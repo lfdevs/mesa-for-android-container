@@ -31,10 +31,10 @@ CSO objects handled by the context object:
   the CSO module will always replace all samplers at once (no sub-ranges).
   This may change in the future.
 * :ref:`Rasterizer`: ``*_rasterizer_state``
-* :ref:`Depth, Stencil, & Alpha`: ``*_depth_stencil_alpha_state``
+* :ref:`depth-stencil-alpha`: ``*_depth_stencil_alpha_state``
 * :ref:`Shader`: These are create, bind and destroy methods for vertex,
   fragment and geometry shaders.
-* :ref:`Vertex Elements`: ``*_vertex_elements_state``
+* :ref:`vertexelements`: ``*_vertex_elements_state``
 
 
 Resource Binding State
@@ -67,6 +67,7 @@ objects. They all follow simple, one-method binding calls, e.g.
   which are used as comparison values in stencil test.
 * ``set_blend_color``
 * ``set_sample_mask``
+* ``set_min_samples`` sets the minimum number of samples that must be run.
 * ``set_clip_state``
 * ``set_polygon_stipple``
 * ``set_scissor_states`` sets the bounds for the scissor test, which culls
@@ -182,10 +183,11 @@ discussed above.
   use pipe_so_target_reference instead.
 
 * ``set_stream_output_targets`` binds stream output targets. The parameter
-  append_bitmask is a bitmask, where the i-th bit specifies whether new
-  primitives should be appended to the i-th buffer (writing starts at
-  the internal offset), or whether writing should start at the beginning
-  (the internal offset is effectively set to 0).
+  offset is an array which specifies the internal offset of the buffer. The
+  internal offset is, besides writing, used for reading the data during the
+  draw_auto stage, i.e. it specifies how much data there is in the buffer
+  for the purposes of the draw_auto stage. -1 means the buffer should
+  be appended to, and everything else sets the internal offset.
 
 NOTE: The currently-bound vertex or geometry shader must be compiled with
 the properly-filled-in structure pipe_stream_output_info describing which
@@ -216,6 +218,11 @@ with the specified depth and stencil values (for combined depth/stencil buffers,
 is is also possible to only clear one or the other part). While it is only
 possible to clear one surface at a time (which can include several layers),
 this surface need not be bound to the framebuffer.
+
+``clear_buffer`` clears a PIPE_BUFFER resource with the specified clear value
+(which may be multiple bytes in length). Logically this is a memset with a
+multi-byte element value starting at offset bytes from resource start, going
+for size bytes. It is guaranteed that size % clear_value_size == 0.
 
 
 Drawing
@@ -304,7 +311,7 @@ The interface currently includes the following types of queries:
 
 ``PIPE_QUERY_OCCLUSION_COUNTER`` counts the number of fragments which
 are written to the framebuffer without being culled by
-:ref:`Depth, Stencil, & Alpha` testing or shader KILL instructions.
+:ref:`depth-stencil-alpha` testing or shader KILL instructions.
 The result is an unsigned 64-bit integer.
 This query can be used with ``render_condition``.
 
@@ -520,6 +527,16 @@ invalidates all read caches of the currently-set samplers.
 
 
 
+.. _memory_barrier:
+
+memory_barrier
+%%%%%%%%%%%%%%%
+
+This function flushes caches according to which of the PIPE_BARRIER_* flags
+are set.
+
+
+
 .. _pipe_transfer:
 
 PIPE_TRANSFER
@@ -557,6 +574,18 @@ These flags control the behavior of a transfer object.
   Written ranges will be notified later with :ref:`transfer_flush_region`.
   Cannot be used with ``PIPE_TRANSFER_READ``.
 
+``PIPE_TRANSFER_PERSISTENT``
+  Allows the resource to be used for rendering while mapped.
+  PIPE_RESOURCE_FLAG_MAP_PERSISTENT must be set when creating
+  the resource.
+  If COHERENT is not set, memory_barrier(PIPE_BARRIER_MAPPED_BUFFER)
+  must be called to ensure the device can see what the CPU has written.
+
+``PIPE_TRANSFER_COHERENT``
+  If PERSISTENT is set, this ensures any writes done by the device are
+  immediately visible to the CPU and vice versa.
+  PIPE_RESOURCE_FLAG_MAP_COHERENT must be set when creating
+  the resource.
 
 Compute kernel execution
 ^^^^^^^^^^^^^^^^^^^^^^^^

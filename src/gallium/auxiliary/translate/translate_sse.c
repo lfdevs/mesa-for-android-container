@@ -104,15 +104,15 @@ struct translate_sse
    int8_t reg_to_const[16];
    int8_t const_to_reg[NUM_CONSTS];
 
-   struct translate_buffer buffer[PIPE_MAX_ATTRIBS];
+   struct translate_buffer buffer[TRANSLATE_MAX_ATTRIBS];
    unsigned nr_buffers;
 
    /* Multiple buffer variants can map to a single buffer. */
-   struct translate_buffer_variant buffer_variant[PIPE_MAX_ATTRIBS];
+   struct translate_buffer_variant buffer_variant[TRANSLATE_MAX_ATTRIBS];
    unsigned nr_buffer_variants;
 
    /* Multiple elements can map to a single buffer variant. */
-   unsigned element_to_buffer_variant[PIPE_MAX_ATTRIBS];
+   unsigned element_to_buffer_variant[TRANSLATE_MAX_ATTRIBS];
 
    boolean use_instancing;
    unsigned instance_id;
@@ -1228,8 +1228,10 @@ static boolean
 incr_inputs(struct translate_sse *p, unsigned index_size)
 {
    if (!index_size && p->nr_buffer_variants == 1) {
+      const unsigned buffer_index = p->buffer_variant[0].buffer_index;
       struct x86_reg stride =
-         x86_make_disp(p->machine_EDI, get_offset(p, &p->buffer[0].stride));
+         x86_make_disp(p->machine_EDI,
+                       get_offset(p, &p->buffer[buffer_index].stride));
 
       if (p->buffer_variant[0].instance_divisor == 0) {
          x64_rexw(p->func);
@@ -1493,6 +1495,8 @@ translate_sse2_create(const struct translate_key *key)
    p->translate.key = *key;
    p->translate.release = translate_sse_release;
    p->translate.set_buffer = translate_sse_set_buffer;
+
+   assert(key->nr_elements <= TRANSLATE_MAX_ATTRIBS);
 
    for (i = 0; i < key->nr_elements; i++) {
       if (key->element[i].type == TRANSLATE_ELEMENT_NORMAL) {

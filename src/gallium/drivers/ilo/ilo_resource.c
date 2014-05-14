@@ -608,7 +608,7 @@ tex_layout_init_hiz(struct tex_layout *layout)
    layout->hiz = true;
 
    /* no point in having HiZ */
-   if (templ->usage & PIPE_USAGE_STAGING)
+   if (templ->usage == PIPE_USAGE_STAGING)
       layout->hiz = false;
 
    if (layout->dev->gen == ILO_GEN(6)) {
@@ -997,9 +997,14 @@ tex_create_bo(struct ilo_texture *tex,
             &tiling, &pitch);
    }
    else {
+      const uint32_t initial_domain =
+         (tex->base.bind & (PIPE_BIND_DEPTH_STENCIL |
+                            PIPE_BIND_RENDER_TARGET)) ?
+         INTEL_DOMAIN_RENDER : 0;
+
       bo = intel_winsys_alloc_texture(is->winsys, name,
             tex->bo_width, tex->bo_height, tex->bo_cpp,
-            tex->tiling, tex->bo_flags, &pitch);
+            tex->tiling, initial_domain, &pitch);
 
       tiling = tex->tiling;
    }
@@ -1090,7 +1095,7 @@ tex_create_hiz(struct ilo_texture *tex, const struct tex_layout *layout)
 
    tex->hiz.bo = intel_winsys_alloc_texture(is->winsys,
          "hiz texture", hz_width, hz_height, 1,
-         INTEL_TILING_Y, INTEL_ALLOC_FOR_RENDER, &pitch);
+         INTEL_TILING_Y, INTEL_DOMAIN_RENDER, &pitch);
    if (!tex->hiz.bo)
       return false;
 
@@ -1133,6 +1138,7 @@ tex_create_hiz(struct ilo_texture *tex, const struct tex_layout *layout)
     */
    for (lv = 0; lv <= templ->last_level; lv++) {
       unsigned align_w = 8, align_h = 4;
+      unsigned flags = 0;
 
       switch (templ->nr_samples) {
       case 0:
@@ -1154,11 +1160,17 @@ tex_create_hiz(struct ilo_texture *tex, const struct tex_layout *layout)
 
       if (u_minify(templ->width0, lv) % align_w == 0 &&
           u_minify(templ->height0, lv) % align_h == 0) {
+         flags |= ILO_TEXTURE_HIZ;
+
+         /* this will trigger a HiZ resolve */
+         if (tex->imported)
+            flags |= ILO_TEXTURE_CPU_WRITE;
+      }
+
+      if (flags) {
          const unsigned num_slices = (templ->target == PIPE_TEXTURE_3D) ?
             u_minify(templ->depth0, lv) : templ->array_size;
-
-         ilo_texture_set_slice_flags(tex, lv, 0, num_slices,
-               ILO_TEXTURE_HIZ, ILO_TEXTURE_HIZ);
+         ilo_texture_set_slice_flags(tex, lv, 0, num_slices, flags, flags);
       }
    }
 
@@ -1201,10 +1213,6 @@ tex_create(struct pipe_screen *screen,
    }
 
    tex->imported = (handle != NULL);
-
-   if (tex->base.bind & (PIPE_BIND_DEPTH_STENCIL |
-                         PIPE_BIND_RENDER_TARGET))
-      tex->bo_flags |= INTEL_ALLOC_FOR_RENDER;
 
    tex_layout_init(&layout, screen, templ, tex->slices);
 
@@ -1309,6 +1317,9 @@ tex_estimate_size(struct pipe_screen *screen,
 static bool
 buf_create_bo(struct ilo_buffer *buf)
 {
+   const uint32_t initial_domain =
+      (buf->base.bind & PIPE_BIND_STREAM_OUTPUT) ?
+      INTEL_DOMAIN_RENDER : 0;
    struct ilo_screen *is = ilo_screen(buf->base.screen);
    const char *name;
    struct intel_bo *bo;
@@ -1332,7 +1343,7 @@ buf_create_bo(struct ilo_buffer *buf)
    }
 
    bo = intel_winsys_alloc_buffer(is->winsys,
-         name, buf->bo_size, buf->bo_flags);
+         name, buf->bo_size, initial_domain);
    if (!bo)
       return false;
 
@@ -1365,7 +1376,6 @@ buf_create(struct pipe_screen *screen, const struct pipe_resource *templ)
    pipe_reference_init(&buf->base.reference, 1);
 
    buf->bo_size = templ->width0;
-   buf->bo_flags = 0;
 
    /*
     * From the Sandy Bridge PRM, volume 1 part 1, page 118:
@@ -1377,6 +1387,23 @@ buf_create(struct pipe_screen *screen, const struct pipe_resource *templ)
     */
    if (templ->bind & PIPE_BIND_SAMPLER_VIEW)
       buf->bo_size = align(buf->bo_size, 256) + 16;
+
+   if (templ->bind & PIPE_BIND_VERTEX_BUFFER) {
+      /*
+       * As noted in ilo_translate_format(), we treat some 3-component formats
+       * as 4-component formats to work around hardware limitations.  Imagine
+       * the case where the vertex buffer holds a single
+       * PIPE_FORMAT_R16G16B16_FLOAT vertex, and buf->bo_size is 6.  The
+       * hardware would fail to fetch it at boundary check because the vertex
+       * buffer is expected to hold a PIPE_FORMAT_R16G16B16A16_FLOAT vertex
+       * and that takes at least 8 bytes.
+       *
+       * For the workaround to work, we should add 2 to the bo size.  But that
+       * would waste a page when the bo size is already page aligned.  Let's
+       * round it to page size for now and revisit this when needed.
+       */
+      buf->bo_size = align(buf->bo_size, 4096);
+   }
 
    if (!buf_create_bo(buf)) {
       FREE(buf);

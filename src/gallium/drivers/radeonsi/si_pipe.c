@@ -33,47 +33,6 @@
 /*
  * pipe_context
  */
-void si_flush(struct pipe_context *ctx, struct pipe_fence_handle **fence,
-	      unsigned flags)
-{
-	struct si_context *sctx = (struct si_context *)ctx;
-	struct pipe_query *render_cond = NULL;
-	boolean render_cond_cond = FALSE;
-	unsigned render_cond_mode = 0;
-
-	if (fence) {
-		*fence = sctx->b.ws->cs_create_fence(sctx->b.rings.gfx.cs);
-	}
-
-	/* Disable render condition. */
-	if (sctx->b.current_render_cond) {
-		render_cond = sctx->b.current_render_cond;
-		render_cond_cond = sctx->b.current_render_cond_cond;
-		render_cond_mode = sctx->b.current_render_cond_mode;
-		ctx->render_condition(ctx, NULL, FALSE, 0);
-	}
-
-	si_context_flush(sctx, flags);
-
-	/* Re-enable render condition. */
-	if (render_cond) {
-		ctx->render_condition(ctx, render_cond, render_cond_cond, render_cond_mode);
-	}
-}
-
-static void si_flush_from_st(struct pipe_context *ctx,
-			     struct pipe_fence_handle **fence,
-			     unsigned flags)
-{
-	si_flush(ctx, fence,
-		 flags & PIPE_FLUSH_END_OF_FRAME ? RADEON_FLUSH_END_OF_FRAME : 0);
-}
-
-static void si_flush_from_winsys(void *ctx, unsigned flags)
-{
-	si_flush((struct pipe_context*)ctx, NULL, flags);
-}
-
 static void si_destroy_context(struct pipe_context *context)
 {
 	struct si_context *sctx = (struct si_context *)context;
@@ -83,15 +42,9 @@ static void si_destroy_context(struct pipe_context *context)
 	pipe_resource_reference(&sctx->null_const_buf.buffer, NULL);
 	r600_resource_reference(&sctx->border_color_table, NULL);
 
-	if (sctx->gs_on) {
-		si_pm4_free_state(sctx, sctx->gs_on, 0);
-	}
-	if (sctx->gs_off) {
-		si_pm4_free_state(sctx, sctx->gs_off, 0);
-	}
-	if (sctx->gs_rings) {
-		si_pm4_free_state(sctx, sctx->gs_rings, 0);
-	}
+	si_pm4_delete_state(sctx, gs_rings, sctx->gs_rings);
+	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_on);
+	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_off);
 
 	if (sctx->dummy_pixel_shader) {
 		sctx->b.b.delete_fs_state(&sctx->b.b, sctx->dummy_pixel_shader);
@@ -104,9 +57,12 @@ static void si_destroy_context(struct pipe_context *context)
 	sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush_inplace);
 	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_resolve);
 	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_decompress);
-	util_unreference_framebuffer_state(&sctx->framebuffer);
+	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_fastclear);
+	util_unreference_framebuffer_state(&sctx->framebuffer.state);
 
 	util_blitter_destroy(sctx->blitter);
+
+	si_pm4_cleanup(sctx);
 
 	r600_common_context_cleanup(&sctx->b);
 	FREE(sctx);
@@ -116,6 +72,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 {
 	struct si_context *sctx = CALLOC_STRUCT(si_context);
 	struct si_screen* sscreen = (struct si_screen *)screen;
+	struct radeon_winsys *ws = sscreen->b.ws;
 	int shader, i;
 
 	if (sctx == NULL)
@@ -124,7 +81,6 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	sctx->b.b.screen = screen; /* this must be set first */
 	sctx->b.b.priv = priv;
 	sctx->b.b.destroy = si_destroy_context;
-	sctx->b.b.flush = si_flush_from_st;
 	sctx->screen = sscreen; /* Easy accessing of screen/winsys. */
 
 	if (!r600_common_context_init(&sctx->b, &sscreen->b))
@@ -141,8 +97,9 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 		sctx->b.b.create_video_buffer = vl_video_buffer_create;
 	}
 
-	sctx->b.rings.gfx.cs = sctx->b.ws->cs_create(sctx->b.ws, RING_GFX, NULL);
-	sctx->b.rings.gfx.flush = si_flush_from_winsys;
+	sctx->b.rings.gfx.cs = ws->cs_create(ws, RING_GFX, si_context_gfx_flush,
+					     sctx, NULL);
+	sctx->b.rings.gfx.flush = si_context_gfx_flush;
 
 	si_init_all_descriptors(sctx);
 
@@ -151,6 +108,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	sctx->atoms.cache_flush = &sctx->cache_flush;
 
 	sctx->atoms.streamout_begin = &sctx->b.streamout.begin_atom;
+	sctx->atoms.streamout_enable = &sctx->b.streamout.enable_atom;
 
 	switch (sctx->b.chip_class) {
 	case SI:
@@ -162,8 +120,6 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 		R600_ERR("Unsupported chip class %d.\n", sctx->b.chip_class);
 		goto fail;
 	}
-
-	sctx->b.ws->cs_set_flush_callback(sctx->b.rings.gfx.cs, si_flush_from_winsys, sctx);
 
 	sctx->blitter = util_blitter_create(&sctx->b.b);
 	if (sctx->blitter == NULL)
@@ -183,7 +139,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	 * with a NULL buffer). We need to use a dummy buffer instead. */
 	if (sctx->b.chip_class == CIK) {
 		sctx->null_const_buf.buffer = pipe_buffer_create(screen, PIPE_BIND_CONSTANT_BUFFER,
-								 PIPE_USAGE_STATIC, 16);
+								 PIPE_USAGE_DEFAULT, 16);
 		sctx->null_const_buf.buffer_size = sctx->null_const_buf.buffer->width0;
 
 		for (shader = 0; shader < SI_NUM_SHADERS; shader++) {
@@ -252,6 +208,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
         case PIPE_CAP_TGSI_VS_LAYER:
 	case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
+	case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
 		return 1;
 
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
@@ -259,20 +216,16 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return HAVE_LLVM >= 0x0304 && (sscreen->b.chip_class < CIK ||
 					       sscreen->b.info.drm_minor >= 35);
 
-	case PIPE_CAP_TGSI_TEXCOORD:
-		return 0;
-
         case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
-                return 64;
+                return R600_MAP_BUFFER_ALIGNMENT;
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
-		return 256;
+	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+		return 4;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
 		return HAVE_LLVM >= 0x0305 ? 330 : 140;
 
-	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-		return 1;
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
 		return MIN2(sscreen->b.info.vram_size, 0xFFFFFFFF);
 
@@ -285,6 +238,12 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_CUBE_MAP_ARRAY:
+	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
+	case PIPE_CAP_TEXTURE_GATHER_SM5:
+	case PIPE_CAP_TGSI_TEXCOORD:
+	case PIPE_CAP_FAKE_SW_MSAA:
+	case PIPE_CAP_TEXTURE_QUERY_LOD:
+        case PIPE_CAP_SAMPLE_SHADING:
 		return 0;
 
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
@@ -307,13 +266,14 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
 	/* Texturing. */
 	case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
-	case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
 	case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
-			return 15;
+		return 15; /* 16384 */
+	case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
+		/* textures support 8192, but layered rendering supports 2048 */
+		return 12;
 	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-		return 16384;
-	case PIPE_CAP_MAX_COMBINED_SAMPLERS:
-		return HAVE_LLVM >= 0x0305 ? 48 : 32;
+		/* textures support 8192, but layered rendering supports 2048 */
+		return 2048;
 
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -327,9 +287,11 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_QUERY_TIME_ELAPSED:
 		return sscreen->b.info.r600_clock_crystal_freq != 0;
 
+ 	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
 		return -8;
 
+ 	case PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MAX_TEXEL_OFFSET:
 		return 7;
 	case PIPE_CAP_ENDIANNESS:
@@ -416,7 +378,7 @@ static void si_destroy_screen(struct pipe_screen* pscreen)
 	if (sscreen == NULL)
 		return;
 
-	if (!radeon_winsys_unref(sscreen->b.ws))
+	if (!sscreen->b.ws->unref(sscreen->b.ws))
 		return;
 
 	r600_destroy_common_screen(&sscreen->b);

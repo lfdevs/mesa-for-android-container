@@ -30,11 +30,10 @@
 #
 include $(top_srcdir)/src/gallium/Automake.inc
 
-LDFLAGS += -Wl,--version-script=$(top_srcdir)/src/gallium/targets/egl-static/egl.link
-
 AM_CFLAGS = $(PTHREAD_CFLAGS)
 AM_CPPFLAGS = \
 	$(GALLIUM_CFLAGS) \
+	$(VISIBILITY_CFLAGS) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -44,6 +43,14 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/state_trackers/egl \
 	-I$(top_srcdir)/src/egl/main \
 	-D_EGL_MAIN=_eglMain
+
+AM_LDFLAGS = \
+	-module \
+	-no-undefined \
+	-avoid-version \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/egl-static/egl.sym
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
 
 egldir = $(EGL_DRIVER_INSTALL_DIR)
 egl_LTLIBRARIES = egl_gallium.la
@@ -62,13 +69,15 @@ egl_gallium_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/egl/libegl.la \
 	$(top_builddir)/src/egl/main/libEGL.la \
 	$(top_builddir)/src/loader/libloader.la \
-	$(CLOCK_LIB) \
-	$(LIBUDEV_LIBS) \
-	$(DLOPEN_LIBS) \
-	$(PTHREAD_LIBS) \
-	-lm
+	$(GALLIUM_COMMON_LIB_DEPS)
 
-egl_gallium_la_LDFLAGS = -Wl,--no-undefined -Wl,--allow-multiple-definition -avoid-version -module
+if HAVE_MESA_LLVM
+AM_LDFLAGS += $(LLVM_LDFLAGS)
+endif
+
+egl_gallium_la_LDFLAGS = \
+	$(AM_LDFLAGS) \
+	-Wl,--allow-multiple-definition
 
 if HAVE_EGL_PLATFORM_X11
 AM_CPPFLAGS += $(LIBDRM_CFLAGS)
@@ -121,17 +130,13 @@ egl_LTLIBRARIES += st_GL.la
 
 nodist_EXTRA_st_GL_la_SOURCES = dummy.cpp
 st_GL_la_SOURCES = st_GL.c
-st_GL_la_LDFLAGS = -Wl,--no-undefined -avoid-version -module
 
 # st_GL, built only when shared glapi is not enabled
 st_GL_la_LIBADD = \
 	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la \
-	$(CLOCK_LIB) \
-	$(DLOPEN_LIBS) \
-	$(PTHREAD_LIBS) \
-	-lm
+	$(GALLIUM_COMMON_LIB_DEPS)
 endif
 endif
 
@@ -232,32 +237,12 @@ endif
 
 if HAVE_MESA_LLVM
 egl_gallium_la_LIBADD += $(LLVM_LIBS)
-egl_gallium_la_LDFLAGS += $(LLVM_LDFLAGS)
 
 if HAVE_OPENGL
 if !HAVE_SHARED_GLAPI
 st_GL_la_LIBADD += $(LLVM_LIBS)
-st_GL_la_LDFLAGS += $(LLVM_LDFLAGS)
 endif
 endif
 endif
 
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-if HAVE_OPENGL
-if !HAVE_SHARED_GLAPI
-all-local: egl_gallium.la st_GL.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/egl
-	ln -f .libs/egl_gallium.so $(top_builddir)/$(LIB_DIR)/egl/egl_gallium.so
-	ln -f .libs/st_GL.so $(top_builddir)/$(LIB_DIR)/egl/st_GL.so
-else
-all-local: egl_gallium.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/egl
-	ln -f .libs/egl_gallium.so $(top_builddir)/$(LIB_DIR)/egl/egl_gallium.so
-
-endif
-else
-all-local: egl_gallium.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/egl
-	ln -f .libs/egl_gallium.so $(top_builddir)/$(LIB_DIR)/egl/egl_gallium.so
-endif
+include $(top_srcdir)/install-gallium-links.mk

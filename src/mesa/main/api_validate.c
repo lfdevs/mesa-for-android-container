@@ -69,7 +69,8 @@ _mesa_max_buffer_index(struct gl_context *ctx, GLuint count, GLenum type,
    if (_mesa_is_bufferobj(elementBuf)) {
       /* elements are in a user-defined buffer object.  need to map it */
       map = ctx->Driver.MapBufferRange(ctx, 0, elementBuf->Size,
-				       GL_MAP_READ_BIT, elementBuf);
+				       GL_MAP_READ_BIT, elementBuf,
+                                       MAP_INTERNAL);
       /* Actual address is the sum of pointers */
       indices = (const GLvoid *) ADD_POINTERS(map, (const GLubyte *) indices);
    }
@@ -92,7 +93,7 @@ _mesa_max_buffer_index(struct gl_context *ctx, GLuint count, GLenum type,
    }
 
    if (map) {
-      ctx->Driver.UnmapBuffer(ctx, elementBuf);
+      ctx->Driver.UnmapBuffer(ctx, elementBuf, MAP_INTERNAL);
    }
 
    return max;
@@ -113,22 +114,25 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
    case API_OPENGLES2:
       /* For ES2, we can draw if any vertex array is enabled (and we
        * should always have a vertex program/shader). */
-      if (ctx->Array.ArrayObj->_Enabled == 0x0 || !ctx->VertexProgram._Current)
+      if (ctx->Array.VAO->_Enabled == 0x0 || !ctx->VertexProgram._Current)
 	 return GL_FALSE;
       break;
 
    case API_OPENGLES:
       /* For OpenGL ES, only draw if we have vertex positions
        */
-      if (!ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled)
+      if (!ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POS].Enabled)
 	 return GL_FALSE;
       break;
 
-   case API_OPENGL_COMPAT:
    case API_OPENGL_CORE:
+      if (ctx->Array.VAO == ctx->Array.DefaultVAO)
+         return GL_FALSE;
+      /* fallthrough */
+   case API_OPENGL_COMPAT:
       {
          const struct gl_shader_program *vsProg =
-            ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX];
+            ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
          GLboolean haveVertexShader = (vsProg && vsProg->LinkStatus);
          GLboolean haveVertexProgram = ctx->VertexProgram._Enabled;
          if (haveVertexShader || haveVertexProgram) {
@@ -141,8 +145,8 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
             /* Draw if we have vertex positions (GL_VERTEX_ARRAY or generic
              * array [0]).
              */
-            return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled ||
-                    ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_GENERIC0].Enabled);
+            return (ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POS].Enabled ||
+                    ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_GENERIC0].Enabled);
          }
       }
       break;
@@ -180,15 +184,15 @@ check_index_bounds(struct gl_context *ctx, GLsizei count, GLenum type,
    memset(&ib, 0, sizeof(ib));
    ib.type = type;
    ib.ptr = indices;
-   ib.obj = ctx->Array.ArrayObj->ElementArrayBufferObj;
+   ib.obj = ctx->Array.VAO->IndexBufferObj;
 
    vbo_get_minmax_indices(ctx, &prim, &ib, &min, &max, 1);
 
    if ((int)(min + basevertex) < 0 ||
-       max + basevertex >= ctx->Array.ArrayObj->_MaxElement) {
+       max + basevertex >= ctx->Array.VAO->_MaxElement) {
       /* the max element is out of bounds of one or more enabled arrays */
       _mesa_warning(ctx, "glDrawElements() index=%u is out of bounds (max=%u)",
-                    max, ctx->Array.ArrayObj->_MaxElement);
+                    max, ctx->Array.VAO->_MaxElement);
       return GL_FALSE;
    }
 
@@ -269,9 +273,9 @@ _mesa_valid_prim_mode(struct gl_context *ctx, GLenum mode, const char *name)
     *   TRIANGLES_ADJACENCY_ARB or TRIANGLE_STRIP_ADJACENCY_ARB.
     *
    */
-   if (ctx->Shader.CurrentProgram[MESA_SHADER_GEOMETRY]) {
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY]) {
       const GLenum geom_mode =
-         ctx->Shader.CurrentProgram[MESA_SHADER_GEOMETRY]->Geom.InputType;
+         ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY]->Geom.InputType;
       switch (mode) {
       case GL_POINTS:
          valid_enum = (geom_mode == GL_POINTS);
@@ -330,8 +334,8 @@ _mesa_valid_prim_mode(struct gl_context *ctx, GLenum mode, const char *name)
    if (_mesa_is_xfb_active_and_unpaused(ctx)) {
       GLboolean pass = GL_TRUE;
 
-      if(ctx->Shader.CurrentProgram[MESA_SHADER_GEOMETRY]) {
-         switch (ctx->Shader.CurrentProgram[MESA_SHADER_GEOMETRY]->Geom.OutputType) {
+      if(ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY]) {
+         switch (ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY]->Geom.OutputType) {
          case GL_POINTS:
             pass = ctx->TransformFeedback.Mode == GL_POINTS;
             break;
@@ -435,10 +439,10 @@ _mesa_validate_DrawElements(struct gl_context *ctx,
       return GL_FALSE;
 
    /* Vertex buffer object tests */
-   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
+   if (_mesa_is_bufferobj(ctx->Array.VAO->IndexBufferObj)) {
       /* use indices in the buffer object */
       /* make sure count doesn't go outside buffer bounds */
-      if (index_bytes(type, count) > ctx->Array.ArrayObj->ElementArrayBufferObj->Size) {
+      if (index_bytes(type, count) > ctx->Array.VAO->IndexBufferObj->Size) {
          _mesa_warning(ctx, "glDrawElements index out of buffer bounds");
          return GL_FALSE;
       }
@@ -493,12 +497,12 @@ _mesa_validate_MultiDrawElements(struct gl_context *ctx,
       return GL_FALSE;
 
    /* Vertex buffer object tests */
-   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
+   if (_mesa_is_bufferobj(ctx->Array.VAO->IndexBufferObj)) {
       /* use indices in the buffer object */
       /* make sure count doesn't go outside buffer bounds */
       for (i = 0; i < primcount; i++) {
          if (index_bytes(type, count[i]) >
-             ctx->Array.ArrayObj->ElementArrayBufferObj->Size) {
+             ctx->Array.VAO->IndexBufferObj->Size) {
             _mesa_warning(ctx,
                           "glMultiDrawElements index out of buffer bounds");
             return GL_FALSE;
@@ -570,10 +574,10 @@ _mesa_validate_DrawRangeElements(struct gl_context *ctx, GLenum mode,
       return GL_FALSE;
 
    /* Vertex buffer object tests */
-   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
+   if (_mesa_is_bufferobj(ctx->Array.VAO->IndexBufferObj)) {
       /* use indices in the buffer object */
       /* make sure count doesn't go outside buffer bounds */
-      if (index_bytes(type, count) > ctx->Array.ArrayObj->ElementArrayBufferObj->Size) {
+      if (index_bytes(type, count) > ctx->Array.VAO->IndexBufferObj->Size) {
          _mesa_warning(ctx, "glDrawRangeElements index out of buffer bounds");
          return GL_FALSE;
       }
@@ -620,7 +624,7 @@ _mesa_validate_DrawArrays(struct gl_context *ctx,
       return GL_FALSE;
 
    if (ctx->Const.CheckArrayBounds) {
-      if (start + count > (GLint) ctx->Array.ArrayObj->_MaxElement)
+      if (start + count > (GLint) ctx->Array.VAO->_MaxElement)
          return GL_FALSE;
    }
 
@@ -689,7 +693,7 @@ _mesa_validate_DrawArraysInstanced(struct gl_context *ctx, GLenum mode, GLint fi
       return GL_FALSE;
 
    if (ctx->Const.CheckArrayBounds) {
-      if (first + count > (GLint) ctx->Array.ArrayObj->_MaxElement)
+      if (first + count > (GLint) ctx->Array.VAO->_MaxElement)
          return GL_FALSE;
    }
 
@@ -769,10 +773,10 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
       return GL_FALSE;
 
    /* Vertex buffer object tests */
-   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
+   if (_mesa_is_bufferobj(ctx->Array.VAO->IndexBufferObj)) {
       /* use indices in the buffer object */
       /* make sure count doesn't go outside buffer bounds */
-      if (index_bytes(type, count) > ctx->Array.ArrayObj->ElementArrayBufferObj->Size) {
+      if (index_bytes(type, count) > ctx->Array.VAO->IndexBufferObj->Size) {
          _mesa_warning(ctx,
                        "glDrawElementsInstanced index out of buffer bounds");
          return GL_FALSE;
@@ -865,7 +869,7 @@ valid_draw_indirect(struct gl_context *ctx,
       return GL_FALSE;
    }
 
-   if (_mesa_bufferobj_mapped(ctx->DrawIndirectBuffer)) {
+   if (_mesa_check_disallowed_mapping(ctx->DrawIndirectBuffer)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "%s(DRAW_INDIRECT_BUFFER is mapped)", name);
       return GL_FALSE;
@@ -901,7 +905,7 @@ valid_draw_indirect_elements(struct gl_context *ctx,
     * If no element array buffer is bound, an INVALID_OPERATION error is
     * generated.
     */
-   if (!_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
+   if (!_mesa_is_bufferobj(ctx->Array.VAO->IndexBufferObj)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "%s(no buffer bound to GL_ELEMENT_ARRAY_BUFFER)", name);
       return GL_FALSE;

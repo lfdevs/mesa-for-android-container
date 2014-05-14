@@ -364,6 +364,8 @@ void util_blitter_destroy(struct blitter_context *blitter)
    pipe->delete_vs_state(pipe, ctx->vs);
    if (ctx->vs_pos_only)
       pipe->delete_vs_state(pipe, ctx->vs_pos_only);
+   if (ctx->vs_layered)
+      pipe->delete_vs_state(pipe, ctx->vs_layered);
    pipe->delete_vertex_elements_state(pipe, ctx->velem_state);
    for (i = 0; i < 4; i++) {
       if (ctx->velem_state_readbuf[i]) {
@@ -470,9 +472,12 @@ static void blitter_restore_vertex_states(struct blitter_context_priv *ctx)
 
    /* Stream outputs. */
    if (ctx->has_stream_out) {
+      unsigned offsets[PIPE_MAX_SO_BUFFERS];
+      for (i = 0; i < ctx->base.saved_num_so_targets; i++)
+         offsets[i] = (unsigned)-1;
       pipe->set_stream_output_targets(pipe,
                                       ctx->base.saved_num_so_targets,
-                                      ctx->base.saved_so_targets, ~0);
+                                      ctx->base.saved_so_targets, offsets);
 
       for (i = 0; i < ctx->base.saved_num_so_targets; i++)
          pipe_so_target_reference(&ctx->base.saved_so_targets[i], NULL);
@@ -683,7 +688,7 @@ static void set_texcoords_in_vertices(const float coord[4],
 static void blitter_set_texcoords(struct blitter_context_priv *ctx,
                                   struct pipe_sampler_view *src,
                                   unsigned src_width0, unsigned src_height0,
-                                  unsigned layer, unsigned sample,
+                                  float layer, unsigned sample,
                                   int x1, int y1, int x2, int y2)
 {
    unsigned i;
@@ -695,11 +700,11 @@ static void blitter_set_texcoords(struct blitter_context_priv *ctx,
    if (src->texture->target == PIPE_TEXTURE_CUBE ||
        src->texture->target == PIPE_TEXTURE_CUBE_ARRAY) {
       set_texcoords_in_vertices(coord, &face_coord[0][0], 2);
-      util_map_texcoords2d_onto_cubemap(layer % 6,
+      util_map_texcoords2d_onto_cubemap((unsigned)layer % 6,
                                         /* pointer, stride in floats */
                                         &face_coord[0][0], 2,
                                         &ctx->vertices[0][1][0], 8,
-                                        TRUE);
+                                        FALSE);
    } else {
       set_texcoords_in_vertices(coord, &ctx->vertices[0][1][0], 8);
    }
@@ -729,7 +734,7 @@ static void blitter_set_texcoords(struct blitter_context_priv *ctx,
 
    case PIPE_TEXTURE_CUBE_ARRAY:
       for (i = 0; i < 4; i++)
-         ctx->vertices[i][1][3] = (float) (layer / 6); /*w*/
+         ctx->vertices[i][1][3] = (float) ((unsigned)layer / 6); /*w*/
       break;
 
    case PIPE_TEXTURE_2D:
@@ -1011,7 +1016,7 @@ static void blitter_set_common_draw_rect_state(struct blitter_context_priv *ctx,
    if (ctx->has_geometry_shader)
       pipe->bind_gs_state(pipe, NULL);
    if (ctx->has_stream_out)
-      pipe->set_stream_output_targets(pipe, 0, NULL, 0);
+      pipe->set_stream_output_targets(pipe, 0, NULL, NULL);
 }
 
 static void blitter_draw(struct blitter_context_priv *ctx,
@@ -1523,9 +1528,31 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
                               UTIL_BLITTER_ATTRIB_TEXCOORD, &coord);
    } else {
       /* Draw the quad with the generic codepath. */
-      int z;
-      for (z = 0; z < dstbox->depth; z++) {
+      int dst_z;
+      for (dst_z = 0; dst_z < dstbox->depth; dst_z++) {
          struct pipe_surface *old;
+         float dst2src_scale = srcbox->depth / (float)dstbox->depth;
+
+         /* Scale Z properly if the blit is scaled.
+          *
+          * When downscaling, we want the coordinates centered, so that
+          * mipmapping works for 3D textures. For example, when generating
+          * a 4x4x4 level, this wouldn't average the pixels:
+          *
+          *   src Z:  0 1 2 3 4 5 6 7
+          *   dst Z:  0   1   2   3
+          *
+          * Because the pixels are not centered below the pixels of the higher
+          * level. Therefore, we want this:
+          *   src Z:  0 1 2 3 4 5 6 7
+          *   dst Z:   0   1   2   3
+          *
+          * dst_offset defines the offset needed for centering the pixels and
+          * it works with any scaling (not just 2x).
+          */
+         float dst_offset = ((srcbox->depth - 1) -
+                             (dstbox->depth - 1) * dst2src_scale) * 0.5;
+         float src_z = (dst_z + dst_offset) * dst2src_scale;
 
          /* Set framebuffer state. */
          if (blit_depth || blit_stencil) {
@@ -1543,7 +1570,7 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
             for (i = 0; i <= max_sample; i++) {
                pipe->set_sample_mask(pipe, 1 << i);
                blitter_set_texcoords(ctx, src, src_width0, src_height0,
-                                     srcbox->z + z,
+                                     srcbox->z + src_z,
                                      i, srcbox->x, srcbox->y,
                                      srcbox->x + srcbox->width,
                                      srcbox->y + srcbox->height);
@@ -1555,7 +1582,7 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
             /* Normal copy, MSAA upsampling, or MSAA resolve. */
             pipe->set_sample_mask(pipe, ~0);
             blitter_set_texcoords(ctx, src, src_width0, src_height0,
-                                  srcbox->z + z, 0,
+                                  srcbox->z + src_z, 0,
                                   srcbox->x, srcbox->y,
                                   srcbox->x + srcbox->width,
                                   srcbox->y + srcbox->height);
@@ -1567,10 +1594,10 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
          /* Get the next surface or (if this is the last iteration)
           * just unreference the last one. */
          old = dst;
-         if (z < dstbox->depth-1) {
+         if (dst_z < dstbox->depth-1) {
             dst = ctx->base.get_next_surface_layer(ctx->base.pipe, dst);
          }
-         if (z) {
+         if (dst_z) {
             pipe_surface_reference(&old, NULL);
          }
       }
@@ -1804,6 +1831,7 @@ void util_blitter_copy_buffer(struct blitter_context *blitter,
    struct pipe_context *pipe = ctx->base.pipe;
    struct pipe_vertex_buffer vb;
    struct pipe_stream_output_target *so_target;
+   unsigned offsets[PIPE_MAX_SO_BUFFERS] = {0};
 
    if (srcx >= src->width0 ||
        dstx >= dst->width0) {
@@ -1845,7 +1873,7 @@ void util_blitter_copy_buffer(struct blitter_context *blitter,
    pipe->bind_rasterizer_state(pipe, ctx->rs_discard_state);
 
    so_target = pipe->create_stream_output_target(pipe, dst, dstx, size);
-   pipe->set_stream_output_targets(pipe, 1, &so_target, 0);
+   pipe->set_stream_output_targets(pipe, 1, &so_target, offsets);
 
    util_draw_arrays(pipe, PIPE_PRIM_POINTS, 0, size / 4);
 
@@ -1865,6 +1893,7 @@ void util_blitter_clear_buffer(struct blitter_context *blitter,
    struct pipe_context *pipe = ctx->base.pipe;
    struct pipe_vertex_buffer vb = {0};
    struct pipe_stream_output_target *so_target;
+   unsigned offsets[PIPE_MAX_SO_BUFFERS] = {0};
 
    assert(num_channels >= 1);
    assert(num_channels <= 4);
@@ -1904,7 +1933,7 @@ void util_blitter_clear_buffer(struct blitter_context *blitter,
    pipe->bind_rasterizer_state(pipe, ctx->rs_discard_state);
 
    so_target = pipe->create_stream_output_target(pipe, dst, offset, size);
-   pipe->set_stream_output_targets(pipe, 1, &so_target, 0);
+   pipe->set_stream_output_targets(pipe, 1, &so_target, offsets);
 
    util_draw_arrays(pipe, PIPE_PRIM_POINTS, 0, size / 4);
 

@@ -41,6 +41,7 @@ GLES2_include_HEADERS = \
 GLES3_includedir = $(includedir)/GLES3
 GLES3_include_HEADERS = \
 	$(top_srcdir)/include/GLES3/gl3.h \
+	$(top_srcdir)/include/GLES3/gl31.h \
 	$(top_srcdir)/include/GLES3/gl3ext.h \
 	$(top_srcdir)/include/GLES3/gl3platform.h
 
@@ -48,7 +49,11 @@ lib_LTLIBRARIES = libGLESv2.la
 
 libGLESv2_la_SOURCES = ../entry.c glapi_mapi_tmp.h
 libGLESv2_la_LIBADD = $(GLESv2_LIB_DEPS)
-libGLESv2_la_LDFLAGS = -version-number 2 -no-undefined
+libGLESv2_la_LDFLAGS = \
+	-no-undefined \
+	-version-number 2 \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
 
 if HAVE_SHARED_GLAPI
 libGLESv2_la_LIBADD += ../shared-glapi/libglapi.la

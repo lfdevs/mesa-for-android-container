@@ -37,7 +37,8 @@
 /**
  * Get standard integer types
  */
-#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L)
+#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || \
+    (defined(_MSC_VER) && _MSC_VER >= 1600)
 #  include <stdint.h>
 #elif defined(_MSC_VER)
    typedef __int8             int8_t;
@@ -88,5 +89,10 @@
 #ifndef __FUNCTION__
 #  define __FUNCTION__ __func__
 #endif
+
+#define STATIC_ASSERT(COND) \
+   do { \
+      (void) sizeof(char [1 - 2*!(COND)]); \
+   } while (0)
 
 #endif /* EGLCOMPILER_INCLUDED */

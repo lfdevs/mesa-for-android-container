@@ -1080,7 +1080,7 @@ static INLINE void
 trace_context_set_stream_output_targets(struct pipe_context *_pipe,
                                         unsigned num_targets,
                                         struct pipe_stream_output_target **tgs,
-                                        unsigned append_bitmask)
+                                        const unsigned *offsets)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
@@ -1090,9 +1090,9 @@ trace_context_set_stream_output_targets(struct pipe_context *_pipe,
    trace_dump_arg(ptr, pipe);
    trace_dump_arg(uint, num_targets);
    trace_dump_arg_array(ptr, tgs, num_targets);
-   trace_dump_arg(uint, append_bitmask);
+   trace_dump_arg_array(uint, offsets, num_targets);
 
-   pipe->set_stream_output_targets(pipe, num_targets, tgs, append_bitmask);
+   pipe->set_stream_output_targets(pipe, num_targets, tgs, offsets);
 
    trace_dump_call_end();
 }
@@ -1489,6 +1489,21 @@ static void trace_context_texture_barrier(struct pipe_context *_context)
 }
 
 
+static void trace_context_memory_barrier(struct pipe_context *_context,
+                                         unsigned flags)
+{
+   struct trace_context *tr_context = trace_context(_context);
+   struct pipe_context *context = tr_context->pipe;
+
+   trace_dump_call_begin("pipe_context", "memory_barrier");
+   trace_dump_arg(ptr, context);
+   trace_dump_arg(uint, flags);
+   trace_dump_call_end();
+
+   context->memory_barrier(context, flags);
+}
+
+
 static const struct debug_named_value rbug_blocker_flags[] = {
    {"before", 1, NULL},
    {"after", 2, NULL},
@@ -1577,6 +1592,7 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(clear_depth_stencil);
    TR_CTX_INIT(flush);
    TR_CTX_INIT(texture_barrier);
+   TR_CTX_INIT(memory_barrier);
 
    TR_CTX_INIT(transfer_map);
    TR_CTX_INIT(transfer_unmap);

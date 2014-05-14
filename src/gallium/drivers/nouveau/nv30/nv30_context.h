@@ -119,14 +119,6 @@ struct nv30_context {
    struct nouveau_heap  *blit_vp;
    struct pipe_resource *blit_fp;
 
-   /*XXX: nvfx state, DO NOT USE EVER OUTSIDE "STOLEN" NVFX code */
-   unsigned is_nv4x;
-   unsigned use_nv4x;
-   bool hw_pointsprite_control;
-   enum {
-      HW,
-   } render_mode;
-
    struct pipe_query *render_cond_query;
    unsigned render_cond_mode;
    boolean render_cond_cond;
@@ -216,14 +208,6 @@ nv30_state_validate(struct nv30_context *nv30, boolean hwtnl);
 
 void
 nv30_state_release(struct nv30_context *nv30);
-
-//XXX: needed to make it build, clean this up!
-void
-_nvfx_fragprog_translate(struct nv30_context *nvfx, struct nv30_fragprog *fp,
-         boolean emulate_sprite_flipping);
-
-boolean
-_nvfx_vertprog_translate(struct nv30_context *nv30, struct nv30_vertprog *vp);
 
 #ifdef NV30_3D_VERTEX_BEGIN_END
 #define NV30_PRIM_GL_CASE(n) \

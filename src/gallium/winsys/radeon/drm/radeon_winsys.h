@@ -61,7 +61,8 @@ enum radeon_bo_layout {
 
 enum radeon_bo_domain { /* bitfield */
     RADEON_DOMAIN_GTT  = 2,
-    RADEON_DOMAIN_VRAM = 4
+    RADEON_DOMAIN_VRAM = 4,
+    RADEON_DOMAIN_VRAM_GTT = RADEON_DOMAIN_VRAM | RADEON_DOMAIN_GTT
 };
 
 enum radeon_bo_usage { /* bitfield */
@@ -129,6 +130,7 @@ enum radeon_family {
     CHIP_KAVERI,
     CHIP_KABINI,
     CHIP_HAWAII,
+    CHIP_MULLINS,
     CHIP_LAST,
 };
 
@@ -149,6 +151,7 @@ enum ring_type {
     RING_GFX = 0,
     RING_DMA,
     RING_UVD,
+    RING_VCE,
     RING_LAST,
 };
 
@@ -156,7 +159,27 @@ enum radeon_value_id {
     RADEON_REQUESTED_VRAM_MEMORY,
     RADEON_REQUESTED_GTT_MEMORY,
     RADEON_BUFFER_WAIT_TIME_NS,
-    RADEON_TIMESTAMP
+    RADEON_TIMESTAMP,
+    RADEON_NUM_CS_FLUSHES,
+    RADEON_NUM_BYTES_MOVED,
+    RADEON_VRAM_USAGE,
+    RADEON_GTT_USAGE
+};
+
+enum radeon_bo_priority {
+    RADEON_PRIO_MIN,
+    RADEON_PRIO_SHADER_DATA, /* shader code, resource descriptors */
+    RADEON_PRIO_SHADER_BUFFER_RO, /* read-only */
+    RADEON_PRIO_SHADER_TEXTURE_RO, /* read-only */
+    RADEON_PRIO_SHADER_RESOURCE_RW, /* buffers, textures, streamout, GS rings, RATs; read/write */
+    RADEON_PRIO_COLOR_BUFFER,
+    RADEON_PRIO_DEPTH_BUFFER,
+    RADEON_PRIO_SHADER_TEXTURE_MSAA,
+    RADEON_PRIO_COLOR_BUFFER_MSAA,
+    RADEON_PRIO_DEPTH_BUFFER_MSAA,
+    RADEON_PRIO_COLOR_META,
+    RADEON_PRIO_DEPTH_META,
+    RADEON_PRIO_MAX /* must be <= 15 */
 };
 
 struct winsys_handle;
@@ -174,12 +197,14 @@ struct radeon_info {
     enum chip_class             chip_class;
     uint32_t                    gart_size;
     uint32_t                    vram_size;
+    uint32_t                    max_sclk;
 
     uint32_t                    drm_major; /* version */
     uint32_t                    drm_minor;
     uint32_t                    drm_patchlevel;
 
     boolean                     has_uvd;
+    uint32_t                    vce_fw_version;
 
     uint32_t                    r300_num_gb_pipes;
     uint32_t                    r300_num_z_pipes;
@@ -188,13 +213,12 @@ struct radeon_info {
     uint32_t                    r600_clock_crystal_freq;
     uint32_t                    r600_tiling_config;
     uint32_t                    r600_num_tile_pipes;
-    uint32_t                    r600_backend_map;
-    uint32_t                    r600_va_start;
-    uint32_t                    r600_ib_vm_max_size;
     uint32_t                    r600_max_pipes;
-    boolean                     r600_backend_map_valid;
     boolean                     r600_virtual_address;
     boolean                     r600_has_dma;
+
+    uint32_t                    r600_backend_map;
+    boolean                     r600_backend_map_valid;
 
     boolean                     si_tile_mode_array_valid;
     uint32_t                    si_tile_mode_array[32];
@@ -210,14 +234,17 @@ enum radeon_feature_id {
 
 struct radeon_winsys {
     /**
-     * Reference counting
-     */
-    struct pipe_reference reference;
-
-    /**
      * The screen object this winsys was created for
      */
     struct pipe_screen *screen;
+
+    /**
+     * Decrement the winsys reference count.
+     *
+     * \param ws  The winsys this function is called for.
+     * \return    True if the winsys and screen should be destroyed.
+     */
+    bool (*unref)(struct radeon_winsys *ws);
 
     /**
      * Destroy this winsys.
@@ -376,6 +403,11 @@ struct radeon_winsys {
      */
     uint64_t (*buffer_get_virtual_address)(struct radeon_winsys_cs_handle *buf);
 
+    /**
+     * Query the initial placement of the buffer from the kernel driver.
+     */
+    enum radeon_bo_domain (*buffer_get_initial_domain)(struct radeon_winsys_cs_handle *buf);
+
     /**************************************************************************
      * Command submission.
      *
@@ -388,10 +420,15 @@ struct radeon_winsys {
      *
      * \param ws        The winsys this function is called from.
      * \param ring_type The ring type (GFX, DMA, UVD)
+     * \param flush     Flush callback function associated with the command stream.
+     * \param user      User pointer that will be passed to the flush callback.
      * \param trace_buf Trace buffer when tracing is enabled
      */
     struct radeon_winsys_cs *(*cs_create)(struct radeon_winsys *ws,
                                           enum ring_type ring_type,
+                                          void (*flush)(void *ctx, unsigned flags,
+							struct pipe_fence_handle **fence),
+                                          void *flush_ctx,
                                           struct radeon_winsys_cs_handle *trace_buf);
 
     /**
@@ -409,12 +446,25 @@ struct radeon_winsys {
      * \param buf A winsys buffer to validate.
      * \param usage   Whether the buffer is used for read and/or write.
      * \param domain  Bitmask of the RADEON_DOMAIN_* flags.
+     * \param priority  A higher number means a greater chance of being
+     *                  placed in the requested domain. 15 is the maximum.
      * \return Relocation index.
      */
     unsigned (*cs_add_reloc)(struct radeon_winsys_cs *cs,
                              struct radeon_winsys_cs_handle *buf,
                              enum radeon_bo_usage usage,
-                             enum radeon_bo_domain domain);
+                             enum radeon_bo_domain domain,
+                             enum radeon_bo_priority priority);
+
+    /**
+     * Return the index of an already-added buffer.
+     *
+     * \param cs        Command stream
+     * \param buf       Buffer
+     * \return          The buffer index, or -1 if the buffer has not been added.
+     */
+    int (*cs_get_reloc)(struct radeon_winsys_cs *cs,
+                        struct radeon_winsys_cs_handle *buf);
 
     /**
      * Return TRUE if there is enough memory in VRAM and GTT for the relocs
@@ -437,34 +487,18 @@ struct radeon_winsys {
     boolean (*cs_memory_below_limit)(struct radeon_winsys_cs *cs, uint64_t vram, uint64_t gtt);
 
     /**
-     * Write a relocated dword to a command buffer.
-     *
-     * \param cs        A command stream the relocation is written to.
-     * \param buf       A winsys buffer to write the relocation for.
-     */
-    void (*cs_write_reloc)(struct radeon_winsys_cs *cs,
-                           struct radeon_winsys_cs_handle *buf);
-
-    /**
      * Flush a command stream.
      *
      * \param cs          A command stream to flush.
      * \param flags,      RADEON_FLUSH_ASYNC or 0.
-     * \param cs_trace_id A unique identifiant for the cs
+     * \param fence       Pointer to a fence. If non-NULL, a fence is inserted
+     *                    after the CS and is returned through this parameter.
+     * \param cs_trace_id A unique identifier of the cs, used for tracing.
      */
-    void (*cs_flush)(struct radeon_winsys_cs *cs, unsigned flags, uint32_t cs_trace_id);
-
-    /**
-     * Set a flush callback which is called from winsys when flush is
-     * required.
-     *
-     * \param cs        A command stream to set the callback for.
-     * \param flush     A flush callback function associated with the command stream.
-     * \param user      A user pointer that will be passed to the flush callback.
-     */
-    void (*cs_set_flush_callback)(struct radeon_winsys_cs *cs,
-                                  void (*flush)(void *ctx, unsigned flags),
-                                  void *ctx);
+    void (*cs_flush)(struct radeon_winsys_cs *cs,
+                     unsigned flags,
+                     struct pipe_fence_handle **fence,
+                     uint32_t cs_trace_id);
 
     /**
      * Return TRUE if a buffer is referenced by a command stream.
@@ -492,13 +526,6 @@ struct radeon_winsys {
       * \param cs        A command stream.
       */
     void (*cs_sync_flush)(struct radeon_winsys_cs *cs);
-
-    /**
-     * Return a fence associated with the CS. The fence will be signalled
-     * once the CS is flushed and all commands in the CS are completed
-     * by the GPU.
-     */
-    struct pipe_fence_handle *(*cs_create_fence)(struct radeon_winsys_cs *cs);
 
     /**
      * Wait for the fence and return true if the fence has been signalled.
@@ -538,15 +565,6 @@ struct radeon_winsys {
                             enum radeon_value_id value);
 };
 
-/**
- * Decrement the winsys reference count.
- *
- * \param ws The winsys this function is called for.
- */
-static INLINE boolean radeon_winsys_unref(struct radeon_winsys *ws)
-{
-   return pipe_reference(&ws->reference, NULL);
-}
 
 static INLINE void radeon_emit(struct radeon_winsys_cs *cs, uint32_t value)
 {

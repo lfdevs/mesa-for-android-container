@@ -79,6 +79,10 @@ static struct r600_resource *r600_new_query_buffer(struct r600_common_context *c
 	case R600_QUERY_REQUESTED_VRAM:
 	case R600_QUERY_REQUESTED_GTT:
 	case R600_QUERY_BUFFER_WAIT_TIME:
+	case R600_QUERY_NUM_CS_FLUSHES:
+	case R600_QUERY_NUM_BYTES_MOVED:
+	case R600_QUERY_VRAM_USAGE:
+	case R600_QUERY_GTT_USAGE:
 		return NULL;
 	}
 
@@ -152,6 +156,7 @@ static void r600_emit_query_begin(struct r600_common_context *ctx, struct r600_q
 	uint64_t va;
 
 	r600_update_occlusion_query_state(ctx, query->type, 1);
+	r600_update_prims_generated_query_state(ctx, query->type, 1);
 	ctx->need_gfx_cs_space(&ctx->b, query->num_cs_dw * 2, TRUE);
 
 	/* Get a new query buffer if needed. */
@@ -206,7 +211,8 @@ static void r600_emit_query_begin(struct r600_common_context *ctx, struct r600_q
 	default:
 		assert(0);
 	}
-	r600_emit_reloc(ctx, &ctx->rings.gfx, query->buffer.buf, RADEON_USAGE_WRITE);
+	r600_emit_reloc(ctx, &ctx->rings.gfx, query->buffer.buf, RADEON_USAGE_WRITE,
+			RADEON_PRIO_MIN);
 
 	if (!r600_is_timer_query(query->type)) {
 		ctx->num_cs_dw_nontimer_queries_suspend += query->num_cs_dw;
@@ -271,7 +277,8 @@ static void r600_emit_query_end(struct r600_common_context *ctx, struct r600_que
 	default:
 		assert(0);
 	}
-	r600_emit_reloc(ctx, &ctx->rings.gfx, query->buffer.buf, RADEON_USAGE_WRITE);
+	r600_emit_reloc(ctx, &ctx->rings.gfx, query->buffer.buf, RADEON_USAGE_WRITE,
+			RADEON_PRIO_MIN);
 
 	query->buffer.results_end += query->result_size;
 
@@ -282,6 +289,7 @@ static void r600_emit_query_end(struct r600_common_context *ctx, struct r600_que
 	}
 
 	r600_update_occlusion_query_state(ctx, query->type, -1);
+	r600_update_prims_generated_query_state(ctx, query->type, -1);
 }
 
 static void r600_emit_query_predication(struct r600_common_context *ctx, struct r600_query *query,
@@ -320,7 +328,8 @@ static void r600_emit_query_predication(struct r600_common_context *ctx, struct 
 				radeon_emit(cs, PKT3(PKT3_SET_PREDICATION, 1, 0));
 				radeon_emit(cs, (va + results_base) & 0xFFFFFFFFUL);
 				radeon_emit(cs, op | (((va + results_base) >> 32UL) & 0xFF));
-				r600_emit_reloc(ctx, &ctx->rings.gfx, qbuf->buf, RADEON_USAGE_READ);
+				r600_emit_reloc(ctx, &ctx->rings.gfx, qbuf->buf, RADEON_USAGE_READ,
+						RADEON_PRIO_MIN);
 				results_base += query->result_size;
 
 				/* set CONTINUE bit for all packets except the first */
@@ -374,6 +383,10 @@ static struct pipe_query *r600_create_query(struct pipe_context *ctx, unsigned q
 	case R600_QUERY_REQUESTED_VRAM:
 	case R600_QUERY_REQUESTED_GTT:
 	case R600_QUERY_BUFFER_WAIT_TIME:
+	case R600_QUERY_NUM_CS_FLUSHES:
+	case R600_QUERY_NUM_BYTES_MOVED:
+	case R600_QUERY_VRAM_USAGE:
+	case R600_QUERY_GTT_USAGE:
 		skip_allocation = true;
 		break;
 	default:
@@ -427,10 +440,18 @@ static void r600_begin_query(struct pipe_context *ctx, struct pipe_query *query)
 		return;
 	case R600_QUERY_REQUESTED_VRAM:
 	case R600_QUERY_REQUESTED_GTT:
+	case R600_QUERY_VRAM_USAGE:
+	case R600_QUERY_GTT_USAGE:
 		rquery->begin_result = 0;
 		return;
 	case R600_QUERY_BUFFER_WAIT_TIME:
 		rquery->begin_result = rctx->ws->query_value(rctx->ws, RADEON_BUFFER_WAIT_TIME_NS);
+		return;
+	case R600_QUERY_NUM_CS_FLUSHES:
+		rquery->begin_result = rctx->ws->query_value(rctx->ws, RADEON_NUM_CS_FLUSHES);
+		return;
+	case R600_QUERY_NUM_BYTES_MOVED:
+		rquery->begin_result = rctx->ws->query_value(rctx->ws, RADEON_NUM_BYTES_MOVED);
 		return;
 	}
 
@@ -478,6 +499,18 @@ static void r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
 	case R600_QUERY_BUFFER_WAIT_TIME:
 		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_BUFFER_WAIT_TIME_NS);
 		return;
+	case R600_QUERY_NUM_CS_FLUSHES:
+		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_NUM_CS_FLUSHES);
+		return;
+	case R600_QUERY_NUM_BYTES_MOVED:
+		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_NUM_BYTES_MOVED);
+		return;
+	case R600_QUERY_VRAM_USAGE:
+		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_VRAM_USAGE);
+		return;
+	case R600_QUERY_GTT_USAGE:
+		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_GTT_USAGE);
+		return;
 	}
 
 	r600_emit_query_end(rctx, rquery);
@@ -520,6 +553,10 @@ static boolean r600_get_query_buffer_result(struct r600_common_context *ctx,
 	case R600_QUERY_REQUESTED_VRAM:
 	case R600_QUERY_REQUESTED_GTT:
 	case R600_QUERY_BUFFER_WAIT_TIME:
+	case R600_QUERY_NUM_CS_FLUSHES:
+	case R600_QUERY_NUM_BYTES_MOVED:
+	case R600_QUERY_VRAM_USAGE:
+	case R600_QUERY_GTT_USAGE:
 		result->u64 = query->end_result - query->begin_result;
 		return TRUE;
 	}
@@ -817,7 +854,7 @@ void r600_query_init_backend_mask(struct r600_common_context *ctx)
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 
-		r600_emit_reloc(ctx, &ctx->rings.gfx, buffer, RADEON_USAGE_WRITE);
+		r600_emit_reloc(ctx, &ctx->rings.gfx, buffer, RADEON_USAGE_WRITE, RADEON_PRIO_MIN);
 
 		/* analyze results */
 		results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_TRANSFER_READ);

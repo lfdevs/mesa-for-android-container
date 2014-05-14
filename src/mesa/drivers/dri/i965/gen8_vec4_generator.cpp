@@ -49,15 +49,6 @@ gen8_vec4_generator::~gen8_vec4_generator()
 }
 
 void
-gen8_vec4_generator::mark_surface_used(unsigned surf_index)
-{
-   assert(surf_index < BRW_MAX_SURFACES);
-
-   prog_data->base.binding_table.size_bytes =
-      MAX2(prog_data->base.binding_table.size_bytes, (surf_index + 1) * 4);
-}
-
-void
 gen8_vec4_generator::generate_tex(vec4_instruction *ir, struct brw_reg dst)
 {
    int msg_type = 0;
@@ -113,14 +104,33 @@ gen8_vec4_generator::generate_tex(vec4_instruction *ir, struct brw_reg dst)
       MOV_RAW(retype(brw_message_reg(ir->base_mrf), BRW_REGISTER_TYPE_UD),
               retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
 
+      default_state.access_mode = BRW_ALIGN_1;
+
       if (ir->texture_offset) {
          /* Set the offset bits in DWord 2. */
-         default_state.access_mode = BRW_ALIGN_1;
          MOV_RAW(retype(brw_vec1_reg(MRF, ir->base_mrf, 2),
                         BRW_REGISTER_TYPE_UD),
                  brw_imm_ud(ir->texture_offset));
-         default_state.access_mode = BRW_ALIGN_16;
       }
+
+      if (ir->sampler >= 16) {
+         /* The "Sampler Index" field can only store values between 0 and 15.
+          * However, we can add an offset to the "Sampler State Pointer"
+          * field, effectively selecting a different set of 16 samplers.
+          *
+          * The "Sampler State Pointer" needs to be aligned to a 32-byte
+          * offset, and each sampler state is only 16-bytes, so we can't
+          * exclusively use the offset - we have to use both.
+          */
+         gen8_instruction *add =
+            ADD(get_element_ud(brw_message_reg(ir->base_mrf), 3),
+                get_element_ud(brw_vec8_grf(0, 0), 3),
+                brw_imm_ud(16 * (ir->sampler / 16) *
+                           sizeof(gen7_sampler_state)));
+         gen8_set_mask_control(add, BRW_MASK_DISABLE);
+      }
+
+      default_state.access_mode = BRW_ALIGN_16;
    }
 
    uint32_t surf_index =
@@ -131,14 +141,14 @@ gen8_vec4_generator::generate_tex(vec4_instruction *ir, struct brw_reg dst)
    gen8_set_src0(brw, inst, brw_message_reg(ir->base_mrf));
    gen8_set_sampler_message(brw, inst,
                             surf_index,
-                            ir->sampler,
+                            ir->sampler % 16,
                             msg_type,
                             1,
                             ir->mlen,
                             ir->header_present,
                             BRW_SAMPLER_SIMD_MODE_SIMD4X2);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&prog_data->base, surf_index);
 }
 
 void
@@ -154,11 +164,8 @@ gen8_vec4_generator::generate_urb_write(vec4_instruction *ir, bool vs)
    if (!(ir->urb_write_flags & BRW_URB_WRITE_USE_CHANNEL_MASKS)) {
       /* Enable Channel Masks in the URB_WRITE_OWORD message header */
       default_state.access_mode = BRW_ALIGN_1;
-      inst = OR(retype(brw_vec1_grf(GEN7_MRF_HACK_START + ir->base_mrf, 5),
-                       BRW_REGISTER_TYPE_UD),
-                retype(brw_vec1_grf(0, 5), BRW_REGISTER_TYPE_UD),
-                brw_imm_ud(0xff00));
-      gen8_set_mask_control(inst, BRW_MASK_DISABLE);
+      MOV_RAW(brw_vec1_grf(GEN7_MRF_HACK_START + ir->base_mrf, 5),
+              brw_imm_ud(0xff00));
       default_state.access_mode = BRW_ALIGN_16;
    }
 
@@ -445,8 +452,65 @@ gen8_vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
                        false,  /* no header */
                        false); /* EOT */
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&prog_data->base, surf_index);
 }
+
+void
+gen8_vec4_generator::generate_untyped_atomic(vec4_instruction *ir,
+                                             struct brw_reg dst,
+                                             struct brw_reg atomic_op,
+                                             struct brw_reg surf_index)
+{
+   assert(atomic_op.file == BRW_IMMEDIATE_VALUE &&
+          atomic_op.type == BRW_REGISTER_TYPE_UD &&
+          surf_index.file == BRW_IMMEDIATE_VALUE &&
+          surf_index.type == BRW_REGISTER_TYPE_UD);
+   assert((atomic_op.dw1.ud & ~0xf) == 0);
+
+   unsigned msg_control =
+      atomic_op.dw1.ud | /* Atomic Operation Type: BRW_AOP_* */
+      (1 << 5); /* Return data expected */
+
+   gen8_instruction *inst = next_inst(BRW_OPCODE_SEND);
+   gen8_set_dst(brw, inst, retype(dst, BRW_REGISTER_TYPE_UD));
+   gen8_set_src0(brw, inst, brw_message_reg(ir->base_mrf));
+   gen8_set_dp_message(brw, inst, HSW_SFID_DATAPORT_DATA_CACHE_1,
+                       surf_index.dw1.ud,
+                       HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2,
+                       msg_control,
+                       ir->mlen,
+                       1,
+                       ir->header_present,
+                       false);
+
+   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
+}
+
+
+
+void
+gen8_vec4_generator::generate_untyped_surface_read(vec4_instruction *ir,
+                                                   struct brw_reg dst,
+                                                   struct brw_reg surf_index)
+{
+   assert(surf_index.file == BRW_IMMEDIATE_VALUE &&
+          surf_index.type == BRW_REGISTER_TYPE_UD);
+
+   gen8_instruction *inst = next_inst(BRW_OPCODE_SEND);
+   gen8_set_dst(brw, inst, retype(dst, BRW_REGISTER_TYPE_UD));
+   gen8_set_src0(brw, inst, brw_message_reg(ir->base_mrf));
+   gen8_set_dp_message(brw, inst, HSW_SFID_DATAPORT_DATA_CACHE_1,
+                       surf_index.dw1.ud,
+                       HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ,
+                       0xe, /* enable only the R channel */
+                       ir->mlen,
+                       1,
+                       ir->header_present,
+                       false);
+
+   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
+}
+
 
 void
 gen8_vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
@@ -570,11 +634,13 @@ gen8_vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
       break;
 
    case BRW_OPCODE_F32TO16:
-      F32TO16(dst, src[0]);
+      /* Emulate the Gen7 zeroing bug. */
+      MOV(retype(dst, BRW_REGISTER_TYPE_UD), brw_imm_ud(0u));
+      MOV(retype(dst, BRW_REGISTER_TYPE_HF), src[0]);
       break;
 
    case BRW_OPCODE_F16TO32:
-      F16TO32(dst, src[0]);
+      MOV(dst, retype(src[0], BRW_REGISTER_TYPE_HF));
       break;
 
    case BRW_OPCODE_LRP:
@@ -752,11 +818,11 @@ gen8_vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
       break;
 
    case SHADER_OPCODE_UNTYPED_ATOMIC:
-      assert(!"XXX: Missing Gen8 vec4 support for UNTYPED_ATOMIC");
+      generate_untyped_atomic(ir, dst, src[0], src[1]);
       break;
 
    case SHADER_OPCODE_UNTYPED_SURFACE_READ:
-      assert(!"XXX: Missing Gen8 vec4 support for UNTYPED_SURFACE_READ");
+      generate_untyped_surface_read(ir, dst, src[0]);
       break;
 
    case VS_OPCODE_UNPACK_FLAGS_SIMD4X2:
@@ -782,10 +848,12 @@ gen8_vec4_generator::generate_code(exec_list *instructions)
    const void *last_annotation_ir = NULL;
 
    if (unlikely(debug_flag)) {
-      if (prog) {
-         printf("Native code for vertex shader %d:\n", shader_prog->Name);
+      if (shader_prog) {
+         fprintf(stderr, "Native code for %s vertex shader %d:\n",
+                 shader_prog->Label ? shader_prog->Label : "unnamed",
+                 shader_prog->Name);
       } else {
-         printf("Native code for vertex program %d:\n", prog->Id);
+         fprintf(stderr, "Native code for vertex program %d:\n", prog->Id);
       }
    }
 
@@ -797,23 +865,23 @@ gen8_vec4_generator::generate_code(exec_list *instructions)
          if (last_annotation_ir != ir->ir) {
             last_annotation_ir = ir->ir;
             if (last_annotation_ir) {
-               printf("   ");
-               if (prog) {
-                  ((ir_instruction *) last_annotation_ir)->print();
+               fprintf(stderr, "   ");
+               if (shader_prog) {
+                  ((ir_instruction *) last_annotation_ir)->fprint(stderr);
                } else {
                   const prog_instruction *vpi;
                   vpi = (const prog_instruction *) ir->ir;
-                  printf("%d: ", (int)(vpi - prog->Instructions));
-                  _mesa_fprint_instruction_opt(stdout, vpi, 0,
+                  fprintf(stderr, "%d: ", (int)(vpi - prog->Instructions));
+                  _mesa_fprint_instruction_opt(stderr, vpi, 0,
                                                PROG_PRINT_DEBUG, NULL);
                }
-               printf("\n");
+               fprintf(stderr, "\n");
             }
          }
          if (last_annotation_string != ir->annotation) {
             last_annotation_string = ir->annotation;
             if (last_annotation_string)
-               printf("   %s\n", last_annotation_string);
+               fprintf(stderr, "   %s\n", last_annotation_string);
          }
       }
 
@@ -842,14 +910,14 @@ gen8_vec4_generator::generate_code(exec_list *instructions)
       }
 
       if (unlikely(debug_flag)) {
-         disassemble(stdout, last_native_inst_offset, next_inst_offset);
+         disassemble(stderr, last_native_inst_offset, next_inst_offset);
       }
 
       last_native_inst_offset = next_inst_offset;
    }
 
    if (unlikely(debug_flag)) {
-      printf("\n");
+      fprintf(stderr, "\n");
    }
 
    patch_jump_targets();
@@ -860,7 +928,7 @@ gen8_vec4_generator::generate_code(exec_list *instructions)
     * case you're doing that.
     */
    if (0 && unlikely(debug_flag)) {
-      disassemble(stdout, 0, next_inst_offset);
+      disassemble(stderr, 0, next_inst_offset);
    }
 }
 

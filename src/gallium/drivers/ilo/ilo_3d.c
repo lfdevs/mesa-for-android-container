@@ -47,8 +47,7 @@ process_query_for_occlusion_counter(struct ilo_3d *hw3d,
    /* in pairs */
    assert(q->reg_read % 2 == 0);
 
-   intel_bo_map(q->bo, false);
-   vals = intel_bo_get_virtual(q->bo);
+   vals = intel_bo_map(q->bo, false);
    for (i = 1; i < q->reg_read; i += 2)
       depth_count += vals[i] - vals[i - 1];
    intel_bo_unmap(q->bo);
@@ -72,8 +71,7 @@ process_query_for_timestamp(struct ilo_3d *hw3d, struct ilo_query *q)
 
    assert(q->reg_read == 1);
 
-   intel_bo_map(q->bo, false);
-   vals = intel_bo_get_virtual(q->bo);
+   vals = intel_bo_map(q->bo, false);
    timestamp = vals[0];
    intel_bo_unmap(q->bo);
 
@@ -90,8 +88,7 @@ process_query_for_time_elapsed(struct ilo_3d *hw3d, struct ilo_query *q)
    /* in pairs */
    assert(q->reg_read % 2 == 0);
 
-   intel_bo_map(q->bo, false);
-   vals = intel_bo_get_virtual(q->bo);
+   vals = intel_bo_map(q->bo, false);
 
    for (i = 1; i < q->reg_read; i += 2)
       elapsed += vals[i] - vals[i - 1];
@@ -100,6 +97,41 @@ process_query_for_time_elapsed(struct ilo_3d *hw3d, struct ilo_query *q)
 
    /* accumulate so that the query can be resumed if wanted */
    q->data.u64 += timestamp_to_ns(elapsed);
+   q->reg_read = 0;
+}
+
+static void
+process_query_for_pipeline_statistics(struct ilo_3d *hw3d,
+                                      struct ilo_query *q)
+{
+   const uint64_t *vals;
+   int i;
+
+   assert(q->reg_read % 22 == 0);
+
+   vals = intel_bo_map(q->bo, false);
+
+   for (i = 0; i < q->reg_read; i += 22) {
+      struct pipe_query_data_pipeline_statistics *stats =
+         &q->data.pipeline_statistics;
+      const uint64_t *begin = vals + i;
+      const uint64_t *end = begin + 11;
+
+      stats->ia_vertices    += end[0] - begin[0];
+      stats->ia_primitives  += end[1] - begin[1];
+      stats->vs_invocations += end[2] - begin[2];
+      stats->gs_invocations += end[3] - begin[3];
+      stats->gs_primitives  += end[4] - begin[4];
+      stats->c_invocations  += end[5] - begin[5];
+      stats->c_primitives   += end[6] - begin[6];
+      stats->ps_invocations += end[7] - begin[7];
+      stats->hs_invocations += end[8] - begin[8];
+      stats->ds_invocations += end[9] - begin[9];
+      stats->cs_invocations += end[10] - begin[10];
+   }
+
+   intel_bo_unmap(q->bo);
+
    q->reg_read = 0;
 }
 
@@ -127,6 +159,17 @@ ilo_3d_resume_queries(struct ilo_3d *hw3d)
       ilo_3d_pipeline_emit_write_timestamp(hw3d->pipeline,
             q->bo, q->reg_read++);
    }
+
+   /* resume pipeline statistics queries */
+   LIST_FOR_EACH_ENTRY(q, &hw3d->pipeline_statistics_queries, list) {
+      /* accumulate the result if the bo is alreay full */
+      if (q->reg_read >= q->reg_total)
+         process_query_for_pipeline_statistics(hw3d, q);
+
+      ilo_3d_pipeline_emit_write_statistics(hw3d->pipeline,
+            q->bo, q->reg_read);
+      q->reg_read += 11;
+   }
 }
 
 static void
@@ -147,6 +190,14 @@ ilo_3d_pause_queries(struct ilo_3d *hw3d)
       ilo_3d_pipeline_emit_write_timestamp(hw3d->pipeline,
             q->bo, q->reg_read++);
    }
+
+   /* pause pipeline statistics queries */
+   LIST_FOR_EACH_ENTRY(q, &hw3d->pipeline_statistics_queries, list) {
+      assert(q->reg_read < q->reg_total);
+      ilo_3d_pipeline_emit_write_statistics(hw3d->pipeline,
+            q->bo, q->reg_read);
+      q->reg_read += 11;
+   }
 }
 
 static void
@@ -160,7 +211,7 @@ ilo_3d_release_render_ring(struct ilo_cp *cp, void *data)
 void
 ilo_3d_own_render_ring(struct ilo_3d *hw3d)
 {
-   ilo_cp_set_ring(hw3d->cp, ILO_CP_RING_RENDER);
+   ilo_cp_set_ring(hw3d->cp, INTEL_RING_RENDER);
 
    if (ilo_cp_set_owner(hw3d->cp, &hw3d->owner, hw3d->owner_reserve))
       ilo_3d_resume_queries(hw3d);
@@ -222,6 +273,25 @@ ilo_3d_begin_query(struct ilo_context *ilo, struct ilo_query *q)
       q->data.u64 = 0;
       list_add(&q->list, &hw3d->prim_emitted_queries);
       break;
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+      /* reserve some space for pausing the query */
+      q->reg_cmd_size = ilo_3d_pipeline_estimate_size(hw3d->pipeline,
+            ILO_3D_PIPELINE_WRITE_STATISTICS, NULL);
+      hw3d->owner_reserve += q->reg_cmd_size;
+      ilo_cp_set_owner(hw3d->cp, &hw3d->owner, hw3d->owner_reserve);
+
+      memset(&q->data.pipeline_statistics, 0,
+            sizeof(q->data.pipeline_statistics));
+
+      if (ilo_query_alloc_bo(q, 11 * 2, -1, hw3d->cp->winsys)) {
+         /* XXX we should check the aperture size */
+         ilo_3d_pipeline_emit_write_statistics(hw3d->pipeline,
+               q->bo, q->reg_read);
+         q->reg_read += 11;
+
+         list_add(&q->list, &hw3d->pipeline_statistics_queries);
+      }
+      break;
    default:
       assert(!"unknown query type");
       break;
@@ -269,6 +339,16 @@ ilo_3d_end_query(struct ilo_context *ilo, struct ilo_query *q)
    case PIPE_QUERY_PRIMITIVES_EMITTED:
       list_del(&q->list);
       break;
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+      list_del(&q->list);
+
+      assert(q->reg_read + 11 <= q->reg_total);
+      hw3d->owner_reserve -= q->reg_cmd_size;
+      ilo_cp_set_owner(hw3d->cp, &hw3d->owner, hw3d->owner_reserve);
+      ilo_3d_pipeline_emit_write_statistics(hw3d->pipeline,
+            q->bo, q->reg_read);
+      q->reg_read += 11;
+      break;
    default:
       assert(!"unknown query type");
       break;
@@ -299,6 +379,10 @@ ilo_3d_process_query(struct ilo_context *ilo, struct ilo_query *q)
    case PIPE_QUERY_PRIMITIVES_GENERATED:
    case PIPE_QUERY_PRIMITIVES_EMITTED:
       break;
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+      if (q->bo)
+         process_query_for_pipeline_statistics(hw3d, q);
+      break;
    default:
       assert(!"unknown query type");
       break;
@@ -318,10 +402,6 @@ ilo_3d_cp_flushed(struct ilo_3d *hw3d)
    ilo_3d_pipeline_invalidate(hw3d->pipeline,
          ILO_3D_PIPELINE_INVALIDATE_BATCH_BO |
          ILO_3D_PIPELINE_INVALIDATE_STATE_BO);
-   if (!hw3d->cp->render_ctx) {
-      ilo_3d_pipeline_invalidate(hw3d->pipeline,
-            ILO_3D_PIPELINE_INVALIDATE_HW);
-   }
 
    hw3d->new_batch = true;
 }
@@ -348,6 +428,7 @@ ilo_3d_create(struct ilo_cp *cp, const struct ilo_dev_info *dev)
    list_inithead(&hw3d->time_elapsed_queries);
    list_inithead(&hw3d->prim_generated_queries);
    list_inithead(&hw3d->prim_emitted_queries);
+   list_inithead(&hw3d->pipeline_statistics_queries);
 
    hw3d->pipeline = ilo_3d_pipeline_create(cp, dev);
    if (!hw3d->pipeline) {
@@ -665,7 +746,7 @@ upload_shaders(struct ilo_3d *hw3d, struct ilo_shader_cache *shc)
          intel_bo_unreference(hw3d->kernel.bo);
 
       hw3d->kernel.bo = intel_winsys_alloc_buffer(hw3d->cp->winsys,
-            "kernel bo", new_size, 0);
+            "kernel bo", new_size, INTEL_DOMAIN_CPU);
       if (!hw3d->kernel.bo) {
          ilo_err("failed to allocate kernel bo\n");
          return false;
@@ -778,7 +859,7 @@ ilo_texture_barrier(struct pipe_context *pipe)
    struct ilo_context *ilo = ilo_context(pipe);
    struct ilo_3d *hw3d = ilo->hw3d;
 
-   if (ilo->cp->ring != ILO_CP_RING_RENDER)
+   if (ilo->cp->ring != INTEL_RING_RENDER)
       return;
 
    ilo_3d_pipeline_emit_flush(hw3d->pipeline);

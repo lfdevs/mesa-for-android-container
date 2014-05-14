@@ -70,7 +70,7 @@ BUILT_SOURCES = \
 CLEANFILES = \
 	$(BUILT_SOURCES) \
 	$(BUILDDIR)program/program_parse.tab.h \
-	git_sha1.h.tmp
+	$(BUILDDIR)main/git_sha1.h.tmp
 
 GET_HASH_GEN = main/get_hash_generator.py
 
@@ -150,11 +150,11 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = gl.pc
 
 $(BUILDDIR)program/lex.yy.c: program/program_lexer.l
-	$(MKDIR_P) $(builddir)/program
+	$(AM_V_at)$(MKDIR_P) program
 	$(AM_V_GEN) $(LEX) --never-interactive --outfile=$@ $<
 
 $(BUILDDIR)program/program_parse.tab.c $(BUILDDIR)program/program_parse.tab.h: program/program_parse.y
-	$(MKDIR_P) $(builddir)/program
+	$(AM_V_at)$(MKDIR_P) program
 	$(AM_V_GEN) $(YACC) -p "_mesa_program_" -v -d --output=$(BUILDDIR)program/program_parse.tab.c $<
 
 if GEN_ASM_OFFSETS

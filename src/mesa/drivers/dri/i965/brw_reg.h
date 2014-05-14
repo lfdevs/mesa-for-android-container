@@ -43,6 +43,8 @@
 #define BRW_REG_H
 
 #include <stdbool.h>
+#include "main/imports.h"
+#include "main/compiler.h"
 #include "program/prog_instruction.h"
 #include "brw_defines.h"
 
@@ -77,6 +79,8 @@ extern "C" {
 #define BRW_SWIZZLE_ZZZZ      BRW_SWIZZLE4(2,2,2,2)
 #define BRW_SWIZZLE_WWWW      BRW_SWIZZLE4(3,3,3,3)
 #define BRW_SWIZZLE_XYXY      BRW_SWIZZLE4(0,1,0,1)
+#define BRW_SWIZZLE_YZXW      BRW_SWIZZLE4(1,2,0,3)
+#define BRW_SWIZZLE_ZXYW      BRW_SWIZZLE4(2,0,1,3)
 #define BRW_SWIZZLE_ZWZW      BRW_SWIZZLE4(2,3,2,3)
 
 static inline bool
@@ -88,7 +92,7 @@ brw_is_single_value_swizzle(int swiz)
            swiz == BRW_SWIZZLE_WWWW);
 }
 
-enum brw_reg_type {
+enum PACKED brw_reg_type {
    BRW_REGISTER_TYPE_UD = 0,
    BRW_REGISTER_TYPE_D,
    BRW_REGISTER_TYPE_UW,
@@ -116,6 +120,7 @@ enum brw_reg_type {
 
 unsigned brw_reg_type_to_hw_type(const struct brw_context *brw,
                                  enum brw_reg_type type, unsigned file);
+const char *brw_reg_type_letters(unsigned brw_reg_type);
 
 #define REG_SIZE (8*4)
 
@@ -176,6 +181,34 @@ type_sz(unsigned type)
       return 1;
    default:
       return 0;
+   }
+}
+
+static inline bool
+type_is_signed(unsigned type)
+{
+   switch(type) {
+   case BRW_REGISTER_TYPE_D:
+   case BRW_REGISTER_TYPE_W:
+   case BRW_REGISTER_TYPE_F:
+   case BRW_REGISTER_TYPE_B:
+   case BRW_REGISTER_TYPE_V:
+   case BRW_REGISTER_TYPE_VF:
+   case BRW_REGISTER_TYPE_DF:
+   case BRW_REGISTER_TYPE_HF:
+   case BRW_REGISTER_TYPE_Q:
+      return true;
+
+   case BRW_REGISTER_TYPE_UD:
+   case BRW_REGISTER_TYPE_UW:
+   case BRW_REGISTER_TYPE_UB:
+   case BRW_REGISTER_TYPE_UV:
+   case BRW_REGISTER_TYPE_UQ:
+      return false;
+
+   default:
+      assert(!"Unreachable.");
+      return false;
    }
 }
 
@@ -479,19 +512,38 @@ brw_imm_vf(unsigned v)
    return imm;
 }
 
-#define VF_ZERO 0x0
-#define VF_ONE  0x30
-#define VF_NEG  (1<<7)
-
-static inline struct brw_reg
-brw_imm_vf4(unsigned v0, unsigned v1, unsigned v2, unsigned v3)
+/**
+ * Convert an integer into a "restricted" 8-bit float, used in vector
+ * immediates.  The 8-bit floating point format has a sign bit, an
+ * excess-3 3-bit exponent, and a 4-bit mantissa.  All integer values
+ * from -31 to 31 can be represented exactly.
+ */
+static inline uint8_t
+int_to_float8(int x)
 {
-   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_VF);
-   imm.vstride = BRW_VERTICAL_STRIDE_0;
-   imm.width = BRW_WIDTH_4;
-   imm.hstride = BRW_HORIZONTAL_STRIDE_1;
-   imm.dw1.ud = ((v0 << 0) | (v1 << 8) | (v2 << 16) | (v3 << 24));
-   return imm;
+   if (x == 0) {
+      return 0;
+   } else if (x < 0) {
+      return 1 << 7 | int_to_float8(-x);
+   } else {
+      const unsigned exponent = _mesa_logbase2(x);
+      const unsigned mantissa = (x - (1 << exponent)) << (4 - exponent);
+      assert(exponent <= 4);
+      return (exponent + 3) << 4 | mantissa;
+   }
+}
+
+/**
+ * Construct a floating-point packed vector immediate from its integer
+ * values. \sa int_to_float8()
+ */
+static inline struct brw_reg
+brw_imm_vf4(int v0, int v1, int v2, int v3)
+{
+   return brw_imm_vf((int_to_float8(v0) << 0) |
+                     (int_to_float8(v1) << 8) |
+                     (int_to_float8(v2) << 16) |
+                     (int_to_float8(v3) << 24));
 }
 
 

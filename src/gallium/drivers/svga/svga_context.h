@@ -200,6 +200,10 @@ struct svga_sampler_state {
 struct svga_velems_state {
    unsigned count;
    struct pipe_vertex_element velem[PIPE_MAX_ATTRIBS];
+   SVGA3dDeclType decl_type[PIPE_MAX_ATTRIBS]; /**< vertex attrib formats */
+   unsigned adjust_attrib_range; /* bitmask of attrs needing range adjustment */
+   unsigned adjust_attrib_w_1;   /* bitmask of attrs needing w = 1 */
+   boolean need_swvfetch;
 };
 
 /* Use to calculate differences between state emitted to hardware and
@@ -304,8 +308,6 @@ struct svga_hw_draw_state
  */
 struct svga_sw_state
 {
-   unsigned ve_format[PIPE_MAX_ATTRIBS]; /* NEW_VELEMENT */
-
    /* which parts we need */
    boolean need_swvfetch;
    boolean need_pipeline;

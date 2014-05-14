@@ -162,7 +162,7 @@ static void so_emit_prim(struct pt_so_emit *so,
    for (i = 0; i < num_vertices; ++i) {
       const float (*input)[4];
       const float *pre_clip_pos = NULL;
-      int ob;
+      unsigned  ob;
 
       input = (const float (*)[4])(
          (const char *)input_ptr + (indices[i] * input_vertex_stride));
@@ -194,7 +194,7 @@ static void so_emit_prim(struct pt_so_emit *so,
          {
             int j;
             debug_printf("VERT[%d], offset = %d, slot[%d] sc = %d, num_c = %d, idx = %d = [",
-                         i + draw->so.targets[ob]->emitted_vertices,
+                         i,
                          draw->so.targets[ob]->internal_offset,
                          slot, start_comp, num_comps, idx);
             for (j = 0; j < num_comps; ++j) {
@@ -209,7 +209,6 @@ static void so_emit_prim(struct pt_so_emit *so,
          struct draw_so_target *target = draw->so.targets[ob];
          if (target && buffer_written[ob]) {
             target->internal_offset += state->stride[ob] * sizeof(float);
-            target->emitted_vertices += 1;
          }
       }
    }

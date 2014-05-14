@@ -24,6 +24,7 @@
 #define CLOVER_API_UTIL_HPP
 
 #include <cassert>
+#include <iostream>
 
 #include "core/error.hpp"
 #include "core/property.hpp"
@@ -48,16 +49,17 @@ namespace clover {
    }
 
    ///
-   /// Return a reference-counted object in \a p if non-zero.
-   /// Otherwise release object ownership.
+   /// Return a clover object in \a p if non-zero incrementing the
+   /// reference count of the object.
    ///
-   template<typename T, typename S>
+   template<typename T>
    void
-   ret_object(T p, S v) {
-      if (p)
-         *p = v;
-      else
-         v->release();
+   ret_object(typename T::descriptor_type **p,
+              const intrusive_ref<T> &v) {
+      if (p) {
+         v().retain();
+         *p = desc(v());
+      }
    }
 }
 

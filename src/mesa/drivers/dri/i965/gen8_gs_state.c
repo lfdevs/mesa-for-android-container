@@ -36,20 +36,6 @@ gen8_upload_gs_state(struct brw_context *brw)
    /* CACHE_NEW_GS_PROG */
    const struct brw_vec4_prog_data *prog_data = &brw->gs.prog_data->base;
 
-   /* BRW_NEW_GS_BINDING_TABLE */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_GS << 16 | (2 - 2));
-   OUT_BATCH(stage_state->bind_bo_offset);
-   ADVANCE_BATCH();
-
-   /* CACHE_NEW_SAMPLER */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_SAMPLER_STATE_POINTERS_GS << 16 | (2 - 2));
-   OUT_BATCH(stage_state->sampler_offset);
-   ADVANCE_BATCH();
-
-   gen8_upload_constant_state(brw, stage_state, active, _3DSTATE_CONSTANT_GS);
-
    if (active) {
       int urb_entry_write_offset = 1;
       uint32_t urb_entry_output_length =
@@ -135,13 +121,11 @@ gen8_upload_gs_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_gs_state = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
+      .mesa  = _NEW_TRANSFORM,
       .brw   = (BRW_NEW_CONTEXT |
                 BRW_NEW_GEOMETRY_PROGRAM |
-                BRW_NEW_GS_BINDING_TABLE |
-                BRW_NEW_BATCH |
-                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
-      .cache = CACHE_NEW_GS_PROG | CACHE_NEW_SAMPLER
+                BRW_NEW_BATCH),
+      .cache = CACHE_NEW_GS_PROG
    },
    .emit = gen8_upload_gs_state,
 };

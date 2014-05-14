@@ -24,9 +24,9 @@
 
 
 /*
- * This is the GLX API dispatcher.  Calls to the glX* functions are
- * either routed to the real GLX encoders or to Mesa's pseudo-GLX functions.
- * See the glxapi.h file for more details.
+ * This is the GLX API dispatcher.  It uses a dispatch table but that's
+ * not really needed anymore since the table always points to the "fake"
+ * GLX functions.
  */
 
 
@@ -40,7 +40,6 @@
 #include "glxapi.h"
 
 
-extern struct _glxapi_table *_real_GetGLXDispatchTable(void);
 extern struct _glxapi_table *_mesa_GetGLXDispatchTable(void);
 
 
@@ -107,9 +106,7 @@ get_dispatch(Display *dpy)
       }
    }
 
-   /* A new display, determine if we should use real GLX
-    * or Mesa's pseudo-GLX.
-    */
+   /* Setup the dispatch table */
    {
       struct _glxapi_table *t = _mesa_GetGLXDispatchTable();
 
@@ -130,15 +127,11 @@ get_dispatch(Display *dpy)
       }
    }
 
-   /* If we get here that means we can't use real GLX on this display
-    * and the Mesa pseudo-GLX software renderer wasn't compiled in.
-    * Or, we ran out of memory!
-    */
    return NULL;
 }
 
 
-/* Don't use the GET_DISPATCH defined in glthread.h */
+/* Don't use the GET_DISPATCH macro */
 #undef GET_DISPATCH
 
 #define GET_DISPATCH(DPY, TABLE)	\
@@ -153,34 +146,6 @@ get_dispatch(Display *dpy)
    }
 
    
-
-
-/**
- * GLX API current context.
- */
-#if defined(GLX_USE_TLS)
-PUBLIC __thread void * CurrentContext
-    __attribute__((tls_model("initial-exec")));
-#elif defined(THREADS)
-static _glthread_TSD ContextTSD;         /**< Per-thread context pointer */
-#else
-static GLXContext CurrentContext = 0;
-#endif
-
-
-static void
-SetCurrentContext(GLXContext c)
-{
-#if defined(GLX_USE_TLS)
-   CurrentContext = c;
-#elif defined(THREADS)
-   _glthread_SetTSD(&ContextTSD, c);
-#else
-   CurrentContext = c;
-#endif
-}
-
-
 /*
  * GLX API entrypoints
  */
@@ -238,8 +203,6 @@ glXDestroyContext(Display *dpy, GLXContext ctx)
    GET_DISPATCH(dpy, t);
    if (!t)
       return;
-   if (glXGetCurrentContext() == ctx)
-      SetCurrentContext(NULL);
    (t->DestroyContext)(dpy, ctx);
 }
 
@@ -266,16 +229,13 @@ glXGetConfig(Display *dpy, XVisualInfo *visinfo, int attrib, int *value)
 }
 
 
+/* declare here to avoid including xmesa.h */
+extern void *XMesaGetCurrentContext(void);
+
 GLXContext PUBLIC
 glXGetCurrentContext(void)
 {
-#if defined(GLX_USE_TLS)
-   return CurrentContext;
-#elif defined(THREADS)
-   return (GLXContext) _glthread_GetTSD(&ContextTSD);
-#else
-   return CurrentContext;
-#endif
+   return (GLXContext) XMesaGetCurrentContext();
 }
 
 
@@ -308,9 +268,6 @@ glXMakeCurrent(Display *dpy, GLXDrawable drawable, GLXContext ctx)
       return False;
    }
    b = (*t->MakeCurrent)(dpy, drawable, ctx);
-   if (b) {
-      SetCurrentContext(ctx);
-   }
    return b;
 }
 
@@ -583,9 +540,6 @@ glXMakeContextCurrent(Display *dpy, GLXDrawable draw, GLXDrawable read, GLXConte
    if (!t)
       return False;
    b = (t->MakeContextCurrent)(dpy, draw, read, ctx);
-   if (b) {
-      SetCurrentContext(ctx);
-   }
    return b;
 }
 

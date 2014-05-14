@@ -176,6 +176,7 @@ static const int reg_type_size[] = {
    [BRW_HW_REG_NON_IMM_TYPE_B]   = 1,
    [GEN7_HW_REG_NON_IMM_TYPE_DF] = 8,
    [BRW_HW_REG_TYPE_F]           = 4,
+   [GEN8_HW_REG_NON_IMM_TYPE_HF] = 2,
 };
 
 static const char *const m_reg_file[4] = {
@@ -219,6 +220,39 @@ static const char *const m_sfid[16] = {
    [GEN7_SFID_PIXEL_INTERPOLATOR]      = "pi",
    [HSW_SFID_DATAPORT_DATA_CACHE_1]    = "dp/data_cache:1",
    [HSW_SFID_CRE]                      = "cre",
+};
+
+static const char *const dp_dc1_msg_type[16] = {
+   [HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ]      = "untyped surface read",
+   [HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP]         = "DC untyped atomic op",
+   [HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2] = "DC untyped 4x2 atomic op",
+   [HSW_DATAPORT_DC_PORT1_MEDIA_BLOCK_READ]          = "DC media block read",
+   [HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ]        = "DC typed surface read",
+   [HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP]           = "DC typed atomic",
+   [HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2]   = "DC typed 4x2 atomic op",
+   [HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE]     = "DC untyped surface write",
+   [HSW_DATAPORT_DC_PORT1_MEDIA_BLOCK_WRITE]         = "DC media block write",
+   [HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP]         = "DC atomic counter op",
+   [HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP_SIMD4X2] = "DC 4x2 atomic counter op",
+   [HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE]       = "DC typed surface write",
+};
+
+static const char * const aop[16] = {
+   [BRW_AOP_AND]    = "and",
+   [BRW_AOP_OR]     = "or",
+   [BRW_AOP_XOR]    = "xor",
+   [BRW_AOP_MOV]    = "mov",
+   [BRW_AOP_INC]    = "inc",
+   [BRW_AOP_DEC]    = "dec",
+   [BRW_AOP_ADD]    = "add",
+   [BRW_AOP_SUB]    = "sub",
+   [BRW_AOP_REVSUB] = "revsub",
+   [BRW_AOP_IMAX]   = "imax",
+   [BRW_AOP_IMIN]   = "imin",
+   [BRW_AOP_UMAX]   = "umax",
+   [BRW_AOP_UMIN]   = "umin",
+   [BRW_AOP_CMPWR]  = "cmpwr",
+   [BRW_AOP_PREDEC] = "predec",
 };
 
 static const char *const m_math_function[16] = {
@@ -568,7 +602,10 @@ src0_3src(FILE *file, struct gen8_instruction *inst)
       return 0;
    if (gen8_src0_3src_subreg_nr(inst))
       format(file, ".%d", gen8_src0_3src_subreg_nr(inst));
-   string(file, "<4,1,1>");
+   if (gen8_src0_3src_rep_ctrl(inst))
+      string(file, "<0,1,0>");
+   else
+      string(file, "<4,4,1>");
    err |= control(file, "src da16 reg type", m_three_source_reg_encoding,
                   gen8_src_3src_type(inst), NULL);
    err |= src_swizzle(file, swz_x, swz_y, swz_z, swz_w);
@@ -594,7 +631,10 @@ src1_3src(FILE *file, struct gen8_instruction *inst)
       return 0;
    if (src1_subreg_nr)
       format(file, ".%d", src1_subreg_nr);
-   string(file, "<4,1,1>");
+   if (gen8_src1_3src_rep_ctrl(inst))
+      string(file, "<0,1,0>");
+   else
+      string(file, "<4,4,1>");
    err |= control(file, "src da16 reg type", m_three_source_reg_encoding,
                   gen8_src_3src_type(inst), NULL);
    err |= src_swizzle(file, swz_x, swz_y, swz_z, swz_w);
@@ -619,7 +659,10 @@ src2_3src(FILE *file, struct gen8_instruction *inst)
       return 0;
    if (gen8_src2_3src_subreg_nr(inst))
       format(file, ".%d", gen8_src2_3src_subreg_nr(inst));
-   string(file, "<4,1,1>");
+   if (gen8_src2_3src_rep_ctrl(inst))
+      string(file, "<0,1,0>");
+   else
+      string(file, "<4,4,1>");
    err |= control(file, "src da16 reg type", m_three_source_reg_encoding,
                   gen8_src_3src_type(inst), NULL);
    err |= src_swizzle(file, swz_x, swz_y, swz_z, swz_w);
@@ -732,13 +775,11 @@ src1(FILE *file, struct gen8_instruction *inst)
    }
 }
 
-static int esize[6] = { 1, 2, 4, 8, 16, 32 };
-
 static int
 qtr_ctrl(FILE *file, struct gen8_instruction *inst)
 {
    int qtr_ctl = gen8_qtr_control(inst);
-   int exec_size = esize[gen8_exec_size(inst)];
+   int exec_size = 1 << gen8_exec_size(inst);
 
    if (exec_size == 8) {
       switch (qtr_ctl) {
@@ -827,27 +868,31 @@ gen8_disassemble(FILE *file, struct gen8_instruction *inst, int gen)
       pad(file, 64);
       err |= src2_3src(file, inst);
    } else {
-      if (m_opcode[opcode].ndst > 0) {
+      if (opcode == BRW_OPCODE_ENDIF || opcode == BRW_OPCODE_WHILE) {
          pad(file, 16);
-         err |= dest(file, inst);
-      } else if (opcode == BRW_OPCODE_ENDIF) {
-         format(file, " %d", gen8_jip(inst));
+         format(file, "JIP: %d", gen8_jip(inst));
       } else if (opcode == BRW_OPCODE_IF ||
                  opcode == BRW_OPCODE_ELSE ||
-                 opcode == BRW_OPCODE_WHILE ||
                  opcode == BRW_OPCODE_BREAK ||
                  opcode == BRW_OPCODE_CONTINUE ||
                  opcode == BRW_OPCODE_HALT) {
-         format(file, " %d %d", gen8_jip(inst), gen8_uip(inst));
-      }
-
-      if (m_opcode[opcode].nsrc > 0) {
+         pad(file, 16);
+         format(file, "JIP: %d", gen8_jip(inst));
          pad(file, 32);
-         err |= src0(file, inst);
-      }
-      if (m_opcode[opcode].nsrc > 1) {
-         pad(file, 48);
-         err |= src1(file, inst);
+         format(file, "UIP: %d", gen8_uip(inst));
+      } else {
+         if (m_opcode[opcode].ndst > 0) {
+            pad(file, 16);
+            err |= dest(file, inst);
+         }
+         if (m_opcode[opcode].nsrc > 0) {
+            pad(file, 32);
+            err |= src0(file, inst);
+         }
+         if (m_opcode[opcode].nsrc > 1) {
+            pad(file, 48);
+            err |= src1(file, inst);
+         }
       }
    }
 
@@ -895,6 +940,38 @@ gen8_disassemble(FILE *file, struct gen8_instruction *inst, int gen)
          format(file, " (%d, 0x%x)",
                 gen8_binding_table_index(inst),
                 gen8_function_control(inst));
+         break;
+
+      case HSW_SFID_DATAPORT_DATA_CACHE_1:
+         err |= control(file, "DP DC1 message type",
+                        dp_dc1_msg_type, gen8_dp_message_type(inst), &space);
+         format(file, ", Surface = %d, ", gen8_binding_table_index(inst));
+         switch (gen8_dp_message_type(inst)) {
+         case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP:
+         case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
+         case HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP:
+            format(file, "SIMD%d,",
+                   (gen8_dp_message_control(inst) & (1 << 4)) ? 8 : 16);
+            /* fallthrough */
+         case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2:
+         case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
+         case HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP_SIMD4X2:
+            control(file, "atomic op", aop,
+                    gen8_dp_message_control(inst) & 0xf, &space);
+            break;
+         case HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ:
+         case HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE:
+         case HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ:
+         case HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE: {
+            static const char *simd_modes[] = { "4x2", "16", "8" };
+            unsigned msg_ctrl = gen8_dp_message_control(inst);
+            format(file, "SIMD%s, Mask = 0x%x",
+                   simd_modes[msg_ctrl >> 4], msg_ctrl & 0xf);
+            break;
+         }
+         default:
+            format(file, "0x%x", gen8_dp_message_control(inst));
+         }
          break;
 
       default:

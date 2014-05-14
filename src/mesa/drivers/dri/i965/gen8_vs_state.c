@@ -29,29 +29,6 @@
 #include "program/prog_statevars.h"
 #include "intel_batchbuffer.h"
 
-void
-gen8_upload_constant_state(struct brw_context *brw,
-                           const struct brw_stage_state *stage_state,
-                           bool active, unsigned opcode)
-{
-   /* Disable if the shader stage is inactive or there are no push constants. */
-   active = active && stage_state->push_const_size != 0;
-
-   BEGIN_BATCH(11);
-   OUT_BATCH(opcode << 16 | (11 - 2));
-   OUT_BATCH(active ? stage_state->push_const_size : 0);
-   OUT_BATCH(0);
-   OUT_BATCH(active ? stage_state->push_const_offset : 0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   ADVANCE_BATCH();
-}
-
 static void
 upload_vs_state(struct brw_context *brw)
 {
@@ -61,21 +38,6 @@ upload_vs_state(struct brw_context *brw)
 
    /* CACHE_NEW_VS_PROG */
    const struct brw_vec4_prog_data *prog_data = &brw->vs.prog_data->base;
-
-   /* BRW_NEW_VS_BINDING_TABLE */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_VS << 16 | (2 - 2));
-   OUT_BATCH(stage_state->bind_bo_offset);
-   ADVANCE_BATCH();
-
-   /* CACHE_NEW_SAMPLER */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_SAMPLER_STATE_POINTERS_VS << 16 | (2 - 2));
-   OUT_BATCH(stage_state->sampler_offset);
-   ADVANCE_BATCH();
-
-   gen8_upload_constant_state(brw, stage_state, true /* active */,
-                              _3DSTATE_CONSTANT_VS);
 
    /* Use ALT floating point mode for ARB vertex programs, because they
     * require 0^0 == 1.
@@ -87,7 +49,7 @@ upload_vs_state(struct brw_context *brw)
    OUT_BATCH(_3DSTATE_VS << 16 | (9 - 2));
    OUT_BATCH(stage_state->prog_offset);
    OUT_BATCH(0);
-   OUT_BATCH(GEN6_VS_VECTOR_MASK_ENABLE | floating_point_mode |
+   OUT_BATCH(floating_point_mode |
              ((ALIGN(stage_state->sampler_count, 4) / 4) <<
                GEN6_VS_SAMPLER_COUNT_SHIFT) |
              ((prog_data->base.binding_table.size_bytes / 4) <<
@@ -119,13 +81,11 @@ upload_vs_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_vs_state = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
+      .mesa  = _NEW_TRANSFORM,
       .brw   = BRW_NEW_CONTEXT |
                BRW_NEW_VERTEX_PROGRAM |
-               BRW_NEW_VS_BINDING_TABLE |
-               BRW_NEW_BATCH |
-               BRW_NEW_PUSH_CONSTANT_ALLOCATION,
-      .cache = CACHE_NEW_VS_PROG | CACHE_NEW_SAMPLER
+               BRW_NEW_BATCH,
+      .cache = CACHE_NEW_VS_PROG
    },
    .emit = upload_vs_state,
 };

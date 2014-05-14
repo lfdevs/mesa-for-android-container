@@ -38,7 +38,7 @@ clCreateBuffer(cl_context d_ctx, cl_mem_flags flags, size_t size,
 
    if (!size ||
        size > fold(maximum(), cl_ulong(0),
-                   map(std::mem_fn(&device::max_mem_alloc_size), ctx.devs())
+                   map(std::mem_fn(&device::max_mem_alloc_size), ctx.devices())
           ))
       throw error(CL_INVALID_BUFFER_SIZE);
 
@@ -230,12 +230,12 @@ clGetMemObjectInfo(cl_mem d_mem, cl_mem_info param,
       break;
 
    case CL_MEM_CONTEXT:
-      buf.as_scalar<cl_context>() = desc(mem.ctx);
+      buf.as_scalar<cl_context>() = desc(mem.context());
       break;
 
    case CL_MEM_ASSOCIATED_MEMOBJECT: {
       sub_buffer *sub = dynamic_cast<sub_buffer *>(&mem);
-      buf.as_scalar<cl_mem>() = (sub ? desc(sub->parent) : NULL);
+      buf.as_scalar<cl_mem>() = (sub ? desc(sub->parent()) : NULL);
       break;
    }
    case CL_MEM_OFFSET: {
@@ -333,4 +333,16 @@ clSetMemObjectDestructorCallback(cl_mem d_mem,
 
 } catch (error &e) {
    return e.get();
+}
+
+CLOVER_API cl_mem
+clCreateImage(cl_context d_ctx, cl_mem_flags flags,
+              const cl_image_format *format,
+              const cl_image_desc *image_desc,
+              void *host_ptr, cl_int *r_errcode) {
+   // This function was added in OpenCL 1.2
+   std::cerr << "CL user error: clCreateImage() not supported by OpenCL 1.1." <<
+                std::endl;
+   ret_error(r_errcode, CL_INVALID_OPERATION);
+   return NULL;
 }

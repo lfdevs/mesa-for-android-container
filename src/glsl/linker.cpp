@@ -297,7 +297,7 @@ linker_warning(gl_shader_program *prog, const char *fmt, ...)
 {
    va_list ap;
 
-   ralloc_strcat(&prog->InfoLog, "error: ");
+   ralloc_strcat(&prog->InfoLog, "warning: ");
    va_start(ap, fmt);
    ralloc_vasprintf_append(&prog->InfoLog, fmt, ap);
    va_end(ap);
@@ -1195,6 +1195,83 @@ private:
 };
 
 /**
+ * Performs the cross-validation of layout qualifiers specified in
+ * redeclaration of gl_FragCoord for the attached fragment shaders,
+ * and propagates them to the linked FS and linked shader program.
+ */
+static void
+link_fs_input_layout_qualifiers(struct gl_shader_program *prog,
+	                        struct gl_shader *linked_shader,
+	                        struct gl_shader **shader_list,
+	                        unsigned num_shaders)
+{
+   linked_shader->redeclares_gl_fragcoord = false;
+   linked_shader->uses_gl_fragcoord = false;
+   linked_shader->origin_upper_left = false;
+   linked_shader->pixel_center_integer = false;
+
+   if (linked_shader->Stage != MESA_SHADER_FRAGMENT ||
+       (prog->Version < 150 && !prog->ARB_fragment_coord_conventions_enable))
+      return;
+
+   for (unsigned i = 0; i < num_shaders; i++) {
+      struct gl_shader *shader = shader_list[i];
+      /* From the GLSL 1.50 spec, page 39:
+       *
+       *   "If gl_FragCoord is redeclared in any fragment shader in a program,
+       *    it must be redeclared in all the fragment shaders in that program
+       *    that have a static use gl_FragCoord."
+       *
+       * Exclude the case when one of the 'linked_shader' or 'shader' redeclares
+       * gl_FragCoord with no layout qualifiers but the other one doesn't
+       * redeclare it. If we strictly follow GLSL 1.50 spec's language, it
+       * should be a link error. But, generating link error for this case will
+       * be a wrong behaviour which spec didn't intend to do and it could also
+       * break some applications.
+       */
+      if ((linked_shader->redeclares_gl_fragcoord
+           && !shader->redeclares_gl_fragcoord
+           && shader->uses_gl_fragcoord
+           && (linked_shader->origin_upper_left
+               || linked_shader->pixel_center_integer))
+          || (shader->redeclares_gl_fragcoord
+              && !linked_shader->redeclares_gl_fragcoord
+              && linked_shader->uses_gl_fragcoord
+              && (shader->origin_upper_left
+                  || shader->pixel_center_integer))) {
+             linker_error(prog, "fragment shader defined with conflicting "
+                         "layout qualifiers for gl_FragCoord\n");
+      }
+
+      /* From the GLSL 1.50 spec, page 39:
+       *
+       *   "All redeclarations of gl_FragCoord in all fragment shaders in a
+       *    single program must have the same set of qualifiers."
+       */
+      if (linked_shader->redeclares_gl_fragcoord && shader->redeclares_gl_fragcoord
+          && (shader->origin_upper_left != linked_shader->origin_upper_left
+          || shader->pixel_center_integer != linked_shader->pixel_center_integer)) {
+         linker_error(prog, "fragment shader defined with conflicting "
+                      "layout qualifiers for gl_FragCoord\n");
+      }
+
+      /* Update the linked shader state.  Note that uses_gl_fragcoord should
+       * accumulate the results.  The other values should replace.  If there
+       * are multiple redeclarations, all the fields except uses_gl_fragcoord
+       * are already known to be the same.
+       */
+      if (shader->redeclares_gl_fragcoord || shader->uses_gl_fragcoord) {
+         linked_shader->redeclares_gl_fragcoord =
+            shader->redeclares_gl_fragcoord;
+         linked_shader->uses_gl_fragcoord = linked_shader->uses_gl_fragcoord
+            || shader->uses_gl_fragcoord;
+         linked_shader->origin_upper_left = shader->origin_upper_left;
+         linked_shader->pixel_center_integer = shader->pixel_center_integer;
+      }
+   }
+}
+
+/**
  * Performs the cross-validation of geometry shader max_vertices and
  * primitive type layout qualifiers for the attached geometry shaders,
  * and propagates them to the linked GS and linked shader program.
@@ -1206,6 +1283,7 @@ link_gs_inout_layout_qualifiers(struct gl_shader_program *prog,
 				unsigned num_shaders)
 {
    linked_shader->Geom.VerticesOut = 0;
+   linked_shader->Geom.Invocations = 0;
    linked_shader->Geom.InputType = PRIM_UNKNOWN;
    linked_shader->Geom.OutputType = PRIM_UNKNOWN;
 
@@ -1259,6 +1337,18 @@ link_gs_inout_layout_qualifiers(struct gl_shader_program *prog,
 	 }
 	 linked_shader->Geom.VerticesOut = shader->Geom.VerticesOut;
       }
+
+      if (shader->Geom.Invocations != 0) {
+	 if (linked_shader->Geom.Invocations != 0 &&
+	     linked_shader->Geom.Invocations != shader->Geom.Invocations) {
+	    linker_error(prog, "geometry shader defined with conflicting "
+			 "invocation count (%d and %d)\n",
+			 linked_shader->Geom.Invocations,
+			 shader->Geom.Invocations);
+	    return;
+	 }
+	 linked_shader->Geom.Invocations = shader->Geom.Invocations;
+      }
    }
 
    /* Just do the intrastage -> interstage propagation right now,
@@ -1285,7 +1375,75 @@ link_gs_inout_layout_qualifiers(struct gl_shader_program *prog,
       return;
    }
    prog->Geom.VerticesOut = linked_shader->Geom.VerticesOut;
+
+   if (linked_shader->Geom.Invocations == 0)
+      linked_shader->Geom.Invocations = 1;
+
+   prog->Geom.Invocations = linked_shader->Geom.Invocations;
 }
+
+
+/**
+ * Perform cross-validation of compute shader local_size_{x,y,z} layout
+ * qualifiers for the attached compute shaders, and propagate them to the
+ * linked CS and linked shader program.
+ */
+static void
+link_cs_input_layout_qualifiers(struct gl_shader_program *prog,
+                                struct gl_shader *linked_shader,
+                                struct gl_shader **shader_list,
+                                unsigned num_shaders)
+{
+   for (int i = 0; i < 3; i++)
+      linked_shader->Comp.LocalSize[i] = 0;
+
+   /* This function is called for all shader stages, but it only has an effect
+    * for compute shaders.
+    */
+   if (linked_shader->Stage != MESA_SHADER_COMPUTE)
+      return;
+
+   /* From the ARB_compute_shader spec, in the section describing local size
+    * declarations:
+    *
+    *     If multiple compute shaders attached to a single program object
+    *     declare local work-group size, the declarations must be identical;
+    *     otherwise a link-time error results. Furthermore, if a program
+    *     object contains any compute shaders, at least one must contain an
+    *     input layout qualifier specifying the local work sizes of the
+    *     program, or a link-time error will occur.
+    */
+   for (unsigned sh = 0; sh < num_shaders; sh++) {
+      struct gl_shader *shader = shader_list[sh];
+
+      if (shader->Comp.LocalSize[0] != 0) {
+         if (linked_shader->Comp.LocalSize[0] != 0) {
+            for (int i = 0; i < 3; i++) {
+               if (linked_shader->Comp.LocalSize[i] !=
+                   shader->Comp.LocalSize[i]) {
+                  linker_error(prog, "compute shader defined with conflicting "
+                               "local sizes\n");
+                  return;
+               }
+            }
+         }
+         for (int i = 0; i < 3; i++)
+            linked_shader->Comp.LocalSize[i] = shader->Comp.LocalSize[i];
+      }
+   }
+
+   /* Just do the intrastage -> interstage propagation right now,
+    * since we already know we're in the right type of shader program
+    * for doing it.
+    */
+   if (linked_shader->Comp.LocalSize[0] == 0) {
+      linker_error(prog, "compute shader didn't declare local size\n");
+      return;
+   }
+   for (int i = 0; i < 3; i++)
+      prog->Comp.LocalSize[i] = linked_shader->Comp.LocalSize[i];
+}
+
 
 /**
  * Combine a group of shaders for a single stage to generate a linked shader
@@ -1390,7 +1548,9 @@ link_intrastage_shaders(void *mem_ctx,
    linked->NumUniformBlocks = num_uniform_blocks;
    ralloc_steal(linked, linked->UniformBlocks);
 
+   link_fs_input_layout_qualifiers(prog, linked, shader_list, num_shaders);
    link_gs_inout_layout_qualifiers(prog, linked, shader_list, num_shaders);
+   link_cs_input_layout_qualifiers(prog, linked, shader_list, num_shaders);
 
    populate_symbol_table(linked);
 
@@ -1716,10 +1876,12 @@ assign_attribute_or_color_locations(gl_shader_program *prog,
 	     *     active attribute array, both of which require multiple
 	     *     contiguous generic attributes."
 	     *
-	     * Previous versions of the spec contain similar language but omit
-	     * the bit about attribute arrays.
+	     * I think above text prohibits the aliasing of explicit and
+	     * automatic assignments. But, aliasing is allowed in manual
+	     * assignments of attribute locations. See below comments for
+	     * the details.
 	     *
-	     * Page 61 of the OpenGL 4.0 spec also says:
+	     * From OpenGL 4.0 spec, page 61:
 	     *
 	     *     "It is possible for an application to bind more than one
 	     *     attribute name to the same location. This is referred to as
@@ -1732,29 +1894,84 @@ assign_attribute_or_color_locations(gl_shader_program *prog,
 	     *     but implementations are not required to generate an error
 	     *     in this case."
 	     *
-	     * These two paragraphs are either somewhat contradictory, or I
-	     * don't fully understand one or both of them.
+	     * From GLSL 4.30 spec, page 54:
+	     *
+	     *    "A program will fail to link if any two non-vertex shader
+	     *     input variables are assigned to the same location. For
+	     *     vertex shaders, multiple input variables may be assigned
+	     *     to the same location using either layout qualifiers or via
+	     *     the OpenGL API. However, such aliasing is intended only to
+	     *     support vertex shaders where each execution path accesses
+	     *     at most one input per each location. Implementations are
+	     *     permitted, but not required, to generate link-time errors
+	     *     if they detect that every path through the vertex shader
+	     *     executable accesses multiple inputs assigned to any single
+	     *     location. For all shader types, a program will fail to link
+	     *     if explicit location assignments leave the linker unable
+	     *     to find space for other variables without explicit
+	     *     assignments."
+	     *
+	     * From OpenGL ES 3.0 spec, page 56:
+	     *
+	     *    "Binding more than one attribute name to the same location
+	     *     is referred to as aliasing, and is not permitted in OpenGL
+	     *     ES Shading Language 3.00 vertex shaders. LinkProgram will
+	     *     fail when this condition exists. However, aliasing is
+	     *     possible in OpenGL ES Shading Language 1.00 vertex shaders.
+	     *     This will only work if only one of the aliased attributes
+	     *     is active in the executable program, or if no path through
+	     *     the shader consumes more than one attribute of a set of
+	     *     attributes aliased to the same location. A link error can
+	     *     occur if the linker determines that every path through the
+	     *     shader consumes multiple aliased attributes, but implemen-
+	     *     tations are not required to generate an error in this case."
+	     *
+	     * After looking at above references from OpenGL, OpenGL ES and
+	     * GLSL specifications, we allow aliasing of vertex input variables
+	     * in: OpenGL 2.0 (and above) and OpenGL ES 2.0.
+	     *
+	     * NOTE: This is not required by the spec but its worth mentioning
+	     * here that we're not doing anything to make sure that no path
+	     * through the vertex shader executable accesses multiple inputs
+	     * assigned to any single location.
 	     */
-	    /* FINISHME: The code as currently written does not support
-	     * FINISHME: attribute location aliasing (see comment above).
-	     */
+
 	    /* Mask representing the contiguous slots that will be used by
 	     * this attribute.
 	     */
 	    const unsigned attr = var->data.location - generic_base;
 	    const unsigned use_mask = (1 << slots) - 1;
+            const char *const string = (target_index == MESA_SHADER_VERTEX)
+               ? "vertex shader input" : "fragment shader output";
+
+            /* Generate a link error if the requested locations for this
+             * attribute exceed the maximum allowed attribute location.
+             */
+            if (attr + slots > max_index) {
+               linker_error(prog,
+                           "insufficient contiguous locations "
+                           "available for %s `%s' %d %d %d", string,
+                           var->name, used_locations, use_mask, attr);
+               return false;
+            }
 
 	    /* Generate a link error if the set of bits requested for this
 	     * attribute overlaps any previously allocated bits.
 	     */
 	    if ((~(use_mask << attr) & used_locations) != used_locations) {
-	       const char *const string = (target_index == MESA_SHADER_VERTEX)
-		  ? "vertex shader input" : "fragment shader output";
-	       linker_error(prog,
-			    "insufficient contiguous locations "
-			    "available for %s `%s' %d %d %d", string,
-			    var->name, used_locations, use_mask, attr);
-	       return false;
+               if (target_index == MESA_SHADER_FRAGMENT ||
+                   (prog->IsES && prog->Version >= 300)) {
+                  linker_error(prog,
+                               "overlapping location is assigned "
+                               "to %s `%s' %d %d %d\n", string,
+                               var->name, used_locations, use_mask, attr);
+                  return false;
+               } else {
+                  linker_warning(prog,
+                                 "overlapping location is assigned "
+                                 "to %s `%s' %d %d %d\n", string,
+                                 var->name, used_locations, use_mask, attr);
+               }
 	    }
 
 	    used_locations |= (use_mask << attr);
@@ -1967,6 +2184,46 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 }
 
+/**
+ * Validate shader image resources.
+ */
+static void
+check_image_resources(struct gl_context *ctx, struct gl_shader_program *prog)
+{
+   unsigned total_image_units = 0;
+   unsigned fragment_outputs = 0;
+
+   if (!ctx->Extensions.ARB_shader_image_load_store)
+      return;
+
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_shader *sh = prog->_LinkedShaders[i];
+
+      if (sh) {
+         if (sh->NumImages > ctx->Const.Program[i].MaxImageUniforms)
+            linker_error(prog, "Too many %s shader image uniforms",
+                         _mesa_shader_stage_to_string(i));
+
+         total_image_units += sh->NumImages;
+
+         if (i == MESA_SHADER_FRAGMENT) {
+            foreach_list(node, sh->ir) {
+               ir_variable *var = ((ir_instruction *)node)->as_variable();
+               if (var && var->data.mode == ir_var_shader_out)
+                  fragment_outputs += var->type->count_attribute_slots();
+            }
+         }
+      }
+   }
+
+   if (total_image_units > ctx->Const.MaxCombinedImageUniforms)
+      linker_error(prog, "Too many combined image uniforms");
+
+   if (total_image_units + fragment_outputs >
+       ctx->Const.MaxCombinedImageUnitsAndFragmentOutputs)
+      linker_error(prog, "Too many combined image uniforms and fragment outputs");
+}
+
 void
 link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 {
@@ -1993,6 +2250,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    ralloc_free(prog->AtomicBuffers);
    prog->AtomicBuffers = NULL;
    prog->NumAtomicBuffers = 0;
+   prog->ARB_fragment_coord_conventions_enable = false;
 
    /* Separate the shaders into groups based on their type.
     */
@@ -2019,6 +2277,9 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 	 goto done;
       }
 
+      prog->ARB_fragment_coord_conventions_enable |=
+         prog->Shaders[i]->ARB_fragment_coord_conventions_enable;
+
       gl_shader_stage shader_type = prog->Shaders[i]->Stage;
       shader_list[shader_type][num_shaders[shader_type]] = prog->Shaders[i];
       num_shaders[shader_type]++;
@@ -2039,10 +2300,18 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    /* Geometry shaders have to be linked with vertex shaders.
     */
    if (num_shaders[MESA_SHADER_GEOMETRY] > 0 &&
-       num_shaders[MESA_SHADER_VERTEX] == 0) {
+       num_shaders[MESA_SHADER_VERTEX] == 0 &&
+       !prog->SeparateShader) {
       linker_error(prog, "Geometry shader must be linked with "
 		   "vertex shader\n");
       goto done;
+   }
+
+   /* Compute shaders have additional restrictions. */
+   if (num_shaders[MESA_SHADER_COMPUTE] > 0 &&
+       num_shaders[MESA_SHADER_COMPUTE] != prog->NumShaders) {
+      linker_error(prog, "Compute shaders may not be linked with any other "
+                   "type of shader\n");
    }
 
    for (unsigned int i = 0; i < MESA_SHADER_STAGES; i++) {
@@ -2098,7 +2367,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 
    unsigned prev;
 
-   for (prev = 0; prev < MESA_SHADER_STAGES; prev++) {
+   for (prev = 0; prev <= MESA_SHADER_FRAGMENT; prev++) {
       if (prog->_LinkedShaders[prev] != NULL)
          break;
    }
@@ -2106,7 +2375,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    /* Validate the inputs of each stage with the output of the preceding
     * stage.
     */
-   for (unsigned i = prev + 1; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned i = prev + 1; i <= MESA_SHADER_FRAGMENT; i++) {
       if (prog->_LinkedShaders[i] == NULL)
          continue;
 
@@ -2167,24 +2436,17 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
          lower_clip_distance(prog->_LinkedShaders[i]);
       }
 
-      unsigned max_unroll = ctx->ShaderCompilerOptions[i].MaxUnrollIterations;
-
-      while (do_common_optimization(prog->_LinkedShaders[i]->ir, true, false, max_unroll, &ctx->ShaderCompilerOptions[i]))
+      while (do_common_optimization(prog->_LinkedShaders[i]->ir, true, false,
+                                    &ctx->ShaderCompilerOptions[i],
+                                    ctx->Const.NativeIntegers))
 	 ;
    }
 
    /* Mark all generic shader inputs and outputs as unpaired. */
-   if (prog->_LinkedShaders[MESA_SHADER_VERTEX] != NULL) {
-      link_invalidate_variable_locations(
-            prog->_LinkedShaders[MESA_SHADER_VERTEX]->ir);
-   }
-   if (prog->_LinkedShaders[MESA_SHADER_GEOMETRY] != NULL) {
-      link_invalidate_variable_locations(
-            prog->_LinkedShaders[MESA_SHADER_GEOMETRY]->ir);
-   }
-   if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] != NULL) {
-      link_invalidate_variable_locations(
-            prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->ir);
+   for (unsigned i = MESA_SHADER_VERTEX; i <= MESA_SHADER_FRAGMENT; i++) {
+      if (prog->_LinkedShaders[i] != NULL) {
+         link_invalidate_variable_locations(prog->_LinkedShaders[i]->ir);
+      }
    }
 
    /* FINISHME: The value of the max_attribute_index parameter is
@@ -2201,7 +2463,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 
    unsigned first;
-   for (first = 0; first < MESA_SHADER_STAGES; first++) {
+   for (first = 0; first <= MESA_SHADER_FRAGMENT; first++) {
       if (prog->_LinkedShaders[first] != NULL)
 	 break;
    }
@@ -2233,7 +2495,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
     * eliminated if they are (transitively) not used in a later stage.
     */
    int last, next;
-   for (last = MESA_SHADER_STAGES-1; last >= 0; last--) {
+   for (last = MESA_SHADER_FRAGMENT; last >= 0; last--) {
       if (prog->_LinkedShaders[last] != NULL)
          break;
    }
@@ -2241,7 +2503,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    if (last >= 0 && last < MESA_SHADER_FRAGMENT) {
       gl_shader *const sh = prog->_LinkedShaders[last];
 
-      if (num_tfeedback_decls != 0) {
+      if (num_tfeedback_decls != 0 || prog->SeparateShader) {
          /* There was no fragment shader, but we still have to assign varying
           * locations for use by transform feedback.
           */
@@ -2255,7 +2517,8 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       do_dead_builtin_varyings(ctx, sh, NULL,
                                num_tfeedback_decls, tfeedback_decls);
 
-      demote_shader_inputs_and_outputs(sh, ir_var_shader_out);
+      if (!prog->SeparateShader)
+         demote_shader_inputs_and_outputs(sh, ir_var_shader_out);
 
       /* Eliminate code that is now dead due to unused outputs being demoted.
        */
@@ -2270,7 +2533,16 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       do_dead_builtin_varyings(ctx, NULL, sh,
                                num_tfeedback_decls, tfeedback_decls);
 
-      demote_shader_inputs_and_outputs(sh, ir_var_shader_in);
+      if (prog->SeparateShader) {
+         if (!assign_varying_locations(ctx, mem_ctx, prog,
+                                       NULL /* producer */,
+                                       sh /* consumer */,
+                                       0 /* num_tfeedback_decls */,
+                                       NULL /* tfeedback_decls */,
+                                       0 /* gs_input_vertices */))
+            goto done;
+      } else
+         demote_shader_inputs_and_outputs(sh, ir_var_shader_in);
 
       while (do_dead_code(sh->ir, false))
          ;
@@ -2323,6 +2595,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    store_fragdepth_layout(prog);
 
    check_resources(ctx, prog);
+   check_image_resources(ctx, prog);
    link_check_atomic_counter_resources(ctx, prog);
 
    if (!prog->LinkStatus)
@@ -2334,7 +2607,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
     * fragment shader) is absent. So, the extension shouldn't change the
     * behavior specified in GLSL specification.
     */
-   if (!prog->InternalSeparateShader && ctx->API == API_OPENGLES2) {
+   if (!prog->SeparateShader && ctx->API == API_OPENGLES2) {
       if (prog->_LinkedShaders[MESA_SHADER_VERTEX] == NULL) {
 	 linker_error(prog, "program lacks a vertex shader\n");
       } else if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] == NULL) {

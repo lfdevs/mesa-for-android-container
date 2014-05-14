@@ -30,7 +30,7 @@ GL 3.0 --- all DONE: i965, nv50, nvc0, r600, radeonsi
   GL_EXT_texture_shared_exponent                        DONE (swrast)
   Float depth buffers (GL_ARB_depth_buffer_float)       DONE ()
   Framebuffer objects (GL_ARB_framebuffer_object)       DONE (r300, swrast)
-  GL_ARB_half_float_pixel                               DONE (r300, swrast)
+  GL_ARB_half_float_pixel                               DONE (all drivers)
   GL_ARB_half_float_vertex                              DONE (r300, swrast)
   GL_EXT_texture_integer                                DONE ()
   GL_EXT_texture_array                                  DONE ()
@@ -63,51 +63,63 @@ GL 3.1 --- all DONE: i965, nv50, nvc0, r600, radeonsi
   Signed normalized textures (GL_EXT_texture_snorm)     DONE (r300)
 
 
-GL 3.2 --- all DONE: i965, nv50, nvc0, radeonsi
+GL 3.2 --- all DONE: i965, nv50, nvc0, r600, radeonsi
 
   Core/compatibility profiles                           DONE
   GLSL 1.50                                             DONE ()
   Geometry shaders                                      DONE ()
-  BGRA vertex order (GL_ARB_vertex_array_bgra)          DONE (r300, r600, swrast)
-  Base vertex offset(GL_ARB_draw_elements_base_vertex)  DONE (r300, r600, swrast)
-  Frag shader coord (GL_ARB_fragment_coord_conventions) DONE (r300, r600, swrast)
-  Provoking vertex (GL_ARB_provoking_vertex)            DONE (r300, r600, swrast)
-  Seamless cubemaps (GL_ARB_seamless_cube_map)          DONE (r600)
-  Multisample textures (GL_ARB_texture_multisample)     DONE (r600)
-  Frag depth clamp (GL_ARB_depth_clamp)                 DONE (r600, swrast)
-  Fence objects (GL_ARB_sync)                           DONE (r300, r600, swrast)
+  BGRA vertex order (GL_ARB_vertex_array_bgra)          DONE (r300, swrast)
+  Base vertex offset(GL_ARB_draw_elements_base_vertex)  DONE (r300, swrast)
+  Frag shader coord (GL_ARB_fragment_coord_conventions) DONE (r300, swrast)
+  Provoking vertex (GL_ARB_provoking_vertex)            DONE (r300, swrast)
+  Seamless cubemaps (GL_ARB_seamless_cube_map)          DONE ()
+  Multisample textures (GL_ARB_texture_multisample)     DONE ()
+  Frag depth clamp (GL_ARB_depth_clamp)                 DONE (swrast)
+  Fence objects (GL_ARB_sync)                           DONE (r300, swrast)
   GLX_ARB_create_context_profile                        DONE
 
 
-GL 3.3 --- all DONE: i965, nv50, nvc0, radeonsi
+GL 3.3 --- all DONE: i965, nv50, nvc0, r600, radeonsi
 
   GLSL 3.30                                             DONE ()
-  GL_ARB_blend_func_extended                            DONE (r600, softpipe)
+  GL_ARB_blend_func_extended                            DONE (softpipe)
   GL_ARB_explicit_attrib_location                       DONE (all drivers that support GLSL)
-  GL_ARB_occlusion_query2                               DONE (r300, r600, swrast)
+  GL_ARB_occlusion_query2                               DONE (r300, swrast)
   GL_ARB_sampler_objects                                DONE (all drivers)
-  GL_ARB_shader_bit_encoding                            DONE (r600)
-  GL_ARB_texture_rgb10_a2ui                             DONE (r600)
-  GL_ARB_texture_swizzle                                DONE (r300, r600, swrast)
-  GL_ARB_timer_query                                    DONE (r600)
-  GL_ARB_instanced_arrays                               DONE (r300, r600)
-  GL_ARB_vertex_type_2_10_10_10_rev                     DONE (r600)
+  GL_ARB_shader_bit_encoding                            DONE ()
+  GL_ARB_texture_rgb10_a2ui                             DONE ()
+  GL_ARB_texture_swizzle                                DONE (r300, swrast)
+  GL_ARB_timer_query                                    DONE ()
+  GL_ARB_instanced_arrays                               DONE (r300)
+  GL_ARB_vertex_type_2_10_10_10_rev                     DONE ()
 
 
 GL 4.0:
 
   GLSL 4.0                                             not started
-  GL_ARB_texture_query_lod                             DONE (i965)
+  GL_ARB_texture_query_lod                             DONE (i965, nv50, nvc0)
   GL_ARB_draw_buffers_blend                            DONE (i965, nv50, nvc0, r600, radeonsi, softpipe)
   GL_ARB_draw_indirect                                 DONE (i965)
   GL_ARB_gpu_shader5                                   started
+  - 'precise' qualifier                                not started
+  - Dynamically uniform sampler array indices          not started
+  - Dynamically uniform UBO array indices              not started
+  - Implicit signed -> unsigned conversions            not started
+  - Fused multiply-add                                 DONE
+  - Packing/bitfield/conversion functions              DONE
+  - Enhanced textureGather                             DONE
+  - Geometry shader instancing                         DONE
+  - Geometry shader multiple streams                   not started
+  - Enhanced per-sample shading                        DONE
+  - Interpolation functions                            started
+  - New overload resolution rules                      not started
   GL_ARB_gpu_shader_fp64                               not started
-  GL_ARB_sample_shading                                DONE (i965)
+  GL_ARB_sample_shading                                DONE (i965, nv50, nvc0)
   GL_ARB_shader_subroutine                             not started
   GL_ARB_tessellation_shader                           not started
-  GL_ARB_texture_buffer_object_rgb32                   DONE (i965, r600, radeonsi, softpipe)
-  GL_ARB_texture_cube_map_array                        DONE (i965, nvc0, r600, softpipe)
-  GL_ARB_texture_gather                                DONE (i965)
+  GL_ARB_texture_buffer_object_rgb32                   DONE (i965, nvc0, r600, radeonsi, softpipe)
+  GL_ARB_texture_cube_map_array                        DONE (i965, nv50, nvc0, r600, softpipe)
+  GL_ARB_texture_gather                                DONE (i965, nv50, nvc0)
   GL_ARB_transform_feedback2                           DONE (i965, nv50, nvc0, r600, radeonsi)
   GL_ARB_transform_feedback3                           DONE (i965, nv50, nvc0, r600, radeonsi)
 
@@ -117,10 +129,10 @@ GL 4.1:
   GLSL 4.1                                             not started
   GL_ARB_ES2_compatibility                             DONE (i965, nv50, nvc0, r300, r600, radeonsi)
   GL_ARB_get_program_binary                            DONE (0 binary formats)
-  GL_ARB_separate_shader_objects                       started (Ian Romanick, Gregory Hainaut)
+  GL_ARB_separate_shader_objects                       DONE (all drivers)
   GL_ARB_shader_precision                              not started
   GL_ARB_vertex_attrib_64bit                           not started
-  GL_ARB_viewport_array                                DONE (i965)
+  GL_ARB_viewport_array                                DONE (i965, nv50, r600)
 
 
 GL 4.2:
@@ -158,11 +170,11 @@ GL 4.3:
   GL_ARB_robust_buffer_access_behavior                 not started
   GL_ARB_shader_image_size                             not started
   GL_ARB_shader_storage_buffer_object                  not started
-  GL_ARB_stencil_texturing                             not started
+  GL_ARB_stencil_texturing                             DONE (i965/gen8+)
   GL_ARB_texture_buffer_range                          DONE (nv50, nvc0, i965, r600, radeonsi)
   GL_ARB_texture_query_levels                          DONE (i965)
   GL_ARB_texture_storage_multisample                   DONE (all drivers that support GL_ARB_texture_multisample)
-  GL_ARB_texture_view                                  started (Courtney Goeltzenleuchter, Chris Forbes)
+  GL_ARB_texture_view                                  DONE (i965)
   GL_ARB_vertex_attrib_binding                         DONE (all drivers)
 
 
@@ -170,14 +182,14 @@ GL 4.4:
 
   GLSL 4.4                                             not started
   GL_MAX_VERTEX_ATTRIB_STRIDE                          not started
-  GL_ARB_buffer_storage                                not started
+  GL_ARB_buffer_storage                                DONE (i965, nv30, nv50, nvc0, r300, r600, radeonsi)
   GL_ARB_clear_texture                                 not started
   GL_ARB_enhanced_layouts                              not started
-  GL_ARB_multi_bind                                    started (Fredrik Höglund)
+  GL_ARB_multi_bind                                    DONE (all drivers)
   GL_ARB_query_buffer_object                           not started
   GL_ARB_texture_mirror_clamp_to_edge                  DONE (i965, nv30, nv50, nvc0, r300, r600, radeonsi, swrast)
   GL_ARB_texture_stencil8                              not started
-  GL_ARB_vertex_type_10f_11f_11f_rev                   DONE (i965, r600)
+  GL_ARB_vertex_type_10f_11f_11f_rev                   DONE (i965, nv50, nvc0, r600, radeonsi)
 
 
 More info about these features and the work involved can be found at

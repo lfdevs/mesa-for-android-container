@@ -65,8 +65,8 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 	util_blitter_save_rasterizer(rctx->blitter, rctx->rasterizer_state.cso);
 
 	if (op & R600_SAVE_FRAGMENT_STATE) {
-		util_blitter_save_viewport(rctx->blitter, &rctx->viewport.state);
-		util_blitter_save_scissor(rctx->blitter, &rctx->scissor.scissor);
+		util_blitter_save_viewport(rctx->blitter, &rctx->viewport[0].state);
+		util_blitter_save_scissor(rctx->blitter, &rctx->scissor[0].scissor);
 		util_blitter_save_fragment_shader(rctx->blitter, rctx->ps_shader);
 		util_blitter_save_blend(rctx->blitter, rctx->blend_state.cso);
 		util_blitter_save_depth_stencil_alpha(rctx->blitter, rctx->dsa_state.cso);
@@ -386,106 +386,6 @@ static bool r600_decompress_subresource(struct pipe_context *ctx,
 	return true;
 }
 
-static void r600_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
-			      unsigned offset, unsigned size, unsigned value);
-
-static void evergreen_set_clear_color(struct pipe_surface *cbuf,
-				      const union pipe_color_union *color)
-{
-	unsigned *clear_value = ((struct r600_texture *)cbuf->texture)->color_clear_value;
-	union util_color uc;
-
-	memset(&uc, 0, sizeof(uc));
-
-	if (util_format_is_pure_uint(cbuf->format)) {
-		util_format_write_4ui(cbuf->format, color->ui, 0, &uc, 0, 0, 0, 1, 1);
-	} else if (util_format_is_pure_sint(cbuf->format)) {
-		util_format_write_4i(cbuf->format, color->i, 0, &uc, 0, 0, 0, 1, 1);
-	} else {
-		util_pack_color(color->f, cbuf->format, &uc);
-	}
-
-	memcpy(clear_value, &uc, 2 * sizeof(uint32_t));
-}
-
-static void evergreen_check_alloc_cmask(struct pipe_context *ctx,
-                                        struct pipe_surface *cbuf)
-{
-        struct r600_context *rctx = (struct r600_context *)ctx;
-        struct r600_texture *tex = (struct r600_texture *)cbuf->texture;
-        struct r600_surface *surf = (struct r600_surface *)cbuf;
-
-        if (tex->cmask_buffer)
-                return;
-
-        r600_texture_init_cmask(&rctx->screen->b, tex);
-
-        /* update colorbuffer state bits */
-        if (tex->cmask_buffer != NULL) {
-                uint64_t va = r600_resource_va(rctx->b.b.screen, &tex->cmask_buffer->b.b);
-                surf->cb_color_cmask = va >> 8;
-                surf->cb_color_cmask_slice = S_028C80_TILE_MAX(tex->cmask.slice_tile_max);
-                surf->cb_color_info |= S_028C70_FAST_CLEAR(1);
-        }
-}
-
-static void r600_try_fast_color_clear(struct r600_context *rctx, unsigned *buffers,
-				      const union pipe_color_union *color)
-{
-	struct pipe_framebuffer_state *fb = &rctx->framebuffer.state;
-	int i;
-
-	for (i = 0; i < fb->nr_cbufs; i++) {
-		struct r600_texture *tex;
-		unsigned clear_bit = PIPE_CLEAR_COLOR0 << i;
-
-		if (!fb->cbufs[i])
-			continue;
-
-		/* if this colorbuffer is not being cleared */
-		if (!(*buffers & clear_bit))
-			continue;
-
-		tex = (struct r600_texture *)fb->cbufs[i]->texture;
-
-		/* 128-bit formats are unusupported */
-		if (util_format_get_blocksizebits(fb->cbufs[i]->format) > 64) {
-			continue;
-		}
-
-		/* the clear is allowed if all layers are bound */
-		if (fb->cbufs[i]->u.tex.first_layer != 0 ||
-		    fb->cbufs[i]->u.tex.last_layer != util_max_layer(&tex->resource.b.b, 0)) {
-			continue;
-		}
-
-		/* cannot clear mipmapped textures */
-		if (fb->cbufs[i]->texture->last_level != 0) {
-			continue;
-		}
-
-		/* only supported on tiled surfaces */
-		if (tex->surface.level[0].mode < RADEON_SURF_MODE_1D) {
-			continue;
-		}
-
-		/* ensure CMASK is enabled */
-		evergreen_check_alloc_cmask(&rctx->b.b, fb->cbufs[i]);
-		if (tex->cmask.size == 0) {
-			continue;
-		}
-
-		/* Do the fast clear. */
-		evergreen_set_clear_color(fb->cbufs[i], color);
-		r600_clear_buffer(&rctx->b.b, &tex->cmask_buffer->b.b,
-				  tex->cmask.offset, tex->cmask.size, 0);
-
-		tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
-		rctx->framebuffer.atom.dirty = true;
-		*buffers &= ~clear_bit;
-	}
-}
-
 static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 		       const union pipe_color_union *color,
 		       double depth, unsigned stencil)
@@ -494,7 +394,8 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 	struct pipe_framebuffer_state *fb = &rctx->framebuffer.state;
 
 	if (buffers & PIPE_CLEAR_COLOR && rctx->b.chip_class >= EVERGREEN) {
-		r600_try_fast_color_clear(rctx, &buffers, color);
+		evergreen_do_fast_color_clear(&rctx->b, fb, &rctx->framebuffer.atom,
+					      &buffers, color);
 	}
 
 	if (buffers & PIPE_CLEAR_COLOR) {
@@ -599,6 +500,12 @@ static void r600_copy_buffer(struct pipe_context *ctx, struct pipe_resource *dst
 	} else {
 		util_resource_copy_region(ctx, dst, 0, dstx, 0, 0, src, 0, src_box);
 	}
+
+	/* The index buffer (VGT) doesn't seem to see the result of the copying.
+	 * Can we somehow flush the index buffer cache? Starting a new IB seems
+	 * to do the trick. */
+	if (rctx->b.chip_class <= R700)
+		rctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 }
 
 /**
@@ -679,6 +586,7 @@ static void r600_resource_copy_region(struct pipe_context *ctx,
 	struct pipe_surface *dst_view, dst_templ;
 	struct pipe_sampler_view src_templ, *src_view;
 	unsigned dst_width, dst_height, src_width0, src_height0, src_widthFL, src_heightFL;
+	unsigned src_force_level = 0;
 	struct pipe_box sbox, dstbox;
 
 	/* Handle buffers first. */
@@ -737,6 +645,8 @@ static void r600_resource_copy_region(struct pipe_context *ctx,
 		sbox.height = util_format_get_nblocksy(src->format, src_box->height);
 		sbox.depth = src_box->depth;
 		src_box = &sbox;
+
+		src_force_level = src_level;
 	} else if (!util_blitter_is_copy_supported(rctx->blitter, dst, src)) {
 		if (util_format_is_subsampled_2x1_32bpp(src->format)) {
 
@@ -789,7 +699,8 @@ static void r600_resource_copy_region(struct pipe_context *ctx,
 
 	if (rctx->b.chip_class >= EVERGREEN) {
 		src_view = evergreen_create_sampler_view_custom(ctx, src, &src_templ,
-								src_width0, src_height0);
+								src_width0, src_height0,
+								src_force_level);
 	} else {
 		src_view = r600_create_sampler_view_custom(ctx, src, &src_templ,
 							   src_widthFL, src_heightFL);

@@ -92,6 +92,8 @@ struct pipe_context *svga_context_create( struct pipe_screen *screen,
    if (svga == NULL)
       goto no_svga;
 
+   LIST_INITHEAD(&svga->dirty_buffers);
+
    svga->pipe.screen = screen;
    svga->pipe.priv = priv;
    svga->pipe.destroy = svga_destroy;
@@ -153,8 +155,6 @@ struct pipe_context *svga_context_create( struct pipe_screen *screen,
    memset(&svga->state.hw_draw.hw_cb, 0x0, sizeof(svga->state.hw_draw.hw_cb));
 
    svga->dirty = ~0;
-
-   LIST_INITHEAD(&svga->dirty_buffers);
 
    return &svga->pipe;
 

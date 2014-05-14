@@ -1447,8 +1447,11 @@ CodeEmitterNV50::emitTEX(const TexInstruction *i)
       code[0] |= 0x01000000;
       break;
    case OP_TXG:
-      code[0] = 0x01000000;
+      code[0] |= 0x01000000;
       code[1] = 0x80000000;
+      break;
+   case OP_TXLQ:
+      code[1] = 0x60020000;
       break;
    default:
       assert(i->op == OP_TEX);
@@ -1472,9 +1475,9 @@ CodeEmitterNV50::emitTEX(const TexInstruction *i)
       code[0] |= 0x08000000;
    } else
    if (i->tex.useOffsets) {
-      code[1] |= (i->tex.offset[0][0] & 0xf) << 24;
-      code[1] |= (i->tex.offset[0][1] & 0xf) << 20;
-      code[1] |= (i->tex.offset[0][2] & 0xf) << 16;
+      code[1] |= (i->tex.offset[0] & 0xf) << 24;
+      code[1] |= (i->tex.offset[1] & 0xf) << 20;
+      code[1] |= (i->tex.offset[2] & 0xf) << 16;
    }
 
    code[0] |= (i->tex.mask & 0x3) << 25;
@@ -1790,6 +1793,8 @@ CodeEmitterNV50::emitInstruction(Instruction *insn)
    case OP_TXB:
    case OP_TXL:
    case OP_TXF:
+   case OP_TXG:
+   case OP_TXLQ:
       emitTEX(insn->asTex());
       break;
    case OP_TXQ:

@@ -36,6 +36,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+# Provide compatibility with scripts for the old Mesa build system for
+# a while by putting a link to the driver into /lib of the build tree.
+
 VPATH = @srcdir@
 am__make_dryrun = \
   { \
@@ -75,20 +78,26 @@ host_triplet = @host@
 target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(top_srcdir)/bin/depcomp \
+	$(top_srcdir)/install-gallium-links.mk \
 	$(top_srcdir)/src/gallium/Automake.inc
 @HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LIBS)
+@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
+@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
+@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
+@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
+@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
+@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
+@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
 subdir = src/gallium/targets/radeonsi/dri
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
-	$(top_srcdir)/m4/ax_pthread.m4 \
-	$(top_srcdir)/m4/ax_python_module.m4 \
-	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
-	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/VERSION \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -124,19 +133,23 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(dridir)"
 LTLIBRARIES = $(dri_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-@HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+@HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1)
+am__DEPENDENCIES_4 = $(top_builddir)/src/mesa/libmesagallium.la \
+	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
+	$(am__DEPENDENCIES_3)
 radeonsi_dri_la_DEPENDENCIES =  \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
-	$(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
 	$(top_builddir)/src/gallium/state_trackers/dri/drm/libdridrm.la \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_2)
+	$(am__DEPENDENCIES_4) $(am__DEPENDENCIES_1)
 am_radeonsi_dri_la_OBJECTS = drm_target.lo
 radeonsi_dri_la_OBJECTS = $(am_radeonsi_dri_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -257,8 +270,6 @@ EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
-EGL_LIB_GLOB = @EGL_LIB_GLOB@
-EGL_LIB_NAME = @EGL_LIB_NAME@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
 ELF_LIB = @ELF_LIB@
@@ -268,30 +279,24 @@ EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
 FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
 FREEDRENO_LIBS = @FREEDRENO_LIBS@
-GALLIUM_DRI_LIB_DEPS = @GALLIUM_DRI_LIB_DEPS@
+GALLIUM_PIPE_LOADER_CLIENT_DEFINES = @GALLIUM_PIPE_LOADER_CLIENT_DEFINES@
+GALLIUM_PIPE_LOADER_CLIENT_LIBS = @GALLIUM_PIPE_LOADER_CLIENT_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GALLIUM_PIPE_LOADER_LIBS = @GALLIUM_PIPE_LOADER_LIBS@
 GALLIUM_PIPE_LOADER_XCB_CFLAGS = @GALLIUM_PIPE_LOADER_XCB_CFLAGS@
 GALLIUM_PIPE_LOADER_XCB_LIBS = @GALLIUM_PIPE_LOADER_XCB_LIBS@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
-GLAPI_LIB_GLOB = @GLAPI_LIB_GLOB@
-GLAPI_LIB_NAME = @GLAPI_LIB_NAME@
+GC_SECTIONS = @GC_SECTIONS@
 GLESv1_CM_LIB_DEPS = @GLESv1_CM_LIB_DEPS@
-GLESv1_CM_LIB_GLOB = @GLESv1_CM_LIB_GLOB@
-GLESv1_CM_LIB_NAME = @GLESv1_CM_LIB_NAME@
 GLESv1_CM_PC_LIB_PRIV = @GLESv1_CM_PC_LIB_PRIV@
 GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
-GLESv2_LIB_GLOB = @GLESv2_LIB_GLOB@
-GLESv2_LIB_NAME = @GLESv2_LIB_NAME@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
-GL_LIB_GLOB = @GL_LIB_GLOB@
-GL_LIB_NAME = @GL_LIB_NAME@
 GL_PC_CFLAGS = @GL_PC_CFLAGS@
 GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
@@ -321,6 +326,7 @@ LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
+LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
 LLVM_BINDIR = @LLVM_BINDIR@
 LLVM_CFLAGS = @LLVM_CFLAGS@
@@ -345,11 +351,13 @@ NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
 NOUVEAU_LIBS = @NOUVEAU_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
+OMX_CFLAGS = @OMX_CFLAGS@
+OMX_LIBS = @OMX_LIBS@
+OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_LIB_NAME = @OSMESA_LIB_NAME@
 OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
@@ -379,6 +387,7 @@ RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -390,8 +399,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_LIB_GLOB = @VG_LIB_GLOB@
-VG_LIB_NAME = @VG_LIB_NAME@
 VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
@@ -527,40 +534,45 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-
-# TODO: add -export-symbols-regex
-GALLIUM_DRI_LINKER_FLAGS = \
-	-module \
-	-avoid-version \
-	-shared \
-	-Wl,-Bsymbolic
-
-GALLIUM_VDPAU_LINKER_FLAGS = \
-	-module \
+GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
+	$(GC_SECTIONS) $(am__append_1)
+GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
 	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-export-symbols-regex $(VDPAU_EXPORTS) \
-	-shared \
-	-no-undefined
-
-GALLIUM_XVMC_LINKER_FLAGS = \
-	-module \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
+	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
+GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
 	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-shared \
-	-export-symbols-regex '^XvMC' \
-	-no-undefined
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
+	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
+GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
+	-avoid-version \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
+	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
+GALLIUM_COMMON_LIB_DEPS = \
+	-lm \
+	$(CLOCK_LIB) \
+	$(PTHREAD_LIBS) \
+	$(DLOPEN_LIBS)
 
-GALLIUM_VDPAU_LIB_DEPS = \
+GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
+	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
+GALLIUM_VDPAU_LIB_DEPS =  \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) \
-	$(LIBDRM_LIBS)
-
-GALLIUM_XVMC_LIB_DEPS = \
+	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
+	$(am__append_6)
+GALLIUM_XVMC_LIB_DEPS =  \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) \
-	$(LIBDRM_LIBS)
-
+	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
+	$(am__append_7)
+GALLIUM_OMX_LIB_DEPS =  \
+	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
+	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -582,23 +594,26 @@ nodist_EXTRA_radeonsi_dri_la_SOURCES = dummy.cpp
 radeonsi_dri_la_SOURCES = \
 	drm_target.c
 
-radeonsi_dri_la_LDFLAGS = $(GALLIUM_DRI_LINKER_FLAGS) $(am__append_1)
-radeonsi_dri_la_LIBADD =  \
+radeonsi_dri_la_LDFLAGS = \
+	$(GALLIUM_DRI_LINKER_FLAGS) \
+	-Wl,--dynamic-list=$(srcdir)/../../r300/dri/radeon.dyn
+
+radeonsi_dri_la_LIBADD = \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
-	$(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
 	$(top_builddir)/src/gallium/state_trackers/dri/drm/libdridrm.la \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
-	$(GALLIUM_DRI_LIB_DEPS) $(RADEON_LIBS) $(am__append_2)
+	$(GALLIUM_DRI_LIB_DEPS) \
+	$(RADEON_LIBS)
+
 all: all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .lo .o .obj
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(top_srcdir)/src/gallium/Automake.inc $(am__configure_deps)
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/install-gallium-links.mk $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -619,7 +634,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
 	esac;
-$(top_srcdir)/src/gallium/Automake.inc:
+$(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/install-gallium-links.mk:
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
@@ -821,6 +836,8 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
+@BUILD_SHARED_FALSE@all-local:
+@HAVE_COMPAT_SYMLINKS_FALSE@all-local:
 all-am: Makefile $(LTLIBRARIES) all-local
 installdirs:
 	for dir in "$(DESTDIR)$(dridir)"; do \
@@ -945,11 +962,26 @@ uninstall-am: uninstall-driLTLIBRARIES
 	uninstall-driLTLIBRARIES
 
 
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: radeonsi_dri.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/radeonsi_dri.so $(top_builddir)/$(LIB_DIR)/gallium/radeonsi_dri.so
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .libs/install-gallium-links
+
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-gallium-links : $(dri_LTLIBRARIES) $(vdpau_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	link_dir=$(top_builddir)/$(LIB_DIR)/gallium;		\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	if test x$(egl_LTLIBRARIES) != x; then			\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		link_dir=$(top_builddir)/$(LIB_DIR)/egl;	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	fi;							\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(MKDIR_P) $$link_dir;					\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list=$(dri_LTLIBRARIES:%.la=.libs/%.so);		\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(vdpau_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*); \
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $$file_list; do 				\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		if test -h .libs/$$f; then			\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			cp -d $$f $$link_dir;			\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		else						\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			ln -f $$f $$link_dir;			\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		fi;						\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	done && touch $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

@@ -477,8 +477,7 @@ xa_composite_prepare(struct xa_context *ctx,
 	return ret;
 
     ctx->dst = dst_srf;
-    renderer_bind_destination(ctx, ctx->srf, ctx->srf->width,
-			      ctx->srf->height);
+    renderer_bind_destination(ctx, ctx->srf);
 
     ret = bind_composite_blend_state(ctx, comp);
     if (ret != XA_ERR_NONE)
@@ -512,6 +511,8 @@ xa_composite_rect(struct xa_context *ctx,
 	int pos[6] = {srcX, srcY, maskX, maskY, dstX, dstY};
 	const float *src_matrix = NULL;
 	const float *mask_matrix = NULL;
+
+	xa_scissor_update(ctx, dstX, dstY, dstX + width, dstY + height);
 
 	if (comp->src->has_transform)
 	    src_matrix = comp->src->transform;

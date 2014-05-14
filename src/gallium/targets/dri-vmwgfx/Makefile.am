@@ -31,6 +31,7 @@ AM_CPPFLAGS = \
 dridir = $(DRI_DRIVER_INSTALL_DIR)
 dri_LTLIBRARIES = vmwgfx_dri.la
 
+nodist_EXTRA_vmwgfx_dri_la_SOURCES = dummy.cpp
 vmwgfx_dri_la_SOURCES = \
 	target.c \
 	vmw_powf.c
@@ -39,8 +40,6 @@ vmwgfx_dri_la_LDFLAGS = $(GALLIUM_DRI_LINKER_FLAGS)
 
 vmwgfx_dri_la_LIBADD = \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
-	$(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/dri/drm/libdridrm.la \
 	$(top_builddir)/src/gallium/winsys/svga/drm/libsvgadrm.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
@@ -49,17 +48,4 @@ vmwgfx_dri_la_LIBADD = \
 	$(top_builddir)/src/gallium/drivers/svga/libsvga.la \
 	$(GALLIUM_DRI_LIB_DEPS)
 
-vmwgfx_dri_la_LINK = $(CXXLINK) $(vmwgfx_dri_la_LDFLAGS)
-# Mention a dummy pure C++ file to trigger generation of the $(LINK) variable
-nodist_EXTRA_vmwgfx_dri_la_SOURCES = dummy-cpp.cpp
-
-if HAVE_MESA_LLVM
-vmwgfx_dri_la_LDFLAGS += $(LLVM_LDFLAGS)
-vmwgfx_dri_la_LIBADD += $(LLVM_LIBS)
-endif
-
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: vmwgfx_dri.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/vmwgfx_dri.so $(top_builddir)/$(LIB_DIR)/gallium/vmwgfx_dri.so
+include $(top_srcdir)/install-gallium-links.mk

@@ -33,6 +33,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/state_trackers/glx/xlib \
 	-I$(top_srcdir)/src/gallium/auxiliary \
+	-I$(top_srcdir)/src/gallium/winsys \
 	-DGALLIUM_SOFTPIPE \
 	-DGALLIUM_RBUG \
 	-DGALLIUM_TRACE \
@@ -41,8 +42,13 @@ AM_CFLAGS = $(X11_INCLUDES)
 
 lib_LTLIBRARIES = libGL.la
 
+nodist_EXTRA_libGL_la_SOURCES = dummy.cpp
 libGL_la_SOURCES = xlib.c
-libGL_la_LDFLAGS = -version-number $(GL_MAJOR):$(GL_MINOR):$(GL_TINY) -no-undefined
+libGL_la_LDFLAGS = \
+	-no-undefined \
+	-version-number $(GL_MAJOR):$(GL_MINOR):$(GL_TINY) \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
 
 libGL_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/glx/xlib/libxlib.la \
@@ -58,21 +64,9 @@ libGL_la_LIBADD = \
 	$(CLOCK_LIB)
 
 if HAVE_MESA_LLVM
-libGL_la_LINK = $(CXXLINK) $(libGL_la_LDFLAGS)
-# Mention a dummy pure C++ file to trigger generation of the $(LINK) variable
-nodist_EXTRA_libGL_la_SOURCES = dummy-cpp.cpp
-
 libGL_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
 AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
 libGL_la_LDFLAGS += $(LLVM_LDFLAGS)
-else
-libGL_la_LINK = $(CXXLINK) $(libGL_la_LDFLAGS)
-# Mention a dummy pure C file to trigger generation of the $(LINK) variable
-nodist_EXTRA_libGL_la_SOURCES = dummy-c.c
 endif
 
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: libGL.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/libGL.so* $(top_builddir)/$(LIB_DIR)/gallium/
+include $(top_srcdir)/install-gallium-links.mk

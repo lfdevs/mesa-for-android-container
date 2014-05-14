@@ -23,11 +23,12 @@
 
 #include <stdint.h>
 #include "brw_defines.h"
+#include "main/compiler.h"
 #include "glsl/ir.h"
 
 #pragma once
 
-enum register_file {
+enum PACKED register_file {
    BAD_FILE,
    GRF,
    MRF,
@@ -41,11 +42,12 @@ enum register_file {
 
 class backend_instruction : public exec_node {
 public:
-   bool is_tex();
-   bool is_math();
-   bool is_control_flow();
-   bool can_do_source_mods();
-   bool can_do_saturate();
+   bool is_tex() const;
+   bool is_math() const;
+   bool is_control_flow() const;
+   bool can_do_source_mods() const;
+   bool can_do_saturate() const;
+   bool reads_accumulator_implicitly() const;
 
    /**
     * True if the instruction has side effects other than writing to
@@ -56,8 +58,9 @@ public:
 
    enum opcode opcode; /* BRW_OPCODE_* or FS_OPCODE_* */
 
-   uint32_t predicate;
+   uint8_t predicate;
    bool predicate_inverse;
+   bool writes_accumulator; /**< instruction implicitly writes accumulator */
 };
 
 enum instruction_scheduler_mode {
@@ -68,14 +71,22 @@ enum instruction_scheduler_mode {
 };
 
 class backend_visitor : public ir_visitor {
+protected:
+
+   backend_visitor(struct brw_context *brw,
+                   struct gl_shader_program *shader_prog,
+                   struct gl_program *prog,
+                   struct brw_stage_prog_data *stage_prog_data,
+                   gl_shader_stage stage);
+
 public:
 
-   struct brw_context *brw;
-   struct gl_context *ctx;
-   struct brw_shader *shader;
-   struct gl_shader_program *shader_prog;
-   struct gl_program *prog;
-   struct brw_stage_prog_data *stage_prog_data;
+   struct brw_context * const brw;
+   struct gl_context * const ctx;
+   struct brw_shader * const shader;
+   struct gl_shader_program * const shader_prog;
+   struct gl_program * const prog;
+   struct brw_stage_prog_data * const stage_prog_data;
 
    /** ralloc context for temporary data used during compile */
    void *mem_ctx;

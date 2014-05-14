@@ -236,8 +236,8 @@ enum pipe_format {
    PIPE_FORMAT_NV12                    = 166,
    PIPE_FORMAT_NV21                    = 167,
 
-   PIPE_FORMAT_R4A4_UNORM              = 168,
-   PIPE_FORMAT_A4R4_UNORM              = 169,
+   PIPE_FORMAT_A4R4_UNORM              = 168,
+   PIPE_FORMAT_R4A4_UNORM              = 169,
    PIPE_FORMAT_R8A8_UNORM              = 170,
    PIPE_FORMAT_A8R8_UNORM              = 171,
 
@@ -341,6 +341,8 @@ enum pipe_format {
    PIPE_FORMAT_R32A32_UINT             = 251,
    PIPE_FORMAT_R32A32_SINT             = 252,
    PIPE_FORMAT_R10G10B10A2_UINT        = 253,
+
+   PIPE_FORMAT_B5G6R5_SRGB             = 254,
 
    PIPE_FORMAT_COUNT
 };

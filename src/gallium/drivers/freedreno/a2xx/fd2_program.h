@@ -77,6 +77,5 @@ void fd2_program_emit(struct fd_ringbuffer *ring,
 void fd2_program_validate(struct fd_context *ctx);
 
 void fd2_prog_init(struct pipe_context *pctx);
-void fd2_prog_fini(struct pipe_context *pctx);
 
 #endif /* FD2_PROGRAM_H_ */

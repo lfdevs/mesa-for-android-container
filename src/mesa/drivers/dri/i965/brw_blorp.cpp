@@ -68,8 +68,8 @@ brw_blorp_mip_info::set(struct intel_mipmap_tree *mt,
    this->mt = mt;
    this->level = level;
    this->layer = layer;
-   this->width = mt->level[level].width;
-   this->height = mt->level[level].height;
+   this->width = minify(mt->physical_width0, level - mt->first_level);
+   this->height = minify(mt->physical_height0, level - mt->first_level);
 
    intel_miptree_get_image_offset(mt, level, layer, &x_offset, &y_offset);
 }
@@ -139,18 +139,16 @@ uint32_t
 brw_blorp_surface_info::compute_tile_offsets(uint32_t *tile_x,
                                              uint32_t *tile_y) const
 {
-   struct intel_region *region = mt->region;
    uint32_t mask_x, mask_y;
 
-   intel_region_get_tile_masks(region, &mask_x, &mask_y,
-                               map_stencil_as_y_tiled);
+   intel_miptree_get_tile_masks(mt, &mask_x, &mask_y, map_stencil_as_y_tiled);
 
    *tile_x = x_offset & mask_x;
    *tile_y = y_offset & mask_y;
 
-   return intel_region_get_aligned_offset(region, x_offset & ~mask_x,
-                                          y_offset & ~mask_y,
-                                          map_stencil_as_y_tiled);
+   return intel_miptree_get_aligned_offset(mt, x_offset & ~mask_x,
+                                           y_offset & ~mask_y,
+                                           map_stencil_as_y_tiled);
 }
 
 
@@ -195,8 +193,12 @@ intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
    DBG("%s %s to mt %p level %d layer %d\n",
        __FUNCTION__, opname, mt, level, layer);
 
-   brw_hiz_op_params params(mt, level, layer, op);
-   brw_blorp_exec(brw, &params);
+   if (brw->gen >= 8) {
+      gen8_hiz_exec(brw, mt, level, layer, op);
+   } else {
+      brw_hiz_op_params params(mt, level, layer, op);
+      brw_blorp_exec(brw, &params);
+   }
 }
 
 } /* extern "C" */
@@ -274,8 +276,8 @@ retry:
     */
    brw->state.dirty.brw = ~0;
    brw->state.dirty.cache = ~0;
+   brw->no_depth_or_stencil = false;
    brw->ib.type = -1;
-   intel_batchbuffer_clear_cache(brw);
 
    /* Flush the sampler cache so any texturing from the destination is
     * coherent.

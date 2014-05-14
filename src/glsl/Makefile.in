@@ -89,14 +89,13 @@ noinst_PROGRAMS = glsl_compiler$(EXEEXT)
 subdir = src/glsl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
-	$(top_srcdir)/m4/ax_pthread.m4 \
-	$(top_srcdir)/m4/ax_python_module.m4 \
-	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
-	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/VERSION \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -131,7 +130,7 @@ am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	loop_unroll.lo lower_clip_distance.lo lower_discard.lo \
 	lower_discard_flow.lo lower_if_to_cond_assign.lo \
 	lower_instructions.lo lower_jumps.lo lower_mat_op_to_vec.lo \
-	lower_noise.lo lower_packed_varyings.lo \
+	lower_noise.lo lower_offset_array.lo lower_packed_varyings.lo \
 	lower_named_interface_blocks.lo lower_packing_builtins.lo \
 	lower_texture_projection.lo \
 	lower_variable_index_to_cond_assign.lo \
@@ -162,11 +161,12 @@ am_glsl_compiler_OBJECTS = hash_table.$(OBJEXT) imports.$(OBJEXT) \
 	prog_hash_table.$(OBJEXT) symbol_table.$(OBJEXT) \
 	$(am__objects_3)
 glsl_compiler_OBJECTS = $(am_glsl_compiler_OBJECTS)
-glsl_compiler_DEPENDENCIES = libglsl.la
+am__DEPENDENCIES_1 =
+glsl_compiler_DEPENDENCIES = libglsl.la $(am__DEPENDENCIES_1)
 am_glsl_test_OBJECTS = hash_table.$(OBJEXT) imports.$(OBJEXT) \
 	prog_hash_table.$(OBJEXT) symbol_table.$(OBJEXT) \
-	standalone_scaffolding.$(OBJEXT) test.$(OBJEXT) \
-	test_optpass.$(OBJEXT)
+	standalone_scaffolding.$(OBJEXT) common.$(OBJEXT) \
+	test.$(OBJEXT) test_optpass.$(OBJEXT)
 glsl_test_OBJECTS = $(am_glsl_test_OBJECTS)
 glsl_test_DEPENDENCIES = libglsl.la
 am_tests_general_ir_test_OBJECTS =  \
@@ -176,9 +176,9 @@ am_tests_general_ir_test_OBJECTS =  \
 	tests_general_ir_test-symbol_table.$(OBJEXT) \
 	standalone_scaffolding.$(OBJEXT) \
 	builtin_variable_test.$(OBJEXT) \
-	invalidate_locations_test.$(OBJEXT) general_ir_test.$(OBJEXT)
+	invalidate_locations_test.$(OBJEXT) general_ir_test.$(OBJEXT) \
+	varyings_test.$(OBJEXT) tests_general_ir_test-common.$(OBJEXT)
 tests_general_ir_test_OBJECTS = $(am_tests_general_ir_test_OBJECTS)
-am__DEPENDENCIES_1 =
 tests_general_ir_test_DEPENDENCIES =  \
 	$(top_builddir)/src/gtest/libgtest.la \
 	$(top_builddir)/src/glsl/libglsl.la $(am__DEPENDENCIES_1)
@@ -190,7 +190,8 @@ tests_ralloc_test_DEPENDENCIES =  \
 am_tests_sampler_types_test_OBJECTS =  \
 	tests_sampler_types_test-prog_hash_table.$(OBJEXT) \
 	tests_sampler_types_test-symbol_table.$(OBJEXT) \
-	sampler_types_test.$(OBJEXT)
+	sampler_types_test.$(OBJEXT) \
+	tests_sampler_types_test-common.$(OBJEXT)
 tests_sampler_types_test_OBJECTS =  \
 	$(am_tests_sampler_types_test_OBJECTS)
 tests_sampler_types_test_DEPENDENCIES =  \
@@ -203,7 +204,8 @@ am_tests_uniform_initializer_test_OBJECTS =  \
 	tests_uniform_initializer_test-symbol_table.$(OBJEXT) \
 	copy_constant_to_storage_tests.$(OBJEXT) \
 	set_uniform_initializer_tests.$(OBJEXT) \
-	uniform_initializer_utils.$(OBJEXT)
+	uniform_initializer_utils.$(OBJEXT) \
+	tests_uniform_initializer_test-common.$(OBJEXT)
 tests_uniform_initializer_test_OBJECTS =  \
 	$(am_tests_uniform_initializer_test_OBJECTS)
 tests_uniform_initializer_test_DEPENDENCIES =  \
@@ -332,8 +334,6 @@ EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
-EGL_LIB_GLOB = @EGL_LIB_GLOB@
-EGL_LIB_NAME = @EGL_LIB_NAME@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
 ELF_LIB = @ELF_LIB@
@@ -343,30 +343,24 @@ EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
 FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
 FREEDRENO_LIBS = @FREEDRENO_LIBS@
-GALLIUM_DRI_LIB_DEPS = @GALLIUM_DRI_LIB_DEPS@
+GALLIUM_PIPE_LOADER_CLIENT_DEFINES = @GALLIUM_PIPE_LOADER_CLIENT_DEFINES@
+GALLIUM_PIPE_LOADER_CLIENT_LIBS = @GALLIUM_PIPE_LOADER_CLIENT_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GALLIUM_PIPE_LOADER_LIBS = @GALLIUM_PIPE_LOADER_LIBS@
 GALLIUM_PIPE_LOADER_XCB_CFLAGS = @GALLIUM_PIPE_LOADER_XCB_CFLAGS@
 GALLIUM_PIPE_LOADER_XCB_LIBS = @GALLIUM_PIPE_LOADER_XCB_LIBS@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
-GLAPI_LIB_GLOB = @GLAPI_LIB_GLOB@
-GLAPI_LIB_NAME = @GLAPI_LIB_NAME@
+GC_SECTIONS = @GC_SECTIONS@
 GLESv1_CM_LIB_DEPS = @GLESv1_CM_LIB_DEPS@
-GLESv1_CM_LIB_GLOB = @GLESv1_CM_LIB_GLOB@
-GLESv1_CM_LIB_NAME = @GLESv1_CM_LIB_NAME@
 GLESv1_CM_PC_LIB_PRIV = @GLESv1_CM_PC_LIB_PRIV@
 GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
-GLESv2_LIB_GLOB = @GLESv2_LIB_GLOB@
-GLESv2_LIB_NAME = @GLESv2_LIB_NAME@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
-GL_LIB_GLOB = @GL_LIB_GLOB@
-GL_LIB_NAME = @GL_LIB_NAME@
 GL_PC_CFLAGS = @GL_PC_CFLAGS@
 GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
@@ -396,6 +390,7 @@ LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
+LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
 LLVM_BINDIR = @LLVM_BINDIR@
 LLVM_CFLAGS = @LLVM_CFLAGS@
@@ -420,11 +415,13 @@ NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
 NOUVEAU_LIBS = @NOUVEAU_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
+OMX_CFLAGS = @OMX_CFLAGS@
+OMX_LIBS = @OMX_LIBS@
+OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_LIB_NAME = @OSMESA_LIB_NAME@
 OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
@@ -454,6 +451,7 @@ RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -465,8 +463,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_LIB_GLOB = @VG_LIB_GLOB@
-VG_LIB_NAME = @VG_LIB_NAME@
 VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
@@ -625,6 +621,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/lower_jumps.cpp \
 	$(GLSL_SRCDIR)/lower_mat_op_to_vec.cpp \
 	$(GLSL_SRCDIR)/lower_noise.cpp \
+	$(GLSL_SRCDIR)/lower_offset_array.cpp \
 	$(GLSL_SRCDIR)/lower_packed_varyings.cpp \
 	$(GLSL_SRCDIR)/lower_named_interface_blocks.cpp \
 	$(GLSL_SRCDIR)/lower_packing_builtins.cpp \
@@ -686,7 +683,9 @@ tests_general_ir_test_SOURCES = \
 	$(GLSL_SRCDIR)/standalone_scaffolding.cpp \
 	tests/builtin_variable_test.cpp			\
 	tests/invalidate_locations_test.cpp		\
-	tests/general_ir_test.cpp
+	tests/general_ir_test.cpp			\
+	tests/varyings_test.cpp				\
+	tests/common.c
 
 tests_general_ir_test_CFLAGS = \
 	$(PTHREAD_CFLAGS)
@@ -703,7 +702,8 @@ tests_uniform_initializer_test_SOURCES = \
 	$(top_srcdir)/src/mesa/program/symbol_table.c	\
 	tests/copy_constant_to_storage_tests.cpp	\
 	tests/set_uniform_initializer_tests.cpp		\
-	tests/uniform_initializer_utils.cpp
+	tests/uniform_initializer_utils.cpp		\
+	tests/common.c
 
 tests_uniform_initializer_test_CFLAGS = \
 	$(PTHREAD_CFLAGS)
@@ -725,7 +725,8 @@ tests_ralloc_test_LDADD = \
 tests_sampler_types_test_SOURCES = \
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c\
 	$(top_srcdir)/src/mesa/program/symbol_table.c	\
-	tests/sampler_types_test.cpp
+	tests/sampler_types_test.cpp			\
+	tests/common.c
 
 tests_sampler_types_test_CFLAGS = \
 	$(PTHREAD_CFLAGS)
@@ -761,13 +762,17 @@ glsl_compiler_SOURCES = \
 	$(top_srcdir)/src/mesa/program/symbol_table.c \
 	$(GLSL_COMPILER_CXX_FILES)
 
-glsl_compiler_LDADD = libglsl.la
+glsl_compiler_LDADD = \
+	libglsl.la					\
+	$(PTHREAD_LIBS)
+
 glsl_test_SOURCES = \
 	$(top_srcdir)/src/mesa/main/hash_table.c \
 	$(top_srcdir)/src/mesa/main/imports.c \
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c \
 	$(top_srcdir)/src/mesa/program/symbol_table.c \
 	$(GLSL_SRCDIR)/standalone_scaffolding.cpp \
+	tests/common.c \
 	test.cpp \
 	test_optpass.cpp
 
@@ -930,6 +935,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/builtin_types.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/builtin_variable_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/builtin_variables.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/copy_constant_to_storage_tests.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/general_ir_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glcpp-lex.Plo@am__quote@
@@ -984,6 +990,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_mat_op_to_vec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_named_interface_blocks.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_noise.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_offset_array.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_output_reads.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_packed_varyings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_packing_builtins.Plo@am__quote@
@@ -1029,18 +1036,22 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/symbol_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_optpass.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-imports.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-prog_hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-symbol_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_ralloc_test-ralloc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_sampler_types_test-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_sampler_types_test-prog_hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_sampler_types_test-symbol_table.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-imports.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-prog_hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-symbol_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uniform_initializer_utils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/varyings_test.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -1168,6 +1179,20 @@ symbol_table.obj: $(top_srcdir)/src/mesa/program/symbol_table.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o symbol_table.obj `if test -f '$(top_srcdir)/src/mesa/program/symbol_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/program/symbol_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/program/symbol_table.c'; fi`
 
+common.o: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT common.o -MD -MP -MF $(DEPDIR)/common.Tpo -c -o common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/common.Tpo $(DEPDIR)/common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='common.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+
+common.obj: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT common.obj -MD -MP -MF $(DEPDIR)/common.Tpo -c -o common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/common.Tpo $(DEPDIR)/common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='common.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+
 tests_general_ir_test-hash_table.o: $(top_srcdir)/src/mesa/main/hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -MT tests_general_ir_test-hash_table.o -MD -MP -MF $(DEPDIR)/tests_general_ir_test-hash_table.Tpo -c -o tests_general_ir_test-hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_general_ir_test-hash_table.Tpo $(DEPDIR)/tests_general_ir_test-hash_table.Po
@@ -1224,6 +1249,20 @@ tests_general_ir_test-symbol_table.obj: $(top_srcdir)/src/mesa/program/symbol_ta
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -c -o tests_general_ir_test-symbol_table.obj `if test -f '$(top_srcdir)/src/mesa/program/symbol_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/program/symbol_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/program/symbol_table.c'; fi`
 
+tests_general_ir_test-common.o: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -MT tests_general_ir_test-common.o -MD -MP -MF $(DEPDIR)/tests_general_ir_test-common.Tpo -c -o tests_general_ir_test-common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_general_ir_test-common.Tpo $(DEPDIR)/tests_general_ir_test-common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='tests_general_ir_test-common.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -c -o tests_general_ir_test-common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+
+tests_general_ir_test-common.obj: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -MT tests_general_ir_test-common.obj -MD -MP -MF $(DEPDIR)/tests_general_ir_test-common.Tpo -c -o tests_general_ir_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_general_ir_test-common.Tpo $(DEPDIR)/tests_general_ir_test-common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='tests_general_ir_test-common.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -c -o tests_general_ir_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+
 tests_ralloc_test-ralloc.o: $(top_builddir)/src/glsl/ralloc.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_ralloc_test_CFLAGS) $(CFLAGS) -MT tests_ralloc_test-ralloc.o -MD -MP -MF $(DEPDIR)/tests_ralloc_test-ralloc.Tpo -c -o tests_ralloc_test-ralloc.o `test -f '$(top_builddir)/src/glsl/ralloc.c' || echo '$(srcdir)/'`$(top_builddir)/src/glsl/ralloc.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_ralloc_test-ralloc.Tpo $(DEPDIR)/tests_ralloc_test-ralloc.Po
@@ -1265,6 +1304,20 @@ tests_sampler_types_test-symbol_table.obj: $(top_srcdir)/src/mesa/program/symbol
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/program/symbol_table.c' object='tests_sampler_types_test-symbol_table.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_sampler_types_test_CFLAGS) $(CFLAGS) -c -o tests_sampler_types_test-symbol_table.obj `if test -f '$(top_srcdir)/src/mesa/program/symbol_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/program/symbol_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/program/symbol_table.c'; fi`
+
+tests_sampler_types_test-common.o: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_sampler_types_test_CFLAGS) $(CFLAGS) -MT tests_sampler_types_test-common.o -MD -MP -MF $(DEPDIR)/tests_sampler_types_test-common.Tpo -c -o tests_sampler_types_test-common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_sampler_types_test-common.Tpo $(DEPDIR)/tests_sampler_types_test-common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='tests_sampler_types_test-common.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_sampler_types_test_CFLAGS) $(CFLAGS) -c -o tests_sampler_types_test-common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+
+tests_sampler_types_test-common.obj: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_sampler_types_test_CFLAGS) $(CFLAGS) -MT tests_sampler_types_test-common.obj -MD -MP -MF $(DEPDIR)/tests_sampler_types_test-common.Tpo -c -o tests_sampler_types_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_sampler_types_test-common.Tpo $(DEPDIR)/tests_sampler_types_test-common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='tests_sampler_types_test-common.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_sampler_types_test_CFLAGS) $(CFLAGS) -c -o tests_sampler_types_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
 
 tests_uniform_initializer_test-hash_table.o: $(top_srcdir)/src/mesa/main/hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -MT tests_uniform_initializer_test-hash_table.o -MD -MP -MF $(DEPDIR)/tests_uniform_initializer_test-hash_table.Tpo -c -o tests_uniform_initializer_test-hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
@@ -1321,6 +1374,20 @@ tests_uniform_initializer_test-symbol_table.obj: $(top_srcdir)/src/mesa/program/
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/program/symbol_table.c' object='tests_uniform_initializer_test-symbol_table.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -c -o tests_uniform_initializer_test-symbol_table.obj `if test -f '$(top_srcdir)/src/mesa/program/symbol_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/program/symbol_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/program/symbol_table.c'; fi`
+
+tests_uniform_initializer_test-common.o: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -MT tests_uniform_initializer_test-common.o -MD -MP -MF $(DEPDIR)/tests_uniform_initializer_test-common.Tpo -c -o tests_uniform_initializer_test-common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_uniform_initializer_test-common.Tpo $(DEPDIR)/tests_uniform_initializer_test-common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='tests_uniform_initializer_test-common.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -c -o tests_uniform_initializer_test-common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+
+tests_uniform_initializer_test-common.obj: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -MT tests_uniform_initializer_test-common.obj -MD -MP -MF $(DEPDIR)/tests_uniform_initializer_test-common.Tpo -c -o tests_uniform_initializer_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_uniform_initializer_test-common.Tpo $(DEPDIR)/tests_uniform_initializer_test-common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='tests_uniform_initializer_test-common.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -c -o tests_uniform_initializer_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -1700,6 +1767,13 @@ lower_noise.lo: $(GLSL_SRCDIR)/lower_noise.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o lower_noise.lo `test -f '$(GLSL_SRCDIR)/lower_noise.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_noise.cpp
 
+lower_offset_array.lo: $(GLSL_SRCDIR)/lower_offset_array.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT lower_offset_array.lo -MD -MP -MF $(DEPDIR)/lower_offset_array.Tpo -c -o lower_offset_array.lo `test -f '$(GLSL_SRCDIR)/lower_offset_array.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_offset_array.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/lower_offset_array.Tpo $(DEPDIR)/lower_offset_array.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/lower_offset_array.cpp' object='lower_offset_array.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o lower_offset_array.lo `test -f '$(GLSL_SRCDIR)/lower_offset_array.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_offset_array.cpp
+
 lower_packed_varyings.lo: $(GLSL_SRCDIR)/lower_packed_varyings.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT lower_packed_varyings.lo -MD -MP -MF $(DEPDIR)/lower_packed_varyings.Tpo -c -o lower_packed_varyings.lo `test -f '$(GLSL_SRCDIR)/lower_packed_varyings.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_packed_varyings.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/lower_packed_varyings.Tpo $(DEPDIR)/lower_packed_varyings.Plo
@@ -2007,6 +2081,20 @@ general_ir_test.obj: tests/general_ir_test.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='tests/general_ir_test.cpp' object='general_ir_test.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o general_ir_test.obj `if test -f 'tests/general_ir_test.cpp'; then $(CYGPATH_W) 'tests/general_ir_test.cpp'; else $(CYGPATH_W) '$(srcdir)/tests/general_ir_test.cpp'; fi`
+
+varyings_test.o: tests/varyings_test.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT varyings_test.o -MD -MP -MF $(DEPDIR)/varyings_test.Tpo -c -o varyings_test.o `test -f 'tests/varyings_test.cpp' || echo '$(srcdir)/'`tests/varyings_test.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/varyings_test.Tpo $(DEPDIR)/varyings_test.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='tests/varyings_test.cpp' object='varyings_test.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o varyings_test.o `test -f 'tests/varyings_test.cpp' || echo '$(srcdir)/'`tests/varyings_test.cpp
+
+varyings_test.obj: tests/varyings_test.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT varyings_test.obj -MD -MP -MF $(DEPDIR)/varyings_test.Tpo -c -o varyings_test.obj `if test -f 'tests/varyings_test.cpp'; then $(CYGPATH_W) 'tests/varyings_test.cpp'; else $(CYGPATH_W) '$(srcdir)/tests/varyings_test.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/varyings_test.Tpo $(DEPDIR)/varyings_test.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='tests/varyings_test.cpp' object='varyings_test.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o varyings_test.obj `if test -f 'tests/varyings_test.cpp'; then $(CYGPATH_W) 'tests/varyings_test.cpp'; else $(CYGPATH_W) '$(srcdir)/tests/varyings_test.cpp'; fi`
 
 ralloc_test.o: tests/ralloc_test.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ralloc_test.o -MD -MP -MF $(DEPDIR)/ralloc_test.Tpo -c -o ralloc_test.o `test -f 'tests/ralloc_test.cpp' || echo '$(srcdir)/'`tests/ralloc_test.cpp
@@ -2413,11 +2501,11 @@ glsl_lexer.cpp: glsl_lexer.ll
 	$(AM_V_LEX) $(LEX) $(LFLAGS) -o $@ $<
 
 glcpp/glcpp-parse.c glcpp/glcpp-parse.h: glcpp/glcpp-parse.y
-	$(MKDIR_P) $(GLSL_BUILDDIR)/glcpp
+	$(AM_V_at)$(MKDIR_P) glcpp
 	$(AM_V_YACC) $(YACC) $(YFLAGS) -o $@ -p "glcpp_parser_" --defines=$(GLSL_BUILDDIR)/glcpp/glcpp-parse.h $<
 
 glcpp/glcpp-lex.c: glcpp/glcpp-lex.l
-	$(MKDIR_P) $(GLSL_BUILDDIR)/glcpp
+	$(AM_V_at)$(MKDIR_P) glcpp
 	$(AM_V_LEX) $(LEX) $(LFLAGS) -o $@ $<
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

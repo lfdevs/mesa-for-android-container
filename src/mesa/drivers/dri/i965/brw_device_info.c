@@ -68,7 +68,7 @@ static const struct brw_device_info brw_device_info_ilk = {
 
 static const struct brw_device_info brw_device_info_snb_gt1 = {
    .gen = 6,
-   .gt = 2,
+   .gt = 1,
    .has_hiz_and_separate_stencil = true,
    .has_llc = true,
    .has_pln = true,
@@ -201,7 +201,7 @@ static const struct brw_device_info brw_device_info_hsw_gt3 = {
    .has_pln = true,                                 \
    .max_vs_threads = 280,                           \
    .max_gs_threads = 256,                           \
-   .max_wm_threads = 64,  /* threads per PSD */     \
+   .max_wm_threads = 408,                           \
    .urb = {                                         \
       .size = 128,                                  \
       .min_vs_entries = 64,                         \
@@ -221,6 +221,23 @@ static const struct brw_device_info brw_device_info_bdw_gt3 = {
    GEN8_FEATURES, .gt = 3,
 };
 
+/* Thread counts and URB limits are placeholders, and may not be accurate.
+ * These were copied from Haswell GT1, above.
+ */
+static const struct brw_device_info brw_device_info_chv = {
+   GEN8_FEATURES, .is_cherryview = 1, .gt = 1,
+   .has_llc = false,
+   .max_vs_threads = 70,
+   .max_gs_threads = 70,
+   .max_wm_threads = 102,
+   .urb = {
+      .size = 128,
+      .min_vs_entries = 64,
+      .max_vs_entries = 640,
+      .max_gs_entries = 256,
+   }
+};
+
 const struct brw_device_info *
 brw_get_device_info(int devid)
 {
@@ -229,7 +246,7 @@ brw_get_device_info(int devid)
 #define CHIPSET(id, family, name) case id: return &brw_device_info_##family;
 #include "pci_ids/i965_pci_ids.h"
    default:
-      fprintf(stderr, "Unknown Intel device.");
-      abort();
+      fprintf(stderr, "i965_dri.so does not support the 0x%x PCI ID.\n", devid);
+      return NULL;
    }
 }

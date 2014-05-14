@@ -57,7 +57,7 @@
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
 #include "intel_pixel.h"
-#include "intel_regions.h"
+#include "intel_image.h"
 #include "intel_tex.h"
 #include "intel_tex_obj.h"
 
@@ -79,6 +79,12 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
    (void) target;
 
    switch (brw->gen) {
+   case 8:
+      samples[0] = 8;
+      samples[1] = 4;
+      samples[2] = 2;
+      return 3;
+
    case 7:
       samples[0] = 8;
       samples[1] = 4;
@@ -198,7 +204,7 @@ intel_glFlush(struct gl_context *ctx)
 
    intel_batchbuffer_flush(brw);
    intel_flush_front(ctx);
-   if (brw->is_front_buffer_rendering)
+   if (brw_is_front_buffer_drawing(ctx->DrawBuffer))
       brw->need_throttle = true;
 }
 
@@ -296,16 +302,24 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = max_samplers;
    else
       ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = 0;
+   if (getenv("INTEL_COMPUTE_SHADER")) {
+      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits = BRW_MAX_TEX_UNIT;
+      ctx->Const.MaxUniformBufferBindings += 12;
+   } else {
+      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits = 0;
+   }
    ctx->Const.MaxCombinedTextureImageUnits =
       ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits +
       ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits +
-      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits;
+      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits +
+      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits;
 
    ctx->Const.MaxTextureLevels = 14; /* 8192 */
    if (ctx->Const.MaxTextureLevels > MAX_TEXTURE_LEVELS)
       ctx->Const.MaxTextureLevels = MAX_TEXTURE_LEVELS;
-   ctx->Const.Max3DTextureLevels = 9;
-   ctx->Const.MaxCubeTextureLevels = 12;
+   ctx->Const.Max3DTextureLevels = 12; /* 2048 */
+   ctx->Const.MaxCubeTextureLevels = 14; /* 8192 */
+   ctx->Const.MaxTextureMbytes = 1536;
 
    if (brw->gen >= 7)
       ctx->Const.MaxArrayTextureLayers = 2048;
@@ -367,6 +381,8 @@ brw_initialize_context_constants(struct brw_context *brw)
 
    if (brw->gen >= 7)
       ctx->Const.MaxProgramTextureGatherComponents = 4;
+   else if (brw->gen == 6)
+      ctx->Const.MaxProgramTextureGatherComponents = 1;
 
    ctx->Const.MinLineWidth = 1.0;
    ctx->Const.MinLineWidthAA = 1.0;
@@ -423,9 +439,11 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
       ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
       ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
+      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
       ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers = BRW_MAX_ABO;
       ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicBuffers = BRW_MAX_ABO;
       ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxAtomicBuffers = BRW_MAX_ABO;
+      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxAtomicBuffers = BRW_MAX_ABO;
       ctx->Const.MaxCombinedAtomicBuffers = 3 * BRW_MAX_ABO;
    }
 
@@ -467,12 +485,11 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->ShaderCompilerOptions[i].EmitNoNoise = true;
       ctx->ShaderCompilerOptions[i].EmitNoMainReturn = true;
       ctx->ShaderCompilerOptions[i].EmitNoIndirectInput = true;
-      ctx->ShaderCompilerOptions[i].EmitNoIndirectOutput = true;
-
-      ctx->ShaderCompilerOptions[i].EmitNoIndirectUniform =
+      ctx->ShaderCompilerOptions[i].EmitNoIndirectOutput =
 	 (i == MESA_SHADER_FRAGMENT);
       ctx->ShaderCompilerOptions[i].EmitNoIndirectTemp =
 	 (i == MESA_SHADER_FRAGMENT);
+      ctx->ShaderCompilerOptions[i].EmitNoIndirectUniform = false;
       ctx->ShaderCompilerOptions[i].LowerClipDistance = true;
    }
 
@@ -566,7 +583,6 @@ brwCreateContext(gl_api api,
    struct intel_screen *screen = sPriv->driverPrivate;
    const struct brw_device_info *devinfo = screen->devinfo;
    struct dd_function_table functions;
-   struct gl_config visual;
 
    /* Only allow the __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS flag if the kernel
     * provides us with context reset notifications.
@@ -584,7 +600,7 @@ brwCreateContext(gl_api api,
 
    struct brw_context *brw = rzalloc(NULL, struct brw_context);
    if (!brw) {
-      printf("%s: failed to alloc context\n", __FUNCTION__);
+      fprintf(stderr, "%s: failed to alloc context\n", __FUNCTION__);
       *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
       return false;
    }
@@ -600,7 +616,7 @@ brwCreateContext(gl_api api,
    brw->is_baytrail = devinfo->is_baytrail;
    brw->is_haswell = devinfo->is_haswell;
    brw->has_llc = devinfo->has_llc;
-   brw->has_hiz = devinfo->has_hiz_and_separate_stencil && brw->gen < 8;
+   brw->has_hiz = devinfo->has_hiz_and_separate_stencil;
    brw->has_separate_stencil = devinfo->has_hiz_and_separate_stencil;
    brw->has_pln = devinfo->has_pln;
    brw->has_compr4 = devinfo->has_compr4;
@@ -612,6 +628,9 @@ brwCreateContext(gl_api api,
    brw->must_use_separate_stencil = screen->hw_must_use_separate_stencil;
    brw->has_swizzling = screen->hw_has_swizzling;
 
+   brw->vs.base.stage = MESA_SHADER_VERTEX;
+   brw->gs.base.stage = MESA_SHADER_GEOMETRY;
+   brw->wm.base.stage = MESA_SHADER_FRAGMENT;
    if (brw->gen >= 8) {
       gen8_init_vtable_surface_functions(brw);
       gen7_init_vtable_sampler_functions(brw);
@@ -633,14 +652,9 @@ brwCreateContext(gl_api api,
 
    struct gl_context *ctx = &brw->ctx;
 
-   if (mesaVis == NULL) {
-      memset(&visual, 0, sizeof visual);
-      mesaVis = &visual;
-   }
-
    if (!_mesa_initialize_context(ctx, api, mesaVis, shareCtx, &functions)) {
       *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
-      printf("%s: failed to init mesa context\n", __FUNCTION__);
+      fprintf(stderr, "%s: failed to init mesa context\n", __FUNCTION__);
       intelDestroyContext(driContextPriv);
       return false;
    }
@@ -680,6 +694,8 @@ brwCreateContext(gl_api api,
    /* Reinitialize the context point state.  It depends on ctx->Const values. */
    _mesa_init_point(ctx);
 
+   intel_fbo_init(brw);
+
    intel_batchbuffer_init(brw);
 
    if (brw->gen >= 6) {
@@ -703,17 +719,7 @@ brwCreateContext(gl_api api,
 
    intelInitExtensions(ctx);
 
-   intel_fbo_init(brw);
-
    brw_init_surface_formats(brw);
-
-   if (brw->is_g4x || brw->gen >= 5) {
-      brw->CMD_VF_STATISTICS = GM45_3DSTATE_VF_STATISTICS;
-      brw->CMD_PIPELINE_SELECT = CMD_PIPELINE_SELECT_GM45;
-  } else {
-      brw->CMD_VF_STATISTICS = GEN4_3DSTATE_VF_STATISTICS;
-      brw->CMD_PIPELINE_SELECT = CMD_PIPELINE_SELECT_965;
-   }
 
    brw->max_vs_threads = devinfo->max_vs_threads;
    brw->max_gs_threads = devinfo->max_gs_threads;
@@ -763,9 +769,6 @@ brwCreateContext(gl_api api,
    if ((flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS) != 0)
       ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT_ARB;
 
-   brw_fs_alloc_reg_sets(brw);
-   brw_vec4_alloc_reg_set(brw);
-
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       brw_init_shader_time(brw);
 
@@ -812,8 +815,6 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    brw_draw_destroy(brw);
 
    drm_intel_bo_unreference(brw->curbe.curbe_bo);
-   drm_intel_bo_unreference(brw->vs.base.const_bo);
-   drm_intel_bo_unreference(brw->wm.base.const_bo);
 
    free(brw->curbe.last_buf);
    free(brw->curbe.next_buf);
@@ -986,7 +987,7 @@ intel_resolve_for_dri2_flush(struct brw_context *brw,
       if (rb->mt->num_samples <= 1)
          intel_miptree_resolve_color(brw, rb->mt);
       else
-         intel_miptree_downsample(brw, rb->mt);
+         intel_renderbuffer_downsample(brw, rb);
    }
 }
 
@@ -1097,6 +1098,7 @@ intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
 void
 intel_prepare_render(struct brw_context *brw)
 {
+   struct gl_context *ctx = &brw->ctx;
    __DRIcontext *driContext = brw->driContext;
    __DRIdrawable *drawable;
 
@@ -1118,7 +1120,7 @@ intel_prepare_render(struct brw_context *brw)
     * that will happen next will probably dirty the front buffer.  So
     * mark it as dirty here.
     */
-   if (brw->is_front_buffer_rendering)
+   if (brw_is_front_buffer_drawing(ctx->DrawBuffer))
       brw->front_buffer_dirty = true;
 
    /* Wait for the swapbuffers before the one we just emitted, so we
@@ -1180,8 +1182,8 @@ intel_query_dri2_buffers(struct brw_context *brw,
    back_rb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
 
    memset(attachments, 0, sizeof(attachments));
-   if ((brw->is_front_buffer_rendering ||
-        brw->is_front_buffer_reading ||
+   if ((brw_is_front_buffer_drawing(fb) ||
+        brw_is_front_buffer_reading(fb) ||
         !back_rb) && front_rb) {
       /* If a fake front buffer is in use, then querying for
        * __DRI_BUFFER_FRONT_LEFT will cause the server to copy the image from
@@ -1230,10 +1232,9 @@ intel_query_dri2_buffers(struct brw_context *brw,
  *    DRI2BufferDepthStencil are handled as special cases.
  *
  * \param buffer_name is a human readable name, such as "dri2 front buffer",
- *        that is passed to intel_region_alloc_for_handle().
+ *        that is passed to drm_intel_bo_gem_create_from_name().
  *
  * \see intel_update_renderbuffers()
- * \see intel_region_alloc_for_handle()
  */
 static void
 intel_process_dri2_buffer(struct brw_context *brw,
@@ -1242,7 +1243,8 @@ intel_process_dri2_buffer(struct brw_context *brw,
                           struct intel_renderbuffer *rb,
                           const char *buffer_name)
 {
-   struct intel_region *region = NULL;
+   struct gl_framebuffer *fb = drawable->driverPrivate;
+   drm_intel_bo *bo;
 
    if (!rb)
       return;
@@ -1253,18 +1255,24 @@ intel_process_dri2_buffer(struct brw_context *brw,
     * use of a mapping of the buffer involves a bunch of page faulting which is
     * moderately expensive.
     */
-   if (num_samples == 0) {
-       if (rb->mt &&
-           rb->mt->region &&
-           rb->mt->region->name == buffer->name)
-          return;
-   } else {
-       if (rb->mt &&
-           rb->mt->singlesample_mt &&
-           rb->mt->singlesample_mt->region &&
-           rb->mt->singlesample_mt->region->name == buffer->name)
-          return;
+   struct intel_mipmap_tree *last_mt;
+   if (num_samples == 0)
+      last_mt = rb->mt;
+   else
+      last_mt = rb->singlesample_mt;
+
+   uint32_t old_name = 0;
+   if (last_mt) {
+       /* The bo already has a name because the miptree was created by a
+	* previous call to intel_process_dri2_buffer(). If a bo already has a
+	* name, then drm_intel_bo_flink() is a low-cost getter.  It does not
+	* create a new name.
+	*/
+      drm_intel_bo_flink(last_mt->bo, &old_name);
    }
+
+   if (old_name == buffer->name)
+      return;
 
    if (unlikely(INTEL_DEBUG & DEBUG_DRI)) {
       fprintf(stderr,
@@ -1274,22 +1282,32 @@ intel_process_dri2_buffer(struct brw_context *brw,
    }
 
    intel_miptree_release(&rb->mt);
-   region = intel_region_alloc_for_handle(brw->intelScreen,
-                                          buffer->cpp,
-                                          drawable->w,
-                                          drawable->h,
-                                          buffer->pitch,
-                                          buffer->name,
-                                          buffer_name);
-   if (!region)
+   bo = drm_intel_bo_gem_create_from_name(brw->bufmgr, buffer_name,
+                                          buffer->name);
+   if (!bo) {
+      fprintf(stderr,
+              "Failed to open BO for returned DRI2 buffer "
+              "(%dx%d, %s, named %d).\n"
+              "This is likely a bug in the X Server that will lead to a "
+              "crash soon.\n",
+              drawable->w, drawable->h, buffer_name, buffer->name);
       return;
+   }
 
-   rb->mt = intel_miptree_create_for_dri2_buffer(brw,
-                                                 buffer->attachment,
-                                                 intel_rb_format(rb),
-                                                 num_samples,
-                                                 region);
-   intel_region_release(&region);
+   intel_update_winsys_renderbuffer_miptree(brw, rb, bo,
+                                            drawable->w, drawable->h,
+                                            buffer->pitch);
+
+   if (brw_is_front_buffer_drawing(fb) &&
+       (buffer->attachment == __DRI_BUFFER_FRONT_LEFT ||
+        buffer->attachment == __DRI_BUFFER_FAKE_FRONT_LEFT) &&
+       rb->Base.Base.NumSamples > 1) {
+      intel_renderbuffer_upsample(brw, rb);
+   }
+
+   assert(rb->mt);
+
+   drm_intel_bo_unreference(bo);
 }
 
 /**
@@ -1315,9 +1333,9 @@ intel_update_image_buffer(struct brw_context *intel,
                           __DRIimage *buffer,
                           enum __DRIimageBufferMask buffer_type)
 {
-   struct intel_region *region = buffer->region;
+   struct gl_framebuffer *fb = drawable->driverPrivate;
 
-   if (!rb || !region)
+   if (!rb || !buffer->bo)
       return;
 
    unsigned num_samples = rb->Base.Base.NumSamples;
@@ -1325,25 +1343,24 @@ intel_update_image_buffer(struct brw_context *intel,
    /* Check and see if we're already bound to the right
     * buffer object
     */
-   if (num_samples == 0) {
-       if (rb->mt &&
-           rb->mt->region &&
-           rb->mt->region->bo == region->bo)
-          return;
-   } else {
-       if (rb->mt &&
-           rb->mt->singlesample_mt &&
-           rb->mt->singlesample_mt->region &&
-           rb->mt->singlesample_mt->region->bo == region->bo)
-          return;
-   }
+   struct intel_mipmap_tree *last_mt;
+   if (num_samples == 0)
+      last_mt = rb->mt;
+   else
+      last_mt = rb->singlesample_mt;
 
-   intel_miptree_release(&rb->mt);
-   rb->mt = intel_miptree_create_for_image_buffer(intel,
-                                                  buffer_type,
-                                                  intel_rb_format(rb),
-                                                  num_samples,
-                                                  region);
+   if (last_mt && last_mt->bo == buffer->bo)
+      return;
+
+   intel_update_winsys_renderbuffer_miptree(intel, rb, buffer->bo,
+                                            buffer->width, buffer->height,
+                                            buffer->pitch);
+
+   if (brw_is_front_buffer_drawing(fb) &&
+       buffer_type == __DRI_IMAGE_BUFFER_FRONT &&
+       rb->Base.Base.NumSamples > 1) {
+      intel_renderbuffer_upsample(intel, rb);
+   }
 }
 
 static void
@@ -1367,8 +1384,10 @@ intel_update_image_buffers(struct brw_context *brw, __DRIdrawable *drawable)
    else
       return;
 
-   if ((brw->is_front_buffer_rendering || brw->is_front_buffer_reading || !back_rb) && front_rb)
+   if (front_rb && (brw_is_front_buffer_drawing(fb) ||
+                    brw_is_front_buffer_reading(fb) || !back_rb)) {
       buffer_mask |= __DRI_IMAGE_BUFFER_FRONT;
+   }
 
    if (back_rb)
       buffer_mask |= __DRI_IMAGE_BUFFER_BACK;

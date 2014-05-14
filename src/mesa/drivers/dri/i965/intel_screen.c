@@ -37,6 +37,7 @@
 #include "main/fbobject.h"
 #include "main/version.h"
 #include "swrast/s_renderbuffer.h"
+#include "glsl/ralloc.h"
 
 #include "utils.h"
 #include "xmlpool.h"
@@ -99,15 +100,11 @@ DRI_CONF_END
 #include "intel_mipmap_tree.h"
 #include "intel_screen.h"
 #include "intel_tex.h"
-#include "intel_regions.h"
+#include "intel_image.h"
 
 #include "brw_context.h"
 
 #include "i915_drm.h"
-
-#ifdef USE_NEW_INTERFACE
-static PFNGLXCREATECONTEXTMODES create_context_modes = NULL;
-#endif /*USE_NEW_INTERFACE */
 
 /**
  * For debugging purposes, this returns a time in seconds.
@@ -143,21 +140,20 @@ aub_dump_bmp(struct gl_context *ctx)
 	    continue;
 	 }
 
-         assert(irb->mt->region->pitch % irb->mt->region->cpp == 0);
-	 drm_intel_gem_bo_aub_dump_bmp(irb->mt->region->bo,
+         drm_intel_gem_bo_aub_dump_bmp(irb->mt->bo,
 				       irb->draw_x,
 				       irb->draw_y,
 				       irb->Base.Base.Width,
 				       irb->Base.Base.Height,
 				       format,
-				       irb->mt->region->pitch,
+				       irb->mt->pitch,
 				       0);
       }
    }
 }
 
 static const __DRItexBufferExtension intelTexBufferExtension = {
-   .base = { __DRI_TEX_BUFFER, __DRI_TEX_BUFFER_VERSION },
+   .base = { __DRI_TEX_BUFFER, 3 },
 
    .setTexBuffer        = intelSetTexBuffer,
    .setTexBuffer2       = intelSetTexBuffer2,
@@ -275,6 +271,18 @@ static struct intel_image_format intel_image_formats[] = {
        { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } }
 };
 
+static void
+intel_image_warn_if_unaligned(__DRIimage *image, const char *func)
+{
+   uint32_t tiling, swizzle;
+   drm_intel_bo_get_tiling(image->bo, &tiling, &swizzle);
+
+   if (tiling != I915_TILING_NONE && (image->offset & 0xfff)) {
+      _mesa_warning(NULL, "%s: offset 0x%08x not on tile boundary",
+                    func, image->offset);
+   }
+}
+
 static struct intel_image_format *
 intel_image_format_lookup(int fourcc)
 {
@@ -316,44 +324,28 @@ intel_allocate_image(int dri_format, void *loaderPrivate)
 }
 
 /**
- * Sets up a DRIImage structure to point to our shared image in a region
+ * Sets up a DRIImage structure to point to a slice out of a miptree.
  */
 static void
 intel_setup_image_from_mipmap_tree(struct brw_context *brw, __DRIimage *image,
                                    struct intel_mipmap_tree *mt, GLuint level,
                                    GLuint zoffset)
 {
-   unsigned int draw_x, draw_y;
-   uint32_t mask_x, mask_y;
-
    intel_miptree_make_shareable(brw, mt);
 
    intel_miptree_check_level_layer(mt, level, zoffset);
 
-   intel_region_get_tile_masks(mt->region, &mask_x, &mask_y, false);
-   intel_miptree_get_image_offset(mt, level, zoffset, &draw_x, &draw_y);
+   image->width = minify(mt->physical_width0, level - mt->first_level);
+   image->height = minify(mt->physical_height0, level - mt->first_level);
+   image->pitch = mt->pitch;
 
-   image->width = mt->level[level].width;
-   image->height = mt->level[level].height;
-   image->tile_x = draw_x & mask_x;
-   image->tile_y = draw_y & mask_y;
+   image->offset = intel_miptree_get_tile_offsets(mt, level, zoffset,
+                                                  &image->tile_x,
+                                                  &image->tile_y);
 
-   image->offset = intel_region_get_aligned_offset(mt->region,
-                                                   draw_x & ~mask_x,
-                                                   draw_y & ~mask_y,
-                                                   false);
-
-   intel_region_reference(&image->region, mt->region);
-}
-
-static void
-intel_setup_image_from_dimensions(__DRIimage *image)
-{
-   image->width    = image->region->width;
-   image->height   = image->region->height;
-   image->tile_x = 0;
-   image->tile_y = 0;
-   image->has_depthstencil = false;
+   drm_intel_bo_unreference(image->bo);
+   image->bo = mt->bo;
+   drm_intel_bo_reference(mt->bo);
 }
 
 static __DRIimage *
@@ -373,15 +365,16 @@ intel_create_image_from_name(__DRIscreen *screen,
        cpp = 1;
     else
        cpp = _mesa_get_format_bytes(image->format);
-    image->region = intel_region_alloc_for_handle(intelScreen,
-						  cpp, width, height,
-						  pitch * cpp, name, "image");
-    if (image->region == NULL) {
+
+    image->width = width;
+    image->height = height;
+    image->pitch = pitch * cpp;
+    image->bo = drm_intel_bo_gem_create_from_name(intelScreen->bufmgr, "image",
+                                                  name);
+    if (!image->bo) {
        free(image);
        return NULL;
     }
-
-    intel_setup_image_from_dimensions(image);
 
     return image;	
 }
@@ -412,8 +405,12 @@ intel_create_image_from_renderbuffer(__DRIcontext *context,
    image->format = rb->Format;
    image->offset = 0;
    image->data = loaderPrivate;
-   intel_region_reference(&image->region, irb->mt->region);
-   intel_setup_image_from_dimensions(image);
+   drm_intel_bo_unreference(image->bo);
+   image->bo = irb->mt->bo;
+   drm_intel_bo_reference(irb->mt->bo);
+   image->width = rb->Width;
+   image->height = rb->Height;
+   image->pitch = irb->mt->pitch;
    image->dri_format = driGLFormatToImageFormat(image->format);
    image->has_depthstencil = irb->mt->stencil_mt? true : false;
 
@@ -484,8 +481,8 @@ intel_create_image_from_texture(__DRIcontext *context, int target,
 static void
 intel_destroy_image(__DRIimage *image)
 {
-    intel_region_release(&image->region);
-    free(image);
+   drm_intel_bo_unreference(image->bo);
+   free(image);
 }
 
 static __DRIimage *
@@ -498,6 +495,7 @@ intel_create_image(__DRIscreen *screen,
    struct intel_screen *intelScreen = screen->driverPrivate;
    uint32_t tiling;
    int cpp;
+   unsigned long pitch;
 
    tiling = I915_TILING_X;
    if (use & __DRI_IMAGE_USE_CURSOR) {
@@ -513,15 +511,18 @@ intel_create_image(__DRIscreen *screen,
    if (image == NULL)
       return NULL;
 
+   
    cpp = _mesa_get_format_bytes(image->format);
-   image->region =
-      intel_region_alloc(intelScreen, tiling, cpp, width, height, true);
-   if (image->region == NULL) {
+   image->bo = drm_intel_bo_alloc_tiled(intelScreen->bufmgr, "image",
+                                        width, height, cpp, &tiling,
+                                        &pitch, 0);
+   if (image->bo == NULL) {
       free(image);
       return NULL;
    }
-
-   intel_setup_image_from_dimensions(image);
+   image->width = width;
+   image->height = height;
+   image->pitch = pitch;
 
    return image;
 }
@@ -531,21 +532,21 @@ intel_query_image(__DRIimage *image, int attrib, int *value)
 {
    switch (attrib) {
    case __DRI_IMAGE_ATTRIB_STRIDE:
-      *value = image->region->pitch;
+      *value = image->pitch;
       return true;
    case __DRI_IMAGE_ATTRIB_HANDLE:
-      *value = image->region->bo->handle;
+      *value = image->bo->handle;
       return true;
    case __DRI_IMAGE_ATTRIB_NAME:
-      return intel_region_flink(image->region, (uint32_t *) value);
+      return !drm_intel_bo_flink(image->bo, (uint32_t *) value);
    case __DRI_IMAGE_ATTRIB_FORMAT:
       *value = image->dri_format;
       return true;
    case __DRI_IMAGE_ATTRIB_WIDTH:
-      *value = image->region->width;
+      *value = image->width;
       return true;
    case __DRI_IMAGE_ATTRIB_HEIGHT:
-      *value = image->region->height;
+      *value = image->height;
       return true;
    case __DRI_IMAGE_ATTRIB_COMPONENTS:
       if (image->planar_format == NULL)
@@ -553,7 +554,7 @@ intel_query_image(__DRIimage *image, int attrib, int *value)
       *value = image->planar_format->components;
       return true;
    case __DRI_IMAGE_ATTRIB_FD:
-      if (drm_intel_bo_gem_export_to_prime(image->region->bo, value) == 0)
+      if (drm_intel_bo_gem_export_to_prime(image->bo, value) == 0)
          return true;
       return false;
   default:
@@ -570,12 +571,8 @@ intel_dup_image(__DRIimage *orig_image, void *loaderPrivate)
    if (image == NULL)
       return NULL;
 
-   intel_region_reference(&image->region, orig_image->region);
-   if (image->region == NULL) {
-      free(image);
-      return NULL;
-   }
-
+   drm_intel_bo_reference(orig_image->bo);
+   image->bo              = orig_image->bo;
    image->internal_format = orig_image->internal_format;
    image->planar_format   = orig_image->planar_format;
    image->dri_format      = orig_image->dri_format;
@@ -583,6 +580,7 @@ intel_dup_image(__DRIimage *orig_image, void *loaderPrivate)
    image->offset          = orig_image->offset;
    image->width           = orig_image->width;
    image->height          = orig_image->height;
+   image->pitch           = orig_image->pitch;
    image->tile_x          = orig_image->tile_x;
    image->tile_y          = orig_image->tile_y;
    image->has_depthstencil = orig_image->has_depthstencil;
@@ -598,7 +596,7 @@ static GLboolean
 intel_validate_usage(__DRIimage *image, unsigned int use)
 {
    if (use & __DRI_IMAGE_USE_CURSOR) {
-      if (image->region->width != 64 || image->region->height != 64)
+      if (image->width != 64 || image->height != 64)
 	 return GL_FALSE;
    }
 
@@ -667,13 +665,16 @@ intel_create_image_from_fds(__DRIscreen *screen,
    if (image == NULL)
       return NULL;
 
-   image->region = intel_region_alloc_for_fd(intelScreen,
-                                             f->planes[0].cpp, width, height, strides[0],
-                                             height * strides[0], fds[0], "image");
-   if (image->region == NULL) {
+   image->bo = drm_intel_bo_gem_create_from_prime(intelScreen->bufmgr,
+                                                  fds[0],
+                                                  height * strides[0]);
+   if (image->bo == NULL) {
       free(image);
       return NULL;
    }
+   image->width = width;
+   image->height = height;
+   image->pitch = strides[0];
 
    image->planar_format = f;
    for (i = 0; i < f->nplanes; i++) {
@@ -682,7 +683,10 @@ intel_create_image_from_fds(__DRIscreen *screen,
       image->strides[index] = strides[index];
    }
 
-   intel_setup_image_from_dimensions(image);
+   if (f->nplanes == 1) {
+      image->offset = image->offsets[0];
+      intel_image_warn_if_unaligned(image, __FUNCTION__);
+   }
 
    return image;
 }
@@ -737,7 +741,6 @@ intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
 {
     int width, height, offset, stride, dri_format, index;
     struct intel_image_format *f;
-    uint32_t mask_x, mask_y;
     __DRIimage *image;
 
     if (parent == NULL || parent->planar_format == NULL)
@@ -748,8 +751,8 @@ intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
     if (plane >= f->nplanes)
         return NULL;
 
-    width = parent->region->width >> f->planes[plane].width_shift;
-    height = parent->region->height >> f->planes[plane].height_shift;
+    width = parent->width >> f->planes[plane].width_shift;
+    height = parent->height >> f->planes[plane].height_shift;
     dri_format = f->planes[plane].dri_format;
     index = f->planes[plane].buffer_index;
     offset = parent->offsets[index];
@@ -759,38 +762,26 @@ intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
     if (image == NULL)
        return NULL;
 
-    if (offset + height * stride > parent->region->bo->size) {
+    if (offset + height * stride > parent->bo->size) {
        _mesa_warning(NULL, "intel_create_sub_image: subimage out of bounds");
        free(image);
        return NULL;
     }
 
-    image->region = calloc(sizeof(*image->region), 1);
-    if (image->region == NULL) {
-       free(image);
-       return NULL;
-    }
+    image->bo = parent->bo;
+    drm_intel_bo_reference(parent->bo);
 
-    image->region->cpp = _mesa_get_format_bytes(image->format);
-    image->region->width = width;
-    image->region->height = height;
-    image->region->pitch = stride;
-    image->region->refcount = 1;
-    image->region->bo = parent->region->bo;
-    drm_intel_bo_reference(image->region->bo);
-    image->region->tiling = parent->region->tiling;
+    image->width = width;
+    image->height = height;
+    image->pitch = stride;
     image->offset = offset;
-    intel_setup_image_from_dimensions(image);
 
-    intel_region_get_tile_masks(image->region, &mask_x, &mask_y, false);
-    if (offset & mask_x)
-       _mesa_warning(NULL,
-                     "intel_create_sub_image: offset not on tile boundary");
+    intel_image_warn_if_unaligned(image, __FUNCTION__);
 
     return image;
 }
 
-static struct __DRIimageExtensionRec intelImageExtension = {
+static const __DRIimageExtension intelImageExtension = {
     .base = { __DRI_IMAGE, 8 },
 
     .createImageFromName                = intel_create_image_from_name,
@@ -885,15 +876,15 @@ brw_query_renderer_string(__DRIscreen *psp, int param, const char **value)
    return -1;
 }
 
-static struct __DRI2rendererQueryExtensionRec intelRendererQueryExtension = {
+static const __DRI2rendererQueryExtension intelRendererQueryExtension = {
    .base = { __DRI2_RENDERER_QUERY, 1 },
 
    .queryInteger = brw_query_renderer_integer,
    .queryString = brw_query_renderer_string
 };
 
-static const struct __DRIrobustnessExtensionRec dri2Robustness = {
-   { __DRI2_ROBUSTNESS, 1 }
+static const __DRIrobustnessExtension dri2Robustness = {
+   .base = { __DRI2_ROBUSTNESS, 1 }
 };
 
 static const __DRIextension *intelScreenExtensions[] = {
@@ -950,7 +941,7 @@ intelDestroyScreen(__DRIscreen * sPriv)
    dri_bufmgr_destroy(intelScreen->bufmgr);
    driDestroyOptionInfo(&intelScreen->optionCache);
 
-   free(intelScreen);
+   ralloc_free(intelScreen);
    sPriv->driverPrivate = NULL;
 }
 
@@ -977,6 +968,11 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
       return false;
 
    _mesa_initialize_window_framebuffer(fb, mesaVis);
+
+   if (screen->winsys_msaa_samples_override != -1) {
+      num_samples = screen->winsys_msaa_samples_override;
+      fb->Visual.samples = num_samples;
+   }
 
    if (mesaVis->redBits == 5)
       rgbFormat = MESA_FORMAT_B5G6R5_UNORM;
@@ -1111,11 +1107,14 @@ intel_detect_swizzling(struct intel_screen *screen)
 const int*
 intel_supported_msaa_modes(const struct intel_screen  *screen)
 {
+   static const int gen8_modes[] = {8, 4, 2, 0, -1};
    static const int gen7_modes[] = {8, 4, 0, -1};
    static const int gen6_modes[] = {4, 0, -1};
    static const int gen4_modes[] = {0, -1};
 
-   if (screen->devinfo->gen >= 7) {
+   if (screen->devinfo->gen >= 8) {
+      return gen8_modes;
+   } else if (screen->devinfo->gen >= 7) {
       return gen7_modes;
    } else if (screen->devinfo->gen == 6) {
       return gen6_modes;
@@ -1312,7 +1311,7 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
    }
 
    /* Allocate the private area */
-   intelScreen = calloc(1, sizeof *intelScreen);
+   intelScreen = rzalloc(NULL, struct intel_screen);
    if (!intelScreen) {
       fprintf(stderr, "\nERROR!  Allocating private area failed\n");
       return false;
@@ -1328,10 +1327,22 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
 
    intelScreen->deviceID = drm_intel_bufmgr_gem_get_devid(intelScreen->bufmgr);
    intelScreen->devinfo = brw_get_device_info(intelScreen->deviceID);
+   if (!intelScreen->devinfo)
+      return false;
 
    intelScreen->hw_must_use_separate_stencil = intelScreen->devinfo->gen >= 7;
 
    intelScreen->hw_has_swizzling = intel_detect_swizzling(intelScreen);
+
+   const char *force_msaa = getenv("INTEL_FORCE_MSAA");
+   if (force_msaa) {
+      intelScreen->winsys_msaa_samples_override =
+         intel_quantize_num_samples(intelScreen, atoi(force_msaa));
+      printf("Forcing winsys sample count to %d\n",
+             intelScreen->winsys_msaa_samples_override);
+   } else {
+      intelScreen->winsys_msaa_samples_override = -1;
+   }
 
    set_max_gl_versions(intelScreen);
 
@@ -1341,23 +1352,31 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
     * no error.  If the ioctl is not supported, it always generate EINVAL.
     * Use this to determine whether to advertise the __DRI2_ROBUSTNESS
     * extension to the loader.
+    *
+    * Don't even try on pre-Gen6, since we don't attempt to use contexts there.
     */
-   struct drm_i915_reset_stats stats;
-   memset(&stats, 0, sizeof(stats));
+   if (intelScreen->devinfo->gen >= 6) {
+      struct drm_i915_reset_stats stats;
+      memset(&stats, 0, sizeof(stats));
 
-   const int ret = drmIoctl(psp->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats);
+      const int ret = drmIoctl(psp->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats);
 
-   intelScreen->has_context_reset_notification = (ret != -1 || errno != EINVAL);
+      intelScreen->has_context_reset_notification =
+         (ret != -1 || errno != EINVAL);
+   }
 
    psp->extensions = !intelScreen->has_context_reset_notification
       ? intelScreenExtensions : intelRobustScreenExtensions;
+
+   brw_fs_alloc_reg_sets(intelScreen);
+   brw_vec4_alloc_reg_set(intelScreen);
 
    return (const __DRIconfig**) intel_screen_make_configs(psp);
 }
 
 struct intel_buffer {
    __DRIbuffer base;
-   struct intel_region *region;
+   drm_intel_bo *bo;
 };
 
 static __DRIbuffer *
@@ -1376,23 +1395,27 @@ intelAllocateBuffer(__DRIscreen *screen,
       return NULL;
 
    /* The front and back buffers are color buffers, which are X tiled. */
-   intelBuffer->region = intel_region_alloc(intelScreen,
-                                            I915_TILING_X,
-                                            format / 8,
-                                            width,
-                                            height,
-                                            true);
+   uint32_t tiling = I915_TILING_X;
+   unsigned long pitch;
+   int cpp = format / 8;
+   intelBuffer->bo = drm_intel_bo_alloc_tiled(intelScreen->bufmgr,
+                                              "intelAllocateBuffer",
+                                              width,
+                                              height,
+                                              cpp,
+                                              &tiling, &pitch,
+                                              BO_ALLOC_FOR_RENDER);
 
-   if (intelBuffer->region == NULL) {
+   if (intelBuffer->bo == NULL) {
 	   free(intelBuffer);
 	   return NULL;
    }
 
-   intel_region_flink(intelBuffer->region, &intelBuffer->base.name);
+   drm_intel_bo_flink(intelBuffer->bo, &intelBuffer->base.name);
 
    intelBuffer->base.attachment = attachment;
-   intelBuffer->base.cpp = intelBuffer->region->cpp;
-   intelBuffer->base.pitch = intelBuffer->region->pitch;
+   intelBuffer->base.cpp = cpp;
+   intelBuffer->base.pitch = pitch;
 
    return &intelBuffer->base;
 }
@@ -1402,7 +1425,7 @@ intelReleaseBuffer(__DRIscreen *screen, __DRIbuffer *buffer)
 {
    struct intel_buffer *intelBuffer = (struct intel_buffer *) buffer;
 
-   intel_region_release(&intelBuffer->region);
+   drm_intel_bo_unreference(intelBuffer->bo);
    free(intelBuffer);
 }
 

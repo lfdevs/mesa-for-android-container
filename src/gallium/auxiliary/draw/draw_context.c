@@ -68,6 +68,12 @@ draw_get_option_use_llvm(void)
    }
    return value;
 }
+#else
+boolean
+draw_get_option_use_llvm(void)
+{
+   return FALSE;
+}
 #endif
 
 
@@ -1043,11 +1049,8 @@ draw_stats_clipper_primitives(struct draw_context *draw,
                               const struct draw_prim_info *prim_info)
 {
    if (draw->collect_statistics) {
-      unsigned start, i;
-      for (start = i = 0;
-           i < prim_info->primitive_count;
-           start += prim_info->primitive_lengths[i], i++)
-      {
+      unsigned i;
+      for (i = 0; i < prim_info->primitive_count; i++) {
          draw->statistics.c_invocations +=
             u_decomposed_prims_for_vertices(prim_info->prim,
                                             prim_info->primitive_lengths[i]);

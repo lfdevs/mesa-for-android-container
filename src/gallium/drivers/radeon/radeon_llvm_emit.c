@@ -24,16 +24,16 @@
  *
  */
 #include "radeon_llvm_emit.h"
+#include "radeon_elf_util.h"
 #include "util/u_memory.h"
 
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
+#include <llvm-c/Core.h>
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <libelf.h>
-#include <gelf.h>
 
 #define CPU_STRING_LEN 30
 #define FS_STRING_LEN 30
@@ -80,12 +80,28 @@ static LLVMTargetRef get_r600_target() {
 	return target;
 }
 
+#if HAVE_LLVM >= 0x0305
+
+static void radeonDiagnosticHandler(LLVMDiagnosticInfoRef di, void *context) {
+	unsigned int *diagnosticflag;
+	char *diaginfo_message;
+
+	diaginfo_message = LLVMGetDiagInfoDescription(di);
+	fprintf(stderr,"LLVM triggered Diagnostic Handler: %s\n", diaginfo_message);
+	LLVMDisposeMessage(diaginfo_message);
+
+	diagnosticflag = (unsigned int *)context;
+	*diagnosticflag = ((LLVMDSError == LLVMGetDiagInfoSeverity(di)) ? 1 : 0);
+}
+
+#endif
+
 /**
  * Compile an LLVM module to machine code.
  *
  * @returns 0 for success, 1 for failure
  */
-unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_llvm_binary *binary,
+unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_shader_binary *binary,
 					  const char * gpu_family, unsigned dump) {
 
 	LLVMTargetRef target;
@@ -93,16 +109,15 @@ unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_llvm_binary *binary,
 	char cpu[CPU_STRING_LEN];
 	char fs[FS_STRING_LEN];
 	char *err;
+	LLVMContextRef llvm_ctx;
+	unsigned rval = 0;
 	LLVMMemoryBufferRef out_buffer;
 	unsigned buffer_size;
 	const char *buffer_data;
 	char triple[TRIPLE_STRING_LEN];
-	char *elf_buffer;
-	Elf *elf;
-	Elf_Scn *section = NULL;
-	size_t section_str_index;
-	LLVMBool r;
+	LLVMBool mem_err;
 
+	/* initialise */
 	init_r600_target();
 
 	target = get_r600_target();
@@ -117,67 +132,42 @@ unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_llvm_binary *binary,
 		strncpy(fs, "+DumpCode", FS_STRING_LEN);
 	}
 	strncpy(triple, "r600--", TRIPLE_STRING_LEN);
+
+	/* Setup Diagnostic Handler*/
+	llvm_ctx = LLVMGetModuleContext(M);
+
+#if HAVE_LLVM >= 0x0305
+	LLVMContextSetDiagnosticHandler(llvm_ctx, radeonDiagnosticHandler, &rval);
+#endif
+	rval = 0;
+
+	/* Compile IR*/
 	tm = LLVMCreateTargetMachine(target, triple, cpu, fs,
 				  LLVMCodeGenLevelDefault, LLVMRelocDefault,
 						  LLVMCodeModelDefault);
-
-	r = LLVMTargetMachineEmitToMemoryBuffer(tm, M, LLVMObjectFile, &err,
+	mem_err = LLVMTargetMachineEmitToMemoryBuffer(tm, M, LLVMObjectFile, &err,
 								 &out_buffer);
-	if (r) {
-		fprintf(stderr, "%s", err);
+
+	/* Process Errors/Warnings */
+	if (mem_err) {
+		fprintf(stderr, "%s: %s", __FUNCTION__, err);
 		FREE(err);
+		LLVMDisposeTargetMachine(tm);
 		return 1;
 	}
 
+	if (0 != rval) {
+		fprintf(stderr, "%s: Processing Diag Flag\n", __FUNCTION__);
+	}
+
+	/* Extract Shader Code*/
 	buffer_size = LLVMGetBufferSize(out_buffer);
 	buffer_data = LLVMGetBufferStart(out_buffer);
 
-	/* One of the libelf implementations
-	 * (http://www.mr511.de/software/english.htm) requires calling
-	 * elf_version() before elf_memory().
-	 */
-	elf_version(EV_CURRENT);
-	elf_buffer = MALLOC(buffer_size);
-	memcpy(elf_buffer, buffer_data, buffer_size);
+	radeon_elf_read(buffer_data, buffer_size, binary, dump);
 
-	elf = elf_memory(elf_buffer, buffer_size);
-
-	elf_getshdrstrndx(elf, &section_str_index);
-	binary->disassembled = 0;
-
-	while ((section = elf_nextscn(elf, section))) {
-		const char *name;
-		Elf_Data *section_data = NULL;
-		GElf_Shdr section_header;
-		if (gelf_getshdr(section, &section_header) != &section_header) {
-			fprintf(stderr, "Failed to read ELF section header\n");
-			return 1;
-		}
-		name = elf_strptr(elf, section_str_index, section_header.sh_name);
-		if (!strcmp(name, ".text")) {
-			section_data = elf_getdata(section, section_data);
-			binary->code_size = section_data->d_size;
-			binary->code = MALLOC(binary->code_size * sizeof(unsigned char));
-			memcpy(binary->code, section_data->d_buf, binary->code_size);
-		} else if (!strcmp(name, ".AMDGPU.config")) {
-			section_data = elf_getdata(section, section_data);
-			binary->config_size = section_data->d_size;
-			binary->config = MALLOC(binary->config_size * sizeof(unsigned char));
-			memcpy(binary->config, section_data->d_buf, binary->config_size);
-		} else if (dump && !strcmp(name, ".AMDGPU.disasm")) {
-			binary->disassembled = 1;
-			section_data = elf_getdata(section, section_data);
-			fprintf(stderr, "\nShader Disassembly:\n\n");
-			fprintf(stderr, "%.*s\n", (int)section_data->d_size,
-						  (char *)section_data->d_buf);
-		}
-	}
-
-	if (elf){
-		elf_end(elf);
-	}
-	FREE(elf_buffer);
+	/* Clean up */
 	LLVMDisposeMemoryBuffer(out_buffer);
 	LLVMDisposeTargetMachine(tm);
-	return 0;
+	return rval;
 }

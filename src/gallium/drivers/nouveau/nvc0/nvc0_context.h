@@ -14,7 +14,6 @@
 #include "draw/draw_vertex.h"
 #endif
 
-#include "nv50/nv50_debug.h"
 #include "nvc0/nvc0_winsys.h"
 #include "nvc0/nvc0_stateobj.h"
 #include "nvc0/nvc0_screen.h"
@@ -24,6 +23,7 @@
 #include "nv50/nv50_transfer.h"
 
 #include "nouveau_context.h"
+#include "nouveau_debug.h"
 
 #include "nvc0/nvc0_3ddefs.xml.h"
 #include "nvc0/nvc0_3d.xml.h"
@@ -56,6 +56,7 @@
 #define NVC0_NEW_TFB_TARGETS  (1 << 21)
 #define NVC0_NEW_IDXBUF       (1 << 22)
 #define NVC0_NEW_SURFACES     (1 << 23)
+#define NVC0_NEW_MIN_SAMPLES  (1 << 24)
 
 #define NVC0_NEW_CP_PROGRAM   (1 << 0)
 #define NVC0_NEW_CP_SURFACES  (1 << 1)
@@ -182,6 +183,7 @@ struct nvc0_context {
    struct pipe_clip_state clip;
 
    unsigned sample_mask;
+   unsigned min_samples;
 
    boolean vbo_push_hint;
 

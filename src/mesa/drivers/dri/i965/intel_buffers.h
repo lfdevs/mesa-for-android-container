@@ -35,8 +35,9 @@
 
 struct intel_framebuffer;
 
-extern void intel_check_front_buffer_rendering(struct brw_context *brw);
-
 extern void intelInitBufferFuncs(struct dd_function_table *functions);
+
+bool brw_is_front_buffer_reading(struct gl_framebuffer *fb);
+bool brw_is_front_buffer_drawing(struct gl_framebuffer *fb);
 
 #endif /* INTEL_BUFFERS_H */

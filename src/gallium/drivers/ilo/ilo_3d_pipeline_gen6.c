@@ -25,9 +25,9 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "genhw/genhw.h"
 #include "util/u_dual_blend.h"
 #include "util/u_prim.h"
-#include "intel_reg.h"
 
 #include "ilo_blitter.h"
 #include "ilo_3d.h"
@@ -67,8 +67,8 @@ gen6_wa_pipe_control_post_sync(struct ilo_3d_pipeline *p,
     * The workaround below necessitates this workaround.
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_CS_STALL |
-         PIPE_CONTROL_STALL_AT_SCOREBOARD,
+         GEN6_PIPE_CONTROL_CS_STALL |
+         GEN6_PIPE_CONTROL_PIXEL_SCOREBOARD_STALL,
          NULL, 0, false, p->cp);
 
    /* the caller will emit the post-sync op */
@@ -86,7 +86,7 @@ gen6_wa_pipe_control_post_sync(struct ilo_3d_pipeline *p,
     *      PIPE_CONTROL with any non-zero post-sync-op is required."
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_WRITE_IMMEDIATE,
+         GEN6_PIPE_CONTROL_WRITE_IMM,
          p->workaround_bo, 0, false, p->cp);
 }
 
@@ -106,8 +106,8 @@ gen6_wa_pipe_control_wm_multisample_flush(struct ilo_3d_pipeline *p)
     *      Depth Flush prior to this command."
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-         PIPE_CONTROL_CS_STALL,
+         GEN6_PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+         GEN6_PIPE_CONTROL_CS_STALL,
          0, 0, false, p->cp);
 }
 
@@ -124,15 +124,15 @@ gen6_wa_pipe_control_wm_depth_flush(struct ilo_3d_pipeline *p)
     * commands.
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_STALL,
+         GEN6_PIPE_CONTROL_DEPTH_STALL,
          NULL, 0, false, p->cp);
 
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_CACHE_FLUSH,
+         GEN6_PIPE_CONTROL_DEPTH_CACHE_FLUSH,
          NULL, 0, false, p->cp);
 
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_STALL,
+         GEN6_PIPE_CONTROL_DEPTH_STALL,
          NULL, 0, false, p->cp);
 }
 
@@ -153,7 +153,7 @@ gen6_wa_pipe_control_wm_max_threads_stall(struct ilo_3d_pipeline *p)
     *      value in this field (Maximum Number of Threads in 3DSTATE_WM)"
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_STALL_AT_SCOREBOARD,
+         GEN6_PIPE_CONTROL_PIXEL_SCOREBOARD_STALL,
          NULL, 0, false, p->cp);
 
 }
@@ -171,9 +171,9 @@ gen6_wa_pipe_control_vs_const_flush(struct ilo_3d_pipeline *p)
     * buffered by VS FF, to the point that the FF dies.
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_STALL |
-         PIPE_CONTROL_INSTRUCTION_FLUSH |
-         PIPE_CONTROL_STATE_CACHE_INVALIDATE,
+         GEN6_PIPE_CONTROL_DEPTH_STALL |
+         GEN6_PIPE_CONTROL_INSTRUCTION_CACHE_INVALIDATE |
+         GEN6_PIPE_CONTROL_STATE_CACHE_INVALIDATE,
          NULL, 0, false, p->cp);
 }
 
@@ -725,10 +725,14 @@ gen6_pipeline_wm_depth(struct ilo_3d_pipeline *p,
    if (DIRTY(FB) || session->batch_bo_changed) {
       const struct ilo_zs_surface *zs;
       struct ilo_zs_surface layer;
+      uint32_t clear_params;
 
       if (ilo->fb.state.zsbuf) {
          const struct ilo_surface_cso *surface =
             (const struct ilo_surface_cso *) ilo->fb.state.zsbuf;
+         const struct ilo_texture_slice *slice =
+            ilo_texture_get_slice(ilo_texture(surface->base.texture),
+                  surface->base.u.tex.level, surface->base.u.tex.first_layer);
 
          if (ilo->fb.offset_to_layers) {
             assert(surface->base.u.tex.first_layer ==
@@ -745,9 +749,12 @@ gen6_pipeline_wm_depth(struct ilo_3d_pipeline *p,
             assert(!surface->is_rt);
             zs = &surface->u.zs;
          }
+
+         clear_params = slice->clear_value;
       }
       else {
          zs = &ilo->fb.null_zs;
+         clear_params = 0;
       }
 
       if (p->dev->gen == ILO_GEN(6)) {
@@ -758,9 +765,7 @@ gen6_pipeline_wm_depth(struct ilo_3d_pipeline *p,
       gen6_emit_3DSTATE_DEPTH_BUFFER(p->dev, zs, p->cp);
       gen6_emit_3DSTATE_HIER_DEPTH_BUFFER(p->dev, zs, p->cp);
       gen6_emit_3DSTATE_STENCIL_BUFFER(p->dev, zs, p->cp);
-
-      /* TODO */
-      gen6_emit_3DSTATE_CLEAR_PARAMS(p->dev, 0, p->cp);
+      gen6_emit_3DSTATE_CLEAR_PARAMS(p->dev, clear_params, p->cp);
    }
 }
 
@@ -1482,13 +1487,13 @@ ilo_3d_pipeline_emit_flush_gen6(struct ilo_3d_pipeline *p)
       gen6_wa_pipe_control_post_sync(p, false);
 
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_INSTRUCTION_FLUSH |
-         PIPE_CONTROL_WRITE_FLUSH |
-         PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-         PIPE_CONTROL_VF_CACHE_INVALIDATE |
-         PIPE_CONTROL_TC_FLUSH |
-         PIPE_CONTROL_NO_WRITE |
-         PIPE_CONTROL_CS_STALL,
+         GEN6_PIPE_CONTROL_INSTRUCTION_CACHE_INVALIDATE |
+         GEN6_PIPE_CONTROL_RENDER_CACHE_FLUSH |
+         GEN6_PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+         GEN6_PIPE_CONTROL_VF_CACHE_INVALIDATE |
+         GEN6_PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
+         GEN6_PIPE_CONTROL_WRITE_NONE |
+         GEN6_PIPE_CONTROL_CS_STALL,
          0, 0, false, p->cp);
 }
 
@@ -1500,8 +1505,8 @@ ilo_3d_pipeline_emit_write_timestamp_gen6(struct ilo_3d_pipeline *p,
       gen6_wa_pipe_control_post_sync(p, true);
 
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_WRITE_TIMESTAMP,
-         bo, index * sizeof(uint64_t) | PIPE_CONTROL_GLOBAL_GTT_WRITE,
+         GEN6_PIPE_CONTROL_WRITE_TIMESTAMP,
+         bo, index * sizeof(uint64_t),
          true, p->cp);
 }
 
@@ -1513,10 +1518,49 @@ ilo_3d_pipeline_emit_write_depth_count_gen6(struct ilo_3d_pipeline *p,
       gen6_wa_pipe_control_post_sync(p, false);
 
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_STALL |
-         PIPE_CONTROL_WRITE_DEPTH_COUNT,
-         bo, index * sizeof(uint64_t) | PIPE_CONTROL_GLOBAL_GTT_WRITE,
+         GEN6_PIPE_CONTROL_DEPTH_STALL |
+         GEN6_PIPE_CONTROL_WRITE_PS_DEPTH_COUNT,
+         bo, index * sizeof(uint64_t),
          true, p->cp);
+}
+
+void
+ilo_3d_pipeline_emit_write_statistics_gen6(struct ilo_3d_pipeline *p,
+                                           struct intel_bo *bo, int index)
+{
+   uint32_t regs[] = {
+      GEN6_REG_IA_VERTICES_COUNT,
+      GEN6_REG_IA_PRIMITIVES_COUNT,
+      GEN6_REG_VS_INVOCATION_COUNT,
+      GEN6_REG_GS_INVOCATION_COUNT,
+      GEN6_REG_GS_PRIMITIVES_COUNT,
+      GEN6_REG_CL_INVOCATION_COUNT,
+      GEN6_REG_CL_PRIMITIVES_COUNT,
+      GEN6_REG_PS_INVOCATION_COUNT,
+      p->dev->gen >= ILO_GEN(7) ? GEN6_REG_HS_INVOCATION_COUNT : 0,
+      p->dev->gen >= ILO_GEN(7) ? GEN6_REG_DS_INVOCATION_COUNT : 0,
+      0,
+   };
+   int i;
+
+   p->emit_flush(p);
+
+   for (i = 0; i < Elements(regs); i++) {
+      const uint32_t bo_offset = (index + i) * sizeof(uint64_t);
+
+      if (regs[i]) {
+         /* store lower 32 bits */
+         gen6_emit_MI_STORE_REGISTER_MEM(p->dev,
+               bo, bo_offset, regs[i], p->cp);
+         /* store higher 32 bits */
+         gen6_emit_MI_STORE_REGISTER_MEM(p->dev,
+               bo, bo_offset + 4, regs[i] + 4, p->cp);
+      }
+      else {
+         gen6_emit_MI_STORE_DATA_IMM(p->dev,
+               bo, bo_offset, 0, true, p->cp);
+      }
+   }
 }
 
 static void
@@ -1545,13 +1589,13 @@ gen6_rectlist_wm(struct ilo_3d_pipeline *p,
 
    switch (blitter->op) {
    case ILO_BLITTER_RECTLIST_CLEAR_ZS:
-      hiz_op = GEN6_WM_DEPTH_CLEAR;
+      hiz_op = GEN6_WM_DW4_DEPTH_CLEAR;
       break;
    case ILO_BLITTER_RECTLIST_RESOLVE_Z:
-      hiz_op = GEN6_WM_DEPTH_RESOLVE;
+      hiz_op = GEN6_WM_DW4_DEPTH_RESOLVE;
       break;
    case ILO_BLITTER_RECTLIST_RESOLVE_HIZ:
-      hiz_op = GEN6_WM_HIERARCHICAL_DEPTH_RESOLVE;
+      hiz_op = GEN6_WM_DW4_HIZ_RESOLVE;
       break;
    default:
       hiz_op = 0;
@@ -1571,10 +1615,13 @@ gen6_rectlist_wm_depth(struct ilo_3d_pipeline *p,
 {
    gen6_wa_pipe_control_wm_depth_flush(p);
 
-   if (blitter->uses & ILO_BLITTER_USE_FB_DEPTH) {
+   if (blitter->uses & (ILO_BLITTER_USE_FB_DEPTH |
+                        ILO_BLITTER_USE_FB_STENCIL)) {
       gen6_emit_3DSTATE_DEPTH_BUFFER(p->dev,
             &blitter->fb.dst.u.zs, p->cp);
+   }
 
+   if (blitter->uses & ILO_BLITTER_USE_FB_DEPTH) {
       gen6_emit_3DSTATE_HIER_DEPTH_BUFFER(p->dev,
             &blitter->fb.dst.u.zs, p->cp);
    }
@@ -1692,156 +1739,157 @@ ilo_3d_pipeline_emit_rectlist_gen6(struct ilo_3d_pipeline *p,
 }
 
 static int
-gen6_pipeline_estimate_commands(const struct ilo_3d_pipeline *p,
-                                const struct ilo_context *ilo)
+gen6_pipeline_max_command_size(const struct ilo_3d_pipeline *p)
 {
    static int size;
-   enum ilo_gpe_gen6_command cmd;
 
-   if (size)
-      return size;
+   if (!size) {
+      size += GEN6_3DSTATE_CONSTANT_ANY__SIZE * 3;
+      size += GEN6_3DSTATE_GS_SVB_INDEX__SIZE * 4;
+      size += GEN6_PIPE_CONTROL__SIZE * 5;
 
-   for (cmd = 0; cmd < ILO_GPE_GEN6_COMMAND_COUNT; cmd++) {
-      int count;
-
-      switch (cmd) {
-      case ILO_GPE_GEN6_PIPE_CONTROL:
-         /* for the workaround */
-         count = 2;
-         /* another one after 3DSTATE_URB */
-         count += 1;
-         /* and another one after 3DSTATE_CONSTANT_VS */
-         count += 1;
-         break;
-      case ILO_GPE_GEN6_3DSTATE_GS_SVB_INDEX:
-         /* there are 4 SVBIs */
-         count = 4;
-         break;
-      case ILO_GPE_GEN6_3DSTATE_VERTEX_BUFFERS:
-         count = 33;
-         break;
-      case ILO_GPE_GEN6_3DSTATE_VERTEX_ELEMENTS:
-         count = 34;
-         break;
-      case ILO_GPE_GEN6_MEDIA_VFE_STATE:
-      case ILO_GPE_GEN6_MEDIA_CURBE_LOAD:
-      case ILO_GPE_GEN6_MEDIA_INTERFACE_DESCRIPTOR_LOAD:
-      case ILO_GPE_GEN6_MEDIA_GATEWAY_STATE:
-      case ILO_GPE_GEN6_MEDIA_STATE_FLUSH:
-      case ILO_GPE_GEN6_MEDIA_OBJECT_WALKER:
-         /* media commands */
-         count = 0;
-         break;
-      default:
-         count = 1;
-         break;
-      }
-
-      if (count)
-         size += ilo_gpe_gen6_estimate_command_size(p->dev, cmd, count);
+      size +=
+         GEN6_STATE_BASE_ADDRESS__SIZE +
+         GEN6_STATE_SIP__SIZE +
+         GEN6_3DSTATE_VF_STATISTICS__SIZE +
+         GEN6_PIPELINE_SELECT__SIZE +
+         GEN6_3DSTATE_BINDING_TABLE_POINTERS__SIZE +
+         GEN6_3DSTATE_SAMPLER_STATE_POINTERS__SIZE +
+         GEN6_3DSTATE_URB__SIZE +
+         GEN6_3DSTATE_VERTEX_BUFFERS__SIZE +
+         GEN6_3DSTATE_VERTEX_ELEMENTS__SIZE +
+         GEN6_3DSTATE_INDEX_BUFFER__SIZE +
+         GEN6_3DSTATE_VIEWPORT_STATE_POINTERS__SIZE +
+         GEN6_3DSTATE_CC_STATE_POINTERS__SIZE +
+         GEN6_3DSTATE_SCISSOR_STATE_POINTERS__SIZE +
+         GEN6_3DSTATE_VS__SIZE +
+         GEN6_3DSTATE_GS__SIZE +
+         GEN6_3DSTATE_CLIP__SIZE +
+         GEN6_3DSTATE_SF__SIZE +
+         GEN6_3DSTATE_WM__SIZE +
+         GEN6_3DSTATE_SAMPLE_MASK__SIZE +
+         GEN6_3DSTATE_DRAWING_RECTANGLE__SIZE +
+         GEN6_3DSTATE_DEPTH_BUFFER__SIZE +
+         GEN6_3DSTATE_POLY_STIPPLE_OFFSET__SIZE +
+         GEN6_3DSTATE_POLY_STIPPLE_PATTERN__SIZE +
+         GEN6_3DSTATE_LINE_STIPPLE__SIZE +
+         GEN6_3DSTATE_AA_LINE_PARAMETERS__SIZE +
+         GEN6_3DSTATE_MULTISAMPLE__SIZE +
+         GEN6_3DSTATE_STENCIL_BUFFER__SIZE +
+         GEN6_3DSTATE_HIER_DEPTH_BUFFER__SIZE +
+         GEN6_3DSTATE_CLEAR_PARAMS__SIZE +
+         GEN6_3DPRIMITIVE__SIZE;
    }
 
    return size;
 }
 
-static int
-gen6_pipeline_estimate_states(const struct ilo_3d_pipeline *p,
-                              const struct ilo_context *ilo)
+int
+gen6_pipeline_estimate_state_size(const struct ilo_3d_pipeline *p,
+                                  const struct ilo_context *ilo)
 {
    static int static_size;
-   int shader_type, count, size;
+   int sh_type, size;
 
    if (!static_size) {
-      struct {
-         enum ilo_gpe_gen6_state state;
-         int count;
-      } static_states[] = {
-         /* viewports */
-         { ILO_GPE_GEN6_SF_VIEWPORT,                 1 },
-         { ILO_GPE_GEN6_CLIP_VIEWPORT,               1 },
-         { ILO_GPE_GEN6_CC_VIEWPORT,                 1 },
-         /* cc */
-         { ILO_GPE_GEN6_COLOR_CALC_STATE,            1 },
-         { ILO_GPE_GEN6_BLEND_STATE,                 ILO_MAX_DRAW_BUFFERS },
-         { ILO_GPE_GEN6_DEPTH_STENCIL_STATE,         1 },
-         /* scissors */
-         { ILO_GPE_GEN6_SCISSOR_RECT,                1 },
-         /* binding table (vs, gs, fs) */
-         { ILO_GPE_GEN6_BINDING_TABLE_STATE,         ILO_MAX_VS_SURFACES },
-         { ILO_GPE_GEN6_BINDING_TABLE_STATE,         ILO_MAX_GS_SURFACES },
-         { ILO_GPE_GEN6_BINDING_TABLE_STATE,         ILO_MAX_WM_SURFACES },
-      };
-      int i;
+      /* 64 bytes, or 16 dwords */
+      const int alignment = 64 / 4;
 
-      for (i = 0; i < Elements(static_states); i++) {
-         static_size += ilo_gpe_gen6_estimate_state_size(p->dev,
-               static_states[i].state,
-               static_states[i].count);
+      /* pad first */
+      size = alignment - 1;
+
+      /* CC states */
+      size += align(GEN6_BLEND_STATE__SIZE * ILO_MAX_DRAW_BUFFERS, alignment);
+      size += align(GEN6_DEPTH_STENCIL_STATE__SIZE, alignment);
+      size += align(GEN6_COLOR_CALC_STATE__SIZE, alignment);
+
+      /* viewport arrays */
+      if (p->dev->gen >= ILO_GEN(7)) {
+         size +=
+            align(GEN7_SF_CLIP_VIEWPORT__SIZE * ILO_MAX_VIEWPORTS, 16) +
+            align(GEN6_CC_VIEWPORT__SIZE * ILO_MAX_VIEWPORTS, 8) +
+            align(GEN6_SCISSOR_RECT__SIZE * ILO_MAX_VIEWPORTS, 8);
       }
+      else {
+         size +=
+            align(GEN6_SF_VIEWPORT__SIZE * ILO_MAX_VIEWPORTS, 8) +
+            align(GEN6_CLIP_VIEWPORT__SIZE * ILO_MAX_VIEWPORTS, 8) +
+            align(GEN6_CC_VIEWPORT__SIZE * ILO_MAX_VIEWPORTS, 8) +
+            align(GEN6_SCISSOR_RECT__SIZE * ILO_MAX_VIEWPORTS, 8);
+      }
+
+      static_size = size;
    }
 
    size = static_size;
 
-   /*
-    * render targets (fs)
-    * stream outputs (gs)
-    * sampler views (vs, fs)
-    * constant buffers (vs, fs)
-    */
-   count = ilo->fb.state.nr_cbufs;
+   for (sh_type = 0; sh_type < PIPE_SHADER_TYPES; sh_type++) {
+      const int alignment = 32 / 4;
+      int num_samplers, num_surfaces, pcb_size;
 
-   if (ilo->gs) {
-      const struct pipe_stream_output_info *so_info =
-         ilo_shader_get_kernel_so_info(ilo->gs);
+      /* samplers */
+      num_samplers = ilo->sampler[sh_type].count;
 
-      count += so_info->num_outputs;
-   }
-   else if (ilo->vs) {
-      const struct pipe_stream_output_info *so_info =
-         ilo_shader_get_kernel_so_info(ilo->vs);
+      /* sampler views and constant buffers */
+      num_surfaces = ilo->view[sh_type].count +
+         util_bitcount(ilo->cbuf[sh_type].enabled_mask);
 
-      count += so_info->num_outputs;
-   }
+      pcb_size = 0;
 
-   for (shader_type = 0; shader_type < PIPE_SHADER_TYPES; shader_type++) {
-      count += ilo->view[shader_type].count;
-      count += util_bitcount(ilo->cbuf[shader_type].enabled_mask);
-   }
+      switch (sh_type) {
+      case PIPE_SHADER_VERTEX:
+         if (ilo->vs) {
+            if (p->dev->gen == ILO_GEN(6)) {
+               const struct pipe_stream_output_info *so_info =
+                  ilo_shader_get_kernel_so_info(ilo->vs);
 
-   if (count) {
-      size += ilo_gpe_gen6_estimate_state_size(p->dev,
-            ILO_GPE_GEN6_SURFACE_STATE, count);
-   }
+               /* stream outputs */
+               num_surfaces += so_info->num_outputs;
+            }
 
-   /* samplers (vs, fs) */
-   for (shader_type = 0; shader_type < PIPE_SHADER_TYPES; shader_type++) {
-      count = ilo->sampler[shader_type].count;
-      if (count) {
-         size += ilo_gpe_gen6_estimate_state_size(p->dev,
-               ILO_GPE_GEN6_SAMPLER_BORDER_COLOR_STATE, count);
-         size += ilo_gpe_gen6_estimate_state_size(p->dev,
-               ILO_GPE_GEN6_SAMPLER_STATE, count);
+            pcb_size = ilo_shader_get_kernel_param(ilo->vs,
+                  ILO_KERNEL_PCB_CBUF0_SIZE);
+            pcb_size += ilo_shader_get_kernel_param(ilo->vs,
+                  ILO_KERNEL_VS_PCB_UCP_SIZE);
+         }
+         break;
+      case PIPE_SHADER_GEOMETRY:
+         if (ilo->gs && p->dev->gen == ILO_GEN(6)) {
+            const struct pipe_stream_output_info *so_info =
+               ilo_shader_get_kernel_so_info(ilo->gs);
+
+            /* stream outputs */
+            num_surfaces += so_info->num_outputs;
+         }
+         break;
+      case PIPE_SHADER_FRAGMENT:
+         /* render targets */
+         num_surfaces += ilo->fb.state.nr_cbufs;
+
+         if (ilo->fs) {
+            pcb_size = ilo_shader_get_kernel_param(ilo->fs,
+                  ILO_KERNEL_PCB_CBUF0_SIZE);
+         }
+         break;
+      default:
+         break;
       }
-   }
 
-   /* pcb (vs) */
-   if (ilo->vs) {
-      const int cbuf0_size =
-         ilo_shader_get_kernel_param(ilo->vs, ILO_KERNEL_PCB_CBUF0_SIZE);
-      const int ucp_size =
-         ilo_shader_get_kernel_param(ilo->vs, ILO_KERNEL_VS_PCB_UCP_SIZE);
+      /* SAMPLER_STATE array and SAMPLER_BORDER_COLORs */
+      if (num_samplers) {
+         size += align(GEN6_SAMPLER_STATE__SIZE * num_samplers, alignment) +
+            align(GEN6_SAMPLER_BORDER_COLOR__SIZE, alignment) * num_samplers;
+      }
 
-      size += ilo_gpe_gen6_estimate_state_size(p->dev,
-            ILO_GPE_GEN6_PUSH_CONSTANT_BUFFER, cbuf0_size + ucp_size);
-   }
+      /* BINDING_TABLE_STATE and SURFACE_STATEs */
+      if (num_surfaces) {
+         size += align(num_surfaces, alignment) +
+            align(GEN6_SURFACE_STATE__SIZE, alignment) * num_surfaces;
+      }
 
-   /* pcb (fs) */
-   if (ilo->fs) {
-      const int cbuf0_size =
-         ilo_shader_get_kernel_param(ilo->fs, ILO_KERNEL_PCB_CBUF0_SIZE);
-
-      size += ilo_gpe_gen6_estimate_state_size(p->dev,
-            ILO_GPE_GEN6_PUSH_CONSTANT_BUFFER, cbuf0_size);
+      /* PCB */
+      if (pcb_size)
+         size += align(pcb_size, alignment);
    }
 
    return size;
@@ -1859,21 +1907,28 @@ ilo_3d_pipeline_estimate_size_gen6(struct ilo_3d_pipeline *p,
       {
          const struct ilo_context *ilo = arg;
 
-         size = gen6_pipeline_estimate_commands(p, ilo) +
-            gen6_pipeline_estimate_states(p, ilo);
+         size = gen6_pipeline_max_command_size(p) +
+            gen6_pipeline_estimate_state_size(p, ilo);
       }
       break;
    case ILO_3D_PIPELINE_FLUSH:
-      size = ilo_gpe_gen6_estimate_command_size(p->dev,
-            ILO_GPE_GEN6_PIPE_CONTROL, 1) * 3;
+      size = GEN6_PIPE_CONTROL__SIZE * 3;
       break;
    case ILO_3D_PIPELINE_WRITE_TIMESTAMP:
-      size = ilo_gpe_gen6_estimate_command_size(p->dev,
-            ILO_GPE_GEN6_PIPE_CONTROL, 1) * 2;
+      size = GEN6_PIPE_CONTROL__SIZE * 2;
       break;
    case ILO_3D_PIPELINE_WRITE_DEPTH_COUNT:
-      size = ilo_gpe_gen6_estimate_command_size(p->dev,
-            ILO_GPE_GEN6_PIPE_CONTROL, 1) * 3;
+      size = GEN6_PIPE_CONTROL__SIZE * 3;
+      break;
+   case ILO_3D_PIPELINE_WRITE_STATISTICS:
+      {
+         const int num_regs = 8;
+         const int num_pads = 3;
+
+         size = GEN6_PIPE_CONTROL__SIZE;
+         size += GEN6_MI_STORE_REGISTER_MEM__SIZE * 2 * num_regs;
+         size += GEN6_MI_STORE_DATA_IMM__SIZE * num_pads;
+      }
       break;
    case ILO_3D_PIPELINE_RECTLIST:
       size = 64 + 256; /* states + commands */
@@ -1895,5 +1950,6 @@ ilo_3d_pipeline_init_gen6(struct ilo_3d_pipeline *p)
    p->emit_flush = ilo_3d_pipeline_emit_flush_gen6;
    p->emit_write_timestamp = ilo_3d_pipeline_emit_write_timestamp_gen6;
    p->emit_write_depth_count = ilo_3d_pipeline_emit_write_depth_count_gen6;
+   p->emit_write_statistics = ilo_3d_pipeline_emit_write_statistics_gen6;
    p->emit_rectlist = ilo_3d_pipeline_emit_rectlist_gen6;
 }

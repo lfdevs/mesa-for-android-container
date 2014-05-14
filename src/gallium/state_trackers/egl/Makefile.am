@@ -27,6 +27,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = $(GALLIUM_CFLAGS)
 AM_CPPFLAGS = \
+	$(VISIBILITY_CFLAGS) \
 	-I$(top_srcdir)/src/egl/main \
 	-I$(top_builddir)/src/egl/wayland/wayland-drm/ \
 	-I$(top_srcdir)/include
@@ -41,6 +42,7 @@ AM_CFLAGS += \
 	$(LIBDRM_CFLAGS) \
 	$(DRI2PROTO_CFLAGS)
 AM_CPPFLAGS += \
+	-I$(top_srcdir)/src/gallium/winsys \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/glx \
 	-I$(top_srcdir)/src/mapi \

@@ -406,7 +406,7 @@ lp_emit_declaration_aos(
    for (idx = first; idx <= last; ++idx) {
       switch (decl->Declaration.File) {
       case TGSI_FILE_TEMPORARY:
-         assert(idx < LP_MAX_TGSI_TEMPS);
+         assert(idx < LP_MAX_INLINED_TEMPS);
          if (bld->indirect_files & (1 << TGSI_FILE_TEMPORARY)) {
             LLVMValueRef array_size = lp_build_const_int32(gallivm, last + 1);
             bld->temps_array = lp_build_array_alloca(bld->bld_base.base.gallivm,
@@ -1042,7 +1042,7 @@ lp_build_tgsi_aos(struct gallivm_state *gallivm,
             const uint size = parse.FullToken.FullImmediate.Immediate.NrTokens - 1;
             float imm[4];
             assert(size <= 4);
-            assert(num_immediates < LP_MAX_TGSI_IMMEDIATES);
+            assert(num_immediates < LP_MAX_INLINED_IMMEDIATES);
             for (chan = 0; chan < 4; ++chan) {
                imm[chan] = 0.0f;
             }

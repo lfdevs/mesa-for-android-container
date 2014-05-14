@@ -132,20 +132,20 @@ schedule_node::set_latency_gen7(bool is_haswell)
    case BRW_OPCODE_MAD:
       /* 2 cycles
        *  (since the last two src operands are in different register banks):
-       * mad(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g3.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * mad(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g3.1<4,4,1>F.x { align16 WE_normal 1Q };
        *
        * 3 cycles on IVB, 4 on HSW
        *  (since the last two src operands are in the same register bank):
-       * mad(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g2.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * mad(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g2.1<4,4,1>F.x { align16 WE_normal 1Q };
        *
        * 18 cycles on IVB, 16 on HSW
        *  (since the last two src operands are in different register banks):
-       * mad(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g3.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * mad(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g3.1<4,4,1>F.x { align16 WE_normal 1Q };
        * mov(8) null   g4<4,5,1>F                     { align16 WE_normal 1Q };
        *
        * 20 cycles on IVB, 18 on HSW
        *  (since the last two src operands are in the same register bank):
-       * mad(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g2.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * mad(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g2.1<4,4,1>F.x { align16 WE_normal 1Q };
        * mov(8) null   g4<4,4,1>F                     { align16 WE_normal 1Q };
        */
 
@@ -158,20 +158,20 @@ schedule_node::set_latency_gen7(bool is_haswell)
    case BRW_OPCODE_LRP:
       /* 2 cycles
        *  (since the last two src operands are in different register banks):
-       * lrp(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g3.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * lrp(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g3.1<4,4,1>F.x { align16 WE_normal 1Q };
        *
        * 3 cycles on IVB, 4 on HSW
        *  (since the last two src operands are in the same register bank):
-       * lrp(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g2.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * lrp(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g2.1<4,4,1>F.x { align16 WE_normal 1Q };
        *
        * 16 cycles on IVB, 14 on HSW
        *  (since the last two src operands are in different register banks):
-       * lrp(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g3.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * lrp(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g3.1<4,4,1>F.x { align16 WE_normal 1Q };
        * mov(8) null   g4<4,4,1>F                     { align16 WE_normal 1Q };
        *
        * 16 cycles
        *  (since the last two src operands are in the same register bank):
-       * lrp(8) g4<1>F g2.2<4,1,1>F.x  g2<4,1,1>F.x g2.1<4,1,1>F.x { align16 WE_normal 1Q };
+       * lrp(8) g4<1>F g2.2<4,4,1>F.x  g2<4,4,1>F.x g2.1<4,4,1>F.x { align16 WE_normal 1Q };
        * mov(8) null   g4<4,4,1>F                     { align16 WE_normal 1Q };
        */
 
@@ -742,6 +742,8 @@ fs_instruction_scheduler::is_compressed(fs_inst *inst)
 void
 fs_instruction_scheduler::calculate_deps()
 {
+   const bool gen6plus = v->brw->gen >= 6;
+
    /* Pre-register-allocation, this tracks the last write per VGRF (so
     * different reg_offsets within it can interfere when they shouldn't).
     * After register allocation, reg_offsets are gone and we track individual
@@ -750,6 +752,7 @@ fs_instruction_scheduler::calculate_deps()
    schedule_node *last_grf_write[grf_count];
    schedule_node *last_mrf_write[BRW_MAX_MRF];
    schedule_node *last_conditional_mod[2] = { NULL, NULL };
+   schedule_node *last_accumulator_write = NULL;
    /* Fixed HW registers are assumed to be separate from the virtual
     * GRFs, so they can be tracked separately.  We don't really write
     * to fixed GRFs much, so don't bother tracking them on a more
@@ -800,6 +803,8 @@ fs_instruction_scheduler::calculate_deps()
             } else {
                add_dep(last_fixed_grf_write, n);
             }
+         } else if (inst->src[i].is_accumulator() && gen6plus) {
+            add_dep(last_accumulator_write, n);
 	 } else if (inst->src[i].file != BAD_FILE &&
 		    inst->src[i].file != IMM &&
 		    inst->src[i].file != UNIFORM) {
@@ -820,6 +825,14 @@ fs_instruction_scheduler::calculate_deps()
 
       if (inst->reads_flag()) {
 	 add_dep(last_conditional_mod[inst->flag_subreg], n);
+      }
+
+      if (inst->reads_accumulator_implicitly()) {
+         if (gen6plus) {
+            add_dep(last_accumulator_write, n);
+         } else {
+            add_barrier_deps(n);
+         }
       }
 
       /* write-after-write deps. */
@@ -854,7 +867,11 @@ fs_instruction_scheduler::calculate_deps()
          } else {
             last_fixed_grf_write = n;
          }
-      } else if (inst->dst.file != BAD_FILE) {
+      } else if (inst->dst.is_accumulator() && gen6plus) {
+         add_dep(last_accumulator_write, n);
+         last_accumulator_write = n;
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
 	 add_barrier_deps(n);
       }
 
@@ -869,12 +886,22 @@ fs_instruction_scheduler::calculate_deps()
 	 add_dep(last_conditional_mod[inst->flag_subreg], n, 0);
 	 last_conditional_mod[inst->flag_subreg] = n;
       }
+
+      if (inst->writes_accumulator) {
+         if (gen6plus) {
+            add_dep(last_accumulator_write, n);
+            last_accumulator_write = n;
+         } else {
+            add_barrier_deps(n);
+         }
+      }
    }
 
    /* bottom-to-top dependencies: WAR */
    memset(last_grf_write, 0, sizeof(last_grf_write));
    memset(last_mrf_write, 0, sizeof(last_mrf_write));
    memset(last_conditional_mod, 0, sizeof(last_conditional_mod));
+   last_accumulator_write = NULL;
    last_fixed_grf_write = NULL;
 
    exec_node *node;
@@ -906,6 +933,8 @@ fs_instruction_scheduler::calculate_deps()
             } else {
                add_dep(n, last_fixed_grf_write);
             }
+         } else if (inst->src[i].is_accumulator() && gen6plus) {
+            add_dep(n, last_accumulator_write);
          } else if (inst->src[i].file != BAD_FILE &&
 		    inst->src[i].file != IMM &&
 		    inst->src[i].file != UNIFORM) {
@@ -926,6 +955,14 @@ fs_instruction_scheduler::calculate_deps()
 
       if (inst->reads_flag()) {
 	 add_dep(n, last_conditional_mod[inst->flag_subreg]);
+      }
+
+      if (inst->reads_accumulator_implicitly()) {
+         if (gen6plus) {
+            add_dep(n, last_accumulator_write);
+         } else {
+            add_barrier_deps(n);
+         }
       }
 
       /* Update the things this instruction wrote, so earlier reads
@@ -959,7 +996,10 @@ fs_instruction_scheduler::calculate_deps()
          } else {
             last_fixed_grf_write = n;
          }
-      } else if (inst->dst.file != BAD_FILE) {
+      } else if (inst->dst.is_accumulator() && gen6plus) {
+         last_accumulator_write = n;
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
 	 add_barrier_deps(n);
       }
 
@@ -972,15 +1012,26 @@ fs_instruction_scheduler::calculate_deps()
       if (inst->writes_flag()) {
 	 last_conditional_mod[inst->flag_subreg] = n;
       }
+
+      if (inst->writes_accumulator) {
+         if (gen6plus) {
+            last_accumulator_write = n;
+         } else {
+            add_barrier_deps(n);
+         }
+      }
    }
 }
 
 void
 vec4_instruction_scheduler::calculate_deps()
 {
+   const bool gen6plus = v->brw->gen >= 6;
+
    schedule_node *last_grf_write[grf_count];
    schedule_node *last_mrf_write[BRW_MAX_MRF];
    schedule_node *last_conditional_mod = NULL;
+   schedule_node *last_accumulator_write = NULL;
    /* Fixed HW registers are assumed to be separate from the virtual
     * GRFs, so they can be tracked separately.  We don't really write
     * to fixed GRFs much, so don't bother tracking them on a more
@@ -1016,6 +1067,9 @@ vec4_instruction_scheduler::calculate_deps()
                     (inst->src[i].fixed_hw_reg.file ==
                      BRW_GENERAL_REGISTER_FILE)) {
             add_dep(last_fixed_grf_write, n);
+         } else if (inst->src[i].is_accumulator() && gen6plus) {
+            assert(last_accumulator_write);
+            add_dep(last_accumulator_write, n);
          } else if (inst->src[i].file != BAD_FILE &&
                     inst->src[i].file != IMM &&
                     inst->src[i].file != UNIFORM) {
@@ -1034,9 +1088,18 @@ vec4_instruction_scheduler::calculate_deps()
          add_dep(last_mrf_write[inst->base_mrf + i], n);
       }
 
-      if (inst->depends_on_flags()) {
+      if (inst->reads_flag()) {
          assert(last_conditional_mod);
          add_dep(last_conditional_mod, n);
+      }
+
+      if (inst->reads_accumulator_implicitly()) {
+         if (gen6plus) {
+            assert(last_accumulator_write);
+            add_dep(last_accumulator_write, n);
+         } else {
+            add_barrier_deps(n);
+         }
       }
 
       /* write-after-write deps. */
@@ -1049,7 +1112,11 @@ vec4_instruction_scheduler::calculate_deps()
      } else if (inst->dst.file == HW_REG &&
                  inst->dst.fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
          last_fixed_grf_write = n;
-      } else if (inst->dst.file != BAD_FILE) {
+      } else if (inst->dst.is_accumulator() && gen6plus) {
+         add_dep(last_accumulator_write, n);
+         last_accumulator_write = n;
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
          add_barrier_deps(n);
       }
 
@@ -1060,9 +1127,18 @@ vec4_instruction_scheduler::calculate_deps()
          }
       }
 
-      if (inst->conditional_mod) {
+      if (inst->writes_flag()) {
          add_dep(last_conditional_mod, n, 0);
          last_conditional_mod = n;
+      }
+
+      if (inst->writes_accumulator) {
+         if (gen6plus) {
+            add_dep(last_accumulator_write, n);
+            last_accumulator_write = n;
+         } else {
+            add_barrier_deps(n);
+         }
       }
    }
 
@@ -1070,6 +1146,7 @@ vec4_instruction_scheduler::calculate_deps()
    memset(last_grf_write, 0, sizeof(last_grf_write));
    memset(last_mrf_write, 0, sizeof(last_mrf_write));
    last_conditional_mod = NULL;
+   last_accumulator_write = NULL;
    last_fixed_grf_write = NULL;
 
    exec_node *node;
@@ -1088,6 +1165,8 @@ vec4_instruction_scheduler::calculate_deps()
                     (inst->src[i].fixed_hw_reg.file ==
                      BRW_GENERAL_REGISTER_FILE)) {
             add_dep(n, last_fixed_grf_write);
+         } else if (inst->src[i].is_accumulator() && gen6plus) {
+            add_dep(n, last_accumulator_write);
          } else if (inst->src[i].file != BAD_FILE &&
                     inst->src[i].file != IMM &&
                     inst->src[i].file != UNIFORM) {
@@ -1105,8 +1184,16 @@ vec4_instruction_scheduler::calculate_deps()
          add_dep(n, last_mrf_write[inst->base_mrf + i], 2);
       }
 
-      if (inst->depends_on_flags()) {
+      if (inst->reads_flag()) {
          add_dep(n, last_conditional_mod);
+      }
+
+      if (inst->reads_accumulator_implicitly()) {
+         if (gen6plus) {
+            add_dep(n, last_accumulator_write);
+         } else {
+            add_barrier_deps(n);
+         }
       }
 
       /* Update the things this instruction wrote, so earlier reads
@@ -1119,7 +1206,10 @@ vec4_instruction_scheduler::calculate_deps()
       } else if (inst->dst.file == HW_REG &&
                  inst->dst.fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
          last_fixed_grf_write = n;
-      } else if (inst->dst.file != BAD_FILE) {
+      } else if (inst->dst.is_accumulator() && gen6plus) {
+         last_accumulator_write = n;
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
          add_barrier_deps(n);
       }
 
@@ -1129,8 +1219,16 @@ vec4_instruction_scheduler::calculate_deps()
          }
       }
 
-      if (inst->conditional_mod) {
+      if (inst->writes_flag()) {
          last_conditional_mod = n;
+      }
+
+      if (inst->writes_accumulator) {
+         if (gen6plus) {
+            last_accumulator_write = n;
+         } else {
+            add_barrier_deps(n);
+         }
       }
    }
 }
@@ -1320,7 +1418,7 @@ instruction_scheduler::schedule_instructions(backend_instruction *next_block_hea
       time = MAX2(time, chosen->unblocked_time);
 
       if (debug) {
-         printf("clock %4d, scheduled: ", time);
+         fprintf(stderr, "clock %4d, scheduled: ", time);
          bv->dump_instruction(chosen->inst);
       }
 
@@ -1336,7 +1434,7 @@ instruction_scheduler::schedule_instructions(backend_instruction *next_block_hea
 				      time + chosen->child_latency[i]);
 
          if (debug) {
-            printf("\tchild %d, %d parents: ", i, child->parent_count);
+            fprintf(stderr, "\tchild %d, %d parents: ", i, child->parent_count);
             bv->dump_instruction(child->inst);
          }
 
@@ -1344,7 +1442,7 @@ instruction_scheduler::schedule_instructions(backend_instruction *next_block_hea
 	 child->parent_count--;
 	 if (child->parent_count == 0) {
             if (debug) {
-               printf("\t\tnow available\n");
+               fprintf(stderr, "\t\tnow available\n");
             }
 	    instructions.push_head(child);
 	 }
@@ -1377,7 +1475,8 @@ instruction_scheduler::run(exec_list *all_instructions)
       (backend_instruction *)all_instructions->head;
 
    if (debug) {
-      printf("\nInstructions before scheduling (reg_alloc %d)\n", post_reg_alloc);
+      fprintf(stderr, "\nInstructions before scheduling (reg_alloc %d)\n",
+              post_reg_alloc);
       bv->dump_instructions();
    }
 
@@ -1411,7 +1510,8 @@ instruction_scheduler::run(exec_list *all_instructions)
    }
 
    if (debug) {
-      printf("\nInstructions after scheduling (reg_alloc %d)\n", post_reg_alloc);
+      fprintf(stderr, "\nInstructions after scheduling (reg_alloc %d)\n",
+              post_reg_alloc);
       bv->dump_instructions();
    }
 }
@@ -1429,7 +1529,7 @@ fs_visitor::schedule_instructions(instruction_scheduler_mode mode)
    sched.run(&instructions);
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM) && mode == SCHEDULE_POST) {
-      printf("fs%d estimated execution time: %d cycles\n",
+      fprintf(stderr, "fs%d estimated execution time: %d cycles\n",
              dispatch_width, sched.time);
    }
 
@@ -1443,7 +1543,7 @@ vec4_visitor::opt_schedule_instructions()
    sched.run(&instructions);
 
    if (unlikely(debug_flag)) {
-      printf("vec4 estimated execution time: %d cycles\n", sched.time);
+      fprintf(stderr, "vec4 estimated execution time: %d cycles\n", sched.time);
    }
 
    invalidate_live_intervals();

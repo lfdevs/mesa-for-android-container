@@ -7948,22 +7948,6 @@
 #define   S_028BDC_DX10_DIAMOND_TEST_ENA(x)                           (((x) & 0x1) << 12)
 #define   G_028BDC_DX10_DIAMOND_TEST_ENA(x)                           (((x) >> 12) & 0x1)
 #define   C_028BDC_DX10_DIAMOND_TEST_ENA                              0xFFFFEFFF
-#define R_028BE0_PA_SC_AA_CONFIG                                        0x028BE0
-#define   S_028BE0_MSAA_NUM_SAMPLES(x)                                (((x) & 0x07) << 0)
-#define   G_028BE0_MSAA_NUM_SAMPLES(x)                                (((x) >> 0) & 0x07)
-#define   C_028BE0_MSAA_NUM_SAMPLES                                   0xFFFFFFF8
-#define   S_028BE0_AA_MASK_CENTROID_DTMN(x)                           (((x) & 0x1) << 4)
-#define   G_028BE0_AA_MASK_CENTROID_DTMN(x)                           (((x) >> 4) & 0x1)
-#define   C_028BE0_AA_MASK_CENTROID_DTMN                              0xFFFFFFEF
-#define   S_028BE0_MAX_SAMPLE_DIST(x)                                 (((x) & 0x0F) << 13)
-#define   G_028BE0_MAX_SAMPLE_DIST(x)                                 (((x) >> 13) & 0x0F)
-#define   C_028BE0_MAX_SAMPLE_DIST                                    0xFFFE1FFF
-#define   S_028BE0_MSAA_EXPOSED_SAMPLES(x)                            (((x) & 0x07) << 20)
-#define   G_028BE0_MSAA_EXPOSED_SAMPLES(x)                            (((x) >> 20) & 0x07)
-#define   C_028BE0_MSAA_EXPOSED_SAMPLES                               0xFF8FFFFF
-#define   S_028BE0_DETAIL_TO_EXPOSED_MODE(x)                          (((x) & 0x03) << 24)
-#define   G_028BE0_DETAIL_TO_EXPOSED_MODE(x)                          (((x) >> 24) & 0x03)
-#define   C_028BE0_DETAIL_TO_EXPOSED_MODE                             0xFCFFFFFF
 #define R_028BE4_PA_SU_VTX_CNTL                                         0x028BE4
 #define   S_028BE4_PIX_CENTER(x)                                      (((x) & 0x1) << 0)
 #define   G_028BE4_PIX_CENTER(x)                                      (((x) >> 0) & 0x1)
@@ -8645,6 +8629,26 @@
 #define R_028E2C_CB_COLOR7_FMASK_SLICE                                  0x028E2C
 #define R_028E30_CB_COLOR7_CLEAR_WORD0                                  0x028E30
 #define R_028E34_CB_COLOR7_CLEAR_WORD1                                  0x028E34
+
+/* SI async DMA packets */
+#define SI_DMA_PACKET(cmd, sub_cmd, n) ((((cmd) & 0xF) << 28) |    \
+                                       (((sub_cmd) & 0xFF) << 20) |\
+                                       (((n) & 0xFFFFF) << 0))
+/* SI async DMA Packet types */
+#define    SI_DMA_PACKET_WRITE                     0x2
+#define    SI_DMA_PACKET_COPY                      0x3
+#define    SI_DMA_COPY_MAX_SIZE                    0xfffe0
+#define    SI_DMA_COPY_MAX_SIZE_DW                 0xffff8
+#define    SI_DMA_COPY_DWORD_ALIGNED               0x00
+#define    SI_DMA_COPY_BYTE_ALIGNED                0x40
+#define    SI_DMA_COPY_TILED                       0x8
+#define    SI_DMA_PACKET_INDIRECT_BUFFER           0x4
+#define    SI_DMA_PACKET_SEMAPHORE                 0x5
+#define    SI_DMA_PACKET_FENCE                     0x6
+#define    SI_DMA_PACKET_TRAP                      0x7
+#define    SI_DMA_PACKET_SRBM_WRITE                0x9
+#define    SI_DMA_PACKET_CONSTANT_FILL             0xd
+#define    SI_DMA_PACKET_NOP                       0xf
 
 #endif /* _SID_H */
 

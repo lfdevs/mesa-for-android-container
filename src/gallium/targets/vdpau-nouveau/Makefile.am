@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Note: Make sure VDPAU_EXPORTS is defined before including Automake.inc
-VDPAU_EXPORTS = '^(vdp_imp_device_create_x11|nouveau_drm_screen_create)$$'
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
@@ -36,22 +34,13 @@ libvdpau_nouveau_la_SOURCES = \
 	$(top_srcdir)/src/gallium/auxiliary/vl/vl_winsys_dri.c
 
 libvdpau_nouveau_la_LDFLAGS = \
-	$(GALLIUM_VDPAU_LINKER_FLAGS)
+	$(GALLIUM_VDPAU_LINKER_FLAGS) \
+	-Wl,--dynamic-list=$(srcdir)/../dri-nouveau/nouveau_dri.dyn
 
 libvdpau_nouveau_la_LIBADD = \
 	$(top_builddir)/src/gallium/winsys/nouveau/drm/libnouveaudrm.la \
 	$(top_builddir)/src/gallium/drivers/nouveau/libnouveau.la \
 	$(GALLIUM_VDPAU_LIB_DEPS) \
-	$(GALLIUM_DRI_LIB_DEPS) \
 	$(NOUVEAU_LIBS)
 
-if HAVE_MESA_LLVM
-libvdpau_nouveau_la_LDFLAGS += $(LLVM_LDFLAGS)
-libvdpau_nouveau_la_LIBADD += $(LLVM_LIBS)
-endif
-
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: libvdpau_nouveau.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/libvdpau_nouveau.so* $(top_builddir)/$(LIB_DIR)/gallium/
+include $(top_srcdir)/install-gallium-links.mk

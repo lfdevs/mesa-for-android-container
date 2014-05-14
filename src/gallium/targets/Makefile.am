@@ -34,6 +34,10 @@ if HAVE_GALLIUM_GBM
 SUBDIRS += gbm
 endif
 
+if HAVE_ST_XA
+SUBDIRS += xa
+endif
+
 if HAVE_CLOVER
 SUBDIRS += opencl
 endif
@@ -41,10 +45,6 @@ endif
 if HAVE_GALLIUM_SVGA
 if HAVE_DRI
 SUBDIRS += dri-vmwgfx
-endif
-
-if HAVE_ST_XA
-SUBDIRS += xa-vmwgfx
 endif
 endif
 
@@ -84,6 +84,10 @@ endif
 if HAVE_ST_VDPAU
 SUBDIRS += r600/vdpau
 endif
+
+if HAVE_ST_OMX
+SUBDIRS += r600/omx
+endif
 endif
 
 if HAVE_GALLIUM_RADEONSI
@@ -93,6 +97,10 @@ endif
 
 if HAVE_ST_VDPAU
 SUBDIRS += radeonsi/vdpau
+endif
+
+if HAVE_ST_OMX
+SUBDIRS += radeonsi/omx
 endif
 endif
 
@@ -107,6 +115,10 @@ endif
 
 if HAVE_ST_VDPAU
 SUBDIRS += vdpau-nouveau
+endif
+
+if HAVE_ST_OMX
+SUBDIRS += omx-nouveau
 endif
 endif
 

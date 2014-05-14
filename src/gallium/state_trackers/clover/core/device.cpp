@@ -21,6 +21,7 @@
 //
 
 #include "core/device.hpp"
+#include "core/platform.hpp"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 
@@ -151,6 +152,12 @@ cl_ulong
 device::max_mem_alloc_size() const {
    return get_compute_param<uint64_t>(pipe,
                                       PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE)[0];
+}
+
+cl_uint
+device::max_clock_frequency() const {
+   return get_compute_param<uint32_t>(pipe,
+                                      PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY)[0];
 }
 
 std::vector<size_t>

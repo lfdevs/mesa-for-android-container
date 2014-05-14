@@ -63,7 +63,7 @@ clWaitForEvents(cl_uint num_evs, const cl_event *d_evs) try {
    auto evs = objs(d_evs, num_evs);
 
    for (auto &ev : evs) {
-      if (ev.ctx != evs.front().ctx)
+      if (ev.context() != evs.front().context())
          throw error(CL_INVALID_CONTEXT);
 
       if (ev.status() < 0)
@@ -72,11 +72,10 @@ clWaitForEvents(cl_uint num_evs, const cl_event *d_evs) try {
 
    // Create a temporary soft event that depends on all the events in
    // the wait list
-   ref_ptr<soft_event> sev =
-      transfer(new soft_event(evs.front().ctx, evs, true));
+   auto sev = create<soft_event>(evs.front().context(), evs, true);
 
    // ...and wait on it.
-   sev->wait();
+   sev().wait();
 
    return CL_SUCCESS;
 
@@ -96,7 +95,7 @@ clGetEventInfo(cl_event d_ev, cl_event_info param,
       break;
 
    case CL_EVENT_CONTEXT:
-      buf.as_scalar<cl_context>() = desc(ev.ctx);
+      buf.as_scalar<cl_context>() = desc(ev.context());
       break;
 
    case CL_EVENT_COMMAND_TYPE:
@@ -132,12 +131,11 @@ clSetEventCallback(cl_event d_ev, cl_int type,
 
    // Create a temporary soft event that depends on ev, with
    // pfn_notify as completion action.
-   ref_ptr<soft_event> sev = transfer(
-      new soft_event(ev.ctx, { ev }, true,
-                     [=, &ev](event &) {
-                        ev.wait();
-                        pfn_notify(desc(ev), ev.status(), user_data);
-                     }));
+   create<soft_event>(ev.context(), ref_vector<event> { ev }, true,
+                      [=, &ev](event &) {
+                         ev.wait();
+                         pfn_notify(desc(ev), ev.status(), user_data);
+                      });
 
    return CL_SUCCESS;
 
@@ -181,6 +179,29 @@ clEnqueueMarker(cl_command_queue d_q, cl_event *rd_ev) try {
 }
 
 CLOVER_API cl_int
+clEnqueueMarkerWithWaitList(cl_command_queue d_q, cl_uint num_deps,
+                            const cl_event *d_deps, cl_event *rd_ev) try {
+   auto &q = obj(d_q);
+   auto deps = objs<wait_list_tag>(d_deps, num_deps);
+
+   for (auto &ev : deps) {
+      if (ev.context() != q.context())
+         throw error(CL_INVALID_CONTEXT);
+   }
+
+   // Create a hard event that depends on the events in the wait list:
+   // previous commands in the same queue are implicitly serialized
+   // with respect to it -- hard events always are.
+   auto hev = create<hard_event>(q, CL_COMMAND_MARKER, deps);
+
+   ret_object(rd_ev, hev);
+   return CL_SUCCESS;
+
+} catch (error &e) {
+   return e.get();
+}
+
+CLOVER_API cl_int
 clEnqueueBarrier(cl_command_queue d_q) try {
    obj(d_q);
 
@@ -193,22 +214,35 @@ clEnqueueBarrier(cl_command_queue d_q) try {
 }
 
 CLOVER_API cl_int
-clEnqueueWaitForEvents(cl_command_queue d_q, cl_uint num_evs,
-                       const cl_event *d_evs) try {
+clEnqueueBarrierWithWaitList(cl_command_queue d_q, cl_uint num_deps,
+                             const cl_event *d_deps, cl_event *rd_ev) try {
    auto &q = obj(d_q);
-   auto evs = objs(d_evs, num_evs);
+   auto deps = objs<wait_list_tag>(d_deps, num_deps);
 
-   for (auto &ev : evs) {
-         if (ev.ctx != q.ctx)
-            throw error(CL_INVALID_CONTEXT);
+   for (auto &ev : deps) {
+      if (ev.context() != q.context())
+         throw error(CL_INVALID_CONTEXT);
    }
 
    // Create a hard event that depends on the events in the wait list:
    // subsequent commands in the same queue will be implicitly
    // serialized with respect to it -- hard events always are.
-   ref_ptr<hard_event> hev = transfer(new hard_event(q, 0, evs));
+   auto hev = create<hard_event>(q, CL_COMMAND_BARRIER, deps);
 
+   ret_object(rd_ev, hev);
    return CL_SUCCESS;
+
+} catch (error &e) {
+   return e.get();
+}
+
+CLOVER_API cl_int
+clEnqueueWaitForEvents(cl_command_queue d_q, cl_uint num_evs,
+                       const cl_event *d_evs) try {
+   // The wait list is mandatory for clEnqueueWaitForEvents().
+   objs(d_evs, num_evs);
+
+   return clEnqueueBarrierWithWaitList(d_q, num_evs, d_evs, NULL);
 
 } catch (error &e) {
    return e.get();
@@ -262,10 +296,10 @@ clFinish(cl_command_queue d_q) try {
 
    // Create a temporary hard event -- it implicitly depends on all
    // the previously queued hard events.
-   ref_ptr<hard_event> hev = transfer(new hard_event(q, 0, { }));
+   auto hev = create<hard_event>(q, 0, ref_vector<event> {});
 
    // And wait on it.
-   hev->wait();
+   hev().wait();
 
    return CL_SUCCESS;
 

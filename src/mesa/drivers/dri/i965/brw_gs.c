@@ -135,11 +135,11 @@ static void compile_ff_gs_prog(struct brw_context *brw,
    if (unlikely(INTEL_DEBUG & DEBUG_GS)) {
       int i;
 
-      printf("gs:\n");
+      fprintf(stderr, "gs:\n");
       for (i = 0; i < program_size / sizeof(struct brw_instruction); i++)
-	 brw_disasm(stdout, &((struct brw_instruction *)program)[i],
+	 brw_disasm(stderr, &((struct brw_instruction *)program)[i],
 		    brw->gen);
-      printf("\n");
+      fprintf(stderr, "\n");
     }
 
    brw_upload_cache(&brw->cache, BRW_FF_GS_PROG,
@@ -187,7 +187,7 @@ static void populate_key(struct brw_context *brw,
       /* BRW_NEW_TRANSFORM_FEEDBACK */
       if (_mesa_is_xfb_active_and_unpaused(ctx)) {
          const struct gl_shader_program *shaderprog =
-            ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX];
+            ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
          const struct gl_transform_feedback_info *linked_xfb_info =
             &shaderprog->LinkedTransformFeedback;
          int i;

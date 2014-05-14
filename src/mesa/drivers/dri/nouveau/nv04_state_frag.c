@@ -257,7 +257,7 @@ nv04_emit_tex_env(struct gl_context *ctx, int emit)
 	struct combiner_state rc_a = {}, rc_c = {};
 
 	/* Compute the new combiner state. */
-	if (ctx->Texture.Unit[i]._ReallyEnabled) {
+	if (ctx->Texture.Unit[i]._Current) {
 		INIT_COMBINER(A, ctx, &rc_a, i);
 		setup_combiner(&rc_a);
 
@@ -286,7 +286,7 @@ nv04_emit_tex_env(struct gl_context *ctx, int emit)
 
 	/* calculate non-multitex state */
 	nv04->blend &= ~NV04_TEXTURED_TRIANGLE_BLEND_TEXTURE_MAP__MASK;
-	if (ctx->Texture._EnabledUnits)
+	if (ctx->Texture._MaxEnabledTexImageUnit != -1)
 		nv04->blend |= get_texenv_mode(ctx->Texture.Unit[0].EnvMode);
 	else
 		nv04->blend |= get_texenv_mode(GL_MODULATE);

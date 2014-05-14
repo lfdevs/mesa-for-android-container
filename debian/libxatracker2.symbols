@@ -1,5 +1,4 @@
 libxatracker.so.2 libxatracker2 #MINVER#
- driver_descriptor@Base 0
  xa_composite_allocation@Base 0
  xa_composite_check_accelerated@Base 0
  xa_composite_done@Base 0

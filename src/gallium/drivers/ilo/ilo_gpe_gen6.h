@@ -28,8 +28,7 @@
 #ifndef ILO_GPE_GEN6_H
 #define ILO_GPE_GEN6_H
 
-#include "brw_defines.h"
-#include "intel_reg.h"
+#include "genhw/genhw.h"
 #include "intel_winsys.h"
 
 #include "ilo_common.h"
@@ -42,88 +41,10 @@
 #define ILO_GPE_VALID_GEN(dev, min_gen, max_gen) \
    assert((dev)->gen >= ILO_GEN(min_gen) && (dev)->gen <= ILO_GEN(max_gen))
 
+#define ILO_GPE_MI(op) (0x0 << 29 | (op) << 23)
+
 #define ILO_GPE_CMD(pipeline, op, subop) \
    (0x3 << 29 | (pipeline) << 27 | (op) << 24 | (subop) << 16)
-
-/**
- * Commands that GEN6 GPE could emit.
- */
-enum ilo_gpe_gen6_command {
-   ILO_GPE_GEN6_STATE_BASE_ADDRESS,                  /* (0x0, 0x1, 0x01) */
-   ILO_GPE_GEN6_STATE_SIP,                           /* (0x0, 0x1, 0x02) */
-   ILO_GPE_GEN6_3DSTATE_VF_STATISTICS,               /* (0x1, 0x0, 0x0b) */
-   ILO_GPE_GEN6_PIPELINE_SELECT,                     /* (0x1, 0x1, 0x04) */
-   ILO_GPE_GEN6_MEDIA_VFE_STATE,                     /* (0x2, 0x0, 0x00) */
-   ILO_GPE_GEN6_MEDIA_CURBE_LOAD,                    /* (0x2, 0x0, 0x01) */
-   ILO_GPE_GEN6_MEDIA_INTERFACE_DESCRIPTOR_LOAD,     /* (0x2, 0x0, 0x02) */
-   ILO_GPE_GEN6_MEDIA_GATEWAY_STATE,                 /* (0x2, 0x0, 0x03) */
-   ILO_GPE_GEN6_MEDIA_STATE_FLUSH,                   /* (0x2, 0x0, 0x04) */
-   ILO_GPE_GEN6_MEDIA_OBJECT_WALKER,                 /* (0x2, 0x1, 0x03) */
-   ILO_GPE_GEN6_3DSTATE_BINDING_TABLE_POINTERS,      /* (0x3, 0x0, 0x01) */
-   ILO_GPE_GEN6_3DSTATE_SAMPLER_STATE_POINTERS,      /* (0x3, 0x0, 0x02) */
-   ILO_GPE_GEN6_3DSTATE_URB,                         /* (0x3, 0x0, 0x05) */
-   ILO_GPE_GEN6_3DSTATE_VERTEX_BUFFERS,              /* (0x3, 0x0, 0x08) */
-   ILO_GPE_GEN6_3DSTATE_VERTEX_ELEMENTS,             /* (0x3, 0x0, 0x09) */
-   ILO_GPE_GEN6_3DSTATE_INDEX_BUFFER,                /* (0x3, 0x0, 0x0a) */
-   ILO_GPE_GEN6_3DSTATE_VIEWPORT_STATE_POINTERS,     /* (0x3, 0x0, 0x0d) */
-   ILO_GPE_GEN6_3DSTATE_CC_STATE_POINTERS,           /* (0x3, 0x0, 0x0e) */
-   ILO_GPE_GEN6_3DSTATE_SCISSOR_STATE_POINTERS,      /* (0x3, 0x0, 0x0f) */
-   ILO_GPE_GEN6_3DSTATE_VS,                          /* (0x3, 0x0, 0x10) */
-   ILO_GPE_GEN6_3DSTATE_GS,                          /* (0x3, 0x0, 0x11) */
-   ILO_GPE_GEN6_3DSTATE_CLIP,                        /* (0x3, 0x0, 0x12) */
-   ILO_GPE_GEN6_3DSTATE_SF,                          /* (0x3, 0x0, 0x13) */
-   ILO_GPE_GEN6_3DSTATE_WM,                          /* (0x3, 0x0, 0x14) */
-   ILO_GPE_GEN6_3DSTATE_CONSTANT_VS,                 /* (0x3, 0x0, 0x15) */
-   ILO_GPE_GEN6_3DSTATE_CONSTANT_GS,                 /* (0x3, 0x0, 0x16) */
-   ILO_GPE_GEN6_3DSTATE_CONSTANT_PS,                 /* (0x3, 0x0, 0x17) */
-   ILO_GPE_GEN6_3DSTATE_SAMPLE_MASK,                 /* (0x3, 0x0, 0x18) */
-   ILO_GPE_GEN6_3DSTATE_DRAWING_RECTANGLE,           /* (0x3, 0x1, 0x00) */
-   ILO_GPE_GEN6_3DSTATE_DEPTH_BUFFER,                /* (0x3, 0x1, 0x05) */
-   ILO_GPE_GEN6_3DSTATE_POLY_STIPPLE_OFFSET,         /* (0x3, 0x1, 0x06) */
-   ILO_GPE_GEN6_3DSTATE_POLY_STIPPLE_PATTERN,        /* (0x3, 0x1, 0x07) */
-   ILO_GPE_GEN6_3DSTATE_LINE_STIPPLE,                /* (0x3, 0x1, 0x08) */
-   ILO_GPE_GEN6_3DSTATE_AA_LINE_PARAMETERS,          /* (0x3, 0x1, 0x0a) */
-   ILO_GPE_GEN6_3DSTATE_GS_SVB_INDEX,                /* (0x3, 0x1, 0x0b) */
-   ILO_GPE_GEN6_3DSTATE_MULTISAMPLE,                 /* (0x3, 0x1, 0x0d) */
-   ILO_GPE_GEN6_3DSTATE_STENCIL_BUFFER,              /* (0x3, 0x1, 0x0e) */
-   ILO_GPE_GEN6_3DSTATE_HIER_DEPTH_BUFFER,           /* (0x3, 0x1, 0x0f) */
-   ILO_GPE_GEN6_3DSTATE_CLEAR_PARAMS,                /* (0x3, 0x1, 0x10) */
-   ILO_GPE_GEN6_PIPE_CONTROL,                        /* (0x3, 0x2, 0x00) */
-   ILO_GPE_GEN6_3DPRIMITIVE,                         /* (0x3, 0x3, 0x00) */
-
-   ILO_GPE_GEN6_COMMAND_COUNT,
-};
-
-/**
- * Indirect states that GEN6 GPE could emit.
- */
-enum ilo_gpe_gen6_state {
-   ILO_GPE_GEN6_INTERFACE_DESCRIPTOR_DATA,
-   ILO_GPE_GEN6_SF_VIEWPORT,
-   ILO_GPE_GEN6_CLIP_VIEWPORT,
-   ILO_GPE_GEN6_CC_VIEWPORT,
-   ILO_GPE_GEN6_COLOR_CALC_STATE,
-   ILO_GPE_GEN6_BLEND_STATE,
-   ILO_GPE_GEN6_DEPTH_STENCIL_STATE,
-   ILO_GPE_GEN6_SCISSOR_RECT,
-   ILO_GPE_GEN6_BINDING_TABLE_STATE,
-   ILO_GPE_GEN6_SURFACE_STATE,
-   ILO_GPE_GEN6_SAMPLER_STATE,
-   ILO_GPE_GEN6_SAMPLER_BORDER_COLOR_STATE,
-   ILO_GPE_GEN6_PUSH_CONSTANT_BUFFER,
-
-   ILO_GPE_GEN6_STATE_COUNT,
-};
-
-int
-ilo_gpe_gen6_estimate_command_size(const struct ilo_dev_info *dev,
-                                   enum ilo_gpe_gen6_command cmd,
-                                   int arg);
-
-int
-ilo_gpe_gen6_estimate_state_size(const struct ilo_dev_info *dev,
-                                 enum ilo_gpe_gen6_state state,
-                                 int arg);
 
 /**
  * Translate winsys tiling to hardware tiling.
@@ -133,14 +54,14 @@ ilo_gpe_gen6_translate_winsys_tiling(enum intel_tiling_mode tiling)
 {
    switch (tiling) {
    case INTEL_TILING_NONE:
-      return 0;
+      return GEN6_TILING_NONE;
    case INTEL_TILING_X:
-      return BRW_SURFACE_TILED;
+      return GEN6_TILING_X;
    case INTEL_TILING_Y:
-      return BRW_SURFACE_TILED | BRW_SURFACE_TILED_Y;
+      return GEN6_TILING_Y;
    default:
       assert(!"unknown tiling");
-      return 0;
+      return GEN6_TILING_NONE;
    }
 }
 
@@ -151,20 +72,20 @@ static inline int
 ilo_gpe_gen6_translate_pipe_prim(unsigned prim)
 {
    static const int prim_mapping[PIPE_PRIM_MAX] = {
-      [PIPE_PRIM_POINTS]                     = _3DPRIM_POINTLIST,
-      [PIPE_PRIM_LINES]                      = _3DPRIM_LINELIST,
-      [PIPE_PRIM_LINE_LOOP]                  = _3DPRIM_LINELOOP,
-      [PIPE_PRIM_LINE_STRIP]                 = _3DPRIM_LINESTRIP,
-      [PIPE_PRIM_TRIANGLES]                  = _3DPRIM_TRILIST,
-      [PIPE_PRIM_TRIANGLE_STRIP]             = _3DPRIM_TRISTRIP,
-      [PIPE_PRIM_TRIANGLE_FAN]               = _3DPRIM_TRIFAN,
-      [PIPE_PRIM_QUADS]                      = _3DPRIM_QUADLIST,
-      [PIPE_PRIM_QUAD_STRIP]                 = _3DPRIM_QUADSTRIP,
-      [PIPE_PRIM_POLYGON]                    = _3DPRIM_POLYGON,
-      [PIPE_PRIM_LINES_ADJACENCY]            = _3DPRIM_LINELIST_ADJ,
-      [PIPE_PRIM_LINE_STRIP_ADJACENCY]       = _3DPRIM_LINESTRIP_ADJ,
-      [PIPE_PRIM_TRIANGLES_ADJACENCY]        = _3DPRIM_TRILIST_ADJ,
-      [PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]   = _3DPRIM_TRISTRIP_ADJ,
+      [PIPE_PRIM_POINTS]                     = GEN6_3DPRIM_POINTLIST,
+      [PIPE_PRIM_LINES]                      = GEN6_3DPRIM_LINELIST,
+      [PIPE_PRIM_LINE_LOOP]                  = GEN6_3DPRIM_LINELOOP,
+      [PIPE_PRIM_LINE_STRIP]                 = GEN6_3DPRIM_LINESTRIP,
+      [PIPE_PRIM_TRIANGLES]                  = GEN6_3DPRIM_TRILIST,
+      [PIPE_PRIM_TRIANGLE_STRIP]             = GEN6_3DPRIM_TRISTRIP,
+      [PIPE_PRIM_TRIANGLE_FAN]               = GEN6_3DPRIM_TRIFAN,
+      [PIPE_PRIM_QUADS]                      = GEN6_3DPRIM_QUADLIST,
+      [PIPE_PRIM_QUAD_STRIP]                 = GEN6_3DPRIM_QUADSTRIP,
+      [PIPE_PRIM_POLYGON]                    = GEN6_3DPRIM_POLYGON,
+      [PIPE_PRIM_LINES_ADJACENCY]            = GEN6_3DPRIM_LINELIST_ADJ,
+      [PIPE_PRIM_LINE_STRIP_ADJACENCY]       = GEN6_3DPRIM_LINESTRIP_ADJ,
+      [PIPE_PRIM_TRIANGLES_ADJACENCY]        = GEN6_3DPRIM_TRILIST_ADJ,
+      [PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]   = GEN6_3DPRIM_TRISTRIP_ADJ,
    };
 
    assert(prim_mapping[prim]);
@@ -180,22 +101,22 @@ ilo_gpe_gen6_translate_texture(enum pipe_texture_target target)
 {
    switch (target) {
    case PIPE_BUFFER:
-      return BRW_SURFACE_BUFFER;
+      return GEN6_SURFTYPE_BUFFER;
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_1D_ARRAY:
-      return BRW_SURFACE_1D;
+      return GEN6_SURFTYPE_1D;
    case PIPE_TEXTURE_2D:
    case PIPE_TEXTURE_RECT:
    case PIPE_TEXTURE_2D_ARRAY:
-      return BRW_SURFACE_2D;
+      return GEN6_SURFTYPE_2D;
    case PIPE_TEXTURE_3D:
-      return BRW_SURFACE_3D;
+      return GEN6_SURFTYPE_3D;
    case PIPE_TEXTURE_CUBE:
    case PIPE_TEXTURE_CUBE_ARRAY:
-      return BRW_SURFACE_CUBE;
+      return GEN6_SURFTYPE_CUBE;
    default:
       assert(!"unknown texture target");
-      return BRW_SURFACE_BUFFER;
+      return GEN6_SURFTYPE_BUFFER;
    }
 }
 
@@ -220,7 +141,7 @@ ilo_gpe_gen6_fill_3dstate_sf_raster(const struct ilo_dev_info *dev,
    }
    else {
       payload[0] = 0;
-      payload[1] = (num_samples > 1) ? GEN6_SF_MSRAST_ON_PATTERN : 0;
+      payload[1] = (num_samples > 1) ? GEN7_SF_DW2_MSRASTMODE_ON_PATTERN : 0;
       payload[2] = 0;
       payload[3] = 0;
       payload[4] = 0;
@@ -233,23 +154,23 @@ ilo_gpe_gen6_fill_3dstate_sf_raster(const struct ilo_dev_info *dev,
       /* separate stencil */
       switch (depth_format) {
       case PIPE_FORMAT_Z16_UNORM:
-         format = BRW_DEPTHFORMAT_D16_UNORM;
+         format = GEN6_ZFORMAT_D16_UNORM;
          break;
       case PIPE_FORMAT_Z32_FLOAT:
       case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
-         format = BRW_DEPTHFORMAT_D32_FLOAT;
+         format = GEN6_ZFORMAT_D32_FLOAT;
          break;
       case PIPE_FORMAT_Z24X8_UNORM:
       case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-         format = BRW_DEPTHFORMAT_D24_UNORM_X8_UINT;
+         format = GEN6_ZFORMAT_D24_UNORM_X8_UINT;
          break;
       default:
          /* FLOAT surface is assumed when there is no depth buffer */
-         format = BRW_DEPTHFORMAT_D32_FLOAT;
+         format = GEN6_ZFORMAT_D32_FLOAT;
          break;
       }
 
-      payload[0] |= format << GEN7_SF_DEPTH_BUFFER_SURFACE_FORMAT_SHIFT;
+      payload[0] |= format << GEN7_SF_DW1_DEPTH_FORMAT__SHIFT;
    }
 }
 
@@ -270,12 +191,7 @@ ilo_gpe_gen6_fill_3dstate_sf_sbe(const struct ilo_dev_info *dev,
 
    if (!fs) {
       memset(dw, 0, sizeof(dw[0]) * num_dwords);
-
-      if (dev->gen >= ILO_GEN(7))
-         dw[0] = 1 << GEN7_SBE_URB_ENTRY_READ_LENGTH_SHIFT;
-      else
-         dw[0] = 1 << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT;
-
+      dw[0] = 1 << GEN7_SBE_DW1_URB_READ_LEN__SHIFT;
       return;
    }
 
@@ -292,27 +208,18 @@ ilo_gpe_gen6_fill_3dstate_sf_sbe(const struct ilo_dev_info *dev,
    if (!vue_len)
       vue_len = 1;
 
-   if (dev->gen >= ILO_GEN(7)) {
-      dw[0] = output_count << GEN7_SBE_NUM_OUTPUTS_SHIFT |
-              vue_len << GEN7_SBE_URB_ENTRY_READ_LENGTH_SHIFT |
-              vue_offset << GEN7_SBE_URB_ENTRY_READ_OFFSET_SHIFT;
-      if (routing->swizzle_enable)
-         dw[0] |= GEN7_SBE_SWIZZLE_ENABLE;
-   }
-   else {
-      dw[0] = output_count << GEN6_SF_NUM_OUTPUTS_SHIFT |
-              vue_len << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT |
-              vue_offset << GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT;
-      if (routing->swizzle_enable)
-         dw[0] |= GEN6_SF_SWIZZLE_ENABLE;
-   }
+   dw[0] = output_count << GEN7_SBE_DW1_ATTR_COUNT__SHIFT |
+           vue_len << GEN7_SBE_DW1_URB_READ_LEN__SHIFT |
+           vue_offset << GEN7_SBE_DW1_URB_READ_OFFSET__SHIFT;
+   if (routing->swizzle_enable)
+      dw[0] |= GEN7_SBE_DW1_ATTR_SWIZZLE_ENABLE;
 
    switch (rasterizer->state.sprite_coord_mode) {
    case PIPE_SPRITE_COORD_UPPER_LEFT:
-      dw[0] |= GEN6_SF_POINT_SPRITE_UPPERLEFT;
+      dw[0] |= GEN7_SBE_DW1_POINT_SPRITE_TEXCOORD_UPPERLEFT;
       break;
    case PIPE_SPRITE_COORD_LOWER_LEFT:
-      dw[0] |= GEN6_SF_POINT_SPRITE_LOWERLEFT;
+      dw[0] |= GEN7_SBE_DW1_POINT_SPRITE_TEXCOORD_LOWERLEFT;
       break;
    }
 
@@ -334,6 +241,104 @@ ilo_gpe_gen6_fill_3dstate_sf_sbe(const struct ilo_dev_info *dev,
    /* WrapShortest enables */
    dw[11] = 0;
    dw[12] = 0;
+}
+
+static inline void
+gen6_emit_MI_STORE_DATA_IMM(const struct ilo_dev_info *dev,
+                            struct intel_bo *bo, uint32_t bo_offset,
+                            uint64_t val, bool store_qword,
+                            struct ilo_cp *cp)
+{
+   const uint32_t cmd = ILO_GPE_MI(0x20);
+   const uint8_t cmd_len = (store_qword) ? 5 : 4;
+   /* must use GGTT on GEN6 as in PIPE_CONTROL */
+   const uint32_t cmd_flags = (dev->gen == ILO_GEN(6)) ? (1 << 22) : 0;
+   const uint32_t read_domains = INTEL_DOMAIN_INSTRUCTION;
+   const uint32_t write_domain = INTEL_DOMAIN_INSTRUCTION;
+
+   ILO_GPE_VALID_GEN(dev, 6, 7.5);
+
+   assert(bo_offset % ((store_qword) ? 8 : 4) == 0);
+
+   ilo_cp_begin(cp, cmd_len);
+   ilo_cp_write(cp, cmd | cmd_flags | (cmd_len - 2));
+   ilo_cp_write(cp, 0);
+   ilo_cp_write_bo(cp, bo_offset, bo, read_domains, write_domain);
+   ilo_cp_write(cp, (uint32_t) val);
+
+   if (store_qword)
+      ilo_cp_write(cp, (uint32_t) (val >> 32));
+   else
+      assert(val == (uint64_t) ((uint32_t) val));
+
+   ilo_cp_end(cp);
+}
+
+static inline void
+gen6_emit_MI_LOAD_REGISTER_IMM(const struct ilo_dev_info *dev,
+                               uint32_t reg, uint32_t val,
+                               struct ilo_cp *cp)
+{
+   const uint32_t cmd = ILO_GPE_MI(0x22);
+   const uint8_t cmd_len = 3;
+
+   ILO_GPE_VALID_GEN(dev, 6, 7.5);
+
+   assert(reg % 4 == 0);
+
+   ilo_cp_begin(cp, cmd_len);
+   ilo_cp_write(cp, cmd | (cmd_len - 2));
+   ilo_cp_write(cp, reg);
+   ilo_cp_write(cp, val);
+   ilo_cp_end(cp);
+}
+
+static inline void
+gen6_emit_MI_STORE_REGISTER_MEM(const struct ilo_dev_info *dev,
+                                struct intel_bo *bo, uint32_t bo_offset,
+                                uint32_t reg, struct ilo_cp *cp)
+{
+   const uint32_t cmd = ILO_GPE_MI(0x24);
+   const uint8_t cmd_len = 3;
+   /* must use GGTT on GEN6 as in PIPE_CONTROL */
+   const uint32_t cmd_flags = (dev->gen == ILO_GEN(6)) ? (1 << 22) : 0;
+   const uint32_t read_domains = INTEL_DOMAIN_INSTRUCTION;
+   const uint32_t write_domain = INTEL_DOMAIN_INSTRUCTION;
+
+   ILO_GPE_VALID_GEN(dev, 6, 7.5);
+
+   assert(reg % 4 == 0 && bo_offset % 4 == 0);
+
+   ilo_cp_begin(cp, cmd_len);
+   ilo_cp_write(cp, cmd | cmd_flags | (cmd_len - 2));
+   ilo_cp_write(cp, reg);
+   ilo_cp_write_bo(cp, bo_offset, bo, read_domains, write_domain);
+   ilo_cp_end(cp);
+}
+
+static inline void
+gen6_emit_MI_REPORT_PERF_COUNT(const struct ilo_dev_info *dev,
+                               struct intel_bo *bo, uint32_t bo_offset,
+                               uint32_t report_id, struct ilo_cp *cp)
+{
+   const uint32_t cmd = ILO_GPE_MI(0x28);
+   const uint8_t cmd_len = 3;
+   const uint32_t read_domains = INTEL_DOMAIN_INSTRUCTION;
+   const uint32_t write_domain = INTEL_DOMAIN_INSTRUCTION;
+
+   ILO_GPE_VALID_GEN(dev, 6, 7.5);
+
+   assert(bo_offset % 64 == 0);
+
+   /* must use GGTT on GEN6 as in PIPE_CONTROL */
+   if (dev->gen == ILO_GEN(6))
+      bo_offset |= 0x1;
+
+   ilo_cp_begin(cp, cmd_len);
+   ilo_cp_write(cp, cmd | (cmd_len - 2));
+   ilo_cp_write_bo(cp, bo_offset, bo, read_domains, write_domain);
+   ilo_cp_write(cp, report_id);
+   ilo_cp_end(cp);
 }
 
 static inline void
@@ -607,9 +612,9 @@ gen6_emit_3DSTATE_BINDING_TABLE_POINTERS(const struct ilo_dev_info *dev,
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2) |
-                    GEN6_BINDING_TABLE_MODIFY_VS |
-                    GEN6_BINDING_TABLE_MODIFY_GS |
-                    GEN6_BINDING_TABLE_MODIFY_PS);
+                    GEN6_PTR_BINDING_TABLE_DW0_VS_CHANGED |
+                    GEN6_PTR_BINDING_TABLE_DW0_GS_CHANGED |
+                    GEN6_PTR_BINDING_TABLE_DW0_PS_CHANGED);
    ilo_cp_write(cp, vs_binding_table);
    ilo_cp_write(cp, gs_binding_table);
    ilo_cp_write(cp, ps_binding_table);
@@ -630,9 +635,9 @@ gen6_emit_3DSTATE_SAMPLER_STATE_POINTERS(const struct ilo_dev_info *dev,
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2) |
-                    VS_SAMPLER_STATE_CHANGE |
-                    GS_SAMPLER_STATE_CHANGE |
-                    PS_SAMPLER_STATE_CHANGE);
+                    GEN6_PTR_SAMPLER_DW0_VS_CHANGED |
+                    GEN6_PTR_SAMPLER_DW0_GS_CHANGED |
+                    GEN6_PTR_SAMPLER_DW0_PS_CHANGED);
    ilo_cp_write(cp, vs_sampler_state);
    ilo_cp_write(cp, gs_sampler_state);
    ilo_cp_write(cp, ps_sampler_state);
@@ -677,10 +682,10 @@ gen6_emit_3DSTATE_URB(const struct ilo_dev_info *dev,
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2));
-   ilo_cp_write(cp, (vs_alloc_size - 1) << GEN6_URB_VS_SIZE_SHIFT |
-                    vs_num_entries << GEN6_URB_VS_ENTRIES_SHIFT);
-   ilo_cp_write(cp, gs_num_entries << GEN6_URB_GS_ENTRIES_SHIFT |
-                    (gs_alloc_size - 1) << GEN6_URB_GS_SIZE_SHIFT);
+   ilo_cp_write(cp, (vs_alloc_size - 1) << GEN6_URB_DW1_VS_ENTRY_SIZE__SHIFT |
+                    vs_num_entries << GEN6_URB_DW1_VS_ENTRY_COUNT__SHIFT);
+   ilo_cp_write(cp, gs_num_entries << GEN6_URB_DW2_GS_ENTRY_COUNT__SHIFT |
+                    (gs_alloc_size - 1) << GEN6_URB_DW2_GS_ENTRY_SIZE__SHIFT);
    ilo_cp_end(cp);
 }
 
@@ -717,36 +722,23 @@ gen6_emit_3DSTATE_VERTEX_BUFFERS(const struct ilo_dev_info *dev,
       const struct pipe_vertex_buffer *cso = &vb->states[pipe_idx];
       uint32_t dw;
 
-      dw = hw_idx << GEN6_VB0_INDEX_SHIFT;
+      dw = hw_idx << GEN6_VB_STATE_DW0_INDEX__SHIFT;
 
       if (instance_divisor)
-         dw |= GEN6_VB0_ACCESS_INSTANCEDATA;
+         dw |= GEN6_VB_STATE_DW0_ACCESS_INSTANCEDATA;
       else
-         dw |= GEN6_VB0_ACCESS_VERTEXDATA;
+         dw |= GEN6_VB_STATE_DW0_ACCESS_VERTEXDATA;
 
       if (dev->gen >= ILO_GEN(7))
-         dw |= GEN7_VB0_ADDRESS_MODIFYENABLE;
+         dw |= GEN7_VB_STATE_DW0_ADDR_MODIFIED;
 
       /* use null vb if there is no buffer or the stride is out of range */
       if (cso->buffer && cso->stride <= 2048) {
          const struct ilo_buffer *buf = ilo_buffer(cso->buffer);
          const uint32_t start_offset = cso->buffer_offset;
-         /*
-          * As noted in ilo_translate_format(), we treat some 3-component
-          * formats as 4-component formats to work around hardware
-          * limitations.  Imagine the case where the vertex buffer holds a
-          * single PIPE_FORMAT_R16G16B16_FLOAT vertex, and buf->bo_size is 6.
-          * The hardware would not be able to fetch it because the vertex
-          * buffer is expected to hold a PIPE_FORMAT_R16G16B16A16_FLOAT vertex
-          * and that takes at least 8 bytes.
-          *
-          * For the workaround to work, we query the physical size, which is
-          * page aligned, to calculate end_offset so that the last vertex has
-          * a better chance to be fetched.
-          */
-         const uint32_t end_offset = intel_bo_get_size(buf->bo) - 1;
+         const uint32_t end_offset = buf->bo_size - 1;
 
-         dw |= cso->stride << BRW_VB0_PITCH_SHIFT;
+         dw |= cso->stride << GEN6_VB_STATE_DW0_PITCH__SHIFT;
 
          ilo_cp_write(cp, dw);
          ilo_cp_write_bo(cp, start_offset, buf->bo, INTEL_DOMAIN_VERTEX, 0);
@@ -774,12 +766,12 @@ ve_init_cso_with_components(const struct ilo_dev_info *dev,
    ILO_GPE_VALID_GEN(dev, 6, 7.5);
 
    STATIC_ASSERT(Elements(cso->payload) >= 2);
-   cso->payload[0] = GEN6_VE0_VALID;
+   cso->payload[0] = GEN6_VE_STATE_DW0_VALID;
    cso->payload[1] =
-         comp0 << BRW_VE1_COMPONENT_0_SHIFT |
-         comp1 << BRW_VE1_COMPONENT_1_SHIFT |
-         comp2 << BRW_VE1_COMPONENT_2_SHIFT |
-         comp3 << BRW_VE1_COMPONENT_3_SHIFT;
+         comp0 << GEN6_VE_STATE_DW1_COMP0__SHIFT |
+         comp1 << GEN6_VE_STATE_DW1_COMP1__SHIFT |
+         comp2 << GEN6_VE_STATE_DW1_COMP2__SHIFT |
+         comp3 << GEN6_VE_STATE_DW1_COMP3__SHIFT;
 }
 
 static inline void
@@ -807,30 +799,28 @@ ve_set_cso_edgeflag(const struct ilo_dev_info *dev,
     *        types (e.g., POLYGONs) prior to submission to the 3D pipeline."
     */
 
-   cso->payload[0] |= GEN6_VE0_EDGE_FLAG_ENABLE;
+   cso->payload[0] |= GEN6_VE_STATE_DW0_EDGE_FLAG_ENABLE;
    cso->payload[1] =
-         BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT |
-         BRW_VE1_COMPONENT_NOSTORE << BRW_VE1_COMPONENT_1_SHIFT |
-         BRW_VE1_COMPONENT_NOSTORE << BRW_VE1_COMPONENT_2_SHIFT |
-         BRW_VE1_COMPONENT_NOSTORE << BRW_VE1_COMPONENT_3_SHIFT;
+         GEN6_VFCOMP_STORE_SRC << GEN6_VE_STATE_DW1_COMP0__SHIFT |
+         GEN6_VFCOMP_NOSTORE << GEN6_VE_STATE_DW1_COMP1__SHIFT |
+         GEN6_VFCOMP_NOSTORE << GEN6_VE_STATE_DW1_COMP2__SHIFT |
+         GEN6_VFCOMP_NOSTORE << GEN6_VE_STATE_DW1_COMP3__SHIFT;
 
    /*
-    * Edge flags have format BRW_SURFACEFORMAT_R8_UINT when defined via
-    * glEdgeFlagPointer(), and format BRW_SURFACEFORMAT_R32_FLOAT when defined
+    * Edge flags have format GEN6_FORMAT_R8_UINT when defined via
+    * glEdgeFlagPointer(), and format GEN6_FORMAT_R32_FLOAT when defined
     * via glEdgeFlag(), as can be seen in vbo_attrib_tmp.h.
     *
     * Since all the hardware cares about is whether the flags are zero or not,
-    * we can treat them as BRW_SURFACEFORMAT_R32_UINT in the latter case.
+    * we can treat them as GEN6_FORMAT_R32_UINT in the latter case.
     */
-   format = (cso->payload[0] >> BRW_VE0_FORMAT_SHIFT) & 0x1ff;
-   if (format == BRW_SURFACEFORMAT_R32_FLOAT) {
-      STATIC_ASSERT(BRW_SURFACEFORMAT_R32_UINT ==
-            BRW_SURFACEFORMAT_R32_FLOAT - 1);
-
-      cso->payload[0] -= (1 << BRW_VE0_FORMAT_SHIFT);
+   format = (cso->payload[0] >> GEN6_VE_STATE_DW0_FORMAT__SHIFT) & 0x1ff;
+   if (format == GEN6_FORMAT_R32_FLOAT) {
+      STATIC_ASSERT(GEN6_FORMAT_R32_UINT == GEN6_FORMAT_R32_FLOAT - 1);
+      cso->payload[0] -= (1 << GEN6_VE_STATE_DW0_FORMAT__SHIFT);
    }
    else {
-      assert(format == BRW_SURFACEFORMAT_R8_UINT);
+      assert(format == GEN6_FORMAT_R8_UINT);
    }
 }
 
@@ -858,10 +848,10 @@ gen6_emit_3DSTATE_VERTEX_ELEMENTS(const struct ilo_dev_info *dev,
       struct ilo_ve_cso dummy;
 
       ve_init_cso_with_components(dev,
-            BRW_VE1_COMPONENT_STORE_0,
-            BRW_VE1_COMPONENT_STORE_0,
-            BRW_VE1_COMPONENT_STORE_0,
-            BRW_VE1_COMPONENT_STORE_1_FLT,
+            GEN6_VFCOMP_STORE_0,
+            GEN6_VFCOMP_STORE_0,
+            GEN6_VFCOMP_STORE_0,
+            GEN6_VFCOMP_STORE_1_FP,
             &dummy);
 
       cmd_len = 3;
@@ -882,10 +872,10 @@ gen6_emit_3DSTATE_VERTEX_ELEMENTS(const struct ilo_dev_info *dev,
       struct ilo_ve_cso gen_ids;
 
       ve_init_cso_with_components(dev,
-            BRW_VE1_COMPONENT_STORE_VID,
-            BRW_VE1_COMPONENT_STORE_IID,
-            BRW_VE1_COMPONENT_NOSTORE,
-            BRW_VE1_COMPONENT_NOSTORE,
+            GEN6_VFCOMP_STORE_VID,
+            GEN6_VFCOMP_STORE_IID,
+            GEN6_VFCOMP_NOSTORE,
+            GEN6_VFCOMP_NOSTORE,
             &gen_ids);
 
       ilo_cp_write_multi(cp, gen_ids.payload, 2);
@@ -932,17 +922,17 @@ gen6_emit_3DSTATE_INDEX_BUFFER(const struct ilo_dev_info *dev,
 
    switch (ib->hw_index_size) {
    case 4:
-      format = BRW_INDEX_DWORD;
+      format = GEN6_IB_DW0_FORMAT_DWORD;
       break;
    case 2:
-      format = BRW_INDEX_WORD;
+      format = GEN6_IB_DW0_FORMAT_WORD;
       break;
    case 1:
-      format = BRW_INDEX_BYTE;
+      format = GEN6_IB_DW0_FORMAT_BYTE;
       break;
    default:
       assert(!"unknown index size");
-      format = BRW_INDEX_BYTE;
+      format = GEN6_IB_DW0_FORMAT_BYTE;
       break;
    }
 
@@ -959,8 +949,8 @@ gen6_emit_3DSTATE_INDEX_BUFFER(const struct ilo_dev_info *dev,
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2) |
-                    ((enable_cut_index) ? BRW_CUT_INDEX_ENABLE : 0) |
-                    format << 8);
+                    ((enable_cut_index) ? GEN6_IB_DW0_CUT_INDEX_ENABLE : 0) |
+                    format);
    ilo_cp_write_bo(cp, start_offset, buf->bo, INTEL_DOMAIN_VERTEX, 0);
    ilo_cp_write_bo(cp, end_offset, buf->bo, INTEL_DOMAIN_VERTEX, 0);
    ilo_cp_end(cp);
@@ -980,9 +970,9 @@ gen6_emit_3DSTATE_VIEWPORT_STATE_POINTERS(const struct ilo_dev_info *dev,
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2) |
-                    GEN6_CLIP_VIEWPORT_MODIFY |
-                    GEN6_SF_VIEWPORT_MODIFY |
-                    GEN6_CC_VIEWPORT_MODIFY);
+                    GEN6_PTR_VP_DW0_CLIP_CHANGED |
+                    GEN6_PTR_VP_DW0_SF_CHANGED |
+                    GEN6_PTR_VP_DW0_CC_CHANGED);
    ilo_cp_write(cp, clip_viewport);
    ilo_cp_write(cp, sf_viewport);
    ilo_cp_write(cp, cc_viewport);
@@ -1055,7 +1045,7 @@ gen6_emit_3DSTATE_VS(const struct ilo_dev_info *dev,
    dw4 = cso->payload[1];
    dw5 = cso->payload[2];
 
-   dw2 |= ((num_samplers + 3) / 4) << GEN6_VS_SAMPLER_COUNT_SHIFT;
+   dw2 |= ((num_samplers + 3) / 4) << GEN6_THREADDISP_SAMPLER_COUNT__SHIFT;
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2));
@@ -1120,8 +1110,8 @@ gen6_emit_3DSTATE_GS(const struct ilo_dev_info *dev,
    else {
       dw1 = 0;
       dw2 = 0;
-      dw4 = 1 << GEN6_GS_URB_READ_LENGTH_SHIFT;
-      dw5 = GEN6_GS_STATISTICS_ENABLE;
+      dw4 = 1 << GEN6_GS_DW4_URB_READ_LEN__SHIFT;
+      dw5 = GEN6_GS_DW5_STATISTICS;
       dw6 = 0;
    }
 
@@ -1158,17 +1148,17 @@ gen6_emit_3DSTATE_CLIP(const struct ilo_dev_info *dev,
       dw3 = rasterizer->clip.payload[2];
 
       if (enable_guardband && rasterizer->clip.can_enable_guardband)
-         dw2 |= GEN6_CLIP_GB_TEST;
+         dw2 |= GEN6_CLIP_DW2_GB_TEST_ENABLE;
 
       interps = (fs) ?  ilo_shader_get_kernel_param(fs,
             ILO_KERNEL_FS_BARYCENTRIC_INTERPOLATIONS) : 0;
 
-      if (interps & (1 << BRW_WM_NONPERSPECTIVE_PIXEL_BARYCENTRIC |
-                     1 << BRW_WM_NONPERSPECTIVE_CENTROID_BARYCENTRIC |
-                     1 << BRW_WM_NONPERSPECTIVE_SAMPLE_BARYCENTRIC))
-         dw2 |= GEN6_CLIP_NON_PERSPECTIVE_BARYCENTRIC_ENABLE;
+      if (interps & (GEN6_INTERP_NONPERSPECTIVE_PIXEL |
+                     GEN6_INTERP_NONPERSPECTIVE_CENTROID |
+                     GEN6_INTERP_NONPERSPECTIVE_SAMPLE))
+         dw2 |= GEN6_CLIP_DW2_NONPERSPECTIVE_BARYCENTRIC_ENABLE;
 
-      dw3 |= GEN6_CLIP_FORCE_ZERO_RTAINDEX |
+      dw3 |= GEN6_CLIP_DW3_RTAINDEX_FORCED_ZERO |
              (num_viewports - 1);
    }
    else {
@@ -1238,7 +1228,7 @@ gen6_emit_3DSTATE_WM(const struct ilo_dev_info *dev,
       ilo_cp_write(cp, 0);
       ilo_cp_write(cp, hiz_op);
       /* honor the valid range even if dispatching is disabled */
-      ilo_cp_write(cp, (max_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT);
+      ilo_cp_write(cp, (max_threads - 1) << GEN6_WM_DW5_MAX_THREADS__SHIFT);
       ilo_cp_write(cp, 0);
       ilo_cp_write(cp, 0);
       ilo_cp_write(cp, 0);
@@ -1253,7 +1243,7 @@ gen6_emit_3DSTATE_WM(const struct ilo_dev_info *dev,
    dw5 = fs_cso->payload[2];
    dw6 = fs_cso->payload[3];
 
-   dw2 |= (num_samplers + 3) / 4 << GEN6_WM_SAMPLER_COUNT_SHIFT;
+   dw2 |= (num_samplers + 3) / 4 << GEN6_THREADDISP_SAMPLER_COUNT__SHIFT;
 
    /*
     * From the Sandy Bridge PRM, volume 2 part 1, page 248:
@@ -1263,15 +1253,13 @@ gen6_emit_3DSTATE_WM(const struct ilo_dev_info *dev,
     *      Enable or Depth Buffer Resolve Enable."
     */
    assert(!hiz_op);
-   dw4 |= GEN6_WM_STATISTICS_ENABLE;
+   dw4 |= GEN6_WM_DW4_STATISTICS;
 
-   if (cc_may_kill) {
-      dw5 |= GEN6_WM_KILL_ENABLE |
-             GEN6_WM_DISPATCH_ENABLE;
-   }
+   if (cc_may_kill)
+      dw5 |= GEN6_WM_DW5_PS_KILL | GEN6_WM_DW5_PS_ENABLE;
 
    if (dual_blend)
-      dw5 |= GEN6_WM_DUAL_SOURCE_BLEND_ENABLE;
+      dw5 |= GEN6_WM_DW5_DUAL_SOURCE_BLEND;
 
    dw5 |= rasterizer->wm.payload[0];
 
@@ -1646,9 +1634,9 @@ gen6_emit_3DSTATE_GS_SVB_INDEX(const struct ilo_dev_info *dev,
    ILO_GPE_VALID_GEN(dev, 6, 6);
    assert(index >= 0 && index < 4);
 
-   dw1 = index << SVB_INDEX_SHIFT;
+   dw1 = index << GEN6_SVBI_DW1_INDEX__SHIFT;
    if (load_vertex_count)
-      dw1 |= SVB_LOAD_INTERNAL_VERTEX_COUNT;
+      dw1 |= GEN6_SVBI_DW1_LOAD_INTERNAL_VERTEX_COUNT;
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2));
@@ -1672,29 +1660,29 @@ gen6_emit_3DSTATE_MULTISAMPLE(const struct ilo_dev_info *dev,
    ILO_GPE_VALID_GEN(dev, 6, 7.5);
 
    dw1 = (pixel_location_center) ?
-      MS_PIXEL_LOCATION_CENTER : MS_PIXEL_LOCATION_UPPER_LEFT;
+      GEN6_MULTISAMPLE_DW1_PIXLOC_CENTER : GEN6_MULTISAMPLE_DW1_PIXLOC_UL_CORNER;
 
    switch (num_samples) {
    case 0:
    case 1:
-      dw1 |= MS_NUMSAMPLES_1;
+      dw1 |= GEN6_MULTISAMPLE_DW1_NUMSAMPLES_1;
       dw2 = 0;
       dw3 = 0;
       break;
    case 4:
-      dw1 |= MS_NUMSAMPLES_4;
+      dw1 |= GEN6_MULTISAMPLE_DW1_NUMSAMPLES_4;
       dw2 = packed_sample_pos[0];
       dw3 = 0;
       break;
    case 8:
       assert(dev->gen >= ILO_GEN(7));
-      dw1 |= MS_NUMSAMPLES_8;
+      dw1 |= GEN7_MULTISAMPLE_DW1_NUMSAMPLES_8;
       dw2 = packed_sample_pos[0];
       dw3 = packed_sample_pos[1];
       break;
    default:
       assert(!"unsupported sample count");
-      dw1 |= MS_NUMSAMPLES_1;
+      dw1 |= GEN6_MULTISAMPLE_DW1_NUMSAMPLES_1;
       dw2 = 0;
       dw3 = 0;
       break;
@@ -1763,7 +1751,7 @@ gen6_emit_3DSTATE_CLEAR_PARAMS(const struct ilo_dev_info *dev,
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2) |
-                    GEN5_DEPTH_CLEAR_VALID);
+                    GEN6_CLEAR_PARAMS_DW0_VALID);
    ilo_cp_write(cp, clear_val);
    ilo_cp_end(cp);
 }
@@ -1782,7 +1770,9 @@ gen6_emit_PIPE_CONTROL(const struct ilo_dev_info *dev,
 
    ILO_GPE_VALID_GEN(dev, 6, 7.5);
 
-   if (dw1 & PIPE_CONTROL_CS_STALL) {
+   assert(bo_offset % ((write_qword) ? 8 : 4) == 0);
+
+   if (dw1 & GEN6_PIPE_CONTROL_CS_STALL) {
       /*
        * From the Sandy Bridge PRM, volume 2 part 1, page 73:
        *
@@ -1805,23 +1795,23 @@ gen6_emit_PIPE_CONTROL(const struct ilo_dev_info *dev,
        *       * Depth Stall ([13] of DW1)
        *       * Post-Sync Operation ([13] of DW1)"
        */
-      uint32_t bit_test = PIPE_CONTROL_WRITE_FLUSH |
-                          PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                          PIPE_CONTROL_STALL_AT_SCOREBOARD |
-                          PIPE_CONTROL_DEPTH_STALL;
+      uint32_t bit_test = GEN6_PIPE_CONTROL_RENDER_CACHE_FLUSH |
+                          GEN6_PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                          GEN6_PIPE_CONTROL_PIXEL_SCOREBOARD_STALL |
+                          GEN6_PIPE_CONTROL_DEPTH_STALL;
 
       /* post-sync op */
-      bit_test |= PIPE_CONTROL_WRITE_IMMEDIATE |
-                  PIPE_CONTROL_WRITE_DEPTH_COUNT |
-                  PIPE_CONTROL_WRITE_TIMESTAMP;
+      bit_test |= GEN6_PIPE_CONTROL_WRITE_IMM |
+                  GEN6_PIPE_CONTROL_WRITE_PS_DEPTH_COUNT |
+                  GEN6_PIPE_CONTROL_WRITE_TIMESTAMP;
 
       if (dev->gen == ILO_GEN(6))
-         bit_test |= PIPE_CONTROL_INTERRUPT_ENABLE;
+         bit_test |= GEN6_PIPE_CONTROL_NOTIFY_ENABLE;
 
       assert(dw1 & bit_test);
    }
 
-   if (dw1 & PIPE_CONTROL_DEPTH_STALL) {
+   if (dw1 & GEN6_PIPE_CONTROL_DEPTH_STALL) {
       /*
        * From the Sandy Bridge PRM, volume 2 part 1, page 73:
        *
@@ -1830,9 +1820,21 @@ gen6_emit_PIPE_CONTROL(const struct ilo_dev_info *dev,
        *       * Render Target Cache Flush Enable ([12] of DW1)
        *       * Depth Cache Flush Enable ([0] of DW1)"
        */
-      assert(!(dw1 & (PIPE_CONTROL_WRITE_FLUSH |
-                      PIPE_CONTROL_DEPTH_CACHE_FLUSH)));
+      assert(!(dw1 & (GEN6_PIPE_CONTROL_RENDER_CACHE_FLUSH |
+                      GEN6_PIPE_CONTROL_DEPTH_CACHE_FLUSH)));
    }
+
+   /*
+    * From the Sandy Bridge PRM, volume 1 part 3, page 19:
+    *
+    *     "[DevSNB] PPGTT memory writes by MI_* (such as MI_STORE_DATA_IMM)
+    *      and PIPE_CONTROL are not supported."
+    *
+    * The kernel will add the mapping automatically (when write domain is
+    * INTEL_DOMAIN_INSTRUCTION).
+    */
+   if (dev->gen == ILO_GEN(6) && bo)
+      bo_offset |= GEN6_PIPE_CONTROL_DW2_USE_GGTT;
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2));
@@ -1854,10 +1856,9 @@ gen6_emit_3DPRIMITIVE(const struct ilo_dev_info *dev,
    const uint32_t cmd = ILO_GPE_CMD(0x3, 0x3, 0x00);
    const uint8_t cmd_len = 6;
    const int prim = (rectlist) ?
-      _3DPRIM_RECTLIST : ilo_gpe_gen6_translate_pipe_prim(info->mode);
+      GEN6_3DPRIM_RECTLIST : ilo_gpe_gen6_translate_pipe_prim(info->mode);
    const int vb_access = (info->indexed) ?
-      GEN4_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM :
-      GEN4_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL;
+      GEN6_3DPRIM_DW0_ACCESS_RANDOM : GEN6_3DPRIM_DW0_ACCESS_SEQUENTIAL;
    const uint32_t vb_start = info->start +
       ((info->indexed) ? ib->draw_start_offset : 0);
 
@@ -1865,7 +1866,7 @@ gen6_emit_3DPRIMITIVE(const struct ilo_dev_info *dev,
 
    ilo_cp_begin(cp, cmd_len);
    ilo_cp_write(cp, cmd | (cmd_len - 2) |
-                    prim << GEN4_3DPRIM_TOPOLOGY_TYPE_SHIFT |
+                    prim << GEN6_3DPRIM_DW0_TYPE__SHIFT |
                     vb_access);
    ilo_cp_write(cp, info->count);
    ilo_cp_write(cp, vb_start);
@@ -2060,7 +2061,7 @@ gen6_emit_COLOR_CALC_STATE(const struct ilo_dev_info *dev,
 
    dw[0] = stencil_ref->ref_value[0] << 24 |
            stencil_ref->ref_value[1] << 16 |
-           BRW_ALPHATEST_FORMAT_UNORM8;
+           GEN6_CC_DW0_ALPHATEST_UNORM8;
    dw[1] = alpha_ref;
    dw[2] = fui(blend_color->color[0]);
    dw[3] = fui(blend_color->color[1]);
@@ -2124,7 +2125,7 @@ gen6_emit_BLEND_STATE(const struct ilo_dev_info *dev,
          case PIPE_FORMAT_B8G8R8X8_UNORM:
             /* force alpha to one when the HW format has alpha */
             assert(ilo_translate_render_format(PIPE_FORMAT_B8G8R8X8_UNORM)
-                  == BRW_SURFACEFORMAT_B8G8R8A8_UNORM);
+                  == GEN6_FORMAT_B8G8R8A8_UNORM);
             rt_dst_alpha_forced_one = true;
             break;
          default:

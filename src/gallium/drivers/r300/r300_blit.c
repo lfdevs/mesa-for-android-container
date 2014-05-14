@@ -118,7 +118,7 @@ static uint32_t r300_depth_clear_cb_value(enum pipe_format format,
     util_pack_color(rgba, format, &uc);
 
     if (util_format_get_blocksizebits(format) == 32)
-        return uc.ui;
+        return uc.ui[0];
     else
         return uc.us | (uc.us << 16);
 }
@@ -130,7 +130,7 @@ static boolean r300_cbzb_clear_allowed(struct r300_context *r300,
         (struct pipe_framebuffer_state*)r300->fb_state.state;
 
     /* Only color clear allowed, and only one colorbuffer. */
-    if ((clear_buffers & ~PIPE_CLEAR_COLOR) != 0 || fb->nr_cbufs != 1)
+    if ((clear_buffers & ~PIPE_CLEAR_COLOR) != 0 || fb->nr_cbufs != 1 || !fb->cbufs[0])
         return FALSE;
 
     return r300_surface(fb->cbufs[0])->cbzb_allowed;
@@ -193,7 +193,7 @@ static void r300_set_clear_color(struct r300_context *r300,
         r300->color_clear_value_gb = uc.h[0] | ((uint32_t)uc.h[1] << 16);
         r300->color_clear_value_ar = uc.h[2] | ((uint32_t)uc.h[3] << 16);
     } else {
-        r300->color_clear_value = uc.ui;
+        r300->color_clear_value = uc.ui[0];
     }
 }
 
@@ -313,7 +313,7 @@ static void r300_clear(struct pipe_context* pipe,
     /* Use fast color clear for an AA colorbuffer.
      * The CMASK is shared between all colorbuffers, so we use it
      * if there is only one colorbuffer bound. */
-    if ((buffers & PIPE_CLEAR_COLOR) && fb->nr_cbufs == 1 &&
+    if ((buffers & PIPE_CLEAR_COLOR) && fb->nr_cbufs == 1 && fb->cbufs[0] &&
         r300_resource(fb->cbufs[0]->texture)->tex.cmask_dwords) {
         /* Try to obtain the access to the CMASK if we don't have one. */
         if (!r300->cmask_access) {
@@ -772,7 +772,7 @@ static void r300_msaa_resolve(struct pipe_context *pipe,
     templ.height0 = info->src.resource->height0;
     templ.depth0 = 1;
     templ.array_size = 1;
-    templ.usage = PIPE_USAGE_STATIC;
+    templ.usage = PIPE_USAGE_DEFAULT;
     templ.flags = R300_RESOURCE_FORCE_MICROTILING;
 
     tmp = screen->resource_create(screen, &templ);

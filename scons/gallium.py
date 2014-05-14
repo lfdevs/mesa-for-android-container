@@ -36,6 +36,8 @@ import os.path
 import re
 import subprocess
 import platform as _platform
+import sys
+import tempfile
 
 import SCons.Action
 import SCons.Builder
@@ -104,6 +106,28 @@ def num_jobs():
     return 1
 
 
+def check_cc(env, cc, expr, cpp_opt = '-E'):
+    # Invoke C-preprocessor to determine whether the specified expression is
+    # true or not.
+
+    sys.stdout.write('Checking for %s ... ' % cc)
+
+    source = tempfile.NamedTemporaryFile(suffix='.c', delete=False)
+    source.write('#if !(%s)\n#error\n#endif\n' % expr)
+    source.close()
+
+    pipe = SCons.Action._subproc(env, [env['CC'], cpp_opt, source.name],
+                                 stdin = 'devnull',
+                                 stderr = 'devnull',
+                                 stdout = 'devnull')
+    result = pipe.wait() == 0
+
+    os.unlink(source.name)
+
+    sys.stdout.write(' %s\n' % ['no', 'yes'][int(bool(result))])
+    return result
+
+
 def generate(env):
     """Common environment generation code"""
 
@@ -137,10 +161,18 @@ def generate(env):
     if os.environ.has_key('LDFLAGS'):
         env['LINKFLAGS'] += SCons.Util.CLVar(os.environ['LDFLAGS'])
 
-    env['gcc'] = 'gcc' in os.path.basename(env['CC']).split('-')
-    env['msvc'] = env['CC'] == 'cl'
+    # Detect gcc/clang not by executable name, but through pre-defined macros
+    # as autoconf does, to avoid drawing wrong conclusions when using tools
+    # that overrice CC/CXX like scan-build.
+    env['gcc'] = 0
+    env['clang'] = 0
+    env['msvc'] = 0
+    if _platform.system() == 'Windows':
+        env['msvc'] = check_cc(env, 'MSVC', 'defined(_MSC_VER)', '/E')
+    if not env['msvc']:
+        env['gcc'] = check_cc(env, 'GCC', 'defined(__GNUC__) && !defined(__clang__)')
+        env['clang'] = check_cc(env, 'Clang', '__clang__')
     env['suncc'] = env['platform'] == 'sunos' and os.path.basename(env['CC']) == 'cc'
-    env['clang'] = env['CC'] == 'clang'
     env['icc'] = 'icc' == os.path.basename(env['CC'])
 
     if env['msvc'] and env['toolchain'] == 'default' and env['machine'] == 'x86_64':
@@ -269,6 +301,11 @@ def generate(env):
             cppdefines += ['HAVE_ALIAS']
         else:
             cppdefines += ['GLX_ALIAS_UNSUPPORTED']
+    if env['platform'] == 'haiku':
+        cppdefines += [
+            'HAVE_PTHREAD',
+            'HAVE_POSIX_MEMALIGN'
+        ]
     if platform == 'windows':
         cppdefines += [
             'WIN32',
@@ -396,6 +433,12 @@ def generate(env):
         # See also:
         # - http://msdn.microsoft.com/en-us/library/19z1t1wy.aspx
         # - cl /?
+        if 'MSVC_VERSION' not in env or distutils.version.LooseVersion(env['MSVC_VERSION']) < distutils.version.LooseVersion('12.0'):
+            # Use bundled stdbool.h and stdint.h headers for older MSVC
+            # versions.  stdint.h was introduced in MSVC 2010, but stdbool.h
+            # was only introduced in MSVC 2013.
+            top_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            env.Append(CPPPATH = [os.path.join(top_dir, 'include/c99')])
         if env['build'] == 'debug':
             ccflags += [
               '/Od', # disable optimizations
@@ -418,7 +461,9 @@ def generate(env):
             ]
         ccflags += [
             '/W3', # warning level
-            #'/Wp64', # enable 64 bit porting warnings
+            '/wd4244', # conversion from 'type1' to 'type2', possible loss of data
+            '/wd4305', # truncation from 'type1' to 'type2'
+            '/wd4800', # forcing value to bool 'true' or 'false' (performance warning)
             '/wd4996', # disable deprecated POSIX name warnings
         ]
         if env['machine'] == 'x86':
@@ -447,6 +492,18 @@ def generate(env):
             env.Append(CCFLAGS = ['/MT'])
             env.Append(SHCCFLAGS = ['/LD'])
     
+    # Static code analysis
+    if env['analyze']:
+        if env['msvc']:
+            # http://msdn.microsoft.com/en-us/library/ms173498.aspx
+            env.Append(CCFLAGS = [
+                '/analyze',
+                #'/analyze:log', '${TARGET.base}.xml',
+            ])
+        if env['clang']:
+            # scan-build will produce more comprehensive output
+            env.Append(CCFLAGS = ['--analyze'])
+
     # Assembler options
     if gcc_compat:
         if env['machine'] == 'x86':
@@ -533,11 +590,9 @@ def generate(env):
     env.PkgCheckModules('X11', ['x11', 'xext', 'xdamage', 'xfixes'])
     env.PkgCheckModules('XCB', ['x11-xcb', 'xcb-glx >= 1.8.1'])
     env.PkgCheckModules('XF86VIDMODE', ['xxf86vm'])
-    env.PkgCheckModules('DRM', ['libdrm >= 2.4.24'])
-    env.PkgCheckModules('DRM_INTEL', ['libdrm_intel >= 2.4.30'])
-    env.PkgCheckModules('XORG', ['xorg-server >= 1.6.0'])
-    env.PkgCheckModules('KMS', ['libkms >= 2.4.24'])
-    env.PkgCheckModules('UDEV', ['libudev > 150'])
+    env.PkgCheckModules('DRM', ['libdrm >= 2.4.38'])
+    env.PkgCheckModules('DRM_INTEL', ['libdrm_intel >= 2.4.52'])
+    env.PkgCheckModules('UDEV', ['libudev >= 151'])
 
     env['dri'] = env['x11'] and env['drm']
 

@@ -56,6 +56,11 @@ To add a new GL extension to Mesa you have to do at least the following.
    If the new extension adds new GL state, the functions in get.c, enable.c
    and attrib.c will most likely require new code.
 </li>
+<li>
+   The dispatch tests check_table.cpp and dispatch_sanity.cpp
+   should be updated with details about the new extensions functions. These
+   tests are run using 'make check'
+</li>
 </ul>
 
 
@@ -210,6 +215,11 @@ should be nominated for the stable branch after it has already been committed,
 you can send a note directly to the mesa-stable@lists.freedesktop.org where
 the Mesa stable-branch maintainers will receive it. Be sure to mention the
 commit ID of the commit of interest (as it appears in the mesa master branch).
+
+The latest set of patches that have been nominated, accepted, or rejected for
+the upcoming stable release can always be seen on the
+<a href=http://cworth.org/~cworth/mesa-stable-queue/">Mesa Stable Queue</a>
+page.
 
 <h2>Cherry-picking candidates for a stable branch</h2>
 

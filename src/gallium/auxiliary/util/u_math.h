@@ -112,10 +112,13 @@ static INLINE float logf( float f )
 #define logf(x) ((float)log((double)(x)))
 #endif /* logf */
 
+#if _MSC_VER < 1800
 #define isfinite(x) _finite((double)(x))
 #define isnan(x) _isnan((double)(x))
+#endif /* _MSC_VER < 1800 */
 #endif /* _MSC_VER < 1400 && !defined(__cplusplus) */
 
+#if _MSC_VER < 1800
 static INLINE double log2( double x )
 {
    const double invln2 = 1.442695041;
@@ -133,9 +136,15 @@ roundf(float x)
 {
    return x >= 0.0f ? floorf(x + 0.5f) : ceilf(x - 0.5f);
 }
+#endif
 
+#ifndef INFINITY
 #define INFINITY (DBL_MAX + DBL_MAX)
+#endif
+
+#ifndef NAN
 #define NAN (INFINITY - INFINITY)
+#endif
 
 #endif /* _MSC_VER */
 
@@ -563,6 +572,22 @@ static INLINE unsigned util_last_bit(unsigned u)
 #endif
 }
 
+/**
+ * Find last bit in a word that does not match the sign bit. The least
+ * significant bit is 1.
+ * Return 0 if no bits are set.
+ */
+static INLINE unsigned util_last_bit_signed(int i)
+{
+#if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 407)
+   return 31 - __builtin_clrsb(i);
+#else
+   if (i >= 0)
+      return util_last_bit(i);
+   else
+      return util_last_bit(~(unsigned)i);
+#endif
+}
 
 /* Destructively loop over all of the bits in a mask as in:
  *
@@ -711,19 +736,39 @@ util_bitcount(unsigned n)
 #endif
 }
 
+/**
+ * Reverse bits in n
+ * Algorithm taken from:
+ * http://stackoverflow.com/questions/9144800/c-reverse-bits-in-unsigned-integer
+ */
+static INLINE unsigned
+util_bitreverse(unsigned n)
+{
+    n = ((n >> 1) & 0x55555555u) | ((n & 0x55555555u) << 1);
+    n = ((n >> 2) & 0x33333333u) | ((n & 0x33333333u) << 2);
+    n = ((n >> 4) & 0x0f0f0f0fu) | ((n & 0x0f0f0f0fu) << 4);
+    n = ((n >> 8) & 0x00ff00ffu) | ((n & 0x00ff00ffu) << 8);
+    n = ((n >> 16) & 0xffffu) | ((n & 0xffffu) << 16);
+    return n;
+}
 
 /**
  * Convert from little endian to CPU byte order.
  */
 
 #ifdef PIPE_ARCH_BIG_ENDIAN
+#define util_le64_to_cpu(x) util_bswap64(x)
 #define util_le32_to_cpu(x) util_bswap32(x)
 #define util_le16_to_cpu(x) util_bswap16(x)
 #else
+#define util_le64_to_cpu(x) (x)
 #define util_le32_to_cpu(x) (x)
 #define util_le16_to_cpu(x) (x)
 #endif
 
+#define util_cpu_to_le64(x) util_le64_to_cpu(x)
+#define util_cpu_to_le32(x) util_le32_to_cpu(x)
+#define util_cpu_to_le16(x) util_le16_to_cpu(x)
 
 /**
  * Reverse byte order of a 32 bit word.
@@ -731,13 +776,28 @@ util_bitcount(unsigned n)
 static INLINE uint32_t
 util_bswap32(uint32_t n)
 {
-#if defined(PIPE_CC_GCC) && (PIPE_CC_GCC_VERSION >= 403)
+/* We need the gcc version checks for non-autoconf build system */
+#if defined(HAVE___BUILTIN_BSWAP32) || (defined(PIPE_CC_GCC) && (PIPE_CC_GCC_VERSION >= 403))
    return __builtin_bswap32(n);
 #else
    return (n >> 24) |
           ((n >> 8) & 0x0000ff00) |
           ((n << 8) & 0x00ff0000) |
           (n << 24);
+#endif
+}
+
+/**
+ * Reverse byte order of a 64bit word.
+ */
+static INLINE uint64_t
+util_bswap64(uint64_t n)
+{
+#if defined(HAVE___BUILTIN_BSWAP64)
+   return __builtin_bswap64(n);
+#else
+   return ((uint64_t)util_bswap32(n) << 32) |
+          util_bswap32((n >> 32));
 #endif
 }
 

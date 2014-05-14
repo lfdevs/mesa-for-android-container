@@ -78,6 +78,8 @@ xa_context_destroy(struct xa_context *r)
     }
 
     xa_ctx_sampler_views_destroy(r);
+    if (r->srf)
+        pipe_surface_reference(&r->srf, NULL);
 
     if (r->cso) {
 	cso_release_all(r->cso);
@@ -185,8 +187,15 @@ xa_ctx_srf_create(struct xa_context *ctx, struct xa_surface *dst)
     struct pipe_screen *screen = ctx->pipe->screen;
     struct pipe_surface srf_templ;
 
-    if (ctx->srf)
-	return -XA_ERR_INVAL;
+    /*
+     * Cache surfaces unless we change render target
+     */
+    if (ctx->srf) {
+        if (ctx->srf->texture == dst->tex)
+            return XA_ERR_NONE;
+
+        pipe_surface_reference(&ctx->srf, NULL);
+    }
 
     if (!screen->is_format_supported(screen,  dst->tex->format,
 				     PIPE_TEXTURE_2D, 0,
@@ -204,7 +213,10 @@ xa_ctx_srf_create(struct xa_context *ctx, struct xa_surface *dst)
 void
 xa_ctx_srf_destroy(struct xa_context *ctx)
 {
-    pipe_surface_reference(&ctx->srf, NULL);
+    /*
+     * Cache surfaces unless we change render target.
+     * Final destruction on context destroy.
+     */
 }
 
 XA_EXPORT int
@@ -237,6 +249,8 @@ xa_copy(struct xa_context *ctx,
 	int dx, int dy, int sx, int sy, int width, int height)
 {
     struct pipe_box src_box;
+
+    xa_scissor_update(ctx, dx, dy, dx + width, dy + height);
 
     if (ctx->simple_copy) {
 	u_box_2d(sx, sy, width, height, &src_box);
@@ -281,7 +295,6 @@ xa_solid_prepare(struct xa_context *ctx, struct xa_surface *dst,
 {
     unsigned vs_traits, fs_traits;
     struct xa_shader shader;
-    int width, height;
     int ret;
 
     ret = xa_ctx_srf_create(ctx, dst);
@@ -295,8 +308,6 @@ xa_solid_prepare(struct xa_context *ctx, struct xa_surface *dst,
     ctx->has_solid_color = 1;
 
     ctx->dst = dst;
-    width = ctx->srf->width;
-    height = ctx->srf->height;
 
 #if 0
     debug_printf("Color Pixel=(%d, %d, %d, %d), RGBA=(%f, %f, %f, %f)\n",
@@ -309,7 +320,7 @@ xa_solid_prepare(struct xa_context *ctx, struct xa_surface *dst,
     vs_traits = VS_SOLID_FILL;
     fs_traits = FS_SOLID_FILL;
 
-    renderer_bind_destination(ctx, ctx->srf, width, height);
+    renderer_bind_destination(ctx, ctx->srf);
     bind_solid_blend_state(ctx);
     cso_set_samplers(ctx->cso, PIPE_SHADER_FRAGMENT, 0, NULL);
     cso_set_sampler_views(ctx->cso, PIPE_SHADER_FRAGMENT, 0, NULL);
@@ -327,6 +338,7 @@ xa_solid_prepare(struct xa_context *ctx, struct xa_surface *dst,
 XA_EXPORT void
 xa_solid(struct xa_context *ctx, int x, int y, int width, int height)
 {
+    xa_scissor_update(ctx, x, y, x + width, y + height);
     renderer_solid(ctx, x, y, x + width, y + height, ctx->solid_color);
 }
 

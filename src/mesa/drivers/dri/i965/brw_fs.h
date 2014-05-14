@@ -82,15 +82,22 @@ public:
    bool is_one() const;
    bool is_null() const;
    bool is_valid_3src() const;
-   fs_reg retype(uint32_t type);
+   bool is_contiguous() const;
+   bool is_accumulator() const;
+
+   fs_reg &apply_stride(unsigned stride);
+   /** Smear a channel of the reg to all channels. */
+   fs_reg &set_smear(unsigned subreg);
 
    /** Register file: GRF, MRF, IMM. */
    enum register_file file;
+   /** Register type.  BRW_REGISTER_TYPE_* */
+   uint8_t type;
    /**
     * Register number.  For MRF, it's the hardware register.  For
     * GRF, it's a virtual register number until register allocation
     */
-   int reg;
+   uint16_t reg;
    /**
     * Offset from the start of the contiguous register block.
     *
@@ -99,13 +106,11 @@ public:
     * For uniforms, this is in units of 1 float.
     */
    int reg_offset;
-   /** Register type.  BRW_REGISTER_TYPE_* */
-   int type;
-   bool negate;
-   bool abs;
-   bool sechalf;
-   struct brw_reg fixed_hw_reg;
-   int smear; /* -1, or a channel of the reg to smear to all channels. */
+   /**
+    * Offset in bytes from the start of the register.  Values up to a
+    * backend_reg::reg_offset unit are valid.
+    */
+   int subreg_offset;
 
    /** Value for file == IMM */
    union {
@@ -114,8 +119,52 @@ public:
       float f;
    } imm;
 
+   struct brw_reg fixed_hw_reg;
+
    fs_reg *reladdr;
+
+   bool negate;
+   bool abs;
+
+   /** Register region horizontal stride */
+   uint8_t stride;
 };
+
+static inline fs_reg
+retype(fs_reg reg, unsigned type)
+{
+   reg.fixed_hw_reg.type = reg.type = type;
+   return reg;
+}
+
+static inline fs_reg
+offset(fs_reg reg, unsigned delta)
+{
+   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
+   reg.reg_offset += delta;
+   return reg;
+}
+
+static inline fs_reg
+byte_offset(fs_reg reg, unsigned delta)
+{
+   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
+   reg.subreg_offset += delta;
+   return reg;
+}
+
+/**
+ * Get either of the 8-component halves of a 16-component register.
+ *
+ * Note: this also works if \c reg represents a SIMD16 pair of registers.
+ */
+static inline fs_reg
+half(const fs_reg &reg, unsigned idx)
+{
+   assert(idx < 2);
+   assert(idx == 0 || (reg.file != HW_REG && reg.file != IMM));
+   return byte_offset(reg, 8 * idx * reg.stride * type_sz(reg.type));
+}
 
 static const fs_reg reg_undef;
 static const fs_reg reg_null_f(retype(brw_null_reg(), BRW_REGISTER_TYPE_F));
@@ -148,38 +197,17 @@ public:
    fs_inst(enum opcode opcode, fs_reg dst,
            fs_reg src0, fs_reg src1,fs_reg src2);
 
-   bool equals(fs_inst *inst);
-   bool overwrites_reg(const fs_reg &reg);
-   bool is_send_from_grf();
-   bool is_partial_write();
-   int regs_read(fs_visitor *v, int arg);
+   bool equals(fs_inst *inst) const;
+   bool overwrites_reg(const fs_reg &reg) const;
+   bool is_send_from_grf() const;
+   bool is_partial_write() const;
+   int regs_read(fs_visitor *v, int arg) const;
 
-   bool reads_flag();
-   bool writes_flag();
+   bool reads_flag() const;
+   bool writes_flag() const;
 
    fs_reg dst;
    fs_reg src[3];
-   bool saturate;
-   int conditional_mod; /**< BRW_CONDITIONAL_* */
-
-   /* Chooses which flag subregister (f0.0 or f0.1) is used for conditional
-    * mod and predication.
-    */
-   uint8_t flag_subreg;
-
-   int mlen; /**< SEND message length */
-   int regs_written; /**< Number of vgrfs written by a SEND message, or 1 */
-   int base_mrf; /**< First MRF in the SEND message, if mlen is nonzero. */
-   uint32_t texture_offset; /**< Texture offset bitfield */
-   int sampler;
-   int target; /**< MRT target. */
-   bool eot;
-   bool header_present;
-   bool shadow_compare;
-   bool force_uncompressed;
-   bool force_sechalf;
-   bool force_writemask_all;
-   uint32_t offset; /* spill/unspill offset */
 
    /** @{
     * Annotation for the generated IR.  One of the two can be set.
@@ -187,6 +215,29 @@ public:
    const void *ir;
    const char *annotation;
    /** @} */
+
+   uint32_t texture_offset; /**< Texture offset bitfield */
+   uint32_t offset; /* spill/unspill offset */
+
+   uint8_t conditional_mod; /**< BRW_CONDITIONAL_* */
+
+   /* Chooses which flag subregister (f0.0 or f0.1) is used for conditional
+    * mod and predication.
+    */
+   uint8_t flag_subreg;
+
+   uint8_t mlen; /**< SEND message length */
+   uint8_t regs_written; /**< Number of vgrfs written by a SEND message, or 1 */
+   int8_t base_mrf; /**< First MRF in the SEND message, if mlen is nonzero. */
+   uint8_t sampler;
+   uint8_t target; /**< MRT target. */
+   bool saturate:1;
+   bool eot:1;
+   bool header_present:1;
+   bool shadow_compare:1;
+   bool force_uncompressed:1;
+   bool force_sechalf:1;
+   bool force_writemask_all:1;
 };
 
 /**
@@ -234,7 +285,6 @@ public:
 
    bool can_do_source_mods(fs_inst *inst);
 
-   fs_inst *emit(fs_inst inst);
    fs_inst *emit(fs_inst *inst);
    void emit(exec_list list);
 
@@ -282,10 +332,11 @@ public:
    int type_size(const struct glsl_type *type);
    fs_inst *get_instruction_generating_reg(fs_inst *start,
 					   fs_inst *end,
-					   fs_reg reg);
+					   const fs_reg &reg);
 
-   exec_list VARYING_PULL_CONSTANT_LOAD(fs_reg dst, fs_reg surf_index,
-                                        fs_reg varying_offset,
+   exec_list VARYING_PULL_CONSTANT_LOAD(const fs_reg &dst,
+                                        const fs_reg &surf_index,
+                                        const fs_reg &varying_offset,
                                         uint32_t const_offset);
 
    bool run();
@@ -307,7 +358,8 @@ public:
    void split_virtual_grfs();
    void compact_virtual_grfs();
    void move_uniform_array_access_to_pull_constants();
-   void setup_pull_constants();
+   void assign_constant_locations();
+   void demote_pull_constants();
    void invalidate_live_intervals();
    void calculate_live_intervals();
    void calculate_register_pressure();
@@ -319,18 +371,19 @@ public:
    bool try_constant_propagate(fs_inst *inst, acp_entry *entry);
    bool opt_copy_propagate_local(void *mem_ctx, bblock_t *block,
                                  exec_list *acp);
+   void opt_drop_redundant_mov_to_flags();
    bool register_coalesce();
    bool compute_to_mrf();
    bool dead_code_eliminate();
-   bool dead_code_eliminate_local();
-   bool remove_dead_constants();
    bool remove_duplicate_mrf_writes();
    bool virtual_grf_interferes(int a, int b);
    void schedule_instructions(instruction_scheduler_mode mode);
    void insert_gen4_send_dependency_workarounds();
    void insert_gen4_pre_send_dependency_workarounds(fs_inst *inst);
    void insert_gen4_post_send_dependency_workarounds(fs_inst *inst);
+   void vfail(const char *msg, va_list args);
    void fail(const char *msg, ...);
+   void no16(const char *msg, ...);
    void lower_uniform_pull_constant_loads();
 
    void push_force_uncompressed();
@@ -360,14 +413,16 @@ public:
                               fs_reg shadow_comp, fs_reg lod, fs_reg lod2,
                               fs_reg sample_index, fs_reg mcs, int sampler);
    fs_reg emit_mcs_fetch(ir_texture *ir, fs_reg coordinate, int sampler);
+   void emit_gen6_gather_wa(uint8_t wa, fs_reg dst);
    fs_reg fix_math_operand(fs_reg src);
    fs_inst *emit_math(enum opcode op, fs_reg dst, fs_reg src0);
    fs_inst *emit_math(enum opcode op, fs_reg dst, fs_reg src0, fs_reg src1);
-   void emit_lrp(fs_reg dst, fs_reg x, fs_reg y, fs_reg a);
-   void emit_minmax(uint32_t conditionalmod, fs_reg dst,
-                    fs_reg src0, fs_reg src1);
+   void emit_lrp(const fs_reg &dst, const fs_reg &x, const fs_reg &y,
+                 const fs_reg &a);
+   void emit_minmax(uint32_t conditionalmod, const fs_reg &dst,
+                    const fs_reg &src0, const fs_reg &src1);
    bool try_emit_saturate(ir_expression *ir);
-   bool try_emit_mad(ir_expression *ir, int mul_arg);
+   bool try_emit_mad(ir_expression *ir);
    void try_replace_with_sel();
    bool opt_peephole_sel();
    bool opt_peephole_predicated_break();
@@ -442,7 +497,7 @@ public:
    struct brw_wm_compile *c;
    unsigned int sanity_param_count;
 
-   int param_size[MAX_UNIFORMS * 4];
+   int *param_size;
 
    int *virtual_grf_sizes;
    int virtual_grf_count;
@@ -453,13 +508,20 @@ public:
 
    int *regs_live_at_ip;
 
-   /* This is the map from UNIFORM hw_reg + reg_offset as generated by
-    * the visitor to the packed uniform number after
-    * remove_dead_constants() that represents the actual uploaded
-    * uniform index.
+   /** Number of uniform variable components visited. */
+   unsigned uniforms;
+
+   /**
+    * Array mapping UNIFORM register numbers to the pull parameter index,
+    * or -1 if this uniform register isn't being uploaded as a pull constant.
     */
-   int *params_remap;
-   int nr_params_remap;
+   int *pull_constant_loc;
+
+   /**
+    * Array mapping UNIFORM register numbers to the push parameter index,
+    * or -1 if this uniform register isn't being uploaded as a push constant.
+    */
+   int *push_constant_loc;
 
    struct hash_table *variable_ht;
    fs_reg frag_depth;
@@ -467,6 +529,7 @@ public:
    fs_reg outputs[BRW_MAX_DRAW_BUFFERS];
    unsigned output_components[BRW_MAX_DRAW_BUFFERS];
    fs_reg dual_src_output;
+   bool do_dual_src;
    int first_non_payload_grf;
    /** Either BRW_MAX_GRF or GEN7_MRF_HACK_START */
    int max_grf;
@@ -481,6 +544,8 @@ public:
 
    bool failed;
    char *fail_msg;
+   bool simd16_unsupported;
+   char *no16_msg;
 
    /* Result of last visit() method. */
    fs_reg result;
@@ -607,8 +672,6 @@ private:
                                       struct brw_reg dst,
                                       struct brw_reg surf_index);
 
-   void mark_surface_used(unsigned surf_index);
-
    void patch_discard_jumps_to_fb_writes();
 
    struct brw_context *brw;
@@ -670,14 +733,34 @@ private:
                                             struct brw_reg index,
                                             struct brw_reg offset);
    void generate_mov_dispatch_to_flags(fs_inst *ir);
+   void generate_set_omask(fs_inst *ir,
+                           struct brw_reg dst,
+                           struct brw_reg sample_mask);
+   void generate_set_sample_id(fs_inst *ir,
+                               struct brw_reg dst,
+                               struct brw_reg src0,
+                               struct brw_reg src1);
    void generate_set_simd4x2_offset(fs_inst *ir,
                                     struct brw_reg dst,
                                     struct brw_reg offset);
+   void generate_pack_half_2x16_split(fs_inst *inst,
+                                      struct brw_reg dst,
+                                      struct brw_reg x,
+                                      struct brw_reg y);
+   void generate_unpack_half_2x16_split(fs_inst *inst,
+                                        struct brw_reg dst,
+                                        struct brw_reg src);
+   void generate_untyped_atomic(fs_inst *inst,
+                                struct brw_reg dst,
+                                struct brw_reg atomic_op,
+                                struct brw_reg surf_index);
+
+   void generate_untyped_surface_read(fs_inst *inst,
+                                      struct brw_reg dst,
+                                      struct brw_reg surf_index);
    void generate_discard_jump(fs_inst *ir);
 
    void patch_discard_jumps_to_fb_writes();
-
-   void mark_surface_used(unsigned surf_index);
 
    struct brw_wm_compile *c;
    const struct gl_fragment_program *fp;

@@ -48,7 +48,7 @@ gen6_upload_vec4_push_constants(struct brw_context *brw,
    /* XXX: Should this happen somewhere before to get our state flag set? */
    _mesa_load_state_parameters(ctx, prog->Parameters);
 
-   if (prog_data->nr_params == 0) {
+   if (prog_data->base.nr_params == 0) {
       stage_state->push_const_size = 0;
    } else {
       int params_uploaded;
@@ -56,7 +56,7 @@ gen6_upload_vec4_push_constants(struct brw_context *brw,
       int i;
 
       param = brw_state_batch(brw, type,
-			      prog_data->nr_params * sizeof(float),
+			      prog_data->base.nr_params * sizeof(float),
 			      32, &stage_state->push_const_offset);
 
       /* _NEW_PROGRAM_CONSTANTS
@@ -65,17 +65,17 @@ gen6_upload_vec4_push_constants(struct brw_context *brw,
        * side effect of dereferencing uniforms, so _NEW_PROGRAM_CONSTANTS
        * wouldn't be set for them.
       */
-      for (i = 0; i < prog_data->nr_params; i++) {
-         param[i] = *prog_data->param[i];
+      for (i = 0; i < prog_data->base.nr_params; i++) {
+         param[i] = *prog_data->base.param[i];
       }
-      params_uploaded = prog_data->nr_params / 4;
+      params_uploaded = prog_data->base.nr_params / 4;
 
       if (0) {
-	 printf("Constant buffer:\n");
+	 fprintf(stderr, "Constant buffer:\n");
 	 for (i = 0; i < params_uploaded; i++) {
 	    float *buf = param + i * 4;
-	    printf("%d: %f %f %f %f\n",
-		   i, buf[0], buf[1], buf[2], buf[3]);
+	    fprintf(stderr, "%d: %f %f %f %f\n",
+                    i, buf[0], buf[1], buf[2], buf[3]);
 	 }
       }
 
@@ -98,13 +98,22 @@ gen6_upload_vs_push_constants(struct brw_context *brw)
 
    gen6_upload_vec4_push_constants(brw, &vp->program.Base, prog_data,
                                    stage_state, AUB_TRACE_VS_CONSTANTS);
+
+   if (brw->gen >= 7) {
+      if (brw->gen == 7 && !brw->is_haswell)
+         gen7_emit_vs_workaround_flush(brw);
+
+      gen7_upload_constant_state(brw, stage_state, true /* active */,
+                                 _3DSTATE_CONSTANT_VS);
+   }
 }
 
 const struct brw_tracked_state gen6_vs_push_constants = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
       .brw   = (BRW_NEW_BATCH |
-		BRW_NEW_VERTEX_PROGRAM),
+                BRW_NEW_VERTEX_PROGRAM |
+                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
       .cache = CACHE_NEW_VS_PROG,
    },
    .emit = gen6_upload_vs_push_constants,
@@ -158,7 +167,7 @@ upload_vs_state(struct brw_context *brw)
    /* Use ALT floating point mode for ARB vertex programs, because they
     * require 0^0 == 1.
     */
-   if (ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX] == NULL)
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX] == NULL)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
    BEGIN_BATCH(6);
@@ -218,7 +227,7 @@ const struct brw_tracked_state gen6_vs_state = {
 		BRW_NEW_VERTEX_PROGRAM |
 		BRW_NEW_BATCH |
                 BRW_NEW_PUSH_CONSTANT_ALLOCATION),
-      .cache = CACHE_NEW_VS_PROG | CACHE_NEW_SAMPLER
+      .cache = CACHE_NEW_VS_PROG
    },
    .emit = upload_vs_state,
 };

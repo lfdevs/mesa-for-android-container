@@ -100,14 +100,13 @@ DIST_COMMON = $(gl_HEADERS) $(srcdir)/Makefile.am \
 subdir = src/mesa
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
-	$(top_srcdir)/m4/ax_pthread.m4 \
-	$(top_srcdir)/m4/ax_python_module.m4 \
-	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
-	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/VERSION \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -124,15 +123,16 @@ am__libmesa_la_SOURCES_DIST = $(SRCDIR)main/api_arrayelt.c \
 	$(SRCDIR)main/blend.c $(SRCDIR)main/blit.c \
 	$(SRCDIR)main/bufferobj.c $(SRCDIR)main/buffers.c \
 	$(SRCDIR)main/clear.c $(SRCDIR)main/clip.c \
-	$(SRCDIR)main/colortab.c $(SRCDIR)main/condrender.c \
-	$(SRCDIR)main/context.c $(SRCDIR)main/convolve.c \
-	$(SRCDIR)main/cpuinfo.c $(SRCDIR)main/debug.c \
-	$(SRCDIR)main/depth.c $(SRCDIR)main/dlist.c \
-	$(SRCDIR)main/drawpix.c $(SRCDIR)main/drawtex.c \
-	$(SRCDIR)main/enable.c $(SRCDIR)main/errors.c \
-	$(SRCDIR)main/eval.c $(SRCDIR)main/execmem.c \
-	$(SRCDIR)main/extensions.c $(SRCDIR)main/fbobject.c \
-	$(SRCDIR)main/feedback.c $(SRCDIR)main/ffvertex_prog.c \
+	$(SRCDIR)main/colortab.c $(SRCDIR)main/compute.c \
+	$(SRCDIR)main/condrender.c $(SRCDIR)main/context.c \
+	$(SRCDIR)main/convolve.c $(SRCDIR)main/cpuinfo.c \
+	$(SRCDIR)main/debug.c $(SRCDIR)main/depth.c \
+	$(SRCDIR)main/dlist.c $(SRCDIR)main/drawpix.c \
+	$(SRCDIR)main/drawtex.c $(SRCDIR)main/enable.c \
+	$(SRCDIR)main/errors.c $(SRCDIR)main/eval.c \
+	$(SRCDIR)main/execmem.c $(SRCDIR)main/extensions.c \
+	$(SRCDIR)main/fbobject.c $(SRCDIR)main/feedback.c \
+	$(SRCDIR)main/ffvertex_prog.c \
 	$(SRCDIR)main/ff_fragment_shader.cpp $(SRCDIR)main/fog.c \
 	$(SRCDIR)main/formatquery.c $(SRCDIR)main/formats.c \
 	$(SRCDIR)main/format_pack.c $(SRCDIR)main/format_unpack.c \
@@ -146,7 +146,8 @@ am__libmesa_la_SOURCES_DIST = $(SRCDIR)main/api_arrayelt.c \
 	$(SRCDIR)main/mipmap.c $(SRCDIR)main/mm.c \
 	$(SRCDIR)main/multisample.c $(SRCDIR)main/objectlabel.c \
 	$(SRCDIR)main/pack.c $(SRCDIR)main/pbo.c \
-	$(SRCDIR)main/performance_monitor.c $(SRCDIR)main/pixel.c \
+	$(SRCDIR)main/performance_monitor.c \
+	$(SRCDIR)main/pipelineobj.c $(SRCDIR)main/pixel.c \
 	$(SRCDIR)main/pixelstore.c $(SRCDIR)main/pixeltransfer.c \
 	$(SRCDIR)main/points.c $(SRCDIR)main/polygon.c \
 	$(SRCDIR)main/queryobj.c $(SRCDIR)main/querymatrix.c \
@@ -212,6 +213,8 @@ am__libmesa_la_SOURCES_DIST = $(SRCDIR)main/api_arrayelt.c \
 	$(SRCDIR)swrast_setup/ss_context.c \
 	$(SRCDIR)swrast_setup/ss_triangle.c \
 	$(SRCDIR)drivers/common/driverfuncs.c \
+	$(SRCDIR)drivers/common/meta_blit.c \
+	$(SRCDIR)drivers/common/meta_generate_mipmap.c \
 	$(SRCDIR)drivers/common/meta.c $(SRCDIR)x86/common_x86.c \
 	$(SRCDIR)x86/x86_xform.c $(SRCDIR)x86/3dnow.c \
 	$(SRCDIR)x86/sse.c $(SRCDIR)x86/rtasm/x86sse.c \
@@ -249,21 +252,21 @@ am__objects_1 = es1_conversion.lo
 am__objects_2 = api_arrayelt.lo api_exec.lo api_loopback.lo \
 	api_validate.lo accum.lo arbprogram.lo atifragshader.lo \
 	attrib.lo arrayobj.lo blend.lo blit.lo bufferobj.lo buffers.lo \
-	clear.lo clip.lo colortab.lo condrender.lo context.lo \
-	convolve.lo cpuinfo.lo debug.lo depth.lo dlist.lo drawpix.lo \
-	drawtex.lo enable.lo errors.lo eval.lo execmem.lo \
+	clear.lo clip.lo colortab.lo compute.lo condrender.lo \
+	context.lo convolve.lo cpuinfo.lo debug.lo depth.lo dlist.lo \
+	drawpix.lo drawtex.lo enable.lo errors.lo eval.lo execmem.lo \
 	extensions.lo fbobject.lo feedback.lo ffvertex_prog.lo \
 	ff_fragment_shader.lo fog.lo formatquery.lo formats.lo \
 	format_pack.lo format_unpack.lo framebuffer.lo get.lo \
 	genmipmap.lo getstring.lo glformats.lo hash.lo hash_table.lo \
 	hint.lo histogram.lo image.lo imports.lo light.lo lines.lo \
 	matrix.lo mipmap.lo mm.lo multisample.lo objectlabel.lo \
-	pack.lo pbo.lo performance_monitor.lo pixel.lo pixelstore.lo \
-	pixeltransfer.lo points.lo polygon.lo queryobj.lo \
-	querymatrix.lo rastpos.lo readpix.lo remap.lo renderbuffer.lo \
-	samplerobj.lo scissor.lo set.lo shaderapi.lo shaderimage.lo \
-	shaderobj.lo shader_query.lo shared.lo state.lo stencil.lo \
-	syncobj.lo texcompress.lo texcompress_cpal.lo \
+	pack.lo pbo.lo performance_monitor.lo pipelineobj.lo pixel.lo \
+	pixelstore.lo pixeltransfer.lo points.lo polygon.lo \
+	queryobj.lo querymatrix.lo rastpos.lo readpix.lo remap.lo \
+	renderbuffer.lo samplerobj.lo scissor.lo set.lo shaderapi.lo \
+	shaderimage.lo shaderobj.lo shader_query.lo shared.lo state.lo \
+	stencil.lo syncobj.lo texcompress.lo texcompress_cpal.lo \
 	texcompress_rgtc.lo texcompress_s3tc.lo texcompress_fxt1.lo \
 	texcompress_etc.lo texenv.lo texformat.lo texgen.lo \
 	texgetimage.lo teximage.lo texobj.lo texparam.lo texstate.lo \
@@ -293,7 +296,8 @@ am__objects_7 = s_aaline.lo s_aatriangle.lo s_alpha.lo \
 	s_stencil.lo s_texcombine.lo s_texfetch.lo s_texfilter.lo \
 	s_texrender.lo s_texture.lo s_triangle.lo s_zoom.lo
 am__objects_8 = ss_context.lo ss_triangle.lo
-am__objects_9 = driverfuncs.lo meta.lo
+am__objects_9 = driverfuncs.lo meta_blit.lo meta_generate_mipmap.lo \
+	meta.lo
 am__objects_10 = common_x86.lo x86_xform.lo 3dnow.lo sse.lo x86sse.lo \
 	sparc.lo x86-64.lo
 am__objects_11 = $(am__objects_2) $(am__objects_3) $(am__objects_4) \
@@ -348,15 +352,16 @@ am__libmesagallium_la_SOURCES_DIST = $(SRCDIR)main/api_arrayelt.c \
 	$(SRCDIR)main/blend.c $(SRCDIR)main/blit.c \
 	$(SRCDIR)main/bufferobj.c $(SRCDIR)main/buffers.c \
 	$(SRCDIR)main/clear.c $(SRCDIR)main/clip.c \
-	$(SRCDIR)main/colortab.c $(SRCDIR)main/condrender.c \
-	$(SRCDIR)main/context.c $(SRCDIR)main/convolve.c \
-	$(SRCDIR)main/cpuinfo.c $(SRCDIR)main/debug.c \
-	$(SRCDIR)main/depth.c $(SRCDIR)main/dlist.c \
-	$(SRCDIR)main/drawpix.c $(SRCDIR)main/drawtex.c \
-	$(SRCDIR)main/enable.c $(SRCDIR)main/errors.c \
-	$(SRCDIR)main/eval.c $(SRCDIR)main/execmem.c \
-	$(SRCDIR)main/extensions.c $(SRCDIR)main/fbobject.c \
-	$(SRCDIR)main/feedback.c $(SRCDIR)main/ffvertex_prog.c \
+	$(SRCDIR)main/colortab.c $(SRCDIR)main/compute.c \
+	$(SRCDIR)main/condrender.c $(SRCDIR)main/context.c \
+	$(SRCDIR)main/convolve.c $(SRCDIR)main/cpuinfo.c \
+	$(SRCDIR)main/debug.c $(SRCDIR)main/depth.c \
+	$(SRCDIR)main/dlist.c $(SRCDIR)main/drawpix.c \
+	$(SRCDIR)main/drawtex.c $(SRCDIR)main/enable.c \
+	$(SRCDIR)main/errors.c $(SRCDIR)main/eval.c \
+	$(SRCDIR)main/execmem.c $(SRCDIR)main/extensions.c \
+	$(SRCDIR)main/fbobject.c $(SRCDIR)main/feedback.c \
+	$(SRCDIR)main/ffvertex_prog.c \
 	$(SRCDIR)main/ff_fragment_shader.cpp $(SRCDIR)main/fog.c \
 	$(SRCDIR)main/formatquery.c $(SRCDIR)main/formats.c \
 	$(SRCDIR)main/format_pack.c $(SRCDIR)main/format_unpack.c \
@@ -370,7 +375,8 @@ am__libmesagallium_la_SOURCES_DIST = $(SRCDIR)main/api_arrayelt.c \
 	$(SRCDIR)main/mipmap.c $(SRCDIR)main/mm.c \
 	$(SRCDIR)main/multisample.c $(SRCDIR)main/objectlabel.c \
 	$(SRCDIR)main/pack.c $(SRCDIR)main/pbo.c \
-	$(SRCDIR)main/performance_monitor.c $(SRCDIR)main/pixel.c \
+	$(SRCDIR)main/performance_monitor.c \
+	$(SRCDIR)main/pipelineobj.c $(SRCDIR)main/pixel.c \
 	$(SRCDIR)main/pixelstore.c $(SRCDIR)main/pixeltransfer.c \
 	$(SRCDIR)main/points.c $(SRCDIR)main/polygon.c \
 	$(SRCDIR)main/queryobj.c $(SRCDIR)main/querymatrix.c \
@@ -709,8 +715,6 @@ EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
-EGL_LIB_GLOB = @EGL_LIB_GLOB@
-EGL_LIB_NAME = @EGL_LIB_NAME@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
 ELF_LIB = @ELF_LIB@
@@ -720,30 +724,24 @@ EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
 FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
 FREEDRENO_LIBS = @FREEDRENO_LIBS@
-GALLIUM_DRI_LIB_DEPS = @GALLIUM_DRI_LIB_DEPS@
+GALLIUM_PIPE_LOADER_CLIENT_DEFINES = @GALLIUM_PIPE_LOADER_CLIENT_DEFINES@
+GALLIUM_PIPE_LOADER_CLIENT_LIBS = @GALLIUM_PIPE_LOADER_CLIENT_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GALLIUM_PIPE_LOADER_LIBS = @GALLIUM_PIPE_LOADER_LIBS@
 GALLIUM_PIPE_LOADER_XCB_CFLAGS = @GALLIUM_PIPE_LOADER_XCB_CFLAGS@
 GALLIUM_PIPE_LOADER_XCB_LIBS = @GALLIUM_PIPE_LOADER_XCB_LIBS@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
-GLAPI_LIB_GLOB = @GLAPI_LIB_GLOB@
-GLAPI_LIB_NAME = @GLAPI_LIB_NAME@
+GC_SECTIONS = @GC_SECTIONS@
 GLESv1_CM_LIB_DEPS = @GLESv1_CM_LIB_DEPS@
-GLESv1_CM_LIB_GLOB = @GLESv1_CM_LIB_GLOB@
-GLESv1_CM_LIB_NAME = @GLESv1_CM_LIB_NAME@
 GLESv1_CM_PC_LIB_PRIV = @GLESv1_CM_PC_LIB_PRIV@
 GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
-GLESv2_LIB_GLOB = @GLESv2_LIB_GLOB@
-GLESv2_LIB_NAME = @GLESv2_LIB_NAME@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
-GL_LIB_GLOB = @GL_LIB_GLOB@
-GL_LIB_NAME = @GL_LIB_NAME@
 GL_PC_CFLAGS = @GL_PC_CFLAGS@
 GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
@@ -773,6 +771,7 @@ LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
+LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
 LLVM_BINDIR = @LLVM_BINDIR@
 LLVM_CFLAGS = @LLVM_CFLAGS@
@@ -797,11 +796,13 @@ NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
 NOUVEAU_LIBS = @NOUVEAU_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
+OMX_CFLAGS = @OMX_CFLAGS@
+OMX_LIBS = @OMX_LIBS@
+OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_LIB_NAME = @OSMESA_LIB_NAME@
 OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
@@ -831,6 +832,7 @@ RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -842,8 +844,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_LIB_GLOB = @VG_LIB_GLOB@
-VG_LIB_NAME = @VG_LIB_NAME@
 VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
@@ -955,6 +955,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/clear.c \
 	$(SRCDIR)main/clip.c \
 	$(SRCDIR)main/colortab.c \
+	$(SRCDIR)main/compute.c \
 	$(SRCDIR)main/condrender.c \
 	$(SRCDIR)main/context.c \
 	$(SRCDIR)main/convolve.c \
@@ -999,6 +1000,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/pack.c \
 	$(SRCDIR)main/pbo.c \
 	$(SRCDIR)main/performance_monitor.c \
+	$(SRCDIR)main/pipelineobj.c \
 	$(SRCDIR)main/pixel.c \
 	$(SRCDIR)main/pixelstore.c \
 	$(SRCDIR)main/pixeltransfer.c \
@@ -1249,6 +1251,8 @@ SPARC_FILES = \
 
 COMMON_DRIVER_FILES = \
 	$(SRCDIR)drivers/common/driverfuncs.c	\
+	$(SRCDIR)drivers/common/meta_blit.c	\
+	$(SRCDIR)drivers/common/meta_generate_mipmap.c	\
 	$(SRCDIR)drivers/common/meta.c
 
 
@@ -1295,7 +1299,7 @@ BUILT_SOURCES = main/get_hash.h $(BUILDDIR)main/git_sha1.h \
 CLEANFILES = \
 	$(BUILT_SOURCES) \
 	$(BUILDDIR)program/program_parse.tab.h \
-	git_sha1.h.tmp
+	$(BUILDDIR)main/git_sha1.h.tmp
 
 GET_HASH_GEN = main/get_hash_generator.py
 noinst_LTLIBRARIES = $(ARCH_LIBS) $(am__append_4) $(am__append_5)
@@ -1444,6 +1448,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colortab.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/common_x86.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/common_x86_asm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compute.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/condrender.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/convolve.Plo@am__quote@
@@ -1497,6 +1502,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/m_xform.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/meta.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/meta_blit.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/meta_generate_mipmap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mipmap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mmx_blend.Plo@am__quote@
@@ -1506,6 +1513,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pbo.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/performance_monitor.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipelineobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pixel.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pixelstore.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pixeltransfer.Plo@am__quote@
@@ -2008,6 +2016,13 @@ colortab.lo: $(SRCDIR)main/colortab.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o colortab.lo `test -f '$(SRCDIR)main/colortab.c' || echo '$(srcdir)/'`$(SRCDIR)main/colortab.c
 
+compute.lo: $(SRCDIR)main/compute.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT compute.lo -MD -MP -MF $(DEPDIR)/compute.Tpo -c -o compute.lo `test -f '$(SRCDIR)main/compute.c' || echo '$(srcdir)/'`$(SRCDIR)main/compute.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/compute.Tpo $(DEPDIR)/compute.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(SRCDIR)main/compute.c' object='compute.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o compute.lo `test -f '$(SRCDIR)main/compute.c' || echo '$(srcdir)/'`$(SRCDIR)main/compute.c
+
 condrender.lo: $(SRCDIR)main/condrender.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT condrender.lo -MD -MP -MF $(DEPDIR)/condrender.Tpo -c -o condrender.lo `test -f '$(SRCDIR)main/condrender.c' || echo '$(srcdir)/'`$(SRCDIR)main/condrender.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/condrender.Tpo $(DEPDIR)/condrender.Plo
@@ -2308,6 +2323,13 @@ performance_monitor.lo: $(SRCDIR)main/performance_monitor.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(SRCDIR)main/performance_monitor.c' object='performance_monitor.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o performance_monitor.lo `test -f '$(SRCDIR)main/performance_monitor.c' || echo '$(srcdir)/'`$(SRCDIR)main/performance_monitor.c
+
+pipelineobj.lo: $(SRCDIR)main/pipelineobj.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT pipelineobj.lo -MD -MP -MF $(DEPDIR)/pipelineobj.Tpo -c -o pipelineobj.lo `test -f '$(SRCDIR)main/pipelineobj.c' || echo '$(srcdir)/'`$(SRCDIR)main/pipelineobj.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/pipelineobj.Tpo $(DEPDIR)/pipelineobj.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(SRCDIR)main/pipelineobj.c' object='pipelineobj.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o pipelineobj.lo `test -f '$(SRCDIR)main/pipelineobj.c' || echo '$(srcdir)/'`$(SRCDIR)main/pipelineobj.c
 
 pixel.lo: $(SRCDIR)main/pixel.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT pixel.lo -MD -MP -MF $(DEPDIR)/pixel.Tpo -c -o pixel.lo `test -f '$(SRCDIR)main/pixel.c' || echo '$(srcdir)/'`$(SRCDIR)main/pixel.c
@@ -3155,6 +3177,20 @@ driverfuncs.lo: $(SRCDIR)drivers/common/driverfuncs.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(SRCDIR)drivers/common/driverfuncs.c' object='driverfuncs.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o driverfuncs.lo `test -f '$(SRCDIR)drivers/common/driverfuncs.c' || echo '$(srcdir)/'`$(SRCDIR)drivers/common/driverfuncs.c
+
+meta_blit.lo: $(SRCDIR)drivers/common/meta_blit.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT meta_blit.lo -MD -MP -MF $(DEPDIR)/meta_blit.Tpo -c -o meta_blit.lo `test -f '$(SRCDIR)drivers/common/meta_blit.c' || echo '$(srcdir)/'`$(SRCDIR)drivers/common/meta_blit.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/meta_blit.Tpo $(DEPDIR)/meta_blit.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(SRCDIR)drivers/common/meta_blit.c' object='meta_blit.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o meta_blit.lo `test -f '$(SRCDIR)drivers/common/meta_blit.c' || echo '$(srcdir)/'`$(SRCDIR)drivers/common/meta_blit.c
+
+meta_generate_mipmap.lo: $(SRCDIR)drivers/common/meta_generate_mipmap.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT meta_generate_mipmap.lo -MD -MP -MF $(DEPDIR)/meta_generate_mipmap.Tpo -c -o meta_generate_mipmap.lo `test -f '$(SRCDIR)drivers/common/meta_generate_mipmap.c' || echo '$(srcdir)/'`$(SRCDIR)drivers/common/meta_generate_mipmap.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/meta_generate_mipmap.Tpo $(DEPDIR)/meta_generate_mipmap.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(SRCDIR)drivers/common/meta_generate_mipmap.c' object='meta_generate_mipmap.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o meta_generate_mipmap.lo `test -f '$(SRCDIR)drivers/common/meta_generate_mipmap.c' || echo '$(srcdir)/'`$(SRCDIR)drivers/common/meta_generate_mipmap.c
 
 meta.lo: $(SRCDIR)drivers/common/meta.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT meta.lo -MD -MP -MF $(DEPDIR)/meta.Tpo -c -o meta.lo `test -f '$(SRCDIR)drivers/common/meta.c' || echo '$(srcdir)/'`$(SRCDIR)drivers/common/meta.c
@@ -4179,11 +4215,11 @@ main/get_hash.h: $(GLAPI)/gl_and_es_API.xml main/get_hash_params.py 	\
 	mv $@.tmp $@;
 
 $(BUILDDIR)program/lex.yy.c: program/program_lexer.l
-	$(MKDIR_P) $(builddir)/program
+	$(AM_V_at)$(MKDIR_P) program
 	$(AM_V_GEN) $(LEX) --never-interactive --outfile=$@ $<
 
 $(BUILDDIR)program/program_parse.tab.c $(BUILDDIR)program/program_parse.tab.h: program/program_parse.y
-	$(MKDIR_P) $(builddir)/program
+	$(AM_V_at)$(MKDIR_P) program
 	$(AM_V_GEN) $(YACC) -p "_mesa_program_" -v -d --output=$(BUILDDIR)program/program_parse.tab.c $<
 
 @GEN_ASM_OFFSETS_TRUE@matypes.h: $(gen_matypes_SOURCES)

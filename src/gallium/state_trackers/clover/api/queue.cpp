@@ -32,7 +32,7 @@ clCreateCommandQueue(cl_context d_ctx, cl_device_id d_dev,
    auto &ctx = obj(d_ctx);
    auto &dev = obj(d_dev);
 
-   if (!count(dev, ctx.devs()))
+   if (!count(dev, ctx.devices()))
       throw error(CL_INVALID_DEVICE);
 
    if (props & ~(CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE |
@@ -75,11 +75,11 @@ clGetCommandQueueInfo(cl_command_queue d_q, cl_command_queue_info param,
 
    switch (param) {
    case CL_QUEUE_CONTEXT:
-      buf.as_scalar<cl_context>() = desc(q.ctx);
+      buf.as_scalar<cl_context>() = desc(q.context());
       break;
 
    case CL_QUEUE_DEVICE:
-      buf.as_scalar<cl_device_id>() = desc(q.dev);
+      buf.as_scalar<cl_device_id>() = desc(q.device());
       break;
 
    case CL_QUEUE_REFERENCE_COUNT:
@@ -87,7 +87,7 @@ clGetCommandQueueInfo(cl_command_queue d_q, cl_command_queue_info param,
       break;
 
    case CL_QUEUE_PROPERTIES:
-      buf.as_scalar<cl_command_queue_properties>() = q.props();
+      buf.as_scalar<cl_command_queue_properties>() = q.properties();
       break;
 
    default:

@@ -151,12 +151,12 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
    intel_miptree_slice_resolve_depth(brw, src_mt, src_level, src_layer);
    intel_miptree_slice_resolve_depth(brw, dst_mt, dst_level, dst_layer);
 
-   DBG("%s from %s mt %p %d %d (%f,%f) (%f,%f)"
-       "to %s mt %p %d %d (%f,%f) (%f,%f) (flip %d,%d)\n",
+   DBG("%s from %dx %s mt %p %d %d (%f,%f) (%f,%f)"
+       "to %dx %s mt %p %d %d (%f,%f) (%f,%f) (flip %d,%d)\n",
        __FUNCTION__,
-       _mesa_get_format_name(src_mt->format), src_mt,
+       src_mt->num_samples, _mesa_get_format_name(src_mt->format), src_mt,
        src_level, src_layer, src_x0, src_y0, src_x1, src_y1,
-       _mesa_get_format_name(dst_mt->format), dst_mt,
+       dst_mt->num_samples, _mesa_get_format_name(dst_mt->format), dst_mt,
        dst_level, dst_layer, dst_x0, dst_y0, dst_x1, dst_y1,
        mirror_x, mirror_y);
 
@@ -193,7 +193,7 @@ do_blorp_blit(struct brw_context *brw, GLbitfield buffer_bit,
                            dstX0, dstY0, dstX1, dstY1,
                            filter, mirror_x, mirror_y);
 
-   intel_renderbuffer_set_needs_downsample(dst_irb);
+   dst_irb->need_downsample = true;
 }
 
 static bool
@@ -402,9 +402,13 @@ brw_blorp_copytexsubimage(struct brw_context *brw,
       mirror_y = true;
    }
 
+   /* Account for face selection and texture view MinLayer */
+   int dst_slice = slice + dst_image->TexObject->MinLayer + dst_image->Face;
+   int dst_level = dst_image->Level + dst_image->TexObject->MinLevel;
+
    brw_blorp_blit_miptrees(brw,
                            src_mt, src_irb->mt_level, src_irb->mt_layer,
-                           dst_mt, dst_image->Level, dst_image->Face + slice,
+                           dst_mt, dst_level, dst_slice,
                            srcX0, srcY0, srcX1, srcY1,
                            dstX0, dstY0, dstX1, dstY1,
                            GL_NEAREST, false, mirror_y);
@@ -427,8 +431,7 @@ brw_blorp_copytexsubimage(struct brw_context *brw,
       if (src_mt != dst_mt) {
          brw_blorp_blit_miptrees(brw,
                                  src_mt, src_irb->mt_level, src_irb->mt_layer,
-                                 dst_mt, dst_image->Level,
-                                 dst_image->Face + slice,
+                                 dst_mt, dst_level, dst_slice,
                                  srcX0, srcY0, srcX1, srcY1,
                                  dstX0, dstY0, dstX1, dstY1,
                                  GL_NEAREST, false, mirror_y);
@@ -629,7 +632,7 @@ public:
                           const brw_blorp_blit_prog_key *key);
 
    const GLuint *compile(struct brw_context *brw, GLuint *program_size,
-                         FILE *dump_file = stdout);
+                         FILE *dump_file = stderr);
 
    brw_blorp_prog_data prog_data;
 
@@ -1973,9 +1976,6 @@ brw_blorp_blit_params::brw_blorp_blit_params(struct brw_context *brw,
                                              GLenum filter,
                                              bool mirror_x, bool mirror_y)
 {
-   struct gl_context *ctx = &brw->ctx;
-   const struct gl_framebuffer *read_fb = ctx->ReadBuffer;
-
    src.set(brw, src_mt, src_level, src_layer, false);
    dst.set(brw, dst_mt, dst_level, dst_layer, true);
 
@@ -2127,8 +2127,10 @@ brw_blorp_blit_params::brw_blorp_blit_params(struct brw_context *brw,
    y0 = wm_push_consts.dst_y0 = dst_y0;
    x1 = wm_push_consts.dst_x1 = dst_x1;
    y1 = wm_push_consts.dst_y1 = dst_y1;
-   wm_push_consts.rect_grid_x1 = read_fb->Width * wm_prog_key.x_scale - 1.0;
-   wm_push_consts.rect_grid_y1 = read_fb->Height * wm_prog_key.y_scale - 1.0;
+   wm_push_consts.rect_grid_x1 = (minify(src_mt->logical_width0, src_level) *
+                                  wm_prog_key.x_scale - 1.0);
+   wm_push_consts.rect_grid_y1 = (minify(src_mt->logical_height0, src_level) *
+                                  wm_prog_key.y_scale - 1.0);
 
    wm_push_consts.x_transform.setup(src_x0, src_x1, dst_x0, dst_x1, mirror_x);
    wm_push_consts.y_transform.setup(src_y0, src_y1, dst_y0, dst_y1, mirror_y);
@@ -2254,7 +2256,7 @@ brw_blorp_blit_params::get_wm_prog(struct brw_context *brw,
                          &prog_offset, prog_data)) {
       brw_blorp_blit_program prog(brw, &this->wm_prog_key);
       GLuint program_size;
-      const GLuint *program = prog.compile(brw, &program_size, stdout);
+      const GLuint *program = prog.compile(brw, &program_size, stderr);
       brw_upload_cache(&brw->cache, BRW_BLORP_BLIT_PROG,
                        &this->wm_prog_key, sizeof(this->wm_prog_key),
                        program, program_size,

@@ -51,35 +51,40 @@ gen6_upload_wm_push_constants(struct brw_context *brw)
    /* XXX: Should this happen somewhere before to get our state flag set? */
    _mesa_load_state_parameters(ctx, fp->program.Base.Parameters);
 
-   if (prog_data->nr_params == 0) {
+   if (prog_data->base.nr_params == 0) {
       brw->wm.base.push_const_size = 0;
    } else {
       float *constants;
       unsigned int i;
 
       constants = brw_state_batch(brw, AUB_TRACE_WM_CONSTANTS,
-				  prog_data->nr_params * sizeof(float),
+				  prog_data->base.nr_params * sizeof(float),
 				  32, &brw->wm.base.push_const_offset);
 
-      for (i = 0; i < prog_data->nr_params; i++) {
-	 constants[i] = *prog_data->param[i];
+      for (i = 0; i < prog_data->base.nr_params; i++) {
+	 constants[i] = *prog_data->base.param[i];
       }
 
       if (0) {
-	 printf("WM constants:\n");
-	 for (i = 0; i < prog_data->nr_params; i++) {
+	 fprintf(stderr, "WM constants:\n");
+	 for (i = 0; i < prog_data->base.nr_params; i++) {
 	    if ((i & 7) == 0)
-	       printf("g%d: ", prog_data->first_curbe_grf + i / 8);
-	    printf("%8f ", constants[i]);
+	       fprintf(stderr, "g%d: ", prog_data->first_curbe_grf + i / 8);
+	    fprintf(stderr, "%8f ", constants[i]);
 	    if ((i & 7) == 7)
-	       printf("\n");
+	       fprintf(stderr, "\n");
 	 }
 	 if ((i & 7) != 0)
-	    printf("\n");
-	 printf("\n");
+	    fprintf(stderr, "\n");
+	 fprintf(stderr, "\n");
       }
 
-      brw->wm.base.push_const_size = ALIGN(prog_data->nr_params, 8) / 8;
+      brw->wm.base.push_const_size = ALIGN(prog_data->base.nr_params, 8) / 8;
+   }
+
+   if (brw->gen >= 7) {
+      gen7_upload_constant_state(brw, &brw->wm.base, true,
+                                 _3DSTATE_CONSTANT_PS);
    }
 }
 
@@ -87,7 +92,8 @@ const struct brw_tracked_state gen6_wm_push_constants = {
    .dirty = {
       .mesa  = _NEW_PROGRAM_CONSTANTS,
       .brw   = (BRW_NEW_BATCH |
-		BRW_NEW_FRAGMENT_PROGRAM),
+                BRW_NEW_FRAGMENT_PROGRAM |
+                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
       .cache = CACHE_NEW_WM_PROG,
    },
    .emit = gen6_upload_wm_push_constants,
@@ -105,7 +111,7 @@ upload_wm_state(struct brw_context *brw)
    bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
 
     /* CACHE_NEW_WM_PROG */
-   if (brw->wm.prog_data->nr_params == 0) {
+   if (brw->wm.prog_data->base.nr_params == 0) {
       /* Disable the push constant buffers. */
       BEGIN_BATCH(5);
       OUT_BATCH(_3DSTATE_CONSTANT_PS << 16 | (5 - 2));
@@ -140,10 +146,9 @@ upload_wm_state(struct brw_context *brw)
     * rendering, CurrentProgram[MESA_SHADER_FRAGMENT] is used for this check
     * to differentiate between the GLSL and non-GLSL cases.
     */
-   if (ctx->Shader.CurrentProgram[MESA_SHADER_FRAGMENT] == NULL)
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT] == NULL)
       dw2 |= GEN6_WM_FLOATING_POINT_MODE_ALT;
 
-   /* CACHE_NEW_SAMPLER */
    dw2 |= (ALIGN(brw->wm.base.sampler_count, 4) / 4) <<
            GEN6_WM_SAMPLER_COUNT_SHIFT;
 
@@ -213,6 +218,7 @@ upload_wm_state(struct brw_context *brw)
        brw->wm.prog_data->uses_omask)
       dw5 |= GEN6_WM_KILL_ENABLE;
 
+   /* _NEW_BUFFERS | _NEW_COLOR */
    if (brw_color_buffer_write_enabled(brw) ||
        dw5 & (GEN6_WM_KILL_ENABLE | GEN6_WM_COMPUTED_DEPTH)) {
       dw5 |= GEN6_WM_DISPATCH_ENABLE;
@@ -279,7 +285,6 @@ upload_wm_state(struct brw_context *brw)
       dw6 |= GEN6_WM_MSDISPMODE_PERSAMPLE;
    }
 
-   /* _NEW_BUFFERS, _NEW_MULTISAMPLE */
    /* From the SNB PRM, volume 2 part 1, page 281:
     * "If the PS kernel does not need the Position XY Offsets
     * to compute a Position XY value, then this field should be
@@ -331,8 +336,7 @@ const struct brw_tracked_state gen6_wm_state = {
       .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
 		BRW_NEW_BATCH |
                 BRW_NEW_PUSH_CONSTANT_ALLOCATION),
-      .cache = (CACHE_NEW_SAMPLER |
-		CACHE_NEW_WM_PROG)
+      .cache = (CACHE_NEW_WM_PROG)
    },
    .emit = upload_wm_state,
 };

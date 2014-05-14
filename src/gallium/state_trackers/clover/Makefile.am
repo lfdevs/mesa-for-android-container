@@ -19,27 +19,30 @@ else
 cldir = $(includedir)/CL
 cl_HEADERS = \
 	$(top_srcdir)/include/CL/cl.h \
+	$(top_srcdir)/include/CL/cl.hpp \
+	$(top_srcdir)/include/CL/cl_d3d10.h \
+	$(top_srcdir)/include/CL/cl_d3d11.h \
+	$(top_srcdir)/include/CL/cl_dx9_media_sharing.h \
+	$(top_srcdir)/include/CL/cl_egl.h \
 	$(top_srcdir)/include/CL/cl_ext.h \
 	$(top_srcdir)/include/CL/cl_gl.h \
 	$(top_srcdir)/include/CL/cl_gl_ext.h \
 	$(top_srcdir)/include/CL/cl_platform.h \
-	$(top_srcdir)/include/CL/opencl.h \
-	$(top_srcdir)/include/CL/cl.hpp
+	$(top_srcdir)/include/CL/opencl.h
 endif
 
 noinst_LTLIBRARIES = libclover.la libcltgsi.la libclllvm.la
 
 libcltgsi_la_CXXFLAGS = \
 	-std=c++0x \
-	$(VISIBILITY_CFLAGS)
+	$(VISIBILITY_CXXFLAGS)
 
 libcltgsi_la_SOURCES = \
 	tgsi/compiler.cpp
 
 libclllvm_la_CXXFLAGS = \
-	-std=c++98 \
-	$(VISIBILITY_CFLAGS) \
-	$(LLVM_CPPFLAGS) \
+	$(VISIBILITY_CXXFLAGS) \
+	$(LLVM_CXXFLAGS) \
 	$(DEFINES) \
 	-DLIBCLC_INCLUDEDIR=\"$(LIBCLC_INCLUDEDIR)/\" \
 	-DLIBCLC_LIBEXECDIR=\"$(LIBCLC_LIBEXECDIR)/\" \
@@ -49,8 +52,8 @@ libclllvm_la_SOURCES = \
 	llvm/invocation.cpp
 
 libclover_la_CXXFLAGS = \
-	-std=c++0x \
-	$(VISIBILITY_CFLAGS)
+	-std=c++11 \
+	$(VISIBILITY_CXXFLAGS)
 
 libclover_la_LIBADD = \
 	libcltgsi.la libclllvm.la

@@ -88,7 +88,7 @@ unregister_surface(struct set_entry *entry)
    }
 
    _mesa_set_remove(ctx->vdpSurfaces, entry);
-   FREE(surf);
+   free(surf);
 }
 
 void GLAPIENTRY
@@ -145,7 +145,7 @@ register_surface(struct gl_context *ctx, GLboolean isOutput,
 
       if (tex->Immutable) {
          _mesa_unlock_texture(ctx, tex);
-         FREE(surf);
+         free(surf);
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "VDPAURegisterSurfaceNV(texture is immutable)");
          return (GLintptr)NULL;
@@ -155,7 +155,7 @@ register_surface(struct gl_context *ctx, GLboolean isOutput,
          tex->Target = target;
       else if (tex->Target != target) {
          _mesa_unlock_texture(ctx, tex);
-         FREE(surf);
+         free(surf);
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "VDPAURegisterSurfaceNV(target mismatch)");
          return (GLintptr)NULL;
@@ -205,7 +205,7 @@ _mesa_VDPAURegisterOutputSurfaceNV(const GLvoid *vdpSurface, GLenum target,
                            numTextureNames, textureNames);
 }
 
-void GLAPIENTRY
+GLboolean GLAPIENTRY
 _mesa_VDPAUIsSurfaceNV(GLintptr surface)
 {
    struct vdp_surface *surf = (struct vdp_surface *)surface;
@@ -213,13 +213,14 @@ _mesa_VDPAUIsSurfaceNV(GLintptr surface)
 
    if (!ctx->vdpDevice || !ctx->vdpGetProcAddress || !ctx->vdpSurfaces) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "VDPAUIsSurfaceNV");
-      return;
+      return false;
    }
 
    if (!_mesa_set_search(ctx->vdpSurfaces, _mesa_hash_pointer(surf), surf)) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "VDPAUIsSurfaceNV");
-      return;
+      return false;
    }
+
+   return true;
 }
 
 void GLAPIENTRY
@@ -253,7 +254,7 @@ _mesa_VDPAUUnregisterSurfaceNV(GLintptr surface)
    }
 
    _mesa_set_remove(ctx->vdpSurfaces, entry);
-   FREE(surf);
+   free(surf);
 }
 
 void GLAPIENTRY

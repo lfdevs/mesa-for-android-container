@@ -90,14 +90,9 @@ target_triplet = @target@
 @HAVE_EGL_PLATFORM_DRM_TRUE@am__append_6 = ../../gbm/libgbm.la
 @HAVE_EGL_PLATFORM_FBDEV_TRUE@am__append_7 = -DHAVE_FBDEV_PLATFORM
 @HAVE_EGL_PLATFORM_NULL_TRUE@am__append_8 = -DHAVE_NULL_PLATFORM
-@HAVE_EGL_DRIVER_GLX_TRUE@am__append_9 = -D_EGL_BUILT_IN_DRIVER_GLX
-@HAVE_EGL_DRIVER_GLX_TRUE@am__append_10 =  \
-@HAVE_EGL_DRIVER_GLX_TRUE@	../drivers/glx/libegl_glx.la \
-@HAVE_EGL_DRIVER_GLX_TRUE@	$(DLOPEN_LIBS)
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_11 =  \
-@HAVE_EGL_DRIVER_DRI2_TRUE@	-D_EGL_BUILT_IN_DRIVER_DRI2 \
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_9 = -D_EGL_BUILT_IN_DRIVER_DRI2 \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-DHAVE_XCB_DRI2
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_12 =  \
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_10 =  \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	../drivers/dri2/libegl_dri2.la \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(DLOPEN_LIBS) $(LIBDRM_LIBS)
 DIST_COMMON = $(egl_HEADERS) $(khr_HEADERS) $(srcdir)/Makefile.am \
@@ -106,14 +101,13 @@ DIST_COMMON = $(egl_HEADERS) $(khr_HEADERS) $(srcdir)/Makefile.am \
 subdir = src/egl/main
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
-	$(top_srcdir)/m4/ax_pthread.m4 \
-	$(top_srcdir)/m4/ax_python_module.m4 \
-	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
-	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/VERSION \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -156,16 +150,12 @@ am__DEPENDENCIES_1 =
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	../wayland/wayland-drm/libwayland-drm.la
-@HAVE_EGL_DRIVER_GLX_TRUE@am__DEPENDENCIES_4 =  \
-@HAVE_EGL_DRIVER_GLX_TRUE@	../drivers/glx/libegl_glx.la \
-@HAVE_EGL_DRIVER_GLX_TRUE@	$(am__DEPENDENCIES_1)
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__DEPENDENCIES_5 =  \
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__DEPENDENCIES_4 =  \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	../drivers/dri2/libegl_dri2.la \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__DEPENDENCIES_1)
 libEGL_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
-	$(am__DEPENDENCIES_3) $(am__append_6) $(am__DEPENDENCIES_4) \
-	$(am__DEPENDENCIES_5)
+	$(am__DEPENDENCIES_3) $(am__append_6) $(am__DEPENDENCIES_4)
 am_libEGL_la_OBJECTS = eglapi.lo eglarray.lo eglconfig.lo \
 	eglcontext.lo eglcurrent.lo egldisplay.lo egldriver.lo \
 	eglfallbacks.lo eglglobals.lo eglimage.lo egllog.lo eglmisc.lo \
@@ -271,8 +261,6 @@ EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
-EGL_LIB_GLOB = @EGL_LIB_GLOB@
-EGL_LIB_NAME = @EGL_LIB_NAME@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
 ELF_LIB = @ELF_LIB@
@@ -282,30 +270,24 @@ EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
 FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
 FREEDRENO_LIBS = @FREEDRENO_LIBS@
-GALLIUM_DRI_LIB_DEPS = @GALLIUM_DRI_LIB_DEPS@
+GALLIUM_PIPE_LOADER_CLIENT_DEFINES = @GALLIUM_PIPE_LOADER_CLIENT_DEFINES@
+GALLIUM_PIPE_LOADER_CLIENT_LIBS = @GALLIUM_PIPE_LOADER_CLIENT_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GALLIUM_PIPE_LOADER_LIBS = @GALLIUM_PIPE_LOADER_LIBS@
 GALLIUM_PIPE_LOADER_XCB_CFLAGS = @GALLIUM_PIPE_LOADER_XCB_CFLAGS@
 GALLIUM_PIPE_LOADER_XCB_LIBS = @GALLIUM_PIPE_LOADER_XCB_LIBS@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
-GLAPI_LIB_GLOB = @GLAPI_LIB_GLOB@
-GLAPI_LIB_NAME = @GLAPI_LIB_NAME@
+GC_SECTIONS = @GC_SECTIONS@
 GLESv1_CM_LIB_DEPS = @GLESv1_CM_LIB_DEPS@
-GLESv1_CM_LIB_GLOB = @GLESv1_CM_LIB_GLOB@
-GLESv1_CM_LIB_NAME = @GLESv1_CM_LIB_NAME@
 GLESv1_CM_PC_LIB_PRIV = @GLESv1_CM_PC_LIB_PRIV@
 GLESv2_LIB_DEPS = @GLESv2_LIB_DEPS@
-GLESv2_LIB_GLOB = @GLESv2_LIB_GLOB@
-GLESv2_LIB_NAME = @GLESv2_LIB_NAME@
 GLESv2_PC_LIB_PRIV = @GLESv2_PC_LIB_PRIV@
 GLPROTO_CFLAGS = @GLPROTO_CFLAGS@
 GLPROTO_LIBS = @GLPROTO_LIBS@
 GLX_TLS = @GLX_TLS@
 GL_LIB = @GL_LIB@
 GL_LIB_DEPS = @GL_LIB_DEPS@
-GL_LIB_GLOB = @GL_LIB_GLOB@
-GL_LIB_NAME = @GL_LIB_NAME@
 GL_PC_CFLAGS = @GL_PC_CFLAGS@
 GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
@@ -335,6 +317,7 @@ LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
 LIB_DIR = @LIB_DIR@
+LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
 LLVM_BINDIR = @LLVM_BINDIR@
 LLVM_CFLAGS = @LLVM_CFLAGS@
@@ -359,11 +342,13 @@ NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
 NOUVEAU_LIBS = @NOUVEAU_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
+OMX_CFLAGS = @OMX_CFLAGS@
+OMX_LIBS = @OMX_LIBS@
+OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_LIB_NAME = @OSMESA_LIB_NAME@
 OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
@@ -393,6 +378,7 @@ RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -404,8 +390,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_LIB_GLOB = @VG_LIB_GLOB@
-VG_LIB_NAME = @VG_LIB_NAME@
 VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
@@ -488,54 +472,62 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-@HAVE_XF86VIDMODE_TRUE@EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/gbm/main \
 	$(DEFINES) $(VISIBILITY_CFLAGS) $(EGL_CFLAGS) \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM) \
 	-D_EGL_DRIVER_SEARCH_DIR=\"$(EGL_DRIVER_INSTALL_DIR)\" \
 	-D_EGL_OS_UNIX=1 $(am__append_1) $(am__append_3) \
 	$(am__append_5) $(am__append_7) $(am__append_8) \
-	$(am__append_9) $(am__append_11)
+	$(am__append_9)
 lib_LTLIBRARIES = libEGL.la
 libEGL_la_SOURCES = \
 	eglapi.c \
+	eglapi.h \
 	eglarray.c \
-	eglconfig.c \
-	eglcontext.c \
-	eglcurrent.c \
-	egldisplay.c \
-	egldriver.c \
-	eglfallbacks.c \
-	eglglobals.c \
-	eglimage.c \
-	egllog.c \
-	eglmisc.c \
-	eglmode.c \
-	eglscreen.c \
-	eglstring.c \
-	eglsurface.c \
-	eglsync.c \
+	eglarray.h \
 	eglcompiler.h \
+	eglconfig.c \
 	eglconfig.h \
+	eglcontext.c \
 	eglcontext.h \
+	eglcurrent.c \
 	eglcurrent.h \
 	egldefines.h \
+	egldisplay.c \
 	egldisplay.h \
+	egldriver.c \
 	egldriver.h \
+	eglfallbacks.c \
+	eglglobals.c \
 	eglglobals.h \
+	eglimage.c \
 	eglimage.h \
+	egllog.c \
 	egllog.h \
+	eglmisc.c \
 	eglmisc.h \
+	eglmode.c \
 	eglmode.h \
 	eglmutex.h \
+	eglscreen.c \
 	eglscreen.h \
+	eglstring.c \
 	eglstring.h \
+	eglsurface.c \
 	eglsurface.h \
-	eglsync.h
+	eglsync.c \
+	eglsync.h \
+	egltypedefs.h
 
 libEGL_la_LIBADD = $(EGL_LIB_DEPS) $(am__append_2) $(am__append_4) \
-	$(am__append_6) $(am__append_10) $(am__append_12)
-libEGL_la_LDFLAGS = -Wl,-Bsymbolic -version-number 1:0 -no-undefined
+	$(am__append_6) $(am__append_10)
+libEGL_la_LDFLAGS = \
+	-no-undefined \
+	-version-number 1:0 \
+	-Wl,-Bsymbolic \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
+
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = egl.pc
 khrdir = $(includedir)/KHR
@@ -833,6 +825,8 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
+@BUILD_SHARED_FALSE@all-local:
+@HAVE_COMPAT_SYMLINKS_FALSE@all-local:
 all-am: Makefile $(LTLIBRARIES) $(DATA) $(HEADERS) all-local
 installdirs:
 	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(egldir)" "$(DESTDIR)$(khrdir)"; do \
@@ -961,17 +955,17 @@ uninstall-am: uninstall-eglHEADERS uninstall-khrHEADERS \
 	uninstall-pkgconfigDATA
 
 
-all-local : .libs/install-mesa-links
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .libs/install-mesa-links
 
-.libs/install-mesa-links : $(lib_LTLIBRARIES)
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)
-	for f in $(lib_LTLIBRARIES:%.la=.libs/%.so*); do	\
-		if test -h .libs/$$f; then			\
-			cp -d $$f $(top_builddir)/$(LIB_DIR);	\
-		else						\
-			ln -f $$f $(top_builddir)/$(LIB_DIR);	\
-		fi;						\
-	done && touch $@
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-mesa-links : $(lib_LTLIBRARIES)
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*); do \
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		if test -h .libs/$$f; then			\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			cp -d $$f $(top_builddir)/$(LIB_DIR);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		else						\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			ln -f $$f $(top_builddir)/$(LIB_DIR);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		fi;						\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	done && touch $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

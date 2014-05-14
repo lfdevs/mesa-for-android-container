@@ -36,8 +36,6 @@ COMMON_LDFLAGS = $(GALLIUM_DRI_LINKER_FLAGS)
 
 COMMON_LIBADD = \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
-	$(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/dri/drm/libdridrm.la \
 	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
 	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
@@ -47,11 +45,6 @@ COMMON_LIBADD = \
 	$(GALLIUM_DRI_LIB_DEPS) \
 	$(LIBDRM_LIBS) \
 	$(FREEDRENO_LIBS)
-
-if HAVE_MESA_LLVM
-COMMON_LDFLAGS += $(LLVM_LDFLAGS)
-COMMON_LIBADD += $(LLVM_LIBS)
-endif
 
 nodist_EXTRA_kgsl_dri_la_SOURCES = dummy.cpp
 kgsl_dri_la_SOURCES = target-kgsl.c
@@ -63,9 +56,4 @@ msm_dri_la_SOURCES  = target-msm.c
 msm_dri_la_LDFLAGS  = $(COMMON_LDFLAGS)
 msm_dri_la_LIBADD   = $(COMMON_LIBADD)
 
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: kgsl_dri.la msm_dri.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/kgsl_dri.so $(top_builddir)/$(LIB_DIR)/gallium/kgsl_dri.so
-	ln -f .libs/msm_dri.so $(top_builddir)/$(LIB_DIR)/gallium/msm_dri.so
+include $(top_srcdir)/install-gallium-links.mk

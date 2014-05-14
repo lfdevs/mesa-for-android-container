@@ -34,6 +34,7 @@
 #include "main/bufferobj.h"
 #include "main/readpix.h"
 #include "main/state.h"
+#include "main/glformats.h"
 
 #include "brw_context.h"
 #include "intel_screen.h"
@@ -41,7 +42,6 @@
 #include "intel_buffers.h"
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
-#include "intel_regions.h"
 #include "intel_pixel.h"
 #include "intel_buffer_objects.h"
 
@@ -88,6 +88,12 @@ do_blit_readpixels(struct gl_context * ctx,
 
    struct gl_renderbuffer *rb = ctx->ReadBuffer->_ColorReadBuffer;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+
+   /* Currently this function only supports reading from color buffers. */
+   if (!_mesa_is_color_format(format))
+      return false;
+
+   assert(irb != NULL);
 
    if (ctx->_ImageTransferState ||
        !_mesa_format_matches_format_and_type(irb->mt->format, format, type,
@@ -137,7 +143,7 @@ do_blit_readpixels(struct gl_context * ctx,
                                   irb->mt->format,
                                   dst_offset,
                                   width, height,
-                                  dst_stride, I915_TILING_NONE);
+                                  dst_stride);
 
    if (!intel_miptree_blit(brw,
                            irb->mt, irb->mt_level, irb->mt_layer,

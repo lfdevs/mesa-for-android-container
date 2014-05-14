@@ -24,7 +24,6 @@
  *
  */
 
-#include "radeon/radeon_uvd.h"
 #include "r600_pipe_common.h"
 #include "r600_cs.h"
 #include "tgsi/tgsi_parse.h"
@@ -33,11 +32,104 @@
 #include "util/u_upload_mgr.h"
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
+#include "radeon/radeon_video.h"
 #include <inttypes.h>
 
 /*
  * pipe_context
  */
+
+void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw)
+{
+	/* The number of dwords we already used in the DMA so far. */
+	num_dw += ctx->rings.dma.cs->cdw;
+	/* Flush if there's not enough space. */
+	if (num_dw > RADEON_MAX_CMDBUF_DWORDS) {
+		ctx->rings.dma.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+	}
+}
+
+static void r600_memory_barrier(struct pipe_context *ctx, unsigned flags)
+{
+}
+
+void r600_preflush_suspend_features(struct r600_common_context *ctx)
+{
+	/* Disable render condition. */
+	ctx->saved_render_cond = NULL;
+	ctx->saved_render_cond_cond = FALSE;
+	ctx->saved_render_cond_mode = 0;
+	if (ctx->current_render_cond) {
+		ctx->saved_render_cond = ctx->current_render_cond;
+		ctx->saved_render_cond_cond = ctx->current_render_cond_cond;
+		ctx->saved_render_cond_mode = ctx->current_render_cond_mode;
+		ctx->b.render_condition(&ctx->b, NULL, FALSE, 0);
+	}
+
+	/* suspend queries */
+	ctx->nontimer_queries_suspended = false;
+	if (ctx->num_cs_dw_nontimer_queries_suspend) {
+		r600_suspend_nontimer_queries(ctx);
+		ctx->nontimer_queries_suspended = true;
+	}
+
+	ctx->streamout.suspended = false;
+	if (ctx->streamout.begin_emitted) {
+		r600_emit_streamout_end(ctx);
+		ctx->streamout.suspended = true;
+	}
+}
+
+void r600_postflush_resume_features(struct r600_common_context *ctx)
+{
+	if (ctx->streamout.suspended) {
+		ctx->streamout.append_bitmask = ctx->streamout.enabled_mask;
+		r600_streamout_buffers_dirty(ctx);
+	}
+
+	/* resume queries */
+	if (ctx->nontimer_queries_suspended) {
+		r600_resume_nontimer_queries(ctx);
+	}
+
+	/* Re-enable render condition. */
+	if (ctx->saved_render_cond) {
+		ctx->b.render_condition(&ctx->b, ctx->saved_render_cond,
+					  ctx->saved_render_cond_cond,
+					  ctx->saved_render_cond_mode);
+	}
+}
+
+static void r600_flush_from_st(struct pipe_context *ctx,
+			       struct pipe_fence_handle **fence,
+			       unsigned flags)
+{
+	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
+	unsigned rflags = 0;
+
+	if (flags & PIPE_FLUSH_END_OF_FRAME)
+		rflags |= RADEON_FLUSH_END_OF_FRAME;
+
+	if (rctx->rings.dma.cs) {
+		rctx->rings.dma.flush(rctx, rflags, NULL);
+	}
+	rctx->rings.gfx.flush(rctx, rflags, fence);
+}
+
+static void r600_flush_dma_ring(void *ctx, unsigned flags,
+				struct pipe_fence_handle **fence)
+{
+	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
+	struct radeon_winsys_cs *cs = rctx->rings.dma.cs;
+
+	if (!cs->cdw) {
+		return;
+	}
+
+	rctx->rings.dma.flushing = true;
+	rctx->ws->cs_flush(cs, flags, fence, 0);
+	rctx->rings.dma.flushing = false;
+}
 
 bool r600_common_context_init(struct r600_common_context *rctx,
 			      struct r600_common_screen *rscreen)
@@ -56,12 +148,15 @@ bool r600_common_context_init(struct r600_common_context *rctx,
 	rctx->b.transfer_flush_region = u_default_transfer_flush_region;
 	rctx->b.transfer_unmap = u_transfer_unmap_vtbl;
 	rctx->b.transfer_inline_write = u_default_transfer_inline_write;
+        rctx->b.memory_barrier = r600_memory_barrier;
+	rctx->b.flush = r600_flush_from_st;
 
+	r600_init_context_texture_functions(rctx);
 	r600_streamout_init(rctx);
 	r600_query_init(rctx);
 
 	rctx->allocator_so_filled_size = u_suballocator_create(&rctx->b, 4096, 4,
-							       0, PIPE_USAGE_STATIC, TRUE);
+							       0, PIPE_USAGE_DEFAULT, TRUE);
 	if (!rctx->allocator_so_filled_size)
 		return false;
 
@@ -70,6 +165,13 @@ bool r600_common_context_init(struct r600_common_context *rctx,
 					PIPE_BIND_CONSTANT_BUFFER);
 	if (!rctx->uploader)
 		return false;
+
+	if (rscreen->info.r600_has_dma && !(rscreen->debug_flags & DBG_NO_ASYNC_DMA)) {
+		rctx->rings.dma.cs = rctx->ws->cs_create(rctx->ws, RING_DMA,
+							 r600_flush_dma_ring,
+							 rctx, NULL);
+		rctx->rings.dma.flush = r600_flush_dma_ring;
+	}
 
 	return true;
 }
@@ -130,6 +232,9 @@ static const struct debug_named_value common_debug_options[] = {
 	{ "vm", DBG_VM, "Print virtual addresses when creating resources" },
 	{ "trace_cs", DBG_TRACE_CS, "Trace cs and write rlockup_<csid>.c file with faulty cs" },
 
+	/* features */
+	{ "nodma", DBG_NO_ASYNC_DMA, "Disable asynchronous DMA" },
+
 	/* shaders */
 	{ "fs", DBG_FS, "Print fetch shaders" },
 	{ "vs", DBG_VS, "Print vertex shaders" },
@@ -188,6 +293,7 @@ static const char* r600_get_name(struct pipe_screen* pscreen)
 	case CHIP_KAVERI: return "AMD KAVERI";
 	case CHIP_KABINI: return "AMD KABINI";
 	case CHIP_HAWAII: return "AMD HAWAII";
+	case CHIP_MULLINS: return "AMD MULLINS";
 	default: return "AMD unknown";
 	}
 }
@@ -305,6 +411,12 @@ const char *r600_get_llvm_processor_name(enum radeon_family family)
 	case CHIP_KABINI: return "kabini";
 	case CHIP_KAVERI: return "kaveri";
 	case CHIP_HAWAII: return "hawaii";
+	case CHIP_MULLINS:
+#if HAVE_LLVM >= 0x0305
+		return "mullins";
+#else
+		return "kabini";
+#endif
 	default: return "";
 #endif
 	}
@@ -400,6 +512,13 @@ static int r600_get_compute_param(struct pipe_screen *screen,
 		}
 		return sizeof(uint64_t);
 
+	case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+		if (ret) {
+			uint32_t *max_clock_frequency = ret;
+			*max_clock_frequency = rscreen->info.max_sclk;
+		}
+		return sizeof(uint32_t);
+
 	default:
 		fprintf(stderr, "unknown PIPE_COMPUTE_CAP %d\n", param);
 		return 0;
@@ -423,7 +542,11 @@ static int r600_get_driver_query_info(struct pipe_screen *screen,
 		{"draw-calls", R600_QUERY_DRAW_CALLS, 0},
 		{"requested-VRAM", R600_QUERY_REQUESTED_VRAM, rscreen->info.vram_size, TRUE},
 		{"requested-GTT", R600_QUERY_REQUESTED_GTT, rscreen->info.gart_size, TRUE},
-		{"buffer-wait-time", R600_QUERY_BUFFER_WAIT_TIME, 0, FALSE}
+		{"buffer-wait-time", R600_QUERY_BUFFER_WAIT_TIME, 0, FALSE},
+		{"num-cs-flushes", R600_QUERY_NUM_CS_FLUSHES, 0, FALSE},
+		{"num-bytes-moved", R600_QUERY_NUM_BYTES_MOVED, 0, TRUE},
+		{"VRAM-usage", R600_QUERY_VRAM_USAGE, rscreen->info.vram_size, TRUE},
+		{"GTT-usage", R600_QUERY_GTT_USAGE, rscreen->info.gart_size, TRUE},
 	};
 
 	if (!info)
@@ -601,14 +724,14 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	rscreen->b.resource_destroy = u_resource_destroy_vtbl;
 
 	if (rscreen->info.has_uvd) {
-		rscreen->b.get_video_param = ruvd_get_video_param;
-		rscreen->b.is_video_format_supported = ruvd_is_format_supported;
+		rscreen->b.get_video_param = rvid_get_video_param;
+		rscreen->b.is_video_format_supported = rvid_is_format_supported;
 	} else {
 		rscreen->b.get_video_param = r600_get_video_param;
 		rscreen->b.is_video_format_supported = vl_video_buffer_is_format_supported;
 	}
 
-	r600_init_texture_functions(rscreen);
+	r600_init_screen_texture_functions(rscreen);
 
 	rscreen->ws = ws;
 	rscreen->family = rscreen->info.family;

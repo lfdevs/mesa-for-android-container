@@ -229,7 +229,7 @@ public:
 
    int next_temp;
 
-   variable_storage *find_variable_storage(ir_variable *var);
+   variable_storage *find_variable_storage(const ir_variable *var);
 
    src_reg get_temp(const glsl_type *type);
    void reladdr_to_temp(ir_instruction *ir, src_reg *reg, int *num_reladdr);
@@ -618,6 +618,7 @@ type_size(const struct glsl_type *type)
       }
       return size;
    case GLSL_TYPE_SAMPLER:
+   case GLSL_TYPE_IMAGE:
       /* Samplers take up one slot in UNIFORMS[], but they're baked in
        * at link time.
        */
@@ -660,9 +661,8 @@ ir_to_mesa_visitor::get_temp(const glsl_type *type)
 }
 
 variable_storage *
-ir_to_mesa_visitor::find_variable_storage(ir_variable *var)
+ir_to_mesa_visitor::find_variable_storage(const ir_variable *var)
 {
-   
    variable_storage *entry;
 
    foreach_list(node, &this->variables) {
@@ -1963,7 +1963,7 @@ ir_to_mesa_visitor::visit(ir_constant *ir)
 }
 
 void
-ir_to_mesa_visitor::visit(ir_call *ir)
+ir_to_mesa_visitor::visit(ir_call *)
 {
    assert(!"ir_to_mesa: All function calls should have been inlined by now.");
 }
@@ -2227,13 +2227,13 @@ ir_to_mesa_visitor::visit(ir_if *ir)
 }
 
 void
-ir_to_mesa_visitor::visit(ir_emit_vertex *ir)
+ir_to_mesa_visitor::visit(ir_emit_vertex *)
 {
    assert(!"Geometry shaders not supported.");
 }
 
 void
-ir_to_mesa_visitor::visit(ir_end_primitive *ir)
+ir_to_mesa_visitor::visit(ir_end_primitive *)
 {
    assert(!"Geometry shaders not supported.");
 }
@@ -2559,6 +2559,7 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
 	    columns = 1;
 	    break;
 	 case GLSL_TYPE_SAMPLER:
+	 case GLSL_TYPE_IMAGE:
 	    format = uniform_native;
 	    columns = 1;
 	    break;
@@ -2915,17 +2916,18 @@ get_mesa_program(struct gl_context *ctx,
 
    set_branchtargets(&v, mesa_instructions, num_instructions);
 
-   if (ctx->Shader.Flags & GLSL_DUMP) {
-      printf("\n");
-      printf("GLSL IR for linked %s program %d:\n", target_string,
-	     shader_program->Name);
-      _mesa_print_ir(shader->ir, NULL);
-      printf("\n");
-      printf("\n");
-      printf("Mesa IR for linked %s program %d:\n", target_string,
-	     shader_program->Name);
+   if (ctx->_Shader->Flags & GLSL_DUMP) {
+      fprintf(stderr, "\n");
+      fprintf(stderr, "GLSL IR for linked %s program %d:\n", target_string,
+	      shader_program->Name);
+      _mesa_print_ir(stderr, shader->ir, NULL);
+      fprintf(stderr, "\n");
+      fprintf(stderr, "\n");
+      fprintf(stderr, "Mesa IR for linked %s program %d:\n", target_string,
+	      shader_program->Name);
       print_program(mesa_instructions, mesa_instruction_annotation,
 		    num_instructions);
+      fflush(stderr);
    }
 
    prog->Instructions = mesa_instructions;
@@ -2950,7 +2952,7 @@ get_mesa_program(struct gl_context *ctx,
 
    _mesa_reference_program(ctx, &shader->Program, prog);
 
-   if ((ctx->Shader.Flags & GLSL_NO_OPT) == 0) {
+   if ((ctx->_Shader->Flags & GLSL_NO_OPT) == 0) {
       _mesa_optimize_program(ctx, prog);
    }
 
@@ -3005,8 +3007,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 	 progress = do_lower_jumps(ir, true, true, options->EmitNoMainReturn, options->EmitNoCont, options->EmitNoLoops) || progress;
 
 	 progress = do_common_optimization(ir, true, true,
-					   options->MaxUnrollIterations,
-                                           options)
+                                           options, ctx->Const.NativeIntegers)
 	   || progress;
 
 	 progress = lower_quadop_vector(ir, true) || progress;
@@ -3093,14 +3094,14 @@ _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       }
    }
 
-   if (ctx->Shader.Flags & GLSL_DUMP) {
+   if (ctx->_Shader->Flags & GLSL_DUMP) {
       if (!prog->LinkStatus) {
-	 printf("GLSL shader program %d failed to link\n", prog->Name);
+	 fprintf(stderr, "GLSL shader program %d failed to link\n", prog->Name);
       }
 
       if (prog->InfoLog && prog->InfoLog[0] != 0) {
-	 printf("GLSL shader program %d info log:\n", prog->Name);
-	 printf("%s\n", prog->InfoLog);
+	 fprintf(stderr, "GLSL shader program %d info log:\n", prog->Name);
+	 fprintf(stderr, "%s\n", prog->InfoLog);
       }
    }
 }

@@ -31,13 +31,12 @@ AM_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
-	$(LIBUDEV_CFLAGS) \
-	$(LIBKMS_CFLAGS) \
 	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\"
 
 noinst_LTLIBRARIES = libegl_dri2.la
 
 libegl_dri2_la_SOURCES = \
+	egl_dri2.h \
 	egl_dri2.c
 
 libegl_dri2_la_LIBADD = \

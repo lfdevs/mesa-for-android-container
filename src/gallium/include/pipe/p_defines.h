@@ -295,8 +295,27 @@ enum pipe_transfer_usage {
     * - D3D10 DDI's D3D10_DDI_MAP_WRITE_DISCARD flag
     * - D3D10's D3D10_MAP_WRITE_DISCARD flag.
     */
-   PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE = (1 << 12)
+   PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE = (1 << 12),
 
+   /**
+    * Allows the resource to be used for rendering while mapped.
+    *
+    * PIPE_RESOURCE_FLAG_MAP_PERSISTENT must be set when creating
+    * the resource.
+    *
+    * If COHERENT is not set, memory_barrier(PIPE_BARRIER_MAPPED_BUFFER)
+    * must be called to ensure the device can see what the CPU has written.
+    */
+   PIPE_TRANSFER_PERSISTENT = (1 << 13),
+
+   /**
+    * If PERSISTENT is set, this ensures any writes done by the device are
+    * immediately visible to the CPU and vice versa.
+    *
+    * PIPE_RESOURCE_FLAG_MAP_COHERENT must be set when creating
+    * the resource.
+    */
+   PIPE_TRANSFER_COHERENT = (1 << 14)
 };
 
 /**
@@ -305,6 +324,11 @@ enum pipe_transfer_usage {
 enum pipe_flush_flags {
    PIPE_FLUSH_END_OF_FRAME = (1 << 0)
 };
+
+/**
+ * Flags for pipe_context::memory_barrier.
+ */
+#define PIPE_BARRIER_MAPPED_BUFFER     (1 << 0)
 
 /*
  * Resource binding flags -- state tracker must specify in advance all
@@ -352,18 +376,19 @@ enum pipe_flush_flags {
 
 /* Flags for the driver about resource behaviour:
  */
-#define PIPE_RESOURCE_FLAG_GEN_MIPS    (1 << 0)  /* Driver performs autogen mips */
+#define PIPE_RESOURCE_FLAG_MAP_PERSISTENT (1 << 0)
+#define PIPE_RESOURCE_FLAG_MAP_COHERENT   (1 << 1)
 #define PIPE_RESOURCE_FLAG_DRV_PRIV    (1 << 16) /* driver/winsys private */
 #define PIPE_RESOURCE_FLAG_ST_PRIV     (1 << 24) /* state-tracker/winsys private */
 
 /* Hint about the expected lifecycle of a resource.
+ * Sorted according to GPU vs CPU access.
  */
-#define PIPE_USAGE_DEFAULT        0 /* many uploads, draws intermixed */
-#define PIPE_USAGE_DYNAMIC        1 /* many uploads, draws intermixed */
-#define PIPE_USAGE_STATIC         2 /* same as immutable?? */
-#define PIPE_USAGE_IMMUTABLE      3 /* no change after first upload */
-#define PIPE_USAGE_STREAM         4 /* upload, draw, upload, draw */
-#define PIPE_USAGE_STAGING        5 /* supports data transfers from the GPU to the CPU */
+#define PIPE_USAGE_DEFAULT        0 /* fast GPU access */
+#define PIPE_USAGE_IMMUTABLE      1 /* fast GPU access, immutable */
+#define PIPE_USAGE_DYNAMIC        2 /* uploaded data is used multiple times */
+#define PIPE_USAGE_STREAM         3 /* uploaded data is used once */
+#define PIPE_USAGE_STAGING        4 /* fast CPU access */
 
 
 /**
@@ -469,9 +494,6 @@ enum pipe_cap {
    PIPE_CAP_SM3 = 29,  /*< Shader Model, supported */
    PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS = 30,
    PIPE_CAP_PRIMITIVE_RESTART = 31,
-   /** Maximum texture image units accessible from vertex and fragment shaders
-    * combined */
-   PIPE_CAP_MAX_COMBINED_SAMPLERS = 32,
    /** blend enables and write masks per rendertarget */
    PIPE_CAP_INDEP_BLEND_ENABLE = 33,
    /** different blend funcs per rendertarget */
@@ -526,7 +548,15 @@ enum pipe_cap {
    PIPE_CAP_MIXED_FRAMEBUFFER_SIZES = 86,
    PIPE_CAP_TGSI_VS_LAYER = 87,
    PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES = 88,
-   PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS = 89
+   PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS = 89,
+   PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS = 90,
+   PIPE_CAP_TEXTURE_GATHER_SM5 = 91,
+   PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT = 92,
+   PIPE_CAP_FAKE_SW_MSAA = 93,
+   PIPE_CAP_TEXTURE_QUERY_LOD = 94,
+   PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET = 95,
+   PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET = 96,
+   PIPE_CAP_SAMPLE_SHADING = 97,
 };
 
 #define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
@@ -612,7 +642,8 @@ enum pipe_compute_cap
    PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE,
    PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE,
    PIPE_COMPUTE_CAP_MAX_INPUT_SIZE,
-   PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE
+   PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE,
+   PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY
 };
 
 /**

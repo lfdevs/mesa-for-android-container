@@ -48,6 +48,8 @@ do_gs_prog(struct brw_context *brw,
    c.prog_data.include_primitive_id =
       (gp->program.Base.InputsRead & VARYING_BIT_PRIMITIVE_ID) != 0;
 
+   c.prog_data.invocations = gp->program.Invocations;
+
    /* Allocate the references to the uniforms that will end up in the
     * prog_data associated with the compiled program, and which will be freed
     * by the state cache.
@@ -62,13 +64,15 @@ do_gs_prog(struct brw_context *brw,
    /* We also upload clip plane data as uniforms */
    param_count += MAX_CLIP_PLANES * 4;
 
-   c.prog_data.base.param = rzalloc_array(NULL, const float *, param_count);
-   c.prog_data.base.pull_param = rzalloc_array(NULL, const float *, param_count);
+   c.prog_data.base.base.param =
+      rzalloc_array(NULL, const float *, param_count);
+   c.prog_data.base.base.pull_param =
+      rzalloc_array(NULL, const float *, param_count);
    /* Setting nr_params here NOT to the size of the param and pull_param
     * arrays, but to the number of uniform components vec4_visitor
     * needs. vec4_visitor::setup_uniforms() will set it back to a proper value.
     */
-   c.prog_data.base.nr_params = ALIGN(param_count, 4) / 4 + gs->num_samplers;
+   c.prog_data.base.base.nr_params = ALIGN(param_count, 4) / 4 + gs->num_samplers;
 
    if (gp->program.OutputType == GL_POINTS) {
       /* When the output type is points, the geometry shader may output data
@@ -302,7 +306,7 @@ brw_upload_gs_prog(struct brw_context *brw)
                          &key, sizeof(key),
                          &stage_state->prog_offset, &brw->gs.prog_data)) {
       bool success =
-         do_gs_prog(brw, ctx->Shader.CurrentProgram[MESA_SHADER_GEOMETRY], gp,
+         do_gs_prog(brw, ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY], gp,
                     &key);
       assert(success);
    }
@@ -365,25 +369,16 @@ brw_gs_prog_data_compare(const void *in_a, const void *in_b)
    const struct brw_gs_prog_data *a = in_a;
    const struct brw_gs_prog_data *b = in_b;
 
-   /* Compare the base vec4 structure. */
-   if (!brw_vec4_prog_data_compare(&a->base, &b->base))
+   /* Compare the base structure. */
+   if (!brw_stage_prog_data_compare(&a->base.base, &b->base.base))
       return false;
 
    /* Compare the rest of the struct. */
-   const unsigned offset = sizeof(struct brw_vec4_prog_data);
+   const unsigned offset = sizeof(struct brw_stage_prog_data);
    if (memcmp(((char *) a) + offset, ((char *) b) + offset,
               sizeof(struct brw_gs_prog_data) - offset)) {
       return false;
    }
 
    return true;
-}
-
-
-void
-brw_gs_prog_data_free(const void *in_prog_data)
-{
-   const struct brw_gs_prog_data *prog_data = in_prog_data;
-
-   brw_vec4_prog_data_free(&prog_data->base);
 }

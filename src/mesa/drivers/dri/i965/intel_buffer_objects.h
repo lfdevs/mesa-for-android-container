@@ -42,9 +42,13 @@ struct intel_buffer_object
    struct gl_buffer_object Base;
    drm_intel_bo *buffer;     /* the low-level buffer manager's buffer handle */
 
-   drm_intel_bo *range_map_bo;
-   void *range_map_buffer;
-   unsigned int range_map_offset;
+   drm_intel_bo *range_map_bo[MAP_COUNT];
+
+   /**
+    * Alignment offset from the range_map_bo temporary mapping to the returned
+    * obj->Pointer (caused by GL_ARB_map_buffer_alignment).
+    */
+   unsigned map_extra[MAP_COUNT];
 
    /** @{
     * Tracking for what range of the BO may currently be in use by the GPU.
@@ -86,16 +90,17 @@ drm_intel_bo *intel_bufferobj_buffer(struct brw_context *brw,
                                      uint32_t size);
 
 void intel_upload_data(struct brw_context *brw,
-		       const void *ptr, GLuint size, GLuint align,
-		       drm_intel_bo **return_bo,
-		       GLuint *return_offset);
+                       const void *data,
+                       uint32_t size,
+                       uint32_t alignment,
+                       drm_intel_bo **out_bo,
+                       uint32_t *out_offset);
 
-void *intel_upload_map(struct brw_context *brw,
-		       GLuint size, GLuint align);
-void intel_upload_unmap(struct brw_context *brw,
-			const void *ptr, GLuint size, GLuint align,
-			drm_intel_bo **return_bo,
-			GLuint *return_offset);
+void *intel_upload_space(struct brw_context *brw,
+                         uint32_t size,
+                         uint32_t alignment,
+                         drm_intel_bo **out_bo,
+                         uint32_t *out_offset);
 
 void intel_upload_finish(struct brw_context *brw);
 

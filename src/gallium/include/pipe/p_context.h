@@ -190,6 +190,9 @@ struct pipe_context {
    void (*set_sample_mask)( struct pipe_context *,
                             unsigned sample_mask );
 
+   void (*set_min_samples)( struct pipe_context *,
+                            unsigned min_samples );
+
    void (*set_clip_state)( struct pipe_context *,
                             const struct pipe_clip_state * );
 
@@ -260,7 +263,7 @@ struct pipe_context {
    void (*set_stream_output_targets)(struct pipe_context *,
                               unsigned num_targets,
                               struct pipe_stream_output_target **targets,
-                              unsigned append_bitmask);
+                              const unsigned *offsets);
 
    /*@}*/
 
@@ -331,6 +334,17 @@ struct pipe_context {
                                unsigned stencil,
                                unsigned dstx, unsigned dsty,
                                unsigned width, unsigned height);
+
+   /**
+    * Clear a buffer. Runs a memset over the specified region with the element
+    * value passed in through clear_value of size clear_value_size.
+    */
+   void (*clear_buffer)(struct pipe_context *pipe,
+                        struct pipe_resource *res,
+                        unsigned offset,
+                        unsigned size,
+                        const void *clear_value,
+                        int clear_value_size);
 
    /** Flush draw commands
     *
@@ -406,7 +420,12 @@ struct pipe_context {
     * Flush any pending framebuffer writes and invalidate texture caches.
     */
    void (*texture_barrier)(struct pipe_context *);
-   
+
+   /**
+    * Flush caches according to flags.
+    */
+   void (*memory_barrier)(struct pipe_context *, unsigned flags);
+
    /**
     * Creates a video codec for a specific video format/profile
     */
@@ -460,11 +479,14 @@ struct pipe_context {
     *                   unless it's NULL, in which case no new
     *                   resources will be bound.
     * \param handles    array of pointers to the memory locations that
-    *                   will be filled with the respective base
-    *                   addresses each buffer will be mapped to.  It
-    *                   should contain at least \a count elements,
-    *                   unless \a resources is NULL in which case \a
-    *                   handles should be NULL as well.
+    *                   will be updated with the address each buffer
+    *                   will be mapped to.  The base memory address of
+    *                   each of the buffers will be added to the value
+    *                   pointed to by its corresponding handle to form
+    *                   the final address argument.  It should contain
+    *                   at least \a count elements, unless \a
+    *                   resources is NULL in which case \a handles
+    *                   should be NULL as well.
     *
     * Note that the driver isn't required to make any guarantees about
     * the contents of the \a handles array being valid anytime except

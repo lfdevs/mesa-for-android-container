@@ -39,3 +39,14 @@ libnouveau_la_SOURCES = \
 	$(NV50_C_SOURCES) \
 	$(NVC0_CODEGEN_SOURCES) \
 	$(NVC0_C_SOURCES)
+
+noinst_PROGRAMS = nouveau_compiler
+
+nodist_EXTRA_nouveau_compiler_SOURCES = dummy.cpp
+nouveau_compiler_SOURCES = \
+	nouveau_compiler.c
+
+nouveau_compiler_LDADD = \
+	libnouveau.la \
+	../../auxiliary/libgallium.la \
+	$(GALLIUM_COMMON_LIB_DEPS)

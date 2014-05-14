@@ -61,7 +61,7 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
    int i;
 
    /* gl_Layer and gl_ViewportIndex don't get their own varying slots -- they
-    * are stored in the virst VUE slot (VARYING_SLOT_PSIZ).
+    * are stored in the first VUE slot (VARYING_SLOT_PSIZ).
     */
    slots_valid &= ~(VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
 
@@ -82,9 +82,7 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
    /* VUE header: format depends on chip generation and whether clipping is
     * enabled.
     */
-   switch (brw->gen) {
-   case 4:
-   case 5:
+   if (brw->gen < 6) {
       /* There are 8 dwords in VUE header pre-Ironlake:
        * dword 0-3 is indices, point width, clip flags.
        * dword 4-7 is ndc position
@@ -96,10 +94,7 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
       assign_vue_slot(vue_map, VARYING_SLOT_PSIZ);
       assign_vue_slot(vue_map, BRW_VARYING_SLOT_NDC);
       assign_vue_slot(vue_map, VARYING_SLOT_POS);
-      break;
-   case 6:
-   case 7:
-   case 8:
+   } else {
       /* There are 8 or 16 DWs (D0-D15) in VUE header on Sandybridge:
        * dword 0-3 of the header is indices, point width, clip flags.
        * dword 4-7 is the 4D space position
@@ -126,10 +121,6 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
          assign_vue_slot(vue_map, VARYING_SLOT_COL1);
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_BFC1))
          assign_vue_slot(vue_map, VARYING_SLOT_BFC1);
-      break;
-   default:
-      assert (!"VUE map not known for this chip generation");
-      break;
    }
 
    /* The hardware doesn't care about the rest of the vertex outputs, so just
@@ -156,7 +147,7 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
  */
 gl_clip_plane *brw_select_clip_planes(struct gl_context *ctx)
 {
-   if (ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX]) {
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]) {
       /* There is currently a GLSL vertex shader, so clip according to GLSL
        * rules, which means compare gl_ClipVertex (or gl_Position, if
        * gl_ClipVertex wasn't assigned) against the eye-coordinate clip planes
@@ -182,12 +173,12 @@ brw_vs_prog_data_compare(const void *in_a, const void *in_b)
    const struct brw_vs_prog_data *a = in_a;
    const struct brw_vs_prog_data *b = in_b;
 
-   /* Compare the base vec4 structure. */
-   if (!brw_vec4_prog_data_compare(&a->base, &b->base))
+   /* Compare the base structure. */
+   if (!brw_stage_prog_data_compare(&a->base.base, &b->base.base))
       return false;
 
    /* Compare the rest of the struct. */
-   const unsigned offset = sizeof(struct brw_vec4_prog_data);
+   const unsigned offset = sizeof(struct brw_stage_prog_data);
    if (memcmp(((char *) a) + offset, ((char *) b) + offset,
               sizeof(struct brw_vs_prog_data) - offset)) {
       return false;
@@ -206,6 +197,7 @@ do_vs_prog(struct brw_context *brw,
    const GLuint *program;
    struct brw_vs_compile c;
    struct brw_vs_prog_data prog_data;
+   struct brw_stage_prog_data *stage_prog_data = &prog_data.base.base;
    void *mem_ctx;
    int i;
    struct gl_shader *vs = NULL;
@@ -241,16 +233,16 @@ do_vs_prog(struct brw_context *brw,
     */
    param_count += c.key.base.nr_userclip_plane_consts * 4;
 
-   prog_data.base.param = rzalloc_array(NULL, const float *, param_count);
-   prog_data.base.pull_param = rzalloc_array(NULL, const float *, param_count);
+   stage_prog_data->param = rzalloc_array(NULL, const float *, param_count);
+   stage_prog_data->pull_param = rzalloc_array(NULL, const float *, param_count);
 
    /* Setting nr_params here NOT to the size of the param and pull_param
     * arrays, but to the number of uniform components vec4_visitor
     * needs. vec4_visitor::setup_uniforms() will set it back to a proper value.
     */
-   prog_data.base.nr_params = ALIGN(param_count, 4) / 4;
+   stage_prog_data->nr_params = ALIGN(param_count, 4) / 4;
    if (vs) {
-      prog_data.base.nr_params += vs->num_samplers;
+      stage_prog_data->nr_params += vs->num_samplers;
    }
 
    GLbitfield64 outputs_written = vp->program.Base.OutputsWritten;
@@ -292,7 +284,7 @@ do_vs_prog(struct brw_context *brw,
    brw_compute_vue_map(brw, &prog_data.base.vue_map, outputs_written);
 
    if (0) {
-      _mesa_fprint_program_opt(stdout, &c.vp->program.Base, PROG_PRINT_DEBUG,
+      _mesa_fprint_program_opt(stderr, &c.vp->program.Base, PROG_PRINT_DEBUG,
 			       true);
    }
 
@@ -492,7 +484,7 @@ static void brw_upload_vs_prog(struct brw_context *brw)
 			 &key, sizeof(key),
 			 &brw->vs.base.prog_offset, &brw->vs.prog_data)) {
       bool success =
-         do_vs_prog(brw, ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX], vp,
+         do_vs_prog(brw, ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX], vp,
                     &key);
       (void) success;
       assert(success);
@@ -553,13 +545,4 @@ brw_vs_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
    brw->vs.prog_data = old_prog_data;
 
    return success;
-}
-
-
-void
-brw_vs_prog_data_free(const void *in_prog_data)
-{
-   const struct brw_vs_prog_data *prog_data = in_prog_data;
-
-   brw_vec4_prog_data_free(&prog_data->base);
 }

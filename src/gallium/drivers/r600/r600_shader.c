@@ -119,7 +119,7 @@ static int store_shader(struct pipe_context *ctx,
 		ptr = r600_buffer_map_sync_with_rings(&rctx->b, shader->bo, PIPE_TRANSFER_WRITE);
 		if (R600_BIG_ENDIAN) {
 			for (i = 0; i < shader->shader.bc.ndw; ++i) {
-				ptr[i] = util_bswap32(shader->shader.bc.bytecode[i]);
+				ptr[i] = util_cpu_to_le32(shader->shader.bc.bytecode[i]);
 			}
 		} else {
 			memcpy(ptr, shader->shader.bc.bytecode, shader->shader.bc.ndw * sizeof(*ptr));
@@ -155,7 +155,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 	r = r600_shader_from_tgsi(rctx, shader, key);
 	if (r) {
 		R600_ERR("translation from TGSI failed !\n");
-		return r;
+		goto error;
 	}
 
 	/* disable SB for geom shaders - it can't handle the CF_EMIT instructions */
@@ -169,7 +169,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		r = r600_bytecode_build(&shader->shader.bc);
 		if (r) {
 			R600_ERR("building bytecode failed !\n");
-			return r;
+			goto error;
 		}
 	}
 
@@ -182,7 +182,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		                             dump, use_sb);
 		if (r) {
 			R600_ERR("r600_sb_bytecode_process failed !\n");
-			return r;
+			goto error;
 		}
 	}
 
@@ -192,16 +192,16 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 			r = r600_sb_bytecode_process(rctx, &shader->gs_copy_shader->shader.bc,
 						     &shader->gs_copy_shader->shader, dump, 0);
 			if (r)
-				return r;
+				goto error;
 		}
 
 		if ((r = store_shader(ctx, shader->gs_copy_shader)))
-			return r;
+			goto error;
 	}
 
 	/* Store the shader in a buffer. */
 	if ((r = store_shader(ctx, shader)))
-		return r;
+		goto error;
 
 	/* Build state. */
 	switch (shader->shader.processor_type) {
@@ -235,9 +235,14 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		}
 		break;
 	default:
-		return -EINVAL;
+		r = -EINVAL;
+		goto error;
 	}
 	return 0;
+
+error:
+	r600_pipe_shader_destroy(ctx, shader);
+	return r;
 }
 
 void r600_pipe_shader_destroy(struct pipe_context *ctx, struct r600_pipe_shader *shader)
@@ -286,6 +291,7 @@ struct r600_shader_ctx {
 	int					colors_used;
 	boolean                 clip_vertex_write;
 	unsigned                cv_output;
+	unsigned		edgeflag_output;
 	int					fragcoord_input;
 	int					native_integers;
 	int					next_ring_offset;
@@ -490,9 +496,11 @@ static int r600_spi_sid(struct r600_shader_io * io)
 	 * semantic indices, so we'll use 0 for them.
 	 */
 	if (name == TGSI_SEMANTIC_POSITION ||
-		name == TGSI_SEMANTIC_PSIZE ||
-		name == TGSI_SEMANTIC_LAYER ||
-		name == TGSI_SEMANTIC_FACE)
+	    name == TGSI_SEMANTIC_PSIZE ||
+	    name == TGSI_SEMANTIC_EDGEFLAG ||
+	    name == TGSI_SEMANTIC_LAYER ||
+	    name == TGSI_SEMANTIC_VIEWPORT_INDEX ||
+	    name == TGSI_SEMANTIC_FACE)
 		index = 0;
 	else {
 		if (name == TGSI_SEMANTIC_GENERIC) {
@@ -622,6 +630,15 @@ static int tgsi_declaration(struct r600_shader_ctx *ctx)
 			case TGSI_SEMANTIC_PSIZE:
 				ctx->shader->vs_out_misc_write = 1;
 				ctx->shader->vs_out_point_size = 1;
+				break;
+			case TGSI_SEMANTIC_EDGEFLAG:
+				ctx->shader->vs_out_misc_write = 1;
+				ctx->shader->vs_out_edgeflag = 1;
+				ctx->edgeflag_output = i;
+				break;
+			case TGSI_SEMANTIC_VIEWPORT_INDEX:
+				ctx->shader->vs_out_misc_write = 1;
+				ctx->shader->vs_out_viewport = 1;
 				break;
 			case TGSI_SEMANTIC_LAYER:
 				ctx->shader->vs_out_misc_write = 1;
@@ -1157,6 +1174,35 @@ out_err:
 	return r;
 }
 
+static void convert_edgeflag_to_int(struct r600_shader_ctx *ctx)
+{
+	struct r600_bytecode_alu alu;
+	unsigned reg;
+
+	if (!ctx->shader->vs_out_edgeflag)
+		return;
+
+	reg = ctx->shader->output[ctx->edgeflag_output].gpr;
+
+	/* clamp(x, 0, 1) */
+	memset(&alu, 0, sizeof(alu));
+	alu.op = ALU_OP1_MOV;
+	alu.src[0].sel = reg;
+	alu.dst.sel = reg;
+	alu.dst.write = 1;
+	alu.dst.clamp = 1;
+	alu.last = 1;
+	r600_bytecode_add_alu(ctx->bc, &alu);
+
+	memset(&alu, 0, sizeof(alu));
+	alu.op = ALU_OP1_FLT_TO_INT;
+	alu.src[0].sel = reg;
+	alu.dst.sel = reg;
+	alu.dst.write = 1;
+	alu.last = 1;
+	r600_bytecode_add_alu(ctx->bc, &alu);
+}
+
 static int generate_gs_copy_shader(struct r600_context *rctx,
 				   struct r600_pipe_shader *gs,
 				   struct pipe_stream_output_info *so)
@@ -1295,6 +1341,18 @@ static int generate_gs_copy_shader(struct r600_context *rctx,
 			output.swizzle_w = 7;
 			ctx.shader->vs_out_misc_write = 1;
 			ctx.shader->vs_out_layer = 1;
+			break;
+		case TGSI_SEMANTIC_VIEWPORT_INDEX:
+			output.array_base = 61;
+			if (next_clip_pos == 61)
+				next_clip_pos = 62;
+			output.type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_POS;
+			ctx.shader->vs_out_misc_write = 1;
+			ctx.shader->vs_out_viewport = 1;
+			output.swizzle_x = 7;
+			output.swizzle_y = 7;
+			output.swizzle_z = 7;
+			output.swizzle_w = 0;
 			break;
 		case TGSI_SEMANTIC_CLIPDIST:
 			/* spi_sid is 0 for clipdistance outputs that were generated
@@ -1480,7 +1538,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	bool pos_emitted = false;
 
 #ifdef R600_USE_LLVM
-	use_llvm = !(rscreen->b.debug_flags & DBG_NO_LLVM);
+	use_llvm = rscreen->b.debug_flags & DBG_LLVM;
 #endif
 	ctx.bc = &shader->bc;
 	ctx.shader = shader;
@@ -1901,6 +1959,8 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	    so.num_outputs && !use_llvm)
 		emit_streamout(&ctx, &so);
 
+	convert_edgeflag_to_int(&ctx);
+
 	if (ring_outputs) {
 		if (key.vs_as_es)
 			emit_gs_ring_writes(&ctx, FALSE);
@@ -1931,6 +1991,15 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 				case TGSI_SEMANTIC_PSIZE:
 					output[j].array_base = 61;
 					output[j].swizzle_y = 7;
+					output[j].swizzle_z = 7;
+					output[j].swizzle_w = 7;
+					output[j].type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_POS;
+					pos_emitted = true;
+					break;
+				case TGSI_SEMANTIC_EDGEFLAG:
+					output[j].array_base = 61;
+					output[j].swizzle_x = 7;
+					output[j].swizzle_y = 0;
 					output[j].swizzle_z = 7;
 					output[j].swizzle_w = 7;
 					output[j].type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_POS;
@@ -4338,11 +4407,16 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 				    (inst->Texture.Texture == TGSI_TEXTURE_2D_MSAA ||
 				     inst->Texture.Texture == TGSI_TEXTURE_2D_ARRAY_MSAA);
 
+	bool txf_add_offsets = inst->Texture.NumOffsets &&
+			     inst->Instruction.Opcode == TGSI_OPCODE_TXF &&
+			     inst->Texture.Texture != TGSI_TEXTURE_BUFFER;
+
 	/* Texture fetch instructions can only use gprs as source.
 	 * Also they cannot negate the source or take the absolute value */
 	const boolean src_requires_loading = (inst->Instruction.Opcode != TGSI_OPCODE_TXQ_LZ &&
                                               tgsi_tex_src_requires_loading(ctx, 0)) ||
-					     read_compressed_msaa;
+					     read_compressed_msaa || txf_add_offsets;
+
 	boolean src_loaded = FALSE;
 	unsigned sampler_src_reg = inst->Instruction.Opcode == TGSI_OPCODE_TXQ_LZ ? 0 : 1;
 	int8_t offset_x = 0, offset_y = 0, offset_z = 0;
@@ -4373,15 +4447,6 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 				ctx->shader->uses_tex_buffers = true;
 			return do_vtx_fetch_inst(ctx, src_requires_loading);
 		}
-	}
-
-	/* get offset values */
-	if (inst->Texture.NumOffsets) {
-		assert(inst->Texture.NumOffsets == 1);
-
-		offset_x = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleX] << 1;
-		offset_y = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleY] << 1;
-		offset_z = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleZ] << 1;
 	}
 
 	if (inst->Instruction.Opcode == TGSI_OPCODE_TXD) {
@@ -4734,6 +4799,78 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		}
 		src_loaded = TRUE;
 		src_gpr = ctx->temp_reg;
+	}
+
+	/* get offset values */
+	if (inst->Texture.NumOffsets) {
+		assert(inst->Texture.NumOffsets == 1);
+
+		/* The texture offset feature doesn't work with the TXF instruction
+		 * and must be emulated by adding the offset to the texture coordinates. */
+		if (txf_add_offsets) {
+			const struct tgsi_texture_offset *off = inst->TexOffsets;
+
+			switch (inst->Texture.Texture) {
+			case TGSI_TEXTURE_3D:
+				memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+				alu.op = ALU_OP2_ADD_INT;
+				alu.src[0].sel = src_gpr;
+				alu.src[0].chan = 2;
+				alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
+				alu.src[1].value = ctx->literals[4 * off[0].Index + off[0].SwizzleZ];
+				alu.dst.sel = src_gpr;
+				alu.dst.chan = 2;
+				alu.dst.write = 1;
+				alu.last = 1;
+				r = r600_bytecode_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+				/* fall through */
+
+			case TGSI_TEXTURE_2D:
+			case TGSI_TEXTURE_SHADOW2D:
+			case TGSI_TEXTURE_RECT:
+			case TGSI_TEXTURE_SHADOWRECT:
+			case TGSI_TEXTURE_2D_ARRAY:
+			case TGSI_TEXTURE_SHADOW2D_ARRAY:
+				memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+				alu.op = ALU_OP2_ADD_INT;
+				alu.src[0].sel = src_gpr;
+				alu.src[0].chan = 1;
+				alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
+				alu.src[1].value = ctx->literals[4 * off[0].Index + off[0].SwizzleY];
+				alu.dst.sel = src_gpr;
+				alu.dst.chan = 1;
+				alu.dst.write = 1;
+				alu.last = 1;
+				r = r600_bytecode_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+				/* fall through */
+
+			case TGSI_TEXTURE_1D:
+			case TGSI_TEXTURE_SHADOW1D:
+			case TGSI_TEXTURE_1D_ARRAY:
+			case TGSI_TEXTURE_SHADOW1D_ARRAY:
+				memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+				alu.op = ALU_OP2_ADD_INT;
+				alu.src[0].sel = src_gpr;
+				alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
+				alu.src[1].value = ctx->literals[4 * off[0].Index + off[0].SwizzleX];
+				alu.dst.sel = src_gpr;
+				alu.dst.write = 1;
+				alu.last = 1;
+				r = r600_bytecode_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+				break;
+				/* texture offsets do not apply to other texture targets */
+			}
+		} else {
+			offset_x = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleX] << 1;
+			offset_y = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleY] << 1;
+			offset_z = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleZ] << 1;
+		}
 	}
 
 	/* Obtain the sample index for reading a compressed MSAA color texture.

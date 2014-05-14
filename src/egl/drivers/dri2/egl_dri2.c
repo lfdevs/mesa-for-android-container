@@ -25,6 +25,8 @@
  *    Kristian Høgsberg <krh@bitplanet.net>
  */
 
+#define WL_HIDE_DEPRECATED
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -42,14 +44,15 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "egl_dri2.h"
-
 #ifdef HAVE_WAYLAND_PLATFORM
 #include "wayland-drm.h"
+#include "wayland-drm-client-protocol.h"
 #endif
 
+#include "egl_dri2.h"
+
 const __DRIuseInvalidateExtension use_invalidate = {
-   { __DRI_USE_INVALIDATE, 1 }
+   .base = { __DRI_USE_INVALIDATE, 1 }
 };
 
 EGLint dri2_to_egl_attribute_map[] = {
@@ -296,8 +299,9 @@ dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data)
 }
 
 const __DRIimageLookupExtension image_lookup_extension = {
-   { __DRI_IMAGE_LOOKUP, 1 },
-   dri2_lookup_egl_image
+   .base = { __DRI_IMAGE_LOOKUP, 1 },
+
+   .lookupEGLImage       = dri2_lookup_egl_image
 };
 
 static const char dri_driver_path[] = DEFAULT_DRIVER_DIR;
@@ -508,6 +512,7 @@ dri2_setup_screen(_EGLDisplay *disp)
 
    assert(dri2_dpy->dri2 || dri2_dpy->swrast);
    disp->Extensions.KHR_surfaceless_context = EGL_TRUE;
+   disp->Extensions.MESA_configless_context = EGL_TRUE;
 
    if (dri2_dpy->dri2 && dri2_dpy->dri2->base.version >= 3) {
       disp->Extensions.KHR_create_context = EGL_TRUE;
@@ -626,7 +631,6 @@ dri2_initialize(_EGLDriver *drv, _EGLDisplay *disp)
       return dri2_initialize_x11(drv, disp);
 #endif
 
-#ifdef HAVE_LIBUDEV
 #ifdef HAVE_DRM_PLATFORM
    case _EGL_PLATFORM_DRM:
       if (disp->Options.TestOnly)
@@ -638,7 +642,6 @@ dri2_initialize(_EGLDriver *drv, _EGLDisplay *disp)
       if (disp->Options.TestOnly)
          return EGL_TRUE;
       return dri2_initialize_wayland(drv, disp);
-#endif
 #endif
 #ifdef HAVE_ANDROID_PLATFORM
    case _EGL_PLATFORM_ANDROID:
@@ -671,23 +674,31 @@ dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
       dlclose(dri2_dpy->driver);
    free(dri2_dpy->device_name);
 
-   if (disp->PlatformDisplay == NULL) {
-      switch (disp->Platform) {
+   switch (disp->Platform) {
 #ifdef HAVE_X11_PLATFORM
-      case _EGL_PLATFORM_X11:
+   case _EGL_PLATFORM_X11:
+      if (dri2_dpy->own_device) {
          xcb_disconnect(dri2_dpy->conn);
-         break;
+      }
+      break;
 #endif
 #ifdef HAVE_DRM_PLATFORM
-      case _EGL_PLATFORM_DRM:
-         if (dri2_dpy->own_device) {
-            gbm_device_destroy(&dri2_dpy->gbm_dri->base.base);
-         }
-         break;
-#endif
-      default:
-         break;
+   case _EGL_PLATFORM_DRM:
+      if (dri2_dpy->own_device) {
+         gbm_device_destroy(&dri2_dpy->gbm_dri->base.base);
       }
+      break;
+#endif
+#ifdef HAVE_WAYLAND_PLATFORM
+   case _EGL_PLATFORM_WAYLAND:
+      wl_drm_destroy(dri2_dpy->wl_drm);
+      if (dri2_dpy->own_device) {
+         wl_display_disconnect(dri2_dpy->wl_dpy);
+      }
+      break;
+#endif
+   default:
+      break;
    }
 
    free(dri2_dpy);
@@ -1012,6 +1023,97 @@ dri2_get_proc_address(_EGLDriver *drv, const char *procname)
    return dri2_drv->get_proc_address(procname);
 }
 
+static _EGLSurface*
+dri2_create_window_surface(_EGLDriver *drv, _EGLDisplay *dpy,
+                           _EGLConfig *conf, void *native_window,
+                           const EGLint *attrib_list)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->create_window_surface(drv, dpy, conf, native_window,
+                                                attrib_list);
+}
+
+static _EGLSurface*
+dri2_create_pixmap_surface(_EGLDriver *drv, _EGLDisplay *dpy,
+                           _EGLConfig *conf, void *native_pixmap,
+                           const EGLint *attrib_list)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->create_pixmap_surface(drv, dpy, conf, native_pixmap,
+                                                attrib_list);
+}
+
+static _EGLSurface*
+dri2_create_pbuffer_surface(_EGLDriver *drv, _EGLDisplay *dpy,
+                           _EGLConfig *conf, const EGLint *attrib_list)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->create_pbuffer_surface(drv, dpy, conf, attrib_list);
+}
+
+static EGLBoolean
+dri2_destroy_surface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->destroy_surface(drv, dpy, surf);
+}
+
+static EGLBoolean
+dri2_swap_interval(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
+                   EGLint interval)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->swap_interval(drv, dpy, surf, interval);
+}
+
+static EGLBoolean
+dri2_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->swap_buffers(drv, dpy, surf);
+}
+
+static EGLBoolean
+dri2_swap_buffers_with_damage(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLSurface *surf,
+                              const EGLint *rects, EGLint n_rects)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->swap_buffers_with_damage(drv, dpy, surf,
+                                                   rects, n_rects);
+}
+
+static EGLBoolean
+dri2_swap_buffers_region(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
+                         EGLint numRects, const EGLint *rects)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->swap_buffers_region(drv, dpy, surf, numRects, rects);
+}
+
+static EGLBoolean
+dri2_post_sub_buffer(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
+                     EGLint x, EGLint y, EGLint width, EGLint height)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->post_sub_buffer(drv, dpy, surf, x, y, width, height);
+}
+
+static EGLBoolean
+dri2_copy_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
+                  void *native_pixmap_target)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->copy_buffers(drv, dpy, surf, native_pixmap_target);
+}
+
+static EGLint
+dri2_query_buffer_age(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->query_buffer_age(drv, dpy, surf);
+}
+
 static EGLBoolean
 dri2_wait_client(_EGLDriver *drv, _EGLDisplay *disp, _EGLContext *ctx)
 {
@@ -1088,7 +1190,6 @@ static EGLBoolean
 dri2_release_tex_image(_EGLDriver *drv,
 		       _EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
 {
-#if __DRI_TEX_BUFFER_VERSION >= 3
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
    struct dri2_egl_context *dri2_ctx;
@@ -1108,17 +1209,29 @@ dri2_release_tex_image(_EGLDriver *drv,
    default:
       assert(0);
    }
-   if (dri2_dpy->tex_buffer->releaseTexBuffer!=NULL)
-    (*dri2_dpy->tex_buffer->releaseTexBuffer)(dri2_ctx->dri_context,
-                                             target,
-                                             dri2_surf->dri_drawable);
-#endif
+
+   if (dri2_dpy->tex_buffer->base.version >= 3 &&
+       dri2_dpy->tex_buffer->releaseTexBuffer != NULL) {
+      (*dri2_dpy->tex_buffer->releaseTexBuffer)(dri2_ctx->dri_context,
+                                                target,
+                                                dri2_surf->dri_drawable);
+   }
 
    return EGL_TRUE;
 }
 
+static _EGLImage*
+dri2_create_image(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx,
+                  EGLenum target, EGLClientBuffer buffer,
+                  const EGLint *attr_list)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->create_image(drv, dpy, ctx, target, buffer,
+                                       attr_list);
+}
+
 static _EGLImage *
-dri2_create_image(_EGLDisplay *disp, __DRIimage *dri_image)
+dri2_create_image_from_dri(_EGLDisplay *disp, __DRIimage *dri_image)
 {
    struct dri2_egl_image *dri2_img;
 
@@ -1162,7 +1275,7 @@ dri2_create_image_khr_renderbuffer(_EGLDisplay *disp, _EGLContext *ctx,
       dri2_dpy->image->createImageFromRenderbuffer(dri2_ctx->dri_context,
                                                    renderbuffer, NULL);
 
-   return dri2_create_image(disp, dri_image);
+   return dri2_create_image_from_dri(disp, dri_image);
 }
 
 #ifdef HAVE_DRM_PLATFORM
@@ -1208,7 +1321,7 @@ dri2_create_image_mesa_drm_buffer(_EGLDisplay *disp, _EGLContext *ctx,
 					   pitch,
 					   NULL);
 
-   return dri2_create_image(disp, dri_image);
+   return dri2_create_image_from_dri(disp, dri_image);
 }
 #endif
 
@@ -1271,7 +1384,7 @@ dri2_create_image_wayland_wl_buffer(_EGLDisplay *disp, _EGLContext *ctx,
       return NULL;
    }
 
-   return dri2_create_image(disp, dri_image);
+   return dri2_create_image_from_dri(disp, dri_image);
 }
 #endif
 
@@ -1382,6 +1495,14 @@ dri2_create_image_khr_texture(_EGLDisplay *disp, _EGLContext *ctx,
       return EGL_NO_IMAGE_KHR;
    }
    return &dri2_img->base;
+}
+
+static struct wl_buffer*
+dri2_create_wayland_buffer_from_image(_EGLDriver *drv, _EGLDisplay *dpy,
+                                      _EGLImage *img)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->create_wayland_buffer_from_image(drv, dpy, img);
 }
 
 #ifdef HAVE_DRM_PLATFORM
@@ -1633,7 +1754,7 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
    if (!dri_image)
       return EGL_NO_IMAGE_KHR;
 
-   res = dri2_create_image(disp, dri_image);
+   res = dri2_create_image_from_dri(disp, dri_image);
    if (res)
       dri2_take_dma_buf_ownership(fds, num_fds);
 
@@ -1879,7 +2000,7 @@ dri2_bind_wayland_display_wl(_EGLDriver *drv, _EGLDisplay *disp,
 	   return EGL_FALSE;
 
    wl_drm_callbacks.authenticate =
-      (int(*)(void *, uint32_t)) dri2_dpy->authenticate;
+      (int(*)(void *, uint32_t)) dri2_dpy->vtbl->authenticate;
 
    ret = drmGetCap(dri2_dpy->fd, DRM_CAP_PRIME, &cap);
    if (ret == 0 && cap == (DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT) &&
@@ -1894,10 +2015,12 @@ dri2_bind_wayland_display_wl(_EGLDriver *drv, _EGLDisplay *disp,
    if (!dri2_dpy->wl_server_drm)
 	   return EGL_FALSE;
 
+#ifdef HAVE_DRM_PLATFORM
    /* We have to share the wl_drm instance with gbm, so gbm can convert
     * wl_buffers to gbm bos. */
    if (dri2_dpy->gbm_dri)
       dri2_dpy->gbm_dri->wl_drm = dri2_dpy->wl_server_drm;
+#endif
 
    return EGL_TRUE;
 }
@@ -2030,13 +2153,25 @@ _eglBuiltInDriverDRI2(const char *args)
    dri2_drv->base.API.CreateContext = dri2_create_context;
    dri2_drv->base.API.DestroyContext = dri2_destroy_context;
    dri2_drv->base.API.MakeCurrent = dri2_make_current;
+   dri2_drv->base.API.CreateWindowSurface = dri2_create_window_surface;
+   dri2_drv->base.API.CreatePixmapSurface = dri2_create_pixmap_surface;
+   dri2_drv->base.API.CreatePbufferSurface = dri2_create_pbuffer_surface;
+   dri2_drv->base.API.DestroySurface = dri2_destroy_surface;
    dri2_drv->base.API.GetProcAddress = dri2_get_proc_address;
    dri2_drv->base.API.WaitClient = dri2_wait_client;
    dri2_drv->base.API.WaitNative = dri2_wait_native;
    dri2_drv->base.API.BindTexImage = dri2_bind_tex_image;
    dri2_drv->base.API.ReleaseTexImage = dri2_release_tex_image;
-   dri2_drv->base.API.CreateImageKHR = dri2_create_image_khr;
+   dri2_drv->base.API.SwapInterval = dri2_swap_interval;
+   dri2_drv->base.API.SwapBuffers = dri2_swap_buffers;
+   dri2_drv->base.API.SwapBuffersWithDamageEXT = dri2_swap_buffers_with_damage;
+   dri2_drv->base.API.SwapBuffersRegionNOK = dri2_swap_buffers_region;
+   dri2_drv->base.API.PostSubBufferNV = dri2_post_sub_buffer;
+   dri2_drv->base.API.CopyBuffers = dri2_copy_buffers,
+   dri2_drv->base.API.QueryBufferAge = dri2_query_buffer_age;
+   dri2_drv->base.API.CreateImageKHR = dri2_create_image;
    dri2_drv->base.API.DestroyImageKHR = dri2_destroy_image_khr;
+   dri2_drv->base.API.CreateWaylandBufferFromImageWL = dri2_create_wayland_buffer_from_image;
 #ifdef HAVE_DRM_PLATFORM
    dri2_drv->base.API.CreateDRMImageMESA = dri2_create_drm_image_mesa;
    dri2_drv->base.API.ExportDRMImageMESA = dri2_export_drm_image_mesa;

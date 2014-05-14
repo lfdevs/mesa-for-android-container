@@ -50,25 +50,23 @@ gen8_fs_generator::~gen8_fs_generator()
 }
 
 void
-gen8_fs_generator::mark_surface_used(unsigned surf_index)
-{
-   assert(surf_index < BRW_MAX_SURFACES);
-
-   c->prog_data.base.binding_table.size_bytes =
-      MAX2(c->prog_data.base.binding_table.size_bytes, (surf_index + 1) * 4);
-}
-
-void
 gen8_fs_generator::generate_fb_write(fs_inst *ir)
 {
-   if (fp && fp->UsesKill) {
-      gen8_instruction *mov =
-         MOV(retype(brw_vec1_grf(1, 7), BRW_REGISTER_TYPE_UW),
-             brw_flag_reg(0, 1));
-      gen8_set_mask_control(mov, BRW_MASK_DISABLE);
-   }
+   /* Disable the discard condition while setting up the header. */
+   default_state.predicate = BRW_PREDICATE_NONE;
+   default_state.predicate_inverse = false;
+   default_state.flag_subreg_nr = 0;
 
    if (ir->header_present) {
+      /* The GPU will use the predicate on SENDC, unless the header is present.
+       */
+      if (fp && fp->UsesKill) {
+         gen8_instruction *mov =
+            MOV(retype(brw_vec1_grf(1, 7), BRW_REGISTER_TYPE_UW),
+                brw_flag_reg(0, 1));
+         gen8_set_mask_control(mov, BRW_MASK_DISABLE);
+      }
+
       gen8_instruction *mov =
          MOV_RAW(brw_message_reg(ir->base_mrf), brw_vec8_grf(0, 0));
       gen8_set_exec_size(mov, BRW_EXECUTE_16);
@@ -87,6 +85,13 @@ gen8_fs_generator::generate_fb_write(fs_inst *ir)
              brw_imm_ud(ir->target));
       }
    }
+
+   /* Set the predicate back to get the conditional write if necessary for
+    * discards.
+    */
+   default_state.predicate = ir->predicate;
+   default_state.predicate_inverse = ir->predicate_inverse;
+   default_state.flag_subreg_nr = ir->flag_subreg;
 
    gen8_instruction *inst = next_inst(BRW_OPCODE_SENDC);
    gen8_set_dst(brw, inst, retype(vec8(brw_null_reg()), BRW_REGISTER_TYPE_UW));
@@ -126,7 +131,7 @@ gen8_fs_generator::generate_fb_write(fs_inst *ir)
                        ir->header_present,
                        ir->eot);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 void
@@ -241,6 +246,9 @@ gen8_fs_generator::generate_tex(fs_inst *ir,
       if (dispatch_width == 16)
          src.nr++;
 
+      unsigned save_exec_size = default_state.exec_size;
+      default_state.exec_size = BRW_EXECUTE_8;
+
       MOV_RAW(src, brw_vec8_grf(0, 0));
 
       if (ir->texture_offset) {
@@ -248,6 +256,25 @@ gen8_fs_generator::generate_tex(fs_inst *ir,
          MOV_RAW(retype(brw_vec1_grf(src.nr, 2), BRW_REGISTER_TYPE_UD),
                  brw_imm_ud(ir->texture_offset));
       }
+
+      if (ir->sampler >= 16) {
+         /* The "Sampler Index" field can only store values between 0 and 15.
+          * However, we can add an offset to the "Sampler State Pointer"
+          * field, effectively selecting a different set of 16 samplers.
+          *
+          * The "Sampler State Pointer" needs to be aligned to a 32-byte
+          * offset, and each sampler state is only 16-bytes, so we can't
+          * exclusively use the offset - we have to use both.
+          */
+         gen8_instruction *add =
+            ADD(get_element_ud(src, 3),
+                get_element_ud(brw_vec8_grf(0, 0), 3),
+                brw_imm_ud(16 * (ir->sampler / 16) *
+                           sizeof(gen7_sampler_state)));
+         gen8_set_mask_control(add, BRW_MASK_DISABLE);
+      }
+
+      default_state.exec_size = save_exec_size;
    }
 
    uint32_t surf_index =
@@ -258,14 +285,14 @@ gen8_fs_generator::generate_tex(fs_inst *ir,
    gen8_set_src0(brw, inst, src);
    gen8_set_sampler_message(brw, inst,
                             surf_index,
-                            ir->sampler,
+                            ir->sampler % 16,
                             msg_type,
                             rlen,
                             ir->mlen,
                             ir->header_present,
                             simd_mode);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 
@@ -380,24 +407,124 @@ gen8_fs_generator::generate_ddy(fs_inst *inst,
 }
 
 void
-gen8_fs_generator::generate_scratch_write(fs_inst *inst, struct brw_reg dst)
+gen8_fs_generator::generate_scratch_write(fs_inst *ir, struct brw_reg src)
 {
-   assert(inst->mlen != 0);
-   assert(!"TODO: Implement generate_scratch_write.");
+   MOV(retype(brw_message_reg(ir->base_mrf + 1), BRW_REGISTER_TYPE_UD),
+       retype(src, BRW_REGISTER_TYPE_UD));
+
+   struct brw_reg mrf =
+      retype(brw_message_reg(ir->base_mrf), BRW_REGISTER_TYPE_UD);
+
+   const int num_regs = dispatch_width / 8;
+
+   uint32_t msg_control;
+   if (num_regs == 1)
+      msg_control = BRW_DATAPORT_OWORD_BLOCK_2_OWORDS;
+   else
+      msg_control = BRW_DATAPORT_OWORD_BLOCK_4_OWORDS;
+
+   /* Set up the message header.  This is g0, with g0.2 filled with
+    * the offset.  We don't want to leave our offset around in g0 or
+    * it'll screw up texture samples, so set it up inside the message
+    * reg.
+    */
+   unsigned save_exec_size = default_state.exec_size;
+   default_state.exec_size = BRW_EXECUTE_8;
+
+   MOV_RAW(mrf, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
+   /* set message header global offset field (reg 0, element 2) */
+   MOV_RAW(get_element_ud(mrf, 2), brw_imm_ud(ir->offset / 16));
+
+   struct brw_reg dst;
+   if (dispatch_width == 16)
+      dst = retype(vec16(brw_null_reg()), BRW_REGISTER_TYPE_UW);
+   else
+      dst = retype(vec8(brw_null_reg()), BRW_REGISTER_TYPE_UW);
+
+   default_state.exec_size = BRW_EXECUTE_16;
+
+   gen8_instruction *send = next_inst(BRW_OPCODE_SEND);
+   gen8_set_dst(brw, send, dst);
+   gen8_set_src0(brw, send, mrf);
+   gen8_set_dp_message(brw, send, GEN7_SFID_DATAPORT_DATA_CACHE,
+                       255, /* binding table index: stateless access */
+                       GEN6_DATAPORT_WRITE_MESSAGE_OWORD_BLOCK_WRITE,
+                       msg_control,
+                       1 + num_regs, /* mlen */
+                       0,            /* rlen */
+                       true,         /* header present */
+                       false);       /* EOT */
+
+   default_state.exec_size = save_exec_size;
 }
 
 void
-gen8_fs_generator::generate_scratch_read(fs_inst *inst, struct brw_reg dst)
+gen8_fs_generator::generate_scratch_read(fs_inst *ir, struct brw_reg dst)
 {
-   assert(inst->mlen != 0);
-   assert(!"TODO: Implement generate_scratch_read.");
+   struct brw_reg mrf =
+      retype(brw_message_reg(ir->base_mrf), BRW_REGISTER_TYPE_UD);
+
+   const int num_regs = dispatch_width / 8;
+
+   uint32_t msg_control;
+   if (num_regs == 1)
+      msg_control = BRW_DATAPORT_OWORD_BLOCK_2_OWORDS;
+   else
+      msg_control = BRW_DATAPORT_OWORD_BLOCK_4_OWORDS;
+
+   unsigned save_exec_size = default_state.exec_size;
+   default_state.exec_size = BRW_EXECUTE_8;
+
+   MOV_RAW(mrf, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
+   /* set message header global offset field (reg 0, element 2) */
+   MOV_RAW(get_element_ud(mrf, 2), brw_imm_ud(ir->offset / 16));
+
+   gen8_instruction *send = next_inst(BRW_OPCODE_SEND);
+   gen8_set_dst(brw, send, retype(dst, BRW_REGISTER_TYPE_UW));
+   gen8_set_src0(brw, send, mrf);
+   gen8_set_dp_message(brw, send, GEN7_SFID_DATAPORT_DATA_CACHE,
+                       255, /* binding table index: stateless access */
+                       BRW_DATAPORT_READ_MESSAGE_OWORD_BLOCK_READ,
+                       msg_control,
+                       1,        /* mlen */
+                       num_regs, /* rlen */
+                       true,     /* header present */
+                       false);   /* EOT */
+
+   default_state.exec_size = save_exec_size;
 }
 
 void
-gen8_fs_generator::generate_scratch_read_gen7(fs_inst *inst, struct brw_reg dst)
+gen8_fs_generator::generate_scratch_read_gen7(fs_inst *ir, struct brw_reg dst)
 {
-   assert(inst->mlen != 0);
-   assert(!"TODO: Implement generate_scratch_read_gen7.");
+   unsigned save_exec_size = default_state.exec_size;
+   gen8_instruction *send = next_inst(BRW_OPCODE_SEND);
+
+   int num_regs = dispatch_width / 8;
+
+   /* According to the docs, offset is "A 12-bit HWord offset into the memory
+    * Immediate Memory buffer as specified by binding table 0xFF."  An HWORD
+    * is 32 bytes, which happens to be the size of a register.
+    */
+   int offset = ir->offset / REG_SIZE;
+
+   /* The HW requires that the header is present; this is to get the g0.5
+    * scratch offset.
+    */
+   gen8_set_src0(brw, send, brw_vec8_grf(0, 0));
+   gen8_set_dst(brw, send, retype(dst, BRW_REGISTER_TYPE_UW));
+   gen8_set_dp_scratch_message(brw, send,
+                               false,    /* scratch read */
+                               false,    /* OWords */
+                               false,    /* invalidate after read */
+                               num_regs,
+                               offset,
+                               1,        /* mlen - just g0 */
+                               num_regs, /* rlen */
+                               true,     /* header present */
+                               false);   /* EOT */
+
+   default_state.exec_size = save_exec_size;
 }
 
 void
@@ -437,7 +564,7 @@ gen8_fs_generator::generate_uniform_pull_constant_load(fs_inst *inst,
                             false, /* no header */
                             BRW_SAMPLER_SIMD_MODE_SIMD4X2);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 void
@@ -479,7 +606,7 @@ gen8_fs_generator::generate_varying_pull_constant_load(fs_inst *ir,
                             false, /* no header */
                             simd_mode);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 /**
@@ -560,6 +687,197 @@ gen8_fs_generator::generate_set_simd4x2_offset(fs_inst *ir,
    MOV_RAW(retype(brw_vec1_reg(dst.file, dst.nr, 0), value.type), value);
 }
 
+/**
+ * Sets vstride=16, width=8, hstride=2 or vstride=0, width=1, hstride=0
+ * (when mask is passed as a uniform) of register mask before moving it
+ * to register dst.
+ */
+void
+gen8_fs_generator::generate_set_omask(fs_inst *inst,
+                                      struct brw_reg dst,
+                                      struct brw_reg mask)
+{
+   assert(dst.type == BRW_REGISTER_TYPE_UW);
+
+   if (dispatch_width == 16)
+      dst = vec16(dst);
+
+   if (mask.vstride == BRW_VERTICAL_STRIDE_8 &&
+       mask.width == BRW_WIDTH_8 &&
+       mask.hstride == BRW_HORIZONTAL_STRIDE_1) {
+      mask = stride(mask, 16, 8, 2);
+   } else {
+      assert(mask.vstride == BRW_VERTICAL_STRIDE_0 &&
+             mask.width == BRW_WIDTH_1 &&
+             mask.hstride == BRW_HORIZONTAL_STRIDE_0);
+   }
+
+   unsigned save_exec_size = default_state.exec_size;
+   default_state.exec_size = BRW_EXECUTE_8;
+
+   gen8_instruction *mov = MOV(dst, retype(mask, dst.type));
+   gen8_set_mask_control(mov, BRW_MASK_DISABLE);
+
+   default_state.exec_size = save_exec_size;
+}
+
+/**
+ * Do a special ADD with vstride=1, width=4, hstride=0 for src1.
+ */
+void
+gen8_fs_generator::generate_set_sample_id(fs_inst *ir,
+                                          struct brw_reg dst,
+                                          struct brw_reg src0,
+                                          struct brw_reg src1)
+{
+   assert(dst.type == BRW_REGISTER_TYPE_D || dst.type == BRW_REGISTER_TYPE_UD);
+   assert(src0.type == BRW_REGISTER_TYPE_D || src0.type == BRW_REGISTER_TYPE_UD);
+
+   struct brw_reg reg = retype(stride(src1, 1, 4, 0), BRW_REGISTER_TYPE_UW);
+
+   unsigned save_exec_size = default_state.exec_size;
+   default_state.exec_size = BRW_EXECUTE_8;
+
+   gen8_instruction *add = ADD(dst, src0, reg);
+   gen8_set_mask_control(add, BRW_MASK_DISABLE);
+   if (dispatch_width == 16) {
+      add = ADD(offset(dst, 1), offset(src0, 1), suboffset(reg, 2));
+      gen8_set_mask_control(add, BRW_MASK_DISABLE);
+   }
+
+   default_state.exec_size = save_exec_size;
+}
+
+/**
+ * Change the register's data type from UD to HF, doubling the strides in order
+ * to compensate for halving the data type width.
+ */
+static struct brw_reg
+ud_reg_to_hf(struct brw_reg r)
+{
+   assert(r.type == BRW_REGISTER_TYPE_UD);
+   r.type = BRW_REGISTER_TYPE_HF;
+
+   /* The BRW_*_STRIDE enums are defined so that incrementing the field
+    * doubles the real stride.
+    */
+   if (r.hstride != 0)
+      ++r.hstride;
+   if (r.vstride != 0)
+      ++r.vstride;
+
+   return r;
+}
+
+void
+gen8_fs_generator::generate_pack_half_2x16_split(fs_inst *inst,
+                                                 struct brw_reg dst,
+                                                 struct brw_reg x,
+                                                 struct brw_reg y)
+{
+   assert(dst.type == BRW_REGISTER_TYPE_UD);
+   assert(x.type == BRW_REGISTER_TYPE_F);
+   assert(y.type == BRW_REGISTER_TYPE_F);
+
+   struct brw_reg dst_hf = ud_reg_to_hf(dst);
+
+   /* Give each 32-bit channel of dst the form below , where "." means
+    * unchanged.
+    *   0x....hhhh
+    */
+   MOV(dst_hf, y);
+
+   /* Now the form:
+    *   0xhhhh0000
+    */
+   SHL(dst, dst, brw_imm_ud(16u));
+
+   /* And, finally the form of packHalf2x16's output:
+    *   0xhhhhllll
+    */
+   MOV(dst_hf, x);
+}
+
+void
+gen8_fs_generator::generate_unpack_half_2x16_split(fs_inst *inst,
+                                                   struct brw_reg dst,
+                                                   struct brw_reg src)
+{
+   assert(dst.type == BRW_REGISTER_TYPE_F);
+   assert(src.type == BRW_REGISTER_TYPE_UD);
+
+   struct brw_reg src_hf = ud_reg_to_hf(src);
+
+   /* Each channel of src has the form of unpackHalf2x16's input: 0xhhhhllll.
+    * For the Y case, we wish to access only the upper word; therefore
+    * a 16-bit subregister offset is needed.
+    */
+   assert(inst->opcode == FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X ||
+          inst->opcode == FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y);
+   if (inst->opcode == FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y)
+      src_hf.subnr += 2;
+
+   MOV(dst, src_hf);
+}
+
+void
+gen8_fs_generator::generate_untyped_atomic(fs_inst *ir,
+                                           struct brw_reg dst,
+                                           struct brw_reg atomic_op,
+                                           struct brw_reg surf_index)
+{
+   assert(atomic_op.file == BRW_IMMEDIATE_VALUE &&
+          atomic_op.type == BRW_REGISTER_TYPE_UD &&
+          surf_index.file == BRW_IMMEDIATE_VALUE &&
+          surf_index.type == BRW_REGISTER_TYPE_UD);
+   assert((atomic_op.dw1.ud & ~0xf) == 0);
+
+   unsigned msg_control =
+      atomic_op.dw1.ud | /* Atomic Operation Type: BRW_AOP_* */
+      ((dispatch_width == 16 ? 0 : 1) << 4) | /* SIMD Mode */
+      (1 << 5); /* Return data expected */
+
+   gen8_instruction *inst = next_inst(BRW_OPCODE_SEND);
+   gen8_set_dst(brw, inst, retype(dst, BRW_REGISTER_TYPE_UD));
+   gen8_set_src0(brw, inst, brw_message_reg(ir->base_mrf));
+   gen8_set_dp_message(brw, inst, HSW_SFID_DATAPORT_DATA_CACHE_1,
+                       surf_index.dw1.ud,
+                       HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP,
+                       msg_control,
+                       ir->mlen,
+                       dispatch_width / 8,
+                       ir->header_present,
+                       false);
+
+   brw_mark_surface_used(&c->prog_data.base, surf_index.dw1.ud);
+}
+
+void
+gen8_fs_generator::generate_untyped_surface_read(fs_inst *ir,
+                                                 struct brw_reg dst,
+                                                 struct brw_reg surf_index)
+{
+   assert(surf_index.file == BRW_IMMEDIATE_VALUE &&
+          surf_index.type == BRW_REGISTER_TYPE_UD);
+
+   unsigned msg_control = 0xe | /* Enable only the R channel */
+     ((dispatch_width == 16 ? 1 : 2) << 4); /* SIMD Mode */
+
+   gen8_instruction *inst = next_inst(BRW_OPCODE_SEND);
+   gen8_set_dst(brw, inst, retype(dst, BRW_REGISTER_TYPE_UD));
+   gen8_set_src0(brw, inst, brw_message_reg(ir->base_mrf));
+   gen8_set_dp_message(brw, inst, HSW_SFID_DATAPORT_DATA_CACHE_1,
+                       surf_index.dw1.ud,
+                       HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ,
+                       msg_control,
+                       ir->mlen,
+                       dispatch_width / 8,
+                       ir->header_present,
+                       false);
+
+   brw_mark_surface_used(&c->prog_data.base, surf_index.dw1.ud);
+}
+
 void
 gen8_fs_generator::generate_code(exec_list *instructions)
 {
@@ -569,14 +887,17 @@ gen8_fs_generator::generate_code(exec_list *instructions)
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
       if (prog) {
-         printf("Native code for fragment shader %d (SIMD%d dispatch):\n",
+         fprintf(stderr,
+                 "Native code for %s fragment shader %d (SIMD%d dispatch):\n",
+                shader_prog->Label ? shader_prog->Label : "unnamed",
                 shader_prog->Name, dispatch_width);
       } else if (fp) {
-         printf("Native code for fragment program %d (SIMD%d dispatch):\n",
-                prog->Id, dispatch_width);
+         fprintf(stderr,
+                 "Native code for fragment program %d (SIMD%d dispatch):\n",
+                 prog->Id, dispatch_width);
       } else {
-         printf("Native code for blorp program (SIMD%d dispatch):\n",
-                dispatch_width);
+         fprintf(stderr, "Native code for blorp program (SIMD%d dispatch):\n",
+                 dispatch_width);
       }
    }
 
@@ -594,38 +915,38 @@ gen8_fs_generator::generate_code(exec_list *instructions)
             bblock_t *block = link->block;
 
             if (block->start == ir) {
-               printf("   START B%d", block->block_num);
+               fprintf(stderr, "   START B%d", block->block_num);
                foreach_list(predecessor_node, &block->parents) {
                   bblock_link *predecessor_link =
                      (bblock_link *)predecessor_node;
                   bblock_t *predecessor_block = predecessor_link->block;
-                  printf(" <-B%d", predecessor_block->block_num);
+                  fprintf(stderr, " <-B%d", predecessor_block->block_num);
                }
-               printf("\n");
+               fprintf(stderr, "\n");
             }
          }
 
          if (last_annotation_ir != ir->ir) {
             last_annotation_ir = ir->ir;
             if (last_annotation_ir) {
-               printf("   ");
+               fprintf(stderr, "   ");
                if (prog) {
-                  ((ir_instruction *) ir->ir)->print();
+                  ((ir_instruction *) ir->ir)->fprint(stderr);
                } else if (prog) {
                   const prog_instruction *fpi;
                   fpi = (const prog_instruction *) ir->ir;
-                  printf("%d: ", (int)(fpi - prog->Instructions));
-                  _mesa_fprint_instruction_opt(stdout,
+                  fprintf(stderr, "%d: ", (int)(fpi - prog->Instructions));
+                  _mesa_fprint_instruction_opt(stderr,
                                                fpi,
                                                0, PROG_PRINT_DEBUG, NULL);
                }
-               printf("\n");
+               fprintf(stderr, "\n");
             }
          }
          if (last_annotation_string != ir->annotation) {
             last_annotation_string = ir->annotation;
             if (last_annotation_string)
-               printf("   %s\n", last_annotation_string);
+               fprintf(stderr, "   %s\n", last_annotation_string);
          }
       }
 
@@ -648,6 +969,7 @@ gen8_fs_generator::generate_code(exec_list *instructions)
       default_state.predicate = ir->predicate;
       default_state.predicate_inverse = ir->predicate_inverse;
       default_state.saturate = ir->saturate;
+      default_state.mask_control = ir->force_writemask_all;
       default_state.flag_subreg_nr = ir->flag_subreg;
 
       if (dispatch_width == 16 && !ir->force_uncompressed)
@@ -655,10 +977,12 @@ gen8_fs_generator::generate_code(exec_list *instructions)
       else
          default_state.exec_size = BRW_EXECUTE_8;
 
-      /* fs_inst::force_sechalf is only used for original Gen4 code, so we
-       * don't handle it.  Add qtr_control to default_state if that changes.
-       */
-      assert(!ir->force_sechalf);
+      if (ir->force_uncompressed || dispatch_width == 8)
+         default_state.qtr_control = GEN6_COMPRESSION_1Q;
+      else if (ir->force_sechalf)
+         default_state.qtr_control = GEN6_COMPRESSION_2Q;
+      else
+         default_state.qtr_control = GEN6_COMPRESSION_1H;
 
       switch (ir->opcode) {
       case BRW_OPCODE_MOV:
@@ -723,10 +1047,10 @@ gen8_fs_generator::generate_code(exec_list *instructions)
          break;
 
       case BRW_OPCODE_F32TO16:
-         F32TO16(dst, src[0]);
+         MOV(retype(dst, BRW_REGISTER_TYPE_HF), src[0]);
          break;
       case BRW_OPCODE_F16TO32:
-         F16TO32(dst, src[0]);
+         MOV(dst, retype(src[0], BRW_REGISTER_TYPE_HF));
          break;
 
       case BRW_OPCODE_CMP:
@@ -923,11 +1247,11 @@ gen8_fs_generator::generate_code(exec_list *instructions)
          break;
 
       case SHADER_OPCODE_UNTYPED_ATOMIC:
-         assert(!"XXX: Missing Gen8 scalar support for untyped atomics");
+         generate_untyped_atomic(ir, dst, src[0], src[1]);
          break;
 
       case SHADER_OPCODE_UNTYPED_SURFACE_READ:
-         assert(!"XXX: Missing Gen8 scalar support for untyped surface reads");
+         generate_untyped_surface_read(ir, dst, src[0]);
          break;
 
       case FS_OPCODE_SET_SIMD4X2_OFFSET:
@@ -935,20 +1259,20 @@ gen8_fs_generator::generate_code(exec_list *instructions)
          break;
 
       case FS_OPCODE_SET_OMASK:
-         assert(!"XXX: Missing Gen8 scalar support for SET_OMASK");
+         generate_set_omask(ir, dst, src[0]);
          break;
 
       case FS_OPCODE_SET_SAMPLE_ID:
-         assert(!"XXX: Missing Gen8 scalar support for SET_SAMPLE_ID");
+         generate_set_sample_id(ir, dst, src[0], src[1]);
          break;
 
       case FS_OPCODE_PACK_HALF_2x16_SPLIT:
-         assert(!"XXX: Missing Gen8 scalar support for PACK_HALF_2x16_SPLIT");
+         generate_pack_half_2x16_split(ir, dst, src[0], src[1]);
          break;
 
       case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X:
       case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y:
-         assert(!"XXX: Missing Gen8 scalar support for UNPACK_HALF_2x16_SPLIT");
+         generate_unpack_half_2x16_split(ir, dst, src[0]);
          break;
 
       case FS_OPCODE_PLACEHOLDER_HALT:
@@ -969,21 +1293,21 @@ gen8_fs_generator::generate_code(exec_list *instructions)
       }
 
       if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
-         disassemble(stdout, last_native_inst_offset, next_inst_offset);
+         disassemble(stderr, last_native_inst_offset, next_inst_offset);
 
          foreach_list(node, &cfg->block_list) {
             bblock_link *link = (bblock_link *)node;
             bblock_t *block = link->block;
 
             if (block->end == ir) {
-               printf("   END B%d", block->block_num);
+               fprintf(stderr, "   END B%d", block->block_num);
                foreach_list(successor_node, &block->children) {
                   bblock_link *successor_link =
                      (bblock_link *)successor_node;
                   bblock_t *successor_block = successor_link->block;
-                  printf(" ->B%d", successor_block->block_num);
+                  fprintf(stderr, " ->B%d", successor_block->block_num);
                }
-               printf("\n");
+               fprintf(stderr, "\n");
             }
          }
       }
@@ -992,10 +1316,19 @@ gen8_fs_generator::generate_code(exec_list *instructions)
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
-      printf("\n");
+      fprintf(stderr, "\n");
    }
 
    patch_jump_targets();
+
+   /* OK, while the INTEL_DEBUG=fs above is very nice for debugging FS
+    * emit issues, it doesn't get the jump distances into the output,
+    * which is often something we want to debug.  So this is here in
+    * case you're doing that.
+    */
+   if (0 && unlikely(INTEL_DEBUG & DEBUG_WM)) {
+      disassemble(stderr, 0, next_inst_offset);
+   }
 }
 
 const unsigned *

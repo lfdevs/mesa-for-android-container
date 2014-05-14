@@ -24,7 +24,7 @@
 
 #include "api/util.hpp"
 #include "core/event.hpp"
-#include "core/resource.hpp"
+#include "core/memory.hpp"
 
 using namespace clover;
 
@@ -50,13 +50,24 @@ namespace {
    }
 
    ///
+   /// Size of a region in bytes.
+   ///
+   size_t
+   size(const vector_t &pitch, const vector_t &region) {
+      if (any_of(is_zero(), region))
+         return 0;
+      else
+         return dot(pitch, region - vector_t{ 0, 1, 1 });
+   }
+
+   ///
    /// Common argument checking shared by memory transfer commands.
    ///
    void
    validate_common(command_queue &q,
                    const ref_vector<event> &deps) {
       if (any_of([&](const event &ev) {
-               return &ev.ctx != &q.ctx;
+               return ev.context() != q.context();
             }, deps))
          throw error(CL_INVALID_CONTEXT);
    }
@@ -67,7 +78,7 @@ namespace {
    void
    validate_object(command_queue &q, buffer &mem, const vector_t &origin,
                    const vector_t &pitch, const vector_t &region) {
-      if (mem.ctx != q.ctx)
+      if (mem.context() != q.context())
          throw error(CL_INVALID_CONTEXT);
 
       // The region must fit within the specified pitch,
@@ -75,7 +86,7 @@ namespace {
          throw error(CL_INVALID_VALUE);
 
       // ...and within the specified object.
-      if (dot(pitch, origin) + pitch[2] * region[2] > mem.size())
+      if (dot(pitch, origin) + size(pitch, region) > mem.size())
          throw error(CL_INVALID_VALUE);
 
       if (any_of(is_zero(), region))
@@ -90,7 +101,7 @@ namespace {
                    const vector_t &orig, const vector_t &region) {
       vector_t size = { img.width(), img.height(), img.depth() };
 
-      if (img.ctx != q.ctx)
+      if (img.context() != q.context())
          throw error(CL_INVALID_CONTEXT);
 
       if (any_of(greater(), orig + region, size))
@@ -128,8 +139,8 @@ namespace {
          auto src_offset = dot(src_pitch, src_orig);
 
          if (interval_overlaps()(
-                dst_offset, dst_offset + dst_pitch[2] * region[2],
-                src_offset, src_offset + src_pitch[2] * region[2]))
+                dst_offset, dst_offset + size(dst_pitch, region),
+                src_offset, src_offset + size(src_pitch, region)))
             throw error(CL_MEM_COPY_OVERLAP);
       }
    }
@@ -199,10 +210,10 @@ namespace {
       return [=, &q](event &) {
          auto dst = _map<T>::get(q, dst_obj, CL_MAP_WRITE,
                                  dot(dst_pitch, dst_orig),
-                                 dst_pitch[2] * region[2]);
+                                 size(dst_pitch, region));
          auto src = _map<S>::get(q, src_obj, CL_MAP_READ,
                                  dot(src_pitch, src_orig),
-                                 src_pitch[2] * region[2]);
+                                 size(src_pitch, region));
          vector_t v = {};
 
          for (v[2] = 0; v[2] < region[2]; ++v[2]) {
@@ -246,7 +257,7 @@ clEnqueueReadBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_object(q, ptr, {}, obj_pitch, region);
    validate_object(q, mem, obj_origin, obj_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_READ_BUFFER, deps,
       soft_copy_op(q, ptr, {}, obj_pitch,
                    &mem, obj_origin, obj_pitch,
@@ -275,7 +286,7 @@ clEnqueueWriteBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_object(q, mem, obj_origin, obj_pitch, region);
    validate_object(q, ptr, {}, obj_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_WRITE_BUFFER, deps,
       soft_copy_op(q, &mem, obj_origin, obj_pitch,
                    ptr, {}, obj_pitch,
@@ -311,7 +322,7 @@ clEnqueueReadBufferRect(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_object(q, ptr, host_origin, host_pitch, region);
    validate_object(q, mem, obj_origin, obj_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_READ_BUFFER_RECT, deps,
       soft_copy_op(q, ptr, host_origin, host_pitch,
                    &mem, obj_origin, obj_pitch,
@@ -347,7 +358,7 @@ clEnqueueWriteBufferRect(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_object(q, mem, obj_origin, obj_pitch, region);
    validate_object(q, ptr, host_origin, host_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_WRITE_BUFFER_RECT, deps,
       soft_copy_op(q, &mem, obj_origin, obj_pitch,
                    ptr, host_origin, host_pitch,
@@ -381,7 +392,7 @@ clEnqueueCopyBuffer(cl_command_queue d_q, cl_mem d_src_mem, cl_mem d_dst_mem,
    validate_copy(q, dst_mem, dst_origin, dst_pitch,
                  src_mem, src_origin, src_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_COPY_BUFFER, deps,
       hard_copy_op(q, &dst_mem, dst_origin,
                    &src_mem, src_origin, region));
@@ -418,7 +429,7 @@ clEnqueueCopyBufferRect(cl_command_queue d_q, cl_mem d_src_mem,
    validate_copy(q, dst_mem, dst_origin, dst_pitch,
                  src_mem, src_origin, src_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_COPY_BUFFER_RECT, deps,
       soft_copy_op(q, &dst_mem, dst_origin, dst_pitch,
                    &src_mem, src_origin, src_pitch,
@@ -451,7 +462,7 @@ clEnqueueReadImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_object(q, ptr, {}, dst_pitch, region);
    validate_object(q, img, src_origin, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_READ_IMAGE, deps,
       soft_copy_op(q, ptr, {}, dst_pitch,
                    &img, src_origin, src_pitch,
@@ -484,7 +495,7 @@ clEnqueueWriteImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_object(q, img, dst_origin, region);
    validate_object(q, ptr, {}, src_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_WRITE_IMAGE, deps,
       soft_copy_op(q, &img, dst_origin, dst_pitch,
                    ptr, {}, src_pitch,
@@ -516,7 +527,7 @@ clEnqueueCopyImage(cl_command_queue d_q, cl_mem d_src_mem, cl_mem d_dst_mem,
    validate_object(q, src_img, src_origin, region);
    validate_copy(q, dst_img, dst_origin, src_img, src_origin, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_COPY_IMAGE, deps,
       hard_copy_op(q, &dst_img, dst_origin,
                    &src_img, src_origin,
@@ -552,7 +563,7 @@ clEnqueueCopyImageToBuffer(cl_command_queue d_q,
    validate_object(q, dst_mem, dst_origin, dst_pitch, region);
    validate_object(q, src_img, src_origin, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_COPY_IMAGE_TO_BUFFER, deps,
       soft_copy_op(q, &dst_mem, dst_origin, dst_pitch,
                    &src_img, src_origin, src_pitch,
@@ -588,7 +599,7 @@ clEnqueueCopyBufferToImage(cl_command_queue d_q,
    validate_object(q, dst_img, dst_origin, region);
    validate_object(q, src_mem, src_origin, src_pitch, region);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_COPY_BUFFER_TO_IMAGE, deps,
       soft_copy_op(q, &dst_img, dst_origin, dst_pitch,
                    &src_mem, src_origin, src_pitch,
@@ -618,7 +629,7 @@ clEnqueueMapBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    void *map = mem.resource(q).add_map(q, flags, blocking, obj_origin, region);
 
-   ret_object(rd_ev, new hard_event(q, CL_COMMAND_MAP_BUFFER, deps));
+   ret_object(rd_ev, create<hard_event>(q, CL_COMMAND_MAP_BUFFER, deps));
    ret_error(r_errcode, CL_SUCCESS);
    return map;
 
@@ -645,7 +656,7 @@ clEnqueueMapImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    void *map = img.resource(q).add_map(q, flags, blocking, origin, region);
 
-   ret_object(rd_ev, new hard_event(q, CL_COMMAND_MAP_IMAGE, deps));
+   ret_object(rd_ev, create<hard_event>(q, CL_COMMAND_MAP_IMAGE, deps));
    ret_error(r_errcode, CL_SUCCESS);
    return map;
 
@@ -664,7 +675,7 @@ clEnqueueUnmapMemObject(cl_command_queue d_q, cl_mem d_mem, void *ptr,
 
    validate_common(q, deps);
 
-   hard_event *hev = new hard_event(
+   auto hev = create<hard_event>(
       q, CL_COMMAND_UNMAP_MEM_OBJECT, deps,
       [=, &q, &mem](event &) {
          mem.resource(q).del_map(ptr);

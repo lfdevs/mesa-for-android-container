@@ -1,3 +1,27 @@
+mesa (10.2.0~rc1-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+    - 02_gbm_no_undefined.diff dropped, upstream
+    - 03_gbm_make_devices_static.diff dropped, upstream
+  * control: Bump libdrm-dev build-dependency.
+  * Drop a symbol from libxatracker2.
+  * libosmesa6: Bump the soname to upstream default (8), drop
+    04_osmesa_version.diff. Add a symlink with the old name to point to
+    the new lib.
+
+  [ Julien Cristau ]
+  * Add 01_no_undefined.diff to actually add -Wl,--no-undefined to the linker
+    flags for our shared libraries.
+
+  [ Andreas Boll ]
+  * Relax ocl-icd-libopencl1 dependency to allow the generic virtual
+    libopencl1 as a valid alternative (Closes: #745765).
+  * Add missing separator between dependency items '${misc:Depends}'
+    and 'libglapi-mesa (= ${binary:Version})'.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 14 May 2014 22:57:08 +0200
+
 mesa (10.1.0-5) unstable; urgency=low
 
   [ Maarten Lankhorst ]

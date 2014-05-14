@@ -38,16 +38,16 @@
 #include "util/u_math.h"
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
+#include "radeon/radeon_video.h"
 #include "radeon/radeon_uvd.h"
 #include "os/os_time.h"
 
 static const struct debug_named_value r600_debug_options[] = {
 	/* features */
 #if defined(R600_USE_LLVM)
-	{ "nollvm", DBG_NO_LLVM, "Disable the LLVM shader compiler" },
+	{ "llvm", DBG_LLVM, "Enable the LLVM shader compiler" },
 #endif
 	{ "nocpdma", DBG_NO_CP_DMA, "Disable CP DMA" },
-	{ "nodma", DBG_NO_ASYNC_DMA, "Disable asynchronous DMA" },
 
 	/* shader backend */
 	{ "nosb", DBG_NO_SB, "Disable sb backend for graphics shaders" },
@@ -65,88 +65,6 @@ static const struct debug_named_value r600_debug_options[] = {
 /*
  * pipe_context
  */
-
-static void r600_flush(struct pipe_context *ctx, unsigned flags)
-{
-	struct r600_context *rctx = (struct r600_context *)ctx;
-	struct pipe_query *render_cond = NULL;
-	unsigned render_cond_mode = 0;
-	boolean render_cond_cond = FALSE;
-
-	if (rctx->b.rings.gfx.cs->cdw == rctx->b.initial_gfx_cs_size)
-		return;
-
-	rctx->b.rings.gfx.flushing = true;
-	/* Disable render condition. */
-	if (rctx->b.current_render_cond) {
-		render_cond = rctx->b.current_render_cond;
-		render_cond_cond = rctx->b.current_render_cond_cond;
-		render_cond_mode = rctx->b.current_render_cond_mode;
-		ctx->render_condition(ctx, NULL, FALSE, 0);
-	}
-
-	r600_context_flush(rctx, flags);
-	rctx->b.rings.gfx.flushing = false;
-	r600_begin_new_cs(rctx);
-
-	/* Re-enable render condition. */
-	if (render_cond) {
-		ctx->render_condition(ctx, render_cond, render_cond_cond, render_cond_mode);
-	}
-
-	rctx->b.initial_gfx_cs_size = rctx->b.rings.gfx.cs->cdw;
-}
-
-static void r600_flush_from_st(struct pipe_context *ctx,
-			       struct pipe_fence_handle **fence,
-			       unsigned flags)
-{
-	struct r600_context *rctx = (struct r600_context *)ctx;
-	unsigned fflags;
-
-	fflags = flags & PIPE_FLUSH_END_OF_FRAME ? RADEON_FLUSH_END_OF_FRAME : 0;
-	if (fence) {
-		*fence = rctx->b.ws->cs_create_fence(rctx->b.rings.gfx.cs);
-	}
-	/* flush gfx & dma ring, order does not matter as only one can be live */
-	if (rctx->b.rings.dma.cs) {
-		rctx->b.rings.dma.flush(rctx, fflags);
-	}
-	rctx->b.rings.gfx.flush(rctx, fflags);
-}
-
-static void r600_flush_gfx_ring(void *ctx, unsigned flags)
-{
-	r600_flush((struct pipe_context*)ctx, flags);
-}
-
-static void r600_flush_dma_ring(void *ctx, unsigned flags)
-{
-	struct r600_context *rctx = (struct r600_context *)ctx;
-	struct radeon_winsys_cs *cs = rctx->b.rings.dma.cs;
-
-	if (!cs->cdw) {
-		return;
-	}
-
-	rctx->b.rings.dma.flushing = true;
-	rctx->b.ws->cs_flush(cs, flags, 0);
-	rctx->b.rings.dma.flushing = false;
-}
-
-static void r600_flush_from_winsys(void *ctx, unsigned flags)
-{
-	struct r600_context *rctx = (struct r600_context *)ctx;
-
-	rctx->b.rings.gfx.flush(rctx, flags);
-}
-
-static void r600_flush_dma_from_winsys(void *ctx, unsigned flags)
-{
-	struct r600_context *rctx = (struct r600_context *)ctx;
-
-	rctx->b.rings.dma.flush(rctx, flags);
-}
 
 static void r600_destroy_context(struct pipe_context *context)
 {
@@ -195,6 +113,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen, void
 {
 	struct r600_context *rctx = CALLOC_STRUCT(r600_context);
 	struct r600_screen* rscreen = (struct r600_screen *)screen;
+	struct radeon_winsys *ws = rscreen->b.ws;
 
 	if (rctx == NULL)
 		return NULL;
@@ -202,7 +121,6 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen, void
 	rctx->b.b.screen = screen;
 	rctx->b.b.priv = priv;
 	rctx->b.b.destroy = r600_destroy_context;
-	rctx->b.b.flush = r600_flush_from_st;
 
 	if (!r600_common_context_init(&rctx->b, &rscreen->b))
 		goto fail;
@@ -259,25 +177,14 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen, void
 		goto fail;
 	}
 
-	if (rscreen->b.trace_bo) {
-		rctx->b.rings.gfx.cs = rctx->b.ws->cs_create(rctx->b.ws, RING_GFX, rscreen->b.trace_bo->cs_buf);
-	} else {
-		rctx->b.rings.gfx.cs = rctx->b.ws->cs_create(rctx->b.ws, RING_GFX, NULL);
-	}
-	rctx->b.rings.gfx.flush = r600_flush_gfx_ring;
-	rctx->b.ws->cs_set_flush_callback(rctx->b.rings.gfx.cs, r600_flush_from_winsys, rctx);
-	rctx->b.rings.gfx.flushing = false;
-
-	rctx->b.rings.dma.cs = NULL;
-	if (rscreen->b.info.r600_has_dma && !(rscreen->b.debug_flags & DBG_NO_ASYNC_DMA)) {
-		rctx->b.rings.dma.cs = rctx->b.ws->cs_create(rctx->b.ws, RING_DMA, NULL);
-		rctx->b.rings.dma.flush = r600_flush_dma_ring;
-		rctx->b.ws->cs_set_flush_callback(rctx->b.rings.dma.cs, r600_flush_dma_from_winsys, rctx);
-		rctx->b.rings.dma.flushing = false;
-	}
+	rctx->b.rings.gfx.cs = ws->cs_create(ws, RING_GFX,
+					     r600_context_gfx_flush, rctx,
+					     rscreen->b.trace_bo ?
+						     rscreen->b.trace_bo->cs_buf : NULL);
+	rctx->b.rings.gfx.flush = r600_context_gfx_flush;
 
 	rctx->allocator_fetch_shader = u_suballocator_create(&rctx->b.b, 64 * 1024, 256,
-							     0, PIPE_USAGE_STATIC, FALSE);
+							     0, PIPE_USAGE_DEFAULT, FALSE);
 	if (!rctx->allocator_fetch_shader)
 		goto fail;
 
@@ -353,12 +260,16 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
 	case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
+        case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
 		return 1;
 
 	case PIPE_CAP_COMPUTE:
 		return rscreen->b.chip_class > R700;
 
 	case PIPE_CAP_TGSI_TEXCOORD:
+		return 0;
+
+	case PIPE_CAP_FAKE_SW_MSAA:
 		return 0;
 
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
@@ -400,6 +311,10 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
+	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
+	case PIPE_CAP_TEXTURE_GATHER_SM5:
+	case PIPE_CAP_TEXTURE_QUERY_LOD:
+        case PIPE_CAP_SAMPLE_SHADING:
 		return 0;
 
 	/* Stream output. */
@@ -419,17 +334,17 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
 	/* Texturing. */
 	case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
-	case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
 	case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
 		if (family >= CHIP_CEDAR)
 			return 15;
 		else
 			return 14;
+	case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
+		/* textures support 8192, but layered rendering supports 2048 */
+		return 12;
 	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-		return rscreen->b.info.drm_minor >= 9 ?
-			(family >= CHIP_CEDAR ? 16384 : 8192) : 0;
-	case PIPE_CAP_MAX_COMBINED_SAMPLERS:
-		return 48;
+		/* textures support 8192, but layered rendering supports 2048 */
+		return rscreen->b.info.drm_minor >= 9 ? 2048 : 0;
 
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -437,7 +352,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 8;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
-		return 1;
+		return 16;
 
 	/* Timer queries, present when the clock frequency is non zero. */
 	case PIPE_CAP_QUERY_TIME_ELAPSED:
@@ -446,9 +361,11 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return rscreen->b.info.drm_minor >= 20 &&
 		       rscreen->b.info.r600_clock_crystal_freq != 0;
 
+	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
 		return -8;
 
+	case PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MAX_TEXEL_OFFSET:
 		return 7;
 
@@ -536,7 +453,7 @@ static void r600_destroy_screen(struct pipe_screen* pscreen)
 	if (rscreen == NULL)
 		return;
 
-	if (!radeon_winsys_unref(rscreen->b.ws))
+	if (!rscreen->b.ws->unref(rscreen->b.ws))
 		return;
 
 	if (rscreen->global_pool) {
@@ -589,8 +506,8 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws)
 		rscreen->b.debug_flags |= DBG_FS | DBG_VS | DBG_GS | DBG_PS | DBG_CS;
 	if (debug_get_bool_option("R600_HYPERZ", FALSE))
 		rscreen->b.debug_flags |= DBG_HYPERZ;
-	if (!debug_get_bool_option("R600_LLVM", TRUE))
-		rscreen->b.debug_flags |= DBG_NO_LLVM;
+	if (debug_get_bool_option("R600_LLVM", FALSE))
+		rscreen->b.debug_flags |= DBG_LLVM;
 
 	if (rscreen->b.family == CHIP_UNKNOWN) {
 		fprintf(stderr, "r600: Unknown chipset 0x%04X\n", rscreen->b.info.pci_id);
@@ -656,7 +573,7 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws)
 	templ.array_size = 1;
 	templ.target = PIPE_TEXTURE_2D;
 	templ.format = PIPE_FORMAT_R8G8B8A8_UNORM;
-	templ.usage = PIPE_USAGE_STATIC;
+	templ.usage = PIPE_USAGE_DEFAULT;
 
 	struct r600_resource *res = r600_resource(rscreen->screen.resource_create(&rscreen->screen, &templ));
 	unsigned char *map = ws->buffer_map(res->cs_buf, NULL, PIPE_TRANSFER_WRITE);

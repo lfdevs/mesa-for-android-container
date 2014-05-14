@@ -1905,6 +1905,7 @@ static void si_llvm_emit_vertex(
 	LLVMValueRef soffset = LLVMGetParam(si_shader_ctx->radeon_bld.main_fn,
 					    SI_PARAM_GS2VS_OFFSET);
 	LLVMValueRef gs_next_vertex;
+	LLVMValueRef can_emit, kill;
 	LLVMValueRef t_list_ptr;
 	LLVMValueRef t_list;
 	LLVMValueRef args[2];
@@ -1934,6 +1935,21 @@ static void si_llvm_emit_vertex(
 
 	/* Write vertex attribute values to GSVS ring */
 	gs_next_vertex = LLVMBuildLoad(gallivm->builder, si_shader_ctx->gs_next_vertex, "");
+
+	/* If this thread has already emitted the declared maximum number of
+	 * vertices, kill it: excessive vertex emissions are not supposed to
+	 * have any effect, and GS threads have no externally observable
+	 * effects other than emitting vertices.
+	 */
+	can_emit = LLVMBuildICmp(gallivm->builder, LLVMIntULE, gs_next_vertex,
+				 lp_build_const_int32(gallivm,
+						      shader->gs_max_out_vertices), "");
+	kill = lp_build_select(&bld_base->base, can_emit,
+			       lp_build_const_float(gallivm, 1.0f),
+			       lp_build_const_float(gallivm, -1.0f));
+	build_intrinsic(gallivm->builder, "llvm.AMDGPU.kill",
+			LLVMVoidTypeInContext(gallivm->context), &kill, 1, 0);
+
 	for (i = 0; i < shader->noutput; i++) {
 		LLVMValueRef *out_ptr =
 			si_shader_ctx->radeon_bld.soa.outputs[shader->output[i].index];
@@ -2277,14 +2293,19 @@ static void preload_streamout_buffers(struct si_shader_context *si_shader_ctx)
 int si_compile_llvm(struct si_context *sctx, struct si_pipe_shader *shader,
 							LLVMModuleRef mod)
 {
+	unsigned r; /* llvm_compile result */
 	unsigned i;
 	uint32_t *ptr;
-	struct radeon_llvm_binary binary;
+	struct radeon_shader_binary binary;
 	bool dump = r600_can_dump_shader(&sctx->screen->b,
 			shader->selector ? shader->selector->tokens : NULL);
+	const char * gpu_family = r600_get_llvm_processor_name(sctx->screen->b.family);
+
+	/* Use LLVM to compile shader */
 	memset(&binary, 0, sizeof(binary));
-	radeon_llvm_compile(mod, &binary,
-		r600_get_llvm_processor_name(sctx->screen->b.family), dump);
+	r = radeon_llvm_compile(mod, &binary, gpu_family, dump);
+
+	/* Output binary dump if rscreen->debug_flags are set */
 	if (dump && ! binary.disassembled) {
 		fprintf(stderr, "SI CODE:\n");
 		for (i = 0; i < binary.code_size; i+=4 ) {
@@ -2297,6 +2318,7 @@ int si_compile_llvm(struct si_context *sctx, struct si_pipe_shader *shader,
 	/* XXX: We may be able to emit some of these values directly rather than
 	 * extracting fields to be emitted later.
 	 */
+	/* Parse config data in compiled binary */
 	for (i = 0; i < binary.config_size; i+= 8) {
 		unsigned reg = util_le32_to_cpu(*(uint32_t*)(binary.config + i));
 		unsigned value = util_le32_to_cpu(*(uint32_t*)(binary.config + i + 4));
@@ -2333,9 +2355,9 @@ int si_compile_llvm(struct si_context *sctx, struct si_pipe_shader *shader,
 	}
 
 	ptr = (uint32_t*)sctx->b.ws->buffer_map(shader->bo->cs_buf, sctx->b.rings.gfx.cs, PIPE_TRANSFER_WRITE);
-	if (0 /*SI_BIG_ENDIAN*/) {
+	if (SI_BIG_ENDIAN) {
 		for (i = 0; i < binary.code_size / 4; ++i) {
-			ptr[i] = util_bswap32(*(uint32_t*)(binary.code + i*4));
+			ptr[i] = util_cpu_to_le32((*(uint32_t*)(binary.code + i*4)));
 		}
 	} else {
 		memcpy(ptr, binary.code, binary.code_size);
@@ -2345,7 +2367,7 @@ int si_compile_llvm(struct si_context *sctx, struct si_pipe_shader *shader,
 	free(binary.code);
 	free(binary.config);
 
-	return 0;
+	return r;
 }
 
 /* Generate code for the hardware VS shader stage to go with a geometry shader */

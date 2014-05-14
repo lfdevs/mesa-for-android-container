@@ -14,7 +14,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include <libdrm/nouveau_drm.h>
+#include <nouveau_drm.h>
 
 #include "nouveau_winsys.h"
 #include "nouveau_screen.h"
@@ -123,7 +123,7 @@ nouveau_screen_bo_get_handle(struct pipe_screen *pscreen,
 		whandle->handle = bo->handle;
 		return TRUE;
 	} else if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
-		return nouveau_bo_set_prime(bo, &whandle->handle) == 0;
+		return nouveau_bo_set_prime(bo, (int *)&whandle->handle) == 0;
 	} else {
 		return FALSE;
 	}
@@ -143,6 +143,12 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 	char *nv_dbg = getenv("NOUVEAU_MESA_DEBUG");
 	if (nv_dbg)
 	   nouveau_mesa_debug = atoi(nv_dbg);
+
+	/*
+	 * this is initialized to 1 in nouveau_drm_screen_create after screen
+	 * is fully constructed and added to the global screen list.
+	 */
+	screen->refcount = -1;
 
 	if (dev->chipset < 0xc0) {
 		data = &nv04_data;

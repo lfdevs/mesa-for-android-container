@@ -39,29 +39,73 @@
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_scan.h"
 
+#include "freedreno_lowering.h"
+
 #include "fd3_compiler.h"
 #include "fd3_program.h"
 #include "fd3_util.h"
 
 #include "instr-a3xx.h"
-#include "ir-a3xx.h"
+#include "ir3.h"
 
+/* NOTE on half/full precision:
+ * Currently, the front end (ie. basically this file) does everything in
+ * full precision (with the exception of trans_arl() which doesn't work
+ * currently.. we reject anything with relative addressing and fallback
+ * to old compiler).
+ *
+ * In the RA step, if half_precision, it will assign the output to hr0.x
+ * but use full precision everywhere else.
+ *
+ * Eventually we'll need a better way to communicate type information
+ * to RA so that it can more properly assign both half and full precision
+ * registers.  (And presumably double precision pairs for a4xx?)  This
+ * would let us make more use of half precision registers, while still
+ * keeping things like tex coords in full precision registers.
+ *
+ * Since the RA is dealing with patching instruction types for half
+ * precision output, we can ignore that in the front end and just always
+ * create full precision instructions.
+ */
 
 struct fd3_compile_context {
 	const struct tgsi_token *tokens;
+	bool free_tokens;
 	struct ir3_shader *ir;
-	struct fd3_shader_stateobj *so;
+	struct fd3_shader_variant *so;
+
+	struct ir3_block *block;
+	struct ir3_instruction *current_instr;
+
+	/* we need to defer updates to block->outputs[] until the end
+	 * of an instruction (so we don't see new value until *after*
+	 * the src registers are processed)
+	 */
+	struct {
+		struct ir3_instruction *instr, **instrp;
+	} output_updates[16];
+	unsigned num_output_updates;
+
+	/* are we in a sequence of "atomic" instructions?
+	 */
+	bool atomic;
+
+	/* For fragment shaders, from the hw perspective the only
+	 * actual input is r0.xy position register passed to bary.f.
+	 * But TGSI doesn't know that, it still declares things as
+	 * IN[] registers.  So we do all the input tracking normally
+	 * and fix things up after compile_instructions()
+	 *
+	 * NOTE that frag_pos is the hardware position (possibly it
+	 * is actually an index or tag or some such.. it is *not*
+	 * values that can be directly used for gl_FragCoord..)
+	 */
+	struct ir3_instruction *frag_pos, *frag_face, *frag_coord[4];
 
 	struct tgsi_parse_context parser;
 	unsigned type;
 
 	struct tgsi_shader_info info;
-
-	/* last input dst (for setting (ei) flag): */
-	struct ir3_register *last_input;
-
-	/* last instruction with relative addressing: */
-	struct ir3_instruction *last_rel;
 
 	/* for calculating input/output positions/linkages: */
 	unsigned next_inloc;
@@ -69,36 +113,21 @@ struct fd3_compile_context {
 	unsigned num_internal_temps;
 	struct tgsi_src_register internal_temps[6];
 
-	/* track registers which need to synchronize w/ "complex alu" cat3
-	 * instruction pipeline:
-	 */
-	regmask_t needs_ss;
-
-	/* track registers which need to synchronize with texture fetch
-	 * pipeline:
-	 */
-	regmask_t needs_sy;
-
-	/* inputs start at r0, temporaries start after last input, and
-	 * outputs start after last temporary.
-	 *
-	 * We could be more clever, because this is not a hw restriction,
-	 * but probably best just to implement an optimizing pass to
-	 * reduce the # of registers used and get rid of redundant mov's
-	 * (to output register).
-	 */
-	unsigned base_reg[TGSI_FILE_COUNT];
-
 	/* idx/slot for last compiler generated immediate */
 	unsigned immediate_idx;
 
-	/* stack of branch instructions that start (potentially nested)
-	 * branch instructions, so that we can fix up the branch targets
-	 * so that we can fix up the branch target on the corresponding
-	 * END instruction
+	/* stack of branch instructions that mark (potentially nested)
+	 * branch if/else/loop/etc
 	 */
-	struct ir3_instruction *branch[16];
+	struct {
+		struct ir3_instruction *instr, *cond;
+		bool inv;   /* true iff in else leg of branch */
+	} branch[16];
 	unsigned int branch_count;
+
+	/* list of kill instructions: */
+	struct ir3_instruction *kill[16];
+	unsigned int kill_count;
 
 	/* used when dst is same as one of the src, to avoid overwriting a
 	 * src element before the remaining scalar instructions that make
@@ -114,52 +143,64 @@ static void vectorize(struct fd3_compile_context *ctx,
 		int nsrcs, ...);
 static void create_mov(struct fd3_compile_context *ctx,
 		struct tgsi_dst_register *dst, struct tgsi_src_register *src);
+static type_t get_ftype(struct fd3_compile_context *ctx);
 
 static unsigned
-compile_init(struct fd3_compile_context *ctx, struct fd3_shader_stateobj *so,
+compile_init(struct fd3_compile_context *ctx, struct fd3_shader_variant *so,
 		const struct tgsi_token *tokens)
 {
-	unsigned ret, base = 0;
+	unsigned ret;
 	struct tgsi_shader_info *info = &ctx->info;
+	const struct fd_lowering_config lconfig = {
+			.color_two_side = so->key.color_two_side,
+			.lower_DST  = true,
+			.lower_XPD  = true,
+			.lower_SCS  = true,
+			.lower_LRP  = true,
+			.lower_FRC  = true,
+			.lower_POW  = true,
+			.lower_LIT  = true,
+			.lower_EXP  = true,
+			.lower_LOG  = true,
+			.lower_DP4  = true,
+			.lower_DP3  = true,
+			.lower_DPH  = true,
+			.lower_DP2  = true,
+			.lower_DP2A = true,
+	};
 
-	ctx->tokens = tokens;
+	ctx->tokens = fd_transform_lowering(&lconfig, tokens, &ctx->info);
+	ctx->free_tokens = !!ctx->tokens;
+	if (!ctx->tokens) {
+		/* no lowering */
+		ctx->tokens = tokens;
+	}
 	ctx->ir = so->ir;
 	ctx->so = so;
-	ctx->last_input = NULL;
-	ctx->last_rel = NULL;
 	ctx->next_inloc = 8;
 	ctx->num_internal_temps = 0;
 	ctx->branch_count = 0;
+	ctx->kill_count = 0;
+	ctx->block = NULL;
+	ctx->current_instr = NULL;
+	ctx->num_output_updates = 0;
+	ctx->atomic = false;
+	ctx->frag_pos = NULL;
+	ctx->frag_face = NULL;
 
-	regmask_init(&ctx->needs_ss);
-	regmask_init(&ctx->needs_sy);
-	memset(ctx->base_reg, 0, sizeof(ctx->base_reg));
+	memset(ctx->frag_coord, 0, sizeof(ctx->frag_coord));
 
-	tgsi_scan_shader(tokens, &ctx->info);
+#define FM(x) (1 << TGSI_FILE_##x)
+	/* optimize can't deal with relative addressing: */
+	if (info->indirect_files & (FM(TEMPORARY) | FM(INPUT) |
+			FM(OUTPUT) | FM(IMMEDIATE) | FM(CONSTANT)))
+		return TGSI_PARSE_ERROR;
 
 	/* Immediates go after constants: */
-	ctx->base_reg[TGSI_FILE_CONSTANT]  = 0;
-	ctx->base_reg[TGSI_FILE_IMMEDIATE] =
-			info->file_max[TGSI_FILE_CONSTANT] + 1;
-
-	/* if full precision and fragment shader, don't clobber
-	 * r0.x w/ bary fetch:
-	 */
-	if ((so->type == SHADER_FRAGMENT) && !so->half_precision)
-		base = 1;
-
-	/* Temporaries after outputs after inputs: */
-	ctx->base_reg[TGSI_FILE_INPUT]     = base;
-	ctx->base_reg[TGSI_FILE_OUTPUT]    = base +
-			info->file_max[TGSI_FILE_INPUT] + 1;
-	ctx->base_reg[TGSI_FILE_TEMPORARY] = base +
-			info->file_max[TGSI_FILE_INPUT] + 1 +
-			info->file_max[TGSI_FILE_OUTPUT] + 1;
-
-	so->first_immediate = ctx->base_reg[TGSI_FILE_IMMEDIATE];
+	so->first_immediate = info->file_max[TGSI_FILE_CONSTANT] + 1;
 	ctx->immediate_idx = 4 * (ctx->info.file_max[TGSI_FILE_IMMEDIATE] + 1);
 
-	ret = tgsi_parse_init(&ctx->parser, tokens);
+	ret = tgsi_parse_init(&ctx->parser, ctx->tokens);
 	if (ret != TGSI_PARSE_OK)
 		return ret;
 
@@ -176,7 +217,7 @@ compile_error(struct fd3_compile_context *ctx, const char *format, ...)
 	_debug_vprintf(format, ap);
 	va_end(ap);
 	tgsi_dump(ctx->tokens, 0);
-	assert(0);
+	debug_assert(0);
 }
 
 #define compile_assert(ctx, cond) do { \
@@ -186,6 +227,8 @@ compile_error(struct fd3_compile_context *ctx, const char *format, ...)
 static void
 compile_free(struct fd3_compile_context *ctx)
 {
+	if (ctx->free_tokens)
+		free((void *)ctx->tokens);
 	tgsi_parse_free(&ctx->parser);
 }
 
@@ -200,52 +243,287 @@ struct instr_translater {
 };
 
 static void
-handle_last_rel(struct fd3_compile_context *ctx)
+instr_finish(struct fd3_compile_context *ctx)
 {
-	if (ctx->last_rel) {
-		ctx->last_rel->flags |= IR3_INSTR_UL;
-		ctx->last_rel = NULL;
-	}
+	unsigned i;
+
+	if (ctx->atomic)
+		return;
+
+	for (i = 0; i < ctx->num_output_updates; i++)
+		*(ctx->output_updates[i].instrp) = ctx->output_updates[i].instr;
+
+	ctx->num_output_updates = 0;
+}
+
+/* For "atomic" groups of instructions, for example the four scalar
+ * instructions to perform a vec4 operation.  Basically this just
+ * blocks out handling of output_updates so the next scalar instruction
+ * still sees the result from before the start of the atomic group.
+ *
+ * NOTE: when used properly, this could probably replace get/put_dst()
+ * stuff.
+ */
+static void
+instr_atomic_start(struct fd3_compile_context *ctx)
+{
+	ctx->atomic = true;
 }
 
 static void
-add_nop(struct fd3_compile_context *ctx, unsigned count)
+instr_atomic_end(struct fd3_compile_context *ctx)
 {
-	while (count-- > 0)
-		ir3_instr_create(ctx->ir, 0, OPC_NOP);
+	ctx->atomic = false;
+	instr_finish(ctx);
 }
 
-static unsigned
-src_flags(struct fd3_compile_context *ctx, struct ir3_register *reg)
+static struct ir3_instruction *
+instr_create(struct fd3_compile_context *ctx, int category, opc_t opc)
 {
-	unsigned flags = 0;
+	instr_finish(ctx);
+	return (ctx->current_instr = ir3_instr_create(ctx->block, category, opc));
+}
 
-	if (reg->flags & (IR3_REG_CONST | IR3_REG_IMMED))
-		return flags;
+static struct ir3_instruction *
+instr_clone(struct fd3_compile_context *ctx, struct ir3_instruction *instr)
+{
+	instr_finish(ctx);
+	return (ctx->current_instr = ir3_instr_clone(instr));
+}
 
-	if (regmask_get(&ctx->needs_ss, reg)) {
-		flags |= IR3_INSTR_SS;
-		regmask_init(&ctx->needs_ss);
+static struct ir3_block *
+push_block(struct fd3_compile_context *ctx)
+{
+	struct ir3_block *block;
+	unsigned ntmp, nin, nout;
+
+#define SCALAR_REGS(file) (4 * (ctx->info.file_max[TGSI_FILE_ ## file] + 1))
+
+	/* hmm, give ourselves room to create 4 extra temporaries (vec4):
+	 */
+	ntmp = SCALAR_REGS(TEMPORARY);
+	ntmp += 4 * 4;
+
+	nout = SCALAR_REGS(OUTPUT);
+	nin  = SCALAR_REGS(INPUT);
+
+	/* for outermost block, 'inputs' are the actual shader INPUT
+	 * register file.  Reads from INPUT registers always go back to
+	 * top block.  For nested blocks, 'inputs' is used to track any
+	 * TEMPORARY file register from one of the enclosing blocks that
+	 * is ready in this block.
+	 */
+	if (!ctx->block) {
+		/* NOTE: fragment shaders actually have two inputs (r0.xy, the
+		 * position)
+		 */
+		if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
+			int n = 2;
+			if (ctx->info.reads_position)
+				n += 4;
+			if (ctx->info.uses_frontface)
+				n += 4;
+			nin = MAX2(n, nin);
+			nout += ARRAY_SIZE(ctx->kill);
+		}
+	} else {
+		nin = ntmp;
 	}
 
-	if (regmask_get(&ctx->needs_sy, reg)) {
-		flags |= IR3_INSTR_SY;
-		regmask_init(&ctx->needs_sy);
+	block = ir3_block_create(ctx->ir, ntmp, nin, nout);
+
+	if ((ctx->type == TGSI_PROCESSOR_FRAGMENT) && !ctx->block)
+		block->noutputs -= ARRAY_SIZE(ctx->kill);
+
+	block->parent = ctx->block;
+	ctx->block = block;
+
+	return block;
+}
+
+static void
+pop_block(struct fd3_compile_context *ctx)
+{
+	ctx->block = ctx->block->parent;
+	compile_assert(ctx, ctx->block);
+}
+
+static void
+ssa_dst(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
+		const struct tgsi_dst_register *dst, unsigned chan)
+{
+	unsigned n = regid(dst->Index, chan);
+	unsigned idx = ctx->num_output_updates;
+
+	compile_assert(ctx, idx < ARRAY_SIZE(ctx->output_updates));
+
+	/* NOTE: defer update of temporaries[idx] or output[idx]
+	 * until instr_finish(), so that if the current instruction
+	 * reads the same TEMP/OUT[] it gets the old value:
+	 *
+	 * bleh.. this might be a bit easier to just figure out
+	 * in instr_finish().  But at that point we've already
+	 * lost information about OUTPUT vs TEMPORARY register
+	 * file..
+	 */
+
+	switch (dst->File) {
+	case TGSI_FILE_OUTPUT:
+		compile_assert(ctx, n < ctx->block->noutputs);
+		ctx->output_updates[idx].instrp = &ctx->block->outputs[n];
+		ctx->output_updates[idx].instr = instr;
+		ctx->num_output_updates++;
+		break;
+	case TGSI_FILE_TEMPORARY:
+		compile_assert(ctx, n < ctx->block->ntemporaries);
+		ctx->output_updates[idx].instrp = &ctx->block->temporaries[n];
+		ctx->output_updates[idx].instr = instr;
+		ctx->num_output_updates++;
+		break;
+	}
+}
+
+static struct ir3_instruction *
+create_output(struct ir3_block *block, struct ir3_instruction *instr,
+		unsigned n)
+{
+	struct ir3_instruction *out;
+
+	out = ir3_instr_create(block, -1, OPC_META_OUTPUT);
+	out->inout.block = block;
+	ir3_reg_create(out, n, 0);
+	if (instr)
+		ir3_reg_create(out, 0, IR3_REG_SSA)->instr = instr;
+
+	return out;
+}
+
+static struct ir3_instruction *
+create_input(struct ir3_block *block, struct ir3_instruction *instr,
+		unsigned n)
+{
+	struct ir3_instruction *in;
+
+	in = ir3_instr_create(block, -1, OPC_META_INPUT);
+	in->inout.block = block;
+	ir3_reg_create(in, n, 0);
+	if (instr)
+		ir3_reg_create(in, 0, IR3_REG_SSA)->instr = instr;
+
+	return in;
+}
+
+static struct ir3_instruction *
+block_input(struct ir3_block *block, unsigned n)
+{
+	/* references to INPUT register file always go back up to
+	 * top level:
+	 */
+	if (block->parent)
+		return block_input(block->parent, n);
+	return block->inputs[n];
+}
+
+/* return temporary in scope, creating if needed meta-input node
+ * to track block inputs
+ */
+static struct ir3_instruction *
+block_temporary(struct ir3_block *block, unsigned n)
+{
+	/* references to TEMPORARY register file, find the nearest
+	 * enclosing block which has already assigned this temporary,
+	 * creating meta-input instructions along the way to keep
+	 * track of block inputs
+	 */
+	if (block->parent && !block->temporaries[n]) {
+		/* if already have input for this block, reuse: */
+		if (!block->inputs[n])
+			block->inputs[n] = block_temporary(block->parent, n);
+
+		/* and create new input to return: */
+		return create_input(block, block->inputs[n], n);
+	}
+	return block->temporaries[n];
+}
+
+static struct ir3_instruction *
+create_immed(struct fd3_compile_context *ctx, float val)
+{
+	/* this can happen when registers (or components of a TGSI
+	 * register) are used as src before they have been assigned
+	 * (undefined contents).  To avoid confusing the rest of the
+	 * compiler, and to generally keep things peachy, substitute
+	 * an instruction that sets the src to 0.0.  Or to keep
+	 * things undefined, I could plug in a random number? :-P
+	 *
+	 * NOTE: *don't* use instr_create() here!
+	 */
+	struct ir3_instruction *instr;
+	instr = ir3_instr_create(ctx->block, 1, 0);
+	instr->cat1.src_type = get_ftype(ctx);
+	instr->cat1.dst_type = get_ftype(ctx);
+	ir3_reg_create(instr, 0, 0);
+	ir3_reg_create(instr, 0, IR3_REG_IMMED)->fim_val = val;
+	return instr;
+}
+
+static void
+ssa_src(struct fd3_compile_context *ctx, struct ir3_register *reg,
+		const struct tgsi_src_register *src, unsigned chan)
+{
+	struct ir3_block *block = ctx->block;
+	unsigned n = regid(src->Index, chan);
+
+	switch (src->File) {
+	case TGSI_FILE_INPUT:
+		reg->flags |= IR3_REG_SSA;
+		reg->instr = block_input(ctx->block, n);
+		break;
+	case TGSI_FILE_OUTPUT:
+		/* really this should just happen in case of 'MOV_SAT OUT[n], ..',
+		 * for the following clamp instructions:
+		 */
+		reg->flags |= IR3_REG_SSA;
+		reg->instr = block->outputs[n];
+		/* we don't have to worry about read from an OUTPUT that was
+		 * assigned outside of the current block, because the _SAT
+		 * clamp instructions will always be in the same block as
+		 * the original instruction which wrote the OUTPUT
+		 */
+		compile_assert(ctx, reg->instr);
+		break;
+	case TGSI_FILE_TEMPORARY:
+		reg->flags |= IR3_REG_SSA;
+		reg->instr = block_temporary(ctx->block, n);
+		break;
 	}
 
-	return flags;
+	if ((reg->flags & IR3_REG_SSA) && !reg->instr) {
+		/* this can happen when registers (or components of a TGSI
+		 * register) are used as src before they have been assigned
+		 * (undefined contents).  To avoid confusing the rest of the
+		 * compiler, and to generally keep things peachy, substitute
+		 * an instruction that sets the src to 0.0.  Or to keep
+		 * things undefined, I could plug in a random number? :-P
+		 *
+		 * NOTE: *don't* use instr_create() here!
+		 */
+		reg->instr = create_immed(ctx, 0.0);
+	}
 }
 
 static struct ir3_register *
-add_dst_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
-		const struct tgsi_dst_register *dst, unsigned chan)
+add_dst_reg_wrmask(struct fd3_compile_context *ctx,
+		struct ir3_instruction *instr, const struct tgsi_dst_register *dst,
+		unsigned chan, unsigned wrmask)
 {
 	unsigned flags = 0, num = 0;
+	struct ir3_register *reg;
 
 	switch (dst->File) {
 	case TGSI_FILE_OUTPUT:
 	case TGSI_FILE_TEMPORARY:
-		num = dst->Index + ctx->base_reg[dst->File];
+		/* uses SSA */
 		break;
 	case TGSI_FILE_ADDRESS:
 		num = REG_A0;
@@ -256,15 +534,60 @@ add_dst_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 		break;
 	}
 
-	if (ctx->so->half_precision)
-		flags |= IR3_REG_HALF;
+	if (dst->Indirect)
+		flags |= IR3_REG_RELATIV;
 
-	return ir3_reg_create(instr, regid(num, chan), flags);
+	reg = ir3_reg_create(instr, regid(num, chan), flags);
+
+	/* NOTE: do not call ssa_dst() if atomic.. vectorize()
+	 * itself will call ssa_dst().  This is to filter out
+	 * the (initially bogus) .x component dst which is
+	 * created (but not necessarily used, ie. if the net
+	 * result of the vector operation does not write to
+	 * the .x component)
+	 */
+
+	reg->wrmask = wrmask;
+	if (wrmask == 0x1) {
+		/* normal case */
+		if (!ctx->atomic)
+			ssa_dst(ctx, instr, dst, chan);
+	} else if ((dst->File == TGSI_FILE_TEMPORARY) ||
+			(dst->File == TGSI_FILE_OUTPUT)) {
+		unsigned i;
+
+		/* if instruction writes multiple, we need to create
+		 * some place-holder collect the registers:
+		 */
+		for (i = 0; i < 4; i++) {
+			if (wrmask & (1 << i)) {
+				struct ir3_instruction *collect =
+						ir3_instr_create(ctx->block, -1, OPC_META_FO);
+				collect->fo.off = i;
+				/* unused dst reg: */
+				ir3_reg_create(collect, 0, 0);
+				/* and src reg used to hold original instr */
+				ir3_reg_create(collect, 0, IR3_REG_SSA)->instr = instr;
+				if (!ctx->atomic)
+					ssa_dst(ctx, collect, dst, chan+i);
+			}
+		}
+	}
+
+	return reg;
 }
 
 static struct ir3_register *
-add_src_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
-		const struct tgsi_src_register *src, unsigned chan)
+add_dst_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
+		const struct tgsi_dst_register *dst, unsigned chan)
+{
+	return add_dst_reg_wrmask(ctx, instr, dst, chan, 0x1);
+}
+
+static struct ir3_register *
+add_src_reg_wrmask(struct fd3_compile_context *ctx,
+		struct ir3_instruction *instr, const struct tgsi_src_register *src,
+		unsigned chan, unsigned wrmask)
 {
 	unsigned flags = 0, num = 0;
 	struct ir3_register *reg;
@@ -280,9 +603,12 @@ add_src_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 		 * TGSI has vec4 immediates, we can only embed scalar (of limited
 		 * size, depending on instruction..)
 		 */
+		flags |= IR3_REG_CONST;
+		num = src->Index + ctx->so->first_immediate;
+		break;
 	case TGSI_FILE_CONSTANT:
 		flags |= IR3_REG_CONST;
-		num = src->Index + ctx->base_reg[src->File];
+		num = src->Index;
 		break;
 	case TGSI_FILE_OUTPUT:
 		/* NOTE: we should only end up w/ OUTPUT file for things like
@@ -290,7 +616,7 @@ add_src_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 		 */
 	case TGSI_FILE_INPUT:
 	case TGSI_FILE_TEMPORARY:
-		num = src->Index + ctx->base_reg[src->File];
+		/* uses SSA */
 		break;
 	default:
 		compile_error(ctx, "unsupported src register file: %s\n",
@@ -304,17 +630,50 @@ add_src_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 		flags |= IR3_REG_NEGATE;
 	if (src->Indirect)
 		flags |= IR3_REG_RELATIV;
-	if (ctx->so->half_precision)
-		flags |= IR3_REG_HALF;
 
 	reg = ir3_reg_create(instr, regid(num, chan), flags);
 
-	if (src->Indirect)
-		ctx->last_rel = instr;
+	reg->wrmask = wrmask;
+	if (wrmask == 0x1) {
+		/* normal case */
+		ssa_src(ctx, reg, src, chan);
+	} else if ((src->File == TGSI_FILE_TEMPORARY) ||
+			(src->File == TGSI_FILE_OUTPUT) ||
+			(src->File == TGSI_FILE_INPUT)) {
+		struct ir3_instruction *collect;
+		unsigned i;
 
-	instr->flags |= src_flags(ctx, reg);
+		/* if instruction reads multiple, we need to create
+		 * some place-holder collect the registers:
+		 */
+		collect = ir3_instr_create(ctx->block, -1, OPC_META_FI);
+		ir3_reg_create(collect, 0, 0);   /* unused dst reg */
+
+		for (i = 0; i < 4; i++) {
+			if (wrmask & (1 << i)) {
+				/* and src reg used point to the original instr */
+				ssa_src(ctx, ir3_reg_create(collect, 0, IR3_REG_SSA),
+						src, chan + i);
+			} else if (wrmask & ~((i << i) - 1)) {
+				/* if any remaining components, then dummy
+				 * placeholder src reg to fill in the blanks:
+				 */
+				ir3_reg_create(collect, 0, 0);
+			}
+		}
+
+		reg->flags |= IR3_REG_SSA;
+		reg->instr = collect;
+	}
 
 	return reg;
+}
+
+static struct ir3_register *
+add_src_reg(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
+		const struct tgsi_src_register *src, unsigned chan)
+{
+	return add_src_reg_wrmask(ctx, instr, src, chan, 0x1);
 }
 
 static void
@@ -369,9 +728,6 @@ get_internal_temp_hr(struct fd3_compile_context *ctx,
 	struct tgsi_src_register *tmp_src;
 	int n;
 
-	if (ctx->so->half_precision)
-		return get_internal_temp(ctx, tmp_dst);
-
 	tmp_dst->File      = TGSI_FILE_TEMPORARY;
 	tmp_dst->WriteMask = TGSI_WRITEMASK_XYZW;
 	tmp_dst->Indirect  = 0;
@@ -414,13 +770,13 @@ is_rel_or_const(struct tgsi_src_register *src)
 static type_t
 get_ftype(struct fd3_compile_context *ctx)
 {
-	return ctx->so->half_precision ? TYPE_F16 : TYPE_F32;
+	return TYPE_F32;
 }
 
 static type_t
 get_utype(struct fd3_compile_context *ctx)
 {
-	return ctx->so->half_precision ? TYPE_U16 : TYPE_U32;
+	return TYPE_U32;
 }
 
 static unsigned
@@ -517,17 +873,15 @@ create_mov(struct fd3_compile_context *ctx, struct tgsi_dst_register *dst,
 				/* can't have abs or neg on a mov instr, so use
 				 * absneg.f instead to handle these cases:
 				 */
-				instr = ir3_instr_create(ctx->ir, 2, OPC_ABSNEG_F);
+				instr = instr_create(ctx, 2, OPC_ABSNEG_F);
 			} else {
-				instr = ir3_instr_create(ctx->ir, 1, 0);
+				instr = instr_create(ctx, 1, 0);
 				instr->cat1.src_type = type_mov;
 				instr->cat1.dst_type = type_mov;
 			}
 
 			add_dst_reg(ctx, instr, dst, i);
 			add_src_reg(ctx, instr, src, src_swiz(src, i));
-		} else {
-			add_nop(ctx, 1);
 		}
 	}
 }
@@ -539,10 +893,10 @@ create_clamp(struct fd3_compile_context *ctx,
 {
 	struct ir3_instruction *instr;
 
-	instr = ir3_instr_create(ctx->ir, 2, OPC_MAX_F);
+	instr = instr_create(ctx, 2, OPC_MAX_F);
 	vectorize(ctx, instr, dst, 2, val, 0, minval, 0);
 
-	instr = ir3_instr_create(ctx->ir, 2, OPC_MIN_F);
+	instr = instr_create(ctx, 2, OPC_MIN_F);
 	vectorize(ctx, instr, dst, 2, val, 0, maxval, 0);
 }
 
@@ -604,7 +958,8 @@ vectorize(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 {
 	va_list ap;
 	int i, j, n = 0;
-	bool indirect = dst->Indirect;
+
+	instr_atomic_start(ctx);
 
 	add_dst_reg(ctx, instr, dst, TGSI_SWIZZLE_X);
 
@@ -620,7 +975,6 @@ vectorize(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 			reg->iim_val = *(int *)&src;
 		} else {
 			reg = add_src_reg(ctx, instr, src, TGSI_SWIZZLE_X);
-			indirect |= src->Indirect;
 		}
 		reg->flags |= flags & ~IR3_REG_NEGATE;
 		if (flags & IR3_REG_NEGATE)
@@ -635,9 +989,10 @@ vectorize(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 			if (n++ == 0) {
 				cur = instr;
 			} else {
-				cur = ir3_instr_clone(instr);
-				cur->flags &= ~(IR3_INSTR_SY | IR3_INSTR_SS | IR3_INSTR_JP);
+				cur = instr_clone(ctx, instr);
 			}
+
+			ssa_dst(ctx, cur, dst, i);
 
 			/* fix-up dst register component: */
 			cur->regs[0]->num = regid(cur->regs[0]->num >> 2, i);
@@ -645,27 +1000,21 @@ vectorize(struct fd3_compile_context *ctx, struct ir3_instruction *instr,
 			/* fix-up src register component: */
 			va_start(ap, nsrcs);
 			for (j = 0; j < nsrcs; j++) {
+				struct ir3_register *reg = cur->regs[j+1];
 				struct tgsi_src_register *src =
 						va_arg(ap, struct tgsi_src_register *);
 				unsigned flags = va_arg(ap, unsigned);
-				if (!(flags & IR3_REG_IMMED)) {
-					cur->regs[j+1]->num =
-							regid(cur->regs[j+1]->num >> 2,
-									src_swiz(src, i));
-					cur->flags |= src_flags(ctx, cur->regs[j+1]);
+				if (reg->flags & IR3_REG_SSA) {
+					ssa_src(ctx, reg, src, src_swiz(src, i));
+				} else if (!(flags & IR3_REG_IMMED)) {
+					reg->num = regid(reg->num >> 2, src_swiz(src, i));
 				}
 			}
 			va_end(ap);
-
-			if (indirect)
-				ctx->last_rel = cur;
 		}
 	}
 
-	/* pad w/ nop's.. at least until we are clever enough to
-	 * figure out if we really need to..
-	 */
-	add_nop(ctx, 4 - n);
+	instr_atomic_end(ctx);
 }
 
 /*
@@ -702,36 +1051,27 @@ trans_arl(const struct instr_translater *t,
 	unsigned chan = src->SwizzleX;
 	compile_assert(ctx, dst->File == TGSI_FILE_ADDRESS);
 
-	handle_last_rel(ctx);
-
 	tmp_src = get_internal_temp_hr(ctx, &tmp_dst);
 
 	/* cov.{f32,f16}s16 Rtmp, Rsrc */
-	instr = ir3_instr_create(ctx->ir, 1, 0);
+	instr = instr_create(ctx, 1, 0);
 	instr->cat1.src_type = get_ftype(ctx);
 	instr->cat1.dst_type = TYPE_S16;
 	add_dst_reg(ctx, instr, &tmp_dst, chan)->flags |= IR3_REG_HALF;
 	add_src_reg(ctx, instr, src, chan);
 
-	add_nop(ctx, 3);
-
 	/* shl.b Rtmp, Rtmp, 2 */
-	instr = ir3_instr_create(ctx->ir, 2, OPC_SHL_B);
+	instr = instr_create(ctx, 2, OPC_SHL_B);
 	add_dst_reg(ctx, instr, &tmp_dst, chan)->flags |= IR3_REG_HALF;
 	add_src_reg(ctx, instr, tmp_src, chan)->flags |= IR3_REG_HALF;
 	ir3_reg_create(instr, 0, IR3_REG_IMMED)->iim_val = 2;
 
-	add_nop(ctx, 3);
-
 	/* mova a0, Rtmp */
-	instr = ir3_instr_create(ctx->ir, 1, 0);
+	instr = instr_create(ctx, 1, 0);
 	instr->cat1.src_type = TYPE_S16;
 	instr->cat1.dst_type = TYPE_S16;
 	add_dst_reg(ctx, instr, dst, 0)->flags |= IR3_REG_HALF;
 	add_src_reg(ctx, instr, tmp_src, chan)->flags |= IR3_REG_HALF;
-
-	/* need to ensure 5 instr slots before a0 is used: */
-	add_nop(ctx, 6);
 }
 
 /* texture fetch/sample instructions: */
@@ -740,7 +1080,6 @@ trans_samp(const struct instr_translater *t,
 		struct fd3_compile_context *ctx,
 		struct tgsi_full_instruction *inst)
 {
-	struct ir3_register *r;
 	struct ir3_instruction *instr;
 	struct tgsi_src_register *coord = &inst->Src[0].Register;
 	struct tgsi_src_register *samp  = &inst->Src[1].Register;
@@ -751,32 +1090,47 @@ trans_samp(const struct instr_translater *t,
 
 	switch (t->arg) {
 	case TGSI_OPCODE_TEX:
-		if (tex == TGSI_TEXTURE_2D) {
+		switch (tex) {
+		case TGSI_TEXTURE_2D:
+		case TGSI_TEXTURE_RECT:
 			order = (int8_t[4]){ 0,  1, -1, -1 };
 			src_wrmask = TGSI_WRITEMASK_XY;
-		} else {
+			break;
+		case TGSI_TEXTURE_3D:
+		case TGSI_TEXTURE_CUBE:
 			order = (int8_t[4]){ 0,  1,  2, -1 };
 			src_wrmask = TGSI_WRITEMASK_XYZ;
+			flags |= IR3_INSTR_3D;
+			break;
+		default:
+			compile_error(ctx, "unknown texture type: %s\n",
+					tgsi_texture_names[tex]);
+			break;
 		}
 		break;
 	case TGSI_OPCODE_TXP:
-		if (tex == TGSI_TEXTURE_2D) {
+		switch (tex) {
+		case TGSI_TEXTURE_2D:
+		case TGSI_TEXTURE_RECT:
 			order = (int8_t[4]){ 0,  1,  3, -1 };
 			src_wrmask = TGSI_WRITEMASK_XYZ;
-		} else {
+			break;
+		case TGSI_TEXTURE_3D:
+		case TGSI_TEXTURE_CUBE:
 			order = (int8_t[4]){ 0,  1,  2,  3 };
 			src_wrmask = TGSI_WRITEMASK_XYZW;
+			flags |= IR3_INSTR_3D;
+			break;
+		default:
+			compile_error(ctx, "unknown texture type: %s\n",
+					tgsi_texture_names[tex]);
+			break;
 		}
 		flags |= IR3_INSTR_P;
 		break;
 	default:
 		compile_assert(ctx, 0);
 		break;
-	}
-
-	if ((tex == TGSI_TEXTURE_3D) || (tex == TGSI_TEXTURE_CUBE)) {
-		add_nop(ctx, 3);
-		flags |= IR3_INSTR_3D;
 	}
 
 	/* cat5 instruction cannot seem to handle const or relative: */
@@ -804,7 +1158,7 @@ trans_samp(const struct instr_translater *t,
 		tmp_src = get_internal_temp(ctx, &tmp_dst);
 
 		for (j = 0; (j < 4) && (order[j] >= 0); j++) {
-			instr = ir3_instr_create(ctx->ir, 1, 0);
+			instr = instr_create(ctx, 1, 0);
 			instr->cat1.src_type = type_mov;
 			instr->cat1.dst_type = type_mov;
 			add_dst_reg(ctx, instr, &tmp_dst, j);
@@ -813,57 +1167,48 @@ trans_samp(const struct instr_translater *t,
 		}
 
 		coord = tmp_src;
-
-		add_nop(ctx, 4 - j);
 	}
 
-	instr = ir3_instr_create(ctx->ir, 5, t->opc);
+	instr = instr_create(ctx, 5, t->opc);
 	instr->cat5.type = get_ftype(ctx);
 	instr->cat5.samp = samp->Index;
 	instr->cat5.tex  = samp->Index;
 	instr->flags |= flags;
 
-	r = add_dst_reg(ctx, instr, &inst->Dst[0].Register, 0);
-	r->wrmask = inst->Dst[0].Register.WriteMask;
+	add_dst_reg_wrmask(ctx, instr, &inst->Dst[0].Register, 0,
+			inst->Dst[0].Register.WriteMask);
 
-	add_src_reg(ctx, instr, coord, coord->SwizzleX)->wrmask = src_wrmask;
-
-	/* after add_src_reg() so we don't set (sy) on sam instr itself! */
-	regmask_set(&ctx->needs_sy, r);
+	add_src_reg_wrmask(ctx, instr, coord, coord->SwizzleX, src_wrmask);
 }
 
 /*
  * SEQ(a,b) = (a == b) ? 1.0 : 0.0
- *   cmps.f.eq tmp0, b, a
+ *   cmps.f.eq tmp0, a, b
  *   cov.u16f16 dst, tmp0
  *
  * SNE(a,b) = (a != b) ? 1.0 : 0.0
- *   cmps.f.eq tmp0, b, a
- *   add.s tmp0, tmp0, -1
- *   sel.f16 dst, {0.0}, tmp0, {1.0}
+ *   cmps.f.ne tmp0, a, b
+ *   cov.u16f16 dst, tmp0
  *
  * SGE(a,b) = (a >= b) ? 1.0 : 0.0
  *   cmps.f.ge tmp0, a, b
  *   cov.u16f16 dst, tmp0
  *
  * SLE(a,b) = (a <= b) ? 1.0 : 0.0
- *   cmps.f.ge tmp0, b, a
+ *   cmps.f.le tmp0, a, b
  *   cov.u16f16 dst, tmp0
  *
  * SGT(a,b) = (a > b)  ? 1.0 : 0.0
- *   cmps.f.ge tmp0, b, a
- *   add.s tmp0, tmp0, -1
- *   sel.f16 dst, {0.0}, tmp0, {1.0}
+ *   cmps.f.gt tmp0, a, b
+ *   cov.u16f16 dst, tmp0
  *
  * SLT(a,b) = (a < b)  ? 1.0 : 0.0
- *   cmps.f.ge tmp0, a, b
- *   add.s tmp0, tmp0, -1
- *   sel.f16 dst, {0.0}, tmp0, {1.0}
+ *   cmps.f.lt tmp0, a, b
+ *   cov.u16f16 dst, tmp0
  *
  * CMP(a,b,c) = (a < 0.0) ? b : c
- *   cmps.f.ge tmp0, a, {0.0}
- *   add.s tmp0, tmp0, -1
- *   sel.f16 dst, c, tmp0, b
+ *   cmps.f.lt tmp0, a, {0.0}
+ *   sel.b16 dst, b, tmp0, c
  */
 static void
 trans_cmp(const struct instr_translater *t,
@@ -873,38 +1218,41 @@ trans_cmp(const struct instr_translater *t,
 	struct ir3_instruction *instr;
 	struct tgsi_dst_register tmp_dst;
 	struct tgsi_src_register *tmp_src;
-	struct tgsi_src_register constval0, constval1;
+	struct tgsi_src_register constval0;
 	/* final instruction for CMP() uses orig src1 and src2: */
 	struct tgsi_dst_register *dst = get_dst(ctx, inst);
-	struct tgsi_src_register *a0, *a1;
+	struct tgsi_src_register *a0, *a1, *a2;
 	unsigned condition;
 
 	tmp_src = get_internal_temp(ctx, &tmp_dst);
 
+	a0 = &inst->Src[0].Register;  /* a */
+	a1 = &inst->Src[1].Register;  /* b */
+
 	switch (t->tgsi_opc) {
 	case TGSI_OPCODE_SEQ:
-	case TGSI_OPCODE_SNE:
-		a0 = &inst->Src[1].Register;  /* b */
-		a1 = &inst->Src[0].Register;  /* a */
 		condition = IR3_COND_EQ;
 		break;
+	case TGSI_OPCODE_SNE:
+		condition = IR3_COND_NE;
+		break;
 	case TGSI_OPCODE_SGE:
-	case TGSI_OPCODE_SLT:
-		a0 = &inst->Src[0].Register;  /* a */
-		a1 = &inst->Src[1].Register;  /* b */
 		condition = IR3_COND_GE;
 		break;
+	case TGSI_OPCODE_SLT:
+		condition = IR3_COND_LT;
+		break;
 	case TGSI_OPCODE_SLE:
+		condition = IR3_COND_LE;
+		break;
 	case TGSI_OPCODE_SGT:
-		a0 = &inst->Src[1].Register;  /* b */
-		a1 = &inst->Src[0].Register;  /* a */
-		condition = IR3_COND_GE;
+		condition = IR3_COND_GT;
 		break;
 	case TGSI_OPCODE_CMP:
 		get_immediate(ctx, &constval0, fui(0.0));
 		a0 = &inst->Src[0].Register;  /* a */
 		a1 = &constval0;              /* {0.0} */
-		condition = IR3_COND_GE;
+		condition = IR3_COND_LT;
 		break;
 	default:
 		compile_assert(ctx, 0);
@@ -914,8 +1262,8 @@ trans_cmp(const struct instr_translater *t,
 	if (is_const(a0) && is_const(a1))
 		a0 = get_unconst(ctx, a0);
 
-	/* cmps.f.ge tmp, a0, a1 */
-	instr = ir3_instr_create(ctx->ir, 2, OPC_CMPS_F);
+	/* cmps.f.<cond> tmp, a0, a1 */
+	instr = instr_create(ctx, 2, OPC_CMPS_F);
 	instr->cat2.condition = condition;
 	vectorize(ctx, instr, &tmp_dst, 2, a0, 0, a1, 0);
 
@@ -923,37 +1271,21 @@ trans_cmp(const struct instr_translater *t,
 	case TGSI_OPCODE_SEQ:
 	case TGSI_OPCODE_SGE:
 	case TGSI_OPCODE_SLE:
+	case TGSI_OPCODE_SNE:
+	case TGSI_OPCODE_SGT:
+	case TGSI_OPCODE_SLT:
 		/* cov.u16f16 dst, tmp0 */
-		instr = ir3_instr_create(ctx->ir, 1, 0);
+		instr = instr_create(ctx, 1, 0);
 		instr->cat1.src_type = get_utype(ctx);
 		instr->cat1.dst_type = get_ftype(ctx);
 		vectorize(ctx, instr, dst, 1, tmp_src, 0);
 		break;
-	case TGSI_OPCODE_SNE:
-	case TGSI_OPCODE_SGT:
-	case TGSI_OPCODE_SLT:
 	case TGSI_OPCODE_CMP:
-		/* add.s tmp, tmp, -1 */
-		instr = ir3_instr_create(ctx->ir, 2, OPC_ADD_S);
-		vectorize(ctx, instr, &tmp_dst, 2, tmp_src, 0, -1, IR3_REG_IMMED);
-
-		if (t->tgsi_opc == TGSI_OPCODE_CMP) {
-			/* sel.{f32,f16} dst, src2, tmp, src1 */
-			instr = ir3_instr_create(ctx->ir, 3,
-					ctx->so->half_precision ? OPC_SEL_F16 : OPC_SEL_F32);
-			vectorize(ctx, instr, dst, 3,
-					&inst->Src[2].Register, 0,
-					tmp_src, 0,
-					&inst->Src[1].Register, 0);
-		} else {
-			get_immediate(ctx, &constval0, fui(0.0));
-			get_immediate(ctx, &constval1, fui(1.0));
-			/* sel.{f32,f16} dst, {0.0}, tmp0, {1.0} */
-			instr = ir3_instr_create(ctx->ir, 3,
-					ctx->so->half_precision ? OPC_SEL_F16 : OPC_SEL_F32);
-			vectorize(ctx, instr, dst, 3,
-					&constval0, 0, tmp_src, 0, &constval1, 0);
-		}
+		a1 = &inst->Src[1].Register;
+		a2 = &inst->Src[2].Register;
+		/* sel.{b32,b16} dst, src2, tmp, src1 */
+		instr = instr_create(ctx, 3, OPC_SEL_B32);
+		vectorize(ctx, instr, dst, 3, a1, 0, tmp_src, 0, a2, 0);
 
 		break;
 	}
@@ -965,67 +1297,60 @@ trans_cmp(const struct instr_translater *t,
  * Conditional / Flow control
  */
 
-static unsigned
-find_instruction(struct fd3_compile_context *ctx, struct ir3_instruction *instr)
+static void
+push_branch(struct fd3_compile_context *ctx, bool inv,
+		struct ir3_instruction *instr, struct ir3_instruction *cond)
 {
-	unsigned i;
-	for (i = 0; i < ctx->ir->instrs_count; i++)
-		if (ctx->ir->instrs[i] == instr)
-			return i;
-	return ~0;
+	unsigned int idx = ctx->branch_count++;
+	compile_assert(ctx, idx < ARRAY_SIZE(ctx->branch));
+	ctx->branch[idx].instr = instr;
+	ctx->branch[idx].inv = inv;
+	/* else side of branch has same condition: */
+	if (!inv)
+		ctx->branch[idx].cond = cond;
 }
 
-static void
-push_branch(struct fd3_compile_context *ctx, struct ir3_instruction *instr)
-{
-	ctx->branch[ctx->branch_count++] = instr;
-}
-
-static void
+static struct ir3_instruction *
 pop_branch(struct fd3_compile_context *ctx)
 {
-	struct ir3_instruction *instr;
-
-	/* if we were clever enough, we'd patch this up after the fact,
-	 * and set (jp) flag on whatever the next instruction was, rather
-	 * than inserting an extra nop..
-	 */
-	instr = ir3_instr_create(ctx->ir, 0, OPC_NOP);
-	instr->flags |= IR3_INSTR_JP;
-
-	/* pop the branch instruction from the stack and fix up branch target: */
-	instr = ctx->branch[--ctx->branch_count];
-	instr->cat0.immed = ctx->ir->instrs_count - find_instruction(ctx, instr) - 1;
+	unsigned int idx = --ctx->branch_count;
+	return ctx->branch[idx].instr;
 }
 
-/* We probably don't really want to translate if/else/endif into branches..
- * the blob driver evaluates both legs of the if and then uses the sel
- * instruction to pick which sides of the branch to "keep".. but figuring
- * that out will take somewhat more compiler smarts.  So hopefully branches
- * don't kill performance too badly.
- */
 static void
 trans_if(const struct instr_translater *t,
 		struct fd3_compile_context *ctx,
 		struct tgsi_full_instruction *inst)
 {
-	struct ir3_instruction *instr;
+	struct ir3_instruction *instr, *cond;
 	struct tgsi_src_register *src = &inst->Src[0].Register;
+	struct tgsi_dst_register tmp_dst;
+	struct tgsi_src_register *tmp_src;
 	struct tgsi_src_register constval;
 
 	get_immediate(ctx, &constval, fui(0.0));
+	tmp_src = get_internal_temp(ctx, &tmp_dst);
 
 	if (is_const(src))
 		src = get_unconst(ctx, src);
 
-	instr = ir3_instr_create(ctx->ir, 2, OPC_CMPS_F);
-	ir3_reg_create(instr, regid(REG_P0, 0), 0);
+	/* cmps.f.ne tmp0, b, {0.0} */
+	instr = instr_create(ctx, 2, OPC_CMPS_F);
+	add_dst_reg(ctx, instr, &tmp_dst, 0);
 	add_src_reg(ctx, instr, src, src->SwizzleX);
 	add_src_reg(ctx, instr, &constval, constval.SwizzleX);
-	instr->cat2.condition = IR3_COND_EQ;
+	instr->cat2.condition = IR3_COND_NE;
 
-	instr = ir3_instr_create(ctx->ir, 0, OPC_BR);
-	push_branch(ctx, instr);
+	compile_assert(ctx, instr->regs[1]->flags & IR3_REG_SSA); /* because get_unconst() */
+	cond = instr->regs[1]->instr;
+
+	/* meta:flow tmp0 */
+	instr = instr_create(ctx, -1, OPC_META_FLOW);
+	ir3_reg_create(instr, 0, 0);  /* dummy dst */
+	add_src_reg(ctx, instr, tmp_src, TGSI_SWIZZLE_X);
+
+	push_branch(ctx, false, instr, cond);
+	instr->flow.if_block = push_block(ctx);
 }
 
 static void
@@ -1035,11 +1360,63 @@ trans_else(const struct instr_translater *t,
 {
 	struct ir3_instruction *instr;
 
-	/* for first half of if/else/endif, generate a jump past the else: */
-	instr = ir3_instr_create(ctx->ir, 0, OPC_JUMP);
+	pop_block(ctx);
 
-	pop_branch(ctx);
-	push_branch(ctx, instr);
+	instr = pop_branch(ctx);
+
+	compile_assert(ctx, (instr->category == -1) &&
+			(instr->opc == OPC_META_FLOW));
+
+	push_branch(ctx, true, instr, NULL);
+	instr->flow.else_block = push_block(ctx);
+}
+
+static struct ir3_instruction *
+find_temporary(struct ir3_block *block, unsigned n)
+{
+	if (block->parent && !block->temporaries[n])
+		return find_temporary(block->parent, n);
+	return block->temporaries[n];
+}
+
+static struct ir3_instruction *
+find_output(struct ir3_block *block, unsigned n)
+{
+	if (block->parent && !block->outputs[n])
+		return find_output(block->parent, n);
+	return block->outputs[n];
+}
+
+static struct ir3_instruction *
+create_phi(struct fd3_compile_context *ctx, struct ir3_instruction *cond,
+		struct ir3_instruction *a, struct ir3_instruction *b)
+{
+	struct ir3_instruction *phi;
+
+	compile_assert(ctx, cond);
+
+	/* Either side of the condition could be null..  which
+	 * indicates a variable written on only one side of the
+	 * branch.  Normally this should only be variables not
+	 * used outside of that side of the branch.  So we could
+	 * just 'return a ? a : b;' in that case.  But for better
+	 * defined undefined behavior we just stick in imm{0.0}.
+	 * In the common case of a value only used within the
+	 * one side of the branch, the PHI instruction will not
+	 * get scheduled
+	 */
+	if (!a)
+		a = create_immed(ctx, 0.0);
+	if (!b)
+		b = create_immed(ctx, 0.0);
+
+	phi = instr_create(ctx, -1, OPC_META_PHI);
+	ir3_reg_create(phi, 0, 0);  /* dummy dst */
+	ir3_reg_create(phi, 0, IR3_REG_SSA)->instr = cond;
+	ir3_reg_create(phi, 0, IR3_REG_SSA)->instr = a;
+	ir3_reg_create(phi, 0, IR3_REG_SSA)->instr = b;
+
+	return phi;
 }
 
 static void
@@ -1047,7 +1424,159 @@ trans_endif(const struct instr_translater *t,
 		struct fd3_compile_context *ctx,
 		struct tgsi_full_instruction *inst)
 {
-	pop_branch(ctx);
+	struct ir3_instruction *instr;
+	struct ir3_block *ifb, *elseb;
+	struct ir3_instruction **ifout, **elseout;
+	unsigned i, ifnout = 0, elsenout = 0;
+
+	pop_block(ctx);
+
+	instr = pop_branch(ctx);
+
+	compile_assert(ctx, (instr->category == -1) &&
+			(instr->opc == OPC_META_FLOW));
+
+	ifb = instr->flow.if_block;
+	elseb = instr->flow.else_block;
+	/* if there is no else block, the parent block is used for the
+	 * branch-not-taken src of the PHI instructions:
+	 */
+	if (!elseb)
+		elseb = ifb->parent;
+
+	/* worst case sizes: */
+	ifnout = ifb->ntemporaries + ifb->noutputs;
+	elsenout = elseb->ntemporaries + elseb->noutputs;
+
+	ifout = ir3_alloc(ctx->ir, sizeof(ifb->outputs[0]) * ifnout);
+	if (elseb != ifb->parent)
+		elseout = ir3_alloc(ctx->ir, sizeof(ifb->outputs[0]) * elsenout);
+
+	ifnout = 0;
+	elsenout = 0;
+
+	/* generate PHI instructions for any temporaries written: */
+	for (i = 0; i < ifb->ntemporaries; i++) {
+		struct ir3_instruction *a = ifb->temporaries[i];
+		struct ir3_instruction *b = elseb->temporaries[i];
+
+		/* if temporary written in if-block, or if else block
+		 * is present and temporary written in else-block:
+		 */
+		if (a || ((elseb != ifb->parent) && b)) {
+			struct ir3_instruction *phi;
+
+			/* if only written on one side, find the closest
+			 * enclosing update on other side:
+			 */
+			if (!a)
+				a = find_temporary(ifb, i);
+			if (!b)
+				b = find_temporary(elseb, i);
+
+			ifout[ifnout] = a;
+			a = create_output(ifb, a, ifnout++);
+
+			if (elseb != ifb->parent) {
+				elseout[elsenout] = b;
+				b = create_output(elseb, b, elsenout++);
+			}
+
+			phi = create_phi(ctx, instr, a, b);
+			ctx->block->temporaries[i] = phi;
+		}
+	}
+
+	compile_assert(ctx, ifb->noutputs == elseb->noutputs);
+
+	/* .. and any outputs written: */
+	for (i = 0; i < ifb->noutputs; i++) {
+		struct ir3_instruction *a = ifb->outputs[i];
+		struct ir3_instruction *b = elseb->outputs[i];
+
+		/* if output written in if-block, or if else block
+		 * is present and output written in else-block:
+		 */
+		if (a || ((elseb != ifb->parent) && b)) {
+			struct ir3_instruction *phi;
+
+			/* if only written on one side, find the closest
+			 * enclosing update on other side:
+			 */
+			if (!a)
+				a = find_output(ifb, i);
+			if (!b)
+				b = find_output(elseb, i);
+
+			ifout[ifnout] = a;
+			a = create_output(ifb, a, ifnout++);
+
+			if (elseb != ifb->parent) {
+				elseout[elsenout] = b;
+				b = create_output(elseb, b, elsenout++);
+			}
+
+			phi = create_phi(ctx, instr, a, b);
+			ctx->block->outputs[i] = phi;
+		}
+	}
+
+	ifb->noutputs = ifnout;
+	ifb->outputs = ifout;
+
+	if (elseb != ifb->parent) {
+		elseb->noutputs = elsenout;
+		elseb->outputs = elseout;
+	}
+
+	// TODO maybe we want to compact block->inputs?
+}
+
+/*
+ * Kill / Kill-if
+ */
+
+static void
+trans_kill(const struct instr_translater *t,
+		struct fd3_compile_context *ctx,
+		struct tgsi_full_instruction *inst)
+{
+	struct ir3_instruction *instr, *immed, *cond = NULL;
+	bool inv = false;
+
+	switch (t->tgsi_opc) {
+	case TGSI_OPCODE_KILL:
+		/* unconditional kill, use enclosing if condition: */
+		if (ctx->branch_count > 0) {
+			unsigned int idx = ctx->branch_count - 1;
+			cond = ctx->branch[idx].cond;
+			inv = ctx->branch[idx].inv;
+		} else {
+			cond = create_immed(ctx, 1.0);
+		}
+
+		break;
+	}
+
+	compile_assert(ctx, cond);
+
+	immed = create_immed(ctx, 0.0);
+
+	/* cmps.f.ne p0.x, cond, {0.0} */
+	instr = instr_create(ctx, 2, OPC_CMPS_F);
+	instr->cat2.condition = IR3_COND_NE;
+	ir3_reg_create(instr, regid(REG_P0, 0), 0);
+	ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = cond;
+	ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = immed;
+	cond = instr;
+
+	/* kill p0.x */
+	instr = instr_create(ctx, 0, OPC_KILL);
+	instr->cat0.inv = inv;
+	ir3_reg_create(instr, 0, 0);  /* dummy dst */
+	ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = cond;
+
+	ctx->kill[ctx->kill_count++] = instr;
 }
 
 /*
@@ -1060,7 +1589,7 @@ instr_cat0(const struct instr_translater *t,
 		struct fd3_compile_context *ctx,
 		struct tgsi_full_instruction *inst)
 {
-	ir3_instr_create(ctx->ir, 0, t->opc);
+	instr_create(ctx, 0, t->opc);
 }
 
 static void
@@ -1070,26 +1599,7 @@ instr_cat1(const struct instr_translater *t,
 {
 	struct tgsi_dst_register *dst = get_dst(ctx, inst);
 	struct tgsi_src_register *src = &inst->Src[0].Register;
-
-	/* mov instructions can't handle a negate on src: */
-	if (src->Negate) {
-		struct tgsi_src_register constval;
-		struct ir3_instruction *instr;
-
-		/* since right now, we are using uniformly either TYPE_F16 or
-		 * TYPE_F32, and we don't utilize the conversion possibilities
-		 * of mov instructions, we can get away with substituting an
-		 * add.f which can handle negate.  Might need to revisit this
-		 * in the future if we start supporting widening/narrowing or
-		 * conversion to/from integer..
-		 */
-		instr = ir3_instr_create(ctx->ir, 2, OPC_ADD_F);
-		get_immediate(ctx, &constval, fui(0.0));
-		vectorize(ctx, instr, dst, 2, src, 0, &constval, 0);
-	} else {
-		create_mov(ctx, dst, src);
-		/* create_mov() generates vector sequence, so no vectorize() */
-	}
+	create_mov(ctx, dst, src);
 	put_dst(ctx, inst, dst);
 }
 
@@ -1129,37 +1639,20 @@ instr_cat2(const struct instr_translater *t,
 	case OPC_SETRM:
 	case OPC_CBITS_B:
 		/* these only have one src reg */
-		instr = ir3_instr_create(ctx->ir, 2, t->opc);
+		instr = instr_create(ctx, 2, t->opc);
 		vectorize(ctx, instr, dst, 1, src0, src0_flags);
 		break;
 	default:
 		if (is_const(src0) && is_const(src1))
 			src0 = get_unconst(ctx, src0);
 
-		instr = ir3_instr_create(ctx->ir, 2, t->opc);
+		instr = instr_create(ctx, 2, t->opc);
 		vectorize(ctx, instr, dst, 2, src0, src0_flags,
 				src1, src1_flags);
 		break;
 	}
 
 	put_dst(ctx, inst, dst);
-}
-
-static bool is_mad(opc_t opc)
-{
-	switch (opc) {
-	case OPC_MAD_U16:
-	case OPC_MADSH_U16:
-	case OPC_MAD_S16:
-	case OPC_MADSH_M16:
-	case OPC_MAD_U24:
-	case OPC_MAD_S24:
-	case OPC_MAD_F16:
-	case OPC_MAD_F32:
-		return true;
-	default:
-		return false;
-	}
 }
 
 static void
@@ -1186,8 +1679,7 @@ instr_cat3(const struct instr_translater *t,
 		}
 	}
 
-	instr = ir3_instr_create(ctx->ir, 3,
-			ctx->so->half_precision ? t->hopc : t->opc);
+	instr = instr_create(ctx, 3, t->opc);
 	vectorize(ctx, instr, dst, 3, src0, 0, src1, 0,
 			&inst->Src[2].Register, 0);
 	put_dst(ctx, inst, dst);
@@ -1201,27 +1693,21 @@ instr_cat4(const struct instr_translater *t,
 	struct tgsi_dst_register *dst = get_dst(ctx, inst);
 	struct tgsi_src_register *src = &inst->Src[0].Register;
 	struct ir3_instruction *instr;
-	unsigned i, n;
+	unsigned i;
 
 	/* seems like blob compiler avoids const as src.. */
 	if (is_const(src))
 		src = get_unconst(ctx, src);
 
-	/* worst case: */
-	add_nop(ctx, 6);
-
 	/* we need to replicate into each component: */
-	for (i = 0, n = 0; i < 4; i++) {
+	for (i = 0; i < 4; i++) {
 		if (dst->WriteMask & (1 << i)) {
-			if (n++)
-				ir3_instr_create(ctx->ir, 0, OPC_NOP);
-			instr = ir3_instr_create(ctx->ir, 4, t->opc);
+			instr = instr_create(ctx, 4, t->opc);
 			add_dst_reg(ctx, instr, dst, i);
 			add_src_reg(ctx, instr, src, src->SwizzleX);
 		}
 	}
 
-	regmask_set(&ctx->needs_ss, instr->regs[0]);
 	put_dst(ctx, inst, dst);
 }
 
@@ -1243,6 +1729,8 @@ static const struct instr_translater translaters[TGSI_OPCODE_LAST] = {
 	INSTR(CLAMP,        trans_clamp),
 	INSTR(FLR,          instr_cat2, .opc = OPC_FLOOR_F),
 	INSTR(ROUND,        instr_cat2, .opc = OPC_RNDNE_F),
+	INSTR(SSG,          instr_cat2, .opc = OPC_SIGN_F),
+	INSTR(CEIL,         instr_cat2, .opc = OPC_CEIL_F),
 	INSTR(ARL,          trans_arl),
 	INSTR(EX2,          instr_cat4, .opc = OPC_EXP2),
 	INSTR(LG2,          instr_cat4, .opc = OPC_LOG2),
@@ -1262,7 +1750,7 @@ static const struct instr_translater translaters[TGSI_OPCODE_LAST] = {
 	INSTR(ELSE,         trans_else),
 	INSTR(ENDIF,        trans_endif),
 	INSTR(END,          instr_cat0, .opc = OPC_END),
-	INSTR(KILL,         instr_cat0, .opc = OPC_KILL),
+	INSTR(KILL,         trans_kill, .opc = OPC_KILL),
 };
 
 static fd3_semantic
@@ -1271,13 +1759,164 @@ decl_semantic(const struct tgsi_declaration_semantic *sem)
 	return fd3_semantic_name(sem->Name, sem->Index);
 }
 
-static int
+static struct ir3_instruction *
+decl_in_frag_bary(struct fd3_compile_context *ctx, unsigned regid,
+		unsigned j, unsigned inloc)
+{
+	struct ir3_instruction *instr;
+	struct ir3_register *src;
+
+	/* bary.f dst, #inloc, r0.x */
+	instr = instr_create(ctx, 2, OPC_BARY_F);
+	ir3_reg_create(instr, regid, 0);   /* dummy dst */
+	ir3_reg_create(instr, 0, IR3_REG_IMMED)->iim_val = inloc;
+	src = ir3_reg_create(instr, 0, IR3_REG_SSA);
+	src->wrmask = 0x3;
+	src->instr = ctx->frag_pos;
+
+	return instr;
+}
+
+/* TGSI_SEMANTIC_POSITION
+ * """"""""""""""""""""""
+ *
+ * For fragment shaders, TGSI_SEMANTIC_POSITION is used to indicate that
+ * fragment shader input contains the fragment's window position.  The X
+ * component starts at zero and always increases from left to right.
+ * The Y component starts at zero and always increases but Y=0 may either
+ * indicate the top of the window or the bottom depending on the fragment
+ * coordinate origin convention (see TGSI_PROPERTY_FS_COORD_ORIGIN).
+ * The Z coordinate ranges from 0 to 1 to represent depth from the front
+ * to the back of the Z buffer.  The W component contains the reciprocol
+ * of the interpolated vertex position W component.
+ */
+static struct ir3_instruction *
+decl_in_frag_coord(struct fd3_compile_context *ctx, unsigned regid,
+		unsigned j)
+{
+	struct ir3_instruction *instr, *src;
+
+	compile_assert(ctx, !ctx->frag_coord[j]);
+
+	ctx->frag_coord[j] = create_input(ctx->block, NULL, 0);
+
+
+	switch (j) {
+	case 0: /* .x */
+	case 1: /* .y */
+		/* for frag_coord, we get unsigned values.. we need
+		 * to subtract (integer) 8 and divide by 16 (right-
+		 * shift by 4) then convert to float:
+		 */
+
+		/* add.s tmp, src, -8 */
+		instr = instr_create(ctx, 2, OPC_ADD_S);
+		ir3_reg_create(instr, regid, 0);    /* dummy dst */
+		ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = ctx->frag_coord[j];
+		ir3_reg_create(instr, 0, IR3_REG_IMMED)->iim_val = -8;
+		src = instr;
+
+		/* shr.b tmp, tmp, 4 */
+		instr = instr_create(ctx, 2, OPC_SHR_B);
+		ir3_reg_create(instr, regid, 0);    /* dummy dst */
+		ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = src;
+		ir3_reg_create(instr, 0, IR3_REG_IMMED)->iim_val = 4;
+		src = instr;
+
+		/* mov.u32f32 dst, tmp */
+		instr = instr_create(ctx, 1, 0);
+		instr->cat1.src_type = TYPE_U32;
+		instr->cat1.dst_type = TYPE_F32;
+		ir3_reg_create(instr, regid, 0);    /* dummy dst */
+		ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = src;
+
+		break;
+	case 2: /* .z */
+	case 3: /* .w */
+		/* seems that we can use these as-is: */
+		instr = ctx->frag_coord[j];
+		break;
+	default:
+		compile_error(ctx, "invalid channel\n");
+		instr = create_immed(ctx, 0.0);
+		break;
+	}
+
+	return instr;
+}
+
+/* TGSI_SEMANTIC_FACE
+ * """"""""""""""""""
+ *
+ * This label applies to fragment shader inputs only and indicates that
+ * the register contains front/back-face information of the form (F, 0,
+ * 0, 1).  The first component will be positive when the fragment belongs
+ * to a front-facing polygon, and negative when the fragment belongs to a
+ * back-facing polygon.
+ */
+static struct ir3_instruction *
+decl_in_frag_face(struct fd3_compile_context *ctx, unsigned regid,
+		unsigned j)
+{
+	struct ir3_instruction *instr, *src;
+
+	switch (j) {
+	case 0: /* .x */
+		compile_assert(ctx, !ctx->frag_face);
+
+		ctx->frag_face = create_input(ctx->block, NULL, 0);
+
+		/* for faceness, we always get -1 or 0 (int).. but TGSI expects
+		 * positive vs negative float.. and piglit further seems to
+		 * expect -1.0 or 1.0:
+		 *
+		 *    mul.s tmp, hr0.x, 2
+		 *    add.s tmp, tmp, 1
+		 *    mov.s16f32, dst, tmp
+		 *
+		 */
+
+		instr = instr_create(ctx, 2, OPC_MUL_S);
+		ir3_reg_create(instr, regid, 0);    /* dummy dst */
+		ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = ctx->frag_face;
+		ir3_reg_create(instr, 0, IR3_REG_IMMED)->iim_val = 2;
+		src = instr;
+
+		instr = instr_create(ctx, 2, OPC_ADD_S);
+		ir3_reg_create(instr, regid, 0);    /* dummy dst */
+		ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = src;
+		ir3_reg_create(instr, 0, IR3_REG_IMMED)->iim_val = 1;
+		src = instr;
+
+		instr = instr_create(ctx, 1, 0); /* mov */
+		instr->cat1.src_type = TYPE_S32;
+		instr->cat1.dst_type = TYPE_F32;
+		ir3_reg_create(instr, regid, 0);    /* dummy dst */
+		ir3_reg_create(instr, 0, IR3_REG_SSA)->instr = src;
+
+		break;
+	case 1: /* .y */
+	case 2: /* .z */
+		instr = create_immed(ctx, 0.0);
+		break;
+	case 3: /* .w */
+		instr = create_immed(ctx, 1.0);
+		break;
+	default:
+		compile_error(ctx, "invalid channel\n");
+		instr = create_immed(ctx, 0.0);
+		break;
+	}
+
+	return instr;
+}
+
+static void
 decl_in(struct fd3_compile_context *ctx, struct tgsi_full_declaration *decl)
 {
-	struct fd3_shader_stateobj *so = ctx->so;
-	unsigned base = ctx->base_reg[TGSI_FILE_INPUT];
-	unsigned i, flags = 0;
-	int nop = 0;
+	struct fd3_shader_variant *so = ctx->so;
+	unsigned name = decl->Semantic.Name;
+	unsigned i;
 
 	/* I don't think we should get frag shader input without
 	 * semantic info?  Otherwise how do inputs get linked to
@@ -1286,76 +1925,77 @@ decl_in(struct fd3_compile_context *ctx, struct tgsi_full_declaration *decl)
 	compile_assert(ctx, (ctx->type == TGSI_PROCESSOR_VERTEX) ||
 			decl->Declaration.Semantic);
 
-	if (ctx->so->half_precision)
-		flags |= IR3_REG_HALF;
-
 	for (i = decl->Range.First; i <= decl->Range.Last; i++) {
 		unsigned n = so->inputs_count++;
-		unsigned r = regid(i + base, 0);
-		unsigned ncomp;
+		unsigned r = regid(i, 0);
+		unsigned ncomp, j;
 
-		/* TODO use ctx->info.input_usage_mask[decl->Range.n] to figure out ncomp: */
+		/* we'll figure out the actual components used after scheduling */
 		ncomp = 4;
 
-		DBG("decl in -> r%d", i + base);   // XXX
+		DBG("decl in -> r%d", i);
 
 		so->inputs[n].semantic = decl_semantic(&decl->Semantic);
 		so->inputs[n].compmask = (1 << ncomp) - 1;
 		so->inputs[n].regid = r;
 		so->inputs[n].inloc = ctx->next_inloc;
-		ctx->next_inloc += ncomp;
 
-		so->total_in += ncomp;
+		for (j = 0; j < ncomp; j++) {
+			struct ir3_instruction *instr = NULL;
 
-		/* for frag shaders, we need to generate the corresponding bary instr: */
-		if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
-			unsigned j;
-
-			for (j = 0; j < ncomp; j++) {
-				struct ir3_instruction *instr;
-				struct ir3_register *dst;
-
-				instr = ir3_instr_create(ctx->ir, 2, OPC_BARY_F);
-
-				/* dst register: */
-				dst = ir3_reg_create(instr, r + j, flags);
-				ctx->last_input = dst;
-
-				/* input position: */
-				ir3_reg_create(instr, 0, IR3_REG_IMMED)->iim_val =
-						so->inputs[n].inloc + j - 8;
-
-				/* input base (always r0.xy): */
-				ir3_reg_create(instr, regid(0,0), 0)->wrmask = 0x3;
+			if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
+				/* for fragment shaders, POSITION and FACE are handled
+				 * specially, not using normal varying / bary.f
+				 */
+				if (name == TGSI_SEMANTIC_POSITION) {
+					so->inputs[n].bary = false;
+					so->frag_coord = true;
+					instr = decl_in_frag_coord(ctx, r + j, j);
+				} else if (name == TGSI_SEMANTIC_FACE) {
+					so->inputs[n].bary = false;
+					so->frag_face = true;
+					instr = decl_in_frag_face(ctx, r + j, j);
+				} else {
+					so->inputs[n].bary = true;
+					instr = decl_in_frag_bary(ctx, r + j, j,
+							so->inputs[n].inloc + j - 8);
+				}
+			} else {
+				instr = create_input(ctx->block, NULL, (i * 4) + j);
 			}
 
-			nop = 6;
+			ctx->block->inputs[(i * 4) + j] = instr;
+		}
+
+		if (so->inputs[n].bary || (ctx->type == TGSI_PROCESSOR_VERTEX)) {
+			ctx->next_inloc += ncomp;
+			so->total_in += ncomp;
 		}
 	}
-
-	return nop;
 }
 
 static void
 decl_out(struct fd3_compile_context *ctx, struct tgsi_full_declaration *decl)
 {
-	struct fd3_shader_stateobj *so = ctx->so;
-	unsigned base = ctx->base_reg[TGSI_FILE_OUTPUT];
+	struct fd3_shader_variant *so = ctx->so;
 	unsigned comp = 0;
 	unsigned name = decl->Semantic.Name;
 	unsigned i;
 
-	compile_assert(ctx, decl->Declaration.Semantic);  // TODO is this ever not true?
+	compile_assert(ctx, decl->Declaration.Semantic);
 
-	DBG("decl out[%d] -> r%d", name, decl->Range.First + base);   // XXX
+	DBG("decl out[%d] -> r%d", name, decl->Range.First);
 
 	if (ctx->type == TGSI_PROCESSOR_VERTEX) {
 		switch (name) {
 		case TGSI_SEMANTIC_POSITION:
 			so->writes_pos = true;
-			/* fallthrough */
+			break;
 		case TGSI_SEMANTIC_PSIZE:
+			so->writes_psize = true;
+			break;
 		case TGSI_SEMANTIC_COLOR:
+		case TGSI_SEMANTIC_BCOLOR:
 		case TGSI_SEMANTIC_GENERIC:
 		case TGSI_SEMANTIC_FOG:
 		case TGSI_SEMANTIC_TEXCOORD:
@@ -1369,7 +2009,7 @@ decl_out(struct fd3_compile_context *ctx, struct tgsi_full_declaration *decl)
 		case TGSI_SEMANTIC_POSITION:
 			comp = 2;  /* tgsi will write to .z component */
 			so->writes_pos = true;
-			/* fallthrough */
+			break;
 		case TGSI_SEMANTIC_COLOR:
 			break;
 		default:
@@ -1380,22 +2020,110 @@ decl_out(struct fd3_compile_context *ctx, struct tgsi_full_declaration *decl)
 
 	for (i = decl->Range.First; i <= decl->Range.Last; i++) {
 		unsigned n = so->outputs_count++;
+		unsigned ncomp, j;
+
+		ncomp = 4;
+
 		so->outputs[n].semantic = decl_semantic(&decl->Semantic);
-		so->outputs[n].regid = regid(i + base, comp);
+		so->outputs[n].regid = regid(i, comp);
+
+		/* avoid undefined outputs, stick a dummy mov from imm{0.0},
+		 * which if the output is actually assigned will be over-
+		 * written
+		 */
+		for (j = 0; j < ncomp; j++)
+			ctx->block->outputs[(i * 4) + j] = create_immed(ctx, 0.0);
 	}
 }
 
+/* from TGSI perspective, we actually have inputs.  But most of the "inputs"
+ * for a fragment shader are just bary.f instructions.  The *actual* inputs
+ * from the hw perspective are the frag_pos and optionally frag_coord and
+ * frag_face.
+ */
 static void
-decl_samp(struct fd3_compile_context *ctx, struct tgsi_full_declaration *decl)
+fixup_frag_inputs(struct fd3_compile_context *ctx)
 {
-	ctx->so->samplers_count++;
+	struct fd3_shader_variant *so = ctx->so;
+	struct ir3_block *block = ctx->block;
+	struct ir3_instruction **inputs;
+	struct ir3_instruction *instr;
+	int n, regid = 0;
+
+	block->ninputs = 0;
+
+	n  = 4;  /* always have frag_pos */
+	n += COND(so->frag_face, 4);
+	n += COND(so->frag_coord, 4);
+
+	inputs = ir3_alloc(ctx->ir, n * (sizeof(struct ir3_instruction *)));
+
+	if (so->frag_face) {
+		/* this ultimately gets assigned to hr0.x so doesn't conflict
+		 * with frag_coord/frag_pos..
+		 */
+		inputs[block->ninputs++] = ctx->frag_face;
+		ctx->frag_face->regs[0]->num = 0;
+
+		/* remaining channels not used, but let's avoid confusing
+		 * other parts that expect inputs to come in groups of vec4
+		 */
+		inputs[block->ninputs++] = NULL;
+		inputs[block->ninputs++] = NULL;
+		inputs[block->ninputs++] = NULL;
+	}
+
+	/* since we don't know where to set the regid for frag_coord,
+	 * we have to use r0.x for it.  But we don't want to *always*
+	 * use r1.x for frag_pos as that could increase the register
+	 * footprint on simple shaders:
+	 */
+	if (so->frag_coord) {
+		ctx->frag_coord[0]->regs[0]->num = regid++;
+		ctx->frag_coord[1]->regs[0]->num = regid++;
+		ctx->frag_coord[2]->regs[0]->num = regid++;
+		ctx->frag_coord[3]->regs[0]->num = regid++;
+
+		inputs[block->ninputs++] = ctx->frag_coord[0];
+		inputs[block->ninputs++] = ctx->frag_coord[1];
+		inputs[block->ninputs++] = ctx->frag_coord[2];
+		inputs[block->ninputs++] = ctx->frag_coord[3];
+	}
+
+	/* we always have frag_pos: */
+	so->pos_regid = regid;
+
+	/* r0.x */
+	instr = create_input(block, NULL, block->ninputs);
+	instr->regs[0]->num = regid++;
+	inputs[block->ninputs++] = instr;
+	ctx->frag_pos->regs[1]->instr = instr;
+
+	/* r0.y */
+	instr = create_input(block, NULL, block->ninputs);
+	instr->regs[0]->num = regid++;
+	inputs[block->ninputs++] = instr;
+	ctx->frag_pos->regs[2]->instr = instr;
+
+	block->inputs = inputs;
 }
 
 static void
 compile_instructions(struct fd3_compile_context *ctx)
 {
-	struct ir3_shader *ir = ctx->ir;
-	int nop = 0;
+	push_block(ctx);
+
+	/* for fragment shader, we have a single input register (usually
+	 * r0.xy) which is used as the base for bary.f varying fetch instrs:
+	 */
+	if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
+		struct ir3_instruction *instr;
+		instr = ir3_instr_create(ctx->block, -1, OPC_META_FI);
+		ir3_reg_create(instr, 0, 0);
+		ir3_reg_create(instr, 0, IR3_REG_SSA);    /* r0.x */
+		ir3_reg_create(instr, 0, IR3_REG_SSA);    /* r0.y */
+		ctx->frag_pos = instr;
+	}
 
 	while (!tgsi_parse_end_of_tokens(&ctx->parser)) {
 		tgsi_parse_token(&ctx->parser);
@@ -1407,9 +2135,7 @@ compile_instructions(struct fd3_compile_context *ctx)
 			if (decl->Declaration.File == TGSI_FILE_OUTPUT) {
 				decl_out(ctx, decl);
 			} else if (decl->Declaration.File == TGSI_FILE_INPUT) {
-				nop = decl_in(ctx, decl);
-			} else if (decl->Declaration.File == TGSI_FILE_SAMPLER) {
-				decl_samp(ctx, decl);
+				decl_in(ctx, decl);
 			}
 			break;
 		}
@@ -1430,9 +2156,6 @@ compile_instructions(struct fd3_compile_context *ctx)
 			unsigned opc = inst->Instruction.Opcode;
 			const struct instr_translater *t = &translaters[opc];
 
-			add_nop(ctx, nop);
-			nop = 0;
-
 			if (t->fxn) {
 				t->fxn(t, ctx, inst);
 				ctx->num_internal_temps = 0;
@@ -1452,27 +2175,41 @@ compile_instructions(struct fd3_compile_context *ctx)
 				break;
 			}
 
+			instr_finish(ctx);
+
 			break;
 		}
 		default:
 			break;
 		}
 	}
+}
 
-	if (ir->instrs_count > 0)
-		ir->instrs[0]->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
-
-	if (ctx->last_input)
-		ctx->last_input->flags |= IR3_REG_EI;
-
-	handle_last_rel(ctx);
+static void
+compile_dump(struct fd3_compile_context *ctx)
+{
+	const char *name = (ctx->so->type == SHADER_VERTEX) ? "vert" : "frag";
+	static unsigned n = 0;
+	char fname[16];
+	FILE *f;
+	snprintf(fname, sizeof(fname), "%s-%04u.dot", name, n++);
+	f = fopen(fname, "w");
+	if (!f)
+		return;
+	ir3_block_depth(ctx->block);
+	ir3_shader_dump(ctx->ir, name, ctx->block, f);
+	fclose(f);
 }
 
 int
-fd3_compile_shader(struct fd3_shader_stateobj *so,
-		const struct tgsi_token *tokens)
+fd3_compile_shader(struct fd3_shader_variant *so,
+		const struct tgsi_token *tokens, struct fd3_shader_key key)
 {
 	struct fd3_compile_context ctx;
+	struct ir3_block *block;
+	struct ir3_instruction **inputs;
+	unsigned i, j, actual_in;
+	int ret = 0;
 
 	assert(!so->ir);
 
@@ -1480,12 +2217,135 @@ fd3_compile_shader(struct fd3_shader_stateobj *so,
 
 	assert(so->ir);
 
-	if (compile_init(&ctx, so, tokens) != TGSI_PARSE_OK)
-		return -1;
+	if (compile_init(&ctx, so, tokens) != TGSI_PARSE_OK) {
+		ret = -1;
+		goto out;
+	}
 
 	compile_instructions(&ctx);
 
+	block = ctx.block;
+
+	/* keep track of the inputs from TGSI perspective.. */
+	inputs = block->inputs;
+
+	/* but fixup actual inputs for frag shader: */
+	if (ctx.type == TGSI_PROCESSOR_FRAGMENT)
+		fixup_frag_inputs(&ctx);
+
+	/* at this point, for binning pass, throw away unneeded outputs: */
+	if (key.binning_pass) {
+		for (i = 0, j = 0; i < so->outputs_count; i++) {
+			unsigned name = sem2name(so->outputs[i].semantic);
+			unsigned idx = sem2name(so->outputs[i].semantic);
+
+			/* throw away everything but first position/psize */
+			if ((idx == 0) && ((name == TGSI_SEMANTIC_POSITION) ||
+					(name == TGSI_SEMANTIC_PSIZE))) {
+				if (i != j) {
+					so->outputs[j] = so->outputs[i];
+					block->outputs[(j*4)+0] = block->outputs[(i*4)+0];
+					block->outputs[(j*4)+1] = block->outputs[(i*4)+1];
+					block->outputs[(j*4)+2] = block->outputs[(i*4)+2];
+					block->outputs[(j*4)+3] = block->outputs[(i*4)+3];
+				}
+				j++;
+			}
+		}
+		so->outputs_count = j;
+		block->noutputs = j * 4;
+	}
+
+	/* at this point, we want the kill's in the outputs array too,
+	 * so that they get scheduled (since they have no dst).. we've
+	 * already ensured that the array is big enough in push_block():
+	 */
+	if (ctx.type == TGSI_PROCESSOR_FRAGMENT) {
+		for (i = 0; i < ctx.kill_count; i++)
+			block->outputs[block->noutputs++] = ctx.kill[i];
+	}
+
+	if (fd_mesa_debug & FD_DBG_OPTDUMP)
+		compile_dump(&ctx);
+
+	ret = ir3_block_flatten(block);
+	if (ret < 0)
+		goto out;
+	if ((ret > 0) && (fd_mesa_debug & FD_DBG_OPTDUMP))
+		compile_dump(&ctx);
+
+	ir3_block_cp(block);
+
+	if (fd_mesa_debug & FD_DBG_OPTDUMP)
+		compile_dump(&ctx);
+
+	ir3_block_depth(block);
+
+	if (fd_mesa_debug & FD_DBG_OPTMSGS) {
+		printf("AFTER DEPTH:\n");
+		ir3_dump_instr_list(block->head);
+	}
+
+	ir3_block_sched(block);
+
+	if (fd_mesa_debug & FD_DBG_OPTMSGS) {
+		printf("AFTER SCHED:\n");
+		ir3_dump_instr_list(block->head);
+	}
+
+	ret = ir3_block_ra(block, so->type, key.half_precision,
+			so->frag_coord, so->frag_face, &so->has_samp);
+	if (ret)
+		goto out;
+
+	if (fd_mesa_debug & FD_DBG_OPTMSGS) {
+		printf("AFTER RA:\n");
+		ir3_dump_instr_list(block->head);
+	}
+
+	/* fixup input/outputs: */
+	for (i = 0; i < so->outputs_count; i++) {
+		so->outputs[i].regid = block->outputs[i*4]->regs[0]->num;
+		/* preserve hack for depth output.. tgsi writes depth to .z,
+		 * but what we give the hw is the scalar register:
+		 */
+		if ((ctx.type == TGSI_PROCESSOR_FRAGMENT) &&
+			(sem2name(so->outputs[i].semantic) == TGSI_SEMANTIC_POSITION))
+			so->outputs[i].regid += 2;
+	}
+	/* Note that some or all channels of an input may be unused: */
+	actual_in = 0;
+	for (i = 0; i < so->inputs_count; i++) {
+		unsigned j, regid = ~0, compmask = 0;
+		so->inputs[i].ncomp = 0;
+		for (j = 0; j < 4; j++) {
+			struct ir3_instruction *in = inputs[(i*4) + j];
+			if (in) {
+				compmask |= (1 << j);
+				regid = in->regs[0]->num - j;
+				actual_in++;
+				so->inputs[i].ncomp++;
+			}
+		}
+		so->inputs[i].regid = regid;
+		so->inputs[i].compmask = compmask;
+	}
+
+	/* fragment shader always gets full vec4's even if it doesn't
+	 * fetch all components, but vertex shader we need to update
+	 * with the actual number of components fetch, otherwise thing
+	 * will hang due to mismaptch between VFD_DECODE's and
+	 * TOTALATTRTOVS
+	 */
+	if (so->type == SHADER_VERTEX)
+		so->total_in = actual_in;
+
+out:
+	if (ret) {
+		ir3_shader_destroy(so->ir);
+		so->ir = NULL;
+	}
 	compile_free(&ctx);
 
-	return 0;
+	return ret;
 }

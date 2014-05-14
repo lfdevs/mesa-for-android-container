@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <errno.h>
 #include <limits.h>
 
 #include <sys/types.h>
@@ -124,27 +125,37 @@ image_get_buffers(__DRIdrawable *driDrawable,
 }
 
 static const __DRIuseInvalidateExtension use_invalidate = {
-   { __DRI_USE_INVALIDATE, 1 }
+   .base = { __DRI_USE_INVALIDATE, 1 }
 };
 
 static const __DRIimageLookupExtension image_lookup_extension = {
-   { __DRI_IMAGE_LOOKUP, 1 },
-   dri_lookup_egl_image
+   .base = { __DRI_IMAGE_LOOKUP, 1 },
+
+   .lookupEGLImage          = dri_lookup_egl_image
 };
 
 static const __DRIdri2LoaderExtension dri2_loader_extension = {
-   { __DRI_DRI2_LOADER, 3 },
-   dri_get_buffers,
-   dri_flush_front_buffer,
-   dri_get_buffers_with_format,
+   .base = { __DRI_DRI2_LOADER, 3 },
+
+   .getBuffers              = dri_get_buffers,
+   .flushFrontBuffer        = dri_flush_front_buffer,
+   .getBuffersWithFormat    = dri_get_buffers_with_format,
 };
 
 static const __DRIimageLoaderExtension image_loader_extension = {
-   { __DRI_IMAGE_LOADER, 1 },
-   image_get_buffers,
-   dri_flush_front_buffer,
+   .base = { __DRI_IMAGE_LOADER, 1 },
+
+   .getBuffers          = image_get_buffers,
+   .flushFrontBuffer    = dri_flush_front_buffer,
 };
 
+static const __DRIextension *gbm_dri_screen_extensions[] = {
+   &image_lookup_extension.base,
+   &use_invalidate.base,
+   &dri2_loader_extension.base,
+   &image_loader_extension.base,
+   NULL,
+};
 
 struct dri_extension_match {
    const char *name;
@@ -282,11 +293,7 @@ dri_screen_create(struct gbm_dri_device *dri)
       return ret;
    };
 
-   dri->extensions[0] = &image_lookup_extension.base;
-   dri->extensions[1] = &use_invalidate.base;
-   dri->extensions[2] = &dri2_loader_extension.base;
-   dri->extensions[3] = &image_loader_extension.base;
-   dri->extensions[4] = NULL;
+   dri->extensions = gbm_dri_screen_extensions;
 
    if (dri->dri2 == NULL)
       return -1;
@@ -351,12 +358,29 @@ gbm_dri_bo_write(struct gbm_bo *_bo, const void *buf, size_t count)
 {
    struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
 
-   if (bo->image != NULL)
+   if (bo->image != NULL) {
+      errno = EINVAL;
       return -1;
+   }
 
    memcpy(bo->map, buf, count);
 
    return 0;
+}
+
+static int
+gbm_dri_bo_get_fd(struct gbm_bo *_bo)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
+   struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
+   int fd;
+
+   if (bo->image == NULL)
+      return -1;
+
+   dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_FD, &fd);
+
+   return fd;
 }
 
 static void
@@ -415,8 +439,10 @@ gbm_dri_bo_import(struct gbm_device *gbm,
    int gbm_format;
 
    /* Required for query image WIDTH & HEIGHT */
-   if (dri->image->base.version < 4)
+   if (dri->image->base.version < 4) {
+      errno = ENOSYS;
       return NULL;
+   }
 
    switch (type) {
 #if HAVE_WAYLAND_PLATFORM
@@ -424,14 +450,18 @@ gbm_dri_bo_import(struct gbm_device *gbm,
    {
       struct wl_drm_buffer *wb;
 
-      if (!dri->wl_drm)
+      if (!dri->wl_drm) {
+         errno = EINVAL;
          return NULL;
+      }
 
       wb = wayland_drm_buffer_get(dri->wl_drm, (struct wl_resource *) buffer);
-      if (!wb)
+      if (!wb) {
+         errno = EINVAL;
          return NULL;
+      }
 
-      image = wb->driver_buffer;
+      image = dri->image->dupImage(wb->driver_buffer, NULL);
 
       switch (wb->format) {
       case WL_DRM_FORMAT_XRGB8888:
@@ -456,18 +486,40 @@ gbm_dri_bo_import(struct gbm_device *gbm,
    case GBM_BO_IMPORT_EGL_IMAGE:
    {
       int dri_format;
-      if (dri->lookup_image == NULL)
+      if (dri->lookup_image == NULL) {
+         errno = EINVAL;
          return NULL;
+      }
 
       image = dri->lookup_image(dri->screen, buffer, dri->lookup_user_data);
+      image = dri->image->dupImage(image, NULL);
       dri->image->queryImage(image, __DRI_IMAGE_ATTRIB_FORMAT, &dri_format);
       gbm_format = gbm_dri_to_gbm_format(dri_format);
-      if (gbm_format == 0)
+      if (gbm_format == 0) {
+         errno = EINVAL;
          return NULL;
+      }
+      break;
+   }
+
+   case GBM_BO_IMPORT_FD:
+   {
+      struct gbm_import_fd_data *fd_data = buffer;
+      int stride = fd_data->stride, offset = 0;
+
+      image = dri->image->createImageFromFds(dri->screen,
+                                             fd_data->width,
+                                             fd_data->height,
+                                             fd_data->format,
+                                             &fd_data->fd, 1,
+                                             &stride, &offset,
+                                             NULL);
+      gbm_format = fd_data->format;
       break;
    }
 
    default:
+      errno = ENOSYS;
       return NULL;
    }
 
@@ -476,7 +528,7 @@ gbm_dri_bo_import(struct gbm_device *gbm,
    if (bo == NULL)
       return NULL;
 
-   bo->image = dri->image->dupImage(image, NULL);
+   bo->image = image;
 
    if (usage & GBM_BO_USE_SCANOUT)
       dri_use |= __DRI_IMAGE_USE_SCANOUT;
@@ -484,6 +536,7 @@ gbm_dri_bo_import(struct gbm_device *gbm,
       dri_use |= __DRI_IMAGE_USE_CURSOR;
    if (dri->image->base.version >= 2 &&
        !dri->image->validateUsage(bo->image, dri_use)) {
+      errno = EINVAL;
       free(bo);
       return NULL;
    }
@@ -515,10 +568,14 @@ create_dumb(struct gbm_device *gbm,
    struct drm_mode_destroy_dumb destroy_arg;
    int ret;
 
-   if (!(usage & GBM_BO_USE_CURSOR_64X64))
+   if (!(usage & GBM_BO_USE_CURSOR_64X64)) {
+      errno = EINVAL;
       return NULL;
-   if (format != GBM_FORMAT_ARGB8888)
+   }
+   if (format != GBM_FORMAT_ARGB8888) {
+      errno = EINVAL;
       return NULL;
+   }
 
    bo = calloc(1, sizeof *bo);
    if (bo == NULL)
@@ -609,7 +666,8 @@ gbm_dri_bo_create(struct gbm_device *gbm,
       dri_format = __DRI_IMAGE_FORMAT_XRGB2101010;
       break;
    default:
-      return NULL;
+      errno = EINVAL;
+      goto failed;
    }
 
    if (usage & GBM_BO_USE_SCANOUT)
@@ -626,7 +684,7 @@ gbm_dri_bo_create(struct gbm_device *gbm,
                               dri_format, dri_use,
                               bo);
    if (bo->image == NULL)
-      return NULL;
+      goto failed;
 
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_HANDLE,
                           &bo->base.base.handle.s32);
@@ -634,6 +692,10 @@ gbm_dri_bo_create(struct gbm_device *gbm,
                           (int *) &bo->base.base.stride);
 
    return &bo->base.base;
+
+failed:
+   free(bo);
+   return NULL;
 }
 
 static struct gbm_surface *
@@ -684,12 +746,15 @@ dri_device_create(int fd)
    int ret;
 
    dri = calloc(1, sizeof *dri);
+   if (!dri)
+      return NULL;
 
    dri->base.base.fd = fd;
    dri->base.base.bo_create = gbm_dri_bo_create;
    dri->base.base.bo_import = gbm_dri_bo_import;
    dri->base.base.is_format_supported = gbm_dri_is_format_supported;
    dri->base.base.bo_write = gbm_dri_bo_write;
+   dri->base.base.bo_get_fd = gbm_dri_bo_get_fd;
    dri->base.base.bo_destroy = gbm_dri_bo_destroy;
    dri->base.base.destroy = dri_destroy;
    dri->base.base.surface_create = gbm_dri_surface_create;

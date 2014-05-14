@@ -61,7 +61,9 @@ tests_general_ir_test_SOURCES =		\
 	$(GLSL_SRCDIR)/standalone_scaffolding.cpp \
 	tests/builtin_variable_test.cpp			\
 	tests/invalidate_locations_test.cpp		\
-	tests/general_ir_test.cpp
+	tests/general_ir_test.cpp			\
+	tests/varyings_test.cpp				\
+	tests/common.c
 tests_general_ir_test_CFLAGS =				\
 	$(PTHREAD_CFLAGS)
 tests_general_ir_test_LDADD =				\
@@ -76,7 +78,8 @@ tests_uniform_initializer_test_SOURCES =		\
 	$(top_srcdir)/src/mesa/program/symbol_table.c	\
 	tests/copy_constant_to_storage_tests.cpp	\
 	tests/set_uniform_initializer_tests.cpp		\
-	tests/uniform_initializer_utils.cpp
+	tests/uniform_initializer_utils.cpp		\
+	tests/common.c
 tests_uniform_initializer_test_CFLAGS =			\
 	$(PTHREAD_CFLAGS)
 tests_uniform_initializer_test_LDADD =			\
@@ -95,7 +98,8 @@ tests_ralloc_test_LDADD =				\
 tests_sampler_types_test_SOURCES =			\
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c\
 	$(top_srcdir)/src/mesa/program/symbol_table.c	\
-	tests/sampler_types_test.cpp
+	tests/sampler_types_test.cpp			\
+	tests/common.c
 tests_sampler_types_test_CFLAGS =			\
 	$(PTHREAD_CFLAGS)
 tests_sampler_types_test_LDADD =			\
@@ -128,7 +132,9 @@ glsl_compiler_SOURCES = \
 	$(top_srcdir)/src/mesa/program/symbol_table.c \
 	$(GLSL_COMPILER_CXX_FILES)
 
-glsl_compiler_LDADD = libglsl.la
+glsl_compiler_LDADD =					\
+	libglsl.la					\
+	$(PTHREAD_LIBS)
 
 glsl_test_SOURCES = \
 	$(top_srcdir)/src/mesa/main/hash_table.c \
@@ -136,6 +142,7 @@ glsl_test_SOURCES = \
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c \
 	$(top_srcdir)/src/mesa/program/symbol_table.c \
 	$(GLSL_SRCDIR)/standalone_scaffolding.cpp \
+	tests/common.c \
 	test.cpp \
 	test_optpass.cpp
 
@@ -178,11 +185,11 @@ glsl_lexer.cpp: glsl_lexer.ll
 	$(AM_V_LEX) $(LEX) $(LFLAGS) -o $@ $<
 
 glcpp/glcpp-parse.c glcpp/glcpp-parse.h: glcpp/glcpp-parse.y
-	$(MKDIR_P) $(GLSL_BUILDDIR)/glcpp
+	$(AM_V_at)$(MKDIR_P) glcpp
 	$(AM_V_YACC) $(YACC) $(YFLAGS) -o $@ -p "glcpp_parser_" --defines=$(GLSL_BUILDDIR)/glcpp/glcpp-parse.h $<
 
 glcpp/glcpp-lex.c: glcpp/glcpp-lex.l
-	$(MKDIR_P) $(GLSL_BUILDDIR)/glcpp
+	$(AM_V_at)$(MKDIR_P) glcpp
 	$(AM_V_LEX) $(LEX) $(LFLAGS) -o $@ $<
 
 # Only the parsers (specifically the header files generated at the same time)

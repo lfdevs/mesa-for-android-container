@@ -31,7 +31,7 @@
  * list of debugging flags, as well as some macros for handling them.
  */
 
-extern int INTEL_DEBUG;
+extern uint64_t INTEL_DEBUG;
 
 #define DEBUG_TEXTURE	  0x1
 #define DEBUG_STATE	  0x2
@@ -42,7 +42,6 @@ extern int INTEL_DEBUG;
 #define DEBUG_BATCH       0x80
 #define DEBUG_PIXEL       0x100
 #define DEBUG_BUFMGR      0x200
-#define DEBUG_REGION      0x400
 #define DEBUG_FBO         0x800
 #define DEBUG_GS          0x1000
 #define DEBUG_SYNC	  0x2000
@@ -70,7 +69,7 @@ extern int INTEL_DEBUG;
 #endif
 #define dbg_printf(...)	ALOGW(__VA_ARGS__)
 #else
-#define dbg_printf(...)	printf(__VA_ARGS__)
+#define dbg_printf(...)	fprintf(stderr, __VA_ARGS__)
 #endif /* HAVE_ANDROID_PLATFORM */
 
 #define DBG(...) do {						\

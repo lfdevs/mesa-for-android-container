@@ -1,4 +1,2 @@
-02_gbm_no_undefined.diff
-03_gbm_make_devices_static.diff
-04_osmesa_version.diff
+01_no_undefined.diff
 07_gallium-fix-build-failure-on-powerpcspe.diff

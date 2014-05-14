@@ -244,7 +244,7 @@ static const char * const access_mode[2] = {
     [1] = "align16",
 };
 
-const char * const reg_encoding[8] = {
+static const char * const reg_encoding[8] = {
     [0] = "UD",
     [1] = "D",
     [2] = "UW",
@@ -309,7 +309,8 @@ static const char * const target_function[16] = {
     [BRW_SFID_DATAPORT_READ] = "read",
     [BRW_SFID_DATAPORT_WRITE] = "write",
     [BRW_SFID_URB] = "urb",
-    [BRW_SFID_THREAD_SPAWNER] = "thread_spawner"
+    [BRW_SFID_THREAD_SPAWNER] = "thread_spawner",
+    [BRW_SFID_VME] = "vme",
 };
 
 static const char * const target_function_gen6[16] = {
@@ -322,7 +323,10 @@ static const char * const target_function_gen6[16] = {
     [GEN6_SFID_DATAPORT_SAMPLER_CACHE] = "sampler",
     [GEN6_SFID_DATAPORT_RENDER_CACHE] = "render",
     [GEN6_SFID_DATAPORT_CONSTANT_CACHE] = "const",
-    [GEN7_SFID_DATAPORT_DATA_CACHE] = "data"
+    [GEN7_SFID_DATAPORT_DATA_CACHE] = "data",
+    [GEN7_SFID_PIXEL_INTERPOLATOR] = "pixel interp",
+    [HSW_SFID_DATAPORT_DATA_CACHE_1] = "dp data 1",
+    [HSW_SFID_CRE] = "cre",
 };
 
 static const char * const dp_rc_msg_type_gen6[16] = {
@@ -340,6 +344,54 @@ static const char * const dp_rc_msg_type_gen6[16] = {
     [GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE] = "RT write",
     [GEN6_DATAPORT_WRITE_MESSAGE_STREAMED_VB_WRITE] = "streamed VB write",
     [GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_UNORM_WRITE] = "RT UNORMc write",
+};
+
+static const char *const dp_dc0_msg_type_gen7[16] = {
+    [GEN7_DATAPORT_DC_OWORD_BLOCK_READ] = "DC OWORD block read",
+    [GEN7_DATAPORT_DC_UNALIGNED_OWORD_BLOCK_READ] = "DC unaligned OWORD block read",
+    [GEN7_DATAPORT_DC_OWORD_DUAL_BLOCK_READ] = "DC OWORD dual block read",
+    [GEN7_DATAPORT_DC_DWORD_SCATTERED_READ] = "DC DWORD scattered read",
+    [GEN7_DATAPORT_DC_BYTE_SCATTERED_READ] = "DC byte scattered read",
+    [GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP] = "DC untyped atomic",
+    [GEN7_DATAPORT_DC_MEMORY_FENCE] = "DC mfence",
+    [GEN7_DATAPORT_DC_OWORD_BLOCK_WRITE] = "DC OWORD block write",
+    [GEN7_DATAPORT_DC_OWORD_DUAL_BLOCK_WRITE] = "DC OWORD dual block write",
+    [GEN7_DATAPORT_DC_DWORD_SCATTERED_WRITE] = "DC DWORD scatterd write",
+    [GEN7_DATAPORT_DC_BYTE_SCATTERED_WRITE] = "DC byte scattered write",
+    [GEN7_DATAPORT_DC_UNTYPED_SURFACE_WRITE] = "DC untyped surface write",
+};
+
+static const char *const dp_dc1_msg_type_hsw[16] = {
+    [HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ] = "untyped surface read",
+    [HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP] = "DC untyped atomic op",
+    [HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2] = "DC untyped 4x2 atomic op",
+    [HSW_DATAPORT_DC_PORT1_MEDIA_BLOCK_READ] = "DC media block read",
+    [HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ] = "DC typed surface read",
+    [HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP] = "DC typed atomic",
+    [HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2] = "DC typed 4x2 atomic op",
+    [HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE] = "DC untyped surface write",
+    [HSW_DATAPORT_DC_PORT1_MEDIA_BLOCK_WRITE] = "DC media block write",
+    [HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP] = "DC atomic counter op",
+    [HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP_SIMD4X2] = "DC 4x2 atomic counter op",
+    [HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE] = "DC typed surface write",
+};
+
+static const char * const aop[16] = {
+   [BRW_AOP_AND] = "and",
+   [BRW_AOP_OR] = "or",
+   [BRW_AOP_XOR] = "xor",
+   [BRW_AOP_MOV] = "mov",
+   [BRW_AOP_INC] = "inc",
+   [BRW_AOP_DEC] = "dec",
+   [BRW_AOP_ADD] = "add",
+   [BRW_AOP_SUB] = "sub",
+   [BRW_AOP_REVSUB] = "revsub",
+   [BRW_AOP_IMAX] = "imax",
+   [BRW_AOP_IMIN] = "imin",
+   [BRW_AOP_UMAX] = "umax",
+   [BRW_AOP_UMIN] = "umin",
+   [BRW_AOP_CMPWR] = "cmpwr",
+   [BRW_AOP_PREDEC] = "predec",
 };
 
 static const char * const math_function[16] = {
@@ -740,7 +792,10 @@ static int src0_3src (FILE *file, struct brw_instruction *inst)
 	return 0;
     if (inst->bits2.da3src.src0_subreg_nr)
 	format (file, ".%d", inst->bits2.da3src.src0_subreg_nr);
-    string (file, "<4,1,1>");
+    if (inst->bits2.da3src.src0_rep_ctrl)
+       string (file, "<0,1,0>");
+    else
+       string (file, "<4,4,1>");
     err |= control (file, "src da16 reg type", three_source_reg_encoding,
                     inst->bits1.da3src.src_type, NULL);
     /*
@@ -792,7 +847,10 @@ static int src1_3src (FILE *file, struct brw_instruction *inst)
 	return 0;
     if (src1_subreg_nr)
 	format (file, ".%d", src1_subreg_nr);
-    string (file, "<4,1,1>");
+    if (inst->bits2.da3src.src1_rep_ctrl)
+       string (file, "<0,1,0>");
+    else
+       string (file, "<4,4,1>");
     err |= control (file, "src da16 reg type", three_source_reg_encoding,
                     inst->bits1.da3src.src_type, NULL);
     /*
@@ -843,7 +901,10 @@ static int src2_3src (FILE *file, struct brw_instruction *inst)
 	return 0;
     if (inst->bits3.da3src.src2_subreg_nr)
 	format (file, ".%d", inst->bits3.da3src.src2_subreg_nr);
-    string (file, "<4,1,1>");
+    if (inst->bits3.da3src.src2_rep_ctrl)
+       string (file, "<0,1,0>");
+    else
+       string (file, "<4,4,1>");
     err |= control (file, "src da16 reg type", three_source_reg_encoding,
                     inst->bits1.da3src.src_type, NULL);
     /*
@@ -1024,19 +1085,10 @@ static int src1 (FILE *file, struct brw_instruction *inst)
     }
 }
 
-int esize[6] = {
-	[0] = 1,
-	[1] = 2,
-	[2] = 4,
-	[3] = 8,
-	[4] = 16,
-	[5] = 32,
-};
-
 static int qtr_ctrl(FILE *file, struct brw_instruction *inst)
 {
     int qtr_ctl = inst->header.compression_control;
-    int exec_size = esize[inst->header.execution_size];
+    int exec_size = 1 << inst->header.execution_size;
 
     if (exec_size == 8) {
 	switch (qtr_ctl) {
@@ -1303,12 +1355,56 @@ int brw_disasm (FILE *file, struct brw_instruction *inst, int gen)
 	case BRW_SFID_THREAD_SPAWNER:
 	    break;
 	case GEN7_SFID_DATAPORT_DATA_CACHE:
-	    format (file, " (%d, %d, %d)",
-		    inst->bits3.gen7_dp.binding_table_index,
-		    inst->bits3.gen7_dp.msg_control,
-		    inst->bits3.gen7_dp.msg_type);
-	    break;
+           if (gen >= 7) {
+              format (file, " (");
 
+              err |= control (file, "DP DC0 message type",
+                              dp_dc0_msg_type_gen7,
+                              inst->bits3.gen7_dp.msg_type, &space);
+
+              format (file, ", %d, ", inst->bits3.gen7_dp.binding_table_index);
+
+              switch (inst->bits3.gen7_dp.msg_type) {
+              case GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP:
+                 control (file, "atomic op", aop, inst->bits3.ud >> 8 & 0xf,
+                          &space);
+                 break;
+              default:
+                 format (file, "%d", inst->bits3.gen7_dp.msg_control);
+              }
+              format (file, ")");
+              break;
+           }
+           /* FALLTHROUGH */
+
+	case HSW_SFID_DATAPORT_DATA_CACHE_1:
+	    if (gen >= 7) {
+		format (file, " (");
+
+		err |= control (file, "DP DC1 message type",
+				dp_dc1_msg_type_hsw,
+				inst->bits3.gen7_dp.msg_type, &space);
+
+		format (file, ", %d, ",
+			inst->bits3.gen7_dp.binding_table_index);
+
+                switch (inst->bits3.gen7_dp.msg_type) {
+                case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP:
+                case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2:
+                case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
+                case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
+                case HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP:
+                case HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP_SIMD4X2:
+                   control (file, "atomic op", aop,
+                            inst->bits3.ud >> 8 & 0xf, &space);
+                   break;
+                default:
+                   format (file, "%d", inst->bits3.gen7_dp.msg_control);
+                }
+                format (file, ")");
+                break;
+            }
+            /* FALLTHROUGH */
 
 	default:
 	    format (file, "unsupported target %d", target);

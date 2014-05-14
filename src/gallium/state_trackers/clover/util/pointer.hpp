@@ -57,33 +57,41 @@ namespace clover {
    /// clover::ref_counter interface.
    ///
    template<typename T>
-   class ref_ptr {
+   class intrusive_ptr {
    public:
-      ref_ptr(T *q = NULL) : p(NULL) {
-         reset(q);
+      intrusive_ptr(T *q = NULL) : p(q) {
+         if (p)
+            p->retain();
       }
 
-      ref_ptr(const ref_ptr<T> &ref) : p(NULL) {
-         reset(ref.p);
+      intrusive_ptr(const intrusive_ptr &ptr) :
+         intrusive_ptr(ptr.p) {
       }
 
-      ~ref_ptr() {
-         reset(NULL);
+      intrusive_ptr(intrusive_ptr &&ptr) :
+         p(ptr.p) {
+         ptr.p = NULL;
       }
 
-      void
-      reset(T *q = NULL) {
-         if (q)
-            q->retain();
+      ~intrusive_ptr() {
          if (p && p->release())
             delete p;
-         p = q;
       }
 
-      ref_ptr &
-      operator=(const ref_ptr &ref) {
-         reset(ref.p);
+      intrusive_ptr &
+      operator=(intrusive_ptr ptr) {
+         std::swap(ptr.p, p);
          return *this;
+      }
+
+      bool
+      operator==(const intrusive_ptr &ref) const {
+         return p == ref.p;
+      }
+
+      bool
+      operator!=(const intrusive_ptr &ref) const {
+         return p != ref.p;
       }
 
       T &
@@ -96,7 +104,16 @@ namespace clover {
          return p;
       }
 
+      T *
+      operator()() const {
+         return p;
+      }
+
       explicit operator bool() const {
+         return p;
+      }
+
+      explicit operator T *() const {
          return p;
       }
 
@@ -105,14 +122,68 @@ namespace clover {
    };
 
    ///
-   /// Transfer the caller's ownership of a reference-counted object
-   /// to a clover::ref_ptr smart pointer.
+   /// Intrusive smart reference for objects that implement the
+   /// clover::ref_counter interface.
    ///
    template<typename T>
-   inline ref_ptr<T>
-   transfer(T *p) {
-      ref_ptr<T> ref { p };
-      p->release();
+   class intrusive_ref {
+   public:
+      intrusive_ref(T &o) : p(&o) {
+         p->retain();
+      }
+
+      intrusive_ref(const intrusive_ref &ref) :
+         intrusive_ref(*ref.p) {
+      }
+
+      intrusive_ref(intrusive_ref &&ref) :
+         p(ref.p) {
+         ref.p = NULL;
+      }
+
+      ~intrusive_ref() {
+         if (p && p->release())
+            delete p;
+      }
+
+      intrusive_ref &
+      operator=(intrusive_ref ref) {
+         std::swap(ref.p, p);
+         return *this;
+      }
+
+      bool
+      operator==(const intrusive_ref &ref) const {
+         return p == ref.p;
+      }
+
+      bool
+      operator!=(const intrusive_ref &ref) const {
+         return p != ref.p;
+      }
+
+      T &
+      operator()() const {
+         return *p;
+      }
+
+      operator T &() const {
+         return *p;
+      }
+
+   private:
+      T *p;
+   };
+
+   ///
+   /// Initialize a clover::intrusive_ref from a newly created object
+   /// using the specified constructor arguments.
+   ///
+   template<typename T, typename... As>
+   intrusive_ref<T>
+   create(As &&... as) {
+      intrusive_ref<T> ref { *new T(std::forward<As>(as)...) };
+      ref().release();
       return ref;
    }
 

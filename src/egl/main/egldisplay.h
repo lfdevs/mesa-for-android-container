@@ -89,6 +89,7 @@ struct _egl_extensions
    EGLBoolean MESA_copy_context;
    EGLBoolean MESA_drm_display;
    EGLBoolean MESA_drm_image;
+   EGLBoolean MESA_configless_context;
 
    EGLBoolean WL_bind_wayland_display;
    EGLBoolean WL_create_wayland_buffer_from_image;
@@ -161,7 +162,7 @@ struct _egl_display
 
 
 extern _EGLPlatformType
-_eglGetNativePlatform(EGLNativeDisplayType nativeDisplay);
+_eglGetNativePlatform(void *nativeDisplay);
 
 
 extern void
@@ -241,5 +242,25 @@ _eglIsResourceLinked(_EGLResource *res)
    return res->IsLinked;
 }
 
+#ifdef HAVE_X11_PLATFORM
+_EGLDisplay*
+_eglGetX11Display(Display *native_display, const EGLint *attrib_list);
+#endif
+
+#ifdef HAVE_DRM_PLATFORM
+struct gbm_device;
+
+_EGLDisplay*
+_eglGetGbmDisplay(struct gbm_device *native_display,
+                  const EGLint *attrib_list);
+#endif
+
+#ifdef HAVE_WAYLAND_PLATFORM
+struct wl_display;
+
+_EGLDisplay*
+_eglGetWaylandDisplay(struct wl_display *native_display,
+                      const EGLint *attrib_list);
+#endif
 
 #endif /* EGLDISPLAY_INCLUDED */

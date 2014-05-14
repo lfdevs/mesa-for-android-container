@@ -26,7 +26,6 @@
  */
 
 #include "util/u_upload_mgr.h"
-#include "intel_chipset.h"
 
 #include "ilo_3d.h"
 #include "ilo_blit.h"
@@ -120,6 +119,7 @@ ilo_context_create(struct pipe_screen *screen, void *priv)
 {
    struct ilo_screen *is = ilo_screen(screen);
    struct ilo_context *ilo;
+   int cp_size;
 
    ilo = CALLOC_STRUCT(ilo_context);
    if (!ilo)
@@ -135,19 +135,17 @@ ilo_context_create(struct pipe_screen *screen, void *priv)
    util_slab_create(&ilo->transfer_mempool,
          sizeof(struct ilo_transfer), 64, UTIL_SLAB_SINGLETHREADED);
 
-   ilo->cp = ilo_cp_create(ilo->winsys, is->dev.has_llc);
+   /* 8192 DWords */
+   cp_size = 8192;
+   if (cp_size * 4 > is->dev.max_batch_size)
+      cp_size = is->dev.max_batch_size / 4;
+
+   ilo->cp = ilo_cp_create(ilo->winsys, cp_size, is->dev.has_llc);
    ilo->shader_cache = ilo_shader_cache_create();
    if (ilo->cp)
       ilo->hw3d = ilo_3d_create(ilo->cp, ilo->dev);
 
    if (!ilo->cp || !ilo->shader_cache || !ilo->hw3d) {
-      ilo_context_destroy(&ilo->base);
-      return NULL;
-   }
-
-   ilo->uploader = u_upload_create(&ilo->base, 1024 * 1024, 16,
-         PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_INDEX_BUFFER);
-   if (!ilo->uploader) {
       ilo_context_destroy(&ilo->base);
       return NULL;
    }
@@ -171,7 +169,17 @@ ilo_context_create(struct pipe_screen *screen, void *priv)
 
    ilo_init_states(ilo);
 
-   /* this must be called last as u_blitter is a client of the pipe context */
+   /*
+    * These must be called last as u_upload/u_blitter are clients of the pipe
+    * context.
+    */
+   ilo->uploader = u_upload_create(&ilo->base, 1024 * 1024, 16,
+         PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_INDEX_BUFFER);
+   if (!ilo->uploader) {
+      ilo_context_destroy(&ilo->base);
+      return NULL;
+   }
+
    ilo->blitter = ilo_blitter_create(ilo);
    if (!ilo->blitter) {
       ilo_context_destroy(&ilo->base);

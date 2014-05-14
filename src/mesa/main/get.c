@@ -28,6 +28,7 @@
 #include "blend.h"
 #include "enable.h"
 #include "enums.h"
+#include "errors.h"
 #include "extensions.h"
 #include "get.h"
 #include "macros.h"
@@ -182,7 +183,7 @@ union value {
 #define CONTEXT_FIELD(field, type) \
    LOC_CONTEXT, type, offsetof(struct gl_context, field)
 #define ARRAY_FIELD(field, type) \
-   LOC_ARRAY, type, offsetof(struct gl_array_object, field)
+   LOC_ARRAY, type, offsetof(struct gl_vertex_array_object, field)
 #undef CONST /* already defined through windows.h */
 #define CONST(value) \
    LOC_CONTEXT, TYPE_CONST, value
@@ -390,6 +391,10 @@ EXTRA_EXT(ARB_shader_atomic_counters);
 EXTRA_EXT(ARB_draw_indirect);
 EXTRA_EXT(ARB_shader_image_load_store);
 EXTRA_EXT(ARB_viewport_array);
+EXTRA_EXT(ARB_compute_shader);
+EXTRA_EXT(ARB_gpu_shader5);
+EXTRA_EXT2(ARB_transform_feedback3, ARB_gpu_shader5);
+EXTRA_EXT(INTEL_performance_query);
 
 static const int
 extra_ARB_color_buffer_float_or_glcore[] = {
@@ -642,7 +647,7 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
    case GL_TEXTURE_COORD_ARRAY_SIZE:
    case GL_TEXTURE_COORD_ARRAY_TYPE:
    case GL_TEXTURE_COORD_ARRAY_STRIDE:
-      array = &ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)];
+      array = &ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)];
       v->value_int = *(GLuint *) ((char *) array + d->offset);
       break;
 
@@ -828,7 +833,7 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
    case GL_SECONDARY_COLOR_ARRAY_BUFFER_BINDING_ARB:
    case GL_FOG_COORDINATE_ARRAY_BUFFER_BINDING_ARB:
       buffer_obj = (struct gl_buffer_object **)
-	 ((char *) ctx->Array.ArrayObj + d->offset);
+	 ((char *) ctx->Array.VAO + d->offset);
       v->value_int = (*buffer_obj)->Name;
       break;
    case GL_ARRAY_BUFFER_BINDING_ARB:
@@ -836,10 +841,10 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       break;
    case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING_ARB:
       v->value_int =
-	 ctx->Array.ArrayObj->VertexBinding[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)].BufferObj->Name;
+	 ctx->Array.VAO->VertexBinding[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)].BufferObj->Name;
       break;
    case GL_ELEMENT_ARRAY_BUFFER_BINDING_ARB:
-      v->value_int = ctx->Array.ArrayObj->ElementArrayBufferObj->Name;
+      v->value_int = ctx->Array.VAO->IndexBufferObj->Name;
       break;
 
    /* ARB_copy_buffer */
@@ -869,6 +874,18 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       v->value_int = ctx->TransformFeedback.CurrentObject->Name;
       break;
    case GL_CURRENT_PROGRAM:
+      /* The Changelog of the ARB_separate_shader_objects spec says:
+       *
+       * 24 25 Jul 2011  pbrown  Remove the language erroneously deleting
+       *                         CURRENT_PROGRAM.  In the EXT extension, this
+       *                         token was aliased to ACTIVE_PROGRAM_EXT, and
+       *                         was used to indicate the last program set by
+       *                         either ActiveProgramEXT or UseProgram.  In
+       *                         the ARB extension, the SSO active programs
+       *                         are now program pipeline object state and
+       *                         CURRENT_PROGRAM should still be used to query
+       *                         the last program set by UseProgram (bug 7822).
+       */
       v->value_int =
 	 ctx->Shader.ActiveProgram ? ctx->Shader.ActiveProgram->Name : 0;
       break;
@@ -880,7 +897,7 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
 	 ctx->CurrentRenderbuffer ? ctx->CurrentRenderbuffer->Name : 0;
       break;
    case GL_POINT_SIZE_ARRAY_BUFFER_BINDING_OES:
-      v->value_int = ctx->Array.ArrayObj->VertexBinding[VERT_ATTRIB_POINT_SIZE].BufferObj->Name;
+      v->value_int = ctx->Array.VAO->VertexBinding[VERT_ATTRIB_POINT_SIZE].BufferObj->Name;
       break;
 
    case GL_FOG_COLOR:
@@ -970,6 +987,12 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
          _mesa_problem(ctx, "driver doesn't implement GetTimestamp");
       }
       break;
+   /* GL_KHR_DEBUG */
+   case GL_DEBUG_LOGGED_MESSAGES:
+   case GL_DEBUG_NEXT_LOGGED_MESSAGE_LENGTH:
+   case GL_DEBUG_GROUP_STACK_DEPTH:
+      v->value_int = _mesa_get_debug_state_int(ctx, d->pname);
+      break;
    /* GL_ARB_shader_atomic_counters */
    case GL_ATOMIC_COUNTER_BUFFER_BINDING:
       v->value_int = ctx->AtomicBuffer->Name;
@@ -977,6 +1000,14 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
    /* GL_ARB_draw_indirect */
    case GL_DRAW_INDIRECT_BUFFER_BINDING:
       v->value_int = ctx->DrawIndirectBuffer->Name;
+      break;
+   /* GL_ARB_separate_shader_objects */
+   case GL_PROGRAM_PIPELINE_BINDING:
+      if (ctx->Pipeline.Current) {
+         v->value_int = ctx->Pipeline.Current->Name;
+      } else {
+         v->value_int = 0;
+      }
       break;
    }
 }
@@ -1188,7 +1219,7 @@ find_value(const char *func, GLenum pname, void **p, union value *v)
       *p = ((char *) ctx + d->offset);
       return d;
    case LOC_ARRAY:
-      *p = ((char *) ctx->Array.ArrayObj + d->offset);
+      *p = ((char *) ctx->Array.VAO + d->offset);
       return d;
    case LOC_TEXUNIT:
       unit = &ctx->Texture.Unit[ctx->Texture.CurrentUnit];
@@ -1851,7 +1882,7 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
           goto invalid_enum;
       if (index >= ctx->Const.Program[MESA_SHADER_VERTEX].MaxAttribs)
           goto invalid_value;
-      v->value_int = ctx->Array.ArrayObj->VertexBinding[VERT_ATTRIB_GENERIC(index)].InstanceDivisor;
+      v->value_int = ctx->Array.VAO->VertexBinding[VERT_ATTRIB_GENERIC(index)].InstanceDivisor;
       return TYPE_INT;
 
    case GL_VERTEX_BINDING_OFFSET:
@@ -1859,7 +1890,7 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
           goto invalid_enum;
       if (index >= ctx->Const.Program[MESA_SHADER_VERTEX].MaxAttribs)
           goto invalid_value;
-      v->value_int = ctx->Array.ArrayObj->VertexBinding[VERT_ATTRIB_GENERIC(index)].Offset;
+      v->value_int = ctx->Array.VAO->VertexBinding[VERT_ATTRIB_GENERIC(index)].Offset;
       return TYPE_INT;
 
    case GL_VERTEX_BINDING_STRIDE:
@@ -1867,7 +1898,7 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
           goto invalid_enum;
       if (index >= ctx->Const.Program[MESA_SHADER_VERTEX].MaxAttribs)
           goto invalid_value;
-      v->value_int = ctx->Array.ArrayObj->VertexBinding[VERT_ATTRIB_GENERIC(index)].Stride;
+      v->value_int = ctx->Array.VAO->VertexBinding[VERT_ATTRIB_GENERIC(index)].Stride;
 
    /* ARB_shader_image_load_store */
    case GL_IMAGE_BINDING_NAME: {
@@ -1927,6 +1958,22 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
 
       v->value_int = ctx->ImageUnits[index].Format;
       return TYPE_INT;
+
+   case GL_MAX_COMPUTE_WORK_GROUP_COUNT:
+      if (!_mesa_is_desktop_gl(ctx) || !ctx->Extensions.ARB_compute_shader)
+         goto invalid_enum;
+      if (index >= 3)
+         goto invalid_value;
+      v->value_int = ctx->Const.MaxComputeWorkGroupCount[index];
+      return TYPE_INT;
+
+   case GL_MAX_COMPUTE_WORK_GROUP_SIZE:
+      if (!_mesa_is_desktop_gl(ctx) || !ctx->Extensions.ARB_compute_shader)
+         goto invalid_enum;
+      if (index >= 3)
+         goto invalid_value;
+      v->value_int = ctx->Const.MaxComputeWorkGroupSize[index];
+      return TYPE_INT;
    }
 
  invalid_enum:
@@ -1957,7 +2004,7 @@ _mesa_GetBooleani_v( GLenum pname, GLuint index, GLboolean *params )
       params[3] = INT_TO_BOOLEAN(v.value_int_4[3]);
       break;
    case TYPE_INT64:
-      params[0] = INT64_TO_BOOLEAN(v.value_int);
+      params[0] = INT64_TO_BOOLEAN(v.value_int64);
       break;
    default:
       ; /* nothing - GL error was recorded */
@@ -2002,7 +2049,7 @@ _mesa_GetIntegeri_v( GLenum pname, GLuint index, GLint *params )
       params[3] = v.value_int_4[3];
       break;
    case TYPE_INT64:
-      params[0] = INT64_TO_INT(v.value_int);
+      params[0] = INT64_TO_INT(v.value_int64);
       break;
    default:
       ; /* nothing - GL error was recorded */
@@ -2027,7 +2074,7 @@ _mesa_GetInteger64i_v( GLenum pname, GLuint index, GLint64 *params )
       params[3] = v.value_int_4[3];
       break;
    case TYPE_INT64:
-      params[0] = v.value_int;
+      params[0] = v.value_int64;
       break;
    default:
       ; /* nothing - GL error was recorded */

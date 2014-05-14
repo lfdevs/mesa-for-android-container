@@ -2,7 +2,7 @@
 #define __NOUVEAU_CONTEXT_H__
 
 #include "pipe/p_context.h"
-#include <libdrm/nouveau.h>
+#include <nouveau.h>
 
 #define NOUVEAU_MAX_SCRATCH_BUFS 4
 
@@ -14,7 +14,6 @@ struct nouveau_context {
    struct nouveau_pushbuf *pushbuf;
 
    boolean vbo_dirty;
-   boolean cb_dirty;
 
    void (*copy_data)(struct nouveau_context *,
                      struct nouveau_bo *dst, unsigned, unsigned,

@@ -334,9 +334,9 @@ static void r600_bind_rs_state(struct pipe_context *ctx, void *state)
 
 	/* Workaround for a missing scissor enable on r600. */
 	if (rctx->b.chip_class == R600 &&
-	    rs->scissor_enable != rctx->scissor.enable) {
-		rctx->scissor.enable = rs->scissor_enable;
-		rctx->scissor.atom.dirty = true;
+	    rs->scissor_enable != rctx->scissor[0].enable) {
+		rctx->scissor[0].enable = rs->scissor_enable;
+		rctx->scissor[0].atom.dirty = true;
 	}
 
 	/* Re-emit PA_SC_LINE_STIPPLE. */
@@ -657,17 +657,22 @@ static void r600_set_viewport_states(struct pipe_context *ctx,
                                      const struct pipe_viewport_state *state)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
+	int i;
 
-	rctx->viewport.state = *state;
-	rctx->viewport.atom.dirty = true;
+	for (i = start_slot; i < start_slot + num_viewports; i++) {
+		rctx->viewport[i].state = state[i - start_slot];
+		rctx->viewport[i].atom.dirty = true;
+	}
 }
 
 void r600_emit_viewport_state(struct r600_context *rctx, struct r600_atom *atom)
 {
 	struct radeon_winsys_cs *cs = rctx->b.rings.gfx.cs;
-	struct pipe_viewport_state *state = &rctx->viewport.state;
+	struct r600_viewport_state *rstate = (struct r600_viewport_state *)atom;
+	struct pipe_viewport_state *state = &rstate->state;
+	int offset = rstate->idx * 6 * 4;
 
-	r600_write_context_reg_seq(cs, R_02843C_PA_CL_VPORT_XSCALE_0, 6);
+	r600_write_context_reg_seq(cs, R_02843C_PA_CL_VPORT_XSCALE_0 + offset, 6);
 	radeon_emit(cs, fui(state->scale[0]));     /* R_02843C_PA_CL_VPORT_XSCALE_0  */
 	radeon_emit(cs, fui(state->translate[0])); /* R_028440_PA_CL_VPORT_XOFFSET_0 */
 	radeon_emit(cs, fui(state->scale[1]));     /* R_028444_PA_CL_VPORT_YSCALE_0  */
@@ -931,7 +936,7 @@ static void r600_set_constant_buffer(struct pipe_context *ctx, uint shader, uint
 			}
 
 			for (i = 0; i < size / 4; ++i) {
-				tmpPtr[i] = util_bswap32(((uint32_t *)ptr)[i]);
+				tmpPtr[i] = util_cpu_to_le32(((uint32_t *)ptr)[i]);
 			}
 
 			u_upload_data(rctx->b.uploader, 0, size, tmpPtr, &cb->buffer_offset, &cb->buffer);
@@ -1109,14 +1114,14 @@ static void update_gs_block_state(struct r600_context *rctx, unsigned enable)
 			unsigned size = 0x1C000;
 			rctx->gs_rings.esgs_ring.buffer =
 					pipe_buffer_create(rctx->b.b.screen, PIPE_BIND_CUSTOM,
-							PIPE_USAGE_STATIC, size);
+							PIPE_USAGE_DEFAULT, size);
 			rctx->gs_rings.esgs_ring.buffer_size = size;
 
 			size = 0x4000000;
 
 			rctx->gs_rings.gsvs_ring.buffer =
 					pipe_buffer_create(rctx->b.b.screen, PIPE_BIND_CUSTOM,
-							PIPE_USAGE_STATIC, size);
+							PIPE_USAGE_DEFAULT, size);
 			rctx->gs_rings.gsvs_ring.buffer_size = size;
 		}
 
@@ -1330,8 +1335,8 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 	}
 
 	/* make sure that the gfx ring is only one active */
-	if (rctx->b.rings.dma.cs) {
-		rctx->b.rings.dma.flush(rctx, RADEON_FLUSH_ASYNC);
+	if (rctx->b.rings.dma.cs && rctx->b.rings.dma.cs->cdw) {
+		rctx->b.rings.dma.flush(rctx, RADEON_FLUSH_ASYNC, NULL);
 	}
 
 	if (!r600_update_derived_state(rctx)) {
@@ -1408,6 +1413,25 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 		r600_emit_atom(rctx, rctx->atoms[i]);
 	}
 
+	/* On R6xx, CULL_FRONT=1 culls all points, lines, and rectangles,
+	 * even though it should have no effect on those. */
+	if (rctx->b.chip_class == R600 && rctx->rasterizer) {
+		unsigned su_sc_mode_cntl = rctx->rasterizer->pa_su_sc_mode_cntl;
+		unsigned prim = info.mode;
+
+		if (rctx->gs_shader) {
+			prim = rctx->gs_shader->current->shader.gs_output_prim;
+		}
+		prim = r600_conv_prim_to_gs_out(prim); /* decrease the number of types to 3 */
+
+		if (prim == V_028A6C_OUTPRIM_TYPE_POINTLIST ||
+		    prim == V_028A6C_OUTPRIM_TYPE_LINESTRIP ||
+		    info.mode == R600_PRIM_RECTANGLE_LIST) {
+			su_sc_mode_cntl &= C_028814_CULL_FRONT;
+		}
+		r600_write_context_reg(cs, R_028814_PA_SU_SC_MODE_CNTL, su_sc_mode_cntl);
+	}
+
 	/* Update start instance. */
 	if (rctx->last_start_instance != info.start_instance) {
 		r600_write_ctl_const(cs, R_03CFF4_SQ_VTX_START_INST_LOC, info.start_instance);
@@ -1458,7 +1482,9 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 			cs->buf[cs->cdw++] = info.count;
 			cs->buf[cs->cdw++] = V_0287F0_DI_SRC_SEL_DMA;
 			cs->buf[cs->cdw++] = PKT3(PKT3_NOP, 0, rctx->b.predicate_drawing);
-			cs->buf[cs->cdw++] = r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx, (struct r600_resource*)ib.buffer, RADEON_USAGE_READ);
+			cs->buf[cs->cdw++] = r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx,
+								   (struct r600_resource*)ib.buffer,
+								   RADEON_USAGE_READ, RADEON_PRIO_MIN);
 		}
 	} else {
 		if (info.count_from_stream_output) {
@@ -1475,7 +1501,9 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 			cs->buf[cs->cdw++] = 0; /* unused */
 
 			cs->buf[cs->cdw++] = PKT3(PKT3_NOP, 0, 0);
-			cs->buf[cs->cdw++] = r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx, t->buf_filled_size, RADEON_USAGE_READ);
+			cs->buf[cs->cdw++] = r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx,
+								   t->buf_filled_size, RADEON_USAGE_READ,
+								   RADEON_PRIO_MIN);
 		}
 
 		cs->buf[cs->cdw++] = PKT3(PKT3_DRAW_INDEX_AUTO, 1, rctx->b.predicate_drawing);
@@ -1719,49 +1747,8 @@ void r600_emit_shader(struct r600_context *rctx, struct r600_atom *a)
 
 	r600_emit_command_buffer(cs, &shader->command_buffer);
 	radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
-	radeon_emit(cs, r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx, shader->bo, RADEON_USAGE_READ));
-}
-
-struct pipe_surface *r600_create_surface_custom(struct pipe_context *pipe,
-						struct pipe_resource *texture,
-						const struct pipe_surface *templ,
-						unsigned width, unsigned height)
-{
-	struct r600_surface *surface = CALLOC_STRUCT(r600_surface);
-
-        assert(templ->u.tex.first_layer <= util_max_layer(texture, templ->u.tex.level));
-        assert(templ->u.tex.last_layer <= util_max_layer(texture, templ->u.tex.level));
-	if (surface == NULL)
-		return NULL;
-	pipe_reference_init(&surface->base.reference, 1);
-	pipe_resource_reference(&surface->base.texture, texture);
-	surface->base.context = pipe;
-	surface->base.format = templ->format;
-	surface->base.width = width;
-	surface->base.height = height;
-	surface->base.u = templ->u;
-	return &surface->base;
-}
-
-static struct pipe_surface *r600_create_surface(struct pipe_context *pipe,
-						struct pipe_resource *tex,
-						const struct pipe_surface *templ)
-{
-	unsigned level = templ->u.tex.level;
-
-	return r600_create_surface_custom(pipe, tex, templ,
-                                          u_minify(tex->width0, level),
-					  u_minify(tex->height0, level));
-}
-
-static void r600_surface_destroy(struct pipe_context *pipe,
-				 struct pipe_surface *surface)
-{
-	struct r600_surface *surf = (struct r600_surface*)surface;
-	pipe_resource_reference((struct pipe_resource**)&surf->cb_buffer_fmask, NULL);
-	pipe_resource_reference((struct pipe_resource**)&surf->cb_buffer_cmask, NULL);
-	pipe_resource_reference(&surface->texture, NULL);
-	FREE(surface);
+	radeon_emit(cs, r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx, shader->bo,
+					      RADEON_USAGE_READ, RADEON_PRIO_SHADER_DATA));
 }
 
 unsigned r600_get_swizzle_combined(const unsigned char *swizzle_format,
@@ -2169,18 +2156,164 @@ out_unknown:
 	return ~0;
 }
 
+uint32_t r600_translate_colorformat(enum chip_class chip, enum pipe_format format)
+{
+	const struct util_format_description *desc = util_format_description(format);
+	int channel = util_format_get_first_non_void_channel(format);
+	bool is_float;
+
+#define HAS_SIZE(x,y,z,w) \
+	(desc->channel[0].size == (x) && desc->channel[1].size == (y) && \
+         desc->channel[2].size == (z) && desc->channel[3].size == (w))
+
+	if (format == PIPE_FORMAT_R11G11B10_FLOAT) /* isn't plain */
+		return V_0280A0_COLOR_10_11_11_FLOAT;
+
+	if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN ||
+	    channel == -1)
+		return ~0U;
+
+	is_float = desc->channel[channel].type == UTIL_FORMAT_TYPE_FLOAT;
+
+	switch (desc->nr_channels) {
+	case 1:
+		switch (desc->channel[0].size) {
+		case 8:
+			return V_0280A0_COLOR_8;
+		case 16:
+			if (is_float)
+				return V_0280A0_COLOR_16_FLOAT;
+			else
+				return V_0280A0_COLOR_16;
+		case 32:
+			if (is_float)
+				return V_0280A0_COLOR_32_FLOAT;
+			else
+				return V_0280A0_COLOR_32;
+		}
+		break;
+	case 2:
+		if (desc->channel[0].size == desc->channel[1].size) {
+			switch (desc->channel[0].size) {
+			case 4:
+				if (chip <= R700)
+					return V_0280A0_COLOR_4_4;
+				else
+					return ~0U; /* removed on Evergreen */
+			case 8:
+				return V_0280A0_COLOR_8_8;
+			case 16:
+				if (is_float)
+					return V_0280A0_COLOR_16_16_FLOAT;
+				else
+					return V_0280A0_COLOR_16_16;
+			case 32:
+				if (is_float)
+					return V_0280A0_COLOR_32_32_FLOAT;
+				else
+					return V_0280A0_COLOR_32_32;
+			}
+		} else if (HAS_SIZE(8,24,0,0)) {
+			return V_0280A0_COLOR_24_8;
+		} else if (HAS_SIZE(24,8,0,0)) {
+			return V_0280A0_COLOR_8_24;
+		}
+		break;
+	case 3:
+		if (HAS_SIZE(5,6,5,0)) {
+			return V_0280A0_COLOR_5_6_5;
+		} else if (HAS_SIZE(32,8,24,0)) {
+			return V_0280A0_COLOR_X24_8_32_FLOAT;
+		}
+		break;
+	case 4:
+		if (desc->channel[0].size == desc->channel[1].size &&
+		    desc->channel[0].size == desc->channel[2].size &&
+		    desc->channel[0].size == desc->channel[3].size) {
+			switch (desc->channel[0].size) {
+			case 4:
+				return V_0280A0_COLOR_4_4_4_4;
+			case 8:
+				return V_0280A0_COLOR_8_8_8_8;
+			case 16:
+				if (is_float)
+					return V_0280A0_COLOR_16_16_16_16_FLOAT;
+				else
+					return V_0280A0_COLOR_16_16_16_16;
+			case 32:
+				if (is_float)
+					return V_0280A0_COLOR_32_32_32_32_FLOAT;
+				else
+					return V_0280A0_COLOR_32_32_32_32;
+			}
+		} else if (HAS_SIZE(5,5,5,1)) {
+			return V_0280A0_COLOR_1_5_5_5;
+		} else if (HAS_SIZE(10,10,10,2)) {
+			return V_0280A0_COLOR_2_10_10_10;
+		}
+		break;
+	}
+	return ~0U;
+}
+
+uint32_t r600_colorformat_endian_swap(uint32_t colorformat)
+{
+	if (R600_BIG_ENDIAN) {
+		switch(colorformat) {
+		/* 8-bit buffers. */
+		case V_0280A0_COLOR_4_4:
+		case V_0280A0_COLOR_8:
+			return ENDIAN_NONE;
+
+		/* 16-bit buffers. */
+		case V_0280A0_COLOR_5_6_5:
+		case V_0280A0_COLOR_1_5_5_5:
+		case V_0280A0_COLOR_4_4_4_4:
+		case V_0280A0_COLOR_16:
+		case V_0280A0_COLOR_8_8:
+			return ENDIAN_8IN16;
+
+		/* 32-bit buffers. */
+		case V_0280A0_COLOR_8_8_8_8:
+		case V_0280A0_COLOR_2_10_10_10:
+		case V_0280A0_COLOR_8_24:
+		case V_0280A0_COLOR_24_8:
+		case V_0280A0_COLOR_32_FLOAT:
+		case V_0280A0_COLOR_16_16_FLOAT:
+		case V_0280A0_COLOR_16_16:
+			return ENDIAN_8IN32;
+
+		/* 64-bit buffers. */
+		case V_0280A0_COLOR_16_16_16_16:
+		case V_0280A0_COLOR_16_16_16_16_FLOAT:
+			return ENDIAN_8IN16;
+
+		case V_0280A0_COLOR_32_32_FLOAT:
+		case V_0280A0_COLOR_32_32:
+		case V_0280A0_COLOR_X24_8_32_FLOAT:
+			return ENDIAN_8IN32;
+
+		/* 128-bit buffers. */
+		case V_0280A0_COLOR_32_32_32_32_FLOAT:
+		case V_0280A0_COLOR_32_32_32_32:
+			return ENDIAN_8IN32;
+		default:
+			return ENDIAN_NONE; /* Unsupported. */
+		}
+	} else {
+		return ENDIAN_NONE;
+	}
+}
+
 static void r600_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource *buf)
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 	struct r600_resource *rbuffer = r600_resource(buf);
 	unsigned i, shader, mask, alignment = rbuffer->buf->alignment;
 
-	/* Discard the buffer. */
-	pb_reference(&rbuffer->buf, NULL);
-
-	/* Create a new one in the same pipe_resource. */
-	r600_init_resource(&rctx->screen->b, rbuffer, rbuffer->b.b.width0, alignment,
-			   TRUE, rbuffer->b.b.usage);
+	/* Reallocate the buffer in the same pipe_resource. */
+	r600_init_resource(&rctx->screen->b, rbuffer, rbuffer->b.b.width0,
+			   alignment, TRUE);
 
 	/* We changed the buffer, now we need to bind it where the old one was bound. */
 	/* Vertex buffers. */
@@ -2275,8 +2408,6 @@ void r600_init_common_state_functions(struct r600_context *rctx)
 	rctx->b.b.sampler_view_destroy = r600_sampler_view_destroy;
 	rctx->b.b.texture_barrier = r600_texture_barrier;
 	rctx->b.b.set_stream_output_targets = r600_set_streamout_targets;
-	rctx->b.b.create_surface = r600_create_surface;
-	rctx->b.b.surface_destroy = r600_surface_destroy;
 	rctx->b.b.draw_vbo = r600_draw_vbo;
 	rctx->b.invalidate_buffer = r600_invalidate_buffer;
 	rctx->b.set_occlusion_query_state = r600_set_occlusion_query_state;
@@ -2291,7 +2422,8 @@ void r600_trace_emit(struct r600_context *rctx)
 	uint32_t reloc;
 
 	va = r600_resource_va(&rscreen->b.b, (void*)rscreen->b.trace_bo);
-	reloc = r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx, rscreen->b.trace_bo, RADEON_USAGE_READWRITE);
+	reloc = r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx, rscreen->b.trace_bo,
+				      RADEON_USAGE_READWRITE, RADEON_PRIO_MIN);
 	radeon_emit(cs, PKT3(PKT3_MEM_WRITE, 3, 0));
 	radeon_emit(cs, va & 0xFFFFFFFFUL);
 	radeon_emit(cs, (va >> 32UL) & 0xFFUL);

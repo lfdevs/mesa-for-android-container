@@ -79,11 +79,22 @@ renderer_draw(struct xa_context *r)
     if (!r->buffer_size)
 	return;
 
+    if (!r->scissor_valid) {
+	r->scissor.minx = 0;
+	r->scissor.miny = 0;
+	r->scissor.maxx = r->dst->tex->width0;
+	r->scissor.maxy = r->dst->tex->height0;
+    }
+
+    r->pipe->set_scissor_states(r->pipe, 0, 1, &r->scissor);
+
     cso_set_vertex_elements(r->cso, r->attrs_per_vertex, r->velems);
     util_draw_user_vertex_buffer(r->cso, r->buffer, PIPE_PRIM_QUADS,
                                  num_verts,	/* verts */
                                  r->attrs_per_vertex);	/* attribs/vert */
     r->buffer_size = 0;
+
+    xa_scissor_reset(r);
 }
 
 static INLINE void
@@ -111,6 +122,7 @@ renderer_init_state(struct xa_context *r)
     raster.half_pixel_center = 1;
     raster.bottom_edge_rule = 1;
     raster.depth_clip = 1;
+    raster.scissor = 1;
     cso_set_rasterizer(r->cso, &raster);
 
     /* vertex elements state */
@@ -325,11 +337,15 @@ setup_vertex_data_yuv(struct xa_context *r,
  */
 void
 renderer_bind_destination(struct xa_context *r,
-			  struct pipe_surface *surface, int width, int height)
+			  struct pipe_surface *surface)
 {
+    int width = surface->width;
+    int height = surface->height;
 
     struct pipe_framebuffer_state fb;
     struct pipe_viewport_state viewport;
+
+    xa_scissor_reset(r);
 
     /* Framebuffer uses actual surface width/height
      */
@@ -380,7 +396,7 @@ renderer_set_constants(struct xa_context *r,
 
     pipe_resource_reference(cbuf, NULL);
     *cbuf = pipe_buffer_create(r->pipe->screen,
-			       PIPE_BIND_CONSTANT_BUFFER, PIPE_USAGE_STATIC,
+			       PIPE_BIND_CONSTANT_BUFFER, PIPE_USAGE_DEFAULT,
 			       param_bytes);
 
     if (*cbuf) {
@@ -406,6 +422,8 @@ renderer_copy_prepare(struct xa_context *r,
 				       PIPE_BIND_RENDER_TARGET));
     (void)screen;
 
+    renderer_bind_destination(r, dst_surface);
+
     /* set misc state we care about */
     {
 	struct pipe_blend_state blend;
@@ -422,6 +440,7 @@ renderer_copy_prepare(struct xa_context *r,
     /* sampler */
     {
 	struct pipe_sampler_state sampler;
+        const struct pipe_sampler_state *p_sampler = &sampler;
 
 	memset(&sampler, 0, sizeof(sampler));
 	sampler.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
@@ -431,12 +450,9 @@ renderer_copy_prepare(struct xa_context *r,
 	sampler.min_img_filter = PIPE_TEX_FILTER_NEAREST;
 	sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
 	sampler.normalized_coords = 1;
-	cso_single_sampler(r->cso, PIPE_SHADER_FRAGMENT, 0, &sampler);
-	cso_single_sampler_done(r->cso, PIPE_SHADER_FRAGMENT);
+        cso_set_samplers(r->cso, PIPE_SHADER_FRAGMENT, 1, &p_sampler);
+        r->num_bound_samplers = 1;
     }
-
-    renderer_bind_destination(r, dst_surface,
-			      dst_surface->width, dst_surface->height);
 
     /* texture/sampler view */
     {

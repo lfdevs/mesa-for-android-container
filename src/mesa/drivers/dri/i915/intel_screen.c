@@ -94,10 +94,6 @@ DRI_CONF_END
 
 #include "i915_drm.h"
 
-#ifdef USE_NEW_INTERFACE
-static PFNGLXCREATECONTEXTMODES create_context_modes = NULL;
-#endif /*USE_NEW_INTERFACE */
-
 /**
  * For debugging purposes, this returns a time in seconds.
  */
@@ -146,7 +142,7 @@ aub_dump_bmp(struct gl_context *ctx)
 }
 
 static const __DRItexBufferExtension intelTexBufferExtension = {
-   .base = { __DRI_TEX_BUFFER, __DRI_TEX_BUFFER_VERSION },
+   .base = { __DRI_TEX_BUFFER, 3 },
 
    .setTexBuffer        = intelSetTexBuffer,
    .setTexBuffer2       = intelSetTexBuffer2,
@@ -689,7 +685,7 @@ intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
     return image;
 }
 
-static struct __DRIimageExtensionRec intelImageExtension = {
+static const __DRIimageExtension intelImageExtension = {
     .base = { __DRI_IMAGE, 7 },
 
     .createImageFromName                = intel_create_image_from_name,
@@ -782,7 +778,7 @@ i915_query_renderer_string(__DRIscreen *psp, int param, const char **value)
    return -1;
 }
 
-static struct __DRI2rendererQueryExtensionRec intelRendererQueryExtension = {
+static const __DRI2rendererQueryExtension intelRendererQueryExtension = {
    .base = { __DRI2_RENDERER_QUERY, 1 },
 
    .queryInteger = i915_query_renderer_integer,

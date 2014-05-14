@@ -45,63 +45,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-/*
- * this are copy from radeon_drm, once an updated libdrm is released
- * we should bump configure.ac requirement for it and remove the following
- * field
- */
-#ifndef RADEON_INFO_TILING_CONFIG
-#define RADEON_INFO_TILING_CONFIG 6
-#endif
-
-#ifndef RADEON_INFO_WANT_HYPERZ
-#define RADEON_INFO_WANT_HYPERZ 7
-#endif
-
-#ifndef RADEON_INFO_WANT_CMASK
-#define RADEON_INFO_WANT_CMASK 8
-#endif
-
-#ifndef RADEON_INFO_CLOCK_CRYSTAL_FREQ
-#define RADEON_INFO_CLOCK_CRYSTAL_FREQ 9
-#endif
-
-#ifndef RADEON_INFO_NUM_BACKENDS
-#define RADEON_INFO_NUM_BACKENDS 0xa
-#endif
-
-#ifndef RADEON_INFO_NUM_TILE_PIPES
-#define RADEON_INFO_NUM_TILE_PIPES 0xb
-#endif
-
-#ifndef RADEON_INFO_BACKEND_MAP
-#define RADEON_INFO_BACKEND_MAP 0xd
-#endif
-
-#ifndef RADEON_INFO_VA_START
-/* virtual address start, va < start are reserved by the kernel */
-#define RADEON_INFO_VA_START        0x0e
-/* maximum size of ib using the virtual memory cs */
-#define RADEON_INFO_IB_VM_MAX_SIZE  0x0f
-#endif
-
-#ifndef RADEON_INFO_MAX_PIPES
-#define RADEON_INFO_MAX_PIPES 0x10
-#endif
-
-#ifndef RADEON_INFO_TIMESTAMP
-#define RADEON_INFO_TIMESTAMP 0x11
-#endif
-
-#ifndef RADEON_INFO_RING_WORKING
-#define RADEON_INFO_RING_WORKING 0x15
-#endif
-
-#ifndef RADEON_CS_RING_UVD
-#define RADEON_CS_RING_UVD	3
-#endif
-
 static struct util_hash_table *fd_tab = NULL;
+pipe_static_mutex(fd_tab_mutex);
 
 /* Enable/disable feature access for one command stream.
  * If enable == TRUE, return TRUE on success.
@@ -331,23 +276,35 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     case CHIP_KAVERI:
     case CHIP_KABINI:
     case CHIP_HAWAII:
+    case CHIP_MULLINS:
         ws->info.chip_class = CIK;
         break;
     }
 
     /* Check for dma */
     ws->info.r600_has_dma = FALSE;
-    if (ws->info.chip_class >= R700 && ws->info.drm_minor >= 27) {
+    /* DMA is disabled on R700. There is IB corruption and hangs. */
+    if (ws->info.chip_class >= EVERGREEN && ws->info.drm_minor >= 27) {
         ws->info.r600_has_dma = TRUE;
     }
 
-    /* Check for UVD */
+    /* Check for UVD and VCE */
     ws->info.has_uvd = FALSE;
+    ws->info.vce_fw_version = 0x00000000;
     if (ws->info.drm_minor >= 32) {
 	uint32_t value = RADEON_CS_RING_UVD;
         if (radeon_get_drm_value(ws->fd, RADEON_INFO_RING_WORKING,
                                  "UVD Ring working", &value))
             ws->info.has_uvd = value;
+
+        value = RADEON_CS_RING_VCE;
+        if (radeon_get_drm_value(ws->fd, RADEON_INFO_RING_WORKING,
+                                 NULL, &value) && value) {
+
+            if (radeon_get_drm_value(ws->fd, RADEON_INFO_VCE_FW_VERSION,
+                                     "VCE FW version", &value))
+                ws->info.vce_fw_version = value;
+	}
     }
 
     /* Get GEM info. */
@@ -360,6 +317,11 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     }
     ws->info.gart_size = gem_info.gart_size;
     ws->info.vram_size = gem_info.vram_size;
+
+    /* Get max clock frequency info and convert it to MHz */
+    radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SCLK, NULL,
+                         &ws->info.max_sclk);
+    ws->info.max_sclk /= 1000;
 
     ws->num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
@@ -400,12 +362,14 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
 
         ws->info.r600_virtual_address = FALSE;
         if (ws->info.drm_minor >= 13) {
+            uint32_t ib_vm_max_size;
+
             ws->info.r600_virtual_address = TRUE;
             if (!radeon_get_drm_value(ws->fd, RADEON_INFO_VA_START, NULL,
-                                      &ws->info.r600_va_start))
+                                      &ws->va_start))
                 ws->info.r600_virtual_address = FALSE;
             if (!radeon_get_drm_value(ws->fd, RADEON_INFO_IB_VM_MAX_SIZE, NULL,
-                                      &ws->info.r600_ib_vm_max_size))
+                                      &ib_vm_max_size))
                 ws->info.r600_virtual_address = FALSE;
         }
 	if (ws->gen == DRV_R600 && !debug_get_bool_option("RADEON_VA", FALSE))
@@ -450,9 +414,6 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
     ws->kman->destroy(ws->kman);
     if (ws->gen >= DRV_R600) {
         radeon_surface_manager_free(ws->surf_man);
-    }
-    if (fd_tab) {
-        util_hash_table_remove(fd_tab, intptr_to_pointer(ws->fd));
     }
     FREE(rws);
 }
@@ -505,7 +466,7 @@ static uint64_t radeon_query_value(struct radeon_winsys *rws,
                                    enum radeon_value_id value)
 {
     struct radeon_drm_winsys *ws = (struct radeon_drm_winsys*)rws;
-    uint64_t ts = 0;
+    uint64_t retval = 0;
 
     switch (value) {
     case RADEON_REQUESTED_VRAM_MEMORY:
@@ -521,8 +482,22 @@ static uint64_t radeon_query_value(struct radeon_winsys *rws,
         }
 
         radeon_get_drm_value(ws->fd, RADEON_INFO_TIMESTAMP, "timestamp",
-                             (uint32_t*)&ts);
-        return ts;
+                             (uint32_t*)&retval);
+        return retval;
+    case RADEON_NUM_CS_FLUSHES:
+        return ws->num_cs_flushes;
+    case RADEON_NUM_BYTES_MOVED:
+        radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_BYTES_MOVED,
+                             "num-bytes-moved", (uint32_t*)&retval);
+        return retval;
+    case RADEON_VRAM_USAGE:
+        radeon_get_drm_value(ws->fd, RADEON_INFO_VRAM_USAGE,
+                             "vram-usage", (uint32_t*)&retval);
+        return retval;
+    case RADEON_GTT_USAGE:
+        radeon_get_drm_value(ws->fd, RADEON_INFO_GTT_USAGE,
+                             "gtt-usage", (uint32_t*)&retval);
+        return retval;
     }
     return 0;
 }
@@ -599,26 +574,49 @@ static PIPE_THREAD_ROUTINE(radeon_drm_cs_emit_ioctl, param)
 DEBUG_GET_ONCE_BOOL_OPTION(thread, "RADEON_THREAD", TRUE)
 static PIPE_THREAD_ROUTINE(radeon_drm_cs_emit_ioctl, param);
 
-PUBLIC struct radeon_winsys *radeon_drm_winsys_create(int fd)
+static bool radeon_winsys_unref(struct radeon_winsys *ws)
+{
+    struct radeon_drm_winsys *rws = (struct radeon_drm_winsys*)ws;
+    bool destroy;
+
+    /* When the reference counter drops to zero, remove the fd from the table.
+     * This must happen while the mutex is locked, so that
+     * radeon_drm_winsys_create in another thread doesn't get the winsys
+     * from the table when the counter drops to 0. */
+    pipe_mutex_lock(fd_tab_mutex);
+
+    destroy = pipe_reference(&rws->reference, NULL);
+    if (destroy && fd_tab)
+        util_hash_table_remove(fd_tab, intptr_to_pointer(rws->fd));
+
+    pipe_mutex_unlock(fd_tab_mutex);
+    return destroy;
+}
+
+PUBLIC struct radeon_winsys *
+radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
 {
     struct radeon_drm_winsys *ws;
 
+    pipe_mutex_lock(fd_tab_mutex);
     if (!fd_tab) {
         fd_tab = util_hash_table_create(hash_fd, compare_fd);
     }
 
     ws = util_hash_table_get(fd_tab, intptr_to_pointer(fd));
     if (ws) {
-        pipe_reference(NULL, &ws->base.reference);
+        pipe_reference(NULL, &ws->reference);
+        pipe_mutex_unlock(fd_tab_mutex);
         return &ws->base;
     }
 
     ws = CALLOC_STRUCT(radeon_drm_winsys);
     if (!ws) {
+        pipe_mutex_unlock(fd_tab_mutex);
         return NULL;
     }
+
     ws->fd = fd;
-    util_hash_table_set(fd_tab, intptr_to_pointer(fd), ws);
 
     if (!do_winsys_init(ws))
         goto fail;
@@ -638,9 +636,10 @@ PUBLIC struct radeon_winsys *radeon_drm_winsys_create(int fd)
     }
 
     /* init reference */
-    pipe_reference_init(&ws->base.reference, 1);
+    pipe_reference_init(&ws->reference, 1);
 
     /* Set functions. */
+    ws->base.unref = radeon_winsys_unref;
     ws->base.destroy = radeon_winsys_destroy;
     ws->base.query_info = radeon_query_info;
     ws->base.cs_request_feature = radeon_cs_request_feature;
@@ -660,9 +659,29 @@ PUBLIC struct radeon_winsys *radeon_drm_winsys_create(int fd)
     if (ws->num_cpus > 1 && debug_get_option_thread())
         ws->thread = pipe_thread_create(radeon_drm_cs_emit_ioctl, ws);
 
+    /* Create the screen at the end. The winsys must be initialized
+     * completely.
+     *
+     * Alternatively, we could create the screen based on "ws->gen"
+     * and link all drivers into one binary blob. */
+    ws->base.screen = screen_create(&ws->base);
+    if (!ws->base.screen) {
+        radeon_winsys_destroy(&ws->base);
+        pipe_mutex_unlock(fd_tab_mutex);
+        return NULL;
+    }
+
+    util_hash_table_set(fd_tab, intptr_to_pointer(fd), ws);
+
+    /* We must unlock the mutex once the winsys is fully initialized, so that
+     * other threads attempting to create the winsys from the same fd will
+     * get a fully initialized winsys and not just half-way initialized. */
+    pipe_mutex_unlock(fd_tab_mutex);
+
     return &ws->base;
 
 fail:
+    pipe_mutex_unlock(fd_tab_mutex);
     if (ws->cman)
         ws->cman->destroy(ws->cman);
     if (ws->kman)

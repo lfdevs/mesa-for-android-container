@@ -170,15 +170,19 @@ radeonGetParam(__DRIscreen *sPriv, int param, void *value)
 
 #if defined(RADEON_R100)
 static const __DRItexBufferExtension radeonTexBufferExtension = {
-    { __DRI_TEX_BUFFER, __DRI_TEX_BUFFER_VERSION },
-   radeonSetTexBuffer,
-   radeonSetTexBuffer2,
+   .base = { __DRI_TEX_BUFFER, 3 },
+
+   .setTexBuffer        = radeonSetTexBuffer,
+   .setTexBuffer2       = radeonSetTexBuffer2,
+   .releaseTexBuffer    = NULL,
 };
 #elif defined(RADEON_R200)
 static const __DRItexBufferExtension r200TexBufferExtension = {
-    { __DRI_TEX_BUFFER, __DRI_TEX_BUFFER_VERSION },
-   r200SetTexBuffer,
-   r200SetTexBuffer2,
+   .base = { __DRI_TEX_BUFFER, 3 },
+
+   .setTexBuffer        = r200SetTexBuffer,
+   .setTexBuffer2       = r200SetTexBuffer2,
+   .releaseTexBuffer    = NULL,
 };
 #endif
 
@@ -192,9 +196,10 @@ radeonDRI2Flush(__DRIdrawable *drawable)
 }
 
 static const struct __DRI2flushExtensionRec radeonFlushExtension = {
-    { __DRI2_FLUSH, 3 },
-    radeonDRI2Flush,
-    dri2InvalidateDrawable,
+   .base = { __DRI2_FLUSH, 3 },
+
+   .flush               = radeonDRI2Flush,
+   .invalidate          = dri2InvalidateDrawable,
 };
 
 static __DRIimage *
@@ -372,13 +377,14 @@ radeon_query_image(__DRIimage *image, int attrib, int *value)
    }
 }
 
-static struct __DRIimageExtensionRec radeonImageExtension = {
-    { __DRI_IMAGE, 1 },
-   radeon_create_image_from_name,
-   radeon_create_image_from_renderbuffer,
-   radeon_destroy_image,
-   radeon_create_image,
-   radeon_query_image
+static const __DRIimageExtension radeonImageExtension = {
+   .base = { __DRI_IMAGE, 1 },
+
+   .createImageFromName         = radeon_create_image_from_name,
+   .createImageFromRenderbuffer = radeon_create_image_from_renderbuffer,
+   .destroyImage                = radeon_destroy_image,
+   .createImage                 = radeon_create_image,
+   .queryImage                  = radeon_query_image
 };
 
 static int radeon_set_screen_flags(radeonScreenPtr screen, int device_id)
@@ -475,11 +481,23 @@ static int radeon_set_screen_flags(radeonScreenPtr screen, int device_id)
    return 0;
 }
 
+
+static const __DRIextension *radeon_screen_extensions[] = {
+    &dri2ConfigQueryExtension.base,
+#if defined(RADEON_R100)
+    &radeonTexBufferExtension.base,
+#elif defined(RADEON_R200)
+    &r200TexBufferExtension.base,
+#endif
+    &radeonFlushExtension.base,
+    &radeonImageExtension.base,
+    NULL
+};
+
 static radeonScreenPtr
 radeonCreateScreen2(__DRIscreen *sPriv)
 {
    radeonScreenPtr screen;
-   int i;
    int ret;
    uint32_t device_id = 0;
 
@@ -516,20 +534,7 @@ radeonCreateScreen2(__DRIscreen *sPriv)
    if (getenv("RADEON_NO_TCL"))
 	   screen->chip_flags &= ~RADEON_CHIPSET_TCL;
 
-   i = 0;
-   screen->extensions[i++] = &dri2ConfigQueryExtension.base;
-
-#if defined(RADEON_R100)
-   screen->extensions[i++] = &radeonTexBufferExtension.base;
-#elif defined(RADEON_R200)
-   screen->extensions[i++] = &r200TexBufferExtension.base;
-#endif
-
-   screen->extensions[i++] = &radeonFlushExtension.base;
-   screen->extensions[i++] = &radeonImageExtension.base;
-
-   screen->extensions[i++] = NULL;
-   sPriv->extensions = screen->extensions;
+   sPriv->extensions = radeon_screen_extensions;
 
    screen->driScreen = sPriv;
    screen->bom = radeon_bo_manager_gem_ctor(sPriv->fd);

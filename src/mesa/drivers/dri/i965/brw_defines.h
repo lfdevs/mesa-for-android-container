@@ -264,6 +264,7 @@
 #define GEN8_SURFACE_HALIGN_8                       (2 << 14)
 #define GEN8_SURFACE_HALIGN_16                      (3 << 14)
 #define GEN8_SURFACE_TILING_NONE                    (0 << 12)
+#define GEN8_SURFACE_TILING_W                       (1 << 12)
 #define GEN8_SURFACE_TILING_X                       (2 << 12)
 #define GEN8_SURFACE_TILING_Y                       (3 << 12)
 #define BRW_SURFACE_RC_READ_WRITE	(1 << 8)
@@ -519,6 +520,10 @@
 #define GEN7_SURFACE_TILING_Y           (3 << 13)
 #define GEN7_SURFACE_ARYSPC_FULL	(0 << 10)
 #define GEN7_SURFACE_ARYSPC_LOD0	(1 << 10)
+
+/* Surface state DW0 */
+#define GEN8_SURFACE_MOCS_SHIFT         24
+#define GEN8_SURFACE_MOCS_MASK          INTEL_MASK(30, 24)
 
 /* Surface state DW2 */
 #define BRW_SURFACE_HEIGHT_SHIFT	19
@@ -902,6 +907,13 @@ enum opcode {
     *   form the final channel mask.
     */
    GS_OPCODE_SET_CHANNEL_MASKS,
+
+   /**
+    * Get the "Instance ID" fields from the payload.
+    *
+    * - dst is the GRF for gl_InvocationID.
+    */
+   GS_OPCODE_GET_INSTANCE_ID,
 };
 
 enum brw_urb_write_flags {
@@ -1511,6 +1523,7 @@ enum brw_message_target {
 # define GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_CUT		0
 # define GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_SID		1
 # define GEN7_GS_CONTROL_DATA_HEADER_SIZE_SHIFT		20
+# define GEN7_GS_INSTANCE_CONTROL_SHIFT			15
 # define GEN7_GS_DISPATCH_MODE_SINGLE			(0 << 11)
 # define GEN7_GS_DISPATCH_MODE_DUAL_INSTANCE		(1 << 11)
 # define GEN7_GS_DISPATCH_MODE_DUAL_OBJECT		(2 << 11)
@@ -1537,6 +1550,11 @@ enum brw_message_target {
 
 # define BRW_GS_EDGE_INDICATOR_0			(1 << 8)
 # define BRW_GS_EDGE_INDICATOR_1			(1 << 9)
+
+/* GS Thread Payload
+ */
+/* R0 */
+# define GEN7_GS_PAYLOAD_INSTANCE_ID_SHIFT		27
 
 /* 3DSTATE_GS "Output Vertex Size" has an effective maximum of 62.  It's
  * counted in multiples of 16 bytes.
@@ -1707,6 +1725,7 @@ enum brw_message_target {
 # define GEN8_RASTER_CULL_FRONT                         (2 << 16)
 # define GEN8_RASTER_CULL_BACK                          (3 << 16)
 # define GEN8_RASTER_SMOOTH_POINT_ENABLE                (1 << 13)
+# define GEN8_RASTER_API_MULTISAMPLE_ENABLE             (1 << 12)
 # define GEN8_RASTER_LINE_AA_ENABLE                     (1 << 2)
 # define GEN8_RASTER_SCISSOR_ENABLE                     (1 << 1)
 # define GEN8_RASTER_VIEWPORT_Z_CLIP_TEST_ENABLE        (1 << 0)
@@ -1753,6 +1772,31 @@ enum brw_message_target {
 #define GEN8_BLEND_POST_BLEND_COLOR_CLAMP_ENABLE        (1 << 0)
 
 #define _3DSTATE_WM_HZ_OP                       0x7852 /* GEN8+ */
+/* DW1 */
+# define GEN8_WM_HZ_STENCIL_CLEAR                       (1 << 31)
+# define GEN8_WM_HZ_DEPTH_CLEAR                         (1 << 30)
+# define GEN8_WM_HZ_DEPTH_RESOLVE                       (1 << 28)
+# define GEN8_WM_HZ_HIZ_RESOLVE                         (1 << 27)
+# define GEN8_WM_HZ_PIXEL_OFFSET_ENABLE                 (1 << 26)
+# define GEN8_WM_HZ_FULL_SURFACE_DEPTH_CLEAR            (1 << 25)
+# define GEN8_WM_HZ_STENCIL_CLEAR_VALUE_MASK            INTEL_MASK(23, 16)
+# define GEN8_WM_HZ_STENCIL_CLEAR_VALUE_SHIFT           16
+# define GEN8_WM_HZ_NUM_SAMPLES_MASK                    INTEL_MASK(15, 13)
+# define GEN8_WM_HZ_NUM_SAMPLES_SHIFT                   13
+/* DW2 */
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_Y_MIN_MASK          INTEL_MASK(31, 16)
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_Y_MIN_SHIFT         16
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_X_MIN_MASK          INTEL_MASK(15, 0)
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_X_MIN_SHIFT         0
+/* DW3 */
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_Y_MAX_MASK          INTEL_MASK(31, 16)
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_Y_MAX_SHIFT         16
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_X_MAX_MASK          INTEL_MASK(15, 0)
+# define GEN8_WM_HZ_CLEAR_RECTANGLE_X_MAX_SHIFT         0
+/* DW4 */
+# define GEN8_WM_HZ_SAMPLE_MASK_MASK                    INTEL_MASK(15, 0)
+# define GEN8_WM_HZ_SAMPLE_MASK_SHIFT                   0
+
 
 #define _3DSTATE_PS_BLEND                       0x784D /* GEN8+ */
 /* DW1 */
@@ -2152,6 +2196,10 @@ enum brw_wm_barycentric_interp_mode {
 #define HSW_MOCS_UC_LLC_UC_ELLC         (1 << 1)
 #define HSW_MOCS_WB_LLC_WB_ELLC         (2 << 1)
 #define HSW_MOCS_UC_LLC_WB_ELLC         (3 << 1)
+
+/* Broadwell: write-back or write-through; always use all the caches. */
+#define BDW_MOCS_WB 0x78
+#define BDW_MOCS_WT 0x58
 
 #include "intel_chipset.h"
 

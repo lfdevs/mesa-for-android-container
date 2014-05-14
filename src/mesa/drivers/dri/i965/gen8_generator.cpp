@@ -87,6 +87,7 @@ gen8_generator::next_inst(unsigned opcode)
    gen8_set_exec_size(inst, default_state.exec_size);
    gen8_set_access_mode(inst, default_state.access_mode);
    gen8_set_mask_control(inst, default_state.mask_control);
+   gen8_set_qtr_control(inst, default_state.qtr_control);
    gen8_set_cond_modifier(inst, default_state.conditional_mod);
    gen8_set_pred_control(inst, default_state.predicate);
    gen8_set_pred_inv(inst, default_state.predicate_inverse);
@@ -154,8 +155,6 @@ ALU2(ASR)
 ALU3(BFE)
 ALU2(BFI1)
 ALU3(BFI2)
-ALU1(F32TO16)
-ALU1(F16TO32)
 ALU1(BFREV)
 ALU1(CBIT)
 ALU2_ACCUMULATE(ADDC)
@@ -628,16 +627,16 @@ gen8_generator::disassemble(FILE *out, int start, int end)
 
    for (int offset = start; offset < end; offset += 16) {
       gen8_instruction *inst = &store[offset / 16];
-      printf("0x%08x: ", offset);
+      fprintf(stderr, "0x%08x: ", offset);
 
       if (dump_hex) {
-         printf("0x%08x 0x%08x 0x%08x 0x%08x ",
-                ((uint32_t *) inst)[3],
-                ((uint32_t *) inst)[2],
-                ((uint32_t *) inst)[1],
-                ((uint32_t *) inst)[0]);
+         fprintf(stderr, "0x%08x 0x%08x 0x%08x 0x%08x ",
+                 ((uint32_t *) inst)[3],
+                 ((uint32_t *) inst)[2],
+                 ((uint32_t *) inst)[1],
+                 ((uint32_t *) inst)[0]);
       }
 
-      gen8_disassemble(stdout, inst, brw->gen);
+      gen8_disassemble(stderr, inst, brw->gen);
    }
 }

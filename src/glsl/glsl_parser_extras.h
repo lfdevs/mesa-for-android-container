@@ -135,6 +135,22 @@ struct _mesa_glsl_parse_state {
       return true;
    }
 
+   bool check_separate_shader_objects_allowed(YYLTYPE *locp,
+                                              const ir_variable *var)
+   {
+      if (!this->has_separate_shader_objects()) {
+         const char *const requirement = this->es_shader
+            ? "GL_EXT_separate_shader_objects extension"
+            : "GL_ARB_separate_shader_objects extension or GLSL 420";
+
+         _mesa_glsl_error(locp, this, "%s explicit location requires %s",
+                          mode_string(var), requirement);
+         return false;
+      }
+
+      return true;
+   }
+
    bool has_explicit_attrib_location() const
    {
       return ARB_explicit_attrib_location_enable || is_version(330, 300);
@@ -145,6 +161,12 @@ struct _mesa_glsl_parse_state {
       return ARB_uniform_buffer_object_enable || is_version(140, 300);
    }
 
+   bool has_separate_shader_objects() const
+   {
+      return ARB_separate_shader_objects_enable || is_version(410, 0)
+         || EXT_separate_shader_objects_enable;
+   }
+
    void process_version_directive(YYLTYPE *locp, int version,
                                   const char *ident);
 
@@ -152,10 +174,6 @@ struct _mesa_glsl_parse_state {
    void *scanner;
    exec_list translation_unit;
    glsl_symbol_table *symbols;
-
-   unsigned num_uniform_blocks;
-   unsigned uniform_block_array_size;
-   struct gl_uniform_block *uniform_blocks;
 
    unsigned num_supported_versions;
    struct {
@@ -182,6 +200,18 @@ struct _mesa_glsl_parse_state {
    struct ast_type_qualifier *default_uniform_qualifier;
 
    /**
+    * Variables to track different cases if a fragment shader redeclares
+    * built-in variable gl_FragCoord.
+    *
+    * Note: These values are computed at ast_to_hir time rather than at parse
+    * time.
+    */
+   bool fs_redeclares_gl_fragcoord;
+   bool fs_origin_upper_left;
+   bool fs_pixel_center_integer;
+   bool fs_redeclares_gl_fragcoord_with_no_layout_qualifiers;
+
+   /**
     * True if a geometry shader input primitive type was specified using a
     * layout directive.
     *
@@ -190,11 +220,23 @@ struct _mesa_glsl_parse_state {
     */
    bool gs_input_prim_type_specified;
 
+   /** Input layout qualifiers from GLSL 1.50. (geometry shader controls)*/
+   struct ast_type_qualifier *in_qualifier;
+
    /**
-    * If gs_input_prim_type_specified is true, the primitive type that was
+    * True if a compute shader input local size was specified using a layout
+    * directive.
+    *
+    * Note: this value is computed at ast_to_hir time rather than at parse
+    * time.
+    */
+   bool cs_input_local_size_specified;
+
+   /**
+    * If cs_input_local_size_specified is true, the local size that was
     * specified.  Otherwise ignored.
     */
-   GLenum gs_input_prim_type;
+   unsigned cs_input_local_size[3];
 
    /** Output layout qualifiers from GLSL 1.50. (geometry shader controls)*/
    struct ast_type_qualifier *out_qualifier;
@@ -250,6 +292,19 @@ struct _mesa_glsl_parse_state {
       unsigned MaxFragmentAtomicCounters;
       unsigned MaxCombinedAtomicCounters;
       unsigned MaxAtomicBufferBindings;
+
+      /* ARB_compute_shader */
+      unsigned MaxComputeWorkGroupCount[3];
+      unsigned MaxComputeWorkGroupSize[3];
+
+      /* ARB_shader_image_load_store */
+      unsigned MaxImageUnits;
+      unsigned MaxCombinedImageUnitsAndFragmentOutputs;
+      unsigned MaxImageSamples;
+      unsigned MaxVertexImageUniforms;
+      unsigned MaxGeometryImageUniforms;
+      unsigned MaxFragmentImageUniforms;
+      unsigned MaxCombinedImageUniforms;
    } Const;
 
    /**
@@ -294,8 +349,14 @@ struct _mesa_glsl_parse_state {
     * \name Enable bits for GLSL extensions
     */
    /*@{*/
+   /* ARB extensions go here, sorted alphabetically.
+    */
    bool ARB_arrays_of_arrays_enable;
    bool ARB_arrays_of_arrays_warn;
+   bool ARB_compute_shader_enable;
+   bool ARB_compute_shader_warn;
+   bool ARB_conservative_depth_enable;
+   bool ARB_conservative_depth_warn;
    bool ARB_draw_buffers_enable;
    bool ARB_draw_buffers_warn;
    bool ARB_draw_instanced_enable;
@@ -304,64 +365,78 @@ struct _mesa_glsl_parse_state {
    bool ARB_explicit_attrib_location_warn;
    bool ARB_fragment_coord_conventions_enable;
    bool ARB_fragment_coord_conventions_warn;
-   bool ARB_texture_rectangle_enable;
-   bool ARB_texture_rectangle_warn;
-   bool ARB_texture_gather_enable;
-   bool ARB_texture_gather_warn;
-   bool EXT_texture_array_enable;
-   bool EXT_texture_array_warn;
-   bool ARB_shader_texture_lod_enable;
-   bool ARB_shader_texture_lod_warn;
-   bool ARB_shader_stencil_export_enable;
-   bool ARB_shader_stencil_export_warn;
-   bool AMD_conservative_depth_enable;
-   bool AMD_conservative_depth_warn;
-   bool ARB_conservative_depth_enable;
-   bool ARB_conservative_depth_warn;
-   bool AMD_shader_stencil_export_enable;
-   bool AMD_shader_stencil_export_warn;
-   bool OES_texture_3D_enable;
-   bool OES_texture_3D_warn;
-   bool OES_EGL_image_external_enable;
-   bool OES_EGL_image_external_warn;
+   bool ARB_gpu_shader5_enable;
+   bool ARB_gpu_shader5_warn;
+   bool ARB_sample_shading_enable;
+   bool ARB_sample_shading_warn;
+   bool ARB_separate_shader_objects_enable;
+   bool ARB_separate_shader_objects_warn;
+   bool ARB_shader_atomic_counters_enable;
+   bool ARB_shader_atomic_counters_warn;
    bool ARB_shader_bit_encoding_enable;
    bool ARB_shader_bit_encoding_warn;
-   bool ARB_uniform_buffer_object_enable;
-   bool ARB_uniform_buffer_object_warn;
-   bool OES_standard_derivatives_enable;
-   bool OES_standard_derivatives_warn;
-   bool ARB_texture_cube_map_array_enable;
-   bool ARB_texture_cube_map_array_warn;
+   bool ARB_shader_image_load_store_enable;
+   bool ARB_shader_image_load_store_warn;
+   bool ARB_shader_stencil_export_enable;
+   bool ARB_shader_stencil_export_warn;
+   bool ARB_shader_texture_lod_enable;
+   bool ARB_shader_texture_lod_warn;
+   bool ARB_shading_language_420pack_enable;
+   bool ARB_shading_language_420pack_warn;
    bool ARB_shading_language_packing_enable;
    bool ARB_shading_language_packing_warn;
+   bool ARB_texture_cube_map_array_enable;
+   bool ARB_texture_cube_map_array_warn;
+   bool ARB_texture_gather_enable;
+   bool ARB_texture_gather_warn;
    bool ARB_texture_multisample_enable;
    bool ARB_texture_multisample_warn;
    bool ARB_texture_query_levels_enable;
    bool ARB_texture_query_levels_warn;
    bool ARB_texture_query_lod_enable;
    bool ARB_texture_query_lod_warn;
-   bool ARB_gpu_shader5_enable;
-   bool ARB_gpu_shader5_warn;
-   bool AMD_vertex_shader_layer_enable;
-   bool AMD_vertex_shader_layer_warn;
-   bool ARB_shading_language_420pack_enable;
-   bool ARB_shading_language_420pack_warn;
-   bool ARB_sample_shading_enable;
-   bool ARB_sample_shading_warn;
-   bool EXT_shader_integer_mix_enable;
-   bool EXT_shader_integer_mix_warn;
-   bool ARB_shader_atomic_counters_enable;
-   bool ARB_shader_atomic_counters_warn;
-   bool AMD_shader_trinary_minmax_enable;
-   bool AMD_shader_trinary_minmax_warn;
+   bool ARB_texture_rectangle_enable;
+   bool ARB_texture_rectangle_warn;
+   bool ARB_uniform_buffer_object_enable;
+   bool ARB_uniform_buffer_object_warn;
    bool ARB_viewport_array_enable;
    bool ARB_viewport_array_warn;
+
+   /* KHR extensions go here, sorted alphabetically.
+    */
+
+   /* OES extensions go here, sorted alphabetically.
+    */
+   bool OES_EGL_image_external_enable;
+   bool OES_EGL_image_external_warn;
+   bool OES_standard_derivatives_enable;
+   bool OES_standard_derivatives_warn;
+   bool OES_texture_3D_enable;
+   bool OES_texture_3D_warn;
+
+   /* All other extensions go here, sorted alphabetically.
+    */
+   bool AMD_conservative_depth_enable;
+   bool AMD_conservative_depth_warn;
+   bool AMD_shader_stencil_export_enable;
+   bool AMD_shader_stencil_export_warn;
+   bool AMD_shader_trinary_minmax_enable;
+   bool AMD_shader_trinary_minmax_warn;
+   bool AMD_vertex_shader_layer_enable;
+   bool AMD_vertex_shader_layer_warn;
+   bool EXT_separate_shader_objects_enable;
+   bool EXT_separate_shader_objects_warn;
+   bool EXT_shader_integer_mix_enable;
+   bool EXT_shader_integer_mix_warn;
+   bool EXT_texture_array_enable;
+   bool EXT_texture_array_warn;
    /*@}*/
 
    /** Extensions supported by the OpenGL implementation. */
    const struct gl_extensions *extensions;
 
    bool uses_builtin_functions;
+   bool fs_uses_gl_fragcoord;
 
    /**
     * For geometry shaders, size of the most recently seen input declaration
@@ -371,6 +446,8 @@ struct _mesa_glsl_parse_state {
     * Unused for other shader types.
     */
    unsigned gs_input_size;
+
+   bool early_fragment_tests;
 
    /** Atomic counter offsets by binding */
    unsigned atomic_counter_offsets[MAX_COMBINED_ATOMIC_BUFFERS];

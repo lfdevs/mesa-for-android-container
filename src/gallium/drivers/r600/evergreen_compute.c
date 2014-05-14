@@ -39,7 +39,6 @@
 #include "util/u_framebuffer.h"
 #include "pipebuffer/pb_buffer.h"
 #include "evergreend.h"
-#include "r600_resource.h"
 #include "r600_shader.h"
 #include "r600_pipe.h"
 #include "r600_formats.h"
@@ -409,8 +408,8 @@ static void compute_emit_cs(struct r600_context *ctx, const uint *block_layout,
 	int i;
 
 	/* make sure that the gfx ring is only one active */
-	if (ctx->b.rings.dma.cs) {
-		ctx->b.rings.dma.flush(ctx, RADEON_FLUSH_ASYNC);
+	if (ctx->b.rings.dma.cs && ctx->b.rings.dma.cs->cdw) {
+		ctx->b.rings.dma.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 	}
 
 	/* Initialize all the compute-related registers.
@@ -429,7 +428,8 @@ static void compute_emit_cs(struct r600_context *ctx, const uint *block_layout,
 		struct r600_surface *cb = (struct r600_surface*)ctx->framebuffer.state.cbufs[i];
 		unsigned reloc = r600_context_bo_reloc(&ctx->b, &ctx->b.rings.gfx,
 						       (struct r600_resource*)cb->base.texture,
-						       RADEON_USAGE_READWRITE);
+						       RADEON_USAGE_READWRITE,
+						       RADEON_PRIO_SHADER_RESOURCE_RW);
 
 		r600_write_compute_context_reg_seq(cs, R_028C60_CB_COLOR0_BASE + i * 0x3C, 7);
 		radeon_emit(cs, cb->cb_color_base);	/* R_028C60_CB_COLOR0_BASE */
@@ -534,7 +534,8 @@ void evergreen_emit_cs_shader(
 
 	radeon_emit(cs, PKT3C(PKT3_NOP, 0, 0));
 	radeon_emit(cs, r600_context_bo_reloc(&rctx->b, &rctx->b.rings.gfx,
-							kernel->code_bo, RADEON_USAGE_READ));
+					      kernel->code_bo, RADEON_USAGE_READ,
+					      RADEON_PRIO_SHADER_DATA));
 }
 
 static void evergreen_launch_grid(
@@ -662,10 +663,15 @@ static void evergreen_set_global_binding(
 
 	for (int i = 0; i < n; i++)
 	{
+		uint32_t buffer_offset;
+		uint32_t handle;
 		assert(resources[i]->target == PIPE_BUFFER);
 		assert(resources[i]->bind & PIPE_BIND_GLOBAL);
 
-		*(handles[i]) = buffers[i]->chunk->start_in_dw * 4;
+		buffer_offset = util_le32_to_cpu(*(handles[i]));
+		handle = buffer_offset + buffers[i]->chunk->start_in_dw * 4;
+
+		*(handles[i]) = util_cpu_to_le32(handle);
 	}
 
 	evergreen_set_rat(ctx->cs_shader_state.shader, 0, pool->bo, 0, pool->size_in_dw * 4);

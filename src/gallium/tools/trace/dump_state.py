@@ -474,7 +474,10 @@ class Context(Dispatcher):
         indices = []
         for i in xrange(info.start, info.start + count):
             offset = self._state.index_buffer.offset + i*index_size
-            index, = unpack_from(format, data, offset)
+            if offset + index_size > len(data):
+                index = 0
+            else:
+                index, = unpack_from(format, data, offset)
             indices.append(index)
             min_index = min(min_index, index)
             max_index = max(max_index, index)
@@ -533,9 +536,9 @@ class Context(Dispatcher):
         self._state.render_condition_condition = condition
         self._state.render_condition_mode = mode
 
-    def set_stream_output_targets(self, num_targets, tgs, append_bitmask):
+    def set_stream_output_targets(self, num_targets, tgs, offsets):
         self._state.so_targets = tgs
-        self._state.so_append_bitmask = append_bitmask
+        self._state.offsets = offsets
 
     def draw_vbo(self, info):
         self._draw_no += 1

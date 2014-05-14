@@ -30,18 +30,16 @@ AM_CPPFLAGS = \
 	-DGALLIUM_TRACE \
 	-DGALLIUM_GALAHAD
 
-noinst_LTLIBRARIES = ilo_dri.la
+dridir = $(DRI_DRIVER_INSTALL_DIR)
+dri_LTLIBRARIES = ilo_dri.la
 
+nodist_EXTRA_ilo_dri_la_SOURCES = dummy.cpp
 ilo_dri_la_SOURCES = target.c
 
-# need -rpath to create a noinst shared library
-ilo_dri_la_LDFLAGS = $(GALLIUM_DRI_LINKER_FLAGS) \
-		     -rpath $(abs_builddir)
+ilo_dri_la_LDFLAGS = $(GALLIUM_DRI_LINKER_FLAGS)
 
 ilo_dri_la_LIBADD = \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
-	$(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/dri/drm/libdridrm.la \
 	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
 	$(top_builddir)/src/gallium/drivers/galahad/libgalahad.la \
@@ -51,17 +49,4 @@ ilo_dri_la_LIBADD = \
 	$(GALLIUM_DRI_LIB_DEPS) \
 	$(INTEL_LIBS)
 
-# Mention a dummy pure C++ file to trigger generation of the $(LINK) variable
-nodist_EXTRA_ilo_dri_la_SOURCES = dummy-cpp.cpp
-
-if HAVE_MESA_LLVM
-ilo_dri_la_LDFLAGS += $(LLVM_LDFLAGS)
-ilo_dri_la_LIBADD += $(LLVM_LIBS)
-endif
-
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: ilo_dri.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/ilo_dri.so $(top_builddir)/$(LIB_DIR)/gallium/ilo_dri.so
-	ln -sf ilo_dri.so $(top_builddir)/$(LIB_DIR)/gallium/i965_dri.so
+include $(top_srcdir)/install-gallium-links.mk

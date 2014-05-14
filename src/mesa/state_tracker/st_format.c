@@ -109,7 +109,7 @@ st_mesa_format_to_pipe_format(mesa_format mesaFormat)
       return PIPE_FORMAT_S8_UINT_Z24_UNORM;
    case MESA_FORMAT_Z24_UNORM_S8_UINT:
       return PIPE_FORMAT_Z24_UNORM_S8_UINT;
-   case MESA_FORMAT_X8Z24_UNORM:
+   case MESA_FORMAT_X8_UINT_Z24_UNORM:
       return PIPE_FORMAT_X8Z24_UNORM;
    case MESA_FORMAT_Z24_UNORM_X8_UINT:
       return PIPE_FORMAT_Z24X8_UNORM;
@@ -121,6 +121,8 @@ st_mesa_format_to_pipe_format(mesa_format mesaFormat)
       return PIPE_FORMAT_Z32_FLOAT_S8X24_UINT;
    case MESA_FORMAT_YCBCR:
       return PIPE_FORMAT_UYVY;
+   case MESA_FORMAT_YCBCR_REV:
+      return PIPE_FORMAT_YUYV;
    case MESA_FORMAT_RGB_DXT1:
       return PIPE_FORMAT_DXT1_RGB;
    case MESA_FORMAT_RGBA_DXT1:
@@ -147,6 +149,8 @@ st_mesa_format_to_pipe_format(mesa_format mesaFormat)
       return PIPE_FORMAT_A8B8G8R8_SRGB;
    case MESA_FORMAT_B8G8R8A8_SRGB:
       return PIPE_FORMAT_B8G8R8A8_SRGB;
+   case MESA_FORMAT_R8G8B8A8_SRGB:
+      return PIPE_FORMAT_R8G8B8A8_SRGB;
    case MESA_FORMAT_RGBA_FLOAT32:
       return PIPE_FORMAT_R32G32B32A32_FLOAT;
    case MESA_FORMAT_RGBA_FLOAT16:
@@ -393,6 +397,9 @@ st_mesa_format_to_pipe_format(mesa_format mesaFormat)
    case MESA_FORMAT_RGBX_SINT32:
       return PIPE_FORMAT_R32G32B32X32_SINT;
 
+   case MESA_FORMAT_B8G8R8X8_SRGB:
+      return PIPE_FORMAT_B8G8R8X8_SRGB;
+
    default:
       return PIPE_FORMAT_NONE;
    }
@@ -463,7 +470,7 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
    case PIPE_FORMAT_S8_UINT_Z24_UNORM:
       return MESA_FORMAT_S8_UINT_Z24_UNORM;
    case PIPE_FORMAT_X8Z24_UNORM:
-      return MESA_FORMAT_X8Z24_UNORM;
+      return MESA_FORMAT_X8_UINT_Z24_UNORM;
    case PIPE_FORMAT_Z24X8_UNORM:
       return MESA_FORMAT_Z24_UNORM_X8_UINT;
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
@@ -748,9 +755,42 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
    case PIPE_FORMAT_R32G32B32X32_SINT:
       return MESA_FORMAT_RGBX_SINT32;
 
+   case PIPE_FORMAT_B8G8R8X8_SRGB:
+      return MESA_FORMAT_B8G8R8X8_SRGB;
+   case PIPE_FORMAT_R8G8B8A8_SRGB:
+      return MESA_FORMAT_R8G8B8A8_SRGB;
+
    default:
-      assert(0);
       return MESA_FORMAT_NONE;
+   }
+}
+
+
+/**
+ * Debug only: check that the two functions above correctly map
+ * Mesa formats to Gallium formats and back again.
+ */
+static void
+test_format_conversion(void)
+{
+   GLuint i;
+
+   /* test all Mesa formats */
+   for (i = 1; i < MESA_FORMAT_COUNT; i++) {
+      enum pipe_format pf = st_mesa_format_to_pipe_format(i);
+      if (pf != PIPE_FORMAT_NONE) {
+         mesa_format mf = st_pipe_format_to_mesa_format(pf);
+         assert(mf == i);
+      }
+   }
+
+   /* Test all Gallium formats */
+   for (i = 1; i < PIPE_FORMAT_COUNT; i++) {
+      mesa_format mf = st_pipe_format_to_mesa_format(i);
+      if (mf != MESA_FORMAT_NONE) {
+         enum pipe_format pf = st_mesa_format_to_pipe_format(mf);
+         assert(pf == i);
+      }
    }
 }
 
@@ -1006,7 +1046,8 @@ static const struct format_mapping format_map[] = {
    /* sRGB formats */
    {
       { GL_SRGB_EXT, GL_SRGB8_EXT, 0 },
-      { PIPE_FORMAT_R8G8B8X8_SRGB, DEFAULT_SRGBA_FORMATS }
+      { PIPE_FORMAT_R8G8B8X8_SRGB, PIPE_FORMAT_B8G8R8X8_SRGB,
+        DEFAULT_SRGBA_FORMATS }
    },
    {
       { GL_SRGB_ALPHA_EXT, GL_SRGB8_ALPHA8_EXT, 0 },
@@ -1015,7 +1056,7 @@ static const struct format_mapping format_map[] = {
    {
       { GL_COMPRESSED_SRGB_EXT, GL_COMPRESSED_SRGB_S3TC_DXT1_EXT, 0 },
       { PIPE_FORMAT_DXT1_SRGB, PIPE_FORMAT_R8G8B8X8_SRGB,
-        DEFAULT_SRGBA_FORMATS }
+        PIPE_FORMAT_B8G8R8X8_SRGB, DEFAULT_SRGBA_FORMATS }
    },
    {
       { GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT, 0 },
@@ -1630,6 +1671,18 @@ st_choose_format(struct st_context *st, GLenum internalFormat,
    int i, j;
    enum pipe_format pf;
 
+#ifdef DEBUG
+   {
+      static boolean firstCall = TRUE;
+      if (firstCall) {
+         test_format_conversion();
+         firstCall = FALSE;
+      }
+   }
+#else
+   (void) test_format_conversion;
+#endif
+
    /* can't render to compressed formats at this time */
    if (_mesa_is_compressed_format(st->ctx, internalFormat)
        && (bindings & ~PIPE_BIND_SAMPLER_VIEW)) {
@@ -1695,6 +1748,12 @@ st_choose_matching_format(struct pipe_screen *screen, unsigned bind,
 
    for (mesa_format = 1; mesa_format < MESA_FORMAT_COUNT; mesa_format++) {
       if (_mesa_get_format_color_encoding(mesa_format) == GL_SRGB) {
+         continue;
+      }
+      if (_mesa_get_format_bits(mesa_format, GL_TEXTURE_INTENSITY_SIZE) > 0) {
+         /* If `format` is GL_RED/GL_RED_INTEGER, then we might match some
+          * intensity formats, which we don't want.
+          */
          continue;
       }
 

@@ -91,6 +91,7 @@ def AddOptions(opts):
 	opts.Add(EnumOption('platform', 'target platform', host_platform,
 											 allowed_values=('cygwin', 'darwin', 'freebsd', 'haiku', 'linux', 'sunos', 'windows')))
 	opts.Add(BoolOption('embedded', 'embedded build', 'no'))
+	opts.Add(BoolOption('analyze', 'enable static code analysis where available', 'no'))
 	opts.Add('toolchain', 'compiler toolchain', default_toolchain)
 	opts.Add(BoolOption('gles', 'EXPERIMENTAL: enable OpenGL ES support', 'no'))
 	opts.Add(BoolOption('llvm', 'use LLVM', default_llvm))
@@ -100,4 +101,4 @@ def AddOptions(opts):
 	opts.Add(BoolOption('quiet', 'DEPRECATED: profile build', 'yes'))
 	opts.Add(BoolOption('texture_float', 'enable floating-point textures and renderbuffers', 'no'))
 	if host_platform == 'windows':
-		opts.Add(EnumOption('MSVC_VERSION', 'MS Visual C++ version', None, allowed_values=('7.1', '8.0', '9.0', '10.0', '11.0', '12.0')))
+		opts.Add('MSVC_VERSION', 'Microsoft Visual C/C++ version')

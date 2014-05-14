@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Note: Make sure VDPAU_EXPORTS is defined before including Automake.inc
-VDPAU_EXPORTS = '^(vdp_imp_device_create_x11|radeon_drm_winsys_create)$$'
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
@@ -30,31 +28,19 @@ AM_CFLAGS = \
 vdpaudir = $(VDPAU_LIB_INSTALL_DIR)
 vdpau_LTLIBRARIES = libvdpau_r600.la
 
+nodist_EXTRA_libvdpau_r600_la_SOURCES = dummy.cpp
 libvdpau_r600_la_SOURCES = \
 	drm_target.c \
 	$(top_srcdir)/src/gallium/auxiliary/vl/vl_winsys_dri.c
 
 libvdpau_r600_la_LDFLAGS = \
-	$(GALLIUM_VDPAU_LINKER_FLAGS)
+	$(GALLIUM_VDPAU_LINKER_FLAGS) \
+	-Wl,--dynamic-list=$(srcdir)/../../r300/dri/radeon.dyn
 
 libvdpau_r600_la_LIBADD = \
 	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
 	$(GALLIUM_VDPAU_LIB_DEPS) \
-	$(GALLIUM_DRI_LIB_DEPS) \
 	$(RADEON_LIBS)
 
-libvdpau_r600_la_LINK = $(CXXLINK) $(libvdpau_r600_la_LDFLAGS)
-# Mention a dummy pure C++ file to trigger generation of the $(LINK) variable
-nodist_EXTRA_libvdpau_r600_la_SOURCES = dummy-cpp.cpp
-
-if HAVE_MESA_LLVM
-libvdpau_r600_la_LDFLAGS += $(LLVM_LDFLAGS)
-libvdpau_r600_la_LIBADD += $(LLVM_LIBS)
-endif
-
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: libvdpau_r600.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/libvdpau_r600.so* $(top_builddir)/$(LIB_DIR)/gallium/
+include $(top_srcdir)/install-gallium-links.mk

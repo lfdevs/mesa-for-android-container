@@ -1850,7 +1850,9 @@ void radeonUploadTexMatrix( r100ContextPtr rmesa,
    GLfloat *src = rmesa->tmpmat[unit].m;
 
    rmesa->TexMatColSwap &= ~(1 << unit);
-   if ((tUnit._ReallyEnabled & (TEXTURE_3D_BIT | TEXTURE_CUBE_BIT)) == 0) {
+   if (!tUnit._Current ||
+       (tUnit._Current->Target != GL_TEXTURE_3D &&
+        tUnit._Current->Target != GL_TEXTURE_CUBE_MAP)) {
       if (swapcols) {
 	 rmesa->TexMatColSwap |= 1 << unit;
 	 /* attention some elems are swapped 2 times! */
@@ -1935,7 +1937,7 @@ static void update_texturematrix( struct gl_context *ctx )
    rmesa->TexMatColSwap = 0;
 
    for (unit = 0 ; unit < ctx->Const.MaxTextureUnits; unit++) {
-      if (ctx->Texture.Unit[unit]._ReallyEnabled) {
+      if (ctx->Texture.Unit[unit]._Current) {
 	 GLboolean needMatrix = GL_FALSE;
 	 if (ctx->TextureMatrixStack[unit].Top->type != MATRIX_IDENTITY) {
 	    needMatrix = GL_TRUE;
@@ -2016,7 +2018,7 @@ static GLboolean r100ValidateBuffers(struct gl_context *ctx)
    for (i = 0; i < ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits; ++i) {
       radeonTexObj *t;
 
-      if (!ctx->Texture.Unit[i]._ReallyEnabled)
+      if (!ctx->Texture.Unit[i]._Current)
 	 continue;
 
       t = rmesa->state.texture.unit[i].texobj;

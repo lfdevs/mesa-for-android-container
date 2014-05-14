@@ -25,10 +25,13 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
-#include "intel_reg.h" /* for MI_xxx */
+#include "genhw/genhw.h"
 #include "intel_winsys.h"
 
 #include "ilo_cp.h"
+
+#define MI_NOOP             GEN_MI_CMD(MI_NOOP)
+#define MI_BATCH_BUFFER_END GEN_MI_CMD(MI_BATCH_BUFFER_END)
 
 /* the size of the private space */
 static const int ilo_cp_private = 2;
@@ -42,7 +45,7 @@ ilo_cp_dump(struct ilo_cp *cp)
 {
    ilo_printf("dumping %d bytes\n", cp->used * 4);
    if (cp->used)
-      intel_winsys_decode_commands(cp->winsys, cp->bo, cp->used * 4);
+      intel_winsys_decode_bo(cp->winsys, cp->bo, cp->used * 4);
 }
 
 /**
@@ -77,7 +80,7 @@ ilo_cp_longjmp(struct ilo_cp *cp, const struct ilo_cp_jmp_buf *jmp)
    cp->size = jmp->size;
    cp->used = jmp->used;
    cp->stolen = jmp->stolen;
-   intel_bo_clear_relocs(cp->bo, jmp->reloc_count);
+   intel_bo_truncate_relocs(cp->bo, jmp->reloc_count);
 }
 
 /**
@@ -160,7 +163,7 @@ ilo_cp_realloc_bo(struct ilo_cp *cp)
     * won't point at the same address, which is needed for jmpbuf
     */
    bo = intel_winsys_alloc_buffer(cp->winsys,
-         "batch buffer", cp->bo_size * 4, 0);
+         "batch buffer", cp->bo_size * 4, INTEL_DOMAIN_CPU);
    if (unlikely(!bo)) {
       /* reuse the old one */
       bo = cp->bo;
@@ -171,10 +174,8 @@ ilo_cp_realloc_bo(struct ilo_cp *cp)
       intel_bo_unreference(cp->bo);
    cp->bo = bo;
 
-   if (!cp->sys) {
-      intel_bo_map(cp->bo, true);
-      cp->ptr = intel_bo_get_virtual(cp->bo);
-   }
+   if (!cp->sys)
+      cp->ptr = intel_bo_map(cp->bo, true);
 }
 
 /**
@@ -184,31 +185,15 @@ static int
 ilo_cp_exec_bo(struct ilo_cp *cp)
 {
    const bool do_exec = !(ilo_debug & ILO_DEBUG_NOHW);
-   struct intel_context *ctx;
-   unsigned long flags;
    int err;
 
-   switch (cp->ring) {
-   case ILO_CP_RING_RENDER:
-      ctx = cp->render_ctx;
-      flags = INTEL_EXEC_RENDER;
-      break;
-   case ILO_CP_RING_BLT:
-      ctx = NULL;
-      flags = INTEL_EXEC_BLT;
-      break;
-   default:
-      ctx = NULL;
-      flags = 0;
-      break;
+   if (likely(do_exec)) {
+      err = intel_winsys_submit_bo(cp->winsys, cp->ring,
+            cp->bo, cp->used * 4, cp->render_ctx, cp->one_off_flags);
    }
-
-   flags |= cp->one_off_flags;
-
-   if (likely(do_exec))
-      err = intel_bo_exec(cp->bo, cp->used * 4, ctx, flags);
-   else
+   else {
       err = 0;
+   }
 
    cp->one_off_flags = 0;
 
@@ -263,8 +248,7 @@ ilo_cp_destroy(struct ilo_cp *cp)
       intel_bo_unreference(cp->bo);
    }
 
-   if (cp->render_ctx)
-      intel_winsys_destroy_context(cp->winsys, cp->render_ctx);
+   intel_winsys_destroy_context(cp->winsys, cp->render_ctx);
 
    FREE(cp->sys);
    FREE(cp);
@@ -274,7 +258,7 @@ ilo_cp_destroy(struct ilo_cp *cp)
  * Create a command parser.
  */
 struct ilo_cp *
-ilo_cp_create(struct intel_winsys *winsys, bool direct_map)
+ilo_cp_create(struct intel_winsys *winsys, int size, bool direct_map)
 {
    struct ilo_cp *cp;
 
@@ -284,11 +268,15 @@ ilo_cp_create(struct intel_winsys *winsys, bool direct_map)
 
    cp->winsys = winsys;
    cp->render_ctx = intel_winsys_create_context(winsys);
+   if (!cp->render_ctx) {
+      FREE(cp);
+      return NULL;
+   }
 
-   cp->ring = ILO_CP_RING_RENDER;
+   cp->ring = INTEL_RING_RENDER;
    cp->no_implicit_flush = false;
 
-   cp->bo_size = 8192;
+   cp->bo_size = size;
 
    if (!direct_map) {
       cp->sys = MALLOC(cp->bo_size * 4);

@@ -32,6 +32,7 @@
 #include "clip.h"
 #include "context.h"
 #include "enable.h"
+#include "errors.h"
 #include "light.h"
 #include "simple_list.h"
 #include "mtypes.h"
@@ -63,46 +64,46 @@ update_derived_primitive_restart_state(struct gl_context *ctx)
 static void
 client_state(struct gl_context *ctx, GLenum cap, GLboolean state)
 {
-   struct gl_array_object *arrayObj = ctx->Array.ArrayObj;
+   struct gl_vertex_array_object *vao = ctx->Array.VAO;
    GLbitfield64 flag;
    GLboolean *var;
 
    switch (cap) {
       case GL_VERTEX_ARRAY:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_POS].Enabled;
          flag = VERT_BIT_POS;
          break;
       case GL_NORMAL_ARRAY:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled;
          flag = VERT_BIT_NORMAL;
          break;
       case GL_COLOR_ARRAY:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled;
          flag = VERT_BIT_COLOR0;
          break;
       case GL_INDEX_ARRAY:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled;
          flag = VERT_BIT_COLOR_INDEX;
          break;
       case GL_TEXTURE_COORD_ARRAY:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)].Enabled;
          flag = VERT_BIT_TEX(ctx->Array.ActiveTexture);
          break;
       case GL_EDGE_FLAG_ARRAY:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled;
          flag = VERT_BIT_EDGEFLAG;
          break;
       case GL_FOG_COORDINATE_ARRAY_EXT:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_FOG].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_FOG].Enabled;
          flag = VERT_BIT_FOG;
          break;
       case GL_SECONDARY_COLOR_ARRAY_EXT:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled;
          flag = VERT_BIT_COLOR1;
          break;
 
       case GL_POINT_SIZE_ARRAY_OES:
-         var = &arrayObj->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled;
+         var = &vao->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled;
          flag = VERT_BIT_POINT_SIZE;
          break;
 
@@ -131,11 +132,11 @@ client_state(struct gl_context *ctx, GLenum cap, GLboolean state)
    update_derived_primitive_restart_state(ctx);
 
    if (state)
-      arrayObj->_Enabled |= flag;
+      vao->_Enabled |= flag;
    else
-      arrayObj->_Enabled &= ~flag;
+      vao->_Enabled &= ~flag;
 
-   arrayObj->NewArrays |= flag;
+   vao->NewArrays |= flag;
 
    if (ctx->Driver.Enable) {
       ctx->Driver.Enable( ctx, cap, state );
@@ -367,14 +368,11 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
          ctx->Depth.Test = state;
          break;
       case GL_DEBUG_OUTPUT:
-         if (!_mesa_is_desktop_gl(ctx))
-            goto invalid_enum_error;
-         ctx->Debug.DebugOutput = state;
-         break;
       case GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB:
          if (!_mesa_is_desktop_gl(ctx))
             goto invalid_enum_error;
-         ctx->Debug.SyncOutput = state;
+         else
+            _mesa_set_debug_state_int(ctx, cap, state);
          break;
       case GL_DITHER:
          if (ctx->Color.DitherFlag == state)
@@ -1226,13 +1224,11 @@ _mesa_IsEnabled( GLenum cap )
       case GL_CULL_FACE:
          return ctx->Polygon.CullFlag;
       case GL_DEBUG_OUTPUT:
-         if (!_mesa_is_desktop_gl(ctx))
-            goto invalid_enum_error;
-         return ctx->Debug.DebugOutput;
       case GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB:
          if (!_mesa_is_desktop_gl(ctx))
             goto invalid_enum_error;
-         return ctx->Debug.SyncOutput;
+         else
+            return (GLboolean) _mesa_get_debug_state_int(ctx, cap);
       case GL_DEPTH_TEST:
          return ctx->Depth.Test;
       case GL_DITHER:
@@ -1423,41 +1419,41 @@ _mesa_IsEnabled( GLenum cap )
       case GL_VERTEX_ARRAY:
          if (ctx->API != API_OPENGL_COMPAT && ctx->API != API_OPENGLES)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled;
+         return ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POS].Enabled;
       case GL_NORMAL_ARRAY:
          if (ctx->API != API_OPENGL_COMPAT && ctx->API != API_OPENGLES)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled;
+         return ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled;
       case GL_COLOR_ARRAY:
          if (ctx->API != API_OPENGL_COMPAT && ctx->API != API_OPENGLES)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled;
+         return ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled;
       case GL_INDEX_ARRAY:
          if (ctx->API != API_OPENGL_COMPAT)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->
+         return ctx->Array.VAO->
             VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled;
       case GL_TEXTURE_COORD_ARRAY:
          if (ctx->API != API_OPENGL_COMPAT && ctx->API != API_OPENGLES)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->
+         return ctx->Array.VAO->
             VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)].Enabled;
       case GL_EDGE_FLAG_ARRAY:
          if (ctx->API != API_OPENGL_COMPAT)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled;
+         return ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled;
       case GL_FOG_COORDINATE_ARRAY_EXT:
          if (ctx->API != API_OPENGL_COMPAT)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_FOG].Enabled;
+         return ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_FOG].Enabled;
       case GL_SECONDARY_COLOR_ARRAY_EXT:
          if (ctx->API != API_OPENGL_COMPAT)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled;
+         return ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled;
       case GL_POINT_SIZE_ARRAY_OES:
          if (ctx->API != API_OPENGLES)
             goto invalid_enum_error;
-         return ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled;
+         return ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled;
 
       /* GL_ARB_texture_cube_map */
       case GL_TEXTURE_CUBE_MAP_ARB:

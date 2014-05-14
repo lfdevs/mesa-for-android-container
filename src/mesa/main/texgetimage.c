@@ -131,8 +131,8 @@ get_tex_depth_stencil(struct gl_context *ctx, GLuint dimensions,
    GLint img, row;
 
    assert(format == GL_DEPTH_STENCIL);
-   assert(type == GL_UNSIGNED_INT_24_8);
-   /* XXX type == GL_FLOAT_32_UNSIGNED_INT_24_8_REV is not handled yet */
+   assert(type == GL_UNSIGNED_INT_24_8 ||
+          type == GL_FLOAT_32_UNSIGNED_INT_24_8_REV);
 
    for (img = 0; img < depth; img++) {
       GLubyte *srcMap;
@@ -149,11 +149,10 @@ get_tex_depth_stencil(struct gl_context *ctx, GLuint dimensions,
             void *dest = _mesa_image_address(dimensions, &ctx->Pack, pixels,
                                              width, height, format, type,
                                              img, row, 0);
-            /* Unpack from texture's format to GL's z24_s8 layout */
-            _mesa_unpack_uint_24_8_depth_stencil_row(texImage->TexFormat,
-                                                     width,
-                                                     (const GLuint *) src,
-                                                     dest);
+            _mesa_unpack_depth_stencil_row(texImage->TexFormat,
+                                           width,
+                                           (const GLuint *) src,
+                                           type, dest);
             if (ctx->Pack.SwapBytes) {
                _mesa_swap4((GLuint *) dest, width);
             }
@@ -642,7 +641,8 @@ _mesa_get_teximage(struct gl_context *ctx,
        */
       GLubyte *buf = (GLubyte *)
          ctx->Driver.MapBufferRange(ctx, 0, ctx->Pack.BufferObj->Size,
-				    GL_MAP_WRITE_BIT, ctx->Pack.BufferObj);
+				    GL_MAP_WRITE_BIT, ctx->Pack.BufferObj,
+                                    MAP_INTERNAL);
       if (!buf) {
          /* out of memory or other unexpected error */
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage(map PBO failed)");
@@ -671,7 +671,7 @@ _mesa_get_teximage(struct gl_context *ctx,
    }
 
    if (_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
-      ctx->Driver.UnmapBuffer(ctx, ctx->Pack.BufferObj);
+      ctx->Driver.UnmapBuffer(ctx, ctx->Pack.BufferObj, MAP_INTERNAL);
    }
 }
 
@@ -696,7 +696,8 @@ _mesa_get_compressed_teximage(struct gl_context *ctx,
       /* pack texture image into a PBO */
       GLubyte *buf = (GLubyte *)
          ctx->Driver.MapBufferRange(ctx, 0, ctx->Pack.BufferObj->Size,
-				    GL_MAP_WRITE_BIT, ctx->Pack.BufferObj);
+				    GL_MAP_WRITE_BIT, ctx->Pack.BufferObj,
+                                    MAP_INTERNAL);
       if (!buf) {
          /* out of memory or other unexpected error */
          _mesa_error(ctx, GL_OUT_OF_MEMORY,
@@ -738,7 +739,7 @@ _mesa_get_compressed_teximage(struct gl_context *ctx,
    }
 
    if (_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
-      ctx->Driver.UnmapBuffer(ctx, ctx->Pack.BufferObj);
+      ctx->Driver.UnmapBuffer(ctx, ctx->Pack.BufferObj, MAP_INTERNAL);
    }
 }
 
@@ -836,6 +837,11 @@ getteximage_error_check(struct gl_context *ctx, GLenum target, GLint level,
       _mesa_error(ctx, GL_INVALID_OPERATION, "glGetTexImage(format mismatch)");
       return GL_TRUE;
    }
+   else if (_mesa_is_stencil_format(format)
+            && !ctx->Extensions.ARB_texture_stencil8) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexImage(format=GL_STENCIL_INDEX)");
+      return GL_TRUE;
+   }
    else if (_mesa_is_ycbcr_format(format)
             && !_mesa_is_ycbcr_format(baseFormat)) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "glGetTexImage(format mismatch)");
@@ -848,6 +854,11 @@ getteximage_error_check(struct gl_context *ctx, GLenum target, GLint level,
    }
    else if (_mesa_is_dudv_format(format)
             && !_mesa_is_dudv_format(baseFormat)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glGetTexImage(format mismatch)");
+      return GL_TRUE;
+   }
+   else if (_mesa_is_enum_format_integer(format) !=
+            _mesa_is_format_integer(texImage->TexFormat)) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "glGetTexImage(format mismatch)");
       return GL_TRUE;
    }
@@ -868,7 +879,7 @@ getteximage_error_check(struct gl_context *ctx, GLenum target, GLint level,
 
    if (_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
       /* PBO should not be mapped */
-      if (_mesa_bufferobj_mapped(ctx->Pack.BufferObj)) {
+      if (_mesa_check_disallowed_mapping(ctx->Pack.BufferObj)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glGetTexImage(PBO is mapped)");
          return GL_TRUE;
@@ -1011,7 +1022,7 @@ getcompressedteximage_error_check(struct gl_context *ctx, GLenum target,
       }
 
       /* make sure PBO is not mapped */
-      if (_mesa_bufferobj_mapped(ctx->Pack.BufferObj)) {
+      if (_mesa_check_disallowed_mapping(ctx->Pack.BufferObj)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glGetCompressedTexImage(PBO is mapped)");
          return GL_TRUE;

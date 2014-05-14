@@ -62,6 +62,12 @@
 #include "program/prog_instruction.h"
 #include <limits>
 
+#define f(x) join(x)
+#define join(x) x ## f
+#define M_PIf f(M_PI)
+#define M_PI_2f f(M_PI_2)
+#define M_PI_4f f(M_PI_4)
+
 using namespace ir_builder;
 
 /**
@@ -69,7 +75,7 @@ using namespace ir_builder;
  *  @{
  */
 static bool
-always_available(const _mesa_glsl_parse_state *state)
+always_available(const _mesa_glsl_parse_state *)
 {
    return true;
 }
@@ -194,13 +200,6 @@ shader_integer_mix(const _mesa_glsl_parse_state *state)
 }
 
 static bool
-shader_packing(const _mesa_glsl_parse_state *state)
-{
-   return state->ARB_shading_language_packing_enable ||
-          state->is_version(400, 0);
-}
-
-static bool
 shader_packing_or_es3(const _mesa_glsl_parse_state *state)
 {
    return state->ARB_shading_language_packing_enable ||
@@ -208,9 +207,24 @@ shader_packing_or_es3(const _mesa_glsl_parse_state *state)
 }
 
 static bool
+shader_packing_or_es3_or_gpu_shader5(const _mesa_glsl_parse_state *state)
+{
+   return state->ARB_shading_language_packing_enable ||
+          state->ARB_gpu_shader5_enable ||
+          state->is_version(400, 300);
+}
+
+static bool
 gpu_shader5(const _mesa_glsl_parse_state *state)
 {
    return state->is_version(400, 0) || state->ARB_gpu_shader5_enable;
+}
+
+static bool
+shader_packing_or_gpu_shader5(const _mesa_glsl_parse_state *state)
+{
+   return state->ARB_shading_language_packing_enable ||
+          gpu_shader5(state);
 }
 
 static bool
@@ -340,6 +354,13 @@ shader_trinary_minmax(const _mesa_glsl_parse_state *state)
    return state->AMD_shader_trinary_minmax_enable;
 }
 
+static bool
+shader_image_load_store(const _mesa_glsl_parse_state *state)
+{
+   return (state->is_version(420, 0) ||
+           state->ARB_shader_image_load_store_enable);
+}
+
 /** @} */
 
 /******************************************************************************/
@@ -412,6 +433,33 @@ private:
 
    /** Create a new function and add the given signatures. */
    void add_function(const char *name, ...);
+
+   enum image_function_flags {
+      IMAGE_FUNCTION_EMIT_STUB = (1 << 0),
+      IMAGE_FUNCTION_RETURNS_VOID = (1 << 1),
+      IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE = (1 << 2),
+      IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE = (1 << 3),
+      IMAGE_FUNCTION_READ_ONLY = (1 << 4),
+      IMAGE_FUNCTION_WRITE_ONLY = (1 << 5)
+   };
+
+   /**
+    * Create a new image built-in function for all known image types.
+    * \p flags is a bitfield of \c image_function_flags flags.
+    */
+   void add_image_function(const char *name,
+                           const char *intrinsic_name,
+                           unsigned num_arguments,
+                           unsigned flags);
+
+   /**
+    * Create new functions for all known image built-ins and types.
+    * If \p glsl is \c true, use the GLSL built-in names and emit code
+    * to call into the actual compiler intrinsic.  If \p glsl is
+    * false, emit a function prototype with no body for each image
+    * intrinsic name.
+    */
+   void add_image_functions(bool glsl);
 
    ir_function_signature *new_sig(const glsl_type *return_type,
                                   builtin_available_predicate avail,
@@ -580,6 +628,20 @@ private:
    B1(max3)
    B1(mid3)
 
+   ir_function_signature *_image_prototype(const glsl_type *image_type,
+                                           const char *intrinsic_name,
+                                           unsigned num_arguments,
+                                           unsigned flags);
+   ir_function_signature *_image(const glsl_type *image_type,
+                                 const char *intrinsic_name,
+                                 unsigned num_arguments,
+                                 unsigned flags);
+
+   ir_function_signature *_memory_barrier_intrinsic(
+      builtin_available_predicate avail);
+   ir_function_signature *_memory_barrier(
+      builtin_available_predicate avail);
+
 #undef B0
 #undef B1
 #undef B2
@@ -693,6 +755,12 @@ builtin_builder::create_intrinsics()
                 NULL);
    add_function("__intrinsic_atomic_predecrement",
                 _atomic_intrinsic(shader_atomic_counters),
+                NULL);
+
+   add_image_functions(false);
+
+   add_function("__intrinsic_memory_barrier",
+                _memory_barrier_intrinsic(shader_image_load_store),
                 NULL);
 }
 
@@ -937,16 +1005,16 @@ builtin_builder::create_builtins()
                 _uintBitsToFloat(glsl_type::uvec4_type),
                 NULL);
 
-   add_function("packUnorm2x16",   _packUnorm2x16(shader_packing_or_es3),   NULL);
-   add_function("packSnorm2x16",   _packSnorm2x16(shader_packing_or_es3),   NULL);
-   add_function("packUnorm4x8",    _packUnorm4x8(shader_packing),           NULL);
-   add_function("packSnorm4x8",    _packSnorm4x8(shader_packing),           NULL);
-   add_function("unpackUnorm2x16", _unpackUnorm2x16(shader_packing_or_es3), NULL);
-   add_function("unpackSnorm2x16", _unpackSnorm2x16(shader_packing_or_es3), NULL);
-   add_function("unpackUnorm4x8",  _unpackUnorm4x8(shader_packing),         NULL);
-   add_function("unpackSnorm4x8",  _unpackSnorm4x8(shader_packing),         NULL);
-   add_function("packHalf2x16",    _packHalf2x16(shader_packing_or_es3),    NULL);
-   add_function("unpackHalf2x16",  _unpackHalf2x16(shader_packing_or_es3),  NULL);
+   add_function("packUnorm2x16",   _packUnorm2x16(shader_packing_or_es3_or_gpu_shader5),   NULL);
+   add_function("packSnorm2x16",   _packSnorm2x16(shader_packing_or_es3),                  NULL);
+   add_function("packUnorm4x8",    _packUnorm4x8(shader_packing_or_gpu_shader5),           NULL);
+   add_function("packSnorm4x8",    _packSnorm4x8(shader_packing_or_gpu_shader5),           NULL);
+   add_function("unpackUnorm2x16", _unpackUnorm2x16(shader_packing_or_es3_or_gpu_shader5), NULL);
+   add_function("unpackSnorm2x16", _unpackSnorm2x16(shader_packing_or_es3),                NULL);
+   add_function("unpackUnorm4x8",  _unpackUnorm4x8(shader_packing_or_gpu_shader5),         NULL);
+   add_function("unpackSnorm4x8",  _unpackSnorm4x8(shader_packing_or_gpu_shader5),         NULL);
+   add_function("packHalf2x16",    _packHalf2x16(shader_packing_or_es3),                   NULL);
+   add_function("unpackHalf2x16",  _unpackHalf2x16(shader_packing_or_es3),                 NULL);
 
    F(length)
    F(distance)
@@ -2167,6 +2235,12 @@ builtin_builder::create_builtins()
                 _mid3(glsl_type::uvec4_type),
                 NULL);
 
+   add_image_functions(true);
+
+   add_function("memoryBarrier",
+                _memory_barrier(shader_image_load_store),
+                NULL);
+
 #undef F
 #undef FI
 #undef FIU
@@ -2198,6 +2272,104 @@ builtin_builder::add_function(const char *name, ...)
    va_end(ap);
 
    shader->symbols->add_function(f);
+}
+
+void
+builtin_builder::add_image_function(const char *name,
+                                    const char *intrinsic_name,
+                                    unsigned num_arguments,
+                                    unsigned flags)
+{
+   static const glsl_type *const types[] = {
+      glsl_type::image1D_type,
+      glsl_type::image2D_type,
+      glsl_type::image3D_type,
+      glsl_type::image2DRect_type,
+      glsl_type::imageCube_type,
+      glsl_type::imageBuffer_type,
+      glsl_type::image1DArray_type,
+      glsl_type::image2DArray_type,
+      glsl_type::imageCubeArray_type,
+      glsl_type::image2DMS_type,
+      glsl_type::image2DMSArray_type,
+      glsl_type::iimage1D_type,
+      glsl_type::iimage2D_type,
+      glsl_type::iimage3D_type,
+      glsl_type::iimage2DRect_type,
+      glsl_type::iimageCube_type,
+      glsl_type::iimageBuffer_type,
+      glsl_type::iimage1DArray_type,
+      glsl_type::iimage2DArray_type,
+      glsl_type::iimageCubeArray_type,
+      glsl_type::iimage2DMS_type,
+      glsl_type::iimage2DMSArray_type,
+      glsl_type::uimage1D_type,
+      glsl_type::uimage2D_type,
+      glsl_type::uimage3D_type,
+      glsl_type::uimage2DRect_type,
+      glsl_type::uimageCube_type,
+      glsl_type::uimageBuffer_type,
+      glsl_type::uimage1DArray_type,
+      glsl_type::uimage2DArray_type,
+      glsl_type::uimageCubeArray_type,
+      glsl_type::uimage2DMS_type,
+      glsl_type::uimage2DMSArray_type
+   };
+   ir_function *f = new(mem_ctx) ir_function(name);
+
+   for (unsigned i = 0; i < Elements(types); ++i) {
+      if (types[i]->sampler_type != GLSL_TYPE_FLOAT ||
+          (flags & IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE))
+         f->add_signature(_image(types[i], intrinsic_name,
+                                 num_arguments, flags));
+   }
+
+   shader->symbols->add_function(f);
+}
+
+void
+builtin_builder::add_image_functions(bool glsl)
+{
+   const unsigned flags = (glsl ? IMAGE_FUNCTION_EMIT_STUB : 0);
+
+   add_image_function(glsl ? "imageLoad" : "__intrinsic_image_load",
+                      "__intrinsic_image_load", 0,
+                      (flags | IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE |
+                       IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
+                       IMAGE_FUNCTION_READ_ONLY));
+
+   add_image_function(glsl ? "imageStore" : "__intrinsic_image_store",
+                      "__intrinsic_image_store", 1,
+                      (flags | IMAGE_FUNCTION_RETURNS_VOID |
+                       IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE |
+                       IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
+                       IMAGE_FUNCTION_WRITE_ONLY));
+
+   add_image_function(glsl ? "imageAtomicAdd" : "__intrinsic_image_atomic_add",
+                      "__intrinsic_image_atomic_add", 1, flags);
+
+   add_image_function(glsl ? "imageAtomicMin" : "__intrinsic_image_atomic_min",
+                      "__intrinsic_image_atomic_min", 1, flags);
+
+   add_image_function(glsl ? "imageAtomicMax" : "__intrinsic_image_atomic_max",
+                      "__intrinsic_image_atomic_max", 1, flags);
+
+   add_image_function(glsl ? "imageAtomicAnd" : "__intrinsic_image_atomic_and",
+                      "__intrinsic_image_atomic_and", 1, flags);
+
+   add_image_function(glsl ? "imageAtomicOr" : "__intrinsic_image_atomic_or",
+                      "__intrinsic_image_atomic_or", 1, flags);
+
+   add_image_function(glsl ? "imageAtomicXor" : "__intrinsic_image_atomic_xor",
+                      "__intrinsic_image_atomic_xor", 1, flags);
+
+   add_image_function((glsl ? "imageAtomicExchange" :
+                       "__intrinsic_image_atomic_exchange"),
+                      "__intrinsic_image_atomic_exchange", 1, flags);
+
+   add_image_function((glsl ? "imageAtomicCompSwap" :
+                       "__intrinsic_image_atomic_comp_swap"),
+                      "__intrinsic_image_atomic_comp_swap", 2, flags);
 }
 
 ir_variable *
@@ -2372,11 +2544,11 @@ ir_expression *
 builtin_builder::asin_expr(ir_variable *x)
 {
    return mul(sign(x),
-              sub(imm(1.5707964f),
+              sub(imm(M_PI_2f),
                   mul(sqrt(sub(imm(1.0f), abs(x))),
-                      add(imm(1.5707964f),
+                      add(imm(M_PI_2f),
                           mul(abs(x),
-                              add(imm(-0.21460183f),
+                              add(imm(M_PI_4f - 1.0f),
                                   mul(abs(x),
                                       add(imm(0.086566724f),
                                           mul(abs(x), imm(-0.03102955f))))))))));
@@ -2420,7 +2592,7 @@ builtin_builder::_acos(const glsl_type *type)
    ir_variable *x = in_var(type, "x");
    MAKE_SIG(type, always_available, 1, x);
 
-   body.emit(ret(sub(imm(1.5707964f), asin_expr(x))));
+   body.emit(ret(sub(imm(M_PI_2f), asin_expr(x))));
 
    return sig;
 }
@@ -2457,13 +2629,13 @@ builtin_builder::_atan2(const glsl_type *type)
       ir_if *inner_if = new(mem_ctx) ir_if(less(x, imm(0.0f)));
       inner_if->then_instructions.push_tail(
          if_tree(gequal(y, imm(0.0f)),
-                 assign(r, add(r, imm(3.141593f))),
-                 assign(r, sub(r, imm(3.141593f)))));
+                 assign(r, add(r, imm(M_PIf))),
+                 assign(r, sub(r, imm(M_PIf)))));
       outer_then.emit(inner_if);
 
       /* Else... */
       outer_if->else_instructions.push_tail(
-         assign(r, mul(sign(y), imm(1.5707965f))));
+         assign(r, mul(sign(y), imm(M_PI_2f))));
 
       body.emit(outer_if);
 
@@ -2883,7 +3055,7 @@ builtin_builder::_length(const glsl_type *type)
    ir_variable *x = in_var(type, "x");
    MAKE_SIG(glsl_type::float_type, always_available, 1, x);
 
-   body.emit(ret(sqrt(dotlike(x, x))));
+   body.emit(ret(sqrt(dot(x, x))));
 
    return sig;
 }
@@ -2973,7 +3145,7 @@ builtin_builder::_faceforward(const glsl_type *type)
    ir_variable *Nref = in_var(type, "Nref");
    MAKE_SIG(type, always_available, 3, N, I, Nref);
 
-   body.emit(if_tree(less(dotlike(Nref, I), imm(0.0f)),
+   body.emit(if_tree(less(dot(Nref, I), imm(0.0f)),
                      ret(N), ret(neg(N))));
 
    return sig;
@@ -2987,7 +3159,7 @@ builtin_builder::_reflect(const glsl_type *type)
    MAKE_SIG(type, always_available, 2, I, N);
 
    /* I - 2 * dot(N, I) * N */
-   body.emit(ret(sub(I, mul(imm(2.0f), mul(dotlike(N, I), N)))));
+   body.emit(ret(sub(I, mul(imm(2.0f), mul(dot(N, I), N)))));
 
    return sig;
 }
@@ -3001,7 +3173,7 @@ builtin_builder::_refract(const glsl_type *type)
    MAKE_SIG(type, always_available, 3, I, N, eta);
 
    ir_variable *n_dot_i = body.make_temp(glsl_type::float_type, "n_dot_i");
-   body.emit(assign(n_dot_i, dotlike(N, I)));
+   body.emit(assign(n_dot_i, dot(N, I)));
 
    /* From the GLSL 1.10 specification:
     * k = 1.0 - eta * eta * (1.0 - dot(N, I) * dot(N, I))
@@ -3549,7 +3721,7 @@ builtin_builder::_texture(ir_texture_opcode opcode,
    ir_texture *tex = new(mem_ctx) ir_texture(opcode);
    tex->set_sampler(var_ref(s), return_type);
 
-   const int coord_size = sampler_type->sampler_coordinate_components();
+   const int coord_size = sampler_type->coordinate_components();
 
    if (coord_size == coord_type->vector_elements) {
       tex->coordinate = var_ref(P);
@@ -4094,13 +4266,106 @@ builtin_builder::_mid3(const glsl_type *type)
    return sig;
 }
 
+ir_function_signature *
+builtin_builder::_image_prototype(const glsl_type *image_type,
+                                  const char *intrinsic_name,
+                                  unsigned num_arguments,
+                                  unsigned flags)
+{
+   const glsl_type *data_type = glsl_type::get_instance(
+      image_type->sampler_type,
+      (flags & IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE ? 4 : 1),
+      1);
+   const glsl_type *ret_type = (flags & IMAGE_FUNCTION_RETURNS_VOID ?
+                                glsl_type::void_type : data_type);
+
+   /* Addressing arguments that are always present. */
+   ir_variable *image = in_var(image_type, "image");
+   ir_variable *coord = in_var(
+      glsl_type::ivec(image_type->coordinate_components()), "coord");
+
+   ir_function_signature *sig = new_sig(
+      ret_type, shader_image_load_store, 2, image, coord);
+
+   /* Sample index for multisample images. */
+   if (image_type->sampler_dimensionality == GLSL_SAMPLER_DIM_MS)
+      sig->parameters.push_tail(in_var(glsl_type::int_type, "sample"));
+
+   /* Data arguments. */
+   for (unsigned i = 0; i < num_arguments; ++i)
+      sig->parameters.push_tail(in_var(data_type,
+                                       ralloc_asprintf(NULL, "arg%d", i)));
+
+   /* Set the maximal set of qualifiers allowed for this image
+    * built-in.  Function calls with arguments having fewer
+    * qualifiers than present in the prototype are allowed by the
+    * spec, but not with more, i.e. this will make the compiler
+    * accept everything that needs to be accepted, and reject cases
+    * like loads from write-only or stores to read-only images.
+    */
+   image->data.image.read_only = flags & IMAGE_FUNCTION_READ_ONLY;
+   image->data.image.write_only = flags & IMAGE_FUNCTION_WRITE_ONLY;
+   image->data.image.coherent = true;
+   image->data.image._volatile = true;
+   image->data.image.restrict_flag = true;
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_image(const glsl_type *image_type,
+                        const char *intrinsic_name,
+                        unsigned num_arguments,
+                        unsigned flags)
+{
+   ir_function_signature *sig = _image_prototype(image_type, intrinsic_name,
+                                                 num_arguments, flags);
+
+   if (flags & IMAGE_FUNCTION_EMIT_STUB) {
+      ir_factory body(&sig->body, mem_ctx);
+      ir_function *f = shader->symbols->get_function(intrinsic_name);
+
+      if (flags & IMAGE_FUNCTION_RETURNS_VOID) {
+         body.emit(call(f, NULL, sig->parameters));
+      } else {
+         ir_variable *ret_val =
+            body.make_temp(sig->return_type, "_ret_val");
+         body.emit(call(f, ret_val, sig->parameters));
+         body.emit(ret(ret_val));
+      }
+
+      sig->is_defined = true;
+
+   } else {
+      sig->is_intrinsic = true;
+   }
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_memory_barrier_intrinsic(builtin_available_predicate avail)
+{
+   MAKE_INTRINSIC(glsl_type::void_type, avail, 0);
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_memory_barrier(builtin_available_predicate avail)
+{
+   MAKE_SIG(glsl_type::void_type, avail, 0);
+   body.emit(call(shader->symbols->get_function("__intrinsic_memory_barrier"),
+                  NULL, sig->parameters));
+   return sig;
+}
+
 /** @} */
 
 /******************************************************************************/
 
 /* The singleton instance of builtin_builder. */
 static builtin_builder builtins;
-_glthread_DECLARE_STATIC_MUTEX(builtins_lock);
+static mtx_t builtins_lock = _MTX_INITIALIZER_NP;
 
 /**
  * External API (exposing the built-in module to the rest of the compiler):
@@ -4109,17 +4374,17 @@ _glthread_DECLARE_STATIC_MUTEX(builtins_lock);
 void
 _mesa_glsl_initialize_builtin_functions()
 {
-   _glthread_LOCK_MUTEX(builtins_lock);
+   mtx_lock(&builtins_lock);
    builtins.initialize();
-   _glthread_UNLOCK_MUTEX(builtins_lock);
+   mtx_unlock(&builtins_lock);
 }
 
 void
 _mesa_glsl_release_builtin_functions()
 {
-   _glthread_LOCK_MUTEX(builtins_lock);
+   mtx_lock(&builtins_lock);
    builtins.release();
-   _glthread_UNLOCK_MUTEX(builtins_lock);
+   mtx_unlock(&builtins_lock);
 }
 
 ir_function_signature *
@@ -4127,9 +4392,9 @@ _mesa_glsl_find_builtin_function(_mesa_glsl_parse_state *state,
                                  const char *name, exec_list *actual_parameters)
 {
    ir_function_signature * s;
-   _glthread_LOCK_MUTEX(builtins_lock);
+   mtx_lock(&builtins_lock);
    s = builtins.find(state, name, actual_parameters);
-   _glthread_UNLOCK_MUTEX(builtins_lock);
+   mtx_unlock(&builtins_lock);
    return s;
 }
 

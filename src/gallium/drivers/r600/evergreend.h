@@ -582,6 +582,9 @@
 #define   S_028810_VTX_KILL_OR(x)                      (((x) & 0x1) << 21)
 #define   G_028810_VTX_KILL_OR(x)                      (((x) >> 21) & 0x1)
 #define   C_028810_VTX_KILL_OR                         0xFFDFFFFF
+#define   S_028810_DX_RASTERIZATION_KILL(x)            (((x) & 0x1) << 22)
+#define   G_028810_DX_RASTERIZATION_KILL(x)            (((x) >> 22) & 0x1)
+#define   C_028810_DX_RASTERIZATION_KILL               0xFFBFFFFF
 #define   S_028810_DX_LINEAR_ATTR_CLIP_ENA(x)          (((x) & 0x1) << 24)
 #define   G_028810_DX_LINEAR_ATTR_CLIP_ENA(x)          (((x) >> 24) & 0x1)
 #define   C_028810_DX_LINEAR_ATTR_CLIP_ENA             0xFEFFFFFF
@@ -2445,6 +2448,10 @@
 /* async DMA Packet types */
 #define    DMA_PACKET_WRITE                     0x2
 #define    DMA_PACKET_COPY                      0x3
+#define    EG_DMA_COPY_MAX_SIZE			0xfffff
+#define    EG_DMA_COPY_DWORD_ALIGNED		0x00
+#define    EG_DMA_COPY_BYTE_ALIGNED		0x40
+#define    EG_DMA_COPY_TILED			0x8
 #define    DMA_PACKET_INDIRECT_BUFFER           0x4
 #define    DMA_PACKET_SEMAPHORE                 0x5
 #define    DMA_PACKET_FENCE                     0x6

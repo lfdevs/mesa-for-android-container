@@ -1238,6 +1238,22 @@ GLenum
 _mesa_error_check_format_and_type(const struct gl_context *ctx,
                                   GLenum format, GLenum type)
 {
+   /* From OpenGL 3.3 spec, page 220:
+    *    "If the format is DEPTH_STENCIL, then values are taken from
+    *    both the depth buffer and the stencil buffer. If there is no
+    *    depth buffer or if there is no stencil buffer, then the error
+    *    INVALID_OPERATION occurs. If the type parameter is not
+    *    UNSIGNED_INT_24_8 or FLOAT_32_UNSIGNED_INT_24_8_REV, then the
+    *    error INVALID_ENUM occurs."
+    *
+    * OpenGL ES still generates GL_INVALID_OPERATION because glReadPixels
+    * cannot be used to read depth or stencil in that API.
+    */
+   if (_mesa_is_desktop_gl(ctx) && format == GL_DEPTH_STENCIL
+       && type != GL_UNSIGNED_INT_24_8
+       && type != GL_FLOAT_32_UNSIGNED_INT_24_8_REV)
+      return GL_INVALID_ENUM;
+
    /* special type-based checks (see glReadPixels, glDrawPixels error lists) */
    switch (type) {
    case GL_BITMAP:
@@ -1323,10 +1339,8 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
             case GL_INT:
             case GL_UNSIGNED_INT:
             case GL_FLOAT:
-               return GL_NO_ERROR;
             case GL_HALF_FLOAT:
-               return ctx->Extensions.ARB_half_float_pixel
-                  ? GL_NO_ERROR : GL_INVALID_ENUM;
+               return GL_NO_ERROR;
             default:
                return GL_INVALID_ENUM;
          }
@@ -1349,10 +1363,8 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
             case GL_INT:
             case GL_UNSIGNED_INT:
             case GL_FLOAT:
-               return GL_NO_ERROR;
             case GL_HALF_FLOAT:
-               return ctx->Extensions.ARB_half_float_pixel
-                  ? GL_NO_ERROR : GL_INVALID_ENUM;
+               return GL_NO_ERROR;
             default:
                return GL_INVALID_ENUM;
          }
@@ -1368,10 +1380,8 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
             case GL_INT:
             case GL_UNSIGNED_INT:
             case GL_FLOAT:
-               return GL_NO_ERROR;
             case GL_HALF_FLOAT:
-               return ctx->Extensions.ARB_half_float_pixel
-                  ? GL_NO_ERROR : GL_INVALID_ENUM;
+               return GL_NO_ERROR;
             default:
                return GL_INVALID_ENUM;
          }
@@ -1389,13 +1399,11 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
             case GL_UNSIGNED_BYTE_2_3_3_REV:
             case GL_UNSIGNED_SHORT_5_6_5:
             case GL_UNSIGNED_SHORT_5_6_5_REV:
+            case GL_HALF_FLOAT:
                return GL_NO_ERROR;
             case GL_UNSIGNED_INT_2_10_10_10_REV:
                /* OK by GL_EXT_texture_type_2_10_10_10_REV */
                return (ctx->API == API_OPENGLES2)
-                  ? GL_NO_ERROR : GL_INVALID_ENUM;
-            case GL_HALF_FLOAT:
-               return ctx->Extensions.ARB_half_float_pixel
                   ? GL_NO_ERROR : GL_INVALID_ENUM;
             case GL_UNSIGNED_INT_5_9_9_9_REV:
                return ctx->Extensions.EXT_texture_shared_exponent
@@ -1419,10 +1427,8 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
             case GL_INT:
             case GL_UNSIGNED_INT:
             case GL_FLOAT:
-               return GL_NO_ERROR;
             case GL_HALF_FLOAT:
-               return ctx->Extensions.ARB_half_float_pixel
-                  ? GL_NO_ERROR : GL_INVALID_ENUM;
+               return GL_NO_ERROR;
             default:
                return GL_INVALID_ENUM;
          }
@@ -1446,10 +1452,8 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
             case GL_UNSIGNED_INT_8_8_8_8_REV:
             case GL_UNSIGNED_INT_10_10_10_2:
             case GL_UNSIGNED_INT_2_10_10_10_REV:
-               return GL_NO_ERROR;
             case GL_HALF_FLOAT:
-               return ctx->Extensions.ARB_half_float_pixel
-                  ? GL_NO_ERROR : GL_INVALID_ENUM;
+               return GL_NO_ERROR;
             default:
                return GL_INVALID_ENUM;
          }

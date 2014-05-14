@@ -21,6 +21,7 @@
 #include "intel_tex.h"
 #include "intel_blit.h"
 #include "intel_fbo.h"
+#include "intel_image.h"
 
 #include "brw_context.h"
 
@@ -140,7 +141,7 @@ try_pbo_upload(struct gl_context *ctx,
                                   intelImage->mt->format,
                                   src_offset,
                                   image->Width, image->Height,
-                                  src_stride, I915_TILING_NONE);
+                                  src_stride);
    if (!pbo_mt)
       return false;
 
@@ -201,22 +202,21 @@ intelTexImage(struct gl_context * ctx,
 
 
 /**
- * Binds a region to a texture image, like it was uploaded by glTexImage2D().
+ * Binds a BO to a texture image, as if it was uploaded by glTexImage2D().
  *
  * Used for GLX_EXT_texture_from_pixmap and EGL image extensions,
  */
 static void
-intel_set_texture_image_region(struct gl_context *ctx,
-			       struct gl_texture_image *image,
-			       struct intel_region *region,
-			       GLenum target,
-			       GLenum internalFormat,
-			       mesa_format format,
-                               uint32_t offset,
-                               GLuint width,
-                               GLuint height,
-                               GLuint tile_x,
-                               GLuint tile_y)
+intel_set_texture_image_bo(struct gl_context *ctx,
+                           struct gl_texture_image *image,
+                           drm_intel_bo *bo,
+                           GLenum target,
+                           GLenum internalFormat,
+                           mesa_format format,
+                           uint32_t offset,
+                           GLuint width, GLuint height,
+                           GLuint pitch,
+                           GLuint tile_x, GLuint tile_y)
 {
    struct brw_context *brw = brw_context(ctx);
    struct intel_texture_image *intel_image = intel_texture_image(image);
@@ -230,13 +230,10 @@ intel_set_texture_image_region(struct gl_context *ctx,
 
    ctx->Driver.FreeTextureImageBuffer(ctx, image);
 
-   intel_image->mt = intel_miptree_create_layout(brw, target, image->TexFormat,
-                                                 0, 0,
-                                                 width, height, 1,
-                                                 true, 0 /* num_samples */);
+   intel_image->mt = intel_miptree_create_for_bo(brw, bo, image->TexFormat,
+                                                 0, width, height, pitch);
    if (intel_image->mt == NULL)
        return;
-   intel_region_reference(&intel_image->mt->region, region);
    intel_image->mt->total_width = width;
    intel_image->mt->total_height = height;
    intel_image->mt->level[0].slice[0].x_offset = tile_x;
@@ -258,8 +255,8 @@ intel_set_texture_image_region(struct gl_context *ctx,
    intel_texobj->needs_validate = true;
 
    intel_image->mt->offset = offset;
-   assert(region->pitch % region->cpp == 0);
-   intel_image->base.RowStride = region->pitch / region->cpp;
+   assert(pitch % intel_image->mt->cpp == 0);
+   intel_image->base.RowStride = pitch / intel_image->mt->cpp;
 
    /* Immediately validate the image to the object. */
    intel_miptree_reference(&intel_texobj->mt, intel_image->mt);
@@ -273,7 +270,6 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    struct gl_framebuffer *fb = dPriv->driverPrivate;
    struct brw_context *brw = pDRICtx->driverPrivate;
    struct gl_context *ctx = &brw->ctx;
-   struct intel_texture_object *intelObj;
    struct intel_renderbuffer *rb;
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
@@ -281,9 +277,8 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    mesa_format texFormat = MESA_FORMAT_NONE;
 
    texObj = _mesa_get_current_tex_object(ctx, target);
-   intelObj = intel_texture_object(texObj);
 
-   if (!intelObj)
+   if (!texObj)
       return;
 
    if (dPriv->lastStamp != dPriv->dri2.stamp ||
@@ -291,8 +286,8 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
       intel_update_renderbuffers(pDRICtx, dPriv);
 
    rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
-   /* If the region isn't set, then intel_update_renderbuffers was unable
-    * to get the buffers for the drawable.
+   /* If the miptree isn't set, then intel_update_renderbuffers was unable
+    * to get the BO for the drawable from the window system.
     */
    if (!rb || !rb->mt)
       return;
@@ -314,12 +309,48 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    _mesa_lock_texture(&brw->ctx, texObj);
    texImage = _mesa_get_tex_image(ctx, texObj, target, level);
    intel_miptree_make_shareable(brw, rb->mt);
-   intel_set_texture_image_region(ctx, texImage, rb->mt->region, target,
-                                  internalFormat, texFormat, 0,
-                                  rb->mt->region->width,
-                                  rb->mt->region->height,
-                                  0, 0);
+   intel_set_texture_image_bo(ctx, texImage, rb->mt->bo, target,
+                              internalFormat, texFormat, 0,
+                              rb->Base.Base.Width,
+                              rb->Base.Base.Height,
+                              rb->mt->pitch,
+                              0, 0);
    _mesa_unlock_texture(&brw->ctx, texObj);
+}
+
+static GLboolean
+intel_bind_renderbuffer_tex_image(struct gl_context *ctx,
+                                  struct gl_renderbuffer *rb,
+                                  struct gl_texture_image *image)
+{
+   struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+   struct intel_texture_image *intel_image = intel_texture_image(image);
+   struct gl_texture_object *texobj = image->TexObject;
+   struct intel_texture_object *intel_texobj = intel_texture_object(texobj);
+
+   /* We can only handle RB allocated with AllocRenderbufferStorage, or
+    * window-system renderbuffers.
+    */
+   assert(!rb->TexImage);
+
+   if (!irb->mt)
+      return false;
+
+   _mesa_lock_texture(ctx, texobj);
+   _mesa_init_teximage_fields(ctx, image,
+			      rb->Width, rb->Height, 1,
+			      0, rb->InternalFormat, rb->Format);
+   image->NumSamples = rb->NumSamples;
+
+   intel_miptree_reference(&intel_image->mt, irb->mt);
+
+   /* Immediately validate the image to the object. */
+   intel_miptree_reference(&intel_texobj->mt, intel_image->mt);
+
+   intel_texobj->needs_validate = true;
+   _mesa_unlock_texture(ctx, texobj);
+
+   return true;
 }
 
 void
@@ -373,11 +404,12 @@ intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
       return;
    }
 
-   intel_set_texture_image_region(ctx, texImage, image->region,
-				  target, image->internal_format,
-                                  image->format, image->offset,
-                                  image->width,  image->height,
-                                  image->tile_x, image->tile_y);
+   intel_set_texture_image_bo(ctx, texImage, image->bo,
+                              target, image->internal_format,
+                              image->format, image->offset,
+                              image->width,  image->height,
+                              image->pitch,
+                              image->tile_x, image->tile_y);
 }
 
 void
@@ -385,4 +417,5 @@ intelInitTextureImageFuncs(struct dd_function_table *functions)
 {
    functions->TexImage = intelTexImage;
    functions->EGLImageTargetTexture2D = intel_image_target_texture_2d;
+   functions->BindRenderbufferTexImage = intel_bind_renderbuffer_tex_image;
 }

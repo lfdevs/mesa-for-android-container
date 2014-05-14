@@ -22,6 +22,7 @@
  */
 
 #include <stdbool.h>
+#include "program/program.h"
 #include "brw_state.h"
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
@@ -29,6 +30,7 @@
 static void
 upload_ps_extra(struct brw_context *brw)
 {
+   struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FRAGMENT_PROGRAM */
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
@@ -63,6 +65,18 @@ upload_ps_extra(struct brw_context *brw)
    if (fp->program.Base.InputsRead & VARYING_BIT_POS)
       dw1 |= GEN8_PSX_USES_SOURCE_DEPTH | GEN8_PSX_USES_SOURCE_W;
 
+   /* BRW_NEW_NUM_SAMPLES | _NEW_MULTISAMPLE */
+   bool multisampled_fbo = brw->num_samples > 1;
+   if (multisampled_fbo &&
+       _mesa_get_min_invocations_per_fragment(ctx, &fp->program, false) > 1)
+      dw1 |= GEN8_PSX_SHADER_IS_PER_SAMPLE;
+
+   if (fp->program.Base.SystemValuesRead & SYSTEM_BIT_SAMPLE_MASK_IN)
+      dw1 |= GEN8_PSX_SHADER_USES_INPUT_COVERAGE_MASK;
+
+   if (brw->wm.prog_data->uses_omask)
+      dw1 |= GEN8_PSX_OMASK_TO_RENDER_TARGET;
+
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_PS_EXTRA << 16 | (2 - 2));
    OUT_BATCH(dw1);
@@ -71,8 +85,8 @@ upload_ps_extra(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_ps_extra = {
    .dirty = {
-      .mesa  = 0,
-      .brw   = BRW_NEW_CONTEXT | BRW_NEW_FRAGMENT_PROGRAM,
+      .mesa  = _NEW_MULTISAMPLE,
+      .brw   = BRW_NEW_CONTEXT | BRW_NEW_FRAGMENT_PROGRAM | BRW_NEW_NUM_SAMPLES,
       .cache = 0,
    },
    .emit = upload_ps_extra,
@@ -122,28 +136,12 @@ upload_ps_state(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    uint32_t dw3 = 0, dw6 = 0, dw7 = 0;
 
-   /* BRW_NEW_PS_BINDING_TABLE */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_PS << 16 | (2 - 2));
-   OUT_BATCH(brw->wm.base.bind_bo_offset);
-   ADVANCE_BATCH();
-
-   /* CACHE_NEW_SAMPLER */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_SAMPLER_STATE_POINTERS_PS << 16 | (2 - 2));
-   OUT_BATCH(brw->wm.base.sampler_offset);
-   ADVANCE_BATCH();
-
-   /* CACHE_NEW_WM_PROG */
-   gen8_upload_constant_state(brw, &brw->wm.base, true, _3DSTATE_CONSTANT_PS);
-
    /* Initialize the execution mask with VMask.  Otherwise, derivatives are
     * incorrect for subspans where some of the pixels are unlit.  We believe
     * the bit just didn't take effect in previous generations.
     */
    dw3 |= GEN7_PS_VECTOR_MASK_ENABLE;
 
-   /* CACHE_NEW_SAMPLER */
    dw3 |=
       (ALIGN(brw->wm.base.sampler_count, 4) / 4) << GEN7_PS_SAMPLER_COUNT_SHIFT;
 
@@ -160,23 +158,67 @@ upload_ps_state(struct brw_context *brw)
    if (ctx->Shader.CurrentProgram[MESA_SHADER_FRAGMENT] == NULL)
       dw3 |= GEN7_PS_FLOATING_POINT_MODE_ALT;
 
-   dw6 |= (brw->max_wm_threads - 2) << HSW_PS_MAX_THREADS_SHIFT;
+   /* 3DSTATE_PS expects the number of threads per PSD, which is always 64;
+    * it implicitly scales for different GT levels (which have some # of PSDs).
+    */
+   dw6 |= (64 - 2) << HSW_PS_MAX_THREADS_SHIFT;
 
    /* CACHE_NEW_WM_PROG */
-   if (brw->wm.prog_data->nr_params > 0)
+   if (brw->wm.prog_data->base.nr_params > 0)
       dw6 |= GEN7_PS_PUSH_CONSTANT_ENABLE;
 
-   dw6 |= GEN7_PS_8_DISPATCH_ENABLE;
-   if (brw->wm.prog_data->prog_offset_16)
-      dw6 |= GEN7_PS_16_DISPATCH_ENABLE;
+   /* From the documentation for this packet:
+    * "If the PS kernel does not need the Position XY Offsets to
+    *  compute a Position Value, then this field should be programmed
+    *  to POSOFFSET_NONE."
+    *
+    * "SW Recommendation: If the PS kernel needs the Position Offsets
+    *  to compute a Position XY value, this field should match Position
+    *  ZW Interpolation Mode to ensure a consistent position.xyzw
+    *  computation."
+    *
+    * We only require XY sample offsets. So, this recommendation doesn't
+    * look useful at the moment. We might need this in future.
+    */
+   if (brw->wm.prog_data->uses_pos_offset)
+      dw6 |= GEN7_PS_POSOFFSET_SAMPLE;
+   else
+      dw6 |= GEN7_PS_POSOFFSET_NONE;
 
-   dw7 |=
-      brw->wm.prog_data->first_curbe_grf << GEN7_PS_DISPATCH_START_GRF_SHIFT_0 |
-      brw->wm.prog_data->first_curbe_grf_16<< GEN7_PS_DISPATCH_START_GRF_SHIFT_2;
+   /* _NEW_MULTISAMPLE
+    * In case of non 1x per sample shading, only one of SIMD8 and SIMD16
+    * should be enabled. We do 'SIMD16 only' dispatch if a SIMD16 shader
+    * is successfully compiled. In majority of the cases that bring us
+    * better performance than 'SIMD8 only' dispatch.
+    */
+   int min_invocations_per_fragment =
+      _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program, false);
+   assert(min_invocations_per_fragment >= 1);
+
+   if (brw->wm.prog_data->prog_offset_16) {
+      dw6 |= GEN7_PS_16_DISPATCH_ENABLE;
+      if (min_invocations_per_fragment == 1) {
+         dw6 |= GEN7_PS_8_DISPATCH_ENABLE;
+         dw7 |= (brw->wm.prog_data->first_curbe_grf <<
+                 GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+         dw7 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+                 GEN7_PS_DISPATCH_START_GRF_SHIFT_2);
+      } else {
+         dw7 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+                 GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+      }
+   } else {
+      dw6 |= GEN7_PS_8_DISPATCH_ENABLE;
+      dw7 |= (brw->wm.prog_data->first_curbe_grf <<
+              GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+   }
 
    BEGIN_BATCH(12);
    OUT_BATCH(_3DSTATE_PS << 16 | (12 - 2));
-   OUT_BATCH(brw->wm.base.prog_offset);
+   if (brw->wm.prog_data->prog_offset_16 && min_invocations_per_fragment > 1)
+      OUT_BATCH(brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16);
+   else
+      OUT_BATCH(brw->wm.base.prog_offset);
    OUT_BATCH(0);
    OUT_BATCH(dw3);
    if (brw->wm.prog_data->total_scratch) {
@@ -198,12 +240,10 @@ upload_ps_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_ps_state = {
    .dirty = {
-      .mesa  = _NEW_PROGRAM_CONSTANTS,
+      .mesa  = _NEW_MULTISAMPLE,
       .brw   = BRW_NEW_FRAGMENT_PROGRAM |
-               BRW_NEW_PS_BINDING_TABLE |
-               BRW_NEW_BATCH |
-               BRW_NEW_PUSH_CONSTANT_ALLOCATION,
-      .cache = CACHE_NEW_SAMPLER | CACHE_NEW_WM_PROG
+               BRW_NEW_BATCH,
+      .cache = CACHE_NEW_WM_PROG
    },
    .emit = upload_ps_state,
 };

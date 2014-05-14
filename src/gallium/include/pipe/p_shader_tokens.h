@@ -167,7 +167,11 @@ struct tgsi_declaration_interp
 #define TGSI_SEMANTIC_VIEWPORT_INDEX 21 /**< viewport index */
 #define TGSI_SEMANTIC_LAYER      22 /**< layer (rendertarget index) */
 #define TGSI_SEMANTIC_CULLDIST   23
-#define TGSI_SEMANTIC_COUNT      24 /**< number of semantic values */
+#define TGSI_SEMANTIC_SAMPLEID   24
+#define TGSI_SEMANTIC_SAMPLEPOS  25
+#define TGSI_SEMANTIC_SAMPLEMASK 26
+#define TGSI_SEMANTIC_INVOCATIONID 27
+#define TGSI_SEMANTIC_COUNT      28 /**< number of semantic values */
 
 struct tgsi_declaration_semantic
 {
@@ -232,7 +236,8 @@ union tgsi_immediate_data
 #define TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS 5
 #define TGSI_PROPERTY_FS_DEPTH_LAYOUT        6
 #define TGSI_PROPERTY_VS_PROHIBIT_UCPS       7
-#define TGSI_PROPERTY_COUNT                  8
+#define TGSI_PROPERTY_GS_INVOCATIONS         8
+#define TGSI_PROPERTY_COUNT                  9
 
 struct tgsi_property {
    unsigned Type         : 4;  /**< TGSI_TOKEN_TYPE_PROPERTY */
@@ -453,7 +458,20 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_IMUL_HI             180
 #define TGSI_OPCODE_UMUL_HI             181
 
-#define TGSI_OPCODE_LAST                182
+#define TGSI_OPCODE_TG4                 182
+
+#define TGSI_OPCODE_LODQ                183
+
+#define TGSI_OPCODE_IBFE                184
+#define TGSI_OPCODE_UBFE                185
+#define TGSI_OPCODE_BFI                 186
+#define TGSI_OPCODE_BREV                187
+#define TGSI_OPCODE_POPC                188
+#define TGSI_OPCODE_LSB                 189
+#define TGSI_OPCODE_IMSB                190
+#define TGSI_OPCODE_UMSB                191
+
+#define TGSI_OPCODE_LAST                192
 
 #define TGSI_SAT_NONE            0  /* do not saturate */
 #define TGSI_SAT_ZERO_ONE        1  /* clamp to [0,1] */

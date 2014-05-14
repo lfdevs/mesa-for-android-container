@@ -45,10 +45,11 @@ namespace {
 
 class ir_algebraic_visitor : public ir_rvalue_visitor {
 public:
-   ir_algebraic_visitor()
+   ir_algebraic_visitor(bool native_integers)
    {
       this->progress = false;
       this->mem_ctx = NULL;
+      this->native_integers = native_integers;
    }
 
    virtual ~ir_algebraic_visitor()
@@ -70,6 +71,7 @@ public:
 
    void *mem_ctx;
 
+   bool native_integers;
    bool progress;
 };
 
@@ -218,6 +220,11 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       this->mem_ctx = ralloc_parent(ir);
 
    switch (ir->operation) {
+   case ir_unop_bit_not:
+      if (op_expr[0] && op_expr[0]->operation == ir_unop_bit_not)
+         return op_expr[0]->operands[0];
+      break;
+
    case ir_unop_abs:
       if (op_expr[0] == NULL)
 	 break;
@@ -236,6 +243,42 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 	 break;
 
       if (op_expr[0]->operation == ir_unop_neg) {
+         return op_expr[0]->operands[0];
+      }
+      break;
+
+   case ir_unop_exp:
+      if (op_expr[0] == NULL)
+	 break;
+
+      if (op_expr[0]->operation == ir_unop_log) {
+         return op_expr[0]->operands[0];
+      }
+      break;
+
+   case ir_unop_log:
+      if (op_expr[0] == NULL)
+	 break;
+
+      if (op_expr[0]->operation == ir_unop_exp) {
+         return op_expr[0]->operands[0];
+      }
+      break;
+
+   case ir_unop_exp2:
+      if (op_expr[0] == NULL)
+	 break;
+
+      if (op_expr[0]->operation == ir_unop_log2) {
+         return op_expr[0]->operands[0];
+      }
+      break;
+
+   case ir_unop_log2:
+      if (op_expr[0] == NULL)
+	 break;
+
+      if (op_expr[0]->operation == ir_unop_exp2) {
          return op_expr[0]->operands[0];
       }
       break;
@@ -404,6 +447,28 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       }
       break;
 
+   case ir_binop_less:
+   case ir_binop_lequal:
+   case ir_binop_greater:
+   case ir_binop_gequal:
+   case ir_binop_equal:
+   case ir_binop_nequal:
+      for (int add_pos = 0; add_pos < 2; add_pos++) {
+         ir_expression *add = op_expr[add_pos];
+
+         if (!add || add->operation != ir_binop_add)
+            continue;
+
+         ir_constant *zero = op_const[1 - add_pos];
+         if (!is_vec_zero(zero))
+            continue;
+
+         return new(mem_ctx) ir_expression(ir->operation,
+                                           add->operands[0],
+                                           neg(add->operands[1]));
+      }
+      break;
+
    case ir_binop_rshift:
    case ir_binop_lshift:
       /* 0 >> x == 0 */
@@ -479,9 +544,21 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       if (is_vec_one(op_const[0]))
          return op_const[0];
 
+      /* x^1 == x */
+      if (is_vec_one(op_const[1]))
+         return ir->operands[0];
+
       /* pow(2,x) == exp2(x) */
       if (is_vec_two(op_const[0]))
          return expr(ir_unop_exp2, ir->operands[1]);
+
+      if (is_vec_two(op_const[1])) {
+         ir_variable *x = new(ir) ir_variable(ir->operands[1]->type, "x",
+                                              ir_var_temporary);
+         base_ir->insert_before(x);
+         base_ir->insert_before(assign(x, ir->operands[0]));
+         return mul(x, x);
+      }
 
       break;
 
@@ -502,13 +579,41 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 
       break;
 
+   case ir_triop_fma:
+      /* Operands are op0 * op1 + op2. */
+      if (is_vec_zero(op_const[0]) || is_vec_zero(op_const[1])) {
+         return ir->operands[2];
+      } else if (is_vec_zero(op_const[2])) {
+         return mul(ir->operands[0], ir->operands[1]);
+      } else if (is_vec_one(op_const[0])) {
+         return add(ir->operands[1], ir->operands[2]);
+      } else if (is_vec_one(op_const[1])) {
+         return add(ir->operands[0], ir->operands[2]);
+      }
+      break;
+
    case ir_triop_lrp:
       /* Operands are (x, y, a). */
       if (is_vec_zero(op_const[2])) {
          return ir->operands[0];
       } else if (is_vec_one(op_const[2])) {
          return ir->operands[1];
+      } else if (ir->operands[0]->equals(ir->operands[1])) {
+         return ir->operands[0];
+      } else if (is_vec_zero(op_const[0])) {
+         return mul(ir->operands[1], ir->operands[2]);
+      } else if (is_vec_zero(op_const[1])) {
+         unsigned op2_components = ir->operands[2]->type->vector_elements;
+         ir_constant *one = new(mem_ctx) ir_constant(1.0f, op2_components);
+         return mul(ir->operands[0], add(one, neg(ir->operands[2])));
       }
+      break;
+
+   case ir_triop_csel:
+      if (is_vec_one(op_const[0]))
+	 return ir->operands[1];
+      if (is_vec_zero(op_const[0]))
+	 return ir->operands[2];
       break;
 
    default:
@@ -542,9 +647,9 @@ ir_algebraic_visitor::handle_rvalue(ir_rvalue **rvalue)
 }
 
 bool
-do_algebraic(exec_list *instructions)
+do_algebraic(exec_list *instructions, bool native_integers)
 {
-   ir_algebraic_visitor v;
+   ir_algebraic_visitor v(native_integers);
 
    visit_list_elements(&v, instructions);
 

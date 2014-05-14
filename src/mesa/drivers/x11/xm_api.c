@@ -74,7 +74,6 @@
 #include "main/teximage.h"
 #include "main/version.h"
 #include "main/vtxfmt.h"
-#include "glapi/glthread.h"
 #include "swrast/swrast.h"
 #include "swrast/s_renderbuffer.h"
 #include "swrast_setup/swrast_setup.h"
@@ -88,7 +87,7 @@
 /**
  * Global X driver lock
  */
-_glthread_Mutex _xmesa_lock;
+mtx_t _xmesa_lock;
 
 
 
@@ -248,10 +247,10 @@ xmesa_get_window_size(XMesaDisplay *dpy, XMesaBuffer b,
 {
    Status stat;
 
-   _glthread_LOCK_MUTEX(_xmesa_lock);
+   mtx_lock(&_xmesa_lock);
    XSync(b->xm_visual->display, 0); /* added for Chromium */
    stat = get_drawable_size(dpy, b->frontxrb->pixmap, width, height);
-   _glthread_UNLOCK_MUTEX(_xmesa_lock);
+   mtx_unlock(&_xmesa_lock);
 
    if (!stat) {
       /* probably querying a window that's recently been destroyed */
@@ -856,7 +855,7 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
                                 accum_red_size, accum_green_size,
                                 accum_blue_size, accum_alpha_size,
                                 0)) {
-      FREE(v);
+      free(v);
       return NULL;
    }
 
@@ -892,7 +891,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
    TNLcontext *tnl;
 
    if (firstTime) {
-      _glthread_INIT_MUTEX(_xmesa_lock);
+      mtx_init(&_xmesa_lock, mtx_plain);
       firstTime = GL_FALSE;
    }
 
@@ -929,6 +928,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
 
 
    /* finish up xmesa context initializations */
+   c->direct = GL_TRUE;
    c->swapbytes = CHECK_BYTE_ORDER(v) ? GL_FALSE : GL_TRUE;
    c->xm_visual = v;
    c->xm_buffer = NULL;   /* set later by XMesaMakeCurrent */
@@ -1336,28 +1336,28 @@ void XMesaSwapBuffers( XMesaBuffer b )
 	 /* Copy Ximage (back buf) from client memory to server window */
 #if defined(USE_XSHM) 
 	 if (b->shm) {
-            /*_glthread_LOCK_MUTEX(_xmesa_lock);*/
+            /*mtx_lock(&_xmesa_lock);*/
 	    XShmPutImage( b->xm_visual->display, b->frontxrb->drawable,
 			  b->swapgc,
 			  b->backxrb->ximage, 0, 0,
 			  0, 0, b->mesa_buffer.Width, b->mesa_buffer.Height,
                           False );
-            /*_glthread_UNLOCK_MUTEX(_xmesa_lock);*/
+            /*mtx_unlock(&_xmesa_lock);*/
 	 }
 	 else
 #endif
          {
-            /*_glthread_LOCK_MUTEX(_xmesa_lock);*/
+            /*mtx_lock(&_xmesa_lock);*/
             XMesaPutImage( b->xm_visual->display, b->frontxrb->drawable,
 			   b->swapgc,
 			   b->backxrb->ximage, 0, 0,
 			   0, 0, b->mesa_buffer.Width, b->mesa_buffer.Height );
-            /*_glthread_UNLOCK_MUTEX(_xmesa_lock);*/
+            /*mtx_unlock(&_xmesa_lock);*/
          }
       }
       else if (b->backxrb->pixmap) {
 	 /* Copy pixmap (back buf) to window (front buf) on server */
-         /*_glthread_LOCK_MUTEX(_xmesa_lock);*/
+         /*mtx_lock(&_xmesa_lock);*/
 	 XMesaCopyArea( b->xm_visual->display,
 			b->backxrb->pixmap,   /* source drawable */
 			b->frontxrb->drawable,  /* dest. drawable */
@@ -1365,7 +1365,7 @@ void XMesaSwapBuffers( XMesaBuffer b )
 			0, 0, b->mesa_buffer.Width, b->mesa_buffer.Height,
 			0, 0                 /* dest region */
 		      );
-         /*_glthread_UNLOCK_MUTEX(_xmesa_lock);*/
+         /*mtx_unlock(&_xmesa_lock);*/
       }
    }
    XSync( b->xm_visual->display, False );

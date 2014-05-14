@@ -50,6 +50,10 @@
 #define R600_QUERY_REQUESTED_VRAM	(PIPE_QUERY_DRIVER_SPECIFIC + 1)
 #define R600_QUERY_REQUESTED_GTT	(PIPE_QUERY_DRIVER_SPECIFIC + 2)
 #define R600_QUERY_BUFFER_WAIT_TIME	(PIPE_QUERY_DRIVER_SPECIFIC + 3)
+#define R600_QUERY_NUM_CS_FLUSHES	(PIPE_QUERY_DRIVER_SPECIFIC + 4)
+#define R600_QUERY_NUM_BYTES_MOVED	(PIPE_QUERY_DRIVER_SPECIFIC + 5)
+#define R600_QUERY_VRAM_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 6)
+#define R600_QUERY_GTT_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 7)
 
 /* read caches */
 #define R600_CONTEXT_INV_VERTEX_CACHE		(1 << 0)
@@ -76,6 +80,8 @@
 #define DBG_COMPUTE		(1 << 2)
 #define DBG_VM			(1 << 3)
 #define DBG_TRACE_CS		(1 << 4)
+/* features */
+#define DBG_NO_ASYNC_DMA	(1 << 5)
 /* shaders */
 #define DBG_FS			(1 << 8)
 #define DBG_VS			(1 << 9)
@@ -90,6 +96,22 @@
 #define R600_MAP_BUFFER_ALIGNMENT 64
 
 struct r600_common_context;
+
+struct radeon_shader_binary {
+	/** Shader code */
+	unsigned char *code;
+	unsigned code_size;
+
+	/** Config/Context register state that accompanies this shader.
+	 * This is a stream of dword pairs.  First dword contains the
+	 * register address, the second dword contains the value.*/
+	unsigned char *config;
+	unsigned config_size;
+
+	/** Set to 1 if the disassembly for this binary has been dumped to
+	 *  stderr. */
+	int disassembled;
+};
 
 struct r600_resource {
 	struct u_resource		b;
@@ -133,6 +155,7 @@ struct r600_cmask_info {
 	unsigned size;
 	unsigned alignment;
 	unsigned slice_tile_max;
+	unsigned base_address_reg;
 };
 
 struct r600_texture {
@@ -150,6 +173,7 @@ struct r600_texture {
 	struct r600_fmask_info		fmask;
 	struct r600_cmask_info		cmask;
 	struct r600_resource		*cmask_buffer;
+	unsigned			cb_color_info; /* fast clear enable bit */
 	unsigned			color_clear_value[2];
 
 	/* Depth buffer compression and fast clear. */
@@ -158,6 +182,48 @@ struct r600_texture {
 
 	bool				non_disp_tiling; /* R600-Cayman only */
 	unsigned			mipmap_shift;
+};
+
+struct r600_surface {
+	struct pipe_surface		base;
+
+	bool color_initialized;
+	bool depth_initialized;
+
+	/* Misc. color flags. */
+	bool alphatest_bypass;
+	bool export_16bpc;
+
+	/* Color registers. */
+	unsigned cb_color_info;
+	unsigned cb_color_base;
+	unsigned cb_color_view;
+	unsigned cb_color_size;		/* R600 only */
+	unsigned cb_color_dim;		/* EG only */
+	unsigned cb_color_pitch;	/* EG and later */
+	unsigned cb_color_slice;	/* EG and later */
+	unsigned cb_color_attrib;	/* EG and later */
+	unsigned cb_color_fmask;	/* CB_COLORn_FMASK (EG and later) or CB_COLORn_FRAG (r600) */
+	unsigned cb_color_fmask_slice;	/* EG and later */
+	unsigned cb_color_cmask;	/* CB_COLORn_TILE (r600 only) */
+	unsigned cb_color_mask;		/* R600 only */
+	struct r600_resource *cb_buffer_fmask; /* Used for FMASK relocations. R600 only */
+	struct r600_resource *cb_buffer_cmask; /* Used for CMASK relocations. R600 only */
+
+	/* DB registers. */
+	unsigned db_depth_info;		/* R600 only, then SI and later */
+	unsigned db_z_info;		/* EG and later */
+	unsigned db_depth_base;		/* DB_Z_READ/WRITE_BASE (EG and later) or DB_DEPTH_BASE (r600) */
+	unsigned db_depth_view;
+	unsigned db_depth_size;
+	unsigned db_depth_slice;	/* EG and later */
+	unsigned db_stencil_base;	/* EG and later */
+	unsigned db_stencil_info;	/* EG and later */
+	unsigned db_prefetch_limit;	/* R600 only */
+	unsigned db_htile_surface;
+	unsigned db_htile_data_base;
+	unsigned db_preload_control;	/* EG and later */
+	unsigned pa_su_poly_offset_db_fmt_cntl;
 };
 
 struct r600_tiling_info {
@@ -220,12 +286,19 @@ struct r600_streamout {
 	/* External state which comes from the vertex shader,
 	 * it must be set explicitly when binding a shader. */
 	unsigned			*stride_in_dw;
+
+	/* The state of VGT_STRMOUT_(CONFIG|EN). */
+	struct r600_atom		enable_atom;
+	bool				streamout_enabled;
+	bool				prims_gen_query_enabled;
+	int				num_prims_gen_queries;
 };
 
 struct r600_ring {
 	struct radeon_winsys_cs		*cs;
 	bool				flushing;
-	void (*flush)(void *ctx, unsigned flags);
+	void (*flush)(void *ctx, unsigned flags,
+		      struct pipe_fence_handle **fence);
 };
 
 struct r600_rings {
@@ -279,16 +352,19 @@ struct r600_common_context {
 	unsigned			current_render_cond_mode;
 	boolean				current_render_cond_cond;
 	boolean				predicate_drawing;
+	/* For context flushing. */
+	struct pipe_query		*saved_render_cond;
+	boolean				saved_render_cond_cond;
+	unsigned			saved_render_cond_mode;
 
-	/* Copy one resource to another using async DMA.
-	 * False is returned if the copy couldn't be done. */
-	boolean (*dma_copy)(struct pipe_context *ctx,
-			    struct pipe_resource *dst,
-			    unsigned dst_level,
-			    unsigned dst_x, unsigned dst_y, unsigned dst_z,
-			    struct pipe_resource *src,
-			    unsigned src_level,
-			    const struct pipe_box *src_box);
+	/* Copy one resource to another using async DMA. */
+	void (*dma_copy)(struct pipe_context *ctx,
+			 struct pipe_resource *dst,
+			 unsigned dst_level,
+			 unsigned dst_x, unsigned dst_y, unsigned dst_z,
+			 struct pipe_resource *src,
+			 unsigned src_level,
+			 const struct pipe_box *src_box);
 
 	void (*clear_buffer)(struct pipe_context *ctx, struct pipe_resource *dst,
 			     unsigned offset, unsigned size, unsigned value);
@@ -322,7 +398,7 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 bool r600_init_resource(struct r600_common_screen *rscreen,
 			struct r600_resource *res,
 			unsigned size, unsigned alignment,
-			bool use_reusable_pool, unsigned usage);
+			bool use_reusable_pool);
 struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 					 const struct pipe_resource *templ,
 					 unsigned alignment);
@@ -331,6 +407,8 @@ struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws);
 void r600_destroy_common_screen(struct r600_common_screen *rscreen);
+void r600_preflush_suspend_features(struct r600_common_context *ctx);
+void r600_postflush_resume_features(struct r600_common_context *ctx);
 bool r600_common_context_init(struct r600_common_context *rctx,
 			      struct r600_common_screen *rscreen);
 void r600_common_context_cleanup(struct r600_common_context *rctx);
@@ -342,6 +420,7 @@ void r600_screen_clear_buffer(struct r600_common_screen *rscreen, struct pipe_re
 struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 						  const struct pipe_resource *templ);
 const char *r600_get_llvm_processor_name(enum radeon_family family);
+void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw);
 
 /* r600_query.c */
 void r600_query_init(struct r600_common_context *rctx);
@@ -354,8 +433,10 @@ void r600_streamout_buffers_dirty(struct r600_common_context *rctx);
 void r600_set_streamout_targets(struct pipe_context *ctx,
 				unsigned num_targets,
 				struct pipe_stream_output_target **targets,
-				unsigned append_bitmask);
+				const unsigned *offset);
 void r600_emit_streamout_end(struct r600_common_context *rctx);
+void r600_update_prims_generated_query_state(struct r600_common_context *rctx,
+					     unsigned type, int diff);
 void r600_streamout_init(struct r600_common_context *rctx);
 
 /* r600_texture.c */
@@ -366,14 +447,32 @@ void r600_texture_get_fmask_info(struct r600_common_screen *rscreen,
 void r600_texture_get_cmask_info(struct r600_common_screen *rscreen,
 				 struct r600_texture *rtex,
 				 struct r600_cmask_info *out);
-void r600_texture_init_cmask(struct r600_common_screen *rscreen,
-			     struct r600_texture *rtex);
 bool r600_init_flushed_depth_texture(struct pipe_context *ctx,
 				     struct pipe_resource *texture,
 				     struct r600_texture **staging);
 struct pipe_resource *r600_texture_create(struct pipe_screen *screen,
 					const struct pipe_resource *templ);
-void r600_init_texture_functions(struct r600_common_screen *rscreen);
+struct pipe_surface *r600_create_surface_custom(struct pipe_context *pipe,
+						struct pipe_resource *texture,
+						const struct pipe_surface *templ,
+						unsigned width, unsigned height);
+unsigned r600_translate_colorswap(enum pipe_format format);
+void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
+				   struct pipe_framebuffer_state *fb,
+				   struct r600_atom *fb_state,
+				   unsigned *buffers,
+				   const union pipe_color_union *color);
+void r600_init_screen_texture_functions(struct r600_common_screen *rscreen);
+void r600_init_context_texture_functions(struct r600_common_context *rctx);
+
+/* cayman_msaa.c */
+extern const uint32_t eg_sample_locs_2x[4];
+extern const unsigned eg_max_dist_2x;
+extern const uint32_t eg_sample_locs_4x[4];
+extern const unsigned eg_max_dist_4x;
+void cayman_get_sample_position(struct pipe_context *ctx, unsigned sample_count,
+				unsigned sample_index, float *out_value);
+void cayman_emit_msaa_state(struct radeon_winsys_cs *cs, int nr_samples);
 
 
 /* Inline helpers. */
@@ -392,5 +491,12 @@ r600_resource_reference(struct r600_resource **ptr, struct r600_resource *res)
 
 #define R600_ERR(fmt, args...) \
 	fprintf(stderr, "EE %s:%d %s - "fmt, __FILE__, __LINE__, __func__, ##args)
+
+/* For MSAA sample positions. */
+#define FILL_SREG(s0x, s0y, s1x, s1y, s2x, s2y, s3x, s3y)  \
+	(((s0x) & 0xf) | (((s0y) & 0xf) << 4) |		   \
+	(((s1x) & 0xf) << 8) | (((s1y) & 0xf) << 12) |	   \
+	(((s2x) & 0xf) << 16) | (((s2y) & 0xf) << 20) |	   \
+	 (((s3x) & 0xf) << 24) | (((s3y) & 0xf) << 28))
 
 #endif

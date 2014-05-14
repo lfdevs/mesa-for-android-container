@@ -106,6 +106,7 @@ public:
 
    /** ir_print_visitor helper for debugging. */
    void print(void) const;
+   void fprint(FILE *f) const;
 
    virtual void accept(ir_visitor *) = 0;
    virtual ir_visitor_status accept(ir_hierarchical_visitor *) = 0;
@@ -264,6 +265,13 @@ public:
     */
    virtual bool is_basis() const;
 
+   /**
+    * Determine if an r-value is an unsigned integer constant which can be
+    * stored in 16 bits.
+    *
+    * \sa ir_constant::is_uint16_constant.
+    */
+   virtual bool is_uint16_constant() const { return false; }
 
    /**
     * Return a generic value of error_type.
@@ -689,6 +697,20 @@ public:
          unsigned buffer_index;
          unsigned offset;
       } atomic;
+
+      /**
+       * ARB_shader_image_load_store qualifiers.
+       */
+      struct {
+         bool read_only; /**< "readonly" qualifier. */
+         bool write_only; /**< "writeonly" qualifier. */
+         bool coherent;
+         bool _volatile;
+         bool restrict_flag;
+
+         /** Image internal format if specified explicitly, otherwise GL_NONE. */
+         GLenum format;
+      } image;
 
       /**
        * Highest element accessed with a constant expression array index
@@ -1899,15 +1921,6 @@ public:
     * Get the variable that is ultimately referenced by an r-value
     */
    virtual ir_variable *variable_referenced() const = 0;
-
-   /**
-    * Get the constant that is ultimately referenced by an r-value,
-    * in a constant expression evaluation context.
-    *
-    * The offset is used when the reference is to a specific column of
-    * a matrix.
-    */
-  virtual void constant_referenced(struct hash_table *variable_context, ir_constant *&store, int &offset) const = 0;
 };
 
 
@@ -1934,15 +1947,6 @@ public:
    {
       return this->var;
    }
-
-   /**
-    * Get the constant that is ultimately referenced by an r-value,
-    * in a constant expression evaluation context.
-    *
-    * The offset is used when the reference is to a specific column of
-    * a matrix.
-    */
-   virtual void constant_referenced(struct hash_table *variable_context, ir_constant *&store, int &offset) const;
 
    virtual ir_variable *whole_variable_referenced()
    {
@@ -1995,15 +1999,6 @@ public:
       return this->array->variable_referenced();
    }
 
-   /**
-    * Get the constant that is ultimately referenced by an r-value,
-    * in a constant expression evaluation context.
-    *
-    * The offset is used when the reference is to a specific column of
-    * a matrix.
-    */
-   virtual void constant_referenced(struct hash_table *variable_context, ir_constant *&store, int &offset) const;
-
    virtual void accept(ir_visitor *v)
    {
       v->visit(this);
@@ -2042,15 +2037,6 @@ public:
    {
       return this->record->variable_referenced();
    }
-
-   /**
-    * Get the constant that is ultimately referenced by an r-value,
-    * in a constant expression evaluation context.
-    *
-    * The offset is used when the reference is to a specific column of
-    * a matrix.
-    */
-   virtual void constant_referenced(struct hash_table *variable_context, ir_constant *&store, int &offset) const;
 
    virtual void accept(ir_visitor *v)
    {
@@ -2186,6 +2172,14 @@ public:
    virtual bool is_basis() const;
 
    /**
+    * Return true for constants that could be stored as 16-bit unsigned values.
+    *
+    * Note that this will return true even for signed integer ir_constants, as
+    * long as the value is non-negative and fits in 16-bits.
+    */
+   virtual bool is_uint16_constant() const;
+
+   /**
     * Value of the constant.
     *
     * The field used to back the values supplied by the constant is determined
@@ -2206,8 +2200,6 @@ private:
     */
    ir_constant(void);
 };
-
-/*@}*/
 
 /**
  * IR instruction to emit a vertex in a geometry shader.
@@ -2255,6 +2247,8 @@ public:
 
    virtual ir_visitor_status accept(ir_hierarchical_visitor *);
 };
+
+/*@}*/
 
 /**
  * Apply a visitor to each IR node in a list
@@ -2351,7 +2345,7 @@ mode_string(const ir_variable *var);
 extern "C" {
 #endif /* __cplusplus */
 
-extern void _mesa_print_ir(struct exec_list *instructions,
+extern void _mesa_print_ir(FILE *f, struct exec_list *instructions,
                            struct _mesa_glsl_parse_state *state);
 
 #ifdef __cplusplus

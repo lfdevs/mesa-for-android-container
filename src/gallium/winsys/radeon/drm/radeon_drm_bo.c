@@ -43,59 +43,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-/*
- * this are copy from radeon_drm, once an updated libdrm is released
- * we should bump configure.ac requirement for it and remove the following
- * field
- */
-#define RADEON_BO_FLAGS_MACRO_TILE  1
-#define RADEON_BO_FLAGS_MICRO_TILE  2
-#define RADEON_BO_FLAGS_MICRO_TILE_SQUARE 0x20
-
-#ifndef DRM_RADEON_GEM_WAIT
-#define DRM_RADEON_GEM_WAIT     0x2b
-
-#define RADEON_GEM_NO_WAIT      0x1
-#define RADEON_GEM_USAGE_READ   0x2
-#define RADEON_GEM_USAGE_WRITE  0x4
-
-struct drm_radeon_gem_wait {
-    uint32_t    handle;
-    uint32_t    flags;  /* one of RADEON_GEM_* */
-};
-
-#endif
-
-#ifndef RADEON_VA_MAP
-
-#define RADEON_VA_MAP               1
-#define RADEON_VA_UNMAP             2
-
-#define RADEON_VA_RESULT_OK         0
-#define RADEON_VA_RESULT_ERROR      1
-#define RADEON_VA_RESULT_VA_EXIST   2
-
-#define RADEON_VM_PAGE_VALID        (1 << 0)
-#define RADEON_VM_PAGE_READABLE     (1 << 1)
-#define RADEON_VM_PAGE_WRITEABLE    (1 << 2)
-#define RADEON_VM_PAGE_SYSTEM       (1 << 3)
-#define RADEON_VM_PAGE_SNOOPED      (1 << 4)
-
-struct drm_radeon_gem_va {
-    uint32_t    handle;
-    uint32_t    operation;
-    uint32_t    vm_id;
-    uint32_t    flags;
-    uint64_t    offset;
-};
-
-#define DRM_RADEON_GEM_VA   0x2b
-#endif
-
-
-
 extern const struct pb_vtbl radeon_bo_vtbl;
-
 
 static INLINE struct radeon_bo *radeon_bo(struct pb_buffer *bo)
 {
@@ -120,6 +68,8 @@ struct radeon_bomgr {
     struct util_hash_table *bo_names;
     /* List of buffer handles. Protectded by bo_handles_mutex. */
     struct util_hash_table *bo_handles;
+    /* List of buffer virtual memory ranges. Protectded by bo_handles_mutex. */
+    struct util_hash_table *bo_vas;
     pipe_mutex bo_handles_mutex;
     pipe_mutex bo_va_mutex;
 
@@ -155,50 +105,62 @@ static struct radeon_bo *get_radeon_bo(struct pb_buffer *_buf)
 static void radeon_bo_wait(struct pb_buffer *_buf, enum radeon_bo_usage usage)
 {
     struct radeon_bo *bo = get_radeon_bo(_buf);
+    struct drm_radeon_gem_wait_idle args = {0};
 
     while (p_atomic_read(&bo->num_active_ioctls)) {
         sched_yield();
     }
 
-    /* XXX use this when it's ready */
-    /*if (bo->rws->info.drm_minor >= 12) {
-        struct drm_radeon_gem_wait args = {};
-        args.handle = bo->handle;
-        args.flags = usage;
-        while (drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_WAIT,
-                                   &args, sizeof(args)) == -EBUSY);
-    } else*/ {
-        struct drm_radeon_gem_wait_idle args;
-        memset(&args, 0, sizeof(args));
-        args.handle = bo->handle;
-        while (drmCommandWrite(bo->rws->fd, DRM_RADEON_GEM_WAIT_IDLE,
-                                   &args, sizeof(args)) == -EBUSY);
-    }
+    args.handle = bo->handle;
+    while (drmCommandWrite(bo->rws->fd, DRM_RADEON_GEM_WAIT_IDLE,
+                           &args, sizeof(args)) == -EBUSY);
 }
 
 static boolean radeon_bo_is_busy(struct pb_buffer *_buf,
                                  enum radeon_bo_usage usage)
 {
     struct radeon_bo *bo = get_radeon_bo(_buf);
+    struct drm_radeon_gem_busy args = {0};
 
     if (p_atomic_read(&bo->num_active_ioctls)) {
         return TRUE;
     }
 
-    /* XXX use this when it's ready */
-    /*if (bo->rws->info.drm_minor >= 12) {
-        struct drm_radeon_gem_wait args = {};
-        args.handle = bo->handle;
-        args.flags = usage | RADEON_GEM_NO_WAIT;
-        return drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_WAIT,
-                                   &args, sizeof(args)) != 0;
-    } else*/ {
-        struct drm_radeon_gem_busy args;
-        memset(&args, 0, sizeof(args));
-        args.handle = bo->handle;
-        return drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_BUSY,
-                                   &args, sizeof(args)) != 0;
-    }
+    args.handle = bo->handle;
+    return drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_BUSY,
+                               &args, sizeof(args)) != 0;
+}
+
+static enum radeon_bo_domain get_valid_domain(enum radeon_bo_domain domain)
+{
+    /* Zero domains the driver doesn't understand. */
+    domain &= RADEON_DOMAIN_VRAM_GTT;
+
+    /* If no domain is set, we must set something... */
+    if (!domain)
+        domain = RADEON_DOMAIN_VRAM_GTT;
+
+    return domain;
+}
+
+static enum radeon_bo_domain radeon_bo_get_initial_domain(
+		struct radeon_winsys_cs_handle *buf)
+{
+    struct radeon_bo *bo = (struct radeon_bo*)buf;
+    struct drm_radeon_gem_op args;
+
+    if (bo->rws->info.drm_minor < 38)
+        return RADEON_DOMAIN_VRAM_GTT;
+
+    memset(&args, 0, sizeof(args));
+    args.handle = bo->handle;
+    args.op = RADEON_GEM_OP_GET_INITIAL_DOMAIN;
+
+    drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_OP,
+                        &args, sizeof(args));
+
+    /* GEM domains and winsys domains are defined the same. */
+    return get_valid_domain(args.value);
 }
 
 static uint64_t radeon_bomgr_find_va(struct radeon_bomgr *mgr, uint64_t size, uint64_t alignment)
@@ -258,48 +220,6 @@ static uint64_t radeon_bomgr_find_va(struct radeon_bomgr *mgr, uint64_t size, ui
     mgr->va_offset += size + waste;
     pipe_mutex_unlock(mgr->bo_va_mutex);
     return offset;
-}
-
-static void radeon_bomgr_force_va(struct radeon_bomgr *mgr, uint64_t va, uint64_t size)
-{
-    size = align(size, 4096);
-
-    pipe_mutex_lock(mgr->bo_va_mutex);
-    if (va >= mgr->va_offset) {
-        if (va > mgr->va_offset) {
-            struct radeon_bo_va_hole *hole;
-            hole = CALLOC_STRUCT(radeon_bo_va_hole);
-            if (hole) {
-                hole->size = va - mgr->va_offset;
-                hole->offset = mgr->va_offset;
-                list_add(&hole->list, &mgr->va_holes);
-            }
-        }
-        mgr->va_offset = va + size;
-    } else {
-        struct radeon_bo_va_hole *hole, *n;
-        uint64_t hole_end, va_end;
-
-        /* Prune/free all holes that fall into the range
-         */
-        LIST_FOR_EACH_ENTRY_SAFE(hole, n, &mgr->va_holes, list) {
-            hole_end = hole->offset + hole->size;
-            va_end = va + size;
-            if (hole->offset >= va_end || hole_end <= va)
-                continue;
-            if (hole->offset >= va && hole_end <= va_end) {
-                list_del(&hole->list);
-                FREE(hole);
-                continue;
-            }
-            if (hole->offset >= va)
-                hole->offset = va_end;
-            else
-                hole_end = va;
-            hole->size = hole_end - hole->offset;
-        }
-    }
-    pipe_mutex_unlock(mgr->bo_va_mutex);
 }
 
 static void radeon_bomgr_free_va(struct radeon_bomgr *mgr, uint64_t va, uint64_t size)
@@ -377,9 +297,9 @@ static void radeon_bo_destroy(struct pb_buffer *_buf)
 
     pipe_mutex_lock(bo->mgr->bo_handles_mutex);
     util_hash_table_remove(bo->mgr->bo_handles, (void*)(uintptr_t)bo->handle);
-    if (bo->name) {
+    if (bo->flink_name) {
         util_hash_table_remove(bo->mgr->bo_names,
-                               (void*)(uintptr_t)bo->name);
+                               (void*)(uintptr_t)bo->flink_name);
     }
     pipe_mutex_unlock(bo->mgr->bo_handles_mutex);
 
@@ -465,7 +385,7 @@ static void *radeon_bo_map(struct radeon_winsys_cs_handle *buf,
                  *
                  * Only check whether the buffer is being used for write. */
                 if (cs && radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC);
+                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC, NULL);
                     return NULL;
                 }
 
@@ -475,7 +395,7 @@ static void *radeon_bo_map(struct radeon_winsys_cs_handle *buf,
                 }
             } else {
                 if (cs && radeon_bo_is_referenced_by_cs(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC);
+                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC, NULL);
                     return NULL;
                 }
 
@@ -496,7 +416,7 @@ static void *radeon_bo_map(struct radeon_winsys_cs_handle *buf,
                  *
                  * Only check whether the buffer is being used for write. */
                 if (cs && radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, 0);
+                    cs->flush_cs(cs->flush_data, 0, NULL);
                 }
                 radeon_bo_wait((struct pb_buffer*)bo,
                                RADEON_USAGE_WRITE);
@@ -504,7 +424,7 @@ static void *radeon_bo_map(struct radeon_winsys_cs_handle *buf,
                 /* Mapping for write. */
                 if (cs) {
                     if (radeon_bo_is_referenced_by_cs(cs, bo)) {
-                        cs->flush_cs(cs->flush_data, 0);
+                        cs->flush_cs(cs->flush_data, 0, NULL);
                     } else {
                         /* Try to avoid busy-waiting in radeon_bo_wait. */
                         if (p_atomic_read(&bo->num_active_ioctls))
@@ -625,11 +545,19 @@ static struct pb_buffer *radeon_bomgr_create_bo(struct pb_manager *_mgr,
             radeon_bo_destroy(&bo->base);
             return NULL;
         }
+        pipe_mutex_lock(mgr->bo_handles_mutex);
         if (va.operation == RADEON_VA_RESULT_VA_EXIST) {
-            radeon_bomgr_free_va(mgr, bo->va, size);
-            bo->va = va.offset;
-            radeon_bomgr_force_va(mgr, bo->va, size);
+            struct pb_buffer *b = &bo->base;
+            struct radeon_bo *old_bo =
+                util_hash_table_get(mgr->bo_vas, (void*)(uintptr_t)va.offset);
+
+            pipe_mutex_unlock(mgr->bo_handles_mutex);
+            pb_reference(&b, &old_bo->base);
+            return b;
         }
+
+        util_hash_table_set(mgr->bo_vas, (void*)(uintptr_t)bo->va, bo);
+        pipe_mutex_unlock(mgr->bo_handles_mutex);
     }
 
     if (rdesc->initial_domains & RADEON_DOMAIN_VRAM)
@@ -667,6 +595,7 @@ static void radeon_bomgr_destroy(struct pb_manager *_mgr)
     struct radeon_bomgr *mgr = radeon_bomgr(_mgr);
     util_hash_table_destroy(mgr->bo_names);
     util_hash_table_destroy(mgr->bo_handles);
+    util_hash_table_destroy(mgr->bo_vas);
     pipe_mutex_destroy(mgr->bo_handles_mutex);
     pipe_mutex_destroy(mgr->bo_va_mutex);
     FREE(mgr);
@@ -700,11 +629,12 @@ struct pb_manager *radeon_bomgr_create(struct radeon_drm_winsys *rws)
     mgr->rws = rws;
     mgr->bo_names = util_hash_table_create(handle_hash, handle_compare);
     mgr->bo_handles = util_hash_table_create(handle_hash, handle_compare);
+    mgr->bo_vas = util_hash_table_create(handle_hash, handle_compare);
     pipe_mutex_init(mgr->bo_handles_mutex);
     pipe_mutex_init(mgr->bo_va_mutex);
 
     mgr->va = rws->info.r600_virtual_address;
-    mgr->va_offset = rws->info.r600_va_start;
+    mgr->va_offset = rws->va_start;
     list_inithead(&mgr->va_holes);
 
     return &mgr->base;
@@ -762,10 +692,12 @@ static void radeon_bo_get_tiling(struct pb_buffer *_buf,
 
     *microtiled = RADEON_LAYOUT_LINEAR;
     *macrotiled = RADEON_LAYOUT_LINEAR;
-    if (args.tiling_flags & RADEON_BO_FLAGS_MICRO_TILE)
+    if (args.tiling_flags & RADEON_TILING_MICRO)
         *microtiled = RADEON_LAYOUT_TILED;
+    else if (args.tiling_flags & RADEON_TILING_MICRO_SQUARE)
+        *microtiled = RADEON_LAYOUT_SQUARETILED;
 
-    if (args.tiling_flags & RADEON_BO_FLAGS_MACRO_TILE)
+    if (args.tiling_flags & RADEON_TILING_MACRO)
         *macrotiled = RADEON_LAYOUT_TILED;
     if (bankw && tile_split && stencil_tile_split && mtilea && tile_split) {
         *bankw = (args.tiling_flags >> RADEON_TILING_EG_BANKW_SHIFT) & RADEON_TILING_EG_BANKW_MASK;
@@ -799,7 +731,7 @@ static void radeon_bo_set_tiling(struct pb_buffer *_buf,
     /* Tiling determines how DRM treats the buffer data.
      * We must flush CS when changing it if the buffer is referenced. */
     if (cs && radeon_bo_is_referenced_by_cs(cs, bo)) {
-        cs->flush_cs(cs->flush_data, 0);
+        cs->flush_cs(cs->flush_data, 0, NULL);
     }
 
     while (p_atomic_read(&bo->num_active_ioctls)) {
@@ -807,12 +739,12 @@ static void radeon_bo_set_tiling(struct pb_buffer *_buf,
     }
 
     if (microtiled == RADEON_LAYOUT_TILED)
-        args.tiling_flags |= RADEON_BO_FLAGS_MICRO_TILE;
+        args.tiling_flags |= RADEON_TILING_MICRO;
     else if (microtiled == RADEON_LAYOUT_SQUARETILED)
-        args.tiling_flags |= RADEON_BO_FLAGS_MICRO_TILE_SQUARE;
+        args.tiling_flags |= RADEON_TILING_MICRO_SQUARE;
 
     if (macrotiled == RADEON_LAYOUT_TILED)
-        args.tiling_flags |= RADEON_BO_FLAGS_MACRO_TILE;
+        args.tiling_flags |= RADEON_TILING_MACRO;
 
     args.tiling_flags |= (bankw & RADEON_TILING_EG_BANKW_MASK) <<
         RADEON_TILING_EG_BANKW_SHIFT;
@@ -891,10 +823,9 @@ static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
     struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
     struct radeon_bo *bo;
     struct radeon_bomgr *mgr = radeon_bomgr(ws->kman);
-    struct drm_radeon_gem_busy args;
     int r;
     unsigned handle;
-    uint64_t size;
+    uint64_t size = 0;
 
     /* We must maintain a list of pairs <handle, bo>, so that we always return
      * the same BO for one particular handle. If we didn't do that and created
@@ -942,7 +873,7 @@ static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
         }
         handle = open_arg.handle;
         size = open_arg.size;
-        bo->name = whandle->handle;
+        bo->flink_name = whandle->handle;
     } else if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
         size = lseek(whandle->handle, 0, SEEK_END);
         /* 
@@ -969,8 +900,8 @@ static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
     bo->va = 0;
     pipe_mutex_init(bo->map_mutex);
 
-    if (bo->name)
-        util_hash_table_set(mgr->bo_names, (void*)(uintptr_t)bo->name, bo);
+    if (bo->flink_name)
+        util_hash_table_set(mgr->bo_names, (void*)(uintptr_t)bo->flink_name, bo);
 
     util_hash_table_set(mgr->bo_handles, (void*)(uintptr_t)bo->handle, bo);
 
@@ -999,34 +930,27 @@ done:
             radeon_bo_destroy(&bo->base);
             return NULL;
         }
+        pipe_mutex_lock(mgr->bo_handles_mutex);
         if (va.operation == RADEON_VA_RESULT_VA_EXIST) {
-            radeon_bomgr_free_va(mgr, bo->va, bo->base.size);
-            bo->va = va.offset;
-            radeon_bomgr_force_va(mgr, bo->va, bo->base.size);
+            struct pb_buffer *b = &bo->base;
+            struct radeon_bo *old_bo =
+                util_hash_table_get(mgr->bo_vas, (void*)(uintptr_t)va.offset);
+
+            pipe_mutex_unlock(mgr->bo_handles_mutex);
+            pb_reference(&b, &old_bo->base);
+            return b;
         }
+
+        util_hash_table_set(mgr->bo_vas, (void*)(uintptr_t)bo->va, bo);
+        pipe_mutex_unlock(mgr->bo_handles_mutex);
     }
 
-    memset(&args, 0, sizeof(args));
+    bo->initial_domain = radeon_bo_get_initial_domain((void*)bo);
 
-    args.handle = bo->handle;
-    r = drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_BUSY, &args, sizeof(args));
-    /* We don't mind if the bo is busy; we're just after the memory domain */
-    if (r && r != -EBUSY) {
-        fprintf(stderr, "radeon: Failed to find initial domain for imported bo\n");
-        radeon_bo_destroy(&bo->base);
-        return NULL;
-    }
-    bo->initial_domain = args.domain;
-
-    switch (bo->initial_domain) {
-    case RADEON_DOMAIN_GTT:
-        ws->allocated_gtt += align(size, 4096);
-        break;
-    case RADEON_DOMAIN_VRAM:
-        ws->allocated_vram += align(size, 4096);
-        break;
-    }
-
+    if (bo->initial_domain & RADEON_DOMAIN_VRAM)
+        ws->allocated_vram += align(bo->base.size, 4096);
+    else if (bo->initial_domain & RADEON_DOMAIN_GTT)
+        ws->allocated_gtt += align(bo->base.size, 4096);
 
     return (struct pb_buffer*)bo;
 
@@ -1045,21 +969,20 @@ static boolean radeon_winsys_bo_get_handle(struct pb_buffer *buffer,
     memset(&flink, 0, sizeof(flink));
 
     if (whandle->type == DRM_API_HANDLE_TYPE_SHARED) {
-        if (!bo->flinked) {
+        if (!bo->flink_name) {
             flink.handle = bo->handle;
 
             if (ioctl(bo->rws->fd, DRM_IOCTL_GEM_FLINK, &flink)) {
                 return FALSE;
             }
 
-            bo->flinked = TRUE;
-            bo->flink = flink.name;
+            bo->flink_name = flink.name;
 
             pipe_mutex_lock(bo->mgr->bo_handles_mutex);
-            util_hash_table_set(bo->mgr->bo_names, (void*)(uintptr_t)bo->flink, bo);
+            util_hash_table_set(bo->mgr->bo_names, (void*)(uintptr_t)bo->flink_name, bo);
             pipe_mutex_unlock(bo->mgr->bo_handles_mutex);
         }
-        whandle->handle = bo->flink;
+        whandle->handle = bo->flink_name;
     } else if (whandle->type == DRM_API_HANDLE_TYPE_KMS) {
         whandle->handle = bo->handle;
     } else if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
@@ -1089,4 +1012,5 @@ void radeon_bomgr_init_functions(struct radeon_drm_winsys *ws)
     ws->base.buffer_from_handle = radeon_winsys_bo_from_handle;
     ws->base.buffer_get_handle = radeon_winsys_bo_get_handle;
     ws->base.buffer_get_virtual_address = radeon_winsys_bo_va;
+    ws->base.buffer_get_initial_domain = radeon_bo_get_initial_domain;
 }

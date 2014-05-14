@@ -24,6 +24,12 @@
 #ifndef BRW_PROGRAM_H
 #define BRW_PROGRAM_H
 
+enum gen6_gather_sampler_wa {
+   WA_SIGN = 1,      /* whether we need to sign extend */
+   WA_8BIT = 2,      /* if we have an 8bit format needing wa */
+   WA_16BIT = 4,     /* if we have a 16bit format needing wa */
+};
+
 /**
  * Sampler information needed by VS, WM, and GS program cache keys.
  */
@@ -36,12 +42,6 @@ struct brw_sampler_prog_key_data {
    uint32_t gl_clamp_mask[3];
 
    /**
-    * YUV conversions, needed for the GL_MESA_ycbcr extension.
-    */
-   uint16_t yuvtex_mask;
-   uint16_t yuvtex_swap_mask; /**< UV swaped */
-
-   /**
     * For RG32F, gather4's channel select is broken.
     */
    uint32_t gather_channel_quirk_mask;
@@ -50,6 +50,11 @@ struct brw_sampler_prog_key_data {
     * Whether this sampler uses the compressed multisample surface layout.
     */
    uint32_t compressed_multisample_layout_mask;
+
+   /**
+    * For Sandybridge, which shader w/a we need for gather quirks.
+    */
+   uint8_t gen6_gather_wa[MAX_SAMPLERS];
 };
 
 #ifdef __cplusplus
@@ -64,6 +69,22 @@ bool brw_debug_recompile_sampler_key(struct brw_context *brw,
                                      const struct brw_sampler_prog_key_data *old_key,
                                      const struct brw_sampler_prog_key_data *key);
 void brw_add_texrect_params(struct gl_program *prog);
+
+void
+brw_mark_surface_used(struct brw_stage_prog_data *prog_data,
+                      unsigned surf_index);
+
+bool
+brw_stage_prog_data_compare(const struct brw_stage_prog_data *a,
+                            const struct brw_stage_prog_data *b);
+
+void
+brw_stage_prog_data_free(const void *prog_data);
+
+void
+brw_dump_ir(struct brw_context *brw, const char *stage,
+            struct gl_shader_program *shader_prog,
+            struct gl_shader *shader, struct gl_program *prog);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -30,30 +30,11 @@
 #include "intel_reg.h"
 #include "intel_bufmgr.h"
 #include "intel_buffers.h"
+#include "intel_fbo.h"
 #include "brw_context.h"
 
 static void
 intel_batchbuffer_reset(struct brw_context *brw);
-
-struct cached_batch_item {
-   struct cached_batch_item *next;
-   uint16_t header;
-   uint16_t size;
-};
-
-void
-intel_batchbuffer_clear_cache(struct brw_context *brw)
-{
-   struct cached_batch_item *item = brw->batch.cached_items;
-
-   while (item) {
-      struct cached_batch_item *next = item->next;
-      free(item);
-      item = next;
-   }
-
-   brw->batch.cached_items = NULL;
-}
 
 void
 intel_batchbuffer_init(struct brw_context *brw)
@@ -87,7 +68,7 @@ intel_batchbuffer_reset(struct brw_context *brw)
    }
    brw->batch.last_bo = brw->batch.bo;
 
-   intel_batchbuffer_clear_cache(brw);
+   brw_render_cache_set_clear(brw);
 
    brw->batch.bo = drm_intel_bo_alloc(brw->bufmgr, "batchbuffer",
 					BATCH_SZ, 4096);
@@ -123,11 +104,6 @@ intel_batchbuffer_reset_to_saved(struct brw_context *brw)
    brw->batch.used = brw->batch.saved.used;
    if (brw->batch.used == 0)
       brw->batch.ring = UNKNOWN_RING;
-
-   /* Cached batch state is dead, since we just cleared some unknown part of the
-    * batchbuffer.  Assume that the caller resets any other state necessary.
-    */
-   intel_batchbuffer_clear_cache(brw);
 }
 
 void
@@ -137,7 +113,6 @@ intel_batchbuffer_free(struct brw_context *brw)
    drm_intel_bo_unreference(brw->batch.last_bo);
    drm_intel_bo_unreference(brw->batch.bo);
    drm_intel_bo_unreference(brw->batch.workaround_bo);
-   intel_batchbuffer_clear_cache(brw);
 }
 
 static void
@@ -168,6 +143,7 @@ do_batch_dump(struct brw_context *brw)
 					 batch->used);
    }
 
+   drm_intel_decode_set_output_file(decode, stderr);
    drm_intel_decode(decode);
 
    drm_intel_decode_context_free(decode);
@@ -432,6 +408,38 @@ intel_batchbuffer_data(struct brw_context *brw,
 }
 
 /**
+ * According to the latest documentation, any PIPE_CONTROL with the
+ * "Command Streamer Stall" bit set must also have another bit set,
+ * with five different options:
+ *
+ *  - Render Target Cache Flush
+ *  - Depth Cache Flush
+ *  - Stall at Pixel Scoreboard
+ *  - Post-Sync Operation
+ *  - Depth Stall
+ *
+ * I chose "Stall at Pixel Scoreboard" since we've used it effectively
+ * in the past, but the choice is fairly arbitrary.
+ */
+static void
+gen8_add_cs_stall_workaround_bits(uint32_t *flags)
+{
+   uint32_t wa_bits = PIPE_CONTROL_WRITE_FLUSH |
+                      PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                      PIPE_CONTROL_WRITE_IMMEDIATE |
+                      PIPE_CONTROL_WRITE_DEPTH_COUNT |
+                      PIPE_CONTROL_WRITE_TIMESTAMP |
+                      PIPE_CONTROL_STALL_AT_SCOREBOARD |
+                      PIPE_CONTROL_DEPTH_STALL;
+
+   /* If we're doing a CS stall, and don't already have one of the
+    * workaround bits set, add "Stall at Pixel Scoreboard."
+    */
+   if ((*flags & PIPE_CONTROL_CS_STALL) != 0 && (*flags & wa_bits) == 0)
+      *flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
+}
+
+/**
  * Emit a PIPE_CONTROL with various flushing flags.
  *
  * The caller is responsible for deciding what flags are appropriate for the
@@ -441,6 +449,8 @@ void
 brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
 {
    if (brw->gen >= 8) {
+      gen8_add_cs_stall_workaround_bits(&flags);
+
       BEGIN_BATCH(6);
       OUT_BATCH(_3DSTATE_PIPE_CONTROL | (6 - 2));
       OUT_BATCH(flags);
@@ -481,6 +491,8 @@ brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
                             uint32_t imm_lower, uint32_t imm_upper)
 {
    if (brw->gen >= 8) {
+      gen8_add_cs_stall_workaround_bits(&flags);
+
       BEGIN_BATCH(6);
       OUT_BATCH(_3DSTATE_PIPE_CONTROL | (6 - 2));
       OUT_BATCH(flags);
@@ -547,7 +559,7 @@ intel_emit_depth_stall_flushes(struct brw_context *brw)
 void
 gen7_emit_vs_workaround_flush(struct brw_context *brw)
 {
-   assert(brw->gen >= 7 && brw->gen <= 8);
+   assert(brw->gen == 7);
    brw_emit_pipe_control_write(brw,
                                PIPE_CONTROL_WRITE_IMMEDIATE
                                | PIPE_CONTROL_DEPTH_STALL,
@@ -659,5 +671,32 @@ intel_batchbuffer_emit_mi_flush(struct brw_context *brw)
          }
       }
       brw_emit_pipe_control_flush(brw, flags);
+   }
+
+   brw_render_cache_set_clear(brw);
+}
+
+void
+brw_load_register_mem(struct brw_context *brw,
+                      uint32_t reg,
+                      drm_intel_bo *bo,
+                      uint32_t read_domains, uint32_t write_domain,
+                      uint32_t offset)
+{
+   /* MI_LOAD_REGISTER_MEM only exists on Gen7+. */
+   assert(brw->gen >= 7);
+
+   if (brw->gen >= 8) {
+      BEGIN_BATCH(4);
+      OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (4 - 2));
+      OUT_BATCH(reg);
+      OUT_RELOC64(bo, read_domains, write_domain, offset);
+      ADVANCE_BATCH();
+   } else {
+      BEGIN_BATCH(3);
+      OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+      OUT_BATCH(reg);
+      OUT_RELOC(bo, read_domains, write_domain, offset);
+      ADVANCE_BATCH();
    }
 }

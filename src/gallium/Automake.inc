@@ -51,38 +51,74 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(VISIBILITY_CFLAGS)
 
 
-# TODO: add -export-symbols-regex
 GALLIUM_DRI_LINKER_FLAGS = \
+	-shared \
+	-shrext .so \
 	-module \
 	-avoid-version \
-	-shared \
-	-Wl,-Bsymbolic
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
+	$(GC_SECTIONS)
 
 GALLIUM_VDPAU_LINKER_FLAGS = \
-	-module \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-export-symbols-regex $(VDPAU_EXPORTS) \
 	-shared \
-	-no-undefined
+	-module \
+	-no-undefined \
+	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
 
 GALLIUM_XVMC_LINKER_FLAGS = \
-	-module \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
 	-shared \
-	-export-symbols-regex '^XvMC' \
-	-no-undefined
+	-module \
+	-no-undefined \
+	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
+
+GALLIUM_OMX_LINKER_FLAGS = \
+	-shared \
+	-module \
+	-no-undefined \
+	-avoid-version \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
+
+GALLIUM_COMMON_LIB_DEPS = \
+	-lm \
+	$(CLOCK_LIB) \
+	$(PTHREAD_LIBS) \
+	$(DLOPEN_LIBS)
+
+GALLIUM_DRI_LIB_DEPS = \
+	$(top_builddir)/src/mesa/libmesagallium.la \
+	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(SELINUX_LIBS) \
+	$(LIBDRM_LIBS) \
+	$(EXPAT_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS)
 
 GALLIUM_VDPAU_LIB_DEPS = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
 	$(VDPAU_LIBS) \
-	$(LIBDRM_LIBS)
+	$(LIBDRM_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS)
 
 GALLIUM_XVMC_LIB_DEPS = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
 	$(XVMC_LIBS) \
-	$(LIBDRM_LIBS)
+	$(LIBDRM_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS)
+
+GALLIUM_OMX_LIB_DEPS = \
+	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
+	$(OMX_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS)
 
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -90,3 +126,17 @@ GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
+
+if HAVE_MESA_LLVM
+
+GALLIUM_DRI_LINKER_FLAGS += $(LLVM_LDFLAGS)
+GALLIUM_VDPAU_LINKER_FLAGS += $(LLVM_LDFLAGS)
+GALLIUM_XVMC_LINKER_FLAGS += $(LLVM_LDFLAGS)
+GALLIUM_OMX_LINKER_FLAGS += $(LLVM_LDFLAGS)
+
+GALLIUM_DRI_LIB_DEPS += $(LLVM_LIBS)
+GALLIUM_VDPAU_LIB_DEPS += $(LLVM_LIBS)
+GALLIUM_XVMC_LIB_DEPS += $(LLVM_LIBS)
+GALLIUM_OMX_LIB_DEPS += $(LLVM_LIBS)
+
+endif

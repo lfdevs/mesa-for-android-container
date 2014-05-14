@@ -94,7 +94,6 @@ void brw_vs_debug_recompile(struct brw_context *brw,
                             struct gl_shader_program *prog,
                             const struct brw_vs_prog_key *key);
 bool brw_vs_prog_data_compare(const void *a, const void *b);
-void brw_vs_prog_data_free(const void *in_prog_data);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -109,7 +108,6 @@ public:
                    struct brw_vs_compile *vs_compile,
                    struct brw_vs_prog_data *vs_prog_data,
                    struct gl_shader_program *prog,
-                   struct brw_shader *shader,
                    void *mem_ctx);
 
 protected:

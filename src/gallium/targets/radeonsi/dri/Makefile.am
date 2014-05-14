@@ -36,12 +36,12 @@ nodist_EXTRA_radeonsi_dri_la_SOURCES = dummy.cpp
 radeonsi_dri_la_SOURCES = \
 	drm_target.c
 
-radeonsi_dri_la_LDFLAGS = $(GALLIUM_DRI_LINKER_FLAGS)
+radeonsi_dri_la_LDFLAGS = \
+	$(GALLIUM_DRI_LINKER_FLAGS) \
+	-Wl,--dynamic-list=$(srcdir)/../../r300/dri/radeon.dyn
 
 radeonsi_dri_la_LIBADD = \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
-	$(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
 	$(top_builddir)/src/gallium/state_trackers/dri/drm/libdridrm.la \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
@@ -51,13 +51,4 @@ radeonsi_dri_la_LIBADD = \
 	$(GALLIUM_DRI_LIB_DEPS) \
 	$(RADEON_LIBS)
 
-if HAVE_MESA_LLVM
-radeonsi_dri_la_LDFLAGS += $(LLVM_LDFLAGS)
-radeonsi_dri_la_LIBADD += $(LLVM_LIBS)
-endif
-
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: radeonsi_dri.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/radeonsi_dri.so $(top_builddir)/$(LIB_DIR)/gallium/radeonsi_dri.so
+include $(top_srcdir)/install-gallium-links.mk

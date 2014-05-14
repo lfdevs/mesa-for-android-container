@@ -73,30 +73,22 @@ void si_need_cs_space(struct si_context *ctx, unsigned num_dw,
 
 	/* Flush if there's not enough space. */
 	if (num_dw > RADEON_MAX_CMDBUF_DWORDS) {
-		si_flush(&ctx->b.b, NULL, RADEON_FLUSH_ASYNC);
+		ctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 	}
 }
 
-void si_context_flush(struct si_context *ctx, unsigned flags)
+void si_context_gfx_flush(void *context, unsigned flags,
+			  struct pipe_fence_handle **fence)
 {
+	struct si_context *ctx = context;
 	struct radeon_winsys_cs *cs = ctx->b.rings.gfx.cs;
 
-	if (cs->cdw == ctx->b.initial_gfx_cs_size)
+	if (cs->cdw == ctx->b.initial_gfx_cs_size && !fence)
 		return;
 
-	/* suspend queries */
-	ctx->b.nontimer_queries_suspended = false;
-	if (ctx->b.num_cs_dw_nontimer_queries_suspend) {
-		r600_suspend_nontimer_queries(&ctx->b);
-		ctx->b.nontimer_queries_suspended = true;
-	}
+	ctx->b.rings.gfx.flushing = true;
 
-	ctx->b.streamout.suspended = false;
-
-	if (ctx->b.streamout.begin_emitted) {
-		r600_emit_streamout_end(&ctx->b);
-		ctx->b.streamout.suspended = true;
-	}
+	r600_preflush_suspend_features(&ctx->b);
 
 	ctx->b.flags |= R600_CONTEXT_FLUSH_AND_INV_CB |
 			R600_CONTEXT_FLUSH_AND_INV_CB_META |
@@ -123,7 +115,8 @@ void si_context_flush(struct si_context *ctx, unsigned flags)
 #endif
 
 	/* Flush the CS. */
-	ctx->b.ws->cs_flush(ctx->b.rings.gfx.cs, flags, 0);
+	ctx->b.ws->cs_flush(cs, flags, fence, 0);
+	ctx->b.rings.gfx.flushing = false;
 
 #if SI_TRACE_CS
 	if (ctx->screen->b.trace_bo) {
@@ -166,17 +159,11 @@ void si_begin_new_cs(struct si_context *ctx)
 	si_pm4_emit(ctx, ctx->queued.named.init);
 	ctx->emitted.named.init = ctx->queued.named.init;
 
-	if (ctx->b.streamout.suspended) {
-		ctx->b.streamout.append_bitmask = ctx->b.streamout.enabled_mask;
-		r600_streamout_buffers_dirty(&ctx->b);
-	}
-
-	/* resume queries */
-	if (ctx->b.nontimer_queries_suspended) {
-		r600_resume_nontimer_queries(&ctx->b);
-	}
-
+	ctx->framebuffer.atom.dirty = true;
+	ctx->b.streamout.enable_atom.dirty = true;
 	si_all_descriptors_begin_new_cs(ctx);
+
+	r600_postflush_resume_features(&ctx->b);
 
 	ctx->b.initial_gfx_cs_size = ctx->b.rings.gfx.cs->cdw;
 }

@@ -85,9 +85,11 @@ fs_live_variables::setup_one_read(bblock_t *block, fs_inst *inst,
     * would get stomped by the first decode as well.
     */
    int end_ip = ip;
-   if (v->dispatch_width == 16 && (reg.smear != -1 ||
-                                   (v->pixel_x.reg == reg.reg ||
-                                    v->pixel_y.reg == reg.reg))) {
+   if (v->dispatch_width == 16 && (reg.stride == 0 ||
+                                   ((v->pixel_x.file == GRF &&
+                                     v->pixel_x.reg == reg.reg) ||
+                                    (v->pixel_y.file == GRF &&
+                                     v->pixel_y.reg == reg.reg)))) {
       end_ip++;
    }
 

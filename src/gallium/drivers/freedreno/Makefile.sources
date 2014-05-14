@@ -1,6 +1,7 @@
 C_SOURCES := \
 	freedreno_util.c \
 	freedreno_lowering.c \
+	freedreno_program.c \
 	freedreno_query.c \
 	freedreno_fence.c \
 	freedreno_resource.c \
@@ -31,6 +32,7 @@ a2xx_SOURCES := \
 a3xx_SOURCES := \
 	a3xx/fd3_blend.c \
 	a3xx/fd3_compiler.c \
+	a3xx/fd3_compiler_old.c \
 	a3xx/fd3_context.c \
 	a3xx/fd3_draw.c \
 	a3xx/fd3_emit.c \
@@ -42,4 +44,10 @@ a3xx_SOURCES := \
 	a3xx/fd3_util.c \
 	a3xx/fd3_zsa.c \
 	a3xx/disasm-a3xx.c \
-	a3xx/ir-a3xx.c
+	a3xx/ir3_cp.c \
+	a3xx/ir3_depth.c \
+	a3xx/ir3_dump.c \
+	a3xx/ir3_flatten.c \
+	a3xx/ir3_ra.c \
+	a3xx/ir3_sched.c \
+	a3xx/ir3.c

@@ -54,7 +54,7 @@ static void si_pipe_shader_es(struct pipe_context *ctx, struct si_pipe_shader *s
 		return;
 
 	va = r600_resource_va(ctx->screen, (void *)shader->bo);
-	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ);
+	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ, RADEON_PRIO_SHADER_DATA);
 
 	vgpr_comp_cnt = shader->shader.uses_instanceid ? 3 : 0;
 
@@ -129,7 +129,7 @@ static void si_pipe_shader_gs(struct pipe_context *ctx, struct si_pipe_shader *s
 	si_pm4_set_reg(pm4, R_028B5C_VGT_GS_VERT_ITEMSIZE, gs_vert_itemsize);
 
 	va = r600_resource_va(ctx->screen, (void *)shader->bo);
-	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ);
+	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ, RADEON_PRIO_SHADER_DATA);
 	si_pm4_set_reg(pm4, R_00B220_SPI_SHADER_PGM_LO_GS, va >> 8);
 	si_pm4_set_reg(pm4, R_00B224_SPI_SHADER_PGM_HI_GS, va >> 40);
 
@@ -166,7 +166,7 @@ static void si_pipe_shader_vs(struct pipe_context *ctx, struct si_pipe_shader *s
 		return;
 
 	va = r600_resource_va(ctx->screen, (void *)shader->bo);
-	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ);
+	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ, RADEON_PRIO_SHADER_DATA);
 
 	vgpr_comp_cnt = shader->shader.uses_instanceid ? 3 : 0;
 
@@ -243,7 +243,7 @@ static void si_pipe_shader_ps(struct pipe_context *ctx, struct si_pipe_shader *s
 		return;
 
 	db_shader_control = S_02880C_Z_ORDER(V_02880C_EARLY_Z_THEN_LATE_Z) |
-			    S_02880C_ALPHA_TO_MASK_DISABLE(sctx->fb_cb0_is_integer);
+			    S_02880C_ALPHA_TO_MASK_DISABLE(sctx->framebuffer.cb0_is_integer);
 
 	for (i = 0; i < shader->shader.ninput; i++) {
 		switch (shader->shader.input[i].name) {
@@ -315,7 +315,7 @@ static void si_pipe_shader_ps(struct pipe_context *ctx, struct si_pipe_shader *s
 	si_pm4_set_reg(pm4, R_02823C_CB_SHADER_MASK, shader->cb_shader_mask);
 
 	va = r600_resource_va(ctx->screen, (void *)shader->bo);
-	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ);
+	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ, RADEON_PRIO_SHADER_DATA);
 	si_pm4_set_reg(pm4, R_00B020_SPI_SHADER_PGM_LO_PS, va >> 8);
 	si_pm4_set_reg(pm4, R_00B024_SPI_SHADER_PGM_HI_PS, va >> 40);
 
@@ -337,7 +337,7 @@ static void si_pipe_shader_ps(struct pipe_context *ctx, struct si_pipe_shader *s
 
 	si_pm4_set_reg(pm4, R_02880C_DB_SHADER_CONTROL, db_shader_control);
 
-	shader->cb0_is_integer = sctx->fb_cb0_is_integer;
+	shader->cb0_is_integer = sctx->framebuffer.cb0_is_integer;
 	shader->sprite_coord_enable = sctx->sprite_coord_enable;
 	sctx->b.flags |= R600_CONTEXT_INV_SHADER_CACHE;
 }
@@ -548,13 +548,13 @@ static void si_init_gs_rings(struct si_context *sctx)
 
 	sctx->esgs_ring.buffer =
 		pipe_buffer_create(sctx->b.b.screen, PIPE_BIND_CUSTOM,
-				   PIPE_USAGE_STATIC, size);
+				   PIPE_USAGE_DEFAULT, size);
 	sctx->esgs_ring.buffer_size = size;
 
 	size = 64 * 1024 * 1024;
 	sctx->gsvs_ring.buffer =
 		pipe_buffer_create(sctx->b.b.screen, PIPE_BIND_CUSTOM,
-				   PIPE_USAGE_STATIC, size);
+				   PIPE_USAGE_DEFAULT, size);
 	sctx->gsvs_ring.buffer_size = size;
 
 	if (sctx->b.chip_class >= CIK) {
@@ -663,7 +663,7 @@ static void si_update_derived_state(struct si_context *sctx)
 	si_shader_select(ctx, sctx->ps_shader);
 
 	if (!sctx->ps_shader->current->pm4 ||
-	    sctx->ps_shader->current->cb0_is_integer != sctx->fb_cb0_is_integer)
+	    sctx->ps_shader->current->cb0_is_integer != sctx->framebuffer.cb0_is_integer)
 		si_pipe_shader_ps(ctx, sctx->ps_shader->current);
 
 	si_pm4_bind_state(sctx, ps, sctx->ps_shader->current->pm4);
@@ -728,7 +728,8 @@ static void si_vertex_buffer_update(struct si_context *sctx)
 		si_pm4_sh_data_add(pm4, sctx->vertex_elements->rsrc_word3[i]);
 
 		if (!bound[ve->vertex_buffer_index]) {
-			si_pm4_add_bo(pm4, rbuffer, RADEON_USAGE_READ);
+			si_pm4_add_bo(pm4, rbuffer, RADEON_USAGE_READ,
+				      RADEON_PRIO_SHADER_BUFFER_RO);
 			bound[ve->vertex_buffer_index] = true;
 		}
 	}
@@ -754,14 +755,14 @@ static void si_state_draw(struct si_context *sctx,
 		if (sctx->b.chip_class >= CIK) {
 			si_pm4_set_reg(pm4, R_028004_DB_COUNT_CONTROL,
 				       S_028004_PERFECT_ZPASS_COUNTS(1) |
-				       S_028004_SAMPLE_RATE(sctx->fb_log_samples) |
+				       S_028004_SAMPLE_RATE(sctx->framebuffer.log_samples) |
 				       S_028004_ZPASS_ENABLE(1) |
 				       S_028004_SLICE_EVEN_ENABLE(1) |
 				       S_028004_SLICE_ODD_ENABLE(1));
 		} else {
 			si_pm4_set_reg(pm4, R_028004_DB_COUNT_CONTROL,
 				       S_028004_PERFECT_ZPASS_COUNTS(1) |
-				       S_028004_SAMPLE_RATE(sctx->fb_log_samples));
+				       S_028004_SAMPLE_RATE(sctx->framebuffer.log_samples));
 		}
 	}
 
@@ -784,7 +785,8 @@ static void si_state_draw(struct si_context *sctx,
 		si_pm4_cmd_add(pm4, va >> 32UL); /* src address hi */
 		si_pm4_cmd_add(pm4, R_028B2C_VGT_STRMOUT_DRAW_OPAQUE_BUFFER_FILLED_SIZE >> 2);
 		si_pm4_cmd_add(pm4, 0); /* unused */
-		si_pm4_add_bo(pm4, t->buf_filled_size, RADEON_USAGE_READ);
+		si_pm4_add_bo(pm4, t->buf_filled_size, RADEON_USAGE_READ,
+			      RADEON_PRIO_MIN);
 		si_pm4_cmd_end(pm4, true);
 	}
 
@@ -810,7 +812,8 @@ static void si_state_draw(struct si_context *sctx,
 		va = r600_resource_va(&sctx->screen->b.b, ib->buffer);
 		va += ib->offset;
 
-		si_pm4_add_bo(pm4, (struct r600_resource *)ib->buffer, RADEON_USAGE_READ);
+		si_pm4_add_bo(pm4, (struct r600_resource *)ib->buffer, RADEON_USAGE_READ,
+			      RADEON_PRIO_MIN);
 		si_cmd_draw_index_2(pm4, max_size, va, info->count,
 				    V_0287F0_DI_SRC_SEL_DMA,
 				    sctx->b.predicate_drawing);
@@ -983,20 +986,20 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 #endif
 
 	/* Set the depth buffer as dirty. */
-	if (sctx->framebuffer.zsbuf) {
-		struct pipe_surface *surf = sctx->framebuffer.zsbuf;
+	if (sctx->framebuffer.state.zsbuf) {
+		struct pipe_surface *surf = sctx->framebuffer.state.zsbuf;
 		struct r600_texture *rtex = (struct r600_texture *)surf->texture;
 
 		rtex->dirty_level_mask |= 1 << surf->u.tex.level;
 	}
-	if (sctx->fb_compressed_cb_mask) {
+	if (sctx->framebuffer.compressed_cb_mask) {
 		struct pipe_surface *surf;
 		struct r600_texture *rtex;
-		unsigned mask = sctx->fb_compressed_cb_mask;
+		unsigned mask = sctx->framebuffer.compressed_cb_mask;
 
 		do {
 			unsigned i = u_bit_scan(&mask);
-			surf = sctx->framebuffer.cbufs[i];
+			surf = sctx->framebuffer.state.cbufs[i];
 			rtex = (struct r600_texture*)surf->texture;
 
 			rtex->dirty_level_mask |= 1 << surf->u.tex.level;

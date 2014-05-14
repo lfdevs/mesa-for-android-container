@@ -52,6 +52,7 @@ main_sources = [
     'main/clear.c',
     'main/clip.c',
     'main/colortab.c',
+    'main/compute.c',
     'main/condrender.c',
     'main/context.c',
     'main/convolve.c',
@@ -97,6 +98,7 @@ main_sources = [
     'main/pack.c',
     'main/pbo.c',
     'main/performance_monitor.c',
+    'main/pipelineobj.c',
     'main/pixel.c',
     'main/pixelstore.c',
     'main/pixeltransfer.c',
@@ -324,6 +326,8 @@ program_sources = [
 common_driver_sources =	[
     'drivers/common/driverfuncs.c',
     'drivers/common/meta.c',
+    'drivers/common/meta_blit.c',
+    'drivers/common/meta_generate_mipmap.c'
 ]
 
 mesa_sources = (

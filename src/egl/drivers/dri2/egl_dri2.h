@@ -75,6 +75,8 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
+struct wl_buffer;
+
 struct dri2_egl_driver
 {
    _EGLDriver base;
@@ -84,22 +86,78 @@ struct dri2_egl_driver
    void (*glFlush)(void);
 };
 
+struct dri2_egl_display_vtbl {
+   int (*authenticate)(_EGLDisplay *disp, uint32_t id);
+
+   _EGLSurface* (*create_window_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                         _EGLConfig *config,
+                                         void *native_window,
+                                         const EGLint *attrib_list);
+
+   _EGLSurface* (*create_pixmap_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                         _EGLConfig *config,
+                                         void *native_pixmap,
+                                         const EGLint *attrib_list);
+
+   _EGLSurface* (*create_pbuffer_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                          _EGLConfig *config,
+                                          const EGLint *attrib_list);
+
+   EGLBoolean (*destroy_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                 _EGLSurface *surface);
+
+   EGLBoolean (*swap_interval)(_EGLDriver *drv, _EGLDisplay *dpy,
+                               _EGLSurface *surf, EGLint interval);
+
+   _EGLImage* (*create_image)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLContext *ctx, EGLenum target,
+                              EGLClientBuffer buffer,
+                              const EGLint *attr_list);
+
+   EGLBoolean (*swap_buffers)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLSurface *surf);
+
+   EGLBoolean (*swap_buffers_with_damage)(_EGLDriver *drv, _EGLDisplay *dpy,     
+                                          _EGLSurface *surface,                  
+                                          const EGLint *rects, EGLint n_rects);  
+
+   EGLBoolean (*swap_buffers_region)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                     _EGLSurface *surf, EGLint numRects,
+                                     const EGLint *rects);
+
+   EGLBoolean (*post_sub_buffer)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                 _EGLSurface *surf,
+                                 EGLint x, EGLint y,
+                                 EGLint width, EGLint height);
+
+   EGLBoolean (*copy_buffers)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLSurface *surf, void *native_pixmap_target);
+
+   EGLint (*query_buffer_age)(_EGLDriver *drv, _EGLDisplay *dpy,
+                              _EGLSurface *surf);
+
+   struct wl_buffer* (*create_wayland_buffer_from_image)(
+                        _EGLDriver *drv, _EGLDisplay *dpy, _EGLImage *img);
+};
+
 struct dri2_egl_display
 {
+   const struct dri2_egl_display_vtbl *vtbl;
+
    int                       dri2_major;
    int                       dri2_minor;
    __DRIscreen              *dri_screen;
    int                       own_dri_screen;
    const __DRIconfig       **driver_configs;
    void                     *driver;
-   __DRIcoreExtension       *core;
-   __DRIdri2Extension       *dri2;
-   __DRIswrastExtension     *swrast;
-   __DRI2flushExtension     *flush;
-   __DRItexBufferExtension  *tex_buffer;
-   __DRIimageExtension      *image;
-   __DRIrobustnessExtension *robustness;
-   __DRI2configQueryExtension *config;
+   const __DRIcoreExtension       *core;
+   const __DRIdri2Extension       *dri2;
+   const __DRIswrastExtension     *swrast;
+   const __DRI2flushExtension     *flush;
+   const __DRItexBufferExtension  *tex_buffer;
+   const __DRIimageExtension      *image;
+   const __DRIrobustnessExtension *robustness;
+   const __DRI2configQueryExtension *config;
    int                       fd;
 
    int                       own_device;
@@ -134,8 +192,6 @@ struct dri2_egl_display
    int			     formats;
    uint32_t                  capabilities;
 #endif
-
-   int (*authenticate) (_EGLDisplay *disp, uint32_t id);
 };
 
 struct dri2_egl_context

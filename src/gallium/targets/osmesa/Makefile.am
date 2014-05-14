@@ -21,7 +21,9 @@
 
 include $(top_srcdir)/src/gallium/Automake.inc
 
-AM_CFLAGS = $(GALLIUM_CFLAGS)
+AM_CFLAGS = \
+	$(GALLIUM_CFLAGS) \
+	$(VISIBILITY_CFLAGS)
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
@@ -36,13 +38,19 @@ AM_CPPFLAGS = \
 
 lib_LTLIBRARIES = lib@OSMESA_LIB@.la
 
+nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
 lib@OSMESA_LIB@_la_SOURCES = target.c
 
-lib@OSMESA_LIB@_la_LDFLAGS = -module -version-number @OSMESA_VERSION@ -no-undefined
+lib@OSMESA_LIB@_la_LDFLAGS = \
+	-module \
+	-no-undefined \
+	-version-number @OSMESA_VERSION@ \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
 
-GLAPI_LIB = $(top_builddir)/src/mapi/glapi/libglapi.la
+
 if HAVE_SHARED_GLAPI
-GLAPI_LIB += $(top_builddir)/src/mapi/shared-glapi/libglapi.la
+SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 endif
 
 lib@OSMESA_LIB@_la_LIBADD = \
@@ -51,13 +59,11 @@ lib@OSMESA_LIB@_la_LIBADD = \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
-        $(top_builddir)/src/gallium/state_trackers/osmesa/libosmesa.la \
-	$(GLAPI_LIB) \
+	$(top_builddir)/src/gallium/state_trackers/osmesa/libosmesa.la \
+	$(top_builddir)/src/mapi/glapi/libglapi.la \
+	$(SHARED_GLAPI_LIB) \
 	$(OSMESA_LIB_DEPS) \
 	$(CLOCK_LIB)
-
-
-nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
 
 if HAVE_MESA_LLVM
 AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
@@ -65,18 +71,7 @@ lib@OSMESA_LIB@_la_LDFLAGS += $(LLVM_LDFLAGS)
 lib@OSMESA_LIB@_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
 endif
 
-
-
-if BUILD_SHARED
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: lib@OSMESA_LIB@.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR);
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium;
-	ln -f .libs/lib@OSMESA_LIB@.so $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so;
-	ln -f .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@ $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so.@OSMESA_VERSION@;
-	ln -f .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@.0.0 $(top_builddir)/$(LIB_DIR)/gallium/
-endif
+include $(top_srcdir)/install-gallium-links.mk
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = osmesa.pc

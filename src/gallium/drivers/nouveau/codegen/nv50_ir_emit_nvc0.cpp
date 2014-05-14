@@ -104,6 +104,7 @@ private:
    void emitPOPC(const Instruction *);
    void emitINSBF(const Instruction *);
    void emitEXTBF(const Instruction *);
+   void emitBFIND(const Instruction *);
    void emitPERMT(const Instruction *);
    void emitShift(const Instruction *);
 
@@ -134,6 +135,8 @@ private:
 
    void emitVSHL(const Instruction *);
    void emitVectorSubOp(const Instruction *);
+
+   void emitPIXLD(const Instruction *);
 
    inline void defId(const ValueDef&, const int pos);
    inline void defId(const Instruction *, int d, const int pos);
@@ -802,6 +805,19 @@ CodeEmitterNVC0::emitEXTBF(const Instruction *i)
 }
 
 void
+CodeEmitterNVC0::emitBFIND(const Instruction *i)
+{
+   emitForm_B(i, HEX64(78000000, 00000003));
+
+   if (i->dType == TYPE_S32)
+      code[0] |= 1 << 5;
+   if (i->src(0).mod == Modifier(NV50_IR_MOD_NOT))
+      code[0] |= 1 << 8;
+   if (i->subOp == NV50_IR_SUBOP_BFIND_SAMT)
+      code[0] |= 1 << 6;
+}
+
+void
 CodeEmitterNVC0::emitPERMT(const Instruction *i)
 {
    emitForm_A(i, HEX64(24000000, 00000004));
@@ -1138,6 +1154,7 @@ CodeEmitterNVC0::emitTEX(const TexInstruction *i)
    case OP_TXL: code[1] = 0x86000000; break;
    case OP_TXF: code[1] = 0x90000000; break;
    case OP_TXG: code[1] = 0xa0000000; break;
+   case OP_TXLQ: code[1] = 0xb0000000; break;
    case OP_TXD: code[1] = 0xe0000000; break;
    default:
       assert(!"invalid texture op");
@@ -1191,8 +1208,10 @@ CodeEmitterNVC0::emitTEX(const TexInstruction *i)
        i->tex.target == TEX_TARGET_2D_MS_ARRAY)
       code[1] |= 1 << 23;
 
-   if (i->tex.useOffsets) // in vecSrc0.w
+   if (i->tex.useOffsets == 1)
       code[1] |= 1 << 22;
+   if (i->tex.useOffsets == 4)
+      code[1] |= 1 << 23;
 
    srcId(i, src1, 26);
 }
@@ -2140,6 +2159,15 @@ CodeEmitterNVC0::emitVSHL(const Instruction *i)
       code[1] |= 1 << 16;
 }
 
+void
+CodeEmitterNVC0::emitPIXLD(const Instruction *i)
+{
+   assert(i->encSize == 8);
+   emitForm_A(i, HEX64(10000000, 00000006));
+   code[0] |= i->subOp << 5;
+   code[1] |= 0x00e00000;
+}
+
 bool
 CodeEmitterNVC0::emitInstruction(Instruction *insn)
 {
@@ -2302,6 +2330,8 @@ CodeEmitterNVC0::emitInstruction(Instruction *insn)
    case OP_TXL:
    case OP_TXD:
    case OP_TXF:
+   case OP_TXG:
+   case OP_TXLQ:
       emitTEX(insn->asTex());
       break;
    case OP_TXQ:
@@ -2368,6 +2398,9 @@ CodeEmitterNVC0::emitInstruction(Instruction *insn)
    case OP_EXTBF:
       emitEXTBF(insn);
       break;
+   case OP_BFIND:
+      emitBFIND(insn);
+      break;
    case OP_PERMT:
       emitPERMT(insn);
       break;
@@ -2386,6 +2419,9 @@ CodeEmitterNVC0::emitInstruction(Instruction *insn)
       break;
    case OP_VSHL:
       emitVSHL(insn);
+      break;
+   case OP_PIXLD:
+      emitPIXLD(insn);
       break;
    case OP_PHI:
    case OP_UNION:

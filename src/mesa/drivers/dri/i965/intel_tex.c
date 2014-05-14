@@ -168,6 +168,7 @@ intel_alloc_texture_storage(struct gl_context *ctx,
    intel_texobj->needs_validate = false;
    intel_texobj->validated_first_level = 0;
    intel_texobj->validated_last_level = levels - 1;
+   intel_texobj->_Format = intel_texobj->mt->format;
 
    return true;
 }
@@ -219,8 +220,11 @@ intel_map_texture_image(struct gl_context *ctx,
    if (tex_image->TexObject->Target == GL_TEXTURE_CUBE_MAP)
       slice = tex_image->Face;
 
-   intel_miptree_map(brw, mt, tex_image->Level, slice, x, y, w, h, mode,
-		     (void **)map, stride);
+   intel_miptree_map(brw, mt,
+                     tex_image->Level + tex_image->TexObject->MinLevel,
+                     slice + tex_image->TexObject->MinLayer,
+                     x, y, w, h, mode,
+                     (void **)map, stride);
 }
 
 static void
@@ -234,7 +238,57 @@ intel_unmap_texture_image(struct gl_context *ctx,
    if (tex_image->TexObject->Target == GL_TEXTURE_CUBE_MAP)
       slice = tex_image->Face;
 
-   intel_miptree_unmap(brw, mt, tex_image->Level, slice);
+   intel_miptree_unmap(brw, mt,
+         tex_image->Level + tex_image->TexObject->MinLevel,
+         slice + tex_image->TexObject->MinLayer);
+}
+
+static GLboolean
+intel_texture_view(struct gl_context *ctx,
+                   struct gl_texture_object *texObj,
+                   struct gl_texture_object *origTexObj)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct intel_texture_object *intel_tex = intel_texture_object(texObj);
+   struct intel_texture_object *intel_orig_tex = intel_texture_object(origTexObj);
+
+   assert(intel_orig_tex->mt);
+   intel_miptree_reference(&intel_tex->mt, intel_orig_tex->mt);
+
+   /* Since we can only make views of immutable-format textures,
+    * we can assume that everything is in origTexObj's miptree.
+    *
+    * Mesa core has already made us a copy of all the teximage objects,
+    * except it hasn't copied our mt pointers, etc.
+    */
+   const int numFaces = _mesa_num_tex_faces(texObj->Target);
+   const int numLevels = texObj->NumLevels;
+
+   int face;
+   int level;
+
+   for (face = 0; face < numFaces; face++) {
+      for (level = 0; level < numLevels; level++) {
+         struct gl_texture_image *image = texObj->Image[face][level];
+         struct intel_texture_image *intel_image = intel_texture_image(image);
+
+         intel_miptree_reference(&intel_image->mt, intel_orig_tex->mt);
+      }
+   }
+
+   /* The miptree is in a validated state, so no need to check later. */
+   intel_tex->needs_validate = false;
+   intel_tex->validated_first_level = 0;
+   intel_tex->validated_last_level = numLevels - 1;
+
+   /* Set the validated texture format, with the same adjustments that
+    * would have been applied to determine the underlying texture's
+    * mt->format.
+    */
+   intel_tex->_Format = intel_depth_format_for_depthstencil_format(
+         intel_lower_compressed_format(brw, texObj->Image[0][0]->TexFormat));
+
+   return GL_TRUE;
 }
 
 void
@@ -249,4 +303,5 @@ intelInitTextureFuncs(struct dd_function_table *functions)
    functions->AllocTextureStorage = intel_alloc_texture_storage;
    functions->MapTextureImage = intel_map_texture_image;
    functions->UnmapTextureImage = intel_unmap_texture_image;
+   functions->TextureView = intel_texture_view;
 }

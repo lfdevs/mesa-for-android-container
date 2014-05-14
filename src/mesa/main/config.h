@@ -272,6 +272,23 @@
 #define MAX_DEBUG_GROUP_STACK_DEPTH 64
 /*@}*/
 
+/** For GL_ARB_gpu_shader5 */
+/*@{*/
+#define MAX_GEOMETRY_SHADER_INVOCATIONS     32
+#define MIN_FRAGMENT_INTERPOLATION_OFFSET   -0.5
+#define MAX_FRAGMENT_INTERPOLATION_OFFSET   0.5
+#define FRAGMENT_INTERPOLATION_OFFSET_BITS  4
+#define MAX_VERTEX_STREAMS                  4
+/*@}*/
+
+/** For GL_INTEL_performance_query */
+/*@{*/
+#define MAX_PERFQUERY_QUERY_NAME_LENGTH     256
+#define MAX_PERFQUERY_COUNTER_NAME_LENGTH   256
+#define MAX_PERFQUERY_COUNTER_DESC_LENGTH   1024
+#define PERFQUERY_HAVE_GPA_EXTENDED_COUNTERS 0
+/*@}*/
+
 /*
  * Color channel component order
  * 

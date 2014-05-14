@@ -109,8 +109,8 @@
 #define OUT_CS_RELOC(r) do { \
     assert((r)); \
     assert((r)->cs_buf); \
-    cs_winsys->cs_write_reloc(cs_copy, (r)->cs_buf); \
-    CS_USED_DW(2); \
+    OUT_CS(0xc0001000); /* PKT3_NOP */ \
+    OUT_CS(cs_winsys->cs_get_reloc(cs_copy, (r)->cs_buf) * 4); \
 } while (0)
 
 

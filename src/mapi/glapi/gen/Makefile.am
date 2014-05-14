@@ -59,7 +59,26 @@ EXTRA_DIST= \
 	$(BUILT_SOURCES) \
 	$(MESA_GLAPI_DIR)/glapi_x86.S \
 	$(MESA_GLAPI_DIR)/glapi_x86-64.S \
-	$(MESA_GLAPI_DIR)/glapi_sparc.S
+	$(MESA_GLAPI_DIR)/glapi_sparc.S \
+	$(COMMON_GLX) \
+	extension_helper.py \
+	gl_apitemp.py \
+	gl_enums.py \
+	gl_genexec.py \
+	gl_gentable.py \
+	gl_offsets.py \
+	gl_procs.py \
+	gl_SPARC_asm.py \
+	gl_table.py \
+	gl_x86-64_asm.py \
+	gl_x86_asm.py \
+	glX_proto_recv.py \
+	glX_proto_send.py \
+	glX_proto_size.py \
+	glX_server_table.py \
+	mesadef.py \
+	remap_helper.py \
+	gl_API.dtd
 
 ######################################################################
 
@@ -88,9 +107,13 @@ XORG_OUTPUTS = \
 
 API_XML = \
 	gl_API.xml \
+	es_EXT.xml \
+	gl_and_es_API.xml \
 	ARB_base_instance.xml \
 	ARB_blend_func_extended.xml \
+	ARB_clear_buffer_object.xml \
 	ARB_color_buffer_float.xml \
+	ARB_compute_shader.xml \
 	ARB_copy_buffer.xml \
 	ARB_debug_output.xml \
 	ARB_depth_buffer_float.xml \
@@ -104,14 +127,18 @@ API_XML = \
 	ARB_ES3_compatibility.xml \
 	ARB_framebuffer_object.xml \
 	ARB_geometry_shader4.xml \
+	ARB_get_program_binary.xml \
+	ARB_gpu_shader5.xml \
 	ARB_instanced_arrays.xml \
 	ARB_internalformat_query.xml \
 	ARB_invalidate_subdata.xml \
 	ARB_map_buffer_range.xml \
+	ARB_multi_bind.xml \
 	ARB_robustness.xml \
 	ARB_sample_shading.xml \
 	ARB_sampler_objects.xml \
 	ARB_seamless_cube_map.xml \
+	ARB_separate_shader_objects.xml \
 	ARB_shader_atomic_counters.xml \
 	ARB_shader_image_load_store.xml \
 	ARB_sync.xml \
@@ -127,6 +154,7 @@ API_XML = \
 	ARB_texture_storage_multisample.xml \
 	ARB_texture_storage.xml \
 	ARB_texture_view.xml \
+	ARB_uniform_buffer_object.xml \
 	ARB_vertex_array_object.xml \
 	ARB_vertex_attrib_binding.xml \
 	ARB_viewport_array.xml \
@@ -135,7 +163,6 @@ API_XML = \
 	ARB_vertex_type_2_10_10_10_rev.xml \
 	APPLE_object_purgeable.xml \
 	APPLE_vertex_array_object.xml \
-	ARB_uniform_buffer_object.xml \
 	EXT_draw_buffers2.xml \
 	EXT_framebuffer_object.xml \
 	EXT_gpu_shader4.xml \
@@ -145,28 +172,23 @@ API_XML = \
 	EXT_texture_array.xml \
 	EXT_texture_integer.xml \
 	EXT_transform_feedback.xml \
+	INTEL_performance_query.xml \
+	KHR_debug.xml \
 	NV_conditional_render.xml \
 	NV_primitive_restart.xml \
 	NV_texture_barrier.xml \
 	NV_vdpau_interop.xml \
 	OES_EGL_image.xml \
+	OES_fixed_point.xml \
+	OES_single_precision.xml \
 	GL3x.xml \
 	GL4x.xml
-
-
 
 COMMON = $(API_XML) \
 	gl_XML.py \
 	glX_XML.py \
 	license.py \
-	typeexpr.py \
-	gl_and_es_API.xml \
-	es_EXT.xml \
-	ARB_ES2_compatibility.xml \
-	ARB_ES3_compatibility.xml \
-	ARB_get_program_binary.xml \
-	OES_fixed_point.xml \
-	OES_single_precision.xml
+	typeexpr.py
 
 COMMON_GLX = $(COMMON) glX_API.xml glX_XML.py glX_proto_common.py
 
@@ -206,7 +228,7 @@ $(MESA_GLAPI_DIR)/glapi_mapi_tmp.h: $(MESA_MAPI_DIR)/mapi_abi.py $(COMMON)
 		--printer glapi --mode lib $(srcdir)/gl_and_es_API.xml > $@
 
 $(MESA_GLAPI_DIR)/glprocs.h: gl_procs.py $(COMMON)
-	$(PYTHON_GEN) $< -f $(srcdir)/gl_and_es_API.xml > $@
+	$(PYTHON_GEN) $< -c -f $(srcdir)/gl_and_es_API.xml > $@
 
 $(MESA_GLAPI_DIR)/glapitemp.h: gl_apitemp.py $(COMMON)
 	$(PYTHON_GEN) $< -f $(srcdir)/gl_and_es_API.xml > $@

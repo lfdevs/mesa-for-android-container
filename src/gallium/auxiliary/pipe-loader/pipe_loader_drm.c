@@ -32,7 +32,6 @@
 
 #include <fcntl.h>
 #include <stdio.h>
-#include <libudev.h>
 #include <xf86drm.h>
 
 #ifdef HAVE_PIPE_LOADER_XCB
@@ -49,6 +48,11 @@
 #include "util/u_dl.h"
 #include "util/u_debug.h"
 
+#define DRM_RENDER_NODE_DEV_NAME_FORMAT "%s/renderD%d"
+#define DRM_RENDER_NODE_MAX_NODES 63
+#define DRM_RENDER_NODE_MIN_MINOR 128
+#define DRM_RENDER_NODE_MAX_MINOR (DRM_RENDER_NODE_MIN_MINOR + DRM_RENDER_NODE_MAX_NODES)
+
 struct pipe_loader_drm_device {
    struct pipe_loader_device base;
    struct util_dl_library *lib;
@@ -62,7 +66,7 @@ static struct pipe_loader_ops pipe_loader_drm_ops;
 static void
 pipe_loader_drm_x_auth(int fd)
 {
-#if HAVE_PIPE_LOADER_XCB
+#ifdef HAVE_PIPE_LOADER_XCB
    /* Try authenticate with the X server to give us access to devices that X
     * is running on. */
    xcb_connection_t *xcb_conn;
@@ -112,11 +116,15 @@ disconnect:
 #endif
 }
 
-boolean
-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
+bool
+pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd,
+                         boolean auth_x)
 {
    struct pipe_loader_drm_device *ddev = CALLOC_STRUCT(pipe_loader_drm_device);
    int vendor_id, chip_id;
+
+   if (!ddev)
+      return false;
 
    if (loader_get_pci_id_for_fd(fd, &vendor_id, &chip_id)) {
       ddev->base.type = PIPE_LOADER_DEVICE_PCI;
@@ -128,18 +136,19 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
    ddev->base.ops = &pipe_loader_drm_ops;
    ddev->fd = fd;
 
-   pipe_loader_drm_x_auth(fd);
+   if (auth_x)
+      pipe_loader_drm_x_auth(fd);
 
    ddev->base.driver_name = loader_get_driver_for_fd(fd, _LOADER_GALLIUM);
    if (!ddev->base.driver_name)
       goto fail;
 
    *dev = &ddev->base;
-   return TRUE;
+   return true;
 
   fail:
    FREE(ddev);
-   return FALSE;
+   return false;
 }
 
 static int
@@ -150,18 +159,87 @@ open_drm_minor(int minor)
    return open(path, O_RDWR, 0);
 }
 
+static int
+open_drm_render_node_minor(int minor)
+{
+   char path[PATH_MAX];
+   snprintf(path, sizeof(path), DRM_RENDER_NODE_DEV_NAME_FORMAT, DRM_DIR_NAME,
+            minor);
+   return open(path, O_RDWR, 0);
+}
+
 int
 pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
 {
-   int i, j, fd;
+   int i, k, fd, num_render_node_devs;
+   int j = 0;
 
-   for (i = 0, j = 0; i < DRM_MAX_MINOR; i++) {
+   struct {
+      unsigned vendor_id;
+      unsigned chip_id;
+   } render_node_devs[DRM_RENDER_NODE_MAX_NODES];
+
+   /* Look for render nodes first */
+   for (i = DRM_RENDER_NODE_MIN_MINOR, j = 0;
+        i <= DRM_RENDER_NODE_MAX_MINOR; i++) {
+      fd = open_drm_render_node_minor(i);
+      struct pipe_loader_device *dev;
+      if (fd < 0)
+         continue;
+
+      if (!pipe_loader_drm_probe_fd(&dev, fd, false)) {
+         close(fd);
+         continue;
+      }
+
+      render_node_devs[j].vendor_id = dev->u.pci.vendor_id;
+      render_node_devs[j].chip_id = dev->u.pci.chip_id;
+
+      if (j < ndev) {
+         devs[j] = dev;
+      } else {
+         close(fd);
+         dev->ops->release(&dev);
+      }
+      j++;
+   }
+
+   num_render_node_devs = j;
+
+   /* Next look for drm devices. */
+   for (i = 0; i < DRM_MAX_MINOR; i++) {
+      struct pipe_loader_device *dev;
+      boolean duplicate = FALSE;
       fd = open_drm_minor(i);
       if (fd < 0)
          continue;
 
-      if (j >= ndev || !pipe_loader_drm_probe_fd(&devs[j], fd))
+      if (!pipe_loader_drm_probe_fd(&dev, fd, true)) {
          close(fd);
+         continue;
+      }
+
+      /* Check to make sure we aren't already accessing this device via
+       * render nodes.
+       */
+      for (k = 0; k < num_render_node_devs; k++) {
+         if (dev->u.pci.vendor_id == render_node_devs[k].vendor_id &&
+             dev->u.pci.chip_id == render_node_devs[k].chip_id) {
+            close(fd);
+            dev->ops->release(&dev);
+            duplicate = TRUE;
+            break;
+         }
+      }
+
+      if (duplicate)
+         continue;
+
+      if (j < ndev) {
+         devs[j] = dev;
+      } else {
+         dev->ops->release(&dev);
+      }
 
       j++;
    }

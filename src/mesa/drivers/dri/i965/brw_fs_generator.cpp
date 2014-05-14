@@ -57,15 +57,6 @@ fs_generator::~fs_generator()
 }
 
 void
-fs_generator::mark_surface_used(unsigned surf_index)
-{
-   assert(surf_index < BRW_MAX_SURFACES);
-
-   c->prog_data.base.binding_table.size_bytes =
-      MAX2(c->prog_data.base.binding_table.size_bytes, (surf_index + 1) * 4);
-}
-
-void
 fs_generator::patch_discard_jumps_to_fb_writes()
 {
    if (brw->gen < 6 || this->discard_halt_patches.is_empty())
@@ -112,20 +103,24 @@ fs_generator::generate_fb_write(fs_inst *inst)
     */
    brw_push_insn_state(p);
    brw_set_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_predicate_control(p, BRW_PREDICATE_NONE);
    brw_set_compression_control(p, BRW_COMPRESSION_NONE);
 
-   if ((fp && fp->UsesKill) || c->key.alpha_test_func) {
-      struct brw_reg pixel_mask;
-
-      if (brw->gen >= 6)
-         pixel_mask = retype(brw_vec1_grf(1, 7), BRW_REGISTER_TYPE_UW);
-      else
-         pixel_mask = retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UW);
-
-      brw_MOV(p, pixel_mask, brw_flag_reg(0, 1));
-   }
-
    if (inst->header_present) {
+      /* On HSW, the GPU will use the predicate on SENDC, unless the header is
+       * present.
+       */
+      if ((fp && fp->UsesKill) || c->key.alpha_test_func) {
+         struct brw_reg pixel_mask;
+
+         if (brw->gen >= 6)
+            pixel_mask = retype(brw_vec1_grf(1, 7), BRW_REGISTER_TYPE_UW);
+         else
+            pixel_mask = retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UW);
+
+         brw_MOV(p, pixel_mask, brw_flag_reg(0, 1));
+      }
+
       if (brw->gen >= 6) {
 	 brw_set_compression_control(p, BRW_COMPRESSION_COMPRESSED);
 	 brw_MOV(p,
@@ -185,7 +180,7 @@ fs_generator::generate_fb_write(fs_inst *inst)
 		eot,
 		inst->header_present);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 void
@@ -615,7 +610,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
 	      simd_mode,
 	      return_format);
 
-   mark_surface_used(surface_index);
+   brw_mark_surface_used(&c->prog_data.base, surface_index);
 }
 
 
@@ -827,7 +822,7 @@ fs_generator::generate_uniform_pull_constant_load(fs_inst *inst,
    brw_oword_block_read(p, dst, brw_message_reg(inst->base_mrf),
 			read_offset, surf_index);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 void
@@ -869,7 +864,7 @@ fs_generator::generate_uniform_pull_constant_load_gen7(fs_inst *inst,
                            BRW_SAMPLER_SIMD_MODE_SIMD4X2,
                            0);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 void
@@ -917,7 +912,7 @@ fs_generator::generate_varying_pull_constant_load(fs_inst *inst,
 
    struct brw_instruction *send = brw_next_insn(p, BRW_OPCODE_SEND);
    send->header.compression_control = BRW_COMPRESSION_NONE;
-   brw_set_dest(p, send, dst);
+   brw_set_dest(p, send, retype(dst, BRW_REGISTER_TYPE_UW));
    brw_set_src0(p, send, header);
    if (brw->gen < 6)
       send->header.destreg__conditionalmod = inst->base_mrf;
@@ -936,7 +931,7 @@ fs_generator::generate_varying_pull_constant_load(fs_inst *inst,
                            simd_mode,
                            return_format);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 void
@@ -980,7 +975,7 @@ fs_generator::generate_varying_pull_constant_load_gen7(fs_inst *inst,
                            simd_mode,
                            0);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&c->prog_data.base, surf_index);
 }
 
 /**
@@ -1030,14 +1025,15 @@ brw_reg_from_fs_reg(fs_reg *reg)
    switch (reg->file) {
    case GRF:
    case MRF:
-      if (reg->smear == -1) {
-	 brw_reg = brw_vec8_reg(brw_file_from_reg(reg), reg->reg, 0);
+      if (reg->stride == 0) {
+         brw_reg = brw_vec1_reg(brw_file_from_reg(reg), reg->reg, 0);
       } else {
-	 brw_reg = brw_vec1_reg(brw_file_from_reg(reg), reg->reg, reg->smear);
+         brw_reg = brw_vec8_reg(brw_file_from_reg(reg), reg->reg, 0);
+         brw_reg = stride(brw_reg, 8 * reg->stride, 8, reg->stride);
       }
+
       brw_reg = retype(brw_reg, reg->type);
-      if (reg->sechalf)
-	 brw_reg = sechalf(brw_reg);
+      brw_reg = byte_offset(brw_reg, reg->subreg_offset);
       break;
    case IMM:
       switch (reg->type) {
@@ -1057,6 +1053,7 @@ brw_reg_from_fs_reg(fs_reg *reg)
       }
       break;
    case HW_REG:
+      assert(reg->type == reg->fixed_hw_reg.type);
       brw_reg = reg->fixed_hw_reg;
       break;
    case BAD_FILE:
@@ -1130,11 +1127,9 @@ fs_generator::generate_set_omask(fs_inst *inst,
    brw_set_mask_control(p, BRW_MASK_DISABLE);
 
    if (stride_8_8_1) {
-      brw_MOV(p, dst, stride(retype(brw_vec1_reg(mask.file, mask.nr, 0),
-                                    dst.type), 16, 8, 2));
+      brw_MOV(p, dst, retype(stride(mask, 16, 8, 2), dst.type));
    } else if (stride_0_1_0) {
-      brw_MOV(p, dst, stride(retype(brw_vec1_reg(mask.file, mask.nr, 0),
-                                    dst.type), 0, 1, 0));
+      brw_MOV(p, dst, retype(mask, dst.type));
    }
    brw_pop_insn_state(p);
 }
@@ -1156,8 +1151,7 @@ fs_generator::generate_set_sample_id(fs_inst *inst,
    brw_push_insn_state(p);
    brw_set_compression_control(p, BRW_COMPRESSION_NONE);
    brw_set_mask_control(p, BRW_MASK_DISABLE);
-   struct brw_reg reg = stride(retype(brw_vec1_reg(src1.file, src1.nr, 0),
-                                      BRW_REGISTER_TYPE_UW), 1, 4, 0);
+   struct brw_reg reg = retype(stride(src1, 1, 4, 0), BRW_REGISTER_TYPE_UW);
    brw_ADD(p, dst, src0, reg);
    if (dispatch_width == 16)
       brw_ADD(p, offset(dst, 1), offset(src0, 1), suboffset(reg, 2));
@@ -1288,7 +1282,8 @@ fs_generator::generate_shader_time_add(fs_inst *inst,
                        c->prog_data.base.binding_table.shader_time_start);
    brw_pop_insn_state(p);
 
-   mark_surface_used(c->prog_data.base.binding_table.shader_time_start);
+   brw_mark_surface_used(&c->prog_data.base,
+                         c->prog_data.base.binding_table.shader_time_start);
 }
 
 void
@@ -1305,7 +1300,7 @@ fs_generator::generate_untyped_atomic(fs_inst *inst, struct brw_reg dst,
                       atomic_op.dw1.ud, surf_index.dw1.ud,
                       inst->mlen, dispatch_width / 8);
 
-   mark_surface_used(surf_index.dw1.ud);
+   brw_mark_surface_used(&c->prog_data.base, surf_index.dw1.ud);
 }
 
 void
@@ -1319,7 +1314,7 @@ fs_generator::generate_untyped_surface_read(fs_inst *inst, struct brw_reg dst,
                             surf_index.dw1.ud,
                             inst->mlen, dispatch_width / 8);
 
-   mark_surface_used(surf_index.dw1.ud);
+   brw_mark_surface_used(&c->prog_data.base, surf_index.dw1.ud);
 }
 
 void
@@ -1331,14 +1326,17 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
       if (prog) {
-         printf("Native code for fragment shader %d (SIMD%d dispatch):\n",
-                prog->Name, dispatch_width);
+         fprintf(stderr,
+                 "Native code for %s fragment shader %d (SIMD%d dispatch):\n",
+                 prog->Label ? prog->Label : "unnamed",
+                 prog->Name, dispatch_width);
       } else if (fp) {
-         printf("Native code for fragment program %d (SIMD%d dispatch):\n",
-                fp->Base.Id, dispatch_width);
+         fprintf(stderr,
+                 "Native code for fragment program %d (SIMD%d dispatch):\n",
+                 fp->Base.Id, dispatch_width);
       } else {
-         printf("Native code for blorp program (SIMD%d dispatch):\n",
-                dispatch_width);
+         fprintf(stderr, "Native code for blorp program (SIMD%d dispatch):\n",
+                 dispatch_width);
       }
    }
 
@@ -1356,38 +1354,39 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
 	    bblock_t *block = link->block;
 
 	    if (block->start == inst) {
-	       printf("   START B%d", block->block_num);
+	       fprintf(stderr, "   START B%d", block->block_num);
 	       foreach_list(predecessor_node, &block->parents) {
 		  bblock_link *predecessor_link =
 		     (bblock_link *)predecessor_node;
 		  bblock_t *predecessor_block = predecessor_link->block;
-		  printf(" <-B%d", predecessor_block->block_num);
+		  fprintf(stderr, " <-B%d", predecessor_block->block_num);
 	       }
-	       printf("\n");
+	       fprintf(stderr, "\n");
 	    }
 	 }
 
 	 if (last_annotation_ir != inst->ir) {
 	    last_annotation_ir = inst->ir;
 	    if (last_annotation_ir) {
-	       printf("   ");
+	       fprintf(stderr, "   ");
                if (prog)
-                  ((ir_instruction *)inst->ir)->print();
+                  ((ir_instruction *)inst->ir)->fprint(stderr);
                else {
                   const prog_instruction *fpi;
                   fpi = (const prog_instruction *)inst->ir;
-                  printf("%d: ", (int)(fpi - (fp ? fp->Base.Instructions : 0)));
-                  _mesa_fprint_instruction_opt(stdout,
+                  fprintf(stderr, "%d: ",
+                          (int)(fpi - (fp ? fp->Base.Instructions : 0)));
+                  _mesa_fprint_instruction_opt(stderr,
                                                fpi,
                                                0, PROG_PRINT_DEBUG, NULL);
                }
-	       printf("\n");
+	       fprintf(stderr, "\n");
 	    }
 	 }
 	 if (last_annotation_string != inst->annotation) {
 	    last_annotation_string = inst->annotation;
 	    if (last_annotation_string)
-	       printf("   %s\n", last_annotation_string);
+	       fprintf(stderr, "   %s\n", last_annotation_string);
 	 }
       }
 
@@ -1412,6 +1411,7 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
       brw_set_flag_reg(p, 0, inst->flag_subreg);
       brw_set_saturate(p, inst->saturate);
       brw_set_mask_control(p, inst->force_writemask_all);
+      brw_set_acc_write_control(p, inst->writes_accumulator);
 
       if (inst->force_uncompressed || dispatch_width == 8) {
 	 brw_set_compression_control(p, BRW_COMPRESSION_NONE);
@@ -1435,9 +1435,7 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
 	 brw_AVG(p, dst, src[0], src[1]);
 	 break;
       case BRW_OPCODE_MACH:
-	 brw_set_acc_write_control(p, 1);
 	 brw_MACH(p, dst, src[0], src[1]);
-	 brw_set_acc_write_control(p, 0);
 	 break;
 
       case BRW_OPCODE_MAD:
@@ -1541,15 +1539,14 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
          break;
       case BRW_OPCODE_ADDC:
          assert(brw->gen >= 7);
-         brw_set_acc_write_control(p, 1);
          brw_ADDC(p, dst, src[0], src[1]);
-         brw_set_acc_write_control(p, 0);
          break;
       case BRW_OPCODE_SUBB:
          assert(brw->gen >= 7);
-         brw_set_acc_write_control(p, 1);
          brw_SUBB(p, dst, src[0], src[1]);
-         brw_set_acc_write_control(p, 0);
+         break;
+      case BRW_OPCODE_MAC:
+         brw_MAC(p, dst, src[0], src[1]);
          break;
 
       case BRW_OPCODE_BFE:
@@ -1805,7 +1802,7 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
       }
 
       if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
-	 brw_dump_compile(p, stdout,
+	 brw_dump_compile(p, stderr,
 			  last_native_insn_offset, p->next_insn_offset);
 
 	 foreach_list(node, &cfg->block_list) {
@@ -1813,14 +1810,14 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
 	    bblock_t *block = link->block;
 
 	    if (block->end == inst) {
-	       printf("   END B%d", block->block_num);
+	       fprintf(stderr, "   END B%d", block->block_num);
 	       foreach_list(successor_node, &block->children) {
 		  bblock_link *successor_link =
 		     (bblock_link *)successor_node;
 		  bblock_t *successor_block = successor_link->block;
-		  printf(" ->B%d", successor_block->block_num);
+		  fprintf(stderr, " ->B%d", successor_block->block_num);
 	       }
-	       printf("\n");
+	       fprintf(stderr, "\n");
 	    }
 	 }
       }
@@ -1829,7 +1826,7 @@ fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
-      printf("\n");
+      fprintf(stderr, "\n");
    }
 
    brw_set_uip_jip(p);

@@ -64,6 +64,9 @@ extern void
 _mesa_error( struct gl_context *ctx, GLenum error, const char *fmtString, ... ) PRINTFLIKE(3, 4);
 
 extern void
+_mesa_error_no_memory(const char *caller);
+
+extern void
 _mesa_debug( const struct gl_context *ctx, const char *fmtString, ... ) PRINTFLIKE(2, 3);
 
 extern void
@@ -83,25 +86,19 @@ _mesa_gl_debug(struct gl_context *ctx,
    }                                                                      \
 } while (0)
 
+bool
+_mesa_set_debug_state_int(struct gl_context *ctx, GLenum pname, GLint val);
+
+GLint
+_mesa_get_debug_state_int(struct gl_context *ctx, GLenum pname);
+
+void *
+_mesa_get_debug_state_ptr(struct gl_context *ctx, GLenum pname);
+
 extern void
 _mesa_shader_debug(struct gl_context *ctx, GLenum type, GLuint *id,
                    const char *msg, int len);
 
-void GLAPIENTRY
-_mesa_DebugMessageInsertARB(GLenum source, GLenum type, GLuint id,
-                            GLenum severity, GLint length,
-                            const GLcharARB* buf);
-GLuint GLAPIENTRY
-_mesa_GetDebugMessageLogARB(GLuint count, GLsizei logSize, GLenum* sources,
-                            GLenum* types, GLenum* ids, GLenum* severities,
-                            GLsizei* lengths, GLcharARB* messageLog);
-void GLAPIENTRY
-_mesa_DebugMessageControlARB(GLenum source, GLenum type, GLenum severity,
-                             GLsizei count, const GLuint *ids,
-                             GLboolean enabled);
-void GLAPIENTRY
-_mesa_DebugMessageCallbackARB(GLDEBUGPROCARB callback,
-                              const void *userParam);
 void GLAPIENTRY
 _mesa_DebugMessageInsert(GLenum source, GLenum type, GLuint id,
                          GLenum severity, GLint length,

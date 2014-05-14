@@ -1,12 +1,17 @@
 C_SOURCES := \
+        cayman_msaa.c \
 	r600_buffer_common.c \
 	r600_pipe_common.c \
         r600_query.c \
 	r600_streamout.c \
         r600_texture.c \
-	radeon_uvd.c
+	radeon_video.c \
+	radeon_uvd.c \
+	radeon_vce.c \
+	radeon_vce_40_2_2.c
 
 LLVM_C_FILES := \
+	radeon_elf_util.c \
 	radeon_setup_tgsi_llvm.c \
 	radeon_llvm_emit.c \
 	radeon_llvm_util.c

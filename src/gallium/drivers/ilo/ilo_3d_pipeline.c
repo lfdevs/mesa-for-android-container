@@ -95,7 +95,7 @@ ilo_3d_pipeline_create(struct ilo_cp *cp, const struct ilo_dev_info *dev)
    p->invalidate_flags = ILO_3D_PIPELINE_INVALIDATE_ALL;
 
    p->workaround_bo = intel_winsys_alloc_buffer(p->cp->winsys,
-         "PIPE_CONTROL workaround", 4096, 0);
+         "PIPE_CONTROL workaround", 4096, INTEL_DOMAIN_INSTRUCTION);
    if (!p->workaround_bo) {
       ilo_warn("failed to allocate PIPE_CONTROL workaround bo\n");
       FREE(p);
@@ -173,7 +173,6 @@ ilo_3d_pipeline_emit_draw(struct ilo_3d_pipeline *p,
 
    while (true) {
       struct ilo_cp_jmp_buf jmp;
-      int err;
 
       /* we will rewind if aperture check below fails */
       ilo_cp_setjmp(p->cp, &jmp);
@@ -185,8 +184,7 @@ ilo_3d_pipeline_emit_draw(struct ilo_3d_pipeline *p,
       p->emit_draw(p, ilo);
       ilo_cp_assert_no_implicit_flush(p->cp, false);
 
-      err = intel_winsys_check_aperture_space(ilo->winsys, &p->cp->bo, 1);
-      if (!err) {
+      if (intel_winsys_can_submit_bo(ilo->winsys, &p->cp->bo, 1)) {
          success = true;
          break;
       }
@@ -238,7 +236,7 @@ ilo_3d_pipeline_emit_flush(struct ilo_3d_pipeline *p)
 }
 
 /**
- * Emit PIPE_CONTROL with PIPE_CONTROL_WRITE_TIMESTAMP post-sync op.
+ * Emit PIPE_CONTROL with GEN6_PIPE_CONTROL_WRITE_TIMESTAMP post-sync op.
  */
 void
 ilo_3d_pipeline_emit_write_timestamp(struct ilo_3d_pipeline *p,
@@ -249,7 +247,7 @@ ilo_3d_pipeline_emit_write_timestamp(struct ilo_3d_pipeline *p,
 }
 
 /**
- * Emit PIPE_CONTROL with PIPE_CONTROL_WRITE_DEPTH_COUNT post-sync op.
+ * Emit PIPE_CONTROL with GEN6_PIPE_CONTROL_WRITE_PS_DEPTH_COUNT post-sync op.
  */
 void
 ilo_3d_pipeline_emit_write_depth_count(struct ilo_3d_pipeline *p,
@@ -257,6 +255,17 @@ ilo_3d_pipeline_emit_write_depth_count(struct ilo_3d_pipeline *p,
 {
    handle_invalid_batch_bo(p, true);
    p->emit_write_depth_count(p, bo, index);
+}
+
+/**
+ * Emit MI_STORE_REGISTER_MEM to store statistics registers.
+ */
+void
+ilo_3d_pipeline_emit_write_statistics(struct ilo_3d_pipeline *p,
+                                      struct intel_bo *bo, int index)
+{
+   handle_invalid_batch_bo(p, true);
+   p->emit_write_statistics(p, bo, index);
 }
 
 void
@@ -271,7 +280,6 @@ ilo_3d_pipeline_emit_rectlist(struct ilo_3d_pipeline *p,
 
    while (true) {
       struct ilo_cp_jmp_buf jmp;
-      int err;
 
       /* we will rewind if aperture check below fails */
       ilo_cp_setjmp(p->cp, &jmp);
@@ -282,9 +290,7 @@ ilo_3d_pipeline_emit_rectlist(struct ilo_3d_pipeline *p,
       p->emit_rectlist(p, blitter);
       ilo_cp_assert_no_implicit_flush(p->cp, false);
 
-      err = intel_winsys_check_aperture_space(blitter->ilo->winsys,
-            &p->cp->bo, 1);
-      if (err) {
+      if (!intel_winsys_can_submit_bo(blitter->ilo->winsys, &p->cp->bo, 1)) {
          /* rewind */
          ilo_cp_longjmp(p->cp, &jmp);
 

@@ -50,6 +50,7 @@ vec4_instruction::get_dst(void)
       break;
 
    case HW_REG:
+      assert(dst.type == dst.fixed_hw_reg.type);
       brw_reg = dst.fixed_hw_reg;
       break;
 
@@ -116,6 +117,7 @@ vec4_instruction::get_src(const struct brw_vec4_prog_data *prog_data, int i)
       break;
 
    case HW_REG:
+      assert(src[i].type == src[i].fixed_hw_reg.type);
       brw_reg = src[i].fixed_hw_reg;
       break;
 
@@ -148,15 +150,6 @@ vec4_generator::vec4_generator(struct brw_context *brw,
 
 vec4_generator::~vec4_generator()
 {
-}
-
-void
-vec4_generator::mark_surface_used(unsigned surf_index)
-{
-   assert(surf_index < BRW_MAX_SURFACES);
-
-   prog_data->base.binding_table.size_bytes =
-      MAX2(prog_data->base.binding_table.size_bytes, (surf_index + 1) * 4);
 }
 
 void
@@ -438,7 +431,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 	      BRW_SAMPLER_SIMD_MODE_SIMD4X2,
 	      return_format);
 
-   mark_surface_used(surface_index);
+   brw_mark_surface_used(&prog_data->base, surface_index);
 }
 
 void
@@ -635,6 +628,23 @@ vec4_generator::generate_gs_set_channel_masks(struct brw_reg dst,
    brw_set_access_mode(p, BRW_ALIGN_1);
    brw_set_mask_control(p, BRW_MASK_DISABLE);
    brw_OR(p, suboffset(vec1(dst), 21), vec1(src), suboffset(vec1(src), 16));
+   brw_pop_insn_state(p);
+}
+
+void
+vec4_generator::generate_gs_get_instance_id(struct brw_reg dst)
+{
+   /* We want to right shift R0.0 & R0.1 by GEN7_GS_PAYLOAD_INSTANCE_ID_SHIFT
+    * and store into dst.0 & dst.4. So generate the instruction:
+    *
+    *     shr(8) dst<1> R0<1,4,0> GEN7_GS_PAYLOAD_INSTANCE_ID_SHIFT { align1 WE_normal 1Q }
+    */
+   brw_push_insn_state(p);
+   brw_set_access_mode(p, BRW_ALIGN_1);
+   dst = retype(dst, BRW_REGISTER_TYPE_UD);
+   struct brw_reg r0(retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
+   brw_SHR(p, dst, stride(r0, 1, 4, 0),
+           brw_imm_ud(GEN7_GS_PAYLOAD_INSTANCE_ID_SHIFT));
    brw_pop_insn_state(p);
 }
 
@@ -850,7 +860,7 @@ vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
                            true, /* header_present */
 			   1 /* rlen */);
 
-   mark_surface_used(surf_index);
+   brw_mark_surface_used(&prog_data->base, surf_index);
 }
 
 void
@@ -875,7 +885,7 @@ vec4_generator::generate_pull_constant_load_gen7(vec4_instruction *inst,
                            BRW_SAMPLER_SIMD_MODE_SIMD4X2,
                            0);
 
-   mark_surface_used(surf_index.dw1.ud);
+   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
 }
 
 void
@@ -893,7 +903,7 @@ vec4_generator::generate_untyped_atomic(vec4_instruction *inst,
                       atomic_op.dw1.ud, surf_index.dw1.ud,
                       inst->mlen, 1);
 
-   mark_surface_used(surf_index.dw1.ud);
+   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
 }
 
 void
@@ -908,7 +918,7 @@ vec4_generator::generate_untyped_surface_read(vec4_instruction *inst,
                             surf_index.dw1.ud,
                             inst->mlen, 1);
 
-   mark_surface_used(surf_index.dw1.ud);
+   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
 }
 
 /**
@@ -961,9 +971,7 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
       brw_MUL(p, dst, src[0], src[1]);
       break;
    case BRW_OPCODE_MACH:
-      brw_set_acc_write_control(p, 1);
       brw_MACH(p, dst, src[0], src[1]);
-      brw_set_acc_write_control(p, 0);
       break;
 
    case BRW_OPCODE_MAD:
@@ -1067,15 +1075,14 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
       break;
    case BRW_OPCODE_ADDC:
       assert(brw->gen >= 7);
-      brw_set_acc_write_control(p, 1);
       brw_ADDC(p, dst, src[0], src[1]);
-      brw_set_acc_write_control(p, 0);
       break;
    case BRW_OPCODE_SUBB:
       assert(brw->gen >= 7);
-      brw_set_acc_write_control(p, 1);
       brw_SUBB(p, dst, src[0], src[1]);
-      brw_set_acc_write_control(p, 0);
+      break;
+   case BRW_OPCODE_MAC:
+      brw_MAC(p, dst, src[0], src[1]);
       break;
 
    case BRW_OPCODE_BFE:
@@ -1218,10 +1225,15 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
       generate_gs_set_channel_masks(dst, src[0]);
       break;
 
+   case GS_OPCODE_GET_INSTANCE_ID:
+      generate_gs_get_instance_id(dst);
+      break;
+
    case SHADER_OPCODE_SHADER_TIME_ADD:
       brw_shader_time_add(p, src[0],
                           prog_data->base.binding_table.shader_time_start);
-      mark_surface_used(prog_data->base.binding_table.shader_time_start);
+      brw_mark_surface_used(&prog_data->base,
+                            prog_data->base.binding_table.shader_time_start);
       break;
 
    case SHADER_OPCODE_UNTYPED_ATOMIC:
@@ -1255,10 +1267,12 @@ vec4_generator::generate_code(exec_list *instructions)
    const void *last_annotation_ir = NULL;
 
    if (unlikely(debug_flag)) {
-      if (prog) {
-         printf("Native code for vertex shader %d:\n", shader_prog->Name);
+      if (shader_prog) {
+         fprintf(stderr, "Native code for %s vertex shader %d:\n",
+                 shader_prog->Label ? shader_prog->Label : "unnamed",
+                 shader_prog->Name);
       } else {
-         printf("Native code for vertex program %d:\n", prog->Id);
+         fprintf(stderr, "Native code for vertex program %d:\n", prog->Id);
       }
    }
 
@@ -1270,23 +1284,23 @@ vec4_generator::generate_code(exec_list *instructions)
 	 if (last_annotation_ir != inst->ir) {
 	    last_annotation_ir = inst->ir;
 	    if (last_annotation_ir) {
-	       printf("   ");
-               if (prog) {
-                  ((ir_instruction *) last_annotation_ir)->print();
+	       fprintf(stderr, "   ");
+               if (shader_prog) {
+                  ((ir_instruction *) last_annotation_ir)->fprint(stderr);
                } else {
                   const prog_instruction *vpi;
                   vpi = (const prog_instruction *) inst->ir;
-                  printf("%d: ", (int)(vpi - prog->Instructions));
-                  _mesa_fprint_instruction_opt(stdout, vpi, 0,
+                  fprintf(stderr, "%d: ", (int)(vpi - prog->Instructions));
+                  _mesa_fprint_instruction_opt(stderr, vpi, 0,
                                                PROG_PRINT_DEBUG, NULL);
                }
-	       printf("\n");
+	       fprintf(stderr, "\n");
 	    }
 	 }
 	 if (last_annotation_string != inst->annotation) {
 	    last_annotation_string = inst->annotation;
 	    if (last_annotation_string)
-	       printf("   %s\n", last_annotation_string);
+	       fprintf(stderr, "   %s\n", last_annotation_string);
 	 }
       }
 
@@ -1300,6 +1314,7 @@ vec4_generator::generate_code(exec_list *instructions)
       brw_set_predicate_inverse(p, inst->predicate_inverse);
       brw_set_saturate(p, inst->saturate);
       brw_set_mask_control(p, inst->force_writemask_all);
+      brw_set_acc_write_control(p, inst->writes_accumulator);
 
       unsigned pre_emit_nr_insn = p->nr_insn;
 
@@ -1319,7 +1334,7 @@ vec4_generator::generate_code(exec_list *instructions)
       }
 
       if (unlikely(debug_flag)) {
-	 brw_dump_compile(p, stdout,
+	 brw_dump_compile(p, stderr,
 			  last_native_insn_offset, p->next_insn_offset);
       }
 
@@ -1327,7 +1342,7 @@ vec4_generator::generate_code(exec_list *instructions)
    }
 
    if (unlikely(debug_flag)) {
-      printf("\n");
+      fprintf(stderr, "\n");
    }
 
    brw_set_uip_jip(p);
@@ -1338,7 +1353,7 @@ vec4_generator::generate_code(exec_list *instructions)
     * case you're doing that.
     */
    if (0 && unlikely(debug_flag)) {
-      brw_dump_compile(p, stdout, 0, p->next_insn_offset);
+      brw_dump_compile(p, stderr, 0, p->next_insn_offset);
    }
 }
 

@@ -314,10 +314,10 @@ struct dd_function_table {
    /*@{*/
 
    /**
-    * Called by glBindTexture().
+    * Called by glBindTexture() and glBindTextures().
     */
-   void (*BindTexture)( struct gl_context *ctx, GLenum target,
-                        struct gl_texture_object *tObj );
+   void (*BindTexture)( struct gl_context *ctx, GLuint texUnit,
+                        GLenum target, struct gl_texture_object *tObj );
 
    /**
     * Called to allocate a new texture object.  Drivers will usually
@@ -399,6 +399,13 @@ struct dd_function_table {
    void (*UnmapRenderbuffer)(struct gl_context *ctx,
 			     struct gl_renderbuffer *rb);
 
+   /**
+    * Optional driver entrypoint that binds a non-texture renderbuffer's
+    * contents to a texture image.
+    */
+   GLboolean (*BindRenderbufferTexImage)(struct gl_context *ctx,
+                                         struct gl_renderbuffer *rb,
+                                         struct gl_texture_image *texImage);
    /*@}*/
 
 
@@ -564,9 +571,6 @@ struct dd_function_table {
     * \name Vertex/pixel buffer object functions
     */
    /*@{*/
-   void (*BindBuffer)( struct gl_context *ctx, GLenum target,
-		       struct gl_buffer_object *obj );
-
    struct gl_buffer_object * (*NewBufferObject)(struct gl_context *ctx,
                                                 GLuint buffer, GLenum target);
    
@@ -574,7 +578,7 @@ struct dd_function_table {
 
    GLboolean (*BufferData)(struct gl_context *ctx, GLenum target,
                            GLsizeiptrARB size, const GLvoid *data, GLenum usage,
-                           struct gl_buffer_object *obj);
+                           GLenum storageFlags, struct gl_buffer_object *obj);
 
    void (*BufferSubData)( struct gl_context *ctx, GLintptrARB offset,
 			  GLsizeiptrARB size, const GLvoid *data,
@@ -601,14 +605,17 @@ struct dd_function_table {
     */
    void * (*MapBufferRange)( struct gl_context *ctx, GLintptr offset,
                              GLsizeiptr length, GLbitfield access,
-                             struct gl_buffer_object *obj);
+                             struct gl_buffer_object *obj,
+                             gl_map_buffer_index index);
 
    void (*FlushMappedBufferRange)(struct gl_context *ctx,
                                   GLintptr offset, GLsizeiptr length,
-                                  struct gl_buffer_object *obj);
+                                  struct gl_buffer_object *obj,
+                                  gl_map_buffer_index index);
 
    GLboolean (*UnmapBuffer)( struct gl_context *ctx,
-			     struct gl_buffer_object *obj );
+			     struct gl_buffer_object *obj,
+                             gl_map_buffer_index index);
    /*@}*/
 
    /**
@@ -709,9 +716,9 @@ struct dd_function_table {
     * \name Vertex Array objects
     */
    /*@{*/
-   struct gl_array_object * (*NewArrayObject)(struct gl_context *ctx, GLuint id);
-   void (*DeleteArrayObject)(struct gl_context *ctx, struct gl_array_object *);
-   void (*BindArrayObject)(struct gl_context *ctx, struct gl_array_object *);
+   struct gl_vertex_array_object * (*NewArrayObject)(struct gl_context *ctx, GLuint id);
+   void (*DeleteArrayObject)(struct gl_context *ctx, struct gl_vertex_array_object *);
+   void (*BindArrayObject)(struct gl_context *ctx, struct gl_vertex_array_object *);
    /*@}*/
 
    /**

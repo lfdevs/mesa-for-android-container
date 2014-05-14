@@ -240,11 +240,12 @@ swrastGetImage(__DRIdrawable * read,
 }
 
 static const __DRIswrastLoaderExtension swrastLoaderExtension = {
-   {__DRI_SWRAST_LOADER, __DRI_SWRAST_LOADER_VERSION},
-   swrastGetDrawableInfo,
-   swrastPutImage,
-   swrastGetImage,
-   swrastPutImage2,
+   .base = {__DRI_SWRAST_LOADER, 2 },
+
+   .getDrawableInfo     = swrastGetDrawableInfo,
+   .putImage            = swrastPutImage,
+   .getImage            = swrastGetImage,
+   .putImage2           = swrastPutImage2,
 };
 
 static const __DRIextension *loader_extensions[] = {
@@ -341,16 +342,15 @@ drisw_bind_tex_image(Display * dpy,
 static void
 drisw_release_tex_image(Display * dpy, GLXDrawable drawable, int buffer)
 {
-#if __DRI_TEX_BUFFER_VERSION >= 3
    struct glx_context *gc = __glXGetCurrentContext();
-   struct dri2_context *pcp = (struct dri2_context *) gc;
+   struct drisw_context *pcp = (struct drisw_context *) gc;
    __GLXDRIdrawable *base = GetGLXDRIDrawable(dpy, drawable);
    struct glx_display *dpyPriv = __glXInitialize(dpy);
-   struct dri2_drawable *pdraw = (struct dri2_drawable *) base;
-   struct dri2_screen *psc;
+   struct drisw_drawable *pdraw = (struct drisw_drawable *) base;
+   struct drisw_screen *psc;
 
-   if (pdraw != NULL) {
-      psc = (struct dri2_screen *) base->psc;
+   if (dpyPriv != NULL && pdraw != NULL) {
+      psc = (struct drisw_screen *) base->psc;
 
       if (!psc->texBuffer)
          return;
@@ -362,19 +362,18 @@ drisw_release_tex_image(Display * dpy, GLXDrawable drawable, int buffer)
                                            pdraw->driDrawable);
       }
    }
-#endif
 }
 
 static const struct glx_context_vtable drisw_context_vtable = {
-   drisw_destroy_context,
-   drisw_bind_context,
-   drisw_unbind_context,
-   NULL,
-   NULL,
-   DRI_glXUseXFont,
-   drisw_bind_tex_image,
-   drisw_release_tex_image,
-   NULL, /* get_proc_address */
+   .destroy             = drisw_destroy_context,
+   .bind                = drisw_bind_context,
+   .unbind              = drisw_unbind_context,
+   .wait_gl             = NULL,
+   .wait_x              = NULL,
+   .use_x_font          = DRI_glXUseXFont,
+   .bind_tex_image      = drisw_bind_tex_image,
+   .release_tex_image   = drisw_release_tex_image,
+   .get_proc_address    = NULL,
 };
 
 static struct glx_context *
@@ -620,6 +619,7 @@ driswDestroyScreen(struct glx_screen *base)
    psc->driScreen = NULL;
    if (psc->driver)
       dlclose(psc->driver);
+   free(psc);
 }
 
 #define SWRAST_DRIVER_NAME "swrast"
@@ -636,8 +636,10 @@ driOpenSwrast(void)
 }
 
 static const struct glx_screen_vtable drisw_screen_vtable = {
-   drisw_create_context,
-   drisw_create_context_attribs
+   .create_context         = drisw_create_context,
+   .create_context_attribs = drisw_create_context_attribs,
+   .query_renderer_integer = NULL,
+   .query_renderer_string  = NULL,
 };
 
 static void

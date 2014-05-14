@@ -97,10 +97,6 @@
 #define GLAPIENTRYP GLAPIENTRY *
 #endif
 
-#if defined(PRAGMA_EXPORT_SUPPORTED)
-#pragma export on
-#endif
-
 /*
  * End system-specific stuff.
  **********************************************************************/
@@ -694,7 +690,7 @@ typedef double		GLclampd;	/* double precision float in [0,1] */
 #define GL_LIST_BIT				0x00020000
 #define GL_TEXTURE_BIT				0x00040000
 #define GL_SCISSOR_BIT				0x00080000
-#define GL_ALL_ATTRIB_BITS			0x000FFFFF
+#define GL_ALL_ATTRIB_BITS			0xFFFFFFFF
 
 
 /* OpenGL 1.1 */
@@ -2110,19 +2106,6 @@ typedef void (APIENTRYP PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC) (GLenum t
  ** glext.h be sure to regenerate the gl_mangle.h file.  See comments
  ** in that file for details.
  **/
-
-
-
-/**********************************************************************
- * Begin system-specific stuff
- */
-#if defined(PRAGMA_EXPORT_SUPPORTED)
-#pragma export off
-#endif
-
-/*
- * End system-specific stuff
- **********************************************************************/
 
 
 #ifdef __cplusplus

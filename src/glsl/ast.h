@@ -75,10 +75,10 @@ public:
       struct YYLTYPE locp;
 
       locp.source = this->location.source;
-      locp.first_line = this->location.line;
-      locp.first_column = this->location.column;
-      locp.last_line = locp.first_line;
-      locp.last_column = locp.first_column;
+      locp.first_line = this->location.first_line;
+      locp.first_column = this->location.first_column;
+      locp.last_line = this->location.last_line;
+      locp.last_column = this->location.last_column;
 
       return locp;
    }
@@ -91,17 +91,35 @@ public:
    void set_location(const struct YYLTYPE &locp)
    {
       this->location.source = locp.source;
-      this->location.line = locp.first_line;
-      this->location.column = locp.first_column;
+      this->location.first_line = locp.first_line;
+      this->location.first_column = locp.first_column;
+      this->location.last_line = locp.last_line;
+      this->location.last_column = locp.last_column;
+   }
+
+   /**
+    * Set the source location range of an AST node using two location nodes
+    *
+    * \sa ast_node::set_location
+    */
+   void set_location_range(const struct YYLTYPE &begin, const struct YYLTYPE &end)
+   {
+      this->location.source = begin.source;
+      this->location.first_line = begin.first_line;
+      this->location.last_line = end.last_line;
+      this->location.first_column = begin.first_column;
+      this->location.last_column = end.last_column;
    }
 
    /**
     * Source location of the AST node.
     */
    struct {
-      unsigned source;    /**< GLSL source number. */
-      unsigned line;      /**< Line number within the source string. */
-      unsigned column;    /**< Column in the line. */
+      unsigned source;          /**< GLSL source number. */
+      unsigned first_line;      /**< First line number within the source string. */
+      unsigned first_column;    /**< First column in the first line. */
+      unsigned last_line;       /**< Last line number within the source string. */
+      unsigned last_column;     /**< Last column in the last line. */
    } location;
 
    exec_node link;
@@ -199,6 +217,13 @@ public:
    virtual ir_rvalue *hir(exec_list *instructions,
 			  struct _mesa_glsl_parse_state *state);
 
+   virtual void hir_no_rvalue(exec_list *instructions,
+                              struct _mesa_glsl_parse_state *state);
+
+   ir_rvalue *do_hir(exec_list *instructions,
+                     struct _mesa_glsl_parse_state *state,
+                     bool needs_rvalue);
+
    virtual void print(void) const;
 
    enum ast_operators oper;
@@ -269,6 +294,9 @@ public:
    virtual ir_rvalue *hir(exec_list *instructions,
 			  struct _mesa_glsl_parse_state *state);
 
+   virtual void hir_no_rvalue(exec_list *instructions,
+                              struct _mesa_glsl_parse_state *state);
+
 private:
    /**
     * Is this function call actually a constructor?
@@ -280,14 +308,14 @@ class ast_array_specifier : public ast_node {
 public:
    /** Unsized array specifier ([]) */
    explicit ast_array_specifier(const struct YYLTYPE &locp)
-     : dimension_count(1), is_unsized_array(true)
+     : is_unsized_array(true)
    {
       set_location(locp);
    }
 
    /** Sized array specifier ([dim]) */
    ast_array_specifier(const struct YYLTYPE &locp, ast_expression *dim)
-     : dimension_count(1), is_unsized_array(false)
+     : is_unsized_array(false)
    {
       set_location(locp);
       array_dimensions.push_tail(&dim->link);
@@ -296,13 +324,9 @@ public:
    void add_dimension(ast_expression *dim)
    {
       array_dimensions.push_tail(&dim->link);
-      dimension_count++;
    }
 
    virtual void print(void) const;
-
-   /* Count including sized and unsized dimensions */
-   unsigned dimension_count;
 
    /* If true, this means that the array has an unsized outermost dimension. */
    bool is_unsized_array;
@@ -345,6 +369,9 @@ public:
 
    virtual ir_rvalue *hir(exec_list *instructions,
                           struct _mesa_glsl_parse_state *state);
+
+   virtual void hir_no_rvalue(exec_list *instructions,
+                              struct _mesa_glsl_parse_state *state);
 };
 
 /**
@@ -460,16 +487,41 @@ struct ast_type_qualifier {
 	 unsigned prim_type:1;
 	 unsigned max_vertices:1;
 	 /** \} */
+
+         /**
+          * local_size_{x,y,z} flags for compute shaders.  Bit 0 represents
+          * local_size_x, and so on.
+          */
+         unsigned local_size:3;
+
+	 /** \name Layout and memory qualifiers for ARB_shader_image_load_store. */
+	 /** \{ */
+	 unsigned early_fragment_tests:1;
+	 unsigned explicit_image_format:1;
+	 unsigned coherent:1;
+	 unsigned _volatile:1;
+	 unsigned restrict_flag:1;
+	 unsigned read_only:1; /**< "readonly" qualifier. */
+	 unsigned write_only:1; /**< "writeonly" qualifier. */
+	 /** \} */
+
+         /** \name Layout qualifiers for GL_ARB_gpu_shader5 */
+         /** \{ */
+         unsigned invocations:1;
+         /** \} */
       }
       /** \brief Set of flags, accessed by name. */
       q;
 
       /** \brief Set of flags, accessed as a bitmask. */
-      unsigned i;
+      uint64_t i;
    } flags;
 
    /** Precision of the type (highp/medium/lowp). */
    unsigned precision:2;
+
+   /** Geometry shader invocations for GL_ARB_gpu_shader5. */
+   int invocations;
 
    /**
     * Location specified via GL_ARB_explicit_attrib_location layout
@@ -510,6 +562,32 @@ struct ast_type_qualifier {
    int offset;
 
    /**
+    * Local size specified via GL_ARB_compute_shader's "local_size_{x,y,z}"
+    * layout qualifier.  Element i of this array is only valid if
+    * flags.q.local_size & (1 << i) is set.
+    */
+   int local_size[3];
+
+   /**
+    * Image format specified with an ARB_shader_image_load_store
+    * layout qualifier.
+    *
+    * \note
+    * This field is only valid if \c explicit_image_format is set.
+    */
+   GLenum image_format;
+
+   /**
+    * Base type of the data read from or written to this image.  Only
+    * the following enumerants are allowed: GLSL_TYPE_UINT,
+    * GLSL_TYPE_INT, GLSL_TYPE_FLOAT.
+    *
+    * \note
+    * This field is only valid if \c explicit_image_format is set.
+    */
+   glsl_base_type image_base_type;
+
+   /**
     * Return true if and only if an interpolation qualifier is present.
     */
    bool has_interpolation() const;
@@ -544,6 +622,12 @@ struct ast_type_qualifier {
    bool merge_qualifier(YYLTYPE *loc,
 			_mesa_glsl_parse_state *state,
 			ast_type_qualifier q);
+
+   bool merge_in_qualifier(YYLTYPE *loc,
+                           _mesa_glsl_parse_state *state,
+                           ast_type_qualifier q,
+                           ast_node* &node);
+
 };
 
 class ast_declarator_list;
@@ -987,6 +1071,27 @@ public:
 
 private:
    const GLenum prim_type;
+};
+
+
+/**
+ * AST node representing a decalaration of the input layout for compute
+ * shaders.
+ */
+class ast_cs_input_layout : public ast_node
+{
+public:
+   ast_cs_input_layout(const struct YYLTYPE &locp, const unsigned *local_size)
+   {
+      memcpy(this->local_size, local_size, sizeof(this->local_size));
+      set_location(locp);
+   }
+
+   virtual ir_rvalue *hir(exec_list *instructions,
+                          struct _mesa_glsl_parse_state *state);
+
+private:
+   unsigned local_size[3];
 };
 
 /*@}*/

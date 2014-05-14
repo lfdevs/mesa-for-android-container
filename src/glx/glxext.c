@@ -269,7 +269,8 @@ __glXCloseDisplay(Display * dpy, XExtCodes * codes)
    }
    _XUnlockMutex(_Xglobal_lock);
 
-   glx_display_free(priv);
+   if (priv != NULL)
+      glx_display_free(priv);
 
    return 1;
 }
@@ -676,6 +677,10 @@ static GLboolean
    psc->serverGLXexts =
       __glXQueryServerString(dpy, priv->majorOpcode, screen, GLX_EXTENSIONS);
 
+   if (psc->serverGLXexts == NULL) {
+      return GL_FALSE;
+   }
+
    LockDisplay(dpy);
 
    psc->configs = NULL;
@@ -825,7 +830,6 @@ __glXInitialize(Display * dpy)
    dpyPriv->codes = XInitExtension(dpy, __glXExtensionName);
    if (!dpyPriv->codes) {
       free(dpyPriv);
-      _XUnlockMutex(_Xglobal_lock);
       return NULL;
    }
 
@@ -841,7 +845,6 @@ __glXInitialize(Display * dpy)
 		     &dpyPriv->majorVersion, &dpyPriv->minorVersion)
        || (dpyPriv->majorVersion == 1 && dpyPriv->minorVersion < 1)) {
       free(dpyPriv);
-      _XUnlockMutex(_Xglobal_lock);
       return NULL;
    }
 
@@ -906,7 +909,7 @@ __glXInitialize(Display * dpy)
    dpyPriv->next = glx_displays;
    glx_displays = dpyPriv;
 
-    _XUnlockMutex(_Xglobal_lock);
+   _XUnlockMutex(_Xglobal_lock);
 
    return dpyPriv;
 }

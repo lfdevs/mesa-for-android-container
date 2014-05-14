@@ -149,6 +149,10 @@ gen6_pipeline_update_max_svbi(struct ilo_3d_pipeline *p,
                               const struct ilo_context *ilo,
                               struct gen6_pipeline_session *session);
 
+int
+gen6_pipeline_estimate_state_size(const struct ilo_3d_pipeline *p,
+                                  const struct ilo_context *ilo);
+
 void
 ilo_3d_pipeline_emit_flush_gen6(struct ilo_3d_pipeline *p);
 
@@ -159,6 +163,10 @@ ilo_3d_pipeline_emit_write_timestamp_gen6(struct ilo_3d_pipeline *p,
 void
 ilo_3d_pipeline_emit_write_depth_count_gen6(struct ilo_3d_pipeline *p,
                                             struct intel_bo *bo, int index);
+
+void
+ilo_3d_pipeline_emit_write_statistics_gen6(struct ilo_3d_pipeline *p,
+                                           struct intel_bo *bo, int index);
 
 void
 ilo_3d_pipeline_init_gen6(struct ilo_3d_pipeline *p);

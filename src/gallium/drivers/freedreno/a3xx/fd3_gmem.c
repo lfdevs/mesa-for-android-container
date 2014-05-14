@@ -43,6 +43,11 @@
 #include "fd3_util.h"
 #include "fd3_zsa.h"
 
+static const struct fd3_shader_key key = {
+		// XXX should set this based on render target format!  We don't
+		// want half_precision if float32 render target!!!
+		.half_precision = true,
+};
 
 static void
 emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
@@ -65,7 +70,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		uint32_t stride = 0;
 		uint32_t base = 0;
 
-		if (i < nr_bufs) {
+		if ((i < nr_bufs) && bufs[i]) {
 			struct pipe_surface *psurf = bufs[i];
 
 			rsc = fd_resource(psurf->texture);
@@ -110,6 +115,24 @@ static bool
 use_hw_binning(struct fd_context *ctx)
 {
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
+
+	/* workaround: combining scissor optimization and hw binning
+	 * seems problematic.  Seems like we end up with a mismatch
+	 * between binning pass and rendering pass, wrt. where the hw
+	 * thinks the vertices belong.  And the blob driver doesn't
+	 * seem to implement anything like scissor optimization, so
+	 * not entirely sure what I might be missing.
+	 *
+	 * But scissor optimization is mainly for window managers,
+	 * which don't have many vertices (and therefore doesn't
+	 * benefit much from binning pass).
+	 *
+	 * So for now just disable binning if scissor optimization is
+	 * used.
+	 */
+	if (gmem->minx || gmem->miny)
+		return false;
+
 	return fd_binning_enabled && ((gmem->nbins_x * gmem->nbins_y) > 2);
 }
 
@@ -147,11 +170,13 @@ emit_binning_workaround(struct fd_context *ctx)
 			A3XX_GRAS_SC_CONTROL_RASTER_MODE(1));
 
 	fd_wfi(ctx, ring);
-	fd3_program_emit(ring, &ctx->solid_prog, false);
-
-	fd3_emit_vertex_bufs(ring, &ctx->solid_prog, (struct fd3_vertex_buf[]) {
-			{ .prsc = fd3_ctx->solid_vbuf, .stride = 12, .format = PIPE_FORMAT_R32G32B32_FLOAT },
-		}, 1);
+	fd3_program_emit(ring, &ctx->solid_prog, key);
+	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->solid_prog.vp, key),
+			(struct fd3_vertex_buf[]) {{
+				.prsc = fd3_ctx->solid_vbuf,
+				.stride = 12,
+				.format = PIPE_FORMAT_R32G32B32_FLOAT,
+			}}, 1);
 
 	OUT_PKT0(ring, REG_A3XX_HLSQ_CONTROL_0_REG, 4);
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(FOUR_QUADS) |
@@ -365,11 +390,13 @@ fd3_emit_tile_gmem2mem(struct fd_context *ctx, struct fd_tile *tile)
 	OUT_RING(ring, 0);            /* VFD_INDEX_OFFSET */
 
 	fd_wfi(ctx, ring);
-	fd3_program_emit(ring, &ctx->solid_prog, false);
-
-	fd3_emit_vertex_bufs(ring, &ctx->solid_prog, (struct fd3_vertex_buf[]) {
-			{ .prsc = fd3_ctx->solid_vbuf, .stride = 12, .format = PIPE_FORMAT_R32G32B32_FLOAT },
-		}, 1);
+	fd3_program_emit(ring, &ctx->solid_prog, key);
+	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->solid_prog.vp, key),
+			(struct fd3_vertex_buf[]) {{
+				.prsc = fd3_ctx->solid_vbuf,
+				.stride = 12,
+				.format = PIPE_FORMAT_R32G32B32_FLOAT,
+			}}, 1);
 
 	if (ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
 		uint32_t base = 0;
@@ -512,12 +539,17 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	OUT_RING(ring, 0);            /* VFD_INDEX_OFFSET */
 
 	fd_wfi(ctx, ring);
-	fd3_program_emit(ring, &ctx->blit_prog, false);
-
-	fd3_emit_vertex_bufs(ring, &ctx->blit_prog, (struct fd3_vertex_buf[]) {
-			{ .prsc = fd3_ctx->blit_texcoord_vbuf, .stride = 8, .format = PIPE_FORMAT_R32G32_FLOAT },
-			{ .prsc = fd3_ctx->solid_vbuf, .stride = 12, .format = PIPE_FORMAT_R32G32B32_FLOAT },
-		}, 2);
+	fd3_program_emit(ring, &ctx->blit_prog, key);
+	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->blit_prog.vp, key),
+			(struct fd3_vertex_buf[]) {{
+				.prsc = fd3_ctx->blit_texcoord_vbuf,
+				.stride = 8,
+				.format = PIPE_FORMAT_R32G32_FLOAT,
+			}, {
+				.prsc = fd3_ctx->solid_vbuf,
+				.stride = 12,
+				.format = PIPE_FORMAT_R32G32B32_FLOAT,
+			}}, 2);
 
 	/* for gmem pitch/base calculations, we need to use the non-
 	 * truncated tile sizes:
@@ -630,9 +662,15 @@ update_vsc_pipe(struct fd_context *ctx)
 static void
 emit_binning_pass(struct fd_context *ctx)
 {
+	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
 	struct fd_ringbuffer *ring = ctx->ring;
 	int i;
+
+	uint32_t x1 = gmem->minx;
+	uint32_t y1 = gmem->miny;
+	uint32_t x2 = gmem->minx + gmem->width - 1;
+	uint32_t y2 = gmem->miny + gmem->height - 1;
 
 	if (ctx->screen->gpu_id == 320) {
 		emit_binning_workaround(ctx);
@@ -656,21 +694,21 @@ emit_binning_pass(struct fd_context *ctx)
 	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER) |
 			A3XX_RB_RENDER_CONTROL_DISABLE_COLOR_PIPE |
-			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(ctx->gmem.bin_w));
+			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(gmem->bin_w));
 
 	/* setup scissor/offset for whole screen: */
 	OUT_PKT0(ring, REG_A3XX_RB_WINDOW_OFFSET, 1);
-	OUT_RING(ring, A3XX_RB_WINDOW_OFFSET_X(0) |
-			A3XX_RB_WINDOW_OFFSET_Y(0));
+	OUT_RING(ring, A3XX_RB_WINDOW_OFFSET_X(x1) |
+			A3XX_RB_WINDOW_OFFSET_Y(y1));
 
 	OUT_PKT0(ring, REG_A3XX_RB_LRZ_VSC_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_LRZ_VSC_CONTROL_BINNING_ENABLE);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SC_SCREEN_SCISSOR_TL, 2);
-	OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_TL_X(0) |
-			A3XX_GRAS_SC_SCREEN_SCISSOR_TL_Y(0));
-	OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_BR_X(pfb->width - 1) |
-			A3XX_GRAS_SC_SCREEN_SCISSOR_BR_Y(pfb->height - 1));
+	OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_TL_X(x1) |
+			A3XX_GRAS_SC_SCREEN_SCISSOR_TL_Y(y1));
+	OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_BR_X(x2) |
+			A3XX_GRAS_SC_SCREEN_SCISSOR_BR_Y(y2));
 
 	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_MODE_CONTROL_RENDER_MODE(RB_TILING_PASS) |
@@ -717,7 +755,7 @@ emit_binning_pass(struct fd_context *ctx)
 			A3XX_RB_MODE_CONTROL_MARB_CACHE_SPLIT_MODE);
 	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_ENABLE_GMEM |
 			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER) |
-			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(ctx->gmem.bin_w));
+			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(gmem->bin_w));
 
 	OUT_PKT3(ring, CP_EVENT_WRITE, 1);
 	OUT_RING(ring, CACHE_FLUSH);
@@ -801,9 +839,13 @@ fd3_emit_tile_prep(struct fd_context *ctx, struct fd_tile *tile)
 		OUT_RING(ring, 0x00000000);
 	}
 
-	OUT_PKT0(ring, REG_A3XX_RB_FRAME_BUFFER_DIMENSION, 1);
-	OUT_RING(ring, A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH(pfb->width) |
-			A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT(pfb->height));
+	if (ctx->needs_rb_fbd) {
+		fd_wfi(ctx, ring);
+		OUT_PKT0(ring, REG_A3XX_RB_FRAME_BUFFER_DIMENSION, 1);
+		OUT_RING(ring, A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH(pfb->width) |
+				A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT(pfb->height));
+		ctx->needs_rb_fbd = false;
+	}
 
 	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_MODE_CONTROL_RENDER_MODE(RB_RENDERING_PASS) |

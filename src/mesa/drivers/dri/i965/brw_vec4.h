@@ -79,9 +79,6 @@ void
 brw_vec4_setup_prog_key_for_precompile(struct gl_context *ctx,
                                        struct brw_vec4_prog_key *key,
                                        GLuint id, struct gl_program *prog);
-bool brw_vec4_prog_data_compare(const struct brw_vec4_prog_data *a,
-                                const struct brw_vec4_prog_data *b);
-void brw_vec4_prog_data_free(const struct brw_vec4_prog_data *prog_data);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -126,21 +123,38 @@ public:
    src_reg(float f);
    src_reg(uint32_t u);
    src_reg(int32_t i);
+   src_reg(struct brw_reg reg);
 
    bool equals(src_reg *r);
    bool is_zero() const;
    bool is_one() const;
+   bool is_accumulator() const;
 
    src_reg(class vec4_visitor *v, const struct glsl_type *type);
 
    explicit src_reg(dst_reg reg);
 
-   GLuint swizzle; /**< SWIZZLE_XYZW swizzles from Mesa. */
+   GLuint swizzle; /**< BRW_SWIZZLE_XYZW macros from brw_reg.h. */
    bool negate;
    bool abs;
 
    src_reg *reladdr;
 };
+
+static inline src_reg
+retype(src_reg reg, unsigned type)
+{
+   reg.fixed_hw_reg.type = reg.type = type;
+   return reg;
+}
+
+static inline src_reg
+offset(src_reg reg, unsigned delta)
+{
+   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
+   reg.reg_offset += delta;
+   return reg;
+}
 
 /**
  * Reswizzle a given source register.
@@ -181,13 +195,37 @@ public:
 
    explicit dst_reg(src_reg reg);
 
+   bool is_null() const;
+   bool is_accumulator() const;
+
    int writemask; /**< Bitfield of WRITEMASK_[XYZW] */
 
    src_reg *reladdr;
 };
 
-dst_reg
-with_writemask(dst_reg const &r, int mask);
+static inline dst_reg
+retype(dst_reg reg, unsigned type)
+{
+   reg.fixed_hw_reg.type = reg.type = type;
+   return reg;
+}
+
+static inline dst_reg
+offset(dst_reg reg, unsigned delta)
+{
+   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
+   reg.reg_offset += delta;
+   return reg;
+}
+
+static inline dst_reg
+writemask(dst_reg reg, unsigned mask)
+{
+   assert(reg.file != HW_REG && reg.file != IMM);
+   assert((reg.writemask & mask) != 0);
+   reg.writemask &= mask;
+   return reg;
+}
 
 class vec4_instruction : public backend_instruction {
 public:
@@ -227,14 +265,20 @@ public:
     */
    const void *ir;
    const char *annotation;
+   /** @} */
 
    bool is_send_from_grf();
    bool can_reswizzle_dst(int dst_writemask, int swizzle, int swizzle_mask);
    void reswizzle_dst(int dst_writemask, int swizzle);
 
-   bool depends_on_flags()
+   bool reads_flag()
    {
       return predicate || opcode == VS_OPCODE_UNPACK_FLAGS_SIMD4X2;
+   }
+
+   bool writes_flag()
+   {
+      return conditional_mod && opcode != BRW_OPCODE_SEL;
    }
 };
 
@@ -253,7 +297,7 @@ public:
                 const struct brw_vec4_prog_key *key,
                 struct brw_vec4_prog_data *prog_data,
 		struct gl_shader_program *shader_prog,
-		struct brw_shader *shader,
+                gl_shader_stage stage,
 		void *mem_ctx,
                 bool debug_flag,
                 bool no_spills,
@@ -277,9 +321,9 @@ public:
       return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_UD));
    }
 
-   struct brw_vec4_compile *c;
-   const struct brw_vec4_prog_key *key;
-   struct brw_vec4_prog_data *prog_data;
+   struct brw_vec4_compile * const c;
+   const struct brw_vec4_prog_key * const key;
+   struct brw_vec4_prog_data * const prog_data;
    unsigned int sanity_param_count;
 
    char *fail_msg;
@@ -510,6 +554,7 @@ public:
 
    uint32_t gather_channel(ir_texture *ir, int sampler);
    src_reg emit_mcs_fetch(ir_texture *ir, src_reg coordinate, int sampler);
+   void emit_gen6_gather_wa(uint8_t wa, dst_reg dst);
    void swizzle_result(ir_texture *ir, src_reg orig_val, int sampler);
 
    void emit_ndc_computation();
@@ -546,7 +591,7 @@ public:
 				int base_offset);
 
    bool try_emit_sat(ir_expression *ir);
-   bool try_emit_mad(ir_expression *ir, int mul_arg);
+   bool try_emit_mad(ir_expression *ir);
    void resolve_ud_negate(src_reg *reg);
 
    src_reg get_timestamp();
@@ -644,6 +689,7 @@ private:
    void generate_gs_set_dword_2_immed(struct brw_reg dst, struct brw_reg src);
    void generate_gs_prepare_channel_masks(struct brw_reg dst);
    void generate_gs_set_channel_masks(struct brw_reg dst, struct brw_reg src);
+   void generate_gs_get_instance_id(struct brw_reg dst);
    void generate_oword_dual_block_offsets(struct brw_reg m1,
 					  struct brw_reg index);
    void generate_scratch_write(vec4_instruction *inst,
@@ -672,8 +718,6 @@ private:
    void generate_untyped_surface_read(vec4_instruction *inst,
                                       struct brw_reg dst,
                                       struct brw_reg surf_index);
-
-   void mark_surface_used(unsigned surf_index);
 
    struct brw_context *brw;
 
@@ -739,8 +783,13 @@ private:
                                     struct brw_reg dst,
                                     struct brw_reg index,
                                     struct brw_reg offset);
-
-   void mark_surface_used(unsigned surf_index);
+   void generate_untyped_atomic(vec4_instruction *ir,
+                                struct brw_reg dst,
+                                struct brw_reg atomic_op,
+                                struct brw_reg surf_index);
+   void generate_untyped_surface_read(vec4_instruction *ir,
+                                      struct brw_reg dst,
+                                      struct brw_reg surf_index);
 
    struct brw_vec4_prog_data *prog_data;
 

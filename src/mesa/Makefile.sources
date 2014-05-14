@@ -24,6 +24,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/clear.c \
 	$(SRCDIR)main/clip.c \
 	$(SRCDIR)main/colortab.c \
+	$(SRCDIR)main/compute.c \
 	$(SRCDIR)main/condrender.c \
 	$(SRCDIR)main/context.c \
 	$(SRCDIR)main/convolve.c \
@@ -68,6 +69,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/pack.c \
 	$(SRCDIR)main/pbo.c \
 	$(SRCDIR)main/performance_monitor.c \
+	$(SRCDIR)main/pipelineobj.c \
 	$(SRCDIR)main/pixel.c \
 	$(SRCDIR)main/pixelstore.c \
 	$(SRCDIR)main/pixeltransfer.c \
@@ -318,6 +320,8 @@ SPARC_FILES =			\
 
 COMMON_DRIVER_FILES =			\
 	$(SRCDIR)drivers/common/driverfuncs.c	\
+	$(SRCDIR)drivers/common/meta_blit.c	\
+	$(SRCDIR)drivers/common/meta_generate_mipmap.c	\
 	$(SRCDIR)drivers/common/meta.c
 
 

@@ -44,7 +44,6 @@
 #include "intel_buffers.h"
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
-#include "intel_regions.h"
 #include "intel_pixel.h"
 #include "intel_buffer_objects.h"
 
@@ -103,9 +102,8 @@ do_blit_drawpixels(struct gl_context * ctx,
    src_offset += _mesa_image_offset(2, unpack, width, height,
 				    format, type, 0, 0, 0);
 
-   src_buffer = intel_bufferobj_buffer(brw, src,
-				       src_offset, width * height *
-                                       irb->mt->cpp);
+   src_buffer = intel_bufferobj_buffer(brw, src, src_offset,
+                                       height * src_stride);
 
    struct intel_mipmap_tree *pbo_mt =
       intel_miptree_create_for_bo(brw,
@@ -113,7 +111,7 @@ do_blit_drawpixels(struct gl_context * ctx,
                                   irb->mt->format,
                                   src_offset,
                                   width, height,
-                                  src_stride, I915_TILING_NONE);
+                                  src_stride);
    if (!pbo_mt)
       return false;
 
@@ -132,8 +130,6 @@ do_blit_drawpixels(struct gl_context * ctx,
 
    if (ctx->Query.CurrentOcclusionObject)
       ctx->Query.CurrentOcclusionObject->Result += width * height;
-
-   intel_check_front_buffer_rendering(brw);
 
    DBG("%s: success\n", __FUNCTION__);
    return true;

@@ -55,10 +55,10 @@ static enum pipe_format XvIDToPipe(int xvimage_id)
          return PIPE_FORMAT_B8G8R8X8_UNORM;
 
       case FOURCC_AI44:
-         return PIPE_FORMAT_A4R4_UNORM;
+         return PIPE_FORMAT_R4A4_UNORM;
 
       case FOURCC_IA44:
-         return PIPE_FORMAT_R4A4_UNORM;
+         return PIPE_FORMAT_A4R4_UNORM;
 
       default:
          XVMC_MSG(XVMC_ERR, "[XvMC] Unrecognized Xv image ID 0x%08X.\n", xvimage_id);
@@ -90,8 +90,8 @@ static int PipeToComponentOrder(enum pipe_format format, char *component_order)
       case PIPE_FORMAT_B8G8R8X8_UNORM:
          return 0;
 
-      case PIPE_FORMAT_R4A4_UNORM:
       case PIPE_FORMAT_A4R4_UNORM:
+      case PIPE_FORMAT_R4A4_UNORM:
          component_order[0] = 'Y';
          component_order[1] = 'U';
          component_order[2] = 'V';
@@ -270,7 +270,7 @@ Status XvMCCreateSubpicture(Display *dpy, XvMCContext *context, XvMCSubpicture *
       tex_templ.format = PIPE_FORMAT_R8G8B8X8_UNORM;
       tex_templ.width0 = subpicture->num_palette_entries;
       tex_templ.height0 = 1;
-      tex_templ.usage = PIPE_USAGE_STATIC;
+      tex_templ.usage = PIPE_USAGE_DEFAULT;
 
       tex = pipe->screen->resource_create(pipe->screen, &tex_templ);
 

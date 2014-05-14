@@ -54,11 +54,11 @@ _glapi_check_multithread(void)
 void
 _glapi_set_context(void *context)
 {
-   u_current_set_user((const void *) context);
+   u_current_set_context((const void *) context);
 }
 
 void
 _glapi_set_dispatch(struct _glapi_table *dispatch)
 {
-   u_current_set((const struct mapi_table *) dispatch);
+   u_current_set_table((const struct mapi_table *) dispatch);
 }

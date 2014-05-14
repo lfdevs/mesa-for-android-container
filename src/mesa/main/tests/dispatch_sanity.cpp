@@ -716,66 +716,66 @@ const struct function gl_core_functions_possible[] = {
    { "glGetProgramBinary", 43, -1 },
    { "glProgramBinary", 43, -1 },
    { "glProgramParameteri", 43, -1 },
-// { "glUseProgramStages", 43, -1 },                    // XXX: Add to xml
-// { "glActiveShaderProgram", 43, -1 },                 // XXX: Add to xml
-// { "glCreateShaderProgramv", 43, -1 },                // XXX: Add to xml
-// { "glBindProgramPipeline", 43, -1 },                 // XXX: Add to xml
-// { "glDeleteProgramPipelines", 43, -1 },              // XXX: Add to xml
-// { "glGenProgramPipelines", 43, -1 },                 // XXX: Add to xml
-// { "glIsProgramPipeline", 43, -1 },                   // XXX: Add to xml
-// { "glGetProgramPipelineiv", 43, -1 },                // XXX: Add to xml
-// { "glProgramUniform1i", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform1iv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform1f", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform1fv", 43, -1 },                   // XXX: Add to xml
+   { "glUseProgramStages", 43, -1 },
+   { "glActiveShaderProgram", 43, -1 },
+   { "glCreateShaderProgramv", 43, -1 },
+   { "glBindProgramPipeline", 43, -1 },
+   { "glDeleteProgramPipelines", 43, -1 },
+   { "glGenProgramPipelines", 43, -1 },
+   { "glIsProgramPipeline", 43, -1 },
+   { "glGetProgramPipelineiv", 43, -1 },
+   { "glProgramUniform1i", 43, -1 },
+   { "glProgramUniform1iv", 43, -1 },
+   { "glProgramUniform1f", 43, -1 },
+   { "glProgramUniform1fv", 43, -1 },
 // { "glProgramUniform1d", 43, -1 },                    // XXX: Add to xml
 // { "glProgramUniform1dv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform1ui", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform1uiv", 43, -1 },                  // XXX: Add to xml
-// { "glProgramUniform2i", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform2iv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform2f", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform2fv", 43, -1 },                   // XXX: Add to xml
+   { "glProgramUniform1ui", 43, -1 },
+   { "glProgramUniform1uiv", 43, -1 },
+   { "glProgramUniform2i", 43, -1 },
+   { "glProgramUniform2iv", 43, -1 },
+   { "glProgramUniform2f", 43, -1 },
+   { "glProgramUniform2fv", 43, -1 },
 // { "glProgramUniform2d", 43, -1 },                    // XXX: Add to xml
 // { "glProgramUniform2dv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform2ui", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform2uiv", 43, -1 },                  // XXX: Add to xml
-// { "glProgramUniform3i", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform3iv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform3f", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform3fv", 43, -1 },                   // XXX: Add to xml
+   { "glProgramUniform2ui", 43, -1 },
+   { "glProgramUniform2uiv", 43, -1 },
+   { "glProgramUniform3i", 43, -1 },
+   { "glProgramUniform3iv", 43, -1 },
+   { "glProgramUniform3f", 43, -1 },
+   { "glProgramUniform3fv", 43, -1 },
 // { "glProgramUniform3d", 43, -1 },                    // XXX: Add to xml
 // { "glProgramUniform3dv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform3ui", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform3uiv", 43, -1 },                  // XXX: Add to xml
-// { "glProgramUniform4i", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform4iv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform4f", 43, -1 },                    // XXX: Add to xml
-// { "glProgramUniform4fv", 43, -1 },                   // XXX: Add to xml
+   { "glProgramUniform3ui", 43, -1 },
+   { "glProgramUniform3uiv", 43, -1 },
+   { "glProgramUniform4i", 43, -1 },
+   { "glProgramUniform4iv", 43, -1 },
+   { "glProgramUniform4f", 43, -1 },
+   { "glProgramUniform4fv", 43, -1 },
 // { "glProgramUniform4d", 43, -1 },                    // XXX: Add to xml
 // { "glProgramUniform4dv", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform4ui", 43, -1 },                   // XXX: Add to xml
-// { "glProgramUniform4uiv", 43, -1 },                  // XXX: Add to xml
-// { "glProgramUniformMatrix2fv", 43, -1 },             // XXX: Add to xml
-// { "glProgramUniformMatrix3fv", 43, -1 },             // XXX: Add to xml
-// { "glProgramUniformMatrix4fv", 43, -1 },             // XXX: Add to xml
+   { "glProgramUniform4ui", 43, -1 },
+   { "glProgramUniform4uiv", 43, -1 },
+   { "glProgramUniformMatrix2fv", 43, -1 },
+   { "glProgramUniformMatrix3fv", 43, -1 },
+   { "glProgramUniformMatrix4fv", 43, -1 },
 // { "glProgramUniformMatrix2dv", 43, -1 },             // XXX: Add to xml
 // { "glProgramUniformMatrix3dv", 43, -1 },             // XXX: Add to xml
 // { "glProgramUniformMatrix4dv", 43, -1 },             // XXX: Add to xml
-// { "glProgramUniformMatrix2x3fv", 43, -1 },           // XXX: Add to xml
-// { "glProgramUniformMatrix3x2fv", 43, -1 },           // XXX: Add to xml
-// { "glProgramUniformMatrix2x4fv", 43, -1 },           // XXX: Add to xml
-// { "glProgramUniformMatrix4x2fv", 43, -1 },           // XXX: Add to xml
-// { "glProgramUniformMatrix3x4fv", 43, -1 },           // XXX: Add to xml
-// { "glProgramUniformMatrix4x3fv", 43, -1 },           // XXX: Add to xml
+   { "glProgramUniformMatrix2x3fv", 43, -1 },
+   { "glProgramUniformMatrix3x2fv", 43, -1 },
+   { "glProgramUniformMatrix2x4fv", 43, -1 },
+   { "glProgramUniformMatrix4x2fv", 43, -1 },
+   { "glProgramUniformMatrix3x4fv", 43, -1 },
+   { "glProgramUniformMatrix4x3fv", 43, -1 },
 // { "glProgramUniformMatrix2x3dv", 43, -1 },           // XXX: Add to xml
 // { "glProgramUniformMatrix3x2dv", 43, -1 },           // XXX: Add to xml
 // { "glProgramUniformMatrix2x4dv", 43, -1 },           // XXX: Add to xml
 // { "glProgramUniformMatrix4x2dv", 43, -1 },           // XXX: Add to xml
 // { "glProgramUniformMatrix3x4dv", 43, -1 },           // XXX: Add to xml
 // { "glProgramUniformMatrix4x3dv", 43, -1 },           // XXX: Add to xml
-// { "glValidateProgramPipeline", 43, -1 },             // XXX: Add to xml
-// { "glGetProgramPipelineInfoLog", 43, -1 },           // XXX: Add to xml
+   { "glValidateProgramPipeline", 43, -1 },
+   { "glGetProgramPipelineInfoLog", 43, -1 },
 // { "glVertexAttribL1d", 43, -1 },                     // XXX: Add to xml
 // { "glVertexAttribL2d", 43, -1 },                     // XXX: Add to xml
 // { "glVertexAttribL3d", 43, -1 },                     // XXX: Add to xml
@@ -797,10 +797,6 @@ const struct function gl_core_functions_possible[] = {
    { "glGetFloati_v", 43, -1 },
    { "glGetDoublei_v", 43, -1 },
 // { "glCreateSyncFromCLeventARB", 43, -1 },            // XXX: Add to xml
-   { "glDebugMessageControlARB", 43, -1 },
-   { "glDebugMessageInsertARB", 43, -1 },
-   { "glDebugMessageCallbackARB", 43, -1 },
-   { "glGetDebugMessageLogARB", 43, -1 },
    { "glGetGraphicsResetStatusARB", 43, -1 },
    { "glGetnMapdvARB", 43, -1 },
    { "glGetnMapfvARB", 43, -1 },
@@ -836,22 +832,12 @@ const struct function gl_core_functions_possible[] = {
    { "glTextureStorage1DEXT", 43, -1 },
    { "glTextureStorage2DEXT", 43, -1 },
    { "glTextureStorage3DEXT", 43, -1 },
-// { "glDebugMessageControl", 43, -1 },                 // XXX: Add to xml
-// { "glDebugMessageInsert", 43, -1 },                  // XXX: Add to xml
-// { "glDebugMessageCallback", 43, -1 },                // XXX: Add to xml
-// { "glGetDebugMessageLog", 43, -1 },                  // XXX: Add to xml
-// { "glPushDebugGroup", 43, -1 },                      // XXX: Add to xml
-// { "glPopDebugGroup", 43, -1 },                       // XXX: Add to xml
-// { "glObjectLabel", 43, -1 },                         // XXX: Add to xml
-// { "glGetObjectLabel", 43, -1 },                      // XXX: Add to xml
-// { "glObjectPtrLabel", 43, -1 },                      // XXX: Add to xml
-// { "glGetObjectPtrLabel", 43, -1 },                   // XXX: Add to xml
    { "glClearBufferData", 43, -1 },
    { "glClearBufferSubData", 43, -1 },
 // { "glClearNamedBufferDataEXT", 43, -1 },             // XXX: Add to xml
 // { "glClearNamedBufferSubDataEXT", 43, -1 },          // XXX: Add to xml
-// { "glDispatchCompute", 43, -1 },                     // XXX: Add to xml
-// { "glDispatchComputeIndirect", 43, -1 },             // XXX: Add to xml
+   { "glDispatchCompute", 43, -1 },
+   { "glDispatchComputeIndirect", 43, -1 },
 // { "glCopyImageSubData", 43, -1 },                    // XXX: Add to xml
    { "glTextureView", 43, -1 },
    { "glBindVertexBuffer", 43, -1 },
@@ -896,7 +882,15 @@ const struct function gl_core_functions_possible[] = {
    /* GL_ARB_internalformat_query */
    { "glGetInternalformativ", 30, -1 },
 
-   /* GL_KHR_debug */
+   /* GL_ARB_multi_bind */
+   { "glBindBuffersBase", 44, -1 },
+   { "glBindBuffersRange", 44, -1 },
+   { "glBindTextures", 44, -1 },
+   { "glBindSamplers", 44, -1 },
+   { "glBindImageTextures", 44, -1 },
+   { "glBindVertexBuffers", 44, -1 },
+
+   /* GL_KHR_debug/GL_ARB_debug_output */
    { "glPushDebugGroup", 11, -1 },
    { "glPopDebugGroup", 11, -1 },
    { "glDebugMessageCallback", 11, -1 },
@@ -907,6 +901,11 @@ const struct function gl_core_functions_possible[] = {
    { "glGetObjectPtrLabel", 11, -1 },
    { "glObjectLabel", 11, -1 },
    { "glObjectPtrLabel", 11, -1 },
+   /* aliased versions checked above */
+   //{ "glDebugMessageControlARB", 11, -1 },
+   //{ "glDebugMessageInsertARB", 11, -1 },
+   //{ "glDebugMessageCallbackARB", 11, -1 },
+   //{ "glGetDebugMessageLogARB", 11, -1 },
 
    /* GL_AMD_performance_monitor */
    { "glGetPerfMonitorGroupsAMD", 11, -1 },
@@ -921,6 +920,18 @@ const struct function gl_core_functions_possible[] = {
    { "glEndPerfMonitorAMD", 11, -1 },
    { "glGetPerfMonitorCounterDataAMD", 11, -1 },
 
+   /* GL_INTEL_performance_query */
+   { "glGetFirstPerfQueryIdINTEL", 30, -1 },
+   { "glGetNextPerfQueryIdINTEL", 30, -1 },
+   { "glGetPerfQueryIdByNameINTEL", 30, -1 },
+   { "glGetPerfQueryInfoINTEL", 30, -1 },
+   { "glGetPerfCounterInfoINTEL", 30, -1 },
+   { "glCreatePerfQueryINTEL", 30, -1 },
+   { "glDeletePerfQueryINTEL", 30, -1 },
+   { "glBeginPerfQueryINTEL", 30, -1 },
+   { "glEndPerfQueryINTEL", 30, -1 },
+   { "glGetPerfQueryDataINTEL", 30, -1 },
+
    /* GL_NV_vdpau_interop */
    { "glVDPAUInitNV", 11, -1 },
    { "glVDPAUFiniNV", 11, -1 },
@@ -932,6 +943,9 @@ const struct function gl_core_functions_possible[] = {
    { "glVDPAUSurfaceAccessNV", 11, -1 },
    { "glVDPAUMapSurfacesNV", 11, -1 },
    { "glVDPAUUnmapSurfacesNV", 11, -1 },
+
+   /* GL_ARB_buffer_storage */
+   { "glBufferStorage", 43, -1 },
 
    { NULL, 0, -1 }
 };
@@ -1301,6 +1315,56 @@ const struct function gles2_functions_possible[] = {
    { "glGetProgramBinaryOES", 20, -1 },
    { "glProgramBinaryOES", 20, -1 },
 
+   /* GL_EXT_separate_shader_objects - Also part of OpenGL ES 3.1. */
+   { "glProgramParameteriEXT", 20, -1 },
+   { "glUseProgramStagesEXT", 20, -1 },
+   { "glActiveShaderProgramEXT", 20, -1 },
+   { "glCreateShaderProgramvEXT", 20, -1 },
+   { "glBindProgramPipelineEXT", 20, -1 },
+   { "glDeleteProgramPipelinesEXT", 20, -1 },
+   { "glGenProgramPipelinesEXT", 20, -1 },
+   { "glIsProgramPipelineEXT", 20, -1 },
+   { "glGetProgramPipelineivEXT", 20, -1 },
+   { "glProgramUniform1iEXT", 20, -1 },
+   { "glProgramUniform1ivEXT", 20, -1 },
+   { "glProgramUniform1fEXT", 20, -1 },
+   { "glProgramUniform1fvEXT", 20, -1 },
+   { "glProgramUniform2iEXT", 20, -1 },
+   { "glProgramUniform2ivEXT", 20, -1 },
+   { "glProgramUniform2fEXT", 20, -1 },
+   { "glProgramUniform2fvEXT", 20, -1 },
+   { "glProgramUniform3iEXT", 20, -1 },
+   { "glProgramUniform3ivEXT", 20, -1 },
+   { "glProgramUniform3fEXT", 20, -1 },
+   { "glProgramUniform3fvEXT", 20, -1 },
+   { "glProgramUniform4iEXT", 20, -1 },
+   { "glProgramUniform4ivEXT", 20, -1 },
+   { "glProgramUniform4fEXT", 20, -1 },
+   { "glProgramUniform4fvEXT", 20, -1 },
+   { "glProgramUniformMatrix2fvEXT", 20, -1 },
+   { "glProgramUniformMatrix3fvEXT", 20, -1 },
+   { "glProgramUniformMatrix4fvEXT", 20, -1 },
+   { "glProgramUniformMatrix2x3fvEXT", 20, -1 },
+   { "glProgramUniformMatrix3x2fvEXT", 20, -1 },
+   { "glProgramUniformMatrix2x4fvEXT", 20, -1 },
+   { "glProgramUniformMatrix4x2fvEXT", 20, -1 },
+   { "glProgramUniformMatrix3x4fvEXT", 20, -1 },
+   { "glProgramUniformMatrix4x3fvEXT", 20, -1 },
+   { "glValidateProgramPipelineEXT", 20, -1 },
+   { "glGetProgramPipelineInfoLogEXT", 20, -1 },
+
+   /* GL_INTEL_performance_query */
+   { "glGetFirstPerfQueryIdINTEL", 20, -1 },
+   { "glGetNextPerfQueryIdINTEL", 20, -1 },
+   { "glGetPerfQueryIdByNameINTEL", 20, -1 },
+   { "glGetPerfQueryInfoINTEL", 20, -1 },
+   { "glGetPerfCounterInfoINTEL", 20, -1 },
+   { "glCreatePerfQueryINTEL", 20, -1 },
+   { "glDeletePerfQueryINTEL", 20, -1 },
+   { "glBeginPerfQueryINTEL", 20, -1 },
+   { "glEndPerfQueryINTEL", 20, -1 },
+   { "glGetPerfQueryDataINTEL", 20, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -1384,7 +1448,7 @@ const struct function gles3_functions_possible[] = {
    // { "glMapBufferRange", 30, -1 },
    { "glPauseTransformFeedback", 30, -1 },
    // glProgramBinary aliases glProgramBinaryOES in GLES 2
-   { "glProgramParameteri", 30, -1 },
+   // glProgramParameteri aliases glProgramParameteriEXT in GLES 2
    // We check for the aliased -NV version in GLES 2
    // { "glReadBuffer", 30, -1 },
    { "glRenderbufferStorageMultisample", 30, -1 },
@@ -1424,5 +1488,16 @@ const struct function gles3_functions_possible[] = {
    { "glVertexAttribI4uiv", 30, -1 },
    { "glVertexAttribIPointer", 30, -1 },
    { "glWaitSync", 30, -1 },
+
+   /* GL_EXT_separate_shader_objects - Also part of OpenGL ES 3.1. */
+   { "glProgramUniform1uiEXT", 30, -1 },
+   { "glProgramUniform1uivEXT", 30, -1 },
+   { "glProgramUniform2uiEXT", 30, -1 },
+   { "glProgramUniform2uivEXT", 30, -1 },
+   { "glProgramUniform3uiEXT", 30, -1 },
+   { "glProgramUniform3uivEXT", 30, -1 },
+   { "glProgramUniform4uiEXT", 30, -1 },
+   { "glProgramUniform4uivEXT", 30, -1 },
+
    { NULL, 0, -1 }
 };

@@ -39,6 +39,12 @@
 #include "st_extensions.h"
 #include "st_format.h"
 
+
+/*
+ * Note: we use these function rather than the MIN2, MAX2, CLAMP macros to
+ * avoid evaluating arguments (which are often function calls) more than once.
+ */
+
 static unsigned _min(unsigned a, unsigned b)
 {
    return (a < b) ? a : b;
@@ -88,10 +94,6 @@ void st_init_limits(struct st_context *st)
 
    c->MaxArrayTextureLayers
       = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS);
-
-   c->MaxCombinedTextureImageUnits
-      = _min(screen->get_param(screen, PIPE_CAP_MAX_COMBINED_SAMPLERS),
-             MAX_COMBINED_TEXTURE_IMAGE_UNITS);
 
    /* Define max viewport size and max renderbuffer size in terms of
     * max texture size (note: max tex RECT size = max tex 2D size).
@@ -243,6 +245,12 @@ void st_init_limits(struct st_context *st)
       options->LowerClipDistance = true;
    }
 
+   c->MaxCombinedTextureImageUnits =
+         _min(c->Program[MESA_SHADER_VERTEX].MaxTextureImageUnits +
+              c->Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits +
+              c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits,
+              MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+
    /* This depends on program constants. */
    c->MaxTextureCoordUnits
       = _min(c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits, MAX_TEXTURE_COORD_UNITS);
@@ -265,6 +273,10 @@ void st_init_limits(struct st_context *st)
 
    c->MinProgramTexelOffset = screen->get_param(screen, PIPE_CAP_MIN_TEXEL_OFFSET);
    c->MaxProgramTexelOffset = screen->get_param(screen, PIPE_CAP_MAX_TEXEL_OFFSET);
+
+   c->MaxProgramTextureGatherComponents = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS);
+   c->MinProgramTextureGatherOffset = screen->get_param(screen, PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET);
+   c->MaxProgramTextureGatherOffset = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET);
 
    c->UniformBooleanTrue = ~0;
 
@@ -373,6 +385,7 @@ void st_init_extensions(struct st_context *st)
 
    static const struct st_extension_cap_mapping cap_mapping[] = {
       { o(ARB_base_instance),                PIPE_CAP_START_INSTANCE                   },
+      { o(ARB_buffer_storage),               PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT },
       { o(ARB_depth_clamp),                  PIPE_CAP_DEPTH_CLIP_DISABLE               },
       { o(ARB_depth_texture),                PIPE_CAP_TEXTURE_SHADOW_MAP               },
       { o(ARB_draw_buffers_blend),           PIPE_CAP_INDEP_BLEND_FUNC                 },
@@ -411,7 +424,9 @@ void st_init_extensions(struct st_context *st)
 
       { o(OES_standard_derivatives),         PIPE_CAP_SM3                              },
       { o(ARB_texture_cube_map_array),       PIPE_CAP_CUBE_MAP_ARRAY                   },
-      { o(ARB_texture_multisample),          PIPE_CAP_TEXTURE_MULTISAMPLE              }
+      { o(ARB_texture_multisample),          PIPE_CAP_TEXTURE_MULTISAMPLE              },
+      { o(ARB_texture_query_lod),            PIPE_CAP_TEXTURE_QUERY_LOD                },
+      { o(ARB_sample_shading),               PIPE_CAP_SAMPLE_SHADING                   },
    };
 
    /* Required: render target and sampler support */
@@ -526,7 +541,6 @@ void st_init_extensions(struct st_context *st)
    ctx->Extensions.ARB_fragment_coord_conventions = GL_TRUE;
    ctx->Extensions.ARB_fragment_program = GL_TRUE;
    ctx->Extensions.ARB_fragment_shader = GL_TRUE;
-   ctx->Extensions.ARB_half_float_pixel = GL_TRUE;
    ctx->Extensions.ARB_half_float_vertex = GL_TRUE;
    ctx->Extensions.ARB_internalformat_query = GL_TRUE;
    ctx->Extensions.ARB_map_buffer_range = GL_TRUE;
@@ -545,13 +559,6 @@ void st_init_extensions(struct st_context *st)
    ctx->Extensions.EXT_pixel_buffer_object = GL_TRUE;
    ctx->Extensions.EXT_point_parameters = GL_TRUE;
    ctx->Extensions.EXT_provoking_vertex = GL_TRUE;
-
-   /* IMPORTANT:
-    *    Don't enable EXT_separate_shader_objects. It disallows a certain
-    *    optimization in the GLSL compiler and therefore is considered
-    *    harmful.
-    */
-   ctx->Extensions.EXT_separate_shader_objects = GL_FALSE;
 
    ctx->Extensions.EXT_texture_env_dot3 = GL_TRUE;
    ctx->Extensions.EXT_vertex_array_bgra = GL_TRUE;
@@ -622,6 +629,8 @@ void st_init_extensions(struct st_context *st)
       if (!st->options.disable_shader_bit_encoding) {
          ctx->Extensions.ARB_shader_bit_encoding = GL_TRUE;
       }
+
+      ctx->Extensions.EXT_shader_integer_mix = GL_TRUE;
    } else {
       /* Optional integer support for GLSL 1.2. */
       if (screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
@@ -629,6 +638,8 @@ void st_init_extensions(struct st_context *st)
           screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
                                    PIPE_SHADER_CAP_INTEGERS)) {
          ctx->Const.NativeIntegers = GL_TRUE;
+
+         ctx->Extensions.EXT_shader_integer_mix = GL_TRUE;
       }
    }
 
@@ -719,6 +730,13 @@ void st_init_extensions(struct st_context *st)
       ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = GL_TRUE;
    }
 
+   if (ctx->Const.MaxSamples == 0 && screen->get_param(screen, PIPE_CAP_FAKE_SW_MSAA)) {
+	ctx->Const.FakeSWMSAA = GL_TRUE;
+        ctx->Extensions.EXT_framebuffer_multisample = GL_TRUE;
+        ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = GL_TRUE;
+        ctx->Extensions.ARB_texture_multisample = GL_TRUE;
+   }
+
    if (ctx->Const.MaxDualSourceDrawBuffers > 0 &&
        !st->options.disable_blend_func_extended)
       ctx->Extensions.ARB_blend_func_extended = GL_TRUE;
@@ -777,4 +795,15 @@ void st_init_extensions(struct st_context *st)
       if (!ctx->Extensions.EXT_transform_feedback)
          ctx->Const.DisableVaryingPacking = GL_TRUE;
    }
+
+   if (ctx->API == API_OPENGL_CORE) {
+      ctx->Const.MaxViewports = screen->get_param(screen, PIPE_CAP_MAX_VIEWPORTS);
+      if (ctx->Const.MaxViewports >= 16) {
+         ctx->Const.ViewportBounds.Min = -16384.0;
+         ctx->Const.ViewportBounds.Max = 16384.0;
+         ctx->Extensions.ARB_viewport_array = GL_TRUE;
+      }
+   }
+   if (ctx->Const.MaxProgramTextureGatherComponents > 0)
+      ctx->Extensions.ARB_texture_gather = GL_TRUE;
 }

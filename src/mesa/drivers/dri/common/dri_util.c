@@ -49,6 +49,7 @@
 #include "../glsl/glsl_parser_extras.h"
 #include "main/mtypes.h"
 #include "main/version.h"
+#include "main/errors.h"
 #include "main/macros.h"
 
 PUBLIC const char __dri2ConfigOptions[] =
@@ -448,8 +449,8 @@ driContextSetFlags(struct gl_context *ctx, uint32_t flags)
     if ((flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0)
         ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
     if ((flags & __DRI_CTX_FLAG_DEBUG) != 0) {
+       _mesa_set_debug_state_int(ctx, GL_DEBUG_OUTPUT, GL_TRUE);
         ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_DEBUG_BIT;
-        ctx->Debug.DebugOutput = GL_TRUE;
     }
 }
 
@@ -764,16 +765,17 @@ const __DRIdri2Extension driDRI2Extension = {
 };
 
 const __DRIswrastExtension driSWRastExtension = {
-    { __DRI_SWRAST, 4 },
-    driSWRastCreateNewScreen,
-    driCreateNewDrawable,
-    driCreateNewContextForAPI,
-    driCreateContextAttribs,
-    driSWRastCreateNewScreen2,
+    .base = { __DRI_SWRAST, 4 },
+
+    .createNewScreen            = driSWRastCreateNewScreen,
+    .createNewDrawable          = driCreateNewDrawable,
+    .createNewContextForAPI     = driCreateNewContextForAPI,
+    .createContextAttribs       = driCreateContextAttribs,
+    .createNewScreen2           = driSWRastCreateNewScreen2,
 };
 
 const __DRI2configQueryExtension dri2ConfigQueryExtension = {
-   .base = { __DRI2_CONFIG_QUERY, __DRI2_CONFIG_QUERY_VERSION },
+   .base = { __DRI2_CONFIG_QUERY, 1 },
 
    .configQueryb        = dri2ConfigQueryb,
    .configQueryi        = dri2ConfigQueryi,
@@ -869,7 +871,7 @@ driImageFormatToGLFormat(uint32_t image_format)
 
 /** Image driver interface */
 const __DRIimageDriverExtension driImageDriverExtension = {
-    .base = { __DRI_IMAGE_DRIVER, __DRI_IMAGE_DRIVER_VERSION },
+    .base = { __DRI_IMAGE_DRIVER, 1 },
 
     .createNewScreen2           = driCreateNewScreen2,
     .createNewDrawable          = driCreateNewDrawable,
@@ -888,6 +890,7 @@ static void driCopySubBuffer(__DRIdrawable *pdp, int x, int y,
 
 /* for swrast only */
 const __DRIcopySubBufferExtension driCopySubBufferExtension = {
-   { __DRI_COPY_SUB_BUFFER, 1 },
-   .copySubBuffer = driCopySubBuffer,
+   .base = { __DRI_COPY_SUB_BUFFER, 1 },
+
+   .copySubBuffer               = driCopySubBuffer,
 };

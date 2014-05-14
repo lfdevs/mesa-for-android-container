@@ -23,6 +23,8 @@
 #ifndef API_DISPATCH_HPP
 #define API_DISPATCH_HPP
 
+#define CL_USE_DEPRECATED_OPENCL_1_1_APIS
+
 #include "CL/cl.h"
 #include "CL/cl_ext.h"
 #include "CL/cl_gl.h"
@@ -638,7 +640,12 @@ struct _cl_icd_dispatch {
       cl_GLsync sync,
       cl_int *errcode_ret);
 
-   void *clCreateSubDevices;
+    CL_API_ENTRY cl_int (CL_API_CALL *clCreateSubDevices)(
+       cl_device_id in_device,
+       const cl_device_partition_property *partition_properties,
+       cl_uint num_entries,
+       cl_device_id *out_devices,
+       cl_uint *num_devices);
 
    CL_API_ENTRY cl_int (CL_API_CALL *clRetainDevice)(
       cl_device_id device);
@@ -646,7 +653,13 @@ struct _cl_icd_dispatch {
    CL_API_ENTRY cl_int (CL_API_CALL *clReleaseDevice)(
       cl_device_id device);
 
-   void *clCreateImage;
+   CL_API_ENTRY cl_mem (CL_API_CALL *clCreateImage)(
+      cl_context context,
+      cl_mem_flags flags,
+      const cl_image_format *image_format,
+      const cl_image_desc *image_desc,
+      void *host_ptr,
+      cl_int *errcode_ret);
 
    CL_API_ENTRY cl_program (CL_API_CALL *clCreateProgramWithBuiltInKernels)(
       cl_context context,

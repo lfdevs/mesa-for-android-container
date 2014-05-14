@@ -33,7 +33,6 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_framebuffer.h"
-#include "r600_resource.h"
 #include "r600_shader.h"
 #include "r600_pipe.h"
 #include "r600_formats.h"
@@ -450,7 +449,7 @@ void compute_memory_transfer(
 
 	if (device_to_host) {
 		map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_READ,
-			&(struct pipe_box) { .width = aligned_size,
+			&(struct pipe_box) { .width = aligned_size * 4,
 			.height = 1, .depth = 1 }, &xfer);
                 assert(xfer);
 		assert(map);
@@ -458,7 +457,7 @@ void compute_memory_transfer(
 		pipe->transfer_unmap(pipe, xfer);
 	} else {
 		map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_WRITE,
-			&(struct pipe_box) { .width = aligned_size,
+			&(struct pipe_box) { .width = aligned_size * 4,
 			.height = 1, .depth = 1 }, &xfer);
 		assert(xfer);
 		assert(map);

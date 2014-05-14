@@ -81,7 +81,11 @@ const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =
    "PCOORD",
    "VIEWPORT_INDEX",
    "LAYER",
-   "CULLDIST"
+   "CULLDIST",
+   "SAMPLEID",
+   "SAMPLEPOS",
+   "SAMPLEMASK",
+   "INVOCATIONID",
 };
 
 const char *tgsi_texture_names[TGSI_TEXTURE_COUNT] =

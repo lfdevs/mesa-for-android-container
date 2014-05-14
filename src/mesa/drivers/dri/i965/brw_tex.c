@@ -34,7 +34,6 @@
 #include "main/mtypes.h"
 #include "main/teximage.h"
 
-#include "intel_regions.h"
 #include "intel_tex.h"
 #include "brw_context.h"
 
@@ -46,11 +45,12 @@ void brw_validate_textures( struct brw_context *brw )
 {
    struct gl_context *ctx = &brw->ctx;
    int i;
+   int maxEnabledUnit = ctx->Texture._MaxEnabledTexImageUnit;
 
-   for (i = 0; i < ctx->Const.MaxCombinedTextureImageUnits; i++) {
+   for (i = 0; i <= maxEnabledUnit; i++) {
       struct gl_texture_unit *texUnit = &ctx->Texture.Unit[i];
 
-      if (texUnit->_ReallyEnabled) {
+      if (texUnit->_Current) {
 	 intel_finalize_mipmap_tree(brw, i);
       }
    }

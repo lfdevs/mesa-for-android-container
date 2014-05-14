@@ -86,7 +86,7 @@ struct svga_shader_emitter
    boolean in_main_func;
 
    boolean created_common_immediate;
-   int common_immediate_idx;
+   int common_immediate_idx[2];
 
    boolean created_loop_const;
    int loop_const_idx;
@@ -183,6 +183,40 @@ inst_token(unsigned opcode)
 
    inst.value = 0;
    inst.op = opcode;
+
+   return inst;
+}
+
+
+/**
+ * Generate a SVGA3dShaderInstToken for the given SVGA3D shader opcode
+ * with the predication flag set.
+ */
+static INLINE SVGA3dShaderInstToken
+inst_token_predicated(unsigned opcode)
+{
+   SVGA3dShaderInstToken inst;
+
+   inst.value = 0;
+   inst.op = opcode;
+   inst.predicated = 1;
+
+   return inst;
+}
+
+
+/**
+ * Generate a SVGA3dShaderInstToken for a SETP instruction (set predicate)
+ * using the given comparison operator (one of SVGA3DOPCOMP_xx).
+ */
+static INLINE SVGA3dShaderInstToken
+inst_token_setp(unsigned operator)
+{
+   SVGA3dShaderInstToken inst;
+
+   inst.value = 0;
+   inst.op = SVGA3DOP_SETP;
+   inst.control = operator;
 
    return inst;
 }

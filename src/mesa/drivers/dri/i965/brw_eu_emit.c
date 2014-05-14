@@ -780,8 +780,10 @@ brw_next_insn(struct brw_compile *p, unsigned opcode)
    struct brw_instruction *insn;
 
    if (p->nr_insn + 1 > p->store_size) {
-      if (0)
-         printf("incresing the store size to %d\n", p->store_size << 1);
+      if (0) {
+         fprintf(stderr, "incresing the store size to %d\n",
+                 p->store_size << 1);
+      }
       p->store_size <<= 1;
       p->store = reralloc(p->mem_ctx, p->store,
                           struct brw_instruction, p->store_size);
@@ -2241,8 +2243,6 @@ void brw_fb_WRITE(struct brw_compile *p,
    } else {
       insn = next_insn(p, BRW_OPCODE_SEND);
    }
-   /* The execution mask is ignored for render target writes. */
-   insn->header.predicate_control = 0;
    insn->header.compression_control = BRW_COMPRESSION_NONE;
 
    if (brw->gen >= 6) {

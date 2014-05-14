@@ -32,25 +32,29 @@ gen6_get_sample_position(struct gl_context *ctx,
                          struct gl_framebuffer *fb,
                          GLuint index, GLfloat *result)
 {
+   uint8_t bits;
+
    switch (fb->Visual.samples) {
    case 1:
       result[0] = result[1] = 0.5f;
+      return;
+   case 2:
+      bits = brw_multisample_positions_1x_2x >> (8 * index);
       break;
-   case 4: {
-      uint8_t val = (uint8_t)(brw_multisample_positions_4x[0] >> (8*index));
-      result[0] = ((val >> 4) & 0xf) / 16.0f;
-      result[1] = (val & 0xf) / 16.0f;
+   case 4:
+      bits = brw_multisample_positions_4x >> (8 * index);
       break;
-   }
-   case 8: {
-      uint8_t val = (uint8_t)(brw_multisample_positions_8x[index>>2] >> (8*(index & 3)));
-      result[0] = ((val >> 4) & 0xf) / 16.0f;
-      result[1] = (val & 0xf) / 16.0f;
+   case 8:
+      bits = brw_multisample_positions_8x[index >> 2] >> (8 * (index & 3));
       break;
-   }
    default:
       assert(!"Not implemented");
+      return;
    }
+
+   /* Convert from U0.4 back to a floating point coordinate. */
+   result[0] = ((bits >> 4) & 0xf) / 16.0f;
+   result[1] = (bits & 0xf) / 16.0f;
 }
 
 /**
@@ -73,7 +77,7 @@ gen6_emit_3dstate_multisample(struct brw_context *brw,
       break;
    case 4:
       number_of_multisamples = MS_NUMSAMPLES_4;
-      sample_positions_3210 = brw_multisample_positions_4x[0];
+      sample_positions_3210 = brw_multisample_positions_4x;
       break;
    case 8:
       number_of_multisamples = MS_NUMSAMPLES_8;
@@ -107,7 +111,8 @@ gen6_determine_sample_mask(struct brw_context *brw)
    float coverage_invert = false;
    unsigned sample_mask = ~0u;
 
-   unsigned num_samples = ctx->DrawBuffer->Visual.samples;
+   /* BRW_NEW_NUM_SAMPLES */
+   unsigned num_samples = brw->num_samples;
 
    if (ctx->Multisample._Enabled) {
       if (ctx->Multisample.SampleCoverage) {
@@ -146,21 +151,17 @@ gen6_emit_3dstate_sample_mask(struct brw_context *brw, unsigned mask)
 
 static void upload_multisample_state(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->ctx;
-
-   /* _NEW_BUFFERS, _NEW_MULTISAMPLE */
-   unsigned num_samples = ctx->DrawBuffer->Visual.samples;
-
-   gen6_emit_3dstate_multisample(brw, num_samples);
+   /* BRW_NEW_NUM_SAMPLES */
+   gen6_emit_3dstate_multisample(brw, brw->num_samples);
    gen6_emit_3dstate_sample_mask(brw, gen6_determine_sample_mask(brw));
 }
 
 
 const struct brw_tracked_state gen6_multisample_state = {
    .dirty = {
-      .mesa = _NEW_BUFFERS |
-              _NEW_MULTISAMPLE,
-      .brw = BRW_NEW_CONTEXT,
+      .mesa = _NEW_MULTISAMPLE,
+      .brw = (BRW_NEW_CONTEXT |
+              BRW_NEW_NUM_SAMPLES),
       .cache = 0
    },
    .emit = upload_multisample_state

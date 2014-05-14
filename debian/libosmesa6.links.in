@@ -1,0 +1,1 @@
+usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa.so.8	usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa.so.6

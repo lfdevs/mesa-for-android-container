@@ -115,7 +115,7 @@ unsigned cso_get_aux_vertex_buffer_slot(struct cso_context *ctx);
 void cso_set_stream_outputs(struct cso_context *ctx,
                             unsigned num_targets,
                             struct pipe_stream_output_target **targets,
-                            unsigned append_bitmask);
+                            const unsigned *offsets);
 void cso_save_stream_outputs(struct cso_context *ctx);
 void cso_restore_stream_outputs(struct cso_context *ctx);
 
@@ -163,6 +163,10 @@ void cso_set_blend_color(struct cso_context *cso,
 void cso_set_sample_mask(struct cso_context *cso, unsigned stencil_mask);
 void cso_save_sample_mask(struct cso_context *ctx);
 void cso_restore_sample_mask(struct cso_context *ctx);
+
+void cso_set_min_samples(struct cso_context *cso, unsigned min_samples);
+void cso_save_min_samples(struct cso_context *ctx);
+void cso_restore_min_samples(struct cso_context *ctx);
 
 void cso_set_stencil_ref(struct cso_context *cso,
                          const struct pipe_stencil_ref *sr);

@@ -77,7 +77,7 @@ struct ureg_tokens {
 #define UREG_MAX_SYSTEM_VALUE PIPE_MAX_ATTRIBS
 #define UREG_MAX_OUTPUT PIPE_MAX_SHADER_OUTPUTS
 #define UREG_MAX_CONSTANT_RANGE 32
-#define UREG_MAX_IMMEDIATE 256
+#define UREG_MAX_IMMEDIATE 4096
 #define UREG_MAX_ADDR 2
 #define UREG_MAX_PRED 1
 #define UREG_MAX_ARRAY_TEMPS 256
@@ -168,6 +168,7 @@ struct ureg_program
    unsigned property_gs_input_prim;
    unsigned property_gs_output_prim;
    unsigned property_gs_max_vertices;
+   unsigned property_gs_invocations;
    unsigned char property_fs_coord_origin; /* = TGSI_FS_COORD_ORIGIN_* */
    unsigned char property_fs_coord_pixel_center; /* = TGSI_FS_COORD_PIXEL_CENTER_* */
    unsigned char property_fs_color0_writes_all_cbufs; /* = TGSI_FS_COLOR0_WRITES_ALL_CBUFS * */
@@ -294,6 +295,12 @@ ureg_property_gs_max_vertices(struct ureg_program *ureg,
                               unsigned max_vertices)
 {
    ureg->property_gs_max_vertices = max_vertices;
+}
+void
+ureg_property_gs_invocations(struct ureg_program *ureg,
+                             unsigned invocations)
+{
+   ureg->property_gs_invocations = invocations;
 }
 
 void
@@ -1461,6 +1468,14 @@ static void emit_decls( struct ureg_program *ureg )
                     ureg->property_gs_max_vertices);
    }
 
+   if (ureg->property_gs_invocations != ~0) {
+      assert(ureg->processor == TGSI_PROCESSOR_GEOMETRY);
+
+      emit_property(ureg,
+                    TGSI_PROPERTY_GS_INVOCATIONS,
+                    ureg->property_gs_invocations);
+   }
+
    if (ureg->property_fs_coord_origin) {
       assert(ureg->processor == TGSI_PROCESSOR_FRAGMENT);
 
@@ -1750,6 +1765,7 @@ struct ureg_program *ureg_create( unsigned processor )
    ureg->property_gs_input_prim = ~0;
    ureg->property_gs_output_prim = ~0;
    ureg->property_gs_max_vertices = ~0;
+   ureg->property_gs_invocations = ~0;
 
    ureg->free_temps = util_bitmask_create();
    if (ureg->free_temps == NULL)

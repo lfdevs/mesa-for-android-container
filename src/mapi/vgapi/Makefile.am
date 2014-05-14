@@ -21,6 +21,7 @@
 
 AM_CPPFLAGS = \
 	$(DEFINES) \
+	$(SELINUX_CFLAGS) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/mapi \
 	-DMAPI_ABI_HEADER=\"vgapi_tmp.h\"
@@ -43,7 +44,11 @@ TOP=$(top_srcdir)
 include ../Makefile.sources
 libOpenVG_la_SOURCES = $(MAPI_FILES) vgapi_tmp.h
 libOpenVG_la_LIBADD = $(VG_LIB_DEPS)
-libOpenVG_la_LDFLAGS = -version-number 1 -no-undefined
+libOpenVG_la_LDFLAGS = \
+	-no-undefined \
+	-version-number 1 \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
 
 vgapi_tmp.h: $(srcdir)/vgapi.csv $(top_srcdir)/src/mapi/mapi_abi.py
 	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(top_srcdir)/src/mapi/mapi_abi.py \

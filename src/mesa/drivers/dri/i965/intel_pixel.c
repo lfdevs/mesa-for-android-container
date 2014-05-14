@@ -34,7 +34,6 @@
 
 #include "brw_context.h"
 #include "intel_pixel.h"
-#include "intel_regions.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PIXEL
 
@@ -77,7 +76,7 @@ intel_check_blit_fragment_ops(struct gl_context * ctx, bool src_alpha_is_one)
       return false;
    }
 
-   if (ctx->Texture._EnabledUnits) {
+   if (ctx->Texture._MaxEnabledTexImageUnit != -1) {
       DBG("fallback due to texturing\n");
       return false;
    }

@@ -598,6 +598,7 @@ private:
    bool handleTXD(TexInstruction *);
    bool handleTXQ(TexInstruction *);
    bool handleManualTXD(TexInstruction *);
+   bool handleTXLQ(TexInstruction *);
    bool handleATOM(Instruction *);
    bool handleCasExch(Instruction *, bool needCctl);
    void handleSurfaceOpNVE4(TexInstruction *);
@@ -666,8 +667,9 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
    const int dim = i->tex.target.getDim() + i->tex.target.isCube();
    const int arg = i->tex.target.getArgCount();
    const int lyr = arg - (i->tex.target.isMS() ? 2 : 1);
+   const int chipset = prog->getTarget()->getChipset();
 
-   if (prog->getTarget()->getChipset() >= NVISA_GK104_CHIPSET) {
+   if (chipset >= NVISA_GK104_CHIPSET) {
       if (i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
          WARN("indirect TEX not implemented\n");
       }
@@ -697,7 +699,7 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
       }
    } else
    // (nvc0) generate and move the tsc/tic/array source to the front
-   if (dim != arg || i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
+   if (i->tex.target.isArray() || i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
       LValue *src = new_LValue(func, FILE_GPR); // 0xttxsaaaa
 
       Value *arrayIndex = i->tex.target.isArray() ? i->getSrc(lyr) : NULL;
@@ -728,20 +730,56 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
       i->setSrc(0, src);
    }
 
-   // offset is last source (lod 1st, dc 2nd)
+   // For nvc0, the sample id has to be in the second operand, as the offset
+   // does. Right now we don't know how to pass both in, and this case can't
+   // happen with OpenGL. On nve0, the sample id is part of the texture
+   // coordinate argument.
+   assert(chipset >= NVISA_GK104_CHIPSET ||
+          !i->tex.useOffsets || !i->tex.target.isMS());
+
+   // offset is between lod and dc
    if (i->tex.useOffsets) {
-      uint32_t value = 0;
       int n, c;
       int s = i->srcCount(0xff, true);
+      if (i->tex.target.isShadow())
+         s--;
       if (i->srcExists(s)) // move potential predicate out of the way
          i->moveSources(s, 1);
-      for (n = 0; n < i->tex.useOffsets; ++n)
-         for (c = 0; c < 3; ++c)
-            value |= (i->tex.offset[n][c] & 0xf) << (n * 12 + c * 4);
-      i->setSrc(s, bld.loadImm(NULL, value));
+      if (i->tex.useOffsets == 4 && i->srcExists(s + 1))
+         i->moveSources(s + 1, 1);
+      if (i->op == OP_TXG) {
+         // Either there is 1 offset, which goes into the 2 low bytes of the
+         // first source, or there are 4 offsets, which go into 2 sources (8
+         // values, 1 byte each).
+         Value *offs[2] = {NULL, NULL};
+         for (n = 0; n < i->tex.useOffsets; n++) {
+            for (c = 0; c < 2; ++c) {
+               if ((n % 2) == 0 && c == 0)
+                  offs[n / 2] = i->offset[n][c].get();
+               else
+                  bld.mkOp3(OP_INSBF, TYPE_U32,
+                            offs[n / 2],
+                            i->offset[n][c].get(),
+                            bld.mkImm(0x800 | ((n * 16 + c * 8) % 32)),
+                            offs[n / 2]);
+            }
+         }
+         i->setSrc(s, offs[0]);
+         if (offs[1])
+            i->setSrc(s + 1, offs[1]);
+      } else {
+         unsigned imm = 0;
+         assert(i->tex.useOffsets == 1);
+         for (c = 0; c < 3; ++c) {
+            ImmediateValue val;
+            assert(i->offset[0][c].getImmediate(val));
+            imm |= (val.reg.data.u32 & 0xf) << (c * 4);
+         }
+         i->setSrc(s, bld.loadImm(NULL, imm));
+      }
    }
 
-   if (prog->getTarget()->getChipset() >= NVISA_GK104_CHIPSET) {
+   if (chipset >= NVISA_GK104_CHIPSET) {
       //
       // If TEX requires more than 4 sources, the 2nd register tuple must be
       // aligned to 4, even if it consists of just a single 4-byte register.
@@ -850,6 +888,44 @@ NVC0LoweringPass::handleTXQ(TexInstruction *txq)
    // TODO: indirect resource/sampler index
    return true;
 }
+
+bool
+NVC0LoweringPass::handleTXLQ(TexInstruction *i)
+{
+   /* The outputs are inverted compared to what the TGSI instruction
+    * expects. Take that into account in the mask.
+    */
+   assert((i->tex.mask & ~3) == 0);
+   if (i->tex.mask == 1)
+      i->tex.mask = 2;
+   else if (i->tex.mask == 2)
+      i->tex.mask = 1;
+   handleTEX(i);
+   bld.setPosition(i, true);
+
+   /* The returned values are not quite what we want:
+    * (a) convert from s16/u16 to f32
+    * (b) multiply by 1/256
+    */
+   for (int def = 0; def < 2; ++def) {
+      if (!i->defExists(def))
+         continue;
+      enum DataType type = TYPE_S16;
+      if (i->tex.mask == 2 || def > 0)
+         type = TYPE_U16;
+      bld.mkCvt(OP_CVT, TYPE_F32, i->getDef(def), type, i->getDef(def));
+      bld.mkOp2(OP_MUL, TYPE_F32, i->getDef(def),
+                i->getDef(def), bld.loadImm(NULL, 1.0f / 256));
+   }
+   if (i->tex.mask == 3) {
+      LValue *t = new_LValue(func, FILE_GPR);
+      bld.mkMov(t, i->getDef(0));
+      bld.mkMov(i->getDef(0), i->getDef(1));
+      bld.mkMov(i->getDef(1), t);
+   }
+   return true;
+}
+
 
 bool
 NVC0LoweringPass::handleATOM(Instruction *atom)
@@ -1373,6 +1449,31 @@ NVC0LoweringPass::handleRDSV(Instruction *i)
       bld.mkLoad(TYPE_U32, i->getDef(0),
                  bld.mkSymbol(FILE_MEMORY_CONST, 0, TYPE_U32, addr), NULL);
       break;
+   case SV_SAMPLE_INDEX:
+      // TODO: Properly pass source as an address in the PIX address space
+      // (which can be of the form [r0+offset]). But this is currently
+      // unnecessary.
+      ld = bld.mkOp1(OP_PIXLD, TYPE_U32, i->getDef(0), bld.mkImm(0));
+      ld->subOp = NV50_IR_SUBOP_PIXLD_SAMPLEID;
+      break;
+   case SV_SAMPLE_POS: {
+      Value *off = new_LValue(func, FILE_GPR);
+      ld = bld.mkOp1(OP_PIXLD, TYPE_U32, i->getDef(0), bld.mkImm(0));
+      ld->subOp = NV50_IR_SUBOP_PIXLD_SAMPLEID;
+      bld.mkOp2(OP_SHL, TYPE_U32, off, i->getDef(0), bld.mkImm(3));
+      bld.mkLoad(TYPE_F32,
+                 i->getDef(0),
+                 bld.mkSymbol(
+                       FILE_MEMORY_CONST, prog->driver->io.resInfoCBSlot,
+                       TYPE_U32, prog->driver->io.sampleInfoBase +
+                       4 * sym->reg.data.sv.index),
+                 off);
+      break;
+   }
+   case SV_SAMPLE_MASK:
+      ld = bld.mkOp1(OP_PIXLD, TYPE_U32, i->getDef(0), bld.mkImm(0));
+      ld->subOp = NV50_IR_SUBOP_PIXLD_COVMASK;
+      break;
    default:
       if (prog->getType() == Program::TYPE_TESSELLATION_EVAL)
          vtx = bld.mkOp1v(OP_PFETCH, TYPE_U32, bld.getSSA(), bld.mkImm(0));
@@ -1520,6 +1621,8 @@ NVC0LoweringPass::visit(Instruction *i)
       return handleTEX(i->asTex());
    case OP_TXD:
       return handleTXD(i->asTex());
+   case OP_TXLQ:
+      return handleTXLQ(i->asTex());
    case OP_TXQ:
      return handleTXQ(i->asTex());
    case OP_EX2:

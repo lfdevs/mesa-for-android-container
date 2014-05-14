@@ -117,6 +117,7 @@ enum operation
    OP_TXQ, // texture size query
    OP_TXD, // texture derivatives
    OP_TXG, // texture gather
+   OP_TXLQ, // texture query lod
    OP_TEXCSAA, // texture op for coverage sampling
    OP_TEXPREP, // turn cube map array into 2d array coordinates
    OP_SULDB, // surface load (raw)
@@ -135,12 +136,14 @@ enum operation
    OP_DFDY,
    OP_RDSV, // read system value
    OP_WRSV, // write system value
+   OP_PIXLD, // get info about raster object or surfaces
    OP_QUADOP,
    OP_QUADON,
    OP_QUADPOP,
    OP_POPCNT, // bitcount(src0 & src1)
    OP_INSBF,  // insert first src1[8:15] bits of src0 into src2 at src1[0:7]
    OP_EXTBF,  // place bits [K,K+N) of src0 into dst, src1 = 0xNNKK
+   OP_BFIND,  // find highest/lowest set bit
    OP_PERMT,  // dst = bytes from src2,src0 selected by src1 (nvc0's src order)
    OP_ATOM,
    OP_BAR,    // execution barrier, sources = { id, thread count, predicate }
@@ -169,6 +172,7 @@ enum operation
 #define NV50_IR_SUBOP_TEXBAR(n)    n
 #define NV50_IR_SUBOP_MOV_FINAL    1
 #define NV50_IR_SUBOP_EXTBF_REV    1
+#define NV50_IR_SUBOP_BFIND_SAMT   1
 #define NV50_IR_SUBOP_PERMT_F4E    1
 #define NV50_IR_SUBOP_PERMT_B4E    2
 #define NV50_IR_SUBOP_PERMT_RC8    3
@@ -213,6 +217,12 @@ enum operation
 #define NV50_IR_SUBOP_SUCLAMP_SD(r, d) (( 0 + (r)) | ((d == 2) ? 0x10 : 0))
 #define NV50_IR_SUBOP_SUCLAMP_PL(r, d) (( 5 + (r)) | ((d == 2) ? 0x10 : 0))
 #define NV50_IR_SUBOP_SUCLAMP_BL(r, d) ((10 + (r)) | ((d == 2) ? 0x10 : 0))
+#define NV50_IR_SUBOP_PIXLD_COUNT       0
+#define NV50_IR_SUBOP_PIXLD_COVMASK     1
+#define NV50_IR_SUBOP_PIXLD_COVERED     2
+#define NV50_IR_SUBOP_PIXLD_OFFSET      3
+#define NV50_IR_SUBOP_PIXLD_CENT_OFFSET 4
+#define NV50_IR_SUBOP_PIXLD_SAMPLEID    5
 #define NV50_IR_SUBOP_MADSP_SD     0xffff
 // Yes, we could represent those with DataType.
 // Or put the type into operation and have a couple 1000 values in that enum.
@@ -353,6 +363,8 @@ enum SVSemantic
    SV_POINT_COORD,
    SV_CLIP_DISTANCE,
    SV_SAMPLE_INDEX,
+   SV_SAMPLE_POS,
+   SV_SAMPLE_MASK,
    SV_TESS_FACTOR,
    SV_TESS_COORD,
    SV_TID,
@@ -901,13 +913,14 @@ public:
       bool derivAll;
 
       int8_t useOffsets; // 0, 1, or 4 for textureGatherOffsets
-      int8_t offset[4][3];
+      int8_t offset[3]; // only used on nv50
 
       enum TexQuery query;
    } tex;
 
    ValueRef dPdx[3];
    ValueRef dPdy[3];
+   ValueRef offset[4][3];
 };
 
 class CmpInstruction : public Instruction

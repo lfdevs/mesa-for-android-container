@@ -49,7 +49,26 @@ struct intel_texture_image;
 struct intel_renderbuffer
 {
    struct swrast_renderbuffer Base;
-   struct intel_mipmap_tree *mt; /**< The renderbuffer storage. */
+   /**
+    * The real renderbuffer storage.
+    *
+    * This is multisampled if NumSamples is > 1.
+    */
+   struct intel_mipmap_tree *mt;
+
+   /**
+    * Downsampled contents for window-system MSAA renderbuffers.
+    *
+    * For window system MSAA color buffers, the singlesample_mt is shared with
+    * other processes in DRI2 (and in DRI3, it's the image buffer managed by
+    * glx_dri3.c), while mt is private to our process.  To do a swapbuffers,
+    * we have to downsample out of mt into singlesample_mt.  For depth and
+    * stencil buffers, the singlesample_mt is also private, and since we don't
+    * expect to need to do resolves (except if someone does a glReadPixels()
+    * or glCopyTexImage()), we just temporarily allocate singlesample_mt when
+    * asked to map the renderbuffer.
+    */
+   struct intel_mipmap_tree *singlesample_mt;
 
    /**
     * \name Miptree view
@@ -71,9 +90,30 @@ struct intel_renderbuffer
     */
    unsigned int mt_level;
    unsigned int mt_layer;
+
+   /* The number of attached logical layers. */
+   unsigned int layer_count;
    /** \} */
 
    GLuint draw_x, draw_y; /**< Offset of drawing within the region */
+
+   /**
+    * Set to true at every draw call, to indicate if a window-system
+    * renderbuffer needs to be downsampled before using singlesample_mt.
+    */
+   bool need_downsample;
+
+   /**
+    * Set to true when doing an intel_renderbuffer_map()/unmap() that requires
+    * an upsample at the end.
+    */
+   bool need_map_upsample;
+
+   /**
+    * Set to true if singlesample_mt is temporary storage that persists only
+    * for the duration of a mapping.
+    */
+   bool singlesample_mt_is_tmp;
 };
 
 
@@ -157,9 +197,6 @@ intel_renderbuffer_get_tile_offsets(struct intel_renderbuffer *irb,
                                          tile_x, tile_y);
 }
 
-void
-intel_renderbuffer_set_needs_downsample(struct intel_renderbuffer *irb);
-
 bool
 intel_renderbuffer_has_hiz(struct intel_renderbuffer *irb);
 
@@ -194,6 +231,18 @@ intel_renderbuffer_resolve_depth(struct brw_context *brw,
 void intel_renderbuffer_move_to_temp(struct brw_context *brw,
                                      struct intel_renderbuffer *irb,
                                      bool invalidate);
+
+void
+intel_renderbuffer_downsample(struct brw_context *brw,
+                              struct intel_renderbuffer *irb);
+
+void
+intel_renderbuffer_upsample(struct brw_context *brw,
+                            struct intel_renderbuffer *irb);
+
+void brw_render_cache_set_clear(struct brw_context *brw);
+void brw_render_cache_set_add_bo(struct brw_context *brw, drm_intel_bo *bo);
+void brw_render_cache_set_check_flush(struct brw_context *brw, drm_intel_bo *bo);
 
 unsigned
 intel_quantize_num_samples(struct intel_screen *intel, unsigned num_samples);

@@ -35,31 +35,31 @@ gen7_upload_constant_state(struct brw_context *brw,
                            const struct brw_stage_state *stage_state,
                            bool active, unsigned opcode)
 {
-   if (!active || stage_state->push_const_size == 0) {
-      /* Disable the push constant buffers. */
-      BEGIN_BATCH(7);
-      OUT_BATCH(opcode << 16 | (7 - 2));
+   uint32_t mocs = brw->gen < 8 ? GEN7_MOCS_L3 : 0;
+
+   /* Disable if the shader stage is inactive or there are no push constants. */
+   active = active && stage_state->push_const_size != 0;
+
+   int dwords = brw->gen >= 8 ? 11 : 7;
+   BEGIN_BATCH(dwords);
+   OUT_BATCH(opcode << 16 | (dwords - 2));
+   OUT_BATCH(active ? stage_state->push_const_size : 0);
+   OUT_BATCH(0);
+   /* Pointer to the constant buffer.  Covered by the set of state flags
+    * from gen6_prepare_wm_contants
+    */
+   OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
+   OUT_BATCH(0);
+   OUT_BATCH(0);
+   OUT_BATCH(0);
+   if (brw->gen >= 8) {
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   } else {
-      BEGIN_BATCH(7);
-      OUT_BATCH(opcode << 16 | (7 - 2));
-      OUT_BATCH(stage_state->push_const_size);
-      OUT_BATCH(0);
-      /* Pointer to the constant buffer.  Covered by the set of state flags
-       * from gen6_prepare_wm_contants
-       */
-      OUT_BATCH(stage_state->push_const_offset | GEN7_MOCS_L3);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
    }
+
+   ADVANCE_BATCH();
 }
 
 
@@ -72,27 +72,13 @@ upload_vs_state(struct brw_context *brw)
    const int max_threads_shift = brw->is_haswell ?
       HSW_VS_MAX_THREADS_SHIFT : GEN6_VS_MAX_THREADS_SHIFT;
 
-   gen7_emit_vs_workaround_flush(brw);
-
-   /* BRW_NEW_VS_BINDING_TABLE */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_VS << 16 | (2 - 2));
-   OUT_BATCH(stage_state->bind_bo_offset);
-   ADVANCE_BATCH();
-
-   /* CACHE_NEW_SAMPLER */
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_SAMPLER_STATE_POINTERS_VS << 16 | (2 - 2));
-   OUT_BATCH(stage_state->sampler_offset);
-   ADVANCE_BATCH();
-
-   gen7_upload_constant_state(brw, stage_state, true /* active */,
-                              _3DSTATE_CONSTANT_VS);
+   if (!brw->is_haswell)
+      gen7_emit_vs_workaround_flush(brw);
 
    /* Use ALT floating point mode for ARB vertex programs, because they
     * require 0^0 == 1.
     */
-   if (ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX] == NULL)
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX] == NULL)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
    BEGIN_BATCH(6);
@@ -125,13 +111,11 @@ upload_vs_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen7_vs_state = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
+      .mesa  = _NEW_TRANSFORM,
       .brw   = (BRW_NEW_CONTEXT |
 		BRW_NEW_VERTEX_PROGRAM |
-		BRW_NEW_VS_BINDING_TABLE |
-		BRW_NEW_BATCH |
-                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
-      .cache = CACHE_NEW_VS_PROG | CACHE_NEW_SAMPLER
+		BRW_NEW_BATCH),
+      .cache = CACHE_NEW_VS_PROG
    },
    .emit = upload_vs_state,
 };

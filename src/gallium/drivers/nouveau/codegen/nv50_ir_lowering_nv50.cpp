@@ -543,6 +543,7 @@ private:
    bool handleTXB(TexInstruction *); // I really
    bool handleTXL(TexInstruction *); // hate
    bool handleTXD(TexInstruction *); // these 3
+   bool handleTXLQ(TexInstruction *);
 
    bool handleCALL(Instruction *);
    bool handlePRECONT(Instruction *);
@@ -664,7 +665,7 @@ NV50LoweringPreSSA::handleTEX(TexInstruction *i)
          bld.mkOp2(OP_MIN, TYPE_U32, src, src, bld.loadImm(NULL, 511));
          i->setSrc(arg - 1, src);
       }
-      if (i->tex.target.isCube()) {
+      if (i->tex.target.isCube() && i->srcCount() > 4) {
          std::vector<Value *> acube, a2d;
          int c;
 
@@ -681,9 +682,10 @@ NV50LoweringPreSSA::handleTEX(TexInstruction *i)
 
          for (c = 0; c < 3; ++c)
             i->setSrc(c, a2d[c]);
-         i->setSrc(c, NULL);
          for (; i->srcExists(c + 1); ++c)
             i->setSrc(c, i->getSrc(c + 1));
+         i->setSrc(c, NULL);
+         assert(c <= 4);
 
          i->tex.target = i->tex.target.isShadow() ?
             TEX_TARGET_2D_ARRAY_SHADOW : TEX_TARGET_2D_ARRAY;
@@ -693,6 +695,14 @@ NV50LoweringPreSSA::handleTEX(TexInstruction *i)
    // texel offsets are 3 immediate fields in the instruction,
    // nv50 cannot do textureGatherOffsets
    assert(i->tex.useOffsets <= 1);
+   if (i->tex.useOffsets) {
+      for (int c = 0; c < 3; ++c) {
+         ImmediateValue val;
+         assert(i->offset[0][c].getImmediate(val));
+         i->tex.offset[c] = val.reg.data.u32;
+         i->offset[0][c].set(NULL);
+      }
+   }
 
    return true;
 }
@@ -856,6 +866,26 @@ NV50LoweringPreSSA::handleTXD(TexInstruction *i)
 }
 
 bool
+NV50LoweringPreSSA::handleTXLQ(TexInstruction *i)
+{
+   handleTEX(i);
+   bld.setPosition(i, true);
+
+   /* The returned values are not quite what we want:
+    * (a) convert from s32 to f32
+    * (b) multiply by 1/256
+    */
+   for (int def = 0; def < 2; ++def) {
+      if (!i->defExists(def))
+         continue;
+      bld.mkCvt(OP_CVT, TYPE_F32, i->getDef(def), TYPE_S32, i->getDef(def));
+      bld.mkOp2(OP_MUL, TYPE_F32, i->getDef(def),
+                i->getDef(def), bld.loadImm(NULL, 1.0f / 256));
+   }
+   return true;
+}
+
+bool
 NV50LoweringPreSSA::handleSET(Instruction *i)
 {
    if (i->dType == TYPE_F32) {
@@ -1010,6 +1040,18 @@ NV50LoweringPreSSA::handleRDSV(Instruction *i)
          bld.mkMov(def, bld.mkImm(0));
       }
       break;
+   case SV_SAMPLE_POS: {
+      Value *off = new_LValue(func, FILE_ADDRESS);
+      bld.mkOp1(OP_RDSV, TYPE_U32, def, bld.mkSysVal(SV_SAMPLE_INDEX, 0));
+      bld.mkOp2(OP_SHL, TYPE_U32, off, def, bld.mkImm(3));
+      bld.mkLoad(TYPE_F32,
+                 def,
+                 bld.mkSymbol(
+                       FILE_MEMORY_CONST, prog->driver->io.resInfoCBSlot,
+                       TYPE_U32, prog->driver->io.sampleInfoBase + 4 * idx),
+                 off);
+      break;
+   }
    default:
       bld.mkFetch(i->getDef(0), i->dType,
                   FILE_SHADER_INPUT, addr, i->getIndirect(0, 0), NULL);
@@ -1196,6 +1238,8 @@ NV50LoweringPreSSA::visit(Instruction *i)
       return handleTXL(i->asTex());
    case OP_TXD:
       return handleTXD(i->asTex());
+   case OP_TXLQ:
+      return handleTXLQ(i->asTex());
    case OP_EX2:
       bld.mkOp1(OP_PREEX2, TYPE_F32, i->getDef(0), i->getSrc(0));
       i->setSrc(0, i->getDef(0));

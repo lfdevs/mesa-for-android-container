@@ -36,11 +36,10 @@ namespace brw {
 vec4_gs_visitor::vec4_gs_visitor(struct brw_context *brw,
                                  struct brw_gs_compile *c,
                                  struct gl_shader_program *prog,
-                                 struct brw_shader *shader,
                                  void *mem_ctx,
                                  bool no_spills)
    : vec4_visitor(brw, &c->base, &c->gp->program.Base, &c->key.base,
-                  &c->prog_data.base, prog, shader, mem_ctx,
+                  &c->prog_data.base, prog, MESA_SHADER_GEOMETRY, mem_ctx,
                   INTEL_DEBUG & DEBUG_GS, no_spills,
                   ST_GS, ST_GS_WRITTEN, ST_GS_RESET),
      c(c)
@@ -51,9 +50,19 @@ vec4_gs_visitor::vec4_gs_visitor(struct brw_context *brw,
 dst_reg *
 vec4_gs_visitor::make_reg_for_system_value(ir_variable *ir)
 {
-   /* Geometry shaders don't use any system values. */
-   assert(!"Unreached");
-   return NULL;
+   dst_reg *reg = new(mem_ctx) dst_reg(this, ir->type);
+
+   switch (ir->data.location) {
+   case SYSTEM_VALUE_INVOCATION_ID:
+      this->current_annotation = "initialize gl_InvocationID";
+      emit(GS_OPCODE_GET_INSTANCE_ID, *reg);
+      break;
+   default:
+      assert(!"not reached");
+      break;
+   }
+
+   return reg;
 }
 
 
@@ -399,7 +408,8 @@ vec4_gs_visitor::emit_control_data_bits()
          src_reg channel_mask(this, glsl_type::uint_type);
          inst = emit(SHL(dst_reg(channel_mask), one, channel));
          inst->force_writemask_all = true;
-         emit(GS_OPCODE_PREPARE_CHANNEL_MASKS, dst_reg(channel_mask));
+         emit(GS_OPCODE_PREPARE_CHANNEL_MASKS, dst_reg(channel_mask),
+                                               channel_mask);
          emit(GS_OPCODE_SET_CHANNEL_MASKS, mrf_reg, channel_mask);
       }
 
@@ -409,6 +419,13 @@ vec4_gs_visitor::emit_control_data_bits()
       inst->force_writemask_all = true;
       inst = emit(GS_OPCODE_URB_WRITE);
       inst->urb_write_flags = urb_write_flags;
+      /* We need to increment Global Offset by 256-bits to make room for
+       * Broadwell's extra "Vertex Count" payload at the beginning of the
+       * URB entry.  Since this is an OWord message, Global Offset is counted
+       * in 128-bit units, so we must set it to 2.
+       */
+      if (brw->gen >= 8)
+         inst->offset = 2;
       inst->base_mrf = base_mrf;
       inst->mlen = 2;
    }
@@ -568,22 +585,22 @@ brw_gs_emit(struct brw_context *brw,
             void *mem_ctx,
             unsigned *final_assembly_size)
 {
-   struct brw_shader *shader =
-      (brw_shader *) prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
-
    if (unlikely(INTEL_DEBUG & DEBUG_GS)) {
-      printf("GLSL IR for native geometry shader %d:\n", prog->Name);
-      _mesa_print_ir(shader->base.ir, NULL);
-      printf("\n\n");
+      struct brw_shader *shader =
+         (brw_shader *) prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
+
+      brw_dump_ir(brw, "geometry", prog, &shader->base, NULL);
    }
 
    /* Compile the geometry shader in DUAL_OBJECT dispatch mode, if we can do
-    * so without spilling.
+    * so without spilling. If the GS invocations count > 1, then we can't use
+    * dual object mode.
     */
-   if (likely(!(INTEL_DEBUG & DEBUG_NO_DUAL_OBJECT_GS))) {
+   if (c->prog_data.invocations <= 1 &&
+       likely(!(INTEL_DEBUG & DEBUG_NO_DUAL_OBJECT_GS))) {
       c->prog_data.dual_instanced_dispatch = false;
 
-      vec4_gs_visitor v(brw, c, prog, shader, mem_ctx, true /* no_spills */);
+      vec4_gs_visitor v(brw, c, prog, mem_ctx, true /* no_spills */);
       if (v.run()) {
          return generate_assembly(brw, prog, &c->gp->program.Base,
                                   &c->prog_data.base, mem_ctx, &v.instructions,
@@ -603,7 +620,7 @@ brw_gs_emit(struct brw_context *brw,
     */
    c->prog_data.dual_instanced_dispatch = true;
 
-   vec4_gs_visitor v(brw, c, prog, shader, mem_ctx, false /* no_spills */);
+   vec4_gs_visitor v(brw, c, prog, mem_ctx, false /* no_spills */);
    if (!v.run()) {
       prog->LinkStatus = false;
       ralloc_strcat(&prog->InfoLog, v.fail_msg);

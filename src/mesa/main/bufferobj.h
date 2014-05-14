@@ -37,11 +37,21 @@
  */
 
 
-/** Is the given buffer object currently mapped? */
+/** Is the given buffer object currently mapped by the GL user? */
 static inline GLboolean
-_mesa_bufferobj_mapped(const struct gl_buffer_object *obj)
+_mesa_bufferobj_mapped(const struct gl_buffer_object *obj,
+                       gl_map_buffer_index index)
 {
-   return obj->Pointer != NULL;
+   return obj->Mappings[index].Pointer != NULL;
+}
+
+/** Can we not use this buffer while mapped? */
+static inline GLboolean
+_mesa_check_disallowed_mapping(const struct gl_buffer_object *obj)
+{
+   return _mesa_bufferobj_mapped(obj, MAP_USER) &&
+          !(obj->Mappings[MAP_USER].AccessFlags &
+            GL_MAP_PERSISTENT_BIT);
 }
 
 /**
@@ -76,6 +86,20 @@ _mesa_update_default_objects_buffer_objects(struct gl_context *ctx);
 extern struct gl_buffer_object *
 _mesa_lookup_bufferobj(struct gl_context *ctx, GLuint buffer);
 
+extern struct gl_buffer_object *
+_mesa_lookup_bufferobj_locked(struct gl_context *ctx, GLuint buffer);
+
+extern void
+_mesa_begin_bufferobj_lookups(struct gl_context *ctx);
+
+extern void
+_mesa_end_bufferobj_lookups(struct gl_context *ctx);
+
+extern struct gl_buffer_object *
+_mesa_multi_bind_lookup_bufferobj(struct gl_context *ctx,
+                                  const GLuint *buffers,
+                                  GLuint index, const char *caller);
+
 extern void
 _mesa_initialize_buffer_object(struct gl_context *ctx,
                                struct gl_buffer_object *obj,
@@ -101,6 +125,16 @@ _mesa_total_buffer_object_memory(struct gl_context *ctx);
 extern void
 _mesa_init_buffer_object_functions(struct dd_function_table *driver);
 
+extern void
+_mesa_buffer_unmap_all_mappings(struct gl_context *ctx,
+                                struct gl_buffer_object *bufObj);
+
+extern void
+_mesa_buffer_clear_subdata(struct gl_context *ctx,
+                           GLintptr offset, GLsizeiptr size,
+                           const GLvoid *clearValue,
+                           GLsizeiptr clearValueSize,
+                           struct gl_buffer_object *bufObj);
 
 /*
  * API functions
@@ -116,6 +150,10 @@ _mesa_GenBuffers(GLsizei n, GLuint * buffer);
 
 GLboolean GLAPIENTRY
 _mesa_IsBuffer(GLuint buffer);
+
+void GLAPIENTRY
+_mesa_BufferStorage(GLenum target, GLsizeiptr size, const GLvoid *data,
+                    GLbitfield flags);
 
 void GLAPIENTRY
 _mesa_BufferData(GLenum target, GLsizeiptrARB size,
@@ -185,6 +223,13 @@ _mesa_BindBufferRange(GLenum target, GLuint index,
 void GLAPIENTRY
 _mesa_BindBufferBase(GLenum target, GLuint index, GLuint buffer);
 
+void GLAPIENTRY
+_mesa_BindBuffersRange(GLenum target, GLuint first, GLsizei count,
+                       const GLuint *buffers,
+                       const GLintptr *offsets, const GLsizeiptr *sizes);
+void GLAPIENTRY
+_mesa_BindBuffersBase(GLenum target, GLuint first, GLsizei count,
+                      const GLuint *buffers);
 void GLAPIENTRY
 _mesa_InvalidateBufferSubData(GLuint buffer, GLintptr offset,
                               GLsizeiptr length);

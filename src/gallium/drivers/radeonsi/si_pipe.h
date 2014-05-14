@@ -70,8 +70,14 @@ struct si_textures_info {
 	unsigned			n_samplers;
 };
 
-struct si_surface {
-	struct pipe_surface		base;
+struct si_framebuffer {
+	struct r600_atom		atom;
+	struct pipe_framebuffer_state	state;
+	unsigned			nr_samples;
+	unsigned			log_samples;
+	unsigned			cb0_is_integer;
+	unsigned			compressed_cb_mask;
+	unsigned			export_16bpc;
 };
 
 #define SI_NUM_ATOMS(sctx) (sizeof((sctx)->atoms)/sizeof((sctx)->atoms.array[0]))
@@ -89,6 +95,7 @@ struct si_context {
 	void				*custom_dsa_flush_inplace;
 	void				*custom_blend_resolve;
 	void				*custom_blend_decompress;
+	void				*custom_blend_fastclear;
 	struct si_screen		*screen;
 
 	union {
@@ -101,15 +108,14 @@ struct si_context {
 			 * updated in memory. */
 			struct r600_atom *cache_flush;
 			struct r600_atom *streamout_begin;
+			struct r600_atom *streamout_enable; /* must be after streamout_begin */
+			struct r600_atom *framebuffer;
 		};
 		struct r600_atom *array[0];
 	} atoms;
 
+	struct si_framebuffer		framebuffer;
 	struct si_vertex_element	*vertex_elements;
-	struct pipe_framebuffer_state	framebuffer;
-	unsigned			fb_log_samples;
-	unsigned			fb_cb0_is_integer;
-	unsigned			fb_compressed_cb_mask;
 	unsigned			pa_sc_line_stipple;
 	unsigned			pa_su_sc_mode_cntl;
 	/* for saving when using blitter */
@@ -120,7 +126,6 @@ struct si_context {
 	struct si_cs_shader_state	cs_shader_state;
 	/* shader information */
 	unsigned			sprite_coord_enable;
-	unsigned			export_16bpc;
 	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
 	struct si_buffer_resources	rw_buffers[SI_NUM_SHADERS];
 	struct si_textures_info	samplers[SI_NUM_SHADERS];
@@ -162,14 +167,20 @@ void si_flush_depth_textures(struct si_context *sctx,
 void si_decompress_color_textures(struct si_context *sctx,
 				  struct si_textures_info *textures);
 
+/* si_dma.c */
+void si_dma_copy(struct pipe_context *ctx,
+		 struct pipe_resource *dst,
+		 unsigned dst_level,
+		 unsigned dstx, unsigned dsty, unsigned dstz,
+		 struct pipe_resource *src,
+		 unsigned src_level,
+		 const struct pipe_box *src_box);
+
 /* si_hw_context.c */
-void si_context_flush(struct si_context *ctx, unsigned flags);
+void si_context_gfx_flush(void *context, unsigned flags,
+			  struct pipe_fence_handle **fence);
 void si_begin_new_cs(struct si_context *ctx);
 void si_need_cs_space(struct si_context *ctx, unsigned num_dw, boolean count_draw_in);
-
-/* si_pipe.c */
-void si_flush(struct pipe_context *ctx, struct pipe_fence_handle **fence,
-	       unsigned flags);
 
 #if SI_TRACE_CS
 void si_trace_emit(struct si_context *sctx);

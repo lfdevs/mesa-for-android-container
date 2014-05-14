@@ -124,7 +124,10 @@ static const struct opProperties _initProps[] =
    { OP_DFDX,   0x1, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_DFDY,   0x1, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_CALL,   0x0, 0x0, 0x0, 0x0, 0x1, 0x0 },
-   { OP_INSBF,  0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
+   { OP_POPCNT, 0x0, 0x0, 0x3, 0x0, 0x2, 0x2 },
+   { OP_INSBF,  0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
+   { OP_EXTBF,  0x0, 0x0, 0x0, 0x0, 0x2, 0x2 },
+   { OP_BFIND,  0x0, 0x0, 0x1, 0x0, 0x1, 0x1 },
    { OP_PERMT,  0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
    { OP_SET_AND, 0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_SET_OR, 0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
@@ -282,6 +285,9 @@ TargetNVC0::getSVAddress(DataFile shaderFile, const Symbol *sym) const
    case SV_NTID:           return kepler ? (0x00 + idx * 4) : ~0;
    case SV_NCTAID:         return kepler ? (0x0c + idx * 4) : ~0;
    case SV_GRIDID:         return kepler ? 0x18 : ~0;
+   case SV_SAMPLE_INDEX:   return 0;
+   case SV_SAMPLE_POS:     return 0;
+   case SV_SAMPLE_MASK:    return 0;
    default:
       return 0xffffffff;
    }
@@ -361,13 +367,6 @@ TargetNVC0::isAccessSupported(DataFile file, DataType ty) const
       return typeSizeof(ty) <= 8;
    if (ty == TYPE_B96)
       return false;
-   if (getChipset() >= 0xf0) {
-      // XXX: find wide vfetch/export
-      if (ty == TYPE_B128)
-         return false;
-      if (ty == TYPE_U64)
-         return false;
-   }
    return true;
 }
 
@@ -397,6 +396,8 @@ TargetNVC0::isModSupported(const Instruction *insn, int s, Modifier mod) const
       case OP_AND:
       case OP_OR:
       case OP_XOR:
+      case OP_POPCNT:
+      case OP_BFIND:
          break;
       case OP_SET:
          if (insn->sType != TYPE_F32)

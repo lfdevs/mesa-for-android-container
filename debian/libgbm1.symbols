@@ -3,6 +3,7 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_bo_create@Base 7.11~1
  gbm_bo_destroy@Base 7.11~1
  gbm_bo_get_device@Base 8.1~0
+ gbm_bo_get_fd@Base 10.2~0
  gbm_bo_get_format@Base 8.1~0
  gbm_bo_get_handle@Base 7.11~1
  gbm_bo_get_height@Base 7.11~1
@@ -17,13 +18,11 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_device_get_backend_name@Base 7.11~1
  gbm_device_get_fd@Base 7.11~1
  gbm_device_is_format_supported@Base 8.1~0
- gbm_dri_backend@Base 8.1~0
  gbm_surface_create@Base 8.1~0
  gbm_surface_destroy@Base 8.1~0
  gbm_surface_has_free_buffers@Base 8.1~0
  gbm_surface_lock_front_buffer@Base 8.1~0
  gbm_surface_release_buffer@Base 8.1~0
- (regex)"^_gbm_.*@Base$" 0 1
 # stupid side effect of code generation from
 # src/egl/wayland/wayland-drm/wayland-drm.xml which ought to be private.
  (arch=linux-any)wl_drm_interface@Base 0 1

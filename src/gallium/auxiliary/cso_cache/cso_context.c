@@ -120,6 +120,7 @@ struct cso_context {
    struct pipe_viewport_state vp, vp_saved;
    struct pipe_blend_color blend_color;
    unsigned sample_mask, sample_mask_saved;
+   unsigned min_samples, min_samples_saved;
    struct pipe_stencil_ref stencil_ref, stencil_ref_saved;
 };
 
@@ -332,7 +333,7 @@ void cso_release_all( struct cso_context *ctx )
       ctx->pipe->bind_vertex_elements_state( ctx->pipe, NULL );
 
       if (ctx->pipe->set_stream_output_targets)
-         ctx->pipe->set_stream_output_targets(ctx->pipe, 0, NULL, 0);
+         ctx->pipe->set_stream_output_targets(ctx->pipe, 0, NULL, NULL);
    }
 
    /* free fragment sampler views */
@@ -714,6 +715,24 @@ void cso_save_sample_mask(struct cso_context *ctx)
 void cso_restore_sample_mask(struct cso_context *ctx)
 {
    cso_set_sample_mask(ctx, ctx->sample_mask_saved);
+}
+
+void cso_set_min_samples(struct cso_context *ctx, unsigned min_samples)
+{
+   if (ctx->min_samples != min_samples && ctx->pipe->set_min_samples) {
+      ctx->min_samples = min_samples;
+      ctx->pipe->set_min_samples(ctx->pipe, min_samples);
+   }
+}
+
+void cso_save_min_samples(struct cso_context *ctx)
+{
+   ctx->min_samples_saved = ctx->min_samples;
+}
+
+void cso_restore_min_samples(struct cso_context *ctx)
+{
+   cso_set_min_samples(ctx, ctx->min_samples_saved);
 }
 
 void cso_set_stencil_ref(struct cso_context *ctx,
@@ -1177,21 +1196,27 @@ cso_set_sampler_views(struct cso_context *ctx,
 {
    struct sampler_info *info = &ctx->samplers[shader_stage];
    unsigned i;
+   boolean any_change = FALSE;
 
    /* reference new views */
    for (i = 0; i < count; i++) {
+      any_change |= info->views[i] != views[i];
       pipe_sampler_view_reference(&info->views[i], views[i]);
    }
    /* unref extra old views, if any */
    for (; i < info->nr_views; i++) {
+      any_change |= info->views[i] != NULL;
       pipe_sampler_view_reference(&info->views[i], NULL);
    }
 
-   info->nr_views = count;
-
    /* bind the new sampler views */
-   ctx->pipe->set_sampler_views(ctx->pipe, shader_stage, 0, count,
-                                info->views);
+   if (any_change) {
+      ctx->pipe->set_sampler_views(ctx->pipe, shader_stage, 0,
+                                   MAX2(info->nr_views, count),
+                                   info->views);
+   }
+
+   info->nr_views = count;
 }
 
 
@@ -1241,7 +1266,7 @@ void
 cso_set_stream_outputs(struct cso_context *ctx,
                        unsigned num_targets,
                        struct pipe_stream_output_target **targets,
-                       unsigned append_bitmask)
+                       const unsigned *offsets)
 {
    struct pipe_context *pipe = ctx->pipe;
    uint i;
@@ -1266,7 +1291,7 @@ cso_set_stream_outputs(struct cso_context *ctx,
    }
 
    pipe->set_stream_output_targets(pipe, num_targets, targets,
-                                   append_bitmask);
+                                   offsets);
    ctx->nr_so_targets = num_targets;
 }
 
@@ -1292,6 +1317,7 @@ cso_restore_stream_outputs(struct cso_context *ctx)
 {
    struct pipe_context *pipe = ctx->pipe;
    uint i;
+   unsigned offset[PIPE_MAX_SO_BUFFERS];
 
    if (!ctx->has_streamout) {
       return;
@@ -1302,19 +1328,21 @@ cso_restore_stream_outputs(struct cso_context *ctx)
       return;
    }
 
+   assert(ctx->nr_so_targets_saved <= PIPE_MAX_SO_BUFFERS);
    for (i = 0; i < ctx->nr_so_targets_saved; i++) {
       pipe_so_target_reference(&ctx->so_targets[i], NULL);
       /* move the reference from one pointer to another */
       ctx->so_targets[i] = ctx->so_targets_saved[i];
       ctx->so_targets_saved[i] = NULL;
+      /* -1 means append */
+      offset[i] = (unsigned)-1;
    }
    for (; i < ctx->nr_so_targets; i++) {
       pipe_so_target_reference(&ctx->so_targets[i], NULL);
    }
 
-   /* ~0 means append */
    pipe->set_stream_output_targets(pipe, ctx->nr_so_targets_saved,
-                                   ctx->so_targets, ~0);
+                                   ctx->so_targets, offset);
 
    ctx->nr_so_targets = ctx->nr_so_targets_saved;
    ctx->nr_so_targets_saved = 0;

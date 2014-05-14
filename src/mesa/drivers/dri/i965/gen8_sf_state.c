@@ -101,11 +101,11 @@ upload_sbe(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_sbe_state = {
    .dirty = {
-      .mesa  = _NEW_LIGHT | _NEW_POINT,
+      .mesa  = _NEW_BUFFERS | _NEW_LIGHT | _NEW_POINT | _NEW_PROGRAM,
       .brw   = BRW_NEW_CONTEXT |
                BRW_NEW_FRAGMENT_PROGRAM |
                BRW_NEW_VUE_MAP_GEOM_OUT,
-      .cache = 0
+      .cache = CACHE_NEW_WM_PROG,
    },
    .emit = upload_sbe,
 };
@@ -139,8 +139,11 @@ upload_sf(struct brw_context *brw)
    if (!(ctx->VertexProgram.PointSizeEnabled || ctx->Point._Attenuated))
       dw3 |= GEN6_SF_USE_STATE_POINT_WIDTH;
 
-   if (ctx->Point.SmoothFlag)
+   /* _NEW_POINT | _NEW_MULTISAMPLE */
+   if ((ctx->Point.SmoothFlag || ctx->Multisample._Enabled) &&
+       !ctx->Point.PointSprite) {
       dw3 |= GEN8_SF_SMOOTH_POINT_ENABLE;
+   }
 
    dw3 |= GEN6_SF_LINE_AA_MODE_TRUE;
 
@@ -166,6 +169,7 @@ const struct brw_tracked_state gen8_sf_state = {
       .mesa  = _NEW_LIGHT |
                _NEW_PROGRAM |
                _NEW_LINE |
+               _NEW_MULTISAMPLE |
                _NEW_POINT,
       .brw   = BRW_NEW_CONTEXT,
       .cache = 0,
@@ -208,6 +212,9 @@ upload_raster(struct brw_context *brw)
    /* _NEW_POINT */
    if (ctx->Point.SmoothFlag)
       dw1 |= GEN8_RASTER_SMOOTH_POINT_ENABLE;
+
+   if (ctx->Multisample._Enabled)
+      dw1 |= GEN8_RASTER_API_MULTISAMPLE_ENABLE;
 
    if (ctx->Polygon.OffsetFill)
       dw1 |= GEN6_SF_GLOBAL_DEPTH_OFFSET_SOLID;
@@ -274,6 +281,7 @@ const struct brw_tracked_state gen8_raster_state = {
    .dirty = {
       .mesa  = _NEW_BUFFERS |
                _NEW_LINE |
+               _NEW_MULTISAMPLE |
                _NEW_POINT |
                _NEW_POLYGON |
                _NEW_SCISSOR |

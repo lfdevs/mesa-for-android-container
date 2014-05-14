@@ -36,7 +36,6 @@
 #include "brw_context.h"
 #include "intel_buffers.h"
 #include "intel_mipmap_tree.h"
-#include "intel_regions.h"
 #include "intel_pixel.h"
 #include "intel_fbo.h"
 #include "intel_blit.h"
@@ -125,7 +124,7 @@ do_blit_copypixels(struct gl_context * ctx,
    }
 
    if (ctx->Fog.Enabled ||
-       ctx->Texture._EnabledUnits ||
+       ctx->Texture._MaxEnabledTexImageUnit != -1 ||
        ctx->FragmentProgram._Enabled) {
       perf_debug("glCopyPixels(): Unsupported fragment shader state\n");
       return false;
@@ -190,7 +189,6 @@ do_blit_copypixels(struct gl_context * ctx,
       ctx->Query.CurrentOcclusionObject->Result += width * height;
 
 out:
-   intel_check_front_buffer_rendering(brw);
 
    DBG("%s: success\n", __FUNCTION__);
    return true;

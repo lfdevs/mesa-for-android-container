@@ -859,8 +859,20 @@ create_common_immediate( struct svga_shader_emitter *emit )
    if (!emit_def_const( emit, SVGA3D_CONST_TYPE_FLOAT,
                         idx, 0.0f, 0.5f, -1.0f, 1.0f ))
       return FALSE;
+   emit->common_immediate_idx[0] = idx;
+   idx++;
 
-   emit->common_immediate_idx = idx;
+   /* Emit constant {2, 0, 0, 0} (only the 2 is used for now) */
+   if (emit->key.vkey.adjust_attrib_range) {
+      if (!emit_def_const( emit, SVGA3D_CONST_TYPE_FLOAT,
+                           idx, 2.0f, 0.0f, 0.0f, 0.0f ))
+         return FALSE;
+      emit->common_immediate_idx[1] = idx;
+   }
+   else {
+      emit->common_immediate_idx[1] = -1;
+   }
+
    emit->created_common_immediate = TRUE;
 
    return TRUE;
@@ -889,7 +901,7 @@ common_immediate_swizzle(float value)
 
 
 /**
- * Returns an immediate reg where all the terms are either 0, 1, -1 or 0.5
+ * Returns an immediate reg where all the terms are either 0, 1, 2 or 0.5
  */
 static struct src_register
 get_immediate(struct svga_shader_emitter *emit,
@@ -900,8 +912,8 @@ get_immediate(struct svga_shader_emitter *emit,
    unsigned sz = common_immediate_swizzle(z);
    unsigned sw = common_immediate_swizzle(w);
    assert(emit->created_common_immediate);
-   assert(emit->common_immediate_idx >= 0);
-   return swizzle(src_register(SVGA3DREG_CONST, emit->common_immediate_idx),
+   assert(emit->common_immediate_idx[0] >= 0);
+   return swizzle(src_register(SVGA3DREG_CONST, emit->common_immediate_idx[0]),
                   sx, sy, sz, sw);
 }
 
@@ -913,9 +925,9 @@ static struct src_register
 get_zero_immediate( struct svga_shader_emitter *emit )
 {
    assert(emit->created_common_immediate);
-   assert(emit->common_immediate_idx >= 0);
+   assert(emit->common_immediate_idx[0] >= 0);
    return swizzle(src_register( SVGA3DREG_CONST,
-                                emit->common_immediate_idx),
+                                emit->common_immediate_idx[0]),
                   0, 0, 0, 0);
 }
 
@@ -927,9 +939,9 @@ static struct src_register
 get_one_immediate( struct svga_shader_emitter *emit )
 {
    assert(emit->created_common_immediate);
-   assert(emit->common_immediate_idx >= 0);
+   assert(emit->common_immediate_idx[0] >= 0);
    return swizzle(src_register( SVGA3DREG_CONST,
-                                emit->common_immediate_idx),
+                                emit->common_immediate_idx[0]),
                   3, 3, 3, 3);
 }
 
@@ -941,9 +953,24 @@ static struct src_register
 get_half_immediate( struct svga_shader_emitter *emit )
 {
    assert(emit->created_common_immediate);
-   assert(emit->common_immediate_idx >= 0);
-   return swizzle(src_register(SVGA3DREG_CONST, emit->common_immediate_idx),
+   assert(emit->common_immediate_idx[0] >= 0);
+   return swizzle(src_register(SVGA3DREG_CONST, emit->common_immediate_idx[0]),
                   1, 1, 1, 1);
+}
+
+
+/**
+ * returns {2, 2, 2, 2} immediate
+ */
+static struct src_register
+get_two_immediate( struct svga_shader_emitter *emit )
+{
+   /* Note we use the second common immediate here */
+   assert(emit->created_common_immediate);
+   assert(emit->common_immediate_idx[1] >= 0);
+   return swizzle(src_register( SVGA3DREG_CONST,
+                                emit->common_immediate_idx[1]),
+                  0, 0, 0, 0);
 }
 
 
@@ -1530,8 +1557,7 @@ emit_conditional(struct svga_shader_emitter *emit,
                  struct src_register fail)
 {
    SVGA3dShaderDestToken pred_reg = dst_register( SVGA3DREG_PREDICATE, 0 );
-   SVGA3dShaderInstToken setp_token, mov_token;
-   setp_token = inst_token( SVGA3DOP_SETP );
+   SVGA3dShaderInstToken setp_token;
 
    switch (compare_func) {
    case PIPE_FUNC_NEVER:
@@ -1539,22 +1565,22 @@ emit_conditional(struct svga_shader_emitter *emit,
                          dst, fail );
       break;
    case PIPE_FUNC_LESS:
-      setp_token.control = SVGA3DOPCOMP_LT;
+      setp_token = inst_token_setp(SVGA3DOPCOMP_LT);
       break;
    case PIPE_FUNC_EQUAL:
-      setp_token.control = SVGA3DOPCOMP_EQ;
+      setp_token = inst_token_setp(SVGA3DOPCOMP_EQ);
       break;
    case PIPE_FUNC_LEQUAL:
-      setp_token.control = SVGA3DOPCOMP_LE;
+      setp_token = inst_token_setp(SVGA3DOPCOMP_LE);
       break;
    case PIPE_FUNC_GREATER:
-      setp_token.control = SVGA3DOPCOMP_GT;
+      setp_token = inst_token_setp(SVGA3DOPCOMP_GT);
       break;
    case PIPE_FUNC_NOTEQUAL:
-      setp_token.control = SVGA3DOPCOMPC_NE;
+      setp_token = inst_token_setp(SVGA3DOPCOMPC_NE);
       break;
    case PIPE_FUNC_GEQUAL:
-      setp_token.control = SVGA3DOPCOMP_GE;
+      setp_token = inst_token_setp(SVGA3DOPCOMP_GE);
       break;
    case PIPE_FUNC_ALWAYS:
       return submit_op1( emit, inst_token( SVGA3DOP_MOV ),
@@ -1577,11 +1603,8 @@ emit_conditional(struct svga_shader_emitter *emit,
                     src0, src1 ))
       return FALSE;
 
-   mov_token = inst_token( SVGA3DOP_MOV );
-
    /* MOV dst, fail */
-   if (!submit_op1( emit, mov_token, dst,
-                    fail ))
+   if (!submit_op1(emit, inst_token(SVGA3DOP_MOV), dst, fail))
       return FALSE;
 
    /* MOV dst, pass (predicated)
@@ -1589,9 +1612,9 @@ emit_conditional(struct svga_shader_emitter *emit,
     * Note that the predicate reg (and possible modifiers) is passed
     * as the first source argument.
     */
-   mov_token.predicated = 1;
-   if (!submit_op2( emit, mov_token, dst,
-                    src( pred_reg ), pass ))
+   if (!submit_op2(emit,
+                   inst_token_predicated(SVGA3DOP_MOV), dst,
+                   src(pred_reg), pass))
       return FALSE;
 
    return TRUE;
@@ -2560,13 +2583,7 @@ emit_lit(struct svga_shader_emitter *emit,
        */
       {
          SVGA3dShaderDestToken pred_reg = dst_register( SVGA3DREG_PREDICATE, 0 );
-         SVGA3dShaderInstToken setp_token, mov_token;
          struct src_register predsrc;
-
-         setp_token = inst_token( SVGA3DOP_SETP );
-         mov_token = inst_token( SVGA3DOP_MOV );
-
-         setp_token.control = SVGA3DOPCOMP_GT;
 
          /* D3D vs GL semantics:
           */
@@ -2576,7 +2593,9 @@ emit_lit(struct svga_shader_emitter *emit,
             predsrc = swizzle(src0, 0, 0, 0, 0); /* GL */
 
          /* SETP src0.xxyy, GT, {0}.x */
-         if (!submit_op2( emit, setp_token, pred_reg,
+         if (!submit_op2( emit,
+                          inst_token_setp(SVGA3DOPCOMP_GT),
+                          pred_reg,
                           predsrc,
                           get_zero_immediate(emit)))
             return FALSE;
@@ -2592,8 +2611,8 @@ emit_lit(struct svga_shader_emitter *emit,
           * as the first source argument.
           */
          if (dst.mask & TGSI_WRITEMASK_YZ) {
-            mov_token.predicated = 1;
-            if (!submit_op2( emit, mov_token,
+            if (!submit_op2( emit,
+                             inst_token_predicated(SVGA3DOP_MOV),
                              writemask(dst, TGSI_WRITEMASK_YZ),
                              src( pred_reg ), src( tmp ) ))
                return FALSE;
@@ -3506,6 +3525,95 @@ emit_inverted_texcoords(struct svga_shader_emitter *emit)
 
 
 /**
+ * Emit code to adjust vertex shader inputs/attributes:
+ * - Change range from [0,1] to [-1,1] (for normalized byte/short attribs).
+ * - Set attrib W component = 1.
+ */
+static boolean
+emit_adjusted_vertex_attribs(struct svga_shader_emitter *emit)
+{
+   unsigned adjust_mask = (emit->key.vkey.adjust_attrib_range |
+                           emit->key.vkey.adjust_attrib_w_1);
+ 
+   while (adjust_mask) {
+      /* Adjust vertex attrib range and/or set W component = 1 */
+      const unsigned index = u_bit_scan(&adjust_mask);
+      struct src_register tmp;
+
+      /* allocate a temp reg */
+      tmp = src_register(SVGA3DREG_TEMP, emit->nr_hw_temp);
+      emit->nr_hw_temp++;
+
+      if (emit->key.vkey.adjust_attrib_range & (1 << index)) {
+         /* The vertex input/attribute is supposed to be a signed value in
+          * the range [-1,1] but we actually fetched/converted it to the
+          * range [0,1].  This most likely happens when the app specifies a
+          * signed byte attribute but we interpreted it as unsigned bytes.
+          * See also svga_translate_vertex_format().
+          *
+          * Here, we emit some extra instructions to adjust
+          * the attribute values from [0,1] to [-1,1].
+          *
+          * The adjustment we implement is:
+          *   new_attrib = attrib * 2.0;
+          *   if (attrib >= 0.5)
+          *      new_attrib = new_attrib - 2.0;
+          * This isn't exactly right (it's off by a bit or so) but close enough.
+          */
+         SVGA3dShaderDestToken pred_reg = dst_register(SVGA3DREG_PREDICATE, 0);
+
+         /* tmp = attrib * 2.0 */
+         if (!submit_op2(emit,
+                         inst_token(SVGA3DOP_MUL),
+                         dst(tmp),
+                         emit->input_map[index],
+                         get_two_immediate(emit)))
+            return FALSE;
+
+         /* pred = (attrib >= 0.5) */
+         if (!submit_op2(emit,
+                         inst_token_setp(SVGA3DOPCOMP_GE),
+                         pred_reg,
+                         emit->input_map[index],  /* vert attrib */
+                         get_half_immediate(emit)))  /* 0.5 */
+            return FALSE;
+
+         /* sub(pred) tmp, tmp, 2.0 */
+         if (!submit_op3(emit,
+                         inst_token_predicated(SVGA3DOP_SUB),
+                         dst(tmp),
+                         src(pred_reg),
+                         tmp,
+                         get_two_immediate(emit)))
+            return FALSE;
+      }
+      else {
+         /* just copy the vertex input attrib to the temp register */
+         if (!submit_op1(emit,
+                         inst_token(SVGA3DOP_MOV),
+                         dst(tmp),
+                         emit->input_map[index]))
+            return FALSE;
+      }
+
+      if (emit->key.vkey.adjust_attrib_w_1 & (1 << index)) {
+         /* move 1 into W position of tmp */
+         if (!submit_op1(emit,
+                         inst_token(SVGA3DOP_MOV),
+                         writemask(dst(tmp), TGSI_WRITEMASK_W),
+                         get_one_immediate(emit)))
+            return FALSE;
+      }
+
+      /* Reassign the input_map entry to the new tmp register */
+      emit->input_map[index] = tmp;
+   }
+
+   return TRUE;
+}
+
+
+/**
  * Determine if we need to create the "common" immediate value which is
  * used for generating useful vector constants such as {0,0,0,0} and
  * {1,1,1,1}.
@@ -3550,9 +3658,11 @@ needs_to_create_common_immediate(const struct svga_shader_emitter *emit)
             return TRUE;
       }
    }
-
-   if (emit->unit == PIPE_SHADER_VERTEX) {
+   else if (emit->unit == PIPE_SHADER_VERTEX) {
       if (emit->info.opcode_count[TGSI_OPCODE_CMP] >= 1)
+         return TRUE;
+      if (emit->key.vkey.adjust_attrib_range ||
+          emit->key.vkey.adjust_attrib_w_1)
          return TRUE;
    }
 
@@ -3713,6 +3823,15 @@ svga_shader_emit_helpers(struct svga_shader_emitter *emit)
             return FALSE;
       }
    }
+   else {
+      assert(emit->unit == PIPE_SHADER_VERTEX);
+      if (emit->key.vkey.adjust_attrib_range ||
+          emit->key.vkey.adjust_attrib_w_1) {
+         if (!emit_adjusted_vertex_attribs(emit))
+            return FALSE;
+      }
+   }
+
 
    return TRUE;
 }

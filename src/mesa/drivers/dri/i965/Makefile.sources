@@ -11,7 +11,6 @@ i965_FILES = \
 	intel_extensions.c \
 	intel_fbo.c \
 	intel_mipmap_tree.c \
-	intel_regions.c \
 	intel_resolve_map.c \
 	intel_screen.c \
 	intel_pixel.c \
@@ -58,11 +57,13 @@ i965_FILES = \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_copy_propagation.cpp \
 	brw_fs_cse.cpp \
+	brw_fs_dead_code_eliminate.cpp \
 	brw_fs_fp.cpp \
 	brw_fs_generator.cpp \
 	brw_fs_live_variables.cpp \
 	brw_fs_peephole_predicated_break.cpp \
 	brw_fs_reg_allocate.cpp \
+	brw_fs_register_coalesce.cpp \
 	brw_fs_saturate_propagation.cpp \
 	brw_fs_sel_peephole.cpp \
 	brw_fs_vector_splitting.cpp \
@@ -73,8 +74,8 @@ i965_FILES = \
 	brw_gs_surface_state.c \
 	brw_interpolation_map.c \
 	brw_lower_texture_gradients.cpp \
-	brw_lower_offset_array.cpp \
 	brw_lower_unnormalized_offset.cpp \
+	brw_meta_updownsample.c \
 	brw_misc_state.c \
 	brw_object_purgeable.c \
 	brw_performance_monitor.c \

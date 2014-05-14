@@ -225,6 +225,7 @@ nouveau_choose_tex_format(struct gl_context *ctx, GLenum target,
 	case GL_INTENSITY12:
 	case GL_INTENSITY16:
 	case GL_INTENSITY8:
+	case GL_COMPRESSED_INTENSITY:
 		return MESA_FORMAT_I_UNORM8;
 
 	case GL_RGB_S3TC:
@@ -574,11 +575,11 @@ nouveau_compressed_texsubimage(struct gl_context *ctx, GLuint dims,
 }
 
 static void
-nouveau_bind_texture(struct gl_context *ctx, GLenum target,
-		     struct gl_texture_object *t)
+nouveau_bind_texture(struct gl_context *ctx, GLuint texUnit,
+                     GLenum target, struct gl_texture_object *t)
 {
-	context_dirty_i(ctx, TEX_OBJ, ctx->Texture.CurrentUnit);
-	context_dirty_i(ctx, TEX_ENV, ctx->Texture.CurrentUnit);
+	context_dirty_i(ctx, TEX_OBJ, texUnit);
+	context_dirty_i(ctx, TEX_ENV, texUnit);
 }
 
 static mesa_format

@@ -65,6 +65,15 @@ ilo_clear(struct pipe_context *pipe,
 {
    struct ilo_context *ilo = ilo_context(pipe);
 
+   if ((buffers & PIPE_CLEAR_DEPTHSTENCIL) && ilo->fb.state.zsbuf) {
+      if (ilo_blitter_rectlist_clear_zs(ilo->blitter, ilo->fb.state.zsbuf,
+               buffers & PIPE_CLEAR_DEPTHSTENCIL, depth, stencil))
+         buffers &= ~PIPE_CLEAR_DEPTHSTENCIL;
+
+      if (!buffers)
+         return;
+   }
+
    ilo_blitter_pipe_clear_fb(ilo->blitter, buffers, color, depth, stencil);
 }
 
@@ -143,7 +152,7 @@ void
 ilo_blit_resolve_slices_for_hiz(struct ilo_context *ilo,
                                 struct pipe_resource *res, unsigned level,
                                 unsigned first_slice, unsigned num_slices,
-                                unsigned flags)
+                                unsigned resolve_flags)
 {
    struct ilo_texture *tex = ilo_texture(res);
    const unsigned any_reader =
@@ -158,15 +167,31 @@ ilo_blit_resolve_slices_for_hiz(struct ilo_context *ilo,
    assert(tex->base.target != PIPE_BUFFER &&
           ilo_texture_can_enable_hiz(tex, level, first_slice, num_slices));
 
-   if (flags & ILO_TEXTURE_RENDER_WRITE) {
+   if (resolve_flags & ILO_TEXTURE_RENDER_WRITE) {
       /*
        * When ILO_TEXTURE_RENDER_WRITE is set, there can be no reader.  We
        * need to perform a HiZ Buffer Resolve in case the resource was
        * previously written by another writer, unless this is a clear.
+       *
+       * When slices have different clear values, we perform a Depth Buffer
+       * Resolve on all slices not sharing the clear value of the first slice.
+       * After resolving, those slices do not use 3DSTATE_CLEAR_PARAMS and can
+       * be made to have the same clear value as the first slice does.  This
+       * way,
+       *
+       *  - 3DSTATE_CLEAR_PARAMS can be set to the clear value of any slice
+       *  - we will not resolve unnecessarily next time this function is
+       *    called
+       *
+       * Since slice clear value is the value the slice is cleared to when
+       * ILO_TEXTURE_CLEAR is set, the bit needs to be unset.
        */
-      assert(!(flags & (other_writers | any_reader)));
+      assert(!(resolve_flags & (other_writers | any_reader)));
 
-      if (!(flags & ILO_TEXTURE_CLEAR)) {
+      if (!(resolve_flags & ILO_TEXTURE_CLEAR)) {
+         bool set_clear_value = false;
+         uint32_t first_clear_value;
+
          for (i = 0; i < num_slices; i++) {
             const struct ilo_texture_slice *slice =
                ilo_texture_get_slice(tex, level, first_slice + i);
@@ -175,11 +200,27 @@ ilo_blit_resolve_slices_for_hiz(struct ilo_context *ilo,
                ilo_blitter_rectlist_resolve_hiz(ilo->blitter,
                      res, level, first_slice + i);
             }
+            else if (i == 0) {
+               first_clear_value = slice->clear_value;
+            }
+            else if (slice->clear_value != first_clear_value &&
+                     (slice->flags & ILO_TEXTURE_RENDER_WRITE)) {
+               ilo_blitter_rectlist_resolve_z(ilo->blitter,
+                     res, level, first_slice + i);
+               set_clear_value = true;
+            }
+         }
+
+         if (set_clear_value) {
+            /* ILO_TEXTURE_CLEAR will be cleared later */
+            ilo_texture_set_slice_clear_value(tex, level,
+                  first_slice, num_slices, first_clear_value);
          }
       }
    }
-   else if ((flags & any_reader) ||
-         ((flags & other_writers) && !(flags & ILO_TEXTURE_CLEAR))) {
+   else if ((resolve_flags & any_reader) ||
+            ((resolve_flags & other_writers) &&
+             !(resolve_flags & ILO_TEXTURE_CLEAR))) {
       /*
        * When there is at least a reader or writer, we need to perform a
        * Depth Buffer Resolve in case the resource was previously written

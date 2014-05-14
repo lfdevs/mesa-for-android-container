@@ -33,7 +33,7 @@
 #include "intel_debug.h"
 #include "utils.h"
 
-int INTEL_DEBUG = 0;
+uint64_t INTEL_DEBUG = 0;
 
 static const struct dri_debug_control debug_control[] = {
    { "tex",   DEBUG_TEXTURE},
@@ -46,7 +46,6 @@ static const struct dri_debug_control debug_control[] = {
    { "bat",   DEBUG_BATCH},
    { "pix",   DEBUG_PIXEL},
    { "buf",   DEBUG_BUFMGR},
-   { "reg",   DEBUG_REGION},
    { "fbo",   DEBUG_FBO},
    { "fs",    DEBUG_WM },
    { "gs",    DEBUG_GS},

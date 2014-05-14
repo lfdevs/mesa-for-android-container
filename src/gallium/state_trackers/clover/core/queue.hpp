@@ -37,7 +37,7 @@ namespace clover {
 
    class command_queue : public ref_counter, public _cl_command_queue {
    public:
-      command_queue(context &ctx, device &dev,
+      command_queue(clover::context &ctx, clover::device &dev,
                     cl_command_queue_properties props);
       ~command_queue();
 
@@ -47,11 +47,11 @@ namespace clover {
 
       void flush();
 
-      cl_command_queue_properties props() const;
+      cl_command_queue_properties properties() const;
       bool profiling_enabled() const;
 
-      context &ctx;
-      device &dev;
+      const intrusive_ref<clover::context> context;
+      const intrusive_ref<clover::device> device;
 
       friend class resource;
       friend class root_resource;
@@ -65,13 +65,11 @@ namespace clover {
    private:
       /// Serialize a hardware event with respect to the previous ones,
       /// and push it to the pending list.
-      void sequence(hard_event *ev);
+      void sequence(hard_event &ev);
 
-      cl_command_queue_properties _props;
+      cl_command_queue_properties props;
       pipe_context *pipe;
-
-      typedef ref_ptr<hard_event> event_ptr;
-      std::deque<event_ptr> queued_events;
+      std::deque<intrusive_ref<hard_event>> queued_events;
    };
 }
 

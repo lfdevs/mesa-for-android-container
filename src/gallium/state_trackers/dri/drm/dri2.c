@@ -43,6 +43,37 @@
 #include "dri_drawable.h"
 #include "dri2_buffer.h"
 
+static int convert_fourcc(int format, int *dri_components_p)
+{
+   int dri_components;
+   switch(format) {
+   case __DRI_IMAGE_FOURCC_RGB565:
+      format = __DRI_IMAGE_FORMAT_RGB565;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
+      break;
+   case __DRI_IMAGE_FOURCC_ARGB8888:
+      format = __DRI_IMAGE_FORMAT_ARGB8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
+      break;
+   case __DRI_IMAGE_FOURCC_XRGB8888:
+      format = __DRI_IMAGE_FORMAT_XRGB8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
+      break;
+   case __DRI_IMAGE_FOURCC_ABGR8888:
+      format = __DRI_IMAGE_FORMAT_ABGR8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
+      break;
+   case __DRI_IMAGE_FOURCC_XBGR8888:
+      format = __DRI_IMAGE_FORMAT_XBGR8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
+      break;
+   default:
+      return -1;
+   }
+   *dri_components_p = dri_components;
+   return format;
+}
+
 /**
  * DRI2 flush extension.
  */
@@ -64,10 +95,11 @@ dri2_invalidate_drawable(__DRIdrawable *dPriv)
 }
 
 static const __DRI2flushExtension dri2FlushExtension = {
-    { __DRI2_FLUSH, __DRI2_FLUSH_VERSION },
-    dri2_flush_drawable,
-    dri2_invalidate_drawable,
-    dri_flush,
+    .base = { __DRI2_FLUSH, 4 },
+
+    .flush                = dri2_flush_drawable,
+    .invalidate           = dri2_invalidate_drawable,
+    .flush_with_flags     = dri_flush,
 };
 
 /**
@@ -79,7 +111,7 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
                           unsigned *count)
 {
    __DRIdrawable *dri_drawable = drawable->dPriv;
-   struct __DRIdri2LoaderExtensionRec *loader = drawable->sPriv->dri2.loader;
+   const __DRIdri2LoaderExtension *loader = drawable->sPriv->dri2.loader;
    boolean with_format;
    __DRIbuffer *buffers;
    int num_buffers;
@@ -205,6 +237,14 @@ dri2_drawable_process_buffers(struct dri_context *ctx,
       /* Don't delete the depth-stencil buffer, we can reuse it. */
       if (i == ST_ATTACHMENT_DEPTH_STENCIL && alloc_depthstencil)
          continue;
+
+      /* Flush the texture before unreferencing, so that other clients can
+       * see what the driver has rendered.
+       */
+      if (i != ST_ATTACHMENT_DEPTH_STENCIL && drawable->textures[i]) {
+         struct pipe_context *pipe = ctx->st->pipe;
+         pipe->flush_resource(pipe, drawable->textures[i]);
+      }
 
       pipe_resource_reference(&drawable->textures[i], NULL);
    }
@@ -483,7 +523,7 @@ dri2_flush_frontbuffer(struct dri_context *ctx,
                        enum st_attachment_type statt)
 {
    __DRIdrawable *dri_drawable = drawable->dPriv;
-   struct __DRIdri2LoaderExtensionRec *loader = drawable->sPriv->dri2.loader;
+   const __DRIdri2LoaderExtension *loader = drawable->sPriv->dri2.loader;
    struct pipe_context *pipe = ctx->st->pipe;
 
    if (statt != ST_ATTACHMENT_FRONT_LEFT)
@@ -518,7 +558,7 @@ dri2_update_tex_buffer(struct dri_drawable *drawable,
 static __DRIimage *
 dri2_lookup_egl_image(struct dri_screen *screen, void *handle)
 {
-   __DRIimageLookupExtension *loader = screen->sPriv->dri2.image;
+   const __DRIimageLookupExtension *loader = screen->sPriv->dri2.image;
    __DRIimage *img;
 
    if (!loader->lookupEGLImage)
@@ -777,6 +817,7 @@ dri2_dup_image(__DRIimage *image, void *loaderPrivate)
    pipe_resource_reference(&img->texture, image->texture);
    img->level = image->level;
    img->layer = image->layer;
+   img->dri_format = image->dri_format;
    /* This should be 0 for sub images, but dup is also used for base images. */
    img->dri_components = image->dri_components;
    img->loader_private = loaderPrivate;
@@ -811,30 +852,9 @@ dri2_from_names(__DRIscreen *screen, int width, int height, int format,
    if (offsets[0] != 0)
       return NULL;
 
-   switch(format) {
-   case __DRI_IMAGE_FOURCC_RGB565:
-      format = __DRI_IMAGE_FORMAT_RGB565;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
-      break;
-   case __DRI_IMAGE_FOURCC_ARGB8888:
-      format = __DRI_IMAGE_FORMAT_ARGB8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
-      break;
-   case __DRI_IMAGE_FOURCC_XRGB8888:
-      format = __DRI_IMAGE_FORMAT_XRGB8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
-      break;
-   case __DRI_IMAGE_FOURCC_ABGR8888:
-      format = __DRI_IMAGE_FORMAT_ABGR8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
-      break;
-   case __DRI_IMAGE_FOURCC_XBGR8888:
-      format = __DRI_IMAGE_FORMAT_XBGR8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
-      break;
-   default:
+   format = convert_fourcc(format, &dri_components);
+   if (format == -1)
       return NULL;
-   }
 
    /* Strides are in bytes not pixels. */
    stride = strides[0] /4;
@@ -947,30 +967,9 @@ dri2_from_fds(__DRIscreen *screen, int width, int height, int fourcc,
    if (offsets[0] != 0)
       return NULL;
 
-   switch(fourcc) {
-   case __DRI_IMAGE_FOURCC_RGB565:
-      format = __DRI_IMAGE_FORMAT_RGB565;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
-      break;
-   case __DRI_IMAGE_FOURCC_ARGB8888:
-      format = __DRI_IMAGE_FORMAT_ARGB8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
-      break;
-   case __DRI_IMAGE_FOURCC_XRGB8888:
-      format = __DRI_IMAGE_FORMAT_XRGB8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
-      break;
-   case __DRI_IMAGE_FOURCC_ABGR8888:
-      format = __DRI_IMAGE_FORMAT_ABGR8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
-      break;
-   case __DRI_IMAGE_FOURCC_XBGR8888:
-      format = __DRI_IMAGE_FORMAT_XBGR8888;
-      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
-      break;
-   default:
+   format = convert_fourcc(fourcc, &dri_components);
+   if (format == -1)
       return NULL;
-   }
 
    /* Strides are in bytes not pixels. */
    stride = strides[0] /4;
@@ -984,6 +983,52 @@ dri2_from_fds(__DRIscreen *screen, int width, int height, int fourcc,
    return img;
 }
 
+static __DRIimage *
+dri2_from_dma_bufs(__DRIscreen *screen,
+                   int width, int height, int fourcc,
+                   int *fds, int num_fds,
+                   int *strides, int *offsets,
+                   enum __DRIYUVColorSpace yuv_color_space,
+                   enum __DRISampleRange sample_range,
+                   enum __DRIChromaSiting horizontal_siting,
+                   enum __DRIChromaSiting vertical_siting,
+                   unsigned *error,
+                   void *loaderPrivate)
+{
+   __DRIimage *img;
+   int format, stride, dri_components;
+
+   if (num_fds != 1 || offsets[0] != 0) {
+      *error = __DRI_IMAGE_ERROR_BAD_MATCH;
+      return NULL;
+   }
+
+   format = convert_fourcc(fourcc, &dri_components);
+   if (format == -1) {
+      *error = __DRI_IMAGE_ERROR_BAD_MATCH;
+      return NULL;
+   }
+
+   /* Strides are in bytes not pixels. */
+   stride = strides[0] /4;
+
+   img = dri2_create_image_from_fd(screen, width, height, format,
+                                   fds[0], stride, loaderPrivate);
+   if (img == NULL) {
+      *error = __DRI_IMAGE_ERROR_BAD_ALLOC;
+      return NULL;
+   }
+
+   img->yuv_color_space = yuv_color_space;
+   img->sample_range = sample_range;
+   img->horizontal_siting = horizontal_siting;
+   img->vertical_siting = vertical_siting;
+   img->dri_components = dri_components;
+
+   *error = __DRI_IMAGE_ERROR_SUCCESS;
+   return img;
+}
+
 static void
 dri2_destroy_image(__DRIimage *img)
 {
@@ -991,18 +1036,20 @@ dri2_destroy_image(__DRIimage *img)
    FREE(img);
 }
 
-static struct __DRIimageExtensionRec dri2ImageExtension = {
-    { __DRI_IMAGE, 6 },
-    dri2_create_image_from_name,
-    dri2_create_image_from_renderbuffer,
-    dri2_destroy_image,
-    dri2_create_image,
-    dri2_query_image,
-    dri2_dup_image,
-    dri2_validate_usage,
-    dri2_from_names,
-    dri2_from_planar,
-    dri2_create_from_texture,
+/* The extension is modified during runtime if DRI_PRIME is detected */
+static __DRIimageExtension dri2ImageExtension = {
+    .base = { __DRI_IMAGE, 6 },
+
+    .createImageFromName          = dri2_create_image_from_name,
+    .createImageFromRenderbuffer  = dri2_create_image_from_renderbuffer,
+    .destroyImage                 = dri2_destroy_image,
+    .createImage                  = dri2_create_image,
+    .queryImage                   = dri2_query_image,
+    .dupImage                     = dri2_dup_image,
+    .validateUsage                = dri2_validate_usage,
+    .createImageFromNames         = dri2_from_names,
+    .fromPlanar                   = dri2_from_planar,
+    .createImageFromTexture       = dri2_create_from_texture,
 };
 
 /*
@@ -1052,18 +1099,17 @@ dri2_init_screen(__DRIscreen * sPriv)
       screen->default_throttle_frames = throttle_ret->val.val_int;
    }
 
-#ifdef DRM_CAP_PRIME /* Old libdrm? */
    if (dmabuf_ret && dmabuf_ret->val.val_bool) {
       uint64_t cap;
 
       if (drmGetCap(sPriv->fd, DRM_CAP_PRIME, &cap) == 0 &&
           (cap & DRM_PRIME_CAP_IMPORT)) {
 
-         dri2ImageExtension.base.version = 7;
+         dri2ImageExtension.base.version = 8;
          dri2ImageExtension.createImageFromFds = dri2_from_fds;
+         dri2ImageExtension.createImageFromDmaBufs = dri2_from_dma_bufs;
       }
    }
-#endif /* DRM_CAP_PRIME */
 
    sPriv->extensions = dri_screen_extensions;
 

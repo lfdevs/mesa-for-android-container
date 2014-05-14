@@ -117,10 +117,10 @@ namespace clover {
       NULL, // clRetainDeviceEXT
       NULL, // clReleaseDeviceEXT
       NULL, // clCreateEventFromGLsyncKHR
-      NULL, // clCreateSubDevices
-      NULL, // clRetainDevice
-      NULL, // clReleaseDevice
-      NULL, // clCreateImage
+      clCreateSubDevices,
+      clRetainDevice,
+      clReleaseDevice,
+      clCreateImage,
       NULL, // clCreateProgramWithBuiltInKernels
       NULL, // clCompileProgram
       NULL, // clLinkProgram
@@ -129,8 +129,8 @@ namespace clover {
       NULL, // clEnqueueFillBuffer
       NULL, // clEnqueueFillImage
       NULL, // clEnqueueMigrateMemObjects
-      NULL, // clEnqueueMarkerWithWaitList
-      NULL, // clEnqueueBarrierWithWaitList
+      clEnqueueMarkerWithWaitList,
+      clEnqueueBarrierWithWaitList,
       NULL, // clGetExtensionFunctionAddressForPlatform
       NULL, // clCreateFromGLTexture
       NULL, // clGetDeviceIDsFromD3D11KHR

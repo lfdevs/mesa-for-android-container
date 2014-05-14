@@ -36,6 +36,9 @@
 #include "main/context.h"
 #include "main/teximage.h"
 #include "main/image.h"
+#include "main/hash_table.h"
+#include "main/set.h"
+#include "main/condrender.h"
 
 #include "swrast/swrast.h"
 #include "drivers/common/meta.h"
@@ -45,7 +48,7 @@
 #include "intel_blit.h"
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
-#include "intel_regions.h"
+#include "intel_image.h"
 #include "intel_screen.h"
 #include "intel_tex.h"
 #include "brw_context.h"
@@ -74,8 +77,38 @@ intel_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
    ASSERT(irb);
 
    intel_miptree_release(&irb->mt);
+   intel_miptree_release(&irb->singlesample_mt);
 
    _mesa_delete_renderbuffer(ctx, rb);
+}
+
+/**
+ * \brief Downsample a winsys renderbuffer from mt to singlesample_mt.
+ *
+ * If the miptree needs no downsample, then skip.
+ */
+void
+intel_renderbuffer_downsample(struct brw_context *brw,
+                              struct intel_renderbuffer *irb)
+{
+   if (!irb->need_downsample)
+      return;
+   intel_miptree_updownsample(brw, irb->mt, irb->singlesample_mt);
+   irb->need_downsample = false;
+}
+
+/**
+ * \brief Upsample a winsys renderbuffer from singlesample_mt to mt.
+ *
+ * The upsample is done unconditionally.
+ */
+void
+intel_renderbuffer_upsample(struct brw_context *brw,
+                            struct intel_renderbuffer *irb)
+{
+   assert(!irb->need_downsample);
+
+   intel_miptree_updownsample(brw, irb->singlesample_mt, irb->mt);
 }
 
 /**
@@ -92,6 +125,7 @@ intel_map_renderbuffer(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct swrast_renderbuffer *srb = (struct swrast_renderbuffer *)rb;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+   struct intel_mipmap_tree *mt;
    void *map;
    int stride;
 
@@ -106,6 +140,39 @@ intel_map_renderbuffer(struct gl_context *ctx,
 
    intel_prepare_render(brw);
 
+   /* The MapRenderbuffer API should always return a single-sampled mapping.
+    * The case we are asked to map multisampled RBs is in glReadPixels() (or
+    * swrast paths like glCopyTexImage()) from a window-system MSAA buffer,
+    * and GL expects an automatic resolve to happen.
+    *
+    * If it's a color miptree, there is a ->singlesample_mt which wraps the
+    * actual window system renderbuffer (which we may resolve to at any time),
+    * while the miptree itself is our driver-private allocation.  If it's a
+    * depth or stencil miptree, we have a private MSAA buffer and no shared
+    * singlesample buffer, and since we don't expect anybody to ever actually
+    * resolve it, we just make a temporary singlesample buffer now when we
+    * have to.
+    */
+   if (rb->NumSamples > 1) {
+      if (!irb->singlesample_mt) {
+         irb->singlesample_mt =
+            intel_miptree_create_for_renderbuffer(brw, irb->mt->format,
+                                                  rb->Width, rb->Height,
+                                                  0 /*num_samples*/);
+         if (!irb->singlesample_mt)
+            goto fail;
+         irb->singlesample_mt_is_tmp = true;
+         irb->need_downsample = true;
+      }
+
+      intel_renderbuffer_downsample(brw, irb);
+      mt = irb->singlesample_mt;
+
+      irb->need_map_upsample = mode & GL_MAP_WRITE_BIT;
+   } else {
+      mt = irb->mt;
+   }
+
    /* For a window-system renderbuffer, we need to flip the mapping we receive
     * upside-down.  So we need to ask for a rectangle on flipped vertically, and
     * we then return a pointer to the bottom of it with a negative stride.
@@ -114,7 +181,7 @@ intel_map_renderbuffer(struct gl_context *ctx,
       y = rb->Height - y - h;
    }
 
-   intel_miptree_map(brw, irb->mt, irb->mt_level, irb->mt_layer,
+   intel_miptree_map(brw, mt, irb->mt_level, irb->mt_layer,
 		     x, y, w, h, mode, &map, &stride);
 
    if (rb->Name == 0) {
@@ -128,6 +195,11 @@ intel_map_renderbuffer(struct gl_context *ctx,
 
    *out_map = map;
    *out_stride = stride;
+   return;
+
+fail:
+   *out_map = NULL;
+   *out_stride = 0;
 }
 
 /**
@@ -140,6 +212,7 @@ intel_unmap_renderbuffer(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct swrast_renderbuffer *srb = (struct swrast_renderbuffer *)rb;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+   struct intel_mipmap_tree *mt;
 
    DBG("%s: rb %d (%s)\n", __FUNCTION__,
        rb->Name, _mesa_get_format_name(rb->Format));
@@ -150,7 +223,21 @@ intel_unmap_renderbuffer(struct gl_context *ctx,
       return;
    }
 
-   intel_miptree_unmap(brw, irb->mt, irb->mt_level, irb->mt_layer);
+   if (rb->NumSamples > 1) {
+      mt = irb->singlesample_mt;
+   } else {
+      mt = irb->mt;
+   }
+
+   intel_miptree_unmap(brw, mt, irb->mt_level, irb->mt_layer);
+
+   if (irb->need_map_upsample) {
+      intel_renderbuffer_upsample(brw, irb);
+      irb->need_map_upsample = false;
+   }
+
+   if (irb->singlesample_mt_is_tmp)
+      intel_miptree_release(&irb->singlesample_mt);
 }
 
 
@@ -173,20 +260,10 @@ intel_quantize_num_samples(struct intel_screen *intel, unsigned num_samples)
    return quantized_samples;
 }
 
-
-/**
- * Called via glRenderbufferStorageEXT() to set the format and allocate
- * storage for a user-created renderbuffer.
- */
-static GLboolean
-intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
-                                 GLenum internalFormat,
-                                 GLuint width, GLuint height)
+static mesa_format
+intel_renderbuffer_format(struct gl_context * ctx, GLenum internalFormat)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct intel_screen *screen = brw->intelScreen;
-   struct intel_renderbuffer *irb = intel_renderbuffer(rb);
-   rb->NumSamples = intel_quantize_num_samples(screen, rb->NumSamples);
 
    switch (internalFormat) {
    default:
@@ -195,9 +272,9 @@ intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer
        * except they're less useful because you can't texture with
        * them.
        */
-      rb->Format = ctx->Driver.ChooseTextureFormat(ctx, GL_TEXTURE_2D,
-                                                   internalFormat,
-                                                   GL_NONE, GL_NONE);
+      return ctx->Driver.ChooseTextureFormat(ctx, GL_TEXTURE_2D,
+                                             internalFormat,
+                                             GL_NONE, GL_NONE);
       break;
    case GL_STENCIL_INDEX:
    case GL_STENCIL_INDEX1_EXT:
@@ -206,14 +283,26 @@ intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer
    case GL_STENCIL_INDEX16_EXT:
       /* These aren't actual texture formats, so force them here. */
       if (brw->has_separate_stencil) {
-	 rb->Format = MESA_FORMAT_S_UINT8;
+	 return MESA_FORMAT_S_UINT8;
       } else {
 	 assert(!brw->must_use_separate_stencil);
-	 rb->Format = MESA_FORMAT_Z24_UNORM_S8_UINT;
+	 return MESA_FORMAT_Z24_UNORM_S8_UINT;
       }
-      break;
    }
+}
 
+static GLboolean
+intel_alloc_private_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
+                                         GLenum internalFormat,
+                                         GLuint width, GLuint height)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct intel_screen *screen = brw->intelScreen;
+   struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+
+   assert(rb->Format != MESA_FORMAT_NONE);
+
+   rb->NumSamples = intel_quantize_num_samples(screen, rb->NumSamples);
    rb->Width = width;
    rb->Height = height;
    rb->_BaseFormat = _mesa_base_fbo_format(ctx, internalFormat);
@@ -233,9 +322,23 @@ intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer
    if (!irb->mt)
       return false;
 
+   irb->layer_count = 1;
+
    return true;
 }
 
+/**
+ * Called via glRenderbufferStorageEXT() to set the format and allocate
+ * storage for a user-created renderbuffer.
+ */
+static GLboolean
+intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
+                                 GLenum internalFormat,
+                                 GLuint width, GLuint height)
+{
+   rb->Format = intel_renderbuffer_format(ctx, internalFormat);
+   return intel_alloc_private_renderbuffer_storage(ctx, rb, internalFormat, width, height);
+}
 
 static void
 intel_image_target_renderbuffer_storage(struct gl_context *ctx,
@@ -281,22 +384,22 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
    irb = intel_renderbuffer(rb);
    intel_miptree_release(&irb->mt);
    irb->mt = intel_miptree_create_for_bo(brw,
-                                         image->region->bo,
+                                         image->bo,
                                          image->format,
                                          image->offset,
-                                         image->region->width,
-                                         image->region->height,
-                                         image->region->pitch,
-                                         image->region->tiling);
+                                         image->width,
+                                         image->height,
+                                         image->pitch);
    if (!irb->mt)
       return;
 
    rb->InternalFormat = image->internal_format;
-   rb->Width = image->region->width;
-   rb->Height = image->region->height;
+   rb->Width = image->width;
+   rb->Height = image->height;
    rb->Format = image->format;
    rb->_BaseFormat = _mesa_base_fbo_format(ctx, image->internal_format);
    rb->NeedsFinishRenderTexture = true;
+   irb->layer_count = 1;
 }
 
 /**
@@ -349,6 +452,7 @@ intel_create_renderbuffer(mesa_format format, unsigned num_samples)
    }
 
    rb = &irb->Base.Base;
+   irb->layer_count = 1;
 
    _mesa_init_renderbuffer(rb, 0);
    rb->ClassID = INTEL_RB_CLASS;
@@ -378,7 +482,7 @@ intel_create_private_renderbuffer(mesa_format format, unsigned num_samples)
    struct intel_renderbuffer *irb;
 
    irb = intel_create_renderbuffer(format, num_samples);
-   irb->Base.Base.AllocStorage = intel_alloc_renderbuffer_storage;
+   irb->Base.Base.AllocStorage = intel_alloc_private_renderbuffer_storage;
 
    return irb;
 }
@@ -415,8 +519,9 @@ intel_new_renderbuffer(struct gl_context * ctx, GLuint name)
 static bool
 intel_renderbuffer_update_wrapper(struct brw_context *brw,
                                   struct intel_renderbuffer *irb,
-				  struct gl_texture_image *image,
-                                  uint32_t layer)
+                                  struct gl_texture_image *image,
+                                  uint32_t layer,
+                                  bool layered)
 {
    struct gl_renderbuffer *rb = &irb->Base.Base;
    struct intel_texture_image *intel_image = intel_texture_image(image);
@@ -425,17 +530,30 @@ intel_renderbuffer_update_wrapper(struct brw_context *brw,
 
    rb->AllocStorage = intel_nop_alloc_storage;
 
+   /* adjust for texture view parameters */
+   layer += image->TexObject->MinLayer;
+   level += image->TexObject->MinLevel;
+
    intel_miptree_check_level_layer(mt, level, layer);
    irb->mt_level = level;
 
+   int layer_multiplier;
    switch (mt->msaa_layout) {
       case INTEL_MSAA_LAYOUT_UMS:
       case INTEL_MSAA_LAYOUT_CMS:
-         irb->mt_layer = layer * mt->num_samples;
+         layer_multiplier = mt->num_samples;
          break;
 
       default:
-         irb->mt_layer = layer;
+         layer_multiplier = 1;
+   }
+
+   irb->mt_layer = layer_multiplier * layer;
+
+   if (layered) {
+      irb->layer_count = image->TexObject->NumLayers ?: mt->level[level].depth / layer_multiplier;
+   } else {
+      irb->layer_count = 1;
    }
 
    intel_miptree_reference(&irb->mt, mt);
@@ -504,7 +622,7 @@ intel_render_texture(struct gl_context * ctx,
 
    intel_miptree_check_level_layer(mt, att->TextureLevel, layer);
 
-   if (!intel_renderbuffer_update_wrapper(brw, irb, image, layer)) {
+   if (!intel_renderbuffer_update_wrapper(brw, irb, image, layer, att->Layered)) {
        _swrast_render_texture(ctx, fb, att);
        return;
    }
@@ -515,24 +633,6 @@ intel_render_texture(struct gl_context * ctx,
        rb->RefCount);
 }
 
-
-/**
- * Called by Mesa when rendering to a texture is done.
- */
-static void
-intel_finish_render_texture(struct gl_context * ctx, struct gl_renderbuffer *rb)
-{
-   struct brw_context *brw = brw_context(ctx);
-
-   DBG("Finish render %s texture\n", _mesa_get_format_name(rb->Format));
-
-   /* Since we've (probably) rendered to the texture and will (likely) use
-    * it in the texture domain later on in this batchbuffer, flush the
-    * batch.  Once again, we wish for a domain tracker in libdrm to cover
-    * usage inside of a batchbuffer like GEM does in the kernel.
-    */
-   intel_batchbuffer_emit_mi_flush(brw);
-}
 
 #define fbo_incomplete(fb, ...) do {                                          \
       static GLuint msg_id = 0;                                               \
@@ -739,16 +839,6 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
             return mask;
          }
 
-         mesa_format src_format = _mesa_get_srgb_format_linear(src_rb->Format);
-         mesa_format dst_format = _mesa_get_srgb_format_linear(dst_rb->Format);
-         if (src_format != dst_format) {
-            perf_debug("glBlitFramebuffer(): unsupported blit from %s to %s.  "
-                       "Falling back to software rendering.\n",
-                       _mesa_get_format_name(src_format),
-                       _mesa_get_format_name(dst_format));
-            return mask;
-         }
-
          if (!intel_miptree_blit(brw,
                                  src_irb->mt,
                                  src_irb->mt_level, src_irb->mt_layer,
@@ -775,6 +865,13 @@ intel_blit_framebuffer(struct gl_context *ctx,
                        GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                        GLbitfield mask, GLenum filter)
 {
+   /* Page 679 of OpenGL 4.4 spec says:
+    *    "Added BlitFramebuffer to commands affected by conditional rendering in
+    *     section 10.10 (Bug 9562)."
+    */
+   if (!_mesa_check_conditional_render(ctx))
+      return;
+
    mask = brw_blorp_framebuffer(brw_context(ctx),
                                 srcX0, srcY0, srcX1, srcY1,
                                 dstX0, dstY0, dstX1, dstY1,
@@ -795,16 +892,6 @@ intel_blit_framebuffer(struct gl_context *ctx,
                               srcX0, srcY0, srcX1, srcY1,
                               dstX0, dstY0, dstX1, dstY1,
                               mask, filter);
-}
-
-/**
- * This is a no-op except on multisample buffers shared with DRI2.
- */
-void
-intel_renderbuffer_set_needs_downsample(struct intel_renderbuffer *irb)
-{
-   if (irb->mt && irb->mt->singlesample_mt)
-      irb->mt->need_downsample = true;
 }
 
 /**
@@ -889,6 +976,43 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
    intel_miptree_release(&new_mt);
 }
 
+void
+brw_render_cache_set_clear(struct brw_context *brw)
+{
+   struct set_entry *entry;
+
+   set_foreach(brw->render_cache, entry) {
+      _mesa_set_remove(brw->render_cache, entry);
+   }
+}
+
+void
+brw_render_cache_set_add_bo(struct brw_context *brw, drm_intel_bo *bo)
+{
+   _mesa_set_add(brw->render_cache, _mesa_hash_pointer(bo), bo);
+}
+
+/**
+ * Emits an appropriate flush for a BO if it has been rendered to within the
+ * same batchbuffer as a read that's about to be emitted.
+ *
+ * The GPU has separate, incoherent caches for the render cache and the
+ * sampler cache, along with other caches.  Usually data in the different
+ * caches don't interact (e.g. we don't render to our driver-generated
+ * immediate constant data), but for render-to-texture in FBOs we definitely
+ * do.  When a batchbuffer is flushed, the kernel will ensure that everything
+ * necessary is flushed before another use of that BO, but for reuse from
+ * different caches within a batchbuffer, it's all our responsibility.
+ */
+void
+brw_render_cache_set_check_flush(struct brw_context *brw, drm_intel_bo *bo)
+{
+   if (!_mesa_set_search(brw->render_cache, _mesa_hash_pointer(bo), bo))
+      return;
+
+   intel_batchbuffer_emit_mi_flush(brw);
+}
+
 /**
  * Do one-time context initializations related to GL_EXT_framebuffer_object.
  * Hook in device driver functions.
@@ -902,9 +1026,10 @@ intel_fbo_init(struct brw_context *brw)
    dd->MapRenderbuffer = intel_map_renderbuffer;
    dd->UnmapRenderbuffer = intel_unmap_renderbuffer;
    dd->RenderTexture = intel_render_texture;
-   dd->FinishRenderTexture = intel_finish_render_texture;
    dd->ValidateFramebuffer = intel_validate_framebuffer;
    dd->BlitFramebuffer = intel_blit_framebuffer;
    dd->EGLImageTargetRenderbufferStorage =
       intel_image_target_renderbuffer_storage;
+
+   brw->render_cache = _mesa_set_create(brw, _mesa_key_pointer_equal);
 }

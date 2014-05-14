@@ -361,13 +361,14 @@ brw_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_Z24_UNORM_S8_UINT] = 0,
       [MESA_FORMAT_Z_UNORM16] = 0,
       [MESA_FORMAT_Z24_UNORM_X8_UINT] = 0,
-      [MESA_FORMAT_X8Z24_UNORM] = 0,
+      [MESA_FORMAT_X8_UINT_Z24_UNORM] = 0,
       [MESA_FORMAT_Z_UNORM32] = 0,
-      [MESA_FORMAT_S_UINT8] = 0,
+      [MESA_FORMAT_S_UINT8] = BRW_SURFACEFORMAT_R8_UINT,
 
       [MESA_FORMAT_BGR_SRGB8] = 0,
       [MESA_FORMAT_A8B8G8R8_SRGB] = 0,
       [MESA_FORMAT_B8G8R8A8_SRGB] = BRW_SURFACEFORMAT_B8G8R8A8_UNORM_SRGB,
+      [MESA_FORMAT_R8G8B8A8_SRGB] = BRW_SURFACEFORMAT_R8G8B8A8_UNORM_SRGB,
       [MESA_FORMAT_L_SRGB8] = BRW_SURFACEFORMAT_L8_UNORM_SRGB,
       [MESA_FORMAT_L8A8_SRGB] = BRW_SURFACEFORMAT_L8A8_UNORM_SRGB,
       [MESA_FORMAT_SRGB_DXT1] = BRW_SURFACEFORMAT_DXT1_RGB_SRGB,
@@ -385,7 +386,7 @@ brw_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_RGBA_FLOAT32] = BRW_SURFACEFORMAT_R32G32B32A32_FLOAT,
       [MESA_FORMAT_RGBA_FLOAT16] = BRW_SURFACEFORMAT_R16G16B16A16_FLOAT,
       [MESA_FORMAT_RGB_FLOAT32] = BRW_SURFACEFORMAT_R32G32B32_FLOAT,
-      [MESA_FORMAT_RGB_FLOAT16] = BRW_SURFACEFORMAT_R16G16B16_FLOAT,
+      [MESA_FORMAT_RGB_FLOAT16] = 0,
       [MESA_FORMAT_A_FLOAT32] = BRW_SURFACEFORMAT_A32_FLOAT,
       [MESA_FORMAT_A_FLOAT16] = BRW_SURFACEFORMAT_A16_FLOAT,
       [MESA_FORMAT_L_FLOAT32] = BRW_SURFACEFORMAT_L32_FLOAT,
@@ -502,6 +503,7 @@ brw_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_Z_FLOAT32] = 0,
       [MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = 0,
 
+      [MESA_FORMAT_R10G10B10A2_UNORM] = BRW_SURFACEFORMAT_R10G10B10A2_UNORM,
       [MESA_FORMAT_B10G10R10A2_UINT] = BRW_SURFACEFORMAT_B10G10R10A2_UINT,
       [MESA_FORMAT_R10G10B10A2_UINT] = BRW_SURFACEFORMAT_R10G10B10A2_UINT,
 
@@ -581,6 +583,9 @@ brw_init_surface_formats(struct brw_context *brw)
 	  */
 	 render = BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
 	 break;
+      case BRW_SURFACEFORMAT_R8G8B8X8_UNORM:
+         render = BRW_SURFACEFORMAT_R8G8B8A8_UNORM;
+         break;
       }
 
       rinfo = &surface_formats[render];
@@ -603,7 +608,6 @@ brw_init_surface_formats(struct brw_context *brw)
    brw->format_supported_as_render_target[MESA_FORMAT_Z24_UNORM_S8_UINT] = true;
    brw->format_supported_as_render_target[MESA_FORMAT_Z24_UNORM_X8_UINT] = true;
    brw->format_supported_as_render_target[MESA_FORMAT_S_UINT8] = true;
-   brw->format_supported_as_render_target[MESA_FORMAT_Z_UNORM16] = true;
    brw->format_supported_as_render_target[MESA_FORMAT_Z_FLOAT32] = true;
    brw->format_supported_as_render_target[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
 
@@ -615,19 +619,17 @@ brw_init_surface_formats(struct brw_context *brw)
    ctx->TextureFormatSupported[MESA_FORMAT_Z_FLOAT32] = true;
    ctx->TextureFormatSupported[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
 
-   /* It appears that Z16 is slower than Z24 (on Intel Ivybridge and newer
-    * hardware at least), so there's no real reason to prefer it unless you're
-    * under memory (not memory bandwidth) pressure.  Our speculation is that
-    * this is due to either increased fragment shader execution from
-    * GL_LEQUAL/GL_EQUAL depth tests at the reduced precision, or due to
-    * increased depth stalls from a cacheline-based heuristic for detecting
-    * depth stalls.
+   /* Benchmarking shows that Z16 is slower than Z24, so there's no reason to
+    * use it unless you're under memory (not memory bandwidth) pressure.
     *
-    * However, desktop GL 3.0+ require that you get exactly 16 bits when
-    * asking for DEPTH_COMPONENT16, so we have to respect that.
+    * Apparently, the GPU's depth scoreboarding works on a 32-bit granularity,
+    * which corresponds to one pixel in the depth buffer for Z24 or Z32 formats.
+    * However, it corresponds to two pixels with Z16, which means both need to
+    * hit the early depth case in order for it to happen.
+    *
+    * Other speculation is that we may be hitting increased fragment shader
+    * execution from GL_LEQUAL/GL_EQUAL depth tests at reduced precision.
     */
-   if (_mesa_is_desktop_gl(ctx))
-      ctx->TextureFormatSupported[MESA_FORMAT_Z_UNORM16] = true;
 
    /* On hardware that lacks support for ETC1, we map ETC1 to RGBX
     * during glCompressedTexImage2D(). See intel_mipmap_tree::wraps_etc1.
@@ -727,6 +729,47 @@ translate_tex_format(struct brw_context *brw,
    default:
       assert(brw_format_for_mesa_format(mesa_format) != 0);
       return brw_format_for_mesa_format(mesa_format);
+   }
+}
+
+/**
+ * Convert a MESA_FORMAT to the corresponding BRW_DEPTHFORMAT enum.
+ */
+uint32_t
+brw_depth_format(struct brw_context *brw, mesa_format format)
+{
+   switch (format) {
+   case MESA_FORMAT_Z_UNORM16:
+      return BRW_DEPTHFORMAT_D16_UNORM;
+   case MESA_FORMAT_Z_FLOAT32:
+      return BRW_DEPTHFORMAT_D32_FLOAT;
+   case MESA_FORMAT_Z24_UNORM_X8_UINT:
+      if (brw->gen >= 6) {
+         return BRW_DEPTHFORMAT_D24_UNORM_X8_UINT;
+      } else {
+         /* Use D24_UNORM_S8, not D24_UNORM_X8.
+          *
+          * D24_UNORM_X8 was not introduced until Gen5. (See the Ironlake PRM,
+          * Volume 2, Part 1, Section 8.4.6 "Depth/Stencil Buffer State", Bits
+          * 3DSTATE_DEPTH_BUFFER.Surface_Format).
+          *
+          * However, on Gen5, D24_UNORM_X8 may be used only if separate
+          * stencil is enabled, and we never enable it. From the Ironlake PRM,
+          * same section as above, 3DSTATE_DEPTH_BUFFER's
+          * "Separate Stencil Buffer Enable" bit:
+          *
+          * "If this field is disabled, the Surface Format of the depth
+          *  buffer cannot be D24_UNORM_X8_UINT."
+          */
+         return BRW_DEPTHFORMAT_D24_UNORM_S8_UINT;
+      }
+   case MESA_FORMAT_Z24_UNORM_S8_UINT:
+      return BRW_DEPTHFORMAT_D24_UNORM_S8_UINT;
+   case MESA_FORMAT_Z32_FLOAT_S8X24_UINT:
+      return BRW_DEPTHFORMAT_D32_FLOAT_S8X24_UINT;
+   default:
+      assert(!"Unexpected depth format.");
+      return BRW_DEPTHFORMAT_D32_FLOAT;
    }
 }
 

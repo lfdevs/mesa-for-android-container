@@ -46,6 +46,15 @@
 extern struct gl_texture_object *
 _mesa_lookup_texture(struct gl_context *ctx, GLuint id);
 
+extern void
+_mesa_begin_texture_lookups(struct gl_context *ctx);
+
+extern void
+_mesa_end_texture_lookups(struct gl_context *ctx);
+
+extern struct gl_texture_object *
+_mesa_lookup_texture_locked(struct gl_context *ctx, GLuint id);
+
 extern struct gl_texture_object *
 _mesa_new_texture_object( struct gl_context *ctx, GLuint name, GLenum target );
 
@@ -114,6 +123,20 @@ _mesa_is_texture_complete(const struct gl_texture_object *texObj,
       return GL_FALSE;
    }
 
+   /* From the ARB_stencil_texturing specification:
+    * "Add a new bullet point for the conditions that cause the texture
+    *  to not be complete:
+    *
+    *  * The internal format of the texture is DEPTH_STENCIL, the
+    *    DEPTH_STENCIL_TEXTURE_MODE for the texture is STENCIL_INDEX and either
+    *    the magnification filter or the minification filter is not NEAREST."
+    */
+   if (texObj->StencilSampling &&
+       texObj->Image[0][texObj->BaseLevel]->_BaseFormat == GL_DEPTH_STENCIL &&
+       (sampler->MagFilter != GL_NEAREST || sampler->MinFilter != GL_NEAREST)) {
+      return GL_FALSE;
+   }
+
    if (_mesa_is_mipmap_filter(sampler))
       return texObj->_MipmapComplete;
    else
@@ -160,6 +183,10 @@ _mesa_DeleteTextures( GLsizei n, const GLuint *textures );
 
 extern void GLAPIENTRY
 _mesa_BindTexture( GLenum target, GLuint texture );
+
+
+extern void GLAPIENTRY
+_mesa_BindTextures( GLuint first, GLsizei count, const GLuint *textures );
 
 
 extern void GLAPIENTRY

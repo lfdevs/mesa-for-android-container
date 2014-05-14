@@ -25,8 +25,8 @@
 #include "codegen/nv50_ir_driver.h"
 
 extern "C" {
+#include "nouveau_debug.h"
 #include "nv50/nv50_program.h"
-#include "nv50/nv50_debug.h"
 }
 
 namespace nv50_ir {
@@ -911,6 +911,9 @@ TexInstruction::~TexInstruction()
       dPdx[c].set(NULL);
       dPdy[c].set(NULL);
    }
+   for (int n = 0; n < 4; ++n)
+      for (int c = 0; c < 3; ++c)
+         offset[n][c].set(NULL);
 }
 
 TexInstruction *
@@ -929,6 +932,10 @@ TexInstruction::clone(ClonePolicy<Function>& pol, Instruction *i) const
          tex->dPdy[c].set(dPdy[c]);
       }
    }
+
+   for (int n = 0; n < tex->tex.useOffsets; ++n)
+      for (int c = 0; c < 3; ++c)
+         tex->offset[n][c].set(offset[n][c]);
 
    return tex;
 }

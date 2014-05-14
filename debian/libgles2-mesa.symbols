@@ -13,7 +13,6 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glBindTexture@Base 7.8.1
  glBindTransformFeedback@Base 9.1~
  glBindVertexArray@Base 9.1~
- glBindVertexArrayOES@Base 9.0~0
  glBlendColor@Base 7.8.1
  glBlendEquation@Base 7.8.1
  glBlendEquationSeparate@Base 7.8.1
@@ -36,15 +35,12 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glCompileShader@Base 7.8.1
  glCompressedTexImage2D@Base 7.8.1
  glCompressedTexImage3D@Base 9.1~
- glCompressedTexImage3DOES@Base 7.8.1
  glCompressedTexSubImage2D@Base 7.8.1
  glCompressedTexSubImage3D@Base 9.1~
- glCompressedTexSubImage3DOES@Base 7.8.1
  glCopyBufferSubData@Base 9.1~
  glCopyTexImage2D@Base 7.8.1
  glCopyTexSubImage2D@Base 7.8.1
  glCopyTexSubImage3D@Base 9.1~
- glCopyTexSubImage3DOES@Base 7.8.1
  glCreateProgram@Base 7.8.1
  glCreateShader@Base 7.8.1
  glCullFace@Base 7.8.1
@@ -59,18 +55,15 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glDeleteTextures@Base 7.8.1
  glDeleteTransformFeedbacks@Base 9.1~
  glDeleteVertexArrays@Base 9.1~
- glDeleteVertexArraysOES@Base 9.0~0
  glDepthFunc@Base 7.8.1
  glDepthMask@Base 7.8.1
  glDepthRangef@Base 7.8.1
  glDetachShader@Base 7.8.1
  glDisable@Base 7.8.1
  glDisableVertexAttribArray@Base 7.8.1
- glDiscardFramebufferEXT@Base 9.2~0
  glDrawArrays@Base 7.8.1
  glDrawArraysInstanced@Base 9.1~
  glDrawBuffers@Base 9.1~
- glDrawBuffersNV@Base 8.0~rc1
  glDrawElements@Base 7.8.1
  glDrawElementsInstanced@Base 9.1~
  glDrawRangeElements@Base 9.1~
@@ -84,10 +77,8 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glFinish@Base 7.8.1
  glFlush@Base 7.8.1
  glFlushMappedBufferRange@Base 9.1~
- glFlushMappedBufferRangeEXT@Base 9.1~
  glFramebufferRenderbuffer@Base 7.8.1
  glFramebufferTexture2D@Base 7.8.1
- glFramebufferTexture3DOES@Base 7.8.1
  glFramebufferTextureLayer@Base 9.1~
  glFrontFace@Base 7.8.1
  glGenBuffers@Base 7.8.1
@@ -98,7 +89,6 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGenTextures@Base 7.8.1
  glGenTransformFeedbacks@Base 9.1~
  glGenVertexArrays@Base 9.1~
- glGenVertexArraysOES@Base 9.0~0
  glGenerateMipmap@Base 7.8.1
  glGetActiveAttrib@Base 7.8.1
  glGetActiveUniform@Base 7.8.1
@@ -111,7 +101,6 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetBufferParameteri64v@Base 9.1~
  glGetBufferParameteriv@Base 7.8.1
  glGetBufferPointerv@Base 9.1~
- glGetBufferPointervOES@Base 7.8.1
  glGetError@Base 7.8.1
  glGetFloatv@Base 7.8.1
  glGetFragDataLocation@Base 9.1~
@@ -122,7 +111,6 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetIntegerv@Base 7.8.1
  glGetInternalformativ@Base 9.1~
  glGetProgramBinary@Base 9.1~
- glGetProgramBinaryOES@Base 7.8.1
  glGetProgramInfoLog@Base 7.8.1
  glGetProgramiv@Base 7.8.1
  glGetQueryObjectuiv@Base 9.1~
@@ -166,22 +154,17 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glIsTexture@Base 7.8.1
  glIsTransformFeedback@Base 9.1~
  glIsVertexArray@Base 9.1~
- glIsVertexArrayOES@Base 9.0~0
  glLineWidth@Base 7.8.1
  glLinkProgram@Base 7.8.1
- glMapBufferOES@Base 7.8.1
  glMapBufferRange@Base 9.1~
- glMapBufferRangeEXT@Base 9.1~
  glMultiDrawArraysEXT@Base 7.8.1
  glMultiDrawElementsEXT@Base 7.8.1
  glPauseTransformFeedback@Base 9.1~
  glPixelStorei@Base 7.8.1
  glPolygonOffset@Base 7.8.1
  glProgramBinary@Base 9.1~
- glProgramBinaryOES@Base 7.8.1
  glProgramParameteri@Base 9.1~
  glReadBuffer@Base 9.1~
- glReadBufferNV@Base 8.1~0
  glReadPixels@Base 7.8.1
  glReleaseShaderCompiler@Base 7.8.1
  glRenderbufferStorage@Base 7.8.1
@@ -203,7 +186,6 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glStencilOpSeparate@Base 7.8.1
  glTexImage2D@Base 7.8.1
  glTexImage3D@Base 9.1~
- glTexImage3DOES@Base 7.8.1
  glTexParameterf@Base 7.8.1
  glTexParameterfv@Base 7.8.1
  glTexParameteri@Base 7.8.1
@@ -212,7 +194,6 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glTexStorage3D@Base 9.1~
  glTexSubImage2D@Base 7.8.1
  glTexSubImage3D@Base 9.1~
- glTexSubImage3DOES@Base 7.8.1
  glTransformFeedbackVaryings@Base 9.1~
  glUniform1f@Base 7.8.1
  glUniform1fv@Base 7.8.1
@@ -249,7 +230,6 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glUniformMatrix4x2fv@Base 9.1~
  glUniformMatrix4x3fv@Base 9.1~
  glUnmapBuffer@Base 9.1~
- glUnmapBufferOES@Base 7.8.1
  glUseProgram@Base 7.8.1
  glValidateProgram@Base 7.8.1
  glVertexAttrib1f@Base 7.8.1

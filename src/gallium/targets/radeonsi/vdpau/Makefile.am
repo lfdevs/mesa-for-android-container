@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Note: Make sure VDPAU_EXPORTS is defined before including Automake.inc
-VDPAU_EXPORTS = '^(vdp_imp_device_create_x11|radeon_drm_winsys_create)$$'
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
@@ -36,22 +34,14 @@ libvdpau_radeonsi_la_SOURCES = \
 	$(top_srcdir)/src/gallium/auxiliary/vl/vl_winsys_dri.c
 
 libvdpau_radeonsi_la_LDFLAGS = \
-	$(GALLIUM_VDPAU_LINKER_FLAGS)
+	$(GALLIUM_VDPAU_LINKER_FLAGS) \
+	-Wl,--dynamic-list=$(srcdir)/../../r300/dri/radeon.dyn
+
 
 libvdpau_radeonsi_la_LIBADD = \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
 	$(GALLIUM_VDPAU_LIB_DEPS) \
-	$(GALLIUM_DRI_LIB_DEPS) \
 	$(RADEON_LIBS)
 
-if HAVE_MESA_LLVM
-libvdpau_radeonsi_la_LDFLAGS += $(LLVM_LDFLAGS)
-libvdpau_radeonsi_la_LIBADD += $(LLVM_LIBS)
-endif
-
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: libvdpau_radeonsi.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/libvdpau_radeonsi.so* $(top_builddir)/$(LIB_DIR)/gallium/
+include $(top_srcdir)/install-gallium-links.mk

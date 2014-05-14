@@ -56,7 +56,6 @@ public:
    virtual uint32_t get_wm_prog(struct brw_context *brw,
                                 brw_blorp_prog_data **prog_data) const;
 
-protected:
    brw_blorp_const_color_prog_key wm_prog_key;
 };
 
@@ -154,9 +153,8 @@ is_color_fast_clear_compatible(struct brw_context *brw,
       return false;
 
    for (int i = 0; i < 4; i++) {
-      if (color->f[i] != 0.0 && color->f[i] != 1.0) {
-         perf_debug("Clear color unsupported by fast color clear.  "
-                    "Falling back to slow clear.\n");
+      if (color->f[i] != 0.0 && color->f[i] != 1.0 &&
+          _mesa_format_has_color_component(format, i)) {
          return false;
       }
    }
@@ -225,14 +223,15 @@ brw_blorp_clear_params::brw_blorp_clear_params(struct brw_context *brw,
     *      accessing tiled memory.  Using this Message Type to access linear
     *      (untiled) memory is UNDEFINED."
     */
-   if (irb->mt->region->tiling == I915_TILING_NONE)
+   if (irb->mt->tiling == I915_TILING_NONE)
       wm_prog_key.use_simd16_replicated_data = false;
 
    /* Constant color writes ignore everyting in blend and color calculator
     * state.  This is not documented.
     */
    for (int i = 0; i < 4; i++) {
-      if (!color_mask[i]) {
+      if (_mesa_format_has_color_component(irb->mt->format, i) &&
+          !color_mask[i]) {
          color_write_disable[i] = true;
          wm_prog_key.use_simd16_replicated_data = false;
       }
@@ -486,9 +485,9 @@ brw_blorp_const_color_program::compile(struct brw_context *brw,
                 false /* header present */);
 
    if (unlikely(INTEL_DEBUG & DEBUG_BLORP)) {
-      printf("Native code for BLORP clear:\n");
-      brw_dump_compile(&func, stdout, 0, func.next_insn_offset);
-      printf("\n");
+      fprintf(stderr, "Native code for BLORP clear:\n");
+      brw_dump_compile(&func, stderr, 0, func.next_insn_offset);
+      fprintf(stderr, "\n");
    }
    return brw_get_program(&func, program_size);
 }
@@ -540,7 +539,15 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
       }
    }
 
-   DBG("%s to mt %p level %d layer %d\n", __FUNCTION__,
+   const char *clear_type;
+   if (is_fast_clear)
+      clear_type = "fast";
+   else if (params.wm_prog_key.use_simd16_replicated_data)
+      clear_type = "replicated";
+   else
+      clear_type = "slow";
+
+   DBG("%s (%s) to mt %p level %d layer %d\n", __FUNCTION__, clear_type,
        irb->mt, irb->mt_level, irb->mt_layer);
 
    brw_blorp_exec(brw, &params);
@@ -560,11 +567,15 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
 extern "C" {
 bool
 brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
-                      bool partial_clear)
+                      GLbitfield mask, bool partial_clear)
 {
    for (unsigned buf = 0; buf < fb->_NumColorDrawBuffers; buf++) {
       struct gl_renderbuffer *rb = fb->_ColorDrawBuffers[buf];
       struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+
+      /* Only clear the buffers present in the provided mask */
+      if (((1 << fb->_ColorDrawBufferIndexes[buf]) & mask) == 0)
+         continue;
 
       /* If this is an ES2 context or GL_ARB_ES2_compatibility is supported,
        * the framebuffer can be complete with some attachments missing.  In
@@ -578,11 +589,10 @@ brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
             (irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_UMS ||
              irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_CMS) ?
             irb->mt->num_samples : 1;
-         unsigned num_layers =
-            irb->mt->level[irb->mt_level].depth / layer_multiplier;
+         unsigned num_layers = irb->layer_count;
          for (unsigned layer = 0; layer < num_layers; layer++) {
             if (!do_single_blorp_clear(brw, fb, rb, buf, partial_clear,
-                                       layer * layer_multiplier)) {
+                                       irb->mt_layer + layer * layer_multiplier)) {
                return false;
             }
          }
@@ -592,7 +602,7 @@ brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
             return false;
       }
 
-      intel_renderbuffer_set_needs_downsample(irb);
+      irb->need_downsample = true;
    }
 
    return true;

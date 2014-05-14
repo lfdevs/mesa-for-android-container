@@ -78,7 +78,7 @@
 #endif
 
 #define __IS_LOADER
-#include "pci_ids/pci_id_driver_map.h"
+#include "pci_id_driver_map.h"
 
 static void default_logger(int level, const char *fmt, ...)
 {
@@ -202,7 +202,7 @@ out:
    return (*chip_id >= 0);
 }
 
-#elif defined(ANDROID) && !defined(__NOT_HAVE_DRM_H)
+#elif !defined(__NOT_HAVE_DRM_H)
 
 /* for i915 */
 #include <i915_drm.h>
@@ -219,12 +219,12 @@ loader_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
    version = drmGetVersion(fd);
    if (!version) {
       log_(_LOADER_WARNING, "MESA-LOADER: invalid drm fd\n");
-      return FALSE;
+      return 0;
    }
    if (!version->name) {
       log_(_LOADER_WARNING, "MESA-LOADER: unable to determine the driver name\n");
       drmFreeVersion(version);
-      return FALSE;
+      return 0;
    }
 
    if (strcmp(version->name, "i915") == 0) {
@@ -350,6 +350,9 @@ loader_get_driver_for_fd(int fd, unsigned driver_types)
          continue;
 
       if (!(driver_types & driver_map[i].driver_types))
+         continue;
+
+      if (driver_map[i].predicate && !driver_map[i].predicate(fd))
          continue;
 
       if (driver_map[i].num_chips_ids == -1) {

@@ -65,15 +65,17 @@ static const struct debug_named_value debug_options[] = {
 		{"direct",    FD_DBG_DIRECT, "Force inline (SS_DIRECT) state loads"},
 		{"dbypass",   FD_DBG_DBYPASS,"Disable GMEM bypass"},
 		{"fraghalf",  FD_DBG_FRAGHALF, "Use half-precision in fragment shader"},
-		{"binning",   FD_DBG_BINNING,  "Enable hw binning"},
-		{"dbinning",  FD_DBG_DBINNING, "Disable hw binning"},
+		{"nobin",     FD_DBG_NOBIN,  "Disable hw binning"},
+		{"noopt",     FD_DBG_NOOPT , "Disable optimization passes in compiler"},
+		{"optmsgs",   FD_DBG_OPTMSGS,"Enable optimizater debug messages"},
+		{"optdump",   FD_DBG_OPTDUMP,"Dump shader DAG to .dot files"},
 		DEBUG_NAMED_VALUE_END
 };
 
 DEBUG_GET_ONCE_FLAGS_OPTION(fd_mesa_debug, "FD_MESA_DEBUG", debug_options, 0)
 
 int fd_mesa_debug = 0;
-bool fd_binning_enabled = false; /* default to off for now */
+bool fd_binning_enabled = true;
 
 static const char *
 fd_screen_get_name(struct pipe_screen *pscreen)
@@ -201,6 +203,12 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
         case PIPE_CAP_TGSI_VS_LAYER:
+	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
+	case PIPE_CAP_TEXTURE_GATHER_SM5:
+        case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+        case PIPE_CAP_FAKE_SW_MSAA:
+	case PIPE_CAP_TEXTURE_QUERY_LOD:
+        case PIPE_CAP_SAMPLE_SHADING:
 		return 0;
 
 	/* Stream output. */
@@ -222,8 +230,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return MAX_MIP_LEVELS;
 	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
 		return 9192;
-	case PIPE_CAP_MAX_COMBINED_SAMPLERS:
-		return 20;
 
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -235,9 +241,11 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_QUERY_TIMESTAMP:
 		return 0;
 
+	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
 		return -8;
 
+	case PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MAX_TEXEL_OFFSET:
 		return 7;
 
@@ -397,10 +405,7 @@ fd_screen_create(struct fd_device *dev)
 
 	fd_mesa_debug = debug_get_option_fd_mesa_debug();
 
-	if (fd_mesa_debug & FD_DBG_BINNING)
-		fd_binning_enabled = true;
-
-	if (fd_mesa_debug & FD_DBG_DBINNING)
+	if (fd_mesa_debug & FD_DBG_NOBIN)
 		fd_binning_enabled = false;
 
 	if (!screen)

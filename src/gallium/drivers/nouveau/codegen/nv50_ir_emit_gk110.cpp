@@ -94,6 +94,8 @@ private:
    void emitLogicOp(const Instruction *, uint8_t subOp);
    void emitPOPC(const Instruction *);
    void emitINSBF(const Instruction *);
+   void emitEXTBF(const Instruction *);
+   void emitBFIND(const Instruction *);
    void emitShift(const Instruction *);
 
    void emitSFnOp(const Instruction *, uint8_t subOp);
@@ -112,6 +114,8 @@ private:
    void emitTXQ(const TexInstruction *);
 
    void emitQUADOP(const Instruction *, uint8_t qOp, uint8_t laneMask);
+
+   void emitPIXLD(const Instruction *);
 
    void emitFlow(const Instruction *);
 
@@ -489,6 +493,8 @@ CodeEmitterGK110::emitFMUL(const Instruction *i)
       assert(i->postFactor == 0);
    } else {
       emitForm_21(i, 0x234, 0xc34);
+      code[1] |= ((i->postFactor > 0) ?
+                  (7 - i->postFactor) : (0 - i->postFactor)) << 12;
 
       RND_(2a, F);
       FTZ_(2f);
@@ -534,7 +540,10 @@ CodeEmitterGK110::emitFADD(const Instruction *i)
       assert(i->rnd == ROUND_N);
       assert(!i->saturate);
 
-      emitForm_L(i, 0x400, 0, i->src(1).mod);
+      Modifier mod = i->src(1).mod ^
+         Modifier(i->op == OP_SUB ? NV50_IR_MOD_NEG : 0);
+
+      emitForm_L(i, 0x400, 0, mod);
 
       FTZ_(3a);
       NEG_(3b, 0);
@@ -549,9 +558,11 @@ CodeEmitterGK110::emitFADD(const Instruction *i)
 
       if (code[0] & 0x1) {
          modNegAbsF32_3b(i, 1);
+         if (i->op == OP_SUB) code[1] ^= 1 << 27;
       } else {
          ABS_(34, 1);
          NEG_(30, 1);
+         if (i->op == OP_SUB) code[1] ^= 1 << 16;
       }
    }
 }
@@ -656,17 +667,16 @@ CodeEmitterGK110::emitNOT(const Instruction *i)
 void
 CodeEmitterGK110::emitLogicOp(const Instruction *i, uint8_t subOp)
 {
-   assert(!(i->src(0).mod & Modifier(NV50_IR_MOD_NOT))); // XXX: find me
-
    if (isLIMM(i->src(1), TYPE_S32)) {
       emitForm_L(i, 0x200, 0, i->src(1).mod);
       code[1] |= subOp << 24;
+      NOT_(3a, 0);
    } else {
       emitForm_21(i, 0x220, 0xc20);
       code[1] |= subOp << 12;
+      NOT_(2a, 0);
       NOT_(2b, 1);
    }
-   assert(!(code[0] & 0x1) || !(i->src(1).mod & Modifier(NV50_IR_MOD_NOT)));
 }
 
 void
@@ -688,35 +698,48 @@ CodeEmitterGK110::emitINSBF(const Instruction *i)
 }
 
 void
+CodeEmitterGK110::emitEXTBF(const Instruction *i)
+{
+   emitForm_21(i, 0x600, 0xc00);
+
+   if (i->dType == TYPE_S32)
+      code[1] |= 0x80000;
+   if (i->subOp == NV50_IR_SUBOP_EXTBF_REV)
+      code[1] |= 0x800;
+}
+
+void
+CodeEmitterGK110::emitBFIND(const Instruction *i)
+{
+   emitForm_21(i, 0x618, 0xc18);
+
+   if (i->dType == TYPE_S32)
+      code[1] |= 0x80000;
+   if (i->src(0).mod == Modifier(NV50_IR_MOD_NOT))
+      code[1] |= 0x800;
+   if (i->subOp == NV50_IR_SUBOP_BFIND_SAMT)
+      code[1] |= 0x1000;
+}
+
+void
 CodeEmitterGK110::emitShift(const Instruction *i)
 {
-   const bool sar = i->op == OP_SHR && isSignedType(i->sType);
-
-   if (sar) {
-      emitForm_21(i, 0x214, 0x014);
-      code[1] |= 1 << 19;
-   } else
    if (i->op == OP_SHR) {
-      // this is actually RSHF
-      emitForm_21(i, 0x27c, 0x87c);
-      code[1] |= GK110_GPR_ZERO << 10;
+      emitForm_21(i, 0x214, 0xc14);
+      if (isSignedType(i->dType))
+         code[1] |= 1 << 19;
    } else {
-      // this is actually LSHF
-      emitForm_21(i, 0x1fc, 0xb7c);
-      code[1] |= GK110_GPR_ZERO << 10;
+      emitForm_21(i, 0x224, 0xc24);
    }
 
-   if (i->subOp == NV50_IR_SUBOP_SHIFT_WRAP) {
-      if (!sar)
-         code[1] |= 1 << 21;
-      // XXX: find wrap modifier for SHR S32
-   }
+   if (i->subOp == NV50_IR_SUBOP_SHIFT_WRAP)
+      code[1] |= 1 << 10;
 }
 
 void
 CodeEmitterGK110::emitPreOp(const Instruction *i)
 {
-   emitForm_21(i, 0x248, -1);
+   emitForm_C(i, 0x248, 0x2);
 
    if (i->op == OP_PREEX2)
       code[1] |= 1 << 10;
@@ -738,8 +761,7 @@ CodeEmitterGK110::emitSFnOp(const Instruction *i, uint8_t subOp)
 
    NEG_(33, 0);
    ABS_(31, 0);
-
-   // XXX: find saturate
+   SAT_(35);
 }
 
 void
@@ -950,7 +972,17 @@ void CodeEmitterGK110::emitTEXBAR(const Instruction *i)
 
 void CodeEmitterGK110::emitTEXCSAA(const TexInstruction *i)
 {
-   emitNOP(i); // TODO
+   code[0] = 0x00000002;
+   code[1] = 0x76c00000;
+
+   code[1] |= i->tex.r << 9;
+   // code[1] |= i->tex.s << (9 + 8);
+
+   if (i->tex.liveOnly)
+      code[0] |= 0x80000000;
+
+   defId(i->def(0), 2);
+   srcId(i->src(0), 10);
 }
 
 static inline bool
@@ -974,6 +1006,15 @@ CodeEmitterGK110::emitTEX(const TexInstruction *i)
       case OP_TXD:
          code[1] = 0x7e000000;
          break;
+      case OP_TXLQ:
+         code[1] = 0x7e800000;
+         break;
+      case OP_TXF:
+         code[1] = 0x78000000;
+         break;
+      case OP_TXG:
+         code[1] = 0x7dc00000;
+         break;
       default:
          code[1] = 0x7d800000;
          break;
@@ -983,42 +1024,59 @@ CodeEmitterGK110::emitTEX(const TexInstruction *i)
       case OP_TXD:
          code[0] = 0x00000002;
          code[1] = 0x76000000;
+         code[1] |= i->tex.r << 9;
+         break;
+      case OP_TXLQ:
+         code[0] = 0x00000002;
+         code[1] = 0x76800000;
+         code[1] |= i->tex.r << 9;
+         break;
+      case OP_TXF:
+         code[0] = 0x00000002;
+         code[1] = 0x70000000;
+         code[1] |= i->tex.r << 13;
+         break;
+      case OP_TXG:
+         code[0] = 0x00000001;
+         code[1] = 0x70000000;
+         code[1] |= i->tex.r << 15;
          break;
       default:
          code[0] = 0x00000001;
          code[1] = 0x60000000;
+         code[1] |= i->tex.r << 15;
          break;
       }
-      code[1] |= i->tex.r << 15;
    }
 
    code[1] |= isNextIndependentTex(i) ? 0x1 : 0x2; // t : p mode
 
-   // if (i->tex.liveOnly)
-   //    ?
+   if (i->tex.liveOnly)
+      code[0] |= 0x80000000;
 
    switch (i->op) {
    case OP_TEX: break;
    case OP_TXB: code[1] |= 0x2000; break;
    case OP_TXL: code[1] |= 0x3000; break;
-   case OP_TXF: break; // XXX
-   case OP_TXG: break; // XXX
+   case OP_TXF: break;
+   case OP_TXG: break;
    case OP_TXD: break;
+   case OP_TXLQ: break;
    default:
       assert(!"invalid texture op");
       break;
    }
-   /*
+
    if (i->op == OP_TXF) {
       if (!i->tex.levelZero)
-         code[1] |= 0x02000000;
-   } else */
+         code[1] |= 0x1000;
+   } else
    if (i->tex.levelZero) {
       code[1] |= 0x1000;
    }
 
-   // if (i->op != OP_TXD && i->tex.derivAll)
-   //   code[1] |= 1 << 13;
+   if (i->op != OP_TXD && i->tex.derivAll)
+      code[1] |= 0x200;
 
    emitPredicate(i);
 
@@ -1030,36 +1088,83 @@ CodeEmitterGK110::emitTEX(const TexInstruction *i)
    srcId(i->src(0), 10);
    srcId(i, src1, 23);
 
-   // if (i->op == OP_TXG) code[0] |= i->tex.gatherComp << 5;
+   if (i->op == OP_TXG) code[1] |= i->tex.gatherComp << 13;
 
    // texture target:
    code[1] |= (i->tex.target.isCube() ? 3 : (i->tex.target.getDim() - 1)) << 7;
    if (i->tex.target.isArray())
       code[1] |= 0x40;
-   // if (i->tex.target.isShadow())
-   //   ?
-   // if (i->tex.target == TEX_TARGET_2D_MS ||
-   //     i->tex.target == TEX_TARGET_2D_MS_ARRAY)
-   //   ?
+   if (i->tex.target.isShadow())
+      code[1] |= 0x400;
+   if (i->tex.target == TEX_TARGET_2D_MS ||
+       i->tex.target == TEX_TARGET_2D_MS_ARRAY)
+      code[1] |= 0x800;
 
    if (i->srcExists(src1) && i->src(src1).getFile() == FILE_IMMEDIATE) {
       // ?
    }
 
-   // if (i->tex.useOffsets)
-   //   ?
+   if (i->tex.useOffsets == 1) {
+      switch (i->op) {
+      case OP_TXF: code[1] |= 0x200; break;
+      default: code[1] |= 0x800; break;
+      }
+   }
+   if (i->tex.useOffsets == 4)
+      code[1] |= 0x1000;
 }
 
 void
 CodeEmitterGK110::emitTXQ(const TexInstruction *i)
 {
-   emitNOP(i); // TODO
+   code[0] = 0x00000002;
+   code[1] = 0x75400001;
+
+   switch (i->tex.query) {
+   case TXQ_DIMS:            code[0] |= 0x01 << 25; break;
+   case TXQ_TYPE:            code[0] |= 0x02 << 25; break;
+   case TXQ_SAMPLE_POSITION: code[0] |= 0x05 << 25; break;
+   case TXQ_FILTER:          code[0] |= 0x10 << 25; break;
+   case TXQ_LOD:             code[0] |= 0x12 << 25; break;
+   case TXQ_BORDER_COLOUR:   code[0] |= 0x16 << 25; break;
+   default:
+      assert(!"invalid texture query");
+      break;
+   }
+
+   code[1] |= i->tex.mask << 2;
+   code[1] |= i->tex.r << 9;
+   if (/*i->tex.sIndirectSrc >= 0 || */i->tex.rIndirectSrc >= 0)
+      code[1] |= 0x08000000;
+
+   defId(i->def(0), 2);
+   srcId(i->src(0), 10);
+
+   emitPredicate(i);
 }
 
 void
 CodeEmitterGK110::emitQUADOP(const Instruction *i, uint8_t qOp, uint8_t laneMask)
 {
-   emitNOP(i); // TODO
+   code[0] = 0x00000002 | ((qOp & 1) << 31);
+   code[1] = 0x7fc00000 | (qOp >> 1) | (laneMask << 12);
+
+   defId(i->def(0), 2);
+   srcId(i->src(0), 10);
+   srcId(i->srcExists(1) ? i->src(1) : i->src(0), 23);
+
+   if (i->op == OP_QUADOP && progType != Program::TYPE_FRAGMENT)
+      code[1] |= 1 << 9; // dall
+
+   emitPredicate(i);
+}
+
+void
+CodeEmitterGK110::emitPIXLD(const Instruction *i)
+{
+   emitForm_L(i, 0x7f4, 2, Modifier(0));
+   code[1] |= i->subOp << 2;
+   code[1] |= 0x00070000;
 }
 
 void
@@ -1073,32 +1178,32 @@ CodeEmitterGK110::emitFlow(const Instruction *i)
 
    switch (i->op) {
    case OP_BRA:
-      code[1] = f->absolute ? 0x00000 : 0x12000000; // XXX
-      // if (i->srcExists(0) && i->src(0).getFile() == FILE_MEMORY_CONST)
-      //   code[0] |= 0x4000;
+      code[1] = f->absolute ? 0x10800000 : 0x12000000;
+      if (i->srcExists(0) && i->src(0).getFile() == FILE_MEMORY_CONST)
+         code[0] |= 0x80;
       mask = 3;
       break;
    case OP_CALL:
-      code[1] = f->absolute ? 0x00000 : 0x13000000; // XXX
-      // if (i->srcExists(0) && i->src(0).getFile() == FILE_MEMORY_CONST)
-      //   code[0] |= 0x4000;
+      code[1] = f->absolute ? 0x11000000 : 0x13000000;
+      if (i->srcExists(0) && i->src(0).getFile() == FILE_MEMORY_CONST)
+         code[0] |= 0x80;
       mask = 2;
       break;
 
    case OP_EXIT:    code[1] = 0x18000000; mask = 1; break;
    case OP_RET:     code[1] = 0x19000000; mask = 1; break;
-   case OP_DISCARD: code[1] = 0x19800000; mask = 1; break; // XXX: guess
-   case OP_BREAK:   code[1] = 0x1a800000; mask = 1; break; // XXX: guess
-   case OP_CONT:    code[1] = 0x1b000000; mask = 1; break; // XXX: guess
+   case OP_DISCARD: code[1] = 0x19800000; mask = 1; break;
+   case OP_BREAK:   code[1] = 0x1a000000; mask = 1; break;
+   case OP_CONT:    code[1] = 0x1a800000; mask = 1; break;
 
    case OP_JOINAT:   code[1] = 0x14800000; mask = 2; break;
-   case OP_PREBREAK: code[1] = 0x15000000; mask = 2; break; // XXX: guess
-   case OP_PRECONT:  code[1] = 0x15800000; mask = 2; break; // XXX: guess
-   case OP_PRERET:   code[1] = 0x16000000; mask = 2; break; // XXX: guess
+   case OP_PREBREAK: code[1] = 0x15000000; mask = 2; break;
+   case OP_PRECONT:  code[1] = 0x15800000; mask = 2; break;
+   case OP_PRERET:   code[1] = 0x13800000; mask = 2; break;
 
-   case OP_QUADON:  code[1] = 0x1c000000; mask = 0; break; // XXX: guess
-   case OP_QUADPOP: code[1] = 0x1c800000; mask = 0; break; // XXX: guess
-   case OP_BRKPT:   code[1] = 0x1d000000; mask = 0; break; // XXX: guess
+   case OP_QUADON:  code[1] = 0x1b000000; mask = 0; break;
+   case OP_QUADPOP: code[1] = 0x1c000000; mask = 0; break;
+   case OP_BRKPT:   code[1] = 0x00000000; mask = 0; break;
    default:
       assert(!"invalid flow operation");
       return;
@@ -1113,13 +1218,10 @@ CodeEmitterGK110::emitFlow(const Instruction *i)
    if (!f)
       return;
 
-   // TODO
-   /*
    if (f->allWarp)
-      code[0] |= 1 << 15;
+      code[0] |= 1 << 9;
    if (f->limit)
-      code[0] |= 1 << 16;
-   */
+      code[0] |= 1 << 8;
 
    if (f->op == OP_CALL) {
       if (f->builtin) {
@@ -1146,16 +1248,26 @@ CodeEmitterGK110::emitFlow(const Instruction *i)
 void
 CodeEmitterGK110::emitPFETCH(const Instruction *i)
 {
-   emitNOP(i); // TODO
+   uint32_t prim = i->src(0).get()->reg.data.u32;
+
+   code[0] = 0x00000002 | ((prim & 0xff) << 23);
+   code[1] = 0x7f800000;
+
+   emitPredicate(i);
+
+   defId(i->def(0), 2);
+   srcId(i->src(1), 10);
 }
 
 void
 CodeEmitterGK110::emitVFETCH(const Instruction *i)
 {
+   unsigned int size = typeSizeof(i->dType);
    uint32_t offset = i->src(0).get()->reg.data.offset;
 
    code[0] = 0x00000002 | (offset << 23);
    code[1] = 0x7ec00000 | (offset >> 9);
+   code[1] |= (size / 4 - 1) << 18;
 
 #if 0
    if (i->perPatch)
@@ -1174,10 +1286,12 @@ CodeEmitterGK110::emitVFETCH(const Instruction *i)
 void
 CodeEmitterGK110::emitEXPORT(const Instruction *i)
 {
+   unsigned int size = typeSizeof(i->dType);
    uint32_t offset = i->src(0).get()->reg.data.offset;
 
    code[0] = 0x00000002 | (offset << 23);
    code[1] = 0x7f000000 | (offset >> 9);
+   code[1] |= (size / 4 - 1) << 18;
 
 #if 0
    if (i->perPatch)
@@ -1196,7 +1310,14 @@ CodeEmitterGK110::emitEXPORT(const Instruction *i)
 void
 CodeEmitterGK110::emitOUT(const Instruction *i)
 {
-   emitNOP(i); // TODO
+   assert(i->src(0).getFile() == FILE_GPR);
+
+   emitForm_21(i, 0x1f0, 0xb70);
+
+   if (i->op == OP_EMIT)
+      code[1] |= 1 << 10;
+   if (i->op == OP_RESTART || i->subOp == NV50_IR_SUBOP_EMIT_RESTART)
+      code[1] |= 1 << 11;
 }
 
 void
@@ -1415,7 +1536,11 @@ CodeEmitterGK110::emitMOV(const Instruction *i)
       setImmediate32(i, 0, Modifier(0));
    } else
    if (i->src(0).getFile() == FILE_PREDICATE) {
-      // TODO
+      code[0] = 0x00000002;
+      code[1] = 0x84401c07;
+      emitPredicate(i);
+      defId(i->def(0), 2);
+      srcId(i->src(0), 14);
    } else {
       emitForm_C(i, 0x24c, 2);
       code[1] |= i->lanes << 10;
@@ -1453,7 +1578,7 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
       case 1: data[0] |= insn->sched << 10; break;
       case 2: data[0] |= insn->sched << 18; break;
       case 3: data[0] |= insn->sched << 26; data[1] |= insn->sched >> 6; break;
-      case 4: data[1] |= insn->sched << 2;
+      case 4: data[1] |= insn->sched << 2; break;
       case 5: data[1] |= insn->sched << 10; break;
       case 6: data[1] |= insn->sched << 18; break;
       default:
@@ -1587,6 +1712,8 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
    case OP_TXL:
    case OP_TXD:
    case OP_TXF:
+   case OP_TXG:
+   case OP_TXLQ:
       emitTEX(insn->asTex());
       break;
    case OP_TXQ:
@@ -1594,6 +1721,9 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
       break;
    case OP_TEXBAR:
       emitTEXBAR(insn);
+      break;
+   case OP_PIXLD:
+      emitPIXLD(insn);
       break;
    case OP_BRA:
    case OP_CALL:
@@ -1622,6 +1752,15 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
       break;
    case OP_POPCNT:
       emitPOPC(insn);
+      break;
+   case OP_INSBF:
+      emitINSBF(insn);
+      break;
+   case OP_EXTBF:
+      emitEXTBF(insn);
+      break;
+   case OP_BFIND:
+      emitBFIND(insn);
       break;
    case OP_JOIN:
       emitNOP(insn);

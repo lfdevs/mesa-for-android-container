@@ -858,6 +858,16 @@ nvc0_set_sample_mask(struct pipe_context *pipe, unsigned sample_mask)
     nvc0->dirty |= NVC0_NEW_SAMPLE_MASK;
 }
 
+static void
+nvc0_set_min_samples(struct pipe_context *pipe, unsigned min_samples)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+
+   if (nvc0->min_samples != min_samples) {
+      nvc0->min_samples = min_samples;
+      nvc0->dirty |= NVC0_NEW_MIN_SAMPLES;
+   }
+}
 
 static void
 nvc0_set_framebuffer_state(struct pipe_context *pipe,
@@ -992,6 +1002,7 @@ nvc0_so_target_create(struct pipe_context *pipe,
                       struct pipe_resource *res,
                       unsigned offset, unsigned size)
 {
+   struct nv04_resource *buf = (struct nv04_resource *)res;
    struct nvc0_so_target *targ = MALLOC_STRUCT(nvc0_so_target);
    if (!targ)
       return NULL;
@@ -1010,6 +1021,9 @@ nvc0_so_target_create(struct pipe_context *pipe,
    pipe_resource_reference(&targ->pipe.buffer, res);
    pipe_reference_init(&targ->pipe.reference, 1);
 
+   assert(buf->base.target == PIPE_BUFFER);
+   util_range_add(&buf->valid_buffer_range, offset, offset + size);
+
    return &targ->pipe;
 }
 
@@ -1027,7 +1041,7 @@ static void
 nvc0_set_transform_feedback_targets(struct pipe_context *pipe,
                                     unsigned num_targets,
                                     struct pipe_stream_output_target **targets,
-                                    unsigned append_mask)
+                                    const unsigned *offsets)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    unsigned i;
@@ -1036,14 +1050,16 @@ nvc0_set_transform_feedback_targets(struct pipe_context *pipe,
    assert(num_targets <= 4);
 
    for (i = 0; i < num_targets; ++i) {
-      if (nvc0->tfbbuf[i] == targets[i] && (append_mask & (1 << i)))
+      const boolean changed = nvc0->tfbbuf[i] != targets[i];
+      const boolean append = (offsets[i] == ((unsigned)-1));
+      if (!changed && append)
          continue;
       nvc0->tfbbuf_dirty |= 1 << i;
 
-      if (nvc0->tfbbuf[i] && nvc0->tfbbuf[i] != targets[i])
+      if (nvc0->tfbbuf[i] && changed)
          nvc0_so_target_save_offset(pipe, nvc0->tfbbuf[i], i, &serialize);
 
-      if (targets[i] && !(append_mask & (1 << i)))
+      if (targets[i] && !append)
          nvc0_so_target(targets[i])->clean = TRUE;
 
       pipe_so_target_reference(&nvc0->tfbbuf[i], targets[i]);
@@ -1209,6 +1225,7 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
    pipe->set_stencil_ref = nvc0_set_stencil_ref;
    pipe->set_clip_state = nvc0_set_clip_state;
    pipe->set_sample_mask = nvc0_set_sample_mask;
+   pipe->set_min_samples = nvc0_set_min_samples;
    pipe->set_constant_buffer = nvc0_set_constant_buffer;
    pipe->set_framebuffer_state = nvc0_set_framebuffer_state;
    pipe->set_polygon_stipple = nvc0_set_polygon_stipple;
@@ -1231,4 +1248,5 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
    pipe->set_shader_resources = nvc0_set_shader_resources;
 
    nvc0->sample_mask = ~0;
+   nvc0->min_samples = 1;
 }

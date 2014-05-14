@@ -25,8 +25,8 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "genhw/genhw.h"
 #include "util/u_dual_blend.h"
-#include "intel_reg.h"
 
 #include "ilo_blitter.h"
 #include "ilo_context.h"
@@ -44,7 +44,7 @@ gen7_wa_pipe_control_cs_stall(struct ilo_3d_pipeline *p,
                               bool change_depth_state)
 {
    struct intel_bo *bo = NULL;
-   uint32_t dw1 = PIPE_CONTROL_CS_STALL;
+   uint32_t dw1 = GEN6_PIPE_CONTROL_CS_STALL;
 
    assert(p->dev->gen == ILO_GEN(7) || p->dev->gen == ILO_GEN(7.5));
 
@@ -81,10 +81,10 @@ gen7_wa_pipe_control_cs_stall(struct ilo_3d_pipeline *p,
     */
 
    if (change_multisample_state)
-      dw1 |= PIPE_CONTROL_DEPTH_CACHE_FLUSH;
+      dw1 |= GEN6_PIPE_CONTROL_DEPTH_CACHE_FLUSH;
 
    if (change_depth_state) {
-      dw1 |= PIPE_CONTROL_WRITE_IMMEDIATE;
+      dw1 |= GEN6_PIPE_CONTROL_WRITE_IMM;
       bo = p->workaround_bo;
    }
 
@@ -106,8 +106,8 @@ gen7_wa_pipe_control_vs_depth_stall(struct ilo_3d_pipeline *p)
     *      needs to be sent before any combination of VS associated 3DSTATE."
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_STALL |
-         PIPE_CONTROL_WRITE_IMMEDIATE,
+         GEN6_PIPE_CONTROL_DEPTH_STALL |
+         GEN6_PIPE_CONTROL_WRITE_IMM,
          p->workaround_bo, 0, false, p->cp);
 }
 
@@ -145,18 +145,18 @@ gen7_wa_pipe_control_wm_depth_stall(struct ilo_3d_pipeline *p,
     *      (e.g., via a preceding MI_FLUSH)."
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_STALL,
+         GEN6_PIPE_CONTROL_DEPTH_STALL,
          NULL, 0, false, p->cp);
 
    if (!change_depth_buffer)
       return;
 
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_CACHE_FLUSH,
+         GEN6_PIPE_CONTROL_DEPTH_CACHE_FLUSH,
          NULL, 0, false, p->cp);
 
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_DEPTH_STALL,
+         GEN6_PIPE_CONTROL_DEPTH_STALL,
          NULL, 0, false, p->cp);
 }
 
@@ -173,7 +173,7 @@ gen7_wa_pipe_control_ps_max_threads_stall(struct ilo_3d_pipeline *p)
     *      Pixel Scoreboard set is required to be issued."
     */
    gen6_emit_PIPE_CONTROL(p->dev,
-         PIPE_CONTROL_STALL_AT_SCOREBOARD,
+         GEN6_PIPE_CONTROL_PIXEL_SCOREBOARD_STALL,
          NULL, 0, false, p->cp);
 
 }
@@ -422,12 +422,6 @@ gen7_pipeline_sol(struct ilo_3d_pipeline *p,
          const int stride = so_info->stride[i] * 4; /* in bytes */
          int base = 0;
 
-         /* reset HW write offsets and offset buffer base */
-         if (!p->cp->render_ctx) {
-            ilo_cp_set_one_off_flags(p->cp, INTEL_EXEC_GEN7_SOL_RESET);
-            base += p->state.so_num_vertices * stride;
-         }
-
          gen7_emit_3DSTATE_SO_BUFFER(p->dev, i, base, stride,
                ilo->so.states[i], p->cp);
       }
@@ -545,24 +539,28 @@ gen7_pipeline_wm(struct ilo_3d_pipeline *p,
    /* 3DSTATE_DEPTH_BUFFER and 3DSTATE_CLEAR_PARAMS */
    if (DIRTY(FB) || session->batch_bo_changed) {
       const struct ilo_zs_surface *zs;
+      uint32_t clear_params;
 
       if (ilo->fb.state.zsbuf) {
          const struct ilo_surface_cso *surface =
             (const struct ilo_surface_cso *) ilo->fb.state.zsbuf;
+         const struct ilo_texture_slice *slice =
+            ilo_texture_get_slice(ilo_texture(surface->base.texture),
+                  surface->base.u.tex.level, surface->base.u.tex.first_layer);
 
          assert(!surface->is_rt);
          zs = &surface->u.zs;
+         clear_params = slice->clear_value;
       }
       else {
          zs = &ilo->fb.null_zs;
+         clear_params = 0;
       }
 
       gen6_emit_3DSTATE_DEPTH_BUFFER(p->dev, zs, p->cp);
       gen6_emit_3DSTATE_HIER_DEPTH_BUFFER(p->dev, zs, p->cp);
       gen6_emit_3DSTATE_STENCIL_BUFFER(p->dev, zs, p->cp);
-
-      /* TODO */
-      gen7_emit_3DSTATE_CLEAR_PARAMS(p->dev, 0, p->cp);
+      gen7_emit_3DSTATE_CLEAR_PARAMS(p->dev, clear_params, p->cp);
    }
 }
 
@@ -728,13 +726,13 @@ gen7_rectlist_wm(struct ilo_3d_pipeline *p,
 
    switch (blitter->op) {
    case ILO_BLITTER_RECTLIST_CLEAR_ZS:
-      hiz_op = GEN7_WM_DEPTH_CLEAR;
+      hiz_op = GEN7_WM_DW1_DEPTH_CLEAR;
       break;
    case ILO_BLITTER_RECTLIST_RESOLVE_Z:
-      hiz_op = GEN7_WM_DEPTH_RESOLVE;
+      hiz_op = GEN7_WM_DW1_DEPTH_RESOLVE;
       break;
    case ILO_BLITTER_RECTLIST_RESOLVE_HIZ:
-      hiz_op = GEN7_WM_HIERARCHICAL_DEPTH_RESOLVE;
+      hiz_op = GEN7_WM_DW1_HIZ_RESOLVE;
       break;
    default:
       hiz_op = 0;
@@ -756,10 +754,13 @@ gen7_rectlist_wm_depth(struct ilo_3d_pipeline *p,
 {
    gen7_wa_pipe_control_wm_depth_stall(p, true);
 
-   if (blitter->uses & ILO_BLITTER_USE_FB_DEPTH) {
+   if (blitter->uses & (ILO_BLITTER_USE_FB_DEPTH |
+                        ILO_BLITTER_USE_FB_STENCIL)) {
       gen6_emit_3DSTATE_DEPTH_BUFFER(p->dev,
             &blitter->fb.dst.u.zs, p->cp);
+   }
 
+   if (blitter->uses & ILO_BLITTER_USE_FB_DEPTH) {
       gen6_emit_3DSTATE_HIER_DEPTH_BUFFER(p->dev,
             &blitter->fb.dst.u.zs, p->cp);
    }
@@ -880,137 +881,51 @@ ilo_3d_pipeline_emit_rectlist_gen7(struct ilo_3d_pipeline *p,
 }
 
 static int
-gen7_pipeline_estimate_commands(const struct ilo_3d_pipeline *p,
-                                const struct ilo_context *ilo)
+gen7_pipeline_max_command_size(const struct ilo_3d_pipeline *p)
 {
    static int size;
-   enum ilo_gpe_gen7_command cmd;
 
-   if (size)
-      return size;
+   if (!size) {
+      size += GEN7_3DSTATE_URB_ANY__SIZE * 4;
+      size += GEN7_3DSTATE_PUSH_CONSTANT_ALLOC_ANY__SIZE * 5;
+      size += GEN6_3DSTATE_CONSTANT_ANY__SIZE * 5;
+      size += GEN7_3DSTATE_POINTERS_ANY__SIZE * (5 + 5 + 4);
+      size += GEN7_3DSTATE_SO_BUFFER__SIZE * 4;
+      size += GEN6_PIPE_CONTROL__SIZE * 5;
 
-   for (cmd = 0; cmd < ILO_GPE_GEN7_COMMAND_COUNT; cmd++) {
-      int count;
-
-      switch (cmd) {
-      case ILO_GPE_GEN7_PIPE_CONTROL:
-         /* for the workaround */
-         count = 2;
-         /* another one after 3DSTATE_URB */
-         count += 1;
-         /* and another one after 3DSTATE_CONSTANT_VS */
-         count += 1;
-         break;
-      case ILO_GPE_GEN7_3DSTATE_VERTEX_BUFFERS:
-         count = 33;
-         break;
-      case ILO_GPE_GEN7_3DSTATE_VERTEX_ELEMENTS:
-         count = 34;
-         break;
-      case ILO_GPE_GEN7_MEDIA_VFE_STATE:
-      case ILO_GPE_GEN7_MEDIA_CURBE_LOAD:
-      case ILO_GPE_GEN7_MEDIA_INTERFACE_DESCRIPTOR_LOAD:
-      case ILO_GPE_GEN7_MEDIA_STATE_FLUSH:
-      case ILO_GPE_GEN7_GPGPU_WALKER:
-         /* media commands */
-         count = 0;
-         break;
-      default:
-         count = 1;
-         break;
-      }
-
-      if (count) {
-         size += ilo_gpe_gen7_estimate_command_size(p->dev,
-               cmd, count);
-      }
-   }
-
-   return size;
-}
-
-static int
-gen7_pipeline_estimate_states(const struct ilo_3d_pipeline *p,
-                              const struct ilo_context *ilo)
-{
-   static int static_size;
-   int shader_type, count, size;
-
-   if (!static_size) {
-      struct {
-         enum ilo_gpe_gen7_state state;
-         int count;
-      } static_states[] = {
-         /* viewports */
-         { ILO_GPE_GEN7_SF_CLIP_VIEWPORT,            1 },
-         { ILO_GPE_GEN7_CC_VIEWPORT,                 1 },
-         /* cc */
-         { ILO_GPE_GEN7_COLOR_CALC_STATE,            1 },
-         { ILO_GPE_GEN7_BLEND_STATE,                 ILO_MAX_DRAW_BUFFERS },
-         { ILO_GPE_GEN7_DEPTH_STENCIL_STATE,         1 },
-         /* scissors */
-         { ILO_GPE_GEN7_SCISSOR_RECT,                1 },
-         /* binding table (vs, gs, fs) */
-         { ILO_GPE_GEN7_BINDING_TABLE_STATE,         ILO_MAX_VS_SURFACES },
-         { ILO_GPE_GEN7_BINDING_TABLE_STATE,         ILO_MAX_GS_SURFACES },
-         { ILO_GPE_GEN7_BINDING_TABLE_STATE,         ILO_MAX_WM_SURFACES },
-      };
-      int i;
-
-      for (i = 0; i < Elements(static_states); i++) {
-         static_size += ilo_gpe_gen7_estimate_state_size(p->dev,
-               static_states[i].state,
-               static_states[i].count);
-      }
-   }
-
-   size = static_size;
-
-   /*
-    * render targets (fs)
-    * sampler views (vs, fs)
-    * constant buffers (vs, fs)
-    */
-   count = ilo->fb.state.nr_cbufs;
-   for (shader_type = 0; shader_type < PIPE_SHADER_TYPES; shader_type++) {
-      count += ilo->view[shader_type].count;
-      count += util_bitcount(ilo->cbuf[shader_type].enabled_mask);
-   }
-
-   if (count) {
-      size += ilo_gpe_gen7_estimate_state_size(p->dev,
-            ILO_GPE_GEN7_SURFACE_STATE, count);
-   }
-
-   /* samplers (vs, fs) */
-   for (shader_type = 0; shader_type < PIPE_SHADER_TYPES; shader_type++) {
-      count = ilo->sampler[shader_type].count;
-      if (count) {
-         size += ilo_gpe_gen7_estimate_state_size(p->dev,
-               ILO_GPE_GEN7_SAMPLER_BORDER_COLOR_STATE, count);
-         size += ilo_gpe_gen7_estimate_state_size(p->dev,
-               ILO_GPE_GEN7_SAMPLER_STATE, count);
-      }
-   }
-
-   /* pcb (vs) */
-   if (ilo->vs) {
-      const int cbuf0_size =
-         ilo_shader_get_kernel_param(ilo->vs, ILO_KERNEL_PCB_CBUF0_SIZE);
-      const int ucp_size =
-         ilo_shader_get_kernel_param(ilo->vs, ILO_KERNEL_VS_PCB_UCP_SIZE);
-
-      size += ilo_gpe_gen7_estimate_state_size(p->dev,
-            ILO_GPE_GEN7_PUSH_CONSTANT_BUFFER, cbuf0_size + ucp_size);
-   }
-
-   /* pcb (fs) */
-   if (ilo->fs) {
-      const int cbuf0_size =
-         ilo_shader_get_kernel_param(ilo->fs, ILO_KERNEL_PCB_CBUF0_SIZE);
-
-      size += ilo_gpe_gen7_estimate_state_size(p->dev,
-            ILO_GPE_GEN7_PUSH_CONSTANT_BUFFER, cbuf0_size);
+      size +=
+         GEN6_STATE_BASE_ADDRESS__SIZE +
+         GEN6_STATE_SIP__SIZE +
+         GEN6_3DSTATE_VF_STATISTICS__SIZE +
+         GEN6_PIPELINE_SELECT__SIZE +
+         GEN6_3DSTATE_CLEAR_PARAMS__SIZE +
+         GEN6_3DSTATE_DEPTH_BUFFER__SIZE +
+         GEN6_3DSTATE_STENCIL_BUFFER__SIZE +
+         GEN6_3DSTATE_HIER_DEPTH_BUFFER__SIZE +
+         GEN6_3DSTATE_VERTEX_BUFFERS__SIZE +
+         GEN6_3DSTATE_VERTEX_ELEMENTS__SIZE +
+         GEN6_3DSTATE_INDEX_BUFFER__SIZE +
+         GEN75_3DSTATE_VF__SIZE +
+         GEN6_3DSTATE_VS__SIZE +
+         GEN6_3DSTATE_GS__SIZE +
+         GEN6_3DSTATE_CLIP__SIZE +
+         GEN6_3DSTATE_SF__SIZE +
+         GEN6_3DSTATE_WM__SIZE +
+         GEN6_3DSTATE_SAMPLE_MASK__SIZE +
+         GEN7_3DSTATE_HS__SIZE +
+         GEN7_3DSTATE_TE__SIZE +
+         GEN7_3DSTATE_DS__SIZE +
+         GEN7_3DSTATE_STREAMOUT__SIZE +
+         GEN7_3DSTATE_SBE__SIZE +
+         GEN7_3DSTATE_PS__SIZE +
+         GEN6_3DSTATE_DRAWING_RECTANGLE__SIZE +
+         GEN6_3DSTATE_POLY_STIPPLE_OFFSET__SIZE +
+         GEN6_3DSTATE_POLY_STIPPLE_PATTERN__SIZE +
+         GEN6_3DSTATE_LINE_STIPPLE__SIZE +
+         GEN6_3DSTATE_AA_LINE_PARAMETERS__SIZE +
+         GEN6_3DSTATE_MULTISAMPLE__SIZE +
+         GEN7_3DSTATE_SO_DECL_LIST__SIZE +
+         GEN6_3DPRIMITIVE__SIZE;
    }
 
    return size;
@@ -1028,15 +943,24 @@ ilo_3d_pipeline_estimate_size_gen7(struct ilo_3d_pipeline *p,
       {
          const struct ilo_context *ilo = arg;
 
-         size = gen7_pipeline_estimate_commands(p, ilo) +
-            gen7_pipeline_estimate_states(p, ilo);
+         size = gen7_pipeline_max_command_size(p) +
+            gen6_pipeline_estimate_state_size(p, ilo);
       }
       break;
    case ILO_3D_PIPELINE_FLUSH:
    case ILO_3D_PIPELINE_WRITE_TIMESTAMP:
    case ILO_3D_PIPELINE_WRITE_DEPTH_COUNT:
-      size = ilo_gpe_gen7_estimate_command_size(p->dev,
-            ILO_GPE_GEN7_PIPE_CONTROL, 1);
+      size = GEN6_PIPE_CONTROL__SIZE;
+      break;
+   case ILO_3D_PIPELINE_WRITE_STATISTICS:
+      {
+         const int num_regs = 10;
+         const int num_pads = 1;
+
+         size = GEN6_PIPE_CONTROL__SIZE;
+         size += GEN6_MI_STORE_REGISTER_MEM__SIZE * 2 * num_regs;
+         size += GEN6_MI_STORE_DATA_IMM__SIZE * num_pads;
+      }
       break;
    case ILO_3D_PIPELINE_RECTLIST:
       size = 64 + 256; /* states + commands */
@@ -1058,5 +982,6 @@ ilo_3d_pipeline_init_gen7(struct ilo_3d_pipeline *p)
    p->emit_flush = ilo_3d_pipeline_emit_flush_gen6;
    p->emit_write_timestamp = ilo_3d_pipeline_emit_write_timestamp_gen6;
    p->emit_write_depth_count = ilo_3d_pipeline_emit_write_depth_count_gen6;
+   p->emit_write_statistics = ilo_3d_pipeline_emit_write_statistics_gen6;
    p->emit_rectlist = ilo_3d_pipeline_emit_rectlist_gen7;
 }
