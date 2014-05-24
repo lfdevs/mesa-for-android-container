@@ -58,6 +58,7 @@
 #define MESA_META_MULTISAMPLE          0x100000
 #define MESA_META_FRAMEBUFFER_SRGB     0x200000
 #define MESA_META_OCCLUSION_QUERY      0x400000
+#define MESA_META_DRAW_BUFFERS         0x800000
 /**\}*/
 
 /**
@@ -180,6 +181,9 @@ struct save_state
    GLboolean TransformFeedbackNeedsResume;
 
    GLuint DrawBufferName, ReadBufferName, RenderbufferName;
+
+   /** MESA_META_DRAW_BUFFERS */
+   GLenum ColorDrawBuffers[MAX_DRAW_BUFFERS];
 };
 
 /**
@@ -261,6 +265,13 @@ struct blit_state
    GLuint msaa_shaders[BLIT_MSAA_SHADER_COUNT];
    struct temp_texture depthTex;
    bool no_ctsi_fallback;
+};
+
+struct fb_tex_blit_state
+{
+   GLint baseLevelSave, maxLevelSave;
+   GLuint sampler, samplerSave;
+   GLuint tempTex;
 };
 
 
@@ -392,10 +403,38 @@ extern GLboolean
 _mesa_meta_in_progress(struct gl_context *ctx);
 
 extern void
+_mesa_meta_fb_tex_blit_begin(const struct gl_context *ctx,
+                             struct fb_tex_blit_state *blit);
+
+extern void
+_mesa_meta_fb_tex_blit_end(const struct gl_context *ctx, GLenum target,
+                           struct fb_tex_blit_state *blit);
+
+extern GLboolean
+_mesa_meta_bind_rb_as_tex_image(struct gl_context *ctx,
+                                struct gl_renderbuffer *rb,
+                                GLuint *tex,
+                                struct gl_texture_object **texObj,
+                                GLenum *target);
+
+GLuint
+_mesa_meta_setup_sampler(struct gl_context *ctx,
+                         const struct gl_texture_object *texObj,
+                         GLenum target, GLenum filter, GLuint srcLevel);
+
+extern GLbitfield
 _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
                            GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                            GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                            GLbitfield mask, GLenum filter);
+
+extern void
+_mesa_meta_and_swrast_BlitFramebuffer(struct gl_context *ctx,
+                                      GLint srcX0, GLint srcY0,
+                                      GLint srcX1, GLint srcY1,
+                                      GLint dstX0, GLint dstY0,
+                                      GLint dstX1, GLint dstY1,
+                                      GLbitfield mask, GLenum filter);
 
 extern void
 _mesa_meta_Clear(struct gl_context *ctx, GLbitfield buffers);
@@ -450,6 +489,13 @@ _mesa_meta_compile_shader_with_debug(struct gl_context *ctx, GLenum target,
 
 GLuint
 _mesa_meta_link_program_with_debug(struct gl_context *ctx, GLuint program);
+
+void
+_mesa_meta_compile_and_link_program(struct gl_context *ctx,
+                                    const char *vs_source,
+                                    const char *fs_source,
+                                    const char *name,
+                                    GLuint *program);
 
 GLboolean
 _mesa_meta_alloc_texture(struct temp_texture *tex,

@@ -122,15 +122,16 @@ am__objects_1 = intel_batchbuffer.lo intel_blit.lo \
 	brw_gs_surface_state.lo brw_interpolation_map.lo \
 	brw_lower_texture_gradients.lo \
 	brw_lower_unnormalized_offset.lo brw_meta_updownsample.lo \
-	brw_misc_state.lo brw_object_purgeable.lo \
-	brw_performance_monitor.lo brw_program.lo \
-	brw_primitive_restart.lo brw_queryobj.lo brw_reset.lo \
-	brw_schedule_instructions.lo brw_sf.lo brw_sf_emit.lo \
-	brw_sf_state.lo brw_shader.lo brw_state_batch.lo \
-	brw_state_cache.lo brw_state_dump.lo brw_state_upload.lo \
-	brw_surface_formats.lo brw_tex.lo brw_tex_layout.lo brw_urb.lo \
-	brw_util.lo brw_vec4.lo brw_vec4_copy_propagation.lo \
-	brw_vec4_generator.lo brw_vec4_gs.lo brw_vec4_gs_visitor.lo \
+	brw_meta_stencil_blit.lo brw_meta_util.lo brw_misc_state.lo \
+	brw_object_purgeable.lo brw_performance_monitor.lo \
+	brw_program.lo brw_primitive_restart.lo brw_queryobj.lo \
+	brw_reset.lo brw_schedule_instructions.lo brw_sf.lo \
+	brw_sf_emit.lo brw_sf_state.lo brw_shader.lo \
+	brw_state_batch.lo brw_state_cache.lo brw_state_dump.lo \
+	brw_state_upload.lo brw_surface_formats.lo brw_tex.lo \
+	brw_tex_layout.lo brw_urb.lo brw_util.lo brw_vec4.lo \
+	brw_vec4_copy_propagation.lo brw_vec4_generator.lo \
+	brw_vec4_gs.lo brw_vec4_gs_visitor.lo \
 	brw_vec4_live_variables.lo brw_vec4_reg_allocate.lo \
 	brw_vec4_visitor.lo brw_vec4_vp.lo brw_vec4_vs_visitor.lo \
 	brw_vs.lo brw_vs_state.lo brw_vs_surface_state.lo brw_wm.lo \
@@ -347,6 +348,7 @@ INTEL_CFLAGS = @INTEL_CFLAGS@
 INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
 LEX = @LEX@
 LEXLIB = @LEXLIB@
 LEX_OUTPUT_ROOT = @LEX_OUTPUT_ROOT@
@@ -593,6 +595,8 @@ i965_FILES = \
 	brw_lower_texture_gradients.cpp \
 	brw_lower_unnormalized_offset.cpp \
 	brw_meta_updownsample.c \
+	brw_meta_stencil_blit.c \
+	brw_meta_util.c \
 	brw_misc_state.c \
 	brw_object_purgeable.c \
 	brw_performance_monitor.c \
@@ -855,7 +859,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_interpolation_map.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_texture_gradients.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_unnormalized_offset.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_stencil_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_updownsample.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_performance_monitor.Plo@am__quote@

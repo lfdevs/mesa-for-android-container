@@ -962,30 +962,30 @@ static const yytype_uint16 yyrline[] =
      866,   880,   890,   904,   909,   923,   926,   934,   946,   959,
      964,   969,   978,   982,   983,   993,  1003,  1013,  1027,  1034,
     1044,  1054,  1064,  1074,  1089,  1096,  1107,  1114,  1115,  1125,
-    1126,  1130,  1315,  1435,  1461,  1466,  1474,  1479,  1484,  1493,
-    1498,  1499,  1500,  1501,  1502,  1520,  1533,  1561,  1584,  1599,
-    1619,  1633,  1638,  1646,  1651,  1656,  1661,  1666,  1671,  1676,
-    1681,  1686,  1692,  1697,  1705,  1711,  1717,  1731,  1746,  1747,
-    1755,  1761,  1767,  1776,  1777,  1778,  1779,  1780,  1781,  1782,
-    1783,  1784,  1785,  1786,  1787,  1788,  1789,  1790,  1791,  1792,
-    1793,  1794,  1795,  1796,  1797,  1798,  1799,  1800,  1801,  1802,
-    1803,  1804,  1805,  1806,  1807,  1808,  1809,  1810,  1811,  1812,
-    1813,  1814,  1815,  1816,  1817,  1818,  1819,  1820,  1821,  1822,
-    1823,  1824,  1825,  1826,  1827,  1828,  1829,  1830,  1831,  1832,
-    1833,  1834,  1835,  1836,  1837,  1838,  1839,  1840,  1841,  1842,
-    1843,  1844,  1845,  1846,  1847,  1848,  1849,  1850,  1851,  1852,
-    1853,  1854,  1855,  1856,  1857,  1858,  1859,  1860,  1861,  1862,
-    1863,  1864,  1865,  1866,  1867,  1868,  1869,  1870,  1871,  1872,
-    1873,  1874,  1875,  1876,  1880,  1885,  1890,  1898,  1905,  1914,
-    1919,  1927,  1946,  1951,  1959,  1965,  1974,  1975,  1979,  1986,
-    1993,  2000,  2006,  2007,  2011,  2012,  2013,  2014,  2015,  2016,
-    2020,  2027,  2026,  2040,  2041,  2045,  2051,  2060,  2070,  2082,
-    2088,  2097,  2106,  2111,  2119,  2123,  2141,  2149,  2154,  2162,
-    2167,  2175,  2183,  2191,  2199,  2207,  2215,  2223,  2230,  2237,
-    2247,  2248,  2252,  2254,  2260,  2265,  2274,  2280,  2286,  2292,
-    2298,  2307,  2308,  2309,  2310,  2314,  2328,  2332,  2343,  2440,
-    2445,  2450,  2459,  2463,  2469,  2478,  2483,  2491,  2515,  2523,
-    2531
+    1126,  1130,  1315,  1438,  1464,  1469,  1477,  1482,  1487,  1496,
+    1501,  1502,  1503,  1504,  1505,  1523,  1536,  1564,  1587,  1602,
+    1622,  1636,  1641,  1649,  1654,  1659,  1664,  1669,  1674,  1679,
+    1684,  1689,  1695,  1700,  1708,  1714,  1720,  1734,  1749,  1750,
+    1758,  1764,  1770,  1779,  1780,  1781,  1782,  1783,  1784,  1785,
+    1786,  1787,  1788,  1789,  1790,  1791,  1792,  1793,  1794,  1795,
+    1796,  1797,  1798,  1799,  1800,  1801,  1802,  1803,  1804,  1805,
+    1806,  1807,  1808,  1809,  1810,  1811,  1812,  1813,  1814,  1815,
+    1816,  1817,  1818,  1819,  1820,  1821,  1822,  1823,  1824,  1825,
+    1826,  1827,  1828,  1829,  1830,  1831,  1832,  1833,  1834,  1835,
+    1836,  1837,  1838,  1839,  1840,  1841,  1842,  1843,  1844,  1845,
+    1846,  1847,  1848,  1849,  1850,  1851,  1852,  1853,  1854,  1855,
+    1856,  1857,  1858,  1859,  1860,  1861,  1862,  1863,  1864,  1865,
+    1866,  1867,  1868,  1869,  1870,  1871,  1872,  1873,  1874,  1875,
+    1876,  1877,  1878,  1879,  1883,  1888,  1893,  1901,  1908,  1917,
+    1922,  1930,  1949,  1954,  1962,  1968,  1977,  1978,  1982,  1989,
+    1996,  2003,  2009,  2010,  2014,  2015,  2016,  2017,  2018,  2019,
+    2023,  2030,  2029,  2043,  2044,  2048,  2054,  2063,  2073,  2085,
+    2091,  2100,  2109,  2114,  2122,  2126,  2144,  2152,  2157,  2165,
+    2170,  2178,  2186,  2194,  2202,  2210,  2218,  2226,  2233,  2240,
+    2250,  2251,  2255,  2257,  2263,  2268,  2277,  2283,  2289,  2295,
+    2301,  2310,  2311,  2312,  2313,  2317,  2331,  2335,  2346,  2443,
+    2448,  2453,  2462,  2466,  2472,  2481,  2486,  2494,  2518,  2526,
+    2534
 };
 #endif
 
@@ -4645,6 +4645,13 @@ yyreduce:
       if (match_layout_qualifier("location", (yyvsp[(1) - (3)].identifier), state) == 0) {
          (yyval.type_qualifier).flags.q.explicit_location = 1;
 
+         if ((yyval.type_qualifier).flags.q.attribute == 1 &&
+             state->ARB_explicit_attrib_location_warn) {
+            _mesa_glsl_warning(& (yylsp[(1) - (3)]), state,
+                               "GL_ARB_explicit_attrib_location layout "
+                               "identifier `%s' used", (yyvsp[(1) - (3)].identifier));
+         }
+
          if ((yyvsp[(3) - (3)].n) >= 0) {
             (yyval.type_qualifier).location = (yyvsp[(3) - (3)].n);
          } else {
@@ -4752,17 +4759,13 @@ yyreduce:
          _mesa_glsl_error(& (yylsp[(1) - (3)]), state, "unrecognized layout identifier "
                           "`%s'", (yyvsp[(1) - (3)].identifier));
          YYERROR;
-      } else if (state->ARB_explicit_attrib_location_warn) {
-         _mesa_glsl_warning(& (yylsp[(1) - (3)]), state,
-                            "GL_ARB_explicit_attrib_location layout "
-                            "identifier `%s' used", (yyvsp[(1) - (3)].identifier));
       }
    }
     break;
 
   case 153:
 /* Line 1787 of yacc.c  */
-#line 1436 "glsl_parser.yy"
+#line 1439 "glsl_parser.yy"
     {
       (yyval.type_qualifier) = (yyvsp[(1) - (1)].type_qualifier);
       /* Layout qualifiers for ARB_uniform_buffer_object. */
@@ -4780,7 +4783,7 @@ yyreduce:
 
   case 154:
 /* Line 1787 of yacc.c  */
-#line 1462 "glsl_parser.yy"
+#line 1465 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.row_major = 1;
@@ -4789,7 +4792,7 @@ yyreduce:
 
   case 155:
 /* Line 1787 of yacc.c  */
-#line 1467 "glsl_parser.yy"
+#line 1470 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.packed = 1;
@@ -4798,7 +4801,7 @@ yyreduce:
 
   case 156:
 /* Line 1787 of yacc.c  */
-#line 1475 "glsl_parser.yy"
+#line 1478 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.smooth = 1;
@@ -4807,7 +4810,7 @@ yyreduce:
 
   case 157:
 /* Line 1787 of yacc.c  */
-#line 1480 "glsl_parser.yy"
+#line 1483 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.flat = 1;
@@ -4816,7 +4819,7 @@ yyreduce:
 
   case 158:
 /* Line 1787 of yacc.c  */
-#line 1485 "glsl_parser.yy"
+#line 1488 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.noperspective = 1;
@@ -4825,7 +4828,7 @@ yyreduce:
 
   case 159:
 /* Line 1787 of yacc.c  */
-#line 1494 "glsl_parser.yy"
+#line 1497 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.invariant = 1;
@@ -4834,7 +4837,7 @@ yyreduce:
 
   case 164:
 /* Line 1787 of yacc.c  */
-#line 1503 "glsl_parser.yy"
+#line 1506 "glsl_parser.yy"
     {
       memset(&(yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).precision = (yyvsp[(1) - (1)].n);
@@ -4843,7 +4846,7 @@ yyreduce:
 
   case 165:
 /* Line 1787 of yacc.c  */
-#line 1521 "glsl_parser.yy"
+#line 1524 "glsl_parser.yy"
     {
       if ((yyvsp[(2) - (2)].type_qualifier).flags.q.invariant)
          _mesa_glsl_error(&(yylsp[(1) - (2)]), state, "duplicate \"invariant\" qualifier");
@@ -4860,7 +4863,7 @@ yyreduce:
 
   case 166:
 /* Line 1787 of yacc.c  */
-#line 1534 "glsl_parser.yy"
+#line 1537 "glsl_parser.yy"
     {
       /* Section 4.3 of the GLSL 1.40 specification states:
        * "...qualified with one of these interpolation qualifiers"
@@ -4892,7 +4895,7 @@ yyreduce:
 
   case 167:
 /* Line 1787 of yacc.c  */
-#line 1562 "glsl_parser.yy"
+#line 1565 "glsl_parser.yy"
     {
       /* The GLSL 1.50 grammar indicates that a layout(...) declaration can be
        * used standalone or immediately before a storage qualifier.  It cannot
@@ -4919,7 +4922,7 @@ yyreduce:
 
   case 168:
 /* Line 1787 of yacc.c  */
-#line 1585 "glsl_parser.yy"
+#line 1588 "glsl_parser.yy"
     {
       if ((yyvsp[(2) - (2)].type_qualifier).has_auxiliary_storage()) {
          _mesa_glsl_error(&(yylsp[(1) - (2)]), state,
@@ -4938,7 +4941,7 @@ yyreduce:
 
   case 169:
 /* Line 1787 of yacc.c  */
-#line 1600 "glsl_parser.yy"
+#line 1603 "glsl_parser.yy"
     {
       /* Section 4.3 of the GLSL 1.20 specification states:
        * "Variable declarations may have a storage qualifier specified..."
@@ -4962,7 +4965,7 @@ yyreduce:
 
   case 170:
 /* Line 1787 of yacc.c  */
-#line 1620 "glsl_parser.yy"
+#line 1623 "glsl_parser.yy"
     {
       if ((yyvsp[(2) - (2)].type_qualifier).precision != ast_precision_none)
          _mesa_glsl_error(&(yylsp[(1) - (2)]), state, "duplicate precision qualifier");
@@ -4977,7 +4980,7 @@ yyreduce:
 
   case 171:
 /* Line 1787 of yacc.c  */
-#line 1634 "glsl_parser.yy"
+#line 1637 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.centroid = 1;
@@ -4986,7 +4989,7 @@ yyreduce:
 
   case 172:
 /* Line 1787 of yacc.c  */
-#line 1639 "glsl_parser.yy"
+#line 1642 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.sample = 1;
@@ -4995,7 +4998,7 @@ yyreduce:
 
   case 173:
 /* Line 1787 of yacc.c  */
-#line 1647 "glsl_parser.yy"
+#line 1650 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.constant = 1;
@@ -5004,7 +5007,7 @@ yyreduce:
 
   case 174:
 /* Line 1787 of yacc.c  */
-#line 1652 "glsl_parser.yy"
+#line 1655 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.attribute = 1;
@@ -5013,7 +5016,7 @@ yyreduce:
 
   case 175:
 /* Line 1787 of yacc.c  */
-#line 1657 "glsl_parser.yy"
+#line 1660 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.varying = 1;
@@ -5022,7 +5025,7 @@ yyreduce:
 
   case 176:
 /* Line 1787 of yacc.c  */
-#line 1662 "glsl_parser.yy"
+#line 1665 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.in = 1;
@@ -5031,7 +5034,7 @@ yyreduce:
 
   case 177:
 /* Line 1787 of yacc.c  */
-#line 1667 "glsl_parser.yy"
+#line 1670 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.out = 1;
@@ -5040,7 +5043,7 @@ yyreduce:
 
   case 178:
 /* Line 1787 of yacc.c  */
-#line 1672 "glsl_parser.yy"
+#line 1675 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.uniform = 1;
@@ -5049,7 +5052,7 @@ yyreduce:
 
   case 179:
 /* Line 1787 of yacc.c  */
-#line 1677 "glsl_parser.yy"
+#line 1680 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.coherent = 1;
@@ -5058,7 +5061,7 @@ yyreduce:
 
   case 180:
 /* Line 1787 of yacc.c  */
-#line 1682 "glsl_parser.yy"
+#line 1685 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q._volatile = 1;
@@ -5067,7 +5070,7 @@ yyreduce:
 
   case 181:
 /* Line 1787 of yacc.c  */
-#line 1687 "glsl_parser.yy"
+#line 1690 "glsl_parser.yy"
     {
       STATIC_ASSERT(sizeof((yyval.type_qualifier).flags.q) <= sizeof((yyval.type_qualifier).flags.i));
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
@@ -5077,7 +5080,7 @@ yyreduce:
 
   case 182:
 /* Line 1787 of yacc.c  */
-#line 1693 "glsl_parser.yy"
+#line 1696 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.read_only = 1;
@@ -5086,7 +5089,7 @@ yyreduce:
 
   case 183:
 /* Line 1787 of yacc.c  */
-#line 1698 "glsl_parser.yy"
+#line 1701 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.write_only = 1;
@@ -5095,7 +5098,7 @@ yyreduce:
 
   case 184:
 /* Line 1787 of yacc.c  */
-#line 1706 "glsl_parser.yy"
+#line 1709 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.array_specifier) = new(ctx) ast_array_specifier((yylsp[(1) - (2)]));
@@ -5105,7 +5108,7 @@ yyreduce:
 
   case 185:
 /* Line 1787 of yacc.c  */
-#line 1712 "glsl_parser.yy"
+#line 1715 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.array_specifier) = new(ctx) ast_array_specifier((yylsp[(1) - (3)]), (yyvsp[(2) - (3)].expression));
@@ -5115,7 +5118,7 @@ yyreduce:
 
   case 186:
 /* Line 1787 of yacc.c  */
-#line 1718 "glsl_parser.yy"
+#line 1721 "glsl_parser.yy"
     {
       (yyval.array_specifier) = (yyvsp[(1) - (3)].array_specifier);
 
@@ -5133,7 +5136,7 @@ yyreduce:
 
   case 187:
 /* Line 1787 of yacc.c  */
-#line 1732 "glsl_parser.yy"
+#line 1735 "glsl_parser.yy"
     {
       (yyval.array_specifier) = (yyvsp[(1) - (4)].array_specifier);
 
@@ -5149,7 +5152,7 @@ yyreduce:
 
   case 189:
 /* Line 1787 of yacc.c  */
-#line 1748 "glsl_parser.yy"
+#line 1751 "glsl_parser.yy"
     {
       (yyval.type_specifier) = (yyvsp[(1) - (2)].type_specifier);
       (yyval.type_specifier)->array_specifier = (yyvsp[(2) - (2)].array_specifier);
@@ -5158,7 +5161,7 @@ yyreduce:
 
   case 190:
 /* Line 1787 of yacc.c  */
-#line 1756 "glsl_parser.yy"
+#line 1759 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.type_specifier) = new(ctx) ast_type_specifier((yyvsp[(1) - (1)].identifier));
@@ -5168,7 +5171,7 @@ yyreduce:
 
   case 191:
 /* Line 1787 of yacc.c  */
-#line 1762 "glsl_parser.yy"
+#line 1765 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.type_specifier) = new(ctx) ast_type_specifier((yyvsp[(1) - (1)].struct_specifier));
@@ -5178,7 +5181,7 @@ yyreduce:
 
   case 192:
 /* Line 1787 of yacc.c  */
-#line 1768 "glsl_parser.yy"
+#line 1771 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.type_specifier) = new(ctx) ast_type_specifier((yyvsp[(1) - (1)].identifier));
@@ -5188,613 +5191,613 @@ yyreduce:
 
   case 193:
 /* Line 1787 of yacc.c  */
-#line 1776 "glsl_parser.yy"
+#line 1779 "glsl_parser.yy"
     { (yyval.identifier) = "void"; }
     break;
 
   case 194:
 /* Line 1787 of yacc.c  */
-#line 1777 "glsl_parser.yy"
+#line 1780 "glsl_parser.yy"
     { (yyval.identifier) = "float"; }
     break;
 
   case 195:
 /* Line 1787 of yacc.c  */
-#line 1778 "glsl_parser.yy"
+#line 1781 "glsl_parser.yy"
     { (yyval.identifier) = "int"; }
     break;
 
   case 196:
 /* Line 1787 of yacc.c  */
-#line 1779 "glsl_parser.yy"
+#line 1782 "glsl_parser.yy"
     { (yyval.identifier) = "uint"; }
     break;
 
   case 197:
 /* Line 1787 of yacc.c  */
-#line 1780 "glsl_parser.yy"
+#line 1783 "glsl_parser.yy"
     { (yyval.identifier) = "bool"; }
     break;
 
   case 198:
 /* Line 1787 of yacc.c  */
-#line 1781 "glsl_parser.yy"
+#line 1784 "glsl_parser.yy"
     { (yyval.identifier) = "vec2"; }
     break;
 
   case 199:
 /* Line 1787 of yacc.c  */
-#line 1782 "glsl_parser.yy"
+#line 1785 "glsl_parser.yy"
     { (yyval.identifier) = "vec3"; }
     break;
 
   case 200:
 /* Line 1787 of yacc.c  */
-#line 1783 "glsl_parser.yy"
+#line 1786 "glsl_parser.yy"
     { (yyval.identifier) = "vec4"; }
     break;
 
   case 201:
 /* Line 1787 of yacc.c  */
-#line 1784 "glsl_parser.yy"
+#line 1787 "glsl_parser.yy"
     { (yyval.identifier) = "bvec2"; }
     break;
 
   case 202:
 /* Line 1787 of yacc.c  */
-#line 1785 "glsl_parser.yy"
+#line 1788 "glsl_parser.yy"
     { (yyval.identifier) = "bvec3"; }
     break;
 
   case 203:
 /* Line 1787 of yacc.c  */
-#line 1786 "glsl_parser.yy"
+#line 1789 "glsl_parser.yy"
     { (yyval.identifier) = "bvec4"; }
     break;
 
   case 204:
 /* Line 1787 of yacc.c  */
-#line 1787 "glsl_parser.yy"
+#line 1790 "glsl_parser.yy"
     { (yyval.identifier) = "ivec2"; }
     break;
 
   case 205:
 /* Line 1787 of yacc.c  */
-#line 1788 "glsl_parser.yy"
+#line 1791 "glsl_parser.yy"
     { (yyval.identifier) = "ivec3"; }
     break;
 
   case 206:
 /* Line 1787 of yacc.c  */
-#line 1789 "glsl_parser.yy"
+#line 1792 "glsl_parser.yy"
     { (yyval.identifier) = "ivec4"; }
     break;
 
   case 207:
 /* Line 1787 of yacc.c  */
-#line 1790 "glsl_parser.yy"
+#line 1793 "glsl_parser.yy"
     { (yyval.identifier) = "uvec2"; }
     break;
 
   case 208:
 /* Line 1787 of yacc.c  */
-#line 1791 "glsl_parser.yy"
+#line 1794 "glsl_parser.yy"
     { (yyval.identifier) = "uvec3"; }
     break;
 
   case 209:
 /* Line 1787 of yacc.c  */
-#line 1792 "glsl_parser.yy"
+#line 1795 "glsl_parser.yy"
     { (yyval.identifier) = "uvec4"; }
     break;
 
   case 210:
 /* Line 1787 of yacc.c  */
-#line 1793 "glsl_parser.yy"
+#line 1796 "glsl_parser.yy"
     { (yyval.identifier) = "mat2"; }
     break;
 
   case 211:
 /* Line 1787 of yacc.c  */
-#line 1794 "glsl_parser.yy"
+#line 1797 "glsl_parser.yy"
     { (yyval.identifier) = "mat2x3"; }
     break;
 
   case 212:
 /* Line 1787 of yacc.c  */
-#line 1795 "glsl_parser.yy"
+#line 1798 "glsl_parser.yy"
     { (yyval.identifier) = "mat2x4"; }
     break;
 
   case 213:
 /* Line 1787 of yacc.c  */
-#line 1796 "glsl_parser.yy"
+#line 1799 "glsl_parser.yy"
     { (yyval.identifier) = "mat3x2"; }
     break;
 
   case 214:
 /* Line 1787 of yacc.c  */
-#line 1797 "glsl_parser.yy"
+#line 1800 "glsl_parser.yy"
     { (yyval.identifier) = "mat3"; }
     break;
 
   case 215:
 /* Line 1787 of yacc.c  */
-#line 1798 "glsl_parser.yy"
+#line 1801 "glsl_parser.yy"
     { (yyval.identifier) = "mat3x4"; }
     break;
 
   case 216:
 /* Line 1787 of yacc.c  */
-#line 1799 "glsl_parser.yy"
+#line 1802 "glsl_parser.yy"
     { (yyval.identifier) = "mat4x2"; }
     break;
 
   case 217:
 /* Line 1787 of yacc.c  */
-#line 1800 "glsl_parser.yy"
+#line 1803 "glsl_parser.yy"
     { (yyval.identifier) = "mat4x3"; }
     break;
 
   case 218:
 /* Line 1787 of yacc.c  */
-#line 1801 "glsl_parser.yy"
+#line 1804 "glsl_parser.yy"
     { (yyval.identifier) = "mat4"; }
     break;
 
   case 219:
 /* Line 1787 of yacc.c  */
-#line 1802 "glsl_parser.yy"
+#line 1805 "glsl_parser.yy"
     { (yyval.identifier) = "sampler1D"; }
     break;
 
   case 220:
 /* Line 1787 of yacc.c  */
-#line 1803 "glsl_parser.yy"
+#line 1806 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2D"; }
     break;
 
   case 221:
 /* Line 1787 of yacc.c  */
-#line 1804 "glsl_parser.yy"
+#line 1807 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2DRect"; }
     break;
 
   case 222:
 /* Line 1787 of yacc.c  */
-#line 1805 "glsl_parser.yy"
+#line 1808 "glsl_parser.yy"
     { (yyval.identifier) = "sampler3D"; }
     break;
 
   case 223:
 /* Line 1787 of yacc.c  */
-#line 1806 "glsl_parser.yy"
+#line 1809 "glsl_parser.yy"
     { (yyval.identifier) = "samplerCube"; }
     break;
 
   case 224:
 /* Line 1787 of yacc.c  */
-#line 1807 "glsl_parser.yy"
+#line 1810 "glsl_parser.yy"
     { (yyval.identifier) = "samplerExternalOES"; }
     break;
 
   case 225:
 /* Line 1787 of yacc.c  */
-#line 1808 "glsl_parser.yy"
+#line 1811 "glsl_parser.yy"
     { (yyval.identifier) = "sampler1DShadow"; }
     break;
 
   case 226:
 /* Line 1787 of yacc.c  */
-#line 1809 "glsl_parser.yy"
+#line 1812 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2DShadow"; }
     break;
 
   case 227:
 /* Line 1787 of yacc.c  */
-#line 1810 "glsl_parser.yy"
+#line 1813 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2DRectShadow"; }
     break;
 
   case 228:
 /* Line 1787 of yacc.c  */
-#line 1811 "glsl_parser.yy"
+#line 1814 "glsl_parser.yy"
     { (yyval.identifier) = "samplerCubeShadow"; }
     break;
 
   case 229:
 /* Line 1787 of yacc.c  */
-#line 1812 "glsl_parser.yy"
+#line 1815 "glsl_parser.yy"
     { (yyval.identifier) = "sampler1DArray"; }
     break;
 
   case 230:
 /* Line 1787 of yacc.c  */
-#line 1813 "glsl_parser.yy"
+#line 1816 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2DArray"; }
     break;
 
   case 231:
 /* Line 1787 of yacc.c  */
-#line 1814 "glsl_parser.yy"
+#line 1817 "glsl_parser.yy"
     { (yyval.identifier) = "sampler1DArrayShadow"; }
     break;
 
   case 232:
 /* Line 1787 of yacc.c  */
-#line 1815 "glsl_parser.yy"
+#line 1818 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2DArrayShadow"; }
     break;
 
   case 233:
 /* Line 1787 of yacc.c  */
-#line 1816 "glsl_parser.yy"
+#line 1819 "glsl_parser.yy"
     { (yyval.identifier) = "samplerBuffer"; }
     break;
 
   case 234:
 /* Line 1787 of yacc.c  */
-#line 1817 "glsl_parser.yy"
+#line 1820 "glsl_parser.yy"
     { (yyval.identifier) = "samplerCubeArray"; }
     break;
 
   case 235:
 /* Line 1787 of yacc.c  */
-#line 1818 "glsl_parser.yy"
+#line 1821 "glsl_parser.yy"
     { (yyval.identifier) = "samplerCubeArrayShadow"; }
     break;
 
   case 236:
 /* Line 1787 of yacc.c  */
-#line 1819 "glsl_parser.yy"
+#line 1822 "glsl_parser.yy"
     { (yyval.identifier) = "isampler1D"; }
     break;
 
   case 237:
 /* Line 1787 of yacc.c  */
-#line 1820 "glsl_parser.yy"
+#line 1823 "glsl_parser.yy"
     { (yyval.identifier) = "isampler2D"; }
     break;
 
   case 238:
 /* Line 1787 of yacc.c  */
-#line 1821 "glsl_parser.yy"
+#line 1824 "glsl_parser.yy"
     { (yyval.identifier) = "isampler2DRect"; }
     break;
 
   case 239:
 /* Line 1787 of yacc.c  */
-#line 1822 "glsl_parser.yy"
+#line 1825 "glsl_parser.yy"
     { (yyval.identifier) = "isampler3D"; }
     break;
 
   case 240:
 /* Line 1787 of yacc.c  */
-#line 1823 "glsl_parser.yy"
+#line 1826 "glsl_parser.yy"
     { (yyval.identifier) = "isamplerCube"; }
     break;
 
   case 241:
 /* Line 1787 of yacc.c  */
-#line 1824 "glsl_parser.yy"
+#line 1827 "glsl_parser.yy"
     { (yyval.identifier) = "isampler1DArray"; }
     break;
 
   case 242:
 /* Line 1787 of yacc.c  */
-#line 1825 "glsl_parser.yy"
+#line 1828 "glsl_parser.yy"
     { (yyval.identifier) = "isampler2DArray"; }
     break;
 
   case 243:
 /* Line 1787 of yacc.c  */
-#line 1826 "glsl_parser.yy"
+#line 1829 "glsl_parser.yy"
     { (yyval.identifier) = "isamplerBuffer"; }
     break;
 
   case 244:
 /* Line 1787 of yacc.c  */
-#line 1827 "glsl_parser.yy"
+#line 1830 "glsl_parser.yy"
     { (yyval.identifier) = "isamplerCubeArray"; }
     break;
 
   case 245:
 /* Line 1787 of yacc.c  */
-#line 1828 "glsl_parser.yy"
+#line 1831 "glsl_parser.yy"
     { (yyval.identifier) = "usampler1D"; }
     break;
 
   case 246:
 /* Line 1787 of yacc.c  */
-#line 1829 "glsl_parser.yy"
+#line 1832 "glsl_parser.yy"
     { (yyval.identifier) = "usampler2D"; }
     break;
 
   case 247:
 /* Line 1787 of yacc.c  */
-#line 1830 "glsl_parser.yy"
+#line 1833 "glsl_parser.yy"
     { (yyval.identifier) = "usampler2DRect"; }
     break;
 
   case 248:
 /* Line 1787 of yacc.c  */
-#line 1831 "glsl_parser.yy"
+#line 1834 "glsl_parser.yy"
     { (yyval.identifier) = "usampler3D"; }
     break;
 
   case 249:
 /* Line 1787 of yacc.c  */
-#line 1832 "glsl_parser.yy"
+#line 1835 "glsl_parser.yy"
     { (yyval.identifier) = "usamplerCube"; }
     break;
 
   case 250:
 /* Line 1787 of yacc.c  */
-#line 1833 "glsl_parser.yy"
+#line 1836 "glsl_parser.yy"
     { (yyval.identifier) = "usampler1DArray"; }
     break;
 
   case 251:
 /* Line 1787 of yacc.c  */
-#line 1834 "glsl_parser.yy"
+#line 1837 "glsl_parser.yy"
     { (yyval.identifier) = "usampler2DArray"; }
     break;
 
   case 252:
 /* Line 1787 of yacc.c  */
-#line 1835 "glsl_parser.yy"
+#line 1838 "glsl_parser.yy"
     { (yyval.identifier) = "usamplerBuffer"; }
     break;
 
   case 253:
 /* Line 1787 of yacc.c  */
-#line 1836 "glsl_parser.yy"
+#line 1839 "glsl_parser.yy"
     { (yyval.identifier) = "usamplerCubeArray"; }
     break;
 
   case 254:
 /* Line 1787 of yacc.c  */
-#line 1837 "glsl_parser.yy"
+#line 1840 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2DMS"; }
     break;
 
   case 255:
 /* Line 1787 of yacc.c  */
-#line 1838 "glsl_parser.yy"
+#line 1841 "glsl_parser.yy"
     { (yyval.identifier) = "isampler2DMS"; }
     break;
 
   case 256:
 /* Line 1787 of yacc.c  */
-#line 1839 "glsl_parser.yy"
+#line 1842 "glsl_parser.yy"
     { (yyval.identifier) = "usampler2DMS"; }
     break;
 
   case 257:
 /* Line 1787 of yacc.c  */
-#line 1840 "glsl_parser.yy"
+#line 1843 "glsl_parser.yy"
     { (yyval.identifier) = "sampler2DMSArray"; }
     break;
 
   case 258:
 /* Line 1787 of yacc.c  */
-#line 1841 "glsl_parser.yy"
+#line 1844 "glsl_parser.yy"
     { (yyval.identifier) = "isampler2DMSArray"; }
     break;
 
   case 259:
 /* Line 1787 of yacc.c  */
-#line 1842 "glsl_parser.yy"
+#line 1845 "glsl_parser.yy"
     { (yyval.identifier) = "usampler2DMSArray"; }
     break;
 
   case 260:
 /* Line 1787 of yacc.c  */
-#line 1843 "glsl_parser.yy"
+#line 1846 "glsl_parser.yy"
     { (yyval.identifier) = "image1D"; }
     break;
 
   case 261:
 /* Line 1787 of yacc.c  */
-#line 1844 "glsl_parser.yy"
+#line 1847 "glsl_parser.yy"
     { (yyval.identifier) = "image2D"; }
     break;
 
   case 262:
 /* Line 1787 of yacc.c  */
-#line 1845 "glsl_parser.yy"
+#line 1848 "glsl_parser.yy"
     { (yyval.identifier) = "image3D"; }
     break;
 
   case 263:
 /* Line 1787 of yacc.c  */
-#line 1846 "glsl_parser.yy"
+#line 1849 "glsl_parser.yy"
     { (yyval.identifier) = "image2DRect"; }
     break;
 
   case 264:
 /* Line 1787 of yacc.c  */
-#line 1847 "glsl_parser.yy"
+#line 1850 "glsl_parser.yy"
     { (yyval.identifier) = "imageCube"; }
     break;
 
   case 265:
 /* Line 1787 of yacc.c  */
-#line 1848 "glsl_parser.yy"
+#line 1851 "glsl_parser.yy"
     { (yyval.identifier) = "imageBuffer"; }
     break;
 
   case 266:
 /* Line 1787 of yacc.c  */
-#line 1849 "glsl_parser.yy"
+#line 1852 "glsl_parser.yy"
     { (yyval.identifier) = "image1DArray"; }
     break;
 
   case 267:
 /* Line 1787 of yacc.c  */
-#line 1850 "glsl_parser.yy"
+#line 1853 "glsl_parser.yy"
     { (yyval.identifier) = "image2DArray"; }
     break;
 
   case 268:
 /* Line 1787 of yacc.c  */
-#line 1851 "glsl_parser.yy"
+#line 1854 "glsl_parser.yy"
     { (yyval.identifier) = "imageCubeArray"; }
     break;
 
   case 269:
 /* Line 1787 of yacc.c  */
-#line 1852 "glsl_parser.yy"
+#line 1855 "glsl_parser.yy"
     { (yyval.identifier) = "image2DMS"; }
     break;
 
   case 270:
 /* Line 1787 of yacc.c  */
-#line 1853 "glsl_parser.yy"
+#line 1856 "glsl_parser.yy"
     { (yyval.identifier) = "image2DMSArray"; }
     break;
 
   case 271:
 /* Line 1787 of yacc.c  */
-#line 1854 "glsl_parser.yy"
+#line 1857 "glsl_parser.yy"
     { (yyval.identifier) = "iimage1D"; }
     break;
 
   case 272:
 /* Line 1787 of yacc.c  */
-#line 1855 "glsl_parser.yy"
+#line 1858 "glsl_parser.yy"
     { (yyval.identifier) = "iimage2D"; }
     break;
 
   case 273:
 /* Line 1787 of yacc.c  */
-#line 1856 "glsl_parser.yy"
+#line 1859 "glsl_parser.yy"
     { (yyval.identifier) = "iimage3D"; }
     break;
 
   case 274:
 /* Line 1787 of yacc.c  */
-#line 1857 "glsl_parser.yy"
+#line 1860 "glsl_parser.yy"
     { (yyval.identifier) = "iimage2DRect"; }
     break;
 
   case 275:
 /* Line 1787 of yacc.c  */
-#line 1858 "glsl_parser.yy"
+#line 1861 "glsl_parser.yy"
     { (yyval.identifier) = "iimageCube"; }
     break;
 
   case 276:
 /* Line 1787 of yacc.c  */
-#line 1859 "glsl_parser.yy"
+#line 1862 "glsl_parser.yy"
     { (yyval.identifier) = "iimageBuffer"; }
     break;
 
   case 277:
 /* Line 1787 of yacc.c  */
-#line 1860 "glsl_parser.yy"
+#line 1863 "glsl_parser.yy"
     { (yyval.identifier) = "iimage1DArray"; }
     break;
 
   case 278:
 /* Line 1787 of yacc.c  */
-#line 1861 "glsl_parser.yy"
+#line 1864 "glsl_parser.yy"
     { (yyval.identifier) = "iimage2DArray"; }
     break;
 
   case 279:
 /* Line 1787 of yacc.c  */
-#line 1862 "glsl_parser.yy"
+#line 1865 "glsl_parser.yy"
     { (yyval.identifier) = "iimageCubeArray"; }
     break;
 
   case 280:
 /* Line 1787 of yacc.c  */
-#line 1863 "glsl_parser.yy"
+#line 1866 "glsl_parser.yy"
     { (yyval.identifier) = "iimage2DMS"; }
     break;
 
   case 281:
 /* Line 1787 of yacc.c  */
-#line 1864 "glsl_parser.yy"
+#line 1867 "glsl_parser.yy"
     { (yyval.identifier) = "iimage2DMSArray"; }
     break;
 
   case 282:
 /* Line 1787 of yacc.c  */
-#line 1865 "glsl_parser.yy"
+#line 1868 "glsl_parser.yy"
     { (yyval.identifier) = "uimage1D"; }
     break;
 
   case 283:
 /* Line 1787 of yacc.c  */
-#line 1866 "glsl_parser.yy"
+#line 1869 "glsl_parser.yy"
     { (yyval.identifier) = "uimage2D"; }
     break;
 
   case 284:
 /* Line 1787 of yacc.c  */
-#line 1867 "glsl_parser.yy"
+#line 1870 "glsl_parser.yy"
     { (yyval.identifier) = "uimage3D"; }
     break;
 
   case 285:
 /* Line 1787 of yacc.c  */
-#line 1868 "glsl_parser.yy"
+#line 1871 "glsl_parser.yy"
     { (yyval.identifier) = "uimage2DRect"; }
     break;
 
   case 286:
 /* Line 1787 of yacc.c  */
-#line 1869 "glsl_parser.yy"
+#line 1872 "glsl_parser.yy"
     { (yyval.identifier) = "uimageCube"; }
     break;
 
   case 287:
 /* Line 1787 of yacc.c  */
-#line 1870 "glsl_parser.yy"
+#line 1873 "glsl_parser.yy"
     { (yyval.identifier) = "uimageBuffer"; }
     break;
 
   case 288:
 /* Line 1787 of yacc.c  */
-#line 1871 "glsl_parser.yy"
+#line 1874 "glsl_parser.yy"
     { (yyval.identifier) = "uimage1DArray"; }
     break;
 
   case 289:
 /* Line 1787 of yacc.c  */
-#line 1872 "glsl_parser.yy"
+#line 1875 "glsl_parser.yy"
     { (yyval.identifier) = "uimage2DArray"; }
     break;
 
   case 290:
 /* Line 1787 of yacc.c  */
-#line 1873 "glsl_parser.yy"
+#line 1876 "glsl_parser.yy"
     { (yyval.identifier) = "uimageCubeArray"; }
     break;
 
   case 291:
 /* Line 1787 of yacc.c  */
-#line 1874 "glsl_parser.yy"
+#line 1877 "glsl_parser.yy"
     { (yyval.identifier) = "uimage2DMS"; }
     break;
 
   case 292:
 /* Line 1787 of yacc.c  */
-#line 1875 "glsl_parser.yy"
+#line 1878 "glsl_parser.yy"
     { (yyval.identifier) = "uimage2DMSArray"; }
     break;
 
   case 293:
 /* Line 1787 of yacc.c  */
-#line 1876 "glsl_parser.yy"
+#line 1879 "glsl_parser.yy"
     { (yyval.identifier) = "atomic_uint"; }
     break;
 
   case 294:
 /* Line 1787 of yacc.c  */
-#line 1881 "glsl_parser.yy"
+#line 1884 "glsl_parser.yy"
     {
       state->check_precision_qualifiers_allowed(&(yylsp[(1) - (1)]));
       (yyval.n) = ast_precision_high;
@@ -5803,7 +5806,7 @@ yyreduce:
 
   case 295:
 /* Line 1787 of yacc.c  */
-#line 1886 "glsl_parser.yy"
+#line 1889 "glsl_parser.yy"
     {
       state->check_precision_qualifiers_allowed(&(yylsp[(1) - (1)]));
       (yyval.n) = ast_precision_medium;
@@ -5812,7 +5815,7 @@ yyreduce:
 
   case 296:
 /* Line 1787 of yacc.c  */
-#line 1891 "glsl_parser.yy"
+#line 1894 "glsl_parser.yy"
     {
       state->check_precision_qualifiers_allowed(&(yylsp[(1) - (1)]));
       (yyval.n) = ast_precision_low;
@@ -5821,7 +5824,7 @@ yyreduce:
 
   case 297:
 /* Line 1787 of yacc.c  */
-#line 1899 "glsl_parser.yy"
+#line 1902 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.struct_specifier) = new(ctx) ast_struct_specifier((yyvsp[(2) - (5)].identifier), (yyvsp[(4) - (5)].declarator_list));
@@ -5832,7 +5835,7 @@ yyreduce:
 
   case 298:
 /* Line 1787 of yacc.c  */
-#line 1906 "glsl_parser.yy"
+#line 1909 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.struct_specifier) = new(ctx) ast_struct_specifier(NULL, (yyvsp[(3) - (4)].declarator_list));
@@ -5842,7 +5845,7 @@ yyreduce:
 
   case 299:
 /* Line 1787 of yacc.c  */
-#line 1915 "glsl_parser.yy"
+#line 1918 "glsl_parser.yy"
     {
       (yyval.declarator_list) = (yyvsp[(1) - (1)].declarator_list);
       (yyvsp[(1) - (1)].declarator_list)->link.self_link();
@@ -5851,7 +5854,7 @@ yyreduce:
 
   case 300:
 /* Line 1787 of yacc.c  */
-#line 1920 "glsl_parser.yy"
+#line 1923 "glsl_parser.yy"
     {
       (yyval.declarator_list) = (yyvsp[(1) - (2)].declarator_list);
       (yyval.declarator_list)->link.insert_before(& (yyvsp[(2) - (2)].declarator_list)->link);
@@ -5860,7 +5863,7 @@ yyreduce:
 
   case 301:
 /* Line 1787 of yacc.c  */
-#line 1928 "glsl_parser.yy"
+#line 1931 "glsl_parser.yy"
     {
       void *ctx = state;
       ast_fully_specified_type *const type = (yyvsp[(1) - (3)].fully_specified_type);
@@ -5880,7 +5883,7 @@ yyreduce:
 
   case 302:
 /* Line 1787 of yacc.c  */
-#line 1947 "glsl_parser.yy"
+#line 1950 "glsl_parser.yy"
     {
       (yyval.declaration) = (yyvsp[(1) - (1)].declaration);
       (yyvsp[(1) - (1)].declaration)->link.self_link();
@@ -5889,7 +5892,7 @@ yyreduce:
 
   case 303:
 /* Line 1787 of yacc.c  */
-#line 1952 "glsl_parser.yy"
+#line 1955 "glsl_parser.yy"
     {
       (yyval.declaration) = (yyvsp[(1) - (3)].declaration);
       (yyval.declaration)->link.insert_before(& (yyvsp[(3) - (3)].declaration)->link);
@@ -5898,7 +5901,7 @@ yyreduce:
 
   case 304:
 /* Line 1787 of yacc.c  */
-#line 1960 "glsl_parser.yy"
+#line 1963 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.declaration) = new(ctx) ast_declaration((yyvsp[(1) - (1)].identifier), NULL, NULL);
@@ -5908,7 +5911,7 @@ yyreduce:
 
   case 305:
 /* Line 1787 of yacc.c  */
-#line 1966 "glsl_parser.yy"
+#line 1969 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.declaration) = new(ctx) ast_declaration((yyvsp[(1) - (2)].identifier), (yyvsp[(2) - (2)].array_specifier), NULL);
@@ -5918,7 +5921,7 @@ yyreduce:
 
   case 307:
 /* Line 1787 of yacc.c  */
-#line 1976 "glsl_parser.yy"
+#line 1979 "glsl_parser.yy"
     {
       (yyval.expression) = (yyvsp[(2) - (3)].expression);
    }
@@ -5926,7 +5929,7 @@ yyreduce:
 
   case 308:
 /* Line 1787 of yacc.c  */
-#line 1980 "glsl_parser.yy"
+#line 1983 "glsl_parser.yy"
     {
       (yyval.expression) = (yyvsp[(2) - (4)].expression);
    }
@@ -5934,7 +5937,7 @@ yyreduce:
 
   case 309:
 /* Line 1787 of yacc.c  */
-#line 1987 "glsl_parser.yy"
+#line 1990 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.expression) = new(ctx) ast_aggregate_initializer();
@@ -5945,7 +5948,7 @@ yyreduce:
 
   case 310:
 /* Line 1787 of yacc.c  */
-#line 1994 "glsl_parser.yy"
+#line 1997 "glsl_parser.yy"
     {
       (yyvsp[(1) - (3)].expression)->expressions.push_tail(& (yyvsp[(3) - (3)].expression)->link);
    }
@@ -5953,13 +5956,13 @@ yyreduce:
 
   case 312:
 /* Line 1787 of yacc.c  */
-#line 2006 "glsl_parser.yy"
+#line 2009 "glsl_parser.yy"
     { (yyval.node) = (ast_node *) (yyvsp[(1) - (1)].compound_statement); }
     break;
 
   case 320:
 /* Line 1787 of yacc.c  */
-#line 2021 "glsl_parser.yy"
+#line 2024 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.compound_statement) = new(ctx) ast_compound_statement(true, NULL);
@@ -5969,7 +5972,7 @@ yyreduce:
 
   case 321:
 /* Line 1787 of yacc.c  */
-#line 2027 "glsl_parser.yy"
+#line 2030 "glsl_parser.yy"
     {
       state->symbols->push_scope();
    }
@@ -5977,7 +5980,7 @@ yyreduce:
 
   case 322:
 /* Line 1787 of yacc.c  */
-#line 2031 "glsl_parser.yy"
+#line 2034 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.compound_statement) = new(ctx) ast_compound_statement(true, (yyvsp[(3) - (4)].node));
@@ -5988,13 +5991,13 @@ yyreduce:
 
   case 323:
 /* Line 1787 of yacc.c  */
-#line 2040 "glsl_parser.yy"
+#line 2043 "glsl_parser.yy"
     { (yyval.node) = (ast_node *) (yyvsp[(1) - (1)].compound_statement); }
     break;
 
   case 325:
 /* Line 1787 of yacc.c  */
-#line 2046 "glsl_parser.yy"
+#line 2049 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.compound_statement) = new(ctx) ast_compound_statement(false, NULL);
@@ -6004,7 +6007,7 @@ yyreduce:
 
   case 326:
 /* Line 1787 of yacc.c  */
-#line 2052 "glsl_parser.yy"
+#line 2055 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.compound_statement) = new(ctx) ast_compound_statement(false, (yyvsp[(2) - (3)].node));
@@ -6014,7 +6017,7 @@ yyreduce:
 
   case 327:
 /* Line 1787 of yacc.c  */
-#line 2061 "glsl_parser.yy"
+#line 2064 "glsl_parser.yy"
     {
       if ((yyvsp[(1) - (1)].node) == NULL) {
          _mesa_glsl_error(& (yylsp[(1) - (1)]), state, "<nil> statement");
@@ -6028,7 +6031,7 @@ yyreduce:
 
   case 328:
 /* Line 1787 of yacc.c  */
-#line 2071 "glsl_parser.yy"
+#line 2074 "glsl_parser.yy"
     {
       if ((yyvsp[(2) - (2)].node) == NULL) {
          _mesa_glsl_error(& (yylsp[(2) - (2)]), state, "<nil> statement");
@@ -6041,7 +6044,7 @@ yyreduce:
 
   case 329:
 /* Line 1787 of yacc.c  */
-#line 2083 "glsl_parser.yy"
+#line 2086 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_expression_statement(NULL);
@@ -6051,7 +6054,7 @@ yyreduce:
 
   case 330:
 /* Line 1787 of yacc.c  */
-#line 2089 "glsl_parser.yy"
+#line 2092 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_expression_statement((yyvsp[(1) - (2)].expression));
@@ -6061,7 +6064,7 @@ yyreduce:
 
   case 331:
 /* Line 1787 of yacc.c  */
-#line 2098 "glsl_parser.yy"
+#line 2101 "glsl_parser.yy"
     {
       (yyval.node) = new(state) ast_selection_statement((yyvsp[(3) - (5)].expression), (yyvsp[(5) - (5)].selection_rest_statement).then_statement,
                                               (yyvsp[(5) - (5)].selection_rest_statement).else_statement);
@@ -6071,7 +6074,7 @@ yyreduce:
 
   case 332:
 /* Line 1787 of yacc.c  */
-#line 2107 "glsl_parser.yy"
+#line 2110 "glsl_parser.yy"
     {
       (yyval.selection_rest_statement).then_statement = (yyvsp[(1) - (3)].node);
       (yyval.selection_rest_statement).else_statement = (yyvsp[(3) - (3)].node);
@@ -6080,7 +6083,7 @@ yyreduce:
 
   case 333:
 /* Line 1787 of yacc.c  */
-#line 2112 "glsl_parser.yy"
+#line 2115 "glsl_parser.yy"
     {
       (yyval.selection_rest_statement).then_statement = (yyvsp[(1) - (1)].node);
       (yyval.selection_rest_statement).else_statement = NULL;
@@ -6089,7 +6092,7 @@ yyreduce:
 
   case 334:
 /* Line 1787 of yacc.c  */
-#line 2120 "glsl_parser.yy"
+#line 2123 "glsl_parser.yy"
     {
       (yyval.node) = (ast_node *) (yyvsp[(1) - (1)].expression);
    }
@@ -6097,7 +6100,7 @@ yyreduce:
 
   case 335:
 /* Line 1787 of yacc.c  */
-#line 2124 "glsl_parser.yy"
+#line 2127 "glsl_parser.yy"
     {
       void *ctx = state;
       ast_declaration *decl = new(ctx) ast_declaration((yyvsp[(2) - (4)].identifier), NULL, (yyvsp[(4) - (4)].expression));
@@ -6112,7 +6115,7 @@ yyreduce:
 
   case 336:
 /* Line 1787 of yacc.c  */
-#line 2142 "glsl_parser.yy"
+#line 2145 "glsl_parser.yy"
     {
       (yyval.node) = new(state) ast_switch_statement((yyvsp[(3) - (5)].expression), (yyvsp[(5) - (5)].switch_body));
       (yyval.node)->set_location_range((yylsp[(1) - (5)]), (yylsp[(5) - (5)]));
@@ -6121,7 +6124,7 @@ yyreduce:
 
   case 337:
 /* Line 1787 of yacc.c  */
-#line 2150 "glsl_parser.yy"
+#line 2153 "glsl_parser.yy"
     {
       (yyval.switch_body) = new(state) ast_switch_body(NULL);
       (yyval.switch_body)->set_location_range((yylsp[(1) - (2)]), (yylsp[(2) - (2)]));
@@ -6130,7 +6133,7 @@ yyreduce:
 
   case 338:
 /* Line 1787 of yacc.c  */
-#line 2155 "glsl_parser.yy"
+#line 2158 "glsl_parser.yy"
     {
       (yyval.switch_body) = new(state) ast_switch_body((yyvsp[(2) - (3)].case_statement_list));
       (yyval.switch_body)->set_location_range((yylsp[(1) - (3)]), (yylsp[(3) - (3)]));
@@ -6139,7 +6142,7 @@ yyreduce:
 
   case 339:
 /* Line 1787 of yacc.c  */
-#line 2163 "glsl_parser.yy"
+#line 2166 "glsl_parser.yy"
     {
       (yyval.case_label) = new(state) ast_case_label((yyvsp[(2) - (3)].expression));
       (yyval.case_label)->set_location((yylsp[(2) - (3)]));
@@ -6148,7 +6151,7 @@ yyreduce:
 
   case 340:
 /* Line 1787 of yacc.c  */
-#line 2168 "glsl_parser.yy"
+#line 2171 "glsl_parser.yy"
     {
       (yyval.case_label) = new(state) ast_case_label(NULL);
       (yyval.case_label)->set_location((yylsp[(2) - (2)]));
@@ -6157,7 +6160,7 @@ yyreduce:
 
   case 341:
 /* Line 1787 of yacc.c  */
-#line 2176 "glsl_parser.yy"
+#line 2179 "glsl_parser.yy"
     {
       ast_case_label_list *labels = new(state) ast_case_label_list();
 
@@ -6169,7 +6172,7 @@ yyreduce:
 
   case 342:
 /* Line 1787 of yacc.c  */
-#line 2184 "glsl_parser.yy"
+#line 2187 "glsl_parser.yy"
     {
       (yyval.case_label_list) = (yyvsp[(1) - (2)].case_label_list);
       (yyval.case_label_list)->labels.push_tail(& (yyvsp[(2) - (2)].case_label)->link);
@@ -6178,7 +6181,7 @@ yyreduce:
 
   case 343:
 /* Line 1787 of yacc.c  */
-#line 2192 "glsl_parser.yy"
+#line 2195 "glsl_parser.yy"
     {
       ast_case_statement *stmts = new(state) ast_case_statement((yyvsp[(1) - (2)].case_label_list));
       stmts->set_location((yylsp[(2) - (2)]));
@@ -6190,7 +6193,7 @@ yyreduce:
 
   case 344:
 /* Line 1787 of yacc.c  */
-#line 2200 "glsl_parser.yy"
+#line 2203 "glsl_parser.yy"
     {
       (yyval.case_statement) = (yyvsp[(1) - (2)].case_statement);
       (yyval.case_statement)->stmts.push_tail(& (yyvsp[(2) - (2)].node)->link);
@@ -6199,7 +6202,7 @@ yyreduce:
 
   case 345:
 /* Line 1787 of yacc.c  */
-#line 2208 "glsl_parser.yy"
+#line 2211 "glsl_parser.yy"
     {
       ast_case_statement_list *cases= new(state) ast_case_statement_list();
       cases->set_location((yylsp[(1) - (1)]));
@@ -6211,7 +6214,7 @@ yyreduce:
 
   case 346:
 /* Line 1787 of yacc.c  */
-#line 2216 "glsl_parser.yy"
+#line 2219 "glsl_parser.yy"
     {
       (yyval.case_statement_list) = (yyvsp[(1) - (2)].case_statement_list);
       (yyval.case_statement_list)->cases.push_tail(& (yyvsp[(2) - (2)].case_statement)->link);
@@ -6220,7 +6223,7 @@ yyreduce:
 
   case 347:
 /* Line 1787 of yacc.c  */
-#line 2224 "glsl_parser.yy"
+#line 2227 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_iteration_statement(ast_iteration_statement::ast_while,
@@ -6231,7 +6234,7 @@ yyreduce:
 
   case 348:
 /* Line 1787 of yacc.c  */
-#line 2231 "glsl_parser.yy"
+#line 2234 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_iteration_statement(ast_iteration_statement::ast_do_while,
@@ -6242,7 +6245,7 @@ yyreduce:
 
   case 349:
 /* Line 1787 of yacc.c  */
-#line 2238 "glsl_parser.yy"
+#line 2241 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_iteration_statement(ast_iteration_statement::ast_for,
@@ -6253,7 +6256,7 @@ yyreduce:
 
   case 353:
 /* Line 1787 of yacc.c  */
-#line 2254 "glsl_parser.yy"
+#line 2257 "glsl_parser.yy"
     {
       (yyval.node) = NULL;
    }
@@ -6261,7 +6264,7 @@ yyreduce:
 
   case 354:
 /* Line 1787 of yacc.c  */
-#line 2261 "glsl_parser.yy"
+#line 2264 "glsl_parser.yy"
     {
       (yyval.for_rest_statement).cond = (yyvsp[(1) - (2)].node);
       (yyval.for_rest_statement).rest = NULL;
@@ -6270,7 +6273,7 @@ yyreduce:
 
   case 355:
 /* Line 1787 of yacc.c  */
-#line 2266 "glsl_parser.yy"
+#line 2269 "glsl_parser.yy"
     {
       (yyval.for_rest_statement).cond = (yyvsp[(1) - (3)].node);
       (yyval.for_rest_statement).rest = (yyvsp[(3) - (3)].expression);
@@ -6279,7 +6282,7 @@ yyreduce:
 
   case 356:
 /* Line 1787 of yacc.c  */
-#line 2275 "glsl_parser.yy"
+#line 2278 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_jump_statement(ast_jump_statement::ast_continue, NULL);
@@ -6289,7 +6292,7 @@ yyreduce:
 
   case 357:
 /* Line 1787 of yacc.c  */
-#line 2281 "glsl_parser.yy"
+#line 2284 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_jump_statement(ast_jump_statement::ast_break, NULL);
@@ -6299,7 +6302,7 @@ yyreduce:
 
   case 358:
 /* Line 1787 of yacc.c  */
-#line 2287 "glsl_parser.yy"
+#line 2290 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_jump_statement(ast_jump_statement::ast_return, NULL);
@@ -6309,7 +6312,7 @@ yyreduce:
 
   case 359:
 /* Line 1787 of yacc.c  */
-#line 2293 "glsl_parser.yy"
+#line 2296 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_jump_statement(ast_jump_statement::ast_return, (yyvsp[(2) - (3)].expression));
@@ -6319,7 +6322,7 @@ yyreduce:
 
   case 360:
 /* Line 1787 of yacc.c  */
-#line 2299 "glsl_parser.yy"
+#line 2302 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.node) = new(ctx) ast_jump_statement(ast_jump_statement::ast_discard, NULL);
@@ -6329,31 +6332,31 @@ yyreduce:
 
   case 361:
 /* Line 1787 of yacc.c  */
-#line 2307 "glsl_parser.yy"
+#line 2310 "glsl_parser.yy"
     { (yyval.node) = (yyvsp[(1) - (1)].function_definition); }
     break;
 
   case 362:
 /* Line 1787 of yacc.c  */
-#line 2308 "glsl_parser.yy"
+#line 2311 "glsl_parser.yy"
     { (yyval.node) = (yyvsp[(1) - (1)].node); }
     break;
 
   case 363:
 /* Line 1787 of yacc.c  */
-#line 2309 "glsl_parser.yy"
+#line 2312 "glsl_parser.yy"
     { (yyval.node) = NULL; }
     break;
 
   case 364:
 /* Line 1787 of yacc.c  */
-#line 2310 "glsl_parser.yy"
+#line 2313 "glsl_parser.yy"
     { (yyval.node) = (yyvsp[(1) - (1)].node); }
     break;
 
   case 365:
 /* Line 1787 of yacc.c  */
-#line 2315 "glsl_parser.yy"
+#line 2318 "glsl_parser.yy"
     {
       void *ctx = state;
       (yyval.function_definition) = new(ctx) ast_function_definition();
@@ -6367,7 +6370,7 @@ yyreduce:
 
   case 366:
 /* Line 1787 of yacc.c  */
-#line 2329 "glsl_parser.yy"
+#line 2332 "glsl_parser.yy"
     {
       (yyval.node) = (yyvsp[(1) - (1)].interface_block);
    }
@@ -6375,7 +6378,7 @@ yyreduce:
 
   case 367:
 /* Line 1787 of yacc.c  */
-#line 2333 "glsl_parser.yy"
+#line 2336 "glsl_parser.yy"
     {
       ast_interface_block *block = (yyvsp[(2) - (2)].interface_block);
       if (!block->layout.merge_qualifier(& (yylsp[(1) - (2)]), state, (yyvsp[(1) - (2)].type_qualifier))) {
@@ -6387,7 +6390,7 @@ yyreduce:
 
   case 368:
 /* Line 1787 of yacc.c  */
-#line 2344 "glsl_parser.yy"
+#line 2347 "glsl_parser.yy"
     {
       ast_interface_block *const block = (yyvsp[(6) - (7)].interface_block);
 
@@ -6485,7 +6488,7 @@ yyreduce:
 
   case 369:
 /* Line 1787 of yacc.c  */
-#line 2441 "glsl_parser.yy"
+#line 2444 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.in = 1;
@@ -6494,7 +6497,7 @@ yyreduce:
 
   case 370:
 /* Line 1787 of yacc.c  */
-#line 2446 "glsl_parser.yy"
+#line 2449 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.out = 1;
@@ -6503,7 +6506,7 @@ yyreduce:
 
   case 371:
 /* Line 1787 of yacc.c  */
-#line 2451 "glsl_parser.yy"
+#line 2454 "glsl_parser.yy"
     {
       memset(& (yyval.type_qualifier), 0, sizeof((yyval.type_qualifier)));
       (yyval.type_qualifier).flags.q.uniform = 1;
@@ -6512,7 +6515,7 @@ yyreduce:
 
   case 372:
 /* Line 1787 of yacc.c  */
-#line 2459 "glsl_parser.yy"
+#line 2462 "glsl_parser.yy"
     {
       (yyval.interface_block) = new(state) ast_interface_block(*state->default_uniform_qualifier,
                                           NULL, NULL);
@@ -6521,7 +6524,7 @@ yyreduce:
 
   case 373:
 /* Line 1787 of yacc.c  */
-#line 2464 "glsl_parser.yy"
+#line 2467 "glsl_parser.yy"
     {
       (yyval.interface_block) = new(state) ast_interface_block(*state->default_uniform_qualifier,
                                           (yyvsp[(1) - (1)].identifier), NULL);
@@ -6531,7 +6534,7 @@ yyreduce:
 
   case 374:
 /* Line 1787 of yacc.c  */
-#line 2470 "glsl_parser.yy"
+#line 2473 "glsl_parser.yy"
     {
       (yyval.interface_block) = new(state) ast_interface_block(*state->default_uniform_qualifier,
                                           (yyvsp[(1) - (2)].identifier), (yyvsp[(2) - (2)].array_specifier));
@@ -6541,7 +6544,7 @@ yyreduce:
 
   case 375:
 /* Line 1787 of yacc.c  */
-#line 2479 "glsl_parser.yy"
+#line 2482 "glsl_parser.yy"
     {
       (yyval.declarator_list) = (yyvsp[(1) - (1)].declarator_list);
       (yyvsp[(1) - (1)].declarator_list)->link.self_link();
@@ -6550,7 +6553,7 @@ yyreduce:
 
   case 376:
 /* Line 1787 of yacc.c  */
-#line 2484 "glsl_parser.yy"
+#line 2487 "glsl_parser.yy"
     {
       (yyval.declarator_list) = (yyvsp[(1) - (2)].declarator_list);
       (yyvsp[(2) - (2)].declarator_list)->link.insert_before(& (yyval.declarator_list)->link);
@@ -6559,7 +6562,7 @@ yyreduce:
 
   case 377:
 /* Line 1787 of yacc.c  */
-#line 2492 "glsl_parser.yy"
+#line 2495 "glsl_parser.yy"
     {
       void *ctx = state;
       ast_fully_specified_type *type = (yyvsp[(1) - (3)].fully_specified_type);
@@ -6584,7 +6587,7 @@ yyreduce:
 
   case 378:
 /* Line 1787 of yacc.c  */
-#line 2516 "glsl_parser.yy"
+#line 2519 "glsl_parser.yy"
     {
       if (!state->default_uniform_qualifier->merge_qualifier(& (yylsp[(1) - (3)]), state, (yyvsp[(1) - (3)].type_qualifier))) {
          YYERROR;
@@ -6595,7 +6598,7 @@ yyreduce:
 
   case 379:
 /* Line 1787 of yacc.c  */
-#line 2524 "glsl_parser.yy"
+#line 2527 "glsl_parser.yy"
     {
       (yyval.node) = NULL;
       if (!state->in_qualifier->merge_in_qualifier(& (yylsp[(1) - (3)]), state, (yyvsp[(1) - (3)].type_qualifier), (yyval.node))) {
@@ -6606,7 +6609,7 @@ yyreduce:
 
   case 380:
 /* Line 1787 of yacc.c  */
-#line 2532 "glsl_parser.yy"
+#line 2535 "glsl_parser.yy"
     {
       if (state->stage != MESA_SHADER_GEOMETRY) {
          _mesa_glsl_error(& (yylsp[(1) - (3)]), state,
@@ -6635,7 +6638,7 @@ yyreduce:
 
 
 /* Line 1787 of yacc.c  */
-#line 6639 "glsl_parser.cpp"
+#line 6642 "glsl_parser.cpp"
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires

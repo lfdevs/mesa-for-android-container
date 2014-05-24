@@ -326,6 +326,7 @@ public:
    struct gl_context *ctx;
    struct gl_program *prog;
    struct gl_shader_program *shader_program;
+   struct gl_shader *shader;
    struct gl_shader_compiler_options *options;
 
    int next_temp;
@@ -3094,6 +3095,7 @@ glsl_to_tgsi_visitor::glsl_to_tgsi_visitor()
    ctx = NULL;
    prog = NULL;
    shader_program = NULL;
+   shader = NULL;
    options = NULL;
 }
 
@@ -3965,6 +3967,7 @@ get_pixel_transfer_visitor(struct st_fragment_program *fp,
    v->ctx = original->ctx;
    v->prog = prog;
    v->shader_program = NULL;
+   v->shader = NULL;
    v->glsl_version = original->glsl_version;
    v->native_integers = original->native_integers;
    v->options = original->options;
@@ -4095,6 +4098,7 @@ get_bitmap_visitor(struct st_fragment_program *fp,
    v->ctx = original->ctx;
    v->prog = prog;
    v->shader_program = NULL;
+   v->shader = NULL;
    v->glsl_version = original->glsl_version;
    v->native_integers = original->native_integers;
    v->options = original->options;
@@ -5058,11 +5062,11 @@ st_translate_program(
       }
    }
 
-   if (program->shader_program) {
-      unsigned num_ubos = program->shader_program->NumUniformBlocks;
+   if (program->shader) {
+      unsigned num_ubos = program->shader->NumUniformBlocks;
 
       for (i = 0; i < num_ubos; i++) {
-         ureg_DECL_constant2D(t->ureg, 0, program->shader_program->UniformBlocks[i].UniformBufferSize / 4, i + 1);
+         ureg_DECL_constant2D(t->ureg, 0, program->shader->UniformBlocks[i].UniformBufferSize / 4, i + 1);
       }
    }
    
@@ -5183,6 +5187,7 @@ get_mesa_program(struct gl_context *ctx,
    v->ctx = ctx;
    v->prog = prog;
    v->shader_program = shader_program;
+   v->shader = shader;
    v->options = options;
    v->glsl_version = ctx->Const.GLSLVersion;
    v->native_integers = ctx->Const.NativeIntegers;

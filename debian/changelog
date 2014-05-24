@@ -1,3 +1,28 @@
+mesa (10.2.0~rc4-1) experimental; urgency=medium
+
+  [ Fabio Pedretti ]
+  * debian/rules: remove unused --with-llvm-shared-libs configure option
+  * debian/control: remove python-libxml2 dependency
+
+  [ Julien Cristau ]
+  * Bump libdrm-dev build-dep to 2.4.54 per configure.ac.
+  * Bump libxcb-dri2 and libxcb-glx build-deps per configure.ac.
+  * Remove Cyril Brulebois from Uploaders.
+  * debian/rules: explicitly disable omx.
+
+  [ Maarten Lankhorst ]
+  * New upstream release candidate.
+
+  [ Andreas Boll ]
+  * New upstream release candidate.
+    - 01_no_undefined.diff dropped, upstream
+  * Don't try to enable xa on !linux.
+
+  [ Emilio Pozuelo Monfort ]
+  * Upload to experimental.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Sat, 24 May 2014 15:16:23 +0200
+
 mesa (10.2.0~rc1-1) experimental; urgency=medium
 
   [ Timo Aaltonen ]

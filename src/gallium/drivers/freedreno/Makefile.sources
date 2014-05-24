@@ -3,6 +3,8 @@ C_SOURCES := \
 	freedreno_lowering.c \
 	freedreno_program.c \
 	freedreno_query.c \
+	freedreno_query_hw.c \
+	freedreno_query_sw.c \
 	freedreno_fence.c \
 	freedreno_resource.c \
 	freedreno_surface.c \
@@ -38,6 +40,7 @@ a3xx_SOURCES := \
 	a3xx/fd3_emit.c \
 	a3xx/fd3_gmem.c \
 	a3xx/fd3_program.c \
+	a3xx/fd3_query.c \
 	a3xx/fd3_rasterizer.c \
 	a3xx/fd3_screen.c \
 	a3xx/fd3_texture.c \

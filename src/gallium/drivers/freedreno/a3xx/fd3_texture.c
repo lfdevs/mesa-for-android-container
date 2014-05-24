@@ -30,6 +30,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
+#include "util/u_format.h"
 
 #include "fd3_texture.h"
 #include "fd3_util.h"
@@ -99,6 +100,9 @@ fd3_sampler_state_create(struct pipe_context *pctx,
 			A3XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t)) |
 			A3XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r));
 
+	if (cso->compare_mode)
+		so->texsamp0 |= A3XX_TEX_SAMP_0_COMPARE_FUNC(cso->compare_func); /* maps 1:1 */
+
 	if (cso->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
 		so->texsamp1 =
 				A3XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
@@ -158,6 +162,10 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			A3XX_TEX_CONST_0_MIPLVLS(miplevels) |
 			fd3_tex_swiz(cso->format, cso->swizzle_r, cso->swizzle_g,
 						cso->swizzle_b, cso->swizzle_a);
+
+	if (util_format_is_srgb(cso->format))
+		so->texconst0 |= A3XX_TEX_CONST_0_SRGB;
+
 	so->texconst1 =
 			A3XX_TEX_CONST_1_FETCHSIZE(fd3_pipe2fetchsize(cso->format)) |
 			A3XX_TEX_CONST_1_WIDTH(prsc->width0) |

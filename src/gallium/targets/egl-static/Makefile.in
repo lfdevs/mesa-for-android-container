@@ -465,6 +465,7 @@ INTEL_CFLAGS = @INTEL_CFLAGS@
 INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
 LEX = @LEX@
 LEXLIB = @LEXLIB@
 LEX_OUTPUT_ROOT = @LEX_OUTPUT_ROOT@
@@ -758,7 +759,7 @@ AM_CPPFLAGS = $(GALLIUM_CFLAGS) $(VISIBILITY_CFLAGS) \
 	$(am__append_42) $(am__append_44) $(am__append_46)
 AM_LDFLAGS = -module -no-undefined -avoid-version \
 	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/egl-static/egl.sym \
-	$(am__append_9)
+	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_9)
 egldir = $(EGL_DRIVER_INSTALL_DIR)
 egl_LTLIBRARIES = egl_gallium.la $(am__append_23)
 nodist_EXTRA_egl_gallium_la_SOURCES = dummy.cpp
@@ -1152,8 +1153,6 @@ uninstall-am: uninstall-eglLTLIBRARIES
 	mostlyclean-libtool pdf pdf-am ps ps-am tags uninstall \
 	uninstall-am uninstall-eglLTLIBRARIES
 
-	$(GC_SECTIONS) \
-	$(LD_NO_UNDEFINED)
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .libs/install-gallium-links
 

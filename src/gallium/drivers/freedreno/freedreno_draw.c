@@ -36,6 +36,7 @@
 #include "freedreno_context.h"
 #include "freedreno_state.h"
 #include "freedreno_resource.h"
+#include "freedreno_query_hw.h"
 #include "freedreno_util.h"
 
 
@@ -70,7 +71,7 @@ fd_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		idx_bo = fd_resource(idx->buffer)->bo;
 		idx_type = size2indextype(idx->index_size);
 		idx_size = idx->index_size * info->count;
-		idx_offset = idx->offset;
+		idx_offset = idx->offset + (info->start * idx->index_size);
 		src_sel = DI_SRC_SEL_DMA;
 	} else {
 		idx_bo = NULL;
@@ -156,6 +157,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* and any buffers used, need to be resolved: */
 	ctx->resolve |= buffers;
 
+	fd_hw_query_set_stage(ctx, ctx->ring, FD_STAGE_DRAW);
 	ctx->draw(ctx, info);
 }
 
@@ -187,6 +189,8 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	DBG("%x depth=%f, stencil=%u (%s/%s)", buffers, depth, stencil,
 		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
+
+	fd_hw_query_set_stage(ctx, ctx->ring, FD_STAGE_CLEAR);
 
 	ctx->clear(ctx, buffers, color, depth, stencil);
 

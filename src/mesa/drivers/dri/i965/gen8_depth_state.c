@@ -75,7 +75,7 @@ emit_depth_packets(struct brw_context *brw,
    OUT_BATCH(((width - 1) << 4) | ((height - 1) << 18) | lod);
    OUT_BATCH(((depth - 1) << 21) | (min_array_element << 10) | BDW_MOCS_WB);
    OUT_BATCH(0);
-   OUT_BATCH(depth_mt ? depth_mt->qpitch >> 2 : 0);
+   OUT_BATCH(((depth - 1) << 21) | (depth_mt ? depth_mt->qpitch >> 2 : 0));
    ADVANCE_BATCH();
 
    if (!hiz) {
@@ -168,7 +168,7 @@ gen8_emit_depth_stencil_hiz(struct brw_context *brw,
    rb = (struct gl_renderbuffer *) irb;
 
    if (rb) {
-      depth = MAX2(rb->Depth, 1);
+      depth = MAX2(irb->layer_count, 1);
       if (rb->TexImage)
          gl_target = rb->TexImage->TexObject->Target;
    }
@@ -184,19 +184,16 @@ gen8_emit_depth_stencil_hiz(struct brw_context *brw,
       surftype = BRW_SURFACE_2D;
       depth *= 6;
       break;
+   case GL_TEXTURE_3D:
+      assert(mt);
+      depth = MAX2(mt->logical_depth0, 1);
+      /* fallthrough */
    default:
       surftype = translate_tex_target(gl_target);
       break;
    }
 
-   if (fb->MaxNumLayers > 0 || !irb) {
-      min_array_element = 0;
-   } else if (irb->mt->num_samples > 1) {
-      /* Convert physical to logical layer. */
-      min_array_element = irb->mt_layer / irb->mt->num_samples;
-   } else {
-      min_array_element = irb->mt_layer;
-   }
+   min_array_element = irb ? irb->mt_layer : 0;
 
    lod = irb ? irb->mt_level - irb->mt->first_level : 0;
 

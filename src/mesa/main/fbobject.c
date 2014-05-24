@@ -500,6 +500,12 @@ _mesa_framebuffer_renderbuffer(struct gl_context *ctx,
    }
    else {
       remove_attachment(ctx, att);
+      if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
+         /* detach stencil (depth was detached above) */
+         att = get_attachment(ctx, fb, GL_STENCIL_ATTACHMENT_EXT);
+         assert(att);
+         remove_attachment(ctx, att);
+      }
    }
 
    invalidate_framebuffer(fb);
@@ -1058,6 +1064,8 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
       if (att->Layered) {
          if (att_tex_target == GL_TEXTURE_CUBE_MAP)
             att_layer_count = 6;
+         else if (att_tex_target == GL_TEXTURE_1D_ARRAY)
+            att_layer_count = att->Renderbuffer->Height;
          else
             att_layer_count = att->Renderbuffer->Depth;
       } else {

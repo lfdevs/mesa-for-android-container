@@ -79,7 +79,7 @@ DIST_COMMON = $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(top_srcdir)/bin/ltmain.sh $(top_srcdir)/bin/missing \
 	$(top_srcdir)/configure $(top_srcdir)/src/gbm/main/gbm.pc.in \
 	bin/ar-lib bin/compile bin/config.guess bin/config.sub \
-	bin/depcomp bin/install-sh bin/ltmain.sh bin/missing
+	bin/install-sh bin/ltmain.sh bin/missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
@@ -263,6 +263,7 @@ INTEL_CFLAGS = @INTEL_CFLAGS@
 INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
 LEX = @LEX@
 LEXLIB = @LEXLIB@
 LEX_OUTPUT_ROOT = @LEX_OUTPUT_ROOT@
