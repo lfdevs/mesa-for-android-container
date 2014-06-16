@@ -1,3 +1,16 @@
+mesa (10.2.1-1) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+    - 01_glapi-Duplicate-GLES1-prototypes-in-glapi_dispatch.c.diff
+      dropped, upstream
+  * Add 01_targets-xa-limit-the-amount-of-exported-symbols.diff, fixes
+    FTBFS with gcc-4.9.
+  [ Maarten Lankhorst ]
+  * Attempt to fix a FTBFS on hurd.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 16 Jun 2014 15:41:59 +0200
+
 mesa (10.2.0~rc4-2) experimental; urgency=medium
 
   [ Andreas Boll ]

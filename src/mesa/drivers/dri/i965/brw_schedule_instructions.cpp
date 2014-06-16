@@ -870,8 +870,7 @@ fs_instruction_scheduler::calculate_deps()
       } else if (inst->dst.is_accumulator() && gen6plus) {
          add_dep(last_accumulator_write, n);
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE &&
-                 !inst->dst.is_null()) {
+      } else if (inst->dst.file != BAD_FILE) {
 	 add_barrier_deps(n);
       }
 
@@ -998,8 +997,7 @@ fs_instruction_scheduler::calculate_deps()
          }
       } else if (inst->dst.is_accumulator() && gen6plus) {
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE &&
-                 !inst->dst.is_null()) {
+      } else if (inst->dst.file != BAD_FILE) {
 	 add_barrier_deps(n);
       }
 
@@ -1115,8 +1113,7 @@ vec4_instruction_scheduler::calculate_deps()
       } else if (inst->dst.is_accumulator() && gen6plus) {
          add_dep(last_accumulator_write, n);
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE &&
-                 !inst->dst.is_null()) {
+      } else if (inst->dst.file != BAD_FILE) {
          add_barrier_deps(n);
       }
 
@@ -1208,8 +1205,7 @@ vec4_instruction_scheduler::calculate_deps()
          last_fixed_grf_write = n;
       } else if (inst->dst.is_accumulator() && gen6plus) {
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE &&
-                 !inst->dst.is_null()) {
+      } else if (inst->dst.file != BAD_FILE) {
          add_barrier_deps(n);
       }
 

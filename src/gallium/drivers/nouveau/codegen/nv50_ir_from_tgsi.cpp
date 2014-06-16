@@ -2199,7 +2199,6 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_UMUL_HI:
    case TGSI_OPCODE_OR:
-   case TGSI_OPCODE_POW:
    case TGSI_OPCODE_SHL:
    case TGSI_OPCODE_ISHR:
    case TGSI_OPCODE_USHR:
@@ -2253,6 +2252,11 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_UARL:
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi)
          mkOp1(OP_MOV, TYPE_U32, dst0[c], fetchSrc(0, c));
+      break;
+   case TGSI_OPCODE_POW:
+      val0 = mkOp2v(op, TYPE_F32, getScratch(), fetchSrc(0, 0), fetchSrc(1, 0));
+      FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi)
+         mkOp1(OP_MOV, TYPE_F32, dst0[c], val0);
       break;
    case TGSI_OPCODE_EX2:
    case TGSI_OPCODE_LG2:
@@ -2453,7 +2457,12 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       break;
    case TGSI_OPCODE_KILL_IF:
       val0 = new_LValue(func, FILE_PREDICATE);
+      mask = 0;
       for (c = 0; c < 4; ++c) {
+         const int s = tgsi.getSrc(0).getSwizzle(c);
+         if (mask & (1 << s))
+            continue;
+         mask |= 1 << s;
          mkCmp(OP_SET, CC_LT, TYPE_F32, val0, TYPE_F32, fetchSrc(0, c), zero);
          mkOp(OP_DISCARD, TYPE_NONE, NULL)->setPredicate(CC_P, val0);
       }

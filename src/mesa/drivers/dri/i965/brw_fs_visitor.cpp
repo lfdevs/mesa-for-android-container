@@ -221,15 +221,18 @@ fs_visitor::emit_lrp(const fs_reg &dst, const fs_reg &x, const fs_reg &y,
        !y.is_valid_3src() ||
        !a.is_valid_3src()) {
       /* We can't use the LRP instruction.  Emit x*(1-a) + y*a. */
+      fs_reg y_times_a           = fs_reg(this, glsl_type::float_type);
       fs_reg one_minus_a         = fs_reg(this, glsl_type::float_type);
+      fs_reg x_times_one_minus_a = fs_reg(this, glsl_type::float_type);
+
+      emit(MUL(y_times_a, y, a));
 
       fs_reg negative_a = a;
       negative_a.negate = !a.negate;
-
       emit(ADD(one_minus_a, negative_a, fs_reg(1.0f)));
-      fs_inst *mul = emit(MUL(reg_null_f, y, a));
-      mul->writes_accumulator = true;
-      emit(MAC(dst, x, one_minus_a));
+      emit(MUL(x_times_one_minus_a, x, one_minus_a));
+
+      emit(ADD(dst, x_times_one_minus_a, y_times_a));
    } else {
       /* The LRP instruction actually does op1 * op0 + op2 * (1 - op0), so
        * we need to reorder the operands.
@@ -1480,15 +1483,28 @@ fs_visitor::rescale_texcoord(ir_texture *ir, fs_reg coordinate,
 	 return coordinate;
       }
 
-      scale_x = fs_reg(UNIFORM, uniforms);
-      scale_y = fs_reg(UNIFORM, uniforms + 1);
-
       GLuint index = _mesa_add_state_reference(params,
 					       (gl_state_index *)tokens);
-      stage_prog_data->param[uniforms++] =
-         &prog->Parameters->ParameterValues[index][0].f;
-      stage_prog_data->param[uniforms++] =
-         &prog->Parameters->ParameterValues[index][1].f;
+      /* Try to find existing copies of the texrect scale uniforms. */
+      for (unsigned i = 0; i < uniforms; i++) {
+         if (stage_prog_data->param[i] ==
+             &prog->Parameters->ParameterValues[index][0].f) {
+            scale_x = fs_reg(UNIFORM, i);
+            scale_y = fs_reg(UNIFORM, i + 1);
+            break;
+         }
+      }
+
+      /* If we didn't already set them up, do so now. */
+      if (scale_x.file == BAD_FILE) {
+         scale_x = fs_reg(UNIFORM, uniforms);
+         scale_y = fs_reg(UNIFORM, uniforms + 1);
+
+         stage_prog_data->param[uniforms++] =
+            &prog->Parameters->ParameterValues[index][0].f;
+         stage_prog_data->param[uniforms++] =
+            &prog->Parameters->ParameterValues[index][1].f;
+      }
    }
 
    /* The 965 requires the EU to do the normalization of GL rectangle
