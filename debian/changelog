@@ -1,3 +1,9 @@
+mesa (10.2.1-2) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 23 Jun 2014 12:00:09 +0200
+
 mesa (10.2.1-1) experimental; urgency=medium
 
   [ Andreas Boll ]
@@ -70,6 +76,40 @@ mesa (10.2.0~rc1-1) experimental; urgency=medium
     and 'libglapi-mesa (= ${binary:Version})'.
 
  -- Julien Cristau <jcristau@debian.org>  Wed, 14 May 2014 22:57:08 +0200
+
+mesa (10.1.4-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+  [ Andreas Boll ]
+  * New upstream release.
+  * Bump llvm-3.4-dev and libclang-3.4-dev to 1:3.4.1-3
+    - Enables geometry shaders on radeonsi
+
+  [ Emilio Pozuelo Monfort ]
+  * Upload to unstable.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Tue, 27 May 2014 12:05:35 +0200
+
+mesa (10.1.2-1) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+    + i965: Don't enable reset notification support on Gen4-5 (Closes: #746557)
+
+ -- Julien Cristau <jcristau@debian.org>  Tue, 06 May 2014 09:31:26 +0200
+
+mesa (10.1.1-1) unstable; urgency=low
+
+  [ Andreas Boll ]
+  * New upstream release.
+  * Relax ocl-icd-libopencl1 dependency to allow the generic virtual
+    libopencl1 as a valid alternative (Closes: #745765).
+  * Add missing separator between dependency items '${misc:Depends}'
+    and 'libglapi-mesa (= ${binary:Version})'.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 27 Apr 2014 19:51:45 +0200
 
 mesa (10.1.0-5) unstable; urgency=low
 
