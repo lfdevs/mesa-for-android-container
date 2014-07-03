@@ -2406,7 +2406,7 @@ fs_visitor::insert_gen4_pre_send_dependency_workarounds(fs_inst *inst)
     * program.
     */
    for (fs_inst *scan_inst = (fs_inst *)inst->prev;
-        scan_inst != NULL;
+        !scan_inst->is_head_sentinel();
         scan_inst = (fs_inst *)scan_inst->prev) {
 
       /* If we hit control flow, assume that there *are* outstanding
@@ -2533,6 +2533,8 @@ fs_visitor::insert_gen4_send_dependency_workarounds()
    if (brw->gen != 4 || brw->is_g4x)
       return;
 
+   bool progress = false;
+
    /* Note that we're done with register allocation, so GRF fs_regs always
     * have a .reg_offset of 0.
     */
@@ -2543,8 +2545,12 @@ fs_visitor::insert_gen4_send_dependency_workarounds()
       if (inst->mlen != 0 && inst->dst.file == GRF) {
          insert_gen4_pre_send_dependency_workarounds(inst);
          insert_gen4_post_send_dependency_workarounds(inst);
+         progress = true;
       }
    }
+
+   if (progress)
+      invalidate_live_intervals();
 }
 
 /**

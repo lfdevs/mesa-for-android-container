@@ -9,7 +9,7 @@
 #define FLEX_SCANNER
 #define YY_FLEX_MAJOR_VERSION 2
 #define YY_FLEX_MINOR_VERSION 5
-#define YY_FLEX_SUBMINOR_VERSION 36
+#define YY_FLEX_SUBMINOR_VERSION 39
 #if YY_FLEX_SUBMINOR_VERSION > 0
 #define FLEX_BETA
 #endif
@@ -159,7 +159,15 @@ typedef void* yyscan_t;
 
 /* Size of default input buffer. */
 #ifndef YY_BUF_SIZE
+#ifdef __ia64__
+/* On IA-64, the buffer size is 16k, not 8k.
+ * Moreover, YY_BUF_SIZE is 2*YY_READ_BUF_SIZE in the general case.
+ * Ditto for the __ia64__ case accordingly.
+ */
+#define YY_BUF_SIZE 32768
+#else
 #define YY_BUF_SIZE 16384
+#endif /* __ia64__ */
 #endif
 
 /* The state buf must be large enough to hold one state per character in the main buffer.
@@ -181,6 +189,7 @@ typedef size_t yy_size_t;
 #define EOB_ACT_LAST_MATCH 2
 
     #define YY_LESS_LINENO(n)
+    #define YY_LINENO_REWIND_TO(ptr)
     
 /* Return all but the first "n" matched characters back to the input stream. */
 #define yyless(n) \
@@ -1233,7 +1242,7 @@ literal_integer(char *text, int len, struct _mesa_glsl_parse_state *state,
    literal_integer(yytext, yyleng, yyextra, yylval, yylloc, base)
 
 
-#line 1237 "glsl_lexer.cpp"
+#line 1246 "glsl_lexer.cpp"
 
 #define INITIAL 0
 #define PP 1
@@ -1372,7 +1381,12 @@ static int input (yyscan_t yyscanner );
 
 /* Amount of stuff to slurp up with each read. */
 #ifndef YY_READ_BUF_SIZE
+#ifdef __ia64__
+/* On IA-64, the buffer size is 16k, not 8k */
+#define YY_READ_BUF_SIZE 16384
+#else
 #define YY_READ_BUF_SIZE 8192
+#endif /* __ia64__ */
 #endif
 
 /* Copy whatever the last rule matched to the standard output. */
@@ -1479,11 +1493,6 @@ YY_DECL
 	register int yy_act;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
-#line 165 "glsl_lexer.ll"
-
-
-#line 1486 "glsl_lexer.cpp"
-
     yylval = yylval_param;
 
     yylloc = yylloc_param;
@@ -1514,6 +1523,12 @@ YY_DECL
 		_mesa_glsl_lexer__load_buffer_state(yyscanner );
 		}
 
+	{
+#line 165 "glsl_lexer.ll"
+
+
+#line 1531 "glsl_lexer.cpp"
+
 	while ( 1 )		/* loops until end-of-file is reached */
 		{
 		yy_cp = yyg->yy_c_buf_p;
@@ -1531,7 +1546,7 @@ YY_DECL
 yy_match:
 		do
 			{
-			register YY_CHAR yy_c = yy_ec[YY_SC_TO_UI(*yy_cp)];
+			register YY_CHAR yy_c = yy_ec[YY_SC_TO_UI(*yy_cp)] ;
 			if ( yy_accept[yy_current_state] )
 				{
 				yyg->yy_last_accepting_state = yy_current_state;
@@ -2918,7 +2933,7 @@ YY_RULE_SETUP
 #line 554 "glsl_lexer.ll"
 ECHO;
 	YY_BREAK
-#line 2922 "glsl_lexer.cpp"
+#line 2937 "glsl_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(PP):
 case YY_STATE_EOF(PRAGMA):
@@ -3052,6 +3067,7 @@ case YY_STATE_EOF(PRAGMA):
 			"fatal flex scanner internal error--no action found" );
 	} /* end of action switch */
 		} /* end of scanning one token */
+	} /* end of user's declarations */
 } /* end of _mesa_glsl_lexer_lex */
 
 /* yy_get_next_buffer - try to read in a new buffer
@@ -3665,7 +3681,7 @@ YY_BUFFER_STATE _mesa_glsl_lexer__scan_bytes  (yyconst char * yybytes, yy_size_t
 	YY_BUFFER_STATE b;
 	char *buf;
 	yy_size_t n;
-	int i;
+	yy_size_t i;
     
 	/* Get memory for full buffer, including space for trailing EOB's. */
 	n = _yybytes_len + 2;
@@ -4062,7 +4078,7 @@ void _mesa_glsl_lexer_free (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 554 "glsl_lexer.ll"
+#line 553 "glsl_lexer.ll"
 
 
 

@@ -94,8 +94,6 @@ gen8_emit_vertices(struct brw_context *brw)
    if (brw->vb.nr_buffers) {
       assert(brw->vb.nr_buffers <= 33);
 
-      perf_debug("Missing MOCS setup for 3DSTATE_VERTEX_BUFFERS.");
-
       BEGIN_BATCH(1 + 4*brw->vb.nr_buffers);
       OUT_BATCH((_3DSTATE_VERTEX_BUFFERS << 16) | (4*brw->vb.nr_buffers - 1));
       for (unsigned i = 0; i < brw->vb.nr_buffers; i++) {
@@ -213,11 +211,9 @@ gen8_emit_index_buffer(struct brw_context *brw)
    if (index_buffer == NULL)
       return;
 
-   perf_debug("Missing MOCS setup for 3DSTATE_INDEX_BUFFER.");
-
    BEGIN_BATCH(5);
    OUT_BATCH(CMD_INDEX_BUFFER << 16 | (5 - 2));
-   OUT_BATCH(brw_get_index_type(index_buffer->type) << 8);
+   OUT_BATCH(brw_get_index_type(index_buffer->type) << 8 | BDW_MOCS_WB);
    OUT_RELOC64(brw->ib.bo, I915_GEM_DOMAIN_VERTEX, 0, 0);
    OUT_BATCH(brw->ib.bo->size);
    ADVANCE_BATCH();

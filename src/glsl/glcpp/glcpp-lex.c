@@ -9,7 +9,7 @@
 #define FLEX_SCANNER
 #define YY_FLEX_MAJOR_VERSION 2
 #define YY_FLEX_MINOR_VERSION 5
-#define YY_FLEX_SUBMINOR_VERSION 36
+#define YY_FLEX_SUBMINOR_VERSION 39
 #if YY_FLEX_SUBMINOR_VERSION > 0
 #define FLEX_BETA
 #endif
@@ -159,7 +159,15 @@ typedef void* yyscan_t;
 
 /* Size of default input buffer. */
 #ifndef YY_BUF_SIZE
+#ifdef __ia64__
+/* On IA-64, the buffer size is 16k, not 8k.
+ * Moreover, YY_BUF_SIZE is 2*YY_READ_BUF_SIZE in the general case.
+ * Ditto for the __ia64__ case accordingly.
+ */
+#define YY_BUF_SIZE 32768
+#else
 #define YY_BUF_SIZE 16384
+#endif /* __ia64__ */
 #endif
 
 /* The state buf must be large enough to hold one state per character in the main buffer.
@@ -181,6 +189,7 @@ typedef size_t yy_size_t;
 #define EOB_ACT_LAST_MATCH 2
 
     #define YY_LESS_LINENO(n)
+    #define YY_LINENO_REWIND_TO(ptr)
     
 /* Return all but the first "n" matched characters back to the input stream. */
 #define yyless(n) \
@@ -628,7 +637,7 @@ match longer strings take priority over those matching shorter
 strings, we have to be careful to avoid OTHER matching and hiding
 something that CPP does care about. So we simply exclude all
 characters that appear in any other expressions. */
-#line 632 "glcpp/glcpp-lex.c"
+#line 641 "glcpp/glcpp-lex.c"
 
 #define INITIAL 0
 #define DONE 1
@@ -779,7 +788,12 @@ static int input (yyscan_t yyscanner );
     
 /* Amount of stuff to slurp up with each read. */
 #ifndef YY_READ_BUF_SIZE
+#ifdef __ia64__
+/* On IA-64, the buffer size is 16k, not 8k */
+#define YY_READ_BUF_SIZE 16384
+#else
 #define YY_READ_BUF_SIZE 8192
+#endif /* __ia64__ */
 #endif
 
 /* Copy whatever the last rule matched to the standard output. */
@@ -886,6 +900,37 @@ YY_DECL
 	register int yy_act;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
+    yylval = yylval_param;
+
+    yylloc = yylloc_param;
+
+	if ( !yyg->yy_init )
+		{
+		yyg->yy_init = 1;
+
+#ifdef YY_USER_INIT
+		YY_USER_INIT;
+#endif
+
+		if ( ! yyg->yy_start )
+			yyg->yy_start = 1;	/* first start state */
+
+		if ( ! yyin )
+			yyin = stdin;
+
+		if ( ! yyout )
+			yyout = stdout;
+
+		if ( ! YY_CURRENT_BUFFER ) {
+			glcpp_ensure_buffer_stack (yyscanner);
+			YY_CURRENT_BUFFER_LVALUE =
+				glcpp__create_buffer(yyin,YY_BUF_SIZE ,yyscanner);
+		}
+
+		glcpp__load_buffer_state(yyscanner );
+		}
+
+	{
 #line 95 "glcpp/glcpp-lex.l"
 
 
@@ -950,37 +995,7 @@ YY_DECL
 	}
 
 	/* Single-line comments */
-#line 954 "glcpp/glcpp-lex.c"
-
-    yylval = yylval_param;
-
-    yylloc = yylloc_param;
-
-	if ( !yyg->yy_init )
-		{
-		yyg->yy_init = 1;
-
-#ifdef YY_USER_INIT
-		YY_USER_INIT;
-#endif
-
-		if ( ! yyg->yy_start )
-			yyg->yy_start = 1;	/* first start state */
-
-		if ( ! yyin )
-			yyin = stdin;
-
-		if ( ! yyout )
-			yyout = stdout;
-
-		if ( ! YY_CURRENT_BUFFER ) {
-			glcpp_ensure_buffer_stack (yyscanner);
-			YY_CURRENT_BUFFER_LVALUE =
-				glcpp__create_buffer(yyin,YY_BUF_SIZE ,yyscanner);
-		}
-
-		glcpp__load_buffer_state(yyscanner );
-		}
+#line 999 "glcpp/glcpp-lex.c"
 
 	while ( 1 )		/* loops until end-of-file is reached */
 		{
@@ -999,7 +1014,7 @@ YY_DECL
 yy_match:
 		do
 			{
-			register YY_CHAR yy_c = yy_ec[YY_SC_TO_UI(*yy_cp)];
+			register YY_CHAR yy_c = yy_ec[YY_SC_TO_UI(*yy_cp)] ;
 			if ( yy_accept[yy_current_state] )
 				{
 				yyg->yy_last_accepting_state = yy_current_state;
@@ -1129,6 +1144,7 @@ YY_RULE_SETUP
 case 13:
 /* rule 13 can match eol */
 *yy_cp = yyg->yy_hold_char; /* undo effects of setting up yytext */
+YY_LINENO_REWIND_TO(yy_cp - 1);
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
@@ -1142,6 +1158,7 @@ YY_RULE_SETUP
 case 14:
 /* rule 14 can match eol */
 *yy_cp = yyg->yy_hold_char; /* undo effects of setting up yytext */
+YY_LINENO_REWIND_TO(yy_cp - 1);
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
@@ -1401,7 +1418,7 @@ YY_RULE_SETUP
 #line 373 "glcpp/glcpp-lex.l"
 ECHO;
 	YY_BREAK
-#line 1405 "glcpp/glcpp-lex.c"
+#line 1422 "glcpp/glcpp-lex.c"
 case YY_STATE_EOF(DONE):
 case YY_STATE_EOF(COMMENT):
 case YY_STATE_EOF(UNREACHABLE):
@@ -1538,6 +1555,7 @@ case YY_STATE_EOF(NEWLINE_CATCHUP):
 			"fatal flex scanner internal error--no action found" );
 	} /* end of action switch */
 		} /* end of scanning one token */
+	} /* end of user's declarations */
 } /* end of glcpp_lex */
 
 /* yy_get_next_buffer - try to read in a new buffer
@@ -2189,7 +2207,7 @@ YY_BUFFER_STATE glcpp__scan_bytes  (yyconst char * yybytes, yy_size_t  _yybytes_
 	YY_BUFFER_STATE b;
 	char *buf;
 	yy_size_t n;
-	int i;
+	yy_size_t i;
     
 	/* Get memory for full buffer, including space for trailing EOB's. */
 	n = _yybytes_len + 2;
@@ -2626,7 +2644,7 @@ void glcpp_free (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 373 "glcpp/glcpp-lex.l"
+#line 372 "glcpp/glcpp-lex.l"
 
 
 

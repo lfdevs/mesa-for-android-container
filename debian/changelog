@@ -1,3 +1,16 @@
+mesa (10.2.2-1) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+    - glx: Don't crash on swap event for a Window (non-GLXWindow)
+      (Closes: #685328).
+    - 01_targets-xa-limit-the-amount-of-exported-symbols.diff dropped,
+      upstream
+  * Cherry-pick commit b4dcf87 (glxext: Send the Drawable's ID in the
+    GLX_BufferSwapComplete event) from upstream, fixes intel + dri3.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Thu, 03 Jul 2014 09:54:48 +0200
+
 mesa (10.2.1-2) unstable; urgency=medium
 
   * Upload to unstable.

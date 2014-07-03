@@ -287,10 +287,12 @@ CodeEmitterGK110::emitPredicate(const Instruction *i)
 void
 CodeEmitterGK110::setCAddress14(const ValueRef& src)
 {
-   const int32_t addr = src.get()->asSym()->reg.data.offset / 4;
+   const Storage& res = src.get()->asSym()->reg;
+   const int32_t addr = res.data.offset / 4;
 
    code[0] |= (addr & 0x01ff) << 23;
    code[1] |= (addr & 0x3e00) >> 9;
+   code[1] |= res.fileIndex << 5;
 }
 
 void
@@ -413,7 +415,6 @@ CodeEmitterGK110::emitForm_21(const Instruction *i, uint32_t opc2,
       case FILE_MEMORY_CONST:
          code[1] &= (s == 2) ? ~(0x4 << 28) : ~(0x8 << 28);
          setCAddress14(i->src(s));
-         code[1] |= i->getSrc(s)->reg.fileIndex << 5;
          break;
       case FILE_IMMEDIATE:
          setShortImmediate(i, s);
@@ -555,6 +556,7 @@ CodeEmitterGK110::emitFADD(const Instruction *i)
       RND_(2a, F);
       ABS_(31, 0);
       NEG_(33, 0);
+      SAT_(35);
 
       if (code[0] & 0x1) {
          modNegAbsF32_3b(i, 1);
@@ -711,7 +713,7 @@ CodeEmitterGK110::emitEXTBF(const Instruction *i)
 void
 CodeEmitterGK110::emitBFIND(const Instruction *i)
 {
-   emitForm_21(i, 0x618, 0xc18);
+   emitForm_C(i, 0x218, 0x2);
 
    if (i->dType == TYPE_S32)
       code[1] |= 0x80000;
