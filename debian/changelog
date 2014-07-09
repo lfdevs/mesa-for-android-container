@@ -1,3 +1,14 @@
+mesa (10.2.3-1) unstable; urgency=low
+
+  [ Maarten Lankhorst ]
+  * New upstream release.
+
+  [ Julien Cristau ]
+  * Add debian/upstream/signing-key.asc, and add pgpsigurlmangle option to
+    debian/watch so uscan can check signatures on release tarballs.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 09 Jul 2014 19:39:06 +0200
+
 mesa (10.2.2-1) unstable; urgency=medium
 
   [ Andreas Boll ]

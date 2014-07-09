@@ -82,7 +82,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 				stride = bin_w * rsc->cpp;
 
 				if (bases) {
-					base = bases[i] * rsc->cpp;
+					base = bases[i];
 				}
 			} else {
 				stride = slice->pitch * rsc->cpp;
@@ -106,9 +106,17 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 }
 
 static uint32_t
-depth_base(struct fd_gmem_stateobj *gmem)
+depth_base(struct fd_context *ctx)
 {
-	return align(gmem->bin_w * gmem->bin_h, 0x4000);
+	struct fd_gmem_stateobj *gmem = &ctx->gmem;
+	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	uint32_t cpp = 4;
+	if (pfb->cbufs[0]) {
+		struct fd_resource *rsc =
+				fd_resource(pfb->cbufs[0]->texture);
+		cpp = rsc->cpp;
+	}
+	return align(gmem->bin_w * gmem->bin_h * cpp, 0x4000);
 }
 
 static bool
@@ -156,7 +164,7 @@ emit_binning_workaround(struct fd_context *ctx)
 	OUT_RING(ring, A3XX_RB_COPY_CONTROL_MSAA_RESOLVE(MSAA_ONE) |
 			A3XX_RB_COPY_CONTROL_MODE(0) |
 			A3XX_RB_COPY_CONTROL_GMEM_BASE(0));
-	OUT_RELOC(ring, fd_resource(fd3_ctx->solid_vbuf)->bo, 0x20, 0, -1);  /* RB_COPY_DEST_BASE */
+	OUT_RELOCW(ring, fd_resource(fd3_ctx->solid_vbuf)->bo, 0x20, 0, -1);  /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(128));
 	OUT_RING(ring, A3XX_RB_COPY_DEST_INFO_TILE(LINEAR) |
 			A3XX_RB_COPY_DEST_INFO_FORMAT(RB_R8G8B8A8_UNORM) |
@@ -399,12 +407,7 @@ fd3_emit_tile_gmem2mem(struct fd_context *ctx, struct fd_tile *tile)
 			}}, 1);
 
 	if (ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
-		uint32_t base = 0;
-		if (pfb->cbufs[0]) {
-			struct fd_resource *rsc =
-					fd_resource(pfb->cbufs[0]->texture);
-			base = depth_base(&ctx->gmem) * rsc->cpp;
-		}
+		uint32_t base = depth_base(ctx);
 		emit_gmem2mem_surf(ctx, RB_COPY_DEPTH_STENCIL, base, pfb->zsbuf);
 	}
 
@@ -458,7 +461,7 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	y1 = ((float)tile->yoff + bin_h) / ((float)pfb->height);
 
 	OUT_PKT3(ring, CP_MEM_WRITE, 5);
-	OUT_RELOC(ring, fd_resource(fd3_ctx->blit_texcoord_vbuf)->bo, 0, 0, 0);
+	OUT_RELOCW(ring, fd_resource(fd3_ctx->blit_texcoord_vbuf)->bo, 0, 0, 0);
 	OUT_RING(ring, fui(x0));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x1));
@@ -558,7 +561,7 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	bin_h = gmem->bin_h;
 
 	if (ctx->restore & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_mem2gmem_surf(ctx, depth_base(gmem), pfb->zsbuf, bin_w);
+		emit_mem2gmem_surf(ctx, depth_base(ctx), pfb->zsbuf, bin_w);
 
 	if (ctx->restore & FD_BUFFER_COLOR)
 		emit_mem2gmem_surf(ctx, 0, pfb->cbufs[0], bin_w);
@@ -639,7 +642,7 @@ update_vsc_pipe(struct fd_context *ctx)
 	int i;
 
 	OUT_PKT0(ring, REG_A3XX_VSC_SIZE_ADDRESS, 1);
-	OUT_RELOC(ring, fd3_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
+	OUT_RELOCW(ring, fd3_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
 
 	for (i = 0; i < 8; i++) {
 		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
@@ -654,7 +657,7 @@ update_vsc_pipe(struct fd_context *ctx)
 				A3XX_VSC_PIPE_CONFIG_Y(pipe->y) |
 				A3XX_VSC_PIPE_CONFIG_W(pipe->w) |
 				A3XX_VSC_PIPE_CONFIG_H(pipe->h));
-		OUT_RELOC(ring, pipe->bo, 0, 0, 0);        /* VSC_PIPE[i].DATA_ADDRESS */
+		OUT_RELOCW(ring, pipe->bo, 0, 0, 0);       /* VSC_PIPE[i].DATA_ADDRESS */
 		OUT_RING(ring, fd_bo_size(pipe->bo) - 32); /* VSC_PIPE[i].DATA_LENGTH */
 	}
 }
@@ -789,6 +792,7 @@ fd3_emit_tile_init(struct fd_context *ctx)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
+	uint32_t rb_render_control;
 
 	fd3_emit_restore(ctx);
 
@@ -813,8 +817,10 @@ fd3_emit_tile_init(struct fd_context *ctx)
 		patch_draws(ctx, IGNORE_VISIBILITY);
 	}
 
-	patch_rbrc(ctx, A3XX_RB_RENDER_CONTROL_ENABLE_GMEM |
-			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(gmem->bin_w));
+	rb_render_control = A3XX_RB_RENDER_CONTROL_ENABLE_GMEM |
+			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(gmem->bin_w);
+
+	patch_rbrc(ctx, rb_render_control);
 }
 
 /* before mem2gmem */
@@ -827,7 +833,7 @@ fd3_emit_tile_prep(struct fd_context *ctx, struct fd_tile *tile)
 	uint32_t reg;
 
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_INFO, 2);
-	reg = A3XX_RB_DEPTH_INFO_DEPTH_BASE(depth_base(gmem));
+	reg = A3XX_RB_DEPTH_INFO_DEPTH_BASE(depth_base(ctx));
 	if (pfb->zsbuf) {
 		reg |= A3XX_RB_DEPTH_INFO_DEPTH_FORMAT(fd_pipe2depth(pfb->zsbuf->format));
 	}

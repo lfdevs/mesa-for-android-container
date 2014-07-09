@@ -1,3 +1,7 @@
 # The first is the change, and the second is the revert of that change.
 e6967270c75a5b669152127bb7a746d55f4407a6 i965: Fix depth (array slices) computation for 1D_ARRAY render targets.
 155f98d49fdc2f46c760f8214327b3804ee60079 Revert "i965: Fix depth (array slices) computation for 1D_ARRAY render targets."
+
+# This patch didn't have enough in the commit message to convince me it
+# is a bug fix, (email sent to author asking for more information).
+41d759d076737f94976f5294b734dbc437a12bae

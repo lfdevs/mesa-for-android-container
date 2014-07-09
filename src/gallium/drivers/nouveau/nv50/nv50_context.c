@@ -61,7 +61,7 @@ static void
 nv50_memory_barrier(struct pipe_context *pipe, unsigned flags)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
-   int i;
+   int i, s;
 
    if (flags & PIPE_BARRIER_MAPPED_BUFFER) {
       for (i = 0; i < nv50->num_vtxbufs; ++i) {
@@ -74,6 +74,26 @@ nv50_memory_barrier(struct pipe_context *pipe, unsigned flags)
       if (nv50->idxbuf.buffer &&
           nv50->idxbuf.buffer->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
          nv50->base.vbo_dirty = TRUE;
+
+      for (s = 0; s < 3 && !nv50->cb_dirty; ++s) {
+         uint32_t valid = nv50->constbuf_valid[s];
+
+         while (valid && !nv50->cb_dirty) {
+            const unsigned i = ffs(valid) - 1;
+            struct pipe_resource *res;
+
+            valid &= ~(1 << i);
+            if (nv50->constbuf[s][i].user)
+               continue;
+
+            res = nv50->constbuf[s][i].u.buf;
+            if (!res)
+               continue;
+
+            if (res->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
+               nv50->cb_dirty = TRUE;
+         }
+      }
    }
 }
 
@@ -253,7 +273,14 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
    nv50->base.screen    = &screen->base;
    nv50->base.copy_data = nv50_m2mf_copy_linear;
    nv50->base.push_data = nv50_sifc_linear_u8;
+   /* FIXME: Make it possible to use this again. The problem is that there is
+    * some clever logic in the card that allows for multiple renders to happen
+    * when there are only constbuf changes. However that relies on the
+    * constbuf updates happening to the right constbuf slots. Currently
+    * implementation just makes it go through a separate slot which doesn't
+    * properly update the right constbuf data.
    nv50->base.push_cb   = nv50_cb_push;
+    */
 
    nv50->screen = screen;
    pipe->screen = pscreen;
