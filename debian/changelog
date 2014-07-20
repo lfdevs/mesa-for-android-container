@@ -1,3 +1,9 @@
+mesa (10.2.4-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 20 Jul 2014 10:20:05 +0200
+
 mesa (10.2.3-1) unstable; urgency=low
 
   [ Maarten Lankhorst ]
