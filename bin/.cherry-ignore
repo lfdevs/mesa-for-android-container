@@ -5,3 +5,14 @@ e6967270c75a5b669152127bb7a746d55f4407a6 i965: Fix depth (array slices) computat
 # This patch didn't have enough in the commit message to convince me it
 # is a bug fix, (email sent to author asking for more information).
 41d759d076737f94976f5294b734dbc437a12bae
+
+# These patch were already cherry-picked before the 10.2.4 release.
+#
+# But get-pick-list.sh doesn't realize that because the commit messages for
+# these on the stable branch reference commit IDs that don't actually appear
+# on master. I'm not sure what happened, (perhaps master was force-pushed at
+# some point?).
+2eaf3f670fea4ce4466340141244e41a45542c13
+e5adc560cc8544200faa3e04504202839626ab37
+cf1b5eee7f36af29d1d5caba3538ad4985e51f81
+

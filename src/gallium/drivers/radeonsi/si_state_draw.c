@@ -33,6 +33,7 @@
 #include "util/u_format.h"
 #include "util/u_index_modify.h"
 #include "util/u_memory.h"
+#include "util/u_prim.h"
 #include "util/u_upload_mgr.h"
 
 /*
@@ -425,16 +426,31 @@ static bool si_update_draw_info_state(struct si_context *sctx,
 					(rs ? rs->line_stipple_enable : false);
 		/* If the WD switch is false, the IA switch must be false too. */
 		bool ia_switch_on_eop = wd_switch_on_eop;
+		unsigned primgroup_size = 64;
 
-		si_pm4_set_reg(pm4, R_028AA8_IA_MULTI_VGT_PARAM,
-			       S_028AA8_SWITCH_ON_EOP(ia_switch_on_eop) |
-			       S_028AA8_PARTIAL_VS_WAVE_ON(1) |
-			       S_028AA8_PRIMGROUP_SIZE(63) |
-			       S_028AA8_WD_SWITCH_ON_EOP(wd_switch_on_eop));
+		/* Hawaii hangs if instancing is enabled and each instance
+		 * is smaller than a prim group and WD_SWITCH_ON_EOP is 0.
+		 * We don't know that for indirect drawing, so treat it as
+		 * always problematic. */
+		if (sctx->b.family == CHIP_HAWAII &&
+		    ((info->instance_count > 1 &&
+		      u_prims_for_vertices(info->mode, info->count) < primgroup_size))) {
+			wd_switch_on_eop = true;
+			ia_switch_on_eop = true;
+		}
+
 		si_pm4_set_reg(pm4, R_028B74_VGT_DISPATCH_DRAW_INDEX,
 			       ib->index_size == 4 ? 0xFC000000 : 0xFC00);
 
-		si_pm4_set_reg(pm4, R_030908_VGT_PRIMITIVE_TYPE, prim);
+		si_pm4_cmd_begin(pm4, PKT3_DRAW_PREAMBLE);
+		si_pm4_cmd_add(pm4, prim); /* VGT_PRIMITIVE_TYPE */
+		si_pm4_cmd_add(pm4, /* IA_MULTI_VGT_PARAM */
+			       S_028AA8_SWITCH_ON_EOP(ia_switch_on_eop) |
+			       S_028AA8_PARTIAL_VS_WAVE_ON(1) |
+			       S_028AA8_PRIMGROUP_SIZE(primgroup_size - 1) |
+			       S_028AA8_WD_SWITCH_ON_EOP(wd_switch_on_eop));
+		si_pm4_cmd_add(pm4, 0); /* VGT_LS_HS_CONFIG */
+		si_pm4_cmd_end(pm4, false);
 	} else {
 		si_pm4_set_reg(pm4, R_008958_VGT_PRIMITIVE_TYPE, prim);
 	}
@@ -902,11 +918,15 @@ void si_emit_cache_flush(struct r600_common_context *sctx, struct r600_atom *ato
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 		radeon_emit(cs, EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
 	}
+	if (sctx->flags & R600_CONTEXT_VGT_STREAMOUT_SYNC) {
+		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+		radeon_emit(cs, EVENT_TYPE(V_028A90_VGT_STREAMOUT_SYNC) | EVENT_INDEX(0));
+	}
 
 	sctx->flags = 0;
 }
 
-const struct r600_atom si_atom_cache_flush = { si_emit_cache_flush, 13 }; /* number of CS dwords */
+const struct r600_atom si_atom_cache_flush = { si_emit_cache_flush, 17 }; /* number of CS dwords */
 
 void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 {
@@ -984,6 +1004,14 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 		si_trace_emit(sctx);
 	}
 #endif
+
+	/* Workaround for a VGT hang when streamout is enabled.
+	 * It must be done after drawing. */
+	if (sctx->b.family == CHIP_HAWAII &&
+	    (sctx->b.streamout.streamout_enabled ||
+	     sctx->b.streamout.prims_gen_query_enabled)) {
+		sctx->b.flags |= R600_CONTEXT_VGT_STREAMOUT_SYNC;
+	}
 
 	/* Set the depth buffer as dirty. */
 	if (sctx->framebuffer.state.zsbuf) {

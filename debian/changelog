@@ -1,3 +1,20 @@
+mesa (10.2.5-1) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+    - nv50: fix build failure on m68k due to invalid struct alignment
+      assumptions (Closes: #728053).
+    - i915: Fix up intelInitScreen2 for DRI3 (Closes: #754297).
+
+  [ Matthias Klose ]
+  * Add patch to fix FTBFS on x32. (Closes: #757703)
+    - x32-updates.patch
+
+  [ Maarten Lankhorst ]
+  * Enable support for freedreno.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 11 Aug 2014 13:34:58 +0200
+
 mesa (10.2.4-1) unstable; urgency=medium
 
   * New upstream release.
