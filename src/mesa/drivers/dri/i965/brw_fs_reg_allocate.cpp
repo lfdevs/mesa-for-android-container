@@ -54,18 +54,18 @@ fs_visitor::assign_regs_trivial()
    }
    this->grf_used = hw_reg_mapping[this->virtual_grf_count];
 
-   foreach_list(node, &this->instructions) {
-      fs_inst *inst = (fs_inst *)node;
-
+   foreach_in_list(fs_inst, inst, &instructions) {
       assign_reg(hw_reg_mapping, &inst->dst, reg_width);
-      assign_reg(hw_reg_mapping, &inst->src[0], reg_width);
-      assign_reg(hw_reg_mapping, &inst->src[1], reg_width);
-      assign_reg(hw_reg_mapping, &inst->src[2], reg_width);
+      for (i = 0; i < inst->sources; i++) {
+         assign_reg(hw_reg_mapping, &inst->src[i], reg_width);
+      }
    }
 
    if (this->grf_used >= max_grf) {
       fail("Ran out of regs on trivial allocator (%d/%d)\n",
 	   this->grf_used, max_grf);
+   } else {
+      this->virtual_grf_count = this->grf_used;
    }
 
 }
@@ -222,9 +222,9 @@ count_to_loop_end(fs_inst *do_inst)
  *
  * The layout of the payload registers is:
  *
- * 0..nr_payload_regs-1: fixed function setup (including bary coordinates).
- * nr_payload_regs..nr_payload_regs+curb_read_lengh-1: uniform data
- * nr_payload_regs+curb_read_lengh..first_non_payload_grf-1: setup coefficients.
+ * 0..payload.num_regs-1: fixed function setup (including bary coordinates).
+ * payload.num_regs..payload.num_regs+curb_read_lengh-1: uniform data
+ * payload.num_regs+curb_read_lengh..first_non_payload_grf-1: setup coefficients.
  *
  * And we have payload_node_count nodes covering these registers in order
  * (note that in SIMD16, a node is two registers).
@@ -241,9 +241,7 @@ fs_visitor::setup_payload_interference(struct ra_graph *g,
    int payload_last_use_ip[payload_node_count];
    memset(payload_last_use_ip, 0, sizeof(payload_last_use_ip));
    int ip = 0;
-   foreach_list(node, &this->instructions) {
-      fs_inst *inst = (fs_inst *)node;
-
+   foreach_in_list(fs_inst, inst, &instructions) {
       switch (inst->opcode) {
       case BRW_OPCODE_DO:
          loop_depth++;
@@ -273,7 +271,7 @@ fs_visitor::setup_payload_interference(struct ra_graph *g,
        * assign_curbe_setup(), and interpolation uses fixed hardware regs from
        * the start (see interp_reg()).
        */
-      for (int i = 0; i < 3; i++) {
+      for (int i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == HW_REG &&
              inst->src[i].fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
             int node_nr = inst->src[i].fixed_hw_reg.nr / reg_width;
@@ -363,9 +361,7 @@ fs_visitor::get_used_mrfs(bool *mrf_used)
 
    memset(mrf_used, 0, BRW_MAX_MRF * sizeof(bool));
 
-   foreach_list(node, &this->instructions) {
-      fs_inst *inst = (fs_inst *)node;
-
+   foreach_in_list(fs_inst, inst, &instructions) {
       if (inst->dst.file == MRF) {
          int reg = inst->dst.reg & ~BRW_MRF_COMPR4;
          mrf_used[reg] = true;
@@ -490,7 +486,7 @@ fs_visitor::assign_regs(bool allow_spilling)
       }
    }
 
-   if (!ra_allocate_no_spills(g)) {
+   if (!ra_allocate(g)) {
       /* Failed to allocate registers.  Spill a reg, and the caller will
        * loop back into here to try again.
        */
@@ -498,7 +494,7 @@ fs_visitor::assign_regs(bool allow_spilling)
 
       if (reg == -1) {
          fail("no register to spill:\n");
-         dump_instructions();
+         dump_instructions(NULL);
       } else if (allow_spilling) {
          spill_reg(reg);
       }
@@ -522,14 +518,14 @@ fs_visitor::assign_regs(bool allow_spilling)
 			    reg_width);
    }
 
-   foreach_list(node, &this->instructions) {
-      fs_inst *inst = (fs_inst *)node;
-
+   foreach_in_list(fs_inst, inst, &instructions) {
       assign_reg(hw_reg_mapping, &inst->dst, reg_width);
-      assign_reg(hw_reg_mapping, &inst->src[0], reg_width);
-      assign_reg(hw_reg_mapping, &inst->src[1], reg_width);
-      assign_reg(hw_reg_mapping, &inst->src[2], reg_width);
+      for (int i = 0; i < inst->sources; i++) {
+         assign_reg(hw_reg_mapping, &inst->src[i], reg_width);
+      }
    }
+
+   this->virtual_grf_count = this->grf_used;
 
    ralloc_free(g);
 
@@ -580,10 +576,8 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
     * spill/unspill we'll have to do, and guess that the insides of
     * loops run 10 times.
     */
-   foreach_list(node, &this->instructions) {
-      fs_inst *inst = (fs_inst *)node;
-
-      for (unsigned int i = 0; i < 3; i++) {
+   foreach_in_list(fs_inst, inst, &instructions) {
+      for (unsigned int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == GRF) {
 	    spill_costs[inst->src[i].reg] += loop_scale;
 
@@ -647,7 +641,7 @@ fs_visitor::spill_reg(int spill_reg)
 {
    int reg_size = dispatch_width * sizeof(float);
    int size = virtual_grf_sizes[spill_reg];
-   unsigned int spill_offset = c->last_scratch;
+   unsigned int spill_offset = last_scratch;
    assert(ALIGN(spill_offset, 16) == spill_offset); /* oword read/write req. */
    int spill_base_mrf = dispatch_width > 8 ? 13 : 14;
 
@@ -672,17 +666,15 @@ fs_visitor::spill_reg(int spill_reg)
       spilled_any_registers = true;
    }
 
-   c->last_scratch += size * reg_size;
+   last_scratch += size * reg_size;
 
    /* Generate spill/unspill instructions for the objects being
     * spilled.  Right now, we spill or unspill the whole thing to a
     * virtual grf of the same size.  For most instructions, though, we
     * could just spill/unspill the GRF being accessed.
     */
-   foreach_list(node, &this->instructions) {
-      fs_inst *inst = (fs_inst *)node;
-
-      for (unsigned int i = 0; i < 3; i++) {
+   foreach_in_list(fs_inst, inst, &instructions) {
+      for (unsigned int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == GRF &&
 	     inst->src[i].reg == spill_reg) {
             int regs_read = inst->regs_read(this, i);

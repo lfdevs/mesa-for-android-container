@@ -59,8 +59,7 @@ brw_swizzle_to_scs(GLenum swizzle, bool need_green_to_blue)
       return HSW_SCS_ONE;
    }
 
-   assert(!"Should not get here: invalid swizzle mode");
-   return HSW_SCS_ZERO;
+   unreachable("Should not get here: invalid swizzle mode");
 }
 
 uint32_t
@@ -316,7 +315,7 @@ gen7_update_texture_surface(struct gl_context *ctx,
    uint32_t effective_depth = (tObj->Immutable && tObj->Target != GL_TEXTURE_3D)
                               ? tObj->NumLayers : mt->logical_depth0;
 
-   if (mt->array_spacing_lod0)
+   if (mt->array_layout == ALL_SLICES_AT_EACH_LOD)
       surf[0] |= GEN7_SURFACE_ARYSPC_LOD0;
 
    surf[1] = mt->bo->offset64 + mt->offset; /* reloc */
@@ -394,6 +393,14 @@ gen7_create_raw_surface(struct brw_context *brw, drm_intel_bo *bo,
                                   true /* rw */);
 }
 
+/**
+ * Creates a null renderbuffer surface.
+ *
+ * This is used when the shader doesn't write to any color output.  An FB
+ * write to target 0 will still be emitted, because that's how the thread is
+ * terminated (and computed depth is returned), so we need to have the
+ * hardware discard the target 0 color output..
+ */
 static void
 gen7_update_null_renderbuffer_surface(struct brw_context *brw, unsigned unit)
 {
@@ -501,8 +508,8 @@ gen7_update_renderbuffer_surface(struct brw_context *brw,
 
    surf[0] = surftype << BRW_SURFACE_TYPE_SHIFT |
              format << BRW_SURFACE_FORMAT_SHIFT |
-             (irb->mt->array_spacing_lod0 ? GEN7_SURFACE_ARYSPC_LOD0
-                                          : GEN7_SURFACE_ARYSPC_FULL) |
+             (irb->mt->array_layout == ALL_SLICES_AT_EACH_LOD ?
+                 GEN7_SURFACE_ARYSPC_LOD0 : GEN7_SURFACE_ARYSPC_FULL) |
              gen7_surface_tiling_mode(mt->tiling);
 
    if (irb->mt->align_h == 4)

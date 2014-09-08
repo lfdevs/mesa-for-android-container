@@ -52,7 +52,7 @@ nodist_EXTRA_mesa_dri_drivers_la_SOURCES = dummy.cpp
 mesa_dri_drivers_la_SOURCES =
 mesa_dri_drivers_la_LDFLAGS = \
         -module -avoid-version -shared -shrext .so \
-        -Wl,-Bsymbolic \
+        $(BSYMBOLIC) \
         $(GC_SECTIONS) \
         $()
 mesa_dri_drivers_la_LIBADD = \
@@ -85,7 +85,6 @@ install-data-hook:
 		ln -f $(DESTDIR)$(dridir)/mesa_dri_drivers.so \
 		      $(DESTDIR)$(dridir)/$$i; \
 	done;
-	$(RM) -f $(DESTDIR)$(dridir)/mesa_dri_drivers.so
-	$(RM) -f $(DESTDIR)$(dridir)/mesa_dri_drivers.la
+	$(RM) -f $(DESTDIR)$(dridir)/mesa_dri_drivers.*
 
 endif

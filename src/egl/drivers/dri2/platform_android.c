@@ -54,8 +54,6 @@ get_format_bpp(int native)
       bpp = 3;
       break;
    case HAL_PIXEL_FORMAT_RGB_565:
-   case HAL_PIXEL_FORMAT_RGBA_5551:
-   case HAL_PIXEL_FORMAT_RGBA_4444:
       bpp = 2;
       break;
    default:
@@ -371,8 +369,6 @@ dri2_create_image_android_native_buffer(_EGLDisplay *disp, _EGLContext *ctx,
       format = __DRI_IMAGE_FORMAT_XBGR8888;
       break;
    case HAL_PIXEL_FORMAT_RGB_888:
-   case HAL_PIXEL_FORMAT_RGBA_5551:
-   case HAL_PIXEL_FORMAT_RGBA_4444:
       /* unsupported */
    default:
       _eglLog(_EGL_WARNING, "unsupported native buffer format 0x%x", buf->format);
@@ -650,6 +646,7 @@ static struct dri2_egl_display_vtbl droid_display_vtbl = {
    .copy_buffers = dri2_fallback_copy_buffers,
    .query_buffer_age = dri2_fallback_query_buffer_age,
    .create_wayland_buffer_from_image = dri2_fallback_create_wayland_buffer_from_image,
+   .get_sync_values = dri2_fallback_get_sync_values,
 };
 
 EGLBoolean

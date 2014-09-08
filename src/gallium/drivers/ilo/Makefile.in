@@ -105,14 +105,14 @@ target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.sources \
 	$(top_srcdir)/src/gallium/Automake.inc $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+
+@NEED_WINSYS_XLIB_TRUE@am__append_2 = \
+@NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
+@NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
+@NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
+
 subdir = src/gallium/drivers/ilo
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -135,14 +135,15 @@ am__objects_1 = ilo_3d.lo ilo_3d_pipeline.lo ilo_3d_pipeline_dump.lo \
 	ilo_3d_pipeline_gen6.lo ilo_3d_pipeline_gen7.lo ilo_blit.lo \
 	ilo_blitter.lo ilo_blitter_blt.lo ilo_blitter_pipe.lo \
 	ilo_blitter_rectlist.lo ilo_context.lo ilo_cp.lo ilo_format.lo \
-	ilo_gpe_gen6.lo ilo_gpe_gen7.lo ilo_gpgpu.lo ilo_query.lo \
-	ilo_resource.lo ilo_screen.lo ilo_shader.lo ilo_state.lo \
-	ilo_transfer.lo ilo_video.lo shader/ilo_shader_cs.lo \
-	shader/ilo_shader_fs.lo shader/ilo_shader_gs.lo \
-	shader/ilo_shader_vs.lo shader/toy_compiler.lo \
-	shader/toy_compiler_asm.lo shader/toy_compiler_disasm.lo \
-	shader/toy_legalize.lo shader/toy_legalize_ra.lo \
-	shader/toy_optimize.lo shader/toy_tgsi.lo
+	ilo_gpe_gen6.lo ilo_gpe_gen7.lo ilo_gpgpu.lo ilo_layout.lo \
+	ilo_query.lo ilo_resource.lo ilo_screen.lo ilo_shader.lo \
+	ilo_state.lo ilo_transfer.lo ilo_video.lo \
+	shader/ilo_shader_cs.lo shader/ilo_shader_fs.lo \
+	shader/ilo_shader_gs.lo shader/ilo_shader_vs.lo \
+	shader/toy_compiler.lo shader/toy_compiler_asm.lo \
+	shader/toy_compiler_disasm.lo shader/toy_legalize.lo \
+	shader/toy_legalize_ra.lo shader/toy_optimize.lo \
+	shader/toy_tgsi.lo
 am_libilo_la_OBJECTS = $(am__objects_1)
 libilo_la_OBJECTS = $(am_libilo_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -218,6 +219,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -487,6 +489,7 @@ C_SOURCES := \
 	ilo_gpe_gen6.c \
 	ilo_gpe_gen7.c \
 	ilo_gpgpu.c \
+	ilo_layout.c \
 	ilo_query.c \
 	ilo_resource.c \
 	ilo_screen.c \
@@ -508,6 +511,7 @@ C_SOURCES := \
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
@@ -519,6 +523,7 @@ GALLIUM_CFLAGS = \
 # preprocessor is determined by the ordering of the -I flags.
 GALLIUM_DRIVER_CFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -528,6 +533,7 @@ GALLIUM_DRIVER_CFLAGS = \
 
 GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -535,21 +541,9 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
-GALLIUM_DRI_CFLAGS = \
+GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/include \
-	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	$(DEFINES) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
-
-GALLIUM_VIDEO_CFLAGS = \
-	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -559,45 +553,12 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
-	$(GC_SECTIONS) $(am__append_1)
-GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
-GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
-GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
-	-avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
 GALLIUM_COMMON_LIB_DEPS = \
 	-lm \
 	$(CLOCK_LIB) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 
-GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
-GALLIUM_VDPAU_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_6)
-GALLIUM_XVMC_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_7)
-GALLIUM_OMX_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
-	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -605,6 +566,9 @@ GALLIUM_WINSYS_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/winsys/intel \
 	$(GALLIUM_DRIVER_CFLAGS)
@@ -713,6 +677,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_gpe_gen6.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_gpe_gen7.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_gpgpu.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_layout.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_screen.Plo@am__quote@

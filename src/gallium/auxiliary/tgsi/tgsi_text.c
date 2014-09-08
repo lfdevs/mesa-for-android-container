@@ -735,8 +735,9 @@ parse_dst_operand(
 static boolean
 parse_optional_swizzle(
    struct translate_ctx *ctx,
-   uint swizzle[4],
-   boolean *parsed_swizzle )
+   uint *swizzle,
+   boolean *parsed_swizzle,
+   int components)
 {
    const char *cur = ctx->cur;
 
@@ -748,7 +749,7 @@ parse_optional_swizzle(
 
       cur++;
       eat_opt_white( &cur );
-      for (i = 0; i < 4; i++) {
+      for (i = 0; i < components; i++) {
          if (uprcase( *cur ) == 'X')
             swizzle[i] = TGSI_SWIZZLE_X;
          else if (uprcase( *cur ) == 'Y')
@@ -803,6 +804,13 @@ parse_src_operand(
       src->Dimension.Indirect = 0;
       src->Dimension.Dimension = 0;
       src->Dimension.Index = bracket[0].index;
+      if (bracket[0].ind_file != TGSI_FILE_NULL) {
+         src->Dimension.Indirect = 1;
+         src->DimIndirect.File = bracket[0].ind_file;
+         src->DimIndirect.Index = bracket[0].ind_index;
+         src->DimIndirect.Swizzle = bracket[0].ind_comp;
+         src->DimIndirect.ArrayID = bracket[0].ind_array;
+      }
       bracket[0] = bracket[1];
    }
    src->Register.Index = bracket[0].index;
@@ -816,7 +824,7 @@ parse_src_operand(
 
    /* Parse optional swizzle.
     */
-   if (parse_optional_swizzle( ctx, swizzle, &parsed_swizzle )) {
+   if (parse_optional_swizzle( ctx, swizzle, &parsed_swizzle, 4 )) {
       if (parsed_swizzle) {
          src->Register.SwizzleX = swizzle[0];
          src->Register.SwizzleY = swizzle[1];
@@ -834,6 +842,35 @@ parse_src_operand(
       ctx->cur++;
    }
 
+
+   return TRUE;
+}
+
+static boolean
+parse_texoffset_operand(
+   struct translate_ctx *ctx,
+   struct tgsi_texture_offset *src )
+{
+   uint file;
+   uint swizzle[3];
+   boolean parsed_swizzle;
+   struct parsed_bracket bracket;
+
+   if (!parse_register_src(ctx, &file, &bracket))
+      return FALSE;
+
+   src->File = file;
+   src->Index = bracket.index;
+
+   /* Parse optional swizzle.
+    */
+   if (parse_optional_swizzle( ctx, swizzle, &parsed_swizzle, 3 )) {
+      if (parsed_swizzle) {
+         src->SwizzleX = swizzle[0];
+         src->SwizzleY = swizzle[1];
+         src->SwizzleZ = swizzle[2];
+      }
+   }
 
    return TRUE;
 }
@@ -904,7 +941,7 @@ parse_instruction(
       if (!parse_register_1d( ctx, &file, &index ))
          return FALSE;
 
-      if (parse_optional_swizzle( ctx, swizzle, &parsed_swizzle )) {
+      if (parse_optional_swizzle( ctx, swizzle, &parsed_swizzle, 4 )) {
          if (parsed_swizzle) {
             inst.Predicate.SwizzleX = swizzle[0];
             inst.Predicate.SwizzleY = swizzle[1];
@@ -1000,6 +1037,19 @@ parse_instruction(
          }
       }
    }
+
+   cur = ctx->cur;
+   eat_opt_white( &cur );
+   for (i = 0; info->is_tex && *cur == ','; i++) {
+         cur++;
+         eat_opt_white( &cur );
+         ctx->cur = cur;
+         if (!parse_texoffset_operand( ctx, &inst.TexOffsets[i] ))
+            return FALSE;
+         cur = ctx->cur;
+         eat_opt_white( &cur );
+   }
+   inst.Texture.NumOffsets = i;
 
    cur = ctx->cur;
    eat_opt_white( &cur );
@@ -1322,6 +1372,23 @@ static boolean parse_declaration( struct translate_ctx *ctx )
       if (i == TGSI_INTERPOLATE_COUNT) {
          report_error( ctx, "Expected semantic or interpolate attribute" );
          return FALSE;
+      }
+   }
+
+   cur = ctx->cur;
+   eat_opt_white( &cur );
+   if (*cur == ',' && !is_vs_input) {
+      uint i;
+
+      cur++;
+      eat_opt_white( &cur );
+      for (i = 0; i < TGSI_INTERPOLATE_LOC_COUNT; i++) {
+         if (str_match_nocase_whole( &cur, tgsi_interpolate_locations[i] )) {
+            decl.Interp.Location = i;
+
+            ctx->cur = cur;
+            break;
+         }
       }
    }
 

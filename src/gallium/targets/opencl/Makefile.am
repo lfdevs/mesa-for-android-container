@@ -1,21 +1,27 @@
 AUTOMAKE_OPTIONS = subdir-objects
 
+include $(top_srcdir)/src/gallium/Automake.inc
+
 lib_LTLIBRARIES = lib@OPENCL_LIBNAME@.la
 
 lib@OPENCL_LIBNAME@_la_LDFLAGS = \
 	$(LLVM_LDFLAGS) \
 	-no-undefined \
 	-version-number 1:0 \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/opencl/opencl.sym \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 
+if HAVE_LD_VERSION_SCRIPT
+lib@OPENCL_LIBNAME@_la_LDFLAGS += \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/opencl/opencl.sym
+endif
 
 lib@OPENCL_LIBNAME@_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
-	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/state_trackers/clover/libclover.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
 	$(GALLIUM_PIPE_LOADER_CLIENT_LIBS) \
 	-ldl \
 	-lclangCodeGen \
@@ -32,18 +38,6 @@ lib@OPENCL_LIBNAME@_la_LIBADD = \
 	-lclangLex \
 	-lclangBasic \
 	$(LLVM_LIBS)
-
-if HAVE_DRI
-lib@OPENCL_LIBNAME@_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
-endif
-
-if NEED_WINSYS_XLIB
-lib@OPENCL_LIBNAME@_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
-	-lX11 -lXext -lXfixes \
-	$(LIBDRM_LIBS)
-endif
 
 nodist_EXTRA_lib@OPENCL_LIBNAME@_la_SOURCES = dummy.cpp
 lib@OPENCL_LIBNAME@_la_SOURCES =

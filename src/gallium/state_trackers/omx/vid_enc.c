@@ -96,16 +96,6 @@ static void vid_enc_BufferEncoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE*
 
 static void enc_ReleaseTasks(struct list_head *head);
 
-static void vid_enc_name(char str[OMX_MAX_STRINGNAME_SIZE])
-{
-   snprintf(str, OMX_MAX_STRINGNAME_SIZE, OMX_VID_ENC_BASE_NAME, driver_descriptor.name);
-}
-
-static void vid_enc_name_avc(char str[OMX_MAX_STRINGNAME_SIZE])
-{
-   snprintf(str, OMX_MAX_STRINGNAME_SIZE, OMX_VID_ENC_AVC_NAME, driver_descriptor.name);
-}
-
 OMX_ERRORTYPE vid_enc_LoaderComponent(stLoaderComponentType *comp)
 {
    comp->componentVersion.s.nVersionMajor = 0;
@@ -119,8 +109,6 @@ OMX_ERRORTYPE vid_enc_LoaderComponent(stLoaderComponentType *comp)
    if (!comp->name)
       return OMX_ErrorInsufficientResources;
 
-   vid_enc_name(comp->name);
-
    comp->name_specific = CALLOC(1, sizeof(char *));
    if (!comp->name_specific)
       goto error_arrays;
@@ -130,26 +118,27 @@ OMX_ERRORTYPE vid_enc_LoaderComponent(stLoaderComponentType *comp)
       goto error_arrays;
 
    comp->name_specific[0] = CALLOC(1, OMX_MAX_STRINGNAME_SIZE);
-   if (!comp->name_specific[0])
+   if (comp->name_specific[0] == NULL)
       goto error_specific;
-
-   vid_enc_name_avc(comp->name_specific[0]);
 
    comp->role_specific[0] = CALLOC(1, OMX_MAX_STRINGNAME_SIZE);
-   if (!comp->role_specific[0])
+   if (comp->role_specific[0] == NULL)
       goto error_specific;
 
+   strcpy(comp->name, OMX_VID_ENC_BASE_NAME);
+   strcpy(comp->name_specific[0], OMX_VID_ENC_AVC_NAME);
    strcpy(comp->role_specific[0], OMX_VID_ENC_AVC_ROLE);
 
    return OMX_ErrorNone;
 
 error_specific:
-   FREE(comp->name_specific[0]);
    FREE(comp->role_specific[0]);
+   FREE(comp->name_specific[0]);
 
 error_arrays:
    FREE(comp->role_specific);
    FREE(comp->name_specific);
+
    FREE(comp->name);
 
    return OMX_ErrorInsufficientResources;
@@ -256,9 +245,13 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
    priv->quant.nQpP = OMX_VID_ENC_QUANT_P_FRAMES_DEFAULT;
    priv->quant.nQpB = OMX_VID_ENC_QUANT_B_FRAMES_DEFAULT;
 
+   priv->profile_level.eProfile = OMX_VIDEO_AVCProfileBaseline;
+   priv->profile_level.eLevel = OMX_VIDEO_AVCLevel42;
+
    priv->force_pic_type.IntraRefreshVOP = OMX_FALSE; 
    priv->frame_num = 0;
    priv->pic_order_cnt = 0;
+   priv->restricted_b_frames = debug_get_bool_option("OMX_USE_RESTRICTED_B_FRAMES", FALSE);
 
    priv->scale.xWidth = OMX_VID_ENC_SCALING_WIDTH_DEFAULT;
    priv->scale.xHeight = OMX_VID_ENC_SCALING_WIDTH_DEFAULT;
@@ -423,6 +416,17 @@ static OMX_ERRORTYPE vid_enc_SetParameter(OMX_HANDLETYPE handle, OMX_INDEXTYPE i
 
       break;
    }
+   case OMX_IndexParamVideoProfileLevelCurrent: {
+      OMX_VIDEO_PARAM_PROFILELEVELTYPE *profile_level = param;
+
+      r = checkHeader(param, sizeof(OMX_VIDEO_PARAM_PROFILELEVELTYPE));
+      if (r)
+         return r;
+
+      priv->profile_level = *profile_level;
+
+      break;
+   }
    default:
       return omx_base_component_SetParameter(handle, idx, param);
    }
@@ -497,10 +501,20 @@ static OMX_ERRORTYPE vid_enc_GetParameter(OMX_HANDLETYPE handle, OMX_INDEXTYPE i
 
       break;
    }
+   case OMX_IndexParamVideoProfileLevelCurrent: {
+      OMX_VIDEO_PARAM_PROFILELEVELTYPE *profile_level = param;
 
+      r = checkHeader(param, sizeof(OMX_VIDEO_PARAM_PROFILELEVELTYPE));
+      if (r)
+         return r;
+
+      profile_level->eProfile = priv->profile_level.eProfile;
+      profile_level->eLevel = priv->profile_level.eLevel;
+
+      break;
+   }
    default:
       return omx_base_component_GetParameter(handle, idx, param);
-
    }
    return OMX_ErrorNone;
 }
@@ -598,6 +612,66 @@ static OMX_ERRORTYPE vid_enc_GetConfig(OMX_HANDLETYPE handle, OMX_INDEXTYPE idx,
    return OMX_ErrorNone;
 }
 
+static enum pipe_video_profile enc_TranslateOMXProfileToPipe(unsigned omx_profile)
+{
+   switch (omx_profile) {
+   case OMX_VIDEO_AVCProfileBaseline:
+      return PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE;
+   case OMX_VIDEO_AVCProfileMain:
+      return PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN;
+   case OMX_VIDEO_AVCProfileExtended:
+      return PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED;
+   case OMX_VIDEO_AVCProfileHigh:
+      return PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH;
+   case OMX_VIDEO_AVCProfileHigh10:
+      return PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10;
+   case OMX_VIDEO_AVCProfileHigh422:
+      return PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422;
+   case OMX_VIDEO_AVCProfileHigh444:
+      return PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444;
+   default:
+      return PIPE_VIDEO_PROFILE_UNKNOWN;
+   }
+}
+
+static unsigned enc_TranslateOMXLevelToPipe(unsigned omx_level)
+{
+   switch (omx_level) {
+   case OMX_VIDEO_AVCLevel1:
+   case OMX_VIDEO_AVCLevel1b:
+      return 10;
+   case OMX_VIDEO_AVCLevel11:
+      return 11;
+   case OMX_VIDEO_AVCLevel12:
+      return 12;
+   case OMX_VIDEO_AVCLevel13:
+      return 13;
+   case OMX_VIDEO_AVCLevel2:
+      return 20;
+   case OMX_VIDEO_AVCLevel21:
+      return 21;
+   case OMX_VIDEO_AVCLevel22:
+      return 22;
+   case OMX_VIDEO_AVCLevel3:
+      return 30;
+   case OMX_VIDEO_AVCLevel31:
+      return 31;
+   case OMX_VIDEO_AVCLevel32:
+      return 32;
+   case OMX_VIDEO_AVCLevel4:
+      return 40;
+   case OMX_VIDEO_AVCLevel41:
+      return 41;
+   default:
+   case OMX_VIDEO_AVCLevel42:
+      return 42;
+   case OMX_VIDEO_AVCLevel5:
+      return 50;
+   case OMX_VIDEO_AVCLevel51:
+      return 51;
+   }
+}
+
 static OMX_ERRORTYPE vid_enc_MessageHandler(OMX_COMPONENTTYPE* comp, internalRequestMessageType *msg)
 {
    vid_enc_PrivateType* priv = comp->pComponentPrivate;
@@ -610,14 +684,16 @@ static OMX_ERRORTYPE vid_enc_MessageHandler(OMX_COMPONENTTYPE* comp, internalReq
 
          port = (omx_base_video_PortType *)priv->ports[OMX_BASE_FILTER_INPUTPORT_INDEX];
 
-         templat.profile = PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE;
+         templat.profile = enc_TranslateOMXProfileToPipe(priv->profile_level.eProfile);
+         templat.level = enc_TranslateOMXLevelToPipe(priv->profile_level.eLevel);
          templat.entrypoint = PIPE_VIDEO_ENTRYPOINT_ENCODE;
          templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
          templat.width = priv->scale_buffer[priv->current_scale_buffer] ?
                             priv->scale.xWidth : port->sPortParam.format.video.nFrameWidth;
          templat.height = priv->scale_buffer[priv->current_scale_buffer] ?
                             priv->scale.xHeight : port->sPortParam.format.video.nFrameHeight;
-         templat.max_references = OMX_VID_ENC_P_PERIOD_DEFAULT;
+         templat.max_references = (templat.profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE) ?
+                            1 : OMX_VID_ENC_P_PERIOD_DEFAULT;
 
          priv->codec = priv->s_pipe->create_video_codec(priv->s_pipe, &templat);
 
@@ -994,6 +1070,8 @@ static void enc_HandleTask(omx_base_PortType *port, struct encode_task *task,
 
    picture.picture_type = picture_type;
    picture.pic_order_cnt = task->pic_order_cnt;
+   if (priv->restricted_b_frames && picture_type == PIPE_H264_ENC_PICTURE_TYPE_B)
+      picture.not_referenced = true;
    enc_ControlPicture(port, &picture);
 
    /* -------------- encode frame --------- */
@@ -1023,7 +1101,9 @@ static void enc_ClearBframes(omx_base_PortType *port, struct input_buf_private *
    /* handle B frames */
    LIST_FOR_EACH_ENTRY(task, &priv->b_frames, list) {
       enc_HandleTask(port, task, PIPE_H264_ENC_PICTURE_TYPE_B);
-      priv->ref_idx_l0 = priv->frame_num++;
+      if (!priv->restricted_b_frames)
+         priv->ref_idx_l0 = priv->frame_num;
+      priv->frame_num++;
    }
 
    enc_MoveTasks(&priv->b_frames, &inp->tasks);
@@ -1069,7 +1149,8 @@ static OMX_ERRORTYPE vid_enc_EncodeFrame(omx_base_PortType *port, OMX_BUFFERHEAD
       picture_type = PIPE_H264_ENC_PICTURE_TYPE_IDR;
       priv->force_pic_type.IntraRefreshVOP = OMX_FALSE; 
       priv->frame_num = 0;
-   } else if (!(priv->pic_order_cnt % OMX_VID_ENC_P_PERIOD_DEFAULT) ||
+   } else if (priv->codec->profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE ||
+              !(priv->pic_order_cnt % OMX_VID_ENC_P_PERIOD_DEFAULT) ||
               (buf->nFlags & OMX_BUFFERFLAG_EOS)) {
       picture_type = PIPE_H264_ENC_PICTURE_TYPE_P;
    } else {
@@ -1091,7 +1172,9 @@ static OMX_ERRORTYPE vid_enc_EncodeFrame(omx_base_PortType *port, OMX_BUFFERHEAD
       /* handle B frames */
       LIST_FOR_EACH_ENTRY(task, &priv->b_frames, list) {
          enc_HandleTask(port, task, PIPE_H264_ENC_PICTURE_TYPE_B);
-         priv->ref_idx_l0 = priv->frame_num++;
+         if (!priv->restricted_b_frames)
+            priv->ref_idx_l0 = priv->frame_num;
+         priv->frame_num++;
       }
 
       enc_MoveTasks(&priv->b_frames, &inp->tasks);

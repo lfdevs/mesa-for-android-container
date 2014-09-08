@@ -126,6 +126,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -479,9 +480,12 @@ API_XML = \
 	ARB_base_instance.xml \
 	ARB_blend_func_extended.xml \
 	ARB_clear_buffer_object.xml \
+	ARB_clear_texture.xml \
 	ARB_color_buffer_float.xml \
+	ARB_compressed_texture_pixel_storage.xml \
 	ARB_compute_shader.xml \
 	ARB_copy_buffer.xml \
+	ARB_copy_image.xml \
 	ARB_debug_output.xml \
 	ARB_depth_buffer_float.xml \
 	ARB_depth_clamp.xml \
@@ -509,6 +513,7 @@ API_XML = \
 	ARB_shader_atomic_counters.xml \
 	ARB_shader_image_load_store.xml \
 	ARB_sync.xml \
+	ARB_texture_barrier.xml \
 	ARB_texture_buffer_object.xml \
 	ARB_texture_buffer_range.xml \
 	ARB_texture_compression_rgtc.xml \

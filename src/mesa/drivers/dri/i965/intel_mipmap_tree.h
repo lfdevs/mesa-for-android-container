@@ -115,6 +115,15 @@ struct intel_mipmap_level
    GLuint depth;
 
    /**
+    * \brief Is HiZ enabled for this level?
+    *
+    * If \c mt->level[l].has_hiz is set, then (1) \c mt->hiz_mt has been
+    * allocated and (2) the HiZ memory for the slices in this level reside at
+    * \c mt->hiz_mt->level[l].
+    */
+   bool has_hiz;
+
+   /**
     * \brief List of 2D images in this mipmap level.
     *
     * This may be a list of cube faces, array slices in 2D array texture, or
@@ -143,15 +152,6 @@ struct intel_mipmap_level
        * intel_miptree_map/unmap on this slice.
        */
       struct intel_miptree_map *map;
-
-      /**
-       * \brief Is HiZ enabled for this slice?
-       *
-       * If \c mt->level[l].slice[s].has_hiz is set, then (1) \c mt->hiz_mt
-       * has been allocated and (2) the HiZ memory corresponding to this slice
-       * resides at \c mt->hiz_mt->level[l].slice[s].
-       */
-      bool has_hiz;
    } *slice;
 };
 
@@ -255,6 +255,58 @@ enum intel_fast_clear_state
    INTEL_FAST_CLEAR_STATE_CLEAR,
 };
 
+enum miptree_array_layout {
+   /* Each array slice contains all miplevels packed together.
+    *
+    * Gen hardware usually wants multilevel miptrees configured this way.
+    *
+    * A 2D Array texture with 2 slices and multiple LODs using
+    * ALL_LOD_IN_EACH_SLICE would look somewhat like this:
+    *
+    *   +----------+
+    *   |          |
+    *   |          |
+    *   +----------+
+    *   +---+ +-+
+    *   |   | +-+
+    *   +---+ *
+    *   +----------+
+    *   |          |
+    *   |          |
+    *   +----------+
+    *   +---+ +-+
+    *   |   | +-+
+    *   +---+ *
+    */
+   ALL_LOD_IN_EACH_SLICE,
+
+   /* Each LOD contains all slices of that LOD packed together.
+    *
+    * In some situations, Gen7+ hardware can use the array_spacing_lod0
+    * feature to save space when the surface only contains LOD 0.
+    *
+    * Gen6 uses this for separate stencil and hiz since gen6 does not support
+    * multiple LODs for separate stencil and hiz.
+    *
+    * A 2D Array texture with 2 slices and multiple LODs using
+    * ALL_SLICES_AT_EACH_LOD would look somewhat like this:
+    *
+    *   +----------+
+    *   |          |
+    *   |          |
+    *   +----------+
+    *   |          |
+    *   |          |
+    *   +----------+
+    *   +---+ +-+
+    *   |   | +-+
+    *   +---+ +-+
+    *   |   | :
+    *   +---+
+    */
+   ALL_SLICES_AT_EACH_LOD,
+};
+
 struct intel_mipmap_tree
 {
    /** Buffer object containing the pixel data. */
@@ -322,13 +374,10 @@ struct intel_mipmap_tree
    uint32_t logical_width0, logical_height0, logical_depth0;
 
    /**
-    * For 1D array, 2D array, cube, and 2D multisampled surfaces on Gen7: true
-    * if the surface only contains LOD 0, and hence no space is for LOD's
-    * other than 0 in between array slices.
-    *
-    * Corresponds to the surface_array_spacing bit in gen7_surface_state.
+    * Indicates if we use the standard miptree layout (ALL_LOD_IN_EACH_SLICE),
+    * or if we tightly pack array slices at each LOD (ALL_SLICES_AT_EACH_LOD).
     */
-   bool array_spacing_lod0;
+   enum miptree_array_layout array_layout;
 
    /**
     * The distance in rows between array slices in an uncompressed surface.
@@ -381,7 +430,7 @@ struct intel_mipmap_tree
     * \c mt->hiz_map. The resolve map of the child HiZ miptree, \c
     * mt->hiz_mt->hiz_map, is unused.
     */
-   struct intel_resolve_map hiz_map;
+   struct exec_list hiz_map; /* List of intel_resolve_map. */
 
    /**
     * \brief Stencil miptree for depthstencil textures.
@@ -454,7 +503,8 @@ struct intel_mipmap_tree *intel_miptree_create(struct brw_context *brw,
                                                GLuint depth0,
 					       bool expect_accelerated_upload,
                                                GLuint num_samples,
-                                               enum intel_miptree_tiling_mode);
+                                               enum intel_miptree_tiling_mode,
+                                               bool force_all_slices_at_each_lod);
 
 struct intel_mipmap_tree *
 intel_miptree_create_layout(struct brw_context *brw,
@@ -466,7 +516,8 @@ intel_miptree_create_layout(struct brw_context *brw,
                             GLuint height0,
                             GLuint depth0,
                             bool for_bo,
-                            GLuint num_samples);
+                            GLuint num_samples,
+                            bool force_all_slices_at_each_lod);
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_bo(struct brw_context *brw,
@@ -586,9 +637,7 @@ intel_miptree_alloc_hiz(struct brw_context *brw,
 			struct intel_mipmap_tree *mt);
 
 bool
-intel_miptree_slice_has_hiz(struct intel_mipmap_tree *mt,
-                            uint32_t level,
-                            uint32_t layer);
+intel_miptree_level_has_hiz(struct intel_mipmap_tree *mt, uint32_t level);
 
 void
 intel_miptree_slice_set_needs_hiz_resolve(struct intel_mipmap_tree *mt,

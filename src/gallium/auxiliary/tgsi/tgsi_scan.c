@@ -187,15 +187,15 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   info->input_semantic_name[reg] = (ubyte) semName;
                   info->input_semantic_index[reg] = (ubyte) semIndex;
                   info->input_interpolate[reg] = (ubyte)fulldecl->Interp.Interpolate;
-                  info->input_centroid[reg] = (ubyte)fulldecl->Interp.Centroid;
+                  info->input_interpolate_loc[reg] = (ubyte)fulldecl->Interp.Location;
                   info->input_cylindrical_wrap[reg] = (ubyte)fulldecl->Interp.CylindricalWrap;
                   info->num_inputs++;
 
-                  if (procType == TGSI_PROCESSOR_FRAGMENT) {
+                  if (semName == TGSI_SEMANTIC_PRIMID)
+                     info->uses_primid = TRUE;
+                  else if (procType == TGSI_PROCESSOR_FRAGMENT) {
                      if (semName == TGSI_SEMANTIC_POSITION)
                         info->reads_position = TRUE;
-                     else if (semName == TGSI_SEMANTIC_PRIMID)
-                        info->uses_primid = TRUE;
                      else if (semName == TGSI_SEMANTIC_FACE)
                         info->uses_frontface = TRUE;
                   }

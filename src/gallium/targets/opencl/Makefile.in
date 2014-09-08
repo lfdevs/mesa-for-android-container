@@ -83,17 +83,20 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_DRI_TRUE@am__append_1 = \
-@HAVE_DRI_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+DIST_COMMON = $(top_srcdir)/src/gallium/Automake.inc \
+	$(top_srcdir)/install-gallium-links.mk $(srcdir)/Makefile.in \
+	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
 @NEED_WINSYS_XLIB_TRUE@am__append_2 = \
 @NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 @NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
 @NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
 
-DIST_COMMON = $(top_srcdir)/install-gallium-links.mk \
-	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
-	$(top_srcdir)/bin/depcomp
+@HAVE_LD_VERSION_SCRIPT_TRUE@am__append_3 = \
+@HAVE_LD_VERSION_SCRIPT_TRUE@	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/opencl/opencl.sym
+
 subdir = src/gallium/targets/opencl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -141,12 +144,14 @@ LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @NEED_WINSYS_XLIB_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 @NEED_WINSYS_XLIB_TRUE@	$(am__DEPENDENCIES_1)
-lib@OPENCL_LIBNAME@_la_DEPENDENCIES = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
+am__DEPENDENCIES_3 =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__DEPENDENCIES_2)
+lib@OPENCL_LIBNAME@_la_DEPENDENCIES = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
 	$(top_builddir)/src/gallium/state_trackers/clover/libclover.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) $(am__append_1) \
-	$(am__DEPENDENCIES_2)
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_3) \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am_lib@OPENCL_LIBNAME@_la_OBJECTS =
 lib@OPENCL_LIBNAME@_la_OBJECTS = $(am_lib@OPENCL_LIBNAME@_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -210,6 +215,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -462,24 +468,93 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
-lib_LTLIBRARIES = lib@OPENCL_LIBNAME@.la
-lib@OPENCL_LIBNAME@_la_LDFLAGS = \
-	$(LLVM_LDFLAGS) \
-	-no-undefined \
-	-version-number 1:0 \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/opencl/opencl.sym \
-	$(GC_SECTIONS) \
-	$(LD_NO_UNDEFINED)
+GALLIUM_CFLAGS = \
+	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	$(DEFINES)
 
-lib@OPENCL_LIBNAME@_la_LIBADD = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
+
+# src/gallium/auxiliary must appear before src/gallium/drivers
+# because there are stupidly two rbug_context.h files in
+# different directories, and which one is included by the
+# preprocessor is determined by the ordering of the -I flags.
+GALLIUM_DRIVER_CFLAGS = \
+	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
+	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	-I$(top_srcdir)/src/gallium/drivers \
+	$(DEFINES) \
+	$(VISIBILITY_CFLAGS)
+
+GALLIUM_DRIVER_CXXFLAGS = \
+	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
+	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	-I$(top_srcdir)/src/gallium/drivers \
+	$(DEFINES) \
+	$(VISIBILITY_CXXFLAGS)
+
+GALLIUM_TARGET_CFLAGS = \
+	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
+	$(DEFINES) \
+	$(PTHREAD_CFLAGS) \
+	$(LIBDRM_CFLAGS) \
+	$(VISIBILITY_CFLAGS)
+
+GALLIUM_COMMON_LIB_DEPS = \
+	-lm \
+	$(CLOCK_LIB) \
+	$(PTHREAD_LIBS) \
+	$(DLOPEN_LIBS)
+
+GALLIUM_WINSYS_CFLAGS = \
+	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	$(DEFINES) \
+	$(VISIBILITY_CFLAGS)
+
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
+lib_LTLIBRARIES = lib@OPENCL_LIBNAME@.la
+lib@OPENCL_LIBNAME@_la_LDFLAGS = $(LLVM_LDFLAGS) -no-undefined \
+	-version-number 1:0 $(GC_SECTIONS) $(LD_NO_UNDEFINED) \
+	$(am__append_3)
+lib@OPENCL_LIBNAME@_la_LIBADD = \
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
 	$(top_builddir)/src/gallium/state_trackers/clover/libclover.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(GALLIUM_PIPE_LOADER_CLIENT_LIBS) -ldl -lclangCodeGen \
-	-lclangFrontendTool -lclangFrontend -lclangDriver \
-	-lclangSerialization -lclangCodeGen -lclangParse -lclangSema \
-	-lclangAnalysis -lclangAST -lclangEdit -lclangLex -lclangBasic \
-	$(LLVM_LIBS) $(am__append_1) $(am__append_2)
+	$(top_builddir)/src/util/libmesautil.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(GALLIUM_PIPE_LOADER_CLIENT_LIBS) \
+	-ldl \
+	-lclangCodeGen \
+	-lclangFrontendTool \
+	-lclangFrontend \
+	-lclangDriver \
+	-lclangSerialization \
+	-lclangCodeGen \
+	-lclangParse \
+	-lclangSema \
+	-lclangAnalysis \
+	-lclangAST \
+	-lclangEdit \
+	-lclangLex \
+	-lclangBasic \
+	$(LLVM_LIBS)
+
 nodist_EXTRA_lib@OPENCL_LIBNAME@_la_SOURCES = dummy.cpp
 lib@OPENCL_LIBNAME@_la_SOURCES = 
 @HAVE_CLOVER_ICD_TRUE@icddir = /etc/OpenCL/vendors/
@@ -488,7 +563,7 @@ all: all-am
 
 .SUFFIXES:
 .SUFFIXES: .cpp .lo .o .obj
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(top_srcdir)/install-gallium-links.mk $(am__configure_deps)
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/install-gallium-links.mk $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -509,7 +584,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
 	esac;
-$(top_srcdir)/install-gallium-links.mk:
+$(top_srcdir)/src/gallium/Automake.inc $(top_srcdir)/install-gallium-links.mk:
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
@@ -782,7 +857,7 @@ uninstall-am: uninstall-icdDATA uninstall-libLTLIBRARIES
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .libs/install-gallium-links
 
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-gallium-links : $(dri_LTLIBRARIES) $(vdpau_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-gallium-links : $(dri_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	link_dir=$(top_builddir)/$(LIB_DIR)/gallium;		\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	if test x$(egl_LTLIBRARIES) != x; then			\
@@ -790,7 +865,6 @@ uninstall-am: uninstall-icdDATA uninstall-libLTLIBRARIES
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	fi;							\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(MKDIR_P) $$link_dir;					\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list=$(dri_LTLIBRARIES:%.la=.libs/%.so);		\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(vdpau_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*); \
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $$file_list; do 				\

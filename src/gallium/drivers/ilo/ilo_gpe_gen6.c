@@ -271,7 +271,7 @@ ve_init_cso(const struct ilo_dev_info *dev,
                      GEN6_VFCOMP_STORE_1_FP;
    }
 
-   format = ilo_translate_vertex_format(state->src_format);
+   format = ilo_translate_vertex_format(dev, state->src_format);
 
    STATIC_ASSERT(Elements(cso->payload) >= 2);
    cso->payload[0] =
@@ -957,7 +957,6 @@ struct ilo_zs_surface_info {
 
    unsigned width, height, depth;
    unsigned lod, first_layer, num_layers;
-   uint32_t x_offset, y_offset;
 };
 
 static void
@@ -981,9 +980,8 @@ zs_init_info(const struct ilo_dev_info *dev,
              const struct ilo_texture *tex,
              enum pipe_format format, unsigned level,
              unsigned first_layer, unsigned num_layers,
-             bool offset_to_layer, struct ilo_zs_surface_info *info)
+             struct ilo_zs_surface_info *info)
 {
-   uint32_t x_offset[3], y_offset[3];
    bool separate_stencil;
 
    ILO_GPE_VALID_GEN(dev, 6, 7.5);
@@ -1075,13 +1073,9 @@ zs_init_info(const struct ilo_dev_info *dev,
 
    if (format != PIPE_FORMAT_S8_UINT) {
       info->zs.bo = tex->bo;
-      info->zs.stride = tex->bo_stride;
-      info->zs.tiling = tex->tiling;
-
-      if (offset_to_layer) {
-         info->zs.offset = ilo_texture_get_slice_offset(tex,
-               level, first_layer, &x_offset[0], &y_offset[0]);
-      }
+      info->zs.stride = tex->layout.bo_stride;
+      info->zs.tiling = tex->layout.tiling;
+      info->zs.offset = 0;
    }
 
    if (tex->separate_s8 || format == PIPE_FORMAT_S8_UINT) {
@@ -1096,114 +1090,43 @@ zs_init_info(const struct ilo_dev_info *dev,
        *     "The pitch must be set to 2x the value computed based on width,
        *       as the stencil buffer is stored with two rows interleaved."
        *
-       * According to the classic driver, we need to do the same for GEN7+
-       * even though the Ivy Bridge PRM does not say anything about it.
+       * For GEN7, we still dobule the stride because we did not double the
+       * slice widths when initializing the layout.
        */
-      info->stencil.stride = s8_tex->bo_stride * 2;
+      info->stencil.stride = s8_tex->layout.bo_stride * 2;
 
-      info->stencil.tiling = s8_tex->tiling;
+      info->stencil.tiling = s8_tex->layout.tiling;
 
-      if (offset_to_layer) {
-         info->stencil.offset = ilo_texture_get_slice_offset(s8_tex,
-               level, first_layer, &x_offset[1], &y_offset[1]);
+      if (dev->gen == ILO_GEN(6)) {
+         unsigned x, y;
+
+         assert(s8_tex->layout.walk == ILO_LAYOUT_WALK_LOD);
+
+         /* offset to the level */
+         ilo_layout_get_slice_pos(&s8_tex->layout, level, 0, &x, &y);
+         ilo_layout_pos_to_mem(&s8_tex->layout, x, y, &x, &y);
+         info->stencil.offset = ilo_layout_mem_to_raw(&s8_tex->layout, x, y);
       }
    }
 
    if (ilo_texture_can_enable_hiz(tex, level, first_layer, num_layers)) {
-      info->hiz.bo = tex->hiz.bo;
-      info->hiz.stride = tex->hiz.bo_stride;
+      info->hiz.bo = tex->aux_bo;
+      info->hiz.stride = tex->layout.aux_stride;
       info->hiz.tiling = INTEL_TILING_Y;
 
-      /*
-       * Layer offsetting is used on GEN6 only.  And on GEN6, HiZ is enabled
-       * only when the depth buffer is non-mipmapped and non-array, making
-       * layer offsetting no-op.
-       */
-      if (offset_to_layer) {
-         assert(level == 0 && first_layer == 0 && num_layers == 1);
-
-         info->hiz.offset = 0;
-         x_offset[2] = 0;
-         y_offset[2] = 0;
-      }
+      /* offset to the level */
+      if (dev->gen == ILO_GEN(6))
+         info->hiz.offset = tex->layout.aux_offsets[level];
    }
 
-   info->width = tex->base.width0;
-   info->height = tex->base.height0;
+   info->width = tex->layout.width0;
+   info->height = tex->layout.height0;
    info->depth = (tex->base.target == PIPE_TEXTURE_3D) ?
       tex->base.depth0 : num_layers;
 
    info->lod = level;
    info->first_layer = first_layer;
    info->num_layers = num_layers;
-
-   if (offset_to_layer) {
-      /* the size of the layer */
-      info->width = u_minify(info->width, level);
-      info->height = u_minify(info->height, level);
-      if (info->surface_type == GEN6_SURFTYPE_3D)
-         info->depth = u_minify(info->depth, level);
-      else
-         info->depth = 1;
-
-      /* no layered rendering */
-      assert(num_layers == 1);
-
-      info->lod = 0;
-      info->first_layer = 0;
-      info->num_layers = 1;
-
-      /* all three share the same X/Y offsets */
-      if (info->zs.bo) {
-         if (info->stencil.bo) {
-            assert(x_offset[0] == x_offset[1]);
-            assert(y_offset[0] == y_offset[1]);
-         }
-
-         info->x_offset = x_offset[0];
-         info->y_offset = y_offset[0];
-      }
-      else {
-         assert(info->stencil.bo);
-
-         info->x_offset = x_offset[1];
-         info->y_offset = y_offset[1];
-      }
-
-      if (info->hiz.bo) {
-         assert(info->x_offset == x_offset[2]);
-         assert(info->y_offset == y_offset[2]);
-      }
-
-      /*
-       * From the Sandy Bridge PRM, volume 2 part 1, page 326:
-       *
-       *     "The 3 LSBs of both offsets (Depth Coordinate Offset Y and Depth
-       *      Coordinate Offset X) must be zero to ensure correct alignment"
-       *
-       * XXX Skip the check for gen6, which seems to be fine.  We need to make
-       * sure that does not happen eventually.
-       */
-      if (dev->gen >= ILO_GEN(7)) {
-         assert((info->x_offset & 7) == 0 && (info->y_offset & 7) == 0);
-         info->x_offset &= ~7;
-         info->y_offset &= ~7;
-      }
-
-      info->width += info->x_offset;
-      info->height += info->y_offset;
-
-      /* we have to treat them as 2D surfaces */
-      if (info->surface_type == GEN6_SURFTYPE_CUBE) {
-         assert(tex->base.width0 == tex->base.height0);
-         /* we will set slice_offset to point to the single face */
-         info->surface_type = GEN6_SURFTYPE_2D;
-      }
-      else if (info->surface_type == GEN6_SURFTYPE_1D && info->height > 1) {
-         assert(tex->base.height0 == 1);
-         info->surface_type = GEN6_SURFTYPE_2D;
-      }
-   }
 }
 
 void
@@ -1211,7 +1134,7 @@ ilo_gpe_init_zs_surface(const struct ilo_dev_info *dev,
                         const struct ilo_texture *tex,
                         enum pipe_format format, unsigned level,
                         unsigned first_layer, unsigned num_layers,
-                        bool offset_to_layer, struct ilo_zs_surface *zs)
+                        struct ilo_zs_surface *zs)
 {
    const int max_2d_size = (dev->gen >= ILO_GEN(7)) ? 16384 : 8192;
    const int max_array_size = (dev->gen >= ILO_GEN(7)) ? 2048 : 512;
@@ -1220,13 +1143,10 @@ ilo_gpe_init_zs_surface(const struct ilo_dev_info *dev,
 
    ILO_GPE_VALID_GEN(dev, 6, 7.5);
 
-   if (tex) {
-      zs_init_info(dev, tex, format, level, first_layer, num_layers,
-            offset_to_layer, &info);
-   }
-   else {
+   if (tex)
+      zs_init_info(dev, tex, format, level, first_layer, num_layers, &info);
+   else
       zs_init_info_null(dev, &info);
-   }
 
    switch (info.surface_type) {
    case GEN6_SURFTYPE_NULL:
@@ -1246,14 +1166,12 @@ ilo_gpe_init_zs_surface(const struct ilo_dev_info *dev,
    case GEN6_SURFTYPE_3D:
       assert(info.width <= 2048 && info.height <= 2048 && info.depth <= 2048);
       assert(info.first_layer < 2048 && info.num_layers <= max_array_size);
-      assert(info.x_offset == 0 && info.y_offset == 0);
       break;
    case GEN6_SURFTYPE_CUBE:
       assert(info.width <= max_2d_size && info.height <= max_2d_size &&
              info.depth == 1);
       assert(info.first_layer == 0 && info.num_layers == 1);
       assert(info.width == info.height);
-      assert(info.x_offset == 0 && info.y_offset == 0);
       break;
    default:
       assert(!"unexpected depth surface type");
@@ -1294,7 +1212,7 @@ ilo_gpe_init_zs_surface(const struct ilo_dev_info *dev,
       dw4 = (info.depth - 1) << 21 |
             info.first_layer << 10;
 
-      dw5 = info.y_offset << 16 | info.x_offset;
+      dw5 = 0;
 
       dw6 = (info.num_layers - 1) << 21;
    }
@@ -1317,7 +1235,7 @@ ilo_gpe_init_zs_surface(const struct ilo_dev_info *dev,
             info.first_layer << 10 |
             (info.num_layers - 1) << 1;
 
-      dw5 = info.y_offset << 16 | info.x_offset;
+      dw5 = 0;
 
       dw6 = 0;
    }
@@ -1831,7 +1749,7 @@ ilo_gpe_init_view_surface_for_buffer_gen6(const struct ilo_dev_info *dev,
     * structure in a buffer.
     */
 
-   surface_format = ilo_translate_color_format(elem_format);
+   surface_format = ilo_translate_color_format(dev, elem_format);
 
    num_entries = size / struct_size;
    /* see if there is enough space to fit another element */
@@ -1912,12 +1830,11 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
                                            unsigned num_levels,
                                            unsigned first_layer,
                                            unsigned num_layers,
-                                           bool is_rt, bool offset_to_layer,
+                                           bool is_rt,
                                            struct ilo_view_surface *surf)
 {
    int surface_type, surface_format;
    int width, height, depth, pitch, lod;
-   unsigned layer_offset, x_offset, y_offset;
    uint32_t *dw;
 
    ILO_GPE_VALID_GEN(dev, 6, 6);
@@ -1929,16 +1846,16 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
       format = PIPE_FORMAT_Z32_FLOAT;
 
    if (is_rt)
-      surface_format = ilo_translate_render_format(format);
+      surface_format = ilo_translate_render_format(dev, format);
    else
-      surface_format = ilo_translate_texture_format(format);
+      surface_format = ilo_translate_texture_format(dev, format);
    assert(surface_format >= 0);
 
-   width = tex->base.width0;
-   height = tex->base.height0;
+   width = tex->layout.width0;
+   height = tex->layout.height0;
    depth = (tex->base.target == PIPE_TEXTURE_3D) ?
       tex->base.depth0 : num_layers;
-   pitch = tex->bo_stride;
+   pitch = tex->layout.bo_stride;
 
    if (surface_type == GEN6_SURFTYPE_CUBE) {
       /*
@@ -1992,10 +1909,10 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
    }
 
    /* non-full array spacing is supported only on GEN7+ */
-   assert(tex->array_spacing_full);
+   assert(tex->layout.walk != ILO_LAYOUT_WALK_LOD);
    /* non-interleaved samples are supported only on GEN7+ */
    if (tex->base.nr_samples > 1)
-      assert(tex->interleaved);
+      assert(tex->layout.interleaved_samples);
 
    if (is_rt) {
       assert(num_levels == 1);
@@ -2003,39 +1920,6 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
    }
    else {
       lod = num_levels - 1;
-   }
-
-   /*
-    * Offset to the layer.  When rendering, the hardware requires LOD and
-    * Depth to be the same for all render targets and the depth buffer.  We
-    * need to offset to the layer manually and always set LOD and Depth to 0.
-    */
-   if (offset_to_layer) {
-      /* we lose the capability for layered rendering */
-      assert(is_rt && num_layers == 1);
-
-      layer_offset = ilo_texture_get_slice_offset(tex,
-            first_level, first_layer, &x_offset, &y_offset);
-
-      assert(x_offset % 4 == 0);
-      assert(y_offset % 2 == 0);
-      x_offset /= 4;
-      y_offset /= 2;
-
-      /* derive the size for the LOD */
-      width = u_minify(width, first_level);
-      height = u_minify(height, first_level);
-
-      first_level = 0;
-      first_layer = 0;
-
-      lod = 0;
-      depth = 1;
-   }
-   else {
-      layer_offset = 0;
-      x_offset = 0;
-      y_offset = 0;
    }
 
    /*
@@ -2056,14 +1940,11 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
     *
     *     "For linear surfaces, this field (X Offset) must be zero"
     */
-   if (tex->tiling == INTEL_TILING_NONE) {
+   if (tex->layout.tiling == INTEL_TILING_NONE) {
       if (is_rt) {
          const int elem_size = util_format_get_blocksize(format);
-         assert(layer_offset % elem_size == 0);
          assert(pitch % elem_size == 0);
       }
-
-      assert(!x_offset);
    }
 
    STATIC_ASSERT(Elements(surf->payload) >= 6);
@@ -2081,7 +1962,7 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
    if (is_rt)
       dw[0] |= GEN6_SURFACE_DW0_RENDER_CACHE_RW;
 
-   dw[1] = layer_offset;
+   dw[1] = 0;
 
    dw[2] = (height - 1) << GEN6_SURFACE_DW2_HEIGHT__SHIFT |
            (width - 1) << GEN6_SURFACE_DW2_WIDTH__SHIFT |
@@ -2089,7 +1970,7 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
 
    dw[3] = (depth - 1) << GEN6_SURFACE_DW3_DEPTH__SHIFT |
            (pitch - 1) << GEN6_SURFACE_DW3_PITCH__SHIFT |
-           ilo_gpe_gen6_translate_winsys_tiling(tex->tiling);
+           ilo_gpe_gen6_translate_winsys_tiling(tex->layout.tiling);
 
    dw[4] = first_level << GEN6_SURFACE_DW4_MIN_LOD__SHIFT |
            first_layer << 17 |
@@ -2097,9 +1978,10 @@ ilo_gpe_init_view_surface_for_texture_gen6(const struct ilo_dev_info *dev,
            ((tex->base.nr_samples > 1) ? GEN6_SURFACE_DW4_MULTISAMPLECOUNT_4 :
                                          GEN6_SURFACE_DW4_MULTISAMPLECOUNT_1);
 
-   dw[5] = x_offset << GEN6_SURFACE_DW5_X_OFFSET__SHIFT |
-           y_offset << GEN6_SURFACE_DW5_Y_OFFSET__SHIFT;
-   if (tex->valign_4)
+   dw[5] = 0;
+
+   assert(tex->layout.align_j == 2 || tex->layout.align_j == 4);
+   if (tex->layout.align_j == 4)
       dw[5] |= GEN6_SURFACE_DW5_VALIGN_4;
 
    /* do not increment reference count */
@@ -2470,7 +2352,7 @@ ilo_gpe_set_fb(const struct ilo_dev_info *dev,
                struct ilo_fb_state *fb)
 {
    const struct pipe_surface *first;
-   unsigned num_surfaces, first_idx;
+   unsigned first_idx;
 
    ILO_GPE_VALID_GEN(dev, 6, 7.5);
 
@@ -2494,79 +2376,8 @@ ilo_gpe_set_fb(const struct ilo_dev_info *dev,
    if (!fb->num_samples)
       fb->num_samples = 1;
 
-   fb->offset_to_layers = false;
-
    /*
     * The PRMs list several restrictions when the framebuffer has more than
-    * one surface, but it seems they are lifted on GEN7+.
+    * one surface.  It seems they are actually lifted on GEN6+.
     */
-   num_surfaces = state->nr_cbufs + !!state->zsbuf;
-
-   if (dev->gen < ILO_GEN(7) && num_surfaces > 1) {
-      const unsigned first_depth =
-         (first->texture->target == PIPE_TEXTURE_3D) ?
-         first->texture->depth0 :
-         first->u.tex.last_layer - first->u.tex.first_layer + 1;
-      bool has_3d_target = (first->texture->target == PIPE_TEXTURE_3D);
-      unsigned i;
-
-      for (i = first_idx + 1; i < num_surfaces; i++) {
-         const struct pipe_surface *surf =
-            (i < state->nr_cbufs) ? state->cbufs[i] : state->zsbuf;
-         unsigned depth;
-
-         if (!surf)
-            continue;
-
-         depth = (surf->texture->target == PIPE_TEXTURE_3D) ?
-            surf->texture->depth0 :
-            surf->u.tex.last_layer - surf->u.tex.first_layer + 1;
-
-         has_3d_target |= (surf->texture->target == PIPE_TEXTURE_3D);
-
-         /*
-          * From the Sandy Bridge PRM, volume 4 part 1, page 79:
-          *
-          *     "The LOD of a render target must be the same as the LOD of the
-          *      other render target(s) and of the depth buffer (defined in
-          *      3DSTATE_DEPTH_BUFFER)."
-          *
-          * From the Sandy Bridge PRM, volume 4 part 1, page 81:
-          *
-          *     "The Depth of a render target must be the same as the Depth of
-          *      the other render target(s) and of the depth buffer (defined
-          *      in 3DSTATE_DEPTH_BUFFER)."
-          */
-         if (surf->u.tex.level != first->u.tex.level ||
-             depth != first_depth) {
-            fb->offset_to_layers = true;
-            break;
-         }
-
-         /*
-          * From the Sandy Bridge PRM, volume 4 part 1, page 77:
-          *
-          *     "The Height of a render target must be the same as the Height
-          *      of the other render targets and the depth buffer (defined in
-          *      3DSTATE_DEPTH_BUFFER), unless Surface Type is SURFTYPE_1D or
-          *      SURFTYPE_2D with Depth = 0 (non-array) and LOD = 0 (non-mip
-          *      mapped)."
-          *
-          * From the Sandy Bridge PRM, volume 4 part 1, page 78:
-          *
-          *     "The Width of a render target must be the same as the Width of
-          *      the other render target(s) and the depth buffer (defined in
-          *      3DSTATE_DEPTH_BUFFER), unless Surface Type is SURFTYPE_1D or
-          *      SURFTYPE_2D with Depth = 0 (non-array) and LOD = 0 (non-mip
-          *      mapped)."
-          */
-         if (surf->texture->width0 != first->texture->width0 ||
-             surf->texture->height0 != first->texture->height0) {
-            if (has_3d_target || first->u.tex.level || first_depth > 1) {
-               fb->offset_to_layers = true;
-               break;
-            }
-         }
-      }
-   }
 }

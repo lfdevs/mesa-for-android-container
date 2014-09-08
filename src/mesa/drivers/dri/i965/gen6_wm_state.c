@@ -38,49 +38,15 @@
 static void
 gen6_upload_wm_push_constants(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->ctx;
+   struct brw_stage_state *stage_state = &brw->wm.base;
    /* BRW_NEW_FRAGMENT_PROGRAM */
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
    /* CACHE_NEW_WM_PROG */
    const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
 
-   /* Updates the ParameterValues[i] pointers for all parameters of the
-    * basic type of PROGRAM_STATE_VAR.
-    */
-   /* XXX: Should this happen somewhere before to get our state flag set? */
-   _mesa_load_state_parameters(ctx, fp->program.Base.Parameters);
-
-   if (prog_data->base.nr_params == 0) {
-      brw->wm.base.push_const_size = 0;
-   } else {
-      float *constants;
-      unsigned int i;
-
-      constants = brw_state_batch(brw, AUB_TRACE_WM_CONSTANTS,
-				  prog_data->base.nr_params * sizeof(float),
-				  32, &brw->wm.base.push_const_offset);
-
-      for (i = 0; i < prog_data->base.nr_params; i++) {
-	 constants[i] = *prog_data->base.param[i];
-      }
-
-      if (0) {
-	 fprintf(stderr, "WM constants:\n");
-	 for (i = 0; i < prog_data->base.nr_params; i++) {
-	    if ((i & 7) == 0)
-	       fprintf(stderr, "g%d: ", prog_data->first_curbe_grf + i / 8);
-	    fprintf(stderr, "%8f ", constants[i]);
-	    if ((i & 7) == 7)
-	       fprintf(stderr, "\n");
-	 }
-	 if ((i & 7) != 0)
-	    fprintf(stderr, "\n");
-	 fprintf(stderr, "\n");
-      }
-
-      brw->wm.base.push_const_size = ALIGN(prog_data->base.nr_params, 8) / 8;
-   }
+   gen6_upload_push_constants(brw, &fp->program.Base, &prog_data->base,
+                              stage_state, AUB_TRACE_WM_CONSTANTS);
 
    if (brw->gen >= 7) {
       gen7_upload_constant_state(brw, &brw->wm.base, true,
@@ -105,12 +71,19 @@ upload_wm_state(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
-   uint32_t dw2, dw4, dw5, dw6;
+   uint32_t dw2, dw4, dw5, dw6, ksp0, ksp2;
 
    /* _NEW_BUFFERS */
    bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
 
-    /* CACHE_NEW_WM_PROG */
+   /* CACHE_NEW_WM_PROG
+    *
+    * We can't fold this into gen6_upload_wm_push_constants(), because
+    * according to the SNB PRM, vol 2 part 1 section 7.2.2
+    * (3DSTATE_CONSTANT_PS [DevSNB]):
+    *
+    *     "[DevSNB]: This packet must be followed by WM_STATE."
+    */
    if (brw->wm.prog_data->base.nr_params == 0) {
       /* Disable the push constant buffers. */
       BEGIN_BATCH(5);
@@ -136,7 +109,7 @@ upload_wm_state(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   dw2 = dw4 = dw5 = dw6 = 0;
+   dw2 = dw4 = dw5 = dw6 = ksp2 = 0;
    dw4 |= GEN6_WM_STATISTICS_ENABLE;
    dw5 |= GEN6_WM_LINE_AA_WIDTH_1_0;
    dw5 |= GEN6_WM_LINE_END_CAP_AA_WIDTH_0_5;
@@ -174,18 +147,23 @@ upload_wm_state(struct brw_context *brw)
 
       if (min_inv_per_frag == 1) {
          dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
-         dw4 |= (brw->wm.prog_data->first_curbe_grf <<
+         dw4 |= (brw->wm.prog_data->base.dispatch_grf_start_reg <<
                  GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
-         dw4 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+         dw4 |= (brw->wm.prog_data->dispatch_grf_start_reg_16 <<
                  GEN6_WM_DISPATCH_START_GRF_SHIFT_2);
-      } else
-         dw4 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+         ksp0 = brw->wm.base.prog_offset;
+         ksp2 = brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16;
+      } else {
+         dw4 |= (brw->wm.prog_data->dispatch_grf_start_reg_16 <<
                 GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
+         ksp0 = brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16;
+      }
    }
    else {
       dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
-      dw4 |= (brw->wm.prog_data->first_curbe_grf <<
+      dw4 |= (brw->wm.prog_data->base.dispatch_grf_start_reg <<
               GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
+      ksp0 = brw->wm.base.prog_offset;
    }
 
    /* CACHE_NEW_WM_PROG | _NEW_COLOR */
@@ -304,10 +282,7 @@ upload_wm_state(struct brw_context *brw)
 
    BEGIN_BATCH(9);
    OUT_BATCH(_3DSTATE_WM << 16 | (9 - 2));
-   if (brw->wm.prog_data->prog_offset_16 && min_inv_per_frag > 1)
-      OUT_BATCH(brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16);
-   else
-      OUT_BATCH(brw->wm.base.prog_offset);
+   OUT_BATCH(ksp0);
    OUT_BATCH(dw2);
    if (brw->wm.prog_data->total_scratch) {
       OUT_RELOC(brw->wm.base.scratch_bo,
@@ -320,8 +295,7 @@ upload_wm_state(struct brw_context *brw)
    OUT_BATCH(dw5);
    OUT_BATCH(dw6);
    OUT_BATCH(0); /* kernel 1 pointer */
-   /* kernel 2 pointer */
-   OUT_BATCH(brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16);
+   OUT_BATCH(ksp2);
    ADVANCE_BATCH();
 }
 

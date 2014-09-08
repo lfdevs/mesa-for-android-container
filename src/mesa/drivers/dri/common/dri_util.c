@@ -52,7 +52,7 @@
 #include "main/errors.h"
 #include "main/macros.h"
 
-PUBLIC const char __dri2ConfigOptions[] =
+const char __dri2ConfigOptions[] =
    DRI_CONF_BEGIN
       DRI_CONF_SECTION_PERFORMANCE
          DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_1)
@@ -677,7 +677,7 @@ dri2ReleaseBuffer(__DRIscreen *screen, __DRIbuffer *buffer)
 
 
 static int
-dri2ConfigQueryb(__DRIscreen *screen, const char *var, GLboolean *val)
+dri2ConfigQueryb(__DRIscreen *screen, const char *var, unsigned char *val)
 {
    if (!driCheckOption(&screen->optionCache, var, DRI_BOOL))
       return -1;
@@ -688,7 +688,7 @@ dri2ConfigQueryb(__DRIscreen *screen, const char *var, GLboolean *val)
 }
 
 static int
-dri2ConfigQueryi(__DRIscreen *screen, const char *var, GLint *val)
+dri2ConfigQueryi(__DRIscreen *screen, const char *var, int *val)
 {
    if (!driCheckOption(&screen->optionCache, var, DRI_INT) &&
        !driCheckOption(&screen->optionCache, var, DRI_ENUM))
@@ -700,7 +700,7 @@ dri2ConfigQueryi(__DRIscreen *screen, const char *var, GLint *val)
 }
 
 static int
-dri2ConfigQueryf(__DRIscreen *screen, const char *var, GLfloat *val)
+dri2ConfigQueryf(__DRIscreen *screen, const char *var, float *val)
 {
    if (!driCheckOption(&screen->optionCache, var, DRI_FLOAT))
       return -1;
@@ -732,7 +732,7 @@ driSwapBuffers(__DRIdrawable *pdp)
 
 /** Core interface */
 const __DRIcoreExtension driCoreExtension = {
-    .base = { __DRI_CORE, __DRI_CORE_VERSION },
+    .base = { __DRI_CORE, 1 },
 
     .createNewScreen            = NULL,
     .destroyScreen              = driDestroyScreen,

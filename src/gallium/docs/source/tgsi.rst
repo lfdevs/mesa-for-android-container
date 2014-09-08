@@ -433,7 +433,11 @@ This instruction replicates its result.
   dst = \cos{src.x}
 
 
-.. opcode:: DDX - Derivative Relative To X
+.. opcode:: DDX, DDX_FINE - Derivative Relative To X
+
+The fine variant is only used when ``PIPE_CAP_TGSI_FS_FINE_DERIVATIVE`` is
+advertised. When it is, the fine version guarantees one derivative per row
+while DDX is allowed to be the same for the entire 2x2 quad.
 
 .. math::
 
@@ -446,7 +450,11 @@ This instruction replicates its result.
   dst.w = partialx(src.w)
 
 
-.. opcode:: DDY - Derivative Relative To Y
+.. opcode:: DDY, DDY_FINE - Derivative Relative To Y
+
+The fine variant is only used when ``PIPE_CAP_TGSI_FS_FINE_DERIVATIVE`` is
+advertised. When it is, the fine version guarantees one derivative per column
+while DDY is allowed to be the same for the entire 2x2 quad.
 
 .. math::
 
@@ -584,25 +592,44 @@ This instruction replicates its result.
   for array textures src0.y contains the slice for 1D,
   and src0.z contain the slice for 2D.
 
-  for shadow textures with no arrays, src0.z contains
-  the reference value.
+  for shadow textures with no arrays (and not cube map),
+  src0.z contains the reference value.
 
   for shadow textures with arrays, src0.z contains
   the reference value for 1D arrays, and src0.w contains
-  the reference value for 2D arrays.
+  the reference value for 2D arrays and cube maps.
 
-  There is no way to pass a bias in the .w value for
-  shadow arrays, and GLSL doesn't allow this.
-  GLSL does allow cube shadows maps to take a bias value,
-  and we have to determine how this will look in TGSI.
+  for cube map array shadow textures, the reference value
+  cannot be passed in src0.w, and TEX2 must be used instead.
 
 .. math::
 
   coord = src0
 
-  bias = 0.0
+  shadow_ref = src0.z or src0.w (optional)
 
-  dst = texture\_sample(unit, coord, bias)
+  unit = src1
+
+  dst = texture\_sample(unit, coord, shadow_ref)
+
+
+.. opcode:: TEX2 - Texture Lookup (for shadow cube map arrays only)
+
+  this is the same as TEX, but uses another reg to encode the
+  reference value.
+
+.. math::
+
+  coord = src0
+
+  shadow_ref = src1.x
+
+  unit = src2
+
+  dst = texture\_sample(unit, coord, shadow_ref)
+
+
+
 
 .. opcode:: TXD - Texture Lookup with Derivatives
 
@@ -614,26 +641,26 @@ This instruction replicates its result.
 
   ddy = src2
 
-  bias = 0.0
+  unit = src3
 
-  dst = texture\_sample\_deriv(unit, coord, bias, ddx, ddy)
+  dst = texture\_sample\_deriv(unit, coord, ddx, ddy)
 
 
 .. opcode:: TXP - Projective Texture Lookup
 
 .. math::
 
-  coord.x = src0.x / src.w
+  coord.x = src0.x / src0.w
 
-  coord.y = src0.y / src.w
+  coord.y = src0.y / src0.w
 
-  coord.z = src0.z / src.w
+  coord.z = src0.z / src0.w
 
   coord.w = src0.w
 
-  bias = 0.0
+  unit = src1
 
-  dst = texture\_sample(unit, coord, bias)
+  dst = texture\_sample(unit, coord)
 
 
 .. opcode:: UP2H - Unpack Two 16-Bit Floats
@@ -763,17 +790,46 @@ This instruction replicates its result.
 
 .. opcode:: TXB - Texture Lookup With Bias
 
+  for cube map array textures and shadow cube maps, the bias value
+  cannot be passed in src0.w, and TXB2 must be used instead.
+
+  if the target is a shadow texture, the reference value is always
+  in src.z (this prevents shadow 3d and shadow 2d arrays from
+  using this instruction, but this is not needed).
+
 .. math::
 
-  coord.x = src.x
+  coord.x = src0.x
 
-  coord.y = src.y
+  coord.y = src0.y
 
-  coord.z = src.z
+  coord.z = src0.z
 
-  coord.w = 1.0
+  coord.w = none
 
-  bias = src.z
+  bias = src0.w
+
+  unit = src1
+
+  dst = texture\_sample(unit, coord, bias)
+
+
+.. opcode:: TXB2 - Texture Lookup With Bias (some cube maps only)
+
+  this is the same as TXB, but uses another reg to encode the
+  lod bias value for cube map arrays and shadow cube maps.
+  Presumably shadow 2d arrays and shadow 3d targets could use
+  this encoding too, but this is not legal.
+
+  shadow cube map arrays are neither possible nor required.
+
+.. math::
+
+  coord = src0
+
+  bias = src1.x
+
+  unit = src2
 
   dst = texture\_sample(unit, coord, bias)
 
@@ -815,6 +871,13 @@ This instruction replicates its result.
 
 .. opcode:: TXL - Texture Lookup With explicit LOD
 
+  for cube map array textures, the explicit lod value
+  cannot be passed in src0.w, and TXL2 must be used instead.
+
+  if the target is a shadow texture, the reference value is always
+  in src.z (this prevents shadow 3d / 2d array / cube targets from
+  using this instruction, but this is not needed).
+
 .. math::
 
   coord.x = src0.x
@@ -823,9 +886,31 @@ This instruction replicates its result.
 
   coord.z = src0.z
 
-  coord.w = 1.0
+  coord.w = none
 
   lod = src0.w
+
+  unit = src1
+
+  dst = texture\_sample(unit, coord, lod)
+
+
+.. opcode:: TXL2 - Texture Lookup With explicit LOD (for cube map arrays only)
+
+  this is the same as TXL, but uses another reg to encode the
+  explicit lod value.
+  Presumably shadow 3d / 2d array / cube targets could use
+  this encoding too, but this is not legal.
+
+  shadow cube map arrays are neither possible nor required.
+
+.. math::
+
+  coord = src0
+
+  lod = src1.x
+
+  unit = src2
 
   dst = texture\_sample(unit, coord, lod)
 
@@ -954,9 +1039,9 @@ XXX doesn't look like most of the opcodes really belong here.
   As per NV_gpu_shader4, extract a single texel from a specified texture
   image. The source sampler may not be a CUBE or SHADOW.  src 0 is a
   four-component signed integer vector used to identify the single texel
-  accessed. 3 components + level.  src 1 is a 3 component constant signed
-  integer vector, with each component only have a range of -8..+8 (hw only
-  seems to deal with this range, interface allows for up to unsigned int).
+  accessed. 3 components + level.  Just like texture instructions, an optional
+  offset vector is provided, which is subject to various driver restrictions
+  (regarding range, source of offsets).
   TXF(uint_vec coord, int_vec offset).
 
 
@@ -964,7 +1049,13 @@ XXX doesn't look like most of the opcodes really belong here.
 
   As per NV_gpu_program4, retrieve the dimensions of the texture depending on
   the target. For 1D (width), 2D/RECT/CUBE (width, height), 3D (width, height,
-  depth), 1D array (width, layers), 2D array (width, height, layers)
+  depth), 1D array (width, layers), 2D array (width, height, layers).
+  Also return the number of accessible levels (last_level - first_level + 1)
+  in W.
+
+  For components which don't return a resource dimension, their value
+  is undefined.
+
 
 .. math::
 
@@ -975,6 +1066,8 @@ XXX doesn't look like most of the opcodes really belong here.
   dst.y = texture\_height(unit, lod)
 
   dst.z = texture\_depth(unit, lod)
+
+  dst.w = texture\_levels(unit)
 
 .. opcode:: TG4 - Texture Gather
 
@@ -1642,14 +1735,14 @@ in any other type of shader.
 
 .. opcode:: EMIT - Emit
 
-  Generate a new vertex for the current primitive using the values in the
-  output registers.
+  Generate a new vertex for the current primitive into the specified vertex
+  stream using the values in the output registers.
 
 
 .. opcode:: ENDPRIM - End Primitive
 
-  Complete the current primitive (consisting of the emitted vertices),
-  and start a new one.
+  Complete the current primitive in the specified vertex stream (consisting of
+  the emitted vertices), and start a new one.
 
 
 GLSL ISA
@@ -1802,6 +1895,29 @@ This instruction replicates its result.
 .. math::
 
   dst = \frac{src.x}{src.x \times src.x + src.y \times src.y + src.z \times src.z + src.w \times src.w}
+
+
+Interpolation ISA
+^^^^^^^^^^^^^^^^^
+
+The interpolation instructions allow an input to be interpolated in a
+different way than its declaration. This corresponds to the GLSL 4.00
+interpolateAt* functions. The first argument of each of these must come from
+``TGSI_FILE_INPUT``.
+
+.. opcode:: INTERP_CENTROID - Interpolate at the centroid
+
+   Interpolates the varying specified by src0 at the centroid
+
+.. opcode:: INTERP_SAMPLE - Interpolate at the specified sample
+
+   Interpolates the varying specified by src0 at the sample id specified by
+   src1.x (interpreted as an integer)
+
+.. opcode:: INTERP_OFFSET - Interpolate at the specified offset
+
+   Interpolates the varying specified by src0 at the offset src1.xy from the
+   pixel center (interpreted as floats)
 
 
 .. _doubleopcodes:
@@ -2731,6 +2847,11 @@ This token is only valid for fragment shader INPUT declarations.
 The Interpolate field specifes the way input is being interpolated by
 the rasteriser and is one of TGSI_INTERPOLATE_*.
 
+The Location field specifies the location inside the pixel that the
+interpolation should be done at, one of ``TGSI_INTERPOLATE_LOC_*``. Note that
+when per-sample shading is enabled, the implementation may choose to
+interpolate at the sample irrespective of the Location field.
+
 The CylindricalWrap bitfield specifies which register components
 should be subject to cylindrical wrapping when interpolating by the
 rasteriser. If TGSI_CYLINDRICAL_WRAP_X is set to 1, the X component
@@ -2848,6 +2969,15 @@ input primitive. Each invocation will have a different
 TGSI_SEMANTIC_INVOCATIONID system value set. If not specified, assumed to
 be 1.
 
+VS_WINDOW_SPACE_POSITION
+""""""""""""""""""""""""""
+If this property is set on the vertex shader, the TGSI_SEMANTIC_POSITION output
+is assumed to contain window space coordinates.
+Division of X,Y,Z by W and the viewport transformation are disabled, and 1/W is
+directly taken from the 4-th component of the shader output.
+Naturally, clipping is not performed on window coordinates either.
+The effect of this property is undefined if a geometry or tessellation shader
+are in use.
 
 Texture Sampling and Texture Formats
 ------------------------------------

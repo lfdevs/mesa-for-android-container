@@ -77,8 +77,7 @@ cross_validate_types_and_qualifiers(struct gl_shader_program *prog,
        *     correspondence between the vertex language and the
        *     fragment language."
        */
-      if (!output->type->is_array()
-          || (strncmp("gl_", output->name, 3) != 0)) {
+      if (!output->type->is_array() || !is_gl_identifier(output->name)) {
          linker_error(prog,
                       "%s shader output `%s' declared as type `%s', "
                       "but %s shader input declared as type `%s'\n",
@@ -176,8 +175,8 @@ cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
 
    /* Find all shader outputs in the "producer" stage.
     */
-   foreach_list(node, producer->ir) {
-      ir_variable *const var = ((ir_instruction *) node)->as_variable();
+   foreach_in_list(ir_instruction, node, producer->ir) {
+      ir_variable *const var = node->as_variable();
 
       if ((var == NULL) || (var->data.mode != ir_var_shader_out))
 	 continue;
@@ -213,8 +212,8 @@ cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
     * should be arrays and the type of the array element should match the type
     * of the corresponding producer output.
     */
-   foreach_list(node, consumer->ir) {
-      ir_variable *const input = ((ir_instruction *) node)->as_variable();
+   foreach_in_list(ir_instruction, node, consumer->ir) {
+      ir_variable *const input = node->as_variable();
 
       if ((input == NULL) || (input->data.mode != ir_var_shader_in))
 	 continue;
@@ -292,6 +291,7 @@ tfeedback_decl::init(struct gl_context *ctx, const void *mem_ctx,
    this->skip_components = 0;
    this->next_buffer_separator = false;
    this->matched_candidate = NULL;
+   this->stream_id = 0;
 
    if (ctx->Extensions.ARB_transform_feedback3) {
       /* Parse gl_NextBuffer. */
@@ -329,7 +329,7 @@ tfeedback_decl::init(struct gl_context *ctx, const void *mem_ctx,
     * class must behave specially to account for the fact that gl_ClipDistance
     * is converted from a float[8] to a vec4[2].
     */
-   if (ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].LowerClipDistance &&
+   if (ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].LowerClipDistance &&
        strcmp(this->var_name, "gl_ClipDistance") == 0) {
       this->is_clip_distance_mesa = true;
    }
@@ -356,8 +356,8 @@ tfeedback_decl::is_same(const tfeedback_decl &x, const tfeedback_decl &y)
 
 
 /**
- * Assign a location for this tfeedback_decl object based on the transform
- * feedback candidate found by find_candidate.
+ * Assign a location and stream ID for this tfeedback_decl object based on the
+ * transform feedback candidate found by find_candidate.
  *
  * If an error occurs, the error is reported through linker_error() and false
  * is returned.
@@ -438,6 +438,11 @@ tfeedback_decl::assign_location(struct gl_context *ctx,
       return false;
    }
 
+   /* Only transform feedback varyings can be assigned to non-zero streams,
+    * so assign the stream id here.
+    */
+   this->stream_id = this->matched_candidate->toplevel_var->data.stream;
+
    return true;
 }
 
@@ -496,6 +501,7 @@ tfeedback_decl::store(struct gl_context *ctx, struct gl_shader_program *prog,
       info->Outputs[info->NumOutputs].ComponentOffset = location_frac;
       info->Outputs[info->NumOutputs].OutputRegister = location;
       info->Outputs[info->NumOutputs].NumComponents = output_size;
+      info->Outputs[info->NumOutputs].StreamId = stream_id;
       info->Outputs[info->NumOutputs].OutputBuffer = buffer;
       info->Outputs[info->NumOutputs].DstOffset = info->BufferStride[buffer];
       ++info->NumOutputs;
@@ -629,10 +635,27 @@ store_tfeedback_info(struct gl_context *ctx, struct gl_shader_program *prog,
    }
    else {
       /* GL_INVERLEAVED_ATTRIBS */
+      int buffer_stream_id = -1;
       for (unsigned i = 0; i < num_tfeedback_decls; ++i) {
          if (tfeedback_decls[i].is_next_buffer_separator()) {
             num_buffers++;
+            buffer_stream_id = -1;
             continue;
+         } else if (buffer_stream_id == -1)  {
+            /* First varying writing to this buffer: remember its stream */
+            buffer_stream_id = (int) tfeedback_decls[i].get_stream_id();
+         } else if (buffer_stream_id !=
+                    (int) tfeedback_decls[i].get_stream_id()) {
+            /* Varying writes to the same buffer from a different stream */
+            linker_error(prog,
+                         "Transform feedback can't capture varyings belonging "
+                         "to different vertex streams in a single buffer. "
+                         "Varying %s writes to buffer from stream %u, other "
+                         "varyings in the same buffer write from stream %u.",
+                         tfeedback_decls[i].name(),
+                         tfeedback_decls[i].get_stream_id(),
+                         buffer_stream_id);
+            return false;
          }
 
          if (!tfeedback_decls[i].store(ctx, prog,
@@ -992,7 +1015,7 @@ varying_matches::match_comparator(const void *x_generic, const void *y_generic)
  * varyings, but excludes variables such as gl_FrontFacing and gl_FragCoord.
  */
 static bool
-is_varying_var(gl_shader_stage stage, const ir_variable *var)
+var_counts_against_varying_limit(gl_shader_stage stage, const ir_variable *var)
 {
    /* Only fragment shaders will take a varying variable as an input */
    if (stage == MESA_SHADER_FRAGMENT &&
@@ -1045,10 +1068,8 @@ private:
    virtual void visit_field(const glsl_type *type, const char *name,
                             bool row_major)
    {
-      assert(!type->is_record());
-      assert(!(type->is_array() && type->fields.array->is_record()));
-      assert(!type->is_interface());
-      assert(!(type->is_array() && type->fields.array->is_interface()));
+      assert(!type->without_array()->is_record());
+      assert(!type->without_array()->is_interface());
 
       (void) row_major;
 
@@ -1098,8 +1119,8 @@ populate_consumer_input_sets(void *mem_ctx, exec_list *ir,
           0,
           sizeof(consumer_inputs_with_locations[0]) * VARYING_SLOT_MAX);
 
-   foreach_list(node, ir) {
-      ir_variable *const input_var = ((ir_instruction *) node)->as_variable();
+   foreach_in_list(ir_instruction, node, ir) {
+      ir_variable *const input_var = node->as_variable();
 
       if ((input_var != NULL) && (input_var->data.mode == ir_var_shader_in)) {
          if (input_var->type->is_interface())
@@ -1204,8 +1225,8 @@ canonicalize_shader_io(exec_list *ir, enum ir_variable_mode io_mode)
    ir_variable *var_table[MAX_PROGRAM_OUTPUTS * 4];
    unsigned num_variables = 0;
 
-   foreach_list(node, ir) {
-      ir_variable *const var = ((ir_instruction *) node)->as_variable();
+   foreach_in_list(ir_instruction, node, ir) {
+      ir_variable *const var = node->as_variable();
 
       if (var == NULL || var->data.mode != io_mode)
          continue;
@@ -1316,13 +1337,17 @@ assign_varying_locations(struct gl_context *ctx,
    }
 
    if (producer) {
-      foreach_list(node, producer->ir) {
-         ir_variable *const output_var =
-            ((ir_instruction *) node)->as_variable();
+      foreach_in_list(ir_instruction, node, producer->ir) {
+         ir_variable *const output_var = node->as_variable();
 
          if ((output_var == NULL) ||
              (output_var->data.mode != ir_var_shader_out))
             continue;
+
+         /* Only geometry shaders can use non-zero streams */
+         assert(output_var->data.stream == 0 ||
+                (output_var->data.stream < MAX_VERTEX_STREAMS &&
+                 producer->Stage == MESA_SHADER_GEOMETRY));
 
          tfeedback_candidate_generator g(mem_ctx, tfeedback_candidates);
          g.process(output_var);
@@ -1339,6 +1364,14 @@ assign_varying_locations(struct gl_context *ctx,
          if (input_var || (prog->SeparateShader && consumer == NULL)) {
             matches.record(output_var, input_var);
          }
+
+         /* Only stream 0 outputs can be consumed in the next stage */
+         if (input_var && output_var->data.stream != 0) {
+            linker_error(prog, "output %s is assigned to stream=%d but "
+                         "is linked to an input, which requires stream=0",
+                         output_var->name, output_var->data.stream);
+            return false;
+         }
       }
    } else {
       /* If there's no producer stage, then this must be a separable program.
@@ -1347,9 +1380,8 @@ assign_varying_locations(struct gl_context *ctx,
        * geometry) shader program.  This means that locations must be assigned
        * for all the inputs.
        */
-      foreach_list(node, consumer->ir) {
-         ir_variable *const input_var =
-            ((ir_instruction *) node)->as_variable();
+      foreach_in_list(ir_instruction, node, consumer->ir) {
+         ir_variable *const input_var = node->as_variable();
 
          if ((input_var == NULL) ||
              (input_var->data.mode != ir_var_shader_in))
@@ -1414,8 +1446,8 @@ assign_varying_locations(struct gl_context *ctx,
    }
 
    if (consumer && producer) {
-      foreach_list(node, consumer->ir) {
-         ir_variable *const var = ((ir_instruction *) node)->as_variable();
+      foreach_in_list(ir_instruction, node, consumer->ir) {
+         ir_variable *const var = node->as_variable();
 
          if (var && var->data.mode == ir_var_shader_in &&
              var->data.is_unmatched_generic_inout) {
@@ -1458,11 +1490,11 @@ check_against_output_limit(struct gl_context *ctx,
 {
    unsigned output_vectors = 0;
 
-   foreach_list(node, producer->ir) {
-      ir_variable *const var = ((ir_instruction *) node)->as_variable();
+   foreach_in_list(ir_instruction, node, producer->ir) {
+      ir_variable *const var = node->as_variable();
 
       if (var && var->data.mode == ir_var_shader_out &&
-          is_varying_var(producer->Stage, var)) {
+          var_counts_against_varying_limit(producer->Stage, var)) {
          output_vectors += var->type->count_attribute_slots();
       }
    }
@@ -1497,11 +1529,11 @@ check_against_input_limit(struct gl_context *ctx,
 {
    unsigned input_vectors = 0;
 
-   foreach_list(node, consumer->ir) {
-      ir_variable *const var = ((ir_instruction *) node)->as_variable();
+   foreach_in_list(ir_instruction, node, consumer->ir) {
+      ir_variable *const var = node->as_variable();
 
       if (var && var->data.mode == ir_var_shader_in &&
-          is_varying_var(consumer->Stage, var)) {
+          var_counts_against_varying_limit(consumer->Stage, var)) {
          input_vectors += var->type->count_attribute_slots();
       }
    }

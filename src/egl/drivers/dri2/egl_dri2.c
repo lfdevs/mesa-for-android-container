@@ -35,7 +35,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
 #include <xf86drm.h>
 #include <drm_fourcc.h>
 #endif
@@ -304,8 +304,6 @@ const __DRIimageLookupExtension image_lookup_extension = {
    .lookupEGLImage       = dri2_lookup_egl_image
 };
 
-static const char dri_driver_path[] = DEFAULT_DRIVER_DIR;
-
 struct dri2_extension_match {
    const char *name;
    int version;
@@ -360,7 +358,7 @@ dri2_bind_extensions(struct dri2_egl_display *dri2_dpy,
    for (j = 0; matches[j].name; j++) {
       field = ((char *) dri2_dpy + matches[j].offset);
       if (*(const __DRIextension **) field == NULL) {
-	 _eglLog(_EGL_FATAL, "DRI2: did not find extension %s version %d",
+	 _eglLog(_EGL_WARNING, "DRI2: did not find extension %s version %d",
 		 matches[j].name, matches[j].version);
 	 ret = EGL_FALSE;
       }
@@ -469,9 +467,7 @@ dri2_load_driver_swrast(_EGLDisplay *disp)
    struct dri2_egl_display *dri2_dpy = disp->DriverData;
    const __DRIextension **extensions;
 
-   dri2_dpy->driver_name = "swrast";
    extensions = dri2_open_driver(disp);
-
    if (!extensions)
       return EGL_FALSE;
 
@@ -522,7 +518,15 @@ dri2_setup_screen(_EGLDisplay *disp)
    }
 
    if (dri2_dpy->image) {
-      disp->Extensions.MESA_drm_image = EGL_TRUE;
+      if (dri2_dpy->image->base.version >= 10 &&
+          dri2_dpy->image->getCapabilities != NULL) {
+         int capabilities;
+
+         capabilities = dri2_dpy->image->getCapabilities(dri2_dpy->dri_screen);
+         disp->Extensions.MESA_drm_image = (capabilities & __DRI_IMAGE_CAP_GLOBAL_NAMES) != 0;
+      } else
+         disp->Extensions.MESA_drm_image = EGL_TRUE;
+
       disp->Extensions.KHR_image_base = EGL_TRUE;
       disp->Extensions.KHR_gl_renderbuffer_image = EGL_TRUE;
       if (dri2_dpy->image->base.version >= 5 &&
@@ -673,6 +677,7 @@ dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
    if (dri2_dpy->driver)
       dlclose(dri2_dpy->driver);
    free(dri2_dpy->device_name);
+   free(dri2_dpy->driver_name);
 
    switch (disp->Platform) {
 #ifdef HAVE_X11_PLATFORM
@@ -811,8 +816,9 @@ dri2_create_context(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
          api = __DRI_API_GLES3;
          break;
       default:
-	 _eglError(EGL_BAD_PARAMETER, "eglCreateContext");
-	 return NULL;
+         _eglError(EGL_BAD_PARAMETER, "eglCreateContext");
+         free(dri2_ctx);
+         return NULL;
       }
       break;
    case EGL_OPENGL_API:
@@ -1388,6 +1394,15 @@ dri2_create_image_wayland_wl_buffer(_EGLDisplay *disp, _EGLContext *ctx,
 }
 #endif
 
+static EGLBoolean
+dri2_get_sync_values_chromium(_EGLDisplay *dpy, _EGLSurface *surf,
+                              EGLuint64KHR *ust, EGLuint64KHR *msc,
+                              EGLuint64KHR *sbc)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(dpy);
+   return dri2_dpy->vtbl->get_sync_values(dpy, surf, ust, msc, sbc);
+}
+
 /**
  * Set the error code after a call to
  * dri2_egl_image::dri_image::createImageFromTexture.
@@ -1663,36 +1678,13 @@ dri2_check_dma_buf_format(const _EGLImageAttribs *attrs)
 /**
  * The spec says:
  *
- * "If eglCreateImageKHR is successful for a EGL_LINUX_DMA_BUF_EXT target,
- *  the EGL takes ownership of the file descriptor and is responsible for
- *  closing it, which it may do at any time while the EGLDisplay is
- *  initialized."
+ * "If eglCreateImageKHR is successful for a EGL_LINUX_DMA_BUF_EXT target, the
+ *  EGL will take a reference to the dma_buf(s) which it will release at any
+ *  time while the EGLDisplay is initialized. It is the responsibility of the
+ *  application to close the dma_buf file descriptors."
+ *
+ * Therefore we must never close or otherwise modify the file descriptors.
  */
-static void
-dri2_take_dma_buf_ownership(const int *fds, unsigned num_fds)
-{
-   int already_closed[num_fds];
-   unsigned num_closed = 0;
-   unsigned i, j;
-
-   for (i = 0; i < num_fds; ++i) {
-      /**
-       * The same file descriptor can be referenced multiple times in case more
-       * than one plane is found in the same buffer, just with a different
-       * offset.
-       */
-      for (j = 0; j < num_closed; ++j) {
-         if (already_closed[j] == fds[i])
-            break;
-      }
-
-      if (j == num_closed) {
-         close(fds[i]);
-         already_closed[num_closed++] = fds[i];
-      }
-   }
-}
-
 static _EGLImage *
 dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
 			  EGLClientBuffer buffer, const EGLint *attr_list)
@@ -1755,8 +1747,6 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
       return EGL_NO_IMAGE_KHR;
 
    res = dri2_create_image_from_dri(disp, dri_image);
-   if (res)
-      dri2_take_dma_buf_ownership(fds, num_fds);
 
    return res;
 }
@@ -1991,7 +1981,7 @@ dri2_bind_wayland_display_wl(_EGLDriver *drv, _EGLDisplay *disp,
 			     struct wl_display *wl_dpy)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   int ret, flags = 0;
+   int flags = 0;
    uint64_t cap;
 
    (void) drv;
@@ -2002,11 +1992,13 @@ dri2_bind_wayland_display_wl(_EGLDriver *drv, _EGLDisplay *disp,
    wl_drm_callbacks.authenticate =
       (int(*)(void *, uint32_t)) dri2_dpy->vtbl->authenticate;
 
-   ret = drmGetCap(dri2_dpy->fd, DRM_CAP_PRIME, &cap);
-   if (ret == 0 && cap == (DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT) &&
+#ifdef HAVE_LIBDRM
+   if (drmGetCap(dri2_dpy->fd, DRM_CAP_PRIME, &cap) == 0 &&
+       cap == (DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT) &&
        dri2_dpy->image->base.version >= 7 &&
        dri2_dpy->image->createImageFromFds != NULL)
       flags |= WAYLAND_DRM_PRIME;
+#endif
 
    dri2_dpy->wl_server_drm =
 	   wayland_drm_init(wl_dpy, dri2_dpy->device_name,
@@ -2181,6 +2173,7 @@ _eglBuiltInDriverDRI2(const char *args)
    dri2_drv->base.API.UnbindWaylandDisplayWL = dri2_unbind_wayland_display_wl;
    dri2_drv->base.API.QueryWaylandBufferWL = dri2_query_wayland_buffer_wl;
 #endif
+   dri2_drv->base.API.GetSyncValuesCHROMIUM = dri2_get_sync_values_chromium;
 
    dri2_drv->base.Name = "DRI2";
    dri2_drv->base.Unload = dri2_unload;

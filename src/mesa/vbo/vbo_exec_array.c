@@ -581,9 +581,9 @@ vbo_handle_primitive_restart(struct gl_context *ctx,
 {
    struct vbo_context *vbo = vbo_context(ctx);
 
-   if ((ib != NULL) &&
-       ctx->Const.PrimitiveRestartInSoftware &&
-       ctx->Array._PrimitiveRestart) {
+   if (ctx->Const.PrimitiveRestartInSoftware &&
+       ctx->Array._PrimitiveRestart &&
+       (ib != NULL)) {
       /* Handle primitive restart in software */
       vbo_sw_primitive_restart(ctx, prim, nr_prims, ib, NULL);
    } else {
@@ -1890,6 +1890,12 @@ _mesa_DrawArrays(GLenum mode, GLint first, GLsizei count)
    vbo_exec_DrawArrays(mode, first, count);
 }
 
+void GLAPIENTRY
+_mesa_DrawArraysInstanced(GLenum mode, GLint first, GLsizei count,
+                          GLsizei primcount)
+{
+   vbo_exec_DrawArraysInstanced(mode, first, count, primcount);
+}
 
 void GLAPIENTRY
 _mesa_DrawElements(GLenum mode, GLsizei count, GLenum type,

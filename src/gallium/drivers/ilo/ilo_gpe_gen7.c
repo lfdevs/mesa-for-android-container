@@ -319,7 +319,7 @@ ilo_gpe_init_view_surface_for_buffer_gen7(const struct ilo_dev_info *dev,
    surface_type = (structured) ? GEN7_SURFTYPE_STRBUF : GEN6_SURFTYPE_BUFFER;
 
    surface_format = (typed) ?
-      ilo_translate_color_format(elem_format) : GEN6_FORMAT_RAW;
+      ilo_translate_color_format(dev, elem_format) : GEN6_FORMAT_RAW;
 
    num_entries = size / struct_size;
    /* see if there is enough space to fit another element */
@@ -430,12 +430,11 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
                                            unsigned num_levels,
                                            unsigned first_layer,
                                            unsigned num_layers,
-                                           bool is_rt, bool offset_to_layer,
+                                           bool is_rt,
                                            struct ilo_view_surface *surf)
 {
    int surface_type, surface_format;
    int width, height, depth, pitch, lod;
-   unsigned layer_offset, x_offset, y_offset;
    uint32_t *dw;
 
    ILO_GPE_VALID_GEN(dev, 7, 7.5);
@@ -447,16 +446,16 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
       format = PIPE_FORMAT_Z32_FLOAT;
 
    if (is_rt)
-      surface_format = ilo_translate_render_format(format);
+      surface_format = ilo_translate_render_format(dev, format);
    else
-      surface_format = ilo_translate_texture_format(format);
+      surface_format = ilo_translate_texture_format(dev, format);
    assert(surface_format >= 0);
 
-   width = tex->base.width0;
-   height = tex->base.height0;
+   width = tex->layout.width0;
+   height = tex->layout.height0;
    depth = (tex->base.target == PIPE_TEXTURE_3D) ?
       tex->base.depth0 : num_layers;
-   pitch = tex->bo_stride;
+   pitch = tex->layout.bo_stride;
 
    if (surface_type == GEN6_SURFTYPE_CUBE) {
       /*
@@ -514,39 +513,6 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
    }
 
    /*
-    * Offset to the layer.  When rendering, the hardware requires LOD and
-    * Depth to be the same for all render targets and the depth buffer.  We
-    * need to offset to the layer manually and always set LOD and Depth to 0.
-    */
-   if (offset_to_layer) {
-      /* we lose the capability for layered rendering */
-      assert(is_rt && num_layers == 1);
-
-      layer_offset = ilo_texture_get_slice_offset(tex,
-            first_level, first_layer, &x_offset, &y_offset);
-
-      assert(x_offset % 4 == 0);
-      assert(y_offset % 2 == 0);
-      x_offset /= 4;
-      y_offset /= 2;
-
-      /* derive the size for the LOD */
-      width = u_minify(width, first_level);
-      height = u_minify(height, first_level);
-
-      first_level = 0;
-      first_layer = 0;
-
-      lod = 0;
-      depth = 1;
-   }
-   else {
-      layer_offset = 0;
-      x_offset = 0;
-      y_offset = 0;
-   }
-
-   /*
     * From the Ivy Bridge PRM, volume 4 part 1, page 68:
     *
     *     "The Base Address for linear render target surfaces and surfaces
@@ -569,14 +535,11 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
     *
     *     "For linear surfaces, this field (X Offset) must be zero."
     */
-   if (tex->tiling == INTEL_TILING_NONE) {
+   if (tex->layout.tiling == INTEL_TILING_NONE) {
       if (is_rt) {
          const int elem_size = util_format_get_blocksize(format);
-         assert(layer_offset % elem_size == 0);
          assert(pitch % elem_size == 0);
       }
-
-      assert(!x_offset);
    }
 
    STATIC_ASSERT(Elements(surf->payload) >= 8);
@@ -584,7 +547,7 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
 
    dw[0] = surface_type << GEN7_SURFACE_DW0_TYPE__SHIFT |
            surface_format << GEN7_SURFACE_DW0_FORMAT__SHIFT |
-           ilo_gpe_gen6_translate_winsys_tiling(tex->tiling) << 13;
+           ilo_gpe_gen6_translate_winsys_tiling(tex->layout.tiling) << 13;
 
    /*
     * From the Ivy Bridge PRM, volume 4 part 1, page 63:
@@ -604,16 +567,19 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
          assert(depth == 1);
    }
 
-   if (tex->valign_4)
+   assert(tex->layout.align_i == 4 || tex->layout.align_i == 8);
+   assert(tex->layout.align_j == 2 || tex->layout.align_j == 4);
+
+   if (tex->layout.align_j == 4)
       dw[0] |= GEN7_SURFACE_DW0_VALIGN_4;
 
-   if (tex->halign_8)
+   if (tex->layout.align_i == 8)
       dw[0] |= GEN7_SURFACE_DW0_HALIGN_8;
 
-   if (tex->array_spacing_full)
-      dw[0] |= GEN7_SURFACE_DW0_ARYSPC_FULL;
-   else
+   if (tex->layout.walk == ILO_LAYOUT_WALK_LOD)
       dw[0] |= GEN7_SURFACE_DW0_ARYSPC_LOD0;
+   else
+      dw[0] |= GEN7_SURFACE_DW0_ARYSPC_FULL;
 
    if (is_rt)
       dw[0] |= GEN7_SURFACE_DW0_RENDER_CACHE_RW;
@@ -621,7 +587,7 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
    if (surface_type == GEN6_SURFTYPE_CUBE && !is_rt)
       dw[0] |= GEN7_SURFACE_DW0_CUBE_FACE_ENABLES__MASK;
 
-   dw[1] = layer_offset;
+   dw[1] = 0;
 
    dw[2] = SET_FIELD(height - 1, GEN7_SURFACE_DW2_HEIGHT) |
            SET_FIELD(width - 1, GEN7_SURFACE_DW2_WIDTH);
@@ -637,7 +603,7 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
     * means the samples are interleaved.  The layouts are the same when the
     * number of samples is 1.
     */
-   if (tex->interleaved && tex->base.nr_samples > 1) {
+   if (tex->layout.interleaved_samples && tex->base.nr_samples > 1) {
       assert(!is_rt);
       dw[4] |= GEN7_SURFACE_DW4_MSFMT_DEPTH_STENCIL;
    }
@@ -652,9 +618,7 @@ ilo_gpe_init_view_surface_for_texture_gen7(const struct ilo_dev_info *dev,
    else
       dw[4] |= GEN7_SURFACE_DW4_MULTISAMPLECOUNT_1;
 
-   dw[5] = x_offset << GEN7_SURFACE_DW5_X_OFFSET__SHIFT |
-           y_offset << GEN7_SURFACE_DW5_Y_OFFSET__SHIFT |
-           SET_FIELD(first_level, GEN7_SURFACE_DW5_MIN_LOD) |
+   dw[5] = SET_FIELD(first_level, GEN7_SURFACE_DW5_MIN_LOD) |
            lod;
 
    dw[6] = 0;

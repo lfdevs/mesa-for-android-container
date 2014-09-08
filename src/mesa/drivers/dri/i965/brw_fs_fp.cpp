@@ -57,7 +57,7 @@ void
 fs_visitor::emit_fp_minmax(const prog_instruction *fpi,
                            fs_reg dst, fs_reg src0, fs_reg src1)
 {
-   uint32_t conditionalmod;
+   enum brw_conditional_mod conditionalmod;
    if (fpi->Opcode == OPCODE_MIN)
       conditionalmod = BRW_CONDITIONAL_L;
    else
@@ -72,7 +72,7 @@ fs_visitor::emit_fp_minmax(const prog_instruction *fpi,
 }
 
 void
-fs_visitor::emit_fp_sop(uint32_t conditional_mod,
+fs_visitor::emit_fp_sop(enum brw_conditional_mod conditional_mod,
                         const struct prog_instruction *fpi,
                         fs_reg dst, fs_reg src0, fs_reg src1,
                         fs_reg one)
@@ -190,7 +190,7 @@ fs_visitor::emit_fragment_program_code()
          case OPCODE_DP3: count = 3; break;
          case OPCODE_DP4: count = 4; break;
          case OPCODE_DPH: count = 3; break;
-         default: assert(!"not reached"); count = 0; break;
+         default: unreachable("not reached");
          }
 
          emit(MUL(acc, offset(src[0], 0), offset(src[1], 0)));
@@ -428,8 +428,7 @@ fs_visitor::emit_fragment_program_code()
             lod = offset(src[0], 3);
             break;
          default:
-            assert(!"not reached");
-            break;
+            unreachable("not reached");
          }
 
          ir->type = glsl_type::vec4_type;
@@ -475,9 +474,7 @@ fs_visitor::emit_fragment_program_code()
          }
 
          default:
-            assert(!"not reached");
-            coordinate_type = glsl_type::vec2_type;
-            break;
+            unreachable("not reached");
          }
 
          ir_constant_data junk_data;
@@ -496,12 +493,11 @@ fs_visitor::emit_fragment_program_code()
          if (brw->gen >= 7) {
             inst = emit_texture_gen7(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index, fs_reg(0u), fpi->TexSrcUnit);
          } else if (brw->gen >= 5) {
-            inst = emit_texture_gen5(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index);
+            inst = emit_texture_gen5(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index, fpi->TexSrcUnit);
          } else {
-            inst = emit_texture_gen4(ir, dst, coordinate, shadow_c, lod, dpdy);
+            inst = emit_texture_gen4(ir, dst, coordinate, shadow_c, lod, dpdy, fpi->TexSrcUnit);
          }
 
-         inst->sampler = fpi->TexSrcUnit;
          inst->shadow_compare = fpi->TexShadow;
 
          /* Reuse the GLSL swizzle_result() handler. */
@@ -587,7 +583,7 @@ fs_visitor::setup_fp_regs()
            p < prog->Parameters->NumParameters; p++) {
          for (unsigned int i = 0; i < 4; i++) {
             stage_prog_data->param[uniforms++] =
-               &prog->Parameters->ParameterValues[p][i].f;
+               &prog->Parameters->ParameterValues[p][i];
          }
       }
    }
@@ -652,7 +648,7 @@ fs_visitor::get_fp_dst_reg(const prog_dst_register *dst)
             /* Tell emit_fb_writes() to smear fragment.color across all the
              * color attachments.
              */
-            for (int i = 1; i < c->key.nr_color_regions; i++) {
+            for (int i = 1; i < key->nr_color_regions; i++) {
                outputs[i] = outputs[0];
                output_components[i] = output_components[0];
             }

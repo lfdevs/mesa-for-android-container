@@ -345,6 +345,146 @@ nvc0_clear_render_target(struct pipe_context *pipe,
 }
 
 static void
+nvc0_clear_buffer_cpu(struct pipe_context *pipe,
+                      struct pipe_resource *res,
+                      unsigned offset, unsigned size,
+                      const void *data, int data_size)
+{
+   struct nv04_resource *buf = nv04_resource(res);
+   struct pipe_transfer *pt;
+   struct pipe_box box;
+   unsigned elements, i;
+
+   elements = size / data_size;
+
+   u_box_1d(offset, size, &box);
+
+   uint8_t *map = buf->vtbl->transfer_map(pipe, res, 0, PIPE_TRANSFER_WRITE,
+                                          &box, &pt);
+
+   for (i = 0; i < elements; ++i)
+      memcpy(&map[i*data_size], data, data_size);
+
+   buf->vtbl->transfer_unmap(pipe, pt);
+}
+
+static void
+nvc0_clear_buffer(struct pipe_context *pipe,
+                  struct pipe_resource *res,
+                  unsigned offset, unsigned size,
+                  const void *data, int data_size)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nv04_resource *buf = nv04_resource(res);
+   union pipe_color_union color;
+   enum pipe_format dst_fmt;
+   unsigned width, height, elements;
+
+   assert(res->target == PIPE_BUFFER);
+   assert(nouveau_bo_memtype(buf->bo) == 0);
+
+   switch (data_size) {
+   case 16:
+      dst_fmt = PIPE_FORMAT_R32G32B32A32_UINT;
+      memcpy(&color.ui, data, 16);
+      break;
+   case 12:
+      /* This doesn't work, RGB32 is not a valid RT format.
+       * dst_fmt = PIPE_FORMAT_R32G32B32_UINT;
+       * memcpy(&color.ui, data, 12);
+       * memset(&color.ui[3], 0, 4);
+       */
+      break;
+   case 8:
+      dst_fmt = PIPE_FORMAT_R32G32_UINT;
+      memcpy(&color.ui, data, 8);
+      memset(&color.ui[2], 0, 8);
+      break;
+   case 4:
+      dst_fmt = PIPE_FORMAT_R32_UINT;
+      memcpy(&color.ui, data, 4);
+      memset(&color.ui[1], 0, 12);
+      break;
+   case 2:
+      dst_fmt = PIPE_FORMAT_R16_UINT;
+      color.ui[0] = util_cpu_to_le32(
+            util_le16_to_cpu(*(unsigned short *)data));
+      memset(&color.ui[1], 0, 12);
+      break;
+   case 1:
+      dst_fmt = PIPE_FORMAT_R8_UINT;
+      color.ui[0] = util_cpu_to_le32(*(unsigned char *)data);
+      memset(&color.ui[1], 0, 12);
+      break;
+   default:
+      assert(!"Unsupported element size");
+      return;
+   }
+
+   assert(size % data_size == 0);
+
+   if (data_size == 12) {
+      /* TODO: Find a way to do this with the GPU! */
+      nvc0_clear_buffer_cpu(pipe, res, offset, size, data, data_size);
+      return;
+   }
+
+   elements = size / data_size;
+   height = (elements + 16383) / 16384;
+   width = elements / height;
+
+   if (!PUSH_SPACE(push, 40))
+      return;
+
+   PUSH_REFN (push, buf->bo, buf->domain | NOUVEAU_BO_WR);
+
+   BEGIN_NVC0(push, NVC0_3D(CLEAR_COLOR(0)), 4);
+   PUSH_DATAf(push, color.f[0]);
+   PUSH_DATAf(push, color.f[1]);
+   PUSH_DATAf(push, color.f[2]);
+   PUSH_DATAf(push, color.f[3]);
+   BEGIN_NVC0(push, NVC0_3D(SCREEN_SCISSOR_HORIZ), 2);
+   PUSH_DATA (push, width << 16);
+   PUSH_DATA (push, height << 16);
+
+   IMMED_NVC0(push, NVC0_3D(RT_CONTROL), 1);
+
+   BEGIN_NVC0(push, NVC0_3D(RT_ADDRESS_HIGH(0)), 9);
+   PUSH_DATAh(push, buf->address + offset);
+   PUSH_DATA (push, buf->address + offset);
+   PUSH_DATA (push, width * data_size);
+   PUSH_DATA (push, height);
+   PUSH_DATA (push, nvc0_format_table[dst_fmt].rt);
+   PUSH_DATA (push, NVC0_3D_RT_TILE_MODE_LINEAR);
+   PUSH_DATA (push, 1);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 0);
+
+   IMMED_NVC0(push, NVC0_3D(ZETA_ENABLE), 0);
+
+   IMMED_NVC0(push, NVC0_3D(CLEAR_BUFFERS), 0x3c);
+
+   if (width * height != elements) {
+      offset += width * height * data_size;
+      width = elements - width * height;
+      height = 1;
+
+      BEGIN_NVC0(push, NVC0_3D(RT_ADDRESS_HIGH(0)), 4);
+      PUSH_DATAh(push, buf->address + offset);
+      PUSH_DATA (push, buf->address + offset);
+      PUSH_DATA (push, width * data_size);
+      PUSH_DATA (push, height);
+
+      IMMED_NVC0(push, NVC0_3D(CLEAR_BUFFERS), 0x3c);
+   }
+
+   nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
+   nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
+   nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
+}
+
+static void
 nvc0_clear_depth_stencil(struct pipe_context *pipe,
                          struct pipe_surface *dst,
                          unsigned clear_flags,
@@ -552,9 +692,23 @@ nvc0_blitter_make_vp(struct nvc0_blitter *blit)
       0x401ffc02, 0x7f0bfc00, /* st b96 a[0x80] $r0t 0x0 0x0 */
       0x001c003c, 0x18000000, /* exit */
    };
+   static const uint32_t code_gm107[] =
+   {
+      0xfc0007e0, 0x001f8000, /* sched 0x7e0 0x7e0 0x7e0 */
+      0x0807ff04, 0xefd8ff80, /* ld b64 $r4 a[0x80] 0x0 */
+      0x0907ff00, 0xefd97f80, /* ld b96 $r0 a[0x90] 0x0 */
+      0x0707ff04, 0xeff0ff80, /* st b64 a[0x70] $r4 0x0 */
+      0xfc0007e0, 0x00000000, /* sched 0x7e0 0x7e0 0x0 */
+      0x0807ff00, 0xeff17f80, /* st b96 a[0x80] $r0 0x0 */
+      0x0007000f, 0xe3000000, /* exit */
+   };
 
    blit->vp.type = PIPE_SHADER_VERTEX;
    blit->vp.translated = TRUE;
+   if (blit->screen->base.class_3d >= GM107_3D_CLASS) {
+      blit->vp.code = (uint32_t *)code_gm107; /* const_cast */
+      blit->vp.code_size = sizeof(code_gm107);
+   } else
    if (blit->screen->base.class_3d >= NVF0_3D_CLASS) {
       blit->vp.code = (uint32_t *)code_gk110; /* const_cast */
       blit->vp.code_size = sizeof(code_gk110);
@@ -858,10 +1012,13 @@ nvc0_blitctx_post_blit(struct nvc0_blitctx *blit)
    nvc0->dirty = blit->saved.dirty |
       (NVC0_NEW_FRAMEBUFFER | NVC0_NEW_SCISSOR | NVC0_NEW_SAMPLE_MASK |
        NVC0_NEW_RASTERIZER | NVC0_NEW_ZSA | NVC0_NEW_BLEND |
+       NVC0_NEW_VIEWPORT |
        NVC0_NEW_TEXTURES | NVC0_NEW_SAMPLERS |
        NVC0_NEW_VERTPROG | NVC0_NEW_FRAGPROG |
        NVC0_NEW_TCTLPROG | NVC0_NEW_TEVLPROG | NVC0_NEW_GMTYPROG |
-       NVC0_NEW_TFB_TARGETS);
+       NVC0_NEW_TFB_TARGETS | NVC0_NEW_VERTEX | NVC0_NEW_ARRAYS);
+   nvc0->scissors_dirty |= 1;
+   nvc0->viewports_dirty |= 1;
 
    nvc0->base.pipe.set_min_samples(&nvc0->base.pipe, blit->saved.min_samples);
 }
@@ -873,8 +1030,11 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct pipe_resource *src = info->src.resource;
    struct pipe_resource *dst = info->dst.resource;
+   struct nouveau_bo *vtxbuf_bo;
+   uint32_t stride, length, *vbuf;
+   uint64_t vtxbuf;
    int32_t minx, maxx, miny, maxy;
-   int32_t i;
+   int32_t i, n;
    float x0, x1, y0, y1, z;
    float dz;
    float x_range, y_range;
@@ -956,43 +1116,73 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    PUSH_DATA (push, (maxx << 16) | minx);
    PUSH_DATA (push, (maxy << 16) | miny);
 
+   stride = (3 + 2) * 4;
+   length = stride * 3 * info->dst.box.depth;
+
+   vbuf = nouveau_scratch_get(&nvc0->base, length, &vtxbuf, &vtxbuf_bo);
+   if (!vbuf) {
+      assert(vbuf);
+      return;
+   }
+
+   BCTX_REFN_bo(nvc0->bufctx_3d, VTX_TMP, NOUVEAU_BO_GART | NOUVEAU_BO_RD, vtxbuf_bo);
+   nouveau_pushbuf_validate(push);
+
+   BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(0)), 4);
+   PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | stride <<
+                    NVC0_3D_VERTEX_ARRAY_FETCH_STRIDE__SHIFT);
+   PUSH_DATAh(push, vtxbuf);
+   PUSH_DATA (push, vtxbuf);
+   PUSH_DATA (push, 0);
+   BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(0)), 2);
+   PUSH_DATAh(push, vtxbuf + length - 1);
+   PUSH_DATA (push, vtxbuf + length - 1);
+
+   n = MAX2(2, nvc0->state.num_vtxelts);
+
+   BEGIN_NVC0(push, NVC0_3D(VERTEX_ATTRIB_FORMAT(0)), n);
+   PUSH_DATA (push, NVC0_3D_VERTEX_ATTRIB_FORMAT_TYPE_FLOAT |
+                    NVC0_3D_VERTEX_ATTRIB_FORMAT_SIZE_32_32 | 0x00 <<
+                    NVC0_3D_VERTEX_ATTRIB_FORMAT_OFFSET__SHIFT);
+   PUSH_DATA (push, NVC0_3D_VERTEX_ATTRIB_FORMAT_TYPE_FLOAT |
+                    NVC0_3D_VERTEX_ATTRIB_FORMAT_SIZE_32_32_32 | 0x08 <<
+                    NVC0_3D_VERTEX_ATTRIB_FORMAT_OFFSET__SHIFT);
+   for (i = 2; i < n; i++) {
+      PUSH_DATA(push, NVC0_3D_VERTEX_ATTRIB_FORMAT_TYPE_FLOAT |
+                      NVC0_3D_VERTEX_ATTRIB_FORMAT_SIZE_32 |
+                      NVC0_3D_VERTEX_ATTRIB_FORMAT_CONST);
+   }
+   nvc0->state.num_vtxelts = 2;
+
    for (i = 0; i < info->dst.box.depth; ++i, z += dz) {
       if (info->dst.box.z + i) {
          BEGIN_NVC0(push, NVC0_3D(LAYER), 1);
          PUSH_DATA (push, info->dst.box.z + i);
       }
 
+      *(vbuf++) = fui(0.0f);
+      *(vbuf++) = fui(0.0f);
+      *(vbuf++) = fui(x0);
+      *(vbuf++) = fui(y0);
+      *(vbuf++) = fui(z);
+
+      *(vbuf++) = fui(16384 << nv50_miptree(dst)->ms_x);
+      *(vbuf++) = fui(0.0f);
+      *(vbuf++) = fui(x1);
+      *(vbuf++) = fui(y0);
+      *(vbuf++) = fui(z);
+
+      *(vbuf++) = fui(0.0f);
+      *(vbuf++) = fui(16384 << nv50_miptree(dst)->ms_y);
+      *(vbuf++) = fui(x0);
+      *(vbuf++) = fui(y1);
+      *(vbuf++) = fui(z);
+
       IMMED_NVC0(push, NVC0_3D(VERTEX_BEGIN_GL),
                        NVC0_3D_VERTEX_BEGIN_GL_PRIMITIVE_TRIANGLES);
-
-      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 4);
-      PUSH_DATA (push, 0x74301);
-      PUSH_DATAf(push, x0);
-      PUSH_DATAf(push, y0);
-      PUSH_DATAf(push, z);
-      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 3);
-      PUSH_DATA (push, 0x74200);
-      PUSH_DATAf(push, 0.0f);
-      PUSH_DATAf(push, 0.0f);
-      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 4);
-      PUSH_DATA (push, 0x74301);
-      PUSH_DATAf(push, x1);
-      PUSH_DATAf(push, y0);
-      PUSH_DATAf(push, z);
-      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 3);
-      PUSH_DATA (push, 0x74200);
-      PUSH_DATAf(push, 16384 << nv50_miptree(dst)->ms_x);
-      PUSH_DATAf(push, 0.0f);
-      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 4);
-      PUSH_DATA (push, 0x74301);
-      PUSH_DATAf(push, x0);
-      PUSH_DATAf(push, y1);
-      PUSH_DATAf(push, z);
-      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 3);
-      PUSH_DATA (push, 0x74200);
-      PUSH_DATAf(push, 0.0f);
-      PUSH_DATAf(push, 16384 << nv50_miptree(dst)->ms_y);
-
+      BEGIN_NVC0(push, NVC0_3D(VERTEX_BUFFER_FIRST), 2);
+      PUSH_DATA (push, i * 3);
+      PUSH_DATA (push, 3);
       IMMED_NVC0(push, NVC0_3D(VERTEX_END_GL), 0);
    }
    if (info->dst.box.z + info->dst.box.depth - 1)
@@ -1000,11 +1190,7 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
 
    nvc0_blitctx_post_blit(blit);
 
-   /* restore viewport */
-
-   BEGIN_NVC0(push, NVC0_3D(VIEWPORT_HORIZ(0)), 2);
-   PUSH_DATA (push, nvc0->vport_int[0]);
-   PUSH_DATA (push, nvc0->vport_int[1]);
+   /* restore viewport transform */
    IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 1);
 }
 
@@ -1050,7 +1236,7 @@ nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    }
 
    if (nvc0->cond_query && info->render_condition_enable)
-      IMMED_NVC0(push, NVC0_2D(COND_MODE), NVC0_2D_COND_MODE_RES_NON_ZERO);
+      IMMED_NVC0(push, NVC0_2D(COND_MODE), nvc0->cond_condmode);
 
    if (mask != 0xffffffff) {
       IMMED_NVC0(push, NVC0_2D(ROP), 0xca); /* DPSDxax */
@@ -1329,4 +1515,5 @@ nvc0_init_surface_functions(struct nvc0_context *nvc0)
    pipe->flush_resource = nvc0_flush_resource;
    pipe->clear_render_target = nvc0_clear_render_target;
    pipe->clear_depth_stencil = nvc0_clear_depth_stencil;
+   pipe->clear_buffer = nvc0_clear_buffer;
 }

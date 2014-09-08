@@ -255,6 +255,7 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
    case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
    case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+   case PIPE_CAP_MAX_VERTEX_STREAMS:
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
@@ -267,13 +268,18 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
-   case PIPE_CAP_TGSI_VS_LAYER:
+   case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
    case PIPE_CAP_TEXTURE_GATHER_SM5:
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
    case PIPE_CAP_FAKE_SW_MSAA:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
    case PIPE_CAP_SAMPLE_SHADING:
+   case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
+   case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+   case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
@@ -283,6 +289,18 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
+
+   case PIPE_CAP_VENDOR_ID:
+      return 0x15ad; /* VMware Inc. */
+   case PIPE_CAP_DEVICE_ID:
+      return 0x0405; /* assume SVGA II */
+   case PIPE_CAP_ACCELERATED:
+      return 0; /* XXX: */
+   case PIPE_CAP_VIDEO_MEMORY:
+      /* XXX: Query the host ? */
+      return 1;
+   case PIPE_CAP_UMA:
+      return 0;
    }
 
    debug_printf("Unexpected PIPE_CAP_ query %u\n", param);
@@ -309,15 +327,14 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
          return SVGA3D_MAX_NESTING_LEVEL;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 10;
-      case PIPE_SHADER_CAP_MAX_CONSTS:
-         return 224;
+      case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+         return 224 * sizeof(float[4]);
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          if (!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_FRAGMENT_SHADER_TEMPS, &result))
             return 32;
          return MIN2(result.u, SVGA3D_TEMPREG_MAX);
-      case PIPE_SHADER_CAP_MAX_ADDRS:
       case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
 	 /* 
 	  * Although PS 3.0 has some addressing abilities it can only represent
@@ -343,11 +360,14 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 16;
-      default:
-         debug_printf("Unexpected fragment shader query %u\n", param);
+      case PIPE_SHADER_CAP_PREFERRED_IR:
+         return PIPE_SHADER_IR_TGSI;
+      case PIPE_SHADER_CAP_DOUBLES:
          return 0;
       }
-      break;
+      /* If we get here, we failed to handle a cap above */
+      debug_printf("Unexpected fragment shader query %u\n", param);
+      return 0;
    case PIPE_SHADER_VERTEX:
       switch (param)
       {
@@ -364,16 +384,14 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
          return SVGA3D_MAX_NESTING_LEVEL;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 16;
-      case PIPE_SHADER_CAP_MAX_CONSTS:
-         return 256;
+      case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+         return 256 * sizeof(float[4]);
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          if (!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_VERTEX_SHADER_TEMPS, &result))
             return 32;
          return MIN2(result.u, SVGA3D_TEMPREG_MAX);
-      case PIPE_SHADER_CAP_MAX_ADDRS:
-         return 1;
       case PIPE_SHADER_CAP_MAX_PREDS:
          return 1;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -394,11 +412,14 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 0;
-      default:
-         debug_printf("Unexpected vertex shader query %u\n", param);
+      case PIPE_SHADER_CAP_PREFERRED_IR:
+         return PIPE_SHADER_IR_TGSI;
+      case PIPE_SHADER_CAP_DOUBLES:
          return 0;
       }
-      break;
+      /* If we get here, we failed to handle a cap above */
+      debug_printf("Unexpected vertex shader query %u\n", param);
+      return 0;
    case PIPE_SHADER_GEOMETRY:
    case PIPE_SHADER_COMPUTE:
       /* no support for geometry or compute shaders at this time */

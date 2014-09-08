@@ -43,7 +43,7 @@
 #include "brw_state.h"
 #include "brw_gs.h"
 
-#include "glsl/ralloc.h"
+#include "util/ralloc.h"
 
 static void compile_ff_gs_prog(struct brw_context *brw,
                                struct brw_ff_gs_prog_key *key)
@@ -70,7 +70,7 @@ static void compile_ff_gs_prog(struct brw_context *brw,
    /* For some reason the thread is spawned with only 4 channels
     * unmasked.
     */
-   brw_set_mask_control(&c.func, BRW_MASK_DISABLE);
+   brw_set_default_mask_control(&c.func, BRW_MASK_DISABLE);
 
    if (brw->gen >= 6) {
       unsigned num_verts;
@@ -103,8 +103,7 @@ static void compile_ff_gs_prog(struct brw_context *brw,
          check_edge_flag = true;
          break;
       default:
-	 assert(!"Unexpected primitive type in Gen6 SOL program.");
-	 return;
+	 unreachable("Unexpected primitive type in Gen6 SOL program.");
       }
       gen6_sol_program(&c, key, num_verts, check_edge_flag);
    } else {
@@ -128,17 +127,15 @@ static void compile_ff_gs_prog(struct brw_context *brw,
       }
    }
 
+   brw_compact_instructions(&c.func, 0, 0, NULL);
+
    /* get the program
     */
    program = brw_get_program(&c.func, &program_size);
 
    if (unlikely(INTEL_DEBUG & DEBUG_GS)) {
-      int i;
-
       fprintf(stderr, "gs:\n");
-      for (i = 0; i < program_size / sizeof(struct brw_instruction); i++)
-	 brw_disasm(stderr, &((struct brw_instruction *)program)[i],
-		    brw->gen);
+      brw_disassemble(brw, c.func.store, 0, program_size, stderr);
       fprintf(stderr, "\n");
     }
 

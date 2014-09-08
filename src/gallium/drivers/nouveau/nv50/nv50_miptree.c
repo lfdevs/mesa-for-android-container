@@ -352,7 +352,12 @@ nv50_miptree_create(struct pipe_screen *pscreen,
    }
    bo_config.nv50.tile_mode = mt->level[0].tile_mode;
 
-   bo_flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_NOSNOOP;
+   if (!bo_config.nv50.memtype && (pt->bind & PIPE_BIND_SHARED))
+      mt->base.domain = NOUVEAU_BO_GART;
+   else
+      mt->base.domain = NOUVEAU_BO_VRAM;
+
+   bo_flags = mt->base.domain | NOUVEAU_BO_NOSNOOP;
    if (mt->base.base.bind & (PIPE_BIND_CURSOR | PIPE_BIND_DISPLAY_TARGET))
       bo_flags |= NOUVEAU_BO_CONTIG;
 
@@ -362,7 +367,6 @@ nv50_miptree_create(struct pipe_screen *pscreen,
       FREE(mt);
       return NULL;
    }
-   mt->base.domain = NOUVEAU_BO_VRAM;
    mt->base.address = mt->base.bo->offset;
 
    return pt;
@@ -403,6 +407,8 @@ nv50_miptree_from_handle(struct pipe_screen *pscreen,
    mt->level[0].pitch = stride;
    mt->level[0].offset = 0;
    mt->level[0].tile_mode = mt->base.bo->config.nv50.tile_mode;
+
+   NOUVEAU_DRV_STAT(nouveau_screen(pscreen), tex_obj_current_count, 1);
 
    /* no need to adjust bo reference count */
    return &mt->base.base;

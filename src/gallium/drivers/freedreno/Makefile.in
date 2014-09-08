@@ -82,14 +82,14 @@ target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.sources \
 	$(top_srcdir)/src/gallium/Automake.inc $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+
+@NEED_WINSYS_XLIB_TRUE@am__append_2 = \
+@NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
+@NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
+@NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
+
 subdir = src/gallium/drivers/freedreno
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -119,16 +119,16 @@ am__objects_2 = a2xx/fd2_blend.lo a2xx/fd2_compiler.lo \
 	a2xx/fd2_gmem.lo a2xx/fd2_program.lo a2xx/fd2_rasterizer.lo \
 	a2xx/fd2_screen.lo a2xx/fd2_texture.lo a2xx/fd2_util.lo \
 	a2xx/fd2_zsa.lo a2xx/disasm-a2xx.lo a2xx/ir-a2xx.lo
-am__objects_3 = a3xx/fd3_blend.lo a3xx/fd3_compiler.lo \
-	a3xx/fd3_compiler_old.lo a3xx/fd3_context.lo a3xx/fd3_draw.lo \
+am__objects_3 = a3xx/fd3_blend.lo a3xx/fd3_context.lo a3xx/fd3_draw.lo \
 	a3xx/fd3_emit.lo a3xx/fd3_gmem.lo a3xx/fd3_program.lo \
 	a3xx/fd3_query.lo a3xx/fd3_rasterizer.lo a3xx/fd3_screen.lo \
-	a3xx/fd3_texture.lo a3xx/fd3_util.lo a3xx/fd3_zsa.lo \
-	a3xx/disasm-a3xx.lo a3xx/ir3_cp.lo a3xx/ir3_depth.lo \
-	a3xx/ir3_dump.lo a3xx/ir3_flatten.lo a3xx/ir3_ra.lo \
-	a3xx/ir3_sched.lo a3xx/ir3.lo
+	a3xx/fd3_texture.lo a3xx/fd3_util.lo a3xx/fd3_zsa.lo
+am__objects_4 = ir3/disasm-a3xx.lo ir3/ir3_compiler.lo \
+	ir3/ir3_compiler_old.lo ir3/ir3_shader.lo ir3/ir3_cp.lo \
+	ir3/ir3_depth.lo ir3/ir3_dump.lo ir3/ir3_flatten.lo \
+	ir3/ir3_ra.lo ir3/ir3_sched.lo ir3/ir3.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	$(am__objects_3)
+	$(am__objects_3) $(am__objects_4)
 libfreedreno_la_OBJECTS = $(am_libfreedreno_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -203,6 +203,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -490,8 +491,6 @@ a2xx_SOURCES := \
 
 a3xx_SOURCES := \
 	a3xx/fd3_blend.c \
-	a3xx/fd3_compiler.c \
-	a3xx/fd3_compiler_old.c \
 	a3xx/fd3_context.c \
 	a3xx/fd3_draw.c \
 	a3xx/fd3_emit.c \
@@ -502,18 +501,24 @@ a3xx_SOURCES := \
 	a3xx/fd3_screen.c \
 	a3xx/fd3_texture.c \
 	a3xx/fd3_util.c \
-	a3xx/fd3_zsa.c \
-	a3xx/disasm-a3xx.c \
-	a3xx/ir3_cp.c \
-	a3xx/ir3_depth.c \
-	a3xx/ir3_dump.c \
-	a3xx/ir3_flatten.c \
-	a3xx/ir3_ra.c \
-	a3xx/ir3_sched.c \
-	a3xx/ir3.c
+	a3xx/fd3_zsa.c
+
+ir3_SOURCES := \
+	ir3/disasm-a3xx.c \
+	ir3/ir3_compiler.c \
+	ir3/ir3_compiler_old.c \
+	ir3/ir3_shader.c \
+	ir3/ir3_cp.c \
+	ir3/ir3_depth.c \
+	ir3/ir3_dump.c \
+	ir3/ir3_flatten.c \
+	ir3/ir3_ra.c \
+	ir3/ir3_sched.c \
+	ir3/ir3.c
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
@@ -525,6 +530,7 @@ GALLIUM_CFLAGS = \
 # preprocessor is determined by the ordering of the -I flags.
 GALLIUM_DRIVER_CFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -534,6 +540,7 @@ GALLIUM_DRIVER_CFLAGS = \
 
 GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -541,21 +548,9 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
-GALLIUM_DRI_CFLAGS = \
+GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/include \
-	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	$(DEFINES) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
-
-GALLIUM_VIDEO_CFLAGS = \
-	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -565,45 +560,12 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
-	$(GC_SECTIONS) $(am__append_1)
-GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
-GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
-GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
-	-avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
 GALLIUM_COMMON_LIB_DEPS = \
 	-lm \
 	$(CLOCK_LIB) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 
-GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
-GALLIUM_VDPAU_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_6)
-GALLIUM_XVMC_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_7)
-GALLIUM_OMX_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
-	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -611,10 +573,12 @@ GALLIUM_WINSYS_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	-Wno-packed-bitfield-compat \
-	-I$(top_srcdir)/src/gallium/drivers/freedreno/a3xx \
-	-I$(top_srcdir)/src/gallium/drivers/freedreno/a2xx \
+	-I$(top_srcdir)/src/gallium/drivers/freedreno/ir3 \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(FREEDRENO_CFLAGS)
 
@@ -622,7 +586,8 @@ noinst_LTLIBRARIES = libfreedreno.la
 libfreedreno_la_SOURCES = \
 	$(C_SOURCES) \
 	$(a2xx_SOURCES) \
-	$(a3xx_SOURCES)
+	$(a3xx_SOURCES) \
+	$(ir3_SOURCES)
 
 all: all-am
 
@@ -704,10 +669,6 @@ a3xx/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) a3xx/$(DEPDIR)
 	@: > a3xx/$(DEPDIR)/$(am__dirstamp)
 a3xx/fd3_blend.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/fd3_compiler.lo: a3xx/$(am__dirstamp) \
-	a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/fd3_compiler_old.lo: a3xx/$(am__dirstamp) \
-	a3xx/$(DEPDIR)/$(am__dirstamp)
 a3xx/fd3_context.lo: a3xx/$(am__dirstamp) \
 	a3xx/$(DEPDIR)/$(am__dirstamp)
 a3xx/fd3_draw.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
@@ -724,16 +685,24 @@ a3xx/fd3_texture.lo: a3xx/$(am__dirstamp) \
 	a3xx/$(DEPDIR)/$(am__dirstamp)
 a3xx/fd3_util.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
 a3xx/fd3_zsa.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/disasm-a3xx.lo: a3xx/$(am__dirstamp) \
-	a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/ir3_cp.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/ir3_depth.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/ir3_dump.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/ir3_flatten.lo: a3xx/$(am__dirstamp) \
-	a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/ir3_ra.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/ir3_sched.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
-a3xx/ir3.lo: a3xx/$(am__dirstamp) a3xx/$(DEPDIR)/$(am__dirstamp)
+ir3/$(am__dirstamp):
+	@$(MKDIR_P) ir3
+	@: > ir3/$(am__dirstamp)
+ir3/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ir3/$(DEPDIR)
+	@: > ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/disasm-a3xx.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_compiler.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_compiler_old.lo: ir3/$(am__dirstamp) \
+	ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_shader.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_cp.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_depth.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_dump.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_flatten.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_ra.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_sched.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 
 libfreedreno.la: $(libfreedreno_la_OBJECTS) $(libfreedreno_la_DEPENDENCIES) $(EXTRA_libfreedreno_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libfreedreno_la_OBJECTS) $(libfreedreno_la_LIBADD) $(LIBS)
@@ -744,6 +713,8 @@ mostlyclean-compile:
 	-rm -f a2xx/*.lo
 	-rm -f a3xx/*.$(OBJEXT)
 	-rm -f a3xx/*.lo
+	-rm -f ir3/*.$(OBJEXT)
+	-rm -f ir3/*.lo
 
 distclean-compile:
 	-rm -f *.tab.c
@@ -777,10 +748,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@a2xx/$(DEPDIR)/fd2_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a2xx/$(DEPDIR)/fd2_zsa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a2xx/$(DEPDIR)/ir-a2xx.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/disasm-a3xx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_blend.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_compiler.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_compiler_old.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_emit.Plo@am__quote@
@@ -792,13 +760,17 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_zsa.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/ir3.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/ir3_cp.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/ir3_depth.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/ir3_dump.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/ir3_flatten.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/ir3_ra.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/ir3_sched.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/disasm-a3xx.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler_old.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cp.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_depth.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_dump.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_flatten.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_ra.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_sched.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_shader.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -831,6 +803,7 @@ clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf a2xx/.libs a2xx/_libs
 	-rm -rf a3xx/.libs a3xx/_libs
+	-rm -rf ir3/.libs ir3/_libs
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -948,6 +921,8 @@ distclean-generic:
 	-rm -f a2xx/$(am__dirstamp)
 	-rm -f a3xx/$(DEPDIR)/$(am__dirstamp)
 	-rm -f a3xx/$(am__dirstamp)
+	-rm -f ir3/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ir3/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -958,7 +933,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR) ir3/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -1004,7 +979,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR) ir3/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

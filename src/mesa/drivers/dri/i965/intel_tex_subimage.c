@@ -42,6 +42,10 @@
 #include "intel_mipmap_tree.h"
 #include "intel_blit.h"
 
+#ifdef __SSSE3__
+#include <tmmintrin.h>
+#endif
+
 #define FILE_DEBUG_FLAG DEBUG_TEXTURE
 
 #define ALIGN_DOWN(a, b) ROUND_DOWN_TO(a, b)
@@ -129,7 +133,8 @@ intel_blit_texsubimage(struct gl_context * ctx,
       intel_miptree_create(brw, GL_TEXTURE_2D, texImage->TexFormat,
                            0, 0,
                            width, height, 1,
-                           false, 0, INTEL_MIPTREE_TILING_NONE);
+                           false, 0, INTEL_MIPTREE_TILING_NONE,
+                           false);
    if (!temp_mt)
       goto err;
 
@@ -174,13 +179,11 @@ err:
 static const uint8_t rgba8_permutation[16] =
    { 2,1,0,3, 6,5,4,7, 10,9,8,11, 14,13,12,15 };
 
-typedef char v16 __attribute__((vector_size(16)));
-
 /* NOTE: dst must be 16 byte aligned */
 #define rgba8_copy_16(dst, src)                     \
-   *(v16*)(dst) = __builtin_ia32_pshufb128(         \
-       (v16) __builtin_ia32_loadups((float*)(src)), \
-      *(v16*) rgba8_permutation                     \
+   *(__m128i *)(dst) = _mm_shuffle_epi8(            \
+      (__m128i) _mm_loadu_ps((float *)(src)),       \
+      *(__m128i *) rgba8_permutation                \
    )
 #endif
 
@@ -447,8 +450,7 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
       span = ytile_span;
       tile_copy = ytile_copy_faster;
    } else {
-      assert(!"unsupported tiling");
-      return;
+      unreachable("unsupported tiling");
    }
 
    /* Round out to tile boundaries. */
@@ -559,7 +561,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
     * we need tests.
     */
    if (!brw->has_llc ||
-       type != GL_UNSIGNED_BYTE ||
+       !(type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_INT_8_8_8_8_REV) ||
        texImage->TexObject->Target != GL_TEXTURE_2D ||
        pixels == NULL ||
        _mesa_is_bufferobj(packing->BufferObj) ||
@@ -572,6 +574,10 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
        packing->Invert)
       return false;
 
+   if (type == GL_UNSIGNED_INT_8_8_8_8_REV &&
+       !(format == GL_RGBA || format == GL_BGRA))
+      return false; /* Invalid type/format combination */
+
    if ((texImage->TexFormat == MESA_FORMAT_L_UNORM8 && format == GL_LUMINANCE) ||
        (texImage->TexFormat == MESA_FORMAT_A_UNORM8 && format == GL_ALPHA)) {
       cpp = 1;
@@ -583,6 +589,17 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
          mem_copy = memcpy;
       } else if (format == GL_RGBA) {
          mem_copy = rgba8_copy;
+      }
+   } else if ((texImage->TexFormat == MESA_FORMAT_R8G8B8A8_UNORM) ||
+              (texImage->TexFormat == MESA_FORMAT_R8G8B8X8_UNORM)) {
+      cpp = 4;
+      if (format == GL_BGRA) {
+         /* Copying from RGBA to BGRA is the same as BGRA to RGBA so we can
+          * use the same function.
+          */
+         mem_copy = rgba8_copy;
+      } else if (format == GL_RGBA) {
+         mem_copy = memcpy;
       }
    }
    if (!mem_copy)
@@ -665,6 +682,12 @@ intelTexSubImage(struct gl_context * ctx,
                  const struct gl_pixelstore_attrib *packing)
 {
    bool ok;
+
+   DBG("%s mesa_format %s target %s format %s type %s level %d %dx%dx%d\n",
+       __FUNCTION__, _mesa_get_format_name(texImage->TexFormat),
+       _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
+       _mesa_lookup_enum_by_nr(format), _mesa_lookup_enum_by_nr(type),
+       texImage->Level, texImage->Width, texImage->Height, texImage->Depth);
 
    ok = intel_texsubimage_tiled_memcpy(ctx, dims, texImage,
                                        xoffset, yoffset, zoffset,

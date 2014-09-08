@@ -19,6 +19,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
+include Makefile.sources
+
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gbm/main \
@@ -32,50 +34,14 @@ AM_CFLAGS = \
 lib_LTLIBRARIES = libEGL.la
 
 libEGL_la_SOURCES = \
-	eglapi.c \
-	eglapi.h \
-	eglarray.c \
-	eglarray.h \
-	eglcompiler.h \
-	eglconfig.c \
-	eglconfig.h \
-	eglcontext.c \
-	eglcontext.h \
-	eglcurrent.c \
-	eglcurrent.h \
-	egldefines.h \
-	egldisplay.c \
-	egldisplay.h \
-	egldriver.c \
-	egldriver.h \
-	eglfallbacks.c \
-	eglglobals.c \
-	eglglobals.h \
-	eglimage.c \
-	eglimage.h \
-	egllog.c \
-	egllog.h \
-	eglmisc.c \
-	eglmisc.h \
-	eglmode.c \
-	eglmode.h \
-	eglmutex.h \
-	eglscreen.c \
-	eglscreen.h \
-	eglstring.c \
-	eglstring.h \
-	eglsurface.c \
-	eglsurface.h \
-	eglsync.c \
-	eglsync.h \
-	egltypedefs.h
+	${LIBEGL_C_FILES}
 
 libEGL_la_LIBADD = \
 	$(EGL_LIB_DEPS)
 libEGL_la_LDFLAGS = \
 	-no-undefined \
 	-version-number 1:0 \
-	-Wl,-Bsymbolic \
+	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 
@@ -126,5 +92,6 @@ egldir = $(includedir)/EGL
 egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglext.h \
 	$(top_srcdir)/include/EGL/egl.h \
+	$(top_srcdir)/include/EGL/eglextchromium.h \
 	$(top_srcdir)/include/EGL/eglmesaext.h \
 	$(top_srcdir)/include/EGL/eglplatform.h

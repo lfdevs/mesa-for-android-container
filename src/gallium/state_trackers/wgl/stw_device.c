@@ -69,6 +69,8 @@ stw_init(const struct stw_winsys *stw_winsys)
    static struct stw_device stw_dev_storage;
    struct pipe_screen *screen;
 
+   debug_disable_error_message_boxes();
+
    debug_printf("%s\n", __FUNCTION__);
    
    assert(!stw_dev);
@@ -187,19 +189,6 @@ stw_cleanup(void)
    stw_tls_cleanup();
 
    stw_dev = NULL;
-}
-
-
-struct stw_context *
-stw_lookup_context_locked( DHGLRC dhglrc )
-{
-   if (dhglrc == 0)
-      return NULL;
-
-   if (stw_dev == NULL)
-      return NULL;
-
-   return (struct stw_context *) handle_table_get(stw_dev->ctx_table, dhglrc);
 }
 
 

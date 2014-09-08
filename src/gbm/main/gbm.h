@@ -192,10 +192,13 @@ enum gbm_bo_flags {
     */
    GBM_BO_USE_SCANOUT      = (1 << 0),
    /**
-    * Buffer is going to be used as cursor - the dimensions for the buffer
-    * must be 64x64 if this flag is passed.
+    * Buffer is going to be used as cursor
     */
-   GBM_BO_USE_CURSOR_64X64 = (1 << 1),
+   GBM_BO_USE_CURSOR       = (1 << 1),
+   /**
+    * Deprecated
+    */
+   GBM_BO_USE_CURSOR_64X64 = GBM_BO_USE_CURSOR,
    /**
     * Buffer is to be used for rendering - for example it is going to be used
     * as the storage for a color buffer
@@ -203,8 +206,7 @@ enum gbm_bo_flags {
    GBM_BO_USE_RENDERING    = (1 << 2),
    /**
     * Buffer can be used for gbm_bo_write.  This is guaranteed to work
-    * with GBM_BO_USE_CURSOR_64X64. but may not work for other
-    * combinations.
+    * with GBM_BO_USE_CURSOR. but may not work for other combinations.
     */
    GBM_BO_USE_WRITE    = (1 << 3),
 };
@@ -284,6 +286,9 @@ struct gbm_surface *
 gbm_surface_create(struct gbm_device *gbm,
                    uint32_t width, uint32_t height,
 		   uint32_t format, uint32_t flags);
+
+int
+gbm_surface_needs_lock_front_buffer(struct gbm_surface *surface);
 
 struct gbm_bo *
 gbm_surface_lock_front_buffer(struct gbm_surface *surface);

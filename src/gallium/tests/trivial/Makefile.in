@@ -82,18 +82,10 @@ target_triplet = @target@
 DIST_COMMON = $(top_srcdir)/src/gallium/Automake.inc \
 	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/bin/depcomp
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
-@HAVE_DRI_TRUE@am__append_9 = \
-@HAVE_DRI_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@NEED_WINSYS_XLIB_TRUE@am__append_10 = \
+@NEED_WINSYS_XLIB_TRUE@am__append_2 = \
 @NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 @NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
 @NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
@@ -119,15 +111,17 @@ am_compute_OBJECTS = compute.$(OBJEXT)
 compute_OBJECTS = $(am_compute_OBJECTS)
 compute_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
-@NEED_WINSYS_XLIB_TRUE@am__DEPENDENCIES_3 = $(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
+@NEED_WINSYS_XLIB_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 @NEED_WINSYS_XLIB_TRUE@	$(am__DEPENDENCIES_1)
-compute_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
+am__DEPENDENCIES_3 =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__DEPENDENCIES_2)
+am__DEPENDENCIES_4 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+compute_DEPENDENCIES = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(am__DEPENDENCIES_2) $(am__append_9) $(am__DEPENDENCIES_3)
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_3) \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_4)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -135,19 +129,17 @@ am__v_lt_1 =
 am_quad_tex_OBJECTS = quad-tex.$(OBJEXT)
 quad_tex_OBJECTS = $(am_quad_tex_OBJECTS)
 quad_tex_LDADD = $(LDADD)
-quad_tex_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
-	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+quad_tex_DEPENDENCIES = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(am__DEPENDENCIES_2) $(am__append_9) $(am__DEPENDENCIES_3)
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_3) \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_4)
 am_tri_OBJECTS = tri.$(OBJEXT)
 tri_OBJECTS = $(am_tri_OBJECTS)
 tri_LDADD = $(LDADD)
-tri_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
-	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+tri_DEPENDENCIES = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(am__DEPENDENCIES_2) $(am__append_9) $(am__DEPENDENCIES_3)
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_3) \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_4)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -217,6 +209,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -470,6 +463,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
@@ -481,6 +475,7 @@ GALLIUM_CFLAGS = \
 # preprocessor is determined by the ordering of the -I flags.
 GALLIUM_DRIVER_CFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -490,6 +485,7 @@ GALLIUM_DRIVER_CFLAGS = \
 
 GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -497,21 +493,9 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
-GALLIUM_DRI_CFLAGS = \
+GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/include \
-	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	$(DEFINES) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
-
-GALLIUM_VIDEO_CFLAGS = \
-	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -521,45 +505,12 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
-	$(GC_SECTIONS) $(am__append_1)
-GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
-GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
-GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
-	-avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
 GALLIUM_COMMON_LIB_DEPS = \
 	-lm \
 	$(CLOCK_LIB) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 
-GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
-GALLIUM_VDPAU_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_6)
-GALLIUM_XVMC_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_7)
-GALLIUM_OMX_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
-	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -567,6 +518,9 @@ GALLIUM_WINSYS_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
 PIPE_SRC_DIR = $(top_builddir)/src/gallium/targets/pipe-loader
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS)
@@ -577,11 +531,14 @@ AM_CPPFLAGS = \
 	-DPIPE_SEARCH_DIR=\"$(PIPE_SRC_DIR)/.libs\" \
 	$(GALLIUM_PIPE_LOADER_DEFINES)
 
-LDADD = $(GALLIUM_PIPE_LOADER_CLIENT_LIBS) \
+LDADD = \
 	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
-	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_9) $(am__append_10)
+	$(top_builddir)/src/util/libmesautil.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(GALLIUM_PIPE_LOADER_CLIENT_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS)
+
 compute_SOURCES = compute.c
 tri_SOURCES = tri.c
 quad_tex_SOURCES = quad-tex.c

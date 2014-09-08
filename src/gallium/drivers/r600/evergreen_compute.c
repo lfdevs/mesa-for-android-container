@@ -49,6 +49,7 @@
 #ifdef HAVE_OPENCL
 #include "radeon_llvm_util.h"
 #endif
+#include <inttypes.h>
 
 /**
 RAT0 is for global binding write
@@ -100,7 +101,7 @@ struct r600_resource* r600_compute_buffer_alloc_vram(
 
 static void evergreen_set_rat(
 	struct r600_pipe_compute *pipe,
-	int id,
+	unsigned id,
 	struct r600_resource* bo,
 	int start,
 	int size)
@@ -276,7 +277,7 @@ void evergreen_compute_upload_input(
 {
 	struct r600_context *ctx = (struct r600_context *)ctx_;
 	struct r600_pipe_compute *shader = ctx->cs_shader_state.shader;
-	int i;
+	unsigned i;
 	/* We need to reserve 9 dwords (36 bytes) for implicit kernel
 	 * parameters.
 	 */
@@ -323,7 +324,7 @@ void evergreen_compute_upload_input(
 	memcpy(kernel_parameters_start, input, shader->input_size);
 
 	for (i = 0; i < (input_size / 4); i++) {
-		COMPUTE_DBG(ctx->screen, "input %i : %i\n", i,
+		COMPUTE_DBG(ctx->screen, "input %i : %u\n", i,
 			((unsigned*)num_work_groups_start)[i]);
 	}
 
@@ -405,7 +406,7 @@ static void compute_emit_cs(struct r600_context *ctx, const uint *block_layout,
 		const uint *grid_layout)
 {
 	struct radeon_winsys_cs *cs = ctx->b.rings.gfx.cs;
-	int i;
+	unsigned i;
 
 	/* make sure that the gfx ring is only one active */
 	if (ctx->b.rings.dma.cs && ctx->b.rings.dma.cs->cdw) {
@@ -521,12 +522,9 @@ void evergreen_emit_cs_shader(
 	struct r600_pipe_compute *shader = state->shader;
 	struct r600_kernel *kernel = &shader->kernels[state->kernel_index];
 	struct radeon_winsys_cs *cs = rctx->b.rings.gfx.cs;
-	uint64_t va;
-
-	va = r600_resource_va(&rctx->screen->b.b, &kernel->code_bo->b.b);
 
 	r600_write_compute_context_reg_seq(cs, R_0288D0_SQ_PGM_START_LS, 3);
-	radeon_emit(cs, va >> 8); /* R_0288D0_SQ_PGM_START_LS */
+	radeon_emit(cs, kernel->code_bo->gpu_address >> 8); /* R_0288D0_SQ_PGM_START_LS */
 	radeon_emit(cs,           /* R_0288D4_SQ_PGM_RESOURCES_LS */
 			S_0288D4_NUM_GPRS(kernel->bc.ngpr)
 			| S_0288D4_STACK_SIZE(kernel->bc.nstack));
@@ -598,7 +596,7 @@ static void evergreen_set_compute_resources(struct pipe_context * ctx_,
 	COMPUTE_DBG(ctx->screen, "*** evergreen_set_compute_resources: start = %u count = %u\n",
 			start, count);
 
-	for (int i = 0; i < count; i++)	{
+	for (unsigned i = 0; i < count; i++) {
 		/* The First two vertex buffers are reserved for parameters and
 		 * global buffers. */
 		unsigned vtx_id = 2 + i;
@@ -629,7 +627,7 @@ void evergreen_set_cs_sampler_view(struct pipe_context *ctx_,
 	struct r600_pipe_sampler_view **resource =
 		(struct r600_pipe_sampler_view **)views;
 
-	for (int i = 0; i < count; i++)	{
+	for (unsigned i = 0; i < count; i++)	{
 		if (resource[i]) {
 			assert(i+1 < 12);
 			/* XXX: Implement */
@@ -650,6 +648,7 @@ static void evergreen_set_global_binding(
 	struct compute_memory_pool *pool = ctx->screen->global_pool;
 	struct r600_resource_global **buffers =
 		(struct r600_resource_global **)resources;
+	unsigned i;
 
 	COMPUTE_DBG(ctx->screen, "*** evergreen_set_global_binding first = %u n = %u\n",
 			first, n);
@@ -659,9 +658,21 @@ static void evergreen_set_global_binding(
 		return;
 	}
 
-	compute_memory_finalize_pending(pool, ctx_);
+	/* We mark these items for promotion to the pool if they
+	 * aren't already there */
+	for (i = first; i < first + n; i++) {
+		struct compute_memory_item *item = buffers[i]->chunk;
 
-	for (int i = 0; i < n; i++)
+		if (!is_item_in_pool(item))
+			buffers[i]->chunk->status |= ITEM_FOR_PROMOTING;
+	}
+
+	if (compute_memory_finalize_pending(pool, ctx_) == -1) {
+		/* XXX: Unset */
+		return;
+	}
+
+	for (i = first; i < first + n; i++)
 	{
 		uint32_t buffer_offset;
 		uint32_t handle;
@@ -881,9 +892,6 @@ void evergreen_init_compute_state_functions(struct r600_context *ctx)
 	ctx->b.b.set_global_binding = evergreen_set_global_binding;
 	ctx->b.b.launch_grid = evergreen_launch_grid;
 
-	/* We always use at least one vertex buffer for parameters (id = 1)*/
-	ctx->cs_vertex_buffer_state.enabled_mask =
-	ctx->cs_vertex_buffer_state.dirty_mask = 0x2;
 }
 
 struct pipe_resource *r600_compute_global_buffer_create(
@@ -958,16 +966,33 @@ void *r600_compute_global_transfer_map(
 	struct r600_resource_global* buffer =
 		(struct r600_resource_global*)resource;
 
+	struct compute_memory_item *item = buffer->chunk;
+	struct pipe_resource *dst = NULL;
+	unsigned offset = box->x;
+
+	if (is_item_in_pool(item)) {
+		compute_memory_demote_item(pool, item, ctx_);
+	}
+	else {
+		if (item->real_buffer == NULL) {
+			item->real_buffer = (struct r600_resource*)
+					r600_compute_buffer_alloc_vram(pool->screen, item->size_in_dw * 4);
+		}
+	}
+
+	dst = (struct pipe_resource*)item->real_buffer;
+
+	if (usage & PIPE_TRANSFER_READ)
+		buffer->chunk->status |= ITEM_MAPPED_FOR_READING;
+
 	COMPUTE_DBG(rctx->screen, "* r600_compute_global_transfer_map()\n"
 			"level = %u, usage = %u, box(x = %u, y = %u, z = %u "
 			"width = %u, height = %u, depth = %u)\n", level, usage,
 			box->x, box->y, box->z, box->width, box->height,
 			box->depth);
-	COMPUTE_DBG(rctx->screen, "Buffer id = %u offset = "
-		"%u (box.x)\n", buffer->chunk->id, box->x);
+	COMPUTE_DBG(rctx->screen, "Buffer id = %"PRIi64" offset = "
+		"%u (box.x)\n", item->id, box->x);
 
-
-	compute_memory_finalize_pending(pool, ctx_);
 
 	assert(resource->target == PIPE_BUFFER);
 	assert(resource->bind & PIPE_BIND_GLOBAL);
@@ -976,9 +1001,8 @@ void *r600_compute_global_transfer_map(
 	assert(box->z == 0);
 
 	///TODO: do it better, mapping is not possible if the pool is too big
-	return pipe_buffer_map_range(ctx_, (struct pipe_resource*)buffer->chunk->pool->bo,
-			box->x + (buffer->chunk->start_in_dw * 4),
-			box->width, usage, ptransfer);
+	return pipe_buffer_map_range(ctx_, dst,
+			offset, box->width, usage, ptransfer);
 }
 
 void r600_compute_global_transfer_unmap(

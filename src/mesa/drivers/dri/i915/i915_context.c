@@ -40,7 +40,7 @@
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "tnl/tnl.h"
-#include "../glsl/ralloc.h"
+#include "util/ralloc.h"
 
 #include "i915_reg.h"
 #include "i915_program.h"
@@ -253,10 +253,10 @@ i915CreateContext(int api,
    /* FINISHME: Are there other options that should be enabled for software
     * FINISHME: vertex shaders?
     */
-   ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitCondCodes = true;
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitCondCodes = true;
 
    struct gl_shader_compiler_options *const fs_options =
-      & ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
+      & ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
    fs_options->MaxIfDepth = 0;
    fs_options->EmitNoNoise = true;
    fs_options->EmitNoPow = true;

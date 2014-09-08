@@ -31,6 +31,8 @@
  */
 
 
+#include <inttypes.h>  /* for PRId64 macro */
+
 #include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/arrayobj.h"
@@ -225,6 +227,9 @@ st_bufferobj_data(struct gl_context *ctx,
    case GL_UNIFORM_BUFFER:
       bind = PIPE_BIND_CONSTANT_BUFFER;
       break;
+   case GL_DRAW_INDIRECT_BUFFER:
+      bind = PIPE_BIND_COMMAND_ARGS_BUFFER;
+      break;
    default:
       bind = 0;
    }
@@ -268,7 +273,8 @@ st_bufferobj_data(struct gl_context *ctx,
    pipe_resource_reference( &st_obj->buffer, NULL );
 
    if (ST_DEBUG & DEBUG_BUFFER) {
-      debug_printf("Create buffer size %td bind 0x%x\n", size, bind);
+      debug_printf("Create buffer size %" PRId64 " bind 0x%x\n",
+                   (int64_t) size, bind);
    }
 
    if (size != 0) {

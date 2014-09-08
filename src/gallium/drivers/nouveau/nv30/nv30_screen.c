@@ -23,6 +23,8 @@
  *
  */
 
+#include <xf86drm.h>
+#include <nouveau_drm.h>
 #include "util/u_format.h"
 #include "util/u_format_s3tc.h"
 
@@ -49,6 +51,7 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 {
    struct nv30_screen *screen = nv30_screen(pscreen);
    struct nouveau_object *eng3d = screen->eng3d;
+   struct nouveau_device *dev = nouveau_screen(pscreen)->device;
 
    switch (param) {
    /* non-boolean capabilities */
@@ -62,6 +65,12 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 13;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
       return 120;
+   case PIPE_CAP_ENDIANNESS:
+      return PIPE_ENDIAN_LITTLE;
+   case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
+      return 16;
+   case PIPE_CAP_MAX_VIEWPORTS:
+      return 1;
    /* supported capabilities */
    case PIPE_CAP_TWO_SIDED_STENCIL:
    case PIPE_CAP_ANISOTROPIC_FILTER:
@@ -80,12 +89,10 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_USER_CONSTANT_BUFFERS:
    case PIPE_CAP_USER_INDEX_BUFFERS:
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
-      return 1;
-   case PIPE_CAP_USER_VERTEX_BUFFERS:
-      return 0;
-   case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
-      return 16;
-   case PIPE_CAP_MAX_VIEWPORTS:
+   case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 1;
    /* nv4x capabilities */
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
@@ -113,12 +120,15 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
    case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
    case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+   case PIPE_CAP_MAX_VERTEX_STREAMS:
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
    case PIPE_CAP_TEXTURE_BARRIER:
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
    case PIPE_CAP_CUBE_MAP_ARRAY:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
+   case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
+   case PIPE_CAP_VERTEX_COLOR_CLAMPED:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_START_INSTANCE:
@@ -130,24 +140,41 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
-   case PIPE_CAP_TGSI_VS_LAYER:
+   case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
    case PIPE_CAP_TEXTURE_GATHER_SM5:
    case PIPE_CAP_FAKE_SW_MSAA:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
    case PIPE_CAP_SAMPLE_SHADING:
+   case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
+   case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+   case PIPE_CAP_USER_VERTEX_BUFFERS:
+   case PIPE_CAP_COMPUTE:
+   case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
       return 0;
-   case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+
+   case PIPE_CAP_VENDOR_ID:
+      return 0x10de;
+   case PIPE_CAP_DEVICE_ID: {
+      uint64_t device_id;
+      if (nouveau_getparam(dev, NOUVEAU_GETPARAM_PCI_DEVICE, &device_id)) {
+         NOUVEAU_ERR("NOUVEAU_GETPARAM_PCI_DEVICE failed.\n");
+         return -1;
+      }
+      return device_id;
+   }
+   case PIPE_CAP_ACCELERATED:
       return 1;
-   case PIPE_CAP_ENDIANNESS:
-      return PIPE_ENDIAN_LITTLE;
-   default:
-      debug_printf("unknown param %d\n", param);
+   case PIPE_CAP_VIDEO_MEMORY:
+      return dev->vram_size >> 20;
+   case PIPE_CAP_UMA:
       return 0;
    }
+
+   debug_printf("unknown param %d\n", param);
+   return 0;
 }
 
 static float
@@ -193,8 +220,8 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
          return 0;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 16;
-      case PIPE_SHADER_CAP_MAX_CONSTS:
-         return (eng3d->oclass >= NV40_3D_CLASS) ? (468 - 6): (256 - 6);
+      case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+         return ((eng3d->oclass >= NV40_3D_CLASS) ? (468 - 6): (256 - 6)) * sizeof(float[4]);
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
@@ -202,8 +229,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 0;
-      case PIPE_SHADER_CAP_MAX_ADDRS:
-         return 2;
       case PIPE_SHADER_CAP_MAX_PREDS:
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
@@ -230,14 +255,12 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
          return 0;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 8; /* should be possible to do 10 with nv4x */
-      case PIPE_SHADER_CAP_MAX_CONSTS:
-         return (eng3d->oclass >= NV40_3D_CLASS) ? 224 : 32;
+      case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+         return ((eng3d->oclass >= NV40_3D_CLASS) ? 224 : 32) * sizeof(float[4]);
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          return 32;
-      case PIPE_SHADER_CAP_MAX_ADDRS:
-         return (eng3d->oclass >= NV40_3D_CLASS) ? 1 : 0;
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 16;

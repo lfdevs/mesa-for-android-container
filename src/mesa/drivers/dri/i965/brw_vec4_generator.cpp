@@ -21,6 +21,7 @@
  */
 
 #include "brw_vec4.h"
+#include "brw_cfg.h"
 
 extern "C" {
 #include "brw_eu.h"
@@ -59,9 +60,7 @@ vec4_instruction::get_dst(void)
       break;
 
    default:
-      assert(!"not reached");
-      brw_reg = brw_null_reg();
-      break;
+      unreachable("not reached");
    }
    return brw_reg;
 }
@@ -85,23 +84,21 @@ vec4_instruction::get_src(const struct brw_vec4_prog_data *prog_data, int i)
    case IMM:
       switch (src[i].type) {
       case BRW_REGISTER_TYPE_F:
-	 brw_reg = brw_imm_f(src[i].imm.f);
+	 brw_reg = brw_imm_f(src[i].fixed_hw_reg.dw1.f);
 	 break;
       case BRW_REGISTER_TYPE_D:
-	 brw_reg = brw_imm_d(src[i].imm.i);
+	 brw_reg = brw_imm_d(src[i].fixed_hw_reg.dw1.d);
 	 break;
       case BRW_REGISTER_TYPE_UD:
-	 brw_reg = brw_imm_ud(src[i].imm.u);
+	 brw_reg = brw_imm_ud(src[i].fixed_hw_reg.dw1.ud);
 	 break;
       default:
-	 assert(!"not reached");
-	 brw_reg = brw_null_reg();
-	 break;
+	 unreachable("not reached");
       }
       break;
 
    case UNIFORM:
-      brw_reg = stride(brw_vec4_grf(prog_data->dispatch_grf_start_reg +
+      brw_reg = stride(brw_vec4_grf(prog_data->base.dispatch_grf_start_reg +
                                     (src[i].reg + src[i].reg_offset) / 2,
 				    ((src[i].reg + src[i].reg_offset) % 2) * 4),
 		       0, 4, 1);
@@ -127,9 +124,7 @@ vec4_instruction::get_src(const struct brw_vec4_prog_data *prog_data, int i)
       break;
    case ATTR:
    default:
-      assert(!"not reached");
-      brw_reg = brw_null_reg();
-      break;
+      unreachable("not reached");
    }
 
    return brw_reg;
@@ -157,13 +152,13 @@ vec4_generator::generate_math1_gen4(vec4_instruction *inst,
                                     struct brw_reg dst,
                                     struct brw_reg src)
 {
-   brw_math(p,
-	    dst,
-	    brw_math_function(inst->opcode),
-	    inst->base_mrf,
-	    src,
-	    BRW_MATH_DATA_VECTOR,
-	    BRW_MATH_PRECISION_FULL);
+   gen4_math(p,
+	     dst,
+	     brw_math_function(inst->opcode),
+	     inst->base_mrf,
+	     src,
+	     BRW_MATH_DATA_VECTOR,
+	     BRW_MATH_PRECISION_FULL);
 }
 
 static void
@@ -176,55 +171,21 @@ check_gen6_math_src_arg(struct brw_reg src)
 }
 
 void
-vec4_generator::generate_math1_gen6(vec4_instruction *inst,
-                                    struct brw_reg dst,
-                                    struct brw_reg src)
-{
-   /* Can't do writemask because math can't be align16. */
-   assert(dst.dw1.bits.writemask == WRITEMASK_XYZW);
-   check_gen6_math_src_arg(src);
-
-   brw_set_access_mode(p, BRW_ALIGN_1);
-   brw_math(p,
-	    dst,
-	    brw_math_function(inst->opcode),
-	    inst->base_mrf,
-	    src,
-	    BRW_MATH_DATA_SCALAR,
-	    BRW_MATH_PRECISION_FULL);
-   brw_set_access_mode(p, BRW_ALIGN_16);
-}
-
-void
-vec4_generator::generate_math2_gen7(vec4_instruction *inst,
-                                    struct brw_reg dst,
-                                    struct brw_reg src0,
-                                    struct brw_reg src1)
-{
-   brw_math2(p,
-	     dst,
-	     brw_math_function(inst->opcode),
-	     src0, src1);
-}
-
-void
-vec4_generator::generate_math2_gen6(vec4_instruction *inst,
-                                    struct brw_reg dst,
-                                    struct brw_reg src0,
-                                    struct brw_reg src1)
+vec4_generator::generate_math_gen6(vec4_instruction *inst,
+                                   struct brw_reg dst,
+                                   struct brw_reg src0,
+                                   struct brw_reg src1)
 {
    /* Can't do writemask because math can't be align16. */
    assert(dst.dw1.bits.writemask == WRITEMASK_XYZW);
    /* Source swizzles are ignored. */
    check_gen6_math_src_arg(src0);
-   check_gen6_math_src_arg(src1);
+   if (src1.file == BRW_GENERAL_REGISTER_FILE)
+      check_gen6_math_src_arg(src1);
 
-   brw_set_access_mode(p, BRW_ALIGN_1);
-   brw_math2(p,
-	     dst,
-	     brw_math_function(inst->opcode),
-	     src0, src1);
-   brw_set_access_mode(p, BRW_ALIGN_16);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
+   gen6_math(p, dst, brw_math_function(inst->opcode), src0, src1);
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
 }
 
 void
@@ -247,24 +208,25 @@ vec4_generator::generate_math2_gen4(vec4_instruction *inst,
    struct brw_reg &op1 = is_int_div ? src0 : src1;
 
    brw_push_insn_state(p);
-   brw_set_saturate(p, false);
-   brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+   brw_set_default_saturate(p, false);
+   brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
    brw_MOV(p, retype(brw_message_reg(inst->base_mrf + 1), op1.type), op1);
    brw_pop_insn_state(p);
 
-   brw_math(p,
-	    dst,
-	    brw_math_function(inst->opcode),
-	    inst->base_mrf,
-	    op0,
-	    BRW_MATH_DATA_VECTOR,
-	    BRW_MATH_PRECISION_FULL);
+   gen4_math(p,
+	     dst,
+	     brw_math_function(inst->opcode),
+	     inst->base_mrf,
+	     op0,
+	     BRW_MATH_DATA_VECTOR,
+	     BRW_MATH_PRECISION_FULL);
 }
 
 void
 vec4_generator::generate_tex(vec4_instruction *inst,
                              struct brw_reg dst,
-                             struct brw_reg src)
+                             struct brw_reg src,
+                             struct brw_reg sampler_index)
 {
    int msg_type = -1;
 
@@ -281,7 +243,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
       case SHADER_OPCODE_TXD:
          if (inst->shadow_compare) {
             /* Gen7.5+.  Otherwise, lowered by brw_lower_texture_gradients(). */
-            assert(brw->is_haswell);
+            assert(brw->gen >= 8 || brw->is_haswell);
             msg_type = HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE;
          } else {
             msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
@@ -318,8 +280,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
          }
          break;
       default:
-	 assert(!"should not get here: invalid vec4 texture opcode");
-	 break;
+	 unreachable("should not get here: invalid vec4 texture opcode");
       }
    } else {
       switch (inst->opcode) {
@@ -347,12 +308,13 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 	 assert(inst->mlen == 2);
 	 break;
       default:
-	 assert(!"should not get here: invalid vec4 texture opcode");
-	 break;
+	 unreachable("should not get here: invalid vec4 texture opcode");
       }
    }
 
    assert(msg_type != -1);
+
+   assert(sampler_index.type == BRW_REGISTER_TYPE_UD);
 
    /* Load the message header if present.  If there's a texture offset, we need
     * to set it up explicitly and load the offset bitfield.  Otherwise, we can
@@ -368,10 +330,10 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 
          /* Explicitly set up the message header by copying g0 to the MRF. */
          brw_push_insn_state(p);
-         brw_set_mask_control(p, BRW_MASK_DISABLE);
+         brw_set_default_mask_control(p, BRW_MASK_DISABLE);
          brw_MOV(p, header, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
 
-         brw_set_access_mode(p, BRW_ALIGN_1);
+         brw_set_default_access_mode(p, BRW_ALIGN_1);
 
          if (inst->texture_offset) {
             /* Set the texel offset bits in DWord 2. */
@@ -379,22 +341,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
                     brw_imm_ud(inst->texture_offset));
          }
 
-         if (inst->sampler >= 16) {
-            /* The "Sampler Index" field can only store values between 0 and 15.
-             * However, we can add an offset to the "Sampler State Pointer"
-             * field, effectively selecting a different set of 16 samplers.
-             *
-             * The "Sampler State Pointer" needs to be aligned to a 32-byte
-             * offset, and each sampler state is only 16-bytes, so we can't
-             * exclusively use the offset - we have to use both.
-             */
-            assert(brw->is_haswell); /* field only exists on Haswell */
-            brw_ADD(p,
-                    get_element_ud(header, 3),
-                    get_element_ud(brw_vec8_grf(0, 0), 3),
-                    brw_imm_ud(16 * (inst->sampler / 16) *
-                               sizeof(gen7_sampler_state)));
-         }
+         brw_adjust_sampler_state_pointer(p, header, sampler_index, dst);
          brw_pop_insn_state(p);
       }
    }
@@ -413,25 +360,81 @@ vec4_generator::generate_tex(vec4_instruction *inst,
       break;
    }
 
-   uint32_t surface_index = ((inst->opcode == SHADER_OPCODE_TG4 ||
-      inst->opcode == SHADER_OPCODE_TG4_OFFSET)
-      ? prog_data->base.binding_table.gather_texture_start
-      : prog_data->base.binding_table.texture_start) + inst->sampler;
+   uint32_t base_binding_table_index = (inst->opcode == SHADER_OPCODE_TG4 ||
+         inst->opcode == SHADER_OPCODE_TG4_OFFSET)
+         ? prog_data->base.binding_table.gather_texture_start
+         : prog_data->base.binding_table.texture_start;
 
-   brw_SAMPLE(p,
-	      dst,
-	      inst->base_mrf,
-	      src,
-              surface_index,
-	      inst->sampler % 16,
-	      msg_type,
-	      1, /* response length */
-	      inst->mlen,
-	      inst->header_present,
-	      BRW_SAMPLER_SIMD_MODE_SIMD4X2,
-	      return_format);
+   if (sampler_index.file == BRW_IMMEDIATE_VALUE) {
+      uint32_t sampler = sampler_index.dw1.ud;
 
-   brw_mark_surface_used(&prog_data->base, surface_index);
+      brw_SAMPLE(p,
+                 dst,
+                 inst->base_mrf,
+                 src,
+                 sampler + base_binding_table_index,
+                 sampler % 16,
+                 msg_type,
+                 1, /* response length */
+                 inst->mlen,
+                 inst->header_present,
+                 BRW_SAMPLER_SIMD_MODE_SIMD4X2,
+                 return_format);
+
+      brw_mark_surface_used(&prog_data->base, sampler + base_binding_table_index);
+   } else {
+      /* Non-constant sampler index. */
+      /* Note: this clobbers `dst` as a temporary before emitting the send */
+
+      struct brw_reg addr = vec1(retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD));
+      struct brw_reg temp = vec1(retype(dst, BRW_REGISTER_TYPE_UD));
+
+      struct brw_reg sampler_reg = vec1(retype(sampler_index, BRW_REGISTER_TYPE_UD));
+
+      brw_push_insn_state(p);
+      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+      brw_set_default_access_mode(p, BRW_ALIGN_1);
+
+      /* Some care required: `sampler` and `temp` may alias:
+       *    addr = sampler & 0xff
+       *    temp = (sampler << 8) & 0xf00
+       *    addr = addr | temp
+       */
+      brw_ADD(p, addr, sampler_reg, brw_imm_ud(base_binding_table_index));
+      brw_SHL(p, temp, sampler_reg, brw_imm_ud(8u));
+      brw_AND(p, temp, temp, brw_imm_ud(0x0f00));
+      brw_AND(p, addr, addr, brw_imm_ud(0x0ff));
+      brw_OR(p, addr, addr, temp);
+
+      /* a0.0 |= <descriptor> */
+      brw_inst *insn_or = brw_next_insn(p, BRW_OPCODE_OR);
+      brw_set_sampler_message(p, insn_or,
+                              0 /* surface */,
+                              0 /* sampler */,
+                              msg_type,
+                              1 /* rlen */,
+                              inst->mlen /* mlen */,
+                              inst->header_present /* header */,
+                              BRW_SAMPLER_SIMD_MODE_SIMD4X2,
+                              return_format);
+      brw_inst_set_exec_size(p->brw, insn_or, BRW_EXECUTE_1);
+      brw_inst_set_src1_reg_type(p->brw, insn_or, BRW_REGISTER_TYPE_UD);
+      brw_set_src0(p, insn_or, addr);
+      brw_set_dest(p, insn_or, addr);
+
+
+      /* dst = send(offset, a0.0) */
+      brw_inst *insn_send = brw_next_insn(p, BRW_OPCODE_SEND);
+      brw_set_dest(p, insn_send, dst);
+      brw_set_src0(p, insn_send, src);
+      brw_set_indirect_send_descriptor(p, insn_send, BRW_SFID_SAMPLER, addr);
+
+      brw_pop_insn_state(p);
+
+      /* visitor knows more than we do about the surface limit required,
+       * so has already done marking.
+       */
+   }
 }
 
 void
@@ -472,7 +475,7 @@ vec4_generator::generate_gs_thread_end(vec4_instruction *inst)
                  inst->base_mrf, /* starting mrf reg nr */
                  src,
                  BRW_URB_WRITE_EOT,
-                 1,              /* message len */
+                 brw->gen >= 8 ? 2 : 1,/* message len */
                  0,              /* response len */
                  0,              /* urb destination offset */
                  BRW_URB_SWIZZLE_INTERLEAVE);
@@ -502,11 +505,11 @@ vec4_generator::generate_gs_set_write_offset(struct brw_reg dst,
     *     mul(2) dst.3<1>UD src0<8;2,4>UD src1   { Align1 WE_all }
     */
    brw_push_insn_state(p);
-   brw_set_access_mode(p, BRW_ALIGN_1);
-   brw_set_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
    brw_MUL(p, suboffset(stride(dst, 2, 2, 1), 3), stride(src0, 8, 2, 4),
            src1);
-   brw_set_access_mode(p, BRW_ALIGN_16);
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
    brw_pop_insn_state(p);
 }
 
@@ -515,25 +518,32 @@ vec4_generator::generate_gs_set_vertex_count(struct brw_reg dst,
                                              struct brw_reg src)
 {
    brw_push_insn_state(p);
-   brw_set_access_mode(p, BRW_ALIGN_1);
-   brw_set_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
 
-   /* If we think of the src and dst registers as composed of 8 DWORDs each,
-    * we want to pick up the contents of DWORDs 0 and 4 from src, truncate
-    * them to WORDs, and then pack them into DWORD 2 of dst.
-    *
-    * It's easier to get the EU to do this if we think of the src and dst
-    * registers as composed of 16 WORDS each; then, we want to pick up the
-    * contents of WORDs 0 and 8 from src, and pack them into WORDs 4 and 5 of
-    * dst.
-    *
-    * We can do that by the following EU instruction:
-    *
-    *     mov (2) dst.4<1>:uw src<8;1,0>:uw   { Align1, Q1, NoMask }
-    */
-   brw_MOV(p, suboffset(stride(retype(dst, BRW_REGISTER_TYPE_UW), 2, 2, 1), 4),
-           stride(retype(src, BRW_REGISTER_TYPE_UW), 8, 1, 0));
-   brw_set_access_mode(p, BRW_ALIGN_16);
+   if (brw->gen >= 8) {
+      /* Move the vertex count into the second MRF for the EOT write. */
+      brw_MOV(p, retype(brw_message_reg(dst.nr + 1), BRW_REGISTER_TYPE_UD),
+              src);
+   } else {
+      /* If we think of the src and dst registers as composed of 8 DWORDs each,
+       * we want to pick up the contents of DWORDs 0 and 4 from src, truncate
+       * them to WORDs, and then pack them into DWORD 2 of dst.
+       *
+       * It's easier to get the EU to do this if we think of the src and dst
+       * registers as composed of 16 WORDS each; then, we want to pick up the
+       * contents of WORDs 0 and 8 from src, and pack them into WORDs 4 and 5
+       * of dst.
+       *
+       * We can do that by the following EU instruction:
+       *
+       *     mov (2) dst.4<1>:uw src<8;1,0>:uw   { Align1, Q1, NoMask }
+       */
+      brw_set_default_access_mode(p, BRW_ALIGN_1);
+      brw_MOV(p,
+              suboffset(stride(retype(dst, BRW_REGISTER_TYPE_UW), 2, 2, 1), 4),
+              stride(retype(src, BRW_REGISTER_TYPE_UW), 8, 1, 0));
+      brw_set_default_access_mode(p, BRW_ALIGN_16);
+   }
    brw_pop_insn_state(p);
 }
 
@@ -544,10 +554,10 @@ vec4_generator::generate_gs_set_dword_2_immed(struct brw_reg dst,
    assert(src.file == BRW_IMMEDIATE_VALUE);
 
    brw_push_insn_state(p);
-   brw_set_access_mode(p, BRW_ALIGN_1);
-   brw_set_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
    brw_MOV(p, suboffset(vec1(dst), 2), src);
-   brw_set_access_mode(p, BRW_ALIGN_16);
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
    brw_pop_insn_state(p);
 }
 
@@ -562,8 +572,8 @@ vec4_generator::generate_gs_prepare_channel_masks(struct brw_reg dst)
     */
    dst = suboffset(vec1(dst), 4);
    brw_push_insn_state(p);
-   brw_set_access_mode(p, BRW_ALIGN_1);
-   brw_set_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
    brw_SHL(p, dst, dst, brw_imm_ud(4));
    brw_pop_insn_state(p);
 }
@@ -625,8 +635,8 @@ vec4_generator::generate_gs_set_channel_masks(struct brw_reg dst,
    dst = retype(dst, BRW_REGISTER_TYPE_UB);
    src = retype(src, BRW_REGISTER_TYPE_UB);
    brw_push_insn_state(p);
-   brw_set_access_mode(p, BRW_ALIGN_1);
-   brw_set_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
    brw_OR(p, suboffset(vec1(dst), 21), vec1(src), suboffset(vec1(src), 16));
    brw_pop_insn_state(p);
 }
@@ -640,7 +650,7 @@ vec4_generator::generate_gs_get_instance_id(struct brw_reg dst)
     *     shr(8) dst<1> R0<1,4,0> GEN7_GS_PAYLOAD_INSTANCE_ID_SHIFT { align1 WE_normal 1Q }
     */
    brw_push_insn_state(p);
-   brw_set_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
    dst = retype(dst, BRW_REGISTER_TYPE_UD);
    struct brw_reg r0(retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
    brw_SHR(p, dst, stride(r0, 1, 4, 0),
@@ -670,8 +680,8 @@ vec4_generator::generate_oword_dual_block_offsets(struct brw_reg m1,
    struct brw_reg index_4 = suboffset(vec1(index), 4);
 
    brw_push_insn_state(p);
-   brw_set_mask_control(p, BRW_MASK_DISABLE);
-   brw_set_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
 
    brw_MOV(p, m1_0, index_0);
 
@@ -690,8 +700,8 @@ vec4_generator::generate_unpack_flags(vec4_instruction *inst,
                                       struct brw_reg dst)
 {
    brw_push_insn_state(p);
-   brw_set_mask_control(p, BRW_MASK_DISABLE);
-   brw_set_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
 
    struct brw_reg flags = brw_flag_reg(0, 0);
    struct brw_reg dst_0 = suboffset(vec1(dst), 0);
@@ -728,11 +738,11 @@ vec4_generator::generate_scratch_read(vec4_instruction *inst,
    /* Each of the 8 channel enables is considered for whether each
     * dword is written.
     */
-   struct brw_instruction *send = brw_next_insn(p, BRW_OPCODE_SEND);
+   brw_inst *send = brw_next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, send, dst);
    brw_set_src0(p, send, header);
    if (brw->gen < 6)
-      send->header.destreg__conditionalmod = inst->base_mrf;
+      brw_inst_set_cond_modifier(brw, send, inst->base_mrf);
    brw_set_dp_read_message(p, send,
 			   255, /* binding table index: stateless access */
 			   BRW_DATAPORT_OWORD_DUAL_BLOCK_1OWORD,
@@ -755,7 +765,7 @@ vec4_generator::generate_scratch_write(vec4_instruction *inst,
    /* If the instruction is predicated, we'll predicate the send, not
     * the header setup.
     */
-   brw_set_predicate_control(p, false);
+   brw_set_default_predicate_control(p, false);
 
    gen6_resolve_implied_move(p, &header, inst->base_mrf);
 
@@ -775,7 +785,7 @@ vec4_generator::generate_scratch_write(vec4_instruction *inst,
    else
       msg_type = BRW_DATAPORT_WRITE_MESSAGE_OWORD_DUAL_BLOCK_WRITE;
 
-   brw_set_predicate_control(p, inst->predicate);
+   brw_set_default_predicate_control(p, inst->predicate);
 
    /* Pre-gen6, we have to specify write commits to ensure ordering
     * between reads and writes within a thread.  Afterwards, that's
@@ -799,11 +809,11 @@ vec4_generator::generate_scratch_write(vec4_instruction *inst,
    /* Each of the 8 channel enables is considered for whether each
     * dword is written.
     */
-   struct brw_instruction *send = brw_next_insn(p, BRW_OPCODE_SEND);
+   brw_inst *send = brw_next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, send, dst);
    brw_set_src0(p, send, header);
    if (brw->gen < 6)
-      send->header.destreg__conditionalmod = inst->base_mrf;
+      brw_inst_set_cond_modifier(brw, send, inst->base_mrf);
    brw_set_dp_write_message(p, send,
 			    255, /* binding table index: stateless access */
 			    BRW_DATAPORT_OWORD_DUAL_BLOCK_1OWORD,
@@ -822,7 +832,6 @@ vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
                                             struct brw_reg index,
                                             struct brw_reg offset)
 {
-   assert(brw->gen <= 7);
    assert(index.file == BRW_IMMEDIATE_VALUE &&
 	  index.type == BRW_REGISTER_TYPE_UD);
    uint32_t surf_index = index.dw1.ud;
@@ -846,11 +855,11 @@ vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
    /* Each of the 8 channel enables is considered for whether each
     * dword is written.
     */
-   struct brw_instruction *send = brw_next_insn(p, BRW_OPCODE_SEND);
+   brw_inst *send = brw_next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, send, dst);
    brw_set_src0(p, send, header);
    if (brw->gen < 6)
-      send->header.destreg__conditionalmod = inst->base_mrf;
+      brw_inst_set_cond_modifier(brw, send, inst->base_mrf);
    brw_set_dp_read_message(p, send,
 			   surf_index,
 			   BRW_DATAPORT_OWORD_DUAL_BLOCK_1OWORD,
@@ -869,23 +878,70 @@ vec4_generator::generate_pull_constant_load_gen7(vec4_instruction *inst,
                                                  struct brw_reg surf_index,
                                                  struct brw_reg offset)
 {
-   assert(surf_index.file == BRW_IMMEDIATE_VALUE &&
-	  surf_index.type == BRW_REGISTER_TYPE_UD);
+   assert(surf_index.type == BRW_REGISTER_TYPE_UD);
 
-   brw_instruction *insn = brw_next_insn(p, BRW_OPCODE_SEND);
-   brw_set_dest(p, insn, dst);
-   brw_set_src0(p, insn, offset);
-   brw_set_sampler_message(p, insn,
-                           surf_index.dw1.ud,
-                           0, /* LD message ignores sampler unit */
-                           GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
-                           1, /* rlen */
-                           1, /* mlen */
-                           false, /* no header */
-                           BRW_SAMPLER_SIMD_MODE_SIMD4X2,
-                           0);
+   if (surf_index.file == BRW_IMMEDIATE_VALUE) {
 
-   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
+      brw_inst *insn = brw_next_insn(p, BRW_OPCODE_SEND);
+      brw_set_dest(p, insn, dst);
+      brw_set_src0(p, insn, offset);
+      brw_set_sampler_message(p, insn,
+                              surf_index.dw1.ud,
+                              0, /* LD message ignores sampler unit */
+                              GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
+                              1, /* rlen */
+                              1, /* mlen */
+                              false, /* no header */
+                              BRW_SAMPLER_SIMD_MODE_SIMD4X2,
+                              0);
+
+      brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
+
+   } else {
+
+      struct brw_reg addr = vec1(retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD));
+
+      brw_push_insn_state(p);
+      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+      brw_set_default_access_mode(p, BRW_ALIGN_1);
+
+      /* a0.0 = surf_index & 0xff */
+      brw_inst *insn_and = brw_next_insn(p, BRW_OPCODE_AND);
+      brw_inst_set_exec_size(p->brw, insn_and, BRW_EXECUTE_1);
+      brw_set_dest(p, insn_and, addr);
+      brw_set_src0(p, insn_and, vec1(retype(surf_index, BRW_REGISTER_TYPE_UD)));
+      brw_set_src1(p, insn_and, brw_imm_ud(0x0ff));
+
+
+      /* a0.0 |= <descriptor> */
+      brw_inst *insn_or = brw_next_insn(p, BRW_OPCODE_OR);
+      brw_set_sampler_message(p, insn_or,
+                              0 /* surface */,
+                              0 /* sampler */,
+                              GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
+                              1 /* rlen */,
+                              1 /* mlen */,
+                              false /* header */,
+                              BRW_SAMPLER_SIMD_MODE_SIMD4X2,
+                              0);
+      brw_inst_set_exec_size(p->brw, insn_or, BRW_EXECUTE_1);
+      brw_inst_set_src1_reg_type(p->brw, insn_or, BRW_REGISTER_TYPE_UD);
+      brw_set_src0(p, insn_or, addr);
+      brw_set_dest(p, insn_or, addr);
+
+
+      /* dst = send(offset, a0.0) */
+      brw_inst *insn_send = brw_next_insn(p, BRW_OPCODE_SEND);
+      brw_set_dest(p, insn_send, dst);
+      brw_set_src0(p, insn_send, offset);
+      brw_set_indirect_send_descriptor(p, insn_send, BRW_SFID_SAMPLER, addr);
+
+      brw_pop_insn_state(p);
+
+      /* visitor knows more than we do about the surface limit required,
+       * so has already done marking.
+       */
+   }
 }
 
 void
@@ -1105,8 +1161,8 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
          assert(brw->gen == 6);
          gen6_IF(p, inst->conditional_mod, src[0], src[1]);
       } else {
-         struct brw_instruction *brw_inst = brw_IF(p, BRW_EXECUTE_8);
-         brw_inst->header.predicate_control = inst->predicate;
+         brw_inst *if_inst = brw_IF(p, BRW_EXECUTE_8);
+         brw_inst_set_pred_control(brw, if_inst, inst->predicate);
       }
       break;
 
@@ -1123,15 +1179,11 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
 
    case BRW_OPCODE_BREAK:
       brw_BREAK(p);
-      brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
       break;
    case BRW_OPCODE_CONTINUE:
-      /* FINISHME: We need to write the loop instruction support still. */
-      if (brw->gen >= 6)
-         gen6_CONT(p);
-      else
-         brw_CONT(p);
-      brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_CONT(p);
+      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
       break;
 
    case BRW_OPCODE_WHILE:
@@ -1145,10 +1197,12 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
    case SHADER_OPCODE_LOG2:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS:
-      if (brw->gen == 6) {
-	 generate_math1_gen6(inst, dst, src[0]);
+      if (brw->gen >= 7) {
+         gen6_math(p, dst, brw_math_function(inst->opcode), src[0],
+                   brw_null_reg());
+      } else if (brw->gen == 6) {
+	 generate_math_gen6(inst, dst, src[0], brw_null_reg());
       } else {
-	 /* Also works for Gen7. */
 	 generate_math1_gen4(inst, dst, src[0]);
       }
       break;
@@ -1157,9 +1211,9 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
    case SHADER_OPCODE_INT_QUOTIENT:
    case SHADER_OPCODE_INT_REMAINDER:
       if (brw->gen >= 7) {
-	 generate_math2_gen7(inst, dst, src[0], src[1]);
+         gen6_math(p, dst, brw_math_function(inst->opcode), src[0], src[1]);
       } else if (brw->gen == 6) {
-	 generate_math2_gen6(inst, dst, src[0], src[1]);
+	 generate_math_gen6(inst, dst, src[0], src[1]);
       } else {
 	 generate_math2_gen4(inst, dst, src[0], src[1]);
       }
@@ -1174,7 +1228,7 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
    case SHADER_OPCODE_TXS:
    case SHADER_OPCODE_TG4:
    case SHADER_OPCODE_TG4_OFFSET:
-      generate_tex(inst, dst, src[0]);
+      generate_tex(inst, dst, src[0], src[1]);
       break;
 
    case VS_OPCODE_URB_WRITE:
@@ -1260,11 +1314,51 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
 }
 
 void
-vec4_generator::generate_code(exec_list *instructions)
+vec4_generator::generate_code(const cfg_t *cfg)
 {
-   int last_native_insn_offset = 0;
-   const char *last_annotation_string = NULL;
-   const void *last_annotation_ir = NULL;
+   struct annotation_info annotation;
+   memset(&annotation, 0, sizeof(annotation));
+
+   foreach_block_and_inst (block, vec4_instruction, inst, cfg) {
+      struct brw_reg src[3], dst;
+
+      if (unlikely(debug_flag))
+         annotate(brw, &annotation, cfg, inst, p->next_insn_offset);
+
+      for (unsigned int i = 0; i < 3; i++) {
+	 src[i] = inst->get_src(this->prog_data, i);
+      }
+      dst = inst->get_dst();
+
+      brw_set_default_predicate_control(p, inst->predicate);
+      brw_set_default_predicate_inverse(p, inst->predicate_inverse);
+      brw_set_default_saturate(p, inst->saturate);
+      brw_set_default_mask_control(p, inst->force_writemask_all);
+      brw_set_default_acc_write_control(p, inst->writes_accumulator);
+
+      unsigned pre_emit_nr_insn = p->nr_insn;
+
+      generate_vec4_instruction(inst, dst, src);
+
+      if (inst->no_dd_clear || inst->no_dd_check || inst->conditional_mod) {
+         assert(p->nr_insn == pre_emit_nr_insn + 1 ||
+                !"conditional_mod, no_dd_check, or no_dd_clear set for IR "
+                 "emitting more than 1 instruction");
+
+         brw_inst *last = &p->store[pre_emit_nr_insn];
+
+         brw_inst_set_cond_modifier(brw, last, inst->conditional_mod);
+         brw_inst_set_no_dd_clear(brw, last, inst->no_dd_clear);
+         brw_inst_set_no_dd_check(brw, last, inst->no_dd_check);
+      }
+   }
+
+   brw_set_uip_jip(p);
+   annotation_finalize(&annotation, p->next_insn_offset);
+
+   int before_size = p->next_insn_offset;
+   brw_compact_instructions(p, 0, annotation.ann_count, annotation.ann);
+   int after_size = p->next_insn_offset;
 
    if (unlikely(debug_flag)) {
       if (shader_prog) {
@@ -1274,95 +1368,23 @@ vec4_generator::generate_code(exec_list *instructions)
       } else {
          fprintf(stderr, "Native code for vertex program %d:\n", prog->Id);
       }
-   }
+      fprintf(stderr, "vec4 shader: %d instructions. Compacted %d to %d"
+                      " bytes (%.0f%%)\n",
+              before_size / 16, before_size, after_size,
+              100.0f * (before_size - after_size) / before_size);
 
-   foreach_list(node, instructions) {
-      vec4_instruction *inst = (vec4_instruction *)node;
-      struct brw_reg src[3], dst;
-
-      if (unlikely(debug_flag)) {
-	 if (last_annotation_ir != inst->ir) {
-	    last_annotation_ir = inst->ir;
-	    if (last_annotation_ir) {
-	       fprintf(stderr, "   ");
-               if (shader_prog) {
-                  ((ir_instruction *) last_annotation_ir)->fprint(stderr);
-               } else {
-                  const prog_instruction *vpi;
-                  vpi = (const prog_instruction *) inst->ir;
-                  fprintf(stderr, "%d: ", (int)(vpi - prog->Instructions));
-                  _mesa_fprint_instruction_opt(stderr, vpi, 0,
-                                               PROG_PRINT_DEBUG, NULL);
-               }
-	       fprintf(stderr, "\n");
-	    }
-	 }
-	 if (last_annotation_string != inst->annotation) {
-	    last_annotation_string = inst->annotation;
-	    if (last_annotation_string)
-	       fprintf(stderr, "   %s\n", last_annotation_string);
-	 }
-      }
-
-      for (unsigned int i = 0; i < 3; i++) {
-	 src[i] = inst->get_src(this->prog_data, i);
-      }
-      dst = inst->get_dst();
-
-      brw_set_conditionalmod(p, inst->conditional_mod);
-      brw_set_predicate_control(p, inst->predicate);
-      brw_set_predicate_inverse(p, inst->predicate_inverse);
-      brw_set_saturate(p, inst->saturate);
-      brw_set_mask_control(p, inst->force_writemask_all);
-      brw_set_acc_write_control(p, inst->writes_accumulator);
-
-      unsigned pre_emit_nr_insn = p->nr_insn;
-
-      generate_vec4_instruction(inst, dst, src);
-
-      if (inst->no_dd_clear || inst->no_dd_check) {
-         assert(p->nr_insn == pre_emit_nr_insn + 1 ||
-                !"no_dd_check or no_dd_clear set for IR emitting more "
-                "than 1 instruction");
-
-         struct brw_instruction *last = &p->store[pre_emit_nr_insn];
-
-         if (inst->no_dd_clear)
-            last->header.dependency_control |= BRW_DEPENDENCY_NOTCLEARED;
-         if (inst->no_dd_check)
-            last->header.dependency_control |= BRW_DEPENDENCY_NOTCHECKED;
-      }
-
-      if (unlikely(debug_flag)) {
-	 brw_dump_compile(p, stderr,
-			  last_native_insn_offset, p->next_insn_offset);
-      }
-
-      last_native_insn_offset = p->next_insn_offset;
-   }
-
-   if (unlikely(debug_flag)) {
-      fprintf(stderr, "\n");
-   }
-
-   brw_set_uip_jip(p);
-
-   /* OK, while the INTEL_DEBUG=vs above is very nice for debugging VS
-    * emit issues, it doesn't get the jump distances into the output,
-    * which is often something we want to debug.  So this is here in
-    * case you're doing that.
-    */
-   if (0 && unlikely(debug_flag)) {
-      brw_dump_compile(p, stderr, 0, p->next_insn_offset);
+      dump_assembly(p->store, annotation.ann_count, annotation.ann, brw, prog);
+      ralloc_free(annotation.ann);
    }
 }
 
 const unsigned *
-vec4_generator::generate_assembly(exec_list *instructions,
+vec4_generator::generate_assembly(const cfg_t *cfg,
                                   unsigned *assembly_size)
 {
-   brw_set_access_mode(p, BRW_ALIGN_16);
-   generate_code(instructions);
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
+   generate_code(cfg);
+
    return brw_get_program(p, assembly_size);
 }
 

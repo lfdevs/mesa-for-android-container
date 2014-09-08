@@ -232,38 +232,29 @@ prepare_shader_sampling(
             /* regular texture - setup array of mipmap level offsets */
             struct pipe_resource *res = view->texture;
             int j;
-            void *mip_ptr;
 
             if (llvmpipe_resource_is_texture(res)) {
                first_level = view->u.tex.first_level;
                last_level = view->u.tex.last_level;
                assert(first_level <= last_level);
                assert(last_level <= res->last_level);
-
-               /* must trigger allocation first before we can get base ptr */
-               /* XXX this may fail due to OOM ? */
-               mip_ptr = llvmpipe_get_texture_image_all(lp_tex, view->u.tex.first_level,
-                                                        LP_TEX_USAGE_READ);
-               addr = lp_tex->linear_img.data;
+               addr = lp_tex->tex_data;
 
                for (j = first_level; j <= last_level; j++) {
-                  mip_ptr = llvmpipe_get_texture_image_all(lp_tex, j,
-                                                           LP_TEX_USAGE_READ);
-                  mip_offsets[j] = (uint8_t *)mip_ptr - (uint8_t *)addr;
-                  /*
-                   * could get mip offset directly but need call above to
-                   * invoke tiled->linear conversion.
-                   */
-                  assert(lp_tex->linear_mip_offsets[j] == mip_offsets[j]);
+                  mip_offsets[j] = lp_tex->mip_offsets[j];
                   row_stride[j] = lp_tex->row_stride[j];
                   img_stride[j] = lp_tex->img_stride[j];
                }
                if (res->target == PIPE_TEXTURE_1D_ARRAY ||
-                   res->target == PIPE_TEXTURE_2D_ARRAY) {
+                   res->target == PIPE_TEXTURE_2D_ARRAY ||
+                   res->target == PIPE_TEXTURE_CUBE_ARRAY) {
                   num_layers = view->u.tex.last_layer - view->u.tex.first_layer + 1;
                   for (j = first_level; j <= last_level; j++) {
                      mip_offsets[j] += view->u.tex.first_layer *
                                        lp_tex->img_stride[j];
+                  }
+                  if (res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+                     assert(num_layers % 6 == 0);
                   }
                   assert(view->u.tex.first_layer <= view->u.tex.last_layer);
                   assert(view->u.tex.last_layer < res->array_size);
@@ -271,8 +262,7 @@ prepare_shader_sampling(
             }
             else {
                unsigned view_blocksize = util_format_get_blocksize(view->format);
-               mip_ptr = lp_tex->data;
-               addr = mip_ptr;
+               addr = lp_tex->data;
                /* probably don't really need to fill that out */
                mip_offsets[0] = 0;
                row_stride[0] = 0;
@@ -310,7 +300,7 @@ prepare_shader_sampling(
       }
    }
 }
-                        
+
 
 /**
  * Called during state validation when LP_NEW_SAMPLER_VIEW is set.

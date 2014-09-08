@@ -58,8 +58,7 @@ vec4_gs_visitor::make_reg_for_system_value(ir_variable *ir)
       emit(GS_OPCODE_GET_INSTANCE_ID, *reg);
       break;
    default:
-      assert(!"not reached");
-      break;
+      unreachable("not reached");
    }
 
    return reg;
@@ -209,7 +208,7 @@ void
 vec4_gs_visitor::emit_program_code()
 {
    /* We don't support NV_geometry_program4. */
-   assert(!"Unreached");
+   unreachable("Unreached");
 }
 
 
@@ -432,9 +431,47 @@ vec4_gs_visitor::emit_control_data_bits()
    emit(BRW_OPCODE_ENDIF);
 }
 
+void
+vec4_gs_visitor::set_stream_control_data_bits(unsigned stream_id)
+{
+   /* control_data_bits |= stream_id << ((2 * (vertex_count - 1)) % 32) */
+
+   /* Note: we are calling this *before* increasing vertex_count, so
+    * this->vertex_count == vertex_count - 1 in the formula above.
+    */
+
+   /* Stream mode uses 2 bits per vertex */
+   assert(c->control_data_bits_per_vertex == 2);
+
+   /* Must be a valid stream */
+   assert(stream_id >= 0 && stream_id < MAX_VERTEX_STREAMS);
+
+   /* Control data bits are initialized to 0 so we don't have to set any
+    * bits when sending vertices to stream 0.
+    */
+   if (stream_id == 0)
+      return;
+
+   /* reg::sid = stream_id */
+   src_reg sid(this, glsl_type::uint_type);
+   emit(MOV(dst_reg(sid), stream_id));
+
+   /* reg:shift_count = 2 * (vertex_count - 1) */
+   src_reg shift_count(this, glsl_type::uint_type);
+   emit(SHL(dst_reg(shift_count), this->vertex_count, 1u));
+
+   /* Note: we're relying on the fact that the GEN SHL instruction only pays
+    * attention to the lower 5 bits of its second source argument, so on this
+    * architecture, stream_id << 2 * (vertex_count - 1) is equivalent to
+    * stream_id << ((2 * (vertex_count - 1)) % 32).
+    */
+   src_reg mask(this, glsl_type::uint_type);
+   emit(SHL(dst_reg(mask), sid, shift_count));
+   emit(OR(dst_reg(this->control_data_bits), this->control_data_bits, mask));
+}
 
 void
-vec4_gs_visitor::visit(ir_emit_vertex *)
+vec4_gs_visitor::visit(ir_emit_vertex *ir)
 {
    this->current_annotation = "emit vertex: safety check";
 
@@ -497,6 +534,17 @@ vec4_gs_visitor::visit(ir_emit_vertex *)
 
       this->current_annotation = "emit vertex: vertex data";
       emit_vertex();
+
+      /* In stream mode we have to set control data bits for all vertices
+       * unless we have disabled control data bits completely (which we do
+       * do for GL_POINTS outputs that don't use streams).
+       */
+      if (c->control_data_header_size_bits > 0 &&
+          c->prog_data.control_data_format ==
+             GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_SID) {
+          this->current_annotation = "emit vertex: Stream control data bits";
+          set_stream_control_data_bits(ir->stream_id());
+      }
 
       this->current_annotation = "emit vertex: increment vertex count";
       emit(ADD(dst_reg(this->vertex_count), this->vertex_count,
@@ -564,18 +612,12 @@ generate_assembly(struct brw_context *brw,
                   struct gl_program *prog,
                   struct brw_vec4_prog_data *prog_data,
                   void *mem_ctx,
-                  exec_list *instructions,
+                  const cfg_t *cfg,
                   unsigned *final_assembly_size)
 {
-   if (brw->gen >= 8) {
-      gen8_vec4_generator g(brw, shader_prog, prog, prog_data, mem_ctx,
-                            INTEL_DEBUG & DEBUG_GS);
-      return g.generate_assembly(instructions, final_assembly_size);
-   } else {
-      vec4_generator g(brw, shader_prog, prog, prog_data, mem_ctx,
-                       INTEL_DEBUG & DEBUG_GS);
-      return g.generate_assembly(instructions, final_assembly_size);
-   }
+   vec4_generator g(brw, shader_prog, prog, prog_data, mem_ctx,
+                    INTEL_DEBUG & DEBUG_GS);
+   return g.generate_assembly(cfg, final_assembly_size);
 }
 
 extern "C" const unsigned *
@@ -603,7 +645,7 @@ brw_gs_emit(struct brw_context *brw,
       vec4_gs_visitor v(brw, c, prog, mem_ctx, true /* no_spills */);
       if (v.run()) {
          return generate_assembly(brw, prog, &c->gp->program.Base,
-                                  &c->prog_data.base, mem_ctx, &v.instructions,
+                                  &c->prog_data.base, mem_ctx, v.cfg,
                                   final_assembly_size);
       }
    }
@@ -628,7 +670,7 @@ brw_gs_emit(struct brw_context *brw,
    }
 
    return generate_assembly(brw, prog, &c->gp->program.Base, &c->prog_data.base,
-                            mem_ctx, &v.instructions, final_assembly_size);
+                            mem_ctx, v.cfg, final_assembly_size);
 }
 
 

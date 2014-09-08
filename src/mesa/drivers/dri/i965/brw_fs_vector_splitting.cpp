@@ -121,8 +121,7 @@ ir_vector_reference_visitor::get_variable_entry(ir_variable *var)
       break;
    }
 
-   foreach_list(node, &this->variable_list) {
-      variable_entry *entry = (variable_entry *)node;
+   foreach_in_list(variable_entry, entry, &variable_list) {
       if (entry->var == var)
 	 return entry;
    }
@@ -219,8 +218,7 @@ ir_vector_splitting_visitor::get_splitting_entry(ir_variable *var)
    if (!var->type->is_vector())
       return NULL;
 
-   foreach_list(node, &*this->variable_list) {
-      variable_entry *entry = (variable_entry *)node;
+   foreach_in_list(variable_entry, entry, variable_list) {
       if (entry->var == var) {
 	 return entry;
       }
@@ -314,7 +312,7 @@ ir_vector_splitting_visitor::visit_leave(ir_assignment *ir)
 	 break;
       default:
 	 ir->fprint(stderr);
-	 assert(!"not reached: non-channelwise dereference of LHS.");
+	 unreachable("not reached: non-channelwise dereference of LHS.");
       }
 
       ir->lhs = new(mem_ctx) ir_dereference_variable(lhs->components[elem]);
@@ -338,9 +336,7 @@ brw_do_vector_splitting(exec_list *instructions)
    visit_list_elements(&refs, instructions);
 
    /* Trim out variables we can't split. */
-   foreach_list_safe(node, &refs.variable_list) {
-      variable_entry *entry = (variable_entry *)node;
-
+   foreach_in_list_safe(variable_entry, entry, &refs.variable_list) {
       if (debug) {
 	 fprintf(stderr, "vector %s@%p: whole_access %d\n",
                  entry->var->name, (void *) entry->var,
@@ -360,8 +356,7 @@ brw_do_vector_splitting(exec_list *instructions)
    /* Replace the decls of the vectors to be split with their split
     * components.
     */
-   foreach_list(node, &refs.variable_list) {
-      variable_entry *entry = (variable_entry *)node;
+   foreach_in_list(variable_entry, entry, &refs.variable_list) {
       const struct glsl_type *type;
       type = glsl_type::get_instance(entry->var->type->base_type, 1, 1);
 

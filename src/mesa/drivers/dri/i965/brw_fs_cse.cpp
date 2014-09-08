@@ -43,6 +43,22 @@ struct aeb_entry : public exec_node {
 }
 
 static bool
+is_copy_payload(const fs_inst *inst)
+{
+   const int reg = inst->src[0].reg;
+   if (inst->src[0].reg_offset != 0)
+      return false;
+
+   for (int i = 1; i < inst->sources; i++) {
+      if (inst->src[i].reg != reg ||
+          inst->src[i].reg_offset != i) {
+         return false;
+      }
+   }
+   return true;
+}
+
+static bool
 is_expression(const fs_inst *const inst)
 {
    switch (inst->opcode) {
@@ -73,8 +89,21 @@ is_expression(const fs_inst *const inst)
    case FS_OPCODE_CINTERP:
    case FS_OPCODE_LINTERP:
       return true;
+   case SHADER_OPCODE_RCP:
+   case SHADER_OPCODE_RSQ:
+   case SHADER_OPCODE_SQRT:
+   case SHADER_OPCODE_EXP2:
+   case SHADER_OPCODE_LOG2:
+   case SHADER_OPCODE_POW:
+   case SHADER_OPCODE_INT_QUOTIENT:
+   case SHADER_OPCODE_INT_REMAINDER:
+   case SHADER_OPCODE_SIN:
+   case SHADER_OPCODE_COS:
+      return inst->mlen == 0;
+   case SHADER_OPCODE_LOAD_PAYLOAD:
+      return !is_copy_payload(inst);
    default:
-      return false;
+      return inst->is_send_from_grf() && !inst->has_side_effects();
    }
 }
 
@@ -94,10 +123,20 @@ is_expression_commutative(enum opcode op)
 }
 
 static bool
-operands_match(enum opcode op, fs_reg *xs, fs_reg *ys)
+operands_match(fs_inst *a, fs_inst *b)
 {
-   if (!is_expression_commutative(op)) {
-      return xs[0].equals(ys[0]) && xs[1].equals(ys[1]) && xs[2].equals(ys[2]);
+   fs_reg *xs = a->src;
+   fs_reg *ys = b->src;
+
+   if (!is_expression_commutative(a->opcode)) {
+      bool match = true;
+      for (int i = 0; i < a->sources; i++) {
+         if (!xs[i].equals(ys[i])) {
+            match = false;
+            break;
+         }
+      }
+      return match;
    } else {
       return (xs[0].equals(ys[0]) && xs[1].equals(ys[1])) ||
              (xs[1].equals(ys[0]) && xs[0].equals(ys[1]));
@@ -113,51 +152,55 @@ instructions_match(fs_inst *a, fs_inst *b)
           a->predicate_inverse == b->predicate_inverse &&
           a->conditional_mod == b->conditional_mod &&
           a->dst.type == b->dst.type &&
-          operands_match(a->opcode, a->src, b->src);
+          a->sources == b->sources &&
+          (a->is_tex() ? (a->texture_offset == b->texture_offset &&
+                          a->mlen == b->mlen &&
+                          a->regs_written == b->regs_written &&
+                          a->base_mrf == b->base_mrf &&
+                          a->eot == b->eot &&
+                          a->header_present == b->header_present &&
+                          a->shadow_compare == b->shadow_compare)
+                       : true) &&
+          operands_match(a, b);
 }
 
 bool
-fs_visitor::opt_cse_local(bblock_t *block, exec_list *aeb)
+fs_visitor::opt_cse_local(bblock_t *block)
 {
    bool progress = false;
+   exec_list aeb;
 
    void *cse_ctx = ralloc_context(NULL);
 
    int ip = block->start_ip;
-   for (fs_inst *inst = (fs_inst *)block->start;
-	inst != block->end->next;
-	inst = (fs_inst *) inst->next) {
-
+   foreach_inst_in_block(fs_inst, inst, block) {
       /* Skip some cases. */
       if (is_expression(inst) && !inst->is_partial_write() &&
           (inst->dst.file != HW_REG || inst->dst.is_null()))
       {
-	 bool found = false;
+         bool found = false;
 
-	 aeb_entry *entry;
-	 foreach_list(entry_node, aeb) {
-	    entry = (aeb_entry *) entry_node;
+         foreach_in_list_use_after(aeb_entry, entry, &aeb) {
+            /* Match current instruction's expression against those in AEB. */
+            if (instructions_match(inst, entry->generator)) {
+               found = true;
+               progress = true;
+               break;
+            }
+         }
 
-	    /* Match current instruction's expression against those in AEB. */
-	    if (instructions_match(inst, entry->generator)) {
-	       found = true;
-	       progress = true;
-	       break;
-	    }
-	 }
-
-	 if (!found) {
-	    /* Our first sighting of this expression.  Create an entry. */
-	    aeb_entry *entry = ralloc(cse_ctx, aeb_entry);
-	    entry->tmp = reg_undef;
-	    entry->generator = inst;
-	    aeb->push_tail(entry);
-	 } else {
-	    /* This is at least our second sighting of this expression.
-	     * If we don't have a temporary already, make one.
-	     */
-	    bool no_existing_temp = entry->tmp.file == BAD_FILE;
-	    if (no_existing_temp && !entry->generator->dst.is_null()) {
+         if (!found) {
+            /* Our first sighting of this expression.  Create an entry. */
+            aeb_entry *entry = ralloc(cse_ctx, aeb_entry);
+            entry->tmp = reg_undef;
+            entry->generator = inst;
+            aeb.push_tail(entry);
+         } else {
+            /* This is at least our second sighting of this expression.
+             * If we don't have a temporary already, make one.
+             */
+            bool no_existing_temp = entry->tmp.file == BAD_FILE;
+            if (no_existing_temp && !entry->generator->dst.is_null()) {
                int written = entry->generator->regs_written;
 
                fs_reg orig_dst = entry->generator->dst;
@@ -166,33 +209,42 @@ fs_visitor::opt_cse_local(bblock_t *block, exec_list *aeb)
                entry->tmp = tmp;
                entry->generator->dst = tmp;
 
-               for (int i = 0; i < written; i++) {
-                  fs_inst *copy = MOV(orig_dst, tmp);
+               fs_inst *copy;
+               if (written > 1) {
+                  fs_reg *sources = ralloc_array(mem_ctx, fs_reg, written);
+                  for (int i = 0; i < written; i++) {
+                     sources[i] = tmp;
+                     sources[i].reg_offset = i;
+                  }
+                  copy = LOAD_PAYLOAD(orig_dst, sources, written);
+               } else {
+                  copy = MOV(orig_dst, tmp);
                   copy->force_writemask_all =
                      entry->generator->force_writemask_all;
-                  entry->generator->insert_after(copy);
-
-                  orig_dst.reg_offset++;
-                  tmp.reg_offset++;
                }
-	    }
+               entry->generator->insert_after(copy);
+            }
 
-	    /* dest <- temp */
+            /* dest <- temp */
             if (!inst->dst.is_null()) {
                int written = inst->regs_written;
                assert(written == entry->generator->regs_written);
                assert(inst->dst.type == entry->tmp.type);
                fs_reg dst = inst->dst;
                fs_reg tmp = entry->tmp;
-               fs_inst *copy = NULL;
-               for (int i = 0; i < written; i++) {
+               fs_inst *copy;
+               if (written > 1) {
+                  fs_reg *sources = ralloc_array(mem_ctx, fs_reg, written);
+                  for (int i = 0; i < written; i++) {
+                     sources[i] = tmp;
+                     sources[i].reg_offset = i;
+                  }
+                  copy = LOAD_PAYLOAD(dst, sources, written);
+               } else {
                   copy = MOV(dst, tmp);
                   copy->force_writemask_all = inst->force_writemask_all;
-                  inst->insert_before(copy);
-
-                  dst.reg_offset++;
-                  tmp.reg_offset++;
                }
+               inst->insert_before(copy);
             }
 
             /* Set our iterator so that next time through the loop inst->next
@@ -203,18 +255,16 @@ fs_visitor::opt_cse_local(bblock_t *block, exec_list *aeb)
 
             inst->remove();
 
-	    /* Appending an instruction may have changed our bblock end. */
-	    if (inst == block->end) {
-	       block->end = prev;
-	    }
+            /* Appending an instruction may have changed our bblock end. */
+            if (inst == block->end) {
+               block->end = prev;
+            }
 
             inst = prev;
-	 }
+         }
       }
 
-      foreach_list_safe(entry_node, aeb) {
-	 aeb_entry *entry = (aeb_entry *)entry_node;
-
+      foreach_in_list_safe(aeb_entry, entry, &aeb) {
          /* Kill all AEB entries that write a different value to or read from
           * the flag register if we just wrote it.
           */
@@ -228,17 +278,17 @@ fs_visitor::opt_cse_local(bblock_t *block, exec_list *aeb)
             }
          }
 
-	 for (int i = 0; i < 3; i++) {
+         for (int i = 0; i < entry->generator->sources; i++) {
             fs_reg *src_reg = &entry->generator->src[i];
 
             /* Kill all AEB entries that use the destination we just
              * overwrote.
              */
             if (inst->overwrites_reg(entry->generator->src[i])) {
-	       entry->remove();
-	       ralloc_free(entry);
-	       break;
-	    }
+               entry->remove();
+               ralloc_free(entry);
+               break;
+            }
 
             /* Kill any AEB entries using registers that don't get reused any
              * more -- a sure sign they'll fail operands_match().
@@ -246,18 +296,15 @@ fs_visitor::opt_cse_local(bblock_t *block, exec_list *aeb)
             if (src_reg->file == GRF && virtual_grf_end[src_reg->reg] < ip) {
                entry->remove();
                ralloc_free(entry);
-	       break;
+               break;
             }
-	 }
+         }
       }
 
       ip++;
    }
 
    ralloc_free(cse_ctx);
-
-   if (progress)
-      invalidate_live_intervals();
 
    return progress;
 }
@@ -269,14 +316,12 @@ fs_visitor::opt_cse()
 
    calculate_live_intervals();
 
-   cfg_t cfg(&instructions);
-
-   for (int b = 0; b < cfg.num_blocks; b++) {
-      bblock_t *block = cfg.blocks[b];
-      exec_list aeb;
-
-      progress = opt_cse_local(block, &aeb) || progress;
+   foreach_block (block, cfg) {
+      progress = opt_cse_local(block) || progress;
    }
+
+   if (progress)
+      invalidate_live_intervals();
 
    return progress;
 }

@@ -28,6 +28,7 @@ extern "C" {
 #include "brw_vs.h"
 #include "brw_vec4_gs.h"
 #include "brw_fs.h"
+#include "brw_cfg.h"
 #include "glsl/ir_optimization.h"
 #include "glsl/glsl_parser_extras.h"
 #include "main/shaderapi.h"
@@ -121,7 +122,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
    for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
       const struct gl_shader_compiler_options *options =
-         &ctx->ShaderCompilerOptions[stage];
+         &ctx->Const.ShaderCompilerOptions[stage];
       struct brw_shader *shader =
 	 (struct brw_shader *)shProg->_LinkedShaders[stage];
 
@@ -212,8 +213,8 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
        * too late.  At that point, the values for the built-in uniforms won't
        * get sent to the shader.
        */
-      foreach_list(node, shader->base.ir) {
-	 ir_variable *var = ((ir_instruction *) node)->as_variable();
+      foreach_in_list(ir_instruction, node, shader->base.ir) {
+	 ir_variable *var = node->as_variable();
 
 	 if ((var == NULL) || (var->data.mode != ir_var_uniform)
 	     || (strncmp(var->name, "gl_", 3) != 0))
@@ -238,12 +239,6 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       _mesa_reference_program(ctx, &shader->base.Program, prog);
 
       brw_add_texrect_params(prog);
-
-      /* This has to be done last.  Any operation that can cause
-       * prog->ParameterValues to get reallocated (e.g., anything that adds a
-       * program constant) has to happen before creating this linkage.
-       */
-      _mesa_associate_uniform_storage(ctx, shProg, prog->Parameters);
 
       _mesa_reference_program(ctx, &prog, NULL);
 
@@ -278,7 +273,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 }
 
 
-int
+enum brw_reg_type
 brw_type_for_base_type(const struct glsl_type *type)
 {
    switch (type->base_type) {
@@ -304,14 +299,13 @@ brw_type_for_base_type(const struct glsl_type *type)
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
    case GLSL_TYPE_INTERFACE:
-      assert(!"not reached");
-      break;
+      unreachable("not reached");
    }
 
    return BRW_REGISTER_TYPE_F;
 }
 
-uint32_t
+enum brw_conditional_mod
 brw_conditional_for_comparison(unsigned int op)
 {
    switch (op) {
@@ -330,8 +324,7 @@ brw_conditional_for_comparison(unsigned int op)
    case ir_binop_any_nequal: /* same as nequal for scalars */
       return BRW_CONDITIONAL_NZ;
    default:
-      assert(!"not reached: bad operation for comparison");
-      return BRW_CONDITIONAL_NZ;
+      unreachable("not reached: bad operation for comparison");
    }
 }
 
@@ -360,8 +353,7 @@ brw_math_function(enum opcode op)
    case SHADER_OPCODE_INT_REMAINDER:
       return BRW_MATH_FUNCTION_INT_DIV_REMAINDER;
    default:
-      assert(!"not reached: unknown math function");
-      return 0;
+      unreachable("not reached: unknown math function");
    }
 }
 
@@ -450,6 +442,11 @@ brw_instruction_name(enum opcode op)
       return "tg4";
    case SHADER_OPCODE_TG4_OFFSET:
       return "tg4_offset";
+   case SHADER_OPCODE_SHADER_TIME_ADD:
+      return "shader_time_add";
+
+   case SHADER_OPCODE_LOAD_PAYLOAD:
+      return "load_payload";
 
    case SHADER_OPCODE_GEN4_SCRATCH_READ:
       return "gen4_scratch_read";
@@ -546,8 +543,47 @@ backend_visitor::backend_visitor(struct brw_context *brw,
         (struct brw_shader *)shader_prog->_LinkedShaders[stage] : NULL),
      shader_prog(shader_prog),
      prog(prog),
-     stage_prog_data(stage_prog_data)
+     stage_prog_data(stage_prog_data),
+     cfg(NULL),
+     stage(stage)
 {
+}
+
+bool
+backend_reg::is_zero() const
+{
+   if (file != IMM)
+      return false;
+
+   return fixed_hw_reg.dw1.d == 0;
+}
+
+bool
+backend_reg::is_one() const
+{
+   if (file != IMM)
+      return false;
+
+   return type == BRW_REGISTER_TYPE_F
+          ? fixed_hw_reg.dw1.f == 1.0
+          : fixed_hw_reg.dw1.d == 1;
+}
+
+bool
+backend_reg::is_null() const
+{
+   return file == HW_REG &&
+          fixed_hw_reg.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+          fixed_hw_reg.nr == BRW_ARF_NULL;
+}
+
+
+bool
+backend_reg::is_accumulator() const
+{
+   return file == HW_REG &&
+          fixed_hw_reg.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+          fixed_hw_reg.nr == BRW_ARF_ACCUMULATOR;
 }
 
 bool
@@ -676,6 +712,16 @@ backend_instruction::reads_accumulator_implicitly() const
 }
 
 bool
+backend_instruction::writes_accumulator_implicitly(struct brw_context *brw) const
+{
+   return writes_accumulator ||
+          (brw->gen < 6 &&
+           ((opcode >= BRW_OPCODE_ADD && opcode < BRW_OPCODE_NOP) ||
+            (opcode >= FS_OPCODE_DDX && opcode <= FS_OPCODE_LINTERP &&
+             opcode != FS_OPCODE_CINTERP)));
+}
+
+bool
 backend_instruction::has_side_effects() const
 {
    switch (opcode) {
@@ -689,14 +735,45 @@ backend_instruction::has_side_effects() const
 void
 backend_visitor::dump_instructions()
 {
+   dump_instructions(NULL);
+}
+
+void
+backend_visitor::dump_instructions(const char *name)
+{
+   FILE *file = stderr;
+   if (name && geteuid() != 0) {
+      file = fopen(name, "w");
+      if (!file)
+         file = stderr;
+   }
+
    int ip = 0;
-   foreach_list(node, &this->instructions) {
-      backend_instruction *inst = (backend_instruction *)node;
-      fprintf(stderr, "%d: ", ip++);
-      dump_instruction(inst);
+   foreach_in_list(backend_instruction, inst, &instructions) {
+      if (!name)
+         fprintf(stderr, "%d: ", ip++);
+      dump_instruction(inst, file);
+   }
+
+   if (file != stderr) {
+      fclose(file);
    }
 }
 
+void
+backend_visitor::calculate_cfg()
+{
+   if (this->cfg)
+      return;
+   cfg = new(mem_ctx) cfg_t(&this->instructions);
+}
+
+void
+backend_visitor::invalidate_cfg()
+{
+   ralloc_free(this->cfg);
+   this->cfg = NULL;
+}
 
 /**
  * Sets up the starting offsets for the groups of binding table entries

@@ -156,13 +156,12 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 
    /* -ve rhw workaround */
    if (brw->has_negative_rhw_bug) {
-      brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
       brw_AND(p, brw_null_reg(), get_element_ud(c->reg.R0, 2),
               brw_imm_ud(1<<20));
+      brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
       brw_OR(p, c->reg.planemask, c->reg.planemask, brw_imm_ud(0x3f));
+      brw_inst_set_pred_control(brw, brw_last_inst, BRW_PREDICATE_NORMAL);
    }
-
-   brw_set_predicate_control(p, BRW_PREDICATE_NONE);
 
    /* Set the initial vertex source mask: The first 6 planes are the bounds
     * of the view volume; the next 8 planes are the user clipping planes.
@@ -177,13 +176,13 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
    {
       /* if (planemask & 1)
        */
-      brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
       brw_AND(p, v1_null_ud, c->reg.planemask, brw_imm_ud(1));
+      brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
 
       brw_IF(p, BRW_EXECUTE_1);
       {
-         brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
          brw_AND(p, v1_null_ud, c->reg.vertex_src_mask, brw_imm_ud(1));
+         brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
          brw_IF(p, BRW_EXECUTE_1);
          {
             /* user clip distance: just fetch the correct float from each vertex */
@@ -229,7 +228,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 
              brw_CMP(p, vec1(brw_null_reg()), BRW_CONDITIONAL_G, c->reg.t, c->reg.t1 );
              brw_MOV(p, c->reg.t1, c->reg.t);
-             brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+             brw_inst_set_pred_control(brw, brw_last_inst, BRW_PREDICATE_NORMAL);
 	 }
 	 brw_ELSE(p);
 	 {
@@ -251,7 +250,8 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 
                  brw_CMP(p, vec1(brw_null_reg()), BRW_CONDITIONAL_G, c->reg.t, c->reg.t0 );
                  brw_MOV(p, c->reg.t0, c->reg.t);
-                 brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+                 brw_inst_set_pred_control(brw, brw_last_inst,
+                                           BRW_PREDICATE_NORMAL);
              }
 
              if (brw->has_negative_rhw_bug) {
@@ -268,12 +268,15 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 
       /* while (planemask>>=1) != 0
        */
-      brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
       brw_SHR(p, c->reg.planemask, c->reg.planemask, brw_imm_ud(1));
+      brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
       brw_SHR(p, c->reg.vertex_src_mask, c->reg.vertex_src_mask, brw_imm_ud(1));
+      brw_inst_set_pred_control(brw, brw_last_inst, BRW_PREDICATE_NORMAL);
       brw_ADD(p, c->reg.clipdistance_offset, c->reg.clipdistance_offset, brw_imm_w(sizeof(float)));
+      brw_inst_set_pred_control(brw, brw_last_inst, BRW_PREDICATE_NORMAL);
    }
    brw_WHILE(p);
+   brw_inst_set_pred_control(brw, brw_last_inst, BRW_PREDICATE_NORMAL);
 
    brw_ADD(p, c->reg.t, c->reg.t0, c->reg.t1);
    brw_CMP(p, vec1(brw_null_reg()), BRW_CONDITIONAL_L, c->reg.t, brw_imm_f(1.0));

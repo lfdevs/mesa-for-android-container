@@ -24,7 +24,7 @@ SHARED_GLAPI_CFLAGS = -DGLX_SHARED_GLAPI
 SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 endif
 
-SUBDIRS=. tests
+SUBDIRS =
 
 if HAVE_XF86VIDMODE
 EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
@@ -82,25 +82,44 @@ libglx_la_SOURCES = \
 	  single2.c \
 	  singlepix.c \
 	  vertarr.c \
-	  xfont.c \
 	  glx_pbuffer.c \
 	  glx_query.c \
-	  drisw_glx.c \
-	  dri_common.c \
+	  glxhash.c
+
+libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la
+
+if HAVE_DRISW
+libglx_la_SOURCES += \
+	  drisw_glx.c
+endif
+
+if HAVE_DRICOMMON
+libglx_la_SOURCES += \
+	  xfont.c \
+	  dri_common.c
+endif
+
+if HAVE_DRI2
+libglx_la_SOURCES += \
 	  dri_glx.c \
 	  XF86dri.c \
-	  glxhash.c \
 	  dri2_glx.c \
 	  dri2.c \
-	  dri2_query_renderer.c \
-	  applegl_glx.c
+	  dri2_query_renderer.c
+endif
 
 if HAVE_DRI3
 libglx_la_SOURCES += \
           dri3_glx.c
 endif
 
-libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la
+if HAVE_APPLEDRI
+libglx_la_SOURCES += \
+	  applegl_glx.c
+
+SUBDIRS += apple
+libglx_la_LIBADD += $(builddir)/apple/libappleglx.la
+endif
 
 GL_LIBS = \
 	libglx.la \
@@ -111,12 +130,14 @@ GL_LIBS = \
 GL_LDFLAGS = \
 	-no-undefined \
 	-version-number 1:2 \
-	-Wl,-Bsymbolic \
+	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 
 lib@GL_LIB@_la_SOURCES =
 lib@GL_LIB@_la_LIBADD = $(GL_LIBS)
 lib@GL_LIB@_la_LDFLAGS = $(GL_LDFLAGS)
+
+SUBDIRS += . tests
 
 include $(top_srcdir)/install-lib-links.mk

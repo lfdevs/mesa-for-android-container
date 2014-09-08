@@ -39,21 +39,16 @@ fs_visitor::dead_code_eliminate()
 {
    bool progress = false;
 
-   cfg_t cfg(&instructions);
-
    calculate_live_intervals();
 
    int num_vars = live_intervals->num_vars;
    BITSET_WORD *live = ralloc_array(NULL, BITSET_WORD, BITSET_WORDS(num_vars));
 
-   for (int b = 0; b < cfg.num_blocks; b++) {
-      bblock_t *block = cfg.blocks[b];
-      memcpy(live, live_intervals->bd[b].liveout,
+   foreach_block (block, cfg) {
+      memcpy(live, live_intervals->bd[block->num].liveout,
              sizeof(BITSET_WORD) * BITSET_WORDS(num_vars));
 
-      for (fs_inst *inst = (fs_inst *)block->end;
-           inst != block->start->prev;
-           inst = (fs_inst *)inst->prev) {
+      foreach_inst_in_block_reverse(fs_inst, inst, block) {
          if (inst->dst.file == GRF &&
              !inst->has_side_effects() &&
              !inst->writes_flag()) {
@@ -90,7 +85,7 @@ fs_visitor::dead_code_eliminate()
             }
          }
 
-         for (int i = 0; i < 3; i++) {
+         for (int i = 0; i < inst->sources; i++) {
             if (inst->src[i].file == GRF) {
                int var = live_intervals->var_from_vgrf[inst->src[i].reg];
 
@@ -105,9 +100,7 @@ fs_visitor::dead_code_eliminate()
    ralloc_free(live);
 
    if (progress) {
-      foreach_list_safe(node, &this->instructions) {
-         fs_inst *inst = (fs_inst *)node;
-
+      foreach_in_list_safe(fs_inst, inst, &instructions) {
          if (inst->opcode == BRW_OPCODE_NOP) {
             inst->remove();
          }

@@ -62,12 +62,14 @@
 # define U_IC  U_IB
 # define U_TCV U_TBV
 # define U_ICV U_IBV
+# define U_t   U_T
 # define U_tV  U_TV
 #else
 # define U_TC  U_TR
 # define U_IC  U_IR
 # define U_TCV U_TRV
 # define U_ICV U_IRV
+# define U_t   0
 # define U_tV  U_V
 #endif
 
@@ -131,6 +133,9 @@
 #define SZB(p, n, r, g, b, a, t, s, u)                                  \
    TBLENT_B_(p, NV50_ZETA_FORMAT_##n,                                   \
              r, g, b, ONE_FLOAT, UINT, t, UINT, UINT, s, u)
+#define SXB(p, r, s, u)                                                 \
+   TBLENT_B_(p, NV50_ZETA_FORMAT_NONE,                                  \
+             r, r, r, r, UINT, UINT, UINT, UINT, s, u)
 
 #define F3A(p, n, r, g, b, a, t, s, u)          \
    C4A(p, n, r, g, b, ONE_FLOAT, t, s, u, 0)
@@ -180,17 +185,20 @@ const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
    ZXB(Z16_UNORM, Z16_UNORM, C0, C0, C0, xx, UNORM, Z16, TZ),
    ZXB(Z32_FLOAT, Z32_FLOAT, C0, C0, C0, xx, FLOAT, Z32, TZ),
    ZXB(Z24X8_UNORM, Z24_X8_UNORM, C0, C0, C0, xx, UNORM, Z24_X8, TZ),
+   SZB(X8Z24_UNORM, S8_Z24_UNORM, C1, C1, C1, xx, UNORM, S8_Z24, TZ),
    ZSB(Z24_UNORM_S8_UINT, Z24_S8_UNORM, C0, C0, C0, xx, UNORM, Z24_S8, TZ),
-   ZSB(X24S8_UINT, NONE, C1, C1, C1, xx, UNORM, Z24_S8, T),
    SZB(S8_UINT_Z24_UNORM, S8_Z24_UNORM, C1, C1, C1, xx, UNORM, S8_Z24, TZ),
-   SZB(S8X24_UINT, NONE, C0, C0, C0, xx, UNORM, S8_Z24, T),
    ZSB(Z32_FLOAT_S8X24_UINT, Z32_S8_X24_FLOAT, C0, C0, C0, xx, FLOAT,
        Z32_S8_X24, TZ),
-   ZSB(X32_S8X24_UINT, NONE, C1, C1, C1, xx, FLOAT, Z32_S8_X24, T),
 
-   F3B(B5G6R5_UNORM, B5G6R5_UNORM, C2, C1, C0, xx, UNORM, 5_6_5, T),
-   C4B(B5G5R5A1_UNORM, BGR5_A1_UNORM, C2, C1, C0, C3, UNORM, 5_5_5_1, TB),
-   F3B(B5G5R5X1_UNORM, BGR5_X1_UNORM, C2, C1, C0, xx, UNORM, 5_5_5_1, TB),
+   SXB(S8_UINT, C0, 8, T),
+   SXB(X24S8_UINT, C1, Z24_S8, T),
+   SXB(S8X24_UINT, C0, S8_Z24, T),
+   SXB(X32_S8X24_UINT, C1, Z32_S8_X24, T),
+
+   F3B(B5G6R5_UNORM, B5G6R5_UNORM, C2, C1, C0, xx, UNORM, 5_6_5, TD),
+   C4B(B5G5R5A1_UNORM, BGR5_A1_UNORM, C2, C1, C0, C3, UNORM, 5_5_5_1, TD),
+   F3B(B5G5R5X1_UNORM, BGR5_X1_UNORM, C2, C1, C0, xx, UNORM, 5_5_5_1, TD),
    C4B(B4G4R4A4_UNORM, NONE, C2, C1, C0, C3, UNORM, 4_4_4_4, T),
    F3B(B4G4R4X4_UNORM, NONE, C2, C1, C0, xx, UNORM, 4_4_4_4, T),
    F3B(R9G9B9E5_FLOAT, NONE, C0, C1, C2, xx, FLOAT, 9_9_9_E5, T),
@@ -198,7 +206,7 @@ const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
    C4A(R10G10B10A2_UNORM, RGB10_A2_UNORM, C0, C1, C2, C3, UNORM, 10_10_10_2,
        IBV, 0),
    C4A(B10G10R10A2_UNORM, BGR10_A2_UNORM, C2, C1, C0, C3, UNORM, 10_10_10_2,
-       TBV, 1),
+       TDV, 1),
    C4A(R10G10B10A2_SNORM, NONE, C0, C1, C2, C3, SNORM, 10_10_10_2, TV, 0),
    C4A(B10G10R10A2_SNORM, NONE, C2, C1, C0, C3, SNORM, 10_10_10_2, TV, 1),
    C4A(R10G10B10A2_UINT, RGB10_A2_UINT, C0, C1, C2, C3, UINT, 10_10_10_2, TRV, 0),
@@ -278,6 +286,11 @@ const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
    F3B(LATC1_SNORM, NONE, C0, C0, C0, xx, SNORM, RGTC1, T),
    C4B(LATC2_UNORM, NONE, C0, C0, C0, C1, UNORM, RGTC2, T),
    C4B(LATC2_SNORM, NONE, C0, C0, C0, C1, SNORM, RGTC2, T),
+
+   C4B(BPTC_RGBA_UNORM, NONE, C0, C1, C2, C3, UNORM, BPTC, t),
+   C4B(BPTC_SRGBA,      NONE, C0, C1, C2, C3, UNORM, BPTC, t),
+   F3B(BPTC_RGB_FLOAT,  NONE, C0, C1, C2, xx, FLOAT, BPTC_FLOAT, t),
+   F3B(BPTC_RGB_UFLOAT, NONE, C0, C1, C2, xx, FLOAT, BPTC_UFLOAT, t),
 
    C4A(R32G32B32A32_FLOAT, RGBA32_FLOAT, C0, C1, C2, C3, FLOAT, 32_32_32_32,
        IBV, 0),

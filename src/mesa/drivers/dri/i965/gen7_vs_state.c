@@ -72,7 +72,7 @@ upload_vs_state(struct brw_context *brw)
    const int max_threads_shift = brw->is_haswell ?
       HSW_VS_MAX_THREADS_SHIFT : GEN6_VS_MAX_THREADS_SHIFT;
 
-   if (!brw->is_haswell)
+   if (!brw->is_haswell && !brw->is_baytrail)
       gen7_emit_vs_workaround_flush(brw);
 
    /* Use ALT floating point mode for ARB vertex programs, because they
@@ -98,7 +98,7 @@ upload_vs_state(struct brw_context *brw)
       OUT_BATCH(0);
    }
 
-   OUT_BATCH((brw->vs.prog_data->base.dispatch_grf_start_reg <<
+   OUT_BATCH((brw->vs.prog_data->base.base.dispatch_grf_start_reg <<
               GEN6_VS_DISPATCH_START_GRF_SHIFT) |
 	     (brw->vs.prog_data->base.urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
 	     (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));

@@ -42,6 +42,7 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglGetPlatformDisplayEXT@Base 10.2
  eglGetProcAddress@Base 7.8.1
  eglGetScreensMESA@Base 7.8.1
+ eglGetSyncValuesCHROMIUM@Base 10.3~git
  eglInitialize@Base 7.8.1
  eglMakeCurrent@Base 7.8.1
  eglPostSubBufferNV@Base 8.0~rc1

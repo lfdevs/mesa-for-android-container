@@ -32,7 +32,6 @@
 #include "r600_llvm.h"
 #include "r600_public.h"
 
-#include "util/u_blitter.h"
 #include "util/u_suballoc.h"
 #include "util/u_double_list.h"
 #include "util/u_transfer.h"
@@ -41,7 +40,7 @@
 
 /* the number of CS dwords for flushing and drawing */
 #define R600_MAX_FLUSH_CS_DWORDS	16
-#define R600_MAX_DRAW_CS_DWORDS		37
+#define R600_MAX_DRAW_CS_DWORDS		40
 #define R600_TRACE_CS_DWORDS		7
 
 #define R600_MAX_USER_CONST_BUFFERS 13
@@ -54,7 +53,7 @@
 #define R600_BUFFER_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 2)
 #define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 3)
 
-#define R600_MAX_CONST_BUFFER_SIZE 4096
+#define R600_MAX_CONST_BUFFER_SIZE (4096 * sizeof(float[4]))
 
 #ifdef PIPE_ARCH_BIG_ENDIAN
 #define R600_BIG_ENDIAN 1
@@ -108,6 +107,7 @@ struct r600_clip_misc_state {
 	unsigned pa_cl_vs_out_cntl; /* from vertex shader */
 	unsigned clip_plane_enable; /* from rasterizer    */
 	unsigned clip_dist_write;   /* from vertex shader */
+	boolean clip_disable;       /* from vertex shader */
 };
 
 struct r600_alphatest_state {
@@ -221,6 +221,7 @@ struct r600_screen {
 
 struct r600_pipe_sampler_view {
 	struct pipe_sampler_view	base;
+	struct list_head		list;
 	struct r600_resource		*tex_resource;
 	uint32_t			tex_resource_words[8];
 	bool				skip_mip_address_reloc;
@@ -631,9 +632,6 @@ void r600_sampler_views_dirty(struct r600_context *rctx,
 void r600_sampler_states_dirty(struct r600_context *rctx,
 			       struct r600_sampler_states *state);
 void r600_constant_buffers_dirty(struct r600_context *rctx, struct r600_constbuf_state *state);
-void r600_draw_rectangle(struct blitter_context *blitter,
-			 int x1, int y1, int x2, int y2, float depth,
-			 enum blitter_attrib_type type, const union pipe_color_union *attrib);
 uint32_t r600_translate_stencil_op(int s_op);
 uint32_t r600_translate_fill(uint32_t func);
 unsigned r600_tex_wrap(unsigned wrap);

@@ -136,7 +136,7 @@ set_vertex_shader_layered(struct st_context *st)
    struct pipe_context *pipe = st->pipe;
 
    if (!pipe->screen->get_param(pipe->screen, PIPE_CAP_TGSI_INSTANCEID) ||
-       !pipe->screen->get_param(pipe->screen, PIPE_CAP_TGSI_VS_LAYER)) {
+       !pipe->screen->get_param(pipe->screen, PIPE_CAP_TGSI_VS_LAYER_VIEWPORT)) {
       assert(!"Got layered clear, but the VS layer output is unsupported");
       set_vertex_shader(st);
       return;
@@ -172,6 +172,9 @@ draw_quad(struct st_context *st,
                       (void **) &vertices) != PIPE_OK) {
       return;
    }
+
+   /* Convert Z from [0,1] to [-1,1] range */
+   z = z * 2.0f - 1.0f;
 
    /* positions */
    vertices[0][0][0] = x0;
@@ -319,11 +322,11 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
       struct pipe_viewport_state vp;
       vp.scale[0] = 0.5f * fb_width;
       vp.scale[1] = fb_height * (invert ? -0.5f : 0.5f);
-      vp.scale[2] = 1.0f;
+      vp.scale[2] = 0.5f;
       vp.scale[3] = 1.0f;
       vp.translate[0] = 0.5f * fb_width;
       vp.translate[1] = 0.5f * fb_height;
-      vp.translate[2] = 0.0f;
+      vp.translate[2] = 0.5f;
       vp.translate[3] = 0.0f;
       cso_set_viewport(st->cso_context, &vp);
    }

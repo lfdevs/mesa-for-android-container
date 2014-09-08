@@ -102,8 +102,10 @@ target_triplet = @target@
 subdir = .
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) \
-	$(top_srcdir)/src/gbm/main/gbm.pc.in bin/ar-lib bin/compile \
-	bin/config.guess bin/config.sub bin/depcomp bin/install-sh \
+	$(top_srcdir)/src/gbm/main/gbm.pc.in \
+	$(top_srcdir)/src/mapi/es1api/glesv1_cm.pc.in \
+	$(top_srcdir)/src/mapi/es2api/glesv2.pc.in bin/ar-lib \
+	bin/compile bin/config.guess bin/config.sub bin/install-sh \
 	bin/missing bin/ltmain.sh $(top_srcdir)/bin/ar-lib \
 	$(top_srcdir)/bin/compile $(top_srcdir)/bin/config.guess \
 	$(top_srcdir)/bin/config.sub $(top_srcdir)/bin/install-sh \
@@ -122,7 +124,8 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
-CONFIG_CLEAN_FILES = src/gbm/main/gbm.pc
+CONFIG_CLEAN_FILES = src/gbm/main/gbm.pc src/mapi/es1api/glesv1_cm.pc \
+	src/mapi/es2api/glesv2.pc
 CONFIG_CLEAN_VPATH_FILES =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -230,6 +233,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -557,6 +561,10 @@ $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	$(am__cd) $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
 $(am__aclocal_m4_deps):
 src/gbm/main/gbm.pc: $(top_builddir)/config.status $(top_srcdir)/src/gbm/main/gbm.pc.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+src/mapi/es1api/glesv1_cm.pc: $(top_builddir)/config.status $(top_srcdir)/src/mapi/es1api/glesv1_cm.pc.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+src/mapi/es2api/glesv2.pc: $(top_builddir)/config.status $(top_srcdir)/src/mapi/es2api/glesv2.pc.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 
 mostlyclean-libtool:
@@ -993,9 +1001,8 @@ doxygen:
 
 parsers: configure
 	$(MAKE) -C src/glsl glsl_parser.cpp glsl_parser.h glsl_lexer.cpp glcpp/glcpp-lex.c glcpp/glcpp-parse.c glcpp/glcpp-parse.h
-	$(MAKE) -C src/mesa program/lex.yy.c program/program_parse.tab.c program/program_parse.tab.h
 
-tarballs: md5
+tarballs: checksums
 	rm -f ../$(PACKAGE_DIR) $(PACKAGE_NAME).tar
 
 manifest.txt: .git
@@ -1022,10 +1029,10 @@ $(PACKAGE_NAME).zip: parsers ../$(PACKAGE_DIR) manifest.txt
 	zip -q -@ $(PACKAGE_NAME).zip < $(PACKAGE_DIR)/manifest.txt ; \
 	mv $(PACKAGE_NAME).zip $(PACKAGE_DIR)
 
-md5: $(ARCHIVES)
-	@-md5sum $(PACKAGE_NAME).tar.gz
-	@-md5sum $(PACKAGE_NAME).tar.bz2
-	@-md5sum $(PACKAGE_NAME).zip
+checksums: $(ARCHIVES)
+	@-sha256sum $(PACKAGE_NAME).tar.gz
+	@-sha256sum $(PACKAGE_NAME).tar.bz2
+	@-sha256sum $(PACKAGE_NAME).zip
 
 .PHONY: tarballs md5
 

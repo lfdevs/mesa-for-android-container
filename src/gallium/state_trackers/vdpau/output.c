@@ -69,7 +69,7 @@ vlVdpOutputSurfaceCreate(VdpDevice device,
    if (!vlsurface)
       return VDP_STATUS_RESOURCES;
 
-   vlsurface->device = dev;
+   DeviceReference(&vlsurface->device, dev);
 
    memset(&res_tmpl, 0, sizeof(res_tmpl));
 
@@ -120,6 +120,7 @@ err_resource:
    pipe_resource_reference(&res, NULL);
 err_unlock:
    pipe_mutex_unlock(dev->mutex);
+   DeviceReference(&vlsurface->device, NULL);
    FREE(vlsurface);
    return VDP_STATUS_ERROR;
 }
@@ -149,6 +150,7 @@ vlVdpOutputSurfaceDestroy(VdpOutputSurface surface)
    pipe_mutex_unlock(vlsurface->device->mutex);
 
    vlRemoveDataHTAB(surface);
+   DeviceReference(&vlsurface->device, NULL);
    FREE(vlsurface);
 
    return VDP_STATUS_OK;
@@ -622,9 +624,9 @@ vlVdpOutputSurfaceRenderOutputSurface(VdpOutputSurface destination_surface,
                                       uint32_t flags)
 {
    vlVdpOutputSurface *dst_vlsurface;
-   vlVdpOutputSurface *src_vlsurface;
 
    struct pipe_context *context;
+   struct pipe_sampler_view *src_sv;
    struct vl_compositor *compositor;
    struct vl_compositor_state *cstate;
 
@@ -637,12 +639,19 @@ vlVdpOutputSurfaceRenderOutputSurface(VdpOutputSurface destination_surface,
    if (!dst_vlsurface)
       return VDP_STATUS_INVALID_HANDLE;
 
-   src_vlsurface = vlGetDataHTAB(source_surface);
-   if (!src_vlsurface)
-      return VDP_STATUS_INVALID_HANDLE;
+   if (source_surface == VDP_INVALID_HANDLE) {
+      src_sv = dst_vlsurface->device->dummy_sv;
 
-   if (dst_vlsurface->device != src_vlsurface->device)
-      return VDP_STATUS_HANDLE_DEVICE_MISMATCH;
+   } else {
+      vlVdpOutputSurface *src_vlsurface = vlGetDataHTAB(source_surface);
+      if (!src_vlsurface)
+         return VDP_STATUS_INVALID_HANDLE;
+
+      if (dst_vlsurface->device != src_vlsurface->device)
+         return VDP_STATUS_HANDLE_DEVICE_MISMATCH;
+
+      src_sv = src_vlsurface->sampler_view;
+   }
 
    pipe_mutex_lock(dst_vlsurface->device->mutex);
    vlVdpResolveDelayedRendering(dst_vlsurface->device, NULL, NULL);
@@ -655,7 +664,7 @@ vlVdpOutputSurfaceRenderOutputSurface(VdpOutputSurface destination_surface,
 
    vl_compositor_clear_layers(cstate);
    vl_compositor_set_layer_blend(cstate, 0, blend, false);
-   vl_compositor_set_rgba_layer(cstate, compositor, 0, src_vlsurface->sampler_view,
+   vl_compositor_set_rgba_layer(cstate, compositor, 0, src_sv,
                                 RectToPipe(source_rect, &src_rect), NULL,
                                 ColorsToPipe(colors, flags, vlcolors));
    STATIC_ASSERT(VL_COMPOSITOR_ROTATE_0 == VDP_OUTPUT_SURFACE_RENDER_ROTATE_0);
@@ -686,9 +695,9 @@ vlVdpOutputSurfaceRenderBitmapSurface(VdpOutputSurface destination_surface,
                                       uint32_t flags)
 {
    vlVdpOutputSurface *dst_vlsurface;
-   vlVdpBitmapSurface *src_vlsurface;
 
    struct pipe_context *context;
+   struct pipe_sampler_view *src_sv;
    struct vl_compositor *compositor;
    struct vl_compositor_state *cstate;
 
@@ -701,12 +710,19 @@ vlVdpOutputSurfaceRenderBitmapSurface(VdpOutputSurface destination_surface,
    if (!dst_vlsurface)
       return VDP_STATUS_INVALID_HANDLE;
 
-   src_vlsurface = vlGetDataHTAB(source_surface);
-   if (!src_vlsurface)
-      return VDP_STATUS_INVALID_HANDLE;
+   if (source_surface == VDP_INVALID_HANDLE) {
+      src_sv = dst_vlsurface->device->dummy_sv;
 
-   if (dst_vlsurface->device != src_vlsurface->device)
-      return VDP_STATUS_HANDLE_DEVICE_MISMATCH;
+   } else {
+      vlVdpBitmapSurface *src_vlsurface = vlGetDataHTAB(source_surface);
+      if (!src_vlsurface)
+         return VDP_STATUS_INVALID_HANDLE;
+
+      if (dst_vlsurface->device != src_vlsurface->device)
+         return VDP_STATUS_HANDLE_DEVICE_MISMATCH;
+
+      src_sv = src_vlsurface->sampler_view;
+   }
 
    context = dst_vlsurface->device->context;
    compositor = &dst_vlsurface->device->compositor;
@@ -719,7 +735,7 @@ vlVdpOutputSurfaceRenderBitmapSurface(VdpOutputSurface destination_surface,
 
    vl_compositor_clear_layers(cstate);
    vl_compositor_set_layer_blend(cstate, 0, blend, false);
-   vl_compositor_set_rgba_layer(cstate, compositor, 0, src_vlsurface->sampler_view,
+   vl_compositor_set_rgba_layer(cstate, compositor, 0, src_sv,
                                 RectToPipe(source_rect, &src_rect), NULL,
                                 ColorsToPipe(colors, flags, vlcolors));
    vl_compositor_set_layer_rotation(cstate, 0, flags & 3);

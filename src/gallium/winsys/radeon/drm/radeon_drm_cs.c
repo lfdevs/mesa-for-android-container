@@ -155,7 +155,7 @@ static struct radeon_winsys_cs *
 radeon_drm_cs_create(struct radeon_winsys *rws,
                      enum ring_type ring_type,
                      void (*flush)(void *ctx, unsigned flags,
-				   struct pipe_fence_handle **fence),
+                                   struct pipe_fence_handle **fence),
                      void *flush_ctx,
                      struct radeon_winsys_cs_handle *trace_buf)
 {
@@ -196,10 +196,10 @@ radeon_drm_cs_create(struct radeon_winsys *rws,
 #define OUT_CS(cs, value) (cs)->buf[(cs)->cdw++] = (value)
 
 static INLINE void update_reloc(struct drm_radeon_cs_reloc *reloc,
-				enum radeon_bo_domain rd,
-				enum radeon_bo_domain wd,
-				unsigned priority,
-				enum radeon_bo_domain *added_domains)
+                                enum radeon_bo_domain rd,
+                                enum radeon_bo_domain wd,
+                                unsigned priority,
+                                enum radeon_bo_domain *added_domains)
 {
     *added_domains = (rd | wd) & ~(reloc->read_domains | reloc->write_domain);
 
@@ -434,33 +434,37 @@ static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
 
     switch (cs->base.ring_type) {
     case RING_DMA:
-	    /* pad DMA ring to 8 DWs */
-	    if (cs->ws->info.chip_class <= SI) {
-		    while (rcs->cdw & 7)
-			    OUT_CS(&cs->base, 0xf0000000); /* NOP packet */
-	    } else {
-		    while (rcs->cdw & 7)
-			    OUT_CS(&cs->base, 0x00000000); /* NOP packet */
-	    }
-	    break;
+        /* pad DMA ring to 8 DWs */
+        if (cs->ws->info.chip_class <= SI) {
+            while (rcs->cdw & 7)
+                OUT_CS(&cs->base, 0xf0000000); /* NOP packet */
+        } else {
+            while (rcs->cdw & 7)
+                OUT_CS(&cs->base, 0x00000000); /* NOP packet */
+        }
+        break;
     case RING_GFX:
-	    /* pad DMA ring to 8 DWs to meet CP fetch alignment requirements
-	     * r6xx, requires at least 4 dw alignment to avoid a hw bug.
-	     */
-	    if (cs->ws->info.chip_class <= SI) {
-		    while (rcs->cdw & 7)
-			    OUT_CS(&cs->base, 0x80000000); /* type2 nop packet */
-	    } else {
-		    while (rcs->cdw & 7)
-			    OUT_CS(&cs->base, 0xffff1000); /* type3 nop packet */
-	    }
-	    break;
+        /* pad DMA ring to 8 DWs to meet CP fetch alignment requirements
+         * r6xx, requires at least 4 dw alignment to avoid a hw bug.
+         * hawaii with old firmware needs type2 nop packet.
+         * accel_working2 with value 3 indicates the new firmware.
+         */
+        if (cs->ws->info.chip_class <= SI ||
+            (cs->ws->info.family == CHIP_HAWAII &&
+             cs->ws->accel_working2 < 3)) {
+            while (rcs->cdw & 7)
+                OUT_CS(&cs->base, 0x80000000); /* type2 nop packet */
+        } else {
+            while (rcs->cdw & 7)
+                OUT_CS(&cs->base, 0xffff1000); /* type3 nop packet */
+        }
+        break;
     case RING_UVD:
-            while (rcs->cdw & 15)
-		OUT_CS(&cs->base, 0x80000000); /* type2 nop packet */
-	    break;
+        while (rcs->cdw & 15)
+            OUT_CS(&cs->base, 0x80000000); /* type2 nop packet */
+        break;
     default:
-	    break;
+        break;
     }
 
     if (rcs->cdw > RADEON_MAX_CMDBUF_DWORDS) {
@@ -606,7 +610,7 @@ radeon_cs_create_fence(struct radeon_winsys_cs *rcs)
 
     /* Create a fence, which is a dummy BO. */
     fence = cs->ws->base.buffer_create(&cs->ws->base, 1, 1, TRUE,
-                                       RADEON_DOMAIN_GTT);
+                                       RADEON_DOMAIN_GTT, 0);
     /* Add the fence as a dummy relocation. */
     cs->ws->base.cs_add_reloc(rcs, cs->ws->base.buffer_get_cs_handle(fence),
                               RADEON_USAGE_READWRITE, RADEON_DOMAIN_GTT,

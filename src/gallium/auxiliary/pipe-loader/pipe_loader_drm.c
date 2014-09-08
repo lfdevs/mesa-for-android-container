@@ -256,8 +256,32 @@ pipe_loader_drm_release(struct pipe_loader_device **dev)
       util_dl_close(ddev->lib);
 
    close(ddev->fd);
+   FREE(ddev->base.driver_name);
    FREE(ddev);
    *dev = NULL;
+}
+
+static const struct drm_conf_ret *
+pipe_loader_drm_configuration(struct pipe_loader_device *dev,
+                              enum drm_conf conf)
+{
+   struct pipe_loader_drm_device *ddev = pipe_loader_drm_device(dev);
+   const struct drm_driver_descriptor *dd;
+
+   if (!ddev->lib)
+      return NULL;
+
+   dd = (const struct drm_driver_descriptor *)
+      util_dl_get_proc_address(ddev->lib, "driver_descriptor");
+
+   /* sanity check on the name */
+   if (!dd || strcmp(dd->name, ddev->base.driver_name) != 0)
+      return NULL;
+
+   if (!dd->configuration)
+      return NULL;
+
+   return dd->configuration(conf);
 }
 
 static struct pipe_screen *
@@ -284,5 +308,6 @@ pipe_loader_drm_create_screen(struct pipe_loader_device *dev,
 
 static struct pipe_loader_ops pipe_loader_drm_ops = {
    .create_screen = pipe_loader_drm_create_screen,
+   .configuration = pipe_loader_drm_configuration,
    .release = pipe_loader_drm_release
 };

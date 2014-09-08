@@ -69,6 +69,10 @@ struct intel_bo;
 struct intel_winsys_info {
    int devid;
 
+   /* the sizes of the aperture in bytes */
+   size_t aperture_total;
+   size_t aperture_mappable;
+
    int max_batch_size;
    bool has_llc;
    bool has_address_swizzling;
@@ -116,36 +120,34 @@ intel_winsys_read_reg(struct intel_winsys *winsys,
                       uint32_t reg, uint64_t *val);
 
 /**
- * Allocate a linear buffer object.
+ * Allocate a buffer object.
  *
  * \param name             Informative description of the bo.
- * \param size             Size of the bo.
+ * \param tiling           Tiling mode.
+ * \param pitch            Pitch of the bo.
+ * \param height           Height of the bo.
  * \param initial_domain   Initial (write) domain.
  */
 struct intel_bo *
+intel_winsys_alloc_bo(struct intel_winsys *winsys,
+                      const char *name,
+                      enum intel_tiling_mode tiling,
+                      unsigned long pitch,
+                      unsigned long height,
+                      uint32_t initial_domain);
+
+/**
+ * Allocate a linear buffer object.
+ */
+static inline struct intel_bo *
 intel_winsys_alloc_buffer(struct intel_winsys *winsys,
                           const char *name,
                           unsigned long size,
-                          uint32_t initial_domain);
-
-/**
- * Allocate a 2-dimentional buffer object.
- *
- * \param name             Informative description of the bo.
- * \param width            Width of the bo.
- * \param height           Height of the bo.
- * \param cpp              Bytes per texel.
- * \param tiling           Tiling mode.
- * \param initial_domain   Initial (write) domain.
- * \param pitch            Pitch of the bo.
- */
-struct intel_bo *
-intel_winsys_alloc_texture(struct intel_winsys *winsys,
-                           const char *name,
-                           int width, int height, int cpp,
-                           enum intel_tiling_mode tiling,
-                           uint32_t initial_domain,
-                           unsigned long *pitch);
+                          uint32_t initial_domain)
+{
+   return intel_winsys_alloc_bo(winsys, name,
+         INTEL_TILING_NONE, size, 1, initial_domain);
+}
 
 /**
  * Create a bo from a winsys handle.
@@ -154,7 +156,7 @@ struct intel_bo *
 intel_winsys_import_handle(struct intel_winsys *winsys,
                            const char *name,
                            const struct winsys_handle *handle,
-                           int width, int height, int cpp,
+                           unsigned long height,
                            enum intel_tiling_mode *tiling,
                            unsigned long *pitch);
 
@@ -166,6 +168,7 @@ intel_winsys_export_handle(struct intel_winsys *winsys,
                            struct intel_bo *bo,
                            enum intel_tiling_mode tiling,
                            unsigned long pitch,
+                           unsigned long height,
                            struct winsys_handle *handle);
 
 /**

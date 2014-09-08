@@ -30,6 +30,7 @@
 
 #include "brw_context.h"
 #include "brw_defines.h"
+#include "brw_eu.h"
 
 static void
 batch_out(struct brw_context *brw, const char *name, uint32_t offset,
@@ -242,12 +243,11 @@ dump_sdc(struct brw_context *brw, uint32_t offset)
       batch_out(brw, name, offset, 10, "s16 ba\n");
       batch_out(brw, name, offset, 11, "s8 rgba\n");
    } else {
-      struct brw_sampler_default_color *sdc = (brw->batch.bo->virtual +
-					       offset);
-      batch_out(brw, name, offset, 0, "r %f\n", sdc->color[0]);
-      batch_out(brw, name, offset, 1, "g %f\n", sdc->color[1]);
-      batch_out(brw, name, offset, 2, "b %f\n", sdc->color[2]);
-      batch_out(brw, name, offset, 3, "a %f\n", sdc->color[3]);
+      float *sdc = brw->batch.bo->virtual + offset;
+      batch_out(brw, name, offset, 0, "r %f\n", sdc[0]);
+      batch_out(brw, name, offset, 1, "g %f\n", sdc[1]);
+      batch_out(brw, name, offset, 2, "b %f\n", sdc[2]);
+      batch_out(brw, name, offset, 3, "a %f\n", sdc[3]);
    }
 }
 
@@ -255,11 +255,9 @@ static void dump_sampler_state(struct brw_context *brw,
 			       uint32_t offset, uint32_t size)
 {
    int i;
-   struct brw_sampler_state *samp = brw->batch.bo->virtual + offset;
+   uint32_t *samp = brw->batch.bo->virtual + offset;
 
-   assert(brw->gen < 7);
-
-   for (i = 0; i < size / sizeof(*samp); i++) {
+   for (i = 0; i < size / 16; i++) {
       char name[20];
 
       sprintf(name, "WM SAMP%d", i);
@@ -268,33 +266,10 @@ static void dump_sampler_state(struct brw_context *brw,
       batch_out(brw, name, offset, 2, "default color pointer\n");
       batch_out(brw, name, offset, 3, "chroma key, aniso\n");
 
-      samp++;
-      offset += sizeof(*samp);
+      samp += 4;
+      offset += 4 * sizeof(uint32_t);
    }
 }
-
-static void dump_gen7_sampler_state(struct brw_context *brw,
-				    uint32_t offset, uint32_t size)
-{
-   struct gen7_sampler_state *samp = brw->batch.bo->virtual + offset;
-   int i;
-
-   assert(brw->gen >= 7);
-
-   for (i = 0; i < size / sizeof(*samp); i++) {
-      char name[20];
-
-      sprintf(name, "WM SAMP%d", i);
-      batch_out(brw, name, offset, 0, "filtering\n");
-      batch_out(brw, name, offset, 1, "wrapping, lod\n");
-      batch_out(brw, name, offset, 2, "default color pointer\n");
-      batch_out(brw, name, offset, 3, "chroma key, aniso\n");
-
-      samp++;
-      offset += sizeof(*samp);
-   }
-}
-
 
 static void dump_sf_viewport_state(struct brw_context *brw,
 				   uint32_t offset)
@@ -486,8 +461,7 @@ static void
 dump_prog_cache(struct brw_context *brw)
 {
    struct brw_cache *cache = &brw->cache;
-   unsigned int b, i;
-   uint32_t *data;
+   unsigned int b;
 
    drm_intel_bo_map(brw->cache.bo, false);
 
@@ -496,9 +470,6 @@ dump_prog_cache(struct brw_context *brw)
 
       for (item = cache->items[b]; item; item = item->next) {
 	 const char *name;
-	 uint32_t offset = item->offset;
-
-	 data = brw->cache.bo->virtual + item->offset;
 
 	 switch (item->cache_id) {
 	 case BRW_VS_PROG:
@@ -524,14 +495,9 @@ dump_prog_cache(struct brw_context *brw)
 	    break;
 	 }
 
-	 for (i = 0; i < item->size / 4 / 4; i++) {
-	    fprintf(stderr, "0x%08x: %8s: 0x%08x 0x%08x 0x%08x 0x%08x ",
-		    offset + i * 4 * 4,
-		    name,
-		    data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
-
-	    brw_disasm(stderr, (void *)(data + i * 4), brw->gen);
-	 }
+         fprintf(stderr, "%s:\n", name);
+         brw_disassemble(brw, brw->cache.bo->virtual, item->offset, item->size,
+                         stderr);
       }
    }
 
@@ -599,11 +565,7 @@ dump_state_batch(struct brw_context *brw)
 	 }
 	 break;
       case AUB_TRACE_SAMPLER_STATE:
-	 if (brw->gen < 7) {
-	    dump_sampler_state(brw, offset, size);
-	 } else {
-	    dump_gen7_sampler_state(brw, offset, size);
-	 }
+         dump_sampler_state(brw, offset, size);
 	 break;
       case AUB_TRACE_SAMPLER_DEFAULT_COLOR:
 	 dump_sdc(brw, offset);

@@ -24,7 +24,7 @@
 #include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
-#include "util/u_format_srgb.h"
+#include "util/format_srgb.h"
 
 #include "tgsi/tgsi_parse.h"
 
@@ -585,9 +585,12 @@ nv50_stage_sampler_states_bind(struct nv50_context *nv50, int s,
          nv50_screen_tsc_unlock(nv50->screen, old);
    }
    assert(nv50->num_samplers[s] <= PIPE_MAX_SAMPLERS);
-   for (; i < nv50->num_samplers[s]; ++i)
-      if (nv50->samplers[s][i])
+   for (; i < nv50->num_samplers[s]; ++i) {
+      if (nv50->samplers[s][i]) {
          nv50_screen_tsc_unlock(nv50->screen, nv50->samplers[s][i]);
+         nv50->samplers[s][i] = NULL;
+      }
+   }
 
    nv50->num_samplers[s] = nr;
 
@@ -1028,7 +1031,7 @@ nv50_so_target_create(struct pipe_context *pipe,
 
    if (nouveau_context(pipe)->screen->class_3d >= NVA0_3D_CLASS) {
       targ->pq = pipe->create_query(pipe,
-                                    NVA0_QUERY_STREAM_OUTPUT_BUFFER_OFFSET);
+                                    NVA0_QUERY_STREAM_OUTPUT_BUFFER_OFFSET, 0);
       if (!targ->pq) {
          FREE(targ);
          return NULL;

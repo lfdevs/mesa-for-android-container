@@ -45,7 +45,7 @@ enum pipe_error st_translate_program(
    const ubyte inputSemanticName[],
    const ubyte inputSemanticIndex[],
    const GLuint interpMode[],
-   const GLboolean is_centroid[],
+   const GLuint interpLocation[],
    GLuint numOutputs,
    const GLuint outputMapping[],
    const ubyte outputSemanticName[],
@@ -73,6 +73,7 @@ st_translate_stream_output_info(struct glsl_to_tgsi_visitor *glsl_to_tgsi,
                                 const GLuint outputMapping[],
                                 struct pipe_stream_output_info *so);
 
+extern const unsigned _mesa_sysval_to_semantic[SYSTEM_VALUE_MAX];
 
 #ifdef __cplusplus
 }

@@ -104,8 +104,7 @@ DIST_COMMON = $(srcdir)/Makefile.sources $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp \
 	$(top_srcdir)/bin/test-driver
 TESTS = test_eu_compact$(EXEEXT) test_vec4_copy_propagation$(EXEEXT) \
-	test_vec4_register_coalesce$(EXEEXT) \
-	test_blorp_blit_eu_gen$(EXEEXT)
+	test_vec4_register_coalesce$(EXEEXT)
 check_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/mesa/drivers/dri/i965
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -125,16 +124,16 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libi965_dri_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
-am__objects_1 = intel_batchbuffer.lo intel_blit.lo \
-	intel_buffer_objects.lo intel_buffers.lo intel_debug.lo \
-	intel_extensions.lo intel_fbo.lo intel_mipmap_tree.lo \
-	intel_resolve_map.lo intel_screen.lo intel_pixel.lo \
-	intel_pixel_bitmap.lo intel_pixel_copy.lo intel_pixel_draw.lo \
-	intel_pixel_read.lo intel_state.lo intel_syncobj.lo \
-	intel_tex.lo intel_tex_copy.lo intel_tex_image.lo \
-	intel_tex_subimage.lo intel_tex_validate.lo intel_upload.lo \
-	brw_binding_tables.lo brw_blorp.lo brw_blorp_blit.lo \
-	brw_blorp_blit_eu.lo brw_blorp_clear.lo brw_cc.lo brw_cfg.lo \
+am__objects_1 = intel_asm_annotation.lo intel_batchbuffer.lo \
+	intel_blit.lo intel_buffer_objects.lo intel_buffers.lo \
+	intel_copy_image.lo intel_debug.lo intel_extensions.lo \
+	intel_fbo.lo intel_mipmap_tree.lo intel_resolve_map.lo \
+	intel_screen.lo intel_pixel.lo intel_pixel_bitmap.lo \
+	intel_pixel_copy.lo intel_pixel_draw.lo intel_pixel_read.lo \
+	intel_state.lo intel_syncobj.lo intel_tex.lo intel_tex_copy.lo \
+	intel_tex_image.lo intel_tex_subimage.lo intel_tex_validate.lo \
+	intel_upload.lo brw_binding_tables.lo brw_blorp.lo \
+	brw_blorp_blit.lo brw_blorp_blit_eu.lo brw_cc.lo brw_cfg.lo \
 	brw_clear.lo brw_clip.lo brw_clip_line.lo brw_clip_point.lo \
 	brw_clip_state.lo brw_clip_tri.lo brw_clip_unfilled.lo \
 	brw_clip_util.lo brw_context.lo brw_cubemap_normalize.lo \
@@ -151,35 +150,34 @@ am__objects_1 = intel_batchbuffer.lo intel_blit.lo \
 	brw_gs_surface_state.lo brw_interpolation_map.lo \
 	brw_lower_texture_gradients.lo \
 	brw_lower_unnormalized_offset.lo brw_meta_updownsample.lo \
-	brw_meta_stencil_blit.lo brw_meta_util.lo brw_misc_state.lo \
+	brw_meta_stencil_blit.lo brw_meta_util.lo \
+	brw_meta_fast_clear.lo brw_misc_state.lo \
 	brw_object_purgeable.lo brw_performance_monitor.lo \
 	brw_program.lo brw_primitive_restart.lo brw_queryobj.lo \
-	brw_reset.lo brw_schedule_instructions.lo brw_sf.lo \
-	brw_sf_emit.lo brw_sf_state.lo brw_shader.lo \
+	brw_reset.lo brw_sampler_state.lo brw_schedule_instructions.lo \
+	brw_sf.lo brw_sf_emit.lo brw_sf_state.lo brw_shader.lo \
 	brw_state_batch.lo brw_state_cache.lo brw_state_dump.lo \
 	brw_state_upload.lo brw_surface_formats.lo brw_tex.lo \
 	brw_tex_layout.lo brw_urb.lo brw_util.lo brw_vec4.lo \
-	brw_vec4_copy_propagation.lo brw_vec4_generator.lo \
-	brw_vec4_gs.lo brw_vec4_gs_visitor.lo \
+	brw_vec4_copy_propagation.lo brw_vec4_cse.lo \
+	brw_vec4_generator.lo brw_vec4_gs.lo brw_vec4_gs_visitor.lo \
 	brw_vec4_live_variables.lo brw_vec4_reg_allocate.lo \
 	brw_vec4_visitor.lo brw_vec4_vp.lo brw_vec4_vs_visitor.lo \
 	brw_vs.lo brw_vs_state.lo brw_vs_surface_state.lo brw_wm.lo \
-	brw_wm_iz.lo brw_wm_sampler_state.lo brw_wm_state.lo \
-	brw_wm_surface_state.lo gen6_blorp.lo gen6_cc.lo \
-	gen6_clip_state.lo gen6_depthstencil.lo gen6_gs_state.lo \
+	brw_wm_iz.lo brw_wm_state.lo brw_wm_surface_state.lo \
+	gen6_blorp.lo gen6_cc.lo gen6_clip_state.lo \
+	gen6_depth_state.lo gen6_depthstencil.lo gen6_gs_state.lo \
 	gen6_multisample_state.lo gen6_queryobj.lo \
 	gen6_sampler_state.lo gen6_scissor_state.lo gen6_sf_state.lo \
-	gen6_sol.lo gen6_urb.lo gen6_viewport_state.lo \
-	gen6_vs_state.lo gen6_wm_state.lo gen7_blorp.lo \
-	gen7_disable.lo gen7_gs_state.lo gen7_misc_state.lo \
-	gen7_sampler_state.lo gen7_sf_state.lo gen7_sol_state.lo \
+	gen6_sol.lo gen6_surface_state.lo gen6_urb.lo \
+	gen6_viewport_state.lo gen6_vs_state.lo gen6_wm_state.lo \
+	gen7_blorp.lo gen7_disable.lo gen7_gs_state.lo \
+	gen7_misc_state.lo gen7_sf_state.lo gen7_sol_state.lo \
 	gen7_urb.lo gen7_viewport_state.lo gen7_vs_state.lo \
 	gen7_wm_state.lo gen7_wm_surface_state.lo gen8_blend_state.lo \
-	gen8_disasm.lo gen8_depth_state.lo gen8_disable.lo \
-	gen8_draw_upload.lo gen8_fs_generator.lo gen8_generator.lo \
-	gen8_instruction.lo gen8_gs_state.lo gen8_misc_state.lo \
-	gen8_multisample_state.lo gen8_sf_state.lo gen8_sol_state.lo \
-	gen8_surface_state.lo gen8_vec4_generator.lo \
+	gen8_depth_state.lo gen8_disable.lo gen8_draw_upload.lo \
+	gen8_gs_state.lo gen8_misc_state.lo gen8_multisample_state.lo \
+	gen8_sf_state.lo gen8_sol_state.lo gen8_surface_state.lo \
 	gen8_viewport_state.lo gen8_vs_state.lo \
 	gen8_wm_depth_stencil.lo gen8_ps_state.lo
 am_libi965_dri_la_OBJECTS = $(am__objects_1)
@@ -190,17 +188,13 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 am__EXEEXT_1 = test_eu_compact$(EXEEXT) \
 	test_vec4_copy_propagation$(EXEEXT) \
-	test_vec4_register_coalesce$(EXEEXT) \
-	test_blorp_blit_eu_gen$(EXEEXT)
-am_test_blorp_blit_eu_gen_OBJECTS = test_blorp_blit_eu_gen.$(OBJEXT)
-test_blorp_blit_eu_gen_OBJECTS = $(am_test_blorp_blit_eu_gen_OBJECTS)
+	test_vec4_register_coalesce$(EXEEXT)
+am_test_eu_compact_OBJECTS = test_eu_compact.$(OBJEXT)
+test_eu_compact_OBJECTS = $(am_test_eu_compact_OBJECTS)
 am__DEPENDENCIES_2 = libi965_dri.la ../common/libdricommon.la \
 	../common/libmegadriver_stub.la ../../../libmesa.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	../common/libdri_test_stubs.la
-test_blorp_blit_eu_gen_DEPENDENCIES = $(am__DEPENDENCIES_2)
-am_test_eu_compact_OBJECTS = test_eu_compact.$(OBJEXT)
-test_eu_compact_OBJECTS = $(am_test_eu_compact_OBJECTS)
 test_eu_compact_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_test_vec4_copy_propagation_OBJECTS =  \
 	test_vec4_copy_propagation.$(OBJEXT)
@@ -266,13 +260,11 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(libi965_dri_la_SOURCES) $(test_blorp_blit_eu_gen_SOURCES) \
-	$(test_eu_compact_SOURCES) \
+SOURCES = $(libi965_dri_la_SOURCES) $(test_eu_compact_SOURCES) \
 	$(nodist_EXTRA_test_eu_compact_SOURCES) \
 	$(test_vec4_copy_propagation_SOURCES) \
 	$(test_vec4_register_coalesce_SOURCES)
-DIST_SOURCES = $(libi965_dri_la_SOURCES) \
-	$(test_blorp_blit_eu_gen_SOURCES) $(test_eu_compact_SOURCES) \
+DIST_SOURCES = $(libi965_dri_la_SOURCES) $(test_eu_compact_SOURCES) \
 	$(test_vec4_copy_propagation_SOURCES) \
 	$(test_vec4_register_coalesce_SOURCES)
 am__can_run_installinfo = \
@@ -512,6 +504,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -763,15 +756,13 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-i965_INCLUDES = \
-	$(MESA_TOP)/src \
-	$(MESA_TOP)/src/mesa/drivers/dri/intel
-
 i965_FILES = \
+	intel_asm_annotation.c \
 	intel_batchbuffer.c \
 	intel_blit.c \
 	intel_buffer_objects.c \
 	intel_buffers.c \
+	intel_copy_image.c \
 	intel_debug.c \
 	intel_extensions.c \
 	intel_fbo.c \
@@ -795,7 +786,6 @@ i965_FILES = \
 	brw_blorp.cpp \
 	brw_blorp_blit.cpp \
 	brw_blorp_blit_eu.cpp \
-	brw_blorp_clear.cpp \
 	brw_cc.c \
 	brw_cfg.cpp \
 	brw_clear.c \
@@ -843,6 +833,7 @@ i965_FILES = \
 	brw_meta_updownsample.c \
 	brw_meta_stencil_blit.c \
 	brw_meta_util.c \
+	brw_meta_fast_clear.c \
 	brw_misc_state.c \
 	brw_object_purgeable.c \
 	brw_performance_monitor.c \
@@ -850,6 +841,7 @@ i965_FILES = \
 	brw_primitive_restart.c \
 	brw_queryobj.c \
 	brw_reset.c \
+	brw_sampler_state.c \
 	brw_schedule_instructions.cpp \
 	brw_sf.c \
 	brw_sf_emit.c \
@@ -866,6 +858,7 @@ i965_FILES = \
 	brw_util.c \
 	brw_vec4.cpp \
 	brw_vec4_copy_propagation.cpp \
+	brw_vec4_cse.cpp \
 	brw_vec4_generator.cpp \
 	brw_vec4_gs.c \
 	brw_vec4_gs_visitor.cpp \
@@ -879,12 +872,12 @@ i965_FILES = \
 	brw_vs_surface_state.c \
 	brw_wm.c \
 	brw_wm_iz.cpp \
-	brw_wm_sampler_state.c \
 	brw_wm_state.c \
 	brw_wm_surface_state.c \
 	gen6_blorp.cpp \
 	gen6_cc.c \
 	gen6_clip_state.c \
+	gen6_depth_state.c \
 	gen6_depthstencil.c \
 	gen6_gs_state.c \
         gen6_multisample_state.c \
@@ -893,6 +886,7 @@ i965_FILES = \
 	gen6_scissor_state.c \
 	gen6_sf_state.c \
         gen6_sol.c \
+	gen6_surface_state.c \
 	gen6_urb.c \
 	gen6_viewport_state.c \
 	gen6_vs_state.c \
@@ -901,7 +895,6 @@ i965_FILES = \
 	gen7_disable.c \
         gen7_gs_state.c \
 	gen7_misc_state.c \
-	gen7_sampler_state.c \
 	gen7_sf_state.c \
 	gen7_sol_state.c \
 	gen7_urb.c \
@@ -910,25 +903,19 @@ i965_FILES = \
 	gen7_wm_state.c \
 	gen7_wm_surface_state.c \
 	gen8_blend_state.c \
-	gen8_disasm.c \
 	gen8_depth_state.c \
 	gen8_disable.c \
 	gen8_draw_upload.c \
-	gen8_fs_generator.cpp \
-	gen8_generator.cpp \
-	gen8_instruction.c \
 	gen8_gs_state.c \
 	gen8_misc_state.c \
 	gen8_multisample_state.c \
 	gen8_sf_state.c \
 	gen8_sol_state.c \
 	gen8_surface_state.c \
-	gen8_vec4_generator.cpp \
 	gen8_viewport_state.c \
 	gen8_vs_state.c \
 	gen8_wm_depth_stencil.c \
-	gen8_ps_state.c \
-        $()
+	gen8_ps_state.c
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -976,10 +963,6 @@ test_eu_compact_SOURCES = \
 
 nodist_EXTRA_test_eu_compact_SOURCES = dummy.cpp
 test_eu_compact_LDADD = $(TEST_LIBS)
-test_blorp_blit_eu_gen_SOURCES = \
-        test_blorp_blit_eu_gen.cpp
-
-test_blorp_blit_eu_gen_LDADD = $(TEST_LIBS)
 all: all-am
 
 .SUFFIXES:
@@ -1039,10 +1022,6 @@ clean-checkPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
-test_blorp_blit_eu_gen$(EXEEXT): $(test_blorp_blit_eu_gen_OBJECTS) $(test_blorp_blit_eu_gen_DEPENDENCIES) $(EXTRA_test_blorp_blit_eu_gen_DEPENDENCIES) 
-	@rm -f test_blorp_blit_eu_gen$(EXEEXT)
-	$(AM_V_CXXLD)$(CXXLINK) $(test_blorp_blit_eu_gen_OBJECTS) $(test_blorp_blit_eu_gen_LDADD) $(LIBS)
-
 test_eu_compact$(EXEEXT): $(test_eu_compact_OBJECTS) $(test_eu_compact_DEPENDENCIES) $(EXTRA_test_eu_compact_DEPENDENCIES) 
 	@rm -f test_eu_compact$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(test_eu_compact_OBJECTS) $(test_eu_compact_LDADD) $(LIBS)
@@ -1065,7 +1044,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp_blit_eu.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_blorp_clear.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_cc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_cfg.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_clear.Plo@am__quote@
@@ -1110,6 +1088,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_interpolation_map.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_texture_gradients.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_unnormalized_offset.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_fast_clear.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_stencil_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_updownsample.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_util.Plo@am__quote@
@@ -1120,6 +1099,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_queryobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_reset.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_sampler_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_schedule_instructions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_sf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_sf_emit.Plo@am__quote@
@@ -1136,6 +1116,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_copy_propagation.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_cse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_generator.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_gs_visitor.Plo@am__quote@
@@ -1149,13 +1130,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vs_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_wm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_wm_iz.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_wm_sampler_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_wm_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_wm_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_blorp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_cc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_clip_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_depth_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_depthstencil.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_gs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_multisample_state.Plo@am__quote@
@@ -1164,6 +1145,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_scissor_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_sf_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_sol.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_urb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_viewport_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_vs_state.Plo@am__quote@
@@ -1172,7 +1154,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_disable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_gs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_misc_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_sampler_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_sf_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_sol_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_urb.Plo@am__quote@
@@ -1183,26 +1164,23 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_blend_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_depth_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_disable.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_disasm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_draw_upload.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_fs_generator.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_generator.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_gs_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_instruction.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_multisample_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_ps_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_sf_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_sol_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_surface_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_vec4_generator.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_viewport_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_vs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_wm_depth_stencil.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_asm_annotation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_batchbuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_buffer_objects.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_buffers.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_copy_image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_extensions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_fbo.Plo@am__quote@
@@ -1222,7 +1200,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tex_subimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tex_validate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_upload.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_blorp_blit_eu_gen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_eu_compact.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vec4_copy_propagation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vec4_register_coalesce.Po@am__quote@
@@ -1485,13 +1462,6 @@ test_vec4_copy_propagation.log: test_vec4_copy_propagation$(EXEEXT)
 test_vec4_register_coalesce.log: test_vec4_register_coalesce$(EXEEXT)
 	@p='test_vec4_register_coalesce$(EXEEXT)'; \
 	b='test_vec4_register_coalesce'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-test_blorp_blit_eu_gen.log: test_blorp_blit_eu_gen$(EXEEXT)
-	@p='test_blorp_blit_eu_gen$(EXEEXT)'; \
-	b='test_blorp_blit_eu_gen'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

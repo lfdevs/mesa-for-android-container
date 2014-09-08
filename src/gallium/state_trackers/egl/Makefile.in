@@ -104,21 +104,21 @@ target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.sources \
 	$(top_srcdir)/src/gallium/Automake.inc $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
-@HAVE_EGL_PLATFORM_X11_TRUE@am__append_9 = $(x11_FILES) $(x11_drm_FILES)
-@HAVE_EGL_PLATFORM_X11_TRUE@am__append_10 = \
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+
+@NEED_WINSYS_XLIB_TRUE@am__append_2 = \
+@NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
+@NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
+@NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
+
+@HAVE_EGL_PLATFORM_X11_TRUE@am__append_3 = $(x11_FILES) $(x11_drm_FILES)
+@HAVE_EGL_PLATFORM_X11_TRUE@am__append_4 = \
 @HAVE_EGL_PLATFORM_X11_TRUE@	$(X11_INCLUDES) \
 @HAVE_EGL_PLATFORM_X11_TRUE@	$(LIBDRM_CFLAGS) \
 @HAVE_EGL_PLATFORM_X11_TRUE@	$(DRI2PROTO_CFLAGS)
 
-@HAVE_EGL_PLATFORM_X11_TRUE@am__append_11 = \
+@HAVE_EGL_PLATFORM_X11_TRUE@am__append_5 = \
 @HAVE_EGL_PLATFORM_X11_TRUE@	-I$(top_srcdir)/src/gallium/winsys \
 @HAVE_EGL_PLATFORM_X11_TRUE@	-I$(top_srcdir)/src/gallium/drivers \
 @HAVE_EGL_PLATFORM_X11_TRUE@	-I$(top_srcdir)/src/glx \
@@ -126,38 +126,50 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 @HAVE_EGL_PLATFORM_X11_TRUE@	-I$(top_srcdir)/src/mesa \
 @HAVE_EGL_PLATFORM_X11_TRUE@	-DHAVE_X11_BACKEND
 
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_12 = $(wayland_FILES)
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_13 = \
+@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_6 = $(wayland_FILES)
+@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_7 = \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(LIBDRM_CFLAGS) \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS)
 
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_14 = \
+@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_8 = \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	-I$(top_srcdir)/src/gallium/winsys \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	-I$(top_srcdir)/src/egl/wayland/wayland-egl \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	-I$(top_builddir)/src/egl/wayland/wayland-drm \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	-DHAVE_WAYLAND_BACKEND
 
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_15 = $(drm_FILES)
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_16 = \
+@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_9 = $(drm_FILES)
+@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_10 = \
 @HAVE_EGL_PLATFORM_DRM_TRUE@	$(LIBDRM_CFLAGS)
 
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_17 = \
+@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_11 = \
 @HAVE_EGL_PLATFORM_DRM_TRUE@	-I$(top_srcdir)/src/loader \
 @HAVE_EGL_PLATFORM_DRM_TRUE@	-I$(top_srcdir)/src/gallium/winsys \
 @HAVE_EGL_PLATFORM_DRM_TRUE@	-I$(top_srcdir)/src/gbm/main \
 @HAVE_EGL_PLATFORM_DRM_TRUE@	-I$(top_srcdir)/src/gallium/state_trackers/gbm \
 @HAVE_EGL_PLATFORM_DRM_TRUE@	-DHAVE_DRM_BACKEND
 
-@HAVE_EGL_PLATFORM_FBDEV_TRUE@am__append_18 = $(fbdev_FILES)
-@HAVE_EGL_PLATFORM_FBDEV_TRUE@am__append_19 = \
+@HAVE_EGL_PLATFORM_FBDEV_TRUE@am__append_12 = $(fbdev_FILES)
+@HAVE_EGL_PLATFORM_FBDEV_TRUE@am__append_13 = \
 @HAVE_EGL_PLATFORM_FBDEV_TRUE@	-I$(top_srcdir)/src/gallium/winsys/sw \
 @HAVE_EGL_PLATFORM_FBDEV_TRUE@	-DHAVE_FBDEV_BACKEND
 
-@HAVE_EGL_PLATFORM_NULL_TRUE@am__append_20 = $(null_FILES)
-@HAVE_EGL_PLATFORM_NULL_TRUE@am__append_21 = \
+@HAVE_EGL_PLATFORM_NULL_TRUE@am__append_14 = $(null_FILES)
+@HAVE_EGL_PLATFORM_NULL_TRUE@am__append_15 = \
 @HAVE_EGL_PLATFORM_NULL_TRUE@	-I$(top_srcdir)/src/gallium/winsys/sw \
 @HAVE_EGL_PLATFORM_NULL_TRUE@	-DHAVE_NULL_BACKEND
+
+@HAVE_OPENGL_TRUE@am__append_16 = \
+@HAVE_OPENGL_TRUE@	-DFEATURE_GL=1
+
+@HAVE_OPENGL_ES1_TRUE@am__append_17 = \
+@HAVE_OPENGL_ES1_TRUE@	-DFEATURE_ES1=1
+
+@HAVE_OPENGL_ES2_TRUE@am__append_18 = \
+@HAVE_OPENGL_ES2_TRUE@	-DFEATURE_ES2=1
+
+@HAVE_OPENVG_TRUE@am__append_19 = \
+@HAVE_OPENVG_TRUE@	-DFEATURE_VG=1
 
 subdir = src/gallium/state_trackers/egl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -175,7 +187,7 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-@HAVE_EGL_PLATFORM_DRM_TRUE@libegl_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la
+libegl_la_LIBADD =
 am__libegl_la_SOURCES_DIST = common/egl_g3d_api.c common/egl_g3d.c \
 	common/egl_g3d_image.c common/egl_g3d_st.c \
 	common/egl_g3d_sync.c common/native_helper.c \
@@ -280,6 +292,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -574,6 +587,7 @@ wayland_FILES := \
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
@@ -585,6 +599,7 @@ GALLIUM_CFLAGS = \
 # preprocessor is determined by the ordering of the -I flags.
 GALLIUM_DRIVER_CFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -594,6 +609,7 @@ GALLIUM_DRIVER_CFLAGS = \
 
 GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -601,21 +617,9 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
-GALLIUM_DRI_CFLAGS = \
+GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/include \
-	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	$(DEFINES) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
-
-GALLIUM_VIDEO_CFLAGS = \
-	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -625,45 +629,12 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
-	$(GC_SECTIONS) $(am__append_1)
-GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
-GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
-GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
-	-avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
 GALLIUM_COMMON_LIB_DEPS = \
 	-lm \
 	$(CLOCK_LIB) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 
-GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
-GALLIUM_VDPAU_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_6)
-GALLIUM_XVMC_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_7)
-GALLIUM_OMX_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
-	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -671,16 +642,19 @@ GALLIUM_WINSYS_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
-AM_CFLAGS = $(GALLIUM_CFLAGS) $(am__append_10) $(am__append_13) \
-	$(am__append_16)
-AM_CPPFLAGS = $(VISIBILITY_CFLAGS) -I$(top_srcdir)/src/egl/main \
-	-I$(top_builddir)/src/egl/wayland/wayland-drm/ \
-	-I$(top_srcdir)/include $(am__append_11) $(am__append_14) \
-	$(am__append_17) $(am__append_19) $(am__append_21)
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
+AM_CFLAGS = $(GALLIUM_CFLAGS) $(VISIBILITY_CFLAGS) $(am__append_4) \
+	$(am__append_7) $(am__append_10)
+AM_CPPFLAGS = -I$(top_srcdir)/src/egl/main \
+	-I$(top_builddir)/src/egl/wayland/wayland-drm/ $(am__append_5) \
+	$(am__append_8) $(am__append_11) $(am__append_13) \
+	$(am__append_15) $(am__append_16) $(am__append_17) \
+	$(am__append_18) $(am__append_19)
 noinst_LTLIBRARIES = libegl.la
-libegl_la_SOURCES = $(common_FILES) $(am__append_9) $(am__append_12) \
-	$(am__append_15) $(am__append_18) $(am__append_20)
-@HAVE_EGL_PLATFORM_DRM_TRUE@libegl_la_LIBADD = $(top_builddir)/src/loader/libloader.la
+libegl_la_SOURCES = $(common_FILES) $(am__append_3) $(am__append_6) \
+	$(am__append_9) $(am__append_12) $(am__append_14)
 all: all-am
 
 .SUFFIXES:

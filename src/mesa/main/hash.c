@@ -37,7 +37,7 @@
 #include "glheader.h"
 #include "imports.h"
 #include "hash.h"
-#include "hash_table.h"
+#include "util/hash_table.h"
 
 /**
  * Magic GLuint object name that gets stored outside of the struct hash_table.
@@ -115,10 +115,20 @@ _mesa_NewHashTable(void)
 
    if (table) {
       table->ht = _mesa_hash_table_create(NULL, uint_key_compare);
+      if (table->ht == NULL) {
+         free(table);
+         _mesa_error_no_memory(__func__);
+         return NULL;
+      }
+
       _mesa_hash_table_set_deleted_key(table->ht, uint_key(DELETED_KEY_VALUE));
       mtx_init(&table->Mutex, mtx_plain);
       mtx_init(&table->WalkMutex, mtx_plain);
    }
+   else {
+      _mesa_error_no_memory(__func__);
+   }
+
    return table;
 }
 

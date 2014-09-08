@@ -97,14 +97,12 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
       return LP_MAX_TGSI_NESTING;
    case PIPE_SHADER_CAP_MAX_INPUTS:
       return PIPE_MAX_SHADER_INPUTS;
-   case PIPE_SHADER_CAP_MAX_CONSTS:
-      return 16 * 2024;
+   case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+      return sizeof(float[4]) * 4096;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
       return PIPE_MAX_CONSTANT_BUFFERS;
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return LP_MAX_TGSI_TEMPS;
-   case PIPE_SHADER_CAP_MAX_ADDRS:
-      return LP_MAX_TGSI_ADDRS;
    case PIPE_SHADER_CAP_MAX_PREDS:
       return LP_MAX_TGSI_PREDS;
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -122,11 +120,17 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
       return PIPE_MAX_SAMPLERS;
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
       return PIPE_MAX_SHADER_SAMPLER_VIEWS;
+   case PIPE_SHADER_CAP_PREFERRED_IR:
+      return PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       return 1;
-   default:
+   case PIPE_SHADER_CAP_DOUBLES:
       return 0;
    }
+   /* if we get here, we missed a shader cap above (and should have seen
+    * a compiler warning.)
+    */
+   return 0;
 }
 
 

@@ -38,13 +38,20 @@ pop_stack(exec_list *list)
 {
    bblock_link *link = (bblock_link *)list->get_tail();
    bblock_t *block = link->block;
-   link->remove();
+   link->link.remove();
 
    return block;
 }
 
+static exec_node *
+link(void *mem_ctx, bblock_t *block)
+{
+   bblock_link *l = new(mem_ctx) bblock_link(block);
+   return &l->link;
+}
+
 bblock_t::bblock_t() :
-   start_ip(0), end_ip(0), block_num(0)
+   start_ip(0), end_ip(0), num(0)
 {
    start = NULL;
    end = NULL;
@@ -60,8 +67,8 @@ bblock_t::bblock_t() :
 void
 bblock_t::add_successor(void *mem_ctx, bblock_t *successor)
 {
-   successor->parents.push_tail(new(mem_ctx) bblock_link(this));
-   children.push_tail(new(mem_ctx) bblock_link(successor));
+   successor->parents.push_tail(::link(mem_ctx, this));
+   children.push_tail(::link(mem_ctx, successor));
 }
 
 void
@@ -91,7 +98,7 @@ cfg_t::cfg_t(exec_list *instructions)
    bblock_t *cur_if = NULL;    /**< BB ending with IF. */
    bblock_t *cur_else = NULL;  /**< BB ending with ELSE. */
    bblock_t *cur_endif = NULL; /**< BB starting with ENDIF. */
-   bblock_t *cur_do = NULL;    /**< BB ending with DO. */
+   bblock_t *cur_do = NULL;    /**< BB starting with DO. */
    bblock_t *cur_while = NULL; /**< BB immediately following WHILE. */
    exec_list if_stack, else_stack, do_stack, while_stack;
    bblock_t *next;
@@ -100,9 +107,7 @@ cfg_t::cfg_t(exec_list *instructions)
 
    entry->start = (backend_instruction *) instructions->get_head();
 
-   foreach_list(node, instructions) {
-      backend_instruction *inst = (backend_instruction *)node;
-
+   foreach_in_list(backend_instruction, inst, instructions) {
       cur->end = inst;
 
       /* set_next_block wants the post-incremented ip */
@@ -113,8 +118,8 @@ cfg_t::cfg_t(exec_list *instructions)
 	 /* Push our information onto a stack so we can recover from
 	  * nested ifs.
 	  */
-	 if_stack.push_tail(new(mem_ctx) bblock_link(cur_if));
-	 else_stack.push_tail(new(mem_ctx) bblock_link(cur_else));
+	 if_stack.push_tail(link(mem_ctx, cur_if));
+	 else_stack.push_tail(link(mem_ctx, cur_else));
 
 	 cur_if = cur;
 	 cur_else = NULL;
@@ -190,23 +195,26 @@ cfg_t::cfg_t(exec_list *instructions)
 	 /* Push our information onto a stack so we can recover from
 	  * nested loops.
 	  */
-	 do_stack.push_tail(new(mem_ctx) bblock_link(cur_do));
-	 while_stack.push_tail(new(mem_ctx) bblock_link(cur_while));
+	 do_stack.push_tail(link(mem_ctx, cur_do));
+	 while_stack.push_tail(link(mem_ctx, cur_while));
 
 	 /* Set up the block just after the while.  Don't know when exactly
 	  * it will start, yet.
 	  */
 	 cur_while = new_block();
 
-	 /* Set up our immediately following block, full of "then"
-	  * instructions.
-	  */
-	 next = new_block();
-	 next->start = (backend_instruction *)inst->next;
-	 cur->add_successor(mem_ctx, next);
-	 cur_do = next;
+         if (cur->start == inst) {
+            /* New block was just created; use it. */
+            cur_do = cur;
+         } else {
+            cur_do = new_block();
+            cur_do->start = inst;
 
-	 set_next_block(&cur, next, ip);
+            cur->end = (backend_instruction *)inst->prev;
+            cur->add_successor(mem_ctx, cur_do);
+
+            set_next_block(&cur, cur_do, ip - 1);
+         }
 	 break;
 
       case BRW_OPCODE_CONTINUE:
@@ -247,6 +255,8 @@ cfg_t::cfg_t(exec_list *instructions)
       }
    }
 
+   assert(cur->end);
+
    cur->end_ip = ip;
 
    make_block_array();
@@ -274,8 +284,8 @@ cfg_t::set_next_block(bblock_t **cur, bblock_t *block, int ip)
    }
 
    block->start_ip = ip;
-   block->block_num = num_blocks++;
-   block_list.push_tail(new(mem_ctx) bblock_link(block));
+   block->num = num_blocks++;
+   block_list.push_tail(&block->link);
    *cur = block;
 }
 
@@ -285,9 +295,8 @@ cfg_t::make_block_array()
    blocks = ralloc_array(mem_ctx, bblock_t *, num_blocks);
 
    int i = 0;
-   foreach_list(block_node, &block_list) {
-      bblock_link *link = (bblock_link *)block_node;
-      blocks[i++] = link->block;
+   foreach_block (block, this) {
+      blocks[i++] = block;
    }
    assert(i == num_blocks);
 }
@@ -295,21 +304,18 @@ cfg_t::make_block_array()
 void
 cfg_t::dump(backend_visitor *v)
 {
-   for (int b = 0; b < this->num_blocks; b++) {
-        bblock_t *block = this->blocks[b];
-      fprintf(stderr, "START B%d", b);
-      foreach_list(node, &block->parents) {
-         bblock_link *link = (bblock_link *)node;
+   foreach_block (block, this) {
+      fprintf(stderr, "START B%d", block->num);
+      foreach_list_typed(bblock_link, link, link, &block->parents) {
          fprintf(stderr, " <-B%d",
-                 link->block->block_num);
+                 link->block->num);
       }
       fprintf(stderr, "\n");
       block->dump(v);
-      fprintf(stderr, "END B%d", b);
-      foreach_list(node, &block->children) {
-         bblock_link *link = (bblock_link *)node;
+      fprintf(stderr, "END B%d", block->num);
+      foreach_list_typed(bblock_link, link, link, &block->children) {
          fprintf(stderr, " ->B%d",
-                 link->block->block_num);
+                 link->block->num);
       }
       fprintf(stderr, "\n");
    }

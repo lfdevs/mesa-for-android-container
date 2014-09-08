@@ -31,36 +31,39 @@
 #if defined(HAVE_DRI3)
 #include "dri3_priv.h"
 #endif
+#include "drisw_priv.h"
+
+#define __RENDERER(attrib) \
+    { GLX_RENDERER_##attrib##_MESA, __DRI2_RENDERER_##attrib }
+
+static const struct {
+   unsigned int glx_attrib, dri2_attrib;
+} query_renderer_map[] = {
+  __RENDERER(VENDOR_ID),
+  __RENDERER(DEVICE_ID),
+  __RENDERER(VERSION),
+  __RENDERER(ACCELERATED),
+  __RENDERER(VIDEO_MEMORY),
+  __RENDERER(UNIFIED_MEMORY_ARCHITECTURE),
+  __RENDERER(PREFERRED_PROFILE),
+  __RENDERER(OPENGL_CORE_PROFILE_VERSION),
+  __RENDERER(OPENGL_COMPATIBILITY_PROFILE_VERSION),
+  __RENDERER(OPENGL_ES_PROFILE_VERSION),
+  __RENDERER(OPENGL_ES2_PROFILE_VERSION),
+};
+
+#undef __RENDERER
 
 static int
 dri2_convert_glx_query_renderer_attribs(int attribute)
 {
-   switch (attribute) {
-   case GLX_RENDERER_VENDOR_ID_MESA:
-      return __DRI2_RENDERER_VENDOR_ID;
-   case GLX_RENDERER_DEVICE_ID_MESA:
-      return __DRI2_RENDERER_DEVICE_ID;
-   case GLX_RENDERER_VERSION_MESA:
-      return __DRI2_RENDERER_VERSION;
-   case GLX_RENDERER_ACCELERATED_MESA:
-      return __DRI2_RENDERER_ACCELERATED;
-   case GLX_RENDERER_VIDEO_MEMORY_MESA:
-      return __DRI2_RENDERER_VIDEO_MEMORY;
-   case GLX_RENDERER_UNIFIED_MEMORY_ARCHITECTURE_MESA:
-      return __DRI2_RENDERER_UNIFIED_MEMORY_ARCHITECTURE;
-   case GLX_RENDERER_PREFERRED_PROFILE_MESA:
-      return __DRI2_RENDERER_PREFERRED_PROFILE;
-   case GLX_RENDERER_OPENGL_CORE_PROFILE_VERSION_MESA:
-      return __DRI2_RENDERER_OPENGL_CORE_PROFILE_VERSION;
-   case GLX_RENDERER_OPENGL_COMPATIBILITY_PROFILE_VERSION_MESA:
-      return __DRI2_RENDERER_OPENGL_COMPATIBILITY_PROFILE_VERSION;
-   case GLX_RENDERER_OPENGL_ES_PROFILE_VERSION_MESA:
-      return __DRI2_RENDERER_OPENGL_ES_PROFILE_VERSION;
-   case GLX_RENDERER_OPENGL_ES2_PROFILE_VERSION_MESA:
-      return __DRI2_RENDERER_OPENGL_ES2_PROFILE_VERSION;
-   default:
-      return -1;
-   }
+   int i;
+
+   for (i = 0; i < ARRAY_SIZE(query_renderer_map); i++)
+      if (query_renderer_map[i].glx_attrib == attribute)
+         return query_renderer_map[i].dri2_attrib;
+
+   return -1;
 }
 
 _X_HIDDEN int
@@ -140,5 +143,44 @@ dri3_query_renderer_string(struct glx_screen *base, int attribute,
    return psc->rendererQuery->queryString(psc->driScreen, dri_attribute, value);
 }
 #endif /* HAVE_DRI3 */
+
+_X_HIDDEN int
+drisw_query_renderer_integer(struct glx_screen *base, int attribute,
+                             unsigned int *value)
+{
+   struct drisw_screen *const psc = (struct drisw_screen *) base;
+
+   /* Even though there are invalid values (and
+    * dri2_convert_glx_query_renderer_attribs may return -1), the higher level
+    * GLX code is required to perform the filtering.  Assume that we got a
+    * good value.
+    */
+   const int dri_attribute = dri2_convert_glx_query_renderer_attribs(attribute);
+
+   if (psc->rendererQuery == NULL)
+      return -1;
+
+   return psc->rendererQuery->queryInteger(psc->driScreen, dri_attribute,
+                                           value);
+}
+
+_X_HIDDEN int
+drisw_query_renderer_string(struct glx_screen *base, int attribute,
+                            const char **value)
+{
+   struct drisw_screen *const psc = (struct drisw_screen *) base;
+
+   /* Even though queryString only accepts a subset of the possible GLX
+    * queries, the higher level GLX code is required to perform the filtering.
+    * Assume that we got a good value.
+    */
+   const int dri_attribute = dri2_convert_glx_query_renderer_attribs(attribute);
+
+   if (psc->rendererQuery == NULL)
+      return -1;
+
+   return psc->rendererQuery->queryString(psc->driScreen, dri_attribute, value);
+}
+
 
 #endif /* GLX_DIRECT_RENDERING */

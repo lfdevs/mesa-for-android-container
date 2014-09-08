@@ -23,9 +23,9 @@
 
 #include "si_pipe.h"
 #include "si_public.h"
+#include "sid.h"
 
 #include "radeon/radeon_uvd.h"
-#include "util/u_blitter.h"
 #include "util/u_memory.h"
 #include "util/u_simple_shaders.h"
 #include "vl/vl_decoder.h"
@@ -105,10 +105,13 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 
 	/* Initialize cache_flush. */
 	sctx->cache_flush = si_atom_cache_flush;
-	sctx->atoms.cache_flush = &sctx->cache_flush;
+	sctx->atoms.s.cache_flush = &sctx->cache_flush;
 
-	sctx->atoms.streamout_begin = &sctx->b.streamout.begin_atom;
-	sctx->atoms.streamout_enable = &sctx->b.streamout.enable_atom;
+	sctx->msaa_config = si_atom_msaa_config;
+	sctx->atoms.s.msaa_config = &sctx->msaa_config;
+
+	sctx->atoms.s.streamout_begin = &sctx->b.streamout.begin_atom;
+	sctx->atoms.s.streamout_enable = &sctx->b.streamout.enable_atom;
 
 	switch (sctx->b.chip_class) {
 	case SI:
@@ -124,6 +127,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	sctx->blitter = util_blitter_create(&sctx->b.b);
 	if (sctx->blitter == NULL)
 		goto fail;
+	sctx->blitter->draw_rectangle = r600_draw_rectangle;
 
 	sctx->dummy_pixel_shader =
 		util_make_fragment_cloneinput_shader(&sctx->b.b, 0,
@@ -143,7 +147,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 		sctx->null_const_buf.buffer_size = sctx->null_const_buf.buffer->width0;
 
 		for (shader = 0; shader < SI_NUM_SHADERS; shader++) {
-			for (i = 0; i < NUM_CONST_BUFFERS; i++) {
+			for (i = 0; i < SI_NUM_CONST_BUFFERS; i++) {
 				sctx->b.b.set_constant_buffer(&sctx->b.b, shader, i,
 							      &sctx->null_const_buf);
 			}
@@ -206,15 +210,18 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_INSTANCEID:
 	case PIPE_CAP_COMPUTE:
 	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
-        case PIPE_CAP_TGSI_VS_LAYER:
+        case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
 	case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
 	case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+	case PIPE_CAP_CUBE_MAP_ARRAY:
+	case PIPE_CAP_SAMPLE_SHADING:
+	case PIPE_CAP_DRAW_INDIRECT:
 		return 1;
 
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
 		/* 2D tiling on CIK is supported since DRM 2.35.0 */
-		return HAVE_LLVM >= 0x0304 && (sscreen->b.chip_class < CIK ||
-					       sscreen->b.info.drm_minor >= 35);
+		return sscreen->b.chip_class < CIK ||
+		       sscreen->b.info.drm_minor >= 35;
 
         case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
                 return R600_MAP_BUFFER_ALIGNMENT;
@@ -224,10 +231,16 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 4;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
-		return (LLVM_SUPPORTS_GEOM_SHADERS) ? 330 : 140;
+		return 330;
 
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
 		return MIN2(sscreen->b.info.vram_size, 0xFFFFFFFF);
+
+	case PIPE_CAP_TEXTURE_QUERY_LOD:
+	case PIPE_CAP_TEXTURE_GATHER_SM5:
+		return HAVE_LLVM >= 0x0305;
+	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
+		return HAVE_LLVM >= 0x0305 ? 4 : 0;
 
 	/* Unsupported features. */
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
@@ -237,13 +250,12 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
 	case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
-	case PIPE_CAP_CUBE_MAP_ARRAY:
-	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
-	case PIPE_CAP_TEXTURE_GATHER_SM5:
 	case PIPE_CAP_TGSI_TEXCOORD:
 	case PIPE_CAP_FAKE_SW_MSAA:
-	case PIPE_CAP_TEXTURE_QUERY_LOD:
-        case PIPE_CAP_SAMPLE_SHADING:
+	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
+	case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+	case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 		return 0;
 
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
@@ -263,6 +275,8 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 1024;
 	case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
 		return 4095;
+	case PIPE_CAP_MAX_VERTEX_STREAMS:
+		return 1;
 
 	/* Texturing. */
 	case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
@@ -289,13 +303,25 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
  	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
-		return -8;
+		return -32;
 
  	case PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MAX_TEXEL_OFFSET:
-		return 7;
+		return 31;
+
 	case PIPE_CAP_ENDIANNESS:
 		return PIPE_ENDIAN_LITTLE;
+
+	case PIPE_CAP_VENDOR_ID:
+		return 0x1002;
+	case PIPE_CAP_DEVICE_ID:
+		return sscreen->b.info.pci_id;
+	case PIPE_CAP_ACCELERATED:
+		return 1;
+	case PIPE_CAP_VIDEO_MEMORY:
+		return sscreen->b.info.vram_size >> 20;
+	case PIPE_CAP_UMA:
+		return 0;
 	}
 	return 0;
 }
@@ -306,16 +332,22 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	{
 	case PIPE_SHADER_FRAGMENT:
 	case PIPE_SHADER_VERTEX:
-		break;
 	case PIPE_SHADER_GEOMETRY:
-#if !(LLVM_SUPPORTS_GEOM_SHADERS)
-		return 0;
-#endif
 		break;
 	case PIPE_SHADER_COMPUTE:
 		switch (param) {
 		case PIPE_SHADER_CAP_PREFERRED_IR:
 			return PIPE_SHADER_IR_LLVM;
+		case PIPE_SHADER_CAP_DOUBLES:
+			return 0; /* XXX: Enable doubles once the compiler can
+			             handle them. */
+		case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE: {
+			uint64_t max_const_buffer_size;
+			pscreen->get_compute_param(pscreen,
+				PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE,
+				&max_const_buffer_size);
+			return max_const_buffer_size;
+		}
 		default:
 			return 0;
 		}
@@ -333,16 +365,13 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
 		return 32;
 	case PIPE_SHADER_CAP_MAX_INPUTS:
-		return 32;
+		return shader == PIPE_SHADER_VERTEX ? SI_NUM_VERTEX_BUFFERS : 32;
 	case PIPE_SHADER_CAP_MAX_TEMPS:
 		return 256; /* Max native temporaries. */
-	case PIPE_SHADER_CAP_MAX_ADDRS:
-		/* FIXME Isn't this equal to TEMPS? */
-		return 1; /* Max native address registers */
-	case PIPE_SHADER_CAP_MAX_CONSTS:
-		return 4096; /* actually only memory limits this */
+	case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+		return 4096 * sizeof(float[4]); /* actually only memory limits this */
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-		return NUM_PIPE_CONST_BUFFERS;
+		return SI_NUM_USER_CONST_BUFFERS;
 	case PIPE_SHADER_CAP_MAX_PREDS:
 		return 0; /* FIXME */
 	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -367,6 +396,8 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 		return 16;
 	case PIPE_SHADER_CAP_PREFERRED_IR:
 		return PIPE_SHADER_IR_TGSI;
+	case PIPE_SHADER_CAP_DOUBLES:
+		return 0;
 	}
 	return 0;
 }
@@ -384,6 +415,57 @@ static void si_destroy_screen(struct pipe_screen* pscreen)
 	r600_destroy_common_screen(&sscreen->b);
 }
 
+#define SI_TILE_MODE_COLOR_2D_8BPP  14
+
+/* Initialize pipe config. This is especially important for GPUs
+ * with 16 pipes and more where it's initialized incorrectly by
+ * the TILING_CONFIG ioctl. */
+static bool si_initialize_pipe_config(struct si_screen *sscreen)
+{
+	unsigned mode2d;
+
+	/* This is okay, because there can be no 2D tiling without
+	 * the tile mode array, so we won't need the pipe config.
+	 * Return "success".
+	 */
+	if (!sscreen->b.info.si_tile_mode_array_valid)
+		return true;
+
+	/* The same index is used for the 2D mode on CIK too. */
+	mode2d = sscreen->b.info.si_tile_mode_array[SI_TILE_MODE_COLOR_2D_8BPP];
+
+	switch (G_009910_PIPE_CONFIG(mode2d)) {
+	case V_02803C_ADDR_SURF_P2:
+		sscreen->b.tiling_info.num_channels = 2;
+		break;
+	case V_02803C_X_ADDR_SURF_P4_8X16:
+	case V_02803C_X_ADDR_SURF_P4_16X16:
+	case V_02803C_X_ADDR_SURF_P4_16X32:
+	case V_02803C_X_ADDR_SURF_P4_32X32:
+		sscreen->b.tiling_info.num_channels = 4;
+		break;
+	case V_02803C_X_ADDR_SURF_P8_16X16_8X16:
+	case V_02803C_X_ADDR_SURF_P8_16X32_8X16:
+	case V_02803C_X_ADDR_SURF_P8_32X32_8X16:
+	case V_02803C_X_ADDR_SURF_P8_16X32_16X16:
+	case V_02803C_X_ADDR_SURF_P8_32X32_16X16:
+	case V_02803C_X_ADDR_SURF_P8_32X32_16X32:
+	case V_02803C_X_ADDR_SURF_P8_32X64_32X32:
+		sscreen->b.tiling_info.num_channels = 8;
+		break;
+	case V_02803C_X_ADDR_SURF_P16_32X32_8X16:
+	case V_02803C_X_ADDR_SURF_P16_32X32_16X16:
+		sscreen->b.tiling_info.num_channels = 16;
+		break;
+	default:
+		assert(0);
+		fprintf(stderr, "radeonsi: Unknown pipe config %i.\n",
+			G_009910_PIPE_CONFIG(mode2d));
+		return false;
+	}
+	return true;
+}
+
 struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 {
 	struct si_screen *sscreen = CALLOC_STRUCT(si_screen);
@@ -399,13 +481,14 @@ struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 	sscreen->b.b.is_format_supported = si_is_format_supported;
 	sscreen->b.b.resource_create = r600_resource_create_common;
 
-	if (!r600_common_screen_init(&sscreen->b, ws)) {
+	if (!r600_common_screen_init(&sscreen->b, ws) ||
+	    !si_initialize_pipe_config(sscreen)) {
 		FREE(sscreen);
 		return NULL;
 	}
 
 	sscreen->b.has_cp_dma = true;
-	sscreen->b.has_streamout = HAVE_LLVM >= 0x0304;
+	sscreen->b.has_streamout = true;
 
 	if (debug_get_bool_option("RADEON_DUMP_SHADERS", FALSE))
 		sscreen->b.debug_flags |= DBG_FS | DBG_VS | DBG_GS | DBG_PS | DBG_CS;

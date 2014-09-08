@@ -82,15 +82,20 @@ target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.sources \
 	$(top_srcdir)/src/gallium/Automake.inc $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
-@NEED_RADEON_LLVM_TRUE@am__append_9 = libllvmradeon.la
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+
+@NEED_WINSYS_XLIB_TRUE@am__append_2 = \
+@NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
+@NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
+@NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
+
+@NEED_RADEON_LLVM_TRUE@am__append_3 = \
+@NEED_RADEON_LLVM_TRUE@	$(LLVM_CFLAGS)
+
+@NEED_RADEON_LLVM_TRUE@am__append_4 = \
+@NEED_RADEON_LLVM_TRUE@	$(LLVM_C_FILES)
+
 subdir = src/gallium/drivers/radeon
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -108,34 +113,31 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-@NEED_RADEON_LLVM_TRUE@libllvmradeon_la_DEPENDENCIES =  \
+@NEED_RADEON_LLVM_TRUE@libradeon_la_DEPENDENCIES =  \
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1) \
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1) \
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1)
-am__libllvmradeon_la_SOURCES_DIST = radeon_elf_util.c \
-	radeon_setup_tgsi_llvm.c radeon_llvm_emit.c radeon_llvm_util.c
-am__objects_1 = libllvmradeon_la-radeon_elf_util.lo \
-	libllvmradeon_la-radeon_setup_tgsi_llvm.lo \
-	libllvmradeon_la-radeon_llvm_emit.lo \
-	libllvmradeon_la-radeon_llvm_util.lo
-@NEED_RADEON_LLVM_TRUE@am_libllvmradeon_la_OBJECTS = $(am__objects_1)
-libllvmradeon_la_OBJECTS = $(am_libllvmradeon_la_OBJECTS)
+am__libradeon_la_SOURCES_DIST = cayman_msaa.c r600_buffer_common.c \
+	r600_pipe_common.c r600_query.c r600_streamout.c \
+	r600_texture.c radeon_video.c radeon_uvd.c radeon_vce.c \
+	radeon_vce_40_2_2.c radeon_elf_util.c radeon_setup_tgsi_llvm.c \
+	radeon_llvm_emit.c radeon_llvm_util.c
+am__objects_1 = cayman_msaa.lo r600_buffer_common.lo \
+	r600_pipe_common.lo r600_query.lo r600_streamout.lo \
+	r600_texture.lo radeon_video.lo radeon_uvd.lo radeon_vce.lo \
+	radeon_vce_40_2_2.lo
+am__objects_2 = radeon_elf_util.lo radeon_setup_tgsi_llvm.lo \
+	radeon_llvm_emit.lo radeon_llvm_util.lo
+@NEED_RADEON_LLVM_TRUE@am__objects_3 = $(am__objects_2)
+am_libradeon_la_OBJECTS = $(am__objects_1) $(am__objects_3)
+libradeon_la_OBJECTS = $(am_libradeon_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-libllvmradeon_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
-	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
-	$(libllvmradeon_la_CFLAGS) $(CFLAGS) \
-	$(libllvmradeon_la_LDFLAGS) $(LDFLAGS) -o $@
-@NEED_RADEON_LLVM_TRUE@am_libllvmradeon_la_rpath =
-libradeon_la_LIBADD =
-am__objects_2 = cayman_msaa.lo r600_buffer_common.lo \
-	r600_pipe_common.lo r600_query.lo r600_streamout.lo \
-	r600_texture.lo radeon_video.lo radeon_uvd.lo radeon_vce.lo \
-	radeon_vce_40_2_2.lo
-am_libradeon_la_OBJECTS = $(am__objects_2)
-libradeon_la_OBJECTS = $(am_libradeon_la_OBJECTS)
+libradeon_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(libradeon_la_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -170,9 +172,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libllvmradeon_la_SOURCES) $(libradeon_la_SOURCES)
-DIST_SOURCES = $(am__libllvmradeon_la_SOURCES_DIST) \
-	$(libradeon_la_SOURCES)
+SOURCES = $(libradeon_la_SOURCES)
+DIST_SOURCES = $(am__libradeon_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -206,6 +207,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -477,6 +479,7 @@ LLVM_C_FILES := \
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
@@ -488,6 +491,7 @@ GALLIUM_CFLAGS = \
 # preprocessor is determined by the ordering of the -I flags.
 GALLIUM_DRIVER_CFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -497,6 +501,7 @@ GALLIUM_DRIVER_CFLAGS = \
 
 GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -504,21 +509,9 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
-GALLIUM_DRI_CFLAGS = \
+GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/include \
-	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	$(DEFINES) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
-
-GALLIUM_VIDEO_CFLAGS = \
-	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -528,45 +521,12 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
-	$(GC_SECTIONS) $(am__append_1)
-GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
-GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
-GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
-	-avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
 GALLIUM_COMMON_LIB_DEPS = \
 	-lm \
 	$(CLOCK_LIB) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 
-GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
-GALLIUM_VDPAU_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_6)
-GALLIUM_XVMC_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_7)
-GALLIUM_OMX_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
-	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -574,28 +534,18 @@ GALLIUM_WINSYS_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
-AM_CFLAGS = \
-	$(GALLIUM_DRIVER_CFLAGS) \
-	$(RADEON_CFLAGS)
-
-noinst_LTLIBRARIES = libradeon.la $(am__append_9)
-libradeon_la_SOURCES = \
-	$(C_SOURCES)
-
-@NEED_RADEON_LLVM_TRUE@libllvmradeon_la_CFLAGS = \
-@NEED_RADEON_LLVM_TRUE@	$(GALLIUM_DRIVER_CFLAGS) \
-@NEED_RADEON_LLVM_TRUE@	$(RADEON_CFLAGS) \
-@NEED_RADEON_LLVM_TRUE@	$(LLVM_CFLAGS)
-
-@NEED_RADEON_LLVM_TRUE@libllvmradeon_la_SOURCES = \
-@NEED_RADEON_LLVM_TRUE@	$(LLVM_C_FILES)
-
-@NEED_RADEON_LLVM_TRUE@libllvmradeon_la_LIBADD = \
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
+AM_CFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(RADEON_CFLAGS) $(am__append_3)
+noinst_LTLIBRARIES = libradeon.la
+libradeon_la_SOURCES = $(C_SOURCES) $(am__append_4)
+@NEED_RADEON_LLVM_TRUE@libradeon_la_LIBADD = \
 @NEED_RADEON_LLVM_TRUE@	$(CLOCK_LIB) \
 @NEED_RADEON_LLVM_TRUE@	$(LLVM_LIBS) \
 @NEED_RADEON_LLVM_TRUE@	$(ELF_LIB)
 
-@NEED_RADEON_LLVM_TRUE@libllvmradeon_la_LDFLAGS = \
+@NEED_RADEON_LLVM_TRUE@libradeon_la_LDFLAGS = \
 @NEED_RADEON_LLVM_TRUE@	$(LLVM_LDFLAGS)
 
 all: all-am
@@ -645,11 +595,8 @@ clean-noinstLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
-libllvmradeon.la: $(libllvmradeon_la_OBJECTS) $(libllvmradeon_la_DEPENDENCIES) $(EXTRA_libllvmradeon_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(libllvmradeon_la_LINK) $(am_libllvmradeon_la_rpath) $(libllvmradeon_la_OBJECTS) $(libllvmradeon_la_LIBADD) $(LIBS)
-
 libradeon.la: $(libradeon_la_OBJECTS) $(libradeon_la_DEPENDENCIES) $(EXTRA_libradeon_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(LINK)  $(libradeon_la_OBJECTS) $(libradeon_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(libradeon_la_LINK)  $(libradeon_la_OBJECTS) $(libradeon_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -658,15 +605,15 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cayman_msaa.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libllvmradeon_la-radeon_elf_util.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libllvmradeon_la-radeon_llvm_emit.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libllvmradeon_la-radeon_llvm_util.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libllvmradeon_la-radeon_setup_tgsi_llvm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_buffer_common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_pipe_common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_streamout.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/r600_texture.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_elf_util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_llvm_emit.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_llvm_util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_setup_tgsi_llvm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_uvd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vce.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vce_40_2_2.Plo@am__quote@
@@ -692,34 +639,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
-
-libllvmradeon_la-radeon_elf_util.lo: radeon_elf_util.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -MT libllvmradeon_la-radeon_elf_util.lo -MD -MP -MF $(DEPDIR)/libllvmradeon_la-radeon_elf_util.Tpo -c -o libllvmradeon_la-radeon_elf_util.lo `test -f 'radeon_elf_util.c' || echo '$(srcdir)/'`radeon_elf_util.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libllvmradeon_la-radeon_elf_util.Tpo $(DEPDIR)/libllvmradeon_la-radeon_elf_util.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='radeon_elf_util.c' object='libllvmradeon_la-radeon_elf_util.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -c -o libllvmradeon_la-radeon_elf_util.lo `test -f 'radeon_elf_util.c' || echo '$(srcdir)/'`radeon_elf_util.c
-
-libllvmradeon_la-radeon_setup_tgsi_llvm.lo: radeon_setup_tgsi_llvm.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -MT libllvmradeon_la-radeon_setup_tgsi_llvm.lo -MD -MP -MF $(DEPDIR)/libllvmradeon_la-radeon_setup_tgsi_llvm.Tpo -c -o libllvmradeon_la-radeon_setup_tgsi_llvm.lo `test -f 'radeon_setup_tgsi_llvm.c' || echo '$(srcdir)/'`radeon_setup_tgsi_llvm.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libllvmradeon_la-radeon_setup_tgsi_llvm.Tpo $(DEPDIR)/libllvmradeon_la-radeon_setup_tgsi_llvm.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='radeon_setup_tgsi_llvm.c' object='libllvmradeon_la-radeon_setup_tgsi_llvm.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -c -o libllvmradeon_la-radeon_setup_tgsi_llvm.lo `test -f 'radeon_setup_tgsi_llvm.c' || echo '$(srcdir)/'`radeon_setup_tgsi_llvm.c
-
-libllvmradeon_la-radeon_llvm_emit.lo: radeon_llvm_emit.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -MT libllvmradeon_la-radeon_llvm_emit.lo -MD -MP -MF $(DEPDIR)/libllvmradeon_la-radeon_llvm_emit.Tpo -c -o libllvmradeon_la-radeon_llvm_emit.lo `test -f 'radeon_llvm_emit.c' || echo '$(srcdir)/'`radeon_llvm_emit.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libllvmradeon_la-radeon_llvm_emit.Tpo $(DEPDIR)/libllvmradeon_la-radeon_llvm_emit.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='radeon_llvm_emit.c' object='libllvmradeon_la-radeon_llvm_emit.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -c -o libllvmradeon_la-radeon_llvm_emit.lo `test -f 'radeon_llvm_emit.c' || echo '$(srcdir)/'`radeon_llvm_emit.c
-
-libllvmradeon_la-radeon_llvm_util.lo: radeon_llvm_util.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -MT libllvmradeon_la-radeon_llvm_util.lo -MD -MP -MF $(DEPDIR)/libllvmradeon_la-radeon_llvm_util.Tpo -c -o libllvmradeon_la-radeon_llvm_util.lo `test -f 'radeon_llvm_util.c' || echo '$(srcdir)/'`radeon_llvm_util.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libllvmradeon_la-radeon_llvm_util.Tpo $(DEPDIR)/libllvmradeon_la-radeon_llvm_util.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='radeon_llvm_util.c' object='libllvmradeon_la-radeon_llvm_util.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libllvmradeon_la_CFLAGS) $(CFLAGS) -c -o libllvmradeon_la-radeon_llvm_util.lo `test -f 'radeon_llvm_util.c' || echo '$(srcdir)/'`radeon_llvm_util.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

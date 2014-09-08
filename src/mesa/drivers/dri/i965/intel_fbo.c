@@ -36,9 +36,9 @@
 #include "main/context.h"
 #include "main/teximage.h"
 #include "main/image.h"
-#include "main/hash_table.h"
 #include "main/set.h"
 #include "main/condrender.h"
+#include "util/hash_table.h"
 
 #include "swrast/swrast.h"
 #include "drivers/common/meta.h"
@@ -427,7 +427,7 @@ static GLboolean
 intel_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
                         GLenum internalFormat, GLuint width, GLuint height)
 {
-   _mesa_problem(ctx, "intel_op_alloc_storage should never be called.");
+   _mesa_problem(ctx, "intel_nop_alloc_storage should never be called.");
    return false;
 }
 
@@ -673,9 +673,9 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
    }
 
    if (depth_mt && stencil_mt) {
-      if (brw->gen >= 7) {
-         /* For gen >= 7, we are using the lod/minimum-array-element fields
-          * and supportting layered rendering. This means that we must restrict
+      if (brw->gen >= 6) {
+         /* For gen >= 6, we are using the lod/minimum-array-element fields
+          * and supporting layered rendering. This means that we must restrict
           * the depth & stencil attachments to match in various more retrictive
           * ways. (width, height, depth, LOD and layer)
           */
@@ -917,7 +917,7 @@ intel_blit_framebuffer(struct gl_context *ctx,
 bool
 intel_renderbuffer_has_hiz(struct intel_renderbuffer *irb)
 {
-   return intel_miptree_slice_has_hiz(irb->mt, irb->mt_level, irb->mt_layer);
+   return intel_miptree_level_has_hiz(irb->mt, irb->mt_level);
 }
 
 bool
@@ -980,7 +980,8 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
                                  width, height, depth,
                                  true,
                                  irb->mt->num_samples,
-                                 INTEL_MIPTREE_TILING_ANY);
+                                 INTEL_MIPTREE_TILING_ANY,
+                                 false);
 
    if (brw_is_hiz_depth_format(brw, new_mt->format)) {
       intel_miptree_alloc_hiz(brw, new_mt);

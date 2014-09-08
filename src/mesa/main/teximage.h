@@ -123,6 +123,9 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
                           mesa_format format,
                           GLint width, GLint height, GLint depth, GLint border);
 
+extern GLboolean
+_mesa_target_can_be_compressed(const struct gl_context *ctx, GLenum target,
+                               GLenum intFormat);
 
 extern GLuint
 _mesa_tex_target_to_face(GLenum target);
@@ -259,6 +262,16 @@ _mesa_CopyTexSubImage3D( GLenum target, GLint level,
                          GLint x, GLint y, GLsizei width, GLsizei height );
 
 
+
+extern void GLAPIENTRY
+_mesa_ClearTexSubImage( GLuint texture, GLint level,
+                        GLint xoffset, GLint yoffset, GLint zoffset,
+                        GLsizei width, GLsizei height, GLsizei depth,
+                        GLenum format, GLenum type, const void *data );
+
+extern void GLAPIENTRY
+_mesa_ClearTexImage( GLuint texture, GLint level,
+                     GLenum format, GLenum type, const void *data );
 
 extern void GLAPIENTRY
 _mesa_CompressedTexImage1D(GLenum target, GLint level,

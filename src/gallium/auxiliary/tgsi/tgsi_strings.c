@@ -122,6 +122,7 @@ const char *tgsi_property_names[TGSI_PROPERTY_COUNT] =
    "FS_DEPTH_LAYOUT",
    "VS_PROHIBIT_UCPS",
    "GS_INVOCATIONS",
+   "VS_POSITION_WINDOW_SPACE"
 };
 
 const char *tgsi_type_names[5] =
@@ -139,6 +140,13 @@ const char *tgsi_interpolate_names[TGSI_INTERPOLATE_COUNT] =
    "LINEAR",
    "PERSPECTIVE",
    "COLOR"
+};
+
+const char *tgsi_interpolate_locations[TGSI_INTERPOLATE_LOC_COUNT] =
+{
+   "CENTER",
+   "CENTROID",
+   "SAMPLE",
 };
 
 const char *tgsi_primitive_names[PIPE_PRIM_MAX] =

@@ -1,3 +1,16 @@
+mesa (10.3.0~rc3-1) experimental; urgency=medium
+
+  [ Maarten Lankhorst ]
+  * Build with llvm 3.5.
+  * New upstream release.
+  * Remove mention of tdfx.
+
+  [ Timo Aaltonen ]
+  * mesa-common-dev: Add glcorearb.h.
+  * not-installed: Skip libglapi.so.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 08 Sep 2014 15:50:42 +0200
+
 mesa (10.2.5-1) unstable; urgency=medium
 
   [ Andreas Boll ]

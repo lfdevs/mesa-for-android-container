@@ -80,6 +80,9 @@ host_triplet = @host@
 target_triplet = @target@
 @HAVE_SHARED_GLAPI_TRUE@TESTS = glx-test$(EXEEXT)
 @HAVE_SHARED_GLAPI_TRUE@check_PROGRAMS = glx-test$(EXEEXT)
+@HAVE_DRI2_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__append_1 = \
+@HAVE_DRI2_TRUE@@HAVE_SHARED_GLAPI_TRUE@	query_renderer_implementation_unittest.cpp
+
 subdir = src/glx/tests
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/bin/depcomp $(top_srcdir)/bin/test-driver
@@ -99,16 +102,17 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__glx_test_SOURCES_DIST = clientinfo_unittest.cpp \
 	create_context_unittest.cpp enum_sizes.cpp fake_glx_screen.cpp \
-	indirect_api.cpp query_renderer_implementation_unittest.cpp \
-	query_renderer_unittest.cpp
+	indirect_api.cpp query_renderer_unittest.cpp \
+	query_renderer_implementation_unittest.cpp
+@HAVE_DRI2_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__objects_1 = query_renderer_implementation_unittest.$(OBJEXT)
 @HAVE_SHARED_GLAPI_TRUE@am_glx_test_OBJECTS =  \
 @HAVE_SHARED_GLAPI_TRUE@	clientinfo_unittest.$(OBJEXT) \
 @HAVE_SHARED_GLAPI_TRUE@	create_context_unittest.$(OBJEXT) \
 @HAVE_SHARED_GLAPI_TRUE@	enum_sizes.$(OBJEXT) \
 @HAVE_SHARED_GLAPI_TRUE@	fake_glx_screen.$(OBJEXT) \
 @HAVE_SHARED_GLAPI_TRUE@	indirect_api.$(OBJEXT) \
-@HAVE_SHARED_GLAPI_TRUE@	query_renderer_implementation_unittest.$(OBJEXT) \
-@HAVE_SHARED_GLAPI_TRUE@	query_renderer_unittest.$(OBJEXT)
+@HAVE_SHARED_GLAPI_TRUE@	query_renderer_unittest.$(OBJEXT) \
+@HAVE_SHARED_GLAPI_TRUE@	$(am__objects_1)
 glx_test_OBJECTS = $(am_glx_test_OBJECTS)
 am__DEPENDENCIES_1 =
 @HAVE_SHARED_GLAPI_TRUE@glx_test_DEPENDENCIES =  \
@@ -393,6 +397,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -656,15 +661,12 @@ top_srcdir = @top_srcdir@
 @HAVE_SHARED_GLAPI_TRUE@	$(LIBDRM_CFLAGS) \
 @HAVE_SHARED_GLAPI_TRUE@	$(X11_CFLAGS)
 
-@HAVE_SHARED_GLAPI_TRUE@glx_test_SOURCES = \
-@HAVE_SHARED_GLAPI_TRUE@	clientinfo_unittest.cpp		\
-@HAVE_SHARED_GLAPI_TRUE@	create_context_unittest.cpp	\
-@HAVE_SHARED_GLAPI_TRUE@	enum_sizes.cpp			\
-@HAVE_SHARED_GLAPI_TRUE@	fake_glx_screen.cpp		\
-@HAVE_SHARED_GLAPI_TRUE@	indirect_api.cpp		\
-@HAVE_SHARED_GLAPI_TRUE@	query_renderer_implementation_unittest.cpp	\
-@HAVE_SHARED_GLAPI_TRUE@	query_renderer_unittest.cpp
-
+@HAVE_SHARED_GLAPI_TRUE@glx_test_SOURCES = clientinfo_unittest.cpp \
+@HAVE_SHARED_GLAPI_TRUE@	create_context_unittest.cpp \
+@HAVE_SHARED_GLAPI_TRUE@	enum_sizes.cpp fake_glx_screen.cpp \
+@HAVE_SHARED_GLAPI_TRUE@	indirect_api.cpp \
+@HAVE_SHARED_GLAPI_TRUE@	query_renderer_unittest.cpp \
+@HAVE_SHARED_GLAPI_TRUE@	$(am__append_1)
 @HAVE_SHARED_GLAPI_TRUE@glx_test_LDADD = \
 @HAVE_SHARED_GLAPI_TRUE@	$(top_builddir)/src/glx/libglx.la \
 @HAVE_SHARED_GLAPI_TRUE@	$(top_builddir)/src/gtest/libgtest.la \

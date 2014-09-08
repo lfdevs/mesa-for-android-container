@@ -802,7 +802,6 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
 
          if (!lp_tex->dt) {
             /* regular texture - setup array of mipmap level offsets */
-            void *mip_ptr;
             int j;
             unsigned first_level = 0;
             unsigned last_level = 0;
@@ -812,22 +811,14 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                last_level = view->u.tex.last_level;
                assert(first_level <= last_level);
                assert(last_level <= res->last_level);
-
-               /*
-                * The complexity here should no longer be necessary.
-                */
-               mip_ptr = llvmpipe_get_texture_image_all(lp_tex, first_level,
-                                                        LP_TEX_USAGE_READ);
-               jit_tex->base = lp_tex->linear_img.data;
+               jit_tex->base = lp_tex->tex_data;
             }
             else {
-               mip_ptr = lp_tex->data;
-               jit_tex->base = mip_ptr;
+              jit_tex->base = lp_tex->data;
             }
 
-            if ((LP_PERF & PERF_TEX_MEM) || !mip_ptr) {
-               /* out of memory - use dummy tile memory */
-               /* Note if using PERF_TEX_MEM will also skip tile conversion */
+            if (LP_PERF & PERF_TEX_MEM) {
+               /* use dummy tile memory */
                jit_tex->base = lp_dummy_tile;
                jit_tex->width = TILE_SIZE/8;
                jit_tex->height = TILE_SIZE/8;
@@ -847,20 +838,14 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
 
                if (llvmpipe_resource_is_texture(res)) {
                   for (j = first_level; j <= last_level; j++) {
-                     mip_ptr = llvmpipe_get_texture_image_all(lp_tex, j,
-                                                              LP_TEX_USAGE_READ);
-                     jit_tex->mip_offsets[j] = (uint8_t *)mip_ptr - (uint8_t *)jit_tex->base;
-                     /*
-                      * could get mip offset directly but need call above to
-                      * invoke tiled->linear conversion.
-                      */
-                     assert(lp_tex->linear_mip_offsets[j] == jit_tex->mip_offsets[j]);
+                     jit_tex->mip_offsets[j] = lp_tex->mip_offsets[j];
                      jit_tex->row_stride[j] = lp_tex->row_stride[j];
                      jit_tex->img_stride[j] = lp_tex->img_stride[j];
                   }
 
                   if (res->target == PIPE_TEXTURE_1D_ARRAY ||
-                      res->target == PIPE_TEXTURE_2D_ARRAY) {
+                      res->target == PIPE_TEXTURE_2D_ARRAY ||
+                      res->target == PIPE_TEXTURE_CUBE_ARRAY) {
                      /*
                       * For array textures, we don't have first_layer, instead
                       * adjust last_layer (stored as depth) plus the mip level offsets
@@ -871,6 +856,9 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                      for (j = first_level; j <= last_level; j++) {
                         jit_tex->mip_offsets[j] += view->u.tex.first_layer *
                                                    lp_tex->img_stride[j];
+                     }
+                     if (res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+                        assert(jit_tex->depth % 6 == 0);
                      }
                      assert(view->u.tex.first_layer <= view->u.tex.last_layer);
                      assert(view->u.tex.last_layer < res->array_size);

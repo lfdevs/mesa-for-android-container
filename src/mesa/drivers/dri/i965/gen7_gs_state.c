@@ -37,11 +37,11 @@ gen7_upload_gs_push_constants(struct brw_context *brw)
 
    if (gp) {
       /* CACHE_NEW_GS_PROG */
-      const struct brw_vec4_prog_data *prog_data = &brw->gs.prog_data->base;
+      const struct brw_stage_prog_data *prog_data = &brw->gs.prog_data->base.base;
       struct brw_stage_state *stage_state = &brw->gs.base;
 
-      gen6_upload_vec4_push_constants(brw, &gp->program.Base, prog_data,
-                                      stage_state, AUB_TRACE_VS_CONSTANTS);
+      gen6_upload_push_constants(brw, &gp->program.Base, prog_data,
+                                 stage_state, AUB_TRACE_VS_CONSTANTS);
    }
 
    gen7_upload_constant_state(brw, stage_state, gp, _3DSTATE_CONSTANT_GS);
@@ -110,7 +110,7 @@ upload_gs_state(struct brw_context *brw)
          (prog_data->urb_read_length <<
           GEN6_GS_URB_READ_LENGTH_SHIFT) |
          (0 << GEN6_GS_URB_ENTRY_READ_OFFSET_SHIFT) |
-         (prog_data->dispatch_grf_start_reg <<
+         (prog_data->base.dispatch_grf_start_reg <<
           GEN6_GS_DISPATCH_START_GRF_SHIFT);
 
       /* Note: the meaning of the GEN7_GS_REORDER_TRAILING bit changes between

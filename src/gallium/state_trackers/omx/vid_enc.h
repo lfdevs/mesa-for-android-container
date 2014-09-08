@@ -46,8 +46,8 @@
 #include "vl/vl_defines.h"
 #include "vl/vl_compositor.h"
 
-#define OMX_VID_ENC_BASE_NAME "OMX.%s.video_encoder"
-#define OMX_VID_ENC_AVC_NAME "OMX.%s.video_encoder.avc"
+#define OMX_VID_ENC_BASE_NAME "OMX.mesa.video_encoder"
+#define OMX_VID_ENC_AVC_NAME "OMX.mesa.video_encoder.avc"
 #define OMX_VID_ENC_AVC_ROLE "video_encoder.avc"
 
 #define OMX_VID_ENC_BITRATE_MIN 64000
@@ -60,7 +60,7 @@
 #define OMX_VID_ENC_SCALING_WIDTH_DEFAULT 0xffffffff
 #define OMX_VID_ENC_SCALING_HEIGHT_DEFAULT 0xffffffff
 #define OMX_VID_ENC_IDR_PERIOD_DEFAULT 1000
-#define OMX_VID_ENC_P_PERIOD_DEFAULT 1
+#define OMX_VID_ENC_P_PERIOD_DEFAULT 3
 
 #define OMX_VID_ENC_NUM_SCALING_BUFFERS 4
 
@@ -77,8 +77,10 @@ DERIVEDCLASS(vid_enc_PrivateType, omx_base_filter_PrivateType)
 	OMX_U32 frame_num; \
 	OMX_U32 pic_order_cnt; \
 	OMX_U32 ref_idx_l0, ref_idx_l1; \
+	OMX_BOOL restricted_b_frames; \
 	OMX_VIDEO_PARAM_BITRATETYPE bitrate; \
 	OMX_VIDEO_PARAM_QUANTIZATIONTYPE quant; \
+	OMX_VIDEO_PARAM_PROFILELEVELTYPE profile_level; \
 	OMX_CONFIG_INTRAREFRESHVOPTYPE force_pic_type; \
 	struct vl_compositor compositor; \
 	struct vl_compositor_state cstate; \

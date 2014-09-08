@@ -542,11 +542,11 @@ const struct function gl_core_functions_possible[] = {
    { "glVertexAttribDivisor", 33, -1 },
 
    /* GL 4.0 */
-   { "glMinSampleShading", 40, -1 },                    // XXX: Add to xml
-// { "glBlendEquationi", 40, -1 },                      // XXX: Add to xml
-// { "glBlendEquationSeparatei", 40, -1 },              // XXX: Add to xml
-// { "glBlendFunci", 40, -1 },                          // XXX: Add to xml
-// { "glBlendFuncSeparatei", 40, -1 },                  // XXX: Add to xml
+   { "glMinSampleShading", 40, -1 },
+   { "glBlendEquationi", 40, -1 },
+   { "glBlendEquationSeparatei", 40, -1 },
+   { "glBlendFunci", 40, -1 },
+   { "glBlendFuncSeparatei", 40, -1 },
 
    /* GL 4.3 */
    { "glIsRenderbuffer", 43, -1 },
@@ -838,7 +838,7 @@ const struct function gl_core_functions_possible[] = {
 // { "glClearNamedBufferSubDataEXT", 43, -1 },          // XXX: Add to xml
    { "glDispatchCompute", 43, -1 },
    { "glDispatchComputeIndirect", 43, -1 },
-// { "glCopyImageSubData", 43, -1 },                    // XXX: Add to xml
+   { "glCopyImageSubData", 43, -1 },
    { "glTextureView", 43, -1 },
    { "glBindVertexBuffer", 43, -1 },
    { "glVertexAttribFormat", 43, -1 },
@@ -946,6 +946,10 @@ const struct function gl_core_functions_possible[] = {
 
    /* GL_ARB_buffer_storage */
    { "glBufferStorage", 43, -1 },
+
+   /* GL_ARB_clear_texture */
+   { "glClearTexImage", 13, -1 },
+   { "glClearTexSubImage", 13, -1 },
 
    { NULL, 0, -1 }
 };

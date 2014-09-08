@@ -138,13 +138,15 @@ test_format_float(unsigned verbose, FILE *fp,
    boolean success = TRUE;
    unsigned i, j, k, l;
 
-   gallivm = gallivm_create();
+   gallivm = gallivm_create("test_module_float");
 
    fetch = add_fetch_rgba_test(gallivm, verbose, desc, lp_float32_vec4_type());
 
    gallivm_compile_module(gallivm);
 
    fetch_ptr = (fetch_ptr_t) gallivm_jit_function(gallivm, fetch);
+
+   gallivm_free_ir(gallivm);
 
    for (l = 0; l < util_format_nr_test_cases; ++l) {
       const struct util_format_test_case *test = &util_format_test_cases[l];
@@ -199,8 +201,6 @@ test_format_float(unsigned verbose, FILE *fp,
       }
    }
 
-   gallivm_free_function(gallivm, fetch, fetch_ptr);
-
    gallivm_destroy(gallivm);
 
    if(fp)
@@ -223,13 +223,15 @@ test_format_unorm8(unsigned verbose, FILE *fp,
    boolean success = TRUE;
    unsigned i, j, k, l;
 
-   gallivm = gallivm_create();
+   gallivm = gallivm_create("test_module_unorm8");
 
    fetch = add_fetch_rgba_test(gallivm, verbose, desc, lp_unorm8_vec4_type());
 
    gallivm_compile_module(gallivm);
 
    fetch_ptr = (fetch_ptr_t) gallivm_jit_function(gallivm, fetch);
+
+   gallivm_free_ir(gallivm);
 
    for (l = 0; l < util_format_nr_test_cases; ++l) {
       const struct util_format_test_case *test = &util_format_test_cases[l];
@@ -283,8 +285,6 @@ test_format_unorm8(unsigned verbose, FILE *fp,
          }
       }
    }
-
-   gallivm_free_function(gallivm, fetch, fetch_ptr);
 
    gallivm_destroy(gallivm);
 

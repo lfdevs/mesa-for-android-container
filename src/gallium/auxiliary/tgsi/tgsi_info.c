@@ -116,8 +116,8 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 0, 1, 0, 0, 0, 1, NONE, "", 76 },      /* removed */
    { 0, 0, 0, 1, 1, 1, NONE, "ELSE", TGSI_OPCODE_ELSE },
    { 0, 0, 0, 0, 1, 0, NONE, "ENDIF", TGSI_OPCODE_ENDIF },
-   { 1, 0, 0, 0, 1, 0, NONE, "", 79 },      /* removed */
-   { 0, 0, 0, 0, 1, 0, NONE, "", 80 },      /* removed */
+   { 1, 1, 0, 0, 0, 0, COMP, "DDX_FINE", TGSI_OPCODE_DDX_FINE },
+   { 1, 1, 0, 0, 0, 0, COMP, "DDY_FINE", TGSI_OPCODE_DDY_FINE },
    { 0, 1, 0, 0, 0, 0, NONE, "PUSHA", TGSI_OPCODE_PUSHA },
    { 1, 0, 0, 0, 0, 0, NONE, "POPA", TGSI_OPCODE_POPA },
    { 1, 1, 0, 0, 0, 0, COMP, "CEIL", TGSI_OPCODE_CEIL },
@@ -134,8 +134,8 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 2, 1, 0, 0, 0, OTHR, "TXF", TGSI_OPCODE_TXF },
    { 1, 2, 1, 0, 0, 0, OTHR, "TXQ", TGSI_OPCODE_TXQ },
    { 0, 0, 0, 0, 0, 0, NONE, "CONT", TGSI_OPCODE_CONT },
-   { 0, 0, 0, 0, 0, 0, NONE, "EMIT", TGSI_OPCODE_EMIT },
-   { 0, 0, 0, 0, 0, 0, NONE, "ENDPRIM", TGSI_OPCODE_ENDPRIM },
+   { 0, 1, 0, 0, 0, 0, NONE, "EMIT", TGSI_OPCODE_EMIT },
+   { 0, 1, 0, 0, 0, 0, NONE, "ENDPRIM", TGSI_OPCODE_ENDPRIM },
    { 0, 0, 0, 1, 0, 1, NONE, "BGNLOOP", TGSI_OPCODE_BGNLOOP },
    { 0, 0, 0, 0, 0, 1, NONE, "BGNSUB", TGSI_OPCODE_BGNSUB },
    { 0, 0, 0, 1, 1, 0, NONE, "ENDLOOP", TGSI_OPCODE_ENDLOOP },
@@ -231,6 +231,10 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 1, 0, 0, 0, 0, COMP, "LSB", TGSI_OPCODE_LSB },
    { 1, 1, 0, 0, 0, 0, COMP, "IMSB", TGSI_OPCODE_IMSB },
    { 1, 1, 0, 0, 0, 0, COMP, "UMSB", TGSI_OPCODE_UMSB },
+
+   { 1, 1, 0, 0, 0, 0, OTHR, "INTERP_CENTROID", TGSI_OPCODE_INTERP_CENTROID },
+   { 1, 2, 0, 0, 0, 0, OTHR, "INTERP_SAMPLE", TGSI_OPCODE_INTERP_SAMPLE },
+   { 1, 2, 0, 0, 0, 0, OTHR, "INTERP_OFFSET", TGSI_OPCODE_INTERP_OFFSET },
 };
 
 const struct tgsi_opcode_info *

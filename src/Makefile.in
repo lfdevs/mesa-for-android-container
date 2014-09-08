@@ -105,17 +105,7 @@ target_triplet = @target@
 @HAVE_EGL_DRIVER_DRI2_TRUE@am__append_4 = egl/drivers/dri2
 @HAVE_GBM_TRUE@am__append_5 = gbm
 @HAVE_EGL_TRUE@am__append_6 = egl/main
-@HAVE_GALLIUM_TRUE@am__append_7 = \
-@HAVE_GALLIUM_TRUE@	gallium/auxiliary	\
-@HAVE_GALLIUM_TRUE@	gallium/drivers		\
-@HAVE_GALLIUM_TRUE@	gallium/state_trackers	\
-@HAVE_GALLIUM_TRUE@	gallium/winsys		\
-@HAVE_GALLIUM_TRUE@	gallium/targets
-
-@HAVE_GALLIUM_TESTS_TRUE@@HAVE_GALLIUM_TRUE@am__append_8 = \
-@HAVE_GALLIUM_TESTS_TRUE@@HAVE_GALLIUM_TRUE@	gallium/tests/trivial	\
-@HAVE_GALLIUM_TESTS_TRUE@@HAVE_GALLIUM_TRUE@	gallium/tests/unit
-
+@HAVE_GALLIUM_TRUE@am__append_7 = gallium
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -186,10 +176,8 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = gtest loader mapi glsl mesa glx egl/wayland \
-	egl/drivers/dri2 gbm egl/main gallium/auxiliary \
-	gallium/drivers gallium/state_trackers gallium/winsys \
-	gallium/targets gallium/tests/trivial gallium/tests/unit
+DIST_SUBDIRS = gtest util mapi glsl mesa loader glx egl/wayland \
+	egl/drivers/dri2 gbm egl/main gallium
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
   dir0=`pwd`; \
@@ -224,6 +212,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -475,9 +464,9 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = gtest loader mapi $(am__append_1) $(am__append_2) \
+SUBDIRS = gtest util mapi $(am__append_1) loader $(am__append_2) \
 	$(am__append_3) $(am__append_4) $(am__append_5) \
-	$(am__append_6) $(am__append_7) $(am__append_8)
+	$(am__append_6) $(am__append_7)
 EXTRA_DIST = getopt
 all: all-recursive
 

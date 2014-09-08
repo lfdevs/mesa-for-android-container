@@ -78,7 +78,7 @@ public:
 
    inline void *getRelocInfo() const { return relocInfo; }
 
-   void prepareEmission(Program *);
+   virtual void prepareEmission(Program *);
    virtual void prepareEmission(Function *);
    virtual void prepareEmission(BasicBlock *);
 
@@ -120,7 +120,7 @@ enum OpClass
 class Target
 {
 public:
-   Target(bool j, bool s) : joinAnterior(j), hasSWSched(s) { }
+   Target(bool m, bool j, bool s) : hasJoin(m), joinAnterior(j), hasSWSched(s) { }
    virtual ~Target() { }
 
    static Target *create(uint32_t chipset);
@@ -192,6 +192,7 @@ public:
    virtual uint32_t getSVAddress(DataFile, const Symbol *) const = 0;
 
 public:
+   const bool hasJoin;      // true if instructions have a join modifier
    const bool joinAnterior; // true if join is executed before the op
    const bool hasSWSched;   // true if code should provide scheduling data
 

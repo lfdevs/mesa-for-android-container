@@ -64,14 +64,13 @@ IGNORE_FILES = \
 
 parsers: configure
 	$(MAKE) -C src/glsl glsl_parser.cpp glsl_parser.h glsl_lexer.cpp glcpp/glcpp-lex.c glcpp/glcpp-parse.c glcpp/glcpp-parse.h
-	$(MAKE) -C src/mesa program/lex.yy.c program/program_parse.tab.c program/program_parse.tab.h
 
 # Everything for new a Mesa release:
 ARCHIVES = $(PACKAGE_NAME).tar.gz \
 	$(PACKAGE_NAME).tar.bz2 \
 	$(PACKAGE_NAME).zip
 
-tarballs: md5
+tarballs: checksums
 	rm -f ../$(PACKAGE_DIR) $(PACKAGE_NAME).tar
 
 manifest.txt: .git
@@ -98,9 +97,9 @@ $(PACKAGE_NAME).zip: parsers ../$(PACKAGE_DIR) manifest.txt
 	zip -q -@ $(PACKAGE_NAME).zip < $(PACKAGE_DIR)/manifest.txt ; \
 	mv $(PACKAGE_NAME).zip $(PACKAGE_DIR)
 
-md5: $(ARCHIVES)
-	@-md5sum $(PACKAGE_NAME).tar.gz
-	@-md5sum $(PACKAGE_NAME).tar.bz2
-	@-md5sum $(PACKAGE_NAME).zip
+checksums: $(ARCHIVES)
+	@-sha256sum $(PACKAGE_NAME).tar.gz
+	@-sha256sum $(PACKAGE_NAME).tar.bz2
+	@-sha256sum $(PACKAGE_NAME).zip
 
 .PHONY: tarballs md5

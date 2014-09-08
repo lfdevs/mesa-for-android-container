@@ -36,10 +36,11 @@
 #define SI_SGPR_RESOURCE	4
 #define SI_SGPR_RW_BUFFERS	6  /* rings (& stream-out, VS only) */
 #define SI_SGPR_VERTEX_BUFFER	8  /* VS only */
-#define SI_SGPR_START_INSTANCE	10 /* VS only */
+#define SI_SGPR_BASE_VERTEX	10 /* VS only */
+#define SI_SGPR_START_INSTANCE	11 /* VS only */
 #define SI_SGPR_ALPHA_REF	8  /* PS only */
 
-#define SI_VS_NUM_USER_SGPR	11
+#define SI_VS_NUM_USER_SGPR	12
 #define SI_GS_NUM_USER_SGPR	8
 #define SI_PS_NUM_USER_SGPR	9
 
@@ -51,11 +52,12 @@
 
 /* VS only parameters */
 #define SI_PARAM_VERTEX_BUFFER	4
-#define SI_PARAM_START_INSTANCE	5
+#define SI_PARAM_BASE_VERTEX	5
+#define SI_PARAM_START_INSTANCE	6
 /* the other VS parameters are assigned dynamically */
 
 /* ES only parameters */
-#define SI_PARAM_ES2GS_OFFSET	6
+#define SI_PARAM_ES2GS_OFFSET	7
 
 /* GS only parameters */
 #define SI_PARAM_GS2VS_OFFSET	4
@@ -138,6 +140,7 @@ struct si_shader {
 	unsigned		gs_input_prim;
 	unsigned		gs_output_prim;
 	unsigned		gs_max_out_vertices;
+	unsigned		ps_conservative_z;
 
 	unsigned		nparam;
 	bool			uses_kill;
@@ -158,6 +161,7 @@ union si_shader_key {
 		unsigned	color_two_side:1;
 		unsigned	alpha_func:3;
 		unsigned	flatshade:1;
+		unsigned	interp_at_sample:1;
 		unsigned	alpha_to_one:1;
 	} ps;
 	struct {
@@ -174,11 +178,15 @@ struct si_pipe_shader {
 	struct si_shader		shader;
 	struct si_pm4_state		*pm4;
 	struct r600_resource		*bo;
+	struct r600_resource		*scratch_bo;
 	unsigned			num_sgprs;
 	unsigned			num_vgprs;
 	unsigned			lds_size;
 	unsigned			spi_ps_input_ena;
+	unsigned			scratch_bytes_per_wave;
 	unsigned			spi_shader_col_format;
+	unsigned			spi_shader_z_format;
+	unsigned			db_shader_control;
 	unsigned			cb_shader_mask;
 	bool				cb0_is_integer;
 	unsigned			sprite_coord_enable;

@@ -38,7 +38,7 @@
 #include "program/program.h"
 #include "program/programopt.h"
 #include "tnl/tnl.h"
-#include "glsl/ralloc.h"
+#include "util/ralloc.h"
 #include "glsl/ir.h"
 
 #include "brw_context.h"
@@ -127,8 +127,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
    }
 
    default:
-      assert(!"Unsupported target in brwNewProgram()");
-      return NULL;
+      unreachable("Unsupported target in brwNewProgram()");
    }
 }
 
@@ -192,8 +191,7 @@ brwProgramStringNotify(struct gl_context *ctx,
        * this function should only ever be called with a target of
        * GL_VERTEX_PROGRAM_ARB or GL_FRAGMENT_PROGRAM_ARB.
        */
-      assert(!"Unexpected target in brwProgramStringNotify");
-      break;
+      unreachable("Unexpected target in brwProgramStringNotify");
    }
 
    brw_add_texrect_params(prog);

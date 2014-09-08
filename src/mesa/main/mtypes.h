@@ -1342,8 +1342,6 @@ struct gl_texture_unit
    GLbitfield _GenFlags;	/**< Bitwise-OR of Gen[STRQ]._ModeBit */
 
    GLfloat LodBias;		/**< for biasing mipmap levels */
-   GLenum BumpTarget;
-   GLfloat RotMatrix[4]; /* 2x2 matrix */
 
    /** Current sampler object (GL_ARB_sampler_objects) */
    struct gl_sampler_object *Sampler;
@@ -1502,6 +1500,10 @@ struct gl_pixelstore_attrib
    GLboolean SwapBytes;
    GLboolean LsbFirst;
    GLboolean Invert;        /**< GL_MESA_pack_invert */
+   GLint CompressedBlockWidth;   /**< GL_ARB_compressed_texture_pixel_storage */
+   GLint CompressedBlockHeight;
+   GLint CompressedBlockDepth;
+   GLint CompressedBlockSize;
    struct gl_buffer_object *BufferObj; /**< GL_ARB_pixel_buffer_object */
 };
 
@@ -1638,6 +1640,17 @@ struct gl_vertex_array_object
 };
 
 
+/** Used to signal when transitioning from one kind of drawing method
+ * to another.
+ */
+typedef enum {
+   DRAW_NONE,          /**< Initial value only */
+   DRAW_BEGIN_END,
+   DRAW_DISPLAY_LIST,
+   DRAW_ARRAYS
+} gl_draw_method;
+
+
 /**
  * Vertex array state
  */
@@ -1677,6 +1690,12 @@ struct gl_array_attrib
     * The array pointer is set up only by the VBO module.
     */
    const struct gl_client_array **_DrawArrays; /**< 0..VERT_ATTRIB_MAX-1 */
+
+   /** One of the DRAW_xxx flags, not consumed by drivers */
+   gl_draw_method DrawMethod;
+
+   /** Legal array datatypes */
+   GLbitfield LegalTypesMask;
 };
 
 
@@ -1787,6 +1806,7 @@ struct gl_transform_feedback_output
    unsigned OutputRegister;
    unsigned OutputBuffer;
    unsigned NumComponents;
+   unsigned StreamId;
 
    /** offset (in DWORDs) of this output within the interleaved structure */
    unsigned DstOffset;
@@ -2031,13 +2051,31 @@ typedef enum
  */
 typedef enum
 {
-   SYSTEM_VALUE_FRONT_FACE,     /**< Fragment shader only (not done yet) */
-   SYSTEM_VALUE_VERTEX_ID,      /**< Vertex shader only */
-   SYSTEM_VALUE_INSTANCE_ID,    /**< Vertex shader only */
-   SYSTEM_VALUE_SAMPLE_ID,      /**< Fragment shader only */
-   SYSTEM_VALUE_SAMPLE_POS,     /**< Fragment shader only */
-   SYSTEM_VALUE_SAMPLE_MASK_IN, /**< Fragment shader only */
-   SYSTEM_VALUE_INVOCATION_ID,  /**< Geometry shader only */
+   /**
+    * \name Vertex shader system values
+    */
+   /*@{*/
+   SYSTEM_VALUE_VERTEX_ID,
+   SYSTEM_VALUE_INSTANCE_ID,
+   /*@}*/
+
+   /**
+    * \name Geometry shader system values
+    */
+   /*@{*/
+   SYSTEM_VALUE_INVOCATION_ID,
+   /*@}*/
+
+   /**
+    * \name Fragment shader system values
+    */
+   /*@{*/
+   SYSTEM_VALUE_FRONT_FACE,     /**< (not done yet) */
+   SYSTEM_VALUE_SAMPLE_ID,
+   SYSTEM_VALUE_SAMPLE_POS,
+   SYSTEM_VALUE_SAMPLE_MASK_IN,
+   /*@}*/
+
    SYSTEM_VALUE_MAX             /**< Number of values */
 } gl_system_value;
 
@@ -2172,7 +2210,8 @@ struct gl_geometry_program
    GLenum InputType;  /**< GL_POINTS, GL_LINES, GL_LINES_ADJACENCY_ARB,
                            GL_TRIANGLES, or GL_TRIANGLES_ADJACENCY_ARB */
    GLenum OutputType; /**< GL_POINTS, GL_LINE_STRIP or GL_TRIANGLE_STRIP */
-   GLboolean UsesEndPrimitive;
+   bool UsesEndPrimitive;
+   bool UsesStreams;
 };
 
 
@@ -2556,7 +2595,7 @@ struct gl_uniform_block
    GLuint Binding;
 
    /**
-    * Minimum size of a buffer object to back this uniform buffer
+    * Minimum size (in bytes) of a buffer object to back this uniform buffer
     * (GL_UNIFORM_BLOCK_DATA_SIZE).
     */
    GLuint UniformBufferSize;
@@ -2675,7 +2714,8 @@ struct gl_shader_program
       GLboolean UsesClipDistance;
       GLuint ClipDistanceArraySize; /**< Size of the gl_ClipDistance array, or
                                          0 if not present. */
-      GLboolean UsesEndPrimitive;
+      bool UsesEndPrimitive;
+      bool UsesStreams;
    } Geom;
 
    /** Vertex shader state */
@@ -2888,6 +2928,7 @@ struct gl_query_object
    GLboolean Active;   /**< inside Begin/EndQuery */
    GLboolean Ready;    /**< result is ready? */
    GLboolean EverBound;/**< has query object ever been bound */
+   GLuint Stream;      /**< The stream */
 };
 
 
@@ -2904,8 +2945,8 @@ struct gl_query_state
    struct gl_query_object *CondRenderQuery;
 
    /** GL_EXT_transform_feedback */
-   struct gl_query_object *PrimitivesGenerated;
-   struct gl_query_object *PrimitivesWritten;
+   struct gl_query_object *PrimitivesGenerated[MAX_VERTEX_STREAMS];
+   struct gl_query_object *PrimitivesWritten[MAX_VERTEX_STREAMS];
 
    /** GL_ARB_timer_query */
    struct gl_query_object *TimeElapsed;
@@ -3319,6 +3360,11 @@ struct gl_constants
    GLuint UniformBufferOffsetAlignment;
    /** @} */
 
+   /**
+    * GL_ARB_explicit_uniform_location
+    */
+   GLuint MaxUserAssignableUniformLocations;
+
    /** GL_ARB_geometry_shader4 */
    GLuint MaxGeometryOutputVertices;
    GLuint MaxGeometryTotalOutputComponents;
@@ -3338,6 +3384,11 @@ struct gl_constants
    GLuint ForceGLSLVersion;
 
    /**
+    * Allow GLSL #extension directives in the middle of shaders.
+    */
+   GLboolean AllowGLSLExtensionDirectiveMidShader;
+
+   /**
     * Does the driver support real 32-bit integers?  (Otherwise, integers are
     * simulated via floats.)
     */
@@ -3348,9 +3399,6 @@ struct gl_constants
     * used for boolean true in uniform uploads?  (Usually 1 or ~0.)
     */
    GLuint UniformBooleanTrue;
-
-   /** Which texture units support GL_ATI_envmap_bumpmap as targets */
-   GLbitfield SupportedBumpUnits;
 
    /**
     * Maximum amount of time, measured in nanseconds, that the server can wait.
@@ -3481,6 +3529,8 @@ struct gl_constants
    GLfloat MaxFragmentInterpolationOffset;
 
    GLboolean FakeSWMSAA;
+
+   struct gl_shader_compiler_options ShaderCompilerOptions[MESA_SHADER_STAGES];
 };
 
 
@@ -3500,22 +3550,28 @@ struct gl_extensions
    GLboolean ARB_base_instance;
    GLboolean ARB_blend_func_extended;
    GLboolean ARB_buffer_storage;
+   GLboolean ARB_clear_texture;
    GLboolean ARB_color_buffer_float;
    GLboolean ARB_compute_shader;
+   GLboolean ARB_conditional_render_inverted;
    GLboolean ARB_conservative_depth;
+   GLboolean ARB_copy_image;
    GLboolean ARB_depth_buffer_float;
    GLboolean ARB_depth_clamp;
    GLboolean ARB_depth_texture;
+   GLboolean ARB_derivative_control;
    GLboolean ARB_draw_buffers_blend;
    GLboolean ARB_draw_elements_base_vertex;
    GLboolean ARB_draw_indirect;
    GLboolean ARB_draw_instanced;
    GLboolean ARB_fragment_coord_conventions;
+   GLboolean ARB_fragment_layer_viewport;
    GLboolean ARB_fragment_program;
    GLboolean ARB_fragment_program_shadow;
    GLboolean ARB_fragment_shader;
    GLboolean ARB_framebuffer_object;
    GLboolean ARB_explicit_attrib_location;
+   GLboolean ARB_explicit_uniform_location;
    GLboolean ARB_geometry_shader4;
    GLboolean ARB_gpu_shader5;
    GLboolean ARB_half_float_vertex;
@@ -3541,6 +3597,7 @@ struct gl_extensions
    GLboolean ARB_texture_buffer_object;
    GLboolean ARB_texture_buffer_object_rgb32;
    GLboolean ARB_texture_buffer_range;
+   GLboolean ARB_texture_compression_bptc;
    GLboolean ARB_texture_compression_rgtc;
    GLboolean ARB_texture_cube_map;
    GLboolean ARB_texture_cube_map_array;
@@ -3606,8 +3663,8 @@ struct gl_extensions
    GLboolean AMD_performance_monitor;
    GLboolean AMD_seamless_cubemap_per_texture;
    GLboolean AMD_vertex_shader_layer;
+   GLboolean AMD_vertex_shader_viewport_index;
    GLboolean APPLE_object_purgeable;
-   GLboolean ATI_envmap_bumpmap;
    GLboolean ATI_texture_compression_3dc;
    GLboolean ATI_texture_mirror_once;
    GLboolean ATI_texture_env_combine3;
@@ -4119,8 +4176,6 @@ struct gl_context
     * \c NULL.
     */
    struct gl_pipeline_object *_Shader;
-
-   struct gl_shader_compiler_options ShaderCompilerOptions[MESA_SHADER_STAGES];
 
    struct gl_query_state Query;  /**< occlusion, timer queries */
 

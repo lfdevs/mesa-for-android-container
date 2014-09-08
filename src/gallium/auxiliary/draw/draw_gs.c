@@ -144,14 +144,10 @@ static void tgsi_fetch_gs_input(struct draw_geometry_shader *shader,
       for (slot = 0, vs_slot = 0; slot < shader->info.num_inputs; ++slot) {
          unsigned idx = i * TGSI_EXEC_MAX_INPUT_ATTRIBS + slot;
          if (shader->info.input_semantic_name[slot] == TGSI_SEMANTIC_PRIMID) {
-            machine->Inputs[idx].xyzw[0].f[prim_idx] =
-               (float)shader->in_prim_idx;
-            machine->Inputs[idx].xyzw[1].f[prim_idx] =
-               (float)shader->in_prim_idx;
-            machine->Inputs[idx].xyzw[2].f[prim_idx] =
-               (float)shader->in_prim_idx;
-            machine->Inputs[idx].xyzw[3].f[prim_idx] =
-               (float)shader->in_prim_idx;
+            machine->Inputs[idx].xyzw[0].u[prim_idx] = shader->in_prim_idx;
+            machine->Inputs[idx].xyzw[1].u[prim_idx] = shader->in_prim_idx;
+            machine->Inputs[idx].xyzw[2].u[prim_idx] = shader->in_prim_idx;
+            machine->Inputs[idx].xyzw[3].u[prim_idx] = shader->in_prim_idx;
          } else {
             vs_slot = draw_gs_get_input_index(
                shader->info.input_semantic_name[slot],
@@ -232,8 +228,7 @@ llvm_fetch_gs_input(struct draw_geometry_shader *shader,
    const float (*input_ptr)[4];
    float (*input_data)[6][PIPE_MAX_SHADER_INPUTS][TGSI_NUM_CHANNELS][TGSI_NUM_CHANNELS] = &shader->gs_input->data;
 
-   shader->llvm_prim_ids[shader->fetched_prim_count] =
-      shader->in_prim_idx;
+   shader->llvm_prim_ids[shader->fetched_prim_count] = shader->in_prim_idx;
 
    input_ptr = shader->input;
 
@@ -248,6 +243,11 @@ llvm_fetch_gs_input(struct draw_geometry_shader *shader,
       for (slot = 0, vs_slot = 0; slot < shader->info.num_inputs; ++slot) {
          if (shader->info.input_semantic_name[slot] == TGSI_SEMANTIC_PRIMID) {
             /* skip. we handle system values through gallivm */
+            /* NOTE: If we hit this case here it's an ordinary input not a sv,
+             * even though it probably should be a sv.
+             * Not sure how to set it up as regular input however if that even,
+             * would make sense so hack around this later in gallivm.
+             */
          } else {
             vs_slot = draw_gs_get_input_index(
                shader->info.input_semantic_name[slot],
@@ -791,6 +791,7 @@ draw_create_geometry_shader(struct draw_context *draw,
     */
    gs->primitive_boundary = gs->max_output_vertices + 1;
 
+   gs->position_output = -1;
    for (i = 0; i < gs->info.num_outputs; i++) {
       if (gs->info.output_semantic_name[i] == TGSI_SEMANTIC_POSITION &&
           gs->info.output_semantic_index[i] == 0)

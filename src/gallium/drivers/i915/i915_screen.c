@@ -27,6 +27,7 @@
 
 
 #include "draw/draw_context.h"
+#include "os/os_misc.h"
 #include "util/u_format.h"
 #include "util/u_format_s3tc.h"
 #include "util/u_inlines.h"
@@ -129,14 +130,12 @@ i915_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_sha
          return 0;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 10;
-      case PIPE_SHADER_CAP_MAX_CONSTS:
-         return 32;
+      case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+         return 32 * sizeof(float[4]);
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          return 12; /* XXX: 12 -> 32 ? */
-      case PIPE_SHADER_CAP_MAX_ADDRS:
-         return 0;
       case PIPE_SHADER_CAP_MAX_PREDS:
          return 0;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -221,6 +220,9 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_FAKE_SW_MSAA:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
    case PIPE_CAP_SAMPLE_SHADING:
+   case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
+   case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
       return 0;
 
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -228,8 +230,10 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_TGSI_VS_LAYER:
+   case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+   case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
       return 0;
 
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
@@ -268,6 +272,7 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    /* Geometry shader output, unsupported. */
    case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
    case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+   case PIPE_CAP_MAX_VERTEX_STREAMS:
       return 0;
 
    /* Fragment coordinate conventions. */
@@ -279,6 +284,28 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
       return 0;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
+
+   case PIPE_CAP_VENDOR_ID:
+      return 0x8086;
+   case PIPE_CAP_DEVICE_ID:
+      return is->iws->pci_id;
+   case PIPE_CAP_ACCELERATED:
+      return 1;
+   case PIPE_CAP_VIDEO_MEMORY: {
+      /* Once a batch uses more than 75% of the maximum mappable size, we
+       * assume that there's some fragmentation, and we start doing extra
+       * flushing, etc.  That's the big cliff apps will care about.
+       */
+      const int gpu_mappable_megabytes = is->iws->aperture_size(is->iws) * 3 / 4;
+      uint64_t system_memory;
+
+      if (!os_get_total_physical_memory(&system_memory))
+         return 0;
+
+      return MIN2(gpu_mappable_megabytes, (int)(system_memory >> 20));
+   }
+   case PIPE_CAP_UMA:
+      return 1;
 
    default:
       debug_printf("%s: Unknown cap %u.\n", __FUNCTION__, cap);

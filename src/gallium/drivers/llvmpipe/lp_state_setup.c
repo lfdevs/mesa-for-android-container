@@ -50,6 +50,10 @@
 #include "lp_state_setup.h"
 
 
+/** Setup shader number (for debugging) */
+static unsigned setup_no = 0;
+
+
 /* currently organized to interpolate full float[4] attributes even
  * when some elements are unused.  Later, can pack vertex data more
  * closely.
@@ -82,26 +86,26 @@ struct lp_setup_args
 
 static void
 store_coef(struct gallivm_state *gallivm,
-	   struct lp_setup_args *args,
-	   unsigned slot,
-	   LLVMValueRef a0,
-	   LLVMValueRef dadx,
-	   LLVMValueRef dady)
+           struct lp_setup_args *args,
+           unsigned slot,
+           LLVMValueRef a0,
+           LLVMValueRef dadx,
+           LLVMValueRef dady)
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef idx = lp_build_const_int32(gallivm, slot);
 
    LLVMBuildStore(builder,
-		  a0, 
-		  LLVMBuildGEP(builder, args->a0, &idx, 1, ""));
+                  a0,
+                  LLVMBuildGEP(builder, args->a0, &idx, 1, ""));
 
    LLVMBuildStore(builder,
-		  dadx, 
-		  LLVMBuildGEP(builder, args->dadx, &idx, 1, ""));
+                  dadx,
+                  LLVMBuildGEP(builder, args->dadx, &idx, 1, ""));
 
    LLVMBuildStore(builder,
-		  dady, 
-		  LLVMBuildGEP(builder, args->dady, &idx, 1, ""));
+                  dady,
+                  LLVMBuildGEP(builder, args->dady, &idx, 1, ""));
 }
 
 
@@ -707,7 +711,7 @@ generate_setup_variant(struct lp_setup_variant_key *key,
    struct lp_setup_variant *variant = NULL;
    struct gallivm_state *gallivm;
    struct lp_setup_args args;
-   char func_name[256];
+   char func_name[64];
    LLVMTypeRef vec4f_type;
    LLVMTypeRef func_type;
    LLVMTypeRef arg_types[7];
@@ -722,7 +726,12 @@ generate_setup_variant(struct lp_setup_variant_key *key,
    if (variant == NULL)
       goto fail;
 
-   variant->gallivm = gallivm = gallivm_create();
+   variant->no = setup_no++;
+
+   util_snprintf(func_name, sizeof(func_name), "setup_variant_%u",
+                 variant->no);
+
+   variant->gallivm = gallivm = gallivm_create(func_name);
    if (!variant->gallivm) {
       goto fail;
    }
@@ -735,9 +744,6 @@ generate_setup_variant(struct lp_setup_variant_key *key,
 
    memcpy(&variant->key, key, key->size);
    variant->list_item_global.base = variant;
-
-   util_snprintf(func_name, sizeof(func_name), "fs%u_setup%u",
-                 0, variant->no);
 
    /* Currently always deal with full 4-wide vertex attributes from
     * the vertices.
@@ -800,6 +806,8 @@ generate_setup_variant(struct lp_setup_variant_key *key,
    if (!variant->jit_function)
       goto fail;
 
+   gallivm_free_ir(variant->gallivm);
+
    /*
     * Update timing information:
     */
@@ -808,22 +816,17 @@ generate_setup_variant(struct lp_setup_variant_key *key,
       LP_COUNT_ADD(llvm_compile_time, t1 - t0);
       LP_COUNT_ADD(nr_llvm_compiles, 1);
    }
-   
+
    return variant;
 
 fail:
    if (variant) {
-      if (variant->function) {
-         gallivm_free_function(gallivm,
-                               variant->function,
-                               variant->jit_function);
-      }
       if (variant->gallivm) {
          gallivm_destroy(variant->gallivm);
       }
       FREE(variant);
    }
-   
+
    return NULL;
 }
 
@@ -831,13 +834,13 @@ fail:
 
 static void
 lp_make_setup_variant_key(struct llvmpipe_context *lp,
-			  struct lp_setup_variant_key *key)
+                          struct lp_setup_variant_key *key)
 {
    struct lp_fragment_shader *fs = lp->fs;
    unsigned i;
 
    assert(sizeof key->inputs[0] == sizeof(uint));
-   
+
    key->num_inputs = fs->info.base.num_inputs;
    key->flatshade_first = lp->rasterizer->flatshade_first;
    key->pixel_center_half = lp->rasterizer->half_pixel_center;
@@ -875,9 +878,9 @@ lp_make_setup_variant_key(struct llvmpipe_context *lp,
    for (i = 0; i < key->num_inputs; i++) {
       if (key->inputs[i].interp == LP_INTERP_COLOR) {
          if (lp->rasterizer->flatshade)
-	    key->inputs[i].interp = LP_INTERP_CONSTANT;
-	 else
-	    key->inputs[i].interp = LP_INTERP_PERSPECTIVE;
+            key->inputs[i].interp = LP_INTERP_CONSTANT;
+         else
+            key->inputs[i].interp = LP_INTERP_PERSPECTIVE;
       }
    }
 
@@ -886,17 +889,11 @@ lp_make_setup_variant_key(struct llvmpipe_context *lp,
 
 static void
 remove_setup_variant(struct llvmpipe_context *lp,
-		     struct lp_setup_variant *variant)
+                     struct lp_setup_variant *variant)
 {
    if (gallivm_debug & GALLIVM_DEBUG_IR) {
       debug_printf("llvmpipe: del setup_variant #%u total %u\n",
-		   variant->no, lp->nr_setup_variants);
-   }
-
-   if (variant->function) {
-      gallivm_free_function(variant->gallivm,
-                            variant->function,
-                            variant->jit_function);
+                   variant->no, lp->nr_setup_variants);
    }
 
    if (variant->gallivm) {
@@ -955,7 +952,7 @@ llvmpipe_update_setup(struct llvmpipe_context *lp)
 
    foreach(li, &lp->setup_variants_list) {
       if(li->base->key.size == key->size &&
-	 memcmp(&li->base->key, key, key->size) == 0) {
+         memcmp(&li->base->key, key, key->size) == 0) {
          variant = li->base;
          break;
       }
@@ -966,19 +963,17 @@ llvmpipe_update_setup(struct llvmpipe_context *lp)
    }
    else {
       if (lp->nr_setup_variants >= LP_MAX_SETUP_VARIANTS) {
-	 cull_setup_variants(lp);
+         cull_setup_variants(lp);
       }
 
       variant = generate_setup_variant(key, lp);
       if (variant) {
          insert_at_head(&lp->setup_variants_list, &variant->list_item_global);
          lp->nr_setup_variants++;
-         llvmpipe_variant_count++;
       }
    }
 
-   lp_setup_set_setup_variant(lp->setup,
-			      variant);
+   lp_setup_set_setup_variant(lp->setup, variant);
 }
 
 void
@@ -994,10 +989,10 @@ lp_delete_setup_variants(struct llvmpipe_context *lp)
 }
 
 void
-lp_dump_setup_coef( const struct lp_setup_variant_key *key,
-		    const float (*sa0)[4],
-		    const float (*sdadx)[4],
-		    const float (*sdady)[4])
+lp_dump_setup_coef(const struct lp_setup_variant_key *key,
+                   const float (*sa0)[4],
+                   const float (*sdadx)[4],
+                   const float (*sdady)[4])
 {
    int i, slot;
 
@@ -1007,23 +1002,20 @@ lp_dump_setup_coef( const struct lp_setup_variant_key *key,
       float dady = sdady[0][i];
 
       debug_printf("POS.%c: a0 = %f, dadx = %f, dady = %f\n",
-		   "xyzw"[i],
-		   a0, dadx, dady);
+                   "xyzw"[i], a0, dadx, dady);
    }
 
    for (slot = 0; slot < key->num_inputs; slot++) {
       unsigned usage_mask = key->inputs[slot].usage_mask;
       for (i = 0; i < TGSI_NUM_CHANNELS; i++) {
-	 if (usage_mask & (1 << i)) {
-	    float a0   = sa0  [1 + slot][i];
-	    float dadx = sdadx[1 + slot][i];
-	    float dady = sdady[1 + slot][i];
+         if (usage_mask & (1 << i)) {
+            float a0   = sa0  [1 + slot][i];
+            float dadx = sdadx[1 + slot][i];
+            float dady = sdady[1 + slot][i];
 
-	    debug_printf("IN[%u].%c: a0 = %f, dadx = %f, dady = %f\n",
-			 slot,
-			 "xyzw"[i],
-			 a0, dadx, dady);
-	 }
+            debug_printf("IN[%u].%c: a0 = %f, dadx = %f, dady = %f\n",
+                         slot, "xyzw"[i], a0, dadx, dady);
+         }
       }
    }
 }

@@ -33,7 +33,7 @@
 #include "main/glheader.h"
 #include "program/register_allocate.h"
 #include "util/u_memory.h"
-#include "ralloc.h"
+#include "util/ralloc.h"
 
 #include "r300_fragprog_swizzle.h"
 #include "radeon_compiler.h"
@@ -617,7 +617,7 @@ static void do_advanced_regalloc(struct regalloc_state * s)
 		input_node++;
 	}
 
-	if (!ra_allocate_no_spills(graph)) {
+	if (!ra_allocate(graph)) {
 		rc_error(s->C, "Ran out of hardware temporaries\n");
 		return;
 	}

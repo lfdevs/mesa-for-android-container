@@ -71,10 +71,24 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
        * maximum screen space coordinates of a small object may larger, but we
        * have no way to enforce the object size other than through clipping.
        *
-       * If you're surprised that we set clip to -gbx to +gbx and it seems like
-       * we'll end up with 16384 wide, note that for a 8192-wide render target,
-       * we'll end up with a normal (-1, 1) clip volume that just covers the
-       * drawable.
+       * The goal is to create the maximum sized guardband (8K x 8K) with the
+       * viewport rectangle in the center of the guardband. This looks weird
+       * because the hardware wants coordinates that are scaled to the viewport
+       * in NDC. In other words, an 8K x 8K viewport would have [-1,1] for X and Y.
+       * A 4K viewport would be [-2,2], 2K := [-4,4] etc.
+       *
+       * --------------------------------
+       * |Guardband                     |
+       * |                              |
+       * |         ------------         |
+       * |         |viewport  |         |
+       * |         |          |         |
+       * |         |          |         |
+       * |         |__________|         |
+       * |                              |
+       * |                              |
+       * |______________________________|
+       *
        */
       const float maximum_guardband_extent = 8192;
       float gbx = maximum_guardband_extent / ctx->ViewportArray[i].Width;
@@ -86,17 +100,23 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
       vp[10] = -gby; /* y-min */
       vp[11] =  gby; /* y-max */
 
-      /* _NEW_SCISSOR | _NEW_VIEWPORT | _NEW_BUFFERS: Screen Space Viewport */
+      /* _NEW_VIEWPORT | _NEW_BUFFERS: Screen Space Viewport
+       * The hardware will take the intersection of the drawing rectangle,
+       * scissor rectangle, and the viewport extents. We don't need to be
+       * smart, and can therefore just program the viewport extents.
+       */
+      float viewport_Xmax = ctx->ViewportArray[i].X + ctx->ViewportArray[i].Width;
+      float viewport_Ymax = ctx->ViewportArray[i].Y + ctx->ViewportArray[i].Height;
       if (render_to_fbo) {
-         vp[12] = ctx->DrawBuffer->_Xmin;
-         vp[13] = ctx->DrawBuffer->_Xmax - 1;
-         vp[14] = ctx->DrawBuffer->_Ymin;
-         vp[15] = ctx->DrawBuffer->_Ymax - 1;
+         vp[12] = ctx->ViewportArray[i].X;
+         vp[13] = viewport_Xmax - 1;
+         vp[14] = ctx->ViewportArray[i].Y;
+         vp[15] = viewport_Ymax - 1;
       } else {
-         vp[12] = ctx->DrawBuffer->_Xmin;
-         vp[13] = ctx->DrawBuffer->_Xmax - 1;
-         vp[14] = ctx->DrawBuffer->Height - ctx->DrawBuffer->_Ymax;
-         vp[15] = ctx->DrawBuffer->Height - ctx->DrawBuffer->_Ymin - 1;
+         vp[12] = ctx->ViewportArray[i].X;
+         vp[13] = viewport_Xmax - 1;
+         vp[14] = ctx->DrawBuffer->Height - viewport_Ymax;
+         vp[15] = ctx->DrawBuffer->Height - ctx->ViewportArray[i].Y - 1;
       }
 
       vp += 16;
@@ -110,7 +130,7 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_sf_clip_viewport = {
    .dirty = {
-      .mesa = _NEW_BUFFERS | _NEW_SCISSOR | _NEW_VIEWPORT,
+      .mesa = _NEW_BUFFERS | _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH,
       .cache = 0,
    },

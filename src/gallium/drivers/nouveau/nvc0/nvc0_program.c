@@ -36,6 +36,8 @@ nvc0_shader_input_address(unsigned sn, unsigned si, unsigned ubase)
    switch (sn) {
    case NV50_SEMANTIC_TESSFACTOR:   return 0x000 + si * 0x4;
    case TGSI_SEMANTIC_PRIMID:       return 0x060;
+   case TGSI_SEMANTIC_LAYER:        return 0x064;
+   case TGSI_SEMANTIC_VIEWPORT_INDEX:return 0x068;
    case TGSI_SEMANTIC_PSIZE:        return 0x06c;
    case TGSI_SEMANTIC_POSITION:     return 0x070;
    case TGSI_SEMANTIC_GENERIC:      return ubase + si * 0x10;
@@ -64,7 +66,7 @@ nvc0_shader_output_address(unsigned sn, unsigned si, unsigned ubase)
    case NV50_SEMANTIC_TESSFACTOR:    return 0x000 + si * 0x4;
    case TGSI_SEMANTIC_PRIMID:        return 0x060;
    case TGSI_SEMANTIC_LAYER:         return 0x064;
-   case NV50_SEMANTIC_VIEWPORTINDEX: return 0x068;
+   case TGSI_SEMANTIC_VIEWPORT_INDEX:return 0x068;
    case TGSI_SEMANTIC_PSIZE:         return 0x06c;
    case TGSI_SEMANTIC_POSITION:      return 0x070;
    case TGSI_SEMANTIC_GENERIC:       return ubase + si * 0x10;
@@ -491,6 +493,7 @@ nvc0_program_create_tfb_state(const struct nv50_ir_prog_info *info,
             info->out[pso->output[i].register_index].slot[s + c];
 
       tfb->varying_count[b] = MAX2(tfb->varying_count[b], p);
+      tfb->stream[b] = pso->output[i].stream;
    }
    for (b = 0; b < 4; ++b) // zero unused indices (looks nicer)
       for (c = tfb->varying_count[b]; c & 3; ++c)
@@ -507,7 +510,7 @@ nvc0_program_dump(struct nvc0_program *prog)
 
    if (prog->type != PIPE_SHADER_COMPUTE) {
       for (pos = 0; pos < sizeof(prog->hdr) / sizeof(prog->hdr[0]); ++pos)
-         debug_printf("HDR[%02lx] = 0x%08x\n",
+         debug_printf("HDR[%02"PRIxPTR"] = 0x%08x\n",
                       pos * sizeof(prog->hdr[0]), prog->hdr[pos]);
    }
    debug_printf("shader binary code (0x%x bytes):", prog->code_size);
@@ -640,6 +643,8 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset)
    */
    if (info->io.globalAccess)
       prog->hdr[0] |= 1 << 16;
+   if (info->io.fp64)
+      prog->hdr[0] |= 1 << 27;
 
    if (prog->pipe.stream_output.num_outputs)
       prog->tfb = nvc0_program_create_tfb_state(info,

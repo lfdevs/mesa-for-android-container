@@ -25,25 +25,10 @@
 
 LOCAL_PATH := $(call my-dir)
 
-# from Makefile
-SOURCES = \
-	eglapi.c \
-	eglarray.c \
-	eglconfig.c \
-	eglcontext.c \
-	eglcurrent.c \
-	egldisplay.c \
-	egldriver.c \
-	eglfallbacks.c \
-	eglglobals.c \
-	eglimage.c \
-	egllog.c \
-	eglmisc.c \
-	eglmode.c \
-	eglscreen.c \
-	eglstring.c \
-	eglsurface.c \
-	eglsync.c
+include $(LOCAL_PATH)/Makefile.sources
+
+SOURCES := \
+	${LIBEGL_C_FILES}
 
 # ---------------------------------------
 # Build libGLES_mesa
@@ -95,6 +80,12 @@ gallium_DRIVERS :=
 # swrast
 gallium_DRIVERS += libmesa_pipe_softpipe libmesa_winsys_sw_android
 
+# freedreno
+ifneq ($(filter freedreno, $(MESA_GPU_DRIVERS)),)
+gallium_DRIVERS += libmesa_winsys_freedreno libmesa_pipe_freedreno
+LOCAL_SHARED_LIBRARIES += libdrm_freedreno
+endif
+
 # i915g
 ifneq ($(filter i915g, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_winsys_i915 libmesa_pipe_i915
@@ -109,28 +100,29 @@ endif
 
 # nouveau
 ifneq ($(filter nouveau, $(MESA_GPU_DRIVERS)),)
-gallium_DRIVERS += \
-	libmesa_winsys_nouveau \
-	libmesa_pipe_nvfx \
-	libmesa_pipe_nv50 \
-	libmesa_pipe_nvc0 \
-	libmesa_pipe_nouveau
+gallium_DRIVERS +=  libmesa_winsys_nouveau libmesa_pipe_nouveau
 LOCAL_SHARED_LIBRARIES += libdrm_nouveau
+LOCAL_SHARED_LIBRARIES += libstlport
 endif
 
 # r300g/r600g/radeonsi
 ifneq ($(filter r300g r600g radeonsi, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_winsys_radeon
+LOCAL_SHARED_LIBRARIES += libdrm_radeon
 ifneq ($(filter r300g, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_pipe_r300
-endif
+endif # r300g
+ifneq ($(filter r600g radeonsi, $(MESA_GPU_DRIVERS)),)
 ifneq ($(filter r600g, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_pipe_r600
-endif
+LOCAL_SHARED_LIBRARIES += libstlport
+endif # r600g
 ifneq ($(filter radeonsi, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_pipe_radeonsi
-endif
-endif
+endif # radeonsi
+gallium_DRIVERS += libmesa_pipe_radeon
+endif # r600g || radeonsi
+endif # r300g || r600g || radeonsi
 
 # vmwgfx
 ifneq ($(filter vmwgfx, $(MESA_GPU_DRIVERS)),)
@@ -160,7 +152,7 @@ endif # MESA_BUILD_GALLIUM
 
 LOCAL_STATIC_LIBRARIES := \
 	$(LOCAL_STATIC_LIBRARIES) \
-	libloader
+	libmesa_loader
 
 LOCAL_MODULE := libGLES_mesa
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/egl

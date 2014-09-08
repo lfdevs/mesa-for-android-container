@@ -42,6 +42,8 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
                           VdpGetProcAddress **get_proc_address)
 {
    struct pipe_screen *pscreen;
+   struct pipe_resource *res, res_tmpl;
+   struct pipe_sampler_view sv_tmpl;
    vlVdpDevice *dev = NULL;
    VdpStatus ret;
 
@@ -58,6 +60,8 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
       ret = VDP_STATUS_RESOURCES;
       goto no_dev;
    }
+
+   pipe_reference_init(&dev->reference, 1);
 
    dev->vscreen = vl_screen_create(display, screen);
    if (!dev->vscreen) {
@@ -77,6 +81,43 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
       goto no_context;
    }
 
+   memset(&res_tmpl, 0, sizeof(res_tmpl));
+
+   res_tmpl.target = PIPE_TEXTURE_2D;
+   res_tmpl.format = PIPE_FORMAT_R8G8B8A8_UNORM;
+   res_tmpl.width0 = 1;
+   res_tmpl.height0 = 1;
+   res_tmpl.depth0 = 1;
+   res_tmpl.array_size = 1;
+   res_tmpl.bind = PIPE_BIND_SAMPLER_VIEW;
+   res_tmpl.usage = PIPE_USAGE_DEFAULT;
+
+   if (!CheckSurfaceParams(pscreen, &res_tmpl)) {
+      ret = VDP_STATUS_NO_IMPLEMENTATION;
+      goto no_resource;
+   }
+
+   res = pscreen->resource_create(pscreen, &res_tmpl);
+   if (!res) {
+      ret = VDP_STATUS_RESOURCES;
+      goto no_resource;
+   }
+
+   memset(&sv_tmpl, 0, sizeof(sv_tmpl));
+   u_sampler_view_default_template(&sv_tmpl, res, res->format);
+
+   sv_tmpl.swizzle_r = PIPE_SWIZZLE_ONE;
+   sv_tmpl.swizzle_g = PIPE_SWIZZLE_ONE;
+   sv_tmpl.swizzle_b = PIPE_SWIZZLE_ONE;
+   sv_tmpl.swizzle_a = PIPE_SWIZZLE_ONE;
+
+   dev->dummy_sv = dev->context->create_sampler_view(dev->context, res, &sv_tmpl);
+   pipe_resource_reference(&res, NULL);
+   if (!dev->dummy_sv) {
+      ret = VDP_STATUS_RESOURCES;
+      goto no_resource;
+   }
+
    *device = vlAddDataHTAB(dev);
    if (*device == 0) {
       ret = VDP_STATUS_ERROR;
@@ -91,8 +132,9 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
    return VDP_STATUS_OK;
 
 no_handle:
+   pipe_sampler_view_reference(&dev->dummy_sv, NULL);
+no_resource:
    dev->context->destroy(dev->context);
-   /* Destroy vscreen */
 no_context:
    vl_screen_destroy(dev->vscreen);
 no_vscreen:
@@ -124,7 +166,7 @@ vlVdpPresentationQueueTargetCreateX11(VdpDevice device, Drawable drawable,
    if (!pqt)
       return VDP_STATUS_RESOURCES;
 
-   pqt->device = dev;
+   DeviceReference(&pqt->device, dev);
    pqt->drawable = drawable;
 
    *target = vlAddDataHTAB(pqt);
@@ -153,6 +195,7 @@ vlVdpPresentationQueueTargetDestroy(VdpPresentationQueueTarget presentation_queu
       return VDP_STATUS_INVALID_HANDLE;
 
    vlRemoveDataHTAB(presentation_queue_target);
+   DeviceReference(&pqt->device, NULL);
    FREE(pqt);
 
    return VDP_STATUS_OK;
@@ -168,16 +211,25 @@ vlVdpDeviceDestroy(VdpDevice device)
    if (!dev)
       return VDP_STATUS_INVALID_HANDLE;
 
-   pipe_mutex_destroy(dev->mutex);
-   vl_compositor_cleanup(&dev->compositor);
-   dev->context->destroy(dev->context);
-   vl_screen_destroy(dev->vscreen);
-
    vlRemoveDataHTAB(device);
-   FREE(dev);
-   vlDestroyHTAB();
+   DeviceReference(&dev, NULL);
 
    return VDP_STATUS_OK;
+}
+
+/**
+ * Free a VdpDevice.
+ */
+void
+vlVdpDeviceFree(vlVdpDevice *dev)
+{
+   pipe_mutex_destroy(dev->mutex);
+   vl_compositor_cleanup(&dev->compositor);
+   pipe_sampler_view_reference(&dev->dummy_sv, NULL);
+   dev->context->destroy(dev->context);
+   vl_screen_destroy(dev->vscreen);
+   FREE(dev);
+   vlDestroyHTAB();
 }
 
 /**

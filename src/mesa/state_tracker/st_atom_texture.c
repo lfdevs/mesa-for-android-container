@@ -212,6 +212,12 @@ check_sampler_swizzle(const struct st_texture_object *stObj,
 }
 
 
+static unsigned last_level(struct st_texture_object *stObj)
+{
+   return MIN2(stObj->base._MaxLevel, stObj->pt->last_level);
+}
+
+
 static struct pipe_sampler_view *
 st_create_texture_sampler_view_from_stobj(struct pipe_context *pipe,
 					  struct st_texture_object *stObj,
@@ -244,6 +250,8 @@ st_create_texture_sampler_view_from_stobj(struct pipe_context *pipe,
       templ.u.buf.last_element  = f + (n - 1);
    } else {
       templ.u.tex.first_level = stObj->base.BaseLevel;
+      templ.u.tex.last_level = last_level(stObj);
+      assert(templ.u.tex.first_level <= templ.u.tex.last_level);
    }
 
    if (swizzle != SWIZZLE_NOOP) {
@@ -271,11 +279,16 @@ st_get_texture_sampler_view_from_stobj(struct st_context *st,
 
    sv = st_texture_get_sampler_view(st, stObj);
 
+   if (stObj->base.StencilSampling &&
+       util_format_is_depth_and_stencil(format))
+      format = util_format_stencil_only(format);
+
    /* if sampler view has changed dereference it */
    if (*sv) {
       if (check_sampler_swizzle(stObj, *sv) ||
 	  (format != (*sv)->format) ||
-	  stObj->base.BaseLevel != (*sv)->u.tex.first_level) {
+          stObj->base.BaseLevel != (*sv)->u.tex.first_level ||
+          last_level(stObj) != (*sv)->u.tex.last_level) {
 	 pipe_sampler_view_reference(sv, NULL);
       }
    }
@@ -325,7 +338,7 @@ update_single_texture(struct st_context *st,
    /* Determine the format of the texture sampler view */
    if (texObj->Target == GL_TEXTURE_BUFFER) {
       view_format =
-         st_mesa_format_to_pipe_format(stObj->base._BufferObjectFormat);
+         st_mesa_format_to_pipe_format(st, stObj->base._BufferObjectFormat);
    }
    else {
       view_format =
@@ -354,7 +367,7 @@ update_textures(struct st_context *st,
 {
    const GLuint old_max = *num_textures;
    GLbitfield samplers_used = prog->SamplersUsed;
-   GLuint unit, new_count;
+   GLuint unit;
 
    if (samplers_used == 0x0 && old_max == 0)
       return;
@@ -383,16 +396,9 @@ update_textures(struct st_context *st,
       pipe_sampler_view_reference(&(sampler_views[unit]), sampler_view);
    }
 
-   /* Ex: if old_max = 3 and *num_textures = 1, we need to pass an
-    * array of views={X, NULL, NULL} to unref the old texture views
-    * at positions [1] and [2].
-    */
-   new_count = MAX2(*num_textures, old_max);
-   assert(new_count <= max_units);
-
    cso_set_sampler_views(st->cso_context,
                          shader_stage,
-                         new_count,
+                         *num_textures,
                          sampler_views);
 }
 
@@ -437,7 +443,7 @@ update_geometry_textures(struct st_context *st)
       update_textures(st,
                       PIPE_SHADER_GEOMETRY,
                       &ctx->GeometryProgram._Current->Base,
-                      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits,
+                      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits,
                       st->state.sampler_views[PIPE_SHADER_GEOMETRY],
                       &st->state.num_sampler_views[PIPE_SHADER_GEOMETRY]);
    }

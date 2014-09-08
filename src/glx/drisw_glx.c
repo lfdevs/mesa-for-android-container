@@ -27,46 +27,7 @@
 #include "glxclient.h"
 #include <dlfcn.h>
 #include "dri_common.h"
-
-struct drisw_display
-{
-   __GLXDRIdisplay base;
-};
-
-struct drisw_context
-{
-   struct glx_context base;
-   __DRIcontext *driContext;
-
-};
-
-struct drisw_screen
-{
-   struct glx_screen base;
-
-   __DRIscreen *driScreen;
-   __GLXDRIscreen vtable;
-   const __DRIcoreExtension *core;
-   const __DRIswrastExtension *swrast;
-   const __DRItexBufferExtension *texBuffer;
-   const __DRIcopySubBufferExtension *copySubBuffer;
-
-   const __DRIconfig **driver_configs;
-
-   void *driver;
-};
-
-struct drisw_drawable
-{
-   __GLXDRIdrawable base;
-
-   GC gc;
-   GC swapgc;
-
-   __DRIdrawable *driDrawable;
-   XVisualInfo *visinfo;
-   XImage *ximage;
-};
+#include "drisw_priv.h"
 
 static Bool
 XCreateDrawable(struct drisw_drawable * pdp,
@@ -638,8 +599,8 @@ driOpenSwrast(void)
 static const struct glx_screen_vtable drisw_screen_vtable = {
    .create_context         = drisw_create_context,
    .create_context_attribs = drisw_create_context_attribs,
-   .query_renderer_integer = NULL,
-   .query_renderer_string  = NULL,
+   .query_renderer_integer = drisw_query_renderer_integer,
+   .query_renderer_string  = drisw_query_renderer_string,
 };
 
 static void
@@ -667,6 +628,14 @@ driswBindExtensions(struct drisw_screen *psc, const __DRIextension **extensions)
       if ((strcmp(extensions[i]->name, __DRI_TEX_BUFFER) == 0)) {
 	 psc->texBuffer = (__DRItexBufferExtension *) extensions[i];
 	 __glXEnableDirectExtension(&psc->base, "GLX_EXT_texture_from_pixmap");
+      }
+      /* DRISW version 3 is also required because GLX_MESA_query_renderer
+       * requires GLX_ARB_create_context_profile.
+       */
+      if (psc->swrast->base.version >= 3
+          && strcmp(extensions[i]->name, __DRI2_RENDERER_QUERY) == 0) {
+         psc->rendererQuery = (__DRI2rendererQueryExtension *) extensions[i];
+         __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
       }
    }
 }
@@ -733,8 +702,10 @@ driswCreateScreen(int screen, struct glx_display *priv)
    configs = driConvertConfigs(psc->core, psc->base.configs, driver_configs);
    visuals = driConvertConfigs(psc->core, psc->base.visuals, driver_configs);
 
-   if (!configs || !visuals)
+   if (!configs || !visuals) {
+       ErrorMessageF("No matching fbConfigs or visuals found\n");
        goto handle_error;
+   }
 
    glx_config_destroy_list(psc->base.configs);
    psc->base.configs = configs;

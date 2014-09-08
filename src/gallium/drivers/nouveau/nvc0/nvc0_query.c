@@ -108,7 +108,7 @@ nvc0_query_destroy(struct pipe_context *pipe, struct pipe_query *pq)
 }
 
 static struct pipe_query *
-nvc0_query_create(struct pipe_context *pipe, unsigned type)
+nvc0_query_create(struct pipe_context *pipe, unsigned type, unsigned index)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nvc0_query *q;
@@ -136,6 +136,7 @@ nvc0_query_create(struct pipe_context *pipe, unsigned type)
    case PIPE_QUERY_PRIMITIVES_GENERATED:
    case PIPE_QUERY_PRIMITIVES_EMITTED:
       q->is64bit = TRUE;
+      q->index = index;
       space = 32;
       break;
    case PIPE_QUERY_TIME_ELAPSED:
@@ -541,45 +542,50 @@ nvc0_render_condition(struct pipe_context *pipe,
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_query *q;
    uint32_t cond;
-   boolean negated = FALSE;
    boolean wait =
       mode != PIPE_RENDER_COND_NO_WAIT &&
       mode != PIPE_RENDER_COND_BY_REGION_NO_WAIT;
 
+   if (!pq) {
+      cond = NVC0_3D_COND_MODE_ALWAYS;
+   }
+   else {
+      q = nvc0_query(pq);
+      /* NOTE: comparison of 2 queries only works if both have completed */
+      switch (q->type) {
+      case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+         cond = condition ? NVC0_3D_COND_MODE_EQUAL :
+                          NVC0_3D_COND_MODE_NOT_EQUAL;
+         wait = TRUE;
+         break;
+      case PIPE_QUERY_OCCLUSION_COUNTER:
+      case PIPE_QUERY_OCCLUSION_PREDICATE:
+         if (likely(!condition)) {
+            if (unlikely(q->nesting))
+               cond = wait ? NVC0_3D_COND_MODE_NOT_EQUAL :
+                             NVC0_3D_COND_MODE_ALWAYS;
+            else
+               cond = NVC0_3D_COND_MODE_RES_NON_ZERO;
+         } else {
+            cond = wait ? NVC0_3D_COND_MODE_EQUAL : NVC0_3D_COND_MODE_ALWAYS;
+         }
+         break;
+      default:
+         assert(!"render condition query not a predicate");
+         cond = NVC0_3D_COND_MODE_ALWAYS;
+         break;
+      }
+   }
+
    nvc0->cond_query = pq;
    nvc0->cond_cond = condition;
+   nvc0->cond_condmode = cond;
    nvc0->cond_mode = mode;
 
    if (!pq) {
       PUSH_SPACE(push, 1);
-      IMMED_NVC0(push, NVC0_3D(COND_MODE), NVC0_3D_COND_MODE_ALWAYS);
+      IMMED_NVC0(push, NVC0_3D(COND_MODE), cond);
       return;
-   }
-   q = nvc0_query(pq);
-
-   /* NOTE: comparison of 2 queries only works if both have completed */
-   switch (q->type) {
-   case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-      cond = negated ? NVC0_3D_COND_MODE_EQUAL :
-                       NVC0_3D_COND_MODE_NOT_EQUAL;
-      wait = TRUE;
-      break;
-   case PIPE_QUERY_OCCLUSION_COUNTER:
-   case PIPE_QUERY_OCCLUSION_PREDICATE:
-      if (likely(!negated)) {
-         if (unlikely(q->nesting))
-            cond = wait ? NVC0_3D_COND_MODE_NOT_EQUAL :
-                          NVC0_3D_COND_MODE_ALWAYS;
-         else
-            cond = NVC0_3D_COND_MODE_RES_NON_ZERO;
-      } else {
-         cond = wait ? NVC0_3D_COND_MODE_EQUAL : NVC0_3D_COND_MODE_ALWAYS;
-      }
-      break;
-   default:
-      assert(!"render condition query not a predicate");
-      mode = NVC0_3D_COND_MODE_ALWAYS;
-      break;
    }
 
    if (wait)
@@ -1066,6 +1072,7 @@ nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
 {
    struct nvc0_screen *screen = nvc0->screen;
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   const boolean is_nve4 = screen->base.class_3d >= NVE4_3D_CLASS;
    const struct nvc0_mp_pm_query_cfg *cfg;
    unsigned i, c;
    unsigned num_ab[2] = { 0, 0 };
@@ -1083,7 +1090,7 @@ nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
    }
 
    assert(cfg->num_counters <= 4);
-   PUSH_SPACE(push, 4 * 8 + 6);
+   PUSH_SPACE(push, 4 * 8 * (is_nve4 ? 1 : 6) + 6);
 
    if (!screen->pm.mp_counters_enabled) {
       screen->pm.mp_counters_enabled = TRUE;
@@ -1117,7 +1124,7 @@ nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
       assert(c <= (d * 4 + 3)); /* must succeed, already checked for space */
 
       /* configure and reset the counter(s) */
-      if (screen->base.class_3d >= NVE4_3D_CLASS) {
+      if (is_nve4) {
          if (d == 0)
             BEGIN_NVC0(push, NVE4_COMPUTE(MP_PM_A_SIGSEL(c & 3)), 1);
          else

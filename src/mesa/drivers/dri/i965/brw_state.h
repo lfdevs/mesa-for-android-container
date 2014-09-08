@@ -196,7 +196,7 @@ void brw_destroy_caches( struct brw_context *brw );
    intel_batchbuffer_data(brw, (s), sizeof(*(s)), RENDER_RING)
 
 void *brw_state_batch(struct brw_context *brw,
-		      enum state_struct_type type,
+		      enum aub_state_struct_type type,
 		      int size,
 		      int alignment,
 		      uint32_t *out_offset);
@@ -242,17 +242,25 @@ void gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
 /* gen8_surface_state.c */
 void gen8_init_vtable_surface_functions(struct brw_context *brw);
 
-/* brw_wm_sampler_state.c */
-uint32_t translate_wrap_mode(struct brw_context *brw,
-                             GLenum wrap, bool using_nearest);
-void upload_default_color(struct brw_context *brw,
-			  struct gl_sampler_object *sampler,
-			  int unit,
-                          uint32_t *sdc_offset);
-void gen4_init_vtable_sampler_functions(struct brw_context *brw);
-
-/* gen7_sampler_state.c */
-void gen7_init_vtable_sampler_functions(struct brw_context *brw);
+/* brw_sampler_state.c */
+void brw_emit_sampler_state(struct brw_context *brw,
+                            uint32_t *sampler_state,
+                            uint32_t batch_offset_for_sampler_state,
+                            unsigned min_filter,
+                            unsigned mag_filter,
+                            unsigned mip_filter,
+                            unsigned max_anisotropy,
+                            unsigned address_rounding,
+                            unsigned wrap_s,
+                            unsigned wrap_t,
+                            unsigned wrap_r,
+                            unsigned min_lod,
+                            unsigned max_lod,
+                            int lod_bias,
+                            unsigned base_level,
+                            unsigned shadow_function,
+                            bool non_normalized_coordinates,
+                            uint32_t border_color_offset);
 
 /* gen6_sf_state.c */
 void
@@ -262,13 +270,17 @@ calculate_attr_overrides(const struct brw_context *brw,
                          uint32_t *flat_enables,
                          uint32_t *urb_entry_read_length);
 
+/* gen6_surface_state.c */
+void gen6_init_vtable_surface_functions(struct brw_context *brw);
+
 /* brw_vs_surface_state.c */
 void
-brw_upload_vec4_pull_constants(struct brw_context *brw,
-                               GLbitfield brw_new_constbuf,
-                               const struct gl_program *prog,
-                               struct brw_stage_state *stage_state,
-                               const struct brw_vec4_prog_data *prog_data);
+brw_upload_pull_constants(struct brw_context *brw,
+                          GLbitfield brw_new_constbuf,
+                          const struct gl_program *prog,
+                          struct brw_stage_state *stage_state,
+                          const struct brw_stage_prog_data *prog_data,
+                          bool dword_pitch);
 
 /* gen7_vs_state.c */
 void

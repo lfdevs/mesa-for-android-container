@@ -44,6 +44,8 @@
 #include "radeon_video.h"
 #include "radeon_vce.h"
 
+static const unsigned profiles[7] = { 66, 77, 88, 100, 110, 122, 244 };
+
 static struct rvce_cpb_slot *current_slot(struct rvce_encoder *enc)
 {
 	return LIST_ENTRY(struct rvce_cpb_slot, enc->cpb_slots.prev, list);
@@ -104,8 +106,9 @@ static void create(struct rvce_encoder *enc)
 
 	RVCE_BEGIN(0x01000001); // create cmd
 	RVCE_CS(0x00000000); // encUseCircularBuffer
-	RVCE_CS(0x0000004d); // encProfile: Main
-	RVCE_CS(0x0000002a); // encLevel: 4.2
+	RVCE_CS(profiles[enc->base.profile -
+		PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE]); // encProfile
+	RVCE_CS(enc->base.level); // encLevel
 	RVCE_CS(0x00000000); // encPicStructRestriction
 	RVCE_CS(enc->base.width); // encImageWidth
 	RVCE_CS(enc->base.height); // encImageHeight
@@ -283,7 +286,7 @@ static void encode(struct rvce_encoder *enc)
 	RVCE_CS(enc->pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR); // encIdrFlag
 	RVCE_CS(0x00000000); // encIdrPicId
 	RVCE_CS(0x00000000); // encMGSKeyPic
-	RVCE_CS(0x00000001); // encReferenceFlag
+	RVCE_CS(!enc->pic.not_referenced); // encReferenceFlag
 	RVCE_CS(0x00000000); // encTemporalLayerIndex
 	RVCE_CS(0x00000000); // num_ref_idx_active_override_flag
 	RVCE_CS(0x00000000); // num_ref_idx_l0_active_minus1

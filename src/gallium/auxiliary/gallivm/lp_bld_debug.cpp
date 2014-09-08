@@ -34,30 +34,30 @@
 #include <llvm/Support/Format.h>
 #include <llvm/Support/MemoryObject.h>
 
-#if HAVE_LLVM >= 0x0300
+#if HAVE_LLVM >= 0x0306
+#include <llvm/Target/TargetSubtargetInfo.h>
+#endif
+
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/MC/MCSubtargetInfo.h>
-#else /* HAVE_LLVM < 0x0300 */
-#include <llvm/Target/TargetRegistry.h>
-#endif /* HAVE_LLVM < 0x0300 */
 
-#if HAVE_LLVM >= 0x0209
 #include <llvm/Support/Host.h>
-#else /* HAVE_LLVM < 0x0209 */
-#include <llvm/System/Host.h>
-#endif /* HAVE_LLVM < 0x0209 */
 
-#if HAVE_LLVM >= 0x0207
+#if HAVE_LLVM >= 0x0303
+#include <llvm/IR/Module.h>
+#else
+#include <llvm/Module.h>
+#endif
+
 #include <llvm/MC/MCDisassembler.h>
 #include <llvm/MC/MCAsmInfo.h>
 #include <llvm/MC/MCInst.h>
 #include <llvm/MC/MCInstPrinter.h>
-#endif /* HAVE_LLVM >= 0x0207 */
-#if HAVE_LLVM >= 0x0301
 #include <llvm/MC/MCRegisterInfo.h>
-#endif /* HAVE_LLVM >= 0x0301 */
 
-#if HAVE_LLVM >= 0x0303
+#if HAVE_LLVM >= 0x0305
+#define OwningPtr std::unique_ptr
+#elif HAVE_LLVM >= 0x0303
 #include <llvm/ADT/OwningPtr.h>
 #endif
 
@@ -104,13 +104,8 @@ public:
 
    void write_impl(const char *Ptr, size_t Size);
 
-#if HAVE_LLVM >= 0x207
    uint64_t current_pos() const { return pos; }
    size_t preferred_buffer_size() const { return 512; }
-#else
-   uint64_t current_pos() { return pos; }
-   size_t preferred_buffer_size() { return 512; }
-#endif
 };
 
 
@@ -125,6 +120,13 @@ raw_debug_ostream::write_impl(const char *Ptr, size_t Size)
       *lastPtr = last;
       pos += Size;
    }
+}
+
+
+extern "C" const char *
+lp_get_module_id(LLVMModuleRef module)
+{
+   return llvm::unwrap(module)->getModuleIdentifier().c_str();
 }
 
 
@@ -144,7 +146,6 @@ lp_debug_dump_value(LLVMValueRef value)
 }
 
 
-#if HAVE_LLVM >= 0x0207
 /*
  * MemoryObject wrapper around a buffer of memory, to be used by MC
  * disassembler.
@@ -179,7 +180,6 @@ public:
       return 0;
    }
 };
-#endif /* HAVE_LLVM >= 0x0207 */
 
 
 /*
@@ -192,7 +192,6 @@ public:
 static size_t
 disassemble(const void* func, llvm::raw_ostream & Out)
 {
-#if HAVE_LLVM >= 0x0207
    using namespace llvm;
 
    const uint8_t *bytes = (const uint8_t *)func;
@@ -208,83 +207,62 @@ disassemble(const void* func, llvm::raw_ostream & Out)
     * Initialize all used objects.
     */
 
-#if HAVE_LLVM >= 0x0301
    std::string Triple = sys::getDefaultTargetTriple();
-#else
-   std::string Triple = sys::getHostTriple();
-#endif
 
    std::string Error;
    const Target *T = TargetRegistry::lookupTarget(Triple, Error);
 
 #if HAVE_LLVM >= 0x0304
    OwningPtr<const MCAsmInfo> AsmInfo(T->createMCAsmInfo(*T->createMCRegInfo(Triple), Triple));
-#elif HAVE_LLVM >= 0x0300
-   OwningPtr<const MCAsmInfo> AsmInfo(T->createMCAsmInfo(Triple));
 #else
-   OwningPtr<const MCAsmInfo> AsmInfo(T->createAsmInfo(Triple));
+   OwningPtr<const MCAsmInfo> AsmInfo(T->createMCAsmInfo(Triple));
 #endif
 
    if (!AsmInfo) {
       Out << "error: no assembly info for target " << Triple << "\n";
+      Out.flush();
       return 0;
    }
 
-#if HAVE_LLVM >= 0x0300
    unsigned int AsmPrinterVariant = AsmInfo->getAssemblerDialect();
-#else
-   int AsmPrinterVariant = AsmInfo->getAssemblerDialect();
-#endif
 
-#if HAVE_LLVM >= 0x0301
    OwningPtr<const MCRegisterInfo> MRI(T->createMCRegInfo(Triple));
    if (!MRI) {
       Out << "error: no register info for target " << Triple.c_str() << "\n";
+      Out.flush();
       return 0;
    }
 
    OwningPtr<const MCInstrInfo> MII(T->createMCInstrInfo());
    if (!MII) {
       Out << "error: no instruction info for target " << Triple.c_str() << "\n";
+      Out.flush();
       return 0;
    }
-#endif
 
 #if HAVE_LLVM >= 0x0305
    OwningPtr<const MCSubtargetInfo> STI(T->createMCSubtargetInfo(Triple, sys::getHostCPUName(), ""));
    OwningPtr<MCContext> MCCtx(new MCContext(AsmInfo.get(), MRI.get(), 0));
    OwningPtr<const MCDisassembler> DisAsm(T->createMCDisassembler(*STI, *MCCtx));
-#elif HAVE_LLVM >= 0x0300
+#else
    OwningPtr<const MCSubtargetInfo> STI(T->createMCSubtargetInfo(Triple, sys::getHostCPUName(), ""));
    OwningPtr<const MCDisassembler> DisAsm(T->createMCDisassembler(*STI));
-#else
-   OwningPtr<const MCDisassembler> DisAsm(T->createMCDisassembler());
 #endif
    if (!DisAsm) {
       Out << "error: no disassembler for target " << Triple << "\n";
+      Out.flush();
       return 0;
    }
 
 
-#if HAVE_LLVM >= 0x0301
    OwningPtr<MCInstPrinter> Printer(
          T->createMCInstPrinter(AsmPrinterVariant, *AsmInfo, *MII, *MRI, *STI));
-#elif HAVE_LLVM == 0x0300
-   OwningPtr<MCInstPrinter> Printer(
-         T->createMCInstPrinter(AsmPrinterVariant, *AsmInfo, *STI));
-#elif HAVE_LLVM >= 0x0208
-   OwningPtr<MCInstPrinter> Printer(
-         T->createMCInstPrinter(AsmPrinterVariant, *AsmInfo));
-#else
-   OwningPtr<MCInstPrinter> Printer(
-         T->createMCInstPrinter(AsmPrinterVariant, *AsmInfo, Out));
-#endif
    if (!Printer) {
       Out << "error: no instruction printer for target " << Triple.c_str() << "\n";
+      Out.flush();
       return 0;
    }
 
-#if HAVE_LLVM >= 0x0301
    TargetOptions options;
 #if defined(DEBUG)
    options.JITEmitDebugInfo = true;
@@ -296,13 +274,12 @@ disassemble(const void* func, llvm::raw_ostream & Out)
    options.NoFramePointerElim = true;
 #endif
    OwningPtr<TargetMachine> TM(T->createTargetMachine(Triple, sys::getHostCPUName(), "", options));
-#elif HAVE_LLVM == 0x0300
-   OwningPtr<TargetMachine> TM(T->createTargetMachine(Triple, sys::getHostCPUName(), ""));
-#else
-   OwningPtr<TargetMachine> TM(T->createTargetMachine(Triple, ""));
-#endif
 
+#if HAVE_LLVM >= 0x0306
+   const TargetInstrInfo *TII = TM->getSubtargetImpl()->getInstrInfo();
+#else
    const TargetInstrInfo *TII = TM->getInstrInfo();
+#endif
 
    /*
     * Wrap the data in a MemoryObject
@@ -324,11 +301,7 @@ disassemble(const void* func, llvm::raw_ostream & Out)
 
       if (!DisAsm->getInstruction(Inst, Size, memoryObject,
                                  pc,
-#if HAVE_LLVM >= 0x0300
 				  nulls(), nulls())) {
-#else
-				  nulls())) {
-#endif
          Out << "invalid";
          pc += 1;
       }
@@ -350,13 +323,7 @@ disassemble(const void* func, llvm::raw_ostream & Out)
       /*
        * Print the instruction.
        */
-#if HAVE_LLVM >= 0x0300
-	 Printer->printInst(&Inst, Out, "");
-#elif HAVE_LLVM >= 0x208
-	 Printer->printInst(&Inst, Out);
-#else
-	 Printer->printInst(&Inst);
-#endif
+      Printer->printInst(&Inst, Out, "");
 
       /*
        * Advance.
@@ -364,11 +331,7 @@ disassemble(const void* func, llvm::raw_ostream & Out)
 
       pc += Size;
 
-#if HAVE_LLVM >= 0x0300
       const MCInstrDesc &TID = TII->get(Inst.getOpcode());
-#else
-      const TargetInstrDesc &TID = TII->get(Inst.getOpcode());
-#endif
 
       /*
        * Keep track of forward jumps to a nearby address.
@@ -445,10 +408,6 @@ disassemble(const void* func, llvm::raw_ostream & Out)
    Out.flush();
 
    return pc;
-#else /* HAVE_LLVM < 0x0207 */
-   (void)func;
-   return 0;
-#endif /* HAVE_LLVM < 0x0207 */
 }
 
 

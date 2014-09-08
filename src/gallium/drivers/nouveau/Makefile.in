@@ -105,14 +105,14 @@ target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.sources \
 	$(top_srcdir)/src/gallium/Automake.inc $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+
+@NEED_WINSYS_XLIB_TRUE@am__append_2 = \
+@NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
+@NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
+@NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
+
 noinst_PROGRAMS = nouveau_compiler$(EXEEXT)
 subdir = src/gallium/drivers/nouveau
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -161,9 +161,11 @@ am__objects_4 = nv50/nv50_context.lo nv50/nv50_formats.lo \
 	nv50/nv84_video_vp.lo nv50/nv98_video.lo \
 	nv50/nv98_video_bsp.lo nv50/nv98_video_vp.lo \
 	nv50/nv98_video_ppp.lo
-am__objects_5 = codegen/nv50_ir_emit_gk110.lo \
-	codegen/nv50_ir_emit_nvc0.lo codegen/nv50_ir_lowering_nvc0.lo \
-	codegen/nv50_ir_target_nvc0.lo
+am__objects_5 = codegen/nv50_ir_emit_nvc0.lo \
+	codegen/nv50_ir_emit_gk110.lo codegen/nv50_ir_emit_gm107.lo \
+	codegen/nv50_ir_lowering_nvc0.lo \
+	codegen/nv50_ir_lowering_gm107.lo \
+	codegen/nv50_ir_target_nvc0.lo codegen/nv50_ir_target_gm107.lo
 am__objects_6 = nvc0/nvc0_compute.lo nvc0/nvc0_context.lo \
 	nvc0/nvc0_formats.lo nvc0/nvc0_miptree.lo \
 	nvc0/nvc0_resource.lo nvc0/nvc0_screen.lo nvc0/nvc0_state.lo \
@@ -188,7 +190,8 @@ am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 nouveau_compiler_DEPENDENCIES = libnouveau.la \
-	../../auxiliary/libgallium.la $(am__DEPENDENCIES_2)
+	../../auxiliary/libgallium.la \
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_2)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -277,6 +280,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -603,10 +607,13 @@ NV50_CODEGEN_SOURCES := \
 	codegen/nv50_ir_util.cpp
 
 NVC0_CODEGEN_SOURCES := \
-	codegen/nv50_ir_emit_gk110.cpp \
 	codegen/nv50_ir_emit_nvc0.cpp \
+	codegen/nv50_ir_emit_gk110.cpp \
+	codegen/nv50_ir_emit_gm107.cpp \
 	codegen/nv50_ir_lowering_nvc0.cpp \
-	codegen/nv50_ir_target_nvc0.cpp
+	codegen/nv50_ir_lowering_gm107.cpp \
+	codegen/nv50_ir_target_nvc0.cpp \
+	codegen/nv50_ir_target_gm107.cpp
 
 NVC0_C_SOURCES := \
 	nvc0/nvc0_compute.c \
@@ -633,6 +640,7 @@ NVC0_C_SOURCES := \
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
@@ -644,6 +652,7 @@ GALLIUM_CFLAGS = \
 # preprocessor is determined by the ordering of the -I flags.
 GALLIUM_DRIVER_CFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -653,6 +662,7 @@ GALLIUM_DRIVER_CFLAGS = \
 
 GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -660,21 +670,9 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
-GALLIUM_DRI_CFLAGS = \
+GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/include \
-	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	$(DEFINES) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
-
-GALLIUM_VIDEO_CFLAGS = \
-	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -684,45 +682,12 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
-	$(GC_SECTIONS) $(am__append_1)
-GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
-GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
-GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
-	-avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
 GALLIUM_COMMON_LIB_DEPS = \
 	-lm \
 	$(CLOCK_LIB) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 
-GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
-GALLIUM_VDPAU_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_6)
-GALLIUM_XVMC_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_7)
-GALLIUM_OMX_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
-	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -730,6 +695,9 @@ GALLIUM_WINSYS_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
 AM_CPPFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
@@ -751,6 +719,7 @@ nouveau_compiler_SOURCES = \
 nouveau_compiler_LDADD = \
 	libnouveau.la \
 	../../auxiliary/libgallium.la \
+	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
 all: all-am
@@ -923,13 +892,19 @@ nv50/nv98_video_vp.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv98_video_ppp.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
+codegen/nv50_ir_emit_nvc0.lo: codegen/$(am__dirstamp) \
+	codegen/$(DEPDIR)/$(am__dirstamp)
 codegen/nv50_ir_emit_gk110.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
-codegen/nv50_ir_emit_nvc0.lo: codegen/$(am__dirstamp) \
+codegen/nv50_ir_emit_gm107.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
 codegen/nv50_ir_lowering_nvc0.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
+codegen/nv50_ir_lowering_gm107.lo: codegen/$(am__dirstamp) \
+	codegen/$(DEPDIR)/$(am__dirstamp)
 codegen/nv50_ir_target_nvc0.lo: codegen/$(am__dirstamp) \
+	codegen/$(DEPDIR)/$(am__dirstamp)
+codegen/nv50_ir_target_gm107.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
 nvc0/$(am__dirstamp):
 	@$(MKDIR_P) nvc0
@@ -1023,10 +998,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_bb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_build_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_emit_gk110.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_emit_gm107.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_emit_nv50.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_emit_nvc0.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_from_tgsi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_graph.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_lowering_gm107.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_lowering_nv50.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_lowering_nvc0.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_peephole.Plo@am__quote@
@@ -1034,6 +1011,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_ra.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_ssa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_target.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_target_gm107.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_target_nv50.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_target_nvc0.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@codegen/$(DEPDIR)/nv50_ir_util.Plo@am__quote@

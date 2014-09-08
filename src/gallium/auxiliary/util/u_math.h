@@ -61,46 +61,46 @@ extern "C" {
 #endif
 
 
-#if defined(_MSC_VER) 
+#if defined(_MSC_VER)
 
 #if _MSC_VER < 1400 && !defined(__cplusplus)
- 
-static INLINE float cosf( float f ) 
+
+static INLINE float cosf( float f )
 {
    return (float) cos( (double) f );
 }
 
-static INLINE float sinf( float f ) 
+static INLINE float sinf( float f )
 {
    return (float) sin( (double) f );
 }
 
-static INLINE float ceilf( float f ) 
+static INLINE float ceilf( float f )
 {
    return (float) ceil( (double) f );
 }
 
-static INLINE float floorf( float f ) 
+static INLINE float floorf( float f )
 {
    return (float) floor( (double) f );
 }
 
-static INLINE float powf( float f, float g ) 
+static INLINE float powf( float f, float g )
 {
    return (float) pow( (double) f, (double) g );
 }
 
-static INLINE float sqrtf( float f ) 
+static INLINE float sqrtf( float f )
 {
    return (float) sqrt( (double) f );
 }
 
-static INLINE float fabsf( float f ) 
+static INLINE float fabsf( float f )
 {
    return (float) fabs( (double) f );
 }
 
-static INLINE float logf( float f ) 
+static INLINE float logf( float f )
 {
    return (float) log( (double) f );
 }
@@ -147,28 +147,6 @@ roundf(float x)
 #endif
 
 #endif /* _MSC_VER */
-
-
-#ifdef PIPE_OS_ANDROID
-
-static INLINE
-double log2(double d)
-{
-   return log(d) * (1.0 / M_LN2);
-}
-
-/* workaround a conflict with main/imports.h */
-#ifdef log2f
-#undef log2f
-#endif
-
-static INLINE
-float log2f(float f)
-{
-   return logf(f) * (float) (1.0 / M_LN2);
-}
-
-#endif
 
 
 #if __STDC_VERSION__ < 199901L && (!defined(__cplusplus) || defined(_MSC_VER))
@@ -258,7 +236,8 @@ union di {
  * Extract the IEEE float32 exponent.
  */
 static INLINE signed
-util_get_float32_exponent(float x) {
+util_get_float32_exponent(float x)
+{
    union fi f;
 
    f.f = x;
@@ -558,7 +537,8 @@ unsigned ffs( unsigned u )
  * Find last bit set in a word.  The least significant bit is 1.
  * Return 0 if no bits are set.
  */
-static INLINE unsigned util_last_bit(unsigned u)
+static INLINE unsigned
+util_last_bit(unsigned u)
 {
 #if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 304)
    return u == 0 ? 0 : 32 - __builtin_clz(u);
@@ -577,9 +557,10 @@ static INLINE unsigned util_last_bit(unsigned u)
  * significant bit is 1.
  * Return 0 if no bits are set.
  */
-static INLINE unsigned util_last_bit_signed(int i)
+static INLINE unsigned
+util_last_bit_signed(int i)
 {
-#if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 407)
+#if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 407) && !defined(__INTEL_COMPILER)
    return 31 - __builtin_clrsb(i);
 #else
    if (i >= 0)
@@ -595,9 +576,10 @@ static INLINE unsigned util_last_bit_signed(int i)
  *   int i = u_bit_scan(&mymask);
  *   ... process element i
  * }
- * 
+ *
  */
-static INLINE int u_bit_scan(unsigned *mask)
+static INLINE int
+u_bit_scan(unsigned *mask)
 {
    int i = ffs(*mask) - 1;
    *mask &= ~(1 << i);
@@ -614,6 +596,14 @@ fui( float f )
    union fi fi;
    fi.f = f;
    return fi.ui;
+}
+
+static INLINE float
+uif(uint32_t ui)
+{
+        union fi fi;
+        fi.ui = ui;
+        return fi.f;
 }
 
 
@@ -812,6 +802,23 @@ util_bswap16(uint16_t n)
           (n << 8);
 }
 
+static INLINE void*
+util_memcpy_cpu_to_le32(void * restrict dest, const void * restrict src, size_t n)
+{
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   size_t i, e;
+   assert(n % 4 == 0);
+
+   for (i = 0, e = n / 4; i < e; i++) {
+      uint32_t * restrict d = (uint32_t* restrict)dest;
+      const uint32_t * restrict s = (const uint32_t* restrict)src;
+      d[i] = util_bswap32(s[i]);
+   }
+   return dest;
+#else
+   return memcpy(dest, src, n);
+#endif
+}
 
 /**
  * Clamp X to [MIN, MAX].
@@ -882,12 +889,14 @@ do {                                     \
 #endif
 
 
-static INLINE uint32_t util_unsigned_fixed(float value, unsigned frac_bits)
+static INLINE uint32_t
+util_unsigned_fixed(float value, unsigned frac_bits)
 {
    return value < 0 ? 0 : (uint32_t)(value * (1<<frac_bits));
 }
 
-static INLINE int32_t util_signed_fixed(float value, unsigned frac_bits)
+static INLINE int32_t
+util_signed_fixed(float value, unsigned frac_bits)
 {
    return (int32_t)(value * (1<<frac_bits));
 }

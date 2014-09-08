@@ -120,7 +120,7 @@ namespace {
    compile(llvm::LLVMContext &llvm_ctx, const std::string &source,
            const std::string &name, const std::string &triple,
            const std::string &processor, const std::string &opts,
-           clang::LangAS::Map& address_spaces) {
+           clang::LangAS::Map& address_spaces, compat::string &r_log) {
 
       clang::CompilerInstance c;
       clang::EmitLLVMOnlyAction act(&llvm_ctx);
@@ -224,14 +224,21 @@ namespace {
       c.getCodeGenOpts().LinkBitcodeFile = libclc_path;
 
       // Compile the code
-      if (!c.ExecuteAction(act))
-         throw build_error(log);
+      bool ExecSuccess = c.ExecuteAction(act);
+      r_log = log;
+
+      if (!ExecSuccess)
+         throw build_error();
 
       // Get address spaces map to be able to find kernel argument address space
-      memcpy(address_spaces, c.getTarget().getAddressSpaceMap(), 
+      memcpy(address_spaces, c.getTarget().getAddressSpaceMap(),
                                                         sizeof(address_spaces));
 
+#if HAVE_LLVM >= 0x0306
+      return act.takeModule().release();
+#else
       return act.takeModule();
+#endif
    }
 
    void
@@ -391,7 +398,8 @@ module
 clover::compile_program_llvm(const compat::string &source,
                              enum pipe_shader_ir ir,
                              const compat::string &target,
-                             const compat::string &opts) {
+                             const compat::string &opts,
+                             compat::string &r_log) {
 
    std::vector<llvm::Function *> kernels;
    size_t processor_str_len = std::string(target.begin()).find_first_of("-");
@@ -405,19 +413,27 @@ clover::compile_program_llvm(const compat::string &source,
    // The input file name must have the .cl extension in order for the
    // CompilerInvocation class to recognize it as an OpenCL source file.
    llvm::Module *mod = compile(llvm_ctx, source, "input.cl", triple, processor,
-                               opts, address_spaces);
+                               opts, address_spaces, r_log);
 
    find_kernels(mod, kernels);
 
    internalize_functions(mod, kernels);
 
+   module m;
    // Build the clover::module
    switch (ir) {
       case PIPE_SHADER_IR_TGSI:
          //XXX: Handle TGSI
          assert(0);
-         return module();
+         m = module();
+         break;
       default:
-         return build_module_llvm(mod, kernels, address_spaces);
+         m = build_module_llvm(mod, kernels, address_spaces);
+         break;
    }
+#if HAVE_LLVM >= 0x0306
+   // LLVM 3.6 and newer, the user takes ownership of the module.
+   delete mod;
+#endif
+   return m;
 }

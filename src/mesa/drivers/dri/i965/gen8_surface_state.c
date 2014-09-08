@@ -62,8 +62,7 @@ vertical_alignment(struct intel_mipmap_tree *mt)
    case 16:
       return GEN8_SURFACE_VALIGN_16;
    default:
-      assert(!"Unsupported vertical surface alignment.");
-      return GEN8_SURFACE_VALIGN_4;
+      unreachable("Unsupported vertical surface alignment.");
    }
 }
 
@@ -78,8 +77,7 @@ horizontal_alignment(struct intel_mipmap_tree *mt)
    case 16:
       return GEN8_SURFACE_HALIGN_16;
    default:
-      assert(!"Unsupported horizontal surface alignment.");
-      return GEN8_SURFACE_HALIGN_4;
+      unreachable("Unsupported horizontal surface alignment.");
    }
 }
 
@@ -268,8 +266,12 @@ gen8_create_raw_surface(struct brw_context *brw, drm_intel_bo *bo,
 }
 
 /**
- * Create the constant buffer surface.  Vertex/fragment shader constants will be
- * read from this buffer with Data Port Read instructions/messages.
+ * Creates a null renderbuffer surface.
+ *
+ * This is used when the shader doesn't write to any color output.  An FB
+ * write to target 0 will still be emitted, because that's how the thread is
+ * terminated (and computed depth is returned), so we need to have the
+ * hardware discard the target 0 color output..
  */
 static void
 gen8_update_null_renderbuffer_surface(struct brw_context *brw, unsigned unit)

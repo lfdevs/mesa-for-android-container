@@ -35,6 +35,7 @@
 #include "intel_mipmap_tree.h"
 #include "brw_context.h"
 #include "main/macros.h"
+#include "main/glformats.h"
 
 #define FILE_DEBUG_FLAG DEBUG_MIPTREE
 
@@ -203,6 +204,11 @@ brw_miptree_layout_2d(struct intel_mipmap_tree *mt)
       if (mt->compressed)
 	 img_height /= mt->align_h;
 
+      if (mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
+         /* Compact arrays with separated miplevels */
+         img_height *= depth;
+      }
+
       /* Because the images are packed better, the final offset
        * might not be the maximal one:
        */
@@ -238,10 +244,11 @@ brw_miptree_layout_texture_array(struct brw_context *brw,
 				 struct intel_mipmap_tree *mt)
 {
    int h0, h1;
+   unsigned height = mt->physical_height0;
 
    h0 = ALIGN(mt->physical_height0, mt->align_h);
    h1 = ALIGN(minify(mt->physical_height0, 1), mt->align_h);
-   if (mt->array_spacing_lod0)
+   if (mt->array_layout == ALL_SLICES_AT_EACH_LOD)
       mt->qpitch = h0;
    else
       mt->qpitch = (h0 + h1 + (brw->gen >= 7 ? 12 : 11) * mt->align_h);
@@ -251,11 +258,22 @@ brw_miptree_layout_texture_array(struct brw_context *brw,
    brw_miptree_layout_2d(mt);
 
    for (unsigned level = mt->first_level; level <= mt->last_level; level++) {
+      unsigned img_height;
+      img_height = ALIGN(height, mt->align_h);
+      if (mt->compressed)
+         img_height /= mt->align_h;
+
       for (int q = 0; q < mt->physical_depth0; q++) {
-	 intel_miptree_set_image_offset(mt, level, q, 0, q * physical_qpitch);
+         if (mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
+            intel_miptree_set_image_offset(mt, level, q, 0, q * img_height);
+         } else {
+            intel_miptree_set_image_offset(mt, level, q, 0, q * physical_qpitch);
+         }
       }
+      height = minify(height, 1);
    }
-   mt->total_height = physical_qpitch * mt->physical_depth0;
+   if (mt->array_layout == ALL_LOD_IN_EACH_SLICE)
+      mt->total_height = physical_qpitch * mt->physical_depth0;
 
    align_cube(mt);
 }
@@ -301,9 +319,41 @@ void
 brw_miptree_layout(struct brw_context *brw, struct intel_mipmap_tree *mt)
 {
    bool multisampled = mt->num_samples > 1;
-   mt->align_w = intel_horizontal_texture_alignment_unit(brw, mt->format);
-   mt->align_h =
-      intel_vertical_texture_alignment_unit(brw, mt->format, multisampled);
+   bool gen6_hiz_or_stencil = false;
+
+   if (brw->gen == 6 && mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
+      const GLenum base_format = _mesa_get_format_base_format(mt->format);
+      gen6_hiz_or_stencil = _mesa_is_depth_or_stencil_format(base_format);
+   }
+
+   if (gen6_hiz_or_stencil) {
+      /* On gen6, we use ALL_SLICES_AT_EACH_LOD for stencil/hiz because the
+       * hardware doesn't support multiple mip levels on stencil/hiz.
+       *
+       * PRM Vol 2, Part 1, 7.5.3 Hierarchical Depth Buffer:
+       * "The hierarchical depth buffer does not support the LOD field"
+       *
+       * PRM Vol 2, Part 1, 7.5.4.1 Separate Stencil Buffer:
+       * "The stencil depth buffer does not support the LOD field"
+       */
+      if (mt->format == MESA_FORMAT_S_UINT8) {
+         /* Stencil uses W tiling, so we force W tiling alignment for the
+          * ALL_SLICES_AT_EACH_LOD miptree layout.
+          */
+         mt->align_w = 64;
+         mt->align_h = 64;
+      } else {
+         /* Depth uses Y tiling, so we force need Y tiling alignment for the
+          * ALL_SLICES_AT_EACH_LOD miptree layout.
+          */
+         mt->align_w = 128 / mt->cpp;
+         mt->align_h = 32;
+      }
+   } else {
+      mt->align_w = intel_horizontal_texture_alignment_unit(brw, mt->format);
+      mt->align_h =
+         intel_vertical_texture_alignment_unit(brw, mt->format, multisampled);
+   }
 
    switch (mt->target) {
    case GL_TEXTURE_CUBE_MAP:

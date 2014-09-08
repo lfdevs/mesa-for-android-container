@@ -25,6 +25,7 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "os/os_misc.h"
 #include "util/u_format_s3tc.h"
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
@@ -34,6 +35,7 @@
 #include "ilo_context.h"
 #include "ilo_format.h"
 #include "ilo_resource.h"
+#include "ilo_transfer.h" /* for ILO_TRANSFER_MAP_BUFFER_ALIGNMENT */
 #include "ilo_public.h"
 #include "ilo_screen.h"
 
@@ -115,14 +117,12 @@ ilo_get_shader_param(struct pipe_screen *screen, unsigned shader,
    case PIPE_SHADER_CAP_MAX_INPUTS:
       /* this is limited by how many attributes SF can remap */
       return 16;
-   case PIPE_SHADER_CAP_MAX_CONSTS:
-      return 1024;
+   case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+      return 1024 * sizeof(float[4]);
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
       return ILO_MAX_CONST_BUFFERS;
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return 256;
-   case PIPE_SHADER_CAP_MAX_ADDRS:
-      return (shader == PIPE_SHADER_FRAGMENT) ? 0 : 1;
    case PIPE_SHADER_CAP_MAX_PREDS:
       return 0;
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -309,23 +309,12 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
        *           Max WxHxD for 2D and CUBE     Max WxHxD for 3D
        *  GEN6           8192x8192x512            2048x2048x2048
        *  GEN7         16384x16384x2048           2048x2048x2048
-       *
-       * However, when the texutre size is large, things become unstable.  We
-       * require the maximum texture size to be 2^30 bytes in
-       * screen->can_create_resource().  Since the maximum pixel size is 2^4
-       * bytes (PIPE_FORMAT_R32G32B32A32_FLOAT), textures should not have more
-       * than 2^26 pixels.
-       *
-       * For 3D textures, we have to set the maximum number of levels to 9,
-       * which has at most 2^24 pixels.  For 2D textures, we set it to 14,
-       * which has at most 2^26 pixels.  And for cube textures, we has to set
-       * it to 12.
        */
-      return 14;
+      return (is->dev.gen >= ILO_GEN(7)) ? 15 : 14;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-      return 9;
-   case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
       return 12;
+   case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
+      return (is->dev.gen >= ILO_GEN(7)) ? 15 : 14;
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
       return false;
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
@@ -373,9 +362,6 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return ILO_MAX_SO_BINDINGS / ILO_MAX_SO_BUFFERS;
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
       return ILO_MAX_SO_BINDINGS;
-   case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
-   case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
-      return 0;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
       if (is->dev.gen >= ILO_GEN(7))
          return is->dev.has_gen7_sol_reset;
@@ -411,7 +397,7 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
       return false; /* TODO */
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
-      return 64;
+      return ILO_TRANSFER_MAP_BUFFER_ALIGNMENT;
    case PIPE_CAP_CUBE_MAP_ARRAY:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return true;
@@ -433,14 +419,46 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return PIPE_ENDIAN_LITTLE;
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
       return true;
-   case PIPE_CAP_TGSI_VS_LAYER:
+   case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
+   case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+   case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
    case PIPE_CAP_TEXTURE_GATHER_SM5:
+      return 0;
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+      return true;
    case PIPE_CAP_FAKE_SW_MSAA:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
    case PIPE_CAP_SAMPLE_SHADING:
+   case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
+   case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+   case PIPE_CAP_MAX_VERTEX_STREAMS:
+   case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
       return 0;
+
+   case PIPE_CAP_VENDOR_ID:
+      return 0x8086;
+   case PIPE_CAP_DEVICE_ID:
+      return is->dev.devid;
+   case PIPE_CAP_ACCELERATED:
+      return true;
+   case PIPE_CAP_VIDEO_MEMORY: {
+      /* Once a batch uses more than 75% of the maximum mappable size, we
+       * assume that there's some fragmentation, and we start doing extra
+       * flushing, etc.  That's the big cliff apps will care about.
+       */
+      const uint64_t gpu_memory = is->dev.aperture_total * 3 / 4;
+      uint64_t system_memory;
+
+      if (!os_get_total_physical_memory(&system_memory))
+         return 0;
+
+      return (int) (MIN2(gpu_memory, system_memory) >> 20);
+   }
+   case PIPE_CAP_UMA:
+      return true;
 
    default:
       return 0;
@@ -526,26 +544,23 @@ ilo_fence_reference(struct pipe_screen *screen,
                     struct pipe_fence_handle **p,
                     struct pipe_fence_handle *f)
 {
-   struct ilo_fence **ptr = (struct ilo_fence **) p;
    struct ilo_fence *fence = ilo_fence(f);
+   struct ilo_fence *old;
 
-   if (!ptr) {
-      /* still need to reference fence */
-      if (fence)
-         pipe_reference(NULL, &fence->reference);
-      return;
+   if (likely(p)) {
+      old = ilo_fence(*p);
+      *p = f;
+   }
+   else {
+      old = NULL;
    }
 
-   /* reference fence and dereference the one pointed to by ptr */
-   if (*ptr && pipe_reference(&(*ptr)->reference, &fence->reference)) {
-      struct ilo_fence *old = *ptr;
-
+   STATIC_ASSERT(&((struct ilo_fence *) NULL)->reference == NULL);
+   if (pipe_reference(&old->reference, &fence->reference)) {
       if (old->bo)
          intel_bo_unreference(old->bo);
       FREE(old);
    }
-
-   *ptr = fence;
 }
 
 static boolean
@@ -586,6 +601,28 @@ ilo_fence_finish(struct pipe_screen *screen,
    return true;
 }
 
+/**
+ * Create a fence for \p bo.  When \p bo is not NULL, it must be submitted
+ * before waited on or checked.
+ */
+struct ilo_fence *
+ilo_fence_create(struct pipe_screen *screen, struct intel_bo *bo)
+{
+   struct ilo_fence *fence;
+
+   fence = CALLOC_STRUCT(ilo_fence);
+   if (!fence)
+      return NULL;
+
+   pipe_reference_init(&fence->reference, 1);
+
+   if (bo)
+      intel_bo_reference(bo);
+   fence->bo = bo;
+
+   return fence;
+}
+
 static void
 ilo_screen_destroy(struct pipe_screen *screen)
 {
@@ -601,6 +638,8 @@ static bool
 init_dev(struct ilo_dev_info *dev, const struct intel_winsys_info *info)
 {
    dev->devid = info->devid;
+   dev->aperture_total = info->aperture_total;
+   dev->aperture_mappable = info->aperture_mappable;
    dev->max_batch_size = info->max_batch_size;
    dev->has_llc = info->has_llc;
    dev->has_address_swizzling = info->has_address_swizzling;

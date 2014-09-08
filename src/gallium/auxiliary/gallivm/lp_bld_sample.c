@@ -927,6 +927,7 @@ lp_build_nearest_mip_level(struct lp_build_sample_context *bld,
                                                                 bld->int_coord_bld.type,
                                                                 out);
       }
+      level = lp_build_andnot(&bld->int_coord_bld, level, *out_of_bounds);
       *level_out = level;
    }
    else {
@@ -975,15 +976,6 @@ lp_build_linear_mip_levels(struct lp_build_sample_context *bld,
     * the minimum number of comparisons, and zeroing lod_fpart in the extreme
     * ends in the process.
     */
-
-   /*
-    * This code (vector select in particular) only works with llvm 3.1
-    * (if there's more than one quad, with x86 backend). Might consider
-    * converting to our lp_bld_logic helpers.
-    */
-#if HAVE_LLVM < 0x0301
-   assert(leveli_bld->type.length == 1);
-#endif
 
    /* *level0_out < first_level */
    clamp_min = LLVMBuildICmp(builder, LLVMIntSLT,

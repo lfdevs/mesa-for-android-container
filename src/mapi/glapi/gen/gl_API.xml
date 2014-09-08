@@ -8276,7 +8276,9 @@
   </function>
 </category>
 
-<!-- ARB extensions #110...#116 -->
+<xi:include href="ARB_compressed_texture_pixel_storage.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<!-- ARB extensions #111...#116 -->
 
 <xi:include href="ARB_internalformat_query.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
@@ -8300,7 +8302,7 @@
 
 <xi:include href="ARB_compute_shader.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
-<!-- ARB extension #123 -->
+<xi:include href="ARB_copy_image.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <xi:include href="ARB_texture_view.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
@@ -8310,9 +8312,24 @@
 
 <xi:include href="ARB_ES3_compatibility.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
-<!-- ARB extensions #128...#131 -->
+<!-- ARB extension #128 -->
+
+<category name="GL_ARB_fragment_layer_viewport" number="129">
+    <!-- No new functions, types, enums. -->
+</category>
+
+<!-- ARB extensions #130..#131 -->
+
+<category name="GL_ARB_explicit_uniform_location" number="128">
+    <enum name="MAX_UNIFORM_LOCATIONS" count="1" value="0x826E" >
+        <size name="Get" mode="get"/>
+    </enum>
+</category>
 
 <xi:include href="ARB_invalidate_subdata.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<!-- ARB extension #133 is ARB_multi_draw_indirect, defined in the same
+     file as ARB_draw_indirect -->
 
 <!-- ARB extensions #134...#138 -->
 
@@ -8341,9 +8358,24 @@
     </function>
 </category>
 
-<!-- ARB extensions #145...#146 -->
+<xi:include href="ARB_clear_texture.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<!-- ARB extension #146 -->
 
 <xi:include href="ARB_multi_bind.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<!-- ARB extensions 148 - 160 -->
+
+<category name="GL_ARB_conditional_render_inverted" number="161">
+    <enum name="QUERY_WAIT_INVERTED"                      value="0x8E17"/>
+    <enum name="QUERY_NO_WAIT_INVERTED"                   value="0x8E18"/>
+    <enum name="QUERY_BY_REGION_WAIT_INVERTED"            value="0x8E19"/>
+    <enum name="QUERY_BY_REGION_NO_WAIT_INVERTED"         value="0x8E1A"/>
+</category>
+
+<!-- ARB extensions 162 - 166 -->
+
+<xi:include href="ARB_texture_barrier.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <!-- Non-ARB extensions sorted by extension number. -->
 
@@ -12140,22 +12172,22 @@
         <size name="GetTexEnviv" mode="get"/>
         <size name="GetTexEnvfv" mode="get"/>
     </enum>
-    <function name="TexBumpParameterfvATI" offset="assign" deprecated="3.1">
+    <function name="TexBumpParameterfvATI" offset="assign" deprecated="3.1" exec="skip">
       <param name="pname" type="GLenum"/>
       <param name="param" type="const GLfloat *" variable_param="pname"/>
       <glx ignore="true"/>
     </function>
-    <function name="TexBumpParameterivATI" offset="assign" deprecated="3.1">
+    <function name="TexBumpParameterivATI" offset="assign" deprecated="3.1" exec="skip">
       <param name="pname" type="GLenum"/>
       <param name="param" type="const GLint *" variable_param="pname"/>
       <glx ignore="true"/>
     </function>
-    <function name="GetTexBumpParameterfvATI" offset="assign" deprecated="3.1">
+    <function name="GetTexBumpParameterfvATI" offset="assign" deprecated="3.1" exec="skip">
       <param name="pname" type="GLenum"/>
       <param name="param" type="GLfloat *" variable_param="pname"/>
       <glx ignore="true"/>
     </function>
-    <function name="GetTexBumpParameterivATI" offset="assign" deprecated="3.1">
+    <function name="GetTexBumpParameterivATI" offset="assign" deprecated="3.1" exec="skip">
       <param name="pname" type="GLenum"/>
       <param name="param" type="GLint *" variable_param="pname"/>
       <glx ignore="true"/>

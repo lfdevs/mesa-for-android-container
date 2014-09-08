@@ -106,12 +106,12 @@ target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.sources $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp \
 	$(top_srcdir)/bin/test-driver README TODO
-TESTS = glcpp/tests/glcpp-test tests/general-ir-test$(EXEEXT) \
-	tests/optimization-test tests/ralloc-test$(EXEEXT) \
+TESTS = glcpp/tests/glcpp-test glcpp/tests/glcpp-test-cr-lf \
+	tests/general-ir-test$(EXEEXT) tests/optimization-test \
 	tests/sampler-types-test$(EXEEXT) \
 	tests/uniform-initializer-test$(EXEEXT)
 check_PROGRAMS = glcpp/glcpp$(EXEEXT) glsl_test$(EXEEXT) \
-	tests/general-ir-test$(EXEEXT) tests/ralloc-test$(EXEEXT) \
+	tests/general-ir-test$(EXEEXT) \
 	tests/sampler-types-test$(EXEEXT) \
 	tests/uniform-initializer-test$(EXEEXT)
 noinst_PROGRAMS = glsl_compiler$(EXEEXT)
@@ -131,8 +131,8 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libglcpp_la_LIBADD =
-am__objects_1 = ralloc.lo pp.lo
+libglcpp_la_DEPENDENCIES = $(top_builddir)/src/util/libmesautil.la
+am__objects_1 = pp.lo
 am_libglcpp_la_OBJECTS = glcpp-lex.lo glcpp-parse.lo $(am__objects_1)
 libglcpp_la_OBJECTS = $(am_libglcpp_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -174,32 +174,30 @@ am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	opt_dead_code_local.lo opt_dead_functions.lo \
 	opt_flatten_nested_if_blocks.lo opt_flip_matrices.lo \
 	opt_function_inlining.lo opt_if_simplification.lo \
-	opt_noop_swizzle.lo opt_redundant_jumps.lo \
-	opt_structure_splitting.lo opt_swizzle_swizzle.lo \
-	opt_tree_grafting.lo opt_vectorize.lo s_expression.lo \
-	strtod.lo
+	opt_noop_swizzle.lo opt_rebalance_tree.lo \
+	opt_redundant_jumps.lo opt_structure_splitting.lo \
+	opt_swizzle_swizzle.lo opt_tree_grafting.lo opt_vectorize.lo \
+	s_expression.lo strtod.lo
 am_libglsl_la_OBJECTS = glsl_lexer.lo glsl_parser.lo $(am__objects_2)
 libglsl_la_OBJECTS = $(am_libglsl_la_OBJECTS)
 PROGRAMS = $(noinst_PROGRAMS)
-am_glcpp_glcpp_OBJECTS = glcpp.$(OBJEXT) prog_hash_table.$(OBJEXT)
+am_glcpp_glcpp_OBJECTS = glcpp.$(OBJEXT) common.$(OBJEXT) \
+	prog_hash_table.$(OBJEXT)
 glcpp_glcpp_OBJECTS = $(am_glcpp_glcpp_OBJECTS)
 glcpp_glcpp_DEPENDENCIES = libglcpp.la
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_3 = standalone_scaffolding.$(OBJEXT) main.$(OBJEXT)
-am_glsl_compiler_OBJECTS = hash_table.$(OBJEXT) imports.$(OBJEXT) \
-	prog_hash_table.$(OBJEXT) symbol_table.$(OBJEXT) \
-	$(am__objects_3)
+am_glsl_compiler_OBJECTS = imports.$(OBJEXT) prog_hash_table.$(OBJEXT) \
+	symbol_table.$(OBJEXT) $(am__objects_3)
 glsl_compiler_OBJECTS = $(am_glsl_compiler_OBJECTS)
 am__DEPENDENCIES_1 =
 glsl_compiler_DEPENDENCIES = libglsl.la $(am__DEPENDENCIES_1)
-am_glsl_test_OBJECTS = hash_table.$(OBJEXT) imports.$(OBJEXT) \
-	prog_hash_table.$(OBJEXT) symbol_table.$(OBJEXT) \
-	standalone_scaffolding.$(OBJEXT) common.$(OBJEXT) \
-	test.$(OBJEXT) test_optpass.$(OBJEXT)
+am_glsl_test_OBJECTS = imports.$(OBJEXT) prog_hash_table.$(OBJEXT) \
+	symbol_table.$(OBJEXT) standalone_scaffolding.$(OBJEXT) \
+	common.$(OBJEXT) test.$(OBJEXT) test_optpass.$(OBJEXT)
 glsl_test_OBJECTS = $(am_glsl_test_OBJECTS)
 glsl_test_DEPENDENCIES = libglsl.la
 am_tests_general_ir_test_OBJECTS =  \
-	tests_general_ir_test-hash_table.$(OBJEXT) \
 	tests_general_ir_test-imports.$(OBJEXT) \
 	tests_general_ir_test-prog_hash_table.$(OBJEXT) \
 	tests_general_ir_test-symbol_table.$(OBJEXT) \
@@ -211,11 +209,6 @@ tests_general_ir_test_OBJECTS = $(am_tests_general_ir_test_OBJECTS)
 tests_general_ir_test_DEPENDENCIES =  \
 	$(top_builddir)/src/gtest/libgtest.la \
 	$(top_builddir)/src/glsl/libglsl.la $(am__DEPENDENCIES_1)
-am_tests_ralloc_test_OBJECTS = ralloc_test.$(OBJEXT) \
-	tests_ralloc_test-ralloc.$(OBJEXT)
-tests_ralloc_test_OBJECTS = $(am_tests_ralloc_test_OBJECTS)
-tests_ralloc_test_DEPENDENCIES =  \
-	$(top_builddir)/src/gtest/libgtest.la $(am__DEPENDENCIES_1)
 am_tests_sampler_types_test_OBJECTS =  \
 	tests_sampler_types_test-prog_hash_table.$(OBJEXT) \
 	tests_sampler_types_test-symbol_table.$(OBJEXT) \
@@ -227,7 +220,6 @@ tests_sampler_types_test_DEPENDENCIES =  \
 	$(top_builddir)/src/gtest/libgtest.la \
 	$(top_builddir)/src/glsl/libglsl.la $(am__DEPENDENCIES_1)
 am_tests_uniform_initializer_test_OBJECTS =  \
-	tests_uniform_initializer_test-hash_table.$(OBJEXT) \
 	tests_uniform_initializer_test-imports.$(OBJEXT) \
 	tests_uniform_initializer_test-prog_hash_table.$(OBJEXT) \
 	tests_uniform_initializer_test-symbol_table.$(OBJEXT) \
@@ -295,13 +287,11 @@ am__v_CXXLD_1 =
 SOURCES = $(libglcpp_la_SOURCES) $(libglsl_la_SOURCES) \
 	$(glcpp_glcpp_SOURCES) $(glsl_compiler_SOURCES) \
 	$(glsl_test_SOURCES) $(tests_general_ir_test_SOURCES) \
-	$(tests_ralloc_test_SOURCES) \
 	$(tests_sampler_types_test_SOURCES) \
 	$(tests_uniform_initializer_test_SOURCES)
 DIST_SOURCES = $(libglcpp_la_SOURCES) $(libglsl_la_SOURCES) \
 	$(glcpp_glcpp_SOURCES) $(glsl_compiler_SOURCES) \
 	$(glsl_test_SOURCES) $(tests_general_ir_test_SOURCES) \
-	$(tests_ralloc_test_SOURCES) \
 	$(tests_sampler_types_test_SOURCES) \
 	$(tests_uniform_initializer_test_SOURCES)
 am__can_run_installinfo = \
@@ -541,6 +531,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -794,6 +785,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
 	-I$(top_srcdir)/src/glsl/glcpp \
@@ -807,7 +799,6 @@ GLSL_BUILDDIR = $(top_builddir)/src/glsl
 
 # libglcpp
 LIBGLCPP_FILES = \
-	$(GLSL_SRCDIR)/ralloc.c \
 	$(GLSL_SRCDIR)/glcpp/pp.c
 
 LIBGLCPP_GENERATED_FILES = \
@@ -897,6 +888,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_function_inlining.cpp \
 	$(GLSL_SRCDIR)/opt_if_simplification.cpp \
 	$(GLSL_SRCDIR)/opt_noop_swizzle.cpp \
+	$(GLSL_SRCDIR)/opt_rebalance_tree.cpp \
 	$(GLSL_SRCDIR)/opt_redundant_jumps.cpp \
 	$(GLSL_SRCDIR)/opt_structure_splitting.cpp \
 	$(GLSL_SRCDIR)/opt_swizzle_swizzle.cpp \
@@ -923,7 +915,6 @@ TESTS_ENVIRONMENT = \
 
 noinst_LTLIBRARIES = libglsl.la libglcpp.la
 tests_general_ir_test_SOURCES = \
-	$(top_srcdir)/src/mesa/main/hash_table.c	\
 	$(top_srcdir)/src/mesa/main/imports.c		\
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c\
 	$(top_srcdir)/src/mesa/program/symbol_table.c	\
@@ -943,7 +934,6 @@ tests_general_ir_test_LDADD = \
 	$(PTHREAD_LIBS)
 
 tests_uniform_initializer_test_SOURCES = \
-	$(top_srcdir)/src/mesa/main/hash_table.c	\
 	$(top_srcdir)/src/mesa/main/imports.c		\
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c\
 	$(top_srcdir)/src/mesa/program/symbol_table.c	\
@@ -960,15 +950,6 @@ tests_uniform_initializer_test_LDADD = \
 	$(top_builddir)/src/glsl/libglsl.la		\
 	$(PTHREAD_LIBS)
 
-tests_ralloc_test_SOURCES = \
-	tests/ralloc_test.cpp				\
-	$(top_builddir)/src/glsl/ralloc.c
-
-tests_ralloc_test_CFLAGS = $(PTHREAD_CFLAGS)
-tests_ralloc_test_LDADD = \
-	$(top_builddir)/src/gtest/libgtest.la		\
-	$(PTHREAD_LIBS)
-
 tests_sampler_types_test_SOURCES = \
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c\
 	$(top_srcdir)/src/mesa/program/symbol_table.c	\
@@ -983,6 +964,9 @@ tests_sampler_types_test_LDADD = \
 	$(top_builddir)/src/glsl/libglsl.la		\
 	$(PTHREAD_LIBS)
 
+libglcpp_la_LIBADD = \
+	$(top_builddir)/src/util/libmesautil.la
+
 libglcpp_la_SOURCES = \
 	glcpp/glcpp-lex.c				\
 	glcpp/glcpp-parse.c				\
@@ -990,6 +974,7 @@ libglcpp_la_SOURCES = \
 
 glcpp_glcpp_SOURCES = \
 	glcpp/glcpp.c					\
+	tests/common.c					\
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c
 
 glcpp_glcpp_LDADD = \
@@ -1003,7 +988,6 @@ libglsl_la_SOURCES = \
 	$(LIBGLSL_FILES)
 
 glsl_compiler_SOURCES = \
-	$(top_srcdir)/src/mesa/main/hash_table.c \
 	$(top_srcdir)/src/mesa/main/imports.c \
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c \
 	$(top_srcdir)/src/mesa/program/symbol_table.c \
@@ -1014,7 +998,6 @@ glsl_compiler_LDADD = \
 	$(PTHREAD_LIBS)
 
 glsl_test_SOURCES = \
-	$(top_srcdir)/src/mesa/main/hash_table.c \
 	$(top_srcdir)/src/mesa/main/imports.c \
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c \
 	$(top_srcdir)/src/mesa/program/symbol_table.c \
@@ -1164,10 +1147,6 @@ tests/general-ir-test$(EXEEXT): $(tests_general_ir_test_OBJECTS) $(tests_general
 	@rm -f tests/general-ir-test$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(tests_general_ir_test_OBJECTS) $(tests_general_ir_test_LDADD) $(LIBS)
 
-tests/ralloc-test$(EXEEXT): $(tests_ralloc_test_OBJECTS) $(tests_ralloc_test_DEPENDENCIES) $(EXTRA_tests_ralloc_test_DEPENDENCIES) tests/$(am__dirstamp)
-	@rm -f tests/ralloc-test$(EXEEXT)
-	$(AM_V_CXXLD)$(CXXLINK) $(tests_ralloc_test_OBJECTS) $(tests_ralloc_test_LDADD) $(LIBS)
-
 tests/sampler-types-test$(EXEEXT): $(tests_sampler_types_test_OBJECTS) $(tests_sampler_types_test_DEPENDENCIES) $(EXTRA_tests_sampler_types_test_DEPENDENCIES) tests/$(am__dirstamp)
 	@rm -f tests/sampler-types-test$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(tests_sampler_types_test_OBJECTS) $(tests_sampler_types_test_LDADD) $(LIBS)
@@ -1202,7 +1181,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glsl_parser_extras.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glsl_symbol_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glsl_types.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hir_field_selection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imports.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/invalidate_locations_test.Po@am__quote@
@@ -1275,6 +1253,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_function_inlining.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_if_simplification.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_noop_swizzle.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_rebalance_tree.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_redundant_jumps.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_structure_splitting.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_swizzle_swizzle.Plo@am__quote@
@@ -1282,8 +1261,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_vectorize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/prog_hash_table.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ralloc.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ralloc_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/s_expression.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sampler_types_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/set_uniform_initializer_tests.Po@am__quote@
@@ -1293,16 +1270,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_optpass.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-common.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-imports.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-prog_hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_general_ir_test-symbol_table.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_ralloc_test-ralloc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_sampler_types_test-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_sampler_types_test-prog_hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_sampler_types_test-symbol_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-common.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-imports.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-prog_hash_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_uniform_initializer_test-symbol_table.Po@am__quote@
@@ -1344,13 +1318,6 @@ glcpp-parse.lo: glcpp/glcpp-parse.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glcpp-parse.lo `test -f 'glcpp/glcpp-parse.c' || echo '$(srcdir)/'`glcpp/glcpp-parse.c
 
-ralloc.lo: $(GLSL_SRCDIR)/ralloc.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT ralloc.lo -MD -MP -MF $(DEPDIR)/ralloc.Tpo -c -o ralloc.lo `test -f '$(GLSL_SRCDIR)/ralloc.c' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/ralloc.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/ralloc.Tpo $(DEPDIR)/ralloc.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(GLSL_SRCDIR)/ralloc.c' object='ralloc.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o ralloc.lo `test -f '$(GLSL_SRCDIR)/ralloc.c' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/ralloc.c
-
 pp.lo: $(GLSL_SRCDIR)/glcpp/pp.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT pp.lo -MD -MP -MF $(DEPDIR)/pp.Tpo -c -o pp.lo `test -f '$(GLSL_SRCDIR)/glcpp/pp.c' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/glcpp/pp.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/pp.Tpo $(DEPDIR)/pp.Plo
@@ -1379,6 +1346,20 @@ glcpp.obj: glcpp/glcpp.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glcpp.obj `if test -f 'glcpp/glcpp.c'; then $(CYGPATH_W) 'glcpp/glcpp.c'; else $(CYGPATH_W) '$(srcdir)/glcpp/glcpp.c'; fi`
 
+common.o: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT common.o -MD -MP -MF $(DEPDIR)/common.Tpo -c -o common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/common.Tpo $(DEPDIR)/common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='common.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
+
+common.obj: tests/common.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT common.obj -MD -MP -MF $(DEPDIR)/common.Tpo -c -o common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/common.Tpo $(DEPDIR)/common.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='common.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
+
 prog_hash_table.o: $(top_srcdir)/src/mesa/program/prog_hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT prog_hash_table.o -MD -MP -MF $(DEPDIR)/prog_hash_table.Tpo -c -o prog_hash_table.o `test -f '$(top_srcdir)/src/mesa/program/prog_hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/program/prog_hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/prog_hash_table.Tpo $(DEPDIR)/prog_hash_table.Po
@@ -1392,20 +1373,6 @@ prog_hash_table.obj: $(top_srcdir)/src/mesa/program/prog_hash_table.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/program/prog_hash_table.c' object='prog_hash_table.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o prog_hash_table.obj `if test -f '$(top_srcdir)/src/mesa/program/prog_hash_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/program/prog_hash_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/program/prog_hash_table.c'; fi`
-
-hash_table.o: $(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT hash_table.o -MD -MP -MF $(DEPDIR)/hash_table.Tpo -c -o hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/hash_table.Tpo $(DEPDIR)/hash_table.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/main/hash_table.c' object='hash_table.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
-
-hash_table.obj: $(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT hash_table.obj -MD -MP -MF $(DEPDIR)/hash_table.Tpo -c -o hash_table.obj `if test -f '$(top_srcdir)/src/mesa/main/hash_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/main/hash_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/main/hash_table.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/hash_table.Tpo $(DEPDIR)/hash_table.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/main/hash_table.c' object='hash_table.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o hash_table.obj `if test -f '$(top_srcdir)/src/mesa/main/hash_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/main/hash_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/main/hash_table.c'; fi`
 
 imports.o: $(top_srcdir)/src/mesa/main/imports.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT imports.o -MD -MP -MF $(DEPDIR)/imports.Tpo -c -o imports.o `test -f '$(top_srcdir)/src/mesa/main/imports.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/imports.c
@@ -1434,34 +1401,6 @@ symbol_table.obj: $(top_srcdir)/src/mesa/program/symbol_table.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/program/symbol_table.c' object='symbol_table.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o symbol_table.obj `if test -f '$(top_srcdir)/src/mesa/program/symbol_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/program/symbol_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/program/symbol_table.c'; fi`
-
-common.o: tests/common.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT common.o -MD -MP -MF $(DEPDIR)/common.Tpo -c -o common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/common.Tpo $(DEPDIR)/common.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='common.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o common.o `test -f 'tests/common.c' || echo '$(srcdir)/'`tests/common.c
-
-common.obj: tests/common.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT common.obj -MD -MP -MF $(DEPDIR)/common.Tpo -c -o common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/common.Tpo $(DEPDIR)/common.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='common.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
-
-tests_general_ir_test-hash_table.o: $(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -MT tests_general_ir_test-hash_table.o -MD -MP -MF $(DEPDIR)/tests_general_ir_test-hash_table.Tpo -c -o tests_general_ir_test-hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_general_ir_test-hash_table.Tpo $(DEPDIR)/tests_general_ir_test-hash_table.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/main/hash_table.c' object='tests_general_ir_test-hash_table.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -c -o tests_general_ir_test-hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
-
-tests_general_ir_test-hash_table.obj: $(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -MT tests_general_ir_test-hash_table.obj -MD -MP -MF $(DEPDIR)/tests_general_ir_test-hash_table.Tpo -c -o tests_general_ir_test-hash_table.obj `if test -f '$(top_srcdir)/src/mesa/main/hash_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/main/hash_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/main/hash_table.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_general_ir_test-hash_table.Tpo $(DEPDIR)/tests_general_ir_test-hash_table.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/main/hash_table.c' object='tests_general_ir_test-hash_table.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -c -o tests_general_ir_test-hash_table.obj `if test -f '$(top_srcdir)/src/mesa/main/hash_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/main/hash_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/main/hash_table.c'; fi`
 
 tests_general_ir_test-imports.o: $(top_srcdir)/src/mesa/main/imports.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -MT tests_general_ir_test-imports.o -MD -MP -MF $(DEPDIR)/tests_general_ir_test-imports.Tpo -c -o tests_general_ir_test-imports.o `test -f '$(top_srcdir)/src/mesa/main/imports.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/imports.c
@@ -1519,20 +1458,6 @@ tests_general_ir_test-common.obj: tests/common.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_general_ir_test_CFLAGS) $(CFLAGS) -c -o tests_general_ir_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
 
-tests_ralloc_test-ralloc.o: $(top_builddir)/src/glsl/ralloc.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_ralloc_test_CFLAGS) $(CFLAGS) -MT tests_ralloc_test-ralloc.o -MD -MP -MF $(DEPDIR)/tests_ralloc_test-ralloc.Tpo -c -o tests_ralloc_test-ralloc.o `test -f '$(top_builddir)/src/glsl/ralloc.c' || echo '$(srcdir)/'`$(top_builddir)/src/glsl/ralloc.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_ralloc_test-ralloc.Tpo $(DEPDIR)/tests_ralloc_test-ralloc.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_builddir)/src/glsl/ralloc.c' object='tests_ralloc_test-ralloc.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_ralloc_test_CFLAGS) $(CFLAGS) -c -o tests_ralloc_test-ralloc.o `test -f '$(top_builddir)/src/glsl/ralloc.c' || echo '$(srcdir)/'`$(top_builddir)/src/glsl/ralloc.c
-
-tests_ralloc_test-ralloc.obj: $(top_builddir)/src/glsl/ralloc.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_ralloc_test_CFLAGS) $(CFLAGS) -MT tests_ralloc_test-ralloc.obj -MD -MP -MF $(DEPDIR)/tests_ralloc_test-ralloc.Tpo -c -o tests_ralloc_test-ralloc.obj `if test -f '$(top_builddir)/src/glsl/ralloc.c'; then $(CYGPATH_W) '$(top_builddir)/src/glsl/ralloc.c'; else $(CYGPATH_W) '$(srcdir)/$(top_builddir)/src/glsl/ralloc.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_ralloc_test-ralloc.Tpo $(DEPDIR)/tests_ralloc_test-ralloc.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_builddir)/src/glsl/ralloc.c' object='tests_ralloc_test-ralloc.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_ralloc_test_CFLAGS) $(CFLAGS) -c -o tests_ralloc_test-ralloc.obj `if test -f '$(top_builddir)/src/glsl/ralloc.c'; then $(CYGPATH_W) '$(top_builddir)/src/glsl/ralloc.c'; else $(CYGPATH_W) '$(srcdir)/$(top_builddir)/src/glsl/ralloc.c'; fi`
-
 tests_sampler_types_test-prog_hash_table.o: $(top_srcdir)/src/mesa/program/prog_hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_sampler_types_test_CFLAGS) $(CFLAGS) -MT tests_sampler_types_test-prog_hash_table.o -MD -MP -MF $(DEPDIR)/tests_sampler_types_test-prog_hash_table.Tpo -c -o tests_sampler_types_test-prog_hash_table.o `test -f '$(top_srcdir)/src/mesa/program/prog_hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/program/prog_hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_sampler_types_test-prog_hash_table.Tpo $(DEPDIR)/tests_sampler_types_test-prog_hash_table.Po
@@ -1574,20 +1499,6 @@ tests_sampler_types_test-common.obj: tests/common.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/common.c' object='tests_sampler_types_test-common.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_sampler_types_test_CFLAGS) $(CFLAGS) -c -o tests_sampler_types_test-common.obj `if test -f 'tests/common.c'; then $(CYGPATH_W) 'tests/common.c'; else $(CYGPATH_W) '$(srcdir)/tests/common.c'; fi`
-
-tests_uniform_initializer_test-hash_table.o: $(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -MT tests_uniform_initializer_test-hash_table.o -MD -MP -MF $(DEPDIR)/tests_uniform_initializer_test-hash_table.Tpo -c -o tests_uniform_initializer_test-hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_uniform_initializer_test-hash_table.Tpo $(DEPDIR)/tests_uniform_initializer_test-hash_table.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/main/hash_table.c' object='tests_uniform_initializer_test-hash_table.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -c -o tests_uniform_initializer_test-hash_table.o `test -f '$(top_srcdir)/src/mesa/main/hash_table.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/hash_table.c
-
-tests_uniform_initializer_test-hash_table.obj: $(top_srcdir)/src/mesa/main/hash_table.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -MT tests_uniform_initializer_test-hash_table.obj -MD -MP -MF $(DEPDIR)/tests_uniform_initializer_test-hash_table.Tpo -c -o tests_uniform_initializer_test-hash_table.obj `if test -f '$(top_srcdir)/src/mesa/main/hash_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/main/hash_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/main/hash_table.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/tests_uniform_initializer_test-hash_table.Tpo $(DEPDIR)/tests_uniform_initializer_test-hash_table.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mesa/main/hash_table.c' object='tests_uniform_initializer_test-hash_table.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -c -o tests_uniform_initializer_test-hash_table.obj `if test -f '$(top_srcdir)/src/mesa/main/hash_table.c'; then $(CYGPATH_W) '$(top_srcdir)/src/mesa/main/hash_table.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/src/mesa/main/hash_table.c'; fi`
 
 tests_uniform_initializer_test-imports.o: $(top_srcdir)/src/mesa/main/imports.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tests_uniform_initializer_test_CFLAGS) $(CFLAGS) -MT tests_uniform_initializer_test-imports.o -MD -MP -MF $(DEPDIR)/tests_uniform_initializer_test-imports.Tpo -c -o tests_uniform_initializer_test-imports.o `test -f '$(top_srcdir)/src/mesa/main/imports.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mesa/main/imports.c
@@ -2226,6 +2137,13 @@ opt_noop_swizzle.lo: $(GLSL_SRCDIR)/opt_noop_swizzle.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o opt_noop_swizzle.lo `test -f '$(GLSL_SRCDIR)/opt_noop_swizzle.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_noop_swizzle.cpp
 
+opt_rebalance_tree.lo: $(GLSL_SRCDIR)/opt_rebalance_tree.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT opt_rebalance_tree.lo -MD -MP -MF $(DEPDIR)/opt_rebalance_tree.Tpo -c -o opt_rebalance_tree.lo `test -f '$(GLSL_SRCDIR)/opt_rebalance_tree.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_rebalance_tree.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/opt_rebalance_tree.Tpo $(DEPDIR)/opt_rebalance_tree.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/opt_rebalance_tree.cpp' object='opt_rebalance_tree.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o opt_rebalance_tree.lo `test -f '$(GLSL_SRCDIR)/opt_rebalance_tree.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_rebalance_tree.cpp
+
 opt_redundant_jumps.lo: $(GLSL_SRCDIR)/opt_redundant_jumps.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT opt_redundant_jumps.lo -MD -MP -MF $(DEPDIR)/opt_redundant_jumps.Tpo -c -o opt_redundant_jumps.lo `test -f '$(GLSL_SRCDIR)/opt_redundant_jumps.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_redundant_jumps.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/opt_redundant_jumps.Tpo $(DEPDIR)/opt_redundant_jumps.Plo
@@ -2351,20 +2269,6 @@ varyings_test.obj: tests/varyings_test.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='tests/varyings_test.cpp' object='varyings_test.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o varyings_test.obj `if test -f 'tests/varyings_test.cpp'; then $(CYGPATH_W) 'tests/varyings_test.cpp'; else $(CYGPATH_W) '$(srcdir)/tests/varyings_test.cpp'; fi`
-
-ralloc_test.o: tests/ralloc_test.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ralloc_test.o -MD -MP -MF $(DEPDIR)/ralloc_test.Tpo -c -o ralloc_test.o `test -f 'tests/ralloc_test.cpp' || echo '$(srcdir)/'`tests/ralloc_test.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/ralloc_test.Tpo $(DEPDIR)/ralloc_test.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='tests/ralloc_test.cpp' object='ralloc_test.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ralloc_test.o `test -f 'tests/ralloc_test.cpp' || echo '$(srcdir)/'`tests/ralloc_test.cpp
-
-ralloc_test.obj: tests/ralloc_test.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ralloc_test.obj -MD -MP -MF $(DEPDIR)/ralloc_test.Tpo -c -o ralloc_test.obj `if test -f 'tests/ralloc_test.cpp'; then $(CYGPATH_W) 'tests/ralloc_test.cpp'; else $(CYGPATH_W) '$(srcdir)/tests/ralloc_test.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/ralloc_test.Tpo $(DEPDIR)/ralloc_test.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='tests/ralloc_test.cpp' object='ralloc_test.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ralloc_test.obj `if test -f 'tests/ralloc_test.cpp'; then $(CYGPATH_W) 'tests/ralloc_test.cpp'; else $(CYGPATH_W) '$(srcdir)/tests/ralloc_test.cpp'; fi`
 
 sampler_types_test.o: tests/sampler_types_test.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT sampler_types_test.o -MD -MP -MF $(DEPDIR)/sampler_types_test.Tpo -c -o sampler_types_test.o `test -f 'tests/sampler_types_test.cpp' || echo '$(srcdir)/'`tests/sampler_types_test.cpp
@@ -2630,6 +2534,13 @@ glcpp/tests/glcpp-test.log: glcpp/tests/glcpp-test
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+glcpp/tests/glcpp-test-cr-lf.log: glcpp/tests/glcpp-test-cr-lf
+	@p='glcpp/tests/glcpp-test-cr-lf'; \
+	b='glcpp/tests/glcpp-test-cr-lf'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/general-ir-test.log: tests/general-ir-test$(EXEEXT)
 	@p='tests/general-ir-test$(EXEEXT)'; \
 	b='tests/general-ir-test'; \
@@ -2640,13 +2551,6 @@ tests/general-ir-test.log: tests/general-ir-test$(EXEEXT)
 tests/optimization-test.log: tests/optimization-test
 	@p='tests/optimization-test'; \
 	b='tests/optimization-test'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-tests/ralloc-test.log: tests/ralloc-test$(EXEEXT)
-	@p='tests/ralloc-test$(EXEEXT)'; \
-	b='tests/ralloc-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

@@ -42,8 +42,8 @@
 #include <X11/extensions/Xext.h>
 #include <X11/extensions/extutil.h>
 #ifdef GLX_USE_APPLEGL
-#include "apple_glx.h"
-#include "apple_visual.h"
+#include "apple/apple_glx.h"
+#include "apple/apple_visual.h"
 #endif
 #include "glxextensions.h"
 
@@ -243,6 +243,7 @@ glx_display_free(struct glx_display *priv)
       (*priv->driswDisplay->destroyDisplay) (priv->driswDisplay);
    priv->driswDisplay = NULL;
 
+#if defined (GLX_USE_DRM)
    if (priv->driDisplay)
       (*priv->driDisplay->destroyDisplay) (priv->driDisplay);
    priv->driDisplay = NULL;
@@ -254,7 +255,8 @@ glx_display_free(struct glx_display *priv)
    if (priv->dri3Display)
       (*priv->dri3Display->destroyDisplay) (priv->dri3Display);
    priv->dri3Display = NULL;
-#endif
+#endif /* GLX_USE_DRM */
+#endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
 
    free((char *) priv);
 }
@@ -780,17 +782,20 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv)
    for (i = 0; i < screens; i++, psc++) {
       psc = NULL;
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_USE_DRM)
 #if defined(HAVE_DRI3)
       if (priv->dri3Display)
          psc = (*priv->dri3Display->createScreen) (i, priv);
-#endif
+#endif /* HAVE_DRI3 */
       if (psc == NULL && priv->dri2Display)
 	 psc = (*priv->dri2Display->createScreen) (i, priv);
       if (psc == NULL && priv->driDisplay)
 	 psc = (*priv->driDisplay->createScreen) (i, priv);
+#endif /* GLX_USE_DRM */
       if (psc == NULL && priv->driswDisplay)
 	 psc = (*priv->driswDisplay->createScreen) (i, priv);
-#endif
+#endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
+
 #if defined(GLX_USE_APPLEGL)
       if (psc == NULL)
          psc = applegl_create_screen(i, priv);
@@ -874,17 +879,19 @@ __glXInitialize(Display * dpy)
     ** Note: This _must_ be done before calling any other DRI routines
     ** (e.g., those called in AllocAndFetchScreenConfigs).
     */
+#if defined(GLX_USE_DRM)
    if (glx_direct && glx_accel) {
 #if defined(HAVE_DRI3)
       if (!getenv("LIBGL_DRI3_DISABLE"))
          dpyPriv->dri3Display = dri3_create_display(dpy);
-#endif
+#endif /* HAVE_DRI3 */
       dpyPriv->dri2Display = dri2CreateDisplay(dpy);
       dpyPriv->driDisplay = driCreateDisplay(dpy);
    }
+#endif /* GLX_USE_DRM */
    if (glx_direct)
       dpyPriv->driswDisplay = driswCreateDisplay(dpy);
-#endif
+#endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
 
 #ifdef GLX_USE_APPLEGL
    if (!applegl_create_display(dpyPriv)) {

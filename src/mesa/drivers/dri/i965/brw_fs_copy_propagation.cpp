@@ -42,6 +42,7 @@ namespace { /* avoid conflict with opt_copy_propagation_elements */
 struct acp_entry : public exec_node {
    fs_reg dst;
    fs_reg src;
+   enum opcode opcode;
 };
 
 struct block_data {
@@ -103,11 +104,9 @@ fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
    bd = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 
    num_acp = 0;
-   for (int b = 0; b < cfg->num_blocks; b++) {
+   foreach_block (block, cfg) {
       for (int i = 0; i < ACP_HASH_SIZE; i++) {
-         foreach_list(entry_node, &out_acp[b][i]) {
-            num_acp++;
-         }
+         num_acp += out_acp[block->num][i].length();
       }
    }
 
@@ -116,23 +115,21 @@ fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
    bitset_words = BITSET_WORDS(num_acp);
 
    int next_acp = 0;
-   for (int b = 0; b < cfg->num_blocks; b++) {
-      bd[b].livein = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[b].liveout = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[b].copy = rzalloc_array(bd, BITSET_WORD, bitset_words);
-      bd[b].kill = rzalloc_array(bd, BITSET_WORD, bitset_words);
+   foreach_block (block, cfg) {
+      bd[block->num].livein = rzalloc_array(bd, BITSET_WORD, bitset_words);
+      bd[block->num].liveout = rzalloc_array(bd, BITSET_WORD, bitset_words);
+      bd[block->num].copy = rzalloc_array(bd, BITSET_WORD, bitset_words);
+      bd[block->num].kill = rzalloc_array(bd, BITSET_WORD, bitset_words);
 
       for (int i = 0; i < ACP_HASH_SIZE; i++) {
-         foreach_list(entry_node, &out_acp[b][i]) {
-            acp_entry *entry = (acp_entry *)entry_node;
-
+         foreach_in_list(acp_entry, entry, &out_acp[block->num][i]) {
             acp[next_acp] = entry;
 
             /* opt_copy_propagate_local populates out_acp with copies created
              * in a block which are still live at the end of the block.  This
              * is exactly what we want in the COPY set.
              */
-            BITSET_SET(bd[b].copy, next_acp);
+            BITSET_SET(bd[block->num].copy, next_acp);
 
             next_acp++;
          }
@@ -153,12 +150,8 @@ void
 fs_copy_prop_dataflow::setup_initial_values()
 {
    /* Initialize the COPY and KILL sets. */
-   for (int b = 0; b < cfg->num_blocks; b++) {
-      bblock_t *block = cfg->blocks[b];
-
-      for (fs_inst *inst = (fs_inst *)block->start;
-           inst != block->end->next;
-           inst = (fs_inst *)inst->next) {
+   foreach_block (block, cfg) {
+      foreach_inst_in_block(fs_inst, inst, block) {
          if (inst->dst.file != GRF)
             continue;
 
@@ -166,7 +159,7 @@ fs_copy_prop_dataflow::setup_initial_values()
          for (int i = 0; i < num_acp; i++) {
             if (inst->overwrites_reg(acp[i]->dst) ||
                 inst->overwrites_reg(acp[i]->src)) {
-               BITSET_SET(bd[b].kill, i);
+               BITSET_SET(bd[block->num].kill, i);
             }
          }
       }
@@ -177,17 +170,16 @@ fs_copy_prop_dataflow::setup_initial_values()
     * For the others, set liveout to 0 (the empty set) and livein to ~0
     * (the universal set).
     */
-   for (int b = 0; b < cfg->num_blocks; b++) {
-      bblock_t *block = cfg->blocks[b];
+   foreach_block (block, cfg) {
       if (block->parents.is_empty()) {
          for (int i = 0; i < bitset_words; i++) {
-            bd[b].livein[i] = 0u;
-            bd[b].liveout[i] = bd[b].copy[i];
+            bd[block->num].livein[i] = 0u;
+            bd[block->num].liveout[i] = bd[block->num].copy[i];
          }
       } else {
          for (int i = 0; i < bitset_words; i++) {
-            bd[b].liveout[i] = 0u;
-            bd[b].livein[i] = ~0u;
+            bd[block->num].liveout[i] = 0u;
+            bd[block->num].livein[i] = ~0u;
          }
       }
    }
@@ -206,17 +198,18 @@ fs_copy_prop_dataflow::run()
       progress = false;
 
       /* Update liveout for all blocks. */
-      for (int b = 0; b < cfg->num_blocks; b++) {
-         if (cfg->blocks[b]->parents.is_empty())
+      foreach_block (block, cfg) {
+         if (block->parents.is_empty())
             continue;
 
          for (int i = 0; i < bitset_words; i++) {
-            const BITSET_WORD old_liveout = bd[b].liveout[i];
+            const BITSET_WORD old_liveout = bd[block->num].liveout[i];
 
-            bd[b].liveout[i] =
-               bd[b].copy[i] | (bd[b].livein[i] & ~bd[b].kill[i]);
+            bd[block->num].liveout[i] =
+               bd[block->num].copy[i] | (bd[block->num].livein[i] &
+                                         ~bd[block->num].kill[i]);
 
-            if (old_liveout != bd[b].liveout[i])
+            if (old_liveout != bd[block->num].liveout[i])
                progress = true;
          }
       }
@@ -224,21 +217,20 @@ fs_copy_prop_dataflow::run()
       /* Update livein for all blocks.  If a copy is live out of all parent
        * blocks, it's live coming in to this block.
        */
-      for (int b = 0; b < cfg->num_blocks; b++) {
-         if (cfg->blocks[b]->parents.is_empty())
+      foreach_block (block, cfg) {
+         if (block->parents.is_empty())
             continue;
 
          for (int i = 0; i < bitset_words; i++) {
-            const BITSET_WORD old_livein = bd[b].livein[i];
+            const BITSET_WORD old_livein = bd[block->num].livein[i];
 
-            bd[b].livein[i] = ~0u;
-            foreach_list(block_node, &cfg->blocks[b]->parents) {
-               bblock_link *link = (bblock_link *)block_node;
-               bblock_t *block = link->block;
-               bd[b].livein[i] &= bd[block->block_num].liveout[i];
+            bd[block->num].livein[i] = ~0u;
+            foreach_list_typed(bblock_link, parent_link, link, &block->parents) {
+               bblock_t *parent = parent_link->block;
+               bd[block->num].livein[i] &= bd[parent->num].liveout[i];
             }
 
-            if (old_livein != bd[b].livein[i])
+            if (old_livein != bd[block->num].livein[i])
                progress = true;
          }
       }
@@ -248,27 +240,26 @@ fs_copy_prop_dataflow::run()
 void
 fs_copy_prop_dataflow::dump_block_data() const
 {
-   for (int b = 0; b < cfg->num_blocks; b++) {
-      bblock_t *block = cfg->blocks[b];
-      fprintf(stderr, "Block %d [%d, %d] (parents ", block->block_num,
+   foreach_block (block, cfg) {
+      fprintf(stderr, "Block %d [%d, %d] (parents ", block->num,
              block->start_ip, block->end_ip);
-      foreach_list(block_node, &block->parents) {
-         bblock_t *parent = ((bblock_link *) block_node)->block;
-         fprintf(stderr, "%d ", parent->block_num);
+      foreach_list_typed(bblock_link, link, link, &block->parents) {
+         bblock_t *parent = link->block;
+         fprintf(stderr, "%d ", parent->num);
       }
       fprintf(stderr, "):\n");
       fprintf(stderr, "       livein = 0x");
       for (int i = 0; i < bitset_words; i++)
-         fprintf(stderr, "%08x", bd[b].livein[i]);
+         fprintf(stderr, "%08x", bd[block->num].livein[i]);
       fprintf(stderr, ", liveout = 0x");
       for (int i = 0; i < bitset_words; i++)
-         fprintf(stderr, "%08x", bd[b].liveout[i]);
+         fprintf(stderr, "%08x", bd[block->num].liveout[i]);
       fprintf(stderr, ",\n       copy   = 0x");
       for (int i = 0; i < bitset_words; i++)
-         fprintf(stderr, "%08x", bd[b].copy[i]);
+         fprintf(stderr, "%08x", bd[block->num].copy[i]);
       fprintf(stderr, ", kill    = 0x");
       for (int i = 0; i < bitset_words; i++)
-         fprintf(stderr, "%08x", bd[b].kill[i]);
+         fprintf(stderr, "%08x", bd[block->num].kill[i]);
       fprintf(stderr, "\n");
    }
 }
@@ -286,6 +277,10 @@ bool
 fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 {
    if (entry->src.file == IMM)
+      return false;
+
+   if (entry->opcode == SHADER_OPCODE_LOAD_PAYLOAD &&
+       inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD)
       return false;
 
    /* Bail if inst is reading more than entry is writing. */
@@ -310,7 +305,11 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 
    if ((has_source_modifiers || entry->src.file == UNIFORM ||
         !entry->src.is_contiguous()) &&
-       !can_do_source_mods(inst))
+       !inst->can_do_source_mods(brw))
+      return false;
+
+   if (has_source_modifiers &&
+       inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE)
       return false;
 
    /* Bail if the result of composing both strides would exceed the
@@ -369,7 +368,7 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
    if (entry->src.file != IMM)
       return false;
 
-   for (int i = 2; i >= 0; i--) {
+   for (int i = inst->sources - 1; i >= 0; i--) {
       if (inst->src[i].file != entry->dst.file ||
           inst->src[i].reg != entry->dst.reg ||
           inst->src[i].reg_offset != entry->dst.reg_offset ||
@@ -439,10 +438,10 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
             inst->src[i] = entry->src;
             progress = true;
          } else if (i == 0 && inst->src[1].file != IMM) {
-            uint32_t new_cmod;
+            enum brw_conditional_mod new_cmod;
 
             new_cmod = brw_swap_cmod(inst->conditional_mod);
-            if (new_cmod != ~0u) {
+            if (new_cmod != BRW_CONDITIONAL_NONE) {
                /* Fit this constant in by swapping the operands and
                 * flipping the test
                 */
@@ -480,10 +479,10 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
           * anyway.
           */
          assert(i == 0);
-         if (inst->src[0].imm.f != 0.0f) {
+         if (inst->src[0].fixed_hw_reg.dw1.f != 0.0f) {
             inst->opcode = BRW_OPCODE_MOV;
             inst->src[0] = entry->src;
-            inst->src[0].imm.f = 1.0f / inst->src[0].imm.f;
+            inst->src[0].fixed_hw_reg.dw1.f = 1.0f / inst->src[0].fixed_hw_reg.dw1.f;
             progress = true;
          }
          break;
@@ -525,18 +524,13 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
 {
    bool progress = false;
 
-   for (fs_inst *inst = (fs_inst *)block->start;
-	inst != block->end->next;
-	inst = (fs_inst *)inst->next) {
-
+   foreach_inst_in_block(fs_inst, inst, block) {
       /* Try propagating into this instruction. */
-      for (int i = 0; i < 3; i++) {
+      for (int i = 0; i < inst->sources; i++) {
          if (inst->src[i].file != GRF)
             continue;
 
-         foreach_list(entry_node, &acp[inst->src[i].reg % ACP_HASH_SIZE]) {
-            acp_entry *entry = (acp_entry *)entry_node;
-
+         foreach_in_list(acp_entry, entry, &acp[inst->src[i].reg % ACP_HASH_SIZE]) {
             if (try_constant_propagate(brw, inst, entry))
                progress = true;
 
@@ -547,9 +541,7 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
 
       /* kill the destination from the ACP */
       if (inst->dst.file == GRF) {
-	 foreach_list_safe(entry_node, &acp[inst->dst.reg % ACP_HASH_SIZE]) {
-	    acp_entry *entry = (acp_entry *)entry_node;
-
+	 foreach_in_list_safe(acp_entry, entry, &acp[inst->dst.reg % ACP_HASH_SIZE]) {
 	    if (inst->overwrites_reg(entry->dst)) {
 	       entry->remove();
 	    }
@@ -559,8 +551,7 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
           * the source, so walk across the entire table.
           */
          for (int i = 0; i < ACP_HASH_SIZE; i++) {
-            foreach_list_safe(entry_node, &acp[i]) {
-               acp_entry *entry = (acp_entry *)entry_node;
+            foreach_in_list_safe(acp_entry, entry, &acp[i]) {
                if (inst->overwrites_reg(entry->src))
                   entry->remove();
             }
@@ -574,7 +565,24 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
 	 acp_entry *entry = ralloc(copy_prop_ctx, acp_entry);
 	 entry->dst = inst->dst;
 	 entry->src = inst->src[0];
+         entry->opcode = inst->opcode;
 	 acp[entry->dst.reg % ACP_HASH_SIZE].push_tail(entry);
+      } else if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD &&
+                 inst->dst.file == GRF) {
+         for (int i = 0; i < inst->sources; i++) {
+            if (inst->src[i].file == GRF) {
+               acp_entry *entry = ralloc(copy_prop_ctx, acp_entry);
+               entry->dst = inst->dst;
+               entry->dst.reg_offset = i;
+               entry->src = inst->src[i];
+               entry->opcode = inst->opcode;
+               if (!entry->dst.equals(inst->src[i])) {
+                  acp[entry->dst.reg % ACP_HASH_SIZE].push_tail(entry);
+               } else {
+                  ralloc_free(entry);
+               }
+            }
+         }
       }
    }
 
@@ -584,35 +592,34 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
 bool
 fs_visitor::opt_copy_propagate()
 {
+   calculate_cfg();
+
    bool progress = false;
    void *copy_prop_ctx = ralloc_context(NULL);
-   cfg_t cfg(&instructions);
-   exec_list *out_acp[cfg.num_blocks];
-   for (int i = 0; i < cfg.num_blocks; i++)
+   exec_list *out_acp[cfg->num_blocks];
+
+   for (int i = 0; i < cfg->num_blocks; i++)
       out_acp[i] = new exec_list [ACP_HASH_SIZE];
 
    /* First, walk through each block doing local copy propagation and getting
     * the set of copies available at the end of the block.
     */
-   for (int b = 0; b < cfg.num_blocks; b++) {
-      bblock_t *block = cfg.blocks[b];
-
+   foreach_block (block, cfg) {
       progress = opt_copy_propagate_local(copy_prop_ctx, block,
-                                          out_acp[b]) || progress;
+                                          out_acp[block->num]) || progress;
    }
 
    /* Do dataflow analysis for those available copies. */
-   fs_copy_prop_dataflow dataflow(copy_prop_ctx, &cfg, out_acp);
+   fs_copy_prop_dataflow dataflow(copy_prop_ctx, cfg, out_acp);
 
    /* Next, re-run local copy propagation, this time with the set of copies
     * provided by the dataflow analysis available at the start of a block.
     */
-   for (int b = 0; b < cfg.num_blocks; b++) {
-      bblock_t *block = cfg.blocks[b];
+   foreach_block (block, cfg) {
       exec_list in_acp[ACP_HASH_SIZE];
 
       for (int i = 0; i < dataflow.num_acp; i++) {
-         if (BITSET_TEST(dataflow.bd[b].livein, i)) {
+         if (BITSET_TEST(dataflow.bd[block->num].livein, i)) {
             struct acp_entry *entry = dataflow.acp[i];
             in_acp[entry->dst.reg % ACP_HASH_SIZE].push_tail(entry);
          }
@@ -621,7 +628,7 @@ fs_visitor::opt_copy_propagate()
       progress = opt_copy_propagate_local(copy_prop_ctx, block, in_acp) || progress;
    }
 
-   for (int i = 0; i < cfg.num_blocks; i++)
+   for (int i = 0; i < cfg->num_blocks; i++)
       delete [] out_acp[i];
    ralloc_free(copy_prop_ctx);
 

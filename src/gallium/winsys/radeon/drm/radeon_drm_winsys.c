@@ -45,6 +45,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifndef RADEON_INFO_ACTIVE_CU_COUNT
+#define RADEON_INFO_ACTIVE_CU_COUNT 0x20
+#endif
+
 static struct util_hash_table *fd_tab = NULL;
 pipe_static_mutex(fd_tab_mutex);
 
@@ -382,6 +386,45 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_PIPES, NULL,
                          &ws->info.r600_max_pipes);
 
+    radeon_get_drm_value(ws->fd, RADEON_INFO_ACTIVE_CU_COUNT, NULL,
+                         &ws->info.max_compute_units);
+
+    radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SE, NULL,
+                         &ws->info.max_se);
+
+    if (!ws->info.max_se) {
+        switch (ws->info.family) {
+        default:
+            ws->info.max_se = 1;
+            break;
+        case CHIP_CYPRESS:
+        case CHIP_HEMLOCK:
+        case CHIP_BARTS:
+        case CHIP_CAYMAN:
+        case CHIP_TAHITI:
+        case CHIP_PITCAIRN:
+        case CHIP_BONAIRE:
+            ws->info.max_se = 2;
+            break;
+        case CHIP_HAWAII:
+            ws->info.max_se = 4;
+            break;
+        }
+    }
+
+    radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SH_PER_SE, NULL,
+                         &ws->info.max_sh_per_se);
+
+    radeon_get_drm_value(ws->fd, RADEON_INFO_ACCEL_WORKING2, NULL,
+                         &ws->accel_working2);
+    if (ws->info.family == CHIP_HAWAII && ws->accel_working2 < 2) {
+        fprintf(stderr, "radeon: GPU acceleration for Hawaii disabled, "
+                "returned accel_working2 value %u is smaller than 2. "
+                "Please install a newer kernel.\n",
+                ws->accel_working2);
+        return FALSE;
+    }
+
     if (radeon_get_drm_value(ws->fd, RADEON_INFO_SI_TILE_MODE_ARRAY, NULL,
                              ws->info.si_tile_mode_array)) {
         ws->info.si_tile_mode_array_valid = TRUE;
@@ -410,7 +453,10 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
     pipe_mutex_destroy(ws->cmask_owner_mutex);
     pipe_mutex_destroy(ws->cs_stack_lock);
 
-    ws->cman->destroy(ws->cman);
+    ws->cman_vram->destroy(ws->cman_vram);
+    ws->cman_vram_gtt_wc->destroy(ws->cman_vram_gtt_wc);
+    ws->cman_gtt->destroy(ws->cman_gtt);
+    ws->cman_gtt_wc->destroy(ws->cman_gtt_wc);
     ws->kman->destroy(ws->kman);
     if (ws->gen >= DRV_R600) {
         radeon_surface_manager_free(ws->surf_man);
@@ -625,8 +671,17 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
     ws->kman = radeon_bomgr_create(ws);
     if (!ws->kman)
         goto fail;
-    ws->cman = pb_cache_manager_create(ws->kman, 1000000, 2.0f, 0);
-    if (!ws->cman)
+    ws->cman_vram = pb_cache_manager_create(ws->kman, 1000000, 2.0f, 0);
+    if (!ws->cman_vram)
+        goto fail;
+    ws->cman_vram_gtt_wc = pb_cache_manager_create(ws->kman, 1000000, 2.0f, 0);
+    if (!ws->cman_vram_gtt_wc)
+        goto fail;
+    ws->cman_gtt = pb_cache_manager_create(ws->kman, 1000000, 2.0f, 0);
+    if (!ws->cman_gtt)
+        goto fail;
+    ws->cman_gtt_wc = pb_cache_manager_create(ws->kman, 1000000, 2.0f, 0);
+    if (!ws->cman_gtt_wc)
         goto fail;
 
     if (ws->gen >= DRV_R600) {
@@ -682,8 +737,14 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
 
 fail:
     pipe_mutex_unlock(fd_tab_mutex);
-    if (ws->cman)
-        ws->cman->destroy(ws->cman);
+    if (ws->cman_gtt)
+        ws->cman_gtt->destroy(ws->cman_gtt);
+    if (ws->cman_gtt_wc)
+        ws->cman_gtt_wc->destroy(ws->cman_gtt_wc);
+    if (ws->cman_vram)
+        ws->cman_vram->destroy(ws->cman_vram);
+    if (ws->cman_vram_gtt_wc)
+        ws->cman_vram_gtt_wc->destroy(ws->cman_vram_gtt_wc);
     if (ws->kman)
         ws->kman->destroy(ws->kman);
     if (ws->surf_man)

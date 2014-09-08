@@ -28,11 +28,11 @@ AC_SUBST([OSMESA_VERSION])
 
 dnl Versions for external dependencies
 LIBDRM_REQUIRED=2.4.38
-LIBDRM_RADEON_REQUIRED=2.4.54
+LIBDRM_RADEON_REQUIRED=2.4.56
 LIBDRM_INTEL_REQUIRED=2.4.52
 LIBDRM_NVVIEUX_REQUIRED=2.4.33
 LIBDRM_NOUVEAU_REQUIRED="2.4.33 libdrm >= 2.4.41"
-LIBDRM_FREEDRENO_REQUIRED=2.4.51
+LIBDRM_FREEDRENO_REQUIRED=2.4.55
 DRI2PROTO_REQUIRED=2.6
 DRI3PROTO_REQUIRED=1.0
 PRESENTPROTO_REQUIRED=1.0
@@ -149,7 +149,7 @@ _SAVE_LDFLAGS="$LDFLAGS"
 _SAVE_CPPFLAGS="$CPPFLAGS"
 
 dnl Compiler macros
-DEFINES=""
+DEFINES="-DUSE_EXTERNAL_DXTN_LIB=1"
 AC_SUBST([DEFINES])
 case "$host_os" in
 linux*|*-gnu*|gnu*)
@@ -159,20 +159,13 @@ solaris*)
     DEFINES="$DEFINES -DHAVE_PTHREAD -DSVR4"
     ;;
 cygwin*)
-    DEFINES="$DEFINES -DHAVE_PTHREAD"
+    DEFINES="$DEFINES -D_XOPEN_SOURCE=700 -DHAVE_PTHREAD"
     ;;
 esac
 
 dnl Add flags for gcc and g++
 if test "x$GCC" = xyes; then
-    case "$host_os" in
-    cygwin*)
-        CFLAGS="$CFLAGS -Wall -std=gnu99"
-        ;;
-    *)
-        CFLAGS="$CFLAGS -Wall -std=c99"
-        ;;
-    esac
+    CFLAGS="$CFLAGS -Wall -std=c99"
 
     # Enable -Werror=implicit-function-declaration and
     # -Werror=missing-prototypes, if available, or otherwise, just
@@ -245,40 +238,10 @@ dnl
 dnl Optional flags, check for compiler support
 dnl
 AX_CHECK_COMPILE_FLAG([-msse4.1], [SSE41_SUPPORTED=1], [SSE41_SUPPORTED=0])
+if test "x$SSE41_SUPPORTED" = x1; then
+    DEFINES="$DEFINES -DUSE_SSE41"
+fi
 AM_CONDITIONAL([SSE41_SUPPORTED], [test x$SSE41_SUPPORTED = x1])
-
-dnl
-dnl Hacks to enable 32 or 64 bit build
-dnl
-AC_ARG_ENABLE([32-bit],
-    [AS_HELP_STRING([--enable-32-bit],
-        [build 32-bit libraries @<:@default=auto@:>@])],
-    [enable_32bit="$enableval"],
-    [enable_32bit=auto]
-)
-if test "x$enable_32bit" = xyes; then
-    if test "x$GCC" = xyes; then
-        CFLAGS="$CFLAGS -m32"
-        CCASFLAGS="$CCASFLAGS -m32"
-    fi
-    if test "x$GXX" = xyes; then
-        CXXFLAGS="$CXXFLAGS -m32"
-    fi
-fi
-AC_ARG_ENABLE([64-bit],
-    [AS_HELP_STRING([--enable-64-bit],
-        [build 64-bit libraries @<:@default=auto@:>@])],
-    [enable_64bit="$enableval"],
-    [enable_64bit=auto]
-)
-if test "x$enable_64bit" = xyes; then
-    if test "x$GCC" = xyes; then
-        CFLAGS="$CFLAGS -m64"
-    fi
-    if test "x$GXX" = xyes; then
-        CXXFLAGS="$CXXFLAGS -m64"
-    fi
-fi
 
 dnl Can't have static and shared libraries, default to static if user
 dnl explicitly requested. If both disabled, set to static since shared
@@ -308,12 +271,38 @@ AC_ARG_ENABLE([debug],
 if test "x$enable_debug" = xyes; then
     DEFINES="$DEFINES -DDEBUG"
     if test "x$GCC" = xyes; then
-        CFLAGS="$CFLAGS -g -O0"
+        if ! echo "$CFLAGS" | grep -q -e '-g'; then
+            CFLAGS="$CFLAGS -g"
+        fi
+        if ! echo "$CFLAGS" | grep -q -e '-O'; then
+            CFLAGS="$CFLAGS -O0"
+        fi
     fi
     if test "x$GXX" = xyes; then
-        CXXFLAGS="$CXXFLAGS -g -O0"
+        if ! echo "$CXXFLAGS" | grep -q -e '-g'; then
+            CXXFLAGS="$CXXFLAGS -g"
+        fi
+        if ! echo "$CXXFLAGS" | grep -q -e '-O'; then
+            CXXFLAGS="$CXXFLAGS -O0"
+        fi
     fi
 fi
+
+dnl
+dnl Check if linker supports -Bsymbolic
+dnl
+save_LDFLAGS=$LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,-Bsymbolic"
+AC_MSG_CHECKING([if ld supports -Bsymbolic])
+AC_LINK_IFELSE(
+    [AC_LANG_SOURCE([int main() { return 0;}])],
+    [AC_MSG_RESULT([yes])
+        BSYMBOLIC="-Wl,-Bsymbolic";],
+    [AC_MSG_RESULT([no])
+        BSYMBOLIC="";])
+LDFLAGS=$save_LDFLAGS
+
+AC_SUBST([BSYMBOLIC])
 
 dnl
 dnl Check if linker supports garbage collection
@@ -336,13 +325,53 @@ dnl OpenBSD does not have DT_NEEDED entries for libc by design
 dnl so when these flags are passed to ld via libtool the checks will fail
 dnl
 case "$host_os" in
-openbsd*)
+openbsd* | darwin* )
     LD_NO_UNDEFINED="" ;;
 *)
     LD_NO_UNDEFINED="-Wl,--no-undefined" ;;
 esac
 
 AC_SUBST([LD_NO_UNDEFINED])
+
+dnl
+dnl Check if linker supports version scripts
+dnl
+AC_MSG_CHECKING([if the linker supports version-scripts])
+save_LDFLAGS=$LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,--version-script=conftest.map"
+cat > conftest.map <<EOF
+VERSION_1 {
+     global:
+         main;
+
+     local:
+         *;
+};
+EOF
+AC_LINK_IFELSE(
+    [AC_LANG_SOURCE([int main() { return 0;}])],
+    [have_ld_version_script=yes;AC_MSG_RESULT(yes)],
+    [have_ld_version_script=no; AC_MSG_RESULT(no)])
+LDFLAGS=$save_LDFLAGS
+AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$have_ld_version_script" = "yes")
+
+dnl
+dnl Check if linker supports dynamic list files
+dnl
+AC_MSG_CHECKING([if the linker supports --dynamic-list])
+save_LDFLAGS=$LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,--dynamic-list=conftest.dyn"
+cat > conftest.dyn <<EOF
+{
+	radeon_drm_winsys_create;
+};
+EOF
+AC_LINK_IFELSE(
+    [AC_LANG_SOURCE([int main() { return 0;}])],
+    [have_ld_dynamic_list=yes;AC_MSG_RESULT(yes)],
+    [have_ld_dynamic_list=no; AC_MSG_RESULT(no)])
+LDFLAGS=$save_LDFLAGS
+AM_CONDITIONAL(HAVE_LD_DYNAMIC_LIST, test "$have_ld_dynamic_list" = "yes")
 
 dnl
 dnl compatibility symlinks
@@ -443,10 +472,7 @@ if test "x$enable_asm" = xyes; then
     case "$host_cpu" in
     i?86)
         case "$host_os" in
-        linux* | *freebsd* | dragonfly* | *netbsd* | openbsd*)
-            test "x$enable_64bit" = xyes && asm_arch=x86_64 || asm_arch=x86
-            ;;
-        gnu*)
+        linux* | *freebsd* | dragonfly* | *netbsd* | openbsd* | gnu*)
             asm_arch=x86
             ;;
         esac
@@ -454,7 +480,7 @@ if test "x$enable_asm" = xyes; then
     x86_64|amd64)
         case "$host_os" in
         linux* | *freebsd* | dragonfly* | *netbsd* | openbsd*)
-            test "x$enable_32bit" = xyes && asm_arch=x86 || asm_arch=x86_64
+            asm_arch=x86_64
             ;;
         esac
         ;;
@@ -494,10 +520,10 @@ AC_CHECK_FUNC([dlopen], [DEFINES="$DEFINES -DHAVE_DLOPEN"],
 AC_SUBST([DLOPEN_LIBS])
 
 dnl Check if that library also has dladdr
-save_LDFLAGS="$LDFLAGS"
-LDFLAGS="$LDFLAGS $DLOPEN_LIBS"
+save_LIBS="$LIBS"
+LIBS="$LIBS $DLOPEN_LIBS"
 AC_CHECK_FUNCS([dladdr])
-LDFLAGS="$save_LDFLAGS"
+LIBS="$save_LIBS"
 
 case "$host_os" in
 darwin*|mingw*)
@@ -505,7 +531,7 @@ darwin*|mingw*)
 *)
     AC_CHECK_FUNCS([clock_gettime], [CLOCK_LIB=],
                    [AC_CHECK_LIB([rt], [clock_gettime], [CLOCK_LIB=-lrt],
-                                 [AC_MSG_ERROR([Couldn't find clock_gettime])])])
+                                 [AC_MSG_ERROR([Could not find clock_gettime])])])
     AC_SUBST([CLOCK_LIB])
     ;;
 esac
@@ -514,7 +540,13 @@ dnl See if posix_memalign is available
 AC_CHECK_FUNC([posix_memalign], [DEFINES="$DEFINES -DHAVE_POSIX_MEMALIGN"])
 
 dnl Check for pthreads
-AX_PTHREAD
+case "$host_os" in
+mingw*)
+    ;;
+*)
+    AX_PTHREAD
+    ;;
+esac
 dnl AX_PTHREADS leaves PTHREAD_LIBS empty for gcc and sets PTHREAD_CFLAGS
 dnl to -pthread, which causes problems if we need -lpthread to appear in
 dnl pkgconfig files.
@@ -677,7 +709,7 @@ GALLIUM_DRIVERS_DEFAULT="r300,r600,svga,swrast"
 AC_ARG_WITH([gallium-drivers],
     [AS_HELP_STRING([--with-gallium-drivers@<:@=DIRS...@:>@],
         [comma delimited Gallium drivers list, e.g.
-        "i915,ilo,nouveau,r300,r600,radeonsi,freedreno,svga,swrast"
+        "i915,ilo,nouveau,r300,r600,radeonsi,freedreno,svga,swrast,vc4"
         @<:@default=r300,r600,svga,swrast@:>@])],
     [with_gallium_drivers="$withval"],
     [with_gallium_drivers="$GALLIUM_DRIVERS_DEFAULT"])
@@ -748,8 +780,22 @@ fi
 
 AM_CONDITIONAL(HAVE_DRI_GLX, test "x$enable_glx" = xyes -a \
                                   "x$enable_dri" = xyes)
-AM_CONDITIONAL(HAVE_DRI, test "x$enable_dri" = xyes)
-AM_CONDITIONAL(HAVE_DRI3, test "x$enable_dri3" = xyes)
+
+# Select which platform-dependent DRI code gets built
+case "$host_os" in
+darwin*)
+    dri_platform='apple' ;;
+gnu*|mingw*|cygwin*)
+    dri_platform='none' ;;
+*)
+    dri_platform='drm' ;;
+esac
+
+AM_CONDITIONAL(HAVE_DRICOMMON, test "x$enable_dri" = xyes )
+AM_CONDITIONAL(HAVE_DRISW, test "x$enable_dri" = xyes )
+AM_CONDITIONAL(HAVE_DRI2, test "x$enable_dri" = xyes && test "x$dri_platform" = xdrm )
+AM_CONDITIONAL(HAVE_DRI3, test "x$enable_dri3" = xyes && test "x$dri_platform" = xdrm )
+AM_CONDITIONAL(HAVE_APPLEDRI, test "x$enable_dri" = xyes && test "x$dri_platform" = xapple )
 
 AC_ARG_ENABLE([shared-glapi],
     [AS_HELP_STRING([--enable-shared-glapi],
@@ -794,6 +840,7 @@ esac
 if test "x$enable_dri" = xyes; then
     GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS sw/dri"
     GALLIUM_STATE_TRACKERS_DIRS="dri $GALLIUM_STATE_TRACKERS_DIRS"
+    enable_gallium_loader=yes
 fi
 
 if test "x$enable_gallium_osmesa" = xyes; then
@@ -818,13 +865,20 @@ fi
 
 case "$host_os" in
 linux*)
-    need_libudev=yes ;;
+    need_pci_id=yes ;;
 *)
-    need_libudev=no ;;
+    need_pci_id=no ;;
 esac
 
 PKG_CHECK_MODULES([LIBUDEV], [libudev >= $LIBUDEV_REQUIRED],
                   have_libudev=yes, have_libudev=no)
+
+AC_ARG_ENABLE([sysfs],
+    [AS_HELP_STRING([--enable-sysfs],
+        [enable /sys PCI identification @<:@default=disabled@:>@])],
+    [have_sysfs="$enableval"],
+    [have_sysfs=no]
+)
 
 if test "x$enable_dri" = xyes; then
     if test "$enable_static" = yes; then
@@ -837,26 +891,12 @@ if test "x$enable_dri" = xyes; then
     fi
 fi
 
-dnl Direct rendering or just indirect rendering
-case "$host_os" in
-gnu*)
-    dnl Disable by default on GNU/Hurd
-    driglx_direct_default="no"
-    ;;
-cygwin*)
-    dnl Disable by default on cygwin
-    driglx_direct_default="no"
-    ;;
-*)
-    driglx_direct_default="yes"
-    ;;
-esac
 AC_ARG_ENABLE([driglx-direct],
     [AS_HELP_STRING([--disable-driglx-direct],
         [disable direct rendering in GLX and EGL for DRI \
             @<:@default=auto@:>@])],
     [driglx_direct="$enableval"],
-    [driglx_direct="$driglx_direct_default"])
+    [driglx_direct="yes"])
 
 dnl
 dnl libGL configuration per driver
@@ -874,23 +914,35 @@ xyesyes)
 xyesno)
     # DRI-based GLX
     PKG_CHECK_MODULES([GLPROTO], [glproto >= $GLPROTO_REQUIRED])
-    if test x"$driglx_direct" = xyes; then
-        if test "x$have_libdrm" != xyes; then
-            AC_MSG_ERROR([Direct rendering requires libdrm >= $LIBDRM_REQUIRED])
-        fi
-        PKG_CHECK_MODULES([DRI2PROTO], [dri2proto >= $DRI2PROTO_REQUIRED])
-        GL_PC_REQ_PRIV="$GL_PC_REQ_PRIV libdrm >= $LIBDRM_REQUIRED"
-        if test x"$enable_dri3" = xyes; then
-            PKG_CHECK_MODULES([DRI3PROTO], [dri3proto >= $DRI3PROTO_REQUIRED])
-            PKG_CHECK_MODULES([PRESENTPROTO], [presentproto >= $PRESENTPROTO_REQUIRED])
-        fi
-    fi
 
     # find the DRI deps for libGL
-    dri_modules="x11 xext xdamage xfixes x11-xcb xcb-glx >= $XCBGLX_REQUIRED xcb-dri2 >= $XCBDRI2_REQUIRED"
+    dri_modules="x11 xext xdamage xfixes x11-xcb xcb-glx >= $XCBGLX_REQUIRED"
 
-    if test x"$enable_dri3" = xyes; then
-        dri_modules="$dri_modules xcb-dri3 xcb-present xcb-sync xshmfence >= $XSHMFENCE_REQUIRED"
+    if test x"$driglx_direct" = xyes; then
+        if test x"$dri_platform" = xdrm ; then
+            DEFINES="$DEFINES -DGLX_USE_DRM"
+            if test "x$have_libdrm" != xyes; then
+               AC_MSG_ERROR([Direct rendering requires libdrm >= $LIBDRM_REQUIRED])
+            fi
+
+            PKG_CHECK_MODULES([DRI2PROTO], [dri2proto >= $DRI2PROTO_REQUIRED])
+            GL_PC_REQ_PRIV="$GL_PC_REQ_PRIV libdrm >= $LIBDRM_REQUIRED"
+            if test x"$enable_dri3" = xyes; then
+               PKG_CHECK_MODULES([DRI3PROTO], [dri3proto >= $DRI3PROTO_REQUIRED])
+               PKG_CHECK_MODULES([PRESENTPROTO], [presentproto >= $PRESENTPROTO_REQUIRED])
+            fi
+
+            if test x"$enable_dri" = xyes; then
+               dri_modules="$dri_modules xcb-dri2 >= $XCBDRI2_REQUIRED"
+            fi
+
+            if test x"$enable_dri3" = xyes; then
+               dri_modules="$dri_modules xcb-dri3 xcb-present xcb-sync xshmfence >= $XSHMFENCE_REQUIRED"
+            fi
+        fi
+        if test x"$dri_platform" = xapple ; then
+            DEFINES="$DEFINES -DGLX_USE_APPLEGL"
+        fi
     fi
 
     # add xf86vidmode if available
@@ -910,8 +962,15 @@ xyesno)
     ;;
 esac
 
+have_pci_id=no
 if test "$have_libudev" = yes; then
     DEFINES="$DEFINES -DHAVE_LIBUDEV"
+    have_pci_id=yes
+fi
+
+if test "$have_sysfs" = yes; then
+    DEFINES="$DEFINES -DHAVE_SYSFS"
+    have_pci_id=yes
 fi
 
 # This is outside the case (above) so that it is invoked even for non-GLX
@@ -1007,14 +1066,13 @@ if test "x$enable_dri" = xyes; then
     # Platform specific settings and drivers to build
     case "$host_os" in
     linux*)
-        DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1"
         DEFINES="$DEFINES -DHAVE_ALIAS"
         if test "x$enable_dri3" = xyes; then
             DEFINES="$DEFINES -DHAVE_DRI3"
         fi
 
-        if test "x$have_libudev" != xyes; then
-            AC_MSG_ERROR([libudev-dev required for building DRI])
+        if test "x$have_pci_id" != xyes; then
+            AC_MSG_ERROR([libudev-dev or sysfs required for building DRI])
         fi
 
         case "$host_cpu" in
@@ -1027,18 +1085,19 @@ if test "x$enable_dri" = xyes; then
         esac
         ;;
     *freebsd* | dragonfly* | *netbsd* | openbsd*)
-        DEFINES="$DEFINES -DHAVE_PTHREAD -DUSE_EXTERNAL_DXTN_LIB=1"
+        DEFINES="$DEFINES -DHAVE_PTHREAD"
         DEFINES="$DEFINES -DHAVE_ALIAS"
         ;;
     gnu*)
-        DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1"
         DEFINES="$DEFINES -DHAVE_ALIAS"
         ;;
-    solaris*)
-        DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1"
-        ;;
     cygwin*)
-        DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1"
+        if test "x$with_dri_drivers" = "xyes"; then
+            with_dri_drivers="swrast"
+        fi
+        ;;
+    darwin*)
+        DEFINES="$DEFINES -DGLX_ALIAS_UNSUPPORTED"
         if test "x$with_dri_drivers" = "xyes"; then
             with_dri_drivers="swrast"
         fi
@@ -1060,6 +1119,7 @@ if test "x$enable_dri" = xyes; then
        EXPAT_LIBS=-lexpat
     fi
 
+    DRICOMMON_NEED_LIBDRM=no
     # If we are building any DRI driver other than swrast.
     if test -n "$with_dri_drivers"; then
         if test "x$with_dri_drivers" != xswrast; then
@@ -1068,8 +1128,14 @@ if test "x$enable_dri" = xyes; then
                 AC_MSG_ERROR([DRI drivers requires libdrm >= $LIBDRM_REQUIRED])
             fi
             DRICOMMON_NEED_LIBDRM=yes
-        else
-            DRICOMMON_NEED_LIBDRM=no
+        fi
+    fi
+
+    # If we're building any gallium DRI driver other than swrast
+    if test -n "$with_gallium_drivers" -a "x$DRICOMMON_NEED_LIBDRM" = xno; then
+        if test "x$with_gallium_drivers" != xswrast; then
+            # ... build a libdrm aware dricommon
+            DRICOMMON_NEED_LIBDRM=yes
         fi
     fi
 
@@ -1183,8 +1249,8 @@ if test "x$enable_gbm" = xauto; then
     esac
 fi
 if test "x$enable_gbm" = xyes; then
-    if test "x$need_libudev$have_libudev" = xyesno; then
-        AC_MSG_ERROR([gbm requires udev >= $LIBUDEV_REQUIRED])
+    if test "x$need_pci_id$have_pci_id" = xyesno; then
+        AC_MSG_ERROR([gbm requires udev >= $LIBUDEV_REQUIRED or sysfs])
     fi
 
     if test "x$enable_dri" = xyes; then
@@ -1202,7 +1268,7 @@ if test "x$enable_gbm" = xyes; then
     fi
 fi
 AM_CONDITIONAL(HAVE_GBM, test "x$enable_gbm" = xyes)
-if test "x$need_libudev" = xyes; then
+if test "x$need_pci_id$have_libudev" = xyesyes; then
     GBM_PC_REQ_PRIV="libudev >= $LIBUDEV_REQUIRED"
 else
     GBM_PC_REQ_PRIV=""
@@ -1247,6 +1313,7 @@ if test "x$enable_gallium_egl" = xyes; then
 
     GALLIUM_STATE_TRACKERS_DIRS="egl $GALLIUM_STATE_TRACKERS_DIRS"
     GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS egl-static"
+#    enable_gallium_loader=yes
 fi
 AM_CONDITIONAL(HAVE_GALLIUM_EGL, test "x$enable_gallium_egl" = xyes)
 
@@ -1268,9 +1335,9 @@ if test "x$enable_gallium_gbm" = xyes; then
     if test "x$enable_gbm" = xno; then
         AC_MSG_ERROR([cannot enable gbm_gallium without gbm])
     fi
-    # gbm_gallium abuses DRI_LIB_DEPS to link.  Make sure it is set.
-    if test "x$enable_dri" = xno; then
-        AC_MSG_ERROR([gbm_gallium requires --enable-dri to build])
+
+    if test "x$enable_gallium_egl" != xyes; then
+        AC_MSG_ERROR([gbm_gallium is only used by egl_gallium])
     fi
 
     GALLIUM_STATE_TRACKERS_DIRS="gbm $GALLIUM_STATE_TRACKERS_DIRS"
@@ -1286,14 +1353,13 @@ if test "x$enable_xa" = xyes; then
     if test "x$with_gallium_drivers" = xswrast; then
        AC_MSG_ERROR([
           Building xa requires at least one non swrast gallium driver.
-          If you are looking to use libxatracker.so with vmware's virtual gpu,
+          If you are looking to use libxatracker.so with the VMware driver,
           make sure to include svga in the gallium drivers list, apart from
           enabling XA.
           Example: ./configure --enable-xa --with-gallium-drivers=svga...])
     fi
     GALLIUM_STATE_TRACKERS_DIRS="xa $GALLIUM_STATE_TRACKERS_DIRS"
     enable_gallium_loader=yes
-    enable_gallium_drm_loader=yes
 fi
 AM_CONDITIONAL(HAVE_ST_XA, test "x$enable_xa" = xyes)
 
@@ -1341,6 +1407,7 @@ fi
 if test "x$enable_xvmc" = xyes; then
     PKG_CHECK_MODULES([XVMC], [xvmc >= $XVMC_REQUIRED x11-xcb xcb-dri2 >= $XCBDRI2_REQUIRED])
     GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS xvmc"
+    enable_gallium_loader=yes
 fi
 AM_CONDITIONAL(HAVE_ST_XVMC, test "x$enable_xvmc" = xyes)
 
@@ -1348,12 +1415,14 @@ if test "x$enable_vdpau" = xyes; then
     PKG_CHECK_MODULES([VDPAU], [vdpau >= $VDPAU_REQUIRED x11-xcb xcb-dri2 >= $XCBDRI2_REQUIRED],
                       [VDPAU_LIBS="`$PKG_CONFIG --libs x11-xcb xcb-dri2`"])
     GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS vdpau"
+    enable_gallium_loader=yes
 fi
 AM_CONDITIONAL(HAVE_ST_VDPAU, test "x$enable_vdpau" = xyes)
 
 if test "x$enable_omx" = xyes; then
     PKG_CHECK_MODULES([OMX], [libomxil-bellagio >= $LIBOMXIL_BELLAGIO_REQUIRED x11-xcb xcb-dri2 >= $XCBDRI2_REQUIRED])
     GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS omx"
+    enable_gallium_loader=yes
 fi
 AM_CONDITIONAL(HAVE_ST_OMX, test "x$enable_omx" = xyes)
 
@@ -1492,9 +1561,9 @@ for plat in $egl_platforms; do
 		;;
 	esac
 
-        case "$plat$need_libudev$have_libudev" in
+        case "$plat$need_pci_id$have_pci_id" in
                 waylandyesno|drmyesno)
-                    AC_MSG_ERROR([cannot build $plat platform without udev >= $LIBUDEV_REQUIRED]) ;;
+                    AC_MSG_ERROR([cannot build $plat platform without udev >= $LIBUDEV_REQUIRED or sysfs]) ;;
         esac
 done
 
@@ -1531,7 +1600,7 @@ fi
 
 AC_ARG_WITH([egl-driver-dir],
     [AS_HELP_STRING([--with-egl-driver-dir=DIR],
-                    [directory for EGL drivers [[default=${libdir}/egl]]])],
+                    [directory for EGL drivers @<:@default=${libdir}/egl@:>@])],
     [EGL_DRIVER_INSTALL_DIR="$withval"],
     [EGL_DRIVER_INSTALL_DIR='${libdir}/egl'])
 AC_SUBST([EGL_DRIVER_INSTALL_DIR])
@@ -1592,7 +1661,8 @@ strip_unwanted_llvm_flags() {
 	-e 's/-fno-exceptions\>//g' \
 	-e 's/-fomit-frame-pointer\>//g' \
 	-e 's/-fvisibility-inlines-hidden\>//g' \
-	-e 's/-fPIC\>//g'
+	-e 's/-fPIC\>//g' \
+	-e 's/-fstack-protector-strong\>//g'
 }
 
 
@@ -1638,6 +1708,12 @@ if test "x$enable_gallium_llvm" = xyes; then
             LLVM_VERSION_INT=`echo $LLVM_VERSION | sed -e 's/\([[0-9]]\)\.\([[0-9]]\)/\10\2/g'`
         fi
 
+        LLVM_REQUIRED_VERSION_MAJOR="3"
+        LLVM_REQUIRED_VERSION_MINOR="1"
+        if test "$LLVM_VERSION_INT" -lt "${LLVM_REQUIRED_VERSION_MAJOR}0${LLVM_REQUIRED_VERSION_MINOR}"; then
+            AC_MSG_ERROR([LLVM $LLVM_REQUIRED_VERSION_MAJOR.$LLVM_REQUIRED_VERSION_MINOR or newer is required])
+        fi
+
         LLVM_COMPONENTS="engine bitwriter"
         if $LLVM_CONFIG --components | grep -qw 'mcjit'; then
             LLVM_COMPONENTS="${LLVM_COMPONENTS} mcjit"
@@ -1652,6 +1728,13 @@ if test "x$enable_gallium_llvm" = xyes; then
             # LLVM 3.4 requires Option
             if $LLVM_CONFIG --components | grep -qw 'option'; then
                 LLVM_COMPONENTS="${LLVM_COMPONENTS} option"
+            fi
+            # Current OpenCL/Clover and LLVM 3.5 require ObjCARCOpts and ProfileData
+            if $LLVM_CONFIG --components | grep -qw 'objcarcopts'; then
+                LLVM_COMPONENTS="${LLVM_COMPONENTS} objcarcopts"
+            fi
+            if $LLVM_CONFIG --components | grep -qw 'profiledata'; then
+                LLVM_COMPONENTS="${LLVM_COMPONENTS} profiledata"
             fi
         fi
         DEFINES="${DEFINES} -DHAVE_LLVM=0x0$LLVM_VERSION_INT -DLLVM_VERSION_PATCH=$LLVM_VERSION_PATCH"
@@ -1757,6 +1840,7 @@ gallium_check_st() {
 
 gallium_require_llvm() {
     if test "x$MESA_LLVM" = x0; then
+        case "$host" in *gnux32) return;; esac
         case "$host_cpu" in
         i*86|x86_64|amd64) AC_MSG_ERROR([LLVM is required to build $1 on x86 and x86_64]);;
         esac
@@ -1765,8 +1849,8 @@ gallium_require_llvm() {
 
 gallium_require_drm_loader() {
     if test "x$enable_gallium_loader" = xyes; then
-        if test "x$need_libudev$have_libudev" = xyesno; then
-            AC_MSG_ERROR([Gallium drm loader requires libudev >= $LIBUDEV_REQUIRED])
+        if test "x$need_pci_id$have_pci_id" = xyesno; then
+            AC_MSG_ERROR([Gallium drm loader requires libudev >= $LIBUDEV_REQUIRED or sysfs])
         fi
         if test "x$have_libdrm" != xyes; then
             AC_MSG_ERROR([Gallium drm loader requires libdrm >= $LIBDRM_REQUIRED])
@@ -1775,14 +1859,28 @@ gallium_require_drm_loader() {
     fi
 }
 
+require_egl_drm() {
+    case "$with_egl_platforms" in
+        *drm*)
+            ;;
+         *)
+            AC_MSG_ERROR([--with-egl-platforms=drm is required to build the $1 driver.])
+            ;;
+    esac
+    if test "x$enable_gbm" != xyes; then
+            AC_MSG_ERROR([--enable-gbm is required to build the $1 driver.])
+    fi
+}
+
 radeon_llvm_check() {
     if test "x$enable_gallium_llvm" != "xyes"; then
         AC_MSG_ERROR([--enable-gallium-llvm is required when building $1])
     fi
     LLVM_REQUIRED_VERSION_MAJOR="3"
-    LLVM_REQUIRED_VERSION_MINOR="3"
-    if test "$LLVM_VERSION_INT" -lt "${LLVM_REQUIRED_VERSION_MAJOR}0${LLVM_REQUIRED_VERSION_MINOR}"; then
-        AC_MSG_ERROR([LLVM $LLVM_REQUIRED_VERSION_MAJOR.$LLVM_REQUIRED_VERSION_MINOR or newer is required for $1])
+    LLVM_REQUIRED_VERSION_MINOR="4"
+    LLVM_REQUIRED_VERSION_PATCH="2"
+    if test "${LLVM_VERSION_INT}${LLVM_VERSION_PATCH}" -lt "${LLVM_REQUIRED_VERSION_MAJOR}0${LLVM_REQUIRED_VERSION_MINOR}${LLVM_REQUIRED_VERSION_PATCH}"; then
+        AC_MSG_ERROR([LLVM $LLVM_REQUIRED_VERSION_MAJOR.$LLVM_REQUIRED_VERSION_MINOR.$LLVM_REQUIRED_VERSION_PATCH or newer is required for $1])
     fi
     if test true && $LLVM_CONFIG --targets-built | grep -qvw 'R600' ; then
         AC_MSG_ERROR([LLVM R600 Target not enabled.  You can enable it when building the LLVM
@@ -1811,27 +1909,21 @@ if test -n "$with_gallium_drivers"; then
             HAVE_GALLIUM_SVGA=yes
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS svga softpipe"
             gallium_require_drm_loader
-            gallium_check_st "svga/drm" "dri-vmwgfx" ""
+            gallium_check_st "svga/drm" "dri/vmwgfx" "xa/vmwgfx"
             ;;
         xi915)
             HAVE_GALLIUM_I915=yes
             PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             gallium_require_drm_loader
-            GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS i915 softpipe"
-            if test "x$MESA_LLVM" = x1; then
-                GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS llvmpipe"
-            fi
-            GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS i915/sw"
-            gallium_check_st "i915/drm" "dri-i915"
-            DRICOMMON_NEED_LIBDRM=yes
+            GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS i915"
+            gallium_check_st "i915/drm" "dri/i915" "xa/i915"
             ;;
         xilo)
             HAVE_GALLIUM_ILO=yes
             PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             gallium_require_drm_loader
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS ilo"
-            gallium_check_st "intel/drm" "dri-ilo"
-            DRICOMMON_NEED_LIBDRM=yes
+            gallium_check_st "intel/drm" "dri/ilo" "xa/ilo"
             ;;
         xr300)
             HAVE_GALLIUM_R300=yes
@@ -1839,8 +1931,7 @@ if test -n "$with_gallium_drivers"; then
             gallium_require_drm_loader
             gallium_require_llvm "Gallium R300"
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS r300"
-            gallium_check_st "radeon/drm" "r300/dri" "" "" ""
-            DRICOMMON_NEED_LIBDRM=yes
+            gallium_check_st "radeon/drm" "dri/r300"
             ;;
         xr600)
             HAVE_GALLIUM_R600=yes
@@ -1857,8 +1948,7 @@ if test -n "$with_gallium_drivers"; then
             if test "x$enable_opencl" = xyes; then
                 LLVM_COMPONENTS="${LLVM_COMPONENTS} bitreader asmparser"
             fi
-            gallium_check_st "radeon/drm" "r600/dri" "" "r600/xvmc" "r600/vdpau" "r600/omx"
-            DRICOMMON_NEED_LIBDRM=yes
+            gallium_check_st "radeon/drm" "dri/r600" "" "xvmc/r600" "vdpau/r600" "omx/r600"
             ;;
         xradeonsi)
             HAVE_GALLIUM_RADEONSI=yes
@@ -1866,24 +1956,22 @@ if test -n "$with_gallium_drivers"; then
             gallium_require_drm_loader
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS radeonsi"
             radeon_llvm_check "radeonsi"
-            gallium_check_st "radeon/drm" "radeonsi/dri" "" "" "radeonsi/vdpau" "radeonsi/omx"
-            DRICOMMON_NEED_LIBDRM=yes
+            require_egl_drm "radeonsi"
+            gallium_check_st "radeon/drm" "dri/radeonsi" "" "" "vdpau/radeonsi" "omx/radeonsi"
             ;;
         xnouveau)
             HAVE_GALLIUM_NOUVEAU=yes
             PKG_CHECK_MODULES([NOUVEAU], [libdrm_nouveau >= $LIBDRM_NOUVEAU_REQUIRED])
             gallium_require_drm_loader
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS nouveau"
-            gallium_check_st "nouveau/drm" "dri-nouveau" "" "xvmc-nouveau" "vdpau-nouveau" "omx-nouveau"
-            DRICOMMON_NEED_LIBDRM=yes
+            gallium_check_st "nouveau/drm" "dri/nouveau" "xa/nouveau" "xvmc/nouveau" "vdpau/nouveau" "omx/nouveau"
             ;;
         xfreedreno)
             HAVE_GALLIUM_FREEDRENO=yes
             PKG_CHECK_MODULES([FREEDRENO], [libdrm_freedreno >= $LIBDRM_FREEDRENO_REQUIRED])
             gallium_require_drm_loader
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS freedreno"
-            gallium_check_st "freedreno/drm" "dri-freedreno" "" "" ""
-            DRICOMMON_NEED_LIBDRM=yes
+            gallium_check_st "freedreno/drm" "dri/freedreno" "xa/freedreno" "" ""
             ;;
         xswrast)
             HAVE_GALLIUM_SOFTPIPE=yes
@@ -1894,8 +1982,24 @@ if test -n "$with_gallium_drivers"; then
             fi
 
             if test "x$enable_dri" = xyes; then
-                GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS dri-swrast"
+                GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS dri/swrast"
             fi
+
+            if test "x$have_libdrm" = xyes; then
+                GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS dri/kms-swrast"
+            fi
+            ;;
+        xvc4)
+            HAVE_GALLIUM_VC4=yes
+            gallium_require_drm_loader
+            GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS vc4"
+            gallium_check_st "vc4/drm" "dri-vc4" "" "" ""
+
+            case "$host_cpu" in
+                i?86 | x86_64 | amd64)
+                USE_VC4_SIMULATOR=yes
+                ;;
+            esac
             ;;
         *)
             AC_MSG_ERROR([Unknown Gallium driver: $driver])
@@ -1952,17 +2056,22 @@ AM_CONDITIONAL(HAVE_GALLIUM_ILO, test "x$HAVE_GALLIUM_ILO" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_R300, test "x$HAVE_GALLIUM_R300" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_R600, test "x$HAVE_GALLIUM_R600" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_RADEONSI, test "x$HAVE_GALLIUM_RADEONSI" = xyes)
+AM_CONDITIONAL(HAVE_GALLIUM_RADEON_COMMON, test "x$HAVE_GALLIUM_R600" = xyes -o \
+                                                "x$HAVE_GALLIUM_RADEONSI" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_NOUVEAU, test "x$HAVE_GALLIUM_NOUVEAU" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_FREEDRENO, test "x$HAVE_GALLIUM_FREEDRENO" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_SOFTPIPE, test "x$HAVE_GALLIUM_SOFTPIPE" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_LLVMPIPE, test "x$HAVE_GALLIUM_LLVMPIPE" = xyes)
+AM_CONDITIONAL(HAVE_GALLIUM_VC4, test "x$HAVE_GALLIUM_VC4" = xyes)
 
 AM_CONDITIONAL(NEED_GALLIUM_SOFTPIPE_DRIVER, test "x$HAVE_GALLIUM_SVGA" = xyes -o \
-                                                  "x$HAVE_GALLIUM_I915" = xyes -o \
                                                   "x$HAVE_GALLIUM_SOFTPIPE" = xyes)
-AM_CONDITIONAL(NEED_GALLIUM_LLVMPIPE_DRIVER, test "x$HAVE_GALLIUM_I915" = xyes -o \
-                                                  "x$HAVE_GALLIUM_SOFTPIPE" = xyes \
+AM_CONDITIONAL(NEED_GALLIUM_LLVMPIPE_DRIVER, test "x$HAVE_GALLIUM_SOFTPIPE" = xyes \
                                                   && test "x$MESA_LLVM" = x1)
+
+# Enable static gallium targets for now.
+# Do not touch this unless you know what you are doing.
+AM_CONDITIONAL(HAVE_GALLIUM_STATIC_TARGETS, test "xyes" = xyes)
 
 # NOTE: anything using xcb or other client side libs ends up in separate
 #       _CLIENT variables.  The pipe loader is built in two variants,
@@ -2019,6 +2128,10 @@ AM_CONDITIONAL(HAVE_LOADER_GALLIUM, test x$enable_gallium_loader = xyes)
 AM_CONDITIONAL(HAVE_DRM_LOADER_GALLIUM, test x$enable_gallium_drm_loader = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_COMPUTE, test x$enable_opencl = xyes)
 AM_CONDITIONAL(HAVE_MESA_LLVM, test x$MESA_LLVM = x1)
+AM_CONDITIONAL(USE_VC4_SIMULATOR, test x$USE_VC4_SIMULATOR = xyes)
+if test "x$USE_VC4_SIMULATOR" = xyes -a "x$HAVE_GALLIUM_ILO" = xyes; then
+    AC_MSG_ERROR([VC4 simulator on x86 replaces i965 driver build, so ilo must be disabled.])
+fi
 
 AC_SUBST([ELF_LIB])
 
@@ -2072,9 +2185,9 @@ AC_CONFIG_FILES([Makefile
 		src/egl/wayland/wayland-drm/Makefile
 		src/egl/wayland/wayland-egl/Makefile
 		src/egl/wayland/wayland-egl/wayland-egl.pc
+		src/gallium/Makefile
 		src/gallium/auxiliary/Makefile
 		src/gallium/auxiliary/pipe-loader/Makefile
-		src/gallium/drivers/Makefile
 		src/gallium/drivers/freedreno/Makefile
 		src/gallium/drivers/galahad/Makefile
 		src/gallium/drivers/i915/Makefile
@@ -2091,11 +2204,9 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/drivers/softpipe/Makefile
 		src/gallium/drivers/svga/Makefile
 		src/gallium/drivers/trace/Makefile
-		src/gallium/state_trackers/Makefile
+		src/gallium/drivers/vc4/Makefile
 		src/gallium/state_trackers/clover/Makefile
 		src/gallium/state_trackers/dri/Makefile
-		src/gallium/state_trackers/dri/drm/Makefile
-		src/gallium/state_trackers/dri/sw/Makefile
 		src/gallium/state_trackers/egl/Makefile
 		src/gallium/state_trackers/gbm/Makefile
 		src/gallium/state_trackers/glx/xlib/Makefile
@@ -2105,66 +2216,47 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/state_trackers/vega/Makefile
 		src/gallium/state_trackers/xa/Makefile
 		src/gallium/state_trackers/xvmc/Makefile
-		src/gallium/targets/Makefile
-		src/gallium/targets/dri-freedreno/Makefile
-		src/gallium/targets/dri-i915/Makefile
-		src/gallium/targets/dri-ilo/Makefile
-		src/gallium/targets/dri-nouveau/Makefile
-		src/gallium/targets/dri-swrast/Makefile
-		src/gallium/targets/dri-vmwgfx/Makefile
+		src/gallium/targets/dri/Makefile
 		src/gallium/targets/egl-static/Makefile
 		src/gallium/targets/gbm/Makefile
+		src/gallium/targets/libgl-xlib/Makefile
+		src/gallium/targets/omx/Makefile
 		src/gallium/targets/opencl/Makefile
-		src/gallium/targets/xa/Makefile
-		src/gallium/targets/xa/xatracker.pc
-		src/gallium/targets/omx-nouveau/Makefile
 		src/gallium/targets/osmesa/Makefile
 		src/gallium/targets/osmesa/osmesa.pc
 		src/gallium/targets/pipe-loader/Makefile
-		src/gallium/targets/radeonsi/dri/Makefile
-		src/gallium/targets/radeonsi/omx/Makefile
-		src/gallium/targets/radeonsi/vdpau/Makefile
-		src/gallium/targets/r300/dri/Makefile
-		src/gallium/targets/r600/dri/Makefile
-		src/gallium/targets/r600/omx/Makefile
-		src/gallium/targets/r600/vdpau/Makefile
-		src/gallium/targets/r600/xvmc/Makefile
-		src/gallium/targets/libgl-xlib/Makefile
-		src/gallium/targets/vdpau-nouveau/Makefile
-		src/gallium/targets/xvmc-nouveau/Makefile
+		src/gallium/targets/vdpau/Makefile
+		src/gallium/targets/xa/Makefile
+		src/gallium/targets/xa/xatracker.pc
+		src/gallium/targets/xvmc/Makefile
 		src/gallium/tests/trivial/Makefile
 		src/gallium/tests/unit/Makefile
-		src/gallium/winsys/Makefile
 		src/gallium/winsys/freedreno/drm/Makefile
 		src/gallium/winsys/i915/drm/Makefile
-		src/gallium/winsys/i915/sw/Makefile
 		src/gallium/winsys/intel/drm/Makefile
 		src/gallium/winsys/nouveau/drm/Makefile
 		src/gallium/winsys/radeon/drm/Makefile
 		src/gallium/winsys/svga/drm/Makefile
 		src/gallium/winsys/sw/dri/Makefile
 		src/gallium/winsys/sw/fbdev/Makefile
+		src/gallium/winsys/sw/kms-dri/Makefile
 		src/gallium/winsys/sw/null/Makefile
 		src/gallium/winsys/sw/wayland/Makefile
 		src/gallium/winsys/sw/wrapper/Makefile
 		src/gallium/winsys/sw/xlib/Makefile
+		src/gallium/winsys/vc4/drm/Makefile
 		src/gbm/Makefile
 		src/gbm/main/gbm.pc
 		src/glsl/Makefile
 		src/glx/Makefile
+		src/glx/apple/Makefile
 		src/glx/tests/Makefile
 		src/gtest/Makefile
 		src/loader/Makefile
 		src/mapi/Makefile
-		src/mapi/es1api/Makefile
 		src/mapi/es1api/glesv1_cm.pc
-		src/mapi/es2api/Makefile
 		src/mapi/es2api/glesv2.pc
-		src/mapi/glapi/Makefile
 		src/mapi/glapi/gen/Makefile
-		src/mapi/glapi/tests/Makefile
-		src/mapi/shared-glapi/Makefile
-		src/mapi/shared-glapi/tests/Makefile
 		src/mapi/vgapi/Makefile
 		src/mapi/vgapi/vg.pc
 		src/mesa/Makefile
@@ -2183,7 +2275,8 @@ AC_CONFIG_FILES([Makefile
 		src/mesa/drivers/osmesa/osmesa.pc
 		src/mesa/drivers/x11/Makefile
 		src/mesa/main/tests/Makefile
-		src/mesa/main/tests/hash_table/Makefile])
+		src/util/Makefile
+		src/util/tests/hash_table/Makefile])
 
 dnl Sort the dirs alphabetically
 GALLIUM_TARGET_DIRS=`echo $GALLIUM_TARGET_DIRS|tr " " "\n"|sort -u|tr "\n" " "`
@@ -2221,7 +2314,9 @@ xnono)
         ;;
 esac
 
+echo ""
 if test "x$enable_dri" != xno; then
+        echo "        DRI platform:    $dri_platform"
         if test -z "$DRI_DIRS"; then
             echo "        DRI drivers:     no"
         else

@@ -70,7 +70,6 @@ struct nv50_ir_varying
 #endif
 
 #define NV50_SEMANTIC_CLIPDISTANCE  (TGSI_SEMANTIC_COUNT + 0)
-#define NV50_SEMANTIC_VIEWPORTINDEX (TGSI_SEMANTIC_COUNT + 4)
 #define NV50_SEMANTIC_TESSFACTOR    (TGSI_SEMANTIC_COUNT + 7)
 #define NV50_SEMANTIC_TESSCOORD     (TGSI_SEMANTIC_COUNT + 8)
 #define NV50_SEMANTIC_COUNT         (TGSI_SEMANTIC_COUNT + 10)
@@ -91,7 +90,8 @@ struct nv50_ir_prog_symbol
 #define NVISA_GF100_CHIPSET_C0 0xc0
 #define NVISA_GF100_CHIPSET_D0 0xd0
 #define NVISA_GK104_CHIPSET    0xe0
-#define NVISA_GK110_CHIPSET    0xf0
+#define NVISA_GK20A_CHIPSET    0xea
+#define NVISA_GM107_CHIPSET    0x110
 
 struct nv50_ir_prog_info
 {
@@ -183,6 +183,7 @@ struct nv50_ir_prog_info
       boolean sampleInterp;      /* perform sample interp on all fp inputs */
       uint8_t backFaceColor[2];  /* input/output indices of back face colour */
       uint8_t globalAccess;      /* 1 for read, 2 for wr, 3 for rw */
+      boolean fp64;              /* program uses fp64 math */
       boolean nv50styleSurfaces; /* generate gX[] access for raw buffers */
       uint8_t resInfoCBSlot;     /* cX[] used for tex handles, surface info */
       uint16_t texBindBase;      /* base address for tex handles (nve4) */

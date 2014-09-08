@@ -6,7 +6,6 @@ GLSL_BUILDDIR = $(top_builddir)/src/glsl
 # libglcpp
 
 LIBGLCPP_FILES = \
-	$(GLSL_SRCDIR)/ralloc.c \
 	$(GLSL_SRCDIR)/glcpp/pp.c
 
 LIBGLCPP_GENERATED_FILES = \
@@ -96,6 +95,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_function_inlining.cpp \
 	$(GLSL_SRCDIR)/opt_if_simplification.cpp \
 	$(GLSL_SRCDIR)/opt_noop_swizzle.cpp \
+	$(GLSL_SRCDIR)/opt_rebalance_tree.cpp \
 	$(GLSL_SRCDIR)/opt_redundant_jumps.cpp \
 	$(GLSL_SRCDIR)/opt_structure_splitting.cpp \
 	$(GLSL_SRCDIR)/opt_swizzle_swizzle.cpp \

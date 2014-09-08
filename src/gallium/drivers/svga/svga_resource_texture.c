@@ -52,7 +52,7 @@
 #define SVGA3D_SURFACE_HINT_SCANOUT (1 << 9)
 
 
-static INLINE void
+static void
 svga_transfer_dma_band(struct svga_context *svga,
                        struct svga_transfer *st,
                        SVGA3dTransferType transfer,
@@ -104,7 +104,7 @@ svga_transfer_dma_band(struct svga_context *svga,
 }
 
 
-static INLINE void
+static void
 svga_transfer_dma(struct svga_context *svga,
                   struct svga_transfer *st,
                   SVGA3dTransferType transfer,
@@ -727,8 +727,10 @@ svga_texture_create(struct pipe_screen *screen,
 
    SVGA_DBG(DEBUG_DMA, "surface_create for texture\n", tex->handle);
    tex->handle = svga_screen_surface_create(svgascreen, &tex->key);
-   if (tex->handle)
-      SVGA_DBG(DEBUG_DMA, "  --> got sid %p (texture)\n", tex->handle);
+   if (!tex->handle)
+       goto error2;
+
+   SVGA_DBG(DEBUG_DMA, "  --> got sid %p (texture)\n", tex->handle);
 
    debug_reference(&tex->b.b.reference,
                    (debug_reference_descriptor)debug_describe_resource, 0);

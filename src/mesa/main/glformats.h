@@ -54,10 +54,16 @@ extern GLint
 _mesa_bytes_per_vertex_attrib(GLint comps, GLenum type);
 
 extern GLboolean
-_mesa_is_type_integer(GLenum type);
+_mesa_is_type_unsigned(GLenum type);
 
 extern GLboolean
-_mesa_is_type_unsigned(GLenum type);
+_mesa_is_enum_format_unsized(GLenum format);
+
+extern GLboolean
+_mesa_is_enum_format_unorm(GLenum format);
+
+extern GLboolean
+_mesa_is_enum_format_snorm(GLenum format);
 
 extern GLboolean
 _mesa_is_enum_format_integer(GLenum format);
@@ -67,9 +73,6 @@ _mesa_is_enum_format_unsigned_int(GLenum format);
 
 extern GLboolean
 _mesa_is_enum_format_signed_int(GLenum format);
-
-extern GLboolean
-_mesa_is_enum_format_or_type_integer(GLenum format, GLenum type);
 
 extern GLboolean
 _mesa_is_color_format(GLenum format);
@@ -88,9 +91,6 @@ _mesa_is_depthstencil_format(GLenum format);
 
 extern GLboolean
 _mesa_is_depth_or_stencil_format(GLenum format);
-
-extern GLboolean
-_mesa_is_dudv_format(GLenum format);
 
 extern GLboolean
 _mesa_is_compressed_format(struct gl_context *ctx, GLenum format);

@@ -101,6 +101,9 @@ namespace {
                    const vector_t &orig, const vector_t &region) {
       vector_t size = { img.width(), img.height(), img.depth() };
 
+      if (!q.device().image_support())
+         throw error(CL_INVALID_OPERATION);
+
       if (img.context() != q.context())
          throw error(CL_INVALID_CONTEXT);
 
@@ -162,6 +165,16 @@ namespace {
                     src_orig, src_orig + region))
             throw error(CL_MEM_COPY_OVERLAP);
       }
+   }
+
+   ///
+   /// Checks that the mapping flags are correct.
+   ///
+   void
+   validate_flags(const cl_map_flags flags) {
+      if ((flags & (CL_MAP_WRITE | CL_MAP_READ)) &&
+          (flags & CL_MAP_WRITE_INVALIDATE_REGION))
+         throw error(CL_INVALID_VALUE);
    }
 
    ///
@@ -626,6 +639,7 @@ clEnqueueMapBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    validate_common(q, deps);
    validate_object(q, mem, obj_origin, obj_pitch, region);
+   validate_flags(flags);
 
    void *map = mem.resource(q).add_map(q, flags, blocking, obj_origin, region);
 
@@ -653,6 +667,7 @@ clEnqueueMapImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    validate_common(q, deps);
    validate_object(q, img, origin, region);
+   validate_flags(flags);
 
    void *map = img.resource(q).add_map(q, flags, blocking, origin, region);
 

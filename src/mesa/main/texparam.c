@@ -1051,6 +1051,7 @@ get_tex_level_parameter_image(struct gl_context *ctx,
                               GLenum pname, GLint *params)
 {
    const struct gl_texture_image *img = NULL;
+   struct gl_texture_image dummy_image;
    mesa_format texFormat;
 
    img = _mesa_select_tex_image(ctx, texObj, target, level);
@@ -1062,12 +1063,12 @@ get_tex_level_parameter_image(struct gl_context *ctx,
        *     instead of 1. TEXTURE_COMPONENTS is deprecated; always
        *     use TEXTURE_INTERNAL_FORMAT."
        */
+      memset(&dummy_image, 0, sizeof(dummy_image));
+      dummy_image.TexFormat = MESA_FORMAT_NONE;
+      dummy_image.InternalFormat = GL_RGBA;
+      dummy_image._BaseFormat = GL_NONE;
 
-      if (pname == GL_TEXTURE_INTERNAL_FORMAT)
-         *params = GL_RGBA;
-      else
-         *params = 0;
-      return;
+      img = &dummy_image;
    }
 
    texFormat = img->TexFormat;
@@ -1383,7 +1384,7 @@ _mesa_GetTexParameterfv( GLenum target, GLenum pname, GLfloat *params )
    if (!obj)
       return;
 
-   _mesa_lock_texture(ctx, obj);
+   _mesa_lock_context_textures(ctx);
    switch (pname) {
       case GL_TEXTURE_MAG_FILTER:
 	 *params = ENUM_TO_FLOAT(obj->Sampler.MagFilter);
@@ -1590,11 +1591,11 @@ _mesa_GetTexParameterfv( GLenum target, GLenum pname, GLfloat *params )
    }
 
    /* no error if we get here */
-   _mesa_unlock_texture(ctx, obj);
+   _mesa_unlock_context_textures(ctx);
    return;
 
 invalid_pname:
-   _mesa_unlock_texture(ctx, obj);
+   _mesa_unlock_context_textures(ctx);
    _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexParameterfv(pname=0x%x)", pname);
 }
 

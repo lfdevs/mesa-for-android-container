@@ -87,7 +87,7 @@ static void reset_cpb(struct rvce_encoder *enc)
 	unsigned i;
 
 	LIST_INITHEAD(&enc->cpb_slots);
-	for (i = 0; i < RVCE_NUM_CPB_FRAMES; ++i) {
+	for (i = 0; i < enc->cpb_num; ++i) {
 		struct rvce_cpb_slot *slot = &enc->cpb_array[i];
 		slot->index = i;
 		slot->picture_type = PIPE_H264_ENC_PICTURE_TYPE_SKIP;
@@ -131,6 +131,59 @@ static void sort_cpb(struct rvce_encoder *enc)
 }
 
 /**
+ * get number of cpbs based on dpb
+ */
+static unsigned get_cpb_num(struct rvce_encoder *enc)
+{
+	unsigned w = align(enc->base.width, 16) / 16;
+	unsigned h = align(enc->base.height, 16) / 16;
+	unsigned dpb;
+
+	switch (enc->base.level) {
+	case 10:
+		dpb = 396;
+		break;
+	case 11:
+		dpb = 900;
+		break;
+	case 12:
+	case 13:
+	case 20:
+		dpb = 2376;
+		break;
+	case 21:
+		dpb = 4752;
+		break;
+	case 22:
+	case 30:
+		dpb = 8100;
+		break;
+	case 31:
+		dpb = 18000;
+		break;
+	case 32:
+		dpb = 20480;
+		break;
+	case 40:
+	case 41:
+		dpb = 32768;
+		break;
+	default:
+	case 42:
+		dpb = 34816;
+		break;
+	case 50:
+		dpb = 110400;
+		break;
+	case 51:
+		dpb = 184320;
+		break;
+	}
+
+	return MIN2(dpb / (w * h), 16);
+}
+
+/**
  * destroy this video encoder
  */
 static void rvce_destroy(struct pipe_video_codec *encoder)
@@ -138,7 +191,7 @@ static void rvce_destroy(struct pipe_video_codec *encoder)
 	struct rvce_encoder *enc = (struct rvce_encoder*)encoder;
 	if (enc->stream_handle) {
 		struct rvid_buffer fb;
-		rvid_create_buffer(enc->ws, &fb, 512, RADEON_DOMAIN_GTT);
+		rvid_create_buffer(enc->ws, &fb, 512, RADEON_DOMAIN_GTT, 0);
 		enc->fb = &fb;
 		enc->session(enc);
 		enc->feedback(enc);
@@ -180,7 +233,7 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder,
 	if (!enc->stream_handle) {
 		struct rvid_buffer fb;
 		enc->stream_handle = rvid_alloc_stream_handle();
-		rvid_create_buffer(enc->ws, &fb, 512, RADEON_DOMAIN_GTT);
+		rvid_create_buffer(enc->ws, &fb, 512, RADEON_DOMAIN_GTT, 0);
 		enc->fb = &fb;
 		enc->session(enc);
 		enc->create(enc);
@@ -212,7 +265,7 @@ static void rvce_encode_bitstream(struct pipe_video_codec *encoder,
 	enc->bs_size = destination->width0;
 
 	*fb = enc->fb = CALLOC_STRUCT(rvid_buffer);
-	if (!rvid_create_buffer(enc->ws, enc->fb, 512, RADEON_DOMAIN_GTT)) {
+	if (!rvid_create_buffer(enc->ws, enc->fb, 512, RADEON_DOMAIN_GTT, 0)) {
 		RVID_ERR("Can't create feedback buffer.\n");
 		return;
 	}
@@ -231,11 +284,13 @@ static void rvce_end_frame(struct pipe_video_codec *encoder,
 	flush(enc);
 
 	/* update the CPB backtrack with the just encoded frame */
-	LIST_DEL(&slot->list);
 	slot->picture_type = enc->pic.picture_type;
 	slot->frame_num = enc->pic.frame_num;
 	slot->pic_order_cnt = enc->pic.pic_order_cnt;
-	LIST_ADD(&slot->list, &enc->cpb_slots);
+	if (!enc->pic.not_referenced) {
+		LIST_DEL(&slot->list);
+		LIST_ADD(&slot->list, &enc->cpb_slots);
+	}
 }
 
 static void rvce_get_feedback(struct pipe_video_codec *encoder,
@@ -325,18 +380,22 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 		goto error;
 	}
 
+	enc->cpb_num = get_cpb_num(enc);
+	if (!enc->cpb_num)
+		goto error;
+
 	get_buffer(((struct vl_video_buffer *)tmp_buf)->resources[0], NULL, &tmp_surf);
 	cpb_size = align(tmp_surf->level[0].pitch_bytes, 128);
 	cpb_size = cpb_size * align(tmp_surf->npix_y, 16);
 	cpb_size = cpb_size * 3 / 2;
-	cpb_size = cpb_size * RVCE_NUM_CPB_FRAMES;
+	cpb_size = cpb_size * enc->cpb_num;
 	tmp_buf->destroy(tmp_buf);
-	if (!rvid_create_buffer(enc->ws, &enc->cpb, cpb_size, RADEON_DOMAIN_VRAM)) {
+	if (!rvid_create_buffer(enc->ws, &enc->cpb, cpb_size, RADEON_DOMAIN_VRAM, 0)) {
 		RVID_ERR("Can't create CPB buffer.\n");
 		goto error;
 	}
 
-	enc->cpb_array = CALLOC(RVCE_NUM_CPB_FRAMES, sizeof(struct rvce_cpb_slot));
+	enc->cpb_array = CALLOC(enc->cpb_num, sizeof(struct rvce_cpb_slot));
 	if (!enc->cpb_array)
 		goto error;
 

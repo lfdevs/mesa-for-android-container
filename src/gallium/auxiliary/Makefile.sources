@@ -113,6 +113,7 @@ C_SOURCES := \
 	util/u_format_s3tc.c \
 	util/u_format_rgtc.c \
 	util/u_format_etc.c \
+	util/u_format_bptc.c \
 	util/u_format_tests.c \
 	util/u_format_yuv.c \
 	util/u_format_zs.c \
@@ -162,7 +163,6 @@ C_SOURCES := \
 GENERATED_SOURCES := \
 	indices/u_indices_gen.c \
 	indices/u_unfilled_gen.c \
-	util/u_format_srgb.c \
 	util/u_format_table.c
 
 GALLIVM_SOURCES := \

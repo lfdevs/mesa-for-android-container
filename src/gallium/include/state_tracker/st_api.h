@@ -245,6 +245,7 @@ struct st_config_options
    boolean force_glsl_extensions_warn;
    unsigned force_glsl_version;
    boolean force_s3tc_enable;
+   boolean allow_glsl_extension_directive_midshader;
 };
 
 /**
@@ -483,6 +484,17 @@ struct st_api
     * Destroy the API.
     */
    void (*destroy)(struct st_api *stapi);
+
+   /**
+    * Query supported OpenGL versions. (if applicable)
+    * The format is (major*10+minor).
+    */
+   void (*query_versions)(struct st_api *stapi, struct st_manager *sm,
+                          struct st_config_options *options,
+                          int *gl_core_version,
+                          int *gl_compat_version,
+                          int *gl_es1_version,
+                          int *gl_es2_version);
 
    /**
     * Return an API entry point.

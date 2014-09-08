@@ -40,17 +40,22 @@ AM_CPPFLAGS = \
 	-DGALLIUM_GALAHAD
 AM_CFLAGS = $(X11_INCLUDES)
 
-lib_LTLIBRARIES = libGL.la
+lib_LTLIBRARIES = lib@GL_LIB@.la
 
-nodist_EXTRA_libGL_la_SOURCES = dummy.cpp
-libGL_la_SOURCES = xlib.c
-libGL_la_LDFLAGS = \
+nodist_EXTRA_lib@GL_LIB@_la_SOURCES = dummy.cpp
+lib@GL_LIB@_la_SOURCES = xlib.c
+lib@GL_LIB@_la_LDFLAGS = \
 	-no-undefined \
 	-version-number $(GL_MAJOR):$(GL_MINOR):$(GL_TINY) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 
-libGL_la_LIBADD = \
+if HAVE_LD_VERSION_SCRIPT
+lib@GL_LIB@_la_LDFLAGS += \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/libgl-xlib/libgl-xlib.sym
+endif
+
+lib@GL_LIB@_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/glx/xlib/libxlib.la \
 	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
@@ -64,9 +69,9 @@ libGL_la_LIBADD = \
 	$(CLOCK_LIB)
 
 if HAVE_MESA_LLVM
-libGL_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
+lib@GL_LIB@_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
 AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
-libGL_la_LDFLAGS += $(LLVM_LDFLAGS)
+lib@GL_LIB@_la_LDFLAGS += $(LLVM_LDFLAGS)
 endif
 
 include $(top_srcdir)/install-gallium-links.mk

@@ -914,10 +914,17 @@ nvc0_set_scissor_states(struct pipe_context *pipe,
                         unsigned num_scissors,
                         const struct pipe_scissor_state *scissor)
 {
-    struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   int i;
 
-    nvc0->scissor = *scissor;
-    nvc0->dirty |= NVC0_NEW_SCISSOR;
+   assert(start_slot + num_scissors <= NVC0_MAX_VIEWPORTS);
+   for (i = 0; i < num_scissors; i++) {
+      if (!memcmp(&nvc0->scissors[start_slot + i], &scissor[i], sizeof(*scissor)))
+         continue;
+      nvc0->scissors[start_slot + i] = scissor[i];
+      nvc0->scissors_dirty |= 1 << (start_slot + i);
+      nvc0->dirty |= NVC0_NEW_SCISSOR;
+   }
 }
 
 static void
@@ -926,10 +933,18 @@ nvc0_set_viewport_states(struct pipe_context *pipe,
                          unsigned num_viewports,
                          const struct pipe_viewport_state *vpt)
 {
-    struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   int i;
 
-    nvc0->viewport = *vpt;
-    nvc0->dirty |= NVC0_NEW_VIEWPORT;
+   assert(start_slot + num_viewports <= NVC0_MAX_VIEWPORTS);
+   for (i = 0; i < num_viewports; i++) {
+      if (!memcmp(&nvc0->viewports[start_slot + i], &vpt[i], sizeof(*vpt)))
+         continue;
+      nvc0->viewports[start_slot + i] = vpt[i];
+      nvc0->viewports_dirty |= 1 << (start_slot + i);
+      nvc0->dirty |= NVC0_NEW_VIEWPORT;
+   }
+
 }
 
 static void
@@ -954,7 +969,7 @@ nvc0_set_vertex_buffers(struct pipe_context *pipe,
 
        if (vb[i].user_buffer) {
           nvc0->vbo_user |= 1 << dst_index;
-          if (!vb[i].stride)
+          if (!vb[i].stride && nvc0->screen->eng3d->oclass < GM107_3D_CLASS)
              nvc0->constant_vbos |= 1 << dst_index;
           else
              nvc0->constant_vbos &= ~(1 << dst_index);
@@ -1012,7 +1027,7 @@ nvc0_so_target_create(struct pipe_context *pipe,
    if (!targ)
       return NULL;
 
-   targ->pq = pipe->create_query(pipe, NVC0_QUERY_TFB_BUFFER_OFFSET);
+   targ->pq = pipe->create_query(pipe, NVC0_QUERY_TFB_BUFFER_OFFSET, 0);
    if (!targ->pq) {
       FREE(targ);
       return NULL;

@@ -39,6 +39,12 @@
 #include "util/u_pack_color.h"
 #include "util/u_surface.h"
 
+static struct pipe_surface *
+i915_create_surface_custom(struct pipe_context *ctx,
+                           struct pipe_resource *pt,
+                           const struct pipe_surface *surf_tmpl,
+                           unsigned width0,
+                           unsigned height0);
 /*
  * surface functions using the render engine
  */
@@ -67,7 +73,7 @@ i915_util_blitter_save_states(struct i915_context *i915)
                                             i915->num_fragment_sampler_views,
                                             i915->fragment_sampler_views);
 }
-
+#
 static void
 i915_surface_copy_render(struct pipe_context *pipe,
                          struct pipe_resource *dst, unsigned dst_level,
@@ -76,25 +82,42 @@ i915_surface_copy_render(struct pipe_context *pipe,
                          const struct pipe_box *src_box)
 {
    struct i915_context *i915 = i915_context(pipe);
+   unsigned src_width0 = src->width0;
+   unsigned src_height0 = src->height0;
+   unsigned dst_width0 = dst->width0;
+   unsigned dst_height0 = dst->height0;
+   struct pipe_box dstbox;
+   struct pipe_sampler_view src_templ, *src_view;
+   struct pipe_surface dst_templ, *dst_view;
 
-   /* Fallback for buffers. */
-   if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
-      util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
-                                src, src_level, src_box);
-      return;
-   }
+   /* Fallback for buffers and npot. */
+   if ((dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) ||
+       !util_is_power_of_two(src_width0) || !util_is_power_of_two(src_height0))
+      goto fallback;
 
-   if (!util_blitter_is_copy_supported(i915->blitter, dst, src)) {
-      util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
-                                src, src_level, src_box);
-      return;
-   }
+   util_blitter_default_dst_texture(&dst_templ, dst, dst_level, dstz);
+   util_blitter_default_src_texture(&src_templ, src, src_level);
+
+   if (!util_blitter_is_copy_supported(i915->blitter, dst, src))
+      goto fallback;
 
    i915_util_blitter_save_states(i915);
 
-   util_blitter_copy_texture(i915->blitter, dst, dst_level, dstx, dsty, dstz,
-                            src, src_level, src_box);
-}
+   dst_view = i915_create_surface_custom(pipe, dst, &dst_templ, dst_width0, dst_height0);
+   src_view = i915_create_sampler_view_custom(pipe, src, &src_templ, src_width0, src_height0);
+
+   u_box_3d(dstx, dsty, dstz, abs(src_box->width), abs(src_box->height),
+            abs(src_box->depth), &dstbox);
+
+   util_blitter_blit_generic(i915->blitter, dst_view, &dstbox,
+                             src_view, src_box, src_width0, src_height0,
+                             PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL);
+   return;
+
+fallback:
+   util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
+                             src, src_level, src_box);
+ }
 
 static void
 i915_clear_render_target_render(struct pipe_context *pipe,
@@ -314,9 +337,11 @@ i915_clear_depth_stencil_blitter(struct pipe_context *pipe,
 
 
 static struct pipe_surface *
-i915_create_surface(struct pipe_context *ctx,
-                    struct pipe_resource *pt,
-                    const struct pipe_surface *surf_tmpl)
+i915_create_surface_custom(struct pipe_context *ctx,
+                           struct pipe_resource *pt,
+                           const struct pipe_surface *surf_tmpl,
+                           unsigned width0,
+                           unsigned height0)
 {
    struct pipe_surface *ps;
 
@@ -331,14 +356,23 @@ i915_create_surface(struct pipe_context *ctx,
       pipe_reference_init(&ps->reference, 1);
       pipe_resource_reference(&ps->texture, pt);
       ps->format = surf_tmpl->format;
-      ps->width = u_minify(pt->width0, surf_tmpl->u.tex.level);
-      ps->height = u_minify(pt->height0, surf_tmpl->u.tex.level);
+      ps->width = u_minify(width0, surf_tmpl->u.tex.level);
+      ps->height = u_minify(height0, surf_tmpl->u.tex.level);
       ps->u.tex.level = surf_tmpl->u.tex.level;
       ps->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
       ps->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
       ps->context = ctx;
    }
    return ps;
+}
+
+static struct pipe_surface *
+i915_create_surface(struct pipe_context *ctx,
+                    struct pipe_resource *pt,
+                    const struct pipe_surface *surf_tmpl)
+{
+   return i915_create_surface_custom(ctx, pt, surf_tmpl,
+                                     pt->width0, pt->height0);
 }
 
 static void

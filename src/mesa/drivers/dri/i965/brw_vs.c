@@ -38,7 +38,7 @@
 #include "program/prog_print.h"
 #include "program/prog_parameter.h"
 
-#include "glsl/ralloc.h"
+#include "util/ralloc.h"
 
 static inline void assign_vue_slot(struct brw_vue_map *vue_map,
                                    int varying)
@@ -233,8 +233,10 @@ do_vs_prog(struct brw_context *brw,
     */
    param_count += c.key.base.nr_userclip_plane_consts * 4;
 
-   stage_prog_data->param = rzalloc_array(NULL, const float *, param_count);
-   stage_prog_data->pull_param = rzalloc_array(NULL, const float *, param_count);
+   stage_prog_data->param =
+      rzalloc_array(NULL, const gl_constant_value *, param_count);
+   stage_prog_data->pull_param =
+      rzalloc_array(NULL, const gl_constant_value *, param_count);
 
    /* Setting nr_params here NOT to the size of the param and pull_param
     * arrays, but to the number of uniform components vec4_visitor

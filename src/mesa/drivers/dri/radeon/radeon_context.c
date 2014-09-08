@@ -157,6 +157,7 @@ static void r100_init_vtbl(radeonContextPtr radeon)
    radeon->vtbl.check_blit = r100_check_blit;
    radeon->vtbl.blit = r100_blit;
    radeon->vtbl.is_format_renderable = radeonIsFormatRenderable;
+   radeon->vtbl.revalidate_all_buffers = r100ValidateBuffers;
 }
 
 /* Create the device specific context.
@@ -302,7 +303,7 @@ r100CreateContext( gl_api api,
    ctx->Const.MaxColorAttachments = 1;
    ctx->Const.MaxRenderbufferSize = 2048;
 
-   ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = true;
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = true;
 
    /* Install the customized pipeline:
     */

@@ -346,6 +346,8 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
 	         unsigned num_verts, bool check_edge_flags)
 {
    struct brw_compile *p = &c->func;
+   struct brw_context *brw = p->brw;
+   brw_inst *inst;
    c->prog_data.svbi_postincrement_value = num_verts;
 
    brw_ff_gs_alloc_regs(c, num_verts, true);
@@ -407,10 +409,10 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
          /* If so, then overwrite destination_indices_uw with the appropriate
           * reordering.
           */
-         brw_MOV(p, destination_indices_uw,
-                 brw_imm_v(key->pv_first ? 0x00010200    /* (0, 2, 1) */
-                                         : 0x00020001)); /* (1, 0, 2) */
-         brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+         inst = brw_MOV(p, destination_indices_uw,
+                        brw_imm_v(key->pv_first ? 0x00010200    /* (0, 2, 1) */
+                                                : 0x00020001)); /* (1, 0, 2) */
+         brw_inst_set_pred_control(brw, inst, BRW_PREDICATE_NORMAL);
       }
       brw_ADD(p, c->reg.destination_indices,
               c->reg.destination_indices, get_element_ud(c->reg.SVBI, 0));
@@ -443,10 +445,10 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
             /* gl_PointSize is stored in VARYING_SLOT_PSIZ.w. */
             vertex_slot.dw1.bits.swizzle = varying == VARYING_SLOT_PSIZ
                ? BRW_SWIZZLE_WWWW : key->transform_feedback_swizzles[binding];
-            brw_set_access_mode(p, BRW_ALIGN_16);
+            brw_set_default_access_mode(p, BRW_ALIGN_16);
             brw_MOV(p, stride(c->reg.header, 4, 4, 1),
                     retype(vertex_slot, BRW_REGISTER_TYPE_UD));
-            brw_set_access_mode(p, BRW_ALIGN_1);
+            brw_set_default_access_mode(p, BRW_ALIGN_1);
             brw_svb_write(p,
                           final_write ? c->reg.temp : brw_null_reg(), /* dest */
                           1, /* msg_reg_nr */
@@ -497,10 +499,10 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
          /* Only emit vertices 0 and 1 if this is the first triangle of the
           * polygon.  Otherwise they are redundant.
           */
-         brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
          brw_AND(p, retype(brw_null_reg(), BRW_REGISTER_TYPE_UD),
                  get_element_ud(c->reg.R0, 2),
                  brw_imm_ud(BRW_GS_EDGE_INDICATOR_0));
+         brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
          brw_IF(p, BRW_EXECUTE_1);
       }
       brw_ff_gs_offset_header_dw2(c, URB_WRITE_PRIM_START);
@@ -513,14 +515,14 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
           * of the polygon.  Otherwise leave the primitive incomplete because
           * there are more polygon vertices coming.
           */
-         brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
          brw_AND(p, retype(brw_null_reg(), BRW_REGISTER_TYPE_UD),
                  get_element_ud(c->reg.R0, 2),
                  brw_imm_ud(BRW_GS_EDGE_INDICATOR_1));
-         brw_set_predicate_control(p, BRW_PREDICATE_NORMAL);
+         brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
+         brw_set_default_predicate_control(p, BRW_PREDICATE_NORMAL);
       }
       brw_ff_gs_offset_header_dw2(c, URB_WRITE_PRIM_END);
-      brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
       brw_ff_gs_emit_vue(c, c->reg.vertex[2], true);
       break;
    }

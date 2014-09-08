@@ -21,41 +21,15 @@ SConscript([
     'drivers/trace/SConscript',
 ])
 
-if not env['msvc']:
-    # These drivers do not build on MSVC compilers
-    SConscript([
-        'drivers/i915/SConscript',
-    ])
-
-#
-# State trackers
-#
-
-# Needed by some state trackers
-SConscript('winsys/sw/null/SConscript')
-
-if not env['embedded']:
-    SConscript('state_trackers/vega/SConscript')
-    if env['platform'] not in ('cygwin', 'darwin', 'haiku', 'sunos'):
-        SConscript('state_trackers/egl/SConscript')
-
-    if env['x11']:
-        SConscript('state_trackers/glx/xlib/SConscript')
-
-    if env['dri']:
-        SConscript('state_trackers/dri/SConscript')
-
-    if env['platform'] == 'windows':
-        SConscript('state_trackers/wgl/SConscript')
-
 #
 # Winsys
-# 
+#
 
 SConscript([
+    'winsys/sw/null/SConscript',
     'winsys/sw/wrapper/SConscript',
 ])
-    
+
 if env['x11']:
     SConscript([
         'winsys/sw/xlib/SConscript',
@@ -66,11 +40,6 @@ if env['platform'] == 'windows':
         'winsys/sw/gdi/SConscript',
     ])
 
-if not env['msvc']:
-    SConscript([
-        'winsys/i915/sw/SConscript',
-    ])
-
 if env['platform'] == 'haiku':
     SConscript([
         'winsys/sw/hgl/SConscript',
@@ -79,19 +48,13 @@ if env['platform'] == 'haiku':
 if env['dri']:
     SConscript([
         'winsys/sw/dri/SConscript',
-    ])
-
-    SConscript([
+        'winsys/sw/kms-dri/SConscript',
         'winsys/svga/drm/SConscript',
     ])
 
-    if env['drm_intel']:
-        SConscript([
-            'winsys/i915/drm/SConscript',
-        ])
 
 #
-# Targets
+# State trackers and targets
 #
 
 SConscript([
@@ -99,19 +62,23 @@ SConscript([
 ])
 
 if not env['embedded']:
+    SConscript('state_trackers/vega/SConscript')
     if env['platform'] not in ('cygwin', 'darwin', 'freebsd', 'haiku', 'sunos'):
         SConscript([
-            'targets/egl-static/SConscript'
+            'state_trackers/egl/SConscript',
+            'targets/egl-static/SConscript',
         ])
 
     if env['x11']:
         SConscript([
+            'state_trackers/glx/xlib/SConscript',
             'targets/graw-xlib/SConscript',
             'targets/libgl-xlib/SConscript',
         ])
 
     if env['platform'] == 'windows':
         SConscript([
+            'state_trackers/wgl/SConscript',
             'targets/graw-gdi/SConscript',
             'targets/libgl-gdi/SConscript',
         ])
@@ -123,13 +90,9 @@ if not env['embedded']:
 
     if env['dri']:
         SConscript([
-            'targets/dri-swrast/SConscript',
-            'targets/dri-vmwgfx/SConscript',
+            'state_trackers/dri/SConscript',
+            'targets/dri/SConscript',
         ])
-        if env['drm_intel']:
-            SConscript([
-                'targets/dri-i915/SConscript',
-            ])
 
 
 #

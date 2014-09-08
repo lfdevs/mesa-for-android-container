@@ -65,7 +65,7 @@ do_optimization(struct exec_list *ir, const char *optimization,
    if (sscanf(optimization, "do_common_optimization ( %d ) ", &int_0) == 1) {
       return do_common_optimization(ir, int_0 != 0, false, options, true);
    } else if (strcmp(optimization, "do_algebraic") == 0) {
-      return do_algebraic(ir, true);
+      return do_algebraic(ir, true, options);
    } else if (strcmp(optimization, "do_constant_folding") == 0) {
       return do_constant_folding(ir);
    } else if (strcmp(optimization, "do_constant_variable") == 0) {
@@ -242,7 +242,7 @@ int test_optpass(int argc, char **argv)
    if (!state->error) {
       GLboolean progress;
       const struct gl_shader_compiler_options *options =
-         &ctx->ShaderCompilerOptions[_mesa_shader_enum_to_shader_stage(shader_type)];
+         &ctx->Const.ShaderCompilerOptions[_mesa_shader_enum_to_shader_stage(shader_type)];
       do {
          progress = do_optimization_passes(shader->ir, &argv[optind],
                                            argc - optind, quiet != 0, options);

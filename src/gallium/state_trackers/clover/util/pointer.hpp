@@ -31,10 +31,10 @@ namespace clover {
    ///
    class ref_counter {
    public:
-      ref_counter() : _ref_count(1) {}
+      ref_counter(unsigned value = 1) : _ref_count(value) {}
 
       unsigned
-      ref_count() {
+      ref_count() const {
          return _ref_count;
       }
 
@@ -50,6 +50,51 @@ namespace clover {
 
    private:
       std::atomic<unsigned> _ref_count;
+   };
+
+   ///
+   /// Simple reference to a clover::ref_counter object.  Unlike
+   /// clover::intrusive_ptr and clover::intrusive_ref, it does nothing
+   /// special when the reference count drops to zero.
+   ///
+   class ref_holder {
+   public:
+      ref_holder(ref_counter &o) : p(&o) {
+         p->retain();
+      }
+
+      ref_holder(const ref_holder &ref) :
+         ref_holder(*ref.p) {
+      }
+
+      ref_holder(ref_holder &&ref) :
+         p(ref.p) {
+         ref.p = NULL;
+      }
+
+      ~ref_holder() {
+         if (p)
+            p->release();
+      }
+
+      ref_holder &
+      operator=(ref_holder ref) {
+         std::swap(ref.p, p);
+         return *this;
+      }
+
+      bool
+      operator==(const ref_holder &ref) const {
+         return p == ref.p;
+      }
+
+      bool
+      operator!=(const ref_holder &ref) const {
+         return p != ref.p;
+      }
+
+   private:
+      ref_counter *p;
    };
 
    ///

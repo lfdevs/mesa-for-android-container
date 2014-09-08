@@ -261,7 +261,6 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
 
    if (pt->usage == PIPE_USAGE_STAGING) {
       switch (pt->target) {
-      case PIPE_TEXTURE_1D:
       case PIPE_TEXTURE_2D:
       case PIPE_TEXTURE_RECT:
          if (pt->last_level == 0 &&
@@ -296,7 +295,7 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
    }
    bo_config.nvc0.tile_mode = mt->level[0].tile_mode;
 
-   if (!bo_config.nvc0.memtype && pt->usage == PIPE_USAGE_STAGING)
+   if (!bo_config.nvc0.memtype && (pt->usage == PIPE_USAGE_STAGING || pt->bind & PIPE_BIND_SHARED))
       mt->base.domain = NOUVEAU_BO_GART;
    else
       mt->base.domain = NOUVEAU_BO_VRAM;

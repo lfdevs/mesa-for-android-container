@@ -86,8 +86,8 @@ host_triplet = @host@
 target_triplet = @target@
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_1 = $(WAYLAND_CFLAGS)
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_2 = $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la $(WAYLAND_LIBS)
-@HAVE_DRI_TRUE@am__append_3 = \
-@HAVE_DRI_TRUE@	libgbm_dri.la $(top_builddir)/src/mapi/shared-glapi/libglapi.la $(LIBDRM_LIBS)
+@HAVE_DRI2_TRUE@am__append_3 = \
+@HAVE_DRI2_TRUE@	libgbm_dri.la $(top_builddir)/src/mapi/shared-glapi/libglapi.la $(LIBDRM_LIBS)
 
 DIST_COMMON = $(top_srcdir)/install-lib-links.mk $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp \
@@ -140,9 +140,9 @@ LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1)
-@HAVE_DRI_TRUE@am__DEPENDENCIES_3 = libgbm_dri.la \
-@HAVE_DRI_TRUE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
-@HAVE_DRI_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_DRI2_TRUE@am__DEPENDENCIES_3 = libgbm_dri.la \
+@HAVE_DRI2_TRUE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
+@HAVE_DRI2_TRUE@	$(am__DEPENDENCIES_1)
 libgbm_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
 	$(am__DEPENDENCIES_3)
@@ -159,13 +159,13 @@ libgbm_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 libgbm_dri_la_LIBADD =
 am__libgbm_dri_la_SOURCES_DIST = backends/dri/gbm_dri.c \
 	backends/dri/gbm_driint.h
-@HAVE_DRI_TRUE@am_libgbm_dri_la_OBJECTS =  \
-@HAVE_DRI_TRUE@	backends/dri/libgbm_dri_la-gbm_dri.lo
+@HAVE_DRI2_TRUE@am_libgbm_dri_la_OBJECTS =  \
+@HAVE_DRI2_TRUE@	backends/dri/libgbm_dri_la-gbm_dri.lo
 libgbm_dri_la_OBJECTS = $(am_libgbm_dri_la_OBJECTS)
 libgbm_dri_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(libgbm_dri_la_CFLAGS) \
 	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-@HAVE_DRI_TRUE@am_libgbm_dri_la_rpath =
+@HAVE_DRI2_TRUE@am_libgbm_dri_la_rpath =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -414,6 +414,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -691,15 +692,15 @@ libgbm_la_LDFLAGS = \
 libgbm_la_LIBADD = $(top_builddir)/src/loader/libloader.la \
 	$(DLOPEN_LIBS) $(am__append_2) $(am__append_3)
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@AM_CPPFLAGS = -DHAVE_WAYLAND_PLATFORM
-@HAVE_DRI_TRUE@noinst_LTLIBRARIES = libgbm_dri.la
-@HAVE_DRI_TRUE@libgbm_dri_la_SOURCES = \
-@HAVE_DRI_TRUE@	backends/dri/gbm_dri.c \
-@HAVE_DRI_TRUE@	backends/dri/gbm_driint.h
+@HAVE_DRI2_TRUE@noinst_LTLIBRARIES = libgbm_dri.la
+@HAVE_DRI2_TRUE@libgbm_dri_la_SOURCES = \
+@HAVE_DRI2_TRUE@	backends/dri/gbm_dri.c \
+@HAVE_DRI2_TRUE@	backends/dri/gbm_driint.h
 
-@HAVE_DRI_TRUE@libgbm_dri_la_CFLAGS = \
-@HAVE_DRI_TRUE@	$(AM_CFLAGS) \
-@HAVE_DRI_TRUE@	-DDEFAULT_DRIVER_DIR='"$(DRI_DRIVER_SEARCH_DIR)"' \
-@HAVE_DRI_TRUE@	$(LIBDRM_CFLAGS)
+@HAVE_DRI2_TRUE@libgbm_dri_la_CFLAGS = \
+@HAVE_DRI2_TRUE@	$(AM_CFLAGS) \
+@HAVE_DRI2_TRUE@	-DDEFAULT_DRIVER_DIR='"$(DRI_DRIVER_SEARCH_DIR)"' \
+@HAVE_DRI2_TRUE@	$(LIBDRM_CFLAGS)
 
 TESTS = gbm-symbols-check
 all: all-am
@@ -1290,7 +1291,7 @@ uninstall-am: uninstall-includeHEADERS uninstall-libLTLIBRARIES \
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-mesa-links : $(lib_LTLIBRARIES)
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*); do \
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $(join $(addsuffix .libs/,$(dir $(lib_LTLIBRARIES))),$(notdir $(lib_LTLIBRARIES:%.la=%.$(LIB_EXT)*))); do \
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		if test -h .libs/$$f; then			\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			cp -d $$f $(top_builddir)/$(LIB_DIR);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		else						\

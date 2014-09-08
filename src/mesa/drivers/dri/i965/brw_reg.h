@@ -52,6 +52,8 @@
 extern "C" {
 #endif
 
+struct brw_context;
+
 /** Number of general purpose registers (VS, WM, etc) */
 #define BRW_MAX_GRF 128
 
@@ -131,7 +133,7 @@ const char *brw_reg_type_letters(unsigned brw_reg_type);
  * or "structure of array" form:
  */
 struct brw_reg {
-   unsigned type:4;
+   enum brw_reg_type type:4;
    unsigned file:2;
    unsigned nr:8;
    unsigned subnr:5;              /* :1 in align16 */
@@ -207,8 +209,7 @@ type_is_signed(unsigned type)
       return false;
 
    default:
-      assert(!"Unreachable.");
-      return false;
+      unreachable("not reached");
    }
 }
 
@@ -228,7 +229,7 @@ static inline struct brw_reg
 brw_reg(unsigned file,
         unsigned nr,
         unsigned subnr,
-        unsigned type,
+        enum brw_reg_type type,
         unsigned vstride,
         unsigned width,
         unsigned hstride,
@@ -358,13 +359,12 @@ brw_vecn_reg(unsigned width, unsigned file, unsigned nr, unsigned subnr)
    case 16:
       return brw_vec16_reg(file, nr, subnr);
    default:
-      assert(!"Invalid register width");
+      unreachable("Invalid register width");
    }
-   unreachable();
 }
 
 static inline struct brw_reg
-retype(struct brw_reg reg, unsigned type)
+retype(struct brw_reg reg, enum brw_reg_type type)
 {
    reg.type = type;
    return reg;
@@ -426,7 +426,7 @@ brw_uw1_reg(unsigned file, unsigned nr, unsigned subnr)
 }
 
 static inline struct brw_reg
-brw_imm_reg(unsigned type)
+brw_imm_reg(enum brw_reg_type type)
 {
    return brw_reg(BRW_IMMEDIATE_VALUE,
                   0,
@@ -631,22 +631,6 @@ brw_acc_reg(void)
 {
    return brw_vec8_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_ACCUMULATOR, 0);
 }
-
-static inline struct brw_reg
-brw_notification_1_reg(void)
-{
-
-   return brw_reg(BRW_ARCHITECTURE_REGISTER_FILE,
-                  BRW_ARF_NOTIFICATION_COUNT,
-                  1,
-                  BRW_REGISTER_TYPE_UD,
-                  BRW_VERTICAL_STRIDE_0,
-                  BRW_WIDTH_1,
-                  BRW_HORIZONTAL_STRIDE_0,
-                  BRW_SWIZZLE_XXXX,
-                  WRITEMASK_X);
-}
-
 
 static inline struct brw_reg
 brw_flag_reg(int reg, int subreg)

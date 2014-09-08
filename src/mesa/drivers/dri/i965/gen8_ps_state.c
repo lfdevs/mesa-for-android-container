@@ -134,7 +134,7 @@ static void
 upload_ps_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   uint32_t dw3 = 0, dw6 = 0, dw7 = 0;
+   uint32_t dw3 = 0, dw6 = 0, dw7 = 0, ksp0, ksp2 = 0;
 
    /* Initialize the execution mask with VMask.  Otherwise, derivatives are
     * incorrect for subspans where some of the pixels are unlit.  We believe
@@ -185,6 +185,8 @@ upload_ps_state(struct brw_context *brw)
    else
       dw6 |= GEN7_PS_POSOFFSET_NONE;
 
+   dw6 |= brw->wm.fast_clear_op;
+
    /* _NEW_MULTISAMPLE
     * In case of non 1x per sample shading, only one of SIMD8 and SIMD16
     * should be enabled. We do 'SIMD16 only' dispatch if a SIMD16 shader
@@ -195,30 +197,32 @@ upload_ps_state(struct brw_context *brw)
       _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program, false);
    assert(min_invocations_per_fragment >= 1);
 
-   if (brw->wm.prog_data->prog_offset_16) {
+   if (brw->wm.prog_data->prog_offset_16 || brw->wm.prog_data->no_8) {
       dw6 |= GEN7_PS_16_DISPATCH_ENABLE;
-      if (min_invocations_per_fragment == 1) {
+      if (!brw->wm.prog_data->no_8 && min_invocations_per_fragment == 1) {
          dw6 |= GEN7_PS_8_DISPATCH_ENABLE;
-         dw7 |= (brw->wm.prog_data->first_curbe_grf <<
+         dw7 |= (brw->wm.prog_data->base.dispatch_grf_start_reg <<
                  GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
-         dw7 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+         dw7 |= (brw->wm.prog_data->dispatch_grf_start_reg_16 <<
                  GEN7_PS_DISPATCH_START_GRF_SHIFT_2);
+         ksp0 = brw->wm.base.prog_offset;
+         ksp2 = brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16;
       } else {
-         dw7 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+         dw7 |= (brw->wm.prog_data->dispatch_grf_start_reg_16 <<
                  GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+
+         ksp0 = brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16;
       }
    } else {
       dw6 |= GEN7_PS_8_DISPATCH_ENABLE;
-      dw7 |= (brw->wm.prog_data->first_curbe_grf <<
+      dw7 |= (brw->wm.prog_data->base.dispatch_grf_start_reg <<
               GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+      ksp0 = brw->wm.base.prog_offset;
    }
 
    BEGIN_BATCH(12);
    OUT_BATCH(_3DSTATE_PS << 16 | (12 - 2));
-   if (brw->wm.prog_data->prog_offset_16 && min_invocations_per_fragment > 1)
-      OUT_BATCH(brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16);
-   else
-      OUT_BATCH(brw->wm.base.prog_offset);
+   OUT_BATCH(ksp0);
    OUT_BATCH(0);
    OUT_BATCH(dw3);
    if (brw->wm.prog_data->total_scratch) {
@@ -233,7 +237,7 @@ upload_ps_state(struct brw_context *brw)
    OUT_BATCH(dw7);
    OUT_BATCH(0); /* kernel 1 pointer */
    OUT_BATCH(0);
-   OUT_BATCH(brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16);
+   OUT_BATCH(ksp2);
    OUT_BATCH(0);
    ADVANCE_BATCH();
 }

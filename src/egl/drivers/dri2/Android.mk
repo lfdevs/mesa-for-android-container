@@ -40,11 +40,11 @@ LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/egl/main \
 	$(MESA_TOP)/src/loader \
-	$(DRM_TOP)/include/drm \
+	$(TARGET_OUT_HEADERS)/libdrm \
 	$(DRM_GRALLOC_TOP)
 
 LOCAL_STATIC_LIBRARIES := \
-	libloader
+	libmesa_loader
 
 LOCAL_MODULE := libmesa_egl_dri2
 

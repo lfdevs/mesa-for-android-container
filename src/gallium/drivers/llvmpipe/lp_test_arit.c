@@ -354,13 +354,15 @@ test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test)
       in[i] = 1.0;
    }
 
-   gallivm = gallivm_create();
+   gallivm = gallivm_create("test_module");
 
    test_func = build_unary_test_func(gallivm, test);
 
    gallivm_compile_module(gallivm);
 
    test_func_jit = (unary_func_t) gallivm_jit_function(gallivm, test_func);
+
+   gallivm_free_ir(gallivm);
 
    for (j = 0; j < (test->num_values + length - 1) / length; j++) {
       int num_vals = ((j + 1) * length <= test->num_values) ? length :
@@ -400,8 +402,6 @@ test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test)
          }
       }
    }
-
-   gallivm_free_function(gallivm, test_func, test_func_jit);
 
    gallivm_destroy(gallivm);
 

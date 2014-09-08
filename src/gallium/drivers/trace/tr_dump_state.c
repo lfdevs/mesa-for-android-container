@@ -292,6 +292,7 @@ void trace_dump_shader_state(const struct pipe_shader_state *state)
       trace_dump_member(uint, &state->stream_output.output[i], num_components);
       trace_dump_member(uint, &state->stream_output.output[i], output_buffer);
       trace_dump_member(uint, &state->stream_output.output[i], dst_offset);
+      trace_dump_member(uint, &state->stream_output.output[i], stream);
       trace_dump_struct_end();
       trace_dump_elem_end();
    }
@@ -716,6 +717,9 @@ void trace_dump_draw_info(const struct pipe_draw_info *state)
    trace_dump_member(uint, state, restart_index);
 
    trace_dump_member(ptr, state, count_from_stream_output);
+
+   trace_dump_member(ptr, state, indirect);
+   trace_dump_member(uint, state, indirect_offset);
 
    trace_dump_struct_end();
 }

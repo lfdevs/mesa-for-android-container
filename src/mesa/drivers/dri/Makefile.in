@@ -276,6 +276,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -542,7 +543,7 @@ nodist_EXTRA_mesa_dri_drivers_la_SOURCES = dummy.cpp
 mesa_dri_drivers_la_SOURCES = 
 mesa_dri_drivers_la_LDFLAGS = \
         -module -avoid-version -shared -shrext .so \
-        -Wl,-Bsymbolic \
+        $(BSYMBOLIC) \
         $(GC_SECTIONS) \
         $()
 
@@ -1015,8 +1016,7 @@ uninstall-am: uninstall-driLTLIBRARIES uninstall-driincludeHEADERS \
 @NEED_MEGADRIVER_TRUE@		ln -f $(DESTDIR)$(dridir)/mesa_dri_drivers.so \
 @NEED_MEGADRIVER_TRUE@		      $(DESTDIR)$(dridir)/$$i; \
 @NEED_MEGADRIVER_TRUE@	done;
-@NEED_MEGADRIVER_TRUE@	$(RM) -f $(DESTDIR)$(dridir)/mesa_dri_drivers.so
-@NEED_MEGADRIVER_TRUE@	$(RM) -f $(DESTDIR)$(dridir)/mesa_dri_drivers.la
+@NEED_MEGADRIVER_TRUE@	$(RM) -f $(DESTDIR)$(dridir)/mesa_dri_drivers.*
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

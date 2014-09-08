@@ -104,24 +104,77 @@ target_triplet = @target@
 DIST_COMMON = $(top_srcdir)/src/gallium/Automake.inc \
 	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/bin/depcomp $(top_srcdir)/bin/test-driver
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_6 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_7 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_8 = $(LLVM_LIBS)
-@HAVE_DRI_TRUE@am__append_9 = \
-@HAVE_DRI_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@NEED_WINSYS_XLIB_TRUE@am__append_10 = \
+@NEED_WINSYS_XLIB_TRUE@am__append_2 = \
 @NEED_WINSYS_XLIB_TRUE@	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 @NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
 @NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_MESA_LLVM_TRUE@am__append_11 = $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_12 = $(LLVM_LDFLAGS)
+@HAVE_LD_VERSION_SCRIPT_TRUE@am__append_3 = \
+@HAVE_LD_VERSION_SCRIPT_TRUE@	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/gbm/gbm.sym
+
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_4 = -DGALLIUM_I915
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_5 = \
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/winsys/i915/drm/libi915drm.la \
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/i915/libi915.la \
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(INTEL_LIBS)
+
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_6 = -DGALLIUM_ILO
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_7 = \
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(INTEL_LIBS)
+
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_8 = -DGALLIUM_NOUVEAU
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_9 = \
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/winsys/nouveau/drm/libnouveaudrm.la \
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/nouveau/libnouveau.la \
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(NOUVEAU_LIBS)
+
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@NEED_RADEON_DRM_WINSYS_TRUE@am__append_10 = \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@NEED_RADEON_DRM_WINSYS_TRUE@	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la
+
+@HAVE_GALLIUM_RADEON_COMMON_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_11 = \
+@HAVE_GALLIUM_RADEON_COMMON_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la
+
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_12 = -DGALLIUM_R300
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_13 = \
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/r300/libr300.la \
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/r300/libr300-helper.la \
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(RADEON_LIBS)
+
+@HAVE_GALLIUM_R600_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_14 = -DGALLIUM_R600
+@HAVE_GALLIUM_R600_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_15 = \
+@HAVE_GALLIUM_R600_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
+@HAVE_GALLIUM_R600_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(RADEON_LIBS)
+
+@HAVE_GALLIUM_RADEONSI_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_16 = -DGALLIUM_RADEONSI
+@HAVE_GALLIUM_RADEONSI_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_17 = \
+@HAVE_GALLIUM_RADEONSI_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
+@HAVE_GALLIUM_RADEONSI_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(RADEON_LIBS)
+
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@HAVE_GALLIUM_SVGA_TRUE@am__append_18 = -DGALLIUM_VMWGFX
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@HAVE_GALLIUM_SVGA_TRUE@am__append_19 = \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@HAVE_GALLIUM_SVGA_TRUE@	$(top_builddir)/src/gallium/winsys/svga/drm/libsvgadrm.la \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@HAVE_GALLIUM_SVGA_TRUE@	$(top_builddir)/src/gallium/drivers/svga/libsvga.la
+
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_20 = -DGALLIUM_FREEDRENO
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_21 = \
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(FREEDRENO_LIBS)
+
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_22 = target.c
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__append_23 = $(STATIC_TARGET_LIB_DEPS)
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@am__append_24 = \
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@	$(GALLIUM_PIPE_LOADER_CLIENT_LIBS) \
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+
+@HAVE_MESA_LLVM_TRUE@am__append_25 = $(LLVM_LIBS)
+@HAVE_MESA_LLVM_TRUE@am__append_26 = $(LLVM_LDFLAGS)
 subdir = src/gallium/targets/gbm
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -169,17 +222,56 @@ LTLIBRARIES = $(gbm_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
-@NEED_WINSYS_XLIB_TRUE@am__DEPENDENCIES_3 = $(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_3 = $(top_builddir)/src/gallium/winsys/i915/drm/libi915drm.la \
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/i915/libi915.la \
+@HAVE_GALLIUM_I915_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_4 = $(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
+@HAVE_GALLIUM_ILO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_5 = $(top_builddir)/src/gallium/winsys/nouveau/drm/libnouveaudrm.la \
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/nouveau/libnouveau.la \
+@HAVE_GALLIUM_NOUVEAU_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_6 = $(top_builddir)/src/gallium/drivers/r300/libr300.la \
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/r300/libr300-helper.la \
+@HAVE_GALLIUM_R300_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_R600_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_7 = $(top_builddir)/src/gallium/drivers/r600/libr600.la \
+@HAVE_GALLIUM_R600_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_RADEONSI_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_8 = $(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
+@HAVE_GALLIUM_RADEONSI_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_9 = $(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_10 = $(top_builddir)/src/loader/libloader.la \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_3) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_4) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_5) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_10) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_11) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_6) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_7) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_8) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_19) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_9)
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__DEPENDENCIES_11 =  \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__DEPENDENCIES_10)
+@NEED_WINSYS_XLIB_TRUE@am__DEPENDENCIES_12 = $(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 @NEED_WINSYS_XLIB_TRUE@	$(am__DEPENDENCIES_1)
-@HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_4 = $(am__DEPENDENCIES_1)
-gbm_gallium_drm_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
+am__DEPENDENCIES_13 =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__DEPENDENCIES_12)
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@am__DEPENDENCIES_14 = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@	$(am__DEPENDENCIES_1) \
+@HAVE_GALLIUM_STATIC_TARGETS_FALSE@	$(am__DEPENDENCIES_13)
+@HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_15 = $(am__DEPENDENCIES_1)
+gbm_gallium_drm_la_DEPENDENCIES =  \
 	$(top_builddir)/src/gallium/state_trackers/gbm/libgbm.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) $(am__append_9) \
-	$(am__DEPENDENCIES_3) $(am__DEPENDENCIES_4)
-am_gbm_gallium_drm_la_OBJECTS = gbm.lo
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_11) \
+	$(am__DEPENDENCIES_14) $(am__DEPENDENCIES_15)
+am__gbm_gallium_drm_la_SOURCES_DIST = target.c
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__objects_1 = gbm_gallium_drm_la-target.lo
+am_gbm_gallium_drm_la_OBJECTS = $(am__objects_1)
 gbm_gallium_drm_la_OBJECTS = $(am_gbm_gallium_drm_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -243,7 +335,7 @@ am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(gbm_gallium_drm_la_SOURCES) \
 	$(nodist_EXTRA_gbm_gallium_drm_la_SOURCES)
-DIST_SOURCES = $(gbm_gallium_drm_la_SOURCES)
+DIST_SOURCES = $(am__gbm_gallium_drm_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -454,6 +546,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -707,6 +800,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES)
@@ -718,6 +812,7 @@ GALLIUM_CFLAGS = \
 # preprocessor is determined by the ordering of the -I flags.
 GALLIUM_DRIVER_CFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -727,6 +822,7 @@ GALLIUM_DRIVER_CFLAGS = \
 
 GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -734,21 +830,9 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
-GALLIUM_DRI_CFLAGS = \
+GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/include \
-	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	$(DEFINES) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
-
-GALLIUM_VIDEO_CFLAGS = \
-	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
@@ -758,45 +842,12 @@ GALLIUM_VIDEO_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_DRI_LINKER_FLAGS = -shared -shrext .so -module -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/dri.sym \
-	$(GC_SECTIONS) $(am__append_1)
-GALLIUM_VDPAU_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/vdpau.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_2)
-GALLIUM_XVMC_LINKER_FLAGS = -shared -module -no-undefined \
-	-version-number $(XVMC_MAJOR):$(XVMC_MINOR) \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xvmc.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3)
-GALLIUM_OMX_LINKER_FLAGS = -shared -module -no-undefined \
-	-avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/omx.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_4)
 GALLIUM_COMMON_LIB_DEPS = \
 	-lm \
 	$(CLOCK_LIB) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 
-GALLIUM_DRI_LIB_DEPS = $(top_builddir)/src/mesa/libmesagallium.la \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(SELINUX_LIBS) $(LIBDRM_LIBS) $(EXPAT_LIBS) \
-	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_5)
-GALLIUM_VDPAU_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
-	$(VDPAU_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_6)
-GALLIUM_XVMC_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/xvmc/libxvmctracker.la \
-	$(XVMC_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_7)
-GALLIUM_OMX_LIB_DEPS =  \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
-	$(OMX_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_8)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/include \
@@ -804,33 +855,46 @@ GALLIUM_WINSYS_CFLAGS = \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
-gbmdir = $(libdir)/gbm
-AM_CPPFLAGS = \
-	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src/gallium/state_trackers/gbm \
-	-I$(top_srcdir)/src/gbm/main \
-	-I$(top_srcdir)/src/gallium/winsys \
-	$(GALLIUM_PIPE_LOADER_DEFINES) \
-	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\"
-
+GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
-	$(GALLIUM_CFLAGS) \
-	$(VISIBILITY_CFLAGS) \
-	$(LIBDRM_CFLAGS)
+	$(GALLIUM_TARGET_CFLAGS)
 
+gbmdir = $(libdir)/gbm
 gbm_LTLIBRARIES = gbm_gallium_drm.la
 nodist_EXTRA_gbm_gallium_drm_la_SOURCES = dummy.cpp
-gbm_gallium_drm_la_SOURCES = gbm.c
-gbm_gallium_drm_la_LIBADD = $(GALLIUM_PIPE_LOADER_CLIENT_LIBS) \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
-	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+gbm_gallium_drm_la_SOURCES = $(am__append_22)
+gbm_gallium_drm_la_LIBADD =  \
 	$(top_builddir)/src/gallium/state_trackers/gbm/libgbm.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) $(am__append_9) \
-	$(am__append_10) $(am__append_11)
+	$(top_builddir)/src/util/libmesautil.la $(LIBDRM_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_23) $(am__append_24) \
+	$(am__append_25)
 gbm_gallium_drm_la_LDFLAGS = -module -no-undefined -avoid-version \
-	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/gbm/gbm.sym \
-	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_12)
+	$(GC_SECTIONS) $(LD_NO_UNDEFINED) $(am__append_3) \
+	$(am__append_26)
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@STATIC_TARGET_CPPFLAGS =  \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_4) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_6) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_8) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_12) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_14) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_16) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_18) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_20)
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@STATIC_TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_5) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_7) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_9) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_10) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_11) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_13) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_15) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_17) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_19) \
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@	$(am__append_21)
+@HAVE_GALLIUM_STATIC_TARGETS_TRUE@gbm_gallium_drm_la_CPPFLAGS = $(STATIC_TARGET_CPPFLAGS)
 TESTS = gallium-gbm-symbols-check
 all: all-am
 
@@ -912,8 +976,8 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gbm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gbm_gallium_drm_la-dummy.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gbm_gallium_drm_la-target.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -936,6 +1000,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
+gbm_gallium_drm_la-target.lo: target.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(gbm_gallium_drm_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT gbm_gallium_drm_la-target.lo -MD -MP -MF $(DEPDIR)/gbm_gallium_drm_la-target.Tpo -c -o gbm_gallium_drm_la-target.lo `test -f 'target.c' || echo '$(srcdir)/'`target.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/gbm_gallium_drm_la-target.Tpo $(DEPDIR)/gbm_gallium_drm_la-target.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='target.c' object='gbm_gallium_drm_la-target.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(gbm_gallium_drm_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o gbm_gallium_drm_la-target.lo `test -f 'target.c' || echo '$(srcdir)/'`target.c
+
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
@@ -956,6 +1027,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
+
+gbm_gallium_drm_la-dummy.lo: dummy.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(gbm_gallium_drm_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gbm_gallium_drm_la-dummy.lo -MD -MP -MF $(DEPDIR)/gbm_gallium_drm_la-dummy.Tpo -c -o gbm_gallium_drm_la-dummy.lo `test -f 'dummy.cpp' || echo '$(srcdir)/'`dummy.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/gbm_gallium_drm_la-dummy.Tpo $(DEPDIR)/gbm_gallium_drm_la-dummy.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='dummy.cpp' object='gbm_gallium_drm_la-dummy.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(gbm_gallium_drm_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gbm_gallium_drm_la-dummy.lo `test -f 'dummy.cpp' || echo '$(srcdir)/'`dummy.cpp
 
 mostlyclean-libtool:
 	-rm -f *.lo

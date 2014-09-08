@@ -45,7 +45,7 @@
 #include "brw_sf.h"
 #include "brw_state.h"
 
-#include "glsl/ralloc.h"
+#include "util/ralloc.h"
 
 static void compile_sf_prog( struct brw_context *brw,
 			     struct brw_sf_prog_key *key )
@@ -54,7 +54,6 @@ static void compile_sf_prog( struct brw_context *brw,
    const GLuint *program;
    void *mem_ctx;
    GLuint program_size;
-   GLuint i;
 
    memset(&c, 0, sizeof(c));
 
@@ -106,9 +105,10 @@ static void compile_sf_prog( struct brw_context *brw,
       brw_emit_anyprim_setup( &c );
       break;
    default:
-      assert(0);
-      return;
+      unreachable("not reached");
    }
+
+   brw_compact_instructions(&c.func, 0, 0, NULL);
 
    /* get the program
     */
@@ -116,9 +116,7 @@ static void compile_sf_prog( struct brw_context *brw,
 
    if (unlikely(INTEL_DEBUG & DEBUG_SF)) {
       fprintf(stderr, "sf:\n");
-      for (i = 0; i < program_size / sizeof(struct brw_instruction); i++)
-	 brw_disasm(stderr, &((struct brw_instruction *)program)[i],
-		    brw->gen);
+      brw_disassemble(brw, c.func.store, 0, program_size, stderr);
       fprintf(stderr, "\n");
    }
 

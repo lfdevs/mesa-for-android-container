@@ -25,12 +25,13 @@ AUTOMAKE_OPTIONS = subdir-objects
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
-AM_CFLAGS = $(GALLIUM_CFLAGS)
+AM_CFLAGS = \
+	$(GALLIUM_CFLAGS) \
+	$(VISIBILITY_CFLAGS)
+
 AM_CPPFLAGS = \
-	$(VISIBILITY_CFLAGS) \
 	-I$(top_srcdir)/src/egl/main \
-	-I$(top_builddir)/src/egl/wayland/wayland-drm/ \
-	-I$(top_srcdir)/include
+	-I$(top_builddir)/src/egl/wayland/wayland-drm/
 
 noinst_LTLIBRARIES = libegl.la
 libegl_la_SOURCES = $(common_FILES)
@@ -65,7 +66,6 @@ endif
 
 if HAVE_EGL_PLATFORM_DRM
 libegl_la_SOURCES += $(drm_FILES)
-libegl_la_LIBADD = $(top_builddir)/src/loader/libloader.la
 AM_CFLAGS += \
 	$(LIBDRM_CFLAGS)
 AM_CPPFLAGS += \
@@ -88,4 +88,24 @@ libegl_la_SOURCES += $(null_FILES)
 AM_CPPFLAGS += \
 	-I$(top_srcdir)/src/gallium/winsys/sw \
 	-DHAVE_NULL_BACKEND
+endif
+
+if HAVE_OPENGL
+AM_CPPFLAGS += \
+	-DFEATURE_GL=1
+endif
+
+if HAVE_OPENGL_ES1
+AM_CPPFLAGS += \
+	-DFEATURE_ES1=1
+endif
+
+if HAVE_OPENGL_ES2
+AM_CPPFLAGS += \
+	-DFEATURE_ES2=1
+endif
+
+if HAVE_OPENVG
+AM_CPPFLAGS += \
+	-DFEATURE_VG=1
 endif

@@ -31,7 +31,7 @@ extern "C" {
 #include "main/shaderobj.h"
 }
 
-#include "ralloc.h"
+#include "util/ralloc.h"
 #include "ast.h"
 #include "glsl_parser_extras.h"
 #include "glsl_parser.h"
@@ -210,6 +210,8 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->early_fragment_tests = false;
    memset(this->atomic_counter_offsets, 0,
           sizeof(this->atomic_counter_offsets));
+   this->allow_extension_directive_midshader =
+      ctx->Const.AllowGLSLExtensionDirectiveMidShader;
 }
 
 /**
@@ -512,10 +514,13 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_arrays_of_arrays,           true,  false,     ARB_arrays_of_arrays),
    EXT(ARB_compute_shader,             true,  false,     ARB_compute_shader),
    EXT(ARB_conservative_depth,         true,  false,     ARB_conservative_depth),
+   EXT(ARB_derivative_control,         true,  false,     ARB_derivative_control),
    EXT(ARB_draw_buffers,               true,  false,     dummy_true),
    EXT(ARB_draw_instanced,             true,  false,     ARB_draw_instanced),
    EXT(ARB_explicit_attrib_location,   true,  false,     ARB_explicit_attrib_location),
+   EXT(ARB_explicit_uniform_location,  true,  false,     ARB_explicit_uniform_location),
    EXT(ARB_fragment_coord_conventions, true,  false,     ARB_fragment_coord_conventions),
+   EXT(ARB_fragment_layer_viewport,    true,  false,     ARB_fragment_layer_viewport),
    EXT(ARB_gpu_shader5,                true,  false,     ARB_gpu_shader5),
    EXT(ARB_sample_shading,             true,  false,     ARB_sample_shading),
    EXT(ARB_separate_shader_objects,    true,  false,     dummy_true),
@@ -550,6 +555,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(AMD_shader_stencil_export,      true,  false,     ARB_shader_stencil_export),
    EXT(AMD_shader_trinary_minmax,      true,  false,     dummy_true),
    EXT(AMD_vertex_shader_layer,        true,  false,     AMD_vertex_shader_layer),
+   EXT(AMD_vertex_shader_viewport_index, true,  false,   AMD_vertex_shader_viewport_index),
    EXT(EXT_separate_shader_objects,    false, true,      dummy_true),
    EXT(EXT_shader_integer_mix,         true,  true,      EXT_shader_integer_mix),
    EXT(EXT_texture_array,              true,  false,     EXT_texture_array),
@@ -842,8 +848,7 @@ ast_compound_statement::print(void) const
 {
    printf("{\n");
    
-   foreach_list_const(n, &this->statements) {
-      ast_node *ast = exec_node_data(ast_node, n, link);
+   foreach_list_typed(ast_node, ast, link, &this->statements) {
       ast->print();
    }
 
@@ -922,11 +927,10 @@ ast_expression::print(void) const
       subexpressions[0]->print();
       printf("( ");
 
-      foreach_list_const (n, &this->expressions) {
-	 if (n != this->expressions.get_head())
+      foreach_list_typed (ast_node, ast, link, &this->expressions) {
+	 if (&ast->link != this->expressions.get_head())
 	    printf(", ");
 
-	 ast_node *ast = exec_node_data(ast_node, n, link);
 	 ast->print();
       }
 
@@ -958,11 +962,10 @@ ast_expression::print(void) const
 
    case ast_sequence: {
       printf("( ");
-      foreach_list_const(n, & this->expressions) {
-	 if (n != this->expressions.get_head())
+      foreach_list_typed (ast_node, ast, link, & this->expressions) {
+	 if (&ast->link != this->expressions.get_head())
 	    printf(", ");
 
-	 ast_node *ast = exec_node_data(ast_node, n, link);
 	 ast->print();
       }
       printf(") ");
@@ -971,11 +974,10 @@ ast_expression::print(void) const
 
    case ast_aggregate: {
       printf("{ ");
-      foreach_list_const(n, & this->expressions) {
-	 if (n != this->expressions.get_head())
+      foreach_list_typed (ast_node, ast, link, & this->expressions) {
+	 if (&ast->link != this->expressions.get_head())
 	    printf(", ");
 
-	 ast_node *ast = exec_node_data(ast_node, n, link);
 	 ast->print();
       }
       printf("} ");
@@ -1025,8 +1027,7 @@ ast_function::print(void) const
    return_type->print();
    printf(" %s (", identifier);
 
-   foreach_list_const(n, & this->parameters) {
-      ast_node *ast = exec_node_data(ast_node, n, link);
+   foreach_list_typed(ast_node, ast, link, & this->parameters) {
       ast->print();
    }
 
@@ -1098,14 +1099,15 @@ ast_declarator_list::print(void) const
 
    if (type)
       type->print();
-   else
+   else if (invariant)
       printf("invariant ");
+   else
+      printf("precise ");
 
-   foreach_list_const (ptr, & this->declarations) {
-      if (ptr != this->declarations.get_head())
+   foreach_list_typed (ast_node, ast, link, & this->declarations) {
+      if (&ast->link != this->declarations.get_head())
 	 printf(", ");
 
-      ast_node *ast = exec_node_data(ast_node, ptr, link);
       ast->print();
    }
 
@@ -1117,6 +1119,7 @@ ast_declarator_list::ast_declarator_list(ast_fully_specified_type *type)
 {
    this->type = type;
    this->invariant = false;
+   this->precise = false;
 }
 
 void
@@ -1236,8 +1239,7 @@ ast_case_label::ast_case_label(ast_expression *test_value)
 
 void ast_case_label_list::print(void) const
 {
-   foreach_list_const(n, & this->labels) {
-      ast_node *ast = exec_node_data(ast_node, n, link);
+   foreach_list_typed(ast_node, ast, link, & this->labels) {
       ast->print();
    }
    printf("\n");
@@ -1252,8 +1254,7 @@ ast_case_label_list::ast_case_label_list(void)
 void ast_case_statement::print(void) const
 {
    labels->print();
-   foreach_list_const(n, & this->stmts) {
-      ast_node *ast = exec_node_data(ast_node, n, link);
+   foreach_list_typed(ast_node, ast, link, & this->stmts) {
       ast->print();
       printf("\n");
    }
@@ -1268,8 +1269,7 @@ ast_case_statement::ast_case_statement(ast_case_label_list *labels)
 
 void ast_case_statement_list::print(void) const
 {
-   foreach_list_const(n, & this->cases) {
-      ast_node *ast = exec_node_data(ast_node, n, link);
+   foreach_list_typed(ast_node, ast, link, & this->cases) {
       ast->print();
    }
 }
@@ -1339,8 +1339,7 @@ void
 ast_struct_specifier::print(void) const
 {
    printf("struct %s { ", name);
-   foreach_list_const(n, &this->declarations) {
-      ast_node *ast = exec_node_data(ast_node, n, link);
+   foreach_list_typed(ast_node, ast, link, &this->declarations) {
       ast->print();
    }
    printf("} ");
@@ -1451,8 +1450,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    }
 
    if (dump_ast) {
-      foreach_list_const(n, &state->translation_unit) {
-         ast_node *ast = exec_node_data(ast_node, n, link);
+      foreach_list_typed(ast_node, ast, link, &state->translation_unit) {
          ast->print();
       }
       printf("\n\n");
@@ -1475,7 +1473,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
 
    if (!state->error && !shader->ir->is_empty()) {
       struct gl_shader_compiler_options *options =
-         &ctx->ShaderCompilerOptions[shader->Stage];
+         &ctx->Const.ShaderCompilerOptions[shader->Stage];
 
       /* Do some optimization at compile time to reduce shader IR size
        * and reduce later work if the same shader is linked multiple times
@@ -1490,7 +1488,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    if (shader->InfoLog)
       ralloc_free(shader->InfoLog);
 
-   shader->symbols = state->symbols;
+   shader->symbols = new(shader->ir) glsl_symbol_table;
    shader->CompileStatus = !state->error;
    shader->InfoLog = state->info_log;
    shader->Version = state->language_version;
@@ -1503,6 +1501,30 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    /* Retain any live IR, but trash the rest. */
    reparent_ir(shader->ir, shader->ir);
 
+   /* Destroy the symbol table.  Create a new symbol table that contains only
+    * the variables and functions that still exist in the IR.  The symbol
+    * table will be used later during linking.
+    *
+    * There must NOT be any freed objects still referenced by the symbol
+    * table.  That could cause the linker to dereference freed memory.
+    *
+    * We don't have to worry about types or interface-types here because those
+    * are fly-weights that are looked up by glsl_type.
+    */
+   foreach_in_list (ir_instruction, ir, shader->ir) {
+      switch (ir->ir_type) {
+      case ir_type_function:
+         shader->symbols->add_function((ir_function *) ir);
+         break;
+      case ir_type_variable:
+         shader->symbols->add_variable((ir_variable *) ir);
+         break;
+      default:
+         break;
+      }
+   }
+
+   delete state->symbols;
    ralloc_free(state);
 }
 
@@ -1565,7 +1587,8 @@ do_common_optimization(exec_list *ir, bool linked,
       progress = do_constant_variable_unlinked(ir) || progress;
    progress = do_constant_folding(ir) || progress;
    progress = do_cse(ir) || progress;
-   progress = do_algebraic(ir, native_integers) || progress;
+   progress = do_rebalance_tree(ir) || progress;
+   progress = do_algebraic(ir, native_integers, options) || progress;
    progress = do_lower_jumps(ir) || progress;
    progress = do_vec_index_to_swizzle(ir) || progress;
    progress = lower_vector_insert(ir, false) || progress;

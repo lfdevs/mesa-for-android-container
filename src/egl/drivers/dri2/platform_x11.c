@@ -481,21 +481,6 @@ dri2_x11_flush_front_buffer(__DRIdrawable * driDrawable, void *loaderPrivate)
 #endif
 }
 
-static char *
-dri2_x11_strndup(const char *s, int length)
-{
-   char *d;
-
-   d = malloc(length + 1);
-   if (d == NULL)
-      return NULL;
-
-   memcpy(d, s, length);
-   d[length] = '\0';
-
-   return d;
-}
-
 static EGLBoolean
 dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
 {
@@ -565,14 +550,14 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
 
    driver_name = xcb_dri2_connect_driver_name (connect);
    dri2_dpy->driver_name =
-      dri2_x11_strndup(driver_name,
-                       xcb_dri2_connect_driver_name_length(connect));
+      strndup(driver_name,
+              xcb_dri2_connect_driver_name_length(connect));
 
    device_name = xcb_dri2_connect_device_name (connect);
 
    dri2_dpy->device_name =
-      dri2_x11_strndup(device_name,
-                       xcb_dri2_connect_device_name_length(connect));
+      strndup(device_name,
+              xcb_dri2_connect_device_name_length(connect));
 
    if (dri2_dpy->device_name == NULL || dri2_dpy->driver_name == NULL) {
       free(dri2_dpy->device_name);
@@ -1008,6 +993,32 @@ dri2_x11_swrast_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
    return NULL;
 }
 
+static EGLBoolean
+dri2_x11_get_sync_values(_EGLDisplay *display, _EGLSurface *surface,
+                         EGLuint64KHR *ust, EGLuint64KHR *msc,
+                         EGLuint64KHR *sbc)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(display);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surface);
+   xcb_dri2_get_msc_cookie_t cookie;
+   xcb_dri2_get_msc_reply_t *reply;
+
+   cookie = xcb_dri2_get_msc(dri2_dpy->conn, dri2_surf->drawable);
+   reply = xcb_dri2_get_msc_reply(dri2_dpy->conn, cookie, NULL);
+
+   if (!reply) {
+      _eglError(EGL_BAD_ACCESS, __func__);
+      return EGL_FALSE;
+   }
+
+   *ust = ((EGLuint64KHR) reply->ust_hi << 32) | reply->ust_lo;
+   *msc = ((EGLuint64KHR) reply->msc_hi << 32) | reply->msc_lo;
+   *sbc = ((EGLuint64KHR) reply->sbc_hi << 32) | reply->sbc_lo;
+   free(reply);
+
+   return EGL_TRUE;
+}
+
 static struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .authenticate = NULL,
    .create_window_surface = dri2_x11_create_window_surface,
@@ -1022,6 +1033,7 @@ static struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .copy_buffers = dri2_x11_copy_buffers,
    .query_buffer_age = dri2_fallback_query_buffer_age,
    .create_wayland_buffer_from_image = dri2_fallback_create_wayland_buffer_from_image,
+   .get_sync_values = dri2_fallback_get_sync_values,
 };
 
 static struct dri2_egl_display_vtbl dri2_x11_display_vtbl = {
@@ -1039,6 +1051,7 @@ static struct dri2_egl_display_vtbl dri2_x11_display_vtbl = {
    .copy_buffers = dri2_x11_copy_buffers,
    .query_buffer_age = dri2_fallback_query_buffer_age,
    .create_wayland_buffer_from_image = dri2_fallback_create_wayland_buffer_from_image,
+   .get_sync_values = dri2_x11_get_sync_values,
 };
 
 static EGLBoolean
@@ -1063,6 +1076,11 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
       goto cleanup_dpy;
    }
 
+   /*
+    * Every hardware driver_name is set using strdup. Doing the same in
+    * here will allow is to simply free the memory at dri2_terminate().
+    */
+   dri2_dpy->driver_name = strdup("swrast");
    if (!dri2_load_driver_swrast(disp))
       goto cleanup_conn;
 
@@ -1101,6 +1119,7 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
  cleanup_driver:
    dlclose(dri2_dpy->driver);
  cleanup_conn:
+   free(dri2_dpy->driver_name);
    if (disp->PlatformDisplay == NULL)
       xcb_disconnect(dri2_dpy->conn);
  cleanup_dpy:
@@ -1243,6 +1262,7 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    disp->Extensions.NOK_swap_region = EGL_TRUE;
    disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
    disp->Extensions.NV_post_sub_buffer = EGL_TRUE;
+   disp->Extensions.CHROMIUM_sync_control = EGL_TRUE;
 
 #ifdef HAVE_WAYLAND_PLATFORM
    disp->Extensions.WL_bind_wayland_display = EGL_TRUE;

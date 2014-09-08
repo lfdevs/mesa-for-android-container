@@ -39,10 +39,6 @@
 
 #define SI_MAX_DRAW_CS_DWORDS 18
 
-#define LLVM_SUPPORTS_GEOM_SHADERS \
-	((HAVE_LLVM >= 0x0305) || \
-	(HAVE_LLVM == 0x0304 && LLVM_VERSION_PATCH >= 1))
-
 struct si_pipe_compute;
 
 struct si_screen {
@@ -51,6 +47,7 @@ struct si_screen {
 
 struct si_pipe_sampler_view {
 	struct pipe_sampler_view	base;
+	struct list_head		list;
 	struct r600_resource		*resource;
 	uint32_t			state[8];
 	uint32_t			fmask_state[8];
@@ -67,11 +64,9 @@ struct si_cs_shader_state {
 
 struct si_textures_info {
 	struct si_sampler_views		views;
-	struct si_pipe_sampler_state	*samplers[NUM_TEX_UNITS];
-	unsigned			n_views;
+	struct si_sampler_states	states;
 	uint32_t			depth_texture_mask; /* which textures are depth */
 	uint32_t			compressed_colortex_mask;
-	unsigned			n_samplers;
 };
 
 struct si_framebuffer {
@@ -88,8 +83,6 @@ struct si_framebuffer {
 
 #define SI_NUM_SHADERS (PIPE_SHADER_GEOMETRY+1)
 
-#define SI_RW_SO 2 /* Streamout buffer descriptors after ring buffers */
-
 struct si_context {
 	struct r600_common_context	b;
 	struct blitter_context		*blitter;
@@ -105,16 +98,19 @@ struct si_context {
 	union {
 		struct {
 			/* The order matters. */
+			struct r600_atom *vertex_buffers;
 			struct r600_atom *const_buffers[SI_NUM_SHADERS];
 			struct r600_atom *rw_buffers[SI_NUM_SHADERS];
 			struct r600_atom *sampler_views[SI_NUM_SHADERS];
+			struct r600_atom *sampler_states[SI_NUM_SHADERS];
 			/* Caches must be flushed after resource descriptors are
 			 * updated in memory. */
 			struct r600_atom *cache_flush;
 			struct r600_atom *streamout_begin;
 			struct r600_atom *streamout_enable; /* must be after streamout_begin */
 			struct r600_atom *framebuffer;
-		};
+			struct r600_atom *msaa_config;
+		} s;
 		struct r600_atom *array[0];
 	} atoms;
 
@@ -130,11 +126,15 @@ struct si_context {
 	struct si_cs_shader_state	cs_shader_state;
 	/* shader information */
 	unsigned			sprite_coord_enable;
+	struct si_descriptors		vertex_buffers;
 	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
 	struct si_buffer_resources	rw_buffers[SI_NUM_SHADERS];
-	struct si_textures_info	samplers[SI_NUM_SHADERS];
+	struct si_textures_info		samplers[SI_NUM_SHADERS];
 	struct r600_resource		*border_color_table;
 	unsigned			border_color_offset;
+
+	struct r600_atom		msaa_config;
+	int				ps_iter_samples;
 
 	unsigned default_ps_gprs, default_vs_gprs;
 
@@ -145,8 +145,7 @@ struct si_context {
 	/* Vertex and index buffers. */
 	bool			vertex_buffers_dirty;
 	struct pipe_index_buffer index_buffer;
-	struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
-	unsigned		nr_vertex_buffers;
+	struct pipe_vertex_buffer vertex_buffer[SI_NUM_VERTEX_BUFFERS];
 
 	/* With rasterizer discard, there doesn't have to be a pixel shader.
 	 * In that case, we bind this one: */

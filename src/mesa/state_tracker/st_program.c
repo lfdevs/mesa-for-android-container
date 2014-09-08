@@ -262,6 +262,10 @@ st_prepare_vertex_program(struct gl_context *ctx,
             stvp->output_semantic_name[slot] = TGSI_SEMANTIC_LAYER;
             stvp->output_semantic_index[slot] = 0;
             break;
+         case VARYING_SLOT_VIEWPORT:
+            stvp->output_semantic_name[slot] = TGSI_SEMANTIC_VIEWPORT_INDEX;
+            stvp->output_semantic_index[slot] = 0;
+            break;
 
          case VARYING_SLOT_TEX0:
          case VARYING_SLOT_TEX1:
@@ -347,7 +351,7 @@ st_translate_vertex_program(struct st_context *st,
                                    NULL, /* input semantic name */
                                    NULL, /* input semantic index */
                                    NULL, /* interp mode */
-                                   NULL, /* is centroid */
+                                   NULL, /* interp location */
                                    /* outputs */
                                    num_outputs,
                                    stvp->result_to_output,
@@ -389,13 +393,12 @@ st_translate_vertex_program(struct st_context *st,
                                       &vpv->tgsi.stream_output);
    }
 
-   vpv->driver_shader = pipe->create_vs_state(pipe, &vpv->tgsi);
-
    if (ST_DEBUG & DEBUG_TGSI) {
-      tgsi_dump( vpv->tgsi.tokens, 0 );
+      tgsi_dump(vpv->tgsi.tokens, 0);
       debug_printf("\n");
    }
 
+   vpv->driver_shader = pipe->create_vs_state(pipe, &vpv->tgsi);
    return vpv;
 
 fail:
@@ -477,6 +480,7 @@ st_translate_fragment_program(struct st_context *st,
    GLuint outputMapping[FRAG_RESULT_MAX];
    GLuint inputMapping[VARYING_SLOT_MAX];
    GLuint interpMode[PIPE_MAX_SHADER_INPUTS];  /* XXX size? */
+   GLuint interpLocation[PIPE_MAX_SHADER_INPUTS];
    GLuint attr;
    GLbitfield64 inputsRead;
    struct ureg_program *ureg;
@@ -485,7 +489,6 @@ st_translate_fragment_program(struct st_context *st,
 
    ubyte input_semantic_name[PIPE_MAX_SHADER_INPUTS];
    ubyte input_semantic_index[PIPE_MAX_SHADER_INPUTS];
-   GLboolean is_centroid[PIPE_MAX_SHADER_INPUTS];
    uint fs_num_inputs = 0;
 
    ubyte fs_output_semantic_name[PIPE_MAX_SHADER_OUTPUTS];
@@ -537,7 +540,15 @@ st_translate_fragment_program(struct st_context *st,
          const GLuint slot = fs_num_inputs++;
 
          inputMapping[attr] = slot;
-         is_centroid[slot] = (stfp->Base.IsCentroid & BITFIELD64_BIT(attr)) != 0;
+         if (stfp->Base.IsCentroid & BITFIELD64_BIT(attr))
+            interpLocation[slot] = TGSI_INTERPOLATE_LOC_CENTROID;
+         else if (stfp->Base.IsSample & BITFIELD64_BIT(attr))
+            interpLocation[slot] = TGSI_INTERPOLATE_LOC_SAMPLE;
+         else
+            interpLocation[slot] = TGSI_INTERPOLATE_LOC_CENTER;
+
+         if (key->persample_shading)
+            interpLocation[slot] = TGSI_INTERPOLATE_LOC_SAMPLE;
 
          switch (attr) {
          case VARYING_SLOT_POS:
@@ -569,6 +580,11 @@ st_translate_fragment_program(struct st_context *st,
             break;
          case VARYING_SLOT_PRIMITIVE_ID:
             input_semantic_name[slot] = TGSI_SEMANTIC_PRIMID;
+            input_semantic_index[slot] = 0;
+            interpMode[slot] = TGSI_INTERPOLATE_CONSTANT;
+            break;
+         case VARYING_SLOT_LAYER:
+            input_semantic_name[slot] = TGSI_SEMANTIC_LAYER;
             input_semantic_index[slot] = 0;
             interpMode[slot] = TGSI_INTERPOLATE_CONSTANT;
             break;
@@ -759,7 +775,7 @@ st_translate_fragment_program(struct st_context *st,
                            input_semantic_name,
                            input_semantic_index,
                            interpMode,
-                           is_centroid,
+                           interpLocation,
                            /* outputs */
                            fs_num_outputs,
                            outputMapping,
@@ -787,14 +803,14 @@ st_translate_fragment_program(struct st_context *st,
    variant->tgsi.tokens = ureg_get_tokens( ureg, NULL );
    ureg_destroy( ureg );
 
+   if (ST_DEBUG & DEBUG_TGSI) {
+      tgsi_dump(variant->tgsi.tokens, 0/*TGSI_DUMP_VERBOSE*/);
+      debug_printf("\n");
+   }
+
    /* fill in variant */
    variant->driver_shader = pipe->create_fs_state(pipe, &variant->tgsi);
    variant->key = *key;
-
-   if (ST_DEBUG & DEBUG_TGSI) {
-      tgsi_dump( variant->tgsi.tokens, 0/*TGSI_DUMP_VERBOSE*/ );
-      debug_printf("\n");
-   }
 
    if (deleteFP) {
       /* Free the temporary program made above */
@@ -1156,10 +1172,6 @@ st_translate_geometry_program(struct st_context *st,
                                       &stgp->tgsi.stream_output);
    }
 
-   /* fill in new variant */
-   gpv->driver_shader = pipe->create_gs_state(pipe, &stgp->tgsi);
-   gpv->key = *key;
-
    if ((ST_DEBUG & DEBUG_TGSI) && (ST_DEBUG & DEBUG_MESA)) {
       _mesa_print_program(&stgp->Base.Base);
       debug_printf("\n");
@@ -1170,6 +1182,9 @@ st_translate_geometry_program(struct st_context *st,
       debug_printf("\n");
    }
 
+   /* fill in new variant */
+   gpv->driver_shader = pipe->create_gs_state(pipe, &stgp->tgsi);
+   gpv->key = *key;
    return gpv;
 }
 

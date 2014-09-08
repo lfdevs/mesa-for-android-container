@@ -109,8 +109,10 @@ upload_sf_state(struct brw_context *brw)
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
 
-   dw1 = GEN6_SF_STATISTICS_ENABLE |
-         GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;
+   dw1 = GEN6_SF_STATISTICS_ENABLE;
+
+   if (brw->sf.viewport_transform_enable)
+       dw1 |= GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;
 
    /* _NEW_BUFFERS */
    dw1 |= (brw_depthbuffer_format(brw) << GEN7_SF_DEPTH_BUFFER_SURFACE_FORMAT_SHIFT);
@@ -142,8 +144,7 @@ upload_sf_state(struct brw_context *brw)
        break;
 
    default:
-       assert(0);
-       break;
+       unreachable("not reached");
    }
 
    switch (ctx->Polygon.BackMode) {
@@ -160,8 +161,7 @@ upload_sf_state(struct brw_context *brw)
        break;
 
    default:
-       assert(0);
-       break;
+       unreachable("not reached");
    }
 
    dw2 = 0;
@@ -178,8 +178,7 @@ upload_sf_state(struct brw_context *brw)
 	 dw2 |= GEN6_SF_CULL_BOTH;
 	 break;
       default:
-	 assert(0);
-	 break;
+	 unreachable("not reached");
       }
    } else {
       dw2 |= GEN6_SF_CULL_NONE;

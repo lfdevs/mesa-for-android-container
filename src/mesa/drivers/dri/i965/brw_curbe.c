@@ -29,6 +29,25 @@
   *   Keith Whitwell <keithw@vmware.com>
   */
 
+/** @file brw_curbe.c
+ *
+ * Push constant handling for gen4/5.
+ *
+ * Push constants are constant values (such as GLSL uniforms) that are
+ * pre-loaded into a shader stage's register space at thread spawn time.  On
+ * gen4 and gen5, we create a blob in memory containing all the push constants
+ * for all the stages in order.  At CMD_CONST_BUFFER time that blob is loaded
+ * into URB space as a constant URB entry (CURBE) so that it can be accessed
+ * quickly at thread setup time.  Each individual fixed function unit's state
+ * (brw_vs_state.c for example) tells the hardware which subset of the CURBE
+ * it wants in its register space, and we calculate those areas here under the
+ * BRW_NEW_CURBE_OFFSETS state flag.  The brw_urb.c allocation will control
+ * how many CURBEs can be loaded into the hardware at once before a pipeline
+ * stall occurs at CMD_CONST_BUFFER time.
+ *
+ * On gen6+, constant handling becomes a much simpler set of per-unit state.
+ * See gen6_upload_vec4_push_constants() in gen6_vs_state.c for that code.
+ */
 
 
 #include "main/glheader.h"
@@ -39,6 +58,7 @@
 #include "program/prog_print.h"
 #include "program/prog_statevars.h"
 #include "intel_batchbuffer.h"
+#include "intel_buffer_objects.h"
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
@@ -46,11 +66,11 @@
 
 
 /**
- * Partition the CURBE between the various users of constant values:
- * Note that vertex and fragment shaders can now fetch constants out
- * of constant buffers.  We no longer allocatea block of the GRF for
- * constants.  That greatly reduces the demand for space in the CURBE.
- * Some of the comments within are dated...
+ * Partition the CURBE between the various users of constant values.
+ *
+ * If the users all fit within the previous allocatation, we avoid changing
+ * the layout because that means reuploading all unit state and uploading new
+ * constant buffers.
  */
 static void calculate_curbe_offsets( struct brw_context *brw )
 {
@@ -58,7 +78,7 @@ static void calculate_curbe_offsets( struct brw_context *brw )
    /* CACHE_NEW_WM_PROG */
    const GLuint nr_fp_regs = (brw->wm.prog_data->base.nr_params + 15) / 16;
 
-   /* BRW_NEW_VERTEX_PROGRAM */
+   /* CACHE_NEW_VS_PROG */
    const GLuint nr_vp_regs = (brw->vs.prog_data->base.base.nr_params + 15) / 16;
    GLuint nr_clip_regs = 0;
    GLuint total_regs;
@@ -72,22 +92,15 @@ static void calculate_curbe_offsets( struct brw_context *brw )
 
    total_regs = nr_fp_regs + nr_vp_regs + nr_clip_regs;
 
-   /* This can happen - what to do?  Probably rather than falling
-    * back, the best thing to do is emit programs which code the
-    * constants as immediate values.  Could do this either as a static
-    * cap on WM and VS, or adaptively.
+   /* The CURBE allocation size is limited to 32 512-bit units (128 EU
+    * registers, or 1024 floats).  See CS_URB_STATE in the gen4 or gen5
+    * (volume 1, part 1) PRMs.
     *
-    * Unfortunately, this is currently dependent on the results of the
-    * program generation process (in the case of wm), so this would
-    * introduce the need to re-generate programs in the event of a
-    * curbe allocation failure.
-    */
-   /* Max size is 32 - just large enough to
-    * hold the 128 parameters allowed by
-    * the fragment and vertex program
-    * api's.  It's not clear what happens
-    * when both VP and FP want to use 128
-    * parameters, though.
+    * Note that in brw_fs.cpp we're only loading up to 16 EU registers of
+    * values as push constants before spilling to pull constants, and in
+    * brw_vec4.cpp we're loading up to 32 registers of push constants.  An EU
+    * register is 1/2 of one of these URB entry units, so that leaves us 16 EU
+    * regs for clip.
     */
    assert(total_regs <= 32);
 
@@ -129,8 +142,8 @@ static void calculate_curbe_offsets( struct brw_context *brw )
 const struct brw_tracked_state brw_curbe_offsets = {
    .dirty = {
       .mesa = _NEW_TRANSFORM,
-      .brw  = BRW_NEW_VERTEX_PROGRAM | BRW_NEW_CONTEXT,
-      .cache = CACHE_NEW_WM_PROG
+      .brw  = BRW_NEW_CONTEXT,
+      .cache = CACHE_NEW_VS_PROG | CACHE_NEW_WM_PROG
    },
    .emit = calculate_curbe_offsets
 };
@@ -138,18 +151,17 @@ const struct brw_tracked_state brw_curbe_offsets = {
 
 
 
-/* Define the number of curbes within CS's urb allocation.  Multiple
- * urb entries -> multiple curbes.  These will be used by
- * fixed-function hardware in a double-buffering scheme to avoid a
- * pipeline stall each time the contents of the curbe is changed.
+/** Uploads the CS_URB_STATE packet.
+ *
+ * Just like brw_vs_state.c and brw_wm_state.c define a URB entry size and
+ * number of entries for their stages, constant buffers do so using this state
+ * packet.  Having multiple CURBEs in the URB at the same time allows the
+ * hardware to avoid a pipeline stall between primitives using different
+ * constant buffer contents.
  */
 void brw_upload_cs_urb_state(struct brw_context *brw)
 {
    BEGIN_BATCH(2);
-   /* It appears that this is the state packet for the CS unit, ie. the
-    * urb entries detailed here are housed in the CS range from the
-    * URB_FENCE command.
-    */
    OUT_BATCH(CMD_CS_URB_STATE << 16 | (2-2));
 
    /* BRW_NEW_URB_FENCE */
@@ -172,32 +184,37 @@ static GLfloat fixed_plane[6][4] = {
    { 1,    0,    0, 1 }
 };
 
-/* Upload a new set of constants.  Too much variability to go into the
- * cache mechanism, but maybe would benefit from a comparison against
- * the current uploaded set of constants.
+/**
+ * Gathers together all the uniform values into a block of memory to be
+ * uploaded into the CURBE, then emits the state packet telling the hardware
+ * the new location.
  */
 static void
 brw_upload_constant_buffer(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   /* BRW_NEW_CURBE_OFFSETS */
    const GLuint sz = brw->curbe.total_size;
    const GLuint bufsz = sz * 16 * sizeof(GLfloat);
-   GLfloat *buf;
+   gl_constant_value *buf;
    GLuint i;
    gl_clip_plane *clip_planes;
 
    if (sz == 0) {
-      brw->curbe.last_bufsz  = 0;
       goto emit;
    }
 
-   buf = brw->curbe.next_buf;
+   buf = intel_upload_space(brw, bufsz, 64,
+                            &brw->curbe.curbe_bo, &brw->curbe.curbe_offset);
+
+   STATIC_ASSERT(sizeof(gl_constant_value) == sizeof(float));
 
    /* fragment shader constants */
    if (brw->curbe.wm_size) {
+      /* BRW_NEW_CURBE_OFFSETS */
       GLuint offset = brw->curbe.wm_start * 16;
 
-      /* copy float constants */
+      /* CACHE_NEW_WM_PROG | _NEW_PROGRAM_CONSTANTS: copy uniform values */
       for (i = 0; i < brw->wm.prog_data->base.nr_params; i++) {
 	 buf[offset + i] = *brw->wm.prog_data->base.param[i];
       }
@@ -211,10 +228,10 @@ brw_upload_constant_buffer(struct brw_context *brw)
       /* If any planes are going this way, send them all this way:
        */
       for (i = 0; i < 6; i++) {
-	 buf[offset + i * 4 + 0] = fixed_plane[i][0];
-	 buf[offset + i * 4 + 1] = fixed_plane[i][1];
-	 buf[offset + i * 4 + 2] = fixed_plane[i][2];
-	 buf[offset + i * 4 + 3] = fixed_plane[i][3];
+	 buf[offset + i * 4 + 0].f = fixed_plane[i][0];
+	 buf[offset + i * 4 + 1].f = fixed_plane[i][1];
+	 buf[offset + i * 4 + 2].f = fixed_plane[i][2];
+	 buf[offset + i * 4 + 3].f = fixed_plane[i][3];
       }
 
       /* Clip planes: _NEW_TRANSFORM plus _NEW_PROJECTION to get to
@@ -223,10 +240,10 @@ brw_upload_constant_buffer(struct brw_context *brw)
       clip_planes = brw_select_clip_planes(ctx);
       for (j = 0; j < MAX_CLIP_PLANES; j++) {
 	 if (ctx->Transform.ClipPlanesEnabled & (1<<j)) {
-	    buf[offset + i * 4 + 0] = clip_planes[j][0];
-	    buf[offset + i * 4 + 1] = clip_planes[j][1];
-	    buf[offset + i * 4 + 2] = clip_planes[j][2];
-	    buf[offset + i * 4 + 3] = clip_planes[j][3];
+	    buf[offset + i * 4 + 0].f = clip_planes[j][0];
+	    buf[offset + i * 4 + 1].f = clip_planes[j][1];
+	    buf[offset + i * 4 + 2].f = clip_planes[j][2];
+	    buf[offset + i * 4 + 3].f = clip_planes[j][3];
 	    i++;
 	 }
       }
@@ -236,6 +253,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
    if (brw->curbe.vs_size) {
       GLuint offset = brw->curbe.vs_start * 16;
 
+      /* CACHE_NEW_VS_PROG | _NEW_PROGRAM_CONSTANTS: copy uniform values */
       for (i = 0; i < brw->vs.prog_data->base.base.nr_params; i++) {
          buf[offset + i] = *brw->vs.prog_data->base.base.param[i];
       }
@@ -244,54 +262,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
    if (0) {
       for (i = 0; i < sz*16; i+=4)
 	 fprintf(stderr, "curbe %d.%d: %f %f %f %f\n", i/8, i&4,
-                 buf[i+0], buf[i+1], buf[i+2], buf[i+3]);
-
-      fprintf(stderr, "last_buf %p buf %p sz %d/%d cmp %d\n",
-              brw->curbe.last_buf, buf,
-              bufsz, brw->curbe.last_bufsz,
-              brw->curbe.last_buf ? memcmp(buf, brw->curbe.last_buf, bufsz) : -1);
-   }
-
-   if (brw->curbe.curbe_bo != NULL &&
-       bufsz == brw->curbe.last_bufsz &&
-       memcmp(buf, brw->curbe.last_buf, bufsz) == 0) {
-      /* constants have not changed */
-   } else {
-      /* Update the record of what our last set of constants was.  We
-       * don't just flip the pointers because we don't fill in the
-       * data in the padding between the entries.
-       */
-      memcpy(brw->curbe.last_buf, buf, bufsz);
-      brw->curbe.last_bufsz = bufsz;
-
-      if (brw->curbe.curbe_bo != NULL &&
-	  brw->curbe.curbe_next_offset + bufsz > brw->curbe.curbe_bo->size)
-      {
-	 drm_intel_gem_bo_unmap_gtt(brw->curbe.curbe_bo);
-	 drm_intel_bo_unreference(brw->curbe.curbe_bo);
-	 brw->curbe.curbe_bo = NULL;
-      }
-
-      if (brw->curbe.curbe_bo == NULL) {
-	 /* Allocate a single page for CURBE entries for this batchbuffer.
-	  * They're generally around 64b.
-	  */
-	 brw->curbe.curbe_bo = drm_intel_bo_alloc(brw->bufmgr, "CURBE",
-						  4096, 1 << 6);
-	 brw->curbe.curbe_next_offset = 0;
-	 drm_intel_gem_bo_map_gtt(brw->curbe.curbe_bo);
-	 assert(bufsz < 4096);
-      }
-
-      brw->curbe.curbe_offset = brw->curbe.curbe_next_offset;
-      brw->curbe.curbe_next_offset += bufsz;
-      brw->curbe.curbe_next_offset = ALIGN(brw->curbe.curbe_next_offset, 64);
-
-      /* Copy data to the buffer:
-       */
-      memcpy(brw->curbe.curbe_bo->virtual + brw->curbe.curbe_offset,
-	     buf,
-	     bufsz);
+                 buf[i+0].f, buf[i+1].f, buf[i+2].f, buf[i+3].f);
    }
 
    /* Because this provokes an action (ie copy the constants into the
@@ -309,6 +280,14 @@ brw_upload_constant_buffer(struct brw_context *brw)
     */
 
 emit:
+   /* BRW_NEW_URB_FENCE: From the gen4 PRM, volume 1, section 3.9.8
+    * (CONSTANT_BUFFER (CURBE Load)):
+    *
+    *     "Modifying the CS URB allocation via URB_FENCE invalidates any
+    *      previous CURBE entries. Therefore software must subsequently
+    *      [re]issue a CONSTANT_BUFFER command before CURBE data can be used
+    *      in the pipeline."
+    */
    BEGIN_BATCH(2);
    if (brw->curbe.total_size == 0) {
       OUT_BATCH((CMD_CONST_BUFFER << 16) | (2 - 2));
@@ -325,13 +304,12 @@ emit:
 const struct brw_tracked_state brw_constant_buffer = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
-      .brw  = (BRW_NEW_FRAGMENT_PROGRAM |
-	       BRW_NEW_VERTEX_PROGRAM |
-	       BRW_NEW_URB_FENCE | /* Implicit - hardware requires this, not used above */
+      .brw  = (BRW_NEW_URB_FENCE |
 	       BRW_NEW_PSP | /* Implicit - hardware requires this, not used above */
 	       BRW_NEW_CURBE_OFFSETS |
 	       BRW_NEW_BATCH),
-      .cache = (CACHE_NEW_WM_PROG)
+      .cache = (CACHE_NEW_VS_PROG |
+                CACHE_NEW_WM_PROG)
    },
    .emit = brw_upload_constant_buffer,
 };

@@ -445,55 +445,44 @@ gen6_blorp_emit_binding_table(struct brw_context *brw,
 /**
  * SAMPLER_STATE.  See brw_update_sampler_state().
  */
-static uint32_t
+uint32_t
 gen6_blorp_emit_sampler_state(struct brw_context *brw,
                               const brw_blorp_params *params)
 {
    uint32_t sampler_offset;
+   uint32_t *sampler_state = (uint32_t *)
+      brw_state_batch(brw, AUB_TRACE_SAMPLER_STATE, 16, 32, &sampler_offset);
 
-   struct brw_sampler_state *sampler = (struct brw_sampler_state *)
-      brw_state_batch(brw, AUB_TRACE_SAMPLER_STATE,
-                      sizeof(struct brw_sampler_state),
-                      32, &sampler_offset);
-   memset(sampler, 0, sizeof(*sampler));
+   unsigned address_rounding = BRW_ADDRESS_ROUNDING_ENABLE_U_MIN |
+                               BRW_ADDRESS_ROUNDING_ENABLE_V_MIN |
+                               BRW_ADDRESS_ROUNDING_ENABLE_R_MIN |
+                               BRW_ADDRESS_ROUNDING_ENABLE_U_MAG |
+                               BRW_ADDRESS_ROUNDING_ENABLE_V_MAG |
+                               BRW_ADDRESS_ROUNDING_ENABLE_R_MAG;
 
-   sampler->ss0.min_filter = BRW_MAPFILTER_LINEAR;
-   sampler->ss0.mip_filter = BRW_MIPFILTER_NONE;
-   sampler->ss0.mag_filter = BRW_MAPFILTER_LINEAR;
-
-   sampler->ss1.r_wrap_mode = BRW_TEXCOORDMODE_CLAMP;
-   sampler->ss1.s_wrap_mode = BRW_TEXCOORDMODE_CLAMP;
-   sampler->ss1.t_wrap_mode = BRW_TEXCOORDMODE_CLAMP;
-
-   sampler->ss0.min_mag_neq = 1;
-
-   /* Set LOD bias:
-    */
-   sampler->ss0.lod_bias = 0;
-
-   sampler->ss0.lod_preclamp = 1; /* OpenGL mode */
-   sampler->ss0.default_color_mode = 0; /* OpenGL/DX10 mode */
-
-   /* Set BaseMipLevel, MaxLOD, MinLOD:
-    *
-    * XXX: I don't think that using firstLevel, lastLevel works,
+   /* XXX: I don't think that using firstLevel, lastLevel works,
     * because we always setup the surface state as if firstLevel ==
     * level zero.  Probably have to subtract firstLevel from each of
     * these:
     */
-   sampler->ss0.base_level = U_FIXED(0, 1);
-
-   sampler->ss1.max_lod = U_FIXED(0, 6);
-   sampler->ss1.min_lod = U_FIXED(0, 6);
-
-   sampler->ss3.non_normalized_coord = 1;
-
-   sampler->ss3.address_round |= BRW_ADDRESS_ROUNDING_ENABLE_U_MIN |
-      BRW_ADDRESS_ROUNDING_ENABLE_V_MIN |
-      BRW_ADDRESS_ROUNDING_ENABLE_R_MIN;
-   sampler->ss3.address_round |= BRW_ADDRESS_ROUNDING_ENABLE_U_MAG |
-      BRW_ADDRESS_ROUNDING_ENABLE_V_MAG |
-      BRW_ADDRESS_ROUNDING_ENABLE_R_MAG;
+   brw_emit_sampler_state(brw,
+                          sampler_state,
+                          sampler_offset,
+                          BRW_MAPFILTER_LINEAR, /* min filter */
+                          BRW_MAPFILTER_LINEAR, /* mag filter */
+                          BRW_MIPFILTER_NONE,
+                          BRW_ANISORATIO_2,
+                          address_rounding,
+                          BRW_TEXCOORDMODE_CLAMP,
+                          BRW_TEXCOORDMODE_CLAMP,
+                          BRW_TEXCOORDMODE_CLAMP,
+                          0, /* min LOD */
+                          0, /* max LOD */
+                          0, /* LOD bias */
+                          0, /* base miplevel */
+                          0, /* shadow function */
+                          true, /* non-normalized coordinates */
+                          0); /* border color offset - unused */
 
    return sampler_offset;
 }
@@ -685,8 +674,7 @@ gen6_blorp_emit_wm_config(struct brw_context *brw,
    case GEN6_HIZ_OP_NONE:
       break;
    default:
-      assert(0);
-      break;
+      unreachable("not reached");
    }
    dw5 |= GEN6_WM_LINE_AA_WIDTH_1_0;
    dw5 |= GEN6_WM_LINE_END_CAP_AA_WIDTH_0_5;
@@ -788,68 +776,82 @@ static void
 gen6_blorp_emit_depth_stencil_config(struct brw_context *brw,
                                      const brw_blorp_params *params)
 {
-   struct gl_context *ctx = &brw->ctx;
-   uint32_t draw_x = params->depth.x_offset;
-   uint32_t draw_y = params->depth.y_offset;
-   uint32_t tile_mask_x, tile_mask_y;
+   uint32_t surfwidth, surfheight;
+   uint32_t surftype;
+   unsigned int depth = MAX2(params->depth.mt->logical_depth0, 1);
+   GLenum gl_target = params->depth.mt->target;
+   unsigned int lod;
 
-   brw_get_depthstencil_tile_masks(params->depth.mt,
-                                   params->depth.level,
-                                   params->depth.layer,
-                                   NULL,
-                                   &tile_mask_x, &tile_mask_y);
+   switch (gl_target) {
+   case GL_TEXTURE_CUBE_MAP_ARRAY:
+   case GL_TEXTURE_CUBE_MAP:
+      /* The PRM claims that we should use BRW_SURFACE_CUBE for this
+       * situation, but experiments show that gl_Layer doesn't work when we do
+       * this.  So we use BRW_SURFACE_2D, since for rendering purposes this is
+       * equivalent.
+       */
+      surftype = BRW_SURFACE_2D;
+      depth *= 6;
+      break;
+   default:
+      surftype = translate_tex_target(gl_target);
+      break;
+   }
+
+   const unsigned min_array_element = params->depth.layer;
+
+   lod = params->depth.level - params->depth.mt->first_level;
+
+   if (params->hiz_op != GEN6_HIZ_OP_NONE && lod == 0) {
+      /* HIZ ops for lod 0 may set the width & height a little
+       * larger to allow the fast depth clear to fit the hardware
+       * alignment requirements. (8x4)
+       */
+      surfwidth = params->depth.width;
+      surfheight = params->depth.height;
+   } else {
+      surfwidth = params->depth.mt->logical_width0;
+      surfheight = params->depth.mt->logical_height0;
+   }
 
    /* 3DSTATE_DEPTH_BUFFER */
    {
-      uint32_t tile_x = draw_x & tile_mask_x;
-      uint32_t tile_y = draw_y & tile_mask_y;
-      uint32_t offset =
-         intel_miptree_get_aligned_offset(params->depth.mt,
-                                          draw_x & ~tile_mask_x,
-                                          draw_y & ~tile_mask_y, false);
-
-      /* According to the Sandy Bridge PRM, volume 2 part 1, pp326-327
-       * (3DSTATE_DEPTH_BUFFER dw5), in the documentation for "Depth
-       * Coordinate Offset X/Y":
-       *
-       *   "The 3 LSBs of both offsets must be zero to ensure correct
-       *   alignment"
-       *
-       * We have no guarantee that tile_x and tile_y are correctly aligned,
-       * since they are determined by the mipmap layout, which is only aligned
-       * to multiples of 4.
-       *
-       * So, to avoid hanging the GPU, just smash the low order 3 bits of
-       * tile_x and tile_y to 0.  This is a temporary workaround until we come
-       * up with a better solution.
-       */
-      WARN_ONCE((tile_x & 7) || (tile_y & 7),
-                "Depth/stencil buffer needs alignment to 8-pixel boundaries.\n"
-                "Truncating offset, bad rendering may occur.\n");
-      tile_x &= ~7;
-      tile_y &= ~7;
-
       intel_emit_post_sync_nonzero_flush(brw);
       intel_emit_depth_stall_flushes(brw);
 
       BEGIN_BATCH(7);
+      /* 3DSTATE_DEPTH_BUFFER dw0 */
       OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (7 - 2));
+
+      /* 3DSTATE_DEPTH_BUFFER dw1 */
       OUT_BATCH((params->depth.mt->pitch - 1) |
                 params->depth_format << 18 |
                 1 << 21 | /* separate stencil enable */
                 1 << 22 | /* hiz enable */
                 BRW_TILEWALK_YMAJOR << 26 |
                 1 << 27 | /* y-tiled */
-                BRW_SURFACE_2D << 29);
+                surftype << 29);
+
+      /* 3DSTATE_DEPTH_BUFFER dw2 */
       OUT_RELOC(params->depth.mt->bo,
                 I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                offset);
+                0);
+
+      /* 3DSTATE_DEPTH_BUFFER dw3 */
       OUT_BATCH(BRW_SURFACE_MIPMAPLAYOUT_BELOW << 1 |
-                (params->depth.width + tile_x - 1) << 6 |
-                (params->depth.height + tile_y - 1) << 19);
+                (surfwidth - 1) << 6 |
+                (surfheight - 1) << 19 |
+                lod << 2);
+
+      /* 3DSTATE_DEPTH_BUFFER dw4 */
+      OUT_BATCH((depth - 1) << 21 |
+                min_array_element << 10 |
+                (depth - 1) << 1);
+
+      /* 3DSTATE_DEPTH_BUFFER dw5 */
       OUT_BATCH(0);
-      OUT_BATCH(tile_x |
-                tile_y << 16);
+
+      /* 3DSTATE_DEPTH_BUFFER dw6 */
       OUT_BATCH(0);
       ADVANCE_BATCH();
    }
@@ -857,17 +859,21 @@ gen6_blorp_emit_depth_stencil_config(struct brw_context *brw,
    /* 3DSTATE_HIER_DEPTH_BUFFER */
    {
       struct intel_mipmap_tree *hiz_mt = params->depth.mt->hiz_mt;
-      uint32_t hiz_offset =
-         intel_miptree_get_aligned_offset(hiz_mt,
-                                          draw_x & ~tile_mask_x,
-                                          (draw_y & ~tile_mask_y) / 2, false);
+      uint32_t offset = 0;
+
+      if (hiz_mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
+         offset = intel_miptree_get_aligned_offset(hiz_mt,
+                                                   hiz_mt->level[lod].level_x,
+                                                   hiz_mt->level[lod].level_y,
+                                                   false);
+      }
 
       BEGIN_BATCH(3);
       OUT_BATCH((_3DSTATE_HIER_DEPTH_BUFFER << 16) | (3 - 2));
       OUT_BATCH(hiz_mt->pitch - 1);
       OUT_RELOC(hiz_mt->bo,
                 I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                hiz_offset);
+                offset);
       ADVANCE_BATCH();
    }
 

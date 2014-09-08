@@ -73,8 +73,8 @@ is_channel_updated(vec4_instruction *inst, src_reg *values[4], int ch)
 }
 
 static bool
-try_constant_propagation(struct brw_context *brw, vec4_instruction *inst,
-                         int arg, src_reg *values[4])
+try_constant_propagate(struct brw_context *brw, vec4_instruction *inst,
+                       int arg, src_reg *values[4])
 {
    /* For constant propagation, we only handle the same constant
     * across all 4 channels.  Some day, we should handle the 8-bit
@@ -83,7 +83,7 @@ try_constant_propagation(struct brw_context *brw, vec4_instruction *inst,
     */
    src_reg value = *values[0];
    for (int i = 1; i < 4; i++) {
-      if (!value.equals(values[i]))
+      if (!value.equals(*values[i]))
 	 return false;
    }
 
@@ -92,18 +92,18 @@ try_constant_propagation(struct brw_context *brw, vec4_instruction *inst,
 
    if (inst->src[arg].abs) {
       if (value.type == BRW_REGISTER_TYPE_F) {
-	 value.imm.f = fabs(value.imm.f);
+	 value.fixed_hw_reg.dw1.f = fabs(value.fixed_hw_reg.dw1.f);
       } else if (value.type == BRW_REGISTER_TYPE_D) {
-	 if (value.imm.i < 0)
-	    value.imm.i = -value.imm.i;
+	 if (value.fixed_hw_reg.dw1.d < 0)
+	    value.fixed_hw_reg.dw1.d = -value.fixed_hw_reg.dw1.d;
       }
    }
 
    if (inst->src[arg].negate) {
       if (value.type == BRW_REGISTER_TYPE_F)
-	 value.imm.f = -value.imm.f;
+	 value.fixed_hw_reg.dw1.f = -value.fixed_hw_reg.dw1.f;
       else
-	 value.imm.u = -value.imm.u;
+	 value.fixed_hw_reg.dw1.ud = -value.fixed_hw_reg.dw1.ud;
    }
 
    switch (inst->opcode) {
@@ -162,10 +162,10 @@ try_constant_propagation(struct brw_context *brw, vec4_instruction *inst,
 	 inst->src[arg] = value;
 	 return true;
       } else if (arg == 0 && inst->src[1].file != IMM) {
-	 uint32_t new_cmod;
+	 enum brw_conditional_mod new_cmod;
 
 	 new_cmod = brw_swap_cmod(inst->conditional_mod);
-	 if (new_cmod != ~0u) {
+	 if (new_cmod != BRW_CONDITIONAL_NONE) {
 	    /* Fit this constant in by swapping the operands and
 	     * flipping the test.
 	     */
@@ -211,9 +211,9 @@ is_logic_op(enum opcode opcode)
            opcode == BRW_OPCODE_NOT);
 }
 
-bool
-vec4_visitor::try_copy_propagation(vec4_instruction *inst, int arg,
-                                   src_reg *values[4])
+static bool
+try_copy_propagate(struct brw_context *brw, vec4_instruction *inst,
+                   int arg, src_reg *values[4])
 {
    /* For constant propagation, we only handle the same constant
     * across all 4 channels.  Some day, we should handle the 8-bit
@@ -267,10 +267,14 @@ vec4_visitor::try_copy_propagation(vec4_instruction *inst, int arg,
     * instructions.
     */
    if ((has_source_modifiers || value.file == UNIFORM ||
-        value.swizzle != BRW_SWIZZLE_XYZW) && !can_do_source_mods(inst))
+        value.swizzle != BRW_SWIZZLE_XYZW) && !inst->can_do_source_mods(brw))
       return false;
 
    if (has_source_modifiers && value.type != inst->src[arg].type)
+      return false;
+
+   if (has_source_modifiers &&
+       inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE)
       return false;
 
    bool is_3src_inst = (inst->opcode == BRW_OPCODE_LRP ||
@@ -293,7 +297,7 @@ vec4_visitor::try_copy_propagation(vec4_instruction *inst, int arg,
       return false;
 
    /* Don't report progress if this is a noop. */
-   if (value.equals(&inst->src[arg]))
+   if (value.equals(inst->src[arg]))
       return false;
 
    value.type = inst->src[arg].type;
@@ -309,9 +313,7 @@ vec4_visitor::opt_copy_propagation()
 
    memset(&cur_value, 0, sizeof(cur_value));
 
-   foreach_list(node, &this->instructions) {
-      vec4_instruction *inst = (vec4_instruction *)node;
-
+   foreach_in_list(vec4_instruction, inst, &instructions) {
       /* This pass only works on basic blocks.  If there's flow
        * control, throw out all our information and start from
        * scratch.
@@ -364,8 +366,10 @@ vec4_visitor::opt_copy_propagation()
 	 if (c != 4)
 	    continue;
 
-	 if (try_constant_propagation(brw, inst, i, values) ||
-	     try_copy_propagation(inst, i, values))
+	 if (try_constant_propagate(brw, inst, i, values))
+            progress = true;
+
+	 if (try_copy_propagate(brw, inst, i, values))
 	    progress = true;
       }
 

@@ -103,9 +103,28 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_DRI3_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@am__append_1 = \
+@HAVE_DRISW_TRUE@	  drisw_glx.c
+
+@HAVE_DRICOMMON_TRUE@am__append_2 = \
+@HAVE_DRICOMMON_TRUE@	  xfont.c \
+@HAVE_DRICOMMON_TRUE@	  dri_common.c
+
+@HAVE_DRI2_TRUE@am__append_3 = \
+@HAVE_DRI2_TRUE@	  dri_glx.c \
+@HAVE_DRI2_TRUE@	  XF86dri.c \
+@HAVE_DRI2_TRUE@	  dri2_glx.c \
+@HAVE_DRI2_TRUE@	  dri2.c \
+@HAVE_DRI2_TRUE@	  dri2_query_renderer.c
+
+@HAVE_DRI3_TRUE@am__append_4 = \
 @HAVE_DRI3_TRUE@          dri3_glx.c
 
+@HAVE_APPLEDRI_TRUE@am__append_5 = \
+@HAVE_APPLEDRI_TRUE@	  applegl_glx.c
+
+@HAVE_APPLEDRI_TRUE@am__append_6 = apple
+@HAVE_APPLEDRI_TRUE@am__append_7 = $(builddir)/apple/libappleglx.la
 DIST_COMMON = $(top_srcdir)/install-lib-links.mk $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
 subdir = src/glx
@@ -167,7 +186,8 @@ lib@GL_LIB@_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(lib@GL_LIB@_la_LDFLAGS) $(LDFLAGS) -o \
 	$@
-libglx_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la
+libglx_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la \
+	$(am__append_7)
 am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 	create_context.c eval.c glxconfig.c glxcmds.c glxcurrent.c \
 	glx_error.c glxext.c glxextensions.c indirect_glx.c indirect.c \
@@ -175,11 +195,16 @@ am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 	indirect_texture_compression.c indirect_transpose_matrix.c \
 	indirect_vertex_array.c indirect_vertex_program.c pixel.c \
 	pixelstore.c query_renderer.c render2.c renderpix.c single2.c \
-	singlepix.c vertarr.c xfont.c glx_pbuffer.c glx_query.c \
-	drisw_glx.c dri_common.c dri_glx.c XF86dri.c glxhash.c \
-	dri2_glx.c dri2.c dri2_query_renderer.c applegl_glx.c \
-	dri3_glx.c
-@HAVE_DRI3_TRUE@am__objects_1 = dri3_glx.lo
+	singlepix.c vertarr.c glx_pbuffer.c glx_query.c glxhash.c \
+	drisw_glx.c xfont.c dri_common.c dri_glx.c XF86dri.c \
+	dri2_glx.c dri2.c dri2_query_renderer.c dri3_glx.c \
+	applegl_glx.c
+@HAVE_DRISW_TRUE@am__objects_1 = drisw_glx.lo
+@HAVE_DRICOMMON_TRUE@am__objects_2 = xfont.lo dri_common.lo
+@HAVE_DRI2_TRUE@am__objects_3 = dri_glx.lo XF86dri.lo dri2_glx.lo \
+@HAVE_DRI2_TRUE@	dri2.lo dri2_query_renderer.lo
+@HAVE_DRI3_TRUE@am__objects_4 = dri3_glx.lo
+@HAVE_APPLEDRI_TRUE@am__objects_5 = applegl_glx.lo
 am_libglx_la_OBJECTS = clientattrib.lo clientinfo.lo compsize.lo \
 	create_context.lo eval.lo glxconfig.lo glxcmds.lo \
 	glxcurrent.lo glx_error.lo glxext.lo glxextensions.lo \
@@ -188,10 +213,9 @@ am_libglx_la_OBJECTS = clientattrib.lo clientinfo.lo compsize.lo \
 	indirect_transpose_matrix.lo indirect_vertex_array.lo \
 	indirect_vertex_program.lo pixel.lo pixelstore.lo \
 	query_renderer.lo render2.lo renderpix.lo single2.lo \
-	singlepix.lo vertarr.lo xfont.lo glx_pbuffer.lo glx_query.lo \
-	drisw_glx.lo dri_common.lo dri_glx.lo XF86dri.lo glxhash.lo \
-	dri2_glx.lo dri2.lo dri2_query_renderer.lo applegl_glx.lo \
-	$(am__objects_1)
+	singlepix.lo vertarr.lo glx_pbuffer.lo glx_query.lo glxhash.lo \
+	$(am__objects_1) $(am__objects_2) $(am__objects_3) \
+	$(am__objects_4) $(am__objects_5)
 libglx_la_OBJECTS = $(am_libglx_la_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -269,7 +293,7 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = apple . tests
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
   dir0=`pwd`; \
@@ -304,6 +328,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -557,7 +582,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_CFLAGS = -DGLX_SHARED_GLAPI
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
-SUBDIRS = . tests
+SUBDIRS = $(am__append_6) . tests
 @HAVE_XF86VIDMODE_TRUE@EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -587,11 +612,11 @@ libglx_la_SOURCES = clientattrib.c clientinfo.c compsize.c \
 	indirect_texture_compression.c indirect_transpose_matrix.c \
 	indirect_vertex_array.c indirect_vertex_program.c pixel.c \
 	pixelstore.c query_renderer.c render2.c renderpix.c single2.c \
-	singlepix.c vertarr.c xfont.c glx_pbuffer.c glx_query.c \
-	drisw_glx.c dri_common.c dri_glx.c XF86dri.c glxhash.c \
-	dri2_glx.c dri2.c dri2_query_renderer.c applegl_glx.c \
-	$(am__append_1)
-libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la
+	singlepix.c vertarr.c glx_pbuffer.c glx_query.c glxhash.c \
+	$(am__append_1) $(am__append_2) $(am__append_3) \
+	$(am__append_4) $(am__append_5)
+libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la \
+	$(am__append_7)
 GL_LIBS = \
 	libglx.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la \
@@ -601,7 +626,7 @@ GL_LIBS = \
 GL_LDFLAGS = \
 	-no-undefined \
 	-version-number 1:2 \
-	-Wl,-Bsymbolic \
+	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 
@@ -1059,7 +1084,7 @@ uninstall-am: uninstall-libLTLIBRARIES
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-mesa-links : $(lib_LTLIBRARIES)
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*); do \
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $(join $(addsuffix .libs/,$(dir $(lib_LTLIBRARIES))),$(notdir $(lib_LTLIBRARIES:%.la=%.$(LIB_EXT)*))); do \
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		if test -h .libs/$$f; then			\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			cp -d $$f $(top_builddir)/$(LIB_DIR);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		else						\

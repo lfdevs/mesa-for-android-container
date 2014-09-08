@@ -117,4 +117,10 @@ struct drm_driver_descriptor driver_descriptor = {             \
    .configuration = (conf),				       \
 };
 
+extern struct pipe_screen *dd_create_screen(int fd);
+
+extern const char *dd_driver_name(void);
+
+extern const struct drm_conf_ret *dd_configuration(enum drm_conf conf);
+
 #endif

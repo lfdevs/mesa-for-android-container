@@ -3,6 +3,7 @@ Import('*')
 env = env.Clone()
 
 env.Append(CPPPATH = [
+    '#/src',
     '#/src/mapi',
     '#/src/mesa',
     '#/src/mesa/main',
@@ -16,6 +17,7 @@ env.Prepend(LIBPATH = env['X11_LIBPATH'])
 
 env.Prepend(LIBS = [
     glapi,
+    mesautil,
     glsl,
     mesa,
 ])

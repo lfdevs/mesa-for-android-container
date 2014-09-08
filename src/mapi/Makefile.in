@@ -14,7 +14,7 @@
 
 @SET_MAKE@
 
-# Copyright © 2013 Intel Corporation
+# Copyright © 2013, 2014 Intel Corporation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -34,6 +34,32 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
+
+# src/mapi/Makefile.sources
+#
+# mapi may be used in several ways
+#
+#  - In default mode, mapi implements the interface defined by mapi.h.  To use
+#    this mode, compile MAPI_FILES.
+#
+#  - In util mode, mapi provides utility functions for use with glapi.  To use
+#    this mode, compile MAPI_UTIL_FILES with MAPI_MODE_UTIL defined.
+#
+#  - In glapi mode, mapi implements the interface defined by glapi.h.  To use
+#    this mode, compile MAPI_GLAPI_FILES with MAPI_MODE_GLAPI defined.
+#
+#  - In bridge mode, mapi provides entry points calling into glapi.  To use
+#    this mode, compile MAPI_BRIDGE_FILES with MAPI_MODE_BRIDGE defined.
+
+# src/mapi/glapi/Makefile.sources
+
+# Helpers for glapi header generation
+
+# Provide compatibility with scripts for the old Mesa build system for
+# a while by putting a link to the driver into /lib of the build tree.
+
+
+
 VPATH = @srcdir@
 am__is_gnu_make = test -n '$(MAKEFILE_LIST)' && test -n '$(MAKELEVEL)'
 am__make_running_with_option = \
@@ -99,13 +125,48 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_SHARED_GLAPI_TRUE@am__append_1 = shared-glapi
-@HAVE_OPENGL_TRUE@am__append_2 = glapi
-@HAVE_OPENGL_ES1_TRUE@am__append_3 = es1api
-@HAVE_OPENGL_ES2_TRUE@am__append_4 = es2api
-@HAVE_OPENVG_TRUE@am__append_5 = vgapi
+TESTS = $(am__EXEEXT_1) $(am__EXEEXT_2) $(am__append_11) \
+	$(am__append_16)
+check_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
+DIST_COMMON = $(srcdir)/Makefile.sources \
+	$(srcdir)/glapi/Makefile.sources \
+	$(srcdir)/glapi/gen/glapi_gen.mk \
+	$(top_srcdir)/install-lib-links.mk $(srcdir)/Makefile.in \
+	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp \
+	$(am__GLES2_include_HEADERS_DIST) \
+	$(am__GLES3_include_HEADERS_DIST) \
+	$(am__GLES_include_HEADERS_DIST) $(top_srcdir)/bin/test-driver
+@HAVE_SHARED_GLAPI_TRUE@am__append_1 = shared-glapi/glapi_mapi_tmp.h
+@HAVE_SHARED_GLAPI_TRUE@am__append_2 = shared-glapi/libglapi.la
+@HAVE_SHARED_GLAPI_TRUE@am__append_3 = shared-glapi-test
+@HAVE_SHARED_GLAPI_TRUE@am__append_4 = shared-glapi-test
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__append_5 = $(MAPI_BRIDGE_FILES)
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__append_6 = \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_TRUE@	-DMAPI_MODE_BRIDGE \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_TRUE@	-DMAPI_ABI_HEADER=\"glapi/glapi_mapi_tmp.h\"
+
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@am__append_7 = \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	-DMAPI_MODE_UTIL
+
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@am__append_8 = \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(GLAPI_SOURCES) \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(GLAPI_ASM_SOURCES) \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(MAPI_UTIL_FILES)
+
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@am__append_9 = glapi-test
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@am__append_10 = glapi-test
+@HAVE_OPENGL_ES1_TRUE@am__append_11 = es1api/ABI-check
+@HAVE_OPENGL_ES1_TRUE@am__append_12 = es1api/glapi_mapi_tmp.h
+@HAVE_OPENGL_ES1_TRUE@am__append_13 = es1api/glesv1_cm.pc
+@HAVE_OPENGL_ES1_TRUE@am__append_14 = es1api/libGLESv1_CM.la
+@HAVE_OPENGL_ES1_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__append_15 = shared-glapi/libglapi.la
+@HAVE_OPENGL_ES2_TRUE@am__append_16 = es2api/ABI-check
+@HAVE_OPENGL_ES2_TRUE@am__append_17 = es2api/glapi_mapi_tmp.h
+@HAVE_OPENGL_ES2_TRUE@am__append_18 = es2api/glesv2.pc
+@HAVE_OPENGL_ES2_TRUE@am__append_19 = es2api/libGLESv2.la
+@HAVE_OPENGL_ES2_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__append_20 = shared-glapi/libglapi.la
+@HAVE_OPENVG_TRUE@am__append_21 = vgapi
 subdir = src/mapi
-DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
@@ -120,6 +181,152 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
+	"$(DESTDIR)$(GLES2_includedir)" \
+	"$(DESTDIR)$(GLES3_includedir)" "$(DESTDIR)$(GLES_includedir)"
+LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
+am__DEPENDENCIES_1 =
+@HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_DEPENDENCIES =  \
+@HAVE_OPENGL_ES1_TRUE@	$(am__DEPENDENCIES_1) $(am__append_15)
+am__es1api_libGLESv1_CM_la_SOURCES_DIST = entry.c \
+	es1api/glapi_mapi_tmp.h
+@HAVE_OPENGL_ES1_TRUE@am_es1api_libGLESv1_CM_la_OBJECTS =  \
+@HAVE_OPENGL_ES1_TRUE@	es1api_libGLESv1_CM_la-entry.lo
+es1api_libGLESv1_CM_la_OBJECTS = $(am_es1api_libGLESv1_CM_la_OBJECTS)
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
+es1api_libGLESv1_CM_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(es1api_libGLESv1_CM_la_CFLAGS) $(CFLAGS) \
+	$(es1api_libGLESv1_CM_la_LDFLAGS) $(LDFLAGS) -o $@
+@HAVE_OPENGL_ES1_TRUE@am_es1api_libGLESv1_CM_la_rpath = -rpath \
+@HAVE_OPENGL_ES1_TRUE@	$(libdir)
+am__dirstamp = $(am__leading_dot)dirstamp
+@HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_DEPENDENCIES =  \
+@HAVE_OPENGL_ES2_TRUE@	$(am__DEPENDENCIES_1) $(am__append_20)
+am__es2api_libGLESv2_la_SOURCES_DIST = entry.c es2api/glapi_mapi_tmp.h
+@HAVE_OPENGL_ES2_TRUE@am_es2api_libGLESv2_la_OBJECTS =  \
+@HAVE_OPENGL_ES2_TRUE@	es2api_libGLESv2_la-entry.lo
+es2api_libGLESv2_la_OBJECTS = $(am_es2api_libGLESv2_la_OBJECTS)
+es2api_libGLESv2_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(es2api_libGLESv2_la_CFLAGS) $(CFLAGS) \
+	$(es2api_libGLESv2_la_LDFLAGS) $(LDFLAGS) -o $@
+@HAVE_OPENGL_ES2_TRUE@am_es2api_libGLESv2_la_rpath = -rpath $(libdir)
+glapi_libglapi_la_LIBADD =
+am__glapi_libglapi_la_SOURCES_DIST =  \
+	$(top_builddir)/src/mapi/glapi/glapi_gentable.c \
+	$(TOP)/src/mapi/entry.c $(TOP)/src/mapi/entry.h \
+	$(TOP)/src/mapi/entry_x86-64_tls.h \
+	$(TOP)/src/mapi/entry_x86_tls.h \
+	$(TOP)/src/mapi/entry_x86_tsd.h $(TOP)/src/mapi/mapi_tmp.h \
+	$(top_srcdir)/src/mapi/glapi/glapi_dispatch.c \
+	$(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c \
+	$(top_srcdir)/src/mapi/glapi/glapi_getproc.c \
+	$(top_srcdir)/src/mapi/glapi/glapi_nop.c \
+	$(top_srcdir)/src/mapi/glapi/glapi.c \
+	$(top_srcdir)/src/mapi/glapi/glapi.h \
+	$(top_srcdir)/src/mapi/glapi/glapi_priv.h \
+	$(top_builddir)/src/mapi/glapi/glapi_sparc.S \
+	$(top_builddir)/src/mapi/glapi/glapi_x86.S \
+	$(top_builddir)/src/mapi/glapi/glapi_x86-64.S \
+	$(TOP)/src/mapi/u_compiler.h $(TOP)/src/mapi/u_current.c \
+	$(TOP)/src/mapi/u_current.h $(TOP)/src/mapi/u_execmem.c \
+	$(TOP)/src/mapi/u_execmem.h $(TOP)/src/mapi/u_macros.h \
+	$(TOP)/src/mapi/u_thread.h
+am__objects_1 = glapi_libglapi_la-glapi_gentable.lo
+am__objects_2 = glapi_libglapi_la-entry.lo
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__objects_3 =  \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_TRUE@	$(am__objects_2)
+am__objects_4 = glapi_libglapi_la-glapi_dispatch.lo \
+	glapi_libglapi_la-glapi_entrypoint.lo \
+	glapi_libglapi_la-glapi_getproc.lo \
+	glapi_libglapi_la-glapi_nop.lo glapi_libglapi_la-glapi.lo
+am__objects_5 = glapi_libglapi_la-glapi_sparc.lo
+am__objects_6 = glapi_libglapi_la-glapi_x86.lo
+am__objects_7 = glapi_libglapi_la-glapi_x86-64.lo
+@HAVE_OPENGL_TRUE@@HAVE_SPARC_ASM_FALSE@@HAVE_X86_64_ASM_FALSE@@HAVE_X86_ASM_TRUE@am__objects_8 = $(am__objects_6)
+@HAVE_OPENGL_TRUE@@HAVE_SPARC_ASM_FALSE@@HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__objects_8 = $(am__objects_7)
+@HAVE_OPENGL_TRUE@@HAVE_SPARC_ASM_TRUE@am__objects_8 =  \
+@HAVE_OPENGL_TRUE@@HAVE_SPARC_ASM_TRUE@	$(am__objects_5)
+am__objects_9 = glapi_libglapi_la-u_current.lo \
+	glapi_libglapi_la-u_execmem.lo
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@am__objects_10 =  \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(am__objects_4) \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(am__objects_8) \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(am__objects_9)
+@HAVE_OPENGL_TRUE@am_glapi_libglapi_la_OBJECTS = $(am__objects_1) \
+@HAVE_OPENGL_TRUE@	$(am__objects_3) $(am__objects_10)
+glapi_libglapi_la_OBJECTS = $(am_glapi_libglapi_la_OBJECTS)
+@HAVE_OPENGL_TRUE@am_glapi_libglapi_la_rpath =
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_libglapi_la_DEPENDENCIES =  \
+@HAVE_SHARED_GLAPI_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_SHARED_GLAPI_TRUE@	$(am__DEPENDENCIES_1)
+am__shared_glapi_libglapi_la_SOURCES_DIST = $(TOP)/src/mapi/entry.c \
+	$(TOP)/src/mapi/mapi_glapi.c $(TOP)/src/mapi/stub.c \
+	$(TOP)/src/mapi/stub.h $(TOP)/src/mapi/table.c \
+	$(TOP)/src/mapi/table.h $(TOP)/src/mapi/u_compiler.h \
+	$(TOP)/src/mapi/u_current.c $(TOP)/src/mapi/u_current.h \
+	$(TOP)/src/mapi/u_execmem.c $(TOP)/src/mapi/u_execmem.h \
+	$(TOP)/src/mapi/u_macros.h $(TOP)/src/mapi/u_thread.h
+am__objects_11 = shared_glapi_libglapi_la-u_current.lo \
+	shared_glapi_libglapi_la-u_execmem.lo
+am__objects_12 = shared_glapi_libglapi_la-entry.lo \
+	shared_glapi_libglapi_la-mapi_glapi.lo \
+	shared_glapi_libglapi_la-stub.lo \
+	shared_glapi_libglapi_la-table.lo $(am__objects_11)
+@HAVE_SHARED_GLAPI_TRUE@am_shared_glapi_libglapi_la_OBJECTS =  \
+@HAVE_SHARED_GLAPI_TRUE@	$(am__objects_12)
+shared_glapi_libglapi_la_OBJECTS =  \
+	$(am_shared_glapi_libglapi_la_OBJECTS)
+shared_glapi_libglapi_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(shared_glapi_libglapi_la_LDFLAGS) \
+	$(LDFLAGS) -o $@
+@HAVE_SHARED_GLAPI_TRUE@am_shared_glapi_libglapi_la_rpath = -rpath \
+@HAVE_SHARED_GLAPI_TRUE@	$(libdir)
+@HAVE_SHARED_GLAPI_TRUE@am__EXEEXT_1 = shared-glapi-test$(EXEEXT)
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@am__EXEEXT_2 = glapi-test$(EXEEXT)
+am__glapi_test_SOURCES_DIST = glapi/tests/check_table.cpp
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@am_glapi_test_OBJECTS = glapi_test-check_table.$(OBJEXT)
+glapi_test_OBJECTS = $(am_glapi_test_OBJECTS)
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@glapi_test_DEPENDENCIES = $(top_builddir)/src/mapi/glapi/libglapi.la \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(top_builddir)/src/gtest/libgtest.la
+am__shared_glapi_test_SOURCES_DIST =  \
+	shared-glapi/tests/check_table.cpp
+@HAVE_SHARED_GLAPI_TRUE@am_shared_glapi_test_OBJECTS = shared_glapi_test-check_table.$(OBJEXT)
+shared_glapi_test_OBJECTS = $(am_shared_glapi_test_OBJECTS)
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_test_DEPENDENCIES = $(top_builddir)/src/mapi/shared-glapi/libglapi.la \
+@HAVE_SHARED_GLAPI_TRUE@	$(top_builddir)/src/gtest/libgtest.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -132,8 +339,66 @@ AM_V_at = $(am__v_at_@AM_V@)
 am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
 am__v_at_0 = @
 am__v_at_1 = 
-SOURCES =
-DIST_SOURCES =
+DEFAULT_INCLUDES = -I.@am__isrc@
+depcomp = $(SHELL) $(top_srcdir)/bin/depcomp
+am__depfiles_maybe = depfiles
+am__mv = mv -f
+CPPASCOMPILE = $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS)
+LTCPPASCOMPILE = $(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CCASFLAGS) $(CCASFLAGS)
+AM_V_CPPAS = $(am__v_CPPAS_@AM_V@)
+am__v_CPPAS_ = $(am__v_CPPAS_@AM_DEFAULT_V@)
+am__v_CPPAS_0 = @echo "  CPPAS   " $@;
+am__v_CPPAS_1 = 
+COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CFLAGS) $(CFLAGS)
+AM_V_CC = $(am__v_CC_@AM_V@)
+am__v_CC_ = $(am__v_CC_@AM_DEFAULT_V@)
+am__v_CC_0 = @echo "  CC      " $@;
+am__v_CC_1 = 
+CCLD = $(CC)
+LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CCLD = $(am__v_CCLD_@AM_V@)
+am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
+am__v_CCLD_0 = @echo "  CCLD    " $@;
+am__v_CCLD_1 = 
+CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CXXFLAGS) $(CXXFLAGS)
+AM_V_CXX = $(am__v_CXX_@AM_V@)
+am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
+am__v_CXX_0 = @echo "  CXX     " $@;
+am__v_CXX_1 = 
+CXXLD = $(CXX)
+CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
+am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
+am__v_CXXLD_0 = @echo "  CXXLD   " $@;
+am__v_CXXLD_1 = 
+SOURCES = $(es1api_libGLESv1_CM_la_SOURCES) \
+	$(es2api_libGLESv2_la_SOURCES) $(glapi_libglapi_la_SOURCES) \
+	$(shared_glapi_libglapi_la_SOURCES) $(glapi_test_SOURCES) \
+	$(shared_glapi_test_SOURCES)
+DIST_SOURCES = $(am__es1api_libGLESv1_CM_la_SOURCES_DIST) \
+	$(am__es2api_libGLESv2_la_SOURCES_DIST) \
+	$(am__glapi_libglapi_la_SOURCES_DIST) \
+	$(am__shared_glapi_libglapi_la_SOURCES_DIST) \
+	$(am__glapi_test_SOURCES_DIST) \
+	$(am__shared_glapi_test_SOURCES_DIST)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -147,6 +412,20 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+DATA = $(pkgconfig_DATA)
+am__GLES2_include_HEADERS_DIST = $(top_srcdir)/include/GLES2/gl2.h \
+	$(top_srcdir)/include/GLES2/gl2ext.h \
+	$(top_srcdir)/include/GLES2/gl2platform.h
+am__GLES3_include_HEADERS_DIST = $(top_srcdir)/include/GLES3/gl3.h \
+	$(top_srcdir)/include/GLES3/gl31.h \
+	$(top_srcdir)/include/GLES3/gl3ext.h \
+	$(top_srcdir)/include/GLES3/gl3platform.h
+am__GLES_include_HEADERS_DIST = $(top_srcdir)/include/GLES/egl.h \
+	$(top_srcdir)/include/GLES/gl.h \
+	$(top_srcdir)/include/GLES/glext.h \
+	$(top_srcdir)/include/GLES/glplatform.h
+HEADERS = $(GLES2_include_HEADERS) $(GLES3_include_HEADERS) \
+	$(GLES_include_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -154,7 +433,7 @@ am__recursive_targets = \
   $(RECURSIVE_CLEAN_TARGETS) \
   $(am__extra_recursive_targets)
 AM_RECURSIVE_TARGETS = $(am__recursive_targets:-recursive=) TAGS CTAGS \
-	distdir
+	check recheck distdir
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -174,7 +453,183 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = glapi/gen shared-glapi glapi es1api es2api vgapi
+am__tty_colors_dummy = \
+  mgn= red= grn= lgn= blu= brg= std=; \
+  am__color_tests=no
+am__tty_colors = { \
+  $(am__tty_colors_dummy); \
+  if test "X$(AM_COLOR_TESTS)" = Xno; then \
+    am__color_tests=no; \
+  elif test "X$(AM_COLOR_TESTS)" = Xalways; then \
+    am__color_tests=yes; \
+  elif test "X$$TERM" != Xdumb && { test -t 1; } 2>/dev/null; then \
+    am__color_tests=yes; \
+  fi; \
+  if test $$am__color_tests = yes; then \
+    red='[0;31m'; \
+    grn='[0;32m'; \
+    lgn='[1;32m'; \
+    blu='[1;34m'; \
+    mgn='[0;35m'; \
+    brg='[1m'; \
+    std='[m'; \
+  fi; \
+}
+am__recheck_rx = ^[ 	]*:recheck:[ 	]*
+am__global_test_result_rx = ^[ 	]*:global-test-result:[ 	]*
+am__copy_in_global_log_rx = ^[ 	]*:copy-in-global-log:[ 	]*
+# A command that, given a newline-separated list of test names on the
+# standard input, print the name of the tests that are to be re-run
+# upon "make recheck".
+am__list_recheck_tests = $(AWK) '{ \
+  recheck = 1; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+        { \
+          if ((getline line2 < ($$0 ".log")) < 0) \
+	    recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[nN][Oo]/) \
+        { \
+          recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[yY][eE][sS]/) \
+        { \
+          break; \
+        } \
+    }; \
+  if (recheck) \
+    print $$0; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# A command that, given a newline-separated list of test names on the
+# standard input, create the global log from their .trs and .log files.
+am__create_global_log = $(AWK) ' \
+function fatal(msg) \
+{ \
+  print "fatal: making $@: " msg | "cat >&2"; \
+  exit 1; \
+} \
+function rst_section(header) \
+{ \
+  print header; \
+  len = length(header); \
+  for (i = 1; i <= len; i = i + 1) \
+    printf "="; \
+  printf "\n\n"; \
+} \
+{ \
+  copy_in_global_log = 1; \
+  global_test_result = "RUN"; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+         fatal("failed to read from " $$0 ".trs"); \
+      if (line ~ /$(am__global_test_result_rx)/) \
+        { \
+          sub("$(am__global_test_result_rx)", "", line); \
+          sub("[ 	]*$$", "", line); \
+          global_test_result = line; \
+        } \
+      else if (line ~ /$(am__copy_in_global_log_rx)[nN][oO]/) \
+        copy_in_global_log = 0; \
+    }; \
+  if (copy_in_global_log) \
+    { \
+      rst_section(global_test_result ": " $$0); \
+      while ((rc = (getline line < ($$0 ".log"))) != 0) \
+      { \
+        if (rc < 0) \
+          fatal("failed to read from " $$0 ".log"); \
+        print line; \
+      }; \
+      printf "\n"; \
+    }; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# Restructured Text title.
+am__rst_title = { sed 's/.*/   &   /;h;s/./=/g;p;x;s/ *$$//;p;g' && echo; }
+# Solaris 10 'make', and several other traditional 'make' implementations,
+# pass "-e" to $(SHELL), and POSIX 2008 even requires this.  Work around it
+# by disabling -e (using the XSI extension "set +e") if it's set.
+am__sh_e_setup = case $$- in *e*) set +e;; esac
+# Default flags passed to test drivers.
+am__common_driver_flags = \
+  --color-tests "$$am__color_tests" \
+  --enable-hard-errors "$$am__enable_hard_errors" \
+  --expect-failure "$$am__expect_failure"
+# To be inserted before the command running the test.  Creates the
+# directory for the log if needed.  Stores in $dir the directory
+# containing $f, in $tst the test, in $log the log.  Executes the
+# developer- defined test setup AM_TESTS_ENVIRONMENT (if any), and
+# passes TESTS_ENVIRONMENT.  Set up options for the wrapper that
+# will run the test scripts (or their associated LOG_COMPILER, if
+# thy have one).
+am__check_pre = \
+$(am__sh_e_setup);					\
+$(am__vpath_adj_setup) $(am__vpath_adj)			\
+$(am__tty_colors);					\
+srcdir=$(srcdir); export srcdir;			\
+case "$@" in						\
+  */*) am__odir=`echo "./$@" | sed 's|/[^/]*$$||'`;;	\
+    *) am__odir=.;; 					\
+esac;							\
+test "x$$am__odir" = x"." || test -d "$$am__odir" 	\
+  || $(MKDIR_P) "$$am__odir" || exit $$?;		\
+if test -f "./$$f"; then dir=./;			\
+elif test -f "$$f"; then dir=;				\
+else dir="$(srcdir)/"; fi;				\
+tst=$$dir$$f; log='$@'; 				\
+if test -n '$(DISABLE_HARD_ERRORS)'; then		\
+  am__enable_hard_errors=no; 				\
+else							\
+  am__enable_hard_errors=yes; 				\
+fi; 							\
+case " $(XFAIL_TESTS) " in				\
+  *[\ \	]$$f[\ \	]* | *[\ \	]$$dir$$f[\ \	]*) \
+    am__expect_failure=yes;;				\
+  *)							\
+    am__expect_failure=no;;				\
+esac; 							\
+$(AM_TESTS_ENVIRONMENT) $(TESTS_ENVIRONMENT)
+# A shell command to get the names of the tests scripts with any registered
+# extension removed (i.e., equivalently, the names of the test logs, with
+# the '.log' extension removed).  The result is saved in the shell variable
+# '$bases'.  This honors runtime overriding of TESTS and TEST_LOGS.  Sadly,
+# we cannot use something simpler, involving e.g., "$(TEST_LOGS:.log=)",
+# since that might cause problem with VPATH rewrites for suffix-less tests.
+# See also 'test-harness-vpath-rewrite.sh' and 'test-trs-basic.sh'.
+am__set_TESTS_bases = \
+  bases='$(TEST_LOGS)'; \
+  bases=`for i in $$bases; do echo $$i; done | sed 's/\.log$$//'`; \
+  bases=`echo $$bases`
+RECHECK_LOGS = $(TEST_LOGS)
+TEST_SUITE_LOG = test-suite.log
+TEST_EXTENSIONS = @EXEEXT@ .test
+LOG_DRIVER = $(SHELL) $(top_srcdir)/bin/test-driver
+LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
+am__set_b = \
+  case '$@' in \
+    */*) \
+      case '$*' in \
+        */*) b='$*';; \
+          *) b=`echo '$@' | sed 's/\.log$$//'`; \
+       esac;; \
+    *) \
+      b='$*';; \
+  esac
+am__test_logs1 = $(TESTS:=.log)
+am__test_logs2 = $(am__test_logs1:@EXEEXT@.log=.log)
+TEST_LOGS = $(am__test_logs2:.test.log=.log)
+TEST_LOG_DRIVER = $(SHELL) $(top_srcdir)/bin/test-driver
+TEST_LOG_COMPILE = $(TEST_LOG_COMPILER) $(AM_TEST_LOG_FLAGS) \
+	$(TEST_LOG_FLAGS)
+DIST_SUBDIRS = glapi/gen . vgapi
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
   dir0=`pwd`; \
@@ -209,6 +664,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -460,12 +916,197 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = glapi/gen $(am__append_1) $(am__append_2) $(am__append_3) \
-	$(am__append_4) $(am__append_5)
-all: all-recursive
+SUBDIRS = glapi/gen . $(am__append_21)
+TOP = $(top_srcdir)
+BUILT_SOURCES = $(am__append_1) $(am__append_12) $(am__append_17)
+CLEANFILES = $(BUILT_SOURCES)
+lib_LTLIBRARIES = $(am__append_2) $(am__append_14) $(am__append_19)
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = $(am__append_13) $(am__append_18)
+AM_CFLAGS = $(PTHREAD_CFLAGS)
+AM_CPPFLAGS = \
+	$(DEFINES)						\
+	$(SELINUX_CFLAGS)					\
+	-I$(top_srcdir)/include					\
+	-I$(top_srcdir)/src/mapi				\
+	-I$(top_builddir)/src/mapi
+
+GLAPI = $(top_srcdir)/src/mapi/glapi
+MAPI_UTIL_FILES = \
+	$(TOP)/src/mapi/u_compiler.h \
+	$(TOP)/src/mapi/u_current.c \
+	$(TOP)/src/mapi/u_current.h \
+	$(TOP)/src/mapi/u_execmem.c \
+	$(TOP)/src/mapi/u_execmem.h \
+	$(TOP)/src/mapi/u_macros.h \
+	$(TOP)/src/mapi/u_thread.h
+
+MAPI_BRIDGE_FILES = \
+	$(TOP)/src/mapi/entry.c \
+	$(TOP)/src/mapi/entry.h \
+	$(TOP)/src/mapi/entry_x86-64_tls.h \
+	$(TOP)/src/mapi/entry_x86_tls.h \
+	$(TOP)/src/mapi/entry_x86_tsd.h \
+	$(TOP)/src/mapi/mapi_tmp.h
+
+MAPI_FILES = \
+	$(TOP)/src/mapi/entry.c \
+	$(TOP)/src/mapi/mapi.c \
+	$(TOP)/src/mapi/mapi.h \
+	$(TOP)/src/mapi/stub.c \
+	$(TOP)/src/mapi/stub.h \
+	$(TOP)/src/mapi/table.c \
+	$(TOP)/src/mapi/table.h \
+	$(MAPI_UTIL_FILES)
+
+MAPI_GLAPI_FILES = \
+	$(TOP)/src/mapi/entry.c \
+	$(TOP)/src/mapi/mapi_glapi.c \
+	$(TOP)/src/mapi/stub.c \
+	$(TOP)/src/mapi/stub.h \
+	$(TOP)/src/mapi/table.c \
+	$(TOP)/src/mapi/table.h \
+	$(MAPI_UTIL_FILES)
+
+GLAPI_UTIL_SOURCES = \
+	$(top_builddir)/src/mapi/glapi/glapi_gentable.c
+
+GLAPI_SOURCES = \
+	$(top_srcdir)/src/mapi/glapi/glapi_dispatch.c \
+	$(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c \
+	$(top_srcdir)/src/mapi/glapi/glapi_getproc.c \
+	$(top_srcdir)/src/mapi/glapi/glapi_nop.c \
+	$(top_srcdir)/src/mapi/glapi/glapi.c \
+	$(top_srcdir)/src/mapi/glapi/glapi.h \
+	$(top_srcdir)/src/mapi/glapi/glapi_priv.h
+
+X86_API = \
+	$(top_builddir)/src/mapi/glapi/glapi_x86.S
+
+X86_64_API = \
+	$(top_builddir)/src/mapi/glapi/glapi_x86-64.S
+
+SPARC_API = \
+	$(top_builddir)/src/mapi/glapi/glapi_sparc.S
+
+glapi_gen_common_deps := \
+	$(wildcard $(top_srcdir)/src/mapi/glapi/gen/*.xml) \
+	$(wildcard $(top_srcdir)/src/mapi/glapi/gen/*.py)
+
+glapi_gen_mapi_script := $(top_srcdir)/src/mapi/mapi_abi.py
+glapi_gen_mapi_deps := \
+	$(glapi_gen_mapi_script) \
+	$(glapi_gen_common_deps)
+
+glapi_gen_dispatch_script := $(top_srcdir)/src/mapi/glapi/gen/gl_table.py
+glapi_gen_dispatch_deps := $(glapi_gen_common_deps)
+glapi_gen_remap_script := $(top_srcdir)/src/mapi/glapi/gen/remap_helper.py
+glapi_gen_remap_deps := $(glapi_gen_common_deps)
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_libglapi_la_SOURCES = $(MAPI_GLAPI_FILES)
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_libglapi_la_CPPFLAGS = \
+@HAVE_SHARED_GLAPI_TRUE@	$(AM_CPPFLAGS) \
+@HAVE_SHARED_GLAPI_TRUE@	-DMAPI_MODE_GLAPI \
+@HAVE_SHARED_GLAPI_TRUE@	-DMAPI_ABI_HEADER=\"shared-glapi/glapi_mapi_tmp.h\"
+
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_libglapi_la_LIBADD = \
+@HAVE_SHARED_GLAPI_TRUE@	$(PTHREAD_LIBS) \
+@HAVE_SHARED_GLAPI_TRUE@	$(SELINUX_LIBS)
+
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_libglapi_la_LDFLAGS = \
+@HAVE_SHARED_GLAPI_TRUE@	-no-undefined \
+@HAVE_SHARED_GLAPI_TRUE@	$(GC_SECTIONS) \
+@HAVE_SHARED_GLAPI_TRUE@	$(LD_NO_UNDEFINED)
+
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_test_SOURCES = shared-glapi/tests/check_table.cpp
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_test_CPPFLAGS = \
+@HAVE_SHARED_GLAPI_TRUE@	$(AM_CPPFLAGS) \
+@HAVE_SHARED_GLAPI_TRUE@	-I$(top_srcdir)/src/gtest/include
+
+@HAVE_SHARED_GLAPI_TRUE@shared_glapi_test_LDADD = \
+@HAVE_SHARED_GLAPI_TRUE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
+@HAVE_SHARED_GLAPI_TRUE@	$(top_builddir)/src/gtest/libgtest.la
+
+@HAVE_OPENGL_TRUE@noinst_LTLIBRARIES = glapi/libglapi.la
+@HAVE_OPENGL_TRUE@@HAVE_SPARC_ASM_TRUE@GLAPI_ASM_SOURCES = $(SPARC_API)
+@HAVE_OPENGL_TRUE@@HAVE_X86_64_ASM_FALSE@@HAVE_X86_ASM_TRUE@GLAPI_ASM_SOURCES = $(X86_API)
+@HAVE_OPENGL_TRUE@@HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@GLAPI_ASM_SOURCES = $(X86_64_API)
+@HAVE_OPENGL_TRUE@glapi_libglapi_la_SOURCES = $(GLAPI_UTIL_SOURCES) \
+@HAVE_OPENGL_TRUE@	$(am__append_5) $(am__append_8)
+@HAVE_OPENGL_TRUE@glapi_libglapi_la_CPPFLAGS = $(AM_CPPFLAGS) \
+@HAVE_OPENGL_TRUE@	-I$(top_srcdir)/src/mapi/glapi \
+@HAVE_OPENGL_TRUE@	-I$(top_srcdir)/src/mesa $(am__append_6) \
+@HAVE_OPENGL_TRUE@	$(am__append_7)
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@glapi_test_SOURCES = glapi/tests/check_table.cpp
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@glapi_test_CPPFLAGS = \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(AM_CPPFLAGS) \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	-I$(top_srcdir)/src/gtest/include
+
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@glapi_test_LDADD = \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(top_builddir)/src/mapi/glapi/libglapi.la \
+@HAVE_OPENGL_TRUE@@HAVE_SHARED_GLAPI_FALSE@	$(top_builddir)/src/gtest/libgtest.la
+
+@HAVE_OPENGL_ES1_TRUE@GLES_includedir = $(includedir)/GLES
+@HAVE_OPENGL_ES1_TRUE@GLES_include_HEADERS = \
+@HAVE_OPENGL_ES1_TRUE@	$(top_srcdir)/include/GLES/egl.h \
+@HAVE_OPENGL_ES1_TRUE@	$(top_srcdir)/include/GLES/gl.h \
+@HAVE_OPENGL_ES1_TRUE@	$(top_srcdir)/include/GLES/glext.h \
+@HAVE_OPENGL_ES1_TRUE@	$(top_srcdir)/include/GLES/glplatform.h
+
+@HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_SOURCES = entry.c es1api/glapi_mapi_tmp.h
+@HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_CFLAGS = \
+@HAVE_OPENGL_ES1_TRUE@	$(AM_CFLAGS) \
+@HAVE_OPENGL_ES1_TRUE@	$(VISIBILITY_CFLAGS)
+
+@HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_CPPFLAGS = \
+@HAVE_OPENGL_ES1_TRUE@	$(AM_CPPFLAGS) \
+@HAVE_OPENGL_ES1_TRUE@	-DMAPI_MODE_BRIDGE \
+@HAVE_OPENGL_ES1_TRUE@	-DMAPI_ABI_HEADER=\"es1api/glapi_mapi_tmp.h\"
+
+@HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_LIBADD =  \
+@HAVE_OPENGL_ES1_TRUE@	$(GLESv1_CM_LIB_DEPS) $(am__append_15)
+@HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_LDFLAGS = \
+@HAVE_OPENGL_ES1_TRUE@	-no-undefined \
+@HAVE_OPENGL_ES1_TRUE@	-version-number 1:1 \
+@HAVE_OPENGL_ES1_TRUE@	$(GC_SECTIONS) \
+@HAVE_OPENGL_ES1_TRUE@	$(LD_NO_UNDEFINED)
+
+@HAVE_OPENGL_ES2_TRUE@GLES2_includedir = $(includedir)/GLES2
+@HAVE_OPENGL_ES2_TRUE@GLES2_include_HEADERS = \
+@HAVE_OPENGL_ES2_TRUE@	$(top_srcdir)/include/GLES2/gl2.h \
+@HAVE_OPENGL_ES2_TRUE@	$(top_srcdir)/include/GLES2/gl2ext.h \
+@HAVE_OPENGL_ES2_TRUE@	$(top_srcdir)/include/GLES2/gl2platform.h
+
+@HAVE_OPENGL_ES2_TRUE@GLES3_includedir = $(includedir)/GLES3
+@HAVE_OPENGL_ES2_TRUE@GLES3_include_HEADERS = \
+@HAVE_OPENGL_ES2_TRUE@	$(top_srcdir)/include/GLES3/gl3.h \
+@HAVE_OPENGL_ES2_TRUE@	$(top_srcdir)/include/GLES3/gl31.h \
+@HAVE_OPENGL_ES2_TRUE@	$(top_srcdir)/include/GLES3/gl3ext.h \
+@HAVE_OPENGL_ES2_TRUE@	$(top_srcdir)/include/GLES3/gl3platform.h
+
+@HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_SOURCES = entry.c es2api/glapi_mapi_tmp.h
+@HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_CFLAGS = \
+@HAVE_OPENGL_ES2_TRUE@	$(AM_CFLAGS) \
+@HAVE_OPENGL_ES2_TRUE@	$(VISIBILITY_CFLAGS)
+
+@HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_CPPFLAGS = \
+@HAVE_OPENGL_ES2_TRUE@	$(AM_CPPFLAGS) \
+@HAVE_OPENGL_ES2_TRUE@	-DMAPI_MODE_BRIDGE \
+@HAVE_OPENGL_ES2_TRUE@	-DMAPI_ABI_HEADER=\"es2api/glapi_mapi_tmp.h\"
+
+@HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_LIBADD = $(GLESv2_LIB_DEPS) \
+@HAVE_OPENGL_ES2_TRUE@	$(am__append_20)
+@HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_LDFLAGS = \
+@HAVE_OPENGL_ES2_TRUE@	-no-undefined \
+@HAVE_OPENGL_ES2_TRUE@	-version-number 2 \
+@HAVE_OPENGL_ES2_TRUE@	$(GC_SECTIONS) \
+@HAVE_OPENGL_ES2_TRUE@	$(LD_NO_UNDEFINED)
+
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
 .SUFFIXES:
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
+.SUFFIXES: .S .c .cpp .lo .log .o .obj .test .test$(EXEEXT) .trs
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/Makefile.sources $(srcdir)/glapi/Makefile.sources $(srcdir)/glapi/gen/glapi_gen.mk $(top_srcdir)/install-lib-links.mk $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -486,6 +1127,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
 	esac;
+$(srcdir)/Makefile.sources $(srcdir)/glapi/Makefile.sources $(srcdir)/glapi/gen/glapi_gen.mk $(top_srcdir)/install-lib-links.mk:
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
@@ -496,11 +1138,446 @@ $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
+install-libLTLIBRARIES: $(lib_LTLIBRARIES)
+	@$(NORMAL_INSTALL)
+	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
+	list2=; for p in $$list; do \
+	  if test -f $$p; then \
+	    list2="$$list2 $$p"; \
+	  else :; fi; \
+	done; \
+	test -z "$$list2" || { \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(libdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(libdir)" || exit 1; \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(libdir)'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(libdir)"; \
+	}
+
+uninstall-libLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
+	for p in $$list; do \
+	  $(am__strip_dir) \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(libdir)/$$f'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(libdir)/$$f"; \
+	done
+
+clean-libLTLIBRARIES:
+	-test -z "$(lib_LTLIBRARIES)" || rm -f $(lib_LTLIBRARIES)
+	@list='$(lib_LTLIBRARIES)'; \
+	locs=`for p in $$list; do echo $$p; done | \
+	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
+	      sort -u`; \
+	test -z "$$locs" || { \
+	  echo rm -f $${locs}; \
+	  rm -f $${locs}; \
+	}
+
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; \
+	locs=`for p in $$list; do echo $$p; done | \
+	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
+	      sort -u`; \
+	test -z "$$locs" || { \
+	  echo rm -f $${locs}; \
+	  rm -f $${locs}; \
+	}
+es1api/$(am__dirstamp):
+	@$(MKDIR_P) es1api
+	@: > es1api/$(am__dirstamp)
+
+es1api/libGLESv1_CM.la: $(es1api_libGLESv1_CM_la_OBJECTS) $(es1api_libGLESv1_CM_la_DEPENDENCIES) $(EXTRA_es1api_libGLESv1_CM_la_DEPENDENCIES) es1api/$(am__dirstamp)
+	$(AM_V_CCLD)$(es1api_libGLESv1_CM_la_LINK) $(am_es1api_libGLESv1_CM_la_rpath) $(es1api_libGLESv1_CM_la_OBJECTS) $(es1api_libGLESv1_CM_la_LIBADD) $(LIBS)
+es2api/$(am__dirstamp):
+	@$(MKDIR_P) es2api
+	@: > es2api/$(am__dirstamp)
+
+es2api/libGLESv2.la: $(es2api_libGLESv2_la_OBJECTS) $(es2api_libGLESv2_la_DEPENDENCIES) $(EXTRA_es2api_libGLESv2_la_DEPENDENCIES) es2api/$(am__dirstamp)
+	$(AM_V_CCLD)$(es2api_libGLESv2_la_LINK) $(am_es2api_libGLESv2_la_rpath) $(es2api_libGLESv2_la_OBJECTS) $(es2api_libGLESv2_la_LIBADD) $(LIBS)
+glapi/$(am__dirstamp):
+	@$(MKDIR_P) glapi
+	@: > glapi/$(am__dirstamp)
+
+glapi/libglapi.la: $(glapi_libglapi_la_OBJECTS) $(glapi_libglapi_la_DEPENDENCIES) $(EXTRA_glapi_libglapi_la_DEPENDENCIES) glapi/$(am__dirstamp)
+	$(AM_V_CCLD)$(LINK) $(am_glapi_libglapi_la_rpath) $(glapi_libglapi_la_OBJECTS) $(glapi_libglapi_la_LIBADD) $(LIBS)
+shared-glapi/$(am__dirstamp):
+	@$(MKDIR_P) shared-glapi
+	@: > shared-glapi/$(am__dirstamp)
+
+shared-glapi/libglapi.la: $(shared_glapi_libglapi_la_OBJECTS) $(shared_glapi_libglapi_la_DEPENDENCIES) $(EXTRA_shared_glapi_libglapi_la_DEPENDENCIES) shared-glapi/$(am__dirstamp)
+	$(AM_V_CCLD)$(shared_glapi_libglapi_la_LINK) $(am_shared_glapi_libglapi_la_rpath) $(shared_glapi_libglapi_la_OBJECTS) $(shared_glapi_libglapi_la_LIBADD) $(LIBS)
+
+clean-checkPROGRAMS:
+	@list='$(check_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+glapi-test$(EXEEXT): $(glapi_test_OBJECTS) $(glapi_test_DEPENDENCIES) $(EXTRA_glapi_test_DEPENDENCIES) 
+	@rm -f glapi-test$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(glapi_test_OBJECTS) $(glapi_test_LDADD) $(LIBS)
+
+shared-glapi-test$(EXEEXT): $(shared_glapi_test_OBJECTS) $(shared_glapi_test_DEPENDENCIES) $(EXTRA_shared_glapi_test_DEPENDENCIES) 
+	@rm -f shared-glapi-test$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(shared_glapi_test_OBJECTS) $(shared_glapi_test_LDADD) $(LIBS)
+
+mostlyclean-compile:
+	-rm -f *.$(OBJEXT)
+
+distclean-compile:
+	-rm -f *.tab.c
+
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/es1api_libGLESv1_CM_la-entry.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/es2api_libGLESv2_la-entry.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-entry.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_dispatch.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_entrypoint.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_gentable.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_getproc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_nop.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_sparc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_x86-64.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-glapi_x86.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-u_current.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_libglapi_la-u_execmem.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glapi_test-check_table.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shared_glapi_libglapi_la-entry.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shared_glapi_libglapi_la-mapi_glapi.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shared_glapi_libglapi_la-stub.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shared_glapi_libglapi_la-table.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shared_glapi_libglapi_la-u_current.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shared_glapi_libglapi_la-u_execmem.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shared_glapi_test-check_table.Po@am__quote@
+
+.S.o:
+@am__fastdepCCAS_TRUE@	$(AM_V_CPPAS)$(CPPASCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCCAS_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	DEPDIR=$(DEPDIR) $(CCASDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS@am__nodep@)$(CPPASCOMPILE) -c -o $@ $<
+
+.S.obj:
+@am__fastdepCCAS_TRUE@	$(AM_V_CPPAS)$(CPPASCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCCAS_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	DEPDIR=$(DEPDIR) $(CCASDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS@am__nodep@)$(CPPASCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.S.lo:
+@am__fastdepCCAS_TRUE@	$(AM_V_CPPAS)$(LTCPPASCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCCAS_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	DEPDIR=$(DEPDIR) $(CCASDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS@am__nodep@)$(LTCPPASCOMPILE) -c -o $@ $<
+
+glapi_libglapi_la-glapi_sparc.lo: $(top_builddir)/src/mapi/glapi/glapi_sparc.S
+@am__fastdepCCAS_TRUE@	$(AM_V_CPPAS)$(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS) -MT glapi_libglapi_la-glapi_sparc.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_sparc.Tpo -c -o glapi_libglapi_la-glapi_sparc.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_sparc.S' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_sparc.S
+@am__fastdepCCAS_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_sparc.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_sparc.Plo
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS)source='$(top_builddir)/src/mapi/glapi/glapi_sparc.S' object='glapi_libglapi_la-glapi_sparc.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	DEPDIR=$(DEPDIR) $(CCASDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS@am__nodep@)$(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS) -c -o glapi_libglapi_la-glapi_sparc.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_sparc.S' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_sparc.S
+
+glapi_libglapi_la-glapi_x86.lo: $(top_builddir)/src/mapi/glapi/glapi_x86.S
+@am__fastdepCCAS_TRUE@	$(AM_V_CPPAS)$(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS) -MT glapi_libglapi_la-glapi_x86.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_x86.Tpo -c -o glapi_libglapi_la-glapi_x86.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_x86.S' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_x86.S
+@am__fastdepCCAS_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_x86.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_x86.Plo
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS)source='$(top_builddir)/src/mapi/glapi/glapi_x86.S' object='glapi_libglapi_la-glapi_x86.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	DEPDIR=$(DEPDIR) $(CCASDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS@am__nodep@)$(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS) -c -o glapi_libglapi_la-glapi_x86.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_x86.S' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_x86.S
+
+glapi_libglapi_la-glapi_x86-64.lo: $(top_builddir)/src/mapi/glapi/glapi_x86-64.S
+@am__fastdepCCAS_TRUE@	$(AM_V_CPPAS)$(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS) -MT glapi_libglapi_la-glapi_x86-64.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_x86-64.Tpo -c -o glapi_libglapi_la-glapi_x86-64.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_x86-64.S' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_x86-64.S
+@am__fastdepCCAS_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_x86-64.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_x86-64.Plo
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS)source='$(top_builddir)/src/mapi/glapi/glapi_x86-64.S' object='glapi_libglapi_la-glapi_x86-64.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCCAS_FALSE@	DEPDIR=$(DEPDIR) $(CCASDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCCAS_FALSE@	$(AM_V_CPPAS@am__nodep@)$(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS) -c -o glapi_libglapi_la-glapi_x86-64.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_x86-64.S' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_x86-64.S
+
+.c.o:
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
+
+.c.obj:
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.c.lo:
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+es1api_libGLESv1_CM_la-entry.lo: entry.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(es1api_libGLESv1_CM_la_CPPFLAGS) $(CPPFLAGS) $(es1api_libGLESv1_CM_la_CFLAGS) $(CFLAGS) -MT es1api_libGLESv1_CM_la-entry.lo -MD -MP -MF $(DEPDIR)/es1api_libGLESv1_CM_la-entry.Tpo -c -o es1api_libGLESv1_CM_la-entry.lo `test -f 'entry.c' || echo '$(srcdir)/'`entry.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/es1api_libGLESv1_CM_la-entry.Tpo $(DEPDIR)/es1api_libGLESv1_CM_la-entry.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='entry.c' object='es1api_libGLESv1_CM_la-entry.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(es1api_libGLESv1_CM_la_CPPFLAGS) $(CPPFLAGS) $(es1api_libGLESv1_CM_la_CFLAGS) $(CFLAGS) -c -o es1api_libGLESv1_CM_la-entry.lo `test -f 'entry.c' || echo '$(srcdir)/'`entry.c
+
+es2api_libGLESv2_la-entry.lo: entry.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(es2api_libGLESv2_la_CPPFLAGS) $(CPPFLAGS) $(es2api_libGLESv2_la_CFLAGS) $(CFLAGS) -MT es2api_libGLESv2_la-entry.lo -MD -MP -MF $(DEPDIR)/es2api_libGLESv2_la-entry.Tpo -c -o es2api_libGLESv2_la-entry.lo `test -f 'entry.c' || echo '$(srcdir)/'`entry.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/es2api_libGLESv2_la-entry.Tpo $(DEPDIR)/es2api_libGLESv2_la-entry.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='entry.c' object='es2api_libGLESv2_la-entry.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(es2api_libGLESv2_la_CPPFLAGS) $(CPPFLAGS) $(es2api_libGLESv2_la_CFLAGS) $(CFLAGS) -c -o es2api_libGLESv2_la-entry.lo `test -f 'entry.c' || echo '$(srcdir)/'`entry.c
+
+glapi_libglapi_la-glapi_gentable.lo: $(top_builddir)/src/mapi/glapi/glapi_gentable.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-glapi_gentable.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_gentable.Tpo -c -o glapi_libglapi_la-glapi_gentable.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_gentable.c' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_gentable.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_gentable.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_gentable.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_builddir)/src/mapi/glapi/glapi_gentable.c' object='glapi_libglapi_la-glapi_gentable.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-glapi_gentable.lo `test -f '$(top_builddir)/src/mapi/glapi/glapi_gentable.c' || echo '$(srcdir)/'`$(top_builddir)/src/mapi/glapi/glapi_gentable.c
+
+glapi_libglapi_la-entry.lo: $(TOP)/src/mapi/entry.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-entry.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-entry.Tpo -c -o glapi_libglapi_la-entry.lo `test -f '$(TOP)/src/mapi/entry.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/entry.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-entry.Tpo $(DEPDIR)/glapi_libglapi_la-entry.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/entry.c' object='glapi_libglapi_la-entry.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-entry.lo `test -f '$(TOP)/src/mapi/entry.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/entry.c
+
+glapi_libglapi_la-glapi_dispatch.lo: $(top_srcdir)/src/mapi/glapi/glapi_dispatch.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-glapi_dispatch.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_dispatch.Tpo -c -o glapi_libglapi_la-glapi_dispatch.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_dispatch.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_dispatch.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_dispatch.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_dispatch.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mapi/glapi/glapi_dispatch.c' object='glapi_libglapi_la-glapi_dispatch.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-glapi_dispatch.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_dispatch.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_dispatch.c
+
+glapi_libglapi_la-glapi_entrypoint.lo: $(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-glapi_entrypoint.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_entrypoint.Tpo -c -o glapi_libglapi_la-glapi_entrypoint.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_entrypoint.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_entrypoint.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c' object='glapi_libglapi_la-glapi_entrypoint.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-glapi_entrypoint.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_entrypoint.c
+
+glapi_libglapi_la-glapi_getproc.lo: $(top_srcdir)/src/mapi/glapi/glapi_getproc.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-glapi_getproc.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_getproc.Tpo -c -o glapi_libglapi_la-glapi_getproc.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_getproc.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_getproc.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_getproc.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_getproc.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mapi/glapi/glapi_getproc.c' object='glapi_libglapi_la-glapi_getproc.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-glapi_getproc.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_getproc.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_getproc.c
+
+glapi_libglapi_la-glapi_nop.lo: $(top_srcdir)/src/mapi/glapi/glapi_nop.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-glapi_nop.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi_nop.Tpo -c -o glapi_libglapi_la-glapi_nop.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_nop.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_nop.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi_nop.Tpo $(DEPDIR)/glapi_libglapi_la-glapi_nop.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mapi/glapi/glapi_nop.c' object='glapi_libglapi_la-glapi_nop.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-glapi_nop.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi_nop.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi_nop.c
+
+glapi_libglapi_la-glapi.lo: $(top_srcdir)/src/mapi/glapi/glapi.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-glapi.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-glapi.Tpo -c -o glapi_libglapi_la-glapi.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-glapi.Tpo $(DEPDIR)/glapi_libglapi_la-glapi.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_srcdir)/src/mapi/glapi/glapi.c' object='glapi_libglapi_la-glapi.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-glapi.lo `test -f '$(top_srcdir)/src/mapi/glapi/glapi.c' || echo '$(srcdir)/'`$(top_srcdir)/src/mapi/glapi/glapi.c
+
+glapi_libglapi_la-u_current.lo: $(TOP)/src/mapi/u_current.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-u_current.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-u_current.Tpo -c -o glapi_libglapi_la-u_current.lo `test -f '$(TOP)/src/mapi/u_current.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_current.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-u_current.Tpo $(DEPDIR)/glapi_libglapi_la-u_current.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/u_current.c' object='glapi_libglapi_la-u_current.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-u_current.lo `test -f '$(TOP)/src/mapi/u_current.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_current.c
+
+glapi_libglapi_la-u_execmem.lo: $(TOP)/src/mapi/u_execmem.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glapi_libglapi_la-u_execmem.lo -MD -MP -MF $(DEPDIR)/glapi_libglapi_la-u_execmem.Tpo -c -o glapi_libglapi_la-u_execmem.lo `test -f '$(TOP)/src/mapi/u_execmem.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_execmem.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_libglapi_la-u_execmem.Tpo $(DEPDIR)/glapi_libglapi_la-u_execmem.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/u_execmem.c' object='glapi_libglapi_la-u_execmem.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o glapi_libglapi_la-u_execmem.lo `test -f '$(TOP)/src/mapi/u_execmem.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_execmem.c
+
+shared_glapi_libglapi_la-entry.lo: $(TOP)/src/mapi/entry.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared_glapi_libglapi_la-entry.lo -MD -MP -MF $(DEPDIR)/shared_glapi_libglapi_la-entry.Tpo -c -o shared_glapi_libglapi_la-entry.lo `test -f '$(TOP)/src/mapi/entry.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/entry.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_libglapi_la-entry.Tpo $(DEPDIR)/shared_glapi_libglapi_la-entry.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/entry.c' object='shared_glapi_libglapi_la-entry.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared_glapi_libglapi_la-entry.lo `test -f '$(TOP)/src/mapi/entry.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/entry.c
+
+shared_glapi_libglapi_la-mapi_glapi.lo: $(TOP)/src/mapi/mapi_glapi.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared_glapi_libglapi_la-mapi_glapi.lo -MD -MP -MF $(DEPDIR)/shared_glapi_libglapi_la-mapi_glapi.Tpo -c -o shared_glapi_libglapi_la-mapi_glapi.lo `test -f '$(TOP)/src/mapi/mapi_glapi.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/mapi_glapi.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_libglapi_la-mapi_glapi.Tpo $(DEPDIR)/shared_glapi_libglapi_la-mapi_glapi.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/mapi_glapi.c' object='shared_glapi_libglapi_la-mapi_glapi.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared_glapi_libglapi_la-mapi_glapi.lo `test -f '$(TOP)/src/mapi/mapi_glapi.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/mapi_glapi.c
+
+shared_glapi_libglapi_la-stub.lo: $(TOP)/src/mapi/stub.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared_glapi_libglapi_la-stub.lo -MD -MP -MF $(DEPDIR)/shared_glapi_libglapi_la-stub.Tpo -c -o shared_glapi_libglapi_la-stub.lo `test -f '$(TOP)/src/mapi/stub.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/stub.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_libglapi_la-stub.Tpo $(DEPDIR)/shared_glapi_libglapi_la-stub.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/stub.c' object='shared_glapi_libglapi_la-stub.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared_glapi_libglapi_la-stub.lo `test -f '$(TOP)/src/mapi/stub.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/stub.c
+
+shared_glapi_libglapi_la-table.lo: $(TOP)/src/mapi/table.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared_glapi_libglapi_la-table.lo -MD -MP -MF $(DEPDIR)/shared_glapi_libglapi_la-table.Tpo -c -o shared_glapi_libglapi_la-table.lo `test -f '$(TOP)/src/mapi/table.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/table.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_libglapi_la-table.Tpo $(DEPDIR)/shared_glapi_libglapi_la-table.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/table.c' object='shared_glapi_libglapi_la-table.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared_glapi_libglapi_la-table.lo `test -f '$(TOP)/src/mapi/table.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/table.c
+
+shared_glapi_libglapi_la-u_current.lo: $(TOP)/src/mapi/u_current.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared_glapi_libglapi_la-u_current.lo -MD -MP -MF $(DEPDIR)/shared_glapi_libglapi_la-u_current.Tpo -c -o shared_glapi_libglapi_la-u_current.lo `test -f '$(TOP)/src/mapi/u_current.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_current.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_libglapi_la-u_current.Tpo $(DEPDIR)/shared_glapi_libglapi_la-u_current.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/u_current.c' object='shared_glapi_libglapi_la-u_current.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared_glapi_libglapi_la-u_current.lo `test -f '$(TOP)/src/mapi/u_current.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_current.c
+
+shared_glapi_libglapi_la-u_execmem.lo: $(TOP)/src/mapi/u_execmem.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared_glapi_libglapi_la-u_execmem.lo -MD -MP -MF $(DEPDIR)/shared_glapi_libglapi_la-u_execmem.Tpo -c -o shared_glapi_libglapi_la-u_execmem.lo `test -f '$(TOP)/src/mapi/u_execmem.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_execmem.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_libglapi_la-u_execmem.Tpo $(DEPDIR)/shared_glapi_libglapi_la-u_execmem.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(TOP)/src/mapi/u_execmem.c' object='shared_glapi_libglapi_la-u_execmem.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_libglapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared_glapi_libglapi_la-u_execmem.lo `test -f '$(TOP)/src/mapi/u_execmem.c' || echo '$(srcdir)/'`$(TOP)/src/mapi/u_execmem.c
+
+.cpp.o:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
+
+.cpp.obj:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.cpp.lo:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
+
+glapi_test-check_table.o: glapi/tests/check_table.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT glapi_test-check_table.o -MD -MP -MF $(DEPDIR)/glapi_test-check_table.Tpo -c -o glapi_test-check_table.o `test -f 'glapi/tests/check_table.cpp' || echo '$(srcdir)/'`glapi/tests/check_table.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_test-check_table.Tpo $(DEPDIR)/glapi_test-check_table.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='glapi/tests/check_table.cpp' object='glapi_test-check_table.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o glapi_test-check_table.o `test -f 'glapi/tests/check_table.cpp' || echo '$(srcdir)/'`glapi/tests/check_table.cpp
+
+glapi_test-check_table.obj: glapi/tests/check_table.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT glapi_test-check_table.obj -MD -MP -MF $(DEPDIR)/glapi_test-check_table.Tpo -c -o glapi_test-check_table.obj `if test -f 'glapi/tests/check_table.cpp'; then $(CYGPATH_W) 'glapi/tests/check_table.cpp'; else $(CYGPATH_W) '$(srcdir)/glapi/tests/check_table.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/glapi_test-check_table.Tpo $(DEPDIR)/glapi_test-check_table.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='glapi/tests/check_table.cpp' object='glapi_test-check_table.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o glapi_test-check_table.obj `if test -f 'glapi/tests/check_table.cpp'; then $(CYGPATH_W) 'glapi/tests/check_table.cpp'; else $(CYGPATH_W) '$(srcdir)/glapi/tests/check_table.cpp'; fi`
+
+shared_glapi_test-check_table.o: shared-glapi/tests/check_table.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT shared_glapi_test-check_table.o -MD -MP -MF $(DEPDIR)/shared_glapi_test-check_table.Tpo -c -o shared_glapi_test-check_table.o `test -f 'shared-glapi/tests/check_table.cpp' || echo '$(srcdir)/'`shared-glapi/tests/check_table.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_test-check_table.Tpo $(DEPDIR)/shared_glapi_test-check_table.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='shared-glapi/tests/check_table.cpp' object='shared_glapi_test-check_table.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o shared_glapi_test-check_table.o `test -f 'shared-glapi/tests/check_table.cpp' || echo '$(srcdir)/'`shared-glapi/tests/check_table.cpp
+
+shared_glapi_test-check_table.obj: shared-glapi/tests/check_table.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT shared_glapi_test-check_table.obj -MD -MP -MF $(DEPDIR)/shared_glapi_test-check_table.Tpo -c -o shared_glapi_test-check_table.obj `if test -f 'shared-glapi/tests/check_table.cpp'; then $(CYGPATH_W) 'shared-glapi/tests/check_table.cpp'; else $(CYGPATH_W) '$(srcdir)/shared-glapi/tests/check_table.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/shared_glapi_test-check_table.Tpo $(DEPDIR)/shared_glapi_test-check_table.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='shared-glapi/tests/check_table.cpp' object='shared_glapi_test-check_table.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(shared_glapi_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o shared_glapi_test-check_table.obj `if test -f 'shared-glapi/tests/check_table.cpp'; then $(CYGPATH_W) 'shared-glapi/tests/check_table.cpp'; else $(CYGPATH_W) '$(srcdir)/shared-glapi/tests/check_table.cpp'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf es1api/.libs es1api/_libs
+	-rm -rf es2api/.libs es2api/_libs
+	-rm -rf glapi/.libs glapi/_libs
+	-rm -rf shared-glapi/.libs shared-glapi/_libs
+install-pkgconfigDATA: $(pkgconfig_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgconfigdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkgconfigdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(pkgconfigdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(pkgconfigdir)" || exit $$?; \
+	done
+
+uninstall-pkgconfigDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(pkgconfigdir)'; $(am__uninstall_files_from_dir)
+install-GLES2_includeHEADERS: $(GLES2_include_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(GLES2_include_HEADERS)'; test -n "$(GLES2_includedir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(GLES2_includedir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(GLES2_includedir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(GLES2_includedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(GLES2_includedir)" || exit $$?; \
+	done
+
+uninstall-GLES2_includeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(GLES2_include_HEADERS)'; test -n "$(GLES2_includedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(GLES2_includedir)'; $(am__uninstall_files_from_dir)
+install-GLES3_includeHEADERS: $(GLES3_include_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(GLES3_include_HEADERS)'; test -n "$(GLES3_includedir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(GLES3_includedir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(GLES3_includedir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(GLES3_includedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(GLES3_includedir)" || exit $$?; \
+	done
+
+uninstall-GLES3_includeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(GLES3_include_HEADERS)'; test -n "$(GLES3_includedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(GLES3_includedir)'; $(am__uninstall_files_from_dir)
+install-GLES_includeHEADERS: $(GLES_include_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(GLES_include_HEADERS)'; test -n "$(GLES_includedir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(GLES_includedir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(GLES_includedir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(GLES_includedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(GLES_includedir)" || exit $$?; \
+	done
+
+uninstall-GLES_includeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(GLES_include_HEADERS)'; test -n "$(GLES_includedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(GLES_includedir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -601,6 +1678,190 @@ cscopelist-am: $(am__tagged_files)
 distclean-tags:
 	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
 
+# Recover from deleted '.trs' file; this should ensure that
+# "rm -f foo.log; make foo.trs" re-run 'foo.test', and re-create
+# both 'foo.log' and 'foo.trs'.  Break the recipe in two subshells
+# to avoid problems with "make -n".
+.log.trs:
+	rm -f $< $@
+	$(MAKE) $(AM_MAKEFLAGS) $<
+
+# Leading 'am--fnord' is there to ensure the list of targets does not
+# expand to empty, as could happen e.g. with make check TESTS=''.
+am--fnord $(TEST_LOGS) $(TEST_LOGS:.log=.trs): $(am__force_recheck)
+am--force-recheck:
+	@:
+
+$(TEST_SUITE_LOG): $(TEST_LOGS)
+	@$(am__set_TESTS_bases); \
+	am__f_ok () { test -f "$$1" && test -r "$$1"; }; \
+	redo_bases=`for i in $$bases; do \
+	              am__f_ok $$i.trs && am__f_ok $$i.log || echo $$i; \
+	            done`; \
+	if test -n "$$redo_bases"; then \
+	  redo_logs=`for i in $$redo_bases; do echo $$i.log; done`; \
+	  redo_results=`for i in $$redo_bases; do echo $$i.trs; done`; \
+	  if $(am__make_dryrun); then :; else \
+	    rm -f $$redo_logs && rm -f $$redo_results || exit 1; \
+	  fi; \
+	fi; \
+	if test -n "$$am__remaking_logs"; then \
+	  echo "fatal: making $(TEST_SUITE_LOG): possible infinite" \
+	       "recursion detected" >&2; \
+	else \
+	  am__remaking_logs=yes $(MAKE) $(AM_MAKEFLAGS) $$redo_logs; \
+	fi; \
+	if $(am__make_dryrun); then :; else \
+	  st=0;  \
+	  errmsg="fatal: making $(TEST_SUITE_LOG): failed to create"; \
+	  for i in $$redo_bases; do \
+	    test -f $$i.trs && test -r $$i.trs \
+	      || { echo "$$errmsg $$i.trs" >&2; st=1; }; \
+	    test -f $$i.log && test -r $$i.log \
+	      || { echo "$$errmsg $$i.log" >&2; st=1; }; \
+	  done; \
+	  test $$st -eq 0 || exit 1; \
+	fi
+	@$(am__sh_e_setup); $(am__tty_colors); $(am__set_TESTS_bases); \
+	ws='[ 	]'; \
+	results=`for b in $$bases; do echo $$b.trs; done`; \
+	test -n "$$results" || results=/dev/null; \
+	all=`  grep "^$$ws*:test-result:"           $$results | wc -l`; \
+	pass=` grep "^$$ws*:test-result:$$ws*PASS"  $$results | wc -l`; \
+	fail=` grep "^$$ws*:test-result:$$ws*FAIL"  $$results | wc -l`; \
+	skip=` grep "^$$ws*:test-result:$$ws*SKIP"  $$results | wc -l`; \
+	xfail=`grep "^$$ws*:test-result:$$ws*XFAIL" $$results | wc -l`; \
+	xpass=`grep "^$$ws*:test-result:$$ws*XPASS" $$results | wc -l`; \
+	error=`grep "^$$ws*:test-result:$$ws*ERROR" $$results | wc -l`; \
+	if test `expr $$fail + $$xpass + $$error` -eq 0; then \
+	  success=true; \
+	else \
+	  success=false; \
+	fi; \
+	br='==================='; br=$$br$$br$$br$$br; \
+	result_count () \
+	{ \
+	    if test x"$$1" = x"--maybe-color"; then \
+	      maybe_colorize=yes; \
+	    elif test x"$$1" = x"--no-color"; then \
+	      maybe_colorize=no; \
+	    else \
+	      echo "$@: invalid 'result_count' usage" >&2; exit 4; \
+	    fi; \
+	    shift; \
+	    desc=$$1 count=$$2; \
+	    if test $$maybe_colorize = yes && test $$count -gt 0; then \
+	      color_start=$$3 color_end=$$std; \
+	    else \
+	      color_start= color_end=; \
+	    fi; \
+	    echo "$${color_start}# $$desc $$count$${color_end}"; \
+	}; \
+	create_testsuite_report () \
+	{ \
+	  result_count $$1 "TOTAL:" $$all   "$$brg"; \
+	  result_count $$1 "PASS: " $$pass  "$$grn"; \
+	  result_count $$1 "SKIP: " $$skip  "$$blu"; \
+	  result_count $$1 "XFAIL:" $$xfail "$$lgn"; \
+	  result_count $$1 "FAIL: " $$fail  "$$red"; \
+	  result_count $$1 "XPASS:" $$xpass "$$red"; \
+	  result_count $$1 "ERROR:" $$error "$$mgn"; \
+	}; \
+	{								\
+	  echo "$(PACKAGE_STRING): $(subdir)/$(TEST_SUITE_LOG)" |	\
+	    $(am__rst_title);						\
+	  create_testsuite_report --no-color;				\
+	  echo;								\
+	  echo ".. contents:: :depth: 2";				\
+	  echo;								\
+	  for b in $$bases; do echo $$b; done				\
+	    | $(am__create_global_log);					\
+	} >$(TEST_SUITE_LOG).tmp || exit 1;				\
+	mv $(TEST_SUITE_LOG).tmp $(TEST_SUITE_LOG);			\
+	if $$success; then						\
+	  col="$$grn";							\
+	 else								\
+	  col="$$red";							\
+	  test x"$$VERBOSE" = x || cat $(TEST_SUITE_LOG);		\
+	fi;								\
+	echo "$${col}$$br$${std}"; 					\
+	echo "$${col}Testsuite summary for $(PACKAGE_STRING)$${std}";	\
+	echo "$${col}$$br$${std}"; 					\
+	create_testsuite_report --maybe-color;				\
+	echo "$$col$$br$$std";						\
+	if $$success; then :; else					\
+	  echo "$${col}See $(subdir)/$(TEST_SUITE_LOG)$${std}";		\
+	  if test -n "$(PACKAGE_BUGREPORT)"; then			\
+	    echo "$${col}Please report to $(PACKAGE_BUGREPORT)$${std}";	\
+	  fi;								\
+	  echo "$$col$$br$$std";					\
+	fi;								\
+	$$success || exit 1
+
+check-TESTS:
+	@list='$(RECHECK_LOGS)';           test -z "$$list" || rm -f $$list
+	@list='$(RECHECK_LOGS:.log=.trs)'; test -z "$$list" || rm -f $$list
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	trs_list=`for i in $$bases; do echo $$i.trs; done`; \
+	log_list=`echo $$log_list`; trs_list=`echo $$trs_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) TEST_LOGS="$$log_list"; \
+	exit $$?;
+recheck: all $(check_PROGRAMS)
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	bases=`for i in $$bases; do echo $$i; done \
+	         | $(am__list_recheck_tests)` || exit 1; \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	log_list=`echo $$log_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) \
+	        am__force_recheck=am--force-recheck \
+	        TEST_LOGS="$$log_list"; \
+	exit $$?
+shared-glapi-test.log: shared-glapi-test$(EXEEXT)
+	@p='shared-glapi-test$(EXEEXT)'; \
+	b='shared-glapi-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+glapi-test.log: glapi-test$(EXEEXT)
+	@p='glapi-test$(EXEEXT)'; \
+	b='glapi-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+es1api/ABI-check.log: es1api/ABI-check
+	@p='es1api/ABI-check'; \
+	b='es1api/ABI-check'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+es2api/ABI-check.log: es2api/ABI-check
+	@p='es2api/ABI-check'; \
+	b='es2api/ABI-check'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+.test.log:
+	@p='$<'; \
+	$(am__set_b); \
+	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+@am__EXEEXT_TRUE@.test$(EXEEXT).log:
+@am__EXEEXT_TRUE@	@p='$<'; \
+@am__EXEEXT_TRUE@	$(am__set_b); \
+@am__EXEEXT_TRUE@	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+@am__EXEEXT_TRUE@	--log-file $$b.log --trs-file $$b.trs \
+@am__EXEEXT_TRUE@	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+@am__EXEEXT_TRUE@	"$$tst" $(AM_TESTS_FD_REDIRECT)
+
 distdir: $(DISTFILES)
 	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
 	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
@@ -657,11 +1918,20 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: check-recursive
-all-am: Makefile
+	$(MAKE) $(AM_MAKEFLAGS) $(check_PROGRAMS)
+	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-recursive
+@BUILD_SHARED_FALSE@all-local:
+@HAVE_COMPAT_SYMLINKS_FALSE@all-local:
+all-am: Makefile $(LTLIBRARIES) $(DATA) $(HEADERS) all-local
 installdirs: installdirs-recursive
 installdirs-am:
-install: install-recursive
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(GLES2_includedir)" "$(DESTDIR)$(GLES3_includedir)" "$(DESTDIR)$(GLES_includedir)"; do \
+	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+	done
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-recursive
 install-exec: install-exec-recursive
 install-data: install-data-recursive
 uninstall: uninstall-recursive
@@ -681,23 +1951,35 @@ install-strip:
 	    "INSTALL_PROGRAM_ENV=STRIPPROG='$(STRIP)'" install; \
 	fi
 mostlyclean-generic:
+	-test -z "$(TEST_LOGS)" || rm -f $(TEST_LOGS)
+	-test -z "$(TEST_LOGS:.log=.trs)" || rm -f $(TEST_LOGS:.log=.trs)
+	-test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f es1api/$(am__dirstamp)
+	-rm -f es2api/$(am__dirstamp)
+	-rm -f glapi/$(am__dirstamp)
+	-rm -f shared-glapi/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-recursive
 
-clean-am: clean-generic clean-libtool mostlyclean-am
+clean-am: clean-checkPROGRAMS clean-generic clean-libLTLIBRARIES \
+	clean-libtool clean-noinstLTLIBRARIES mostlyclean-am
 
 distclean: distclean-recursive
+	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
-distclean-am: clean-am distclean-generic distclean-tags
+distclean-am: clean-am distclean-compile distclean-generic \
+	distclean-tags
 
 dvi: dvi-recursive
 
@@ -711,13 +1993,15 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-GLES2_includeHEADERS \
+	install-GLES3_includeHEADERS install-GLES_includeHEADERS \
+	install-pkgconfigDATA
 
 install-dvi: install-dvi-recursive
 
 install-dvi-am:
 
-install-exec-am:
+install-exec-am: install-libLTLIBRARIES
 
 install-html: install-html-recursive
 
@@ -740,12 +2024,14 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-recursive
+	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
 mostlyclean: mostlyclean-recursive
 
-mostlyclean-am: mostlyclean-generic mostlyclean-libtool
+mostlyclean-am: mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool
 
 pdf: pdf-recursive
 
@@ -755,23 +2041,79 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am:
+uninstall-am: uninstall-GLES2_includeHEADERS \
+	uninstall-GLES3_includeHEADERS uninstall-GLES_includeHEADERS \
+	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 
-.MAKE: $(am__recursive_targets) install-am install-strip
+.MAKE: $(am__recursive_targets) all check check-am install install-am \
+	install-strip
 
-.PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
-	check-am clean clean-generic clean-libtool cscopelist-am ctags \
-	ctags-am distclean distclean-generic distclean-libtool \
+.PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am all-local \
+	check check-TESTS check-am clean clean-checkPROGRAMS \
+	clean-generic clean-libLTLIBRARIES clean-libtool \
+	clean-noinstLTLIBRARIES cscopelist-am ctags ctags-am distclean \
+	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
+	install install-GLES2_includeHEADERS \
+	install-GLES3_includeHEADERS install-GLES_includeHEADERS \
+	install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
-	ps ps-am tags tags-am uninstall uninstall-am
+	install-html-am install-info install-info-am \
+	install-libLTLIBRARIES install-man install-pdf install-pdf-am \
+	install-pkgconfigDATA install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am recheck tags tags-am uninstall \
+	uninstall-GLES2_includeHEADERS uninstall-GLES3_includeHEADERS \
+	uninstall-GLES_includeHEADERS uninstall-am \
+	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 
+
+# $(1): path to an XML file
+# $(2): name of the printer
+define glapi_gen_mapi
+@$(MKDIR_P) $(dir $@)
+$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(glapi_gen_mapi_script) \
+	--mode lib --printer $(2) $(1) > $@
+endef
+
+# $(1): path to an XML file
+# $(2): empty, es1, or es2 for entry point filtering
+define glapi_gen_dispatch
+@$(MKDIR_P) $(dir $@)
+$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(glapi_gen_dispatch_script) \
+	-f $(1) -m remap_table $(if $(2),-c $(2),) > $@
+endef
+
+# $(1): path to an XML file
+# $(2): empty, es1, or es2 for entry point filtering
+define glapi_gen_remap
+@$(MKDIR_P) $(dir $@)
+$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(glapi_gen_remap_script) \
+	-f $(1) $(if $(2),-c $(2),) > $@
+endef
+
+@HAVE_SHARED_GLAPI_TRUE@shared-glapi/glapi_mapi_tmp.h : $(GLAPI)/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
+@HAVE_SHARED_GLAPI_TRUE@	$(call glapi_gen_mapi,$<,shared-glapi)
+
+@HAVE_OPENGL_ES1_TRUE@es1api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
+@HAVE_OPENGL_ES1_TRUE@	$(call glapi_gen_mapi,$<,es1api)
+
+@HAVE_OPENGL_ES2_TRUE@es2api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
+@HAVE_OPENGL_ES2_TRUE@	$(call glapi_gen_mapi,$<,es2api)
+
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .libs/install-mesa-links
+
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-mesa-links : $(lib_LTLIBRARIES)
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $(join $(addsuffix .libs/,$(dir $(lib_LTLIBRARIES))),$(notdir $(lib_LTLIBRARIES:%.la=%.$(LIB_EXT)*))); do \
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		if test -h .libs/$$f; then			\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			cp -d $$f $(top_builddir)/$(LIB_DIR);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		else						\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@			ln -f $$f $(top_builddir)/$(LIB_DIR);	\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@		fi;						\
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	done && touch $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

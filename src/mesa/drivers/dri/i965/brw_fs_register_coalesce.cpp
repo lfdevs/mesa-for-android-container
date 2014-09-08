@@ -46,7 +46,16 @@
 static bool
 is_nop_mov(const fs_inst *inst)
 {
-   if (inst->opcode == BRW_OPCODE_MOV) {
+   if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
+      fs_reg dst = inst->dst;
+      for (int i = 0; i < inst->sources; i++) {
+         dst.reg_offset = i;
+         if (!dst.equals(inst->src[i])) {
+            return false;
+         }
+      }
+      return true;
+   } else if (inst->opcode == BRW_OPCODE_MOV) {
       return inst->dst.equals(inst->src[0]);
    }
 
@@ -54,9 +63,29 @@ is_nop_mov(const fs_inst *inst)
 }
 
 static bool
+is_copy_payload(const fs_inst *inst, int src_size)
+{
+   if (src_size != inst->sources)
+      return false;
+
+   const int reg = inst->src[0].reg;
+   if (inst->src[0].reg_offset != 0)
+      return false;
+
+   for (int i = 1; i < inst->sources; i++) {
+      if (inst->src[i].reg != reg ||
+          inst->src[i].reg_offset != i) {
+         return false;
+      }
+   }
+   return true;
+}
+
+static bool
 is_coalesce_candidate(const fs_inst *inst, const int *virtual_grf_sizes)
 {
-   if (inst->opcode != BRW_OPCODE_MOV ||
+   if ((inst->opcode != BRW_OPCODE_MOV &&
+        inst->opcode != SHADER_OPCODE_LOAD_PAYLOAD) ||
        inst->is_partial_write() ||
        inst->saturate ||
        inst->src[0].file != GRF ||
@@ -72,6 +101,12 @@ is_coalesce_candidate(const fs_inst *inst, const int *virtual_grf_sizes)
        virtual_grf_sizes[inst->dst.reg])
       return false;
 
+   if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
+      if (!is_copy_payload(inst, virtual_grf_sizes[inst->src[0].reg])) {
+         return false;
+      }
+   }
+
    return true;
 }
 
@@ -83,24 +118,24 @@ can_coalesce_vars(brw::fs_live_variables *live_intervals,
    if (!live_intervals->vars_interfere(var_from, var_to))
       return true;
 
-   /* We know that the live ranges of A (var_from) and B (var_to)
-    * interfere because of the ->vars_interfere() call above. If the end
-    * of B's live range is after the end of A's range, then we know two
-    * things:
-    *  - the start of B's live range must be in A's live range (since we
-    *    already know the two ranges interfere, this is the only remaining
-    *    possibility)
-    *  - the interference isn't of the form we're looking for (where B is
-    *    entirely inside A)
-    */
-   if (live_intervals->end[var_to] > live_intervals->end[var_from])
+   int start_to = live_intervals->start[var_to];
+   int end_to = live_intervals->end[var_to];
+   int start_from = live_intervals->start[var_from];
+   int end_from = live_intervals->end[var_from];
+
+   /* Variables interfere and one line range isn't a subset of the other. */
+   if ((end_to > end_from && start_from < start_to) ||
+       (end_from > end_to && start_to < start_from))
       return false;
 
+   int start_ip = MIN2(start_to, start_from);
    int scan_ip = -1;
 
-   foreach_list(n, instructions) {
-      fs_inst *scan_inst = (fs_inst *)n;
+   foreach_in_list(fs_inst, scan_inst, instructions) {
       scan_ip++;
+
+      if (scan_ip < start_ip)
+         continue;
 
       if (scan_inst->is_control_flow())
          return false;
@@ -134,9 +169,7 @@ fs_visitor::register_coalesce()
    int var_to[MAX_SAMPLER_MESSAGE_SIZE];
    int var_from[MAX_SAMPLER_MESSAGE_SIZE];
 
-   foreach_list(node, &this->instructions) {
-      fs_inst *inst = (fs_inst *)node;
-
+   foreach_in_list(fs_inst, inst, &instructions) {
       if (!is_coalesce_candidate(inst, virtual_grf_sizes))
          continue;
 
@@ -161,10 +194,18 @@ fs_visitor::register_coalesce()
       if (reg_to != inst->dst.reg)
          continue;
 
-      const int offset = inst->src[0].reg_offset;
-      reg_to_offset[offset] = inst->dst.reg_offset;
-      mov[offset] = inst;
-      channels_remaining--;
+      if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
+         for (int i = 0; i < src_size; i++) {
+            reg_to_offset[i] = i;
+         }
+         mov[0] = inst;
+         channels_remaining -= inst->sources;
+      } else {
+         const int offset = inst->src[0].reg_offset;
+         reg_to_offset[offset] = inst->dst.reg_offset;
+         mov[offset] = inst;
+         channels_remaining--;
+      }
 
       if (channels_remaining)
          continue;
@@ -186,30 +227,29 @@ fs_visitor::register_coalesce()
          continue;
 
       progress = true;
+      bool was_load_payload = inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD;
 
       for (int i = 0; i < src_size; i++) {
          if (mov[i]) {
             mov[i]->opcode = BRW_OPCODE_NOP;
             mov[i]->conditional_mod = BRW_CONDITIONAL_NONE;
             mov[i]->dst = reg_undef;
-            mov[i]->src[0] = reg_undef;
-            mov[i]->src[1] = reg_undef;
-            mov[i]->src[2] = reg_undef;
+            for (int j = 0; j < mov[i]->sources; j++) {
+               mov[i]->src[j] = reg_undef;
+            }
          }
       }
 
-      foreach_list(node, &this->instructions) {
-         fs_inst *scan_inst = (fs_inst *)node;
-
+      foreach_in_list(fs_inst, scan_inst, &instructions) {
          for (int i = 0; i < src_size; i++) {
-            if (mov[i]) {
+            if (mov[i] || was_load_payload) {
                if (scan_inst->dst.file == GRF &&
                    scan_inst->dst.reg == reg_from &&
                    scan_inst->dst.reg_offset == i) {
                   scan_inst->dst.reg = reg_to;
                   scan_inst->dst.reg_offset = reg_to_offset[i];
                }
-               for (int j = 0; j < 3; j++) {
+               for (int j = 0; j < scan_inst->sources; j++) {
                   if (scan_inst->src[j].file == GRF &&
                       scan_inst->src[j].reg == reg_from &&
                       scan_inst->src[j].reg_offset == i) {
@@ -233,9 +273,7 @@ fs_visitor::register_coalesce()
    }
 
    if (progress) {
-      foreach_list_safe(node, &this->instructions) {
-         fs_inst *inst = (fs_inst *)node;
-
+      foreach_in_list_safe(fs_inst, inst, &instructions) {
          if (inst->opcode == BRW_OPCODE_NOP) {
             inst->remove();
          }

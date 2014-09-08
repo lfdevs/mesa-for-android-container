@@ -300,6 +300,12 @@ Queries can be created with ``create_query`` and deleted with
 ``destroy_query``. To start a query, use ``begin_query``, and when finished,
 use ``end_query`` to end the query.
 
+``create_query`` takes a query type (``PIPE_QUERY_*``), as well as an index,
+which is the vertex stream for ``PIPE_QUERY_PRIMITIVES_GENERATED`` and
+``PIPE_QUERY_PRIMITIVES_EMITTED``, and allocates a query structure.
+
+``begin_query`` will clear/reset previous query results.
+
 ``get_query_result`` is used to retrieve the results of a query.  If
 the ``wait`` parameter is TRUE, then the ``get_query_result`` call
 will block until the results of the query are ready (and TRUE will be
@@ -390,8 +396,10 @@ Conditional Rendering
 A drawing command can be skipped depending on the outcome of a query
 (typically an occlusion query, or streamout overflow predicate).
 The ``render_condition`` function specifies the query which should be checked
-prior to rendering anything. Functions honoring render_condition include
+prior to rendering anything. Functions always honoring render_condition include
 (and are limited to) draw_vbo, clear, clear_render_target, clear_depth_stencil.
+The blit function (but not resource_copy_region, which seems inconsistent)
+can also optionally honor the current render condition.
 
 If ``render_condition`` is called with ``query`` = NULL, conditional
 rendering is disabled and drawing takes place normally.
@@ -463,8 +471,10 @@ but overlapping blits are not permitted.
 This can be considered the equivalent of a CPU memcpy.
 
 ``blit`` blits a region of a resource to a region of another resource, including
-scaling, format conversion, and up-/downsampling, as well as
-a destination clip rectangle (scissors).
+scaling, format conversion, and up-/downsampling, as well as a destination clip
+rectangle (scissors). It can also optionally honor the current render condition
+(but either way the blit itself never contributes anything to queries currently
+gathering data).
 As opposed to manually drawing a textured quad, this lets the pipe driver choose
 the optimal method for blitting (like using a special 2D engine), and usually
 offers, for example, accelerated stencil-only copies even where

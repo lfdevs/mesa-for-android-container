@@ -190,6 +190,7 @@ static void r200_init_vtbl(radeonContextPtr radeon)
    radeon->vtbl.check_blit = r200_check_blit;
    radeon->vtbl.blit = r200_blit;
    radeon->vtbl.is_format_renderable = radeonIsFormatRenderable;
+   radeon->vtbl.revalidate_all_buffers = r200ValidateBuffers;
 }
 
 
@@ -339,7 +340,7 @@ GLboolean r200CreateContext( gl_api api,
    ctx->Const.MaxDrawBuffers = 1;
    ctx->Const.MaxColorAttachments = 1;
 
-   ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = GL_TRUE;
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = GL_TRUE;
 
    /* Install the customized pipeline:
     */

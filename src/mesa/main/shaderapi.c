@@ -42,7 +42,6 @@
 #include "main/dispatch.h"
 #include "main/enums.h"
 #include "main/hash.h"
-#include "main/hash_table.h"
 #include "main/mtypes.h"
 #include "main/pipelineobj.h"
 #include "main/shaderapi.h"
@@ -52,7 +51,8 @@
 #include "program/program.h"
 #include "program/prog_print.h"
 #include "program/prog_parameter.h"
-#include "ralloc.h"
+#include "util/ralloc.h"
+#include "util/hash_table.h"
 #include <stdbool.h>
 #include "../glsl/glsl_parser_extras.h"
 #include "../glsl/ir.h"
@@ -119,7 +119,7 @@ _mesa_init_shader_state(struct gl_context *ctx)
    options.DefaultPragmas.Optimize = GL_TRUE;
 
    for (sh = 0; sh < MESA_SHADER_STAGES; ++sh)
-      memcpy(&ctx->ShaderCompilerOptions[sh], &options, sizeof(options));
+      memcpy(&ctx->Const.ShaderCompilerOptions[sh], &options, sizeof(options));
 
    ctx->Shader.Flags = _mesa_get_shader_flags();
 
@@ -826,7 +826,7 @@ compile_shader(struct gl_context *ctx, GLuint shaderObj)
    if (!sh)
       return;
 
-   options = &ctx->ShaderCompilerOptions[sh->Stage];
+   options = &ctx->Const.ShaderCompilerOptions[sh->Stage];
 
    /* set default pragma state for shader */
    sh->Pragmas = options->DefaultPragmas;
@@ -1392,7 +1392,7 @@ _mesa_LinkProgram(GLhandleARB programObj)
 static GLcharARB *
 read_shader(const char *fname)
 {
-   const int max = 50*1000;
+   int shader_size = 0;
    FILE *f = fopen(fname, "r");
    GLcharARB *buffer, *shader;
    int len;
@@ -1401,8 +1401,19 @@ read_shader(const char *fname)
       return NULL;
    }
 
-   buffer = malloc(max);
-   len = fread(buffer, 1, max, f);
+   /* allocate enough room for the entire shader */
+   fseek(f, 0, SEEK_END);
+   shader_size = ftell(f);
+   rewind(f);
+   assert(shader_size);
+
+   /* add one for terminating zero */
+   shader_size++;
+
+   buffer = malloc(shader_size);
+   assert(buffer);
+
+   len = fread(buffer, 1, shader_size, f);
    buffer[len] = 0;
 
    fclose(f);
@@ -1877,6 +1888,12 @@ _mesa_copy_linked_program_data(gl_shader_stage type,
       dst_gp->OutputType = src->Geom.OutputType;
       dst->UsesClipDistanceOut = src->Geom.UsesClipDistance;
       dst_gp->UsesEndPrimitive = src->Geom.UsesEndPrimitive;
+      dst_gp->UsesStreams = src->Geom.UsesStreams;
+   }
+      break;
+   case MESA_SHADER_FRAGMENT: {
+      struct gl_fragment_program *dst_fp = (struct gl_fragment_program *) dst;
+      dst_fp->FragDepthLayout = src->FragDepthLayout;
    }
       break;
    case MESA_SHADER_COMPUTE: {

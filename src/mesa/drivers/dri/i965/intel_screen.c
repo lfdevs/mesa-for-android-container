@@ -37,7 +37,7 @@
 #include "main/fbobject.h"
 #include "main/version.h"
 #include "swrast/s_renderbuffer.h"
-#include "glsl/ralloc.h"
+#include "util/ralloc.h"
 
 #include "utils.h"
 #include "xmlpool.h"
@@ -84,6 +84,7 @@ DRI_CONF_BEGIN
       DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN("false")
       DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS("false")
       DRI_CONF_DISABLE_BLEND_FUNC_EXTENDED("false")
+      DRI_CONF_ALLOW_GLSL_EXTENSION_DIRECTIVE_MIDSHADER("false")
 
       DRI_CONF_OPT_BEGIN_B(shader_precompile, "true")
 	 DRI_CONF_DESC(en, "Perform code generation at shader link time.")
@@ -845,10 +846,6 @@ brw_query_renderer_integer(__DRIscreen *psp, int param, unsigned int *value)
    case __DRI2_RENDERER_UNIFIED_MEMORY_ARCHITECTURE:
       value[0] = 1;
       return 0;
-   case __DRI2_RENDERER_PREFERRED_PROFILE:
-      value[0] = (psp->max_gl_core_version != 0)
-         ? (1U << __DRI_API_OPENGL_CORE) : (1U << __DRI_API_OPENGL);
-      return 0;
    default:
       return driQueryRendererIntegerCommon(psp, param, value);
    }
@@ -1285,8 +1282,7 @@ set_max_gl_versions(struct intel_screen *screen)
       psp->max_gl_es2_version = 20;
       break;
    default:
-      assert(!"unrecognized intel_screen::gen");
-      break;
+      unreachable("unrecognized intel_screen::gen");
    }
 }
 

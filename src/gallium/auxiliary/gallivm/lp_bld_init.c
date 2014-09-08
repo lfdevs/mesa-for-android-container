@@ -32,6 +32,7 @@
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/u_simple_list.h"
+#include "os/os_time.h"
 #include "lp_bld.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_misc.h"
@@ -67,6 +68,16 @@
 #if USE_MCJIT
 void LLVMLinkInMCJIT();
 #endif
+
+/*
+ * LLVM has several global caches which pointing/derived from objects
+ * owned by the context, so if we freeing contexts causes
+ * memory leaks and false cache hits when these objects are destroyed.
+ *
+ * TODO: For thread safety on multi-threaded OpenGL we should use one LLVM
+ * context per thread, and put them in a pool when threads are destroyed.
+ */
+#define USE_GLOBAL_CONTEXT 1
 
 
 #ifdef DEBUG
@@ -104,26 +115,11 @@ unsigned lp_native_vector_width;
  * See also CodeGenOpt::Level in llvm/Target/TargetMachine.h
  */
 enum LLVM_CodeGenOpt_Level {
-#if HAVE_LLVM >= 0x207
    None,        // -O0
    Less,        // -O1
    Default,     // -O2, -Os
    Aggressive   // -O3
-#else
-   Default,
-   None,
-   Aggressive
-#endif
 };
-
-
-#if HAVE_LLVM <= 0x0206
-/**
- * LLVM 2.6 permits only one ExecutionEngine to be created.  So use the
- * same gallivm state everywhere.
- */
-static struct gallivm_state *GlobalGallivm = NULL;
-#endif
 
 
 /**
@@ -137,7 +133,7 @@ create_pass_manager(struct gallivm_state *gallivm)
    assert(!gallivm->passmgr);
    assert(gallivm->target);
 
-   gallivm->passmgr = LLVMCreateFunctionPassManager(gallivm->provider);
+   gallivm->passmgr = LLVMCreateFunctionPassManagerForModule(gallivm->module);
    if (!gallivm->passmgr)
       return FALSE;
 
@@ -152,27 +148,9 @@ create_pass_manager(struct gallivm_state *gallivm)
       LLVMAddLICMPass(gallivm->passmgr);
       LLVMAddCFGSimplificationPass(gallivm->passmgr);
       LLVMAddReassociatePass(gallivm->passmgr);
-
-      if (HAVE_LLVM >= 0x207 && sizeof(void*) == 4) {
-         /* For LLVM >= 2.7 and 32-bit build, use this order of passes to
-          * avoid generating bad code.
-          * Test with piglit glsl-vs-sqrt-zero test.
-          */
-         LLVMAddConstantPropagationPass(gallivm->passmgr);
-         LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
-      }
-      else {
-         LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
-         LLVMAddConstantPropagationPass(gallivm->passmgr);
-      }
-
-      if (util_cpu_caps.has_sse4_1) {
-         /* FIXME: There is a bug in this pass, whereby the combination
-          * of fptosi and sitofp (necessary for trunc/floor/ceil/round
-          * implementation) somehow becomes invalid code.
-          */
-         LLVMAddInstructionCombiningPass(gallivm->passmgr);
-      }
+      LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
+      LLVMAddConstantPropagationPass(gallivm->passmgr);
+      LLVMAddInstructionCombiningPass(gallivm->passmgr);
       LLVMAddGVNPass(gallivm->passmgr);
    }
    else {
@@ -187,35 +165,20 @@ create_pass_manager(struct gallivm_state *gallivm)
 
 
 /**
- * Free gallivm object's LLVM allocations, but not the gallivm object itself.
+ * Free gallivm object's LLVM allocations, but not any generated code
+ * nor the gallivm object itself.
  */
-static void
-free_gallivm_state(struct gallivm_state *gallivm)
+void
+gallivm_free_ir(struct gallivm_state *gallivm)
 {
-#if HAVE_LLVM >= 0x207 /* XXX or 0x208? */
-   /* This leads to crashes w/ some versions of LLVM */
-   LLVMModuleRef mod;
-   char *error;
-
-   if (gallivm->engine && gallivm->provider)
-      LLVMRemoveModuleProvider(gallivm->engine, gallivm->provider,
-                               &mod, &error);
-#endif
-
    if (gallivm->passmgr) {
       LLVMDisposePassManager(gallivm->passmgr);
    }
 
-#if 0
-   /* XXX this seems to crash with all versions of LLVM */
-   if (gallivm->provider)
-      LLVMDisposeModuleProvider(gallivm->provider);
-#endif
-
-   if (HAVE_LLVM >= 0x207 && gallivm->engine) {
+   if (gallivm->engine) {
       /* This will already destroy any associated module */
       LLVMDisposeExecutionEngine(gallivm->engine);
-   } else {
+   } else if (gallivm->module) {
       LLVMDisposeModule(gallivm->module);
    }
 
@@ -227,23 +190,31 @@ free_gallivm_state(struct gallivm_state *gallivm)
    }
 #endif
 
-   /* Never free the LLVM context.
-    */
-#if 0
-   if (gallivm->context)
-      LLVMContextDispose(gallivm->context);
-#endif
-
    if (gallivm->builder)
       LLVMDisposeBuilder(gallivm->builder);
+
+   if (!USE_GLOBAL_CONTEXT && gallivm->context)
+      LLVMContextDispose(gallivm->context);
 
    gallivm->engine = NULL;
    gallivm->target = NULL;
    gallivm->module = NULL;
-   gallivm->provider = NULL;
    gallivm->passmgr = NULL;
    gallivm->context = NULL;
    gallivm->builder = NULL;
+}
+
+
+/**
+ * Free LLVM-generated code.  Should be done AFTER gallivm_free_ir().
+ */
+static void
+gallivm_free_code(struct gallivm_state *gallivm)
+{
+   assert(!gallivm->module);
+   assert(!gallivm->engine);
+   lp_free_generated_code(gallivm->code);
+   gallivm->code = NULL;
 }
 
 
@@ -251,7 +222,6 @@ static boolean
 init_gallivm_engine(struct gallivm_state *gallivm)
 {
    if (1) {
-      /* We can only create one LLVMExecutionEngine (w/ LLVM 2.6 anyway) */
       enum LLVM_CodeGenOpt_Level optlevel;
       char *error = NULL;
       int ret;
@@ -263,24 +233,18 @@ init_gallivm_engine(struct gallivm_state *gallivm)
          optlevel = Default;
       }
 
-#if HAVE_LLVM >= 0x0301
       ret = lp_build_create_jit_compiler_for_module(&gallivm->engine,
+                                                    &gallivm->code,
                                                     gallivm->module,
                                                     (unsigned) optlevel,
                                                     USE_MCJIT,
                                                     &error);
-#else
-      ret = LLVMCreateJITCompiler(&gallivm->engine, gallivm->provider,
-                                  (unsigned) optlevel, &error);
-#endif
       if (ret) {
          _debug_printf("%s\n", error);
          LLVMDisposeMessage(error);
          goto fail;
       }
    }
-
-   LLVMAddModuleProvider(gallivm->engine, gallivm->provider);//new
 
 #if !USE_MCJIT
    gallivm->target = LLVMGetExecutionEngineTargetData(gallivm->engine);
@@ -317,46 +281,28 @@ fail:
 
 
 /**
- * Singleton
- *
- * We must never free LLVM contexts, because LLVM has several global caches
- * which pointing/derived from objects owned by the context, causing false
- * memory leaks and false cache hits when these objects are destroyed.
- *
- * TODO: For thread safety on multi-threaded OpenGL we should use one LLVM
- * context per thread, and put them in a pool when threads are destroyed.
- */
-static LLVMContextRef gallivm_context = NULL;
-
-
-/**
  * Allocate gallivm LLVM objects.
  * \return  TRUE for success, FALSE for failure
  */
 static boolean
-init_gallivm_state(struct gallivm_state *gallivm)
+init_gallivm_state(struct gallivm_state *gallivm, const char *name)
 {
    assert(!gallivm->context);
    assert(!gallivm->module);
-   assert(!gallivm->provider);
 
    lp_build_init();
 
-   if (!gallivm_context) {
-      gallivm_context = LLVMContextCreate();
+   if (USE_GLOBAL_CONTEXT) {
+      gallivm->context = LLVMGetGlobalContext();
+   } else {
+      gallivm->context = LLVMContextCreate();
    }
-   gallivm->context = gallivm_context;
    if (!gallivm->context)
       goto fail;
 
-   gallivm->module = LLVMModuleCreateWithNameInContext("gallivm",
+   gallivm->module = LLVMModuleCreateWithNameInContext(name,
                                                        gallivm->context);
    if (!gallivm->module)
-      goto fail;
-
-   gallivm->provider =
-      LLVMCreateModuleProviderForExistingModule(gallivm->module);
-   if (!gallivm->provider)
       goto fail;
 
    gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
@@ -414,7 +360,8 @@ init_gallivm_state(struct gallivm_state *gallivm)
    return TRUE;
 
 fail:
-   free_gallivm_state(gallivm);
+   gallivm_free_ir(gallivm);
+   gallivm_free_code(gallivm);
    return FALSE;
 }
 
@@ -520,30 +467,19 @@ lp_build_init(void)
 
 /**
  * Create a new gallivm_state object.
- * Note that we return a singleton.
  */
 struct gallivm_state *
-gallivm_create(void)
+gallivm_create(const char *name)
 {
    struct gallivm_state *gallivm;
 
-#if HAVE_LLVM <= 0x206
-   if (GlobalGallivm) {
-      return GlobalGallivm;
-   }
-#endif
-
    gallivm = CALLOC_STRUCT(gallivm_state);
    if (gallivm) {
-      if (!init_gallivm_state(gallivm)) {
+      if (!init_gallivm_state(gallivm, name)) {
          FREE(gallivm);
          gallivm = NULL;
       }
    }
-
-#if HAVE_LLVM <= 0x206
-   GlobalGallivm = gallivm;
-#endif
 
    return gallivm;
 }
@@ -555,44 +491,15 @@ gallivm_create(void)
 void
 gallivm_destroy(struct gallivm_state *gallivm)
 {
-#if HAVE_LLVM <= 0x0206
-   /* No-op: don't destroy the singleton */
-   (void) gallivm;
-#else
-   free_gallivm_state(gallivm);
+   gallivm_free_ir(gallivm);
+   gallivm_free_code(gallivm);
    FREE(gallivm);
-#endif
-}
-
-
-/**
- * Validate and optimze a function.
- */
-static void
-gallivm_optimize_function(struct gallivm_state *gallivm,
-                          LLVMValueRef func)
-{
-   if (0) {
-      debug_printf("optimizing %s...\n", LLVMGetValueName(func));
-   }
-
-   assert(gallivm->passmgr);
-
-   /* Apply optimizations to LLVM IR */
-   LLVMRunFunctionPassManager(gallivm->passmgr, func);
-
-   if (0) {
-      if (gallivm_debug & GALLIVM_DEBUG_IR) {
-         /* Print the LLVM IR to stderr */
-         lp_debug_dump_value(func);
-         debug_printf("\n");
-      }
-   }
 }
 
 
 /**
  * Validate a function.
+ * Verification is only done with debug builds.
  */
 void
 gallivm_verify_function(struct gallivm_state *gallivm,
@@ -607,8 +514,6 @@ gallivm_verify_function(struct gallivm_state *gallivm,
    }
 #endif
 
-   gallivm_optimize_function(gallivm, func);
-
    if (gallivm_debug & GALLIVM_DEBUG_IR) {
       /* Print the LLVM IR to stderr */
       lp_debug_dump_value(func);
@@ -617,12 +522,44 @@ gallivm_verify_function(struct gallivm_state *gallivm,
 }
 
 
+/**
+ * Compile a module.
+ * This does IR optimization on all functions in the module.
+ */
 void
 gallivm_compile_module(struct gallivm_state *gallivm)
 {
-#if HAVE_LLVM > 0x206
+   LLVMValueRef func;
+   int64_t time_begin;
+
    assert(!gallivm->compiled);
-#endif
+
+   if (gallivm->builder) {
+      LLVMDisposeBuilder(gallivm->builder);
+      gallivm->builder = NULL;
+   }
+
+   if (gallivm_debug & GALLIVM_DEBUG_PERF)
+      time_begin = os_time_get();
+
+   /* Run optimization passes */
+   LLVMInitializeFunctionPassManager(gallivm->passmgr);
+   func = LLVMGetFirstFunction(gallivm->module);
+   while (func) {
+      if (0) {
+         debug_printf("optimizing func %s...\n", LLVMGetValueName(func));
+      }
+      LLVMRunFunctionPassManager(gallivm->passmgr, func);
+      func = LLVMGetNextFunction(func);
+   }
+   LLVMFinalizeFunctionPassManager(gallivm->passmgr);
+
+   if (gallivm_debug & GALLIVM_DEBUG_PERF) {
+      int64_t time_end = os_time_get();
+      int time_msec = (int)(time_end - time_begin) / 1000;
+      debug_printf("optimizing module %s took %d msec\n",
+                   lp_get_module_id(gallivm->module), time_msec);
+   }
 
    /* Dump byte code to a file */
    if (0) {
@@ -666,26 +603,5 @@ gallivm_jit_function(struct gallivm_state *gallivm,
    lp_profile(func, code);
 #endif
 
-   /* Free the function body to save memory */
-   lp_func_delete_body(func);
-
    return jit_func;
-}
-
-
-/**
- * Free the function (and its machine code).
- */
-void
-gallivm_free_function(struct gallivm_state *gallivm,
-                      LLVMValueRef func,
-                      const void *code)
-{
-#if !USE_MCJIT
-   if (code) {
-      LLVMFreeMachineCodeForFunction(gallivm->engine, func);
-   }
-
-   LLVMDeleteFunction(func);
-#endif
 }

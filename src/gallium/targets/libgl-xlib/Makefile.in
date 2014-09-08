@@ -104,9 +104,12 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
-@HAVE_MESA_LLVM_TRUE@am__append_2 = -DGALLIUM_LLVMPIPE
-@HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
+@HAVE_LD_VERSION_SCRIPT_TRUE@am__append_1 = \
+@HAVE_LD_VERSION_SCRIPT_TRUE@	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/libgl-xlib/libgl-xlib.sym
+
+@HAVE_MESA_LLVM_TRUE@am__append_2 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
+@HAVE_MESA_LLVM_TRUE@am__append_3 = -DGALLIUM_LLVMPIPE
+@HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LDFLAGS)
 DIST_COMMON = $(top_srcdir)/install-gallium-links.mk \
 	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/bin/depcomp
@@ -157,7 +160,7 @@ LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la \
 @HAVE_MESA_LLVM_TRUE@	$(am__DEPENDENCIES_1)
-libGL_la_DEPENDENCIES = $(top_builddir)/src/gallium/state_trackers/glx/xlib/libxlib.la \
+lib@GL_LIB@_la_DEPENDENCIES = $(top_builddir)/src/gallium/state_trackers/glx/xlib/libxlib.la \
 	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
@@ -168,15 +171,16 @@ libGL_la_DEPENDENCIES = $(top_builddir)/src/gallium/state_trackers/glx/xlib/libx
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2)
-am_libGL_la_OBJECTS = xlib.lo
-libGL_la_OBJECTS = $(am_libGL_la_OBJECTS)
+am_lib@GL_LIB@_la_OBJECTS = xlib.lo
+lib@GL_LIB@_la_OBJECTS = $(am_lib@GL_LIB@_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-libGL_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
-	$(CXXFLAGS) $(libGL_la_LDFLAGS) $(LDFLAGS) -o $@
+lib@GL_LIB@_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
+	$(AM_CXXFLAGS) $(CXXFLAGS) $(lib@GL_LIB@_la_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -229,32 +233,15 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(libGL_la_SOURCES) $(nodist_EXTRA_libGL_la_SOURCES)
-DIST_SOURCES = $(libGL_la_SOURCES)
+SOURCES = $(lib@GL_LIB@_la_SOURCES) \
+	$(nodist_EXTRA_lib@GL_LIB@_la_SOURCES)
+DIST_SOURCES = $(lib@GL_LIB@_la_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
-# Read a list of newline-separated strings from the standard input,
-# and print each of them once, without duplicates.  Input order is
-# *not* preserved.
-am__uniquify_input = $(AWK) '\
-  BEGIN { nonempty = 0; } \
-  { items[$$0] = 1; nonempty = 1; } \
-  END { if (nonempty) { for (i in items) print i; }; } \
-'
-# Make sure the list of sources is unique.  This is necessary because,
-# e.g., the same source file might be shared among _SOURCES variables
-# for different programs/libraries.
-am__define_uniq_tagged_files = \
-  list='$(am__tagged_files)'; \
-  unique=`for i in $$list; do \
-    if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
-  done | $(am__uniquify_input)`
-ETAGS = etags
-CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
@@ -264,6 +251,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
 CCASDEPMODE = @CCASDEPMODE@
@@ -526,15 +514,15 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/winsys -DGALLIUM_SOFTPIPE \
 	-DGALLIUM_RBUG -DGALLIUM_TRACE -DGALLIUM_GALAHAD \
-	$(am__append_2)
+	$(am__append_3)
 AM_CFLAGS = $(X11_INCLUDES)
-lib_LTLIBRARIES = libGL.la
-nodist_EXTRA_libGL_la_SOURCES = dummy.cpp
-libGL_la_SOURCES = xlib.c
-libGL_la_LDFLAGS = -no-undefined -version-number \
+lib_LTLIBRARIES = lib@GL_LIB@.la
+nodist_EXTRA_lib@GL_LIB@_la_SOURCES = dummy.cpp
+lib@GL_LIB@_la_SOURCES = xlib.c
+lib@GL_LIB@_la_LDFLAGS = -no-undefined -version-number \
 	$(GL_MAJOR):$(GL_MINOR):$(GL_TINY) $(GC_SECTIONS) \
-	$(LD_NO_UNDEFINED) $(am__append_3)
-libGL_la_LIBADD = $(top_builddir)/src/gallium/state_trackers/glx/xlib/libxlib.la \
+	$(LD_NO_UNDEFINED) $(am__append_1) $(am__append_4)
+lib@GL_LIB@_la_LIBADD = $(top_builddir)/src/gallium/state_trackers/glx/xlib/libxlib.la \
 	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
@@ -543,7 +531,7 @@ libGL_la_LIBADD = $(top_builddir)/src/gallium/state_trackers/glx/xlib/libxlib.la
 	$(top_builddir)/src/mapi/glapi/libglapi.la \
 	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(GL_LIB_DEPS) $(CLOCK_LIB) $(am__append_1)
+	$(GL_LIB_DEPS) $(CLOCK_LIB) $(am__append_2)
 all: all-am
 
 .SUFFIXES:
@@ -615,8 +603,8 @@ clean-libLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
-libGL.la: $(libGL_la_OBJECTS) $(libGL_la_DEPENDENCIES) $(EXTRA_libGL_la_DEPENDENCIES) 
-	$(AM_V_CXXLD)$(libGL_la_LINK) -rpath $(libdir) $(libGL_la_OBJECTS) $(libGL_la_LIBADD) $(LIBS)
+lib@GL_LIB@.la: $(lib@GL_LIB@_la_OBJECTS) $(lib@GL_LIB@_la_DEPENDENCIES) $(EXTRA_lib@GL_LIB@_la_DEPENDENCIES) 
+	$(AM_V_CXXLD)$(lib@GL_LIB@_la_LINK) -rpath $(libdir) $(lib@GL_LIB@_la_OBJECTS) $(lib@GL_LIB@_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -674,58 +662,12 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+tags TAGS:
 
-ID: $(am__tagged_files)
-	$(am__define_uniq_tagged_files); mkid -fID $$unique
-tags: tags-am
-TAGS: tags
+ctags CTAGS:
 
-tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
-	set x; \
-	here=`pwd`; \
-	$(am__define_uniq_tagged_files); \
-	shift; \
-	if test -z "$(ETAGS_ARGS)$$*$$unique"; then :; else \
-	  test -n "$$unique" || unique=$$empty_fix; \
-	  if test $$# -gt 0; then \
-	    $(ETAGS) $(ETAGSFLAGS) $(AM_ETAGSFLAGS) $(ETAGS_ARGS) \
-	      "$$@" $$unique; \
-	  else \
-	    $(ETAGS) $(ETAGSFLAGS) $(AM_ETAGSFLAGS) $(ETAGS_ARGS) \
-	      $$unique; \
-	  fi; \
-	fi
-ctags: ctags-am
+cscope cscopelist:
 
-CTAGS: ctags
-ctags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
-	$(am__define_uniq_tagged_files); \
-	test -z "$(CTAGS_ARGS)$$unique" \
-	  || $(CTAGS) $(CTAGSFLAGS) $(AM_CTAGSFLAGS) $(CTAGS_ARGS) \
-	     $$unique
-
-GTAGS:
-	here=`$(am__cd) $(top_builddir) && pwd` \
-	  && $(am__cd) $(top_srcdir) \
-	  && gtags -i $(GTAGS_ARGS) "$$here"
-cscopelist: cscopelist-am
-
-cscopelist-am: $(am__tagged_files)
-	list='$(am__tagged_files)'; \
-	case "$(srcdir)" in \
-	  [\\/]* | ?:[\\/]*) sdir="$(srcdir)" ;; \
-	  *) sdir=$(subdir)/$(srcdir) ;; \
-	esac; \
-	for i in $$list; do \
-	  if test -f "$$i"; then \
-	    echo "$(subdir)/$$i"; \
-	  else \
-	    echo "$$sdir/$$i"; \
-	  fi; \
-	done >> $(top_builddir)/cscope.files
-
-distclean-tags:
-	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
 
 distdir: $(DISTFILES)
 	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
@@ -804,8 +746,7 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
-distclean-am: clean-am distclean-compile distclean-generic \
-	distclean-tags
+distclean-am: clean-am distclean-compile distclean-generic
 
 dvi: dvi-am
 
@@ -869,24 +810,24 @@ uninstall-am: uninstall-libLTLIBRARIES
 
 .MAKE: install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am all-local check check-am clean \
-	clean-generic clean-libLTLIBRARIES clean-libtool cscopelist-am \
-	ctags ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-libLTLIBRARIES install-man install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs maintainer-clean \
+.PHONY: all all-am all-local check check-am clean clean-generic \
+	clean-libLTLIBRARIES clean-libtool cscopelist-am ctags-am \
+	distclean distclean-compile distclean-generic \
+	distclean-libtool distdir dvi dvi-am html html-am info info-am \
+	install install-am install-data install-data-am install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-info install-info-am \
+	install-libLTLIBRARIES install-man install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am uninstall-libLTLIBRARIES
+	tags-am uninstall uninstall-am uninstall-libLTLIBRARIES
 
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .libs/install-gallium-links
 
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-gallium-links : $(dri_LTLIBRARIES) $(vdpau_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
+@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.libs/install-gallium-links : $(dri_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $(top_builddir)/$(LIB_DIR);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	link_dir=$(top_builddir)/$(LIB_DIR)/gallium;		\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	if test x$(egl_LTLIBRARIES) != x; then			\
@@ -894,7 +835,6 @@ uninstall-am: uninstall-libLTLIBRARIES
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	fi;							\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	$(MKDIR_P) $$link_dir;					\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list=$(dri_LTLIBRARIES:%.la=.libs/%.so);		\
-@BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(vdpau_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*); \
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(egl_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	file_list+=$(lib_LTLIBRARIES:%.la=.libs/%.$(LIB_EXT)*);	\
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@	for f in $$file_list; do 				\

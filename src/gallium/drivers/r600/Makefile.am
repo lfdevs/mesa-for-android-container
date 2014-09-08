@@ -17,8 +17,6 @@ libr600_la_SOURCES = \
 	$(C_SOURCES) \
 	$(CXX_SOURCES)
 
-libr600_la_LIBADD = ../radeon/libradeon.la
-
 if NEED_RADEON_LLVM
 
 AM_CFLAGS += \
@@ -27,8 +25,6 @@ AM_CFLAGS += \
 
 libr600_la_SOURCES += \
 	$(LLVM_C_SOURCES)
-
-libr600_la_LIBADD += ../radeon/libllvmradeon.la
 
 endif
 

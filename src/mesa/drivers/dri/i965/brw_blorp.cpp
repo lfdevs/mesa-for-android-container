@@ -82,7 +82,7 @@ brw_blorp_surface_info::set(struct brw_context *brw,
 {
    brw_blorp_mip_info::set(mt, level, layer);
    this->num_samples = mt->num_samples;
-   this->array_spacing_lod0 = mt->array_spacing_lod0;
+   this->array_layout = mt->array_layout;
    this->map_stencil_as_y_tiled = false;
    this->msaa_layout = mt->msaa_layout;
 
@@ -235,8 +235,7 @@ retry:
       break;
    default:
       /* BLORP is not supported before Gen6. */
-      assert(false);
-      break;
+      unreachable("not reached");
    }
 
    /* Make sure we didn't wrap the batch unintentionally, and make sure we
@@ -325,13 +324,13 @@ brw_hiz_op_params::brw_hiz_op_params(struct intel_mipmap_tree *mt,
    x1 = depth.width;
    y1 = depth.height;
 
-   assert(intel_miptree_slice_has_hiz(mt, level, layer));
+   assert(intel_miptree_level_has_hiz(mt, level));
 
    switch (mt->format) {
    case MESA_FORMAT_Z_UNORM16:       depth_format = BRW_DEPTHFORMAT_D16_UNORM; break;
    case MESA_FORMAT_Z_FLOAT32: depth_format = BRW_DEPTHFORMAT_D32_FLOAT; break;
    case MESA_FORMAT_Z24_UNORM_X8_UINT:    depth_format = BRW_DEPTHFORMAT_D24_UNORM_X8_UINT; break;
-   default:                    assert(0); break;
+   default:                    unreachable("not reached");
    }
 }
 

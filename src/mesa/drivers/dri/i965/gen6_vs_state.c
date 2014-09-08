@@ -32,13 +32,29 @@
 #include "program/prog_parameter.h"
 #include "program/prog_statevars.h"
 #include "intel_batchbuffer.h"
+#include "glsl/glsl_parser_extras.h"
 
+/**
+ * Creates a streamed BO containing the push constants for the VS or GS on
+ * gen6+.
+ *
+ * Push constants are constant values (such as GLSL uniforms) that are
+ * pre-loaded into a shader stage's register space at thread spawn time.
+ *
+ * Not all GLSL uniforms will be uploaded as push constants: The hardware has
+ * a limitation of 32 or 64 EU registers (256 or 512 floats) per stage to be
+ * uploaded as push constants, while GL 4.4 requires at least 1024 components
+ * to be usable for the VS.  Plus, currently we always use pull constants
+ * instead of push constants when doing variable-index array access.
+ *
+ * See brw_curbe.c for the equivalent gen4/5 code.
+ */
 void
-gen6_upload_vec4_push_constants(struct brw_context *brw,
-                                const struct gl_program *prog,
-                                const struct brw_vec4_prog_data *prog_data,
-                                struct brw_stage_state *stage_state,
-                                enum state_struct_type type)
+gen6_upload_push_constants(struct brw_context *brw,
+                           const struct gl_program *prog,
+                           const struct brw_stage_prog_data *prog_data,
+                           struct brw_stage_state *stage_state,
+                           enum aub_state_struct_type type)
 {
    struct gl_context *ctx = &brw->ctx;
 
@@ -48,16 +64,17 @@ gen6_upload_vec4_push_constants(struct brw_context *brw,
    /* XXX: Should this happen somewhere before to get our state flag set? */
    _mesa_load_state_parameters(ctx, prog->Parameters);
 
-   if (prog_data->base.nr_params == 0) {
+   if (prog_data->nr_params == 0) {
       stage_state->push_const_size = 0;
    } else {
-      int params_uploaded;
-      float *param;
+      gl_constant_value *param;
       int i;
 
       param = brw_state_batch(brw, type,
-			      prog_data->base.nr_params * sizeof(float),
+			      prog_data->nr_params * sizeof(gl_constant_value),
 			      32, &stage_state->push_const_offset);
+
+      STATIC_ASSERT(sizeof(gl_constant_value) == sizeof(float));
 
       /* _NEW_PROGRAM_CONSTANTS
        *
@@ -65,22 +82,42 @@ gen6_upload_vec4_push_constants(struct brw_context *brw,
        * side effect of dereferencing uniforms, so _NEW_PROGRAM_CONSTANTS
        * wouldn't be set for them.
       */
-      for (i = 0; i < prog_data->base.nr_params; i++) {
-         param[i] = *prog_data->base.param[i];
+      for (i = 0; i < prog_data->nr_params; i++) {
+         param[i] = *prog_data->param[i];
       }
-      params_uploaded = prog_data->base.nr_params / 4;
 
       if (0) {
-	 fprintf(stderr, "Constant buffer:\n");
-	 for (i = 0; i < params_uploaded; i++) {
-	    float *buf = param + i * 4;
-	    fprintf(stderr, "%d: %f %f %f %f\n",
-                    i, buf[0], buf[1], buf[2], buf[3]);
+	 fprintf(stderr, "%s constants:\n",
+                 _mesa_shader_stage_to_string(stage_state->stage));
+	 for (i = 0; i < prog_data->nr_params; i++) {
+	    if ((i & 7) == 0)
+	       fprintf(stderr, "g%d: ",
+                       prog_data->dispatch_grf_start_reg + i / 8);
+	    fprintf(stderr, "%8f ", param[i].f);
+	    if ((i & 7) == 7)
+	       fprintf(stderr, "\n");
 	 }
+	 if ((i & 7) != 0)
+	    fprintf(stderr, "\n");
+	 fprintf(stderr, "\n");
       }
 
-      stage_state->push_const_size = (params_uploaded + 1) / 2;
+      stage_state->push_const_size = ALIGN(prog_data->nr_params, 8) / 8;
       /* We can only push 32 registers of constants at a time. */
+
+      /* From the SNB PRM (vol2, part 1, section 3.2.1.4: 3DSTATE_CONSTANT_VS:
+       *
+       *     "The sum of all four read length fields (each incremented to
+       *      represent the actual read length) must be less than or equal to
+       *      32"
+       *
+       * From the IVB PRM (vol2, part 1, section 3.2.1.3: 3DSTATE_CONSTANT_VS:
+       *
+       *     "The sum of all four read length fields must be less than or
+       *      equal to the size of 64"
+       *
+       * The other shader stages all match the VS's limits.
+       */
       assert(stage_state->push_const_size <= 32);
    }
 }
@@ -94,13 +131,13 @@ gen6_upload_vs_push_constants(struct brw_context *brw)
    const struct brw_vertex_program *vp =
       brw_vertex_program_const(brw->vertex_program);
    /* CACHE_NEW_VS_PROG */
-   const struct brw_vec4_prog_data *prog_data = &brw->vs.prog_data->base;
+   const struct brw_stage_prog_data *prog_data = &brw->vs.prog_data->base.base;
 
-   gen6_upload_vec4_push_constants(brw, &vp->program.Base, prog_data,
-                                   stage_state, AUB_TRACE_VS_CONSTANTS);
+   gen6_upload_push_constants(brw, &vp->program.Base, prog_data,
+                              stage_state, AUB_TRACE_VS_CONSTANTS);
 
    if (brw->gen >= 7) {
-      if (brw->gen == 7 && !brw->is_haswell)
+      if (brw->gen == 7 && !brw->is_haswell && !brw->is_baytrail)
          gen7_emit_vs_workaround_flush(brw);
 
       gen7_upload_constant_state(brw, stage_state, true /* active */,
@@ -186,7 +223,7 @@ upload_vs_state(struct brw_context *brw)
       OUT_BATCH(0);
    }
 
-   OUT_BATCH((brw->vs.prog_data->base.dispatch_grf_start_reg <<
+   OUT_BATCH((brw->vs.prog_data->base.base.dispatch_grf_start_reg <<
               GEN6_VS_DISPATCH_START_GRF_SHIFT) |
 	     (brw->vs.prog_data->base.urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
 	     (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));

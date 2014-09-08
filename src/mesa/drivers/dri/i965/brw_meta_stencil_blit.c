@@ -57,7 +57,7 @@
 #include "main/blend.h"
 #include "main/varray.h"
 #include "main/shaderapi.h"
-#include "glsl/ralloc.h"
+#include "util/ralloc.h"
 
 #include "drivers/common/meta.h"
 #include "brw_meta_util.h"
@@ -276,7 +276,7 @@ setup_program(struct brw_context *brw, bool msaa_tex)
 {
    struct gl_context *ctx = &brw->ctx;
    struct blit_state *blit = &ctx->Meta->Blit;
-   const char *fs_source;
+   char *fs_source;
    const struct sampler_and_fetch *sampler = &samplers[msaa_tex];
 
    _mesa_meta_setup_vertex_objects(&blit->VAO, &blit->VBO, true, 2, 2, 0);

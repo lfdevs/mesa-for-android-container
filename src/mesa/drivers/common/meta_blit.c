@@ -49,7 +49,7 @@
 #include "main/viewport.h"
 #include "swrast/swrast.h"
 #include "drivers/common/meta.h"
-#include "../glsl/ralloc.h"
+#include "util/ralloc.h"
 
 /** Return offset in bytes of the field within a vertex struct */
 #define OFFSET(FIELD) ((void *) offsetof(struct vertex, FIELD))
@@ -325,10 +325,12 @@ setup_glsl_blit_framebuffer(struct gl_context *ctx,
                             struct gl_renderbuffer *src_rb,
                             GLenum target)
 {
+   unsigned texcoord_size;
+
    /* target = GL_TEXTURE_RECTANGLE is not supported in GLES 3.0 */
    assert(_mesa_is_desktop_gl(ctx) || target == GL_TEXTURE_2D);
 
-   unsigned texcoord_size = 2 + (src_rb->Depth > 1 ? 1 : 0);
+   texcoord_size = 2 + (src_rb->Depth > 1 ? 1 : 0);
 
    _mesa_meta_setup_vertex_objects(&blit->VAO, &blit->VBO, true,
                                    2, texcoord_size, 0);
@@ -428,6 +430,9 @@ blitframebuffer_texture(struct gl_context *ctx,
       srcLevel = 0;
       target = meta_temp_texture->Target;
       texObj = _mesa_lookup_texture(ctx, meta_temp_texture->TexObj);
+      if (texObj == NULL) {
+         return false;
+      }
 
       _mesa_meta_setup_copypix_texture(ctx, meta_temp_texture,
                                        srcX0, srcY0,
@@ -703,6 +708,9 @@ _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
     * necessary anyway, so save/clear state.
     */
    _mesa_meta_begin(ctx, MESA_META_ALL & ~MESA_META_DRAW_BUFFERS);
+
+   /* Dithering shouldn't be performed for glBlitFramebuffer */
+   _mesa_set_enable(ctx, GL_DITHER, GL_FALSE);
 
    /* If the clipping earlier changed the destination rect at all, then
     * enable the scissor to clip to it.

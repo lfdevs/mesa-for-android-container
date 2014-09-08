@@ -28,6 +28,7 @@
 #include "macros.h"
 #include "../../gallium/auxiliary/util/u_format_rgb9e5.h"
 #include "../../gallium/auxiliary/util/u_format_r11g11b10f.h"
+#include "util/format_srgb.h"
 
 
 /** Helper struct for MESA_FORMAT_Z32_FLOAT_S8X24_UINT */
@@ -51,34 +52,6 @@ struct z32f_x24s8
 #define EXPAND_5_8(X)  ( ((X) << 3) | ((X) >> 2) )
 
 #define EXPAND_6_8(X)  ( ((X) << 2) | ((X) >> 4) )
-
-
-/**
- * Convert an 8-bit sRGB value from non-linear space to a
- * linear RGB value in [0, 1].
- * Implemented with a 256-entry lookup table.
- */
-GLfloat
-_mesa_nonlinear_to_linear(GLubyte cs8)
-{
-   static GLfloat table[256];
-   static GLboolean tableReady = GL_FALSE;
-   if (!tableReady) {
-      /* compute lookup table now */
-      GLuint i;
-      for (i = 0; i < 256; i++) {
-         const GLfloat cs = UBYTE_TO_FLOAT(i);
-         if (cs <= 0.04045) {
-            table[i] = cs / 12.92f;
-         }
-         else {
-            table[i] = (GLfloat) pow((cs + 0.055) / 1.055, 2.4);
-         }
-      }
-      tableReady = GL_TRUE;
-   }
-   return table[cs8];
-}
 
 
 /**********************************************************************/
@@ -763,9 +736,9 @@ unpack_BGR_SRGB8(const void *src, GLfloat dst[][4], GLuint n)
    const GLubyte *s = (const GLubyte *) src;
    GLuint i;
    for (i = 0; i < n; i++) {
-      dst[i][RCOMP] = _mesa_nonlinear_to_linear(s[i*3+2]);
-      dst[i][GCOMP] = _mesa_nonlinear_to_linear(s[i*3+1]);
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear(s[i*3+0]);
+      dst[i][RCOMP] = util_format_srgb_8unorm_to_linear_float(s[i*3+2]);
+      dst[i][GCOMP] = util_format_srgb_8unorm_to_linear_float(s[i*3+1]);
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float(s[i*3+0]);
       dst[i][ACOMP] = 1.0F;
    }
 }
@@ -776,9 +749,9 @@ unpack_A8B8G8R8_SRGB(const void *src, GLfloat dst[][4], GLuint n)
    const GLuint *s = ((const GLuint *) src);
    GLuint i;
    for (i = 0; i < n; i++) {
-      dst[i][RCOMP] = _mesa_nonlinear_to_linear( (s[i] >> 24) );
-      dst[i][GCOMP] = _mesa_nonlinear_to_linear( (s[i] >> 16) & 0xff );
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear( (s[i] >>  8) & 0xff );
+      dst[i][RCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >> 24) );
+      dst[i][GCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >> 16) & 0xff );
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >>  8) & 0xff );
       dst[i][ACOMP] = UBYTE_TO_FLOAT( s[i] & 0xff ); /* linear! */
    }
 }
@@ -789,9 +762,9 @@ unpack_B8G8R8A8_SRGB(const void *src, GLfloat dst[][4], GLuint n)
    const GLuint *s = ((const GLuint *) src);
    GLuint i;
    for (i = 0; i < n; i++) {
-      dst[i][RCOMP] = _mesa_nonlinear_to_linear( (s[i] >> 16) & 0xff );
-      dst[i][GCOMP] = _mesa_nonlinear_to_linear( (s[i] >>  8) & 0xff );
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear( (s[i]      ) & 0xff );
+      dst[i][RCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >> 16) & 0xff );
+      dst[i][GCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >>  8) & 0xff );
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i]      ) & 0xff );
       dst[i][ACOMP] = UBYTE_TO_FLOAT( s[i] >> 24 ); /* linear! */
    }
 }
@@ -802,9 +775,9 @@ unpack_R8G8B8A8_SRGB(const void *src, GLfloat dst[][4], GLuint n)
    const GLuint *s = ((const GLuint *) src);
    GLuint i;
    for (i = 0; i < n; i++) {
-      dst[i][RCOMP] = _mesa_nonlinear_to_linear( (s[i]      ) & 0xff );
-      dst[i][GCOMP] = _mesa_nonlinear_to_linear( (s[i] >>  8) & 0xff );
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear( (s[i] >> 16) & 0xff );
+      dst[i][RCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i]      ) & 0xff );
+      dst[i][GCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >>  8) & 0xff );
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >> 16) & 0xff );
       dst[i][ACOMP] = UBYTE_TO_FLOAT( s[i] >> 24 ); /* linear! */
    }
 }
@@ -817,7 +790,7 @@ unpack_L_SRGB8(const void *src, GLfloat dst[][4], GLuint n)
    for (i = 0; i < n; i++) {
       dst[i][RCOMP] = 
       dst[i][GCOMP] = 
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear(s[i]);
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float(s[i]);
       dst[i][ACOMP] = 1.0F;
    }
 }
@@ -830,7 +803,7 @@ unpack_L8A8_SRGB(const void *src, GLfloat dst[][4], GLuint n)
    for (i = 0; i < n; i++) {
       dst[i][RCOMP] =
       dst[i][GCOMP] =
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear(s[i] & 0xff);
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float(s[i] & 0xff);
       dst[i][ACOMP] = UBYTE_TO_FLOAT(s[i] >> 8); /* linear! */
    }
 }
@@ -1708,19 +1681,6 @@ unpack_RGBA_UINT32(const void *src, GLfloat dst[][4], GLuint n)
 }
 
 static void
-unpack_DUDV8(const void *src, GLfloat dst[][4], GLuint n)
-{
-   const GLbyte *s = (const GLbyte *) src;
-   GLuint i;
-   for (i = 0; i < n; i++) {
-      dst[i][RCOMP] = BYTE_TO_FLOAT(s[i*2+0]);
-      dst[i][GCOMP] = BYTE_TO_FLOAT(s[i*2+1]);
-      dst[i][BCOMP] = 0;
-      dst[i][ACOMP] = 0;
-   }
-}
-
-static void
 unpack_R_SNORM8(const void *src, GLfloat dst[][4], GLuint n)
 {
    const GLbyte *s = ((const GLbyte *) src);
@@ -2137,9 +2097,9 @@ unpack_R8G8B8X8_SRGB(const void *src, GLfloat dst[][4], GLuint n)
    const GLuint *s = ((const GLuint *) src);
    GLuint i;
    for (i = 0; i < n; i++) {
-      dst[i][RCOMP] = _mesa_nonlinear_to_linear( (s[i]      ) & 0xff );
-      dst[i][GCOMP] = _mesa_nonlinear_to_linear( (s[i] >>  8) & 0xff );
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear( (s[i] >> 16) & 0xff );
+      dst[i][RCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i]      ) & 0xff );
+      dst[i][GCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >>  8) & 0xff );
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >> 16) & 0xff );
       dst[i][ACOMP] = UBYTE_TO_FLOAT( s[i] >> 24 ); /* linear! */
    }
 }
@@ -2332,9 +2292,9 @@ unpack_B8G8R8X8_SRGB(const void *src, GLfloat dst[][4], GLuint n)
    const GLuint *s = ((const GLuint *) src);
    GLuint i;
    for (i = 0; i < n; i++) {
-      dst[i][RCOMP] = _mesa_nonlinear_to_linear( (s[i] >> 16) & 0xff );
-      dst[i][GCOMP] = _mesa_nonlinear_to_linear( (s[i] >>  8) & 0xff );
-      dst[i][BCOMP] = _mesa_nonlinear_to_linear( (s[i]      ) & 0xff );
+      dst[i][RCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >> 16) & 0xff );
+      dst[i][GCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i] >>  8) & 0xff );
+      dst[i][BCOMP] = util_format_srgb_8unorm_to_linear_float( (s[i]      ) & 0xff );
       dst[i][ACOMP] = 1.0F;
    }
 }
@@ -2486,7 +2446,6 @@ get_unpack_rgba_function(mesa_format format)
       table[MESA_FORMAT_RGB_UINT32] = unpack_RGB_UINT32;
       table[MESA_FORMAT_RGBA_UINT32] = unpack_RGBA_UINT32;
 
-      table[MESA_FORMAT_DUDV8] = unpack_DUDV8;
       table[MESA_FORMAT_R_SNORM8] = unpack_R_SNORM8;
       table[MESA_FORMAT_R8G8_SNORM] = unpack_R8G8_SNORM;
       table[MESA_FORMAT_X8B8G8R8_SNORM] = unpack_X8B8G8R8_SNORM;

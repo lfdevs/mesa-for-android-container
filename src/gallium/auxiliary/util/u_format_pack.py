@@ -659,7 +659,7 @@ def generate_format_fetch(format, dst_channel, dst_native_type, dst_suffix):
 
 
 def is_format_hand_written(format):
-    return format.layout in ('s3tc', 'rgtc', 'etc', 'subsampled', 'other') or format.colorspace == ZS
+    return format.layout in ('s3tc', 'rgtc', 'etc', 'bptc', 'subsampled', 'other') or format.colorspace == ZS
 
 
 def generate(formats):
@@ -669,7 +669,7 @@ def generate(formats):
     print '#include "u_half.h"'
     print '#include "u_format.h"'
     print '#include "u_format_other.h"'
-    print '#include "u_format_srgb.h"'
+    print '#include "util/format_srgb.h"'
     print '#include "u_format_yuv.h"'
     print '#include "u_format_zs.h"'
     print

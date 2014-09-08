@@ -81,31 +81,15 @@ struct brw_wm_prog_key {
    struct brw_sampler_prog_key_data tex;
 };
 
-struct brw_wm_compile {
-   struct brw_wm_prog_key key;
-   struct brw_wm_prog_data prog_data;
-
-   uint8_t source_depth_reg;
-   uint8_t source_w_reg;
-   uint8_t aa_dest_stencil_reg;
-   uint8_t dest_depth_reg;
-   uint8_t sample_pos_reg;
-   uint8_t sample_mask_reg;
-   uint8_t barycentric_coord_reg[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
-   uint8_t nr_payload_regs;
-   GLuint source_depth_to_render_target:1;
-   GLuint runtime_check_aads_emit:1;
-
-   GLuint last_scratch;
-};
-
 /**
  * Compile a fragment shader.
  *
  * Returns the final assembly and the program's size.
  */
 const unsigned *brw_wm_fs_emit(struct brw_context *brw,
-                               struct brw_wm_compile *c,
+                               void *mem_ctx,
+                               const struct brw_wm_prog_key *key,
+                               struct brw_wm_prog_data *prog_data,
                                struct gl_fragment_program *fp,
                                struct gl_shader_program *prog,
                                unsigned *final_assembly_size);

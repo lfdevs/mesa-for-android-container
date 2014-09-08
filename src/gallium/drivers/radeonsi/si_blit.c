@@ -22,7 +22,6 @@
  */
 
 #include "si_pipe.h"
-#include "util/u_blitter.h"
 #include "util/u_format.h"
 
 enum si_blitter_op /* bitmask */
@@ -38,12 +37,11 @@ enum si_blitter_op /* bitmask */
 	SI_COPY          = SI_SAVE_FRAMEBUFFER | SI_SAVE_TEXTURES |
 			   SI_DISABLE_RENDER_COND,
 
-	SI_BLIT          = SI_SAVE_FRAMEBUFFER | SI_SAVE_TEXTURES |
-			   SI_DISABLE_RENDER_COND,
+	SI_BLIT          = SI_SAVE_FRAMEBUFFER | SI_SAVE_TEXTURES,
 
 	SI_DECOMPRESS    = SI_SAVE_FRAMEBUFFER | SI_DISABLE_RENDER_COND,
 
-	SI_COLOR_RESOLVE = SI_SAVE_FRAMEBUFFER | SI_DISABLE_RENDER_COND
+	SI_COLOR_RESOLVE = SI_SAVE_FRAMEBUFFER
 };
 
 static void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
@@ -60,8 +58,15 @@ static void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
 	util_blitter_save_geometry_shader(sctx->blitter, sctx->gs_shader);
 	util_blitter_save_vertex_shader(sctx->blitter, sctx->vs_shader);
 	util_blitter_save_vertex_elements(sctx->blitter, sctx->vertex_elements);
+	if (sctx->queued.named.sample_mask) {
+		util_blitter_save_sample_mask(sctx->blitter,
+					      sctx->queued.named.sample_mask->sample_mask);
+	}
 	if (sctx->queued.named.viewport) {
 		util_blitter_save_viewport(sctx->blitter, &sctx->queued.named.viewport->viewport);
+	}
+	if (sctx->queued.named.scissor) {
+		util_blitter_save_scissor(sctx->blitter, &sctx->queued.named.scissor->scissor);
 	}
 	util_blitter_save_vertex_buffer_slot(sctx->blitter, sctx->vertex_buffer);
 	util_blitter_save_so_targets(sctx->blitter, sctx->b.streamout.num_targets,
@@ -72,12 +77,10 @@ static void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
 
 	if (op & SI_SAVE_TEXTURES) {
 		util_blitter_save_fragment_sampler_states(
-			sctx->blitter, sctx->samplers[PIPE_SHADER_FRAGMENT].n_samplers,
-			(void**)sctx->samplers[PIPE_SHADER_FRAGMENT].samplers);
+			sctx->blitter, 2,
+			sctx->samplers[PIPE_SHADER_FRAGMENT].states.saved_states);
 
-		util_blitter_save_fragment_sampler_views(sctx->blitter,
-			util_last_bit(sctx->samplers[PIPE_SHADER_FRAGMENT].views.desc.enabled_mask &
-				      ((1 << NUM_TEX_UNITS) - 1)),
+		util_blitter_save_fragment_sampler_views(sctx->blitter, 2,
 			sctx->samplers[PIPE_SHADER_FRAGMENT].views.views);
 	}
 
@@ -228,17 +231,19 @@ void si_flush_depth_textures(struct si_context *sctx,
 			     struct si_textures_info *textures)
 {
 	unsigned i;
+	unsigned mask = textures->depth_texture_mask;
 
-	for (i = 0; i < textures->n_views; ++i) {
+	while (mask) {
 		struct pipe_sampler_view *view;
 		struct r600_texture *tex;
 
+		i = u_bit_scan(&mask);
+
 		view = textures->views.views[i];
-		if (!view) continue;
+		assert(view);
 
 		tex = (struct r600_texture *)view->texture;
-		if (!tex->is_depth || tex->is_flushing_texture)
-			continue;
+		assert(tex->is_depth && !tex->is_flushing_texture);
 
 		si_blit_decompress_depth_in_place(sctx, tex,
 						  view->u.tex.first_level, view->u.tex.last_level,
@@ -549,46 +554,63 @@ static void si_resource_copy_region(struct pipe_context *ctx,
 		dstx = util_format_get_nblocksx(orig_info[1].format, dstx);
 		dsty = util_format_get_nblocksy(orig_info[1].format, dsty);
 	} else if (!util_blitter_is_copy_supported(sctx->blitter, dst, src)) {
-		unsigned blocksize = util_format_get_blocksize(src->format);
+		if (util_format_is_subsampled_422(src->format)) {
+			/* XXX untested */
+			si_change_format(src, src_level, &orig_info[0],
+					 PIPE_FORMAT_R8G8B8A8_UINT);
+			si_change_format(dst, dst_level, &orig_info[1],
+					 PIPE_FORMAT_R8G8B8A8_UINT);
 
-		switch (blocksize) {
-		case 1:
-			si_change_format(src, src_level, &orig_info[0],
-					 PIPE_FORMAT_R8_UNORM);
-			si_change_format(dst, dst_level, &orig_info[1],
-					 PIPE_FORMAT_R8_UNORM);
-			break;
-		case 2:
-			si_change_format(src, src_level, &orig_info[0],
-					 PIPE_FORMAT_R8G8_UNORM);
-			si_change_format(dst, dst_level, &orig_info[1],
-					 PIPE_FORMAT_R8G8_UNORM);
-			break;
-		case 4:
-			si_change_format(src, src_level, &orig_info[0],
-					 PIPE_FORMAT_R8G8B8A8_UNORM);
-			si_change_format(dst, dst_level, &orig_info[1],
-					 PIPE_FORMAT_R8G8B8A8_UNORM);
-			break;
-		case 8:
-			si_change_format(src, src_level, &orig_info[0],
-					 PIPE_FORMAT_R16G16B16A16_UINT);
-			si_change_format(dst, dst_level, &orig_info[1],
-					 PIPE_FORMAT_R16G16B16A16_UINT);
-			break;
-		case 16:
-			si_change_format(src, src_level, &orig_info[0],
-					 PIPE_FORMAT_R32G32B32A32_UINT);
-			si_change_format(dst, dst_level, &orig_info[1],
-					 PIPE_FORMAT_R32G32B32A32_UINT);
-			break;
-		default:
-			fprintf(stderr, "Unhandled format %s with blocksize %u\n",
-				util_format_short_name(src->format), blocksize);
-			assert(0);
+			sbox = *src_box;
+			sbox.x = util_format_get_nblocksx(orig_info[0].format, src_box->x);
+			sbox.width = util_format_get_nblocksx(orig_info[0].format, src_box->width);
+			src_box = &sbox;
+			dstx = util_format_get_nblocksx(orig_info[1].format, dstx);
+
+			restore_orig[0] = TRUE;
+			restore_orig[1] = TRUE;
+		} else {
+			unsigned blocksize = util_format_get_blocksize(src->format);
+
+			switch (blocksize) {
+			case 1:
+				si_change_format(src, src_level, &orig_info[0],
+						PIPE_FORMAT_R8_UNORM);
+				si_change_format(dst, dst_level, &orig_info[1],
+						PIPE_FORMAT_R8_UNORM);
+				break;
+			case 2:
+				si_change_format(src, src_level, &orig_info[0],
+						PIPE_FORMAT_R8G8_UNORM);
+				si_change_format(dst, dst_level, &orig_info[1],
+						PIPE_FORMAT_R8G8_UNORM);
+				break;
+			case 4:
+				si_change_format(src, src_level, &orig_info[0],
+						PIPE_FORMAT_R8G8B8A8_UNORM);
+				si_change_format(dst, dst_level, &orig_info[1],
+						PIPE_FORMAT_R8G8B8A8_UNORM);
+				break;
+			case 8:
+				si_change_format(src, src_level, &orig_info[0],
+						PIPE_FORMAT_R16G16B16A16_UINT);
+				si_change_format(dst, dst_level, &orig_info[1],
+						PIPE_FORMAT_R16G16B16A16_UINT);
+				break;
+			case 16:
+				si_change_format(src, src_level, &orig_info[0],
+						PIPE_FORMAT_R32G32B32A32_UINT);
+				si_change_format(dst, dst_level, &orig_info[1],
+						PIPE_FORMAT_R32G32B32A32_UINT);
+				break;
+			default:
+				fprintf(stderr, "Unhandled format %s with blocksize %u\n",
+					util_format_short_name(src->format), blocksize);
+				assert(0);
+			}
+			restore_orig[0] = TRUE;
+			restore_orig[1] = TRUE;
 		}
-		restore_orig[0] = TRUE;
-		restore_orig[1] = TRUE;
 	}
 
 	/* Initialize the surface. */
@@ -691,7 +713,8 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 	    dst->surface.level[info->dst.level].mode >= RADEON_SURF_MODE_1D &&
 	    !(dst->surface.flags & RADEON_SURF_SCANOUT) &&
 	    (!dst->cmask.size || !dst->dirty_level_mask) /* dst cannot be fast-cleared */) {
-		si_blitter_begin(ctx, SI_COLOR_RESOLVE);
+		si_blitter_begin(ctx, SI_COLOR_RESOLVE |
+				 (info->render_condition_enable ? 0 : SI_DISABLE_RENDER_COND));
 		util_blitter_custom_resolve_color(sctx->blitter,
 						  info->dst.resource, info->dst.level,
 						  info->dst.box.z,
@@ -721,7 +744,8 @@ static void si_blit(struct pipe_context *ctx,
 				  info->src.box.z,
 				  info->src.box.z + info->src.box.depth - 1);
 
-	si_blitter_begin(ctx, SI_BLIT);
+	si_blitter_begin(ctx, SI_BLIT |
+			 (info->render_condition_enable ? 0 : SI_DISABLE_RENDER_COND));
 	util_blitter_blit(sctx->blitter, info);
 	si_blitter_end(ctx);
 }

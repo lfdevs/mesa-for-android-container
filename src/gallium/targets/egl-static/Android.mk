@@ -47,31 +47,32 @@ LOCAL_CFLAGS += -DGALLIUM_SOFTPIPE
 
 # !swrast only
 ifneq ($(MESA_GPU_DRIVERS),swrast)
-LOCAL_C_INCLUDES += \
-	$(DRM_TOP)/include/drm \
-	$(DRM_TOP)
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libdrm
 endif
 
+ifneq ($(filter freedreno, $(MESA_GPU_DRIVERS)),)
+LOCAL_CFLAGS += -DGALLIUM_FREEDRENO
+endif
 ifneq ($(filter i915g, $(MESA_GPU_DRIVERS)),)
-LOCAL_CFLAGS += -D_EGL_PIPE_I915=1
+LOCAL_CFLAGS += -DGALLIUM_I915
 endif
 ifneq ($(filter ilo, $(MESA_GPU_DRIVERS)),)
-LOCAL_CFLAGS += -D_EGL_PIPE_ILO=1
+LOCAL_CFLAGS += -DGALLIUM_ILO
 endif
 ifneq ($(filter nouveau, $(MESA_GPU_DRIVERS)),)
-LOCAL_CFLAGS += -D_EGL_PIPE_NOUVEAU=1
+LOCAL_CFLAGS += -DGALLIUM_NOUVEAU
 endif
 ifneq ($(filter r300g, $(MESA_GPU_DRIVERS)),)
-LOCAL_CFLAGS += -D_EGL_PIPE_R300=1
+LOCAL_CFLAGS += -DGALLIUM_R300
 endif
 ifneq ($(filter r600g, $(MESA_GPU_DRIVERS)),)
-LOCAL_CFLAGS += -D_EGL_PIPE_R600=1
+LOCAL_CFLAGS += -DGALLIUM_R600
 endif
 ifneq ($(filter radeonsi, $(MESA_GPU_DRIVERS)),)
-LOCAL_CFLAGS += -D_EGL_PIPE_RADEONSI=1
+LOCAL_CFLAGS += -DGALLIUM_RADEONSI
 endif
 ifneq ($(filter vmwgfx, $(MESA_GPU_DRIVERS)),)
-LOCAL_CFLAGS += -D_EGL_PIPE_VMWGFX=1
+LOCAL_CFLAGS += -DGALLIUM_VMWGFX
 endif
 
 LOCAL_MODULE := libmesa_egl_gallium

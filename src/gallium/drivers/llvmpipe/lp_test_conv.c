@@ -211,13 +211,15 @@ test_one(unsigned verbose,
 
    eps = MAX2(lp_const_eps(src_type), lp_const_eps(dst_type));
 
-   gallivm = gallivm_create();
+   gallivm = gallivm_create("test_module");
 
    func = add_conv_test(gallivm, src_type, num_srcs, dst_type, num_dsts);
 
    gallivm_compile_module(gallivm);
 
    conv_test_ptr = (conv_test_ptr_t)gallivm_jit_function(gallivm, func);
+
+   gallivm_free_ir(gallivm);
 
    success = TRUE;
    for(i = 0; i < n && success; ++i) {
@@ -318,8 +320,6 @@ test_one(unsigned verbose,
 
    if(fp)
       write_tsv_row(fp, src_type, dst_type, cycles_avg, success);
-
-   gallivm_free_function(gallivm, func, conv_test_ptr);
 
    gallivm_destroy(gallivm);
 

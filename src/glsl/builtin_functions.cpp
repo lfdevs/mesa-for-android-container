@@ -226,6 +226,14 @@ shader_packing_or_gpu_shader5(const _mesa_glsl_parse_state *state)
 }
 
 static bool
+fs_gpu_shader5(const _mesa_glsl_parse_state *state)
+{
+   return state->stage == MESA_SHADER_FRAGMENT &&
+          (state->is_version(400, 0) || state->ARB_gpu_shader5_enable);
+}
+
+
+static bool
 texture_array_lod(const _mesa_glsl_parse_state *state)
 {
    return lod_exists_in_stage(state) &&
@@ -310,6 +318,14 @@ fs_oes_derivatives(const _mesa_glsl_parse_state *state)
 }
 
 static bool
+fs_derivative_control(const _mesa_glsl_parse_state *state)
+{
+   return state->stage == MESA_SHADER_FRAGMENT &&
+          (state->is_version(450, 0) ||
+           state->ARB_derivative_control_enable);
+}
+
+static bool
 tex1d_lod(const _mesa_glsl_parse_state *state)
 {
    return !state->es_shader && lod_exists_in_stage(state);
@@ -357,6 +373,12 @@ shader_image_load_store(const _mesa_glsl_parse_state *state)
 {
    return (state->is_version(420, 0) ||
            state->ARB_shader_image_load_store_enable);
+}
+
+static bool
+gs_streams(const _mesa_glsl_parse_state *state)
+{
+   return gpu_shader5(state) && gs_only(state);
 }
 
 /** @} */
@@ -594,12 +616,22 @@ private:
 
    B0(EmitVertex)
    B0(EndPrimitive)
+   ir_function_signature *_EmitStreamVertex(builtin_available_predicate avail,
+                                            const glsl_type *stream_type);
+   ir_function_signature *_EndStreamPrimitive(builtin_available_predicate avail,
+                                              const glsl_type *stream_type);
 
    B2(textureQueryLod);
    B1(textureQueryLevels);
    B1(dFdx);
    B1(dFdy);
    B1(fwidth);
+   B1(dFdxCoarse);
+   B1(dFdyCoarse);
+   B1(fwidthCoarse);
+   B1(dFdxFine);
+   B1(dFdyFine);
+   B1(fwidthFine);
    B1(noise1);
    B1(noise2);
    B1(noise3);
@@ -617,6 +649,9 @@ private:
    B1(uaddCarry)
    B1(usubBorrow)
    B1(mulExtended)
+   B1(interpolateAtCentroid)
+   B1(interpolateAtOffset)
+   B1(interpolateAtSample)
 
    ir_function_signature *_atomic_intrinsic(builtin_available_predicate avail);
    ir_function_signature *_atomic_op(const char *intrinsic,
@@ -685,7 +720,8 @@ builtin_builder::find(_mesa_glsl_parse_state *state,
    if (f == NULL)
       return NULL;
 
-   ir_function_signature *sig = f->matching_signature(state, actual_parameters);
+   ir_function_signature *sig =
+      f->matching_signature(state, actual_parameters, true);
    if (sig == NULL)
       return NULL;
 
@@ -1708,6 +1744,14 @@ builtin_builder::create_builtins()
 
    add_function("EmitVertex",   _EmitVertex(),   NULL);
    add_function("EndPrimitive", _EndPrimitive(), NULL);
+   add_function("EmitStreamVertex",
+                _EmitStreamVertex(gs_streams, glsl_type::uint_type),
+                _EmitStreamVertex(gs_streams, glsl_type::int_type),
+                NULL);
+   add_function("EndStreamPrimitive",
+                _EndStreamPrimitive(gs_streams, glsl_type::uint_type),
+                _EndStreamPrimitive(gs_streams, glsl_type::int_type),
+                NULL);
 
    add_function("textureQueryLOD",
                 _textureQueryLod(glsl_type::sampler1D_type,  glsl_type::float_type),
@@ -2118,6 +2162,12 @@ builtin_builder::create_builtins()
    F(dFdx)
    F(dFdy)
    F(fwidth)
+   F(dFdxCoarse)
+   F(dFdyCoarse)
+   F(fwidthCoarse)
+   F(dFdxFine)
+   F(dFdyFine)
+   F(fwidthFine)
    F(noise1)
    F(noise2)
    F(noise3)
@@ -2167,6 +2217,24 @@ builtin_builder::create_builtins()
                 _mulExtended(glsl_type::uvec2_type),
                 _mulExtended(glsl_type::uvec3_type),
                 _mulExtended(glsl_type::uvec4_type),
+                NULL);
+   add_function("interpolateAtCentroid",
+                _interpolateAtCentroid(glsl_type::float_type),
+                _interpolateAtCentroid(glsl_type::vec2_type),
+                _interpolateAtCentroid(glsl_type::vec3_type),
+                _interpolateAtCentroid(glsl_type::vec4_type),
+                NULL);
+   add_function("interpolateAtOffset",
+                _interpolateAtOffset(glsl_type::float_type),
+                _interpolateAtOffset(glsl_type::vec2_type),
+                _interpolateAtOffset(glsl_type::vec3_type),
+                _interpolateAtOffset(glsl_type::vec4_type),
+                NULL);
+   add_function("interpolateAtSample",
+                _interpolateAtSample(glsl_type::float_type),
+                _interpolateAtSample(glsl_type::vec2_type),
+                _interpolateAtSample(glsl_type::vec3_type),
+                _interpolateAtSample(glsl_type::vec4_type),
                 NULL);
 
    add_function("atomicCounter",
@@ -2557,8 +2625,7 @@ builtin_builder::call(ir_function *f, ir_variable *ret, exec_list params)
 {
    exec_list actual_params;
 
-   foreach_list(node, &params) {
-      ir_variable *var = (ir_variable *) node;
+   foreach_in_list(ir_variable, var, &params) {
       actual_params.push_tail(var_ref(var));
    }
 
@@ -3872,7 +3939,28 @@ builtin_builder::_EmitVertex()
 {
    MAKE_SIG(glsl_type::void_type, gs_only, 0);
 
-   body.emit(new(mem_ctx) ir_emit_vertex());
+   ir_rvalue *stream = new(mem_ctx) ir_constant(0, 1);
+   body.emit(new(mem_ctx) ir_emit_vertex(stream));
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_EmitStreamVertex(builtin_available_predicate avail,
+                                   const glsl_type *stream_type)
+{
+   /* Section 8.12 (Geometry Shader Functions) of the GLSL 4.0 spec says:
+    *
+    *     "Emit the current values of output variables to the current output
+    *     primitive on stream stream. The argument to stream must be a constant
+    *     integral expression."
+    */
+   ir_variable *stream =
+      new(mem_ctx) ir_variable(stream_type, "stream", ir_var_const_in);
+
+   MAKE_SIG(glsl_type::void_type, avail, 1, stream);
+
+   body.emit(new(mem_ctx) ir_emit_vertex(var_ref(stream)));
 
    return sig;
 }
@@ -3882,7 +3970,28 @@ builtin_builder::_EndPrimitive()
 {
    MAKE_SIG(glsl_type::void_type, gs_only, 0);
 
-   body.emit(new(mem_ctx) ir_end_primitive());
+   ir_rvalue *stream = new(mem_ctx) ir_constant(0, 1);
+   body.emit(new(mem_ctx) ir_end_primitive(stream));
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_EndStreamPrimitive(builtin_available_predicate avail,
+                                     const glsl_type *stream_type)
+{
+   /* Section 8.12 (Geometry Shader Functions) of the GLSL 4.0 spec says:
+    *
+    *     "Completes the current output primitive on stream stream and starts
+    *     a new one. The argument to stream must be a constant integral
+    *     expression."
+    */
+   ir_variable *stream =
+      new(mem_ctx) ir_variable(stream_type, "stream", ir_var_const_in);
+
+   MAKE_SIG(glsl_type::void_type, avail, 1, stream);
+
+   body.emit(new(mem_ctx) ir_end_primitive(var_ref(stream)));
 
    return sig;
 }
@@ -3921,7 +4030,11 @@ builtin_builder::_textureQueryLevels(const glsl_type *sampler_type)
 }
 
 UNOP(dFdx, ir_unop_dFdx, fs_oes_derivatives)
+UNOP(dFdxCoarse, ir_unop_dFdx_coarse, fs_derivative_control)
+UNOP(dFdxFine, ir_unop_dFdx_fine, fs_derivative_control)
 UNOP(dFdy, ir_unop_dFdy, fs_oes_derivatives)
+UNOP(dFdyCoarse, ir_unop_dFdy_coarse, fs_derivative_control)
+UNOP(dFdyFine, ir_unop_dFdy_fine, fs_derivative_control)
 
 ir_function_signature *
 builtin_builder::_fwidth(const glsl_type *type)
@@ -3930,6 +4043,30 @@ builtin_builder::_fwidth(const glsl_type *type)
    MAKE_SIG(type, fs_oes_derivatives, 1, p);
 
    body.emit(ret(add(abs(expr(ir_unop_dFdx, p)), abs(expr(ir_unop_dFdy, p)))));
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_fwidthCoarse(const glsl_type *type)
+{
+   ir_variable *p = in_var(type, "p");
+   MAKE_SIG(type, fs_derivative_control, 1, p);
+
+   body.emit(ret(add(abs(expr(ir_unop_dFdx_coarse, p)),
+                     abs(expr(ir_unop_dFdy_coarse, p)))));
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_fwidthFine(const glsl_type *type)
+{
+   ir_variable *p = in_var(type, "p");
+   MAKE_SIG(type, fs_derivative_control, 1, p);
+
+   body.emit(ret(add(abs(expr(ir_unop_dFdx_fine, p)),
+                     abs(expr(ir_unop_dFdy_fine, p)))));
 
    return sig;
 }
@@ -4196,6 +4333,44 @@ builtin_builder::_mulExtended(const glsl_type *type)
 
    body.emit(assign(msb, imul_high(x, y)));
    body.emit(assign(lsb, mul(x, y)));
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_interpolateAtCentroid(const glsl_type *type)
+{
+   ir_variable *interpolant = in_var(type, "interpolant");
+   interpolant->data.must_be_shader_input = 1;
+   MAKE_SIG(type, fs_gpu_shader5, 1, interpolant);
+
+   body.emit(ret(interpolate_at_centroid(interpolant)));
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_interpolateAtOffset(const glsl_type *type)
+{
+   ir_variable *interpolant = in_var(type, "interpolant");
+   interpolant->data.must_be_shader_input = 1;
+   ir_variable *offset = in_var(glsl_type::vec2_type, "offset");
+   MAKE_SIG(type, fs_gpu_shader5, 2, interpolant, offset);
+
+   body.emit(ret(interpolate_at_offset(interpolant, offset)));
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_interpolateAtSample(const glsl_type *type)
+{
+   ir_variable *interpolant = in_var(type, "interpolant");
+   interpolant->data.must_be_shader_input = 1;
+   ir_variable *sample_num = in_var(glsl_type::int_type, "sample_num");
+   MAKE_SIG(type, fs_gpu_shader5, 2, interpolant, sample_num);
+
+   body.emit(ret(interpolate_at_sample(interpolant, sample_num)));
 
    return sig;
 }
