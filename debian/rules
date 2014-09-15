@@ -303,7 +303,7 @@ binary-arch: install
 	dh_strip $(foreach p,$(nodbgpkg),-p$(p))
 	dh_compress -s
 	dh_fixperms -s
-	dh_makeshlibs -s -- -c4
+	dh_makeshlibs -s -Xgbm_gallium_drm.so -- -c4
 	dh_installdeb -s
 	dh_shlibdeps -s
 	dh_gencontrol -s

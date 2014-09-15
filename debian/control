@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Standards-Version: 3.9.3
 Build-Depends:
- debhelper (>= 8.1.3),
+ debhelper (>= 9),
  quilt (>= 0.40),
  pkg-config,
  libdrm-dev (>= 2.4.56) [!hurd-any],
@@ -37,10 +37,10 @@ Build-Depends:
  libudev-dev [linux-any],
  flex,
  bison,
- llvm-3.5-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
+ llvm-3.5-dev (>= 1:3.5-1) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
  libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
  libwayland-dev (>= 1.2.0) [linux-any],
- libclang-3.5-dev [amd64 i386 armhf],
+ libclang-3.5-dev (>= 1:3.5-1) [amd64 i386 armhf],
  libclc-dev [amd64 i386 armhf],
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
@@ -143,6 +143,7 @@ Depends:
 Provides: libgl-dev, mesag-dev, libgl1-mesa-swrast-dev
 Conflicts: mesa-dev, libgl-dev, mesag3 (<< 3.1-1), nvidia-glx-dev, mesag-dev, libgl1-mesa-swrast-dev
 Replaces: libgl-dev, mesag-dev, libgl1-mesa-swrast-dev
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- development files
  This package provides the development environment required for
  compiling programs with Mesa.  For a complete description of Mesa,
@@ -189,6 +190,7 @@ Architecture: linux-any
 Depends:
  libxatracker2 (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: X acceleration library -- development files
  This package contains the XA (X acceleration) library.  It is used exclusively
  by the X server to do render, copy and video acceleration.
@@ -237,6 +239,7 @@ Depends:
  libgbm1 (= ${binary:Version}),
  libudev-dev,
  ${misc:Depends},
+Multi-Arch: same
 Description: generic buffer management API -- development files
  This package contains the GBM buffer management library.  It provides a
  mechanism for allocating buffers for graphics rendering tied to Mesa.
@@ -306,6 +309,7 @@ Depends:
  libx11-xcb-dev,
  libwayland-dev (>= 1.2.0) [linux-any],
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the EGL API -- development files
  This package contains the development environment required for compiling
  programs against EGL native platform graphics interface library.
@@ -422,6 +426,7 @@ Depends:
  libopenvg1-mesa (= ${binary:Version}),
  libegl1-mesa-dev,
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the OpenVG API -- development files
  This package contains the mesa implementation of the OpenVG 2D acceleration
  library.  OpenVG provides a device independent and vendor-neutral interface
@@ -477,6 +482,7 @@ Depends:
  libgles1-mesa (= ${binary:Version}),
  libegl1-mesa-dev,
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the OpenGL|ES 1.x API -- development files
  OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
  embedded systems - including consoles, phones, appliances and vehicles.
@@ -535,6 +541,7 @@ Depends:
  libgles2-mesa (= ${binary:Version}),
  libegl1-mesa-dev,
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the OpenGL|ES 2.x API -- development files
  OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
  embedded systems - including consoles, phones, appliances and vehicles.
@@ -723,6 +730,7 @@ Depends:
 Conflicts: libgl-dev, libgl1-mesa-dri-dev
 Replaces: libgl-dev, libgl1-mesa-dri-dev
 Provides: libgl-dev, libgl1-mesa-dri-dev
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- GLX development files
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -742,6 +750,7 @@ Depends:
  libx11-dev,
  libdrm-dev (>= 2.4.52) [!hurd-any],
  ${misc:Depends},
+Multi-Arch: same
 Description: Developer documentation for Mesa
  This package includes the specifications for the Mesa-specific OpenGL
  extensions, the complete set of release notes and the development header
@@ -775,6 +784,7 @@ Depends:
 Conflicts: xlibosmesa-dev, libosmesa4-dev, libosmesa-dev
 Replaces: xlibosmesa-dev, libosmesa-dev, libgl1-mesa-swx11-dev (<< 6.5.2), mesa-common-dev (<< 6.5.2)
 Provides: xlibosmesa-dev, libosmesa-dev
+Multi-Arch: same
 Description: Mesa Off-screen rendering extension -- development files
  This package provides the required environment for developing programs
  that use the off-screen rendering extension of Mesa.

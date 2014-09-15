@@ -1,3 +1,21 @@
+mesa (10.3.0~rc3-3) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * Bump llvm-3.5-dev and libclang-3.5-dev to 1:3.5-1, should fix FTBFS on
+    kfreebsd-*.
+  * Bump compat to v9 for changed dh_strip behavior:
+    - dh_strip puts separated debug symbols in a location based on their
+      build-id (Closes: #755921).
+  * Drop redundant libegl1-mesa-drivers.install.linux.in.
+
+  [ Dima Kogan ]
+  * All -dev packages are now Multi-Arch: same (Closes: #689088, #678040).
+
+  [ Julien Cristau ]
+  * Upload clean source without partial Ubuntu alternatives patches (closes: #761678)
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 15 Sep 2014 22:39:15 +0200
+
 mesa (10.3.0~rc3-2) experimental; urgency=medium
 
   [ Andreas Boll ]
