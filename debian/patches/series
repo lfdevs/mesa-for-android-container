@@ -1,1 +1,2 @@
+01_gallium-util-add-missing-u_debug-include.patch
 07_gallium-fix-build-failure-on-powerpcspe.diff

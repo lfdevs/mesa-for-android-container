@@ -1,0 +1,20 @@
+#!/bin/sh
+
+set -e
+
+THIS_PACKAGE=libegl1-mesa
+THIS_SCRIPT=prerm
+
+case "$1" in
+  remove)
+  # Use alternatives to make it easier to switch between Mesa and 3rd party modules
+  update-alternatives --remove x86_64-linux-gnu_egl_conf /usr/lib/x86_64-linux-gnu/mesa-egl/ld.so.conf
+
+  # explicit ldconfig due to alternatives
+  ldconfig
+
+esac
+
+#DEBHELPER#
+
+exit 0

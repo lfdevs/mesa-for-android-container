@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -e
+
+THIS_PACKAGE=libegl1-mesa
+THIS_SCRIPT=postinst
+
+case "$1" in
+  configure)
+  # Use alternatives to make it easier to switch between Mesa and 3rd party modules
+  update-alternatives --force \
+    --install /etc/ld.so.conf.d/x86_64-linux-gnu_EGL.conf x86_64-linux-gnu_egl_conf /usr/lib/x86_64-linux-gnu/mesa-egl/ld.so.conf 500 \
+
+  # ldconfig needs to be run immediately as we're changing /etc/ld.so.conf.d/ with
+  # alternatives.
+  LDCONFIG_NOTRIGGER=y ldconfig
+
+esac
+
+#DEBHELPER#
+
+exit 0

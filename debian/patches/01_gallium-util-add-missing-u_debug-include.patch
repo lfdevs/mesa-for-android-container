@@ -1,0 +1,39 @@
+From 05bd91b0202e06cab998112a3a833c1fa3b47d31 Mon Sep 17 00:00:00 2001
+From: Andreas Boll <andreas.boll.dev@gmail.com>
+Date: Fri, 12 Sep 2014 10:11:24 +0200
+Subject: [PATCH] gallium/util: add missing u_debug include
+
+Needed for assert.
+Fixes build on BE archs with -Werror=implicit-function-declaration.
+
+In file included from
+../../../../../src/gallium/auxiliary/draw/draw_fs.c:30:0:
+../../../../../src/gallium/auxiliary/util/u_math.h: In function
+'util_memcpy_cpu_to_le32':
+../../../../../src/gallium/auxiliary/util/u_math.h:810:4: error:
+implicit declaration of function 'assert'
+[-Werror=implicit-function-declaration]
+    assert(n % 4 == 0);
+        ^
+
+Cc: "10.3" <mesa-stable@lists.freedesktop.org>
+Signed-off-by: Andreas Boll <andreas.boll.dev@gmail.com>
+---
+ src/gallium/auxiliary/util/u_math.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/auxiliary/util/u_math.h b/src/gallium/auxiliary/util/u_math.h
+index 25bcfb5..39bd40f 100644
+--- a/src/gallium/auxiliary/util/u_math.h
++++ b/src/gallium/auxiliary/util/u_math.h
+@@ -40,6 +40,7 @@
+ 
+ 
+ #include "pipe/p_compiler.h"
++#include "util/u_debug.h"
+ 
+ 
+ #ifdef __cplusplus
+-- 
+2.1.0
+

@@ -1,3 +1,16 @@
+mesa (10.3.0~rc3-2) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * Add 01_gallium-util-add-missing-u_debug-include.patch, fixes FTBFS on
+    big endian archs.
+  * Enable --with-egl-platforms=drm on kfreebsd-any, should fix FTBFS.
+  * Don't try to install vdpau hardlinks on hurd, should fix FTBFS.
+
+  [ Fabio Pedretti ]
+  * debian/rules: minor cleanup.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 15 Sep 2014 11:01:55 +0200
+
 mesa (10.3.0~rc3-1) experimental; urgency=medium
 
   [ Maarten Lankhorst ]
