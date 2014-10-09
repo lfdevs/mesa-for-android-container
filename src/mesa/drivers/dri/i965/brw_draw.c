@@ -176,26 +176,19 @@ static void brw_emit_prim(struct brw_context *brw,
 {
    int verts_per_instance;
    int vertex_access_type;
-   int start_vertex_location;
-   int base_vertex_location;
    int indirect_flag;
 
    DBG("PRIM: %s %d %d\n", _mesa_lookup_enum_by_nr(prim->mode),
        prim->start, prim->count);
 
-   start_vertex_location = prim->start;
-   base_vertex_location = prim->basevertex;
    if (prim->indexed) {
       vertex_access_type = brw->gen >= 7 ?
          GEN7_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM :
          GEN4_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM;
-      start_vertex_location += brw->ib.start_vertex_offset;
-      base_vertex_location += brw->vb.start_vertex_bias;
    } else {
       vertex_access_type = brw->gen >= 7 ?
          GEN7_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL :
          GEN4_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL;
-      start_vertex_location += brw->vb.start_vertex_bias;
    }
 
    /* We only need to trim the primitive count on pre-Gen6. */
@@ -270,10 +263,10 @@ static void brw_emit_prim(struct brw_context *brw,
                 vertex_access_type);
    }
    OUT_BATCH(verts_per_instance);
-   OUT_BATCH(start_vertex_location);
+   OUT_BATCH(brw->draw.start_vertex_location);
    OUT_BATCH(prim->num_instances);
    OUT_BATCH(prim->base_instance);
-   OUT_BATCH(base_vertex_location);
+   OUT_BATCH(brw->draw.base_vertex_location);
    ADVANCE_BATCH();
 
    /* Only used on Sandybridge; harmless to set elsewhere. */
@@ -436,12 +429,35 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
             brw_merge_inputs(brw, arrays);
          }
       }
+
+      brw->draw.indexed = prims[i].indexed;
+      brw->draw.start_vertex_location = prims[i].start;
+      brw->draw.base_vertex_location = prims[i].basevertex;
+
+      drm_intel_bo_unreference(brw->draw.draw_params_bo);
+
+      if (prims[i].is_indirect) {
+         /* Point draw_params_bo at the indirect buffer. */
+         brw->draw.draw_params_bo =
+            intel_buffer_object(ctx->DrawIndirectBuffer)->buffer;
+         drm_intel_bo_reference(brw->draw.draw_params_bo);
+         brw->draw.draw_params_offset =
+            prims[i].indirect_offset + (prims[i].indexed ? 12 : 8);
+      } else {
+         /* Set draw_params_bo to NULL so brw_prepare_vertices knows it
+          * has to upload gl_BaseVertex and such if they're needed.
+          */
+         brw->draw.draw_params_bo = NULL;
+         brw->draw.draw_params_offset = 0;
+      }
+
       if (brw->gen < 6)
 	 brw_set_prim(brw, &prims[i]);
       else
 	 gen6_set_prim(brw, &prims[i]);
 
 retry:
+
       /* Note that before the loop, brw->state.dirty.brw was set to != 0, and
        * that the state updated in the loop outside of this block is that in
        * *_set_prim or intel_batchbuffer_flush(), which only impacts

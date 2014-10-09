@@ -1,3 +1,22 @@
+mesa (10.3.0-2) experimental; urgency=medium
+
+  * Add missing Replaces/Breaks for the gallium-pipe move.
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 10 Oct 2014 00:09:47 +0200
+
+mesa (10.3.0-1) experimental; urgency=medium
+
+  [ Maarten Lankhorst ]
+  * New upstream release.
+  * Remove upstreamed patch.
+    - 01_gallium-util-add-missing-u_debug-include.patch
+
+  [ Andreas Boll ]
+  * Move gallium-pipe installation from libgl1-mesa-dri.install.linux.in
+    to mesa-opencl-icd.install.in, because it's only needed for opencl.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 08 Oct 2014 10:30:05 +0200
+
 mesa (10.3.0~rc3-3) experimental; urgency=medium
 
   [ Andreas Boll ]

@@ -588,10 +588,10 @@ type_size(const struct glsl_type *type)
       }
       return size;
    case GLSL_TYPE_SAMPLER:
-      /* Samplers take up one slot in UNIFORMS[], but they're baked in
-       * at link time.
+      /* Samplers take up no register space, since they're baked in at
+       * link time.
        */
-      return 1;
+      return 0;
    case GLSL_TYPE_ATOMIC_UINT:
       return 0;
    case GLSL_TYPE_IMAGE:
@@ -776,7 +776,7 @@ vec4_visitor::emit_bool_to_cond_code(ir_rvalue *ir,
 
    *predicate = BRW_PREDICATE_NORMAL;
 
-   if (expr) {
+   if (expr && expr->operation != ir_binop_ubo_load) {
       src_reg op[3];
       vec4_instruction *inst;
 
@@ -897,11 +897,11 @@ vec4_visitor::emit_if_gen6(ir_if *ir)
 {
    ir_expression *expr = ir->condition->as_expression();
 
-   if (expr) {
-      src_reg op[2];
+   if (expr && expr->operation != ir_binop_ubo_load) {
+      src_reg op[3];
       dst_reg temp;
 
-      assert(expr->get_num_operands() <= 2);
+      assert(expr->get_num_operands() <= 3);
       for (unsigned int i = 0; i < expr->get_num_operands(); i++) {
 	 expr->operands[i]->accept(this);
 	 op[i] = this->result;
@@ -961,6 +961,20 @@ vec4_visitor::emit_if_gen6(ir_if *ir)
 	 emit(IF(BRW_PREDICATE_ALIGN16_ANY4H));
 	 return;
 
+      case ir_triop_csel: {
+         /* Expand the boolean condition into the flag register. */
+         vec4_instruction *inst = emit(MOV(dst_null_d(), op[0]));
+         inst->conditional_mod = BRW_CONDITIONAL_NZ;
+
+         /* Select which boolean to return. */
+         dst_reg temp(this, expr->operands[1]->type);
+         inst = emit(BRW_OPCODE_SEL, temp, op[1], op[2]);
+         inst->predicate = BRW_PREDICATE_NORMAL;
+
+         emit(IF(src_reg(temp), src_reg(0), BRW_CONDITIONAL_NZ));
+         return;
+      }
+
       default:
 	 unreachable("not reached");
       }
@@ -1009,10 +1023,10 @@ vec4_visitor::visit(ir_variable *ir)
        * ir_binop_ubo_load expressions and not ir_dereference_variable for UBO
        * variables, so no need for them to be in variable_ht.
        *
-       * Atomic counters take no uniform storage, no need to do
-       * anything here.
+       * Some uniforms, such as samplers and atomic counters, have no actual
+       * storage, so we should ignore them.
        */
-      if (ir->is_in_uniform_block() || ir->type->contains_atomic())
+      if (ir->is_in_uniform_block() || type_size(ir->type) == 0)
          return;
 
       /* Track how big the whole uniform variable is, in case we need to put a

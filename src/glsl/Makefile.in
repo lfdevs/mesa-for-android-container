@@ -165,12 +165,12 @@ am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	lower_variable_index_to_cond_assign.lo \
 	lower_vec_index_to_cond_assign.lo \
 	lower_vec_index_to_swizzle.lo lower_vector.lo \
-	lower_vector_insert.lo lower_output_reads.lo \
-	lower_ubo_reference.lo opt_algebraic.lo opt_array_splitting.lo \
-	opt_constant_folding.lo opt_constant_propagation.lo \
-	opt_constant_variable.lo opt_copy_propagation.lo \
-	opt_copy_propagation_elements.lo opt_cse.lo \
-	opt_dead_builtin_varyings.lo opt_dead_code.lo \
+	lower_vector_insert.lo lower_vertex_id.lo \
+	lower_output_reads.lo lower_ubo_reference.lo opt_algebraic.lo \
+	opt_array_splitting.lo opt_constant_folding.lo \
+	opt_constant_propagation.lo opt_constant_variable.lo \
+	opt_copy_propagation.lo opt_copy_propagation_elements.lo \
+	opt_cse.lo opt_dead_builtin_varyings.lo opt_dead_code.lo \
 	opt_dead_code_local.lo opt_dead_functions.lo \
 	opt_flatten_nested_if_blocks.lo opt_flip_matrices.lo \
 	opt_function_inlining.lo opt_if_simplification.lo \
@@ -869,6 +869,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/lower_vec_index_to_swizzle.cpp \
 	$(GLSL_SRCDIR)/lower_vector.cpp \
 	$(GLSL_SRCDIR)/lower_vector_insert.cpp \
+	$(GLSL_SRCDIR)/lower_vertex_id.cpp \
 	$(GLSL_SRCDIR)/lower_output_reads.cpp \
 	$(GLSL_SRCDIR)/lower_ubo_reference.cpp \
 	$(GLSL_SRCDIR)/opt_algebraic.cpp \
@@ -1235,6 +1236,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vec_index_to_swizzle.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vector_insert.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vertex_id.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_algebraic.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_array_splitting.Plo@am__quote@
@@ -2003,6 +2005,13 @@ lower_vector_insert.lo: $(GLSL_SRCDIR)/lower_vector_insert.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/lower_vector_insert.cpp' object='lower_vector_insert.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o lower_vector_insert.lo `test -f '$(GLSL_SRCDIR)/lower_vector_insert.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_vector_insert.cpp
+
+lower_vertex_id.lo: $(GLSL_SRCDIR)/lower_vertex_id.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT lower_vertex_id.lo -MD -MP -MF $(DEPDIR)/lower_vertex_id.Tpo -c -o lower_vertex_id.lo `test -f '$(GLSL_SRCDIR)/lower_vertex_id.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_vertex_id.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/lower_vertex_id.Tpo $(DEPDIR)/lower_vertex_id.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/lower_vertex_id.cpp' object='lower_vertex_id.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o lower_vertex_id.lo `test -f '$(GLSL_SRCDIR)/lower_vertex_id.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_vertex_id.cpp
 
 lower_output_reads.lo: $(GLSL_SRCDIR)/lower_output_reads.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT lower_output_reads.lo -MD -MP -MF $(DEPDIR)/lower_output_reads.Tpo -c -o lower_output_reads.lo `test -f '$(GLSL_SRCDIR)/lower_output_reads.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_output_reads.cpp

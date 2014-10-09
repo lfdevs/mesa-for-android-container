@@ -78,10 +78,10 @@ struct mpeg4_picparm_vp {
 	uint8_t top_field_first; // bool, written to vuc
 
 	uint8_t pad4[3]; // 59, 5a, 5b, contains garbage on blob
-	uint32_t pad5[0x10]; // 5c...9c non-inclusive, but WHY?
 
-	uint32_t intra[0x10]; // 9c
-	uint32_t non_intra[0x10]; // bc
+	uint32_t intra[0x10]; // 5c
+	uint32_t non_intra[0x10]; // 9c
+	uint32_t pad5[0x10]; // bc what does this do?
 	// udc..uff pad?
 };
 
@@ -196,11 +196,15 @@ nouveau_vp3_handle_references(struct nouveau_vp3_decoder *dec, struct nouveau_vp
    /* Try to find a real empty spot first, there should be one..
     */
    for (i = 0; i < dec->base.max_references + 1; ++i) {
-      if (dec->refs[i].last_used != seq) {
+      if (dec->refs[i].vidbuf == target) {
          empty_spot = i;
          break;
-      }
+      } else if (!dec->refs[i].last_used) {
+         empty_spot = i;
+      } else if (empty_spot == ~0U && dec->refs[i].last_used != seq)
+         empty_spot = i;
    }
+
    assert(empty_spot < dec->base.max_references+1);
    dec->refs[empty_spot].last_used = seq;
 //   debug_printf("Kicked %p to add %p to slot %i\n", dec->refs[empty_spot].vidbuf, target, empty_spot);
@@ -267,7 +271,6 @@ nouveau_vp3_fill_picparm_mpeg4_vp(struct nouveau_vp3_decoder *dec,
 {
    struct mpeg4_picparm_vp pic_vp_stub = {}, *pic_vp = &pic_vp_stub;
    uint32_t ring, ret = 0x01014; // !async_shutdown << 16 | watchdog << 12 | irq_record << 4 | unk;
-   assert(!(dec->base.width & 0xf));
    *is_ref = desc->vop_coding_type <= 1;
 
    pic_vp->width = dec->base.width;
@@ -463,14 +466,45 @@ void nouveau_vp3_vp_caps(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
    case PIPE_VIDEO_FORMAT_MPEG12:
       *caps = nouveau_vp3_fill_picparm_mpeg12_vp(dec, desc.mpeg12, refs, is_ref, vp);
       nouveau_vp3_handle_references(dec, refs, dec->fence_seq, target);
+      switch (desc.mpeg12->picture_structure) {
+      case PIPE_MPEG12_PICTURE_STRUCTURE_FIELD_TOP:
+         dec->refs[target->valid_ref].decoded_top = 1;
+         break;
+      case PIPE_MPEG12_PICTURE_STRUCTURE_FIELD_BOTTOM:
+         dec->refs[target->valid_ref].decoded_bottom = 1;
+         break;
+      default:
+         dec->refs[target->valid_ref].decoded_top = 1;
+         dec->refs[target->valid_ref].decoded_bottom = 1;
+         break;
+      }
       return;
    case PIPE_VIDEO_FORMAT_MPEG4:
       *caps = nouveau_vp3_fill_picparm_mpeg4_vp(dec, desc.mpeg4, refs, is_ref, vp);
       nouveau_vp3_handle_references(dec, refs, dec->fence_seq, target);
+      // XXX: Correct?
+      if (!desc.mpeg4->interlaced) {
+         dec->refs[target->valid_ref].decoded_top = 1;
+         dec->refs[target->valid_ref].decoded_bottom = 1;
+      } else if (desc.mpeg4->top_field_first) {
+         if (!dec->refs[target->valid_ref].decoded_top)
+            dec->refs[target->valid_ref].decoded_top = 1;
+         else
+            dec->refs[target->valid_ref].decoded_bottom = 1;
+      } else {
+         if (!dec->refs[target->valid_ref].decoded_bottom)
+            dec->refs[target->valid_ref].decoded_bottom = 1;
+         else
+            dec->refs[target->valid_ref].decoded_top = 1;
+      }
       return;
    case PIPE_VIDEO_FORMAT_VC1: {
       *caps = nouveau_vp3_fill_picparm_vc1_vp(dec, desc.vc1, refs, is_ref, vp);
       nouveau_vp3_handle_references(dec, refs, dec->fence_seq, target);
+      if (desc.vc1->frame_coding_mode == 3)
+         debug_printf("Field-Interlaced possibly incorrectly handled\n");
+      dec->refs[target->valid_ref].decoded_top = 1;
+      dec->refs[target->valid_ref].decoded_bottom = 1;
       return;
    }
    case PIPE_VIDEO_FORMAT_MPEG4_AVC: {

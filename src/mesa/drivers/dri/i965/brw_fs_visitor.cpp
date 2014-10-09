@@ -109,10 +109,10 @@ fs_visitor::visit(ir_variable *ir)
        * ir_binop_ubo_load expressions and not ir_dereference_variable for UBO
        * variables, so no need for them to be in variable_ht.
        *
-       * Atomic counters take no uniform storage, no need to do
-       * anything here.
+       * Some uniforms, such as samplers and atomic counters, have no actual
+       * storage, so we should ignore them.
        */
-      if (ir->is_in_uniform_block() || ir->type->contains_atomic())
+      if (ir->is_in_uniform_block() || type_size(ir->type) == 0)
          return;
 
       if (dispatch_width == 16) {
@@ -2238,7 +2238,7 @@ fs_visitor::emit_bool_to_cond_code(ir_rvalue *ir)
 {
    ir_expression *expr = ir->as_expression();
 
-   if (!expr) {
+   if (!expr || expr->operation == ir_binop_ubo_load) {
       ir->accept(this);
 
       fs_inst *inst = emit(AND(reg_null_d, this->result, fs_reg(1)));
@@ -2366,12 +2366,12 @@ fs_visitor::emit_if_gen6(ir_if *ir)
 {
    ir_expression *expr = ir->condition->as_expression();
 
-   if (expr) {
-      fs_reg op[2];
+   if (expr && expr->operation != ir_binop_ubo_load) {
+      fs_reg op[3];
       fs_inst *inst;
       fs_reg temp;
 
-      assert(expr->get_num_operands() <= 2);
+      assert(expr->get_num_operands() <= 3);
       for (unsigned int i = 0; i < expr->get_num_operands(); i++) {
 	 assert(expr->operands[i]->type->is_scalar());
 
@@ -2415,6 +2415,21 @@ fs_visitor::emit_if_gen6(ir_if *ir)
 	 emit(IF(op[0], op[1],
                  brw_conditional_for_comparison(expr->operation)));
 	 return;
+
+      case ir_triop_csel: {
+         /* Expand the boolean condition into the flag register. */
+         fs_inst *inst = emit(MOV(reg_null_d, op[0]));
+         inst->conditional_mod = BRW_CONDITIONAL_NZ;
+
+         /* Select which boolean to use as the result. */
+         fs_reg temp(this, expr->operands[1]->type);
+         inst = emit(SEL(temp, op[1], op[2]));
+         inst->predicate = BRW_PREDICATE_NORMAL;
+
+	 emit(IF(temp, fs_reg(0), BRW_CONDITIONAL_NZ));
+	 return;
+      }
+
       default:
 	 unreachable("not reached");
       }

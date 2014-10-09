@@ -604,16 +604,83 @@ brw_prepare_vertices(struct brw_context *brw)
    brw->vb.nr_buffers = j;
 }
 
-static void brw_emit_vertices(struct brw_context *brw)
+void
+brw_prepare_shader_draw_parameters(struct brw_context *brw)
+{
+   int *gl_basevertex_value;
+   if (brw->draw.indexed) {
+      brw->draw.start_vertex_location += brw->ib.start_vertex_offset;
+      brw->draw.base_vertex_location += brw->vb.start_vertex_bias;
+      gl_basevertex_value = &brw->draw.base_vertex_location;
+   } else {
+      brw->draw.start_vertex_location += brw->vb.start_vertex_bias;
+      gl_basevertex_value = &brw->draw.start_vertex_location;
+   }
+
+   /* For non-indirect draws, upload gl_BaseVertex. */
+   if (brw->vs.prog_data->uses_vertexid && brw->draw.draw_params_bo == NULL) {
+      intel_upload_data(brw, gl_basevertex_value, 4, 4,
+			&brw->draw.draw_params_bo,
+                        &brw->draw.draw_params_offset);
+   }
+}
+
+/**
+ * Emit a VERTEX_BUFFER_STATE entry (part of 3DSTATE_VERTEX_BUFFERS).
+ */
+static void
+emit_vertex_buffer_state(struct brw_context *brw,
+                         unsigned buffer_nr,
+                         drm_intel_bo *bo,
+                         unsigned bo_ending_address,
+                         unsigned bo_offset,
+                         unsigned stride,
+                         unsigned step_rate)
 {
    struct gl_context *ctx = &brw->ctx;
-   GLuint i, nr_elements;
+   uint32_t dw0;
+
+   if (brw->gen >= 6) {
+      dw0 = (buffer_nr << GEN6_VB0_INDEX_SHIFT) |
+            (step_rate ? GEN6_VB0_ACCESS_INSTANCEDATA
+                       : GEN6_VB0_ACCESS_VERTEXDATA);
+   } else {
+      dw0 = (buffer_nr << BRW_VB0_INDEX_SHIFT) |
+            (step_rate ? BRW_VB0_ACCESS_INSTANCEDATA
+                       : BRW_VB0_ACCESS_VERTEXDATA);
+   }
+
+   if (brw->gen >= 7)
+      dw0 |= GEN7_VB0_ADDRESS_MODIFYENABLE;
+
+   if (brw->gen == 7)
+      dw0 |= GEN7_MOCS_L3 << 16;
+
+   WARN_ONCE(stride >= (brw->gen >= 5 ? 2048 : 2047),
+             "VBO stride %d too large, bad rendering may occur\n",
+             stride);
+   OUT_BATCH(dw0 | (stride << BRW_VB0_PITCH_SHIFT));
+   OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0, bo_offset);
+   if (brw->gen >= 5) {
+      OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0, bo_ending_address);
+   } else {
+      OUT_BATCH(0);
+   }
+   OUT_BATCH(step_rate);
+}
+
+static void brw_emit_vertices(struct brw_context *brw)
+{
+   GLuint i;
 
    brw_prepare_vertices(brw);
+   brw_prepare_shader_draw_parameters(brw);
 
    brw_emit_query_begin(brw);
 
-   nr_elements = brw->vb.nr_enabled + brw->vs.prog_data->uses_vertexid;
+   unsigned nr_elements = brw->vb.nr_enabled;
+   if (brw->vs.prog_data->uses_vertexid || brw->vs.prog_data->uses_instanceid)
+      ++nr_elements;
 
    /* If the VS doesn't read any inputs (calculating vertex position from
     * a state variable for some reason, for example), emit a single pad
@@ -647,47 +714,33 @@ static void brw_emit_vertices(struct brw_context *brw)
    /* Now emit VB and VEP state packets.
     */
 
-   if (brw->vb.nr_buffers) {
+   unsigned nr_buffers =
+      brw->vb.nr_buffers + brw->vs.prog_data->uses_vertexid;
+
+   if (nr_buffers) {
       if (brw->gen >= 6) {
-	 assert(brw->vb.nr_buffers <= 33);
+	 assert(nr_buffers <= 33);
       } else {
-	 assert(brw->vb.nr_buffers <= 17);
+	 assert(nr_buffers <= 17);
       }
 
-      BEGIN_BATCH(1 + 4*brw->vb.nr_buffers);
-      OUT_BATCH((_3DSTATE_VERTEX_BUFFERS << 16) | (4*brw->vb.nr_buffers - 1));
+      BEGIN_BATCH(1 + 4 * nr_buffers);
+      OUT_BATCH((_3DSTATE_VERTEX_BUFFERS << 16) | (4 * nr_buffers - 1));
       for (i = 0; i < brw->vb.nr_buffers; i++) {
 	 struct brw_vertex_buffer *buffer = &brw->vb.buffers[i];
-	 uint32_t dw0;
+         emit_vertex_buffer_state(brw, i, buffer->bo, buffer->bo->size - 1,
+                                  buffer->offset, buffer->stride,
+                                  buffer->step_rate);
 
-	 if (brw->gen >= 6) {
-	    dw0 = buffer->step_rate
-	             ? GEN6_VB0_ACCESS_INSTANCEDATA
-	             : GEN6_VB0_ACCESS_VERTEXDATA;
-	    dw0 |= i << GEN6_VB0_INDEX_SHIFT;
-	 } else {
-	    dw0 = buffer->step_rate
-	             ? BRW_VB0_ACCESS_INSTANCEDATA
-	             : BRW_VB0_ACCESS_VERTEXDATA;
-	    dw0 |= i << BRW_VB0_INDEX_SHIFT;
-	 }
+      }
 
-	 if (brw->gen >= 7)
-	    dw0 |= GEN7_VB0_ADDRESS_MODIFYENABLE;
-
-         if (brw->gen == 7)
-	    dw0 |= GEN7_MOCS_L3 << 16;
-
-         WARN_ONCE(buffer->stride >= (brw->gen >= 5 ? 2048 : 2047),
-                   "VBO stride %d too large, bad rendering may occur\n",
-                   buffer->stride);
-	 OUT_BATCH(dw0 | (buffer->stride << BRW_VB0_PITCH_SHIFT));
-	 OUT_RELOC(buffer->bo, I915_GEM_DOMAIN_VERTEX, 0, buffer->offset);
-	 if (brw->gen >= 5) {
-	    OUT_RELOC(buffer->bo, I915_GEM_DOMAIN_VERTEX, 0, buffer->bo->size - 1);
-	 } else
-	    OUT_BATCH(0);
-	 OUT_BATCH(buffer->step_rate);
+      if (brw->vs.prog_data->uses_vertexid) {
+         emit_vertex_buffer_state(brw, brw->vb.nr_buffers,
+                                  brw->draw.draw_params_bo,
+                                  brw->draw.draw_params_bo->size - 1,
+                                  brw->draw.draw_params_offset,
+                                  0,  /* stride */
+                                  0); /* step rate */
       }
       ADVANCE_BATCH();
    }
@@ -773,18 +826,35 @@ static void brw_emit_vertices(struct brw_context *brw)
                 (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
    }
 
-   if (brw->vs.prog_data->uses_vertexid) {
+   if (brw->vs.prog_data->uses_vertexid || brw->vs.prog_data->uses_instanceid) {
       uint32_t dw0 = 0, dw1 = 0;
+      uint32_t comp0 = BRW_VE1_COMPONENT_STORE_0;
+      uint32_t comp1 = BRW_VE1_COMPONENT_STORE_0;
+      uint32_t comp2 = BRW_VE1_COMPONENT_STORE_0;
+      uint32_t comp3 = BRW_VE1_COMPONENT_STORE_0;
 
-      dw1 = ((BRW_VE1_COMPONENT_STORE_VID << BRW_VE1_COMPONENT_0_SHIFT) |
-	     (BRW_VE1_COMPONENT_STORE_IID << BRW_VE1_COMPONENT_1_SHIFT) |
-	     (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
-	     (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
+      if (brw->vs.prog_data->uses_vertexid) {
+         comp0 = BRW_VE1_COMPONENT_STORE_SRC;
+         comp2 = BRW_VE1_COMPONENT_STORE_VID;
+      }
+
+      if (brw->vs.prog_data->uses_instanceid) {
+         comp3 = BRW_VE1_COMPONENT_STORE_IID;
+      }
+
+      dw1 = (comp0 << BRW_VE1_COMPONENT_0_SHIFT) |
+            (comp1 << BRW_VE1_COMPONENT_1_SHIFT) |
+            (comp2 << BRW_VE1_COMPONENT_2_SHIFT) |
+            (comp3 << BRW_VE1_COMPONENT_3_SHIFT);
 
       if (brw->gen >= 6) {
-	 dw0 |= GEN6_VE0_VALID;
+         dw0 |= GEN6_VE0_VALID |
+                brw->vb.nr_buffers << GEN6_VE0_INDEX_SHIFT |
+                BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT;
       } else {
-	 dw0 |= BRW_VE0_VALID;
+         dw0 |= BRW_VE0_VALID |
+                brw->vb.nr_buffers << BRW_VE0_INDEX_SHIFT |
+                BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT;
 	 dw1 |= (i * 4) << BRW_VE1_DST_OFFSET_SHIFT;
       }
 

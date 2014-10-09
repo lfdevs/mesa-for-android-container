@@ -835,6 +835,10 @@ Depends:
  ocl-icd-libopencl1 | libopencl1,
  ${shlibs:Depends},
  ${misc:Depends},
+Replaces:
+ libgl1-mesa-dri (<< 10.3.0-1),
+Breaks:
+ libgl1-mesa-dri (<< 10.3.0-1),
 Provides: opencl-icd
 Description: free implementation of the OpenCL API -- ICD runtime
  This package contains the mesa implementation of the OpenCL (Open Compute
