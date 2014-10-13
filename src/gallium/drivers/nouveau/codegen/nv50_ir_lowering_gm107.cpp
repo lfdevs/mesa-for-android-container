@@ -58,6 +58,7 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
    Value *zero = bld.loadImm(bld.getSSA(), 0);
    int l, c;
    const int dim = i->tex.target.getDim();
+   const int array = i->tex.target.isArray();
 
    i->op = OP_TEX; // no need to clone dPdx/dPdy later
 
@@ -69,7 +70,7 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
       // mov coordinates from lane l to all lanes
       bld.mkOp(OP_QUADON, TYPE_NONE, NULL);
       for (c = 0; c < dim; ++c) {
-         bld.mkOp2(OP_SHFL, TYPE_F32, crd[c], i->getSrc(c), bld.mkImm(l));
+         bld.mkOp2(OP_SHFL, TYPE_F32, crd[c], i->getSrc(c + array), bld.mkImm(l));
          add = bld.mkOp2(OP_QUADOP, TYPE_F32, crd[c], crd[c], zero);
          add->subOp = 0x00;
          add->lanes = 1; /* abused for .ndv */
@@ -94,7 +95,7 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
       // texture
       bld.insert(tex = cloneForward(func, i));
       for (c = 0; c < dim; ++c)
-         tex->setSrc(c, crd[c]);
+         tex->setSrc(c + array, crd[c]);
       bld.mkOp(OP_QUADPOP, TYPE_NONE, NULL);
 
       // save results
@@ -158,7 +159,10 @@ GM107LoweringPass::handlePFETCH(Instruction *i)
    bld.mkOp2(OP_SHR , TYPE_U32, tmp1, tmp0, bld.mkImm(16));
    bld.mkOp2(OP_AND , TYPE_U32, tmp0, tmp0, bld.mkImm(0xff));
    bld.mkOp2(OP_AND , TYPE_U32, tmp1, tmp1, bld.mkImm(0xff));
-   bld.mkOp1(OP_MOV , TYPE_U32, tmp2, bld.mkImm(i->getSrc(0)->reg.data.u32));
+   if (i->getSrc(1))
+      bld.mkOp2(OP_ADD , TYPE_U32, tmp2, i->getSrc(0), i->getSrc(1));
+   else
+      bld.mkOp1(OP_MOV , TYPE_U32, tmp2, i->getSrc(0));
    bld.mkOp3(OP_MAD , TYPE_U32, tmp0, tmp0, tmp1, tmp2);
    i->setSrc(0, tmp0);
    i->setSrc(1, NULL);
@@ -239,6 +243,20 @@ GM107LoweringPass::visit(Instruction *i)
          } else {
             i->op = OP_VFETCH;
             assert(prog->getType() != Program::TYPE_FRAGMENT); // INTERP
+         }
+      } else if (i->src(0).getFile() == FILE_MEMORY_CONST) {
+         if (i->src(0).isIndirect(1)) {
+            Value *ptr;
+            if (i->src(0).isIndirect(0))
+               ptr = bld.mkOp3v(OP_INSBF, TYPE_U32, bld.getSSA(),
+                                i->getIndirect(0, 1), bld.mkImm(0x1010),
+                                i->getIndirect(0, 0));
+            else
+               ptr = bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                                i->getIndirect(0, 1), bld.mkImm(16));
+            i->setIndirect(0, 1, NULL);
+            i->setIndirect(0, 0, ptr);
+            i->subOp = NV50_IR_SUBOP_LDC_IS;
          }
       }
       break;

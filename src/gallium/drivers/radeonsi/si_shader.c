@@ -2894,5 +2894,9 @@ out:
 
 void si_pipe_shader_destroy(struct pipe_context *ctx, struct si_pipe_shader *shader)
 {
+	if (shader->gs_copy_shader)
+		si_pipe_shader_destroy(ctx, shader->gs_copy_shader);
+
 	r600_resource_reference(&shader->bo, NULL);
+	r600_resource_reference(&shader->scratch_bo, NULL);
 }

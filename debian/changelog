@@ -1,3 +1,11 @@
+mesa (10.3.1-1) unstable; urgency=medium
+
+  * Build libgbm on kfreebsd (fixes FTBFS).
+  * New upstream stable release.
+  * Upload to unstable.
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 13 Oct 2014 17:56:27 +0200
+
 mesa (10.3.0-2) experimental; urgency=medium
 
   * Add missing Replaces/Breaks for the gallium-pipe move.

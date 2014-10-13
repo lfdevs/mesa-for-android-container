@@ -39,6 +39,8 @@ static void si_destroy_context(struct pipe_context *context)
 
 	si_release_all_descriptors(sctx);
 
+	pipe_resource_reference(&sctx->esgs_ring.buffer, NULL);
+	pipe_resource_reference(&sctx->gsvs_ring.buffer, NULL);
 	pipe_resource_reference(&sctx->null_const_buf.buffer, NULL);
 	r600_resource_reference(&sctx->border_color_table, NULL);
 

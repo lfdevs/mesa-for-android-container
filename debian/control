@@ -202,7 +202,7 @@ Description: X acceleration library -- development files
 
 Package: libgbm1
 Section: libs
-Architecture: linux-any
+Architecture: linux-any kfreebsd-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -218,7 +218,7 @@ Description: generic buffer management API -- runtime
 Package: libgbm1-dbg
 Section: debug
 Priority: extra
-Architecture: linux-any
+Architecture: linux-any kfreebsd-any
 Depends:
  libgbm1 (= ${binary:Version}),
  ${misc:Depends},
@@ -234,10 +234,10 @@ Description: generic buffer management API -- debugging symbols
 
 Package: libgbm-dev
 Section: libdevel
-Architecture: linux-any
+Architecture: linux-any kfreebsd-any
 Depends:
  libgbm1 (= ${binary:Version}),
- libudev-dev,
+ libudev-dev [linux-any],
  ${misc:Depends},
 Multi-Arch: same
 Description: generic buffer management API -- development files
