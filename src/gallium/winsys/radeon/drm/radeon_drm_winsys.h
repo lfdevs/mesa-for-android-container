@@ -41,6 +41,8 @@ enum radeon_generation {
     DRV_SI
 };
 
+#define RADEON_NUM_CACHE_MANAGERS 8
+
 struct radeon_drm_winsys {
     struct radeon_winsys base;
     struct pipe_reference reference;
@@ -58,10 +60,8 @@ struct radeon_drm_winsys {
     uint32_t accel_working2;
 
     struct pb_manager *kman;
-    struct pb_manager *cman_vram;
-    struct pb_manager *cman_vram_gtt_wc;
-    struct pb_manager *cman_gtt;
-    struct pb_manager *cman_gtt_wc;
+    struct pb_manager *cman_vram[RADEON_NUM_CACHE_MANAGERS];
+    struct pb_manager *cman_gtt[RADEON_NUM_CACHE_MANAGERS];
     struct radeon_surface_manager *surf_man;
 
     uint32_t num_cpus;      /* Number of CPUs. */

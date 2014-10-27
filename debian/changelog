@@ -1,3 +1,11 @@
+mesa (10.3.2-1) unstable; urgency=medium
+
+  [ Sven Joachim ]
+  * New upstream stable release.
+    - Fixes crashes in vdpau with the r600g driver (Closes: #766058).
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 27 Oct 2014 11:40:24 +0100
+
 mesa (10.3.1-1) unstable; urgency=medium
 
   * Build libgbm on kfreebsd (fixes FTBFS).

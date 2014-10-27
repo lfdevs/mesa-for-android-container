@@ -158,8 +158,10 @@ static void r600_bind_blend_state(struct pipe_context *ctx, void *state)
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_blend_state *blend = (struct r600_blend_state *)state;
 
-	if (blend == NULL)
+	if (blend == NULL) {
+		r600_set_cso_state_with_cb(&rctx->blend_state, NULL, NULL);
 		return;
+	}
 
 	r600_bind_blend_state_internal(rctx, blend, rctx->force_blend_disable);
 }
@@ -447,7 +449,12 @@ static void r600_delete_sampler_state(struct pipe_context *ctx, void *state)
 
 static void r600_delete_blend_state(struct pipe_context *ctx, void *state)
 {
+	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_blend_state *blend = (struct r600_blend_state*)state;
+
+	if (rctx->blend_state.cso == state) {
+		ctx->bind_blend_state(ctx, NULL);
+	}
 
 	r600_release_command_buffer(&blend->buffer);
 	r600_release_command_buffer(&blend->buffer_no_blend);

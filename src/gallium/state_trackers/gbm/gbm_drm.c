@@ -85,7 +85,7 @@ gbm_gallium_drm_is_format_supported(struct gbm_device *gbm,
    if (pf == PIPE_FORMAT_NONE)
       return 0;
 
-   if (!gdrm->screen->is_format_supported(gdrm->screen, PIPE_TEXTURE_2D, pf, 0,
+   if (!gdrm->screen->is_format_supported(gdrm->screen, pf, PIPE_TEXTURE_2D, 0,
                                           gbm_usage_to_gallium(usage)))
       return 0;
 

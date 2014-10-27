@@ -4818,15 +4818,19 @@ emit_wpos(struct st_context *st,
  * saturating the value to [0,1] does the job.
  */
 static void
-emit_face_var(struct st_translate *t)
+emit_face_var(struct gl_context *ctx, struct st_translate *t)
 {
    struct ureg_program *ureg = t->ureg;
    struct ureg_dst face_temp = ureg_DECL_temporary(ureg);
    struct ureg_src face_input = t->inputs[t->inputMapping[VARYING_SLOT_FACE]];
 
-   /* MOV_SAT face_temp, input[face] */
-   face_temp = ureg_saturate(face_temp);
-   ureg_MOV(ureg, face_temp, face_input);
+   if (ctx->Const.NativeIntegers) {
+      ureg_FSGE(ureg, face_temp, face_input, ureg_imm1f(ureg, 0));
+   }
+   else {
+      /* MOV_SAT face_temp, input[face] */
+      ureg_MOV(ureg, ureg_saturate(face_temp), face_input);
+   }
 
    /* Use face_temp as face input from here on: */
    t->inputs[t->inputMapping[VARYING_SLOT_FACE]] = ureg_src(face_temp);
@@ -4946,7 +4950,7 @@ st_translate_program(
       }
 
       if (proginfo->InputsRead & VARYING_BIT_FACE)
-         emit_face_var(t);
+         emit_face_var(ctx, t);
 
       /*
        * Declare output attributes.

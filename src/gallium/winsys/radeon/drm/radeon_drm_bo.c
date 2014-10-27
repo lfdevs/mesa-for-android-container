@@ -811,17 +811,12 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
     desc.flags = flags;
 
     /* Assign a buffer manager. */
+    assert(flags < RADEON_NUM_CACHE_MANAGERS);
     if (use_reusable_pool) {
-        if (domain == RADEON_DOMAIN_VRAM) {
-            if (flags & RADEON_FLAG_GTT_WC)
-                provider = ws->cman_vram_gtt_wc;
-            else
-                provider = ws->cman_vram;
-        } else if (flags & RADEON_FLAG_GTT_WC) {
-            provider = ws->cman_gtt_wc;
-        } else {
-            provider = ws->cman_gtt;
-        }
+        if (domain == RADEON_DOMAIN_VRAM)
+            provider = ws->cman_vram[flags];
+        else
+            provider = ws->cman_gtt[flags];
     } else {
         provider = ws->kman;
     }

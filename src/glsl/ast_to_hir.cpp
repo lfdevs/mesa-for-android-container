@@ -3760,7 +3760,7 @@ ast_declarator_list::hir(exec_list *instructions,
              earlier->data.how_declared == ir_var_declared_in_block) {
             _mesa_glsl_error(&loc, state,
                              "`%s' has already been redeclared using "
-                             "gl_PerVertex", var->name);
+                             "gl_PerVertex", earlier->name);
          }
          earlier->data.how_declared = ir_var_declared_normally;
       }
@@ -5674,17 +5674,21 @@ ast_interface_block::hir(exec_list *instructions,
 
          var->data.stream = this->layout.stream;
 
+         /* Examine var name here since var may get deleted in the next call */
+         bool var_is_gl_id = is_gl_identifier(var->name);
+
          if (redeclaring_per_vertex) {
             ir_variable *earlier =
                get_variable_being_redeclared(var, loc, state,
                                              true /* allow_all_redeclarations */);
-            if (!is_gl_identifier(var->name) || earlier == NULL) {
+            if (!var_is_gl_id || earlier == NULL) {
                _mesa_glsl_error(&loc, state,
                                 "redeclaration of gl_PerVertex can only "
                                 "include built-in variables");
             } else if (earlier->data.how_declared == ir_var_declared_normally) {
                _mesa_glsl_error(&loc, state,
-                                "`%s' has already been redeclared", var->name);
+                                "`%s' has already been redeclared",
+                                earlier->name);
             } else {
                earlier->data.how_declared = ir_var_declared_in_block;
                earlier->reinit_interface_type(block_type);

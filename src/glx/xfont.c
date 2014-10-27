@@ -221,6 +221,7 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
    XGCValues values;
    unsigned long valuemask;
    XFontStruct *fs;
+   __GLXDRIdrawable *glxdraw;
 
    GLint swapbytes, lsbfirst, rowlength;
    GLint skiprows, skippixels, alignment;
@@ -232,6 +233,10 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
 
    dpy = CC->currentDpy;
    win = CC->currentDrawable;
+
+   glxdraw = GetGLXDRIDrawable(CC->currentDpy, CC->currentDrawable);
+   if (glxdraw)
+      win = glxdraw->xDrawable;
 
    fs = XQueryFont(dpy, font);
    if (!fs) {

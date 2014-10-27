@@ -189,6 +189,9 @@ nouveau_context_init(struct gl_context *ctx, gl_api api,
 	ctx->Extensions.NV_texture_env_combine4 = true;
 	ctx->Const.MaxColorAttachments = 1;
 
+	/* This effectively disables 3D textures */
+	ctx->Const.Max3DTextureLevels = 1;
+
 	return GL_TRUE;
 }
 
