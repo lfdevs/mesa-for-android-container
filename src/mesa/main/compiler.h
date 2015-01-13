@@ -150,8 +150,8 @@ extern "C" {
 #elif defined(__APPLE__)
 #include <CoreFoundation/CFByteOrder.h>
 #define CPU_TO_LE32( x )	CFSwapInt32HostToLittle( x )
-#elif (defined(_AIX) || defined(__blrts))
-static INLINE GLuint CPU_TO_LE32(GLuint x)
+#elif (defined(_AIX))
+static inline GLuint CPU_TO_LE32(GLuint x)
 {
    return (((x & 0x000000ff) << 24) |
            ((x & 0x0000ff00) <<  8) |
@@ -214,12 +214,10 @@ static INLINE GLuint CPU_TO_LE32(GLuint x)
 /**
  * ASSERT macro
  */
-#if !defined(_WIN32_WCE)
 #if defined(DEBUG)
 #  define ASSERT(X)   assert(X)
 #else
 #  define ASSERT(X)
-#endif
 #endif
 
 

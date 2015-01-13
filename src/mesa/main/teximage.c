@@ -1542,7 +1542,7 @@ _mesa_legal_texture_dimensions(struct gl_context *ctx, GLenum target,
       maxSize >>= level;
       if (width < 2 * border || width > 2 * border + maxSize)
          return GL_FALSE;
-      if (height < 1 || height > ctx->Const.MaxArrayTextureLayers)
+      if (height < 0 || height > ctx->Const.MaxArrayTextureLayers)
          return GL_FALSE;
       if (!ctx->Extensions.ARB_texture_non_power_of_two) {
          if (width > 0 && !_mesa_is_pow_two(width - 2 * border))
@@ -2449,7 +2449,7 @@ texsubimage_error_check(struct gl_context *ctx, GLuint dimensions,
 
    /* level check */
    if (level < 0 || level >= _mesa_max_texture_levels(ctx, target)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glTexSubImage%uD(level=%d)",
+      _mesa_error(ctx, GL_INVALID_VALUE, "glTexSubImage%uD(level=%d)",
                   dimensions, level);
       return GL_TRUE;
    }
@@ -4652,6 +4652,12 @@ texbufferrange(struct gl_context *ctx, GLenum target, GLenum internalFormat,
       texObj->BufferSize = size;
    }
    _mesa_unlock_texture(ctx, texObj);
+
+   ctx->NewDriverState |= ctx->DriverFlags.NewTextureBuffer;
+
+   if (bufObj) {
+      bufObj->UsageHistory |= USAGE_TEXTURE_BUFFER;
+   }
 }
 
 

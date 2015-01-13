@@ -1089,7 +1089,8 @@ typedef std::vector<repeat_node*> repeat_vec;
 class region_node : public container_node {
 protected:
 	region_node(unsigned id) : container_node(NT_REGION, NST_LIST), region_id(id),
-			loop_phi(), phi(), vars_defined(), departs(), repeats() {}
+			loop_phi(), phi(), vars_defined(), departs(), repeats(), src_loop()
+			{}
 public:
 	unsigned region_id;
 
@@ -1101,12 +1102,16 @@ public:
 	depart_vec departs;
 	repeat_vec repeats;
 
+	// true if region was created for loop in the parser, sometimes repeat_node
+	// may be optimized away so we need to remember this information
+	bool src_loop;
+
 	virtual bool accept(vpass &p, bool enter);
 
 	unsigned dep_count() { return departs.size(); }
 	unsigned rep_count() { return repeats.size() + 1; }
 
-	bool is_loop() { return !repeats.empty(); }
+	bool is_loop() { return src_loop || !repeats.empty(); }
 
 	container_node* get_entry_code_location() {
 		node *p = first;

@@ -1460,8 +1460,9 @@ AC_SUBST([am__tar])
 AC_SUBST([am__untar])
 ]) # _AM_PROG_TAR
 
-m4_include([m4/ax_check_compile_flag.m4])
+m4_include([m4/ax_check_gnu_make.m4])
 m4_include([m4/ax_gcc_builtin.m4])
+m4_include([m4/ax_gcc_func_attribute.m4])
 m4_include([m4/ax_prog_bison.m4])
 m4_include([m4/ax_prog_flex.m4])
 m4_include([m4/ax_pthread.m4])

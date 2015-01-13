@@ -218,6 +218,8 @@ type_is_signed(unsigned type)
  * \param file      one of the BRW_x_REGISTER_FILE values
  * \param nr        register number/index
  * \param subnr     register sub number
+ * \param negate    register negate modifier
+ * \param abs       register abs modifier
  * \param type      one of BRW_REGISTER_TYPE_x
  * \param vstride   one of BRW_VERTICAL_STRIDE_x
  * \param width     one of BRW_WIDTH_x
@@ -229,6 +231,8 @@ static inline struct brw_reg
 brw_reg(unsigned file,
         unsigned nr,
         unsigned subnr,
+        unsigned negate,
+        unsigned abs,
         enum brw_reg_type type,
         unsigned vstride,
         unsigned width,
@@ -248,8 +252,8 @@ brw_reg(unsigned file,
    reg.file = file;
    reg.nr = nr;
    reg.subnr = subnr * type_sz(type);
-   reg.negate = 0;
-   reg.abs = 0;
+   reg.negate = negate;
+   reg.abs = abs;
    reg.vstride = vstride;
    reg.width = width;
    reg.hstride = hstride;
@@ -276,6 +280,8 @@ brw_vec16_reg(unsigned file, unsigned nr, unsigned subnr)
    return brw_reg(file,
                   nr,
                   subnr,
+                  0,
+                  0,
                   BRW_REGISTER_TYPE_F,
                   BRW_VERTICAL_STRIDE_16,
                   BRW_WIDTH_16,
@@ -291,6 +297,8 @@ brw_vec8_reg(unsigned file, unsigned nr, unsigned subnr)
    return brw_reg(file,
                   nr,
                   subnr,
+                  0,
+                  0,
                   BRW_REGISTER_TYPE_F,
                   BRW_VERTICAL_STRIDE_8,
                   BRW_WIDTH_8,
@@ -306,6 +314,8 @@ brw_vec4_reg(unsigned file, unsigned nr, unsigned subnr)
    return brw_reg(file,
                   nr,
                   subnr,
+                  0,
+                  0,
                   BRW_REGISTER_TYPE_F,
                   BRW_VERTICAL_STRIDE_4,
                   BRW_WIDTH_4,
@@ -321,6 +331,8 @@ brw_vec2_reg(unsigned file, unsigned nr, unsigned subnr)
    return brw_reg(file,
                   nr,
                   subnr,
+                  0,
+                  0,
                   BRW_REGISTER_TYPE_F,
                   BRW_VERTICAL_STRIDE_2,
                   BRW_WIDTH_2,
@@ -336,6 +348,8 @@ brw_vec1_reg(unsigned file, unsigned nr, unsigned subnr)
    return brw_reg(file,
                   nr,
                   subnr,
+                  0,
+                  0,
                   BRW_REGISTER_TYPE_F,
                   BRW_VERTICAL_STRIDE_0,
                   BRW_WIDTH_1,
@@ -367,6 +381,12 @@ static inline struct brw_reg
 retype(struct brw_reg reg, enum brw_reg_type type)
 {
    reg.type = type;
+   return reg;
+}
+
+static inline struct brw_reg
+firsthalf(struct brw_reg reg)
+{
    return reg;
 }
 
@@ -429,6 +449,8 @@ static inline struct brw_reg
 brw_imm_reg(enum brw_reg_type type)
 {
    return brw_reg(BRW_IMMEDIATE_VALUE,
+                  0,
+                  0,
                   0,
                   0,
                   type,
@@ -603,6 +625,12 @@ brw_null_reg(void)
 }
 
 static inline struct brw_reg
+brw_null_vec(unsigned width)
+{
+   return brw_vecn_reg(width, BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_NULL, 0);
+}
+
+static inline struct brw_reg
 brw_address_reg(unsigned subnr)
 {
    return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_ADDRESS, subnr);
@@ -618,6 +646,8 @@ brw_ip_reg(void)
    return brw_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                   BRW_ARF_IP,
                   0,
+                  0,
+                  0,
                   BRW_REGISTER_TYPE_UD,
                   BRW_VERTICAL_STRIDE_4, /* ? */
                   BRW_WIDTH_1,
@@ -627,9 +657,10 @@ brw_ip_reg(void)
 }
 
 static inline struct brw_reg
-brw_acc_reg(void)
+brw_acc_reg(unsigned width)
 {
-   return brw_vec8_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_ACCUMULATOR, 0);
+   return brw_vecn_reg(width, BRW_ARCHITECTURE_REGISTER_FILE,
+                       BRW_ARF_ACCUMULATOR, 0);
 }
 
 static inline struct brw_reg

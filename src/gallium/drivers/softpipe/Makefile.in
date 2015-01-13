@@ -114,8 +114,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 
 subdir = src/gallium/drivers/softpipe
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -129,15 +130,15 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsoftpipe_la_LIBADD =
-am__objects_1 = sp_fs_exec.lo sp_clear.lo sp_fence.lo sp_flush.lo \
-	sp_query.lo sp_context.lo sp_draw_arrays.lo sp_prim_vbuf.lo \
-	sp_quad_pipe.lo sp_quad_stipple.lo sp_quad_depth_test.lo \
-	sp_quad_fs.lo sp_quad_blend.lo sp_screen.lo sp_setup.lo \
-	sp_state_blend.lo sp_state_clip.lo sp_state_derived.lo \
-	sp_state_sampler.lo sp_state_shader.lo sp_state_so.lo \
-	sp_state_rasterizer.lo sp_state_surface.lo sp_state_vertex.lo \
-	sp_texture.lo sp_tex_sample.lo sp_tex_tile_cache.lo \
-	sp_tile_cache.lo sp_surface.lo
+am__objects_1 = sp_clear.lo sp_context.lo sp_draw_arrays.lo \
+	sp_fence.lo sp_flush.lo sp_fs_exec.lo sp_prim_vbuf.lo \
+	sp_quad_blend.lo sp_quad_depth_test.lo sp_quad_fs.lo \
+	sp_quad_pipe.lo sp_quad_stipple.lo sp_query.lo sp_screen.lo \
+	sp_setup.lo sp_state_blend.lo sp_state_clip.lo \
+	sp_state_derived.lo sp_state_rasterizer.lo sp_state_sampler.lo \
+	sp_state_shader.lo sp_state_so.lo sp_state_surface.lo \
+	sp_state_vertex.lo sp_surface.lo sp_tex_sample.lo \
+	sp_tex_tile_cache.lo sp_texture.lo sp_tile_cache.lo
 am_libsoftpipe_la_OBJECTS = $(am__objects_1)
 libsoftpipe_la_OBJECTS = $(am_libsoftpipe_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -229,6 +230,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -251,7 +253,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -324,11 +325,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -339,10 +343,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -356,7 +358,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -375,7 +376,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -439,6 +446,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -466,35 +474,55 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 C_SOURCES := \
-	sp_fs_exec.c \
 	sp_clear.c \
-	sp_fence.c \
-	sp_flush.c \
-	sp_query.c \
+	sp_clear.h \
 	sp_context.c \
+	sp_context.h \
 	sp_draw_arrays.c \
+	sp_fence.c \
+	sp_fence.h \
+	sp_flush.c \
+	sp_flush.h \
+	sp_fs_exec.c \
+	sp_fs.h \
+	sp_limits.h \
 	sp_prim_vbuf.c \
-	sp_quad_pipe.c \
-	sp_quad_stipple.c \
-	sp_quad_depth_test.c \
-	sp_quad_fs.c \
+	sp_prim_vbuf.h \
+	sp_public.h \
 	sp_quad_blend.c \
+	sp_quad_depth_test.c \
+	sp_quad_depth_test_tmp.h \
+	sp_quad_fs.c \
+	sp_quad.h \
+	sp_quad_pipe.c \
+	sp_quad_pipe.h \
+	sp_quad_stipple.c \
+	sp_query.c \
+	sp_query.h \
 	sp_screen.c \
+	sp_screen.h \
 	sp_setup.c \
+	sp_setup.h \
 	sp_state_blend.c \
 	sp_state_clip.c \
 	sp_state_derived.c \
+	sp_state.h \
+	sp_state_rasterizer.c \
 	sp_state_sampler.c \
 	sp_state_shader.c \
 	sp_state_so.c \
-	sp_state_rasterizer.c \
 	sp_state_surface.c \
 	sp_state_vertex.c \
-	sp_texture.c \
+	sp_surface.c \
+	sp_surface.h \
 	sp_tex_sample.c \
+	sp_tex_sample.h \
 	sp_tex_tile_cache.c \
+	sp_tex_tile_cache.h \
+	sp_texture.c \
+	sp_texture.h \
 	sp_tile_cache.c \
-	sp_surface.c
+	sp_tile_cache.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -515,6 +543,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -525,6 +554,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -555,12 +585,14 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS)
 
 noinst_LTLIBRARIES = libsoftpipe.la
 libsoftpipe_la_SOURCES = $(C_SOURCES)
+EXTRA_DIST = Android.mk SConscript
 all: all-am
 
 .SUFFIXES:

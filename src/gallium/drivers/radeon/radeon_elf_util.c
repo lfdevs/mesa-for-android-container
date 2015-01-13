@@ -33,6 +33,48 @@
 #include <libelf.h>
 #include <stdio.h>
 
+static void parse_symbol_table(Elf_Data *symbol_table_data,
+				const GElf_Shdr *symbol_table_header,
+				struct radeon_shader_binary *binary)
+{
+	GElf_Sym symbol;
+	unsigned i = 0;
+	unsigned symbol_count =
+		symbol_table_header->sh_size / symbol_table_header->sh_entsize;
+
+	/* We are over allocating this list, because symbol_count gives the
+ 	 * total number of symbols, and we will only be filling the list
+ 	 * with offsets of global symbols.  The memory savings from
+ 	 * allocating the correct size of this list will be small, and
+ 	 * I don't think it is worth the cost of pre-computing the number
+ 	 * of global symbols.
+ 	 */
+	binary->global_symbol_offsets = CALLOC(symbol_count, sizeof(uint64_t));
+
+	while (gelf_getsym(symbol_table_data, i++, &symbol)) {
+		unsigned i;
+		if (GELF_ST_BIND(symbol.st_info) != STB_GLOBAL) {
+			continue;
+		}
+
+		binary->global_symbol_offsets[binary->global_symbol_count] =
+					symbol.st_value;
+
+		/* Sort the list using bubble sort.  This list will usually
+		 * be small. */
+		for (i = binary->global_symbol_count; i > 0; --i) {
+			uint64_t lhs = binary->global_symbol_offsets[i - 1];
+			uint64_t rhs = binary->global_symbol_offsets[i];
+			if (lhs < rhs) {
+				break;
+			}
+			binary->global_symbol_offsets[i] = lhs;
+			binary->global_symbol_offsets[i - 1] = rhs;
+		}
+		++binary->global_symbol_count;
+	}
+}
+
 void radeon_elf_read(const char *elf_data, unsigned elf_size,
 					struct radeon_shader_binary *binary,
 					unsigned debug)
@@ -85,6 +127,9 @@ void radeon_elf_read(const char *elf_data, unsigned elf_size,
 			binary->rodata_size = section_data->d_size;
 			binary->rodata = MALLOC(binary->rodata_size * sizeof(unsigned char));
 			memcpy(binary->rodata, section_data->d_buf, binary->rodata_size);
+		} else if (!strncmp(name, ".symtab", 7)) {
+			section_data = elf_getdata(section, section_data);
+			parse_symbol_table(section_data, &section_header, binary);
 		}
 	}
 
@@ -92,4 +137,27 @@ void radeon_elf_read(const char *elf_data, unsigned elf_size,
 		elf_end(elf);
 	}
 	FREE(elf_buffer);
+
+	/* Cache the config size per symbol */
+	if (binary->global_symbol_count) {
+		binary->config_size_per_symbol =
+			binary->config_size / binary->global_symbol_count;
+	} else {
+		binary->global_symbol_count = 1;
+		binary->config_size_per_symbol = binary->config_size;
+	}
+}
+
+const unsigned char *radeon_shader_binary_config_start(
+	const struct radeon_shader_binary *binary,
+	uint64_t symbol_offset)
+{
+	unsigned i;
+	for (i = 0; i < binary->global_symbol_count; ++i) {
+		if (binary->global_symbol_offsets[i] == symbol_offset) {
+			unsigned offset = i * binary->config_size_per_symbol;
+			return binary->config + offset;
+		}
+	}
+	return binary->config;
 }

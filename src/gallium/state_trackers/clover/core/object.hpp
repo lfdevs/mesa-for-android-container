@@ -32,6 +32,7 @@
 #include "core/error.hpp"
 #include "core/property.hpp"
 #include "api/dispatch.hpp"
+#include "util/macros.h"
 
 ///
 /// Main namespace of the CL state tracker.
@@ -54,6 +55,7 @@ namespace clover {
    };
 
    struct default_tag;
+   struct allow_empty_tag;
    struct wait_list_tag;
    struct property_list_tag;
 
@@ -90,6 +92,23 @@ namespace clover {
          static void
          validate_list(D *const *ds, size_t n) {
             if (!ds || !n)
+               throw error(CL_INVALID_VALUE);
+         }
+      };
+
+      template<typename D>
+      struct descriptor_traits<allow_empty_tag, D> {
+         typedef typename D::object_type object_type;
+
+         static void
+         validate(D *d) {
+            if (!d || d->dispatch != &_dispatch)
+               throw invalid_object_error<object_type>();
+         }
+
+         static void
+         validate_list(D *const *ds, size_t n) {
+            if (bool(ds) != bool(n))
                throw error(CL_INVALID_VALUE);
          }
       };

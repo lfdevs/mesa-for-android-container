@@ -35,7 +35,6 @@
 #include "tgsi/tgsi_parse.h"
 
 #include "freedreno_context.h"
-#include "freedreno_lowering.h"
 #include "freedreno_util.h"
 
 #include "ir3_shader.h"
@@ -45,7 +44,8 @@
 static void
 delete_variant(struct ir3_shader_variant *v)
 {
-	ir3_destroy(v->ir);
+	if (v->ir)
+		ir3_destroy(v->ir);
 	fd_bo_del(v->bo);
 	free(v);
 }
@@ -68,7 +68,16 @@ assemble_variant(struct ir3_shader_variant *v)
 	free(bin);
 
 	v->instrlen = v->info.sizedwords / 8;
-	v->constlen = v->info.max_const + 1;
+
+	/* NOTE: if relative addressing is used, we set constlen in
+	 * the compiler (to worst-case value) since we don't know in
+	 * the assembler what the max addr reg value can be:
+	 */
+	v->constlen = MAX2(v->constlen, v->info.max_const + 1);
+
+	/* no need to keep the ir around beyond this point: */
+	ir3_destroy(v->ir);
+	v->ir = NULL;
 }
 
 /* for vertex shader, the inputs are loaded into registers before the shader
@@ -81,14 +90,25 @@ fixup_vp_regfootprint(struct ir3_shader_variant *v)
 	unsigned i;
 	for (i = 0; i < v->inputs_count; i++) {
 		if (v->inputs[i].compmask) {
-			uint32_t regid = (v->inputs[i].regid + 3) >> 2;
+			int32_t regid = (v->inputs[i].regid + 3) >> 2;
 			v->info.max_reg = MAX2(v->info.max_reg, regid);
 		}
 	}
 	for (i = 0; i < v->outputs_count; i++) {
-		uint32_t regid = (v->outputs[i].regid + 3) >> 2;
+		int32_t regid = (v->outputs[i].regid + 3) >> 2;
 		v->info.max_reg = MAX2(v->info.max_reg, regid);
 	}
+}
+
+/* reset before attempting to compile again.. */
+static void reset_variant(struct ir3_shader_variant *v, const char *msg)
+{
+	debug_error(msg);
+	v->inputs_count = 0;
+	v->outputs_count = 0;
+	v->total_in = 0;
+	v->has_samp = false;
+	v->immediates_count = 0;
 }
 
 static struct ir3_shader_variant *
@@ -112,15 +132,12 @@ create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 	}
 
 	if (!(fd_mesa_debug & FD_DBG_NOOPT)) {
-		ret = ir3_compile_shader(v, tokens, key);
+		ret = ir3_compile_shader(v, tokens, key, true);
 		if (ret) {
-			debug_error("new compiler failed, trying fallback!");
-
-			v->inputs_count = 0;
-			v->outputs_count = 0;
-			v->total_in = 0;
-			v->has_samp = false;
-			v->immediates_count = 0;
+			reset_variant(v, "new compiler failed, trying without copy propagation!");
+			ret = ir3_compile_shader(v, tokens, key, false);
+			if (ret)
+				reset_variant(v, "new compiler failed, trying fallback!");
 		}
 	} else {
 		ret = -1;  /* force fallback to old compiler */
@@ -165,16 +182,30 @@ ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 	 * so normalize the key to avoid constructing multiple identical
 	 * variants:
 	 */
-	if (shader->type == SHADER_FRAGMENT) {
+	switch (shader->type) {
+	case SHADER_FRAGMENT:
+	case SHADER_COMPUTE:
 		key.binning_pass = false;
-	}
-	if (shader->type == SHADER_VERTEX) {
+		if (key.has_per_samp) {
+			key.vsaturate_s = 0;
+			key.vsaturate_t = 0;
+			key.vsaturate_r = 0;
+		}
+		break;
+	case SHADER_VERTEX:
 		key.color_two_side = false;
 		key.half_precision = false;
+		key.alpha = false;
+		if (key.has_per_samp) {
+			key.fsaturate_s = 0;
+			key.fsaturate_t = 0;
+			key.fsaturate_r = 0;
+		}
+		break;
 	}
 
 	for (v = shader->variants; v; v = v->next)
-		if (!memcmp(&key, &v->key, sizeof(key)))
+		if (ir3_shader_key_equal(&key, &v->key))
 			return v;
 
 	/* compile new variant if it doesn't exist already: */

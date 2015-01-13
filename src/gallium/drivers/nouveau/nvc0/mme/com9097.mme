@@ -227,6 +227,7 @@ locn_0f_ts:
 /* NVC0_3D_MACRO_DRAW_ELEMENTS_INDIRECT
  *
  * NOTE: Saves and restores VB_ELEMENT,INSTANCE_BASE.
+ * Forcefully sets VERTEX_ID_BASE to the value of VB_ELEMENT_BASE.
  *
  * arg     = mode
  * parm[0] = count
@@ -247,6 +248,8 @@ locn_0f_ts:
    maddr 0x150d /* VB_ELEMENT,INSTANCE_BASE */
    send $r4
    send $r5
+   maddr 0x446
+   send $r4
    mov $r4 0x1
 dei_again:
    maddr 0x586 /* VERTEX_BEGIN_GL */
@@ -258,8 +261,10 @@ dei_again:
    branz $r2 #dei_again
    mov $r1 (extrinsrt $r1 $r4 0 1 26) /* set INSTANCE_NEXT */
    maddr 0x150d /* VB_ELEMENT,INSTANCE_BASE */
-   exit send $r6
+   send $r6
    send $r7
+   exit maddr 0x446
+   send $r6
 dei_end:
    exit
    nop

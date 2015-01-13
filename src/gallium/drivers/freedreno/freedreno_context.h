@@ -29,7 +29,6 @@
 #ifndef FREEDRENO_CONTEXT_H_
 #define FREEDRENO_CONTEXT_H_
 
-#include "draw/draw_context.h"
 #include "pipe/p_context.h"
 #include "indices/u_primconvert.h"
 #include "util/u_blitter.h"
@@ -81,6 +80,15 @@ struct fd_vertexbuf_stateobj {
 struct fd_vertex_stateobj {
 	struct pipe_vertex_element pipe[PIPE_MAX_ATTRIBS];
 	unsigned num_elements;
+};
+
+/* group together the vertex and vertexbuf state.. for ease of passing
+ * around, and because various internal operations (gmem<->mem, etc)
+ * need their own vertex state:
+ */
+struct fd_vertex_state {
+	struct fd_vertex_stateobj *vtx;
+	struct fd_vertexbuf_stateobj vertexbuf;
 };
 
 /* Bitmask of stages in rendering that a particular query query is
@@ -174,6 +182,10 @@ struct fd_context {
 	 * there was a glClear() that invalidated the entire previous buffer
 	 * contents.  Keep track of which buffer(s) are cleared, or needs
 	 * restore.  Masks of PIPE_CLEAR_*
+	 *
+	 * The 'cleared' bits will be set for buffers which are *entirely*
+	 * cleared, and 'partial_cleared' bits will be set if you must
+	 * check cleared_scissor.
 	 */
 	enum {
 		/* align bitmask values w/ PIPE_CLEAR_*.. since that is convenient.. */
@@ -181,7 +193,7 @@ struct fd_context {
 		FD_BUFFER_DEPTH   = PIPE_CLEAR_DEPTH,
 		FD_BUFFER_STENCIL = PIPE_CLEAR_STENCIL,
 		FD_BUFFER_ALL     = FD_BUFFER_COLOR | FD_BUFFER_DEPTH | FD_BUFFER_STENCIL,
-	} cleared, restore, resolve;
+	} cleared, partial_cleared, restore, resolve;
 
 	bool needs_flush;
 
@@ -222,6 +234,14 @@ struct fd_context {
 	struct fd_ringbuffer *rings[8];
 	unsigned rings_idx;
 
+	/* NOTE: currently using a single ringbuffer for both draw and
+	 * tiling commands, we need to make sure we need to leave enough
+	 * room at the end to append the tiling commands when we flush.
+	 * 0x7000 dwords should be a couple times more than we ever need
+	 * so should be a nice conservative threshold.
+	 */
+#define FD_TILING_COMMANDS_DWORDS 0x7000
+
 	/* normal draw/clear cmds: */
 	struct fd_ringbuffer *ring;
 	struct fd_ringmarker *draw_start, *draw_end;
@@ -260,6 +280,14 @@ struct fd_context {
 	 */
 	struct pipe_scissor_state max_scissor;
 
+	/* Track the cleared scissor for color/depth/stencil, so we know
+	 * which, if any, tiles need to be restored (mem2gmem).  Only valid
+	 * if the corresponding bit in ctx->cleared is set.
+	 */
+	struct {
+		struct pipe_scissor_state color, depth, stencil;
+	} cleared_scissor;
+
 	/* Current gmem/tiling configuration.. gets updated on render_tiles()
 	 * if out of date with current maximal-scissor/cpp:
 	 */
@@ -297,7 +325,7 @@ struct fd_context {
 
 	struct fd_program_stateobj prog;
 
-	struct fd_vertex_stateobj *vtx;
+	struct fd_vertex_state vtx;
 
 	struct pipe_blend_color blend_color;
 	struct pipe_stencil_ref stencil_ref;
@@ -306,7 +334,6 @@ struct fd_context {
 	struct pipe_poly_stipple stipple;
 	struct pipe_viewport_state viewport;
 	struct fd_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
-	struct fd_vertexbuf_stateobj vertexbuf;
 	struct pipe_index_buffer indexbuf;
 
 	/* GMEM/tile handling fxns: */
@@ -320,7 +347,7 @@ struct fd_context {
 	void (*emit_sysmem_prep)(struct fd_context *ctx);
 
 	/* draw: */
-	void (*draw)(struct fd_context *pctx, const struct pipe_draw_info *info);
+	void (*draw_vbo)(struct fd_context *pctx, const struct pipe_draw_info *info);
 	void (*clear)(struct fd_context *ctx, unsigned buffers,
 			const union pipe_color_union *color, double depth, unsigned stencil);
 };

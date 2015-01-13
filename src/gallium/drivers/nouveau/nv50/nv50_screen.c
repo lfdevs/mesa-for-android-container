@@ -117,6 +117,8 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1024;
    case PIPE_CAP_MAX_VERTEX_STREAMS:
       return 1;
+   case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
+      return 2048;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 256;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
@@ -169,6 +171,9 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_SAMPLER_VIEW_TARGET:
+   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+   case PIPE_CAP_CLIP_HALFZ:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1; /* class_3d >= NVA0_3D_CLASS; */
@@ -200,7 +205,6 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_COMPUTE:
    case PIPE_CAP_DRAW_INDIRECT:
-   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -250,6 +254,8 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       if (shader == PIPE_SHADER_VERTEX)
          return 32;
       return 15;
+   case PIPE_SHADER_CAP_MAX_OUTPUTS:
+      return 16;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
       return 65536;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
@@ -455,8 +461,6 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
    PUSH_DATA (push, 0);
    BEGIN_NV04(push, NV50_3D(PRIM_RESTART_WITH_DRAW_ARRAYS), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_3D(LINE_LAST_PIXEL), 1);
-   PUSH_DATA (push, 0);
    BEGIN_NV04(push, NV50_3D(BLEND_SEPARATE_ALPHA), 1);
    PUSH_DATA (push, 1);
 
@@ -602,6 +606,13 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
    PUSH_DATA (push, 0x11111111);
    BEGIN_NV04(push, NV50_3D(EDGEFLAG), 1);
    PUSH_DATA (push, 1);
+
+   BEGIN_NV04(push, NV50_3D(VB_ELEMENT_BASE), 1);
+   PUSH_DATA (push, 0);
+   if (screen->base.class_3d >= NV84_3D_CLASS) {
+      BEGIN_NV04(push, SUBC_3D(NV84_3D_VERTEX_ID_BASE), 1);
+      PUSH_DATA (push, 0);
+   }
 
    PUSH_KICK (push);
 }

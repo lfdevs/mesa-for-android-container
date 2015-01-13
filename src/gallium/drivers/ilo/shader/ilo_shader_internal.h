@@ -29,7 +29,7 @@
 #define ILO_SHADER_INTERNAL_H
 
 #include "ilo_common.h"
-#include "ilo_context.h"
+#include "ilo_state.h"
 #include "ilo_shader.h"
 
 /* XXX The interface needs to be reworked */
@@ -116,6 +116,7 @@ struct ilo_shader {
    /* for VS stream output / rasterizer discard */
    int gs_offsets[3];
    int gs_start_grf;
+   int gs_bt_so_count;
 
    void *kernel;
    int kernel_size;
@@ -131,6 +132,20 @@ struct ilo_shader {
       int cbuf0_size;
       int clip_state_size;
    } pcb;
+
+   /* binding table */
+   struct {
+      int rt_base, rt_count;
+      int tex_base, tex_count;
+      int const_base, const_count;
+      int res_base, res_count;
+
+      int gen6_so_base, gen6_so_count;
+
+      int global_base, global_count;
+
+      int total_count;
+   } bt;
 
    struct list_head list;
 
@@ -168,6 +183,8 @@ struct ilo_shader_info {
 
    uint32_t shadow_samplers;
    int num_samplers;
+
+   int constant_buffer_count;
 };
 
 /**
@@ -189,7 +206,7 @@ struct ilo_shader_state {
 void
 ilo_shader_variant_init(struct ilo_shader_variant *variant,
                         const struct ilo_shader_info *info,
-                        const struct ilo_context *ilo);
+                        const struct ilo_state_vector *vec);
 
 bool
 ilo_shader_state_use_variant(struct ilo_shader_state *state,

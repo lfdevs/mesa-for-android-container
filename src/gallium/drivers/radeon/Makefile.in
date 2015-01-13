@@ -98,8 +98,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 
 subdir = src/gallium/drivers/radeon
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -118,16 +119,19 @@ am__DEPENDENCIES_1 =
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1) \
 @NEED_RADEON_LLVM_TRUE@	$(am__DEPENDENCIES_1)
 am__libradeon_la_SOURCES_DIST = cayman_msaa.c r600_buffer_common.c \
-	r600_pipe_common.c r600_query.c r600_streamout.c \
-	r600_texture.c radeon_video.c radeon_uvd.c radeon_vce.c \
-	radeon_vce_40_2_2.c radeon_elf_util.c radeon_setup_tgsi_llvm.c \
-	radeon_llvm_emit.c radeon_llvm_util.c
+	r600_cs.h r600d_common.h r600_pipe_common.c r600_pipe_common.h \
+	r600_query.c r600_streamout.c r600_texture.c radeon_uvd.c \
+	radeon_uvd.h radeon_vce_40_2_2.c radeon_vce.c radeon_vce.h \
+	radeon_video.c radeon_video.h radeon_elf_util.c \
+	radeon_elf_util.h radeon_llvm_emit.c radeon_llvm_emit.h \
+	radeon_llvm.h radeon_llvm_util.c radeon_llvm_util.h \
+	radeon_setup_tgsi_llvm.c
 am__objects_1 = cayman_msaa.lo r600_buffer_common.lo \
 	r600_pipe_common.lo r600_query.lo r600_streamout.lo \
-	r600_texture.lo radeon_video.lo radeon_uvd.lo radeon_vce.lo \
-	radeon_vce_40_2_2.lo
-am__objects_2 = radeon_elf_util.lo radeon_setup_tgsi_llvm.lo \
-	radeon_llvm_emit.lo radeon_llvm_util.lo
+	r600_texture.lo radeon_uvd.lo radeon_vce_40_2_2.lo \
+	radeon_vce.lo radeon_video.lo
+am__objects_2 = radeon_elf_util.lo radeon_llvm_emit.lo \
+	radeon_llvm_util.lo radeon_setup_tgsi_llvm.lo
 @NEED_RADEON_LLVM_TRUE@am__objects_3 = $(am__objects_2)
 am_libradeon_la_OBJECTS = $(am__objects_1) $(am__objects_3)
 libradeon_la_OBJECTS = $(am_libradeon_la_OBJECTS)
@@ -223,6 +227,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -245,7 +250,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -318,11 +322,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -333,10 +340,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -350,7 +355,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -369,7 +373,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -433,6 +443,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -460,22 +471,32 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 C_SOURCES := \
-        cayman_msaa.c \
+	cayman_msaa.c \
 	r600_buffer_common.c \
+	r600_cs.h \
+	r600d_common.h \
 	r600_pipe_common.c \
-        r600_query.c \
+	r600_pipe_common.h \
+	r600_query.c \
 	r600_streamout.c \
-        r600_texture.c \
-	radeon_video.c \
+	r600_texture.c \
 	radeon_uvd.c \
+	radeon_uvd.h \
+	radeon_vce_40_2_2.c \
 	radeon_vce.c \
-	radeon_vce_40_2_2.c
+	radeon_vce.h \
+	radeon_video.c \
+	radeon_video.h
 
 LLVM_C_FILES := \
 	radeon_elf_util.c \
-	radeon_setup_tgsi_llvm.c \
+	radeon_elf_util.h \
 	radeon_llvm_emit.c \
-	radeon_llvm_util.c
+	radeon_llvm_emit.h \
+	radeon_llvm.h \
+	radeon_llvm_util.c \
+	radeon_llvm_util.h \
+	radeon_setup_tgsi_llvm.c
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -496,6 +517,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -506,6 +528,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -536,6 +559,7 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(RADEON_CFLAGS) $(am__append_3)
 noinst_LTLIBRARIES = libradeon.la
@@ -547,6 +571,9 @@ libradeon_la_SOURCES = $(C_SOURCES) $(am__append_4)
 
 @NEED_RADEON_LLVM_TRUE@libradeon_la_LDFLAGS = \
 @NEED_RADEON_LLVM_TRUE@	$(LLVM_LDFLAGS)
+
+EXTRA_DIST = Android.mk \
+	LLVM_REVISION.txt
 
 all: all-am
 

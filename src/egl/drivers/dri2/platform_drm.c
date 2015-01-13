@@ -352,7 +352,7 @@ dri2_drm_get_buffers(__DRIdrawable * driDrawable,
    const unsigned int format = 32;
    int i;
 
-   attachments_with_format = calloc(count * 2, sizeof(unsigned int));
+   attachments_with_format = calloc(count, 2 * sizeof(unsigned int));
    if (!attachments_with_format) {
       *out_count = 0;
       return NULL;
@@ -418,6 +418,14 @@ dri2_drm_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
          for (i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++)
             if (dri2_surf->color_buffers[i].age > 0)
                dri2_surf->color_buffers[i].age++;
+
+         /* Make sure we have a back buffer in case we're swapping without
+          * ever rendering. */
+         if (get_back_bo(dri2_surf) < 0) {
+            _eglError(EGL_BAD_ALLOC, "dri2_swap_buffers");
+            return EGL_FALSE;
+         }
+
          dri2_surf->current = dri2_surf->back;
          dri2_surf->current->age = 1;
          dri2_surf->back = NULL;

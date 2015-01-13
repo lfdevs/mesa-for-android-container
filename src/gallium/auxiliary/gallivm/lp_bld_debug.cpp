@@ -32,10 +32,11 @@
 #include <llvm/Target/TargetInstrInfo.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
-#include <llvm/Support/MemoryObject.h>
 
 #if HAVE_LLVM >= 0x0306
 #include <llvm/Target/TargetSubtargetInfo.h>
+#else
+#include <llvm/Support/MemoryObject.h>
 #endif
 
 #include <llvm/Support/TargetRegistry.h>
@@ -43,11 +44,7 @@
 
 #include <llvm/Support/Host.h>
 
-#if HAVE_LLVM >= 0x0303
 #include <llvm/IR/Module.h>
-#else
-#include <llvm/Module.h>
-#endif
 
 #include <llvm/MC/MCDisassembler.h>
 #include <llvm/MC/MCAsmInfo.h>
@@ -57,7 +54,7 @@
 
 #if HAVE_LLVM >= 0x0305
 #define OwningPtr std::unique_ptr
-#elif HAVE_LLVM >= 0x0303
+#else
 #include <llvm/ADT/OwningPtr.h>
 #endif
 
@@ -146,6 +143,8 @@ lp_debug_dump_value(LLVMValueRef value)
 }
 
 
+#if HAVE_LLVM < 0x0306
+
 /*
  * MemoryObject wrapper around a buffer of memory, to be used by MC
  * disassembler.
@@ -180,6 +179,8 @@ public:
       return 0;
    }
 };
+
+#endif /* HAVE_LLVM < 0x0306 */
 
 
 /*
@@ -284,7 +285,11 @@ disassemble(const void* func, llvm::raw_ostream & Out)
    /*
     * Wrap the data in a MemoryObject
     */
+#if HAVE_LLVM >= 0x0306
+   ArrayRef<uint8_t> memoryObject((const uint8_t *)bytes, extent);
+#else
    BufferMemoryObject memoryObject((const uint8_t *)bytes, extent);
+#endif
 
    uint64_t pc;
    pc = 0;
@@ -414,6 +419,7 @@ disassemble(const void* func, llvm::raw_ostream & Out)
 extern "C" void
 lp_disassemble(LLVMValueRef func, const void *code) {
    raw_debug_ostream Out;
+   Out << LLVMGetValueName(func) << ":\n";
    disassemble(code, Out);
 }
 

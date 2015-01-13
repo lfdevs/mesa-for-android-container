@@ -318,6 +318,11 @@ tfeedback_decl::init(struct gl_context *ctx, const void *mem_ctx,
    const char *base_name_end;
    long subscript = parse_program_resource_name(input, &base_name_end);
    this->var_name = ralloc_strndup(mem_ctx, input, base_name_end - input);
+   if (this->var_name == NULL) {
+      _mesa_error_no_memory(__func__);
+      return;
+   }
+
    if (subscript >= 0) {
       this->array_subscript = subscript;
       this->is_subscripted = true;
@@ -830,9 +835,11 @@ varying_matches::record(ir_variable *producer_var, ir_variable *consumer_var)
        * regardless of where they appear.  We can trivially satisfy that
        * requirement by changing the interpolation type to flat here.
        */
-      producer_var->data.centroid = false;
-      producer_var->data.sample = false;
-      producer_var->data.interpolation = INTERP_QUALIFIER_FLAT;
+      if (producer_var) {
+         producer_var->data.centroid = false;
+         producer_var->data.sample = false;
+         producer_var->data.interpolation = INTERP_QUALIFIER_FLAT;
+      }
 
       if (consumer_var) {
          consumer_var->data.centroid = false;
@@ -1451,7 +1458,22 @@ assign_varying_locations(struct gl_context *ctx,
 
          if (var && var->data.mode == ir_var_shader_in &&
              var->data.is_unmatched_generic_inout) {
-            if (prog->Version <= 120) {
+            if (prog->IsES) {
+               /*
+                * On Page 91 (Page 97 of the PDF) of the GLSL ES 1.0 spec:
+                *
+                *     If the vertex shader declares but doesn't write to a
+                *     varying and the fragment shader declares and reads it,
+                *     is this an error?
+                *
+                *     RESOLUTION: No.
+                */
+               linker_warning(prog, "%s shader varying %s not written "
+                              "by %s shader\n.",
+                              _mesa_shader_stage_to_string(consumer->Stage),
+                              var->name,
+                              _mesa_shader_stage_to_string(producer->Stage));
+            } else if (prog->Version <= 120) {
                /* On page 25 (page 31 of the PDF) of the GLSL 1.20 spec:
                 *
                 *     Only those varying variables used (i.e. read) in
@@ -1464,7 +1486,6 @@ assign_varying_locations(struct gl_context *ctx,
                 * write the variable for the FS to read it.  See
                 * "glsl1-varying read but not written" in piglit.
                 */
-
                linker_error(prog, "%s shader varying %s not written "
                             "by %s shader\n.",
                             _mesa_shader_stage_to_string(consumer->Stage),

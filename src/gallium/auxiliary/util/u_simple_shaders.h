@@ -60,6 +60,12 @@ extern void *
 util_make_layered_clear_vertex_shader(struct pipe_context *pipe);
 
 extern void *
+util_make_layered_clear_helper_vertex_shader(struct pipe_context *pipe);
+
+extern void *
+util_make_layered_clear_geometry_shader(struct pipe_context *pipe);
+
+extern void *
 util_make_fragment_tex_shader_writemask(struct pipe_context *pipe, 
                                         unsigned tex_target,
                                         unsigned interp_mode,

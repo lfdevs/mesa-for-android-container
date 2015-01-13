@@ -424,6 +424,13 @@ update_array(struct gl_context *ctx,
       return;
    }
 
+   if (ctx->API == API_OPENGL_CORE && ctx->Version >= 44 &&
+       stride > ctx->Const.MaxVertexAttribStride) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s(stride=%d > "
+                  "GL_MAX_VERTEX_ATTRIB_STRIDE)", func, stride);
+      return;
+   }
+
    /* Page 29 (page 44 of the PDF) of the OpenGL 3.3 spec says:
     *
     *     "An INVALID_OPERATION error is generated under any of the following
@@ -704,7 +711,7 @@ _mesa_EnableVertexAttribArray(GLuint index)
 
    vao = ctx->Array.VAO;
 
-   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(vao->_VertexAttrib));
+   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(vao->VertexAttrib));
 
    if (!vao->VertexAttrib[VERT_ATTRIB_GENERIC(index)].Enabled) {
       /* was disabled, now being enabled */
@@ -730,7 +737,7 @@ _mesa_DisableVertexAttribArray(GLuint index)
 
    vao = ctx->Array.VAO;
 
-   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(vao->_VertexAttrib));
+   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(vao->VertexAttrib));
 
    if (vao->VertexAttrib[VERT_ATTRIB_GENERIC(index)].Enabled) {
       /* was enabled, now being disabled */
@@ -824,7 +831,7 @@ get_current_attrib(struct gl_context *ctx, GLuint index, const char *function)
       return NULL;
    }
 
-   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(ctx->Array.VAO->_VertexAttrib));
+   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(ctx->Array.VAO->VertexAttrib));
 
    FLUSH_CURRENT(ctx, 0);
    return ctx->Current.Attrib[VERT_ATTRIB_GENERIC(index)];
@@ -946,7 +953,7 @@ _mesa_GetVertexAttribPointerv(GLuint index, GLenum pname, GLvoid **pointer)
       return;
    }
 
-   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(ctx->Array.VAO->_VertexAttrib));
+   ASSERT(VERT_ATTRIB_GENERIC(index) < Elements(ctx->Array.VAO->VertexAttrib));
 
    *pointer = (GLvoid *) ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_GENERIC(index)].Ptr;
 }
@@ -1437,6 +1444,13 @@ _mesa_BindVertexBuffer(GLuint bindingIndex, GLuint buffer, GLintptr offset,
       return;
    }
 
+   if (ctx->API == API_OPENGL_CORE && ctx->Version >= 44 &&
+       stride > ctx->Const.MaxVertexAttribStride) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glBindVertexBuffer(stride=%d > "
+                  "GL_MAX_VERTEX_ATTRIB_STRIDE)", stride);
+      return;
+   }
+
    if (buffer == vao->VertexBinding[VERT_ATTRIB_GENERIC(bindingIndex)].BufferObj->Name) {
       vbo = vao->VertexBinding[VERT_ATTRIB_GENERIC(bindingIndex)].BufferObj;
    } else if (buffer != 0) {
@@ -1562,6 +1576,14 @@ _mesa_BindVertexBuffers(GLuint first, GLsizei count, const GLuint *buffers,
          _mesa_error(ctx, GL_INVALID_VALUE,
                      "glBindVertexBuffers(strides[%u]=%d < 0)",
                      i, strides[i]);
+         continue;
+      }
+
+      if (ctx->API == API_OPENGL_CORE && ctx->Version >= 44 &&
+          strides[i] > ctx->Const.MaxVertexAttribStride) {
+         _mesa_error(ctx, GL_INVALID_VALUE,
+                     "glBindVertexBuffers(strides[%u]=%d > "
+                     "GL_MAX_VERTEX_ATTRIB_STRIDE)", i, strides[i]);
          continue;
       }
 
@@ -1845,7 +1867,6 @@ _mesa_copy_client_array(struct gl_context *ctx,
    dst->InstanceDivisor = src->InstanceDivisor;
    dst->_ElementSize = src->_ElementSize;
    _mesa_reference_buffer_object(ctx, &dst->BufferObj, src->BufferObj);
-   dst->_MaxElement = src->_MaxElement;
 }
 
 void
@@ -1886,14 +1907,13 @@ static void
 print_array(const char *name, GLint index, const struct gl_client_array *array)
 {
    if (index >= 0)
-      printf("  %s[%d]: ", name, index);
+      fprintf(stderr, "  %s[%d]: ", name, index);
    else
-      printf("  %s: ", name);
-   printf("Ptr=%p, Type=0x%x, Size=%d, ElemSize=%u, Stride=%d, Buffer=%u(Size %lu), MaxElem=%u\n",
+      fprintf(stderr, "  %s: ", name);
+   fprintf(stderr, "Ptr=%p, Type=0x%x, Size=%d, ElemSize=%u, Stride=%d, Buffer=%u(Size %lu)\n",
 	  array->Ptr, array->Type, array->Size,
 	  array->_ElementSize, array->StrideB,
-	  array->BufferObj->Name, (unsigned long) array->BufferObj->Size,
-	  array->_MaxElement);
+	  array->BufferObj->Name, (unsigned long) array->BufferObj->Size);
 }
 
 
@@ -1905,8 +1925,6 @@ _mesa_print_arrays(struct gl_context *ctx)
 {
    struct gl_vertex_array_object *vao = ctx->Array.VAO;
    GLuint i;
-
-   _mesa_update_vao_max_element(ctx, vao);
 
    printf("Array Object %u\n", vao->Name);
    if (vao->_VertexAttrib[VERT_ATTRIB_POS].Enabled)
@@ -1921,7 +1939,6 @@ _mesa_print_arrays(struct gl_context *ctx)
    for (i = 0; i < VERT_ATTRIB_GENERIC_MAX; i++)
       if (vao->_VertexAttrib[VERT_ATTRIB_GENERIC(i)].Enabled)
          print_array("Attrib", i, &vao->_VertexAttrib[VERT_ATTRIB_GENERIC(i)]);
-   printf("  _MaxElement = %u\n", vao->_MaxElement);
 }
 
 

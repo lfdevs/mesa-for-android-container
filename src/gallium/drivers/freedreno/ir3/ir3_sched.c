@@ -64,6 +64,7 @@ struct ir3_sched_ctx {
 	struct ir3_instruction *addr;      /* current a0.x user, if any */
 	struct ir3_instruction *pred;      /* current p0.x user, if any */
 	unsigned cnt;
+	bool error;
 };
 
 static struct ir3_instruction *
@@ -161,7 +162,8 @@ static void schedule(struct ir3_sched_ctx *ctx,
  * Delay-slot calculation.  Follows fanin/fanout.
  */
 
-static unsigned delay_calc2(struct ir3_sched_ctx *ctx,
+/* calculate delay for specified src: */
+static unsigned delay_calc_srcn(struct ir3_sched_ctx *ctx,
 		struct ir3_instruction *assigner,
 		struct ir3_instruction *consumer, unsigned srcn)
 {
@@ -172,7 +174,7 @@ static unsigned delay_calc2(struct ir3_sched_ctx *ctx,
 		for (i = 1; i < assigner->regs_count; i++) {
 			struct ir3_register *reg = assigner->regs[i];
 			if (reg->flags & IR3_REG_SSA) {
-				unsigned d = delay_calc2(ctx, reg->instr,
+				unsigned d = delay_calc_srcn(ctx, reg->instr,
 						consumer, srcn);
 				delay = MAX2(delay, d);
 			}
@@ -185,6 +187,7 @@ static unsigned delay_calc2(struct ir3_sched_ctx *ctx,
 	return delay;
 }
 
+/* calculate delay for instruction (maximum of delay for all srcs): */
 static unsigned delay_calc(struct ir3_sched_ctx *ctx,
 		struct ir3_instruction *instr)
 {
@@ -193,7 +196,7 @@ static unsigned delay_calc(struct ir3_sched_ctx *ctx,
 	for (i = 1; i < instr->regs_count; i++) {
 		struct ir3_register *reg = instr->regs[i];
 		if (reg->flags & IR3_REG_SSA) {
-			unsigned d = delay_calc2(ctx, reg->instr,
+			unsigned d = delay_calc_srcn(ctx, reg->instr,
 					instr, i - 1);
 			delay = MAX2(delay, d);
 		}
@@ -238,6 +241,32 @@ static int trysched(struct ir3_sched_ctx *ctx,
 	delay = delay_calc(ctx, instr);
 	if (delay)
 		return delay;
+
+	/* if the instruction is a kill, we need to ensure *every*
+	 * bary.f is scheduled.  The hw seems unhappy if the thread
+	 * gets killed before the end-input (ei) flag is hit.
+	 *
+	 * We could do this by adding each bary.f instruction as
+	 * virtual ssa src for the kill instruction.  But we have
+	 * fixed length instr->regs[].
+	 *
+	 * TODO this wouldn't be quite right if we had multiple
+	 * basic blocks, if any block was conditional.  We'd need
+	 * to schedule the bary.f's outside of any block which
+	 * was conditional that contained a kill.. I think..
+	 */
+	if (is_kill(instr)) {
+		struct ir3 *ir = instr->block->shader;
+		unsigned i;
+
+		for (i = 0; i < ir->baryfs_count; i++) {
+			if (ir->baryfs[i]->depth == DEPTH_UNUSED)
+				continue;
+			delay = trysched(ctx, ir->baryfs[i]);
+			if (delay)
+				return delay;
+		}
+	}
 
 	/* if this is a write to address/predicate register, and that
 	 * register is currently in use, we need to defer until it is
@@ -308,7 +337,8 @@ static int block_sched_undelayed(struct ir3_sched_ctx *ctx,
 	struct ir3_instruction *instr = block->head;
 	bool addr_in_use = false;
 	bool pred_in_use = false;
-	unsigned cnt = ~0;
+	bool all_delayed = true;
+	unsigned cnt = ~0, attempted = 0;
 
 	while (instr) {
 		struct ir3_instruction *next = instr->next;
@@ -317,6 +347,10 @@ static int block_sched_undelayed(struct ir3_sched_ctx *ctx,
 
 		if (addr || pred) {
 			int ret = trysched(ctx, instr);
+
+			if (ret != DELAYED)
+				all_delayed = false;
+
 			if (ret == SCHEDULED)
 				cnt = 0;
 			else if (ret > 0)
@@ -325,6 +359,8 @@ static int block_sched_undelayed(struct ir3_sched_ctx *ctx,
 				addr_in_use = true;
 			if (pred)
 				pred_in_use = true;
+
+			attempted++;
 		}
 
 		instr = next;
@@ -335,6 +371,12 @@ static int block_sched_undelayed(struct ir3_sched_ctx *ctx,
 
 	if (!pred_in_use)
 		ctx->pred = NULL;
+
+	/* detect if we've gotten ourselves into an impossible situation
+	 * and bail if needed
+	 */
+	if (all_delayed && (attempted > 0))
+		ctx->error = true;
 
 	return cnt;
 }
@@ -356,7 +398,7 @@ static void block_sched(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 		}
 	}
 
-	while ((instr = block->head)) {
+	while ((instr = block->head) && !ctx->error) {
 		/* NOTE: always grab next *before* trysched(), in case the
 		 * instruction is actually scheduled (and therefore moved
 		 * from depth list into scheduled list)
@@ -393,9 +435,12 @@ static void block_sched(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 	block->head = reverse(ctx->scheduled);
 }
 
-void ir3_block_sched(struct ir3_block *block)
+int ir3_block_sched(struct ir3_block *block)
 {
 	struct ir3_sched_ctx ctx = {0};
 	ir3_clear_mark(block->shader);
 	block_sched(&ctx, block);
+	if (ctx.error)
+		return -1;
+	return 0;
 }

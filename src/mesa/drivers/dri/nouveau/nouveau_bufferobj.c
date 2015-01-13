@@ -48,7 +48,7 @@ get_bufferobj_map(struct gl_context *ctx, struct gl_buffer_object *obj,
 }
 
 static struct gl_buffer_object *
-nouveau_bufferobj_new(struct gl_context *ctx, GLuint buffer, GLenum target)
+nouveau_bufferobj_new(struct gl_context *ctx, GLuint buffer)
 {
 	struct nouveau_bufferobj *nbo;
 
@@ -56,7 +56,7 @@ nouveau_bufferobj_new(struct gl_context *ctx, GLuint buffer, GLenum target)
 	if (!nbo)
 		return NULL;
 
-	_mesa_initialize_buffer_object(ctx, &nbo->base, buffer, target);
+	_mesa_initialize_buffer_object(ctx, &nbo->base, buffer);
 
 	return &nbo->base;
 }

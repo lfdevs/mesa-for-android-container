@@ -841,6 +841,9 @@
 #define   S_02880C_KILL_ENABLE(x)                      (((x) & 0x1) << 6)
 #define   G_02880C_KILL_ENABLE(x)                      (((x) >> 6) & 0x1)
 #define   C_02880C_KILL_ENABLE                         0xFFFFFFBF
+#define   S_02880C_MASK_EXPORT_ENABLE(x)               (((x) & 0x1) << 8)
+#define   G_02880C_MASK_EXPORT_ENABLE(x)               (((x) >> 8) & 0x1)
+#define   C_02880C_MASK_EXPORT_ENABLE                  0xFFFFFEFF
 #define   S_02880C_DUAL_EXPORT_ENABLE(x)               (((x) & 0x1) << 9)
 #define   G_02880C_DUAL_EXPORT_ENABLE(x)               (((x) >> 9) & 0x1)
 #define   C_02880C_DUAL_EXPORT_ENABLE                  0xFFFFFDFF
@@ -889,6 +892,7 @@
 #define   S_028A40_CUT_MODE(x)                         (((x) & 0x3) << 3)
 #define   G_028A40_CUT_MODE(x)                         (((x) >> 3) & 0x3)
 #define   C_028A40_CUT_MODE                            0xFFFFFFE7
+#define R_028A50_VGT_ENHANCE                         0x028A50
 #define R_028A6C_VGT_GS_OUT_PRIM_TYPE                0x028A6C
 #define   S_028A6C_OUTPRIM_TYPE(x)                     (((x) & 0x3F) << 0)
 #define     V_028A6C_OUTPRIM_TYPE_POINTLIST            0

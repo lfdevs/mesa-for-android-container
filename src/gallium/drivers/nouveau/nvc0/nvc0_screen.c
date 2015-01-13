@@ -104,6 +104,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1024;
    case PIPE_CAP_MAX_VERTEX_STREAMS:
       return 4;
+   case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
+      return 2048;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 256;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
@@ -168,6 +170,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_GATHER_SM5:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+   case PIPE_CAP_SAMPLER_VIEW_TARGET:
+   case PIPE_CAP_CLIP_HALFZ:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
       return (class_3d >= NVE4_3D_CLASS) ? 1 : 0;
@@ -256,6 +260,8 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
        * and excludes 0x60 per-patch inputs.
        */
       return 0x200 / 16;
+   case PIPE_SHADER_CAP_MAX_OUTPUTS:
+      return 32;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
       return 65536;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
@@ -399,8 +405,6 @@ nvc0_screen_destroy(struct pipe_screen *pscreen)
    nouveau_heap_destroy(&screen->text_heap);
 
    FREE(screen->tic.entries);
-
-   nouveau_mm_destroy(screen->mm_VRAM_fe0);
 
    nouveau_object_del(&screen->eng3d);
    nouveau_object_del(&screen->eng2d);
@@ -595,7 +599,6 @@ nvc0_screen_create(struct nouveau_device *dev)
    uint32_t obj_class;
    int ret;
    unsigned i;
-   union nouveau_bo_config mm_config;
 
    switch (dev->chipset & ~0xf) {
    case 0xc0:
@@ -783,8 +786,6 @@ nvc0_screen_create(struct nouveau_device *dev)
    PUSH_DATA (push, 0);
    BEGIN_NVC0(push, NVC0_3D(LINE_WIDTH_SEPARATE), 1);
    PUSH_DATA (push, 1);
-   BEGIN_NVC0(push, NVC0_3D(LINE_LAST_PIXEL), 1);
-   PUSH_DATA (push, 0);
    BEGIN_NVC0(push, NVC0_3D(PRIM_RESTART_WITH_DRAW_ARRAYS), 1);
    PUSH_DATA (push, 1);
    BEGIN_NVC0(push, NVC0_3D(BLEND_SEPARATE_ALPHA), 1);
@@ -1007,10 +1008,6 @@ nvc0_screen_create(struct nouveau_device *dev)
 
    screen->tic.entries = CALLOC(4096, sizeof(void *));
    screen->tsc.entries = screen->tic.entries + 2048;
-
-   mm_config.nvc0.tile_mode = 0;
-   mm_config.nvc0.memtype = 0xfe0;
-   screen->mm_VRAM_fe0 = nouveau_mm_create(dev, NOUVEAU_BO_VRAM, &mm_config);
 
    if (!nvc0_blitter_create(screen))
       goto fail;

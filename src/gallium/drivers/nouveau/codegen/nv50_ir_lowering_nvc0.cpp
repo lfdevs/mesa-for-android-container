@@ -150,7 +150,7 @@ NVC0LegalizePostRA::findOverwritingDefs(const Instruction *texi,
    while (insn->op == OP_MOV && insn->getDef(0)->equals(insn->getSrc(0)))
       insn = insn->getSrc(0)->getUniqueInsn();
 
-   if (!insn || !insn->bb->reachableBy(texi->bb, term))
+   if (!insn->bb->reachableBy(texi->bb, term))
       return;
 
    switch (insn->op) {
@@ -309,7 +309,6 @@ NVC0LegalizePostRA::insertTextureBarriers(Function *fn)
       }
    }
    delete[] uses;
-   uses = NULL;
 
    // insert the barriers
    for (size_t i = 0; i < useVec.size(); ++i) {
@@ -330,11 +329,8 @@ NVC0LegalizePostRA::insertTextureBarriers(Function *fn)
       }
    }
 
-   if (fn->getProgram()->optLevel < 3) {
-      if (uses)
-         delete[] uses;
+   if (fn->getProgram()->optLevel < 3)
       return true;
-   }
 
    std::vector<Limits> limitT, limitB, limitS; // entry, exit, single
 
@@ -419,8 +415,6 @@ NVC0LegalizePostRA::insertTextureBarriers(Function *fn)
             prev = i;
       }
    }
-   if (uses)
-      delete[] uses;
    return true;
 }
 
@@ -760,7 +754,8 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
          assert(i->tex.useOffsets == 1);
          for (c = 0; c < 3; ++c) {
             ImmediateValue val;
-            assert(i->offset[0][c].getImmediate(val));
+            if (!i->offset[0][c].getImmediate(val))
+               assert(!"non-immediate offset passed to non-TXG");
             imm |= (val.reg.data.u32 & 0xf) << (c * 4);
          }
          if (i->op == OP_TXD && chipset >= NVISA_GK104_CHIPSET) {

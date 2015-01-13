@@ -49,8 +49,7 @@
 #include "brw_state.h"
 #include "brw_vs.h"
 #include "brw_wm.h"
-#include "brw_vs.h"
-#include "brw_vec4_gs.h"
+#include "brw_gs.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -115,7 +114,7 @@ rehash(struct brw_cache *cache)
    GLuint size, i;
 
    size = cache->size * 3;
-   items = calloc(1, size * sizeof(*items));
+   items = calloc(size, sizeof(*items));
 
    for (i = 0; i < cache->size; i++)
       for (c = cache->items[i]; c; c = next) {
@@ -172,14 +171,23 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
    drm_intel_bo *new_bo;
 
    new_bo = drm_intel_bo_alloc(brw->bufmgr, "program cache", new_size, 64);
+   if (brw->has_llc)
+      drm_intel_gem_bo_map_unsynchronized(new_bo);
 
    /* Copy any existing data that needs to be saved. */
    if (cache->next_offset != 0) {
-      drm_intel_bo_map(cache->bo, false);
-      drm_intel_bo_subdata(new_bo, 0, cache->next_offset, cache->bo->virtual);
-      drm_intel_bo_unmap(cache->bo);
+      if (brw->has_llc) {
+         memcpy(new_bo->virtual, cache->bo->virtual, cache->next_offset);
+      } else {
+         drm_intel_bo_map(cache->bo, false);
+         drm_intel_bo_subdata(new_bo, 0, cache->next_offset,
+                              cache->bo->virtual);
+         drm_intel_bo_unmap(cache->bo);
+      }
    }
 
+   if (brw->has_llc)
+      drm_intel_bo_unmap(cache->bo);
    drm_intel_bo_unreference(cache->bo);
    cache->bo = new_bo;
    cache->bo_used_by_gpu = false;
@@ -200,6 +208,7 @@ brw_try_upload_using_copy(struct brw_cache *cache,
 			  const void *data,
 			  const void *aux)
 {
+   struct brw_context *brw = cache->brw;
    int i;
    struct brw_cache_item *item;
 
@@ -221,9 +230,11 @@ brw_try_upload_using_copy(struct brw_cache *cache,
 	    continue;
 	 }
 
-	 drm_intel_bo_map(cache->bo, false);
+         if (!brw->has_llc)
+            drm_intel_bo_map(cache->bo, false);
 	 ret = memcmp(cache->bo->virtual + item->offset, data, item->size);
-	 drm_intel_bo_unmap(cache->bo);
+         if (!brw->has_llc)
+            drm_intel_bo_unmap(cache->bo);
 	 if (ret)
 	    continue;
 
@@ -241,6 +252,8 @@ brw_upload_item_data(struct brw_cache *cache,
 		     struct brw_cache_item *item,
 		     const void *data)
 {
+   struct brw_context *brw = cache->brw;
+
    /* Allocate space in the cache BO for our new program. */
    if (cache->next_offset + item->size > cache->bo->size) {
       uint32_t new_size = cache->bo->size * 2;
@@ -254,7 +267,8 @@ brw_upload_item_data(struct brw_cache *cache,
    /* If we would block on writing to an in-use program BO, just
     * recreate it.
     */
-   if (cache->bo_used_by_gpu) {
+   if (!brw->has_llc && cache->bo_used_by_gpu) {
+      perf_debug("Copying busy program cache buffer.\n");
       brw_cache_new_bo(cache, cache->bo->size);
    }
 
@@ -276,6 +290,7 @@ brw_upload_cache(struct brw_cache *cache,
 		 uint32_t *out_offset,
 		 void *out_aux)
 {
+   struct brw_context *brw = cache->brw;
    struct brw_cache_item *item = CALLOC_STRUCT(brw_cache_item);
    GLuint hash;
    void *tmp;
@@ -316,7 +331,11 @@ brw_upload_cache(struct brw_cache *cache,
    cache->n_items++;
 
    /* Copy data to the buffer */
-   drm_intel_bo_subdata(cache->bo, item->offset, data_size, data);
+   if (brw->has_llc) {
+      memcpy((char *) cache->bo->virtual + item->offset, data, data_size);
+   } else {
+      drm_intel_bo_subdata(cache->bo, item->offset, data_size, data);
+   }
 
    *out_offset = item->offset;
    *(void **)out_aux = (void *)((char *)item->key + item->key_size);
@@ -333,11 +352,13 @@ brw_init_caches(struct brw_context *brw)
    cache->size = 7;
    cache->n_items = 0;
    cache->items =
-      calloc(1, cache->size * sizeof(struct brw_cache_item *));
+      calloc(cache->size, sizeof(struct brw_cache_item *));
 
    cache->bo = drm_intel_bo_alloc(brw->bufmgr,
 				  "program cache",
 				  4096, 64);
+   if (brw->has_llc)
+      drm_intel_gem_bo_map_unsynchronized(cache->bo);
 
    cache->aux_compare[BRW_VS_PROG] = brw_vs_prog_data_compare;
    cache->aux_compare[BRW_GS_PROG] = brw_gs_prog_data_compare;
@@ -379,7 +400,7 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
     * any offsets leftover in brw_context will no longer be valid.
     */
    brw->state.dirty.mesa |= ~0;
-   brw->state.dirty.brw |= ~0;
+   brw->state.dirty.brw |= ~0ull;
    brw->state.dirty.cache |= ~0;
    intel_batchbuffer_flush(brw);
 }
@@ -404,6 +425,8 @@ brw_destroy_cache(struct brw_context *brw, struct brw_cache *cache)
 
    DBG("%s\n", __FUNCTION__);
 
+   if (brw->has_llc)
+      drm_intel_bo_unmap(cache->bo);
    drm_intel_bo_unreference(cache->bo);
    cache->bo = NULL;
    brw_clear_cache(brw, cache);

@@ -1,2 +1,0 @@
-# This file gets tweaked in an os-specific fashion (see libegl1-mesa-drivers.install.linux.in)
-dri/usr/lib/${DEB_HOST_MULTIARCH}/egl/egl_gallium.so usr/lib/${DEB_HOST_MULTIARCH}/egl

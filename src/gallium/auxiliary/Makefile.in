@@ -103,8 +103,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 
 subdir = src/gallium/auxiliary
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -151,12 +152,13 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	rbug/rbug_texture.c rbug/rbug_shader.c rtasm/rtasm_cpu.c \
 	rtasm/rtasm_execmem.c rtasm/rtasm_x86sse.c tgsi/tgsi_build.c \
 	tgsi/tgsi_dump.c tgsi/tgsi_exec.c tgsi/tgsi_info.c \
-	tgsi/tgsi_iterate.c tgsi/tgsi_parse.c tgsi/tgsi_sanity.c \
-	tgsi/tgsi_scan.c tgsi/tgsi_strings.c tgsi/tgsi_text.c \
-	tgsi/tgsi_transform.c tgsi/tgsi_ureg.c tgsi/tgsi_util.c \
-	translate/translate.c translate/translate_cache.c \
-	translate/translate_generic.c translate/translate_sse.c \
-	util/u_debug.c util/u_debug_describe.c util/u_debug_flush.c \
+	tgsi/tgsi_iterate.c tgsi/tgsi_lowering.c tgsi/tgsi_parse.c \
+	tgsi/tgsi_sanity.c tgsi/tgsi_scan.c tgsi/tgsi_strings.c \
+	tgsi/tgsi_text.c tgsi/tgsi_transform.c tgsi/tgsi_ureg.c \
+	tgsi/tgsi_util.c translate/translate.c \
+	translate/translate_cache.c translate/translate_generic.c \
+	translate/translate_sse.c util/u_debug.c \
+	util/u_debug_describe.c util/u_debug_flush.c \
 	util/u_debug_memory.c util/u_debug_refcnt.c \
 	util/u_debug_stack.c util/u_debug_symbol.c \
 	util/u_dump_defines.c util/u_dump_state.c util/u_bitmask.c \
@@ -233,10 +235,10 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	rbug/rbug_texture.lo rbug/rbug_shader.lo rtasm/rtasm_cpu.lo \
 	rtasm/rtasm_execmem.lo rtasm/rtasm_x86sse.lo \
 	tgsi/tgsi_build.lo tgsi/tgsi_dump.lo tgsi/tgsi_exec.lo \
-	tgsi/tgsi_info.lo tgsi/tgsi_iterate.lo tgsi/tgsi_parse.lo \
-	tgsi/tgsi_sanity.lo tgsi/tgsi_scan.lo tgsi/tgsi_strings.lo \
-	tgsi/tgsi_text.lo tgsi/tgsi_transform.lo tgsi/tgsi_ureg.lo \
-	tgsi/tgsi_util.lo translate/translate.lo \
+	tgsi/tgsi_info.lo tgsi/tgsi_iterate.lo tgsi/tgsi_lowering.lo \
+	tgsi/tgsi_parse.lo tgsi/tgsi_sanity.lo tgsi/tgsi_scan.lo \
+	tgsi/tgsi_strings.lo tgsi/tgsi_text.lo tgsi/tgsi_transform.lo \
+	tgsi/tgsi_ureg.lo tgsi/tgsi_util.lo translate/translate.lo \
 	translate/translate_cache.lo translate/translate_generic.lo \
 	translate/translate_sse.lo util/u_debug.lo \
 	util/u_debug_describe.lo util/u_debug_flush.lo \
@@ -389,7 +391,7 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = pipe-loader
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
   dir0=`pwd`; \
@@ -440,6 +442,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -462,7 +465,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -535,11 +537,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -550,10 +555,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -567,7 +570,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -586,7 +588,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -650,6 +658,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -677,7 +686,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
-SUBDIRS := pipe-loader
+@HAVE_LOADER_GALLIUM_TRUE@SUBDIRS := pipe-loader
 C_SOURCES := \
 	cso_cache/cso_cache.c \
 	cso_cache/cso_context.c \
@@ -755,6 +764,7 @@ C_SOURCES := \
 	tgsi/tgsi_exec.c \
 	tgsi/tgsi_info.c \
 	tgsi/tgsi_iterate.c \
+	tgsi/tgsi_lowering.c \
 	tgsi/tgsi_parse.c \
 	tgsi/tgsi_sanity.c \
 	tgsi/tgsi_scan.c \
@@ -903,6 +913,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -913,6 +924,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -943,6 +955,7 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 noinst_LTLIBRARIES = libgallium.la
 AM_CFLAGS = -I$(top_srcdir)/src/gallium/auxiliary/util \
@@ -1191,6 +1204,8 @@ tgsi/tgsi_dump.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_exec.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_info.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_iterate.lo: tgsi/$(am__dirstamp) \
+	tgsi/$(DEPDIR)/$(am__dirstamp)
+tgsi/tgsi_lowering.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_parse.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
@@ -1576,6 +1591,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_info.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_iterate.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_lowering.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_parse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_sanity.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_scan.Plo@am__quote@

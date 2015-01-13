@@ -318,6 +318,9 @@ descriptor=[
   [ "PERFQUERY_COUNTER_NAME_LENGTH_MAX_INTEL", "CONST(MAX_PERFQUERY_COUNTER_NAME_LENGTH), extra_INTEL_performance_query" ],
   [ "PERFQUERY_COUNTER_DESC_LENGTH_MAX_INTEL", "CONST(MAX_PERFQUERY_COUNTER_DESC_LENGTH), extra_INTEL_performance_query" ],
   [ "PERFQUERY_GPA_EXTENDED_COUNTERS_INTEL", "CONST(PERFQUERY_HAVE_GPA_EXTENDED_COUNTERS), extra_INTEL_performance_query" ],
+
+# GL_KHR_context_flush_control
+  [ "CONTEXT_RELEASE_BEHAVIOR", "CONTEXT_ENUM(Const.ContextReleaseBehavior), NO_EXTRA" ],
 ]},
 
 # GLES3 is not a typo.
@@ -414,6 +417,8 @@ descriptor=[
   [ "AUX_BUFFERS", "BUFFER_INT(Visual.numAuxBuffers), NO_EXTRA" ],
   [ "BLUE_BIAS", "CONTEXT_FLOAT(Pixel.BlueBias), NO_EXTRA" ],
   [ "BLUE_SCALE", "CONTEXT_FLOAT(Pixel.BlueScale), NO_EXTRA" ],
+  [ "CLIP_DEPTH_MODE", "CONTEXT_ENUM(Transform.ClipDepthMode), extra_ARB_clip_control" ],
+  [ "CLIP_ORIGIN", "CONTEXT_ENUM(Transform.ClipOrigin), extra_ARB_clip_control" ],
   [ "CLIENT_ATTRIB_STACK_DEPTH", "CONTEXT_INT(ClientAttribStackDepth), NO_EXTRA" ],
   [ "COLOR_MATERIAL_FACE", "CONTEXT_ENUM(Light.ColorMaterialFace), NO_EXTRA" ],
   [ "COLOR_MATERIAL_PARAMETER", "CONTEXT_ENUM(Light.ColorMaterialMode), NO_EXTRA" ],
@@ -622,7 +627,7 @@ descriptor=[
 # == GL_CURRENT_MATRIX_NV
   [ "CURRENT_MATRIX_ARB", "LOC_CUSTOM, TYPE_MATRIX, 0, extra_ARB_vertex_program_ARB_fragment_program" ],
 # == GL_CURRENT_MATRIX_NV
-  [ "TRANSPOSE_CURRENT_MATRIX_ARB", "LOC_CUSTOM, TYPE_MATRIX, 0, extra_ARB_vertex_program_ARB_fragment_program" ],
+  [ "TRANSPOSE_CURRENT_MATRIX_ARB", "LOC_CUSTOM, TYPE_MATRIX_T, 0, extra_ARB_vertex_program_ARB_fragment_program" ],
 # == GL_PROGRAM_ERROR_POSITION_NV
   [ "PROGRAM_ERROR_POSITION_ARB", "CONTEXT_INT(Program.ErrorPos), extra_ARB_vertex_program_ARB_fragment_program" ],
 
@@ -711,6 +716,9 @@ descriptor=[
   [ "CONTEXT_PROFILE_MASK", "CONTEXT_INT(Const.ProfileMask), extra_version_32" ],
   [ "MAX_GEOMETRY_INPUT_COMPONENTS", "CONTEXT_INT(Const.Program[MESA_SHADER_GEOMETRY].MaxInputComponents), extra_version_32" ],
   [ "MAX_GEOMETRY_OUTPUT_COMPONENTS", "CONTEXT_INT(Const.Program[MESA_SHADER_GEOMETRY].MaxOutputComponents), extra_version_32" ],
+
+# GL 4.4
+  [ "MAX_VERTEX_ATTRIB_STRIDE", "CONTEXT_ENUM(Const.MaxVertexAttribStride), NO_EXTRA" ],
 
 # GL_ARB_robustness
   [ "RESET_NOTIFICATION_STRATEGY_ARB", "CONTEXT_ENUM(Const.ResetStrategy), NO_EXTRA" ],

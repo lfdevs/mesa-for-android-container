@@ -772,7 +772,8 @@ NV50LoweringPreSSA::handleTEX(TexInstruction *i)
    if (i->tex.useOffsets) {
       for (int c = 0; c < 3; ++c) {
          ImmediateValue val;
-         assert(i->offset[0][c].getImmediate(val));
+         if (!i->offset[0][c].getImmediate(val))
+            assert(!"non-immediate offset");
          i->tex.offset[c] = val.reg.data.u32;
          i->offset[0][c].set(NULL);
       }

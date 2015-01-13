@@ -256,7 +256,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libudev1 [linux-any],
-Recommends: libegl1-mesa-drivers [!hurd-any]
 Provides: libegl1-x11
 Conflicts: libegl1-x11
 Replaces: libegl1-x11
@@ -265,11 +264,10 @@ Multi-Arch: same
 Description: free implementation of the EGL API -- runtime
  This package contains the EGL native platform graphics interface library.
  EGL provides a platform-agnostic mechanism for creating rendering surfaces
- for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ for use with other graphics libraries, such as OpenGL|ES.
  .
  This package contains modules to interface with the existing system GLX or
- DRI2 drivers to provide OpenGL via EGL.  The libegl1-mesa-drivers package
- provides drivers to provide hardware-accelerated OpenGL|ES and OpenVG support.
+ DRI2 drivers to provide OpenGL via EGL.
 
 Package: libegl1-mesa-dbg
 Section: debug
@@ -282,7 +280,7 @@ Multi-Arch: same
 Description: free implementation of the EGL API -- debugging symbols
  This package contains the EGL native platform graphics interface library.
  EGL provides a platform-agnostic mechanism for creating rendering surfaces
- for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ for use with other graphics libraries, such as OpenGL|ES.
  .
  This package contains the debugging symbols for the EGL library.
 
@@ -291,7 +289,6 @@ Section: libdevel
 Architecture: any
 Depends:
  libegl1-mesa (= ${binary:Version}),
- libegl1-mesa-drivers (= ${binary:Version}) [!hurd-any],
  libdrm-dev (>= 2.4.52) [!hurd-any],
  x11proto-dri2-dev (>= 2.6),
  x11proto-gl-dev (>= 1.4.14),
@@ -314,7 +311,7 @@ Description: free implementation of the EGL API -- development files
  This package contains the development environment required for compiling
  programs against EGL native platform graphics interface library.
  EGL provides a platform-agnostic mechanism for creating rendering surfaces
- for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ for use with other graphics libraries, such as OpenGL|ES.
  .
  This package provides the development environment for compiling programs
  against the EGL library.
@@ -323,37 +320,9 @@ Package: libegl1-mesa-drivers
 Section: libs
 Architecture: linux-any kfreebsd-any
 Depends:
- ${shlibs:Depends},
  ${misc:Depends},
- libegl1-mesa (= ${binary:Version}),
- libglapi-mesa (= ${binary:Version}),
- libwayland-egl1-mesa (= ${binary:Version}) [linux-any],
- libudev1 [linux-any],
-Pre-Depends: ${misc:Pre-Depends}
-Multi-Arch: same
-Description: free implementation of the EGL API -- hardware drivers
- This package contains the EGL native platform graphics interface library.
- EGL provides a platform-agnostic mechanism for creating rendering surfaces
- for use with other graphics libraries, such as OpenGL|ES and OpenVG.
- .
- This package contains the drivers required for hardware accelerated rendering
- of EGL-based graphics libraries, such as OpenGL|ES and OpenVG.
-
-Package: libegl1-mesa-drivers-dbg
-Section: debug
-Priority: extra
-Architecture: linux-any kfreebsd-any
-Depends:
- libegl1-mesa-drivers (= ${binary:Version}),
- ${misc:Depends},
-Multi-Arch: same
-Description: free implementation of the EGL API -- driver debugging symbols
- This package contains the EGL native platform graphics interface library.
- EGL provides a platform-agnostic mechanism for creating rendering surfaces
- for use with other graphics libraries, such as OpenGL|ES and OpenVG.
- .
- This package contains the debugging symbols for the drivers required for
- hardware accelerated rendering of EGL-based graphics libraries.
+Description: transitional dummy package
+ This is a transitional dummy package, it can be safely removed.
 
 Package: libwayland-egl1-mesa
 Section: libs
@@ -362,7 +331,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libegl1-mesa (= ${binary:Version})
-Recommends: libegl1-mesa-drivers
 Provides: libwayland-egl1
 Conflicts: libwayland-egl1
 Replaces: libwayland-egl1, libegl1-mesa-drivers  (<< 10.1.0-2)
@@ -383,59 +351,6 @@ Multi-Arch: same
 Description: implementation of the Wayland EGL platform -- debugging symbols
  This package contains the debugging symbols for the mesa implementation of the
  Wayland EGL platform
-
-Package: libopenvg1-mesa
-Section: libs
-Architecture: linux-any kfreebsd-any
-Depends:
- ${shlibs:Depends},
- ${misc:Depends},
-Provides: libopenvg1
-Conflicts: libopenvg1
-Replaces: libopenvg1
-Pre-Depends: ${misc:Pre-Depends}
-Multi-Arch: same
-Description: free implementation of the OpenVG API -- runtime
- This package contains the mesa implementation of the OpenVG 2D acceleration
- library.  OpenVG provides a device independent and vendor-neutral interface
- for sophisticated 2D graphical applications, while allowing device
- manufacturers to provide hardware acceleration on devices ranging from wrist
- watches to full microprocessor-based desktop and server machines.
-
-Package: libopenvg1-mesa-dbg
-Section: debug
-Priority: extra
-Architecture: linux-any kfreebsd-any
-Depends:
- libopenvg1-mesa (= ${binary:Version}),
- ${misc:Depends},
-Multi-Arch: same
-Description: free implementation of the OpenVG API -- debugging symbols
- This package contains the mesa implementation of the OpenVG 2D acceleration
- library.  OpenVG provides a device independent and vendor-neutral interface
- for sophisticated 2D graphical applications, while allowing device
- manufacturers to provide hardware acceleration on devices ranging from wrist
- watches to full microprocessor-based desktop and server machines.
- .
- This package contains the debugging symbols for the OpenVG library.
-
-Package: libopenvg1-mesa-dev
-Section: libdevel
-Architecture: linux-any kfreebsd-any
-Depends:
- libopenvg1-mesa (= ${binary:Version}),
- libegl1-mesa-dev,
- ${misc:Depends},
-Multi-Arch: same
-Description: free implementation of the OpenVG API -- development files
- This package contains the mesa implementation of the OpenVG 2D acceleration
- library.  OpenVG provides a device independent and vendor-neutral interface
- for sophisticated 2D graphical applications, while allowing device
- manufacturers to provide hardware acceleration on devices ranging from wrist
- watches to full microprocessor-based desktop and server machines.
- .
- This package contains the development environment required for compiling
- programs against the OpenVG 2D acceleration library.
 
 Package: libgles1-mesa
 Section: libs

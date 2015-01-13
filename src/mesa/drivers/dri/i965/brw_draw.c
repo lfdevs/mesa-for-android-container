@@ -181,14 +181,20 @@ static void brw_emit_prim(struct brw_context *brw,
    DBG("PRIM: %s %d %d\n", _mesa_lookup_enum_by_nr(prim->mode),
        prim->start, prim->count);
 
+   int start_vertex_location = prim->start;
+   int base_vertex_location = prim->basevertex;
+
    if (prim->indexed) {
       vertex_access_type = brw->gen >= 7 ?
          GEN7_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM :
          GEN4_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM;
+      start_vertex_location += brw->ib.start_vertex_offset;
+      base_vertex_location += brw->vb.start_vertex_bias;
    } else {
       vertex_access_type = brw->gen >= 7 ?
          GEN7_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL :
          GEN4_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL;
+      start_vertex_location += brw->vb.start_vertex_bias;
    }
 
    /* We only need to trim the primitive count on pre-Gen6. */
@@ -263,10 +269,10 @@ static void brw_emit_prim(struct brw_context *brw,
                 vertex_access_type);
    }
    OUT_BATCH(verts_per_instance);
-   OUT_BATCH(brw->draw.start_vertex_location);
+   OUT_BATCH(start_vertex_location);
    OUT_BATCH(prim->num_instances);
    OUT_BATCH(prim->base_instance);
-   OUT_BATCH(brw->draw.base_vertex_location);
+   OUT_BATCH(base_vertex_location);
    ADVANCE_BATCH();
 
    /* Only used on Sandybridge; harmless to set elsewhere. */
@@ -430,9 +436,8 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
          }
       }
 
-      brw->draw.indexed = prims[i].indexed;
-      brw->draw.start_vertex_location = prims[i].start;
-      brw->draw.base_vertex_location = prims[i].basevertex;
+      brw->draw.gl_basevertex =
+         prims[i].indexed ? prims[i].basevertex : prims[i].start;
 
       drm_intel_bo_unreference(brw->draw.draw_params_bo);
 

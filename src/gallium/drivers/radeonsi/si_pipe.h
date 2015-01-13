@@ -39,13 +39,13 @@
 
 #define SI_MAX_DRAW_CS_DWORDS 18
 
-struct si_pipe_compute;
+struct si_compute;
 
 struct si_screen {
 	struct r600_common_screen	b;
 };
 
-struct si_pipe_sampler_view {
+struct si_sampler_view {
 	struct pipe_sampler_view	base;
 	struct list_head		list;
 	struct r600_resource		*resource;
@@ -53,13 +53,13 @@ struct si_pipe_sampler_view {
 	uint32_t			fmask_state[8];
 };
 
-struct si_pipe_sampler_state {
+struct si_sampler_state {
 	uint32_t			val[4];
 	uint32_t			border_color[4];
 };
 
 struct si_cs_shader_state {
-	struct si_pipe_compute		*program;
+	struct si_compute		*program;
 };
 
 struct si_textures_info {
@@ -86,10 +86,7 @@ struct si_framebuffer {
 struct si_context {
 	struct r600_common_context	b;
 	struct blitter_context		*blitter;
-	void				*custom_dsa_flush_depth_stencil[8];
-	void				*custom_dsa_flush_depth[8];
-	void				*custom_dsa_flush_stencil[8];
-	void				*custom_dsa_flush_inplace;
+	void				*custom_dsa_flush;
 	void				*custom_blend_resolve;
 	void				*custom_blend_decompress;
 	void				*custom_blend_fastclear;
@@ -109,6 +106,7 @@ struct si_context {
 			struct r600_atom *streamout_begin;
 			struct r600_atom *streamout_enable; /* must be after streamout_begin */
 			struct r600_atom *framebuffer;
+			struct r600_atom *db_render_state;
 			struct r600_atom *msaa_config;
 		} s;
 		struct r600_atom *array[0];
@@ -120,9 +118,10 @@ struct si_context {
 	unsigned			pa_su_sc_mode_cntl;
 	/* for saving when using blitter */
 	struct pipe_stencil_ref		stencil_ref;
-	struct si_pipe_shader_selector	*ps_shader;
-	struct si_pipe_shader_selector	*gs_shader;
-	struct si_pipe_shader_selector	*vs_shader;
+	/* shaders */
+	struct si_shader_selector	*ps_shader;
+	struct si_shader_selector	*gs_shader;
+	struct si_shader_selector	*vs_shader;
 	struct si_cs_shader_state	cs_shader_state;
 	/* shader information */
 	unsigned			sprite_coord_enable;
@@ -155,12 +154,22 @@ struct si_context {
 	struct si_pm4_state	*gs_rings;
 	struct r600_atom	cache_flush;
 	struct pipe_constant_buffer null_const_buf; /* used for set_constant_buffer(NULL) on CIK */
-	struct pipe_constant_buffer esgs_ring;
-	struct pipe_constant_buffer gsvs_ring;
+	struct pipe_resource	*esgs_ring;
+	struct pipe_resource	*gsvs_ring;
 
 	/* SI state handling */
 	union si_state	queued;
 	union si_state	emitted;
+
+	/* DB render state. */
+	struct r600_atom	db_render_state;
+	bool			dbcb_depth_copy_enabled;
+	bool			dbcb_stencil_copy_enabled;
+	unsigned		dbcb_copy_sample;
+	bool			db_inplace_flush_enabled;
+	bool			db_depth_clear;
+	bool			db_depth_disable_expclear;
+	unsigned		ps_db_shader_control;
 };
 
 /* si_blit.c */
@@ -169,6 +178,13 @@ void si_flush_depth_textures(struct si_context *sctx,
 			     struct si_textures_info *textures);
 void si_decompress_color_textures(struct si_context *sctx,
 				  struct si_textures_info *textures);
+void si_resource_copy_region(struct pipe_context *ctx,
+			     struct pipe_resource *dst,
+			     unsigned dst_level,
+			     unsigned dstx, unsigned dsty, unsigned dstz,
+			     struct pipe_resource *src,
+			     unsigned src_level,
+			     const struct pipe_box *src_box);
 
 /* si_dma.c */
 void si_dma_copy(struct pipe_context *ctx,

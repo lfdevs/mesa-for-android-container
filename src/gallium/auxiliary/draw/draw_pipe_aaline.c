@@ -140,7 +140,6 @@ struct aa_transform_context {
    int freeSampler;  /** an available sampler for the pstipple */
    int maxInput, maxGeneric;  /**< max input index found */
    int colorTemp, texTemp;  /**< temp registers */
-   boolean firstInstruction;
 };
 
 
@@ -197,148 +196,105 @@ free_bit(uint bitfield)
 
 
 /**
+ * TGSI transform prolog callback.
+ */
+static void
+aa_transform_prolog(struct tgsi_transform_context *ctx)
+{
+   struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
+   uint i;
+
+   /* find free sampler */
+   aactx->freeSampler = free_bit(aactx->samplersUsed);
+   if (aactx->freeSampler >= PIPE_MAX_SAMPLERS)
+      aactx->freeSampler = PIPE_MAX_SAMPLERS - 1;
+
+   /* find two free temp regs */
+   for (i = 0; i < 32; i++) {
+      if ((aactx->tempsUsed & (1 << i)) == 0) {
+      /* found a free temp */
+      if (aactx->colorTemp < 0)
+         aactx->colorTemp  = i;
+      else if (aactx->texTemp < 0)
+         aactx->texTemp  = i;
+      else
+         break;
+      }
+   }
+   assert(aactx->colorTemp >= 0);
+   assert(aactx->texTemp >= 0);
+
+   /* declare new generic input/texcoord */
+   tgsi_transform_input_decl(ctx, aactx->maxInput + 1,
+                             TGSI_SEMANTIC_GENERIC, aactx->maxGeneric + 1,
+                             TGSI_INTERPOLATE_LINEAR);
+
+   /* declare new sampler */
+   tgsi_transform_sampler_decl(ctx, aactx->freeSampler);
+
+   /* declare new temp regs */
+   tgsi_transform_temp_decl(ctx, aactx->texTemp);
+   tgsi_transform_temp_decl(ctx, aactx->colorTemp);
+}
+
+
+/**
+ * TGSI transform epilog callback.
+ */
+static void
+aa_transform_epilog(struct tgsi_transform_context *ctx)
+{
+   struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
+
+   if (aactx->colorOutput != -1) {
+      /* insert texture sampling code for antialiasing. */
+
+      /* TEX texTemp, input_coord, sampler */
+      tgsi_transform_tex_2d_inst(ctx,
+                                 TGSI_FILE_TEMPORARY, aactx->texTemp,
+                                 TGSI_FILE_INPUT, aactx->maxInput + 1,
+                                 aactx->freeSampler);
+
+      /* MOV rgb */
+      tgsi_transform_op1_inst(ctx, TGSI_OPCODE_MOV,
+                              TGSI_FILE_OUTPUT, aactx->colorOutput,
+                              TGSI_WRITEMASK_XYZ,
+                              TGSI_FILE_TEMPORARY, aactx->colorTemp);
+
+      /* MUL alpha */
+      tgsi_transform_op2_inst(ctx, TGSI_OPCODE_MUL,
+                              TGSI_FILE_OUTPUT, aactx->colorOutput,
+                              TGSI_WRITEMASK_W,
+                              TGSI_FILE_TEMPORARY, aactx->colorTemp,
+                              TGSI_FILE_TEMPORARY, aactx->texTemp);
+   }
+}
+
+
+/**
  * TGSI instruction transform callback.
  * Replace writes to result.color w/ a temp reg.
- * Upon END instruction, insert texture sampling code for antialiasing.
  */
 static void
 aa_transform_inst(struct tgsi_transform_context *ctx,
                   struct tgsi_full_instruction *inst)
 {
    struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
+   uint i;
 
-   if (aactx->firstInstruction) {
-      /* emit our new declarations before the first instruction */
-
-      struct tgsi_full_declaration decl;
-      uint i;
-
-      /* find free sampler */
-      aactx->freeSampler = free_bit(aactx->samplersUsed);
-      if (aactx->freeSampler >= PIPE_MAX_SAMPLERS)
-         aactx->freeSampler = PIPE_MAX_SAMPLERS - 1;
-
-      /* find two free temp regs */
-      for (i = 0; i < 32; i++) {
-         if ((aactx->tempsUsed & (1 << i)) == 0) {
-            /* found a free temp */
-            if (aactx->colorTemp < 0)
-               aactx->colorTemp  = i;
-            else if (aactx->texTemp < 0)
-               aactx->texTemp  = i;
-            else
-               break;
-         }
+   /*
+    * Look for writes to result.color and replace with colorTemp reg.
+    */
+   for (i = 0; i < inst->Instruction.NumDstRegs; i++) {
+      struct tgsi_full_dst_register *dst = &inst->Dst[i];
+      if (dst->Register.File == TGSI_FILE_OUTPUT &&
+          dst->Register.Index == aactx->colorOutput) {
+         dst->Register.File = TGSI_FILE_TEMPORARY;
+         dst->Register.Index = aactx->colorTemp;
       }
-      assert(aactx->colorTemp >= 0);
-      assert(aactx->texTemp >= 0);
-
-      /* declare new generic input/texcoord */
-      decl = tgsi_default_full_declaration();
-      decl.Declaration.File = TGSI_FILE_INPUT;
-      /* XXX this could be linear... */
-      decl.Declaration.Interpolate = 1;
-      decl.Declaration.Semantic = 1;
-      decl.Semantic.Name = TGSI_SEMANTIC_GENERIC;
-      decl.Semantic.Index = aactx->maxGeneric + 1;
-      decl.Range.First = 
-      decl.Range.Last = aactx->maxInput + 1;
-      decl.Interp.Interpolate = TGSI_INTERPOLATE_PERSPECTIVE;
-      ctx->emit_declaration(ctx, &decl);
-
-      /* declare new sampler */
-      decl = tgsi_default_full_declaration();
-      decl.Declaration.File = TGSI_FILE_SAMPLER;
-      decl.Range.First = 
-      decl.Range.Last = aactx->freeSampler;
-      ctx->emit_declaration(ctx, &decl);
-
-      /* declare new temp regs */
-      decl = tgsi_default_full_declaration();
-      decl.Declaration.File = TGSI_FILE_TEMPORARY;
-      decl.Range.First = 
-      decl.Range.Last = aactx->texTemp;
-      ctx->emit_declaration(ctx, &decl);
-
-      decl = tgsi_default_full_declaration();
-      decl.Declaration.File = TGSI_FILE_TEMPORARY;
-      decl.Range.First = 
-      decl.Range.Last = aactx->colorTemp;
-      ctx->emit_declaration(ctx, &decl);
-
-      aactx->firstInstruction = FALSE;
    }
 
-   if (inst->Instruction.Opcode == TGSI_OPCODE_END &&
-       aactx->colorOutput != -1) {
-      struct tgsi_full_instruction newInst;
-
-      /* TEX */
-      newInst = tgsi_default_full_instruction();
-      newInst.Instruction.Opcode = TGSI_OPCODE_TEX;
-      newInst.Instruction.NumDstRegs = 1;
-      newInst.Dst[0].Register.File = TGSI_FILE_TEMPORARY;
-      newInst.Dst[0].Register.Index = aactx->texTemp;
-      newInst.Instruction.NumSrcRegs = 2;
-      newInst.Instruction.Texture = TRUE;
-      newInst.Texture.Texture = TGSI_TEXTURE_2D;
-      newInst.Src[0].Register.File = TGSI_FILE_INPUT;
-      newInst.Src[0].Register.Index = aactx->maxInput + 1;
-      newInst.Src[1].Register.File = TGSI_FILE_SAMPLER;
-      newInst.Src[1].Register.Index = aactx->freeSampler;
-
-      ctx->emit_instruction(ctx, &newInst);
-
-      /* MOV rgb */
-      newInst = tgsi_default_full_instruction();
-      newInst.Instruction.Opcode = TGSI_OPCODE_MOV;
-      newInst.Instruction.NumDstRegs = 1;
-      newInst.Dst[0].Register.File = TGSI_FILE_OUTPUT;
-      newInst.Dst[0].Register.Index = aactx->colorOutput;
-      newInst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_XYZ;
-      newInst.Instruction.NumSrcRegs = 1;
-      newInst.Src[0].Register.File = TGSI_FILE_TEMPORARY;
-      newInst.Src[0].Register.Index = aactx->colorTemp;
-      ctx->emit_instruction(ctx, &newInst);
-
-      /* MUL alpha */
-      newInst = tgsi_default_full_instruction();
-      newInst.Instruction.Opcode = TGSI_OPCODE_MUL;
-      newInst.Instruction.NumDstRegs = 1;
-      newInst.Dst[0].Register.File = TGSI_FILE_OUTPUT;
-      newInst.Dst[0].Register.Index = aactx->colorOutput;
-      newInst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_W;
-      newInst.Instruction.NumSrcRegs = 2;
-      newInst.Src[0].Register.File = TGSI_FILE_TEMPORARY;
-      newInst.Src[0].Register.Index = aactx->colorTemp;
-      newInst.Src[1].Register.File = TGSI_FILE_TEMPORARY;
-      newInst.Src[1].Register.Index = aactx->texTemp;
-      ctx->emit_instruction(ctx, &newInst);
-
-      /* END */
-      newInst = tgsi_default_full_instruction();
-      newInst.Instruction.Opcode = TGSI_OPCODE_END;
-      newInst.Instruction.NumDstRegs = 0;
-      newInst.Instruction.NumSrcRegs = 0;
-      ctx->emit_instruction(ctx, &newInst);
-   }
-   else {
-      /* Not an END instruction.
-       * Look for writes to result.color and replace with colorTemp reg.
-       */
-      uint i;
-
-      for (i = 0; i < inst->Instruction.NumDstRegs; i++) {
-         struct tgsi_full_dst_register *dst = &inst->Dst[i];
-         if (dst->Register.File == TGSI_FILE_OUTPUT &&
-             dst->Register.Index == aactx->colorOutput) {
-            dst->Register.File = TGSI_FILE_TEMPORARY;
-            dst->Register.Index = aactx->colorTemp;
-         }
-      }
-
-      ctx->emit_instruction(ctx, inst);
-   }
+   ctx->emit_instruction(ctx, inst);
 }
 
 
@@ -366,7 +322,8 @@ generate_aaline_fs(struct aaline_stage *aaline)
    transform.maxGeneric = -1;
    transform.colorTemp = -1;
    transform.texTemp = -1;
-   transform.firstInstruction = TRUE;
+   transform.base.prolog = aa_transform_prolog;
+   transform.base.epilog = aa_transform_epilog;
    transform.base.transform_instruction = aa_transform_inst;
    transform.base.transform_declaration = aa_transform_decl;
 

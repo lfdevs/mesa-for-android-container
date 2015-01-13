@@ -49,8 +49,13 @@ fd3_context_destroy(struct pipe_context *pctx)
 	fd_bo_del(fd3_ctx->fs_pvt_mem);
 	fd_bo_del(fd3_ctx->vsc_size_mem);
 
+	pctx->delete_vertex_elements_state(pctx, fd3_ctx->solid_vbuf_state.vtx);
+	pctx->delete_vertex_elements_state(pctx, fd3_ctx->blit_vbuf_state.vtx);
+
 	pipe_resource_reference(&fd3_ctx->solid_vbuf, NULL);
 	pipe_resource_reference(&fd3_ctx->blit_texcoord_vbuf, NULL);
+
+	u_upload_destroy(fd3_ctx->border_color_uploader);
 
 	fd_context_destroy(pctx);
 }
@@ -135,7 +140,38 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv)
 	fd3_ctx->solid_vbuf = create_solid_vertexbuf(pctx);
 	fd3_ctx->blit_texcoord_vbuf = create_blit_texcoord_vertexbuf(pctx);
 
+	/* setup solid_vbuf_state: */
+	fd3_ctx->solid_vbuf_state.vtx = pctx->create_vertex_elements_state(
+			pctx, 1, (struct pipe_vertex_element[]){{
+				.vertex_buffer_index = 0,
+				.src_offset = 0,
+				.src_format = PIPE_FORMAT_R32G32B32_FLOAT,
+			}});
+	fd3_ctx->solid_vbuf_state.vertexbuf.count = 1;
+	fd3_ctx->solid_vbuf_state.vertexbuf.vb[0].stride = 12;
+	fd3_ctx->solid_vbuf_state.vertexbuf.vb[0].buffer = fd3_ctx->solid_vbuf;
+
+	/* setup blit_vbuf_state: */
+	fd3_ctx->blit_vbuf_state.vtx = pctx->create_vertex_elements_state(
+			pctx, 2, (struct pipe_vertex_element[]){{
+				.vertex_buffer_index = 0,
+				.src_offset = 0,
+				.src_format = PIPE_FORMAT_R32G32_FLOAT,
+			}, {
+				.vertex_buffer_index = 1,
+				.src_offset = 0,
+				.src_format = PIPE_FORMAT_R32G32B32_FLOAT,
+			}});
+	fd3_ctx->blit_vbuf_state.vertexbuf.count = 2;
+	fd3_ctx->blit_vbuf_state.vertexbuf.vb[0].stride = 8;
+	fd3_ctx->blit_vbuf_state.vertexbuf.vb[0].buffer = fd3_ctx->blit_texcoord_vbuf;
+	fd3_ctx->blit_vbuf_state.vertexbuf.vb[1].stride = 12;
+	fd3_ctx->blit_vbuf_state.vertexbuf.vb[1].buffer = fd3_ctx->solid_vbuf;
+
 	fd3_query_context_init(pctx);
+
+	fd3_ctx->border_color_uploader = u_upload_create(pctx, 4096,
+			2 * PIPE_MAX_SAMPLERS * BORDERCOLOR_SIZE, 0);
 
 	return pctx;
 }

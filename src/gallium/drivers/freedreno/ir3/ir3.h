@@ -47,7 +47,7 @@ struct ir3_info {
 	 */
 	int8_t   max_reg;   /* highest GPR # used by shader */
 	int8_t   max_half_reg;
-	int8_t   max_const;
+	int16_t  max_const;
 };
 
 struct ir3_register {
@@ -96,6 +96,8 @@ struct ir3_register {
 	 */
 	int wrmask;
 };
+
+#define IR3_INSTR_SRCS 10
 
 struct ir3_instruction {
 	struct ir3_block *block;
@@ -156,7 +158,7 @@ struct ir3_instruction {
 	} flags;
 	int repeat;
 	unsigned regs_count;
-	struct ir3_register *regs[5];
+	struct ir3_register *regs[1 + IR3_INSTR_SRCS];
 	union {
 		struct {
 			char inv;
@@ -208,8 +210,25 @@ struct ir3_instruction {
 		 * result of moving a const to a reg would have a low cost,  so to
 		 * it could make sense to duplicate the instruction at various
 		 * points where the result is needed to reduce register footprint.
+		 *
+		 * DEPTH_UNUSED used to mark unused instructions after depth
+		 * calculation pass.
 		 */
+#define DEPTH_UNUSED  ~0
 		unsigned depth;
+
+		/* Used just during cp stage, which comes before depth pass.
+		 * For fanin, where we need a sequence of consecutive registers,
+		 * keep track of each src instructions left (ie 'n-1') and right
+		 * (ie 'n+1') neighbor.  The front-end must insert enough mov's
+		 * to ensure that each instruction has at most one left and at
+		 * most one right neighbor.  During the copy-propagation pass,
+		 * we only remove mov's when we can preserve this constraint.
+		 */
+		struct {
+			struct ir3_instruction *left, *right;
+			uint16_t left_cnt, right_cnt;
+		} cp;
 	};
 	struct ir3_instruction *next;
 #ifdef DEBUG
@@ -222,6 +241,9 @@ struct ir3_heap_chunk;
 struct ir3 {
 	unsigned instrs_count, instrs_sz;
 	struct ir3_instruction **instrs;
+	unsigned baryfs_count, baryfs_sz;
+	struct ir3_instruction **baryfs;
+	struct ir3_block *block;
 	unsigned heap_idx;
 	struct ir3_heap_chunk *chunk;
 };
@@ -270,6 +292,10 @@ static inline void ir3_clear_mark(struct ir3 *shader)
 	/* TODO would be nice to drop the instruction array.. for
 	 * new compiler, _clear_mark() is all we use it for, and
 	 * we could probably manage a linked list instead..
+	 *
+	 * Also, we'll probably want to mark instructions within
+	 * a block, so tracking the list of instrs globally is
+	 * unlikely to be what we want.
 	 */
 	unsigned i;
 	for (i = 0; i < shader->instrs_count; i++) {
@@ -406,12 +432,12 @@ void ir3_block_depth(struct ir3_block *block);
 void ir3_block_cp(struct ir3_block *block);
 
 /* scheduling: */
-void ir3_block_sched(struct ir3_block *block);
+int ir3_block_sched(struct ir3_block *block);
 
 /* register assignment: */
 int ir3_block_ra(struct ir3_block *block, enum shader_t type,
 		bool half_precision, bool frag_coord, bool frag_face,
-		bool *has_samp);
+		bool *has_samp, int *max_bary);
 
 #ifndef ARRAY_SIZE
 #  define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -444,7 +470,7 @@ static inline void regmask_set(regmask_t *regmask, struct ir3_register *reg)
 {
 	unsigned idx = regmask_idx(reg);
 	unsigned i;
-	for (i = 0; i < 4; i++, idx++)
+	for (i = 0; i < IR3_INSTR_SRCS; i++, idx++)
 		if (reg->wrmask & (1 << i))
 			(*regmask)[idx / 8] |= 1 << (idx % 8);
 }
@@ -457,7 +483,7 @@ static inline void regmask_set_if_not(regmask_t *a,
 {
 	unsigned idx = regmask_idx(reg);
 	unsigned i;
-	for (i = 0; i < 4; i++, idx++)
+	for (i = 0; i < IR3_INSTR_SRCS; i++, idx++)
 		if (reg->wrmask & (1 << i))
 			if (!((*b)[idx / 8] & (1 << (idx % 8))))
 				(*a)[idx / 8] |= 1 << (idx % 8);
@@ -468,7 +494,7 @@ static inline unsigned regmask_get(regmask_t *regmask,
 {
 	unsigned idx = regmask_idx(reg);
 	unsigned i;
-	for (i = 0; i < 4; i++, idx++)
+	for (i = 0; i < IR3_INSTR_SRCS; i++, idx++)
 		if (reg->wrmask & (1 << i))
 			if ((*regmask)[idx / 8] & (1 << (idx % 8)))
 				return true;

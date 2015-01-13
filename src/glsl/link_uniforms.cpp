@@ -585,6 +585,8 @@ private:
       this->uniforms[id].driver_storage = NULL;
       this->uniforms[id].storage = this->values;
       this->uniforms[id].atomic_buffer_index = -1;
+      this->uniforms[id].hidden =
+         current_var->data.how_declared == ir_var_hidden;
       if (this->ubo_block_index != -1) {
 	 this->uniforms[id].block_index = this->ubo_block_index;
 
@@ -749,7 +751,7 @@ link_update_uniform_buffer_variables(struct gl_shader *shader)
                if (end == NULL)
                   continue;
 
-               if (l != (end - begin))
+               if ((ptrdiff_t) l != (end - begin))
                   continue;
 
                if (strncmp(var->name, begin, l) == 0) {
@@ -768,40 +770,6 @@ link_update_uniform_buffer_variables(struct gl_shader *shader)
 	    break;
       }
       assert(found);
-   }
-}
-
-void
-link_assign_uniform_block_offsets(struct gl_shader *shader)
-{
-   for (unsigned b = 0; b < shader->NumUniformBlocks; b++) {
-      struct gl_uniform_block *block = &shader->UniformBlocks[b];
-
-      unsigned offset = 0;
-      for (unsigned int i = 0; i < block->NumUniforms; i++) {
-	 struct gl_uniform_buffer_variable *ubo_var = &block->Uniforms[i];
-	 const struct glsl_type *type = ubo_var->Type;
-
-	 unsigned alignment = type->std140_base_alignment(ubo_var->RowMajor);
-	 unsigned size = type->std140_size(ubo_var->RowMajor);
-
-	 offset = glsl_align(offset, alignment);
-	 ubo_var->Offset = offset;
-	 offset += size;
-      }
-
-      /* From the GL_ARB_uniform_buffer_object spec:
-       *
-       *     "For uniform blocks laid out according to [std140] rules,
-       *      the minimum buffer object size returned by the
-       *      UNIFORM_BLOCK_DATA_SIZE query is derived by taking the
-       *      offset of the last basic machine unit consumed by the
-       *      last uniform of the uniform block (including any
-       *      end-of-array or end-of-structure padding), adding one,
-       *      and rounding up to the next multiple of the base
-       *      alignment required for a vec4."
-       */
-      block->UniformBufferSize = glsl_align(offset, 16);
    }
 }
 
@@ -829,8 +797,8 @@ link_set_image_access_qualifiers(struct gl_shader_program *prog)
             (void) found;
             const gl_uniform_storage *storage = &prog->UniformStorage[id];
             const unsigned index = storage->image[i].index;
-            const GLenum access = (var->data.image.read_only ? GL_READ_ONLY :
-                                   var->data.image.write_only ? GL_WRITE_ONLY :
+            const GLenum access = (var->data.image_read_only ? GL_READ_ONLY :
+                                   var->data.image_write_only ? GL_WRITE_ONLY :
                                    GL_READ_WRITE);
 
             for (unsigned j = 0; j < MAX2(1, storage->array_elements); ++j)
@@ -838,6 +806,50 @@ link_set_image_access_qualifiers(struct gl_shader_program *prog)
          }
       }
    }
+}
+
+/**
+ * Sort the array of uniform storage so that the non-hidden uniforms are first
+ *
+ * This function sorts the list "in place."  This is important because some of
+ * the storage accessible from \c uniforms has \c uniforms as its \c ralloc
+ * context.  If \c uniforms is freed, some other storage will also be freed.
+ */
+static unsigned
+move_hidden_uniforms_to_end(struct gl_shader_program *prog,
+                            struct gl_uniform_storage *uniforms,
+                            unsigned num_elements)
+{
+   struct gl_uniform_storage *sorted_uniforms =
+      ralloc_array(prog, struct gl_uniform_storage, num_elements);
+   unsigned hidden_uniforms = 0;
+   unsigned j = 0;
+
+   /* Add the non-hidden uniforms. */
+   for (unsigned i = 0; i < num_elements; i++) {
+      if (!uniforms[i].hidden)
+         sorted_uniforms[j++] = uniforms[i];
+   }
+
+   /* Add and count the hidden uniforms. */
+   for (unsigned i = 0; i < num_elements; i++) {
+      if (uniforms[i].hidden) {
+         sorted_uniforms[j++] = uniforms[i];
+         hidden_uniforms++;
+      }
+   }
+
+   assert(prog->UniformHash != NULL);
+   prog->UniformHash->clear();
+   for (unsigned i = 0; i < num_elements; i++) {
+      if (sorted_uniforms[i].name != NULL)
+         prog->UniformHash->put(i, sorted_uniforms[i].name);
+   }
+
+   memcpy(uniforms, sorted_uniforms, sizeof(uniforms[0]) * num_elements);
+   ralloc_free(sorted_uniforms);
+
+   return hidden_uniforms;
 }
 
 void
@@ -960,6 +972,9 @@ link_assign_uniform_locations(struct gl_shader_program *prog,
              sizeof(prog->_LinkedShaders[i]->SamplerTargets));
    }
 
+   const unsigned hidden_uniforms =
+      move_hidden_uniforms_to_end(prog, uniforms, num_user_uniforms);
+
    /* Reserve all the explicit locations of the active uniforms. */
    for (unsigned i = 0; i < num_user_uniforms; i++) {
       if (uniforms[i].remap_location != UNMAPPED_UNIFORM_LOC) {
@@ -1012,6 +1027,7 @@ link_assign_uniform_locations(struct gl_shader_program *prog,
 #endif
 
    prog->NumUserUniformStorage = num_user_uniforms;
+   prog->NumHiddenUniforms = hidden_uniforms;
    prog->UniformStorage = uniforms;
 
    link_set_image_access_qualifiers(prog);

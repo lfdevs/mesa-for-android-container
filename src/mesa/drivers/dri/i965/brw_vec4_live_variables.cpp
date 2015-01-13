@@ -214,7 +214,7 @@ vec4_visitor::calculate_live_intervals()
     * flow.
     */
    int ip = 0;
-   foreach_in_list(vec4_instruction, inst, &instructions) {
+   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (unsigned int i = 0; i < 3; i++) {
 	 if (inst->src[i].file == GRF) {
 	    int reg = inst->src[i].reg;
@@ -247,7 +247,6 @@ vec4_visitor::calculate_live_intervals()
     * The control flow-aware analysis was done at a channel level, while at
     * this point we're distilling it down to vgrfs.
     */
-   calculate_cfg();
    vec4_live_variables livevars(this, cfg);
 
    foreach_block (block, cfg) {
@@ -271,8 +270,6 @@ void
 vec4_visitor::invalidate_live_intervals()
 {
    live_intervals_valid = false;
-
-   invalidate_cfg();
 }
 
 bool

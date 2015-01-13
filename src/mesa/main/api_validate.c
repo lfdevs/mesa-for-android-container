@@ -55,52 +55,6 @@ index_bytes(GLenum type, GLsizei count)
 
 
 /**
- * Find the max index in the given element/index buffer
- */
-GLuint
-_mesa_max_buffer_index(struct gl_context *ctx, GLuint count, GLenum type,
-                       const void *indices,
-                       struct gl_buffer_object *elementBuf)
-{
-   const GLubyte *map = NULL;
-   GLuint max = 0;
-   GLuint i;
-
-   if (_mesa_is_bufferobj(elementBuf)) {
-      /* elements are in a user-defined buffer object.  need to map it */
-      map = ctx->Driver.MapBufferRange(ctx, 0, elementBuf->Size,
-				       GL_MAP_READ_BIT, elementBuf,
-                                       MAP_INTERNAL);
-      /* Actual address is the sum of pointers */
-      indices = (const GLvoid *) ADD_POINTERS(map, (const GLubyte *) indices);
-   }
-
-   if (type == GL_UNSIGNED_INT) {
-      for (i = 0; i < count; i++)
-         if (((GLuint *) indices)[i] > max)
-            max = ((GLuint *) indices)[i];
-   }
-   else if (type == GL_UNSIGNED_SHORT) {
-      for (i = 0; i < count; i++)
-         if (((GLushort *) indices)[i] > max)
-            max = ((GLushort *) indices)[i];
-   }
-   else {
-      ASSERT(type == GL_UNSIGNED_BYTE);
-      for (i = 0; i < count; i++)
-         if (((GLubyte *) indices)[i] > max)
-            max = ((GLubyte *) indices)[i];
-   }
-
-   if (map) {
-      ctx->Driver.UnmapBuffer(ctx, elementBuf, MAP_INTERNAL);
-   }
-
-   return max;
-}
-
-
-/**
  * Check if OK to draw arrays/elements.
  */
 static GLboolean
@@ -112,9 +66,8 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
 
    switch (ctx->API) {
    case API_OPENGLES2:
-      /* For ES2, we can draw if any vertex array is enabled (and we
-       * should always have a vertex program/shader). */
-      if (ctx->Array.VAO->_Enabled == 0x0 || !ctx->VertexProgram._Current)
+      /* For ES2, we can draw if we have a vertex program/shader). */
+      if (!ctx->VertexProgram._Current)
 	 return GL_FALSE;
       break;
 
@@ -153,47 +106,6 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
 
    default:
       assert(!"Invalid API value in check_valid_to_render()");
-   }
-
-   return GL_TRUE;
-}
-
-
-/**
- * Do bounds checking on array element indexes.  Check that the vertices
- * pointed to by the indices don't lie outside buffer object bounds.
- * \return GL_TRUE if OK, GL_FALSE if any indexed vertex goes is out of bounds
- */
-static GLboolean
-check_index_bounds(struct gl_context *ctx, GLsizei count, GLenum type,
-		   const GLvoid *indices, GLint basevertex)
-{
-   struct _mesa_prim prim;
-   struct _mesa_index_buffer ib;
-   GLuint min, max;
-
-   /* Only the X Server needs to do this -- otherwise, accessing outside
-    * array/BO bounds allows application termination.
-    */
-   if (!ctx->Const.CheckArrayBounds)
-      return GL_TRUE;
-
-   memset(&prim, 0, sizeof(prim));
-   prim.count = count;
-
-   memset(&ib, 0, sizeof(ib));
-   ib.type = type;
-   ib.ptr = indices;
-   ib.obj = ctx->Array.VAO->IndexBufferObj;
-
-   vbo_get_minmax_indices(ctx, &prim, &ib, &min, &max, 1);
-
-   if ((int)(min + basevertex) < 0 ||
-       max + basevertex >= ctx->Array.VAO->_MaxElement) {
-      /* the max element is out of bounds of one or more enabled arrays */
-      _mesa_warning(ctx, "glDrawElements() index=%u is out of bounds (max=%u)",
-                    max, ctx->Array.VAO->_MaxElement);
-      return GL_FALSE;
    }
 
    return GL_TRUE;
@@ -453,9 +365,6 @@ _mesa_validate_DrawElements(struct gl_context *ctx,
          return GL_FALSE;
    }
 
-   if (!check_index_bounds(ctx, count, type, indices, basevertex))
-      return GL_FALSE;
-
    if (count == 0)
       return GL_FALSE;
 
@@ -515,12 +424,6 @@ _mesa_validate_MultiDrawElements(struct gl_context *ctx,
          if (!indices[i])
             return GL_FALSE;
       }
-   }
-
-   for (i = 0; i < primcount; i++) {
-      if (!check_index_bounds(ctx, count[i], type, indices[i],
-                              basevertex ? basevertex[i] : 0))
-         return GL_FALSE;
    }
 
    return GL_TRUE;
@@ -588,9 +491,6 @@ _mesa_validate_DrawRangeElements(struct gl_context *ctx, GLenum mode,
          return GL_FALSE;
    }
 
-   if (!check_index_bounds(ctx, count, type, indices, basevertex))
-      return GL_FALSE;
-
    if (count == 0)
       return GL_FALSE;
 
@@ -622,11 +522,6 @@ _mesa_validate_DrawArrays(struct gl_context *ctx,
 
    if (!check_valid_to_render(ctx, "glDrawArrays"))
       return GL_FALSE;
-
-   if (ctx->Const.CheckArrayBounds) {
-      if (start + count > (GLint) ctx->Array.VAO->_MaxElement)
-         return GL_FALSE;
-   }
 
    /* From the GLES3 specification, section 2.14.2 (Transform Feedback
     * Primitive Capture):
@@ -691,11 +586,6 @@ _mesa_validate_DrawArraysInstanced(struct gl_context *ctx, GLenum mode, GLint fi
 
    if (!check_valid_to_render(ctx, "glDrawArraysInstanced(invalid to render)"))
       return GL_FALSE;
-
-   if (ctx->Const.CheckArrayBounds) {
-      if (first + count > (GLint) ctx->Array.VAO->_MaxElement)
-         return GL_FALSE;
-   }
 
    /* From the GLES3 specification, section 2.14.2 (Transform Feedback
     * Primitive Capture):
@@ -791,9 +681,6 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
    if (count == 0)
       return GL_FALSE;
 
-   if (!check_index_bounds(ctx, count, type, indices, basevertex))
-      return GL_FALSE;
-
    return GL_TRUE;
 }
 
@@ -816,14 +703,14 @@ _mesa_validate_DrawTransformFeedback(struct gl_context *ctx,
       return GL_FALSE;
    }
 
-   if (!obj->EndedAnytime) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glDrawTransformFeedback*");
-      return GL_FALSE;
-   }
-
    if (stream >= ctx->Const.MaxVertexStreams) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glDrawTransformFeedbackStream*(index>=MaxVertexStream)");
+      return GL_FALSE;
+   }
+
+   if (!obj->EndedAnytime) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glDrawTransformFeedback*");
       return GL_FALSE;
    }
 

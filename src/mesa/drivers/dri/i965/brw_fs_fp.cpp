@@ -115,8 +115,6 @@ fs_visitor::emit_fragment_program_code()
 {
    setup_fp_regs();
 
-   fs_reg null = fs_reg(brw_null_reg());
-
    /* Keep a reg with 1.0 around, for reuse by emit_fp_sop so that it can just
     * be:
     *
@@ -163,7 +161,7 @@ fs_visitor::emit_fragment_program_code()
             if (fpi->DstReg.WriteMask & (1 << i)) {
                fs_inst *inst;
 
-               emit(CMP(null, offset(src[0], i), fs_reg(0.0f),
+               emit(CMP(reg_null_f, offset(src[0], i), fs_reg(0.0f),
                         BRW_CONDITIONAL_L));
 
                inst = emit(BRW_OPCODE_SEL, offset(dst, i),
@@ -250,8 +248,8 @@ fs_visitor::emit_fragment_program_code()
              * undiscarded pixels, and updates just those pixels to be
              * turned off.
              */
-            fs_inst *cmp = emit(CMP(null, offset(src[0], i), fs_reg(0.0f),
-                                    BRW_CONDITIONAL_GE));
+            fs_inst *cmp = emit(CMP(reg_null_f, offset(src[0], i),
+                                    fs_reg(0.0f), BRW_CONDITIONAL_GE));
             cmp->predicate = BRW_PREDICATE_NORMAL;
             cmp->flag_subreg = 1;
          }
@@ -283,7 +281,7 @@ fs_visitor::emit_fragment_program_code()
 
          if (fpi->DstReg.WriteMask & WRITEMASK_YZ) {
             fs_inst *inst;
-            emit(CMP(null, offset(src[0], 0), fs_reg(0.0f),
+            emit(CMP(reg_null_f, offset(src[0], 0), fs_reg(0.0f),
                      BRW_CONDITIONAL_LE));
 
             if (fpi->DstReg.WriteMask & WRITEMASK_Y) {
@@ -393,26 +391,20 @@ fs_visitor::emit_fragment_program_code()
       case OPCODE_TEX:
       case OPCODE_TXB:
       case OPCODE_TXP: {
-         /* We piggy-back on the GLSL IR support for texture setup.  To do so,
-          * we have to cook up an ir_texture that has the coordinate field
-          * with appropriate type, and shadow_comparitor set or not.  All the
-          * other properties of ir_texture are passed in as arguments to the
-          * emit_texture_gen* function.
-          */
-         ir_texture *ir = NULL;
-
+         ir_texture_opcode op;
          fs_reg lod;
          fs_reg dpdy;
          fs_reg coordinate = src[0];
          fs_reg shadow_c;
          fs_reg sample_index;
+         fs_reg texel_offset; /* No offsets; leave as BAD_FILE. */
 
          switch (fpi->Opcode) {
          case OPCODE_TEX:
-            ir = new(mem_ctx) ir_texture(ir_tex);
+            op = ir_tex;
             break;
          case OPCODE_TXP: {
-            ir = new(mem_ctx) ir_texture(ir_tex);
+            op = ir_tex;
 
             coordinate = fs_reg(this, glsl_type::vec3_type);
             fs_reg invproj = fs_reg(this, glsl_type::float_type);
@@ -424,14 +416,12 @@ fs_visitor::emit_fragment_program_code()
             break;
          }
          case OPCODE_TXB:
-            ir = new(mem_ctx) ir_texture(ir_txb);
+            op = ir_txb;
             lod = offset(src[0], 3);
             break;
          default:
             unreachable("not reached");
          }
-
-         ir->type = glsl_type::vec4_type;
 
          const glsl_type *coordinate_type;
          switch (fpi->TexSrcTarget) {
@@ -477,31 +467,18 @@ fs_visitor::emit_fragment_program_code()
             unreachable("not reached");
          }
 
-         ir_constant_data junk_data;
-         ir->coordinate = new(mem_ctx) ir_constant(coordinate_type, &junk_data);
-
-         if (fpi->TexShadow) {
+         if (fpi->TexShadow)
             shadow_c = offset(coordinate, 2);
-            ir->shadow_comparitor = new(mem_ctx) ir_constant(0.0f);
-         }
 
-         coordinate = rescale_texcoord(ir, coordinate,
-                                       fpi->TexSrcTarget == TEXTURE_RECT_INDEX,
-                                       fpi->TexSrcUnit, fpi->TexSrcUnit);
-
-         fs_inst *inst;
-         if (brw->gen >= 7) {
-            inst = emit_texture_gen7(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index, fs_reg(0u), fpi->TexSrcUnit);
-         } else if (brw->gen >= 5) {
-            inst = emit_texture_gen5(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index, fpi->TexSrcUnit);
-         } else {
-            inst = emit_texture_gen4(ir, dst, coordinate, shadow_c, lod, dpdy, fpi->TexSrcUnit);
-         }
-
-         inst->shadow_compare = fpi->TexShadow;
-
-         /* Reuse the GLSL swizzle_result() handler. */
-         swizzle_result(ir, dst, fpi->TexSrcUnit);
+         emit_texture(op, glsl_type::vec4_type, coordinate, coordinate_type,
+                      shadow_c, lod, dpdy, 0, sample_index,
+                      reg_undef, 0, /* offset, components */
+                      reg_undef, /* mcs */
+                      0, /* gather component */
+                      false, /* is cube array */
+                      fpi->TexSrcTarget == TEXTURE_RECT_INDEX,
+                      fpi->TexSrcUnit, fs_reg(fpi->TexSrcUnit),
+                      fpi->TexSrcUnit);
          dst = this->result;
 
          break;
@@ -604,12 +581,16 @@ fs_visitor::setup_fp_regs()
 
          switch (i) {
          case VARYING_SLOT_POS:
-            ir->data.pixel_center_integer = fp->PixelCenterInteger;
-            ir->data.origin_upper_left = fp->OriginUpperLeft;
+            {
+               assert(stage == MESA_SHADER_FRAGMENT);
+               gl_fragment_program *fp = (gl_fragment_program*) prog;
+               ir->data.pixel_center_integer = fp->PixelCenterInteger;
+               ir->data.origin_upper_left = fp->OriginUpperLeft;
+            }
             fp_input_regs[i] = *emit_fragcoord_interpolation(ir);
             break;
          case VARYING_SLOT_FACE:
-            fp_input_regs[i] = *emit_frontfacing_interpolation(ir);
+            fp_input_regs[i] = *emit_frontfacing_interpolation();
             break;
          default:
             fp_input_regs[i] = *emit_general_interpolation(ir);
@@ -631,6 +612,9 @@ fs_visitor::setup_fp_regs()
 fs_reg
 fs_visitor::get_fp_dst_reg(const prog_dst_register *dst)
 {
+   assert(stage == MESA_SHADER_FRAGMENT);
+   brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
+
    switch (dst->File) {
    case PROGRAM_TEMPORARY:
       return fp_temp_regs[dst->Index];

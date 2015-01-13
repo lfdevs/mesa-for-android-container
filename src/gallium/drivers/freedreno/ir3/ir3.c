@@ -81,6 +81,8 @@ void ir3_destroy(struct ir3 *shader)
 		shader->chunk = chunk->next;
 		free(chunk);
 	}
+	free(shader->instrs);
+	free(shader->baryfs);
 	free(shader);
 }
 
@@ -104,7 +106,7 @@ static uint32_t reg(struct ir3_register *reg, struct ir3_info *info,
 		val.iim_val = reg->iim_val;
 	} else {
 		int8_t components = util_last_bit(reg->wrmask);
-		int8_t max = (reg->num + repeat + components - 1) >> 2;
+		int16_t max = (reg->num + repeat + components - 1) >> 2;
 
 		val.comp = reg->num & 0x3;
 		val.num  = reg->num >> 2;
@@ -554,7 +556,7 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info)
 	 */
 	info->sizedwords = 2 * align(shader->instrs_count, 4);
 
-	ptr = dwords = calloc(1, 4 * info->sizedwords);
+	ptr = dwords = calloc(4, info->sizedwords);
 
 	for (i = 0; i < shader->instrs_count; i++) {
 		struct ir3_instruction *instr = shader->instrs[i];
@@ -596,6 +598,15 @@ static void insert_instr(struct ir3 *shader,
 				shader->instrs_sz * sizeof(shader->instrs[0]));
 	}
 	shader->instrs[shader->instrs_count++] = instr;
+
+	if (is_input(instr)) {
+		if (shader->baryfs_count == shader->baryfs_sz) {
+			shader->baryfs_sz = MAX2(2 * shader->baryfs_sz, 16);
+			shader->baryfs = realloc(shader->baryfs,
+					shader->baryfs_sz * sizeof(shader->baryfs[0]));
+		}
+		shader->baryfs[shader->baryfs_count++] = instr;
+	}
 }
 
 struct ir3_block * ir3_block_create(struct ir3 *shader,

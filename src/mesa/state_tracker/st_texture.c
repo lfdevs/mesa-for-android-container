@@ -88,7 +88,7 @@ st_texture_create(struct st_context *st,
    pt.width0 = width0;
    pt.height0 = height0;
    pt.depth0 = depth0;
-   pt.array_size = (target == PIPE_TEXTURE_CUBE ? 6 : layers);
+   pt.array_size = layers;
    pt.usage = PIPE_USAGE_DEFAULT;
    pt.bind = bind;
    pt.flags = 0;
@@ -260,6 +260,13 @@ st_texture_image_map(struct st_context *st, struct st_texture_image *stImage,
    else
       level = stImage->base.Level;
 
+   if (stObj->base.Immutable) {
+      level += stObj->base.MinLevel;
+      z += stObj->base.MinLayer;
+      if (stObj->pt->array_size > 1)
+         d = MIN2(d, stObj->base.NumLayers);
+   }
+
    z += stImage->base.Face;
 
    map = pipe_transfer_map_3d(st->pipe, stImage->pt, level, usage,
@@ -289,8 +296,13 @@ st_texture_image_unmap(struct st_context *st,
                        struct st_texture_image *stImage, unsigned slice)
 {
    struct pipe_context *pipe = st->pipe;
-   struct pipe_transfer **transfer =
-      &stImage->transfer[slice + stImage->base.Face].transfer;
+   struct st_texture_object *stObj =
+      st_texture_object(stImage->base.TexObject);
+   struct pipe_transfer **transfer;
+
+   if (stObj->base.Immutable)
+      slice += stObj->base.MinLayer;
+   transfer = &stImage->transfer[slice + stImage->base.Face].transfer;
 
    DBG("%s\n", __FUNCTION__);
 

@@ -30,11 +30,15 @@
 #define SI_SHADER_H
 
 #include <llvm-c/Core.h> /* LLVMModuleRef */
+#include "tgsi/tgsi_scan.h"
+#include "si_state.h"
 
-#define SI_SGPR_CONST		0
-#define SI_SGPR_SAMPLER		2
-#define SI_SGPR_RESOURCE	4
-#define SI_SGPR_RW_BUFFERS	6  /* rings (& stream-out, VS only) */
+struct radeon_shader_binary;
+
+#define SI_SGPR_RW_BUFFERS	0  /* rings (& stream-out, VS only) */
+#define SI_SGPR_CONST		2
+#define SI_SGPR_SAMPLER		4
+#define SI_SGPR_RESOURCE	6
 #define SI_SGPR_VERTEX_BUFFER	8  /* VS only */
 #define SI_SGPR_BASE_VERTEX	10 /* VS only */
 #define SI_SGPR_START_INSTANCE	11 /* VS only */
@@ -42,13 +46,14 @@
 
 #define SI_VS_NUM_USER_SGPR	12
 #define SI_GS_NUM_USER_SGPR	8
+#define SI_GSCOPY_NUM_USER_SGPR	4
 #define SI_PS_NUM_USER_SGPR	9
 
 /* LLVM function parameter indices */
-#define SI_PARAM_CONST		0
-#define SI_PARAM_SAMPLER	1
-#define SI_PARAM_RESOURCE	2
-#define SI_PARAM_RW_BUFFERS	3
+#define SI_PARAM_RW_BUFFERS	0
+#define SI_PARAM_CONST		1
+#define SI_PARAM_SAMPLER	2
+#define SI_PARAM_RESOURCE	3
 
 /* VS only parameters */
 #define SI_PARAM_VERTEX_BUFFER	4
@@ -93,89 +98,48 @@
 
 #define SI_NUM_PARAMS (SI_PARAM_POS_FIXED_PT + 1)
 
-struct si_shader_input {
-	unsigned		name;
-	int			sid;
-	unsigned		param_offset;
-	unsigned		index;
-	unsigned		interpolate;
-	bool			centroid;
-};
+struct si_shader;
 
-struct si_shader_output {
-	unsigned		name;
-	int			sid;
-	unsigned		param_offset;
-	unsigned		index;
-	unsigned		usage;
-};
-
-struct si_pipe_shader;
-
-struct si_pipe_shader_selector {
-	struct si_pipe_shader *current;
+struct si_shader_selector {
+	struct si_shader *current;
 
 	struct tgsi_token       *tokens;
 	struct pipe_stream_output_info  so;
+	struct tgsi_shader_info		info;
 
 	unsigned	num_shaders;
 
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	unsigned	type;
 
-	/* 1 when the shader contains
-	 * TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS, otherwise it's 0.
-	 * Used to determine whether we need to include nr_cbufs in the key */
-	unsigned	fs_write_all;
-};
-
-struct si_shader {
-	unsigned		ninput;
-	struct si_shader_input	input[40];
-
-	unsigned		noutput;
-	struct si_shader_output	output[40];
-
-	/* geometry shader properties */
-	unsigned		gs_input_prim;
-	unsigned		gs_output_prim;
-	unsigned		gs_max_out_vertices;
-	unsigned		ps_conservative_z;
-
-	unsigned		nparam;
-	bool			uses_kill;
-	bool			uses_instanceid;
-	bool			fs_write_all;
-	bool			vs_out_misc_write;
-	bool			vs_out_point_size;
-	bool			vs_out_edgeflag;
-	bool			vs_out_layer;
-	unsigned		nr_pos_exports;
-	unsigned		clip_dist_write;
+	unsigned	gs_output_prim;
+	unsigned	gs_max_out_vertices;
+	uint64_t	gs_used_inputs; /* mask of "get_unique_index" bits */
 };
 
 union si_shader_key {
 	struct {
 		unsigned	export_16bpc:8;
-		unsigned	nr_cbufs:4;
+		unsigned	last_cbuf:3;
 		unsigned	color_two_side:1;
 		unsigned	alpha_func:3;
 		unsigned	flatshade:1;
-		unsigned	interp_at_sample:1;
 		unsigned	alpha_to_one:1;
 	} ps;
 	struct {
-		unsigned	instance_divisors[PIPE_MAX_ATTRIBS];
-		unsigned	ucps_enabled:2;
+		unsigned	instance_divisors[SI_NUM_VERTEX_BUFFERS];
+		/* The mask of "get_unique_index" bits, needed for ES,
+		 * it describes how the ES->GS ring buffer is laid out. */
+		uint64_t	gs_used_inputs;
 		unsigned	as_es:1;
 	} vs;
 };
 
-struct si_pipe_shader {
-	struct si_pipe_shader_selector	*selector;
-	struct si_pipe_shader		*next_variant;
-	struct si_pipe_shader		*gs_copy_shader;
-	struct si_shader		shader;
+struct si_shader {
+	struct si_shader_selector	*selector;
+	struct si_shader		*next_variant;
+
+	struct si_shader		*gs_copy_shader;
 	struct si_pm4_state		*pm4;
 	struct r600_resource		*bo;
 	struct r600_resource		*scratch_bo;
@@ -188,24 +152,40 @@ struct si_pipe_shader {
 	unsigned			spi_shader_z_format;
 	unsigned			db_shader_control;
 	unsigned			cb_shader_mask;
-	bool				cb0_is_integer;
-	unsigned			sprite_coord_enable;
 	union si_shader_key		key;
+
+	unsigned		nparam;
+	unsigned		vs_output_param_offset[PIPE_MAX_SHADER_OUTPUTS];
+	unsigned		ps_input_param_offset[PIPE_MAX_SHADER_INPUTS];
+
+	bool			uses_instanceid;
+	bool			vs_out_misc_write;
+	bool			vs_out_point_size;
+	bool			vs_out_edgeflag;
+	bool			vs_out_layer;
+	unsigned		nr_pos_exports;
+	unsigned		clip_dist_write;
+	bool			is_gs_copy_shader;
 };
 
 static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 {
 	if (sctx->gs_shader)
-		return &sctx->gs_shader->current->gs_copy_shader->shader;
+		return sctx->gs_shader->current->gs_copy_shader;
 	else
-		return &sctx->vs_shader->current->shader;
+		return sctx->vs_shader->current;
 }
 
 /* radeonsi_shader.c */
-int si_pipe_shader_create(struct pipe_context *ctx, struct si_pipe_shader *shader);
-int si_pipe_shader_create(struct pipe_context *ctx, struct si_pipe_shader *shader);
-int si_compile_llvm(struct si_context *sctx, struct si_pipe_shader *shader,
-							LLVMModuleRef mod);
-void si_pipe_shader_destroy(struct pipe_context *ctx, struct si_pipe_shader *shader);
+int si_shader_create(struct si_screen *sscreen, struct si_shader *shader);
+int si_compile_llvm(struct si_screen *sscreen, struct si_shader *shader,
+		    LLVMModuleRef mod);
+void si_shader_destroy(struct pipe_context *ctx, struct si_shader *shader);
+unsigned si_shader_io_get_unique_index(unsigned semantic_name, unsigned index);
+int si_shader_binary_read(struct si_screen *sscreen, struct si_shader *shader,
+		const struct radeon_shader_binary *binary);
+void si_shader_binary_read_config(const struct radeon_shader_binary *binary,
+				struct si_shader *shader,
+				unsigned symbol_offset);
 
 #endif

@@ -31,21 +31,41 @@
 #include "gen_regs.xml.h"
 #include "gen_mi.xml.h"
 #include "gen_blitter.xml.h"
+#include "gen_render.xml.h"
 #include "gen_render_surface.xml.h"
 #include "gen_render_dynamic.xml.h"
 #include "gen_render_3d.xml.h"
+#include "gen_render_media.xml.h"
 #include "gen_eu_isa.xml.h"
 #include "gen_eu_message.xml.h"
 
-#define GEN_MI_CMD(op) (GEN6_MI_TYPE_MI | GEN6_MI_OPCODE_ ## op)
+#define GEN_MI_CMD(gen, op) (GEN6_MI_TYPE_MI | gen ## _MI_OPCODE_ ## op)
+#define GEN6_MI_CMD(op) GEN_MI_CMD(GEN6, op)
+#define GEN7_MI_CMD(op) GEN_MI_CMD(GEN7, op)
 
-#define GEN_BLITTER_CMD(op) \
-   (GEN6_BLITTER_TYPE_BLITTER | GEN6_BLITTER_OPCODE_ ## op)
+#define GEN_BLITTER_CMD(gen, op) \
+   (GEN6_BLITTER_TYPE_BLITTER | gen ## _BLITTER_OPCODE_ ## op)
+#define GEN6_BLITTER_CMD(op) GEN_BLITTER_CMD(GEN6, op)
 
-#define GEN_RENDER_CMD(subtype, op)    \
-   (GEN6_RENDER_TYPE_RENDER |          \
-    GEN6_RENDER_SUBTYPE_ ## subtype |  \
-    GEN6_RENDER_OPCODE_ ## op)
+#define GEN_RENDER_CMD(subtype, gen, op)  \
+   (GEN6_RENDER_TYPE_RENDER |             \
+    GEN6_RENDER_SUBTYPE_ ## subtype |     \
+    gen ## _RENDER_OPCODE_ ## op)
+#define GEN6_RENDER_CMD(subtype, op) GEN_RENDER_CMD(subtype, GEN6, op)
+#define GEN7_RENDER_CMD(subtype, op) GEN_RENDER_CMD(subtype, GEN7, op)
+#define GEN75_RENDER_CMD(subtype, op) GEN_RENDER_CMD(subtype, GEN75, op)
+
+#define GEN_EXTRACT(bits, field) (((bits) & field ## __MASK) >> field ## __SHIFT)
+#define GEN_SHIFT32(bits, field) gen_shift32(bits, field ## __MASK, field ## __SHIFT)
+
+static inline uint32_t
+gen_shift32(uint32_t bits, uint32_t mask, int shift)
+{
+   bits <<= shift;
+
+   assert((bits & mask) == bits);
+   return bits & mask;
+}
 
 static inline bool
 gen_is_snb(int devid)

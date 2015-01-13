@@ -94,7 +94,7 @@ namespace {
 
       static void
       proc(compat::istream &is, compat::vector<T> &v) {
-         v.reserve(_proc<uint32_t>(is));
+         v.resize(_proc<uint32_t>(is));
 
          for (size_t i = 0; i < v.size(); i++)
             new(&v[i]) T(_proc<T>(is));
@@ -122,7 +122,7 @@ namespace {
 
       static void
       proc(compat::istream &is, compat::vector<T> &v) {
-         v.reserve(_proc<uint32_t>(is));
+         v.resize(_proc<uint32_t>(is));
          is.read(reinterpret_cast<char *>(v.begin()),
                  v.size() * sizeof(T));
       }
@@ -157,6 +157,7 @@ namespace {
          _proc(s, x.target_size);
          _proc(s, x.target_align);
          _proc(s, x.ext_type);
+         _proc(s, x.semantic);
       }
    };
 

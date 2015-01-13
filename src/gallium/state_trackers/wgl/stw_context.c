@@ -201,35 +201,51 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
    if (contextFlags & WGL_CONTEXT_DEBUG_BIT_ARB)
       attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
 
-   /* There are no profiles before OpenGL 3.2.  The
-    * WGL_ARB_create_context_profile spec says:
-    *
-    *     "If the requested OpenGL version is less than 3.2,
-    *     WGL_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality of the
-    *     context is determined solely by the requested version."
-    *
-    * The spec also says:
-    *
-    *     "The default value for WGL_CONTEXT_PROFILE_MASK_ARB is
-    *     WGL_CONTEXT_CORE_PROFILE_BIT_ARB."
-    *
-    * The spec also says:
-    *
-    *     "If version 3.1 is requested, the context returned may implement
-    *     any of the following versions:
-    *
-    *       * Version 3.1. The GL_ARB_compatibility extension may or may not
-    *         be implemented, as determined by the implementation.
-    *       * The core profile of version 3.2 or greater."
-    *
-    * and because Mesa doesn't support GL_ARB_compatibility, the only chance to
-    * honour a 3.1 context is through core profile.
-    */
-   attribs.profile = ST_PROFILE_DEFAULT;
-   if (((majorVersion > 3 || (majorVersion == 3 && minorVersion >= 2))
-        && ((profileMask & WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB) == 0)) ||
-       (majorVersion == 3 && minorVersion == 1))
-      attribs.profile = ST_PROFILE_OPENGL_CORE;
+   switch (profileMask) {
+   case WGL_CONTEXT_CORE_PROFILE_BIT_ARB:
+      /* There are no profiles before OpenGL 3.2.  The
+       * WGL_ARB_create_context_profile spec says:
+       *
+       *     "If the requested OpenGL version is less than 3.2,
+       *     WGL_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality
+       *     of the context is determined solely by the requested version."
+       */
+      if (majorVersion > 3 || (majorVersion == 3 && minorVersion >= 2)) {
+         attribs.profile = ST_PROFILE_OPENGL_CORE;
+         break;
+      }
+      /* fall-through */
+   case WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB:
+      /*
+       * The spec also says:
+       *
+       *     "If version 3.1 is requested, the context returned may implement
+       *     any of the following versions:
+       *
+       *       * Version 3.1. The GL_ARB_compatibility extension may or may not
+       *         be implemented, as determined by the implementation.
+       *       * The core profile of version 3.2 or greater."
+       *
+       * and because Mesa doesn't support GL_ARB_compatibility, the only chance to
+       * honour a 3.1 context is through core profile.
+       */
+      if (majorVersion == 3 && minorVersion == 1) {
+         attribs.profile = ST_PROFILE_OPENGL_CORE;
+      } else {
+         attribs.profile = ST_PROFILE_DEFAULT;
+      }
+      break;
+   case WGL_CONTEXT_ES_PROFILE_BIT_EXT:
+      if (majorVersion >= 2) {
+         attribs.profile = ST_PROFILE_OPENGL_ES2;
+      } else {
+         attribs.profile = ST_PROFILE_OPENGL_ES1;
+      }
+      break;
+   default:
+      assert(0);
+      goto no_st_ctx;
+   }
 
    ctx->st = stw_dev->stapi->create_context(stw_dev->stapi,
          stw_dev->smapi, &attribs, &ctx_err, shareCtx ? shareCtx->st : NULL);

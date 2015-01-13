@@ -104,6 +104,8 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	char *buf;
 	int ret = 0;
 
+	DBG("prsc=%p, level=%u, usage=%x", prsc, level, usage);
+
 	ptrans = util_slab_alloc(&ctx->transfer_pool);
 	if (!ptrans)
 		return NULL;
@@ -116,7 +118,7 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	ptrans->usage = usage;
 	ptrans->box = *box;
 	ptrans->stride = slice->pitch * rsc->cpp;
-	ptrans->layer_stride = ptrans->stride;
+	ptrans->layer_stride = slice->size0;
 
 	if (usage & PIPE_TRANSFER_READ)
 		op |= DRM_FREEDRENO_PREP_READ;
@@ -124,18 +126,15 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	if (usage & PIPE_TRANSFER_WRITE)
 		op |= DRM_FREEDRENO_PREP_WRITE;
 
-	if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)
-		op |= DRM_FREEDRENO_PREP_NOSYNC;
-
 	/* some state trackers (at least XA) don't do this.. */
 	if (!(usage & (PIPE_TRANSFER_FLUSH_EXPLICIT | PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)))
 		fd_resource_transfer_flush_region(pctx, ptrans, box);
 
-	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+	if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) {
+		realloc_bo(rsc, fd_bo_size(rsc->bo));
+	} else if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
 		ret = fd_bo_cpu_prep(rsc->bo, ctx->screen->pipe, op);
-		if ((ret == -EBUSY) && (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
-			realloc_bo(rsc, fd_bo_size(rsc->bo));
-		else if (ret)
+		if (ret)
 			goto fail;
 	}
 
@@ -199,11 +198,39 @@ setup_slices(struct fd_resource *rsc)
 
 	for (level = 0; level <= prsc->last_level; level++) {
 		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
-		uint32_t aligned_width = align(width, 32);
 
-		slice->pitch = aligned_width;
+		slice->pitch = align(width, 32);
 		slice->offset = size;
 		slice->size0 = slice->pitch * height * rsc->cpp;
+
+		size += slice->size0 * depth * prsc->array_size;
+
+		width = u_minify(width, 1);
+		height = u_minify(height, 1);
+		depth = u_minify(depth, 1);
+	}
+
+	return size;
+}
+
+/* 2d array and 3d textures seem to want their layers aligned to
+ * page boundaries
+ */
+static uint32_t
+setup_slices_array(struct fd_resource *rsc)
+{
+	struct pipe_resource *prsc = &rsc->base.b;
+	uint32_t level, size = 0;
+	uint32_t width = prsc->width0;
+	uint32_t height = prsc->height0;
+	uint32_t depth = prsc->depth0;
+
+	for (level = 0; level <= prsc->last_level; level++) {
+		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
+
+		slice->pitch = align(width, 32);
+		slice->offset = size;
+		slice->size0 = align(slice->pitch * height * rsc->cpp, 4096);
 
 		size += slice->size0 * depth * prsc->array_size;
 
@@ -246,7 +273,16 @@ fd_resource_create(struct pipe_screen *pscreen,
 
 	assert(rsc->cpp);
 
-	size = setup_slices(rsc);
+	switch (tmpl->target) {
+	case PIPE_TEXTURE_3D:
+	case PIPE_TEXTURE_1D_ARRAY:
+	case PIPE_TEXTURE_2D_ARRAY:
+		size = setup_slices_array(rsc);
+		break;
+	default:
+		size = setup_slices(rsc);
+		break;
+	}
 
 	realloc_bo(rsc, size);
 	if (!rsc->bo)
@@ -410,8 +446,8 @@ fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 static void
 fd_blitter_pipe_begin(struct fd_context *ctx)
 {
-	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vertexbuf.vb);
-	util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx);
+	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vtx.vertexbuf.vb);
+	util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx.vtx);
 	util_blitter_save_vertex_shader(ctx->blitter, ctx->prog.vp);
 	util_blitter_save_rasterizer(ctx->blitter, ctx->rasterizer);
 	util_blitter_save_viewport(ctx->blitter, &ctx->viewport);

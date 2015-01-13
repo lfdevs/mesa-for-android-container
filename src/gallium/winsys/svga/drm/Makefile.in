@@ -114,8 +114,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 
 subdir = src/gallium/winsys/svga/drm
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -129,10 +130,10 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsvgadrm_la_LIBADD =
-am__objects_1 = vmw_buffer.lo vmw_context.lo vmw_fence.lo \
-	vmw_screen.lo vmw_screen_dri.lo vmw_screen_ioctl.lo \
-	vmw_screen_pools.lo vmw_screen_svga.lo vmw_surface.lo \
-	vmw_shader.lo pb_buffer_simple_fenced.lo
+am__objects_1 = pb_buffer_simple_fenced.lo vmw_buffer.lo \
+	vmw_context.lo vmw_fence.lo vmw_screen.lo vmw_screen_dri.lo \
+	vmw_screen_ioctl.lo vmw_screen_pools.lo vmw_screen_svga.lo \
+	vmw_surface.lo vmw_shader.lo
 am_libsvgadrm_la_OBJECTS = $(am__objects_1)
 libsvgadrm_la_OBJECTS = $(am_libsvgadrm_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -216,7 +217,7 @@ CCASFLAGS = @CCASFLAGS@
 CCDEPMODE = @CCDEPMODE@
 
 #On some systems -std= must be added to CFLAGS to be the last -std=
-CFLAGS = @CFLAGS@ -std=gnu99 -D_FILE_OFFSET_BITS=64
+CFLAGS = @CFLAGS@ -std=gnu99
 CLANG_RESOURCE_DIR = @CLANG_RESOURCE_DIR@
 CLOCK_LIB = @CLOCK_LIB@
 CPP = @CPP@
@@ -226,6 +227,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -248,7 +250,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -321,11 +322,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -336,10 +340,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -353,7 +355,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -372,7 +373,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -436,6 +443,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -463,17 +471,25 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 C_SOURCES := \
-        vmw_buffer.c \
-        vmw_context.c  \
-        vmw_fence.c  \
-        vmw_screen.c  \
-        vmw_screen_dri.c  \
-        vmw_screen_ioctl.c  \
-        vmw_screen_pools.c  \
-        vmw_screen_svga.c  \
-        vmw_surface.c \
-        vmw_shader.c \
-        pb_buffer_simple_fenced.c
+	pb_buffer_simple_fenced.c \
+	svga_drm_public.h \
+	vmw_buffer.c \
+	vmw_buffer.h \
+	vmw_context.c \
+	vmw_context.h \
+	vmw_fence.c \
+	vmw_fence.h \
+	vmwgfx_drm.h \
+	vmw_screen.c \
+	vmw_screen_dri.c \
+	vmw_screen.h \
+	vmw_screen_ioctl.c \
+	vmw_screen_pools.c \
+	vmw_screen_svga.c \
+	vmw_surface.c \
+	vmw_surface.h \
+	vmw_shader.c \
+	vmw_shader.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -494,6 +510,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -504,6 +521,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -534,16 +552,17 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers/svga \
 	-I$(top_srcdir)/src/gallium/drivers/svga/include \
-	-I$(top_srcdir)/src/gallium/drivers \
 	$(GALLIUM_WINSYS_CFLAGS) \
 	$(LIBDRM_CFLAGS)
 
 noinst_LTLIBRARIES = libsvgadrm.la
 libsvgadrm_la_SOURCES = $(C_SOURCES)
+EXTRA_DIST = Android.mk SConscript
 all: all-am
 
 .SUFFIXES:

@@ -19,7 +19,7 @@
 #endif
 
 #if GALLIUM_ILO
-#include "intel/intel_winsys.h"
+#include "intel/drm/intel_drm_public.h"
 #include "ilo/ilo_public.h"
 #endif
 
@@ -408,7 +408,7 @@ static const struct drm_conf_ret share_fd_ret = {
    {true},
 };
 
-static const struct drm_conf_ret *
+static inline const struct drm_conf_ret *
 configuration_query(enum drm_conf conf)
 {
    switch (conf) {
@@ -465,7 +465,7 @@ dd_configuration(enum drm_conf conf)
 #endif
 #if defined(GALLIUM_FREEDRENO)
    if ((strcmp(driver_name, "kgsl") == 0) || (strcmp(driver_name, "msm") == 0))
-      return NULL;
+      return configuration_query(conf);
    else
 #endif
       return NULL;

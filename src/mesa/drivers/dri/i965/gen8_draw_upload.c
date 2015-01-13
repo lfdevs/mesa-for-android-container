@@ -39,6 +39,7 @@ static void
 gen8_emit_vertices(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
 
    brw_prepare_vertices(brw);
    brw_prepare_shader_draw_parameters(brw);
@@ -119,7 +120,7 @@ gen8_emit_vertices(struct brw_context *brw)
          dw0 |= i << GEN6_VB0_INDEX_SHIFT;
          dw0 |= GEN7_VB0_ADDRESS_MODIFYENABLE;
          dw0 |= buffer->stride << BRW_VB0_PITCH_SHIFT;
-         dw0 |= BDW_MOCS_WB << 16;
+         dw0 |= mocs_wb << 16;
 
          OUT_BATCH(dw0);
          OUT_RELOC64(buffer->bo, I915_GEM_DOMAIN_VERTEX, 0, buffer->offset);
@@ -129,7 +130,7 @@ gen8_emit_vertices(struct brw_context *brw)
       if (brw->vs.prog_data->uses_vertexid) {
          OUT_BATCH(brw->vb.nr_buffers << GEN6_VB0_INDEX_SHIFT |
                    GEN7_VB0_ADDRESS_MODIFYENABLE |
-                   BDW_MOCS_WB << 16);
+                   mocs_wb << 16);
          OUT_RELOC64(brw->draw.draw_params_bo, I915_GEM_DOMAIN_VERTEX, 0,
                      brw->draw.draw_params_offset);
          OUT_BATCH(brw->draw.draw_params_bo->size);
@@ -242,13 +243,14 @@ static void
 gen8_emit_index_buffer(struct brw_context *brw)
 {
    const struct _mesa_index_buffer *index_buffer = brw->ib.ib;
+   uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
 
    if (index_buffer == NULL)
       return;
 
    BEGIN_BATCH(5);
    OUT_BATCH(CMD_INDEX_BUFFER << 16 | (5 - 2));
-   OUT_BATCH(brw_get_index_type(index_buffer->type) << 8 | BDW_MOCS_WB);
+   OUT_BATCH(brw_get_index_type(index_buffer->type) << 8 | mocs_wb);
    OUT_RELOC64(brw->ib.bo, I915_GEM_DOMAIN_VERTEX, 0, 0);
    OUT_BATCH(brw->ib.bo->size);
    ADVANCE_BATCH();

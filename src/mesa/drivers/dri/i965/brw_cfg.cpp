@@ -50,18 +50,12 @@ link(void *mem_ctx, bblock_t *block)
    return &l->link;
 }
 
-bblock_t::bblock_t() :
-   start_ip(0), end_ip(0), num(0)
+bblock_t::bblock_t(cfg_t *cfg) :
+   cfg(cfg), start_ip(0), end_ip(0), num(0)
 {
-   start = NULL;
-   end = NULL;
-
+   instructions.make_empty();
    parents.make_empty();
    children.make_empty();
-
-   if_inst = NULL;
-   else_inst = NULL;
-   endif_inst = NULL;
 }
 
 void
@@ -71,13 +65,86 @@ bblock_t::add_successor(void *mem_ctx, bblock_t *successor)
    children.push_tail(::link(mem_ctx, successor));
 }
 
+bool
+bblock_t::is_predecessor_of(const bblock_t *block) const
+{
+   foreach_list_typed_safe (bblock_link, parent, link, &block->parents) {
+      if (parent->block == this) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+bool
+bblock_t::is_successor_of(const bblock_t *block) const
+{
+   foreach_list_typed_safe (bblock_link, child, link, &block->children) {
+      if (child->block == this) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+static bool
+ends_block(const backend_instruction *inst)
+{
+   enum opcode op = inst->opcode;
+
+   return op == BRW_OPCODE_IF ||
+          op == BRW_OPCODE_ELSE ||
+          op == BRW_OPCODE_CONTINUE ||
+          op == BRW_OPCODE_BREAK ||
+          op == BRW_OPCODE_WHILE;
+}
+
+static bool
+starts_block(const backend_instruction *inst)
+{
+   enum opcode op = inst->opcode;
+
+   return op == BRW_OPCODE_DO ||
+          op == BRW_OPCODE_ENDIF;
+}
+
+bool
+bblock_t::can_combine_with(const bblock_t *that) const
+{
+   if ((const bblock_t *)this->link.next != that)
+      return false;
+
+   if (ends_block(this->end()) ||
+       starts_block(that->start()))
+      return false;
+
+   return true;
+}
+
 void
-bblock_t::dump(backend_visitor *v)
+bblock_t::combine_with(bblock_t *that)
+{
+   assert(this->can_combine_with(that));
+   foreach_list_typed (bblock_link, link, link, &this->children) {
+      assert(link->block == that);
+   }
+   foreach_list_typed (bblock_link, link, link, &that->parents) {
+      assert(link->block == this);
+   }
+
+   this->end_ip = that->end_ip;
+   this->instructions.append_list(&that->instructions);
+
+   this->cfg->remove_block(that);
+}
+
+void
+bblock_t::dump(backend_visitor *v) const
 {
    int ip = this->start_ip;
-   for (backend_instruction *inst = (backend_instruction *)this->start;
-	inst != this->end->next;
-	inst = (backend_instruction *) inst->next) {
+   foreach_inst_in_block(backend_instruction, inst, this) {
       fprintf(stderr, "%5d: ", ip);
       v->dump_instruction(inst);
       ip++;
@@ -105,16 +172,15 @@ cfg_t::cfg_t(exec_list *instructions)
 
    set_next_block(&cur, entry, ip);
 
-   entry->start = (backend_instruction *) instructions->get_head();
-
-   foreach_in_list(backend_instruction, inst, instructions) {
-      cur->end = inst;
-
+   foreach_in_list_safe(backend_instruction, inst, instructions) {
       /* set_next_block wants the post-incremented ip */
       ip++;
 
       switch (inst->opcode) {
       case BRW_OPCODE_IF:
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
+
 	 /* Push our information onto a stack so we can recover from
 	  * nested ifs.
 	  */
@@ -129,62 +195,46 @@ cfg_t::cfg_t(exec_list *instructions)
 	  * instructions.
 	  */
 	 next = new_block();
-	 next->start = (backend_instruction *)inst->next;
 	 cur_if->add_successor(mem_ctx, next);
 
 	 set_next_block(&cur, next, ip);
 	 break;
 
       case BRW_OPCODE_ELSE:
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
+
          cur_else = cur;
 
 	 next = new_block();
-	 next->start = (backend_instruction *)inst->next;
 	 cur_if->add_successor(mem_ctx, next);
 
 	 set_next_block(&cur, next, ip);
 	 break;
 
       case BRW_OPCODE_ENDIF: {
-         if (cur->start == inst) {
+         if (cur->instructions.is_empty()) {
             /* New block was just created; use it. */
             cur_endif = cur;
          } else {
             cur_endif = new_block();
-            cur_endif->start = inst;
 
-            cur->end = (backend_instruction *)inst->prev;
             cur->add_successor(mem_ctx, cur_endif);
 
             set_next_block(&cur, cur_endif, ip - 1);
          }
 
-         backend_instruction *else_inst = NULL;
-         if (cur_else) {
-            else_inst = (backend_instruction *)cur_else->end;
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
 
+         if (cur_else) {
             cur_else->add_successor(mem_ctx, cur_endif);
          } else {
             cur_if->add_successor(mem_ctx, cur_endif);
          }
 
-         assert(cur_if->end->opcode == BRW_OPCODE_IF);
-         assert(!else_inst || else_inst->opcode == BRW_OPCODE_ELSE);
-         assert(inst->opcode == BRW_OPCODE_ENDIF);
-
-         cur_if->if_inst = cur_if->end;
-         cur_if->else_inst = else_inst;
-         cur_if->endif_inst = inst;
-
-	 if (cur_else) {
-            cur_else->if_inst = cur_if->end;
-            cur_else->else_inst = else_inst;
-            cur_else->endif_inst = inst;
-         }
-
-         cur->if_inst = cur_if->end;
-         cur->else_inst = else_inst;
-         cur->endif_inst = inst;
+         assert(cur_if->end()->opcode == BRW_OPCODE_IF);
+         assert(!cur_else || cur_else->end()->opcode == BRW_OPCODE_ELSE);
 
 	 /* Pop the stack so we're in the previous if/else/endif */
 	 cur_if = pop_stack(&if_stack);
@@ -203,25 +253,28 @@ cfg_t::cfg_t(exec_list *instructions)
 	  */
 	 cur_while = new_block();
 
-         if (cur->start == inst) {
+         if (cur->instructions.is_empty()) {
             /* New block was just created; use it. */
             cur_do = cur;
          } else {
             cur_do = new_block();
-            cur_do->start = inst;
 
-            cur->end = (backend_instruction *)inst->prev;
             cur->add_successor(mem_ctx, cur_do);
 
             set_next_block(&cur, cur_do, ip - 1);
          }
+
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
 	 break;
 
       case BRW_OPCODE_CONTINUE:
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
+
 	 cur->add_successor(mem_ctx, cur_do);
 
 	 next = new_block();
-	 next->start = (backend_instruction *)inst->next;
 	 if (inst->predicate)
 	    cur->add_successor(mem_ctx, next);
 
@@ -229,10 +282,12 @@ cfg_t::cfg_t(exec_list *instructions)
 	 break;
 
       case BRW_OPCODE_BREAK:
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
+
 	 cur->add_successor(mem_ctx, cur_while);
 
 	 next = new_block();
-	 next->start = (backend_instruction *)inst->next;
 	 if (inst->predicate)
 	    cur->add_successor(mem_ctx, next);
 
@@ -240,7 +295,8 @@ cfg_t::cfg_t(exec_list *instructions)
 	 break;
 
       case BRW_OPCODE_WHILE:
-	 cur_while->start = (backend_instruction *)inst->next;
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
 
 	 cur->add_successor(mem_ctx, cur_do);
 	 set_next_block(&cur, cur_while, ip);
@@ -251,11 +307,11 @@ cfg_t::cfg_t(exec_list *instructions)
 	 break;
 
       default:
+         inst->exec_node::remove();
+         cur->instructions.push_tail(inst);
 	 break;
       }
    }
-
-   assert(cur->end);
 
    cur->end_ip = ip;
 
@@ -267,10 +323,62 @@ cfg_t::~cfg_t()
    ralloc_free(mem_ctx);
 }
 
+void
+cfg_t::remove_block(bblock_t *block)
+{
+   foreach_list_typed_safe (bblock_link, predecessor, link, &block->parents) {
+      /* Remove block from all of its predecessors' successor lists. */
+      foreach_list_typed_safe (bblock_link, successor, link,
+                               &predecessor->block->children) {
+         if (block == successor->block) {
+            successor->link.remove();
+            ralloc_free(successor);
+         }
+      }
+
+      /* Add removed-block's successors to its predecessors' successor lists. */
+      foreach_list_typed (bblock_link, successor, link, &block->children) {
+         if (!successor->block->is_successor_of(predecessor->block)) {
+            predecessor->block->children.push_tail(link(mem_ctx,
+                                                        successor->block));
+         }
+      }
+   }
+
+   foreach_list_typed_safe (bblock_link, successor, link, &block->children) {
+      /* Remove block from all of its childrens' parents lists. */
+      foreach_list_typed_safe (bblock_link, predecessor, link,
+                               &successor->block->parents) {
+         if (block == predecessor->block) {
+            predecessor->link.remove();
+            ralloc_free(predecessor);
+         }
+      }
+
+      /* Add removed-block's predecessors to its successors' predecessor lists. */
+      foreach_list_typed (bblock_link, predecessor, link, &block->parents) {
+         if (!predecessor->block->is_predecessor_of(successor->block)) {
+            successor->block->parents.push_tail(link(mem_ctx,
+                                                     predecessor->block));
+         }
+      }
+   }
+
+   block->link.remove();
+
+   for (int b = block->num; b < this->num_blocks - 1; b++) {
+      this->blocks[b] = this->blocks[b + 1];
+      this->blocks[b]->num = b;
+   }
+
+   this->blocks[this->num_blocks - 1]->num = this->num_blocks - 2;
+   this->num_blocks--;
+}
+
 bblock_t *
 cfg_t::new_block()
 {
-   bblock_t *block = new(mem_ctx) bblock_t();
+   bblock_t *block = new(mem_ctx) bblock_t(this);
 
    return block;
 }
@@ -279,7 +387,6 @@ void
 cfg_t::set_next_block(bblock_t **cur, bblock_t *block, int ip)
 {
    if (*cur) {
-      assert((*cur)->end->next == block->start);
       (*cur)->end_ip = ip - 1;
    }
 
@@ -302,7 +409,7 @@ cfg_t::make_block_array()
 }
 
 void
-cfg_t::dump(backend_visitor *v)
+cfg_t::dump(backend_visitor *v) const
 {
    foreach_block (block, this) {
       fprintf(stderr, "START B%d", block->num);

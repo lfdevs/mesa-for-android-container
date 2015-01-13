@@ -67,7 +67,7 @@ namespace clover {
    class build_error : public error {
    public:
       build_error(const compat::string &what = "") :
-         error(CL_BUILD_PROGRAM_FAILURE, what) {
+         error(CL_COMPILE_PROGRAM_FAILURE, what) {
       }
    };
 

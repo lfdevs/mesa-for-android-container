@@ -1,3 +1,12 @@
+mesa (10.4.2-1) experimental; urgency=medium
+
+  * New upstream release.
+  * control, rules, libopenvg*, libgbm1, libegl1-mesa-drivers:
+    Drop EGL/GBM state trackers and OpenVG.
+  * control: Make libegl1-mesa-drivers transitional.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 13 Jan 2015 13:43:51 +0200
+
 mesa (10.3.2-1) unstable; urgency=medium
 
   [ Sven Joachim ]

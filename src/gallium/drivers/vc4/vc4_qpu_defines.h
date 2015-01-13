@@ -25,8 +25,7 @@
 #define VC4_QPU_DEFINES_H
 
 #include <assert.h>
-
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#include <util/macros.h>
 
 enum qpu_op_add {
         QPU_A_NOP,
@@ -74,7 +73,7 @@ enum qpu_raddr {
         QPU_R_ELEM_QPU = 38,
         QPU_R_NOP,
         QPU_R_XY_PIXEL_COORD = 41,
-        QPU_R_MS_REV_FLAGS = 41,
+        QPU_R_MS_REV_FLAGS = 42,
         QPU_R_VPM = 48,
         QPU_R_VPM_LD_BUSY,
         QPU_R_VPM_LD_WAIT,
@@ -196,15 +195,15 @@ enum qpu_pack_a {
         QPU_PACK_A_8D_SAT,
 };
 
-enum qpu_unpack_r4 {
-        QPU_UNPACK_R4_NOP,
-        QPU_UNPACK_R4_F16A_TO_F32,
-        QPU_UNPACK_R4_F16B_TO_F32,
-        QPU_UNPACK_R4_8D_REP,
-        QPU_UNPACK_R4_8A,
-        QPU_UNPACK_R4_8B,
-        QPU_UNPACK_R4_8C,
-        QPU_UNPACK_R4_8D,
+enum qpu_unpack {
+        QPU_UNPACK_NOP,
+        QPU_UNPACK_F16A_TO_F32,
+        QPU_UNPACK_F16B_TO_F32,
+        QPU_UNPACK_8D_REP,
+        QPU_UNPACK_8A,
+        QPU_UNPACK_8B,
+        QPU_UNPACK_8C,
+        QPU_UNPACK_8D,
 };
 
 #define QPU_MASK(high, low) ((((uint64_t)1<<((high)-(low)+1))-1)<<(low))

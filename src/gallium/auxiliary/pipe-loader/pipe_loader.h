@@ -166,6 +166,17 @@ pipe_loader_sw_probe_null(struct pipe_loader_device **devs);
 int
 pipe_loader_sw_probe(struct pipe_loader_device **devs, int ndev);
 
+/**
+ * Get a software device wrapped atop another device.
+ *
+ * This function is platform-specific.
+ *
+ * \sa pipe_loader_probe
+ */
+boolean
+pipe_loader_sw_probe_wrapped(struct pipe_loader_device **dev,
+                             struct pipe_screen *screen);
+
 #ifdef HAVE_PIPE_LOADER_DRM
 
 /**

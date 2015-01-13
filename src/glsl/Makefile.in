@@ -117,8 +117,9 @@ check_PROGRAMS = glcpp/glcpp$(EXEEXT) glsl_test$(EXEEXT) \
 noinst_PROGRAMS = glsl_compiler$(EXEEXT)
 subdir = src/glsl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -156,7 +157,8 @@ am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	link_uniform_initializers.lo \
 	link_uniform_block_active_visitor.lo link_uniform_blocks.lo \
 	link_varyings.lo loop_analysis.lo loop_controls.lo \
-	loop_unroll.lo lower_clip_distance.lo lower_discard.lo \
+	loop_unroll.lo lower_clip_distance.lo \
+	lower_const_arrays_to_uniforms.lo lower_discard.lo \
 	lower_discard_flow.lo lower_if_to_cond_assign.lo \
 	lower_instructions.lo lower_jumps.lo lower_mat_op_to_vec.lo \
 	lower_noise.lo lower_offset_array.lo lower_packed_varyings.lo \
@@ -170,14 +172,15 @@ am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	opt_array_splitting.lo opt_constant_folding.lo \
 	opt_constant_propagation.lo opt_constant_variable.lo \
 	opt_copy_propagation.lo opt_copy_propagation_elements.lo \
-	opt_cse.lo opt_dead_builtin_varyings.lo opt_dead_code.lo \
+	opt_cse.lo opt_dead_builtin_variables.lo \
+	opt_dead_builtin_varyings.lo opt_dead_code.lo \
 	opt_dead_code_local.lo opt_dead_functions.lo \
 	opt_flatten_nested_if_blocks.lo opt_flip_matrices.lo \
 	opt_function_inlining.lo opt_if_simplification.lo \
-	opt_noop_swizzle.lo opt_rebalance_tree.lo \
+	opt_minmax.lo opt_noop_swizzle.lo opt_rebalance_tree.lo \
 	opt_redundant_jumps.lo opt_structure_splitting.lo \
 	opt_swizzle_swizzle.lo opt_tree_grafting.lo opt_vectorize.lo \
-	s_expression.lo strtod.lo
+	s_expression.lo
 am_libglsl_la_OBJECTS = glsl_lexer.lo glsl_parser.lo $(am__objects_2)
 libglsl_la_OBJECTS = $(am_libglsl_la_OBJECTS)
 PROGRAMS = $(noinst_PROGRAMS)
@@ -547,6 +550,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -569,7 +573,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -642,11 +645,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -657,10 +663,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -674,7 +678,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -693,7 +696,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -757,6 +766,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -852,6 +862,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/loop_controls.cpp \
 	$(GLSL_SRCDIR)/loop_unroll.cpp \
 	$(GLSL_SRCDIR)/lower_clip_distance.cpp \
+	$(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp \
 	$(GLSL_SRCDIR)/lower_discard.cpp \
 	$(GLSL_SRCDIR)/lower_discard_flow.cpp \
 	$(GLSL_SRCDIR)/lower_if_to_cond_assign.cpp \
@@ -880,6 +891,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_copy_propagation.cpp \
 	$(GLSL_SRCDIR)/opt_copy_propagation_elements.cpp \
 	$(GLSL_SRCDIR)/opt_cse.cpp \
+	$(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp \
 	$(GLSL_SRCDIR)/opt_dead_builtin_varyings.cpp \
 	$(GLSL_SRCDIR)/opt_dead_code.cpp \
 	$(GLSL_SRCDIR)/opt_dead_code_local.cpp \
@@ -888,6 +900,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_flip_matrices.cpp \
 	$(GLSL_SRCDIR)/opt_function_inlining.cpp \
 	$(GLSL_SRCDIR)/opt_if_simplification.cpp \
+	$(GLSL_SRCDIR)/opt_minmax.cpp \
 	$(GLSL_SRCDIR)/opt_noop_swizzle.cpp \
 	$(GLSL_SRCDIR)/opt_rebalance_tree.cpp \
 	$(GLSL_SRCDIR)/opt_redundant_jumps.cpp \
@@ -895,8 +908,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_swizzle_swizzle.cpp \
 	$(GLSL_SRCDIR)/opt_tree_grafting.cpp \
 	$(GLSL_SRCDIR)/opt_vectorize.cpp \
-	$(GLSL_SRCDIR)/s_expression.cpp \
-	$(GLSL_SRCDIR)/strtod.c
+	$(GLSL_SRCDIR)/s_expression.cpp
 
 
 # glsl_compiler
@@ -1217,6 +1229,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loop_controls.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loop_unroll.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_clip_distance.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_const_arrays_to_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_discard.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_discard_flow.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_if_to_cond_assign.Plo@am__quote@
@@ -1246,6 +1259,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_copy_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_copy_propagation_elements.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_cse.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_dead_builtin_variables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_dead_builtin_varyings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_dead_code.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_dead_code_local.Plo@am__quote@
@@ -1254,6 +1268,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_flip_matrices.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_function_inlining.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_if_simplification.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_minmax.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_noop_swizzle.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_rebalance_tree.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_redundant_jumps.Plo@am__quote@
@@ -1267,7 +1282,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sampler_types_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/set_uniform_initializer_tests.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/standalone_scaffolding.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/strtod.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/symbol_table.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_optpass.Po@am__quote@
@@ -1326,13 +1340,6 @@ pp.lo: $(GLSL_SRCDIR)/glcpp/pp.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(GLSL_SRCDIR)/glcpp/pp.c' object='pp.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o pp.lo `test -f '$(GLSL_SRCDIR)/glcpp/pp.c' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/glcpp/pp.c
-
-strtod.lo: $(GLSL_SRCDIR)/strtod.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT strtod.lo -MD -MP -MF $(DEPDIR)/strtod.Tpo -c -o strtod.lo `test -f '$(GLSL_SRCDIR)/strtod.c' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/strtod.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/strtod.Tpo $(DEPDIR)/strtod.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(GLSL_SRCDIR)/strtod.c' object='strtod.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o strtod.lo `test -f '$(GLSL_SRCDIR)/strtod.c' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/strtod.c
 
 glcpp.o: glcpp/glcpp.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT glcpp.o -MD -MP -MF $(DEPDIR)/glcpp.Tpo -c -o glcpp.o `test -f 'glcpp/glcpp.c' || echo '$(srcdir)/'`glcpp/glcpp.c
@@ -1887,6 +1894,13 @@ lower_clip_distance.lo: $(GLSL_SRCDIR)/lower_clip_distance.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o lower_clip_distance.lo `test -f '$(GLSL_SRCDIR)/lower_clip_distance.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_clip_distance.cpp
 
+lower_const_arrays_to_uniforms.lo: $(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT lower_const_arrays_to_uniforms.lo -MD -MP -MF $(DEPDIR)/lower_const_arrays_to_uniforms.Tpo -c -o lower_const_arrays_to_uniforms.lo `test -f '$(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/lower_const_arrays_to_uniforms.Tpo $(DEPDIR)/lower_const_arrays_to_uniforms.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp' object='lower_const_arrays_to_uniforms.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o lower_const_arrays_to_uniforms.lo `test -f '$(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp
+
 lower_discard.lo: $(GLSL_SRCDIR)/lower_discard.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT lower_discard.lo -MD -MP -MF $(DEPDIR)/lower_discard.Tpo -c -o lower_discard.lo `test -f '$(GLSL_SRCDIR)/lower_discard.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/lower_discard.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/lower_discard.Tpo $(DEPDIR)/lower_discard.Plo
@@ -2083,6 +2097,13 @@ opt_cse.lo: $(GLSL_SRCDIR)/opt_cse.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o opt_cse.lo `test -f '$(GLSL_SRCDIR)/opt_cse.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_cse.cpp
 
+opt_dead_builtin_variables.lo: $(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT opt_dead_builtin_variables.lo -MD -MP -MF $(DEPDIR)/opt_dead_builtin_variables.Tpo -c -o opt_dead_builtin_variables.lo `test -f '$(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/opt_dead_builtin_variables.Tpo $(DEPDIR)/opt_dead_builtin_variables.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp' object='opt_dead_builtin_variables.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o opt_dead_builtin_variables.lo `test -f '$(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp
+
 opt_dead_builtin_varyings.lo: $(GLSL_SRCDIR)/opt_dead_builtin_varyings.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT opt_dead_builtin_varyings.lo -MD -MP -MF $(DEPDIR)/opt_dead_builtin_varyings.Tpo -c -o opt_dead_builtin_varyings.lo `test -f '$(GLSL_SRCDIR)/opt_dead_builtin_varyings.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_dead_builtin_varyings.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/opt_dead_builtin_varyings.Tpo $(DEPDIR)/opt_dead_builtin_varyings.Plo
@@ -2138,6 +2159,13 @@ opt_if_simplification.lo: $(GLSL_SRCDIR)/opt_if_simplification.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/opt_if_simplification.cpp' object='opt_if_simplification.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o opt_if_simplification.lo `test -f '$(GLSL_SRCDIR)/opt_if_simplification.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_if_simplification.cpp
+
+opt_minmax.lo: $(GLSL_SRCDIR)/opt_minmax.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT opt_minmax.lo -MD -MP -MF $(DEPDIR)/opt_minmax.Tpo -c -o opt_minmax.lo `test -f '$(GLSL_SRCDIR)/opt_minmax.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_minmax.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/opt_minmax.Tpo $(DEPDIR)/opt_minmax.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$(GLSL_SRCDIR)/opt_minmax.cpp' object='opt_minmax.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o opt_minmax.lo `test -f '$(GLSL_SRCDIR)/opt_minmax.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_minmax.cpp
 
 opt_noop_swizzle.lo: $(GLSL_SRCDIR)/opt_noop_swizzle.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT opt_noop_swizzle.lo -MD -MP -MF $(DEPDIR)/opt_noop_swizzle.Tpo -c -o opt_noop_swizzle.lo `test -f '$(GLSL_SRCDIR)/opt_noop_swizzle.cpp' || echo '$(srcdir)/'`$(GLSL_SRCDIR)/opt_noop_swizzle.cpp

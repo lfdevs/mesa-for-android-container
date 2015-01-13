@@ -381,8 +381,6 @@ nouveau_decoder_surface_index(struct nouveau_decoder *dec,
 
    unsigned i;
 
-   if (!buf)
-      return 8;
    for (i = 0; i < dec->num_surfaces; ++i) {
       if (dec->surfaces[i] == buf)
          return i;
@@ -553,7 +551,7 @@ nouveau_create_decoder(struct pipe_context *context,
                                &mpeg);
    if (ret < 0) {
       debug_printf("Creation failed: %s (%i)\n", strerror(-ret), ret);
-      return NULL;
+      goto fail;
    }
 
    dec->mpeg = mpeg;

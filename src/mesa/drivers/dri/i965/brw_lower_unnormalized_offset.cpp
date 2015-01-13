@@ -66,6 +66,11 @@ brw_lower_unnormalized_offset_visitor::visit_leave(ir_texture *ir)
    void *mem_ctx = ralloc_parent(ir);
 
    if (ir->op == ir_txf) {
+      /* It appears that the ld instruction used for txf does its
+       * address bounds check before adding in the offset.  To work
+       * around this, just add the integer offset to the integer texel
+       * coordinate, and don't put the offset in the header.
+       */
       ir_variable *var = new(mem_ctx) ir_variable(ir->coordinate->type,
                                                   "coordinate",
                                                   ir_var_temporary);

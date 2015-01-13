@@ -800,6 +800,10 @@ static PIPE_THREAD_ROUTINE( thread_function, init_data )
       pipe_semaphore_signal(&task->work_done);
    }
 
+#ifdef _WIN32
+   pipe_semaphore_signal(&task->work_done);
+#endif
+
    return 0;
 }
 
@@ -885,9 +889,15 @@ void lp_rast_destroy( struct lp_rasterizer *rast )
       pipe_semaphore_signal(&rast->tasks[i].work_ready);
    }
 
-   /* Wait for threads to terminate before cleaning up per-thread data */
+   /* Wait for threads to terminate before cleaning up per-thread data.
+    * We don't actually call pipe_thread_wait to avoid dead lock on Windows
+    * per https://bugs.freedesktop.org/show_bug.cgi?id=76252 */
    for (i = 0; i < rast->num_threads; i++) {
+#ifdef _WIN32
+      pipe_semaphore_wait(&rast->tasks[i].work_done);
+#else
       pipe_thread_wait(rast->threads[i]);
+#endif
    }
 
    /* Clean up per-thread data */

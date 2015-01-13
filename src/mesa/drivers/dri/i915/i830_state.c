@@ -1069,11 +1069,11 @@ i830_init_packets(struct i830_context *i830)
    i830->state.Stipple[I830_STPREG_ST0] = _3DSTATE_STIPPLE;
 
    i830->state.Buffer[I830_DESTREG_DV0] = _3DSTATE_DST_BUF_VARS_CMD;
-   i830->state.Buffer[I830_DESTREG_SENABLE] = (_3DSTATE_SCISSOR_ENABLE_CMD |
-                                               DISABLE_SCISSOR_RECT);
    i830->state.Buffer[I830_DESTREG_SR0] = _3DSTATE_SCISSOR_RECT_0_CMD;
    i830->state.Buffer[I830_DESTREG_SR1] = 0;
    i830->state.Buffer[I830_DESTREG_SR2] = 0;
+   i830->state.Buffer[I830_DESTREG_SENABLE] = (_3DSTATE_SCISSOR_ENABLE_CMD |
+                                               DISABLE_SCISSOR_RECT);
 }
 
 void

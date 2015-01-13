@@ -304,11 +304,12 @@ do_vs_prog(struct brw_context *brw,
                  "Try reducing the number of live vec4 values to "
                  "improve performance.\n");
 
-      prog_data.base.total_scratch
+      prog_data.base.base.total_scratch
          = brw_get_scratch_size(c.base.last_scratch*REG_SIZE);
 
       brw_get_scratch_bo(brw, &brw->vs.base.scratch_bo,
-			 prog_data.base.total_scratch * brw->max_vs_threads);
+			 prog_data.base.base.total_scratch *
+                         brw->max_vs_threads);
    }
 
    brw_upload_cache(&brw->cache, BRW_VS_PROG,
@@ -497,7 +498,7 @@ static void brw_upload_vs_prog(struct brw_context *brw)
               sizeof(brw->vue_map_geom_out)) != 0) {
       brw->vue_map_vs = brw->vs.prog_data->base.vue_map;
       brw->state.dirty.brw |= BRW_NEW_VUE_MAP_VS;
-      if (brw->gen < 7) {
+      if (brw->gen < 6) {
          /* No geometry shader support, so the VS VUE map is the VUE map for
           * the output of the "geometry" portion of the pipeline.
           */

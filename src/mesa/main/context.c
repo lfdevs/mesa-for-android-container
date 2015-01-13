@@ -133,6 +133,7 @@
 #include "program/prog_print.h"
 #include "math/m_matrix.h"
 #include "main/dispatch.h" /* for _gloffset_COUNT */
+#include "uniforms.h"
 
 #ifdef USE_SPARC_ASM
 #include "sparc/sparc.h"
@@ -628,9 +629,6 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
     */
    consts->VertexID_is_zero_based = false;
 
-   /* CheckArrayBounds is overriden by drivers/x11 for X server */
-   consts->CheckArrayBounds = GL_FALSE;
-
    /* GL_ARB_draw_buffers */
    consts->MaxDrawBuffers = MAX_DRAW_BUFFERS;
 
@@ -645,16 +643,14 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    consts->MaxGeometryTotalOutputComponents = MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS;
 
    /* Shading language version */
-   if (api == API_OPENGL_COMPAT || api == API_OPENGL_CORE) {
-      consts->GLSLVersion = 120;
-      _mesa_override_glsl_version(consts);
-   }
-   else if (api == API_OPENGLES2) {
-      consts->GLSLVersion = 100;
-   }
-   else if (api == API_OPENGLES) {
-      consts->GLSLVersion = 0; /* GLSL not supported */
-   }
+   consts->GLSLVersion = 120;
+   _mesa_override_glsl_version(consts);
+
+#ifdef DEBUG
+   consts->GenerateTemporaryNames = true;
+#else
+   consts->GenerateTemporaryNames = false;
+#endif
 
    /* GL_ARB_framebuffer_object */
    consts->MaxSamples = 0;
@@ -679,6 +675,9 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
                           ? GL_CONTEXT_CORE_PROFILE_BIT
                           : GL_CONTEXT_COMPATIBILITY_PROFILE_BIT;
 
+   /* GL 4.4 */
+   consts->MaxVertexAttribStride = 2048;
+
    /** GL_EXT_gpu_shader4 */
    consts->MinProgramTexelOffset = -8;
    consts->MaxProgramTexelOffset = 7;
@@ -689,9 +688,6 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
 
    /* GL_ARB_robustness */
    consts->ResetStrategy = GL_NO_RESET_NOTIFICATION_ARB;
-
-   /* PrimitiveRestart */
-   consts->PrimitiveRestartInSoftware = GL_FALSE;
 
    /* ES 3.0 or ARB_ES3_compatibility */
    consts->MaxElementIndex = 0xffffffffu;
@@ -723,6 +719,9 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    /** GL_ARB_gpu_shader5 */
    consts->MinFragmentInterpolationOffset = MIN_FRAGMENT_INTERPOLATION_OFFSET;
    consts->MaxFragmentInterpolationOffset = MAX_FRAGMENT_INTERPOLATION_OFFSET;
+
+   /** GL_KHR_context_flush_control */
+   consts->ContextReleaseBehavior = GL_CONTEXT_RELEASE_BEHAVIOR_FLUSH;
 }
 
 
@@ -733,6 +732,8 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
 static void
 check_context_limits(struct gl_context *ctx)
 {
+   (void) ctx;
+
    /* check that we don't exceed the size of various bitfields */
    assert(VARYING_SLOT_MAX <=
 	  (8 * sizeof(ctx->VertexProgram._Current->Base.OutputsWritten)));
@@ -913,7 +914,7 @@ nop_glFlush(void)
  * which raises GL_INVALID_OPERATION.
  */
 struct _glapi_table *
-_mesa_alloc_dispatch_table()
+_mesa_alloc_dispatch_table(void)
 {
    /* Find the larger of Mesa's dispatch table and libGL's dispatch table.
     * In practice, this'll be the same for stand-alone Mesa.  But for DRI
@@ -1132,10 +1133,10 @@ _mesa_initialize_context(struct gl_context *ctx,
    ctx->CurrentDispatch = ctx->OutsideBeginEnd;
 
    ctx->FragmentProgram._MaintainTexEnvProgram
-      = (_mesa_getenv("MESA_TEX_PROG") != NULL);
+      = (getenv("MESA_TEX_PROG") != NULL);
 
    ctx->VertexProgram._MaintainTnlProgram
-      = (_mesa_getenv("MESA_TNL_PROG") != NULL);
+      = (getenv("MESA_TNL_PROG") != NULL);
    if (ctx->VertexProgram._MaintainTnlProgram) {
       /* this is required... */
       ctx->FragmentProgram._MaintainTexEnvProgram = GL_TRUE;
@@ -1538,7 +1539,10 @@ handle_first_current(struct gl_context *ctx)
    GLenum buffer;
    GLint bufferIndex;
 
-   assert(ctx->Version > 0);
+   if (ctx->Version == 0) {
+      /* probably in the process of tearing down the context */
+      return;
+   }
 
    ctx->Extensions.String = _mesa_make_extension_string(ctx);
 
@@ -1576,7 +1580,7 @@ handle_first_current(struct gl_context *ctx)
     * first time each context is made current we'll print some useful
     * information.
     */
-   if (_mesa_getenv("MESA_INFO")) {
+   if (getenv("MESA_INFO")) {
       _mesa_print_info(ctx);
    }
 }
@@ -1623,9 +1627,11 @@ _mesa_make_current( struct gl_context *newCtx,
    }
 
    if (curCtx && 
-      (curCtx->WinSysDrawBuffer || curCtx->WinSysReadBuffer) &&
+       (curCtx->WinSysDrawBuffer || curCtx->WinSysReadBuffer) &&
        /* make sure this context is valid for flushing */
-      curCtx != newCtx)
+       curCtx != newCtx &&
+       curCtx->Const.ContextReleaseBehavior ==
+       GL_CONTEXT_RELEASE_BEHAVIOR_FLUSH)
       _mesa_flush(curCtx);
 
    /* We used to call _glapi_check_multithread() here.  Now do it in drivers */
@@ -1947,6 +1953,17 @@ _mesa_valid_to_render(struct gl_context *ctx, const char *where)
       /* Error message will be printed inside _mesa_validate_program_pipeline.
        */
       if (!_mesa_validate_program_pipeline(ctx, ctx->_Shader, GL_TRUE)) {
+         return GL_FALSE;
+      }
+   }
+
+   /* If a program is active and SSO not in use, check if validation of
+    * samplers succeeded for the active program. */
+   if (ctx->_Shader->ActiveProgram && ctx->_Shader != ctx->Pipeline.Current) {
+      char errMsg[100];
+      if (!_mesa_sampler_uniforms_are_valid(ctx->_Shader->ActiveProgram,
+                                            errMsg, 100)) {
+         _mesa_error(ctx, GL_INVALID_OPERATION, "%s", errMsg);
          return GL_FALSE;
       }
    }

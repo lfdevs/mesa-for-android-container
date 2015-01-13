@@ -616,6 +616,8 @@ public:
 	unsigned num_slots;
 	bool uses_mova_gpr;
 
+	bool r6xx_gpr_index_workaround;
+
 	bool stack_workaround_8xx;
 	bool stack_workaround_9xx;
 

@@ -120,7 +120,6 @@ else
   endif
 
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
-	confflags_OPENVG = --enable-openvg --enable-gallium-egl
 	confflags_GALLIUM += --enable-vdpau
 endif
 confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
@@ -143,7 +142,6 @@ confflags-dri = \
 	$(confflags_EGL) \
 	$(confflags_GALLIUM) \
 	$(confflags_GLES) \
-	$(confflags_OPENVG) \
 	$(buildflags)
 
 confflags-swx11 = \

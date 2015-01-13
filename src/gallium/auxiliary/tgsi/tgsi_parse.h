@@ -150,6 +150,9 @@ tgsi_dup_tokens(const struct tgsi_token *tokens);
 struct tgsi_token *
 tgsi_alloc_tokens(unsigned num_tokens);
 
+void
+tgsi_free_tokens(const struct tgsi_token *tokens);
+
 
 #if defined __cplusplus
 }

@@ -92,16 +92,11 @@ disable_stages(struct brw_context *brw)
    OUT_BATCH(0);
    ADVANCE_BATCH();
 
-   BEGIN_BATCH(9);
-   OUT_BATCH(_3DSTATE_DS << 16 | (9 - 2));
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
+   int ds_pkt_len = brw->gen >= 9 ? 11 : 9;
+   BEGIN_BATCH(ds_pkt_len);
+   OUT_BATCH(_3DSTATE_DS << 16 | (ds_pkt_len - 2));
+   for (int i = 0; i < ds_pkt_len - 1; i++)
+      OUT_BATCH(0);
    ADVANCE_BATCH();
 
    BEGIN_BATCH(2);

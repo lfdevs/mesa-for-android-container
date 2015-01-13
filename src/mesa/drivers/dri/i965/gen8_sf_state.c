@@ -39,10 +39,13 @@ upload_sbe(struct brw_context *brw)
    uint32_t urb_entry_read_length;
    uint32_t point_sprite_enables;
    uint32_t flat_enables;
+   int sbe_cmd_length;
 
    uint32_t dw1 =
       GEN7_SBE_SWIZZLE_ENABLE |
       num_outputs << GEN7_SBE_NUM_OUTPUTS_SHIFT;
+   uint32_t dw4 = 0;
+   uint32_t dw5 = 0;
 
    /* _NEW_BUFFERS */
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
@@ -57,8 +60,8 @@ upload_sbe(struct brw_context *brw)
    else
       dw1 |= GEN6_SF_POINT_SPRITE_UPPERLEFT;
 
-   /* BRW_NEW_VUE_MAP_GEOM_OUT | _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM |
-    * CACHE_NEW_WM_PROG
+   /* BRW_NEW_VUE_MAP_GEOM_OUT | BRW_NEW_FRAGMENT_PROGRAM |
+    * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | CACHE_NEW_WM_PROG
     */
    calculate_attr_overrides(brw, attr_overrides,
                             &point_sprite_enables,
@@ -79,11 +82,34 @@ upload_sbe(struct brw_context *brw)
       GEN8_SBE_FORCE_URB_ENTRY_READ_LENGTH |
       GEN8_SBE_FORCE_URB_ENTRY_READ_OFFSET;
 
-   BEGIN_BATCH(4);
-   OUT_BATCH(_3DSTATE_SBE << 16 | (4 - 2));
+   if (brw->gen == 8) {
+      sbe_cmd_length = 4;
+   } else {
+      sbe_cmd_length = 6;
+
+      /* prepare the active component dwords */
+      int input_index = 0;
+      for (int attr = 0; attr < VARYING_SLOT_MAX; attr++) {
+         if (!(brw->fragment_program->Base.InputsRead & BITFIELD64_BIT(attr)))
+            continue;
+
+         if (input_index < 16)
+            dw4 |= (GEN9_SBE_ACTIVE_COMPONENT_XYZW << (input_index << 1));
+         else
+            dw5 |= (GEN9_SBE_ACTIVE_COMPONENT_XYZW << (input_index << 1));
+
+         ++input_index;
+      }
+   }
+   BEGIN_BATCH(sbe_cmd_length);
+   OUT_BATCH(_3DSTATE_SBE << 16 | (sbe_cmd_length - 2));
    OUT_BATCH(dw1);
    OUT_BATCH(point_sprite_enables);
    OUT_BATCH(flat_enables);
+   if (sbe_cmd_length >= 6) {
+      OUT_BATCH(dw4);
+      OUT_BATCH(dw5);
+   }
    ADVANCE_BATCH();
 
    BEGIN_BATCH(11);
@@ -123,10 +149,15 @@ upload_sf(struct brw_context *brw)
        dw1 |= GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;
 
    /* _NEW_LINE */
-   uint32_t line_width_u3_7 = U_FIXED(CLAMP(ctx->Line.Width, 0.0, 7.99), 7);
+   uint32_t line_width_u3_7 =
+      U_FIXED(CLAMP(ctx->Line.Width, 0.0, ctx->Const.MaxLineWidth), 7);
    if (line_width_u3_7 == 0)
       line_width_u3_7 = 1;
-   dw2 |= line_width_u3_7 << GEN6_SF_LINE_WIDTH_SHIFT;
+   if (brw->gen >= 9 || brw->is_cherryview) {
+      dw1 |= line_width_u3_7 << GEN9_SF_LINE_WIDTH_SHIFT;
+   } else {
+      dw2 |= line_width_u3_7 << GEN6_SF_LINE_WIDTH_SHIFT;
+   }
 
    if (ctx->Line.SmoothFlag) {
       dw2 |= GEN6_SF_LINE_END_CAP_WIDTH_1_0;
@@ -265,8 +296,14 @@ upload_raster(struct brw_context *brw)
       dw1 |= GEN8_RASTER_SCISSOR_ENABLE;
 
    /* _NEW_TRANSFORM */
-   if (!ctx->Transform.DepthClamp)
-      dw1 |= GEN8_RASTER_VIEWPORT_Z_CLIP_TEST_ENABLE;
+   if (!ctx->Transform.DepthClamp) {
+      if (brw->gen >= 9) {
+         dw1 |= GEN9_RASTER_VIEWPORT_Z_NEAR_CLIP_TEST_ENABLE |
+                GEN9_RASTER_VIEWPORT_Z_FAR_CLIP_TEST_ENABLE;
+      } else {
+         dw1 |= GEN8_RASTER_VIEWPORT_Z_CLIP_TEST_ENABLE;
+      }
+   }
 
    BEGIN_BATCH(5);
    OUT_BATCH(_3DSTATE_RASTER << 16 | (5 - 2));

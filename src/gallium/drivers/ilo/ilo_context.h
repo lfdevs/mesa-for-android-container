@@ -31,18 +31,18 @@
 #include "pipe/p_context.h"
 #include "util/u_slab.h"
 
-#include "ilo_gpe.h"
 #include "ilo_common.h"
+#include "ilo_cp.h"
+#include "ilo_draw.h"
+#include "ilo_state.h"
 
-struct pipe_draw_info;
 struct u_upload_mgr;
 struct intel_winsys;
-struct intel_bo;
-struct ilo_3d;
+
 struct ilo_blitter;
-struct ilo_cp;
+struct ilo_render;
 struct ilo_screen;
-struct ilo_shader_state;
+struct ilo_shader_cache;
 
 struct ilo_context {
    struct pipe_context base;
@@ -53,52 +53,25 @@ struct ilo_context {
    struct util_slab_mempool transfer_mempool;
 
    struct ilo_cp *cp;
-   struct intel_bo *last_cp_bo;
 
    struct ilo_shader_cache *shader_cache;
-   struct ilo_3d *hw3d;
    struct ilo_blitter *blitter;
+   struct ilo_render *render;
 
    struct u_upload_mgr *uploader;
 
-   const struct pipe_draw_info *draw;
-   uint32_t dirty;
+   struct ilo_state_vector state_vector;
 
-   struct ilo_vb_state vb;
-   const struct ilo_ve_state *ve;
-   struct ilo_ib_state ib;
+   struct {
+      struct pipe_query *query;
+      bool condition;
+      unsigned mode;
+   } render_condition;
 
-   struct ilo_shader_state *vs;
-   struct ilo_shader_state *gs;
-
-   struct ilo_so_state so;
-
-   struct pipe_clip_state clip;
-   struct ilo_viewport_state viewport;
-   struct ilo_scissor_state scissor;
-
-   const struct ilo_rasterizer_state *rasterizer;
-   struct pipe_poly_stipple poly_stipple;
-   unsigned sample_mask;
-
-   struct ilo_shader_state *fs;
-
-   const struct ilo_dsa_state *dsa;
-   struct pipe_stencil_ref stencil_ref;
-   const struct ilo_blend_state *blend;
-   struct pipe_blend_color blend_color;
-   struct ilo_fb_state fb;
-
-   /* shader resources */
-   struct ilo_sampler_state sampler[PIPE_SHADER_TYPES];
-   struct ilo_view_state view[PIPE_SHADER_TYPES];
-   struct ilo_cbuf_state cbuf[PIPE_SHADER_TYPES];
-   struct ilo_resource_state resource;
-
-   /* GPGPU */
-   struct ilo_shader_state *cs;
-   struct ilo_resource_state cs_resource;
-   struct ilo_global_binding global_binding;
+   struct {
+      struct ilo_cp_owner cp_owner;
+      struct list_head queries;
+   } draw;
 };
 
 static inline struct ilo_context *
@@ -109,5 +82,8 @@ ilo_context(struct pipe_context *pipe)
 
 void
 ilo_init_context_functions(struct ilo_screen *is);
+
+bool
+ilo_skip_rendering(struct ilo_context *ilo);
 
 #endif /* ILO_CONTEXT_H */

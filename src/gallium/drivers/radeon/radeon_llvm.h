@@ -33,9 +33,9 @@
 
 #define RADEON_LLVM_MAX_INPUTS 32 * 4
 #define RADEON_LLVM_MAX_OUTPUTS 32 * 4
-#define RADEON_LLVM_MAX_BRANCH_DEPTH 16
-#define RADEON_LLVM_MAX_LOOP_DEPTH 16
 #define RADEON_LLVM_MAX_ARRAYS 16
+
+#define RADEON_LLVM_INITIAL_CF_DEPTH 4
 
 #define RADEON_LLVM_MAX_SYSTEM_VALUES 4
 
@@ -122,11 +122,13 @@ struct radeon_llvm_context {
 
 	/*=== Private Members ===*/
 
-	struct radeon_llvm_branch branch[RADEON_LLVM_MAX_BRANCH_DEPTH];
-	struct radeon_llvm_loop loop[RADEON_LLVM_MAX_LOOP_DEPTH];
+	struct radeon_llvm_branch *branch;
+	struct radeon_llvm_loop *loop;
 
 	unsigned branch_depth;
+	unsigned branch_depth_max;
 	unsigned loop_depth;
+	unsigned loop_depth_max;
 
 	struct tgsi_declaration_range arrays[RADEON_LLVM_MAX_ARRAYS];
 	unsigned num_arrays;

@@ -25,179 +25,84 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
-#include "genhw/genhw.h"
 #include "intel_winsys.h"
 
+#include "ilo_builder_mi.h"
+#include "ilo_shader.h"
 #include "ilo_cp.h"
 
-#define MI_NOOP             GEN_MI_CMD(MI_NOOP)
-#define MI_BATCH_BUFFER_END GEN_MI_CMD(MI_BATCH_BUFFER_END)
+static const struct ilo_cp_owner ilo_cp_default_owner;
 
-/* the size of the private space */
-static const int ilo_cp_private = 2;
-
-/**
- * Dump the contents of the parser bo.  This can only be called in the flush
- * callback.
- */
-void
-ilo_cp_dump(struct ilo_cp *cp)
+static void
+ilo_cp_release_owner(struct ilo_cp *cp)
 {
-   ilo_printf("dumping %d bytes\n", cp->used * 4);
-   if (cp->used)
-      intel_winsys_decode_bo(cp->winsys, cp->bo, cp->used * 4);
+   if (cp->owner != &ilo_cp_default_owner) {
+      const struct ilo_cp_owner *owner = cp->owner;
+
+      cp->owner = &ilo_cp_default_owner;
+
+      assert(ilo_cp_space(cp) >= owner->reserve);
+      owner->release(cp, owner->data);
+   }
 }
 
 /**
- * Save the command parser state for rewind.
+ * Set the parser owner.  If this is a new owner or a new ring, the old owner
+ * is released and the new owner's own() is called.  The parser may implicitly
+ * submit if there is a ring change.
  *
- * Note that this cannot rewind a flush, and the caller must make sure
- * that does not happend.
+ * own() is called before \p owner owns the parser.  It must make sure there
+ * is more space than \p owner->reserve when it returns.  Calling
+ * ilo_cp_submit() is allowed.
+ *
+ * release() will be called after \p owner loses the parser.  That may happen
+ * just before the parser submits and ilo_cp_submit() is not allowed.
  */
 void
-ilo_cp_setjmp(struct ilo_cp *cp, struct ilo_cp_jmp_buf *jmp)
+ilo_cp_set_owner(struct ilo_cp *cp, enum intel_ring_type ring,
+                 const struct ilo_cp_owner *owner)
 {
-   jmp->id = pointer_to_intptr(cp->bo);
+   if (!owner)
+      owner = &ilo_cp_default_owner;
 
-   jmp->size = cp->size;
-   jmp->used = cp->used;
-   jmp->stolen = cp->stolen;
-   /* save reloc count to rewind ilo_cp_write_bo() */
-   jmp->reloc_count = intel_bo_get_reloc_count(cp->bo);
-}
-
-/**
- * Rewind to the saved state.
- */
-void
-ilo_cp_longjmp(struct ilo_cp *cp, const struct ilo_cp_jmp_buf *jmp)
-{
-   if (jmp->id != pointer_to_intptr(cp->bo)) {
-      assert(!"invalid use of CP longjmp");
-      return;
+   if (cp->ring != ring) {
+      ilo_cp_submit(cp, "ring change");
+      cp->ring = ring;
    }
 
-   cp->size = jmp->size;
-   cp->used = jmp->used;
-   cp->stolen = jmp->stolen;
-   intel_bo_truncate_relocs(cp->bo, jmp->reloc_count);
-}
+   if (cp->owner != owner) {
+      ilo_cp_release_owner(cp);
 
-/**
- * Clear the parser buffer.
- */
-static void
-ilo_cp_clear_buffer(struct ilo_cp *cp)
-{
-   cp->cmd_cur = 0;
-   cp->cmd_end = 0;
+      owner->own(cp, owner->data);
 
-   cp->used = 0;
-   cp->stolen = 0;
-
-   /*
-    * Recalculate cp->size.  This is needed not only because cp->stolen is
-    * reset above, but also that ilo_cp_private are added to cp->size in
-    * ilo_cp_end_buffer().
-    */
-   cp->size = cp->bo_size - ilo_cp_private;
-}
-
-/**
- * Add MI_BATCH_BUFFER_END to the private space of the parser buffer.
- */
-static void
-ilo_cp_end_buffer(struct ilo_cp *cp)
-{
-   /* make the private space available */
-   cp->size += ilo_cp_private;
-
-   assert(cp->used + 2 <= cp->size);
-
-   cp->ptr[cp->used++] = MI_BATCH_BUFFER_END;
-
-   /*
-    * From the Sandy Bridge PRM, volume 1 part 1, page 107:
-    *
-    *     "The batch buffer must be QWord aligned and a multiple of QWords in
-    *      length."
-    */
-   if (cp->used & 1)
-      cp->ptr[cp->used++] = MI_NOOP;
-}
-
-/**
- * Upload the parser buffer to the bo.
- */
-static int
-ilo_cp_upload_buffer(struct ilo_cp *cp)
-{
-   int err;
-
-   if (!cp->sys) {
-      intel_bo_unmap(cp->bo);
-      return 0;
+      assert(ilo_cp_space(cp) >= owner->reserve);
+      cp->owner = owner;
    }
-
-   err = intel_bo_pwrite(cp->bo, 0, cp->used * 4, cp->ptr);
-   if (likely(!err && cp->stolen)) {
-      const int offset = cp->bo_size - cp->stolen;
-
-      err = intel_bo_pwrite(cp->bo, offset * 4,
-            cp->stolen * 4, &cp->ptr[offset]);
-   }
-
-   return err;
 }
 
-/**
- * Reallocate the parser bo.
- */
-static void
-ilo_cp_realloc_bo(struct ilo_cp *cp)
+static struct intel_bo *
+ilo_cp_end_batch(struct ilo_cp *cp, unsigned *used)
 {
    struct intel_bo *bo;
 
-   /*
-    * allocate the new bo before unreferencing the old one so that they
-    * won't point at the same address, which is needed for jmpbuf
-    */
-   bo = intel_winsys_alloc_buffer(cp->winsys,
-         "batch buffer", cp->bo_size * 4, INTEL_DOMAIN_CPU);
-   if (unlikely(!bo)) {
-      /* reuse the old one */
-      bo = cp->bo;
-      intel_bo_reference(bo);
+   ilo_cp_release_owner(cp);
+
+   if (!ilo_builder_batch_used(&cp->builder)) {
+      ilo_builder_batch_discard(&cp->builder);
+      return NULL;
    }
 
-   if (cp->bo)
-      intel_bo_unreference(cp->bo);
-   cp->bo = bo;
+   /* see ilo_cp_space() */
+   assert(ilo_builder_batch_space(&cp->builder) >= 2);
+   gen6_mi_batch_buffer_end(&cp->builder);
 
-   if (!cp->sys)
-      cp->ptr = intel_bo_map(cp->bo, true);
-}
+   bo = ilo_builder_end(&cp->builder, used);
 
-/**
- * Execute the parser bo.
- */
-static int
-ilo_cp_exec_bo(struct ilo_cp *cp)
-{
-   const bool do_exec = !(ilo_debug & ILO_DEBUG_NOHW);
-   int err;
+   /* we have to assume that kernel uploads also failed */
+   if (!bo)
+      ilo_shader_cache_invalidate(cp->shader_cache);
 
-   if (likely(do_exec)) {
-      err = intel_winsys_submit_bo(cp->winsys, cp->ring,
-            cp->bo, cp->used * 4, cp->render_ctx, cp->one_off_flags);
-   }
-   else {
-      err = 0;
-   }
-
-   cp->one_off_flags = 0;
-
-   return err;
+   return bo;
 }
 
 /**
@@ -205,34 +110,41 @@ ilo_cp_exec_bo(struct ilo_cp *cp)
  * is empty, the callback is not invoked.
  */
 void
-ilo_cp_flush_internal(struct ilo_cp *cp)
+ilo_cp_submit_internal(struct ilo_cp *cp)
 {
+   const bool do_exec = !(ilo_debug & ILO_DEBUG_NOHW);
+   struct intel_bo *bo;
+   unsigned used;
    int err;
 
-   ilo_cp_set_owner(cp, NULL, 0);
-
-   /* sanity check */
-   assert(cp->bo_size == cp->size + cp->stolen + ilo_cp_private);
-
-   if (!cp->used) {
-      /* return the space stolen and etc. */
-      ilo_cp_clear_buffer(cp);
-
+   bo = ilo_cp_end_batch(cp, &used);
+   if (!bo)
       return;
+
+   if (likely(do_exec)) {
+      err = intel_winsys_submit_bo(cp->winsys, cp->ring,
+            bo, used, cp->render_ctx, cp->one_off_flags);
+   }
+   else {
+      err = 0;
    }
 
-   ilo_cp_end_buffer(cp);
+   cp->one_off_flags = 0;
 
-   /* upload and execute */
-   err = ilo_cp_upload_buffer(cp);
-   if (likely(!err))
-      err = ilo_cp_exec_bo(cp);
+   if (!err) {
+      if (cp->last_submitted_bo)
+         intel_bo_unreference(cp->last_submitted_bo);
+      cp->last_submitted_bo = bo;
+      intel_bo_reference(cp->last_submitted_bo);
 
-   if (likely(!err && cp->flush_callback))
-      cp->flush_callback(cp, cp->flush_callback_data);
+      if (ilo_debug & ILO_DEBUG_BATCH)
+         ilo_builder_decode(&cp->builder);
 
-   ilo_cp_clear_buffer(cp);
-   ilo_cp_realloc_bo(cp);
+      if (cp->submit_callback)
+         cp->submit_callback(cp, cp->submit_callback_data);
+   }
+
+   ilo_builder_begin(&cp->builder);
 }
 
 /**
@@ -241,16 +153,9 @@ ilo_cp_flush_internal(struct ilo_cp *cp)
 void
 ilo_cp_destroy(struct ilo_cp *cp)
 {
-   if (cp->bo) {
-      if (!cp->sys)
-         intel_bo_unmap(cp->bo);
-
-      intel_bo_unreference(cp->bo);
-   }
+   ilo_builder_reset(&cp->builder);
 
    intel_winsys_destroy_context(cp->winsys, cp->render_ctx);
-
-   FREE(cp->sys);
    FREE(cp);
 }
 
@@ -258,7 +163,9 @@ ilo_cp_destroy(struct ilo_cp *cp)
  * Create a command parser.
  */
 struct ilo_cp *
-ilo_cp_create(struct intel_winsys *winsys, int size, bool direct_map)
+ilo_cp_create(const struct ilo_dev_info *dev,
+              struct intel_winsys *winsys,
+              struct ilo_shader_cache *shc)
 {
    struct ilo_cp *cp;
 
@@ -267,6 +174,7 @@ ilo_cp_create(struct intel_winsys *winsys, int size, bool direct_map)
       return NULL;
 
    cp->winsys = winsys;
+   cp->shader_cache = shc;
    cp->render_ctx = intel_winsys_create_context(winsys);
    if (!cp->render_ctx) {
       FREE(cp);
@@ -274,28 +182,14 @@ ilo_cp_create(struct intel_winsys *winsys, int size, bool direct_map)
    }
 
    cp->ring = INTEL_RING_RENDER;
-   cp->no_implicit_flush = false;
+   cp->owner = &ilo_cp_default_owner;
 
-   cp->bo_size = size;
+   ilo_builder_init(&cp->builder, dev, winsys);
 
-   if (!direct_map) {
-      cp->sys = MALLOC(cp->bo_size * 4);
-      if (!cp->sys) {
-         FREE(cp);
-         return NULL;
-      }
-
-      cp->ptr = cp->sys;
-   }
-
-   ilo_cp_realloc_bo(cp);
-   if (!cp->bo) {
-      FREE(cp->sys);
-      FREE(cp);
+   if (!ilo_builder_begin(&cp->builder)) {
+      ilo_cp_destroy(cp);
       return NULL;
    }
-
-   ilo_cp_clear_buffer(cp);
 
    return cp;
 }

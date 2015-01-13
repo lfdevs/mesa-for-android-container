@@ -993,8 +993,7 @@ parse_instruction(
       /*
        * These are not considered tex opcodes here (no additional
        * target argument) however we're required to set the Texture
-       * bit so we can set the number of tex offsets (offsets aren't
-       * actually handled here yet in any case).
+       * bit so we can set the number of tex offsets.
        */
       inst.Instruction.Texture = 1;
       inst.Texture.Texture = TGSI_TEXTURE_UNKNOWN;
@@ -1040,7 +1039,7 @@ parse_instruction(
 
    cur = ctx->cur;
    eat_opt_white( &cur );
-   for (i = 0; info->is_tex && *cur == ','; i++) {
+   for (i = 0; inst.Instruction.Texture && *cur == ','; i++) {
          cur++;
          eat_opt_white( &cur );
          ctx->cur = cur;
@@ -1259,8 +1258,8 @@ static boolean parse_declaration( struct translate_ctx *ctx )
          ++cur;
          eat_opt_white( &cur );
          for (j = 0; j < 4; ++j) {
-            for (i = 0; i < PIPE_TYPE_COUNT; ++i) {
-               if (str_match_nocase_whole(&cur, tgsi_type_names[i])) {
+            for (i = 0; i < TGSI_RETURN_TYPE_COUNT; ++i) {
+               if (str_match_nocase_whole(&cur, tgsi_return_type_names[i])) {
                   switch (j) {
                   case 0:
                      decl.SamplerView.ReturnTypeX = i;
@@ -1280,7 +1279,7 @@ static boolean parse_declaration( struct translate_ctx *ctx )
                   break;
                }
             }
-            if (i == PIPE_TYPE_COUNT) {
+            if (i == TGSI_RETURN_TYPE_COUNT) {
                if (j == 0 || j >  2) {
                   report_error(ctx, "Expected type name");
                   return FALSE;

@@ -84,6 +84,7 @@ const struct opcode_desc opcode_descs[128] = {
    [BRW_OPCODE_SEND]     = { .name = "send",    .nsrc = 1, .ndst = 1 },
    [BRW_OPCODE_SENDC]    = { .name = "sendc",   .nsrc = 1, .ndst = 1 },
    [BRW_OPCODE_NOP]      = { .name = "nop",     .nsrc = 0, .ndst = 0 },
+   [BRW_OPCODE_NENOP]    = { .name = "nenop",   .nsrc = 0, .ndst = 0 },
    [BRW_OPCODE_JMPI]     = { .name = "jmpi",    .nsrc = 0, .ndst = 0 },
    [BRW_OPCODE_IF]       = { .name = "if",      .nsrc = 2, .ndst = 0 },
    [BRW_OPCODE_IFF]      = { .name = "iff",     .nsrc = 2, .ndst = 1 },
@@ -110,7 +111,10 @@ has_jip(struct brw_context *brw, enum opcode opcode)
    return opcode == BRW_OPCODE_IF ||
           opcode == BRW_OPCODE_ELSE ||
           opcode == BRW_OPCODE_ENDIF ||
-          opcode == BRW_OPCODE_WHILE;
+          opcode == BRW_OPCODE_WHILE ||
+          opcode == BRW_OPCODE_BREAK ||
+          opcode == BRW_OPCODE_CONTINUE ||
+          opcode == BRW_OPCODE_HALT;
 }
 
 static bool
@@ -137,8 +141,8 @@ is_logic_instruction(unsigned opcode)
 
 const char *const conditional_modifier[16] = {
    [BRW_CONDITIONAL_NONE] = "",
-   [BRW_CONDITIONAL_Z]    = ".e",
-   [BRW_CONDITIONAL_NZ]   = ".ne",
+   [BRW_CONDITIONAL_Z]    = ".z",
+   [BRW_CONDITIONAL_NZ]   = ".nz",
    [BRW_CONDITIONAL_G]    = ".g",
    [BRW_CONDITIONAL_GE]   = ".ge",
    [BRW_CONDITIONAL_L]    = ".l",
@@ -430,6 +434,7 @@ static const char *const dp_dc0_msg_type_gen7[16] = {
    [GEN7_DATAPORT_DC_OWORD_DUAL_BLOCK_READ] = "DC OWORD dual block read",
    [GEN7_DATAPORT_DC_DWORD_SCATTERED_READ] = "DC DWORD scattered read",
    [GEN7_DATAPORT_DC_BYTE_SCATTERED_READ] = "DC byte scattered read",
+   [GEN7_DATAPORT_DC_UNTYPED_SURFACE_READ] = "DC untyped surface read",
    [GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP] = "DC untyped atomic",
    [GEN7_DATAPORT_DC_MEMORY_FENCE] = "DC mfence",
    [GEN7_DATAPORT_DC_OWORD_BLOCK_WRITE] = "DC OWORD block write",
@@ -1222,7 +1227,7 @@ brw_disassemble_inst(FILE *file, struct brw_context *brw, brw_inst *inst,
       }
    }
 
-   if (opcode != BRW_OPCODE_NOP) {
+   if (opcode != BRW_OPCODE_NOP && opcode != BRW_OPCODE_NENOP) {
       string(file, "(");
       err |= control(file, "execution size", exec_size,
                      brw_inst_exec_size(brw, inst), NULL);
@@ -1256,12 +1261,13 @@ brw_disassemble_inst(FILE *file, struct brw_context *brw, brw_inst *inst,
                                opcode == BRW_OPCODE_IFF ||
                                opcode == BRW_OPCODE_HALT)) {
       pad(file, 16);
-      format(file, "Jump: %d", brw_inst_gen4_pop_count(brw, inst));
+      format(file, "Jump: %d", brw_inst_gen4_jump_count(brw, inst));
    } else if (brw->gen < 6 && opcode == BRW_OPCODE_ENDIF) {
       pad(file, 16);
       format(file, "Pop: %d", brw_inst_gen4_pop_count(brw, inst));
    } else if (opcode == BRW_OPCODE_JMPI) {
-      format(file, " %d", brw_inst_imm_d(brw, inst));
+      pad(file, 16);
+      err |= src1(file, brw, inst);
    } else if (opcode_descs[opcode].nsrc == 3) {
       pad(file, 16);
       err |= dest_3src(file, brw, inst);
@@ -1505,7 +1511,7 @@ brw_disassemble_inst(FILE *file, struct brw_context *brw, brw_inst *inst,
       }
    }
    pad(file, 64);
-   if (opcode != BRW_OPCODE_NOP) {
+   if (opcode != BRW_OPCODE_NOP && opcode != BRW_OPCODE_NENOP) {
       string(file, "{");
       space = 1;
       err |= control(file, "access mode", access_mode,

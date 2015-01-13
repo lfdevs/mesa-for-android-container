@@ -176,7 +176,7 @@
 #define HAVE_ASPRINTF 1 /* not needed */
 #define HAVE_STDARG_H 1
 #define HAVE_STDDEF_H 1
-#define HAVE_STDINT_H 0
+#define HAVE_STDINT_H 1
 #define HAVE_STDLIB_H 1
 #define HAVE_INTTYPES_H 0
 #define HAVE_LOCALE_H 0
@@ -333,15 +333,6 @@ static void *mymemcpy(void *, void *, size_t);
 #define UINTPTR_T unsigned long int
 #endif	/* HAVE_UINTPTR_T || defined(uintptr_t) */
 #endif	/* !defined(UINTPTR_T) */
-
-/* WinCE5.0 does not have uintptr_t defined */ 
-#if (_WIN32_WCE < 600) 
-#ifdef UINTPTR_T 
-#undef UINTPTR_T 
-#endif 
-#define UINTPTR_T unsigned long int 
-#endif 
-
 
 /* Support for ptrdiff_t. */
 #ifndef PTRDIFF_T

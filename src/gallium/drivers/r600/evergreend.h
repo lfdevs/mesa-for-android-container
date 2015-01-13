@@ -803,6 +803,9 @@
 #define   S_02880C_KILL_ENABLE(x)                      (((x) & 0x1) << 6)
 #define   G_02880C_KILL_ENABLE(x)                      (((x) >> 6) & 0x1)
 #define   C_02880C_KILL_ENABLE                         0xFFFFFFBF
+#define   S_02880C_MASK_EXPORT_ENABLE(x)               (((x) & 0x1) << 8)
+#define   G_02880C_MASK_EXPORT_ENABLE(x)               (((x) >> 8) & 0x1)
+#define   C_02880C_MASK_EXPORT_ENABLE                  0XFFFFFEFF
 #define   S_02880C_DUAL_EXPORT_ENABLE(x)               (((x) & 0x1) << 9)
 #define   G_02880C_DUAL_EXPORT_ENABLE(x)               (((x) >> 9) & 0x1)
 #define   C_02880C_DUAL_EXPORT_ENABLE                  0xFFFFFDFF

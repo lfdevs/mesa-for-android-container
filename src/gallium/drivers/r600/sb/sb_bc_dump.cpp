@@ -165,13 +165,14 @@ void bc_dump::dump(cf_node& n) {
 		s << " @" << (n.bc.addr << 1);
 
 		if (n.bc.op_ptr->flags & CF_ALU) {
+			static const char *index_mode[] = {"", " CF_INDEX_0", " CF_INDEX_1"};
 
 			for (int k = 0; k < 4; ++k) {
 				bc_kcache &kc = n.bc.kc[k];
 				if (kc.mode) {
 					s << " KC" << k << "[CB" << kc.bank << ":" <<
 							(kc.addr << 4) << "-" <<
-							(((kc.addr + kc.mode) << 4) - 1) << "]";
+							(((kc.addr + kc.mode) << 4) - 1) << index_mode[kc.index_mode] << "]";
 				}
 			}
 		}
@@ -445,6 +446,11 @@ void bc_dump::dump(fetch_node& n) {
 			s << " MFC:" << n.bc.mega_fetch_count;
 		if (n.bc.fetch_whole_quad)
 			s << " FWQ";
+		if (ctx.is_egcm() && n.bc.resource_index_mode)
+			s << " RIM:SQ_CF_INDEX_" << n.bc.resource_index_mode;
+		if (ctx.is_egcm() && n.bc.resource_index_mode)
+			s << " SID:SQ_CF_INDEX_" << n.bc.sampler_index_mode;
+
 		s << " UCF:" << n.bc.use_const_fields
 				<< " FMT(DTA:" << n.bc.data_format
 				<< " NUM:" << n.bc.num_format_all

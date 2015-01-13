@@ -1634,6 +1634,8 @@ texstore_via_float(TEXSTORE_PARAMS)
       }
    }
 
+   free(tmp_row);
+
    return GL_TRUE;
 }
 
@@ -1701,6 +1703,8 @@ texstore_rgba_integer(TEXSTORE_PARAMS)
          src_row += src_stride;
       }
    }
+
+   free(tmp_row);
 
    return GL_TRUE;
 }
@@ -2225,7 +2229,7 @@ _mesa_compute_compressed_pixelstore(GLuint dims, mesa_format texFormat,
 
       if (packing->RowLength) {
          store->TotalBytesPerRow = packing->CompressedBlockSize *
-            (packing->RowLength + bw - 1) / bw;
+            ((packing->RowLength + bw - 1) / bw);
       }
 
       store->SkipBytes += packing->SkipPixels * packing->CompressedBlockSize / bw;

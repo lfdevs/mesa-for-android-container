@@ -31,16 +31,29 @@
  * instructions as used.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include "vc4_qir.h"
 
+static bool debug;
+
+static void
+dce(struct vc4_compile *c, struct qinst *inst)
+{
+        if (debug) {
+                fprintf(stderr, "Removing: ");
+                qir_dump_inst(c, inst);
+                fprintf(stderr, "\n");
+        }
+        qir_remove_instruction(inst);
+}
+
 bool
-qir_opt_dead_code(struct qcompile *c)
+qir_opt_dead_code(struct vc4_compile *c)
 {
         bool progress = false;
-        bool debug = false;
         bool *used = calloc(c->num_temps, sizeof(bool));
+        bool sf_used = false;
+        /* Whether we're eliminating texture setup currently. */
+        bool dce_tex = false;
 
         struct simple_node *node, *t;
         for (node = c->instructions.prev, t = node->prev;
@@ -50,14 +63,38 @@ qir_opt_dead_code(struct qcompile *c)
 
                 if (inst->dst.file == QFILE_TEMP &&
                     !used[inst->dst.index] &&
-                    !qir_has_side_effects(inst)) {
-                        if (debug) {
-                                fprintf(stderr, "Removing: ");
-                                qir_dump_inst(inst);
-                                fprintf(stderr, "\n");
+                    (!qir_has_side_effects(c, inst) ||
+                     inst->op == QOP_TEX_RESULT)) {
+                        if (inst->op == QOP_TEX_RESULT) {
+                                dce_tex = true;
+                                c->num_texture_samples--;
                         }
-                        remove_from_list(&inst->link);
-                        free(inst);
+
+                        dce(c, inst);
+                        progress = true;
+                        continue;
+                }
+
+                if (qir_depends_on_flags(inst))
+                        sf_used = true;
+                if (inst->op == QOP_SF) {
+                        if (!sf_used) {
+                                dce(c, inst);
+                                progress = true;
+                                continue;
+                        }
+                        sf_used = false;
+                }
+
+                if (inst->op == QOP_TEX_RESULT)
+                        dce_tex = false;
+
+                if (dce_tex && (inst->op == QOP_TEX_S ||
+                                inst->op == QOP_TEX_T ||
+                                inst->op == QOP_TEX_R ||
+                                inst->op == QOP_TEX_B ||
+                                inst->op == QOP_TEX_DIRECT)) {
+                        dce(c, inst);
                         progress = true;
                         continue;
                 }

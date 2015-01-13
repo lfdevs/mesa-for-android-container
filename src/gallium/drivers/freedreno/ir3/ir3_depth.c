@@ -150,10 +150,22 @@ void ir3_block_depth(struct ir3_block *block)
 		if (block->outputs[i])
 			ir3_instr_depth(block->outputs[i]);
 
-	/* at this point, any unvisited input is unused: */
+	/* mark un-used instructions: */
+	for (i = 0; i < block->shader->instrs_count; i++) {
+		struct ir3_instruction *instr = block->shader->instrs[i];
+
+		/* just consider instructions within this block: */
+		if (instr->block != block)
+			continue;
+
+		if (!ir3_instr_check_mark(instr))
+			instr->depth = DEPTH_UNUSED;
+	}
+
+	/* cleanup unused inputs: */
 	for (i = 0; i < block->ninputs; i++) {
 		struct ir3_instruction *in = block->inputs[i];
-		if (in && !ir3_instr_check_mark(in))
+		if (in && (in->depth == DEPTH_UNUSED))
 			block->inputs[i] = NULL;
 	}
 }

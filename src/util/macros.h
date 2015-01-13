@@ -33,12 +33,12 @@
 /**
  * __builtin_expect macros
  */
-#if !defined(__GNUC__)
+#if !defined(HAVE___BUILTIN_EXPECT)
 #  define __builtin_expect(x, y) (x)
 #endif
 
 #ifndef likely
-#  ifdef __GNUC__
+#  ifdef HAVE___BUILTIN_EXPECT
 #    define likely(x)   __builtin_expect(!!(x), 1)
 #    define unlikely(x) __builtin_expect(!!(x), 0)
 #  else
@@ -63,43 +63,64 @@
  * Unreachable macro. Useful for suppressing "control reaches end of non-void
  * function" warnings.
  */
-#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 5
+#ifdef HAVE___BUILTIN_UNREACHABLE
 #define unreachable(str)    \
 do {                        \
    assert(!str);            \
    __builtin_unreachable(); \
 } while (0)
-#elif (defined(__clang__) && defined(__has_builtin))
-# if __has_builtin(__builtin_unreachable)
-#  define unreachable(str)  \
+#elif _MSC_VER >= 1200
+#define unreachable(str)    \
 do {                        \
    assert(!str);            \
-   __builtin_unreachable(); \
+   __assume(0);             \
 } while (0)
-# endif
 #endif
 
 #ifndef unreachable
 #define unreachable(str)
 #endif
 
+/**
+ * Assume macro. Useful for expressing our assumptions to the compiler,
+ * typically for purposes of silencing warnings.
+ */
+#ifdef HAVE___BUILTIN_UNREACHABLE
+#define assume(expr) ((expr) ? ((void) 0) \
+                             : (assert(!"assumption failed"), \
+                                __builtin_unreachable()))
+#elif _MSC_VER >= 1200
+#define assume(expr) __assume(expr)
+#else
+#define assume(expr) assert(expr)
+#endif
 
-#if (__GNUC__ >= 3)
+#ifdef HAVE_FUNC_ATTRIBUTE_FLATTEN
+#define FLATTEN __attribute__((__flatten__))
+#else
+#define FLATTEN
+#endif
+
+#ifdef HAVE_FUNC_ATTRIBUTE_FORMAT
 #define PRINTFLIKE(f, a) __attribute__ ((format(__printf__, f, a)))
 #else
 #define PRINTFLIKE(f, a)
 #endif
 
+#ifdef HAVE_FUNC_ATTRIBUTE_MALLOC
+#define MALLOCLIKE __attribute__((__malloc__))
+#else
+#define MALLOCLIKE
+#endif
 
 /* Used to optionally mark structures with misaligned elements or size as
  * packed, to trade off performance for space.
  */
-#if (__GNUC__ >= 3)
+#ifdef HAVE_FUNC_ATTRIBUTE_PACKED
 #define PACKED __attribute__((__packed__))
 #else
 #define PACKED
 #endif
-
 
 #ifdef __cplusplus
 /**

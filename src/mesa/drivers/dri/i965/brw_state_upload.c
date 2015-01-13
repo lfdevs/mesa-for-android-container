@@ -108,7 +108,7 @@ static const struct brw_tracked_state *gen4_atoms[] =
 static const struct brw_tracked_state *gen6_atoms[] =
 {
    &brw_vs_prog, /* must do before state base address */
-   &brw_ff_gs_prog, /* must do before state base address */
+   &brw_gs_prog, /* must do before state base address */
    &brw_wm_prog, /* must do before state base address */
 
    &gen6_clip_vp,
@@ -128,6 +128,7 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &gen6_depth_stencil_state,	/* must do before cc unit */
 
    &gen6_vs_push_constants, /* Before vs_state */
+   &gen6_gs_push_constants, /* Before gs_state */
    &gen6_wm_push_constants, /* Before wm_state */
 
    /* Surface state setup.  Must come before the VS/WM unit.  The binding
@@ -135,6 +136,8 @@ static const struct brw_tracked_state *gen6_atoms[] =
     */
    &brw_vs_pull_constants,
    &brw_vs_ubo_surfaces,
+   &brw_gs_pull_constants,
+   &brw_gs_ubo_surfaces,
    &brw_wm_pull_constants,
    &brw_wm_ubo_surfaces,
    &gen6_renderbuffer_surfaces,
@@ -146,6 +149,7 @@ static const struct brw_tracked_state *gen6_atoms[] =
 
    &brw_fs_samplers,
    &brw_vs_samplers,
+   &brw_gs_samplers,
    &gen6_sampler_state,
    &gen6_multisample_state,
 
@@ -196,7 +200,7 @@ static const struct brw_tracked_state *gen7_atoms[] =
    &gen6_depth_stencil_state,	/* must do before cc unit */
 
    &gen6_vs_push_constants, /* Before vs_state */
-   &gen7_gs_push_constants, /* Before gs_state */
+   &gen6_gs_push_constants, /* Before gs_state */
    &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
 
    /* Surface state setup.  Must come before the VS/WM unit.  The binding
@@ -270,7 +274,7 @@ static const struct brw_tracked_state *gen8_atoms[] =
    &gen6_color_calc_state,
 
    &gen6_vs_push_constants, /* Before vs_state */
-   &gen7_gs_push_constants, /* Before gs_state */
+   &gen6_gs_push_constants, /* Before gs_state */
    &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
 
    /* Surface state setup.  Must come before the VS/WM unit.  The binding
@@ -329,6 +333,7 @@ static const struct brw_tracked_state *gen8_atoms[] =
    &gen8_vertices,
 
    &haswell_cut_index,
+   &gen8_pma_fix,
 };
 
 static void
@@ -384,7 +389,12 @@ void brw_init_state( struct brw_context *brw )
    brw_upload_initial_gpu_state(brw);
 
    brw->state.dirty.mesa = ~0;
-   brw->state.dirty.brw = ~0;
+   brw->state.dirty.brw = ~0ull;
+
+   /* ~0 is a nonsensical value which won't match anything we program, so
+    * the programming will take effect on the first time around.
+    */
+   brw->pma_stall_bits = ~0;
 
    /* Make sure that brw->state.dirty.brw has enough bits to hold all possible
     * dirty flags.
@@ -395,6 +405,7 @@ void brw_init_state( struct brw_context *brw )
    ctx->DriverFlags.NewTransformFeedbackProg = BRW_NEW_TRANSFORM_FEEDBACK;
    ctx->DriverFlags.NewRasterizerDiscard = BRW_NEW_RASTERIZER_DISCARD;
    ctx->DriverFlags.NewUniformBuffer = BRW_NEW_UNIFORM_BUFFER;
+   ctx->DriverFlags.NewTextureBuffer = BRW_NEW_TEXTURE_BUFFER;
    ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_ATOMIC_BUFFER;
 }
 
@@ -434,7 +445,7 @@ static void xor_states( struct brw_state_flags *result,
 }
 
 struct dirty_bit_map {
-   uint32_t bit;
+   uint64_t bit;
    char *name;
    uint32_t count;
 };
@@ -471,7 +482,8 @@ static struct dirty_bit_map mesa_bits[] = {
    DEFINE_BIT(_NEW_PROGRAM_CONSTANTS),
    DEFINE_BIT(_NEW_BUFFER_OBJECT),
    DEFINE_BIT(_NEW_FRAG_CLAMP),
-   DEFINE_BIT(_NEW_VARYING_VP_INPUTS),
+   /* Avoid sign extension problems. */
+   {(unsigned) _NEW_VARYING_VP_INPUTS, "_NEW_VARYING_VP_INPUTS", 0},
    {0, 0, 0}
 };
 
@@ -508,6 +520,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_INTERPOLATION_MAP),
    DEFINE_BIT(BRW_NEW_PUSH_CONSTANT_ALLOCATION),
    DEFINE_BIT(BRW_NEW_NUM_SAMPLES),
+   DEFINE_BIT(BRW_NEW_TEXTURE_BUFFER),
    {0, 0, 0}
 };
 
@@ -516,7 +529,6 @@ static struct dirty_bit_map cache_bits[] = {
    DEFINE_BIT(CACHE_NEW_CC_UNIT),
    DEFINE_BIT(CACHE_NEW_WM_PROG),
    DEFINE_BIT(CACHE_NEW_BLORP_BLIT_PROG),
-   DEFINE_BIT(CACHE_NEW_BLORP_CONST_COLOR_PROG),
    DEFINE_BIT(CACHE_NEW_SAMPLER),
    DEFINE_BIT(CACHE_NEW_WM_UNIT),
    DEFINE_BIT(CACHE_NEW_SF_PROG),
@@ -535,14 +547,9 @@ static struct dirty_bit_map cache_bits[] = {
 
 
 static void
-brw_update_dirty_count(struct dirty_bit_map *bit_map, int32_t bits)
+brw_update_dirty_count(struct dirty_bit_map *bit_map, uint64_t bits)
 {
-   int i;
-
-   for (i = 0; i < 32; i++) {
-      if (bit_map[i].bit == 0)
-	 return;
-
+   for (int i = 0; bit_map[i].bit != 0; i++) {
       if (bit_map[i].bit & bits)
 	 bit_map[i].count++;
    }
@@ -551,13 +558,8 @@ brw_update_dirty_count(struct dirty_bit_map *bit_map, int32_t bits)
 static void
 brw_print_dirty_count(struct dirty_bit_map *bit_map)
 {
-   int i;
-
-   for (i = 0; i < 32; i++) {
-      if (bit_map[i].bit == 0)
-	 return;
-
-      fprintf(stderr, "0x%08x: %12d (%s)\n",
+   for (int i = 0; bit_map[i].bit != 0; i++) {
+      fprintf(stderr, "0x%016lx: %12d (%s)\n",
 	      bit_map[i].bit, bit_map[i].count, bit_map[i].name);
    }
 }
@@ -581,7 +583,7 @@ void brw_upload_state(struct brw_context *brw)
    if (0) {
       /* Always re-emit all state. */
       state->mesa |= ~0;
-      state->brw |= ~0;
+      state->brw |= ~0ull;
       state->cache |= ~0;
    }
 

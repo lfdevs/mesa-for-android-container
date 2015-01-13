@@ -43,42 +43,18 @@
 #include <llvm-c/BitWriter.h>
 
 
-/**
- * AVX is supported in:
- * - standard JIT from LLVM 3.2 onwards
- * - MC-JIT from LLVM 3.1
- *   - MC-JIT supports limited OSes (MacOSX and Linux)
- * - standard JIT in LLVM 3.1, with backports
- */
-#if defined(PIPE_ARCH_PPC_64) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_ARM) || defined(PIPE_ARCH_AARCH64)
+/* Only MCJIT is available as of LLVM SVN r216982 */
+#if HAVE_LLVM >= 0x0306
 #  define USE_MCJIT 1
-#  define HAVE_AVX 0
-#elif HAVE_LLVM >= 0x0302 || (HAVE_LLVM == 0x0301 && defined(HAVE_JIT_AVX_SUPPORT))
-#  define USE_MCJIT 0
-#  define HAVE_AVX 1
-#elif HAVE_LLVM == 0x0301 && (defined(PIPE_OS_LINUX) || defined(PIPE_OS_APPLE))
+#elif defined(PIPE_ARCH_PPC_64) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_ARM) || defined(PIPE_ARCH_AARCH64)
 #  define USE_MCJIT 1
-#  define HAVE_AVX 1
 #else
 #  define USE_MCJIT 0
-#  define HAVE_AVX 0
 #endif
-
 
 #if USE_MCJIT
 void LLVMLinkInMCJIT();
 #endif
-
-/*
- * LLVM has several global caches which pointing/derived from objects
- * owned by the context, so if we freeing contexts causes
- * memory leaks and false cache hits when these objects are destroyed.
- *
- * TODO: For thread safety on multi-threaded OpenGL we should use one LLVM
- * context per thread, and put them in a pool when threads are destroyed.
- */
-#define USE_GLOBAL_CONTEXT 1
-
 
 #ifdef DEBUG
 unsigned gallivm_debug = 0;
@@ -130,6 +106,7 @@ enum LLVM_CodeGenOpt_Level {
 static boolean
 create_pass_manager(struct gallivm_state *gallivm)
 {
+   char *td_str;
    assert(!gallivm->passmgr);
    assert(gallivm->target);
 
@@ -137,7 +114,13 @@ create_pass_manager(struct gallivm_state *gallivm)
    if (!gallivm->passmgr)
       return FALSE;
 
+   // Old versions of LLVM get the DataLayout from the pass manager.
    LLVMAddTargetData(gallivm->target, gallivm->passmgr);
+
+   // New ones from the Module.
+   td_str = LLVMCopyStringRepOfTargetData(gallivm->target);
+   LLVMSetDataLayout(gallivm->module, td_str);
+   free(td_str);
 
    if ((gallivm_debug & GALLIVM_DEBUG_NO_OPT) == 0) {
       /* These are the passes currently listed in llvm-c/Transforms/Scalar.h,
@@ -193,8 +176,7 @@ gallivm_free_ir(struct gallivm_state *gallivm)
    if (gallivm->builder)
       LLVMDisposeBuilder(gallivm->builder);
 
-   if (!USE_GLOBAL_CONTEXT && gallivm->context)
-      LLVMContextDispose(gallivm->context);
+   /* The LLVMContext should be owned by the parent of gallivm. */
 
    gallivm->engine = NULL;
    gallivm->target = NULL;
@@ -215,6 +197,8 @@ gallivm_free_code(struct gallivm_state *gallivm)
    assert(!gallivm->engine);
    lp_free_generated_code(gallivm->code);
    gallivm->code = NULL;
+   lp_free_memory_manager(gallivm->memorymgr);
+   gallivm->memorymgr = NULL;
 }
 
 
@@ -236,6 +220,7 @@ init_gallivm_engine(struct gallivm_state *gallivm)
       ret = lp_build_create_jit_compiler_for_module(&gallivm->engine,
                                                     &gallivm->code,
                                                     gallivm->module,
+                                                    gallivm->memorymgr,
                                                     (unsigned) optlevel,
                                                     USE_MCJIT,
                                                     &error);
@@ -285,18 +270,17 @@ fail:
  * \return  TRUE for success, FALSE for failure
  */
 static boolean
-init_gallivm_state(struct gallivm_state *gallivm, const char *name)
+init_gallivm_state(struct gallivm_state *gallivm, const char *name,
+                   LLVMContextRef context)
 {
    assert(!gallivm->context);
    assert(!gallivm->module);
 
-   lp_build_init();
+   if (!lp_build_init())
+      return FALSE;
 
-   if (USE_GLOBAL_CONTEXT) {
-      gallivm->context = LLVMGetGlobalContext();
-   } else {
-      gallivm->context = LLVMContextCreate();
-   }
+   gallivm->context = context;
+
    if (!gallivm->context)
       goto fail;
 
@@ -307,6 +291,10 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name)
 
    gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
    if (!gallivm->builder)
+      goto fail;
+
+   gallivm->memorymgr = lp_get_default_memory_manager();
+   if (!gallivm->memorymgr)
       goto fail;
 
    /* FIXME: MC-JIT only allows compiling one module at a time, and it must be
@@ -366,11 +354,11 @@ fail:
 }
 
 
-void
+boolean
 lp_build_init(void)
 {
    if (gallivm_initialized)
-      return;
+      return TRUE;
 
 #ifdef DEBUG
    gallivm_debug = debug_get_option_gallivm_debug();
@@ -393,8 +381,7 @@ lp_build_init(void)
     * See also:
     * - http://www.anandtech.com/show/4955/the-bulldozer-review-amd-fx8150-tested/2
     */
-   if (HAVE_AVX &&
-       util_cpu_caps.has_avx &&
+   if (util_cpu_caps.has_avx &&
        util_cpu_caps.has_intel) {
       lp_native_vector_width = 256;
    } else {
@@ -417,16 +404,6 @@ lp_build_init(void)
        */
       util_cpu_caps.has_avx = 0;
       util_cpu_caps.has_avx2 = 0;
-   }
-
-   if (!HAVE_AVX) {
-      /*
-       * note these instructions are VEX-only, so can only emit if we use
-       * avx (don't want to base it on has_avx & has_f16c later as that would
-       * omit it unnecessarily on amd cpus, see above).
-       */
-      util_cpu_caps.has_f16c = 0;
-      util_cpu_caps.has_xop = 0;
    }
 
 #ifdef PIPE_ARCH_PPC_64
@@ -461,6 +438,8 @@ lp_build_init(void)
    util_cpu_caps.has_avx = 0;
    util_cpu_caps.has_f16c = 0;
 #endif
+
+   return TRUE;
 }
 
 
@@ -469,13 +448,13 @@ lp_build_init(void)
  * Create a new gallivm_state object.
  */
 struct gallivm_state *
-gallivm_create(const char *name)
+gallivm_create(const char *name, LLVMContextRef context)
 {
    struct gallivm_state *gallivm;
 
    gallivm = CALLOC_STRUCT(gallivm_state);
    if (gallivm) {
-      if (!init_gallivm_state(gallivm, name)) {
+      if (!init_gallivm_state(gallivm, name, context)) {
          FREE(gallivm);
          gallivm = NULL;
       }

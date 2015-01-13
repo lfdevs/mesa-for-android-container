@@ -33,7 +33,7 @@ struct r600_shader_io {
 	int			spi_sid;
 	unsigned		interpolate;
 	unsigned		ij_index;
-	boolean                 centroid;
+	unsigned        interpolate_location; //  TGSI_INTERPOLATE_LOC_CENTER, CENTROID, SAMPLE
 	unsigned		lds_pos; /* for evergreen */
 	unsigned		back_color_input;
 	unsigned		write_mask;
@@ -69,11 +69,14 @@ struct r600_shader {
 	boolean			has_txq_cube_array_z_comp;
 	boolean			uses_tex_buffers;
 	boolean                 gs_prim_id_input;
+	/* Temporarily workaround SB not handling CF_INDEX_[01] index registers */
+	boolean			uses_index_registers;
 
 	/* geometry shader properties */
 	unsigned		gs_input_prim;
 	unsigned		gs_output_prim;
 	unsigned		gs_max_out_vertices;
+	unsigned		gs_num_invocations;
 	/* size in bytes of a data item in the ring (single vertex data) */
 	unsigned		ring_item_size;
 
@@ -113,5 +116,9 @@ struct r600_pipe_shader {
 	unsigned		db_shader_control;
 	unsigned		ps_depth_export;
 };
+
+/* return the table index 0-5 for TGSI_INTERPOLATE_LINEAR/PERSPECTIVE and
+ TGSI_INTERPOLATE_LOC_CENTER/SAMPLE/COUNT. Other input values return -1. */
+int eg_get_interpolator_index(unsigned interpolate, unsigned location);
 
 #endif

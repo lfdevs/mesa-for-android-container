@@ -837,14 +837,35 @@ This instruction replicates its result.
 .. opcode:: NRM - 3-component Vector Normalise
 
 .. math::
+  
+  u = src.x \times src.x + src.y \times src.y + src.z \times src.z
 
-  dst.x = src.x / (src.x \times src.x + src.y \times src.y + src.z \times src.z)
+  v = \frac{1}{\sqrt{u}}
 
-  dst.y = src.y / (src.x \times src.x + src.y \times src.y + src.z \times src.z)
+  dst.x = src.x \times v
 
-  dst.z = src.z / (src.x \times src.x + src.y \times src.y + src.z \times src.z)
+  dst.y = src.y \times v
+
+  dst.z = src.z \times v
 
   dst.w = 1
+
+
+.. opcode:: NRM4 - 4-component Vector Normalise
+
+.. math::
+  
+  u = src.x \times src.x + src.y \times src.y + src.z \times src.z + src.w \times src.w
+
+  v = \frac{1}{\sqrt{u}}
+
+  dst.x = src.x \times v
+
+  dst.y = src.y \times v
+
+  dst.z = src.z \times v
+
+  dst.w = src.w \times v
 
 
 .. opcode:: DIV - Divide
@@ -1886,15 +1907,6 @@ Some require glsl version 1.30 (UIF/BREAKC/SWITCH/CASE/DEFAULT/ENDSWITCH).
 .. opcode:: ENDSWITCH - End of switch
 
    Ends a switch expression.
-
-
-.. opcode:: NRM4 - 4-component Vector Normalise
-
-This instruction replicates its result.
-
-.. math::
-
-  dst = \frac{src.x}{src.x \times src.x + src.y \times src.y + src.z \times src.z + src.w \times src.w}
 
 
 Interpolation ISA

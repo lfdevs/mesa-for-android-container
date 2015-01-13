@@ -26,12 +26,13 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
+#include "main/stencil.h"
 
 static void
 gen8_upload_wm_depth_stencil(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   uint32_t dw1 = 0, dw2 = 0;
+   uint32_t dw1 = 0, dw2 = 0, dw3 = 0;
 
    /* _NEW_BUFFERS */
    struct intel_renderbuffer *depth_irb =
@@ -73,6 +74,14 @@ gen8_upload_wm_depth_stencil(struct brw_context *brw)
                 SET_FIELD(stencil->ValueMask[b] & 0xff,
                           GEN8_WM_DS_BF_STENCIL_TEST_MASK);
       }
+
+      if (brw->gen >= 9) {
+         int stencil_ref  = _mesa_get_stencil_ref(ctx, 0);
+         int backface_ref = _mesa_get_stencil_ref(ctx, ctx->Stencil._BackFace);
+
+         dw3 = SET_FIELD(stencil_ref, GEN9_WM_DS_STENCIL_REF) |
+               SET_FIELD(backface_ref, GEN9_WM_DS_BF_STENCIL_REF);
+      }
    }
 
    /* _NEW_DEPTH */
@@ -85,10 +94,15 @@ gen8_upload_wm_depth_stencil(struct brw_context *brw)
          dw1 |= GEN8_WM_DS_DEPTH_BUFFER_WRITE_ENABLE;
    }
 
-   BEGIN_BATCH(3);
-   OUT_BATCH(_3DSTATE_WM_DEPTH_STENCIL << 16 | (3 - 2));
+   int pkt_len = brw->gen >= 9 ? 4 : 3;
+
+   BEGIN_BATCH(pkt_len);
+   OUT_BATCH(_3DSTATE_WM_DEPTH_STENCIL << 16 | (pkt_len - 2));
    OUT_BATCH(dw1);
    OUT_BATCH(dw2);
+   if (pkt_len > 3) {
+      OUT_BATCH(dw3);
+   }
    ADVANCE_BATCH();
 }
 

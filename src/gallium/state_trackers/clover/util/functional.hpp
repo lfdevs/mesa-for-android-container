@@ -332,9 +332,9 @@ namespace clover {
       key_equals_t(T &&x) : x(x) {
       }
 
-      template<typename S>
+      template<typename P>
       bool
-      operator()(const std::pair<T, S> &p) const {
+      operator()(const P &p) const {
          return p.first == x;
       }
 

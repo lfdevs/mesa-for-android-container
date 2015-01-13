@@ -27,7 +27,6 @@
 
 #include "radeon/radeon_uvd.h"
 #include "util/u_memory.h"
-#include "util/u_simple_shaders.h"
 #include "vl/vl_decoder.h"
 
 /*
@@ -39,8 +38,8 @@ static void si_destroy_context(struct pipe_context *context)
 
 	si_release_all_descriptors(sctx);
 
-	pipe_resource_reference(&sctx->esgs_ring.buffer, NULL);
-	pipe_resource_reference(&sctx->gsvs_ring.buffer, NULL);
+	pipe_resource_reference(&sctx->esgs_ring, NULL);
+	pipe_resource_reference(&sctx->gsvs_ring, NULL);
 	pipe_resource_reference(&sctx->null_const_buf.buffer, NULL);
 	r600_resource_reference(&sctx->border_color_table, NULL);
 
@@ -51,12 +50,7 @@ static void si_destroy_context(struct pipe_context *context)
 	if (sctx->dummy_pixel_shader) {
 		sctx->b.b.delete_fs_state(&sctx->b.b, sctx->dummy_pixel_shader);
 	}
-	for (int i = 0; i < 8; i++) {
-		sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush_depth_stencil[i]);
-		sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush_depth[i]);
-		sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush_stencil[i]);
-	}
-	sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush_inplace);
+	sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush);
 	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_resolve);
 	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_decompress);
 	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_fastclear);
@@ -100,7 +94,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	}
 
 	sctx->b.rings.gfx.cs = ws->cs_create(ws, RING_GFX, si_context_gfx_flush,
-					     sctx, NULL);
+					     sctx, sscreen->b.trace_bo ?
+						sscreen->b.trace_bo->cs_buf : NULL);
 	sctx->b.rings.gfx.flush = si_context_gfx_flush;
 
 	si_init_all_descriptors(sctx);
@@ -126,16 +121,13 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 		goto fail;
 	}
 
+	if (sscreen->b.debug_flags & DBG_FORCE_DMA)
+		sctx->b.b.resource_copy_region = sctx->b.dma_copy;
+
 	sctx->blitter = util_blitter_create(&sctx->b.b);
 	if (sctx->blitter == NULL)
 		goto fail;
 	sctx->blitter->draw_rectangle = r600_draw_rectangle;
-
-	sctx->dummy_pixel_shader =
-		util_make_fragment_cloneinput_shader(&sctx->b.b, 0,
-						     TGSI_SEMANTIC_GENERIC,
-						     TGSI_INTERPOLATE_CONSTANT);
-	sctx->b.b.bind_fs_state(&sctx->b.b, sctx->dummy_pixel_shader);
 
 	/* these must be last */
 	si_begin_new_cs(sctx);
@@ -218,6 +210,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_CUBE_MAP_ARRAY:
 	case PIPE_CAP_SAMPLE_SHADING:
 	case PIPE_CAP_DRAW_INDIRECT:
+	case PIPE_CAP_CLIP_HALFZ:
 		return 1;
 
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
@@ -258,6 +251,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
 	case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 		return 0;
 
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
@@ -279,6 +273,9 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 4095;
 	case PIPE_CAP_MAX_VERTEX_STREAMS:
 		return 1;
+
+	case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
+		return 2048;
 
 	/* Texturing. */
 	case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
@@ -339,7 +336,11 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	case PIPE_SHADER_COMPUTE:
 		switch (param) {
 		case PIPE_SHADER_CAP_PREFERRED_IR:
+#if HAVE_LLVM < 0x0306
 			return PIPE_SHADER_IR_LLVM;
+#else
+			return PIPE_SHADER_IR_NATIVE;
+#endif
 		case PIPE_SHADER_CAP_DOUBLES:
 			return 0; /* XXX: Enable doubles once the compiler can
 			             handle them. */
@@ -368,6 +369,8 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 		return 32;
 	case PIPE_SHADER_CAP_MAX_INPUTS:
 		return shader == PIPE_SHADER_VERTEX ? SI_NUM_VERTEX_BUFFERS : 32;
+	case PIPE_SHADER_CAP_MAX_OUTPUTS:
+		return shader == PIPE_SHADER_FRAGMENT ? 8 : 32;
 	case PIPE_SHADER_CAP_MAX_TEMPS:
 		return 256; /* Max native temporaries. */
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:

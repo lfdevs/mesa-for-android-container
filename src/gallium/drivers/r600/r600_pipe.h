@@ -26,8 +26,8 @@
 #ifndef R600_PIPE_H
 #define R600_PIPE_H
 
-#include "../radeon/r600_pipe_common.h"
-#include "../radeon/r600_cs.h"
+#include "radeon/r600_pipe_common.h"
+#include "radeon/r600_cs.h"
 
 #include "r600_llvm.h"
 #include "r600_public.h"
@@ -44,14 +44,21 @@
 #define R600_TRACE_CS_DWORDS		7
 
 #define R600_MAX_USER_CONST_BUFFERS 13
-#define R600_MAX_DRIVER_CONST_BUFFERS 4
+#define R600_MAX_DRIVER_CONST_BUFFERS 3
 #define R600_MAX_CONST_BUFFERS (R600_MAX_USER_CONST_BUFFERS + R600_MAX_DRIVER_CONST_BUFFERS)
 
 /* start driver buffers after user buffers */
 #define R600_UCP_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS)
-#define R600_TXQ_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 1)
-#define R600_BUFFER_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 2)
-#define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 3)
+#define R600_BUFFER_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 1)
+#define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 2)
+/* Currently R600_MAX_CONST_BUFFERS just fits on the hw, which has a limit
+ * of 16 const buffers.
+ * UCP/SAMPLE_POSITIONS are never accessed by same shader stage so they can use the same id.
+ *
+ * In order to support d3d 11 mandated minimum of 15 user const buffers
+ * we'd have to squash all use cases into one driver buffer.
+ */
+#define R600_SAMPLE_POSITIONS_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS)
 
 #define R600_MAX_CONST_BUFFER_SIZE (4096 * sizeof(float[4]))
 
@@ -138,6 +145,7 @@ struct r600_clip_state {
 struct r600_cs_shader_state {
 	struct r600_atom atom;
 	unsigned kernel_index;
+	unsigned pc;
 	struct r600_pipe_compute *shader;
 };
 
@@ -195,8 +203,8 @@ struct r600_gs_rings_state {
 
 /* This must start from 16. */
 /* features */
-#define DBG_LLVM		(1 << 17)
-#define DBG_NO_CP_DMA		(1 << 18)
+#define DBG_LLVM		(1 << 29)
+#define DBG_NO_CP_DMA		(1 << 30)
 /* shader backend */
 #define DBG_NO_SB		(1 << 21)
 #define DBG_SB_CS		(1 << 22)
@@ -307,7 +315,6 @@ struct r600_samplerview_state {
 	uint32_t			dirty_mask;
 	uint32_t			compressed_depthtex_mask; /* which textures are depth */
 	uint32_t			compressed_colortex_mask;
-	boolean                         dirty_txq_constants;
 	boolean				dirty_buffer_constants;
 };
 
@@ -452,6 +459,7 @@ struct r600_context {
 	bool				force_blend_disable;
 	boolean				dual_src_blend;
 	unsigned			zwritemask;
+	int					ps_iter_samples;
 
 	/* Index buffer. */
 	struct pipe_index_buffer	index_buffer;
@@ -551,6 +559,13 @@ void r600_decompress_depth_textures(struct r600_context *rctx,
 				    struct r600_samplerview_state *textures);
 void r600_decompress_color_textures(struct r600_context *rctx,
 				    struct r600_samplerview_state *textures);
+void r600_resource_copy_region(struct pipe_context *ctx,
+			       struct pipe_resource *dst,
+			       unsigned dst_level,
+			       unsigned dstx, unsigned dsty, unsigned dstz,
+			       struct pipe_resource *src,
+			       unsigned src_level,
+			       const struct pipe_box *src_box);
 
 /* r600_shader.c */
 int r600_pipe_shader_create(struct pipe_context *ctx,
@@ -632,6 +647,7 @@ void r600_sampler_views_dirty(struct r600_context *rctx,
 void r600_sampler_states_dirty(struct r600_context *rctx,
 			       struct r600_sampler_states *state);
 void r600_constant_buffers_dirty(struct r600_context *rctx, struct r600_constbuf_state *state);
+void r600_set_sample_locations_constant_buffer(struct r600_context *rctx);
 uint32_t r600_translate_stencil_op(int s_op);
 uint32_t r600_translate_fill(uint32_t func);
 unsigned r600_tex_wrap(unsigned wrap);

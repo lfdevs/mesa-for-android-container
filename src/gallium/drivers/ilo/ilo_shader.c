@@ -30,7 +30,9 @@
 #include "intel_winsys.h"
 
 #include "shader/ilo_shader_internal.h"
+#include "ilo_builder.h"
 #include "ilo_state.h"
+#include "ilo_state_3d.h"
 #include "ilo_shader.h"
 
 struct ilo_shader_cache {
@@ -107,128 +109,53 @@ ilo_shader_cache_notify_change(struct ilo_shader_cache *shc,
 }
 
 /**
- * Upload a managed shader to the bo.
+ * Upload managed shaders to the bo.  Only shaders that are changed or added
+ * after the last upload are uploaded.
  */
-static int
-ilo_shader_cache_upload_shader(struct ilo_shader_cache *shc,
-                               struct ilo_shader_state *shader,
-                               struct intel_bo *bo, unsigned offset,
-                               bool incremental)
+void
+ilo_shader_cache_upload(struct ilo_shader_cache *shc,
+                        struct ilo_builder *builder)
 {
-   const unsigned base = offset;
-   struct ilo_shader *sh;
+   struct ilo_shader_state *shader, *next;
 
-   LIST_FOR_EACH_ENTRY(sh, &shader->variants, list) {
-      int err;
+   LIST_FOR_EACH_ENTRY_SAFE(shader, next, &shc->changed, list) {
+      struct ilo_shader *sh;
 
-      if (incremental && sh->uploaded)
-         continue;
+      LIST_FOR_EACH_ENTRY(sh, &shader->variants, list) {
+         if (sh->uploaded)
+            continue;
 
-      /* kernels must be aligned to 64-byte */
-      offset = align(offset, 64);
+         sh->cache_offset = ilo_builder_instruction_write(builder,
+               sh->kernel_size, sh->kernel);
 
-      err = intel_bo_pwrite(bo, offset, sh->kernel_size, sh->kernel);
-      if (unlikely(err))
-         return -1;
+         sh->uploaded = true;
+      }
 
-      sh->uploaded = true;
-      sh->cache_offset = offset;
-
-      offset += sh->kernel_size;
+      list_del(&shader->list);
+      list_add(&shader->list, &shc->shaders);
    }
-
-   return (int) (offset - base);
 }
 
 /**
- * Similar to ilo_shader_cache_upload(), except no upload happens.
+ * Invalidate all shaders so that they get uploaded in next
+ * ilo_shader_cache_upload().
  */
-static int
-ilo_shader_cache_get_upload_size(struct ilo_shader_cache *shc,
-                                 unsigned offset,
-                                 bool incremental)
+void
+ilo_shader_cache_invalidate(struct ilo_shader_cache *shc)
 {
-   const unsigned base = offset;
-   struct ilo_shader_state *shader;
+   struct ilo_shader_state *shader, *next;
 
-   if (!incremental) {
-      LIST_FOR_EACH_ENTRY(shader, &shc->shaders, list) {
-         struct ilo_shader *sh;
-
-         /* see ilo_shader_cache_upload_shader() */
-         LIST_FOR_EACH_ENTRY(sh, &shader->variants, list) {
-            if (!incremental || !sh->uploaded)
-               offset = align(offset, 64) + sh->kernel_size;
-         }
-      }
+   LIST_FOR_EACH_ENTRY_SAFE(shader, next, &shc->shaders, list) {
+      list_del(&shader->list);
+      list_add(&shader->list, &shc->changed);
    }
 
    LIST_FOR_EACH_ENTRY(shader, &shc->changed, list) {
       struct ilo_shader *sh;
 
-      /* see ilo_shader_cache_upload_shader() */
-      LIST_FOR_EACH_ENTRY(sh, &shader->variants, list) {
-         if (!incremental || !sh->uploaded)
-            offset = align(offset, 64) + sh->kernel_size;
-      }
+      LIST_FOR_EACH_ENTRY(sh, &shader->variants, list)
+         sh->uploaded = false;
    }
-
-   /*
-    * From the Sandy Bridge PRM, volume 4 part 2, page 112:
-    *
-    *     "Due to prefetch of the instruction stream, the EUs may attempt to
-    *      access up to 8 instructions (128 bytes) beyond the end of the
-    *      kernel program - possibly into the next memory page.  Although
-    *      these instructions will not be executed, software must account for
-    *      the prefetch in order to avoid invalid page access faults."
-    */
-   if (offset > base)
-      offset += 128;
-
-   return (int) (offset - base);
-}
-
-/**
- * Upload managed shaders to the bo.  When incremental is true, only shaders
- * that are changed or added after the last upload are uploaded.
- */
-int
-ilo_shader_cache_upload(struct ilo_shader_cache *shc,
-                        struct intel_bo *bo, unsigned offset,
-                        bool incremental)
-{
-   struct ilo_shader_state *shader, *next;
-   int size = 0, s;
-
-   if (!bo)
-      return ilo_shader_cache_get_upload_size(shc, offset, incremental);
-
-   if (!incremental) {
-      LIST_FOR_EACH_ENTRY(shader, &shc->shaders, list) {
-         s = ilo_shader_cache_upload_shader(shc, shader,
-               bo, offset, incremental);
-         if (unlikely(s < 0))
-            return s;
-
-         size += s;
-         offset += s;
-      }
-   }
-
-   LIST_FOR_EACH_ENTRY_SAFE(shader, next, &shc->changed, list) {
-      s = ilo_shader_cache_upload_shader(shc, shader,
-            bo, offset, incremental);
-      if (unlikely(s < 0))
-         return s;
-
-      size += s;
-      offset += s;
-
-      list_del(&shader->list);
-      list_add(&shader->list, &shc->shaders);
-   }
-
-   return size;
 }
 
 /**
@@ -237,7 +164,7 @@ ilo_shader_cache_upload(struct ilo_shader_cache *shc,
 void
 ilo_shader_variant_init(struct ilo_shader_variant *variant,
                         const struct ilo_shader_info *info,
-                        const struct ilo_context *ilo)
+                        const struct ilo_state_vector *vec)
 {
    int num_views, i;
 
@@ -246,27 +173,27 @@ ilo_shader_variant_init(struct ilo_shader_variant *variant,
    switch (info->type) {
    case PIPE_SHADER_VERTEX:
       variant->u.vs.rasterizer_discard =
-         ilo->rasterizer->state.rasterizer_discard;
+         vec->rasterizer->state.rasterizer_discard;
       variant->u.vs.num_ucps =
-         util_last_bit(ilo->rasterizer->state.clip_plane_enable);
+         util_last_bit(vec->rasterizer->state.clip_plane_enable);
       break;
    case PIPE_SHADER_GEOMETRY:
       variant->u.gs.rasterizer_discard =
-         ilo->rasterizer->state.rasterizer_discard;
-      variant->u.gs.num_inputs = ilo->vs->shader->out.count;
-      for (i = 0; i < ilo->vs->shader->out.count; i++) {
+         vec->rasterizer->state.rasterizer_discard;
+      variant->u.gs.num_inputs = vec->vs->shader->out.count;
+      for (i = 0; i < vec->vs->shader->out.count; i++) {
          variant->u.gs.semantic_names[i] =
-            ilo->vs->shader->out.semantic_names[i];
+            vec->vs->shader->out.semantic_names[i];
          variant->u.gs.semantic_indices[i] =
-            ilo->vs->shader->out.semantic_indices[i];
+            vec->vs->shader->out.semantic_indices[i];
       }
       break;
    case PIPE_SHADER_FRAGMENT:
       variant->u.fs.flatshade =
-         (info->has_color_interp && ilo->rasterizer->state.flatshade);
+         (info->has_color_interp && vec->rasterizer->state.flatshade);
       variant->u.fs.fb_height = (info->has_pos) ?
-         ilo->fb.state.height : 1;
-      variant->u.fs.num_cbufs = ilo->fb.state.nr_cbufs;
+         vec->fb.state.height : 1;
+      variant->u.fs.num_cbufs = vec->fb.state.nr_cbufs;
       break;
    default:
       assert(!"unknown shader type");
@@ -274,19 +201,19 @@ ilo_shader_variant_init(struct ilo_shader_variant *variant,
    }
 
    /* use PCB unless constant buffer 0 is not in user buffer  */
-   if ((ilo->cbuf[info->type].enabled_mask & 0x1) &&
-       !ilo->cbuf[info->type].cso[0].user_buffer)
+   if ((vec->cbuf[info->type].enabled_mask & 0x1) &&
+       !vec->cbuf[info->type].cso[0].user_buffer)
       variant->use_pcb = false;
    else
       variant->use_pcb = true;
 
-   num_views = ilo->view[info->type].count;
+   num_views = vec->view[info->type].count;
    assert(info->num_samplers <= num_views);
 
    variant->num_sampler_views = info->num_samplers;
    for (i = 0; i < info->num_samplers; i++) {
-      const struct pipe_sampler_view *view = ilo->view[info->type].states[i];
-      const struct ilo_sampler_cso *sampler = ilo->sampler[info->type].cso[i];
+      const struct pipe_sampler_view *view = vec->view[info->type].states[i];
+      const struct ilo_sampler_cso *sampler = vec->sampler[info->type].cso[i];
 
       if (view) {
          variant->sampler_view_swizzles[i].r = view->swizzle_r;
@@ -326,7 +253,7 @@ ilo_shader_variant_init(struct ilo_shader_variant *variant,
 static void
 ilo_shader_variant_guess(struct ilo_shader_variant *variant,
                          const struct ilo_shader_info *info,
-                         const struct ilo_context *ilo)
+                         const struct ilo_state_vector *vec)
 {
    int i;
 
@@ -340,7 +267,7 @@ ilo_shader_variant_guess(struct ilo_shader_variant *variant,
    case PIPE_SHADER_FRAGMENT:
       variant->u.fs.flatshade = false;
       variant->u.fs.fb_height = (info->has_pos) ?
-         ilo->fb.state.height : 1;
+         vec->fb.state.height : 1;
       variant->u.fs.num_cbufs = 1;
       break;
    default:
@@ -458,6 +385,14 @@ ilo_shader_info_parse_decl(struct ilo_shader_info *info,
           decl->Semantic.Name == TGSI_SEMANTIC_EDGEFLAG)
          info->edgeflag_out = decl->Range.First;
       break;
+   case TGSI_FILE_CONSTANT:
+      {
+         const int idx = (decl->Declaration.Dimension) ?
+            decl->Dim.Index2D : 0;
+         if (info->constant_buffer_count <= idx)
+            info->constant_buffer_count = idx + 1;
+      }
+      break;
    case TGSI_FILE_SYSTEM_VALUE:
       if (decl->Declaration.Semantic &&
           decl->Semantic.Name == TGSI_SEMANTIC_INSTANCEID)
@@ -507,7 +442,8 @@ ilo_shader_info_parse_tokens(struct ilo_shader_info *info)
  * Create a shader state.
  */
 static struct ilo_shader_state *
-ilo_shader_state_create(const struct ilo_context *ilo,
+ilo_shader_state_create(const struct ilo_dev_info *dev,
+                        const struct ilo_state_vector *vec,
                         int type, const void *templ)
 {
    struct ilo_shader_state *state;
@@ -517,7 +453,7 @@ ilo_shader_state_create(const struct ilo_context *ilo,
    if (!state)
       return NULL;
 
-   state->info.dev = ilo->dev;
+   state->info.dev = dev;
    state->info.type = type;
 
    if (type == PIPE_SHADER_COMPUTE) {
@@ -542,7 +478,7 @@ ilo_shader_state_create(const struct ilo_context *ilo,
    ilo_shader_info_parse_tokens(&state->info);
 
    /* guess and compile now */
-   ilo_shader_variant_guess(&variant, &state->info, ilo);
+   ilo_shader_variant_guess(&variant, &state->info, vec);
    if (!ilo_shader_state_use_variant(state, &variant)) {
       ilo_shader_destroy(state);
       return NULL;
@@ -748,11 +684,12 @@ ilo_shader_state_use_variant(struct ilo_shader_state *state,
 struct ilo_shader_state *
 ilo_shader_create_vs(const struct ilo_dev_info *dev,
                      const struct pipe_shader_state *state,
-                     const struct ilo_context *precompile)
+                     const struct ilo_state_vector *precompile)
 {
    struct ilo_shader_state *shader;
 
-   shader = ilo_shader_state_create(precompile, PIPE_SHADER_VERTEX, state);
+   shader = ilo_shader_state_create(dev, precompile,
+         PIPE_SHADER_VERTEX, state);
 
    /* states used in ilo_shader_variant_init() */
    shader->info.non_orthogonal_states = ILO_DIRTY_VIEW_VS |
@@ -765,11 +702,12 @@ ilo_shader_create_vs(const struct ilo_dev_info *dev,
 struct ilo_shader_state *
 ilo_shader_create_gs(const struct ilo_dev_info *dev,
                      const struct pipe_shader_state *state,
-                     const struct ilo_context *precompile)
+                     const struct ilo_state_vector *precompile)
 {
    struct ilo_shader_state *shader;
 
-   shader = ilo_shader_state_create(precompile, PIPE_SHADER_GEOMETRY, state);
+   shader = ilo_shader_state_create(dev, precompile,
+         PIPE_SHADER_GEOMETRY, state);
 
    /* states used in ilo_shader_variant_init() */
    shader->info.non_orthogonal_states = ILO_DIRTY_VIEW_GS |
@@ -783,11 +721,12 @@ ilo_shader_create_gs(const struct ilo_dev_info *dev,
 struct ilo_shader_state *
 ilo_shader_create_fs(const struct ilo_dev_info *dev,
                      const struct pipe_shader_state *state,
-                     const struct ilo_context *precompile)
+                     const struct ilo_state_vector *precompile)
 {
    struct ilo_shader_state *shader;
 
-   shader = ilo_shader_state_create(precompile, PIPE_SHADER_FRAGMENT, state);
+   shader = ilo_shader_state_create(dev, precompile,
+         PIPE_SHADER_FRAGMENT, state);
 
    /* states used in ilo_shader_variant_init() */
    shader->info.non_orthogonal_states = ILO_DIRTY_VIEW_FS |
@@ -801,11 +740,12 @@ ilo_shader_create_fs(const struct ilo_dev_info *dev,
 struct ilo_shader_state *
 ilo_shader_create_cs(const struct ilo_dev_info *dev,
                      const struct pipe_compute_state *state,
-                     const struct ilo_context *precompile)
+                     const struct ilo_state_vector *precompile)
 {
    struct ilo_shader_state *shader;
 
-   shader = ilo_shader_state_create(precompile, PIPE_SHADER_COMPUTE, state);
+   shader = ilo_shader_state_create(dev, precompile,
+         PIPE_SHADER_COMPUTE, state);
 
    shader->info.non_orthogonal_states = 0;
 
@@ -846,7 +786,7 @@ ilo_shader_get_type(const struct ilo_shader_state *shader)
  */
 bool
 ilo_shader_select_kernel(struct ilo_shader_state *shader,
-                         const struct ilo_context *ilo,
+                         const struct ilo_state_vector *vec,
                          uint32_t dirty)
 {
    const struct ilo_shader * const cur = shader->shader;
@@ -855,7 +795,7 @@ ilo_shader_select_kernel(struct ilo_shader_state *shader,
    if (!(shader->info.non_orthogonal_states & dirty))
       return false;
 
-   ilo_shader_variant_init(&variant, &shader->info, ilo);
+   ilo_shader_variant_init(&variant, &shader->info, vec);
    ilo_shader_state_use_variant(shader, &variant);
 
    return (shader->shader != cur);
@@ -902,8 +842,8 @@ ilo_shader_select_kernel_routing(struct ilo_shader_state *shader,
    int dst_len, dst_slot;
 
    /* we are constructing 3DSTATE_SBE here */
-   assert(shader->info.dev->gen >= ILO_GEN(6) &&
-          shader->info.dev->gen <= ILO_GEN(7.5));
+   assert(ilo_dev_gen(shader->info.dev) >= ILO_GEN(6) &&
+          ilo_dev_gen(shader->info.dev) <= ILO_GEN(7.5));
 
    assert(kernel);
 
@@ -1068,6 +1008,9 @@ ilo_shader_get_kernel_param(const struct ilo_shader_state *shader,
    case ILO_KERNEL_OUTPUT_COUNT:
       val = kernel->out.count;
       break;
+   case ILO_KERNEL_SAMPLER_COUNT:
+      val = shader->info.num_samplers;
+      break;
    case ILO_KERNEL_URB_DATA_START_REG:
       val = kernel->in.start_grf;
       break;
@@ -1076,6 +1019,28 @@ ilo_shader_get_kernel_param(const struct ilo_shader_state *shader,
       break;
    case ILO_KERNEL_PCB_CBUF0_SIZE:
       val = kernel->pcb.cbuf0_size;
+      break;
+
+   case ILO_KERNEL_SURFACE_TOTAL_COUNT:
+      val = kernel->bt.total_count;
+      break;
+   case ILO_KERNEL_SURFACE_TEX_BASE:
+      val = kernel->bt.tex_base;
+      break;
+   case ILO_KERNEL_SURFACE_TEX_COUNT:
+      val = kernel->bt.tex_count;
+      break;
+   case ILO_KERNEL_SURFACE_CONST_BASE:
+      val = kernel->bt.const_base;
+      break;
+   case ILO_KERNEL_SURFACE_CONST_COUNT:
+      val = kernel->bt.const_count;
+      break;
+   case ILO_KERNEL_SURFACE_RES_BASE:
+      val = kernel->bt.res_base;
+      break;
+   case ILO_KERNEL_SURFACE_RES_COUNT:
+      val = kernel->bt.res_count;
       break;
 
    case ILO_KERNEL_VS_INPUT_INSTANCEID:
@@ -1112,12 +1077,21 @@ ilo_shader_get_kernel_param(const struct ilo_shader_state *shader,
    case ILO_KERNEL_VS_GEN6_SO_TRI_OFFSET:
       val = kernel->gs_offsets[2];
       break;
+   case ILO_KERNEL_VS_GEN6_SO_SURFACE_COUNT:
+      val = kernel->gs_bt_so_count;
+      break;
 
    case ILO_KERNEL_GS_DISCARD_ADJACENCY:
       val = kernel->in.discard_adj;
       break;
    case ILO_KERNEL_GS_GEN6_SVBI_POST_INC:
       val = kernel->svbi_post_inc;
+      break;
+   case ILO_KERNEL_GS_GEN6_SURFACE_SO_BASE:
+      val = kernel->bt.gen6_so_base;
+      break;
+   case ILO_KERNEL_GS_GEN6_SURFACE_SO_COUNT:
+      val = kernel->bt.gen6_so_count;
       break;
 
    case ILO_KERNEL_FS_INPUT_Z:
@@ -1135,6 +1109,31 @@ ilo_shader_get_kernel_param(const struct ilo_shader_state *shader,
       break;
    case ILO_KERNEL_FS_DISPATCH_16_OFFSET:
       val = 0;
+      break;
+   case ILO_KERNEL_FS_SURFACE_RT_BASE:
+      val = kernel->bt.rt_base;
+      break;
+   case ILO_KERNEL_FS_SURFACE_RT_COUNT:
+      val = kernel->bt.rt_count;
+      break;
+
+   case ILO_KERNEL_CS_LOCAL_SIZE:
+      val = shader->info.compute.req_local_mem;
+      break;
+   case ILO_KERNEL_CS_PRIVATE_SIZE:
+      val = shader->info.compute.req_private_mem;
+      break;
+   case ILO_KERNEL_CS_INPUT_SIZE:
+      val = shader->info.compute.req_input_mem;
+      break;
+   case ILO_KERNEL_CS_SIMD_SIZE:
+      val = 16;
+      break;
+   case ILO_KERNEL_CS_SURFACE_GLOBAL_BASE:
+      val = kernel->bt.global_base;
+      break;
+   case ILO_KERNEL_CS_SURFACE_GLOBAL_COUNT:
+      val = kernel->bt.global_count;
       break;
 
    default:

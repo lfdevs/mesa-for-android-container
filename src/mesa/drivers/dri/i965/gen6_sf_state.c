@@ -129,6 +129,26 @@ get_attr_override(const struct brw_vue_map *vue_map, int urb_entry_read_offset,
 }
 
 
+static bool
+is_drawing_points(const struct brw_context *brw)
+{
+   /* Determine if the primitives *reaching the SF* are points */
+   /* _NEW_POLYGON */
+   if (brw->ctx.Polygon.FrontMode == GL_POINT ||
+       brw->ctx.Polygon.BackMode == GL_POINT) {
+      return true;
+   }
+
+   if (brw->geometry_program) {
+      /* BRW_NEW_GEOMETRY_PROGRAM */
+      return brw->geometry_program->OutputType == GL_POINTS;
+   } else {
+      /* BRW_NEW_PRIMITIVE */
+      return brw->primitive == _3DPRIM_POINTLIST;
+   }
+}
+
+
 /**
  * Create the mapping from the FS inputs we produce to the previous pipeline
  * stage (GS or VS) outputs they source from.
@@ -149,12 +169,30 @@ calculate_attr_overrides(const struct brw_context *brw,
    /* _NEW_LIGHT */
    bool shade_model_flat = brw->ctx.Light.ShadeModel == GL_FLAT;
 
+   /* From the Ivybridge PRM, Vol 2 Part 1, 3DSTATE_SBE,
+    * description of dw10 Point Sprite Texture Coordinate Enable:
+    *
+    * "This field must be programmed to zero when non-point primitives
+    * are rendered."
+    *
+    * The SandyBridge PRM doesn't explicitly say that point sprite enables
+    * must be programmed to zero when rendering non-point primitives, but
+    * the IvyBridge PRM does, and if we don't, we get garbage.
+    *
+    * This is not required on Haswell, as the hardware ignores this state
+    * when drawing non-points -- although we do still need to be careful to
+    * correctly set the attr overrides.
+    */
+   /* BRW_NEW_PRIMITIVE | BRW_NEW_GEOMETRY_PROGRAM */
+   bool drawing_points = is_drawing_points(brw);
+
    /* Initialize all the attr_overrides to 0.  In the loop below we'll modify
     * just the ones that correspond to inputs used by the fs.
     */
    memset(attr_overrides, 0, 16*sizeof(*attr_overrides));
 
    for (int attr = 0; attr < VARYING_SLOT_MAX; attr++) {
+      /* BRW_NEW_FRAGMENT_PROGRAM */
       enum glsl_interp_qualifier interp_qualifier =
          brw->fragment_program->InterpQualifier[attr];
       bool is_gl_Color = attr == VARYING_SLOT_COL0 || attr == VARYING_SLOT_COL1;
@@ -166,17 +204,19 @@ calculate_attr_overrides(const struct brw_context *brw,
 
       /* _NEW_POINT */
       bool point_sprite = false;
-      if (brw->ctx.Point.PointSprite &&
-	  (attr >= VARYING_SLOT_TEX0 && attr <= VARYING_SLOT_TEX7) &&
-	  brw->ctx.Point.CoordReplace[attr - VARYING_SLOT_TEX0]) {
-         point_sprite = true;
+      if (drawing_points) {
+         if (brw->ctx.Point.PointSprite &&
+             (attr >= VARYING_SLOT_TEX0 && attr <= VARYING_SLOT_TEX7) &&
+             brw->ctx.Point.CoordReplace[attr - VARYING_SLOT_TEX0]) {
+            point_sprite = true;
+         }
+
+         if (attr == VARYING_SLOT_PNTC)
+            point_sprite = true;
+
+         if (point_sprite)
+            *point_sprite_enables |= (1 << input_index);
       }
-
-      if (attr == VARYING_SLOT_PNTC)
-         point_sprite = true;
-
-      if (point_sprite)
-	 *point_sprite_enables |= (1 << input_index);
 
       /* flat shading */
       if (interp_qualifier == INTERP_QUALIFIER_FLAT ||
@@ -321,7 +361,8 @@ upload_sf_state(struct brw_context *brw)
 
    /* _NEW_LINE */
    {
-      uint32_t line_width_u3_7 = U_FIXED(CLAMP(ctx->Line.Width, 0.0, 7.99), 7);
+      uint32_t line_width_u3_7 =
+         U_FIXED(CLAMP(ctx->Line.Width, 0.0, ctx->Const.MaxLineWidth), 7);
       /* TODO: line width of 0 is not allowed when MSAA enabled */
       if (line_width_u3_7 == 0)
          line_width_u3_7 = 1;
@@ -369,8 +410,8 @@ upload_sf_state(struct brw_context *brw)
 	 (1 << GEN6_SF_TRIFAN_PROVOKE_SHIFT);
    }
 
-   /* BRW_NEW_VUE_MAP_GEOM_OUT | _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM |
-    * CACHE_NEW_WM_PROG
+   /* BRW_NEW_VUE_MAP_GEOM_OUT | BRW_NEW_FRAGMENT_PROGRAM |
+    * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | CACHE_NEW_WM_PROG
     */
    uint32_t urb_entry_read_length;
    calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
@@ -408,7 +449,9 @@ const struct brw_tracked_state gen6_sf_state = {
 		_NEW_POINT |
                 _NEW_MULTISAMPLE),
       .brw   = (BRW_NEW_CONTEXT |
-		BRW_NEW_FRAGMENT_PROGRAM |
+                BRW_NEW_FRAGMENT_PROGRAM |
+                BRW_NEW_GEOMETRY_PROGRAM |
+                BRW_NEW_PRIMITIVE |
                 BRW_NEW_VUE_MAP_GEOM_OUT),
       .cache = CACHE_NEW_WM_PROG
    },

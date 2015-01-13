@@ -23,7 +23,18 @@
  * Authors:
  *      Marek Olšák <marek.olsak@amd.com>
  */
-#include "../radeon/r600_cs.h"
+
+/* Resource binding slots and sampler states (each described with 8 or 4 dwords)
+ * live in memory on SI.
+ *
+ * This file is responsible for managing lists of resources and sampler states
+ * in memory and binding them, which means updating those structures in memory.
+ *
+ * There is also code for updating shader pointers to resources and sampler
+ * states. CP DMA functions are here too.
+ */
+
+#include "radeon/r600_cs.h"
 #include "si_pipe.h"
 #include "si_shader.h"
 #include "sid.h"
@@ -319,8 +330,8 @@ static void si_sampler_views_begin_new_cs(struct si_context *sctx,
 	/* Add relocations to the CS. */
 	while (mask) {
 		int i = u_bit_scan(&mask);
-		struct si_pipe_sampler_view *rview =
-			(struct si_pipe_sampler_view*)views->views[i];
+		struct si_sampler_view *rview =
+			(struct si_sampler_view*)views->views[i];
 
 		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 				      rview->resource, RADEON_USAGE_READ,
@@ -343,8 +354,8 @@ static void si_set_sampler_view(struct si_context *sctx, unsigned shader,
 		return;
 
 	if (view) {
-		struct si_pipe_sampler_view *rview =
-			(struct si_pipe_sampler_view*)view;
+		struct si_sampler_view *rview =
+			(struct si_sampler_view*)view;
 
 		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 				      rview->resource, RADEON_USAGE_READ,
@@ -369,7 +380,7 @@ static void si_set_sampler_views(struct pipe_context *ctx,
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct si_textures_info *samplers = &sctx->samplers[shader];
-	struct si_pipe_sampler_view **rviews = (struct si_pipe_sampler_view **)views;
+	struct si_sampler_view **rviews = (struct si_sampler_view **)views;
 	int i;
 
 	if (!count || shader >= SI_NUM_SHADERS)
@@ -444,7 +455,7 @@ void si_set_sampler_descriptors(struct si_context *sctx, unsigned shader,
 				unsigned start, unsigned count, void **states)
 {
 	struct si_sampler_states *samplers = &sctx->samplers[shader].states;
-	struct si_pipe_sampler_state **sstates = (struct si_pipe_sampler_state**)states;
+	struct si_sampler_state **sstates = (struct si_sampler_state**)states;
 	int i;
 
 	if (start == 0)
@@ -726,7 +737,7 @@ static void si_set_constant_buffer(struct pipe_context *ctx, uint shader, uint s
 /* RING BUFFERS */
 
 void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
-			struct pipe_constant_buffer *input,
+			struct pipe_resource *buffer,
 			unsigned stride, unsigned num_records,
 			bool add_tid, bool swizzle,
 			unsigned element_size, unsigned index_stride)
@@ -743,10 +754,10 @@ void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
 	assert(slot < buffers->num_buffers);
 	pipe_resource_reference(&buffers->buffers[slot], NULL);
 
-	if (input && input->buffer) {
+	if (buffer) {
 		uint64_t va;
 
-		va = r600_resource(input->buffer)->gpu_address;
+		va = r600_resource(buffer)->gpu_address;
 
 		switch (element_size) {
 		default:
@@ -801,9 +812,9 @@ void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
 			  S_008F0C_INDEX_STRIDE(index_stride) |
 			  S_008F0C_ADD_TID_ENABLE(add_tid);
 
-		pipe_resource_reference(&buffers->buffers[slot], input->buffer);
+		pipe_resource_reference(&buffers->buffers[slot], buffer);
 		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
-				      (struct r600_resource*)input->buffer,
+				      (struct r600_resource*)buffer,
 				      buffers->shader_usage, buffers->priority);
 		buffers->desc.enabled_mask |= 1 << slot;
 	} else {
@@ -919,7 +930,7 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 	uint64_t old_va = rbuffer->gpu_address;
 	unsigned num_elems = sctx->vertex_elements ?
 				       sctx->vertex_elements->count : 0;
-	struct si_pipe_sampler_view *view;
+	struct si_sampler_view *view;
 
 	/* Reallocate the buffer in the same pipe_resource. */
 	r600_init_resource(&sctx->screen->b, rbuffer, rbuffer->b.b.width0,

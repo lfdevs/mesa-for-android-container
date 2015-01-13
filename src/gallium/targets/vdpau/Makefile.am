@@ -36,58 +36,22 @@ libvdpau_gallium_la_LIBADD = \
 	$(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
+TARGET_DRIVERS =
+TARGET_CPPFLAGS =
+TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la
+
+include $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/r300/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 
 if HAVE_GALLIUM_STATIC_TARGETS
 
-MEGADRIVERS =
-STATIC_TARGET_CPPFLAGS = -DGALLIUM_STATIC_TARGETS=1
-STATIC_TARGET_LIB_DEPS = \
-	$(top_builddir)/src/loader/libloader.la
-
-if HAVE_GALLIUM_NOUVEAU
-MEGADRIVERS += nouveau
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_NOUVEAU
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/nouveau/drm/libnouveaudrm.la \
-	$(top_builddir)/src/gallium/drivers/nouveau/libnouveau.la \
-	$(NOUVEAU_LIBS)
-endif
-
-# Radeon winsys chaos
-if HAVE_GALLIUM_R600
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la
-else
-if HAVE_GALLIUM_RADEONSI
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la
-endif
-endif
-
-if HAVE_GALLIUM_RADEON_COMMON
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la
-endif
-
-if HAVE_GALLIUM_R600
-MEGADRIVERS += r600
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_R600
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
-	$(RADEON_LIBS)
-endif
-
-if HAVE_GALLIUM_RADEONSI
-MEGADRIVERS += radeonsi
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_RADEONSI
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
-	$(RADEON_LIBS)
-endif
-
 libvdpau_gallium_la_SOURCES += target.c
-libvdpau_gallium_la_CPPFLAGS = $(STATIC_TARGET_CPPFLAGS)
-libvdpau_gallium_la_LIBADD += $(STATIC_TARGET_LIB_DEPS)
+libvdpau_gallium_la_CPPFLAGS = $(TARGET_CPPFLAGS) -DGALLIUM_STATIC_TARGETS=1
+libvdpau_gallium_la_LIBADD += $(TARGET_LIB_DEPS) \
+	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
 
@@ -95,7 +59,6 @@ libvdpau_gallium_la_CPPFLAGS = \
 	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\"
 
-# XXX: Use the pipe-loader-client over pipe-loader ?
 libvdpau_gallium_la_LIBADD += \
 	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
 	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
@@ -113,7 +76,7 @@ if HAVE_COMPAT_SYMLINKS
 all-local: $(vdpau_LTLIBRARIES)
 	$(AM_V_GEN)link_dir=$(top_builddir)/$(LIB_DIR)/gallium;		\
 	$(MKDIR_P) $${link_dir};					\
-	for i in $(MEGADRIVERS); do					\
+	for i in $(TARGET_DRIVERS); do					\
 		j=libvdpau_gallium.$(LIB_EXT);				\
 		k=libvdpau_$${i}.$(LIB_EXT);				\
 		l=$${k}.$(VDPAU_MAJOR).$(VDPAU_MINOR).0;		\
@@ -132,7 +95,7 @@ endif
 # libvdpau_gallium.so in the set of final installed files.
 install-data-hook:
 	$(AM_V_GEN)dest_dir=$(DESTDIR)/$(vdpaudir);			\
-	for i in $(MEGADRIVERS); do					\
+	for i in $(TARGET_DRIVERS); do					\
 		j=libvdpau_gallium.$(LIB_EXT);				\
 		k=libvdpau_$${i}.$(LIB_EXT);				\
 		l=$${k}.$(VDPAU_MAJOR).$(VDPAU_MINOR).0;		\

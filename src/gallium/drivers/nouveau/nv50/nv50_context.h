@@ -10,10 +10,6 @@
 #include "util/u_inlines.h"
 #include "util/u_dynarray.h"
 
-#ifdef NV50_WITH_DRAW_MODULE
-#include "draw/draw_vertex.h"
-#endif
-
 #include "nv50/nv50_winsys.h"
 #include "nv50/nv50_stateobj.h"
 #include "nv50/nv50_screen.h"
@@ -182,14 +178,11 @@ struct nv50_context {
    uint32_t rt_array_mode;
 
    struct pipe_query *cond_query;
-   boolean cond_cond;
+   boolean cond_cond; /* inverted rendering condition */
    uint cond_mode;
+   uint32_t cond_condmode; /* the calculated condition */
 
    struct nv50_blitctx *blit;
-
-#ifdef NV50_WITH_DRAW_MODULE
-   struct draw_context *draw;
-#endif
 };
 
 static INLINE struct nv50_context *

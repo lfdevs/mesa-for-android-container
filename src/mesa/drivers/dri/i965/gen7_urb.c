@@ -150,6 +150,19 @@ gen7_upload_urb(struct brw_context *brw)
    unsigned gs_size = gs_present ? brw->gs.prog_data->base.urb_entry_size : 1;
    unsigned gs_entry_size_bytes = gs_size * 64;
 
+   /* If we're just switching between programs with the same URB requirements,
+    * skip the rest of the logic.
+    */
+   if (!(brw->state.dirty.brw & BRW_NEW_CONTEXT) &&
+       brw->urb.vsize == vs_size &&
+       brw->urb.gs_present == gs_present &&
+       brw->urb.gsize == gs_size) {
+      return;
+   }
+   brw->urb.vsize = vs_size;
+   brw->urb.gs_present = gs_present;
+   brw->urb.gsize = gs_size;
+
    /* From p35 of the Ivy Bridge PRM (section 1.7.1: 3DSTATE_URB_GS):
     *
     *     VS Number of URB Entries must be divisible by 8 if the VS URB Entry

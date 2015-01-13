@@ -29,7 +29,6 @@
 #include <GL/internal/dri_interface.h>
 
 #include "intel_batchbuffer.h"
-#include "intel_chipset.h"
 #include "intel_mipmap_tree.h"
 #include "intel_resolve_map.h"
 #include "intel_tex.h"
@@ -1746,8 +1745,8 @@ intel_miptree_map_gtt(struct brw_context *brw,
    unsigned int bw, bh;
    void *base;
    unsigned int image_x, image_y;
-   int x = map->x;
-   int y = map->y;
+   intptr_t x = map->x;
+   intptr_t y = map->y;
 
    /* For compressed formats, the stride is the number of bytes per
     * row of blocks.  intel_miptree_get_image_offset() already does
@@ -1773,7 +1772,8 @@ intel_miptree_map_gtt(struct brw_context *brw,
       map->ptr = base + y * map->stride + x * mt->cpp;
    }
 
-   DBG("%s: %d,%d %dx%d from mt %p (%s) %d,%d = %p/%d\n", __FUNCTION__,
+   DBG("%s: %d,%d %dx%d from mt %p (%s) "
+       "%"PRIiPTR",%"PRIiPTR" = %p/%d\n", __FUNCTION__,
        map->x, map->y, map->w, map->h,
        mt, _mesa_get_format_name(mt->format),
        x, y, map->ptr, map->stride);

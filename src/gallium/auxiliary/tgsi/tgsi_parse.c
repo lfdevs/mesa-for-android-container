@@ -291,6 +291,16 @@ tgsi_alloc_tokens(unsigned num_tokens)
 }
 
 
+/**
+ * Free tokens allocated by tgsi_alloc_tokens() or tgsi_dup_tokens()
+ */
+void
+tgsi_free_tokens(const struct tgsi_token *tokens)
+{
+   FREE((void *) tokens);
+}
+
+
 void
 tgsi_dump_tokens(const struct tgsi_token *tokens)
 {

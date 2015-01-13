@@ -99,7 +99,7 @@ is_expression(const fs_inst *const inst)
    case SHADER_OPCODE_INT_REMAINDER:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS:
-      return inst->mlen == 0;
+      return inst->mlen < 2;
    case SHADER_OPCODE_LOAD_PAYLOAD:
       return !is_copy_payload(inst);
    default:
@@ -128,7 +128,11 @@ operands_match(fs_inst *a, fs_inst *b)
    fs_reg *xs = a->src;
    fs_reg *ys = b->src;
 
-   if (!is_expression_commutative(a->opcode)) {
+   if (a->opcode == BRW_OPCODE_MAD) {
+      return xs[0].equals(ys[0]) &&
+             ((xs[1].equals(ys[1]) && xs[2].equals(ys[2])) ||
+              (xs[2].equals(ys[1]) && xs[1].equals(ys[2])));
+   } else if (!is_expression_commutative(a->opcode)) {
       bool match = true;
       for (int i = 0; i < a->sources; i++) {
          if (!xs[i].equals(ys[i])) {
@@ -202,49 +206,49 @@ fs_visitor::opt_cse_local(bblock_t *block)
             bool no_existing_temp = entry->tmp.file == BAD_FILE;
             if (no_existing_temp && !entry->generator->dst.is_null()) {
                int written = entry->generator->regs_written;
+               int dst_width = entry->generator->dst.width / 8;
+               assert(written % dst_width == 0);
 
                fs_reg orig_dst = entry->generator->dst;
                fs_reg tmp = fs_reg(GRF, virtual_grf_alloc(written),
-                                   orig_dst.type);
+                                   orig_dst.type, orig_dst.width);
                entry->tmp = tmp;
                entry->generator->dst = tmp;
 
                fs_inst *copy;
-               if (written > 1) {
-                  fs_reg *sources = ralloc_array(mem_ctx, fs_reg, written);
-                  for (int i = 0; i < written; i++) {
-                     sources[i] = tmp;
-                     sources[i].reg_offset = i;
-                  }
-                  copy = LOAD_PAYLOAD(orig_dst, sources, written);
+               if (written > dst_width) {
+                  fs_reg *sources = ralloc_array(mem_ctx, fs_reg, written / dst_width);
+                  for (int i = 0; i < written / dst_width; i++)
+                     sources[i] = offset(tmp, i);
+                  copy = LOAD_PAYLOAD(orig_dst, sources, written / dst_width);
                } else {
                   copy = MOV(orig_dst, tmp);
                   copy->force_writemask_all =
                      entry->generator->force_writemask_all;
                }
-               entry->generator->insert_after(copy);
+               entry->generator->insert_after(block, copy);
             }
 
             /* dest <- temp */
             if (!inst->dst.is_null()) {
                int written = inst->regs_written;
+               int dst_width = inst->dst.width / 8;
                assert(written == entry->generator->regs_written);
+               assert(dst_width == entry->generator->dst.width / 8);
                assert(inst->dst.type == entry->tmp.type);
                fs_reg dst = inst->dst;
                fs_reg tmp = entry->tmp;
                fs_inst *copy;
-               if (written > 1) {
-                  fs_reg *sources = ralloc_array(mem_ctx, fs_reg, written);
-                  for (int i = 0; i < written; i++) {
-                     sources[i] = tmp;
-                     sources[i].reg_offset = i;
-                  }
-                  copy = LOAD_PAYLOAD(dst, sources, written);
+               if (written > dst_width) {
+                  fs_reg *sources = ralloc_array(mem_ctx, fs_reg, written / dst_width);
+                  for (int i = 0; i < written / dst_width; i++)
+                     sources[i] = offset(tmp, i);
+                  copy = LOAD_PAYLOAD(dst, sources, written / dst_width);
                } else {
                   copy = MOV(dst, tmp);
                   copy->force_writemask_all = inst->force_writemask_all;
                }
-               inst->insert_before(copy);
+               inst->insert_before(block, copy);
             }
 
             /* Set our iterator so that next time through the loop inst->next
@@ -253,13 +257,7 @@ fs_visitor::opt_cse_local(bblock_t *block)
              */
             fs_inst *prev = (fs_inst *)inst->prev;
 
-            inst->remove();
-
-            /* Appending an instruction may have changed our bblock end. */
-            if (inst == block->end) {
-               block->end = prev;
-            }
-
+            inst->remove(block);
             inst = prev;
          }
       }

@@ -30,6 +30,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
+#include "util/u_format.h"
 
 #include "freedreno_state.h"
 #include "freedreno_resource.h"
@@ -43,39 +44,15 @@
 
 
 static void
-emit_vertexbufs(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		struct ir3_shader_key key)
+draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		struct fd3_emit *emit)
 {
-	struct fd_vertex_stateobj *vtx = ctx->vtx;
-	struct fd_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
-	struct fd3_vertex_buf bufs[PIPE_MAX_ATTRIBS];
-	unsigned i;
+	const struct pipe_draw_info *info = emit->info;
 
-	if (!vtx->num_elements)
-		return;
+	fd3_emit_state(ctx, ring, emit);
 
-	for (i = 0; i < vtx->num_elements; i++) {
-		struct pipe_vertex_element *elem = &vtx->pipe[i];
-		struct pipe_vertex_buffer *vb =
-				&vertexbuf->vb[elem->vertex_buffer_index];
-		bufs[i].offset = vb->buffer_offset + elem->src_offset;
-		bufs[i].stride = vb->stride;
-		bufs[i].prsc   = vb->buffer;
-		bufs[i].format = elem->src_format;
-	}
-
-	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->prog.vp, key),
-			bufs, vtx->num_elements);
-}
-
-static void
-draw_impl(struct fd_context *ctx, const struct pipe_draw_info *info,
-		struct fd_ringbuffer *ring, unsigned dirty, struct ir3_shader_key key)
-{
-	fd3_emit_state(ctx, ring, &ctx->prog, dirty, key);
-
-	if (dirty & FD_DIRTY_VTXBUF)
-		emit_vertexbufs(ctx, ring, key);
+	if (emit->dirty & (FD_DIRTY_VTXBUF | FD_DIRTY_VTXSTATE))
+		fd3_emit_vertex_bufs(ring, emit);
 
 	OUT_PKT0(ring, REG_A3XX_PC_VERTEX_REUSE_BLOCK_CNTL, 1);
 	OUT_RING(ring, 0x0000000b);             /* PC_VERTEX_REUSE_BLOCK_CNTL */
@@ -91,27 +68,103 @@ draw_impl(struct fd_context *ctx, const struct pipe_draw_info *info,
 			info->restart_index : 0xffffffff);
 
 	fd_draw_emit(ctx, ring,
-			key.binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
+			emit->key.binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
 			info);
 }
 
+/* fixup dirty shader state in case some "unrelated" (from the state-
+ * tracker's perspective) state change causes us to switch to a
+ * different variant.
+ */
 static void
-fd3_draw(struct fd_context *ctx, const struct pipe_draw_info *info)
+fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 {
-	unsigned dirty = ctx->dirty;
-	struct ir3_shader_key key = {
+	struct fd3_context *fd3_ctx = fd3_context(ctx);
+	struct ir3_shader_key *last_key = &fd3_ctx->last_key;
+
+	if (!ir3_shader_key_equal(last_key, key)) {
+		ctx->dirty |= FD_DIRTY_PROG;
+
+		if (last_key->has_per_samp || key->has_per_samp) {
+			if ((last_key->vsaturate_s != key->vsaturate_s) ||
+					(last_key->vsaturate_t != key->vsaturate_t) ||
+					(last_key->vsaturate_r != key->vsaturate_r))
+				ctx->prog.dirty |= FD_SHADER_DIRTY_VP;
+
+			if ((last_key->fsaturate_s != key->fsaturate_s) ||
+					(last_key->fsaturate_t != key->fsaturate_t) ||
+					(last_key->fsaturate_r != key->fsaturate_r))
+				ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+		}
+
+		if (last_key->color_two_side != key->color_two_side)
+			ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+
+		if (last_key->half_precision != key->half_precision)
+			ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+
+		if (last_key->alpha != key->alpha)
+			ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
+
+		fd3_ctx->last_key = *key;
+	}
+}
+
+static void
+fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
+{
+	struct fd3_context *fd3_ctx = fd3_context(ctx);
+	struct fd3_emit emit = {
+		.vtx  = &ctx->vtx,
+		.prog = &ctx->prog,
+		.info = info,
+		.key = {
 			/* do binning pass first: */
 			.binning_pass = true,
 			.color_two_side = ctx->rasterizer ? ctx->rasterizer->light_twoside : false,
+			.alpha = util_format_is_alpha(pipe_surface_format(ctx->framebuffer.cbufs[0])),
 			// TODO set .half_precision based on render target format,
 			// ie. float16 and smaller use half, float32 use full..
 			.half_precision = !!(fd_mesa_debug & FD_DBG_FRAGHALF),
+			.has_per_samp = fd3_ctx->fsaturate || fd3_ctx->vsaturate,
+			.vsaturate_s = fd3_ctx->vsaturate_s,
+			.vsaturate_t = fd3_ctx->vsaturate_t,
+			.vsaturate_r = fd3_ctx->vsaturate_r,
+			.fsaturate_s = fd3_ctx->fsaturate_s,
+			.fsaturate_t = fd3_ctx->fsaturate_t,
+			.fsaturate_r = fd3_ctx->fsaturate_r,
+		},
+		.rasterflat = ctx->rasterizer && ctx->rasterizer->flatshade,
 	};
-	draw_impl(ctx, info, ctx->binning_ring,
-			dirty & ~(FD_DIRTY_BLEND), key);
+	unsigned dirty;
+
+	fixup_shader_state(ctx, &emit.key);
+
+	dirty = ctx->dirty;
+	emit.dirty = dirty & ~(FD_DIRTY_BLEND);
+	draw_impl(ctx, ctx->binning_ring, &emit);
+
 	/* and now regular (non-binning) pass: */
-	key.binning_pass = false;
-	draw_impl(ctx, info, ctx->ring, dirty, key);
+	emit.key.binning_pass = false;
+	emit.dirty = dirty;
+	emit.vp = NULL;   /* we changed key so need to refetch vp */
+	draw_impl(ctx, ctx->ring, &emit);
+}
+
+/* clear operations ignore viewport state, so we need to reset it
+ * based on framebuffer state:
+ */
+static void
+reset_viewport(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb)
+{
+	float half_width = pfb->width * 0.5f;
+	float half_height = pfb->height * 0.5f;
+
+	OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_XOFFSET, 4);
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XOFFSET(half_width - 0.5));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XSCALE(half_width));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_YOFFSET(half_height - 0.5));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_YSCALE(-half_height));
 }
 
 /* binning pass cmds for a clear:
@@ -127,19 +180,19 @@ fd3_clear_binning(struct fd_context *ctx, unsigned dirty)
 {
 	struct fd3_context *fd3_ctx = fd3_context(ctx);
 	struct fd_ringbuffer *ring = ctx->binning_ring;
-	struct ir3_shader_key key = {
+	struct fd3_emit emit = {
+		.vtx  = &fd3_ctx->solid_vbuf_state,
+		.prog = &ctx->solid_prog,
+		.key = {
 			.binning_pass = true,
 			.half_precision = true,
+		},
+		.dirty = dirty,
 	};
 
-	fd3_emit_state(ctx, ring, &ctx->solid_prog, dirty, key);
-
-	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->solid_prog.vp, key),
-			(struct fd3_vertex_buf[]) {{
-				.prsc = fd3_ctx->solid_vbuf,
-				.stride = 12,
-				.format = PIPE_FORMAT_R32G32B32_FLOAT,
-			}}, 1);
+	fd3_emit_state(ctx, ring, &emit);
+	fd3_emit_vertex_bufs(ring, &emit);
+	reset_viewport(ring, &ctx->framebuffer);
 
 	OUT_PKT0(ring, REG_A3XX_PC_PRIM_VTX_CNTL, 1);
 	OUT_RING(ring, A3XX_PC_PRIM_VTX_CNTL_STRIDE_IN_VPC(0) |
@@ -168,17 +221,23 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 	struct fd_ringbuffer *ring = ctx->ring;
 	unsigned dirty = ctx->dirty;
 	unsigned ce, i;
-	struct ir3_shader_key key = {
+	struct fd3_emit emit = {
+		.vtx  = &fd3_ctx->solid_vbuf_state,
+		.prog = &ctx->solid_prog,
+		.key = {
 			.half_precision = true,
+		},
 	};
 
-	dirty &= FD_DIRTY_VIEWPORT | FD_DIRTY_FRAMEBUFFER | FD_DIRTY_SCISSOR;
+	dirty &= FD_DIRTY_FRAMEBUFFER | FD_DIRTY_SCISSOR;
 	dirty |= FD_DIRTY_PROG;
+	emit.dirty = dirty;
 
 	fd3_clear_binning(ctx, dirty);
 
 	/* emit generic state now: */
-	fd3_emit_state(ctx, ring, &ctx->solid_prog, dirty, key);
+	fd3_emit_state(ctx, ring, &emit);
+	reset_viewport(ring, &ctx->framebuffer);
 
 	OUT_PKT0(ring, REG_A3XX_RB_BLEND_ALPHA, 1);
 	OUT_RING(ring, A3XX_RB_BLEND_ALPHA_UINT(0xff) |
@@ -269,12 +328,7 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 	OUT_PKT0(ring, REG_A3XX_GRAS_SU_MODE_CONTROL, 1);
 	OUT_RING(ring, A3XX_GRAS_SU_MODE_CONTROL_LINEHALFWIDTH(0));
 
-	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->solid_prog.vp, key),
-			(struct fd3_vertex_buf[]) {{
-				.prsc = fd3_ctx->solid_vbuf,
-				.stride = 12,
-				.format = PIPE_FORMAT_R32G32B32_FLOAT,
-			}}, 1);
+	fd3_emit_vertex_bufs(ring, &emit);
 
 	fd3_emit_constant(ring, SB_FRAG_SHADER, 0, 0, 4, color->ui, NULL);
 
@@ -301,6 +355,6 @@ void
 fd3_draw_init(struct pipe_context *pctx)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	ctx->draw = fd3_draw;
+	ctx->draw_vbo = fd3_draw_vbo;
 	ctx->clear = fd3_clear;
 }

@@ -70,8 +70,7 @@ device::type() const {
    case PIPE_LOADER_DEVICE_PLATFORM:
       return CL_DEVICE_TYPE_GPU;
    default:
-      assert(0);
-      return 0;
+      unreachable("Unknown device type.");
    }
 }
 
@@ -84,8 +83,7 @@ device::vendor_id() const {
    case PIPE_LOADER_DEVICE_PCI:
       return ldev->u.pci.vendor_id;
    default:
-      assert(0);
-      return 0;
+      unreachable("Unknown device type.");
    }
 }
 

@@ -168,6 +168,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 0;
    case PIPE_CAP_TGSI_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
+   case PIPE_CAP_START_INSTANCE:
       return 1;
    case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
       return 0;
@@ -195,6 +196,8 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1024;
    case PIPE_CAP_MAX_VERTEX_STREAMS:
       return 1;
+   case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
+      return 2048;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
       return 1;
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
@@ -221,11 +224,11 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_DRAW_INDIRECT:
       return 1;
 
+   case PIPE_CAP_CUBE_MAP_ARRAY:
+      return 1;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
-   case PIPE_CAP_START_INSTANCE:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
-   case PIPE_CAP_CUBE_MAP_ARRAY:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
@@ -250,6 +253,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_SAMPLER_VIEW_TARGET:
       return 0;
    case PIPE_CAP_FAKE_SW_MSAA:
       return 1;
@@ -273,6 +277,8 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    }
    case PIPE_CAP_UMA:
       return 0;
+   case PIPE_CAP_CLIP_HALFZ:
+      return 1;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAP %d query\n", param);
@@ -547,12 +553,6 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
 
    util_cpu_detect();
 
-#if defined(PIPE_ARCH_X86) && HAVE_LLVM < 0x0302
-   /* require SSE2 due to LLVM PR6960. */
-   if (!util_cpu_caps.has_sse2)
-       return NULL;
-#endif
-
 #ifdef DEBUG
    LP_DEBUG = debug_get_flags_option("LP_DEBUG", lp_debug_flags, 0 );
 #endif
@@ -562,6 +562,11 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    screen = CALLOC_STRUCT(llvmpipe_screen);
    if (!screen)
       return NULL;
+
+   if (!lp_jit_screen_init(screen)) {
+      FREE(screen);
+      return NULL;
+   }
 
    screen->winsys = winsys;
 
@@ -583,8 +588,6 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    screen->base.get_timestamp = llvmpipe_get_timestamp;
 
    llvmpipe_init_screen_resource_funcs(&screen->base);
-
-   lp_jit_screen_init(screen);
 
    screen->num_threads = util_cpu_caps.nr_cpus > 1 ? util_cpu_caps.nr_cpus : 0;
 #ifdef PIPE_SUBSYSTEM_EMBEDDED

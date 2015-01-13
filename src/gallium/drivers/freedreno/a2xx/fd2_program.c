@@ -174,7 +174,7 @@ patch_vtx_fetches(struct fd_context *ctx, struct fd2_shader_stateobj *so,
 		struct ir2_instruction *instr = so->vfetch_instrs[i];
 		struct pipe_vertex_element *elem = &vtx->pipe[i];
 		struct pipe_vertex_buffer *vb =
-				&ctx->vertexbuf.vb[elem->vertex_buffer_index];
+				&ctx->vtx.vertexbuf.vb[elem->vertex_buffer_index];
 		enum pipe_format format = elem->src_format;
 		const struct util_format_description *desc =
 				util_format_description(format);
@@ -258,7 +258,7 @@ fd2_program_validate(struct fd_context *ctx)
 
 	/* if necessary, fix up vertex fetch instructions: */
 	if (ctx->dirty & (FD_DIRTY_VTXSTATE | FD_DIRTY_PROG))
-		patch_vtx_fetches(ctx, prog->vp, ctx->vtx);
+		patch_vtx_fetches(ctx, prog->vp, ctx->vtx.vtx);
 
 	/* if necessary, fix up texture fetch instructions: */
 	if (ctx->dirty & (FD_DIRTY_TEXSTATE | FD_DIRTY_PROG)) {

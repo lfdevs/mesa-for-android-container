@@ -41,6 +41,7 @@
  */
 
 #include "brw_fs.h"
+#include "brw_cfg.h"
 #include "brw_fs_live_variables.h"
 
 static bool
@@ -63,26 +64,22 @@ is_nop_mov(const fs_inst *inst)
 }
 
 static bool
-is_copy_payload(const fs_inst *inst, int src_size)
+is_copy_payload(const fs_visitor *v, const fs_inst *inst)
 {
-   if (src_size != inst->sources)
+   if (v->virtual_grf_sizes[inst->src[0].reg] != inst->regs_written)
       return false;
 
-   const int reg = inst->src[0].reg;
-   if (inst->src[0].reg_offset != 0)
-      return false;
+   fs_reg reg = inst->src[0];
 
-   for (int i = 1; i < inst->sources; i++) {
-      if (inst->src[i].reg != reg ||
-          inst->src[i].reg_offset != i) {
+   for (int i = 0; i < inst->sources; i++)
+      if (!inst->src[i].equals(offset(reg, i)))
          return false;
-      }
-   }
+
    return true;
 }
 
 static bool
-is_coalesce_candidate(const fs_inst *inst, const int *virtual_grf_sizes)
+is_coalesce_candidate(const fs_visitor *v, const fs_inst *inst)
 {
    if ((inst->opcode != BRW_OPCODE_MOV &&
         inst->opcode != SHADER_OPCODE_LOAD_PAYLOAD) ||
@@ -97,12 +94,12 @@ is_coalesce_candidate(const fs_inst *inst, const int *virtual_grf_sizes)
       return false;
    }
 
-   if (virtual_grf_sizes[inst->src[0].reg] >
-       virtual_grf_sizes[inst->dst.reg])
+   if (v->virtual_grf_sizes[inst->src[0].reg] >
+       v->virtual_grf_sizes[inst->dst.reg])
       return false;
 
    if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
-      if (!is_copy_payload(inst, virtual_grf_sizes[inst->src[0].reg])) {
+      if (!is_copy_payload(v, inst)) {
          return false;
       }
    }
@@ -112,7 +109,7 @@ is_coalesce_candidate(const fs_inst *inst, const int *virtual_grf_sizes)
 
 static bool
 can_coalesce_vars(brw::fs_live_variables *live_intervals,
-                  const exec_list *instructions, const fs_inst *inst,
+                  const cfg_t *cfg, const fs_inst *inst,
                   int var_to, int var_from)
 {
    if (!live_intervals->vars_interfere(var_from, var_to))
@@ -131,7 +128,7 @@ can_coalesce_vars(brw::fs_live_variables *live_intervals,
    int start_ip = MIN2(start_to, start_from);
    int scan_ip = -1;
 
-   foreach_in_list(fs_inst, scan_inst, instructions) {
+   foreach_block_and_inst(block, fs_inst, scan_inst, cfg) {
       scan_ip++;
 
       if (scan_ip < start_ip)
@@ -144,7 +141,7 @@ can_coalesce_vars(brw::fs_live_variables *live_intervals,
          continue;
 
       if (scan_ip > live_intervals->end[var_to])
-         break;
+         return true;
 
       if (scan_inst->dst.equals(inst->dst) ||
           scan_inst->dst.equals(inst->src[0]))
@@ -164,13 +161,13 @@ fs_visitor::register_coalesce()
    int src_size = 0;
    int channels_remaining = 0;
    int reg_from = -1, reg_to = -1;
-   int reg_to_offset[MAX_SAMPLER_MESSAGE_SIZE];
-   fs_inst *mov[MAX_SAMPLER_MESSAGE_SIZE];
-   int var_to[MAX_SAMPLER_MESSAGE_SIZE];
-   int var_from[MAX_SAMPLER_MESSAGE_SIZE];
+   int reg_to_offset[MAX_VGRF_SIZE];
+   fs_inst *mov[MAX_VGRF_SIZE];
+   int var_to[MAX_VGRF_SIZE];
+   int var_from[MAX_VGRF_SIZE];
 
-   foreach_in_list(fs_inst, inst, &instructions) {
-      if (!is_coalesce_candidate(inst, virtual_grf_sizes))
+   foreach_block_and_inst(block, fs_inst, inst, cfg) {
+      if (!is_coalesce_candidate(this, inst))
          continue;
 
       if (is_nop_mov(inst)) {
@@ -183,8 +180,9 @@ fs_visitor::register_coalesce()
          reg_from = inst->src[0].reg;
 
          src_size = virtual_grf_sizes[inst->src[0].reg];
-         assert(src_size <= MAX_SAMPLER_MESSAGE_SIZE);
+         assert(src_size <= MAX_VGRF_SIZE);
 
+         assert(inst->src[0].width % 8 == 0);
          channels_remaining = src_size;
          memset(mov, 0, sizeof(mov));
 
@@ -199,12 +197,24 @@ fs_visitor::register_coalesce()
             reg_to_offset[i] = i;
          }
          mov[0] = inst;
-         channels_remaining -= inst->sources;
+         channels_remaining -= inst->regs_written;
       } else {
          const int offset = inst->src[0].reg_offset;
+         if (mov[offset]) {
+            /* This is the second time that this offset in the register has
+             * been set.  This means, in particular, that inst->dst was
+             * live before this instruction and that the live ranges of
+             * inst->dst and inst->src[0] overlap and we can't coalesce the
+             * two variables.  Let's ensure that doesn't happen.
+             */
+            channels_remaining = -1;
+            continue;
+         }
          reg_to_offset[offset] = inst->dst.reg_offset;
+         if (inst->src[0].width == 16)
+            reg_to_offset[offset + 1] = inst->dst.reg_offset + 1;
          mov[offset] = inst;
-         channels_remaining--;
+         channels_remaining -= inst->regs_written;
       }
 
       if (channels_remaining)
@@ -212,10 +222,17 @@ fs_visitor::register_coalesce()
 
       bool can_coalesce = true;
       for (int i = 0; i < src_size; i++) {
+         if (reg_to_offset[i] != reg_to_offset[0] + i) {
+            /* Registers are out-of-order. */
+            can_coalesce = false;
+            reg_from = -1;
+            break;
+         }
+
          var_to[i] = live_intervals->var_from_vgrf[reg_to] + reg_to_offset[i];
          var_from[i] = live_intervals->var_from_vgrf[reg_from] + i;
 
-         if (!can_coalesce_vars(live_intervals, &instructions, inst,
+         if (!can_coalesce_vars(live_intervals, cfg, inst,
                                 var_to[i], var_from[i])) {
             can_coalesce = false;
             reg_from = -1;
@@ -240,7 +257,7 @@ fs_visitor::register_coalesce()
          }
       }
 
-      foreach_in_list(fs_inst, scan_inst, &instructions) {
+      foreach_block_and_inst(block, fs_inst, scan_inst, cfg) {
          for (int i = 0; i < src_size; i++) {
             if (mov[i] || was_load_payload) {
                if (scan_inst->dst.file == GRF &&
@@ -273,9 +290,9 @@ fs_visitor::register_coalesce()
    }
 
    if (progress) {
-      foreach_in_list_safe(fs_inst, inst, &instructions) {
+      foreach_block_and_inst_safe (block, backend_instruction, inst, cfg) {
          if (inst->opcode == BRW_OPCODE_NOP) {
-            inst->remove();
+            inst->remove(block);
          }
       }
 

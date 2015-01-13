@@ -127,6 +127,12 @@ struct lp_tgsi_info
    unsigned indirect_textures:1;
 
    /*
+    * Whether any of the texture (sample) ocpodes use different sampler
+    * and sampler view unit.
+    */
+   unsigned sampler_texture_units_different:1;
+
+   /*
     * Whether any immediate values are outside the range of 0 and 1
     */
    unsigned unclamped_immediates:1;
@@ -537,6 +543,8 @@ struct lp_build_tgsi_aos_context
    LLVMValueRef *outputs;
 
    struct lp_build_sampler_aos *sampler;
+
+   struct tgsi_declaration_sampler_view sv[PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    LLVMValueRef immediates[LP_MAX_INLINED_IMMEDIATES];
    LLVMValueRef temps[LP_MAX_INLINED_TEMPS];

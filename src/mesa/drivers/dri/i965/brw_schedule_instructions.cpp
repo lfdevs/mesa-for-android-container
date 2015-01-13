@@ -27,6 +27,8 @@
 
 #include "brw_fs.h"
 #include "brw_vec4.h"
+#include "brw_cfg.h"
+#include "brw_shader.h"
 #include "glsl/glsl_types.h"
 #include "glsl/ir_optimization.h"
 
@@ -421,8 +423,8 @@ public:
    void add_dep(schedule_node *before, schedule_node *after, int latency);
    void add_dep(schedule_node *before, schedule_node *after);
 
-   void run(exec_list *instructions);
-   void add_inst(backend_instruction *inst);
+   void run(cfg_t *cfg);
+   void add_insts_from_block(bblock_t *block);
    void compute_delay(schedule_node *node);
    virtual void calculate_deps() = 0;
    virtual schedule_node *choose_instruction_to_schedule() = 0;
@@ -440,7 +442,7 @@ public:
    virtual void update_register_pressure(backend_instruction *inst) = 0;
    virtual int get_register_pressure_benefit(backend_instruction *inst) = 0;
 
-   void schedule_instructions(backend_instruction *next_block_header);
+   void schedule_instructions(bblock_t *block);
 
    void *mem_ctx;
 
@@ -624,17 +626,28 @@ schedule_node::schedule_node(backend_instruction *inst,
 }
 
 void
-instruction_scheduler::add_inst(backend_instruction *inst)
+instruction_scheduler::add_insts_from_block(bblock_t *block)
 {
-   schedule_node *n = new(mem_ctx) schedule_node(inst, this);
+   /* Removing the last instruction from a basic block removes the block as
+    * well, so put a NOP at the end to keep it alive.
+    */
+   if (!block->end()->is_control_flow()) {
+      backend_instruction *nop = new(mem_ctx) backend_instruction();
+      nop->opcode = BRW_OPCODE_NOP;
+      block->end()->insert_after(block, nop);
+   }
 
-   assert(!inst->is_head_sentinel());
-   assert(!inst->is_tail_sentinel());
+   foreach_inst_in_block_safe(backend_instruction, inst, block) {
+      if (inst->opcode == BRW_OPCODE_NOP || inst->is_control_flow())
+         continue;
 
-   this->instructions_to_schedule++;
+      schedule_node *n = new(mem_ctx) schedule_node(inst, this);
 
-   inst->remove();
-   instructions.push_tail(n);
+      this->instructions_to_schedule++;
+
+      inst->remove(block);
+      instructions.push_tail(n);
+   }
 }
 
 /** Recursive computation of the delay member of a node. */
@@ -734,9 +747,7 @@ instruction_scheduler::add_barrier_deps(schedule_node *n)
 bool
 fs_instruction_scheduler::is_compressed(fs_inst *inst)
 {
-   return (v->dispatch_width == 16 &&
-	   !inst->force_uncompressed &&
-	   !inst->force_sechalf);
+   return inst->exec_size == 16;
 }
 
 void
@@ -782,7 +793,7 @@ fs_instruction_scheduler::calculate_deps()
       for (int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == GRF) {
             if (post_reg_alloc) {
-               for (int r = 0; r < reg_width * inst->regs_read(v, i); r++)
+               for (int r = 0; r < inst->regs_read(v, i); r++)
                   add_dep(last_grf_write[inst->src[i].reg + r], n);
             } else {
                for (int r = 0; r < inst->regs_read(v, i); r++) {
@@ -834,7 +845,7 @@ fs_instruction_scheduler::calculate_deps()
       /* write-after-write deps. */
       if (inst->dst.file == GRF) {
          if (post_reg_alloc) {
-            for (int r = 0; r < inst->regs_written * reg_width; r++) {
+            for (int r = 0; r < inst->regs_written; r++) {
                add_dep(last_grf_write[inst->dst.reg + r], n);
                last_grf_write[inst->dst.reg + r] = n;
             }
@@ -910,7 +921,7 @@ fs_instruction_scheduler::calculate_deps()
       for (int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == GRF) {
             if (post_reg_alloc) {
-               for (int r = 0; r < reg_width * inst->regs_read(v, i); r++)
+               for (int r = 0; r < inst->regs_read(v, i); r++)
                   add_dep(n, last_grf_write[inst->src[i].reg + r]);
             } else {
                for (int r = 0; r < inst->regs_read(v, i); r++) {
@@ -964,7 +975,7 @@ fs_instruction_scheduler::calculate_deps()
        */
       if (inst->dst.file == GRF) {
          if (post_reg_alloc) {
-            for (int r = 0; r < inst->regs_written * reg_width; r++)
+            for (int r = 0; r < inst->regs_written; r++)
                last_grf_write[inst->dst.reg + r] = n;
          } else {
             for (int r = 0; r < inst->regs_written; r++) {
@@ -1287,7 +1298,8 @@ fs_instruction_scheduler::choose_instruction_to_schedule()
                 * single-result send is probably actually reducing register
                 * pressure.
                 */
-               if (inst->regs_written <= 1 && chosen_inst->regs_written > 1) {
+               if (inst->regs_written <= inst->dst.width / 8 &&
+                   chosen_inst->regs_written > chosen_inst->dst.width / 8) {
                   chosen = n;
                   continue;
                } else if (inst->regs_written > chosen_inst->regs_written) {
@@ -1354,9 +1366,10 @@ vec4_instruction_scheduler::issue_time(backend_instruction *inst)
 }
 
 void
-instruction_scheduler::schedule_instructions(backend_instruction *next_block_header)
+instruction_scheduler::schedule_instructions(bblock_t *block)
 {
    struct brw_context *brw = bv->brw;
+   backend_instruction *inst = block->end();
    time = 0;
 
    /* Remove non-DAG heads from the list. */
@@ -1372,7 +1385,7 @@ instruction_scheduler::schedule_instructions(backend_instruction *next_block_hea
       /* Schedule this instruction. */
       assert(chosen);
       chosen->remove();
-      next_block_header->insert_before(chosen->inst);
+      inst->insert_before(block, chosen->inst);
       instructions_to_schedule--;
       update_register_pressure(chosen->inst);
 
@@ -1434,15 +1447,14 @@ instruction_scheduler::schedule_instructions(backend_instruction *next_block_hea
       }
    }
 
+   if (block->end()->opcode == BRW_OPCODE_NOP)
+      block->end()->remove(block);
    assert(instructions_to_schedule == 0);
 }
 
 void
-instruction_scheduler::run(exec_list *all_instructions)
+instruction_scheduler::run(cfg_t *cfg)
 {
-   backend_instruction *next_block_header =
-      (backend_instruction *)all_instructions->head;
-
    if (debug) {
       fprintf(stderr, "\nInstructions before scheduling (reg_alloc %d)\n",
               post_reg_alloc);
@@ -1453,28 +1465,24 @@ instruction_scheduler::run(exec_list *all_instructions)
     * scheduling.
     */
    if (remaining_grf_uses) {
-      foreach_in_list(schedule_node, node, all_instructions) {
-         count_remaining_grf_uses((backend_instruction *)node);
+      foreach_block_and_inst(block, backend_instruction, inst, cfg) {
+         count_remaining_grf_uses(inst);
       }
    }
 
-   while (!next_block_header->is_tail_sentinel()) {
-      /* Add things to be scheduled until we get to a new BB. */
-      while (!next_block_header->is_tail_sentinel()) {
-	 backend_instruction *inst = next_block_header;
-	 next_block_header = (backend_instruction *)next_block_header->next;
+   foreach_block(block, cfg) {
+      if (block->end_ip - block->start_ip <= 1)
+         continue;
 
-	 add_inst(inst);
-         if (inst->is_control_flow())
-	    break;
-      }
+      add_insts_from_block(block);
+
       calculate_deps();
 
       foreach_in_list(schedule_node, n, &instructions) {
          compute_delay(n);
       }
 
-      schedule_instructions(next_block_header);
+      schedule_instructions(block);
    }
 
    if (debug) {
@@ -1494,7 +1502,7 @@ fs_visitor::schedule_instructions(instruction_scheduler_mode mode)
       grf_count = virtual_grf_count;
 
    fs_instruction_scheduler sched(this, grf_count, mode);
-   sched.run(&instructions);
+   sched.run(cfg);
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM) && mode == SCHEDULE_POST) {
       fprintf(stderr, "fs%d estimated execution time: %d cycles\n",
@@ -1508,7 +1516,7 @@ void
 vec4_visitor::opt_schedule_instructions()
 {
    vec4_instruction_scheduler sched(this, prog_data->total_grf);
-   sched.run(&instructions);
+   sched.run(cfg);
 
    if (unlikely(debug_flag)) {
       fprintf(stderr, "vec4 estimated execution time: %d cycles\n", sched.time);

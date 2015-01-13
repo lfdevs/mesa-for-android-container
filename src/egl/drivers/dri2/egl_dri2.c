@@ -543,6 +543,10 @@ dri2_setup_screen(_EGLDisplay *disp)
    }
 }
 
+/* All platforms but DRM call this function to create the screen, query the
+ * dri extensions, setup the vtables and populate the driver_configs.
+ * DRM inherits all that information from its display - GBM.
+ */
 EGLBoolean
 dri2_create_screen(_EGLDisplay *disp)
 {
@@ -666,6 +670,7 @@ static EGLBoolean
 dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   unsigned i;
 
    _eglReleaseDisplayResources(drv, disp);
    _eglCleanupDisplay(disp);
@@ -706,6 +711,15 @@ dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
       break;
    }
 
+   /* The drm platform does not create the screen/driver_configs but reuses
+    * the ones from the gbm device. As such the gbm itself is responsible
+    * for the cleanup.
+    */
+   if (disp->Platform != _EGL_PLATFORM_DRM) {
+      for (i = 0; dri2_dpy->driver_configs[i]; i++)
+         free((__DRIconfig *) dri2_dpy->driver_configs[i]);
+      free(dri2_dpy->driver_configs);
+   }
    free(dri2_dpy);
    disp->DriverData = NULL;
 

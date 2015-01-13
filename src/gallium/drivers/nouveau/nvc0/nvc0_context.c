@@ -23,10 +23,6 @@
 #include "pipe/p_defines.h"
 #include "util/u_framebuffer.h"
 
-#ifdef NVC0_WITH_DRAW_MODULE
-#include "draw/draw_context.h"
-#endif
-
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nvc0_screen.h"
 #include "nvc0/nvc0_resource.h"
@@ -154,10 +150,6 @@ nvc0_destroy(struct pipe_context *pipe)
    nvc0_context_unreference_resources(nvc0);
    nvc0_blitctx_destroy(nvc0);
 
-#ifdef NVC0_WITH_DRAW_MODULE
-   draw_destroy(nvc0->draw);
-#endif
-
    nouveau_context_destroy(&nvc0->base);
 }
 
@@ -171,8 +163,8 @@ nvc0_default_kick_notify(struct nouveau_pushbuf *push)
       nouveau_fence_update(&screen->base, TRUE);
       if (screen->cur_ctx)
          screen->cur_ctx->state.flushed = TRUE;
+      NOUVEAU_DRV_STAT(&screen->base, pushbuf_count, 1);
    }
-   NOUVEAU_DRV_STAT(&screen->base, pushbuf_count, 1);
 }
 
 static int
@@ -204,7 +196,12 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
       }
    }
 
-   if (res->bind & PIPE_BIND_VERTEX_BUFFER) {
+   if (res->bind & (PIPE_BIND_VERTEX_BUFFER |
+                    PIPE_BIND_INDEX_BUFFER |
+                    PIPE_BIND_CONSTANT_BUFFER |
+                    PIPE_BIND_STREAM_OUTPUT |
+                    PIPE_BIND_COMMAND_ARGS_BUFFER |
+                    PIPE_BIND_SAMPLER_VIEW)) {
       for (i = 0; i < nvc0->num_vtxbufs; ++i) {
          if (nvc0->vtxbuf[i].buffer == res) {
             nvc0->dirty |= NVC0_NEW_ARRAYS;
@@ -213,17 +210,14 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
                return ref;
          }
       }
-   }
-   if (res->bind & PIPE_BIND_INDEX_BUFFER) {
+
       if (nvc0->idxbuf.buffer == res) {
          nvc0->dirty |= NVC0_NEW_IDXBUF;
          nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_IDX);
          if (!--ref)
             return ref;
       }
-   }
 
-   if (res->bind & PIPE_BIND_SAMPLER_VIEW) {
       for (s = 0; s < 5; ++s) {
       for (i = 0; i < nvc0->num_textures[s]; ++i) {
          if (nvc0->textures[s][i] &&
@@ -236,11 +230,11 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
          }
       }
       }
-   }
 
-   if (res->bind & PIPE_BIND_CONSTANT_BUFFER) {
       for (s = 0; s < 5; ++s) {
-      for (i = 0; i < nvc0->num_vtxbufs; ++i) {
+      for (i = 0; i < NVC0_MAX_PIPE_CONSTBUFS; ++i) {
+         if (!(nvc0->constbuf_valid[s] & (1 << i)))
+            continue;
          if (!nvc0->constbuf[s][i].user &&
              nvc0->constbuf[s][i].u.buf == res) {
             nvc0->dirty |= NVC0_NEW_CONSTBUF;
@@ -321,13 +315,6 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    nvc0_init_resource_functions(pipe);
 
    nvc0->base.invalidate_resource_storage = nvc0_invalidate_resource_storage;
-
-#ifdef NVC0_WITH_DRAW_MODULE
-   /* no software fallbacks implemented */
-   nvc0->draw = draw_create(pipe);
-   assert(nvc0->draw);
-   draw_set_rasterize_stage(nvc0->draw, nvc0_draw_render_stage(nvc0));
-#endif
 
    pipe->create_video_codec = nvc0_create_decoder;
    pipe->create_video_buffer = nvc0_video_buffer_create;

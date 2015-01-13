@@ -502,10 +502,7 @@ brw_prepare_vertices(struct brw_context *brw)
 	 /* This is a common place to reach if the user mistakenly supplies
 	  * a pointer in place of a VBO offset.  If we just let it go through,
 	  * we may end up dereferencing a pointer beyond the bounds of the
-	  * GTT.  We would hope that the VBO's max_index would save us, but
-	  * Mesa appears to hand us min/max values not clipped to the
-	  * array object's _MaxElement, and _MaxElement frequently appears
-	  * to be wrong anyway.
+	  * GTT.
 	  *
 	  * The VBO spec allows application termination in this case, and it's
 	  * probably a service to the poor programmer to do so rather than
@@ -607,19 +604,9 @@ brw_prepare_vertices(struct brw_context *brw)
 void
 brw_prepare_shader_draw_parameters(struct brw_context *brw)
 {
-   int *gl_basevertex_value;
-   if (brw->draw.indexed) {
-      brw->draw.start_vertex_location += brw->ib.start_vertex_offset;
-      brw->draw.base_vertex_location += brw->vb.start_vertex_bias;
-      gl_basevertex_value = &brw->draw.base_vertex_location;
-   } else {
-      brw->draw.start_vertex_location += brw->vb.start_vertex_bias;
-      gl_basevertex_value = &brw->draw.start_vertex_location;
-   }
-
    /* For non-indirect draws, upload gl_BaseVertex. */
    if (brw->vs.prog_data->uses_vertexid && brw->draw.draw_params_bo == NULL) {
-      intel_upload_data(brw, gl_basevertex_value, 4, 4,
+      intel_upload_data(brw, &brw->draw.gl_basevertex, 4, 4,
 			&brw->draw.draw_params_bo,
                         &brw->draw.draw_params_offset);
    }

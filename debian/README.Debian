@@ -1,7 +1,7 @@
-Documentation for the libegl1-x11, libgles1, libgles2, and libopenvg1 virtual
+Documentation for the libegl1-x11, libgles1, and libgles2 virtual
 packages.
 
-Although there are is no standardised linux ABI for GL|ES or OpenVG, there is
+Although there are is no standardised linux ABI for GL|ES, there is
 a “strongly encouraged” set of standard headers, type and linkage definitions
 supplied by the Khronos group[1].  The mesa implementation provides this ABI.
 Any non-mesa implementation that wants to provide these packages should

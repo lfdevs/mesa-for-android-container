@@ -227,7 +227,7 @@ static void
 validate_reg(const struct brw_context *brw, brw_inst *inst, struct brw_reg reg)
 {
    int hstride_for_reg[] = {0, 1, 2, 4};
-   int vstride_for_reg[] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256};
+   int vstride_for_reg[] = {0, 1, 2, 4, 8, 16, 32};
    int width_for_reg[] = {1, 2, 4, 8, 16};
    int execsize_for_reg[] = {1, 2, 4, 8, 16};
    int width, hstride, vstride, execsize;
@@ -1879,11 +1879,18 @@ void gen4_math(struct brw_compile *p,
 	       unsigned function,
 	       unsigned msg_reg_nr,
 	       struct brw_reg src,
-	       unsigned data_type,
 	       unsigned precision )
 {
    struct brw_context *brw = p->brw;
    brw_inst *insn = next_insn(p, BRW_OPCODE_SEND);
+   unsigned data_type;
+   if (src.vstride == BRW_VERTICAL_STRIDE_0 &&
+       src.width == BRW_WIDTH_1 &&
+       src.hstride == BRW_HORIZONTAL_STRIDE_0) {
+      data_type = BRW_MATH_DATA_SCALAR;
+   } else {
+      data_type = BRW_MATH_DATA_VECTOR;
+   }
 
    assert(brw->gen < 6);
 
@@ -2092,7 +2099,18 @@ brw_oword_block_read_scratch(struct brw_compile *p,
    if (brw->gen >= 6)
       offset /= 16;
 
-   mrf = retype(mrf, BRW_REGISTER_TYPE_UD);
+   if (p->brw->gen >= 7) {
+      /* On gen 7 and above, we no longer have message registers and we can
+       * send from any register we want.  By using the destination register
+       * for the message, we guarantee that the implied message write won't
+       * accidentally overwrite anything.  This has been a problem because
+       * the MRF registers and source for the final FB write are both fixed
+       * and may overlap.
+       */
+      mrf = retype(dest, BRW_REGISTER_TYPE_UD);
+   } else {
+      mrf = retype(mrf, BRW_REGISTER_TYPE_UD);
+   }
    dest = retype(dest, BRW_REGISTER_TYPE_UW);
 
    if (num_regs == 1) {
@@ -2111,11 +2129,7 @@ brw_oword_block_read_scratch(struct brw_compile *p,
       brw_MOV(p, mrf, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
 
       /* set message header global offset field (reg 0, element 2) */
-      brw_MOV(p,
-	      retype(brw_vec1_reg(BRW_MESSAGE_REGISTER_FILE,
-				  mrf.nr,
-				  2), BRW_REGISTER_TYPE_UD),
-	      brw_imm_ud(offset));
+      brw_MOV(p, get_element_ud(mrf, 2), brw_imm_ud(offset));
 
       brw_pop_insn_state(p);
    }
@@ -2244,8 +2258,8 @@ void brw_oword_block_read(struct brw_compile *p,
 
 void brw_fb_WRITE(struct brw_compile *p,
 		  int dispatch_width,
-                  unsigned msg_reg_nr,
-                  struct brw_reg src0,
+                  struct brw_reg payload,
+                  struct brw_reg implied_header,
                   unsigned msg_control,
                   unsigned binding_table_index,
                   unsigned msg_length,
@@ -2256,7 +2270,7 @@ void brw_fb_WRITE(struct brw_compile *p,
    struct brw_context *brw = p->brw;
    brw_inst *insn;
    unsigned msg_type;
-   struct brw_reg dest;
+   struct brw_reg dest, src0;
 
    if (dispatch_width == 16)
       dest = retype(vec16(brw_null_reg()), BRW_REGISTER_TYPE_UW);
@@ -2272,11 +2286,13 @@ void brw_fb_WRITE(struct brw_compile *p,
 
    if (brw->gen >= 6) {
       /* headerless version, just submit color payload */
-      src0 = brw_message_reg(msg_reg_nr);
+      src0 = payload;
 
       msg_type = GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE;
    } else {
-      brw_inst_set_base_mrf(brw, insn, msg_reg_nr);
+      assert(payload.file == BRW_MESSAGE_REGISTER_FILE);
+      brw_inst_set_base_mrf(brw, insn, payload.nr);
+      src0 = implied_header;
 
       msg_type = BRW_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE;
    }
@@ -2393,7 +2409,7 @@ void brw_adjust_sampler_state_pointer(struct brw_compile *p,
 
       struct brw_reg temp = vec1(retype(scratch, BRW_REGISTER_TYPE_UD));
 
-      brw_AND(p, temp, sampler_index, brw_imm_ud(0x0f0));
+      brw_AND(p, temp, get_element_ud(sampler_index, 0), brw_imm_ud(0x0f0));
       brw_SHL(p, temp, temp, brw_imm_ud(4));
       brw_ADD(p,
               get_element_ud(header, 3),
@@ -2557,12 +2573,15 @@ brw_set_uip_jip(struct brw_compile *p)
          assert(brw_inst_jip(brw, insn) != 0);
 	 break;
 
-      case BRW_OPCODE_ENDIF:
-         if (block_end_offset == 0)
-            brw_inst_set_jip(brw, insn, 1 * br);
+      case BRW_OPCODE_ENDIF: {
+         int32_t jump = (block_end_offset == 0) ?
+                        1 * br : (block_end_offset - offset) / scale;
+         if (brw->gen >= 7)
+            brw_inst_set_jip(brw, insn, jump);
          else
-            brw_inst_set_jip(brw, insn, (block_end_offset - offset) / scale);
+            brw_inst_set_gen6_jump_count(brw, insn, jump);
 	 break;
+      }
 
       case BRW_OPCODE_HALT:
 	 /* From the Sandy Bridge PRM (volume 4, part 2, section 8.3.19):
@@ -2704,7 +2723,7 @@ brw_set_dp_untyped_atomic_message(struct brw_compile *p,
 void
 brw_untyped_atomic(struct brw_compile *p,
                    struct brw_reg dest,
-                   struct brw_reg mrf,
+                   struct brw_reg payload,
                    unsigned atomic_op,
                    unsigned bind_table_index,
                    unsigned msg_length,
@@ -2713,7 +2732,7 @@ brw_untyped_atomic(struct brw_compile *p,
    brw_inst *insn = brw_next_insn(p, BRW_OPCODE_SEND);
 
    brw_set_dest(p, insn, retype(dest, BRW_REGISTER_TYPE_UD));
-   brw_set_src0(p, insn, retype(mrf, BRW_REGISTER_TYPE_UD));
+   brw_set_src0(p, insn, retype(payload, BRW_REGISTER_TYPE_UD));
    brw_set_src1(p, insn, brw_imm_d(0));
    brw_set_dp_untyped_atomic_message(
       p, insn, atomic_op, bind_table_index, msg_length, response_length,

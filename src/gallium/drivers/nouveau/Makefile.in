@@ -116,8 +116,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 noinst_PROGRAMS = nouveau_compiler$(EXEEXT)
 subdir = src/gallium/drivers/nouveau
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -131,19 +132,19 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libnouveau_la_LIBADD =
-am__objects_1 = nouveau_screen.lo nouveau_fence.lo nouveau_mm.lo \
-	nouveau_buffer.lo nouveau_heap.lo nouveau_video.lo \
-	nouveau_vp3_video.lo nouveau_vp3_video_bsp.lo \
+am__objects_1 = nouveau_buffer.lo nouveau_fence.lo nouveau_heap.lo \
+	nouveau_mm.lo nouveau_screen.lo nouveau_video.lo \
+	nouveau_vp3_video_bsp.lo nouveau_vp3_video.lo \
 	nouveau_vp3_video_vp.lo
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_2 = nv30/nv30_screen.lo nv30/nv30_context.lo \
-	nv30/nv30_format.lo nv30/nv30_resource.lo \
-	nv30/nv30_transfer.lo nv30/nv30_miptree.lo nv30/nv30_state.lo \
-	nv30/nv30_state_validate.lo nv30/nv30_texture.lo \
-	nv30/nv30_fragtex.lo nv30/nv40_verttex.lo \
-	nv30/nv30_fragprog.lo nv30/nv30_vertprog.lo nv30/nv30_clear.lo \
-	nv30/nv30_vbo.lo nv30/nv30_push.lo nv30/nv30_draw.lo \
-	nv30/nv30_query.lo nv30/nvfx_vertprog.lo nv30/nvfx_fragprog.lo
+am__objects_2 = nv30/nv30_clear.lo nv30/nv30_context.lo \
+	nv30/nv30_draw.lo nv30/nv30_format.lo nv30/nv30_fragprog.lo \
+	nv30/nv30_fragtex.lo nv30/nv30_miptree.lo nv30/nv30_push.lo \
+	nv30/nv30_query.lo nv30/nv30_resource.lo nv30/nv30_screen.lo \
+	nv30/nv30_state.lo nv30/nv30_state_validate.lo \
+	nv30/nv30_texture.lo nv30/nv30_transfer.lo nv30/nv30_vbo.lo \
+	nv30/nv30_vertprog.lo nv30/nv40_verttex.lo \
+	nv30/nvfx_fragprog.lo nv30/nvfx_vertprog.lo
 am__objects_3 = codegen/nv50_ir.lo codegen/nv50_ir_bb.lo \
 	codegen/nv50_ir_build_util.lo codegen/nv50_ir_emit_nv50.lo \
 	codegen/nv50_ir_from_tgsi.lo codegen/nv50_ir_graph.lo \
@@ -152,29 +153,29 @@ am__objects_3 = codegen/nv50_ir.lo codegen/nv50_ir_bb.lo \
 	codegen/nv50_ir_ssa.lo codegen/nv50_ir_target.lo \
 	codegen/nv50_ir_target_nv50.lo codegen/nv50_ir_util.lo
 am__objects_4 = nv50/nv50_context.lo nv50/nv50_formats.lo \
-	nv50/nv50_miptree.lo nv50/nv50_resource.lo nv50/nv50_screen.lo \
-	nv50/nv50_state.lo nv50/nv50_state_validate.lo \
-	nv50/nv50_surface.lo nv50/nv50_tex.lo nv50/nv50_transfer.lo \
-	nv50/nv50_vbo.lo nv50/nv50_program.lo \
-	nv50/nv50_shader_state.lo nv50/nv50_push.lo nv50/nv50_query.lo \
-	nv50/nv84_video.lo nv50/nv84_video_bsp.lo \
-	nv50/nv84_video_vp.lo nv50/nv98_video.lo \
-	nv50/nv98_video_bsp.lo nv50/nv98_video_vp.lo \
-	nv50/nv98_video_ppp.lo
-am__objects_5 = codegen/nv50_ir_emit_nvc0.lo \
-	codegen/nv50_ir_emit_gk110.lo codegen/nv50_ir_emit_gm107.lo \
-	codegen/nv50_ir_lowering_nvc0.lo \
+	nv50/nv50_miptree.lo nv50/nv50_program.lo nv50/nv50_push.lo \
+	nv50/nv50_query.lo nv50/nv50_resource.lo nv50/nv50_screen.lo \
+	nv50/nv50_shader_state.lo nv50/nv50_state.lo \
+	nv50/nv50_state_validate.lo nv50/nv50_surface.lo \
+	nv50/nv50_tex.lo nv50/nv50_transfer.lo nv50/nv50_vbo.lo \
+	nv50/nv84_video_bsp.lo nv50/nv84_video.lo \
+	nv50/nv84_video_vp.lo nv50/nv98_video_bsp.lo \
+	nv50/nv98_video.lo nv50/nv98_video_ppp.lo \
+	nv50/nv98_video_vp.lo
+am__objects_5 = codegen/nv50_ir_emit_gk110.lo \
+	codegen/nv50_ir_emit_gm107.lo codegen/nv50_ir_emit_nvc0.lo \
 	codegen/nv50_ir_lowering_gm107.lo \
-	codegen/nv50_ir_target_nvc0.lo codegen/nv50_ir_target_gm107.lo
+	codegen/nv50_ir_lowering_nvc0.lo \
+	codegen/nv50_ir_target_gm107.lo codegen/nv50_ir_target_nvc0.lo
 am__objects_6 = nvc0/nvc0_compute.lo nvc0/nvc0_context.lo \
-	nvc0/nvc0_formats.lo nvc0/nvc0_miptree.lo \
-	nvc0/nvc0_resource.lo nvc0/nvc0_screen.lo nvc0/nvc0_state.lo \
+	nvc0/nvc0_formats.lo nvc0/nvc0_miptree.lo nvc0/nvc0_program.lo \
+	nvc0/nvc0_query.lo nvc0/nvc0_resource.lo nvc0/nvc0_screen.lo \
+	nvc0/nvc0_shader_state.lo nvc0/nvc0_state.lo \
 	nvc0/nvc0_state_validate.lo nvc0/nvc0_surface.lo \
 	nvc0/nvc0_tex.lo nvc0/nvc0_transfer.lo nvc0/nvc0_vbo.lo \
-	nvc0/nvc0_vbo_translate.lo nvc0/nvc0_program.lo \
-	nvc0/nvc0_shader_state.lo nvc0/nvc0_query.lo \
-	nvc0/nve4_compute.lo nvc0/nvc0_video.lo nvc0/nvc0_video_bsp.lo \
-	nvc0/nvc0_video_vp.lo nvc0/nvc0_video_ppp.lo
+	nvc0/nvc0_vbo_translate.lo nvc0/nvc0_video_bsp.lo \
+	nvc0/nvc0_video.lo nvc0/nvc0_video_ppp.lo \
+	nvc0/nvc0_video_vp.lo nvc0/nve4_compute.lo
 am_libnouveau_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
 	$(am__objects_6)
@@ -296,6 +297,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -318,7 +320,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -391,11 +392,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -406,10 +410,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -423,7 +425,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -442,7 +443,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -506,6 +513,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -534,109 +542,181 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 C_SOURCES := \
-	nouveau_screen.c \
-	nouveau_fence.c \
-	nouveau_mm.c \
 	nouveau_buffer.c \
+	nouveau_buffer.h \
+	nouveau_context.h \
+	nouveau_debug.h \
+	nouveau_fence.c \
+	nouveau_fence.h \
+	nouveau_gldefs.h \
 	nouveau_heap.c \
+	nouveau_heap.h \
+	nouveau_mm.c \
+	nouveau_mm.h \
+	nouveau_screen.c \
+	nouveau_screen.h \
+	nouveau_statebuf.h \
 	nouveau_video.c \
-	nouveau_vp3_video.c \
+	nouveau_video.h \
 	nouveau_vp3_video_bsp.c \
-	nouveau_vp3_video_vp.c
+	nouveau_vp3_video.c \
+	nouveau_vp3_video.h \
+	nouveau_vp3_video_vp.c \
+	nouveau_winsys.h \
+	nv17_mpeg.xml.h \
+	nv31_mpeg.xml.h \
+	nv_m2mf.xml.h \
+	nv_object.xml.h
 
 NV30_C_SOURCES := \
-	nv30/nv30_screen.c \
+	nv30/nv01_2d.xml.h \
+	nv30/nv30-40_3d.xml.h \
+	nv30/nv30_clear.c \
 	nv30/nv30_context.c \
+	nv30/nv30_context.h \
+	nv30/nv30_draw.c \
 	nv30/nv30_format.c \
-	nv30/nv30_resource.c \
-	nv30/nv30_transfer.c \
+	nv30/nv30_format.h \
+	nv30/nv30_fragprog.c \
+	nv30/nv30_fragtex.c \
 	nv30/nv30_miptree.c \
+	nv30/nv30_push.c \
+	nv30/nv30_query.c \
+	nv30/nv30_resource.c \
+	nv30/nv30_resource.h \
+	nv30/nv30_screen.c \
+	nv30/nv30_screen.h \
 	nv30/nv30_state.c \
+	nv30/nv30_state.h \
 	nv30/nv30_state_validate.c \
 	nv30/nv30_texture.c \
-	nv30/nv30_fragtex.c \
-	nv30/nv40_verttex.c \
-	nv30/nv30_fragprog.c \
-	nv30/nv30_vertprog.c \
-	nv30/nv30_clear.c \
+	nv30/nv30_transfer.c \
+	nv30/nv30_transfer.h \
 	nv30/nv30_vbo.c \
-	nv30/nv30_push.c \
-	nv30/nv30_draw.c \
-	nv30/nv30_query.c \
-	nv30/nvfx_vertprog.c \
-	nv30/nvfx_fragprog.c
+	nv30/nv30_vertprog.c \
+	nv30/nv30_vertprog.h \
+	nv30/nv30_winsys.h \
+	nv30/nv40_vertprog.h \
+	nv30/nv40_verttex.c \
+	nv30/nvfx_fragprog.c \
+	nv30/nvfx_shader.h \
+	nv30/nvfx_vertprog.c
 
 NV50_C_SOURCES := \
+	nv50/nv50_2d.xml.h \
+	nv50/nv50_3ddefs.xml.h \
+	nv50/nv50_3d.xml.h \
+	nv50/nv50_blit.h \
 	nv50/nv50_context.c \
+	nv50/nv50_context.h \
+	nv50/nv50_defs.xml.h \
 	nv50/nv50_formats.c \
 	nv50/nv50_miptree.c \
+	nv50/nv50_program.c \
+	nv50/nv50_program.h \
+	nv50/nv50_push.c \
+	nv50/nv50_query.c \
 	nv50/nv50_resource.c \
+	nv50/nv50_resource.h \
 	nv50/nv50_screen.c \
+	nv50/nv50_screen.h \
+	nv50/nv50_shader_state.c \
 	nv50/nv50_state.c \
+	nv50/nv50_stateobj.h \
+	nv50/nv50_stateobj_tex.h \
 	nv50/nv50_state_validate.c \
 	nv50/nv50_surface.c \
 	nv50/nv50_tex.c \
+	nv50/nv50_texture.xml.h \
 	nv50/nv50_transfer.c \
+	nv50/nv50_transfer.h \
 	nv50/nv50_vbo.c \
-	nv50/nv50_program.c \
-	nv50/nv50_shader_state.c \
-	nv50/nv50_push.c \
-	nv50/nv50_query.c \
-	nv50/nv84_video.c \
+	nv50/nv50_winsys.h \
 	nv50/nv84_video_bsp.c \
+	nv50/nv84_video.c \
+	nv50/nv84_video.h \
 	nv50/nv84_video_vp.c \
-	nv50/nv98_video.c \
 	nv50/nv98_video_bsp.c \
-	nv50/nv98_video_vp.c \
-	nv50/nv98_video_ppp.c
+	nv50/nv98_video.c \
+	nv50/nv98_video.h \
+	nv50/nv98_video_ppp.c \
+	nv50/nv98_video_vp.c
 
 NV50_CODEGEN_SOURCES := \
 	codegen/nv50_ir.cpp \
 	codegen/nv50_ir_bb.cpp \
 	codegen/nv50_ir_build_util.cpp \
+	codegen/nv50_ir_build_util.h \
+	codegen/nv50_ir_driver.h \
 	codegen/nv50_ir_emit_nv50.cpp \
 	codegen/nv50_ir_from_tgsi.cpp \
 	codegen/nv50_ir_graph.cpp \
+	codegen/nv50_ir_graph.h \
+	codegen/nv50_ir.h \
+	codegen/nv50_ir_inlines.h \
 	codegen/nv50_ir_lowering_nv50.cpp \
 	codegen/nv50_ir_peephole.cpp \
 	codegen/nv50_ir_print.cpp \
 	codegen/nv50_ir_ra.cpp \
 	codegen/nv50_ir_ssa.cpp \
 	codegen/nv50_ir_target.cpp \
+	codegen/nv50_ir_target.h \
 	codegen/nv50_ir_target_nv50.cpp \
-	codegen/nv50_ir_util.cpp
+	codegen/nv50_ir_target_nv50.h \
+	codegen/nv50_ir_util.cpp \
+	codegen/nv50_ir_util.h
 
 NVC0_CODEGEN_SOURCES := \
-	codegen/nv50_ir_emit_nvc0.cpp \
 	codegen/nv50_ir_emit_gk110.cpp \
 	codegen/nv50_ir_emit_gm107.cpp \
-	codegen/nv50_ir_lowering_nvc0.cpp \
+	codegen/nv50_ir_emit_nvc0.cpp \
 	codegen/nv50_ir_lowering_gm107.cpp \
+	codegen/nv50_ir_lowering_gm107.h \
+	codegen/nv50_ir_lowering_nvc0.cpp \
+	codegen/nv50_ir_lowering_nvc0.h \
+	codegen/nv50_ir_target_gm107.cpp \
+	codegen/nv50_ir_target_gm107.h \
 	codegen/nv50_ir_target_nvc0.cpp \
-	codegen/nv50_ir_target_gm107.cpp
+	codegen/nv50_ir_target_nvc0.h
 
 NVC0_C_SOURCES := \
+	nvc0/nvc0_2d.xml.h \
+	nvc0/nvc0_3ddefs.xml.h \
+	nvc0/nvc0_3d.xml.h \
 	nvc0/nvc0_compute.c \
+	nvc0/nvc0_compute.h \
+	nvc0/nvc0_compute.xml.h \
 	nvc0/nvc0_context.c \
+	nvc0/nvc0_context.h \
 	nvc0/nvc0_formats.c \
+	nvc0/nvc0_m2mf.xml.h \
 	nvc0/nvc0_miptree.c \
+	nvc0/nvc0_program.c \
+	nvc0/nvc0_program.h \
+	nvc0/nvc0_query.c \
 	nvc0/nvc0_resource.c \
+	nvc0/nvc0_resource.h \
 	nvc0/nvc0_screen.c \
+	nvc0/nvc0_screen.h \
+	nvc0/nvc0_shader_state.c \
 	nvc0/nvc0_state.c \
+	nvc0/nvc0_stateobj.h \
 	nvc0/nvc0_state_validate.c \
 	nvc0/nvc0_surface.c \
 	nvc0/nvc0_tex.c \
 	nvc0/nvc0_transfer.c \
 	nvc0/nvc0_vbo.c \
 	nvc0/nvc0_vbo_translate.c \
-	nvc0/nvc0_program.c \
-	nvc0/nvc0_shader_state.c \
-	nvc0/nvc0_query.c \
-	nvc0/nve4_compute.c \
-	nvc0/nvc0_video.c \
 	nvc0/nvc0_video_bsp.c \
+	nvc0/nvc0_video.c \
+	nvc0/nvc0_video.h \
+	nvc0/nvc0_video_ppp.c \
 	nvc0/nvc0_video_vp.c \
-	nvc0/nvc0_video_ppp.c
+	nvc0/nvc0_winsys.h \
+	nvc0/nve4_compute.c \
+	nvc0/nve4_compute.h \
+	nvc0/nve4_compute.xml.h \
+	nvc0/nve4_p2mf.xml.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -657,6 +737,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -667,6 +748,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -697,6 +779,7 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CPPFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
@@ -722,6 +805,7 @@ nouveau_compiler_LDADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
+EXTRA_DIST = Android.mk codegen/lib nvc0/mme
 all: all-am
 
 .SUFFIXES:
@@ -774,17 +858,25 @@ nv30/$(am__dirstamp):
 nv30/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) nv30/$(DEPDIR)
 	@: > nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_screen.lo: nv30/$(am__dirstamp) \
+nv30/nv30_clear.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
 nv30/nv30_context.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_draw.lo: nv30/$(am__dirstamp) nv30/$(DEPDIR)/$(am__dirstamp)
 nv30/nv30_format.lo: nv30/$(am__dirstamp) \
+	nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_fragprog.lo: nv30/$(am__dirstamp) \
+	nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_fragtex.lo: nv30/$(am__dirstamp) \
+	nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_miptree.lo: nv30/$(am__dirstamp) \
+	nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_push.lo: nv30/$(am__dirstamp) nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_query.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
 nv30/nv30_resource.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_transfer.lo: nv30/$(am__dirstamp) \
-	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_miptree.lo: nv30/$(am__dirstamp) \
+nv30/nv30_screen.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
 nv30/nv30_state.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
@@ -792,24 +884,16 @@ nv30/nv30_state_validate.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
 nv30/nv30_texture.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_fragtex.lo: nv30/$(am__dirstamp) \
+nv30/nv30_transfer.lo: nv30/$(am__dirstamp) \
+	nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_vbo.lo: nv30/$(am__dirstamp) nv30/$(DEPDIR)/$(am__dirstamp)
+nv30/nv30_vertprog.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
 nv30/nv40_verttex.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_fragprog.lo: nv30/$(am__dirstamp) \
-	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_vertprog.lo: nv30/$(am__dirstamp) \
-	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_clear.lo: nv30/$(am__dirstamp) \
-	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_vbo.lo: nv30/$(am__dirstamp) nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_push.lo: nv30/$(am__dirstamp) nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_draw.lo: nv30/$(am__dirstamp) nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nv30_query.lo: nv30/$(am__dirstamp) \
+nv30/nvfx_fragprog.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
 nv30/nvfx_vertprog.lo: nv30/$(am__dirstamp) \
-	nv30/$(DEPDIR)/$(am__dirstamp)
-nv30/nvfx_fragprog.lo: nv30/$(am__dirstamp) \
 	nv30/$(DEPDIR)/$(am__dirstamp)
 codegen/$(am__dirstamp):
 	@$(MKDIR_P) codegen
@@ -857,9 +941,16 @@ nv50/nv50_formats.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv50_miptree.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
+nv50/nv50_program.lo: nv50/$(am__dirstamp) \
+	nv50/$(DEPDIR)/$(am__dirstamp)
+nv50/nv50_push.lo: nv50/$(am__dirstamp) nv50/$(DEPDIR)/$(am__dirstamp)
+nv50/nv50_query.lo: nv50/$(am__dirstamp) \
+	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv50_resource.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv50_screen.lo: nv50/$(am__dirstamp) \
+	nv50/$(DEPDIR)/$(am__dirstamp)
+nv50/nv50_shader_state.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv50_state.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
@@ -871,40 +962,33 @@ nv50/nv50_tex.lo: nv50/$(am__dirstamp) nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv50_transfer.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv50_vbo.lo: nv50/$(am__dirstamp) nv50/$(DEPDIR)/$(am__dirstamp)
-nv50/nv50_program.lo: nv50/$(am__dirstamp) \
-	nv50/$(DEPDIR)/$(am__dirstamp)
-nv50/nv50_shader_state.lo: nv50/$(am__dirstamp) \
-	nv50/$(DEPDIR)/$(am__dirstamp)
-nv50/nv50_push.lo: nv50/$(am__dirstamp) nv50/$(DEPDIR)/$(am__dirstamp)
-nv50/nv50_query.lo: nv50/$(am__dirstamp) \
+nv50/nv84_video_bsp.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv84_video.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
-nv50/nv84_video_bsp.lo: nv50/$(am__dirstamp) \
-	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv84_video_vp.lo: nv50/$(am__dirstamp) \
-	nv50/$(DEPDIR)/$(am__dirstamp)
-nv50/nv98_video.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv98_video_bsp.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
-nv50/nv98_video_vp.lo: nv50/$(am__dirstamp) \
+nv50/nv98_video.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
 nv50/nv98_video_ppp.lo: nv50/$(am__dirstamp) \
 	nv50/$(DEPDIR)/$(am__dirstamp)
-codegen/nv50_ir_emit_nvc0.lo: codegen/$(am__dirstamp) \
-	codegen/$(DEPDIR)/$(am__dirstamp)
+nv50/nv98_video_vp.lo: nv50/$(am__dirstamp) \
+	nv50/$(DEPDIR)/$(am__dirstamp)
 codegen/nv50_ir_emit_gk110.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
 codegen/nv50_ir_emit_gm107.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
-codegen/nv50_ir_lowering_nvc0.lo: codegen/$(am__dirstamp) \
+codegen/nv50_ir_emit_nvc0.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
 codegen/nv50_ir_lowering_gm107.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
-codegen/nv50_ir_target_nvc0.lo: codegen/$(am__dirstamp) \
+codegen/nv50_ir_lowering_nvc0.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
 codegen/nv50_ir_target_gm107.lo: codegen/$(am__dirstamp) \
+	codegen/$(DEPDIR)/$(am__dirstamp)
+codegen/nv50_ir_target_nvc0.lo: codegen/$(am__dirstamp) \
 	codegen/$(DEPDIR)/$(am__dirstamp)
 nvc0/$(am__dirstamp):
 	@$(MKDIR_P) nvc0
@@ -920,9 +1004,15 @@ nvc0/nvc0_formats.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
 nvc0/nvc0_miptree.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
+nvc0/nvc0_program.lo: nvc0/$(am__dirstamp) \
+	nvc0/$(DEPDIR)/$(am__dirstamp)
+nvc0/nvc0_query.lo: nvc0/$(am__dirstamp) \
+	nvc0/$(DEPDIR)/$(am__dirstamp)
 nvc0/nvc0_resource.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
 nvc0/nvc0_screen.lo: nvc0/$(am__dirstamp) \
+	nvc0/$(DEPDIR)/$(am__dirstamp)
+nvc0/nvc0_shader_state.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
 nvc0/nvc0_state.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
@@ -936,21 +1026,15 @@ nvc0/nvc0_transfer.lo: nvc0/$(am__dirstamp) \
 nvc0/nvc0_vbo.lo: nvc0/$(am__dirstamp) nvc0/$(DEPDIR)/$(am__dirstamp)
 nvc0/nvc0_vbo_translate.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
-nvc0/nvc0_program.lo: nvc0/$(am__dirstamp) \
-	nvc0/$(DEPDIR)/$(am__dirstamp)
-nvc0/nvc0_shader_state.lo: nvc0/$(am__dirstamp) \
-	nvc0/$(DEPDIR)/$(am__dirstamp)
-nvc0/nvc0_query.lo: nvc0/$(am__dirstamp) \
-	nvc0/$(DEPDIR)/$(am__dirstamp)
-nvc0/nve4_compute.lo: nvc0/$(am__dirstamp) \
+nvc0/nvc0_video_bsp.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
 nvc0/nvc0_video.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
-nvc0/nvc0_video_bsp.lo: nvc0/$(am__dirstamp) \
+nvc0/nvc0_video_ppp.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
 nvc0/nvc0_video_vp.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
-nvc0/nvc0_video_ppp.lo: nvc0/$(am__dirstamp) \
+nvc0/nve4_compute.lo: nvc0/$(am__dirstamp) \
 	nvc0/$(DEPDIR)/$(am__dirstamp)
 
 libnouveau.la: $(libnouveau_la_OBJECTS) $(libnouveau_la_DEPENDENCIES) $(EXTRA_libnouveau_la_DEPENDENCIES) 

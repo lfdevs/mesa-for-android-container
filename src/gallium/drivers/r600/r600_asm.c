@@ -819,6 +819,10 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 			have_rel = 1;
 		}
 
+		if (alu->op == ALU_OP0_SET_CF_IDX0 ||
+			alu->op == ALU_OP0_SET_CF_IDX1)
+			return 0; /* data hazard with MOVA */
+
 		/* Let's check source gprs */
 		num_src = r600_bytecode_get_num_operands(bc, alu);
 		for (src = 0; src < num_src; ++src) {
@@ -884,7 +888,7 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 /* we'll keep kcache sets sorted by bank & addr */
 static int r600_bytecode_alloc_kcache_line(struct r600_bytecode *bc,
 		struct r600_bytecode_kcache *kcache,
-		unsigned bank, unsigned line)
+		unsigned bank, unsigned line, unsigned index_mode)
 {
 	int i, kcache_banks = bc->chip_class >= EVERGREEN ? 4 : 2;
 
@@ -907,6 +911,7 @@ static int r600_bytecode_alloc_kcache_line(struct r600_bytecode *bc,
 				kcache[i].mode = V_SQ_CF_KCACHE_LOCK_1;
 				kcache[i].bank = bank;
 				kcache[i].addr = line;
+				kcache[i].index_mode = index_mode;
 				return 0;
 			}
 
@@ -936,6 +941,7 @@ static int r600_bytecode_alloc_kcache_line(struct r600_bytecode *bc,
 			kcache[i].mode = V_SQ_CF_KCACHE_LOCK_1;
 			kcache[i].bank = bank;
 			kcache[i].addr = line;
+			kcache[i].index_mode = index_mode;
 			return 0;
 		}
 	}
@@ -949,15 +955,16 @@ static int r600_bytecode_alloc_inst_kcache_lines(struct r600_bytecode *bc,
 	int i, r;
 
 	for (i = 0; i < 3; i++) {
-		unsigned bank, line, sel = alu->src[i].sel;
+		unsigned bank, line, sel = alu->src[i].sel, index_mode;
 
 		if (sel < 512)
 			continue;
 
 		bank = alu->src[i].kc_bank;
 		line = (sel-512)>>4;
+		index_mode = alu->src[i].kc_rel ? 1 : 0; // V_SQ_CF_INDEX_0 / V_SQ_CF_INDEX_NONE
 
-		if ((r = r600_bytecode_alloc_kcache_line(bc, kcache, bank, line)))
+		if ((r = r600_bytecode_alloc_kcache_line(bc, kcache, bank, line, index_mode)))
 			return r;
 	}
 	return 0;
@@ -1028,8 +1035,9 @@ static int r600_bytecode_alloc_kcache_lines(struct r600_bytecode *bc,
 		memcpy(bc->cf_last->kcache, kcache, 4 * sizeof(struct r600_bytecode_kcache));
 	}
 
-	/* if we actually used more than 2 kcache sets - use ALU_EXTENDED on eg+ */
-	if (kcache[2].mode != V_SQ_CF_KCACHE_NOP) {
+	/* if we actually used more than 2 kcache sets, or have relative indexing - use ALU_EXTENDED on eg+ */
+	if (kcache[2].mode != V_SQ_CF_KCACHE_NOP ||
+		kcache[0].index_mode || kcache[1].index_mode || kcache[2].index_mode || kcache[3].index_mode) {
 		if (bc->chip_class < EVERGREEN)
 			return -ENOMEM;
 		bc->cf_last->eg_alu_extended = 1;
@@ -1148,6 +1156,13 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		}
 	}
 	bc->cf_last->op = type;
+
+	/* Load index register if required */
+	if (bc->chip_class >= EVERGREEN) {
+		for (i = 0; i < 3; i++)
+			if (nalu->src[i].kc_bank && nalu->src[i].kc_rel)
+				egcm_load_index_reg(bc, 0, true);
+	}
 
 	/* Check AR usage and load it if required */
 	for (i = 0; i < 3; i++)
@@ -1274,6 +1289,12 @@ int r600_bytecode_add_vtx(struct r600_bytecode *bc, const struct r600_bytecode_v
 		return -ENOMEM;
 	memcpy(nvtx, vtx, sizeof(struct r600_bytecode_vtx));
 
+	/* Load index register if required */
+	if (bc->chip_class >= EVERGREEN) {
+		if (vtx->buffer_index_mode)
+			egcm_load_index_reg(bc, 0, false);
+	}
+
 	/* cf can contains only alu or only vtx or only tex */
 	if (bc->cf_last == NULL ||
 	    last_inst_was_not_vtx_fetch(bc) ||
@@ -1319,6 +1340,12 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 	if (ntex == NULL)
 		return -ENOMEM;
 	memcpy(ntex, tex, sizeof(struct r600_bytecode_tex));
+
+	/* Load index register if required */
+	if (bc->chip_class >= EVERGREEN) {
+		if (tex->sampler_index_mode || tex->resource_index_mode)
+			egcm_load_index_reg(bc, 1, false);
+	}
 
 	/* we can't fetch data und use it as texture lookup address in the same TEX clause */
 	if (bc->cf_last != NULL &&
@@ -1400,6 +1427,8 @@ static int r600_bytecode_vtx_build(struct r600_bytecode *bc, struct r600_bytecod
 				S_SQ_VTX_WORD1_GPR_DST_GPR(vtx->dst_gpr);
 	bc->bytecode[id] = S_SQ_VTX_WORD2_OFFSET(vtx->offset)|
 				S_SQ_VTX_WORD2_ENDIAN_SWAP(vtx->endian);
+	if (bc->chip_class >= EVERGREEN)
+		bc->bytecode[id] |= ((vtx->buffer_index_mode & 0x3) << 21); // S_SQ_VTX_WORD2_BIM(vtx->buffer_index_mode);
 	if (bc->chip_class < CAYMAN)
 		bc->bytecode[id] |= S_SQ_VTX_WORD2_MEGA_FETCH(1);
 	id++;
@@ -1410,12 +1439,16 @@ static int r600_bytecode_vtx_build(struct r600_bytecode *bc, struct r600_bytecod
 /* common to all 3 families */
 static int r600_bytecode_tex_build(struct r600_bytecode *bc, struct r600_bytecode_tex *tex, unsigned id)
 {
-	bc->bytecode[id++] = S_SQ_TEX_WORD0_TEX_INST(
+	bc->bytecode[id] = S_SQ_TEX_WORD0_TEX_INST(
 					r600_isa_fetch_opcode(bc->isa->hw_class, tex->op)) |
 			    EG_S_SQ_TEX_WORD0_INST_MOD(tex->inst_mod) |
 				S_SQ_TEX_WORD0_RESOURCE_ID(tex->resource_id) |
 				S_SQ_TEX_WORD0_SRC_GPR(tex->src_gpr) |
 				S_SQ_TEX_WORD0_SRC_REL(tex->src_rel);
+	if (bc->chip_class >= EVERGREEN)
+		bc->bytecode[id] |= ((tex->sampler_index_mode & 0x3) << 27) | // S_SQ_TEX_WORD0_SIM(tex->sampler_index_mode);
+				((tex->resource_index_mode & 0x3) << 25); // S_SQ_TEX_WORD0_RIM(tex->resource_index_mode)
+	id++;
 	bc->bytecode[id++] = S_SQ_TEX_WORD1_DST_GPR(tex->dst_gpr) |
 				S_SQ_TEX_WORD1_DST_REL(tex->dst_rel) |
 				S_SQ_TEX_WORD1_DST_SEL_X(tex->dst_sel_x) |
@@ -1590,7 +1623,7 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 		bc->ndw = cf->addr + cf->ndw;
 	}
 	free(bc->bytecode);
-	bc->bytecode = calloc(1, bc->ndw * 4);
+	bc->bytecode = calloc(4, bc->ndw);
 	if (bc->bytecode == NULL)
 		return -ENOMEM;
 	LIST_FOR_EACH_ENTRY(cf, &bc->cf, list) {
@@ -1847,6 +1880,7 @@ static int print_indent(int p, int c)
 
 void r600_bytecode_disasm(struct r600_bytecode *bc)
 {
+	const char *index_mode[] = {"CF_INDEX_NONE", "CF_INDEX_0", "CF_INDEX_1"};
 	static int index = 0;
 	struct r600_bytecode_cf *cf = NULL;
 	struct r600_bytecode_alu *alu = NULL;
@@ -1897,8 +1931,10 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 					if (cf->kcache[i].mode) {
 						int c_start = (cf->kcache[i].addr << 4);
 						int c_end = c_start + (cf->kcache[i].mode << 4);
-						fprintf(stderr, "KC%d[CB%d:%d-%d] ",
-						        i, cf->kcache[i].bank, c_start, c_end);
+						fprintf(stderr, "KC%d[CB%d:%d-%d%s%s] ",
+						        i, cf->kcache[i].bank, c_start, c_end,
+						        cf->kcache[i].index_mode ? " " : "",
+						        cf->kcache[i].index_mode ? index_mode[cf->kcache[i].index_mode] : "");
 					}
 				}
 				fprintf(stderr, "\n");
@@ -2064,6 +2100,9 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 			o += fprintf(stderr, ",  RID:%d", tex->resource_id);
 			o += fprintf(stderr, ", SID:%d  ", tex->sampler_id);
 
+			if (tex->sampler_index_mode)
+				fprintf(stderr, "SQ_%s ", index_mode[tex->sampler_index_mode]);
+
 			if (tex->lod_bias)
 				fprintf(stderr, "LB:%d ", tex->lod_bias);
 
@@ -2114,6 +2153,9 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 
 			if (bc->chip_class < CAYMAN && vtx->mega_fetch_count)
 				fprintf(stderr, "MFC:%d ", vtx->mega_fetch_count);
+
+			if (bc->chip_class >= EVERGREEN && vtx->buffer_index_mode)
+				fprintf(stderr, "SQ_%s ", index_mode[vtx->buffer_index_mode]);
 
 			fprintf(stderr, "UCF:%d ", vtx->use_const_fields);
 			fprintf(stderr, "FMT(DTA:%d ", vtx->data_format);

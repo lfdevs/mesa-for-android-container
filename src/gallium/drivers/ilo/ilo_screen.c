@@ -25,6 +25,7 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "pipe/p_state.h"
 #include "os/os_misc.h"
 #include "util/u_format_s3tc.h"
 #include "vl/vl_decoder.h"
@@ -39,16 +40,21 @@
 #include "ilo_public.h"
 #include "ilo_screen.h"
 
+struct ilo_fence {
+   struct pipe_reference reference;
+   struct intel_bo *bo;
+};
+
 int ilo_debug;
 
 static const struct debug_named_value ilo_debug_flags[] = {
-   { "3d",        ILO_DEBUG_3D,       "Dump 3D commands and states" },
+   { "batch",     ILO_DEBUG_BATCH,    "Dump batch/state/surface/instruction buffers" },
    { "vs",        ILO_DEBUG_VS,       "Dump vertex shaders" },
    { "gs",        ILO_DEBUG_GS,       "Dump geometry shaders" },
    { "fs",        ILO_DEBUG_FS,       "Dump fragment shaders" },
    { "cs",        ILO_DEBUG_CS,       "Dump compute shaders" },
    { "draw",      ILO_DEBUG_DRAW,     "Show draw information" },
-   { "flush",     ILO_DEBUG_FLUSH,    "Show batch buffer flushes" },
+   { "submit",    ILO_DEBUG_SUBMIT,   "Show batch buffer submissions" },
    { "nohw",      ILO_DEBUG_NOHW,     "Do not send commands to HW" },
    { "nocache",   ILO_DEBUG_NOCACHE,  "Always invalidate HW caches" },
    { "nohiz",     ILO_DEBUG_NOHIZ,    "Disable HiZ" },
@@ -115,6 +121,7 @@ ilo_get_shader_param(struct pipe_screen *screen, unsigned shader,
    case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
       return UINT_MAX;
    case PIPE_SHADER_CAP_MAX_INPUTS:
+   case PIPE_SHADER_CAP_MAX_OUTPUTS:
       /* this is limited by how many attributes SF can remap */
       return 16;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
@@ -187,6 +194,7 @@ ilo_get_compute_param(struct pipe_screen *screen,
                       enum pipe_compute_cap param,
                       void *ret)
 {
+   struct ilo_screen *is = ilo_screen(screen);
    union {
       const char *ir_target;
       uint64_t grid_dimension;
@@ -198,11 +206,13 @@ ilo_get_compute_param(struct pipe_screen *screen,
       uint64_t max_private_size;
       uint64_t max_input_size;
       uint64_t max_mem_alloc_size;
+      uint32_t max_clock_frequency;
+      uint32_t max_compute_units;
+      uint32_t images_supported;
    } val;
    const void *ptr;
    int size;
 
-   /* XXX some randomly chosen values */
    switch (param) {
    case PIPE_COMPUTE_CAP_IR_TARGET:
       val.ir_target = "ilog";
@@ -217,57 +227,78 @@ ilo_get_compute_param(struct pipe_screen *screen,
       size = sizeof(val.grid_dimension);
       break;
    case PIPE_COMPUTE_CAP_MAX_GRID_SIZE:
-      val.max_grid_size[0] = 65535;
-      val.max_grid_size[1] = 65535;
-      val.max_grid_size[2] = 1;
+      val.max_grid_size[0] = 0xffffffffu;
+      val.max_grid_size[1] = 0xffffffffu;
+      val.max_grid_size[2] = 0xffffffffu;
 
       ptr = &val.max_grid_size;
       size = sizeof(val.max_grid_size);
       break;
    case PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE:
-      val.max_block_size[0] = 512;
-      val.max_block_size[1] = 512;
-      val.max_block_size[2] = 512;
+      val.max_block_size[0] = 1024;
+      val.max_block_size[1] = 1024;
+      val.max_block_size[2] = 1024;
 
       ptr = &val.max_block_size;
       size = sizeof(val.max_block_size);
       break;
 
    case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
-      val.max_threads_per_block = 512;
+      val.max_threads_per_block = 1024;
 
       ptr = &val.max_threads_per_block;
       size = sizeof(val.max_threads_per_block);
       break;
    case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
-      val.max_global_size = 4;
+      /* \see ilo_max_resource_size */
+      val.max_global_size = 1u << 31;
 
       ptr = &val.max_global_size;
       size = sizeof(val.max_global_size);
       break;
    case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE:
+      /* Shared Local Memory Size of INTERFACE_DESCRIPTOR_DATA */
       val.max_local_size = 64 * 1024;
 
       ptr = &val.max_local_size;
       size = sizeof(val.max_local_size);
       break;
    case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
-      val.max_private_size = 32768;
+      /* scratch size */
+      val.max_private_size = 12 * 1024;
 
       ptr = &val.max_private_size;
       size = sizeof(val.max_private_size);
       break;
    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
-      val.max_input_size = 256;
+      val.max_input_size = 1024;
 
       ptr = &val.max_input_size;
       size = sizeof(val.max_input_size);
       break;
    case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
-      val.max_mem_alloc_size = 128 * 1024 * 1024;
+      val.max_mem_alloc_size = 1u << 31;
 
       ptr = &val.max_mem_alloc_size;
       size = sizeof(val.max_mem_alloc_size);
+      break;
+   case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+      val.max_clock_frequency = 1000;
+
+      ptr = &val.max_clock_frequency;
+      size = sizeof(val.max_clock_frequency);
+      break;
+   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
+      val.max_compute_units = is->dev.eu_count;
+
+      ptr = &val.max_compute_units;
+      size = sizeof(val.max_compute_units);
+      break;
+   case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
+      val.images_supported = 1;
+
+      ptr = &val.images_supported;
+      size = sizeof(val.images_supported);
       break;
    default:
       ptr = NULL;
@@ -310,18 +341,18 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
        *  GEN6           8192x8192x512            2048x2048x2048
        *  GEN7         16384x16384x2048           2048x2048x2048
        */
-      return (is->dev.gen >= ILO_GEN(7)) ? 15 : 14;
+      return (ilo_dev_gen(&is->dev) >= ILO_GEN(7)) ? 15 : 14;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
       return 12;
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
-      return (is->dev.gen >= ILO_GEN(7)) ? 15 : 14;
+      return (ilo_dev_gen(&is->dev) >= ILO_GEN(7)) ? 15 : 14;
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
       return false;
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_SM3:
       return true;
    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
-      if (is->dev.gen >= ILO_GEN(7) && !is->dev.has_gen7_sol_reset)
+      if (ilo_dev_gen(&is->dev) >= ILO_GEN(7) && !is->dev.has_gen7_sol_reset)
          return 0;
       return ILO_MAX_SO_BUFFERS;
    case PIPE_CAP_PRIMITIVE_RESTART:
@@ -330,7 +361,7 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_INDEP_BLEND_FUNC:
       return true;
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-      return (is->dev.gen >= ILO_GEN(7)) ? 2048 : 512;
+      return (ilo_dev_gen(&is->dev) >= ILO_GEN(7)) ? 2048 : 512;
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
@@ -363,7 +394,7 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
       return ILO_MAX_SO_BINDINGS;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
-      if (is->dev.gen >= ILO_GEN(7))
+      if (ilo_dev_gen(&is->dev) >= ILO_GEN(7))
          return is->dev.has_gen7_sol_reset;
       else
          return false; /* TODO */
@@ -382,6 +413,8 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
       return false;
+   case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
+      return 2048;
    case PIPE_CAP_COMPUTE:
       return false; /* TODO */
    case PIPE_CAP_USER_INDEX_BUFFERS:
@@ -436,6 +469,7 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_DRAW_INDIRECT:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+   case PIPE_CAP_SAMPLER_VIEW_TARGET:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -458,6 +492,8 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return (int) (MIN2(gpu_memory, system_memory) >> 20);
    }
    case PIPE_CAP_UMA:
+      return true;
+   case PIPE_CAP_CLIP_HALFZ:
       return true;
 
    default:
@@ -640,7 +676,6 @@ init_dev(struct ilo_dev_info *dev, const struct intel_winsys_info *info)
    dev->devid = info->devid;
    dev->aperture_total = info->aperture_total;
    dev->aperture_mappable = info->aperture_mappable;
-   dev->max_batch_size = info->max_batch_size;
    dev->has_llc = info->has_llc;
    dev->has_address_swizzling = info->has_address_swizzling;
    dev->has_logical_context = info->has_logical_context;
@@ -671,39 +706,85 @@ init_dev(struct ilo_dev_info *dev, const struct intel_winsys_info *info)
       ilo_warn("PPGTT disabled\n");
    }
 
-   /*
-    * From the Sandy Bridge PRM, volume 4 part 2, page 18:
-    *
-    *     "[DevSNB]: The GT1 product's URB provides 32KB of storage, arranged
-    *      as 1024 256-bit rows. The GT2 product's URB provides 64KB of
-    *      storage, arranged as 2048 256-bit rows. A row corresponds in size
-    *      to an EU GRF register. Read/write access to the URB is generally
-    *      supported on a row-granular basis."
-    *
-    * From the Ivy Bridge PRM, volume 4 part 2, page 17:
-    *
-    *     "URB Size    URB Rows    URB Rows when SLM Enabled
-    *      128k        4096        2048
-    *      256k        8096        4096"
-    */
-
    if (gen_is_hsw(info->devid)) {
-      dev->gen = ILO_GEN(7.5);
+      /*
+       * From the Haswell PRM, volume 4, page 8:
+       *
+       *     "Description                    GT3      GT2      GT1.5    GT1
+       *      (...)
+       *      EUs (Total)                    40       20       12       10
+       *      Threads (Total)                280      140      84       70
+       *      (...)
+       *      URB Size (max, within L3$)     512KB    256KB    256KB    128KB
+       */
+      dev->gen_opaque = ILO_GEN(7.5);
       dev->gt = gen_get_hsw_gt(info->devid);
-      dev->urb_size = ((dev->gt == 3) ? 512 :
-                       (dev->gt == 2) ? 256 : 128) * 1024;
-   }
-   else if (gen_is_ivb(info->devid) || gen_is_vlv(info->devid)) {
-      dev->gen = ILO_GEN(7);
+      if (dev->gt == 3) {
+         dev->eu_count = 40;
+         dev->thread_count = 280;
+         dev->urb_size = 512 * 1024;
+      } else if (dev->gt == 2) {
+         dev->eu_count = 20;
+         dev->thread_count = 140;
+         dev->urb_size = 256 * 1024;
+      } else {
+         dev->eu_count = 10;
+         dev->thread_count = 70;
+         dev->urb_size = 128 * 1024;
+      }
+   } else if (gen_is_ivb(info->devid) || gen_is_vlv(info->devid)) {
+      /*
+       * From the Ivy Bridge PRM, volume 1 part 1, page 18:
+       *
+       *     "Device             # of EUs        #Threads/EU
+       *      Ivy Bridge (GT2)   16              8
+       *      Ivy Bridge (GT1)   6               6"
+       *
+       * From the Ivy Bridge PRM, volume 4 part 2, page 17:
+       *
+       *     "URB Size    URB Rows    URB Rows when SLM Enabled
+       *      128k        4096        2048
+       *      256k        8096        4096"
+       */
+      dev->gen_opaque = ILO_GEN(7);
       dev->gt = (gen_is_ivb(info->devid)) ? gen_get_ivb_gt(info->devid) : 1;
-      dev->urb_size = ((dev->gt == 2) ? 256 : 128) * 1024;
-   }
-   else if (gen_is_snb(info->devid)) {
-      dev->gen = ILO_GEN(6);
+      if (dev->gt == 2) {
+         dev->eu_count = 16;
+         dev->thread_count = 128;
+         dev->urb_size = 256 * 1024;
+      } else {
+         dev->eu_count = 6;
+         dev->thread_count = 36;
+         dev->urb_size = 128 * 1024;
+      }
+   } else if (gen_is_snb(info->devid)) {
+      /*
+       * From the Sandy Bridge PRM, volume 1 part 1, page 22:
+       *
+       *     "Device             # of EUs        #Threads/EU
+       *      SNB GT2            12              5
+       *      SNB GT1            6               4"
+       *
+       * From the Sandy Bridge PRM, volume 4 part 2, page 18:
+       *
+       *     "[DevSNB]: The GT1 product's URB provides 32KB of storage,
+       *      arranged as 1024 256-bit rows. The GT2 product's URB provides
+       *      64KB of storage, arranged as 2048 256-bit rows. A row
+       *      corresponds in size to an EU GRF register. Read/write access to
+       *      the URB is generally supported on a row-granular basis."
+       */
+      dev->gen_opaque = ILO_GEN(6);
       dev->gt = gen_get_snb_gt(info->devid);
-      dev->urb_size = ((dev->gt == 2) ? 64 : 32) * 1024;
-   }
-   else {
+      if (dev->gt == 2) {
+         dev->eu_count = 12;
+         dev->thread_count = 60;
+         dev->urb_size = 64 * 1024;
+      } else {
+         dev->eu_count = 6;
+         dev->thread_count = 24;
+         dev->urb_size = 32 * 1024;
+      }
+   } else {
       ilo_err("unknown GPU generation\n");
       return false;
    }

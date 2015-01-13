@@ -49,12 +49,12 @@ ast_array_specifier::print(void) const
  * loc and state to report the error.
  */
 static void
-update_max_array_access(ir_rvalue *ir, unsigned idx, YYLTYPE *loc,
+update_max_array_access(ir_rvalue *ir, int idx, YYLTYPE *loc,
                         struct _mesa_glsl_parse_state *state)
 {
    if (ir_dereference_variable *deref_var = ir->as_dereference_variable()) {
       ir_variable *var = deref_var->var;
-      if (idx > var->data.max_array_access) {
+      if (idx > (int)var->data.max_array_access) {
          var->data.max_array_access = idx;
 
          /* Check whether this access will, as a side effect, implicitly cause
@@ -88,8 +88,14 @@ update_max_array_access(ir_rvalue *ir, unsigned idx, YYLTYPE *loc,
             unsigned field_index =
                deref_record->record->type->field_index(deref_record->field);
             assert(field_index < interface_type->length);
-            if (idx > deref_var->var->max_ifc_array_access[field_index]) {
-               deref_var->var->max_ifc_array_access[field_index] = idx;
+
+            unsigned *const max_ifc_array_access =
+               deref_var->var->get_max_ifc_array_access();
+
+            assert(max_ifc_array_access != NULL);
+
+            if (idx > (int)max_ifc_array_access[field_index]) {
+               max_ifc_array_access[field_index] = idx;
 
                /* Check whether this access will, as a side effect, implicitly
                 * cause the size of a built-in array to be too large.

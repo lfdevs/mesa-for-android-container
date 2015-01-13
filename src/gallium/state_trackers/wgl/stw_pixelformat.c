@@ -303,7 +303,7 @@ stw_pixelformat_get_extended_count( void )
 const struct stw_pixelformat_info *
 stw_pixelformat_get_info( int iPixelFormat )
 {
-   int index;
+   unsigned index;
 
    if (iPixelFormat <= 0) {
       return NULL;

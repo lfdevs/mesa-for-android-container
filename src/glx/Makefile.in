@@ -108,14 +108,14 @@ target_triplet = @target@
 
 @HAVE_DRICOMMON_TRUE@am__append_2 = \
 @HAVE_DRICOMMON_TRUE@	  xfont.c \
-@HAVE_DRICOMMON_TRUE@	  dri_common.c
+@HAVE_DRICOMMON_TRUE@	  dri_common.c \
+@HAVE_DRICOMMON_TRUE@	  dri_common_query_renderer.c
 
 @HAVE_DRI2_TRUE@am__append_3 = \
 @HAVE_DRI2_TRUE@	  dri_glx.c \
 @HAVE_DRI2_TRUE@	  XF86dri.c \
 @HAVE_DRI2_TRUE@	  dri2_glx.c \
-@HAVE_DRI2_TRUE@	  dri2.c \
-@HAVE_DRI2_TRUE@	  dri2_query_renderer.c
+@HAVE_DRI2_TRUE@	  dri2.c
 
 @HAVE_DRI3_TRUE@am__append_4 = \
 @HAVE_DRI3_TRUE@          dri3_glx.c
@@ -129,8 +129,9 @@ DIST_COMMON = $(top_srcdir)/install-lib-links.mk $(srcdir)/Makefile.in \
 	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
 subdir = src/glx
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -196,13 +197,13 @@ am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 	indirect_vertex_array.c indirect_vertex_program.c pixel.c \
 	pixelstore.c query_renderer.c render2.c renderpix.c single2.c \
 	singlepix.c vertarr.c glx_pbuffer.c glx_query.c glxhash.c \
-	drisw_glx.c xfont.c dri_common.c dri_glx.c XF86dri.c \
-	dri2_glx.c dri2.c dri2_query_renderer.c dri3_glx.c \
-	applegl_glx.c
+	drisw_glx.c xfont.c dri_common.c dri_common_query_renderer.c \
+	dri_glx.c XF86dri.c dri2_glx.c dri2.c dri3_glx.c applegl_glx.c
 @HAVE_DRISW_TRUE@am__objects_1 = drisw_glx.lo
-@HAVE_DRICOMMON_TRUE@am__objects_2 = xfont.lo dri_common.lo
+@HAVE_DRICOMMON_TRUE@am__objects_2 = xfont.lo dri_common.lo \
+@HAVE_DRICOMMON_TRUE@	dri_common_query_renderer.lo
 @HAVE_DRI2_TRUE@am__objects_3 = dri_glx.lo XF86dri.lo dri2_glx.lo \
-@HAVE_DRI2_TRUE@	dri2.lo dri2_query_renderer.lo
+@HAVE_DRI2_TRUE@	dri2.lo
 @HAVE_DRI3_TRUE@am__objects_4 = dri3_glx.lo
 @HAVE_APPLEDRI_TRUE@am__objects_5 = applegl_glx.lo
 am_libglx_la_OBJECTS = clientattrib.lo clientinfo.lo compsize.lo \
@@ -344,6 +345,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -366,7 +368,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -439,11 +440,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -454,10 +458,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -471,7 +473,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -490,7 +491,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -554,6 +561,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -735,9 +743,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/create_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri2.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri2_glx.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri2_query_renderer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri3_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_common.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_common_query_renderer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/drisw_glx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eval.Plo@am__quote@

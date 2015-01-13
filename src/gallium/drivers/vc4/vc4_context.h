@@ -25,6 +25,8 @@
 #ifndef VC4_CONTEXT_H
 #define VC4_CONTEXT_H
 
+#include <stdio.h>
+
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "util/u_slab.h"
@@ -54,6 +56,9 @@
 #define VC4_DIRTY_VTXBUF        (1 << 15)
 #define VC4_DIRTY_INDEXBUF      (1 << 16)
 #define VC4_DIRTY_SCISSOR       (1 << 17)
+#define VC4_DIRTY_FLAT_SHADE_FLAGS (1 << 18)
+#define VC4_DIRTY_PRIM_MODE     (1 << 19)
+#define VC4_DIRTY_CLIP          (1 << 20)
 
 #define VC4_SHADER_DIRTY_VP     (1 << 0)
 #define VC4_SHADER_DIRTY_FP     (1 << 1)
@@ -73,18 +78,61 @@ struct vc4_shader_uniform_info {
         uint32_t num_texture_samples;
 };
 
+struct vc4_uncompiled_shader {
+        /** A name for this program, so you can track it in shader-db output. */
+        uint32_t program_id;
+        /** How many variants of this program were compiled, for shader-db. */
+        uint32_t compiled_variant_count;
+        struct pipe_shader_state base;
+        const struct tgsi_token *twoside_tokens;
+};
+
+struct vc4_ubo_range {
+        /**
+         * offset in bytes from the start of the ubo where this range is
+         * uploaded.
+         *
+         * Only set once used is set.
+         */
+        uint32_t dst_offset;
+
+        /**
+         * offset in bytes from the start of the gallium uniforms where the
+         * data comes from.
+         */
+        uint32_t src_offset;
+
+        /** size in bytes of this ubo range */
+        uint32_t size;
+};
+
 struct vc4_compiled_shader {
+        uint64_t program_id;
         struct vc4_bo *bo;
 
-        struct vc4_shader_uniform_info uniforms[2];
+        struct vc4_shader_uniform_info uniforms;
 
-        uint32_t coord_shader_offset;
+        struct vc4_ubo_range *ubo_ranges;
+        uint32_t num_ubo_ranges;
+        uint32_t ubo_size;
+
+        /** bitmask of which inputs are color inputs, for flat shade handling. */
+        uint32_t color_inputs;
+
         uint8_t num_inputs;
+
+        /**
+         * Array of the meanings of the VPM inputs this shader needs.
+         *
+         * It doesn't include those that aren't part of the VPM, like
+         * point/line coordinates.
+         */
+        struct vc4_varying_semantic *input_semantics;
 };
 
 struct vc4_program_stateobj {
-        struct pipe_shader_state *bind_vs, *bind_fs;
-        struct vc4_compiled_shader *vs, *fs;
+        struct vc4_uncompiled_shader *bind_vs, *bind_fs;
+        struct vc4_compiled_shader *cs, *vs, *fs;
         uint32_t dirty;
         uint8_t num_exports;
         /* Indexed by semantic name or TGSI_SEMANTIC_COUNT + semantic index
@@ -144,6 +192,7 @@ struct vc4_context {
         uint32_t resolve;
         uint32_t clear_color[2];
         uint32_t clear_depth; /**< 24-bit unorm depth */
+        uint8_t clear_stencil;
 
         /**
          * Set if some drawing (triangles, blits, or just a glClear()) has
@@ -161,6 +210,14 @@ struct vc4_context {
         struct primconvert_context *primconvert;
 
         struct util_hash_table *fs_cache, *vs_cache;
+        uint32_t next_uncompiled_program_id;
+        uint64_t next_compiled_program_id;
+
+        struct ra_regs *regs;
+        unsigned int reg_class_any;
+        unsigned int reg_class_a;
+
+        uint8_t prim_mode;
 
         /** @{ Current pipeline state objects */
         struct pipe_scissor_state scissor;
@@ -179,6 +236,7 @@ struct vc4_context {
         unsigned sample_mask;
         struct pipe_framebuffer_state framebuffer;
         struct pipe_poly_stipple stipple;
+        struct pipe_clip_state clip;
         struct pipe_viewport_state viewport;
         struct vc4_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
         struct vc4_vertexbuf_stateobj vertexbuf;
@@ -193,6 +251,17 @@ struct vc4_rasterizer_state {
         uint8_t config_bits[3];
 
         float point_size;
+
+        /**
+         * Half-float (1/8/7 bits) value of polygon offset units for
+         * VC4_PACKET_DEPTH_OFFSET
+         */
+        uint16_t offset_units;
+        /**
+         * Half-float (1/8/7 bits) value of polygon offset scale for
+         * VC4_PACKET_DEPTH_OFFSET
+         */
+        uint16_t offset_factor;
 };
 
 struct vc4_depth_stencil_alpha_state {
@@ -200,6 +269,14 @@ struct vc4_depth_stencil_alpha_state {
 
         /* VC4_CONFIGURATION_BITS */
         uint8_t config_bits[3];
+
+        /** Uniforms for stencil state.
+         *
+         * Index 0 is either the front config, or the front-and-back config.
+         * Index 1 is the back config if doing separate back stencil.
+         * Index 2 is the writemask config if it's not a common mask value.
+         */
+        uint32_t stencil_uniforms[3];
 };
 
 static inline struct vc4_context *
@@ -213,6 +290,7 @@ struct pipe_context *vc4_context_create(struct pipe_screen *pscreen,
 void vc4_draw_init(struct pipe_context *pctx);
 void vc4_state_init(struct pipe_context *pctx);
 void vc4_program_init(struct pipe_context *pctx);
+void vc4_query_init(struct pipe_context *pctx);
 void vc4_simulator_init(struct vc4_screen *screen);
 int vc4_simulator_flush(struct vc4_context *vc4,
                         struct drm_vc4_submit_cl *args);
@@ -220,13 +298,19 @@ int vc4_simulator_flush(struct vc4_context *vc4,
 void vc4_write_uniforms(struct vc4_context *vc4,
                         struct vc4_compiled_shader *shader,
                         struct vc4_constbuf_stateobj *cb,
-                        struct vc4_texture_stateobj *texstate,
-                        int shader_index);
+                        struct vc4_texture_stateobj *texstate);
 
 void vc4_flush(struct pipe_context *pctx);
-void vc4_flush_for_bo(struct pipe_context *pctx, struct vc4_bo *bo);
+bool vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo);
 void vc4_emit_state(struct pipe_context *pctx);
-void vc4_generate_code(struct qcompile *c);
+void vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c);
+struct qpu_reg *vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c);
 void vc4_update_compiled_shaders(struct vc4_context *vc4, uint8_t prim_mode);
 
+bool vc4_rt_format_supported(enum pipe_format f);
+bool vc4_rt_format_is_565(enum pipe_format f);
+bool vc4_tex_format_supported(enum pipe_format f);
+uint8_t vc4_get_tex_format(enum pipe_format f);
+const uint8_t *vc4_get_format_swizzle(enum pipe_format f);
+void vc4_init_query_functions(struct vc4_context *vc4);
 #endif /* VC4_CONTEXT_H */

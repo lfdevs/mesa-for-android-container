@@ -40,11 +40,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * IMPORTS: these headers contain all the DRI, X and kernel-related
  * definitions that we need.
  */
+#include <xf86drm.h>
+#include <radeon_drm.h>
 #include "dri_util.h"
-#include "radeon_dri.h"
 #include "radeon_chipset.h"
 #include "radeon_reg.h"
-#include "drm_sarea.h"
 #include "xmlconfig.h"
 
 
@@ -87,7 +87,6 @@ typedef struct radeon_screen {
    __volatile__ uint32_t *scratch;
 
    __DRIscreen *driScreen;
-   unsigned int sarea_priv_offset;
    unsigned int gart_buffer_offset;	/* offset in card memory space */
    unsigned int gart_texture_offset;	/* offset in card memory space */
    unsigned int gart_base;
@@ -99,7 +98,6 @@ typedef struct radeon_screen {
 
    int num_gb_pipes;
    int num_z_pipes;
-   drm_radeon_sarea_t *sarea;	/* Private SAREA data */
    struct radeon_bo_manager *bom;
 
 } radeonScreenRec, *radeonScreenPtr;

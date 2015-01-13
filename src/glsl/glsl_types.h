@@ -122,15 +122,17 @@ struct glsl_type {
     * easier to just ralloc_free 'mem_ctx' (or any of its ancestors). */
    static void* operator new(size_t size)
    {
-      if (glsl_type::mem_ctx == NULL) {
-	 glsl_type::mem_ctx = ralloc_context(NULL);
-	 assert(glsl_type::mem_ctx != NULL);
-      }
+      mtx_lock(&glsl_type::mutex);
+
+      /* mem_ctx should have been created by the static members */
+      assert(glsl_type::mem_ctx != NULL);
 
       void *type;
 
       type = ralloc_size(glsl_type::mem_ctx, size);
       assert(type != NULL);
+
+      mtx_unlock(&glsl_type::mutex);
 
       return type;
    }
@@ -139,7 +141,9 @@ struct glsl_type {
     * ralloc_free in that case. */
    static void operator delete(void *type)
    {
+      mtx_lock(&glsl_type::mutex);
       ralloc_free(type);
+      mtx_unlock(&glsl_type::mutex);
    }
 
    /**
@@ -149,16 +153,9 @@ struct glsl_type {
     * these will be 0.
     */
    /*@{*/
-   unsigned vector_elements:3; /**< 1, 2, 3, or 4 vector elements. */
-   unsigned matrix_columns:3;  /**< 1, 2, 3, or 4 matrix columns. */
+   uint8_t vector_elements;    /**< 1, 2, 3, or 4 vector elements. */
+   uint8_t matrix_columns;     /**< 1, 2, 3, or 4 matrix columns. */
    /*@}*/
-
-   /**
-    * Name of the data type
-    *
-    * Will never be \c NULL.
-    */
-   const char *name;
 
    /**
     * For \c GLSL_TYPE_ARRAY, this is the length of the array.  For
@@ -167,6 +164,13 @@ struct glsl_type {
     * \c fields.structure (below).
     */
    unsigned length;
+
+   /**
+    * Name of the data type
+    *
+    * Will never be \c NULL.
+    */
+   const char *name;
 
    /**
     * Subtype of composite data types.
@@ -279,6 +283,9 @@ struct glsl_type {
    /**
     * Calculate the number of unique values from glGetUniformLocation for the
     * elements of the type.
+    *
+    * This is used to allocate slots in the UniformRemapTable, the amount of
+    * locations may not match with actual used storage space by the driver.
     */
    unsigned uniform_locations() const;
 
@@ -486,6 +493,14 @@ struct glsl_type {
    }
 
    /**
+    * Query if a type is unnamed/anonymous (named by the parser)
+    */
+   bool is_anonymous() const
+   {
+      return !strncmp(name, "#anon", 5);
+   }
+
+   /**
     * Get the type stripped of any arrays
     *
     * \return
@@ -607,6 +622,9 @@ struct glsl_type {
    bool record_compare(const glsl_type *b) const;
 
 private:
+
+   static mtx_t mutex;
+
    /**
     * ralloc context for all glsl_type allocations
     *

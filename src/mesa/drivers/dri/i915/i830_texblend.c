@@ -136,7 +136,7 @@ i830SetTexEnvCombine(struct i830_context * i830,
                      GLuint texel_op, GLuint * state, const GLfloat * factor)
 {
    const GLuint numColorArgs = combine->_NumArgsRGB;
-   const GLuint numAlphaArgs = combine->_NumArgsA;
+   GLuint numAlphaArgs = combine->_NumArgsA;
 
    GLuint blendop;
    GLuint ablendop;
@@ -209,7 +209,7 @@ i830SetTexEnvCombine(struct i830_context * i830,
       break;
    case GL_DOT3_RGBA_EXT:
    case GL_DOT3_RGBA:
-      blendop = TEXBLENDOP_DOT3;
+      blendop = TEXBLENDOP_DOT4;
       break;
    default:
       return pass_through(state, blendUnit);
@@ -273,6 +273,7 @@ i830SetTexEnvCombine(struct i830_context * i830,
    if (combine->ModeRGB == GL_DOT3_RGBA_EXT ||
        combine->ModeRGB == GL_DOT3_RGBA) {
       ablendop = TEXBLENDOP_DOT4;
+      numAlphaArgs = 2;
       args_A[0] = TEXBLENDARG_FACTOR;   /* the global factor */
       args_A[1] = TEXBLENDARG_FACTOR;
       args_A[2] = TEXBLENDARG_FACTOR;

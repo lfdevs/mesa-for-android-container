@@ -914,8 +914,11 @@ static void
 dri_destroy(struct gbm_device *gbm)
 {
    struct gbm_dri_device *dri = gbm_dri_device(gbm);
+   unsigned i;
 
    dri->core->destroyScreen(dri->screen);
+   for (i = 0; dri->driver_configs[i]; i++)
+      free((__DRIconfig *) dri->driver_configs[i]);
    free(dri->driver_configs);
    dlclose(dri->driver);
    free(dri->base.driver_name);

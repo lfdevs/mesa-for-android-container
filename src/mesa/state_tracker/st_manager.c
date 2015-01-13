@@ -452,7 +452,8 @@ st_framebuffer_create(struct st_context *st,
           st_pipe_format_to_mesa_format(srgb_format) != MESA_FORMAT_NONE &&
           screen->is_format_supported(screen, srgb_format,
                                       PIPE_TEXTURE_2D, stfbi->visual->samples,
-                                      PIPE_BIND_RENDER_TARGET))
+                                      (PIPE_BIND_DISPLAY_TARGET |
+                                       PIPE_BIND_RENDER_TARGET)))
          mode.sRGBCapable = GL_TRUE;
    }
 
@@ -928,7 +929,7 @@ static unsigned get_version(struct pipe_screen *screen,
    _mesa_init_extensions(&extensions);
 
    st_init_limits(screen, &consts, &extensions);
-   st_init_extensions(screen, api, &consts, &extensions, options, GL_TRUE);
+   st_init_extensions(screen, &consts, &extensions, options, GL_TRUE);
 
    return _mesa_get_version(&extensions, &consts, api);
 }

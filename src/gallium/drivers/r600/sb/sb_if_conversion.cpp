@@ -115,13 +115,13 @@ void if_conversion::convert_kill_instructions(region_node *r,
 bool if_conversion::check_and_convert(region_node *r) {
 
 	depart_node *nd1 = static_cast<depart_node*>(r->first);
-	if (!nd1->is_depart())
+	if (!nd1->is_depart() || nd1->target != r)
 		return false;
 	if_node *nif = static_cast<if_node*>(nd1->first);
 	if (!nif->is_if())
 		return false;
 	depart_node *nd2 = static_cast<depart_node*>(nif->first);
-	if (!nd2->is_depart())
+	if (!nd2->is_depart() || nd2->target != r)
 		return false;
 
 	value* &em = nif->cond;

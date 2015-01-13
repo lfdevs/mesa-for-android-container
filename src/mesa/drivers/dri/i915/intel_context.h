@@ -226,7 +226,6 @@ struct intel_context
 
    GLfloat polygon_offset_scale;        /* dependent on depth_scale, bpp */
 
-   bool hw_stencil;
    bool hw_stipple;
    bool no_rast;
    bool always_flush_batch;

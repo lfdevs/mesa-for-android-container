@@ -28,9 +28,10 @@
 #define SI_STATE_H
 
 #include "si_pm4.h"
-#include "../radeon/r600_pipe_common.h"
+#include "radeon/r600_pipe_common.h"
 
 struct si_screen;
+struct si_shader;
 
 struct si_state_blend {
 	struct si_pm4_state	pm4;
@@ -234,7 +235,7 @@ void si_set_sampler_descriptors(struct si_context *sctx, unsigned shader,
 				unsigned start, unsigned count, void **states);
 void si_update_vertex_buffers(struct si_context *sctx);
 void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
-			struct pipe_constant_buffer *input,
+			struct pipe_resource *buffer,
 			unsigned stride, unsigned num_records,
 			bool add_tid, bool swizzle,
 			unsigned element_size, unsigned index_stride);
@@ -248,7 +249,7 @@ void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuf
 			    const uint8_t *ptr, unsigned size, uint32_t *const_offset);
 
 /* si_state.c */
-struct si_pipe_shader_selector;
+struct si_shader_selector;
 
 boolean si_is_format_supported(struct pipe_screen *screen,
                                enum pipe_format format,
@@ -256,7 +257,8 @@ boolean si_is_format_supported(struct pipe_screen *screen,
                                unsigned sample_count,
                                unsigned usage);
 int si_shader_select(struct pipe_context *ctx,
-		     struct si_pipe_shader_selector *sel);
+		     struct si_shader_selector *sel);
+void si_make_dummy_ps(struct si_context *sctx);
 void si_init_state_functions(struct si_context *sctx);
 void si_init_config(struct si_context *sctx);
 unsigned cik_bank_wh(unsigned bankwh);
@@ -269,6 +271,7 @@ unsigned si_tile_mode_index(struct r600_texture *rtex, unsigned level, bool sten
 /* si_state_draw.c */
 extern const struct r600_atom si_atom_cache_flush;
 extern const struct r600_atom si_atom_msaa_config;
+void si_shader_init_pm4_state(struct si_shader *shader);
 void si_emit_cache_flush(struct r600_common_context *sctx, struct r600_atom *atom);
 void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *dinfo);
 
@@ -286,6 +289,5 @@ void si_cmd_draw_index_indirect(struct si_pm4_state *pm4, uint64_t indirect_va,
 				uint64_t index_va, uint32_t index_max_size,
 				uint32_t indirect_offset, uint32_t base_vtx_loc,
 				uint32_t start_inst_loc, bool predicate);
-void si_cmd_surface_sync(struct si_pm4_state *pm4, uint32_t cp_coher_cntl);
 
 #endif

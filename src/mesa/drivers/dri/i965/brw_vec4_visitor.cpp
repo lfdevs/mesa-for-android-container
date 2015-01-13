@@ -22,6 +22,7 @@
  */
 
 #include "brw_vec4.h"
+#include "brw_cfg.h"
 #include "glsl/ir_uniform.h"
 extern "C" {
 #include "program/sampler.h"
@@ -66,19 +67,20 @@ vec4_visitor::emit(vec4_instruction *inst)
 }
 
 vec4_instruction *
-vec4_visitor::emit_before(vec4_instruction *inst, vec4_instruction *new_inst)
+vec4_visitor::emit_before(bblock_t *block, vec4_instruction *inst,
+                          vec4_instruction *new_inst)
 {
    new_inst->ir = inst->ir;
    new_inst->annotation = inst->annotation;
 
-   inst->insert_before(new_inst);
+   inst->insert_before(block, new_inst);
 
    return inst;
 }
 
 vec4_instruction *
-vec4_visitor::emit(enum opcode opcode, dst_reg dst,
-		   src_reg src0, src_reg src1, src_reg src2)
+vec4_visitor::emit(enum opcode opcode, const dst_reg &dst, const src_reg &src0,
+                   const src_reg &src1, const src_reg &src2)
 {
    return emit(new(mem_ctx) vec4_instruction(this, opcode, dst,
 					     src0, src1, src2));
@@ -86,19 +88,20 @@ vec4_visitor::emit(enum opcode opcode, dst_reg dst,
 
 
 vec4_instruction *
-vec4_visitor::emit(enum opcode opcode, dst_reg dst, src_reg src0, src_reg src1)
+vec4_visitor::emit(enum opcode opcode, const dst_reg &dst, const src_reg &src0,
+                   const src_reg &src1)
 {
    return emit(new(mem_ctx) vec4_instruction(this, opcode, dst, src0, src1));
 }
 
 vec4_instruction *
-vec4_visitor::emit(enum opcode opcode, dst_reg dst, src_reg src0)
+vec4_visitor::emit(enum opcode opcode, const dst_reg &dst, const src_reg &src0)
 {
    return emit(new(mem_ctx) vec4_instruction(this, opcode, dst, src0));
 }
 
 vec4_instruction *
-vec4_visitor::emit(enum opcode opcode, dst_reg dst)
+vec4_visitor::emit(enum opcode opcode, const dst_reg &dst)
 {
    return emit(new(mem_ctx) vec4_instruction(this, opcode, dst));
 }
@@ -307,6 +310,9 @@ vec4_visitor::fix_3src_operand(src_reg src)
 src_reg
 vec4_visitor::fix_math_operand(src_reg src)
 {
+   if (brw->gen < 6 || brw->gen >= 8 || src.file == BAD_FILE)
+      return src;
+
    /* The gen6 math instruction ignores the source modifiers --
     * swizzle, abs, negate, and at least some parts of the register
     * region description.
@@ -328,107 +334,21 @@ vec4_visitor::fix_math_operand(src_reg src)
 }
 
 void
-vec4_visitor::emit_math1_gen6(enum opcode opcode, dst_reg dst, src_reg src)
-{
-   src = fix_math_operand(src);
-
-   if (brw->gen == 6 && dst.writemask != WRITEMASK_XYZW) {
-      /* The gen6 math instruction must be align1, so we can't do
-       * writemasks.
-       */
-      dst_reg temp_dst = dst_reg(this, glsl_type::vec4_type);
-
-      emit(opcode, temp_dst, src);
-
-      emit(MOV(dst, src_reg(temp_dst)));
-   } else {
-      emit(opcode, dst, src);
-   }
-}
-
-void
-vec4_visitor::emit_math1_gen4(enum opcode opcode, dst_reg dst, src_reg src)
-{
-   vec4_instruction *inst = emit(opcode, dst, src);
-   inst->base_mrf = 1;
-   inst->mlen = 1;
-}
-
-void
-vec4_visitor::emit_math(opcode opcode, dst_reg dst, src_reg src)
-{
-   switch (opcode) {
-   case SHADER_OPCODE_RCP:
-   case SHADER_OPCODE_RSQ:
-   case SHADER_OPCODE_SQRT:
-   case SHADER_OPCODE_EXP2:
-   case SHADER_OPCODE_LOG2:
-   case SHADER_OPCODE_SIN:
-   case SHADER_OPCODE_COS:
-      break;
-   default:
-      unreachable("not reached: bad math opcode");
-   }
-
-   if (brw->gen >= 8) {
-      emit(opcode, dst, src);
-   } else if (brw->gen >= 6) {
-      emit_math1_gen6(opcode, dst, src);
-   } else {
-      emit_math1_gen4(opcode, dst, src);
-   }
-}
-
-void
-vec4_visitor::emit_math2_gen6(enum opcode opcode,
-			      dst_reg dst, src_reg src0, src_reg src1)
-{
-   src0 = fix_math_operand(src0);
-   src1 = fix_math_operand(src1);
-
-   if (brw->gen == 6 && dst.writemask != WRITEMASK_XYZW) {
-      /* The gen6 math instruction must be align1, so we can't do
-       * writemasks.
-       */
-      dst_reg temp_dst = dst_reg(this, glsl_type::vec4_type);
-      temp_dst.type = dst.type;
-
-      emit(opcode, temp_dst, src0, src1);
-
-      emit(MOV(dst, src_reg(temp_dst)));
-   } else {
-      emit(opcode, dst, src0, src1);
-   }
-}
-
-void
-vec4_visitor::emit_math2_gen4(enum opcode opcode,
-			      dst_reg dst, src_reg src0, src_reg src1)
-{
-   vec4_instruction *inst = emit(opcode, dst, src0, src1);
-   inst->base_mrf = 1;
-   inst->mlen = 2;
-}
-
-void
 vec4_visitor::emit_math(enum opcode opcode,
-			dst_reg dst, src_reg src0, src_reg src1)
+                        const dst_reg &dst,
+                        const src_reg &src0, const src_reg &src1)
 {
-   switch (opcode) {
-   case SHADER_OPCODE_POW:
-   case SHADER_OPCODE_INT_QUOTIENT:
-   case SHADER_OPCODE_INT_REMAINDER:
-      break;
-   default:
-      unreachable("not reached: unsupported binary math opcode");
-   }
+   vec4_instruction *math =
+      emit(opcode, dst, fix_math_operand(src0), fix_math_operand(src1));
 
-   if (brw->gen >= 8) {
-      emit(opcode, dst, src0, src1);
-   } else if (brw->gen >= 6) {
-      emit_math2_gen6(opcode, dst, src0, src1);
-   } else {
-      emit_math2_gen4(opcode, dst, src0, src1);
+   if (brw->gen == 6 && dst.writemask != WRITEMASK_XYZW) {
+      /* MATH on Gen6 must be align1, so we can't do writemasks. */
+      math->dst = dst_reg(this, glsl_type::vec4_type);
+      math->dst.type = dst.type;
+      emit(MOV(dst, src_reg(math->dst)));
+   } else if (brw->gen < 6) {
+      math->base_mrf = 1;
+      math->mlen = src1.file == BAD_FILE ? 1 : 2;
    }
 }
 
@@ -639,6 +559,20 @@ src_reg::src_reg(class vec4_visitor *v, const struct glsl_type *type)
    this->type = brw_type_for_base_type(type);
 }
 
+src_reg::src_reg(class vec4_visitor *v, const struct glsl_type *type, int size)
+{
+   assert(size > 0);
+
+   init();
+
+   this->file = GRF;
+   this->reg = v->virtual_grf_alloc(type_size(type) * size);
+
+   this->swizzle = BRW_SWIZZLE_NOOP;
+
+   this->type = brw_type_for_base_type(type);
+}
+
 dst_reg::dst_reg(class vec4_visitor *v, const struct glsl_type *type)
 {
    init();
@@ -729,10 +663,10 @@ vec4_visitor::setup_uniform_clipplane_values()
 void
 vec4_visitor::setup_builtin_uniform_values(ir_variable *ir)
 {
-   const ir_state_slot *const slots = ir->state_slots;
-   assert(ir->state_slots != NULL);
+   const ir_state_slot *const slots = ir->get_state_slots();
+   assert(slots != NULL);
 
-   for (unsigned int i = 0; i < ir->num_state_slots; i++) {
+   for (unsigned int i = 0; i < ir->get_num_state_slots(); i++) {
       /* This state reference has already been setup by ir_to_mesa,
        * but we'll get the same index back here.  We can reference
        * ParameterValues directly, since unlike brw_fs.cpp, we never
@@ -1108,24 +1042,6 @@ vec4_visitor::visit(ir_function *ir)
 }
 
 bool
-vec4_visitor::try_emit_sat(ir_expression *ir)
-{
-   ir_rvalue *sat_src = ir->as_rvalue_to_saturate();
-   if (!sat_src)
-      return false;
-
-   sat_src->accept(this);
-   src_reg src = this->result;
-
-   this->result = src_reg(this, ir->type);
-   vec4_instruction *inst;
-   inst = emit(MOV(dst_reg(this->result), src));
-   inst->saturate = true;
-
-   return true;
-}
-
-bool
 vec4_visitor::try_emit_mad(ir_expression *ir)
 {
    /* 3-src instructions were introduced in gen6. */
@@ -1261,12 +1177,7 @@ vec4_visitor::visit(ir_expression *ir)
 {
    unsigned int operand;
    src_reg op[Elements(ir->operands)];
-   src_reg result_src;
-   dst_reg result_dst;
    vec4_instruction *inst;
-
-   if (try_emit_sat(ir))
-      return;
 
    if (ir->operation == ir_binop_add) {
       if (try_emit_mad(ir))
@@ -1276,6 +1187,26 @@ vec4_visitor::visit(ir_expression *ir)
    if (ir->operation == ir_unop_b2f) {
       if (try_emit_b2f_of_compare(ir))
 	 return;
+   }
+
+   /* Storage for our result.  Ideally for an assignment we'd be using
+    * the actual storage for the result here, instead.
+    */
+   dst_reg result_dst(this, ir->type);
+   src_reg result_src(result_dst);
+
+   if (ir->operation == ir_triop_csel) {
+      ir->operands[1]->accept(this);
+      op[1] = this->result;
+      ir->operands[2]->accept(this);
+      op[2] = this->result;
+
+      enum brw_predicate predicate;
+      emit_bool_to_cond_code(ir->operands[0], &predicate);
+      inst = emit(BRW_OPCODE_SEL, result_dst, op[1], op[2]);
+      inst->predicate = predicate;
+      this->result = result_src;
+      return;
    }
 
    for (operand = 0; operand < ir->get_num_operands(); operand++) {
@@ -1294,34 +1225,15 @@ vec4_visitor::visit(ir_expression *ir)
       assert(!ir->operands[operand]->type->is_matrix());
    }
 
-   int vector_elements = ir->operands[0]->type->vector_elements;
-   if (ir->operands[1]) {
-      vector_elements = MAX2(vector_elements,
-			     ir->operands[1]->type->vector_elements);
-   }
-
-   this->result.file = BAD_FILE;
-
-   /* Storage for our result.  Ideally for an assignment we'd be using
-    * the actual storage for the result here, instead.
-    */
-   result_src = src_reg(this, ir->type);
-   /* convenience for the emit functions below. */
-   result_dst = dst_reg(result_src);
    /* If nothing special happens, this is the result. */
    this->result = result_src;
-   /* Limit writes to the channels that will be used by result_src later.
-    * This does limit this temp's use as a temporary for multi-instruction
-    * sequences.
-    */
-   result_dst.writemask = (1 << ir->type->vector_elements) - 1;
 
    switch (ir->operation) {
    case ir_unop_logic_not:
       if (ctx->Const.UniformBooleanTrue != 1) {
          emit(NOT(result_dst, op[0]));
       } else {
-         emit(XOR(result_dst, op[0], src_reg(1)));
+         emit(XOR(result_dst, op[0], src_reg(1u)));
       }
       break;
    case ir_unop_neg:
@@ -1427,6 +1339,10 @@ vec4_visitor::visit(ir_expression *ir)
    case ir_unop_find_lsb:
       emit(FBL(result_dst, op[0]));
       break;
+   case ir_unop_saturate:
+      inst = emit(MOV(result_dst, op[0]));
+      inst->saturate = true;
+      break;
 
    case ir_unop_noise:
       unreachable("not reached: should be handled by lower_noise");
@@ -1456,7 +1372,7 @@ vec4_visitor::visit(ir_expression *ir)
             else
                emit(MUL(result_dst, op[0], op[1]));
          } else {
-            struct brw_reg acc = retype(brw_acc_reg(), result_dst.type);
+            struct brw_reg acc = retype(brw_acc_reg(8), result_dst.type);
 
             emit(MUL(acc, op[0], op[1]));
             emit(MACH(dst_null_d(), op[0], op[1]));
@@ -1467,7 +1383,7 @@ vec4_visitor::visit(ir_expression *ir)
       }
       break;
    case ir_binop_imul_high: {
-      struct brw_reg acc = retype(brw_acc_reg(), result_dst.type);
+      struct brw_reg acc = retype(brw_acc_reg(8), result_dst.type);
 
       emit(MUL(acc, op[0], op[1]));
       emit(MACH(result_dst, op[0], op[1]));
@@ -1479,14 +1395,14 @@ vec4_visitor::visit(ir_expression *ir)
       emit_math(SHADER_OPCODE_INT_QUOTIENT, result_dst, op[0], op[1]);
       break;
    case ir_binop_carry: {
-      struct brw_reg acc = retype(brw_acc_reg(), BRW_REGISTER_TYPE_UD);
+      struct brw_reg acc = retype(brw_acc_reg(8), BRW_REGISTER_TYPE_UD);
 
       emit(ADDC(dst_null_ud(), op[0], op[1]));
       emit(MOV(result_dst, src_reg(acc)));
       break;
    }
    case ir_binop_borrow: {
-      struct brw_reg acc = retype(brw_acc_reg(), BRW_REGISTER_TYPE_UD);
+      struct brw_reg acc = retype(brw_acc_reg(8), BRW_REGISTER_TYPE_UD);
 
       emit(SUBB(dst_null_ud(), op[0], op[1]));
       emit(MOV(result_dst, src_reg(acc)));
@@ -1507,7 +1423,7 @@ vec4_visitor::visit(ir_expression *ir)
       emit(CMP(result_dst, op[0], op[1],
 	       brw_conditional_for_comparison(ir->operation)));
       if (ctx->Const.UniformBooleanTrue == 1) {
-         emit(AND(result_dst, result_src, src_reg(1)));
+         emit(AND(result_dst, result_src, src_reg(1u)));
       }
       break;
    }
@@ -1523,7 +1439,7 @@ vec4_visitor::visit(ir_expression *ir)
       } else {
 	 emit(CMP(result_dst, op[0], op[1], BRW_CONDITIONAL_Z));
          if (ctx->Const.UniformBooleanTrue == 1) {
-            emit(AND(result_dst, result_src, src_reg(1)));
+            emit(AND(result_dst, result_src, src_reg(1u)));
          }
       }
       break;
@@ -1539,7 +1455,7 @@ vec4_visitor::visit(ir_expression *ir)
       } else {
 	 emit(CMP(result_dst, op[0], op[1], BRW_CONDITIONAL_NZ));
          if (ctx->Const.UniformBooleanTrue == 1) {
-            emit(AND(result_dst, result_src, src_reg(1)));
+            emit(AND(result_dst, result_src, src_reg(1u)));
          }
       }
       break;
@@ -1603,7 +1519,7 @@ vec4_visitor::visit(ir_expression *ir)
       break;
    case ir_unop_b2i:
       if (ctx->Const.UniformBooleanTrue != 1) {
-         emit(AND(result_dst, op[0], src_reg(1)));
+         emit(AND(result_dst, op[0], src_reg(1u)));
       } else {
          emit(MOV(result_dst, op[0]));
       }
@@ -1622,7 +1538,7 @@ vec4_visitor::visit(ir_expression *ir)
    case ir_unop_i2b:
       emit(CMP(result_dst, op[0], src_reg(0.0f), BRW_CONDITIONAL_NZ));
       if (ctx->Const.UniformBooleanTrue == 1) {
-         emit(AND(result_dst, result_src, src_reg(1)));
+         emit(AND(result_dst, result_src, src_reg(1u)));
       }
       break;
 
@@ -1770,7 +1686,7 @@ vec4_visitor::visit(ir_expression *ir)
          emit(CMP(result_dst, packed_consts, src_reg(0u),
                   BRW_CONDITIONAL_NZ));
          if (ctx->Const.UniformBooleanTrue == 1) {
-            emit(AND(result_dst, result, src_reg(1)));
+            emit(AND(result_dst, result, src_reg(1u)));
          }
       } else {
          emit(MOV(result_dst, packed_consts));
@@ -1796,9 +1712,7 @@ vec4_visitor::visit(ir_expression *ir)
       break;
 
    case ir_triop_csel:
-      emit(CMP(dst_null_d(), op[0], src_reg(0), BRW_CONDITIONAL_NZ));
-      inst = emit(BRW_OPCODE_SEL, result_dst, op[1], op[2]);
-      inst->predicate = BRW_PREDICATE_NORMAL;
+      unreachable("already handled above");
       break;
 
    case ir_triop_bfi:
@@ -2297,7 +2211,7 @@ vec4_visitor::emit_constant_values(dst_reg *dst, ir_constant *ir)
       case GLSL_TYPE_BOOL:
          emit(MOV(*dst,
                   src_reg(ir->value.b[i] != 0 ? ctx->Const.UniformBooleanTrue
-                                              : 0)));
+                                              : 0u)));
 	 break;
       default:
 	 unreachable("Non-float/uint/int/bool constant");
@@ -2324,7 +2238,7 @@ vec4_visitor::visit_atomic_counter_intrinsic(ir_call *ir)
       ir->actual_parameters.get_head());
    ir_variable *location = deref->variable_referenced();
    unsigned surf_index = (prog_data->base.binding_table.abo_start +
-                          location->data.atomic.buffer_index);
+                          location->data.binding);
 
    /* Calculate the surface offset */
    src_reg offset(this, glsl_type::uint_type);
@@ -2553,8 +2467,11 @@ vec4_visitor::visit(ir_texture *ir)
 
    vec4_instruction *inst = new(mem_ctx) vec4_instruction(this, opcode);
 
-   if (ir->offset != NULL && ir->op != ir_txf)
-      inst->texture_offset = brw_texture_offset(ctx, ir->offset->as_constant());
+   if (ir->offset != NULL && !has_nonconstant_offset) {
+      inst->texture_offset =
+         brw_texture_offset(ctx, ir->offset->as_constant()->value.i,
+                            ir->offset->type->vector_elements);
+   }
 
    /* Stuff the channel select bits in the top of the texture offset */
    if (ir->op == ir_tg4)
@@ -2932,7 +2849,7 @@ vec4_visitor::emit_ndc_computation()
 }
 
 void
-vec4_visitor::emit_psiz_and_flags(struct brw_reg reg)
+vec4_visitor::emit_psiz_and_flags(dst_reg reg)
 {
    if (brw->gen < 6 &&
        ((prog_data->vue_map.slots_valid & VARYING_BIT_PSIZ) ||
@@ -2992,16 +2909,21 @@ vec4_visitor::emit_psiz_and_flags(struct brw_reg reg)
    } else {
       emit(MOV(retype(reg, BRW_REGISTER_TYPE_D), src_reg(0)));
       if (prog_data->vue_map.slots_valid & VARYING_BIT_PSIZ) {
-         emit(MOV(brw_writemask(reg, WRITEMASK_W),
-                  src_reg(output_reg[VARYING_SLOT_PSIZ])));
+         dst_reg reg_w = reg;
+         reg_w.writemask = WRITEMASK_W;
+         emit(MOV(reg_w, src_reg(output_reg[VARYING_SLOT_PSIZ])));
       }
       if (prog_data->vue_map.slots_valid & VARYING_BIT_LAYER) {
-         emit(MOV(retype(brw_writemask(reg, WRITEMASK_Y), BRW_REGISTER_TYPE_D),
-                  src_reg(output_reg[VARYING_SLOT_LAYER])));
+         dst_reg reg_y = reg;
+         reg_y.writemask = WRITEMASK_Y;
+         reg_y.type = BRW_REGISTER_TYPE_D;
+         emit(MOV(reg_y, src_reg(output_reg[VARYING_SLOT_LAYER])));
       }
       if (prog_data->vue_map.slots_valid & VARYING_BIT_VIEWPORT) {
-         emit(MOV(retype(brw_writemask(reg, WRITEMASK_Z), BRW_REGISTER_TYPE_D),
-                  src_reg(output_reg[VARYING_SLOT_VIEWPORT])));
+         dst_reg reg_z = reg;
+         reg_z.writemask = WRITEMASK_Z;
+         reg_z.type = BRW_REGISTER_TYPE_D;
+         emit(MOV(reg_z, src_reg(output_reg[VARYING_SLOT_VIEWPORT])));
       }
    }
 }
@@ -3054,18 +2976,18 @@ vec4_visitor::emit_generic_urb_slot(dst_reg reg, int varying)
 }
 
 void
-vec4_visitor::emit_urb_slot(int mrf, int varying)
+vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
 {
-   struct brw_reg hw_reg = brw_message_reg(mrf);
-   dst_reg reg = dst_reg(MRF, mrf);
    reg.type = BRW_REGISTER_TYPE_F;
 
    switch (varying) {
    case VARYING_SLOT_PSIZ:
+   {
       /* PSIZ is always in slot 0, and is coupled with other flags. */
       current_annotation = "indices, point width, clip flags";
-      emit_psiz_and_flags(hw_reg);
+      emit_psiz_and_flags(reg);
       break;
+   }
    case BRW_VARYING_SLOT_NDC:
       current_annotation = "NDC";
       emit(MOV(reg, src_reg(output_reg[BRW_VARYING_SLOT_NDC])));
@@ -3173,7 +3095,8 @@ vec4_visitor::emit_vertex()
 
       mrf = base_mrf + 1;
       for (; slot < prog_data->vue_map.num_slots; ++slot) {
-         emit_urb_slot(mrf++, prog_data->vue_map.slot_to_varying[slot]);
+         emit_urb_slot(dst_reg(MRF, mrf++),
+                       prog_data->vue_map.slot_to_varying[slot]);
 
          /* If this was max_usable_mrf, we can't fit anything more into this
           * URB WRITE.
@@ -3195,7 +3118,7 @@ vec4_visitor::emit_vertex()
 
 
 src_reg
-vec4_visitor::get_scratch_offset(vec4_instruction *inst,
+vec4_visitor::get_scratch_offset(bblock_t *block, vec4_instruction *inst,
 				 src_reg *reladdr, int reg_offset)
 {
    /* Because we store the values to scratch interleaved like our
@@ -3212,9 +3135,10 @@ vec4_visitor::get_scratch_offset(vec4_instruction *inst,
    if (reladdr) {
       src_reg index = src_reg(this, glsl_type::int_type);
 
-      emit_before(inst, ADD(dst_reg(index), *reladdr, src_reg(reg_offset)));
-      emit_before(inst, MUL(dst_reg(index),
-			    index, src_reg(message_header_scale)));
+      emit_before(block, inst, ADD(dst_reg(index), *reladdr,
+                                   src_reg(reg_offset)));
+      emit_before(block, inst, MUL(dst_reg(index), index,
+                                   src_reg(message_header_scale)));
 
       return index;
    } else {
@@ -3223,26 +3147,27 @@ vec4_visitor::get_scratch_offset(vec4_instruction *inst,
 }
 
 src_reg
-vec4_visitor::get_pull_constant_offset(vec4_instruction *inst,
+vec4_visitor::get_pull_constant_offset(bblock_t * block, vec4_instruction *inst,
 				       src_reg *reladdr, int reg_offset)
 {
    if (reladdr) {
       src_reg index = src_reg(this, glsl_type::int_type);
 
-      emit_before(inst, ADD(dst_reg(index), *reladdr, src_reg(reg_offset)));
+      emit_before(block, inst, ADD(dst_reg(index), *reladdr,
+                                   src_reg(reg_offset)));
 
       /* Pre-gen6, the message header uses byte offsets instead of vec4
        * (16-byte) offset units.
        */
       if (brw->gen < 6) {
-	 emit_before(inst, MUL(dst_reg(index), index, src_reg(16)));
+         emit_before(block, inst, MUL(dst_reg(index), index, src_reg(16)));
       }
 
       return index;
    } else if (brw->gen >= 8) {
       /* Store the offset in a GRF so we can send-from-GRF. */
       src_reg offset = src_reg(this, glsl_type::int_type);
-      emit_before(inst, MOV(dst_reg(offset), src_reg(reg_offset)));
+      emit_before(block, inst, MOV(dst_reg(offset), src_reg(reg_offset)));
       return offset;
    } else {
       int message_header_scale = brw->gen < 6 ? 16 : 1;
@@ -3257,14 +3182,15 @@ vec4_visitor::get_pull_constant_offset(vec4_instruction *inst,
  * @base_offset is measured in 32-byte units (the size of a register).
  */
 void
-vec4_visitor::emit_scratch_read(vec4_instruction *inst,
+vec4_visitor::emit_scratch_read(bblock_t *block, vec4_instruction *inst,
 				dst_reg temp, src_reg orig_src,
 				int base_offset)
 {
    int reg_offset = base_offset + orig_src.reg_offset;
-   src_reg index = get_scratch_offset(inst, orig_src.reladdr, reg_offset);
+   src_reg index = get_scratch_offset(block, inst, orig_src.reladdr,
+                                      reg_offset);
 
-   emit_before(inst, SCRATCH_READ(temp, index));
+   emit_before(block, inst, SCRATCH_READ(temp, index));
 }
 
 /**
@@ -3274,10 +3200,12 @@ vec4_visitor::emit_scratch_read(vec4_instruction *inst,
  * @base_offset is measured in 32-byte units (the size of a register).
  */
 void
-vec4_visitor::emit_scratch_write(vec4_instruction *inst, int base_offset)
+vec4_visitor::emit_scratch_write(bblock_t *block, vec4_instruction *inst,
+                                 int base_offset)
 {
    int reg_offset = base_offset + inst->dst.reg_offset;
-   src_reg index = get_scratch_offset(inst, inst->dst.reladdr, reg_offset);
+   src_reg index = get_scratch_offset(block, inst, inst->dst.reladdr,
+                                      reg_offset);
 
    /* Create a temporary register to store *inst's result in.
     *
@@ -3304,7 +3232,7 @@ vec4_visitor::emit_scratch_write(vec4_instruction *inst, int base_offset)
    write->predicate = inst->predicate;
    write->ir = inst->ir;
    write->annotation = inst->annotation;
-   inst->insert_after(write);
+   inst->insert_after(block, write);
 
    inst->dst.file = temp.file;
    inst->dst.reg = temp.reg;
@@ -3322,16 +3250,13 @@ void
 vec4_visitor::move_grf_array_access_to_scratch()
 {
    int scratch_loc[this->virtual_grf_count];
-
-   for (int i = 0; i < this->virtual_grf_count; i++) {
-      scratch_loc[i] = -1;
-   }
+   memset(scratch_loc, -1, sizeof(scratch_loc));
 
    /* First, calculate the set of virtual GRFs that need to be punted
     * to scratch due to having any array access on them, and where in
     * scratch.
     */
-   foreach_in_list(vec4_instruction, inst, &instructions) {
+   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       if (inst->dst.file == GRF && inst->dst.reladdr &&
 	  scratch_loc[inst->dst.reg] == -1) {
 	 scratch_loc[inst->dst.reg] = c->last_scratch;
@@ -3354,13 +3279,13 @@ vec4_visitor::move_grf_array_access_to_scratch()
     * we may generate a new scratch_write instruction after the one
     * we're processing.
     */
-   foreach_in_list_safe(vec4_instruction, inst, &instructions) {
+   foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
       /* Set up the annotation tracking for new generated instructions. */
       base_ir = inst->ir;
       current_annotation = inst->annotation;
 
       if (inst->dst.file == GRF && scratch_loc[inst->dst.reg] != -1) {
-	 emit_scratch_write(inst, scratch_loc[inst->dst.reg]);
+	 emit_scratch_write(block, inst, scratch_loc[inst->dst.reg]);
       }
 
       for (int i = 0 ; i < 3; i++) {
@@ -3369,7 +3294,7 @@ vec4_visitor::move_grf_array_access_to_scratch()
 
 	 dst_reg temp = dst_reg(this, glsl_type::vec4_type);
 
-	 emit_scratch_read(inst, temp, inst->src[i],
+	 emit_scratch_read(block, inst, temp, inst->src[i],
 			   scratch_loc[inst->src[i].reg]);
 
 	 inst->src[i].file = temp.file;
@@ -3385,19 +3310,20 @@ vec4_visitor::move_grf_array_access_to_scratch()
  * from the pull constant buffer (surface) at @base_offset to @temp.
  */
 void
-vec4_visitor::emit_pull_constant_load(vec4_instruction *inst,
+vec4_visitor::emit_pull_constant_load(bblock_t *block, vec4_instruction *inst,
 				      dst_reg temp, src_reg orig_src,
 				      int base_offset)
 {
    int reg_offset = base_offset + orig_src.reg_offset;
    src_reg index = src_reg(prog_data->base.binding_table.pull_constants_start);
-   src_reg offset = get_pull_constant_offset(inst, orig_src.reladdr, reg_offset);
+   src_reg offset = get_pull_constant_offset(block, inst, orig_src.reladdr,
+                                             reg_offset);
    vec4_instruction *load;
 
    if (brw->gen >= 7) {
       dst_reg grf_offset = dst_reg(this, glsl_type::int_type);
       grf_offset.type = offset.type;
-      emit_before(inst, MOV(grf_offset, offset));
+      emit_before(block, inst, MOV(grf_offset, offset));
 
       load = new(mem_ctx) vec4_instruction(this,
                                            VS_OPCODE_PULL_CONSTANT_LOAD_GEN7,
@@ -3408,7 +3334,7 @@ vec4_visitor::emit_pull_constant_load(vec4_instruction *inst,
       load->base_mrf = 14;
       load->mlen = 1;
    }
-   emit_before(inst, load);
+   emit_before(block, inst, load);
 }
 
 /**
@@ -3427,10 +3353,8 @@ void
 vec4_visitor::move_uniform_array_access_to_pull_constants()
 {
    int pull_constant_loc[this->uniforms];
-
-   for (int i = 0; i < this->uniforms; i++) {
-      pull_constant_loc[i] = -1;
-   }
+   memset(pull_constant_loc, -1, sizeof(pull_constant_loc));
+   bool nested_reladdr;
 
    /* Walk through and find array access of uniforms.  Put a copy of that
     * uniform in the pull constant buffer.
@@ -3438,44 +3362,51 @@ vec4_visitor::move_uniform_array_access_to_pull_constants()
     * Note that we don't move constant-indexed accesses to arrays.  No
     * testing has been done of the performance impact of this choice.
     */
-   foreach_in_list_safe(vec4_instruction, inst, &instructions) {
-      for (int i = 0 ; i < 3; i++) {
-	 if (inst->src[i].file != UNIFORM || !inst->src[i].reladdr)
-	    continue;
+   do {
+      nested_reladdr = false;
 
-	 int uniform = inst->src[i].reg;
+      foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
+         for (int i = 0 ; i < 3; i++) {
+            if (inst->src[i].file != UNIFORM || !inst->src[i].reladdr)
+               continue;
 
-	 /* If this array isn't already present in the pull constant buffer,
-	  * add it.
-	  */
-	 if (pull_constant_loc[uniform] == -1) {
-	    const gl_constant_value **values =
-               &stage_prog_data->param[uniform * 4];
+            int uniform = inst->src[i].reg;
 
-	    pull_constant_loc[uniform] = stage_prog_data->nr_pull_params / 4;
+            if (inst->src[i].reladdr->reladdr)
+               nested_reladdr = true;  /* will need another pass */
 
-	    assert(uniform < uniform_array_size);
-	    for (int j = 0; j < uniform_size[uniform] * 4; j++) {
-	       stage_prog_data->pull_param[stage_prog_data->nr_pull_params++]
-                  = values[j];
-	    }
-	 }
+            /* If this array isn't already present in the pull constant buffer,
+             * add it.
+             */
+            if (pull_constant_loc[uniform] == -1) {
+               const gl_constant_value **values =
+                  &stage_prog_data->param[uniform * 4];
 
-	 /* Set up the annotation tracking for new generated instructions. */
-	 base_ir = inst->ir;
-	 current_annotation = inst->annotation;
+               pull_constant_loc[uniform] = stage_prog_data->nr_pull_params / 4;
 
-	 dst_reg temp = dst_reg(this, glsl_type::vec4_type);
+               assert(uniform < uniform_array_size);
+               for (int j = 0; j < uniform_size[uniform] * 4; j++) {
+                  stage_prog_data->pull_param[stage_prog_data->nr_pull_params++]
+                     = values[j];
+               }
+            }
 
-	 emit_pull_constant_load(inst, temp, inst->src[i],
-				 pull_constant_loc[uniform]);
+            /* Set up the annotation tracking for new generated instructions. */
+            base_ir = inst->ir;
+            current_annotation = inst->annotation;
 
-	 inst->src[i].file = temp.file;
-	 inst->src[i].reg = temp.reg;
-	 inst->src[i].reg_offset = temp.reg_offset;
-	 inst->src[i].reladdr = NULL;
+            dst_reg temp = dst_reg(this, glsl_type::vec4_type);
+
+            emit_pull_constant_load(block, inst, temp, inst->src[i],
+                                    pull_constant_loc[uniform]);
+
+            inst->src[i].file = temp.file;
+            inst->src[i].reg = temp.reg;
+            inst->src[i].reg_offset = temp.reg_offset;
+            inst->src[i].reladdr = NULL;
+         }
       }
-   }
+   } while (nested_reladdr);
 
    /* Now there are no accesses of the UNIFORM file with a reladdr, so
     * no need to track them as larger-than-vec4 objects.  This will be

@@ -33,6 +33,7 @@ struct r600_bytecode_alu_src {
 	unsigned			abs;
 	unsigned			rel;
 	unsigned			kc_bank;
+	unsigned			kc_rel;
 	uint32_t			value;
 };
 
@@ -86,6 +87,9 @@ struct r600_bytecode_tex {
 	unsigned			src_sel_y;
 	unsigned			src_sel_z;
 	unsigned			src_sel_w;
+	/* indexed samplers/resources only on evergreen/cayman */
+	unsigned			sampler_index_mode;
+	unsigned			resource_index_mode;
 };
 
 struct r600_bytecode_vtx {
@@ -108,6 +112,7 @@ struct r600_bytecode_vtx {
 	unsigned			srf_mode_all;
 	unsigned			offset;
 	unsigned			endian;
+	unsigned			buffer_index_mode;
 };
 
 struct r600_bytecode_output {
@@ -132,6 +137,7 @@ struct r600_bytecode_kcache {
 	unsigned			bank;
 	unsigned			mode;
 	unsigned			addr;
+	unsigned			index_mode;
 };
 
 struct r600_bytecode_cf {
@@ -217,12 +223,15 @@ struct r600_bytecode {
 	unsigned	ar_chan;
 	unsigned        ar_handling;
 	unsigned        r6xx_nop_after_rel_dst;
+	bool		index_loaded[2];
+	unsigned 	index_reg[2]; /* indexing register CF_INDEX_[01] */
 	unsigned        debug_id;
 	struct r600_isa* isa;
 };
 
 /* eg_asm.c */
 int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf);
+int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_clause);
 
 /* r600_asm.c */
 void r600_bytecode_init(struct r600_bytecode *bc,

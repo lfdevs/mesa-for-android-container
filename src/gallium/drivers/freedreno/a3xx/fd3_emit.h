@@ -33,6 +33,7 @@
 
 #include "freedreno_context.h"
 #include "fd3_util.h"
+#include "fd3_program.h"
 #include "ir3_shader.h"
 
 struct fd_ringbuffer;
@@ -46,21 +47,44 @@ void fd3_emit_constant(struct fd_ringbuffer *ring,
 void fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
 		struct pipe_surface *psurf);
 
-/* NOTE: this just exists because we don't have proper vertex/vertexbuf
- * state objs for clear, and mem2gmem/gmem2mem operations..
- */
-struct fd3_vertex_buf {
-	unsigned offset, stride;
-	struct pipe_resource *prsc;
-	enum pipe_format format;
+/* grouped together emit-state for prog/vertex/state emit: */
+struct fd3_emit {
+	const struct fd_vertex_state *vtx;
+	const struct fd_program_stateobj *prog;
+	const struct pipe_draw_info *info;
+	struct ir3_shader_key key;
+	uint32_t dirty;
+	bool rasterflat;
+
+	/* cached to avoid repeated lookups of same variants: */
+	struct ir3_shader_variant *vp, *fp;
 };
 
-void fd3_emit_vertex_bufs(struct fd_ringbuffer *ring,
-		struct ir3_shader_variant *vp,
-		struct fd3_vertex_buf *vbufs, uint32_t n);
+static inline struct ir3_shader_variant *
+fd3_emit_get_vp(struct fd3_emit *emit)
+{
+	if (!emit->vp) {
+		struct fd3_shader_stateobj *so = emit->prog->vp;
+		emit->vp = ir3_shader_variant(so->shader, emit->key);
+	}
+	return emit->vp;
+}
+
+static inline struct ir3_shader_variant *
+fd3_emit_get_fp(struct fd3_emit *emit)
+{
+	if (!emit->fp) {
+		struct fd3_shader_stateobj *so = emit->prog->fp;
+		emit->fp = ir3_shader_variant(so->shader, emit->key);
+	}
+	return emit->fp;
+}
+
+void fd3_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd3_emit *emit);
+
 void fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		struct fd_program_stateobj *prog, uint32_t dirty,
-		struct ir3_shader_key key);
+		struct fd3_emit *emit);
+
 void fd3_emit_restore(struct fd_context *ctx);
 
 #endif /* FD3_EMIT_H */

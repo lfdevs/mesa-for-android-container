@@ -280,11 +280,15 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_DRAW_INDIRECT:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+   case PIPE_CAP_SAMPLER_VIEW_TARGET:
+   case PIPE_CAP_CLIP_HALFZ:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
       return 1;
+   case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
+      return 2048;
    case PIPE_CAP_MAX_VIEWPORTS:
       return 1;
    case PIPE_CAP_ENDIANNESS:
@@ -327,6 +331,8 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
          return SVGA3D_MAX_NESTING_LEVEL;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 10;
+      case PIPE_SHADER_CAP_MAX_OUTPUTS:
+         return svgascreen->max_color_buffers;
       case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
          return 224 * sizeof(float[4]);
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
@@ -384,6 +390,8 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
          return SVGA3D_MAX_NESTING_LEVEL;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 16;
+      case PIPE_SHADER_CAP_MAX_OUTPUTS:
+         return 10;
       case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
          return 256 * sizeof(float[4]);
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:

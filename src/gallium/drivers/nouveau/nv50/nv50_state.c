@@ -57,10 +57,6 @@
  *  ! pipe_rasterizer_state.flatshade_first also applies to QUADS
  *    (There's a GL query for that, forcing an exception is just ridiculous.)
  *
- *  ! pipe_rasterizer_state.half_pixel_center is ignored - pixel centers
- *     are always at half integer coordinates and the top-left rule applies
- *    (There does not seem to be a hardware switch for this.)
- *
  *  ! pipe_rasterizer_state.sprite_coord_enable is masked with 0xff on NVC0
  *    (The hardware only has 8 slots meant for TexCoord and we have to assign
  *     in advance to maintain elegant separate shader objects.)
@@ -221,7 +217,7 @@ nv50_blend_state_delete(struct pipe_context *pipe, void *hwcso)
    FREE(hwcso);
 }
 
-/* NOTE: ignoring line_last_pixel, using FALSE (set on screen init) */
+/* NOTE: ignoring line_last_pixel */
 static void *
 nv50_rasterizer_state_create(struct pipe_context *pipe,
                              const struct pipe_rasterizer_state *cso)
@@ -332,6 +328,12 @@ nv50_rasterizer_state_create(struct pipe_context *pipe,
 #endif
    SB_BEGIN_3D(so, VIEW_VOLUME_CLIP_CTRL, 1);
    SB_DATA    (so, reg);
+
+   SB_BEGIN_3D(so, DEPTH_CLIP_NEGATIVE_Z, 1);
+   SB_DATA    (so, cso->clip_halfz);
+
+   SB_BEGIN_3D(so, PIXEL_CENTER_INTEGER, 1);
+   SB_DATA    (so, !cso->half_pixel_center);
 
    assert(so->size <= (sizeof(so->state) / sizeof(so->state[0])));
    return (void *)so;

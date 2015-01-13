@@ -100,7 +100,7 @@ fd_context_render(struct pipe_context *pctx)
 	if (!ctx->needs_flush)
 		return;
 
-	fd_gmem_render_tiles(pctx);
+	fd_gmem_render_tiles(ctx);
 
 	DBG("%p/%p/%p", ctx->ring->start, ctx->ring->cur, ctx->ring->end);
 
@@ -111,7 +111,7 @@ fd_context_render(struct pipe_context *pctx)
 		fd_context_next_rb(pctx);
 
 	ctx->needs_flush = false;
-	ctx->cleared = ctx->restore = ctx->resolve = 0;
+	ctx->cleared = ctx->partial_cleared = ctx->restore = ctx->resolve = 0;
 	ctx->gmem_reason = 0;
 	ctx->num_draws = 0;
 
@@ -148,8 +148,6 @@ fd_context_destroy(struct pipe_context *pctx)
 	fd_prog_fini(pctx);
 	fd_hw_query_fini(pctx);
 
-	util_slab_destroy(&ctx->transfer_pool);
-
 	util_dynarray_fini(&ctx->draw_patches);
 
 	if (ctx->blitter)
@@ -157,6 +155,8 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	if (ctx->primconvert)
 		util_primconvert_destroy(ctx->primconvert);
+
+	util_slab_destroy(&ctx->transfer_pool);
 
 	fd_ringmarker_del(ctx->draw_start);
 	fd_ringmarker_del(ctx->draw_end);

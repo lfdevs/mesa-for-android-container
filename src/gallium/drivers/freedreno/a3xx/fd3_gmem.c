@@ -69,6 +69,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		struct fd_resource_slice *slice = NULL;
 		uint32_t stride = 0;
 		uint32_t base = 0;
+		uint32_t layer_offset = 0;
 
 		if ((i < nr_bufs) && bufs[i]) {
 			struct pipe_surface *psurf = bufs[i];
@@ -77,6 +78,10 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 			slice = &rsc->slices[psurf->u.tex.level];
 			format = fd3_pipe2color(psurf->format);
 			swap = fd3_pipe2swap(psurf->format);
+
+			debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
+
+			layer_offset = slice->size0 * psurf->u.tex.first_layer;
 
 			if (bin_w) {
 				stride = bin_w * rsc->cpp;
@@ -97,7 +102,8 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		if (bin_w || (i >= nr_bufs)) {
 			OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(base));
 		} else {
-			OUT_RELOCW(ring, rsc->bo, slice->offset, 0, -1);
+			OUT_RELOCW(ring, rsc->bo,
+					slice->offset + layer_offset, 0, -1);
 		}
 
 		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
@@ -152,6 +158,11 @@ emit_binning_workaround(struct fd_context *ctx)
 	struct fd3_context *fd3_ctx = fd3_context(ctx);
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct fd_ringbuffer *ring = ctx->ring;
+	struct fd3_emit emit = {
+			.vtx = &fd3_ctx->solid_vbuf_state,
+			.prog = &ctx->solid_prog,
+			.key = key,
+	};
 
 	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 2);
 	OUT_RING(ring, A3XX_RB_MODE_CONTROL_RENDER_MODE(RB_RESOLVE_PASS) |
@@ -177,13 +188,8 @@ emit_binning_workaround(struct fd_context *ctx)
 			A3XX_GRAS_SC_CONTROL_MSAA_SAMPLES(MSAA_ONE) |
 			A3XX_GRAS_SC_CONTROL_RASTER_MODE(1));
 
-	fd3_program_emit(ring, &ctx->solid_prog, key);
-	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->solid_prog.vp, key),
-			(struct fd3_vertex_buf[]) {{
-				.prsc = fd3_ctx->solid_vbuf,
-				.stride = 12,
-				.format = PIPE_FORMAT_R32G32B32_FLOAT,
-			}}, 1);
+	fd3_program_emit(ring, &emit);
+	fd3_emit_vertex_bufs(ring, &emit);
 
 	OUT_PKT0(ring, REG_A3XX_HLSQ_CONTROL_0_REG, 4);
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(FOUR_QUADS) |
@@ -303,12 +309,16 @@ emit_gmem2mem_surf(struct fd_context *ctx,
 	struct fd_ringbuffer *ring = ctx->ring;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	struct fd_resource_slice *slice = &rsc->slices[psurf->u.tex.level];
+	uint32_t layer_offset = slice->size0 * psurf->u.tex.first_layer;
+
+	debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
 
 	OUT_PKT0(ring, REG_A3XX_RB_COPY_CONTROL, 4);
 	OUT_RING(ring, A3XX_RB_COPY_CONTROL_MSAA_RESOLVE(MSAA_ONE) |
 			A3XX_RB_COPY_CONTROL_MODE(mode) |
 			A3XX_RB_COPY_CONTROL_GMEM_BASE(base));
-	OUT_RELOCW(ring, rsc->bo, slice->offset, 0, -1);    /* RB_COPY_DEST_BASE */
+
+	OUT_RELOCW(ring, rsc->bo, slice->offset + layer_offset, 0, -1);    /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch * rsc->cpp));
 	OUT_RING(ring, A3XX_RB_COPY_DEST_INFO_TILE(LINEAR) |
 			A3XX_RB_COPY_DEST_INFO_FORMAT(fd3_pipe2color(psurf->format)) |
@@ -326,6 +336,11 @@ fd3_emit_tile_gmem2mem(struct fd_context *ctx, struct fd_tile *tile)
 	struct fd3_context *fd3_ctx = fd3_context(ctx);
 	struct fd_ringbuffer *ring = ctx->ring;
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct fd3_emit emit = {
+			.vtx = &fd3_ctx->solid_vbuf_state,
+			.prog = &ctx->solid_prog,
+			.key = key,
+	};
 
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_DEPTH_CONTROL_ZFUNC(FUNC_NEVER));
@@ -398,13 +413,8 @@ fd3_emit_tile_gmem2mem(struct fd_context *ctx, struct fd_tile *tile)
 	OUT_RING(ring, 0);            /* VFD_INSTANCEID_OFFSET */
 	OUT_RING(ring, 0);            /* VFD_INDEX_OFFSET */
 
-	fd3_program_emit(ring, &ctx->solid_prog, key);
-	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->solid_prog.vp, key),
-			(struct fd3_vertex_buf[]) {{
-				.prsc = fd3_ctx->solid_vbuf,
-				.stride = 12,
-				.format = PIPE_FORMAT_R32G32B32_FLOAT,
-			}}, 1);
+	fd3_program_emit(ring, &emit);
+	fd3_emit_vertex_bufs(ring, &emit);
 
 	if (ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
 		uint32_t base = depth_base(ctx);
@@ -448,6 +458,11 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct fd_ringbuffer *ring = ctx->ring;
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct fd3_emit emit = {
+			.vtx = &fd3_ctx->blit_vbuf_state,
+			.prog = &ctx->blit_prog,
+			.key = key,
+	};
 	float x0, y0, x1, y1;
 	unsigned bin_w = tile->bin_w;
 	unsigned bin_h = tile->bin_h;
@@ -542,17 +557,8 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	OUT_RING(ring, 0);            /* VFD_INSTANCEID_OFFSET */
 	OUT_RING(ring, 0);            /* VFD_INDEX_OFFSET */
 
-	fd3_program_emit(ring, &ctx->blit_prog, key);
-	fd3_emit_vertex_bufs(ring, fd3_shader_variant(ctx->blit_prog.vp, key),
-			(struct fd3_vertex_buf[]) {{
-				.prsc = fd3_ctx->blit_texcoord_vbuf,
-				.stride = 8,
-				.format = PIPE_FORMAT_R32G32_FLOAT,
-			}, {
-				.prsc = fd3_ctx->solid_vbuf,
-				.stride = 12,
-				.format = PIPE_FORMAT_R32G32B32_FLOAT,
-			}}, 2);
+	fd3_program_emit(ring, &emit);
+	fd3_emit_vertex_bufs(ring, &emit);
 
 	/* for gmem pitch/base calculations, we need to use the non-
 	 * truncated tile sizes:
@@ -560,10 +566,10 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	bin_w = gmem->bin_w;
 	bin_h = gmem->bin_h;
 
-	if (ctx->restore & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
+	if (fd_gmem_needs_restore(ctx, tile, FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
 		emit_mem2gmem_surf(ctx, depth_base(ctx), pfb->zsbuf, bin_w);
 
-	if (ctx->restore & FD_BUFFER_COLOR)
+	if (fd_gmem_needs_restore(ctx, tile, FD_BUFFER_COLOR))
 		emit_mem2gmem_surf(ctx, 0, pfb->cbufs[0], bin_w);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SC_CONTROL, 1);
@@ -603,8 +609,11 @@ fd3_emit_sysmem_prep(struct fd_context *ctx)
 	struct fd_ringbuffer *ring = ctx->ring;
 	uint32_t pitch = 0;
 
-	if (pfb->cbufs[0])
-		pitch = fd_resource(pfb->cbufs[0]->texture)->slices[0].pitch;
+	if (pfb->cbufs[0]) {
+		struct pipe_surface *psurf = pfb->cbufs[0];
+		unsigned lvl = psurf->u.tex.level;
+		pitch = fd_resource(psurf->texture)->slices[lvl].pitch;
+	}
 
 	fd3_emit_restore(ctx);
 

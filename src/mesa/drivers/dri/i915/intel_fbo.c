@@ -180,6 +180,15 @@ intel_renderbuffer_format(struct gl_context * ctx, GLenum internalFormat)
       return intel->ctx.Driver.ChooseTextureFormat(ctx, GL_TEXTURE_2D,
                                                    internalFormat,
                                                    GL_NONE, GL_NONE);
+
+   case GL_DEPTH_COMPONENT16:
+      return MESA_FORMAT_Z_UNORM16;
+   case GL_DEPTH_COMPONENT:
+   case GL_DEPTH_COMPONENT24:
+   case GL_DEPTH_COMPONENT32:
+      return MESA_FORMAT_Z24_UNORM_X8_UINT;
+   case GL_DEPTH_STENCIL_EXT:
+   case GL_DEPTH24_STENCIL8_EXT:
    case GL_STENCIL_INDEX:
    case GL_STENCIL_INDEX1_EXT:
    case GL_STENCIL_INDEX4_EXT:

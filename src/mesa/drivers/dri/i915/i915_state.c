@@ -34,6 +34,7 @@
 #include "main/dd.h"
 #include "main/state.h"
 #include "main/stencil.h"
+#include "main/viewport.h"
 #include "tnl/tnl.h"
 #include "tnl/t_context.h"
 
@@ -401,26 +402,17 @@ void
 intelCalcViewport(struct gl_context * ctx)
 {
    struct intel_context *intel = intel_context(ctx);
+   double scale[3], translate[3];
+
+   _mesa_get_viewport_xform(ctx, 0, scale, translate);
 
    if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
-      _math_matrix_viewport(&intel->ViewportMatrix,
-			    ctx->ViewportArray[0].X,
-			    ctx->DrawBuffer->Height - ctx->ViewportArray[0].Y,
-			    ctx->ViewportArray[0].Width,
-			    -ctx->ViewportArray[0].Height,
-			    ctx->ViewportArray[0].Near,
-			    ctx->ViewportArray[0].Far,
-			    1.0);
-   } else {
-      _math_matrix_viewport(&intel->ViewportMatrix,
-			    ctx->ViewportArray[0].X,
-			    ctx->ViewportArray[0].Y,
-			    ctx->ViewportArray[0].Width,
-			    ctx->ViewportArray[0].Height,
-			    ctx->ViewportArray[0].Near,
-			    ctx->ViewportArray[0].Far,
-			    1.0);
+      scale[1] = -scale[1];
+      translate[1] = ctx->DrawBuffer->Height - translate[1];
    }
+
+   _math_matrix_viewport(&intel->ViewportMatrix,
+                         scale, translate, 1.0);
 }
 
 
@@ -988,11 +980,11 @@ i915_init_packets(struct i915_context *i915)
       i915->state.Buffer[I915_DESTREG_DV0] = _3DSTATE_DST_BUF_VARS_CMD;
 
       /* scissor */
-      i915->state.Buffer[I915_DESTREG_SENABLE] =
-         (_3DSTATE_SCISSOR_ENABLE_CMD | DISABLE_SCISSOR_RECT);
       i915->state.Buffer[I915_DESTREG_SR0] = _3DSTATE_SCISSOR_RECT_0_CMD;
       i915->state.Buffer[I915_DESTREG_SR1] = 0;
       i915->state.Buffer[I915_DESTREG_SR2] = 0;
+      i915->state.Buffer[I915_DESTREG_SENABLE] =
+         (_3DSTATE_SCISSOR_ENABLE_CMD | DISABLE_SCISSOR_RECT);
    }
 
    i915->state.RasterRules[I915_RASTER_RULES] = _3DSTATE_RASTER_RULES_CMD |

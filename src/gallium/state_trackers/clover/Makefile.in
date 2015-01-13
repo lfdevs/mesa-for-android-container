@@ -86,8 +86,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources $(srcdir)/Makefile.in \
 @HAVE_CLOVER_ICD_TRUE@am__append_1 = -DHAVE_CLOVER_ICD
 subdir = src/gallium/state_trackers/clover
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -102,7 +103,8 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libclllvm_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am_libclllvm_la_OBJECTS = llvm/libclllvm_la-invocation.lo
+am__objects_1 = llvm/libclllvm_la-invocation.lo
+am_libclllvm_la_OBJECTS = $(am__objects_1)
 libclllvm_la_OBJECTS = $(am_libclllvm_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -112,26 +114,27 @@ libclllvm_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(libclllvm_la_CXXFLAGS) \
 	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 libclover_la_DEPENDENCIES = libcltgsi.la libclllvm.la
-am__objects_1 = util/libclover_la-compat.lo \
-	core/libclover_la-device.lo core/libclover_la-context.lo \
-	core/libclover_la-queue.lo core/libclover_la-format.lo \
-	core/libclover_la-memory.lo core/libclover_la-platform.lo \
-	core/libclover_la-resource.lo core/libclover_la-sampler.lo \
-	core/libclover_la-timestamp.lo core/libclover_la-event.lo \
-	core/libclover_la-program.lo core/libclover_la-kernel.lo \
-	core/libclover_la-module.lo api/libclover_la-dispatch.lo \
-	api/libclover_la-platform.lo api/libclover_la-device.lo \
-	api/libclover_la-context.lo api/libclover_la-queue.lo \
-	api/libclover_la-memory.lo api/libclover_la-transfer.lo \
-	api/libclover_la-sampler.lo api/libclover_la-event.lo \
-	api/libclover_la-program.lo api/libclover_la-kernel.lo
-am_libclover_la_OBJECTS = $(am__objects_1)
+am__objects_2 = api/libclover_la-context.lo api/libclover_la-device.lo \
+	api/libclover_la-dispatch.lo api/libclover_la-event.lo \
+	api/libclover_la-kernel.lo api/libclover_la-memory.lo \
+	api/libclover_la-platform.lo api/libclover_la-program.lo \
+	api/libclover_la-queue.lo api/libclover_la-sampler.lo \
+	api/libclover_la-transfer.lo core/libclover_la-context.lo \
+	core/libclover_la-device.lo core/libclover_la-event.lo \
+	core/libclover_la-format.lo core/libclover_la-kernel.lo \
+	core/libclover_la-memory.lo core/libclover_la-module.lo \
+	core/libclover_la-platform.lo core/libclover_la-program.lo \
+	core/libclover_la-queue.lo core/libclover_la-resource.lo \
+	core/libclover_la-sampler.lo core/libclover_la-timestamp.lo \
+	util/libclover_la-compat.lo
+am_libclover_la_OBJECTS = $(am__objects_2)
 libclover_la_OBJECTS = $(am_libclover_la_OBJECTS)
 libclover_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(libclover_la_CXXFLAGS) \
 	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 libcltgsi_la_LIBADD =
-am_libcltgsi_la_OBJECTS = tgsi/libcltgsi_la-compiler.lo
+am__objects_3 = tgsi/libcltgsi_la-compiler.lo
+am_libcltgsi_la_OBJECTS = $(am__objects_3)
 libcltgsi_la_OBJECTS = $(am_libcltgsi_la_OBJECTS)
 libcltgsi_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(libcltgsi_la_CXXFLAGS) \
@@ -281,6 +284,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -303,7 +307,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -376,11 +379,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -391,10 +397,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -408,7 +412,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -427,7 +430,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -491,6 +500,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -519,6 +529,49 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 CPP_SOURCES := \
+	api/context.cpp \
+	api/device.cpp \
+	api/dispatch.cpp \
+	api/dispatch.hpp \
+	api/event.cpp \
+	api/kernel.cpp \
+	api/memory.cpp \
+	api/platform.cpp \
+	api/program.cpp \
+	api/queue.cpp \
+	api/sampler.cpp \
+	api/transfer.cpp \
+	api/util.hpp \
+	core/compiler.hpp \
+	core/context.cpp \
+	core/context.hpp \
+	core/device.cpp \
+	core/device.hpp \
+	core/error.hpp \
+	core/event.cpp \
+	core/event.hpp \
+	core/format.cpp \
+	core/format.hpp \
+	core/kernel.cpp \
+	core/kernel.hpp \
+	core/memory.cpp \
+	core/memory.hpp \
+	core/module.cpp \
+	core/module.hpp \
+	core/object.hpp \
+	core/platform.cpp \
+	core/platform.hpp \
+	core/program.cpp \
+	core/program.hpp \
+	core/property.hpp \
+	core/queue.cpp \
+	core/queue.hpp \
+	core/resource.cpp \
+	core/resource.hpp \
+	core/sampler.cpp \
+	core/sampler.hpp \
+	core/timestamp.cpp \
+	core/timestamp.hpp \
 	util/adaptor.hpp \
 	util/algebra.hpp \
 	util/algorithm.hpp \
@@ -529,54 +582,18 @@ CPP_SOURCES := \
 	util/lazy.hpp \
 	util/pointer.hpp \
 	util/range.hpp \
-	util/tuple.hpp \
-	core/object.hpp \
-	core/error.hpp \
-	core/compiler.hpp \
-	core/device.hpp \
-	core/device.cpp \
-	core/context.hpp \
-	core/context.cpp \
-	core/queue.hpp \
-	core/queue.cpp \
-	core/format.hpp \
-	core/format.cpp \
-	core/memory.hpp \
-	core/memory.cpp \
-	core/platform.hpp \
-	core/platform.cpp \
-	core/resource.hpp \
-	core/resource.cpp \
-	core/sampler.hpp \
-	core/sampler.cpp \
-	core/timestamp.hpp \
-	core/timestamp.cpp \
-	core/event.hpp \
-	core/event.cpp \
-	core/program.hpp \
-	core/program.cpp \
-	core/property.hpp \
-	core/kernel.hpp \
-	core/kernel.cpp \
-	core/module.hpp \
-	core/module.cpp \
-	api/util.hpp \
-	api/dispatch.hpp \
-	api/dispatch.cpp \
-	api/platform.cpp \
-	api/device.cpp \
-	api/context.cpp \
-	api/queue.cpp \
-	api/memory.cpp \
-	api/transfer.cpp \
-	api/sampler.cpp \
-	api/event.cpp \
-	api/program.cpp \
-	api/kernel.cpp
+	util/tuple.hpp
+
+LLVM_SOURCES := \
+	llvm/invocation.cpp
+
+TGSI_SOURCES := \
+	tgsi/compiler.cpp
 
 AM_CPPFLAGS = $(GALLIUM_PIPE_LOADER_DEFINES) \
 	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\" \
-	-I$(top_srcdir)/include -I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/include -I$(top_srcdir)/src \
+	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/winsys -I$(srcdir) $(am__append_1)
@@ -600,9 +617,7 @@ libcltgsi_la_CXXFLAGS = \
 	-std=c++0x \
 	$(VISIBILITY_CXXFLAGS)
 
-libcltgsi_la_SOURCES = \
-	tgsi/compiler.cpp
-
+libcltgsi_la_SOURCES = $(TGSI_SOURCES)
 libclllvm_la_CXXFLAGS = \
 	$(VISIBILITY_CXXFLAGS) \
 	$(LLVM_CXXFLAGS) \
@@ -611,9 +626,7 @@ libclllvm_la_CXXFLAGS = \
 	-DLIBCLC_LIBEXECDIR=\"$(LIBCLC_LIBEXECDIR)/\" \
 	-DCLANG_RESOURCE_DIR=\"$(CLANG_RESOURCE_DIR)\"
 
-libclllvm_la_SOURCES = \
-	llvm/invocation.cpp
-
+libclllvm_la_SOURCES = $(LLVM_SOURCES)
 libclover_la_CXXFLAGS = \
 	-std=c++11 \
 	$(VISIBILITY_CXXFLAGS)
@@ -622,6 +635,7 @@ libclover_la_LIBADD = \
 	libcltgsi.la libclllvm.la
 
 libclover_la_SOURCES = $(CPP_SOURCES)
+EXTRA_DIST = Doxyfile
 all: all-am
 
 .SUFFIXES:
@@ -679,6 +693,66 @@ llvm/libclllvm_la-invocation.lo: llvm/$(am__dirstamp) \
 
 libclllvm.la: $(libclllvm_la_OBJECTS) $(libclllvm_la_DEPENDENCIES) $(EXTRA_libclllvm_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(libclllvm_la_LINK)  $(libclllvm_la_OBJECTS) $(libclllvm_la_LIBADD) $(LIBS)
+api/$(am__dirstamp):
+	@$(MKDIR_P) api
+	@: > api/$(am__dirstamp)
+api/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) api/$(DEPDIR)
+	@: > api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-context.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-device.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-dispatch.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-event.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-kernel.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-memory.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-platform.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-program.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-queue.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-sampler.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-transfer.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
+core/$(am__dirstamp):
+	@$(MKDIR_P) core
+	@: > core/$(am__dirstamp)
+core/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) core/$(DEPDIR)
+	@: > core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-context.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-device.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-event.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-format.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-kernel.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-memory.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-module.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-platform.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-program.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-queue.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-resource.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-sampler.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/libclover_la-timestamp.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
 util/$(am__dirstamp):
 	@$(MKDIR_P) util
 	@: > util/$(am__dirstamp)
@@ -687,66 +761,6 @@ util/$(DEPDIR)/$(am__dirstamp):
 	@: > util/$(DEPDIR)/$(am__dirstamp)
 util/libclover_la-compat.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
-core/$(am__dirstamp):
-	@$(MKDIR_P) core
-	@: > core/$(am__dirstamp)
-core/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) core/$(DEPDIR)
-	@: > core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-device.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-context.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-queue.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-format.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-memory.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-platform.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-resource.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-sampler.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-timestamp.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-event.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-program.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-kernel.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-core/libclover_la-module.lo: core/$(am__dirstamp) \
-	core/$(DEPDIR)/$(am__dirstamp)
-api/$(am__dirstamp):
-	@$(MKDIR_P) api
-	@: > api/$(am__dirstamp)
-api/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) api/$(DEPDIR)
-	@: > api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-dispatch.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-platform.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-device.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-context.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-queue.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-memory.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-transfer.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-sampler.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-event.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-program.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
-api/libclover_la-kernel.lo: api/$(am__dirstamp) \
-	api/$(DEPDIR)/$(am__dirstamp)
 
 libclover.la: $(libclover_la_OBJECTS) $(libclover_la_DEPENDENCIES) $(EXTRA_libclover_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(libclover_la_LINK)  $(libclover_la_OBJECTS) $(libclover_la_LIBADD) $(LIBS)
@@ -837,19 +851,82 @@ llvm/libclllvm_la-invocation.lo: llvm/invocation.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclllvm_la_CXXFLAGS) $(CXXFLAGS) -c -o llvm/libclllvm_la-invocation.lo `test -f 'llvm/invocation.cpp' || echo '$(srcdir)/'`llvm/invocation.cpp
 
-util/libclover_la-compat.lo: util/compat.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT util/libclover_la-compat.lo -MD -MP -MF util/$(DEPDIR)/libclover_la-compat.Tpo -c -o util/libclover_la-compat.lo `test -f 'util/compat.cpp' || echo '$(srcdir)/'`util/compat.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) util/$(DEPDIR)/libclover_la-compat.Tpo util/$(DEPDIR)/libclover_la-compat.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='util/compat.cpp' object='util/libclover_la-compat.lo' libtool=yes @AMDEPBACKSLASH@
+api/libclover_la-context.lo: api/context.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-context.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-context.Tpo -c -o api/libclover_la-context.lo `test -f 'api/context.cpp' || echo '$(srcdir)/'`api/context.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-context.Tpo api/$(DEPDIR)/libclover_la-context.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/context.cpp' object='api/libclover_la-context.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o util/libclover_la-compat.lo `test -f 'util/compat.cpp' || echo '$(srcdir)/'`util/compat.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-context.lo `test -f 'api/context.cpp' || echo '$(srcdir)/'`api/context.cpp
 
-core/libclover_la-device.lo: core/device.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-device.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-device.Tpo -c -o core/libclover_la-device.lo `test -f 'core/device.cpp' || echo '$(srcdir)/'`core/device.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-device.Tpo core/$(DEPDIR)/libclover_la-device.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/device.cpp' object='core/libclover_la-device.lo' libtool=yes @AMDEPBACKSLASH@
+api/libclover_la-device.lo: api/device.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-device.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-device.Tpo -c -o api/libclover_la-device.lo `test -f 'api/device.cpp' || echo '$(srcdir)/'`api/device.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-device.Tpo api/$(DEPDIR)/libclover_la-device.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/device.cpp' object='api/libclover_la-device.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-device.lo `test -f 'core/device.cpp' || echo '$(srcdir)/'`core/device.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-device.lo `test -f 'api/device.cpp' || echo '$(srcdir)/'`api/device.cpp
+
+api/libclover_la-dispatch.lo: api/dispatch.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-dispatch.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-dispatch.Tpo -c -o api/libclover_la-dispatch.lo `test -f 'api/dispatch.cpp' || echo '$(srcdir)/'`api/dispatch.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-dispatch.Tpo api/$(DEPDIR)/libclover_la-dispatch.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/dispatch.cpp' object='api/libclover_la-dispatch.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-dispatch.lo `test -f 'api/dispatch.cpp' || echo '$(srcdir)/'`api/dispatch.cpp
+
+api/libclover_la-event.lo: api/event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-event.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-event.Tpo -c -o api/libclover_la-event.lo `test -f 'api/event.cpp' || echo '$(srcdir)/'`api/event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-event.Tpo api/$(DEPDIR)/libclover_la-event.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/event.cpp' object='api/libclover_la-event.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-event.lo `test -f 'api/event.cpp' || echo '$(srcdir)/'`api/event.cpp
+
+api/libclover_la-kernel.lo: api/kernel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-kernel.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-kernel.Tpo -c -o api/libclover_la-kernel.lo `test -f 'api/kernel.cpp' || echo '$(srcdir)/'`api/kernel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-kernel.Tpo api/$(DEPDIR)/libclover_la-kernel.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/kernel.cpp' object='api/libclover_la-kernel.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-kernel.lo `test -f 'api/kernel.cpp' || echo '$(srcdir)/'`api/kernel.cpp
+
+api/libclover_la-memory.lo: api/memory.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-memory.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-memory.Tpo -c -o api/libclover_la-memory.lo `test -f 'api/memory.cpp' || echo '$(srcdir)/'`api/memory.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-memory.Tpo api/$(DEPDIR)/libclover_la-memory.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/memory.cpp' object='api/libclover_la-memory.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-memory.lo `test -f 'api/memory.cpp' || echo '$(srcdir)/'`api/memory.cpp
+
+api/libclover_la-platform.lo: api/platform.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-platform.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-platform.Tpo -c -o api/libclover_la-platform.lo `test -f 'api/platform.cpp' || echo '$(srcdir)/'`api/platform.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-platform.Tpo api/$(DEPDIR)/libclover_la-platform.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/platform.cpp' object='api/libclover_la-platform.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-platform.lo `test -f 'api/platform.cpp' || echo '$(srcdir)/'`api/platform.cpp
+
+api/libclover_la-program.lo: api/program.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-program.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-program.Tpo -c -o api/libclover_la-program.lo `test -f 'api/program.cpp' || echo '$(srcdir)/'`api/program.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-program.Tpo api/$(DEPDIR)/libclover_la-program.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/program.cpp' object='api/libclover_la-program.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-program.lo `test -f 'api/program.cpp' || echo '$(srcdir)/'`api/program.cpp
+
+api/libclover_la-queue.lo: api/queue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-queue.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-queue.Tpo -c -o api/libclover_la-queue.lo `test -f 'api/queue.cpp' || echo '$(srcdir)/'`api/queue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-queue.Tpo api/$(DEPDIR)/libclover_la-queue.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/queue.cpp' object='api/libclover_la-queue.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-queue.lo `test -f 'api/queue.cpp' || echo '$(srcdir)/'`api/queue.cpp
+
+api/libclover_la-sampler.lo: api/sampler.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-sampler.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-sampler.Tpo -c -o api/libclover_la-sampler.lo `test -f 'api/sampler.cpp' || echo '$(srcdir)/'`api/sampler.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-sampler.Tpo api/$(DEPDIR)/libclover_la-sampler.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/sampler.cpp' object='api/libclover_la-sampler.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-sampler.lo `test -f 'api/sampler.cpp' || echo '$(srcdir)/'`api/sampler.cpp
+
+api/libclover_la-transfer.lo: api/transfer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-transfer.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-transfer.Tpo -c -o api/libclover_la-transfer.lo `test -f 'api/transfer.cpp' || echo '$(srcdir)/'`api/transfer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-transfer.Tpo api/$(DEPDIR)/libclover_la-transfer.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/transfer.cpp' object='api/libclover_la-transfer.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-transfer.lo `test -f 'api/transfer.cpp' || echo '$(srcdir)/'`api/transfer.cpp
 
 core/libclover_la-context.lo: core/context.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-context.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-context.Tpo -c -o core/libclover_la-context.lo `test -f 'core/context.cpp' || echo '$(srcdir)/'`core/context.cpp
@@ -858,12 +935,19 @@ core/libclover_la-context.lo: core/context.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-context.lo `test -f 'core/context.cpp' || echo '$(srcdir)/'`core/context.cpp
 
-core/libclover_la-queue.lo: core/queue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-queue.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-queue.Tpo -c -o core/libclover_la-queue.lo `test -f 'core/queue.cpp' || echo '$(srcdir)/'`core/queue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-queue.Tpo core/$(DEPDIR)/libclover_la-queue.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/queue.cpp' object='core/libclover_la-queue.lo' libtool=yes @AMDEPBACKSLASH@
+core/libclover_la-device.lo: core/device.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-device.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-device.Tpo -c -o core/libclover_la-device.lo `test -f 'core/device.cpp' || echo '$(srcdir)/'`core/device.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-device.Tpo core/$(DEPDIR)/libclover_la-device.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/device.cpp' object='core/libclover_la-device.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-queue.lo `test -f 'core/queue.cpp' || echo '$(srcdir)/'`core/queue.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-device.lo `test -f 'core/device.cpp' || echo '$(srcdir)/'`core/device.cpp
+
+core/libclover_la-event.lo: core/event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-event.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-event.Tpo -c -o core/libclover_la-event.lo `test -f 'core/event.cpp' || echo '$(srcdir)/'`core/event.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-event.Tpo core/$(DEPDIR)/libclover_la-event.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/event.cpp' object='core/libclover_la-event.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-event.lo `test -f 'core/event.cpp' || echo '$(srcdir)/'`core/event.cpp
 
 core/libclover_la-format.lo: core/format.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-format.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-format.Tpo -c -o core/libclover_la-format.lo `test -f 'core/format.cpp' || echo '$(srcdir)/'`core/format.cpp
@@ -872,6 +956,13 @@ core/libclover_la-format.lo: core/format.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-format.lo `test -f 'core/format.cpp' || echo '$(srcdir)/'`core/format.cpp
 
+core/libclover_la-kernel.lo: core/kernel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-kernel.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-kernel.Tpo -c -o core/libclover_la-kernel.lo `test -f 'core/kernel.cpp' || echo '$(srcdir)/'`core/kernel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-kernel.Tpo core/$(DEPDIR)/libclover_la-kernel.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/kernel.cpp' object='core/libclover_la-kernel.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-kernel.lo `test -f 'core/kernel.cpp' || echo '$(srcdir)/'`core/kernel.cpp
+
 core/libclover_la-memory.lo: core/memory.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-memory.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-memory.Tpo -c -o core/libclover_la-memory.lo `test -f 'core/memory.cpp' || echo '$(srcdir)/'`core/memory.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-memory.Tpo core/$(DEPDIR)/libclover_la-memory.Plo
@@ -879,12 +970,33 @@ core/libclover_la-memory.lo: core/memory.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-memory.lo `test -f 'core/memory.cpp' || echo '$(srcdir)/'`core/memory.cpp
 
+core/libclover_la-module.lo: core/module.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-module.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-module.Tpo -c -o core/libclover_la-module.lo `test -f 'core/module.cpp' || echo '$(srcdir)/'`core/module.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-module.Tpo core/$(DEPDIR)/libclover_la-module.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/module.cpp' object='core/libclover_la-module.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-module.lo `test -f 'core/module.cpp' || echo '$(srcdir)/'`core/module.cpp
+
 core/libclover_la-platform.lo: core/platform.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-platform.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-platform.Tpo -c -o core/libclover_la-platform.lo `test -f 'core/platform.cpp' || echo '$(srcdir)/'`core/platform.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-platform.Tpo core/$(DEPDIR)/libclover_la-platform.Plo
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/platform.cpp' object='core/libclover_la-platform.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-platform.lo `test -f 'core/platform.cpp' || echo '$(srcdir)/'`core/platform.cpp
+
+core/libclover_la-program.lo: core/program.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-program.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-program.Tpo -c -o core/libclover_la-program.lo `test -f 'core/program.cpp' || echo '$(srcdir)/'`core/program.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-program.Tpo core/$(DEPDIR)/libclover_la-program.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/program.cpp' object='core/libclover_la-program.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-program.lo `test -f 'core/program.cpp' || echo '$(srcdir)/'`core/program.cpp
+
+core/libclover_la-queue.lo: core/queue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-queue.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-queue.Tpo -c -o core/libclover_la-queue.lo `test -f 'core/queue.cpp' || echo '$(srcdir)/'`core/queue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-queue.Tpo core/$(DEPDIR)/libclover_la-queue.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/queue.cpp' object='core/libclover_la-queue.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-queue.lo `test -f 'core/queue.cpp' || echo '$(srcdir)/'`core/queue.cpp
 
 core/libclover_la-resource.lo: core/resource.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-resource.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-resource.Tpo -c -o core/libclover_la-resource.lo `test -f 'core/resource.cpp' || echo '$(srcdir)/'`core/resource.cpp
@@ -907,110 +1019,12 @@ core/libclover_la-timestamp.lo: core/timestamp.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-timestamp.lo `test -f 'core/timestamp.cpp' || echo '$(srcdir)/'`core/timestamp.cpp
 
-core/libclover_la-event.lo: core/event.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-event.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-event.Tpo -c -o core/libclover_la-event.lo `test -f 'core/event.cpp' || echo '$(srcdir)/'`core/event.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-event.Tpo core/$(DEPDIR)/libclover_la-event.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/event.cpp' object='core/libclover_la-event.lo' libtool=yes @AMDEPBACKSLASH@
+util/libclover_la-compat.lo: util/compat.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT util/libclover_la-compat.lo -MD -MP -MF util/$(DEPDIR)/libclover_la-compat.Tpo -c -o util/libclover_la-compat.lo `test -f 'util/compat.cpp' || echo '$(srcdir)/'`util/compat.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) util/$(DEPDIR)/libclover_la-compat.Tpo util/$(DEPDIR)/libclover_la-compat.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='util/compat.cpp' object='util/libclover_la-compat.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-event.lo `test -f 'core/event.cpp' || echo '$(srcdir)/'`core/event.cpp
-
-core/libclover_la-program.lo: core/program.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-program.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-program.Tpo -c -o core/libclover_la-program.lo `test -f 'core/program.cpp' || echo '$(srcdir)/'`core/program.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-program.Tpo core/$(DEPDIR)/libclover_la-program.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/program.cpp' object='core/libclover_la-program.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-program.lo `test -f 'core/program.cpp' || echo '$(srcdir)/'`core/program.cpp
-
-core/libclover_la-kernel.lo: core/kernel.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-kernel.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-kernel.Tpo -c -o core/libclover_la-kernel.lo `test -f 'core/kernel.cpp' || echo '$(srcdir)/'`core/kernel.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-kernel.Tpo core/$(DEPDIR)/libclover_la-kernel.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/kernel.cpp' object='core/libclover_la-kernel.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-kernel.lo `test -f 'core/kernel.cpp' || echo '$(srcdir)/'`core/kernel.cpp
-
-core/libclover_la-module.lo: core/module.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT core/libclover_la-module.lo -MD -MP -MF core/$(DEPDIR)/libclover_la-module.Tpo -c -o core/libclover_la-module.lo `test -f 'core/module.cpp' || echo '$(srcdir)/'`core/module.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) core/$(DEPDIR)/libclover_la-module.Tpo core/$(DEPDIR)/libclover_la-module.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='core/module.cpp' object='core/libclover_la-module.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-module.lo `test -f 'core/module.cpp' || echo '$(srcdir)/'`core/module.cpp
-
-api/libclover_la-dispatch.lo: api/dispatch.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-dispatch.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-dispatch.Tpo -c -o api/libclover_la-dispatch.lo `test -f 'api/dispatch.cpp' || echo '$(srcdir)/'`api/dispatch.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-dispatch.Tpo api/$(DEPDIR)/libclover_la-dispatch.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/dispatch.cpp' object='api/libclover_la-dispatch.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-dispatch.lo `test -f 'api/dispatch.cpp' || echo '$(srcdir)/'`api/dispatch.cpp
-
-api/libclover_la-platform.lo: api/platform.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-platform.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-platform.Tpo -c -o api/libclover_la-platform.lo `test -f 'api/platform.cpp' || echo '$(srcdir)/'`api/platform.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-platform.Tpo api/$(DEPDIR)/libclover_la-platform.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/platform.cpp' object='api/libclover_la-platform.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-platform.lo `test -f 'api/platform.cpp' || echo '$(srcdir)/'`api/platform.cpp
-
-api/libclover_la-device.lo: api/device.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-device.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-device.Tpo -c -o api/libclover_la-device.lo `test -f 'api/device.cpp' || echo '$(srcdir)/'`api/device.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-device.Tpo api/$(DEPDIR)/libclover_la-device.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/device.cpp' object='api/libclover_la-device.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-device.lo `test -f 'api/device.cpp' || echo '$(srcdir)/'`api/device.cpp
-
-api/libclover_la-context.lo: api/context.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-context.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-context.Tpo -c -o api/libclover_la-context.lo `test -f 'api/context.cpp' || echo '$(srcdir)/'`api/context.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-context.Tpo api/$(DEPDIR)/libclover_la-context.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/context.cpp' object='api/libclover_la-context.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-context.lo `test -f 'api/context.cpp' || echo '$(srcdir)/'`api/context.cpp
-
-api/libclover_la-queue.lo: api/queue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-queue.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-queue.Tpo -c -o api/libclover_la-queue.lo `test -f 'api/queue.cpp' || echo '$(srcdir)/'`api/queue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-queue.Tpo api/$(DEPDIR)/libclover_la-queue.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/queue.cpp' object='api/libclover_la-queue.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-queue.lo `test -f 'api/queue.cpp' || echo '$(srcdir)/'`api/queue.cpp
-
-api/libclover_la-memory.lo: api/memory.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-memory.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-memory.Tpo -c -o api/libclover_la-memory.lo `test -f 'api/memory.cpp' || echo '$(srcdir)/'`api/memory.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-memory.Tpo api/$(DEPDIR)/libclover_la-memory.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/memory.cpp' object='api/libclover_la-memory.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-memory.lo `test -f 'api/memory.cpp' || echo '$(srcdir)/'`api/memory.cpp
-
-api/libclover_la-transfer.lo: api/transfer.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-transfer.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-transfer.Tpo -c -o api/libclover_la-transfer.lo `test -f 'api/transfer.cpp' || echo '$(srcdir)/'`api/transfer.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-transfer.Tpo api/$(DEPDIR)/libclover_la-transfer.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/transfer.cpp' object='api/libclover_la-transfer.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-transfer.lo `test -f 'api/transfer.cpp' || echo '$(srcdir)/'`api/transfer.cpp
-
-api/libclover_la-sampler.lo: api/sampler.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-sampler.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-sampler.Tpo -c -o api/libclover_la-sampler.lo `test -f 'api/sampler.cpp' || echo '$(srcdir)/'`api/sampler.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-sampler.Tpo api/$(DEPDIR)/libclover_la-sampler.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/sampler.cpp' object='api/libclover_la-sampler.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-sampler.lo `test -f 'api/sampler.cpp' || echo '$(srcdir)/'`api/sampler.cpp
-
-api/libclover_la-event.lo: api/event.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-event.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-event.Tpo -c -o api/libclover_la-event.lo `test -f 'api/event.cpp' || echo '$(srcdir)/'`api/event.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-event.Tpo api/$(DEPDIR)/libclover_la-event.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/event.cpp' object='api/libclover_la-event.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-event.lo `test -f 'api/event.cpp' || echo '$(srcdir)/'`api/event.cpp
-
-api/libclover_la-program.lo: api/program.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-program.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-program.Tpo -c -o api/libclover_la-program.lo `test -f 'api/program.cpp' || echo '$(srcdir)/'`api/program.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-program.Tpo api/$(DEPDIR)/libclover_la-program.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/program.cpp' object='api/libclover_la-program.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-program.lo `test -f 'api/program.cpp' || echo '$(srcdir)/'`api/program.cpp
-
-api/libclover_la-kernel.lo: api/kernel.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-kernel.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-kernel.Tpo -c -o api/libclover_la-kernel.lo `test -f 'api/kernel.cpp' || echo '$(srcdir)/'`api/kernel.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-kernel.Tpo api/$(DEPDIR)/libclover_la-kernel.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/kernel.cpp' object='api/libclover_la-kernel.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-kernel.lo `test -f 'api/kernel.cpp' || echo '$(srcdir)/'`api/kernel.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o util/libclover_la-compat.lo `test -f 'util/compat.cpp' || echo '$(srcdir)/'`util/compat.cpp
 
 tgsi/libcltgsi_la-compiler.lo: tgsi/compiler.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcltgsi_la_CXXFLAGS) $(CXXFLAGS) -MT tgsi/libcltgsi_la-compiler.lo -MD -MP -MF tgsi/$(DEPDIR)/libcltgsi_la-compiler.Tpo -c -o tgsi/libcltgsi_la-compiler.lo `test -f 'tgsi/compiler.cpp' || echo '$(srcdir)/'`tgsi/compiler.cpp

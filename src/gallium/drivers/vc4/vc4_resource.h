@@ -26,12 +26,20 @@
 #define VC4_RESOURCE_H
 
 #include "vc4_screen.h"
+#include "vc4_packet.h"
 #include "util/u_transfer.h"
+
+struct vc4_transfer {
+        struct pipe_transfer base;
+        void *map;
+};
 
 struct vc4_resource_slice {
         uint32_t offset;
         uint32_t stride;
-        uint32_t size0;
+        uint32_t size;
+        /** One of VC4_TILING_FORMAT_* */
+        uint8_t tiling;
 };
 
 struct vc4_surface {
@@ -41,15 +49,41 @@ struct vc4_surface {
         uint32_t width;
         uint16_t height;
         uint16_t depth;
+        uint8_t tiling;
 };
 
 struct vc4_resource {
         struct u_resource base;
         struct vc4_bo *bo;
         struct vc4_resource_slice slices[VC4_MAX_MIP_LEVELS];
+        uint32_t cube_map_stride;
         int cpp;
-        /** One of VC4_TILING_FORMAT_* */
-        uint8_t tiling;
+        bool tiled;
+        /** One of VC4_TEXTURE_TYPE_* */
+        enum vc4_texture_data_type vc4_format;
+
+        /**
+         * Number of times the resource has been written to.
+         *
+         * This is used to track when we need to update this shadow resource
+         * from its parent in the case of GL_TEXTURE_BASE_LEVEL (which we
+         * can't support in hardware) or GL_UNSIGNED_INTEGER index buffers.
+         */
+        uint64_t writes;
+
+        /**
+         * Resource containing the non-GL_TEXTURE_BASE_LEVEL-rebased texture
+         * contents, or the 4-byte index buffer.
+         *
+         * If the parent is set for an texture, then this resource is actually
+         * the texture contents just starting from the sampler_view's
+         * first_level.
+         *
+         * If the parent is set for an index index buffer, then this resource
+         * is actually a shadow containing a 2-byte index buffer starting from
+         * the ib's offset.
+         */
+        struct pipe_resource *shadow_parent;
 };
 
 static INLINE struct vc4_resource *
@@ -64,7 +98,19 @@ vc4_surface(struct pipe_surface *psurf)
         return (struct vc4_surface *)psurf;
 }
 
+static INLINE struct vc4_transfer *
+vc4_transfer(struct pipe_transfer *ptrans)
+{
+        return (struct vc4_transfer *)ptrans;
+}
+
 void vc4_resource_screen_init(struct pipe_screen *pscreen);
 void vc4_resource_context_init(struct pipe_context *pctx);
+struct pipe_resource *vc4_resource_create(struct pipe_screen *pscreen,
+                                          const struct pipe_resource *tmpl);
+void vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
+                                         struct pipe_sampler_view *view);
+void vc4_update_shadow_index_buffer(struct pipe_context *pctx,
+                                    const struct pipe_index_buffer *ib);
 
 #endif /* VC4_RESOURCE_H */

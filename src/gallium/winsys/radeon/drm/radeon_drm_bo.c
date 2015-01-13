@@ -24,7 +24,6 @@
  * of the Software.
  */
 
-#define _FILE_OFFSET_BITS 64
 #include "radeon_drm_cs.h"
 
 #include "util/u_hash_table.h"
@@ -478,7 +477,15 @@ const struct pb_vtbl radeon_bo_vtbl = {
 };
 
 #ifndef RADEON_GEM_GTT_WC
-#define RADEON_GEM_GTT_WC (1 << 2)
+#define RADEON_GEM_GTT_WC		(1 << 2)
+#endif
+#ifndef RADEON_GEM_CPU_ACCESS
+/* BO is expected to be accessed by the CPU */
+#define RADEON_GEM_CPU_ACCESS		(1 << 3)
+#endif
+#ifndef RADEON_GEM_NO_CPU_ACCESS
+/* CPU access is not expected to work for this BO */
+#define RADEON_GEM_NO_CPU_ACCESS	(1 << 4)
 #endif
 
 static struct pb_buffer *radeon_bomgr_create_bo(struct pb_manager *_mgr,
@@ -505,6 +512,10 @@ static struct pb_buffer *radeon_bomgr_create_bo(struct pb_manager *_mgr,
 
     if (rdesc->flags & RADEON_FLAG_GTT_WC)
         args.flags |= RADEON_GEM_GTT_WC;
+    if (rdesc->flags & RADEON_FLAG_CPU_ACCESS)
+        args.flags |= RADEON_GEM_CPU_ACCESS;
+    if (rdesc->flags & RADEON_FLAG_NO_CPU_ACCESS)
+        args.flags |= RADEON_GEM_NO_CPU_ACCESS;
 
     if (drmCommandWriteRead(rws->fd, DRM_RADEON_GEM_CREATE,
                             &args, sizeof(args))) {
@@ -805,21 +816,24 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
     memset(&desc, 0, sizeof(desc));
     desc.base.alignment = alignment;
 
-    /* Additional criteria for the cache manager. */
-    desc.base.usage = domain;
+    /* Only set one usage bit each for domains and flags, or the cache manager
+     * might consider different sets of domains / flags compatible
+     */
+    if (domain == RADEON_DOMAIN_VRAM_GTT)
+        desc.base.usage = 1 << 2;
+    else
+        desc.base.usage = domain >> 1;
+    assert(flags < sizeof(desc.base.usage) * 8 - 3);
+    desc.base.usage |= 1 << (flags + 3);
+
     desc.initial_domains = domain;
     desc.flags = flags;
 
     /* Assign a buffer manager. */
-    assert(flags < RADEON_NUM_CACHE_MANAGERS);
-    if (use_reusable_pool) {
-        if (domain == RADEON_DOMAIN_VRAM)
-            provider = ws->cman_vram[flags];
-        else
-            provider = ws->cman_gtt[flags];
-    } else {
+    if (use_reusable_pool)
+        provider = ws->cman;
+    else
         provider = ws->kman;
-    }
 
     buffer = provider->create_buffer(provider, size, &desc.base);
     if (!buffer)

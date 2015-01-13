@@ -317,10 +317,10 @@ fd2_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
-	if (ctx->restore & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
+	if (fd_gmem_needs_restore(ctx, tile, FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
 		emit_mem2gmem_surf(ctx, bin_w * bin_h, pfb->zsbuf);
 
-	if (ctx->restore & FD_BUFFER_COLOR)
+	if (fd_gmem_needs_restore(ctx, tile, FD_BUFFER_COLOR))
 		emit_mem2gmem_surf(ctx, 0, pfb->cbufs[0]);
 
 	/* TODO blob driver seems to toss in a CACHE_FLUSH after each DRAW_INDX.. */

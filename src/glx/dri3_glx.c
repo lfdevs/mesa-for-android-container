@@ -271,8 +271,11 @@ static void
 dri3_update_num_back(struct dri3_drawable *priv)
 {
    priv->num_back = 1;
-   if (priv->flipping)
+   if (priv->flipping) {
+      if (!priv->is_pixmap && !(priv->present_capabilities & XCB_PRESENT_CAPABILITY_ASYNC))
+         priv->num_back++;
       priv->num_back++;
+   }
    if (priv->swap_interval == 0)
       priv->num_back++;
 }
@@ -358,12 +361,34 @@ dri3_create_drawable(struct glx_screen *base, XID xDrawable,
    return &pdraw->base;
 }
 
+static void
+show_fps(struct dri3_drawable *draw, uint64_t current_ust)
+{
+   const uint64_t interval =
+      ((struct dri3_screen *) draw->base.psc)->show_fps_interval;
+
+   draw->frames++;
+
+   /* DRI3+Present together uses microseconds for UST. */
+   if (draw->previous_ust + interval * 1000000 <= current_ust) {
+      if (draw->previous_ust) {
+         fprintf(stderr, "libGL: FPS = %.1f\n",
+                 ((uint64_t) draw->frames * 1000000) /
+                 (double)(current_ust - draw->previous_ust));
+      }
+      draw->frames = 0;
+      draw->previous_ust = current_ust;
+   }
+}
+
 /*
  * Process one Present event
  */
 static void
 dri3_handle_present_event(struct dri3_drawable *priv, xcb_present_generic_event_t *ge)
 {
+   struct dri3_screen *psc = (struct dri3_screen *) priv->base.psc;
+
    switch (ge->evtype) {
    case XCB_PRESENT_CONFIGURE_NOTIFY: {
       xcb_present_configure_notify_event_t *ce = (void *) ge;
@@ -392,11 +417,17 @@ dri3_handle_present_event(struct dri3_drawable *priv, xcb_present_generic_event_
             break;
          }
          dri3_update_num_back(priv);
+
+         if (psc->show_fps_interval)
+            show_fps(priv, ce->ust);
+
+         priv->ust = ce->ust;
+         priv->msc = ce->msc;
       } else {
          priv->recv_msc_serial = ce->serial;
+         priv->notify_ust = ce->ust;
+         priv->notify_msc = ce->msc;
       }
-      priv->ust = ce->ust;
-      priv->msc = ce->msc;
       break;
    }
    case XCB_PRESENT_EVENT_IDLE_NOTIFY: {
@@ -470,8 +501,8 @@ dri3_wait_for_msc(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
       }
    }
 
-   *ust = priv->ust;
-   *msc = priv->msc;
+   *ust = priv->notify_ust;
+   *msc = priv->notify_msc;
    *sbc = priv->recv_sbc;
 
    return 1;
@@ -500,6 +531,15 @@ dri3_wait_for_sbc(__GLXDRIdrawable *pdraw, int64_t target_sbc, int64_t *ust,
                   int64_t *msc, int64_t *sbc)
 {
    struct dri3_drawable *priv = (struct dri3_drawable *) pdraw;
+
+   /* From the GLX_OML_sync_control spec:
+    *
+    *     "If <target_sbc> = 0, the function will block until all previous
+    *      swaps requested with glXSwapBuffersMscOML for that window have
+    *      completed."
+    */
+   if (!target_sbc)
+      target_sbc = priv->send_sbc;
 
    while (priv->recv_sbc < target_sbc) {
       if (!dri3_wait_for_event(pdraw))
@@ -993,6 +1033,9 @@ dri3_update_drawable(__DRIdrawable *driDrawable, void *loaderPrivate)
       xcb_get_geometry_reply_t                  *geom_reply;
       xcb_void_cookie_t                         cookie;
       xcb_generic_error_t                       *error;
+      xcb_present_query_capabilities_cookie_t   present_capabilities_cookie;
+      xcb_present_query_capabilities_reply_t    *present_capabilities_reply;
+
 
       /* Try to select for input on the window.
        *
@@ -1010,6 +1053,8 @@ dri3_update_drawable(__DRIdrawable *driDrawable, void *loaderPrivate)
                                                 XCB_PRESENT_EVENT_MASK_CONFIGURE_NOTIFY|
                                                 XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY|
                                                 XCB_PRESENT_EVENT_MASK_IDLE_NOTIFY);
+
+      present_capabilities_cookie = xcb_present_query_capabilities(c, priv->base.xDrawable);
 
       /* Create an XCB event queue to hold present events outside of the usual
        * application event queue
@@ -1039,6 +1084,16 @@ dri3_update_drawable(__DRIdrawable *driDrawable, void *loaderPrivate)
        */
 
       error = xcb_request_check(c, cookie);
+
+      present_capabilities_reply = xcb_present_query_capabilities_reply(c,
+                                                                        present_capabilities_cookie,
+                                                                        NULL);
+
+      if (present_capabilities_reply) {
+         priv->present_capabilities = present_capabilities_reply->capabilities;
+         free(present_capabilities_reply);
+      } else
+         priv->present_capabilities = 0;
 
       if (error) {
          if (error->error_code != BadWindow) {
@@ -1504,11 +1559,24 @@ dri3_swap_buffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
       dri3_fence_reset(c, back);
 
       /* Compute when we want the frame shown by taking the last known successful
-       * MSC and adding in a swap interval for each outstanding swap request
+       * MSC and adding in a swap interval for each outstanding swap request.
+       * target_msc=divisor=remainder=0 means "Use glXSwapBuffers() semantic"
        */
       ++priv->send_sbc;
-      if (target_msc == 0)
+      if (target_msc == 0 && divisor == 0 && remainder == 0)
          target_msc = priv->msc + priv->swap_interval * (priv->send_sbc - priv->recv_sbc);
+      else if (divisor == 0 && remainder > 0) {
+         /* From the GLX_OML_sync_control spec:
+          *
+          *     "If <divisor> = 0, the swap will occur when MSC becomes
+          *      greater than or equal to <target_msc>."
+          *
+          * Note that there's no mention of the remainder.  The Present extension
+          * throws BadValue for remainder != 0 with divisor == 0, so just drop
+          * the passed in value.
+          */
+         remainder = 0;
+      }
 
       back->busy = 1;
       back->last_swap = priv->send_sbc;
@@ -1812,7 +1880,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    struct dri3_screen *psc;
    __GLXDRIscreen *psp;
    struct glx_config *configs = NULL, *visuals = NULL;
-   char *driverName, *deviceName;
+   char *driverName, *deviceName, *tmp;
    int i;
 
    psc = calloc(1, sizeof *psc);
@@ -1950,6 +2018,11 @@ dri3_create_screen(int screen, struct glx_display * priv)
 
    free(driverName);
    free(deviceName);
+
+   tmp = getenv("LIBGL_SHOW_FPS");
+   psc->show_fps_interval = tmp ? atoi(tmp) : 0;
+   if (psc->show_fps_interval < 0)
+      psc->show_fps_interval = 0;
 
    return &psc->base;
 

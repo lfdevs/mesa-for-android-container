@@ -52,91 +52,34 @@ endif
 
 if HAVE_GALLIUM_STATIC_TARGETS
 
-STATIC_TARGET_CPPFLAGS =
-STATIC_TARGET_LIB_DEPS = \
-	$(top_builddir)/src/loader/libloader.la
+TARGET_DRIVERS =
+TARGET_CPPFLAGS =
+TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la
 
-if HAVE_GALLIUM_I915
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_I915
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/i915/drm/libi915drm.la \
-	$(top_builddir)/src/gallium/drivers/i915/libi915.la \
-	$(INTEL_LIBS)
-endif
+include $(top_srcdir)/src/gallium/drivers/i915/Automake.inc
 
-if HAVE_GALLIUM_ILO
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_ILO
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
-	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
-	$(INTEL_LIBS)
-endif
+include $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc
 
-if HAVE_GALLIUM_NOUVEAU
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_NOUVEAU
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/nouveau/drm/libnouveaudrm.la \
-	$(top_builddir)/src/gallium/drivers/nouveau/libnouveau.la \
-	$(NOUVEAU_LIBS)
-endif
+include $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc
 
-if NEED_RADEON_DRM_WINSYS
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la
-endif
+include $(top_srcdir)/src/gallium/drivers/r300/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 
-if HAVE_GALLIUM_RADEON_COMMON
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la
-endif
+include $(top_srcdir)/src/gallium/drivers/svga/Automake.inc
 
-if HAVE_GALLIUM_R300
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_R300
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/drivers/r300/libr300.la \
-	$(top_builddir)/src/gallium/drivers/r300/libr300-helper.la \
-	$(RADEON_LIBS)
-endif
-
-if HAVE_GALLIUM_R600
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_R600
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
-	$(RADEON_LIBS)
-endif
-
-if HAVE_GALLIUM_RADEONSI
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_RADEONSI
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
-	$(RADEON_LIBS)
-endif
-
-if HAVE_GALLIUM_SVGA
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_VMWGFX
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/svga/drm/libsvgadrm.la \
-	$(top_builddir)/src/gallium/drivers/svga/libsvga.la
-endif
-
-if HAVE_GALLIUM_FREEDRENO
-STATIC_TARGET_CPPFLAGS += -DGALLIUM_FREEDRENO
-STATIC_TARGET_LIB_DEPS += \
-	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
-	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
-	$(FREEDRENO_LIBS)
-
-endif
+include $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc
 
 gbm_gallium_drm_la_SOURCES += target.c
-gbm_gallium_drm_la_CPPFLAGS = $(STATIC_TARGET_CPPFLAGS)
-gbm_gallium_drm_la_LIBADD += $(STATIC_TARGET_LIB_DEPS)
+gbm_gallium_drm_la_CPPFLAGS = $(TARGET_CPPFLAGS)
+gbm_gallium_drm_la_LIBADD += $(TARGET_LIB_DEPS) \
+	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
 gbm_gallium_drm_la_LIBADD += \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_client.la \
-	$(GALLIUM_PIPE_LOADER_CLIENT_LIBS) \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(GALLIUM_PIPE_LOADER_LIBS)
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 

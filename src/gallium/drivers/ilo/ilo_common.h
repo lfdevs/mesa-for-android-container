@@ -41,7 +41,6 @@
 #include "util/u_pointer.h"
 
 #define ILO_GEN(gen) ((int) (gen * 100))
-#define ILO_GEN_GET_MAJOR(gen) (gen / 100)
 
 /* enable debug flags affecting hot pathes only with debug builds */
 #ifdef DEBUG
@@ -50,14 +49,20 @@
 #define ILO_DEBUG_HOT 0
 #endif
 
+#define ILO_DEV_ASSERT(dev, min_gen, max_gen) \
+   ilo_dev_assert(dev, ILO_GEN(min_gen), ILO_GEN(max_gen))
+
+#define ILO_PRIM_RECTANGLES PIPE_PRIM_MAX
+#define ILO_PRIM_MAX (PIPE_PRIM_MAX + 1)
+
 enum ilo_debug {
-   ILO_DEBUG_3D        = 1 << 0,
+   ILO_DEBUG_BATCH     = 1 << 0,
    ILO_DEBUG_VS        = 1 << 1,
    ILO_DEBUG_GS        = 1 << 2,
    ILO_DEBUG_FS        = 1 << 3,
    ILO_DEBUG_CS        = 1 << 4,
    ILO_DEBUG_DRAW      = ILO_DEBUG_HOT << 5,
-   ILO_DEBUG_FLUSH     = 1 << 6,
+   ILO_DEBUG_SUBMIT    = 1 << 6,
 
    /* flags that affect the behaviors of the driver */
    ILO_DEBUG_NOHW      = 1 << 20,
@@ -70,7 +75,6 @@ struct ilo_dev_info {
    int devid;
    size_t aperture_total;
    size_t aperture_mappable;
-   int max_batch_size;
    bool has_llc;
    bool has_address_swizzling;
    bool has_logical_context;
@@ -78,12 +82,28 @@ struct ilo_dev_info {
    bool has_timestamp;
    bool has_gen7_sol_reset;
 
-   int gen;
+   /* use ilo_dev_gen() */
+   int gen_opaque;
+
    int gt;
+   int eu_count;
+   int thread_count;
    int urb_size;
 };
 
 extern int ilo_debug;
+
+static inline int
+ilo_dev_gen(const struct ilo_dev_info *dev)
+{
+   return dev->gen_opaque;
+}
+
+static inline void
+ilo_dev_assert(const struct ilo_dev_info *dev, int min_opqaue, int max_opqaue)
+{
+   assert(dev->gen_opaque >= min_opqaue && dev->gen_opaque <= max_opqaue);
+}
 
 /**
  * Print a message, for dumping or debugging.

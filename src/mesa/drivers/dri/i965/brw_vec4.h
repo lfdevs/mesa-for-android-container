@@ -107,6 +107,7 @@ public:
    bool equals(const src_reg &r) const;
 
    src_reg(class vec4_visitor *v, const struct glsl_type *type);
+   src_reg(class vec4_visitor *v, const struct glsl_type *type, int size);
 
    explicit src_reg(dst_reg reg);
 
@@ -218,6 +219,10 @@ public:
 
    enum brw_urb_write_flags urb_write_flags;
    bool header_present;
+
+   unsigned sol_binding; /**< gen6: SOL binding table index */
+   bool sol_final_write; /**< gen6: send commit message */
+   unsigned sol_vertex; /**< gen6: used for setting dst index in SVB header */
 
    bool is_send_from_grf();
    bool can_reswizzle(int dst_writemask, int swizzle, int swizzle_mask);
@@ -394,82 +399,65 @@ public:
    vec4_instruction *emit(vec4_instruction *inst);
 
    vec4_instruction *emit(enum opcode opcode);
+   vec4_instruction *emit(enum opcode opcode, const dst_reg &dst);
+   vec4_instruction *emit(enum opcode opcode, const dst_reg &dst,
+                          const src_reg &src0);
+   vec4_instruction *emit(enum opcode opcode, const dst_reg &dst,
+                          const src_reg &src0, const src_reg &src1);
+   vec4_instruction *emit(enum opcode opcode, const dst_reg &dst,
+                          const src_reg &src0, const src_reg &src1,
+                          const src_reg &src2);
 
-   vec4_instruction *emit(enum opcode opcode, dst_reg dst);
-
-   vec4_instruction *emit(enum opcode opcode, dst_reg dst, src_reg src0);
-
-   vec4_instruction *emit(enum opcode opcode, dst_reg dst,
-			  src_reg src0, src_reg src1);
-
-   vec4_instruction *emit(enum opcode opcode, dst_reg dst,
-			  src_reg src0, src_reg src1, src_reg src2);
-
-   vec4_instruction *emit_before(vec4_instruction *inst,
+   vec4_instruction *emit_before(bblock_t *block,
+                                 vec4_instruction *inst,
 				 vec4_instruction *new_inst);
 
-   vec4_instruction *MOV(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *NOT(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *RNDD(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *RNDE(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *RNDZ(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *FRC(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *F32TO16(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *F16TO32(const dst_reg &dst, const src_reg &src0);
-   vec4_instruction *ADD(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *MUL(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *MACH(const dst_reg &dst, const src_reg &src0,
-                          const src_reg &src1);
-   vec4_instruction *MAC(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *AND(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *OR(const dst_reg &dst, const src_reg &src0,
-                        const src_reg &src1);
-   vec4_instruction *XOR(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *DP3(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *DP4(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *DPH(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *SHL(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *SHR(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
-   vec4_instruction *ASR(const dst_reg &dst, const src_reg &src0,
-                         const src_reg &src1);
+#define EMIT1(op) vec4_instruction *op(const dst_reg &, const src_reg &);
+#define EMIT2(op) vec4_instruction *op(const dst_reg &, const src_reg &, const src_reg &);
+#define EMIT3(op) vec4_instruction *op(const dst_reg &, const src_reg &, const src_reg &, const src_reg &);
+   EMIT1(MOV)
+   EMIT1(NOT)
+   EMIT1(RNDD)
+   EMIT1(RNDE)
+   EMIT1(RNDZ)
+   EMIT1(FRC)
+   EMIT1(F32TO16)
+   EMIT1(F16TO32)
+   EMIT2(ADD)
+   EMIT2(MUL)
+   EMIT2(MACH)
+   EMIT2(MAC)
+   EMIT2(AND)
+   EMIT2(OR)
+   EMIT2(XOR)
+   EMIT2(DP3)
+   EMIT2(DP4)
+   EMIT2(DPH)
+   EMIT2(SHL)
+   EMIT2(SHR)
+   EMIT2(ASR)
    vec4_instruction *CMP(dst_reg dst, src_reg src0, src_reg src1,
 			 enum brw_conditional_mod condition);
    vec4_instruction *IF(src_reg src0, src_reg src1,
                         enum brw_conditional_mod condition);
    vec4_instruction *IF(enum brw_predicate predicate);
-   vec4_instruction *PULL_CONSTANT_LOAD(const dst_reg &dst,
-                                        const src_reg &index);
-   vec4_instruction *SCRATCH_READ(const dst_reg &dst, const src_reg &index);
-   vec4_instruction *SCRATCH_WRITE(const dst_reg &dst, const src_reg &src,
-                                   const src_reg &index);
-   vec4_instruction *LRP(const dst_reg &dst, const src_reg &a,
-                         const src_reg &y, const src_reg &x);
-   vec4_instruction *BFREV(const dst_reg &dst, const src_reg &value);
-   vec4_instruction *BFE(const dst_reg &dst, const src_reg &bits,
-                         const src_reg &offset, const src_reg &value);
-   vec4_instruction *BFI1(const dst_reg &dst, const src_reg &bits,
-                          const src_reg &offset);
-   vec4_instruction *BFI2(const dst_reg &dst, const src_reg &bfi1_dst,
-                          const src_reg &insert, const src_reg &base);
-   vec4_instruction *FBH(const dst_reg &dst, const src_reg &value);
-   vec4_instruction *FBL(const dst_reg &dst, const src_reg &value);
-   vec4_instruction *CBIT(const dst_reg &dst, const src_reg &value);
-   vec4_instruction *MAD(const dst_reg &dst, const src_reg &c,
-                         const src_reg &b, const src_reg &a);
-   vec4_instruction *ADDC(const dst_reg &dst, const src_reg &src0,
-                          const src_reg &src1);
-   vec4_instruction *SUBB(const dst_reg &dst, const src_reg &src0,
-                          const src_reg &src1);
+   EMIT1(PULL_CONSTANT_LOAD)
+   EMIT1(SCRATCH_READ)
+   EMIT2(SCRATCH_WRITE)
+   EMIT3(LRP)
+   EMIT1(BFREV)
+   EMIT3(BFE)
+   EMIT2(BFI1)
+   EMIT3(BFI2)
+   EMIT1(FBH)
+   EMIT1(FBL)
+   EMIT1(CBIT)
+   EMIT3(MAD)
+   EMIT2(ADDC)
+   EMIT2(SUBB)
+#undef EMIT1
+#undef EMIT2
+#undef EMIT3
 
    int implied_mrf_writes(vec4_instruction *inst);
 
@@ -515,12 +503,8 @@ public:
 
    src_reg fix_3src_operand(src_reg src);
 
-   void emit_math1_gen6(enum opcode opcode, dst_reg dst, src_reg src);
-   void emit_math1_gen4(enum opcode opcode, dst_reg dst, src_reg src);
-   void emit_math(enum opcode opcode, dst_reg dst, src_reg src);
-   void emit_math2_gen6(enum opcode opcode, dst_reg dst, src_reg src0, src_reg src1);
-   void emit_math2_gen4(enum opcode opcode, dst_reg dst, src_reg src0, src_reg src1);
-   void emit_math(enum opcode opcode, dst_reg dst, src_reg src0, src_reg src1);
+   void emit_math(enum opcode opcode, const dst_reg &dst, const src_reg &src0,
+                  const src_reg &src1 = src_reg());
    src_reg fix_math_operand(src_reg src);
 
    void emit_pack_half_2x16(dst_reg dst, src_reg src0);
@@ -532,10 +516,10 @@ public:
    void swizzle_result(ir_texture *ir, src_reg orig_val, uint32_t sampler);
 
    void emit_ndc_computation();
-   void emit_psiz_and_flags(struct brw_reg reg);
+   void emit_psiz_and_flags(dst_reg reg);
    void emit_clip_distances(dst_reg reg, int offset);
    void emit_generic_urb_slot(dst_reg reg, int varying);
-   void emit_urb_slot(int mrf, int varying);
+   void emit_urb_slot(dst_reg reg, int varying);
 
    void emit_shader_time_begin();
    void emit_shader_time_end();
@@ -549,22 +533,21 @@ public:
    void emit_untyped_surface_read(unsigned surf_index, dst_reg dst,
                                   src_reg offset);
 
-   src_reg get_scratch_offset(vec4_instruction *inst,
+   src_reg get_scratch_offset(bblock_t *block, vec4_instruction *inst,
 			      src_reg *reladdr, int reg_offset);
-   src_reg get_pull_constant_offset(vec4_instruction *inst,
+   src_reg get_pull_constant_offset(bblock_t *block, vec4_instruction *inst,
 				    src_reg *reladdr, int reg_offset);
-   void emit_scratch_read(vec4_instruction *inst,
+   void emit_scratch_read(bblock_t *block, vec4_instruction *inst,
 			  dst_reg dst,
 			  src_reg orig_src,
 			  int base_offset);
-   void emit_scratch_write(vec4_instruction *inst,
+   void emit_scratch_write(bblock_t *block, vec4_instruction *inst,
 			   int base_offset);
-   void emit_pull_constant_load(vec4_instruction *inst,
+   void emit_pull_constant_load(bblock_t *block, vec4_instruction *inst,
 				dst_reg dst,
 				src_reg orig_src,
 				int base_offset);
 
-   bool try_emit_sat(ir_expression *ir);
    bool try_emit_mad(ir_expression *ir);
    bool try_emit_b2f_of_compare(ir_expression *ir);
    void resolve_ud_negate(src_reg *reg);
@@ -585,6 +568,7 @@ protected:
    void setup_payload_interference(struct ra_graph *g, int first_payload_node,
                                    int reg_node_count);
    virtual dst_reg *make_reg_for_system_value(ir_variable *ir) = 0;
+   virtual void assign_binding_table_offsets();
    virtual void setup_payload() = 0;
    virtual void emit_prolog() = 0;
    virtual void emit_program_code() = 0;
@@ -627,9 +611,6 @@ public:
 
 private:
    void generate_code(const cfg_t *cfg);
-   void generate_vec4_instruction(vec4_instruction *inst,
-                                  struct brw_reg dst,
-                                  struct brw_reg *src);
 
    void generate_math1_gen4(vec4_instruction *inst,
 			    struct brw_reg dst,
@@ -650,16 +631,33 @@ private:
 
    void generate_vs_urb_write(vec4_instruction *inst);
    void generate_gs_urb_write(vec4_instruction *inst);
+   void generate_gs_urb_write_allocate(vec4_instruction *inst);
    void generate_gs_thread_end(vec4_instruction *inst);
    void generate_gs_set_write_offset(struct brw_reg dst,
                                      struct brw_reg src0,
                                      struct brw_reg src1);
    void generate_gs_set_vertex_count(struct brw_reg dst,
                                      struct brw_reg src);
-   void generate_gs_set_dword_2_immed(struct brw_reg dst, struct brw_reg src);
+   void generate_gs_svb_write(vec4_instruction *inst,
+                              struct brw_reg dst,
+                              struct brw_reg src0,
+                              struct brw_reg src1);
+   void generate_gs_svb_set_destination_index(vec4_instruction *inst,
+                                              struct brw_reg dst,
+                                              struct brw_reg src);
+   void generate_gs_set_dword_2(struct brw_reg dst, struct brw_reg src);
    void generate_gs_prepare_channel_masks(struct brw_reg dst);
    void generate_gs_set_channel_masks(struct brw_reg dst, struct brw_reg src);
    void generate_gs_get_instance_id(struct brw_reg dst);
+   void generate_gs_ff_sync_set_primitives(struct brw_reg dst,
+                                           struct brw_reg src0,
+                                           struct brw_reg src1,
+                                           struct brw_reg src2);
+   void generate_gs_ff_sync(vec4_instruction *inst,
+                            struct brw_reg dst,
+                            struct brw_reg src0,
+                            struct brw_reg src1);
+   void generate_gs_set_primitive_id(struct brw_reg dst);
    void generate_oword_dual_block_offsets(struct brw_reg m1,
 					  struct brw_reg index);
    void generate_scratch_write(vec4_instruction *inst,

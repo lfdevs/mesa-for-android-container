@@ -1527,6 +1527,9 @@ bool post_scheduler::check_copy(node *n) {
 
 	if (!s->is_prealloc()) {
 		recolor_local(s);
+
+		if (!s->chunk || s->chunk != d->chunk)
+			return false;
 	}
 
 	if (s->gpr == d->gpr) {

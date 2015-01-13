@@ -75,6 +75,20 @@ pipe_i915_la_LIBADD = \
 
 endif
 
+if HAVE_GALLIUM_ILO
+pipe_LTLIBRARIES += pipe_i965.la
+
+pipe_i965_la_SOURCES = pipe_i965.c
+nodist_EXTRA_pipe_i965_la_SOURCES = dummy.cpp
+pipe_i965_la_LIBADD = \
+	$(PIPE_LIBS) \
+	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
+	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
+	$(LIBDRM_LIBS) \
+	$(INTEL_LIBS)
+
+endif
+
 if HAVE_GALLIUM_NOUVEAU
 pipe_LTLIBRARIES += pipe_nouveau.la
 
@@ -97,7 +111,6 @@ nodist_EXTRA_pipe_r300_la_SOURCES = dummy.cpp
 pipe_r300_la_LIBADD = \
 	$(PIPE_LIBS) \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
-	$(top_builddir)/src/gallium/drivers/r300/libr300-helper.la \
 	$(top_builddir)/src/gallium/drivers/r300/libr300.la \
 	$(LIBDRM_LIBS) \
 	$(RADEON_LIBS)

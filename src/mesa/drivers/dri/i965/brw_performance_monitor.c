@@ -907,7 +907,7 @@ gather_oa_results(struct brw_context *brw,
       return;
    }
 
-   const int snapshot_size = brw->perfmon.entries_per_oa_snapshot;
+   const ptrdiff_t snapshot_size = brw->perfmon.entries_per_oa_snapshot;
 
    /* First, add the contributions from the "head" interval:
     * (snapshot taken at BeginPerfMonitor time,

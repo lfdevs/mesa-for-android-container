@@ -575,8 +575,9 @@ nvc0_draw_arrays(struct nvc0_context *nvc0,
    if (nvc0->state.index_bias) {
       /* index_bias is implied 0 if !info->indexed (really ?) */
       /* TODO: can we deactivate it for the VERTEX_BUFFER_FIRST command ? */
-      PUSH_SPACE(push, 1);
+      PUSH_SPACE(push, 2);
       IMMED_NVC0(push, NVC0_3D(VB_ELEMENT_BASE), 0);
+      IMMED_NVC0(push, NVC0_3D(VERTEX_ID), 0);
       nvc0->state.index_bias = 0;
    }
 
@@ -705,8 +706,10 @@ nvc0_draw_elements(struct nvc0_context *nvc0, boolean shorten,
    prim = nvc0_prim_gl(mode);
 
    if (index_bias != nvc0->state.index_bias) {
-      PUSH_SPACE(push, 2);
+      PUSH_SPACE(push, 4);
       BEGIN_NVC0(push, NVC0_3D(VB_ELEMENT_BASE), 1);
+      PUSH_DATA (push, index_bias);
+      BEGIN_NVC0(push, NVC0_3D(VERTEX_ID), 1);
       PUSH_DATA (push, index_bias);
       nvc0->state.index_bias = index_bias;
    }
@@ -818,6 +821,7 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
       if (nvc0->state.index_bias) {
          /* index_bias is implied 0 if !info->indexed (really ?) */
          IMMED_NVC0(push, NVC0_3D(VB_ELEMENT_BASE), 0);
+         IMMED_NVC0(push, NVC0_3D(VERTEX_ID), 0);
          nvc0->state.index_bias = 0;
       }
       size = 4 * 4;

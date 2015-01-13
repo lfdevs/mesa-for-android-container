@@ -105,8 +105,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 
 subdir = src/gallium/drivers/r600
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -120,24 +121,31 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libr600_la_LIBADD =
-am__libr600_la_SOURCES_DIST = r600_asm.c r600_blit.c r600_hw_context.c \
-	r600_isa.c r600_pipe.c r600_shader.c r600_state.c r700_asm.c \
-	evergreen_hw_context.c evergreen_state.c eg_asm.c \
-	r600_state_common.c evergreen_compute.c compute_memory_pool.c \
-	r600_uvd.c sb/sb_bc_builder.cpp sb/sb_bc_decoder.cpp \
-	sb/sb_bc_dump.cpp sb/sb_bc_finalize.cpp sb/sb_bc_parser.cpp \
-	sb/sb_context.cpp sb/sb_core.cpp sb/sb_dce_cleanup.cpp \
-	sb/sb_def_use.cpp sb/sb_dump.cpp sb/sb_expr.cpp sb/sb_gcm.cpp \
-	sb/sb_gvn.cpp sb/sb_if_conversion.cpp sb/sb_ir.cpp \
-	sb/sb_liveness.cpp sb/sb_pass.cpp sb/sb_peephole.cpp \
-	sb/sb_psi_ops.cpp sb/sb_ra_checker.cpp sb/sb_ra_coalesce.cpp \
-	sb/sb_ra_init.cpp sb/sb_sched.cpp sb/sb_shader.cpp \
-	sb/sb_ssa_builder.cpp sb/sb_valtable.cpp r600_llvm.c
-am__objects_1 = r600_asm.lo r600_blit.lo r600_hw_context.lo \
-	r600_isa.lo r600_pipe.lo r600_shader.lo r600_state.lo \
-	r700_asm.lo evergreen_hw_context.lo evergreen_state.lo \
-	eg_asm.lo r600_state_common.lo evergreen_compute.lo \
-	compute_memory_pool.lo r600_uvd.lo
+am__libr600_la_SOURCES_DIST = compute_memory_pool.c \
+	compute_memory_pool.h eg_asm.c eg_sq.h evergreen_compute.c \
+	evergreen_compute.h evergreen_compute_internal.h evergreend.h \
+	evergreen_hw_context.c evergreen_state.c r600_asm.c r600_asm.h \
+	r600_blit.c r600d.h r600_formats.h r600_hw_context.c \
+	r600_isa.c r600_isa.h r600_opcodes.h r600_pipe.c r600_pipe.h \
+	r600_public.h r600_shader.c r600_shader.h r600_sq.h \
+	r600_state.c r600_state_common.c r600_uvd.c r700_asm.c \
+	r700_sq.h sb/sb_bc_builder.cpp sb/sb_bc_decoder.cpp \
+	sb/sb_bc_dump.cpp sb/sb_bc_finalize.cpp sb/sb_bc.h \
+	sb/sb_bc_parser.cpp sb/sb_context.cpp sb/sb_core.cpp \
+	sb/sb_dce_cleanup.cpp sb/sb_def_use.cpp sb/sb_dump.cpp \
+	sb/sb_expr.cpp sb/sb_expr.h sb/sb_gcm.cpp sb/sb_gvn.cpp \
+	sb/sb_if_conversion.cpp sb/sb_ir.cpp sb/sb_ir.h \
+	sb/sb_liveness.cpp sb/sb_pass.cpp sb/sb_pass.h \
+	sb/sb_peephole.cpp sb/sb_psi_ops.cpp sb/sb_public.h \
+	sb/sb_ra_checker.cpp sb/sb_ra_coalesce.cpp sb/sb_ra_init.cpp \
+	sb/sb_sched.cpp sb/sb_sched.h sb/sb_shader.cpp sb/sb_shader.h \
+	sb/sb_ssa_builder.cpp sb/sb_valtable.cpp r600_llvm.c \
+	r600_llvm.h
+am__objects_1 = compute_memory_pool.lo eg_asm.lo evergreen_compute.lo \
+	evergreen_hw_context.lo evergreen_state.lo r600_asm.lo \
+	r600_blit.lo r600_hw_context.lo r600_isa.lo r600_pipe.lo \
+	r600_shader.lo r600_state.lo r600_state_common.lo r600_uvd.lo \
+	r700_asm.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_2 = sb/sb_bc_builder.lo sb/sb_bc_decoder.lo \
 	sb/sb_bc_dump.lo sb/sb_bc_finalize.lo sb/sb_bc_parser.lo \
@@ -260,6 +268,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -282,7 +291,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -355,11 +363,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -370,10 +381,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -387,7 +396,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -406,7 +414,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -470,6 +484,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -498,27 +513,43 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 C_SOURCES = \
-	r600_asm.c \
-	r600_blit.c \
-	r600_hw_context.c \
-	r600_isa.c \
-	r600_pipe.c \
-	r600_shader.c \
-	r600_state.c \
-	r700_asm.c \
+	compute_memory_pool.c \
+	compute_memory_pool.h \
+	eg_asm.c \
+	eg_sq.h \
+	evergreen_compute.c \
+	evergreen_compute.h \
+	evergreen_compute_internal.h \
+	evergreend.h \
 	evergreen_hw_context.c \
 	evergreen_state.c \
-	eg_asm.c \
+	r600_asm.c \
+	r600_asm.h \
+	r600_blit.c \
+	r600d.h \
+	r600_formats.h \
+	r600_hw_context.c \
+	r600_isa.c \
+	r600_isa.h \
+	r600_opcodes.h \
+	r600_pipe.c \
+	r600_pipe.h \
+	r600_public.h \
+	r600_shader.c \
+	r600_shader.h \
+	r600_sq.h \
+	r600_state.c \
 	r600_state_common.c \
-	evergreen_compute.c \
-	compute_memory_pool.c \
-	r600_uvd.c
+	r600_uvd.c \
+	r700_asm.c \
+	r700_sq.h
 
 CXX_SOURCES = \
 	sb/sb_bc_builder.cpp \
 	sb/sb_bc_decoder.cpp \
 	sb/sb_bc_dump.cpp \
 	sb/sb_bc_finalize.cpp \
+	sb/sb_bc.h \
 	sb/sb_bc_parser.cpp \
 	sb/sb_context.cpp \
 	sb/sb_core.cpp \
@@ -526,23 +557,32 @@ CXX_SOURCES = \
 	sb/sb_def_use.cpp \
 	sb/sb_dump.cpp \
 	sb/sb_expr.cpp \
+	sb/sb_expr.h \
 	sb/sb_gcm.cpp \
 	sb/sb_gvn.cpp \
 	sb/sb_if_conversion.cpp \
 	sb/sb_ir.cpp \
+	sb/sb_ir.h \
 	sb/sb_liveness.cpp \
 	sb/sb_pass.cpp \
+	sb/sb_pass.h \
 	sb/sb_peephole.cpp \
 	sb/sb_psi_ops.cpp \
+	sb/sb_public.h \
 	sb/sb_ra_checker.cpp \
 	sb/sb_ra_coalesce.cpp \
 	sb/sb_ra_init.cpp \
 	sb/sb_sched.cpp \
+	sb/sb_sched.h \
 	sb/sb_shader.cpp \
+	sb/sb_shader.h \
 	sb/sb_ssa_builder.cpp \
 	sb/sb_valtable.cpp
 
-LLVM_C_SOURCES = r600_llvm.c
+LLVM_C_SOURCES = \
+	r600_llvm.c \
+	r600_llvm.h
+
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
@@ -562,6 +602,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -572,6 +613,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -602,6 +644,7 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(RADEON_CFLAGS) $(am__append_3) \
 	$(am__append_5) $(am__append_6)
@@ -611,6 +654,10 @@ AM_CXXFLAGS = \
 
 noinst_LTLIBRARIES = libr600.la
 libr600_la_SOURCES = $(C_SOURCES) $(CXX_SOURCES) $(am__append_4)
+EXTRA_DIST = Android.mk \
+	sb/notes.markdown \
+	sb/sb_bc_fmt_def.inc
+
 all: all-am
 
 .SUFFIXES:

@@ -54,6 +54,7 @@ extern int
 lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
                                         struct lp_generated_code **OutCode,
                                         LLVMModuleRef M,
+                                        LLVMMCJITMemoryManagerRef MM,
                                         unsigned OptLevel,
                                         int useMCJIT,
                                         char **OutError);
@@ -61,6 +62,11 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 extern void
 lp_free_generated_code(struct lp_generated_code *code);
 
+extern LLVMMCJITMemoryManagerRef
+lp_get_default_memory_manager();
+
+extern void
+lp_free_memory_manager(LLVMMCJITMemoryManagerRef memorymgr);
 
 #ifdef __cplusplus
 }

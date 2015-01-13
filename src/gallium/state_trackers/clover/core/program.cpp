@@ -21,7 +21,6 @@
 //
 
 #include "core/program.hpp"
-#include "core/compiler.hpp"
 
 using namespace clover;
 
@@ -41,7 +40,8 @@ program::program(clover::context &ctx,
 }
 
 void
-program::build(const ref_vector<device> &devs, const char *opts) {
+program::build(const ref_vector<device> &devs, const char *opts,
+               const header_map &headers) {
    if (has_source) {
       _devices = devs;
 
@@ -57,13 +57,14 @@ program::build(const ref_vector<device> &devs, const char *opts) {
          try {
             auto module = (dev.ir_format() == PIPE_SHADER_IR_TGSI ?
                            compile_program_tgsi(_source) :
-                           compile_program_llvm(_source, dev.ir_format(),
+                           compile_program_llvm(_source, headers,
+                                                dev.ir_format(),
                                                 dev.ir_target(), build_opts(dev),
                                                 log));
             _binaries.insert({ &dev, module });
-            _logs.insert({ &dev, std::string(log.c_str()) });
+            _logs.insert({ &dev, log });
          } catch (const build_error &) {
-            _logs.insert({ &dev, std::string(log.c_str()) });
+            _logs.insert({ &dev, log });
             throw;
          }
       }

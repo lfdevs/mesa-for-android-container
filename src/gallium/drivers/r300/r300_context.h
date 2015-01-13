@@ -36,7 +36,7 @@
 #include "r300_defines.h"
 #include "r300_screen.h"
 #include "compiler/radeon_regalloc.h"
-#include "../../winsys/radeon/drm/radeon_winsys.h"
+#include "radeon/drm/radeon_winsys.h"
 
 struct u_upload_mgr;
 struct r300_context;
@@ -580,6 +580,7 @@ struct r300_context {
     /* Whether two-sided color selection is enabled (AKA light_twoside). */
     boolean two_sided_color;
     boolean flatshade;
+    boolean clip_halfz;
     /* Whether fast color clear is enabled. */
     boolean cbzb_clear;
     /* Whether fragment shader needs to be validated. */

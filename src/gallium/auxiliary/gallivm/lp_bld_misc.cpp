@@ -55,18 +55,20 @@
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ADT/Triple.h>
+#if HAVE_LLVM < 0x0306
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
+#else
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
+#endif
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/PrettyStackTrace.h>
 
 #include <llvm/Support/TargetSelect.h>
 
-#if HAVE_LLVM >= 0x0303
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CBindingWrapping.h>
-#endif
 
 #include "pipe/p_config.h"
 #include "util/u_debug.h"
@@ -80,15 +82,9 @@ class LLVMEnsureMultithreaded {
 public:
    LLVMEnsureMultithreaded()
    {
-#if HAVE_LLVM < 0x0303
-      if (!llvm::llvm_is_multithreaded()) {
-         llvm::llvm_start_multithreaded();
-      }
-#else
       if (!LLVMIsMultithreaded()) {
          LLVMStartMultithreaded();
       }
-#endif
    }
 };
 
@@ -138,10 +134,17 @@ lp_set_load_alignment(LLVMValueRef Inst,
 extern "C"
 void
 lp_set_store_alignment(LLVMValueRef Inst,
-		       unsigned Align)
+                       unsigned Align)
 {
    llvm::unwrap<llvm::StoreInst>(Inst)->setAlignment(Align);
 }
+
+
+#if HAVE_LLVM < 0x0306
+typedef llvm::JITMemoryManager BaseMemoryManager;
+#else
+typedef llvm::RTDyldMemoryManager BaseMemoryManager;
+#endif
 
 
 /*
@@ -149,12 +152,13 @@ lp_set_store_alignment(LLVMValueRef Inst,
  * anonymous namespace in LLVM, so we cannot just derive from it to change
  * its behavior.
  */
-class DelegatingJITMemoryManager : public llvm::JITMemoryManager {
+class DelegatingJITMemoryManager : public BaseMemoryManager {
 
    protected:
-      virtual llvm::JITMemoryManager *mgr() const = 0;
+      virtual BaseMemoryManager *mgr() const = 0;
 
    public:
+#if HAVE_LLVM < 0x0306
       /*
        * From JITMemoryManager
        */
@@ -238,6 +242,7 @@ class DelegatingJITMemoryManager : public llvm::JITMemoryManager {
       virtual unsigned GetNumStubSlabs() {
          return mgr()->GetNumStubSlabs();
       }
+#endif
 
       /*
        * From RTDyldMemoryManager
@@ -257,7 +262,6 @@ class DelegatingJITMemoryManager : public llvm::JITMemoryManager {
          return mgr()->allocateCodeSection(Size, Alignment, SectionID);
       }
 #endif
-#if HAVE_LLVM >= 0x0303
       virtual uint8_t *allocateDataSection(uintptr_t Size,
                                            unsigned Alignment,
                                            unsigned SectionID,
@@ -283,22 +287,15 @@ class DelegatingJITMemoryManager : public llvm::JITMemoryManager {
          mgr()->registerEHFrames(SectionData);
       }
 #endif
-#else
-      virtual uint8_t *allocateDataSection(uintptr_t Size,
-                                           unsigned Alignment,
-                                           unsigned SectionID) {
-         return mgr()->allocateDataSection(Size, Alignment, SectionID);
-      }
-#endif
       virtual void *getPointerToNamedFunction(const std::string &Name,
                                               bool AbortOnFailure=true) {
          return mgr()->getPointerToNamedFunction(Name, AbortOnFailure);
       }
-#if HAVE_LLVM == 0x0303
+#if HAVE_LLVM <= 0x0303
       virtual bool applyPermissions(std::string *ErrMsg = 0) {
          return mgr()->applyPermissions(ErrMsg);
       }
-#elif HAVE_LLVM > 0x0303
+#else
       virtual bool finalizeMemory(std::string *ErrMsg = 0) {
          return mgr()->finalizeMemory(ErrMsg);
       }
@@ -319,15 +316,15 @@ class DelegatingJITMemoryManager : public llvm::JITMemoryManager {
  */
 class ShaderMemoryManager : public DelegatingJITMemoryManager {
 
-   static llvm::JITMemoryManager *TheMM;
-   static unsigned NumUsers;
+   BaseMemoryManager *TheMM;
 
    struct GeneratedCode {
       typedef std::vector<void *> Vec;
       Vec FunctionBody, ExceptionTable;
+      BaseMemoryManager *TheMM;
 
-      GeneratedCode() {
-         ++NumUsers;
+      GeneratedCode(BaseMemoryManager *MM) {
+         TheMM = MM;
       }
 
       ~GeneratedCode() {
@@ -335,36 +332,31 @@ class ShaderMemoryManager : public DelegatingJITMemoryManager {
           * Deallocate things as previously requested and
           * free shared manager when no longer used.
           */
-	 Vec::iterator i;
+#if HAVE_LLVM < 0x0306
+         Vec::iterator i;
 
-	 assert(TheMM);
-	 for ( i = FunctionBody.begin(); i != FunctionBody.end(); ++i )
-	    TheMM->deallocateFunctionBody(*i);
+         assert(TheMM);
+         for ( i = FunctionBody.begin(); i != FunctionBody.end(); ++i )
+            TheMM->deallocateFunctionBody(*i);
 #if HAVE_LLVM < 0x0304
-	 for ( i = ExceptionTable.begin(); i != ExceptionTable.end(); ++i )
-	    TheMM->deallocateExceptionTable(*i);
-#endif
-         --NumUsers;
-         if (NumUsers == 0) {
-            delete TheMM;
-            TheMM = 0;
-         }
+         for ( i = ExceptionTable.begin(); i != ExceptionTable.end(); ++i )
+            TheMM->deallocateExceptionTable(*i);
+#endif /* HAVE_LLVM < 0x0304 */
+#endif /* HAVE_LLVM < 0x0306 */
       }
    };
 
    GeneratedCode *code;
 
-   llvm::JITMemoryManager *mgr() const {
-      if (!TheMM) {
-         TheMM = CreateDefaultMemManager();
-      }
+   BaseMemoryManager *mgr() const {
       return TheMM;
    }
 
    public:
 
-      ShaderMemoryManager() {
-         code = new GeneratedCode;
+      ShaderMemoryManager(BaseMemoryManager* MM) {
+         TheMM = MM;
+         code = new GeneratedCode(MM);
       }
 
       virtual ~ShaderMemoryManager() {
@@ -395,9 +387,6 @@ class ShaderMemoryManager : public DelegatingJITMemoryManager {
       }
 };
 
-llvm::JITMemoryManager *ShaderMemoryManager::TheMM = 0;
-unsigned ShaderMemoryManager::NumUsers = 0;
-
 
 /**
  * Same as LLVMCreateJITCompilerForModule, but:
@@ -414,6 +403,7 @@ LLVMBool
 lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
                                         lp_generated_code **OutCode,
                                         LLVMModuleRef M,
+                                        LLVMMCJITMemoryManagerRef CMM,
                                         unsigned OptLevel,
                                         int useMCJIT,
                                         char **OutError)
@@ -443,7 +433,9 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    options.JITEmitDebugInfo = true;
 #endif
 
-#if defined(DEBUG) || defined(PROFILE)
+   /* XXX: Workaround http://llvm.org/PR21435 */
+#if defined(DEBUG) || defined(PROFILE) || \
+    (HAVE_LLVM >= 0x0303 && (defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)))
 #if HAVE_LLVM < 0x0304
    options.NoFramePointerElimNonLeaf = true;
 #endif
@@ -456,7 +448,9 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
           .setOptLevel((CodeGenOpt::Level)OptLevel);
 
    if (useMCJIT) {
+#if HAVE_LLVM < 0x0306
        builder.setUseMCJIT(true);
+#endif
 #ifdef _WIN32
        /*
         * MCJIT works on Windows, but currently only through ELF object format.
@@ -499,24 +493,30 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    builder.setMCPU(MCPU);
 #endif
 
-   ShaderMemoryManager *MM = new ShaderMemoryManager();
-   *OutCode = MM->getGeneratedCode();
+   ShaderMemoryManager *MM;
+   if (useMCJIT) {
+#if HAVE_LLVM > 0x0303
+       BaseMemoryManager* JMM = reinterpret_cast<BaseMemoryManager*>(CMM);
+       MM = new ShaderMemoryManager(JMM);
+       *OutCode = MM->getGeneratedCode();
 
-   builder.setJITMemoryManager(MM);
+       builder.setMCJITMemoryManager(MM);
+#endif
+   } else {
+#if HAVE_LLVM < 0x0306
+       BaseMemoryManager* JMM = reinterpret_cast<BaseMemoryManager*>(CMM);
+       MM = new ShaderMemoryManager(JMM);
+       *OutCode = MM->getGeneratedCode();
+
+       builder.setJITMemoryManager(MM);
+#else
+       assert(0);
+#endif
+   }
 
    ExecutionEngine *JIT;
 
-#if HAVE_LLVM >= 0x0302
    JIT = builder.create();
-#else
-   /*
-    * Workaround http://llvm.org/PR12833
-    */
-   StringRef MArch = "";
-   StringRef MCPU = "";
-   Triple TT(unwrap(M)->getTargetTriple());
-   JIT = builder.create(builder.selectTarget(TT, MArch, MCPU, MAttrs));
-#endif
    if (JIT) {
       *OutJIT = wrap(JIT);
       return 0;
@@ -534,4 +534,24 @@ void
 lp_free_generated_code(struct lp_generated_code *code)
 {
    ShaderMemoryManager::freeGeneratedCode(code);
+}
+
+extern "C"
+LLVMMCJITMemoryManagerRef
+lp_get_default_memory_manager()
+{
+   BaseMemoryManager *mm;
+#if HAVE_LLVM < 0x0306
+   mm = llvm::JITMemoryManager::CreateDefaultMemManager();
+#else
+   mm = new llvm::SectionMemoryManager();
+#endif
+   return reinterpret_cast<LLVMMCJITMemoryManagerRef>(mm);
+}
+
+extern "C"
+void
+lp_free_memory_manager(LLVMMCJITMemoryManagerRef memorymgr)
+{
+   delete reinterpret_cast<BaseMemoryManager*>(memorymgr);
 }

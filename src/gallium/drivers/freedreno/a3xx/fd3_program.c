@@ -34,7 +34,6 @@
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
 
-#include "freedreno_lowering.h"
 #include "freedreno_program.h"
 
 #include "fd3_program.h"
@@ -127,79 +126,80 @@ emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 	}
 }
 
-static int
-find_output(const struct ir3_shader_variant *so, ir3_semantic semantic)
-{
-	int j;
-
-	for (j = 0; j < so->outputs_count; j++)
-		if (so->outputs[j].semantic == semantic)
-			return j;
-
-	/* it seems optional to have a OUT.BCOLOR[n] for each OUT.COLOR[n]
-	 * in the vertex shader.. but the fragment shader doesn't know this
-	 * so  it will always have both IN.COLOR[n] and IN.BCOLOR[n].  So
-	 * at link time if there is no matching OUT.BCOLOR[n], we must map
-	 * OUT.COLOR[n] to IN.BCOLOR[n].
-	 */
-	if (sem2name(semantic) == TGSI_SEMANTIC_BCOLOR) {
-		unsigned idx = sem2idx(semantic);
-		return find_output(so, ir3_semantic_name(TGSI_SEMANTIC_COLOR, idx));
-	}
-
-	debug_assert(0);
-
-	return 0;
-}
-
-static int
-next_varying(const struct ir3_shader_variant *so, int i)
-{
-	while (++i < so->inputs_count)
-		if (so->inputs[i].compmask && so->inputs[i].bary)
-			break;
-	return i;
-}
-
-static uint32_t
-find_output_regid(const struct ir3_shader_variant *so, ir3_semantic semantic)
-{
-	int j;
-	for (j = 0; j < so->outputs_count; j++)
-		if (so->outputs[j].semantic == semantic)
-			return so->outputs[j].regid;
-	return regid(63, 0);
-}
-
 void
-fd3_program_emit(struct fd_ringbuffer *ring,
-		struct fd_program_stateobj *prog, struct ir3_shader_key key)
+fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 {
 	const struct ir3_shader_variant *vp, *fp;
 	const struct ir3_info *vsi, *fsi;
+	enum a3xx_instrbuffermode fpbuffer, vpbuffer;
+	uint32_t fpbuffersz, vpbuffersz, fsoff;
 	uint32_t pos_regid, posz_regid, psize_regid, color_regid;
+	int constmode;
 	int i, j, k;
 
-	vp = fd3_shader_variant(prog->vp, key);
+	vp = fd3_emit_get_vp(emit);
 
-	if (key.binning_pass) {
+	if (emit->key.binning_pass) {
 		/* use dummy stateobj to simplify binning vs non-binning: */
 		static const struct ir3_shader_variant binning_fp = {};
 		fp = &binning_fp;
 	} else {
-		fp = fd3_shader_variant(prog->fp, key);
+		fp = fd3_emit_get_fp(emit);
 	}
 
 	vsi = &vp->info;
 	fsi = &fp->info;
 
-	pos_regid = find_output_regid(vp,
+	fpbuffer = BUFFER;
+	vpbuffer = BUFFER;
+	fpbuffersz = fp->instrlen;
+	vpbuffersz = vp->instrlen;
+
+	/*
+	 * Decide whether to use BUFFER or CACHE mode for VS and FS.  It
+	 * appears like 256 is the hard limit, but when the combined size
+	 * exceeds 128 then blob will try to keep FS in BUFFER mode and
+	 * switch to CACHE for VS until VS is too large.  The blob seems
+	 * to switch FS out of BUFFER mode at slightly under 128.  But
+	 * a bit fuzzy on the decision tree, so use slightly conservative
+	 * limits.
+	 *
+	 * TODO check if these thresholds for BUFFER vs CACHE mode are the
+	 *      same for all a3xx or whether we need to consider the gpuid
+	 */
+
+	if ((fpbuffersz + vpbuffersz) > 128) {
+		if (fpbuffersz < 112) {
+			/* FP:BUFFER   VP:CACHE  */
+			vpbuffer = CACHE;
+			vpbuffersz = 256 - fpbuffersz;
+		} else if (vpbuffersz < 112) {
+			/* FP:CACHE    VP:BUFFER */
+			fpbuffer = CACHE;
+			fpbuffersz = 256 - vpbuffersz;
+		} else {
+			/* FP:CACHE    VP:CACHE  */
+			vpbuffer = fpbuffer = CACHE;
+			vpbuffersz = fpbuffersz = 192;
+		}
+	}
+
+	if (fpbuffer == BUFFER) {
+		fsoff = 128 - fpbuffersz;
+	} else {
+		fsoff = 256 - fpbuffersz;
+	}
+
+	/* seems like vs->constlen + fs->constlen > 256, then CONSTMODE=1 */
+	constmode = ((vp->constlen + fp->constlen) > 256) ? 1 : 0;
+
+	pos_regid = ir3_find_output_regid(vp,
 		ir3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
-	posz_regid = find_output_regid(fp,
+	posz_regid = ir3_find_output_regid(fp,
 		ir3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
-	psize_regid = find_output_regid(vp,
+	psize_regid = ir3_find_output_regid(vp,
 		ir3_semantic_name(TGSI_SEMANTIC_PSIZE, 0));
-	color_regid = find_output_regid(fp,
+	color_regid = ir3_find_output_regid(fp,
 		ir3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
 
 	/* we could probably divide this up into things that need to be
@@ -208,6 +208,7 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 
 	OUT_PKT0(ring, REG_A3XX_HLSQ_CONTROL_0_REG, 6);
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(FOUR_QUADS) |
+			A3XX_HLSQ_CONTROL_0_REG_CONSTMODE(constmode) |
 			/* NOTE:  I guess SHADERRESTART and CONSTFULLUPDATE maybe
 			 * flush some caches? I think we only need to set those
 			 * bits if we have updated const or shader..
@@ -221,14 +222,14 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_3_REG_REGID(fp->pos_regid));
 	OUT_RING(ring, A3XX_HLSQ_VS_CONTROL_REG_CONSTLENGTH(vp->constlen) |
 			A3XX_HLSQ_VS_CONTROL_REG_CONSTSTARTOFFSET(0) |
-			A3XX_HLSQ_VS_CONTROL_REG_INSTRLENGTH(vp->instrlen));
+			A3XX_HLSQ_VS_CONTROL_REG_INSTRLENGTH(vpbuffersz));
 	OUT_RING(ring, A3XX_HLSQ_FS_CONTROL_REG_CONSTLENGTH(fp->constlen) |
 			A3XX_HLSQ_FS_CONTROL_REG_CONSTSTARTOFFSET(128) |
-			A3XX_HLSQ_FS_CONTROL_REG_INSTRLENGTH(fp->instrlen));
+			A3XX_HLSQ_FS_CONTROL_REG_INSTRLENGTH(fpbuffersz));
 
 	OUT_PKT0(ring, REG_A3XX_SP_SP_CTRL_REG, 1);
-	OUT_RING(ring, A3XX_SP_SP_CTRL_REG_CONSTMODE(0) |
-			COND(key.binning_pass, A3XX_SP_SP_CTRL_REG_BINNING) |
+	OUT_RING(ring, A3XX_SP_SP_CTRL_REG_CONSTMODE(constmode) |
+			COND(emit->key.binning_pass, A3XX_SP_SP_CTRL_REG_BINNING) |
 			A3XX_SP_SP_CTRL_REG_SLEEPMODE(1) |
 			A3XX_SP_SP_CTRL_REG_L0MODE(0));
 
@@ -237,18 +238,18 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 
 	OUT_PKT0(ring, REG_A3XX_SP_VS_CTRL_REG0, 3);
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG0_THREADMODE(MULTI) |
-			A3XX_SP_VS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
-			A3XX_SP_VS_CTRL_REG0_CACHEINVALID |
+			A3XX_SP_VS_CTRL_REG0_INSTRBUFFERMODE(vpbuffer) |
+			COND(vpbuffer == CACHE, A3XX_SP_VS_CTRL_REG0_CACHEINVALID) |
 			A3XX_SP_VS_CTRL_REG0_HALFREGFOOTPRINT(vsi->max_half_reg + 1) |
 			A3XX_SP_VS_CTRL_REG0_FULLREGFOOTPRINT(vsi->max_reg + 1) |
 			A3XX_SP_VS_CTRL_REG0_INOUTREGOVERLAP(0) |
 			A3XX_SP_VS_CTRL_REG0_THREADSIZE(TWO_QUADS) |
 			A3XX_SP_VS_CTRL_REG0_SUPERTHREADMODE |
 			COND(vp->has_samp, A3XX_SP_VS_CTRL_REG0_PIXLODENABLE) |
-			A3XX_SP_VS_CTRL_REG0_LENGTH(vp->instrlen));
+			A3XX_SP_VS_CTRL_REG0_LENGTH(vpbuffersz));
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(vp->constlen) |
 			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(vp->total_in) |
-			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(MAX2(vsi->max_const, 0)));
+			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(MAX2(vp->constlen + 1, 0)));
 	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(pos_regid) |
 			A3XX_SP_VS_PARAM_REG_PSIZEREGID(psize_regid) |
 			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(align(fp->total_in, 4) / 4));
@@ -258,16 +259,16 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 
 		OUT_PKT0(ring, REG_A3XX_SP_VS_OUT_REG(i), 1);
 
-		j = next_varying(fp, j);
+		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count) {
-			k = find_output(vp, fp->inputs[j].semantic);
+			k = ir3_find_output(vp, fp->inputs[j].semantic);
 			reg |= A3XX_SP_VS_OUT_REG_A_REGID(vp->outputs[k].regid);
 			reg |= A3XX_SP_VS_OUT_REG_A_COMPMASK(fp->inputs[j].compmask);
 		}
 
-		j = next_varying(fp, j);
+		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count) {
-			k = find_output(vp, fp->inputs[j].semantic);
+			k = ir3_find_output(vp, fp->inputs[j].semantic);
 			reg |= A3XX_SP_VS_OUT_REG_B_REGID(vp->outputs[k].regid);
 			reg |= A3XX_SP_VS_OUT_REG_B_COMPMASK(fp->inputs[j].compmask);
 		}
@@ -280,16 +281,16 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 
 		OUT_PKT0(ring, REG_A3XX_SP_VS_VPC_DST_REG(i), 1);
 
-		j = next_varying(fp, j);
+		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count)
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC0(fp->inputs[j].inloc);
-		j = next_varying(fp, j);
+		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count)
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC1(fp->inputs[j].inloc);
-		j = next_varying(fp, j);
+		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count)
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC2(fp->inputs[j].inloc);
-		j = next_varying(fp, j);
+		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count)
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC3(fp->inputs[j].inloc);
 
@@ -301,7 +302,7 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 			A3XX_SP_VS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
 	OUT_RELOC(ring, vp->bo, 0, 0, 0);  /* SP_VS_OBJ_START_REG */
 
-	if (key.binning_pass) {
+	if (emit->key.binning_pass) {
 		OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
 		OUT_RING(ring, 0x00000000);
 
@@ -309,34 +310,36 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 		OUT_RING(ring, A3XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
 				A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(BUFFER));
 		OUT_RING(ring, 0x00000000);
+
+		OUT_PKT0(ring, REG_A3XX_SP_FS_OBJ_OFFSET_REG, 1);
+		OUT_RING(ring, A3XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(128) |
+				A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
 	} else {
 		OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
 		OUT_RING(ring, A3XX_SP_FS_LENGTH_REG_SHADERLENGTH(fp->instrlen));
 
 		OUT_PKT0(ring, REG_A3XX_SP_FS_CTRL_REG0, 2);
 		OUT_RING(ring, A3XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
-				A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
-				A3XX_SP_FS_CTRL_REG0_CACHEINVALID |
+				A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(fpbuffer) |
+				COND(fpbuffer == CACHE, A3XX_SP_FS_CTRL_REG0_CACHEINVALID) |
 				A3XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(fsi->max_half_reg + 1) |
 				A3XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(fsi->max_reg + 1) |
 				A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
 				A3XX_SP_FS_CTRL_REG0_THREADSIZE(FOUR_QUADS) |
 				A3XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
 				COND(fp->has_samp > 0, A3XX_SP_FS_CTRL_REG0_PIXLODENABLE) |
-				A3XX_SP_FS_CTRL_REG0_LENGTH(fp->instrlen));
+				A3XX_SP_FS_CTRL_REG0_LENGTH(fpbuffersz));
 		OUT_RING(ring, A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(fp->constlen) |
 				A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING(fp->total_in) |
-				A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(MAX2(fsi->max_const, 0)) |
+				A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(MAX2(fp->constlen + 1, 0)) |
 				A3XX_SP_FS_CTRL_REG1_HALFPRECVAROFFSET(63));
+
 		OUT_PKT0(ring, REG_A3XX_SP_FS_OBJ_OFFSET_REG, 2);
-		OUT_RING(ring, A3XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(128) |
-				A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
+		OUT_RING(ring, A3XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(
+					MAX2(128, vp->constlen)) |
+				A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(fsoff));
 		OUT_RELOC(ring, fp->bo, 0, 0, 0);  /* SP_FS_OBJ_START_REG */
 	}
-
-	OUT_PKT0(ring, REG_A3XX_SP_FS_FLAT_SHAD_MODE_REG_0, 2);
-	OUT_RING(ring, 0x00000000);        /* SP_FS_FLAT_SHAD_MODE_REG_0 */
-	OUT_RING(ring, 0x00000000);        /* SP_FS_FLAT_SHAD_MODE_REG_1 */
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_OUTPUT_REG, 1);
 	if (fp->writes_pos) {
@@ -353,13 +356,37 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
 
-	if (key.binning_pass) {
+	if (emit->key.binning_pass) {
 		OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
 		OUT_RING(ring, A3XX_VPC_ATTR_THRDASSIGN(1) |
 				A3XX_VPC_ATTR_LMSIZE(1) |
 				COND(vp->writes_psize, A3XX_VPC_ATTR_PSIZE));
 		OUT_RING(ring, 0x00000000);
 	} else {
+		uint32_t vinterp[4] = {0}, flatshade[2] = {0};
+
+		/* figure out VARYING_INTERP / FLAT_SHAD register values: */
+		for (j = -1; (j = ir3_next_varying(fp, j)) < (int)fp->inputs_count; ) {
+			uint32_t interp = fp->inputs[j].interpolate;
+			if ((interp == TGSI_INTERPOLATE_CONSTANT) ||
+					((interp == TGSI_INTERPOLATE_COLOR) && emit->rasterflat)) {
+				/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
+				 * instead.. rather than -8 everywhere else..
+				 */
+				uint32_t loc = fp->inputs[j].inloc - 8;
+
+				/* currently assuming varyings aligned to 4 (not
+				 * packed):
+				 */
+				debug_assert((loc % 4) == 0);
+
+				for (i = 0; i < 4; i++, loc++) {
+					vinterp[loc / 16] |= FLAT << ((loc % 16) * 2);
+					flatshade[loc / 32] |= 1 << (loc % 32);
+				}
+			}
+		}
+
 		OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
 		OUT_RING(ring, A3XX_VPC_ATTR_TOTALATTR(fp->total_in) |
 				A3XX_VPC_ATTR_THRDASSIGN(1) |
@@ -369,29 +396,35 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 				A3XX_VPC_PACK_NUMNONPOSVSVAR(fp->total_in));
 
 		OUT_PKT0(ring, REG_A3XX_VPC_VARYING_INTERP_MODE(0), 4);
-		OUT_RING(ring, fp->shader->vinterp[0]);    /* VPC_VARYING_INTERP[0].MODE */
-		OUT_RING(ring, fp->shader->vinterp[1]);    /* VPC_VARYING_INTERP[1].MODE */
-		OUT_RING(ring, fp->shader->vinterp[2]);    /* VPC_VARYING_INTERP[2].MODE */
-		OUT_RING(ring, fp->shader->vinterp[3]);    /* VPC_VARYING_INTERP[3].MODE */
+		OUT_RING(ring, vinterp[0]);    /* VPC_VARYING_INTERP[0].MODE */
+		OUT_RING(ring, vinterp[1]);    /* VPC_VARYING_INTERP[1].MODE */
+		OUT_RING(ring, vinterp[2]);    /* VPC_VARYING_INTERP[2].MODE */
+		OUT_RING(ring, vinterp[3]);    /* VPC_VARYING_INTERP[3].MODE */
 
 		OUT_PKT0(ring, REG_A3XX_VPC_VARYING_PS_REPL_MODE(0), 4);
 		OUT_RING(ring, fp->shader->vpsrepl[0]);    /* VPC_VARYING_PS_REPL[0].MODE */
 		OUT_RING(ring, fp->shader->vpsrepl[1]);    /* VPC_VARYING_PS_REPL[1].MODE */
 		OUT_RING(ring, fp->shader->vpsrepl[2]);    /* VPC_VARYING_PS_REPL[2].MODE */
 		OUT_RING(ring, fp->shader->vpsrepl[3]);    /* VPC_VARYING_PS_REPL[3].MODE */
+
+		OUT_PKT0(ring, REG_A3XX_SP_FS_FLAT_SHAD_MODE_REG_0, 2);
+		OUT_RING(ring, flatshade[0]);        /* SP_FS_FLAT_SHAD_MODE_REG_0 */
+		OUT_RING(ring, flatshade[1]);        /* SP_FS_FLAT_SHAD_MODE_REG_1 */
 	}
 
 	OUT_PKT0(ring, REG_A3XX_VFD_VS_THREADING_THRESHOLD, 1);
 	OUT_RING(ring, A3XX_VFD_VS_THREADING_THRESHOLD_REGID_THRESHOLD(15) |
 			A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT(252));
 
-	emit_shader(ring, vp);
+	if (vpbuffer == BUFFER)
+		emit_shader(ring, vp);
 
 	OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
 	OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
 
-	if (!key.binning_pass) {
-		emit_shader(ring, fp);
+	if (!emit->key.binning_pass) {
+		if (fpbuffer == BUFFER)
+			emit_shader(ring, fp);
 
 		OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
 		OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */

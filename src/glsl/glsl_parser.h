@@ -251,31 +251,30 @@ extern int _mesa_glsl_debug;
     FIXED_TOK = 461,
     UNSIGNED = 462,
     INPUT_TOK = 463,
-    OUPTUT = 464,
-    HVEC2 = 465,
-    HVEC3 = 466,
-    HVEC4 = 467,
-    DVEC2 = 468,
-    DVEC3 = 469,
-    DVEC4 = 470,
-    FVEC2 = 471,
-    FVEC3 = 472,
-    FVEC4 = 473,
-    SAMPLER3DRECT = 474,
-    SIZEOF = 475,
-    CAST = 476,
-    NAMESPACE = 477,
-    USING = 478,
-    RESOURCE = 479,
-    PATCH = 480,
-    SUBROUTINE = 481,
-    ERROR_TOK = 482,
-    COMMON = 483,
-    PARTITION = 484,
-    ACTIVE = 485,
-    FILTER = 486,
-    ROW_MAJOR = 487,
-    THEN = 488
+    HVEC2 = 464,
+    HVEC3 = 465,
+    HVEC4 = 466,
+    DVEC2 = 467,
+    DVEC3 = 468,
+    DVEC4 = 469,
+    FVEC2 = 470,
+    FVEC3 = 471,
+    FVEC4 = 472,
+    SAMPLER3DRECT = 473,
+    SIZEOF = 474,
+    CAST = 475,
+    NAMESPACE = 476,
+    USING = 477,
+    RESOURCE = 478,
+    PATCH = 479,
+    SUBROUTINE = 480,
+    ERROR_TOK = 481,
+    COMMON = 482,
+    PARTITION = 483,
+    ACTIVE = 484,
+    FILTER = 485,
+    ROW_MAJOR = 486,
+    THEN = 487
   };
 #endif
 
@@ -284,7 +283,7 @@ extern int _mesa_glsl_debug;
 typedef union YYSTYPE YYSTYPE;
 union YYSTYPE
 {
-#line 91 "glsl_parser.yy" /* yacc.c:1909  */
+#line 94 "glsl_parser.yy" /* yacc.c:1909  */
 
    int n;
    float real;
@@ -321,7 +320,7 @@ union YYSTYPE
       ast_node *else_statement;
    } selection_rest_statement;
 
-#line 325 "../../src/glsl/glsl_parser.h" /* yacc.c:1909  */
+#line 324 "../../src/glsl/glsl_parser.h" /* yacc.c:1909  */
 };
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1

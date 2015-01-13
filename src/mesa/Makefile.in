@@ -127,8 +127,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources $(srcdir)/Makefile.in \
 @HAVE_SPARC_ASM_TRUE@am__append_13 = -I$(builddir)/sparc -I$(srcdir)/sparc
 subdir = src/mesa
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -261,9 +262,7 @@ am__libmesa_la_SOURCES_DIST = $(SRCDIR)main/api_arrayelt.c \
 	$(SRCDIR)program/prog_parameter_layout.c \
 	$(SRCDIR)program/prog_print.c \
 	$(SRCDIR)program/prog_statevars.c \
-	$(SRCDIR)program/programopt.c \
-	$(SRCDIR)program/register_allocate.c \
-	$(SRCDIR)program/sampler.cpp \
+	$(SRCDIR)program/programopt.c $(SRCDIR)program/sampler.cpp \
 	$(SRCDIR)program/string_to_uint_map.cpp \
 	$(SRCDIR)program/symbol_table.c $(BUILDDIR)program/lex.yy.c \
 	$(BUILDDIR)program/program_parse.tab.c \
@@ -339,9 +338,8 @@ am__objects_12 = arbprogparse.lo prog_hash_table.lo ir_to_mesa.lo \
 	prog_execute.lo prog_instruction.lo prog_noise.lo \
 	prog_optimize.lo prog_opt_constant_fold.lo prog_parameter.lo \
 	prog_parameter_layout.lo prog_print.lo prog_statevars.lo \
-	programopt.lo register_allocate.lo sampler.lo \
-	string_to_uint_map.lo symbol_table.lo lex.yy.lo \
-	program_parse.tab.lo
+	programopt.lo sampler.lo string_to_uint_map.lo symbol_table.lo \
+	lex.yy.lo program_parse.tab.lo
 am__objects_13 = xform4.lo
 @HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@am__objects_14 =  \
 @HAVE_X86_64_ASM_TRUE@@HAVE_X86_ASM_TRUE@	$(am__objects_13)
@@ -366,7 +364,8 @@ am__v_lt_1 =
 @NEED_LIBMESA_TRUE@am_libmesa_la_rpath =
 libmesa_sse41_la_LIBADD =
 am_libmesa_sse41_la_OBJECTS =  \
-	libmesa_sse41_la-streaming-load-memcpy.lo
+	libmesa_sse41_la-streaming-load-memcpy.lo \
+	libmesa_sse41_la-sse_minmax.lo
 libmesa_sse41_la_OBJECTS = $(am_libmesa_sse41_la_OBJECTS)
 libmesa_sse41_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -511,9 +510,7 @@ am__libmesagallium_la_SOURCES_DIST = $(SRCDIR)main/api_arrayelt.c \
 	$(SRCDIR)program/prog_parameter_layout.c \
 	$(SRCDIR)program/prog_print.c \
 	$(SRCDIR)program/prog_statevars.c \
-	$(SRCDIR)program/programopt.c \
-	$(SRCDIR)program/register_allocate.c \
-	$(SRCDIR)program/sampler.cpp \
+	$(SRCDIR)program/programopt.c $(SRCDIR)program/sampler.cpp \
 	$(SRCDIR)program/string_to_uint_map.cpp \
 	$(SRCDIR)program/symbol_table.c $(BUILDDIR)program/lex.yy.c \
 	$(BUILDDIR)program/program_parse.tab.c \
@@ -745,6 +742,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -767,7 +765,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -840,11 +837,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -855,10 +855,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -872,7 +870,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -891,7 +888,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -955,6 +958,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -1264,7 +1268,6 @@ PROGRAM_FILES = \
 	$(SRCDIR)program/prog_print.c \
 	$(SRCDIR)program/prog_statevars.c \
 	$(SRCDIR)program/programopt.c \
-	$(SRCDIR)program/register_allocate.c \
 	$(SRCDIR)program/sampler.cpp \
 	$(SRCDIR)program/string_to_uint_map.cpp \
 	$(SRCDIR)program/symbol_table.c \
@@ -1392,9 +1395,10 @@ libmesagallium_la_LIBADD = \
 	$(ARCH_LIBS)
 
 libmesa_sse41_la_SOURCES = \
-	main/streaming-load-memcpy.c
+	main/streaming-load-memcpy.c \
+	main/sse_minmax.c
 
-libmesa_sse41_la_CFLAGS = $(AM_CFLAGS) -msse4.1
+libmesa_sse41_la_CFLAGS = $(AM_CFLAGS) $(SSE41_CFLAGS)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = gl.pc
 all: $(BUILT_SOURCES)
@@ -1553,6 +1557,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imports.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ir_to_mesa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lex.yy.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesa_sse41_la-sse_minmax.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesa_sse41_la-streaming-load-memcpy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/light.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lines.Plo@am__quote@
@@ -1604,7 +1609,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rastpos.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/read_rgba_span_x86.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/readpix.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/register_allocate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/remap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/renderbuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/s_aaline.Plo@am__quote@
@@ -3440,13 +3444,6 @@ programopt.lo: $(SRCDIR)program/programopt.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o programopt.lo `test -f '$(SRCDIR)program/programopt.c' || echo '$(srcdir)/'`$(SRCDIR)program/programopt.c
 
-register_allocate.lo: $(SRCDIR)program/register_allocate.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT register_allocate.lo -MD -MP -MF $(DEPDIR)/register_allocate.Tpo -c -o register_allocate.lo `test -f '$(SRCDIR)program/register_allocate.c' || echo '$(srcdir)/'`$(SRCDIR)program/register_allocate.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/register_allocate.Tpo $(DEPDIR)/register_allocate.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(SRCDIR)program/register_allocate.c' object='register_allocate.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o register_allocate.lo `test -f '$(SRCDIR)program/register_allocate.c' || echo '$(srcdir)/'`$(SRCDIR)program/register_allocate.c
-
 symbol_table.lo: $(SRCDIR)program/symbol_table.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT symbol_table.lo -MD -MP -MF $(DEPDIR)/symbol_table.Tpo -c -o symbol_table.lo `test -f '$(SRCDIR)program/symbol_table.c' || echo '$(srcdir)/'`$(SRCDIR)program/symbol_table.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/symbol_table.Tpo $(DEPDIR)/symbol_table.Plo
@@ -3474,6 +3471,13 @@ libmesa_sse41_la-streaming-load-memcpy.lo: main/streaming-load-memcpy.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='main/streaming-load-memcpy.c' object='libmesa_sse41_la-streaming-load-memcpy.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libmesa_sse41_la_CFLAGS) $(CFLAGS) -c -o libmesa_sse41_la-streaming-load-memcpy.lo `test -f 'main/streaming-load-memcpy.c' || echo '$(srcdir)/'`main/streaming-load-memcpy.c
+
+libmesa_sse41_la-sse_minmax.lo: main/sse_minmax.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libmesa_sse41_la_CFLAGS) $(CFLAGS) -MT libmesa_sse41_la-sse_minmax.lo -MD -MP -MF $(DEPDIR)/libmesa_sse41_la-sse_minmax.Tpo -c -o libmesa_sse41_la-sse_minmax.lo `test -f 'main/sse_minmax.c' || echo '$(srcdir)/'`main/sse_minmax.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesa_sse41_la-sse_minmax.Tpo $(DEPDIR)/libmesa_sse41_la-sse_minmax.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='main/sse_minmax.c' object='libmesa_sse41_la-sse_minmax.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libmesa_sse41_la_CFLAGS) $(CFLAGS) -c -o libmesa_sse41_la-sse_minmax.lo `test -f 'main/sse_minmax.c' || echo '$(srcdir)/'`main/sse_minmax.c
 
 st_atom.lo: $(SRCDIR)state_tracker/st_atom.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT st_atom.lo -MD -MP -MF $(DEPDIR)/st_atom.Tpo -c -o st_atom.lo `test -f '$(SRCDIR)state_tracker/st_atom.c' || echo '$(srcdir)/'`$(SRCDIR)state_tracker/st_atom.c

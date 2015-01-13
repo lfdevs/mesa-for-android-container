@@ -96,7 +96,7 @@ resource_get_transfer_method(struct pipe_resource *res,
       /* we may need to convert on the fly */
       if (tex->separate_s8 || tex->layout.format == PIPE_FORMAT_S8_UINT) {
          /* on GEN6, separate stencil is enabled only when HiZ is */
-         if (is->dev.gen >= ILO_GEN(7) ||
+         if (ilo_dev_gen(&is->dev) >= ILO_GEN(7) ||
              ilo_texture_can_enable_hiz(tex, transfer->level,
                 transfer->box.z, transfer->box.depth)) {
             m = ILO_TRANSFER_MAP_SW_ZS;
@@ -224,7 +224,7 @@ xfer_unblock(struct ilo_transfer *xfer, bool *resource_renamed)
    case ILO_TRANSFER_MAP_CPU:
    case ILO_TRANSFER_MAP_GTT:
       if (xfer->base.usage & PIPE_TRANSFER_UNSYNCHRONIZED) {
-         xfer->method = ILO_TRANSFER_MAP_GTT_UNSYNC;
+         xfer->method = ILO_TRANSFER_MAP_GTT_ASYNC;
          unblocked = true;
       }
       else if ((xfer->base.usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) &&
@@ -238,7 +238,7 @@ xfer_unblock(struct ilo_transfer *xfer, bool *resource_renamed)
          unblocked = true;
       }
       break;
-   case ILO_TRANSFER_MAP_GTT_UNSYNC:
+   case ILO_TRANSFER_MAP_GTT_ASYNC:
    case ILO_TRANSFER_MAP_STAGING:
       unblocked = true;
       break;
@@ -291,9 +291,8 @@ xfer_map(struct ilo_transfer *xfer)
    case ILO_TRANSFER_MAP_GTT:
       ptr = intel_bo_map_gtt(ilo_resource_get_bo(xfer->base.resource));
       break;
-   case ILO_TRANSFER_MAP_GTT_UNSYNC:
-      ptr = intel_bo_map_unsynchronized(
-            ilo_resource_get_bo(xfer->base.resource));
+   case ILO_TRANSFER_MAP_GTT_ASYNC:
+      ptr = intel_bo_map_gtt_async(ilo_resource_get_bo(xfer->base.resource));
       break;
    case ILO_TRANSFER_MAP_STAGING:
       {
@@ -337,7 +336,7 @@ xfer_unmap(struct ilo_transfer *xfer)
    switch (xfer->method) {
    case ILO_TRANSFER_MAP_CPU:
    case ILO_TRANSFER_MAP_GTT:
-   case ILO_TRANSFER_MAP_GTT_UNSYNC:
+   case ILO_TRANSFER_MAP_GTT_ASYNC:
       intel_bo_unmap(ilo_resource_get_bo(xfer->base.resource));
       break;
    case ILO_TRANSFER_MAP_STAGING:
@@ -953,7 +952,7 @@ tex_map(struct ilo_transfer *xfer)
    switch (xfer->method) {
    case ILO_TRANSFER_MAP_CPU:
    case ILO_TRANSFER_MAP_GTT:
-   case ILO_TRANSFER_MAP_GTT_UNSYNC:
+   case ILO_TRANSFER_MAP_GTT_ASYNC:
       ptr = xfer_map(xfer);
       if (ptr) {
          const struct ilo_texture *tex = ilo_texture(xfer->base.resource);
@@ -1044,12 +1043,12 @@ copy_staging_resource(struct ilo_context *ilo,
 }
 
 static bool
-is_bo_busy(struct ilo_context *ilo, struct intel_bo *bo, bool *need_flush)
+is_bo_busy(struct ilo_context *ilo, struct intel_bo *bo, bool *need_submit)
 {
-   const bool referenced = intel_bo_has_reloc(ilo->cp->bo, bo);
+   const bool referenced = ilo_builder_has_reloc(&ilo->cp->builder, bo);
 
-   if (need_flush)
-      *need_flush = referenced;
+   if (need_submit)
+      *need_submit = referenced;
 
    if (referenced)
       return true;
@@ -1065,26 +1064,26 @@ static bool
 choose_transfer_method(struct ilo_context *ilo, struct ilo_transfer *xfer)
 {
    struct pipe_resource *res = xfer->base.resource;
-   bool need_flush;
+   bool need_submit;
 
    if (!resource_get_transfer_method(res, &xfer->base, &xfer->method))
       return false;
 
    /* see if we can avoid blocking */
-   if (is_bo_busy(ilo, ilo_resource_get_bo(res), &need_flush)) {
+   if (is_bo_busy(ilo, ilo_resource_get_bo(res), &need_submit)) {
       bool resource_renamed;
 
       if (!xfer_unblock(xfer, &resource_renamed)) {
          if (xfer->base.usage & PIPE_TRANSFER_DONTBLOCK)
             return false;
 
-         /* flush to make bo really busy so that map() correctly blocks */
-         if (need_flush)
-            ilo_cp_flush(ilo->cp, "syncing for transfers");
+         /* submit to make bo really busy and map() correctly blocks */
+         if (need_submit)
+            ilo_cp_submit(ilo->cp, "syncing for transfers");
       }
 
       if (resource_renamed)
-         ilo_mark_states_with_resource_renamed(ilo, res);
+         ilo_state_vector_resource_renamed(&ilo->state_vector, res);
    }
 
    return true;
@@ -1094,15 +1093,15 @@ static void
 buf_pwrite(struct ilo_context *ilo, struct ilo_buffer *buf,
            unsigned usage, int offset, int size, const void *data)
 {
-   bool need_flush;
+   bool need_submit;
 
    /* see if we can avoid blocking */
-   if (is_bo_busy(ilo, buf->bo, &need_flush)) {
+   if (is_bo_busy(ilo, buf->bo, &need_submit)) {
       bool unblocked = false;
 
       if ((usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) &&
           ilo_buffer_rename_bo(buf)) {
-         ilo_mark_states_with_resource_renamed(ilo, &buf->base);
+         ilo_state_vector_resource_renamed(&ilo->state_vector, &buf->base);
          unblocked = true;
       }
       else {
@@ -1133,9 +1132,9 @@ buf_pwrite(struct ilo_context *ilo, struct ilo_buffer *buf,
          }
       }
 
-      /* flush to make bo really busy so that pwrite() correctly blocks */
-      if (!unblocked && need_flush)
-         ilo_cp_flush(ilo->cp, "syncing for pwrites");
+      /* submit to make bo really busy and pwrite() correctly blocks */
+      if (!unblocked && need_submit)
+         ilo_cp_submit(ilo->cp, "syncing for pwrites");
    }
 
    intel_bo_pwrite(buf->bo, offset, size, data);

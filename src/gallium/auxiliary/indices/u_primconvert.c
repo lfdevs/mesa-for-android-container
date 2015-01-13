@@ -45,6 +45,7 @@
 #include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
+#include "util/u_upload_mgr.h"
 
 #include "indices/u_indices.h"
 #include "indices/u_primconvert.h"
@@ -55,7 +56,7 @@ struct primconvert_context
    struct pipe_index_buffer saved_ib;
    uint32_t primtypes_mask;
    unsigned api_pv;
-   // TODO we could cache/recycle the indexbuf created to translate prims..
+   struct u_upload_mgr *upload;
 };
 
 
@@ -112,10 +113,10 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    struct pipe_index_buffer *ib = &pc->saved_ib;
    struct pipe_index_buffer new_ib;
    struct pipe_draw_info new_info;
-   struct pipe_transfer *src_transfer = NULL, *dst_transfer = NULL;
+   struct pipe_transfer *src_transfer = NULL;
    u_translate_func trans_func;
    u_generate_func gen_func;
-   const void *src;
+   const void *src = NULL;
    void *dst;
 
    memset(&new_ib, 0, sizeof(new_ib));
@@ -123,6 +124,9 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    new_info.indexed = true;
    new_info.min_index = info->min_index;
    new_info.max_index = info->max_index;
+   new_info.index_bias = info->index_bias;
+   new_info.start_instance = info->start_instance;
+   new_info.instance_count = info->instance_count;
 
    if (info->indexed) {
       u_index_translator(pc->primtypes_mask,
@@ -135,6 +139,7 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
          src = pipe_buffer_map(pc->pipe, ib->buffer,
                                PIPE_TRANSFER_READ, &src_transfer);
       }
+      src = (const uint8_t *)src + ib->offset;
    }
    else {
       u_index_generator(pc->primtypes_mask,
@@ -144,14 +149,12 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
                         &gen_func);
    }
 
+   if (!pc->upload) {
+      pc->upload = u_upload_create(pc->pipe, 4096, 4, PIPE_BIND_INDEX_BUFFER);
+   }
 
-   new_ib.buffer = pipe_buffer_create(pc->pipe->screen,
-                                      PIPE_BIND_INDEX_BUFFER,
-                                      PIPE_USAGE_IMMUTABLE,
-                                      new_ib.index_size * new_info.count);
-   dst =
-      pipe_buffer_map(pc->pipe, new_ib.buffer, PIPE_TRANSFER_WRITE,
-                      &dst_transfer);
+   u_upload_alloc(pc->upload, 0, new_ib.index_size * new_info.count,
+                  &new_ib.offset, &new_ib.buffer, &dst);
 
    if (info->indexed) {
       trans_func(src, info->start, new_info.count, dst);
@@ -163,8 +166,7 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    if (src_transfer)
       pipe_buffer_unmap(pc->pipe, src_transfer);
 
-   if (dst_transfer)
-      pipe_buffer_unmap(pc->pipe, dst_transfer);
+   u_upload_unmap(pc->upload);
 
    /* bind new index buffer: */
    pc->pipe->set_index_buffer(pc->pipe, &new_ib);

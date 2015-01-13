@@ -96,7 +96,6 @@ DRI_CONF_END
 #include "intel_batchbuffer.h"
 #include "intel_buffers.h"
 #include "intel_bufmgr.h"
-#include "intel_chipset.h"
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
 #include "intel_screen.h"
@@ -1267,15 +1266,11 @@ set_max_gl_versions(struct intel_screen *screen)
    __DRIscreen *psp = screen->driScrnPriv;
 
    switch (screen->devinfo->gen) {
+   case 9:
    case 8:
    case 7:
-      psp->max_gl_core_version = 33;
-      psp->max_gl_compat_version = 30;
-      psp->max_gl_es1_version = 11;
-      psp->max_gl_es2_version = 30;
-      break;
    case 6:
-      psp->max_gl_core_version = 31;
+      psp->max_gl_core_version = 33;
       psp->max_gl_compat_version = 30;
       psp->max_gl_es1_version = 11;
       psp->max_gl_es2_version = 30;

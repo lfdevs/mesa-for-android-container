@@ -6,6 +6,7 @@ AM_CPPFLAGS = \
 	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\" \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -37,8 +38,7 @@ libcltgsi_la_CXXFLAGS = \
 	-std=c++0x \
 	$(VISIBILITY_CXXFLAGS)
 
-libcltgsi_la_SOURCES = \
-	tgsi/compiler.cpp
+libcltgsi_la_SOURCES = $(TGSI_SOURCES)
 
 libclllvm_la_CXXFLAGS = \
 	$(VISIBILITY_CXXFLAGS) \
@@ -48,8 +48,7 @@ libclllvm_la_CXXFLAGS = \
 	-DLIBCLC_LIBEXECDIR=\"$(LIBCLC_LIBEXECDIR)/\" \
 	-DCLANG_RESOURCE_DIR=\"$(CLANG_RESOURCE_DIR)\"
 
-libclllvm_la_SOURCES = \
-	llvm/invocation.cpp
+libclllvm_la_SOURCES = $(LLVM_SOURCES)
 
 libclover_la_CXXFLAGS = \
 	-std=c++11 \
@@ -59,3 +58,5 @@ libclover_la_LIBADD = \
 	libcltgsi.la libclllvm.la
 
 libclover_la_SOURCES = $(CPP_SOURCES)
+
+EXTRA_DIST = Doxyfile

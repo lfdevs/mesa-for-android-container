@@ -41,6 +41,16 @@
 #define TRIPLE_STRING_LEN 7
 
 /**
+ * Shader types for the LLVM backend.
+ */
+enum radeon_llvm_shader_type {
+	RADEON_LLVM_SHADER_PS = 0,
+	RADEON_LLVM_SHADER_VS = 1,
+	RADEON_LLVM_SHADER_GS = 2,
+	RADEON_LLVM_SHADER_CS = 3,
+};
+
+/**
  * Set the shader type we want to compile
  *
  * @param type shader type to set
@@ -48,7 +58,26 @@
 void radeon_llvm_shader_type(LLVMValueRef F, unsigned type)
 {
 	char Str[2];
-	sprintf(Str, "%1d", type);
+	enum radeon_llvm_shader_type llvm_type;
+
+	switch (type) {
+	case TGSI_PROCESSOR_VERTEX:
+		llvm_type = RADEON_LLVM_SHADER_VS;
+		break;
+	case TGSI_PROCESSOR_GEOMETRY:
+		llvm_type = RADEON_LLVM_SHADER_GS;
+		break;
+	case TGSI_PROCESSOR_FRAGMENT:
+		llvm_type = RADEON_LLVM_SHADER_PS;
+		break;
+	case TGSI_PROCESSOR_COMPUTE:
+		llvm_type = RADEON_LLVM_SHADER_CS;
+		break;
+	default:
+		assert(0);
+	}
+
+	sprintf(Str, "%1d", llvm_type);
 
 	LLVMAddTargetDependentFunctionAttr(F, "ShaderType", Str);
 

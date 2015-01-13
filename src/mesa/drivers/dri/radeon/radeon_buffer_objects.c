@@ -40,12 +40,11 @@ get_radeon_buffer_object(struct gl_buffer_object *obj)
 
 static struct gl_buffer_object *
 radeonNewBufferObject(struct gl_context * ctx,
-                      GLuint name,
-                      GLenum target)
+                      GLuint name)
 {
     struct radeon_buffer_object *obj = CALLOC_STRUCT(radeon_buffer_object);
 
-    _mesa_initialize_buffer_object(ctx, &obj->Base, name, target);
+    _mesa_initialize_buffer_object(ctx, &obj->Base, name);
 
     obj->bo = NULL;
 

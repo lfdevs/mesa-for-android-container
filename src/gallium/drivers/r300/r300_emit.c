@@ -1136,6 +1136,7 @@ void r300_emit_vs_state(struct r300_context* r300, unsigned size, void* state)
             R300_PVS_NUM_CNTLRS(pvs_num_controllers) |
             R300_PVS_NUM_FPUS(r300screen->caps.num_vert_fpus) |
             R300_PVS_VF_MAX_VTX_NUM(12) |
+            (r300->clip_halfz ? R300_DX_CLIP_SPACE_DEF : 0) |
             (r300screen->caps.is_r500 ? R500_TCL_STATE_OPTIMIZATION : 0));
 
     /* Emit flow control instructions.  Even if there are no fc instructions,

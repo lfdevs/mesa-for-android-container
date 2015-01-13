@@ -33,24 +33,8 @@ kernel::kernel(clover::program &prog, const std::string &name,
    program(prog), _name(name), exec(*this),
    program_ref(prog._kernel_ref_counter) {
    for (auto &marg : margs) {
-      if (marg.type == module::argument::scalar)
-         _args.emplace_back(new scalar_argument(marg.size));
-      else if (marg.type == module::argument::global)
-         _args.emplace_back(new global_argument);
-      else if (marg.type == module::argument::local)
-         _args.emplace_back(new local_argument);
-      else if (marg.type == module::argument::constant)
-         _args.emplace_back(new constant_argument);
-      else if (marg.type == module::argument::image2d_rd ||
-               marg.type == module::argument::image3d_rd)
-         _args.emplace_back(new image_rd_argument);
-      else if (marg.type == module::argument::image2d_wr ||
-               marg.type == module::argument::image3d_wr)
-         _args.emplace_back(new image_wr_argument);
-      else if (marg.type == module::argument::sampler)
-         _args.emplace_back(new sampler_argument);
-      else
-         throw error(CL_INVALID_KERNEL_DEFINITION);
+      if (marg.semantic == module::argument::general)
+         _args.emplace_back(argument::create(marg));
    }
 }
 
@@ -70,7 +54,7 @@ kernel::launch(command_queue &q,
    const auto m = program().binary(q.device());
    const auto reduced_grid_size =
       map(divides(), grid_size, block_size);
-   void *st = exec.bind(&q);
+   void *st = exec.bind(&q, grid_offset);
 
    // The handles are created during exec_context::bind(), so we need make
    // sure to call exec_context::bind() before retrieving them.
@@ -165,17 +149,41 @@ kernel::exec_context::~exec_context() {
 }
 
 void *
-kernel::exec_context::bind(intrusive_ptr<command_queue> _q) {
+kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
+                           const std::vector<size_t> &grid_offset) {
    std::swap(q, _q);
 
    // Bind kernel arguments.
    auto &m = kern.program().binary(q->device());
    auto margs = find(name_equals(kern.name()), m.syms).args;
    auto msec = find(type_equals(module::section::text), m.secs);
+   auto explicit_arg = kern._args.begin();
 
-   for_each([=](kernel::argument &karg, const module::argument &marg) {
-               karg.bind(*this, marg);
-            }, kern.args(), margs);
+   for (auto &marg : margs) {
+      switch (marg.semantic) {
+      case module::argument::general:
+         (*(explicit_arg++))->bind(*this, marg);
+         break;
+
+      case module::argument::grid_dimension: {
+         const cl_uint dimension = grid_offset.size();
+         auto arg = argument::create(marg);
+
+         arg->set(sizeof(dimension), &dimension);
+         arg->bind(*this, marg);
+         break;
+      }
+      case module::argument::grid_offset: {
+         for (cl_uint x : pad_vector(*q, grid_offset, 1)) {
+            auto arg = argument::create(marg);
+
+            arg->set(sizeof(x), &x);
+            arg->bind(*this, marg);
+         }
+         break;
+      }
+      }
+   }
 
    // Create a new compute state if anything changed.
    if (!st || q != _q ||
@@ -281,6 +289,42 @@ namespace {
       v.resize(pos + n);
       return pos;
    }
+}
+
+std::unique_ptr<kernel::argument>
+kernel::argument::create(const module::argument &marg) {
+      if (marg.type == module::argument::scalar)
+         return std::unique_ptr<kernel::argument>(
+            new scalar_argument(marg.size));
+
+      else if (marg.type == module::argument::global)
+         return std::unique_ptr<kernel::argument>(
+            new global_argument);
+
+      else if (marg.type == module::argument::local)
+         return std::unique_ptr<kernel::argument>(
+            new local_argument);
+
+      else if (marg.type == module::argument::constant)
+         return std::unique_ptr<kernel::argument>(
+            new constant_argument);
+
+      else if (marg.type == module::argument::image2d_rd ||
+               marg.type == module::argument::image3d_rd)
+         return std::unique_ptr<kernel::argument>(
+            new image_rd_argument);
+
+      else if (marg.type == module::argument::image2d_wr ||
+               marg.type == module::argument::image3d_wr)
+         return std::unique_ptr<kernel::argument>(
+            new image_wr_argument);
+
+      else if (marg.type == module::argument::sampler)
+         return std::unique_ptr<kernel::argument>(
+            new sampler_argument);
+
+      else
+         throw error(CL_INVALID_KERNEL_DEFINITION);
 }
 
 kernel::argument::argument() : _set(false) {

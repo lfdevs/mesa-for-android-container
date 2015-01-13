@@ -30,7 +30,6 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
-#include "util/u_pack_color.h"
 
 #include "freedreno_state.h"
 #include "freedreno_resource.h"
@@ -57,8 +56,8 @@ emit_cacheflush(struct fd_ringbuffer *ring)
 static void
 emit_vertexbufs(struct fd_context *ctx)
 {
-	struct fd_vertex_stateobj *vtx = ctx->vtx;
-	struct fd_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
+	struct fd_vertex_stateobj *vtx = ctx->vtx.vtx;
+	struct fd_vertexbuf_stateobj *vertexbuf = &ctx->vtx.vertexbuf;
 	struct fd2_vertex_buf bufs[PIPE_MAX_ATTRIBS];
 	unsigned i;
 
@@ -81,7 +80,7 @@ emit_vertexbufs(struct fd_context *ctx)
 }
 
 static void
-fd2_draw(struct fd_context *ctx, const struct pipe_draw_info *info)
+fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
 
@@ -117,14 +116,6 @@ fd2_draw(struct fd_context *ctx, const struct pipe_draw_info *info)
 	emit_cacheflush(ring);
 }
 
-
-static uint32_t
-pack_rgba(enum pipe_format format, const float *rgba)
-{
-	union util_color uc;
-	util_pack_color(rgba, format, &uc);
-	return uc.ui[0];
-}
 
 static void
 fd2_clear(struct fd_context *ctx, unsigned buffers,
@@ -285,6 +276,6 @@ void
 fd2_draw_init(struct pipe_context *pctx)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	ctx->draw = fd2_draw;
+	ctx->draw_vbo = fd2_draw_vbo;
 	ctx->clear = fd2_clear;
 }

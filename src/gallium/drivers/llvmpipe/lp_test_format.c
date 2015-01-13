@@ -133,12 +133,13 @@ test_format_float(unsigned verbose, FILE *fp,
    struct gallivm_state *gallivm;
    LLVMValueRef fetch = NULL;
    fetch_ptr_t fetch_ptr;
+   PIPE_ALIGN_VAR(16) uint8_t packed[UTIL_FORMAT_MAX_PACKED_BYTES];
    PIPE_ALIGN_VAR(16) float unpacked[4];
    boolean first = TRUE;
    boolean success = TRUE;
    unsigned i, j, k, l;
 
-   gallivm = gallivm_create("test_module_float");
+   gallivm = gallivm_create("test_module_float", LLVMGetGlobalContext());
 
    fetch = add_fetch_rgba_test(gallivm, verbose, desc, lp_float32_vec4_type());
 
@@ -156,8 +157,12 @@ test_format_float(unsigned verbose, FILE *fp,
          if (first) {
             printf("Testing %s (float) ...\n",
                    desc->name);
+            fflush(stdout);
             first = FALSE;
          }
+
+         /* To ensure it's 16-byte aligned */
+         memcpy(packed, test->packed, sizeof packed);
 
          for (i = 0; i < desc->block.height; ++i) {
             for (j = 0; j < desc->block.width; ++j) {
@@ -165,7 +170,7 @@ test_format_float(unsigned verbose, FILE *fp,
 
                memset(unpacked, 0, sizeof unpacked);
 
-               fetch_ptr(unpacked, test->packed, j, i);
+               fetch_ptr(unpacked, packed, j, i);
 
                for(k = 0; k < 4; ++k) {
                   if (util_double_inf_sign(test->unpacked[i][j][k]) != util_inf_sign(unpacked[k])) {
@@ -194,6 +199,7 @@ test_format_float(unsigned verbose, FILE *fp,
                          test->unpacked[i][j][1],
                          test->unpacked[i][j][2],
                          test->unpacked[i][j][3]);
+                  fflush(stdout);
                   success = FALSE;
                }
             }
@@ -218,12 +224,13 @@ test_format_unorm8(unsigned verbose, FILE *fp,
    struct gallivm_state *gallivm;
    LLVMValueRef fetch = NULL;
    fetch_ptr_t fetch_ptr;
+   PIPE_ALIGN_VAR(16) uint8_t packed[UTIL_FORMAT_MAX_PACKED_BYTES];
    uint8_t unpacked[4];
    boolean first = TRUE;
    boolean success = TRUE;
    unsigned i, j, k, l;
 
-   gallivm = gallivm_create("test_module_unorm8");
+   gallivm = gallivm_create("test_module_unorm8", LLVMGetGlobalContext());
 
    fetch = add_fetch_rgba_test(gallivm, verbose, desc, lp_unorm8_vec4_type());
 
@@ -244,13 +251,16 @@ test_format_unorm8(unsigned verbose, FILE *fp,
             first = FALSE;
          }
 
+         /* To ensure it's 16-byte aligned */
+         memcpy(packed, test->packed, sizeof packed);
+
          for (i = 0; i < desc->block.height; ++i) {
             for (j = 0; j < desc->block.width; ++j) {
                boolean match;
 
                memset(unpacked, 0, sizeof unpacked);
 
-               fetch_ptr(unpacked, test->packed, j, i);
+               fetch_ptr(unpacked, packed, j, i);
 
                match = TRUE;
                for(k = 0; k < 4; ++k) {

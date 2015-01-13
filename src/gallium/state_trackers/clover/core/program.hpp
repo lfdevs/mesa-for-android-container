@@ -28,6 +28,7 @@
 #include "core/object.hpp"
 #include "core/context.hpp"
 #include "core/module.hpp"
+#include "core/compiler.hpp"
 
 namespace clover {
    class program : public ref_counter, public _cl_program {
@@ -46,7 +47,8 @@ namespace clover {
       program &
       operator=(const program &prog) = delete;
 
-      void build(const ref_vector<device> &devs, const char *opts);
+      void build(const ref_vector<device> &devs, const char *opts,
+                 const header_map &headers = {});
 
       const bool has_source;
       const std::string &source() const;

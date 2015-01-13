@@ -912,7 +912,6 @@ get_lvalue_copy(exec_list *instructions, ir_rvalue *lvalue)
    var = new(ctx) ir_variable(lvalue->type, "_post_incdec_tmp",
 			      ir_var_temporary);
    instructions->push_tail(var);
-   var->data.mode = ir_var_auto;
 
    instructions->push_tail(new(ctx) ir_assignment(new(ctx) ir_dereference_variable(var),
 						  lvalue));
@@ -2360,11 +2359,11 @@ apply_image_qualifier_to_variable(const struct ast_type_qualifier *qual,
                           "global variables");
       }
 
-      var->data.image.read_only |= qual->flags.q.read_only;
-      var->data.image.write_only |= qual->flags.q.write_only;
-      var->data.image.coherent |= qual->flags.q.coherent;
-      var->data.image._volatile |= qual->flags.q._volatile;
-      var->data.image.restrict_flag |= qual->flags.q.restrict_flag;
+      var->data.image_read_only |= qual->flags.q.read_only;
+      var->data.image_write_only |= qual->flags.q.write_only;
+      var->data.image_coherent |= qual->flags.q.coherent;
+      var->data.image_volatile |= qual->flags.q._volatile;
+      var->data.image_restrict |= qual->flags.q.restrict_flag;
       var->data.read_only = true;
 
       if (qual->flags.q.explicit_image_format) {
@@ -2378,7 +2377,7 @@ apply_image_qualifier_to_variable(const struct ast_type_qualifier *qual,
                              "base data type of the image");
          }
 
-         var->data.image.format = qual->image_format;
+         var->data.image_format = qual->image_format;
       } else {
          if (var->data.mode == ir_var_uniform && !qual->flags.q.write_only) {
             _mesa_glsl_error(loc, state, "uniforms not qualified with "
@@ -2386,7 +2385,7 @@ apply_image_qualifier_to_variable(const struct ast_type_qualifier *qual,
                              "qualifier");
          }
 
-         var->data.image.format = GL_NONE;
+         var->data.image_format = GL_NONE;
       }
    }
 }
@@ -2499,6 +2498,7 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
    /* If there is no qualifier that changes the mode of the variable, leave
     * the setting alone.
     */
+   assert(var->data.mode != ir_var_temporary);
    if (qual->flags.q.in && qual->flags.q.out)
       var->data.mode = ir_var_function_inout;
    else if (qual->flags.q.in)
@@ -3202,6 +3202,41 @@ validate_identifier(const char *identifier, YYLTYPE loc,
    }
 }
 
+static bool
+precision_qualifier_allowed(const glsl_type *type)
+{
+   /* Precision qualifiers apply to floating point, integer and sampler
+    * types.
+    *
+    * Section 4.5.2 (Precision Qualifiers) of the GLSL 1.30 spec says:
+    *    "Any floating point or any integer declaration can have the type
+    *    preceded by one of these precision qualifiers [...] Literal
+    *    constants do not have precision qualifiers. Neither do Boolean
+    *    variables.
+    *
+    * Section 4.5 (Precision and Precision Qualifiers) of the GLSL 1.30
+    * spec also says:
+    *
+    *     "Precision qualifiers are added for code portability with OpenGL
+    *     ES, not for functionality. They have the same syntax as in OpenGL
+    *     ES."
+    *
+    * Section 8 (Built-In Functions) of the GLSL ES 1.00 spec says:
+    *
+    *     "uniform lowp sampler2D sampler;
+    *     highp vec2 coord;
+    *     ...
+    *     lowp vec4 col = texture2D (sampler, coord);
+    *                                            // texture2D returns lowp"
+    *
+    * From this, we infer that GLSL 1.30 (and later) should allow precision
+    * qualifiers on sampler types just like float and integer types.
+    */
+   return type->is_float()
+       || type->is_integer()
+       || type->is_record()
+       || type->is_sampler();
+}
 
 ir_rvalue *
 ast_declarator_list::hir(exec_list *instructions,
@@ -3689,41 +3724,13 @@ ast_declarator_list::hir(exec_list *instructions,
       }
 
 
-      /* Precision qualifiers apply to floating point, integer and sampler
-       * types.
-       *
-       * Section 4.5.2 (Precision Qualifiers) of the GLSL 1.30 spec says:
-       *    "Any floating point or any integer declaration can have the type
-       *    preceded by one of these precision qualifiers [...] Literal
-       *    constants do not have precision qualifiers. Neither do Boolean
-       *    variables.
-       *
-       * Section 4.5 (Precision and Precision Qualifiers) of the GLSL 1.30
-       * spec also says:
-       *
-       *     "Precision qualifiers are added for code portability with OpenGL
-       *     ES, not for functionality. They have the same syntax as in OpenGL
-       *     ES."
-       *
-       * Section 8 (Built-In Functions) of the GLSL ES 1.00 spec says:
-       *
-       *     "uniform lowp sampler2D sampler;
-       *     highp vec2 coord;
-       *     ...
-       *     lowp vec4 col = texture2D (sampler, coord);
-       *                                            // texture2D returns lowp"
-       *
-       * From this, we infer that GLSL 1.30 (and later) should allow precision
-       * qualifiers on sampler types just like float and integer types.
+      /* If a precision qualifier is allowed on a type, it is allowed on
+       * an array of that type.
        */
-      if (this->type->qualifier.precision != ast_precision_none
-          && !var->type->is_float()
-          && !var->type->is_integer()
-          && !var->type->is_record()
-          && !var->type->is_sampler()
-          && !(var->type->is_array()
-               && (var->type->fields.array->is_float()
-                   || var->type->fields.array->is_integer()))) {
+      if (!(this->type->qualifier.precision == ast_precision_none
+          || precision_qualifier_allowed(var->type)
+          || (var->type->is_array()
+	      && precision_qualifier_allowed(var->type->fields.array)))) {
 
          _mesa_glsl_error(&loc, state,
                           "precision qualifiers apply only to floating point"
@@ -4366,7 +4373,7 @@ ast_jump_statement::hir(exec_list *instructions,
           * loop.
           */
          if (state->loop_nesting_ast != NULL &&
-             mode == ast_continue) {
+             mode == ast_continue && !state->switch_state.is_switch_innermost) {
             if (state->loop_nesting_ast->rest_expression) {
                state->loop_nesting_ast->rest_expression->hir(instructions,
                                                              state);
@@ -4378,19 +4385,27 @@ ast_jump_statement::hir(exec_list *instructions,
          }
 
          if (state->switch_state.is_switch_innermost &&
+             mode == ast_continue) {
+            /* Set 'continue_inside' to true. */
+            ir_rvalue *const true_val = new (ctx) ir_constant(true);
+            ir_dereference_variable *deref_continue_inside_var =
+               new(ctx) ir_dereference_variable(state->switch_state.continue_inside);
+            instructions->push_tail(new(ctx) ir_assignment(deref_continue_inside_var,
+                                                           true_val));
+
+            /* Break out from the switch, continue for the loop will
+             * be called right after switch. */
+            ir_loop_jump *const jump =
+               new(ctx) ir_loop_jump(ir_loop_jump::jump_break);
+            instructions->push_tail(jump);
+
+         } else if (state->switch_state.is_switch_innermost &&
              mode == ast_break) {
-            /* Force break out of switch by setting is_break switch state.
-             */
-            ir_variable *const is_break_var = state->switch_state.is_break_var;
-            ir_dereference_variable *const deref_is_break_var =
-               new(ctx) ir_dereference_variable(is_break_var);
-            ir_constant *const true_val = new(ctx) ir_constant(true);
-            ir_assignment *const set_break_var =
-               new(ctx) ir_assignment(deref_is_break_var, true_val);
-	    
-            instructions->push_tail(set_break_var);
-         }
-         else {
+            /* Force break out of switch by inserting a break. */
+            ir_loop_jump *const jump =
+               new(ctx) ir_loop_jump(ir_loop_jump::jump_break);
+            instructions->push_tail(jump);
+         } else {
             ir_loop_jump *const jump =
                new(ctx) ir_loop_jump((mode == ast_break)
                   ? ir_loop_jump::jump_break
@@ -4502,19 +4517,19 @@ ast_switch_statement::hir(exec_list *instructions,
    instructions->push_tail(new(ctx) ir_assignment(deref_is_fallthru_var,
                                                   is_fallthru_val));
 
-   /* Initalize is_break state to false.
+   /* Initialize continue_inside state to false.
     */
-   ir_rvalue *const is_break_val = new (ctx) ir_constant(false);
-   state->switch_state.is_break_var =
+   state->switch_state.continue_inside =
       new(ctx) ir_variable(glsl_type::bool_type,
-                           "switch_is_break_tmp",
+                           "continue_inside_tmp",
                            ir_var_temporary);
-   instructions->push_tail(state->switch_state.is_break_var);
+   instructions->push_tail(state->switch_state.continue_inside);
 
-   ir_dereference_variable *deref_is_break_var =
-      new(ctx) ir_dereference_variable(state->switch_state.is_break_var);
-   instructions->push_tail(new(ctx) ir_assignment(deref_is_break_var,
-                                                  is_break_val));
+   ir_rvalue *const false_val = new (ctx) ir_constant(false);
+   ir_dereference_variable *deref_continue_inside_var =
+      new(ctx) ir_dereference_variable(state->switch_state.continue_inside);
+   instructions->push_tail(new(ctx) ir_assignment(deref_continue_inside_var,
+                                                  false_val));
 
    state->switch_state.run_default =
       new(ctx) ir_variable(glsl_type::bool_type,
@@ -4522,13 +4537,42 @@ ast_switch_statement::hir(exec_list *instructions,
                              ir_var_temporary);
    instructions->push_tail(state->switch_state.run_default);
 
+   /* Loop around the switch is used for flow control. */
+   ir_loop * loop = new(ctx) ir_loop();
+   instructions->push_tail(loop);
+
    /* Cache test expression.
     */
-   test_to_hir(instructions, state);
+   test_to_hir(&loop->body_instructions, state);
 
    /* Emit code for body of switch stmt.
     */
-   body->hir(instructions, state);
+   body->hir(&loop->body_instructions, state);
+
+   /* Insert a break at the end to exit loop. */
+   ir_loop_jump *jump = new(ctx) ir_loop_jump(ir_loop_jump::jump_break);
+   loop->body_instructions.push_tail(jump);
+
+   /* If we are inside loop, check if continue got called inside switch. */
+   if (state->loop_nesting_ast != NULL) {
+      ir_dereference_variable *deref_continue_inside =
+         new(ctx) ir_dereference_variable(state->switch_state.continue_inside);
+      ir_if *irif = new(ctx) ir_if(deref_continue_inside);
+      ir_loop_jump *jump = new(ctx) ir_loop_jump(ir_loop_jump::jump_continue);
+
+      if (state->loop_nesting_ast != NULL) {
+         if (state->loop_nesting_ast->rest_expression) {
+            state->loop_nesting_ast->rest_expression->hir(&irif->then_instructions,
+                                                          state);
+         }
+         if (state->loop_nesting_ast->mode ==
+             ast_iteration_statement::ast_do_while) {
+            state->loop_nesting_ast->condition_to_hir(&irif->then_instructions, state);
+         }
+      }
+      irif->then_instructions.push_tail(jump);
+      instructions->push_tail(irif);
+   }
 
    hash_table_dtor(state->switch_state.labels_ht);
 
@@ -4651,18 +4695,6 @@ ast_case_statement::hir(exec_list *instructions,
                         struct _mesa_glsl_parse_state *state)
 {
    labels->hir(instructions, state);
-
-   /* Conditionally set fallthru state based on break state. */
-   ir_constant *const false_val = new(state) ir_constant(false);
-   ir_dereference_variable *const deref_is_fallthru_var =
-      new(state) ir_dereference_variable(state->switch_state.is_fallthru_var);
-   ir_dereference_variable *const deref_is_break_var =
-      new(state) ir_dereference_variable(state->switch_state.is_break_var);
-   ir_assignment *const reset_fallthru_on_break =
-      new(state) ir_assignment(deref_is_fallthru_var,
-                               false_val,
-                               deref_is_break_var);
-   instructions->push_tail(reset_fallthru_on_break);
 
    /* Guard case statements depending on fallthru state. */
    ir_dereference_variable *const deref_fallthru_guard =
@@ -5024,7 +5056,7 @@ ast_type_specifier::hir(exec_list *instructions,
           */
          ir_variable *const junk =
             new(state) ir_variable(type, "#default precision",
-                                   ir_var_temporary);
+                                   ir_var_auto);
 
          state->symbols->add_variable(junk);
       }
@@ -5455,7 +5487,7 @@ ast_interface_block::hir(exec_list *instructions,
          }
          if (this->instance_name != NULL) {
             _mesa_glsl_error(&loc, state,
-                             "gl_PerVertex input may not be redeclared with "
+                             "gl_PerVertex output may not be redeclared with "
                              "an instance name");
          }
          break;

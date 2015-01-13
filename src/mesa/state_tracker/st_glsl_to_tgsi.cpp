@@ -438,7 +438,6 @@ public:
               int mul_operand);
    bool try_emit_mad_for_and_not(ir_expression *ir,
               int mul_operand);
-   bool try_emit_sat(ir_expression *ir);
 
    void emit_swz(ir_expression *ir);
 
@@ -1073,8 +1072,8 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
 
    if (ir->data.mode == ir_var_uniform && strncmp(ir->name, "gl_", 3) == 0) {
       unsigned int i;
-      const ir_state_slot *const slots = ir->state_slots;
-      assert(ir->state_slots != NULL);
+      const ir_state_slot *const slots = ir->get_state_slots();
+      assert(slots != NULL);
 
       /* Check if this statevar's setup in the STATE file exactly
        * matches how we'll want to reference it as a
@@ -1082,7 +1081,7 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
        * temporary storage and hope that it'll get copy-propagated
        * out.
        */
-      for (i = 0; i < ir->num_state_slots; i++) {
+      for (i = 0; i < ir->get_num_state_slots(); i++) {
          if (slots[i].swizzle != SWIZZLE_XYZW) {
             break;
          }
@@ -1090,7 +1089,7 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
 
       variable_storage *storage;
       st_dst_reg dst;
-      if (i == ir->num_state_slots) {
+      if (i == ir->get_num_state_slots()) {
          /* We'll set the index later. */
          storage = new(mem_ctx) variable_storage(ir, PROGRAM_STATE_VAR, -1);
          this->variables.push_tail(storage);
@@ -1101,7 +1100,7 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
           * of the type.  However, this had better match the number of state
           * elements that we're going to copy into the new temporary.
           */
-         assert((int) ir->num_state_slots == type_size(ir->type));
+         assert((int) ir->get_num_state_slots() == type_size(ir->type));
 
          dst = st_dst_reg(get_temp(ir->type));
 
@@ -1111,7 +1110,7 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
       }
 
 
-      for (unsigned int i = 0; i < ir->num_state_slots; i++) {
+      for (unsigned int i = 0; i < ir->get_num_state_slots(); i++) {
          int index = _mesa_add_state_reference(this->prog->Parameters,
         				       (gl_state_index *)slots[i].tokens);
 
@@ -1136,7 +1135,7 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
       }
 
       if (storage->file == PROGRAM_TEMPORARY &&
-          dst.index != storage->index + (int) ir->num_state_slots) {
+          dst.index != storage->index + (int) ir->get_num_state_slots()) {
          fail_link(this->shader_program,
         	   "failed to load builtin uniform `%s'  (%d/%d regs loaded)\n",
         	   ir->name, dst.index - storage->index,
@@ -1262,53 +1261,6 @@ glsl_to_tgsi_visitor::try_emit_mad_for_and_not(ir_expression *ir, int try_operan
    return true;
 }
 
-bool
-glsl_to_tgsi_visitor::try_emit_sat(ir_expression *ir)
-{
-   /* Emit saturates in the vertex shader only if SM 3.0 is supported.
-    */
-   if (this->prog->Target == GL_VERTEX_PROGRAM_ARB &&
-       !st_context(this->ctx)->has_shader_model3) {
-      return false;
-   }
-
-   ir_rvalue *sat_src = ir->as_rvalue_to_saturate();
-   if (!sat_src)
-      return false;
-
-   sat_src->accept(this);
-   st_src_reg src = this->result;
-
-   /* If we generated an expression instruction into a temporary in
-    * processing the saturate's operand, apply the saturate to that
-    * instruction.  Otherwise, generate a MOV to do the saturate.
-    *
-    * Note that we have to be careful to only do this optimization if
-    * the instruction in question was what generated src->result.  For
-    * example, ir_dereference_array might generate a MUL instruction
-    * to create the reladdr, and return us a src reg using that
-    * reladdr.  That MUL result is not the value we're trying to
-    * saturate.
-    */
-   ir_expression *sat_src_expr = sat_src->as_expression();
-   if (sat_src_expr && (sat_src_expr->operation == ir_binop_mul ||
-			sat_src_expr->operation == ir_binop_add ||
-			sat_src_expr->operation == ir_binop_dot)) {
-      glsl_to_tgsi_instruction *new_inst;
-      new_inst = (glsl_to_tgsi_instruction *)this->instructions.get_tail();
-      new_inst->saturate = true;
-   } else {
-      this->result = get_temp(ir->type);
-      st_dst_reg result_dst = st_dst_reg(this->result);
-      result_dst.writemask = (1 << ir->type->vector_elements) - 1;
-      glsl_to_tgsi_instruction *inst;
-      inst = emit(ir, TGSI_OPCODE_MOV, result_dst, src);
-      inst->saturate = true;
-   }
-
-   return true;
-}
-
 void
 glsl_to_tgsi_visitor::reladdr_to_temp(ir_instruction *ir,
         			    st_src_reg *reg, int *num_reladdr)
@@ -1354,9 +1306,6 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       if (try_emit_mad_for_and_not(ir, 0))
 	 return;
    }
-
-   if (try_emit_sat(ir))
-      return;
 
    if (ir->operation == ir_quadop_vector)
       assert(!"ir_quadop_vector should have been lowered");
@@ -1452,6 +1401,12 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
    case ir_unop_cos_reduced:
       emit_scs(ir, TGSI_OPCODE_COS, result_dst, op[0]);
       break;
+   case ir_unop_saturate: {
+      glsl_to_tgsi_instruction *inst;
+      inst = emit(ir, TGSI_OPCODE_MOV, result_dst, op[0]);
+      inst->saturate = true;
+      break;
+   }
 
    case ir_unop_dFdx:
    case ir_unop_dFdx_coarse:
@@ -2662,10 +2617,7 @@ glsl_to_tgsi_visitor::visit(ir_constant *ir)
    case GLSL_TYPE_BOOL:
       gl_type = native_integers ? GL_BOOL : GL_FLOAT;
       for (i = 0; i < ir->type->vector_elements; i++) {
-         if (native_integers)
-            values[i].u = ir->value.b[i] ? ~0 : 0;
-         else
-            values[i].f = ir->value.b[i];
+         values[i].u = ir->value.b[i] ? ctx->Const.UniformBooleanTrue : 0;
       }
       break;
    default:
@@ -3136,8 +3088,18 @@ glsl_to_tgsi_visitor::visit(ir_discard *ir)
 {
    if (ir->condition) {
       ir->condition->accept(this);
-      this->result.negate = ~this->result.negate;
-      emit(ir, TGSI_OPCODE_KILL_IF, undef_dst, this->result);
+      st_src_reg condition = this->result;
+
+      /* Convert the bool condition to a float so we can negate. */
+      if (native_integers) {
+         st_src_reg temp = get_temp(ir->condition->type);
+         emit(ir, TGSI_OPCODE_AND, st_dst_reg(temp),
+              condition, st_src_reg_for_float(1.0));
+         condition = temp;
+      }
+
+      condition.negate = ~condition.negate;
+      emit(ir, TGSI_OPCODE_KILL_IF, undef_dst, condition);
    } else {
       /* unconditional kil */
       emit(ir, TGSI_OPCODE_KILL);
@@ -3207,6 +3169,7 @@ glsl_to_tgsi_visitor::glsl_to_tgsi_visitor()
    shader_program = NULL;
    shader = NULL;
    options = NULL;
+   have_sqrt = false;
 }
 
 glsl_to_tgsi_visitor::~glsl_to_tgsi_visitor()
@@ -3564,7 +3527,8 @@ glsl_to_tgsi_visitor::copy_propagate(void)
                first = copy_chan;
             } else {
                if (first->src[0].file != copy_chan->src[0].file ||
-        	   first->src[0].index != copy_chan->src[0].index) {
+                   first->src[0].index != copy_chan->src[0].index ||
+                   first->src[0].index2D != copy_chan->src[0].index2D) {
         	  good = false;
         	  break;
                }
@@ -4059,6 +4023,7 @@ get_pixel_transfer_visitor(struct st_fragment_program *fp,
 
       newinst = v->emit(NULL, inst->op, inst->dst, src_regs[0], src_regs[1], src_regs[2]);
       newinst->tex_target = inst->tex_target;
+      newinst->sampler_array_size = inst->sampler_array_size;
    }
 
    /* Make modifications to fragment program info. */
@@ -4138,6 +4103,7 @@ get_bitmap_visitor(struct st_fragment_program *fp,
 
       newinst = v->emit(NULL, inst->op, inst->dst, src_regs[0], src_regs[1], src_regs[2]);
       newinst->tex_target = inst->tex_target;
+      newinst->sampler_array_size = inst->sampler_array_size;
    }
 
    /* Make modifications to fragment program info. */
@@ -4561,8 +4527,10 @@ compile_tgsi_instruction(struct st_translate *t,
                              inst->saturate,
                              clamp_dst_color_output);
 
-   for (i = 0; i < num_src; i++) 
+   for (i = 0; i < num_src; i++) {
+      assert(inst->src[i].file != PROGRAM_UNDEFINED);
       src[i] = translate_src(t, &inst->src[i]);
+   }
 
    switch(inst->op) {
    case TGSI_OPCODE_BGNLOOP:
@@ -4592,6 +4560,7 @@ compile_tgsi_instruction(struct st_translate *t,
    case TGSI_OPCODE_TG4:
    case TGSI_OPCODE_LODQ:
       src[num_src] = t->samplers[inst->sampler.index];
+      assert(src[num_src].File != TGSI_FILE_NULL);
       if (inst->sampler.reladdr)
          src[num_src] =
             ureg_src_indirect(src[num_src], ureg_src(t->address[2]));
@@ -5251,6 +5220,7 @@ get_mesa_program(struct gl_context *ctx,
    v->have_sqrt = pscreen->get_shader_param(pscreen, ptarget,
                                             PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED);
 
+   _mesa_copy_linked_program_data(shader->Stage, shader_program, prog);
    _mesa_generate_parameters_list_for_uniforms(shader_program, shader,
 					       prog->Parameters);
 
@@ -5356,10 +5326,6 @@ get_mesa_program(struct gl_context *ctx,
    case GL_GEOMETRY_SHADER:
       stgp = (struct st_geometry_program *)prog;
       stgp->glsl_to_tgsi = v;
-      stgp->Base.InputType = shader_program->Geom.InputType;
-      stgp->Base.OutputType = shader_program->Geom.OutputType;
-      stgp->Base.VerticesOut = shader_program->Geom.VerticesOut;
-      stgp->Base.Invocations = shader_program->Geom.Invocations;
       break;
    default:
       assert(!"should not be reached");
@@ -5370,34 +5336,6 @@ get_mesa_program(struct gl_context *ctx,
 }
 
 extern "C" {
-
-struct gl_shader *
-st_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
-{
-   struct gl_shader *shader;
-   assert(type == GL_FRAGMENT_SHADER || type == GL_VERTEX_SHADER ||
-          type == GL_GEOMETRY_SHADER_ARB);
-   shader = rzalloc(NULL, struct gl_shader);
-   if (shader) {
-      shader->Type = type;
-      shader->Stage = _mesa_shader_enum_to_shader_stage(type);
-      shader->Name = name;
-      _mesa_init_shader(ctx, shader);
-   }
-   return shader;
-}
-
-struct gl_shader_program *
-st_new_shader_program(struct gl_context *ctx, GLuint name)
-{
-   struct gl_shader_program *shProg;
-   shProg = rzalloc(NULL, struct gl_shader_program);
-   if (shProg) {
-      shProg->Name = name;
-      _mesa_init_shader_program(ctx, shProg);
-   }
-   return shProg;
-}
 
 /**
  * Link a shader.
@@ -5450,6 +5388,9 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       if (!pscreen->get_param(pscreen, PIPE_CAP_TEXTURE_GATHER_OFFSETS))
          lower_offset_arrays(ir);
       do_mat_op_to_vec(ir);
+      /* Emit saturates in the vertex shader only if SM 3.0 is supported. */
+      bool vs_sm3 = (_mesa_shader_stage_to_program(prog->_LinkedShaders[i]->Stage) ==
+                         GL_VERTEX_PROGRAM_ARB) && st_context(ctx)->has_shader_model3;
       lower_instructions(ir,
                          MOD_TO_FRACT |
                          DIV_TO_MUL_RCP |
@@ -5459,7 +5400,8 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
                          CARRY_TO_ARITH |
                          BORROW_TO_ARITH |
                          (options->EmitNoPow ? POW_TO_EXP2 : 0) |
-                         (!ctx->Const.NativeIntegers ? INT_DIV_TO_MUL_RCP : 0));
+                         (!ctx->Const.NativeIntegers ? INT_DIV_TO_MUL_RCP : 0) |
+                         (vs_sm3 ? SAT_TO_CLAMP : 0));
 
       lower_ubo_reference(prog->_LinkedShaders[i], ir);
       do_vec_index_to_cond_assign(ir);

@@ -49,6 +49,18 @@ vc4_emit_state(struct pipe_context *pctx)
                       vc4->zsa->config_bits[2]);
         }
 
+        if (vc4->dirty & VC4_DIRTY_RASTERIZER) {
+                cl_u8(&vc4->bcl, VC4_PACKET_DEPTH_OFFSET);
+                cl_u16(&vc4->bcl, vc4->rasterizer->offset_factor);
+                cl_u16(&vc4->bcl, vc4->rasterizer->offset_units);
+
+                cl_u8(&vc4->bcl, VC4_PACKET_POINT_SIZE);
+                cl_f(&vc4->bcl, vc4->rasterizer->point_size);
+
+                cl_u8(&vc4->bcl, VC4_PACKET_LINE_WIDTH);
+                cl_f(&vc4->bcl, vc4->rasterizer->base.line_width);
+        }
+
         if (vc4->dirty & VC4_DIRTY_VIEWPORT) {
                 cl_u8(&vc4->bcl, VC4_PACKET_CLIPPER_XY_SCALING);
                 cl_f(&vc4->bcl, vc4->viewport.scale[0] * 16.0f);
@@ -61,5 +73,11 @@ vc4_emit_state(struct pipe_context *pctx)
                 cl_u8(&vc4->bcl, VC4_PACKET_VIEWPORT_OFFSET);
                 cl_u16(&vc4->bcl, 16 * vc4->viewport.translate[0]);
                 cl_u16(&vc4->bcl, 16 * vc4->viewport.translate[1]);
+        }
+
+        if (vc4->dirty & VC4_DIRTY_FLAT_SHADE_FLAGS) {
+                cl_u8(&vc4->bcl, VC4_PACKET_FLAT_SHADE_FLAGS);
+                cl_u32(&vc4->bcl, vc4->rasterizer->base.flatshade ?
+                       vc4->prog.fs->color_inputs : 0);
         }
 }

@@ -62,6 +62,8 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
    int profileMask = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
    int i;
    BOOL done = FALSE;
+   const int contextFlagsAll = (WGL_CONTEXT_DEBUG_BIT_ARB |
+                                WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB);
 
    /* parse attrib_list */
    if (attribList) {
@@ -94,46 +96,41 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
       }
    }
 
+   /* check contextFlags */
+   if (contextFlags & ~contextFlagsAll) {
+      SetLastError(ERROR_INVALID_PARAMETER);
+      return NULL;
+   }
+
+   /* check profileMask */
+   if (profileMask != WGL_CONTEXT_CORE_PROFILE_BIT_ARB &&
+       profileMask != WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB &&
+       profileMask != WGL_CONTEXT_ES_PROFILE_BIT_EXT) {
+      SetLastError(ERROR_INVALID_PROFILE_ARB);
+      return NULL;
+   }
+
    /* check version (generate ERROR_INVALID_VERSION_ARB if bad) */
-   switch (majorVersion) {
-   case 1:
-      if (minorVersion < 0 || minorVersion > 5) {
-         SetLastError(ERROR_INVALID_VERSION_ARB);
-         return 0;
-      }
-      break;
-   case 2:
-      if (minorVersion < 0 || minorVersion > 1) {
-         SetLastError(ERROR_INVALID_VERSION_ARB);
-         return 0;
-      }
-      break;
-   case 3:
-      if (minorVersion < 0 || minorVersion > 3) {
-         SetLastError(ERROR_INVALID_VERSION_ARB);
-         return 0;
-      }
-      break;
-   case 4:
-      if (minorVersion < 0 || minorVersion > 2) {
-         SetLastError(ERROR_INVALID_VERSION_ARB);
-         return 0;
-      }
-      break;
-   default:
-      return 0;
+   if (majorVersion <= 0 ||
+       minorVersion < 0 ||
+       (profileMask != WGL_CONTEXT_ES_PROFILE_BIT_EXT &&
+        ((majorVersion == 1 && minorVersion > 5) ||
+         (majorVersion == 2 && minorVersion > 1) ||
+         (majorVersion == 3 && minorVersion > 3) ||
+         (majorVersion == 4 && minorVersion > 5) ||
+         majorVersion > 4)) ||
+       (profileMask == WGL_CONTEXT_ES_PROFILE_BIT_EXT &&
+        ((majorVersion == 1 && minorVersion > 1) ||
+         (majorVersion == 2 && minorVersion > 0) ||
+         (majorVersion == 3 && minorVersion > 1) ||
+         majorVersion > 3))) {
+      SetLastError(ERROR_INVALID_VERSION_ARB);
+      return NULL;
    }
 
    if ((contextFlags & WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB) &&
        majorVersion < 3) {
       SetLastError(ERROR_INVALID_VERSION_ARB);
-      return 0;
-   }
-
-   /* check profileMask */
-   if (profileMask != WGL_CONTEXT_CORE_PROFILE_BIT_ARB &&
-       profileMask != WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB) {
-      SetLastError(ERROR_INVALID_PROFILE_ARB);
       return 0;
    }
 

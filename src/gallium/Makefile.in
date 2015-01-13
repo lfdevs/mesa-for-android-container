@@ -88,36 +88,36 @@ target_triplet = @target@
 @HAVE_GALLIUM_R600_TRUE@am__append_8 = drivers/r600
 @HAVE_GALLIUM_RADEONSI_TRUE@am__append_9 = drivers/radeonsi
 @NEED_RADEON_DRM_WINSYS_TRUE@am__append_10 = winsys/radeon/drm
-@NEED_GALLIUM_SOFTPIPE_DRIVER_TRUE@am__append_11 = drivers/softpipe
-@NEED_GALLIUM_LLVMPIPE_DRIVER_TRUE@@NEED_GALLIUM_SOFTPIPE_DRIVER_TRUE@am__append_12 = drivers/llvmpipe
+@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_11 = drivers/softpipe
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_12 = drivers/llvmpipe
 @HAVE_GALLIUM_VC4_TRUE@am__append_13 = drivers/vc4 winsys/vc4/drm
 @NEED_WINSYS_XLIB_TRUE@am__append_14 = winsys/sw/xlib
 @HAVE_DRISW_TRUE@am__append_15 = winsys/sw/dri
 @HAVE_DRI2_TRUE@am__append_16 = winsys/sw/kms-dri
 @HAVE_EGL_PLATFORM_FBDEV_TRUE@am__append_17 = winsys/sw/fbdev
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_18 = winsys/sw/wayland
-@NEED_WINSYS_WRAPPER_TRUE@am__append_19 = winsys/sw/wrapper
-@NEED_GALLIUM_LOADER_TRUE@am__append_20 = targets/pipe-loader
-@HAVE_CLOVER_TRUE@am__append_21 = state_trackers/clover targets/opencl
-@HAVE_DRICOMMON_TRUE@am__append_22 = state_trackers/dri targets/dri
-@HAVE_OPENVG_TRUE@am__append_23 = state_trackers/vega
-@HAVE_GALLIUM_EGL_TRUE@am__append_24 = state_trackers/egl targets/egl-static
-@HAVE_GALLIUM_GBM_TRUE@am__append_25 = state_trackers/gbm targets/gbm
-@HAVE_X11_DRIVER_TRUE@am__append_26 = state_trackers/glx/xlib targets/libgl-xlib
-@HAVE_ST_OMX_TRUE@am__append_27 = state_trackers/omx targets/omx
-@HAVE_GALLIUM_OSMESA_TRUE@am__append_28 = state_trackers/osmesa targets/osmesa
-@HAVE_ST_VDPAU_TRUE@am__append_29 = state_trackers/vdpau targets/vdpau
-@HAVE_ST_XA_TRUE@am__append_30 = state_trackers/xa targets/xa
-@HAVE_ST_XVMC_TRUE@am__append_31 = state_trackers/xvmc targets/xvmc
-@HAVE_GALLIUM_TESTS_TRUE@am__append_32 = \
+@HAVE_LOADER_GALLIUM_TRUE@am__append_19 = targets/pipe-loader
+@HAVE_CLOVER_TRUE@am__append_20 = state_trackers/clover targets/opencl
+@HAVE_DRICOMMON_TRUE@am__append_21 = state_trackers/dri targets/dri
+@HAVE_OPENVG_TRUE@am__append_22 = state_trackers/vega
+@HAVE_X11_DRIVER_TRUE@am__append_23 = state_trackers/glx/xlib targets/libgl-xlib
+@HAVE_ST_OMX_TRUE@am__append_24 = state_trackers/omx targets/omx
+@HAVE_GALLIUM_OSMESA_TRUE@am__append_25 = state_trackers/osmesa targets/osmesa
+@HAVE_ST_VA_TRUE@am__append_26 = state_trackers/va targets/va
+@HAVE_ST_VDPAU_TRUE@am__append_27 = state_trackers/vdpau targets/vdpau
+@HAVE_ST_XA_TRUE@am__append_28 = state_trackers/xa targets/xa
+@HAVE_ST_XVMC_TRUE@am__append_29 = state_trackers/xvmc targets/xvmc
+@HAVE_ST_NINE_TRUE@am__append_30 = state_trackers/nine targets/d3dadapter9
+@HAVE_GALLIUM_TESTS_TRUE@am__append_31 = \
 @HAVE_GALLIUM_TESTS_TRUE@	tests/trivial \
 @HAVE_GALLIUM_TESTS_TRUE@	tests/unit
 
 subdir = src/gallium
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -194,11 +194,11 @@ DIST_SUBDIRS = auxiliary drivers/galahad drivers/identity drivers/noop \
 	winsys/sw/fbdev winsys/sw/wayland winsys/sw/wrapper \
 	targets/pipe-loader state_trackers/clover targets/opencl \
 	state_trackers/dri targets/dri state_trackers/vega \
-	state_trackers/egl targets/egl-static state_trackers/gbm \
-	targets/gbm state_trackers/glx/xlib targets/libgl-xlib \
-	state_trackers/omx targets/omx state_trackers/osmesa \
-	targets/osmesa state_trackers/vdpau targets/vdpau \
-	state_trackers/xa targets/xa state_trackers/xvmc targets/xvmc \
+	state_trackers/glx/xlib targets/libgl-xlib state_trackers/omx \
+	targets/omx state_trackers/osmesa targets/osmesa \
+	state_trackers/va targets/va state_trackers/vdpau \
+	targets/vdpau state_trackers/xa targets/xa state_trackers/xvmc \
+	targets/xvmc state_trackers/nine targets/d3dadapter9 \
 	tests/trivial tests/unit
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -250,6 +250,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -272,7 +273,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -345,11 +345,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -360,10 +363,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -377,7 +378,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -396,7 +396,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -460,6 +466,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -493,12 +500,17 @@ SUBDIRS = auxiliary drivers/galahad drivers/identity drivers/noop \
 	$(am__append_9) $(am__append_10) $(am__append_11) \
 	$(am__append_12) $(am__append_13) winsys/sw/null \
 	$(am__append_14) $(am__append_15) $(am__append_16) \
-	$(am__append_17) $(am__append_18) $(am__append_19) \
-	$(am__append_20) $(am__append_21) $(am__append_22) \
-	$(am__append_23) $(am__append_24) $(am__append_25) \
-	$(am__append_26) $(am__append_27) $(am__append_28) \
-	$(am__append_29) $(am__append_30) $(am__append_31) \
-	$(am__append_32)
+	$(am__append_17) $(am__append_18) winsys/sw/wrapper \
+	$(am__append_19) $(am__append_20) $(am__append_21) \
+	$(am__append_22) $(am__append_23) $(am__append_24) \
+	$(am__append_25) $(am__append_26) $(am__append_27) \
+	$(am__append_28) $(am__append_29) $(am__append_30) \
+	$(am__append_31)
+EXTRA_DIST = winsys/sw/android winsys/sw/gdi winsys/sw/hgl \
+	state_trackers/README state_trackers/wgl targets/libgl-gdi \
+	targets/graw-gdi targets/graw-null targets/graw-xlib \
+	state_trackers/hgl targets/haiku-softpipe tools tests/graw \
+	tests/python
 all: all-recursive
 
 .SUFFIXES:

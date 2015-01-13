@@ -61,6 +61,8 @@ int sb_context::init(r600_isa *isa, sb_hw_chip chip, sb_hw_class cclass) {
 
 	uses_mova_gpr = is_r600() && chip != HW_CHIP_RV670;
 
+	r6xx_gpr_index_workaround = is_r600() && chip != HW_CHIP_RV670 && chip != HW_CHIP_RS780 && chip != HW_CHIP_RS880;
+
 	switch (chip) {
 	case HW_CHIP_RV610:
 	case HW_CHIP_RS780:

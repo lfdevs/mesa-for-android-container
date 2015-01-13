@@ -147,25 +147,28 @@ int bc_parser::parse_decls() {
 	bool ps_interp = ctx.hw_class >= HW_CLASS_EVERGREEN
 			&& sh->target == TARGET_PS;
 
-	unsigned linear = 0, persp = 0, centroid = 1;
+	bool ij_interpolators[6];
+	memset(ij_interpolators, 0, sizeof(ij_interpolators));
 
 	for (unsigned i = 0; i < pshader->ninput; ++i) {
 		r600_shader_io & in = pshader->input[i];
 		bool preloaded = sh->target == TARGET_PS && !(ps_interp && in.spi_sid);
 		sh->add_input(in.gpr, preloaded, /*in.write_mask*/ 0x0F);
 		if (ps_interp && in.spi_sid) {
-			if (in.interpolate == TGSI_INTERPOLATE_LINEAR ||
-					in.interpolate == TGSI_INTERPOLATE_COLOR)
-				linear = 1;
-			else if (in.interpolate == TGSI_INTERPOLATE_PERSPECTIVE)
-				persp = 1;
-			if (in.centroid)
-				centroid = 2;
+			int k = eg_get_interpolator_index(in.interpolate, in.interpolate_location);
+			if (k >= 0)
+				ij_interpolators[k] |= true;
 		}
 	}
 
 	if (ps_interp) {
-		unsigned mask = (1 << (2 * (linear + persp) * centroid)) - 1;
+		/* add the egcm ij interpolators to live inputs */
+		unsigned num_ij = 0;
+		for (unsigned i = 0; i < Elements(ij_interpolators); i++) {
+			num_ij += ij_interpolators[i];
+		}
+
+		unsigned mask = (1 << (2 * num_ij)) - 1;
 		unsigned gpr = 0;
 
 		while (mask) {
@@ -754,6 +757,8 @@ int bc_parser::prepare_loop(cf_node* c) {
 	reg->push_back(rep);
 	c->insert_before(reg);
 	rep->move(c, end->next);
+
+	reg->src_loop = true;
 
 	loop_stack.push(reg);
 	return 0;

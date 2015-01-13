@@ -33,14 +33,11 @@
 #include "pipe/p_context.h"
 
 #include "freedreno_context.h"
+#include "freedreno_resource.h"
 #include "freedreno_screen.h"
 #include "freedreno_util.h"
 
 struct fd_ringbuffer;
-
-void fd_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		enum pc_di_vis_cull_mode vismode,
-		const struct pipe_draw_info *info);
 
 void fd_draw_init(struct pipe_context *pctx);
 
@@ -96,6 +93,52 @@ fd_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	emit_marker(ring, 7);
 
 	fd_reset_wfi(ctx);
+}
+
+
+static inline enum pc_di_index_size
+size2indextype(unsigned index_size)
+{
+	switch (index_size) {
+	case 1: return INDEX_SIZE_8_BIT;
+	case 2: return INDEX_SIZE_16_BIT;
+	case 4: return INDEX_SIZE_32_BIT;
+	}
+	DBG("unsupported index size: %d", index_size);
+	assert(0);
+	return INDEX_SIZE_IGN;
+}
+
+/* this is same for a2xx/a3xx, so split into helper: */
+static inline void
+fd_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		enum pc_di_vis_cull_mode vismode,
+		const struct pipe_draw_info *info)
+{
+	struct pipe_index_buffer *idx = &ctx->indexbuf;
+	struct fd_bo *idx_bo = NULL;
+	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
+	enum pc_di_src_sel src_sel;
+	uint32_t idx_size, idx_offset;
+
+	if (info->indexed) {
+		assert(!idx->user_buffer);
+
+		idx_bo = fd_resource(idx->buffer)->bo;
+		idx_type = size2indextype(idx->index_size);
+		idx_size = idx->index_size * info->count;
+		idx_offset = idx->offset + (info->start * idx->index_size);
+		src_sel = DI_SRC_SEL_DMA;
+	} else {
+		idx_bo = NULL;
+		idx_type = INDEX_SIZE_IGN;
+		idx_size = 0;
+		idx_offset = 0;
+		src_sel = DI_SRC_SEL_AUTO_INDEX;
+	}
+
+	fd_draw(ctx, ring, ctx->primtypes[info->mode], vismode, src_sel,
+			info->count, idx_type, idx_size, idx_offset, idx_bo);
 }
 
 #endif /* FREEDRENO_DRAW_H_ */

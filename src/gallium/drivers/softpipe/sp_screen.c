@@ -123,12 +123,15 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1024;
    case PIPE_CAP_MAX_VERTEX_STREAMS:
       return 1;
+   case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
+      return 2048;
    case PIPE_CAP_PRIMITIVE_RESTART:
       return 1;
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
       return 1;
    case PIPE_CAP_TGSI_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
+   case PIPE_CAP_START_INSTANCE:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
@@ -167,7 +170,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_START_INSTANCE:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
@@ -196,6 +198,7 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_SAMPLER_VIEW_TARGET:
       return 0;
    case PIPE_CAP_FAKE_SW_MSAA:
       return 1;
@@ -224,6 +227,8 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 0;
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
       return 1;
+   case PIPE_CAP_CLIP_HALFZ:
+      return 1;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAP %d query\n", param);
@@ -240,20 +245,10 @@ softpipe_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe
       return tgsi_exec_get_shader_param(param);
    case PIPE_SHADER_VERTEX:
    case PIPE_SHADER_GEOMETRY:
-      switch (param) {
-      case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
-      case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
-         if (sp_screen->use_llvm)
-            /* Softpipe doesn't yet know how to tell draw/llvm about textures */
-            return 0;
-         else
-            return PIPE_MAX_SAMPLERS;
-      default:
-         if (sp_screen->use_llvm)
-            return draw_get_shader_param(shader, param);
-         else
-            return draw_get_shader_param_no_llvm(shader, param);
-      }
+      if (sp_screen->use_llvm)
+         return draw_get_shader_param(shader, param);
+      else
+         return draw_get_shader_param_no_llvm(shader, param);
    default:
       return 0;
    }

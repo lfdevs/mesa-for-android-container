@@ -290,8 +290,7 @@ get_fast_clear_rect(struct brw_context *brw, struct gl_framebuffer *fb,
          x_scaledown = 2;
          break;
       default:
-         assert(!"Unexpected sample count for fast clear");
-         break;
+         unreachable("Unexpected sample count for fast clear");
       }
       y_scaledown = 2;
       x_align = x_scaledown * 2;
@@ -644,11 +643,14 @@ get_resolve_rect(struct brw_context *brw,
     * The scaledown factors in the table that follows are related to the
     * alignment size returned by intel_get_non_msrt_mcs_alignment() by a
     * multiplier.  For IVB and HSW, we divide by two, for BDW we multiply
-    * by 8 and 16.
+    * by 8 and 16 and 8 and 8 for SKL.
     */
 
    intel_get_non_msrt_mcs_alignment(brw, mt, &x_align, &y_align);
-   if (brw->gen >= 8) {
+   if (brw->gen >= 9) {
+      x_scaledown = x_align * 8;
+      y_scaledown = y_align * 8;
+   } else if (brw->gen >= 8) {
       x_scaledown = x_align * 8;
       y_scaledown = y_align * 16;
    } else {

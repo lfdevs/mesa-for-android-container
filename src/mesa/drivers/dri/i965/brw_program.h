@@ -82,8 +82,7 @@ void
 brw_stage_prog_data_free(const void *prog_data);
 
 void
-brw_dump_ir(struct brw_context *brw, const char *stage,
-            struct gl_shader_program *shader_prog,
+brw_dump_ir(const char *stage, struct gl_shader_program *shader_prog,
             struct gl_shader *shader, struct gl_program *prog);
 
 #ifdef __cplusplus

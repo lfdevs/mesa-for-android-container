@@ -72,9 +72,6 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       attribs.major = major_version;
       attribs.minor = minor_version;
 
-      if ((flags & __DRI_CTX_FLAG_DEBUG) != 0)
-	 attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
-
       if ((flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0)
 	 attribs.flags |= ST_CONTEXT_FLAG_FORWARD_COMPATIBLE;
       break;
@@ -82,6 +79,9 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       *error = __DRI_CTX_ERROR_BAD_API;
       goto fail;
    }
+
+   if ((flags & __DRI_CTX_FLAG_DEBUG) != 0)
+      attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
 
    if (flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE)) {
       *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;

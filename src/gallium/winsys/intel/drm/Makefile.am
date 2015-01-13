@@ -25,9 +25,12 @@ include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
+	-I$(top_srcdir)/src/gallium/drivers \
 	$(GALLIUM_WINSYS_CFLAGS) \
 	$(INTEL_CFLAGS)
 
 noinst_LTLIBRARIES = libintelwinsys.la
 
 libintelwinsys_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = Android.mk

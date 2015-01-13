@@ -1666,15 +1666,7 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
    partial_mask |= !variant->opaque;
    i32_zero = lp_build_const_int32(gallivm, 0);
 
-#if HAVE_LLVM < 0x0302
-   /*
-    * undef triggers a crash in LLVMBuildTrunc in convert_from_blend_type in some
-    * cases (seen with r10g10b10a2, 128bit wide vectors) (only used for 1d case).
-    */
-   undef_src_val = lp_build_zero(gallivm, fs_type);
-#else
    undef_src_val = lp_build_undef(gallivm, fs_type);
-#endif
 
    row_type.length = fs_type.length;
    vector_width    = dst_type.floating ? lp_native_vector_width : lp_integer_vector_width;
@@ -2212,14 +2204,8 @@ generate_fragment(struct llvmpipe_context *lp,
    }
 
    /* check if writes to cbuf[0] are to be copied to all cbufs */
-   cbuf0_write_all = FALSE;
-   for (i = 0;i < shader->info.base.num_properties; i++) {
-      if (shader->info.base.properties[i].name ==
-          TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS) {
-         cbuf0_write_all = TRUE;
-         break;
-      }
-   }
+   cbuf0_write_all =
+     shader->info.base.properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS];
 
    /* TODO: actually pick these based on the fs and color buffer
     * characteristics. */
@@ -2329,6 +2315,8 @@ generate_fragment(struct llvmpipe_context *lp,
       LLVMValueRef mask_store = lp_build_array_alloca(gallivm, mask_type,
                                                       num_loop, "mask_store");
       LLVMValueRef color_store[PIPE_MAX_COLOR_BUFS][TGSI_NUM_CHANNELS];
+      boolean pixel_center_integer =
+         shader->info.base.properties[TGSI_PROPERTY_FS_COORD_PIXEL_CENTER];
 
       /*
        * The shader input interpolation info is not explicitely baked in the
@@ -2339,7 +2327,7 @@ generate_fragment(struct llvmpipe_context *lp,
                                gallivm,
                                shader->info.base.num_inputs,
                                inputs,
-                               shader->info.base.pixel_center_integer,
+                               pixel_center_integer,
                                builder, fs_type,
                                a0_ptr, dadx_ptr, dady_ptr,
                                x, y);
@@ -2565,7 +2553,7 @@ generate_variant(struct llvmpipe_context *lp,
    util_snprintf(module_name, sizeof(module_name), "fs%u_variant%u",
                  shader->no, shader->variants_created);
 
-   variant->gallivm = gallivm_create(module_name);
+   variant->gallivm = gallivm_create(module_name, lp->context);
    if (!variant->gallivm) {
       FREE(variant);
       return NULL;

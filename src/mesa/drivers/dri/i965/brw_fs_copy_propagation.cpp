@@ -42,7 +42,9 @@ namespace { /* avoid conflict with opt_copy_propagation_elements */
 struct acp_entry : public exec_node {
    fs_reg dst;
    fs_reg src;
+   uint8_t regs_written;
    enum opcode opcode;
+   bool saturate;
 };
 
 struct block_data {
@@ -276,24 +278,29 @@ is_logic_op(enum opcode opcode)
 bool
 fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 {
+   if (inst->src[arg].file != GRF)
+      return false;
+
    if (entry->src.file == IMM)
       return false;
+   assert(entry->src.file == GRF || entry->src.file == UNIFORM);
 
    if (entry->opcode == SHADER_OPCODE_LOAD_PAYLOAD &&
        inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD)
       return false;
 
-   /* Bail if inst is reading more than entry is writing. */
-   if ((inst->regs_read(this, arg) * inst->src[arg].stride *
-        type_sz(inst->src[arg].type)) > type_sz(entry->dst.type))
+   assert(entry->dst.file == GRF);
+   if (inst->src[arg].reg != entry->dst.reg)
       return false;
 
-   if (inst->src[arg].file != entry->dst.file ||
-       inst->src[arg].reg != entry->dst.reg ||
-       inst->src[arg].reg_offset != entry->dst.reg_offset ||
-       inst->src[arg].subreg_offset != entry->dst.subreg_offset) {
+   /* Bail if inst is reading a range that isn't contained in the range
+    * that entry is writing.
+    */
+   if (inst->src[arg].reg_offset < entry->dst.reg_offset ||
+       (inst->src[arg].reg_offset * 32 + inst->src[arg].subreg_offset +
+        inst->regs_read(this, arg) * inst->src[arg].stride * 32) >
+       (entry->dst.reg_offset + entry->regs_written) * 32)
       return false;
-   }
 
    /* See resolve_ud_negate() and comment in brw_fs_emit.cpp. */
    if (inst->conditional_mod &&
@@ -344,11 +351,63 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
       return false;
    }
 
+   if (entry->saturate) {
+      switch(inst->opcode) {
+      case BRW_OPCODE_SEL:
+         if (inst->src[1].file != IMM ||
+             inst->src[1].fixed_hw_reg.dw1.f < 0.0 ||
+             inst->src[1].fixed_hw_reg.dw1.f > 1.0) {
+            return false;
+         }
+         break;
+      default:
+         return false;
+      }
+   }
+
    inst->src[arg].file = entry->src.file;
    inst->src[arg].reg = entry->src.reg;
-   inst->src[arg].reg_offset = entry->src.reg_offset;
-   inst->src[arg].subreg_offset = entry->src.subreg_offset;
    inst->src[arg].stride *= entry->src.stride;
+   inst->saturate = inst->saturate || entry->saturate;
+
+   switch (entry->src.file) {
+   case UNIFORM:
+      assert(entry->src.width == 1);
+   case BAD_FILE:
+   case HW_REG:
+      inst->src[arg].width = entry->src.width;
+      inst->src[arg].reg_offset = entry->src.reg_offset;
+      inst->src[arg].subreg_offset = entry->src.subreg_offset;
+      break;
+   case GRF:
+      {
+         assert(entry->src.width % inst->src[arg].width == 0);
+         /* In this case, we'll just leave the width alone.  The source
+          * register could have different widths depending on how it is
+          * being used.  For instance, if only half of the register was
+          * used then we want to preserve that and continue to only use
+          * half.
+          *
+          * Also, we have to deal with mapping parts of vgrfs to other
+          * parts of vgrfs so we have to do some reg_offset magic.
+          */
+
+         /* Compute the offset of inst->src[arg] relative to inst->dst */
+         assert(entry->dst.subreg_offset == 0);
+         int rel_offset = inst->src[arg].reg_offset - entry->dst.reg_offset;
+         int rel_suboffset = inst->src[arg].subreg_offset;
+
+         /* Compute the final register offset (in bytes) */
+         int offset = entry->src.reg_offset * 32 + entry->src.subreg_offset;
+         offset += rel_offset * 32 + rel_suboffset;
+         inst->src[arg].reg_offset = offset / 32;
+         inst->src[arg].subreg_offset = offset % 32;
+      }
+      break;
+   default:
+      unreachable("Invalid register file");
+      break;
+   }
 
    if (!inst->src[arg].abs) {
       inst->src[arg].abs = entry->src.abs;
@@ -359,9 +418,8 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 }
 
 
-static bool
-try_constant_propagate(struct brw_context *brw, fs_inst *inst,
-                       acp_entry *entry)
+bool
+fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
 {
    bool progress = false;
 
@@ -369,12 +427,21 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
       return false;
 
    for (int i = inst->sources - 1; i >= 0; i--) {
-      if (inst->src[i].file != entry->dst.file ||
-          inst->src[i].reg != entry->dst.reg ||
-          inst->src[i].reg_offset != entry->dst.reg_offset ||
-          inst->src[i].subreg_offset != entry->dst.subreg_offset ||
-          inst->src[i].type != entry->dst.type ||
-          inst->src[i].stride > 1)
+      if (inst->src[i].file != GRF)
+         continue;
+
+      assert(entry->dst.file == GRF);
+      if (inst->src[i].reg != entry->dst.reg ||
+          inst->src[i].type != entry->dst.type)
+         continue;
+
+      /* Bail if inst is reading a range that isn't contained in the range
+       * that entry is writing.
+       */
+      if (inst->src[i].reg_offset < entry->dst.reg_offset ||
+          (inst->src[i].reg_offset * 32 + inst->src[i].subreg_offset +
+           inst->regs_read(this, i) * inst->src[i].stride * 32) >
+          (entry->dst.reg_offset + entry->regs_written) * 32)
          continue;
 
       /* Don't bother with cases that should have been taken care of by the
@@ -383,9 +450,13 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
       if (inst->src[i].negate || inst->src[i].abs)
          continue;
 
+      fs_reg val = entry->src;
+      val.effective_width = inst->src[i].effective_width;
+
       switch (inst->opcode) {
       case BRW_OPCODE_MOV:
-         inst->src[i] = entry->src;
+      case SHADER_OPCODE_LOAD_PAYLOAD:
+         inst->src[i] = val;
          progress = true;
          break;
 
@@ -401,7 +472,7 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
       case BRW_OPCODE_SHR:
       case BRW_OPCODE_SUBB:
          if (i == 1) {
-            inst->src[i] = entry->src;
+            inst->src[i] = val;
             progress = true;
          }
          break;
@@ -414,7 +485,7 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
       case BRW_OPCODE_XOR:
       case BRW_OPCODE_ADDC:
          if (i == 1) {
-            inst->src[i] = entry->src;
+            inst->src[i] = val;
             progress = true;
          } else if (i == 0 && inst->src[1].file != IMM) {
             /* Fit this constant in by commuting the operands.
@@ -427,7 +498,7 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
                  inst->src[1].type == BRW_REGISTER_TYPE_UD))
                break;
             inst->src[0] = inst->src[1];
-            inst->src[1] = entry->src;
+            inst->src[1] = val;
             progress = true;
          }
          break;
@@ -435,7 +506,7 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
       case BRW_OPCODE_CMP:
       case BRW_OPCODE_IF:
          if (i == 1) {
-            inst->src[i] = entry->src;
+            inst->src[i] = val;
             progress = true;
          } else if (i == 0 && inst->src[1].file != IMM) {
             enum brw_conditional_mod new_cmod;
@@ -446,7 +517,7 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
                 * flipping the test
                 */
                inst->src[0] = inst->src[1];
-               inst->src[1] = entry->src;
+               inst->src[1] = val;
                inst->conditional_mod = new_cmod;
                progress = true;
             }
@@ -455,11 +526,11 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
 
       case BRW_OPCODE_SEL:
          if (i == 1) {
-            inst->src[i] = entry->src;
+            inst->src[i] = val;
             progress = true;
          } else if (i == 0 && inst->src[1].file != IMM) {
             inst->src[0] = inst->src[1];
-            inst->src[1] = entry->src;
+            inst->src[1] = val;
 
             /* If this was predicated, flipping operands means
              * we also need to flip the predicate.
@@ -481,14 +552,14 @@ try_constant_propagate(struct brw_context *brw, fs_inst *inst,
          assert(i == 0);
          if (inst->src[0].fixed_hw_reg.dw1.f != 0.0f) {
             inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0] = entry->src;
+            inst->src[0] = val;
             inst->src[0].fixed_hw_reg.dw1.f = 1.0f / inst->src[0].fixed_hw_reg.dw1.f;
             progress = true;
          }
          break;
 
       case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
-         inst->src[i] = entry->src;
+         inst->src[i] = val;
          progress = true;
          break;
 
@@ -511,7 +582,6 @@ can_propagate_from(fs_inst *inst)
             inst->src[0].file == UNIFORM ||
             inst->src[0].file == IMM) &&
            inst->src[0].type == inst->dst.type &&
-           !inst->saturate &&
            !inst->is_partial_write());
 }
 
@@ -531,7 +601,7 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
             continue;
 
          foreach_in_list(acp_entry, entry, &acp[inst->src[i].reg % ACP_HASH_SIZE]) {
-            if (try_constant_propagate(brw, inst, entry))
+            if (try_constant_propagate(inst, entry))
                progress = true;
 
             if (try_copy_propagate(inst, i, entry))
@@ -565,16 +635,23 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
 	 acp_entry *entry = ralloc(copy_prop_ctx, acp_entry);
 	 entry->dst = inst->dst;
 	 entry->src = inst->src[0];
+         entry->regs_written = inst->regs_written;
          entry->opcode = inst->opcode;
+         entry->saturate = inst->saturate;
 	 acp[entry->dst.reg % ACP_HASH_SIZE].push_tail(entry);
       } else if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD &&
                  inst->dst.file == GRF) {
+         int offset = 0;
          for (int i = 0; i < inst->sources; i++) {
+            int regs_written = ((inst->src[i].effective_width *
+                                 type_sz(inst->src[i].type)) + 31) / 32;
             if (inst->src[i].file == GRF) {
                acp_entry *entry = ralloc(copy_prop_ctx, acp_entry);
                entry->dst = inst->dst;
-               entry->dst.reg_offset = i;
+               entry->dst.reg_offset = offset;
+               entry->dst.width = inst->src[i].effective_width;
                entry->src = inst->src[i];
+               entry->regs_written = regs_written;
                entry->opcode = inst->opcode;
                if (!entry->dst.equals(inst->src[i])) {
                   acp[entry->dst.reg % ACP_HASH_SIZE].push_tail(entry);
@@ -582,6 +659,7 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
                   ralloc_free(entry);
                }
             }
+            offset += regs_written;
          }
       }
    }
@@ -592,8 +670,6 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
 bool
 fs_visitor::opt_copy_propagate()
 {
-   calculate_cfg();
-
    bool progress = false;
    void *copy_prop_ctx = ralloc_context(NULL);
    exec_list *out_acp[cfg->num_blocks];

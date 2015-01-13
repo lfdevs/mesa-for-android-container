@@ -924,7 +924,9 @@ CodeEmitterNV50::emitMINMAX(const Instruction *i)
          break;
       }
       code[1] |= i->src(0).mod.abs() << 20;
+      code[1] |= i->src(0).mod.neg() << 26;
       code[1] |= i->src(1).mod.abs() << 19;
+      code[1] |= i->src(1).mod.neg() << 27;
    }
    emitForm_MAD(i);
 }

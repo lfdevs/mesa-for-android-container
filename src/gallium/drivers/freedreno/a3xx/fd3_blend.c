@@ -105,8 +105,7 @@ fd3_blend_state_create(struct pipe_context *pctx,
 				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(fd_blend_factor(rt->rgb_dst_factor)) |
 				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_SRC_FACTOR(fd_blend_factor(rt->alpha_src_factor)) |
 				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_BLEND_OPCODE(blend_func(rt->alpha_func)) |
-				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(fd_blend_factor(rt->alpha_dst_factor)) |
-				A3XX_RB_MRT_BLEND_CONTROL_CLAMP_ENABLE;
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(fd_blend_factor(rt->alpha_dst_factor));
 
 		so->rb_mrt[i].control =
 				A3XX_RB_MRT_CONTROL_ROP_CODE(rop) |

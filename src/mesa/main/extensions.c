@@ -91,6 +91,7 @@ static const struct extension extension_table[] = {
    { "GL_ARB_buffer_storage",                      o(ARB_buffer_storage),                      GL,             2013 },
    { "GL_ARB_clear_buffer_object",                 o(dummy_true),                              GL,             2012 },
    { "GL_ARB_clear_texture",                       o(ARB_clear_texture),                       GL,             2013 },
+   { "GL_ARB_clip_control",                        o(ARB_clip_control),                        GL,             2014 },
    { "GL_ARB_color_buffer_float",                  o(ARB_color_buffer_float),                  GL,             2004 },
    { "GL_ARB_compressed_texture_pixel_storage",    o(dummy_true),                              GL,             2011 },
    { "GL_ARB_compute_shader",                      o(ARB_compute_shader),                      GL,             2012 },
@@ -319,6 +320,7 @@ static const struct extension extension_table[] = {
 
    /* KHR extensions */
    { "GL_KHR_debug",                               o(dummy_true),                              GL,             2012 },
+   { "GL_KHR_context_flush_control",               o(dummy_true),                              GL       | ES2, 2014 },
 
    /* Vendor extensions */
    { "GL_3DFX_texture_compression_FXT1",           o(TDFX_texture_compression_FXT1),           GL,             1999 },
@@ -588,7 +590,7 @@ free_unknown_extensions_strings(void)
 void
 _mesa_one_time_init_extension_overrides(void)
 {
-   const char *env_const = _mesa_getenv("MESA_EXTENSION_OVERRIDE");
+   const char *env_const = getenv("MESA_EXTENSION_OVERRIDE");
    char *env;
    char *ext;
    int len;
@@ -609,6 +611,15 @@ _mesa_one_time_init_extension_overrides(void)
 
    /* Copy env_const because strtok() is destructive. */
    env = strdup(env_const);
+
+   if (env == NULL || extra_extensions == NULL ||
+           cant_disable_extensions == NULL) {
+       free(env);
+       free(extra_extensions);
+       free(cant_disable_extensions);
+       return;
+   }
+
    for (ext = strtok(env, " "); ext != NULL; ext = strtok(NULL, " ")) {
       int enable;
       bool recognized;

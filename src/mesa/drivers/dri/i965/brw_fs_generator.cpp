@@ -40,14 +40,15 @@ fs_generator::fs_generator(struct brw_context *brw,
                            void *mem_ctx,
                            const struct brw_wm_prog_key *key,
                            struct brw_wm_prog_data *prog_data,
-                           struct gl_shader_program *prog,
+                           struct gl_shader_program *shader_prog,
                            struct gl_fragment_program *fp,
                            bool runtime_check_aads_emit,
                            bool debug_flag)
 
-   : brw(brw), key(key), prog_data(prog_data), prog(prog), fp(fp),
-     runtime_check_aads_emit(runtime_check_aads_emit), debug_flag(debug_flag),
-     mem_ctx(mem_ctx)
+   : brw(brw), stage(MESA_SHADER_FRAGMENT), key(key),
+     prog_data(&prog_data->base), shader_prog(shader_prog),
+     prog(&fp->Base), runtime_check_aads_emit(runtime_check_aads_emit),
+     debug_flag(debug_flag), mem_ctx(mem_ctx)
 {
    ctx = &brw->ctx;
 
@@ -98,20 +99,21 @@ fs_generator::patch_discard_jumps_to_fb_writes()
 
 void
 fs_generator::fire_fb_write(fs_inst *inst,
-                            GLuint base_reg,
+                            struct brw_reg payload,
                             struct brw_reg implied_header,
                             GLuint nr)
 {
    uint32_t msg_control;
+
+   assert(stage == MESA_SHADER_FRAGMENT);
+   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
 
    if (brw->gen < 6) {
       brw_push_insn_state(p);
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
       brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-      brw_MOV(p,
-              brw_message_reg(base_reg + 1),
-              brw_vec8_grf(1, 0));
+      brw_MOV(p, offset(payload, 1), brw_vec8_grf(1, 0));
       brw_pop_insn_state(p);
    }
 
@@ -129,7 +131,7 @@ fs_generator::fire_fb_write(fs_inst *inst,
 
    brw_fb_WRITE(p,
                 dispatch_width,
-                base_reg,
+                payload,
                 implied_header,
                 msg_control,
                 surf_index,
@@ -142,9 +144,15 @@ fs_generator::fire_fb_write(fs_inst *inst,
 }
 
 void
-fs_generator::generate_fb_write(fs_inst *inst)
+fs_generator::generate_fb_write(fs_inst *inst, struct brw_reg payload)
 {
+   assert(stage == MESA_SHADER_FRAGMENT);
+   brw_wm_prog_data *prog_data = (brw_wm_prog_data*) this->prog_data;
+   const brw_wm_prog_key * const key = (brw_wm_prog_key * const) this->key;
    struct brw_reg implied_header;
+
+   if (inst->base_mrf >= 0)
+      payload = brw_message_reg(inst->base_mrf);
 
    /* Header is 2 regs, g0 and g1 are the contents. g0 will be implied
     * move, here's g1.
@@ -159,7 +167,7 @@ fs_generator::generate_fb_write(fs_inst *inst)
       /* On HSW, the GPU will use the predicate on SENDC, unless the header is
        * present.
        */
-      if ((fp && fp->UsesKill) || key->alpha_test_func) {
+      if (prog_data->uses_kill || key->alpha_test_func) {
          struct brw_reg pixel_mask;
 
          if (brw->gen >= 6)
@@ -173,7 +181,7 @@ fs_generator::generate_fb_write(fs_inst *inst)
       if (brw->gen >= 6) {
 	 brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
 	 brw_MOV(p,
-		 retype(brw_message_reg(inst->base_mrf), BRW_REGISTER_TYPE_UD),
+		 retype(payload, BRW_REGISTER_TYPE_UD),
 		 retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
 	 brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
 
@@ -182,16 +190,15 @@ fs_generator::generate_fb_write(fs_inst *inst)
              * header.
              */
             brw_OR(p,
-		   vec1(retype(brw_message_reg(inst->base_mrf), BRW_REGISTER_TYPE_UD)),
+		   vec1(retype(payload, BRW_REGISTER_TYPE_UD)),
 		   vec1(retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD)),
 		   brw_imm_ud(0x1 << 11));
          }
 
 	 if (inst->target > 0) {
 	    /* Set the render target index for choosing BLEND_STATE. */
-	    brw_MOV(p, retype(brw_vec1_reg(BRW_MESSAGE_REGISTER_FILE,
-					   inst->base_mrf, 2),
-			      BRW_REGISTER_TYPE_UD),
+	    brw_MOV(p, retype(vec1(suboffset(payload, 2)),
+                              BRW_REGISTER_TYPE_UD),
 		    brw_imm_ud(inst->target));
 	 }
 
@@ -206,7 +213,7 @@ fs_generator::generate_fb_write(fs_inst *inst)
    }
 
    if (!runtime_check_aads_emit) {
-      fire_fb_write(inst, inst->base_mrf, implied_header, inst->mlen);
+      fire_fb_write(inst, payload, implied_header, inst->mlen);
    } else {
       /* This can only happen in gen < 6 */
       assert(brw->gen < 6);
@@ -225,10 +232,10 @@ fs_generator::generate_fb_write(fs_inst *inst)
       brw_inst_set_exec_size(brw, brw_last_inst, BRW_EXECUTE_1);
       {
          /* Don't send AA data */
-         fire_fb_write(inst, inst->base_mrf+1, implied_header, inst->mlen-1);
+         fire_fb_write(inst, offset(payload, 1), implied_header, inst->mlen-1);
       }
       brw_land_fwd_jump(p, jmp);
-      fire_fb_write(inst, inst->base_mrf, implied_header, inst->mlen);
+      fire_fb_write(inst, payload, implied_header, inst->mlen);
    }
 }
 
@@ -237,7 +244,7 @@ fs_generator::generate_blorp_fb_write(fs_inst *inst)
 {
    brw_fb_WRITE(p,
                 16 /* dispatch_width */,
-                inst->base_mrf,
+                brw_message_reg(inst->base_mrf),
                 brw_reg_from_fs_reg(&inst->src[0]),
                 BRW_DATAPORT_RENDER_TARGET_WRITE_SIMD16_SINGLE_SOURCE,
                 inst->target,
@@ -308,10 +315,11 @@ fs_generator::generate_math_gen6(fs_inst *inst,
    int op = brw_math_function(inst->opcode);
    bool binop = src1.file != BRW_ARCHITECTURE_REGISTER_FILE;
 
-   brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-   gen6_math(p, dst, op, src0, src1);
-
-   if (dispatch_width == 16) {
+   if (dispatch_width == 8) {
+      gen6_math(p, dst, op, src0, src1);
+   } else if (dispatch_width == 16) {
+      brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
+      gen6_math(p, firsthalf(dst), op, firsthalf(src0), firsthalf(src1));
       brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
       gen6_math(p, sechalf(dst), op, sechalf(src0),
                 binop ? sechalf(src1) : brw_null_reg());
@@ -328,19 +336,21 @@ fs_generator::generate_math_gen4(fs_inst *inst,
 
    assert(inst->mlen >= 1);
 
-   brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-   gen4_math(p, dst,
-	     op,
-	     inst->base_mrf, src,
-	     BRW_MATH_DATA_VECTOR,
-	     BRW_MATH_PRECISION_FULL);
-
-   if (dispatch_width == 16) {
+   if (dispatch_width == 8) {
+      gen4_math(p, dst,
+                op,
+                inst->base_mrf, src,
+                BRW_MATH_PRECISION_FULL);
+   } else if (dispatch_width == 16) {
+      brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
+      gen4_math(p, firsthalf(dst),
+	        op,
+	        inst->base_mrf, firsthalf(src),
+	        BRW_MATH_PRECISION_FULL);
       brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
       gen4_math(p, sechalf(dst),
 	        op,
 	        inst->base_mrf + 1, sechalf(src),
-	        BRW_MATH_DATA_VECTOR,
 	        BRW_MATH_PRECISION_FULL);
 
       brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
@@ -366,7 +376,6 @@ fs_generator::generate_math_g45(fs_inst *inst,
    gen4_math(p, dst,
              op,
              inst->base_mrf, src,
-             BRW_MATH_DATA_VECTOR,
              BRW_MATH_PRECISION_FULL);
 }
 
@@ -376,7 +385,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
 {
    int msg_type = -1;
    int rlen = 4;
-   uint32_t simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD8;
+   uint32_t simd_mode;
    uint32_t return_format;
 
    switch (dst.type) {
@@ -391,9 +400,16 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
       break;
    }
 
-   if (dispatch_width == 16 &&
-      !inst->force_uncompressed && !inst->force_sechalf)
+   switch (inst->exec_size) {
+   case 8:
+      simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD8;
+      break;
+   case 16:
       simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD16;
+      break;
+   default:
+      unreachable("Invalid width for texture instruction");
+   }
 
    if (brw->gen >= 5) {
       switch (inst->opcode) {
@@ -530,15 +546,8 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
       dst = vec16(dst);
    }
 
-   if (brw->gen >= 7 && inst->header_present && dispatch_width == 16) {
-      /* The send-from-GRF for SIMD16 texturing with a header has an extra
-       * hardware register allocated to it, which we need to skip over (since
-       * our coordinates in the payload are in the even-numbered registers,
-       * and the header comes right before the first one).
-       */
-      assert(src.file == BRW_GENERAL_REGISTER_FILE);
-      src.nr++;
-   }
+   assert(brw->gen < 7 || !inst->header_present ||
+          src.file == BRW_GENERAL_REGISTER_FILE);
 
    assert(sampler_index.type == BRW_REGISTER_TYPE_UD);
 
@@ -579,8 +588,8 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
 
    uint32_t base_binding_table_index = (inst->opcode == SHADER_OPCODE_TG4 ||
          inst->opcode == SHADER_OPCODE_TG4_OFFSET)
-         ? prog_data->base.binding_table.gather_texture_start
-         : prog_data->base.binding_table.texture_start;
+         ? prog_data->binding_table.gather_texture_start
+         : prog_data->binding_table.texture_start;
 
    if (sampler_index.file == BRW_IMMEDIATE_VALUE) {
       uint32_t sampler = sampler_index.dw1.ud;
@@ -598,7 +607,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
                  simd_mode,
                  return_format);
 
-      brw_mark_surface_used(&prog_data->base, sampler + base_binding_table_index);
+      brw_mark_surface_used(prog_data, sampler + base_binding_table_index);
    } else {
       /* Non-const sampler index */
       /* Note: this clobbers `dst` as a temporary before emitting the send */
@@ -691,6 +700,9 @@ fs_generator::generate_ddx(fs_inst *inst, struct brw_reg dst, struct brw_reg src
    assert(quality.file == BRW_IMMEDIATE_VALUE);
    assert(quality.type == BRW_REGISTER_TYPE_D);
 
+   assert(stage == MESA_SHADER_FRAGMENT);
+   const brw_wm_prog_key * const key = (brw_wm_prog_key * const) this->key;
+
    int quality_value = quality.dw1.d;
 
    if (quality_value == BRW_DERIVATIVE_FINE ||
@@ -706,12 +718,14 @@ fs_generator::generate_ddx(fs_inst *inst, struct brw_reg dst, struct brw_reg src
    }
 
    struct brw_reg src0 = brw_reg(src.file, src.nr, 1,
+                                 src.negate, src.abs,
 				 BRW_REGISTER_TYPE_F,
 				 vstride,
 				 width,
 				 BRW_HORIZONTAL_STRIDE_0,
 				 BRW_SWIZZLE_XYZW, WRITEMASK_XYZW);
    struct brw_reg src1 = brw_reg(src.file, src.nr, 0,
+                                 src.negate, src.abs,
 				 BRW_REGISTER_TYPE_F,
 				 vstride,
 				 width,
@@ -730,6 +744,9 @@ fs_generator::generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src
 {
    assert(quality.file == BRW_IMMEDIATE_VALUE);
    assert(quality.type == BRW_REGISTER_TYPE_D);
+
+   assert(stage == MESA_SHADER_FRAGMENT);
+   const brw_wm_prog_key * const key = (brw_wm_prog_key * const) this->key;
 
    int quality_value = quality.dw1.d;
 
@@ -761,12 +778,14 @@ fs_generator::generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src
 
       /* produce accurate derivatives */
       struct brw_reg src0 = brw_reg(src.file, src.nr, 0,
+                                    src.negate, src.abs,
                                     BRW_REGISTER_TYPE_F,
                                     BRW_VERTICAL_STRIDE_4,
                                     BRW_WIDTH_4,
                                     BRW_HORIZONTAL_STRIDE_1,
                                     BRW_SWIZZLE_XYXY, WRITEMASK_XYZW);
       struct brw_reg src1 = brw_reg(src.file, src.nr, 0,
+                                    src.negate, src.abs,
                                     BRW_REGISTER_TYPE_F,
                                     BRW_VERTICAL_STRIDE_4,
                                     BRW_WIDTH_4,
@@ -774,17 +793,18 @@ fs_generator::generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src
                                     BRW_SWIZZLE_ZWZW, WRITEMASK_XYZW);
       brw_push_insn_state(p);
       brw_set_default_access_mode(p, BRW_ALIGN_16);
-      if (unroll_to_simd8)
-         brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-      if (negate_value)
-         brw_ADD(p, dst, src1, negate(src0));
-      else
-         brw_ADD(p, dst, src0, negate(src1));
       if (unroll_to_simd8) {
-         brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
-         src0 = sechalf(src0);
-         src1 = sechalf(src1);
-         dst = sechalf(dst);
+         brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
+         if (negate_value) {
+            brw_ADD(p, firsthalf(dst), firsthalf(src1), negate(firsthalf(src0)));
+            brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
+            brw_ADD(p, sechalf(dst), sechalf(src1), negate(sechalf(src0)));
+         } else {
+            brw_ADD(p, firsthalf(dst), firsthalf(src0), negate(firsthalf(src1)));
+            brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
+            brw_ADD(p, sechalf(dst), sechalf(src0), negate(sechalf(src1)));
+         }
+      } else {
          if (negate_value)
             brw_ADD(p, dst, src1, negate(src0));
          else
@@ -794,12 +814,14 @@ fs_generator::generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src
    } else {
       /* replicate the derivative at the top-left pixel to other pixels */
       struct brw_reg src0 = brw_reg(src.file, src.nr, 0,
+                                    src.negate, src.abs,
                                     BRW_REGISTER_TYPE_F,
                                     BRW_VERTICAL_STRIDE_4,
                                     BRW_WIDTH_4,
                                     BRW_HORIZONTAL_STRIDE_0,
                                     BRW_SWIZZLE_XYZW, WRITEMASK_XYZW);
       struct brw_reg src1 = brw_reg(src.file, src.nr, 2,
+                                    src.negate, src.abs,
                                     BRW_REGISTER_TYPE_F,
                                     BRW_VERTICAL_STRIDE_4,
                                     BRW_WIDTH_4,
@@ -835,10 +857,10 @@ fs_generator::generate_scratch_write(fs_inst *inst, struct brw_reg src)
    assert(inst->mlen != 0);
 
    brw_MOV(p,
-	   retype(brw_message_reg(inst->base_mrf + 1), BRW_REGISTER_TYPE_UD),
+	   brw_uvec_mrf(inst->exec_size, (inst->base_mrf + 1), 0),
 	   retype(src, BRW_REGISTER_TYPE_UD));
    brw_oword_block_write_scratch(p, brw_message_reg(inst->base_mrf),
-                                 dispatch_width / 8, inst->offset);
+                                 inst->exec_size / 8, inst->offset);
 }
 
 void
@@ -847,13 +869,13 @@ fs_generator::generate_scratch_read(fs_inst *inst, struct brw_reg dst)
    assert(inst->mlen != 0);
 
    brw_oword_block_read_scratch(p, dst, brw_message_reg(inst->base_mrf),
-                                dispatch_width / 8, inst->offset);
+                                inst->exec_size / 8, inst->offset);
 }
 
 void
 fs_generator::generate_scratch_read_gen7(fs_inst *inst, struct brw_reg dst)
 {
-   gen7_block_read_scratch(p, dst, dispatch_width / 8, inst->offset);
+   gen7_block_read_scratch(p, dst, inst->exec_size / 8, inst->offset);
 }
 
 void
@@ -875,7 +897,7 @@ fs_generator::generate_uniform_pull_constant_load(fs_inst *inst,
    brw_oword_block_read(p, dst, brw_message_reg(inst->base_mrf),
 			read_offset, surf_index);
 
-   brw_mark_surface_used(&prog_data->base, surf_index);
+   brw_mark_surface_used(prog_data, surf_index);
 }
 
 void
@@ -919,7 +941,7 @@ fs_generator::generate_uniform_pull_constant_load_gen7(fs_inst *inst,
                               BRW_SAMPLER_SIMD_MODE_SIMD4X2,
                               0);
 
-      brw_mark_surface_used(&prog_data->base, surf_index);
+      brw_mark_surface_used(prog_data, surf_index);
 
    } else {
 
@@ -1033,7 +1055,7 @@ fs_generator::generate_varying_pull_constant_load(fs_inst *inst,
                            simd_mode,
                            return_format);
 
-   brw_mark_surface_used(&prog_data->base, surf_index);
+   brw_mark_surface_used(prog_data, surf_index);
 }
 
 void
@@ -1066,7 +1088,7 @@ fs_generator::generate_varying_pull_constant_load_gen7(fs_inst *inst,
       uint32_t surf_index = index.dw1.ud;
 
       brw_inst *send = brw_next_insn(p, BRW_OPCODE_SEND);
-      brw_set_dest(p, send, dst);
+      brw_set_dest(p, send, retype(dst, BRW_REGISTER_TYPE_UW));
       brw_set_src0(p, send, offset);
       brw_set_sampler_message(p, send,
                               surf_index,
@@ -1078,7 +1100,7 @@ fs_generator::generate_varying_pull_constant_load_gen7(fs_inst *inst,
                               simd_mode,
                               0);
 
-      brw_mark_surface_used(&prog_data->base, surf_index);
+      brw_mark_surface_used(prog_data, surf_index);
 
    } else {
 
@@ -1115,7 +1137,7 @@ fs_generator::generate_varying_pull_constant_load_gen7(fs_inst *inst,
 
       /* dst = send(offset, a0.0) */
       brw_inst *insn_send = brw_next_insn(p, BRW_OPCODE_SEND);
-      brw_set_dest(p, insn_send, dst);
+      brw_set_dest(p, insn_send, retype(dst, BRW_REGISTER_TYPE_UW));
       brw_set_src0(p, insn_send, offset);
       brw_set_indirect_send_descriptor(p, insn_send, BRW_SFID_SAMPLER, addr);
 
@@ -1195,7 +1217,20 @@ brw_reg_from_fs_reg(fs_reg *reg)
    case MRF:
       if (reg->stride == 0) {
          brw_reg = brw_vec1_reg(brw_file_from_reg(reg), reg->reg, 0);
+      } else if (reg->width < 8) {
+         brw_reg = brw_vec8_reg(brw_file_from_reg(reg), reg->reg, 0);
+         brw_reg = stride(brw_reg, reg->width * reg->stride,
+                          reg->width, reg->stride);
       } else {
+         /* From the Haswell PRM:
+          *
+          * VertStride must be used to cross GRF register boundaries. This
+          * rule implies that elements within a 'Width' cannot cross GRF
+          * boundaries.
+          *
+          * So, for registers with width > 8, we have to use a width of 8
+          * and trust the compression state to sort out the exec size.
+          */
          brw_reg = brw_vec8_reg(brw_file_from_reg(reg), reg->reg, 0);
          brw_reg = stride(brw_reg, 8 * reg->stride, 8, reg->stride);
       }
@@ -1314,9 +1349,12 @@ fs_generator::generate_set_sample_id(fs_inst *inst,
    brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
    brw_set_default_mask_control(p, BRW_MASK_DISABLE);
    struct brw_reg reg = retype(stride(src1, 1, 4, 0), BRW_REGISTER_TYPE_UW);
-   brw_ADD(p, dst, src0, reg);
-   if (dispatch_width == 16)
-      brw_ADD(p, offset(dst, 1), offset(src0, 1), suboffset(reg, 2));
+   if (dispatch_width == 8) {
+      brw_ADD(p, dst, src0, reg);
+   } else if (dispatch_width == 16) {
+      brw_ADD(p, firsthalf(dst), firsthalf(src0), reg);
+      brw_ADD(p, sechalf(dst), sechalf(src0), suboffset(reg, 2));
+   }
    brw_pop_insn_state(p);
 }
 
@@ -1441,15 +1479,16 @@ fs_generator::generate_shader_time_add(fs_inst *inst,
    brw_MOV(p, payload_offset, offset);
    brw_MOV(p, payload_value, value);
    brw_shader_time_add(p, payload,
-                       prog_data->base.binding_table.shader_time_start);
+                       prog_data->binding_table.shader_time_start);
    brw_pop_insn_state(p);
 
-   brw_mark_surface_used(&prog_data->base,
-                         prog_data->base.binding_table.shader_time_start);
+   brw_mark_surface_used(prog_data,
+                         prog_data->binding_table.shader_time_start);
 }
 
 void
 fs_generator::generate_untyped_atomic(fs_inst *inst, struct brw_reg dst,
+                                      struct brw_reg payload,
                                       struct brw_reg atomic_op,
                                       struct brw_reg surf_index)
 {
@@ -1458,31 +1497,40 @@ fs_generator::generate_untyped_atomic(fs_inst *inst, struct brw_reg dst,
           surf_index.file == BRW_IMMEDIATE_VALUE &&
 	  surf_index.type == BRW_REGISTER_TYPE_UD);
 
-   brw_untyped_atomic(p, dst, brw_message_reg(inst->base_mrf),
-                      atomic_op.dw1.ud, surf_index.dw1.ud,
-                      inst->mlen, dispatch_width / 8);
+   brw_untyped_atomic(p, dst, payload, atomic_op.dw1.ud, surf_index.dw1.ud,
+                      inst->mlen, inst->exec_size / 8);
 
-   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
+   brw_mark_surface_used(prog_data, surf_index.dw1.ud);
 }
 
 void
 fs_generator::generate_untyped_surface_read(fs_inst *inst, struct brw_reg dst,
+                                            struct brw_reg payload,
                                             struct brw_reg surf_index)
 {
    assert(surf_index.file == BRW_IMMEDIATE_VALUE &&
 	  surf_index.type == BRW_REGISTER_TYPE_UD);
 
-   brw_untyped_surface_read(p, dst, brw_message_reg(inst->base_mrf),
+   brw_untyped_surface_read(p, dst, payload,
                             surf_index.dw1.ud,
-                            inst->mlen, dispatch_width / 8);
+                            inst->mlen, inst->exec_size / 8);
 
-   brw_mark_surface_used(&prog_data->base, surf_index.dw1.ud);
+   brw_mark_surface_used(prog_data, surf_index.dw1.ud);
 }
 
-void
-fs_generator::generate_code(const cfg_t *cfg)
+int
+fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
 {
+   /* align to 64 byte boundary. */
+   while (p->next_insn_offset % 64)
+      brw_NOP(p);
+
+   this->dispatch_width = dispatch_width;
+   if (dispatch_width == 16)
+      brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
+
    int start_offset = p->next_insn_offset;
+   int loop_count = 0;
 
    struct annotation_info annotation;
    memset(&annotation, 0, sizeof(annotation));
@@ -1516,12 +1564,25 @@ fs_generator::generate_code(const cfg_t *cfg)
       brw_set_default_mask_control(p, inst->force_writemask_all);
       brw_set_default_acc_write_control(p, inst->writes_accumulator);
 
-      if (inst->force_uncompressed || dispatch_width == 8) {
-	 brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-      } else if (inst->force_sechalf) {
-	 brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
-      } else {
-	 brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
+      switch (inst->exec_size) {
+      case 1:
+      case 2:
+      case 4:
+         assert(inst->force_writemask_all);
+         brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
+         break;
+      case 8:
+         if (inst->force_sechalf) {
+            brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
+         } else {
+            brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
+         }
+         break;
+      case 16:
+         brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
+         break;
+      default:
+         unreachable(!"Invalid instruction width");
       }
 
       switch (inst->opcode) {
@@ -1546,7 +1607,7 @@ fs_generator::generate_code(const cfg_t *cfg)
 	 brw_set_default_access_mode(p, BRW_ALIGN_16);
          if (dispatch_width == 16 && brw->gen < 8 && !brw->is_haswell) {
 	    brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-	    brw_MAD(p, dst, src[0], src[1], src[2]);
+	    brw_MAD(p, firsthalf(dst), firsthalf(src[0]), firsthalf(src[1]), firsthalf(src[2]));
 	    brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
 	    brw_MAD(p, sechalf(dst), sechalf(src[0]), sechalf(src[1]), sechalf(src[2]));
 	    brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
@@ -1561,7 +1622,7 @@ fs_generator::generate_code(const cfg_t *cfg)
 	 brw_set_default_access_mode(p, BRW_ALIGN_16);
          if (dispatch_width == 16 && brw->gen < 8 && !brw->is_haswell) {
 	    brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-	    brw_LRP(p, dst, src[0], src[1], src[2]);
+	    brw_LRP(p, firsthalf(dst), firsthalf(src[0]), firsthalf(src[1]), firsthalf(src[2]));
 	    brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
 	    brw_LRP(p, sechalf(dst), sechalf(src[0]), sechalf(src[1]), sechalf(src[2]));
 	    brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
@@ -1657,7 +1718,7 @@ fs_generator::generate_code(const cfg_t *cfg)
          brw_set_default_access_mode(p, BRW_ALIGN_16);
          if (dispatch_width == 16 && brw->gen < 8 && !brw->is_haswell) {
             brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-            brw_BFE(p, dst, src[0], src[1], src[2]);
+            brw_BFE(p, firsthalf(dst), firsthalf(src[0]), firsthalf(src[1]), firsthalf(src[2]));
             brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
             brw_BFE(p, sechalf(dst), sechalf(src[0]), sechalf(src[1]), sechalf(src[2]));
             brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
@@ -1676,7 +1737,7 @@ fs_generator::generate_code(const cfg_t *cfg)
           */
          if (dispatch_width == 16 && brw->is_haswell) {
             brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-            brw_BFI1(p, dst, src[0], src[1]);
+            brw_BFI1(p, firsthalf(dst), firsthalf(src[0]), firsthalf(src[1]));
             brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
             brw_BFI1(p, sechalf(dst), sechalf(src[0]), sechalf(src[1]));
             brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
@@ -1695,9 +1756,9 @@ fs_generator::generate_code(const cfg_t *cfg)
           * Otherwise we would be able to emit compressed instructions like we
           * do for the other three-source instructions.
           */
-         if (dispatch_width == 16) {
+         if (dispatch_width == 16 && brw->gen < 8) {
             brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-            brw_BFI2(p, dst, src[0], src[1], src[2]);
+            brw_BFI2(p, firsthalf(dst), firsthalf(src[0]), firsthalf(src[1]), firsthalf(src[2]));
             brw_set_default_compression_control(p, BRW_COMPRESSION_2NDHALF);
             brw_BFI2(p, sechalf(dst), sechalf(src[0]), sechalf(src[1]), sechalf(src[2]));
             brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
@@ -1739,6 +1800,7 @@ fs_generator::generate_code(const cfg_t *cfg)
 
       case BRW_OPCODE_WHILE:
 	 brw_WHILE(p);
+         loop_count++;
 	 break;
 
       case SHADER_OPCODE_RCP:
@@ -1805,8 +1867,10 @@ fs_generator::generate_code(const cfg_t *cfg)
          /* Make sure fp->UsesDFdy flag got set (otherwise there's no
           * guarantee that key->render_to_fbo is set).
           */
-         assert(fp->UsesDFdy);
-	 generate_ddy(inst, dst, src[0], src[1], key->render_to_fbo);
+         assert(stage == MESA_SHADER_FRAGMENT &&
+                ((gl_fragment_program *) prog)->UsesDFdy);
+         generate_ddy(inst, dst, src[0], src[1],
+                      ((brw_wm_prog_key * const) this->key)->render_to_fbo);
 	 break;
 
       case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
@@ -1839,7 +1903,7 @@ fs_generator::generate_code(const cfg_t *cfg)
 
       case FS_OPCODE_REP_FB_WRITE:
       case FS_OPCODE_FB_WRITE:
-	 generate_fb_write(inst);
+	 generate_fb_write(inst, src[0]);
 	 break;
 
       case FS_OPCODE_BLORP_FB_WRITE:
@@ -1859,11 +1923,11 @@ fs_generator::generate_code(const cfg_t *cfg)
          break;
 
       case SHADER_OPCODE_UNTYPED_ATOMIC:
-         generate_untyped_atomic(inst, dst, src[0], src[1]);
+         generate_untyped_atomic(inst, dst, src[0], src[1], src[2]);
          break;
 
       case SHADER_OPCODE_UNTYPED_SURFACE_READ:
-         generate_untyped_surface_read(inst, dst, src[0]);
+         generate_untyped_surface_read(inst, dst, src[0], src[1]);
          break;
 
       case FS_OPCODE_SET_SIMD4X2_OFFSET:
@@ -1953,57 +2017,33 @@ fs_generator::generate_code(const cfg_t *cfg)
    int after_size = p->next_insn_offset - start_offset;
 
    if (unlikely(debug_flag)) {
-      if (prog) {
+      if (shader_prog) {
          fprintf(stderr,
                  "Native code for %s fragment shader %d (SIMD%d dispatch):\n",
-                 prog->Label ? prog->Label : "unnamed",
-                 prog->Name, dispatch_width);
-      } else if (fp) {
+                 shader_prog->Label ? shader_prog->Label : "unnamed",
+                 shader_prog->Name, dispatch_width);
+      } else if (prog) {
          fprintf(stderr,
                  "Native code for fragment program %d (SIMD%d dispatch):\n",
-                 fp->Base.Id, dispatch_width);
+                 prog->Id, dispatch_width);
       } else {
          fprintf(stderr, "Native code for blorp program (SIMD%d dispatch):\n",
                  dispatch_width);
       }
-      fprintf(stderr, "SIMD%d shader: %d instructions. Compacted %d to %d"
+      fprintf(stderr, "SIMD%d shader: %d instructions. %d loops. Compacted %d to %d"
                       " bytes (%.0f%%)\n",
-              dispatch_width, before_size / 16, before_size, after_size,
+              dispatch_width, before_size / 16, loop_count, before_size, after_size,
               100.0f * (before_size - after_size) / before_size);
-
-      const struct gl_program *prog = fp ? &fp->Base : NULL;
 
       dump_assembly(p->store, annotation.ann_count, annotation.ann, brw, prog);
       ralloc_free(annotation.ann);
    }
+
+   return start_offset;
 }
 
 const unsigned *
-fs_generator::generate_assembly(const cfg_t *simd8_cfg,
-                                const cfg_t *simd16_cfg,
-                                unsigned *assembly_size)
+fs_generator::get_assembly(unsigned int *assembly_size)
 {
-   assert(simd8_cfg || simd16_cfg);
-
-   if (simd8_cfg) {
-      dispatch_width = 8;
-      generate_code(simd8_cfg);
-   }
-
-   if (simd16_cfg) {
-      /* align to 64 byte boundary. */
-      while (p->next_insn_offset % 64) {
-         brw_NOP(p);
-      }
-
-      /* Save off the start of this SIMD16 program */
-      prog_data->prog_offset_16 = p->next_insn_offset;
-
-      brw_set_default_compression_control(p, BRW_COMPRESSION_COMPRESSED);
-
-      dispatch_width = 16;
-      generate_code(simd16_cfg);
-   }
-
    return brw_get_program(p, assembly_size);
 }

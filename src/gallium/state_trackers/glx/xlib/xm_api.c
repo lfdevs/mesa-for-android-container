@@ -592,7 +592,7 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
     * which can help Brian figure out what's going on when a user
     * reports bugs.
     */
-   if (_mesa_getenv("MESA_INFO")) {
+   if (getenv("MESA_INFO")) {
       printf("X/Mesa visual = %p\n", (void *) v);
       printf("X/Mesa level = %d\n", v->mesa_visual.level);
       printf("X/Mesa depth = %d\n", v->visinfo->depth);
@@ -686,7 +686,7 @@ XMesaVisual XMesaCreateVisual( Display *display,
       return NULL;
 
    /* For debugging only */
-   if (_mesa_getenv("MESA_XSYNC")) {
+   if (getenv("MESA_XSYNC")) {
       /* This makes debugging X easier.
        * In your debugger, set a breakpoint on _XError to stop when an
        * X protocol error is generated.
@@ -866,12 +866,12 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
    XMesaContext c;
 
    if (!xmdpy)
-      return NULL;
+      goto no_xmesa_context;
 
    /* Note: the XMesaContext contains a Mesa struct gl_context struct (inheritance) */
    c = (XMesaContext) CALLOC_STRUCT(xmesa_context);
    if (!c)
-      return NULL;
+      goto no_xmesa_context;
 
    c->xm_visual = v;
    c->xm_buffer = NULL;   /* set later by XMesaMakeCurrent */
@@ -888,40 +888,56 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
    if (contextFlags & GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB)
       attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
 
-   /* There are no profiles before OpenGL 3.2.  The
-    * GLX_ARB_create_context_profile spec says:
-    *
-    *     "If the requested OpenGL version is less than 3.2,
-    *     GLX_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality of the
-    *     context is determined solely by the requested version."
-    *
-    * The spec also says:
-    *
-    *     "The default value for GLX_CONTEXT_PROFILE_MASK_ARB is
-    *     GLX_CONTEXT_CORE_PROFILE_BIT_ARB."
-    *
-    * The spec also says:
-    *
-    *     "If version 3.1 is requested, the context returned may implement
-    *     any of the following versions:
-    *
-    *       * Version 3.1. The GL_ARB_compatibility extension may or may not
-    *         be implemented, as determined by the implementation.
-    *       * The core profile of version 3.2 or greater."
-    *
-    * and because Mesa doesn't support GL_ARB_compatibility, the only chance to
-    * honour a 3.1 context is through core profile.
-    */
-   attribs.profile = ST_PROFILE_DEFAULT;
-   if (((major > 3 || (major == 3 && minor >= 2))
-        && ((profileMask & GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB) == 0)) ||
-       (major == 3 && minor == 1))
-      attribs.profile = ST_PROFILE_OPENGL_CORE;
+   switch (profileMask) {
+   case GLX_CONTEXT_CORE_PROFILE_BIT_ARB:
+      /* There are no profiles before OpenGL 3.2.  The
+       * GLX_ARB_create_context_profile spec says:
+       *
+       *     "If the requested OpenGL version is less than 3.2,
+       *     GLX_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality
+       *     of the context is determined solely by the requested version."
+       */
+      if (major > 3 || (major == 3 && minor >= 2)) {
+         attribs.profile = ST_PROFILE_OPENGL_CORE;
+         break;
+      }
+      /* fall-through */
+   case GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB:
+      /*
+       * The spec also says:
+       *
+       *     "If version 3.1 is requested, the context returned may implement
+       *     any of the following versions:
+       *
+       *       * Version 3.1. The GL_ARB_compatibility extension may or may not
+       *         be implemented, as determined by the implementation.
+       *       * The core profile of version 3.2 or greater."
+       *
+       * and because Mesa doesn't support GL_ARB_compatibility, the only chance to
+       * honour a 3.1 context is through core profile.
+       */
+      if (major == 3 && minor == 1) {
+         attribs.profile = ST_PROFILE_OPENGL_CORE;
+      } else {
+         attribs.profile = ST_PROFILE_DEFAULT;
+      }
+      break;
+   case GLX_CONTEXT_ES_PROFILE_BIT_EXT:
+      if (major >= 2) {
+         attribs.profile = ST_PROFILE_OPENGL_ES2;
+      } else {
+         attribs.profile = ST_PROFILE_OPENGL_ES1;
+      }
+      break;
+   default:
+      assert(0);
+      goto no_st;
+   }
 
    c->st = stapi->create_context(stapi, xmdpy->smapi, &attribs,
          &ctx_err, (share_list) ? share_list->st : NULL);
    if (c->st == NULL)
-      goto fail;
+      goto no_st;
 
    c->st->st_manager_private = (void *) c;
 
@@ -929,11 +945,9 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
 
    return c;
 
-fail:
-   if (c->st)
-      c->st->destroy(c->st);
-
+no_st:
    free(c);
+no_xmesa_context:
    return NULL;
 }
 

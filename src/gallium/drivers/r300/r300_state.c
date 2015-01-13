@@ -942,30 +942,6 @@ void r300_mark_fb_state_dirty(struct r300_context *r300,
     /* The size of the rest of atoms stays the same. */
 }
 
-static unsigned r300_get_num_samples(struct r300_context *r300)
-{
-    struct pipe_framebuffer_state* fb =
-            (struct pipe_framebuffer_state*)r300->fb_state.state;
-    unsigned i, num_samples;
-
-    if (!fb->nr_cbufs && !fb->zsbuf)
-        return 1;
-
-    num_samples = 6;
-
-    for (i = 0; i < fb->nr_cbufs; i++)
-        if (fb->cbufs[i])
-            num_samples = MIN2(num_samples, fb->cbufs[i]->texture->nr_samples);
-
-    if (fb->zsbuf)
-        num_samples = MIN2(num_samples, fb->zsbuf->texture->nr_samples);
-
-    if (!num_samples)
-        num_samples = 1;
-
-    return num_samples;
-}
-
 static void
 r300_set_framebuffer_state(struct pipe_context* pipe,
                            const struct pipe_framebuffer_state* state)
@@ -1073,7 +1049,7 @@ r300_set_framebuffer_state(struct pipe_context* pipe,
         }
     }
 
-    r300->num_samples = r300_get_num_samples(r300);
+    r300->num_samples = util_framebuffer_get_num_samples(state);
 
     /* Set up AA config. */
     if (r300->num_samples > 1) {
@@ -1414,6 +1390,7 @@ static void r300_bind_rs_state(struct pipe_context* pipe, void* state)
     boolean last_two_sided_color = r300->two_sided_color;
     boolean last_msaa_enable = r300->msaa_enable;
     boolean last_flatshade = r300->flatshade;
+    boolean last_clip_halfz = r300->clip_halfz;
 
     if (r300->draw && rs) {
         draw_set_rasterizer_state(r300->draw, &rs->rs_draw, state);
@@ -1425,12 +1402,14 @@ static void r300_bind_rs_state(struct pipe_context* pipe, void* state)
         r300->two_sided_color = rs->rs.light_twoside;
         r300->msaa_enable = rs->rs.multisample;
         r300->flatshade = rs->rs.flatshade;
+        r300->clip_halfz = rs->rs.clip_halfz;
     } else {
         r300->polygon_offset_enabled = FALSE;
         r300->sprite_coord_enable = 0;
         r300->two_sided_color = FALSE;
         r300->msaa_enable = FALSE;
         r300->flatshade = FALSE;
+        r300->clip_halfz = FALSE;
     }
 
     UPDATE_STATE(state, r300->rs_state);
@@ -1451,6 +1430,10 @@ static void r300_bind_rs_state(struct pipe_context* pipe, void* state)
             r300->fs_status == FRAGMENT_SHADER_VALID) {
             r300->fs_status = FRAGMENT_SHADER_MAYBE_DIRTY;
         }
+    }
+
+    if (r300->screen->caps.has_tcl && last_clip_halfz != r300->clip_halfz) {
+        r300_mark_atom_dirty(r300, &r300->vs_state);
     }
 }
 

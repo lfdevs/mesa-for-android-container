@@ -151,8 +151,9 @@ libmesagallium_la_LIBADD = \
 	$(ARCH_LIBS)
 
 libmesa_sse41_la_SOURCES = \
-	main/streaming-load-memcpy.c
-libmesa_sse41_la_CFLAGS = $(AM_CFLAGS) -msse4.1
+	main/streaming-load-memcpy.c \
+	main/sse_minmax.c
+libmesa_sse41_la_CFLAGS = $(AM_CFLAGS) $(SSE41_CFLAGS)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = gl.pc

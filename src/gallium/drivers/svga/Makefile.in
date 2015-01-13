@@ -36,6 +36,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+
 VPATH = @srcdir@
 am__is_gnu_make = test -n '$(MAKEFILE_LIST)' && test -n '$(MAKELEVEL)'
 am__make_running_with_option = \
@@ -103,7 +104,8 @@ host_triplet = @host@
 target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.sources \
 	$(top_srcdir)/src/gallium/Automake.inc $(srcdir)/Makefile.in \
-	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp
+	$(srcdir)/Makefile.am $(top_srcdir)/bin/depcomp \
+	$(noinst_HEADERS)
 @HAVE_DRISW_TRUE@am__append_1 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
@@ -114,8 +116,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 
 subdir = src/gallium/drivers/svga
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -130,24 +133,24 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsvga_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_1 = svgadump/svga_shader_dump.lo \
-	svgadump/svga_shader_op.lo svgadump/svga_dump.lo svga_cmd.lo \
-	svga_context.lo svga_draw.lo svga_draw_arrays.lo \
-	svga_draw_elements.lo svga_format.lo svga_pipe_blend.lo \
-	svga_pipe_blit.lo svga_pipe_clear.lo svga_pipe_constants.lo \
-	svga_pipe_depthstencil.lo svga_pipe_draw.lo svga_pipe_flush.lo \
-	svga_pipe_fs.lo svga_pipe_misc.lo svga_pipe_query.lo \
-	svga_pipe_rasterizer.lo svga_pipe_sampler.lo \
-	svga_pipe_vertex.lo svga_pipe_vs.lo svga_screen.lo \
-	svga_screen_cache.lo svga_shader.lo svga_state.lo \
-	svga_state_need_swtnl.lo svga_state_constants.lo \
-	svga_state_framebuffer.lo svga_state_rss.lo svga_state_tss.lo \
-	svga_state_vdecl.lo svga_state_fs.lo svga_state_vs.lo \
+am__objects_1 = svga_cmd.lo svga_context.lo svga_draw_arrays.lo \
+	svga_draw.lo svga_draw_elements.lo svga_format.lo \
+	svga_pipe_blend.lo svga_pipe_blit.lo svga_pipe_clear.lo \
+	svga_pipe_constants.lo svga_pipe_depthstencil.lo \
+	svga_pipe_draw.lo svga_pipe_flush.lo svga_pipe_fs.lo \
+	svga_pipe_misc.lo svga_pipe_query.lo svga_pipe_rasterizer.lo \
+	svga_pipe_sampler.lo svga_pipe_vertex.lo svga_pipe_vs.lo \
+	svga_resource_buffer.lo svga_resource_buffer_upload.lo \
+	svga_resource.lo svga_resource_texture.lo svga_sampler_view.lo \
+	svga_screen.lo svga_screen_cache.lo svga_shader.lo \
+	svga_state.lo svga_state_constants.lo \
+	svga_state_framebuffer.lo svga_state_fs.lo \
+	svga_state_need_swtnl.lo svga_state_rss.lo svga_state_tss.lo \
+	svga_state_vdecl.lo svga_state_vs.lo svga_surface.lo \
 	svga_swtnl_backend.lo svga_swtnl_draw.lo svga_swtnl_state.lo \
 	svga_tgsi.lo svga_tgsi_decl_sm30.lo svga_tgsi_insn.lo \
-	svga_sampler_view.lo svga_surface.lo svga_resource.lo \
-	svga_resource_texture.lo svga_resource_buffer.lo \
-	svga_resource_buffer_upload.lo
+	svgadump/svga_dump.lo svgadump/svga_shader_dump.lo \
+	svgadump/svga_shader_op.lo
 am_libsvga_la_OBJECTS = $(am__objects_1)
 libsvga_la_OBJECTS = $(am_libsvga_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -195,6 +198,7 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+HEADERS = $(noinst_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -241,6 +245,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -263,7 +268,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -336,11 +340,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -351,10 +358,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -368,7 +373,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -387,7 +391,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -451,6 +461,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -479,15 +490,19 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 C_SOURCES := \
-	svgadump/svga_shader_dump.c \
-	svgadump/svga_shader_op.c \
-	svgadump/svga_dump.c \
 	svga_cmd.c \
+	svga_cmd.h \
 	svga_context.c \
-	svga_draw.c \
+	svga_context.h \
+	svga_debug.h \
 	svga_draw_arrays.c \
+	svga_draw.c \
 	svga_draw_elements.c \
+	svga_draw.h \
+	svga_draw_private.h \
 	svga_format.c \
+	svga_format.h \
+	svga_hw_reg.h \
 	svga_pipe_blend.c \
 	svga_pipe_blit.c \
 	svga_pipe_clear.c \
@@ -502,30 +517,71 @@ C_SOURCES := \
 	svga_pipe_sampler.c \
 	svga_pipe_vertex.c \
 	svga_pipe_vs.c \
+	svga_public.h \
+	svga_resource_buffer.c \
+	svga_resource_buffer.h \
+	svga_resource_buffer_upload.c \
+	svga_resource_buffer_upload.h \
+	svga_resource.c \
+	svga_resource.h \
+	svga_resource_texture.c \
+	svga_resource_texture.h \
+	svga_sampler_view.c \
+	svga_sampler_view.h \
 	svga_screen.c \
 	svga_screen_cache.c \
+	svga_screen_cache.h \
+	svga_screen.h \
 	svga_shader.c \
+	svga_shader.h \
 	svga_state.c \
-	svga_state_need_swtnl.c \
 	svga_state_constants.c \
 	svga_state_framebuffer.c \
+	svga_state_fs.c \
+	svga_state.h \
+	svga_state_need_swtnl.c \
 	svga_state_rss.c \
 	svga_state_tss.c \
 	svga_state_vdecl.c \
-	svga_state_fs.c \
 	svga_state_vs.c \
+	svga_surface.c \
+	svga_surface.h \
 	svga_swtnl_backend.c \
 	svga_swtnl_draw.c \
+	svga_swtnl.h \
+	svga_swtnl_private.h \
 	svga_swtnl_state.c \
 	svga_tgsi.c \
 	svga_tgsi_decl_sm30.c \
+	svga_tgsi_emit.h \
+	svga_tgsi.h \
 	svga_tgsi_insn.c \
-	svga_sampler_view.c \
-	svga_surface.c \
-	svga_resource.c \
-	svga_resource_texture.c \
-	svga_resource_buffer.c \
-	svga_resource_buffer_upload.c 
+	svga_winsys.h \
+	\
+	svgadump/svga_dump.c \
+	svgadump/svga_dump.h \
+	svgadump/svga_shader_dump.c \
+	svgadump/svga_shader_dump.h \
+	svgadump/svga_shader.h \
+	svgadump/svga_shader_op.c \
+	svgadump/svga_shader_op.h
+
+SVGA_H_FILES := \
+	include/includeCheck.h \
+	include/svga3d_caps.h \
+	include/svga3d_cmd.h \
+	include/svga3d_devcaps.h \
+	include/svga3d_limits.h \
+	include/svga3d_reg.h \
+	include/svga3d_shaderdefs.h \
+	include/svga3d_surfacedefs.h \
+	include/svga3d_types.h \
+	include/svga_escape.h \
+	include/svga_overlay.h \
+	include/svga_reg.h \
+	include/svga_types.h \
+	include/vmware_pack_begin.h \
+	include/vmware_pack_end.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -546,6 +602,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -556,6 +613,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -586,12 +644,18 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS)
 
+noinst_HEADERS = $(SVGA_H_FILES)
 noinst_LTLIBRARIES = libsvga.la
 libsvga_la_SOURCES = $(C_SOURCES)
+EXTRA_DIST = Android.mk SConscript \
+	include/README \
+	svgadump/svga_dump.py
+
 all: all-am
 
 .SUFFIXES:
@@ -644,11 +708,11 @@ svgadump/$(am__dirstamp):
 svgadump/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) svgadump/$(DEPDIR)
 	@: > svgadump/$(DEPDIR)/$(am__dirstamp)
+svgadump/svga_dump.lo: svgadump/$(am__dirstamp) \
+	svgadump/$(DEPDIR)/$(am__dirstamp)
 svgadump/svga_shader_dump.lo: svgadump/$(am__dirstamp) \
 	svgadump/$(DEPDIR)/$(am__dirstamp)
 svgadump/svga_shader_op.lo: svgadump/$(am__dirstamp) \
-	svgadump/$(DEPDIR)/$(am__dirstamp)
-svgadump/svga_dump.lo: svgadump/$(am__dirstamp) \
 	svgadump/$(DEPDIR)/$(am__dirstamp)
 
 libsvga.la: $(libsvga_la_OBJECTS) $(libsvga_la_DEPENDENCIES) $(EXTRA_libsvga_la_DEPENDENCIES) 
@@ -825,7 +889,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES)
+all-am: Makefile $(LTLIBRARIES) $(HEADERS)
 installdirs:
 install: install-am
 install-exec: install-exec-am

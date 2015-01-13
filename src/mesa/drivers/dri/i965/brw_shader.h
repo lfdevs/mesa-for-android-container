@@ -78,6 +78,7 @@ struct backend_reg
 };
 
 struct cfg_t;
+struct bblock_t;
 
 #ifdef __cplusplus
 struct backend_instruction : public exec_node {
@@ -88,6 +89,11 @@ struct backend_instruction : public exec_node {
    bool can_do_saturate() const;
    bool reads_accumulator_implicitly() const;
    bool writes_accumulator_implicitly(struct brw_context *brw) const;
+
+   void remove(bblock_t *block);
+   void insert_after(bblock_t *block, backend_instruction *inst);
+   void insert_before(bblock_t *block, backend_instruction *inst);
+   void insert_before(bblock_t *block, exec_list *list);
 
    /**
     * True if the instruction has side effects other than writing to
@@ -176,7 +182,8 @@ public:
    virtual void invalidate_live_intervals() = 0;
 };
 
-uint32_t brw_texture_offset(struct gl_context *ctx, ir_constant *offset);
+uint32_t brw_texture_offset(struct gl_context *ctx, int *offsets,
+                            unsigned num_components);
 
 #endif /* __cplusplus */
 

@@ -120,10 +120,9 @@ static inline struct qpu_reg qpu_r3(void) { return qpu_rn(3); }
 static inline struct qpu_reg qpu_r4(void) { return qpu_rn(4); }
 static inline struct qpu_reg qpu_r5(void) { return qpu_rn(5); }
 
+uint64_t qpu_NOP(void);
 uint64_t qpu_a_MOV(struct qpu_reg dst, struct qpu_reg src);
 uint64_t qpu_m_MOV(struct qpu_reg dst, struct qpu_reg src);
-uint64_t qpu_a_NOP(void);
-uint64_t qpu_m_NOP(void);
 uint64_t qpu_a_alu2(enum qpu_op_add op, struct qpu_reg dst,
                     struct qpu_reg src0, struct qpu_reg src1);
 uint64_t qpu_m_alu2(enum qpu_op_mul op, struct qpu_reg dst,
@@ -131,6 +130,8 @@ uint64_t qpu_m_alu2(enum qpu_op_mul op, struct qpu_reg dst,
 uint64_t qpu_inst(uint64_t add, uint64_t mul);
 uint64_t qpu_load_imm_ui(struct qpu_reg dst, uint32_t val);
 uint64_t qpu_set_sig(uint64_t inst, uint32_t sig);
+uint64_t qpu_set_cond_add(uint64_t inst, uint32_t cond);
+uint64_t qpu_set_cond_mul(uint64_t inst, uint32_t cond);
 
 static inline uint64_t
 qpu_load_imm_f(struct qpu_reg dst, float val)

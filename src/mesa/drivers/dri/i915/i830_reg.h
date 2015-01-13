@@ -256,7 +256,7 @@
 
 #define _3DSTATE_MAP_COORD_TRANSFORM	((3<<29)|(0x1d<<24)|(0x8c<<16))
 #define DISABLE_TEX_TRANSFORM		(1<<28)
-#define TEXTURE_SET(x)			(x<<29)
+#define TEXTURE_SET(x)			((x)<<29)
 
 #define _3DSTATE_VERTEX_TRANSFORM	((3<<29)|(0x1d<<24)|(0x8b<<16))
 #define DISABLE_VIEWPORT_TRANSFORM	(1<<31)

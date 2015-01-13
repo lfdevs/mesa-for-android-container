@@ -32,36 +32,52 @@
  * there's no killing to worry about.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
 #include "vc4_qir.h"
 
 bool
-qir_opt_copy_propagation(struct qcompile *c)
+qir_opt_copy_propagation(struct vc4_compile *c)
 {
         bool progress = false;
         struct simple_node *node;
         bool debug = false;
         struct qreg *movs = calloc(c->num_temps, sizeof(struct qreg));
+        struct qinst **defs = calloc(c->num_temps, sizeof(struct qreg));
 
         foreach(node, &c->instructions) {
                 struct qinst *inst = (struct qinst *)node;
 
+                if (inst->dst.file == QFILE_TEMP)
+                        defs[inst->dst.index] = inst;
+
+                /* A single instruction can only read one uniform value.  (It
+                 * could maybe read the same uniform value in two operands,
+                 * but that doesn't seem important to do).
+                 */
+                bool reads_a_uniform = false;
+                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                        if (inst->src[i].file == QFILE_UNIF)
+                                reads_a_uniform = true;
+                }
+
                 for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
                         int index = inst->src[i].index;
                         if (inst->src[i].file == QFILE_TEMP &&
-                            movs[index].file == QFILE_TEMP) {
+                            (movs[index].file == QFILE_TEMP ||
+                             (movs[index].file == QFILE_UNIF &&
+                              !reads_a_uniform))) {
                                 if (debug) {
                                         fprintf(stderr, "Copy propagate: ");
-                                        qir_dump_inst(inst);
+                                        qir_dump_inst(c, inst);
                                         fprintf(stderr, "\n");
                                 }
 
                                 inst->src[i] = movs[index];
+                                if (movs[index].file == QFILE_UNIF)
+                                        reads_a_uniform = true;
 
                                 if (debug) {
                                         fprintf(stderr, "to: ");
-                                        qir_dump_inst(inst);
+                                        qir_dump_inst(c, inst);
                                         fprintf(stderr, "\n");
                                 }
 
@@ -69,10 +85,16 @@ qir_opt_copy_propagation(struct qcompile *c)
                         }
                 }
 
-                if (inst->op == QOP_MOV && inst->dst.file == QFILE_TEMP)
+                if (inst->op == QOP_MOV &&
+                    inst->dst.file == QFILE_TEMP &&
+                    (inst->src[0].file != QFILE_TEMP ||
+                     (defs[inst->src[0].index]->op != QOP_TEX_RESULT &&
+                      defs[inst->dst.index]->op != QOP_TLB_COLOR_READ))) {
                         movs[inst->dst.index] = inst->src[0];
+                }
         }
 
         free(movs);
+        free(defs);
         return progress;
 }

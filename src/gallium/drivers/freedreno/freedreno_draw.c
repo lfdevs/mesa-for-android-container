@@ -40,51 +40,6 @@
 #include "freedreno_util.h"
 
 
-static enum pc_di_index_size
-size2indextype(unsigned index_size)
-{
-	switch (index_size) {
-	case 1: return INDEX_SIZE_8_BIT;
-	case 2: return INDEX_SIZE_16_BIT;
-	case 4: return INDEX_SIZE_32_BIT;
-	}
-	DBG("unsupported index size: %d", index_size);
-	assert(0);
-	return INDEX_SIZE_IGN;
-}
-
-/* this is same for a2xx/a3xx, so split into helper: */
-void
-fd_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		enum pc_di_vis_cull_mode vismode,
-		const struct pipe_draw_info *info)
-{
-	struct pipe_index_buffer *idx = &ctx->indexbuf;
-	struct fd_bo *idx_bo = NULL;
-	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
-	enum pc_di_src_sel src_sel;
-	uint32_t idx_size, idx_offset;
-
-	if (info->indexed) {
-		assert(!idx->user_buffer);
-
-		idx_bo = fd_resource(idx->buffer)->bo;
-		idx_type = size2indextype(idx->index_size);
-		idx_size = idx->index_size * info->count;
-		idx_offset = idx->offset + (info->start * idx->index_size);
-		src_sel = DI_SRC_SEL_DMA;
-	} else {
-		idx_bo = NULL;
-		idx_type = INDEX_SIZE_IGN;
-		idx_size = 0;
-		idx_offset = 0;
-		src_sel = DI_SRC_SEL_AUTO_INDEX;
-	}
-
-	fd_draw(ctx, ring, ctx->primtypes[info->mode], vismode, src_sel,
-			info->count, idx_type, idx_size, idx_offset, idx_bo);
-}
-
 static void
 fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 {
@@ -152,13 +107,30 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	ctx->stats.prims_emitted +=
 		u_reduced_prims_for_vertices(info->mode, info->count);
 
-	/* any buffers that haven't been cleared, we need to restore: */
+	/* any buffers that haven't been cleared yet, we need to restore: */
 	ctx->restore |= buffers & (FD_BUFFER_ALL & ~ctx->cleared);
 	/* and any buffers used, need to be resolved: */
 	ctx->resolve |= buffers;
 
+	DBG("%x num_draws=%u (%s/%s)", buffers, ctx->num_draws,
+		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
+		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
+
 	fd_hw_query_set_stage(ctx, ctx->ring, FD_STAGE_DRAW);
-	ctx->draw(ctx, info);
+	ctx->draw_vbo(ctx, info);
+
+	/* if an app (or, well, piglit test) does many thousands of draws
+	 * without flush (or anything which implicitly flushes, like
+	 * changing render targets), we can exceed the ringbuffer size.
+	 * Since we don't currently have a sane way to wrapparound, and
+	 * we use the same buffer for both draw and tiling commands, for
+	 * now we need to do this hack and trigger flush if we are running
+	 * low on remaining space for cmds:
+	 */
+	if (((ctx->ring->cur - ctx->ring->start) >
+				(ctx->ring->size/4 - FD_TILING_COMMANDS_DWORDS)) ||
+			(fd_mesa_debug & FD_DBG_FLUSH))
+		fd_context_render(pctx);
 }
 
 /* TODO figure out how to make better use of existing state mechanism
@@ -173,8 +145,30 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct pipe_scissor_state *scissor = fd_context_get_scissor(ctx);
+	unsigned cleared_buffers;
 
-	ctx->cleared |= buffers;
+	/* for bookkeeping about which buffers have been cleared (and thus
+	 * can fully or partially skip mem2gmem) we need to ignore buffers
+	 * that have already had a draw, in case apps do silly things like
+	 * clear after draw (ie. if you only clear the color buffer, but
+	 * something like alpha-test causes side effects from the draw in
+	 * the depth buffer, etc)
+	 */
+	cleared_buffers = buffers & (FD_BUFFER_ALL & ~ctx->restore);
+
+	/* do we have full-screen scissor? */
+	if (!memcmp(scissor, &ctx->disabled_scissor, sizeof(*scissor))) {
+		ctx->cleared |= cleared_buffers;
+	} else {
+		ctx->partial_cleared |= cleared_buffers;
+		if (cleared_buffers & PIPE_CLEAR_COLOR)
+			ctx->cleared_scissor.color = *scissor;
+		if (cleared_buffers & PIPE_CLEAR_DEPTH)
+			ctx->cleared_scissor.depth = *scissor;
+		if (cleared_buffers & PIPE_CLEAR_STENCIL)
+			ctx->cleared_scissor.stencil = *scissor;
+	}
 	ctx->resolve |= buffers;
 	ctx->needs_flush = true;
 

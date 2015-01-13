@@ -749,16 +749,8 @@ static void print_instr(uint32_t *dwords, int level, int n)
 	uint32_t opc = instr_opc(instr);
 	const char *name;
 
-	printf("%s%04d[%08xx_%08xx] ", levels[level], n, dwords[1], dwords[0]);
-
-#if 0
-	/* print unknown bits: */
-	if (debug & PRINT_RAW)
-		printf("[%08xx_%08xx] ", dwords[1] & 0x001ff800, dwords[0] & 0x00000000);
-
 	if (debug & PRINT_VERBOSE)
-		printf("%d,%02d ", instr->opc_cat, opc);
-#endif
+		printf("%s%04d[%08xx_%08xx] ", levels[level], n, dwords[1], dwords[0]);
 
 	/* NOTE: order flags are printed is a bit fugly.. but for now I
 	 * try to match the order in llvm-a3xx disassembler for easy

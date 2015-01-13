@@ -14,6 +14,7 @@
 
 @SET_MAKE@
 
+
 VPATH = @srcdir@
 am__is_gnu_make = test -n '$(MAKEFILE_LIST)' && test -n '$(MAKELEVEL)'
 am__make_running_with_option = \
@@ -90,10 +91,12 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 @NEED_WINSYS_XLIB_TRUE@	-lX11 -lXext -lXfixes \
 @NEED_WINSYS_XLIB_TRUE@	$(LIBDRM_LIBS)
 
+noinst_PROGRAMS = ir3_compiler$(EXEEXT)
 subdir = src/gallium/drivers/freedreno
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -107,26 +110,25 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libfreedreno_la_LIBADD =
-am__objects_1 = freedreno_util.lo freedreno_lowering.lo \
-	freedreno_program.lo freedreno_query.lo freedreno_query_hw.lo \
-	freedreno_query_sw.lo freedreno_fence.lo freedreno_resource.lo \
-	freedreno_surface.lo freedreno_draw.lo freedreno_state.lo \
-	freedreno_texture.lo freedreno_context.lo freedreno_screen.lo \
-	freedreno_gmem.lo
+am__objects_1 = freedreno_context.lo freedreno_draw.lo \
+	freedreno_fence.lo freedreno_gmem.lo freedreno_program.lo \
+	freedreno_query.lo freedreno_query_hw.lo freedreno_query_sw.lo \
+	freedreno_resource.lo freedreno_screen.lo freedreno_state.lo \
+	freedreno_surface.lo freedreno_texture.lo freedreno_util.lo
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_2 = a2xx/fd2_blend.lo a2xx/fd2_compiler.lo \
-	a2xx/fd2_context.lo a2xx/fd2_draw.lo a2xx/fd2_emit.lo \
-	a2xx/fd2_gmem.lo a2xx/fd2_program.lo a2xx/fd2_rasterizer.lo \
-	a2xx/fd2_screen.lo a2xx/fd2_texture.lo a2xx/fd2_util.lo \
-	a2xx/fd2_zsa.lo a2xx/disasm-a2xx.lo a2xx/ir-a2xx.lo
+am__objects_2 = a2xx/disasm-a2xx.lo a2xx/fd2_blend.lo \
+	a2xx/fd2_compiler.lo a2xx/fd2_context.lo a2xx/fd2_draw.lo \
+	a2xx/fd2_emit.lo a2xx/fd2_gmem.lo a2xx/fd2_program.lo \
+	a2xx/fd2_rasterizer.lo a2xx/fd2_screen.lo a2xx/fd2_texture.lo \
+	a2xx/fd2_util.lo a2xx/fd2_zsa.lo a2xx/ir-a2xx.lo
 am__objects_3 = a3xx/fd3_blend.lo a3xx/fd3_context.lo a3xx/fd3_draw.lo \
 	a3xx/fd3_emit.lo a3xx/fd3_gmem.lo a3xx/fd3_program.lo \
 	a3xx/fd3_query.lo a3xx/fd3_rasterizer.lo a3xx/fd3_screen.lo \
 	a3xx/fd3_texture.lo a3xx/fd3_util.lo a3xx/fd3_zsa.lo
-am__objects_4 = ir3/disasm-a3xx.lo ir3/ir3_compiler.lo \
-	ir3/ir3_compiler_old.lo ir3/ir3_shader.lo ir3/ir3_cp.lo \
-	ir3/ir3_depth.lo ir3/ir3_dump.lo ir3/ir3_flatten.lo \
-	ir3/ir3_ra.lo ir3/ir3_sched.lo ir3/ir3.lo
+am__objects_4 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler.lo \
+	ir3/ir3_compiler_old.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
+	ir3/ir3_dump.lo ir3/ir3_flatten.lo ir3/ir3_ra.lo \
+	ir3/ir3_sched.lo ir3/ir3_shader.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4)
 libfreedreno_la_OBJECTS = $(am_libfreedreno_la_OBJECTS)
@@ -134,6 +136,16 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+PROGRAMS = $(noinst_PROGRAMS)
+am_ir3_compiler_OBJECTS = ir3/ir3_cmdline.$(OBJEXT)
+ir3_compiler_OBJECTS = $(am_ir3_compiler_OBJECTS)
+am__DEPENDENCIES_1 =
+am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+ir3_compiler_DEPENDENCIES = libfreedreno.la \
+	../../auxiliary/libgallium.la \
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_2) \
+	$(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -168,8 +180,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libfreedreno_la_SOURCES)
-DIST_SOURCES = $(libfreedreno_la_SOURCES)
+SOURCES = $(libfreedreno_la_SOURCES) $(ir3_compiler_SOURCES)
+DIST_SOURCES = $(libfreedreno_la_SOURCES) $(ir3_compiler_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -219,6 +231,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -241,7 +254,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -314,11 +326,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -329,10 +344,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -346,7 +359,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -365,7 +377,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -429,6 +447,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -457,64 +476,113 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 C_SOURCES := \
-	freedreno_util.c \
-	freedreno_lowering.c \
-	freedreno_program.c \
-	freedreno_query.c \
-	freedreno_query_hw.c \
-	freedreno_query_sw.c \
-	freedreno_fence.c \
-	freedreno_resource.c \
-	freedreno_surface.c \
-	freedreno_draw.c \
-	freedreno_state.c \
-	freedreno_texture.c \
+	adreno_common.xml.h \
+	adreno_pm4.xml.h \
+	disasm.h \
 	freedreno_context.c \
+	freedreno_context.h \
+	freedreno_draw.c \
+	freedreno_draw.h \
+	freedreno_fence.c \
+	freedreno_fence.h \
+	freedreno_gmem.c \
+	freedreno_gmem.h \
+	freedreno_program.c \
+	freedreno_program.h \
+	freedreno_query.c \
+	freedreno_query.h \
+	freedreno_query_hw.c \
+	freedreno_query_hw.h \
+	freedreno_query_sw.c \
+	freedreno_query_sw.h \
+	freedreno_resource.c \
+	freedreno_resource.h \
 	freedreno_screen.c \
-	freedreno_gmem.c
+	freedreno_screen.h \
+	freedreno_state.c \
+	freedreno_state.h \
+	freedreno_surface.c \
+	freedreno_surface.h \
+	freedreno_texture.c \
+	freedreno_texture.h \
+	freedreno_util.c \
+	freedreno_util.h
 
 a2xx_SOURCES := \
-	a2xx/fd2_blend.c \
-	a2xx/fd2_compiler.c \
-	a2xx/fd2_context.c \
-	a2xx/fd2_draw.c \
-	a2xx/fd2_emit.c \
-	a2xx/fd2_gmem.c \
-	a2xx/fd2_program.c \
-	a2xx/fd2_rasterizer.c \
-	a2xx/fd2_screen.c \
-	a2xx/fd2_texture.c \
-	a2xx/fd2_util.c \
-	a2xx/fd2_zsa.c \
+	a2xx/a2xx.xml.h \
 	a2xx/disasm-a2xx.c \
-	a2xx/ir-a2xx.c
+	a2xx/fd2_blend.c \
+	a2xx/fd2_blend.h \
+	a2xx/fd2_compiler.c \
+	a2xx/fd2_compiler.h \
+	a2xx/fd2_context.c \
+	a2xx/fd2_context.h \
+	a2xx/fd2_draw.c \
+	a2xx/fd2_draw.h \
+	a2xx/fd2_emit.c \
+	a2xx/fd2_emit.h \
+	a2xx/fd2_gmem.c \
+	a2xx/fd2_gmem.h \
+	a2xx/fd2_program.c \
+	a2xx/fd2_program.h \
+	a2xx/fd2_rasterizer.c \
+	a2xx/fd2_rasterizer.h \
+	a2xx/fd2_screen.c \
+	a2xx/fd2_screen.h \
+	a2xx/fd2_texture.c \
+	a2xx/fd2_texture.h \
+	a2xx/fd2_util.c \
+	a2xx/fd2_util.h \
+	a2xx/fd2_zsa.c \
+	a2xx/fd2_zsa.h \
+	a2xx/instr-a2xx.h \
+	a2xx/ir-a2xx.c \
+	a2xx/ir-a2xx.h
 
 a3xx_SOURCES := \
+	a3xx/a3xx.xml.h \
 	a3xx/fd3_blend.c \
+	a3xx/fd3_blend.h \
 	a3xx/fd3_context.c \
+	a3xx/fd3_context.h \
 	a3xx/fd3_draw.c \
+	a3xx/fd3_draw.h \
 	a3xx/fd3_emit.c \
+	a3xx/fd3_emit.h \
 	a3xx/fd3_gmem.c \
+	a3xx/fd3_gmem.h \
 	a3xx/fd3_program.c \
+	a3xx/fd3_program.h \
 	a3xx/fd3_query.c \
+	a3xx/fd3_query.h \
 	a3xx/fd3_rasterizer.c \
+	a3xx/fd3_rasterizer.h \
 	a3xx/fd3_screen.c \
+	a3xx/fd3_screen.h \
 	a3xx/fd3_texture.c \
+	a3xx/fd3_texture.h \
 	a3xx/fd3_util.c \
-	a3xx/fd3_zsa.c
+	a3xx/fd3_util.h \
+	a3xx/fd3_zsa.c \
+	a3xx/fd3_zsa.h
 
 ir3_SOURCES := \
 	ir3/disasm-a3xx.c \
+	ir3/instr-a3xx.h \
+	ir3/ir3.c \
 	ir3/ir3_compiler.c \
+	ir3/ir3_compiler.h \
 	ir3/ir3_compiler_old.c \
-	ir3/ir3_shader.c \
 	ir3/ir3_cp.c \
 	ir3/ir3_depth.c \
 	ir3/ir3_dump.c \
 	ir3/ir3_flatten.c \
+	ir3/ir3.h \
 	ir3/ir3_ra.c \
 	ir3/ir3_sched.c \
-	ir3/ir3.c
+	ir3/ir3_shader.c \
+	ir3/ir3_shader.h \
+	ir3/ir3_visitor.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -535,6 +603,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -545,6 +614,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -575,6 +645,7 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	-Wno-packed-bitfield-compat \
@@ -589,6 +660,17 @@ libfreedreno_la_SOURCES = \
 	$(a3xx_SOURCES) \
 	$(ir3_SOURCES)
 
+ir3_compiler_SOURCES = \
+	ir3/ir3_cmdline.c
+
+ir3_compiler_LDADD = \
+	libfreedreno.la \
+	../../auxiliary/libgallium.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(GALLIUM_COMMON_LIB_DEPS) \
+	$(FREEDRENO_LIBS)
+
+EXTRA_DIST = Android.mk
 all: all-am
 
 .SUFFIXES:
@@ -641,6 +723,8 @@ a2xx/$(am__dirstamp):
 a2xx/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) a2xx/$(DEPDIR)
 	@: > a2xx/$(DEPDIR)/$(am__dirstamp)
+a2xx/disasm-a2xx.lo: a2xx/$(am__dirstamp) \
+	a2xx/$(DEPDIR)/$(am__dirstamp)
 a2xx/fd2_blend.lo: a2xx/$(am__dirstamp) a2xx/$(DEPDIR)/$(am__dirstamp)
 a2xx/fd2_compiler.lo: a2xx/$(am__dirstamp) \
 	a2xx/$(DEPDIR)/$(am__dirstamp)
@@ -659,8 +743,6 @@ a2xx/fd2_texture.lo: a2xx/$(am__dirstamp) \
 	a2xx/$(DEPDIR)/$(am__dirstamp)
 a2xx/fd2_util.lo: a2xx/$(am__dirstamp) a2xx/$(DEPDIR)/$(am__dirstamp)
 a2xx/fd2_zsa.lo: a2xx/$(am__dirstamp) a2xx/$(DEPDIR)/$(am__dirstamp)
-a2xx/disasm-a2xx.lo: a2xx/$(am__dirstamp) \
-	a2xx/$(DEPDIR)/$(am__dirstamp)
 a2xx/ir-a2xx.lo: a2xx/$(am__dirstamp) a2xx/$(DEPDIR)/$(am__dirstamp)
 a3xx/$(am__dirstamp):
 	@$(MKDIR_P) a3xx
@@ -692,20 +774,35 @@ ir3/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) ir3/$(DEPDIR)
 	@: > ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/disasm-a3xx.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_compiler.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_compiler_old.lo: ir3/$(am__dirstamp) \
 	ir3/$(DEPDIR)/$(am__dirstamp)
-ir3/ir3_shader.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_cp.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_depth.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_dump.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_flatten.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_ra.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_sched.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
-ir3/ir3.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_shader.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 
 libfreedreno.la: $(libfreedreno_la_OBJECTS) $(libfreedreno_la_DEPENDENCIES) $(EXTRA_libfreedreno_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libfreedreno_la_OBJECTS) $(libfreedreno_la_LIBADD) $(LIBS)
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+ir3/ir3_cmdline.$(OBJEXT): ir3/$(am__dirstamp) \
+	ir3/$(DEPDIR)/$(am__dirstamp)
+
+ir3_compiler$(EXEEXT): $(ir3_compiler_OBJECTS) $(ir3_compiler_DEPENDENCIES) $(EXTRA_ir3_compiler_DEPENDENCIES) 
+	@rm -f ir3_compiler$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(ir3_compiler_OBJECTS) $(ir3_compiler_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -723,7 +820,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_fence.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_gmem.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_lowering.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_query_hw.Plo@am__quote@
@@ -762,6 +858,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@a3xx/$(DEPDIR)/fd3_zsa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/disasm-a3xx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cmdline.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler_old.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cp.Plo@am__quote@
@@ -889,7 +986,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS)
 installdirs:
 install: install-am
 install-exec: install-exec-am
@@ -930,7 +1027,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
-	mostlyclean-am
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR) a2xx/$(DEPDIR) a3xx/$(DEPDIR) ir3/$(DEPDIR)
@@ -1001,15 +1098,15 @@ uninstall-am:
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLTLIBRARIES cscopelist-am ctags \
-	ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
+	clean-libtool clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
 	tags tags-am uninstall uninstall-am

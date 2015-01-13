@@ -206,12 +206,12 @@ i915_emit_invarient_state(struct intel_context *intel)
    OUT_BATCH(_3DSTATE_LOAD_STATE_IMMEDIATE_1 | I1_LOAD_S(3) | (0));
    OUT_BATCH(0);
 
-   /* XXX: Use this */
-   OUT_BATCH(_3DSTATE_SCISSOR_ENABLE_CMD | DISABLE_SCISSOR_RECT);
-
    OUT_BATCH(_3DSTATE_SCISSOR_RECT_0_CMD);
    OUT_BATCH(0);
    OUT_BATCH(0);
+
+   /* XXX: Use this */
+   OUT_BATCH(_3DSTATE_SCISSOR_ENABLE_CMD | DISABLE_SCISSOR_RECT);
 
    OUT_BATCH(_3DSTATE_DEPTH_SUBRECT_DISABLE);
 
@@ -415,10 +415,10 @@ i915_emit_state(struct intel_context *intel)
 
       OUT_BATCH(state->Buffer[I915_DESTREG_DV0]);
       OUT_BATCH(state->Buffer[I915_DESTREG_DV1]);
-      OUT_BATCH(state->Buffer[I915_DESTREG_SENABLE]);
       OUT_BATCH(state->Buffer[I915_DESTREG_SR0]);
       OUT_BATCH(state->Buffer[I915_DESTREG_SR1]);
       OUT_BATCH(state->Buffer[I915_DESTREG_SR2]);
+      OUT_BATCH(state->Buffer[I915_DESTREG_SENABLE]);
 
       if (state->Buffer[I915_DESTREG_DRAWRECT0] != MI_NOOP)
          OUT_BATCH(state->Buffer[I915_DESTREG_DRAWRECT0]);

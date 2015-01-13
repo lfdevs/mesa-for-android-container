@@ -85,6 +85,19 @@ wrapper_sw_displaytarget(struct sw_displaytarget *dt)
 
 
 static boolean
+wsw_is_dt_format_supported(struct sw_winsys *ws,
+                           unsigned tex_usage,
+                           enum pipe_format format)
+{
+   struct wrapper_sw_winsys *wsw = wrapper_sw_winsys(ws);
+
+   return wsw->screen->is_format_supported(wsw->screen, format,
+                                           PIPE_TEXTURE_2D, 0,
+                                           PIPE_BIND_RENDER_TARGET |
+                                           PIPE_BIND_DISPLAY_TARGET);
+}
+
+static boolean
 wsw_dt_get_stride(struct wrapper_sw_displaytarget *wdt, unsigned *stride)
 {
    struct pipe_context *pipe = wdt->winsys->pipe;
@@ -276,6 +289,7 @@ wrapper_sw_winsys_wrap_pipe_screen(struct pipe_screen *screen)
    if (!wsw)
       goto err;
 
+   wsw->base.is_displaytarget_format_supported = wsw_is_dt_format_supported;
    wsw->base.displaytarget_create = wsw_dt_create;
    wsw->base.displaytarget_from_handle = wsw_dt_from_handle;
    wsw->base.displaytarget_get_handle = wsw_dt_get_handle;

@@ -52,7 +52,7 @@ AM_LDFLAGS += \
 	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/egl-static/egl.sym
 endif
 
-egldir = $(EGL_DRIVER_INSTALL_DIR)
+egldir = $(libdir)/egl
 egl_LTLIBRARIES = egl_gallium.la
 
 nodist_EXTRA_egl_gallium_la_SOURCES = dummy.cpp
@@ -123,7 +123,6 @@ egl_LTLIBRARIES += st_GL.la
 nodist_EXTRA_st_GL_la_SOURCES = dummy.cpp
 st_GL_la_SOURCES = st_GL.c
 
-st_GL_la_LDFLAGS = $(AM_LDFLAGS)
 # st_GL, built only when shared glapi is not enabled
 st_GL_la_LIBADD = \
 	$(top_builddir)/src/mesa/libmesagallium.la \
@@ -154,96 +153,31 @@ endif
 
 #if HAVE_GALLIUM_STATIC_TARGETS
 
-egl_gallium_la_LDFLAGS = $(AM_LDFLAGS)
-egl_gallium_la_CPPFLAGS = $(AM_CPPFLAGS)
+TARGET_DRIVERS =
+TARGET_CPPFLAGS =
+TARGET_LIB_DEPS =
 
-if HAVE_GALLIUM_I915
-egl_gallium_la_CPPFLAGS += -DGALLIUM_I915
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/i915/drm/libi915drm.la \
-	$(top_builddir)/src/gallium/drivers/i915/libi915.la \
-	$(INTEL_LIBS)
-endif
+include $(top_srcdir)/src/gallium/drivers/i915/Automake.inc
 
-if HAVE_GALLIUM_ILO
-egl_gallium_la_CPPFLAGS += -DGALLIUM_ILO
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
-	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
-	$(INTEL_LIBS)
-endif
+include $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc
 
-if HAVE_GALLIUM_NOUVEAU
-egl_gallium_la_CPPFLAGS += -DGALLIUM_NOUVEAU
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/nouveau/drm/libnouveaudrm.la \
-	$(top_builddir)/src/gallium/drivers/nouveau/libnouveau.la \
-	$(NOUVEAU_LIBS)
-endif
+include $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc
 
-if NEED_RADEON_DRM_WINSYS
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la
-endif
+include $(top_srcdir)/src/gallium/drivers/r300/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 
-if HAVE_GALLIUM_RADEON_COMMON
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la
-endif
+include $(top_srcdir)/src/gallium/drivers/svga/Automake.inc
 
-if HAVE_GALLIUM_R300
-egl_gallium_la_CPPFLAGS += -DGALLIUM_R300
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/drivers/r300/libr300.la \
-	$(RADEON_LIBS)
+include $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc
 
-if !HAVE_OPENGL
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/drivers/r300/libr300-helper.la
-endif
-endif
+include $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc
 
-if HAVE_GALLIUM_R600
-egl_gallium_la_CPPFLAGS += -DGALLIUM_R600
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
-	$(RADEON_LIBS)
-endif
+egl_gallium_la_CPPFLAGS = $(AM_CPPFLAGS) $(TARGET_CPPFLAGS)
+egl_gallium_la_LIBADD += $(TARGET_LIB_DEPS) \
+	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
-if HAVE_GALLIUM_RADEONSI
-egl_gallium_la_CPPFLAGS += -DGALLIUM_RADEONSI
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
-	$(RADEON_LIBS)
-endif
-
-if HAVE_GALLIUM_SVGA
-egl_gallium_la_CPPFLAGS += -DGALLIUM_VMWGFX
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/svga/drm/libsvgadrm.la \
-	$(top_builddir)/src/gallium/drivers/svga/libsvga.la
-endif
-
-if HAVE_GALLIUM_FREEDRENO
-egl_gallium_la_CPPFLAGS += -DGALLIUM_FREEDRENO
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
-	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
-	$(FREEDRENO_LIBS)
-
-endif
-
-if HAVE_GALLIUM_SOFTPIPE
-egl_gallium_la_CPPFLAGS += -DGALLIUM_SOFTPIPE
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la
-endif
-
-if NEED_GALLIUM_LLVMPIPE_DRIVER
-egl_gallium_la_CPPFLAGS += -DGALLIUM_LLVMPIPE
-egl_gallium_la_LIBADD += \
-	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
-endif
 
 #else # HAVE_GALLIUM_STATIC_TARGETS
 
@@ -255,12 +189,12 @@ endif
 
 if HAVE_MESA_LLVM
 
-egl_gallium_la_LDFLAGS += $(LLVM_LDFLAGS)
+AM_LDFLAGS += $(LLVM_LDFLAGS)
+
 egl_gallium_la_LIBADD += $(LLVM_LIBS)
 
 if HAVE_OPENGL
 if !HAVE_SHARED_GLAPI
-st_GL_la_LDFLAGS += $(LLVM_LDFLAGS)
 st_GL_la_LIBADD += $(LLVM_LIBS)
 endif
 endif

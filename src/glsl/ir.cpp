@@ -46,11 +46,6 @@ bool ir_rvalue::is_negative_one() const
    return false;
 }
 
-bool ir_rvalue::is_basis() const
-{
-   return false;
-}
-
 /**
  * Modify the swizzle make to move one component to another
  *
@@ -255,6 +250,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
    case ir_unop_dFdy_fine:
    case ir_unop_bitfield_reverse:
    case ir_unop_interpolate_at_centroid:
+   case ir_unop_saturate:
       this->type = op0->type;
       break;
 
@@ -534,6 +530,7 @@ static const char *const operator_strs[] = {
    "bit_count",
    "find_msb",
    "find_lsb",
+   "sat",
    "noise",
    "interpolate_at_centroid",
    "+",
@@ -1189,49 +1186,6 @@ ir_constant::is_negative_one() const
 }
 
 bool
-ir_constant::is_basis() const
-{
-   if (!this->type->is_scalar() && !this->type->is_vector())
-      return false;
-
-   if (this->type->is_boolean())
-      return false;
-
-   unsigned ones = 0;
-   for (unsigned c = 0; c < this->type->vector_elements; c++) {
-      switch (this->type->base_type) {
-      case GLSL_TYPE_FLOAT:
-	 if (this->value.f[c] == 1.0)
-	    ones++;
-	 else if (this->value.f[c] != 0.0)
-	    return false;
-	 break;
-      case GLSL_TYPE_INT:
-	 if (this->value.i[c] == 1)
-	    ones++;
-	 else if (this->value.i[c] != 0)
-	    return false;
-	 break;
-      case GLSL_TYPE_UINT:
-	 if (int(this->value.u[c]) == 1)
-	    ones++;
-	 else if (int(this->value.u[c]) != 0)
-	    return false;
-	 break;
-      default:
-	 /* The only other base types are structures, arrays, samplers, and
-	  * booleans.  Samplers cannot be constants, and the others should
-	  * have been filtered out above.
-	  */
-	 assert(!"Should not get here.");
-	 return false;
-      }
-   }
-
-   return ones == 1;
-}
-
-bool
 ir_constant::is_uint16_constant() const
 {
    if (!type->is_integer())
@@ -1541,17 +1495,44 @@ ir_swizzle::variable_referenced() const
 }
 
 
+bool ir_variable::temporaries_allocate_names = false;
+
+const char ir_variable::tmp_name[] = "compiler_temp";
+
 ir_variable::ir_variable(const struct glsl_type *type, const char *name,
 			 ir_variable_mode mode)
-   : ir_instruction(ir_type_variable), max_ifc_array_access(NULL)
+   : ir_instruction(ir_type_variable)
 {
    this->type = type;
-   this->name = ralloc_strdup(this, name);
+
+   if (mode == ir_var_temporary && !ir_variable::temporaries_allocate_names)
+      name = NULL;
+
+   /* The ir_variable clone method may call this constructor with name set to
+    * tmp_name.
+    */
+   assert(name != NULL
+          || mode == ir_var_temporary
+          || mode == ir_var_function_in
+          || mode == ir_var_function_out
+          || mode == ir_var_function_inout);
+   assert(name != ir_variable::tmp_name
+          || mode == ir_var_temporary);
+   if (mode == ir_var_temporary
+       && (name == NULL || name == ir_variable::tmp_name)) {
+      this->name = ir_variable::tmp_name;
+   } else {
+      this->name = ralloc_strdup(this, name);
+   }
+
+   this->u.max_ifc_array_access = NULL;
+
    this->data.explicit_location = false;
    this->data.has_initializer = false;
    this->data.location = -1;
    this->data.location_frac = 0;
-   this->warn_extension = NULL;
+   this->data.binding = 0;
+   this->data.warn_extension_index = 0;
    this->constant_value = NULL;
    this->constant_initializer = NULL;
    this->data.origin_upper_left = false;
@@ -1566,13 +1547,12 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    this->data.mode = mode;
    this->data.interpolation = INTERP_QUALIFIER_NONE;
    this->data.max_array_access = 0;
-   this->data.atomic.buffer_index = 0;
    this->data.atomic.offset = 0;
-   this->data.image.read_only = false;
-   this->data.image.write_only = false;
-   this->data.image.coherent = false;
-   this->data.image._volatile = false;
-   this->data.image.restrict_flag = false;
+   this->data.image_read_only = false;
+   this->data.image_write_only = false;
+   this->data.image_coherent = false;
+   this->data.image_volatile = false;
+   this->data.image_restrict = false;
 
    if (type != NULL) {
       if (type->base_type == GLSL_TYPE_SAMPLER)
@@ -1615,6 +1595,32 @@ ir_variable::determine_interpolation_mode(bool flat_shade)
       return INTERP_QUALIFIER_SMOOTH;
 }
 
+const char *const ir_variable::warn_extension_table[] = {
+   "",
+   "GL_ARB_shader_stencil_export",
+   "GL_AMD_shader_stencil_export",
+};
+
+void
+ir_variable::enable_extension_warning(const char *extension)
+{
+   for (unsigned i = 0; i < Elements(warn_extension_table); i++) {
+      if (strcmp(warn_extension_table[i], extension) == 0) {
+         this->data.warn_extension_index = i;
+         return;
+      }
+   }
+
+   assert(!"Should not get here.");
+   this->data.warn_extension_index = 0;
+}
+
+const char *
+ir_variable::get_extension_warning() const
+{
+   return this->data.warn_extension_index == 0
+      ? NULL : warn_extension_table[this->data.warn_extension_index];
+}
 
 ir_function_signature::ir_function_signature(const glsl_type *return_type,
                                              builtin_available_predicate b)
@@ -1678,11 +1684,11 @@ ir_function_signature::qualifiers_match(exec_list *params)
 	  a->data.interpolation != b->data.interpolation ||
 	  a->data.centroid != b->data.centroid ||
           a->data.sample != b->data.sample ||
-          a->data.image.read_only != b->data.image.read_only ||
-          a->data.image.write_only != b->data.image.write_only ||
-          a->data.image.coherent != b->data.image.coherent ||
-          a->data.image._volatile != b->data.image._volatile ||
-          a->data.image.restrict_flag != b->data.image.restrict_flag) {
+          a->data.image_read_only != b->data.image_read_only ||
+          a->data.image_write_only != b->data.image_write_only ||
+          a->data.image_coherent != b->data.image_coherent ||
+          a->data.image_volatile != b->data.image_volatile ||
+          a->data.image_restrict != b->data.image_restrict) {
 
 	 /* parameter a's qualifiers don't match */
 	 return a->name;

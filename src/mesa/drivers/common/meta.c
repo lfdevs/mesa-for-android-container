@@ -680,6 +680,12 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
          _mesa_Ortho(0.0, ctx->DrawBuffer->Width,
                      0.0, ctx->DrawBuffer->Height,
                      -1.0, 1.0);
+
+      if (ctx->Extensions.ARB_clip_control) {
+         save->ClipOrigin = ctx->Transform.ClipOrigin;
+         save->ClipDepthMode = ctx->Transform.ClipDepthMode;
+         _mesa_ClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+      }
    }
 
    if (state & MESA_META_CLIP) {
@@ -1081,6 +1087,9 @@ _mesa_meta_end(struct gl_context *ctx)
       _mesa_LoadMatrixf(save->ProjectionMatrix);
 
       _mesa_MatrixMode(save->MatrixMode);
+
+      if (ctx->Extensions.ARB_clip_control)
+         _mesa_ClipControl(save->ClipOrigin, save->ClipDepthMode);
    }
 
    if (state & MESA_META_CLIP) {
@@ -1220,7 +1229,7 @@ _mesa_meta_in_progress(struct gl_context *ctx)
  * Used by the meta-Clear, Draw/CopyPixels and Bitmap functions where the Z
  * value comes from the clear value or raster position.
  */
-static INLINE GLfloat
+static inline GLfloat
 invert_z(GLfloat normZ)
 {
    GLfloat objZ = 1.0f - 2.0f * normZ;

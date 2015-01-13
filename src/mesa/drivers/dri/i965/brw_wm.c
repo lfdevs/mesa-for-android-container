@@ -156,6 +156,7 @@ bool do_wm_prog(struct brw_context *brw,
       fs = prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
 
    memset(&prog_data, 0, sizeof(prog_data));
+   prog_data.uses_kill = fp->program.UsesKill;
 
    /* Allocate the references to the uniforms that will end up in the
     * prog_data associated with the compiled program, and which will be freed
@@ -187,9 +188,9 @@ bool do_wm_prog(struct brw_context *brw,
       return false;
    }
 
-   if (prog_data.total_scratch) {
+   if (prog_data.base.total_scratch) {
       brw_get_scratch_bo(brw, &brw->wm.base.scratch_bo,
-			 prog_data.total_scratch * brw->max_wm_threads);
+			 prog_data.base.total_scratch * brw->max_wm_threads);
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM))

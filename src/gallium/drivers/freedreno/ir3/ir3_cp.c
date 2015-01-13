@@ -26,18 +26,76 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include "freedreno_util.h"
+
 #include "ir3.h"
 
 /*
  * Copy Propagate:
  *
- * TODO probably want some sort of visitor sort of interface to
- * avoid duplicating the same graph traversal logic everywhere..
- *
  */
 
 static void block_cp(struct ir3_block *block);
 static struct ir3_instruction * instr_cp(struct ir3_instruction *instr, bool keep);
+
+/* XXX move this somewhere useful (and rename?) */
+static struct ir3_instruction *ssa(struct ir3_register *reg)
+{
+	if (reg->flags & IR3_REG_SSA)
+		return reg->instr;
+	return NULL;
+}
+
+static bool conflicts(struct ir3_instruction *a, struct ir3_instruction *b)
+{
+	return (a && b) && (a != b);
+}
+
+static void set_neighbors(struct ir3_instruction *instr,
+		struct ir3_instruction *left, struct ir3_instruction *right)
+{
+	debug_assert(!conflicts(instr->cp.left, left));
+	if (left) {
+		instr->cp.left_cnt++;
+		instr->cp.left = left;
+	}
+	debug_assert(!conflicts(instr->cp.right, right));
+	if (right) {
+		instr->cp.right_cnt++;
+		instr->cp.right = right;
+	}
+}
+
+/* remove neighbor reference, clearing left/right neighbor ptrs when
+ * there are no more references:
+ */
+static void remove_neighbors(struct ir3_instruction *instr)
+{
+	if (instr->cp.left) {
+		if (--instr->cp.left_cnt == 0)
+			instr->cp.left = NULL;
+	}
+	if (instr->cp.right) {
+		if (--instr->cp.right_cnt == 0)
+			instr->cp.right = NULL;
+	}
+}
+
+/* stop condition for iteration: */
+static bool check_stop(struct ir3_instruction *instr)
+{
+	if (ir3_instr_check_mark(instr))
+		return true;
+
+	/* stay within the block.. don't try to operate across
+	 * basic block boundaries or we'll have problems when
+	 * dealing with multiple basic blocks:
+	 */
+	if (is_meta(instr) && (instr->opc == OPC_META_INPUT))
+		return true;
+
+	return false;
+}
 
 static bool is_eligible_mov(struct ir3_instruction *instr)
 {
@@ -45,12 +103,24 @@ static bool is_eligible_mov(struct ir3_instruction *instr)
 			(instr->cat1.src_type == instr->cat1.dst_type)) {
 		struct ir3_register *dst = instr->regs[0];
 		struct ir3_register *src = instr->regs[1];
+		struct ir3_instruction *src_instr = ssa(src);
 		if (dst->flags & IR3_REG_ADDR)
 			return false;
-		if ((src->flags & IR3_REG_SSA) &&
-				/* TODO: propagate abs/neg modifiers if possible */
-				!(src->flags & (IR3_REG_ABS | IR3_REG_NEGATE | IR3_REG_RELATIV)))
+		/* TODO: propagate abs/neg modifiers if possible */
+		if (src->flags & (IR3_REG_ABS | IR3_REG_NEGATE | IR3_REG_RELATIV))
+			return false;
+		if (src_instr) {
+			/* check that eliminating the move won't result in
+			 * a neighbor conflict, ie. if an instruction feeds
+			 * into multiple fanins it can still only have at
+			 * most one left and one right neighbor:
+			 */
+			if (conflicts(instr->cp.left, src_instr->cp.left))
+				return false;
+			if (conflicts(instr->cp.right, src_instr->cp.right))
+				return false;
 			return true;
+		}
 	}
 	return false;
 }
@@ -70,7 +140,7 @@ static void walk_children(struct ir3_instruction *instr, bool keep)
 static struct ir3_instruction *
 instr_cp_fanin(struct ir3_instruction *instr)
 {
-	unsigned i;
+	unsigned i, j;
 
 	/* we need to handle fanin specially, to detect cases
 	 * when we need to keep a mov
@@ -92,29 +162,41 @@ instr_cp_fanin(struct ir3_instruction *instr)
 			if (is_meta(cand) && (cand->opc == OPC_META_FO))
 				cand = instr_cp(src->instr, true);
 
-			src->instr = cand;
+			/* we can't have 2 registers referring to the same instruction, so
+			 * go through and check if any already refer to the candidate
+			 * instruction. if so, don't do the propagation.
+			 *
+			 * NOTE: we need to keep this, despite the neighbor
+			 * conflict checks, to avoid A<->B<->A..
+			 */
+			for (j = 1; j < instr->regs_count; j++)
+				if (instr->regs[j]->instr == cand)
+					break;
+			if (j == instr->regs_count)
+				src->instr = cand;
 		}
 	}
 
 	walk_children(instr, false);
 
 	return instr;
-
 }
 
 static struct ir3_instruction *
 instr_cp(struct ir3_instruction *instr, bool keep)
 {
 	/* if we've already visited this instruction, bail now: */
-	if (ir3_instr_check_mark(instr))
+	if (check_stop(instr))
 		return instr;
 
 	if (is_meta(instr) && (instr->opc == OPC_META_FI))
 		return instr_cp_fanin(instr);
 
-	if (is_eligible_mov(instr) && !keep) {
-		struct ir3_register *src = instr->regs[1];
-		return instr_cp(src->instr, false);
+	if (!keep && is_eligible_mov(instr)) {
+		struct ir3_instruction *src_instr = ssa(instr->regs[1]);
+		set_neighbors(src_instr, instr->cp.left, instr->cp.right);
+		remove_neighbors(instr);
+		return instr_cp(src_instr, false);
 	}
 
 	walk_children(instr, false);
@@ -151,8 +233,88 @@ static void block_cp(struct ir3_block *block)
 	}
 }
 
+/*
+ * Find instruction neighbors:
+ */
+
+static void instr_find_neighbors(struct ir3_instruction *instr)
+{
+	unsigned i;
+
+	if (check_stop(instr))
+		return;
+
+	if (is_meta(instr) && (instr->opc == OPC_META_FI)) {
+		unsigned n = instr->regs_count;
+		for (i = 1; i < n; i++) {
+			struct ir3_instruction *src_instr = ssa(instr->regs[i]);
+			if (src_instr) {
+				struct ir3_instruction *left = (i > 1) ?
+						ssa(instr->regs[i-1]) : NULL;
+				struct ir3_instruction *right = (i < (n - 1)) ?
+						ssa(instr->regs[i+1]) : NULL;
+				set_neighbors(src_instr, left, right);
+				instr_find_neighbors(src_instr);
+			}
+		}
+	} else {
+		for (i = 1; i < instr->regs_count; i++) {
+			struct ir3_instruction *src_instr = ssa(instr->regs[i]);
+			if (src_instr)
+				instr_find_neighbors(src_instr);
+		}
+	}
+}
+
+static void block_find_neighbors(struct ir3_block *block)
+{
+	unsigned i;
+
+	for (i = 0; i < block->noutputs; i++) {
+		if (block->outputs[i]) {
+			struct ir3_instruction *instr = block->outputs[i];
+			instr_find_neighbors(instr);
+		}
+	}
+}
+
+static void instr_clear_neighbors(struct ir3_instruction *instr)
+{
+	unsigned i;
+
+	if (check_stop(instr))
+		return;
+
+	instr->cp.left_cnt = 0;
+	instr->cp.left = NULL;
+	instr->cp.right_cnt = 0;
+	instr->cp.right = NULL;
+
+	for (i = 1; i < instr->regs_count; i++) {
+		struct ir3_instruction *src_instr = ssa(instr->regs[i]);
+		if (src_instr)
+			instr_clear_neighbors(src_instr);
+	}
+}
+
+static void block_clear_neighbors(struct ir3_block *block)
+{
+	unsigned i;
+
+	for (i = 0; i < block->noutputs; i++) {
+		if (block->outputs[i]) {
+			struct ir3_instruction *instr = block->outputs[i];
+			instr_clear_neighbors(instr);
+		}
+	}
+}
+
 void ir3_block_cp(struct ir3_block *block)
 {
+	ir3_clear_mark(block->shader);
+	block_clear_neighbors(block);
+	ir3_clear_mark(block->shader);
+	block_find_neighbors(block);
 	ir3_clear_mark(block->shader);
 	block_cp(block);
 }

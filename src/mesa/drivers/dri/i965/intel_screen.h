@@ -32,7 +32,6 @@
 #include <sys/time.h>
 #include "dri_util.h"
 #include "intel_bufmgr.h"
-#include "intel_chipset.h"
 #include "brw_device_info.h"
 #include "i915_drm.h"
 #include "xmlconfig.h"
@@ -88,6 +87,16 @@ struct intel_screen
        * block sizes used, indexed by register size.
        */
       int classes[16];
+
+      /**
+       * Mapping from classes to ra_reg ranges.  Each of the per-size
+       * classes corresponds to a range of ra_reg nodes.  This array stores
+       * those ranges in the form of first ra_reg in each class and the
+       * total number of ra_reg elements in the last array element.  This
+       * way the range of the i'th class is given by:
+       * [ class_to_ra_reg_range[i], class_to_ra_reg_range[i+1] )
+       */
+      int class_to_ra_reg_range[17];
 
       /**
        * Mapping for register-allocated objects in *regs to the first

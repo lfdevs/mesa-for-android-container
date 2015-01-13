@@ -114,8 +114,9 @@ DIST_COMMON = $(srcdir)/Makefile.sources \
 
 subdir = src/gallium/drivers/i915
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -129,15 +130,14 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libi915_la_LIBADD =
-am__objects_1 = i915_blit.lo i915_clear.lo i915_flush.lo \
-	i915_context.lo i915_debug.lo i915_debug_fp.lo i915_state.lo \
-	i915_state_immediate.lo i915_state_dynamic.lo \
-	i915_state_derived.lo i915_state_emit.lo i915_state_fpc.lo \
-	i915_state_sampler.lo i915_state_static.lo i915_screen.lo \
-	i915_prim_emit.lo i915_prim_vbuf.lo i915_query.lo \
-	i915_resource.lo i915_resource_texture.lo \
-	i915_resource_buffer.lo i915_fpc_emit.lo i915_fpc_translate.lo \
-	i915_fpc_optimize.lo i915_surface.lo
+am__objects_1 = i915_blit.lo i915_clear.lo i915_context.lo \
+	i915_debug.lo i915_debug_fp.lo i915_flush.lo i915_fpc_emit.lo \
+	i915_fpc_optimize.lo i915_fpc_translate.lo i915_prim_emit.lo \
+	i915_prim_vbuf.lo i915_query.lo i915_resource_buffer.lo \
+	i915_resource.lo i915_resource_texture.lo i915_screen.lo \
+	i915_state.lo i915_state_derived.lo i915_state_dynamic.lo \
+	i915_state_emit.lo i915_state_fpc.lo i915_state_immediate.lo \
+	i915_state_sampler.lo i915_state_static.lo i915_surface.lo
 am_libi915_la_OBJECTS = $(am__objects_1)
 libi915_la_OBJECTS = $(am_libi915_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -229,6 +229,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -251,7 +252,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -324,11 +324,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -339,10 +342,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -356,7 +357,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -375,7 +375,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -439,6 +445,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -466,31 +473,47 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 C_SOURCES := \
+	i915_batchbuffer.h \
+	i915_batch.h \
 	i915_blit.c \
+	i915_blit.h \
 	i915_clear.c \
-	i915_flush.c \
 	i915_context.c \
+	i915_context.h \
 	i915_debug.c \
 	i915_debug_fp.c \
-	i915_state.c \
-	i915_state_immediate.c \
-	i915_state_dynamic.c \
-	i915_state_derived.c \
-	i915_state_emit.c \
-	i915_state_fpc.c \
-	i915_state_sampler.c \
-	i915_state_static.c \
-	i915_screen.c \
+	i915_debug.h \
+	i915_debug_private.h \
+	i915_flush.c \
+	i915_fpc_emit.c \
+	i915_fpc.h \
+	i915_fpc_optimize.c \
+	i915_fpc_translate.c \
 	i915_prim_emit.c \
 	i915_prim_vbuf.c \
+	i915_public.h \
 	i915_query.c \
-	i915_resource.c \
-	i915_resource_texture.c \
+	i915_query.h \
+	i915_reg.h \
 	i915_resource_buffer.c \
-	i915_fpc_emit.c \
-	i915_fpc_translate.c \
-	i915_fpc_optimize.c \
-	i915_surface.c 
+	i915_resource.c \
+	i915_resource.h \
+	i915_resource_texture.c \
+	i915_screen.c \
+	i915_screen.h \
+	i915_state.c \
+	i915_state_derived.c \
+	i915_state_dynamic.c \
+	i915_state_emit.c \
+	i915_state_fpc.c \
+	i915_state.h \
+	i915_state_immediate.c \
+	i915_state_inlines.h \
+	i915_state_sampler.c \
+	i915_state_static.c \
+	i915_surface.c \
+	i915_surface.h \
+	i915_winsys.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -511,6 +534,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -521,6 +545,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -551,12 +576,14 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS)
 
 noinst_LTLIBRARIES = libi915.la
 libi915_la_SOURCES = $(C_SOURCES)
+EXTRA_DIST = Android.mk TODO
 all: all-am
 
 .SUFFIXES:

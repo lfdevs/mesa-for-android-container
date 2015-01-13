@@ -54,13 +54,53 @@ static inline uint16_t sem2idx(ir3_semantic sem)
  * in hw (two sided color), binning-pass vertex shader, etc.
  */
 struct ir3_shader_key {
-	/* vertex shader variant parameters: */
-	unsigned binning_pass : 1;
+	union {
+		struct {
+			/* do we need to check {v,f}saturate_{s,t,r}? */
+			unsigned has_per_samp : 1;
 
-	/* fragment shader variant parameters: */
-	unsigned color_two_side : 1;
-	unsigned half_precision : 1;
+			/*
+			 * Vertex shader variant parameters:
+			 */
+			unsigned binning_pass : 1;
+
+			/*
+			 * Fragment shader variant parameters:
+			 */
+			unsigned color_two_side : 1;
+			unsigned half_precision : 1;
+			/* For rendering to alpha, we need a bit of special handling
+			 * since the hw always takes gl_FragColor starting from x
+			 * component, rather than figuring out to take the w component.
+			 * We could be more clever and generate variants for other
+			 * render target formats (ie. luminance formats are xxx1), but
+			 * let's start with this and see how it goes:
+			 */
+			unsigned alpha : 1;
+		};
+		uint32_t global;
+	};
+
+	/* bitmask of sampler which needs coords clamped for vertex
+	 * shader:
+	 */
+	uint16_t vsaturate_s, vsaturate_t, vsaturate_r;
+
+	/* bitmask of sampler which needs coords clamped for frag
+	 * shader:
+	 */
+	uint16_t fsaturate_s, fsaturate_t, fsaturate_r;
+
 };
+
+static inline bool
+ir3_shader_key_equal(struct ir3_shader_key *a, struct ir3_shader_key *b)
+{
+	/* slow-path if we need to check {v,f}saturate_{s,t,r} */
+	if (a->has_per_samp || b->has_per_samp)
+		return memcmp(a, b, sizeof(struct ir3_shader_key)) == 0;
+	return a->global == b->global;
+}
 
 struct ir3_shader_variant {
 	struct fd_bo *bo;
@@ -110,15 +150,29 @@ struct ir3_shader_variant {
 		uint8_t regid;
 		uint8_t compmask;
 		uint8_t ncomp;
-		/* in theory inloc of fs should match outloc of vs: */
+		/* In theory inloc of fs should match outloc of vs.  Or
+		 * rather the outloc of the vs is 8 plus the offset passed
+		 * to bary.f.  Presumably that +8 is to account for
+		 * gl_Position/gl_PointSize?
+		 *
+		 * NOTE inloc is currently aligned to 4 (we don't try
+		 * to pack varyings).  Changing this would likely break
+		 * assumptions in few places (like setting up of flat
+		 * shading in fd3_program) so be sure to check all the
+		 * spots where inloc is used.
+		 */
 		uint8_t inloc;
 		uint8_t bary;
+		uint8_t interpolate;
 	} inputs[16 + 2];  /* +POSITION +FACE */
 
 	unsigned total_in;       /* sum of inputs (scalar) */
 
 	/* do we have one or more texture sample instructions: */
 	bool has_samp;
+
+	/* do we have kill instructions: */
+	bool has_kill;
 
 	/* const reg # of first immediate, ie. 1 == c1
 	 * (not regid, because TGSI thinks in terms of vec4 registers,
@@ -147,9 +201,9 @@ struct ir3_shader {
 	struct ir3_shader_variant *variants;
 
 	/* so far, only used for blit_prog shader.. values for
-	 * VPC_VARYING_INTERP[i].MODE and VPC_VARYING_PS_REPL[i].MODE
+	 * VPC_VARYING_PS_REPL[i].MODE
 	 */
-	uint32_t vinterp[4], vpsrepl[4];
+	uint32_t vpsrepl[4];
 };
 
 
@@ -159,5 +213,63 @@ void ir3_shader_destroy(struct ir3_shader *shader);
 
 struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
 		struct ir3_shader_key key);
+
+/*
+ * Helper/util:
+ */
+
+static inline int
+ir3_find_output(const struct ir3_shader_variant *so, ir3_semantic semantic)
+{
+	int j;
+
+	for (j = 0; j < so->outputs_count; j++)
+		if (so->outputs[j].semantic == semantic)
+			return j;
+
+	/* it seems optional to have a OUT.BCOLOR[n] for each OUT.COLOR[n]
+	 * in the vertex shader.. but the fragment shader doesn't know this
+	 * so  it will always have both IN.COLOR[n] and IN.BCOLOR[n].  So
+	 * at link time if there is no matching OUT.BCOLOR[n], we must map
+	 * OUT.COLOR[n] to IN.BCOLOR[n].  And visa versa if there is only
+	 * a OUT.BCOLOR[n] but no matching OUT.COLOR[n]
+	 */
+	if (sem2name(semantic) == TGSI_SEMANTIC_BCOLOR) {
+		unsigned idx = sem2idx(semantic);
+		semantic = ir3_semantic_name(TGSI_SEMANTIC_COLOR, idx);
+	} else if (sem2name(semantic) == TGSI_SEMANTIC_COLOR) {
+		unsigned idx = sem2idx(semantic);
+		semantic = ir3_semantic_name(TGSI_SEMANTIC_BCOLOR, idx);
+	} else {
+		return 0;
+	}
+
+	for (j = 0; j < so->outputs_count; j++)
+		if (so->outputs[j].semantic == semantic)
+			return j;
+
+	debug_assert(0);
+
+	return 0;
+}
+
+static inline int
+ir3_next_varying(const struct ir3_shader_variant *so, int i)
+{
+	while (++i < so->inputs_count)
+		if (so->inputs[i].compmask && so->inputs[i].bary)
+			break;
+	return i;
+}
+
+static inline uint32_t
+ir3_find_output_regid(const struct ir3_shader_variant *so, ir3_semantic semantic)
+{
+	int j;
+	for (j = 0; j < so->outputs_count; j++)
+		if (so->outputs[j].semantic == semantic)
+			return so->outputs[j].regid;
+	return regid(63, 0);
+}
 
 #endif /* IR3_SHADER_H_ */

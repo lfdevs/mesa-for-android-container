@@ -272,7 +272,7 @@ static INLINE uint64_t xgetbv(void)
 
 
 #if defined(PIPE_ARCH_X86)
-static INLINE boolean sse2_has_daz(void)
+PIPE_ALIGN_STACK static INLINE boolean sse2_has_daz(void)
 {
    struct {
       uint32_t pad1[7];
@@ -369,7 +369,7 @@ util_cpu_detect(void)
          util_cpu_caps.has_avx    = ((regs2[2] >> 28) & 1) && // AVX
                                     ((regs2[2] >> 27) & 1) && // OSXSAVE
                                     ((xgetbv() & 6) == 6);    // XMM & YMM
-         util_cpu_caps.has_f16c   = (regs2[2] >> 29) & 1;
+         util_cpu_caps.has_f16c   = ((regs2[2] >> 29) & 1) && util_cpu_caps.has_avx;
          util_cpu_caps.has_mmx2   = util_cpu_caps.has_sse; /* SSE cpus supports mmxext too */
 #if defined(PIPE_ARCH_X86_64)
          util_cpu_caps.has_daz = 1;
@@ -409,8 +409,12 @@ util_cpu_detect(void)
       }
 
       if (regs[0] >= 0x80000006) {
+         /* should we really do this if the clflush size above worked? */
+         unsigned int cacheline;
          cpuid(0x80000006, regs2);
-         util_cpu_caps.cacheline = regs2[2] & 0xFF;
+         cacheline = regs2[2] & 0xFF;
+         if (cacheline > 0)
+            util_cpu_caps.cacheline = cacheline;
       }
 
       if (!util_cpu_caps.has_sse) {

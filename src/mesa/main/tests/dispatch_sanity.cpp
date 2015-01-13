@@ -951,6 +951,9 @@ const struct function gl_core_functions_possible[] = {
    { "glClearTexImage", 13, -1 },
    { "glClearTexSubImage", 13, -1 },
 
+   /* GL_ARB_clip_control */
+   { "glClipControl", 45, -1 },
+
    { NULL, 0, -1 }
 };
 

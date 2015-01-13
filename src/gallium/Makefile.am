@@ -68,11 +68,11 @@ SUBDIRS += winsys/radeon/drm
 endif
 
 ## swrast/softpipe
-if NEED_GALLIUM_SOFTPIPE_DRIVER
+if HAVE_GALLIUM_SOFTPIPE
 SUBDIRS += drivers/softpipe
 
 ## swrast/llvmpipe
-if NEED_GALLIUM_LLVMPIPE_DRIVER
+if HAVE_GALLIUM_LLVMPIPE
 SUBDIRS += drivers/llvmpipe
 endif
 endif
@@ -105,16 +105,23 @@ if HAVE_EGL_PLATFORM_WAYLAND
 SUBDIRS += winsys/sw/wayland
 endif
 
-if NEED_WINSYS_WRAPPER
 SUBDIRS += winsys/sw/wrapper
-endif
+
+##
+## Don't forget to bundle the remaining (non autotools) winsys'
+##
+
+EXTRA_DIST = \
+	winsys/sw/android \
+	winsys/sw/gdi \
+	winsys/sw/hgl
 
 
 ##
 ## Gallium state trackers and their users (targets)
 ##
 
-if NEED_GALLIUM_LOADER
+if HAVE_LOADER_GALLIUM
 SUBDIRS += targets/pipe-loader
 endif
 
@@ -131,14 +138,6 @@ if HAVE_OPENVG
 SUBDIRS += state_trackers/vega
 endif
 
-if HAVE_GALLIUM_EGL
-SUBDIRS += state_trackers/egl targets/egl-static
-endif
-
-if HAVE_GALLIUM_GBM
-SUBDIRS += state_trackers/gbm targets/gbm
-endif
-
 if HAVE_X11_DRIVER
 SUBDIRS += state_trackers/glx/xlib targets/libgl-xlib
 endif
@@ -149,6 +148,10 @@ endif
 
 if HAVE_GALLIUM_OSMESA
 SUBDIRS += state_trackers/osmesa targets/osmesa
+endif
+
+if HAVE_ST_VA
+SUBDIRS += state_trackers/va targets/va
 endif
 
 if HAVE_ST_VDPAU
@@ -163,6 +166,22 @@ if HAVE_ST_XVMC
 SUBDIRS += state_trackers/xvmc targets/xvmc
 endif
 
+if HAVE_ST_NINE
+SUBDIRS += state_trackers/nine targets/d3dadapter9
+endif
+
+##
+## Don't forget to bundle the remaining (non autotools) state-trackers/targets
+##
+
+EXTRA_DIST += \
+	state_trackers/README \
+	state_trackers/wgl targets/libgl-gdi \
+	targets/graw-gdi targets/graw-null  targets/graw-xlib \
+	state_trackers/hgl targets/haiku-softpipe \
+	tools
+
+
 ##
 ## Gallium tests
 ##
@@ -172,3 +191,7 @@ SUBDIRS += \
 	tests/trivial \
 	tests/unit
 endif
+
+EXTRA_DIST += \
+	tests/graw \
+	tests/python

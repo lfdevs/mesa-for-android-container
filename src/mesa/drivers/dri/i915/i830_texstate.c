@@ -47,8 +47,6 @@ translate_texture_format(GLuint mesa_format)
       return MAPSURF_8BIT | MT_8BIT_L8;
    case MESA_FORMAT_I_UNORM8:
       return MAPSURF_8BIT | MT_8BIT_I8;
-   case MESA_FORMAT_A_UNORM8:
-      return MAPSURF_8BIT | MT_8BIT_I8; /* Kludge! */
    case MESA_FORMAT_L8A8_UNORM:
       return MAPSURF_16BIT | MT_16BIT_AY88;
    case MESA_FORMAT_B5G6R5_UNORM:
@@ -227,6 +225,8 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
       if (sampler->MaxAnisotropy > 1.0) {
          minFilt = FILTER_ANISOTROPIC;
          magFilt = FILTER_ANISOTROPIC;
+         /* no trilinear + anisotropic */
+         mipFilt = MIPFILTER_NEAREST;
       }
       else {
          switch (sampler->MagFilter) {

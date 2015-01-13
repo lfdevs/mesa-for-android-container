@@ -68,27 +68,35 @@ namespace clover {
             sign_ext
          };
 
+         enum semantic {
+            general,
+            grid_dimension,
+            grid_offset
+         };
+
          argument(enum type type, size_t size,
                   size_t target_size, size_t target_align,
-                  enum ext_type ext_type) :
+                  enum ext_type ext_type,
+                  enum semantic semantic = general) :
             type(type), size(size),
             target_size(target_size), target_align(target_align),
-            ext_type(ext_type) { }
+            ext_type(ext_type), semantic(semantic) { }
 
          argument(enum type type, size_t size) :
             type(type), size(size),
             target_size(size), target_align(1),
-            ext_type(zero_ext) { }
+            ext_type(zero_ext), semantic(general) { }
 
          argument() : type(scalar), size(0),
                       target_size(0), target_align(1),
-                      ext_type(zero_ext) { }
+                      ext_type(zero_ext), semantic(general) { }
 
          type type;
          size_t size;
          size_t target_size;
          size_t target_align;
          ext_type ext_type;
+         semantic semantic;
       };
 
       struct symbol {

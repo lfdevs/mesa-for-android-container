@@ -40,6 +40,7 @@
 #define LDEXP_TO_ARITH     0x100
 #define CARRY_TO_ARITH     0x200
 #define BORROW_TO_ARITH    0x400
+#define SAT_TO_CLAMP       0x800
 
 /**
  * \see class lower_packing_builtins_visitor
@@ -98,6 +99,7 @@ bool opt_flatten_nested_if_blocks(exec_list *instructions);
 bool do_discard_simplification(exec_list *instructions);
 bool lower_if_to_cond_assign(exec_list *instructions, unsigned max_depth = 0);
 bool do_mat_op_to_vec(exec_list *instructions);
+bool do_minmax_prune(exec_list *instructions);
 bool do_noop_swizzle(exec_list *instructions);
 bool do_structure_splitting(exec_list *instructions);
 bool do_swizzle_swizzle(exec_list *instructions);
@@ -112,6 +114,7 @@ bool lower_noise(exec_list *instructions);
 bool lower_variable_index_to_cond_assign(exec_list *instructions,
     bool lower_input, bool lower_output, bool lower_temp, bool lower_uniform);
 bool lower_quadop_vector(exec_list *instructions, bool dont_lower_swz);
+bool lower_const_arrays_to_uniforms(exec_list *instructions);
 bool lower_clip_distance(gl_shader *shader);
 void lower_output_reads(exec_list *instructions);
 bool lower_packing_builtins(exec_list *instructions, int op_mask);
@@ -124,6 +127,8 @@ void lower_named_interface_blocks(void *mem_ctx, gl_shader *shader);
 bool optimize_redundant_jumps(exec_list *instructions);
 bool optimize_split_arrays(exec_list *instructions, bool linked);
 bool lower_offset_arrays(exec_list *instructions);
+void optimize_dead_builtin_variables(exec_list *instructions,
+                                     enum ir_variable_mode other);
 
 bool lower_vertex_id(gl_shader *shader);
 

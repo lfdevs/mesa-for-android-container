@@ -60,8 +60,8 @@ upload_sbe_state(struct brw_context *brw)
    }
    dw1 |= point_sprite_origin;
 
-   /* BRW_NEW_VUE_MAP_GEOM_OUT | _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM |
-    * CACHE_NEW_WM_PROG
+   /* BRW_NEW_VUE_MAP_GEOM_OUT | BRW_NEW_FRAGMENT_PROGRAM
+    * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | CACHE_NEW_WM_PROG
     */
    uint32_t urb_entry_read_length;
    calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
@@ -92,7 +92,9 @@ const struct brw_tracked_state gen7_sbe_state = {
 		_NEW_POINT |
 		_NEW_PROGRAM),
       .brw   = (BRW_NEW_CONTEXT |
-		BRW_NEW_FRAGMENT_PROGRAM |
+                BRW_NEW_FRAGMENT_PROGRAM |
+                BRW_NEW_GEOMETRY_PROGRAM |
+                BRW_NEW_PRIMITIVE |
                 BRW_NEW_VUE_MAP_GEOM_OUT),
       .cache = CACHE_NEW_WM_PROG
    },
@@ -190,7 +192,8 @@ upload_sf_state(struct brw_context *brw)
 
    /* _NEW_LINE */
    {
-      uint32_t line_width_u3_7 = U_FIXED(CLAMP(ctx->Line.Width, 0.0, 7.99), 7);
+      uint32_t line_width_u3_7 =
+         U_FIXED(CLAMP(ctx->Line.Width, 0.0, ctx->Const.MaxLineWidth), 7);
       /* TODO: line width of 0 is not allowed when MSAA enabled */
       if (line_width_u3_7 == 0)
          line_width_u3_7 = 1;
@@ -254,7 +257,7 @@ const struct brw_tracked_state gen7_sf_state = {
 		_NEW_POINT |
                 _NEW_MULTISAMPLE),
       .brw   = BRW_NEW_CONTEXT,
-      .cache = CACHE_NEW_VS_PROG
+      .cache = 0,
    },
    .emit = upload_sf_state,
 };

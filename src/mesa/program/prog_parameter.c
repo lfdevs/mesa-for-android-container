@@ -54,7 +54,7 @@ _mesa_new_parameter_list_sized(unsigned size)
 
       /* alloc arrays */
       p->Parameters = (struct gl_program_parameter *)
-	 calloc(1, size * sizeof(struct gl_program_parameter));
+	 calloc(size, sizeof(struct gl_program_parameter));
 
       p->ParameterValues = (gl_constant_value (*)[4])
          _mesa_align_malloc(size * 4 *sizeof(gl_constant_value), 16);
@@ -121,9 +121,8 @@ _mesa_add_parameter(struct gl_program_parameter_list *paramList,
 
       /* realloc arrays */
       paramList->Parameters = (struct gl_program_parameter *)
-	 _mesa_realloc(paramList->Parameters,
-		       oldNum * sizeof(struct gl_program_parameter),
-		       paramList->Size * sizeof(struct gl_program_parameter));
+         realloc(paramList->Parameters,
+                 paramList->Size * sizeof(struct gl_program_parameter));
 
       paramList->ParameterValues = (gl_constant_value (*)[4])
          _mesa_align_realloc(paramList->ParameterValues,         /* old buf */

@@ -55,6 +55,11 @@ struct fd_gmem_stateobj {
 	bool has_zs;  /* gmem config using depth/stencil? */
 };
 
-void fd_gmem_render_tiles(struct pipe_context *pctx);
+struct fd_context;
+
+void fd_gmem_render_tiles(struct fd_context *ctx);
+
+bool fd_gmem_needs_restore(struct fd_context *ctx, struct fd_tile *tile,
+		uint32_t buffers);
 
 #endif /* FREEDRENO_GMEM_H_ */

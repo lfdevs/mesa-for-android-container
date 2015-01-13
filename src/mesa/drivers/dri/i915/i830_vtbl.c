@@ -510,10 +510,10 @@ i830_emit_state(struct intel_context *intel)
 
       OUT_BATCH(state->Buffer[I830_DESTREG_DV0]);
       OUT_BATCH(state->Buffer[I830_DESTREG_DV1]);
-      OUT_BATCH(state->Buffer[I830_DESTREG_SENABLE]);
       OUT_BATCH(state->Buffer[I830_DESTREG_SR0]);
       OUT_BATCH(state->Buffer[I830_DESTREG_SR1]);
       OUT_BATCH(state->Buffer[I830_DESTREG_SR2]);
+      OUT_BATCH(state->Buffer[I830_DESTREG_SENABLE]);
 
       assert(state->Buffer[I830_DESTREG_DRAWRECT0] != MI_NOOP);
       OUT_BATCH(state->Buffer[I830_DESTREG_DRAWRECT0]);

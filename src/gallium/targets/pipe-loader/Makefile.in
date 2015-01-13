@@ -118,22 +118,24 @@ DIST_COMMON = $(top_srcdir)/src/gallium/Automake.inc \
 @HAVE_MESA_LLVM_TRUE@am__append_4 = $(LLVM_LIBS)
 @HAVE_MESA_LLVM_TRUE@am__append_5 = $(LLVM_LDFLAGS)
 @HAVE_GALLIUM_I915_TRUE@am__append_6 = pipe_i915.la
-@HAVE_GALLIUM_NOUVEAU_TRUE@am__append_7 = pipe_nouveau.la
-@HAVE_GALLIUM_R300_TRUE@am__append_8 = pipe_r300.la
-@HAVE_GALLIUM_R600_TRUE@am__append_9 = pipe_r600.la
-@HAVE_GALLIUM_RADEONSI_TRUE@am__append_10 = pipe_radeonsi.la
-@HAVE_GALLIUM_FREEDRENO_TRUE@am__append_11 = pipe_msm.la
-@HAVE_GALLIUM_SVGA_TRUE@am__append_12 = pipe_vmwgfx.la
-@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_13 = -DGALLIUM_SOFTPIPE
-@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_14 = pipe_swrast.la
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_15 = -DGALLIUM_LLVMPIPE
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_16 = \
+@HAVE_GALLIUM_ILO_TRUE@am__append_7 = pipe_i965.la
+@HAVE_GALLIUM_NOUVEAU_TRUE@am__append_8 = pipe_nouveau.la
+@HAVE_GALLIUM_R300_TRUE@am__append_9 = pipe_r300.la
+@HAVE_GALLIUM_R600_TRUE@am__append_10 = pipe_r600.la
+@HAVE_GALLIUM_RADEONSI_TRUE@am__append_11 = pipe_radeonsi.la
+@HAVE_GALLIUM_FREEDRENO_TRUE@am__append_12 = pipe_msm.la
+@HAVE_GALLIUM_SVGA_TRUE@am__append_13 = pipe_vmwgfx.la
+@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_14 = -DGALLIUM_SOFTPIPE
+@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_15 = pipe_swrast.la
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_16 = -DGALLIUM_LLVMPIPE
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_17 = \
 @HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
 
 subdir = src/gallium/targets/pipe-loader
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
+	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
 	$(top_srcdir)/m4/ax_prog_bison.m4 \
 	$(top_srcdir)/m4/ax_prog_flex.m4 \
 	$(top_srcdir)/m4/ax_pthread.m4 $(top_srcdir)/m4/libtool.m4 \
@@ -199,6 +201,16 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 @HAVE_GALLIUM_I915_TRUE@am_pipe_i915_la_rpath = -rpath $(pipedir)
+@HAVE_GALLIUM_ILO_TRUE@pipe_i965_la_DEPENDENCIES =  \
+@HAVE_GALLIUM_ILO_TRUE@	$(am__DEPENDENCIES_4) \
+@HAVE_GALLIUM_ILO_TRUE@	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
+@HAVE_GALLIUM_ILO_TRUE@	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
+@HAVE_GALLIUM_ILO_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_GALLIUM_ILO_TRUE@	$(am__DEPENDENCIES_1)
+am__pipe_i965_la_SOURCES_DIST = pipe_i965.c
+@HAVE_GALLIUM_ILO_TRUE@am_pipe_i965_la_OBJECTS = pipe_i965.lo
+pipe_i965_la_OBJECTS = $(am_pipe_i965_la_OBJECTS)
+@HAVE_GALLIUM_ILO_TRUE@am_pipe_i965_la_rpath = -rpath $(pipedir)
 @HAVE_GALLIUM_FREEDRENO_TRUE@pipe_msm_la_DEPENDENCIES =  \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(am__DEPENDENCIES_4) \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
@@ -224,7 +236,6 @@ pipe_nouveau_la_OBJECTS = $(am_pipe_nouveau_la_OBJECTS)
 @HAVE_GALLIUM_R300_TRUE@pipe_r300_la_DEPENDENCIES =  \
 @HAVE_GALLIUM_R300_TRUE@	$(am__DEPENDENCIES_4) \
 @HAVE_GALLIUM_R300_TRUE@	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
-@HAVE_GALLIUM_R300_TRUE@	$(top_builddir)/src/gallium/drivers/r300/libr300-helper.la \
 @HAVE_GALLIUM_R300_TRUE@	$(top_builddir)/src/gallium/drivers/r300/libr300.la \
 @HAVE_GALLIUM_R300_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_GALLIUM_R300_TRUE@	$(am__DEPENDENCIES_1)
@@ -259,7 +270,7 @@ pipe_radeonsi_la_OBJECTS = $(am_pipe_radeonsi_la_OBJECTS)
 @HAVE_GALLIUM_SOFTPIPE_TRUE@pipe_swrast_la_DEPENDENCIES =  \
 @HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__DEPENDENCIES_4) \
 @HAVE_GALLIUM_SOFTPIPE_TRUE@	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__append_16)
+@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__append_17)
 am__pipe_swrast_la_SOURCES_DIST = pipe_swrast.c
 @HAVE_GALLIUM_SOFTPIPE_TRUE@am_pipe_swrast_la_OBJECTS =  \
 @HAVE_GALLIUM_SOFTPIPE_TRUE@	pipe_swrast.lo
@@ -328,6 +339,7 @@ am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(pipe_i915_la_SOURCES) $(nodist_EXTRA_pipe_i915_la_SOURCES) \
+	$(pipe_i965_la_SOURCES) $(nodist_EXTRA_pipe_i965_la_SOURCES) \
 	$(pipe_msm_la_SOURCES) $(nodist_EXTRA_pipe_msm_la_SOURCES) \
 	$(pipe_nouveau_la_SOURCES) \
 	$(nodist_EXTRA_pipe_nouveau_la_SOURCES) \
@@ -340,6 +352,7 @@ SOURCES = $(pipe_i915_la_SOURCES) $(nodist_EXTRA_pipe_i915_la_SOURCES) \
 	$(pipe_vmwgfx_la_SOURCES) \
 	$(nodist_EXTRA_pipe_vmwgfx_la_SOURCES)
 DIST_SOURCES = $(am__pipe_i915_la_SOURCES_DIST) \
+	$(am__pipe_i965_la_SOURCES_DIST) \
 	$(am__pipe_msm_la_SOURCES_DIST) \
 	$(am__pipe_nouveau_la_SOURCES_DIST) \
 	$(am__pipe_r300_la_SOURCES_DIST) \
@@ -396,6 +409,7 @@ CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
+D3D_DRIVER_INSTALL_DIR = @D3D_DRIVER_INSTALL_DIR@
 DEFINES = @DEFINES@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -418,7 +432,6 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGL_CFLAGS = @EGL_CFLAGS@
 EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
-EGL_DRIVER_INSTALL_DIR = @EGL_DRIVER_INSTALL_DIR@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
@@ -491,11 +504,14 @@ LLVM_LIBS = @LLVM_LIBS@
 LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAKE = @MAKE@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+NINE_MAJOR = @NINE_MAJOR@
+NINE_MINOR = @NINE_MINOR@
+NINE_TINY = @NINE_TINY@
+NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
 NOUVEAU_CFLAGS = @NOUVEAU_CFLAGS@
@@ -506,10 +522,8 @@ OMX_CFLAGS = @OMX_CFLAGS@
 OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
-OPENCL_LIB_INSTALL_DIR = @OPENCL_LIB_INSTALL_DIR@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
-OSMESA_MESA_DEPS = @OSMESA_MESA_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
 OSMESA_PC_REQ = @OSMESA_PC_REQ@
 OSMESA_VERSION = @OSMESA_VERSION@
@@ -523,7 +537,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -542,7 +555,13 @@ SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
+VA_CFLAGS = @VA_CFLAGS@
+VA_LIBS = @VA_LIBS@
+VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
+VA_MAJOR = @VA_MAJOR@
+VA_MINOR = @VA_MINOR@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -606,6 +625,7 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -651,6 +671,7 @@ GALLIUM_DRIVER_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
@@ -661,6 +682,7 @@ GALLIUM_DRIVER_CXXFLAGS = \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/gallium/winsys \
 	$(DEFINES) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -691,16 +713,17 @@ GALLIUM_WINSYS_CFLAGS = \
 
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 AM_CPPFLAGS = $(GALLIUM_CFLAGS) -I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys $(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) -DGALLIUM_RBUG -DGALLIUM_TRACE \
-	-DGALLIUM_GALAHAD $(am__append_13) $(am__append_15)
+	-DGALLIUM_GALAHAD $(am__append_14) $(am__append_16)
 pipedir = $(libdir)/gallium-pipe
 pipe_LTLIBRARIES = $(am__append_6) $(am__append_7) $(am__append_8) \
 	$(am__append_9) $(am__append_10) $(am__append_11) \
-	$(am__append_12) $(am__append_14)
+	$(am__append_12) $(am__append_13) $(am__append_15)
 PIPE_LIBS = $(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
@@ -718,6 +741,15 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 @HAVE_GALLIUM_I915_TRUE@	$(LIBDRM_LIBS) \
 @HAVE_GALLIUM_I915_TRUE@	$(INTEL_LIBS)
 
+@HAVE_GALLIUM_ILO_TRUE@pipe_i965_la_SOURCES = pipe_i965.c
+@HAVE_GALLIUM_ILO_TRUE@nodist_EXTRA_pipe_i965_la_SOURCES = dummy.cpp
+@HAVE_GALLIUM_ILO_TRUE@pipe_i965_la_LIBADD = \
+@HAVE_GALLIUM_ILO_TRUE@	$(PIPE_LIBS) \
+@HAVE_GALLIUM_ILO_TRUE@	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
+@HAVE_GALLIUM_ILO_TRUE@	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
+@HAVE_GALLIUM_ILO_TRUE@	$(LIBDRM_LIBS) \
+@HAVE_GALLIUM_ILO_TRUE@	$(INTEL_LIBS)
+
 @HAVE_GALLIUM_NOUVEAU_TRUE@pipe_nouveau_la_SOURCES = pipe_nouveau.c
 @HAVE_GALLIUM_NOUVEAU_TRUE@nodist_EXTRA_pipe_nouveau_la_SOURCES = dummy.cpp
 @HAVE_GALLIUM_NOUVEAU_TRUE@pipe_nouveau_la_LIBADD = \
@@ -732,7 +764,6 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 @HAVE_GALLIUM_R300_TRUE@pipe_r300_la_LIBADD = \
 @HAVE_GALLIUM_R300_TRUE@	$(PIPE_LIBS) \
 @HAVE_GALLIUM_R300_TRUE@	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
-@HAVE_GALLIUM_R300_TRUE@	$(top_builddir)/src/gallium/drivers/r300/libr300-helper.la \
 @HAVE_GALLIUM_R300_TRUE@	$(top_builddir)/src/gallium/drivers/r300/libr300.la \
 @HAVE_GALLIUM_R300_TRUE@	$(LIBDRM_LIBS) \
 @HAVE_GALLIUM_R300_TRUE@	$(RADEON_LIBS)
@@ -778,7 +809,7 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 @HAVE_GALLIUM_SOFTPIPE_TRUE@nodist_EXTRA_pipe_swrast_la_SOURCES = dummy.cpp
 @HAVE_GALLIUM_SOFTPIPE_TRUE@pipe_swrast_la_LIBADD = $(PIPE_LIBS) \
 @HAVE_GALLIUM_SOFTPIPE_TRUE@	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
-@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__append_16)
+@HAVE_GALLIUM_SOFTPIPE_TRUE@	$(am__append_17)
 all: all-am
 
 .SUFFIXES:
@@ -853,6 +884,9 @@ clean-pipeLTLIBRARIES:
 pipe_i915.la: $(pipe_i915_la_OBJECTS) $(pipe_i915_la_DEPENDENCIES) $(EXTRA_pipe_i915_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(CXXLINK) $(am_pipe_i915_la_rpath) $(pipe_i915_la_OBJECTS) $(pipe_i915_la_LIBADD) $(LIBS)
 
+pipe_i965.la: $(pipe_i965_la_OBJECTS) $(pipe_i965_la_DEPENDENCIES) $(EXTRA_pipe_i965_la_DEPENDENCIES) 
+	$(AM_V_CXXLD)$(CXXLINK) $(am_pipe_i965_la_rpath) $(pipe_i965_la_OBJECTS) $(pipe_i965_la_LIBADD) $(LIBS)
+
 pipe_msm.la: $(pipe_msm_la_OBJECTS) $(pipe_msm_la_DEPENDENCIES) $(EXTRA_pipe_msm_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(CXXLINK) $(am_pipe_msm_la_rpath) $(pipe_msm_la_OBJECTS) $(pipe_msm_la_LIBADD) $(LIBS)
 
@@ -882,6 +916,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_i915.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_i965.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_msm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_nouveau.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_r300.Plo@am__quote@

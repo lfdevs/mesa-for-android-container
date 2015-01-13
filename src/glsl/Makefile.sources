@@ -59,6 +59,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/loop_controls.cpp \
 	$(GLSL_SRCDIR)/loop_unroll.cpp \
 	$(GLSL_SRCDIR)/lower_clip_distance.cpp \
+	$(GLSL_SRCDIR)/lower_const_arrays_to_uniforms.cpp \
 	$(GLSL_SRCDIR)/lower_discard.cpp \
 	$(GLSL_SRCDIR)/lower_discard_flow.cpp \
 	$(GLSL_SRCDIR)/lower_if_to_cond_assign.cpp \
@@ -87,6 +88,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_copy_propagation.cpp \
 	$(GLSL_SRCDIR)/opt_copy_propagation_elements.cpp \
 	$(GLSL_SRCDIR)/opt_cse.cpp \
+	$(GLSL_SRCDIR)/opt_dead_builtin_variables.cpp \
 	$(GLSL_SRCDIR)/opt_dead_builtin_varyings.cpp \
 	$(GLSL_SRCDIR)/opt_dead_code.cpp \
 	$(GLSL_SRCDIR)/opt_dead_code_local.cpp \
@@ -95,6 +97,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_flip_matrices.cpp \
 	$(GLSL_SRCDIR)/opt_function_inlining.cpp \
 	$(GLSL_SRCDIR)/opt_if_simplification.cpp \
+	$(GLSL_SRCDIR)/opt_minmax.cpp \
 	$(GLSL_SRCDIR)/opt_noop_swizzle.cpp \
 	$(GLSL_SRCDIR)/opt_rebalance_tree.cpp \
 	$(GLSL_SRCDIR)/opt_redundant_jumps.cpp \
@@ -102,8 +105,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_swizzle_swizzle.cpp \
 	$(GLSL_SRCDIR)/opt_tree_grafting.cpp \
 	$(GLSL_SRCDIR)/opt_vectorize.cpp \
-	$(GLSL_SRCDIR)/s_expression.cpp \
-	$(GLSL_SRCDIR)/strtod.c
+	$(GLSL_SRCDIR)/s_expression.cpp
 
 # glsl_compiler
 

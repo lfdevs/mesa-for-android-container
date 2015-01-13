@@ -158,7 +158,10 @@ nv50_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
       /* XXX: can we do this with the GPU, and sync with respect to a previous
        *  query ?
        */
+      q->data[0] = q->sequence; /* initialize sequence */
       q->data[1] = 1; /* initial render condition = TRUE */
+      q->data[4] = q->sequence + 1; /* for comparison COND_MODE */
+      q->data[5] = 0;
    }
    if (!q->is64bit)
       q->data[0] = q->sequence++; /* the previously used one */
@@ -327,30 +330,67 @@ nv50_render_condition(struct pipe_context *pipe,
    struct nv50_context *nv50 = nv50_context(pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    struct nv50_query *q;
+   uint32_t cond;
+   boolean wait =
+      mode != PIPE_RENDER_COND_NO_WAIT &&
+      mode != PIPE_RENDER_COND_BY_REGION_NO_WAIT;
+
+   if (!pq) {
+      cond = NV50_3D_COND_MODE_ALWAYS;
+   }
+   else {
+      q = nv50_query(pq);
+      /* NOTE: comparison of 2 queries only works if both have completed */
+      switch (q->type) {
+      case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+         cond = condition ? NV50_3D_COND_MODE_EQUAL :
+                            NV50_3D_COND_MODE_NOT_EQUAL;
+         wait = TRUE;
+         break;
+      case PIPE_QUERY_OCCLUSION_COUNTER:
+      case PIPE_QUERY_OCCLUSION_PREDICATE:
+         if (likely(!condition)) {
+            /* XXX: Placeholder, handle nesting here if available */
+            if (unlikely(false))
+               cond = wait ? NV50_3D_COND_MODE_NOT_EQUAL :
+                             NV50_3D_COND_MODE_ALWAYS;
+            else
+               cond = NV50_3D_COND_MODE_RES_NON_ZERO;
+         } else {
+            cond = wait ? NV50_3D_COND_MODE_EQUAL : NV50_3D_COND_MODE_ALWAYS;
+         }
+         break;
+      default:
+         assert(!"render condition query not a predicate");
+         cond = NV50_3D_COND_MODE_ALWAYS;
+         break;
+      }
+   }
 
    nv50->cond_query = pq;
    nv50->cond_cond = condition;
+   nv50->cond_condmode = cond;
    nv50->cond_mode = mode;
+
+   if (!pq) {
+      PUSH_SPACE(push, 2);
+      BEGIN_NV04(push, NV50_3D(COND_MODE), 1);
+      PUSH_DATA (push, cond);
+      return;
+   }
 
    PUSH_SPACE(push, 9);
 
-   if (!pq) {
-      BEGIN_NV04(push, NV50_3D(COND_MODE), 1);
-      PUSH_DATA (push, NV50_3D_COND_MODE_ALWAYS);
-      return;
-   }
-   q = nv50_query(pq);
-
-   if (mode == PIPE_RENDER_COND_WAIT ||
-       mode == PIPE_RENDER_COND_BY_REGION_WAIT) {
+   if (wait) {
       BEGIN_NV04(push, SUBC_3D(NV50_GRAPH_SERIALIZE), 1);
       PUSH_DATA (push, 0);
    }
 
+   PUSH_REFN (push, q->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
    BEGIN_NV04(push, NV50_3D(COND_ADDRESS_HIGH), 3);
    PUSH_DATAh(push, q->bo->offset + q->offset);
    PUSH_DATA (push, q->bo->offset + q->offset);
-   PUSH_DATA (push, NV50_3D_COND_MODE_RES_NON_ZERO);
+   PUSH_DATA (push, cond);
 
    BEGIN_NV04(push, NV50_2D(COND_ADDRESS_HIGH), 2);
    PUSH_DATAh(push, q->bo->offset + q->offset);

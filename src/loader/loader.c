@@ -402,7 +402,7 @@ int loader_get_user_preferred_fd(int default_fd, int *different_device)
    }
 
    fd = drm_open_device(device_name);
-   if (fd > 0) {
+   if (fd >= 0) {
       close(default_fd);
    } else {
       fd = default_fd;
@@ -593,6 +593,9 @@ libudev_get_device_name_for_fd(int fd)
    UDEV_SYMBOL(struct udev_device *, udev_device_unref,
                (struct udev_device *));
    UDEV_SYMBOL(struct udev *, udev_unref, (struct udev *));
+
+   if (dlsym_failed)
+      return NULL;
 
    udev = udev_new();
    device = udev_device_new_from_fd(udev, fd);

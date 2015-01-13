@@ -28,42 +28,35 @@ static uint64_t
 set_src_raddr(uint64_t inst, struct qpu_reg src)
 {
         if (src.mux == QPU_MUX_A) {
-                /* These asserts could be better, checking to be sure we're
-                 * not overwriting an actual use of a raddr of 0.
-                 */
-                assert(QPU_GET_FIELD(inst, QPU_RADDR_A) == 0 ||
+                assert(QPU_GET_FIELD(inst, QPU_RADDR_A) == QPU_R_NOP ||
                        QPU_GET_FIELD(inst, QPU_RADDR_A) == src.addr);
-                return inst | QPU_SET_FIELD(src.addr, QPU_RADDR_A);
+                return ((inst & ~QPU_RADDR_A_MASK) |
+                        QPU_SET_FIELD(src.addr, QPU_RADDR_A));
         }
 
         if (src.mux == QPU_MUX_B) {
-                assert(QPU_GET_FIELD(inst, QPU_RADDR_B) == 0 ||
+                assert(QPU_GET_FIELD(inst, QPU_RADDR_B) == QPU_R_NOP ||
                        QPU_GET_FIELD(inst, QPU_RADDR_B) == src.addr);
-                return inst | QPU_SET_FIELD(src.addr, QPU_RADDR_B);
+                return ((inst & ~QPU_RADDR_B_MASK) |
+                        QPU_SET_FIELD(src.addr, QPU_RADDR_B));
         }
 
         return inst;
 }
 
 uint64_t
-qpu_a_NOP()
+qpu_NOP()
 {
         uint64_t inst = 0;
 
         inst |= QPU_SET_FIELD(QPU_A_NOP, QPU_OP_ADD);
-        inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_ADD);
-        inst |= QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG);
-
-        return inst;
-}
-
-uint64_t
-qpu_m_NOP()
-{
-        uint64_t inst = 0;
-
         inst |= QPU_SET_FIELD(QPU_M_NOP, QPU_OP_MUL);
+
+        /* Note: These field values are actually non-zero */
+        inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_ADD);
         inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_MUL);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_A);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_B);
         inst |= QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG);
 
         return inst;
@@ -109,12 +102,15 @@ qpu_a_MOV(struct qpu_reg dst, struct qpu_reg src)
         uint64_t inst = 0;
 
         inst |= QPU_SET_FIELD(QPU_A_OR, QPU_OP_ADD);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_A);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_B);
         inst |= qpu_a_dst(dst);
         inst |= QPU_SET_FIELD(QPU_COND_ALWAYS, QPU_COND_ADD);
         inst |= QPU_SET_FIELD(src.mux, QPU_ADD_A);
         inst |= QPU_SET_FIELD(src.mux, QPU_ADD_B);
-        inst |= set_src_raddr(inst, src);
+        inst = set_src_raddr(inst, src);
         inst |= QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG);
+        inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_MUL);
 
         return inst;
 }
@@ -125,12 +121,15 @@ qpu_m_MOV(struct qpu_reg dst, struct qpu_reg src)
         uint64_t inst = 0;
 
         inst |= QPU_SET_FIELD(QPU_M_V8MIN, QPU_OP_MUL);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_A);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_B);
         inst |= qpu_m_dst(dst);
         inst |= QPU_SET_FIELD(QPU_COND_ALWAYS, QPU_COND_MUL);
         inst |= QPU_SET_FIELD(src.mux, QPU_MUL_A);
         inst |= QPU_SET_FIELD(src.mux, QPU_MUL_B);
-        inst |= set_src_raddr(inst, src);
+        inst = set_src_raddr(inst, src);
         inst |= QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG);
+        inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_ADD);
 
         return inst;
 }
@@ -141,7 +140,7 @@ qpu_load_imm_ui(struct qpu_reg dst, uint32_t val)
         uint64_t inst = 0;
 
         inst |= qpu_a_dst(dst);
-        inst |= qpu_m_dst(qpu_rb(QPU_W_NOP));
+        inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_MUL);
         inst |= QPU_SET_FIELD(QPU_COND_ALWAYS, QPU_COND_ADD);
         inst |= QPU_SET_FIELD(QPU_COND_ALWAYS, QPU_COND_MUL);
         inst |= QPU_SET_FIELD(QPU_SIG_LOAD_IMM, QPU_SIG);
@@ -157,13 +156,16 @@ qpu_a_alu2(enum qpu_op_add op,
         uint64_t inst = 0;
 
         inst |= QPU_SET_FIELD(op, QPU_OP_ADD);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_A);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_B);
         inst |= qpu_a_dst(dst);
         inst |= QPU_SET_FIELD(QPU_COND_ALWAYS, QPU_COND_ADD);
         inst |= QPU_SET_FIELD(src0.mux, QPU_ADD_A);
-        inst |= set_src_raddr(inst, src0);
+        inst = set_src_raddr(inst, src0);
         inst |= QPU_SET_FIELD(src1.mux, QPU_ADD_B);
-        inst |= set_src_raddr(inst, src1);
+        inst = set_src_raddr(inst, src1);
         inst |= QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG);
+        inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_MUL);
 
         return inst;
 }
@@ -174,37 +176,49 @@ qpu_m_alu2(enum qpu_op_mul op,
 {
         uint64_t inst = 0;
 
-        set_src_raddr(inst, src0);
-        set_src_raddr(inst, src1);
-
         inst |= QPU_SET_FIELD(op, QPU_OP_MUL);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_A);
+        inst |= QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_B);
         inst |= qpu_m_dst(dst);
         inst |= QPU_SET_FIELD(QPU_COND_ALWAYS, QPU_COND_MUL);
         inst |= QPU_SET_FIELD(src0.mux, QPU_MUL_A);
-        inst |= set_src_raddr(inst, src0);
+        inst = set_src_raddr(inst, src0);
         inst |= QPU_SET_FIELD(src1.mux, QPU_MUL_B);
-        inst |= set_src_raddr(inst, src1);
+        inst = set_src_raddr(inst, src1);
         inst |= QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG);
+        inst |= QPU_SET_FIELD(QPU_W_NOP, QPU_WADDR_ADD);
 
         return inst;
+}
+
+static uint64_t
+merge_fields(uint64_t merge,
+             uint64_t add, uint64_t mul,
+             uint64_t mask, uint64_t ignore)
+{
+        if ((add & mask) == ignore)
+                return (merge & ~mask) | (mul & mask);
+        else if ((mul & mask) == ignore)
+                return (merge & ~mask) | (add & mask);
+        else {
+                assert((add & mask) == (mul & mask));
+                return merge;
+        }
 }
 
 uint64_t
 qpu_inst(uint64_t add, uint64_t mul)
 {
-        uint64_t merge = add | mul;
+        uint64_t merge = ((add & ~QPU_WADDR_MUL_MASK) |
+                          (mul & ~QPU_WADDR_ADD_MASK));
 
-        /* If either one has no signal field, then use the other's signal field.
-         * (since QPU_SIG_NONE != 0).
-         */
-        if (QPU_GET_FIELD(add, QPU_SIG) == QPU_SIG_NONE)
-                merge = (merge & ~QPU_SIG_MASK) | (mul & QPU_SIG_MASK);
-        else if (QPU_GET_FIELD(mul, QPU_SIG) == QPU_SIG_NONE)
-                merge = (merge & ~QPU_SIG_MASK) | (add & QPU_SIG_MASK);
-        else {
-                assert(QPU_GET_FIELD(add, QPU_SIG) ==
-                       QPU_GET_FIELD(mul, QPU_SIG));
-        }
+        merge = merge_fields(merge, add, mul, QPU_SIG_MASK,
+                             QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG));
+
+        merge = merge_fields(merge, add, mul, QPU_RADDR_A_MASK,
+                             QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_A));
+        merge = merge_fields(merge, add, mul, QPU_RADDR_B_MASK,
+                             QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_B));
 
         return merge;
 }
@@ -214,5 +228,19 @@ qpu_set_sig(uint64_t inst, uint32_t sig)
 {
         assert(QPU_GET_FIELD(inst, QPU_SIG) == QPU_SIG_NONE);
         return (inst & ~QPU_SIG_MASK) | QPU_SET_FIELD(sig, QPU_SIG);
+}
+
+uint64_t
+qpu_set_cond_add(uint64_t inst, uint32_t sig)
+{
+        assert(QPU_GET_FIELD(inst, QPU_COND_ADD) == QPU_COND_ALWAYS);
+        return (inst & ~QPU_COND_ADD_MASK) | QPU_SET_FIELD(sig, QPU_COND_ADD);
+}
+
+uint64_t
+qpu_set_cond_mul(uint64_t inst, uint32_t sig)
+{
+        assert(QPU_GET_FIELD(inst, QPU_COND_MUL) == QPU_COND_ALWAYS);
+        return (inst & ~QPU_COND_MUL_MASK) | QPU_SET_FIELD(sig, QPU_COND_MUL);
 }
 

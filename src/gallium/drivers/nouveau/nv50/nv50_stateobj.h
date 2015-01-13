@@ -25,7 +25,7 @@ struct nv50_blend_stateobj {
 struct nv50_rasterizer_stateobj {
    struct pipe_rasterizer_state pipe;
    int size;
-   uint32_t state[48];
+   uint32_t state[49];
 };
 
 struct nv50_zsa_stateobj {

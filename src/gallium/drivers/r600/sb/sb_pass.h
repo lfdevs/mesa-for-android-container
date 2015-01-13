@@ -695,8 +695,9 @@ public:
 
 	void run_on(container_node *c);
 
-	void finalize_alu_group(alu_group_node *g);
-	void finalize_alu_src(alu_group_node *g, alu_node *a);
+	void insert_rv6xx_load_ar_workaround(alu_group_node *b4);
+	void finalize_alu_group(alu_group_node *g, node *prev_node);
+	bool finalize_alu_src(alu_group_node *g, alu_node *a, alu_group_node *prev_node);
 
 	void emit_set_grad(fetch_node* f);
 	void finalize_fetch(fetch_node *f);

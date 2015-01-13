@@ -2343,9 +2343,12 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          mkMov(dst0[c], val0);
       break;
    case TGSI_OPCODE_ARL:
+   case TGSI_OPCODE_ARR:
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
+         const RoundMode rnd =
+            tgsi.getOpcode() == TGSI_OPCODE_ARR ? ROUND_N : ROUND_M;
          src0 = fetchSrc(0, c);
-         mkCvt(OP_CVT, TYPE_S32, dst0[c], TYPE_F32, src0)->rnd = ROUND_M;
+         mkCvt(OP_CVT, TYPE_S32, dst0[c], TYPE_F32, src0)->rnd = rnd;
       }
       break;
    case TGSI_OPCODE_UARL:

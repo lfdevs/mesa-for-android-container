@@ -154,6 +154,8 @@ public:
 
       linked_sig->replace_parameters(&formal_parameters);
 
+      linked_sig->is_intrinsic = sig->is_intrinsic;
+
       if (sig->is_defined) {
          foreach_in_list(const ir_instruction, original, &sig->body) {
             ir_instruction *copy = original->clone(linked, ht);
@@ -243,11 +245,19 @@ public:
                /* Similarly, we need implicit sizes of arrays within interface
                 * blocks to be sized by the maximal access in *any* shader.
                 */
+               unsigned *const linked_max_ifc_array_access =
+                  var->get_max_ifc_array_access();
+               unsigned *const ir_max_ifc_array_access =
+                  ir->var->get_max_ifc_array_access();
+
+               assert(linked_max_ifc_array_access != NULL);
+               assert(ir_max_ifc_array_access != NULL);
+
                for (unsigned i = 0; i < var->get_interface_type()->length;
                     i++) {
-                  var->max_ifc_array_access[i] =
-                     MAX2(var->max_ifc_array_access[i],
-                          ir->var->max_ifc_array_access[i]);
+                  linked_max_ifc_array_access[i] =
+                     MAX2(linked_max_ifc_array_access[i],
+                          ir_max_ifc_array_access[i]);
                }
             }
 	 }

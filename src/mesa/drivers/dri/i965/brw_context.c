@@ -325,7 +325,7 @@ brw_initialize_context_constants(struct brw_context *brw)
       MIN2(ctx->Const.MaxTextureCoordUnits,
            ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits);
    ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits = max_samplers;
-   if (brw->gen >= 7)
+   if (brw->gen >= 6)
       ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = max_samplers;
    else
       ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = 0;
@@ -406,6 +406,14 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.MaxDepthTextureSamples = max_samples;
    ctx->Const.MaxIntegerSamples = max_samples;
 
+   /* gen6_set_sample_maps() sets SampleMap{2,4,8}x variables which are used
+    * to map indices of rectangular grid to sample numbers within a pixel.
+    * These variables are used by GL_EXT_framebuffer_multisample_blit_scaled
+    * extension implementation. For more details see the comment above
+    * gen6_set_sample_maps() definition.
+    */
+   gen6_set_sample_maps(ctx);
+
    if (brw->gen >= 7)
       ctx->Const.MaxProgramTextureGatherComponents = 4;
    else if (brw->gen == 6)
@@ -413,9 +421,19 @@ brw_initialize_context_constants(struct brw_context *brw)
 
    ctx->Const.MinLineWidth = 1.0;
    ctx->Const.MinLineWidthAA = 1.0;
-   ctx->Const.MaxLineWidth = 5.0;
-   ctx->Const.MaxLineWidthAA = 5.0;
-   ctx->Const.LineWidthGranularity = 0.5;
+   if (brw->gen >= 9 || brw->is_cherryview) {
+      ctx->Const.MaxLineWidth = 40.0;
+      ctx->Const.MaxLineWidthAA = 40.0;
+      ctx->Const.LineWidthGranularity = 0.125;
+   } else if (brw->gen >= 6) {
+      ctx->Const.MaxLineWidth = 7.875;
+      ctx->Const.MaxLineWidthAA = 7.875;
+      ctx->Const.LineWidthGranularity = 0.125;
+   } else {
+      ctx->Const.MaxLineWidth = 7.0;
+      ctx->Const.MaxLineWidthAA = 7.0;
+      ctx->Const.LineWidthGranularity = 0.5;
+   }
 
    ctx->Const.MinPointSize = 1.0;
    ctx->Const.MinPointSizeAA = 1.0;
@@ -806,7 +824,7 @@ brwCreateContext(gl_api api,
    brw->max_gtt_map_object_size = gtt_size / 4;
 
    if (brw->gen == 6)
-      brw->urb.gen6_gs_previously_active = false;
+      brw->urb.gs_present = false;
 
    brw->prim_restart.in_progress = false;
    brw->prim_restart.enable_cut_index = false;
@@ -985,13 +1003,17 @@ intelMakeCurrent(__DRIcontext * driContextPriv,
       struct gl_context *ctx = &brw->ctx;
       struct gl_framebuffer *fb, *readFb;
 
-      if (driDrawPriv == NULL && driReadPriv == NULL) {
+      if (driDrawPriv == NULL) {
          fb = _mesa_get_incomplete_framebuffer();
-         readFb = _mesa_get_incomplete_framebuffer();
       } else {
          fb = driDrawPriv->driverPrivate;
-         readFb = driReadPriv->driverPrivate;
          driContextPriv->dri2.draw_stamp = driDrawPriv->dri2.stamp - 1;
+      }
+
+      if (driReadPriv == NULL) {
+         readFb = _mesa_get_incomplete_framebuffer();
+      } else {
+         readFb = driReadPriv->driverPrivate;
          driContextPriv->dri2.read_stamp = driReadPriv->dri2.stamp - 1;
       }
 

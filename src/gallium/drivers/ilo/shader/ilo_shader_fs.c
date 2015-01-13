@@ -32,7 +32,6 @@
 #include "toy_legalize.h"
 #include "toy_optimize.h"
 #include "toy_helpers.h"
-#include "ilo_context.h"
 #include "ilo_shader_internal.h"
 
 struct fs_compile_context {
@@ -295,7 +294,7 @@ fs_lower_opcode_tgsi_indirect_const(struct fs_compile_context *fcc,
          simd_mode,
          GEN6_MSG_SAMPLER_LD,
          0,
-         ILO_WM_CONST_SURFACE(dim));
+         fcc->shader->bt.const_base + dim);
 
    tmp = tdst(TOY_FILE_VRF, tc_alloc_vrf(tc, param_size * 4), 0);
    inst = tc_SEND(tc, tmp, tsrc_from(offset), desc, GEN6_SFID_SAMPLER);
@@ -371,7 +370,7 @@ fs_lower_opcode_tgsi_const_gen6(struct fs_compile_context *fcc,
    msg_len = 1;
 
    desc = tsrc_imm_mdesc_data_port(tc, false, msg_len, 1, true, false,
-         msg_type, msg_ctrl, ILO_WM_CONST_SURFACE(dim));
+         msg_type, msg_ctrl, fcc->shader->bt.const_base + dim);
 
    tmp = tc_alloc_tmp(tc);
 
@@ -418,7 +417,7 @@ fs_lower_opcode_tgsi_const_gen7(struct fs_compile_context *fcc,
          GEN6_MSG_SAMPLER_SIMD4X2,
          GEN6_MSG_SAMPLER_LD,
          0,
-         ILO_WM_CONST_SURFACE(dim));
+         fcc->shader->bt.const_base + dim);
 
    tmp = tc_alloc_tmp(tc);
    inst = tc_SEND(tc, tmp, tsrc_from(offset), desc, GEN6_SFID_SAMPLER);
@@ -494,7 +493,7 @@ fs_lower_opcode_tgsi_direct(struct fs_compile_context *fcc,
       fs_lower_opcode_tgsi_in(fcc, inst->dst, dim, idx);
       break;
    case TOY_OPCODE_TGSI_CONST:
-      if (tc->dev->gen >= ILO_GEN(7))
+      if (ilo_dev_gen(tc->dev) >= ILO_GEN(7))
          fs_lower_opcode_tgsi_const_gen7(fcc, inst->dst, dim, inst->src[1]);
       else
          fs_lower_opcode_tgsi_const_gen6(fcc, inst->dst, dim, inst->src[1]);
@@ -715,10 +714,12 @@ fs_add_sampler_params_gen7(struct toy_compiler *tc, int msg_type,
  * Set up message registers and return the message descriptor for sampling.
  */
 static struct toy_src
-fs_prepare_tgsi_sampling(struct toy_compiler *tc, const struct toy_inst *inst,
+fs_prepare_tgsi_sampling(struct fs_compile_context *fcc,
+                         const struct toy_inst *inst,
                          int base_mrf, const uint32_t *saturate_coords,
                          unsigned *ret_sampler_index)
 {
+   struct toy_compiler *tc = &fcc->tc;
    unsigned simd_mode, msg_type, msg_len, sampler_index, binding_table_index;
    struct toy_src coords[4], ddx[4], ddy[4], bias_or_lod, ref_or_si;
    int num_coords, ref_pos, num_derivs;
@@ -801,7 +802,7 @@ fs_prepare_tgsi_sampling(struct toy_compiler *tc, const struct toy_inst *inst,
          msg_type = GEN7_MSG_SAMPLER_SAMPLE_D_C;
          ref_or_si = coords[ref_pos];
 
-         if (tc->dev->gen < ILO_GEN(7.5))
+         if (ilo_dev_gen(tc->dev) < ILO_GEN(7.5))
             tc_fail(tc, "TXD with shadow sampler not supported");
       }
       else {
@@ -977,7 +978,7 @@ fs_prepare_tgsi_sampling(struct toy_compiler *tc, const struct toy_inst *inst,
 
    assert(inst->src[sampler_src].file == TOY_FILE_IMM);
    sampler_index = inst->src[sampler_src].val32;
-   binding_table_index = ILO_WM_TEXTURE_SURFACE(sampler_index);
+   binding_table_index = fcc->shader->bt.tex_base + sampler_index;
 
    /*
     * From the Sandy Bridge PRM, volume 4 part 1, page 18:
@@ -1064,7 +1065,7 @@ fs_prepare_tgsi_sampling(struct toy_compiler *tc, const struct toy_inst *inst,
    }
 
    /* set up sampler parameters */
-   if (tc->dev->gen >= ILO_GEN(7)) {
+   if (ilo_dev_gen(tc->dev) >= ILO_GEN(7)) {
       msg_len = fs_add_sampler_params_gen7(tc, msg_type, base_mrf, param_size,
             coords, num_coords, bias_or_lod, ref_or_si, ddx, ddy, num_derivs);
    }
@@ -1101,7 +1102,7 @@ fs_lower_opcode_tgsi_sampling(struct fs_compile_context *fcc,
    int swizzles[4], i;
    bool need_filter;
 
-   desc = fs_prepare_tgsi_sampling(tc, inst,
+   desc = fs_prepare_tgsi_sampling(fcc, inst,
          fcc->first_free_mrf,
          fcc->variant->saturate_tex_coords,
          &sampler_index);
@@ -1425,7 +1426,7 @@ fs_compile(struct fs_compile_context *fcc)
 
    if (ilo_debug & ILO_DEBUG_FS) {
       ilo_printf("disassembly:\n");
-      toy_compiler_disassemble(tc, sh->kernel, sh->kernel_size);
+      toy_compiler_disassemble(tc->dev, sh->kernel, sh->kernel_size, false);
       ilo_printf("\n");
    }
 
@@ -1569,7 +1570,7 @@ fs_write_fb(struct fs_compile_context *fcc)
             mrf - fcc->first_free_mrf, 0,
             header_present, false,
             GEN6_MSG_DP_RT_WRITE,
-            ctrl, ILO_WM_DRAW_SURFACE(cbuf));
+            ctrl, fcc->shader->bt.rt_base + cbuf);
 
       tc_add2(tc, TOY_OPCODE_FB_WRITE, tdst_null(),
             tsrc(TOY_FILE_MRF, fcc->first_free_mrf, 0), desc);
@@ -1849,7 +1850,7 @@ fs_setup(struct fs_compile_context *fcc,
    fcc->num_grf_per_vrf =
       (fcc->dispatch_mode == GEN6_WM_DW5_16_PIXEL_DISPATCH) ? 2 : 1;
 
-   if (fcc->tc.dev->gen >= ILO_GEN(7)) {
+   if (ilo_dev_gen(fcc->tc.dev) >= ILO_GEN(7)) {
       fcc->last_free_grf -= 15;
       fcc->first_free_mrf = fcc->last_free_grf + 1;
       fcc->last_free_mrf = fcc->first_free_mrf + 14;
@@ -1859,6 +1860,23 @@ fs_setup(struct fs_compile_context *fcc,
    fcc->shader->has_kill = fcc->tgsi.uses_kill;
    fcc->shader->dispatch_16 =
       (fcc->dispatch_mode == GEN6_WM_DW5_16_PIXEL_DISPATCH);
+
+   fcc->shader->bt.rt_base = 0;
+   fcc->shader->bt.rt_count = fcc->variant->u.fs.num_cbufs;
+   /* to send EOT */
+   if (!fcc->shader->bt.rt_count)
+      fcc->shader->bt.rt_count = 1;
+
+   fcc->shader->bt.tex_base = fcc->shader->bt.rt_base +
+                              fcc->shader->bt.rt_count;
+   fcc->shader->bt.tex_count = fcc->variant->num_sampler_views;
+
+   fcc->shader->bt.const_base = fcc->shader->bt.tex_base +
+                                fcc->shader->bt.tex_count;
+   fcc->shader->bt.const_count = state->info.constant_buffer_count;
+
+   fcc->shader->bt.total_count = fcc->shader->bt.const_base +
+                                 fcc->shader->bt.const_count;
 
    return true;
 }

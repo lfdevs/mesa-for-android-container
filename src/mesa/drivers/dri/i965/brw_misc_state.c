@@ -902,7 +902,7 @@ brw_upload_invariant_state(struct brw_context *brw)
    const uint32_t _3DSTATE_PIPELINE_SELECT =
       is_965 ? CMD_PIPELINE_SELECT_965 : CMD_PIPELINE_SELECT_GM45;
    BEGIN_BATCH(1);
-   OUT_BATCH(_3DSTATE_PIPELINE_SELECT << 16 | 0);
+   OUT_BATCH(_3DSTATE_PIPELINE_SELECT << 16 | (brw->gen >= 9 ? (3 << 8) : 0));
    ADVANCE_BATCH();
 
    if (brw->gen < 6) {
@@ -929,8 +929,7 @@ brw_upload_invariant_state(struct brw_context *brw)
    const uint32_t _3DSTATE_VF_STATISTICS =
       is_965 ? GEN4_3DSTATE_VF_STATISTICS : GM45_3DSTATE_VF_STATISTICS;
    BEGIN_BATCH(1);
-   OUT_BATCH(_3DSTATE_VF_STATISTICS << 16 |
-	     (unlikely(INTEL_DEBUG & DEBUG_STATS) ? 1 : 0));
+   OUT_BATCH(_3DSTATE_VF_STATISTICS << 16 | 1);
    ADVANCE_BATCH();
 }
 

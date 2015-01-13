@@ -518,19 +518,6 @@ _eglAddUserDriver(void)
 
 
 /**
- * Add egl_gallium to the module array.
- */
-static void
-_eglAddGalliumDriver(void)
-{
-#ifndef _EGL_BUILT_IN_DRIVER_GALLIUM
-   void *external = (void *) "egl_gallium";
-   _eglPreloadForEach(_eglGetSearchPath(), _eglLoaderFile, external);
-#endif
-}
-
-
-/**
  * Add built-in drivers to the module array.
  */
 static void
@@ -562,7 +549,6 @@ _eglAddDrivers(void)
        * Add other drivers only when EGL_DRIVER is not set.  The order here
        * decides the priorities.
        */
-      _eglAddGalliumDriver();
       _eglAddBuiltInDrivers();
    }
 

@@ -334,12 +334,6 @@ ytile_copy(
    }
 }
 
-#ifdef __GNUC__
-#define FLATTEN __attribute__((flatten))
-#else
-#define FLATTEN
-#endif
-
 /**
  * Copy texture data from linear to X tile layout, faster.
  *
@@ -494,8 +488,8 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
          /* Translate by (xt,yt) for single-tile copier. */
          tile_copy(x0-xt, x1-xt, x2-xt, x3-xt,
                    y0-yt, y1-yt,
-                   dst + xt * th + yt * dst_pitch,
-                   src + xt      + yt * src_pitch,
+                   dst + (ptrdiff_t) xt * th + (ptrdiff_t) yt * dst_pitch,
+                   src + (ptrdiff_t) xt      + (ptrdiff_t) yt * src_pitch,
                    src_pitch,
                    swizzle_bit,
                    mem_copy);
@@ -660,7 +654,8 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
    linear_to_tiled(
       xoffset * cpp, (xoffset + width) * cpp,
       yoffset, yoffset + height,
-      bo->virtual, pixels - yoffset * src_pitch - xoffset * cpp,
+      bo->virtual,
+      pixels - (ptrdiff_t) yoffset * src_pitch - (ptrdiff_t) xoffset * cpp,
       image->mt->pitch, src_pitch,
       brw->has_swizzling,
       image->mt->tiling,

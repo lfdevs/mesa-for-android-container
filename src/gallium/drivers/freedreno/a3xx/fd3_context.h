@@ -29,9 +29,14 @@
 #ifndef FD3_CONTEXT_H_
 #define FD3_CONTEXT_H_
 
+#include "util/u_upload_mgr.h"
+
 #include "freedreno_drmif.h"
 
 #include "freedreno_context.h"
+
+#include "ir3_shader.h"
+
 
 struct fd3_context {
 	struct fd_context base;
@@ -56,6 +61,55 @@ struct fd3_context {
 	/* vertex buf used for mem->gmem tex coords:
 	 */
 	struct pipe_resource *blit_texcoord_vbuf;
+
+	/* vertex state for solid_vbuf:
+	 *    - solid_vbuf / 12 / R32G32B32_FLOAT
+	 */
+	struct fd_vertex_state solid_vbuf_state;
+
+	/* vertex state for blit_prog:
+	 *    - blit_texcoord_vbuf / 8 / R32G32_FLOAT
+	 *    - solid_vbuf / 12 / R32G32B32_FLOAT
+	 */
+	struct fd_vertex_state blit_vbuf_state;
+
+
+	/*
+	 * Border color layout *appears* to be as arrays of 0x40 byte
+	 * elements, with frag shader elements starting at (16 x 0x40).
+	 * But at some point I should probably experiment more with
+	 * samplers in vertex shaders to be sure.  Unclear about why
+	 * there is this offset when there are separate VS and FS base
+	 * addr regs.
+	 *
+	 * The first 8 bytes of each entry are the requested border
+	 * color in fp16.  Unclear about the rest.. could be used for
+	 * other formats, or could simply be for aligning the pitch
+	 * to 32 pixels.
+	 */
+#define BORDERCOLOR_SIZE 0x40
+
+	struct u_upload_mgr *border_color_uploader;
+	struct pipe_resource *border_color_buf;
+
+	/* if *any* of bits are set in {v,f}saturate_{s,t,r} */
+	bool vsaturate, fsaturate;
+
+	/* bitmask of sampler which needs coords clamped for vertex
+	 * shader:
+	 */
+	unsigned vsaturate_s, vsaturate_t, vsaturate_r;
+
+	/* bitmask of sampler which needs coords clamped for frag
+	 * shader:
+	 */
+	unsigned fsaturate_s, fsaturate_t, fsaturate_r;
+
+	/* some state changes require a different shader variant.  Keep
+	 * track of this so we know when we need to re-emit shader state
+	 * due to variant change.  See fixup_shader_state()
+	 */
+	struct ir3_shader_key last_key;
 };
 
 static INLINE struct fd3_context *
