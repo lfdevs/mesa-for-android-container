@@ -289,6 +289,7 @@ Section: libdevel
 Architecture: any
 Depends:
  libegl1-mesa (= ${binary:Version}),
+ libwayland-egl1-mesa (= ${binary:Version}) [linux-any],
  libdrm-dev (>= 2.4.52) [!hurd-any],
  x11proto-dri2-dev (>= 2.6),
  x11proto-gl-dev (>= 1.4.14),
@@ -321,6 +322,7 @@ Section: libs
 Architecture: linux-any kfreebsd-any
 Depends:
  ${misc:Depends},
+Multi-Arch: same
 Description: transitional dummy package
  This is a transitional dummy package, it can be safely removed.
 
