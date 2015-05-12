@@ -212,6 +212,7 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
    }
    context->decoder->destroy(context->decoder);
    FREE(context);
+   handle_table_remove(drv->htab, context_id);
 
    return VA_STATUS_SUCCESS;
 }

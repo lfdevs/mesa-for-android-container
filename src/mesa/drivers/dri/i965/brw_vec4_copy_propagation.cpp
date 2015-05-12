@@ -50,7 +50,9 @@ is_direct_copy(vec4_instruction *inst)
 	   inst->dst.file == GRF &&
 	   !inst->dst.reladdr &&
 	   !inst->src[0].reladdr &&
-	   inst->dst.type == inst->src[0].type);
+	   (inst->dst.type == inst->src[0].type ||
+            (inst->dst.type == BRW_REGISTER_TYPE_F &&
+             inst->src[0].type == BRW_REGISTER_TYPE_VF)));
 }
 
 static bool
@@ -77,6 +79,22 @@ is_channel_updated(vec4_instruction *inst, src_reg *values[4], int ch)
 	   inst->dst.writemask & (1 << BRW_GET_SWZ(src->swizzle, ch)));
 }
 
+static unsigned
+swizzle_vf_imm(unsigned vf4, unsigned swizzle)
+{
+   union {
+      unsigned vf4;
+      uint8_t vf[4];
+   } v = { vf4 }, ret;
+
+   ret.vf[0] = v.vf[BRW_GET_SWZ(swizzle, 0)];
+   ret.vf[1] = v.vf[BRW_GET_SWZ(swizzle, 1)];
+   ret.vf[2] = v.vf[BRW_GET_SWZ(swizzle, 2)];
+   ret.vf[3] = v.vf[BRW_GET_SWZ(swizzle, 3)];
+
+   return ret.vf4;
+}
+
 static bool
 try_constant_propagate(struct brw_context *brw, vec4_instruction *inst,
                        int arg, struct copy_entry *entry)
@@ -96,20 +114,20 @@ try_constant_propagate(struct brw_context *brw, vec4_instruction *inst,
       return false;
 
    if (inst->src[arg].abs) {
-      if (value.type == BRW_REGISTER_TYPE_F) {
-	 value.fixed_hw_reg.dw1.f = fabs(value.fixed_hw_reg.dw1.f);
-      } else if (value.type == BRW_REGISTER_TYPE_D) {
-	 if (value.fixed_hw_reg.dw1.d < 0)
-	    value.fixed_hw_reg.dw1.d = -value.fixed_hw_reg.dw1.d;
+      if (!brw_abs_immediate(value.type, &value.fixed_hw_reg)) {
+         return false;
       }
    }
 
    if (inst->src[arg].negate) {
-      if (value.type == BRW_REGISTER_TYPE_F)
-	 value.fixed_hw_reg.dw1.f = -value.fixed_hw_reg.dw1.f;
-      else
-	 value.fixed_hw_reg.dw1.ud = -value.fixed_hw_reg.dw1.ud;
+      if (!brw_negate_immediate(value.type, &value.fixed_hw_reg)) {
+         return false;
+      }
    }
+
+   if (value.type == BRW_REGISTER_TYPE_VF)
+      value.fixed_hw_reg.dw1.ud = swizzle_vf_imm(value.fixed_hw_reg.dw1.ud,
+                                                 inst->src[arg].swizzle);
 
    switch (inst->opcode) {
    case BRW_OPCODE_MOV:
@@ -282,22 +300,17 @@ try_copy_propagate(struct brw_context *brw, vec4_instruction *inst,
        inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE)
       return false;
 
-   bool is_3src_inst = (inst->opcode == BRW_OPCODE_LRP ||
-                        inst->opcode == BRW_OPCODE_MAD ||
-                        inst->opcode == BRW_OPCODE_BFE ||
-                        inst->opcode == BRW_OPCODE_BFI2);
-   if (is_3src_inst && value.file == UNIFORM)
+   if (inst->is_3src() && value.file == UNIFORM)
       return false;
 
    if (inst->is_send_from_grf())
       return false;
 
-   /* We can't copy-propagate a UD negation into a condmod
-    * instruction, because the condmod ends up looking at the 33-bit
-    * signed accumulator value instead of the 32-bit value we wanted
+   /* we can't generally copy-propagate UD negations becuse we
+    * end up accessing the resulting values as signed integers
+    * instead. See also resolve_ud_negate().
     */
-   if (inst->conditional_mod &&
-       value.negate &&
+   if (value.negate &&
        value.type == BRW_REGISTER_TYPE_UD)
       return false;
 
@@ -330,7 +343,7 @@ try_copy_propagate(struct brw_context *brw, vec4_instruction *inst,
 }
 
 bool
-vec4_visitor::opt_copy_propagation()
+vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 {
    bool progress = false;
    struct copy_entry entries[virtual_grf_reg_count];
@@ -395,7 +408,7 @@ vec4_visitor::opt_copy_propagation()
 	 if (c != 4)
 	    continue;
 
-	 if (try_constant_propagate(brw, inst, i, &entry))
+         if (do_constant_prop && try_constant_propagate(brw, inst, i, &entry))
             progress = true;
 
 	 if (try_copy_propagate(brw, inst, i, &entry, reg))
@@ -415,7 +428,7 @@ vec4_visitor::opt_copy_propagation()
 	 entries[reg].saturatemask = 0x0;
 	 for (int i = 0; i < 4; i++) {
 	    if (inst->dst.writemask & (1 << i)) {
-               entries[reg].value[i] = direct_copy ? &inst->src[0] : NULL;
+               entries[reg].value[i] = (!inst->saturate && direct_copy) ? &inst->src[0] : NULL;
                entries[reg].saturatemask |= (((inst->saturate && direct_copy) ? 1 : 0) << i);
 	    }
 	 }

@@ -75,7 +75,8 @@ static const struct {
    { _EGL_PLATFORM_DRM, "drm" },
    { _EGL_PLATFORM_FBDEV, "fbdev" },
    { _EGL_PLATFORM_NULL, "null" },
-   { _EGL_PLATFORM_ANDROID, "android" }
+   { _EGL_PLATFORM_ANDROID, "android" },
+   { _EGL_PLATFORM_HAIKU, "haiku" }
 };
 
 
@@ -176,6 +177,10 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
 #ifdef HAVE_X11_PLATFORM
       /* If not matched to any other platform, fallback to x11. */
       return _EGL_PLATFORM_X11;
+#endif
+
+#ifdef HAVE_HAIKU_PLATFORM
+	return _EGL_PLATFORM_HAIKU;
 #endif
    }
 

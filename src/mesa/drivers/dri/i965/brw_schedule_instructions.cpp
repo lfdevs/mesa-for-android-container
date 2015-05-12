@@ -673,7 +673,7 @@ instruction_scheduler::compute_delay(schedule_node *n)
  */
 void
 instruction_scheduler::add_dep(schedule_node *before, schedule_node *after,
-			       int latency)
+                               int latency)
 {
    if (!before || !after)
       return;
@@ -682,22 +682,22 @@ instruction_scheduler::add_dep(schedule_node *before, schedule_node *after,
 
    for (int i = 0; i < before->child_count; i++) {
       if (before->children[i] == after) {
-	 before->child_latency[i] = MAX2(before->child_latency[i], latency);
-	 return;
+         before->child_latency[i] = MAX2(before->child_latency[i], latency);
+         return;
       }
    }
 
    if (before->child_array_size <= before->child_count) {
       if (before->child_array_size < 16)
-	 before->child_array_size = 16;
+         before->child_array_size = 16;
       else
-	 before->child_array_size *= 2;
+         before->child_array_size *= 2;
 
       before->children = reralloc(mem_ctx, before->children,
-				  schedule_node *,
-				  before->child_array_size);
+                                  schedule_node *,
+                                  before->child_array_size);
       before->child_latency = reralloc(mem_ctx, before->child_latency,
-				       int, before->child_array_size);
+                                       int, before->child_array_size);
    }
 
    before->children[before->child_count] = after;
@@ -728,15 +728,15 @@ instruction_scheduler::add_barrier_deps(schedule_node *n)
 
    if (prev) {
       while (!prev->is_head_sentinel()) {
-	 add_dep(prev, n, 0);
-	 prev = (schedule_node *)prev->prev;
+         add_dep(prev, n, 0);
+         prev = (schedule_node *)prev->prev;
       }
    }
 
    if (next) {
       while (!next->is_tail_sentinel()) {
-	 add_dep(n, next, 0);
-	 next = (schedule_node *)next->next;
+         add_dep(n, next, 0);
+         next = (schedule_node *)next->next;
       }
    }
 }
@@ -791,7 +791,7 @@ fs_instruction_scheduler::calculate_deps()
 
       /* read-after-write deps. */
       for (int i = 0; i < inst->sources; i++) {
-	 if (inst->src[i].file == GRF) {
+         if (inst->src[i].file == GRF) {
             if (post_reg_alloc) {
                for (int r = 0; r < inst->regs_read(v, i); r++)
                   add_dep(last_grf_write[inst->src[i].reg + r], n);
@@ -800,10 +800,10 @@ fs_instruction_scheduler::calculate_deps()
                   add_dep(last_grf_write[inst->src[i].reg * 16 + inst->src[i].reg_offset + r], n);
                }
             }
-	 } else if (inst->src[i].file == HW_REG &&
-		    (inst->src[i].fixed_hw_reg.file ==
-		     BRW_GENERAL_REGISTER_FILE)) {
-	    if (post_reg_alloc) {
+         } else if (inst->src[i].file == HW_REG &&
+                    (inst->src[i].fixed_hw_reg.file ==
+                     BRW_GENERAL_REGISTER_FILE)) {
+            if (post_reg_alloc) {
                int size = reg_width;
                if (inst->src[i].fixed_hw_reg.vstride == BRW_VERTICAL_STRIDE_0)
                   size = 1;
@@ -814,28 +814,28 @@ fs_instruction_scheduler::calculate_deps()
             }
          } else if (inst->src[i].is_accumulator()) {
             add_dep(last_accumulator_write, n);
-	 } else if (inst->src[i].file != BAD_FILE &&
-		    inst->src[i].file != IMM &&
-		    inst->src[i].file != UNIFORM &&
+         } else if (inst->src[i].file != BAD_FILE &&
+                    inst->src[i].file != IMM &&
+                    inst->src[i].file != UNIFORM &&
                     (inst->src[i].file != HW_REG ||
                      inst->src[i].fixed_hw_reg.file != IMM)) {
-	    assert(inst->src[i].file != MRF);
-	    add_barrier_deps(n);
-	 }
+            assert(inst->src[i].file != MRF);
+            add_barrier_deps(n);
+         }
       }
 
       if (inst->base_mrf != -1) {
-	 for (int i = 0; i < inst->mlen; i++) {
-	    /* It looks like the MRF regs are released in the send
-	     * instruction once it's sent, not when the result comes
-	     * back.
-	     */
-	    add_dep(last_mrf_write[inst->base_mrf + i], n);
-	 }
+         for (int i = 0; i < inst->mlen; i++) {
+            /* It looks like the MRF regs are released in the send
+             * instruction once it's sent, not when the result comes
+             * back.
+             */
+            add_dep(last_mrf_write[inst->base_mrf + i], n);
+         }
       }
 
       if (inst->reads_flag()) {
-	 add_dep(last_conditional_mod[inst->flag_subreg], n);
+         add_dep(last_conditional_mod[inst->flag_subreg], n);
       }
 
       if (inst->reads_accumulator_implicitly()) {
@@ -856,20 +856,20 @@ fs_instruction_scheduler::calculate_deps()
             }
          }
       } else if (inst->dst.file == MRF) {
-	 int reg = inst->dst.reg & ~BRW_MRF_COMPR4;
+         int reg = inst->dst.reg & ~BRW_MRF_COMPR4;
 
-	 add_dep(last_mrf_write[reg], n);
-	 last_mrf_write[reg] = n;
-	 if (is_compressed(inst)) {
-	    if (inst->dst.reg & BRW_MRF_COMPR4)
-	       reg += 4;
-	    else
-	       reg++;
-	    add_dep(last_mrf_write[reg], n);
-	    last_mrf_write[reg] = n;
-	 }
+         add_dep(last_mrf_write[reg], n);
+         last_mrf_write[reg] = n;
+         if (is_compressed(inst)) {
+            if (inst->dst.reg & BRW_MRF_COMPR4)
+               reg += 4;
+            else
+               reg++;
+            add_dep(last_mrf_write[reg], n);
+            last_mrf_write[reg] = n;
+         }
       } else if (inst->dst.file == HW_REG &&
-		 inst->dst.fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
+                 inst->dst.fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
          if (post_reg_alloc) {
             for (int r = 0; r < reg_width; r++)
                last_grf_write[inst->dst.fixed_hw_reg.nr + r] = n;
@@ -879,20 +879,21 @@ fs_instruction_scheduler::calculate_deps()
       } else if (inst->dst.is_accumulator()) {
          add_dep(last_accumulator_write, n);
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE) {
-	 add_barrier_deps(n);
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
+         add_barrier_deps(n);
       }
 
       if (inst->mlen > 0 && inst->base_mrf != -1) {
-	 for (int i = 0; i < v->implied_mrf_writes(inst); i++) {
-	    add_dep(last_mrf_write[inst->base_mrf + i], n);
-	    last_mrf_write[inst->base_mrf + i] = n;
-	 }
+         for (int i = 0; i < v->implied_mrf_writes(inst); i++) {
+            add_dep(last_mrf_write[inst->base_mrf + i], n);
+            last_mrf_write[inst->base_mrf + i] = n;
+         }
       }
 
       if (inst->writes_flag()) {
-	 add_dep(last_conditional_mod[inst->flag_subreg], n, 0);
-	 last_conditional_mod[inst->flag_subreg] = n;
+         add_dep(last_conditional_mod[inst->flag_subreg], n, 0);
+         last_conditional_mod[inst->flag_subreg] = n;
       }
 
       if (inst->writes_accumulator_implicitly(v->brw) &&
@@ -912,14 +913,14 @@ fs_instruction_scheduler::calculate_deps()
    exec_node *node;
    exec_node *prev;
    for (node = instructions.get_tail(), prev = node->prev;
-	!node->is_head_sentinel();
-	node = prev, prev = node->prev) {
+        !node->is_head_sentinel();
+        node = prev, prev = node->prev) {
       schedule_node *n = (schedule_node *)node;
       fs_inst *inst = (fs_inst *)n->inst;
 
       /* write-after-read deps. */
       for (int i = 0; i < inst->sources; i++) {
-	 if (inst->src[i].file == GRF) {
+         if (inst->src[i].file == GRF) {
             if (post_reg_alloc) {
                for (int r = 0; r < inst->regs_read(v, i); r++)
                   add_dep(n, last_grf_write[inst->src[i].reg + r]);
@@ -928,10 +929,10 @@ fs_instruction_scheduler::calculate_deps()
                   add_dep(n, last_grf_write[inst->src[i].reg * 16 + inst->src[i].reg_offset + r]);
                }
             }
-	 } else if (inst->src[i].file == HW_REG &&
-		    (inst->src[i].fixed_hw_reg.file ==
-		     BRW_GENERAL_REGISTER_FILE)) {
-	    if (post_reg_alloc) {
+         } else if (inst->src[i].file == HW_REG &&
+                    (inst->src[i].fixed_hw_reg.file ==
+                     BRW_GENERAL_REGISTER_FILE)) {
+            if (post_reg_alloc) {
                int size = reg_width;
                if (inst->src[i].fixed_hw_reg.vstride == BRW_VERTICAL_STRIDE_0)
                   size = 1;
@@ -943,27 +944,27 @@ fs_instruction_scheduler::calculate_deps()
          } else if (inst->src[i].is_accumulator()) {
             add_dep(n, last_accumulator_write);
          } else if (inst->src[i].file != BAD_FILE &&
-		    inst->src[i].file != IMM &&
-		    inst->src[i].file != UNIFORM &&
+                    inst->src[i].file != IMM &&
+                    inst->src[i].file != UNIFORM &&
                     (inst->src[i].file != HW_REG ||
                      inst->src[i].fixed_hw_reg.file != IMM)) {
-	    assert(inst->src[i].file != MRF);
-	    add_barrier_deps(n);
-	 }
+            assert(inst->src[i].file != MRF);
+            add_barrier_deps(n);
+         }
       }
 
       if (inst->base_mrf != -1) {
-	 for (int i = 0; i < inst->mlen; i++) {
-	    /* It looks like the MRF regs are released in the send
-	     * instruction once it's sent, not when the result comes
-	     * back.
-	     */
-	    add_dep(n, last_mrf_write[inst->base_mrf + i], 2);
-	 }
+         for (int i = 0; i < inst->mlen; i++) {
+            /* It looks like the MRF regs are released in the send
+             * instruction once it's sent, not when the result comes
+             * back.
+             */
+            add_dep(n, last_mrf_write[inst->base_mrf + i], 2);
+         }
       }
 
       if (inst->reads_flag()) {
-	 add_dep(n, last_conditional_mod[inst->flag_subreg]);
+         add_dep(n, last_conditional_mod[inst->flag_subreg]);
       }
 
       if (inst->reads_accumulator_implicitly()) {
@@ -983,20 +984,20 @@ fs_instruction_scheduler::calculate_deps()
             }
          }
       } else if (inst->dst.file == MRF) {
-	 int reg = inst->dst.reg & ~BRW_MRF_COMPR4;
+         int reg = inst->dst.reg & ~BRW_MRF_COMPR4;
 
-	 last_mrf_write[reg] = n;
+         last_mrf_write[reg] = n;
 
-	 if (is_compressed(inst)) {
-	    if (inst->dst.reg & BRW_MRF_COMPR4)
-	       reg += 4;
-	    else
-	       reg++;
+         if (is_compressed(inst)) {
+            if (inst->dst.reg & BRW_MRF_COMPR4)
+               reg += 4;
+            else
+               reg++;
 
-	    last_mrf_write[reg] = n;
-	 }
+            last_mrf_write[reg] = n;
+         }
       } else if (inst->dst.file == HW_REG &&
-		 inst->dst.fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
+                 inst->dst.fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
          if (post_reg_alloc) {
             for (int r = 0; r < reg_width; r++)
                last_grf_write[inst->dst.fixed_hw_reg.nr + r] = n;
@@ -1005,18 +1006,19 @@ fs_instruction_scheduler::calculate_deps()
          }
       } else if (inst->dst.is_accumulator()) {
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE) {
-	 add_barrier_deps(n);
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
+         add_barrier_deps(n);
       }
 
       if (inst->mlen > 0 && inst->base_mrf != -1) {
-	 for (int i = 0; i < v->implied_mrf_writes(inst); i++) {
-	    last_mrf_write[inst->base_mrf + i] = n;
-	 }
+         for (int i = 0; i < v->implied_mrf_writes(inst); i++) {
+            last_mrf_write[inst->base_mrf + i] = n;
+         }
       }
 
       if (inst->writes_flag()) {
-	 last_conditional_mod[inst->flag_subreg] = n;
+         last_conditional_mod[inst->flag_subreg] = n;
       }
 
       if (inst->writes_accumulator_implicitly(v->brw)) {
@@ -1112,7 +1114,8 @@ vec4_instruction_scheduler::calculate_deps()
       } else if (inst->dst.is_accumulator()) {
          add_dep(last_accumulator_write, n);
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE) {
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
          add_barrier_deps(n);
       }
 
@@ -1199,7 +1202,8 @@ vec4_instruction_scheduler::calculate_deps()
          last_fixed_grf_write = n;
       } else if (inst->dst.is_accumulator()) {
          last_accumulator_write = n;
-      } else if (inst->dst.file != BAD_FILE) {
+      } else if (inst->dst.file != BAD_FILE &&
+                 !inst->dst.is_null()) {
          add_barrier_deps(n);
       }
 
@@ -1375,7 +1379,7 @@ instruction_scheduler::schedule_instructions(bblock_t *block)
    /* Remove non-DAG heads from the list. */
    foreach_in_list_safe(schedule_node, n, &instructions) {
       if (n->parent_count != 0)
-	 n->remove();
+         n->remove();
    }
 
    unsigned cand_generation = 1;
@@ -1412,10 +1416,10 @@ instruction_scheduler::schedule_instructions(bblock_t *block)
        * DAG edge as we do so.
        */
       for (int i = chosen->child_count - 1; i >= 0; i--) {
-	 schedule_node *child = chosen->children[i];
+         schedule_node *child = chosen->children[i];
 
-	 child->unblocked_time = MAX2(child->unblocked_time,
-				      time + chosen->child_latency[i]);
+         child->unblocked_time = MAX2(child->unblocked_time,
+                                      time + chosen->child_latency[i]);
 
          if (debug) {
             fprintf(stderr, "\tchild %d, %d parents: ", i, child->parent_count);
@@ -1423,13 +1427,13 @@ instruction_scheduler::schedule_instructions(bblock_t *block)
          }
 
          child->cand_generation = cand_generation;
-	 child->parent_count--;
-	 if (child->parent_count == 0) {
+         child->parent_count--;
+         if (child->parent_count == 0) {
             if (debug) {
                fprintf(stderr, "\t\tnow available\n");
             }
-	    instructions.push_head(child);
-	 }
+            instructions.push_head(child);
+         }
       }
       cand_generation++;
 
@@ -1440,10 +1444,10 @@ instruction_scheduler::schedule_instructions(bblock_t *block)
        */
       if (brw->gen < 6 && chosen->inst->is_math()) {
          foreach_in_list(schedule_node, n, &instructions) {
-	    if (n->inst->is_math())
-	       n->unblocked_time = MAX2(n->unblocked_time,
-					time + chosen->latency);
-	 }
+            if (n->inst->is_math())
+               n->unblocked_time = MAX2(n->unblocked_time,
+                                        time + chosen->latency);
+         }
       }
    }
 

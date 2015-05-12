@@ -80,7 +80,7 @@ nv50_colormask(unsigned mask)
 }
 
 #define NV50_BLEND_FACTOR_CASE(a, b) \
-   case PIPE_BLENDFACTOR_##a: return NV50_3D_BLEND_FACTOR_##b
+   case PIPE_BLENDFACTOR_##a: return NV50_BLEND_FACTOR_##b
 
 static INLINE uint32_t
 nv50_blend_fac(unsigned factor)
@@ -106,7 +106,7 @@ nv50_blend_fac(unsigned factor)
    NV50_BLEND_FACTOR_CASE(INV_SRC1_COLOR, ONE_MINUS_SRC1_COLOR);
    NV50_BLEND_FACTOR_CASE(INV_SRC1_ALPHA, ONE_MINUS_SRC1_ALPHA);
    default:
-      return NV50_3D_BLEND_FACTOR_ZERO;
+      return NV50_BLEND_FACTOR_ZERO;
    }
 }
 

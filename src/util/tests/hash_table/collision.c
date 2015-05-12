@@ -40,38 +40,38 @@ main(int argc, char **argv)
    uint32_t bad_hash = 5;
    int i;
 
-   ht = _mesa_hash_table_create(NULL, _mesa_key_string_equal);
+   ht = _mesa_hash_table_create(NULL, NULL, _mesa_key_string_equal);
 
-   _mesa_hash_table_insert(ht, bad_hash, str1, NULL);
-   _mesa_hash_table_insert(ht, bad_hash, str2, NULL);
+   _mesa_hash_table_insert_pre_hashed(ht, bad_hash, str1, NULL);
+   _mesa_hash_table_insert_pre_hashed(ht, bad_hash, str2, NULL);
 
-   entry1 = _mesa_hash_table_search(ht, bad_hash, str1);
+   entry1 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str1);
    assert(entry1->key == str1);
 
-   entry2 = _mesa_hash_table_search(ht, bad_hash, str2);
+   entry2 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str2);
    assert(entry2->key == str2);
 
    /* Check that we can still find #1 after inserting #2 */
-   entry1 = _mesa_hash_table_search(ht, bad_hash, str1);
+   entry1 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str1);
    assert(entry1->key == str1);
 
    /* Remove the collided entry and look again. */
    _mesa_hash_table_remove(ht, entry1);
-   entry2 = _mesa_hash_table_search(ht, bad_hash, str2);
+   entry2 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str2);
    assert(entry2->key == str2);
 
    /* Put str1 back, then spam junk into the table to force a
     * resize and make sure we can still find them both.
     */
-   _mesa_hash_table_insert(ht, bad_hash, str1, NULL);
+   _mesa_hash_table_insert_pre_hashed(ht, bad_hash, str1, NULL);
    for (i = 0; i < 100; i++) {
       char *key = malloc(10);
       sprintf(key, "spam%d", i);
-      _mesa_hash_table_insert(ht, _mesa_hash_string(key), key, NULL);
+      _mesa_hash_table_insert_pre_hashed(ht, _mesa_hash_string(key), key, NULL);
    }
-   entry1 = _mesa_hash_table_search(ht, bad_hash, str1);
+   entry1 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str1);
    assert(entry1->key == str1);
-   entry2 = _mesa_hash_table_search(ht, bad_hash, str2);
+   entry2 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str2);
    assert(entry2->key == str2);
 
    _mesa_hash_table_destroy(ht, NULL);

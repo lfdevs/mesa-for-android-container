@@ -193,7 +193,7 @@ def lineloop(intype, outtype, inpv, outpv):
     print '  for (i = start, j = 0; j < nr - 2; j+=2, i++) { '
     do_line( intype, outtype, 'out+j',  'i', 'i+1', inpv, outpv );
     print '   }'
-    do_line( intype, outtype, 'out+j',  'i', '0', inpv, outpv );
+    do_line( intype, outtype, 'out+j',  'i', 'start', inpv, outpv );
     postamble()
 
 def tris(intype, outtype, inpv, outpv):
@@ -218,7 +218,7 @@ def tristrip(intype, outtype, inpv, outpv):
 def trifan(intype, outtype, inpv, outpv):
     preamble(intype, outtype, inpv, outpv, prim='trifan')
     print '  for (i = start, j = 0; j < nr; j+=3, i++) { '
-    do_tri( intype, outtype, 'out+j',  '0', 'i+1', 'i+2', inpv, outpv );
+    do_tri( intype, outtype, 'out+j',  'start', 'i+1', 'i+2', inpv, outpv );
     print '   }'
     postamble()
 
@@ -228,9 +228,9 @@ def polygon(intype, outtype, inpv, outpv):
     preamble(intype, outtype, inpv, outpv, prim='polygon')
     print '  for (i = start, j = 0; j < nr; j+=3, i++) { '
     if inpv == FIRST:
-        do_tri( intype, outtype, 'out+j',  '0', 'i+1', 'i+2', inpv, outpv );
+        do_tri( intype, outtype, 'out+j',  'start', 'i+1', 'i+2', inpv, outpv );
     else:
-        do_tri( intype, outtype, 'out+j',  'i+1', 'i+2', '0', inpv, outpv );
+        do_tri( intype, outtype, 'out+j',  'i+1', 'i+2', 'start', inpv, outpv );
     print '   }'
     postamble()
 

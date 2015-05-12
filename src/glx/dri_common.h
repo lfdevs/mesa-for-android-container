@@ -40,7 +40,7 @@
 #include <stdbool.h>
 #include "loader.h"
 
-#if (__GNUC__ >= 3)
+#if (__GNUC__)
 #define PRINTFLIKE(f, a) __attribute__ ((format(__printf__, f, a)))
 #else
 #define PRINTFLIKE(f, a)

@@ -96,7 +96,7 @@ extern _EGLDriver *
 _eglBuiltInDriverGLX(const char *args);
 
 
-PUBLIC _EGLDriver *
+extern _EGLDriver *
 _eglMain(const char *args);
 
 
@@ -113,11 +113,11 @@ _eglUnloadDrivers(void);
 
 
 /* defined in eglfallbacks.c */
-PUBLIC void
+extern void
 _eglInitDriverFallbacks(_EGLDriver *drv);
 
 
-PUBLIC void
+extern void
 _eglSearchPathForEach(EGLBoolean (*callback)(const char *, size_t, void *),
                       void *callback_data);
 

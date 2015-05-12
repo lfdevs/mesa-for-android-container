@@ -49,6 +49,11 @@ struct block_data {
 
    /** Which defs reach the exit point of the block. */
    BITSET_WORD *liveout;
+
+   BITSET_WORD flag_def[1];
+   BITSET_WORD flag_use[1];
+   BITSET_WORD flag_livein[1];
+   BITSET_WORD flag_liveout[1];
 };
 
 class vec4_live_variables {
@@ -62,7 +67,7 @@ public:
    int bitset_words;
 
    /** Per-basic-block information on live variables */
-   struct block_data *bd;
+   struct block_data *block_data;
 
 protected:
    void setup_def_use();

@@ -712,7 +712,7 @@ static void r200ColorMask( struct gl_context *ctx,
  */
 
 static void r200PolygonOffset( struct gl_context *ctx,
-			       GLfloat factor, GLfloat units )
+			       GLfloat factor, GLfloat units, GLfloat clamp )
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
    const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;

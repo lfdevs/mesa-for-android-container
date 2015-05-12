@@ -161,7 +161,6 @@ void vg_destroy_context(struct vg_context *ctx)
    if (ctx->mask.set_fs)
       vg_shader_destroy(ctx, ctx->mask.set_fs);
 
-   cso_release_all(ctx->cso_context);
    cso_destroy_context(ctx->cso_context);
 
    cso_hash_delete(ctx->owned_objects[VG_OBJECT_PAINT]);

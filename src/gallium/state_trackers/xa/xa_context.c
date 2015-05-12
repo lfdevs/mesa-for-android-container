@@ -82,7 +82,6 @@ xa_context_destroy(struct xa_context *r)
         pipe_surface_reference(&r->srf, NULL);
 
     if (r->cso) {
-	cso_release_all(r->cso);
 	cso_destroy_context(r->cso);
 	r->cso = NULL;
     }

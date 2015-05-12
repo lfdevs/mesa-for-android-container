@@ -67,7 +67,7 @@ int ir3_delayslots(struct ir3_instruction *assigner,
 		return 6;
 
 	/* handled via sync flags: */
-	if (is_sfu(assigner) || is_tex(assigner))
+	if (is_sfu(assigner) || is_tex(assigner) || is_mem(assigner))
 		return 0;
 
 	/* assigner must be alu: */

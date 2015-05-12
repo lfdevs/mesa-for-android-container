@@ -63,7 +63,7 @@ static void update_map(struct i915_context *i915,
                        const struct i915_texture *tex,
                        const struct i915_sampler_state *sampler,
                        const struct pipe_sampler_view* view,
-                       uint state[2]);
+                       uint state[3]);
 
 
 
@@ -300,13 +300,25 @@ static void update_map(struct i915_context *i915,
                        const struct i915_texture *tex,
                        const struct i915_sampler_state *sampler,
                        const struct pipe_sampler_view* view,
-                       uint state[2])
+                       uint state[3])
 {
    const struct pipe_resource *pt = &tex->b.b;
-   uint format, pitch;
-   const uint width = pt->width0, height = pt->height0, depth = pt->depth0;
-   const uint num_levels = pt->last_level;
+   uint width = pt->width0, height = pt->height0, depth = pt->depth0;
+   int first_level = view->u.tex.first_level;
+   const uint num_levels = pt->last_level - first_level;
    unsigned max_lod = num_levels * 4;
+   bool is_npot = (!util_is_power_of_two(pt->width0) || !util_is_power_of_two(pt->height0)); 
+   uint format, pitch;
+
+   /*
+    * This is a bit messy. i915 doesn't support NPOT with mipmaps, but we can
+    * still texture from a single level. This is useful to make u_blitter work.
+    */
+   if (is_npot) {
+      width = u_minify(width, first_level);
+      height = u_minify(height, first_level);
+      max_lod = 1;
+   }
 
    assert(tex);
    assert(width);
@@ -341,6 +353,11 @@ static void update_map(struct i915_context *i915,
        | MS4_CUBE_FACE_ENA_MASK
        | ((max_lod) << MS4_MAX_LOD_SHIFT)
        | ((depth - 1) << MS4_VOLUME_DEPTH_SHIFT));
+
+   if (is_npot)
+      state[2] = i915_texture_offset(tex, first_level, 0);
+   else
+      state[2] = 0;
 }
 
 static void update_maps(struct i915_context *i915)

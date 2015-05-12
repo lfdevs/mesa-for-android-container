@@ -783,8 +783,7 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
 
    if (prog->mem)
       nouveau_heap_free(&prog->mem);
-   if (prog->code)
-      FREE(prog->code); /* may be 0 for hardcoded shaders */
+   FREE(prog->code); /* may be 0 for hardcoded shaders */
    FREE(prog->immd_data);
    FREE(prog->relocs);
    if (prog->type == PIPE_SHADER_COMPUTE && prog->cp.syms)

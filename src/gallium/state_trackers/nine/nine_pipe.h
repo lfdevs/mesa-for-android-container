@@ -25,8 +25,10 @@
 
 #include "d3d9.h"
 #include "pipe/p_format.h"
+#include "pipe/p_screen.h"
 #include "pipe/p_state.h" /* pipe_box */
 #include "util/u_rect.h"
+#include "util/u_format.h"
 #include "nine_helpers.h"
 
 struct cso_context;
@@ -173,18 +175,72 @@ pipe_to_d3d9_format(enum pipe_format format)
     return nine_pipe_to_d3d9_format_map[format];
 }
 
+static INLINE boolean
+depth_stencil_format( D3DFORMAT fmt )
+{
+    static D3DFORMAT allowed[] = {
+        D3DFMT_D16_LOCKABLE,
+        D3DFMT_D32,
+        D3DFMT_D15S1,
+        D3DFMT_D24S8,
+        D3DFMT_D24X8,
+        D3DFMT_D24X4S4,
+        D3DFMT_D16,
+        D3DFMT_D32F_LOCKABLE,
+        D3DFMT_D24FS8,
+        D3DFMT_D32_LOCKABLE,
+        D3DFMT_DF16,
+        D3DFMT_DF24,
+        D3DFMT_INTZ
+    };
+    unsigned i;
+
+    for (i = 0; i < sizeof(allowed)/sizeof(D3DFORMAT); i++) {
+        if (fmt == allowed[i]) { return TRUE; }
+    }
+    return FALSE;
+}
+
+static INLINE unsigned
+d3d9_get_pipe_depth_format_bindings(D3DFORMAT format)
+{
+    switch (format) {
+    case D3DFMT_D32:
+    case D3DFMT_D15S1:
+    case D3DFMT_D24S8:
+    case D3DFMT_D24X8:
+    case D3DFMT_D24X4S4:
+    case D3DFMT_D16:
+    case D3DFMT_D24FS8:
+        return PIPE_BIND_DEPTH_STENCIL;
+    case D3DFMT_D32F_LOCKABLE:
+    case D3DFMT_D16_LOCKABLE:
+    case D3DFMT_D32_LOCKABLE:
+        return PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_TRANSFER_READ |
+               PIPE_BIND_TRANSFER_WRITE;
+    case D3DFMT_DF16:
+    case D3DFMT_DF24:
+    case D3DFMT_INTZ:
+        return PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_SAMPLER_VIEW;
+    default: assert(0);
+    }
+}
+
 static INLINE enum pipe_format
-d3d9_to_pipe_format(D3DFORMAT format)
+d3d9_to_pipe_format_internal(D3DFORMAT format)
 {
     if (format <= D3DFMT_A2B10G10R10_XR_BIAS)
         return nine_d3d9_to_pipe_format_map[format];
     switch (format) {
-    case D3DFMT_INTZ: return PIPE_FORMAT_Z24_UNORM_S8_UINT;
+    case D3DFMT_INTZ: return PIPE_FORMAT_S8_UINT_Z24_UNORM;
+    case D3DFMT_DF16: return PIPE_FORMAT_Z16_UNORM;
     case D3DFMT_DXT1: return PIPE_FORMAT_DXT1_RGBA;
     case D3DFMT_DXT2: return PIPE_FORMAT_DXT3_RGBA; /* XXX */
     case D3DFMT_DXT3: return PIPE_FORMAT_DXT3_RGBA;
     case D3DFMT_DXT4: return PIPE_FORMAT_DXT5_RGBA; /* XXX */
     case D3DFMT_DXT5: return PIPE_FORMAT_DXT5_RGBA;
+    case D3DFMT_ATI1: return PIPE_FORMAT_RGTC1_UNORM;
+    case D3DFMT_ATI2: return PIPE_FORMAT_RGTC2_UNORM;
     case D3DFMT_UYVY: return PIPE_FORMAT_UYVY;
     case D3DFMT_YUY2: return PIPE_FORMAT_YUYV; /* XXX check */
     case D3DFMT_NV12: return PIPE_FORMAT_NV12;
@@ -195,8 +251,9 @@ d3d9_to_pipe_format(D3DFORMAT format)
     case D3DFMT_Y210: /* XXX */
     case D3DFMT_Y216:
     case D3DFMT_NV11:
-    case D3DFMT_DF16: /* useless, not supported by wine either */
-    case D3DFMT_DF24: /* useless, not supported by wine either */
+    case D3DFMT_DF24: /* Similar to D3DFMT_DF16 but for 24-bits.
+        We don't advertise it because when it is supported, Fetch-4 is
+        supposed to be supported, which we don't support yet. */
     case D3DFMT_NULL: /* special cased, only for surfaces */
         return PIPE_FORMAT_NONE;
     default:
@@ -205,6 +262,51 @@ d3d9_to_pipe_format(D3DFORMAT format)
                  (char)(format >> 16), (char)(format >> 24));
         return PIPE_FORMAT_NONE;
     }
+}
+
+#define format_check_internal(pipe_format) \
+    screen->is_format_supported(screen, pipe_format, target, \
+                                sample_count, bindings)
+
+static INLINE enum pipe_format
+d3d9_to_pipe_format_checked(struct pipe_screen *screen,
+                            D3DFORMAT format,
+                            enum pipe_texture_target target,
+                            unsigned sample_count,
+                            unsigned bindings,
+                            boolean srgb)
+{
+    enum pipe_format result;
+
+    result = d3d9_to_pipe_format_internal(format);
+    if (result == PIPE_FORMAT_NONE)
+        return PIPE_FORMAT_NONE;
+
+    if (srgb)
+        result = util_format_srgb(result);
+
+    if (format_check_internal(result))
+        return result;
+
+    /* fallback to another format for formats
+     * that match several pipe_format */
+    switch(format) {
+        /* depth buffer formats are not lockable (except those for which it
+         * is precised in the name), so it is ok to match to another similar
+         * format. In all cases, if the app reads the texture with a shader,
+         * it gets depth on r and doesn't get stencil.*/
+        case D3DFMT_INTZ:
+        case D3DFMT_D24S8:
+            if (format_check_internal(PIPE_FORMAT_Z24_UNORM_S8_UINT))
+                return PIPE_FORMAT_Z24_UNORM_S8_UINT;
+            break;
+        case D3DFMT_D24X8:
+            if (format_check_internal(PIPE_FORMAT_Z24X8_UNORM))
+                return PIPE_FORMAT_Z24X8_UNORM;
+        default:
+            break;
+    }
+    return PIPE_FORMAT_NONE;
 }
 
 static INLINE const char *
@@ -249,6 +351,8 @@ d3dformat_to_string(D3DFORMAT fmt)
     case D3DFMT_DXT3: return "D3DFMT_DXT3";
     case D3DFMT_DXT4: return "D3DFMT_DXT4";
     case D3DFMT_DXT5: return "D3DFMT_DXT5";
+    case D3DFMT_ATI1: return "D3DFMT_ATI1";
+    case D3DFMT_ATI2: return "D3DFMT_ATI2";
     case D3DFMT_D16_LOCKABLE: return "D3DFMT_D16_LOCKABLE";
     case D3DFMT_D32: return "D3DFMT_D32";
     case D3DFMT_D15S1: return "D3DFMT_D15S1";
@@ -279,6 +383,8 @@ d3dformat_to_string(D3DFORMAT fmt)
     case D3DFMT_DF16: return "D3DFMT_DF16";
     case D3DFMT_DF24: return "D3DFMT_DF24";
     case D3DFMT_INTZ: return "D3DFMT_INTZ";
+    case D3DFMT_NVDB: return "D3DFMT_NVDB";
+    case D3DFMT_RESZ: return "D3DFMT_RESZ";
     case D3DFMT_NULL: return "D3DFMT_NULL";
     default:
         break;
@@ -392,6 +498,7 @@ d3dcmpfunc_to_pipe_func(D3DCMPFUNC func)
     case D3DCMP_NOTEQUAL:     return PIPE_FUNC_NOTEQUAL;
     case D3DCMP_GREATEREQUAL: return PIPE_FUNC_GEQUAL;
     case D3DCMP_ALWAYS:       return PIPE_FUNC_ALWAYS;
+    case D3DCMP_NEVER_ZERO:   return PIPE_FUNC_NEVER; // Tested on windows + ATI HD5770
     default:
         assert(0);
         return PIPE_FUNC_NEVER;
@@ -435,6 +542,7 @@ d3dfillmode_to_pipe_polygon_mode(D3DFILLMODE mode)
     case D3DFILL_POINT:     return PIPE_POLYGON_MODE_POINT;
     case D3DFILL_WIREFRAME: return PIPE_POLYGON_MODE_LINE;
     case D3DFILL_SOLID:     return PIPE_POLYGON_MODE_FILL;
+    case D3DFILL_SOLID_ZERO:return PIPE_POLYGON_MODE_FILL;
     default:
         assert(0);
         return PIPE_POLYGON_MODE_FILL;

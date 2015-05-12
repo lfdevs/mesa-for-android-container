@@ -28,7 +28,7 @@
 #include "main/glheader.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 #include "main/enums.h"
 #include "main/mm.h"
 

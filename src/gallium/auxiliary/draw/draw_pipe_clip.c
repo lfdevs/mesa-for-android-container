@@ -741,9 +741,10 @@ static void
 clip_init_state( struct draw_stage *stage )
 {
    struct clip_stage *clipper = clip_stage( stage );
-   const struct draw_fragment_shader *fs = stage->draw->fs.fragment_shader;
+   const struct draw_context *draw = stage->draw;
+   const struct draw_fragment_shader *fs = draw->fs.fragment_shader;
+   const struct tgsi_shader_info *info = draw_get_shader_info(draw);
    uint i, j;
-   const struct tgsi_shader_info *info = draw_get_shader_info(stage->draw);
 
    /* We need to know for each attribute what kind of interpolation is
     * done on it (flat, smooth or noperspective).  But the information
@@ -765,7 +766,7 @@ clip_init_state( struct draw_stage *stage )
     * gl_Color/gl_SecondaryColor, with the correct default.
     */
    int indexed_interp[2];
-   indexed_interp[0] = indexed_interp[1] = stage->draw->rasterizer->flatshade ?
+   indexed_interp[0] = indexed_interp[1] = draw->rasterizer->flatshade ?
       TGSI_INTERPOLATE_CONSTANT : TGSI_INTERPOLATE_PERSPECTIVE;
 
    if (fs) {
@@ -802,11 +803,11 @@ clip_init_state( struct draw_stage *stage )
          clipper->noperspective_attribs[i] = interp == TGSI_INTERPOLATE_LINEAR;
    }
    /* Search the extra vertex attributes */
-   for (j = 0; j < stage->draw->extra_shader_outputs.num; j++) {
+   for (j = 0; j < draw->extra_shader_outputs.num; j++) {
       /* Find the interpolation mode for a specific attribute */
       int interp = find_interp(fs, indexed_interp,
-                               stage->draw->extra_shader_outputs.semantic_name[j],
-                               stage->draw->extra_shader_outputs.semantic_index[j]);
+                               draw->extra_shader_outputs.semantic_name[j],
+                               draw->extra_shader_outputs.semantic_index[j]);
       /* If it's flat, add it to the flat vector.  Otherwise update
        * the noperspective mask.
        */

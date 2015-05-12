@@ -87,9 +87,10 @@ qir_opt_copy_propagation(struct vc4_compile *c)
 
                 if (inst->op == QOP_MOV &&
                     inst->dst.file == QFILE_TEMP &&
-                    (inst->src[0].file != QFILE_TEMP ||
-                     (defs[inst->src[0].index]->op != QOP_TEX_RESULT &&
-                      defs[inst->dst.index]->op != QOP_TLB_COLOR_READ))) {
+                    inst->src[0].file != QFILE_VPM &&
+                    !(inst->src[0].file == QFILE_TEMP &&
+                      (defs[inst->src[0].index]->op == QOP_TEX_RESULT ||
+                       defs[inst->src[0].index]->op == QOP_TLB_COLOR_READ))) {
                         movs[inst->dst.index] = inst->src[0];
                 }
         }

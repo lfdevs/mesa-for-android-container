@@ -91,11 +91,10 @@ gen6_update_sol_surfaces(struct brw_context *brw)
 const struct brw_tracked_state gen6_sol_surface = {
    .dirty = {
       .mesa = 0,
-      .brw = (BRW_NEW_BATCH |
-              BRW_NEW_VERTEX_PROGRAM |
-              BRW_NEW_GEOMETRY_PROGRAM |
-              BRW_NEW_TRANSFORM_FEEDBACK),
-      .cache = 0
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_GEOMETRY_PROGRAM |
+             BRW_NEW_VERTEX_PROGRAM |
+             BRW_NEW_TRANSFORM_FEEDBACK,
    },
    .emit = gen6_update_sol_surfaces,
 };
@@ -186,11 +185,10 @@ brw_gs_upload_binding_table(struct brw_context *brw)
 const struct brw_tracked_state gen6_gs_binding_table = {
    .dirty = {
       .mesa = 0,
-      .brw = (BRW_NEW_BATCH |
-              BRW_NEW_VERTEX_PROGRAM |
-              BRW_NEW_GEOMETRY_PROGRAM |
-              BRW_NEW_SURFACES),
-      .cache = 0
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_GEOMETRY_PROGRAM |
+             BRW_NEW_VERTEX_PROGRAM |
+             BRW_NEW_SURFACES,
    },
    .emit = brw_gs_upload_binding_table,
 };
@@ -243,7 +241,7 @@ brw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
 
    assert(brw->gen == 6);
 
-   if (brw->geometry_program) {
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY]) {
       /* BRW_NEW_GEOMETRY_PROGRAM */
       shaderprog =
          ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY];

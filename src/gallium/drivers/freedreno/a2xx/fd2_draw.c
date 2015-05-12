@@ -176,7 +176,7 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 				reg |= A2XX_RB_COPY_CONTROL_CLEAR_MASK(0xf);
 			break;
 		default:
-			assert(1);
+			debug_assert(0);
 			break;
 		}
 	}
@@ -193,6 +193,9 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 			break;
 		case DEPTHX_16:
 			reg = (uint32_t)(0xffffffff * depth);
+			break;
+		default:
+			debug_assert(0);
 			break;
 		}
 	}

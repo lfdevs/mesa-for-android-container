@@ -52,9 +52,6 @@ NineResource9_ctor( struct NineResource9 *This,
         This, pParams, initResource, (int) Allocate,
         Type, Pool, Usage);
 
-    DBG("This=%p pParams=%p initResource=%p Allocate=%d Type=%d Pool=%d usage=%d\n",
-        This, pParams, initResource, Allocate, Type, Pool, Usage);
-
     hr = NineUnknown_ctor(&This->base, pParams);
     if (FAILED(hr))
         return hr;

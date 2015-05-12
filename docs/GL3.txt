@@ -18,7 +18,7 @@ are exposed in the 3.0 context as extensions.
 Feature                                               Status
 ----------------------------------------------------- ------------------------
 
-GL 3.0, GLSL 1.30 --- all DONE: i965, nv50, nvc0, r600, radeonsi, llvmpipe (*), softpipe (*)
+GL 3.0, GLSL 1.30 --- all DONE: i965, nv50, nvc0, r600, radeonsi, llvmpipe, softpipe
 
   glBindFragDataLocation, glGetFragDataLocation         DONE
   Conditional rendering (GL_NV_conditional_render)      DONE (r300, swrast)
@@ -45,7 +45,7 @@ GL 3.0, GLSL 1.30 --- all DONE: i965, nv50, nvc0, r600, radeonsi, llvmpipe (*), 
   glVertexAttribI commands                              DONE
   Depth format cube textures                            DONE ()
   GLX_ARB_create_context (GLX 1.4 is required)          DONE
-  Multisample anti-aliasing                             DONE (r300)
+  Multisample anti-aliasing                             DONE (llvmpipe (*), softpipe (*), r300)
 
 (*) llvmpipe and softpipe have fake Multisample anti-aliasing support
 
@@ -191,7 +191,16 @@ GL 4.5, GLSL 4.50:
   GL_ARB_conditional_render_inverted                   DONE (i965, nv50, nvc0, llvmpipe, softpipe)
   GL_ARB_cull_distance                                 not started
   GL_ARB_derivative_control                            DONE (i965, nv50, nvc0, r600)
-  GL_ARB_direct_state_access                           not started
+  GL_ARB_direct_state_access                           started
+  - Transform Feedback object                          started (Martin Peres)
+  - Buffer object                                      started (Laura Ekstrand)
+  - Framebuffer object                                 started (Laura Ekstrand)
+  - Renderbuffer object                                not started
+  - Texture object                                     started (Laura Ekstrand)
+  - Vertex array object                                started (Fredrik Höglund)
+  - Sampler object                                     not started
+  - Program Pipeline object                            not started
+  - Query object                                       started (Martin Peres)
   GL_ARB_get_texture_sub_image                         started (Brian Paul)
   GL_ARB_shader_texture_image_samples                  not started
   GL_ARB_texture_barrier                               DONE (nv50, nvc0, r300, r600, radeonsi)

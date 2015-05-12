@@ -49,6 +49,7 @@ _reads_reg(uint64_t inst, uint32_t r, bool ignore_a, bool ignore_b)
                         return true;
 
                 if (!ignore_b &&
+                    QPU_GET_FIELD(inst, QPU_SIG) != QPU_SIG_SMALL_IMM &&
                     src_regs[i].mux == QPU_MUX_B &&
                     (QPU_GET_FIELD(inst, QPU_RADDR_B) == r))
                         return true;
@@ -91,17 +92,28 @@ writes_sfu(uint64_t inst)
 void
 vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
 {
+        bool scoreboard_locked = false;
+
         for (int i = 0; i < num_inst; i++) {
                 uint64_t inst = insts[i];
 
-                if (QPU_GET_FIELD(inst, QPU_SIG) != QPU_SIG_PROG_END)
+                if (QPU_GET_FIELD(inst, QPU_SIG) != QPU_SIG_PROG_END) {
+                        if (qpu_inst_is_tlb(inst))
+                                scoreboard_locked = true;
+
                         continue;
+                }
 
                 /* "The Thread End instruction must not write to either physical
                  *  regfile A or B."
                  */
                 assert(QPU_GET_FIELD(inst, QPU_WADDR_ADD) >= 32);
                 assert(QPU_GET_FIELD(inst, QPU_WADDR_MUL) >= 32);
+
+                /* Can't trigger an implicit wait on scoreboard in the program
+                 * end instruction.
+                 */
+                assert(!qpu_inst_is_tlb(inst) || scoreboard_locked);
 
                 /* Two delay slots will be executed. */
                 assert(i + 2 <= num_inst);
@@ -141,13 +153,7 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
         for (int i = 0; i < 2; i++) {
                 uint64_t inst = insts[i];
 
-                assert(QPU_GET_FIELD(inst, QPU_SIG) != QPU_SIG_COLOR_LOAD);
-                assert(QPU_GET_FIELD(inst, QPU_SIG) !=
-                       QPU_SIG_WAIT_FOR_SCOREBOARD);
-                assert(!writes_reg(inst, QPU_W_TLB_COLOR_MS));
-                assert(!writes_reg(inst, QPU_W_TLB_COLOR_ALL));
-                assert(!writes_reg(inst, QPU_W_TLB_Z));
-
+                assert(!qpu_inst_is_tlb(inst));
         }
 
         /* "If TMU_NOSWAP is written, the write must be three instructions
@@ -197,12 +203,13 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
         int last_sfu_inst = -10;
         for (int i = 0; i < num_inst - 1; i++) {
                 uint64_t inst = insts[i];
+                uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
 
                 assert(i - last_sfu_inst > 2 ||
                        (!writes_sfu(inst) &&
-                        !writes_reg(inst, QPU_W_TMU0_S) &&
-                        !writes_reg(inst, QPU_W_TMU1_S) &&
-                        QPU_GET_FIELD(inst, QPU_SIG) != QPU_SIG_COLOR_LOAD));
+                        sig != QPU_SIG_LOAD_TMU0 &&
+                        sig != QPU_SIG_LOAD_TMU1 &&
+                        sig != QPU_SIG_COLOR_LOAD));
 
                 if (writes_sfu(inst))
                         last_sfu_inst = i;
@@ -249,42 +256,7 @@ vc4_qpu_validate(uint64_t *insts, uint32_t num_inst)
          */
         for (int i = 0; i < num_inst - 1; i++) {
                 uint64_t inst = insts[i];
-                int accesses = 0;
-                static const uint32_t specials[] = {
-                        QPU_W_TLB_COLOR_MS,
-                        QPU_W_TLB_COLOR_ALL,
-                        QPU_W_TLB_Z,
-                        QPU_W_TMU0_S,
-                        QPU_W_TMU0_T,
-                        QPU_W_TMU0_R,
-                        QPU_W_TMU0_B,
-                        QPU_W_TMU1_S,
-                        QPU_W_TMU1_T,
-                        QPU_W_TMU1_R,
-                        QPU_W_TMU1_B,
-                        QPU_W_SFU_RECIP,
-                        QPU_W_SFU_RECIPSQRT,
-                        QPU_W_SFU_EXP,
-                        QPU_W_SFU_LOG,
-                };
 
-                for (int j = 0; j < ARRAY_SIZE(specials); j++) {
-                        if (writes_reg(inst, specials[j]))
-                                accesses++;
-                }
-
-                if (reads_reg(inst, QPU_R_MUTEX_ACQUIRE))
-                        accesses++;
-
-                /* XXX: semaphore, combined color read/write? */
-                switch (QPU_GET_FIELD(inst, QPU_SIG)) {
-                case QPU_SIG_COLOR_LOAD:
-                case QPU_SIG_COLOR_LOAD_END:
-                case QPU_SIG_LOAD_TMU0:
-                case QPU_SIG_LOAD_TMU1:
-                        accesses++;
-                }
-
-                assert(accesses <= 1);
+                assert(qpu_num_sf_accesses(inst) <= 1);
         }
 }

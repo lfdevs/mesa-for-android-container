@@ -460,15 +460,17 @@ error:
 
 void
 brw_meta_fbo_stencil_blit(struct brw_context *brw,
+                          struct gl_framebuffer *read_fb,
+                          struct gl_framebuffer *draw_fb,
                           GLfloat src_x0, GLfloat src_y0,
                           GLfloat src_x1, GLfloat src_y1,
                           GLfloat dst_x0, GLfloat dst_y0,
                           GLfloat dst_x1, GLfloat dst_y1)
 {
    struct gl_context *ctx = &brw->ctx;
-   struct gl_renderbuffer *draw_fb =
-      ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Renderbuffer;
-   const struct intel_renderbuffer *dst_irb = intel_renderbuffer(draw_fb);
+   struct gl_renderbuffer *draw_rb =
+      draw_fb->Attachment[BUFFER_STENCIL].Renderbuffer;
+   const struct intel_renderbuffer *dst_irb = intel_renderbuffer(draw_rb);
    struct intel_mipmap_tree *dst_mt = dst_irb->mt;
 
    if (!dst_mt)
@@ -478,7 +480,7 @@ brw_meta_fbo_stencil_blit(struct brw_context *brw,
       dst_mt = dst_mt->stencil_mt;
 
    bool mirror_x, mirror_y;
-   if (brw_meta_mirror_clip_and_scissor(ctx,
+   if (brw_meta_mirror_clip_and_scissor(ctx, read_fb, draw_fb,
                                         &src_x0, &src_y0, &src_x1, &src_y1,
                                         &dst_x0, &dst_y0, &dst_x1, &dst_y1,
                                         &mirror_x, &mirror_y))

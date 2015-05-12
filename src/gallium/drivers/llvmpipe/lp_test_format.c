@@ -112,7 +112,7 @@ add_fetch_rgba_test(struct gallivm_state *gallivm, unsigned verbose,
    block = LLVMAppendBasicBlockInContext(context, func, "entry");
    LLVMPositionBuilderAtEnd(builder, block);
 
-   rgba = lp_build_fetch_rgba_aos(gallivm, desc, type,
+   rgba = lp_build_fetch_rgba_aos(gallivm, desc, type, TRUE,
                                   packed_ptr, offset, i, j);
 
    LLVMBuildStore(builder, rgba, rgba_ptr);
@@ -252,6 +252,7 @@ test_format_unorm8(unsigned verbose, FILE *fp,
          }
 
          /* To ensure it's 16-byte aligned */
+         /* Could skip this and use unaligned lp_build_fetch_rgba_aos */
          memcpy(packed, test->packed, sizeof packed);
 
          for (i = 0; i < desc->block.height; ++i) {

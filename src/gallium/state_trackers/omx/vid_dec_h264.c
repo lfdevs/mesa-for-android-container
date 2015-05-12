@@ -706,6 +706,11 @@ static void slice_header(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp,
       if (pic_order_cnt_lsb != priv->codec_data.h264.pic_order_cnt_lsb)
          vid_dec_h264_EndFrame(priv);
 
+      if (IdrPicFlag) {
+         priv->codec_data.h264.pic_order_cnt_msb = 0;
+         priv->codec_data.h264.pic_order_cnt_lsb = 0;
+      }
+
       if ((pic_order_cnt_lsb < priv->codec_data.h264.pic_order_cnt_lsb) &&
           (priv->codec_data.h264.pic_order_cnt_lsb - pic_order_cnt_lsb) >= (max_pic_order_cnt_lsb / 2))
          pic_order_cnt_msb = priv->codec_data.h264.pic_order_cnt_msb + max_pic_order_cnt_lsb;

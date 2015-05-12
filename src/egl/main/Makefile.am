@@ -95,3 +95,8 @@ egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglextchromium.h \
 	$(top_srcdir)/include/EGL/eglmesaext.h \
 	$(top_srcdir)/include/EGL/eglplatform.h
+
+EXTRA_DIST = \
+	egl.def \
+	README.txt \
+	SConscript

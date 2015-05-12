@@ -386,6 +386,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
                                type.length,
                                format_desc->block.bits,
                                type.width,
+                               TRUE,
                                base_ptr, offset, FALSE);
 
       /*
@@ -411,8 +412,8 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
 
       packed = lp_build_gather(gallivm, type.length,
                                format_desc->block.bits,
-                               type.width, base_ptr, offset,
-                               FALSE);
+                               type.width, TRUE,
+                               base_ptr, offset, FALSE);
       if (format_desc->format == PIPE_FORMAT_R11G11B10_FLOAT) {
          lp_build_r11g11b10_to_float(gallivm, packed, rgba_out);
       }
@@ -438,15 +439,15 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
          unsigned mask = (1 << 8) - 1;
          LLVMValueRef s_offset = lp_build_const_int_vec(gallivm, type, 4);
          offset = LLVMBuildAdd(builder, offset, s_offset, "");
-         packed = lp_build_gather(gallivm, type.length,
-                                  32, type.width, base_ptr, offset, FALSE);
+         packed = lp_build_gather(gallivm, type.length, 32, type.width,
+                                  TRUE, base_ptr, offset, FALSE);
          packed = LLVMBuildAnd(builder, packed,
                                lp_build_const_int_vec(gallivm, type, mask), "");
       }
       else {
          assert (format_desc->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT);
-         packed = lp_build_gather(gallivm, type.length,
-                                  32, type.width, base_ptr, offset, TRUE);
+         packed = lp_build_gather(gallivm, type.length, 32, type.width,
+                                  TRUE, base_ptr, offset, TRUE);
          packed = LLVMBuildBitCast(builder, packed,
                                    lp_build_vec_type(gallivm, type), "");
       }
@@ -472,7 +473,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
       tmp_type.norm = TRUE;
 
       tmp = lp_build_fetch_rgba_aos(gallivm, format_desc, tmp_type,
-                                    base_ptr, offset, i, j);
+                                    TRUE, base_ptr, offset, i, j);
 
       lp_build_rgba8_to_fi32_soa(gallivm,
                                 type,
@@ -522,7 +523,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
 
          /* Get a single float[4]={R,G,B,A} pixel */
          tmp = lp_build_fetch_rgba_aos(gallivm, format_desc, tmp_type,
-                                       base_ptr, offset_elem,
+                                       TRUE, base_ptr, offset_elem,
                                        i_elem, j_elem);
 
          /*

@@ -84,6 +84,8 @@ struct r600_shader {
 	unsigned		max_arrays;
 	unsigned		num_arrays;
 	unsigned		vs_as_es;
+	unsigned		vs_as_gs_a;
+	unsigned                ps_prim_id_input;
 	struct r600_shader_array * arrays;
 };
 
@@ -92,6 +94,8 @@ struct r600_shader_key {
 	unsigned alpha_to_one:1;
 	unsigned nr_cbufs:4;
 	unsigned vs_as_es:1;
+	unsigned vs_as_gs_a:1;
+	unsigned vs_prim_id_out:8;
 };
 
 struct r600_shader_array {

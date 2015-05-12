@@ -39,6 +39,7 @@ NineAdapter9_ctor( struct NineAdapter9 *This,
                    struct NineUnknownParams *pParams,
                    struct d3dadapter9_context *pCTX )
 {
+    struct pipe_screen *hal = pCTX->hal;
     HRESULT hr = NineUnknown_ctor(&This->base, pParams);
     if (FAILED(hr)) { return hr; }
 
@@ -46,7 +47,7 @@ NineAdapter9_ctor( struct NineAdapter9 *This,
     nine_dump_D3DADAPTER_IDENTIFIER9(DBG_CHANNEL, &pCTX->identifier);
 
     This->ctx = pCTX;
-    if (!This->ctx->hal->get_param(This->ctx->hal, PIPE_CAP_CLIP_HALFZ)) {
+    if (!hal->get_param(hal, PIPE_CAP_CLIP_HALFZ)) {
         ERR("Driver doesn't support d3d9 coordinates\n");
         return D3DERR_DRIVERINTERNALERROR;
     }
@@ -54,7 +55,44 @@ NineAdapter9_ctor( struct NineAdapter9 *This,
         !This->ctx->ref->get_param(This->ctx->ref, PIPE_CAP_CLIP_HALFZ)) {
         ERR("Warning: Sotware rendering driver doesn't support d3d9 coordinates\n");
     }
+    /* Old cards had tricks to bypass some restrictions to implement
+     * everything and fit tight the requirements: number of constants,
+     * number of temp registers, special behaviours, etc. Since we don't
+     * have access to all this, we need a bit more than what dx9 required.
+     * For example we have to use more than 32 temp registers to emulate
+     * behaviours, while some dx9 hw don't have more. As for sm2 hardware,
+     * we could support vs2 / ps2 for them but it needs some more care, and
+     * as these are very old, we choose to drop support for them */
 
+    /* checks minimum requirements, most are vs3/ps3 strict requirements */
+    if (!hal->get_param(hal, PIPE_CAP_SM3) ||
+        hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
+                              PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) < 256 * sizeof(float[4]) ||
+        hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
+                              PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) < 244 * sizeof(float[4]) ||
+        hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
+                              PIPE_SHADER_CAP_MAX_TEMPS) < 32 ||
+        hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
+                              PIPE_SHADER_CAP_MAX_TEMPS) < 32 ||
+        hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
+                              PIPE_SHADER_CAP_MAX_INPUTS) < 16 ||
+        hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
+                              PIPE_SHADER_CAP_MAX_INPUTS) < 10) {
+        ERR("Your card is not supported by Gallium Nine. Minimum requirement "
+            "is >= r500, >= nv50, >= i965\n");
+        return D3DERR_DRIVERINTERNALERROR;
+    }
+    /* for r500 */
+    if (hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
+                              PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) < 276 * sizeof(float[4]) || /* we put bool and int constants with float constants */
+        hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
+                              PIPE_SHADER_CAP_MAX_TEMPS) < 40 || /* we use some more temp registers */
+        hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
+                              PIPE_SHADER_CAP_MAX_TEMPS) < 40 ||
+        hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
+                              PIPE_SHADER_CAP_MAX_INPUTS) < 20) /* we don't pack inputs as much as we could */
+        ERR("Your card is at the limit of Gallium Nine requirements. Some games "
+            "may run into issues because requirements are too tight\n");
     return D3D_OK;
 }
 
@@ -166,19 +204,15 @@ NineAdapter9_CheckDeviceType( struct NineAdapter9 *This,
     hr = NineAdapter9_GetScreen(This, DevType, &screen);
     if (FAILED(hr)) { return hr; }
 
-    dfmt = d3d9_to_pipe_format(AdapterFormat);
-    bfmt = d3d9_to_pipe_format(BackBufferFormat);
+    dfmt = d3d9_to_pipe_format_checked(screen, AdapterFormat, PIPE_TEXTURE_2D,
+                                       1,
+                                       PIPE_BIND_DISPLAY_TARGET |
+                                       PIPE_BIND_SHARED, FALSE);
+    bfmt = d3d9_to_pipe_format_checked(screen, BackBufferFormat, PIPE_TEXTURE_2D,
+                                       1,
+                                       PIPE_BIND_DISPLAY_TARGET |
+                                       PIPE_BIND_SHARED, FALSE);
     if (dfmt == PIPE_FORMAT_NONE || bfmt == PIPE_FORMAT_NONE) {
-        DBG("Invalid Adapter/BackBufferFormat.\n");
-        return D3DERR_NOTAVAILABLE;
-    }
-
-    if (!screen->is_format_supported(screen, dfmt, PIPE_TEXTURE_2D, 1,
-                                     PIPE_BIND_DISPLAY_TARGET |
-                                     PIPE_BIND_SHARED) ||
-        !screen->is_format_supported(screen, bfmt, PIPE_TEXTURE_2D, 1,
-                                     PIPE_BIND_DISPLAY_TARGET |
-                                     PIPE_BIND_SHARED)) {
         DBG("Unsupported Adapter/BackBufferFormat.\n");
         return D3DERR_NOTAVAILABLE;
     }
@@ -220,24 +254,24 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
     enum pipe_format pf;
     enum pipe_texture_target target;
     unsigned bind = 0;
+    boolean srgb;
 
     /* Check adapter format. */
 
-    /* Nicer output if we only have the line at the end. */
-#if 1
     DBG("This=%p DeviceType=%s AdapterFormat=%s\n", This,
         nine_D3DDEVTYPE_to_str(DeviceType), d3dformat_to_string(AdapterFormat));
-#endif
+    DBG("Usage=%x RType=%u CheckFormat=%s\n", Usage, RType,
+        d3dformat_to_string(CheckFormat));
+
     user_assert(display_format(AdapterFormat, FALSE), D3DERR_INVALIDCALL);
 
     hr = NineAdapter9_GetScreen(This, DeviceType, &screen);
     if (FAILED(hr))
         return hr;
-    pf = d3d9_to_pipe_format(AdapterFormat);
-    if (pf == PIPE_FORMAT_NONE ||
-        !screen->is_format_supported(screen, pf, PIPE_TEXTURE_2D, 0,
+    pf = d3d9_to_pipe_format_checked(screen, AdapterFormat, PIPE_TEXTURE_2D, 0,
                                      PIPE_BIND_DISPLAY_TARGET |
-                                     PIPE_BIND_SHARED)) {
+                                     PIPE_BIND_SHARED, FALSE);
+    if (pf == PIPE_FORMAT_NONE) {
         DBG("AdapterFormat %s not available.\n",
             d3dformat_to_string(AdapterFormat));
         return D3DERR_NOTAVAILABLE;
@@ -267,6 +301,16 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
          RType == D3DRTYPE_TEXTURE))
         return D3D_OK;
 
+    /* RESZ hack */
+    if (CheckFormat == D3DFMT_RESZ && bind == PIPE_BIND_RENDER_TARGET &&
+        RType == D3DRTYPE_SURFACE)
+        return screen->get_param(screen, PIPE_CAP_MULTISAMPLE_Z_RESOLVE) ?
+               D3D_OK : D3DERR_NOTAVAILABLE;
+
+    /* ATOC hack */
+    if (CheckFormat == D3DFMT_ATOC && RType == D3DRTYPE_SURFACE)
+        return D3D_OK;
+
     if (Usage & D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING)
         bind |= PIPE_BIND_BLENDABLE;
 
@@ -286,22 +330,16 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
     }
 
 
-    pf = d3d9_to_pipe_format(CheckFormat);
-    if (Usage & (D3DUSAGE_QUERY_SRGBREAD | D3DUSAGE_QUERY_SRGBWRITE))
-        pf = util_format_srgb(pf);
-
-    DBG("Format=%s/%s Usage/Bind=%x/%d RType/Target=%u/%s\n", // replace %d to %s
-        d3dformat_to_string(CheckFormat), util_format_name(pf),
-        Usage, bind, // temporary simplified for merge, FIXME
-        /* Usage, util_dump_bind_flags(bind), */
-        RType, util_dump_tex_target(target, TRUE));
-
-    if (pf == PIPE_FORMAT_NONE ||
-        !screen->is_format_supported(screen, pf, target, 0, bind)) {
+    srgb = (Usage & (D3DUSAGE_QUERY_SRGBREAD | D3DUSAGE_QUERY_SRGBWRITE)) != 0;
+    pf = d3d9_to_pipe_format_checked(screen, CheckFormat, target, 0, bind, srgb);
+    if (pf == PIPE_FORMAT_NONE) {
         DBG("NOT AVAILABLE\n");
         return D3DERR_NOTAVAILABLE;
     }
 
+    /* we support ATI1 and ATI2 hack only for 2D textures */
+    if (RType != D3DRTYPE_TEXTURE && (CheckFormat == D3DFMT_ATI1 || CheckFormat == D3DFMT_ATI2))
+        return D3DERR_NOTAVAILABLE;
     /* if (Usage & D3DUSAGE_NONSECURE) { don't know the implications of this } */
     /* if (Usage & D3DUSAGE_SOFTWAREPROCESSING) { we can always support this } */
 
@@ -332,13 +370,16 @@ NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
     if (FAILED(hr))
         return hr;
 
-    pf = d3d9_to_pipe_format(SurfaceFormat);
-    bind = util_format_is_depth_or_stencil(pf) ?
-        PIPE_BIND_DEPTH_STENCIL : PIPE_BIND_RENDER_TARGET;
+    if (depth_stencil_format(SurfaceFormat))
+        bind = d3d9_get_pipe_depth_format_bindings(SurfaceFormat);
+    else /* render-target */
+        bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_TRANSFER_READ |
+               PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_RENDER_TARGET;
 
-    if (pf == PIPE_FORMAT_NONE ||
-        !screen->is_format_supported(screen, pf, PIPE_TEXTURE_2D,
-                                     MultiSampleType, bind)) {
+    pf = d3d9_to_pipe_format_checked(screen, SurfaceFormat, PIPE_TEXTURE_2D,
+                                     MultiSampleType, bind, FALSE);
+
+    if (pf == PIPE_FORMAT_NONE) {
         DBG("%s with %u samples not available.\n",
             d3dformat_to_string(SurfaceFormat), MultiSampleType);
         return D3DERR_NOTAVAILABLE;
@@ -348,29 +389,6 @@ NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
         *pQualityLevels = 1; /* gallium doesn't have quality levels */
 
     return D3D_OK;
-}
-
-static INLINE boolean
-depth_stencil_format( D3DFORMAT fmt )
-{
-    static D3DFORMAT allowed[] = {
-        D3DFMT_D16_LOCKABLE,
-        D3DFMT_D32,
-        D3DFMT_D15S1,
-        D3DFMT_D24S8,
-        D3DFMT_D24X8,
-        D3DFMT_D24X4S4,
-        D3DFMT_D16,
-        D3DFMT_D32F_LOCKABLE,
-        D3DFMT_D24FS8,
-        D3DFMT_D32_LOCKABLE
-    };
-    unsigned i;
-
-    for (i = 0; i < sizeof(allowed)/sizeof(D3DFORMAT); i++) {
-        if (fmt == allowed[i]) { return TRUE; }
-    }
-    return FALSE;
 }
 
 HRESULT WINAPI
@@ -396,24 +414,21 @@ NineAdapter9_CheckDepthStencilMatch( struct NineAdapter9 *This,
     hr = NineAdapter9_GetScreen(This, DeviceType, &screen);
     if (FAILED(hr)) { return hr; }
 
-    dfmt = d3d9_to_pipe_format(AdapterFormat);
-    bfmt = d3d9_to_pipe_format(RenderTargetFormat);
+    dfmt = d3d9_to_pipe_format_checked(screen, AdapterFormat, PIPE_TEXTURE_2D, 0,
+                                       PIPE_BIND_DISPLAY_TARGET |
+                                       PIPE_BIND_SHARED, FALSE);
+    bfmt = d3d9_to_pipe_format_checked(screen, RenderTargetFormat,
+                                       PIPE_TEXTURE_2D, 0,
+                                       PIPE_BIND_RENDER_TARGET, FALSE);
     if (RenderTargetFormat == D3DFMT_NULL)
         bfmt = dfmt;
-    zsfmt = d3d9_to_pipe_format(DepthStencilFormat);
+    zsfmt = d3d9_to_pipe_format_checked(screen, DepthStencilFormat,
+                                        PIPE_TEXTURE_2D, 0,
+                                        d3d9_get_pipe_depth_format_bindings(DepthStencilFormat),
+                                        FALSE);
     if (dfmt == PIPE_FORMAT_NONE ||
         bfmt == PIPE_FORMAT_NONE ||
         zsfmt == PIPE_FORMAT_NONE) {
-        return D3DERR_NOTAVAILABLE;
-    }
-
-    if (!screen->is_format_supported(screen, dfmt, PIPE_TEXTURE_2D, 0,
-                                     PIPE_BIND_DISPLAY_TARGET |
-                                     PIPE_BIND_SHARED) ||
-        !screen->is_format_supported(screen, bfmt, PIPE_TEXTURE_2D, 0,
-                                     PIPE_BIND_RENDER_TARGET) ||
-        !screen->is_format_supported(screen, zsfmt, PIPE_TEXTURE_2D, 0,
-                                     PIPE_BIND_DEPTH_STENCIL)) {
         return D3DERR_NOTAVAILABLE;
     }
 
@@ -443,17 +458,14 @@ NineAdapter9_CheckDeviceFormatConversion( struct NineAdapter9 *This,
     hr = NineAdapter9_GetScreen(This, DeviceType, &screen);
     if (FAILED(hr)) { return hr; }
 
-    dfmt = d3d9_to_pipe_format(TargetFormat);
-    bfmt = d3d9_to_pipe_format(SourceFormat);
+    dfmt = d3d9_to_pipe_format_checked(screen, TargetFormat, PIPE_TEXTURE_2D, 1,
+                                       PIPE_BIND_DISPLAY_TARGET |
+                                       PIPE_BIND_SHARED, FALSE);
+    bfmt = d3d9_to_pipe_format_checked(screen, SourceFormat, PIPE_TEXTURE_2D, 1,
+                                       PIPE_BIND_DISPLAY_TARGET |
+                                       PIPE_BIND_SHARED, FALSE);
+
     if (dfmt == PIPE_FORMAT_NONE || bfmt == PIPE_FORMAT_NONE) {
-        return D3DERR_NOTAVAILABLE;
-    }
-    if (!screen->is_format_supported(screen, dfmt, PIPE_TEXTURE_2D, 1,
-                                     PIPE_BIND_DISPLAY_TARGET |
-                                     PIPE_BIND_SHARED) ||
-        !screen->is_format_supported(screen, bfmt, PIPE_TEXTURE_2D, 1,
-                                     PIPE_BIND_DISPLAY_TARGET |
-                                     PIPE_BIND_SHARED)) {
         DBG("%s to %s not supported.\n",
             d3dformat_to_string(SourceFormat),
             d3dformat_to_string(TargetFormat));
@@ -469,7 +481,6 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                             D3DCAPS9 *pCaps )
 {
     struct pipe_screen *screen;
-    boolean sm3, vs;
     HRESULT hr;
 
     DBG("This=%p DeviceType=%s pCaps=%p\n", This,
@@ -488,10 +499,6 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
 
 #define D3DNPIPECAP(pcap, d3dcap) \
     (screen->get_param(screen, PIPE_CAP_##pcap) ? 0 : (d3dcap))
-
-    sm3 = screen->get_param(screen, PIPE_CAP_SM3);
-    vs = !!(screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
-                                     PIPE_SHADER_CAP_MAX_INSTRUCTIONS));
 
     pCaps->DeviceType = DeviceType;
 
@@ -549,7 +556,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                                D3DPMISCCAPS_CULLCCW |
                                D3DPMISCCAPS_COLORWRITEENABLE |
                                D3DPMISCCAPS_CLIPPLANESCALEDPOINTS |
-                               D3DPMISCCAPS_CLIPTLVERTS |
+                               /*D3DPMISCCAPS_CLIPTLVERTS |*/
                                D3DPMISCCAPS_TSSARGTEMP |
                                D3DPMISCCAPS_BLENDOP |
                                D3DPIPECAP(INDEP_BLEND_ENABLE, D3DPMISCCAPS_INDEPENDENTWRITEMASKS) |
@@ -560,6 +567,8 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                                D3DPIPECAP(MIXED_COLORBUFFER_FORMATS, D3DPMISCCAPS_MRTINDEPENDENTBITDEPTHS) |
                                D3DPMISCCAPS_MRTPOSTPIXELSHADERBLENDING |
                                /*D3DPMISCCAPS_FOGVERTEXCLAMPED*/0;
+    if (!screen->get_param(screen, PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION))
+        pCaps->PrimitiveMiscCaps |= D3DPMISCCAPS_CLIPTLVERTS;
 
     pCaps->RasterCaps =
         D3DPIPECAP(ANISOTROPIC_FILTER, D3DPRASTERCAPS_ANISOTROPY) |
@@ -710,7 +719,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
         D3DPIPECAP(TWO_SIDED_STENCIL, D3DSTENCILCAPS_TWOSIDED);
 
     pCaps->FVFCaps =
-        (D3DFVFCAPS_TEXCOORDCOUNTMASK & 0xff) |
+        8 | /* 8 textures max */
         /*D3DFVFCAPS_DONOTSTRIPELEMENTS |*/
         D3DFVFCAPS_PSIZE;
 
@@ -766,8 +775,8 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
 
     pCaps->MaxPointSize = screen->get_paramf(screen, PIPE_CAPF_MAX_POINT_WIDTH);
 
-    pCaps->MaxPrimitiveCount = 0xFFFFF; /* <- wine, really 0xFFFFFFFF; */
-    pCaps->MaxVertexIndex = 0xFFFFF; /* <- wine, really 0xFFFFFFFF */
+    pCaps->MaxPrimitiveCount = 0x555555; /* <- wine, really 0xFFFFFFFF; */
+    pCaps->MaxVertexIndex = 0xFFFFFF; /* <- wine, really 0xFFFFFFFF */
     pCaps->MaxStreams =
         _min(screen->get_shader_param(screen,
                  PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_MAX_INPUTS),
@@ -776,28 +785,16 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
     pCaps->MaxStreamStride = screen->get_param(screen,
             PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE);
 
-    pCaps->VertexShaderVersion = sm3 ? D3DVS_VERSION(3,0) : D3DVS_VERSION(2,0);
-    if (vs) {
-        /* VS 2 as well as 3.0 supports a minimum of 256 consts, no matter how
-         * much our architecture moans about it. The problem is that D3D9
-         * expects access to 16 int consts (i#), containing 3 components and
-         * 16 booleans (b#), containing only 1 component. This should be packed
-         * into 20 float vectors (16 for i# and 16/4 for b#), since gallium has
-         * removed support for the loop counter/boolean files. */
-        pCaps->MaxVertexShaderConst =
-            _min((screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
-                     PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) /
-                     sizeof(float[4])) - 20,
-		 NINE_MAX_CONST_F);
-        /* Fake the minimum cap for Windows. */
-        if (QUIRK(FAKE_CAPS)) {
-            pCaps->MaxVertexShaderConst = 256;
-        }
-    } else {
-        pCaps->MaxVertexShaderConst = 0;
-    }
+    pCaps->VertexShaderVersion = D3DVS_VERSION(3,0);
 
-    pCaps->PixelShaderVersion = sm3 ? D3DPS_VERSION(3,0) : D3DPS_VERSION(2,0);
+    /* VS 2 as well as 3.0 supports a minimum of 256 consts.
+     * Wine and d3d9 drivers for dx1x hw advertise 256. Just as them,
+     * advertise 256. Problem is with hw that can only do 256, because
+     * we need take a few slots for boolean and integer constants. For these
+     * we'll have to fail later if they use complex shaders. */
+    pCaps->MaxVertexShaderConst = NINE_MAX_CONST_F;
+
+    pCaps->PixelShaderVersion = D3DPS_VERSION(3,0);
     pCaps->PixelShader1xMaxValue = 8.0f; /* XXX: wine */
 
     pCaps->DevCaps2 = D3DDEVCAPS2_STREAMOFFSET |
@@ -914,23 +911,18 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
     else
         pCaps->VertexTextureFilterCaps = 0;
 
-    if (sm3) {
-        pCaps->MaxVertexShader30InstructionSlots =
-            screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
-                                     PIPE_SHADER_CAP_MAX_INSTRUCTIONS);
-        pCaps->MaxPixelShader30InstructionSlots =
-            screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
-                                     PIPE_SHADER_CAP_MAX_INSTRUCTIONS);
-        if (pCaps->MaxVertexShader30InstructionSlots > D3DMAX30SHADERINSTRUCTIONS)
-            pCaps->MaxVertexShader30InstructionSlots = D3DMAX30SHADERINSTRUCTIONS;
-        if (pCaps->MaxPixelShader30InstructionSlots > D3DMAX30SHADERINSTRUCTIONS)
-            pCaps->MaxPixelShader30InstructionSlots = D3DMAX30SHADERINSTRUCTIONS;
-        assert(pCaps->MaxVertexShader30InstructionSlots >= D3DMIN30SHADERINSTRUCTIONS);
-        assert(pCaps->MaxPixelShader30InstructionSlots >= D3DMIN30SHADERINSTRUCTIONS);
-    } else {
-        pCaps->MaxVertexShader30InstructionSlots = 0;
-        pCaps->MaxPixelShader30InstructionSlots = 0;
-    }
+    pCaps->MaxVertexShader30InstructionSlots =
+        screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
+                                 PIPE_SHADER_CAP_MAX_INSTRUCTIONS);
+    pCaps->MaxPixelShader30InstructionSlots =
+        screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
+                                 PIPE_SHADER_CAP_MAX_INSTRUCTIONS);
+    if (pCaps->MaxVertexShader30InstructionSlots > D3DMAX30SHADERINSTRUCTIONS)
+        pCaps->MaxVertexShader30InstructionSlots = D3DMAX30SHADERINSTRUCTIONS;
+    if (pCaps->MaxPixelShader30InstructionSlots > D3DMAX30SHADERINSTRUCTIONS)
+        pCaps->MaxPixelShader30InstructionSlots = D3DMAX30SHADERINSTRUCTIONS;
+    assert(pCaps->MaxVertexShader30InstructionSlots >= D3DMIN30SHADERINSTRUCTIONS);
+    assert(pCaps->MaxPixelShader30InstructionSlots >= D3DMIN30SHADERINSTRUCTIONS);
 
     /* 65535 is required, advertise more for GPUs with >= 2048 instruction slots */
     pCaps->MaxVShaderInstructionsExecuted = MAX2(65535, pCaps->MaxVertexShader30InstructionSlots * 32);

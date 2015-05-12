@@ -33,5 +33,3 @@ noinst_HEADERS = $(GENHW_FILES)
 noinst_LTLIBRARIES = libilo.la
 
 libilo_la_SOURCES = $(C_SOURCES)
-
-EXTRA_DIST = Android.mk

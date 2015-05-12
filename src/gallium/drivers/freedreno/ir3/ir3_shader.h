@@ -77,6 +77,10 @@ struct ir3_shader_key {
 			 * let's start with this and see how it goes:
 			 */
 			unsigned alpha : 1;
+			/* used when shader needs to handle flat varyings (a4xx),
+			 * for TGSI_INTERPOLATE_COLOR:
+			 */
+			unsigned rasterflat : 1;
 		};
 		uint32_t global;
 	};
@@ -91,6 +95,9 @@ struct ir3_shader_key {
 	 */
 	uint16_t fsaturate_s, fsaturate_t, fsaturate_r;
 
+	/* bitmask of sampler which produces integer outputs:
+	 */
+	uint16_t vinteger_s, finteger_s;
 };
 
 static inline bool
@@ -111,7 +118,8 @@ struct ir3_shader_variant {
 	struct ir3 *ir;
 
 	/* the instructions length is in units of instruction groups
-	 * (4 instructions, 8 dwords):
+	 * (4 instructions for a3xx, 16 instructions for a4xx.. each
+	 * instruction is 2 dwords):
 	 */
 	unsigned instrlen;
 
@@ -203,14 +211,15 @@ struct ir3_shader {
 	/* so far, only used for blit_prog shader.. values for
 	 * VPC_VARYING_PS_REPL[i].MODE
 	 */
-	uint32_t vpsrepl[4];
+	uint32_t vpsrepl[8];
 };
 
+void * ir3_shader_assemble(struct ir3_shader_variant *v, uint32_t gpu_id);
 
 struct ir3_shader * ir3_shader_create(struct pipe_context *pctx,
 		const struct tgsi_token *tokens, enum shader_t type);
 void ir3_shader_destroy(struct ir3_shader *shader);
-
+uint32_t ir3_shader_gpuid(struct ir3_shader *shader);
 struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
 		struct ir3_shader_key key);
 

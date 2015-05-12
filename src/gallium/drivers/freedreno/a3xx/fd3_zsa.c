@@ -33,7 +33,7 @@
 
 #include "fd3_zsa.h"
 #include "fd3_context.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 
 void *
 fd3_zsa_state_create(struct pipe_context *pctx,

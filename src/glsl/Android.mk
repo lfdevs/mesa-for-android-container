@@ -27,7 +27,6 @@ LOCAL_PATH := $(call my-dir)
 
 include $(LOCAL_PATH)/Makefile.sources
 
-GLSL_SRCDIR = .
 # ---------------------------------------
 # Build libmesa_glsl
 # ---------------------------------------
@@ -36,10 +35,10 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	$(LIBGLCPP_FILES) \
-	$(LIBGLSL_FILES)
+	$(LIBGLSL_FILES) \
+	$(NIR_FILES)
 
 LOCAL_C_INCLUDES := \
-	$(MESA_TOP)/src \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/mesa
 
@@ -60,7 +59,6 @@ LOCAL_SRC_FILES := \
 	$(GLSL_COMPILER_CXX_FILES)
 
 LOCAL_C_INCLUDES := \
-	$(MESA_TOP)/src \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/mesa
 

@@ -35,8 +35,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/mesa \
-	$(MESA_TOP)/src/mapi \
-	$(MESA_TOP)/src
+	$(MESA_TOP)/src/mapi
 
 LOCAL_MODULE := libmesa_util
 
@@ -75,8 +74,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/mesa \
-	$(MESA_TOP)/src/mapi \
-	$(MESA_TOP)/src
+	$(MESA_TOP)/src/mapi
 
 LOCAL_MODULE := libmesa_util
 

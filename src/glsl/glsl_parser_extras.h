@@ -217,7 +217,7 @@ struct _mesa_glsl_parse_state {
    struct {
       unsigned ver;
       bool es;
-   } supported_versions[12];
+   } supported_versions[14];
 
    bool es_shader;
    unsigned language_version;
@@ -424,6 +424,8 @@ struct _mesa_glsl_parse_state {
    bool ARB_shader_bit_encoding_warn;
    bool ARB_shader_image_load_store_enable;
    bool ARB_shader_image_load_store_warn;
+   bool ARB_shader_precision_enable;
+   bool ARB_shader_precision_warn;
    bool ARB_shader_stencil_export_enable;
    bool ARB_shader_stencil_export_warn;
    bool ARB_shader_texture_lod_enable;
@@ -473,6 +475,8 @@ struct _mesa_glsl_parse_state {
    bool AMD_vertex_shader_layer_warn;
    bool AMD_vertex_shader_viewport_index_enable;
    bool AMD_vertex_shader_viewport_index_warn;
+   bool EXT_draw_buffers_enable;
+   bool EXT_draw_buffers_warn;
    bool EXT_separate_shader_objects_enable;
    bool EXT_separate_shader_objects_warn;
    bool EXT_shader_integer_mix_enable;

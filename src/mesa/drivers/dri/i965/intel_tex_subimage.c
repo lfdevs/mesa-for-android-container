@@ -35,467 +35,16 @@
 #include "main/texstore.h"
 #include "main/texcompress.h"
 #include "main/enums.h"
+#include "drivers/common/meta.h"
 
 #include "brw_context.h"
 #include "intel_batchbuffer.h"
 #include "intel_tex.h"
 #include "intel_mipmap_tree.h"
 #include "intel_blit.h"
-
-#ifdef __SSSE3__
-#include <tmmintrin.h>
-#endif
+#include "intel_tiled_memcpy.h"
 
 #define FILE_DEBUG_FLAG DEBUG_TEXTURE
-
-#define ALIGN_DOWN(a, b) ROUND_DOWN_TO(a, b)
-#define ALIGN_UP(a, b) ALIGN(a, b)
-
-/* Tile dimensions.
- * Width and span are in bytes, height is in pixels (i.e. unitless).
- * A "span" is the most number of bytes we can copy from linear to tiled
- * without needing to calculate a new destination address.
- */
-static const uint32_t xtile_width = 512;
-static const uint32_t xtile_height = 8;
-static const uint32_t xtile_span = 64;
-static const uint32_t ytile_width = 128;
-static const uint32_t ytile_height = 32;
-static const uint32_t ytile_span = 16;
-
-typedef void *(*mem_copy_fn)(void *dest, const void *src, size_t n);
-
-/**
- * Each row from y0 to y1 is copied in three parts: [x0,x1), [x1,x2), [x2,x3).
- * These ranges are in bytes, i.e. pixels * bytes-per-pixel.
- * The first and last ranges must be shorter than a "span" (the longest linear
- * stretch within a tile) and the middle must equal a whole number of spans.
- * Ranges may be empty.  The region copied must land entirely within one tile.
- * 'dst' is the start of the tile and 'src' is the corresponding
- * address to copy from, though copying begins at (x0, y0).
- * To enable swizzling 'swizzle_bit' must be 1<<6, otherwise zero.
- * Swizzling flips bit 6 in the copy destination offset, when certain other
- * bits are set in it.
- */
-typedef void (*tile_copy_fn)(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
-                             uint32_t y0, uint32_t y1,
-                             char *dst, const char *src,
-                             uint32_t src_pitch,
-                             uint32_t swizzle_bit,
-                             mem_copy_fn mem_copy);
-
-
-static bool
-intel_blit_texsubimage(struct gl_context * ctx,
-		       struct gl_texture_image *texImage,
-		       GLint xoffset, GLint yoffset,
-		       GLint width, GLint height,
-		       GLenum format, GLenum type, const void *pixels,
-		       const struct gl_pixelstore_attrib *packing)
-{
-   struct brw_context *brw = brw_context(ctx);
-   struct intel_texture_image *intelImage = intel_texture_image(texImage);
-
-   /* Try to do a blit upload of the subimage if the texture is
-    * currently busy.
-    */
-   if (!intelImage->mt)
-      return false;
-
-   /* Prior to Sandybridge, the blitter can't handle Y tiling */
-   if (brw->gen < 6 && intelImage->mt->tiling == I915_TILING_Y)
-      return false;
-
-   if (texImage->TexObject->Target != GL_TEXTURE_2D)
-      return false;
-
-   /* On gen6, it's probably not worth swapping to the blit ring to do
-    * this because of all the overhead involved.
-    */
-   if (brw->gen >= 6)
-      return false;
-
-   if (!drm_intel_bo_busy(intelImage->mt->bo))
-      return false;
-
-   DBG("BLT subimage %s target %s level %d offset %d,%d %dx%d\n",
-       __FUNCTION__,
-       _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
-       texImage->Level, xoffset, yoffset, width, height);
-
-   pixels = _mesa_validate_pbo_teximage(ctx, 2, width, height, 1,
-					format, type, pixels, packing,
-					"glTexSubImage");
-   if (!pixels)
-      return false;
-
-   struct intel_mipmap_tree *temp_mt =
-      intel_miptree_create(brw, GL_TEXTURE_2D, texImage->TexFormat,
-                           0, 0,
-                           width, height, 1,
-                           false, 0, INTEL_MIPTREE_TILING_NONE,
-                           false);
-   if (!temp_mt)
-      goto err;
-
-   GLubyte *dst = intel_miptree_map_raw(brw, temp_mt);
-   if (!dst)
-      goto err;
-
-   if (!_mesa_texstore(ctx, 2, texImage->_BaseFormat,
-		       texImage->TexFormat,
-		       temp_mt->pitch,
-		       &dst,
-		       width, height, 1,
-		       format, type, pixels, packing)) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "intelTexSubImage");
-   }
-
-   intel_miptree_unmap_raw(brw, temp_mt);
-
-   bool ret;
-
-   ret = intel_miptree_blit(brw,
-                            temp_mt, 0, 0,
-                            0, 0, false,
-                            intelImage->mt, texImage->Level, texImage->Face,
-                            xoffset, yoffset, false,
-                            width, height, GL_COPY);
-   assert(ret);
-
-   intel_miptree_release(&temp_mt);
-   _mesa_unmap_teximage_pbo(ctx, packing);
-
-   return ret;
-
-err:
-   _mesa_error(ctx, GL_OUT_OF_MEMORY, "intelTexSubImage");
-   intel_miptree_release(&temp_mt);
-   _mesa_unmap_teximage_pbo(ctx, packing);
-   return false;
-}
-
-#ifdef __SSSE3__
-static const uint8_t rgba8_permutation[16] =
-   { 2,1,0,3, 6,5,4,7, 10,9,8,11, 14,13,12,15 };
-
-/* NOTE: dst must be 16 byte aligned */
-#define rgba8_copy_16(dst, src)                     \
-   *(__m128i *)(dst) = _mm_shuffle_epi8(            \
-      (__m128i) _mm_loadu_ps((float *)(src)),       \
-      *(__m128i *) rgba8_permutation                \
-   )
-#endif
-
-/**
- * Copy RGBA to BGRA - swap R and B.
- */
-static inline void *
-rgba8_copy(void *dst, const void *src, size_t bytes)
-{
-   uint8_t *d = dst;
-   uint8_t const *s = src;
-
-#ifdef __SSSE3__
-   /* Fast copying for tile spans.
-    *
-    * As long as the destination texture is 16 aligned,
-    * any 16 or 64 spans we get here should also be 16 aligned.
-    */
-
-   if (bytes == 16) {
-      assert(!(((uintptr_t)dst) & 0xf));
-      rgba8_copy_16(d+ 0, s+ 0);
-      return dst;
-   }
-
-   if (bytes == 64) {
-      assert(!(((uintptr_t)dst) & 0xf));
-      rgba8_copy_16(d+ 0, s+ 0);
-      rgba8_copy_16(d+16, s+16);
-      rgba8_copy_16(d+32, s+32);
-      rgba8_copy_16(d+48, s+48);
-      return dst;
-   }
-#endif
-
-   while (bytes >= 4) {
-      d[0] = s[2];
-      d[1] = s[1];
-      d[2] = s[0];
-      d[3] = s[3];
-      d += 4;
-      s += 4;
-      bytes -= 4;
-   }
-   return dst;
-}
-
-/**
- * Copy texture data from linear to X tile layout.
- *
- * \copydoc tile_copy_fn
- */
-static inline void
-xtile_copy(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
-           uint32_t y0, uint32_t y1,
-           char *dst, const char *src,
-           uint32_t src_pitch,
-           uint32_t swizzle_bit,
-           mem_copy_fn mem_copy)
-{
-   /* The copy destination offset for each range copied is the sum of
-    * an X offset 'x0' or 'xo' and a Y offset 'yo.'
-    */
-   uint32_t xo, yo;
-
-   src += y0 * src_pitch;
-
-   for (yo = y0 * xtile_width; yo < y1 * xtile_width; yo += xtile_width) {
-      /* Bits 9 and 10 of the copy destination offset control swizzling.
-       * Only 'yo' contributes to those bits in the total offset,
-       * so calculate 'swizzle' just once per row.
-       * Move bits 9 and 10 three and four places respectively down
-       * to bit 6 and xor them.
-       */
-      uint32_t swizzle = ((yo >> 3) ^ (yo >> 4)) & swizzle_bit;
-
-      mem_copy(dst + ((x0 + yo) ^ swizzle), src + x0, x1 - x0);
-
-      for (xo = x1; xo < x2; xo += xtile_span) {
-         mem_copy(dst + ((xo + yo) ^ swizzle), src + xo, xtile_span);
-      }
-
-      mem_copy(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
-
-      src += src_pitch;
-   }
-}
-
-/**
- * Copy texture data from linear to Y tile layout.
- *
- * \copydoc tile_copy_fn
- */
-static inline void
-ytile_copy(
-   uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
-   uint32_t y0, uint32_t y1,
-   char *dst, const char *src,
-   uint32_t src_pitch,
-   uint32_t swizzle_bit,
-   mem_copy_fn mem_copy)
-{
-   /* Y tiles consist of columns that are 'ytile_span' wide (and the same height
-    * as the tile).  Thus the destination offset for (x,y) is the sum of:
-    *   (x % column_width)                    // position within column
-    *   (x / column_width) * bytes_per_column // column number * bytes per column
-    *   y * column_width
-    *
-    * The copy destination offset for each range copied is the sum of
-    * an X offset 'xo0' or 'xo' and a Y offset 'yo.'
-    */
-   const uint32_t column_width = ytile_span;
-   const uint32_t bytes_per_column = column_width * ytile_height;
-
-   uint32_t xo0 = (x0 % ytile_span) + (x0 / ytile_span) * bytes_per_column;
-   uint32_t xo1 = (x1 % ytile_span) + (x1 / ytile_span) * bytes_per_column;
-
-   /* Bit 9 of the destination offset control swizzling.
-    * Only the X offset contributes to bit 9 of the total offset,
-    * so swizzle can be calculated in advance for these X positions.
-    * Move bit 9 three places down to bit 6.
-    */
-   uint32_t swizzle0 = (xo0 >> 3) & swizzle_bit;
-   uint32_t swizzle1 = (xo1 >> 3) & swizzle_bit;
-
-   uint32_t x, yo;
-
-   src += y0 * src_pitch;
-
-   for (yo = y0 * column_width; yo < y1 * column_width; yo += column_width) {
-      uint32_t xo = xo1;
-      uint32_t swizzle = swizzle1;
-
-      mem_copy(dst + ((xo0 + yo) ^ swizzle0), src + x0, x1 - x0);
-
-      /* Step by spans/columns.  As it happens, the swizzle bit flips
-       * at each step so we don't need to calculate it explicitly.
-       */
-      for (x = x1; x < x2; x += ytile_span) {
-         mem_copy(dst + ((xo + yo) ^ swizzle), src + x, ytile_span);
-         xo += bytes_per_column;
-         swizzle ^= swizzle_bit;
-      }
-
-      mem_copy(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
-
-      src += src_pitch;
-   }
-}
-
-/**
- * Copy texture data from linear to X tile layout, faster.
- *
- * Same as \ref xtile_copy but faster, because it passes constant parameters
- * for common cases, allowing the compiler to inline code optimized for those
- * cases.
- *
- * \copydoc tile_copy_fn
- */
-static FLATTEN void
-xtile_copy_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
-                  uint32_t y0, uint32_t y1,
-                  char *dst, const char *src,
-                  uint32_t src_pitch,
-                  uint32_t swizzle_bit,
-                  mem_copy_fn mem_copy)
-{
-   if (x0 == 0 && x3 == xtile_width && y0 == 0 && y1 == xtile_height) {
-      if (mem_copy == memcpy)
-         return xtile_copy(0, 0, xtile_width, xtile_width, 0, xtile_height,
-                           dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy)
-         return xtile_copy(0, 0, xtile_width, xtile_width, 0, xtile_height,
-                           dst, src, src_pitch, swizzle_bit, rgba8_copy);
-   } else {
-      if (mem_copy == memcpy)
-         return xtile_copy(x0, x1, x2, x3, y0, y1,
-                           dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy)
-         return xtile_copy(x0, x1, x2, x3, y0, y1,
-                           dst, src, src_pitch, swizzle_bit, rgba8_copy);
-   }
-   xtile_copy(x0, x1, x2, x3, y0, y1,
-              dst, src, src_pitch, swizzle_bit, mem_copy);
-}
-
-/**
- * Copy texture data from linear to Y tile layout, faster.
- *
- * Same as \ref ytile_copy but faster, because it passes constant parameters
- * for common cases, allowing the compiler to inline code optimized for those
- * cases.
- *
- * \copydoc tile_copy_fn
- */
-static FLATTEN void
-ytile_copy_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
-                  uint32_t y0, uint32_t y1,
-                  char *dst, const char *src,
-                  uint32_t src_pitch,
-                  uint32_t swizzle_bit,
-                  mem_copy_fn mem_copy)
-{
-   if (x0 == 0 && x3 == ytile_width && y0 == 0 && y1 == ytile_height) {
-      if (mem_copy == memcpy)
-         return ytile_copy(0, 0, ytile_width, ytile_width, 0, ytile_height,
-                           dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy)
-         return ytile_copy(0, 0, ytile_width, ytile_width, 0, ytile_height,
-                           dst, src, src_pitch, swizzle_bit, rgba8_copy);
-   } else {
-      if (mem_copy == memcpy)
-         return ytile_copy(x0, x1, x2, x3, y0, y1,
-                           dst, src, src_pitch, swizzle_bit, memcpy);
-      else if (mem_copy == rgba8_copy)
-         return ytile_copy(x0, x1, x2, x3, y0, y1,
-                           dst, src, src_pitch, swizzle_bit, rgba8_copy);
-   }
-   ytile_copy(x0, x1, x2, x3, y0, y1,
-              dst, src, src_pitch, swizzle_bit, mem_copy);
-}
-
-/**
- * Copy from linear to tiled texture.
- *
- * Divide the region given by X range [xt1, xt2) and Y range [yt1, yt2) into
- * pieces that do not cross tile boundaries and copy each piece with a tile
- * copy function (\ref tile_copy_fn).
- * The X range is in bytes, i.e. pixels * bytes-per-pixel.
- * The Y range is in pixels (i.e. unitless).
- * 'dst' is the start of the texture and 'src' is the corresponding
- * address to copy from, though copying begins at (xt1, yt1).
- */
-static void
-linear_to_tiled(uint32_t xt1, uint32_t xt2,
-                uint32_t yt1, uint32_t yt2,
-                char *dst, const char *src,
-                uint32_t dst_pitch, uint32_t src_pitch,
-                bool has_swizzling,
-                uint32_t tiling,
-                mem_copy_fn mem_copy)
-{
-   tile_copy_fn tile_copy;
-   uint32_t xt0, xt3;
-   uint32_t yt0, yt3;
-   uint32_t xt, yt;
-   uint32_t tw, th, span;
-   uint32_t swizzle_bit = has_swizzling ? 1<<6 : 0;
-
-   if (tiling == I915_TILING_X) {
-      tw = xtile_width;
-      th = xtile_height;
-      span = xtile_span;
-      tile_copy = xtile_copy_faster;
-   } else if (tiling == I915_TILING_Y) {
-      tw = ytile_width;
-      th = ytile_height;
-      span = ytile_span;
-      tile_copy = ytile_copy_faster;
-   } else {
-      unreachable("unsupported tiling");
-   }
-
-   /* Round out to tile boundaries. */
-   xt0 = ALIGN_DOWN(xt1, tw);
-   xt3 = ALIGN_UP  (xt2, tw);
-   yt0 = ALIGN_DOWN(yt1, th);
-   yt3 = ALIGN_UP  (yt2, th);
-
-   /* Loop over all tiles to which we have something to copy.
-    * 'xt' and 'yt' are the origin of the destination tile, whether copying
-    * copying a full or partial tile.
-    * tile_copy() copies one tile or partial tile.
-    * Looping x inside y is the faster memory access pattern.
-    */
-   for (yt = yt0; yt < yt3; yt += th) {
-      for (xt = xt0; xt < xt3; xt += tw) {
-         /* The area to update is [x0,x3) x [y0,y1).
-          * May not want the whole tile, hence the min and max.
-          */
-         uint32_t x0 = MAX2(xt1, xt);
-         uint32_t y0 = MAX2(yt1, yt);
-         uint32_t x3 = MIN2(xt2, xt + tw);
-         uint32_t y1 = MIN2(yt2, yt + th);
-
-         /* [x0,x3) is split into [x0,x1), [x1,x2), [x2,x3) such that
-          * the middle interval is the longest span-aligned part.
-          * The sub-ranges could be empty.
-          */
-         uint32_t x1, x2;
-         x1 = ALIGN_UP(x0, span);
-         if (x1 > x3)
-            x1 = x2 = x3;
-         else
-            x2 = ALIGN_DOWN(x3, span);
-
-         assert(x0 <= x1 && x1 <= x2 && x2 <= x3);
-         assert(x1 - x0 < span && x3 - x2 < span);
-         assert(x3 - x0 <= tw);
-         assert((x2 - x1) % span == 0);
-
-         /* Translate by (xt,yt) for single-tile copier. */
-         tile_copy(x0-xt, x1-xt, x2-xt, x3-xt,
-                   y0-yt, y1-yt,
-                   dst + (ptrdiff_t) xt * th + (ptrdiff_t) yt * dst_pitch,
-                   src + (ptrdiff_t) xt      + (ptrdiff_t) yt * src_pitch,
-                   src_pitch,
-                   swizzle_bit,
-                   mem_copy);
-      }
-   }
-}
 
 /**
  * \brief A fast path for glTexImage and glTexSubImage.
@@ -556,7 +105,8 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
     */
    if (!brw->has_llc ||
        !(type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_INT_8_8_8_8_REV) ||
-       texImage->TexObject->Target != GL_TEXTURE_2D ||
+       !(texImage->TexObject->Target == GL_TEXTURE_2D ||
+         texImage->TexObject->Target == GL_TEXTURE_RECTANGLE) ||
        pixels == NULL ||
        _mesa_is_bufferobj(packing->BufferObj) ||
        packing->Alignment > 4 ||
@@ -568,35 +118,8 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
        packing->Invert)
       return false;
 
-   if (type == GL_UNSIGNED_INT_8_8_8_8_REV &&
-       !(format == GL_RGBA || format == GL_BGRA))
-      return false; /* Invalid type/format combination */
-
-   if ((texImage->TexFormat == MESA_FORMAT_L_UNORM8 && format == GL_LUMINANCE) ||
-       (texImage->TexFormat == MESA_FORMAT_A_UNORM8 && format == GL_ALPHA)) {
-      cpp = 1;
-      mem_copy = memcpy;
-   } else if ((texImage->TexFormat == MESA_FORMAT_B8G8R8A8_UNORM) ||
-              (texImage->TexFormat == MESA_FORMAT_B8G8R8X8_UNORM)) {
-      cpp = 4;
-      if (format == GL_BGRA) {
-         mem_copy = memcpy;
-      } else if (format == GL_RGBA) {
-         mem_copy = rgba8_copy;
-      }
-   } else if ((texImage->TexFormat == MESA_FORMAT_R8G8B8A8_UNORM) ||
-              (texImage->TexFormat == MESA_FORMAT_R8G8B8X8_UNORM)) {
-      cpp = 4;
-      if (format == GL_BGRA) {
-         /* Copying from RGBA to BGRA is the same as BGRA to RGBA so we can
-          * use the same function.
-          */
-         mem_copy = rgba8_copy;
-      } else if (format == GL_RGBA) {
-         mem_copy = memcpy;
-      }
-   }
-   if (!mem_copy)
+   if (!intel_get_memcpy(texImage->TexFormat, format, type, &mem_copy, &cpp,
+                         INTEL_UPLOAD))
       return false;
 
    /* If this is a nontrivial texture view, let another path handle it instead. */
@@ -676,13 +199,23 @@ intelTexSubImage(struct gl_context * ctx,
                  const GLvoid * pixels,
                  const struct gl_pixelstore_attrib *packing)
 {
+   struct intel_texture_image *intelImage = intel_texture_image(texImage);
    bool ok;
+
+   bool tex_busy = intelImage->mt && drm_intel_bo_busy(intelImage->mt->bo);
 
    DBG("%s mesa_format %s target %s format %s type %s level %d %dx%dx%d\n",
        __FUNCTION__, _mesa_get_format_name(texImage->TexFormat),
        _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
        _mesa_lookup_enum_by_nr(format), _mesa_lookup_enum_by_nr(type),
        texImage->Level, texImage->Width, texImage->Height, texImage->Depth);
+
+   ok = _mesa_meta_pbo_TexSubImage(ctx, dims, texImage,
+                                   xoffset, yoffset, zoffset,
+                                   width, height, depth, format, type,
+                                   pixels, false, tex_busy, packing);
+   if (ok)
+      return;
 
    ok = intel_texsubimage_tiled_memcpy(ctx, dims, texImage,
                                        xoffset, yoffset, zoffset,
@@ -692,16 +225,10 @@ intelTexSubImage(struct gl_context * ctx,
    if (ok)
      return;
 
-   /* The intel_blit_texsubimage() function only handles 2D images */
-   if (dims != 2 || !intel_blit_texsubimage(ctx, texImage,
-			       xoffset, yoffset,
-			       width, height,
-			       format, type, pixels, packing)) {
-      _mesa_store_texsubimage(ctx, dims, texImage,
-                              xoffset, yoffset, zoffset,
-                              width, height, depth,
-                              format, type, pixels, packing);
-   }
+   _mesa_store_texsubimage(ctx, dims, texImage,
+                           xoffset, yoffset, zoffset,
+                           width, height, depth,
+                           format, type, pixels, packing);
 }
 
 void

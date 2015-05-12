@@ -212,9 +212,9 @@ done:
 const struct brw_tracked_state brw_recalculate_urb_fence = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_CURBE_OFFSETS,
-      .cache = (CACHE_NEW_VS_PROG |
-		CACHE_NEW_SF_PROG)
+      .brw = BRW_NEW_CURBE_OFFSETS |
+             BRW_NEW_SF_PROG_DATA |
+             BRW_NEW_VS_PROG_DATA,
    },
    .emit = recalculate_urb_fence
 };

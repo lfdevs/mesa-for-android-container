@@ -61,12 +61,10 @@ EXTRA_DIST= \
 	$(MESA_GLAPI_DIR)/glapi_x86-64.S \
 	$(MESA_GLAPI_DIR)/glapi_sparc.S \
 	$(COMMON_GLX) \
-	extension_helper.py \
 	gl_apitemp.py \
 	gl_enums.py \
 	gl_genexec.py \
 	gl_gentable.py \
-	gl_offsets.py \
 	gl_procs.py \
 	gl_SPARC_asm.py \
 	gl_table.py \
@@ -76,8 +74,8 @@ EXTRA_DIST= \
 	glX_proto_send.py \
 	glX_proto_size.py \
 	glX_server_table.py \
-	mesadef.py \
 	remap_helper.py \
+	SConscript \
 	gl_API.dtd
 
 ######################################################################
@@ -109,6 +107,7 @@ API_XML = \
 	gl_API.xml \
 	es_EXT.xml \
 	gl_and_es_API.xml \
+	gl_and_glX_API.xml \
 	ARB_base_instance.xml \
 	ARB_blend_func_extended.xml \
 	ARB_clear_buffer_object.xml \
@@ -122,6 +121,7 @@ API_XML = \
 	ARB_debug_output.xml \
 	ARB_depth_buffer_float.xml \
 	ARB_depth_clamp.xml \
+	ARB_direct_state_access.xml \
 	ARB_draw_buffers.xml \
 	ARB_draw_buffers_blend.xml \
 	ARB_draw_elements_base_vertex.xml \
@@ -179,6 +179,7 @@ API_XML = \
 	EXT_transform_feedback.xml \
 	INTEL_performance_query.xml \
 	KHR_debug.xml \
+	KHR_context_flush_control.xml \
 	NV_conditional_render.xml \
 	NV_primitive_restart.xml \
 	NV_texture_barrier.xml \

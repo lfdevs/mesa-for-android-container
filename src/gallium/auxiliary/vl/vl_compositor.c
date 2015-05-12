@@ -829,9 +829,7 @@ vl_compositor_clear_layers(struct vl_compositor_state *s)
       s->layers[i].blend = NULL;
       s->layers[i].fs = NULL;
       s->layers[i].viewport.scale[2] = 1;
-      s->layers[i].viewport.scale[3] = 1;
       s->layers[i].viewport.translate[2] = 0;
-      s->layers[i].viewport.translate[3] = 0;
       s->layers[i].rotate = VL_COMPOSITOR_ROTATE_0;
 
       for ( j = 0; j < 3; j++)

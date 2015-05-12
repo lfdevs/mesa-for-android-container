@@ -39,7 +39,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/image.h"
 #include "main/imports.h"
 #include "main/macros.h"
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 
 #include "swrast/s_context.h"
 #include "swrast/s_fog.h"

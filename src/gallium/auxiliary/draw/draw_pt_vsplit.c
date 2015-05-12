@@ -91,7 +91,7 @@ vsplit_add_cache(struct vsplit_frontend *vsplit, unsigned fetch, unsigned ofbias
 
    hash = fetch % MAP_SIZE;
 
-   /* If the value isn't in the cache of it's an overflow due to the
+   /* If the value isn't in the cache or it's an overflow due to the
     * element bias */
    if (vsplit->cache.fetches[hash] != fetch || ofbias) {
       /* update cache */

@@ -112,7 +112,7 @@ static Status Validate(Display *dpy, XvPortID port, int surface_type_id, int xvi
 {
    XvImageFormatValues *subpictures;
    int num_subpics;
-   unsigned int i;
+   int i;
 
    subpictures = XvMCListSubpictureTypes(dpy, port, surface_type_id, &num_subpics);
    if (num_subpics < 1) {

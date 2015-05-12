@@ -38,7 +38,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/enums.h"
 #include "main/imports.h"
 #include "main/macros.h"
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 
 #include "math/m_xform.h"
 

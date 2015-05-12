@@ -153,40 +153,7 @@ ureg_create_shader_and_destroy( struct ureg_program *p,
  */
 
 void
-ureg_property_gs_input_prim(struct ureg_program *ureg,
-                            unsigned input_prim);
-
-void
-ureg_property_gs_output_prim(struct ureg_program *ureg,
-                             unsigned output_prim);
-
-void
-ureg_property_gs_max_vertices(struct ureg_program *ureg,
-                              unsigned max_vertices);
-
-void
-ureg_property_gs_invocations(struct ureg_program *ureg,
-                             unsigned invocations);
-
-void
-ureg_property_fs_coord_origin(struct ureg_program *ureg,
-                            unsigned fs_coord_origin);
-
-void
-ureg_property_fs_coord_pixel_center(struct ureg_program *ureg,
-                            unsigned fs_coord_pixel_center);
-
-void
-ureg_property_fs_color0_writes_all_cbufs(struct ureg_program *ureg,
-                            unsigned fs_color0_writes_all_cbufs);
-
-void
-ureg_property_fs_depth_layout(struct ureg_program *ureg,
-                              unsigned fs_depth_layout);
-
-void
-ureg_property_vs_window_space_position(struct ureg_program *ureg,
-                                       boolean vs_window_space_position);
+ureg_property(struct ureg_program *ureg, unsigned name, unsigned value);
 
 
 /***********************************************************************
@@ -1167,6 +1134,31 @@ ureg_dst_array_offset( struct ureg_dst reg, int offset )
    assert(reg.File == TGSI_FILE_TEMPORARY);
    reg.Index += offset;
    return reg;
+}
+
+static INLINE struct ureg_dst
+ureg_dst_register( unsigned file,
+                   unsigned index )
+{
+   struct ureg_dst dst;
+
+   dst.File      = file;
+   dst.WriteMask = TGSI_WRITEMASK_XYZW;
+   dst.Indirect  = 0;
+   dst.IndirectFile = TGSI_FILE_NULL;
+   dst.IndirectIndex = 0;
+   dst.IndirectSwizzle = 0;
+   dst.Saturate  = 0;
+   dst.Predicate = 0;
+   dst.PredNegate = 0;
+   dst.PredSwizzleX = TGSI_SWIZZLE_X;
+   dst.PredSwizzleY = TGSI_SWIZZLE_Y;
+   dst.PredSwizzleZ = TGSI_SWIZZLE_Z;
+   dst.PredSwizzleW = TGSI_SWIZZLE_W;
+   dst.Index     = index;
+   dst.ArrayID = 0;
+
+   return dst;
 }
 
 static INLINE struct ureg_dst

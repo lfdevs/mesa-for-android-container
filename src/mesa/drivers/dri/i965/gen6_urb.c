@@ -54,7 +54,7 @@ gen6_upload_urb( struct brw_context *brw )
 
    bool gs_present = brw->ff_gs.prog_active || brw->geometry_program;
 
-   /* CACHE_NEW_VS_PROG */
+   /* BRW_NEW_VS_PROG_DATA */
    unsigned vs_size = MAX2(brw->vs.prog_data->base.urb_entry_size, 1);
 
    /* Whe using GS to do transform feedback only we use the same VUE layout for
@@ -127,8 +127,11 @@ gen6_upload_urb( struct brw_context *brw )
 const struct brw_tracked_state gen6_urb = {
    .dirty = {
       .mesa = 0,
-      .brw = (BRW_NEW_CONTEXT | BRW_NEW_GEOMETRY_PROGRAM),
-      .cache = (CACHE_NEW_VS_PROG | CACHE_NEW_GS_PROG | CACHE_NEW_FF_GS_PROG),
+      .brw = BRW_NEW_CONTEXT |
+             BRW_NEW_FF_GS_PROG_DATA |
+             BRW_NEW_GEOMETRY_PROGRAM |
+             BRW_NEW_GS_PROG_DATA |
+             BRW_NEW_VS_PROG_DATA,
    },
    .emit = gen6_upload_urb,
 };

@@ -1031,7 +1031,10 @@ transform_samp(struct tgsi_transform_context *tctx,
    struct tgsi_full_instruction new_inst;
    /* mask is clamped coords, pmask is all coords (for projection): */
    unsigned mask = 0, pmask = 0, smask;
+   unsigned tex = inst->Texture.Texture;
    unsigned opcode = inst->Instruction.Opcode;
+   bool lower_txp = (opcode == TGSI_OPCODE_TXP) &&
+		   (ctx->config->lower_TXP & (1 << tex));
 
    if (opcode == TGSI_OPCODE_TXB2) {
       samp = &inst->Src[2];
@@ -1043,14 +1046,14 @@ transform_samp(struct tgsi_transform_context *tctx,
    smask = 1 << samp->Register.Index;
 
    /* check if we actually need to lower this one: */
-   if (!(ctx->saturate & smask))
+   if (!(ctx->saturate & smask) && !lower_txp)
       return -1;
 
    /* figure out which coordinates need saturating:
     *   - RECT textures should not get saturated
     *   - array index coords should not get saturated
     */
-   switch (inst->Texture.Texture) {
+   switch (tex) {
    case TGSI_TEXTURE_3D:
    case TGSI_TEXTURE_CUBE:
    case TGSI_TEXTURE_CUBE_ARRAY:
@@ -1081,16 +1084,19 @@ transform_samp(struct tgsi_transform_context *tctx,
       pmask |= TGSI_WRITEMASK_X;
       break;
 
-      /* TODO: I think we should ignore these?
-         case TGSI_TEXTURE_RECT:
-         case TGSI_TEXTURE_SHADOWRECT:
-      */
+   case TGSI_TEXTURE_RECT:
+   case TGSI_TEXTURE_SHADOWRECT:
+      /* we don't saturate, but in case of lower_txp we
+       * still need to do the perspective divide:
+       */
+       pmask = TGSI_WRITEMASK_XY;
+       break;
    }
 
    /* sanity check.. driver could be asking to saturate a non-
     * existent coordinate component:
     */
-   if (!mask)
+   if (!mask && !lower_txp)
       return -1;
 
    /* MOV tmpA, src0 */
@@ -1126,8 +1132,10 @@ transform_samp(struct tgsi_transform_context *tctx,
    }
 
    /* MOV_SAT tmpA.<mask>, tmpA */
-   create_mov(tctx, &ctx->tmp[A].dst, &ctx->tmp[A].src, mask,
-              TGSI_SAT_ZERO_ONE);
+   if (mask) {
+      create_mov(tctx, &ctx->tmp[A].dst, &ctx->tmp[A].src, mask,
+                 TGSI_SAT_ZERO_ONE);
+   }
 
    /* modify the texture samp instruction to take fixed up coord: */
    new_inst = *inst;
@@ -1462,6 +1470,7 @@ tgsi_transform_lowering(const struct tgsi_lowering_config *config,
          OPCS(DPH) ||
          OPCS(DP2) ||
          OPCS(DP2A) ||
+         OPCS(TXP) ||
          ctx.two_side_colors ||
          ctx.saturate))
       return NULL;
@@ -1529,12 +1538,19 @@ tgsi_transform_lowering(const struct tgsi_lowering_config *config,
       newlen += DP2A_GROW * OPCS(DP2A);
       numtmp = MAX2(numtmp, DOTP_TMP);
    }
-   if (ctx.saturate) {
-      int n = info->opcode_count[TGSI_OPCODE_TEX] +
-         info->opcode_count[TGSI_OPCODE_TXP] +
-         info->opcode_count[TGSI_OPCODE_TXB] +
-         info->opcode_count[TGSI_OPCODE_TXB2] +
-         info->opcode_count[TGSI_OPCODE_TXL];
+   if (ctx.saturate || config->lower_TXP) {
+      int n = 0;
+
+      if (ctx.saturate) {
+         n = info->opcode_count[TGSI_OPCODE_TEX] +
+            info->opcode_count[TGSI_OPCODE_TXP] +
+            info->opcode_count[TGSI_OPCODE_TXB] +
+            info->opcode_count[TGSI_OPCODE_TXB2] +
+            info->opcode_count[TGSI_OPCODE_TXL];
+      } else if (config->lower_TXP) {
+          n = info->opcode_count[TGSI_OPCODE_TXP];
+      }
+
       newlen += SAMP_GROW * n;
       numtmp = MAX2(numtmp, SAMP_TMP);
    }

@@ -69,6 +69,9 @@ struct tgsi_lowering_config
    unsigned lower_DP2:1;
    unsigned lower_DP2A:1;
 
+   /* bitmask of (1 << TGSI_TEXTURE_type): */
+   unsigned lower_TXP;
+
    /* To emulate certain texture wrap modes, this can be used
     * to saturate the specified tex coord to [0.0, 1.0].  The
     * bits are according to sampler #, ie. if, for example:

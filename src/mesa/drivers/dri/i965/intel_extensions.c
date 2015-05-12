@@ -46,6 +46,10 @@ can_do_pipelined_register_writes(struct brw_context *brw)
    if (brw->gen >= 8)
       return true;
 
+   static int result = -1;
+   if (result != -1)
+      return result;
+
    /* We use SO_WRITE_OFFSET0 since you're supposed to write it (unlike the
     * statistics registers), and we already reset it to zero before using it.
     */
@@ -91,6 +95,8 @@ can_do_pipelined_register_writes(struct brw_context *brw)
    bool success = data[offset] == expected_value;
    drm_intel_bo_unmap(brw->batch.workaround_bo);
 
+   result = success;
+
    return success;
 }
 
@@ -99,6 +105,10 @@ can_write_oacontrol(struct brw_context *brw)
 {
    if (brw->gen < 6 || brw->gen >= 8)
       return false;
+
+   static int result = -1;
+   if (result != -1)
+      return result;
 
    /* Set "Select Context ID" to a particular address (which is likely not a
     * context), but leave all counting disabled.  This should be harmless.
@@ -149,6 +159,8 @@ can_write_oacontrol(struct brw_context *brw)
    data = brw->batch.workaround_bo->virtual;
    bool success = data[offset] == expected_value;
    drm_intel_bo_unmap(brw->batch.workaround_bo);
+
+   result = success;
 
    return success;
 }
@@ -273,6 +285,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_texture_gather = true;
       ctx->Extensions.ARB_conditional_render_inverted = true;
       ctx->Extensions.AMD_vertex_shader_layer = true;
+      ctx->Extensions.EXT_polygon_offset_clamp = true;
 
       /* Test if the kernel has the ioctl. */
       if (drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &dummy) == 0)
@@ -332,4 +345,9 @@ intelInitExtensions(struct gl_context *ctx)
 
    if (brw->gen == 7)
       ctx->Extensions.ARB_gpu_shader5 = true;
+
+   ctx->Extensions.OES_texture_float = true;
+   ctx->Extensions.OES_texture_float_linear = true;
+   ctx->Extensions.OES_texture_half_float = true;
+   ctx->Extensions.OES_texture_half_float_linear = true;
 }

@@ -51,8 +51,6 @@ private:
 			ulong				fOptions;			
 			GLuint				fWidth;
 			GLuint				fHeight;
-			GLuint				fNewWidth;
-			GLuint				fNewHeight;
 			color_space			fColorSpace;
 };
 

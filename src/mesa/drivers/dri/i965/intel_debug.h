@@ -61,8 +61,9 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_VUE                 (1 << 25)
 #define DEBUG_NO_DUAL_OBJECT_GS   (1 << 26)
 #define DEBUG_OPTIMIZER           (1 << 27)
-#define DEBUG_NO_ANNOTATION       (1 << 28)
+#define DEBUG_ANNOTATION          (1 << 28)
 #define DEBUG_NO8                 (1 << 29)
+#define DEBUG_VEC4VS              (1 << 30)
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"
@@ -86,6 +87,7 @@ extern uint64_t INTEL_DEBUG;
       dbg_printf(__VA_ARGS__);                                  \
    if (brw->perf_debug)                                         \
       _mesa_gl_debug(&brw->ctx, &msg_id,                        \
+                     MESA_DEBUG_SOURCE_API,                     \
                      MESA_DEBUG_TYPE_PERFORMANCE,               \
                      MESA_DEBUG_SEVERITY_MEDIUM,                \
                      __VA_ARGS__);                              \
@@ -101,6 +103,7 @@ extern uint64_t INTEL_DEBUG;
          _warned = true;                                        \
                                                                 \
          _mesa_gl_debug(ctx, &msg_id,                           \
+                        MESA_DEBUG_SOURCE_API,                  \
                         MESA_DEBUG_TYPE_OTHER,                  \
                         MESA_DEBUG_SEVERITY_HIGH, fmt);         \
       }                                                         \

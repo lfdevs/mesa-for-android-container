@@ -50,13 +50,12 @@ int
 main(int argc, char **argv)
 {
    struct hash_table *ht;
-   uint32_t hash_str1 = _mesa_hash_string(str1);
-   uint32_t hash_str2 = _mesa_hash_string(str2);
 
-   ht = _mesa_hash_table_create(NULL, _mesa_key_string_equal);
+   ht = _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                _mesa_key_string_equal);
 
-   _mesa_hash_table_insert(ht, hash_str1, str1, NULL);
-   _mesa_hash_table_insert(ht, hash_str2, str2, NULL);
+   _mesa_hash_table_insert(ht, str1, NULL);
+   _mesa_hash_table_insert(ht, str2, NULL);
 
    _mesa_hash_table_destroy(ht, delete_callback);
 

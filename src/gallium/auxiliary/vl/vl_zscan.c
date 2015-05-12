@@ -470,11 +470,9 @@ vl_zscan_init_buffer(struct vl_zscan *zscan, struct vl_zscan_buffer *buffer,
    buffer->viewport.scale[0] = dst->width;
    buffer->viewport.scale[1] = dst->height;
    buffer->viewport.scale[2] = 1;
-   buffer->viewport.scale[3] = 1;
    buffer->viewport.translate[0] = 0;
    buffer->viewport.translate[1] = 0;
    buffer->viewport.translate[2] = 0;
-   buffer->viewport.translate[3] = 0;
 
    buffer->fb_state.width = dst->width;
    buffer->fb_state.height = dst->height;

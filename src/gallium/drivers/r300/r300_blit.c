@@ -803,6 +803,15 @@ static void r300_blit(struct pipe_context *pipe,
         (struct pipe_framebuffer_state*)r300->fb_state.state;
     struct pipe_blit_info info = *blit;
 
+    /* The driver supports sRGB textures but not framebuffers. Blitting
+     * from sRGB to sRGB should be the same as blitting from linear
+     * to linear, so use that, This avoids incorrect linearization.
+     */
+    if (util_format_is_srgb(info.src.format)) {
+      info.src.format = util_format_linear(info.src.format);
+      info.dst.format = util_format_linear(info.dst.format);
+    }
+
     /* MSAA resolve. */
     if (info.src.resource->nr_samples > 1 &&
         !util_format_is_depth_or_stencil(info.src.resource->format)) {

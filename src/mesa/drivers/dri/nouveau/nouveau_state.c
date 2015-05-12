@@ -319,7 +319,7 @@ nouveau_polygon_mode(struct gl_context *ctx, GLenum face, GLenum mode)
 }
 
 static void
-nouveau_polygon_offset(struct gl_context *ctx, GLfloat factor, GLfloat units)
+nouveau_polygon_offset(struct gl_context *ctx, GLfloat factor, GLfloat units, GLfloat clamp)
 {
 	context_dirty(ctx, POLYGON_OFFSET);
 }

@@ -60,7 +60,6 @@ static INLINE uint32_t r300_translate_blend_function(int blend_func,
     return 0;
 }
 
-/* XXX we can also offer the D3D versions of some of these... */
 static INLINE uint32_t r300_translate_blend_factor(int blend_fact)
 {
     switch (blend_fact) {
@@ -343,6 +342,9 @@ r300_translate_vertex_data_type(enum pipe_format format) {
     const struct util_format_description *desc;
     unsigned i;
 
+    if (!format)
+        format = PIPE_FORMAT_R32_FLOAT;
+
     desc = util_format_description(format);
 
     if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN) {
@@ -410,10 +412,16 @@ r300_translate_vertex_data_type(enum pipe_format format) {
 
 static INLINE uint16_t
 r300_translate_vertex_data_swizzle(enum pipe_format format) {
-    const struct util_format_description *desc = util_format_description(format);
+    const struct util_format_description *desc;
     unsigned i, swizzle = 0;
 
-    assert(format);
+    if (!format)
+        return (R300_SWIZZLE_SELECT_FP_ZERO << R300_SWIZZLE_SELECT_X_SHIFT) |
+               (R300_SWIZZLE_SELECT_FP_ZERO << R300_SWIZZLE_SELECT_Y_SHIFT) |
+               (R300_SWIZZLE_SELECT_FP_ZERO << R300_SWIZZLE_SELECT_Z_SHIFT) |
+               (R300_SWIZZLE_SELECT_FP_ONE << R300_SWIZZLE_SELECT_W_SHIFT);
+
+    desc = util_format_description(format);
 
     if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN) {
         fprintf(stderr, "r300: Bad format %s in %s:%d\n",

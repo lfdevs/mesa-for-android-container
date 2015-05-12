@@ -256,8 +256,7 @@ nv84_decoder_destroy(struct pipe_video_codec *decoder)
 
    nouveau_client_del(&dec->client);
 
-   if (dec->mpeg12_bs)
-      FREE(dec->mpeg12_bs);
+   FREE(dec->mpeg12_bs);
    FREE(dec);
 }
 

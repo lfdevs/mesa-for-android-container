@@ -56,6 +56,7 @@ struct _egl_global
       bool EXT_platform_x11;
       bool EXT_platform_wayland;
       bool MESA_platform_gbm;
+      bool KHR_get_all_proc_addresses;
    } ClientExtensions;
 
    const char *ClientExtensionString;

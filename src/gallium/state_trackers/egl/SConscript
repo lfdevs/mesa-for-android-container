@@ -39,7 +39,8 @@ else:
             '#/src/mapi',
         ])
         sources.append(env.ParseSourceList('Makefile.sources', 'x11_FILES'))
-        if env['drm']:
+        if env['drm'] and False:
+            # XXX: Disabled as we're don't generate the x11/dri2.c symlink at buildtime.
             env.Append(CPPDEFINES = ['GLX_DIRECT_RENDERING'])
             sources.append(env.ParseSourceList('Makefile.sources', 'x11_drm_FILES'))
     if env['drm'] and False:

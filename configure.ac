@@ -1,3 +1,34 @@
+dnl Copyright © 2011-2014 Intel Corporation
+dnl Copyright © 2011-2014 Emil Velikov <emil.l.velikov@gmail.com>
+dnl Copyright © 2007-2010 Dan Nicholson
+dnl Copyright © 2010-2014 Marek Olšák <maraeo@gmail.com>
+dnl Copyright © 2010-2014 Christian König
+dnl Copyright © 2012-2014 Tom Stellard <tstellar@gmail.com>
+dnl Copyright © 2009-2012 Jakob Bornecrantz
+dnl Copyright © 2009-2014 Jon TURNEY
+dnl Copyright © 2011-2012 Benjamin Franzke
+dnl Copyright © 2008-2014 David Airlie
+dnl Copyright © 2009-2013 Brian Paul
+dnl
+dnl Permission is hereby granted, free of charge, to any person obtaining a
+dnl copy of this software and associated documentation files (the "Software"),
+dnl to deal in the Software without restriction, including without limitation
+dnl the rights to use, copy, modify, merge, publish, distribute, sublicense,
+dnl and/or sell copies of the Software, and to permit persons to whom the
+dnl Software is furnished to do so, subject to the following conditions:
+dnl
+dnl The above copyright notice and this permission notice (including the next
+dnl paragraph) shall be included in all copies or substantial portions of the
+dnl Software.
+dnl
+dnl THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+dnl IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+dnl FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+dnl THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+dnl LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+dnl FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+dnl DEALINGS IN THE SOFTWARE.
+dnl
 dnl Process this file with autoconf to create configure.
 
 AC_PREREQ([2.60])
@@ -12,7 +43,7 @@ AC_INIT([Mesa], [MESA_VERSION],
 AC_CONFIG_AUX_DIR([bin])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_SYSTEM
-AM_INIT_AUTOMAKE([foreign])
+AM_INIT_AUTOMAKE([foreign tar-ustar dist-xz])
 
 # Support silent build rules, requires at least automake-1.11. Disable
 # by either passing --disable-silent-rules to configure or passing V=1
@@ -39,6 +70,7 @@ PRESENTPROTO_REQUIRED=1.0
 LIBUDEV_REQUIRED=151
 GLPROTO_REQUIRED=1.4.14
 LIBOMXIL_BELLAGIO_REQUIRED=0.0
+LIBVA_REQUIRED=0.35.0
 VDPAU_REQUIRED=0.4.1
 WAYLAND_REQUIRED=1.2.0
 XCB_REQUIRED=1.9.3
@@ -46,6 +78,7 @@ XCBDRI2_REQUIRED=1.8
 XCBGLX_REQUIRED=1.8.1
 XSHMFENCE_REQUIRED=1.1
 XVMC_REQUIRED=1.0.6
+PYTHON_MAKO_REQUIRED=0.3.4
 
 dnl Check for progs
 AC_PROG_CPP
@@ -72,7 +105,27 @@ AX_PROG_FLEX([],
 
 AC_CHECK_PROG(INDENT, indent, indent, cat)
 if test "x$INDENT" != "xcat"; then
-    AC_SUBST(INDENT_FLAGS, '-i4 -nut -br -brs -npcs -ce -TGLubyte -TGLbyte -TBool')
+    # Only GNU indent is supported
+    INDENT_VERSION=`indent --version | grep GNU`
+    if test $? -eq 0; then
+       AC_SUBST(INDENT_FLAGS, '-i4 -nut -br -brs -npcs -ce -TGLubyte -TGLbyte -TBool')
+    else
+       INDENT="cat"
+    fi
+fi
+
+AX_CHECK_PYTHON_MAKO_MODULE($PYTHON_MAKO_REQUIRED)
+
+if test -z "$PYTHON2"; then
+    if test ! -f "$srcdir/src/util/format_srgb.c"; then
+        AC_MSG_ERROR([Python not found - unable to generate sources])
+    fi
+else
+    if test "x$acv_mako_found" = xno; then
+        if test ! -f "$srcdir/src/mesa/main/format_unpack.c"; then
+            AC_MSG_ERROR([Python mako module v$PYTHON_MAKO_REQUIRED or higher not found])
+        fi
+    fi
 fi
 
 AC_PROG_INSTALL
@@ -101,9 +154,10 @@ AC_COMPILE_IFELSE(
 
 AC_MSG_RESULT([$acv_mesa_CLANG])
 
-dnl If we're using GCC, make sure that it is at least version 3.3.0.  Older
+dnl If we're using GCC, make sure that it is at least version 4.2.0.  Older
 dnl versions are explictly not supported.
 GEN_ASM_OFFSETS=no
+USE_GNU99=no
 if test "x$GCC" = xyes -a "x$acv_mesa_CLANG" = xno; then
     AC_MSG_CHECKING([whether gcc version is sufficient])
     major=0
@@ -115,13 +169,16 @@ if test "x$GCC" = xyes -a "x$acv_mesa_CLANG" = xno; then
         GCC_VERSION_MINOR=`echo $GCC_VERSION | cut -d. -f2`
     fi
 
-    if test $GCC_VERSION_MAJOR -lt 3 -o $GCC_VERSION_MAJOR -eq 3 -a $GCC_VERSION_MINOR -lt 3 ; then
+    if test $GCC_VERSION_MAJOR -lt 4 -o $GCC_VERSION_MAJOR -eq 4 -a $GCC_VERSION_MINOR -lt 2 ; then
         AC_MSG_RESULT([no])
-        AC_MSG_ERROR([If using GCC, version 3.3.0 or later is required.])
+        AC_MSG_ERROR([If using GCC, version 4.2.0 or later is required.])
     else
         AC_MSG_RESULT([yes])
     fi
 
+    if test $GCC_VERSION_MAJOR -lt 4 -o $GCC_VERSION_MAJOR -eq 4 -a $GCC_VERSION_MINOR -lt 6 ; then
+        USE_GNU99=yes
+    fi
     if test "x$cross_compiling" = xyes; then
         GEN_ASM_OFFSETS=yes
     fi
@@ -180,7 +237,13 @@ esac
 
 dnl Add flags for gcc and g++
 if test "x$GCC" = xyes; then
-    CFLAGS="$CFLAGS -Wall -std=c99"
+    CFLAGS="$CFLAGS -Wall"
+
+    if test "x$USE_GNU99" = xyes; then
+	CFLAGS="$CFLAGS -std=gnu99"
+    else
+	CFLAGS="$CFLAGS -std=c99"
+    fi
 
     # Enable -Werror=implicit-function-declaration and
     # -Werror=missing-prototypes, if available, or otherwise, just
@@ -1353,7 +1416,7 @@ if test "x$enable_openvg" = xyes; then
     fi
 
     AC_MSG_ERROR([Cannot enable OpenVG, because egl_gallium has been removed and
-                  OpenVG hasn't been integrated into standard libEGL yet])
+                  OpenVG has not been integrated into standard libEGL yet])
 
     EGL_CLIENT_APIS="$EGL_CLIENT_APIS "'$(VG_LIB)'
     VG_LIB_DEPS="$VG_LIB_DEPS $SELINUX_LIBS $PTHREAD_LIBS"
@@ -1367,44 +1430,60 @@ dnl Gallium G3DVL configuration
 dnl
 if test -n "$with_gallium_drivers" -a "x$with_gallium_drivers" != xswrast; then
     if test "x$enable_xvmc" = xauto; then
-	PKG_CHECK_EXISTS([xvmc], [enable_xvmc=yes], [enable_xvmc=no])
+	PKG_CHECK_EXISTS([xvmc >= $XVMC_REQUIRED], [enable_xvmc=yes], [enable_xvmc=no])
     fi
 
     if test "x$enable_vdpau" = xauto; then
-	PKG_CHECK_EXISTS([vdpau], [enable_vdpau=yes], [enable_vdpau=no])
+	PKG_CHECK_EXISTS([vdpau >= $VDPAU_REQUIRED], [enable_vdpau=yes], [enable_vdpau=no])
     fi
 
     if test "x$enable_omx" = xauto; then
-	PKG_CHECK_EXISTS([libomxil-bellagio], [enable_omx=yes], [enable_omx=no])
+	PKG_CHECK_EXISTS([libomxil-bellagio >= $LIBOMXIL_BELLAGIO_REQUIRED], [enable_omx=yes], [enable_omx=no])
     fi
 
     if test "x$enable_va" = xauto; then
-        PKG_CHECK_EXISTS([libva], [enable_va=yes], [enable_va=no])
+        PKG_CHECK_EXISTS([libva >= $LIBVA_REQUIRED], [enable_va=yes], [enable_va=no])
     fi
 fi
 
+if test "x$enable_dri" = xyes -o \
+        "x$enable_xvmc" = xyes -o \
+        "x$enable_vdpau" = xyes -o \
+        "x$enable_omx" = xyes -o \
+        "x$enable_va" = xyes; then
+    need_gallium_vl=yes
+fi
+AM_CONDITIONAL(NEED_GALLIUM_VL, test "x$need_gallium_vl" = xyes)
+
+if test "x$enable_xvmc" = xyes -o \
+        "x$enable_vdpau" = xyes -o \
+        "x$enable_omx" = xyes -o \
+        "x$enable_va" = xyes; then
+    PKG_CHECK_MODULES([VL], [x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED])
+    need_gallium_vl_winsys=yes
+fi
+AM_CONDITIONAL(NEED_GALLIUM_VL_WINSYS, test "x$need_gallium_vl_winsys" = xyes)
+
 if test "x$enable_xvmc" = xyes; then
-    PKG_CHECK_MODULES([XVMC], [xvmc >= $XVMC_REQUIRED x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED])
+    PKG_CHECK_MODULES([XVMC], [xvmc >= $XVMC_REQUIRED])
     enable_gallium_loader=$enable_shared_pipe_drivers
 fi
 AM_CONDITIONAL(HAVE_ST_XVMC, test "x$enable_xvmc" = xyes)
 
 if test "x$enable_vdpau" = xyes; then
-    PKG_CHECK_MODULES([VDPAU], [vdpau >= $VDPAU_REQUIRED x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED],
-                      [VDPAU_LIBS="`$PKG_CONFIG --libs x11-xcb xcb xcb-dri2`"])
+    PKG_CHECK_MODULES([VDPAU], [vdpau >= $VDPAU_REQUIRED])
     enable_gallium_loader=$enable_shared_pipe_drivers
 fi
 AM_CONDITIONAL(HAVE_ST_VDPAU, test "x$enable_vdpau" = xyes)
 
 if test "x$enable_omx" = xyes; then
-    PKG_CHECK_MODULES([OMX], [libomxil-bellagio >= $LIBOMXIL_BELLAGIO_REQUIRED x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED])
+    PKG_CHECK_MODULES([OMX], [libomxil-bellagio >= $LIBOMXIL_BELLAGIO_REQUIRED])
     enable_gallium_loader=$enable_shared_pipe_drivers
 fi
 AM_CONDITIONAL(HAVE_ST_OMX, test "x$enable_omx" = xyes)
 
 if test "x$enable_va" = xyes; then
-    PKG_CHECK_MODULES([VA], [libva >= 0.35.0 x11-xcb xcb-dri2 >= $XCBDRI2_REQUIRED],
-                      [VA_LIBS="`$PKG_CONFIG --libs x11-xcb xcb-dri2`"])
+    PKG_CHECK_MODULES([VA], [libva >= $LIBVA_REQUIRED])
     enable_gallium_loader=$enable_shared_pipe_drivers
 fi
 AM_CONDITIONAL(HAVE_ST_VA, test "x$enable_va" = xyes)
@@ -1534,6 +1613,13 @@ if test "x$with_egl_platforms" != "x" -a "x$enable_egl" != xyes; then
     AC_MSG_ERROR([cannot build egl state tracker without EGL library])
 fi
 
+PKG_CHECK_MODULES([WAYLAND_SCANNER], [wayland_scanner],
+        WAYLAND_SCANNER=`$PKG_CONFIG --variable=wayland_scanner wayland_scanner`,
+        WAYLAND_SCANNER='')
+if test "x$WAYLAND_SCANNER" = x; then
+    AC_PATH_PROG([WAYLAND_SCANNER], [wayland-scanner])
+fi
+
 # Do per-EGL platform setups and checks
 egl_platforms=`IFS=', '; echo $with_egl_platforms`
 for plat in $egl_platforms; do
@@ -1541,9 +1627,9 @@ for plat in $egl_platforms; do
 	wayland)
 		PKG_CHECK_MODULES([WAYLAND], [wayland-client >= $WAYLAND_REQUIRED wayland-server >= $WAYLAND_REQUIRED])
 
-                WAYLAND_PREFIX=`$PKG_CONFIG --variable=prefix wayland-client`
-                AC_PATH_PROG([WAYLAND_SCANNER], [wayland-scanner],,
-                             [${WAYLAND_PREFIX}/bin$PATH_SEPARATOR$PATH])
+		if test "x$WAYLAND_SCANNER" = x; then
+			AC_MSG_ERROR([wayland-scanner is needed to compile the wayland egl platform])
+		fi
 		;;
 
 	x11)
@@ -1574,7 +1660,7 @@ done
 # libEGL wants to default to the first platform specified in
 # ./configure.  parse that here.
 if test "x$egl_platforms" != "x"; then
-    FIRST_PLATFORM_CAPS=`echo $egl_platforms | sed 's| .*||' | tr 'a-z' 'A-Z'`
+    FIRST_PLATFORM_CAPS=`echo $egl_platforms | sed 's| .*||' | tr '[[a-z]]' '[[A-Z]]'`
     EGL_NATIVE_PLATFORM="_EGL_PLATFORM_$FIRST_PLATFORM_CAPS"
 else
     EGL_NATIVE_PLATFORM="_EGL_INVALID_PLATFORM"
@@ -1716,7 +1802,7 @@ if test "x$enable_gallium_llvm" = xyes; then
         fi
 
         if test "x$enable_opencl" = xyes; then
-            LLVM_COMPONENTS="${LLVM_COMPONENTS} ipo linker instrumentation"
+            LLVM_COMPONENTS="${LLVM_COMPONENTS} all-targets ipo linker instrumentation"
             # LLVM 3.3 >= 177971 requires IRReader
             if $LLVM_CONFIG --components | grep -qw 'irreader'; then
                 LLVM_COMPONENTS="${LLVM_COMPONENTS} irreader"
@@ -2138,7 +2224,6 @@ AC_CONFIG_FILES([Makefile
 		src/egl/drivers/dri2/Makefile
 		src/egl/main/Makefile
 		src/egl/main/egl.pc
-		src/egl/wayland/Makefile
 		src/egl/wayland/wayland-drm/Makefile
 		src/egl/wayland/wayland-egl/Makefile
 		src/egl/wayland/wayland-egl/wayland-egl.pc
@@ -2177,8 +2262,6 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/targets/d3dadapter9/Makefile
 		src/gallium/targets/d3dadapter9/d3d.pc
 		src/gallium/targets/dri/Makefile
-		src/gallium/targets/egl-static/Makefile
-		src/gallium/targets/gbm/Makefile
 		src/gallium/targets/libgl-xlib/Makefile
 		src/gallium/targets/omx/Makefile
 		src/gallium/targets/opencl/Makefile
@@ -2218,8 +2301,6 @@ AC_CONFIG_FILES([Makefile
 		src/mapi/es1api/glesv1_cm.pc
 		src/mapi/es2api/glesv2.pc
 		src/mapi/glapi/gen/Makefile
-		src/mapi/vgapi/Makefile
-		src/mapi/vgapi/vg.pc
 		src/mesa/Makefile
 		src/mesa/gl.pc
 		src/mesa/drivers/dri/dri.pc

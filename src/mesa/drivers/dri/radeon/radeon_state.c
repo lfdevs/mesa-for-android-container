@@ -40,7 +40,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/context.h"
 #include "main/framebuffer.h"
 #include "main/fbobject.h"
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 #include "main/state.h"
 #include "main/core.h"
 #include "main/stencil.h"
@@ -520,7 +520,7 @@ static void radeonColorMask( struct gl_context *ctx,
  */
 
 static void radeonPolygonOffset( struct gl_context *ctx,
-				 GLfloat factor, GLfloat units )
+				 GLfloat factor, GLfloat units, GLfloat clamp )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
    const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;

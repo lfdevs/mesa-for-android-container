@@ -31,5 +31,3 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libfreedrenodrm.la
 
 libfreedrenodrm_la_SOURCES = $(C_SOURCES)
-
-EXTRA_DIST = Android.mk

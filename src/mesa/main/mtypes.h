@@ -41,7 +41,7 @@
 #include "main/config.h"
 #include "glapi/glapi.h"
 #include "math/m_matrix.h"	/* GLmatrix */
-#include "main/simple_list.h"	/* struct simple_node */
+#include "util/simple_list.h"	/* struct simple_node */
 #include "main/formats.h"       /* MESA_FORMAT_COUNT */
 
 
@@ -1004,6 +1004,7 @@ struct gl_polygon_attrib
    GLenum CullFaceMode;		/**< Culling mode GL_FRONT or GL_BACK */
    GLfloat OffsetFactor;	/**< Polygon offset factor, from user */
    GLfloat OffsetUnits;		/**< Polygon offset units, from user */
+   GLfloat OffsetClamp;		/**< Polygon offset clamp, from user */
    GLboolean OffsetPoint;	/**< Offset in GL_POINT mode */
    GLboolean OffsetLine;	/**< Offset in GL_LINE mode */
    GLboolean OffsetFill;	/**< Offset in GL_FILL mode */
@@ -1220,6 +1221,8 @@ struct gl_texture_object
    GLboolean Purgeable;        /**< Is the buffer purgeable under memory
                                     pressure? */
    GLboolean Immutable;        /**< GL_ARB_texture_storage */
+   GLboolean _IsFloat;         /**< GL_OES_float_texture */
+   GLboolean _IsHalfFloat;     /**< GL_OES_half_float_texture */
 
    GLuint MinLevel;            /**< GL_ARB_texture_view */
    GLuint MinLayer;            /**< GL_ARB_texture_view */
@@ -1657,6 +1660,20 @@ typedef enum {
    DRAW_ARRAYS
 } gl_draw_method;
 
+/**
+ * Enum for the OpenGL APIs we know about and may support.
+ *
+ * NOTE: This must match the api_enum table in
+ * src/mesa/main/get_hash_generator.py
+ */
+typedef enum
+{
+   API_OPENGL_COMPAT,      /* legacy / compatibility contexts */
+   API_OPENGLES,
+   API_OPENGLES2,
+   API_OPENGL_CORE,
+   API_OPENGL_LAST = API_OPENGL_CORE
+} gl_api;
 
 /**
  * Vertex array state
@@ -1701,8 +1718,9 @@ struct gl_array_attrib
    /** One of the DRAW_xxx flags, not consumed by drivers */
    gl_draw_method DrawMethod;
 
-   /** Legal array datatypes */
+   /** Legal array datatypes and the API for which they have been computed */
    GLbitfield LegalTypesMask;
+   gl_api LegalTypesMaskAPI;
 };
 
 
@@ -2990,6 +3008,7 @@ struct gl_shader_compiler_options
    GLboolean EmitNoMainReturn;            /**< Emit CONT/RET opcodes? */
    GLboolean EmitNoNoise;                 /**< Emit NOISE opcodes? */
    GLboolean EmitNoPow;                   /**< Emit POW opcodes? */
+   GLboolean EmitNoSat;                   /**< Emit SAT opcodes? */
    GLboolean LowerClipDistance; /**< Lower gl_ClipDistance from float[8] to vec4[2]? */
 
    /**
@@ -3741,6 +3760,7 @@ struct gl_extensions
    GLboolean ARB_shader_atomic_counters;
    GLboolean ARB_shader_bit_encoding;
    GLboolean ARB_shader_image_load_store;
+   GLboolean ARB_shader_precision;
    GLboolean ARB_shader_stencil_export;
    GLboolean ARB_shader_texture_lod;
    GLboolean ARB_shading_language_packing;
@@ -3794,6 +3814,7 @@ struct gl_extensions
    GLboolean EXT_packed_float;
    GLboolean EXT_pixel_buffer_object;
    GLboolean EXT_point_parameters;
+   GLboolean EXT_polygon_offset_clamp;
    GLboolean EXT_provoking_vertex;
    GLboolean EXT_shader_integer_mix;
    GLboolean EXT_stencil_two_side;
@@ -3842,6 +3863,10 @@ struct gl_extensions
    GLboolean OES_draw_texture;
    GLboolean OES_depth_texture_cube_map;
    GLboolean OES_EGL_image_external;
+   GLboolean OES_texture_float;
+   GLboolean OES_texture_float_linear;
+   GLboolean OES_texture_half_float;
+   GLboolean OES_texture_half_float_linear;
    GLboolean OES_compressed_ETC1_RGB8_texture;
    GLboolean extension_sentinel;
    /** The extension string */
@@ -4037,21 +4062,6 @@ enum mesa_debug_severity {
 };
 
 /** @} */
-
-/**
- * Enum for the OpenGL APIs we know about and may support.
- *
- * NOTE: This must match the api_enum table in
- * src/mesa/main/get_hash_generator.py
- */
-typedef enum
-{
-   API_OPENGL_COMPAT,      /* legacy / compatibility contexts */
-   API_OPENGLES,
-   API_OPENGLES2,
-   API_OPENGL_CORE,
-   API_OPENGL_LAST = API_OPENGL_CORE
-} gl_api;
 
 /**
  * Driver-specific state flags.

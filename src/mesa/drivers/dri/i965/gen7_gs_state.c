@@ -34,8 +34,8 @@ upload_gs_state(struct brw_context *brw)
       HSW_GS_MAX_THREADS_SHIFT : GEN6_GS_MAX_THREADS_SHIFT;
    /* BRW_NEW_GEOMETRY_PROGRAM */
    bool active = brw->geometry_program;
-   /* CACHE_NEW_GS_PROG */
-   const struct brw_vec4_prog_data *prog_data = &brw->gs.prog_data->base;
+   /* BRW_NEW_GS_PROG_DATA */
+   const struct brw_vue_prog_data *prog_data = &brw->gs.prog_data->base;
 
    /**
     * From Graphics BSpec: 3D-Media-GPGPU Engine > 3D Pipeline Stages >
@@ -154,10 +154,10 @@ upload_gs_state(struct brw_context *brw)
 const struct brw_tracked_state gen7_gs_state = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM,
-      .brw   = (BRW_NEW_CONTEXT |
-                BRW_NEW_GEOMETRY_PROGRAM |
-                BRW_NEW_BATCH),
-      .cache = CACHE_NEW_GS_PROG
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_CONTEXT |
+               BRW_NEW_GEOMETRY_PROGRAM |
+               BRW_NEW_GS_PROG_DATA,
    },
    .emit = upload_gs_state,
 };

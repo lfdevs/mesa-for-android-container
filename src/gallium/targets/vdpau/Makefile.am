@@ -7,8 +7,7 @@ vdpaudir = $(VDPAU_LIB_INSTALL_DIR)
 vdpau_LTLIBRARIES = libvdpau_gallium.la
 
 nodist_EXTRA_libvdpau_gallium_la_SOURCES = dummy.cpp
-libvdpau_gallium_la_SOURCES = \
-	$(top_srcdir)/src/gallium/auxiliary/vl/vl_winsys_dri.c
+libvdpau_gallium_la_SOURCES =
 
 libvdpau_gallium_la_LDFLAGS = \
 	-shared \
@@ -28,13 +27,23 @@ libvdpau_gallium_la_LDFLAGS += \
 	-Wl,--dynamic-list=$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
 endif # HAVE_LD_DYNAMIC_LIST
 
+# NOTE: libvdpau_gallium does not use(link against) libvdpau
 libvdpau_gallium_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvlwinsys.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvl.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(VDPAU_LIBS) \
+	$(VL_LIBS) \
 	$(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
+
+EXTRA_libvdpau_gallium_la_DEPENDENCIES = \
+	vdpau.sym \
+	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
+EXTRA_DIST = \
+	vdpau.sym \
+	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =
@@ -49,15 +58,11 @@ include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 if HAVE_GALLIUM_STATIC_TARGETS
 
 libvdpau_gallium_la_SOURCES += target.c
-libvdpau_gallium_la_CPPFLAGS = $(TARGET_CPPFLAGS) -DGALLIUM_STATIC_TARGETS=1
+libvdpau_gallium_la_CPPFLAGS = $(TARGET_CPPFLAGS)
 libvdpau_gallium_la_LIBADD += $(TARGET_LIB_DEPS) \
 	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
-
-libvdpau_gallium_la_CPPFLAGS = \
-	$(GALLIUM_PIPE_LOADER_DEFINES) \
-	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\"
 
 libvdpau_gallium_la_LIBADD += \
 	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
@@ -89,6 +94,12 @@ all-local: $(vdpau_LTLIBRARIES)
 		ln -sf $${l}						\
 		       $${link_dir}/$${k};				\
 	done
+
+clean-local:
+	$(AM_V_GEN)link_dir=$(top_builddir)/$(LIB_DIR)/gallium;		\
+	$(AM_V_GEN)for i in $(TARGET_DRIVERS); do			\
+		$(RM) $${link_dir}/libvdpau_$${i}.so{,.$(VDPAU_MAJOR){,.$(VDPAU_MINOR){,.0}}}; \
+	done;
 endif
 
 # hardlink each megadriver instance, but don't actually have
@@ -108,4 +119,9 @@ install-data-hook:
 		ln -sf $${l}						\
 		       $${dest_dir}/$${k};				\
 	done;								\
-	$(RM) -f $${dest_dir}/libvdpau_gallium.*
+	$(RM) $${dest_dir}/libvdpau_gallium.*
+
+uninstall-hook:
+	for i in $(TARGET_DRIVERS); do					\
+		$(RM) $(DESTDIR)$(vdpaudir)/libvdpau_$${i}.so{,.$(VDPAU_MAJOR){,.$(VDPAU_MINOR){,.0}}}; \
+	done;

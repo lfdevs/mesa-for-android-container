@@ -47,6 +47,7 @@ NineTexture9_ctor( struct NineTexture9 *This,
     struct pipe_screen *screen = pParams->device->screen;
     struct pipe_resource *info = &This->base.base.info;
     struct pipe_resource *resource;
+    enum pipe_format pf;
     unsigned l;
     D3DSURFACE_DESC sfdesc;
     HRESULT hr;
@@ -92,9 +93,14 @@ NineTexture9_ctor( struct NineTexture9 *This,
     if (Usage & D3DUSAGE_AUTOGENMIPMAP)
         Levels = 0;
 
+    pf = d3d9_to_pipe_format_checked(screen, Format, PIPE_TEXTURE_2D, 0,
+                                     PIPE_BIND_SAMPLER_VIEW, FALSE);
+    if (Format != D3DFMT_NULL && pf == PIPE_FORMAT_NONE)
+        return D3DERR_INVALIDCALL;
+
     info->screen = screen;
     info->target = PIPE_TEXTURE_2D;
-    info->format = d3d9_to_pipe_format(Format);
+    info->format = pf;
     info->width0 = Width;
     info->height0 = Height;
     info->depth0 = 1;

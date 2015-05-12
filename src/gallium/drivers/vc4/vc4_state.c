@@ -186,12 +186,30 @@ vc4_create_depth_stencil_alpha_state(struct pipe_context *pctx,
 
         so->base = *cso;
 
+        /* We always keep the early Z state correct, since a later state using
+         * early Z may want it.
+         */
+        so->config_bits[2] |= VC4_CONFIG_BITS_EARLY_Z_UPDATE;
+
         if (cso->depth.enabled) {
                 if (cso->depth.writemask) {
                         so->config_bits[1] |= VC4_CONFIG_BITS_Z_UPDATE;
                 }
                 so->config_bits[1] |= (cso->depth.func <<
                                        VC4_CONFIG_BITS_DEPTH_FUNC_SHIFT);
+
+                /* We only handle early Z in the < direction because otherwise
+                 * we'd have to runtime guess which direction to set in the
+                 * render config.
+                 */
+                if ((cso->depth.func == PIPE_FUNC_LESS ||
+                     cso->depth.func == PIPE_FUNC_LEQUAL) &&
+                    (!cso->stencil[0].enabled ||
+                     (cso->stencil[0].zfail_op == PIPE_STENCIL_OP_KEEP &&
+                      (!cso->stencil[1].enabled ||
+                       cso->stencil[1].zfail_op == PIPE_STENCIL_OP_KEEP)))) {
+                        so->config_bits[2] |= VC4_CONFIG_BITS_EARLY_Z;
+                }
         } else {
                 so->config_bits[1] |= (PIPE_FUNC_ALWAYS <<
                                        VC4_CONFIG_BITS_DEPTH_FUNC_SHIFT);
@@ -300,12 +318,11 @@ vc4_set_index_buffer(struct pipe_context *pctx,
                         pipe_resource_reference(&vc4->indexbuf.buffer, NULL);
                         vc4->indexbuf.buffer = pshadow;
                         vc4->indexbuf.index_size = 2;
-                        vc4->indexbuf.offset = 0;
                 } else {
                         pipe_resource_reference(&vc4->indexbuf.buffer, ib->buffer);
                         vc4->indexbuf.index_size = ib->index_size;
-                        vc4->indexbuf.offset = ib->offset;
                 }
+                vc4->indexbuf.offset = ib->offset;
         } else {
                 pipe_resource_reference(&vc4->indexbuf.buffer, NULL);
         }

@@ -632,7 +632,7 @@ gen6_gs_visitor::xfb_write()
    emit(CMP(dst_null_d(), sol_temp, this->max_svbi, BRW_CONDITIONAL_LE));
    emit(IF(BRW_PREDICATE_NORMAL));
    {
-      struct src_reg destination_indices_uw =
+      src_reg destination_indices_uw =
          retype(destination_indices, BRW_REGISTER_TYPE_UW);
 
       vec4_instruction *inst = emit(MOV(dst_reg(destination_indices_uw),

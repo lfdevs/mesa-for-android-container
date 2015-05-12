@@ -40,11 +40,17 @@ LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/egl/main \
 	$(MESA_TOP)/src/loader \
-	$(TARGET_OUT_HEADERS)/libdrm \
 	$(DRM_GRALLOC_TOP)
 
 LOCAL_STATIC_LIBRARIES := \
 	libmesa_loader
+
+LOCAL_SHARED_LIBRARIES := libdrm
+
+ifeq ($(shell echo "$(MESA_ANDROID_VERSION) >= 4.2" | bc),1)
+LOCAL_SHARED_LIBRARIES += \
+	libsync
+endif
 
 LOCAL_MODULE := libmesa_egl_dri2
 

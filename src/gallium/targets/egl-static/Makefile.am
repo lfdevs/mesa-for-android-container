@@ -59,10 +59,13 @@ nodist_EXTRA_egl_gallium_la_SOURCES = dummy.cpp
 egl_gallium_la_SOURCES = \
 	egl.c \
 	egl_pipe.c \
-	egl_st.c
+	egl_pipe.h \
+	egl_st.c \
+	egl_st.h
 
 egl_gallium_la_LIBADD = \
 	$(top_builddir)/src/loader/libloader.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/drivers/identity/libidentity.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
@@ -150,6 +153,9 @@ egl_gallium_la_LIBADD += \
 	$(top_builddir)/src/gallium/state_trackers/vega/libvega.la \
 	$(top_builddir)/src/mapi/vgapi/libOpenVG.la
 endif
+
+EXTRA_egl_gallium_la_DEPENDENCIES = egl.sym
+EXTRA_DIST = SConscript
 
 #if HAVE_GALLIUM_STATIC_TARGETS
 

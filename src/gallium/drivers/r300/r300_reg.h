@@ -191,7 +191,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #	define R300_VAP_TCL_BYPASS		(1 << 8)
 /* Read only flag if TCL engine is busy. */
 #	define R300_VAP_PVS_BUSY                (1 << 11)
-/* TODO: gap for MAX_MPS */
 /* Read only flag if the vertex store is busy. */
 #	define R300_VAP_VS_BUSY                 (1 << 24)
 /* Read only flag if the reciprocal engine is busy. */
@@ -921,9 +920,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  * The line width is given in multiples of 6.
  * In default mode lines are classified as vertical lines.
- * HO: horizontal
- * VE: vertical or horizontal
- * HO & VE: no classification
  */
 #define R300_GA_LINE_CNTL                             0x4234
 #       define R300_GA_LINE_CNTL_WIDTH_SHIFT       0
@@ -934,12 +930,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #	define R300_GA_LINE_CNTL_END_TYPE_COMP     (3 << 16) /* Computed (perpendicular to slope) */
 #	define R500_GA_LINE_CNTL_SORT_NO           (0 << 18)
 #	define R500_GA_LINE_CNTL_SORT_MINX_MINY    (1 << 18)
-/** TODO: looks wrong */
-#       define R300_LINESIZE_MAX              (R300_GA_LINE_CNTL_WIDTH_MASK / 6)
-/** TODO: looks wrong */
-#       define R300_LINE_CNT_HO               (1 << 16)
-/** TODO: looks wrong */
-#       define R300_LINE_CNT_VE               (1 << 17)
 
 /* Line Stipple configuration information. */
 #define R300_GA_LINE_STIPPLE_CONFIG                   0x4238
@@ -1278,8 +1268,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define R300_RS_IP_1				        0x4314
 #define R300_RS_IP_2				        0x4318
 #define R300_RS_IP_3				        0x431C
-#       define R300_RS_INTERP_SRC_SHIFT          2 /* TODO: check for removal */
-#       define R300_RS_INTERP_SRC_MASK           (7 << 2) /* TODO: check for removal */
 #	define R300_RS_TEX_PTR(x)		        (x << 0)
 #	define R300_RS_COL_PTR(x)		        ((x) << 6)
 #	define R300_RS_COL_FMT(x)		        ((x) << 9)
@@ -3300,7 +3288,7 @@ enum {
 #   define R500_INST_ALPHA_PRED_SEL_GGGG		(3 << 25)
 #   define R500_INST_ALPHA_PRED_SEL_BBBB		(4 << 25)
 #   define R500_INST_ALPHA_PRED_SEL_AAAA		(5 << 25)
-/* XXX next four are kind of guessed */
+/* Next four are guessed, documentation doesn't mention order. */
 #   define R500_INST_STAT_WE_R				(1 << 28)
 #   define R500_INST_STAT_WE_G				(1 << 29)
 #   define R500_INST_STAT_WE_B				(1 << 30)
@@ -3546,19 +3534,13 @@ enum {
 /*
  * CP type-3 packets
  */
-#define R300_CP_CMD_BITBLT_MULTI	0xC0009B00
-
-/* XXX Corbin's stuff from radeon and r200 */
-
 #define RADEON_WAIT_UNTIL                   0x1720
 #       define RADEON_WAIT_CRTC_PFLIP       (1 << 0)
 #       define RADEON_WAIT_2D_IDLECLEAN     (1 << 16)
 #       define RADEON_WAIT_3D_IDLECLEAN     (1 << 17)
 #       define RADEON_WAIT_HOST_IDLECLEAN   (1 << 18)
 
-#define R200_3D_DRAW_IMMD_2      0xC0003500
-
-#define RADEON_CP_PACKET0 0x0 /* XXX stolen from radeon_reg.h */
+#define RADEON_CP_PACKET0                           0x00000000
 #define RADEON_CP_PACKET3                           0xC0000000
 
 #define RADEON_ONE_REG_WR        (1 << 15)

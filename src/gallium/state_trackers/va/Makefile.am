@@ -26,6 +26,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
+	$(VL_CFLAGS) \
 	$(VA_CFLAGS) \
 	-DVA_DRIVER_INIT_FUNC="__vaDriverInit_$(VA_MAJOR)_$(VA_MINOR)"
 

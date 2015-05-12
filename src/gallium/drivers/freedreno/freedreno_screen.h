@@ -76,4 +76,16 @@ is_a3xx_p0(struct fd_screen *screen)
 	return (screen->chip_id & 0xff0000ff) == 0x03000000;
 }
 
+static inline boolean
+is_a3xx(struct fd_screen *screen)
+{
+	return (screen->gpu_id >= 300) && (screen->gpu_id < 400);
+}
+
+static inline boolean
+is_a4xx(struct fd_screen *screen)
+{
+	return (screen->gpu_id >= 400) && (screen->gpu_id < 500);
+}
+
 #endif /* FREEDRENO_SCREEN_H_ */

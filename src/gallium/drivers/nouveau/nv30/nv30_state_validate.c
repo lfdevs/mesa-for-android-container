@@ -254,11 +254,11 @@ nv30_validate_viewport(struct nv30_context *nv30)
    PUSH_DATAf(push, vp->translate[0]);
    PUSH_DATAf(push, vp->translate[1]);
    PUSH_DATAf(push, vp->translate[2]);
-   PUSH_DATAf(push, vp->translate[3]);
+   PUSH_DATAf(push, 0.0f);
    PUSH_DATAf(push, vp->scale[0]);
    PUSH_DATAf(push, vp->scale[1]);
    PUSH_DATAf(push, vp->scale[2]);
-   PUSH_DATAf(push, vp->scale[3]);
+   PUSH_DATAf(push, 1.0f);
    BEGIN_NV04(push, NV30_3D(DEPTH_RANGE_NEAR), 2);
    PUSH_DATAf(push, vp->translate[2] - fabsf(vp->scale[2]));
    PUSH_DATAf(push, vp->translate[2] + fabsf(vp->scale[2]));

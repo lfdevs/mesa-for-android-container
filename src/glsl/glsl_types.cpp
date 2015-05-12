@@ -25,9 +25,8 @@
 #include "main/core.h" /* for Elements, MAX2 */
 #include "glsl_parser_extras.h"
 #include "glsl_types.h"
-extern "C" {
 #include "program/hash_table.h"
-}
+
 
 mtx_t glsl_type::mutex = _MTX_INITIALIZER_NP;
 hash_table *glsl_type::array_types = NULL;
@@ -475,6 +474,117 @@ glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns)
    return error_type;
 }
 
+const glsl_type *
+glsl_type::get_sampler_instance(enum glsl_sampler_dim dim,
+                                bool shadow,
+                                bool array,
+                                glsl_base_type type)
+{
+   switch (type) {
+   case GLSL_TYPE_FLOAT:
+      switch (dim) {
+      case GLSL_SAMPLER_DIM_1D:
+         if (shadow)
+            return (array ? sampler1DArrayShadow_type : sampler1DShadow_type);
+         else
+            return (array ? sampler1DArray_type : sampler1D_type);
+      case GLSL_SAMPLER_DIM_2D:
+         if (shadow)
+            return (array ? sampler2DArrayShadow_type : sampler2DShadow_type);
+         else
+            return (array ? sampler2DArray_type : sampler2D_type);
+      case GLSL_SAMPLER_DIM_3D:
+         if (shadow || array)
+            return error_type;
+         else
+            return sampler3D_type;
+      case GLSL_SAMPLER_DIM_CUBE:
+         if (shadow)
+            return (array ? samplerCubeArrayShadow_type : samplerCubeShadow_type);
+         else
+            return (array ? samplerCubeArray_type : samplerCube_type);
+      case GLSL_SAMPLER_DIM_RECT:
+         if (array)
+            return error_type;
+         if (shadow)
+            return sampler2DRectShadow_type;
+         else
+            return sampler2DRect_type;
+      case GLSL_SAMPLER_DIM_BUF:
+         if (shadow || array)
+            return error_type;
+         else
+            return samplerBuffer_type;
+      case GLSL_SAMPLER_DIM_MS:
+         if (shadow)
+            return error_type;
+         return (array ? sampler2DMSArray_type : sampler2DMS_type);
+      case GLSL_SAMPLER_DIM_EXTERNAL:
+         if (shadow || array)
+            return error_type;
+         else
+            return samplerExternalOES_type;
+      }
+   case GLSL_TYPE_INT:
+      if (shadow)
+         return error_type;
+      switch (dim) {
+      case GLSL_SAMPLER_DIM_1D:
+         return (array ? isampler1DArray_type : isampler1D_type);
+      case GLSL_SAMPLER_DIM_2D:
+         return (array ? isampler2DArray_type : isampler2D_type);
+      case GLSL_SAMPLER_DIM_3D:
+         if (array)
+            return error_type;
+         return isampler3D_type;
+      case GLSL_SAMPLER_DIM_CUBE:
+         return (array ? isamplerCubeArray_type : isamplerCube_type);
+      case GLSL_SAMPLER_DIM_RECT:
+         if (array)
+            return error_type;
+         return isampler2DRect_type;
+      case GLSL_SAMPLER_DIM_BUF:
+         if (array)
+            return error_type;
+         return isamplerBuffer_type;
+      case GLSL_SAMPLER_DIM_MS:
+         return (array ? isampler2DMSArray_type : isampler2DMS_type);
+      case GLSL_SAMPLER_DIM_EXTERNAL:
+         return error_type;
+      }
+   case GLSL_TYPE_UINT:
+      if (shadow)
+         return error_type;
+      switch (dim) {
+      case GLSL_SAMPLER_DIM_1D:
+         return (array ? usampler1DArray_type : usampler1D_type);
+      case GLSL_SAMPLER_DIM_2D:
+         return (array ? usampler2DArray_type : usampler2D_type);
+      case GLSL_SAMPLER_DIM_3D:
+         if (array)
+            return error_type;
+         return usampler3D_type;
+      case GLSL_SAMPLER_DIM_CUBE:
+         return (array ? usamplerCubeArray_type : usamplerCube_type);
+      case GLSL_SAMPLER_DIM_RECT:
+         if (array)
+            return error_type;
+         return usampler2DRect_type;
+      case GLSL_SAMPLER_DIM_BUF:
+         if (array)
+            return error_type;
+         return usamplerBuffer_type;
+      case GLSL_SAMPLER_DIM_MS:
+         return (array ? usampler2DMSArray_type : usampler2DMS_type);
+      case GLSL_SAMPLER_DIM_EXTERNAL:
+         return error_type;
+      }
+   default:
+      return error_type;
+   }
+
+   unreachable("switch statement above should be complete");
+}
 
 const glsl_type *
 glsl_type::get_array_instance(const glsl_type *base, unsigned array_size)
@@ -580,24 +690,27 @@ glsl_type::record_key_compare(const void *a, const void *b)
 }
 
 
+/**
+ * Generate an integer hash value for a glsl_type structure type.
+ */
 unsigned
 glsl_type::record_key_hash(const void *a)
 {
    const glsl_type *const key = (glsl_type *) a;
-   char hash_key[128];
-   unsigned size = 0;
-
-   size = snprintf(hash_key, sizeof(hash_key), "%08x", key->length);
+   uintptr_t hash = key->length;
+   unsigned retval;
 
    for (unsigned i = 0; i < key->length; i++) {
-      if (size >= sizeof(hash_key))
-	 break;
-
-      size += snprintf(& hash_key[size], sizeof(hash_key) - size,
-		       "%p", (void *) key->fields.structure[i].type);
+      /* casting pointer to uintptr_t */
+      hash = (hash * 13 ) + (uintptr_t) key->fields.structure[i].type;
    }
 
-   return hash_table_string_hash(& hash_key);
+   if (sizeof(hash) == 8)
+      retval = (hash & 0xffffffff) ^ ((uint64_t) hash >> 32);
+   else
+      retval = hash;
+
+   return retval;
 }
 
 

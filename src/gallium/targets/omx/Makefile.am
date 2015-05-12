@@ -7,8 +7,7 @@ omxdir = $(OMX_LIB_INSTALL_DIR)
 omx_LTLIBRARIES = libomx_mesa.la
 
 nodist_EXTRA_libomx_mesa_la_SOURCES = dummy.cpp
-libomx_mesa_la_SOURCES = \
-	$(top_srcdir)/src/gallium/auxiliary/vl/vl_winsys_dri.c
+libomx_mesa_la_SOURCES =
 
 libomx_mesa_la_LDFLAGS = \
 	-shared \
@@ -25,10 +24,17 @@ endif # HAVE_LD_VERSION_SCRIPT
 
 libomx_mesa_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/omx/libomxtracker.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvlwinsys.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvl.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(OMX_LIBS) \
+	$(VL_LIBS) \
+	$(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
+
+EXTRA_libomx_mesa_la_DEPENDENCIES = omx.sym
+EXTRA_DIST = omx.sym
 
 if HAVE_GALLIUM_STATIC_TARGETS
 
@@ -43,15 +49,11 @@ include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 
 libomx_mesa_la_SOURCES += target.c
-libomx_mesa_la_CPPFLAGS = $(TARGET_CPPFLAGS) -DGALLIUM_STATIC_TARGETS=1
+libomx_mesa_la_CPPFLAGS = $(TARGET_CPPFLAGS)
 libomx_mesa_la_LIBADD += $(TARGET_LIB_DEPS) \
 	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
-
-libomx_mesa_la_CPPFLAGS = \
-	$(GALLIUM_PIPE_LOADER_DEFINES) \
-	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\"
 
 libomx_mesa_la_LIBADD += \
 	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \

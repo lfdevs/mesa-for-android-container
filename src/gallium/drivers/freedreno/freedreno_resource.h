@@ -33,11 +33,24 @@
 
 #include "freedreno_util.h"
 
-/* for mipmap, cubemap, etc, each level is represented by a slice.
- * Currently all slices are part of same bo (just different offsets),
- * this is at least how it needs to be for cubemaps, although mipmap
- * can be different bo's (although, not sure if there is a strong
- * advantage to doing that)
+/* Texture Layout on a3xx:
+ *
+ * Each mipmap-level contains all of it's layers (ie. all cubmap
+ * faces, all 1d/2d array elements, etc).  The texture sampler is
+ * programmed with the start address of each mipmap level, and hw
+ * derives the layer offset within the level.
+ *
+ * Texture Layout on a4xx:
+ *
+ * For cubemap and 2d array, each layer contains all of it's mipmap
+ * levels (layer_first layout).
+ *
+ * 3d textures are layed out as on a3xx, but unknown about 3d-array
+ * textures.
+ *
+ * In either case, the slice represents the per-miplevel information,
+ * but in layer_first layout it only includes the first layer, and
+ * an additional offset of (rsc->layer_size * layer) must be added.
  */
 struct fd_resource_slice {
 	uint32_t offset;         /* offset of first layer in slice */
@@ -49,6 +62,8 @@ struct fd_resource {
 	struct u_resource base;
 	struct fd_bo *bo;
 	uint32_t cpp;
+	bool layer_first;        /* see above description */
+	uint32_t layer_size;
 	struct fd_resource_slice slices[MAX_MIP_LEVELS];
 	uint32_t timestamp;
 	bool dirty;
@@ -65,6 +80,21 @@ fd_resource_slice(struct fd_resource *rsc, unsigned level)
 {
 	assert(level <= rsc->base.b.last_level);
 	return &rsc->slices[level];
+}
+
+/* get offset for specified mipmap level and texture/array layer */
+static INLINE uint32_t
+fd_resource_offset(struct fd_resource *rsc, unsigned level, unsigned layer)
+{
+	struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
+	unsigned offset;
+	if (rsc->layer_first) {
+		offset = slice->offset + (rsc->layer_size * layer);
+	} else {
+		offset = slice->offset + (slice->size0 * layer);
+	}
+	debug_assert(offset < fd_bo_size(rsc->bo));
+	return offset;
 }
 
 void fd_resource_screen_init(struct pipe_screen *pscreen);

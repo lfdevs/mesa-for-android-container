@@ -61,10 +61,6 @@ DRI_CONF_BEGIN
       DRI_CONF_OPT_BEGIN_B(hiz, "true")
 	 DRI_CONF_DESC(en, "Enable Hierarchical Z on gen6+")
       DRI_CONF_OPT_END
-
-      DRI_CONF_OPT_BEGIN_B(disable_derivative_optimization, "false")
-	 DRI_CONF_DESC(en, "Derivatives with finer granularity by default")
-      DRI_CONF_OPT_END
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_QUALITY
@@ -1130,7 +1126,8 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
 {
    static const mesa_format formats[] = {
       MESA_FORMAT_B5G6R5_UNORM,
-      MESA_FORMAT_B8G8R8A8_UNORM
+      MESA_FORMAT_B8G8R8A8_UNORM,
+      MESA_FORMAT_B8G8R8X8_UNORM
    };
 
    /* GLX_SWAP_COPY_OML is not supported due to page flipping. */

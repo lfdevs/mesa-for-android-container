@@ -131,10 +131,10 @@ kms_sw_displaytarget_create(struct sw_winsys *ws,
    kms_sw_dt->width = width;
    kms_sw_dt->height = height;
 
+   memset(&create_req, 0, sizeof(create_req));
    create_req.bpp = 32;
    create_req.width = width;
    create_req.height = height;
-   create_req.handle = 0;
    ret = drmIoctl(kms_sw->fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_req);
    if (ret)
       goto free_bo;

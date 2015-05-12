@@ -28,6 +28,6 @@ r300_compiler_tests_SOURCES = $(COMPILER_TESTS_SOURCES)
 
 libr300_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = Android.mk \
+EXTRA_DIST = \
 	compiler/tests/omod_two_writers.test \
 	compiler/tests/regalloc_tex_1d_swizzle.test

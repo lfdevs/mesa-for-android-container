@@ -27,10 +27,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(C_SOURCES)
 
-LOCAL_C_INCLUDES := \
-	$(TARGET_OUT_HEADERS)/libdrm \
-	$(TARGET_OUT_HEADERS)/freedreno
-
+LOCAL_SHARED_LIBRARIES := libdrm libdrm_freedreno
 LOCAL_MODULE := libmesa_winsys_freedreno
 
 include $(GALLIUM_COMMON_MK)

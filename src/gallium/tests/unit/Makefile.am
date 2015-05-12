@@ -2,6 +2,8 @@
 
 include $(top_srcdir)/src/gallium/Automake.inc
 
+EXTRA_DIST = SConscript
+
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS)
 

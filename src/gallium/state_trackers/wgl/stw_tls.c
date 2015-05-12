@@ -120,7 +120,7 @@ stw_tls_data_create(DWORD dwThreadId)
       debug_printf("%s(0x%04lx)\n", __FUNCTION__, dwThreadId);
    }
 
-   data = (struct stw_tls_data *)calloc(1, sizeof *data);
+   data = calloc(1, sizeof *data);
    if (!data) {
       goto no_data;
    }

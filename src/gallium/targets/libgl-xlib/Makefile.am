@@ -74,4 +74,7 @@ AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
 lib@GL_LIB@_la_LDFLAGS += $(LLVM_LDFLAGS)
 endif
 
+EXTRA_lib@GL_LIB@_la_DEPENDENCIES = libgl-xlib.sym
+EXTRA_DIST = SConscript libgl-xlib.sym
+
 include $(top_srcdir)/install-gallium-links.mk

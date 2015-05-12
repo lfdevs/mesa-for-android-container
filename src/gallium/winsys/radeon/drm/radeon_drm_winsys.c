@@ -387,6 +387,8 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_PIPES, NULL,
                          &ws->info.r600_max_pipes);
 
+    /* All GPUs have at least one compute unit */
+    ws->info.max_compute_units = 1;
     radeon_get_drm_value(ws->fd, RADEON_INFO_ACTIVE_CU_COUNT, NULL,
                          &ws->info.max_compute_units);
 
@@ -671,7 +673,7 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
         goto fail;
 
     ws->cman = pb_cache_manager_create(ws->kman, 1000000, 2.0f, 0,
-                                       (ws->info.vram_size + ws->info.gart_size) / 8);
+                                       MIN2(ws->info.vram_size, ws->info.gart_size));
     if (!ws->cman)
         goto fail;
 

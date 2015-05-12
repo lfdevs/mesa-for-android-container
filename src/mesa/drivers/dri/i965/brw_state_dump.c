@@ -472,23 +472,23 @@ dump_prog_cache(struct brw_context *brw)
 	 const char *name;
 
 	 switch (item->cache_id) {
-	 case BRW_VS_PROG:
+	 case BRW_CACHE_VS_PROG:
 	    name = "VS kernel";
 	    break;
-	 case BRW_FF_GS_PROG:
+	 case BRW_CACHE_FF_GS_PROG:
 	    name = "Fixed-function GS kernel";
 	    break;
-         case BRW_GS_PROG:
+         case BRW_CACHE_GS_PROG:
             name = "GS kernel";
             break;
-	 case BRW_CLIP_PROG:
+	 case BRW_CACHE_CLIP_PROG:
 	    name = "CLIP kernel";
 	    break;
-	 case BRW_SF_PROG:
+	 case BRW_CACHE_SF_PROG:
 	    name = "SF kernel";
 	    break;
-	 case BRW_WM_PROG:
-	    name = "WM kernel";
+	 case BRW_CACHE_FS_PROG:
+	    name = "FS kernel";
 	    break;
 	 default:
 	    name = "unknown";

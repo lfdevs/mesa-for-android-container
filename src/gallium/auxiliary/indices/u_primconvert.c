@@ -74,6 +74,8 @@ util_primconvert_create(struct pipe_context *pipe, uint32_t primtypes_mask)
 void
 util_primconvert_destroy(struct primconvert_context *pc)
 {
+   if (pc->upload)
+      u_upload_destroy(pc->upload);
    util_primconvert_save_index_buffer(pc, NULL);
    FREE(pc);
 }

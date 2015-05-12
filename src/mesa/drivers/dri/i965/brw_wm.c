@@ -116,6 +116,25 @@ brw_compute_barycentric_interp_modes(struct brw_context *brw,
    return barycentric_interp_modes;
 }
 
+static uint8_t
+computed_depth_mode(struct gl_fragment_program *fp)
+{
+   if (fp->Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
+      switch (fp->FragDepthLayout) {
+      case FRAG_DEPTH_LAYOUT_NONE:
+      case FRAG_DEPTH_LAYOUT_ANY:
+         return BRW_PSCDEPTH_ON;
+      case FRAG_DEPTH_LAYOUT_GREATER:
+         return BRW_PSCDEPTH_ON_GE;
+      case FRAG_DEPTH_LAYOUT_LESS:
+         return BRW_PSCDEPTH_ON_LE;
+      case FRAG_DEPTH_LAYOUT_UNCHANGED:
+         return BRW_PSCDEPTH_OFF;
+      }
+   }
+   return BRW_PSCDEPTH_OFF;
+}
+
 bool
 brw_wm_prog_data_compare(const void *in_a, const void *in_b)
 {
@@ -156,7 +175,16 @@ bool do_wm_prog(struct brw_context *brw,
       fs = prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
 
    memset(&prog_data, 0, sizeof(prog_data));
-   prog_data.uses_kill = fp->program.UsesKill;
+   /* key->alpha_test_func means simulating alpha testing via discards,
+    * so the shader definitely kills pixels.
+    */
+   prog_data.uses_kill = fp->program.UsesKill || key->alpha_test_func;
+
+   prog_data.computed_depth_mode = computed_depth_mode(&fp->program);
+
+   /* Use ALT floating point mode for ARB programs so that 0^0 == 1. */
+   if (!prog)
+      prog_data.base.use_alt_mode = true;
 
    /* Allocate the references to the uniforms that will end up in the
     * prog_data associated with the compiled program, and which will be freed
@@ -196,7 +224,7 @@ bool do_wm_prog(struct brw_context *brw,
    if (unlikely(INTEL_DEBUG & DEBUG_WM))
       fprintf(stderr, "\n");
 
-   brw_upload_cache(&brw->cache, BRW_WM_PROG,
+   brw_upload_cache(&brw->cache, BRW_CACHE_FS_PROG,
 		    key, sizeof(struct brw_wm_prog_key),
 		    program, program_size,
 		    &prog_data, sizeof(prog_data),
@@ -254,7 +282,7 @@ brw_wm_debug_recompile(struct brw_context *brw,
 
    for (unsigned int i = 0; i < brw->cache.size; i++) {
       for (c = brw->cache.items[i]; c; c = c->next) {
-         if (c->cache_id == BRW_WM_PROG) {
+         if (c->cache_id == BRW_CACHE_FS_PROG) {
             old_key = c->key;
 
             if (old_key->program_string_id == key->program_string_id)
@@ -465,13 +493,8 @@ static void brw_wm_populate_key( struct brw_context *brw,
    key->line_aa = line_aa;
 
    /* _NEW_HINT */
-   if (brw->disable_derivative_optimization) {
-      key->high_quality_derivatives =
-         ctx->Hint.FragmentShaderDerivative != GL_FASTEST;
-   } else {
-      key->high_quality_derivatives =
-         ctx->Hint.FragmentShaderDerivative == GL_NICEST;
-   }
+   key->high_quality_derivatives =
+      ctx->Hint.FragmentShaderDerivative == GL_NICEST;
 
    if (brw->gen < 6)
       key->stats_wm = brw->stats_wm;
@@ -570,7 +593,7 @@ brw_upload_wm_prog(struct brw_context *brw)
 
    brw_wm_populate_key(brw, &key);
 
-   if (!brw_search_cache(&brw->cache, BRW_WM_PROG,
+   if (!brw_search_cache(&brw->cache, BRW_CACHE_FS_PROG,
 			 &key, sizeof(key),
 			 &brw->wm.base.prog_offset, &brw->wm.prog_data)) {
       bool success = do_wm_prog(brw, ctx->_Shader->_CurrentFragmentProgram, fp,
@@ -584,21 +607,21 @@ brw_upload_wm_prog(struct brw_context *brw)
 
 const struct brw_tracked_state brw_wm_prog = {
    .dirty = {
-      .mesa  = (_NEW_COLOR |
-		_NEW_DEPTH |
-		_NEW_STENCIL |
-		_NEW_POLYGON |
-		_NEW_LINE |
-		_NEW_HINT |
-		_NEW_LIGHT |
-		_NEW_FRAG_CLAMP |
-		_NEW_BUFFERS |
-		_NEW_TEXTURE |
-		_NEW_MULTISAMPLE),
-      .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
-		BRW_NEW_REDUCED_PRIMITIVE |
-                BRW_NEW_VUE_MAP_GEOM_OUT |
-                BRW_NEW_STATS_WM)
+      .mesa  = _NEW_BUFFERS |
+               _NEW_COLOR |
+               _NEW_DEPTH |
+               _NEW_FRAG_CLAMP |
+               _NEW_HINT |
+               _NEW_LIGHT |
+               _NEW_LINE |
+               _NEW_MULTISAMPLE |
+               _NEW_POLYGON |
+               _NEW_STENCIL |
+               _NEW_TEXTURE,
+      .brw   = BRW_NEW_FRAGMENT_PROGRAM |
+               BRW_NEW_REDUCED_PRIMITIVE |
+               BRW_NEW_STATS_WM |
+               BRW_NEW_VUE_MAP_GEOM_OUT,
    },
    .emit = brw_upload_wm_prog
 };

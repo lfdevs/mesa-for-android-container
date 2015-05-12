@@ -256,8 +256,15 @@ st_bufferobj_data(struct gl_context *ctx,
          break;
       case GL_STREAM_DRAW:
       case GL_STREAM_COPY:
-         pipe_usage = PIPE_USAGE_STREAM;
-         break;
+         /* XXX: Remove this test and fall-through when we have PBO unpacking
+          * acceleration. Right now, PBO unpacking is done by the CPU, so we
+          * have to make sure CPU reads are fast.
+          */
+         if (target != GL_PIXEL_UNPACK_BUFFER_ARB) {
+            pipe_usage = PIPE_USAGE_STREAM;
+            break;
+         }
+         /* fall through */
       case GL_STATIC_READ:
       case GL_DYNAMIC_READ:
       case GL_STREAM_READ:

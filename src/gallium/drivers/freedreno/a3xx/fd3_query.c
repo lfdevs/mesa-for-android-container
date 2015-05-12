@@ -31,7 +31,7 @@
 #include "freedreno_util.h"
 
 #include "fd3_query.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 
 
 struct fd_rb_samp_ctrs {

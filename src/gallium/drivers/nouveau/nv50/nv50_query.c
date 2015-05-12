@@ -41,7 +41,7 @@ struct nv50_query {
    uint32_t sequence;
    struct nouveau_bo *bo;
    uint32_t base;
-   uint32_t offset; /* base + i * 16 */
+   uint32_t offset; /* base + i * 32 */
    boolean ready;
    boolean flushed;
    boolean is64bit;
@@ -116,8 +116,8 @@ nv50_query_create(struct pipe_context *pipe, unsigned type, unsigned index)
    q->type = type;
 
    if (q->type == PIPE_QUERY_OCCLUSION_COUNTER) {
-      q->offset -= 16;
-      q->data -= 16 / sizeof(*q->data); /* we advance before query_begin ! */
+      q->offset -= 32;
+      q->data -= 32 / sizeof(*q->data); /* we advance before query_begin ! */
    }
 
    return (struct pipe_query *)q;
@@ -150,8 +150,8 @@ nv50_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
     * initialized it to TRUE.
     */
    if (q->type == PIPE_QUERY_OCCLUSION_COUNTER) {
-      q->offset += 16;
-      q->data += 16 / sizeof(*q->data);
+      q->offset += 32;
+      q->data += 32 / sizeof(*q->data);
       if (q->offset - q->base == NV50_QUERY_ALLOC_SPACE)
          nv50_query_allocate(nv50, q, NV50_QUERY_ALLOC_SPACE);
 

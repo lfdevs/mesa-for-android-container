@@ -27,12 +27,13 @@
  */
 
 #include "pipe/p_state.h"
+#include "util/u_blend.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 
 #include "fd3_blend.h"
 #include "fd3_context.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 
 
 static enum a3xx_rb_blend_opcode
@@ -99,13 +100,20 @@ fd3_blend_state_create(struct pipe_context *pctx,
 	for (i = 0; i < ARRAY_SIZE(so->rb_mrt); i++) {
 		const struct pipe_rt_blend_state *rt = &cso->rt[i];
 
-		so->rb_mrt[i].blend_control =
+		so->rb_mrt[i].blend_control_rgb =
 				A3XX_RB_MRT_BLEND_CONTROL_RGB_SRC_FACTOR(fd_blend_factor(rt->rgb_src_factor)) |
 				A3XX_RB_MRT_BLEND_CONTROL_RGB_BLEND_OPCODE(blend_func(rt->rgb_func)) |
-				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(fd_blend_factor(rt->rgb_dst_factor)) |
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(fd_blend_factor(rt->rgb_dst_factor));
+
+		so->rb_mrt[i].blend_control_alpha =
 				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_SRC_FACTOR(fd_blend_factor(rt->alpha_src_factor)) |
 				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_BLEND_OPCODE(blend_func(rt->alpha_func)) |
 				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(fd_blend_factor(rt->alpha_dst_factor));
+
+		so->rb_mrt[i].blend_control_no_alpha_rgb =
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_SRC_FACTOR(fd_blend_factor(util_blend_dst_alpha_to_one(rt->rgb_src_factor))) |
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_BLEND_OPCODE(blend_func(rt->rgb_func)) |
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(fd_blend_factor(util_blend_dst_alpha_to_one(rt->rgb_dst_factor)));
 
 		so->rb_mrt[i].control =
 				A3XX_RB_MRT_CONTROL_ROP_CODE(rop) |

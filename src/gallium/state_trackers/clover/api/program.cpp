@@ -182,6 +182,8 @@ clBuildProgram(cl_program d_prog, cl_uint num_devs,
    prog.build(devs, opts);
    return CL_SUCCESS;
 } catch (error &e) {
+   if (e.get() == CL_INVALID_COMPILER_OPTIONS)
+      return CL_INVALID_BUILD_OPTIONS;
    if (e.get() == CL_COMPILE_PROGRAM_FAILURE)
       return CL_BUILD_PROGRAM_FAILURE;
    return e.get();

@@ -32,7 +32,7 @@
 #include <sys/stat.h>
 
 /* GCC visibility */
-#if defined(__GNUC__) && __GNUC__ >= 4
+#if defined(__GNUC__)
 #define GBM_EXPORT __attribute__ ((visibility("default")))
 #else
 #define GBM_EXPORT

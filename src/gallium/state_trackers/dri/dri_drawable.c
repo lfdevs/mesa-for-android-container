@@ -418,7 +418,7 @@ dri_postprocessing(struct dri_context *ctx,
    struct pipe_resource *src = drawable->textures[att];
    struct pipe_resource *zsbuf = drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL];
 
-   if (ctx->pp && src && zsbuf)
+   if (ctx->pp && src)
       pp_run(ctx->pp, src, src, zsbuf);
 }
 
@@ -484,6 +484,12 @@ dri_flush(__DRIcontext *cPriv,
       }
 
       pipe->flush_resource(pipe, drawable->textures[ST_ATTACHMENT_BACK_LEFT]);
+
+      if (pipe->invalidate_resource &&
+          (flags & __DRI2_FLUSH_INVALIDATE_ANCILLARY)) {
+         pipe->invalidate_resource(pipe, drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL]);
+         pipe->invalidate_resource(pipe, drawable->msaa_textures[ST_ATTACHMENT_DEPTH_STENCIL]);
+      }
    }
 
    flush_flags = 0;

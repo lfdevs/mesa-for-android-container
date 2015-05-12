@@ -177,7 +177,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     } else if (mode) {
         This->mode = malloc(sizeof(D3DDISPLAYMODEEX));
         memcpy(This->mode, mode, sizeof(D3DDISPLAYMODEEX));
-    } else if (This->mode) {
+    } else {
         free(This->mode);
         This->mode = NULL;
     }
@@ -195,7 +195,10 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     newBufferCount = pParams->BackBufferCount +
                      (pParams->SwapEffect != D3DSWAPEFFECT_COPY);
 
-    pf = d3d9_to_pipe_format(pParams->BackBufferFormat);
+    pf = d3d9_to_pipe_format_checked(This->screen, pParams->BackBufferFormat,
+                                     PIPE_TEXTURE_2D, pParams->MultiSampleType,
+                                     PIPE_BIND_RENDER_TARGET, FALSE);
+
     if (This->actx->linear_framebuffer ||
         (pf != PIPE_FORMAT_B8G8R8X8_UNORM &&
         pf != PIPE_FORMAT_B8G8R8A8_UNORM) ||
@@ -268,12 +271,6 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         if (!bufs)
             return E_OUTOFMEMORY;
         This->buffers = bufs;
-        if (has_present_buffers) {
-            This->present_buffers = REALLOC(This->present_buffers,
-                                            This->present_buffers == NULL ? 0 : oldBufferCount * sizeof(struct pipe_resource *),
-                                            newBufferCount * sizeof(struct pipe_resource *));
-            memset(This->present_buffers, 0, newBufferCount * sizeof(struct pipe_resource *));
-        }
         This->present_handles = REALLOC(This->present_handles,
                                         oldBufferCount * sizeof(D3DWindowBuffer *),
                                         newBufferCount * sizeof(D3DWindowBuffer *));
@@ -283,13 +280,28 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         }
     }
 
+    if (has_present_buffers &&
+        (newBufferCount != oldBufferCount || !This->present_buffers)) {
+        This->present_buffers = REALLOC(This->present_buffers,
+                                        This->present_buffers == NULL ? 0 :
+                                        oldBufferCount * sizeof(struct pipe_resource *),
+                                        newBufferCount * sizeof(struct pipe_resource *));
+        memset(This->present_buffers, 0, newBufferCount * sizeof(struct pipe_resource *));
+    }
+
     for (i = 0; i < newBufferCount; ++i) {
-        tmplt.format = d3d9_to_pipe_format(pParams->BackBufferFormat);
         tmplt.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_TRANSFER_READ |
                      PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_RENDER_TARGET;
         tmplt.nr_samples = pParams->MultiSampleType;
         if (!has_present_buffers)
             tmplt.bind |= PIPE_BIND_SHARED | PIPE_BIND_SCANOUT | PIPE_BIND_DISPLAY_TARGET;
+        tmplt.format = d3d9_to_pipe_format_checked(This->screen,
+                                                   pParams->BackBufferFormat,
+                                                   PIPE_TEXTURE_2D,
+                                                   tmplt.nr_samples,
+                                                   tmplt.bind, FALSE);
+        if (tmplt.format == PIPE_FORMAT_NONE)
+            return D3DERR_INVALIDCALL;
         resource = This->screen->resource_create(This->screen, &tmplt);
         if (!resource) {
             DBG("Failed to create pipe_resource.\n");
@@ -326,14 +338,36 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
             pipe_resource_reference(&(This->present_buffers[i]), resource);
         }
         This->present_handles[i] = D3DWindowBuffer_create(This, resource, depth);
-        if (!has_present_buffers)
-            pipe_resource_reference(&resource, NULL);
+        pipe_resource_reference(&resource, NULL);
     }
     if (pParams->EnableAutoDepthStencil) {
-        tmplt.format = d3d9_to_pipe_format(pParams->AutoDepthStencilFormat);
-        tmplt.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_TRANSFER_READ |
-                     PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_DEPTH_STENCIL;
+        tmplt.bind = d3d9_get_pipe_depth_format_bindings(pParams->AutoDepthStencilFormat);
+        /* Checking the d3d9 depth format for texture support indicates the app if it can use
+         * the format for shadow mapping or texturing. If the check returns true, then the app
+         * is allowed to use this functionnality, so try first to create the buffer
+         * with PIPE_BIND_SAMPLER_VIEW. If the format can't be created with it, try without.
+         * If it fails with PIPE_BIND_SAMPLER_VIEW, then the app check for texture support
+         * would fail too, so we are fine. */
+        tmplt.bind |= PIPE_BIND_SAMPLER_VIEW;
         tmplt.nr_samples = pParams->MultiSampleType;
+        tmplt.format = d3d9_to_pipe_format_checked(This->screen,
+                                                   pParams->AutoDepthStencilFormat,
+                                                   PIPE_TEXTURE_2D,
+                                                   tmplt.nr_samples,
+                                                   tmplt.bind,
+                                                   FALSE);
+        if (tmplt.format == PIPE_FORMAT_NONE) {
+            tmplt.bind &= ~PIPE_BIND_SAMPLER_VIEW;
+            tmplt.format = d3d9_to_pipe_format_checked(This->screen,
+                                                       pParams->AutoDepthStencilFormat,
+                                                       PIPE_TEXTURE_2D,
+                                                       tmplt.nr_samples,
+                                                       tmplt.bind,
+                                                       FALSE);
+        }
+
+        if (tmplt.format == PIPE_FORMAT_NONE)
+            return D3DERR_INVALIDCALL;
 
         resource = This->screen->resource_create(This->screen, &tmplt);
         if (!resource) {
@@ -467,7 +501,7 @@ NineSwapChain9_dtor( struct NineSwapChain9 *This )
 
     if (This->buffers) {
         for (i = 0; i < This->params.BackBufferCount; i++) {
-            NineUnknown_Destroy(NineUnknown(This->buffers[i]));
+            NineUnknown_Release(NineUnknown(This->buffers[i]));
             ID3DPresent_DestroyD3DWindowBuffer(This->present, This->present_handles[i]);
             if (This->present_buffers)
                 pipe_resource_reference(&(This->present_buffers[i]), NULL);

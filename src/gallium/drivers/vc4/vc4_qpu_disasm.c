@@ -98,8 +98,8 @@ static const char *qpu_pack_mul[] = {
  */
 static const char *qpu_unpack[] = {
         [QPU_UNPACK_NOP] = "",
-        [QPU_UNPACK_F16A_TO_F32] = "f16a",
-        [QPU_UNPACK_F16B_TO_F32] = "f16b",
+        [QPU_UNPACK_16A_TO_F32] = "16a",
+        [QPU_UNPACK_16B_TO_F32] = "16b",
         [QPU_UNPACK_8D_REP] = "8d_rep",
         [QPU_UNPACK_8A] = "8a",
         [QPU_UNPACK_8B] = "8b",
@@ -291,9 +291,9 @@ print_alu_src(uint64_t inst, uint32_t mux)
                 else if (si <= 39)
                         fprintf(stderr, "%.1f", (float)(1 << (si - 32)));
                 else if (si <= 47)
-                        fprintf(stderr, "%f", 1.0f / (256 / (si - 39)));
+                        fprintf(stderr, "%f", 1.0f / (1 << (48 - si)));
                 else
-                        fprintf(stderr, "???");
+                        fprintf(stderr, "<bad imm %d>", si);
         } else if (raddr <= 31)
                 fprintf(stderr, "r%s%d", file, raddr);
         else {
@@ -390,7 +390,7 @@ vc4_qpu_disasm(const uint64_t *instructions, int num_instructions)
 
                 switch (sig) {
                 case QPU_SIG_BRANCH:
-                        fprintf(stderr, "branch\n");
+                        fprintf(stderr, "branch");
                         break;
                 case QPU_SIG_LOAD_IMM:
                         print_load_imm(inst);
@@ -401,10 +401,10 @@ vc4_qpu_disasm(const uint64_t *instructions, int num_instructions)
                         print_add_op(inst);
                         fprintf(stderr, " ; ");
                         print_mul_op(inst);
-
-                        if (num_instructions != 1)
-                                fprintf(stderr, "\n");
                         break;
                 }
+
+                if (num_instructions != 1)
+                        fprintf(stderr, "\n");
         }
 }

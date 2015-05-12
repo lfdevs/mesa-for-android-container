@@ -375,7 +375,6 @@ vl_median_filter_render(struct vl_median_filter *filter,
    viewport.scale[0] = dst->width;
    viewport.scale[1] = dst->height;
    viewport.scale[2] = 1;
-   viewport.scale[3] = 1;
 
    memset(&fb_state, 0, sizeof(fb_state));
    fb_state.width = dst->width;

@@ -903,7 +903,7 @@ CodeEmitterGK110::emitSET(const CmpInstruction *i)
       code[0] |= 0x1c;
    } else {
       switch (i->sType) {
-      case TYPE_F32: op2 = 0x000; op1 = 0x820; break;
+      case TYPE_F32: op2 = 0x000; op1 = 0x800; break;
       case TYPE_F64: op2 = 0x080; op1 = 0x900; break;
       default:
          op2 = 0x1a8;
@@ -1116,6 +1116,7 @@ CodeEmitterGK110::emitTEX(const TexInstruction *i)
    if (i->tex.useOffsets == 1) {
       switch (i->op) {
       case OP_TXF: code[1] |= 0x200; break;
+      case OP_TXD: code[1] |= 0x00400000; break;
       default: code[1] |= 0x800; break;
       }
    }
@@ -1264,8 +1265,10 @@ CodeEmitterGK110::emitPFETCH(const Instruction *i)
 
    emitPredicate(i);
 
+   const int src1 = (i->predSrc == 1) ? 2 : 1; // if predSrc == 1, !srcExists(2)
+
    defId(i->def(0), 2);
-   srcId(i->src(1), 10);
+   srcId(i, src1, 10);
 }
 
 void

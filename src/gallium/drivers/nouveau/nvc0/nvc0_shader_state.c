@@ -252,13 +252,20 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
 
    for (b = 0; b < nvc0->num_tfbbufs; ++b) {
       struct nvc0_so_target *targ = nvc0_so_target(nvc0->tfbbuf[b]);
-      struct nv04_resource *buf = nv04_resource(targ->pipe.buffer);
+      struct nv04_resource *buf;
+
+      if (!targ) {
+         IMMED_NVC0(push, NVC0_3D(TFB_BUFFER_ENABLE(b)), 0);
+         continue;
+      }
 
       if (tfb)
          targ->stride = tfb->stride[b];
 
       if (!(nvc0->tfbbuf_dirty & (1 << b)))
          continue;
+
+      buf = nv04_resource(targ->pipe.buffer);
 
       if (!targ->clean)
          nvc0_query_fifo_wait(push, targ->pq);

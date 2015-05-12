@@ -76,6 +76,7 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
                      unsigned length,
                      unsigned src_width,
                      unsigned dst_width,
+                     boolean aligned,
                      LLVMValueRef base_ptr,
                      LLVMValueRef offsets,
                      unsigned i,
@@ -92,6 +93,27 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
    ptr = lp_build_gather_elem_ptr(gallivm, length, base_ptr, offsets, i);
    ptr = LLVMBuildBitCast(gallivm->builder, ptr, src_ptr_type, "");
    res = LLVMBuildLoad(gallivm->builder, ptr, "");
+
+   /* XXX
+    * On some archs we probably really want to avoid having to deal
+    * with alignments lower than 4 bytes (if fetch size is a power of
+    * two >= 32). On x86 it doesn't matter, however.
+    * We should be able to guarantee full alignment for any kind of texture
+    * fetch (except ARB_texture_buffer_range, oops), but not vertex fetch
+    * (there's PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY and friends
+    * but I don't think that's quite what we wanted).
+    * For ARB_texture_buffer_range, PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT
+    * looks like a good fit, but it seems this cap bit (and OpenGL) aren't
+    * enforcing what we want (which is what d3d10 does, the offset needs to
+    * be aligned to element size, but GL has bytes regardless of element
+    * size which would only leave us with minimum alignment restriction of 16
+    * which doesn't make much sense if the type isn't 4x32bit). Due to
+    * translation of offsets to first_elem in sampler_views it actually seems
+    * gallium could not do anything else except 16 no matter what...
+    */
+  if (!aligned) {
+      lp_set_load_alignment(res, 1);
+   }
 
    assert(src_width <= dst_width);
    if (src_width > dst_width) {
@@ -126,6 +148,7 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
  * @param length length of the offsets
  * @param src_width src element width in bits
  * @param dst_width result element width in bits (src will be expanded to fit)
+ * @param aligned whether the data is guaranteed to be aligned (to src_width)
  * @param base_ptr base pointer, should be a i8 pointer type.
  * @param offsets vector with offsets
  * @param vector_justify select vector rather than integer justification
@@ -135,6 +158,7 @@ lp_build_gather(struct gallivm_state *gallivm,
                 unsigned length,
                 unsigned src_width,
                 unsigned dst_width,
+                boolean aligned,
                 LLVMValueRef base_ptr,
                 LLVMValueRef offsets,
                 boolean vector_justify)
@@ -144,7 +168,7 @@ lp_build_gather(struct gallivm_state *gallivm,
    if (length == 1) {
       /* Scalar */
       return lp_build_gather_elem(gallivm, length,
-                                  src_width, dst_width,
+                                  src_width, dst_width, aligned,
                                   base_ptr, offsets, 0, vector_justify);
    } else {
       /* Vector */
@@ -158,7 +182,7 @@ lp_build_gather(struct gallivm_state *gallivm,
          LLVMValueRef index = lp_build_const_int32(gallivm, i);
          LLVMValueRef elem;
          elem = lp_build_gather_elem(gallivm, length,
-                                     src_width, dst_width,
+                                     src_width, dst_width, aligned,
                                      base_ptr, offsets, i, vector_justify);
          res = LLVMBuildInsertElement(gallivm->builder, res, elem, index, "");
       }

@@ -252,7 +252,7 @@ static inline uint32_t env2u(const char *envvar)
 {
 	char *str = getenv(envvar);
 	if (str)
-		return strtol(str, NULL, 0);
+		return strtoul(str, NULL, 0);
 	return 0;
 }
 

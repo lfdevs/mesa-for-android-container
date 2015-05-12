@@ -404,8 +404,7 @@ dri_load_driver_swrast(struct gbm_dri_device *dri)
 }
 
 static int
-dri_screen_create_dri2(struct gbm_dri_device *dri,
-                       const char *driver_name)
+dri_screen_create_dri2(struct gbm_dri_device *dri, char *driver_name)
 {
    const __DRIextension **extensions;
    int ret = 0;
@@ -495,7 +494,7 @@ dri_screen_create_swrast(struct gbm_dri_device *dri)
 static int
 dri_screen_create(struct gbm_dri_device *dri)
 {
-   const char *driver_name;
+   char *driver_name;
 
    driver_name = loader_get_driver_for_fd(dri->base.base.fd, 0);
    if (!driver_name)
@@ -507,7 +506,7 @@ dri_screen_create(struct gbm_dri_device *dri)
 static int
 dri_screen_create_sw(struct gbm_dri_device *dri)
 {
-   const char *driver_name;
+   char *driver_name;
    int ret;
 
    driver_name = strdup("kms_swrast");
@@ -774,6 +773,7 @@ create_dumb(struct gbm_device *gbm,
    if (bo == NULL)
       return NULL;
 
+   memset(&create_arg, 0, sizeof(create_arg));
    create_arg.bpp = 32;
    create_arg.width = width;
    create_arg.height = height;

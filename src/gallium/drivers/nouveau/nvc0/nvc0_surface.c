@@ -88,7 +88,7 @@ nvc0_2d_texture_set(struct nouveau_pushbuf *push, boolean dst,
    struct nouveau_bo *bo = mt->base.bo;
    uint32_t width, height, depth;
    uint32_t format;
-   uint32_t mthd = dst ? NVC0_2D_DST_FORMAT : NVC0_2D_SRC_FORMAT;
+   uint32_t mthd = dst ? NV50_2D_DST_FORMAT : NV50_2D_SRC_FORMAT;
    uint32_t offset = mt->level[level].offset;
 
    format = nvc0_2d_format(pformat, dst, dst_src_pformat_equal);
@@ -1214,10 +1214,10 @@ nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    boolean b;
 
    mode = nv50_blit_get_filter(info) ?
-      NVC0_2D_BLIT_CONTROL_FILTER_BILINEAR :
-      NVC0_2D_BLIT_CONTROL_FILTER_POINT_SAMPLE;
+      NV50_2D_BLIT_CONTROL_FILTER_BILINEAR :
+      NV50_2D_BLIT_CONTROL_FILTER_POINT_SAMPLE;
    mode |= (src->base.base.nr_samples > dst->base.base.nr_samples) ?
-      NVC0_2D_BLIT_CONTROL_ORIGIN_CORNER : NVC0_2D_BLIT_CONTROL_ORIGIN_CENTER;
+      NV50_2D_BLIT_CONTROL_ORIGIN_CORNER : NV50_2D_BLIT_CONTROL_ORIGIN_CENTER;
 
    du_dx = ((int64_t)info->src.box.width << 32) / info->dst.box.width;
    dv_dy = ((int64_t)info->src.box.height << 32) / info->dst.box.height;
@@ -1241,13 +1241,13 @@ nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    if (mask != 0xffffffff) {
       IMMED_NVC0(push, NVC0_2D(ROP), 0xca); /* DPSDxax */
       IMMED_NVC0(push, NVC0_2D(PATTERN_COLOR_FORMAT),
-                       NVC0_2D_PATTERN_COLOR_FORMAT_32BPP);
-      BEGIN_NVC0(push, NVC0_2D(PATTERN_COLOR(0)), 4);
+                       NV50_2D_PATTERN_COLOR_FORMAT_A8R8G8B8);
+      BEGIN_NVC0(push, NVC0_2D(PATTERN_BITMAP_COLOR(0)), 4);
       PUSH_DATA (push, 0x00000000);
       PUSH_DATA (push, mask);
       PUSH_DATA (push, 0xffffffff);
       PUSH_DATA (push, 0xffffffff);
-      IMMED_NVC0(push, NVC0_2D(OPERATION), NVC0_2D_OPERATION_ROP);
+      IMMED_NVC0(push, NVC0_2D(OPERATION), NV50_2D_OPERATION_ROP);
    } else
    if (info->src.format != info->dst.format) {
       if (info->src.format == PIPE_FORMAT_R8_UNORM ||
@@ -1259,13 +1259,13 @@ nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
          mask = 0xffff0000; /* also makes condition for OPERATION reset true */
          BEGIN_NVC0(push, NVC0_2D(BETA4), 2);
          PUSH_DATA (push, mask);
-         PUSH_DATA (push, NVC0_2D_OPERATION_SRCCOPY_PREMULT);
+         PUSH_DATA (push, NV50_2D_OPERATION_SRCCOPY_PREMULT);
       } else
       if (info->src.format == PIPE_FORMAT_A8_UNORM) {
          mask = 0xff000000;
          BEGIN_NVC0(push, NVC0_2D(BETA4), 2);
          PUSH_DATA (push, mask);
-         PUSH_DATA (push, NVC0_2D_OPERATION_SRCCOPY_PREMULT);
+         PUSH_DATA (push, NV50_2D_OPERATION_SRCCOPY_PREMULT);
       }
    }
 
@@ -1361,9 +1361,9 @@ nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    if (info->scissor_enable)
       IMMED_NVC0(push, NVC0_2D(CLIP_ENABLE), 0);
    if (mask != 0xffffffff)
-      IMMED_NVC0(push, NVC0_2D(OPERATION), NVC0_2D_OPERATION_SRCCOPY);
+      IMMED_NVC0(push, NVC0_2D(OPERATION), NV50_2D_OPERATION_SRCCOPY);
    if (nvc0->cond_query && info->render_condition_enable)
-      IMMED_NVC0(push, NVC0_2D(COND_MODE), NVC0_2D_COND_MODE_ALWAYS);
+      IMMED_NVC0(push, NVC0_2D(COND_MODE), NV50_2D_COND_MODE_ALWAYS);
 }
 
 static void
@@ -1401,11 +1401,14 @@ nvc0_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
       } else
       if (!nv50_2d_src_format_faithful(info->src.format)) {
          if (!util_format_is_luminance(info->src.format)) {
+            if (!nv50_2d_dst_format_ops_supported(info->dst.format))
+               eng3d = TRUE;
+            else
             if (util_format_is_intensity(info->src.format))
                eng3d = info->src.format != PIPE_FORMAT_I8_UNORM;
             else
-            if (!nv50_2d_dst_format_ops_supported(info->dst.format))
-               eng3d = TRUE;
+            if (util_format_is_alpha(info->src.format))
+               eng3d = info->src.format != PIPE_FORMAT_A8_UNORM;
             else
                eng3d = !nv50_2d_format_supported(info->src.format);
          }
@@ -1501,8 +1504,7 @@ nvc0_blitctx_create(struct nvc0_context *nvc0)
 void
 nvc0_blitctx_destroy(struct nvc0_context *nvc0)
 {
-   if (nvc0->blit)
-      FREE(nvc0->blit);
+   FREE(nvc0->blit);
 }
 
 void

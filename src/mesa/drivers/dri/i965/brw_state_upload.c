@@ -190,7 +190,6 @@ static const struct brw_tracked_state *gen7_atoms[] =
    &brw_state_base_address,
 
    &brw_cc_vp,
-   &gen7_cc_viewport_state_pointer, /* must do after brw_cc_vp */
    &gen7_sf_clip_viewport,
 
    &gen7_push_constant_space,
@@ -265,7 +264,6 @@ static const struct brw_tracked_state *gen8_atoms[] =
    &gen8_state_base_address,
 
    &brw_cc_vp,
-   &gen7_cc_viewport_state_pointer, /* must do after brw_cc_vp */
    &gen8_sf_clip_viewport,
 
    &gen7_push_constant_space,
@@ -359,6 +357,11 @@ void brw_init_state( struct brw_context *brw )
    const struct brw_tracked_state **atoms;
    int num_atoms;
 
+   STATIC_ASSERT(ARRAY_SIZE(gen4_atoms) <= ARRAY_SIZE(brw->atoms));
+   STATIC_ASSERT(ARRAY_SIZE(gen6_atoms) <= ARRAY_SIZE(brw->atoms));
+   STATIC_ASSERT(ARRAY_SIZE(gen7_atoms) <= ARRAY_SIZE(brw->atoms));
+   STATIC_ASSERT(ARRAY_SIZE(gen8_atoms) <= ARRAY_SIZE(brw->atoms));
+
    brw_init_caches(brw);
 
    if (brw->gen >= 8) {
@@ -375,13 +378,19 @@ void brw_init_state( struct brw_context *brw )
       num_atoms = ARRAY_SIZE(gen4_atoms);
    }
 
-   brw->atoms = atoms;
    brw->num_atoms = num_atoms;
 
+   /* This is to work around brw_context::atoms being declared const.  We want
+    * it to be const, but it needs to be initialized somehow!
+    */
+   struct brw_tracked_state *context_atoms =
+      (struct brw_tracked_state *) &brw->atoms[0];
+
+   for (int i = 0; i < num_atoms; i++)
+      context_atoms[i] = *atoms[i];
+
    while (num_atoms--) {
-      assert((*atoms)->dirty.mesa |
-	     (*atoms)->dirty.brw |
-	     (*atoms)->dirty.cache);
+      assert((*atoms)->dirty.mesa | (*atoms)->dirty.brw);
       assert((*atoms)->emit);
       atoms++;
    }
@@ -421,9 +430,7 @@ void brw_destroy_state( struct brw_context *brw )
 static bool
 check_state(const struct brw_state_flags *a, const struct brw_state_flags *b)
 {
-   return ((a->mesa & b->mesa) |
-	   (a->brw & b->brw) |
-	   (a->cache & b->cache)) != 0;
+   return ((a->mesa & b->mesa) | (a->brw & b->brw)) != 0;
 }
 
 static void accumulate_state( struct brw_state_flags *a,
@@ -431,7 +438,6 @@ static void accumulate_state( struct brw_state_flags *a,
 {
    a->mesa |= b->mesa;
    a->brw |= b->brw;
-   a->cache |= b->cache;
 }
 
 
@@ -441,7 +447,6 @@ static void xor_states( struct brw_state_flags *result,
 {
    result->mesa = a->mesa ^ b->mesa;
    result->brw = a->brw ^ b->brw;
-   result->cache = a->cache ^ b->cache;
 }
 
 struct dirty_bit_map {
@@ -488,6 +493,13 @@ static struct dirty_bit_map mesa_bits[] = {
 };
 
 static struct dirty_bit_map brw_bits[] = {
+   DEFINE_BIT(BRW_NEW_FS_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_BLORP_BLIT_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_SF_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_VS_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_FF_GS_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_GS_PROG_DATA),
+   DEFINE_BIT(BRW_NEW_CLIP_PROG_DATA),
    DEFINE_BIT(BRW_NEW_URB_FENCE),
    DEFINE_BIT(BRW_NEW_FRAGMENT_PROGRAM),
    DEFINE_BIT(BRW_NEW_GEOMETRY_PROGRAM),
@@ -521,30 +533,14 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_PUSH_CONSTANT_ALLOCATION),
    DEFINE_BIT(BRW_NEW_NUM_SAMPLES),
    DEFINE_BIT(BRW_NEW_TEXTURE_BUFFER),
+   DEFINE_BIT(BRW_NEW_GEN4_UNIT_STATE),
+   DEFINE_BIT(BRW_NEW_CC_VP),
+   DEFINE_BIT(BRW_NEW_SF_VP),
+   DEFINE_BIT(BRW_NEW_CLIP_VP),
+   DEFINE_BIT(BRW_NEW_SAMPLER_STATE_TABLE),
+   DEFINE_BIT(BRW_NEW_VS_ATTRIB_WORKAROUNDS),
    {0, 0, 0}
 };
-
-static struct dirty_bit_map cache_bits[] = {
-   DEFINE_BIT(CACHE_NEW_CC_VP),
-   DEFINE_BIT(CACHE_NEW_CC_UNIT),
-   DEFINE_BIT(CACHE_NEW_WM_PROG),
-   DEFINE_BIT(CACHE_NEW_BLORP_BLIT_PROG),
-   DEFINE_BIT(CACHE_NEW_SAMPLER),
-   DEFINE_BIT(CACHE_NEW_WM_UNIT),
-   DEFINE_BIT(CACHE_NEW_SF_PROG),
-   DEFINE_BIT(CACHE_NEW_SF_VP),
-   DEFINE_BIT(CACHE_NEW_SF_UNIT),
-   DEFINE_BIT(CACHE_NEW_VS_UNIT),
-   DEFINE_BIT(CACHE_NEW_VS_PROG),
-   DEFINE_BIT(CACHE_NEW_FF_GS_UNIT),
-   DEFINE_BIT(CACHE_NEW_FF_GS_PROG),
-   DEFINE_BIT(CACHE_NEW_GS_PROG),
-   DEFINE_BIT(CACHE_NEW_CLIP_VP),
-   DEFINE_BIT(CACHE_NEW_CLIP_UNIT),
-   DEFINE_BIT(CACHE_NEW_CLIP_PROG),
-   {0, 0, 0}
-};
-
 
 static void
 brw_update_dirty_count(struct dirty_bit_map *bit_map, uint64_t bits)
@@ -559,8 +555,10 @@ static void
 brw_print_dirty_count(struct dirty_bit_map *bit_map)
 {
    for (int i = 0; bit_map[i].bit != 0; i++) {
-      fprintf(stderr, "0x%016lx: %12d (%s)\n",
-	      bit_map[i].bit, bit_map[i].count, bit_map[i].name);
+      if (bit_map[i].count > 1) {
+         fprintf(stderr, "0x%016lx: %12d (%s)\n",
+                 bit_map[i].bit, bit_map[i].count, bit_map[i].name);
+      }
    }
 }
 
@@ -584,7 +582,6 @@ void brw_upload_state(struct brw_context *brw)
       /* Always re-emit all state. */
       state->mesa |= ~0;
       state->brw |= ~0ull;
-      state->cache |= ~0;
    }
 
    if (brw->fragment_program != ctx->FragmentProgram._Current) {
@@ -612,7 +609,7 @@ void brw_upload_state(struct brw_context *brw)
       brw->state.dirty.brw |= BRW_NEW_NUM_SAMPLES;
    }
 
-   if ((state->mesa | state->cache | state->brw) == 0)
+   if ((state->mesa | state->brw) == 0)
       return;
 
    if (unlikely(INTEL_DEBUG)) {
@@ -625,7 +622,7 @@ void brw_upload_state(struct brw_context *brw)
       prev = *state;
 
       for (i = 0; i < brw->num_atoms; i++) {
-	 const struct brw_tracked_state *atom = brw->atoms[i];
+	 const struct brw_tracked_state *atom = &brw->atoms[i];
 	 struct brw_state_flags generated;
 
 	 if (check_state(state, &atom->dirty)) {
@@ -645,7 +642,7 @@ void brw_upload_state(struct brw_context *brw)
    }
    else {
       for (i = 0; i < brw->num_atoms; i++) {
-	 const struct brw_tracked_state *atom = brw->atoms[i];
+	 const struct brw_tracked_state *atom = &brw->atoms[i];
 
 	 if (check_state(state, &atom->dirty)) {
 	    atom->emit(brw);
@@ -655,15 +652,12 @@ void brw_upload_state(struct brw_context *brw)
 
    if (unlikely(INTEL_DEBUG & DEBUG_STATE)) {
       STATIC_ASSERT(ARRAY_SIZE(brw_bits) == BRW_NUM_STATE_BITS + 1);
-      STATIC_ASSERT(ARRAY_SIZE(cache_bits) == BRW_MAX_CACHE + 1);
 
       brw_update_dirty_count(mesa_bits, state->mesa);
       brw_update_dirty_count(brw_bits, state->brw);
-      brw_update_dirty_count(cache_bits, state->cache);
       if (dirty_count++ % 1000 == 0) {
 	 brw_print_dirty_count(mesa_bits);
 	 brw_print_dirty_count(brw_bits);
-	 brw_print_dirty_count(cache_bits);
 	 fprintf(stderr, "\n");
       }
    }

@@ -33,7 +33,7 @@
 #include "util/u_format.h"
 
 #include "fd3_texture.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 
 static enum a3xx_tex_clamp
 tex_clamp(unsigned wrap, bool clamp_to_edge)
@@ -68,13 +68,13 @@ tex_clamp(unsigned wrap, bool clamp_to_edge)
 }
 
 static enum a3xx_tex_filter
-tex_filter(unsigned filter)
+tex_filter(unsigned filter, bool aniso)
 {
 	switch (filter) {
 	case PIPE_TEX_FILTER_NEAREST:
 		return A3XX_TEX_NEAREST;
 	case PIPE_TEX_FILTER_LINEAR:
-		return A3XX_TEX_LINEAR;
+		return aniso ? A3XX_TEX_ANISO : A3XX_TEX_LINEAR;
 	default:
 		DBG("invalid filter: %u", filter);
 		return 0;
@@ -86,6 +86,7 @@ fd3_sampler_state_create(struct pipe_context *pctx,
 		const struct pipe_sampler_state *cso)
 {
 	struct fd3_sampler_stateobj *so = CALLOC_STRUCT(fd3_sampler_stateobj);
+	unsigned aniso = util_last_bit(MIN2(cso->max_anisotropy >> 1, 8));
 	bool miplinear = false;
 	bool clamp_to_edge;
 
@@ -115,8 +116,9 @@ fd3_sampler_state_create(struct pipe_context *pctx,
 	so->texsamp0 =
 			COND(!cso->normalized_coords, A3XX_TEX_SAMP_0_UNNORM_COORDS) |
 			COND(miplinear, A3XX_TEX_SAMP_0_MIPFILTER_LINEAR) |
-			A3XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter)) |
-			A3XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter)) |
+			A3XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
+			A3XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
+			A3XX_TEX_SAMP_0_ANISO(aniso) |
 			A3XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, clamp_to_edge)) |
 			A3XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, clamp_to_edge)) |
 			A3XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, clamp_to_edge));
@@ -210,6 +212,7 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	struct fd_resource *rsc = fd_resource(prsc);
 	unsigned lvl = cso->u.tex.first_level;
 	unsigned miplevels = cso->u.tex.last_level - lvl;
+	uint32_t sz2 = 0;
 
 	if (!so)
 		return NULL;
@@ -250,8 +253,10 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	case PIPE_TEXTURE_3D:
 		so->texconst3 =
 				A3XX_TEX_CONST_3_DEPTH(u_minify(prsc->depth0, lvl)) |
-				A3XX_TEX_CONST_3_LAYERSZ1(rsc->slices[0].size0) |
-				A3XX_TEX_CONST_3_LAYERSZ2(rsc->slices[0].size0);
+				A3XX_TEX_CONST_3_LAYERSZ1(rsc->slices[lvl].size0);
+		while (lvl < cso->u.tex.last_level && sz2 != rsc->slices[lvl+1].size0)
+			sz2 = rsc->slices[++lvl].size0;
+		so->texconst3 |= A3XX_TEX_CONST_3_LAYERSZ2(sz2);
 		break;
 	default:
 		so->texconst3 = 0x00000000;
@@ -261,10 +266,44 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	return &so->base;
 }
 
+static void
+fd3_set_sampler_views(struct pipe_context *pctx, unsigned shader,
+					  unsigned start, unsigned nr,
+					  struct pipe_sampler_view **views)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd3_context *fd3_ctx = fd3_context(ctx);
+	struct fd_texture_stateobj *tex;
+	uint16_t integer_s = 0, *ptr;
+	int i;
+
+	fd_set_sampler_views(pctx, shader, start, nr, views);
+
+	switch (shader) {
+	case PIPE_SHADER_FRAGMENT:
+		tex = &ctx->fragtex;
+		ptr = &fd3_ctx->finteger_s;
+		break;
+	case PIPE_SHADER_VERTEX:
+		tex = &ctx->verttex;
+		ptr = &fd3_ctx->vinteger_s;
+		break;
+	default:
+		return;
+	}
+
+	for (i = 0; i < tex->num_textures; i++)
+		if (util_format_is_pure_integer(tex->textures[i]->format))
+			integer_s |= 1 << i;
+	*ptr = integer_s;
+}
+
+
 void
 fd3_texture_init(struct pipe_context *pctx)
 {
 	pctx->create_sampler_state = fd3_sampler_state_create;
 	pctx->bind_sampler_states = fd3_sampler_states_bind;
 	pctx->create_sampler_view = fd3_sampler_view_create;
+	pctx->set_sampler_views = fd3_set_sampler_views;
 }

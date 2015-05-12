@@ -90,6 +90,8 @@ cl_build_status
 program::build_status(const device &dev) const {
    if (_binaries.count(&dev))
       return CL_BUILD_SUCCESS;
+   else if (_logs.count(&dev))
+      return CL_BUILD_ERROR;
    else
       return CL_BUILD_NONE;
 }

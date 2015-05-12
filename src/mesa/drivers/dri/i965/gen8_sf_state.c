@@ -33,7 +33,7 @@ static void
 upload_sbe(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   /* CACHE_NEW_WM_PROG */
+   /* BRW_NEW_FS_PROG_DATA */
    uint32_t num_outputs = brw->wm.prog_data->num_varying_inputs;
    uint16_t attr_overrides[VARYING_SLOT_MAX];
    uint32_t urb_entry_read_length;
@@ -61,7 +61,7 @@ upload_sbe(struct brw_context *brw)
       dw1 |= GEN6_SF_POINT_SPRITE_UPPERLEFT;
 
    /* BRW_NEW_VUE_MAP_GEOM_OUT | BRW_NEW_FRAGMENT_PROGRAM |
-    * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | CACHE_NEW_WM_PROG
+    * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | BRW_NEW_FS_PROG_DATA
     */
    calculate_attr_overrides(brw, attr_overrides,
                             &point_sprite_enables,
@@ -93,10 +93,12 @@ upload_sbe(struct brw_context *brw)
          if (!(brw->fragment_program->Base.InputsRead & BITFIELD64_BIT(attr)))
             continue;
 
+         assert(input_index < 32);
+
          if (input_index < 16)
             dw4 |= (GEN9_SBE_ACTIVE_COMPONENT_XYZW << (input_index << 1));
          else
-            dw5 |= (GEN9_SBE_ACTIVE_COMPONENT_XYZW << (input_index << 1));
+            dw5 |= (GEN9_SBE_ACTIVE_COMPONENT_XYZW << ((input_index - 16) << 1));
 
          ++input_index;
       }
@@ -127,11 +129,14 @@ upload_sbe(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_sbe_state = {
    .dirty = {
-      .mesa  = _NEW_BUFFERS | _NEW_LIGHT | _NEW_POINT | _NEW_PROGRAM,
+      .mesa  = _NEW_BUFFERS |
+               _NEW_LIGHT |
+               _NEW_POINT |
+               _NEW_PROGRAM,
       .brw   = BRW_NEW_CONTEXT |
                BRW_NEW_FRAGMENT_PROGRAM |
+               BRW_NEW_FS_PROG_DATA |
                BRW_NEW_VUE_MAP_GEOM_OUT,
-      .cache = CACHE_NEW_WM_PROG,
    },
    .emit = upload_sbe,
 };
@@ -206,7 +211,6 @@ const struct brw_tracked_state gen8_sf_state = {
                _NEW_MULTISAMPLE |
                _NEW_POINT,
       .brw   = BRW_NEW_CONTEXT,
-      .cache = 0,
    },
    .emit = upload_sf,
 };
@@ -310,7 +314,7 @@ upload_raster(struct brw_context *brw)
    OUT_BATCH(dw1);
    OUT_BATCH_F(ctx->Polygon.OffsetUnits * 2); /* constant.  copied from gen4 */
    OUT_BATCH_F(ctx->Polygon.OffsetFactor); /* scale */
-   OUT_BATCH_F(0.0);
+   OUT_BATCH_F(ctx->Polygon.OffsetClamp); /* global depth offset clamp */
    ADVANCE_BATCH();
 }
 
@@ -324,7 +328,6 @@ const struct brw_tracked_state gen8_raster_state = {
                _NEW_SCISSOR |
                _NEW_TRANSFORM,
       .brw   = BRW_NEW_CONTEXT,
-      .cache = 0,
    },
    .emit = upload_raster,
 };

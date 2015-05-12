@@ -4,6 +4,7 @@
 
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
+#include "util/u_tests.h"
 
 
 /* Helper function to wrap a screen with
@@ -48,6 +49,9 @@ debug_screen_wrap(struct pipe_screen *screen)
 #if defined(GALLIUM_NOOP)
    screen = noop_screen_create(screen);
 #endif
+
+   if (debug_get_bool_option("GALLIUM_TESTS", FALSE))
+      util_run_tests(screen);
 
    return screen;
 }

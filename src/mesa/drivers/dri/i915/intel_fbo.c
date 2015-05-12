@@ -287,8 +287,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
    rb->Width = image->region->width;
    rb->Height = image->region->height;
    rb->Format = image->format;
-   rb->_BaseFormat = _mesa_base_fbo_format(&intel->ctx,
-					   image->internal_format);
+   rb->_BaseFormat = _mesa_get_format_base_format(image->format);
    rb->NeedsFinishRenderTexture = true;
 }
 
@@ -546,6 +545,7 @@ intel_finish_render_texture(struct gl_context * ctx, struct gl_renderbuffer *rb)
       static GLuint msg_id = 0;                                               \
       if (unlikely(ctx->Const.ContextFlags & GL_CONTEXT_FLAG_DEBUG_BIT)) {    \
          _mesa_gl_debug(ctx, &msg_id,                                         \
+                        MESA_DEBUG_SOURCE_API,                                \
                         MESA_DEBUG_TYPE_OTHER,                                \
                         MESA_DEBUG_SEVERITY_MEDIUM,                           \
                         __VA_ARGS__);                                         \
@@ -648,6 +648,8 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
  */
 static GLbitfield
 intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
+                                    const struct gl_framebuffer *readFb,
+                                    const struct gl_framebuffer *drawFb,
                                     GLint srcX0, GLint srcY0,
                                     GLint srcX1, GLint srcY1,
                                     GLint dstX0, GLint dstY0,
@@ -658,8 +660,6 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
 
    if (mask & GL_COLOR_BUFFER_BIT) {
       GLint i;
-      const struct gl_framebuffer *drawFb = ctx->DrawBuffer;
-      const struct gl_framebuffer *readFb = ctx->ReadBuffer;
       struct gl_renderbuffer *src_rb = readFb->_ColorReadBuffer;
       struct intel_renderbuffer *src_irb = intel_renderbuffer(src_rb);
 
@@ -695,8 +695,8 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
        * results are undefined if any destination pixels have a dependency on
        * source pixels.
        */
-      for (i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; i++) {
-         struct gl_renderbuffer *dst_rb = ctx->DrawBuffer->_ColorDrawBuffers[i];
+      for (i = 0; i < drawFb->_NumColorDrawBuffers; i++) {
+         struct gl_renderbuffer *dst_rb = drawFb->_ColorDrawBuffers[i];
          struct intel_renderbuffer *dst_irb = intel_renderbuffer(dst_rb);
 
          if (!dst_irb) {
@@ -737,12 +737,14 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
 
 static void
 intel_blit_framebuffer(struct gl_context *ctx,
+                       struct gl_framebuffer *readFb,
+                       struct gl_framebuffer *drawFb,
                        GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                        GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                        GLbitfield mask, GLenum filter)
 {
    /* Try using the BLT engine. */
-   mask = intel_blit_framebuffer_with_blitter(ctx,
+   mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
                                               srcX0, srcY0, srcX1, srcY1,
                                               dstX0, dstY0, dstX1, dstY1,
                                               mask, filter);
@@ -750,7 +752,7 @@ intel_blit_framebuffer(struct gl_context *ctx,
       return;
 
 
-   _mesa_meta_and_swrast_BlitFramebuffer(ctx,
+   _mesa_meta_and_swrast_BlitFramebuffer(ctx, readFb, drawFb,
                                          srcX0, srcY0, srcX1, srcY1,
                                          dstX0, dstY0, dstX1, dstY1,
                                          mask, filter);

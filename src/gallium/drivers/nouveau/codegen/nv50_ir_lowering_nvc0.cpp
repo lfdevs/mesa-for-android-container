@@ -73,6 +73,26 @@ NVC0LegalizeSSA::handleRCPRSQ(Instruction *i)
    // TODO
 }
 
+void
+NVC0LegalizeSSA::handleFTZ(Instruction *i)
+{
+   // Only want to flush float inputs
+   if (i->sType != TYPE_F32)
+      return;
+
+   // If we're already flushing denorms (and NaN's) to zero, no need for this.
+   if (i->dnz)
+      return;
+
+   // Only certain classes of operations can flush
+   OpClass cls = prog->getTarget()->getOpClass(i->op);
+   if (cls != OPCLASS_ARITH && cls != OPCLASS_COMPARE &&
+       cls != OPCLASS_CONVERT)
+      return;
+
+   i->ftz = true;
+}
+
 bool
 NVC0LegalizeSSA::visit(Function *fn)
 {
@@ -86,8 +106,11 @@ NVC0LegalizeSSA::visit(BasicBlock *bb)
    Instruction *next;
    for (Instruction *i = bb->getEntry(); i; i = next) {
       next = i->next;
-      if (i->dType == TYPE_F32)
+      if (i->dType == TYPE_F32) {
+         if (prog->getType() != Program::TYPE_COMPUTE)
+            handleFTZ(i);
          continue;
+      }
       switch (i->op) {
       case OP_DIV:
       case OP_MOD:

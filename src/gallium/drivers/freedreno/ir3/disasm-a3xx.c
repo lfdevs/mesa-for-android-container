@@ -448,117 +448,114 @@ static void print_instr_cat5(instr_t *instr)
 	}
 }
 
-static int32_t u2i(uint32_t val, int nbits)
-{
-	return ((val >> (nbits-1)) * ~((1 << nbits) - 1)) | val;
-}
-
 static void print_instr_cat6(instr_t *instr)
 {
 	instr_cat6_t *cat6 = &instr->cat6;
+	char sd = 0, ss = 0;  /* dst/src address space */
+	bool full = type_size(cat6->type) == 32;
+	bool nodst = false;
 
 	printf(".%s ", type[cat6->type]);
 
 	switch (cat6->opc) {
+	case OPC_STG:
+		sd = 'g';
+		break;
+	case OPC_STP:
+		sd = 'p';
+		break;
+	case OPC_STL:
+	case OPC_STLW:
+		sd = 'l';
+		break;
+
 	case OPC_LDG:
+		ss = 'g';
+		break;
 	case OPC_LDP:
+		ss = 'p';
+		break;
 	case OPC_LDL:
 	case OPC_LDLW:
 	case OPC_LDLV:
-		/* load instructions: */
-		print_reg_dst((reg_t)(cat6->a.dst), type_size(cat6->type) == 32, false);
-		printf(",");
-		switch (cat6->opc) {
-		case OPC_LDG:
-			printf("g");
-			break;
-		case OPC_LDP:
-			printf("p");
-			break;
-		case OPC_LDL:
-		case OPC_LDLW:
-		case OPC_LDLV:
-			printf("l");
-			break;
-		}
-		printf("[");
-		print_reg_src((reg_t)(cat6->a.src), true,
-				false, false, false, false, false, false);
-		if (cat6->a.off)
-			printf("%+d", cat6->a.off);
-		printf("]");
+		ss = 'l';
 		break;
-	case OPC_PREFETCH:
-		/* similar to load instructions: */
-		printf("g[");
-		print_reg_src((reg_t)(cat6->a.src), true,
-				false, false, false, false, false, false);
-		if (cat6->a.off)
-			printf("%+d", cat6->a.off);
-		printf("]");
-		break;
-	case OPC_STG:
-	case OPC_STP:
-	case OPC_STL:
-	case OPC_STLW:
-		/* store instructions: */
-		switch (cat6->opc) {
-		case OPC_STG:
-			printf("g");
-			break;
-		case OPC_STP:
-			printf("p");
-			break;
-		case OPC_STL:
-		case OPC_STLW:
-			printf("l");
-			break;
-		}
-		printf("[");
-		print_reg_dst((reg_t)(cat6->b.dst), true, false);
-		if (cat6->b.off || cat6->b.off_hi)
-			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
-		printf("]");
-		printf(",");
-		print_reg_src((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
-				false, false, false, false, false, false);
 
+	case OPC_L2G:
+		ss = 'l';
+		sd = 'g';
 		break;
+
+	case OPC_G2L:
+		ss = 'g';
+		sd = 'l';
+		break;
+
+	case OPC_PREFETCH:
+		ss = 'g';
+		nodst = true;
+		break;
+
 	case OPC_STI:
-		/* sti has same encoding as other store instructions, but
-		 * slightly different syntax:
-		 */
-		print_reg_dst((reg_t)(cat6->b.dst), false /* XXX is it always half? */, false);
-		if (cat6->b.off || cat6->b.off_hi)
-			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
-		printf(",");
-		print_reg_src((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
-				false, false, false, false, false, false);
+		full = false;  // XXX or inverts??
 		break;
 	}
 
-	printf(", %d", cat6->iim_val);
+	if (cat6->has_off) {
+		if (!nodst) {
+			if (sd)
+				printf("%c[", sd);
+			print_reg_dst((reg_t)(cat6->a.dst), full, false);
+			if (sd)
+				printf("]");
+			printf(", ");
+		}
+		if (ss)
+			printf("%c[", ss);
+		print_reg_src((reg_t)(cat6->a.src1), true,
+				false, false, cat6->a.src1_im, false, false, false);
+		printf("%+d", cat6->a.off);
+		if (ss)
+			printf("]");
+		printf(", ");
+		print_reg_src((reg_t)(cat6->a.src2), full,
+				false, false, cat6->a.src2_im, false, false, false);
+	} else {
+		if (!nodst) {
+			if (sd)
+				printf("%c[", sd);
+			print_reg_dst((reg_t)(cat6->b.dst), full, false);
+			if (sd)
+				printf("]");
+			printf(", ");
+		}
+		if (ss)
+			printf("%c[", ss);
+		print_reg_src((reg_t)(cat6->b.src1), true,
+				false, false, cat6->b.src1_im, false, false, false);
+		if (ss)
+			printf("]");
+		printf(", ");
+		print_reg_src((reg_t)(cat6->b.src2), full,
+				false, false, cat6->b.src2_im, false, false, false);
+	}
 
 	if (debug & PRINT_VERBOSE) {
 		switch (cat6->opc) {
 		case OPC_LDG:
 		case OPC_LDP:
 			/* load instructions: */
-			if (cat6->a.dummy1|cat6->a.dummy2|cat6->a.dummy3)
-				printf("\t{6: %x,%x,%x}", cat6->a.dummy1, cat6->a.dummy2, cat6->a.dummy3);
-			if ((cat6->a.must_be_one1 != 1) || (cat6->a.must_be_one2 != 1))
-				printf("{?? %d,%d ??}", cat6->a.must_be_one1, cat6->a.must_be_one2);
+			if (cat6->a.dummy2|cat6->a.dummy3)
+				printf("\t{6: %x,%x}", cat6->a.dummy2, cat6->a.dummy3);
 			break;
 		case OPC_STG:
 		case OPC_STP:
 		case OPC_STI:
 			/* store instructions: */
-			if (cat6->b.dummy1|cat6->b.dummy2)
-				printf("\t{6: %x,%x}", cat6->b.dummy1, cat6->b.dummy2);
-			if ((cat6->b.must_be_one1 != 1) || (cat6->b.must_be_one2 != 1) ||
-					(cat6->b.must_be_zero1 != 0))
-				printf("{?? %d,%d,%d ??}", cat6->b.must_be_one1, cat6->b.must_be_one2,
-						cat6->b.must_be_zero1);
+			if (cat6->b.dummy2|cat6->b.dummy2)
+				printf("\t{6: %x,%x}", cat6->b.dummy2, cat6->b.dummy3);
+			if (cat6->b.ignore0)
+				printf("\t{?? %x}", cat6->b.ignore0);
 			break;
 		}
 	}

@@ -36,6 +36,6 @@ noinst_LTLIBRARIES = libsvga.la
 
 libsvga_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = Android.mk SConscript \
+EXTRA_DIST = SConscript \
 	include/README \
 	svgadump/svga_dump.py

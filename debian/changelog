@@ -1,3 +1,14 @@
+mesa (10.5.5-1) unstable; urgency=medium
+
+  [ Maarten Lankhorst ]
+  * New upstream release.
+  * Update watch file.
+
+  [ Timo Aaltonen ]
+  * libegl1-mesa.symbols: Updated.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 12 May 2015 13:26:49 +0300
+
 mesa (10.4.2-2) unstable; urgency=medium
 
   * rules: Drop dh_makeshlibs exception on gbm_gallium_drm.so as it's

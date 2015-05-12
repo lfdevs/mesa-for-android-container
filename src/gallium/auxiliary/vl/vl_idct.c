@@ -609,7 +609,6 @@ init_source(struct vl_idct *idct, struct vl_idct_buffer *buffer)
    buffer->viewport_mismatch.scale[0] = tex->width0;
    buffer->viewport_mismatch.scale[1] = tex->height0;
    buffer->viewport_mismatch.scale[2] = 1;
-   buffer->viewport_mismatch.scale[3] = 1;
 
    return true;
 }
@@ -653,7 +652,6 @@ init_intermediate(struct vl_idct *idct, struct vl_idct_buffer *buffer)
    buffer->viewport.scale[0] = tex->width0;
    buffer->viewport.scale[1] = tex->height0;
    buffer->viewport.scale[2] = 1;
-   buffer->viewport.scale[3] = 1;
 
    return true;
 

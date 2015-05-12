@@ -748,7 +748,7 @@ static void txp_fetch_args(
 	const struct tgsi_full_instruction * inst = emit_data->inst;
 	LLVMValueRef src_w;
 	unsigned chan;
-	LLVMValueRef coords[4];
+	LLVMValueRef coords[5];
 
 	emit_data->dst_type = LLVMVectorType(bld_base->base.elem_type, 4);
 	src_w = lp_build_emit_fetch(bld_base, emit_data->inst, 0, TGSI_CHAN_W);
@@ -1107,9 +1107,9 @@ static void emit_ssg(
 		cmp = LLVMBuildICmp(builder, LLVMIntSGE, val, bld_base->int_bld.zero, "");
 		val = LLVMBuildSelect(builder, cmp, val, LLVMConstInt(bld_base->int_bld.elem_type, -1, true), "");
 	} else { // float SSG
-		cmp = LLVMBuildFCmp(builder, LLVMRealUGT, emit_data->args[0], bld_base->base.zero, "");
+		cmp = LLVMBuildFCmp(builder, LLVMRealOGT, emit_data->args[0], bld_base->base.zero, "");
 		val = LLVMBuildSelect(builder, cmp, bld_base->base.one, emit_data->args[0], "");
-		cmp = LLVMBuildFCmp(builder, LLVMRealUGE, val, bld_base->base.zero, "");
+		cmp = LLVMBuildFCmp(builder, LLVMRealOGE, val, bld_base->base.zero, "");
 		val = LLVMBuildSelect(builder, cmp, val, LLVMConstReal(bld_base->base.elem_type, -1), "");
 	}
 

@@ -952,7 +952,7 @@ build_gather(struct lp_build_context *bld,
    LLVMBuilderRef builder = bld->gallivm->builder;
    LLVMValueRef res = bld->undef;
    unsigned i;
-   LLVMValueRef temp_ptr;
+   LLVMValueRef temp_ptr = NULL;
 
    if (overflow_mask) {
       temp_ptr = lp_build_alloca(
@@ -1535,6 +1535,16 @@ emit_fetch_system_value(
 
    case TGSI_SEMANTIC_VERTEXID:
       res = bld->system_values.vertex_id;
+      atype = TGSI_TYPE_UNSIGNED;
+      break;
+
+   case TGSI_SEMANTIC_VERTEXID_NOBASE:
+      res = bld->system_values.vertex_id_nobase;
+      atype = TGSI_TYPE_UNSIGNED;
+      break;
+
+   case TGSI_SEMANTIC_BASEVERTEX:
+      res = bld->system_values.basevertex;
       atype = TGSI_TYPE_UNSIGNED;
       break;
 
@@ -3507,99 +3517,6 @@ cont_emit(
    lp_exec_continue(&bld->exec_mask);
 }
 
-/* XXX: Refactor and move it to lp_bld_tgsi_action.c
- *
- * XXX: What do the comments about xmm registers mean?  Maybe they are left over
- * from old code, but there is no garauntee that LLVM will use those registers
- * for this code.
- *
- * XXX: There should be no calls to lp_build_emit_fetch in this function.  This
- * should be handled by the emit_data->fetch_args function. */
-static void
-nrm_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   LLVMValueRef tmp0, tmp1;
-   LLVMValueRef tmp4 = NULL;
-   LLVMValueRef tmp5 = NULL;
-   LLVMValueRef tmp6 = NULL;
-   LLVMValueRef tmp7 = NULL;
-   struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
-
-   uint dims = (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_NRM) ? 3 : 4;
-
-  if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_X) ||
-      TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_Y) ||
-      TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_Z) ||
-      (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_W) && dims == 4)) {
-
-      /* NOTE: Cannot use xmm regs 2/3 here (see emit_rsqrt() above). */
-
-      /* xmm4 = src.x */
-      /* xmm0 = src.x * src.x */
-      tmp0 = lp_build_emit_fetch(&bld->bld_base, emit_data->inst, 0, TGSI_CHAN_X);
-      if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_X)) {
-         tmp4 = tmp0;
-      }
-      tmp0 = lp_build_mul( &bld->bld_base.base, tmp0, tmp0);
-
-      /* xmm5 = src.y */
-      /* xmm0 = xmm0 + src.y * src.y */
-      tmp1 = lp_build_emit_fetch(&bld->bld_base, emit_data->inst, 0, TGSI_CHAN_Y);
-      if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_Y)) {
-         tmp5 = tmp1;
-      }
-      tmp1 = lp_build_mul( &bld->bld_base.base, tmp1, tmp1);
-      tmp0 = lp_build_add( &bld->bld_base.base, tmp0, tmp1);
-
-      /* xmm6 = src.z */
-      /* xmm0 = xmm0 + src.z * src.z */
-      tmp1 = lp_build_emit_fetch(&bld->bld_base, emit_data->inst, 0, TGSI_CHAN_Z);
-      if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_Z)) {
-         tmp6 = tmp1;
-      }
-      tmp1 = lp_build_mul( &bld->bld_base.base, tmp1, tmp1);
-      tmp0 = lp_build_add( &bld->bld_base.base, tmp0, tmp1);
-
-      if (dims == 4) {
-         /* xmm7 = src.w */
-         /* xmm0 = xmm0 + src.w * src.w */
-         tmp1 = lp_build_emit_fetch(&bld->bld_base, emit_data->inst, 0, TGSI_CHAN_W);
-         if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_W)) {
-            tmp7 = tmp1;
-         }
-         tmp1 = lp_build_mul( &bld->bld_base.base, tmp1, tmp1);
-         tmp0 = lp_build_add( &bld->bld_base.base, tmp0, tmp1);
-      }
-      /* xmm1 = 1 / sqrt(xmm0) */
-      tmp1 = lp_build_rsqrt( &bld->bld_base.base, tmp0);
-       /* dst.x = xmm1 * src.x */
-      if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_X)) {
-         emit_data->output[TGSI_CHAN_X] = lp_build_mul( &bld->bld_base.base, tmp4, tmp1);
-      }
-      /* dst.y = xmm1 * src.y */
-      if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_Y)) {
-         emit_data->output[TGSI_CHAN_Y] = lp_build_mul( &bld->bld_base.base, tmp5, tmp1);
-      }
-
-      /* dst.z = xmm1 * src.z */
-      if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_Z)) {
-         emit_data->output[TGSI_CHAN_Z] = lp_build_mul( &bld->bld_base.base, tmp6, tmp1);
-      }
-      /* dst.w = xmm1 * src.w */
-      if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_X) && dims == 4) {
-         emit_data->output[TGSI_CHAN_W] = lp_build_mul( &bld->bld_base.base, tmp7, tmp1);
-      }
-   }
-
-   /* dst.w = 1.0 */
-   if (TGSI_IS_DST0_CHANNEL_ENABLED(emit_data->inst, TGSI_CHAN_W) && dims == 3) {
-       emit_data->output[TGSI_CHAN_W] = bld->bld_base.base.one;
-   }
-}
-
 static void emit_prologue(struct lp_build_tgsi_context * bld_base)
 {
    struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
@@ -3825,8 +3742,6 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
    bld.bld_base.op_actions[TGSI_OPCODE_UIF].emit = uif_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_KILL_IF].emit = kill_if_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_KILL].emit = kill_emit;
-   bld.bld_base.op_actions[TGSI_OPCODE_NRM].emit = nrm_emit;
-   bld.bld_base.op_actions[TGSI_OPCODE_NRM4].emit = nrm_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_RET].emit = ret_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_SWITCH].emit = switch_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TEX].emit = tex_emit;

@@ -105,8 +105,8 @@ brw_setup_vue_interpolation(struct brw_context *brw)
 const struct brw_tracked_state brw_interpolation_map = {
    .dirty = {
       .mesa  = _NEW_LIGHT,
-      .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
-                BRW_NEW_VUE_MAP_GEOM_OUT)
+      .brw   = BRW_NEW_FRAGMENT_PROGRAM |
+               BRW_NEW_VUE_MAP_GEOM_OUT,
    },
    .emit = brw_setup_vue_interpolation
 };

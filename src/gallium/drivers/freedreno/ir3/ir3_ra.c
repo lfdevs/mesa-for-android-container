@@ -30,7 +30,6 @@
 #include "util/u_math.h"
 
 #include "ir3.h"
-#include "ir3_visitor.h"
 
 /*
  * Register Assignment:
@@ -53,14 +52,41 @@
 struct ir3_ra_ctx {
 	struct ir3_block *block;
 	enum shader_t type;
-	bool half_precision;
 	bool frag_coord;
 	bool frag_face;
-	bool has_samp;
 	int cnt;
-	int max_bary;
 	bool error;
 };
+
+#ifdef DEBUG
+#  include "freedreno_util.h"
+#  define ra_debug (fd_mesa_debug & FD_DBG_OPTMSGS)
+#else
+#  define ra_debug 0
+#endif
+
+#define ra_dump_list(msg, n) do { \
+		if (ra_debug) { \
+			debug_printf("-- " msg); \
+			ir3_dump_instr_list(n); \
+		} \
+	} while (0)
+
+#define ra_dump_instr(msg, n) do { \
+		if (ra_debug) { \
+			debug_printf(">> " msg); \
+			ir3_dump_instr_single(n); \
+		} \
+	} while (0)
+
+#define ra_assert(ctx, x) do { \
+		debug_assert(x); \
+		if (!(x)) { \
+			debug_printf("RA: failed assert: %s\n", #x); \
+			(ctx)->error = true; \
+		}; \
+	} while (0)
+
 
 /* sorta ugly way to retrofit half-precision support.. rather than
  * passing extra param around, just OR in a high bit.  All the low
@@ -69,19 +95,6 @@ struct ir3_ra_ctx {
  * would go badly anyways).
  */
 #define REG_HALF  0x8000
-
-struct ir3_ra_assignment {
-	int8_t  off;        /* offset of instruction dst within range */
-	uint8_t num;        /* number of components for the range */
-};
-
-static void ra_assign(struct ir3_ra_ctx *ctx,
-		struct ir3_instruction *assigner, int num);
-static struct ir3_ra_assignment ra_calc(struct ir3_instruction *instr);
-
-/*
- * Register Allocation:
- */
 
 #define REG(n, wm, f) (struct ir3_register){ \
 		.flags  = (f), \
@@ -92,24 +105,40 @@ static struct ir3_ra_assignment ra_calc(struct ir3_instruction *instr);
 /* check that the register exists, is a GPR and is not special (a0/p0) */
 static struct ir3_register * reg_check(struct ir3_instruction *instr, unsigned n)
 {
-	if ((n < instr->regs_count) && reg_gpr(instr->regs[n]))
+	if ((n < instr->regs_count) && reg_gpr(instr->regs[n]) &&
+			!(instr->regs[n]->flags & IR3_REG_SSA))
 		return instr->regs[n];
 	return NULL;
 }
 
-static int output_base(struct ir3_ra_ctx *ctx)
+/* figure out if an unassigned src register points back to the instr we
+ * are assigning:
+ */
+static bool instr_used_by(struct ir3_instruction *instr,
+		struct ir3_register *src)
 {
-	/* ugg, for fragment shader we need to have input at r0.x
-	 * (or at least if there is a way to configure it, I can't
-	 * see how because the blob driver always uses r0.x (ie.
-	 * all zeros)
-	 */
-	if (ctx->type == SHADER_FRAGMENT) {
-		if (ctx->half_precision)
-			return ctx->frag_face ? 4 : 3;
-		return ctx->frag_coord ? 8 : 4;
-	}
-	return 0;
+	struct ir3_instruction *src_instr = ssa(src);
+	unsigned i;
+	if (instr == src_instr)
+		return true;
+	if (src_instr && is_meta(src_instr))
+		for (i = 1; i < src_instr->regs_count; i++)
+			if (instr_used_by(instr, src_instr->regs[i]))
+				return true;
+
+	return false;
+}
+
+static bool instr_is_output(struct ir3_instruction *instr)
+{
+	struct ir3_block *block = instr->block;
+	unsigned i;
+
+	for (i = 0; i < block->noutputs; i++)
+		if (instr == block->outputs[i])
+			return true;
+
+	return false;
 }
 
 /* live means read before written */
@@ -117,100 +146,67 @@ static void compute_liveregs(struct ir3_ra_ctx *ctx,
 		struct ir3_instruction *instr, regmask_t *liveregs)
 {
 	struct ir3_block *block = instr->block;
+	struct ir3_instruction *n;
 	regmask_t written;
-	unsigned i, j;
+	unsigned i;
 
-	regmask_init(liveregs);
 	regmask_init(&written);
 
-	for (instr = instr->next; instr; instr = instr->next) {
+	for (n = instr->next; n; n = n->next) {
 		struct ir3_register *r;
 
-		if (is_meta(instr))
+		if (is_meta(n))
 			continue;
 
 		/* check first src's read: */
-		for (j = 1; j < instr->regs_count; j++) {
-			r = reg_check(instr, j);
+		for (i = 1; i < n->regs_count; i++) {
+			r = reg_check(n, i);
 			if (r)
 				regmask_set_if_not(liveregs, r, &written);
+
+			/* if any src points back to the instruction(s) in
+			 * the block of neighbors that we are assigning then
+			 * mark any written (clobbered) registers as live:
+			 */
+			if (instr_used_by(instr, n->regs[i]))
+				regmask_or(liveregs, liveregs, &written);
 		}
 
+		/* meta-instructions don't actually get scheduled,
+		 * so don't let it's write confuse us.. what we
+		 * really care about is when the src to the meta
+		 * instr was written:
+		 */
+		if (is_meta(n))
+			continue;
+
 		/* then dst written (if assigned already): */
-		if (instr->flags & IR3_INSTR_MARK) {
-			r = reg_check(instr, 0);
-			if (r)
+		r = reg_check(n, 0);
+		if (r) {
+			/* if an instruction *is* an output, then it is live */
+			if (!instr_is_output(n))
 				regmask_set(&written, r);
 		}
+
 	}
 
 	/* be sure to account for output registers too: */
 	for (i = 0; i < block->noutputs; i++) {
-		struct ir3_register reg = REG(output_base(ctx) + i, X, 0);
-		regmask_set_if_not(liveregs, &reg, &written);
-	}
-}
-
-/* calculate registers that are clobbered before last use of 'assigner'.
- * This needs to be done backwards, although it could possibly be
- * combined into compute_liveregs().  (Ie. compute_liveregs() could
- * reverse the list, then do this part backwards reversing the list
- * again back to original order.)  Otoh, probably I should try to
- * construct a proper interference graph instead.
- *
- * XXX this need to follow the same recursion path that is used for
- * to rename/assign registers (ie. ra_assign_src()).. this is a bit
- * ugly right now, maybe refactor into node iterator sort of things
- * that iterates nodes in the correct order?
- */
-static bool compute_clobbers(struct ir3_ra_ctx *ctx,
-		struct ir3_instruction *instr, struct ir3_instruction *assigner,
-		regmask_t *liveregs)
-{
-	unsigned i;
-	bool live = false, was_live = false;
-
-	if (instr == NULL) {
-		struct ir3_block *block = ctx->block;
-
-		/* if at the end, check outputs: */
-		for (i = 0; i < block->noutputs; i++)
-			if (block->outputs[i] == assigner)
-				return true;
-		return false;
+		struct ir3_register *r;
+		if (!block->outputs[i])
+			continue;
+		r = reg_check(block->outputs[i], 0);
+		if (r)
+			regmask_set_if_not(liveregs, r, &written);
 	}
 
-	for (i = 1; i < instr->regs_count; i++) {
-		struct ir3_register *reg = instr->regs[i];
-		if ((reg->flags & IR3_REG_SSA) && (reg->instr == assigner)) {
-			if (is_meta(instr)) {
-				switch (instr->opc) {
-				case OPC_META_INPUT:
-					// TODO
-					assert(0);
-					break;
-				case OPC_META_FO:
-				case OPC_META_FI:
-					was_live |= compute_clobbers(ctx, instr->next,
-							instr, liveregs);
-					break;
-				default:
-					break;
-				}
-			}
-			live = true;
-			break;
-		}
-	}
-
-	was_live |= compute_clobbers(ctx, instr->next, assigner, liveregs);
-
-	if (was_live && (instr->regs_count > 0) &&
-			(instr->flags & IR3_INSTR_MARK) &&
-			!is_meta(instr))
-		regmask_set(liveregs, instr->regs[0]);
-
-	return live || was_live;
+	/* if instruction is output, we need a reg that isn't written
+	 * before the end.. equiv to the instr_used_by() check above
+	 * in the loop body
+	 * TODO maybe should follow fanin/fanout?
+	 */
+	if (instr_is_output(instr))
+		regmask_or(liveregs, liveregs, &written);
 }
 
 static int find_available(regmask_t *liveregs, int size, bool half)
@@ -234,141 +230,39 @@ static int find_available(regmask_t *liveregs, int size, bool half)
 static int alloc_block(struct ir3_ra_ctx *ctx,
 		struct ir3_instruction *instr, int size)
 {
-	if (!instr) {
-		/* special case, allocating shader outputs.  At this
-		 * point, nothing is allocated, just start the shader
-		 * outputs at r0.x and let compute_liveregs() take
-		 * care of the rest from here:
-		 */
-		return 0;
-	} else {
-		struct ir3_register *dst = instr->regs[0];
-		regmask_t liveregs;
-
-		compute_liveregs(ctx, instr, &liveregs);
-
-		// XXX XXX XXX XXX XXX XXX XXX XXX XXX
-		// XXX hack.. maybe ra_calc should give us a list of
-		// instrs to compute_clobbers() on?
-		if (is_meta(instr) && (instr->opc == OPC_META_INPUT) &&
-				(instr->regs_count == 1)) {
-			unsigned i, base = instr->regs[0]->num & ~0x3;
-			for (i = 0; i < 4; i++) {
-				struct ir3_instruction *in = NULL;
-				if ((base + i) < ctx->block->ninputs)
-					in = ctx->block->inputs[base + i];
-				if (in)
-					compute_clobbers(ctx, in->next, in, &liveregs);
-			}
-		} else
-		// XXX XXX XXX XXX XXX XXX XXX XXX XXX
-		compute_clobbers(ctx, instr->next, instr, &liveregs);
-
-		return find_available(&liveregs, size,
-				!!(dst->flags & IR3_REG_HALF));
-	}
-}
-
-/*
- * Constraint Calculation:
- */
-
-struct ra_calc_visitor {
-	struct ir3_visitor base;
-	struct ir3_ra_assignment a;
-};
-
-static inline struct ra_calc_visitor *ra_calc_visitor(struct ir3_visitor *v)
-{
-	return (struct ra_calc_visitor *)v;
-}
-
-/* calculate register assignment for the instruction.  If the register
- * written by this instruction is required to be part of a range, to
- * handle other (input/output/sam/bary.f/etc) contiguous register range
- * constraints, that is calculated handled here.
- */
-static void ra_calc_dst(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
-{
-	struct ra_calc_visitor *c = ra_calc_visitor(v);
-	if (is_tex(instr)) {
-		c->a.off = 0;
-		c->a.num = 4;
-	} else {
-		c->a.off = 0;
-		c->a.num = 1;
-	}
-}
-
-static void
-ra_calc_dst_shader_input(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
-{
-	struct ra_calc_visitor *c = ra_calc_visitor(v);
-	struct ir3_block *block = instr->block;
 	struct ir3_register *dst = instr->regs[0];
-	unsigned base = dst->num & ~0x3;
-	unsigned i, num = 0;
+	struct ir3_instruction *n;
+	regmask_t liveregs;
+	unsigned name;
 
-	assert(!(dst->flags & IR3_REG_IA));
+	/* should only ever be called w/ head of neighbor list: */
+	debug_assert(!instr->cp.left);
 
-	/* check what input components we need: */
-	for (i = 0; i < 4; i++) {
-		unsigned idx = base + i;
-		if ((idx < block->ninputs) && block->inputs[idx])
-			num = i + 1;
-	}
+	regmask_init(&liveregs);
 
-	c->a.off = dst->num - base;
-	c->a.num = num;
-}
+	for (n = instr; n; n = n->cp.right)
+		compute_liveregs(ctx, n, &liveregs);
 
-static void ra_calc_src_fanin(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
-{
-	struct ra_calc_visitor *c = ra_calc_visitor(v);
-	unsigned srcn = ir3_instr_regno(instr, reg) - 1;
-	c->a.off += srcn;
-	c->a.num += srcn;
-	c->a.num = MAX2(c->a.num, instr->regs_count - 1);
-}
+	/* because we do assignment on fanout nodes for wrmask!=0x1, we
+	 * need to handle this special case, where the fanout nodes all
+	 * appear after one or more of the consumers of the src node:
+	 *
+	 *   0098:009: sam _, r2.x
+	 *   0028:010: mul.f r3.z, r4.x, c13.x
+	 *   ; we start assigning here for '0098:009: sam'.. but
+	 *   ; would miss the usage at '0028:010: mul.f'
+	 *   0101:009: _meta:fo _, _[0098:009: sam], off=2
+	 */
+	if (is_meta(instr) && (instr->opc == OPC_META_FO))
+		compute_liveregs(ctx, instr->regs[1]->instr, &liveregs);
 
-static const struct ir3_visitor_funcs calc_visitor_funcs = {
-		.instr = ir3_visit_instr,
-		.dst_shader_input = ra_calc_dst_shader_input,
-		.dst_fanout = ra_calc_dst,
-		.dst_fanin = ra_calc_dst,
-		.dst = ra_calc_dst,
-		.src_fanout = ir3_visit_reg,
-		.src_fanin = ra_calc_src_fanin,
-		.src = ir3_visit_reg,
-};
+	name = find_available(&liveregs, size,
+			!!(dst->flags & IR3_REG_HALF));
 
-static struct ir3_ra_assignment ra_calc(struct ir3_instruction *assigner)
-{
-	struct ra_calc_visitor v = {
-			.base.funcs = &calc_visitor_funcs,
-	};
+	if (dst->flags & IR3_REG_HALF)
+		name |= REG_HALF;
 
-	ir3_visit_instr(&v.base, assigner);
-
-	return v.a;
-}
-
-/*
- * Register Assignment:
- */
-
-struct ra_assign_visitor {
-	struct ir3_visitor base;
-	struct ir3_ra_ctx *ctx;
-	int num;
-};
-
-static inline struct ra_assign_visitor *ra_assign_visitor(struct ir3_visitor *v)
-{
-	return (struct ra_assign_visitor *)v;
+	return name;
 }
 
 static type_t half_type(type_t type)
@@ -439,20 +333,15 @@ static void fixup_half_instr_src(struct ir3_instruction *instr)
 	}
 }
 
-static void ra_assign_reg(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
+static void reg_assign(struct ir3_instruction *instr,
+		unsigned r, unsigned name)
 {
-	struct ra_assign_visitor *a = ra_assign_visitor(v);
-
-	if (is_flow(instr) && (instr->opc == OPC_KILL))
-		return;
+	struct ir3_register *reg = instr->regs[r];
 
 	reg->flags &= ~IR3_REG_SSA;
-	reg->num = a->num & ~REG_HALF;
+	reg->num = name & ~REG_HALF;
 
-	assert(reg->num >= 0);
-
-	if (a->num & REG_HALF) {
+	if (name & REG_HALF) {
 		reg->flags |= IR3_REG_HALF;
 		/* if dst reg being assigned, patch up the instr: */
 		if (reg == instr->regs[0])
@@ -462,342 +351,218 @@ static void ra_assign_reg(struct ir3_visitor *v,
 	}
 }
 
-static void ra_assign_dst_shader_input(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
+static void instr_assign(struct ir3_ra_ctx *ctx,
+		struct ir3_instruction *instr, unsigned name);
+
+static void instr_assign_src(struct ir3_ra_ctx *ctx,
+		struct ir3_instruction *instr, unsigned r, unsigned name)
 {
-	struct ra_assign_visitor *a = ra_assign_visitor(v);
-	unsigned i, base = reg->num & ~0x3;
-	int off = base - reg->num;
+	reg_assign(instr, r, name);
 
-	ra_assign_reg(v, instr, reg);
-	reg->flags |= IR3_REG_IA;
-
-	/* trigger assignment of all our companion input components: */
-	for (i = 0; i < 4; i++) {
-		struct ir3_instruction *in = NULL;
-		if ((base + i) < instr->block->ninputs)
-			in = instr->block->inputs[base + i];
-		if (in && is_meta(in) && (in->opc == OPC_META_INPUT))
-			ra_assign(a->ctx, in, a->num + off + i);
-	}
-}
-
-static void ra_assign_dst_fanout(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
-{
-	struct ra_assign_visitor *a = ra_assign_visitor(v);
-	struct ir3_register *src = instr->regs[1];
-	ra_assign_reg(v, instr, reg);
-	if (src->flags & IR3_REG_SSA)
-		ra_assign(a->ctx, src->instr, a->num - instr->fo.off);
-}
-
-static void ra_assign_src_fanout(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
-{
-	struct ra_assign_visitor *a = ra_assign_visitor(v);
-	ra_assign_reg(v, instr, reg);
-	ra_assign(a->ctx, instr, a->num + instr->fo.off);
-}
-
-
-static void ra_assign_src_fanin(struct ir3_visitor *v,
-		struct ir3_instruction *instr, struct ir3_register *reg)
-{
-	struct ra_assign_visitor *a = ra_assign_visitor(v);
-	unsigned j, srcn = ir3_instr_regno(instr, reg) - 1;
-	ra_assign_reg(v, instr, reg);
-	ra_assign(a->ctx, instr, a->num - srcn);
-	for (j = 1; j < instr->regs_count; j++) {
-		struct ir3_register *reg = instr->regs[j];
-		if (reg->flags & IR3_REG_SSA)  /* could be renamed already */
-			ra_assign(a->ctx, reg->instr, a->num - srcn + j - 1);
-	}
-}
-
-static const struct ir3_visitor_funcs assign_visitor_funcs = {
-		.instr = ir3_visit_instr,
-		.dst_shader_input = ra_assign_dst_shader_input,
-		.dst_fanout = ra_assign_dst_fanout,
-		.dst_fanin = ra_assign_reg,
-		.dst = ra_assign_reg,
-		.src_fanout = ra_assign_src_fanout,
-		.src_fanin = ra_assign_src_fanin,
-		.src = ra_assign_reg,
-};
-
-static void ra_assign(struct ir3_ra_ctx *ctx,
-		struct ir3_instruction *assigner, int num)
-{
-	struct ra_assign_visitor v = {
-			.base.funcs = &assign_visitor_funcs,
-			.ctx = ctx,
-			.num = num,
-	};
-
-	/* if we've already visited this instruction, bail now: */
-	if (ir3_instr_check_mark(assigner)) {
-		debug_assert(assigner->regs[0]->num == (num & ~REG_HALF));
-		if (assigner->regs[0]->num != (num & ~REG_HALF)) {
-			/* impossible situation, should have been resolved
-			 * at an earlier stage by inserting extra mov's:
+	if (is_meta(instr)) {
+		switch (instr->opc) {
+		case OPC_META_INPUT:
+			/* shader-input does not have a src, only block input: */
+			debug_assert(instr->regs_count == 2);
+			instr_assign(ctx, instr, name);
+			return;
+		case OPC_META_FO:
+			instr_assign(ctx, instr, name + instr->fo.off);
+			return;
+		case OPC_META_FI:
+			instr_assign(ctx, instr, name - (r - 1));
+			return;
+		case OPC_META_DEREF:
+			/* first arg of meta:deref is the addr reg (do not
+			 * propagate), 2nd is actual src (fanin) which does
+			 * get propagated)
 			 */
-			ctx->error = true;
+			if (r == 2)
+				instr_assign(ctx, instr, name + instr->deref.off);
+			break;
+		default:
+			break;
 		}
+	}
+}
+
+static void instr_assign(struct ir3_ra_ctx *ctx,
+		struct ir3_instruction *instr, unsigned name)
+{
+	struct ir3_instruction *n;
+	struct ir3_register *reg = instr->regs[0];
+
+	/* check if already assigned: */
+	if (!(reg->flags & IR3_REG_SSA)) {
+		/* ... and if so, sanity check: */
+		ra_assert(ctx, reg->num == (name & ~REG_HALF));
 		return;
 	}
 
-	ir3_visit_instr(&v.base, assigner);
+	/* rename this instructions dst register: */
+	reg_assign(instr, 0, name);
+
+	/* and rename any subsequent use of result of this instr: */
+	for (n = instr->next; n && !ctx->error; n = n->next) {
+		unsigned i;
+
+		for (i = 1; i < n->regs_count; i++) {
+			reg = n->regs[i];
+			if ((reg->flags & IR3_REG_SSA) && (reg->instr == instr))
+				instr_assign_src(ctx, n, i, name);
+		}
+	}
+
+	/* To simplify the neighbor logic, and to "avoid" dealing with
+	 * instructions which write more than one output, we actually
+	 * do register assignment for instructions that produce multiple
+	 * outputs on the fanout nodes and propagate up the assignment
+	 * to the actual instruction:
+	 */
+	if (is_meta(instr) && (instr->opc == OPC_META_FO)) {
+		struct ir3_instruction *src = ssa(instr->regs[1]);
+		debug_assert(name >= instr->fo.off);
+		if (src)
+			instr_assign(ctx, src, name - instr->fo.off);
+	}
 }
 
-/*
- *
+/* check neighbor list to see if it is already partially (or completely)
+ * assigned, in which case register block is already allocated and we
+ * just need to complete the assignment:
  */
-
-static void ir3_instr_ra(struct ir3_ra_ctx *ctx,
+static int check_partial_assignment(struct ir3_ra_ctx *ctx,
 		struct ir3_instruction *instr)
 {
-	struct ir3_register *dst;
-	unsigned num;
+	struct ir3_instruction *n;
+	int off = 0;
 
-	/* skip over nop's */
+	debug_assert(!instr->cp.left);
+
+	for (n = instr; n; n = n->cp.right) {
+		struct ir3_register *dst = n->regs[0];
+		if (!(dst->flags & IR3_REG_SSA)) {
+			int name = dst->num - off;
+			debug_assert(name >= 0);
+			return name;
+		}
+		off++;
+	}
+
+	return -1;
+}
+
+/* allocate register name(s) for a list of neighboring instructions;
+ * instr should point to leftmost neighbor (head of list)
+ */
+static void instr_alloc_and_assign(struct ir3_ra_ctx *ctx,
+		struct ir3_instruction *instr)
+{
+	struct ir3_instruction *n;
+	struct ir3_register *dst;
+	int name;
+
+	debug_assert(!instr->cp.left);
+
 	if (instr->regs_count == 0)
 		return;
 
 	dst = instr->regs[0];
 
-	/* if we've already visited this instruction, bail now: */
-	if (instr->flags & IR3_INSTR_MARK)
+	/* for instructions w/ fanouts, do the actual register assignment
+	 * on the group of fanout neighbor nodes and propagate the reg
+	 * name back up to the texture instruction.
+	 */
+	if (dst->wrmask != 0x1)
 		return;
+
+	name = check_partial_assignment(ctx, instr);
 
 	/* allocate register(s): */
-	if (is_addr(instr)) {
-		num = instr->regs[2]->num;
+	if (name >= 0) {
+		/* already partially assigned, just finish the job */
+	} else if (is_addr(instr)) {
+		debug_assert(!instr->cp.right);
+		name = instr->regs[2]->num + instr->deref.off;
 	} else if (reg_gpr(dst)) {
-		struct ir3_ra_assignment a;
-		a = ra_calc(instr);
-		num = alloc_block(ctx, instr, a.num) + a.off;
+		int size;
+		/* number of consecutive registers to assign: */
+		size = ir3_neighbor_count(instr);
+		if (dst->wrmask != 0x1)
+			size = MAX2(size, ffs(~dst->wrmask) - 1);
+		name = alloc_block(ctx, instr, size);
 	} else if (dst->flags & IR3_REG_ADDR) {
+		debug_assert(!instr->cp.right);
 		dst->flags &= ~IR3_REG_ADDR;
-		num = regid(REG_A0, 0) | REG_HALF;
+		name = regid(REG_A0, 0) | REG_HALF;
 	} else {
+		debug_assert(!instr->cp.right);
 		/* predicate register (p0).. etc */
-		return;
+		name = regid(REG_P0, 0);
+		debug_assert(dst->num == name);
 	}
 
-	ra_assign(ctx, instr, num);
-}
+	ra_assert(ctx, name >= 0);
 
-/* flatten into shader: */
-// XXX this should probably be somewhere else:
-static void legalize(struct ir3_ra_ctx *ctx, struct ir3_block *block)
-{
-	struct ir3_instruction *n;
-	struct ir3 *shader = block->shader;
-	struct ir3_instruction *end =
-			ir3_instr_create(block, 0, OPC_END);
-	struct ir3_instruction *last_input = NULL;
-	struct ir3_instruction *last_rel = NULL;
-	regmask_t needs_ss_war;       /* write after read */
-	regmask_t needs_ss;
-	regmask_t needs_sy;
-
-	regmask_init(&needs_ss_war);
-	regmask_init(&needs_ss);
-	regmask_init(&needs_sy);
-
-	shader->instrs_count = 0;
-
-	for (n = block->head; n; n = n->next) {
-		struct ir3_register *reg;
-		unsigned i;
-
-		if (is_meta(n))
-			continue;
-
-		if (is_input(n)) {
-			struct ir3_register *inloc = n->regs[1];
-			assert(inloc->flags & IR3_REG_IMMED);
-			ctx->max_bary = MAX2(ctx->max_bary, inloc->iim_val);
-		}
-
-		for (i = 1; i < n->regs_count; i++) {
-			reg = n->regs[i];
-
-			if (reg_gpr(reg)) {
-
-				/* TODO: we probably only need (ss) for alu
-				 * instr consuming sfu result.. need to make
-				 * some tests for both this and (sy)..
-				 */
-				if (regmask_get(&needs_ss, reg)) {
-					n->flags |= IR3_INSTR_SS;
-					regmask_init(&needs_ss);
-				}
-
-				if (regmask_get(&needs_sy, reg)) {
-					n->flags |= IR3_INSTR_SY;
-					regmask_init(&needs_sy);
-				}
-			}
-
-			/* TODO: is it valid to have address reg loaded from a
-			 * relative src (ie. mova a0, c<a0.x+4>)?  If so, the
-			 * last_rel check below should be moved ahead of this:
-			 */
-			if (reg->flags & IR3_REG_RELATIV)
-				last_rel = n;
-		}
-
-		if (n->regs_count > 0) {
-			reg = n->regs[0];
-			if (regmask_get(&needs_ss_war, reg)) {
-				n->flags |= IR3_INSTR_SS;
-				regmask_init(&needs_ss_war); // ??? I assume?
-			}
-
-			if (last_rel && (reg->num == regid(REG_A0, 0))) {
-				last_rel->flags |= IR3_INSTR_UL;
-				last_rel = NULL;
-			}
-		}
-
-		/* cat5+ does not have an (ss) bit, if needed we need to
-		 * insert a nop to carry the sync flag.  Would be kinda
-		 * clever if we were aware of this during scheduling, but
-		 * this should be a pretty rare case:
-		 */
-		if ((n->flags & IR3_INSTR_SS) && (n->category >= 5)) {
-			struct ir3_instruction *nop;
-			nop = ir3_instr_create(block, 0, OPC_NOP);
-			nop->flags |= IR3_INSTR_SS;
-			n->flags &= ~IR3_INSTR_SS;
-		}
-
-		/* need to be able to set (ss) on first instruction: */
-		if ((shader->instrs_count == 0) && (n->category >= 5))
-			ir3_instr_create(block, 0, OPC_NOP);
-
-		if (is_nop(n) && shader->instrs_count) {
-			struct ir3_instruction *last =
-					shader->instrs[shader->instrs_count-1];
-			if (is_nop(last) && (last->repeat < 5)) {
-				last->repeat++;
-				last->flags |= n->flags;
-				continue;
-			}
-		}
-
-		shader->instrs[shader->instrs_count++] = n;
-
-		if (is_sfu(n))
-			regmask_set(&needs_ss, n->regs[0]);
-
-		if (is_tex(n)) {
-			/* this ends up being the # of samp instructions.. but that
-			 * is ok, everything else only cares whether it is zero or
-			 * not.  We do this here, rather than when we encounter a
-			 * SAMP decl, because (especially in binning pass shader)
-			 * the samp instruction(s) could get eliminated if the
-			 * result is not used.
-			 */
-			ctx->has_samp = true;
-			regmask_set(&needs_sy, n->regs[0]);
-		}
-
-		/* both tex/sfu appear to not always immediately consume
-		 * their src register(s):
-		 */
-		if (is_tex(n) || is_sfu(n)) {
-			for (i = 1; i < n->regs_count; i++) {
-				reg = n->regs[i];
-				if (reg_gpr(reg))
-					regmask_set(&needs_ss_war, reg);
-			}
-		}
-
-		if (is_input(n))
-			last_input = n;
+	for (n = instr; n && !ctx->error; n = n->cp.right) {
+		instr_assign(ctx, n, name);
+		name++;
 	}
-
-	if (last_input)
-		last_input->regs[0]->flags |= IR3_REG_EI;
-
-	if (last_rel)
-		last_rel->flags |= IR3_INSTR_UL;
-
-	shader->instrs[shader->instrs_count++] = end;
-
-	shader->instrs[0]->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
 }
 
 static int block_ra(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 {
 	struct ir3_instruction *n;
 
-	if (!block->parent) {
-		unsigned i, j;
-		int base, off = output_base(ctx);
-
-		base = alloc_block(ctx, NULL, block->noutputs + off);
-
-		if (ctx->half_precision)
-			base |= REG_HALF;
-
-		for (i = 0; i < block->noutputs; i++)
-			if (block->outputs[i] && !is_kill(block->outputs[i]))
-				ra_assign(ctx, block->outputs[i], base + i + off);
-
-		if (ctx->type == SHADER_FRAGMENT) {
-			i = 0;
-			if (ctx->frag_face) {
-				/* if we have frag_face, it gets hr0.x */
-				ra_assign(ctx, block->inputs[i], REG_HALF | 0);
-				i += 4;
-			}
-			for (j = 0; i < block->ninputs; i++, j++)
-				if (block->inputs[i])
-					ra_assign(ctx, block->inputs[i], (base & ~REG_HALF) + j);
-		} else {
-			for (i = 0; i < block->ninputs; i++)
-				if (block->inputs[i])
-					ir3_instr_ra(ctx, block->inputs[i]);
-		}
-	}
-
-	/* then loop over instruction list and assign registers:
+	/* frag shader inputs get pre-assigned, since we have some
+	 * constraints/unknowns about setup for some of these regs:
 	 */
-	n = block->head;
-	while (n) {
-		ir3_instr_ra(ctx, n);
-		if (ctx->error)
-			return -1;
-		n = n->next;
+	if ((ctx->type == SHADER_FRAGMENT) && !block->parent) {
+		unsigned i = 0, j;
+		if (ctx->frag_face && (i < block->ninputs) && block->inputs[i]) {
+			/* if we have frag_face, it gets hr0.x */
+			instr_assign(ctx, block->inputs[i], REG_HALF | 0);
+			i += 4;
+		}
+		for (j = 0; i < block->ninputs; i++, j++)
+			if (block->inputs[i])
+				instr_assign(ctx, block->inputs[i], j);
 	}
 
-	legalize(ctx, block);
+	ra_dump_list("-------\n", block->head);
 
-	return 0;
+	for (n = block->head; n && !ctx->error; n = n->next) {
+		ra_dump_instr("ASSIGN: ", n);
+		instr_alloc_and_assign(ctx, ir3_neighbor_first(n));
+		ra_dump_list("-------\n", block->head);
+	}
+
+	return ctx->error ? -1 : 0;
 }
 
 int ir3_block_ra(struct ir3_block *block, enum shader_t type,
-		bool half_precision, bool frag_coord, bool frag_face,
-		bool *has_samp, int *max_bary)
+		bool frag_coord, bool frag_face)
 {
+	struct ir3_instruction *n;
 	struct ir3_ra_ctx ctx = {
 			.block = block,
 			.type = type,
-			.half_precision = half_precision,
 			.frag_coord = frag_coord,
 			.frag_face = frag_face,
-			.max_bary = -1,
 	};
 	int ret;
 
+	/* mark dst registers w/ SSA flag so we can see which
+	 * have been assigned so far:
+	 * NOTE: we really should set SSA flag consistently on
+	 * every dst register in the frontend.
+	 */
+	for (n = block->head; n; n = n->next)
+		if (n->regs_count > 0)
+			n->regs[0]->flags |= IR3_REG_SSA;
+
 	ir3_clear_mark(block->shader);
 	ret = block_ra(&ctx, block);
-	*has_samp = ctx.has_samp;
-	*max_bary = ctx.max_bary;
 
 	return ret;
 }

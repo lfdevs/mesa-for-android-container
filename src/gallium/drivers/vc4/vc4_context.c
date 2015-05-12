@@ -94,8 +94,15 @@ vc4_setup_rcl(struct vc4_context *vc4)
         uint32_t resolve_uncleared = vc4->resolve & ~vc4->cleared;
         uint32_t width = vc4->framebuffer.width;
         uint32_t height = vc4->framebuffer.height;
-        uint32_t xtiles = align(width, 64) / 64;
-        uint32_t ytiles = align(height, 64) / 64;
+        uint32_t stride_in_tiles = align(width, 64) / 64;
+
+        assert(vc4->draw_min_x != ~0 && vc4->draw_min_y != ~0);
+        uint32_t min_x_tile = vc4->draw_min_x / 64;
+        uint32_t min_y_tile = vc4->draw_min_y / 64;
+        uint32_t max_x_tile = (vc4->draw_max_x - 1) / 64;
+        uint32_t max_y_tile = (vc4->draw_max_y - 1) / 64;
+        uint32_t xtiles = max_x_tile - min_x_tile + 1;
+        uint32_t ytiles = max_y_tile - min_y_tile + 1;
 
 #if 0
         fprintf(stderr, "RCL: resolve 0x%x clear 0x%x resolve uncleared 0x%x\n",
@@ -103,6 +110,22 @@ vc4_setup_rcl(struct vc4_context *vc4)
                 vc4->cleared,
                 resolve_uncleared);
 #endif
+
+        uint32_t reloc_size = 9;
+        uint32_t clear_size = 14;
+        uint32_t config_size = 11 + reloc_size;
+        uint32_t loadstore_size = 7 + reloc_size;
+        uint32_t tilecoords_size = 3;
+        uint32_t branch_size = 5 + reloc_size;
+        uint32_t color_store_size = 1;
+        cl_ensure_space(&vc4->rcl,
+                        clear_size +
+                        config_size +
+                        loadstore_size +
+                        xtiles * ytiles * (loadstore_size * 4 +
+                                           tilecoords_size * 3 +
+                                           branch_size +
+                                           color_store_size));
 
         cl_u8(&vc4->rcl, VC4_PACKET_CLEAR_COLORS);
         cl_u32(&vc4->rcl, vc4->clear_color[0]);
@@ -119,7 +142,6 @@ vc4_setup_rcl(struct vc4_context *vc4)
          */
         struct vc4_surface *render_surf = csurf ? csurf : zsurf;
         struct vc4_resource *render_tex = vc4_resource(render_surf->base.texture);
-
         cl_start_reloc(&vc4->rcl, 1);
         cl_u8(&vc4->rcl, VC4_PACKET_TILE_RENDERING_MODE_CONFIG);
         cl_reloc(vc4, &vc4->rcl, render_tex->bo, render_surf->offset);
@@ -129,8 +151,7 @@ vc4_setup_rcl(struct vc4_context *vc4)
                             VC4_RENDER_CONFIG_MEMORY_FORMAT_SHIFT) |
                            (vc4_rt_format_is_565(render_surf->base.format) ?
                             VC4_RENDER_CONFIG_FORMAT_BGR565 :
-                            VC4_RENDER_CONFIG_FORMAT_RGBA8888) |
-                           VC4_RENDER_CONFIG_EARLY_Z_COVERAGE_DISABLE));
+                            VC4_RENDER_CONFIG_FORMAT_RGBA8888)));
 
         /* The tile buffer normally gets cleared when the previous tile is
          * stored.  If the clear values changed between frames, then the tile
@@ -152,10 +173,14 @@ vc4_setup_rcl(struct vc4_context *vc4)
                 cl_u32(&vc4->rcl, 0); /* no address, since we're in None mode */
         }
 
-        for (int y = 0; y < ytiles; y++) {
-                for (int x = 0; x < xtiles; x++) {
-                        bool end_of_frame = (x == xtiles - 1 &&
-                                             y == ytiles - 1);
+        uint32_t color_hindex = ctex ? vc4_gem_hindex(vc4, ctex->bo) : 0;
+        uint32_t depth_hindex = ztex ? vc4_gem_hindex(vc4, ztex->bo) : 0;
+        uint32_t tile_alloc_hindex = vc4_gem_hindex(vc4, vc4->tile_alloc);
+
+        for (int y = min_y_tile; y <= max_y_tile; y++) {
+                for (int x = min_x_tile; x <= max_x_tile; x++) {
+                        bool end_of_frame = (x == max_x_tile &&
+                                             y == max_y_tile);
                         bool coords_emitted = false;
 
                         /* Note that the load doesn't actually occur until the
@@ -175,8 +200,8 @@ vc4_setup_rcl(struct vc4_context *vc4)
                                       vc4_rt_format_is_565(csurf->base.format) ?
                                       VC4_LOADSTORE_TILE_BUFFER_BGR565 :
                                       VC4_LOADSTORE_TILE_BUFFER_RGBA8888);
-                                cl_reloc(vc4, &vc4->rcl, ctex->bo,
-                                         csurf->offset);
+                                cl_reloc_hindex(&vc4->rcl, color_hindex,
+                                                csurf->offset);
 
                                 vc4_tile_coordinates(vc4, x, y, &coords_emitted);
                         }
@@ -191,8 +216,8 @@ vc4_setup_rcl(struct vc4_context *vc4)
                                       (zsurf->tiling <<
                                        VC4_LOADSTORE_TILE_BUFFER_FORMAT_SHIFT));
                                 cl_u8(&vc4->rcl, 0);
-                                cl_reloc(vc4, &vc4->rcl, ztex->bo,
-                                         zsurf->offset);
+                                cl_reloc_hindex(&vc4->rcl, depth_hindex,
+                                                zsurf->offset);
 
                                 vc4_tile_coordinates(vc4, x, y, &coords_emitted);
                         }
@@ -203,10 +228,16 @@ vc4_setup_rcl(struct vc4_context *vc4)
                          */
                         vc4_tile_coordinates(vc4, x, y, &coords_emitted);
 
+                        /* Wait for the binner before jumping to the first
+                         * tile's lists.
+                         */
+                        if (x == min_x_tile && y == min_y_tile)
+                                cl_u8(&vc4->rcl, VC4_PACKET_WAIT_ON_SEMAPHORE);
+
                         cl_start_reloc(&vc4->rcl, 1);
                         cl_u8(&vc4->rcl, VC4_PACKET_BRANCH_TO_SUB_LIST);
-                        cl_reloc(vc4, &vc4->rcl, vc4->tile_alloc,
-                                 (y * xtiles + x) * 32);
+                        cl_reloc_hindex(&vc4->rcl, tile_alloc_hindex,
+                                        (y * stride_in_tiles + x) * 32);
 
                         if (vc4->resolve & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) {
                                 vc4_tile_coordinates(vc4, x, y, &coords_emitted);
@@ -219,11 +250,11 @@ vc4_setup_rcl(struct vc4_context *vc4)
                                        VC4_LOADSTORE_TILE_BUFFER_FORMAT_SHIFT));
                                 cl_u8(&vc4->rcl,
                                       VC4_STORE_TILE_BUFFER_DISABLE_COLOR_CLEAR);
-                                cl_reloc(vc4, &vc4->rcl, ztex->bo,
-                                         zsurf->offset |
-                                         ((end_of_frame &&
-                                           !(vc4->resolve & PIPE_CLEAR_COLOR0)) ?
-                                          VC4_LOADSTORE_TILE_BUFFER_EOF : 0));
+                                cl_reloc_hindex(&vc4->rcl, depth_hindex,
+                                                zsurf->offset |
+                                                ((end_of_frame &&
+                                                  !(vc4->resolve & PIPE_CLEAR_COLOR0)) ?
+                                                 VC4_LOADSTORE_TILE_BUFFER_EOF : 0));
 
                                 coords_emitted = false;
                         }
@@ -261,6 +292,40 @@ vc4_setup_rcl(struct vc4_context *vc4)
                 ztex->writes++;
 }
 
+static void
+vc4_draw_reset(struct vc4_context *vc4)
+{
+        struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
+        for (int i = 0; i < (vc4->bo_handles.next -
+                             vc4->bo_handles.base) / 4; i++) {
+                vc4_bo_unreference(&referenced_bos[i]);
+        }
+        vc4_reset_cl(&vc4->bcl);
+        vc4_reset_cl(&vc4->rcl);
+        vc4_reset_cl(&vc4->shader_rec);
+        vc4_reset_cl(&vc4->uniforms);
+        vc4_reset_cl(&vc4->bo_handles);
+        vc4_reset_cl(&vc4->bo_pointers);
+        vc4->shader_rec_count = 0;
+
+        vc4->needs_flush = false;
+        vc4->draw_call_queued = false;
+
+        /* We have no hardware context saved between our draw calls, so we
+         * need to flag the next draw as needing all state emitted.  Emitting
+         * all state at the start of our draws is also what ensures that we
+         * return to the state we need after a previous tile has finished.
+         */
+        vc4->dirty = ~0;
+        vc4->resolve = 0;
+        vc4->cleared = 0;
+
+        vc4->draw_min_x = ~0;
+        vc4->draw_min_y = ~0;
+        vc4->draw_max_x = 0;
+        vc4->draw_max_y = 0;
+}
+
 void
 vc4_flush(struct pipe_context *pctx)
 {
@@ -269,19 +334,30 @@ vc4_flush(struct pipe_context *pctx)
         if (!vc4->needs_flush)
                 return;
 
+        /* The RCL setup would choke if the draw bounds cause no drawing, so
+         * just drop the drawing if that's the case.
+         */
+        if (vc4->draw_max_x <= vc4->draw_min_x ||
+            vc4->draw_max_y <= vc4->draw_min_y) {
+                vc4_draw_reset(vc4);
+                return;
+        }
+
+        /* Increment the semaphore indicating that binning is done and
+         * unblocking the render thread.  Note that this doesn't act until the
+         * FLUSH completes.
+         */
+        cl_u8(&vc4->bcl, VC4_PACKET_INCREMENT_SEMAPHORE);
         /* The FLUSH caps all of our bin lists with a VC4_PACKET_RETURN. */
         cl_u8(&vc4->bcl, VC4_PACKET_FLUSH);
-
-        cl_u8(&vc4->bcl, VC4_PACKET_NOP);
-        cl_u8(&vc4->bcl, VC4_PACKET_HALT);
 
         vc4_setup_rcl(vc4);
 
         if (vc4_debug & VC4_DEBUG_CL) {
                 fprintf(stderr, "BCL:\n");
-                vc4_dump_cl(vc4->bcl.base, vc4->bcl.end - vc4->bcl.base, false);
+                vc4_dump_cl(vc4->bcl.base, vc4->bcl.next - vc4->bcl.base, false);
                 fprintf(stderr, "RCL:\n");
-                vc4_dump_cl(vc4->rcl.base, vc4->rcl.end - vc4->rcl.base, true);
+                vc4_dump_cl(vc4->rcl.base, vc4->rcl.next - vc4->rcl.base, true);
         }
 
         struct drm_vc4_submit_cl submit;
@@ -314,35 +390,32 @@ vc4_flush(struct pipe_context *pctx)
                 }
         }
 
-        vc4_reset_cl(&vc4->bcl);
-        vc4_reset_cl(&vc4->rcl);
-        vc4_reset_cl(&vc4->shader_rec);
-        vc4_reset_cl(&vc4->uniforms);
-        vc4_reset_cl(&vc4->bo_handles);
-        struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
-        for (int i = 0; i < submit.bo_handle_count; i++)
-                vc4_bo_unreference(&referenced_bos[i]);
-        vc4_reset_cl(&vc4->bo_pointers);
-        vc4->shader_rec_count = 0;
+        vc4->last_emit_seqno = submit.seqno;
 
-        vc4->needs_flush = false;
-        vc4->draw_call_queued = false;
+        if (vc4_debug & VC4_DEBUG_ALWAYS_SYNC) {
+                if (!vc4_wait_seqno(vc4->screen, vc4->last_emit_seqno,
+                                    PIPE_TIMEOUT_INFINITE)) {
+                        fprintf(stderr, "Wait failed.\n");
+                        abort();
+                }
+        }
 
-        /* We have no hardware context saved between our draw calls, so we
-         * need to flag the next draw as needing all state emitted.  Emitting
-         * all state at the start of our draws is also what ensures that we
-         * return to the state we need after a previous tile has finished.
-         */
-        vc4->dirty = ~0;
-        vc4->resolve = 0;
-        vc4->cleared = 0;
+        vc4_draw_reset(vc4);
 }
 
 static void
 vc4_pipe_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
                unsigned flags)
 {
+        struct vc4_context *vc4 = vc4_context(pctx);
+
         vc4_flush(pctx);
+
+        if (fence) {
+                struct vc4_fence *f = vc4_fence_create(vc4->screen,
+                                                       vc4->last_emit_seqno);
+                *fence = (struct pipe_fence_handle *)f;
+        }
 }
 
 /**
@@ -393,6 +466,16 @@ vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo)
 }
 
 static void
+vc4_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
+{
+        struct vc4_context *vc4 = vc4_context(pctx);
+        struct pipe_surface *zsurf = vc4->framebuffer.zsbuf;
+
+        if (zsurf && zsurf->texture == prsc)
+                vc4->resolve &= ~(PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL);
+}
+
+static void
 vc4_context_destroy(struct pipe_context *pctx)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
@@ -404,6 +487,13 @@ vc4_context_destroy(struct pipe_context *pctx)
                 util_primconvert_destroy(vc4->primconvert);
 
         util_slab_destroy(&vc4->transfer_pool);
+
+        pipe_surface_reference(&vc4->framebuffer.cbufs[0], NULL);
+        pipe_surface_reference(&vc4->framebuffer.zsbuf, NULL);
+        vc4_bo_unreference(&vc4->tile_alloc);
+        vc4_bo_unreference(&vc4->tile_state);
+
+        vc4_program_fini(pctx);
 
         ralloc_free(vc4);
 }
@@ -429,6 +519,7 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv)
         pctx->priv = priv;
         pctx->destroy = vc4_context_destroy;
         pctx->flush = vc4_pipe_flush;
+        pctx->invalidate_resource = vc4_invalidate_resource;
 
         vc4_draw_init(pctx);
         vc4_state_init(pctx);
@@ -439,9 +530,11 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv)
         vc4_init_cl(vc4, &vc4->bcl);
         vc4_init_cl(vc4, &vc4->rcl);
         vc4_init_cl(vc4, &vc4->shader_rec);
+        vc4_init_cl(vc4, &vc4->uniforms);
         vc4_init_cl(vc4, &vc4->bo_handles);
+        vc4_init_cl(vc4, &vc4->bo_pointers);
+        vc4_draw_reset(vc4);
 
-        vc4->dirty = ~0;
         vc4->fd = screen->fd;
 
         util_slab_create(&vc4->transfer_pool, sizeof(struct vc4_transfer),

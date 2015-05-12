@@ -767,9 +767,6 @@ extern char *__glXQueryServerString(Display * dpy, int opcode,
 extern char *__glXGetString(Display * dpy, int opcode,
                             CARD32 screen, CARD32 name);
 
-extern char *__glXstrdup(const char *str);
-
-
 extern const char __glXGLClientVersion[];
 extern const char __glXGLClientExtensions[];
 

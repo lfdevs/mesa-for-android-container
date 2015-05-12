@@ -67,11 +67,11 @@ struct _egl_screen
 };
 
 
-PUBLIC void
+extern void
 _eglInitScreen(_EGLScreen *screen, _EGLDisplay *dpy, EGLint num_modes);
 
 
-PUBLIC EGLScreenMESA
+extern EGLScreenMESA
 _eglLinkScreen(_EGLScreen *screen);
 
 

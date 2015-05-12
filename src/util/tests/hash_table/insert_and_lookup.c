@@ -36,19 +36,18 @@ main(int argc, char **argv)
    struct hash_table *ht;
    const char *str1 = "test1";
    const char *str2 = "test2";
-   uint32_t hash_str1 = _mesa_hash_string(str1);
-   uint32_t hash_str2 = _mesa_hash_string(str2);
    struct hash_entry *entry;
 
-   ht = _mesa_hash_table_create(NULL, _mesa_key_string_equal);
+   ht = _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                _mesa_key_string_equal);
 
-   _mesa_hash_table_insert(ht, hash_str1, str1, NULL);
-   _mesa_hash_table_insert(ht, hash_str2, str2, NULL);
+   _mesa_hash_table_insert(ht, str1, NULL);
+   _mesa_hash_table_insert(ht, str2, NULL);
 
-   entry = _mesa_hash_table_search(ht, hash_str1, str1);
+   entry = _mesa_hash_table_search(ht, str1);
    assert(strcmp(entry->key, str1) == 0);
 
-   entry = _mesa_hash_table_search(ht, hash_str2, str2);
+   entry = _mesa_hash_table_search(ht, str2);
    assert(strcmp(entry->key, str2) == 0);
 
    _mesa_hash_table_destroy(ht, NULL);

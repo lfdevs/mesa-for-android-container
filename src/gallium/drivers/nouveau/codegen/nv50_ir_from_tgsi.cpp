@@ -492,9 +492,6 @@ nv50_ir::CondCode Instruction::getSetCond() const
       return CC_NEU;
    case TGSI_OPCODE_USNE:
       return CC_NE;
-   case TGSI_OPCODE_SFL:
-      return CC_NEVER;
-   case TGSI_OPCODE_STR:
    default:
       return CC_ALWAYS;
    }
@@ -537,17 +534,14 @@ static nv50_ir::operation translateOpcode(uint opcode)
    NV50_IR_OPCODE_CASE(KILL, DISCARD);
 
    NV50_IR_OPCODE_CASE(SEQ, SET);
-   NV50_IR_OPCODE_CASE(SFL, SET);
    NV50_IR_OPCODE_CASE(SGT, SET);
    NV50_IR_OPCODE_CASE(SIN, SIN);
    NV50_IR_OPCODE_CASE(SLE, SET);
    NV50_IR_OPCODE_CASE(SNE, SET);
-   NV50_IR_OPCODE_CASE(STR, SET);
    NV50_IR_OPCODE_CASE(TEX, TEX);
    NV50_IR_OPCODE_CASE(TXD, TXD);
    NV50_IR_OPCODE_CASE(TXP, TEX);
 
-   NV50_IR_OPCODE_CASE(BRA, BRA);
    NV50_IR_OPCODE_CASE(CAL, CALL);
    NV50_IR_OPCODE_CASE(RET, RET);
    NV50_IR_OPCODE_CASE(CMP, SLCT);
@@ -2536,11 +2530,9 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_SLT:
    case TGSI_OPCODE_SGE:
    case TGSI_OPCODE_SEQ:
-   case TGSI_OPCODE_SFL:
    case TGSI_OPCODE_SGT:
    case TGSI_OPCODE_SLE:
    case TGSI_OPCODE_SNE:
-   case TGSI_OPCODE_STR:
    case TGSI_OPCODE_FSEQ:
    case TGSI_OPCODE_FSGE:
    case TGSI_OPCODE_FSLT:

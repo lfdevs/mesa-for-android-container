@@ -302,7 +302,7 @@ FlowInstruction *Instruction::asFlow()
 
 const FlowInstruction *Instruction::asFlow() const
 {
-   if (op >= OP_BRA && op <= OP_JOINAT)
+   if (op >= OP_BRA && op <= OP_JOIN)
       return static_cast<const FlowInstruction *>(this);
    return NULL;
 }

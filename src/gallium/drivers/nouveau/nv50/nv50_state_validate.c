@@ -8,7 +8,7 @@ nv50_fb_set_null_rt(struct nouveau_pushbuf *push, unsigned i)
    BEGIN_NV04(push, NV50_3D(RT_ADDRESS_HIGH(i)), 4);
    PUSH_DATA (push, 0);
    PUSH_DATA (push, 0);
-   PUSH_DATA (push, NV50_SURFACE_FORMAT_NONE);
+   PUSH_DATA (push, 0);
    PUSH_DATA (push, 0);
    BEGIN_NV04(push, NV50_3D(RT_HORIZ(i)), 2);
    PUSH_DATA (push, 64);

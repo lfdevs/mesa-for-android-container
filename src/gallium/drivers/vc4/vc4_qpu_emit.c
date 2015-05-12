@@ -26,6 +26,7 @@
 #include "vc4_context.h"
 #include "vc4_qir.h"
 #include "vc4_qpu.h"
+#include "util/ralloc.h"
 
 static void
 vc4_dump_program(struct vc4_compile *c)
@@ -41,15 +42,10 @@ vc4_dump_program(struct vc4_compile *c)
         }
 }
 
-struct queued_qpu_inst {
-        struct simple_node link;
-        uint64_t inst;
-};
-
 static void
 queue(struct vc4_compile *c, uint64_t inst)
 {
-        struct queued_qpu_inst *q = calloc(1, sizeof(*q));
+        struct queued_qpu_inst *q = rzalloc(c, struct queued_qpu_inst);
         q->inst = inst;
         insert_at_tail(&c->qpu_inst_list, &q->link);
 }
@@ -78,11 +74,15 @@ swap_file(struct qpu_reg *src)
         switch (src->addr) {
         case QPU_R_UNIF:
         case QPU_R_VARY:
-                if (src->mux == QPU_MUX_A)
-                        src->mux = QPU_MUX_B;
-                else
-                        src->mux = QPU_MUX_A;
-                return true;
+                if (src->mux == QPU_MUX_SMALL_IMM) {
+                        return false;
+                } else {
+                        if (src->mux == QPU_MUX_A)
+                                src->mux = QPU_MUX_B;
+                        else
+                                src->mux = QPU_MUX_A;
+                        return true;
+                }
 
         default:
                 return false;
@@ -96,142 +96,32 @@ swap_file(struct qpu_reg *src)
  * address.
  *
  * In that case, we need to move one to a temporary that can be used in the
- * instruction, instead.
+ * instruction, instead.  We reserve ra31/rb31 for this purpose.
  */
 static void
 fixup_raddr_conflict(struct vc4_compile *c,
+                     struct qpu_reg dst,
                      struct qpu_reg *src0, struct qpu_reg *src1)
 {
-        if ((src0->mux != QPU_MUX_A && src0->mux != QPU_MUX_B) ||
-            src0->mux != src1->mux ||
-            src0->addr == src1->addr) {
+        uint32_t mux0 = src0->mux == QPU_MUX_SMALL_IMM ? QPU_MUX_B : src0->mux;
+        uint32_t mux1 = src1->mux == QPU_MUX_SMALL_IMM ? QPU_MUX_B : src1->mux;
+
+        if (mux0 <= QPU_MUX_R5 ||
+            mux0 != mux1 ||
+            (src0->addr == src1->addr &&
+             src0->mux == src1->mux)) {
                 return;
         }
 
         if (swap_file(src0) || swap_file(src1))
                 return;
 
-        queue(c, qpu_a_MOV(qpu_r3(), *src1));
-        *src1 = qpu_r3();
-}
-
-static void
-serialize_one_inst(struct vc4_compile *c, uint64_t inst)
-{
-        if (c->qpu_inst_count >= c->qpu_inst_size) {
-                c->qpu_inst_size = MAX2(16, c->qpu_inst_size * 2);
-                c->qpu_insts = realloc(c->qpu_insts,
-                                       c->qpu_inst_size * sizeof(uint64_t));
-        }
-        c->qpu_insts[c->qpu_inst_count++] = inst;
-}
-
-static void
-serialize_insts(struct vc4_compile *c)
-{
-        int last_sfu_write = -10;
-        bool scoreboard_wait_emitted = false;
-
-        while (!is_empty_list(&c->qpu_inst_list)) {
-                struct queued_qpu_inst *q =
-                        (struct queued_qpu_inst *)first_elem(&c->qpu_inst_list);
-                uint32_t last_waddr_a = QPU_W_NOP, last_waddr_b = QPU_W_NOP;
-                uint32_t raddr_a = QPU_GET_FIELD(q->inst, QPU_RADDR_A);
-                uint32_t raddr_b = QPU_GET_FIELD(q->inst, QPU_RADDR_B);
-
-                if (c->qpu_inst_count > 0) {
-                        uint64_t last_inst = c->qpu_insts[c->qpu_inst_count -
-                                                          1];
-                        uint32_t last_waddr_add = QPU_GET_FIELD(last_inst,
-                                                                QPU_WADDR_ADD);
-                        uint32_t last_waddr_mul = QPU_GET_FIELD(last_inst,
-                                                                QPU_WADDR_MUL);
-
-                        if (last_inst & QPU_WS) {
-                                last_waddr_a = last_waddr_mul;
-                                last_waddr_b = last_waddr_add;
-                        } else {
-                                last_waddr_a = last_waddr_add;
-                                last_waddr_b = last_waddr_mul;
-                        }
-                }
-
-                uint32_t src_muxes[] = {
-                        QPU_GET_FIELD(q->inst, QPU_ADD_A),
-                        QPU_GET_FIELD(q->inst, QPU_ADD_B),
-                        QPU_GET_FIELD(q->inst, QPU_MUL_A),
-                        QPU_GET_FIELD(q->inst, QPU_MUL_B),
-                };
-
-                /* "An instruction must not read from a location in physical
-                 *  regfile A or B that was written to by the previous
-                 *  instruction."
-                 */
-                bool needs_raddr_vs_waddr_nop = false;
-                bool reads_r4 = false;
-                for (int i = 0; i < ARRAY_SIZE(src_muxes); i++) {
-                        if ((raddr_a < 32 &&
-                             src_muxes[i] == QPU_MUX_A &&
-                             last_waddr_a == raddr_a) ||
-                            (raddr_b < 32 &&
-                             src_muxes[i] == QPU_MUX_B &&
-                             last_waddr_b == raddr_b)) {
-                                needs_raddr_vs_waddr_nop = true;
-                        }
-                        if (src_muxes[i] == QPU_MUX_R4)
-                                reads_r4 = true;
-                }
-
-                if (needs_raddr_vs_waddr_nop) {
-                        serialize_one_inst(c, qpu_NOP());
-                }
-
-                /* "After an SFU lookup instruction, accumulator r4 must not
-                 *  be read in the following two instructions. Any other
-                 *  instruction that results in r4 being written (that is, TMU
-                 *  read, TLB read, SFU lookup) cannot occur in the two
-                 *  instructions following an SFU lookup."
-                 */
-                if (reads_r4) {
-                        while (c->qpu_inst_count - last_sfu_write < 3) {
-                                serialize_one_inst(c, qpu_NOP());
-                        }
-                }
-
-                uint32_t waddr_a = QPU_GET_FIELD(q->inst, QPU_WADDR_ADD);
-                uint32_t waddr_m = QPU_GET_FIELD(q->inst, QPU_WADDR_MUL);
-                if ((waddr_a >= QPU_W_SFU_RECIP && waddr_a <= QPU_W_SFU_LOG) ||
-                    (waddr_m >= QPU_W_SFU_RECIP && waddr_m <= QPU_W_SFU_LOG)) {
-                        last_sfu_write = c->qpu_inst_count;
-                }
-
-                /* "A scoreboard wait must not occur in the first two
-                 *  instructions of a fragment shader. This is either the
-                 *  explicit Wait for Scoreboard signal or an implicit wait
-                 *  with the first tile-buffer read or write instruction."
-                 */
-                if (!scoreboard_wait_emitted &&
-                    (waddr_a == QPU_W_TLB_Z || waddr_m == QPU_W_TLB_Z ||
-                     waddr_a == QPU_W_TLB_COLOR_MS ||
-                     waddr_m == QPU_W_TLB_COLOR_MS ||
-                     waddr_a == QPU_W_TLB_COLOR_ALL ||
-                     waddr_m == QPU_W_TLB_COLOR_ALL ||
-                     QPU_GET_FIELD(q->inst, QPU_SIG) == QPU_SIG_COLOR_LOAD)) {
-                        while (c->qpu_inst_count < 3 ||
-                               QPU_GET_FIELD(c->qpu_insts[c->qpu_inst_count - 1],
-                                             QPU_SIG) != QPU_SIG_NONE) {
-                                serialize_one_inst(c, qpu_NOP());
-                        }
-                        c->qpu_insts[c->qpu_inst_count - 1] =
-                                qpu_set_sig(c->qpu_insts[c->qpu_inst_count - 1],
-                                            QPU_SIG_WAIT_FOR_SCOREBOARD);
-                        scoreboard_wait_emitted = true;
-                }
-
-                serialize_one_inst(c, q->inst);
-
-                remove_from_list(&q->link);
-                free(q);
+        if (mux0 == QPU_MUX_A) {
+                queue(c, qpu_a_MOV(qpu_rb(31), *src1));
+                *src1 = qpu_rb(31);
+        } else {
+                queue(c, qpu_a_MOV(qpu_ra(31), *src1));
+                *src1 = qpu_ra(31);
         }
 }
 
@@ -243,6 +133,16 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
         uint32_t inputs_remaining = c->num_inputs;
         uint32_t vpm_read_fifo_count = 0;
         uint32_t vpm_read_offset = 0;
+        int last_vpm_read_index = -1;
+        /* Map from the QIR ops enum order to QPU unpack bits. */
+        static const uint32_t unpack_map[] = {
+                QPU_UNPACK_8A,
+                QPU_UNPACK_8B,
+                QPU_UNPACK_8C,
+                QPU_UNPACK_8D,
+                QPU_UNPACK_16A_TO_F32,
+                QPU_UNPACK_16B_TO_F32,
+        };
 
         make_empty_list(&c->qpu_inst_list);
 
@@ -326,6 +226,20 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         case QFILE_VARY:
                                 src[i] = qpu_vary();
                                 break;
+                        case QFILE_SMALL_IMM:
+                                src[i].mux = QPU_MUX_SMALL_IMM;
+                                src[i].addr = qpu_encode_small_immediate(qinst->src[i].index);
+                                /* This should only have returned a valid
+                                 * small immediate field, not ~0 for failure.
+                                 */
+                                assert(src[i].addr <= 47);
+                                break;
+                        case QFILE_VPM:
+                                assert((int)qinst->src[i].index >=
+                                       last_vpm_read_index);
+                                last_vpm_read_index = qinst->src[i].index;
+                                src[i] = qpu_ra(QPU_R_VPM);
+                                break;
                         }
                 }
 
@@ -337,8 +251,12 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                 case QFILE_TEMP:
                         dst = temp_registers[qinst->dst.index];
                         break;
+                case QFILE_VPM:
+                        dst = qpu_ra(QPU_W_VPM);
+                        break;
                 case QFILE_VARY:
                 case QFILE_UNIF:
+                case QFILE_SMALL_IMM:
                         assert(!"not reached");
                         break;
                 }
@@ -384,14 +302,6 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
 
                         break;
 
-                case QOP_VPM_WRITE:
-                        queue(c, qpu_a_MOV(qpu_ra(QPU_W_VPM), src[0]));
-                        break;
-
-                case QOP_VPM_READ:
-                        queue(c, qpu_a_MOV(dst, qpu_ra(QPU_R_VPM)));
-                        break;
-
                 case QOP_RCP:
                 case QOP_RSQ:
                 case QOP_EXP2:
@@ -421,16 +331,39 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
 
                         break;
 
-                case QOP_PACK_COLORS:
-                        for (int i = 0; i < 4; i++) {
-                                queue(c, qpu_m_MOV(qpu_r3(), src[i]));
-                                *last_inst(c) |= QPU_PM;
-                                *last_inst(c) |= QPU_SET_FIELD(QPU_PACK_MUL_8A + i,
-                                                               QPU_PACK);
+                case QOP_PACK_8888_F:
+                        queue(c, qpu_m_MOV(dst, src[0]));
+                        *last_inst(c) |= QPU_PM;
+                        *last_inst(c) |= QPU_SET_FIELD(QPU_PACK_MUL_8888,
+                                                       QPU_PACK);
+                        break;
+
+                case QOP_PACK_8A_F:
+                case QOP_PACK_8B_F:
+                case QOP_PACK_8C_F:
+                case QOP_PACK_8D_F:
+                        /* If dst doesn't happen to already contain src[0],
+                         * then we have to move it in.
+                         */
+                        if (qinst->src[0].file != QFILE_NULL &&
+                            (src[0].mux != dst.mux || src[0].addr != dst.addr)) {
+                                /* Don't overwrite src1 while setting up
+                                 * the dst!
+                                 */
+                                if (dst.mux == src[1].mux &&
+                                    dst.addr == src[1].addr) {
+                                        queue(c, qpu_m_MOV(qpu_rb(31), src[1]));
+                                        src[1] = qpu_rb(31);
+                                }
+
+                                queue(c, qpu_m_MOV(dst, src[0]));
                         }
 
-                        queue(c, qpu_a_MOV(dst, qpu_r3()));
-
+                        queue(c, qpu_m_MOV(dst, src[1]));
+                        *last_inst(c) |= QPU_PM;
+                        *last_inst(c) |= QPU_SET_FIELD(QPU_PACK_MUL_8A +
+                                                       qinst->op - QOP_PACK_8A_F,
+                                                       QPU_PACK);
                         break;
 
                 case QOP_FRAG_X:
@@ -518,7 +451,7 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         break;
 
                 case QOP_TEX_DIRECT:
-                        fixup_raddr_conflict(c, &src[0], &src[1]);
+                        fixup_raddr_conflict(c, dst, &src[0], &src[1]);
                         queue(c, qpu_a_ADD(qpu_rb(QPU_W_TMU0_S), src[0], src[1]));
                         break;
 
@@ -543,27 +476,49 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
 
                         break;
 
-                case QOP_UNPACK_8A:
-                case QOP_UNPACK_8B:
-                case QOP_UNPACK_8C:
-                case QOP_UNPACK_8D: {
+                case QOP_UNPACK_8A_F:
+                case QOP_UNPACK_8B_F:
+                case QOP_UNPACK_8C_F:
+                case QOP_UNPACK_8D_F:
+                case QOP_UNPACK_16A_F:
+                case QOP_UNPACK_16B_F: {
                         assert(src[0].mux == QPU_MUX_A);
 
-                        /* And, since we're setting the pack bits, if the
+                        /* Since we're setting the pack bits, if the
                          * destination is in A it would get re-packed.
                          */
-                        struct qpu_reg orig_dst = dst;
-                        if (orig_dst.mux == QPU_MUX_A)
-                                dst = qpu_rn(3);
-
-                        queue(c, qpu_a_FMAX(dst, src[0], src[0]));
-                        *last_inst(c) |= QPU_SET_FIELD(QPU_UNPACK_8A +
-                                                       (qinst->op -
-                                                        QOP_UNPACK_8A),
+                        queue(c, qpu_a_FMAX((dst.mux == QPU_MUX_A ?
+                                             qpu_rb(31) : dst),
+                                            src[0], src[0]));
+                        *last_inst(c) |= QPU_SET_FIELD(unpack_map[qinst->op -
+                                                                  QOP_UNPACK_8A_F],
                                                        QPU_UNPACK);
 
-                        if (orig_dst.mux == QPU_MUX_A) {
-                                queue(c, qpu_a_MOV(orig_dst, dst));
+                        if (dst.mux == QPU_MUX_A) {
+                                queue(c, qpu_a_MOV(dst, qpu_rb(31)));
+                        }
+                }
+                        break;
+
+                case QOP_UNPACK_8A_I:
+                case QOP_UNPACK_8B_I:
+                case QOP_UNPACK_8C_I:
+                case QOP_UNPACK_8D_I:
+                case QOP_UNPACK_16A_I:
+                case QOP_UNPACK_16B_I: {
+                        assert(src[0].mux == QPU_MUX_A);
+
+                        /* Since we're setting the pack bits, if the
+                         * destination is in A it would get re-packed.
+                         */
+                        queue(c, qpu_a_MOV((dst.mux == QPU_MUX_A ?
+                                            qpu_rb(31) : dst), src[0]));
+                        *last_inst(c) |= QPU_SET_FIELD(unpack_map[qinst->op -
+                                                                  QOP_UNPACK_8A_I],
+                                                       QPU_UNPACK);
+
+                        if (dst.mux == QPU_MUX_A) {
+                                queue(c, qpu_a_MOV(dst, qpu_rb(31)));
                         }
                 }
                         break;
@@ -579,7 +534,7 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         if (qir_get_op_nsrc(qinst->op) == 1)
                                 src[1] = src[0];
 
-                        fixup_raddr_conflict(c, &src[0], &src[1]);
+                        fixup_raddr_conflict(c, dst, &src[0], &src[1]);
 
                         if (translate[qinst->op].is_mul) {
                                 queue(c, qpu_m_alu2(translate[qinst->op].op,
@@ -590,18 +545,23 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                                                     dst,
                                                     src[0], src[1]));
                         }
+
                         break;
                 }
         }
 
-        serialize_insts(c);
+        qpu_schedule_instructions(c);
 
-        /* thread end can't have VPM write */
+        /* thread end can't have VPM write or read */
         if (QPU_GET_FIELD(c->qpu_insts[c->qpu_inst_count - 1],
                           QPU_WADDR_ADD) == QPU_W_VPM ||
             QPU_GET_FIELD(c->qpu_insts[c->qpu_inst_count - 1],
-                          QPU_WADDR_MUL) == QPU_W_VPM) {
-                serialize_one_inst(c, qpu_NOP());
+                          QPU_WADDR_MUL) == QPU_W_VPM ||
+            QPU_GET_FIELD(c->qpu_insts[c->qpu_inst_count - 1],
+                          QPU_RADDR_A) == QPU_R_VPM ||
+            QPU_GET_FIELD(c->qpu_insts[c->qpu_inst_count - 1],
+                          QPU_RADDR_B) == QPU_R_VPM) {
+                qpu_serialize_one_inst(c, qpu_NOP());
         }
 
         /* thread end can't have uniform read */
@@ -609,14 +569,18 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                           QPU_RADDR_A) == QPU_R_UNIF ||
             QPU_GET_FIELD(c->qpu_insts[c->qpu_inst_count - 1],
                           QPU_RADDR_B) == QPU_R_UNIF) {
-                serialize_one_inst(c, qpu_NOP());
+                qpu_serialize_one_inst(c, qpu_NOP());
         }
+
+        /* thread end can't have TLB operations */
+        if (qpu_inst_is_tlb(c->qpu_insts[c->qpu_inst_count - 1]))
+                qpu_serialize_one_inst(c, qpu_NOP());
 
         c->qpu_insts[c->qpu_inst_count - 1] =
                 qpu_set_sig(c->qpu_insts[c->qpu_inst_count - 1],
                             QPU_SIG_PROG_END);
-        serialize_one_inst(c, qpu_NOP());
-        serialize_one_inst(c, qpu_NOP());
+        qpu_serialize_one_inst(c, qpu_NOP());
+        qpu_serialize_one_inst(c, qpu_NOP());
 
         switch (c->stage) {
         case QSTAGE_VERT:

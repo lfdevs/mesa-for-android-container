@@ -53,7 +53,7 @@ nvc0_colormask(unsigned mask)
 }
 
 #define NVC0_BLEND_FACTOR_CASE(a, b) \
-   case PIPE_BLENDFACTOR_##a: return NV50_3D_BLEND_FACTOR_##b
+   case PIPE_BLENDFACTOR_##a: return NV50_BLEND_FACTOR_##b
 
 static INLINE uint32_t
 nvc0_blend_fac(unsigned factor)
@@ -79,7 +79,7 @@ nvc0_blend_fac(unsigned factor)
    NVC0_BLEND_FACTOR_CASE(INV_SRC1_COLOR, ONE_MINUS_SRC1_COLOR);
    NVC0_BLEND_FACTOR_CASE(INV_SRC1_ALPHA, ONE_MINUS_SRC1_ALPHA);
    default:
-      return NV50_3D_BLEND_FACTOR_ZERO;
+      return NV50_BLEND_FACTOR_ZERO;
    }
 }
 
@@ -248,7 +248,7 @@ nvc0_rasterizer_state_create(struct pipe_context *pipe,
 
     }
 
-    SB_IMMED_3D(so, VP_POINT_SIZE_EN, cso->point_size_per_vertex);
+    SB_IMMED_3D(so, VP_POINT_SIZE, cso->point_size_per_vertex);
     if (!cso->point_size_per_vertex) {
        SB_BEGIN_3D(so, POINT_SIZE, 1);
        SB_DATA    (so, fui(cso->point_size));
@@ -1089,9 +1089,11 @@ nvc0_set_transform_feedback_targets(struct pipe_context *pipe,
       pipe_so_target_reference(&nvc0->tfbbuf[i], targets[i]);
    }
    for (; i < nvc0->num_tfbbufs; ++i) {
-      nvc0->tfbbuf_dirty |= 1 << i;
-      nvc0_so_target_save_offset(pipe, nvc0->tfbbuf[i], i, &serialize);
-      pipe_so_target_reference(&nvc0->tfbbuf[i], NULL);
+      if (nvc0->tfbbuf[i]) {
+         nvc0->tfbbuf_dirty |= 1 << i;
+         nvc0_so_target_save_offset(pipe, nvc0->tfbbuf[i], i, &serialize);
+         pipe_so_target_reference(&nvc0->tfbbuf[i], NULL);
+      }
    }
    nvc0->num_tfbbufs = num_targets;
 

@@ -64,7 +64,7 @@ create_fs_variant(struct softpipe_context *softpipe,
          /* get new shader that implements polygon stippling */
          var->tokens = 
             util_pstipple_create_fragment_shader(curfs->tokens,
-                                                 &var->stipple_sampler_unit);
+                                                 &var->stipple_sampler_unit, 0);
       }
       else
 #endif

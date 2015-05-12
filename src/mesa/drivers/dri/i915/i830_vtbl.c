@@ -134,27 +134,28 @@ i830_render_start(struct intel_context *intel)
             GLuint mcs = (i830->state.Tex[i][I830_TEXREG_MCS] &
                           ~TEXCOORDTYPE_MASK);
 
-            switch (sz) {
-            case 1:
-            case 2:
-               emit = EMIT_2F;
-               sz = 2;
-               mcs |= TEXCOORDTYPE_CARTESIAN;
-               break;
-            case 3:
+            if (intel->ctx.Texture.Unit[i]._Current->Target == GL_TEXTURE_CUBE_MAP) {
                emit = EMIT_3F;
                sz = 3;
                mcs |= TEXCOORDTYPE_VECTOR;
-               break;
-            case 4:
-               emit = EMIT_3F_XYW;
-               sz = 3;
-               mcs |= TEXCOORDTYPE_HOMOGENEOUS;
-               break;
-            default:
-               continue;
-            };
-
+            } else {
+               switch (sz) {
+               case 1:
+               case 2:
+               case 3:
+                  emit = EMIT_2F;
+                  sz = 2;
+                  mcs |= TEXCOORDTYPE_CARTESIAN;
+                  break;
+               case 4:
+                  emit = EMIT_3F_XYW;
+                  sz = 3;
+                  mcs |= TEXCOORDTYPE_HOMOGENEOUS;
+                  break;
+               default:
+                  continue;
+               }
+            }
 
             EMIT_ATTR(_TNL_ATTRIB_TEX0 + i, emit, 0);
             v2 |= VRTX_TEX_SET_FMT(count, SZ_TO_HW(sz));

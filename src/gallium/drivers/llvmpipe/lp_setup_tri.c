@@ -760,8 +760,8 @@ lp_setup_bin_triangle( struct lp_setup_context *setup,
             for (i = 0; i < nr_planes; i++) {
                int64_t planeout = cx[i] + eo[i];
                int64_t planepartial = cx[i] + ei[i] - 1;
-               out |= (planeout >> 63);
-               partial |= (planepartial >> 63) & (1<<i);
+               out |= (int) (planeout >> 63);
+               partial |= ((int) (planepartial >> 63)) & (1<<i);
             }
 
             if (out) {

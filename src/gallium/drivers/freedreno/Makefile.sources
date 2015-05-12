@@ -72,6 +72,8 @@ a3xx_SOURCES := \
 	a3xx/fd3_draw.h \
 	a3xx/fd3_emit.c \
 	a3xx/fd3_emit.h \
+	a3xx/fd3_format.c \
+	a3xx/fd3_format.h \
 	a3xx/fd3_gmem.c \
 	a3xx/fd3_gmem.h \
 	a3xx/fd3_program.c \
@@ -84,10 +86,35 @@ a3xx_SOURCES := \
 	a3xx/fd3_screen.h \
 	a3xx/fd3_texture.c \
 	a3xx/fd3_texture.h \
-	a3xx/fd3_util.c \
-	a3xx/fd3_util.h \
 	a3xx/fd3_zsa.c \
 	a3xx/fd3_zsa.h
+
+a4xx_SOURCES := \
+	a4xx/a4xx.xml.h \
+	a4xx/fd4_blend.c \
+	a4xx/fd4_blend.h \
+	a4xx/fd4_context.c \
+	a4xx/fd4_context.h \
+	a4xx/fd4_draw.c \
+	a4xx/fd4_draw.h \
+	a4xx/fd4_emit.c \
+	a4xx/fd4_emit.h \
+	a4xx/fd4_format.c \
+	a4xx/fd4_format.h \
+	a4xx/fd4_gmem.c \
+	a4xx/fd4_gmem.h \
+	a4xx/fd4_program.c \
+	a4xx/fd4_program.h \
+	a4xx/fd4_query.c \
+	a4xx/fd4_query.h \
+	a4xx/fd4_rasterizer.c \
+	a4xx/fd4_rasterizer.h \
+	a4xx/fd4_screen.c \
+	a4xx/fd4_screen.h \
+	a4xx/fd4_texture.c \
+	a4xx/fd4_texture.h \
+	a4xx/fd4_zsa.c \
+	a4xx/fd4_zsa.h
 
 ir3_SOURCES := \
 	ir3/disasm-a3xx.c \
@@ -100,9 +127,10 @@ ir3_SOURCES := \
 	ir3/ir3_depth.c \
 	ir3/ir3_dump.c \
 	ir3/ir3_flatten.c \
+	ir3/ir3_group.c \
 	ir3/ir3.h \
+	ir3/ir3_legalize.c \
 	ir3/ir3_ra.c \
 	ir3/ir3_sched.c \
 	ir3/ir3_shader.c \
-	ir3/ir3_shader.h \
-	ir3/ir3_visitor.h
+	ir3/ir3_shader.h

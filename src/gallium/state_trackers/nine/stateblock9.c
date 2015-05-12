@@ -43,8 +43,8 @@ NineStateBlock9_ctor( struct NineStateBlock9 *This,
 
     This->type = type;
 
-    This->state.vs_const_f = MALLOC(pParams->device->constbuf_vs->width0);
-    This->state.ps_const_f = MALLOC(pParams->device->constbuf_ps->width0);
+    This->state.vs_const_f = MALLOC(This->base.device->vs_const_size);
+    This->state.ps_const_f = MALLOC(This->base.device->ps_const_size);
     if (!This->state.vs_const_f || !This->state.ps_const_f)
         return E_OUTOFMEMORY;
 
@@ -60,12 +60,12 @@ NineStateBlock9_dtor( struct NineStateBlock9 *This )
 
     nine_state_clear(state, FALSE);
 
-    if (state->vs_const_f) FREE(state->vs_const_f);
-    if (state->ps_const_f) FREE(state->ps_const_f);
+    FREE(state->vs_const_f);
+    FREE(state->ps_const_f);
 
-    if (state->ff.light) FREE(state->ff.light);
+    FREE(state->ff.light);
 
-    if (state->ff.transform) FREE(state->ff.transform);
+    FREE(state->ff.transform);
 
     if (This->state.changed.ps_const_f) {
         for (r = This->state.changed.ps_const_f; r->next; r = r->next);
@@ -275,7 +275,8 @@ nine_state_copy_common(struct nine_state *dst,
             if (mask->ff.light[i].Type != NINED3DLIGHT_INVALID)
                 dst->ff.light[i] = src->ff.light[i];
 
-        DBG("TODO: active lights\n");
+        memcpy(dst->ff.active_light, src->ff.active_light, sizeof(src->ff.active_light) );
+        dst->ff.num_lights_active = src->ff.num_lights_active;
     }
     if (mask->changed.group & NINE_STATE_FF_VSTRANSF) {
         for (i = 0; i < Elements(mask->ff.changed.transform); ++i) {
@@ -415,7 +416,8 @@ nine_state_copy_common_all(struct nine_state *dst,
         memcpy(dst->ff.light,
                src->ff.light, src->ff.num_lights * sizeof(dst->ff.light[0]));
 
-        DBG("TODO: active lights\n");
+        memcpy(dst->ff.active_light, src->ff.active_light, sizeof(src->ff.active_light) );
+        dst->ff.num_lights_active = src->ff.num_lights_active;
     }
 
     /* Transforms. */

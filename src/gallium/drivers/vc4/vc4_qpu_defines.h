@@ -147,8 +147,11 @@ enum qpu_mux {
         QPU_MUX_A,
         QPU_MUX_B,
 
-        /* non-hardware mux values */
-        QPU_MUX_IMM,
+        /**
+         * Non-hardware mux value, stores a small immediate field to be
+         * programmed into raddr_b in the qpu_reg.index.
+         */
+        QPU_MUX_SMALL_IMM,
 };
 
 enum qpu_cond {
@@ -197,8 +200,8 @@ enum qpu_pack_a {
 
 enum qpu_unpack {
         QPU_UNPACK_NOP,
-        QPU_UNPACK_F16A_TO_F32,
-        QPU_UNPACK_F16B_TO_F32,
+        QPU_UNPACK_16A_TO_F32,
+        QPU_UNPACK_16B_TO_F32,
         QPU_UNPACK_8D_REP,
         QPU_UNPACK_8A,
         QPU_UNPACK_8B,
@@ -216,6 +219,9 @@ enum qpu_unpack {
          })
 
 #define QPU_GET_FIELD(word, field) ((uint32_t)(((word)  & field ## _MASK) >> field ## _SHIFT))
+
+#define QPU_UPDATE_FIELD(inst, value, field)                              \
+        (((inst) & ~(field ## _MASK)) | QPU_SET_FIELD(value, field))
 
 #define QPU_SIG_SHIFT                   60
 #define QPU_SIG_MASK                    QPU_MASK(63, 60)

@@ -15,10 +15,6 @@
 #include "bitmap_wrapper.h"
 extern "C" {
 #include "glapi/glapi.h"
-#include "main/context.h"
-#include "main/framebuffer.h"
-#include "main/renderbuffer.h"
-#include "main/viewport.h"
 #include "pipe/p_format.h"
 #include "state_tracker/st_cb_fbo.h"
 #include "state_tracker/st_cb_flush.h"
@@ -27,6 +23,7 @@ extern "C" {
 #include "state_tracker/st_manager.h"
 #include "state_tracker/sw_winsys.h"
 #include "sw/hgl/hgl_sw_winsys.h"
+#include "util/u_atomic.h"
 #include "util/u_memory.h"
 
 #include "target-helpers/inline_sw_helper.h"
@@ -42,31 +39,6 @@ extern "C" {
 #	define CALLED()
 #endif
 #define ERROR(x...) printf("GalliumContext: " x)
-
-
-static void
-hgl_viewport(struct gl_context* glContext)
-{
-	// TODO: We should try to eliminate this function
-
-	GLint x = glContext->ViewportArray[0].X;
-	GLint y = glContext->ViewportArray[0].Y;
-	GLint width = glContext->ViewportArray[0].Width;
-	GLint height = glContext->ViewportArray[0].Height;
-
-	TRACE("%s(glContext: %p, x: %d, y: %d, w: %d, h: %d\n", __func__,
-		glContext, x, y, width, height);
-
-	_mesa_check_init_viewport(glContext, width, height);
-
-	struct gl_framebuffer *draw = glContext->WinSysDrawBuffer;
-	struct gl_framebuffer *read = glContext->WinSysReadBuffer;
-
-	if (draw)
-		_mesa_resize_framebuffer(glContext, draw, width, height);
-	if (read)
-		_mesa_resize_framebuffer(glContext, read, width, height);
-}
 
 
 GalliumContext::GalliumContext(ulong options)
@@ -148,6 +120,7 @@ GalliumContext::CreateContext(Bitmap *bitmap)
 	// Set up the initial things our context needs
 	context->bitmap = bitmap;
 	context->colorSpace = get_bitmap_color_space(bitmap);
+	context->screen = fScreen;
 	context->draw = NULL;
 	context->read = NULL;
 	context->st = NULL;
@@ -159,7 +132,7 @@ GalliumContext::CreateContext(Bitmap *bitmap)
 	}
 
 	// Create state_tracker manager
-	context->manager = hgl_create_st_manager(fScreen);
+	context->manager = hgl_create_st_manager(context);
 
 	// Create state tracker visual
 	context->stVisual = hgl_create_st_visual(fOptions);
@@ -228,8 +201,6 @@ GalliumContext::CreateContext(Bitmap *bitmap)
 
 	struct st_context *stContext = (struct st_context*)context->st;
 	
-	stContext->ctx->Driver.Viewport = hgl_viewport;
-
 	// Init Gallium3D Post Processing
 	// TODO: no pp filters are enabled yet through postProcessEnable
 	context->postProcess = pp_init(stContext->pipe, context->postProcessEnable,
@@ -335,14 +306,14 @@ GalliumContext::SetCurrentContext(Bitmap *bitmap, context_id contextID)
 	api->make_current(context->api, context->st, context->draw->stfbi,
 		context->read->stfbi);
 
-	if (context->textures[ST_ATTACHMENT_BACK_LEFT]
-		&& context->textures[ST_ATTACHMENT_DEPTH_STENCIL]
-		&& context->postProcess) {
-		TRACE("Postprocessing textures...\n");
-		pp_init_fbos(context->postProcess,
-			context->textures[ST_ATTACHMENT_BACK_LEFT]->width0,
-			context->textures[ST_ATTACHMENT_BACK_LEFT]->height0);
-	}
+	//if (context->textures[ST_ATTACHMENT_BACK_LEFT]
+	//	&& context->textures[ST_ATTACHMENT_DEPTH_STENCIL]
+	//	&& context->postProcess) {
+	//	TRACE("Postprocessing textures...\n");
+	//	pp_init_fbos(context->postProcess,
+	//		context->textures[ST_ATTACHMENT_BACK_LEFT]->width0,
+	//		context->textures[ST_ATTACHMENT_BACK_LEFT]->height0);
+	//}
 
 	context->bitmap = bitmap;
 	//context->st->pipe->priv = context;
@@ -399,17 +370,38 @@ GalliumContext::SwapBuffers(context_id contextID)
 }
 
 
-void
-GalliumContext::ResizeViewport(int32 width, int32 height)
+bool
+GalliumContext::Validate(uint32 width, uint32 height)
 {
 	CALLED();
-	for (context_id i = 0; i < CONTEXT_MAX; i++) {
-		if (fContext[i] && fContext[i]->st) {
-			struct st_context *stContext = (struct st_context*)fContext[i]->st;
-			_mesa_set_viewport(stContext->ctx, 0, 0, 0, width, height);
-			st_manager_validate_framebuffers(stContext);
-		}
+
+	if (!fContext[fCurrentContext]) {
+		return false;
 	}
+
+	if (fContext[fCurrentContext]->width != width
+		|| fContext[fCurrentContext]->height != height) {
+		Invalidate(width, height);
+		return false;
+	}
+	return true;
+}
+
+
+void
+GalliumContext::Invalidate(uint32 width, uint32 height)
+{
+	CALLED();
+
+	assert(fContext[fCurrentContext]);
+
+	// Update st_context dimensions 
+	fContext[fCurrentContext]->width = width;
+	fContext[fCurrentContext]->height = height;
+
+	// Is this the best way to invalidate?
+	p_atomic_inc(&fContext[fCurrentContext]->read->stfbi->stamp);
+	p_atomic_inc(&fContext[fCurrentContext]->draw->stfbi->stamp);
 }
 
 

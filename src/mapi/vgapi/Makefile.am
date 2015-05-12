@@ -54,6 +54,7 @@ vgapi_tmp.h: $(srcdir)/vgapi.csv $(top_srcdir)/src/mapi/mapi_abi.py
 	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(top_srcdir)/src/mapi/mapi_abi.py \
 		--printer vgapi --mode lib $< > $@
 
+EXTRA_DIST = SConscript vgapi.csv
 BUILT_SOURCES = vgapi_tmp.h
 CLEANFILES = $(BUILT_SOURCES)
 

@@ -44,10 +44,8 @@
 #include "main/mtypes.h"
 #include "main/shaderobj.h"
 #include "main/uniforms.h"
-#include "program/hash_table.h"
-
-extern "C" {
 #include "main/shaderapi.h"
+#include "program/hash_table.h"
 #include "program/prog_instruction.h"
 #include "program/prog_optimize.h"
 #include "program/prog_print.h"
@@ -67,7 +65,7 @@ extern "C" {
 #include "st_program.h"
 #include "st_glsl_to_tgsi.h"
 #include "st_mesa_to_tgsi.h"
-}
+
 
 #define PROGRAM_IMMEDIATE PROGRAM_FILE_MAX
 #define PROGRAM_ANY_CONST ((1 << PROGRAM_STATE_VAR) |    \
@@ -457,7 +455,8 @@ public:
    void renumber_registers(void);
 
    void emit_block_mov(ir_assignment *ir, const struct glsl_type *type,
-                       st_dst_reg *l, st_src_reg *r);
+                       st_dst_reg *l, st_src_reg *r,
+                       st_src_reg *cond, bool cond_swap);
 
    void *mem_ctx;
 };
@@ -487,7 +486,7 @@ fail_link(struct gl_shader_program *prog, const char *fmt, ...)
 static int
 swizzle_for_size(int size)
 {
-   int size_swizzles[4] = {
+   static const int size_swizzles[4] = {
       MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_X, SWIZZLE_X, SWIZZLE_X),
       MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y, SWIZZLE_Y, SWIZZLE_Y),
       MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y, SWIZZLE_Z, SWIZZLE_Z),
@@ -2052,6 +2051,7 @@ glsl_to_tgsi_visitor::visit(ir_swizzle *ir)
    ir->val->accept(this);
    src = this->result;
    assert(src.file != PROGRAM_UNDEFINED);
+   assert(ir->type->vector_elements > 0);
 
    for (i = 0; i < 4; i++) {
       if (i < ir->type->vector_elements) {
@@ -2288,6 +2288,37 @@ glsl_to_tgsi_visitor::process_move_condition(ir_rvalue *ir)
    bool switch_order = false;
 
    ir_expression *const expr = ir->as_expression();
+
+   if (native_integers) {
+      if ((expr != NULL) && (expr->get_num_operands() == 2)) {
+         enum glsl_base_type type = expr->operands[0]->type->base_type;
+         if (type == GLSL_TYPE_INT || type == GLSL_TYPE_UINT ||
+             type == GLSL_TYPE_BOOL) {
+            if (expr->operation == ir_binop_equal) {
+               if (expr->operands[0]->is_zero()) {
+                  src_ir = expr->operands[1];
+                  switch_order = true;
+               }
+               else if (expr->operands[1]->is_zero()) {
+                  src_ir = expr->operands[0];
+                  switch_order = true;
+               }
+            }
+            else if (expr->operation == ir_binop_nequal) {
+               if (expr->operands[0]->is_zero()) {
+                  src_ir = expr->operands[1];
+               }
+               else if (expr->operands[1]->is_zero()) {
+                  src_ir = expr->operands[0];
+               }
+            }
+         }
+      }
+
+      src_ir->accept(this);
+      return switch_order;
+   }
+
    if ((expr != NULL) && (expr->get_num_operands() == 2)) {
       bool zero_on_left = false;
 
@@ -2359,18 +2390,20 @@ glsl_to_tgsi_visitor::process_move_condition(ir_rvalue *ir)
 
 void
 glsl_to_tgsi_visitor::emit_block_mov(ir_assignment *ir, const struct glsl_type *type,
-                                     st_dst_reg *l, st_src_reg *r)
+                                     st_dst_reg *l, st_src_reg *r,
+                                     st_src_reg *cond, bool cond_swap)
 {
    if (type->base_type == GLSL_TYPE_STRUCT) {
       for (unsigned int i = 0; i < type->length; i++) {
-         emit_block_mov(ir, type->fields.structure[i].type, l, r);
+         emit_block_mov(ir, type->fields.structure[i].type, l, r,
+                        cond, cond_swap);
       }
       return;
    }
 
    if (type->is_array()) {
       for (unsigned int i = 0; i < type->length; i++) {
-         emit_block_mov(ir, type->fields.array, l, r);
+         emit_block_mov(ir, type->fields.array, l, r, cond, cond_swap);
       }
       return;
    }
@@ -2379,10 +2412,10 @@ glsl_to_tgsi_visitor::emit_block_mov(ir_assignment *ir, const struct glsl_type *
       const struct glsl_type *vec_type;
 
       vec_type = glsl_type::get_instance(GLSL_TYPE_FLOAT,
-					 type->vector_elements, 1);
+                                         type->vector_elements, 1);
 
       for (int i = 0; i < type->matrix_columns; i++) {
-         emit_block_mov(ir, vec_type, l, r);
+         emit_block_mov(ir, vec_type, l, r, cond, cond_swap);
       }
       return;
    }
@@ -2390,7 +2423,22 @@ glsl_to_tgsi_visitor::emit_block_mov(ir_assignment *ir, const struct glsl_type *
    assert(type->is_scalar() || type->is_vector());
 
    r->type = type->base_type;
-   emit(ir, TGSI_OPCODE_MOV, *l, *r);
+   if (cond) {
+      st_src_reg l_src = st_src_reg(*l);
+      l_src.swizzle = swizzle_for_size(type->vector_elements);
+
+      if (native_integers) {
+         emit(ir, TGSI_OPCODE_UCMP, *l, *cond,
+              cond_swap ? l_src : *r,
+              cond_swap ? *r : l_src);
+      } else {
+         emit(ir, TGSI_OPCODE_CMP, *l, *cond,
+              cond_swap ? l_src : *r,
+              cond_swap ? *r : l_src);
+      }
+   } else {
+      emit(ir, TGSI_OPCODE_MOV, *l, *r);
+   }
    l->index++;
    r->index++;
 }
@@ -2400,7 +2448,6 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
 {
    st_dst_reg l;
    st_src_reg r;
-   int i;
 
    ir->rhs->accept(this);
    r = this->result;
@@ -2447,7 +2494,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
             swizzles[i] = first_enabled_chan;
       }
       r.swizzle = MAKE_SWIZZLE4(swizzles[0], swizzles[1],
-        			swizzles[2], swizzles[3]);
+                                swizzles[2], swizzles[3]);
    }
 
    assert(l.file != PROGRAM_UNDEFINED);
@@ -2457,32 +2504,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
       const bool switch_order = this->process_move_condition(ir->condition);
       st_src_reg condition = this->result;
 
-      for (i = 0; i < type_size(ir->lhs->type); i++) {
-         st_src_reg l_src = st_src_reg(l);
-         st_src_reg condition_temp = condition;
-         l_src.swizzle = swizzle_for_size(ir->lhs->type->vector_elements);
-         
-         if (native_integers) {
-            /* This is necessary because TGSI's CMP instruction expects the
-             * condition to be a float, and we store booleans as integers.
-             * TODO: really want to avoid i2f path and use UCMP. Requires
-             * changes to process_move_condition though too.
-             */
-            condition_temp = get_temp(glsl_type::vec4_type);
-            condition.negate = 0;
-            emit(ir, TGSI_OPCODE_I2F, st_dst_reg(condition_temp), condition);
-            condition_temp.swizzle = condition.swizzle;
-         }
-         
-         if (switch_order) {
-            emit(ir, TGSI_OPCODE_CMP, l, condition_temp, l_src, r);
-         } else {
-            emit(ir, TGSI_OPCODE_CMP, l, condition_temp, r, l_src);
-         }
-
-         l.index++;
-         r.index++;
-      }
+      emit_block_mov(ir, ir->lhs->type, &l, &r, &condition, switch_order);
    } else if (ir->rhs->as_expression() &&
               this->instructions.get_tail() &&
               ir->rhs == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->ir &&
@@ -2499,7 +2521,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
       new_inst->saturate = inst->saturate;
       inst->dead_mask = inst->dst.writemask;
    } else {
-      emit_block_mov(ir, ir->rhs->type, &l, &r);
+      emit_block_mov(ir, ir->rhs->type, &l, &r, NULL, false);
    }
 }
 
@@ -2838,7 +2860,7 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
       break;
    case ir_query_levels:
       opcode = TGSI_OPCODE_TXQ;
-      lod_info = st_src_reg(PROGRAM_IMMEDIATE, 0, GLSL_TYPE_INT);
+      lod_info = undef_src;
       levels_src = get_temp(ir->type);
       break;
    case ir_txf:
@@ -3646,6 +3668,7 @@ glsl_to_tgsi_visitor::copy_propagate(void)
              inst->dst.index == inst->src[0].index) &&
           !inst->dst.reladdr &&
           !inst->saturate &&
+          inst->src[0].file != PROGRAM_ARRAY &&
           !inst->src[0].reladdr &&
           !inst->src[0].reladdr2 &&
           !inst->src[0].negate) {
@@ -4129,6 +4152,7 @@ struct st_translate {
 
    struct ureg_dst arrays[MAX_ARRAYS];
    struct ureg_src *constants;
+   int num_constants;
    struct ureg_src *immediates;
    struct ureg_dst outputs[PIPE_MAX_SHADER_OUTPUTS];
    struct ureg_src inputs[PIPE_MAX_SHADER_INPUTS];
@@ -4168,8 +4192,8 @@ const unsigned _mesa_sysval_to_semantic[SYSTEM_VALUE_MAX] = {
     */
    TGSI_SEMANTIC_VERTEXID,
    TGSI_SEMANTIC_INSTANCEID,
-   0,
-   0,
+   TGSI_SEMANTIC_VERTEXID_NOBASE,
+   TGSI_SEMANTIC_BASEVERTEX,
 
    /* Geometry shader
     */
@@ -4329,7 +4353,7 @@ src_register(struct st_translate *t, const struct st_src_reg *reg)
 {
    switch(reg->file) {
    case PROGRAM_UNDEFINED:
-      return ureg_src_undef();
+      return ureg_imm4f(t->ureg, 0, 0, 0, 0);
 
    case PROGRAM_TEMPORARY:
    case PROGRAM_ARRAY:
@@ -4337,15 +4361,15 @@ src_register(struct st_translate *t, const struct st_src_reg *reg)
 
    case PROGRAM_UNIFORM:
       assert(reg->index >= 0);
-      return t->constants[reg->index];
+      return reg->index < t->num_constants ?
+               t->constants[reg->index] : ureg_imm4f(t->ureg, 0, 0, 0, 0);
    case PROGRAM_STATE_VAR:
    case PROGRAM_CONSTANT:       /* ie, immediate */
       if (reg->has_index2)
          return ureg_src_register(TGSI_FILE_CONSTANT, reg->index);
-      else if (reg->index < 0)
-         return ureg_DECL_constant(t->ureg, 0);
       else
-         return t->constants[reg->index];
+         return reg->index >= 0 && reg->index < t->num_constants ?
+                  t->constants[reg->index] : ureg_imm4f(t->ureg, 0, 0, 0, 0);
 
    case PROGRAM_IMMEDIATE:
       return t->immediates[reg->index];
@@ -4391,8 +4415,8 @@ translate_dst(struct st_translate *t,
       /* Clamp colors for ARB_color_buffer_float. */
       switch (t->procType) {
       case TGSI_PROCESSOR_VERTEX:
-         /* XXX if the geometry shader is present, this must be done there
-          * instead of here. */
+         /* This can only occur with a compatibility profile, which doesn't
+          * support geometry shaders. */
          if (dst_reg->index == VARYING_SLOT_COL0 ||
              dst_reg->index == VARYING_SLOT_COL1 ||
              dst_reg->index == VARYING_SLOT_BFC0 ||
@@ -4527,10 +4551,8 @@ compile_tgsi_instruction(struct st_translate *t,
                              inst->saturate,
                              clamp_dst_color_output);
 
-   for (i = 0; i < num_src; i++) {
-      assert(inst->src[i].file != PROGRAM_UNDEFINED);
+   for (i = 0; i < num_src; i++)
       src[i] = translate_src(t, &inst->src[i]);
-   }
 
    switch(inst->op) {
    case TGSI_OPCODE_BGNLOOP:
@@ -4727,7 +4749,8 @@ emit_wpos(struct st_context *st,
       }
       else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT)) {
          /* the driver supports lower-left origin, need to invert Y */
-         ureg_property_fs_coord_origin(ureg, TGSI_FS_COORD_ORIGIN_LOWER_LEFT);
+         ureg_property(ureg, TGSI_PROPERTY_FS_COORD_ORIGIN,
+                       TGSI_FS_COORD_ORIGIN_LOWER_LEFT);
          invert = TRUE;
       }
       else
@@ -4737,7 +4760,8 @@ emit_wpos(struct st_context *st,
       /* Fragment shader wants origin in lower-left */
       if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT))
          /* the driver supports lower-left origin */
-         ureg_property_fs_coord_origin(ureg, TGSI_FS_COORD_ORIGIN_LOWER_LEFT);
+         ureg_property(ureg, TGSI_PROPERTY_FS_COORD_ORIGIN,
+                       TGSI_FS_COORD_ORIGIN_LOWER_LEFT);
       else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT))
          /* the driver supports upper-left origin, need to invert Y */
          invert = TRUE;
@@ -4750,7 +4774,8 @@ emit_wpos(struct st_context *st,
       if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER)) {
          /* the driver supports pixel center integer */
          adjY[1] = 1.0f;
-         ureg_property_fs_coord_pixel_center(ureg, TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
+         ureg_property(ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER,
+                       TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
       }
       else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER)) {
          /* the driver supports pixel center half integer, need to bias X,Y */
@@ -4769,7 +4794,8 @@ emit_wpos(struct st_context *st,
       else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER)) {
          /* the driver supports pixel center integer, need to bias X,Y */
          adjX = adjY[0] = adjY[1] = 0.5f;
-         ureg_property_fs_coord_pixel_center(ureg, TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
+         ureg_property(ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER,
+                       TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
       }
       else
          assert(0);
@@ -4876,6 +4902,10 @@ st_translate_program(
           TGSI_SEMANTIC_SAMPLEMASK);
    assert(_mesa_sysval_to_semantic[SYSTEM_VALUE_INVOCATION_ID] ==
           TGSI_SEMANTIC_INVOCATIONID);
+   assert(_mesa_sysval_to_semantic[SYSTEM_VALUE_VERTEX_ID_ZERO_BASE] ==
+          TGSI_SEMANTIC_VERTEXID_NOBASE);
+   assert(_mesa_sysval_to_semantic[SYSTEM_VALUE_BASE_VERTEX] ==
+          TGSI_SEMANTIC_BASEVERTEX);
 
    t = CALLOC_STRUCT(st_translate);
    if (!t) {
@@ -5052,6 +5082,7 @@ st_translate_program(
          ret = PIPE_ERROR_OUT_OF_MEMORY;
          goto out;
       }
+      t->num_constants = proginfo->Parameters->NumParameters;
 
       for (i = 0; i < proginfo->Parameters->NumParameters; i++) {
          switch (proginfo->Parameters->Parameters[i].Type) {
@@ -5151,6 +5182,7 @@ out:
       free(t->insn);
       free(t->labels);
       free(t->constants);
+      t->num_constants = 0;
       free(t->immediates);
 
       if (t->error) {
@@ -5388,11 +5420,8 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       if (!pscreen->get_param(pscreen, PIPE_CAP_TEXTURE_GATHER_OFFSETS))
          lower_offset_arrays(ir);
       do_mat_op_to_vec(ir);
-      /* Emit saturates in the vertex shader only if SM 3.0 is supported. */
-      bool vs_sm3 = (_mesa_shader_stage_to_program(prog->_LinkedShaders[i]->Stage) ==
-                         GL_VERTEX_PROGRAM_ARB) && st_context(ctx)->has_shader_model3;
       lower_instructions(ir,
-                         MOD_TO_FRACT |
+                         MOD_TO_FLOOR |
                          DIV_TO_MUL_RCP |
                          EXP_TO_EXP2 |
                          LOG_TO_LOG2 |
@@ -5401,7 +5430,7 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
                          BORROW_TO_ARITH |
                          (options->EmitNoPow ? POW_TO_EXP2 : 0) |
                          (!ctx->Const.NativeIntegers ? INT_DIV_TO_MUL_RCP : 0) |
-                         (vs_sm3 ? SAT_TO_CLAMP : 0));
+                         (options->EmitNoSat ? SAT_TO_CLAMP : 0));
 
       lower_ubo_reference(prog->_LinkedShaders[i], ir);
       do_vec_index_to_cond_assign(ir);

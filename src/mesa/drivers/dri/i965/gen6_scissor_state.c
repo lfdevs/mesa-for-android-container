@@ -92,9 +92,10 @@ gen6_upload_scissor_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_scissor_state = {
    .dirty = {
-      .mesa = _NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT,
+      .mesa = _NEW_BUFFERS |
+              _NEW_SCISSOR |
+              _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH,
-      .cache = 0,
    },
    .emit = gen6_upload_scissor_state,
 };

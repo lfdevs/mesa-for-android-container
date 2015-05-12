@@ -41,4 +41,4 @@ TESTS = \
 	replacement \
 	$()
 
-EXTRA_PROGRAMS = $(TESTS)
+check_PROGRAMS = $(TESTS)

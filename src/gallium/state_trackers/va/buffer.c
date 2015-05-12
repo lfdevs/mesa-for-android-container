@@ -131,6 +131,7 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
 
    FREE(buf->data);
    FREE(buf);
+   handle_table_remove(VL_VA_DRIVER(ctx)->htab, buf_id);
 
    return VA_STATUS_SUCCESS;
 }

@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.0.2.  */
+/* A Bison parser, made by GNU Bison 3.0.4.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2013 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@
 #define YYBISON 1
 
 /* Bison version.  */
-#define YYBISON_VERSION "3.0.2"
+#define YYBISON_VERSION "3.0.4"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -68,7 +68,7 @@
 
 
 /* Copy the first part of user declarations.  */
-#line 1 "glcpp/glcpp-parse.y" /* yacc.c:339  */
+#line 1 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:339  */
 
 /*
  * Copyright © 2010 Intel Corporation
@@ -248,8 +248,8 @@ add_builtin_define(glcpp_parser_t *parser, const char *name, int value);
 
 /* In a future release of Bison, this section will be replaced
    by #include "glcpp-parse.h".  */
-#ifndef YY_GLCPP_PARSER_SRC_GLSL_GLCPP_GLCPP_PARSE_H_INCLUDED
-# define YY_GLCPP_PARSER_SRC_GLSL_GLCPP_GLCPP_PARSE_H_INCLUDED
+#ifndef YY_GLCPP_PARSER_GLCPP_GLCPP_PARSE_H_INCLUDED
+# define YY_GLCPP_PARSER_GLCPP_GLCPP_PARSE_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 1
@@ -325,7 +325,7 @@ struct YYLTYPE
 
 int glcpp_parser_parse (glcpp_parser_t *parser);
 
-#endif /* !YY_GLCPP_PARSER_SRC_GLSL_GLCPP_GLCPP_PARSE_H_INCLUDED  */
+#endif /* !YY_GLCPP_PARSER_GLCPP_GLCPP_PARSE_H_INCLUDED  */
 
 /* Copy the second part of user declarations.  */
 
@@ -634,16 +634,16 @@ static const yytype_uint16 yyrline[] =
 {
        0,   205,   205,   207,   211,   212,   213,   218,   222,   227,
      232,   240,   253,   256,   259,   265,   268,   269,   269,   284,
-     284,   287,   287,   304,   304,   327,   337,   337,   344,   344,
-     351,   377,   397,   397,   410,   410,   413,   419,   425,   428,
-     434,   437,   440,   446,   455,   460,   464,   471,   482,   493,
-     500,   507,   514,   521,   528,   535,   542,   549,   556,   563,
-     570,   577,   584,   596,   608,   615,   619,   623,   627,   631,
-     637,   642,   650,   651,   655,   656,   659,   661,   667,   672,
-     679,   683,   687,   691,   695,   699,   706,   707,   708,   709,
-     710,   711,   712,   713,   714,   715,   716,   717,   718,   719,
-     720,   721,   722,   723,   724,   725,   726,   727,   728,   729,
-     730,   731,   732,   733,   734,   735,   736,   737,   738
+     284,   287,   287,   305,   305,   328,   338,   338,   345,   345,
+     352,   378,   398,   398,   411,   411,   414,   420,   426,   429,
+     435,   438,   441,   447,   456,   461,   465,   472,   483,   494,
+     501,   508,   515,   522,   529,   536,   543,   550,   557,   564,
+     571,   578,   585,   597,   609,   616,   620,   624,   628,   632,
+     638,   643,   651,   652,   656,   657,   660,   662,   668,   673,
+     680,   684,   688,   692,   696,   700,   707,   708,   709,   710,
+     711,   712,   713,   714,   715,   716,   717,   718,   719,   720,
+     721,   722,   723,   724,   725,   726,   727,   728,   729,   730,
+     731,   732,   733,   734,   735,   736,   737,   738,   739
 };
 #endif
 
@@ -1555,7 +1555,7 @@ YYLTYPE yylloc = yyloc_default;
   yychar = YYEMPTY; /* Cause a token to be read.  */
 
 /* User initialization code.  */
-#line 165 "glcpp/glcpp-parse.y" /* yacc.c:1429  */
+#line 165 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1429  */
 {
 	yylloc.first_line = 1;
 	yylloc.first_column = 1;
@@ -1751,7 +1751,7 @@ yyreduce:
   switch (yyn)
     {
         case 6:
-#line 213 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 213 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		_glcpp_parser_print_expanded_token_list (parser, (yyvsp[0].token_list));
 		ralloc_asprintf_rewrite_tail (&parser->output, &parser->output_length, "\n");
@@ -1761,7 +1761,7 @@ yyreduce:
     break;
 
   case 8:
-#line 222 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 222 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if (parser->is_gles && (yyvsp[-1].expression_value).undefined_macro)
 			glcpp_error(& (yylsp[-2]), parser, "undefined macro %s in expression (illegal in GLES)", (yyvsp[-1].expression_value).undefined_macro);
@@ -1771,7 +1771,7 @@ yyreduce:
     break;
 
   case 9:
-#line 227 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 227 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if (parser->is_gles && (yyvsp[-1].expression_value).undefined_macro)
 			glcpp_error(& (yylsp[-2]), parser, "undefined macro %s in expression (illegal in GLES)", (yyvsp[-1].expression_value).undefined_macro);
@@ -1781,7 +1781,7 @@ yyreduce:
     break;
 
   case 10:
-#line 232 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 232 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		parser->has_new_line_number = 1;
 		parser->new_line_number = (yyvsp[-1].ival);
@@ -1794,7 +1794,7 @@ yyreduce:
     break;
 
   case 11:
-#line 240 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 240 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		parser->has_new_line_number = 1;
 		parser->new_line_number = (yyvsp[-2].ival);
@@ -1809,7 +1809,7 @@ yyreduce:
     break;
 
   case 12:
-#line 253 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 253 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		_define_object_macro (parser, & (yylsp[-2]), (yyvsp[-2].str), (yyvsp[-1].token_list));
 	}
@@ -1817,7 +1817,7 @@ yyreduce:
     break;
 
   case 13:
-#line 256 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 256 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		_define_function_macro (parser, & (yylsp[-4]), (yyvsp[-4].str), NULL, (yyvsp[-1].token_list));
 	}
@@ -1825,7 +1825,7 @@ yyreduce:
     break;
 
   case 14:
-#line 259 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 259 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		_define_function_macro (parser, & (yylsp[-5]), (yyvsp[-5].str), (yyvsp[-3].string_list), (yyvsp[-1].token_list));
 	}
@@ -1833,7 +1833,7 @@ yyreduce:
     break;
 
   case 15:
-#line 265 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 265 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		ralloc_asprintf_rewrite_tail (&parser->output, &parser->output_length, "\n");
 	}
@@ -1841,7 +1841,7 @@ yyreduce:
     break;
 
   case 17:
-#line 269 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 269 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_parser_resolve_implicit_version(parser);
 	}
@@ -1849,7 +1849,7 @@ yyreduce:
     break;
 
   case 18:
-#line 271 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 271 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 
 		if (parser->skip_stack == NULL ||
@@ -1864,7 +1864,7 @@ yyreduce:
     break;
 
   case 19:
-#line 284 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 284 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_parser_resolve_implicit_version(parser);
 	}
@@ -1872,7 +1872,7 @@ yyreduce:
     break;
 
   case 21:
-#line 287 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 287 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_parser_resolve_implicit_version(parser);
 	}
@@ -1880,14 +1880,15 @@ yyreduce:
     break;
 
   case 22:
-#line 289 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 289 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		macro_t *macro;
 		if (strcmp("__LINE__", (yyvsp[-1].str)) == 0
 		    || strcmp("__FILE__", (yyvsp[-1].str)) == 0
-		    || strcmp("__VERSION__", (yyvsp[-1].str)) == 0)
+		    || strcmp("__VERSION__", (yyvsp[-1].str)) == 0
+		    || strncmp("GL_", (yyvsp[-1].str), 3) == 0)
 			glcpp_error(& (yylsp[-4]), parser, "Built-in (pre-defined)"
-				    " macro names can not be undefined.");
+				    " macro names cannot be undefined.");
 
 		macro = hash_table_find (parser->defines, (yyvsp[-1].str));
 		if (macro) {
@@ -1896,19 +1897,19 @@ yyreduce:
 		}
 		ralloc_free ((yyvsp[-1].str));
 	}
-#line 1900 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1901 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 23:
-#line 304 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 305 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_parser_resolve_implicit_version(parser);
 	}
-#line 1908 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1909 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 24:
-#line 306 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 307 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		/* Be careful to only evaluate the 'if' expression if
 		 * we are not skipping. When we are skipping, we
@@ -1930,11 +1931,11 @@ yyreduce:
 			parser->skip_stack->type = SKIP_TO_ENDIF;
 		}
 	}
-#line 1934 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1935 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 25:
-#line 327 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 328 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		/* #if without an expression is only an error if we
 		 *  are not skipping */
@@ -1945,47 +1946,47 @@ yyreduce:
 		}	
 		_glcpp_parser_skip_stack_push_if (parser, & (yylsp[-2]), 0);
 	}
-#line 1949 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1950 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 26:
-#line 337 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 338 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_parser_resolve_implicit_version(parser);
 	}
-#line 1957 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1958 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 27:
-#line 339 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 340 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		macro_t *macro = hash_table_find (parser->defines, (yyvsp[-2].str));
 		ralloc_free ((yyvsp[-2].str));
 		_glcpp_parser_skip_stack_push_if (parser, & (yylsp[-5]), macro != NULL);
 	}
-#line 1967 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1968 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 28:
-#line 344 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 345 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_parser_resolve_implicit_version(parser);
 	}
-#line 1975 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1976 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 29:
-#line 346 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 347 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		macro_t *macro = hash_table_find (parser->defines, (yyvsp[-2].str));
 		ralloc_free ((yyvsp[-2].str));
 		_glcpp_parser_skip_stack_push_if (parser, & (yylsp[-3]), macro == NULL);
 	}
-#line 1985 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 1986 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 30:
-#line 351 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 352 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		/* Be careful to only evaluate the 'elif' expression
 		 * if we are not skipping. When we are skipping, we
@@ -2012,11 +2013,11 @@ yyreduce:
 							    "elif", 0);
 		}
 	}
-#line 2016 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2017 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 31:
-#line 377 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 378 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		/* #elif without an expression is an error unless we
 		 * are skipping. */
@@ -2037,17 +2038,17 @@ yyreduce:
 			glcpp_warning(& (yylsp[-2]), parser, "ignoring illegal #elif without expression");
 		}
 	}
-#line 2041 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2042 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 32:
-#line 397 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 398 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { parser->lexing_directive = 1; }
-#line 2047 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2048 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 33:
-#line 397 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 398 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if (parser->skip_stack &&
 		    parser->skip_stack->has_else)
@@ -2061,81 +2062,81 @@ yyreduce:
 				parser->skip_stack->has_else = true;
 		}
 	}
-#line 2065 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2066 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 34:
-#line 410 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 411 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		_glcpp_parser_skip_stack_pop (parser, & (yylsp[-1]));
 	}
-#line 2073 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2074 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 36:
-#line 413 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 414 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if (parser->version_resolved) {
 			glcpp_error(& (yylsp[-3]), parser, "#version must appear on the first line");
 		}
 		_glcpp_parser_handle_version_declaration(parser, (yyvsp[-1].ival), NULL, true);
 	}
-#line 2084 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2085 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 37:
-#line 419 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 420 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if (parser->version_resolved) {
 			glcpp_error(& (yylsp[-4]), parser, "#version must appear on the first line");
 		}
 		_glcpp_parser_handle_version_declaration(parser, (yyvsp[-2].ival), (yyvsp[-1].str), true);
 	}
-#line 2095 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2096 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 38:
-#line 425 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 426 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_parser_resolve_implicit_version(parser);
 	}
-#line 2103 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2104 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 39:
-#line 428 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 429 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		ralloc_asprintf_rewrite_tail (&parser->output, &parser->output_length, "#%s", (yyvsp[-1].str));
 	}
-#line 2111 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2112 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 40:
-#line 434 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 435 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_error(& (yylsp[-2]), parser, "#%s", (yyvsp[-1].str));
 	}
-#line 2119 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2120 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 41:
-#line 437 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 438 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_error (& (yylsp[-2]), parser, "#define without macro name");
 	}
-#line 2127 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2128 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 42:
-#line 440 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 441 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_error (& (yylsp[-3]), parser, "Illegal non-directive after #");
 	}
-#line 2135 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2136 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 43:
-#line 446 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 447 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if (strlen ((yyvsp[0].str)) >= 3 && strncmp ((yyvsp[0].str), "0x", 2) == 0) {
 			(yyval.ival) = strtoll ((yyvsp[0].str) + 2, NULL, 16);
@@ -2145,28 +2146,28 @@ yyreduce:
 			(yyval.ival) = strtoll ((yyvsp[0].str), NULL, 10);
 		}
 	}
-#line 2149 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2150 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 44:
-#line 455 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 456 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.ival) = (yyvsp[0].ival);
 	}
-#line 2157 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2158 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 45:
-#line 460 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 461 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[0].ival);
 		(yyval.expression_value).undefined_macro = NULL;
 	}
-#line 2166 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2167 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 46:
-#line 464 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 465 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = 0;
 		if (parser->is_gles)
@@ -2174,11 +2175,11 @@ yyreduce:
 		else
 			(yyval.expression_value).undefined_macro = NULL;
 	}
-#line 2178 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2179 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 47:
-#line 471 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 472 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value || (yyvsp[0].expression_value).value;
 
@@ -2190,11 +2191,11 @@ yyreduce:
                 else if (! (yyvsp[-2].expression_value).value)
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2194 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2195 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 48:
-#line 482 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 483 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value && (yyvsp[0].expression_value).value;
 
@@ -2206,11 +2207,11 @@ yyreduce:
                 else if ((yyvsp[-2].expression_value).value)
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2210 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2211 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 49:
-#line 493 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 494 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value | (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2218,11 +2219,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2222 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2223 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 50:
-#line 500 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 501 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value ^ (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2230,11 +2231,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2234 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2235 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 51:
-#line 507 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 508 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value & (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2242,11 +2243,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2246 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2247 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 52:
-#line 514 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 515 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value != (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2254,11 +2255,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2258 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2259 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 53:
-#line 521 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 522 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value == (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2266,11 +2267,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2270 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2271 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 54:
-#line 528 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 529 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value >= (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2278,11 +2279,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2282 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2283 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 55:
-#line 535 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 536 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value <= (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2290,11 +2291,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2294 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2295 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 56:
-#line 542 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 543 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value > (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2302,11 +2303,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2306 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2307 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 57:
-#line 549 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 550 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value < (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2314,11 +2315,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2318 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2319 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 58:
-#line 556 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 557 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value >> (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2326,11 +2327,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2330 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2331 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 59:
-#line 563 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 564 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value << (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2338,11 +2339,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2342 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2343 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 60:
-#line 570 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 571 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value - (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2350,11 +2351,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2354 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2355 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 61:
-#line 577 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 578 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value + (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2362,11 +2363,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2366 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2367 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 62:
-#line 584 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 585 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if ((yyvsp[0].expression_value).value == 0) {
 			yyerror (& (yylsp[-2]), parser,
@@ -2379,11 +2380,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2383 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2384 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 63:
-#line 596 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 597 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		if ((yyvsp[0].expression_value).value == 0) {
 			yyerror (& (yylsp[-2]), parser,
@@ -2396,11 +2397,11 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2400 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2401 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 64:
-#line 608 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 609 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = (yyvsp[-2].expression_value).value * (yyvsp[0].expression_value).value;
 		if ((yyvsp[-2].expression_value).undefined_macro)
@@ -2408,366 +2409,366 @@ yyreduce:
                 else
 			(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2412 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2413 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 65:
-#line 615 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 616 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = ! (yyvsp[0].expression_value).value;
 		(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2421 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2422 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 66:
-#line 619 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 620 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = ~ (yyvsp[0].expression_value).value;
 		(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2430 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2431 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 67:
-#line 623 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 624 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = - (yyvsp[0].expression_value).value;
 		(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2439 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2440 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 68:
-#line 627 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 628 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value).value = + (yyvsp[0].expression_value).value;
 		(yyval.expression_value).undefined_macro = (yyvsp[0].expression_value).undefined_macro;
 	}
-#line 2448 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2449 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 69:
-#line 631 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 632 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.expression_value) = (yyvsp[-1].expression_value);
 	}
-#line 2456 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2457 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 70:
-#line 637 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 638 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.string_list) = _string_list_create (parser);
 		_string_list_append_item ((yyval.string_list), (yyvsp[0].str));
 		ralloc_steal ((yyval.string_list), (yyvsp[0].str));
 	}
-#line 2466 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2467 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 71:
-#line 642 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 643 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.string_list) = (yyvsp[-2].string_list);	
 		_string_list_append_item ((yyval.string_list), (yyvsp[0].str));
 		ralloc_steal ((yyval.string_list), (yyvsp[0].str));
 	}
-#line 2476 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2477 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 72:
-#line 650 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 651 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.token_list) = NULL; }
-#line 2482 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2483 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 74:
-#line 655 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 656 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.token_list) = NULL; }
-#line 2488 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2489 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 77:
-#line 661 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 662 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		glcpp_error(&(yylsp[0]), parser, "extra tokens at end of directive");
 	}
-#line 2496 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2497 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 78:
-#line 667 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 668 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		parser->space_tokens = 1;
 		(yyval.token_list) = _token_list_create (parser);
 		_token_list_append ((yyval.token_list), (yyvsp[0].token));
 	}
-#line 2506 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2507 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 79:
-#line 672 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 673 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.token_list) = (yyvsp[-1].token_list);
 		_token_list_append ((yyval.token_list), (yyvsp[0].token));
 	}
-#line 2515 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2516 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 80:
-#line 679 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 680 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.token) = _token_create_str (parser, IDENTIFIER, (yyvsp[0].str));
 		(yyval.token)->location = yylloc;
 	}
-#line 2524 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2525 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 81:
-#line 683 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 684 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.token) = _token_create_str (parser, INTEGER_STRING, (yyvsp[0].str));
 		(yyval.token)->location = yylloc;
 	}
-#line 2533 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2534 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 82:
-#line 687 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 688 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.token) = _token_create_ival (parser, (yyvsp[0].ival), (yyvsp[0].ival));
 		(yyval.token)->location = yylloc;
 	}
-#line 2542 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2543 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 83:
-#line 691 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 692 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.token) = _token_create_ival (parser, DEFINED, DEFINED);
 		(yyval.token)->location = yylloc;
 	}
-#line 2551 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2552 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 84:
-#line 695 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 696 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.token) = _token_create_str (parser, OTHER, (yyvsp[0].str));
 		(yyval.token)->location = yylloc;
 	}
-#line 2560 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2561 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 85:
-#line 699 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 700 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     {
 		(yyval.token) = _token_create_ival (parser, SPACE, SPACE);
 		(yyval.token)->location = yylloc;
 	}
-#line 2569 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2570 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 86:
-#line 706 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 707 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '['; }
-#line 2575 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2576 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 87:
-#line 707 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 708 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = ']'; }
-#line 2581 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2582 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 88:
-#line 708 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 709 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '('; }
-#line 2587 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2588 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 89:
-#line 709 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 710 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = ')'; }
-#line 2593 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2594 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 90:
-#line 710 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 711 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '{'; }
-#line 2599 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2600 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 91:
-#line 711 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 712 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '}'; }
-#line 2605 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2606 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 92:
-#line 712 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 713 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '.'; }
-#line 2611 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2612 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 93:
-#line 713 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 714 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '&'; }
-#line 2617 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2618 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 94:
-#line 714 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 715 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '*'; }
-#line 2623 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2624 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 95:
-#line 715 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 716 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '+'; }
-#line 2629 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2630 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 96:
-#line 716 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 717 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '-'; }
-#line 2635 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2636 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 97:
-#line 717 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 718 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '~'; }
-#line 2641 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2642 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 98:
-#line 718 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 719 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '!'; }
-#line 2647 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2648 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 99:
-#line 719 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 720 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '/'; }
-#line 2653 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2654 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 100:
-#line 720 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 721 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '%'; }
-#line 2659 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2660 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 101:
-#line 721 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 722 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = LEFT_SHIFT; }
-#line 2665 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2666 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 102:
-#line 722 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 723 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = RIGHT_SHIFT; }
-#line 2671 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2672 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 103:
-#line 723 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 724 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '<'; }
-#line 2677 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2678 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 104:
-#line 724 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 725 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '>'; }
-#line 2683 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2684 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 105:
-#line 725 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 726 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = LESS_OR_EQUAL; }
-#line 2689 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2690 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 106:
-#line 726 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 727 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = GREATER_OR_EQUAL; }
-#line 2695 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2696 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 107:
-#line 727 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 728 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = EQUAL; }
-#line 2701 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2702 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 108:
-#line 728 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 729 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = NOT_EQUAL; }
-#line 2707 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2708 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 109:
-#line 729 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 730 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '^'; }
-#line 2713 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2714 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 110:
-#line 730 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 731 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '|'; }
-#line 2719 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2720 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 111:
-#line 731 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 732 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = AND; }
-#line 2725 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2726 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 112:
-#line 732 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 733 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = OR; }
-#line 2731 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2732 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 113:
-#line 733 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 734 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = ';'; }
-#line 2737 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2738 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 114:
-#line 734 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 735 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = ','; }
-#line 2743 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2744 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 115:
-#line 735 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 736 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = '='; }
-#line 2749 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2750 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 116:
-#line 736 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 737 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = PASTE; }
-#line 2755 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2756 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 117:
-#line 737 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 738 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = PLUS_PLUS; }
-#line 2761 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2762 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
   case 118:
-#line 738 "glcpp/glcpp-parse.y" /* yacc.c:1646  */
+#line 739 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1646  */
     { (yyval.ival) = MINUS_MINUS; }
-#line 2767 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2768 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
     break;
 
 
-#line 2771 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
+#line 2772 "glcpp/glcpp-parse.c" /* yacc.c:1646  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -3002,7 +3003,7 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 741 "glcpp/glcpp-parse.y" /* yacc.c:1906  */
+#line 742 "../../../src/glsl/glcpp/glcpp-parse.y" /* yacc.c:1906  */
 
 
 string_list_t *
@@ -4639,6 +4640,7 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
 	if (parser->is_gles) {
 	   add_builtin_define(parser, "GL_ES", 1);
            add_builtin_define(parser, "GL_EXT_separate_shader_objects", 1);
+           add_builtin_define(parser, "GL_EXT_draw_buffers", 1);
 
 	   if (extensions != NULL) {
 	      if (extensions->OES_EGL_image_external)
@@ -4737,6 +4739,9 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
 
               if (extensions->ARB_derivative_control)
                  add_builtin_define(parser, "GL_ARB_derivative_control", 1);
+
+              if (extensions->ARB_shader_precision)
+                 add_builtin_define(parser, "GL_ARB_shader_precision", 1);
 	   }
 	}
 

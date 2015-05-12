@@ -38,6 +38,6 @@ AM_CFLAGS += \
 	-DHAVE_OPENCL
 endif
 
-EXTRA_DIST = Android.mk \
+EXTRA_DIST = \
 	sb/notes.markdown \
 	sb/sb_bc_fmt_def.inc

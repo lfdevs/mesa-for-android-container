@@ -431,7 +431,7 @@ dri2_drm_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
          dri2_surf->back = NULL;
       }
 
-      (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
+      dri2_flush_drawable_for_swapbuffers(disp, draw);
       (*dri2_dpy->flush->invalidate)(dri2_surf->dri_drawable);
    }
 
@@ -668,15 +668,21 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
 
    for (i = 0; dri2_dpy->driver_configs[i]; i++) {
       EGLint format, attr_list[3];
-      unsigned int mask;
+      unsigned int red, alpha;
 
       dri2_dpy->core->getConfigAttrib(dri2_dpy->driver_configs[i],
-                                       __DRI_ATTRIB_RED_MASK, &mask);
-      if (mask == 0x3ff00000)
+                                       __DRI_ATTRIB_RED_MASK, &red);
+      dri2_dpy->core->getConfigAttrib(dri2_dpy->driver_configs[i],
+                                       __DRI_ATTRIB_ALPHA_MASK, &alpha);
+      if (red == 0x3ff00000 && alpha == 0x00000000)
          format = GBM_FORMAT_XRGB2101010;
-      else if (mask == 0x00ff0000)
+      else if (red == 0x3ff00000 && alpha == 0xc0000000)
+         format = GBM_FORMAT_ARGB2101010;
+      else if (red == 0x00ff0000 && alpha == 0x00000000)
          format = GBM_FORMAT_XRGB8888;
-      else if (mask == 0xf800)
+      else if (red == 0x00ff0000 && alpha == 0xff000000)
+         format = GBM_FORMAT_ARGB8888;
+      else if (red == 0xf800)
          format = GBM_FORMAT_RGB565;
       else
          continue;

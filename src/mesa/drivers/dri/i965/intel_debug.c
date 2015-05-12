@@ -32,6 +32,7 @@
 #include "brw_context.h"
 #include "intel_debug.h"
 #include "utils.h"
+#include "util/u_atomic.h" /* for p_atomic_cmpxchg */
 
 uint64_t INTEL_DEBUG = 0;
 
@@ -65,15 +66,18 @@ static const struct dri_debug_control debug_control[] = {
    { "blorp",       DEBUG_BLORP },
    { "nodualobj",   DEBUG_NO_DUAL_OBJECT_GS },
    { "optimizer",   DEBUG_OPTIMIZER },
-   { "noann",       DEBUG_NO_ANNOTATION },
+   { "ann",         DEBUG_ANNOTATION },
    { "no8",         DEBUG_NO8 },
+   { "vec4vs",      DEBUG_VEC4VS },
    { NULL,    0 }
 };
 
 void
 brw_process_intel_debug_variable(struct brw_context *brw)
 {
-   INTEL_DEBUG = driParseDebugString(getenv("INTEL_DEBUG"), debug_control);
+   uint64_t intel_debug = driParseDebugString(getenv("INTEL_DEBUG"), debug_control);
+   (void) p_atomic_cmpxchg(&INTEL_DEBUG, 0, intel_debug);
+
    if (INTEL_DEBUG & DEBUG_BUFMGR)
       dri_bufmgr_set_debug(brw->bufmgr, true);
 

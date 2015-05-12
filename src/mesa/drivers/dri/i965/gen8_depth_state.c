@@ -190,6 +190,18 @@ gen8_emit_depth_stencil_hiz(struct brw_context *brw,
    case GL_TEXTURE_3D:
       assert(mt);
       depth = MAX2(mt->logical_depth0, 1);
+      surftype = translate_tex_target(gl_target);
+      break;
+   case GL_TEXTURE_1D_ARRAY:
+   case GL_TEXTURE_1D:
+      if (brw->gen >= 9) {
+         /* WaDisable1DDepthStencil. Skylake+ doesn't support 1D depth
+          * textures but it does allow pretending it's a 2D texture
+          * instead.
+          */
+         surftype = BRW_SURFACE_2D;
+         break;
+      }
       /* fallthrough */
    default:
       surftype = translate_tex_target(gl_target);
@@ -225,8 +237,6 @@ static bool
 pma_fix_enable(const struct brw_context *brw)
 {
    const struct gl_context *ctx = &brw->ctx;
-   /* BRW_NEW_FRAGMENT_PROGRAM */
-   const struct gl_fragment_program *fp = brw->fragment_program;
    /* _NEW_BUFFERS */
    struct intel_renderbuffer *depth_irb =
       intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
@@ -279,15 +289,14 @@ pma_fix_enable(const struct brw_context *brw)
     */
    const bool stencil_writes_enabled = ctx->Stencil._WriteEnabled;
 
-   /* BRW_NEW_FRAGMENT_PROGRAM:
-    * 3DSTATE_PS_EXTRA::Pixel Shader Computed Depth Mode == PSCDEPTH_OFF
+   /* BRW_NEW_FS_PROG_DATA:
+    * 3DSTATE_PS_EXTRA::Pixel Shader Computed Depth Mode != PSCDEPTH_OFF
     */
    const bool ps_computes_depth =
-      (fp->Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) &&
-      fp->FragDepthLayout != FRAG_DEPTH_LAYOUT_UNCHANGED;
+      brw->wm.prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF;
 
-   /* BRW_NEW_FRAGMENT_PROGRAM: 3DSTATE_PS_EXTRA::PixelShaderKillsPixels
-    * CACHE_NEW_WM_PROG:        3DSTATE_PS_EXTRA::oMask Present to RenderTarget
+   /* BRW_NEW_FS_PROG_DATA:        3DSTATE_PS_EXTRA::PixelShaderKillsPixels
+    * BRW_NEW_FS_PROG_DATA:        3DSTATE_PS_EXTRA::oMask Present to RenderTarget
     * _NEW_MULTISAMPLE:         3DSTATE_PS_BLEND::AlphaToCoverageEnable
     * _NEW_COLOR:               3DSTATE_PS_BLEND::AlphaTestEnable
     *
@@ -295,7 +304,7 @@ pma_fix_enable(const struct brw_context *brw)
     * 3DSTATE_WM::ForceKillPix != ForceOff is always true.
     */
    const bool kill_pixel =
-      fp->UsesKill ||
+      brw->wm.prog_data->uses_kill ||
       brw->wm.prog_data->uses_omask ||
       (ctx->Multisample._Enabled && ctx->Multisample.SampleAlphaToCoverage) ||
       ctx->Color.AlphaEnabled;
@@ -372,8 +381,7 @@ const struct brw_tracked_state gen8_pma_fix = {
               _NEW_DEPTH |
               _NEW_MULTISAMPLE |
               _NEW_STENCIL,
-      .brw = BRW_NEW_FRAGMENT_PROGRAM,
-      .cache = CACHE_NEW_WM_PROG,
+      .brw = BRW_NEW_FS_PROG_DATA,
    },
    .emit = gen8_emit_pma_stall_workaround
 };

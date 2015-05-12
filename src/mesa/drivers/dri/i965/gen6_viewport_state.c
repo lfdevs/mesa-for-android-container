@@ -63,14 +63,13 @@ gen6_upload_clip_vp(struct brw_context *brw)
    vp->ymin = -gby;
    vp->ymax = gby;
 
-   brw->state.dirty.cache |= CACHE_NEW_CLIP_VP;
+   brw->state.dirty.brw |= BRW_NEW_CLIP_VP;
 }
 
 const struct brw_tracked_state gen6_clip_vp = {
    .dirty = {
       .mesa = _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH,
-      .cache = 0,
    },
    .emit = gen6_upload_clip_vp,
 };
@@ -106,14 +105,14 @@ gen6_upload_sf_vp(struct brw_context *brw)
    sfv->viewport.m31 = v[MAT_TY] * y_scale + y_bias;
    sfv->viewport.m32 = v[MAT_TZ] * depth_scale;
 
-   brw->state.dirty.cache |= CACHE_NEW_SF_VP;
+   brw->state.dirty.brw |= BRW_NEW_SF_VP;
 }
 
 const struct brw_tracked_state gen6_sf_vp = {
    .dirty = {
-      .mesa = _NEW_VIEWPORT | _NEW_BUFFERS,
+      .mesa = _NEW_BUFFERS |
+              _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH,
-      .cache = 0,
    },
    .emit = gen6_upload_sf_vp,
 };
@@ -134,11 +133,11 @@ static void upload_viewport_state_pointers(struct brw_context *brw)
 const struct brw_tracked_state gen6_viewport_state = {
    .dirty = {
       .mesa = 0,
-      .brw = (BRW_NEW_BATCH |
-	      BRW_NEW_STATE_BASE_ADDRESS),
-      .cache = (CACHE_NEW_CLIP_VP |
-		CACHE_NEW_SF_VP |
-		CACHE_NEW_CC_VP)
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_CC_VP |
+             BRW_NEW_CLIP_VP |
+             BRW_NEW_SF_VP |
+             BRW_NEW_STATE_BASE_ADDRESS,
    },
    .emit = upload_viewport_state_pointers,
 };

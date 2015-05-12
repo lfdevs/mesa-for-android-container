@@ -569,21 +569,6 @@ aos_LRP(struct toy_compiler *tc,
 }
 
 static void
-aos_CND(struct toy_compiler *tc,
-        const struct tgsi_full_instruction *tgsi_inst,
-        struct toy_dst *dst,
-        struct toy_src *src)
-{
-   struct toy_inst *inst;
-
-   assert(!"CND untested");
-
-   tc_CMP(tc, tdst_null(), src[2], tsrc_imm_f(0.5f), GEN6_COND_G);
-   inst = tc_SEL(tc, dst[0], src[0], src[1], GEN6_COND_NONE);
-   inst->pred_ctrl = GEN6_PREDCTRL_NORMAL;
-}
-
-static void
 aos_DP2A(struct toy_compiler *tc,
          const struct tgsi_full_instruction *tgsi_inst,
          struct toy_dst *dst,
@@ -651,28 +636,6 @@ aos_PK2H(struct toy_compiler *tc,
 }
 
 static void
-aos_SFL(struct toy_compiler *tc,
-        const struct tgsi_full_instruction *tgsi_inst,
-        struct toy_dst *dst,
-        struct toy_src *src)
-{
-   assert(!"SFL untested");
-
-   tc_MOV(tc, dst[0], tsrc_imm_f(0.0f));
-}
-
-static void
-aos_STR(struct toy_compiler *tc,
-        const struct tgsi_full_instruction *tgsi_inst,
-        struct toy_dst *dst,
-        struct toy_src *src)
-{
-   assert(!"STR untested");
-
-   tc_MOV(tc, dst[0], tsrc_imm_f(1.0f));
-}
-
-static void
 aos_UP2H(struct toy_compiler *tc,
          const struct tgsi_full_instruction *tgsi_inst,
          struct toy_dst *dst,
@@ -701,24 +664,6 @@ aos_SCS(struct toy_compiler *tc,
          tdst_writemask(dst[0], TOY_WRITEMASK_Y), src[0]);
 
    tc_MOV(tc, tdst_writemask(dst[0], TOY_WRITEMASK_Z), tsrc_imm_f(0.0f));
-   tc_MOV(tc, tdst_writemask(dst[0], TOY_WRITEMASK_W), tsrc_imm_f(1.0f));
-}
-
-static void
-aos_NRM(struct toy_compiler *tc,
-        const struct tgsi_full_instruction *tgsi_inst,
-        struct toy_dst *dst,
-        struct toy_src *src)
-{
-   struct toy_dst tmp = tc_alloc_tmp(tc);
-
-   assert(!"NRM untested");
-
-   tc_DP3(tc, tmp, src[0], src[0]);
-   tc_INV(tc, tmp, tsrc_from(tmp));
-   tc_MUL(tc, tdst_writemask(dst[0], TOY_WRITEMASK_XYZ),
-         src[0], tsrc_from(tmp));
-
    tc_MOV(tc, tdst_writemask(dst[0], TOY_WRITEMASK_W), tsrc_imm_f(1.0f));
 }
 
@@ -803,21 +748,6 @@ aos_ENDLOOP(struct toy_compiler *tc,
 }
 
 static void
-aos_NRM4(struct toy_compiler *tc,
-         const struct tgsi_full_instruction *tgsi_inst,
-         struct toy_dst *dst,
-         struct toy_src *src)
-{
-   struct toy_dst tmp = tc_alloc_tmp(tc);
-
-   assert(!"NRM4 untested");
-
-   tc_DP4(tc, tmp, src[0], src[0]);
-   tc_INV(tc, tmp, tsrc_from(tmp));
-   tc_MUL(tc, dst[0], tsrc_swizzle1(src[0], TOY_SWIZZLE_X), tsrc_from(tmp));
-}
-
-static void
 aos_unsupported(struct toy_compiler *tc,
                 const struct tgsi_full_instruction *tgsi_inst,
                 struct toy_dst *dst,
@@ -850,11 +780,8 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_MAD]          = aos_simple,
    [TGSI_OPCODE_SUB]          = aos_simple,
    [TGSI_OPCODE_LRP]          = aos_LRP,
-   [TGSI_OPCODE_CND]          = aos_CND,
    [TGSI_OPCODE_SQRT]         = aos_simple,
    [TGSI_OPCODE_DP2A]         = aos_DP2A,
-   [22]                       = aos_unsupported,
-   [23]                       = aos_unsupported,
    [TGSI_OPCODE_FRC]          = aos_simple,
    [TGSI_OPCODE_CLAMP]        = aos_CLAMP,
    [TGSI_OPCODE_FLR]          = aos_simple,
@@ -863,9 +790,7 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_LG2]          = aos_simple,
    [TGSI_OPCODE_POW]          = aos_simple,
    [TGSI_OPCODE_XPD]          = aos_XPD,
-   [32]                       = aos_unsupported,
    [TGSI_OPCODE_ABS]          = aos_simple,
-   [TGSI_OPCODE_RCC]          = aos_unsupported,
    [TGSI_OPCODE_DPH]          = aos_simple,
    [TGSI_OPCODE_COS]          = aos_simple,
    [TGSI_OPCODE_DDX]          = aos_unsupported,
@@ -875,14 +800,11 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_PK2US]        = aos_unsupported,
    [TGSI_OPCODE_PK4B]         = aos_unsupported,
    [TGSI_OPCODE_PK4UB]        = aos_unsupported,
-   [TGSI_OPCODE_RFL]          = aos_unsupported,
    [TGSI_OPCODE_SEQ]          = aos_set_on_cond,
-   [TGSI_OPCODE_SFL]          = aos_SFL,
    [TGSI_OPCODE_SGT]          = aos_set_on_cond,
    [TGSI_OPCODE_SIN]          = aos_simple,
    [TGSI_OPCODE_SLE]          = aos_set_on_cond,
    [TGSI_OPCODE_SNE]          = aos_set_on_cond,
-   [TGSI_OPCODE_STR]          = aos_STR,
    [TGSI_OPCODE_TEX]          = aos_tex,
    [TGSI_OPCODE_TXD]          = aos_tex,
    [TGSI_OPCODE_TXP]          = aos_tex,
@@ -890,28 +812,21 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_UP2US]        = aos_unsupported,
    [TGSI_OPCODE_UP4B]         = aos_unsupported,
    [TGSI_OPCODE_UP4UB]        = aos_unsupported,
-   [TGSI_OPCODE_X2D]          = aos_unsupported,
-   [TGSI_OPCODE_ARA]          = aos_unsupported,
    [TGSI_OPCODE_ARR]          = aos_simple,
-   [TGSI_OPCODE_BRA]          = aos_unsupported,
    [TGSI_OPCODE_CAL]          = aos_unsupported,
    [TGSI_OPCODE_RET]          = aos_unsupported,
    [TGSI_OPCODE_SSG]          = aos_set_sign,
    [TGSI_OPCODE_CMP]          = aos_compare,
    [TGSI_OPCODE_SCS]          = aos_SCS,
    [TGSI_OPCODE_TXB]          = aos_tex,
-   [TGSI_OPCODE_NRM]          = aos_NRM,
    [TGSI_OPCODE_DIV]          = aos_DIV,
    [TGSI_OPCODE_DP2]          = aos_simple,
    [TGSI_OPCODE_TXL]          = aos_tex,
    [TGSI_OPCODE_BRK]          = aos_BRK,
    [TGSI_OPCODE_IF]           = aos_simple,
    [TGSI_OPCODE_UIF]          = aos_simple,
-   [76]                       = aos_unsupported,
    [TGSI_OPCODE_ELSE]         = aos_simple,
    [TGSI_OPCODE_ENDIF]        = aos_simple,
-   [79]                       = aos_unsupported,
-   [80]                       = aos_unsupported,
    [TGSI_OPCODE_PUSHA]        = aos_unsupported,
    [TGSI_OPCODE_POPA]         = aos_unsupported,
    [TGSI_OPCODE_CEIL]         = aos_CEIL,
@@ -919,7 +834,6 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_NOT]          = aos_simple,
    [TGSI_OPCODE_TRUNC]        = aos_simple,
    [TGSI_OPCODE_SHL]          = aos_simple,
-   [88]                       = aos_unsupported,
    [TGSI_OPCODE_AND]          = aos_simple,
    [TGSI_OPCODE_OR]           = aos_simple,
    [TGSI_OPCODE_MOD]          = aos_simple,
@@ -935,20 +849,15 @@ static const toy_tgsi_translate aos_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_ENDLOOP]      = aos_ENDLOOP,
    [TGSI_OPCODE_ENDSUB]       = aos_unsupported,
    [TGSI_OPCODE_TXQ_LZ]       = aos_tex,
-   [104]                      = aos_unsupported,
-   [105]                      = aos_unsupported,
-   [106]                      = aos_unsupported,
    [TGSI_OPCODE_NOP]          = aos_simple,
    [TGSI_OPCODE_FSEQ]         = aos_set_on_cond,
    [TGSI_OPCODE_FSGE]         = aos_set_on_cond,
    [TGSI_OPCODE_FSLT]         = aos_set_on_cond,
    [TGSI_OPCODE_FSNE]         = aos_set_on_cond,
-   [TGSI_OPCODE_NRM4]         = aos_NRM4,
    [TGSI_OPCODE_CALLNZ]       = aos_unsupported,
    [TGSI_OPCODE_BREAKC]       = aos_unsupported,
    [TGSI_OPCODE_KILL_IF]      = aos_simple,
    [TGSI_OPCODE_END]          = aos_simple,
-   [118]                      = aos_unsupported,
    [TGSI_OPCODE_F2I]          = aos_simple,
    [TGSI_OPCODE_IDIV]         = aos_simple,
    [TGSI_OPCODE_IMAX]         = aos_simple,
@@ -1380,58 +1289,6 @@ soa_SCS(struct toy_compiler *tc,
 }
 
 static void
-soa_NRM(struct toy_compiler *tc,
-        const struct tgsi_full_instruction *tgsi_inst,
-        struct toy_dst *dst_,
-        struct toy_src *src_)
-{
-   const struct toy_dst tmp = tc_alloc_tmp(tc);
-   struct toy_dst dst0[4];
-   struct toy_src src0[4];
-
-   assert(!"SoA NRM untested");
-
-   tdst_transpose(dst_[0], dst0);
-   tsrc_transpose(src_[0], src0);
-
-   tc_MUL(tc, tmp, src0[2], src0[2]);
-   tc_MAC(tc, tmp, src0[1], src0[1], tsrc_from(tmp));
-   tc_MAC(tc, tmp, src0[0], src0[0], tsrc_from(tmp));
-   tc_INV(tc, tmp, tsrc_from(tmp));
-
-   tc_MUL(tc, dst0[0], src0[0], tsrc_from(tmp));
-   tc_MUL(tc, dst0[1], src0[1], tsrc_from(tmp));
-   tc_MUL(tc, dst0[2], src0[2], tsrc_from(tmp));
-   tc_MOV(tc, dst0[3], tsrc_imm_f(1.0f));
-}
-
-static void
-soa_NRM4(struct toy_compiler *tc,
-         const struct tgsi_full_instruction *tgsi_inst,
-         struct toy_dst *dst_,
-         struct toy_src *src_)
-{
-   const struct toy_dst tmp = tc_alloc_tmp(tc);
-   struct toy_dst dst0[4];
-   struct toy_src src0[4];
-   int i;
-
-   assert(!"SoA NRM4 untested");
-
-   tdst_transpose(dst_[0], dst0);
-   tsrc_transpose(src_[0], src0);
-
-   tc_MUL(tc, tmp, src0[3], src0[3]);
-   tc_MAC(tc, tmp, src0[2], src0[2], tsrc_from(tmp));
-   tc_MAC(tc, tmp, src0[1], src0[1], tsrc_from(tmp));
-   tc_MAC(tc, tmp, src0[0], src0[0], tsrc_from(tmp));
-   tc_INV(tc, tmp, tsrc_from(tmp));
-
-   for (i = 0; i < 4; i++)
-      tc_MUL(tc, dst0[i], src0[0], tsrc_from(tmp));
-}
-
-static void
 soa_unsupported(struct toy_compiler *tc,
                 const struct tgsi_full_instruction *tgsi_inst,
                 struct toy_dst *dst_,
@@ -1466,11 +1323,8 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_MAD]          = soa_per_channel,
    [TGSI_OPCODE_SUB]          = soa_per_channel,
    [TGSI_OPCODE_LRP]          = soa_per_channel,
-   [TGSI_OPCODE_CND]          = soa_per_channel,
    [TGSI_OPCODE_SQRT]         = soa_scalar_replicate,
    [TGSI_OPCODE_DP2A]         = soa_dot_product,
-   [22]                       = soa_unsupported,
-   [23]                       = soa_unsupported,
    [TGSI_OPCODE_FRC]          = soa_per_channel,
    [TGSI_OPCODE_CLAMP]        = soa_per_channel,
    [TGSI_OPCODE_FLR]          = soa_per_channel,
@@ -1479,9 +1333,7 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_LG2]          = soa_scalar_replicate,
    [TGSI_OPCODE_POW]          = soa_scalar_replicate,
    [TGSI_OPCODE_XPD]          = soa_XPD,
-   [32]                       = soa_unsupported,
    [TGSI_OPCODE_ABS]          = soa_per_channel,
-   [TGSI_OPCODE_RCC]          = soa_unsupported,
    [TGSI_OPCODE_DPH]          = soa_dot_product,
    [TGSI_OPCODE_COS]          = soa_scalar_replicate,
    [TGSI_OPCODE_DDX]          = soa_partial_derivative,
@@ -1491,14 +1343,11 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_PK2US]        = soa_unsupported,
    [TGSI_OPCODE_PK4B]         = soa_unsupported,
    [TGSI_OPCODE_PK4UB]        = soa_unsupported,
-   [TGSI_OPCODE_RFL]          = soa_unsupported,
    [TGSI_OPCODE_SEQ]          = soa_per_channel,
-   [TGSI_OPCODE_SFL]          = soa_per_channel,
    [TGSI_OPCODE_SGT]          = soa_per_channel,
    [TGSI_OPCODE_SIN]          = soa_scalar_replicate,
    [TGSI_OPCODE_SLE]          = soa_per_channel,
    [TGSI_OPCODE_SNE]          = soa_per_channel,
-   [TGSI_OPCODE_STR]          = soa_per_channel,
    [TGSI_OPCODE_TEX]          = soa_passthrough,
    [TGSI_OPCODE_TXD]          = soa_passthrough,
    [TGSI_OPCODE_TXP]          = soa_passthrough,
@@ -1506,28 +1355,21 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_UP2US]        = soa_unsupported,
    [TGSI_OPCODE_UP4B]         = soa_unsupported,
    [TGSI_OPCODE_UP4UB]        = soa_unsupported,
-   [TGSI_OPCODE_X2D]          = soa_unsupported,
-   [TGSI_OPCODE_ARA]          = soa_unsupported,
    [TGSI_OPCODE_ARR]          = soa_per_channel,
-   [TGSI_OPCODE_BRA]          = soa_unsupported,
    [TGSI_OPCODE_CAL]          = soa_unsupported,
    [TGSI_OPCODE_RET]          = soa_unsupported,
    [TGSI_OPCODE_SSG]          = soa_per_channel,
    [TGSI_OPCODE_CMP]          = soa_per_channel,
    [TGSI_OPCODE_SCS]          = soa_SCS,
    [TGSI_OPCODE_TXB]          = soa_passthrough,
-   [TGSI_OPCODE_NRM]          = soa_NRM,
    [TGSI_OPCODE_DIV]          = soa_per_channel,
    [TGSI_OPCODE_DP2]          = soa_dot_product,
    [TGSI_OPCODE_TXL]          = soa_passthrough,
    [TGSI_OPCODE_BRK]          = soa_passthrough,
    [TGSI_OPCODE_IF]           = soa_if,
    [TGSI_OPCODE_UIF]          = soa_if,
-   [76]                       = soa_unsupported,
    [TGSI_OPCODE_ELSE]         = soa_passthrough,
    [TGSI_OPCODE_ENDIF]        = soa_passthrough,
-   [79]                       = soa_unsupported,
-   [80]                       = soa_unsupported,
    [TGSI_OPCODE_PUSHA]        = soa_unsupported,
    [TGSI_OPCODE_POPA]         = soa_unsupported,
    [TGSI_OPCODE_CEIL]         = soa_per_channel,
@@ -1535,7 +1377,6 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_NOT]          = soa_per_channel,
    [TGSI_OPCODE_TRUNC]        = soa_per_channel,
    [TGSI_OPCODE_SHL]          = soa_per_channel,
-   [88]                       = soa_unsupported,
    [TGSI_OPCODE_AND]          = soa_per_channel,
    [TGSI_OPCODE_OR]           = soa_per_channel,
    [TGSI_OPCODE_MOD]          = soa_per_channel,
@@ -1551,20 +1392,15 @@ static const toy_tgsi_translate soa_translate_table[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_ENDLOOP]      = soa_passthrough,
    [TGSI_OPCODE_ENDSUB]       = soa_unsupported,
    [TGSI_OPCODE_TXQ_LZ]       = soa_passthrough,
-   [104]                      = soa_unsupported,
-   [105]                      = soa_unsupported,
-   [106]                      = soa_unsupported,
    [TGSI_OPCODE_NOP]          = soa_passthrough,
    [TGSI_OPCODE_FSEQ]         = soa_per_channel,
    [TGSI_OPCODE_FSGE]         = soa_per_channel,
    [TGSI_OPCODE_FSLT]         = soa_per_channel,
    [TGSI_OPCODE_FSNE]         = soa_per_channel,
-   [TGSI_OPCODE_NRM4]         = soa_NRM4,
    [TGSI_OPCODE_CALLNZ]       = soa_unsupported,
    [TGSI_OPCODE_BREAKC]       = soa_unsupported,
    [TGSI_OPCODE_KILL_IF]          = soa_passthrough,
    [TGSI_OPCODE_END]          = soa_passthrough,
-   [118]                      = soa_unsupported,
    [TGSI_OPCODE_F2I]          = soa_per_channel,
    [TGSI_OPCODE_IDIV]         = soa_per_channel,
    [TGSI_OPCODE_IMAX]         = soa_per_channel,
@@ -2185,6 +2021,12 @@ parse_instruction(struct toy_tgsi *tgsi,
 
    /* translate the instruction */
    translate = tgsi->translate_table[tgsi_inst->Instruction.Opcode];
+   if (!translate) {
+      if (tgsi->translate_table == soa_translate_table)
+         soa_unsupported(tgsi->tc, tgsi_inst, dst, src);
+      else
+         aos_unsupported(tgsi->tc, tgsi_inst, dst, src);
+   }
    translate(tgsi->tc, tgsi_inst, dst, src);
 
    /* write the result to the real destinations if needed */
@@ -2454,10 +2296,8 @@ add_imm(struct toy_tgsi *tgsi, enum toy_type type, const uint32_t *buf)
             cur_size * sizeof(new_types[0]),
             new_size * sizeof(new_types[0]));
       if (!new_buf || !new_types) {
-         if (new_buf)
-            FREE(new_buf);
-         if (new_types)
-            FREE(new_types);
+         FREE(new_buf);
+         FREE(new_types);
          return -1;
       }
 

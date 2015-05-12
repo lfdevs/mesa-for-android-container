@@ -80,12 +80,12 @@ struct _egl_image
 };
 
 
-PUBLIC EGLint
+extern EGLint
 _eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
                          const EGLint *attrib_list);
 
 
-PUBLIC EGLBoolean
+extern EGLBoolean
 _eglInitImage(_EGLImage *img, _EGLDisplay *dpy);
 
 

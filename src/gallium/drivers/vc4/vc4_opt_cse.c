@@ -84,7 +84,7 @@ vc4_find_cse(struct vc4_compile *c, struct hash_table *ht,
 
         uint32_t hash = _mesa_hash_data(&key, sizeof(key));
         struct hash_entry *entry =
-                _mesa_hash_table_search(ht, hash, &key);
+                _mesa_hash_table_search_pre_hashed(ht, hash, &key);
 
         if (entry) {
                 if (debug) {
@@ -106,7 +106,7 @@ vc4_find_cse(struct vc4_compile *c, struct hash_table *ht,
         if (!alloc_key)
                 return NULL;
         memcpy(alloc_key, &key, sizeof(*alloc_key));
-        _mesa_hash_table_insert(ht, hash, alloc_key, inst);
+        _mesa_hash_table_insert_pre_hashed(ht, hash, alloc_key, inst);
 
         if (debug) {
                 fprintf(stderr, "Added to CSE HT: ");
@@ -125,14 +125,16 @@ qir_opt_cse(struct vc4_compile *c)
         struct qinst *last_sf = NULL;
         uint32_t sf_count = 0, r4_count = 0;
 
-        struct hash_table *ht = _mesa_hash_table_create(NULL, inst_key_equals);
+        struct hash_table *ht = _mesa_hash_table_create(NULL, NULL,
+                                                        inst_key_equals);
         if (!ht)
                 return false;
 
         foreach_s(node, t, &c->instructions) {
                 struct qinst *inst = (struct qinst *)node;
 
-                if (qir_has_side_effects(c, inst)) {
+                if (qir_has_side_effects(c, inst) ||
+                    qir_has_side_effect_reads(c, inst)) {
                         if (inst->op == QOP_TLB_DISCARD_SETUP)
                                 last_sf = NULL;
                         continue;

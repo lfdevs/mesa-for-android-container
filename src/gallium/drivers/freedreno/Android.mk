@@ -34,10 +34,9 @@ LOCAL_CFLAGS := \
 	-Wno-packed-bitfield-compat
 
 LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH)/ir3 \
-	$(TARGET_OUT_HEADERS)/libdrm \
-	$(TARGET_OUT_HEADERS)/freedreno
+	$(LOCAL_PATH)/ir3
 
+LOCAL_SHARED_LIBRARIES := libdrm libdrm_freedreno
 LOCAL_MODULE := libmesa_pipe_freedreno
 
 include $(GALLIUM_COMMON_MK)

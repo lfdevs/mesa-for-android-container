@@ -74,21 +74,28 @@ struct d3dadapter9drm_context
 {
     struct d3dadapter9_context base;
     struct pipe_loader_device *dev, *swdev;
+    int fd;
 };
 
 static void
 drm_destroy( struct d3dadapter9_context *ctx )
 {
-#if !GALLIUM_STATIC_TARGETS
     struct d3dadapter9drm_context *drm = (struct d3dadapter9drm_context *)ctx;
 
-    /* pipe_loader_sw destroys the context */
+    if (ctx->ref)
+        ctx->ref->destroy(ctx->ref);
+    /* because ref is a wrapper around hal, freeing ref frees hal too. */
+    else if (ctx->hal)
+        ctx->hal->destroy(ctx->hal);
+
+#if !GALLIUM_STATIC_TARGETS
     if (drm->swdev)
         pipe_loader_release(&drm->swdev, 1);
     if (drm->dev)
         pipe_loader_release(&drm->dev, 1);
 #endif
 
+    close(drm->fd);
     FREE(ctx);
 }
 
@@ -135,53 +142,22 @@ get_bus_info( int fd,
               DWORD *subsysid,
               DWORD *revision )
 {
-    drm_unique_t u;
+    int vid, did;
 
-    u.unique_len = 0;
-    u.unique = NULL;
-
-    if (ioctl(fd, DRM_IOCTL_GET_UNIQUE, &u)) { return; }
-    u.unique = CALLOC(u.unique_len+1, 1);
-
-    if (ioctl(fd, DRM_IOCTL_GET_UNIQUE, &u)) { return; }
-    u.unique[u.unique_len] = '\0';
-
-    DBG("DRM Device BusID: %s\n", u.unique);
-    if (strncmp("pci:", u.unique, 4) == 0) {
-        char fname[512]; /* this ought to be enough */
-        int l = snprintf(fname, 512, "/sys/bus/pci/devices/%s/", u.unique+4);
-
-        /* VendorId */
-        snprintf(fname+l, 512-l, "vendor");
-        *vendorid = read_file_dword(fname);
-        /* DeviceId */
-        snprintf(fname+l, 512-l, "device");
-        *deviceid = read_file_dword(fname);
-        /* SubSysId */
-        snprintf(fname+l, 512-l, "subsystem_device");
-        *subsysid = (read_file_dword(fname) << 16) & 0xFFFF0000;
-        snprintf(fname+l, 512-l, "subsystem_vendor");
-        *subsysid |= read_file_dword(fname) & 0x0000FFFF;
-        /* Revision */
-        {
-            int cfgfd;
-
-            snprintf(fname+l, 512-l, "config");
-            cfgfd = open(fname, O_RDONLY);
-            if (cfgfd >= 0) {
-                *revision = read_config_dword(cfgfd, 0x8) & 0x000000FF;
-                close(cfgfd);
-            } else {
-                DBG("Unable to get raw PCI information from `%s'\n", fname);
-            }
-        }
-        DBG("PCI info: vendor=0x%04x, device=0x%04x, subsys=0x%08x, rev=%d\n",
-            *vendorid, *deviceid, *subsysid, *revision);
+    if (loader_get_pci_id_for_fd(fd, &vid, &did)) {
+        DBG("PCI info: vendor=0x%04x, device=0x%04x\n",
+            vid, did);
+        *vendorid = vid;
+        *deviceid = did;
+        *subsysid = 0;
+        *revision = 0;
     } else {
-        DBG("Unsupported BusID type.\n");
+        DBG("Unable to detect card. Fake GTX 680.\n");
+        *vendorid = 0x10de; /* NV GTX 680 */
+        *deviceid = 0x1180;
+        *subsysid = 0;
+        *revision = 0;
     }
-
-    FREE(u.unique);
 }
 
 static INLINE void
@@ -260,6 +236,7 @@ drm_create_adapter( int fd,
     ctx->base.destroy = drm_destroy;
 
     fd = loader_get_user_preferred_fd(fd, &different_device);
+    ctx->fd = fd;
     ctx->base.linear_framebuffer = !!different_device;
 
 #if GALLIUM_STATIC_TARGETS

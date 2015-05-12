@@ -36,6 +36,7 @@ private:
    // we want to insert calls to the builtin library only after optimization
    void handleDIV(Instruction *); // integer division, modulus
    void handleRCPRSQ(Instruction *); // double precision float recip/rsqrt
+   void handleFTZ(Instruction *);
 
 private:
    BuildUtil bld;

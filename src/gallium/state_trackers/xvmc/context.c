@@ -67,7 +67,7 @@ static Status Validate(Display *dpy, XvPortID port, int surface_type_id,
 
    *found_port = false;
 
-   for (unsigned int i = 0; i < XScreenCount(dpy); ++i) {
+   for (int i = 0; i < XScreenCount(dpy); ++i) {
       ret = XvQueryAdaptors(dpy, XRootWindow(dpy, i), &num_adaptors, &adaptor_info);
       if (ret != Success)
          return ret;
@@ -87,7 +87,7 @@ static Status Validate(Display *dpy, XvPortID port, int surface_type_id,
                return BadAlloc;
             }
 
-            for (unsigned int l = 0; l < num_types && !found_surface; ++l) {
+            for (int l = 0; l < num_types && !found_surface; ++l) {
                if (surface_info[l].surface_type_id != surface_type_id)
                   continue;
 
@@ -191,7 +191,7 @@ Status XvMCCreateContext(Display *dpy, XvPortID port, int surface_type_id,
    Status ret;
    struct vl_screen *vscreen;
    struct pipe_context *pipe;
-   struct pipe_video_codec templat = {};
+   struct pipe_video_codec templat = {0};
    XvMCContextPrivate *context_priv;
    vl_csc_matrix csc;
 

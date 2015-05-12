@@ -99,7 +99,7 @@ mkdir subtest-cr
 for file in "$testdir"/*.c; do
     base=$(basename "$file")
     tr "\n" "\r" < "$file" > subtest-cr/"$base"
-    cp subtest-lf/"$base".out subtest-cr/"$base".expected
+    cp `pwd`/glcpp/tests/subtest-lf/"$base".out subtest-cr/"$base".expected
 done
 
 run_test "${glcpp_test} --testdir=subtest-cr"
@@ -112,7 +112,7 @@ mkdir subtest-cr-lf
 for file in "$testdir"/*.c; do
     base=$(basename "$file")
     sed -e 's/$//' < "$file" > subtest-cr-lf/"$base"
-    cp subtest-lf/"$base".out subtest-cr-lf/"$base".expected
+    cp `pwd`/glcpp/tests/subtest-lf/"$base".out subtest-cr-lf/"$base".expected
 done
 
 run_test "${glcpp_test} --testdir=subtest-cr-lf"
@@ -125,7 +125,7 @@ mkdir subtest-lf-cr
 for file in "$testdir"/*.c; do
     base=$(basename "$file")
     sed -e 's/$//' < "$file" | tr "\n\r" "\r\n" > subtest-lf-cr/"$base"
-    cp subtest-lf/"$base".out subtest-lf-cr/"$base".expected
+    cp `pwd`/glcpp/tests/subtest-lf/"$base".out subtest-lf-cr/"$base".expected
 done
 
 run_test "${glcpp_test} --testdir=subtest-lf-cr"

@@ -76,10 +76,9 @@
 #include "ir_rvalue_visitor.h"
 #include "ir_uniform.h"
 
-extern "C" {
 #include "main/shaderobj.h"
 #include "main/enums.h"
-}
+
 
 void linker_error(gl_shader_program *, const char *, ...);
 
@@ -642,7 +641,7 @@ validate_geometry_shader_emissions(struct gl_context *ctx,
       emit_vertex.run(prog->_LinkedShaders[MESA_SHADER_GEOMETRY]->ir);
       if (emit_vertex.error()) {
          linker_error(prog, "Invalid call %s(%d). Accepted values for the "
-                      "stream parameter are in the range [0, %d].",
+                      "stream parameter are in the range [0, %d].\n",
                       emit_vertex.error_func(),
                       emit_vertex.error_stream(),
                       ctx->Const.MaxVertexStreams - 1);
@@ -676,7 +675,7 @@ validate_geometry_shader_emissions(struct gl_context *ctx,
        */
       if (prog->Geom.UsesStreams && prog->Geom.OutputType != GL_POINTS) {
          linker_error(prog, "EmitStreamVertex(n) and EndStreamPrimitive(n) "
-                      "with n>0 requires point output");
+                      "with n>0 requires point output\n");
       }
    }
 }
@@ -732,8 +731,27 @@ cross_validate_globals(struct gl_shader_program *prog,
 		   && ((var->type->length == 0)
 		       || (existing->type->length == 0))) {
 		  if (var->type->length != 0) {
+                     if (var->type->length <= existing->data.max_array_access) {
+                        linker_error(prog, "%s `%s' declared as type "
+                                     "`%s' but outermost dimension has an index"
+                                     " of `%i'\n",
+                                     mode_string(var),
+                                     var->name, var->type->name,
+                                     existing->data.max_array_access);
+                        return;
+                     }
 		     existing->type = var->type;
-		  }
+		  } else if (existing->type->length != 0
+                             && existing->type->length <=
+                                var->data.max_array_access) {
+                     linker_error(prog, "%s `%s' declared as type "
+                                  "`%s' but outermost dimension has an index"
+                                  " of `%i'\n",
+                                  mode_string(var),
+                                  var->name, existing->type->name,
+                                  var->data.max_array_access);
+                     return;
+                  }
                } else if (var->type->is_record()
 		   && existing->type->is_record()
 		   && existing->type->record_compare(var->type)) {
@@ -808,7 +826,7 @@ cross_validate_globals(struct gl_shader_program *prog,
 		  linker_error(prog,
 			       "All redeclarations of gl_FragDepth in all "
 			       "fragment shaders in a single program must have "
-			       "the same set of qualifiers.");
+			       "the same set of qualifiers.\n");
 	       }
 
 	       if (var->data.used && layout_differs) {
@@ -817,7 +835,7 @@ cross_validate_globals(struct gl_shader_program *prog,
 			       "qualifier in any fragment shader, it must be "
 			       "redeclared with the same layout qualifier in "
 			       "all fragment shaders that have assignments to "
-			       "gl_FragDepth");
+			       "gl_FragDepth\n");
 	       }
 	    }
 
@@ -948,7 +966,7 @@ interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog)
 						       &sh->UniformBlocks[j]);
 
 	 if (index == -1) {
-	    linker_error(prog, "uniform block `%s' has mismatching definitions",
+	    linker_error(prog, "uniform block `%s' has mismatching definitions\n",
 			 sh->UniformBlocks[j].Name);
 	    return false;
 	 }
@@ -1346,24 +1364,13 @@ link_fs_input_layout_qualifiers(struct gl_shader_program *prog,
        *   "If gl_FragCoord is redeclared in any fragment shader in a program,
        *    it must be redeclared in all the fragment shaders in that program
        *    that have a static use gl_FragCoord."
-       *
-       * Exclude the case when one of the 'linked_shader' or 'shader' redeclares
-       * gl_FragCoord with no layout qualifiers but the other one doesn't
-       * redeclare it. If we strictly follow GLSL 1.50 spec's language, it
-       * should be a link error. But, generating link error for this case will
-       * be a wrong behaviour which spec didn't intend to do and it could also
-       * break some applications.
        */
       if ((linked_shader->redeclares_gl_fragcoord
            && !shader->redeclares_gl_fragcoord
-           && shader->uses_gl_fragcoord
-           && (linked_shader->origin_upper_left
-               || linked_shader->pixel_center_integer))
+           && shader->uses_gl_fragcoord)
           || (shader->redeclares_gl_fragcoord
               && !linked_shader->redeclares_gl_fragcoord
-              && linked_shader->uses_gl_fragcoord
-              && (shader->origin_upper_left
-                  || shader->pixel_center_integer))) {
+              && linked_shader->uses_gl_fragcoord)) {
              linker_error(prog, "fragment shader defined with conflicting "
                          "layout qualifiers for gl_FragCoord\n");
       }
@@ -1635,7 +1642,7 @@ link_intrastage_shaders(void *mem_ctx,
 
 	       if ((other_sig != NULL) && other_sig->is_defined
 		   && !other_sig->is_builtin()) {
-		  linker_error(prog, "function `%s' is multiply defined",
+		  linker_error(prog, "function `%s' is multiply defined\n",
 			       f->name);
 		  return NULL;
 	       }
@@ -2086,7 +2093,7 @@ assign_attribute_or_color_locations(gl_shader_program *prog,
             if (attr + slots > max_index) {
                linker_error(prog,
                            "insufficient contiguous locations "
-                           "available for %s `%s' %d %d %d", string,
+                           "available for %s `%s' %d %d %d\n", string,
                            var->name, used_locations, use_mask, attr);
                return false;
             }
@@ -2155,7 +2162,7 @@ assign_attribute_or_color_locations(gl_shader_program *prog,
 
 	 linker_error(prog,
 		      "insufficient contiguous locations "
-		      "available for %s `%s'",
+		      "available for %s `%s'\n",
 		      string, to_assign[i].var->name);
 	 return false;
       }
@@ -2257,7 +2264,7 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
 	 continue;
 
       if (sh->num_samplers > ctx->Const.Program[i].MaxTextureImageUnits) {
-	 linker_error(prog, "Too many %s shader texture samplers",
+	 linker_error(prog, "Too many %s shader texture samplers\n",
 		      _mesa_shader_stage_to_string(i));
       }
 
@@ -2271,7 +2278,7 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
                            _mesa_shader_stage_to_string(i));
          } else {
             linker_error(prog, "Too many %s shader default uniform block "
-			 "components",
+			 "components\n",
                          _mesa_shader_stage_to_string(i));
          }
       }
@@ -2284,7 +2291,7 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
                            "this is non-portable out-of-spec behavior\n",
                            _mesa_shader_stage_to_string(i));
          } else {
-            linker_error(prog, "Too many %s shader uniform components",
+            linker_error(prog, "Too many %s shader uniform components\n",
                          _mesa_shader_stage_to_string(i));
          }
       }
@@ -2302,7 +2309,7 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
       }
 
       if (total_uniform_blocks > ctx->Const.MaxCombinedUniformBlocks) {
-	 linker_error(prog, "Too many combined uniform blocks (%d/%d)",
+	 linker_error(prog, "Too many combined uniform blocks (%d/%d)\n",
 		      prog->NumUniformBlocks,
 		      ctx->Const.MaxCombinedUniformBlocks);
       } else {
@@ -2310,7 +2317,7 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
             const unsigned max_uniform_blocks =
                ctx->Const.Program[i].MaxUniformBlocks;
 	    if (blocks[i] > max_uniform_blocks) {
-	       linker_error(prog, "Too many %s uniform blocks (%d/%d)",
+	       linker_error(prog, "Too many %s uniform blocks (%d/%d)\n",
 			    _mesa_shader_stage_to_string(i),
 			    blocks[i],
 			    max_uniform_blocks);
@@ -2338,7 +2345,7 @@ check_image_resources(struct gl_context *ctx, struct gl_shader_program *prog)
 
       if (sh) {
          if (sh->NumImages > ctx->Const.Program[i].MaxImageUniforms)
-            linker_error(prog, "Too many %s shader image uniforms",
+            linker_error(prog, "Too many %s shader image uniforms\n",
                          _mesa_shader_stage_to_string(i));
 
          total_image_units += sh->NumImages;
@@ -2354,11 +2361,11 @@ check_image_resources(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 
    if (total_image_units > ctx->Const.MaxCombinedImageUniforms)
-      linker_error(prog, "Too many combined image uniforms");
+      linker_error(prog, "Too many combined image uniforms\n");
 
    if (total_image_units + fragment_outputs >
        ctx->Const.MaxCombinedImageUnitsAndFragmentOutputs)
-      linker_error(prog, "Too many combined image uniforms and fragment outputs");
+      linker_error(prog, "Too many combined image uniforms and fragment outputs\n");
 }
 
 
@@ -2382,7 +2389,7 @@ reserve_explicit_locations(struct gl_shader_program *prog,
                   max_loc + 1);
 
       if (!prog->UniformRemapTable) {
-         linker_error(prog, "Out of memory during linking.");
+         linker_error(prog, "Out of memory during linking.\n");
          return false;
       }
 
@@ -2412,7 +2419,7 @@ reserve_explicit_locations(struct gl_shader_program *prog,
           */
          linker_error(prog,
                       "location qualifier for uniform %s overlaps "
-                      "previously used location",
+                      "previously used location\n",
                       var->name);
          return false;
       }
@@ -2447,7 +2454,7 @@ check_explicit_uniform_locations(struct gl_context *ctx,
    string_to_uint_map *uniform_map = new string_to_uint_map;
 
    if (!uniform_map) {
-      linker_error(prog, "Out of memory during linking.");
+      linker_error(prog, "Out of memory during linking.\n");
       return;
    }
 
@@ -2721,7 +2728,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
        */
       if (first == MESA_SHADER_FRAGMENT) {
          linker_error(prog, "Transform feedback varyings specified, but "
-                      "no vertex or geometry shader is present.");
+                      "no vertex or geometry shader is present.\n");
          goto done;
       }
 

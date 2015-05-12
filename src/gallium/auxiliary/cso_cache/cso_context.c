@@ -286,9 +286,9 @@ out:
 }
 
 /**
- * Prior to context destruction, this function unbinds all state objects.
+ * Free the CSO context.
  */
-void cso_release_all( struct cso_context *ctx )
+void cso_destroy_context( struct cso_context *ctx )
 {
    unsigned i, shader;
 
@@ -355,20 +355,10 @@ void cso_release_all( struct cso_context *ctx )
       cso_cache_delete( ctx->cache );
       ctx->cache = NULL;
    }
-}
 
-
-/**
- * Free the CSO context.  NOTE: the state tracker should have previously called
- * cso_release_all().
- */
-void cso_destroy_context( struct cso_context *ctx )
-{
-   if (ctx) {
-      if (ctx->vbuf)
-         u_vbuf_destroy(ctx->vbuf);
-      FREE( ctx );
-   }
+   if (ctx->vbuf)
+      u_vbuf_destroy(ctx->vbuf);
+   FREE( ctx );
 }
 
 

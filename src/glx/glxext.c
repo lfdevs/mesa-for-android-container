@@ -143,8 +143,13 @@ __glXWireToEvent(Display *dpy, XEvent *event, xEvent *wire)
       aevent->ust = ((CARD64)awire->ust_hi << 32) | awire->ust_lo;
       aevent->msc = ((CARD64)awire->msc_hi << 32) | awire->msc_lo;
 
-      if (awire->sbc < glxDraw->lastEventSbc)
-	 glxDraw->eventSbcWrap += 0x100000000;
+      /* Handle 32-Bit wire sbc wraparound in both directions to cope with out
+       * of sequence 64-Bit sbc's
+       */
+      if ((int64_t) awire->sbc < ((int64_t) glxDraw->lastEventSbc - 0x40000000))
+         glxDraw->eventSbcWrap += 0x100000000;
+      if ((int64_t) awire->sbc > ((int64_t) glxDraw->lastEventSbc + 0x40000000))
+         glxDraw->eventSbcWrap -= 0x100000000;
       glxDraw->lastEventSbc = awire->sbc;
       aevent->sbc = awire->sbc + glxDraw->eventSbcWrap;
       return True;

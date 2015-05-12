@@ -108,7 +108,7 @@ static void dump_instr_name(struct ir3_dump_ctx *ctx,
 }
 
 static void dump_reg_name(struct ir3_dump_ctx *ctx,
-		struct ir3_register *reg)
+		struct ir3_register *reg, bool followssa)
 {
 	if ((reg->flags & IR3_REG_ABS) && (reg->flags & IR3_REG_NEGATE))
 		fprintf(ctx->f, "(absneg)");
@@ -121,17 +121,27 @@ static void dump_reg_name(struct ir3_dump_ctx *ctx,
 		fprintf(ctx->f, "imm[%f,%d,0x%x]", reg->fim_val, reg->iim_val, reg->iim_val);
 	} else if (reg->flags & IR3_REG_SSA) {
 		if (ctx->verbose) {
-			fprintf(ctx->f, "_[");
-			dump_instr_name(ctx, reg->instr);
-			fprintf(ctx->f, "]");
+			fprintf(ctx->f, "_");
+			if (followssa) {
+				fprintf(ctx->f, "[");
+				dump_instr_name(ctx, reg->instr);
+				fprintf(ctx->f, "]");
+			}
 		}
+	} else if (reg->flags & IR3_REG_RELATIV) {
+		if (reg->flags & IR3_REG_HALF)
+			fprintf(ctx->f, "h");
+		if (reg->flags & IR3_REG_CONST)
+			fprintf(ctx->f, "c<a0.x + %u>", reg->num);
+		else
+			fprintf(ctx->f, "\x1b[0;31mr<a0.x + %u>\x1b[0m (%u)", reg->num, reg->size);
 	} else {
 		if (reg->flags & IR3_REG_HALF)
 			fprintf(ctx->f, "h");
 		if (reg->flags & IR3_REG_CONST)
 			fprintf(ctx->f, "c%u.%c", reg_num(reg), "xyzw"[reg_comp(reg)]);
 		else
-			fprintf(ctx->f, "r%u.%c", reg_num(reg), "xyzw"[reg_comp(reg)]);
+			fprintf(ctx->f, "\x1b[0;31mr%u.%c\x1b[0m", reg_num(reg), "xyzw"[reg_comp(reg)]);
 	}
 }
 
@@ -282,7 +292,7 @@ static void ir3_instr_dump(struct ir3_dump_ctx *ctx,
 		if (reg->flags & IR3_REG_SSA)
 			fprintf(ctx->f, "<src%u> ", (i - 1));
 
-		dump_reg_name(ctx, reg);
+		dump_reg_name(ctx, reg, true);
 	}
 
 	fprintf(ctx->f, "}\"];\n");
@@ -406,14 +416,19 @@ ir3_dump_instr_single(struct ir3_instruction *instr)
 	for (i = 0; i < instr->regs_count; i++) {
 		struct ir3_register *reg = instr->regs[i];
 		printf(i ? ", " : " ");
-		dump_reg_name(&ctx, reg);
+		dump_reg_name(&ctx, reg, !!i);
 	}
+
+	if (is_meta(instr) && (instr->opc == OPC_META_FO))
+		printf(", off=%d", instr->fo.off);
+
 	printf("\n");
 }
 
 void
 ir3_dump_instr_list(struct ir3_instruction *instr)
 {
+	struct ir3_block *block = instr->block;
 	unsigned n = 0;
 
 	while (instr) {
@@ -423,4 +438,11 @@ ir3_dump_instr_list(struct ir3_instruction *instr)
 		instr = instr->next;
 	}
 	printf("%u instructions\n", n);
+
+	for (n = 0; n < block->noutputs; n++) {
+		if (!block->outputs[n])
+			continue;
+		printf("out%d: ", n);
+		ir3_dump_instr_single(block->outputs[n]);
+	}
 }

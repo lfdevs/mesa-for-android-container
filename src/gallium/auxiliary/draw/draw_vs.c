@@ -85,7 +85,9 @@ draw_create_vertex_shader(struct draw_context *draw,
                   vs->info.output_semantic_index[i] == 0) {
             found_clipvertex = TRUE;
             vs->clipvertex_output = i;
-         } else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_CLIPDIST) {
+         } else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_VIEWPORT_INDEX)
+            vs->viewport_index_output = i;
+         else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_CLIPDIST) {
             debug_assert(vs->info.output_semantic_index[i] <
                          PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
             vs->clipdistance_output[vs->info.output_semantic_index[i]] = i;
@@ -120,6 +122,8 @@ draw_bind_vertex_shader(struct draw_context *draw,
       draw->vs.clipdistance_output[0] = dvs->clipdistance_output[0];
       draw->vs.clipdistance_output[1] = dvs->clipdistance_output[1];
       dvs->prepare( dvs, draw );
+      draw_update_clip_flags(draw);
+      draw_update_viewport_flags(draw);
    }
    else {
       draw->vs.vertex_shader = NULL;

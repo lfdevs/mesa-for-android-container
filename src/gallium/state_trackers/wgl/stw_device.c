@@ -213,6 +213,14 @@ BOOL APIENTRY
 DrvValidateVersion(
    ULONG ulVersion )
 {
-   /* TODO: get the expected version from the winsys */
-   return ulVersion == 1;
+   /* ulVersion is the version reported by the KMD:
+    * - via D3DKMTQueryAdapterInfo(KMTQAITYPE_UMOPENGLINFO) on WDDM,
+    * - or ExtEscape on XPDM and can be used to ensure the KMD and OpenGL ICD
+    *   versions match.
+    *
+    * We should get the expected version number from the winsys, but for now
+    * ignore it.
+    */
+   (void)ulVersion;
+   return TRUE;
 }

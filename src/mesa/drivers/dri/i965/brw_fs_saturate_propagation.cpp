@@ -26,6 +26,20 @@
 #include "brw_cfg.h"
 
 /** @file brw_fs_saturate_propagation.cpp
+ *
+ * Implements a pass that propagates the SAT modifier from a MOV.SAT into the
+ * instruction that produced the source of the MOV.SAT, thereby allowing the
+ * MOV's src and dst to be coalesced and the MOV removed.
+ *
+ * For instance,
+ *
+ *    ADD     tmp, src0, src1
+ *    MOV.SAT dst, tmp
+ *
+ * would be transformed into
+ *
+ *    ADD.SAT tmp, src0, src1
+ *    MOV     dst, tmp
  */
 
 static bool
@@ -45,15 +59,15 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
           !inst->saturate)
          continue;
 
-      int src_var = v->live_intervals->var_from_reg(&inst->src[0]);
+      int src_var = v->live_intervals->var_from_reg(inst->src[0]);
       int src_end_ip = v->live_intervals->end[src_var];
 
       bool interfered = false;
       foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst, block) {
-         if (scan_inst->dst.file == GRF &&
-             scan_inst->dst.reg == inst->src[0].reg &&
-             scan_inst->dst.reg_offset == inst->src[0].reg_offset &&
-             !scan_inst->is_partial_write()) {
+         if (scan_inst->overwrites_reg(inst->src[0])) {
+            if (scan_inst->is_partial_write())
+               break;
+
             if (scan_inst->saturate) {
                inst->saturate = false;
                progress = true;
@@ -67,12 +81,16 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
             break;
          }
          for (int i = 0; i < scan_inst->sources; i++) {
-            if ((scan_inst->opcode != BRW_OPCODE_MOV || !scan_inst->saturate) &&
-                scan_inst->src[i].file == GRF &&
+            if (scan_inst->src[i].file == GRF &&
                 scan_inst->src[i].reg == inst->src[0].reg &&
                 scan_inst->src[i].reg_offset == inst->src[0].reg_offset) {
-               interfered = true;
-               break;
+               if (scan_inst->opcode != BRW_OPCODE_MOV ||
+                   !scan_inst->saturate ||
+                   scan_inst->src[0].abs ||
+                   scan_inst->src[0].negate) {
+                  interfered = true;
+                  break;
+               }
             }
          }
 

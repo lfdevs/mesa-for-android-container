@@ -500,7 +500,11 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
        MM = new ShaderMemoryManager(JMM);
        *OutCode = MM->getGeneratedCode();
 
+#if HAVE_LLVM >= 0x0306
+       builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(MM));
+#else
        builder.setMCJITMemoryManager(MM);
+#endif
 #endif
    } else {
 #if HAVE_LLVM < 0x0306

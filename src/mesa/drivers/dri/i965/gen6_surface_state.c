@@ -97,7 +97,8 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
              SET_FIELD(format, BRW_SURFACE_FORMAT);
 
    /* reloc */
-   surf[1] = mt->bo->offset64;
+   assert(mt->offset % mt->cpp == 0);
+   surf[1] = mt->bo->offset64 + mt->offset;
 
    /* In the gen6 PRM Volume 1 Part 1: Graphics Core, Section 7.18.3.7.1
     * (Surface Arrays For all surfaces other than separate stencil buffer):

@@ -31,7 +31,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
 #include "main/enums.h"

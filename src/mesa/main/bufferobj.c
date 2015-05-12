@@ -1226,7 +1226,7 @@ _mesa_DeleteBuffers(GLsizei n, const GLuint *ids)
             }
          }
 
-         if (ctx->UniformBuffer == bufObj) {
+         if (ctx->AtomicBuffer == bufObj) {
             _mesa_BindBuffer( GL_ATOMIC_COUNTER_BUFFER, 0 );
          }
 
@@ -2887,7 +2887,7 @@ static void
 unbind_uniform_buffers(struct gl_context *ctx, GLuint first, GLsizei count)
 {
    struct gl_buffer_object *bufObj = ctx->Shared->NullBufferObj;
-   GLuint i;
+   GLint i;
 
    for (i = 0; i < count; i++)
       set_ubo_binding(ctx, &ctx->UniformBufferBindings[first + i],
@@ -2898,7 +2898,7 @@ static void
 bind_uniform_buffers_base(struct gl_context *ctx, GLuint first, GLsizei count,
                           const GLuint *buffers)
 {
-   GLuint i;
+   GLint i;
 
    if (!error_check_bind_uniform_buffers(ctx, first, count, "glBindBuffersBase"))
       return;
@@ -2965,7 +2965,7 @@ bind_uniform_buffers_range(struct gl_context *ctx, GLuint first, GLsizei count,
                            const GLuint *buffers,
                            const GLintptr *offsets, const GLsizeiptr *sizes)
 {
-   GLuint i;
+   GLint i;
 
    if (!error_check_bind_uniform_buffers(ctx, first, count,
                                          "glBindBuffersRange"))
@@ -3122,7 +3122,7 @@ unbind_xfb_buffers(struct gl_context *ctx,
                    GLuint first, GLsizei count)
 {
    struct gl_buffer_object * const bufObj = ctx->Shared->NullBufferObj;
-   GLuint i;
+   GLint i;
 
    for (i = 0; i < count; i++)
       _mesa_set_transform_feedback_binding(ctx, tfObj, first + i,
@@ -3136,7 +3136,7 @@ bind_xfb_buffers_base(struct gl_context *ctx,
 {
    struct gl_transform_feedback_object *tfObj =
       ctx->TransformFeedback.CurrentObject;
-   GLuint i;
+   GLint i;
 
    if (!error_check_bind_xfb_buffers(ctx, tfObj, first, count,
                                      "glBindBuffersBase"))
@@ -3204,7 +3204,7 @@ bind_xfb_buffers_range(struct gl_context *ctx,
 {
    struct gl_transform_feedback_object *tfObj =
        ctx->TransformFeedback.CurrentObject;
-   GLuint i;
+   GLint i;
 
    if (!error_check_bind_xfb_buffers(ctx, tfObj, first, count,
                                      "glBindBuffersRange"))
@@ -3342,7 +3342,7 @@ static void
 unbind_atomic_buffers(struct gl_context *ctx, GLuint first, GLsizei count)
 {
    struct gl_buffer_object * const bufObj = ctx->Shared->NullBufferObj;
-   GLuint i;
+   GLint i;
 
    for (i = 0; i < count; i++)
       set_atomic_buffer_binding(ctx, &ctx->AtomicBufferBindings[first + i],
@@ -3355,7 +3355,7 @@ bind_atomic_buffers_base(struct gl_context *ctx,
                          GLsizei count,
                          const GLuint *buffers)
 {
-   GLuint i;
+   GLint i;
 
    if (!error_check_bind_atomic_buffers(ctx, first, count,
                                         "glBindBuffersBase"))
@@ -3422,7 +3422,7 @@ bind_atomic_buffers_range(struct gl_context *ctx,
                           const GLintptr *offsets,
                           const GLsizeiptr *sizes)
 {
-   GLuint i;
+   GLint i;
 
    if (!error_check_bind_atomic_buffers(ctx, first, count,
                                         "glBindBuffersRange"))

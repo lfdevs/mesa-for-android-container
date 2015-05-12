@@ -34,6 +34,7 @@ Build-Depends:
  libxcb-sync-dev,
  libxshmfence-dev (>= 1.1),
  python,
+ python-mako,
  libudev-dev [linux-any],
  flex,
  bison,

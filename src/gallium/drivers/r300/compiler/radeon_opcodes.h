@@ -47,6 +47,10 @@ typedef enum {
 	 * dst.x = floor(src.x), where dst must be an address register */
 	RC_OPCODE_ARL,
 
+	/** special instruction: load address register with round
+	 * dst.x = round(src.x), where dst must be an address register */
+	RC_OPCODE_ARR,
+
 	/** vec4 instruction: dst.c = ceil(src0.c) */
 	RC_OPCODE_CEIL,
 

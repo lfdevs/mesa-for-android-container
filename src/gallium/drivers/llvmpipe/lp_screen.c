@@ -245,13 +245,17 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_NATIVE;
    case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
+      return 1;
+   case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+      return 1;
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
    case PIPE_CAP_TEXTURE_GATHER_SM5:
-   case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
    case PIPE_CAP_SAMPLE_SHADING:
    case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
+      return 0;
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+      return 1;
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
       return 0;
@@ -279,6 +283,12 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 0;
    case PIPE_CAP_CLIP_HALFZ:
       return 1;
+   case PIPE_CAP_VERTEXID_NOBASE:
+      return 0;
+   case PIPE_CAP_POLYGON_OFFSET_CLAMP:
+      return 1;
+   case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+      return 0;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAP %d query\n", param);

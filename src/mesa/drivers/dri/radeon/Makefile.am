@@ -23,6 +23,10 @@
 
 include Makefile.sources
 
+EXTRA_DIST = \
+	radeon_maos_verts.c \
+	radeon_maos_arrays.c
+
 AM_CFLAGS = \
 	-DRADEON_R100 \
 	-I$(top_srcdir)/include \

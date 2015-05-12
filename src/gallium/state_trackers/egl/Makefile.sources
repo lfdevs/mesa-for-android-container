@@ -52,6 +52,5 @@ x11_FILES := \
 	x11/native_ximage.c
 
 x11_drm_FILES := \
-	x11/dri2.c \
 	x11/x11_screen.c \
 	x11/x11_screen.h

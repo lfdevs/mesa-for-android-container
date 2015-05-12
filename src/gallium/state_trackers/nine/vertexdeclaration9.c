@@ -181,10 +181,13 @@ NineVertexDeclaration9_ctor( struct NineVertexDeclaration9 *This,
     HRESULT hr = NineUnknown_ctor(&This->base, pParams);
     if (FAILED(hr)) { return hr; }
 
+    /* wine */
     for (This->nelems = 0;
-         pElements[This->nelems].Type != D3DDECLTYPE_UNUSED &&
-         pElements[This->nelems].Stream != 0xFF; /* wine */
-         ++This->nelems);
+         pElements[This->nelems].Stream != 0xFF;
+         ++This->nelems) {
+        user_assert(pElements[This->nelems].Type != D3DDECLTYPE_UNUSED, E_FAIL);
+        user_assert(!(pElements[This->nelems].Offset & 3), E_FAIL);
+    }
 
     caps = NineDevice9_GetCaps(This->base.device);
     user_assert(This->nelems <= caps->MaxStreams, D3DERR_INVALIDCALL);
@@ -192,7 +195,7 @@ NineVertexDeclaration9_ctor( struct NineVertexDeclaration9 *This,
     This->decls = CALLOC(This->nelems+1, sizeof(D3DVERTEXELEMENT9));
     This->elems = CALLOC(This->nelems, sizeof(struct pipe_vertex_element));
     This->usage_map = CALLOC(This->nelems, sizeof(uint16_t));
-    if (!This->decls || !This->elems) { return E_OUTOFMEMORY; }
+    if (!This->decls || !This->elems || !This->usage_map) { return E_OUTOFMEMORY; }
     memcpy(This->decls, pElements, sizeof(D3DVERTEXELEMENT9)*(This->nelems+1));
 
     for (i = 0; i < This->nelems; ++i) {
@@ -220,12 +223,9 @@ NineVertexDeclaration9_ctor( struct NineVertexDeclaration9 *This,
 void
 NineVertexDeclaration9_dtor( struct NineVertexDeclaration9 *This )
 {
-    if (This->decls)
-        FREE(This->decls);
-    if (This->elems)
-        FREE(This->elems);
-    if (This->usage_map)
-        FREE(This->usage_map);
+    FREE(This->decls);
+    FREE(This->elems);
+    FREE(This->usage_map);
 
     NineUnknown_dtor(&This->base);
 }

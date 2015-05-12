@@ -302,9 +302,12 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
        (entry->dst.reg_offset + entry->regs_written) * 32)
       return false;
 
-   /* See resolve_ud_negate() and comment in brw_fs_emit.cpp. */
-   if (inst->conditional_mod &&
-       inst->src[arg].type == BRW_REGISTER_TYPE_UD &&
+   /* we can't generally copy-propagate UD negations because we
+    * can end up accessing the resulting values as signed integers
+    * instead. See also resolve_ud_negate() and comment in
+    * fs_generator::generate_code.
+    */
+   if (inst->src[arg].type == BRW_REGISTER_TYPE_UD &&
        entry->src.negate)
       return false;
 
@@ -425,14 +428,15 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
 
    if (entry->src.file != IMM)
       return false;
+   if (entry->saturate)
+      return false;
 
    for (int i = inst->sources - 1; i >= 0; i--) {
       if (inst->src[i].file != GRF)
          continue;
 
       assert(entry->dst.file == GRF);
-      if (inst->src[i].reg != entry->dst.reg ||
-          inst->src[i].type != entry->dst.type)
+      if (inst->src[i].reg != entry->dst.reg)
          continue;
 
       /* Bail if inst is reading a range that isn't contained in the range
@@ -444,14 +448,21 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
           (entry->dst.reg_offset + entry->regs_written) * 32)
          continue;
 
-      /* Don't bother with cases that should have been taken care of by the
-       * GLSL compiler's constant folding pass.
-       */
-      if (inst->src[i].negate || inst->src[i].abs)
-         continue;
-
       fs_reg val = entry->src;
       val.effective_width = inst->src[i].effective_width;
+      val.type = inst->src[i].type;
+
+      if (inst->src[i].abs) {
+         if (!brw_abs_immediate(val.type, &val.fixed_hw_reg)) {
+            continue;
+         }
+      }
+
+      if (inst->src[i].negate) {
+         if (!brw_negate_immediate(val.type, &val.fixed_hw_reg)) {
+            continue;
+         }
+      }
 
       switch (inst->opcode) {
       case BRW_OPCODE_MOV:

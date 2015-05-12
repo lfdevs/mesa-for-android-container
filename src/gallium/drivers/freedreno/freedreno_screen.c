@@ -52,6 +52,7 @@
 
 #include "a2xx/fd2_screen.h"
 #include "a3xx/fd3_screen.h"
+#include "a4xx/fd4_screen.h"
 
 /* XXX this should go away */
 #include "state_tracker/drm_driver.h"
@@ -192,13 +193,13 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	case PIPE_CAP_SM3:
 	case PIPE_CAP_PRIMITIVE_RESTART:
-		return (screen->gpu_id >= 300) ? 1 : 0;
+		return is_a3xx(screen) || is_a4xx(screen);
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
 		return 256;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
-		return ((screen->gpu_id >= 300) && glsl130) ? 130 : 120;
+		return ((is_a3xx(screen) || is_a4xx(screen)) && glsl130) ? 130 : 120;
 
 	/* Unsupported features. */
 	case PIPE_CAP_INDEP_BLEND_ENABLE:
@@ -227,6 +228,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_CLIP_HALFZ:
+	case PIPE_CAP_VERTEXID_NOBASE:
+	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
+	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 		return 0;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
@@ -256,7 +260,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return 11;
 
 	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-		return (screen->gpu_id >= 300) ? 256 : 0;
+		return (is_a3xx(screen) || is_a4xx(screen)) ? 256 : 0;
 
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -267,7 +271,10 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_QUERY_TIMESTAMP:
 		return 0;
 	case PIPE_CAP_OCCLUSION_QUERY:
-		return (screen->gpu_id >= 300) ? 1 : 0;
+		/* TODO still missing on a4xx, but we lie to get gl2..
+		 * it's not a feature, it's a bug!
+		 */
+		return is_a3xx(screen) || is_a4xx(screen);
 
 	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
@@ -307,7 +314,7 @@ fd_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 	case PIPE_CAPF_MAX_LINE_WIDTH_AA:
 	case PIPE_CAPF_MAX_POINT_WIDTH:
 	case PIPE_CAPF_MAX_POINT_WIDTH_AA:
-		return 8192.0f;
+		return 4092.0f;
 	case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
 		return 16.0f;
 	case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
@@ -361,7 +368,7 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		 * split between VS and FS.  Use lower limit of 256 to
 		 * avoid getting into impossible situations:
 		 */
-		return ((screen->gpu_id >= 300) ? 256 : 64) * sizeof(float[4]);
+		return ((is_a3xx(screen) || is_a4xx(screen)) ? 256 : 64) * sizeof(float[4]);
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
 		return 1;
 	case PIPE_SHADER_CAP_MAX_PREDS:
@@ -381,8 +388,11 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_INTEGERS:
 		/* we should be able to support this on a3xx, but not
 		 * implemented yet:
+		 *
+		 * TODO looks like a4xx will require some additional
+		 * work for integer varying fetch..
 		 */
-		return ((screen->gpu_id >= 300) && glsl130) ? 1 : 0;
+		return (is_a3xx(screen) && glsl130) ? 1 : 0;
 	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
 	case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
 		return 16;
@@ -514,7 +524,7 @@ fd_screen_create(struct fd_device *dev)
 	 * before enabling:
 	 *
 	 * If you have a different adreno version, feel free to add it to one
-	 * of the two cases below and see what happens.  And if it works, please
+	 * of the cases below and see what happens.  And if it works, please
 	 * send a patch ;-)
 	 */
 	switch (screen->gpu_id) {
@@ -524,6 +534,9 @@ fd_screen_create(struct fd_device *dev)
 	case 320:
 	case 330:
 		fd3_screen_init(pscreen);
+		break;
+	case 420:
+		fd4_screen_init(pscreen);
 		break;
 	default:
 		debug_printf("unsupported GPU: a%03d\n", screen->gpu_id);

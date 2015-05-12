@@ -57,30 +57,6 @@
 #define AA_SOMETIMES 1
 #define AA_ALWAYS    2
 
-struct brw_wm_prog_key {
-   uint8_t iz_lookup;
-   GLuint stats_wm:1;
-   GLuint flat_shade:1;
-   GLuint persample_shading:1;
-   GLuint persample_2x:1;
-   GLuint nr_color_regions:5;
-   GLuint replicate_alpha:1;
-   GLuint render_to_fbo:1;
-   GLuint clamp_fragment_color:1;
-   GLuint compute_pos_offset:1;
-   GLuint compute_sample_id:1;
-   GLuint line_aa:2;
-   GLuint high_quality_derivatives:1;
-
-   GLushort drawable_height;
-   GLbitfield64 input_slots_valid;
-   GLuint program_string_id:32;
-   GLenum alpha_test_func;          /* < For Gen4/5 MRT alpha test */
-   float alpha_test_ref;
-
-   struct brw_sampler_prog_key_data tex;
-};
-
 /**
  * Compile a fragment shader.
  *

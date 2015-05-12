@@ -35,7 +35,9 @@
 
 #include "cso_hash.h"
 
+#ifndef MAX
 #define MAX(a, b) ((a > b) ? (a) : (b))
+#endif
 
 static const int MinNumBits = 4;
 

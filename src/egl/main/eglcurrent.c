@@ -242,7 +242,7 @@ _eglIsCurrentThreadDummy(void)
 /**
  * Return the currently bound context of the given API, or NULL.
  */
-PUBLIC _EGLContext *
+_EGLContext *
 _eglGetAPIContext(EGLenum api)
 {
    _EGLThreadInfo *t = _eglGetCurrentThread();

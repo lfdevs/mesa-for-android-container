@@ -92,28 +92,9 @@ gen7_upload_sf_clip_viewport(struct brw_context *brw)
 
 const struct brw_tracked_state gen7_sf_clip_viewport = {
    .dirty = {
-      .mesa = _NEW_VIEWPORT | _NEW_BUFFERS,
+      .mesa = _NEW_BUFFERS |
+              _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH,
-      .cache = 0,
    },
    .emit = gen7_upload_sf_clip_viewport,
-};
-
-/* ----------------------------------------------------- */
-
-static void upload_cc_viewport_state_pointer(struct brw_context *brw)
-{
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_VIEWPORT_STATE_POINTERS_CC << 16 | (2 - 2));
-   OUT_BATCH(brw->cc.vp_offset);
-   ADVANCE_BATCH();
-}
-
-const struct brw_tracked_state gen7_cc_viewport_state_pointer = {
-   .dirty = {
-      .mesa = 0,
-      .brw = BRW_NEW_BATCH,
-      .cache = CACHE_NEW_CC_VP
-   },
-   .emit = upload_cc_viewport_state_pointer,
 };

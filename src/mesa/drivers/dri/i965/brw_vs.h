@@ -50,28 +50,6 @@
 #define BRW_ATTRIB_WA_SIGN          32  /* interpret as signed in shader */
 #define BRW_ATTRIB_WA_SCALE         64  /* interpret as scaled in shader */
 
-struct brw_vs_prog_key {
-   struct brw_vec4_prog_key base;
-
-   /*
-    * Per-attribute workaround flags
-    */
-   uint8_t gl_attrib_wa_flags[VERT_ATTRIB_MAX];
-
-   GLuint copy_edgeflag:1;
-
-   /**
-    * For pre-Gen6 hardware, a bitfield indicating which texture coordinates
-    * are going to be replaced with point coordinates (as a consequence of a
-    * call to glTexEnvi(GL_POINT_SPRITE, GL_COORD_REPLACE, GL_TRUE)).  Because
-    * our SF thread requires exact matching between VS outputs and FS inputs,
-    * these texture coordinates will need to be unconditionally included in
-    * the VUE, even if they aren't written by the vertex shader.
-    */
-   GLuint point_coord_replace:8;
-};
-
-
 struct brw_vs_compile {
    struct brw_vec4_compile base;
    struct brw_vs_prog_key key;
@@ -89,7 +67,6 @@ const unsigned *brw_vs_emit(struct brw_context *brw,
                             struct brw_vs_prog_data *prog_data,
                             void *mem_ctx,
                             unsigned *program_size);
-bool brw_vs_precompile(struct gl_context *ctx, struct gl_shader_program *prog);
 void brw_vs_debug_recompile(struct brw_context *brw,
                             struct gl_shader_program *prog,
                             const struct brw_vs_prog_key *key);

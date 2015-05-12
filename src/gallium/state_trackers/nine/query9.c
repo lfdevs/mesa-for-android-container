@@ -23,60 +23,50 @@
 #include "device9.h"
 #include "query9.h"
 #include "nine_helpers.h"
+#include "pipe/p_screen.h"
 #include "pipe/p_context.h"
 #include "util/u_math.h"
 #include "nine_dump.h"
 
 #define DBG_CHANNEL DBG_QUERY
 
-#define QUERY_TYPE_MAP_CASE(a, b) case D3DQUERYTYPE_##a: return PIPE_QUERY_##b
 static inline unsigned
-d3dquerytype_to_pipe_query(D3DQUERYTYPE type)
+d3dquerytype_to_pipe_query(struct pipe_screen *screen, D3DQUERYTYPE type)
 {
     switch (type) {
-    QUERY_TYPE_MAP_CASE(EVENT, GPU_FINISHED);
-    QUERY_TYPE_MAP_CASE(OCCLUSION, OCCLUSION_COUNTER);
-    QUERY_TYPE_MAP_CASE(TIMESTAMP, TIMESTAMP);
-    QUERY_TYPE_MAP_CASE(TIMESTAMPDISJOINT, TIMESTAMP_DISJOINT);
-    QUERY_TYPE_MAP_CASE(TIMESTAMPFREQ, TIMESTAMP_DISJOINT);
-    QUERY_TYPE_MAP_CASE(VERTEXSTATS, PIPELINE_STATISTICS);
-    case D3DQUERYTYPE_VCACHE:
-    case D3DQUERYTYPE_RESOURCEMANAGER:
-    case D3DQUERYTYPE_PIPELINETIMINGS:
-    case D3DQUERYTYPE_INTERFACETIMINGS:
-    case D3DQUERYTYPE_VERTEXTIMINGS:
-    case D3DQUERYTYPE_PIXELTIMINGS:
-    case D3DQUERYTYPE_BANDWIDTHTIMINGS:
-    case D3DQUERYTYPE_CACHEUTILIZATION:
-       return PIPE_QUERY_TYPES;
+    case D3DQUERYTYPE_EVENT:
+        return PIPE_QUERY_GPU_FINISHED;
+    case D3DQUERYTYPE_OCCLUSION:
+        return screen->get_param(screen, PIPE_CAP_OCCLUSION_QUERY) ?
+               PIPE_QUERY_OCCLUSION_COUNTER : PIPE_QUERY_TYPES;
+    case D3DQUERYTYPE_TIMESTAMP:
+        return screen->get_param(screen, PIPE_CAP_QUERY_TIMESTAMP) ?
+               PIPE_QUERY_TIMESTAMP : PIPE_QUERY_TYPES;
+    case D3DQUERYTYPE_TIMESTAMPDISJOINT:
+    case D3DQUERYTYPE_TIMESTAMPFREQ:
+        return screen->get_param(screen, PIPE_CAP_QUERY_TIMESTAMP) ?
+               PIPE_QUERY_TIMESTAMP_DISJOINT : PIPE_QUERY_TYPES;
+    case D3DQUERYTYPE_VERTEXSTATS:
+        return screen->get_param(screen,
+                                 PIPE_CAP_QUERY_PIPELINE_STATISTICS) ?
+               PIPE_QUERY_PIPELINE_STATISTICS : PIPE_QUERY_TYPES;
     default:
-        return ~0;
+        return PIPE_QUERY_TYPES; /* Query not supported */
     }
 }
 
-#define GET_DATA_SIZE_CASE9(a)    case D3DQUERYTYPE_##a: return sizeof(D3DDEVINFO_D3D9##a)
-#define GET_DATA_SIZE_CASE1(a)    case D3DQUERYTYPE_##a: return sizeof(D3DDEVINFO_##a)
 #define GET_DATA_SIZE_CASE2(a, b) case D3DQUERYTYPE_##a: return sizeof(D3DDEVINFO_##b)
 #define GET_DATA_SIZE_CASET(a, b) case D3DQUERYTYPE_##a: return sizeof(b)
 static INLINE DWORD
 nine_query_result_size(D3DQUERYTYPE type)
 {
     switch (type) {
-    GET_DATA_SIZE_CASE1(VCACHE);
-    GET_DATA_SIZE_CASE1(RESOURCEMANAGER);
     GET_DATA_SIZE_CASE2(VERTEXSTATS, D3DVERTEXSTATS);
     GET_DATA_SIZE_CASET(EVENT, BOOL);
     GET_DATA_SIZE_CASET(OCCLUSION, DWORD);
     GET_DATA_SIZE_CASET(TIMESTAMP, UINT64);
     GET_DATA_SIZE_CASET(TIMESTAMPDISJOINT, BOOL);
     GET_DATA_SIZE_CASET(TIMESTAMPFREQ, UINT64);
-    GET_DATA_SIZE_CASE9(PIPELINETIMINGS);
-    GET_DATA_SIZE_CASE9(INTERFACETIMINGS);
-    GET_DATA_SIZE_CASE2(VERTEXTIMINGS, D3D9STAGETIMINGS);
-    GET_DATA_SIZE_CASE2(PIXELTIMINGS, D3D9STAGETIMINGS);
-    GET_DATA_SIZE_CASE9(BANDWIDTHTIMINGS);
-    GET_DATA_SIZE_CASE9(CACHEUTILIZATION);
-    /* GET_DATA_SIZE_CASE1(MEMORYPRESSURE); Win7 only */
     default:
         assert(0);
         return 0;
@@ -84,9 +74,9 @@ nine_query_result_size(D3DQUERYTYPE type)
 }
 
 HRESULT
-nine_is_query_supported(D3DQUERYTYPE type)
+nine_is_query_supported(struct pipe_screen *screen, D3DQUERYTYPE type)
 {
-    const unsigned ptype = d3dquerytype_to_pipe_query(type);
+    const unsigned ptype = d3dquerytype_to_pipe_query(screen, type);
 
     user_assert(ptype != ~0, D3DERR_INVALIDCALL);
 
@@ -104,7 +94,7 @@ NineQuery9_ctor( struct NineQuery9 *This,
                  D3DQUERYTYPE Type )
 {
     struct pipe_context *pipe = pParams->device->pipe;
-    const unsigned ptype = d3dquerytype_to_pipe_query(Type);
+    const unsigned ptype = d3dquerytype_to_pipe_query(pParams->device->screen, Type);
     HRESULT hr;
 
     DBG("This=%p pParams=%p Type=%d\n", This, pParams, Type);
@@ -123,8 +113,7 @@ NineQuery9_ctor( struct NineQuery9 *This,
         if (!This->pq)
             return E_OUTOFMEMORY;
     } else {
-        DBG("Returning dummy NineQuery9 for %s.\n",
-            nine_D3DQUERYTYPE_to_str(Type));
+        assert(0); /* we have checked this case before */
     }
 
     This->instant =
@@ -174,19 +163,19 @@ NineQuery9_Issue( struct NineQuery9 *This,
 
     DBG("This=%p dwIssueFlags=%d\n", This, dwIssueFlags);
 
-    user_assert((dwIssueFlags == D3DISSUE_BEGIN && !This->instant) ||
+    user_assert((dwIssueFlags == D3DISSUE_BEGIN) ||
                 (dwIssueFlags == 0) ||
                 (dwIssueFlags == D3DISSUE_END), D3DERR_INVALIDCALL);
 
-    if (!This->pq) {
-        DBG("Issued dummy query.\n");
+    /* Wine tests: always return D3D_OK on D3DISSUE_BEGIN
+     * even when the call is supposed to be forbidden */
+    if (dwIssueFlags == D3DISSUE_BEGIN && This->instant)
         return D3D_OK;
-    }
 
     if (dwIssueFlags == D3DISSUE_BEGIN) {
         if (This->state == NINE_QUERY_STATE_RUNNING) {
-	    pipe->end_query(pipe, This->pq);
-	}
+        pipe->end_query(pipe, This->pq);
+        }
         pipe->begin_query(pipe, This->pq);
         This->state = NINE_QUERY_STATE_RUNNING;
     } else {
@@ -203,13 +192,6 @@ NineQuery9_Issue( struct NineQuery9 *This,
 union nine_query_result
 {
     D3DDEVINFO_D3DVERTEXSTATS vertexstats;
-    D3DDEVINFO_D3D9BANDWIDTHTIMINGS bandwidth;
-    D3DDEVINFO_VCACHE vcache;
-    D3DDEVINFO_RESOURCEMANAGER rm;
-    D3DDEVINFO_D3D9PIPELINETIMINGS pipe;
-    D3DDEVINFO_D3D9STAGETIMINGS stage;
-    D3DDEVINFO_D3D9INTERFACETIMINGS iface;
-    D3DDEVINFO_D3D9CACHEUTILIZATION cacheu;
     DWORD dw;
     BOOL b;
     UINT64 u64;
@@ -222,38 +204,39 @@ NineQuery9_GetData( struct NineQuery9 *This,
                     DWORD dwGetDataFlags )
 {
     struct pipe_context *pipe = This->base.device->pipe;
-    boolean ok = !This->pq;
-    unsigned i;
+    boolean ok, wait_query_result = FALSE;
     union pipe_query_result presult;
     union nine_query_result nresult;
 
     DBG("This=%p pData=%p dwSize=%d dwGetDataFlags=%d\n",
         This, pData, dwSize, dwGetDataFlags);
 
-    user_assert(This->state != NINE_QUERY_STATE_RUNNING, D3DERR_INVALIDCALL);
+    /* according to spec we should return D3DERR_INVALIDCALL here, but
+     * wine returns S_FALSE because it is apparently the behaviour
+     * on windows */
+    user_assert(This->state != NINE_QUERY_STATE_RUNNING, S_FALSE);
     user_assert(dwSize == 0 || pData, D3DERR_INVALIDCALL);
     user_assert(dwGetDataFlags == 0 ||
                 dwGetDataFlags == D3DGETDATA_FLUSH, D3DERR_INVALIDCALL);
 
-    if (!This->pq) {
-        DBG("No pipe query available.\n");
-        if (!dwSize)
-           return S_OK;
+    if (This->state == NINE_QUERY_STATE_FRESH) {
+        /* App forgot calling Issue. call it for it.
+         * However Wine states that return value should
+         * be S_OK, so wait for the result to return S_OK. */
+        NineQuery9_Issue(This, D3DISSUE_END);
+        wait_query_result = TRUE;
     }
-    if (This->state == NINE_QUERY_STATE_FRESH)
-        return S_OK;
 
-    if (!ok) {
-        ok = pipe->get_query_result(pipe, This->pq, FALSE, &presult);
-        if (!ok) {
-            if (dwGetDataFlags) {
-                if (This->state != NINE_QUERY_STATE_FLUSHED)
-                    pipe->flush(pipe, NULL, 0);
-                This->state = NINE_QUERY_STATE_FLUSHED;
-            }
-            return S_FALSE;
-        }
-    }
+    /* Wine tests: D3DQUERYTYPE_TIMESTAMP always succeeds */
+    wait_query_result |= This->type == D3DQUERYTYPE_TIMESTAMP;
+
+    /* Note: We ignore dwGetDataFlags, because get_query_result will
+     * flush automatically if needed */
+
+    ok = pipe->get_query_result(pipe, This->pq, wait_query_result, &presult);
+
+    if (!ok) return S_FALSE;
+
     if (!dwSize)
         return S_OK;
 
@@ -278,59 +261,6 @@ NineQuery9_GetData( struct NineQuery9 *This,
             presult.pipeline_statistics.c_invocations;
         nresult.vertexstats.NumExtraClippingTriangles =
             presult.pipeline_statistics.c_primitives;
-        break;
-    /* Thse might be doable with driver-specific queries; dummy for now. */
-    case D3DQUERYTYPE_BANDWIDTHTIMINGS:
-        nresult.bandwidth.MaxBandwidthUtilized = 1.0f;
-        nresult.bandwidth.FrontEndUploadMemoryUtilizedPercent = 0.5f;
-        nresult.bandwidth.VertexRateUtilizedPercent = 0.75f;
-        nresult.bandwidth.TriangleSetupRateUtilizedPercent = 0.75f;
-        nresult.bandwidth.FillRateUtilizedPercent = 1.0f;
-        break;
-    case D3DQUERYTYPE_VERTEXTIMINGS:
-    case D3DQUERYTYPE_PIXELTIMINGS:
-        nresult.stage.MemoryProcessingPercent = 0.5f;
-        nresult.stage.ComputationProcessingPercent = 0.5f;
-        break;
-    case D3DQUERYTYPE_VCACHE:
-        /* Are we supposed to fill this in ? */
-        nresult.vcache.Pattern = MAKEFOURCC('C', 'A', 'C', 'H');
-        nresult.vcache.OptMethod = 1;
-        nresult.vcache.CacheSize = 32 << 10;
-        nresult.vcache.MagicNumber = 0xdeadcafe;
-        break;
-    case D3DQUERYTYPE_RESOURCEMANAGER:
-        /* We could record some of these in the device ... */
-        for (i = 0; i < D3DRTYPECOUNT; ++i) {
-            nresult.rm.stats[i].bThrashing = FALSE;
-            nresult.rm.stats[i].ApproxBytesDownloaded = 0;
-            nresult.rm.stats[i].NumEvicts = 0;
-            nresult.rm.stats[i].NumVidCreates = 0;
-            nresult.rm.stats[i].LastPri = 0;
-            nresult.rm.stats[i].NumUsed = 1;
-            nresult.rm.stats[i].NumUsedInVidMem = 1;
-            nresult.rm.stats[i].WorkingSet = 1;
-            nresult.rm.stats[i].WorkingSetBytes = 1 << 20;
-            nresult.rm.stats[i].TotalManaged = 1;
-            nresult.rm.stats[i].TotalBytes = 1 << 20;
-        }
-        break;
-    case D3DQUERYTYPE_PIPELINETIMINGS:
-        nresult.pipe.VertexProcessingTimePercent = 0.4f;
-        nresult.pipe.PixelProcessingTimePercent = 0.4f;
-        nresult.pipe.OtherGPUProcessingTimePercent = 0.15f;
-        nresult.pipe.GPUIdleTimePercent = 0.05f;
-        break;
-    case D3DQUERYTYPE_INTERFACETIMINGS:
-        nresult.iface.WaitingForGPUToUseApplicationResourceTimePercent = 0.0f;
-        nresult.iface.WaitingForGPUToAcceptMoreCommandsTimePercent = 0.0f;
-        nresult.iface.WaitingForGPUToStayWithinLatencyTimePercent = 0.0f;
-        nresult.iface.WaitingForGPUExclusiveResourceTimePercent = 0.0f;
-        nresult.iface.WaitingForGPUOtherTimePercent = 0.0f;
-        break;
-    case D3DQUERYTYPE_CACHEUTILIZATION:
-        nresult.cacheu.TextureCacheHitRate = 0.9f;
-        nresult.cacheu.PostTransformVertexCacheHitRate = 0.3f;
         break;
     default:
         assert(0);

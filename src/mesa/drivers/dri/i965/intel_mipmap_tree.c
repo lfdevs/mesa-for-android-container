@@ -290,7 +290,28 @@ intel_miptree_create_layout(struct brw_context *brw,
       /* Adjust width/height/depth for MSAA */
       mt->msaa_layout = compute_msaa_layout(brw, format, mt->target);
       if (mt->msaa_layout == INTEL_MSAA_LAYOUT_IMS) {
-         /* In the Sandy Bridge PRM, volume 4, part 1, page 31, it says:
+         /* From the Ivybridge PRM, Volume 1, Part 1, page 108:
+          * "If the surface is multisampled and it is a depth or stencil
+          *  surface or Multisampled Surface StorageFormat in SURFACE_STATE is
+          *  MSFMT_DEPTH_STENCIL, WL and HL must be adjusted as follows before
+          *  proceeding:
+          *
+          *  +----------------------------------------------------------------+
+          *  | Num Multisamples |        W_l =         |        H_l =         |
+          *  +----------------------------------------------------------------+
+          *  |         2        | ceiling(W_l / 2) * 4 | H_l (no adjustment)  |
+          *  |         4        | ceiling(W_l / 2) * 4 | ceiling(H_l / 2) * 4 |
+          *  |         8        | ceiling(W_l / 2) * 8 | ceiling(H_l / 2) * 4 |
+          *  |        16        | ceiling(W_l / 2) * 8 | ceiling(H_l / 2) * 8 |
+          *  +----------------------------------------------------------------+
+          * "
+          *
+          * Note that MSFMT_DEPTH_STENCIL just means the IMS (interleaved)
+          * format rather than UMS/CMS (array slices).  The Sandybridge PRM,
+          * Volume 1, Part 1, Page 111 has the same formula for 4x MSAA.
+          *
+          * Another more complicated explanation for these adjustments comes
+          * from the Sandybridge PRM, volume 4, part 1, page 31:
           *
           *     "Any of the other messages (sample*, LOD, load4) used with a
           *      (4x) multisampled surface will in-effect sample a surface with
@@ -671,10 +692,12 @@ intel_miptree_create_for_bo(struct brw_context *brw,
                             uint32_t offset,
                             uint32_t width,
                             uint32_t height,
+                            uint32_t depth,
                             int pitch)
 {
    struct intel_mipmap_tree *mt;
    uint32_t tiling, swizzle;
+   GLenum target;
 
    drm_intel_bo_get_tiling(bo, &tiling, &swizzle);
 
@@ -689,9 +712,11 @@ intel_miptree_create_for_bo(struct brw_context *brw,
     */
    assert(pitch >= 0);
 
-   mt = intel_miptree_create_layout(brw, GL_TEXTURE_2D, format,
+   target = depth > 1 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D;
+
+   mt = intel_miptree_create_layout(brw, target, format,
                                     0, 0,
-                                    width, height, 1,
+                                    width, height, depth,
                                     true, 0, false);
    if (!mt) {
       free(mt);
@@ -742,6 +767,7 @@ intel_update_winsys_renderbuffer_miptree(struct brw_context *intel,
                                                  0,
                                                  width,
                                                  height,
+                                                 1,
                                                  pitch);
    if (!singlesample_mt)
       goto fail;
@@ -1111,7 +1137,7 @@ intel_miptree_copy_slice_sw(struct brw_context *brw,
                             int height)
 {
    void *src, *dst;
-   int src_stride, dst_stride;
+   ptrdiff_t src_stride, dst_stride;
    int cpp = dst_mt->cpp;
 
    intel_miptree_map(brw, src_mt,
@@ -1129,7 +1155,7 @@ intel_miptree_copy_slice_sw(struct brw_context *brw,
                      BRW_MAP_DIRECT_BIT,
                      &dst, &dst_stride);
 
-   DBG("sw blit %s mt %p %p/%d -> %s mt %p %p/%d (%dx%d)\n",
+   DBG("sw blit %s mt %p %p/%"PRIdPTR" -> %s mt %p %p/%"PRIdPTR" (%dx%d)\n",
        _mesa_get_format_name(src_mt->format),
        src_mt, src, src_stride,
        _mesa_get_format_name(dst_mt->format),
@@ -1244,7 +1270,12 @@ intel_miptree_copy_teximage(struct brw_context *brw,
       intel_texture_object(intelImage->base.Base.TexObject);
    int level = intelImage->base.Base.Level;
    int face = intelImage->base.Base.Face;
-   GLuint depth = intelImage->base.Base.Depth;
+
+   GLuint depth;
+   if (intel_obj->base.Target == GL_TEXTURE_1D_ARRAY)
+      depth = intelImage->base.Base.Height;
+   else
+      depth = intelImage->base.Base.Depth;
 
    if (!invalidate) {
       for (int slice = 0; slice < depth; slice++) {
@@ -1807,14 +1838,21 @@ intel_miptree_map_blit(struct brw_context *brw,
    }
    map->stride = map->mt->pitch;
 
-   if (!intel_miptree_blit(brw,
-                           mt, level, slice,
-                           map->x, map->y, false,
-                           map->mt, 0, 0,
-                           0, 0, false,
-                           map->w, map->h, GL_COPY)) {
-      fprintf(stderr, "Failed to blit\n");
-      goto fail;
+   /* One of either READ_BIT or WRITE_BIT or both is set.  READ_BIT implies no
+    * INVALIDATE_RANGE_BIT.  WRITE_BIT needs the original values read in unless
+    * invalidate is set, since we'll be writing the whole rectangle from our
+    * temporary buffer back out.
+    */
+   if (!(map->mode & GL_MAP_INVALIDATE_RANGE_BIT)) {
+      if (!intel_miptree_blit(brw,
+                              mt, level, slice,
+                              map->x, map->y, false,
+                              map->mt, 0, 0,
+                              0, 0, false,
+                              map->w, map->h, GL_COPY)) {
+         fprintf(stderr, "Failed to blit\n");
+         goto fail;
+      }
    }
 
    map->ptr = intel_miptree_map_raw(brw, map->mt);
@@ -2259,6 +2297,17 @@ can_blit_slice(struct intel_mipmap_tree *mt,
    return true;
 }
 
+/**
+ * Parameter \a out_stride has type ptrdiff_t not because the buffer stride may
+ * exceed 32 bits but to diminish the likelihood subtle bugs in pointer
+ * arithmetic overflow.
+ *
+ * If you call this function and use \a out_stride, then you're doing pointer
+ * arithmetic on \a out_ptr. The type of \a out_stride doesn't prevent all
+ * bugs.  The caller must still take care to avoid 32-bit overflow errors in
+ * all arithmetic expressions that contain buffer offsets and pixel sizes,
+ * which usually have type uint32_t or GLuint.
+ */
 void
 intel_miptree_map(struct brw_context *brw,
                   struct intel_mipmap_tree *mt,
@@ -2270,7 +2319,7 @@ intel_miptree_map(struct brw_context *brw,
                   unsigned int h,
                   GLbitfield mode,
                   void **out_ptr,
-                  int *out_stride)
+                  ptrdiff_t *out_stride)
 {
    struct intel_miptree_map *map;
 

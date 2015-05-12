@@ -32,15 +32,6 @@
 
 #include "brw_vec4.h"
 
-
-struct brw_gs_prog_key
-{
-   struct brw_vec4_prog_key base;
-
-   GLbitfield64 input_varyings;
-};
-
-
 /**
  * Scratch data used when compiling a GLSL geometry shader.
  */

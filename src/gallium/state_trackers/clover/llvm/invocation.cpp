@@ -56,7 +56,11 @@
 
 
 #include <llvm/IR/DataLayout.h>
+#if HAVE_LLVM >= 0x0307
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#else
 #include <llvm/Target/TargetLibraryInfo.h>
+#endif
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 
@@ -177,7 +181,7 @@ namespace {
                                         opts_carray.data() + opts_carray.size(),
                                         Diags);
       if (!Success) {
-         throw error(CL_INVALID_BUILD_OPTIONS);
+         throw error(CL_INVALID_COMPILER_OPTIONS);
       }
       c.getFrontendOpts().ProgramAction = clang::frontend::EmitLLVMOnly;
       c.getHeaderSearchOpts().UseBuiltinIncludes = true;
@@ -281,7 +285,11 @@ namespace {
       }
 
       for (unsigned i = 0; i < kernel_node->getNumOperands(); ++i) {
+#if HAVE_LLVM >= 0x0306
+         kernels.push_back(llvm::mdconst::dyn_extract<llvm::Function>(
+#else
          kernels.push_back(llvm::dyn_cast<llvm::Function>(
+#endif
                                     kernel_node->getOperand(i)->getOperand(0)));
       }
    }
@@ -323,7 +331,11 @@ namespace {
 
       llvm::PassManagerBuilder PMB;
       PMB.OptLevel = optimization_level;
+#if HAVE_LLVM < 0x0307
       PMB.LibraryInfo = new llvm::TargetLibraryInfo(
+#else
+      PMB.LibraryInfo = new llvm::TargetLibraryInfoImpl(
+#endif
             llvm::Triple(mod->getTargetTriple()));
       PMB.populateModulePassManager(PM);
       PM.run(*mod);
@@ -660,19 +672,27 @@ namespace {
          targets_initialized = true;
       }
    }
-} // End anonymous namespace
 
 #define DBG_CLC  (1 << 0)
 #define DBG_LLVM (1 << 1)
 #define DBG_ASM  (1 << 2)
 
-static const struct debug_named_value debug_options[] = {
-   {"clc", DBG_CLC, "Dump the OpenCL C code for all kernels."},
-   {"llvm", DBG_LLVM, "Dump the generated LLVM IR for all kernels."},
-   {"asm", DBG_ASM, "Dump kernel assembly code for targets specifying "
-                    "PIPE_SHADER_IR_NATIVE"},
-	DEBUG_NAMED_VALUE_END // must be last
-};
+   unsigned
+   get_debug_flags() {
+      static const struct debug_named_value debug_options[] = {
+         {"clc", DBG_CLC, "Dump the OpenCL C code for all kernels."},
+         {"llvm", DBG_LLVM, "Dump the generated LLVM IR for all kernels."},
+         {"asm", DBG_ASM, "Dump kernel assembly code for targets specifying "
+          "PIPE_SHADER_IR_NATIVE"},
+         DEBUG_NAMED_VALUE_END // must be last
+      };
+      static const unsigned debug_flags =
+         debug_get_flags_option("CLOVER_DEBUG", debug_options, 0);
+
+      return debug_flags;
+   }
+
+} // End anonymous namespace
 
 module
 clover::compile_program_llvm(const compat::string &source,
@@ -683,13 +703,11 @@ clover::compile_program_llvm(const compat::string &source,
                              compat::string &r_log) {
 
    init_targets();
-   static unsigned debug_flags = debug_get_flags_option("CLOVER_DEBUG",
-                                                         debug_options, 0);
 
    std::vector<llvm::Function *> kernels;
-   size_t processor_str_len = std::string(target.begin()).find_first_of("-");
-   std::string processor(target.begin(), 0, processor_str_len);
-   std::string triple(target.begin(), processor_str_len + 1,
+   size_t processor_str_len = std::string(target).find_first_of("-");
+   std::string processor(target, 0, processor_str_len);
+   std::string triple(target, processor_str_len + 1,
                       target.size() - processor_str_len - 1);
    clang::LangAS::Map address_spaces;
    llvm::LLVMContext llvm_ctx;
@@ -698,6 +716,9 @@ clover::compile_program_llvm(const compat::string &source,
 #if HAVE_LLVM >= 0x0305
    llvm_ctx.setDiagnosticHandler(diagnostic_handler, &r_log);
 #endif
+
+   if (get_debug_flags() & DBG_CLC)
+      debug_log(source, ".cl");
 
    // The input file name must have the .cl extension in order for the
    // CompilerInvocation class to recognize it as an OpenCL source file.
@@ -709,10 +730,7 @@ clover::compile_program_llvm(const compat::string &source,
 
    optimize(mod, optimization_level, kernels);
 
-   if (debug_flags & DBG_CLC)
-      debug_log(source, ".cl");
-
-   if (debug_flags & DBG_LLVM) {
+   if (get_debug_flags() & DBG_LLVM) {
       std::string log;
       llvm::raw_string_ostream s_log(log);
       mod->print(s_log, NULL);
@@ -733,7 +751,8 @@ clover::compile_program_llvm(const compat::string &source,
          break;
       case PIPE_SHADER_IR_NATIVE: {
          std::vector<char> code = compile_native(mod, triple, processor,
-	                                         debug_flags & DBG_ASM, r_log);
+                                                 get_debug_flags() & DBG_ASM,
+                                                 r_log);
          m = build_module_native(code, mod, kernels, address_spaces, r_log);
          break;
       }

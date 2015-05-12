@@ -30,7 +30,6 @@ enum nine_query_state
     NINE_QUERY_STATE_FRESH = 0,
     NINE_QUERY_STATE_RUNNING,
     NINE_QUERY_STATE_ENDED,
-    NINE_QUERY_STATE_FLUSHED
 };
 
 struct NineQuery9
@@ -49,7 +48,7 @@ NineQuery9( void *data )
 }
 
 HRESULT
-nine_is_query_supported(D3DQUERYTYPE);
+nine_is_query_supported(struct pipe_screen *screen, D3DQUERYTYPE);
 
 HRESULT
 NineQuery9_new( struct NineDevice9 *Device,

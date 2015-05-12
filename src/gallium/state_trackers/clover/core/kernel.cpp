@@ -293,38 +293,32 @@ namespace {
 
 std::unique_ptr<kernel::argument>
 kernel::argument::create(const module::argument &marg) {
-      if (marg.type == module::argument::scalar)
-         return std::unique_ptr<kernel::argument>(
-            new scalar_argument(marg.size));
+   switch (marg.type) {
+   case module::argument::scalar:
+      return std::unique_ptr<kernel::argument>(new scalar_argument(marg.size));
 
-      else if (marg.type == module::argument::global)
-         return std::unique_ptr<kernel::argument>(
-            new global_argument);
+   case module::argument::global:
+      return std::unique_ptr<kernel::argument>(new global_argument);
 
-      else if (marg.type == module::argument::local)
-         return std::unique_ptr<kernel::argument>(
-            new local_argument);
+   case module::argument::local:
+      return std::unique_ptr<kernel::argument>(new local_argument);
 
-      else if (marg.type == module::argument::constant)
-         return std::unique_ptr<kernel::argument>(
-            new constant_argument);
+   case module::argument::constant:
+      return std::unique_ptr<kernel::argument>(new constant_argument);
 
-      else if (marg.type == module::argument::image2d_rd ||
-               marg.type == module::argument::image3d_rd)
-         return std::unique_ptr<kernel::argument>(
-            new image_rd_argument);
+   case module::argument::image2d_rd:
+   case module::argument::image3d_rd:
+      return std::unique_ptr<kernel::argument>(new image_rd_argument);
 
-      else if (marg.type == module::argument::image2d_wr ||
-               marg.type == module::argument::image3d_wr)
-         return std::unique_ptr<kernel::argument>(
-            new image_wr_argument);
+   case module::argument::image2d_wr:
+   case module::argument::image3d_wr:
+      return std::unique_ptr<kernel::argument>(new image_wr_argument);
 
-      else if (marg.type == module::argument::sampler)
-         return std::unique_ptr<kernel::argument>(
-            new sampler_argument);
+   case module::argument::sampler:
+      return std::unique_ptr<kernel::argument>(new sampler_argument);
 
-      else
-         throw error(CL_INVALID_KERNEL_DEFINITION);
+   }
+   throw error(CL_INVALID_KERNEL_DEFINITION);
 }
 
 kernel::argument::argument() : _set(false) {

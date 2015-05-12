@@ -64,7 +64,6 @@ const struct brw_tracked_state brw_drawing_rect = {
    .dirty = {
       .mesa = _NEW_BUFFERS,
       .brw = BRW_NEW_CONTEXT,
-      .cache = 0
    },
    .emit = upload_drawing_rect
 };
@@ -116,16 +115,11 @@ static void upload_psp_urb_cbs(struct brw_context *brw )
 const struct brw_tracked_state brw_psp_urb_cbs = {
    .dirty = {
       .mesa = 0,
-      .brw = (BRW_NEW_URB_FENCE |
-	      BRW_NEW_BATCH |
-	      BRW_NEW_STATE_BASE_ADDRESS),
-      .cache = (CACHE_NEW_VS_UNIT |
-		CACHE_NEW_FF_GS_UNIT |
-		CACHE_NEW_FF_GS_PROG |
-		CACHE_NEW_CLIP_UNIT |
-		CACHE_NEW_SF_UNIT |
-		CACHE_NEW_WM_UNIT |
-		CACHE_NEW_CC_UNIT)
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_FF_GS_PROG_DATA |
+             BRW_NEW_GEN4_UNIT_STATE |
+             BRW_NEW_STATE_BASE_ADDRESS |
+             BRW_NEW_URB_FENCE,
    },
    .emit = upload_psp_urb_cbs,
 };
@@ -707,7 +701,6 @@ const struct brw_tracked_state brw_depthbuffer = {
    .dirty = {
       .mesa = _NEW_BUFFERS,
       .brw = BRW_NEW_BATCH,
-      .cache = 0,
    },
    .emit = brw_emit_depthbuffer,
 };
@@ -753,10 +746,9 @@ static void upload_polygon_stipple(struct brw_context *brw)
 
 const struct brw_tracked_state brw_polygon_stipple = {
    .dirty = {
-      .mesa = (_NEW_POLYGONSTIPPLE |
-	       _NEW_POLYGON),
+      .mesa = _NEW_POLYGON |
+              _NEW_POLYGONSTIPPLE,
       .brw = BRW_NEW_CONTEXT,
-      .cache = 0
    },
    .emit = upload_polygon_stipple
 };
@@ -797,10 +789,9 @@ static void upload_polygon_stipple_offset(struct brw_context *brw)
 
 const struct brw_tracked_state brw_polygon_stipple_offset = {
    .dirty = {
-      .mesa = (_NEW_BUFFERS |
-	       _NEW_POLYGON),
+      .mesa = _NEW_BUFFERS |
+              _NEW_POLYGON,
       .brw = BRW_NEW_CONTEXT,
-      .cache = 0
    },
    .emit = upload_polygon_stipple_offset
 };
@@ -834,7 +825,6 @@ const struct brw_tracked_state brw_aa_line_parameters = {
    .dirty = {
       .mesa = _NEW_LINE,
       .brw = BRW_NEW_CONTEXT,
-      .cache = 0
    },
    .emit = upload_aa_line_parameters
 };
@@ -879,7 +869,6 @@ const struct brw_tracked_state brw_line_stipple = {
    .dirty = {
       .mesa = _NEW_LINE,
       .brw = BRW_NEW_CONTEXT,
-      .cache = 0
    },
    .emit = upload_line_stipple
 };
@@ -937,7 +926,6 @@ const struct brw_tracked_state brw_invariant_state = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_CONTEXT,
-      .cache = 0
    },
    .emit = brw_upload_invariant_state
 };
@@ -1059,9 +1047,8 @@ static void upload_state_base_address( struct brw_context *brw )
 const struct brw_tracked_state brw_state_base_address = {
    .dirty = {
       .mesa = 0,
-      .brw = (BRW_NEW_BATCH |
-	      BRW_NEW_PROGRAM_CACHE),
-      .cache = 0,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_PROGRAM_CACHE,
    },
    .emit = upload_state_base_address
 };

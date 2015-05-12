@@ -48,9 +48,9 @@ upload_sampler_state_pointers(struct brw_context *brw)
 const struct brw_tracked_state gen6_sampler_state = {
    .dirty = {
       .mesa = 0,
-      .brw = (BRW_NEW_BATCH |
-	      BRW_NEW_STATE_BASE_ADDRESS),
-      .cache = CACHE_NEW_SAMPLER
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_SAMPLER_STATE_TABLE |
+             BRW_NEW_STATE_BASE_ADDRESS,
    },
    .emit = upload_sampler_state_pointers,
 };

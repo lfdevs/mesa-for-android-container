@@ -162,15 +162,14 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
                             draw->clip_user,
                             point_clip ? draw->guard_band_points_xy :
                                          draw->guard_band_xy,
-                            draw->identity_viewport,
+                            draw->bypass_viewport,
                             draw->rasterizer->clip_halfz,
                             (draw->vs.edgeflag_output ? TRUE : FALSE) );
 
    draw_pt_so_emit_prepare( fpme->so_emit, gs == NULL );
 
    if (!(opt & PT_PIPELINE)) {
-      draw_pt_emit_prepare( fpme->emit,
-			    out_prim,
+      draw_pt_emit_prepare( fpme->emit, out_prim,
                             max_vertices );
 
       *max_vertices = MAX2( *max_vertices, 4096 );
@@ -294,8 +293,8 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
    fpme->llvm->gs_jit_context.planes =
       (float (*)[DRAW_TOTAL_CLIP_PLANES][4]) draw->pt.user.planes[0];
 
-   fpme->llvm->jit_context.viewport = (float *) draw->viewports[0].scale;
-   fpme->llvm->gs_jit_context.viewport = (float *) draw->viewports[0].scale;
+   fpme->llvm->jit_context.viewports = draw->viewports;
+   fpme->llvm->gs_jit_context.viewports = draw->viewports;
 }
 
 
@@ -442,7 +441,8 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
     * will try to access non-existent position output.
     */
    if (draw_current_shader_position_output(draw) != -1) {
-      if ((opt & PT_SHADE) && gshader) {
+      if ((opt & PT_SHADE) && (gshader ||
+                               draw->vs.vertex_shader->info.writes_viewport_index)) {
          clipped = draw_pt_post_vs_run( fpme->post_vs, vert_info, prim_info );
       }
       if (clipped) {

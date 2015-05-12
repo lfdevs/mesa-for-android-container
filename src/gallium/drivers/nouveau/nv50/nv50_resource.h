@@ -34,7 +34,8 @@ nv50_screen_init_resource_functions(struct pipe_screen *pscreen);
 #endif /* __NVC0_RESOURCE_H__ */
 
 uint32_t
-nv50_tex_choose_tile_dims_helper(unsigned nx, unsigned ny, unsigned nz);
+nv50_tex_choose_tile_dims_helper(unsigned nx, unsigned ny, unsigned nz,
+                                 boolean is_3d);
 
 struct nv50_miptree_level {
    uint32_t offset;

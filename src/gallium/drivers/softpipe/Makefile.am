@@ -30,4 +30,4 @@ noinst_LTLIBRARIES = libsoftpipe.la
 
 libsoftpipe_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = Android.mk SConscript
+EXTRA_DIST = SConscript

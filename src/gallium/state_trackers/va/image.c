@@ -44,6 +44,7 @@ static const VAImageFormat formats[VL_VA_MAX_IMAGE_FORMATS] =
    {VA_FOURCC('Y','V','1','2')},
    {VA_FOURCC('Y','U','Y','V')},
    {VA_FOURCC('U','Y','V','Y')},
+   {VA_FOURCC('B','G','R','A')}
 };
 
 static void
@@ -93,7 +94,9 @@ vlVaQueryImageFormats(VADriverContextP ctx, VAImageFormat *format_list, int *num
 VAStatus
 vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int height, VAImage *image)
 {
+   VAStatus status;
    vlVaDriver *drv;
+   VAImage *img;
    int w, h;
 
    if (!ctx)
@@ -104,50 +107,66 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
 
    drv = VL_VA_DRIVER(ctx);
 
-   image->image_id = handle_table_add(drv->htab, image);
-   image->format = *format;
-   image->width = width;
-   image->height = height;
+   img = CALLOC(1, sizeof(VAImage));
+   if (!img)
+      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   img->image_id = handle_table_add(drv->htab, img);
+
+   img->format = *format;
+   img->width = width;
+   img->height = height;
    w = align(width, 2);
    h = align(width, 2);
 
    switch (format->fourcc) {
    case VA_FOURCC('N','V','1','2'):
-      image->num_planes = 2;
-      image->pitches[0] = w;
-      image->offsets[0] = 0;
-      image->pitches[1] = w;
-      image->offsets[1] = w * h;
-      image->data_size  = w * h * 3 / 2;
+      img->num_planes = 2;
+      img->pitches[0] = w;
+      img->offsets[0] = 0;
+      img->pitches[1] = w;
+      img->offsets[1] = w * h;
+      img->data_size  = w * h * 3 / 2;
       break;
 
    case VA_FOURCC('I','4','2','0'):
    case VA_FOURCC('Y','V','1','2'):
-      image->num_planes = 3;
-      image->pitches[0] = w;
-      image->offsets[0] = 0;
-      image->pitches[1] = w / 2;
-      image->offsets[1] = w * h;
-      image->pitches[2] = w / 2;
-      image->offsets[2] = w * h * 5 / 4;
-      image->data_size  = w * h * 3 / 2;
+      img->num_planes = 3;
+      img->pitches[0] = w;
+      img->offsets[0] = 0;
+      img->pitches[1] = w / 2;
+      img->offsets[1] = w * h;
+      img->pitches[2] = w / 2;
+      img->offsets[2] = w * h * 5 / 4;
+      img->data_size  = w * h * 3 / 2;
       break;
 
    case VA_FOURCC('U','Y','V','Y'):
    case VA_FOURCC('Y','U','Y','V'):
-      image->num_planes = 1;
-      image->pitches[0] = w * 2;
-      image->offsets[0] = 0;
-      image->data_size  = w * h * 2;
+      img->num_planes = 1;
+      img->pitches[0] = w * 2;
+      img->offsets[0] = 0;
+      img->data_size  = w * h * 2;
+      break;
+
+   case VA_FOURCC('B','G','R','A'):
+      img->num_planes = 1;
+      img->pitches[0] = w * 4;
+      img->offsets[0] = 0;
+      img->data_size  = w * h * 4;
       break;
 
    default:
       return VA_STATUS_ERROR_INVALID_IMAGE_FORMAT;
    }
 
-   return vlVaCreateBuffer(ctx, 0, VAImageBufferType,
-                           align(image->data_size, 16),
-                           1, NULL, &image->buf);
+   status =  vlVaCreateBuffer(ctx, 0, VAImageBufferType,
+                           align(img->data_size, 16),
+                           1, NULL, &img->buf);
+   if (status != VA_STATUS_SUCCESS)
+      return status;
+   *image = *img;
+
+   return status;
 }
 
 VAStatus
@@ -171,6 +190,8 @@ vlVaDestroyImage(VADriverContextP ctx, VAImageID image)
    if (!vaimage)
       return VA_STATUS_ERROR_INVALID_IMAGE;
 
+   handle_table_remove(VL_VA_DRIVER(ctx)->htab, image);
+   FREE(vaimage);
    return vlVaDestroyBuffer(ctx, vaimage->buf);
 }
 

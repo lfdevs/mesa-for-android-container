@@ -397,8 +397,6 @@ int main(int argc, char **argv)
    }
 #endif
 
-   util_cpu_detect();
-
    if(fp) {
       /* Warm up the caches */
       test_some(0, NULL, 100);

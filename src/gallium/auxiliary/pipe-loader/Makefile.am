@@ -1,8 +1,9 @@
-AUTOMAKE_OPTIONS = subdir-objects
+include Makefile.sources
 
 AM_CPPFLAGS = $(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
@@ -11,16 +12,10 @@ AM_CPPFLAGS = $(DEFINES) \
 noinst_LTLIBRARIES = libpipe_loader.la
 noinst_LTLIBRARIES += libpipe_loader_client.la
 
-COMMON_SOURCES = \
-	pipe_loader.h \
-	pipe_loader_priv.h \
-	pipe_loader.c \
-	pipe_loader_sw.c
-
 if HAVE_DRM_LOADER_GALLIUM
 AM_CFLAGS = $(LIBDRM_CFLAGS)
 
-COMMON_SOURCES += pipe_loader_drm.c
+COMMON_SOURCES += $(DRM_SOURCES)
 
 COMMON_LIBADD = \
 	$(top_builddir)/src/loader/libloader.la

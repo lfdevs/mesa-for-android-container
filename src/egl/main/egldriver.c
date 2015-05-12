@@ -52,6 +52,9 @@
 #include <unistd.h>
 #endif
 
+#ifdef _EGL_BUILT_IN_DRIVER_HAIKU
+_EGLDriver* _eglBuiltInDriverHaiku(const char* args);
+#endif
 
 typedef struct _egl_module {
    char *Path;
@@ -72,6 +75,9 @@ const struct {
 #endif
 #ifdef _EGL_BUILT_IN_DRIVER_DRI2
    { "egl_dri2", _eglBuiltInDriverDRI2 },
+#endif
+#ifdef _EGL_BUILT_IN_DRIVER_HAIKU
+   { "egl_haiku", _eglBuiltInDriverHaiku },
 #endif
    { NULL, NULL }
 };

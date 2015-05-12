@@ -34,9 +34,10 @@
 #define NINED3DRS_VSPOINTSIZE (D3DRS_BLENDOPALPHA + 1)
 #define NINED3DRS_RTMASK      (D3DRS_BLENDOPALPHA + 2)
 #define NINED3DRS_ZBIASSCALE  (D3DRS_BLENDOPALPHA + 3)
+#define NINED3DRS_ALPHACOVERAGE  (D3DRS_BLENDOPALPHA + 4)
 
 #define D3DRS_LAST       D3DRS_BLENDOPALPHA
-#define NINED3DRS_LAST   NINED3DRS_ZBIASSCALE /* 212 */
+#define NINED3DRS_LAST   NINED3DRS_ALPHACOVERAGE /* 213 */
 #define NINED3DSAMP_LAST NINED3DSAMP_SHADOW /* 15 */
 #define NINED3DTSS_LAST  D3DTSS_CONSTANT
 #define NINED3DTS_LAST   D3DTS_WORLDMATRIX(255)
@@ -80,6 +81,7 @@
 
 
 #define NINE_MAX_SIMULTANEOUS_RENDERTARGETS 4
+#define NINE_MAX_CONST_F_PS3 224
 #define NINE_MAX_CONST_F   256
 #define NINE_MAX_CONST_I   16
 #define NINE_MAX_CONST_B   16
@@ -90,11 +92,6 @@
 #define NINE_CONST_B_BASE(nconstf) \
     ((nconstf)        * 4 * sizeof(float) + \
      NINE_MAX_CONST_I * 4 * sizeof(int))
-
-#define NINE_CONSTBUF_SIZE(nconstf)         \
-    ((nconstf)        * 4 * sizeof(float) + \
-     NINE_MAX_CONST_I * 4 * sizeof(int) + \
-     NINE_MAX_CONST_B * 1 * sizeof(float))
 
 
 #define NINE_MAX_LIGHTS        65536
@@ -127,6 +124,7 @@ struct nine_state
         uint16_t vs_const_b; /* NINE_MAX_CONST_B == 16 */
         uint16_t ps_const_b;
         uint8_t ucp;
+        boolean srgb;
     } changed;
 
     struct NineSurface9 *rt[NINE_MAX_SIMULTANEOUS_RENDERTARGETS];
@@ -144,6 +142,7 @@ struct nine_state
     float *vs_const_f;
     int    vs_const_i[NINE_MAX_CONST_I][4];
     BOOL   vs_const_b[NINE_MAX_CONST_B];
+    float *vs_lconstf_temp;
     uint32_t vs_key;
 
     struct NinePixelShader9 *ps;
@@ -176,6 +175,11 @@ struct nine_state
 
     DWORD samp[NINE_MAX_SAMPLERS][NINED3DSAMP_COUNT];
     uint32_t samplers_shadow;
+    uint8_t bound_samplers_mask_vs;
+    uint16_t bound_samplers_mask_ps;
+
+    int dummy_vbo_bound_at; /* -1 = not bound , >= 0 = bound index */
+    boolean vbo_bound_done;
 
     struct {
         struct {
@@ -218,7 +222,7 @@ struct NineDevice9;
 
 boolean nine_update_state(struct NineDevice9 *, uint32_t group_mask);
 
-void nine_state_set_defaults(struct nine_state *, const D3DCAPS9 *,
+void nine_state_set_defaults(struct NineDevice9 *, const D3DCAPS9 *,
                              boolean is_reset);
 void nine_state_clear(struct nine_state *, const boolean device);
 

@@ -3,6 +3,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/gallium/state_trackers/dri \
 	$(GALLIUM_TARGET_CFLAGS)
@@ -43,6 +44,7 @@ gallium_dri_la_LIBADD = \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
 	$(top_builddir)/src/mesa/drivers/dri/common/libmegadriver_stub.la \
 	$(top_builddir)/src/gallium/state_trackers/dri/libdri.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvl.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/drivers/galahad/libgalahad.la \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
@@ -58,6 +60,14 @@ gallium_dri_la_LIBADD = \
 # Remove this hack as we come up with a cleaner solution.
 gallium_dri_la_LDFLAGS += \
 	-Wl,--allow-multiple-definition
+
+EXTRA_gallium_dri_la_DEPENDENCIES = \
+	dri.sym \
+	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
+EXTRA_DIST = \
+	SConscript \
+	dri.sym \
+	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =
@@ -109,21 +119,27 @@ all-local: $(dri_LTLIBRARIES)
 	$(AM_V_GEN)link_dir=$(top_builddir)/$(LIB_DIR)/gallium;         \
 	$(MKDIR_P) $${link_dir};                                        \
 	for i in $(TARGET_DRIVERS); do                                  \
-		j=gallium_dri.so;                                       \
-		k=$${i}_dri.so;                                         \
-		ln -f .libs/$${j}                                       \
-			$${link_dir}/$${k};                             \
+		ln -f .libs/gallium_dri.so                              \
+			$${link_dir}/$${i}_dri.so;                      \
 	done
+
+clean-local:
+	$(AM_V_GEN)link_dir=$(top_builddir)/$(LIB_DIR)/gallium;         \
+	$(AM_V_GEN)for i in $(TARGET_DRIVERS); do                       \
+		$(RM) $${link_dir}/$${i}_dri.so;                        \
+	done;
 endif
 
 # hardlink each megadriver instance, but don't actually have
 # gallium_dri.so in the set of final installed files.
 install-data-hook:
-	$(AM_V_GEN)dest_dir=$(DESTDIR)/$(dridir);                       \
 	for i in $(TARGET_DRIVERS); do                                  \
-		j=gallium_dri.so;                                       \
-		k=$${i}_dri.so;                                         \
-		ln -f $${dest_dir}/$${j}                                \
-			$${dest_dir}/$${k};                             \
+		ln -f $(DESTDIR)$(dridir)/gallium_dri.so                \
+		      $(DESTDIR)$(dridir)/$${i}_dri.so;                 \
 	done;                                                           \
-	$(RM) -f $$dest_dir/gallium_dri.*
+	$(RM) $(DESTDIR)$(dridir)/gallium_dri.*
+
+uninstall-hook:
+	for i in $(TARGET_DRIVERS); do                                  \
+		$(RM) $(DESTDIR)$(dridir)/$${i}_dri.so;                 \
+	done;

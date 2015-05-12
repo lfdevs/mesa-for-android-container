@@ -65,10 +65,23 @@ dri2_convert_glx_query_renderer_attribs(int attribute)
    return -1;
 }
 
+/* Convert internal dri context profile bits into GLX context profile bits */
+static inline void
+dri_convert_context_profile_bits(int attribute, unsigned int *value)
+{
+   if (attribute == GLX_RENDERER_PREFERRED_PROFILE_MESA) {
+      if (value[0] == (1U << __DRI_API_OPENGL_CORE))
+         value[0] = GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
+      else if (value[0] == (1U << __DRI_API_OPENGL))
+         value[0] = GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
+   }
+}
+
 _X_HIDDEN int
 dri2_query_renderer_integer(struct glx_screen *base, int attribute,
                             unsigned int *value)
 {
+   int ret;
    struct dri2_screen *const psc = (struct dri2_screen *) base;
 
    /* Even though there are invalid values (and
@@ -81,8 +94,11 @@ dri2_query_renderer_integer(struct glx_screen *base, int attribute,
    if (psc->rendererQuery == NULL)
       return -1;
 
-   return psc->rendererQuery->queryInteger(psc->driScreen, dri_attribute,
-                                           value);
+   ret = psc->rendererQuery->queryInteger(psc->driScreen, dri_attribute,
+                                          value);
+   dri_convert_context_profile_bits(attribute, value);
+
+   return ret;
 }
 
 _X_HIDDEN int
@@ -108,6 +124,7 @@ _X_HIDDEN int
 dri3_query_renderer_integer(struct glx_screen *base, int attribute,
                             unsigned int *value)
 {
+   int ret;
    struct dri3_screen *const psc = (struct dri3_screen *) base;
 
    /* Even though there are invalid values (and
@@ -120,8 +137,11 @@ dri3_query_renderer_integer(struct glx_screen *base, int attribute,
    if (psc->rendererQuery == NULL)
       return -1;
 
-   return psc->rendererQuery->queryInteger(psc->driScreen, dri_attribute,
-                                           value);
+   ret = psc->rendererQuery->queryInteger(psc->driScreen, dri_attribute,
+                                          value);
+   dri_convert_context_profile_bits(attribute, value);
+
+   return ret;
 }
 
 _X_HIDDEN int
@@ -147,6 +167,7 @@ _X_HIDDEN int
 drisw_query_renderer_integer(struct glx_screen *base, int attribute,
                              unsigned int *value)
 {
+   int ret;
    struct drisw_screen *const psc = (struct drisw_screen *) base;
 
    /* Even though there are invalid values (and
@@ -159,8 +180,11 @@ drisw_query_renderer_integer(struct glx_screen *base, int attribute,
    if (psc->rendererQuery == NULL)
       return -1;
 
-   return psc->rendererQuery->queryInteger(psc->driScreen, dri_attribute,
-                                           value);
+   ret = psc->rendererQuery->queryInteger(psc->driScreen, dri_attribute,
+                                          value);
+   dri_convert_context_profile_bits(attribute, value);
+
+   return ret;
 }
 
 _X_HIDDEN int

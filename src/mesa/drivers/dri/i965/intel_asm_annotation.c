@@ -109,7 +109,7 @@ void annotate(struct brw_context *brw,
 
    struct annotation *ann = &annotation->ann[annotation->ann_count++];
    ann->offset = offset;
-   if ((INTEL_DEBUG & DEBUG_NO_ANNOTATION) == 0) {
+   if ((INTEL_DEBUG & DEBUG_ANNOTATION) != 0) {
       ann->ir = inst->ir;
       ann->annotation = inst->annotation;
    }

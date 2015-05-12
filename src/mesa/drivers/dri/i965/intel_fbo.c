@@ -36,9 +36,9 @@
 #include "main/context.h"
 #include "main/teximage.h"
 #include "main/image.h"
-#include "main/set.h"
 #include "main/condrender.h"
 #include "util/hash_table.h"
+#include "util/set.h"
 
 #include "swrast/swrast.h"
 #include "drivers/common/meta.h"
@@ -127,7 +127,7 @@ intel_map_renderbuffer(struct gl_context *ctx,
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_mipmap_tree *mt;
    void *map;
-   int stride;
+   ptrdiff_t stride;
 
    if (srb->Buffer) {
       /* this is a malloc'd renderbuffer (accum buffer), not an irb */
@@ -189,7 +189,7 @@ intel_map_renderbuffer(struct gl_context *ctx,
       stride = -stride;
    }
 
-   DBG("%s: rb %d (%s) mt mapped: (%d, %d) (%dx%d) -> %p/%d\n",
+   DBG("%s: rb %d (%s) mt mapped: (%d, %d) (%dx%d) -> %p/%"PRIdPTR"\n",
        __FUNCTION__, rb->Name, _mesa_get_format_name(rb->Format),
        x, y, w, h, map, stride);
 
@@ -389,6 +389,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
                                          image->offset,
                                          image->width,
                                          image->height,
+                                         1,
                                          image->pitch);
    if (!irb->mt)
       return;
@@ -397,7 +398,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
    rb->Width = image->width;
    rb->Height = image->height;
    rb->Format = image->format;
-   rb->_BaseFormat = _mesa_base_fbo_format(ctx, image->internal_format);
+   rb->_BaseFormat = _mesa_get_format_base_format(image->format);
    rb->NeedsFinishRenderTexture = true;
    irb->layer_count = 1;
 }
@@ -638,6 +639,7 @@ intel_render_texture(struct gl_context * ctx,
       static GLuint msg_id = 0;                                               \
       if (unlikely(ctx->Const.ContextFlags & GL_CONTEXT_FLAG_DEBUG_BIT)) {    \
          _mesa_gl_debug(ctx, &msg_id,                                         \
+                        MESA_DEBUG_SOURCE_API,                                \
                         MESA_DEBUG_TYPE_OTHER,                                \
                         MESA_DEBUG_SEVERITY_MEDIUM,                           \
                         __VA_ARGS__);                                         \
@@ -777,6 +779,8 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
  */
 static GLbitfield
 intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
+                                    const struct gl_framebuffer *readFb,
+                                    const struct gl_framebuffer *drawFb,
                                     GLint srcX0, GLint srcY0,
                                     GLint srcX1, GLint srcY1,
                                     GLint dstX0, GLint dstY0,
@@ -792,8 +796,6 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
 
    if (mask & GL_COLOR_BUFFER_BIT) {
       GLint i;
-      const struct gl_framebuffer *drawFb = ctx->DrawBuffer;
-      const struct gl_framebuffer *readFb = ctx->ReadBuffer;
       struct gl_renderbuffer *src_rb = readFb->_ColorReadBuffer;
       struct intel_renderbuffer *src_irb = intel_renderbuffer(src_rb);
 
@@ -829,8 +831,8 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
        * results are undefined if any destination pixels have a dependency on
        * source pixels.
        */
-      for (i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; i++) {
-         struct gl_renderbuffer *dst_rb = ctx->DrawBuffer->_ColorDrawBuffers[i];
+      for (i = 0; i < drawFb->_NumColorDrawBuffers; i++) {
+         struct gl_renderbuffer *dst_rb = drawFb->_ColorDrawBuffers[i];
          struct intel_renderbuffer *dst_irb = intel_renderbuffer(dst_rb);
 
          if (!dst_irb) {
@@ -861,6 +863,8 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
 
 static void
 intel_blit_framebuffer(struct gl_context *ctx,
+                       struct gl_framebuffer *readFb,
+                       struct gl_framebuffer *drawFb,
                        GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                        GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                        GLbitfield mask, GLenum filter)
@@ -874,15 +878,22 @@ intel_blit_framebuffer(struct gl_context *ctx,
    if (!_mesa_check_conditional_render(ctx))
       return;
 
-   mask = brw_blorp_framebuffer(brw,
+   mask = brw_blorp_framebuffer(brw, readFb, drawFb,
                                 srcX0, srcY0, srcX1, srcY1,
                                 dstX0, dstY0, dstX1, dstY1,
                                 mask, filter);
    if (mask == 0x0)
       return;
 
+   mask = _mesa_meta_BlitFramebuffer(ctx, readFb, drawFb,
+                                     srcX0, srcY0, srcX1, srcY1,
+                                     dstX0, dstY0, dstX1, dstY1,
+                                     mask, filter);
+   if (mask == 0x0)
+      return;
+
    if (brw->gen >= 8 && (mask & GL_STENCIL_BUFFER_BIT)) {
-      brw_meta_fbo_stencil_blit(brw_context(ctx),
+      brw_meta_fbo_stencil_blit(brw_context(ctx), readFb, drawFb,
                                 srcX0, srcY0, srcX1, srcY1,
                                 dstX0, dstY0, dstX1, dstY1);
       mask &= ~GL_STENCIL_BUFFER_BIT;
@@ -891,21 +902,59 @@ intel_blit_framebuffer(struct gl_context *ctx,
    }
 
    /* Try using the BLT engine. */
-   mask = intel_blit_framebuffer_with_blitter(ctx,
+   mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
                                               srcX0, srcY0, srcX1, srcY1,
                                               dstX0, dstY0, dstX1, dstY1,
                                               mask, filter);
    if (mask == 0x0)
       return;
 
-   mask = _mesa_meta_BlitFramebuffer(ctx,
+   _swrast_BlitFramebuffer(ctx, readFb, drawFb,
+                           srcX0, srcY0, srcX1, srcY1,
+                           dstX0, dstY0, dstX1, dstY1,
+                           mask, filter);
+}
+
+/**
+ * Gen4-5 implementation of glBlitFrameBuffer().
+ *
+ * Tries BLT, Meta, then swrast.
+ *
+ * Gen4-5 have a single ring for both 3D and BLT operations, so there's no
+ * inter-ring synchronization issues like on Gen6+.  It is apparently faster
+ * than using the 3D pipeline.  Original Gen4 also has to rebase and copy
+ * miptree slices in order to render to unaligned locations.
+ */
+static void
+gen4_blit_framebuffer(struct gl_context *ctx,
+                      struct gl_framebuffer *readFb,
+                      struct gl_framebuffer *drawFb,
+                      GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+                      GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                      GLbitfield mask, GLenum filter)
+{
+   /* Page 679 of OpenGL 4.4 spec says:
+    * "Added BlitFramebuffer to commands affected by conditional rendering in
+    *  section 10.10 (Bug 9562)."
+    */
+   if (!_mesa_check_conditional_render(ctx))
+      return;
+
+   mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
+                                              srcX0, srcY0, srcX1, srcY1,
+                                              dstX0, dstY0, dstX1, dstY1,
+                                              mask, filter);
+   if (mask == 0x0)
+      return;
+
+   mask = _mesa_meta_BlitFramebuffer(ctx, readFb, drawFb,
                                      srcX0, srcY0, srcX1, srcY1,
                                      dstX0, dstY0, dstX1, dstY1,
                                      mask, filter);
    if (mask == 0x0)
       return;
 
-   _swrast_BlitFramebuffer(ctx,
+   _swrast_BlitFramebuffer(ctx, readFb, drawFb,
                            srcX0, srcY0, srcX1, srcY1,
                            dstX0, dstY0, dstX1, dstY1,
                            mask, filter);
@@ -1007,7 +1056,7 @@ brw_render_cache_set_clear(struct brw_context *brw)
 void
 brw_render_cache_set_add_bo(struct brw_context *brw, drm_intel_bo *bo)
 {
-   _mesa_set_add(brw->render_cache, _mesa_hash_pointer(bo), bo);
+   _mesa_set_add(brw->render_cache, bo);
 }
 
 /**
@@ -1025,7 +1074,7 @@ brw_render_cache_set_add_bo(struct brw_context *brw, drm_intel_bo *bo)
 void
 brw_render_cache_set_check_flush(struct brw_context *brw, drm_intel_bo *bo)
 {
-   if (!_mesa_set_search(brw->render_cache, _mesa_hash_pointer(bo), bo))
+   if (!_mesa_set_search(brw->render_cache, bo))
       return;
 
    intel_batchbuffer_emit_mi_flush(brw);
@@ -1045,9 +1094,13 @@ intel_fbo_init(struct brw_context *brw)
    dd->UnmapRenderbuffer = intel_unmap_renderbuffer;
    dd->RenderTexture = intel_render_texture;
    dd->ValidateFramebuffer = intel_validate_framebuffer;
-   dd->BlitFramebuffer = intel_blit_framebuffer;
+   if (brw->gen >= 6)
+      dd->BlitFramebuffer = intel_blit_framebuffer;
+   else
+      dd->BlitFramebuffer = gen4_blit_framebuffer;
    dd->EGLImageTargetRenderbufferStorage =
       intel_image_target_renderbuffer_storage;
 
-   brw->render_cache = _mesa_set_create(brw, _mesa_key_pointer_equal);
+   brw->render_cache = _mesa_set_create(brw, _mesa_hash_pointer,
+                                        _mesa_key_pointer_equal);
 }

@@ -128,6 +128,15 @@ gen8_upload_3dstate_streamout(struct brw_context *brw, bool active,
       dw2 |= urb_entry_read_offset << SO_STREAM_0_VERTEX_READ_OFFSET_SHIFT;
       dw2 |= (urb_entry_read_length - 1) << SO_STREAM_0_VERTEX_READ_LENGTH_SHIFT;
 
+      dw2 |= urb_entry_read_offset << SO_STREAM_1_VERTEX_READ_OFFSET_SHIFT;
+      dw2 |= (urb_entry_read_length - 1) << SO_STREAM_1_VERTEX_READ_LENGTH_SHIFT;
+
+      dw2 |= urb_entry_read_offset << SO_STREAM_2_VERTEX_READ_OFFSET_SHIFT;
+      dw2 |= (urb_entry_read_length - 1) << SO_STREAM_2_VERTEX_READ_LENGTH_SHIFT;
+
+      dw2 |= urb_entry_read_offset << SO_STREAM_3_VERTEX_READ_OFFSET_SHIFT;
+      dw2 |= (urb_entry_read_length - 1) << SO_STREAM_3_VERTEX_READ_LENGTH_SHIFT;
+
       /* Set buffer pitches; 0 means unbound. */
       if (xfb_obj->Buffers[0])
          dw3 |= linked_xfb_info->BufferStride[0] * 4;
@@ -170,7 +179,6 @@ const struct brw_tracked_state gen8_sol_state = {
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_TRANSFORM_FEEDBACK |
                BRW_NEW_VUE_MAP_GEOM_OUT,
-      .cache = 0,
    },
    .emit = upload_sol_state,
 };

@@ -177,7 +177,7 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       *widthOut = widthIn;
       *heightOut = heightIn;
       *depthOut = 1;
-      *layersOut = depthIn;
+      *layersOut = util_align_npot(depthIn, 6);
       break;
    default:
       assert(0 && "Unexpected texture in st_gl_texture_dims_to_pipe_dims()");

@@ -313,7 +313,7 @@ cfg_t::cfg_t(exec_list *instructions)
       }
    }
 
-   cur->end_ip = ip;
+   cur->end_ip = ip - 1;
 
    make_block_array();
 }

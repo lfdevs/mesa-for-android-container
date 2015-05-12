@@ -112,7 +112,13 @@ SUBDIRS += winsys/sw/wrapper
 ##
 
 EXTRA_DIST = \
-	winsys/sw/android \
+	docs \
+	README.portability \
+	SConscript \
+	state_trackers/egl \
+	state_trackers/gbm \
+	targets/egl-static \
+	targets/gbm \
 	winsys/sw/gdi \
 	winsys/sw/hgl
 
@@ -175,6 +181,7 @@ endif
 ##
 
 EXTRA_DIST += \
+	include \
 	state_trackers/README \
 	state_trackers/wgl targets/libgl-gdi \
 	targets/graw-gdi targets/graw-null  targets/graw-xlib \

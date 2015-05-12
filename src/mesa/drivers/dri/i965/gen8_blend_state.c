@@ -199,9 +199,11 @@ gen8_upload_blend_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_blend_state = {
    .dirty = {
-      .mesa = _NEW_COLOR | _NEW_BUFFERS | _NEW_MULTISAMPLE,
-      .brw = BRW_NEW_BATCH | BRW_NEW_STATE_BASE_ADDRESS,
-      .cache = 0,
+      .mesa = _NEW_BUFFERS |
+              _NEW_COLOR |
+              _NEW_MULTISAMPLE,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_STATE_BASE_ADDRESS,
    },
    .emit = gen8_upload_blend_state,
 };
@@ -289,9 +291,11 @@ gen8_upload_ps_blend(struct brw_context *brw)
 
 const struct brw_tracked_state gen8_ps_blend = {
    .dirty = {
-      .mesa = _NEW_BUFFERS | _NEW_COLOR | _NEW_MULTISAMPLE,
-      .brw = BRW_NEW_CONTEXT | BRW_NEW_FRAGMENT_PROGRAM,
-      .cache = 0,
+      .mesa = _NEW_BUFFERS |
+              _NEW_COLOR |
+              _NEW_MULTISAMPLE,
+      .brw = BRW_NEW_CONTEXT |
+             BRW_NEW_FRAGMENT_PROGRAM,
    },
    .emit = gen8_upload_ps_blend
 };

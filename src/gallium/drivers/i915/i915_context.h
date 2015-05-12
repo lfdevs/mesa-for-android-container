@@ -157,7 +157,7 @@ struct i915_state
    unsigned sampler_enable_nr;
 
    /* texture image buffers */
-   unsigned texbuffer[I915_TEX_UNITS][2];
+   unsigned texbuffer[I915_TEX_UNITS][3];
 
    /** Describes the current hardware vertex layout */
    struct vertex_info vertex_info;

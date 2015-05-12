@@ -348,11 +348,9 @@ static void vg_set_viewport(struct renderer *r,
    viewport.scale[0] =  fb->width / 2.f;
    viewport.scale[1] =  fb->height / y_scale;
    viewport.scale[2] =  1.0;
-   viewport.scale[3] =  1.0;
    viewport.translate[0] = fb->width / 2.f;
    viewport.translate[1] = fb->height / 2.f;
    viewport.translate[2] = 0.0;
-   viewport.translate[3] = 0.0;
 
    cso_set_viewport(r->cso, &viewport);
 }

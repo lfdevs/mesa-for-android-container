@@ -2428,23 +2428,6 @@ __glXReleaseTexImageEXT(Display * dpy, GLXDrawable drawable, int buffer)
 
 #endif /* GLX_USE_APPLEGL */
 
-/**
- * \c strdup is actually not a standard ANSI C or POSIX routine.
- * Irix will not define it if ANSI mode is in effect.
- *
- * \sa strdup
- */
-_X_HIDDEN char *
-__glXstrdup(const char *str)
-{
-   char *copy;
-   copy = malloc(strlen(str) + 1);
-   if (!copy)
-      return NULL;
-   strcpy(copy, str);
-   return copy;
-}
-
 /*
 ** glXGetProcAddress support
 */

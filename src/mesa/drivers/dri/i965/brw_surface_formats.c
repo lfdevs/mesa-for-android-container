@@ -518,7 +518,7 @@ brw_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_B4G4R4X4_UNORM] = 0,
       [MESA_FORMAT_B5G5R5X1_UNORM] = BRW_SURFACEFORMAT_B5G5R5X1_UNORM,
       [MESA_FORMAT_R8G8B8X8_SNORM] = 0,
-      [MESA_FORMAT_R8G8B8X8_SRGB] = 0,
+      [MESA_FORMAT_R8G8B8X8_SRGB] = BRW_SURFACEFORMAT_R8G8B8X8_UNORM_SRGB,
       [MESA_FORMAT_X8B8G8R8_SRGB] = 0,
       [MESA_FORMAT_RGBX_UINT8] = 0,
       [MESA_FORMAT_RGBX_SINT8] = 0,
@@ -594,6 +594,9 @@ brw_init_surface_formats(struct brw_context *brw)
 	 break;
       case BRW_SURFACEFORMAT_R8G8B8X8_UNORM:
          render = BRW_SURFACEFORMAT_R8G8B8A8_UNORM;
+         break;
+      case BRW_SURFACEFORMAT_R8G8B8X8_UNORM_SRGB:
+         render = BRW_SURFACEFORMAT_R8G8B8A8_UNORM_SRGB;
          break;
       }
 

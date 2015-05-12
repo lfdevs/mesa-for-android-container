@@ -137,8 +137,6 @@ NVC0_CODEGEN_SOURCES := \
 	codegen/nv50_ir_target_nvc0.h
 
 NVC0_C_SOURCES := \
-	nvc0/nvc0_2d.xml.h \
-	nvc0/nvc0_3ddefs.xml.h \
 	nvc0/nvc0_3d.xml.h \
 	nvc0/nvc0_compute.c \
 	nvc0/nvc0_compute.h \
@@ -147,6 +145,7 @@ NVC0_C_SOURCES := \
 	nvc0/nvc0_context.h \
 	nvc0/nvc0_formats.c \
 	nvc0/nvc0_m2mf.xml.h \
+	nvc0/nvc0_macros.h \
 	nvc0/nvc0_miptree.c \
 	nvc0/nvc0_program.c \
 	nvc0/nvc0_program.h \

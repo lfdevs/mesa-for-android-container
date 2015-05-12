@@ -954,6 +954,43 @@ const struct function gl_core_functions_possible[] = {
    /* GL_ARB_clip_control */
    { "glClipControl", 45, -1 },
 
+   /* GL_ARB_direct_state_access */
+   { "glCreateTextures", 45, -1 },
+   { "glTextureStorage1D", 45, -1 },
+   { "glTextureStorage2D", 45, -1 },
+   { "glTextureStorage3D", 45, -1 },
+   { "glTextureSubImage1D", 45, -1 },
+   { "glTextureSubImage2D", 45, -1 },
+   { "glTextureSubImage3D", 45, -1 },
+   { "glBindTextureUnit", 45, -1 },
+   { "glTextureParameterf", 45, -1 },
+   { "glTextureParameterfv", 45, -1 },
+   { "glTextureParameteri", 45, -1 },
+   { "glTextureParameterIiv", 45, -1 },
+   { "glTextureParameterIuiv", 45, -1 },
+   { "glTextureParameteriv", 45, -1 },
+   { "glGetTextureLevelParameterfv", 45, -1 },
+   { "glGetTextureLevelParameteriv", 45, -1 },
+   { "glGetTextureParameterfv", 45, -1 },
+   { "glGetTextureParameterIiv", 45, -1 },
+   { "glGetTextureParameterIuiv", 45, -1 },
+   { "glGetTextureParameteriv", 45, -1 },
+   { "glCopyTextureSubImage1D", 45, -1 },
+   { "glCopyTextureSubImage2D", 45, -1 },
+   { "glCopyTextureSubImage3D", 45, -1 },
+   { "glGetTextureImage", 45, -1 },
+   { "glGetCompressedTextureImage", 45, -1 },
+   { "glCompressedTextureSubImage1D", 45, -1 },
+   { "glCompressedTextureSubImage2D", 45, -1 },
+   { "glCompressedTextureSubImage3D", 45, -1 },
+   { "glGenerateTextureMipmap", 45, -1 },
+   { "glTextureStorage2DMultisample", 45, -1 },
+   { "glTextureStorage3DMultisample", 45, -1 },
+   { "glTextureBuffer", 45, -1 },
+
+   /* GL_EXT_polygon_offset_clamp */
+   { "glPolygonOffsetClampEXT", 11, -1 },
+
    { NULL, 0, -1 }
 };
 

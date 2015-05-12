@@ -43,7 +43,7 @@ void si_need_cs_space(struct si_context *ctx, unsigned num_dw,
 		}
 
 		/* The number of dwords all the dirty states would take. */
-		num_dw += ctx->pm4_dirty_cdwords;
+		num_dw += si_pm4_dirty_dw(ctx);
 
 		/* The upper-bound of how much a draw command would take. */
 		num_dw += SI_MAX_DRAW_CS_DWORDS;
@@ -90,13 +90,11 @@ void si_context_gfx_flush(void *context, unsigned flags,
 
 	r600_preflush_suspend_features(&ctx->b);
 
-	ctx->b.flags |= R600_CONTEXT_FLUSH_AND_INV_CB |
-			R600_CONTEXT_FLUSH_AND_INV_CB_META |
-			R600_CONTEXT_FLUSH_AND_INV_DB |
-			R600_CONTEXT_FLUSH_AND_INV_DB_META |
-			R600_CONTEXT_INV_TEX_CACHE |
+	ctx->b.flags |= SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER |
+			SI_CONTEXT_INV_TC_L1 |
+			SI_CONTEXT_INV_TC_L2 |
 			/* this is probably not needed anymore */
-			R600_CONTEXT_PS_PARTIAL_FLUSH;
+			SI_CONTEXT_PS_PARTIAL_FLUSH;
 	si_emit_cache_flush(&ctx->b, NULL);
 
 	/* force to keep tiling flags */
@@ -131,12 +129,11 @@ void si_context_gfx_flush(void *context, unsigned flags,
 
 void si_begin_new_cs(struct si_context *ctx)
 {
-	ctx->pm4_dirty_cdwords = 0;
-
 	/* Flush read caches at the beginning of CS. */
-	ctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE |
-			R600_CONTEXT_INV_CONST_CACHE |
-			R600_CONTEXT_INV_SHADER_CACHE;
+	ctx->b.flags |= SI_CONTEXT_INV_TC_L1 |
+			SI_CONTEXT_INV_TC_L2 |
+			SI_CONTEXT_INV_KCACHE |
+			SI_CONTEXT_INV_ICACHE;
 
 	/* set all valid group as dirty so they get reemited on
 	 * next draw command
@@ -144,9 +141,9 @@ void si_begin_new_cs(struct si_context *ctx)
 	si_pm4_reset_emitted(ctx);
 
 	/* The CS initialization should be emitted before everything else. */
-	si_pm4_emit(ctx, ctx->queued.named.init);
-	ctx->emitted.named.init = ctx->queued.named.init;
+	si_pm4_emit(ctx, ctx->init_config);
 
+	ctx->clip_regs.dirty = true;
 	ctx->framebuffer.atom.dirty = true;
 	ctx->msaa_config.dirty = true;
 	ctx->db_render_state.dirty = true;
@@ -156,4 +153,12 @@ void si_begin_new_cs(struct si_context *ctx)
 	r600_postflush_resume_features(&ctx->b);
 
 	ctx->b.initial_gfx_cs_size = ctx->b.rings.gfx.cs->cdw;
+	si_invalidate_draw_sh_constants(ctx);
+	ctx->last_primitive_restart_en = -1;
+	ctx->last_restart_index = SI_RESTART_INDEX_UNKNOWN;
+	ctx->last_gs_out_prim = -1;
+	ctx->last_prim = -1;
+	ctx->last_multi_vgt_param = -1;
+	ctx->last_rast_prim = -1;
+	ctx->emit_scratch_reloc = true;
 }

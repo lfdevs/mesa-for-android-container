@@ -39,27 +39,23 @@
 
 /**
  * Convert an swizzle enumeration (i.e. SWIZZLE_X) to one of the Gen7.5+
- * "Shader Channel Select" enumerations (i.e. HSW_SCS_RED)
+ * "Shader Channel Select" enumerations (i.e. HSW_SCS_RED).  The mappings are
+ *
+ * SWIZZLE_X, SWIZZLE_Y, SWIZZLE_Z, SWIZZLE_W, SWIZZLE_ZERO, SWIZZLE_ONE
+ *         0          1          2          3             4            5
+ *         4          5          6          7             0            1
+ *   SCS_RED, SCS_GREEN,  SCS_BLUE, SCS_ALPHA,     SCS_ZERO,     SCS_ONE
+ *
+ * which is simply adding 4 then modding by 8 (or anding with 7).
+ *
+ * We then may need to apply workarounds for textureGather hardware bugs.
  */
-unsigned
-brw_swizzle_to_scs(GLenum swizzle, bool need_green_to_blue)
+static unsigned
+swizzle_to_scs(GLenum swizzle, bool need_green_to_blue)
 {
-   switch (swizzle) {
-   case SWIZZLE_X:
-      return HSW_SCS_RED;
-   case SWIZZLE_Y:
-      return need_green_to_blue ? HSW_SCS_BLUE : HSW_SCS_GREEN;
-   case SWIZZLE_Z:
-      return HSW_SCS_BLUE;
-   case SWIZZLE_W:
-      return HSW_SCS_ALPHA;
-   case SWIZZLE_ZERO:
-      return HSW_SCS_ZERO;
-   case SWIZZLE_ONE:
-      return HSW_SCS_ONE;
-   }
+   unsigned scs = (swizzle + 4) & 7;
 
-   unreachable("Should not get here: invalid swizzle mode");
+   return (need_green_to_blue && scs == HSW_SCS_GREEN) ? HSW_SCS_BLUE : scs;
 }
 
 uint32_t
@@ -229,7 +225,6 @@ gen7_emit_buffer_surface_state(struct brw_context *brw,
                                unsigned surface_format,
                                unsigned buffer_size,
                                unsigned pitch,
-                               unsigned mocs,
                                bool rw)
 {
    uint32_t *surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
@@ -245,7 +240,7 @@ gen7_emit_buffer_surface_state(struct brw_context *brw,
    surf[3] = SET_FIELD(((buffer_size - 1) >> 21) & 0x3f, BRW_SURFACE_DEPTH) |
              (pitch - 1);
 
-   surf[5] = SET_FIELD(mocs, GEN7_SURFACE_MOCS);
+   surf[5] = SET_FIELD(GEN7_MOCS_L3, GEN7_SURFACE_MOCS);
 
    if (brw->is_haswell) {
       surf[7] |= (SET_FIELD(HSW_SCS_RED,   GEN7_SURFACE_SCS_R) |
@@ -326,6 +321,9 @@ gen7_update_texture_surface(struct gl_context *ctx,
    surf[3] = SET_FIELD(effective_depth - 1, BRW_SURFACE_DEPTH) |
              (mt->pitch - 1);
 
+   if (brw->is_haswell && tObj->_IsIntegerFormat)
+      surf[3] |= HSW_SURFACE_IS_INTEGER_FORMAT;
+
    surf[4] = gen7_surface_msaa_bits(mt->num_samples, mt->msaa_layout) |
              SET_FIELD(tObj->MinLayer, GEN7_SURFACE_MIN_ARRAY_ELEMENT) |
              SET_FIELD((effective_depth - 1),
@@ -353,10 +351,10 @@ gen7_update_texture_surface(struct gl_context *ctx,
       const bool need_scs_green_to_blue = for_gather && tex_format == BRW_SURFACEFORMAT_R32G32_FLOAT_LD;
 
       surf[7] |=
-         SET_FIELD(brw_swizzle_to_scs(GET_SWZ(swizzle, 0), need_scs_green_to_blue), GEN7_SURFACE_SCS_R) |
-         SET_FIELD(brw_swizzle_to_scs(GET_SWZ(swizzle, 1), need_scs_green_to_blue), GEN7_SURFACE_SCS_G) |
-         SET_FIELD(brw_swizzle_to_scs(GET_SWZ(swizzle, 2), need_scs_green_to_blue), GEN7_SURFACE_SCS_B) |
-         SET_FIELD(brw_swizzle_to_scs(GET_SWZ(swizzle, 3), need_scs_green_to_blue), GEN7_SURFACE_SCS_A);
+         SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 0), need_scs_green_to_blue), GEN7_SURFACE_SCS_R) |
+         SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 1), need_scs_green_to_blue), GEN7_SURFACE_SCS_G) |
+         SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 2), need_scs_green_to_blue), GEN7_SURFACE_SCS_B) |
+         SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 3), need_scs_green_to_blue), GEN7_SURFACE_SCS_A);
    }
 
    if (mt->mcs_mt) {
@@ -389,7 +387,6 @@ gen7_create_raw_surface(struct brw_context *brw, drm_intel_bo *bo,
                                   BRW_SURFACEFORMAT_RAW,
                                   size,
                                   1,
-                                  0 /* mocs */,
                                   true /* rw */);
 }
 
@@ -521,7 +518,8 @@ gen7_update_renderbuffer_surface(struct brw_context *brw,
       surf[0] |= GEN7_SURFACE_IS_ARRAY;
    }
 
-   surf[1] = mt->bo->offset64;
+   assert(mt->offset % mt->cpp == 0);
+   surf[1] = mt->bo->offset64 + mt->offset;
 
    assert(brw->has_surface_tile_offset);
 

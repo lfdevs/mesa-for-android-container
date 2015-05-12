@@ -42,11 +42,7 @@ struct cso_context;
 struct u_vbuf;
 
 struct cso_context *cso_create_context( struct pipe_context *pipe );
-
-void cso_release_all( struct cso_context *ctx );
-
 void cso_destroy_context( struct cso_context *cso );
-
 
 
 enum pipe_error cso_set_blend( struct cso_context *cso,

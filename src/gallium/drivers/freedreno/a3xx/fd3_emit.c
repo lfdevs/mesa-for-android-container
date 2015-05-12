@@ -40,7 +40,7 @@
 #include "fd3_program.h"
 #include "fd3_rasterizer.h"
 #include "fd3_texture.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 #include "fd3_zsa.h"
 
 /* regid:          base const register
@@ -202,10 +202,24 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 					(BORDERCOLOR_SIZE * tex_off[sb]) +
 					(BORDERCOLOR_SIZE * i));
 
-			bcolor[0] = util_float_to_half(sampler->base.border_color.f[2]);
-			bcolor[1] = util_float_to_half(sampler->base.border_color.f[1]);
-			bcolor[2] = util_float_to_half(sampler->base.border_color.f[0]);
-			bcolor[3] = util_float_to_half(sampler->base.border_color.f[3]);
+			/*
+			 * XXX HACK ALERT XXX
+			 *
+			 * The border colors need to be swizzled in a particular
+			 * format-dependent order. Even though samplers don't know about
+			 * formats, we can assume that with a GL state tracker, there's a
+			 * 1:1 correspondence between sampler and texture. Take advantage
+			 * of that knowledge.
+			 */
+			if (i < tex->num_textures && tex->textures[i]) {
+				const struct util_format_description *desc =
+					util_format_description(tex->textures[i]->format);
+				for (j = 0; j < 4; j++) {
+					if (desc->swizzle[j] < 4)
+						bcolor[desc->swizzle[j]] =
+							util_float_to_half(sampler->base.border_color.f[j]);
+				}
+			}
 
 			OUT_RING(ring, sampler->texsamp0);
 			OUT_RING(ring, sampler->texsamp1);
@@ -283,8 +297,8 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring, struct pipe_surface *psurf
 {
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	unsigned lvl = psurf->u.tex.level;
-	struct fd_resource_slice *slice = &rsc->slices[lvl];
-	uint32_t layer_offset = slice->size0 * psurf->u.tex.first_layer;
+	struct fd_resource_slice *slice = fd_resource_slice(rsc, lvl);
+	uint32_t offset = fd_resource_offset(rsc, lvl, psurf->u.tex.first_layer);
 	enum pipe_format format = fd3_gmem_restore_format(psurf->format);
 
 	debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
@@ -331,7 +345,7 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring, struct pipe_surface *psurf
 			CP_LOAD_STATE_0_NUM_UNIT(1));
 	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
 			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-	OUT_RELOC(ring, rsc->bo, layer_offset, 0, 0);
+	OUT_RELOC(ring, rsc->bo, offset, 0, 0);
 }
 
 void
@@ -571,14 +585,31 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		uint32_t i;
 
 		for (i = 0; i < ARRAY_SIZE(blend->rb_mrt); i++) {
-			bool is_float = util_format_is_float(
-					pipe_surface_format(ctx->framebuffer.cbufs[i]));
+			enum pipe_format format = pipe_surface_format(ctx->framebuffer.cbufs[i]);
+			bool is_float = util_format_is_float(format);
+			bool is_int = util_format_is_pure_integer(format);
+			bool has_alpha = util_format_has_alpha(format);
+			uint32_t control = blend->rb_mrt[i].control;
+			uint32_t blend_control = blend->rb_mrt[i].blend_control_alpha;
+
+			if (is_int) {
+				control &= (A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK |
+							A3XX_RB_MRT_CONTROL_DITHER_MODE__MASK);
+				control |= A3XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY);
+			}
+
+			if (has_alpha) {
+				blend_control |= blend->rb_mrt[i].blend_control_rgb;
+			} else {
+				blend_control |= blend->rb_mrt[i].blend_control_no_alpha_rgb;
+				control &= ~A3XX_RB_MRT_CONTROL_BLEND2;
+			}
 
 			OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 1);
-			OUT_RING(ring, blend->rb_mrt[i].control);
+			OUT_RING(ring, control);
 
 			OUT_PKT0(ring, REG_A3XX_RB_MRT_BLEND_CONTROL(i), 1);
-			OUT_RING(ring, blend->rb_mrt[i].blend_control |
+			OUT_RING(ring, blend_control |
 					COND(!is_float, A3XX_RB_MRT_BLEND_CONTROL_CLAMP_ENABLE));
 		}
 	}

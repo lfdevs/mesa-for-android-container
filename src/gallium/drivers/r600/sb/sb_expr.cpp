@@ -645,6 +645,7 @@ bool expr_handler::fold_assoc(alu_node *n) {
 						(op == ALU_OP2_MUL_IEEE &&
 								d0->is_alu_op(ALU_OP2_MUL))) &&
 						!d0->bc.omod && !d0->bc.clamp &&
+						!a->bc.src[0].abs &&
 						(!a->bc.src[0].neg || allow_neg)) {
 					cur_neg ^= a->bc.src[0].neg;
 					a = d0;
@@ -678,6 +679,7 @@ bool expr_handler::fold_assoc(alu_node *n) {
 						(op == ALU_OP2_MUL_IEEE &&
 								d1->is_alu_op(ALU_OP2_MUL))) &&
 						!d1->bc.omod && !d1->bc.clamp &&
+						!a->bc.src[1].abs &&
 						(!a->bc.src[1].neg || allow_neg)) {
 					cur_neg ^= a->bc.src[1].neg;
 					a = d1;

@@ -105,6 +105,9 @@ struct fd3_context {
 	 */
 	unsigned fsaturate_s, fsaturate_t, fsaturate_r;
 
+	/* bitmask of integer texture samplers */
+	uint16_t vinteger_s, finteger_s;
+
 	/* some state changes require a different shader variant.  Keep
 	 * track of this so we know when we need to re-emit shader state
 	 * due to variant change.  See fixup_shader_state()

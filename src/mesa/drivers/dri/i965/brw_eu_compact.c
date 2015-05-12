@@ -75,6 +75,7 @@
 #include "brw_context.h"
 #include "brw_eu.h"
 #include "intel_asm_annotation.h"
+#include "util/u_atomic.h" /* for p_atomic_cmpxchg */
 
 static const uint32_t g45_control_index_table[32] = {
    0b00000000000000000,
@@ -1247,6 +1248,10 @@ update_gen4_jump_count(struct brw_context *brw, brw_inst *insn,
 void
 brw_init_compaction_tables(struct brw_context *brw)
 {
+   static bool initialized;
+   if (initialized || p_atomic_cmpxchg(&initialized, false, true) != false)
+      return;
+
    assert(g45_control_index_table[ARRAY_SIZE(g45_control_index_table) - 1] != 0);
    assert(g45_datatype_table[ARRAY_SIZE(g45_datatype_table) - 1] != 0);
    assert(g45_subreg_table[ARRAY_SIZE(g45_subreg_table) - 1] != 0);

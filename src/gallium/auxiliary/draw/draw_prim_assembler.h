@@ -70,5 +70,8 @@ draw_prim_assembler_run(struct draw_context *draw,
 void
 draw_prim_assembler_prepare_outputs(struct draw_assembler *ia);
 
+void
+draw_prim_assembler_new_instance(struct draw_assembler *ia);
+
 
 #endif

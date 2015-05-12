@@ -27,7 +27,7 @@
 
 #include "util/u_format.h"
 #include "util/u_memory.h"
-#include "util/u_simple_list.h"
+#include "util/simple_list.h"
 
 #include "tr_dump.h"
 #include "tr_dump_defines.h"

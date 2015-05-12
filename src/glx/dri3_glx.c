@@ -1526,6 +1526,7 @@ dri3_swap_buffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
    xcb_connection_t *c = XGetXCBConnection(dpy);
    struct dri3_buffer *back;
    int64_t ret = 0;
+   uint32_t options = XCB_PRESENT_OPTION_NONE;
 
    unsigned flags = __DRI2_FLUSH_DRAWABLE;
    if (flush)
@@ -1578,6 +1579,17 @@ dri3_swap_buffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
          remainder = 0;
       }
 
+      /* From the GLX_EXT_swap_control spec:
+       *
+       *     "If <interval> is set to a value of 0, buffer swaps are not
+       *      synchronized to a video frame."
+       *
+       * Implementation note: It is possible to enable triple buffering behaviour
+       * by not using XCB_PRESENT_OPTION_ASYNC, but this should not be the default.
+       */
+      if (priv->swap_interval == 0)
+          options |= XCB_PRESENT_OPTION_ASYNC;
+
       back->busy = 1;
       back->last_swap = priv->send_sbc;
       xcb_present_pixmap(c,
@@ -1591,7 +1603,7 @@ dri3_swap_buffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
                          None,                                 /* target_crtc */
                          None,
                          back->sync_fence,
-                         XCB_PRESENT_OPTION_NONE,
+                         options,
                          target_msc,
                          divisor,
                          remainder, 0, NULL);

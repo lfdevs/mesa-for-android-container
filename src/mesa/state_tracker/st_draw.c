@@ -226,7 +226,7 @@ st_draw_vbo(struct gl_context *ctx,
       }
 
       info.indexed = TRUE;
-      if (min_index != ~0 && max_index != ~0) {
+      if (min_index != ~0U && max_index != ~0U) {
          info.min_index = min_index;
          info.max_index = max_index;
       }

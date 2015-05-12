@@ -125,6 +125,8 @@ do_blorp_blit(struct brw_context *brw, GLbitfield buffer_bit,
 
 static bool
 try_blorp_blit(struct brw_context *brw,
+               const struct gl_framebuffer *read_fb,
+               const struct gl_framebuffer *draw_fb,
                GLfloat srcX0, GLfloat srcY0, GLfloat srcX1, GLfloat srcY1,
                GLfloat dstX0, GLfloat dstY0, GLfloat dstX1, GLfloat dstY1,
                GLenum filter, GLbitfield buffer_bit)
@@ -136,11 +138,8 @@ try_blorp_blit(struct brw_context *brw,
     */
    intel_prepare_render(brw);
 
-   const struct gl_framebuffer *read_fb = ctx->ReadBuffer;
-   const struct gl_framebuffer *draw_fb = ctx->DrawBuffer;
-
    bool mirror_x, mirror_y;
-   if (brw_meta_mirror_clip_and_scissor(ctx,
+   if (brw_meta_mirror_clip_and_scissor(ctx, read_fb, draw_fb,
                                         &srcX0, &srcY0, &srcX1, &srcY1,
                                         &dstX0, &dstY0, &dstX1, &dstY1,
                                         &mirror_x, &mirror_y))
@@ -154,8 +153,8 @@ try_blorp_blit(struct brw_context *brw,
    switch (buffer_bit) {
    case GL_COLOR_BUFFER_BIT:
       src_irb = intel_renderbuffer(read_fb->_ColorReadBuffer);
-      for (unsigned i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; ++i) {
-         dst_irb = intel_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[i]);
+      for (unsigned i = 0; i < draw_fb->_NumColorDrawBuffers; ++i) {
+         dst_irb = intel_renderbuffer(draw_fb->_ColorDrawBuffers[i]);
 	 if (dst_irb)
             do_blorp_blit(brw, buffer_bit,
                           src_irb, src_irb->Base.Base.Format,
@@ -317,6 +316,8 @@ brw_blorp_copytexsubimage(struct brw_context *brw,
 
 GLbitfield
 brw_blorp_framebuffer(struct brw_context *brw,
+                      struct gl_framebuffer *readFb,
+                      struct gl_framebuffer *drawFb,
                       GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                       GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                       GLbitfield mask, GLenum filter)
@@ -333,7 +334,7 @@ brw_blorp_framebuffer(struct brw_context *brw,
 
    for (unsigned int i = 0; i < ARRAY_SIZE(buffer_bits); ++i) {
       if ((mask & buffer_bits[i]) &&
-       try_blorp_blit(brw,
+       try_blorp_blit(brw, readFb, drawFb,
                       srcX0, srcY0, srcX1, srcY1,
                       dstX0, dstY0, dstX1, dstY1,
                       filter, buffer_bits[i])) {
@@ -1868,8 +1869,9 @@ brw_blorp_blit_params::brw_blorp_blit_params(struct brw_context *brw,
        _mesa_get_format_color_encoding(dst_mt->format) == GL_SRGB &&
        _mesa_get_srgb_format_linear(src_mt->format) ==
        _mesa_get_srgb_format_linear(dst_mt->format)) {
-      dst.brw_surfaceformat = brw_format_for_mesa_format(dst_mt->format);
-      src.brw_surfaceformat = dst.brw_surfaceformat;
+      assert(brw->format_supported_as_render_target[dst_mt->format]);
+      dst.brw_surfaceformat = brw->render_target_format[dst_mt->format];
+      src.brw_surfaceformat = brw_format_for_mesa_format(dst_mt->format);
    }
 
    /* When doing a multisample resolve of a GL_LUMINANCE32F or GL_INTENSITY32F
@@ -2119,14 +2121,14 @@ brw_blorp_blit_params::get_wm_prog(struct brw_context *brw,
                                    brw_blorp_prog_data **prog_data) const
 {
    uint32_t prog_offset = 0;
-   if (!brw_search_cache(&brw->cache, BRW_BLORP_BLIT_PROG,
+   if (!brw_search_cache(&brw->cache, BRW_CACHE_BLORP_BLIT_PROG,
                          &this->wm_prog_key, sizeof(this->wm_prog_key),
                          &prog_offset, prog_data)) {
       brw_blorp_blit_program prog(brw, &this->wm_prog_key,
                                   INTEL_DEBUG & DEBUG_BLORP);
       GLuint program_size;
       const GLuint *program = prog.compile(brw, &program_size);
-      brw_upload_cache(&brw->cache, BRW_BLORP_BLIT_PROG,
+      brw_upload_cache(&brw->cache, BRW_CACHE_BLORP_BLIT_PROG,
                        &this->wm_prog_key, sizeof(this->wm_prog_key),
                        program, program_size,
                        &prog.prog_data, sizeof(prog.prog_data),

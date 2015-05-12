@@ -326,11 +326,13 @@ emit_map(struct i915_context *i915)
          if (enabled & (1 << unit)) {
             struct i915_texture *texture = i915_texture(i915->fragment_sampler_views[unit]->texture);
             struct i915_winsys_buffer *buf = texture->buffer;
+            unsigned offset = i915->current.texbuffer[unit][2];
+
             assert(buf);
 
             count++;
 
-            OUT_RELOC(buf, I915_USAGE_SAMPLER, 0);
+            OUT_RELOC(buf, I915_USAGE_SAMPLER, offset);
             OUT_BATCH(i915->current.texbuffer[unit][0]); /* MS3 */
             OUT_BATCH(i915->current.texbuffer[unit][1]); /* MS4 */
          }

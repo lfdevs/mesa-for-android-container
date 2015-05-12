@@ -29,6 +29,32 @@
 #include "vc4_context.h"
 #include "vc4_resource.h"
 
+static void
+vc4_get_draw_cl_space(struct vc4_context *vc4)
+{
+        /* Binner gets our packet state -- vc4_emit.c contents,
+         * and the primitive itself.
+         */
+        cl_ensure_space(&vc4->bcl, 256);
+
+        /* Nothing for rcl -- that's covered by vc4_context.c */
+
+        /* shader_rec gets up to 12 dwords of reloc handles plus a maximally
+         * sized shader_rec (104 bytes base for 8 vattrs plus 32 bytes of
+         * vattr stride).
+         */
+        cl_ensure_space(&vc4->shader_rec, 12 * sizeof(uint32_t) + 104 + 8 * 32);
+
+        /* Uniforms are covered by vc4_write_uniforms(). */
+
+        /* There could be up to 16 textures per stage, plus misc other
+         * pointers.
+         */
+        cl_ensure_space(&vc4->bo_handles, (2 * 16 + 20) * sizeof(uint32_t));
+        cl_ensure_space(&vc4->bo_pointers,
+                        (2 * 16 + 20) * sizeof(struct vc4_bo *));
+}
+
 /**
  * Does the initial bining command list setup for drawing to a given FBO.
  */
@@ -37,6 +63,8 @@ vc4_start_draw(struct vc4_context *vc4)
 {
         if (vc4->needs_flush)
                 return;
+
+        vc4_get_draw_cl_space(vc4);
 
         uint32_t width = vc4->framebuffer.width;
         uint32_t height = vc4->framebuffer.height;
@@ -48,6 +76,10 @@ vc4_start_draw(struct vc4_context *vc4)
          * BO allocations align to that anyway), then for some reason the
          * simulator wants an extra page available, even if you have overflow
          * memory set up.
+         *
+         * XXX: The binner only does 28-bit addressing math, so the tile alloc
+         * and tile state should be in the same BO and that BO needs to not
+         * cross a 256MB boundary, somehow.
          */
         uint32_t tile_alloc_size = 32 * tilew * tileh;
         tile_alloc_size = align(tile_alloc_size, 4096);
@@ -110,6 +142,8 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 return;
         }
 
+        vc4_get_draw_cl_space(vc4);
+
         struct vc4_vertex_stateobj *vtx = vc4->vtx;
         struct vc4_vertexbuf_stateobj *vertexbuf = &vc4->vertexbuf;
 
@@ -151,18 +185,19 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         cl_u32(&vc4->shader_rec, 0); /* UBO offset written by kernel */
 
         cl_u16(&vc4->shader_rec, 0); /* vs num uniforms */
-        cl_u8(&vc4->shader_rec, (1 << num_elements_emit) - 1); /* vs attribute array bitfield */
-        cl_u8(&vc4->shader_rec, 16 * num_elements_emit); /* vs total attribute size */
+        cl_u8(&vc4->shader_rec, vc4->prog.vs->vattrs_live);
+        cl_u8(&vc4->shader_rec, vc4->prog.vs->vattr_offsets[8]);
         cl_reloc(vc4, &vc4->shader_rec, vc4->prog.vs->bo, 0);
         cl_u32(&vc4->shader_rec, 0); /* UBO offset written by kernel */
 
         cl_u16(&vc4->shader_rec, 0); /* cs num uniforms */
-        cl_u8(&vc4->shader_rec, (1 << num_elements_emit) - 1); /* cs attribute array bitfield */
-        cl_u8(&vc4->shader_rec, 16 * num_elements_emit); /* cs total attribute size */
+        cl_u8(&vc4->shader_rec, vc4->prog.cs->vattrs_live);
+        cl_u8(&vc4->shader_rec, vc4->prog.cs->vattr_offsets[8]);
         cl_reloc(vc4, &vc4->shader_rec, vc4->prog.cs->bo, 0);
         cl_u32(&vc4->shader_rec, 0); /* UBO offset written by kernel */
 
         uint32_t max_index = 0xffff;
+        uint32_t vpm_offset = 0;
         for (int i = 0; i < vtx->num_elements; i++) {
                 struct pipe_vertex_element *elem = &vtx->pipe[i];
                 struct pipe_vertex_buffer *vb =
@@ -176,8 +211,10 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 cl_reloc(vc4, &vc4->shader_rec, rsc->bo, offset);
                 cl_u8(&vc4->shader_rec, elem_size - 1);
                 cl_u8(&vc4->shader_rec, vb->stride);
-                cl_u8(&vc4->shader_rec, i * 16); /* VS VPM offset */
-                cl_u8(&vc4->shader_rec, i * 16); /* CS VPM offset */
+                cl_u8(&vc4->shader_rec, vc4->prog.vs->vattr_offsets[i]);
+                cl_u8(&vc4->shader_rec, vc4->prog.cs->vattr_offsets[i]);
+
+                vpm_offset += align(elem_size, 4);
 
                 if (vb->stride > 0) {
                         max_index = MIN2(max_index,
@@ -214,7 +251,6 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 if (rsc->shadow_parent) {
                         vc4_update_shadow_index_buffer(pctx, &vc4->indexbuf);
                         offset = 0;
-                        index_size = 2;
                 }
 
                 cl_start_reloc(&vc4->bcl, 1);
@@ -252,7 +288,10 @@ pack_rgba(enum pipe_format format, const float *rgba)
 {
         union util_color uc;
         util_pack_color(rgba, format, &uc);
-        return uc.ui[0];
+        if (util_format_get_blocksize(format) == 2)
+                return uc.us;
+        else
+                return uc.ui[0];
 }
 
 static void
@@ -283,6 +322,10 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
         if (buffers & PIPE_CLEAR_STENCIL)
                 vc4->clear_stencil = stencil;
 
+        vc4->draw_min_x = 0;
+        vc4->draw_min_y = 0;
+        vc4->draw_max_x = vc4->framebuffer.width;
+        vc4->draw_max_y = vc4->framebuffer.height;
         vc4->cleared |= buffers;
         vc4->resolve |= buffers;
 

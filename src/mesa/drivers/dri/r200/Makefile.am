@@ -23,6 +23,9 @@
 
 include Makefile.sources
 
+EXTRA_DIST = \
+	r200_maos_arrays.c
+
 AM_CFLAGS = \
 	-DRADEON_R200 \
 	-I$(top_srcdir)/include \

@@ -1208,7 +1208,7 @@ _mesa_GetActiveUniformName(GLuint program, GLuint uniformIndex,
    struct gl_shader_program *shProg;
 
    if (!ctx->Extensions.ARB_uniform_buffer_object) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glGetActiveUniformBlockiv");
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glGetActiveUniformName");
       return;
    }
 

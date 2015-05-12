@@ -56,5 +56,6 @@ libgbm_la_LIBADD += \
 endif
 
 TESTS = gbm-symbols-check
+EXTRA_DIST = gbm-symbols-check
 
 include $(top_srcdir)/install-lib-links.mk

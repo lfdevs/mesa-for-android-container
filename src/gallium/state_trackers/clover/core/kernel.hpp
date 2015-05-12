@@ -175,7 +175,7 @@ namespace clover {
          virtual void unbind(exec_context &ctx);
 
       private:
-         size_t _storage;
+         size_t _storage = 0;
       };
 
       class constant_argument : public argument {

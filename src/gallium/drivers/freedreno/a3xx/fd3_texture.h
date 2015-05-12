@@ -35,7 +35,7 @@
 #include "freedreno_resource.h"
 
 #include "fd3_context.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 
 struct fd3_sampler_stateobj {
 	struct pipe_sampler_state base;

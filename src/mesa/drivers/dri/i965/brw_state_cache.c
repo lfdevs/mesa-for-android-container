@@ -157,7 +157,7 @@ brw_search_cache(struct brw_cache *cache,
    *(void **)out_aux = ((char *)item->key + item->key_size);
 
    if (item->offset != *inout_offset) {
-      brw->state.dirty.cache |= (1 << cache_id);
+      brw->state.dirty.brw |= (1 << cache_id);
       *inout_offset = item->offset;
    }
 
@@ -339,7 +339,7 @@ brw_upload_cache(struct brw_cache *cache,
 
    *out_offset = item->offset;
    *(void **)out_aux = (void *)((char *)item->key + item->key_size);
-   cache->brw->state.dirty.cache |= 1 << cache_id;
+   cache->brw->state.dirty.brw |= 1 << cache_id;
 }
 
 void
@@ -360,12 +360,12 @@ brw_init_caches(struct brw_context *brw)
    if (brw->has_llc)
       drm_intel_gem_bo_map_unsynchronized(cache->bo);
 
-   cache->aux_compare[BRW_VS_PROG] = brw_vs_prog_data_compare;
-   cache->aux_compare[BRW_GS_PROG] = brw_gs_prog_data_compare;
-   cache->aux_compare[BRW_WM_PROG] = brw_wm_prog_data_compare;
-   cache->aux_free[BRW_VS_PROG] = brw_stage_prog_data_free;
-   cache->aux_free[BRW_GS_PROG] = brw_stage_prog_data_free;
-   cache->aux_free[BRW_WM_PROG] = brw_stage_prog_data_free;
+   cache->aux_compare[BRW_CACHE_VS_PROG] = brw_vs_prog_data_compare;
+   cache->aux_compare[BRW_CACHE_GS_PROG] = brw_gs_prog_data_compare;
+   cache->aux_compare[BRW_CACHE_FS_PROG] = brw_wm_prog_data_compare;
+   cache->aux_free[BRW_CACHE_VS_PROG] = brw_stage_prog_data_free;
+   cache->aux_free[BRW_CACHE_GS_PROG] = brw_stage_prog_data_free;
+   cache->aux_free[BRW_CACHE_FS_PROG] = brw_stage_prog_data_free;
 }
 
 static void
@@ -401,7 +401,6 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
     */
    brw->state.dirty.mesa |= ~0;
    brw->state.dirty.brw |= ~0ull;
-   brw->state.dirty.cache |= ~0;
    intel_batchbuffer_flush(brw);
 }
 

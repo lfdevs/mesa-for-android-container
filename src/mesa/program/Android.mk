@@ -39,8 +39,6 @@ endef
 # Import the following variables:
 #     PROGRAM_FILES
 include $(MESA_TOP)/src/mesa/Makefile.sources
-SRCDIR :=
-BUILDDIR :=
 
 include $(CLEAR_VARS)
 
@@ -73,7 +71,6 @@ $(intermediates)/program/lex.yy.c: $(LOCAL_PATH)/program_lexer.l
 
 LOCAL_C_INCLUDES := \
 	$(intermediates) \
-	$(MESA_TOP)/src \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/mesa \
 	$(MESA_TOP)/src/glsl

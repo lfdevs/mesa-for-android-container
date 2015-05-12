@@ -131,6 +131,17 @@ has_uip(struct brw_context *brw, enum opcode opcode)
 }
 
 static bool
+has_branch_ctrl(struct brw_context *brw, enum opcode opcode)
+{
+   if (brw->gen < 8)
+      return false;
+
+   return opcode == BRW_OPCODE_IF ||
+          opcode == BRW_OPCODE_ELSE ||
+          opcode == BRW_OPCODE_GOTO;
+}
+
+static bool
 is_logic_instruction(unsigned opcode)
 {
    return opcode == BRW_OPCODE_AND ||
@@ -217,6 +228,11 @@ static const char *const accwr[2] = {
    [1] = "AccWrEnable"
 };
 
+static const char *const branch_ctrl[2] = {
+   [0] = "",
+   [1] = "BranchCtrl"
+};
+
 static const char *const wectrl[2] = {
    [0] = "",
    [1] = "WE_all"
@@ -259,7 +275,7 @@ static const char *const pred_ctrl_align1[16] = {
    [BRW_PREDICATE_ALIGN1_ANY16H] = ".any16h",
    [BRW_PREDICATE_ALIGN1_ALL16H] = ".all16h",
    [BRW_PREDICATE_ALIGN1_ANY32H] = ".any32h",
-   [BRW_PREDICATE_ALIGN1_ANY32H] = ".all32h",
+   [BRW_PREDICATE_ALIGN1_ALL32H] = ".all32h",
 };
 
 static const char *const thread_ctrl[4] = {
@@ -681,6 +697,12 @@ reg(FILE *file, unsigned _reg_file, unsigned _reg_nr)
          string(file, "ip");
          return -1;
          break;
+      case BRW_ARF_TDR:
+         format(file, "tdr0");
+         return -1;
+      case BRW_ARF_TIMESTAMP:
+         format(file, "tm%d", _reg_nr & 0x0f);
+         break;
       default:
          format(file, "ARF%d", _reg_nr);
          break;
@@ -1009,7 +1031,11 @@ imm(FILE *file, struct brw_context *brw, unsigned type, brw_inst *inst)
       format(file, "0x%08xUV", brw_inst_imm_ud(brw, inst));
       break;
    case BRW_HW_REG_IMM_TYPE_VF:
-      format(file, "Vector Float");
+      format(file, "[%-gF, %-gF, %-gF, %-gF]VF",
+             brw_vf_to_float(brw_inst_imm_ud(brw, inst)),
+             brw_vf_to_float(brw_inst_imm_ud(brw, inst) >> 8),
+             brw_vf_to_float(brw_inst_imm_ud(brw, inst) >> 16),
+             brw_vf_to_float(brw_inst_imm_ud(brw, inst) >> 24));
       break;
    case BRW_HW_REG_IMM_TYPE_V:
       format(file, "0x%08xV", brw_inst_imm_ud(brw, inst));
@@ -1544,9 +1570,13 @@ brw_disassemble_inst(FILE *file, struct brw_context *brw, brw_inst *inst,
       err |= control(file, "compaction", cmpt_ctrl, is_compacted, &space);
       err |= control(file, "thread control", thread_ctrl,
                      brw_inst_thread_control(brw, inst), &space);
-      if (brw->gen >= 6)
+      if (has_branch_ctrl(brw, opcode)) {
+         err |= control(file, "branch ctrl", branch_ctrl,
+                        brw_inst_branch_control(brw, inst), &space);
+      } else if (brw->gen >= 6) {
          err |= control(file, "acc write control", accwr,
                         brw_inst_acc_wr_control(brw, inst), &space);
+      }
       if (opcode == BRW_OPCODE_SEND || opcode == BRW_OPCODE_SENDC)
          err |= control(file, "end of thread", end_of_thread,
                         brw_inst_eot(brw, inst), &space);

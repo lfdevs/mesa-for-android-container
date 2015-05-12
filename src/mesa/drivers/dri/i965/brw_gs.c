@@ -69,11 +69,7 @@ do_gs_prog(struct brw_context *brw,
       rzalloc_array(NULL, const gl_constant_value *, param_count);
    c.prog_data.base.base.pull_param =
       rzalloc_array(NULL, const gl_constant_value *, param_count);
-   /* Setting nr_params here NOT to the size of the param and pull_param
-    * arrays, but to the number of uniform components vec4_visitor
-    * needs. vec4_visitor::setup_uniforms() will set it back to a proper value.
-    */
-   c.prog_data.base.base.nr_params = ALIGN(param_count, 4) / 4 + gs->num_samplers;
+   c.prog_data.base.base.nr_params = param_count;
 
    if (brw->gen >= 7) {
       if (gp->program.OutputType == GL_POINTS) {
@@ -282,7 +278,7 @@ do_gs_prog(struct brw_context *brw,
                          brw->max_gs_threads);
    }
 
-   brw_upload_cache(&brw->cache, BRW_GS_PROG,
+   brw_upload_cache(&brw->cache, BRW_CACHE_GS_PROG,
                     &c.key, sizeof(c.key),
                     program, program_size,
                     &c.prog_data, sizeof(c.prog_data),
@@ -330,11 +326,8 @@ brw_upload_gs_prog(struct brw_context *brw)
    memset(&key, 0, sizeof(key));
 
    key.base.program_string_id = gp->id;
-   brw_setup_vec4_key_clip_info(brw, &key.base,
-                                gp->program.Base.UsesClipDistanceOut);
-
-   /* _NEW_LIGHT | _NEW_BUFFERS */
-   key.base.clamp_vertex_color = ctx->Light._ClampVertexColor;
+   brw_setup_vue_key_clip_info(brw, &key.base,
+                               gp->program.Base.UsesClipDistanceOut);
 
    /* _NEW_TEXTURE */
    brw_populate_sampler_prog_key_data(ctx, prog, stage_state->sampler_count,
@@ -343,7 +336,7 @@ brw_upload_gs_prog(struct brw_context *brw)
    /* BRW_NEW_VUE_MAP_VS */
    key.input_varyings = brw->vue_map_vs.slots_valid;
 
-   if (!brw_search_cache(&brw->cache, BRW_GS_PROG,
+   if (!brw_search_cache(&brw->cache, BRW_CACHE_GS_PROG,
                          &key, sizeof(key),
                          &stage_state->prog_offset, &brw->gs.prog_data)) {
       bool success =
@@ -354,7 +347,7 @@ brw_upload_gs_prog(struct brw_context *brw)
    }
    brw->gs.base.prog_data = &brw->gs.prog_data->base.base;
 
-   if (memcmp(&brw->vs.prog_data->base.vue_map, &brw->vue_map_geom_out,
+   if (memcmp(&brw->gs.prog_data->base.vue_map, &brw->vue_map_geom_out,
               sizeof(brw->vue_map_geom_out)) != 0) {
       brw->vue_map_geom_out = brw->gs.prog_data->base.vue_map;
       brw->state.dirty.brw |= BRW_NEW_VUE_MAP_GEOM_OUT;
@@ -364,17 +357,19 @@ brw_upload_gs_prog(struct brw_context *brw)
 
 const struct brw_tracked_state brw_gs_prog = {
    .dirty = {
-      .mesa  = (_NEW_LIGHT | _NEW_BUFFERS | _NEW_TEXTURE),
-      .brw   = (BRW_NEW_GEOMETRY_PROGRAM |
-                BRW_NEW_VUE_MAP_VS |
-                BRW_NEW_TRANSFORM_FEEDBACK),
+      .mesa  = _NEW_TEXTURE,
+      .brw   = BRW_NEW_GEOMETRY_PROGRAM |
+               BRW_NEW_TRANSFORM_FEEDBACK |
+               BRW_NEW_VUE_MAP_VS,
    },
    .emit = brw_upload_gs_prog
 };
 
 
 bool
-brw_gs_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
+brw_gs_precompile(struct gl_context *ctx,
+                  struct gl_shader_program *shader_prog,
+                  struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_gs_prog_key key;
@@ -382,23 +377,19 @@ brw_gs_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
    struct brw_gs_prog_data *old_prog_data = brw->gs.prog_data;
    bool success;
 
-   if (!prog->_LinkedShaders[MESA_SHADER_GEOMETRY])
-      return true;
-
-   struct gl_geometry_program *gp = (struct gl_geometry_program *)
-      prog->_LinkedShaders[MESA_SHADER_GEOMETRY]->Program;
+   struct gl_geometry_program *gp = (struct gl_geometry_program *) prog;
    struct brw_geometry_program *bgp = brw_geometry_program(gp);
 
    memset(&key, 0, sizeof(key));
 
-   brw_vec4_setup_prog_key_for_precompile(ctx, &key.base, bgp->id, &gp->Base);
+   brw_vue_setup_prog_key_for_precompile(ctx, &key.base, bgp->id, &gp->Base);
 
    /* Assume that the set of varyings coming in from the vertex shader exactly
     * matches what the geometry shader requires.
     */
    key.input_varyings = gp->Base.InputsRead;
 
-   success = do_gs_prog(brw, prog, bgp, &key);
+   success = do_gs_prog(brw, shader_prog, bgp, &key);
 
    brw->gs.base.prog_offset = old_prog_offset;
    brw->gs.prog_data = old_prog_data;

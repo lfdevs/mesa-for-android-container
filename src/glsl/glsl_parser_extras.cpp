@@ -25,12 +25,10 @@
 #include <string.h>
 #include <assert.h>
 
-extern "C" {
 #include "main/core.h" /* for struct gl_context */
 #include "main/context.h"
 #include "main/shaderobj.h"
-}
-
+#include "util/u_atomic.h" /* for p_atomic_cmpxchg */
 #include "util/ralloc.h"
 #include "ast.h"
 #include "glsl_parser_extras.h"
@@ -50,7 +48,7 @@ glsl_compute_version_string(void *mem_ctx, bool is_es, unsigned version)
 
 
 static const unsigned known_desktop_glsl_versions[] =
-   { 110, 120, 130, 140, 150, 330, 400, 410, 420, 430, 440 };
+   { 110, 120, 130, 140, 150, 330, 400, 410, 420, 430, 440, 450 };
 
 
 _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
@@ -144,6 +142,12 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->user_structures = NULL;
    this->num_user_structures = 0;
 
+   /* supported_versions should be large enough to support the known desktop
+    * GLSL versions plus 2 GLES versions (ES2 & ES3)
+    */
+   STATIC_ASSERT((ARRAY_SIZE(known_desktop_glsl_versions) + 2) ==
+                 ARRAY_SIZE(this->supported_versions));
+
    /* Populate the list of supported GLSL versions */
    /* FINISHME: Once the OpenGL 3.0 'forward compatible' context or
     * the OpenGL 3.2 Core context is supported, this logic will need
@@ -171,8 +175,6 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
       this->supported_versions[this->num_supported_versions].es = true;
       this->num_supported_versions++;
    }
-   assert(this->num_supported_versions
-          <= ARRAY_SIZE(this->supported_versions));
 
    /* Create a string for use in error messages to tell the user which GLSL
     * versions are supported.
@@ -530,6 +532,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_shader_atomic_counters,     true,  false,     ARB_shader_atomic_counters),
    EXT(ARB_shader_bit_encoding,        true,  false,     ARB_shader_bit_encoding),
    EXT(ARB_shader_image_load_store,    true,  false,     ARB_shader_image_load_store),
+   EXT(ARB_shader_precision,           true,  false,     ARB_shader_precision),
    EXT(ARB_shader_stencil_export,      true,  false,     ARB_shader_stencil_export),
    EXT(ARB_shader_texture_lod,         true,  false,     ARB_shader_texture_lod),
    EXT(ARB_shading_language_420pack,   true,  false,     ARB_shading_language_420pack),
@@ -559,6 +562,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(AMD_shader_trinary_minmax,      true,  false,     dummy_true),
    EXT(AMD_vertex_shader_layer,        true,  false,     AMD_vertex_shader_layer),
    EXT(AMD_vertex_shader_viewport_index, true,  false,   AMD_vertex_shader_viewport_index),
+   EXT(EXT_draw_buffers,               false,  true,     dummy_true),
    EXT(EXT_separate_shader_objects,    false, true,      dummy_true),
    EXT(EXT_shader_integer_mix,         true,  true,      EXT_shader_integer_mix),
    EXT(EXT_texture_array,              true,  false,     EXT_texture_array),
@@ -1450,7 +1454,8 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    const char *source = shader->Source;
 
    if (ctx->Const.GenerateTemporaryNames)
-      ir_variable::temporaries_allocate_names = true;
+      (void) p_atomic_cmpxchg(&ir_variable::temporaries_allocate_names,
+                              false, true);
 
    state->error = glcpp_preprocess(state, &source, &state->info_log,
                              &ctx->Extensions, ctx);

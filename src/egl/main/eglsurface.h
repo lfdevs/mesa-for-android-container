@@ -78,7 +78,7 @@ struct _egl_surface
 };
 
 
-PUBLIC EGLBoolean
+extern EGLBoolean
 _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
                 _EGLConfig *config, const EGLint *attrib_list);
 
@@ -91,10 +91,10 @@ extern EGLBoolean
 _eglSurfaceAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint attribute, EGLint value);
 
 
-PUBLIC extern EGLBoolean
+extern EGLBoolean
 _eglBindTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint buffer);
 
-PUBLIC extern EGLBoolean
+extern EGLBoolean
 _eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint buffer);
 
 

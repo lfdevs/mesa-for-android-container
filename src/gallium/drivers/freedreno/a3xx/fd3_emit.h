@@ -32,7 +32,7 @@
 #include "pipe/p_context.h"
 
 #include "freedreno_context.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 #include "fd3_program.h"
 #include "ir3_shader.h"
 
@@ -53,6 +53,7 @@ struct fd3_emit {
 	const struct fd_program_stateobj *prog;
 	const struct pipe_draw_info *info;
 	struct ir3_shader_key key;
+	enum pipe_format format;
 	uint32_t dirty;
 	bool rasterflat;
 

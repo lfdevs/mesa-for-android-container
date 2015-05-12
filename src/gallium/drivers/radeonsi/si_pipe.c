@@ -25,9 +25,13 @@
 #include "si_public.h"
 #include "sid.h"
 
+#include "radeon/radeon_llvm_emit.h"
 #include "radeon/radeon_uvd.h"
 #include "util/u_memory.h"
 #include "vl/vl_decoder.h"
+
+#include <llvm-c/Target.h>
+#include <llvm-c/TargetMachine.h>
 
 /*
  * pipe_context
@@ -42,11 +46,15 @@ static void si_destroy_context(struct pipe_context *context)
 	pipe_resource_reference(&sctx->gsvs_ring, NULL);
 	pipe_resource_reference(&sctx->null_const_buf.buffer, NULL);
 	r600_resource_reference(&sctx->border_color_table, NULL);
+	r600_resource_reference(&sctx->scratch_buffer, NULL);
 
+	si_pm4_free_state(sctx, sctx->init_config, ~0);
 	si_pm4_delete_state(sctx, gs_rings, sctx->gs_rings);
 	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_on);
 	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_off);
 
+	if (sctx->pstipple_sampler_state)
+		sctx->b.b.delete_sampler_state(&sctx->b.b, sctx->pstipple_sampler_state);
 	if (sctx->dummy_pixel_shader) {
 		sctx->b.b.delete_fs_state(&sctx->b.b, sctx->dummy_pixel_shader);
 	}
@@ -61,6 +69,11 @@ static void si_destroy_context(struct pipe_context *context)
 	si_pm4_cleanup(sctx);
 
 	r600_common_context_cleanup(&sctx->b);
+
+#if HAVE_LLVM >= 0x0306
+	LLVMDisposeTargetMachine(sctx->tm);
+#endif
+
 	FREE(sctx);
 }
 
@@ -69,6 +82,12 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	struct si_context *sctx = CALLOC_STRUCT(si_context);
 	struct si_screen* sscreen = (struct si_screen *)screen;
 	struct radeon_winsys *ws = sscreen->b.ws;
+	LLVMTargetRef r600_target;
+#if HAVE_LLVM >= 0x0306
+	const char *triple = "amdgcn--";
+#else
+	const char *triple = "r600--";
+#endif
 	int shader, i;
 
 	if (sctx == NULL)
@@ -114,6 +133,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	case SI:
 	case CIK:
 		si_init_state_functions(sctx);
+		si_init_shader_functions(sctx);
 		si_init_config(sctx);
 		break;
 	default:
@@ -149,8 +169,25 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 
 		/* Clear the NULL constant buffer, because loads should return zeros. */
 		sctx->b.clear_buffer(&sctx->b.b, sctx->null_const_buf.buffer, 0,
-				     sctx->null_const_buf.buffer->width0, 0);
+				     sctx->null_const_buf.buffer->width0, 0, false);
 	}
+
+	/* XXX: This is the maximum value allowed.  I'm not sure how to compute
+	 * this for non-cs shaders.  Using the wrong value here can result in
+	 * GPU lockups, but the maximum value seems to always work.
+	 */
+	sctx->scratch_waves = 32 * sscreen->b.info.max_compute_units;
+
+#if HAVE_LLVM >= 0x0306
+	/* Initialize LLVM TargetMachine */
+	r600_target = radeon_llvm_get_r600_target(triple);
+	sctx->tm = LLVMCreateTargetMachine(r600_target, triple,
+					   r600_get_llvm_processor_name(sscreen->b.family),
+					   "+DumpCode,+vgpr-spilling",
+					   LLVMCodeGenLevelDefault,
+					   LLVMRelocDefault,
+					   LLVMCodeModelDefault);
+#endif
 
 	return &sctx->b.b;
 fail:
@@ -183,6 +220,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
 	case PIPE_CAP_SM3:
 	case PIPE_CAP_SEAMLESS_CUBE_MAP:
 	case PIPE_CAP_PRIMITIVE_RESTART:
@@ -211,6 +249,9 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_SAMPLE_SHADING:
 	case PIPE_CAP_DRAW_INDIRECT:
 	case PIPE_CAP_CLIP_HALFZ:
+	case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
+	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 		return 1;
 
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
@@ -239,7 +280,6 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
 	/* Unsupported features. */
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
 	case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
 	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
@@ -248,10 +288,10 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_TEXCOORD:
 	case PIPE_CAP_FAKE_SW_MSAA:
 	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
-	case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
 	case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
+	case PIPE_CAP_VERTEXID_NOBASE:
 		return 0;
 
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
@@ -474,6 +514,7 @@ static bool si_initialize_pipe_config(struct si_screen *sscreen)
 struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 {
 	struct si_screen *sscreen = CALLOC_STRUCT(si_screen);
+
 	if (sscreen == NULL) {
 		return NULL;
 	}

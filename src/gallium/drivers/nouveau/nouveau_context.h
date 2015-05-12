@@ -40,8 +40,10 @@ struct nouveau_context {
       unsigned end;
       struct nouveau_bo *bo[NOUVEAU_MAX_SCRATCH_BUFS];
       struct nouveau_bo *current;
-      struct nouveau_bo **runout;
-      unsigned nr_runout;
+      struct runout {
+         unsigned nr;
+         struct nouveau_bo *bo[0];
+      } *runout;
       unsigned bo_size;
    } scratch;
 
@@ -71,7 +73,7 @@ static INLINE void
 nouveau_scratch_done(struct nouveau_context *nv)
 {
    nv->scratch.wrap = nv->scratch.id;
-   if (unlikely(nv->scratch.nr_runout))
+   if (unlikely(nv->scratch.runout))
       nouveau_scratch_runout_release(nv);
 }
 

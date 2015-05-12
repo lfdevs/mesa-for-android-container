@@ -208,7 +208,7 @@ upload_default_color(struct brw_context *brw,
    struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
    struct gl_texture_object *texObj = texUnit->_Current;
    struct gl_texture_image *firstImage = texObj->Image[0][texObj->BaseLevel];
-   float color[4];
+   union gl_color_union color;
 
    switch (firstImage->_BaseFormat) {
    case GL_DEPTH_COMPONENT:
@@ -216,40 +216,40 @@ upload_default_color(struct brw_context *brw,
        * R channel, while the hardware uses A.  Spam R into all the
        * channels for safety.
        */
-      color[0] = sampler->BorderColor.f[0];
-      color[1] = sampler->BorderColor.f[0];
-      color[2] = sampler->BorderColor.f[0];
-      color[3] = sampler->BorderColor.f[0];
+      color.ui[0] = sampler->BorderColor.ui[0];
+      color.ui[1] = sampler->BorderColor.ui[0];
+      color.ui[2] = sampler->BorderColor.ui[0];
+      color.ui[3] = sampler->BorderColor.ui[0];
       break;
    case GL_ALPHA:
-      color[0] = 0.0;
-      color[1] = 0.0;
-      color[2] = 0.0;
-      color[3] = sampler->BorderColor.f[3];
+      color.ui[0] = 0u;
+      color.ui[1] = 0u;
+      color.ui[2] = 0u;
+      color.ui[3] = sampler->BorderColor.ui[3];
       break;
    case GL_INTENSITY:
-      color[0] = sampler->BorderColor.f[0];
-      color[1] = sampler->BorderColor.f[0];
-      color[2] = sampler->BorderColor.f[0];
-      color[3] = sampler->BorderColor.f[0];
+      color.ui[0] = sampler->BorderColor.ui[0];
+      color.ui[1] = sampler->BorderColor.ui[0];
+      color.ui[2] = sampler->BorderColor.ui[0];
+      color.ui[3] = sampler->BorderColor.ui[0];
       break;
    case GL_LUMINANCE:
-      color[0] = sampler->BorderColor.f[0];
-      color[1] = sampler->BorderColor.f[0];
-      color[2] = sampler->BorderColor.f[0];
-      color[3] = 1.0;
+      color.ui[0] = sampler->BorderColor.ui[0];
+      color.ui[1] = sampler->BorderColor.ui[0];
+      color.ui[2] = sampler->BorderColor.ui[0];
+      color.ui[3] = float_as_int(1.0);
       break;
    case GL_LUMINANCE_ALPHA:
-      color[0] = sampler->BorderColor.f[0];
-      color[1] = sampler->BorderColor.f[0];
-      color[2] = sampler->BorderColor.f[0];
-      color[3] = sampler->BorderColor.f[3];
+      color.ui[0] = sampler->BorderColor.ui[0];
+      color.ui[1] = sampler->BorderColor.ui[0];
+      color.ui[2] = sampler->BorderColor.ui[0];
+      color.ui[3] = sampler->BorderColor.ui[3];
       break;
    default:
-      color[0] = sampler->BorderColor.f[0];
-      color[1] = sampler->BorderColor.f[1];
-      color[2] = sampler->BorderColor.f[2];
-      color[3] = sampler->BorderColor.f[3];
+      color.ui[0] = sampler->BorderColor.ui[0];
+      color.ui[1] = sampler->BorderColor.ui[1];
+      color.ui[2] = sampler->BorderColor.ui[2];
+      color.ui[3] = sampler->BorderColor.ui[3];
       break;
    }
 
@@ -258,18 +258,79 @@ upload_default_color(struct brw_context *brw,
     * the border color alpha to 1.0 in that case.
     */
    if (firstImage->_BaseFormat == GL_RGB)
-      color[3] = 1.0;
+      color.ui[3] = float_as_int(1.0);
 
    if (brw->gen >= 8) {
       /* On Broadwell, the border color is represented as four 32-bit floats,
        * integers, or unsigned values, interpreted according to the surface
-       * format.  This matches the sampler->BorderColor union exactly.  Since
-       * we use floats both here and in the above reswizzling code, we preserve
-       * the original bit pattern.  So we actually handle all three formats.
+       * format.  This matches the sampler->BorderColor union exactly; just
+       * memcpy the values.
        */
-      float *sdc = brw_state_batch(brw, AUB_TRACE_SAMPLER_DEFAULT_COLOR,
-                                   4 * 4, 64, sdc_offset);
-      COPY_4FV(sdc, color);
+      uint32_t *sdc = brw_state_batch(brw, AUB_TRACE_SAMPLER_DEFAULT_COLOR,
+                                      4 * 4, 64, sdc_offset);
+      memcpy(sdc, color.ui, 4 * 4);
+   } else if (brw->is_haswell && texObj->_IsIntegerFormat) {
+      /* Haswell's integer border color support is completely insane:
+       * SAMPLER_BORDER_COLOR_STATE is 20 DWords.  The first four are
+       * for float colors.  The next 12 DWords are MBZ and only exist to
+       * pad it out to a 64 byte cacheline boundary.  DWords 16-19 then
+       * contain integer colors; these are only used if SURFACE_STATE
+       * has the "Integer Surface Format" bit set.  Even then, the
+       * arrangement of the RGBA data devolves into madness.
+       */
+      uint32_t *sdc = brw_state_batch(brw, AUB_TRACE_SAMPLER_DEFAULT_COLOR,
+                                      20 * 4, 512, sdc_offset);
+      memset(sdc, 0, 20 * 4);
+      sdc = &sdc[16];
+
+      mesa_format format = firstImage->TexFormat;
+      int bits_per_channel = _mesa_get_format_bits(format, GL_RED_BITS);
+
+      /* From the Haswell PRM, "Command Reference: Structures", Page 36:
+       * "If any color channel is missing from the surface format,
+       *  corresponding border color should be programmed as zero and if
+       *  alpha channel is missing, corresponding Alpha border color should
+       *  be programmed as 1."
+       */
+      unsigned c[4] = { 0, 0, 0, 1 };
+      for (int i = 0; i < 4; i++) {
+         if (_mesa_format_has_color_component(format, i))
+            c[i] = color.ui[i];
+      }
+
+      switch (bits_per_channel) {
+      case 8:
+         /* Copy RGBA in order. */
+         for (int i = 0; i < 4; i++)
+            ((uint8_t *) sdc)[i] = c[i];
+         break;
+      case 10:
+         /* R10G10B10A2_UINT is treated like a 16-bit format. */
+      case 16:
+         ((uint16_t *) sdc)[0] = c[0]; /* R -> DWord 0, bits 15:0  */
+         ((uint16_t *) sdc)[1] = c[1]; /* G -> DWord 0, bits 31:16 */
+         /* DWord 1 is Reserved/MBZ! */
+         ((uint16_t *) sdc)[4] = c[2]; /* B -> DWord 2, bits 15:0  */
+         ((uint16_t *) sdc)[5] = c[3]; /* A -> DWord 3, bits 31:16 */
+         break;
+      case 32:
+         if (firstImage->_BaseFormat == GL_RG) {
+            /* Careful inspection of the tables reveals that for RG32 formats,
+             * the green channel needs to go where blue normally belongs.
+             */
+            sdc[0] = c[0];
+            sdc[2] = c[1];
+            sdc[3] = 1;
+         } else {
+            /* Copy RGBA in order. */
+            for (int i = 0; i < 4; i++)
+               sdc[i] = c[i];
+         }
+         break;
+      default:
+         assert(!"Invalid number of bits per channel in integer format.");
+         break;
+      }
    } else if (brw->gen == 5 || brw->gen == 6) {
       struct gen5_sampler_default_color *sdc;
 
@@ -278,39 +339,39 @@ upload_default_color(struct brw_context *brw,
 
       memset(sdc, 0, sizeof(*sdc));
 
-      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[0], color[0]);
-      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[1], color[1]);
-      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[2], color[2]);
-      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[3], color[3]);
+      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[0], color.f[0]);
+      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[1], color.f[1]);
+      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[2], color.f[2]);
+      UNCLAMPED_FLOAT_TO_UBYTE(sdc->ub[3], color.f[3]);
 
-      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[0], color[0]);
-      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[1], color[1]);
-      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[2], color[2]);
-      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[3], color[3]);
+      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[0], color.f[0]);
+      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[1], color.f[1]);
+      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[2], color.f[2]);
+      UNCLAMPED_FLOAT_TO_USHORT(sdc->us[3], color.f[3]);
 
-      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[0], color[0]);
-      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[1], color[1]);
-      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[2], color[2]);
-      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[3], color[3]);
+      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[0], color.f[0]);
+      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[1], color.f[1]);
+      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[2], color.f[2]);
+      UNCLAMPED_FLOAT_TO_SHORT(sdc->s[3], color.f[3]);
 
-      sdc->hf[0] = _mesa_float_to_half(color[0]);
-      sdc->hf[1] = _mesa_float_to_half(color[1]);
-      sdc->hf[2] = _mesa_float_to_half(color[2]);
-      sdc->hf[3] = _mesa_float_to_half(color[3]);
+      sdc->hf[0] = _mesa_float_to_half(color.f[0]);
+      sdc->hf[1] = _mesa_float_to_half(color.f[1]);
+      sdc->hf[2] = _mesa_float_to_half(color.f[2]);
+      sdc->hf[3] = _mesa_float_to_half(color.f[3]);
 
       sdc->b[0] = sdc->s[0] >> 8;
       sdc->b[1] = sdc->s[1] >> 8;
       sdc->b[2] = sdc->s[2] >> 8;
       sdc->b[3] = sdc->s[3] >> 8;
 
-      sdc->f[0] = color[0];
-      sdc->f[1] = color[1];
-      sdc->f[2] = color[2];
-      sdc->f[3] = color[3];
+      sdc->f[0] = color.f[0];
+      sdc->f[1] = color.f[1];
+      sdc->f[2] = color.f[2];
+      sdc->f[3] = color.f[3];
    } else {
       float *sdc = brw_state_batch(brw, AUB_TRACE_SAMPLER_DEFAULT_COLOR,
 			           4 * 4, 32, sdc_offset);
-      memcpy(sdc, color, 4 * 4);
+      memcpy(sdc, color.f, 4 * 4);
    }
 }
 
@@ -512,7 +573,7 @@ brw_upload_sampler_state_table(struct brw_context *brw,
       /* Flag that the sampler state table pointer has changed; later atoms
        * will handle it.
        */
-      brw->state.dirty.cache |= CACHE_NEW_SAMPLER;
+      brw->state.dirty.brw |= BRW_NEW_SAMPLER_STATE_TABLE;
    }
 }
 
@@ -529,7 +590,6 @@ const struct brw_tracked_state brw_fs_samplers = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_FRAGMENT_PROGRAM,
-      .cache = 0
    },
    .emit = brw_upload_fs_samplers,
 };
@@ -548,7 +608,6 @@ const struct brw_tracked_state brw_vs_samplers = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_VERTEX_PROGRAM,
-      .cache = 0
    },
    .emit = brw_upload_vs_samplers,
 };
@@ -571,7 +630,6 @@ const struct brw_tracked_state brw_gs_samplers = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_GEOMETRY_PROGRAM,
-      .cache = 0
    },
    .emit = brw_upload_gs_samplers,
 };

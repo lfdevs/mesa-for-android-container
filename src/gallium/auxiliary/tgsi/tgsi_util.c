@@ -193,7 +193,6 @@ tgsi_util_get_inst_usage_mask(const struct tgsi_full_instruction *inst,
    case TGSI_OPCODE_MAD:
    case TGSI_OPCODE_SUB:
    case TGSI_OPCODE_LRP:
-   case TGSI_OPCODE_CND:
    case TGSI_OPCODE_FRC:
    case TGSI_OPCODE_CEIL:
    case TGSI_OPCODE_CLAMP:
@@ -253,7 +252,6 @@ tgsi_util_get_inst_usage_mask(const struct tgsi_full_instruction *inst,
 
    case TGSI_OPCODE_EX2:
    case TGSI_OPCODE_LG2:
-   case TGSI_OPCODE_RCC:
       read_mask = TGSI_WRITEMASK_X;
       break;
 

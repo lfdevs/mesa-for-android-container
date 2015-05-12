@@ -707,6 +707,10 @@ static INLINE struct r600_shader_key r600_shader_selector_key(struct pipe_contex
 			key.nr_cbufs = 2;
 	} else if (sel->type == PIPE_SHADER_VERTEX) {
 		key.vs_as_es = (rctx->gs_shader != NULL);
+		if (rctx->ps_shader->current->shader.gs_prim_id_input && !rctx->gs_shader) {
+			key.vs_as_gs_a = true;
+			key.vs_prim_id_out = rctx->ps_shader->current->shader.input[rctx->ps_shader->current->shader.ps_prim_id_input].spi_sid;
+		}
 	}
 	return key;
 }
@@ -1170,6 +1174,10 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 		}
 	}
 
+	r600_shader_select(ctx, rctx->ps_shader, &ps_dirty);
+	if (unlikely(!rctx->ps_shader->current))
+		return false;
+
 	update_gs_block_state(rctx, rctx->gs_shader != NULL);
 
 	if (rctx->gs_shader) {
@@ -1232,9 +1240,6 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 		}
 	}
 
-	r600_shader_select(ctx, rctx->ps_shader, &ps_dirty);
-	if (unlikely(!rctx->ps_shader->current))
-		return false;
 
 	if (unlikely(ps_dirty || rctx->pixel_shader.shader != rctx->ps_shader->current ||
 		rctx->rasterizer->sprite_coord_enable != rctx->ps_shader->current->sprite_coord_enable ||
@@ -1264,6 +1269,7 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 				r600_update_ps_state(ctx, rctx->ps_shader->current);
 		}
 
+		rctx->shader_stages.atom.dirty = true;
 		update_shader_atom(ctx, &rctx->pixel_shader, rctx->ps_shader->current);
 	}
 

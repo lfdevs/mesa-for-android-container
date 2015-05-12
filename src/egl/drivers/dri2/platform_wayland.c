@@ -130,13 +130,12 @@ dri2_wl_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 
    (void) drv;
 
-   dri2_surf = malloc(sizeof *dri2_surf);
+   dri2_surf = calloc(1, sizeof *dri2_surf);
    if (!dri2_surf) {
       _eglError(EGL_BAD_ALLOC, "dri2_create_surface");
       return NULL;
    }
    
-   memset(dri2_surf, 0, sizeof *dri2_surf);
    if (!_eglInitSurface(&dri2_surf->base, disp, type, conf, attrib_list))
       goto cleanup_surf;
 
@@ -293,6 +292,26 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
    int i;
+   unsigned int dri_image_format;
+
+   /* currently supports three WL DRM formats,
+    * WL_DRM_FORMAT_ARGB8888, WL_DRM_FORMAT_XRGB8888,
+    * and WL_DRM_FORMAT_RGB565
+    */
+   switch (dri2_surf->format) {
+   case WL_DRM_FORMAT_ARGB8888:
+      dri_image_format = __DRI_IMAGE_FORMAT_ARGB8888;
+      break;
+   case WL_DRM_FORMAT_XRGB8888:
+      dri_image_format = __DRI_IMAGE_FORMAT_XRGB8888;
+      break;
+   case WL_DRM_FORMAT_RGB565:
+      dri_image_format = __DRI_IMAGE_FORMAT_RGB565;
+      break;
+   default:
+      /* format is not supported */
+      return -1;
+   }
 
    /* We always want to throttle to some event (either a frame callback or
     * a sync request) after the commit so that we can be sure the
@@ -323,7 +342,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
          dri2_dpy->image->createImage(dri2_dpy->dri_screen,
                                       dri2_surf->base.Width,
                                       dri2_surf->base.Height,
-                                      __DRI_IMAGE_FORMAT_ARGB8888,
+                                      dri_image_format,
                                       __DRI_IMAGE_USE_SHARE,
                                       NULL);
       dri2_surf->back->age = 0;
@@ -463,10 +482,25 @@ dri2_wl_get_buffers(__DRIdrawable * driDrawable,
                     unsigned int *attachments, int count,
                     int *out_count, void *loaderPrivate)
 {
+   struct dri2_egl_surface *dri2_surf = loaderPrivate;
    unsigned int *attachments_with_format;
    __DRIbuffer *buffer;
-   const unsigned int format = 32;
+   unsigned int bpp;
+
    int i;
+
+   switch (dri2_surf->format) {
+   case WL_DRM_FORMAT_ARGB8888:
+   case WL_DRM_FORMAT_XRGB8888:
+      bpp = 32;
+      break;
+   case WL_DRM_FORMAT_RGB565:
+      bpp = 16;
+      break;
+   default:
+      /* format is not supported */
+      return NULL;
+   }
 
    attachments_with_format = calloc(count, 2 * sizeof(unsigned int));
    if (!attachments_with_format) {
@@ -476,7 +510,7 @@ dri2_wl_get_buffers(__DRIdrawable * driDrawable,
 
    for (i = 0; i < count; ++i) {
       attachments_with_format[2*i] = attachments[i];
-      attachments_with_format[2*i + 1] = format;
+      attachments_with_format[2*i + 1] = bpp;
    }
 
    buffer =
@@ -597,8 +631,6 @@ dri2_wl_swap_buffers_with_damage(_EGLDriver *drv,
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
-   struct dri2_egl_context *dri2_ctx;
-   _EGLContext *ctx;
    int i;
 
    for (i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++)
@@ -650,17 +682,7 @@ dri2_wl_swap_buffers_with_damage(_EGLDriver *drv,
       }
    }
 
-   if (dri2_dpy->flush->base.version >= 4) {
-      ctx = _eglGetCurrentContext();
-      dri2_ctx = dri2_egl_context(ctx);
-      (*dri2_dpy->flush->flush_with_flags)(dri2_ctx->dri_context,
-                                           dri2_surf->dri_drawable,
-                                           __DRI2_FLUSH_DRAWABLE,
-                                           __DRI2_THROTTLE_SWAPBUFFER);
-   } else {
-      (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
-   }
-
+   dri2_flush_drawable_for_swapbuffers(disp, draw);
    (*dri2_dpy->flush->invalidate)(dri2_surf->dri_drawable);
 
    wl_surface_commit(dri2_surf->wl_win->surface);

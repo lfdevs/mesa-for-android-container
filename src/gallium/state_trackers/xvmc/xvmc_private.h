@@ -69,7 +69,7 @@ typedef struct
    struct pipe_video_buffer *video_buffer;
 
    /* nonzero if this picture is already being decoded */
-   int picture_structure;
+   unsigned picture_structure;
 
    XvMCSurface *ref[2];
 
@@ -106,7 +106,7 @@ typedef struct
 #define XVMC_WARN  2
 #define XVMC_TRACE 3
 
-static INLINE void XVMC_MSG(unsigned int level, const char *fmt, ...)
+static INLINE void XVMC_MSG(int level, const char *fmt, ...)
 {
    static int debug_level = -1;
 

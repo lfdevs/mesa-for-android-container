@@ -684,19 +684,6 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
    case TGSI_OPCODE_RCP:
       nvfx_fp_emit(fpc, arith(sat, RCP, dst, mask, src[0], none, none));
       break;
-   case TGSI_OPCODE_RFL:
-      if(!fpc->is_nv4x)
-         nvfx_fp_emit(fpc, arith(0, RFL_NV30, dst, mask, src[0], src[1], none));
-      else {
-         tmp = nvfx_src(temp(fpc));
-         nvfx_fp_emit(fpc, arith(0, DP3, tmp.reg, NVFX_FP_MASK_X, src[0], src[0], none));
-         nvfx_fp_emit(fpc, arith(0, DP3, tmp.reg, NVFX_FP_MASK_Y, src[0], src[1], none));
-         insn = arith(0, DIV, tmp.reg, NVFX_FP_MASK_Z, swz(tmp, Y, Y, Y, Y), swz(tmp, X, X, X, X), none);
-         insn.scale = NVFX_FP_OP_DST_SCALE_2X;
-         nvfx_fp_emit(fpc, insn);
-         nvfx_fp_emit(fpc, arith(sat, MAD, dst, mask, swz(tmp, Z, Z, Z, Z), src[0], neg(src[1])));
-      }
-      break;
    case TGSI_OPCODE_RSQ:
       if(!fpc->is_nv4x)
          nvfx_fp_emit(fpc, arith(sat, RSQ_NV30, dst, mask, abs(swz(src[0], X, X, X, X)), none, none));
@@ -727,9 +714,6 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       break;
    case TGSI_OPCODE_SEQ:
       nvfx_fp_emit(fpc, arith(sat, SEQ, dst, mask, src[0], src[1], none));
-      break;
-   case TGSI_OPCODE_SFL:
-      nvfx_fp_emit(fpc, arith(sat, SFL, dst, mask, src[0], src[1], none));
       break;
    case TGSI_OPCODE_SGE:
       nvfx_fp_emit(fpc, arith(sat, SGE, dst, mask, src[0], src[1], none));
@@ -768,9 +752,6 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       }
       break;
    }
-   case TGSI_OPCODE_STR:
-      nvfx_fp_emit(fpc, arith(sat, STR, dst, mask, src[0], src[1], none));
-      break;
    case TGSI_OPCODE_SUB:
       nvfx_fp_emit(fpc, arith(sat, ADD, dst, mask, src[0], neg(src[1]), none));
       break;
@@ -839,13 +820,6 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       hw[3] = fpc->fp->insn_len;
       break;
    }
-
-   case TGSI_OPCODE_BRA:
-      /* This can in limited cases be implemented with an IF with the else and endif labels pointing to the target */
-      /* no state tracker uses this, so don't implement this for now */
-      assert(0);
-      nv40_fp_bra(fpc, finst->Label.Label);
-      break;
 
    case TGSI_OPCODE_BGNSUB:
    case TGSI_OPCODE_ENDSUB:

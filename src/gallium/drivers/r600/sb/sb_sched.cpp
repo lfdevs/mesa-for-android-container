@@ -266,7 +266,7 @@ bool rp_gpr_tracker::try_reserve(alu_node* n) {
 
 	for (i = 0; i < nsrc; ++i) {
 		value *v = n->src[i];
-		if (v->is_readonly()) {
+		if (v->is_readonly() || v->is_undef()) {
 			const_count++;
 			if (trans && const_count == 3)
 				break;
@@ -295,7 +295,7 @@ bool rp_gpr_tracker::try_reserve(alu_node* n) {
 	if (need_unreserve && i--) {
 		do {
 			value *v = n->src[i];
-			if (!v->is_readonly()) {
+			if (!v->is_readonly() && !v->is_undef()) {
 			if (i == 1 && opt)
 				continue;
 			unreserve(bs_cycle(trans, bs, i), n->bc.src[i].sel,

@@ -226,10 +226,10 @@ extern int reg_type_size[];
 static void
 validate_reg(const struct brw_context *brw, brw_inst *inst, struct brw_reg reg)
 {
-   int hstride_for_reg[] = {0, 1, 2, 4};
-   int vstride_for_reg[] = {0, 1, 2, 4, 8, 16, 32};
-   int width_for_reg[] = {1, 2, 4, 8, 16};
-   int execsize_for_reg[] = {1, 2, 4, 8, 16};
+   const int hstride_for_reg[] = {0, 1, 2, 4};
+   const int vstride_for_reg[] = {0, 1, 2, 4, 8, 16, 32};
+   const int width_for_reg[] = {1, 2, 4, 8, 16};
+   const int execsize_for_reg[] = {1, 2, 4, 8, 16};
    int width, hstride, vstride, execsize;
 
    if (reg.file == BRW_IMMEDIATE_VALUE) {
@@ -453,12 +453,12 @@ void
 brw_set_src1(struct brw_compile *p, brw_inst *inst, struct brw_reg reg)
 {
    const struct brw_context *brw = p->brw;
-   assert(reg.file != BRW_MESSAGE_REGISTER_FILE);
 
    if (reg.file != BRW_ARCHITECTURE_REGISTER_FILE)
       assert(reg.nr < 128);
 
    gen7_convert_mrf_to_grf(p, &reg);
+   assert(reg.file != BRW_MESSAGE_REGISTER_FILE);
 
    validate_reg(brw, inst, reg);
 
@@ -1040,7 +1040,6 @@ ALU2(DP4)
 ALU2(DPH)
 ALU2(DP3)
 ALU2(DP2)
-ALU2(LINE)
 ALU2(PLN)
 ALU3F(MAD)
 ALU3F(LRP)
@@ -1133,6 +1132,16 @@ brw_MUL(struct brw_compile *p, struct brw_reg dest,
 	  src1.nr != BRW_ARF_ACCUMULATOR);
 
    return brw_alu2(p, BRW_OPCODE_MUL, dest, src0, src1);
+}
+
+brw_inst *
+brw_LINE(struct brw_compile *p, struct brw_reg dest,
+         struct brw_reg src0, struct brw_reg src1)
+{
+   src0.vstride = BRW_VERTICAL_STRIDE_0;
+   src0.width = BRW_WIDTH_1;
+   src0.hstride = BRW_HORIZONTAL_STRIDE_0;
+   return brw_alu2(p, BRW_OPCODE_LINE, dest, src0, src1);
 }
 
 brw_inst *
@@ -1840,14 +1849,6 @@ void brw_CMP(struct brw_compile *p,
    struct brw_context *brw = p->brw;
    brw_inst *insn = next_insn(p, BRW_OPCODE_CMP);
 
-   if (brw->gen >= 8) {
-      /* The CMP instruction appears to behave erratically for floating point
-       * sources unless the destination type is also float.  Overriding it to
-       * match src0 makes it work in all cases.
-       */
-      dest.type = src0.type;
-   }
-
    brw_inst_set_cond_modifier(brw, insn, conditional);
    brw_set_dest(p, insn, dest);
    brw_set_src0(p, insn, src0);
@@ -1884,9 +1885,7 @@ void gen4_math(struct brw_compile *p,
    struct brw_context *brw = p->brw;
    brw_inst *insn = next_insn(p, BRW_OPCODE_SEND);
    unsigned data_type;
-   if (src.vstride == BRW_VERTICAL_STRIDE_0 &&
-       src.width == BRW_WIDTH_1 &&
-       src.hstride == BRW_HORIZONTAL_STRIDE_0) {
+   if (has_scalar_region(src)) {
       data_type = BRW_MATH_DATA_SCALAR;
    } else {
       data_type = BRW_MATH_DATA_VECTOR;
@@ -2376,8 +2375,7 @@ void brw_SAMPLE(struct brw_compile *p,
  */
 void brw_adjust_sampler_state_pointer(struct brw_compile *p,
                                       struct brw_reg header,
-                                      struct brw_reg sampler_index,
-                                      struct brw_reg scratch)
+                                      struct brw_reg sampler_index)
 {
    /* The "Sampler Index" field can only store values between 0 and 15.
     * However, we can add an offset to the "Sampler State Pointer"
@@ -2407,7 +2405,7 @@ void brw_adjust_sampler_state_pointer(struct brw_compile *p,
          return;
       }
 
-      struct brw_reg temp = vec1(retype(scratch, BRW_REGISTER_TYPE_UD));
+      struct brw_reg temp = get_element_ud(header, 3);
 
       brw_AND(p, temp, get_element_ud(sampler_index, 0), brw_imm_ud(0x0f0));
       brw_SHL(p, temp, temp, brw_imm_ud(4));

@@ -63,7 +63,7 @@ nvc0_fb_set_null_rt(struct nouveau_pushbuf *push, unsigned i)
    PUSH_DATA (push, 0);
    PUSH_DATA (push, 64);
    PUSH_DATA (push, 0);
-   PUSH_DATA (push, NV50_SURFACE_FORMAT_NONE);
+   PUSH_DATA (push, 0);
    PUSH_DATA (push, 0);
 }
 

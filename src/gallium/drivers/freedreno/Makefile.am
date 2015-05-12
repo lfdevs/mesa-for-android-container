@@ -15,6 +15,7 @@ libfreedreno_la_SOURCES = \
 	$(C_SOURCES) \
 	$(a2xx_SOURCES) \
 	$(a3xx_SOURCES) \
+	$(a4xx_SOURCES) \
 	$(ir3_SOURCES)
 
 noinst_PROGRAMS = ir3_compiler
@@ -28,5 +29,3 @@ ir3_compiler_LDADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS) \
 	$(FREEDRENO_LIBS)
-
-EXTRA_DIST = Android.mk

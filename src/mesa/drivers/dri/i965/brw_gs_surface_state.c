@@ -46,7 +46,7 @@ brw_upload_gs_pull_constants(struct brw_context *brw)
    if (!gp)
       return;
 
-   /* CACHE_NEW_GS_PROG */
+   /* BRW_NEW_GS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = &brw->gs.prog_data->base.base;
 
    /* _NEW_PROGRAM_CONSTANTS */
@@ -56,9 +56,10 @@ brw_upload_gs_pull_constants(struct brw_context *brw)
 
 const struct brw_tracked_state brw_gs_pull_constants = {
    .dirty = {
-      .mesa = (_NEW_PROGRAM_CONSTANTS),
-      .brw = (BRW_NEW_BATCH | BRW_NEW_GEOMETRY_PROGRAM),
-      .cache = CACHE_NEW_GS_PROG,
+      .mesa = _NEW_PROGRAM_CONSTANTS,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_GEOMETRY_PROGRAM |
+             BRW_NEW_GS_PROG_DATA,
    },
    .emit = brw_upload_gs_pull_constants,
 };
@@ -75,16 +76,17 @@ brw_upload_gs_ubo_surfaces(struct brw_context *brw)
    if (!prog)
       return;
 
-   /* CACHE_NEW_GS_PROG */
+   /* BRW_NEW_GS_PROG_DATA */
    brw_upload_ubo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_GEOMETRY],
-			   &brw->gs.base, &brw->gs.prog_data->base.base);
+			   &brw->gs.base, &brw->gs.prog_data->base.base, false);
 }
 
 const struct brw_tracked_state brw_gs_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
-      .brw = BRW_NEW_BATCH | BRW_NEW_UNIFORM_BUFFER,
-      .cache = CACHE_NEW_GS_PROG,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_GS_PROG_DATA |
+             BRW_NEW_UNIFORM_BUFFER,
    },
    .emit = brw_upload_gs_ubo_surfaces,
 };
@@ -98,7 +100,7 @@ brw_upload_gs_abo_surfaces(struct brw_context *brw)
       ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY];
 
    if (prog) {
-      /* CACHE_NEW_GS_PROG */
+      /* BRW_NEW_GS_PROG_DATA */
       brw_upload_abo_surfaces(brw, prog, &brw->gs.base,
                               &brw->gs.prog_data->base.base);
    }
@@ -107,8 +109,9 @@ brw_upload_gs_abo_surfaces(struct brw_context *brw)
 const struct brw_tracked_state brw_gs_abo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
-      .brw = BRW_NEW_BATCH | BRW_NEW_ATOMIC_BUFFER,
-      .cache = CACHE_NEW_GS_PROG,
+      .brw = BRW_NEW_ATOMIC_BUFFER |
+             BRW_NEW_BATCH |
+             BRW_NEW_GS_PROG_DATA,
    },
    .emit = brw_upload_gs_abo_surfaces,
 };

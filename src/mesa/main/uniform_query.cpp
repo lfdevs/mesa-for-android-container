@@ -45,9 +45,14 @@ _mesa_GetActiveUniform(GLuint program, GLuint index,
                        GLenum *type, GLcharARB *nameOut)
 {
    GET_CURRENT_CONTEXT(ctx);
-   struct gl_shader_program *shProg =
-      _mesa_lookup_shader_program_err(ctx, program, "glGetActiveUniform");
+   struct gl_shader_program *shProg;
 
+   if (maxLength < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glGetActiveUniform(maxLength < 0)");
+      return;
+   }
+
+   shProg = _mesa_lookup_shader_program_err(ctx, program, "glGetActiveUniform");
    if (!shProg)
       return;
 
@@ -85,15 +90,15 @@ _mesa_GetActiveUniformsiv(GLuint program,
    struct gl_shader_program *shProg;
    GLsizei i;
 
-   shProg = _mesa_lookup_shader_program_err(ctx, program, "glGetActiveUniform");
-   if (!shProg)
-      return;
-
    if (uniformCount < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE,
 		  "glGetActiveUniformsiv(uniformCount < 0)");
       return;
    }
+
+   shProg = _mesa_lookup_shader_program_err(ctx, program, "glGetActiveUniform");
+   if (!shProg)
+      return;
 
    for (i = 0; i < uniformCount; i++) {
       GLuint index = uniformIndices[i];

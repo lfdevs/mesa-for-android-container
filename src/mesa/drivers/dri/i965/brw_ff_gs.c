@@ -139,7 +139,7 @@ static void compile_ff_gs_prog(struct brw_context *brw,
       fprintf(stderr, "\n");
     }
 
-   brw_upload_cache(&brw->cache, BRW_FF_GS_PROG,
+   brw_upload_cache(&brw->cache, BRW_CACHE_FF_GS_PROG,
 		    &c.key, sizeof(c.key),
 		    program, program_size,
 		    &c.prog_data, sizeof(c.prog_data),
@@ -161,7 +161,7 @@ static void populate_key(struct brw_context *brw,
 
    memset(key, 0, sizeof(*key));
 
-   /* CACHE_NEW_VS_PROG (part of VUE map) */
+   /* BRW_NEW_VS_PROG_DATA (part of VUE map) */
    key->attrs = brw->vs.prog_data->base.vue_map.slots_valid;
 
    /* BRW_NEW_PRIMITIVE */
@@ -230,12 +230,12 @@ brw_upload_ff_gs_prog(struct brw_context *brw)
    populate_key(brw, &key);
 
    if (brw->ff_gs.prog_active != key.need_gs_prog) {
-      brw->state.dirty.cache |= CACHE_NEW_FF_GS_PROG;
+      brw->state.dirty.brw |= BRW_NEW_FF_GS_PROG_DATA;
       brw->ff_gs.prog_active = key.need_gs_prog;
    }
 
    if (brw->ff_gs.prog_active) {
-      if (!brw_search_cache(&brw->cache, BRW_FF_GS_PROG,
+      if (!brw_search_cache(&brw->cache, BRW_CACHE_FF_GS_PROG,
 			    &key, sizeof(key),
 			    &brw->ff_gs.prog_offset, &brw->ff_gs.prog_data)) {
 	 compile_ff_gs_prog( brw, &key );
@@ -250,10 +250,10 @@ void gen6_brw_upload_ff_gs_prog(struct brw_context *brw)
 
 const struct brw_tracked_state brw_ff_gs_prog = {
    .dirty = {
-      .mesa  = (_NEW_LIGHT),
-      .brw   = (BRW_NEW_PRIMITIVE |
-                BRW_NEW_TRANSFORM_FEEDBACK),
-      .cache = CACHE_NEW_VS_PROG
+      .mesa  = _NEW_LIGHT,
+      .brw   = BRW_NEW_PRIMITIVE |
+               BRW_NEW_TRANSFORM_FEEDBACK |
+               BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_upload_ff_gs_prog
 };

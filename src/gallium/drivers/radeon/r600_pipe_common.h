@@ -56,28 +56,8 @@
 #define R600_QUERY_VRAM_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 6)
 #define R600_QUERY_GTT_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 7)
 
-/* read caches */
-#define R600_CONTEXT_INV_VERTEX_CACHE		(1 << 0)
-#define R600_CONTEXT_INV_TEX_CACHE		(1 << 1)
-#define R600_CONTEXT_INV_CONST_CACHE		(1 << 2)
-#define R600_CONTEXT_INV_SHADER_CACHE		(1 << 3)
-/* read-write caches */
-#define R600_CONTEXT_STREAMOUT_FLUSH		(1 << 8)
-#define R600_CONTEXT_FLUSH_AND_INV		(1 << 9)
-#define R600_CONTEXT_FLUSH_AND_INV_CB_META	(1 << 10)
-#define R600_CONTEXT_FLUSH_AND_INV_DB_META	(1 << 11)
-#define R600_CONTEXT_FLUSH_AND_INV_DB		(1 << 12)
-#define R600_CONTEXT_FLUSH_AND_INV_CB		(1 << 13)
-#define R600_CONTEXT_FLUSH_WITH_INV_L2		(1 << 14)
-/* engine synchronization */
-#define R600_CONTEXT_PS_PARTIAL_FLUSH		(1 << 16)
-#define R600_CONTEXT_WAIT_3D_IDLE		(1 << 17)
-#define R600_CONTEXT_WAIT_CP_DMA_IDLE		(1 << 18)
-#define R600_CONTEXT_VGT_FLUSH			(1 << 19)
-#define R600_CONTEXT_VGT_STREAMOUT_SYNC		(1 << 20)
-#define R600_CONTEXT_CS_PARTIAL_FLUSH		(1 << 21)
-/* other flags */
-#define R600_CONTEXT_FLAG_COMPUTE		(1u << 31)
+#define R600_CONTEXT_STREAMOUT_FLUSH		(1u << 0)
+#define R600_CONTEXT_PRIVATE_FLAG		(1u << 1)
 
 /* special primitive types */
 #define R600_PRIM_RECTANGLE_LIST	PIPE_PRIM_MAX
@@ -109,6 +89,11 @@
 
 struct r600_common_context;
 
+struct radeon_shader_reloc {
+	char *name;
+	uint64_t offset;
+};
+
 struct radeon_shader_binary {
 	/** Shader code */
 	unsigned char *code;
@@ -132,6 +117,9 @@ struct radeon_shader_binary {
 	/** List of symbol offsets for the shader */
 	uint64_t *global_symbol_offsets;
 	unsigned global_symbol_count;
+
+	struct radeon_shader_reloc *relocs;
+	unsigned reloc_count;
 
 	/** Set to 1 if the disassembly for this binary has been dumped to
 	 *  stderr. */
@@ -158,6 +146,18 @@ struct r600_resource {
 	 * the unsynchronized map flag and expect the driver to figure it out.
          */
 	struct util_range		valid_buffer_range;
+
+	/* For buffers only. This indicates that a write operation has been
+	 * performed by TC L2, but the cache hasn't been flushed.
+	 * Any hw block which doesn't use or bypasses TC L2 should check this
+	 * flag and flush the cache before using the buffer.
+	 *
+	 * For example, TC L2 must be flushed if a buffer which has been
+	 * modified by a shader store instruction is about to be used as
+	 * an index buffer. The reason is that VGT DMA index fetching doesn't
+	 * use TC L2.
+	 */
+	bool				TC_L2_dirty;
 };
 
 struct r600_transfer {
@@ -294,6 +294,7 @@ struct r600_so_target {
 	/* The buffer where BUFFER_FILLED_SIZE is stored. */
 	struct r600_resource	*buf_filled_size;
 	unsigned		buf_filled_size_offset;
+	bool			buf_filled_size_valid;
 
 	unsigned		stride_in_dw;
 };
@@ -408,7 +409,8 @@ struct r600_common_context {
 			 const struct pipe_box *src_box);
 
 	void (*clear_buffer)(struct pipe_context *ctx, struct pipe_resource *dst,
-			     unsigned offset, unsigned size, unsigned value);
+			     unsigned offset, unsigned size, unsigned value,
+			     bool is_framebuffer);
 
 	void (*blit_decompress_depth)(struct pipe_context *ctx,
 				      struct r600_texture *texture,
@@ -461,7 +463,8 @@ void r600_context_add_resource_size(struct pipe_context *ctx, struct pipe_resour
 bool r600_can_dump_shader(struct r600_common_screen *rscreen,
 			  const struct tgsi_token *tokens);
 void r600_screen_clear_buffer(struct r600_common_screen *rscreen, struct pipe_resource *dst,
-			      unsigned offset, unsigned size, unsigned value);
+			      unsigned offset, unsigned size, unsigned value,
+			      bool is_framebuffer);
 struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 						  const struct pipe_resource *templ);
 const char *r600_get_llvm_processor_name(enum radeon_family family);

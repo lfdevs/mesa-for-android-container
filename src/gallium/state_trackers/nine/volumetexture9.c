@@ -37,6 +37,8 @@ NineVolumeTexture9_ctor( struct NineVolumeTexture9 *This,
                          HANDLE *pSharedHandle )
 {
     struct pipe_resource *info = &This->base.base.info;
+    struct pipe_screen *screen = pParams->device->screen;
+    enum pipe_format pf;
     unsigned l;
     D3DVOLUME_DESC voldesc;
     HRESULT hr;
@@ -57,9 +59,18 @@ NineVolumeTexture9_ctor( struct NineVolumeTexture9 *This,
     if (Usage & D3DUSAGE_AUTOGENMIPMAP)
         Levels = 0;
 
+    pf = d3d9_to_pipe_format_checked(screen, Format, PIPE_TEXTURE_3D, 0,
+                                     PIPE_BIND_SAMPLER_VIEW, FALSE);
+    if (pf == PIPE_FORMAT_NONE)
+        return D3DERR_INVALIDCALL;
+
+    /* We support ATI1 and ATI2 hacks only for 2D textures */
+    if (Format == D3DFMT_ATI1 || Format == D3DFMT_ATI2)
+        return D3DERR_INVALIDCALL;
+
     info->screen = pParams->device->screen;
     info->target = PIPE_TEXTURE_3D;
-    info->format = d3d9_to_pipe_format(Format);
+    info->format = pf;
     info->width0 = Width;
     info->height0 = Height;
     info->depth0 = Depth;

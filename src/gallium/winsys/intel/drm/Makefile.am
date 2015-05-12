@@ -32,5 +32,3 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libintelwinsys.la
 
 libintelwinsys_la_SOURCES = $(C_SOURCES)
-
-EXTRA_DIST = Android.mk

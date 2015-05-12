@@ -20,7 +20,7 @@ git.debian.org in the pkg-xorg subdirectory. Most upstream packages
 are actually maintained in git repositories as well, so they often
 just need to be pulled into git.debian.org in a "upstream-*" branch.
 
-The .orig.tar.gz is upstream's MesaLib tarball.
+The .orig.tar.gz is upstream's mesa tarball.
 
 While building from git, dpkg-source can complain about symlinks vs.
 normal files mismatches. To work around this issue, before uploading,

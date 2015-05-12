@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 /* GCC visibility */
-#if defined(__GNUC__) && __GNUC__ >= 4
+#if defined(__GNUC__)
 #define WL_EGL_EXPORT __attribute__ ((visibility("default")))
 #else
 #define WL_EGL_EXPORT

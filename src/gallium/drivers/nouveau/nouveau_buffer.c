@@ -846,17 +846,28 @@ nouveau_scratch_bo_alloc(struct nouveau_context *nv, struct nouveau_bo **pbo,
                          4096, size, NULL, pbo);
 }
 
+static void
+nouveau_scratch_unref_bos(void *d)
+{
+   struct runout *b = d;
+   int i;
+
+   for (i = 0; i < b->nr; ++i)
+      nouveau_bo_ref(NULL, &b->bo[i]);
+
+   FREE(b);
+}
+
 void
 nouveau_scratch_runout_release(struct nouveau_context *nv)
 {
-   if (!nv->scratch.nr_runout)
+   if (!nv->scratch.runout)
       return;
-   do {
-      --nv->scratch.nr_runout;
-      nouveau_bo_ref(NULL, &nv->scratch.runout[nv->scratch.nr_runout]);
-   } while (nv->scratch.nr_runout);
 
-   FREE(nv->scratch.runout);
+   if (!nouveau_fence_work(nv->screen->fence.current, nouveau_scratch_unref_bos,
+         nv->scratch.runout))
+      return;
+
    nv->scratch.end = 0;
    nv->scratch.runout = NULL;
 }
@@ -868,21 +879,26 @@ static INLINE boolean
 nouveau_scratch_runout(struct nouveau_context *nv, unsigned size)
 {
    int ret;
-   const unsigned n = nv->scratch.nr_runout++;
+   unsigned n;
 
-   nv->scratch.runout = REALLOC(nv->scratch.runout,
-                                (n + 0) * sizeof(*nv->scratch.runout),
-                                (n + 1) * sizeof(*nv->scratch.runout));
-   nv->scratch.runout[n] = NULL;
+   if (nv->scratch.runout)
+      n = nv->scratch.runout->nr;
+   else
+      n = 0;
+   nv->scratch.runout = REALLOC(nv->scratch.runout, n == 0 ? 0 :
+                                (sizeof(*nv->scratch.runout) + (n + 0) * sizeof(void *)),
+                                 sizeof(*nv->scratch.runout) + (n + 1) * sizeof(void *));
+   nv->scratch.runout->nr = n + 1;
+   nv->scratch.runout->bo[n] = NULL;
 
-   ret = nouveau_scratch_bo_alloc(nv, &nv->scratch.runout[n], size);
+   ret = nouveau_scratch_bo_alloc(nv, &nv->scratch.runout->bo[n], size);
    if (!ret) {
-      ret = nouveau_bo_map(nv->scratch.runout[n], 0, NULL);
+      ret = nouveau_bo_map(nv->scratch.runout->bo[n], 0, NULL);
       if (ret)
-         nouveau_bo_ref(NULL, &nv->scratch.runout[--nv->scratch.nr_runout]);
+         nouveau_bo_ref(NULL, &nv->scratch.runout->bo[--nv->scratch.runout->nr]);
    }
    if (!ret) {
-      nv->scratch.current = nv->scratch.runout[n];
+      nv->scratch.current = nv->scratch.runout->bo[n];
       nv->scratch.offset = 0;
       nv->scratch.end = size;
       nv->scratch.map = nv->scratch.current->map;

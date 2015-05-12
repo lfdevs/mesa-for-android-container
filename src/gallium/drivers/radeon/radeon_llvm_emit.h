@@ -28,15 +28,19 @@
 #define RADEON_LLVM_EMIT_H
 
 #include <llvm-c/Core.h>
+#include <llvm-c/TargetMachine.h>
 
 struct radeon_shader_binary;
 
 void radeon_llvm_shader_type(LLVMValueRef F, unsigned type);
 
+LLVMTargetRef radeon_llvm_get_r600_target(const char *triple);
+
 unsigned  radeon_llvm_compile(
 	LLVMModuleRef M,
 	struct radeon_shader_binary *binary,
 	const char * gpu_family,
-	unsigned dump);
+	unsigned dump,
+	LLVMTargetMachineRef tm);
 
 #endif /* RADEON_LLVM_EMIT_H */

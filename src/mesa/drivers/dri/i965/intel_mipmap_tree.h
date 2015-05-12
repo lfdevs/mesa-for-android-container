@@ -526,6 +526,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
                             uint32_t offset,
                             uint32_t width,
                             uint32_t height,
+                            uint32_t depth,
                             int pitch);
 
 void
@@ -733,7 +734,7 @@ intel_miptree_map(struct brw_context *brw,
 		  unsigned int h,
 		  GLbitfield mode,
 		  void **out_ptr,
-		  int *out_stride);
+		  ptrdiff_t *out_stride);
 
 void
 intel_miptree_unmap(struct brw_context *brw,

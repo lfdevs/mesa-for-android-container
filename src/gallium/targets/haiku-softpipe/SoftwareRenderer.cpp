@@ -54,7 +54,7 @@ SoftwareRenderer::SoftwareRenderer(BGLView *view, ulong options,
 	CALLED();
 
 	// Disable double buffer for the moment.
-	options &= ~BGL_DOUBLE;
+	//options &= ~BGL_DOUBLE;
 
 	// Initialize the "Haiku Software GL Pipe"
 	time_t beg;
@@ -72,8 +72,6 @@ SoftwareRenderer::SoftwareRenderer(BGLView *view, ulong options,
 
 	fWidth = (GLint)b.IntegerWidth();
 	fHeight = (GLint)b.IntegerHeight();
-	fNewWidth = fWidth;
-	fNewHeight = fHeight;
 
 	_AllocateBitmap();
 
@@ -115,19 +113,16 @@ SoftwareRenderer::LockGL()
 
 	BAutolock lock(fInfoLocker);
 	if (fDirectModeEnabled && fInfo != NULL) {
-		fNewWidth = fInfo->window_bounds.right - fInfo->window_bounds.left;
-		fNewHeight = fInfo->window_bounds.bottom - fInfo->window_bounds.top;
+		fWidth = fInfo->window_bounds.right - fInfo->window_bounds.left;
+		fHeight = fInfo->window_bounds.bottom - fInfo->window_bounds.top;
 	}
 
-	if (fBitmap && cs == fColorSpace && fNewWidth == fWidth
-		&& fNewHeight == fHeight) {
+	if (fBitmap && cs == fColorSpace && fContextObj->Validate(fWidth, fHeight)) {
 		fContextObj->SetCurrentContext(fBitmap, fContextID);
 		return;
 	}
 
 	fColorSpace = cs;
-	fWidth = fNewWidth;
-	fHeight = fNewHeight;
 
 	_AllocateBitmap();
 	fContextObj->SetCurrentContext(fBitmap, fContextID);
@@ -329,8 +324,8 @@ SoftwareRenderer::FrameResized(float width, float height)
 	TRACE("%s: %f x %f\n", __func__, width, height);
 
 	BAutolock lock(fInfoLocker);
-	fNewWidth = (GLuint)width;
-	fNewHeight = (GLuint)height;
+	fWidth = (GLuint)width;
+	fHeight = (GLuint)height;
 }
 
 
@@ -341,8 +336,9 @@ SoftwareRenderer::_AllocateBitmap()
 
 	// allocate new size of back buffer bitmap
 	BAutolock lock(fInfoLocker);
-	delete fBitmap;
-	fBitmap = NULL;
+	if (fBitmap)
+		delete fBitmap;
+
 	if (fWidth < 1 || fHeight < 1) {
 		TRACE("%s: Can't allocate bitmap of %dx%d\n", __func__,
 			fWidth, fHeight);
@@ -355,10 +351,8 @@ SoftwareRenderer::_AllocateBitmap()
 		return;
 	}
 
-	TRACE("%s: New bitmap size: %ld x %ld\n", __func__,
+	TRACE("%s: New bitmap size: %" B_PRId32 " x %" B_PRId32 "\n", __func__,
 		fBitmap->Bounds().IntegerWidth(), fBitmap->Bounds().IntegerHeight());
-
-	fContextObj->ResizeViewport(fWidth, fHeight);
 
 #if 0
 	// debug..

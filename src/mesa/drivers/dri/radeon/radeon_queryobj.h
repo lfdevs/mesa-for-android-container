@@ -26,7 +26,7 @@
  */
 
 #include "main/imports.h"
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 #include "radeon_common_context.h"
 
 extern void radeonEmitQueryBegin(struct gl_context *ctx);

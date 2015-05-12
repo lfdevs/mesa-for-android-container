@@ -28,7 +28,7 @@
 
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/u_simple_list.h"
+#include "util/simple_list.h"
 #include "os/os_time.h"
 #include "gallivm/lp_bld_arit.h"
 #include "gallivm/lp_bld_bitarit.h"

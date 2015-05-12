@@ -37,7 +37,7 @@
 #include "gallivm/lp_bld_limits.h"
 
 #include "pipe/p_context.h"
-#include "util/u_simple_list.h"
+#include "util/simple_list.h"
 
 
 struct draw_llvm;
@@ -125,7 +125,7 @@ struct draw_jit_context
    const float *vs_constants[LP_MAX_TGSI_CONST_BUFFERS];
    int num_vs_constants[LP_MAX_TGSI_CONST_BUFFERS];
    float (*planes) [DRAW_TOTAL_CLIP_PLANES][4];
-   float *viewport;
+   struct pipe_viewport_state *viewports;
 
    struct draw_jit_texture textures[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    struct draw_jit_sampler samplers[PIPE_MAX_SAMPLERS];
@@ -150,8 +150,8 @@ enum {
 #define draw_jit_context_planes(_gallivm, _ptr) \
    lp_build_struct_get(_gallivm, _ptr, DRAW_JIT_CTX_PLANES, "planes")
 
-#define draw_jit_context_viewport(_gallivm, _ptr) \
-   lp_build_struct_get(_gallivm, _ptr, DRAW_JIT_CTX_VIEWPORT, "viewport")
+#define draw_jit_context_viewports(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, DRAW_JIT_CTX_VIEWPORT, "viewports")
 
 #define draw_jit_context_textures(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_CTX_TEXTURES, "textures")
@@ -207,7 +207,7 @@ struct draw_gs_jit_context
    const float *constants[LP_MAX_TGSI_CONST_BUFFERS];
    int num_constants[LP_MAX_TGSI_CONST_BUFFERS];
    float (*planes) [DRAW_TOTAL_CLIP_PLANES][4];
-   float *viewport;
+   struct pipe_viewport_state *viewports;
 
    /* There two need to be exactly at DRAW_JIT_CTX_TEXTURES and
     * DRAW_JIT_CTX_SAMPLERS positions in the struct */
@@ -245,8 +245,8 @@ enum {
 #define draw_gs_jit_context_planes(_gallivm, _ptr) \
    lp_build_struct_get(_gallivm, _ptr, DRAW_GS_JIT_CTX_PLANES, "planes")
 
-#define draw_gs_jit_context_viewport(_gallivm, _ptr) \
-   lp_build_struct_get(_gallivm, _ptr, DRAW_GS_JIT_CTX_VIEWPORT, "viewport")
+#define draw_gs_jit_context_viewports(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, DRAW_GS_JIT_CTX_VIEWPORT, "viewports")
 
 #define draw_gs_jit_context_textures(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_GS_JIT_CTX_TEXTURES, "textures")

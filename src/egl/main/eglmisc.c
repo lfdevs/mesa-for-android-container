@@ -101,6 +101,7 @@ _eglUpdateExtensionsString(_EGLDisplay *dpy)
       _eglAppendExtension(&exts, "EGL_KHR_image");
 
    _EGL_CHECK_EXTENSION(KHR_vg_parent_image);
+   _EGL_CHECK_EXTENSION(KHR_get_all_proc_addresses);
    _EGL_CHECK_EXTENSION(KHR_gl_texture_2D_image);
    _EGL_CHECK_EXTENSION(KHR_gl_texture_cubemap_image);
    _EGL_CHECK_EXTENSION(KHR_gl_texture_3D_image);

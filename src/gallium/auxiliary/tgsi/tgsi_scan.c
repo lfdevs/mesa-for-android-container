@@ -130,6 +130,7 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                /* check for indirect register reads */
                if (src->Register.Indirect) {
                   info->indirect_files |= (1 << src->Register.File);
+                  info->indirect_files_read |= (1 << src->Register.File);
                }
 
                /* MSAA samplers */
@@ -150,6 +151,7 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                const struct tgsi_full_dst_register *dst = &fullinst->Dst[i];
                if (dst->Register.Indirect) {
                   info->indirect_files |= (1 << dst->Register.File);
+                  info->indirect_files_written |= (1 << dst->Register.File);
                }
             }
 
@@ -163,6 +165,8 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                = &parse.FullToken.FullDeclaration;
             const uint file = fulldecl->Declaration.File;
             uint reg;
+            if (fulldecl->Declaration.Array)
+               info->array_max[file] = MAX2(info->array_max[file], fulldecl->Array.ArrayID);
             for (reg = fulldecl->Range.First;
                  reg <= fulldecl->Range.Last;
                  reg++) {
@@ -191,6 +195,9 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   info->input_cylindrical_wrap[reg] = (ubyte)fulldecl->Interp.CylindricalWrap;
                   info->num_inputs++;
 
+                  if (fulldecl->Interp.Location == TGSI_INTERPOLATE_LOC_CENTROID)
+                     info->uses_centroid = TRUE;
+
                   if (semName == TGSI_SEMANTIC_PRIMID)
                      info->uses_primid = TRUE;
                   else if (procType == TGSI_PROCESSOR_FRAGMENT) {
@@ -213,6 +220,12 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   else if (semName == TGSI_SEMANTIC_VERTEXID) {
                      info->uses_vertexid = TRUE;
                   }
+                  else if (semName == TGSI_SEMANTIC_VERTEXID_NOBASE) {
+                     info->uses_vertexid_nobase = TRUE;
+                  }
+                  else if (semName == TGSI_SEMANTIC_BASEVERTEX) {
+                     info->uses_basevertex = TRUE;
+                  }
                   else if (semName == TGSI_SEMANTIC_PRIMID) {
                      info->uses_primid = TRUE;
                   }
@@ -227,10 +240,26 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                      if (semName == TGSI_SEMANTIC_CLIPDIST) {
                         info->num_written_clipdistance +=
                            util_bitcount(fulldecl->Declaration.UsageMask);
+                        info->clipdist_writemask |=
+                           fulldecl->Declaration.UsageMask << (semIndex*4);
                      }
                      else if (semName == TGSI_SEMANTIC_CULLDIST) {
                         info->num_written_culldistance +=
                            util_bitcount(fulldecl->Declaration.UsageMask);
+                        info->culldist_writemask |=
+                           fulldecl->Declaration.UsageMask << (semIndex*4);
+                     }
+                     else if (semName == TGSI_SEMANTIC_VIEWPORT_INDEX) {
+                        info->writes_viewport_index = TRUE;
+                     }
+                     else if (semName == TGSI_SEMANTIC_LAYER) {
+                        info->writes_layer = TRUE;
+                     }
+                     else if (semName == TGSI_SEMANTIC_PSIZE) {
+                        info->writes_psize = TRUE;
+                     }
+                     else if (semName == TGSI_SEMANTIC_CLIPVERTEX) {
+                        info->writes_clipvertex = TRUE;
                      }
                   }
 
@@ -246,15 +275,6 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   if (procType == TGSI_PROCESSOR_VERTEX) {
                      if (semName == TGSI_SEMANTIC_EDGEFLAG) {
                         info->writes_edgeflag = TRUE;
-                     }
-                  }
-
-                  if (procType == TGSI_PROCESSOR_GEOMETRY) {
-                     if (semName == TGSI_SEMANTIC_VIEWPORT_INDEX) {
-                        info->writes_viewport_index = TRUE;
-                     }
-                     else if (semName == TGSI_SEMANTIC_LAYER) {
-                        info->writes_layer = TRUE;
                      }
                   }
                }

@@ -221,7 +221,11 @@ static struct draw_stage *validate_pipeline( struct draw_stage *stage )
       need_det = TRUE;
    }
 
-   if (rast->flatshade && precalc_flat) {
+   if (precalc_flat) {
+      /*
+       * could only run the stage if either rast->flatshade is true
+       * or there's constant interpolated values.
+       */
       draw->pipeline.flatshade->next = next;
       next = draw->pipeline.flatshade;
    }

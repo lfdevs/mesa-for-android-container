@@ -30,8 +30,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(C_SOURCES)
 
-LOCAL_C_INCLUDES := $(TARGET_OUT_HEADERS)/libdrm
-
+LOCAL_SHARED_LIBRARIES := libdrm libdrm_nouveau
 LOCAL_MODULE := libmesa_winsys_nouveau
 
 include $(GALLIUM_COMMON_MK)

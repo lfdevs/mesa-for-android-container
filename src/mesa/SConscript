@@ -60,8 +60,22 @@ get_hash_header = env.CodeGenerate(
 )
 
 format_info = env.CodeGenerate(
-      target = 'main/format_info.c',
+      target = 'main/format_info.h',
       script = 'main/format_info.py',
+      source = 'main/formats.csv',
+      command = python_cmd + ' $SCRIPT ' + ' $SOURCE > $TARGET'
+)
+
+format_pack = env.CodeGenerate(
+      target = 'main/format_pack.c',
+      script = 'main/format_pack.py',
+      source = 'main/formats.csv',
+      command = python_cmd + ' $SCRIPT ' + ' $SOURCE > $TARGET'
+)
+
+format_unpack = env.CodeGenerate(
+      target = 'main/format_unpack.c',
+      script = 'main/format_unpack.py',
       source = 'main/formats.csv',
       command = python_cmd + ' $SCRIPT ' + ' $SOURCE > $TARGET'
 )

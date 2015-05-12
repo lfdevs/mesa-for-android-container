@@ -329,6 +329,9 @@ void
 pp_jimenezmlaa(struct pp_queue_t *ppq, struct pipe_resource *in,
                struct pipe_resource *out, unsigned int n)
 {
+   if (!ppq->depth) {
+      return;
+   }
    pp_jimenezmlaa_run(ppq, in, out, n, false);
 }
 

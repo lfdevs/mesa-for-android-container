@@ -422,7 +422,9 @@ ConstantFolding::expr(Instruction *i,
             b->data.f32 = 0.0f;
       }
       switch (i->dType) {
-      case TYPE_F32: res.data.f32 = a->data.f32 * b->data.f32; break;
+      case TYPE_F32:
+         res.data.f32 = a->data.f32 * b->data.f32 * exp2f(i->postFactor);
+         break;
       case TYPE_F64: res.data.f64 = a->data.f64 * b->data.f64; break;
       case TYPE_S32:
          if (i->subOp == NV50_IR_SUBOP_MUL_HIGH) {
@@ -550,6 +552,7 @@ ConstantFolding::expr(Instruction *i,
 
    i->src(0).mod = Modifier(0);
    i->src(1).mod = Modifier(0);
+   i->postFactor = 0;
 
    i->setSrc(0, new_ImmediateValue(i->bb->getProgram(), res.data.u32));
    i->setSrc(1, NULL);
@@ -653,7 +656,7 @@ ConstantFolding::tryCollapseChainedMULs(Instruction *mul2,
    Instruction *insn;
    Instruction *mul1 = NULL; // mul1 before mul2
    int e = 0;
-   float f = imm2.reg.data.f32;
+   float f = imm2.reg.data.f32 * exp2f(mul2->postFactor);
    ImmediateValue imm1;
 
    assert(mul2->op == OP_MUL && mul2->dType == TYPE_F32);
@@ -753,9 +756,10 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->op = OP_MOV;
          i->setSrc(0, new_ImmediateValue(prog, 0u));
          i->src(0).mod = Modifier(0);
+         i->postFactor = 0;
          i->setSrc(1, NULL);
       } else
-      if (imm0.isInteger(1) || imm0.isInteger(-1)) {
+      if (!i->postFactor && (imm0.isInteger(1) || imm0.isInteger(-1))) {
          if (imm0.isNegative())
             i->src(t).mod = i->src(t).mod ^ Modifier(NV50_IR_MOD_NEG);
          i->op = i->src(t).mod.getOp();
@@ -768,7 +772,7 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
             i->src(0).mod = 0;
          i->setSrc(1, NULL);
       } else
-      if (imm0.isInteger(2) || imm0.isInteger(-2)) {
+      if (!i->postFactor && (imm0.isInteger(2) || imm0.isInteger(-2))) {
          if (imm0.isNegative())
             i->src(t).mod = i->src(t).mod ^ Modifier(NV50_IR_MOD_NEG);
          i->op = OP_ADD;
@@ -782,6 +786,29 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->src(0).mod = i->src(t).mod;
          i->setSrc(1, new_ImmediateValue(prog, imm0.reg.data.u32));
          i->src(1).mod = 0;
+      }
+      break;
+   case OP_MAD:
+      if (imm0.isInteger(0)) {
+         i->setSrc(0, i->getSrc(2));
+         i->src(0).mod = i->src(2).mod;
+         i->setSrc(1, NULL);
+         i->setSrc(2, NULL);
+         i->op = i->src(0).mod.getOp();
+         if (i->op != OP_CVT)
+            i->src(0).mod = 0;
+      } else
+      if (imm0.isInteger(1) || imm0.isInteger(-1)) {
+         if (imm0.isNegative())
+            i->src(t).mod = i->src(t).mod ^ Modifier(NV50_IR_MOD_NEG);
+         if (s == 0) {
+            i->setSrc(0, i->getSrc(1));
+            i->src(0).mod = i->src(1).mod;
+         }
+         i->setSrc(1, i->getSrc(2));
+         i->src(1).mod = i->src(2).mod;
+         i->setSrc(2, NULL);
+         i->op = OP_ADD;
       }
       break;
    case OP_ADD:

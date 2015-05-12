@@ -474,7 +474,7 @@ svga_texture_transfer_map(struct pipe_context *pipe,
       }
 
       /*
-       * Make sure whe return NULL if the map fails
+       * Make sure we return NULL if the map fails
        */
       if (map == NULL) {
          FREE(st);

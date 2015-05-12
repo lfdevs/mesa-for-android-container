@@ -143,7 +143,7 @@ i915_texture_set_level_info(struct i915_texture *tex,
    tex->image_offset[level][0].nblocksy = 0;
 }
 
-INLINE unsigned i915_texture_offset(struct i915_texture *tex,
+unsigned i915_texture_offset(const struct i915_texture *tex,
                                     unsigned level, unsigned layer)
 {
    unsigned x, y;
@@ -295,7 +295,8 @@ static void
 i9x5_texture_layout_cube(struct i915_texture *tex)
 {
    struct pipe_resource *pt = &tex->b.b;
-   const unsigned nblocks = util_format_get_nblocksx(pt->format, pt->width0);
+   unsigned width = util_next_power_of_two(pt->width0);
+   const unsigned nblocks = util_format_get_nblocksx(pt->format, width);
    unsigned level;
    unsigned face;
 
@@ -333,15 +334,15 @@ i915_texture_layout_2d(struct i915_texture *tex)
 {
    struct pipe_resource *pt = &tex->b.b;
    unsigned level;
-   unsigned width = pt->width0;
-   unsigned height = pt->height0;
-   unsigned nblocksy = util_format_get_nblocksy(pt->format, pt->width0);
+   unsigned width = util_next_power_of_two(pt->width0);
+   unsigned height = util_next_power_of_two(pt->height0);
+   unsigned nblocksy = util_format_get_nblocksy(pt->format, width);
    unsigned align_y = 2;
 
    if (util_format_is_s3tc(pt->format))
       align_y = 1;
 
-   tex->stride = align(util_format_get_stride(pt->format, pt->width0), 4);
+   tex->stride = align(util_format_get_stride(pt->format, width), 4);
    tex->total_nblocksy = 0;
 
    for (level = 0; level <= pt->last_level; level++) {
@@ -362,15 +363,15 @@ i915_texture_layout_3d(struct i915_texture *tex)
    struct pipe_resource *pt = &tex->b.b;
    unsigned level;
 
-   unsigned width = pt->width0;
-   unsigned height = pt->height0;
-   unsigned depth = pt->depth0;
-   unsigned nblocksy = util_format_get_nblocksy(pt->format, pt->height0);
+   unsigned width = util_next_power_of_two(pt->width0);
+   unsigned height = util_next_power_of_two(pt->height0);
+   unsigned depth = util_next_power_of_two(pt->depth0);
+   unsigned nblocksy = util_format_get_nblocksy(pt->format, height);
    unsigned stack_nblocksy = 0;
 
    /* Calculate the size of a single slice. 
     */
-   tex->stride = align(util_format_get_stride(pt->format, pt->width0), 4);
+   tex->stride = align(util_format_get_stride(pt->format, width), 4);
 
    /* XXX: hardware expects/requires 9 levels at minimum.
     */
@@ -398,7 +399,7 @@ i915_texture_layout_3d(struct i915_texture *tex)
     * remarkable how wasteful of memory the i915 texture layouts
     * are.  They are largely fixed in the i945.
     */
-   tex->total_nblocksy = stack_nblocksy * pt->depth0;
+   tex->total_nblocksy = stack_nblocksy * util_next_power_of_two(pt->depth0);
 }
 
 static boolean
@@ -439,17 +440,17 @@ i945_texture_layout_2d(struct i915_texture *tex)
    unsigned level;
    unsigned x = 0;
    unsigned y = 0;
-   unsigned width = pt->width0;
-   unsigned height = pt->height0;
-   unsigned nblocksx = util_format_get_nblocksx(pt->format, pt->width0);
-   unsigned nblocksy = util_format_get_nblocksy(pt->format, pt->height0);
+   unsigned width = util_next_power_of_two(pt->width0);
+   unsigned height = util_next_power_of_two(pt->height0);
+   unsigned nblocksx = util_format_get_nblocksx(pt->format, width);
+   unsigned nblocksy = util_format_get_nblocksy(pt->format, height);
 
    if (util_format_is_s3tc(pt->format)) {
       align_x = 1;
       align_y = 1;
    }
 
-   tex->stride = align(util_format_get_stride(pt->format, pt->width0), 4);
+   tex->stride = align(util_format_get_stride(pt->format, width), 4);
 
    /* May need to adjust pitch to accomodate the placement of
     * the 2nd mipmap level.  This occurs when the alignment
@@ -458,8 +459,8 @@ i945_texture_layout_2d(struct i915_texture *tex)
     */
    if (pt->last_level > 0) {
       unsigned mip1_nblocksx =
-         align_nblocksx(pt->format, u_minify(pt->width0, 1), align_x) +
-         util_format_get_nblocksx(pt->format, u_minify(pt->width0, 2));
+         align_nblocksx(pt->format, u_minify(width, 1), align_x) +
+         util_format_get_nblocksx(pt->format, u_minify(width, 2));
 
       if (mip1_nblocksx > nblocksx)
          tex->stride = mip1_nblocksx * util_format_get_blocksize(pt->format);
@@ -498,15 +499,15 @@ static void
 i945_texture_layout_3d(struct i915_texture *tex)
 {
    struct pipe_resource *pt = &tex->b.b;
-   unsigned width = pt->width0;
-   unsigned height = pt->height0;
-   unsigned depth = pt->depth0;
-   unsigned nblocksy = util_format_get_nblocksy(pt->format, pt->width0);
+   unsigned width = util_next_power_of_two(pt->width0);
+   unsigned height = util_next_power_of_two(pt->height0);
+   unsigned depth = util_next_power_of_two(pt->depth0);
+   unsigned nblocksy = util_format_get_nblocksy(pt->format, width);
    unsigned pack_x_pitch, pack_x_nr;
    unsigned pack_y_pitch;
    unsigned level;
 
-   tex->stride = align(util_format_get_stride(pt->format, pt->width0), 4);
+   tex->stride = align(util_format_get_stride(pt->format, width), 4);
    tex->total_nblocksy = 0;
 
    pack_y_pitch = MAX2(nblocksy, 2);
@@ -553,13 +554,13 @@ static void
 i945_texture_layout_cube(struct i915_texture *tex)
 {
    struct pipe_resource *pt = &tex->b.b;
-   const unsigned nblocks = util_format_get_nblocksx(pt->format, pt->width0);
-   const unsigned dim = pt->width0;
+   unsigned width = util_next_power_of_two(pt->width0);
+   const unsigned nblocks = util_format_get_nblocksx(pt->format, width);
+   const unsigned dim = width;
    unsigned level;
    unsigned face;
 
    assert(pt->width0 == pt->height0); /* cubemap images are square */
-   assert(util_next_power_of_two(pt->width0) == pt->width0); /* npot only */
    assert(util_format_is_s3tc(pt->format)); /* compressed only */
 
    /*
@@ -570,7 +571,7 @@ i945_texture_layout_cube(struct i915_texture *tex)
     * 64  * 2 / 4 = 32
     * 14 * 2 = 28
     */
-   if (pt->width0 >= 64)
+   if (width >= 64)
       tex->stride = nblocks * 2 * util_format_get_blocksize(pt->format);
    else
       tex->stride = 14 * 2 * util_format_get_blocksize(pt->format);
@@ -578,7 +579,7 @@ i945_texture_layout_cube(struct i915_texture *tex)
    /*
     * Something similary apply for height as well.
     */
-   if (pt->width0 >= 4)
+   if (width >= 4)
       tex->total_nblocksy = nblocks * 4 + 1;
    else
       tex->total_nblocksy = 1;

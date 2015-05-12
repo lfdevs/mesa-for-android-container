@@ -15,5 +15,6 @@ libwayland_egl_la_LDFLAGS = \
 	$(LD_NO_UNDEFINED)
 
 TESTS = wayland-egl-symbols-check
+EXTRA_DIST = wayland-egl-symbols-check
 
 include $(top_srcdir)/install-lib-links.mk

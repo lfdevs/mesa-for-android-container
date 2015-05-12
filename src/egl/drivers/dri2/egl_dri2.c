@@ -534,7 +534,7 @@ dri2_setup_screen(_EGLDisplay *disp)
          disp->Extensions.KHR_gl_texture_2D_image = EGL_TRUE;
          disp->Extensions.KHR_gl_texture_cubemap_image = EGL_TRUE;
       }
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
       if (dri2_dpy->image->base.version >= 8 &&
           dri2_dpy->image->createImageFromDmaBufs) {
          disp->Extensions.EXT_image_dma_buf_import = EGL_TRUE;
@@ -659,6 +659,7 @@ dri2_initialize(_EGLDriver *drv, _EGLDisplay *disp)
 #endif
 
    default:
+      _eglLog(_EGL_WARNING, "No EGL platform enabled.");
       return EGL_FALSE;
    }
 }
@@ -1086,6 +1087,42 @@ dri2_swap_interval(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
    return dri2_dpy->vtbl->swap_interval(drv, dpy, surf, interval);
 }
 
+/**
+ * Asks the client API to flush any rendering to the drawable so that we can
+ * do our swapbuffers.
+ */
+void
+dri2_flush_drawable_for_swapbuffers(_EGLDisplay *disp, _EGLSurface *draw)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
+
+   if (dri2_dpy->flush) {
+      if (dri2_dpy->flush->base.version >= 4) {
+         /* We know there's a current context because:
+          *
+          *     "If surface is not bound to the calling thread’s current
+          *      context, an EGL_BAD_SURFACE error is generated."
+         */
+         _EGLContext *ctx = _eglGetCurrentContext();
+         struct dri2_egl_context *dri2_ctx = dri2_egl_context(ctx);
+
+         /* From the EGL 1.4 spec (page 52):
+          *
+          *     "The contents of ancillary buffers are always undefined
+          *      after calling eglSwapBuffers."
+          */
+         dri2_dpy->flush->flush_with_flags(dri2_ctx->dri_context,
+                                           dri2_surf->dri_drawable,
+                                           __DRI2_FLUSH_DRAWABLE |
+                                           __DRI2_FLUSH_INVALIDATE_ANCILLARY,
+                                           __DRI2_THROTTLE_SWAPBUFFER);
+      } else {
+         dri2_dpy->flush->flush(dri2_surf->dri_drawable);
+      }
+   }
+}
+
 static EGLBoolean
 dri2_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
 {
@@ -1298,7 +1335,7 @@ dri2_create_image_khr_renderbuffer(_EGLDisplay *disp, _EGLContext *ctx,
    return dri2_create_image_from_dri(disp, dri_image);
 }
 
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
 static _EGLImage *
 dri2_create_image_mesa_drm_buffer(_EGLDisplay *disp, _EGLContext *ctx,
 				  EGLClientBuffer buffer, const EGLint *attr_list)
@@ -1534,7 +1571,7 @@ dri2_create_wayland_buffer_from_image(_EGLDriver *drv, _EGLDisplay *dpy,
    return dri2_dpy->vtbl->create_wayland_buffer_from_image(drv, dpy, img);
 }
 
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
 static EGLBoolean
 dri2_check_dma_buf_attribs(const _EGLImageAttribs *attrs)
 {
@@ -1784,7 +1821,7 @@ dri2_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
       return dri2_create_image_khr_texture(disp, ctx, target, buffer, attr_list);
    case EGL_GL_RENDERBUFFER_KHR:
       return dri2_create_image_khr_renderbuffer(disp, ctx, buffer, attr_list);
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
    case EGL_DRM_BUFFER_MESA:
       return dri2_create_image_mesa_drm_buffer(disp, ctx, buffer, attr_list);
 #endif
@@ -1792,7 +1829,7 @@ dri2_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
    case EGL_WAYLAND_BUFFER_WL:
       return dri2_create_image_wayland_wl_buffer(disp, ctx, buffer, attr_list);
 #endif
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
    case EGL_LINUX_DMA_BUF_EXT:
       return dri2_create_image_dma_buf(disp, ctx, buffer, attr_list);
 #endif
@@ -1816,7 +1853,7 @@ dri2_destroy_image_khr(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *image)
    return EGL_TRUE;
 }
 
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
 static _EGLImage *
 dri2_create_drm_image_mesa(_EGLDriver *drv, _EGLDisplay *disp,
 			   const EGLint *attr_list)
@@ -2178,7 +2215,7 @@ _eglBuiltInDriverDRI2(const char *args)
    dri2_drv->base.API.CreateImageKHR = dri2_create_image;
    dri2_drv->base.API.DestroyImageKHR = dri2_destroy_image_khr;
    dri2_drv->base.API.CreateWaylandBufferFromImageWL = dri2_create_wayland_buffer_from_image;
-#ifdef HAVE_DRM_PLATFORM
+#ifdef HAVE_LIBDRM
    dri2_drv->base.API.CreateDRMImageMESA = dri2_create_drm_image_mesa;
    dri2_drv->base.API.ExportDRMImageMESA = dri2_export_drm_image_mesa;
 #endif

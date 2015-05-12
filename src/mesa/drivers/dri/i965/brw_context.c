@@ -81,6 +81,7 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
    (void) target;
 
    switch (brw->gen) {
+   case 9:
    case 8:
       samples[0] = 8;
       samples[1] = 4;
@@ -97,6 +98,7 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
       return 1;
 
    default:
+      assert(brw->gen < 6);
       samples[0] = 1;
       return 1;
    }
@@ -480,6 +482,12 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.Program[MESA_SHADER_FRAGMENT].HighInt = ctx->Const.Program[MESA_SHADER_FRAGMENT].LowInt;
    ctx->Const.Program[MESA_SHADER_FRAGMENT].MediumInt = ctx->Const.Program[MESA_SHADER_FRAGMENT].LowInt;
 
+   ctx->Const.Program[MESA_SHADER_VERTEX].LowInt.RangeMin = 31;
+   ctx->Const.Program[MESA_SHADER_VERTEX].LowInt.RangeMax = 30;
+   ctx->Const.Program[MESA_SHADER_VERTEX].LowInt.Precision = 0;
+   ctx->Const.Program[MESA_SHADER_VERTEX].HighInt = ctx->Const.Program[MESA_SHADER_VERTEX].LowInt;
+   ctx->Const.Program[MESA_SHADER_VERTEX].MediumInt = ctx->Const.Program[MESA_SHADER_VERTEX].LowInt;
+
    if (brw->gen >= 7) {
       ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
       ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
@@ -516,18 +524,10 @@ brw_initialize_context_constants(struct brw_context *brw)
     *    contains meaning [sic] data, software should make sure all higher bits
     *    are masked out (e.g. by 'and-ing' an [sic] 0x01 constant)."
     *
-    * We select the representation of a true boolean uniform to match what the
-    * CMP instruction returns.
-    *
-    * The Sandybridge BSpec's description of the CMP instruction matches that
-    * of the Ivybridge PRM. (The description in the Sandybridge PRM is seems
-    * to have not been updated from Ironlake). Its CMP instruction behaves like
-    * Ivybridge and newer.
+    * We select the representation of a true boolean uniform to be ~0, and fix
+    * the results of Gen <= 5 CMP instruction's with -(result & 1).
     */
-   if (brw->gen >= 6)
-      ctx->Const.UniformBooleanTrue = ~0;
-   else
-      ctx->Const.UniformBooleanTrue = 1;
+   ctx->Const.UniformBooleanTrue = ~0;
 
    /* From the gen4 PRM, volume 4 page 127:
     *
@@ -566,6 +566,15 @@ brw_initialize_context_constants(struct brw_context *brw)
 
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = true;
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_GEOMETRY].OptimizeForAOS = true;
+
+   if (brw->scalar_vs) {
+      /* If we're using the scalar backend for vertex shaders, we need to
+       * configure these accordingly.
+       */
+      ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoIndirectOutput = true;
+      ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoIndirectTemp = true;
+      ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = false;
+   }
 
    /* ARB_viewport_array */
    if (brw->gen >= 7 && ctx->API == API_OPENGL_CORE) {
@@ -629,9 +638,6 @@ brw_process_driconf_options(struct brw_context *brw)
       fprintf(stderr, "disabling flush throttling\n");
       brw->disable_throttling = true;
    }
-
-   brw->disable_derivative_optimization =
-      driQueryOptionb(&brw->optionCache, "disable_derivative_optimization");
 
    brw->precompile = driQueryOptionb(&brw->optionCache, "shader_precompile");
 
@@ -765,6 +771,10 @@ brwCreateContext(gl_api api,
 
    brw_process_driconf_options(brw);
    brw_process_intel_debug_variable(brw);
+
+   if (brw->gen >= 8 && !(INTEL_DEBUG & DEBUG_VEC4VS))
+      brw->scalar_vs = true;
+
    brw_initialize_context_constants(brw);
 
    ctx->Const.ResetStrategy = notify_reset

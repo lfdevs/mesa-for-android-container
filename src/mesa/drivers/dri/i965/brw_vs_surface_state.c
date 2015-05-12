@@ -59,11 +59,6 @@ brw_upload_pull_constants(struct brw_context *brw,
    int i;
    uint32_t surf_index = prog_data->binding_table.pull_constants_start;
 
-   /* Updates the ParamaterValues[i] pointers for all parameters of the
-    * basic type of PROGRAM_STATE_VAR.
-    */
-   _mesa_load_state_parameters(&brw->ctx, prog->Parameters);
-
    if (!prog_data->nr_pull_params) {
       if (stage_state->surf_offset[surf_index]) {
 	 stage_state->surf_offset[surf_index] = 0;
@@ -72,7 +67,12 @@ brw_upload_pull_constants(struct brw_context *brw,
       return;
    }
 
-   /* CACHE_NEW_*_PROG | _NEW_PROGRAM_CONSTANTS */
+   /* Updates the ParamaterValues[i] pointers for all parameters of the
+    * basic type of PROGRAM_STATE_VAR.
+    */
+   _mesa_load_state_parameters(&brw->ctx, prog->Parameters);
+
+   /* BRW_NEW_*_PROG_DATA | _NEW_PROGRAM_CONSTANTS */
    uint32_t size = prog_data->nr_pull_params * 4;
    drm_intel_bo *const_bo = NULL;
    uint32_t const_offset;
@@ -112,24 +112,28 @@ static void
 brw_upload_vs_pull_constants(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->vs.base;
+   bool dword_pitch;
 
    /* BRW_NEW_VERTEX_PROGRAM */
    struct brw_vertex_program *vp =
       (struct brw_vertex_program *) brw->vertex_program;
 
-   /* CACHE_NEW_VS_PROG */
+   /* BRW_NEW_VS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = &brw->vs.prog_data->base.base;
+
+   dword_pitch = brw->vs.prog_data->base.simd8;
 
    /* _NEW_PROGRAM_CONSTANTS */
    brw_upload_pull_constants(brw, BRW_NEW_VS_CONSTBUF, &vp->program.Base,
-                             stage_state, prog_data, false);
+                             stage_state, prog_data, dword_pitch);
 }
 
 const struct brw_tracked_state brw_vs_pull_constants = {
    .dirty = {
-      .mesa = (_NEW_PROGRAM_CONSTANTS),
-      .brw = (BRW_NEW_BATCH | BRW_NEW_VERTEX_PROGRAM),
-      .cache = CACHE_NEW_VS_PROG,
+      .mesa = _NEW_PROGRAM_CONSTANTS,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_VERTEX_PROGRAM |
+             BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_upload_vs_pull_constants,
 };
@@ -141,20 +145,24 @@ brw_upload_vs_ubo_surfaces(struct brw_context *brw)
    /* _NEW_PROGRAM */
    struct gl_shader_program *prog =
       ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
+   bool dword_pitch;
 
    if (!prog)
       return;
 
-   /* CACHE_NEW_VS_PROG */
+   /* BRW_NEW_VS_PROG_DATA */
+   dword_pitch = brw->vs.prog_data->base.simd8;
    brw_upload_ubo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_VERTEX],
-			   &brw->vs.base, &brw->vs.prog_data->base.base);
+                           &brw->vs.base, &brw->vs.prog_data->base.base,
+                           dword_pitch);
 }
 
 const struct brw_tracked_state brw_vs_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
-      .brw = BRW_NEW_BATCH | BRW_NEW_UNIFORM_BUFFER,
-      .cache = CACHE_NEW_VS_PROG,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_UNIFORM_BUFFER |
+             BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_upload_vs_ubo_surfaces,
 };
@@ -168,7 +176,7 @@ brw_upload_vs_abo_surfaces(struct brw_context *brw)
       ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
 
    if (prog) {
-      /* CACHE_NEW_VS_PROG */
+      /* BRW_NEW_VS_PROG_DATA */
       brw_upload_abo_surfaces(brw, prog, &brw->vs.base,
                               &brw->vs.prog_data->base.base);
    }
@@ -177,8 +185,9 @@ brw_upload_vs_abo_surfaces(struct brw_context *brw)
 const struct brw_tracked_state brw_vs_abo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
-      .brw = BRW_NEW_BATCH | BRW_NEW_ATOMIC_BUFFER,
-      .cache = CACHE_NEW_VS_PROG,
+      .brw = BRW_NEW_ATOMIC_BUFFER |
+             BRW_NEW_BATCH |
+             BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_upload_vs_abo_surfaces,
 };

@@ -53,20 +53,7 @@
 boolean
 draw_get_option_use_llvm(void)
 {
-   static boolean first = TRUE;
-   static boolean value;
-   if (first) {
-      first = FALSE;
-      value = debug_get_bool_option("DRAW_USE_LLVM", TRUE);
-
-#ifdef PIPE_ARCH_X86
-      util_cpu_detect();
-      /* require SSE2 due to LLVM PR6960. XXX Might be fixed by now? */
-      if (!util_cpu_caps.has_sse2)
-         value = FALSE;
-#endif
-   }
-   return value;
+   return debug_get_bool_option("DRAW_USE_LLVM", TRUE);
 }
 #else
 boolean
@@ -195,6 +182,7 @@ boolean draw_init(struct draw_context *draw)
 void draw_new_instance(struct draw_context *draw)
 {
    draw_geometry_shader_new_instance(draw->gs.geometry_shader);
+   draw_prim_assembler_new_instance(draw->ia);
 }
 
 
@@ -267,20 +255,47 @@ void draw_set_zs_format(struct draw_context *draw, enum pipe_format format)
 }
 
 
-static void update_clip_flags( struct draw_context *draw )
+static bool
+draw_is_vs_window_space(struct draw_context *draw)
 {
-   draw->clip_xy = !draw->driver.bypass_clip_xy;
+   if (draw->vs.vertex_shader) {
+      struct tgsi_shader_info *info = &draw->vs.vertex_shader->info;
+
+      return info->properties[TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION] != 0;
+   }
+   return false;
+}
+
+
+void
+draw_update_clip_flags(struct draw_context *draw)
+{
+   bool window_space = draw_is_vs_window_space(draw);
+
+   draw->clip_xy = !draw->driver.bypass_clip_xy && !window_space;
    draw->guard_band_xy = (!draw->driver.bypass_clip_xy &&
                           draw->driver.guard_band_xy);
    draw->clip_z = (!draw->driver.bypass_clip_z &&
-                   draw->rasterizer && draw->rasterizer->depth_clip);
+                   draw->rasterizer && draw->rasterizer->depth_clip) &&
+                  !window_space;
    draw->clip_user = draw->rasterizer &&
-                     draw->rasterizer->clip_plane_enable != 0;
+                     draw->rasterizer->clip_plane_enable != 0 &&
+                     !window_space;
    draw->guard_band_points_xy = draw->guard_band_xy ||
                                 (draw->driver.bypass_clip_points &&
                                 (draw->rasterizer &&
                                  draw->rasterizer->point_tri_clip));
 }
+
+
+void
+draw_update_viewport_flags(struct draw_context *draw)
+{
+   bool window_space = draw_is_vs_window_space(draw);
+
+   draw->bypass_viewport = window_space || draw->identity_viewport;
+}
+
 
 /**
  * Register new primitive rasterization/rendering state.
@@ -295,7 +310,7 @@ void draw_set_rasterizer_state( struct draw_context *draw,
 
       draw->rasterizer = raster;
       draw->rast_handle = rast_handle;
-      update_clip_flags(draw);
+      draw_update_clip_flags(draw);
    }
 }
 
@@ -322,7 +337,7 @@ void draw_set_driver_clipping( struct draw_context *draw,
    draw->driver.bypass_clip_z = bypass_clip_z;
    draw->driver.guard_band_xy = guard_band_xy;
    draw->driver.bypass_clip_points = bypass_clip_points;
-   update_clip_flags(draw);
+   draw_update_clip_flags(draw);
 }
 
 
@@ -373,11 +388,10 @@ void draw_set_viewport_states( struct draw_context *draw,
       (viewport->scale[0] == 1.0f &&
        viewport->scale[1] == 1.0f &&
        viewport->scale[2] == 1.0f &&
-       viewport->scale[3] == 1.0f &&
        viewport->translate[0] == 0.0f &&
        viewport->translate[1] == 0.0f &&
-       viewport->translate[2] == 0.0f &&
-       viewport->translate[3] == 0.0f);
+       viewport->translate[2] == 0.0f);
+   draw_update_viewport_flags(draw);
 }
 
 
@@ -676,7 +690,7 @@ draw_total_vs_outputs(const struct draw_context *draw)
 {
    const struct tgsi_shader_info *info = &draw->vs.vertex_shader->info;
 
-   return info->num_outputs + draw->extra_shader_outputs.num;;
+   return info->num_outputs + draw->extra_shader_outputs.num;
 }
 
 /**
@@ -808,7 +822,7 @@ draw_current_shader_viewport_index_output(const struct draw_context *draw)
 {
    if (draw->gs.geometry_shader)
       return draw->gs.geometry_shader->viewport_index_output;
-   return 0;
+   return draw->vs.vertex_shader->viewport_index_output;
 }
 
 /**
@@ -820,7 +834,7 @@ draw_current_shader_uses_viewport_index(const struct draw_context *draw)
 {
    if (draw->gs.geometry_shader)
       return draw->gs.geometry_shader->info.writes_viewport_index;
-   return FALSE;
+   return draw->vs.vertex_shader->info.writes_viewport_index;
 }
 
 

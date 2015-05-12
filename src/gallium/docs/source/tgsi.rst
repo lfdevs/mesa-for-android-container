@@ -48,13 +48,13 @@ used.
 
 .. math::
 
-  dst.x = \lfloor src.x\rfloor
+  dst.x = (int) \lfloor src.x\rfloor
 
-  dst.y = \lfloor src.y\rfloor
+  dst.y = (int) \lfloor src.y\rfloor
 
-  dst.z = \lfloor src.z\rfloor
+  dst.z = (int) \lfloor src.z\rfloor
 
-  dst.w = \lfloor src.w\rfloor
+  dst.w = (int) \lfloor src.w\rfloor
 
 
 .. opcode:: MOV - Move
@@ -272,19 +272,6 @@ This instruction replicates its result.
   dst.w = src0.w \times src1.w + (1 - src0.w) \times src2.w
 
 
-.. opcode:: CND - Condition
-
-.. math::
-
-  dst.x = (src2.x > 0.5) ? src0.x : src1.x
-
-  dst.y = (src2.y > 0.5) ? src0.y : src1.y
-
-  dst.z = (src2.z > 0.5) ? src0.z : src1.z
-
-  dst.w = (src2.w > 0.5) ? src0.w : src1.w
-
-
 .. opcode:: DP2A - 2-component Dot Product And Add
 
 .. math::
@@ -325,8 +312,6 @@ This instruction replicates its result.
 
 
 .. opcode:: FLR - Floor
-
-This is identical to :opcode:`ARL`.
 
 .. math::
 
@@ -404,17 +389,6 @@ This instruction replicates its result.
   dst.w = |src.w|
 
 
-.. opcode:: RCC - Reciprocal Clamped
-
-This instruction replicates its result.
-
-XXX cleanup on aisle three
-
-.. math::
-
-  dst = (1 / src.x) > 0 ? clamp(1 / src.x, 5.42101e-020, 1.84467e+019) : clamp(1 / src.x, -1.84467e+019, -5.42101e-020)
-
-
 .. opcode:: DPH - Homogeneous Dot Product
 
 This instruction replicates its result.
@@ -487,23 +461,6 @@ while DDY is allowed to be the same for the entire 2x2 quad.
   TBD
 
 
-.. opcode:: RFL - Reflection Vector
-
-.. math::
-
-  dst.x = 2 \times (src0.x \times src1.x + src0.y \times src1.y + src0.z \times src1.z) / (src0.x \times src0.x + src0.y \times src0.y + src0.z \times src0.z) \times src0.x - src1.x
-
-  dst.y = 2 \times (src0.x \times src1.x + src0.y \times src1.y + src0.z \times src1.z) / (src0.x \times src0.x + src0.y \times src0.y + src0.z \times src0.z) \times src0.y - src1.y
-
-  dst.z = 2 \times (src0.x \times src1.x + src0.y \times src1.y + src0.z \times src1.z) / (src0.x \times src0.x + src0.y \times src0.y + src0.z \times src0.z) \times src0.z - src1.z
-
-  dst.w = 1
-
-.. note::
-
-   Considered for removal.
-
-
 .. opcode:: SEQ - Set On Equal
 
 .. math::
@@ -515,19 +472,6 @@ while DDY is allowed to be the same for the entire 2x2 quad.
   dst.z = (src0.z == src1.z) ? 1.0F : 0.0F
 
   dst.w = (src0.w == src1.w) ? 1.0F : 0.0F
-
-
-.. opcode:: SFL - Set On False
-
-This instruction replicates its result.
-
-.. math::
-
-  dst = 0.0F
-
-.. note::
-
-   Considered for removal.
 
 
 .. opcode:: SGT - Set On Greater Than
@@ -576,15 +520,6 @@ This instruction replicates its result.
   dst.z = (src0.z != src1.z) ? 1.0F : 0.0F
 
   dst.w = (src0.w != src1.w) ? 1.0F : 0.0F
-
-
-.. opcode:: STR - Set On True
-
-This instruction replicates its result.
-
-.. math::
-
-  dst = 1.0F
 
 
 .. opcode:: TEX - Texture Lookup
@@ -695,42 +630,18 @@ This instruction replicates its result.
 
    Considered for removal.
 
-.. opcode:: X2D - 2D Coordinate Transformation
-
-.. math::
-
-  dst.x = src0.x + src1.x \times src2.x + src1.y \times src2.y
-
-  dst.y = src0.y + src1.x \times src2.z + src1.y \times src2.w
-
-  dst.z = src0.x + src1.x \times src2.x + src1.y \times src2.y
-
-  dst.w = src0.y + src1.x \times src2.z + src1.y \times src2.w
-
-.. note::
-
-   Considered for removal.
-
-
-.. opcode:: ARA - Address Register Add
-
-  TBD
-
-.. note::
-
-   Considered for removal.
 
 .. opcode:: ARR - Address Register Load With Round
 
 .. math::
 
-  dst.x = round(src.x)
+  dst.x = (int) round(src.x)
 
-  dst.y = round(src.y)
+  dst.y = (int) round(src.y)
 
-  dst.z = round(src.z)
+  dst.z = (int) round(src.z)
 
-  dst.w = round(src.w)
+  dst.w = (int) round(src.w)
 
 
 .. opcode:: SSG - Set Sign
@@ -834,40 +745,6 @@ This instruction replicates its result.
   dst = texture\_sample(unit, coord, bias)
 
 
-.. opcode:: NRM - 3-component Vector Normalise
-
-.. math::
-  
-  u = src.x \times src.x + src.y \times src.y + src.z \times src.z
-
-  v = \frac{1}{\sqrt{u}}
-
-  dst.x = src.x \times v
-
-  dst.y = src.y \times v
-
-  dst.z = src.z \times v
-
-  dst.w = 1
-
-
-.. opcode:: NRM4 - 4-component Vector Normalise
-
-.. math::
-  
-  u = src.x \times src.x + src.y \times src.y + src.z \times src.z + src.w \times src.w
-
-  v = \frac{1}{\sqrt{u}}
-
-  dst.x = src.x \times v
-
-  dst.y = src.y \times v
-
-  dst.z = src.z \times v
-
-  dst.w = src.w \times v
-
-
 .. opcode:: DIV - Divide
 
 .. math::
@@ -961,15 +838,6 @@ This instruction replicates its result.
 .. note::
 
    Considered for cleanup.
-
-.. note::
-
-   Considered for removal.
-
-
-.. opcode:: BRA - Branch
-
-  pc = target
 
 .. note::
 
@@ -2642,8 +2510,10 @@ The Y component starts at zero and always increases but Y=0 may either
 indicate the top of the window or the bottom depending on the fragment
 coordinate origin convention (see TGSI_PROPERTY_FS_COORD_ORIGIN).
 The Z coordinate ranges from 0 to 1 to represent depth from the front
-to the back of the Z buffer.  The W component contains the reciprocol
-of the interpolated vertex position W component.
+to the back of the Z buffer.  The W component contains the interpolated
+reciprocal of the vertex position W component (corresponding to gl_Fragcoord,
+but unlike d3d10 which interpolates the same 1/w but then gives back
+the reciprocal of the interpolated value).
 
 Fragment shaders may also declare an output register with
 TGSI_SEMANTIC_POSITION.  Only the Z component is writable.  This allows
@@ -2779,7 +2649,7 @@ TGSI_SEMANTIC_VIEWPORT_INDEX
 
 For geometry shaders, this semantic label indicates that an output
 contains the index of the viewport (and scissor) to use.
-Only the X value is used.
+This is an integer value, and only the X component is used.
 
 
 TGSI_SEMANTIC_LAYER
@@ -2787,7 +2657,8 @@ TGSI_SEMANTIC_LAYER
 
 For geometry shaders, this semantic label indicates that an output
 contains the layer value to use for the color and depth/stencil surfaces.
-Only the X value is used. (Also known as rendertarget array index.)
+This is an integer value, and only the X component is used.
+(Also known as rendertarget array index.)
 
 
 TGSI_SEMANTIC_CULLDIST
@@ -2828,7 +2699,8 @@ TGSI_SEMANTIC_SAMPLEID
 """"""""""""""""""""""
 
 For fragment shaders, this semantic label indicates that a system value
-contains the current sample id (i.e. gl_SampleID). Only the X value is used.
+contains the current sample id (i.e. gl_SampleID).
+This is an integer value, and only the X component is used.
 
 TGSI_SEMANTIC_SAMPLEPOS
 """""""""""""""""""""""
@@ -2848,8 +2720,48 @@ TGSI_SEMANTIC_INVOCATIONID
 """"""""""""""""""""""""""
 
 For geometry shaders, this semantic label indicates that a system value
-contains the current invocation id (i.e. gl_InvocationID). Only the X value is
-used.
+contains the current invocation id (i.e. gl_InvocationID).
+This is an integer value, and only the X component is used.
+
+TGSI_SEMANTIC_INSTANCEID
+""""""""""""""""""""""""
+
+For vertex shaders, this semantic label indicates that a system value contains
+the current instance id (i.e. gl_InstanceID). It does not include the base
+instance. This is an integer value, and only the X component is used.
+
+TGSI_SEMANTIC_VERTEXID
+""""""""""""""""""""""
+
+For vertex shaders, this semantic label indicates that a system value contains
+the current vertex id (i.e. gl_VertexID). It does (unlike in d3d10) include the
+base vertex. This is an integer value, and only the X component is used.
+
+TGSI_SEMANTIC_VERTEXID_NOBASE
+"""""""""""""""""""""""""""""""
+
+For vertex shaders, this semantic label indicates that a system value contains
+the current vertex id without including the base vertex (this corresponds to
+d3d10 vertex id, so TGSI_SEMANTIC_VERTEXID_NOBASE + TGSI_SEMANTIC_BASEVERTEX
+== TGSI_SEMANTIC_VERTEXID). This is an integer value, and only the X component
+is used.
+
+TGSI_SEMANTIC_BASEVERTEX
+""""""""""""""""""""""""
+
+For vertex shaders, this semantic label indicates that a system value contains
+the base vertex (i.e. gl_BaseVertex). Note that for non-indexed draw calls,
+this contains the first (or start) value instead.
+This is an integer value, and only the X component is used.
+
+TGSI_SEMANTIC_PRIMID
+""""""""""""""""""""
+
+For geometry and fragment shaders, this semantic label indicates the value
+contains the primitive id (i.e. gl_PrimitiveID). This is an integer value,
+and only the X component is used.
+FIXME: This right now can be either a ordinary input or a system value...
+
 
 Declaration Interpolate
 ^^^^^^^^^^^^^^^^^^^^^^^

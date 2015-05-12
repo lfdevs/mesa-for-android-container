@@ -46,6 +46,36 @@ dce(struct vc4_compile *c, struct qinst *inst)
         qir_remove_instruction(inst);
 }
 
+static bool
+has_nonremovable_reads(struct vc4_compile *c, struct qinst *inst)
+{
+        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                if (inst->src[i].file == QFILE_VPM) {
+                        uint32_t attr = inst->src[i].index / 4;
+                        uint32_t offset = (inst->src[i].index % 4) * 4;
+
+                        if (c->vattr_sizes[attr] != offset + 4)
+                                return true;
+
+                        /* Can't get rid of the last VPM read, or the
+                         * simulator (at least) throws an error.
+                         */
+                        uint32_t total_size = 0;
+                        for (uint32_t i = 0; i < ARRAY_SIZE(c->vattr_sizes); i++)
+                                total_size += c->vattr_sizes[i];
+                        if (total_size == 4)
+                                return true;
+                }
+
+                if (inst->src[i].file == QFILE_VARY &&
+                    c->input_semantics[inst->src[i].index].semantic == 0xff) {
+                        return true;
+                }
+        }
+
+        return false;
+}
+
 bool
 qir_opt_dead_code(struct vc4_compile *c)
 {
@@ -64,10 +94,23 @@ qir_opt_dead_code(struct vc4_compile *c)
                 if (inst->dst.file == QFILE_TEMP &&
                     !used[inst->dst.index] &&
                     (!qir_has_side_effects(c, inst) ||
-                     inst->op == QOP_TEX_RESULT)) {
+                     inst->op == QOP_TEX_RESULT) &&
+                    !has_nonremovable_reads(c, inst)) {
                         if (inst->op == QOP_TEX_RESULT) {
                                 dce_tex = true;
                                 c->num_texture_samples--;
+                        }
+
+                        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                                if (inst->src[i].file != QFILE_VPM)
+                                        continue;
+                                uint32_t attr = inst->src[i].index / 4;
+                                uint32_t offset = (inst->src[i].index % 4) * 4;
+
+                                if (c->vattr_sizes[attr] == offset + 4) {
+                                        c->num_inputs--;
+                                        c->vattr_sizes[attr] -= 4;
+                                }
                         }
 
                         dce(c, inst);

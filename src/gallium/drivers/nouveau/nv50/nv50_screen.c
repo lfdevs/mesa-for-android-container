@@ -174,6 +174,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_CLIP_HALFZ:
+   case PIPE_CAP_POLYGON_OFFSET_CLAMP:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1; /* class_3d >= NVA0_3D_CLASS; */
@@ -205,6 +206,8 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_COMPUTE:
    case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_VERTEXID_NOBASE:
+   case PIPE_CAP_MULTISAMPLE_Z_RESOLVE: /* potentially supported on some hw */
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -447,6 +450,13 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
       BEGIN_NV04(push, NV50_3D(WATCHDOG_TIMER), 1);
       PUSH_DATA (push, 0x18);
    }
+
+   BEGIN_NV04(push, NV50_3D(ZETA_COMP_ENABLE), 1);
+   PUSH_DATA(push, screen->base.device->drm_version >= 0x01000101);
+
+   BEGIN_NV04(push, NV50_3D(RT_COMP_ENABLE(0)), 8);
+   for (i = 0; i < 8; ++i)
+      PUSH_DATA(push, screen->base.device->drm_version >= 0x01000101);
 
    BEGIN_NV04(push, NV50_3D(RT_CONTROL), 1);
    PUSH_DATA (push, 1);

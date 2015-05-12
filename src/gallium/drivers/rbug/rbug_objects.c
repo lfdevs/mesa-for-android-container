@@ -27,7 +27,7 @@
 
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
-#include "util/u_simple_list.h"
+#include "util/simple_list.h"
 
 #include "tgsi/tgsi_parse.h"
 

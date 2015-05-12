@@ -48,6 +48,7 @@ int r700_bytecode_alu_build(struct r600_bytecode *bc, struct r600_bytecode_alu *
 
 	/* don't replace gpr by pv or ps for destination register */
 	if (alu->is_op3) {
+		assert(!alu->src[0].abs && !alu->src[1].abs && !alu->src[2].abs);
 		bc->bytecode[id++] = S_SQ_ALU_WORD1_DST_GPR(alu->dst.sel) |
 					S_SQ_ALU_WORD1_DST_CHAN(alu->dst.chan) |
 			                S_SQ_ALU_WORD1_DST_REL(alu->dst.rel) |

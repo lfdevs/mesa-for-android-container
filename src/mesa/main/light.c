@@ -30,7 +30,7 @@
 #include "enums.h"
 #include "light.h"
 #include "macros.h"
-#include "simple_list.h"
+#include "util/simple_list.h"
 #include "mtypes.h"
 #include "math/m_matrix.h"
 

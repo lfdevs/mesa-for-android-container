@@ -54,7 +54,6 @@ translate_opcode(uint opcode)
    case TGSI_OPCODE_MOV:        return SVGA3DOP_MOV;
    case TGSI_OPCODE_MUL:        return SVGA3DOP_MUL;
    case TGSI_OPCODE_NOP:        return SVGA3DOP_NOP;
-   case TGSI_OPCODE_NRM4:       return SVGA3DOP_NRM;
    default:
       assert(!"svga: unexpected opcode in translate_opcode()");
       return SVGA3DOP_LAST_INST;
@@ -1263,40 +1262,6 @@ emit_dph(struct svga_shader_emitter *emit,
    /* ADD  DST, TMP, SRC2.wwww */
    if (!submit_op2( emit, inst_token( SVGA3DOP_ADD ), dst,
                     src( temp ), src1 ))
-      return FALSE;
-
-   return TRUE;
-}
-
-
-/**
- * Translate the following TGSI DST instruction.
- *    NRM  DST, SRC
- * To the following SVGA3D instruction sequence.
- *    DP3  TMP, SRC, SRC
- *    RSQ  TMP, TMP
- *    MUL  DST, SRC, TMP
- */
-static boolean
-emit_nrm(struct svga_shader_emitter *emit,
-         const struct tgsi_full_instruction *insn)
-{
-   SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
-   const struct src_register src0 =
-      translate_src_register(emit, &insn->Src[0]);
-   SVGA3dShaderDestToken temp = get_temp( emit );
-
-   /* DP3  TMP, SRC, SRC */
-   if (!submit_op2( emit, inst_token( SVGA3DOP_DP3 ), temp, src0, src0 ))
-      return FALSE;
-
-   /* RSQ  TMP, TMP */
-   if (!submit_op1( emit, inst_token( SVGA3DOP_RSQ ), temp, src( temp )))
-      return FALSE;
-
-   /* MUL  DST, SRC, TMP */
-   if (!submit_op2( emit, inst_token( SVGA3DOP_MUL ), dst,
-                    src0, src( temp )))
       return FALSE;
 
    return TRUE;
@@ -2961,9 +2926,6 @@ svga_emit_instruction(struct svga_shader_emitter *emit,
 
    case TGSI_OPCODE_DPH:
       return emit_dph( emit, insn );
-
-   case TGSI_OPCODE_NRM:
-      return emit_nrm( emit, insn );
 
    case TGSI_OPCODE_COS:
       return emit_cos( emit, insn );

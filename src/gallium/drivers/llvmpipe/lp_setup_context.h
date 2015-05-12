@@ -55,7 +55,8 @@ struct lp_setup_variant;
 
 
 /** Max number of scenes */
-#define MAX_SCENES 2
+/* XXX: make multiple scenes per context work, see lp_setup_rasterize_scene */
+#define MAX_SCENES 1
 
 
 

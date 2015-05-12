@@ -118,7 +118,7 @@ os_get_total_physical_memory(uint64_t *size)
    *size = phys_pages * page_size;
    return (phys_pages > 0 && page_size > 0);
 #elif defined(PIPE_OS_APPLE) || defined(PIPE_OS_BSD)
-   size_t len = sizeof(size);
+   size_t len = sizeof(*size);
    int mib[2];
 
    mib[0] = CTL_HW;
@@ -134,7 +134,7 @@ os_get_total_physical_memory(uint64_t *size)
 #error Unsupported *BSD
 #endif
 
-   return (sysctl(mib, 2, &size, &len, NULL, 0) == 0);
+   return (sysctl(mib, 2, size, &len, NULL, 0) == 0);
 #elif defined(PIPE_OS_HAIKU)
    system_info info;
    status_t ret;

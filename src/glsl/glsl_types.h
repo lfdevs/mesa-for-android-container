@@ -244,6 +244,15 @@ struct glsl_type {
 					unsigned columns);
 
    /**
+    * Get the instance of a sampler type
+    */
+   static const glsl_type *get_sampler_instance(enum glsl_sampler_dim dim,
+                                                bool shadow,
+                                                bool array,
+                                                glsl_base_type type);
+
+
+   /**
     * Get the instance of an array type
     */
    static const glsl_type *get_array_instance(const glsl_type *base,

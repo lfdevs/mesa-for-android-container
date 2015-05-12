@@ -29,6 +29,7 @@ VDPAU_MINOR = 0
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
+	$(VL_CFLAGS) \
 	$(VDPAU_CFLAGS)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \

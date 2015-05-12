@@ -196,7 +196,7 @@ fs_visitor::opt_peephole_sel()
              */
             fs_reg src0(then_mov[i]->src[0]);
             if (src0.file == IMM) {
-               src0 = fs_reg(this, glsl_type::float_type);
+               src0 = vgrf(glsl_type::float_type);
                src0.type = then_mov[i]->src[0].type;
                mov_imm_inst[i] = MOV(src0, then_mov[i]->src[0]);
             }

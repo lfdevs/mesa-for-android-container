@@ -29,6 +29,8 @@
 #include "main/enums.h"
 #include "main/fbobject.h"
 #include "main/formats.h"
+#include "main/format_utils.h"
+#include "main/glformats.h"
 #include "main/image.h"
 #include "main/imports.h"
 #include "main/macros.h"
@@ -739,6 +741,11 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    if (gl_target == GL_TEXTURE_CUBE_MAP) {
       gl_target = GL_TEXTURE_2D;
    }
+   /* TexSubImage can specify subsets of cube map array faces
+    * so we need to upload via 2D array instead */
+   if (gl_target == GL_TEXTURE_CUBE_MAP_ARRAY) {
+      gl_target = GL_TEXTURE_2D_ARRAY;
+   }
 
    /* Initialize the source texture description. */
    memset(&src_templ, 0, sizeof(src_templ));
@@ -899,7 +906,7 @@ st_CompressedTexImage(struct gl_context *ctx, GLuint dims,
  * We can do arbitrary X/Y/Z/W/0/1 swizzling here as long as there is
  * a format which matches the swizzling.
  *
- * If such a format isn't available, it falls back to _mesa_get_teximage.
+ * If such a format isn't available, it falls back to _mesa_GetTexImage_sw.
  *
  * NOTE: Drivers usually do a blit to convert between tiled and linear
  *       texture layouts during texture uploads/downloads, so the blit
@@ -944,14 +951,14 @@ st_GetTexImage(struct gl_context * ctx,
       goto fallback;
    }
 
-   /* XXX Fallback to _mesa_get_teximage for depth-stencil formats
+   /* XXX Fallback to _mesa_GetTexImage_sw for depth-stencil formats
     * due to an incomplete stencil blit implementation in some drivers. */
    if (format == GL_DEPTH_STENCIL) {
       goto fallback;
    }
 
    /* If the base internal format and the texture format don't match, we have
-    * to fall back to _mesa_get_teximage. */
+    * to fall back to _mesa_GetTexImage_sw. */
    if (texImage->_BaseFormat !=
        _mesa_get_format_base_format(texImage->TexFormat)) {
       goto fallback;
@@ -1005,7 +1012,7 @@ st_GetTexImage(struct gl_context * ctx,
    if (dst_format == PIPE_FORMAT_NONE) {
       GLenum dst_glformat;
 
-      /* Fall back to _mesa_get_teximage except for compressed formats,
+      /* Fall back to _mesa_GetTexImage_sw except for compressed formats,
        * where decompression with a blit is always preferred. */
       if (!util_format_is_compressed(src->format)) {
          goto fallback;
@@ -1138,6 +1145,8 @@ st_GetTexImage(struct gl_context * ctx,
       /* format translation via floats */
       GLuint row, slice;
       GLfloat *rgba;
+      uint32_t dstMesaFormat;
+      int dstStride, srcStride;
 
       assert(util_format_is_compressed(src->format));
 
@@ -1149,6 +1158,9 @@ st_GetTexImage(struct gl_context * ctx,
       if (ST_DEBUG & DEBUG_FALLBACK)
          debug_printf("%s: fallback format translation\n", __FUNCTION__);
 
+      dstMesaFormat = _mesa_format_from_format_and_type(format, type);
+      dstStride = _mesa_image_row_stride(&ctx->Pack, width, format, type);
+      srcStride = 4 * width * sizeof(GLfloat);
       for (slice = 0; slice < depth; slice++) {
          if (gl_target == GL_TEXTURE_1D_ARRAY) {
             /* 1D array textures.
@@ -1162,8 +1174,9 @@ st_GetTexImage(struct gl_context * ctx,
             pipe_get_tile_rgba_format(tex_xfer, map, 0, 0, width, 1,
                                       dst_format, rgba);
 
-            _mesa_pack_rgba_span_float(ctx, width, (GLfloat (*)[4]) rgba, format,
-                                       type, dest, &ctx->Pack, 0);
+            _mesa_format_convert(dest, dstMesaFormat, dstStride,
+                                 rgba, RGBA32_FLOAT, srcStride,
+                                 width, 1, NULL);
          }
          else {
             for (row = 0; row < height; row++) {
@@ -1175,8 +1188,9 @@ st_GetTexImage(struct gl_context * ctx,
                pipe_get_tile_rgba_format(tex_xfer, map, 0, row, width, 1,
                                          dst_format, rgba);
 
-               _mesa_pack_rgba_span_float(ctx, width, (GLfloat (*)[4]) rgba, format,
-                                          type, dest, &ctx->Pack, 0);
+               _mesa_format_convert(dest, dstMesaFormat, dstStride,
+                                    rgba, RGBA32_FLOAT, srcStride,
+                                    width, 1, NULL);
             }
          }
          map += tex_xfer->layer_stride;
@@ -1195,7 +1209,7 @@ end:
 
 fallback:
    if (!done) {
-      _mesa_get_teximage(ctx, format, type, pixels, texImage);
+      _mesa_GetTexImage_sw(ctx, format, type, pixels, texImage);
    }
 }
 
@@ -1546,7 +1560,7 @@ st_finalize_texture(struct gl_context *ctx,
    struct st_texture_object *stObj = st_texture_object(tObj);
    const GLuint nr_faces = (stObj->base.Target == GL_TEXTURE_CUBE_MAP) ? 6 : 1;
    GLuint face;
-   struct st_texture_image *firstImage;
+   const struct st_texture_image *firstImage;
    enum pipe_format firstImageFormat;
    GLuint ptWidth, ptHeight, ptDepth, ptLayers, ptNumSamples;
 
@@ -1587,7 +1601,7 @@ st_finalize_texture(struct gl_context *ctx,
 
    }
 
-   firstImage = st_texture_image(stObj->base.Image[0][stObj->base.BaseLevel]);
+   firstImage = st_texture_image_const(_mesa_base_tex_image(&stObj->base));
    assert(firstImage);
 
    /* If both firstImage and stObj point to a texture which can contain
@@ -1886,7 +1900,7 @@ st_init_texture_functions(struct dd_function_table *functions)
 
    /* compressed texture functions */
    functions->CompressedTexImage = st_CompressedTexImage;
-   functions->GetCompressedTexImage = _mesa_get_compressed_teximage;
+   functions->GetCompressedTexImage = _mesa_GetCompressedTexImage_sw;
 
    functions->NewTextureObject = st_NewTextureObject;
    functions->NewTextureImage = st_NewTextureImage;

@@ -344,17 +344,6 @@ brw_get_vertex_surface_type(struct brw_context *brw,
    }
 }
 
-unsigned
-brw_get_index_type(GLenum type)
-{
-   switch (type) {
-   case GL_UNSIGNED_BYTE:  return BRW_INDEX_BYTE;
-   case GL_UNSIGNED_SHORT: return BRW_INDEX_WORD;
-   case GL_UNSIGNED_INT:   return BRW_INDEX_DWORD;
-   default: unreachable("not reached");
-   }
-}
-
 static void
 copy_array_to_vbo_array(struct brw_context *brw,
 			struct brw_vertex_element *element,
@@ -400,7 +389,7 @@ void
 brw_prepare_vertices(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   /* CACHE_NEW_VS_PROG */
+   /* BRW_NEW_VS_PROG_DATA */
    GLbitfield64 vs_inputs = brw->vs.prog_data->inputs_read;
    const unsigned char *ptr = NULL;
    GLuint interleaved = 0;
@@ -859,8 +848,9 @@ static void brw_emit_vertices(struct brw_context *brw)
 const struct brw_tracked_state brw_vertices = {
    .dirty = {
       .mesa = _NEW_POLYGON,
-      .brw = BRW_NEW_BATCH | BRW_NEW_VERTICES,
-      .cache = CACHE_NEW_VS_PROG,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_VERTICES |
+             BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_emit_vertices,
 };
@@ -941,7 +931,6 @@ const struct brw_tracked_state brw_indices = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_INDICES,
-      .cache = 0,
    },
    .emit = brw_upload_indices,
 };
@@ -963,7 +952,7 @@ static void brw_emit_index_buffer(struct brw_context *brw)
    BEGIN_BATCH(3);
    OUT_BATCH(CMD_INDEX_BUFFER << 16 |
              cut_index_setting |
-             brw_get_index_type(index_buffer->type) << 8 |
+             brw_get_index_type(index_buffer->type) |
              1);
    OUT_RELOC(brw->ib.bo,
              I915_GEM_DOMAIN_VERTEX, 0,
@@ -977,8 +966,8 @@ static void brw_emit_index_buffer(struct brw_context *brw)
 const struct brw_tracked_state brw_index_buffer = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_BATCH | BRW_NEW_INDEX_BUFFER,
-      .cache = 0,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_INDEX_BUFFER,
    },
    .emit = brw_emit_index_buffer,
 };

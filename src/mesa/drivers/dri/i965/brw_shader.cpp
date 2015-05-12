@@ -55,20 +55,36 @@ brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
  * the eventual NOS used, and thus allows us to produce link failures.
  */
 static bool
-brw_shader_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
+brw_shader_precompile(struct gl_context *ctx,
+                      struct gl_shader_program *sh_prog)
 {
-   struct brw_context *brw = brw_context(ctx);
+   struct gl_shader *vs = sh_prog->_LinkedShaders[MESA_SHADER_VERTEX];
+   struct gl_shader *gs = sh_prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
+   struct gl_shader *fs = sh_prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
 
-   if (brw->precompile && !brw_fs_precompile(ctx, prog))
+   if (fs && !brw_fs_precompile(ctx, sh_prog, fs->Program))
       return false;
 
-   if (brw->precompile && !brw_gs_precompile(ctx, prog))
+   if (gs && !brw_gs_precompile(ctx, sh_prog, gs->Program))
       return false;
 
-   if (brw->precompile && !brw_vs_precompile(ctx, prog))
+   if (vs && !brw_vs_precompile(ctx, sh_prog, vs->Program))
       return false;
 
    return true;
+}
+
+static inline bool
+is_scalar_shader_stage(struct brw_context *brw, int stage)
+{
+   switch (stage) {
+   case MESA_SHADER_FRAGMENT:
+      return true;
+   case MESA_SHADER_VERTEX:
+      return brw->scalar_vs;
+   default:
+      return false;
+   }
 }
 
 static void
@@ -79,11 +95,14 @@ brw_lower_packing_builtins(struct brw_context *brw,
    int ops = LOWER_PACK_SNORM_2x16
            | LOWER_UNPACK_SNORM_2x16
            | LOWER_PACK_UNORM_2x16
-           | LOWER_UNPACK_UNORM_2x16
-           | LOWER_PACK_SNORM_4x8
+           | LOWER_UNPACK_UNORM_2x16;
+
+   if (is_scalar_shader_stage(brw, shader_type)) {
+      ops |= LOWER_UNPACK_UNORM_4x8
            | LOWER_UNPACK_SNORM_4x8
            | LOWER_PACK_UNORM_4x8
-           | LOWER_UNPACK_UNORM_4x8;
+           | LOWER_PACK_SNORM_4x8;
+   }
 
    if (brw->gen >= 7) {
       /* Gen7 introduced the f32to16 and f16to32 instructions, which can be
@@ -91,7 +110,7 @@ brw_lower_packing_builtins(struct brw_context *brw,
        * lowering is needed. For SOA code, the Half2x16 ops must be
        * scalarized.
        */
-      if (shader_type == MESA_SHADER_FRAGMENT) {
+      if (is_scalar_shader_stage(brw, shader_type)) {
          ops |= LOWER_PACK_HALF_2x16_TO_SPLIT
              |  LOWER_UNPACK_HALF_2x16_TO_SPLIT;
       }
@@ -138,7 +157,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
                                   ? BITFIELD_INSERT_TO_BFM_BFI
                                   : 0;
       lower_instructions(shader->base.ir,
-			 MOD_TO_FRACT |
+			 MOD_TO_FLOOR |
 			 DIV_TO_MUL_RCP |
 			 SUB_TO_ADD_NEG |
 			 EXP_TO_EXP2 |
@@ -179,7 +198,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       do {
 	 progress = false;
 
-	 if (stage == MESA_SHADER_FRAGMENT) {
+	 if (is_scalar_shader_stage(brw, stage)) {
 	    brw_do_channel_expressions(shader->base.ir);
 	    brw_do_vector_splitting(shader->base.ir);
 	 }
@@ -223,6 +242,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       do_set_program_inouts(shader->base.ir, prog, shader->base.Stage);
 
       prog->SamplersUsed = shader->base.active_samplers;
+      prog->ShadowSamplers = shader->base.shadow_samplers;
       _mesa_update_shader_textures_used(shProg, prog);
 
       _mesa_reference_program(ctx, &shader->base.Program, prog);
@@ -255,7 +275,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       }
    }
 
-   if (!brw_shader_precompile(ctx, shProg))
+   if (brw->precompile && !brw_shader_precompile(ctx, shProg))
       return false;
 
    return true;
@@ -269,8 +289,8 @@ brw_type_for_base_type(const struct glsl_type *type)
    case GLSL_TYPE_FLOAT:
       return BRW_REGISTER_TYPE_F;
    case GLSL_TYPE_INT:
-      return BRW_REGISTER_TYPE_D;
    case GLSL_TYPE_BOOL:
+      return BRW_REGISTER_TYPE_D;
    case GLSL_TYPE_UINT:
       return BRW_REGISTER_TYPE_UD;
    case GLSL_TYPE_ARRAY:
@@ -374,16 +394,16 @@ brw_texture_offset(struct gl_context *ctx, int *offsets,
 const char *
 brw_instruction_name(enum opcode op)
 {
-   char *fallback;
-
-   if (op < ARRAY_SIZE(opcode_descs) && opcode_descs[op].name)
-      return opcode_descs[op].name;
-
    switch (op) {
+   case BRW_OPCODE_MOV ... BRW_OPCODE_NOP:
+      assert(opcode_descs[op].name);
+      return opcode_descs[op].name;
    case FS_OPCODE_FB_WRITE:
       return "fb_write";
    case FS_OPCODE_BLORP_FB_WRITE:
       return "blorp_fb_write";
+   case FS_OPCODE_REP_FB_WRITE:
+      return "rep_fb_write";
 
    case SHADER_OPCODE_RCP:
       return "rcp";
@@ -424,12 +444,19 @@ brw_instruction_name(enum opcode op)
       return "txf_ums";
    case SHADER_OPCODE_TXF_MCS:
       return "txf_mcs";
+   case SHADER_OPCODE_LOD:
+      return "lod";
    case SHADER_OPCODE_TG4:
       return "tg4";
    case SHADER_OPCODE_TG4_OFFSET:
       return "tg4_offset";
    case SHADER_OPCODE_SHADER_TIME_ADD:
       return "shader_time_add";
+
+   case SHADER_OPCODE_UNTYPED_ATOMIC:
+      return "untyped_atomic";
+   case SHADER_OPCODE_UNTYPED_SURFACE_READ:
+      return "untyped_surface_read";
 
    case SHADER_OPCODE_LOAD_PAYLOAD:
       return "load_payload";
@@ -440,11 +467,24 @@ brw_instruction_name(enum opcode op)
       return "gen4_scratch_write";
    case SHADER_OPCODE_GEN7_SCRATCH_READ:
       return "gen7_scratch_read";
+   case SHADER_OPCODE_URB_WRITE_SIMD8:
+      return "gen8_urb_write_simd8";
 
-   case FS_OPCODE_DDX:
-      return "ddx";
-   case FS_OPCODE_DDY:
-      return "ddy";
+   case VEC4_OPCODE_MOV_BYTES:
+      return "mov_bytes";
+   case VEC4_OPCODE_PACK_BYTES:
+      return "pack_bytes";
+   case VEC4_OPCODE_UNPACK_UNIFORM:
+      return "unpack_uniform";
+
+   case FS_OPCODE_DDX_COARSE:
+      return "ddx_coarse";
+   case FS_OPCODE_DDX_FINE:
+      return "ddx_fine";
+   case FS_OPCODE_DDY_COARSE:
+      return "ddy_coarse";
+   case FS_OPCODE_DDY_FINE:
+      return "ddy_fine";
 
    case FS_OPCODE_PIXEL_X:
       return "pixel_x";
@@ -470,6 +510,10 @@ brw_instruction_name(enum opcode op)
    case FS_OPCODE_DISCARD_JUMP:
       return "discard_jump";
 
+   case FS_OPCODE_SET_OMASK:
+      return "set_omask";
+   case FS_OPCODE_SET_SAMPLE_ID:
+      return "set_sample_id";
    case FS_OPCODE_SET_SIMD4X2_OFFSET:
       return "set_simd4x2_offset";
 
@@ -482,6 +526,15 @@ brw_instruction_name(enum opcode op)
 
    case FS_OPCODE_PLACEHOLDER_HALT:
       return "placeholder_halt";
+
+   case FS_OPCODE_INTERPOLATE_AT_CENTROID:
+      return "interp_centroid";
+   case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
+      return "interp_sample";
+   case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
+      return "interp_shared_offset";
+   case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
+      return "interp_per_slot_offset";
 
    case VS_OPCODE_URB_WRITE:
       return "vs_urb_write";
@@ -520,14 +573,131 @@ brw_instruction_name(enum opcode op)
       return "gs_svb_set_dst_index";
    case GS_OPCODE_FF_SYNC_SET_PRIMITIVES:
       return "gs_ff_sync_set_primitives";
-
-   default:
-      /* Yes, this leaks.  It's in debug code, it should never occur, and if
-       * it does, you should just add the case to the list above.
-       */
-      asprintf(&fallback, "op%d", op);
-      return fallback;
    }
+
+   unreachable("not reached");
+}
+
+bool
+brw_saturate_immediate(enum brw_reg_type type, struct brw_reg *reg)
+{
+   union {
+      unsigned ud;
+      int d;
+      float f;
+   } imm = { reg->dw1.ud }, sat_imm;
+
+   switch (type) {
+   case BRW_REGISTER_TYPE_UD:
+   case BRW_REGISTER_TYPE_D:
+   case BRW_REGISTER_TYPE_UQ:
+   case BRW_REGISTER_TYPE_Q:
+      /* Nothing to do. */
+      return false;
+   case BRW_REGISTER_TYPE_UW:
+      sat_imm.ud = CLAMP(imm.ud, 0, USHRT_MAX);
+      break;
+   case BRW_REGISTER_TYPE_W:
+      sat_imm.d = CLAMP(imm.d, SHRT_MIN, SHRT_MAX);
+      break;
+   case BRW_REGISTER_TYPE_F:
+      sat_imm.f = CLAMP(imm.f, 0.0f, 1.0f);
+      break;
+   case BRW_REGISTER_TYPE_UB:
+   case BRW_REGISTER_TYPE_B:
+      unreachable("no UB/B immediates");
+   case BRW_REGISTER_TYPE_V:
+   case BRW_REGISTER_TYPE_UV:
+   case BRW_REGISTER_TYPE_VF:
+      assert(!"unimplemented: saturate vector immediate");
+   case BRW_REGISTER_TYPE_DF:
+   case BRW_REGISTER_TYPE_HF:
+      assert(!"unimplemented: saturate DF/HF immediate");
+   }
+
+   if (imm.ud != sat_imm.ud) {
+      reg->dw1.ud = sat_imm.ud;
+      return true;
+   }
+   return false;
+}
+
+bool
+brw_negate_immediate(enum brw_reg_type type, struct brw_reg *reg)
+{
+   switch (type) {
+   case BRW_REGISTER_TYPE_D:
+      reg->dw1.d = -reg->dw1.d;
+      return true;
+   case BRW_REGISTER_TYPE_W:
+      reg->dw1.d = -(int16_t)reg->dw1.ud;
+      return true;
+   case BRW_REGISTER_TYPE_F:
+      reg->dw1.f = -reg->dw1.f;
+      return true;
+   case BRW_REGISTER_TYPE_VF:
+      reg->dw1.ud ^= 0x80808080;
+      return true;
+   case BRW_REGISTER_TYPE_UB:
+   case BRW_REGISTER_TYPE_B:
+      unreachable("no UB/B immediates");
+   case BRW_REGISTER_TYPE_UD:
+   case BRW_REGISTER_TYPE_UW:
+      /* Presumably the negate modifier on an unsigned source is the same as
+       * on a signed source but it would be nice to confirm.
+       */
+      assert(!"unimplemented: negate UD/UW immediate");
+   case BRW_REGISTER_TYPE_UV:
+   case BRW_REGISTER_TYPE_V:
+      assert(!"unimplemented: negate UV/V immediate");
+   case BRW_REGISTER_TYPE_UQ:
+   case BRW_REGISTER_TYPE_Q:
+      assert(!"unimplemented: negate UQ/Q immediate");
+   case BRW_REGISTER_TYPE_DF:
+   case BRW_REGISTER_TYPE_HF:
+      assert(!"unimplemented: negate DF/HF immediate");
+   }
+
+   return false;
+}
+
+bool
+brw_abs_immediate(enum brw_reg_type type, struct brw_reg *reg)
+{
+   switch (type) {
+   case BRW_REGISTER_TYPE_D:
+      reg->dw1.d = abs(reg->dw1.d);
+      return true;
+   case BRW_REGISTER_TYPE_W:
+      reg->dw1.d = abs((int16_t)reg->dw1.ud);
+      return true;
+   case BRW_REGISTER_TYPE_F:
+      reg->dw1.f = fabsf(reg->dw1.f);
+      return true;
+   case BRW_REGISTER_TYPE_VF:
+      reg->dw1.ud &= ~0x80808080;
+      return true;
+   case BRW_REGISTER_TYPE_UB:
+   case BRW_REGISTER_TYPE_B:
+      unreachable("no UB/B immediates");
+   case BRW_REGISTER_TYPE_UQ:
+   case BRW_REGISTER_TYPE_UD:
+   case BRW_REGISTER_TYPE_UW:
+   case BRW_REGISTER_TYPE_UV:
+      /* Presumably the absolute value modifier on an unsigned source is a
+       * nop, but it would be nice to confirm.
+       */
+      assert(!"unimplemented: abs unsigned immediate");
+   case BRW_REGISTER_TYPE_V:
+      assert(!"unimplemented: abs V immediate");
+   case BRW_REGISTER_TYPE_Q:
+      assert(!"unimplemented: abs Q immediate");
+   case BRW_REGISTER_TYPE_DF:
+   case BRW_REGISTER_TYPE_HF:
+      assert(!"unimplemented: abs DF/HF immediate");
+   }
+
+   return false;
 }
 
 backend_visitor::backend_visitor(struct brw_context *brw,
@@ -582,6 +752,12 @@ backend_reg::is_accumulator() const
    return file == HW_REG &&
           fixed_hw_reg.file == BRW_ARCHITECTURE_REGISTER_FILE &&
           fixed_hw_reg.nr == BRW_ARF_ACCUMULATOR;
+}
+
+bool
+backend_instruction::is_3src() const
+{
+   return opcode < ARRAY_SIZE(opcode_descs) && opcode_descs[opcode].nsrc == 3;
 }
 
 bool
@@ -697,6 +873,51 @@ backend_instruction::can_do_saturate() const
 }
 
 bool
+backend_instruction::can_do_cmod() const
+{
+   switch (opcode) {
+   case BRW_OPCODE_ADD:
+   case BRW_OPCODE_ADDC:
+   case BRW_OPCODE_AND:
+   case BRW_OPCODE_ASR:
+   case BRW_OPCODE_AVG:
+   case BRW_OPCODE_CMP:
+   case BRW_OPCODE_CMPN:
+   case BRW_OPCODE_DP2:
+   case BRW_OPCODE_DP3:
+   case BRW_OPCODE_DP4:
+   case BRW_OPCODE_DPH:
+   case BRW_OPCODE_F16TO32:
+   case BRW_OPCODE_F32TO16:
+   case BRW_OPCODE_FRC:
+   case BRW_OPCODE_LINE:
+   case BRW_OPCODE_LRP:
+   case BRW_OPCODE_LZD:
+   case BRW_OPCODE_MAC:
+   case BRW_OPCODE_MACH:
+   case BRW_OPCODE_MAD:
+   case BRW_OPCODE_MOV:
+   case BRW_OPCODE_MUL:
+   case BRW_OPCODE_NOT:
+   case BRW_OPCODE_OR:
+   case BRW_OPCODE_PLN:
+   case BRW_OPCODE_RNDD:
+   case BRW_OPCODE_RNDE:
+   case BRW_OPCODE_RNDU:
+   case BRW_OPCODE_RNDZ:
+   case BRW_OPCODE_SAD2:
+   case BRW_OPCODE_SADA2:
+   case BRW_OPCODE_SHL:
+   case BRW_OPCODE_SHR:
+   case BRW_OPCODE_SUBB:
+   case BRW_OPCODE_XOR:
+      return true;
+   default:
+      return false;
+   }
+}
+
+bool
 backend_instruction::reads_accumulator_implicitly() const
 {
    switch (opcode) {
@@ -715,7 +936,7 @@ backend_instruction::writes_accumulator_implicitly(struct brw_context *brw) cons
    return writes_accumulator ||
           (brw->gen < 6 &&
            ((opcode >= BRW_OPCODE_ADD && opcode < BRW_OPCODE_NOP) ||
-            (opcode >= FS_OPCODE_DDX && opcode <= FS_OPCODE_LINTERP &&
+            (opcode >= FS_OPCODE_DDX_COARSE && opcode <= FS_OPCODE_LINTERP &&
              opcode != FS_OPCODE_CINTERP)));
 }
 
@@ -724,6 +945,8 @@ backend_instruction::has_side_effects() const
 {
    switch (opcode) {
    case SHADER_OPCODE_UNTYPED_ATOMIC:
+   case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
+   case SHADER_OPCODE_URB_WRITE_SIMD8:
    case FS_OPCODE_FB_WRITE:
       return true;
    default:

@@ -72,6 +72,7 @@ d3dadapter9_la_LDFLAGS += \
 endif # HAVE_LD_VERSION_SCRIPT
 
 d3dadapter9_la_LIBADD = \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/state_trackers/nine/libninetracker.la \
 	$(top_builddir)/src/util/libmesautil.la \
@@ -79,6 +80,8 @@ d3dadapter9_la_LIBADD = \
 	$(EXPAT_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
+EXTRA_d3dadapter9_la_DEPENDENCIES = d3dadapter9.sym
+EXTRA_DIST = d3dadapter9.sym
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =

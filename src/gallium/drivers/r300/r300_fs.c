@@ -170,24 +170,10 @@ static void get_external_state(
         }
 
         state->unit[i].non_normalized_coords = !s->state.normalized_coords;
-        state->unit[i].convert_unorm_to_snorm =
-                v->base.format == PIPE_FORMAT_RGTC1_SNORM ||
-                v->base.format == PIPE_FORMAT_LATC1_SNORM;
+        state->unit[i].convert_unorm_to_snorm = 0;
 
         /* Pass texture swizzling to the compiler, some lowering passes need it. */
-        if (v->base.format == PIPE_FORMAT_RGTC1_SNORM ||
-            v->base.format == PIPE_FORMAT_LATC1_SNORM) {
-            unsigned char swizzle[4];
-
-            util_format_compose_swizzles(
-                            util_format_description(v->base.format)->swizzle,
-                            v->swizzle,
-                            swizzle);
-
-            state->unit[i].texture_swizzle =
-                    RC_MAKE_SWIZZLE(swizzle[0], swizzle[1],
-                                    swizzle[2], swizzle[3]);
-        } else if (state->unit[i].compare_mode_enabled) {
+        if (state->unit[i].compare_mode_enabled) {
             state->unit[i].texture_swizzle =
                 RC_MAKE_SWIZZLE(v->swizzle[0], v->swizzle[1],
                                 v->swizzle[2], v->swizzle[3]);

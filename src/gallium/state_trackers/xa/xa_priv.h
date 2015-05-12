@@ -40,7 +40,7 @@
 
 #include "util/u_math.h"
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+#if defined(__GNUC__)
 #define XA_EXPORT __attribute__ ((visibility("default")))
 #else
 #define XA_EXPORT

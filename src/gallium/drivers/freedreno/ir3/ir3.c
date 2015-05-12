@@ -113,6 +113,8 @@ static uint32_t reg(struct ir3_register *reg, struct ir3_info *info,
 
 		if (reg->flags & IR3_REG_CONST) {
 			info->max_const = MAX2(info->max_const, max);
+		} else if (val.num == 63) {
+			/* ignore writes to dummy register r63.x */
 		} else if ((max != REG_A0) && (max != REG_P0)) {
 			if (reg->flags & IR3_REG_HALF) {
 				info->max_half_reg = MAX2(info->max_half_reg, max);
@@ -474,58 +476,40 @@ static int emit_cat5(struct ir3_instruction *instr, void *ptr,
 static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		struct ir3_info *info)
 {
-	struct ir3_register *dst = instr->regs[0];
-	struct ir3_register *src = instr->regs[1];
+	struct ir3_register *dst  = instr->regs[0];
+	struct ir3_register *src1 = instr->regs[1];
+	struct ir3_register *src2 = (instr->regs_count >= 3) ? instr->regs[2] : NULL;
 	instr_cat6_t *cat6 = ptr;
 
-	iassert(instr->regs_count == 2);
+	iassert(instr->regs_count >= 2);
 
-	switch (instr->opc) {
-	/* load instructions: */
-	case OPC_LDG:
-	case OPC_LDP:
-	case OPC_LDL:
-	case OPC_LDLW:
-	case OPC_LDLV:
-	case OPC_PREFETCH: {
+	if (instr->cat6.offset) {
 		instr_cat6a_t *cat6a = ptr;
 
-		iassert(!((dst->flags ^ type_flags(instr->cat6.type)) & IR3_REG_HALF));
+		cat6->has_off = true;
 
-		cat6a->must_be_one1  = 1;
-		cat6a->must_be_one2  = 1;
-		cat6a->off = instr->cat6.offset;
-		cat6a->src = reg(src, info, instr->repeat, 0);
 		cat6a->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
-		break;
-	}
-	/* store instructions: */
-	case OPC_STG:
-	case OPC_STP:
-	case OPC_STL:
-	case OPC_STLW:
-	case OPC_STI: {
+		cat6a->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
+		cat6a->src1_im = !!(src1->flags & IR3_REG_IMMED);
+		if (src2) {
+			cat6a->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
+			cat6a->src2_im = !!(src2->flags & IR3_REG_IMMED);
+		}
+		cat6a->off = instr->cat6.offset;
+	} else {
 		instr_cat6b_t *cat6b = ptr;
-		uint32_t src_flags = type_flags(instr->cat6.type);
-		uint32_t dst_flags = (instr->opc == OPC_STI) ? IR3_REG_HALF : 0;
 
-		iassert(!((src->flags ^ src_flags) & IR3_REG_HALF));
+		cat6->has_off = false;
 
-		cat6b->must_be_one1  = 1;
-		cat6b->must_be_one2  = 1;
-		cat6b->src    = reg(src, info, instr->repeat, src_flags);
-		cat6b->off_hi = instr->cat6.offset >> 8;
-		cat6b->off    = instr->cat6.offset;
-		cat6b->dst    = reg(dst, info, instr->repeat, IR3_REG_R | dst_flags);
-
-		break;
-	}
-	default:
-		// TODO
-		break;
+		cat6b->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
+		cat6b->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
+		cat6b->src1_im = !!(src1->flags & IR3_REG_IMMED);
+		if (src2) {
+			cat6b->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
+			cat6b->src2_im = !!(src2->flags & IR3_REG_IMMED);
+		}
 	}
 
-	cat6->iim_val  = instr->cat6.iim_val;
 	cat6->type     = instr->cat6.type;
 	cat6->opc      = instr->opc;
 	cat6->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
@@ -540,7 +524,8 @@ static int (*emit[])(struct ir3_instruction *instr, void *ptr,
 	emit_cat0, emit_cat1, emit_cat2, emit_cat3, emit_cat4, emit_cat5, emit_cat6,
 };
 
-void * ir3_assemble(struct ir3 *shader, struct ir3_info *info)
+void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
+		uint32_t gpu_id)
 {
 	uint32_t *ptr, *dwords;
 	uint32_t i;
@@ -550,11 +535,15 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info)
 	info->max_const     = -1;
 	info->instrs_count  = 0;
 
-	/* need a integer number of instruction "groups" (sets of four
-	 * instructions), so pad out w/ NOPs if needed:
-	 * (each instruction is 64bits)
+	/* need a integer number of instruction "groups" (sets of 16
+	 * instructions on a4xx or sets of 4 instructions on a3xx),
+	 * so pad out w/ NOPs if needed: (NOTE each instruction is 64bits)
 	 */
-	info->sizedwords = 2 * align(shader->instrs_count, 4);
+	if (gpu_id >= 400) {
+		info->sizedwords = 2 * align(shader->instrs_count, 16);
+	} else {
+		info->sizedwords = 2 * align(shader->instrs_count, 4);
+	}
 
 	ptr = dwords = calloc(4, info->sizedwords);
 
@@ -643,11 +632,27 @@ struct ir3_block * ir3_block_create(struct ir3 *shader,
 	return block;
 }
 
-struct ir3_instruction * ir3_instr_create(struct ir3_block *block,
-		int category, opc_t opc)
+static struct ir3_instruction *instr_create(struct ir3_block *block, int nreg)
 {
-	struct ir3_instruction *instr =
-			ir3_alloc(block->shader, sizeof(struct ir3_instruction));
+	struct ir3_instruction *instr;
+	unsigned sz = sizeof(*instr) + (nreg * sizeof(instr->regs[0]));
+	char *ptr = ir3_alloc(block->shader, sz);
+
+	instr = (struct ir3_instruction *)ptr;
+	ptr  += sizeof(*instr);
+	instr->regs = (struct ir3_register **)ptr;
+
+#ifdef DEBUG
+	instr->regs_max = nreg;
+#endif
+
+	return instr;
+}
+
+struct ir3_instruction * ir3_instr_create2(struct ir3_block *block,
+		int category, opc_t opc, int nreg)
+{
+	struct ir3_instruction *instr = instr_create(block, nreg);
 	instr->block = block;
 	instr->category = category;
 	instr->opc = opc;
@@ -655,13 +660,27 @@ struct ir3_instruction * ir3_instr_create(struct ir3_block *block,
 	return instr;
 }
 
+struct ir3_instruction * ir3_instr_create(struct ir3_block *block,
+		int category, opc_t opc)
+{
+	/* NOTE: we could be slightly more clever, at least for non-meta,
+	 * and choose # of regs based on category.
+	 */
+	return ir3_instr_create2(block, category, opc, 4);
+}
+
+/* only used by old compiler: */
 struct ir3_instruction * ir3_instr_clone(struct ir3_instruction *instr)
 {
-	struct ir3_instruction *new_instr =
-			ir3_alloc(instr->block->shader, sizeof(struct ir3_instruction));
+	struct ir3_instruction *new_instr = instr_create(instr->block,
+			instr->regs_count);
+	struct ir3_register **regs;
 	unsigned i;
 
+	regs = new_instr->regs;
 	*new_instr = *instr;
+	new_instr->regs = regs;
+
 	insert_instr(instr->block->shader, new_instr);
 
 	/* clone registers: */
@@ -680,7 +699,9 @@ struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
 		int num, int flags)
 {
 	struct ir3_register *reg = reg_create(instr->block->shader, num, flags);
-	assert(instr->regs_count < ARRAY_SIZE(instr->regs));
+#ifdef DEBUG
+	debug_assert(instr->regs_count < instr->regs_max);
+#endif
 	instr->regs[instr->regs_count++] = reg;
 	return reg;
 }

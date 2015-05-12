@@ -33,6 +33,7 @@
 
 #include "pipe/p_shader_tokens.h"
 #include "draw_vs.h"
+#include "draw_fs.h"
 #include "draw_pipe.h"
 
 
@@ -41,19 +42,9 @@ struct flat_stage
 {
    struct draw_stage stage;
 
-   uint num_color_attribs;
-   uint color_attribs[2];  /* front/back primary colors */
-
-   uint num_spec_attribs;
-   uint spec_attribs[2];  /* front/back secondary colors */
+   uint num_flat_attribs;
+   uint flat_attribs[PIPE_MAX_SHADER_OUTPUTS];  /* flatshaded attribs */
 };
-
-#define COPY_3FV( DST, SRC )         \
-do {                                \
-   (DST)[0] = (SRC)[0];             \
-   (DST)[1] = (SRC)[1];             \
-   (DST)[2] = (SRC)[2];             \
-} while (0)
 
 
 static INLINE struct flat_stage *
@@ -63,51 +54,41 @@ flat_stage(struct draw_stage *stage)
 }
 
 
-/** Copy all the color attributes from 'src' vertex to 'dst' vertex */
-static INLINE void copy_colors( struct draw_stage *stage,
-                                struct vertex_header *dst,
-                                const struct vertex_header *src )
+/** Copy all the constant attributes from 'src' vertex to 'dst' vertex */
+static INLINE void copy_flats( struct draw_stage *stage,
+                               struct vertex_header *dst,
+                               const struct vertex_header *src )
 {
    const struct flat_stage *flat = flat_stage(stage);
    uint i;
 
-   for (i = 0; i < flat->num_color_attribs; i++) {
-      const uint attr = flat->color_attribs[i];
+   for (i = 0; i < flat->num_flat_attribs; i++) {
+      const uint attr = flat->flat_attribs[i];
       COPY_4FV(dst->data[attr], src->data[attr]);
-   }
-
-   for (i = 0; i < flat->num_spec_attribs; i++) {
-      const uint attr = flat->spec_attribs[i];
-      COPY_3FV(dst->data[attr], src->data[attr]);
    }
 }
 
 
 /** Copy all the color attributes from src vertex to dst0 & dst1 vertices */
-static INLINE void copy_colors2( struct draw_stage *stage,
-                                 struct vertex_header *dst0,
-                                 struct vertex_header *dst1,
-                                 const struct vertex_header *src )
+static INLINE void copy_flats2( struct draw_stage *stage,
+                                struct vertex_header *dst0,
+                                struct vertex_header *dst1,
+                                const struct vertex_header *src )
 {
    const struct flat_stage *flat = flat_stage(stage);
    uint i;
-   for (i = 0; i < flat->num_color_attribs; i++) {
-      const uint attr = flat->color_attribs[i];
+   for (i = 0; i < flat->num_flat_attribs; i++) {
+      const uint attr = flat->flat_attribs[i];
       COPY_4FV(dst0->data[attr], src->data[attr]);
       COPY_4FV(dst1->data[attr], src->data[attr]);
-   }
-
-   for (i = 0; i < flat->num_spec_attribs; i++) {
-      const uint attr = flat->spec_attribs[i];
-      COPY_3FV(dst0->data[attr], src->data[attr]);
-      COPY_3FV(dst1->data[attr], src->data[attr]);
    }
 }
 
 
 /**
- * Flatshade tri.  Required for clipping and when unfilled tris are
- * active, otherwise handled by hardware.
+ * Flatshade tri. Not required for clipping which handles this on its own,
+ * but required for unfilled tris and other primitive-changing stages
+ * (like widelines). If no such stages are active, handled by hardware.
  */
 static void flatshade_tri_0( struct draw_stage *stage,
                              struct prim_header *header )
@@ -121,8 +102,8 @@ static void flatshade_tri_0( struct draw_stage *stage,
    tmp.v[1] = dup_vert(stage, header->v[1], 0);
    tmp.v[2] = dup_vert(stage, header->v[2], 1);
 
-   copy_colors2(stage, tmp.v[1], tmp.v[2], tmp.v[0]);
-   
+   copy_flats2(stage, tmp.v[1], tmp.v[2], tmp.v[0]);
+
    stage->next->tri( stage->next, &tmp );
 }
 
@@ -139,69 +120,143 @@ static void flatshade_tri_2( struct draw_stage *stage,
    tmp.v[1] = dup_vert(stage, header->v[1], 1);
    tmp.v[2] = header->v[2];
 
-   copy_colors2(stage, tmp.v[0], tmp.v[1], tmp.v[2]);
-   
+   copy_flats2(stage, tmp.v[0], tmp.v[1], tmp.v[2]);
+
    stage->next->tri( stage->next, &tmp );
 }
 
 
-
-
-
 /**
- * Flatshade line.  Required for clipping.
+ * Flatshade line.
  */
 static void flatshade_line_0( struct draw_stage *stage,
                               struct prim_header *header )
 {
    struct prim_header tmp;
 
+   tmp.det = header->det;
+   tmp.flags = header->flags;
+   tmp.pad = header->pad;
    tmp.v[0] = header->v[0];
    tmp.v[1] = dup_vert(stage, header->v[1], 0);
 
-   copy_colors(stage, tmp.v[1], tmp.v[0]);
-   
+   copy_flats(stage, tmp.v[1], tmp.v[0]);
+
    stage->next->line( stage->next, &tmp );
 }
+
 
 static void flatshade_line_1( struct draw_stage *stage,
                               struct prim_header *header )
 {
    struct prim_header tmp;
 
+   tmp.det = header->det;
+   tmp.flags = header->flags;
+   tmp.pad = header->pad;
    tmp.v[0] = dup_vert(stage, header->v[0], 0);
    tmp.v[1] = header->v[1];
 
-   copy_colors(stage, tmp.v[0], tmp.v[1]);
-   
+   copy_flats(stage, tmp.v[0], tmp.v[1]);
+
    stage->next->line( stage->next, &tmp );
 }
 
 
+static int
+find_interp(const struct draw_fragment_shader *fs, int *indexed_interp,
+            uint semantic_name, uint semantic_index)
+{
+   int interp;
+   /* If it's gl_{Front,Back}{,Secondary}Color, pick up the mode
+    * from the array we've filled before. */
+   if (semantic_name == TGSI_SEMANTIC_COLOR ||
+       semantic_name == TGSI_SEMANTIC_BCOLOR) {
+      interp = indexed_interp[semantic_index];
+   } else {
+      /* Otherwise, search in the FS inputs, with a decent default
+       * if we don't find it.
+       */
+      uint j;
+      interp = TGSI_INTERPOLATE_PERSPECTIVE;
+      if (fs) {
+         for (j = 0; j < fs->info.num_inputs; j++) {
+            if (semantic_name == fs->info.input_semantic_name[j] &&
+                semantic_index == fs->info.input_semantic_index[j]) {
+               interp = fs->info.input_interpolate[j];
+               break;
+            }
+         }
+      }
+   }
+   return interp;
+}
 
 
 static void flatshade_init_state( struct draw_stage *stage )
 {
    struct flat_stage *flat = flat_stage(stage);
-   const struct draw_vertex_shader *vs = stage->draw->vs.vertex_shader;
-   uint i;
+   const struct draw_context *draw = stage->draw;
+   const struct draw_fragment_shader *fs = draw->fs.fragment_shader;
+   const struct tgsi_shader_info *info = draw_get_shader_info(draw);
+   uint i, j;
 
-   /* Find which vertex shader outputs are colors, make a list */
-   flat->num_color_attribs = 0;
-   flat->num_spec_attribs = 0;
-   for (i = 0; i < vs->info.num_outputs; i++) {
-      if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_COLOR ||
-          vs->info.output_semantic_name[i] == TGSI_SEMANTIC_BCOLOR) {
-         if (vs->info.output_semantic_index[i] == 0)
-            flat->color_attribs[flat->num_color_attribs++] = i;
-         else
-            flat->spec_attribs[flat->num_spec_attribs++] = i;
+   /* Find which vertex shader outputs need constant interpolation, make a list */
+
+   /* XXX: this code is a near exact copy of the one in clip_init_state.
+    * The latter also cares about perspective though.
+    */
+
+   /* First pick up the interpolation mode for
+    * gl_Color/gl_SecondaryColor, with the correct default.
+    */
+   int indexed_interp[2];
+   indexed_interp[0] = indexed_interp[1] = draw->rasterizer->flatshade ?
+      TGSI_INTERPOLATE_CONSTANT : TGSI_INTERPOLATE_PERSPECTIVE;
+
+   if (fs) {
+      for (i = 0; i < fs->info.num_inputs; i++) {
+         if (fs->info.input_semantic_name[i] == TGSI_SEMANTIC_COLOR) {
+            if (fs->info.input_interpolate[i] != TGSI_INTERPOLATE_COLOR)
+               indexed_interp[fs->info.input_semantic_index[i]] = fs->info.input_interpolate[i];
+         }
+      }
+   }
+
+   /* Then resolve the interpolation mode for every output attribute.
+    *
+    * Given how the rest of the code, the most efficient way is to
+    * have a vector of flat-mode attributes.
+    */
+   flat->num_flat_attribs = 0;
+   for (i = 0; i < info->num_outputs; i++) {
+      /* Find the interpolation mode for a specific attribute */
+      int interp = find_interp(fs, indexed_interp,
+                               info->output_semantic_name[i],
+                               info->output_semantic_index[i]);
+      /* If it's flat, add it to the flat vector. */
+
+      if (interp == TGSI_INTERPOLATE_CONSTANT) {
+         flat->flat_attribs[flat->num_flat_attribs] = i;
+         flat->num_flat_attribs++;
+      }
+   }
+   /* Search the extra vertex attributes */
+   for (j = 0; j < draw->extra_shader_outputs.num; j++) {
+      /* Find the interpolation mode for a specific attribute */
+      int interp = find_interp(fs, indexed_interp,
+                               draw->extra_shader_outputs.semantic_name[j],
+                               draw->extra_shader_outputs.semantic_index[j]);
+      /* If it's flat, add it to the flat vector. */
+      if (interp == TGSI_INTERPOLATE_CONSTANT) {
+         flat->flat_attribs[flat->num_flat_attribs] = i + j;
+         flat->num_flat_attribs++;
       }
    }
 
    /* Choose flatshade routine according to provoking vertex:
     */
-   if (stage->draw->rasterizer->flatshade_first) {
+   if (draw->rasterizer->flatshade_first) {
       stage->line = flatshade_line_0;
       stage->tri = flatshade_tri_0;
    }
@@ -212,14 +267,14 @@ static void flatshade_init_state( struct draw_stage *stage )
 }
 
 static void flatshade_first_tri( struct draw_stage *stage,
-				 struct prim_header *header )
+                                 struct prim_header *header )
 {
    flatshade_init_state( stage );
    stage->tri( stage, header );
 }
 
 static void flatshade_first_line( struct draw_stage *stage,
-				  struct prim_header *header )
+                                  struct prim_header *header )
 {
    flatshade_init_state( stage );
    stage->line( stage, header );
@@ -227,7 +282,7 @@ static void flatshade_first_line( struct draw_stage *stage,
 
 
 static void flatshade_flush( struct draw_stage *stage, 
-			     unsigned flags )
+                             unsigned flags )
 {
    stage->tri = flatshade_first_tri;
    stage->line = flatshade_first_line;

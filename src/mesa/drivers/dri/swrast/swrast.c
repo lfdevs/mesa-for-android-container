@@ -54,6 +54,7 @@
 
 #include "main/teximage.h"
 #include "main/texformat.h"
+#include "main/texobj.h"
 #include "main/texstate.h"
 
 #include "swrast_priv.h"
@@ -61,8 +62,8 @@
 
 const __DRIextension **__driDriverGetExtensions_swrast(void);
 
-const char const *swrast_vendor_string = "Mesa Project";
-const char const *swrast_renderer_string = "Software Rasterizer";
+const char * const swrast_vendor_string = "Mesa Project";
+const char * const swrast_renderer_string = "Software Rasterizer";
 
 /**
  * Screen and config-related functions

@@ -69,8 +69,16 @@ NineBaseTexture9_ctor( struct NineBaseTexture9 *This,
         D3DTEXF_LINEAR : D3DTEXF_NONE;
     This->lod = 0;
     This->lod_resident = -1;
-    This->shadow = This->format != D3DFMT_INTZ && util_format_has_depth(
-        util_format_description(This->base.info.format));
+    /* When a depth buffer is sampled, it is for shadow mapping, except for
+     * D3DFMT_INTZ, D3DFMT_DF16 and D3DFMT_DF24.
+     * In addition D3DFMT_INTZ can be used for both texturing and depth buffering
+     * if z write is disabled. This particular feature may not work for us in
+     * practice because OGL doesn't have that. However apparently it is known
+     * some cards have performance issues with this feature, so real apps
+     * shouldn't use it. */
+    This->shadow = (This->format != D3DFMT_INTZ && This->format != D3DFMT_DF16 &&
+                    This->format != D3DFMT_DF24) &&
+                   util_format_has_depth(util_format_description(This->base.info.format));
 
     list_inithead(&This->list);
 
@@ -85,7 +93,8 @@ NineBaseTexture9_dtor( struct NineBaseTexture9 *This )
     pipe_sampler_view_reference(&This->view[0], NULL);
     pipe_sampler_view_reference(&This->view[1], NULL);
 
-    list_del(&This->list),
+    if (This->list.prev != NULL && This->list.next != NULL)
+        list_del(&This->list),
 
     NineResource9_dtor(&This->base);
 }
@@ -436,14 +445,21 @@ NineBaseTexture9_CreatePipeResource( struct NineBaseTexture9 *This,
     return D3D_OK;
 }
 
+#define SWIZZLE_TO_REPLACE(s) (s == UTIL_FORMAT_SWIZZLE_0 || \
+                               s == UTIL_FORMAT_SWIZZLE_1 || \
+                               s == UTIL_FORMAT_SWIZZLE_NONE)
+
 HRESULT
 NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
                                     const int sRGB )
 {
     const struct util_format_description *desc;
     struct pipe_context *pipe = This->pipe;
+    struct pipe_screen *screen = pipe->screen;
     struct pipe_resource *resource = This->base.resource;
     struct pipe_sampler_view templ;
+    enum pipe_format srgb_format;
+    unsigned i;
     uint8_t swizzle[4];
 
     DBG("This=%p sRGB=%d\n", This, sRGB);
@@ -452,6 +468,9 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
 	if (unlikely(This->format == D3DFMT_NULL))
             return D3D_OK;
         NineBaseTexture9_Dump(This);
+        /* hack due to incorrect POOL_MANAGED handling */
+        NineBaseTexture9_GenerateMipSubLevels(This);
+        resource = This->base.resource;
     }
     assert(resource);
 
@@ -463,25 +482,49 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
     swizzle[3] = PIPE_SWIZZLE_ALPHA;
     desc = util_format_description(resource->format);
     if (desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
-        /* ZZZ1 -> 0Z01 (see end of docs/source/tgsi.rst)
-         * XXX: but it's wrong
-        swizzle[0] = PIPE_SWIZZLE_ZERO;
-        swizzle[2] = PIPE_SWIZZLE_ZERO; */
-    } else
-    if (desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_X &&
-        desc->swizzle[3] == UTIL_FORMAT_SWIZZLE_1) {
-        /* R001/RG01 -> R111/RG11 */
-        if (desc->swizzle[1] == UTIL_FORMAT_SWIZZLE_0)
-            swizzle[1] = PIPE_SWIZZLE_ONE;
-        if (desc->swizzle[2] == UTIL_FORMAT_SWIZZLE_0)
-            swizzle[2] = PIPE_SWIZZLE_ONE;
+        /* msdn doc is incomplete here and wrong.
+         * The only formats that can be read directly here
+         * are DF16, DF24 and INTZ.
+         * Tested on win the swizzle is
+         * R = depth, G = B = 0, A = 1 for DF16 and DF24
+         * R = G = B = A = depth for INTZ
+         * For the other ZS formats that can't be read directly
+         * but can be used as shadow map, the result is duplicated on
+         * all channel */
+        if (This->format == D3DFMT_DF16 ||
+            This->format == D3DFMT_DF24) {
+            swizzle[1] = PIPE_SWIZZLE_ZERO;
+            swizzle[2] = PIPE_SWIZZLE_ZERO;
+            swizzle[3] = PIPE_SWIZZLE_ONE;
+        } else {
+            swizzle[1] = PIPE_SWIZZLE_RED;
+            swizzle[2] = PIPE_SWIZZLE_RED;
+            swizzle[3] = PIPE_SWIZZLE_RED;
+        }
+    } else if (resource->format != PIPE_FORMAT_A8_UNORM &&
+               resource->format != PIPE_FORMAT_RGTC1_UNORM) {
+        /* exceptions:
+         * A8 should have 0.0 as default values for RGB.
+         * ATI1/RGTC1 should be r 0 0 1 (tested on windows).
+         * It is already what gallium does. All the other ones
+         * should have 1.0 for non-defined values */
+        for (i = 0; i < 4; i++) {
+            if (SWIZZLE_TO_REPLACE(desc->swizzle[i]))
+                swizzle[i] = PIPE_SWIZZLE_ONE;
+        }
     }
-    /* but 000A remains unchanged */
 
-    templ.format = sRGB ? util_format_srgb(resource->format) : resource->format;
+    /* if requested and supported, convert to the sRGB format */
+    srgb_format = util_format_srgb(resource->format);
+    if (sRGB && srgb_format != PIPE_FORMAT_NONE &&
+        screen->is_format_supported(screen, srgb_format,
+                                    resource->target, 0, resource->bind))
+        templ.format = srgb_format;
+    else
+        templ.format = resource->format;
     templ.u.tex.first_layer = 0;
-    templ.u.tex.last_layer = (resource->target == PIPE_TEXTURE_CUBE) ?
-        5 : (This->base.info.depth0 - 1);
+    templ.u.tex.last_layer = resource->target == PIPE_TEXTURE_3D ?
+                             resource->depth0 - 1 : resource->array_size - 1;
     templ.u.tex.first_level = 0;
     templ.u.tex.last_level = resource->last_level;
     templ.swizzle_r = swizzle[0];

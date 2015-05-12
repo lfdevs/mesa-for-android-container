@@ -137,7 +137,7 @@ fd_verttex_set_sampler_views(struct pipe_context *pctx, unsigned nr,
 	ctx->dirty |= FD_DIRTY_VERTTEX;
 }
 
-static void
+void
 fd_set_sampler_views(struct pipe_context *pctx, unsigned shader,
                      unsigned start, unsigned nr,
                      struct pipe_sampler_view **views)
@@ -161,6 +161,4 @@ fd_texture_init(struct pipe_context *pctx)
 	pctx->delete_sampler_state = fd_sampler_state_delete;
 
 	pctx->sampler_view_destroy = fd_sampler_view_destroy;
-
-	pctx->set_sampler_views = fd_set_sampler_views;
 }

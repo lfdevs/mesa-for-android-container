@@ -29,6 +29,10 @@
 #  define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 #endif
 
+/* For compatibility with Clang's __has_builtin() */
+#ifndef __has_builtin
+#  define __has_builtin(x) 0
+#endif
 
 /**
  * __builtin_expect macros
@@ -78,14 +82,20 @@ do {                        \
 #endif
 
 #ifndef unreachable
-#define unreachable(str)
+#define unreachable(str) assert(!str)
 #endif
 
 /**
  * Assume macro. Useful for expressing our assumptions to the compiler,
  * typically for purposes of silencing warnings.
  */
-#ifdef HAVE___BUILTIN_UNREACHABLE
+#if __has_builtin(__builtin_assume)
+#define assume(expr)       \
+do {                       \
+   assert(expr);           \
+   __builtin_assume(expr); \
+} while (0)
+#elif defined HAVE___BUILTIN_UNREACHABLE
 #define assume(expr) ((expr) ? ((void) 0) \
                              : (assert(!"assumption failed"), \
                                 __builtin_unreachable()))

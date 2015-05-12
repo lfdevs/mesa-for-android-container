@@ -77,10 +77,13 @@ struct NineDevice9
 
     struct pipe_resource *constbuf_vs;
     struct pipe_resource *constbuf_ps;
+    uint16_t vs_const_size;
+    uint16_t ps_const_size;
     uint16_t max_vs_const_f;
     uint16_t max_ps_const_f;
-    uint32_t vs_bool_true;
-    uint32_t ps_bool_true;
+
+    struct pipe_resource *dummy_texture;
+    struct pipe_sampler_view *dummy_sampler;
 
     struct gen_mipmap_state *gen_mipmap;
 
@@ -111,6 +114,8 @@ struct NineDevice9
         boolean user_vbufs;
         boolean user_ibufs;
         boolean window_space_position_support;
+        boolean vs_integer;
+        boolean ps_integer;
     } driver_caps;
 
     struct u_upload_mgr *upload;
@@ -118,6 +123,10 @@ struct NineDevice9
     struct nine_range_pool range_pool;
 
     struct hud_context *hud; /* NULL if hud is disabled */
+
+    /* dummy vbo (containing 0 0 0 0) to bind if vertex shader input
+     * is not bound to anything by the vertex declaration */
+    struct pipe_resource *dummy_vbo;
 };
 static INLINE struct NineDevice9 *
 NineDevice9( void *data )

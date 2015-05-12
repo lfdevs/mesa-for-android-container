@@ -60,12 +60,14 @@ PUSH_REFN(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t flags)
 #define NVE4_P2MF(n) SUBC_P2MF(NVE4_P2MF_##n)
 
 #define SUBC_2D(m) 3, (m)
-#define NVC0_2D(n) SUBC_2D(NVC0_2D_##n)
+#define NVC0_2D(n) SUBC_2D(NV50_2D_##n)
 
 #define SUBC_COPY(m) 4, (m)
 #define NVE4_COPY(m) SUBC_COPY(NVE4_COPY_##n)
 
 #define SUBC_SW(m) 7, (m)
+
+#define NVC0_3D_SERIALIZE NV50_GRAPH_SERIALIZE
 
 static INLINE uint32_t
 NVC0_FIFO_PKHDR_SQ(int subc, int mthd, unsigned size)

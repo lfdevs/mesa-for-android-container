@@ -468,6 +468,11 @@ dd_configuration(enum drm_conf conf)
       return configuration_query(conf);
    else
 #endif
+#if defined(GALLIUM_VC4)
+   if (strcmp(driver_name, "vc4") == 0)
+      return configuration_query(conf);
+   else
+#endif
       return NULL;
 }
 #endif /* INLINE_DRM_HELPER_H */

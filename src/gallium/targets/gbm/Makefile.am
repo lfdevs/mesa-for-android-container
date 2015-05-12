@@ -33,6 +33,7 @@ gbm_gallium_drm_la_SOURCES =
 
 gbm_gallium_drm_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/gbm/libgbm.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(LIBDRM_LIBS) \
@@ -49,6 +50,9 @@ if HAVE_LD_VERSION_SCRIPT
 gbm_gallium_drm_la_LDFLAGS += \
 	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/gbm/gbm.sym
 endif
+
+EXTRA_gbm_gallium_drm_la_DEPENDENCIES = gbm.sym
+EXTRA_DIST = gallium-gbm-symbols-check gbm.sym
 
 if HAVE_GALLIUM_STATIC_TARGETS
 

@@ -34,6 +34,7 @@
 #include "si_state.h"
 
 struct radeon_shader_binary;
+struct radeon_shader_reloc;
 
 #define SI_SGPR_RW_BUFFERS	0  /* rings (& stream-out, VS only) */
 #define SI_SGPR_CONST		2
@@ -123,8 +124,8 @@ union si_shader_key {
 		unsigned	last_cbuf:3;
 		unsigned	color_two_side:1;
 		unsigned	alpha_func:3;
-		unsigned	flatshade:1;
 		unsigned	alpha_to_one:1;
+		unsigned	poly_stipple:1;
 	} ps;
 	struct {
 		unsigned	instance_divisors[SI_NUM_VERTEX_BUFFERS];
@@ -143,6 +144,7 @@ struct si_shader {
 	struct si_pm4_state		*pm4;
 	struct r600_resource		*bo;
 	struct r600_resource		*scratch_bo;
+	struct radeon_shader_binary	binary;
 	unsigned			num_sgprs;
 	unsigned			num_vgprs;
 	unsigned			lds_size;
@@ -159,14 +161,16 @@ struct si_shader {
 	unsigned		ps_input_param_offset[PIPE_MAX_SHADER_INPUTS];
 
 	bool			uses_instanceid;
-	bool			vs_out_misc_write;
-	bool			vs_out_point_size;
-	bool			vs_out_edgeflag;
-	bool			vs_out_layer;
 	unsigned		nr_pos_exports;
-	unsigned		clip_dist_write;
 	bool			is_gs_copy_shader;
+	bool			dx10_clamp_mode; /* convert NaNs to 0 */
 };
+
+static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
+{
+	return sctx->gs_shader ? &sctx->gs_shader->info
+                               : &sctx->vs_shader->info;
+}
 
 static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 {
@@ -177,14 +181,18 @@ static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 }
 
 /* radeonsi_shader.c */
-int si_shader_create(struct si_screen *sscreen, struct si_shader *shader);
+int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
+		     struct si_shader *shader);
 int si_compile_llvm(struct si_screen *sscreen, struct si_shader *shader,
-		    LLVMModuleRef mod);
+		    LLVMTargetMachineRef tm, LLVMModuleRef mod);
 void si_shader_destroy(struct pipe_context *ctx, struct si_shader *shader);
 unsigned si_shader_io_get_unique_index(unsigned semantic_name, unsigned index);
 int si_shader_binary_read(struct si_screen *sscreen, struct si_shader *shader,
 		const struct radeon_shader_binary *binary);
-void si_shader_binary_read_config(const struct radeon_shader_binary *binary,
+void si_shader_apply_scratch_relocs(struct si_context *sctx,
+			struct si_shader *shader,
+			uint64_t scratch_va);
+void si_shader_binary_read_config(const struct si_screen *sscreen,
 				struct si_shader *shader,
 				unsigned symbol_offset);
 

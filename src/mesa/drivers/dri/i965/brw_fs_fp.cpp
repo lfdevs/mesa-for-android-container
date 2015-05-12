@@ -105,7 +105,7 @@ fs_visitor::emit_fp_scalar_math(enum opcode opcode,
                                 const struct prog_instruction *fpi,
                                 fs_reg dst, fs_reg src)
 {
-   fs_reg temp = fs_reg(this, glsl_type::float_type);
+   fs_reg temp = vgrf(glsl_type::float_type);
    emit_math(opcode, temp, src);
    emit_fp_scalar_write(fpi, dst, temp);
 }
@@ -125,14 +125,12 @@ fs_visitor::emit_fragment_program_code()
     * mov    dst 0.0
     * mov.f0 dst 1.0
     */
-   fs_reg one = fs_reg(this, glsl_type::float_type);
+   fs_reg one = vgrf(glsl_type::float_type);
    emit(MOV(one, fs_reg(1.0f)));
 
    for (unsigned int insn = 0; insn < prog->NumInstructions; insn++) {
       const struct prog_instruction *fpi = &prog->Instructions[insn];
       base_ir = fpi;
-
-      //_mesa_print_instruction(fpi);
 
       fs_reg dst;
       fs_reg src[3];
@@ -140,7 +138,7 @@ fs_visitor::emit_fragment_program_code()
       /* We always emit into a temporary destination register to avoid
        * aliasing issues.
        */
-      dst = fs_reg(this, glsl_type::vec4_type);
+      dst = vgrf(glsl_type::vec4_type);
 
       for (int i = 0; i < 3; i++)
          src[i] = get_fp_src_reg(&fpi->SrcReg[i]);
@@ -179,8 +177,8 @@ fs_visitor::emit_fragment_program_code()
       case OPCODE_DP3:
       case OPCODE_DP4:
       case OPCODE_DPH: {
-         fs_reg mul = fs_reg(this, glsl_type::float_type);
-         fs_reg acc = fs_reg(this, glsl_type::float_type);
+         fs_reg mul = vgrf(glsl_type::float_type);
+         fs_reg acc = vgrf(glsl_type::float_type);
          int count;
 
          switch (fpi->Opcode) {
@@ -318,7 +316,7 @@ fs_visitor::emit_fragment_program_code()
       case OPCODE_MAD:
          for (int i = 0; i < 4; i++) {
             if (fpi->DstReg.WriteMask & (1 << i)) {
-               fs_reg temp = fs_reg(this, glsl_type::float_type);
+               fs_reg temp = vgrf(glsl_type::float_type);
                emit(MUL(temp, offset(src[0], i), offset(src[1], i)));
                emit(ADD(offset(dst, i), temp, offset(src[2], i)));
             }
@@ -342,7 +340,7 @@ fs_visitor::emit_fragment_program_code()
          break;
 
       case OPCODE_POW: {
-         fs_reg temp = fs_reg(this, glsl_type::float_type);
+         fs_reg temp = vgrf(glsl_type::float_type);
          emit_math(SHADER_OPCODE_POW, temp, src[0], src[1]);
          emit_fp_scalar_write(fpi, dst, temp);
          break;
@@ -406,8 +404,8 @@ fs_visitor::emit_fragment_program_code()
          case OPCODE_TXP: {
             op = ir_tex;
 
-            coordinate = fs_reg(this, glsl_type::vec3_type);
-            fs_reg invproj = fs_reg(this, glsl_type::float_type);
+            coordinate = vgrf(glsl_type::vec3_type);
+            fs_reg invproj = vgrf(glsl_type::float_type);
             emit_math(SHADER_OPCODE_RCP, invproj, offset(src[0], 3));
             for (int i = 0; i < 3; i++) {
                emit(MUL(offset(coordinate, i),
@@ -423,29 +421,29 @@ fs_visitor::emit_fragment_program_code()
             unreachable("not reached");
          }
 
-         const glsl_type *coordinate_type;
+         int coord_components;
          switch (fpi->TexSrcTarget) {
          case TEXTURE_1D_INDEX:
-            coordinate_type = glsl_type::float_type;
+            coord_components = 1;
             break;
 
          case TEXTURE_2D_INDEX:
          case TEXTURE_1D_ARRAY_INDEX:
          case TEXTURE_RECT_INDEX:
          case TEXTURE_EXTERNAL_INDEX:
-            coordinate_type = glsl_type::vec2_type;
+            coord_components = 2;
             break;
 
          case TEXTURE_3D_INDEX:
          case TEXTURE_2D_ARRAY_INDEX:
-            coordinate_type = glsl_type::vec3_type;
+            coord_components = 3;
             break;
 
          case TEXTURE_CUBE_INDEX: {
-            coordinate_type = glsl_type::vec3_type;
+            coord_components = 4;
 
-            fs_reg temp = fs_reg(this, glsl_type::float_type);
-            fs_reg cubecoord = fs_reg(this, glsl_type::vec3_type);
+            fs_reg temp = vgrf(glsl_type::float_type);
+            fs_reg cubecoord = vgrf(glsl_type::vec3_type);
             fs_reg abscoord = coordinate;
             abscoord.negate = false;
             abscoord.abs = true;
@@ -470,7 +468,7 @@ fs_visitor::emit_fragment_program_code()
          if (fpi->TexShadow)
             shadow_c = offset(coordinate, 2);
 
-         emit_texture(op, glsl_type::vec4_type, coordinate, coordinate_type,
+         emit_texture(op, glsl_type::vec4_type, coordinate, coord_components,
                       shadow_c, lod, dpdy, 0, sample_index,
                       reg_undef, 0, /* offset, components */
                       reg_undef, /* mcs */
@@ -497,7 +495,7 @@ fs_visitor::emit_fragment_program_code()
                int i1 = (i + 1) % 3;
                int i2 = (i + 2) % 3;
 
-               fs_reg temp = fs_reg(this, glsl_type::float_type);
+               fs_reg temp = vgrf(glsl_type::float_type);
                fs_reg neg_src1_1 = offset(src[1], i1);
                neg_src1_1.negate = !neg_src1_1.negate;
                emit(MUL(temp, offset(src[0], i2), neg_src1_1));
@@ -539,7 +537,7 @@ fs_visitor::emit_fragment_program_code()
     */
    this->current_annotation = "result.depth write";
    if (frag_depth.file != BAD_FILE) {
-      fs_reg temp = fs_reg(this, glsl_type::float_type);
+      fs_reg temp = vgrf(glsl_type::float_type);
       emit(MOV(temp, offset(frag_depth, 2)));
       frag_depth = temp;
    }
@@ -552,7 +550,7 @@ fs_visitor::setup_fp_regs()
    int num_temp = prog->NumTemporaries;
    fp_temp_regs = rzalloc_array(mem_ctx, fs_reg, num_temp);
    for (int i = 0; i < num_temp; i++)
-      fp_temp_regs[i] = fs_reg(this, glsl_type::vec4_type);
+      fp_temp_regs[i] = vgrf(glsl_type::vec4_type);
 
    /* PROGRAM_STATE_VAR etc. */
    if (dispatch_width == 8) {
@@ -568,14 +566,6 @@ fs_visitor::setup_fp_regs()
    fp_input_regs = rzalloc_array(mem_ctx, fs_reg, VARYING_SLOT_MAX);
    for (int i = 0; i < VARYING_SLOT_MAX; i++) {
       if (prog->InputsRead & BITFIELD64_BIT(i)) {
-         /* Make up a dummy instruction to reuse code for emitting
-          * interpolation.
-          */
-         ir_variable *ir = new(mem_ctx) ir_variable(glsl_type::vec4_type,
-                                                    "fp_input",
-                                                    ir_var_shader_in);
-         ir->data.location = i;
-
          this->current_annotation = ralloc_asprintf(ctx, "interpolate input %d",
                                                     i);
 
@@ -584,16 +574,20 @@ fs_visitor::setup_fp_regs()
             {
                assert(stage == MESA_SHADER_FRAGMENT);
                gl_fragment_program *fp = (gl_fragment_program*) prog;
-               ir->data.pixel_center_integer = fp->PixelCenterInteger;
-               ir->data.origin_upper_left = fp->OriginUpperLeft;
+               fp_input_regs[i] =
+                  *emit_fragcoord_interpolation(fp->PixelCenterInteger,
+                                                fp->OriginUpperLeft);
             }
-            fp_input_regs[i] = *emit_fragcoord_interpolation(ir);
             break;
          case VARYING_SLOT_FACE:
             fp_input_regs[i] = *emit_frontfacing_interpolation();
             break;
          default:
-            fp_input_regs[i] = *emit_general_interpolation(ir);
+            fp_input_regs[i] = vgrf(glsl_type::vec4_type);
+            emit_general_interpolation(fp_input_regs[i], "fp_input",
+                                       glsl_type::vec4_type,
+                                       INTERP_QUALIFIER_NONE,
+                                       i, false, false);
 
             if (i == VARYING_SLOT_FOGC) {
                emit(MOV(offset(fp_input_regs[i], 1), fs_reg(0.0f)));
@@ -622,11 +616,11 @@ fs_visitor::get_fp_dst_reg(const prog_dst_register *dst)
    case PROGRAM_OUTPUT:
       if (dst->Index == FRAG_RESULT_DEPTH) {
          if (frag_depth.file == BAD_FILE)
-            frag_depth = fs_reg(this, glsl_type::vec4_type);
+            frag_depth = vgrf(glsl_type::vec4_type);
          return frag_depth;
       } else if (dst->Index == FRAG_RESULT_COLOR) {
          if (outputs[0].file == BAD_FILE) {
-            outputs[0] = fs_reg(this, glsl_type::vec4_type);
+            outputs[0] = vgrf(glsl_type::vec4_type);
             output_components[0] = 4;
 
             /* Tell emit_fb_writes() to smear fragment.color across all the
@@ -641,7 +635,7 @@ fs_visitor::get_fp_dst_reg(const prog_dst_register *dst)
       } else {
          int output_index = dst->Index - FRAG_RESULT_DATA0;
          if (outputs[output_index].file == BAD_FILE) {
-            outputs[output_index] = fs_reg(this, glsl_type::vec4_type);
+            outputs[output_index] = vgrf(glsl_type::vec4_type);
          }
          output_components[output_index] = 4;
          return outputs[output_index];
@@ -653,7 +647,7 @@ fs_visitor::get_fp_dst_reg(const prog_dst_register *dst)
    default:
       _mesa_problem(ctx, "bad dst register file: %s\n",
                     _mesa_register_file_name((gl_register_file)dst->File));
-      return fs_reg(this, glsl_type::vec4_type);
+      return vgrf(glsl_type::vec4_type);
    }
 }
 
@@ -686,7 +680,7 @@ fs_visitor::get_fp_src_reg(const prog_src_register *src)
        */
       switch (plist->Parameters[src->Index].Type) {
       case PROGRAM_CONSTANT: {
-         result = fs_reg(this, glsl_type::vec4_type);
+         result = vgrf(glsl_type::vec4_type);
 
          for (int i = 0; i < 4; i++) {
             emit(MOV(offset(result, i),
@@ -703,19 +697,19 @@ fs_visitor::get_fp_src_reg(const prog_src_register *src)
       default:
          _mesa_problem(ctx, "bad uniform src register file: %s\n",
                        _mesa_register_file_name((gl_register_file)src->File));
-         return fs_reg(this, glsl_type::vec4_type);
+         return vgrf(glsl_type::vec4_type);
       }
       break;
 
    default:
       _mesa_problem(ctx, "bad src register file: %s\n",
                     _mesa_register_file_name((gl_register_file)src->File));
-      return fs_reg(this, glsl_type::vec4_type);
+      return vgrf(glsl_type::vec4_type);
    }
 
    if (src->Swizzle != SWIZZLE_NOOP || src->Negate) {
       fs_reg unswizzled = result;
-      result = fs_reg(this, glsl_type::vec4_type);
+      result = vgrf(glsl_type::vec4_type);
       for (int i = 0; i < 4; i++) {
          bool negate = src->Negate & (1 << i);
          /* The ZERO, ONE, and Negate options are only used for OPCODE_SWZ,

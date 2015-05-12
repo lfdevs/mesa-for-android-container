@@ -33,7 +33,7 @@ static void
 upload_sbe_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   /* CACHE_NEW_WM_PROG */
+   /* BRW_NEW_FS_PROG_DATA */
    uint32_t num_outputs = brw->wm.prog_data->num_varying_inputs;
    uint32_t dw1;
    uint32_t point_sprite_enables;
@@ -61,7 +61,7 @@ upload_sbe_state(struct brw_context *brw)
    dw1 |= point_sprite_origin;
 
    /* BRW_NEW_VUE_MAP_GEOM_OUT | BRW_NEW_FRAGMENT_PROGRAM
-    * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | CACHE_NEW_WM_PROG
+    * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | BRW_NEW_FS_PROG_DATA
     */
    uint32_t urb_entry_read_length;
    calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
@@ -87,16 +87,16 @@ upload_sbe_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen7_sbe_state = {
    .dirty = {
-      .mesa  = (_NEW_BUFFERS |
-		_NEW_LIGHT |
-		_NEW_POINT |
-		_NEW_PROGRAM),
-      .brw   = (BRW_NEW_CONTEXT |
-                BRW_NEW_FRAGMENT_PROGRAM |
-                BRW_NEW_GEOMETRY_PROGRAM |
-                BRW_NEW_PRIMITIVE |
-                BRW_NEW_VUE_MAP_GEOM_OUT),
-      .cache = CACHE_NEW_WM_PROG
+      .mesa  = _NEW_BUFFERS |
+               _NEW_LIGHT |
+               _NEW_POINT |
+               _NEW_PROGRAM,
+      .brw   = BRW_NEW_CONTEXT |
+               BRW_NEW_FRAGMENT_PROGRAM |
+               BRW_NEW_FS_PROG_DATA |
+               BRW_NEW_GEOMETRY_PROGRAM |
+               BRW_NEW_PRIMITIVE |
+               BRW_NEW_VUE_MAP_GEOM_OUT,
    },
    .emit = upload_sbe_state,
 };
@@ -242,22 +242,21 @@ upload_sf_state(struct brw_context *brw)
    OUT_BATCH(dw3);
    OUT_BATCH_F(ctx->Polygon.OffsetUnits * 2); /* constant.  copied from gen4 */
    OUT_BATCH_F(ctx->Polygon.OffsetFactor); /* scale */
-   OUT_BATCH_F(0.0); /* XXX: global depth offset clamp */
+   OUT_BATCH_F(ctx->Polygon.OffsetClamp); /* global depth offset clamp */
    ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state gen7_sf_state = {
    .dirty = {
-      .mesa  = (_NEW_LIGHT |
-		_NEW_PROGRAM |
-		_NEW_POLYGON |
-		_NEW_LINE |
-		_NEW_SCISSOR |
-		_NEW_BUFFERS |
-		_NEW_POINT |
-                _NEW_MULTISAMPLE),
+      .mesa  = _NEW_BUFFERS |
+               _NEW_LIGHT |
+               _NEW_LINE |
+               _NEW_MULTISAMPLE |
+               _NEW_POINT |
+               _NEW_POLYGON |
+               _NEW_PROGRAM |
+               _NEW_SCISSOR,
       .brw   = BRW_NEW_CONTEXT,
-      .cache = 0,
    },
    .emit = upload_sf_state,
 };

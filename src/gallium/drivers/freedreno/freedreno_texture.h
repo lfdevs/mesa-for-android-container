@@ -35,6 +35,10 @@ void fd_sampler_states_bind(struct pipe_context *pctx,
 		unsigned shader, unsigned start,
 		unsigned nr, void **hwcso);
 
+void fd_set_sampler_views(struct pipe_context *pctx, unsigned shader,
+						  unsigned start, unsigned nr,
+						  struct pipe_sampler_view **views);
+
 void fd_texture_init(struct pipe_context *pctx);
 
 #endif /* FREEDRENO_TEXTURE_H_ */

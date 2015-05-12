@@ -98,7 +98,7 @@
 #define     PKT3_WRITE_DATA_DST_SEL(x)             ((x) << 8)
 #define     PKT3_WRITE_DATA_DST_SEL_REG            0
 #define     PKT3_WRITE_DATA_DST_SEL_MEM_SYNC       1
-#define     PKT3_WRITE_DATA_DST_SEL_TC_OR_L2       2
+#define     PKT3_WRITE_DATA_DST_SEL_TC_L2          2
 #define     PKT3_WRITE_DATA_DST_SEL_GDS            3
 #define     PKT3_WRITE_DATA_DST_SEL_RESERVED_4     4
 #define     PKT3_WRITE_DATA_DST_SEL_MEM_ASYNC      5
@@ -164,10 +164,12 @@
 /* 0 - SRC_ADDR
  * 1 - GDS (program SAS to 1 as well)
  * 2 - DATA
+ * 3 - SRC_ADDR using TC L2 (DMA_DATA only)
  */
 #define PKT3_CP_DMA_DST_SEL(x)       ((x) << 20)
 /* 0 - DST_ADDR
  * 1 - GDS (program DAS to 1 as well)
+ * 3 - DST_ADDR using TC L2 (DMA_DATA only)
  */
 /* COMMAND */
 #define PKT3_CP_DMA_CMD_SRC_SWAP(x) ((x) << 23)

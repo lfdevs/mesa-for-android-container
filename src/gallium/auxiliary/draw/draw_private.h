@@ -252,6 +252,7 @@ struct draw_context
 
    struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    boolean identity_viewport;
+   boolean bypass_viewport;
 
    /** Vertex shader state */
    struct {
@@ -478,6 +479,9 @@ void
 draw_stats_clipper_primitives(struct draw_context *draw,
                               const struct draw_prim_info *prim_info);
 
+void draw_update_clip_flags(struct draw_context *draw);
+void draw_update_viewport_flags(struct draw_context *draw);
+
 /** 
  * Return index i from the index buffer.
  * If the index buffer would overflow we return the
@@ -499,7 +503,7 @@ draw_clamp_viewport_idx(int idx)
 /**
  * Adds two unsigned integers and if the addition
  * overflows then it returns the value from
- * from the overflow_value variable.
+ * the overflow_value variable.
  */
 static INLINE unsigned
 draw_overflow_uadd(unsigned a, unsigned b,

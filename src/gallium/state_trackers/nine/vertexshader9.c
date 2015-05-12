@@ -72,8 +72,6 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
 
     This->variant.cso = info.cso;
     This->const_used_size = info.const_used_size;
-    if (info.const_used_size == ~0)
-        This->const_used_size = NINE_CONSTBUF_SIZE(device->max_vs_const_f);
     This->lconstf = info.lconstf;
     This->sampler_mask = info.sampler_mask;
     This->position_t = info.position_t;
@@ -105,8 +103,7 @@ NineVertexShader9_dtor( struct NineVertexShader9 *This )
     }
     nine_shader_variants_free(&This->variant);
 
-    if (This->byte_code.tokens)
-        FREE((void *)This->byte_code.tokens); /* const_cast */
+    FREE((void *)This->byte_code.tokens); /* const_cast */
 
     FREE(This->lconstf.data);
     FREE(This->lconstf.ranges);

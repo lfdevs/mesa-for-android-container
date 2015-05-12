@@ -33,9 +33,10 @@ LOCAL_SRC_FILES := $(C_SOURCES)
 LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/glsl \
-	$(MESA_TOP)/src/mesa \
-	$(TARGET_OUT_HEADERS)/libdrm
+	$(MESA_TOP)/src/mesa
 
+
+LOCAL_SHARED_LIBRARIES := libdrm libdrm_radeon
 LOCAL_MODULE := libmesa_pipe_r300
 
 include $(GALLIUM_COMMON_MK)

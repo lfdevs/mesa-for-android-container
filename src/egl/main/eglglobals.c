@@ -55,7 +55,8 @@ struct _egl_global _eglGlobal =
       true, /* EGL_EXT_platform_base */
       true, /* EGL_EXT_platform_x11 */
       true, /* EGL_EXT_platform_wayland */
-      true  /* EGL_MESA_platform_gbm */
+      true, /* EGL_MESA_platform_gbm */
+      true, /* EGL_KHR_client_get_all_proc_addresses */
    },
 
    /* ClientExtensionsString */
@@ -64,6 +65,7 @@ struct _egl_global _eglGlobal =
    " EGL_EXT_platform_x11"
    " EGL_EXT_platform_wayland"
    " EGL_MESA_platform_gbm"
+   " EGL_KHR_client_get_all_proc_addresses"
 };
 
 

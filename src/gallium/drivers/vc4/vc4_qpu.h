@@ -30,6 +30,8 @@
 
 #include "vc4_qpu_defines.h"
 
+struct vc4_compile;
+
 struct qpu_reg {
         enum qpu_mux mux;
         uint8_t addr;
@@ -127,11 +129,17 @@ uint64_t qpu_a_alu2(enum qpu_op_add op, struct qpu_reg dst,
                     struct qpu_reg src0, struct qpu_reg src1);
 uint64_t qpu_m_alu2(enum qpu_op_mul op, struct qpu_reg dst,
                     struct qpu_reg src0, struct qpu_reg src1);
-uint64_t qpu_inst(uint64_t add, uint64_t mul);
+uint64_t qpu_merge_inst(uint64_t a, uint64_t b);
 uint64_t qpu_load_imm_ui(struct qpu_reg dst, uint32_t val);
 uint64_t qpu_set_sig(uint64_t inst, uint32_t sig);
 uint64_t qpu_set_cond_add(uint64_t inst, uint32_t cond);
 uint64_t qpu_set_cond_mul(uint64_t inst, uint32_t cond);
+uint32_t qpu_encode_small_immediate(uint32_t i);
+
+bool qpu_waddr_is_tlb(uint32_t waddr);
+bool qpu_inst_is_tlb(uint64_t inst);
+int qpu_num_sf_accesses(uint64_t inst);
+void qpu_serialize_one_inst(struct vc4_compile *c, uint64_t inst);
 
 static inline uint64_t
 qpu_load_imm_f(struct qpu_reg dst, float val)

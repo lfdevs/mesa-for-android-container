@@ -492,7 +492,7 @@ lp_emit_instruction_aos(
    int *pc)
 {
    LLVMValueRef src0, src1, src2;
-   LLVMValueRef tmp0, tmp1;
+   LLVMValueRef tmp0;
    LLVMValueRef dst0 = NULL;
 
    /*
@@ -620,15 +620,6 @@ lp_emit_instruction_aos(
       dst0 = lp_build_add(&bld->bld_base.base, tmp0, src2);
       break;
 
-   case TGSI_OPCODE_CND:
-      src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
-      src1 = lp_build_emit_fetch(&bld->bld_base, inst, 1, LP_CHAN_ALL);
-      src2 = lp_build_emit_fetch(&bld->bld_base, inst, 2, LP_CHAN_ALL);
-      tmp1 = lp_build_const_vec(bld->bld_base.base.gallivm, bld->bld_base.base.type, 0.5);
-      tmp0 = lp_build_cmp(&bld->bld_base.base, PIPE_FUNC_GREATER, src2, tmp1);
-      dst0 = lp_build_select(&bld->bld_base.base, tmp0, src0, src1);
-      break;
-
    case TGSI_OPCODE_DP2A:
       return FALSE;
 
@@ -679,11 +670,6 @@ lp_emit_instruction_aos(
    case TGSI_OPCODE_XPD:
       return FALSE;
 
-   case TGSI_OPCODE_RCC:
-      /* deprecated? */
-      assert(0);
-      return FALSE;
-
    case TGSI_OPCODE_DPH:
       return FALSE;
 
@@ -720,18 +706,11 @@ lp_emit_instruction_aos(
    case TGSI_OPCODE_PK4UB:
       return FALSE;
 
-   case TGSI_OPCODE_RFL:
-      return FALSE;
-
    case TGSI_OPCODE_SEQ:
       src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
       src1 = lp_build_emit_fetch(&bld->bld_base, inst, 1, LP_CHAN_ALL);
       tmp0 = lp_build_cmp(&bld->bld_base.base, PIPE_FUNC_EQUAL, src0, src1);
       dst0 = lp_build_select(&bld->bld_base.base, tmp0, bld->bld_base.base.one, bld->bld_base.base.zero);
-      break;
-
-   case TGSI_OPCODE_SFL:
-      dst0 = bld->bld_base.base.zero;
       break;
 
    case TGSI_OPCODE_SGT:
@@ -759,10 +738,6 @@ lp_emit_instruction_aos(
       src1 = lp_build_emit_fetch(&bld->bld_base, inst, 1, LP_CHAN_ALL);
       tmp0 = lp_build_cmp(&bld->bld_base.base, PIPE_FUNC_NOTEQUAL, src0, src1);
       dst0 = lp_build_select(&bld->bld_base.base, tmp0, bld->bld_base.base.one, bld->bld_base.base.zero);
-      break;
-
-   case TGSI_OPCODE_STR:
-      dst0 = bld->bld_base.base.one;
       break;
 
    case TGSI_OPCODE_TEX:
@@ -797,27 +772,9 @@ lp_emit_instruction_aos(
       return FALSE;
       break;
 
-   case TGSI_OPCODE_X2D:
-      /* deprecated? */
-      assert(0);
-      return FALSE;
-      break;
-
-   case TGSI_OPCODE_ARA:
-      /* deprecated */
-      assert(0);
-      return FALSE;
-      break;
-
    case TGSI_OPCODE_ARR:
       src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
       dst0 = lp_build_round(&bld->bld_base.base, src0);
-      break;
-
-   case TGSI_OPCODE_BRA:
-      /* deprecated */
-      assert(0);
-      return FALSE;
       break;
 
    case TGSI_OPCODE_CAL:
@@ -851,11 +808,6 @@ lp_emit_instruction_aos(
    case TGSI_OPCODE_TXB:
       dst0 = emit_tex(bld, inst, LP_BLD_TEX_MODIFIER_LOD_BIAS);
       break;
-
-   case TGSI_OPCODE_NRM:
-      /* fall-through */
-   case TGSI_OPCODE_NRM4:
-      return FALSE;
 
    case TGSI_OPCODE_DIV:
       assert(0);

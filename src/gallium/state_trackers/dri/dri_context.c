@@ -165,6 +165,9 @@ dri_destroy_context(__DRIcontext * cPriv)
       hud_destroy(ctx->hud);
    }
 
+   if (ctx->pp)
+      pp_free(ctx->pp);
+
    /* No particular reason to wait for command completion before
     * destroying a context, but we flush the context here
     * to avoid having to add code elsewhere to cope with flushing a
@@ -172,10 +175,6 @@ dri_destroy_context(__DRIcontext * cPriv)
     */
    ctx->st->flush(ctx->st, 0, NULL);
    ctx->st->destroy(ctx->st);
-
-   if (ctx->pp)
-      pp_free(ctx->pp);
-
    free(ctx);
 }
 

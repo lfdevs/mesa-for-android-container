@@ -40,7 +40,7 @@ gen6_upload_gs_push_constants(struct brw_context *brw)
       (struct brw_geometry_program *) brw->geometry_program;
 
    if (gp) {
-      /* CACHE_NEW_GS_PROG */
+      /* BRW_NEW_GS_PROG_DATA */
       struct brw_stage_prog_data *prog_data = &brw->gs.prog_data->base.base;
 
       gen6_upload_push_constants(brw, &gp->program.Base, prog_data,
@@ -53,11 +53,12 @@ gen6_upload_gs_push_constants(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_gs_push_constants = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
-      .brw   = (BRW_NEW_BATCH |
-                BRW_NEW_GEOMETRY_PROGRAM |
-                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
-      .cache = CACHE_NEW_GS_PROG,
+      .mesa  = _NEW_PROGRAM_CONSTANTS |
+               _NEW_TRANSFORM,
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_GEOMETRY_PROGRAM |
+               BRW_NEW_GS_PROG_DATA |
+               BRW_NEW_PUSH_CONSTANT_ALLOCATION,
    },
    .emit = gen6_upload_gs_push_constants,
 };
@@ -89,8 +90,8 @@ upload_gs_state(struct brw_context *brw)
 {
    /* BRW_NEW_GEOMETRY_PROGRAM */
    bool active = brw->geometry_program;
-   /* CACHE_NEW_GS_PROG */
-   const struct brw_vec4_prog_data *prog_data = &brw->gs.prog_data->base;
+   /* BRW_NEW_GS_PROG_DATA */
+   const struct brw_vue_prog_data *prog_data = &brw->gs.prog_data->base;
    const struct brw_stage_state *stage_state = &brw->gs.base;
 
    if (!active || stage_state->push_const_size == 0) {
@@ -195,12 +196,14 @@ upload_gs_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_gs_state = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
-      .brw   = (BRW_NEW_CONTEXT |
-                BRW_NEW_PUSH_CONSTANT_ALLOCATION |
-                BRW_NEW_GEOMETRY_PROGRAM |
-                BRW_NEW_BATCH),
-      .cache = (CACHE_NEW_GS_PROG | CACHE_NEW_FF_GS_PROG)
+      .mesa  = _NEW_PROGRAM_CONSTANTS |
+               _NEW_TRANSFORM,
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_CONTEXT |
+               BRW_NEW_FF_GS_PROG_DATA |
+               BRW_NEW_GEOMETRY_PROGRAM |
+               BRW_NEW_GS_PROG_DATA |
+               BRW_NEW_PUSH_CONSTANT_ALLOCATION,
    },
    .emit = upload_gs_state,
 };

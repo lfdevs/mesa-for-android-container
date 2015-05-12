@@ -44,7 +44,25 @@
 
 #define SI_NUM_CONTEXTS 16
 
-static uint32_t null_desc[8]; /* zeros */
+/* NULL image and buffer descriptor.
+ *
+ * For images, all fields must be zero except for the swizzle, which
+ * supports arbitrary combinations of 0s and 1s. The texture type must be
+ * any valid type (e.g. 1D). If the texture type isn't set, the hw hangs.
+ *
+ * For buffers, all fields must be zero. If they are not, the hw hangs.
+ *
+ * This is the only reason why the buffer descriptor must be in words [4:7].
+ */
+static uint32_t null_descriptor[8] = {
+	0,
+	0,
+	0,
+	S_008F1C_DST_SEL_W(V_008F1C_SQ_SEL_1) |
+	S_008F1C_TYPE(V_008F1C_SQ_RSRC_IMG_1D)
+	/* the rest must contain zeros, which is also used by the buffer
+	 * descriptor */
+};
 
 /* Set this if you want the 3D engine to wait until CP DMA is done.
  * It should be set on the last CP DMA packet. */
@@ -54,6 +72,7 @@ static uint32_t null_desc[8]; /* zeros */
  * packet. It's for preventing a read-after-write (RAW) hazard between two
  * CP DMA packets. */
 #define SI_CP_DMA_RAW_WAIT	(1 << 1) /* SI+ */
+#define CIK_CP_DMA_USE_L2	(1 << 2)
 
 /* Emit a CP DMA packet to do a copy from one buffer to another.
  * The size must fit in bits [20:0].
@@ -65,13 +84,15 @@ static void si_emit_cp_dma_copy_buffer(struct si_context *sctx,
 	struct radeon_winsys_cs *cs = sctx->b.rings.gfx.cs;
 	uint32_t sync_flag = flags & R600_CP_DMA_SYNC ? PKT3_CP_DMA_CP_SYNC : 0;
 	uint32_t raw_wait = flags & SI_CP_DMA_RAW_WAIT ? PKT3_CP_DMA_CMD_RAW_WAIT : 0;
+	uint32_t sel = flags & CIK_CP_DMA_USE_L2 ?
+			   PKT3_CP_DMA_SRC_SEL(3) | PKT3_CP_DMA_DST_SEL(3) : 0;
 
 	assert(size);
 	assert((size & ((1<<21)-1)) == size);
 
 	if (sctx->b.chip_class >= CIK) {
 		radeon_emit(cs, PKT3(PKT3_DMA_DATA, 5, 0));
-		radeon_emit(cs, sync_flag);		/* CP_SYNC [31] */
+		radeon_emit(cs, sync_flag | sel);	/* CP_SYNC [31] */
 		radeon_emit(cs, src_va);		/* SRC_ADDR_LO [31:0] */
 		radeon_emit(cs, src_va >> 32);		/* SRC_ADDR_HI [31:0] */
 		radeon_emit(cs, dst_va);		/* DST_ADDR_LO [31:0] */
@@ -95,13 +116,14 @@ static void si_emit_cp_dma_clear_buffer(struct si_context *sctx,
 	struct radeon_winsys_cs *cs = sctx->b.rings.gfx.cs;
 	uint32_t sync_flag = flags & R600_CP_DMA_SYNC ? PKT3_CP_DMA_CP_SYNC : 0;
 	uint32_t raw_wait = flags & SI_CP_DMA_RAW_WAIT ? PKT3_CP_DMA_CMD_RAW_WAIT : 0;
+	uint32_t dst_sel = flags & CIK_CP_DMA_USE_L2 ? PKT3_CP_DMA_DST_SEL(3) : 0;
 
 	assert(size);
 	assert((size & ((1<<21)-1)) == size);
 
 	if (sctx->b.chip_class >= CIK) {
 		radeon_emit(cs, PKT3(PKT3_DMA_DATA, 5, 0));
-		radeon_emit(cs, sync_flag | PKT3_CP_DMA_SRC_SEL(2)); /* CP_SYNC [31] | SRC_SEL[30:29] */
+		radeon_emit(cs, sync_flag | dst_sel | PKT3_CP_DMA_SRC_SEL(2)); /* CP_SYNC [31] | SRC_SEL[30:29] */
 		radeon_emit(cs, clear_value);		/* DATA [31:0] */
 		radeon_emit(cs, 0);
 		radeon_emit(cs, dst_va);		/* DST_ADDR_LO [31:0] */
@@ -145,7 +167,7 @@ static void si_init_descriptors(struct si_context *sctx,
 	 * only once at context initialization. */
 	si_emit_cp_dma_clear_buffer(sctx, desc->buffer->gpu_address,
 				    desc->buffer->b.b.width0, 0,
-				    R600_CP_DMA_SYNC);
+				    R600_CP_DMA_SYNC | CIK_CP_DMA_USE_L2);
 }
 
 static void si_release_descriptors(struct si_descriptors *desc)
@@ -159,7 +181,7 @@ static void si_update_descriptors(struct si_context *sctx,
 	if (desc->dirty_mask) {
 		desc->atom.num_dw =
 			7 + /* copy */
-			(4 + desc->element_dw_size) * util_bitcount(desc->dirty_mask) + /* update */
+			(4 + desc->element_dw_size) * util_bitcount64(desc->dirty_mask) + /* update */
 			4; /* pointer update */
 
 		if (desc->shader_userdata_reg >= R_00B130_SPI_SHADER_USER_DATA_VS_0 &&
@@ -167,8 +189,18 @@ static void si_update_descriptors(struct si_context *sctx,
 			desc->atom.num_dw += 4; /* second pointer update */
 
 		desc->atom.dirty = true;
+
+		/* TODO: Investigate if these flushes can be removed after
+		 * adding CE support. */
+
 		/* The descriptors are read with the K cache. */
-		sctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE;
+		sctx->b.flags |= SI_CONTEXT_INV_KCACHE;
+
+		/* Since SI uses uncached CP DMA to update descriptors,
+		 * we have to flush TC L2, which is used to fetch constants
+		 * along with KCACHE. */
+		if (sctx->b.chip_class == SI)
+			sctx->b.flags |= SI_CONTEXT_INV_TC_L2;
 	} else {
 		desc->atom.dirty = false;
 	}
@@ -206,10 +238,10 @@ static void si_emit_descriptors(struct si_context *sctx,
 {
 	struct radeon_winsys_cs *cs = sctx->b.rings.gfx.cs;
 	uint64_t va_base;
-	int packet_start;
+	int packet_start = 0;
 	int packet_size = 0;
 	int last_index = desc->num_elements; /* point to a non-existing element */
-	unsigned dirty_mask = desc->dirty_mask;
+	uint64_t dirty_mask = desc->dirty_mask;
 	unsigned new_context_id = (desc->current_context_id + 1) % SI_NUM_CONTEXTS;
 
 	assert(dirty_mask);
@@ -217,11 +249,10 @@ static void si_emit_descriptors(struct si_context *sctx,
 	va_base = desc->buffer->gpu_address;
 
 	/* Copy the descriptors to a new context slot. */
-	/* XXX Consider using TC or L2 for this copy on CIK. */
 	si_emit_cp_dma_copy_buffer(sctx,
 				   va_base + new_context_id * desc->context_size,
 				   va_base + desc->current_context_id * desc->context_size,
-				   desc->context_size, R600_CP_DMA_SYNC);
+				   desc->context_size, R600_CP_DMA_SYNC | CIK_CP_DMA_USE_L2);
 
 	va_base += new_context_id * desc->context_size;
 
@@ -232,7 +263,7 @@ static void si_emit_descriptors(struct si_context *sctx,
 	 *     with CP DMA instead of emitting zeros.
 	 */
 	while (dirty_mask) {
-		int i = u_bit_scan(&dirty_mask);
+		int i = u_bit_scan64(&dirty_mask);
 
 		assert(i < desc->num_elements);
 
@@ -248,7 +279,9 @@ static void si_emit_descriptors(struct si_context *sctx,
 			packet_size = 2 + desc->element_dw_size;
 
 			radeon_emit(cs, PKT3(PKT3_WRITE_DATA, packet_size, 0));
-			radeon_emit(cs, PKT3_WRITE_DATA_DST_SEL(PKT3_WRITE_DATA_DST_SEL_TC_OR_L2) |
+			radeon_emit(cs, PKT3_WRITE_DATA_DST_SEL(sctx->b.chip_class == SI ?
+						PKT3_WRITE_DATA_DST_SEL_MEM_SYNC :
+						PKT3_WRITE_DATA_DST_SEL_TC_L2) |
 					     PKT3_WRITE_DATA_WR_CONFIRM |
 					     PKT3_WRITE_DATA_ENGINE_SEL(PKT3_WRITE_DATA_ENGINE_SEL_ME));
 			radeon_emit(cs, va & 0xFFFFFFFFUL);
@@ -295,10 +328,18 @@ static void si_init_sampler_views(struct si_context *sctx,
 				  struct si_sampler_views *views,
 				  unsigned shader)
 {
+	int i;
+
 	si_init_descriptors(sctx, &views->desc,
 			    si_get_shader_user_data_base(shader) +
 			    SI_SGPR_RESOURCE * 4,
 			    8, SI_NUM_SAMPLER_VIEWS, si_emit_sampler_views);
+
+	for (i = 0; i < views->desc.num_elements; i++) {
+		views->desc_data[i] = null_descriptor;
+		views->desc.dirty_mask |= 1llu << i;
+	}
+	si_update_descriptors(sctx, &views->desc);
 }
 
 static void si_release_sampler_views(struct si_sampler_views *views)
@@ -325,13 +366,16 @@ static enum radeon_bo_priority si_get_resource_ro_priority(struct r600_resource 
 static void si_sampler_views_begin_new_cs(struct si_context *sctx,
 					  struct si_sampler_views *views)
 {
-	unsigned mask = views->desc.enabled_mask;
+	uint64_t mask = views->desc.enabled_mask;
 
 	/* Add relocations to the CS. */
 	while (mask) {
-		int i = u_bit_scan(&mask);
+		int i = u_bit_scan64(&mask);
 		struct si_sampler_view *rview =
 			(struct si_sampler_view*)views->views[i];
+
+		if (!rview->resource)
+			continue;
 
 		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 				      rview->resource, RADEON_USAGE_READ,
@@ -357,20 +401,22 @@ static void si_set_sampler_view(struct si_context *sctx, unsigned shader,
 		struct si_sampler_view *rview =
 			(struct si_sampler_view*)view;
 
-		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
-				      rview->resource, RADEON_USAGE_READ,
-				      si_get_resource_ro_priority(rview->resource));
+		if (rview->resource)
+			r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
+				rview->resource, RADEON_USAGE_READ,
+				si_get_resource_ro_priority(rview->resource));
+
 
 		pipe_sampler_view_reference(&views->views[slot], view);
 		views->desc_data[slot] = view_desc;
-		views->desc.enabled_mask |= 1 << slot;
+		views->desc.enabled_mask |= 1llu << slot;
 	} else {
 		pipe_sampler_view_reference(&views->views[slot], NULL);
-		views->desc_data[slot] = null_desc;
-		views->desc.enabled_mask &= ~(1 << slot);
+		views->desc_data[slot] = null_descriptor;
+		views->desc.enabled_mask &= ~(1llu << slot);
 	}
 
-	views->desc.dirty_mask |= 1 << slot;
+	views->desc.dirty_mask |= 1llu << slot;
 }
 
 static void si_set_sampler_views(struct pipe_context *ctx,
@@ -389,7 +435,7 @@ static void si_set_sampler_views(struct pipe_context *ctx,
 	for (i = 0; i < count; i++) {
 		unsigned slot = start + i;
 
-		if (!views[i]) {
+		if (!views || !views[i]) {
 			samplers->depth_texture_mask &= ~(1 << slot);
 			samplers->compressed_colortex_mask &= ~(1 << slot);
 			si_set_sampler_view(sctx, shader, slot, NULL, NULL);
@@ -400,7 +446,7 @@ static void si_set_sampler_views(struct pipe_context *ctx,
 
 		si_set_sampler_view(sctx, shader, slot, views[i], rviews[i]->state);
 
-		if (views[i]->texture->target != PIPE_BUFFER) {
+		if (views[i]->texture && views[i]->texture->target != PIPE_BUFFER) {
 			struct r600_texture *rtex =
 				(struct r600_texture*)views[i]->texture;
 
@@ -430,7 +476,6 @@ static void si_set_sampler_views(struct pipe_context *ctx,
 		}
 	}
 
-	sctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE;
 	si_update_descriptors(sctx, &samplers->views.desc);
 }
 
@@ -469,12 +514,12 @@ void si_set_sampler_descriptors(struct si_context *sctx, unsigned shader,
 		unsigned slot = start + i;
 
 		if (!sstates[i]) {
-			samplers->desc.dirty_mask &= ~(1 << slot);
+			samplers->desc.dirty_mask &= ~(1llu << slot);
 			continue;
 		}
 
 		samplers->desc_data[slot] = sstates[i]->val;
-		samplers->desc.dirty_mask |= 1 << slot;
+		samplers->desc.dirty_mask |= 1llu << slot;
 	}
 
 	si_update_descriptors(sctx, &samplers->desc);
@@ -534,11 +579,11 @@ static void si_release_buffer_resources(struct si_buffer_resources *buffers)
 static void si_buffer_resources_begin_new_cs(struct si_context *sctx,
 					     struct si_buffer_resources *buffers)
 {
-	unsigned mask = buffers->desc.enabled_mask;
+	uint64_t mask = buffers->desc.enabled_mask;
 
 	/* Add relocations to the CS. */
 	while (mask) {
-		int i = u_bit_scan(&mask);
+		int i = u_bit_scan64(&mask);
 
 		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 				      (struct r600_resource*)buffers->buffers[i],
@@ -655,7 +700,6 @@ void si_update_vertex_buffers(struct si_context *sctx)
 	 * on performance (confirmed by testing). New descriptors are always
 	 * uploaded to a fresh new buffer, so I don't think flushing the const
 	 * cache is needed. */
-	sctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE;
 }
 
 
@@ -723,14 +767,14 @@ static void si_set_constant_buffer(struct pipe_context *ctx, uint shader, uint s
 		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 				      (struct r600_resource*)buffer,
 				      buffers->shader_usage, buffers->priority);
-		buffers->desc.enabled_mask |= 1 << slot;
+		buffers->desc.enabled_mask |= 1llu << slot;
 	} else {
 		/* Clear the descriptor. */
 		memset(buffers->desc_data[slot], 0, sizeof(uint32_t) * 4);
-		buffers->desc.enabled_mask &= ~(1 << slot);
+		buffers->desc.enabled_mask &= ~(1llu << slot);
 	}
 
-	buffers->desc.dirty_mask |= 1 << slot;
+	buffers->desc.dirty_mask |= 1llu << slot;
 	si_update_descriptors(sctx, &buffers->desc);
 }
 
@@ -816,14 +860,14 @@ void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
 		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 				      (struct r600_resource*)buffer,
 				      buffers->shader_usage, buffers->priority);
-		buffers->desc.enabled_mask |= 1 << slot;
+		buffers->desc.enabled_mask |= 1llu << slot;
 	} else {
 		/* Clear the descriptor. */
 		memset(buffers->desc_data[slot], 0, sizeof(uint32_t) * 4);
-		buffers->desc.enabled_mask &= ~(1 << slot);
+		buffers->desc.enabled_mask &= ~(1llu << slot);
 	}
 
-	buffers->desc.dirty_mask |= 1 << slot;
+	buffers->desc.dirty_mask |= 1llu << slot;
 	si_update_descriptors(sctx, &buffers->desc);
 }
 
@@ -838,6 +882,36 @@ static void si_set_streamout_targets(struct pipe_context *ctx,
 	struct si_buffer_resources *buffers = &sctx->rw_buffers[PIPE_SHADER_VERTEX];
 	unsigned old_num_targets = sctx->b.streamout.num_targets;
 	unsigned i, bufidx;
+
+	/* We are going to unbind the buffers. Mark which caches need to be flushed. */
+	if (sctx->b.streamout.num_targets && sctx->b.streamout.begin_emitted) {
+		/* Since streamout uses vector writes which go through TC L2
+		 * and most other clients can use TC L2 as well, we don't need
+		 * to flush it.
+		 *
+		 * The only case which requires flushing it is VGT DMA index
+		 * fetching, which is a rare case. Thus, flag the TC L2
+		 * dirtiness in the resource and handle it when index fetching
+		 * is used.
+		 */
+		for (i = 0; i < sctx->b.streamout.num_targets; i++)
+			if (sctx->b.streamout.targets[i])
+				r600_resource(sctx->b.streamout.targets[i]->b.buffer)->TC_L2_dirty = true;
+
+		/* Invalidate the scalar cache in case a streamout buffer is
+		 * going to be used as a constant buffer.
+		 *
+		 * Invalidate TC L1, because streamout bypasses it (done by
+		 * setting GLC=1 in the store instruction), but it can contain
+		 * outdated data of streamout buffers.
+		 *
+		 * VS_PARTIAL_FLUSH is required if the buffers are going to be
+		 * used as an input immediately.
+		 */
+		sctx->b.flags |= SI_CONTEXT_INV_KCACHE |
+				 SI_CONTEXT_INV_TC_L1 |
+				 SI_CONTEXT_VS_PARTIAL_FLUSH;
+	}
 
 	/* Streamout buffers must be bound in 2 places:
 	 * 1) in VGT by setting the VGT_STRMOUT registers
@@ -871,24 +945,24 @@ static void si_set_streamout_targets(struct pipe_context *ctx,
 			r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 					      (struct r600_resource*)buffer,
 					      buffers->shader_usage, buffers->priority);
-			buffers->desc.enabled_mask |= 1 << bufidx;
+			buffers->desc.enabled_mask |= 1llu << bufidx;
 		} else {
 			/* Clear the descriptor and unset the resource. */
 			memset(buffers->desc_data[bufidx], 0,
 			       sizeof(uint32_t) * 4);
 			pipe_resource_reference(&buffers->buffers[bufidx],
 						NULL);
-			buffers->desc.enabled_mask &= ~(1 << bufidx);
+			buffers->desc.enabled_mask &= ~(1llu << bufidx);
 		}
-		buffers->desc.dirty_mask |= 1 << bufidx;
+		buffers->desc.dirty_mask |= 1llu << bufidx;
 	}
 	for (; i < old_num_targets; i++) {
 		bufidx = SI_SO_BUF_OFFSET + i;
 		/* Clear the descriptor and unset the resource. */
 		memset(buffers->desc_data[bufidx], 0, sizeof(uint32_t) * 4);
 		pipe_resource_reference(&buffers->buffers[bufidx], NULL);
-		buffers->desc.enabled_mask &= ~(1 << bufidx);
-		buffers->desc.dirty_mask |= 1 << bufidx;
+		buffers->desc.enabled_mask &= ~(1llu << bufidx);
+		buffers->desc.dirty_mask |= 1llu << bufidx;
 	}
 
 	si_update_descriptors(sctx, &buffers->desc);
@@ -961,10 +1035,10 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 	for (shader = 0; shader < SI_NUM_SHADERS; shader++) {
 		struct si_buffer_resources *buffers = &sctx->rw_buffers[shader];
 		bool found = false;
-		uint32_t mask = buffers->desc.enabled_mask;
+		uint64_t mask = buffers->desc.enabled_mask;
 
 		while (mask) {
-			i = u_bit_scan(&mask);
+			i = u_bit_scan64(&mask);
 			if (buffers->buffers[i] == buf) {
 				si_desc_reset_buffer_offset(ctx, buffers->desc_data[i],
 							    old_va, buf);
@@ -973,7 +1047,7 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 						      rbuffer, buffers->shader_usage,
 						      buffers->priority);
 
-				buffers->desc.dirty_mask |= 1 << i;
+				buffers->desc.dirty_mask |= 1llu << i;
 				found = true;
 
 				if (i >= SI_SO_BUF_OFFSET && shader == PIPE_SHADER_VERTEX) {
@@ -996,10 +1070,10 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 	for (shader = 0; shader < SI_NUM_SHADERS; shader++) {
 		struct si_buffer_resources *buffers = &sctx->const_buffers[shader];
 		bool found = false;
-		uint32_t mask = buffers->desc.enabled_mask;
+		uint64_t mask = buffers->desc.enabled_mask;
 
 		while (mask) {
-			unsigned i = u_bit_scan(&mask);
+			unsigned i = u_bit_scan64(&mask);
 			if (buffers->buffers[i] == buf) {
 				si_desc_reset_buffer_offset(ctx, buffers->desc_data[i],
 							    old_va, buf);
@@ -1008,7 +1082,7 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 						      rbuffer, buffers->shader_usage,
 						      buffers->priority);
 
-				buffers->desc.dirty_mask |= 1 << i;
+				buffers->desc.dirty_mask |= 1llu << i;
 				found = true;
 			}
 		}
@@ -1020,23 +1094,23 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 	/* Texture buffers - update virtual addresses in sampler view descriptors. */
 	LIST_FOR_EACH_ENTRY(view, &sctx->b.texture_buffers, list) {
 		if (view->base.texture == buf) {
-			si_desc_reset_buffer_offset(ctx, view->state, old_va, buf);
+			si_desc_reset_buffer_offset(ctx, &view->state[4], old_va, buf);
 		}
 	}
 	/* Texture buffers - update bindings. */
 	for (shader = 0; shader < SI_NUM_SHADERS; shader++) {
 		struct si_sampler_views *views = &sctx->samplers[shader].views;
 		bool found = false;
-		uint32_t mask = views->desc.enabled_mask;
+		uint64_t mask = views->desc.enabled_mask;
 
 		while (mask) {
-			unsigned i = u_bit_scan(&mask);
+			unsigned i = u_bit_scan64(&mask);
 			if (views->views[i]->texture == buf) {
 				r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx,
 						      rbuffer, RADEON_USAGE_READ,
 						      RADEON_PRIO_SHADER_BUFFER_RO);
 
-				views->desc.dirty_mask |= 1 << i;
+				views->desc.dirty_mask |= 1llu << i;
 				found = true;
 			}
 		}
@@ -1052,9 +1126,11 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 #define CP_DMA_MAX_BYTE_COUNT ((1 << 21) - 8)
 
 static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
-			    unsigned offset, unsigned size, unsigned value)
+			    unsigned offset, unsigned size, unsigned value,
+			    bool is_framebuffer)
 {
 	struct si_context *sctx = (struct si_context*)ctx;
+	unsigned flush_flags, tc_l2_flag;
 
 	if (!size)
 		return;
@@ -1079,18 +1155,22 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 	uint64_t va = r600_resource(dst)->gpu_address + offset;
 
 	/* Flush the caches where the resource is bound. */
-	/* XXX only flush the caches where the buffer is bound. */
-	sctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE |
-			 R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_FLUSH_AND_INV_CB |
-			 R600_CONTEXT_FLUSH_AND_INV_DB |
-			 R600_CONTEXT_FLUSH_AND_INV_CB_META |
-			 R600_CONTEXT_FLUSH_AND_INV_DB_META;
-	sctx->b.flags |= R600_CONTEXT_WAIT_3D_IDLE;
+	if (is_framebuffer) {
+		flush_flags = SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER;
+		tc_l2_flag = 0;
+	} else {
+		flush_flags = SI_CONTEXT_INV_TC_L1 |
+			      (sctx->b.chip_class == SI ? SI_CONTEXT_INV_TC_L2 : 0) |
+			      SI_CONTEXT_INV_KCACHE;
+		tc_l2_flag = sctx->b.chip_class == SI ? 0 : CIK_CP_DMA_USE_L2;
+	}
+
+	sctx->b.flags |= SI_CONTEXT_PS_PARTIAL_FLUSH |
+			 flush_flags;
 
 	while (size) {
 		unsigned byte_count = MIN2(size, CP_DMA_MAX_BYTE_COUNT);
-		unsigned dma_flags = 0;
+		unsigned dma_flags = tc_l2_flag;
 
 		si_need_cs_space(sctx, 7 + (sctx->b.flags ? sctx->cache_flush.num_dw : 0),
 				 FALSE);
@@ -1120,19 +1200,19 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 
 	/* Flush the caches again in case the 3D engine has been prefetching
 	 * the resource. */
-	/* XXX only flush the caches where the buffer is bound. */
-	sctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE |
-			 R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_FLUSH_AND_INV_CB |
-			 R600_CONTEXT_FLUSH_AND_INV_DB |
-			 R600_CONTEXT_FLUSH_AND_INV_CB_META |
-			 R600_CONTEXT_FLUSH_AND_INV_DB_META;
+	sctx->b.flags |= flush_flags;
+
+	if (tc_l2_flag)
+		r600_resource(dst)->TC_L2_dirty = true;
 }
 
 void si_copy_buffer(struct si_context *sctx,
 		    struct pipe_resource *dst, struct pipe_resource *src,
-		    uint64_t dst_offset, uint64_t src_offset, unsigned size)
+		    uint64_t dst_offset, uint64_t src_offset, unsigned size,
+		    bool is_framebuffer)
 {
+	unsigned flush_flags, tc_l2_flag;
+
 	if (!size)
 		return;
 
@@ -1146,16 +1226,21 @@ void si_copy_buffer(struct si_context *sctx,
 	src_offset += r600_resource(src)->gpu_address;
 
 	/* Flush the caches where the resource is bound. */
-	sctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE |
-			 R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_FLUSH_AND_INV_CB |
-			 R600_CONTEXT_FLUSH_AND_INV_DB |
-			 R600_CONTEXT_FLUSH_AND_INV_CB_META |
-			 R600_CONTEXT_FLUSH_AND_INV_DB_META |
-			 R600_CONTEXT_WAIT_3D_IDLE;
+	if (is_framebuffer) {
+		flush_flags = SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER;
+		tc_l2_flag = 0;
+	} else {
+		flush_flags = SI_CONTEXT_INV_TC_L1 |
+			      (sctx->b.chip_class == SI ? SI_CONTEXT_INV_TC_L2 : 0) |
+			      SI_CONTEXT_INV_KCACHE;
+		tc_l2_flag = sctx->b.chip_class == SI ? 0 : CIK_CP_DMA_USE_L2;
+	}
+
+	sctx->b.flags |= SI_CONTEXT_PS_PARTIAL_FLUSH |
+			 flush_flags;
 
 	while (size) {
-		unsigned sync_flags = 0;
+		unsigned sync_flags = tc_l2_flag;
 		unsigned byte_count = MIN2(size, CP_DMA_MAX_BYTE_COUNT);
 
 		si_need_cs_space(sctx, 7 + (sctx->b.flags ? sctx->cache_flush.num_dw : 0), FALSE);
@@ -1184,12 +1269,12 @@ void si_copy_buffer(struct si_context *sctx,
 		dst_offset += byte_count;
 	}
 
-	sctx->b.flags |= R600_CONTEXT_INV_TEX_CACHE |
-			 R600_CONTEXT_INV_CONST_CACHE |
-			 R600_CONTEXT_FLUSH_AND_INV_CB |
-			 R600_CONTEXT_FLUSH_AND_INV_DB |
-			 R600_CONTEXT_FLUSH_AND_INV_CB_META |
-			 R600_CONTEXT_FLUSH_AND_INV_DB_META;
+	/* Flush the caches again in case the 3D engine has been prefetching
+	 * the resource. */
+	sctx->b.flags |= flush_flags;
+
+	if (tc_l2_flag)
+		r600_resource(dst)->TC_L2_dirty = true;
 }
 
 /* INIT/DEINIT */

@@ -211,13 +211,15 @@ static unsigned delay_calc(struct ir3_sched_ctx *ctx,
 static int trysched(struct ir3_sched_ctx *ctx,
 		struct ir3_instruction *instr)
 {
-	struct ir3_instruction *srcs[ARRAY_SIZE(instr->regs) - 1];
+	struct ir3_instruction *srcs[64];
 	struct ir3_instruction *src;
 	unsigned i, delay, nsrcs = 0;
 
 	/* if already scheduled: */
 	if (instr->flags & IR3_INSTR_MARK)
 		return 0;
+
+	debug_assert(instr->regs_count < ARRAY_SIZE(srcs));
 
 	/* figure out our src's: */
 	for (i = 1; i < instr->regs_count; i++) {

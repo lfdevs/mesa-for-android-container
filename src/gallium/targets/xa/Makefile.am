@@ -35,6 +35,7 @@ libxatracker_la_SOURCES =
 
 libxatracker_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/xa/libxatracker.la \
+	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(LIBDRM_LIBS) \
@@ -50,6 +51,9 @@ if HAVE_LD_VERSION_SCRIPT
 libxatracker_la_LDFLAGS += \
 	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/xa/xa.sym
 endif
+
+EXTRA_libxatracker_la_DEPENDENCIES = xa.sym
+EXTRA_DIST = xa.sym
 
 if HAVE_GALLIUM_STATIC_TARGETS
 

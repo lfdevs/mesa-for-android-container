@@ -147,7 +147,8 @@ void r600_flush_emit(struct r600_context *rctx)
 		cp_coher_cntl |= S_0085F0_FULL_CACHE_ENA(1);
 	}
 
-	if (rctx->b.flags & R600_CONTEXT_FLUSH_AND_INV) {
+	if (rctx->b.flags & R600_CONTEXT_FLUSH_AND_INV ||
+	    (rctx->b.chip_class == R600 && rctx->b.flags & R600_CONTEXT_STREAMOUT_FLUSH)) {
 		cs->buf[cs->cdw++] = PKT3(PKT3_EVENT_WRITE, 0, 0);
 		cs->buf[cs->cdw++] = EVENT_TYPE(EVENT_TYPE_CACHE_FLUSH_AND_INV_EVENT) | EVENT_INDEX(0);
 	}
@@ -202,7 +203,8 @@ void r600_flush_emit(struct r600_context *rctx)
 					S_0085F0_CB11_DEST_BASE_ENA(1);
 	}
 
-	if (rctx->b.flags & R600_CONTEXT_STREAMOUT_FLUSH) {
+	if (rctx->b.chip_class >= R700 &&
+	    rctx->b.flags & R600_CONTEXT_STREAMOUT_FLUSH) {
 		cp_coher_cntl |= S_0085F0_SO0_DEST_BASE_ENA(1) |
 				S_0085F0_SO1_DEST_BASE_ENA(1) |
 				S_0085F0_SO2_DEST_BASE_ENA(1) |
@@ -211,7 +213,8 @@ void r600_flush_emit(struct r600_context *rctx)
 	}
 
 	/* Workaround for buggy flushing on some R6xx chipsets. */
-	if (rctx->b.flags & R600_CONTEXT_FLUSH_AND_INV &&
+	if ((rctx->b.flags & (R600_CONTEXT_FLUSH_AND_INV |
+			      R600_CONTEXT_STREAMOUT_FLUSH)) &&
 	    (rctx->b.family == CHIP_RV670 ||
 	     rctx->b.family == CHIP_RS780 ||
 	     rctx->b.family == CHIP_RS880)) {
@@ -312,9 +315,9 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	ctx->stencil_ref.atom.dirty = true;
 	ctx->vertex_fetch_shader.atom.dirty = true;
 	ctx->export_shader.atom.dirty = true;
+	ctx->shader_stages.atom.dirty = true;
 	if (ctx->gs_shader) {
 		ctx->geometry_shader.atom.dirty = true;
-		ctx->shader_stages.atom.dirty = true;
 		ctx->gs_rings.atom.dirty = true;
 	}
 	ctx->vertex_shader.atom.dirty = true;

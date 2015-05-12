@@ -92,7 +92,6 @@ NineVolume9_ctor( struct NineVolume9 *This,
 
     This->info.screen = pParams->device->screen;
     This->info.target = PIPE_TEXTURE_3D;
-    This->info.format = d3d9_to_pipe_format(pDesc->Format);
     This->info.width0 = pDesc->Width;
     This->info.height0 = pDesc->Height;
     This->info.depth0 = pDesc->Depth;
@@ -102,6 +101,14 @@ NineVolume9_ctor( struct NineVolume9 *This,
     This->info.usage = PIPE_USAGE_DEFAULT;
     This->info.bind = PIPE_BIND_SAMPLER_VIEW;
     This->info.flags = 0;
+    This->info.format = d3d9_to_pipe_format_checked(This->info.screen,
+                                                    pDesc->Format,
+                                                    This->info.target,
+                                                    This->info.nr_samples,
+                                                    This->info.bind, FALSE);
+
+    if (This->info.format == PIPE_FORMAT_NONE)
+        return D3DERR_DRIVERINTERNALERROR;
 
     This->stride = util_format_get_stride(This->info.format, pDesc->Width);
     This->stride = align(This->stride, 4);
@@ -126,6 +133,9 @@ NineVolume9_dtor( struct NineVolume9 *This )
 
     if (This->transfer)
         NineVolume9_UnlockBox(This);
+
+    if (This->data)
+           FREE(This->data);
 
     pipe_resource_reference(&This->resource, NULL);
 

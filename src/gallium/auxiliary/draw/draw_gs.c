@@ -715,7 +715,7 @@ draw_create_geometry_shader(struct draw_context *draw,
 {
 #ifdef HAVE_LLVM
    boolean use_llvm = draw->llvm != NULL;
-   struct llvm_geometry_shader *llvm_gs;
+   struct llvm_geometry_shader *llvm_gs = NULL;
 #endif
    struct draw_geometry_shader *gs;
    unsigned i;

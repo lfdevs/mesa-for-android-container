@@ -186,8 +186,7 @@ sp_tile_cache_set_surface(struct softpipe_tile_cache *tc,
       FREE(tc->transfer_map);
       tc->num_maps = 0;
 
-      if (tc->clear_flags)
-         FREE(tc->clear_flags);
+      FREE(tc->clear_flags);
       tc->clear_flags_size = 0;
    }
 

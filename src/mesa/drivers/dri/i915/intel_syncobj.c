@@ -38,7 +38,7 @@
  * performance bottleneck, though.
  */
 
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 #include "main/imports.h"
 
 #include "intel_context.h"

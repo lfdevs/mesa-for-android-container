@@ -28,6 +28,7 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <regex.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -528,7 +529,6 @@ void init_compiler(
 }
 
 #define MAX_LINE_LENGTH 100
-#define MAX_PATH_LENGTH 100
 
 unsigned load_program(
 	struct radeon_compiler *c,
@@ -536,14 +536,19 @@ unsigned load_program(
 	const char *filename)
 {
 	char line[MAX_LINE_LENGTH];
-	char path[MAX_PATH_LENGTH];
+	char path[PATH_MAX];
 	FILE *file;
 	unsigned *count;
 	char **string_store;
 	unsigned i = 0;
+	int n;
 
 	memset(line, 0, sizeof(line));
-	snprintf(path, MAX_PATH_LENGTH, TEST_PATH "/%s", filename);
+	n = snprintf(path, PATH_MAX, TEST_PATH "/%s", filename);
+	if (n < 0 || n >= PATH_MAX) {
+		return 0;
+	}
+
 	file = fopen(path, "r");
 	if (!file) {
 		return 0;

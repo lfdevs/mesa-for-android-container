@@ -144,8 +144,8 @@ copy_image_with_memcpy(struct brw_context *brw,
                        int src_width, int src_height)
 {
    bool same_slice;
-   uint8_t *mapped, *src_mapped, *dst_mapped;
-   int src_stride, dst_stride, i, cpp;
+   void *mapped, *src_mapped, *dst_mapped;
+   ptrdiff_t src_stride, dst_stride, cpp;
    int map_x1, map_y1, map_x2, map_y2;
    GLuint src_bw, src_bh;
 
@@ -176,7 +176,7 @@ copy_image_with_memcpy(struct brw_context *brw,
       intel_miptree_map(brw, src_mt, src_level, src_z,
                         map_x1, map_y1, map_x2 - map_x1, map_y2 - map_y1,
                         GL_MAP_READ_BIT | GL_MAP_WRITE_BIT,
-                        (void **)&mapped, &src_stride);
+                        &mapped, &src_stride);
 
       dst_stride = src_stride;
 
@@ -188,16 +188,16 @@ copy_image_with_memcpy(struct brw_context *brw,
    } else {
       intel_miptree_map(brw, src_mt, src_level, src_z,
                         src_x, src_y, src_width, src_height,
-                        GL_MAP_READ_BIT, (void **)&src_mapped, &src_stride);
+                        GL_MAP_READ_BIT, &src_mapped, &src_stride);
       intel_miptree_map(brw, dst_mt, dst_level, dst_z,
                         dst_x, dst_y, src_width, src_height,
-                        GL_MAP_WRITE_BIT, (void **)&dst_mapped, &dst_stride);
+                        GL_MAP_WRITE_BIT, &dst_mapped, &dst_stride);
    }
 
    src_width /= (int)src_bw;
    src_height /= (int)src_bh;
 
-   for (i = 0; i < src_height; ++i) {
+   for (int i = 0; i < src_height; ++i) {
       memcpy(dst_mapped, src_mapped, src_width * cpp);
       src_mapped += src_stride;
       dst_mapped += dst_stride;

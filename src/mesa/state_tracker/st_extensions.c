@@ -411,7 +411,8 @@ void st_init_extensions(struct pipe_screen *screen,
                         struct st_config_options *options,
                         boolean has_lib_dxtc)
 {
-   int i, glsl_feature_level;
+   unsigned i;
+   int glsl_feature_level;
    GLboolean *extension_table = (GLboolean *) extensions;
 
    static const struct st_extension_cap_mapping cap_mapping[] = {
@@ -463,6 +464,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_conditional_render_inverted),  PIPE_CAP_CONDITIONAL_RENDER_INVERTED      },
       { o(ARB_texture_view),                 PIPE_CAP_SAMPLER_VIEW_TARGET              },
       { o(ARB_clip_control),                 PIPE_CAP_CLIP_HALFZ                       },
+      { o(EXT_polygon_offset_clamp),         PIPE_CAP_POLYGON_OFFSET_CLAMP             },
    };
 
    /* Required: render target and sampler support */
@@ -674,6 +676,10 @@ void st_init_extensions(struct pipe_screen *screen,
       consts->NativeIntegers = GL_TRUE;
       consts->MaxClipPlanes = 8;
 
+      if (screen->get_param(screen, PIPE_CAP_VERTEXID_NOBASE)) {
+         consts->VertexID_is_zero_based = GL_TRUE;
+      }
+
       /* Extensions that either depend on GLSL 1.30 or are a subset thereof. */
       extensions->ARB_conservative_depth = GL_TRUE;
       extensions->ARB_shading_language_packing = GL_TRUE;
@@ -696,9 +702,12 @@ void st_init_extensions(struct pipe_screen *screen,
 
          extensions->EXT_shader_integer_mix = GL_TRUE;
       }
+
+      /* Integer textures make no sense before GLSL 1.30 */
+      extensions->EXT_texture_integer = GL_FALSE;
    }
 
-   consts->UniformBooleanTrue = consts->NativeIntegers ? ~0 : fui(1.0f);
+   consts->UniformBooleanTrue = consts->NativeIntegers ? ~0U : fui(1.0f);
 
    /* Below are the cases which cannot be moved into tables easily. */
 

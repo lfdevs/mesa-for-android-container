@@ -104,15 +104,14 @@ clip_or_scissor(bool mirror,
 
 bool
 brw_meta_mirror_clip_and_scissor(const struct gl_context *ctx,
+                                 const struct gl_framebuffer *read_fb,
+                                 const struct gl_framebuffer *draw_fb,
                                  GLfloat *srcX0, GLfloat *srcY0,
                                  GLfloat *srcX1, GLfloat *srcY1,
                                  GLfloat *dstX0, GLfloat *dstY0,
                                  GLfloat *dstX1, GLfloat *dstY1,
                                  bool *mirror_x, bool *mirror_y)
 {
-   const struct gl_framebuffer *read_fb = ctx->ReadBuffer;
-   const struct gl_framebuffer *draw_fb = ctx->DrawBuffer;
-
    *mirror_x = false;
    *mirror_y = false;
 

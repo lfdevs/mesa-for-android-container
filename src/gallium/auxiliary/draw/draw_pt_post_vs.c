@@ -117,7 +117,7 @@ dot4(const float *a, const float *b)
 
 
 boolean draw_pt_post_vs_run( struct pt_post_vs *pvs,
-			     struct draw_vertex_info *info,
+                             struct draw_vertex_info *info,
                              const struct draw_prim_info *prim_info )
 {
    return pvs->run( pvs, info, prim_info );

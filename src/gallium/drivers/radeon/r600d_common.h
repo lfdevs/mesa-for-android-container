@@ -28,6 +28,8 @@
 
 #define R600_CONFIG_REG_OFFSET	0x08000
 #define R600_CONTEXT_REG_OFFSET 0x28000
+#define SI_SH_REG_OFFSET                     0x0000B000
+#define SI_SH_REG_END                        0x0000C000
 #define CIK_UCONFIG_REG_OFFSET               0x00030000
 #define CIK_UCONFIG_REG_END                  0x00031000
 
@@ -61,7 +63,8 @@
 #define		SURFACE_BASE_UPDATE_COLOR(x)   (2 << (x))
 #define		SURFACE_BASE_UPDATE_COLOR_NUM(x) (((1 << x) - 1) << 1)
 #define		SURFACE_BASE_UPDATE_STRMOUT(x) (0x200 << (x))
-#define PKT3_SET_UCONFIG_REG                   0x79 /* new for CIK */
+#define PKT3_SET_SH_REG                        0x76 /* SI and later */
+#define PKT3_SET_UCONFIG_REG                   0x79 /* CIK and later */
 
 #define EVENT_TYPE_PS_PARTIAL_FLUSH            0x10
 #define EVENT_TYPE_CACHE_FLUSH_AND_INV_TS_EVENT 0x14

@@ -51,6 +51,11 @@ struct block_data {
 
    /** Which defs reach the exit point of the block. */
    BITSET_WORD *liveout;
+
+   BITSET_WORD flag_def[1];
+   BITSET_WORD flag_use[1];
+   BITSET_WORD flag_livein[1];
+   BITSET_WORD flag_liveout[1];
 };
 
 class fs_live_variables {
@@ -61,7 +66,10 @@ public:
    ~fs_live_variables();
 
    bool vars_interfere(int a, int b);
-   int var_from_reg(fs_reg *reg);
+   int var_from_reg(const fs_reg &reg) const
+   {
+      return var_from_vgrf[reg.reg] + reg.reg_offset;
+   }
 
    /** Map from virtual GRF number to index in block_data arrays. */
    int *var_from_vgrf;
@@ -87,12 +95,14 @@ public:
    /** @} */
 
    /** Per-basic-block information on live variables */
-   struct block_data *bd;
+   struct block_data *block_data;
 
 protected:
    void setup_def_use();
-   void setup_one_read(bblock_t *block, fs_inst *inst, int ip, fs_reg reg);
-   void setup_one_write(bblock_t *block, fs_inst *inst, int ip, fs_reg reg);
+   void setup_one_read(struct block_data *bd, fs_inst *inst, int ip,
+                       const fs_reg &reg);
+   void setup_one_write(struct block_data *bd, fs_inst *inst, int ip,
+                        const fs_reg &reg);
    void compute_live_variables();
    void compute_start_end();
 

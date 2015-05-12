@@ -2111,6 +2111,11 @@ static void evergreen_emit_shader_stages(struct r600_context *rctx, struct r600_
 
 	uint32_t v = 0, v2 = 0, primid = 0;
 
+	if (rctx->vs_shader->current->shader.vs_as_gs_a) {
+		v2 = S_028A40_MODE(V_028A40_GS_SCENARIO_A);
+		primid = 1;
+	}
+
 	if (state->geom_enable) {
 		uint32_t cut_val;
 

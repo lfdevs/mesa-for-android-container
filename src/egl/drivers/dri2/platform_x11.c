@@ -49,8 +49,7 @@ dri2_x11_swap_interval(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
 
 static void
 swrastCreateDrawable(struct dri2_egl_display * dri2_dpy,
-                     struct dri2_egl_surface * dri2_surf,
-                     int depth)
+                     struct dri2_egl_surface * dri2_surf)
 {
    uint32_t           mask;
    const uint32_t     function = GXcopy;
@@ -66,8 +65,7 @@ swrastCreateDrawable(struct dri2_egl_display * dri2_dpy,
    valgc[0] = function;
    valgc[1] = False;
    xcb_create_gc(dri2_dpy->conn, dri2_surf->swapgc, dri2_surf->drawable, mask, valgc);
-   dri2_surf->depth = depth;
-   switch (depth) {
+   switch (dri2_surf->depth) {
       case 32:
       case 24:
          dri2_surf->bytes_per_pixel = 4;
@@ -82,7 +80,7 @@ swrastCreateDrawable(struct dri2_egl_display * dri2_dpy,
          dri2_surf->bytes_per_pixel = 0;
          break;
       default:
-         _eglLog(_EGL_WARNING, "unsupported depth %d", depth);
+         _eglLog(_EGL_WARNING, "unsupported depth %d", dri2_surf->depth);
    }
 }
 
@@ -257,12 +255,6 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       _eglError(EGL_BAD_ALLOC, "dri2->createNewDrawable");
       goto cleanup_pixmap;
    }
-   
-   if (dri2_dpy->dri2) {
-      xcb_dri2_create_drawable (dri2_dpy->conn, dri2_surf->drawable);
-   } else {
-      swrastCreateDrawable(dri2_dpy, dri2_surf, _eglGetConfigKey(conf, EGL_BUFFER_SIZE));
-   }
 
    if (type != EGL_PBUFFER_BIT) {
       cookie = xcb_get_geometry (dri2_dpy->conn, dri2_surf->drawable);
@@ -275,7 +267,17 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 
       dri2_surf->base.Width = reply->width;
       dri2_surf->base.Height = reply->height;
+      dri2_surf->depth = reply->depth;
       free(reply);
+   }
+
+   if (dri2_dpy->dri2) {
+      xcb_dri2_create_drawable (dri2_dpy->conn, dri2_surf->drawable);
+   } else {
+      if (type == EGL_PBUFFER_BIT) {
+         dri2_surf->depth = _eglGetConfigKey(conf, EGL_BUFFER_SIZE);
+      }
+      swrastCreateDrawable(dri2_dpy, dri2_surf);
    }
 
    /* we always copy the back buffer to front */
@@ -771,8 +773,7 @@ dri2_x11_swap_buffers_msc(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
    if (draw->SwapBehavior == EGL_BUFFER_PRESERVED || !dri2_dpy->swap_available)
       return dri2_copy_region(drv, disp, draw, dri2_surf->region) ? 0 : -1;
 
-   if (dri2_dpy->flush)
-      (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
+   dri2_flush_drawable_for_swapbuffers(disp, draw);
 
    cookie = xcb_dri2_swap_buffers_unchecked(dri2_dpy->conn, dri2_surf->drawable,
                   msc_hi, msc_lo, divisor_hi, divisor_lo, remainder_hi, remainder_lo);

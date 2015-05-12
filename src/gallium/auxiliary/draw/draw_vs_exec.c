@@ -129,6 +129,18 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
             unsigned vid = machine->SysSemanticToIndex[TGSI_SEMANTIC_VERTEXID];
             assert(vid < Elements(machine->SystemValue));
             machine->SystemValue[vid].i[j] = i + j;
+            /* XXX this should include base vertex. Where to get it??? */
+         }
+         if (shader->info.uses_basevertex) {
+            unsigned vid = machine->SysSemanticToIndex[TGSI_SEMANTIC_BASEVERTEX];
+            assert(vid < Elements(machine->SystemValue));
+            machine->SystemValue[vid].i[j] = 0;
+            /* XXX Where to get it??? */
+         }
+         if (shader->info.uses_vertexid_nobase) {
+            unsigned vid = machine->SysSemanticToIndex[TGSI_SEMANTIC_VERTEXID_NOBASE];
+            assert(vid < Elements(machine->SystemValue));
+            machine->SystemValue[vid].i[j] = i + j;
          }
 
          for (slot = 0; slot < shader->info.num_inputs; slot++) {
@@ -144,7 +156,7 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
             machine->Inputs[slot].xyzw[3].f[j] = input[slot][3];
          }
 
-	 input = (const float (*)[4])((const char *)input + input_stride);
+         input = (const float (*)[4])((const char *)input + input_stride);
       } 
 
       tgsi_set_exec_mask(machine,

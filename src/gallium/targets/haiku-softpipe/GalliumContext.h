@@ -40,7 +40,9 @@ public:
 								context_id contextID);
 
 		status_t			SwapBuffers(context_id contextID);
-		void				ResizeViewport(int32 width, int32 height);
+
+		bool				Validate(uint32 width, uint32 height);
+		void				Invalidate(uint32 width, uint32 height);
 
 private:
 		status_t			CreateScreen();

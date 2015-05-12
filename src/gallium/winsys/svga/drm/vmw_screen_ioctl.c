@@ -248,8 +248,7 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
    return rep->handle;
 
 out_fail_create:
-   if (region)
-      FREE(region);
+   FREE(region);
    return SVGA3D_INVALID_ID;
 }
 
@@ -378,8 +377,7 @@ out_fail_ref:
    if (needs_unref)
       vmw_ioctl_surface_destroy(vws, *handle);
 out_fail_req:
-   if (region)
-      FREE(region);
+   FREE(region);
    return ret;
 }
 

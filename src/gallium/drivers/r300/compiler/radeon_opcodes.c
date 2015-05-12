@@ -60,6 +60,12 @@ struct rc_opcode_info rc_opcodes[MAX_RC_OPCODE] = {
 		.HasDstReg = 1
 	},
 	{
+		.Opcode = RC_OPCODE_ARR,
+		.Name = "ARR",
+		.NumSrcRegs = 1,
+		.HasDstReg = 1
+	},
+	{
 		.Opcode = RC_OPCODE_CEIL,
 		.Name = "CEIL",
 		.NumSrcRegs = 1,
@@ -546,6 +552,7 @@ void rc_compute_sources_for_writemask(
 	} else {
 		switch(opcode->Opcode) {
 		case RC_OPCODE_ARL:
+		case RC_OPCODE_ARR:
 			srcmasks[0] |= RC_MASK_X;
 			break;
 		case RC_OPCODE_DP2:

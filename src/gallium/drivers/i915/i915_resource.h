@@ -86,7 +86,7 @@ struct i915_texture {
    struct i915_winsys_buffer *buffer;
 };
 
-unsigned i915_texture_offset(struct i915_texture *tex,
+unsigned i915_texture_offset(const struct i915_texture *tex,
                              unsigned level, unsigned layer);
 void i915_init_screen_resource_functions(struct i915_screen *is);
 void i915_init_resource_functions(struct i915_context *i915);

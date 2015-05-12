@@ -38,6 +38,8 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
                        HANDLE *pSharedHandle )
 {
     struct pipe_resource *info = &This->base.base.info;
+    struct pipe_screen *screen = pParams->device->screen;
+    enum pipe_format pf;
     unsigned i;
     D3DSURFACE_DESC sfdesc;
     HRESULT hr;
@@ -55,9 +57,18 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
     if (Usage & D3DUSAGE_AUTOGENMIPMAP)
         Levels = 0;
 
+    pf = d3d9_to_pipe_format_checked(screen, Format, PIPE_TEXTURE_CUBE, 0,
+                                     PIPE_BIND_SAMPLER_VIEW, FALSE);
+    if (pf == PIPE_FORMAT_NONE)
+        return D3DERR_INVALIDCALL;
+
+    /* We support ATI1 and ATI2 hacks only for 2D textures */
+    if (Format == D3DFMT_ATI1 || Format == D3DFMT_ATI2)
+        return D3DERR_INVALIDCALL;
+
     info->screen = pParams->device->screen;
     info->target = PIPE_TEXTURE_CUBE;
-    info->format = d3d9_to_pipe_format(Format);
+    info->format = pf;
     info->width0 = EdgeLength;
     info->height0 = EdgeLength;
     info->depth0 = 1;
@@ -146,7 +157,7 @@ NineCubeTexture9_GetLevelDesc( struct NineCubeTexture9 *This,
     user_assert(Level == 0 || !(This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP),
                 D3DERR_INVALIDCALL);
 
-    *pDesc = This->surfaces[Level]->desc;
+    *pDesc = This->surfaces[Level * 6]->desc;
 
     return D3D_OK;
 }

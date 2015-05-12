@@ -117,7 +117,6 @@ extern const struct brw_tracked_state gen6_vs_state;
 extern const struct brw_tracked_state gen6_wm_push_constants;
 extern const struct brw_tracked_state gen6_wm_state;
 extern const struct brw_tracked_state gen7_depthbuffer;
-extern const struct brw_tracked_state gen7_cc_viewport_state_pointer;
 extern const struct brw_tracked_state gen7_clip_state;
 extern const struct brw_tracked_state gen7_disable_stages;
 extern const struct brw_tracked_state gen7_gs_push_constants;
@@ -226,7 +225,6 @@ int brw_get_texture_swizzle(const struct gl_context *ctx,
                             const struct gl_texture_object *t);
 
 /* gen7_wm_surface_state.c */
-unsigned brw_swizzle_to_scs(GLenum swizzle, bool need_green_to_blue);
 uint32_t gen7_surface_tiling_mode(uint32_t tiling);
 uint32_t gen7_surface_msaa_bits(unsigned num_samples, enum intel_msaa_layout l);
 void gen7_set_surface_mcs_info(struct brw_context *brw,

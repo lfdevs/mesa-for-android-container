@@ -69,7 +69,9 @@
 
 static uint32_t bin_width(struct fd_context *ctx)
 {
-	if (ctx->screen->gpu_id >= 300)
+	if (is_a4xx(ctx->screen))
+		return 1024;
+	if (is_a3xx(ctx->screen))
 		return 992;
 	return 512;
 }

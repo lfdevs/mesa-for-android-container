@@ -80,10 +80,6 @@ void radeon_llvm_shader_type(LLVMValueRef F, unsigned type)
 	sprintf(Str, "%1d", llvm_type);
 
 	LLVMAddTargetDependentFunctionAttr(F, "ShaderType", Str);
-
-	if (type != TGSI_PROCESSOR_COMPUTE) {
-		LLVMAddTargetDependentFunctionAttr(F, "unsafe-fp-math", "true");
-	}
 }
 
 static void init_r600_target()
@@ -98,19 +94,19 @@ static void init_r600_target()
 	}
 }
 
-static LLVMTargetRef get_r600_target()
+LLVMTargetRef radeon_llvm_get_r600_target(const char *triple)
 {
 	LLVMTargetRef target = NULL;
+	char *err_message = NULL;
 
-	for (target = LLVMGetFirstTarget(); target;
-					target = LLVMGetNextTarget(target)) {
-		if (!strncmp(LLVMGetTargetName(target), "r600", 4)) {
-			break;
+	init_r600_target();
+
+	if (LLVMGetTargetFromTriple(triple, &target, &err_message)) {
+		fprintf(stderr, "Cannot find target for triple %s ", triple);
+		if (err_message) {
+			fprintf(stderr, "%s\n", err_message);
 		}
-	}
-
-	if (!target) {
-		fprintf(stderr, "Can't find target r600\n");
+		LLVMDisposeMessage(err_message);
 		return NULL;
 	}
 	return target;
@@ -138,14 +134,13 @@ static void radeonDiagnosticHandler(LLVMDiagnosticInfoRef di, void *context)
  * @returns 0 for success, 1 for failure
  */
 unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_shader_binary *binary,
-					  const char *gpu_family, unsigned dump)
+			  const char *gpu_family, unsigned dump, LLVMTargetMachineRef tm)
 {
 
-	LLVMTargetRef target;
-	LLVMTargetMachineRef tm;
 	char cpu[CPU_STRING_LEN];
 	char fs[FS_STRING_LEN];
 	char *err;
+	bool dispose_tm = false;
 	LLVMContextRef llvm_ctx;
 	unsigned rval = 0;
 	LLVMMemoryBufferRef out_buffer;
@@ -154,22 +149,25 @@ unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_shader_binary *binar
 	char triple[TRIPLE_STRING_LEN];
 	LLVMBool mem_err;
 
-	/* initialise */
-	init_r600_target();
-
-	target = get_r600_target();
-	if (!target) {
-		return 1;
+	if (!tm) {
+		strncpy(triple, "r600--", TRIPLE_STRING_LEN);
+		LLVMTargetRef target = radeon_llvm_get_r600_target(triple);
+		if (!target) {
+			return 1;
+		}
+		strncpy(cpu, gpu_family, CPU_STRING_LEN);
+		memset(fs, 0, sizeof(fs));
+		if (dump) {
+			strncpy(fs, "+DumpCode", FS_STRING_LEN);
+		}
+		tm = LLVMCreateTargetMachine(target, triple, cpu, fs,
+				  LLVMCodeGenLevelDefault, LLVMRelocDefault,
+						  LLVMCodeModelDefault);
+		dispose_tm = true;
 	}
-
-	strncpy(cpu, gpu_family, CPU_STRING_LEN);
-	memset(fs, 0, sizeof(fs));
 	if (dump) {
 		LLVMDumpModule(M);
-		strncpy(fs, "+DumpCode", FS_STRING_LEN);
 	}
-	strncpy(triple, "r600--", TRIPLE_STRING_LEN);
-
 	/* Setup Diagnostic Handler*/
 	llvm_ctx = LLVMGetModuleContext(M);
 
@@ -179,9 +177,6 @@ unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_shader_binary *binar
 	rval = 0;
 
 	/* Compile IR*/
-	tm = LLVMCreateTargetMachine(target, triple, cpu, fs,
-				  LLVMCodeGenLevelDefault, LLVMRelocDefault,
-						  LLVMCodeModelDefault);
 	mem_err = LLVMTargetMachineEmitToMemoryBuffer(tm, M, LLVMObjectFile, &err,
 								 &out_buffer);
 
@@ -205,6 +200,9 @@ unsigned radeon_llvm_compile(LLVMModuleRef M, struct radeon_shader_binary *binar
 
 	/* Clean up */
 	LLVMDisposeMemoryBuffer(out_buffer);
-	LLVMDisposeTargetMachine(tm);
+
+	if (dispose_tm) {
+		LLVMDisposeTargetMachine(tm);
+	}
 	return rval;
 }

@@ -33,7 +33,7 @@
 
 #include "fd3_rasterizer.h"
 #include "fd3_context.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 
 void *
 fd3_rasterizer_state_create(struct pipe_context *pctx,
@@ -50,7 +50,7 @@ fd3_rasterizer_state_create(struct pipe_context *pctx,
 
 	if (cso->point_size_per_vertex) {
 		psize_min = util_get_min_point_size(cso);
-		psize_max = 8192;
+		psize_max = 4092;
 	} else {
 		/* Force the point size to be as if the vertex output was disabled. */
 		psize_min = cso->point_size;
@@ -67,9 +67,9 @@ fd3_rasterizer_state_create(struct pipe_context *pctx,
 */
 	so->gras_cl_clip_cntl = A3XX_GRAS_CL_CLIP_CNTL_IJ_PERSP_CENTER; /* ??? */
 	so->gras_su_point_minmax =
-			A3XX_GRAS_SU_POINT_MINMAX_MIN(psize_min/2) |
-			A3XX_GRAS_SU_POINT_MINMAX_MAX(psize_max/2);
-	so->gras_su_point_size   = A3XX_GRAS_SU_POINT_SIZE(cso->point_size/2);
+			A3XX_GRAS_SU_POINT_MINMAX_MIN(psize_min) |
+			A3XX_GRAS_SU_POINT_MINMAX_MAX(psize_max);
+	so->gras_su_point_size   = A3XX_GRAS_SU_POINT_SIZE(cso->point_size);
 	so->gras_su_poly_offset_scale =
 			A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL(cso->offset_scale);
 	so->gras_su_poly_offset_offset =

@@ -49,7 +49,7 @@ extern _EGLArray *
 _eglCreateArray(const char *name, EGLint init_size);
 
 
-PUBLIC void
+extern void
 _eglDestroyArray(_EGLArray *array, void (*free_cb)(void *));
 
 
@@ -65,7 +65,7 @@ void *
 _eglFindArray(_EGLArray *array, void *elem);
 
 
-PUBLIC EGLint
+extern EGLint
 _eglFilterArray(_EGLArray *array, void **data, EGLint size,
                 _EGLArrayForEach filter, void *filter_data);
 

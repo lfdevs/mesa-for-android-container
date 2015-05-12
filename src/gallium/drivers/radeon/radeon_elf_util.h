@@ -30,6 +30,7 @@
 #include <stdint.h>
 
 struct radeon_shader_binary;
+struct radeon_shader_reloc;
 
 /*
  * Parse the elf binary stored in \p elf_data and create a
@@ -46,4 +47,18 @@ const unsigned char *radeon_shader_binary_config_start(
 	const struct radeon_shader_binary *binary,
 	uint64_t symbol_offset);
 
+/**
+ * Free all memory allocated for members of \p binary.  This function does
+ * not free \p binary.
+ *
+ * @param free_relocs If false, reolc information will not be freed.
+ */
+void radeon_shader_binary_free_members(struct radeon_shader_binary *binary,
+	unsigned free_relocs);
+
+/**
+ * Free \p relocs and all member data.
+ */
+void radeon_shader_binary_free_relocs(struct radeon_shader_reloc *relocs,
+					unsigned reloc_count);
 #endif /* RADEON_ELF_UTIL_H */

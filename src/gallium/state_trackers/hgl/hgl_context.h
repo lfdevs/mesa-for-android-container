@@ -37,7 +37,10 @@ struct hgl_buffer
 
 	unsigned width;
 	unsigned height;
+	unsigned mask;
 
+	struct pipe_screen* screen;
+	enum pipe_texture_target target;
 	struct pipe_resource* textures[ST_ATTACHMENT_COUNT];
 
 	void *map;
@@ -57,11 +60,17 @@ struct hgl_context
 	struct st_visual* stVisual;
 		// State Tracker Visual
 
-	struct pipe_resource* textures[ST_ATTACHMENT_COUNT];
+	struct pipe_screen* screen;
+
+	//struct pipe_resource* textures[ST_ATTACHMENT_COUNT];
 
 	// Post processing
 	struct pp_queue_t* postProcess;
 	unsigned int postProcessEnable[PP_FILTERS];
+
+	// Desired viewport size
+	unsigned width;
+	unsigned height;
 
 	Bitmap* bitmap;
 	color_space colorSpace;
@@ -77,7 +86,7 @@ struct hgl_context
 struct hgl_buffer* hgl_create_st_framebuffer(struct hgl_context* context);
 
 // hgl state_tracker manager
-struct st_manager* hgl_create_st_manager(struct pipe_screen* screen);
+struct st_manager* hgl_create_st_manager(struct hgl_context* screen);
 void hgl_destroy_st_manager(struct st_manager *manager);
 
 // hgl state_tracker visual

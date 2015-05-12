@@ -283,8 +283,7 @@ void brw_SAMPLE(struct brw_compile *p,
 
 void brw_adjust_sampler_state_pointer(struct brw_compile *p,
                                       struct brw_reg header,
-                                      struct brw_reg sampler_index,
-                                      struct brw_reg scratch);
+                                      struct brw_reg sampler_index);
 
 void gen4_math(struct brw_compile *p,
 	       struct brw_reg dest,

@@ -253,8 +253,7 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
        */
       xmvis->vishandle = vinfo;
       /* Allocate more space for additional visual */
-      VisualTable = (XMesaVisual *) realloc( VisualTable,
-                                   sizeof(XMesaVisual) * (NumVisuals + 1));
+      VisualTable = realloc(VisualTable, sizeof(XMesaVisual) * (NumVisuals + 1));
       /* add xmvis to the list */
       VisualTable[NumVisuals] = xmvis;
       NumVisuals++;
@@ -1078,7 +1077,7 @@ glXChooseVisual( Display *dpy, int screen, int *list )
    xmvis = choose_visual(dpy, screen, list, GL_FALSE);
    if (xmvis) {
       /* create a new vishandle - the cached one may be stale */
-      xmvis->vishandle = (XVisualInfo *) malloc(sizeof(XVisualInfo));
+      xmvis->vishandle = malloc(sizeof(XVisualInfo));
       if (xmvis->vishandle) {
          memcpy(xmvis->vishandle, xmvis->visinfo, sizeof(XVisualInfo));
       }
@@ -1829,8 +1828,7 @@ glXGetFBConfigs( Display *dpy, int screen, int *nelements )
    visTemplate.screen = screen;
    visuals = XGetVisualInfo(dpy, visMask, &visTemplate, nelements);
    if (*nelements > 0) {
-      XMesaVisual *results;
-      results = (XMesaVisual *) malloc(*nelements * sizeof(XMesaVisual));
+      XMesaVisual *results = malloc(*nelements * sizeof(XMesaVisual));
       if (!results) {
          *nelements = 0;
          return NULL;
@@ -1864,7 +1862,7 @@ glXChooseFBConfig(Display *dpy, int screen,
 
    xmvis = choose_visual(dpy, screen, attribList, GL_TRUE);
    if (xmvis) {
-      GLXFBConfig *config = (GLXFBConfig *) malloc(sizeof(XMesaVisual));
+      GLXFBConfig *config = malloc(sizeof(XMesaVisual));
       if (!config) {
          *nitems = 0;
          return NULL;
@@ -1889,7 +1887,7 @@ glXGetVisualFromFBConfig( Display *dpy, GLXFBConfig config )
       return xmvis->vishandle;
 #else
       /* create a new vishandle - the cached one may be stale */
-      xmvis->vishandle = (XVisualInfo *) malloc(sizeof(XVisualInfo));
+      xmvis->vishandle = malloc(sizeof(XVisualInfo));
       if (xmvis->vishandle) {
          memcpy(xmvis->vishandle, xmvis->visinfo, sizeof(XVisualInfo));
       }

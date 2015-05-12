@@ -86,6 +86,8 @@ const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =
    "SAMPLEPOS",
    "SAMPLEMASK",
    "INVOCATIONID",
+   "VERTEXID_NOBASE",
+   "BASEVERTEX",
 };
 
 const char *tgsi_texture_names[TGSI_TEXTURE_COUNT] =
@@ -122,7 +124,7 @@ const char *tgsi_property_names[TGSI_PROPERTY_COUNT] =
    "FS_DEPTH_LAYOUT",
    "VS_PROHIBIT_UCPS",
    "GS_INVOCATIONS",
-   "VS_POSITION_WINDOW_SPACE"
+   "VS_WINDOW_SPACE_POSITION"
 };
 
 const char *tgsi_return_type_names[TGSI_RETURN_TYPE_COUNT] =

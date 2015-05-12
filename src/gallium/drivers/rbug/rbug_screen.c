@@ -30,7 +30,7 @@
 #include "pipe/p_state.h"
 #include "util/u_memory.h"
 #include "util/u_debug.h"
-#include "util/u_simple_list.h"
+#include "util/simple_list.h"
 
 #include "rbug_public.h"
 #include "rbug_screen.h"

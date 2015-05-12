@@ -1797,7 +1797,8 @@ st_choose_format(struct st_context *st, GLenum internalFormat,
                  unsigned bindings, boolean allow_dxt)
 {
    struct pipe_screen *screen = st->pipe->screen;
-   int i, j;
+   unsigned i;
+   int j;
    enum pipe_format pf;
 
 #ifdef DEBUG

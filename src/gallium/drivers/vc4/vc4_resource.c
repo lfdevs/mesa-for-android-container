@@ -126,7 +126,10 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
          * need to do syncing stuff here yet.
          */
 
-        buf = vc4_bo_map(rsc->bo);
+        if (usage & PIPE_TRANSFER_UNSYNCHRONIZED)
+                buf = vc4_bo_map_unsynchronized(rsc->bo);
+        else
+                buf = vc4_bo_map(rsc->bo);
         if (!buf) {
                 fprintf(stderr, "Failed to map bo\n");
                 goto fail;
@@ -369,12 +372,14 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
                 return NULL;
 
         rsc->tiled = false;
-        rsc->bo = vc4_screen_bo_from_handle(pscreen, handle, &slice->stride);
+        rsc->bo = vc4_screen_bo_from_handle(pscreen, handle);
         if (!rsc->bo)
                 goto fail;
 
 #ifdef USE_VC4_SIMULATOR
         slice->stride = align(prsc->width0 * rsc->cpp, 16);
+#else
+        slice->stride = handle->stride;
 #endif
         slice->tiling = VC4_TILING_FORMAT_LINEAR;
 
@@ -429,11 +434,11 @@ vc4_surface_destroy(struct pipe_context *pctx, struct pipe_surface *psurf)
 static void
 vc4_flush_resource(struct pipe_context *pctx, struct pipe_resource *resource)
 {
-        struct vc4_context *vc4 = vc4_context(pctx);
-
-        /* XXX: Skip this if we don't have any queued drawing to it. */
-        vc4->base.flush(pctx, NULL, 0);
+        /* All calls to flush_resource are followed by a flush of the context,
+         * so there's nothing to do.
+         */
 }
+
 static bool
 render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
 {

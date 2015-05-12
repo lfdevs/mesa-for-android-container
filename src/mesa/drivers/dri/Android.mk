@@ -35,17 +35,16 @@ MESA_DRI_CFLAGS := \
 	-DHAVE_ANDROID_PLATFORM
 
 MESA_DRI_C_INCLUDES := \
-	$(MESA_TOP)/src \
 	$(call intermediates-dir-for,STATIC_LIBRARIES,libmesa_dri_common) \
 	$(addprefix $(MESA_TOP)/, $(mesa_dri_common_INCLUDES)) \
-	$(TARGET_OUT_HEADERS)/libdrm \
 	external/expat/lib
 
 MESA_DRI_WHOLE_STATIC_LIBRARIES := \
 	libmesa_glsl \
 	libmesa_megadriver_stub \
 	libmesa_dri_common \
-	libmesa_dricore
+	libmesa_dricore \
+	libmesa_util
 
 MESA_DRI_SHARED_LIBRARIES := \
 	libcutils \

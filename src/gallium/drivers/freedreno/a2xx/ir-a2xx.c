@@ -439,7 +439,8 @@ static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
 		assert(sdst_reg->flags == dst_reg->flags);
 
 		if (src3_reg) {
-			assert(src3_reg == instr->regs[reg++]);
+			assert(src3_reg == instr->regs[reg]);
+			reg++;
 		} else {
 			src3_reg = instr->regs[reg++];
 		}

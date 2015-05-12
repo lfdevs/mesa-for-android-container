@@ -572,15 +572,15 @@ typedef struct PACKED {
 	uint32_t opc_cat  : 3;
 } instr_cat5_t;
 
-/* used for load instructions: */
+/* [src1 + off], src2: */
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t must_be_one1 : 1;
-	int16_t  off      : 13;
-	uint32_t src      : 8;
-	uint32_t dummy1   : 1;
-	uint32_t must_be_one2 : 1;
-	int32_t  iim_val  : 8;
+	uint32_t mustbe1  : 1;
+	int32_t  off      : 13;
+	uint32_t src1     : 8;
+	uint32_t src1_im  : 1;
+	uint32_t src2_im  : 1;
+	uint32_t src2     : 8;
 
 	/* dword1: */
 	uint32_t dst      : 8;
@@ -593,35 +593,38 @@ typedef struct PACKED {
 	uint32_t opc_cat  : 3;
 } instr_cat6a_t;
 
-/* used for store instructions: */
+/* [src1], src2: */
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t must_be_zero1 : 1;
-	uint32_t src      : 8;
-	uint32_t off_hi   : 5;   /* high bits of 'off'... ugly! */
-	uint32_t dummy1   : 9;
-	uint32_t must_be_one1 : 1;
-	int32_t  iim_val  : 8;
+	uint32_t mustbe0  : 1;
+	uint32_t src1     : 8;
+	uint32_t ignore0  : 13;
+	uint32_t src1_im  : 1;
+	uint32_t src2_im  : 1;
+	uint32_t src2     : 8;
 
 	/* dword1: */
-	uint16_t off      : 8;
-	uint32_t must_be_one2 : 1;
 	uint32_t dst      : 8;
+	uint32_t dummy2   : 9;
 	uint32_t type     : 3;
-	uint32_t dummy2   : 2;
+	uint32_t dummy3   : 2;
 	uint32_t opc      : 5;
 	uint32_t jmp_tgt  : 1;
 	uint32_t sync     : 1;
 	uint32_t opc_cat  : 3;
 } instr_cat6b_t;
 
+/* I think some of the other cat6 instructions use additional
+ * sub-encodings..
+ */
+
 typedef union PACKED {
 	instr_cat6a_t a;
 	instr_cat6b_t b;
 	struct PACKED {
 		/* dword0: */
-		uint32_t pad1     : 24;
-		int32_t  iim_val  : 8;
+		uint32_t has_off  : 1;
+		uint32_t pad1     : 31;
 
 		/* dword1: */
 		uint32_t pad2     : 17;

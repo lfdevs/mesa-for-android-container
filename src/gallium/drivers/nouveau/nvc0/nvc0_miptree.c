@@ -29,9 +29,9 @@
 #include "nvc0/nvc0_resource.h"
 
 static uint32_t
-nvc0_tex_choose_tile_dims(unsigned nx, unsigned ny, unsigned nz)
+nvc0_tex_choose_tile_dims(unsigned nx, unsigned ny, unsigned nz, boolean is_3d)
 {
-   return nv50_tex_choose_tile_dims_helper(nx, ny, nz);
+   return nv50_tex_choose_tile_dims_helper(nx, ny, nz, is_3d);
 }
 
 static uint32_t
@@ -211,7 +211,7 @@ nvc0_miptree_init_layout_tiled(struct nv50_miptree *mt)
 
       lvl->offset = mt->total_size;
 
-      lvl->tile_mode = nvc0_tex_choose_tile_dims(nbx, nby, d);
+      lvl->tile_mode = nvc0_tex_choose_tile_dims(nbx, nby, d, mt->layout_3d);
 
       tsx = NVC0_TILE_SIZE_X(lvl->tile_mode); /* x is tile row pitch in bytes */
       tsy = NVC0_TILE_SIZE_Y(lvl->tile_mode);

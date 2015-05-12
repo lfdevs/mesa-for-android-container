@@ -43,19 +43,18 @@
 #include "linker.h"
 
 #include "main/mtypes.h"
+#include "main/shaderapi.h"
 #include "main/shaderobj.h"
 #include "main/uniforms.h"
-#include "program/hash_table.h"
 
-extern "C" {
-#include "main/shaderapi.h"
+#include "program/hash_table.h"
 #include "program/prog_instruction.h"
 #include "program/prog_optimize.h"
 #include "program/prog_print.h"
 #include "program/program.h"
 #include "program/prog_parameter.h"
 #include "program/sampler.h"
-}
+
 
 static int swizzle_for_size(int size);
 
@@ -1153,7 +1152,7 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       assert(!"not reached: should be handled by ir_div_to_mul_rcp");
       break;
    case ir_binop_mod:
-      /* Floating point should be lowered by MOD_TO_FRACT in the compiler. */
+      /* Floating point should be lowered by MOD_TO_FLOOR in the compiler. */
       assert(ir->type->is_integer());
       emit(ir, OPCODE_MUL, result_dst, op[0], op[1]);
       break;
@@ -1450,6 +1449,7 @@ ir_to_mesa_visitor::visit(ir_swizzle *ir)
    ir->val->accept(this);
    src = this->result;
    assert(src.file != PROGRAM_UNDEFINED);
+   assert(ir->type->vector_elements > 0);
 
    for (i = 0; i < 4; i++) {
       if (i < ir->type->vector_elements) {
@@ -2943,8 +2943,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
 	 /* Lowering */
 	 do_mat_op_to_vec(ir);
-	 GLenum target = _mesa_shader_stage_to_program(prog->_LinkedShaders[i]->Stage);
-	 lower_instructions(ir, (MOD_TO_FRACT | DIV_TO_MUL_RCP | EXP_TO_EXP2
+	 lower_instructions(ir, (MOD_TO_FLOOR | DIV_TO_MUL_RCP | EXP_TO_EXP2
 				 | LOG_TO_LOG2 | INT_DIV_TO_MUL_RCP
 				 | ((options->EmitNoPow) ? POW_TO_EXP2 : 0)));
 

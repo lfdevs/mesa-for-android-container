@@ -62,14 +62,21 @@ brw_upload_cc_vp(struct brw_context *brw)
       }
    }
 
-   brw->state.dirty.cache |= CACHE_NEW_CC_VP;
+   if (brw->gen >= 7) {
+      BEGIN_BATCH(2);
+      OUT_BATCH(_3DSTATE_VIEWPORT_STATE_POINTERS_CC << 16 | (2 - 2));
+      OUT_BATCH(brw->cc.vp_offset);
+      ADVANCE_BATCH();
+   } else {
+      brw->state.dirty.brw |= BRW_NEW_CC_VP;
+   }
 }
 
 const struct brw_tracked_state brw_cc_vp = {
    .dirty = {
-      .mesa = _NEW_VIEWPORT | _NEW_TRANSFORM,
+      .mesa = _NEW_TRANSFORM |
+              _NEW_VIEWPORT,
       .brw = BRW_NEW_BATCH,
-      .cache = 0
    },
    .emit = brw_upload_cc_vp
 };
@@ -219,11 +226,11 @@ static void upload_cc_unit(struct brw_context *brw)
    if (brw->stats_wm || unlikely(INTEL_DEBUG & DEBUG_STATS))
       cc->cc5.statistics_enable = 1;
 
-   /* CACHE_NEW_CC_VP */
+   /* BRW_NEW_CC_VP */
    cc->cc4.cc_viewport_state_offset = (brw->batch.bo->offset64 +
 				       brw->cc.vp_offset) >> 5; /* reloc */
 
-   brw->state.dirty.cache |= CACHE_NEW_CC_UNIT;
+   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
 
    /* Emit CC viewport relocation */
    drm_intel_bo_emit_reloc(brw->batch.bo,
@@ -235,9 +242,13 @@ static void upload_cc_unit(struct brw_context *brw)
 
 const struct brw_tracked_state brw_cc_unit = {
    .dirty = {
-      .mesa = _NEW_STENCIL | _NEW_COLOR | _NEW_DEPTH | _NEW_BUFFERS,
-      .brw = BRW_NEW_BATCH | BRW_NEW_STATS_WM,
-      .cache = CACHE_NEW_CC_VP
+      .mesa = _NEW_BUFFERS |
+              _NEW_COLOR |
+              _NEW_DEPTH |
+              _NEW_STENCIL,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_CC_VP |
+             BRW_NEW_STATS_WM,
    },
    .emit = upload_cc_unit,
 };
@@ -259,7 +270,6 @@ const struct brw_tracked_state brw_blend_constant_color = {
    .dirty = {
       .mesa = _NEW_COLOR,
       .brw = BRW_NEW_CONTEXT,
-      .cache = 0
    },
    .emit = upload_blend_constant_color
 };

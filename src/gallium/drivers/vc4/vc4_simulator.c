@@ -24,6 +24,7 @@
 #ifdef USE_VC4_SIMULATOR
 
 #include "util/u_memory.h"
+#include "util/ralloc.h"
 
 #include "vc4_screen.h"
 #include "vc4_context.h"
@@ -173,6 +174,7 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
         if (ret)
                 return ret;
 
+        vc4_bo_unreference(&exec.exec_bo->bo);
         free(exec.exec_bo);
 
         if (ctex && ctex->bo->simulator_winsys_map) {
@@ -190,7 +192,8 @@ void
 vc4_simulator_init(struct vc4_screen *screen)
 {
         screen->simulator_mem_size = 256 * 1024 * 1024;
-        screen->simulator_mem_base = malloc(screen->simulator_mem_size);
+        screen->simulator_mem_base = ralloc_size(screen,
+                                                 screen->simulator_mem_size);
 
         /* We supply our own memory so that we can have more aperture
          * available (256MB instead of simpenrose's default 64MB).

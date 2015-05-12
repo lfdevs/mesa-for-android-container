@@ -241,11 +241,11 @@ gen6_upload_blend_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_blend_state = {
    .dirty = {
-      .mesa = (_NEW_COLOR |
-               _NEW_BUFFERS |
-               _NEW_MULTISAMPLE),
-      .brw = BRW_NEW_BATCH | BRW_NEW_STATE_BASE_ADDRESS,
-      .cache = 0,
+      .mesa = _NEW_BUFFERS |
+              _NEW_COLOR |
+              _NEW_MULTISAMPLE,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_STATE_BASE_ADDRESS,
    },
    .emit = gen6_upload_blend_state,
 };
@@ -295,9 +295,10 @@ gen6_upload_color_calc_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_color_calc_state = {
    .dirty = {
-      .mesa = _NEW_COLOR | _NEW_STENCIL,
-      .brw = BRW_NEW_BATCH | BRW_NEW_STATE_BASE_ADDRESS,
-      .cache = 0,
+      .mesa = _NEW_COLOR |
+              _NEW_STENCIL,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_STATE_BASE_ADDRESS,
    },
    .emit = gen6_upload_color_calc_state,
 };

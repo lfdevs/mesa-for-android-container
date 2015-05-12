@@ -742,21 +742,25 @@ st_translate_fragment_program(struct st_context *st,
       debug_printf("\n");
    }
    if (write_all == GL_TRUE)
-      ureg_property_fs_color0_writes_all_cbufs(ureg, 1);
+      ureg_property(ureg, TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS, 1);
 
    if (stfp->Base.FragDepthLayout != FRAG_DEPTH_LAYOUT_NONE) {
       switch (stfp->Base.FragDepthLayout) {
       case FRAG_DEPTH_LAYOUT_ANY:
-         ureg_property_fs_depth_layout(ureg, TGSI_FS_DEPTH_LAYOUT_ANY);
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_ANY);
          break;
       case FRAG_DEPTH_LAYOUT_GREATER:
-         ureg_property_fs_depth_layout(ureg, TGSI_FS_DEPTH_LAYOUT_GREATER);
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_GREATER);
          break;
       case FRAG_DEPTH_LAYOUT_LESS:
-         ureg_property_fs_depth_layout(ureg, TGSI_FS_DEPTH_LAYOUT_LESS);
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_LESS);
          break;
       case FRAG_DEPTH_LAYOUT_UNCHANGED:
-         ureg_property_fs_depth_layout(ureg, TGSI_FS_DEPTH_LAYOUT_UNCHANGED);
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_UNCHANGED);
          break;
       default:
          assert(0);
@@ -1091,7 +1095,7 @@ st_translate_geometry_program(struct st_context *st,
 
    /* find max output slot referenced to compute gs_num_outputs */
    for (attr = 0; attr < VARYING_SLOT_MAX; attr++) {
-      if (outputMapping[attr] != ~0 && outputMapping[attr] > maxSlot)
+      if (outputMapping[attr] != ~0U && outputMapping[attr] > maxSlot)
          maxSlot = outputMapping[attr];
    }
    gs_num_outputs = maxSlot + 1;
@@ -1122,10 +1126,11 @@ st_translate_geometry_program(struct st_context *st,
       stgp->tgsi.tokens = NULL;
    }
 
-   ureg_property_gs_input_prim(ureg, stgp->Base.InputType);
-   ureg_property_gs_output_prim(ureg, stgp->Base.OutputType);
-   ureg_property_gs_max_vertices(ureg, stgp->Base.VerticesOut);
-   ureg_property_gs_invocations(ureg, stgp->Base.Invocations);
+   ureg_property(ureg, TGSI_PROPERTY_GS_INPUT_PRIM, stgp->Base.InputType);
+   ureg_property(ureg, TGSI_PROPERTY_GS_OUTPUT_PRIM, stgp->Base.OutputType);
+   ureg_property(ureg, TGSI_PROPERTY_GS_MAX_OUTPUT_VERTICES,
+                 stgp->Base.VerticesOut);
+   ureg_property(ureg, TGSI_PROPERTY_GS_INVOCATIONS, stgp->Base.Invocations);
 
    if (stgp->glsl_to_tgsi)
       st_translate_program(st->ctx,

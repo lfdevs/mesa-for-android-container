@@ -116,7 +116,7 @@ cross_validate_types_and_qualifiers(struct gl_shader_program *prog,
       return;
    }
 
-   if (input->data.invariant != output->data.invariant) {
+   if (!prog->IsES && input->data.invariant != output->data.invariant) {
       linker_error(prog,
                    "%s shader output `%s' %s invariant qualifier, "
                    "but %s shader input %s invariant qualifier\n",

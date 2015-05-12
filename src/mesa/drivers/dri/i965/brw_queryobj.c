@@ -476,6 +476,8 @@ brw_query_counter(struct gl_context *ctx, struct gl_query_object *q)
    drm_intel_bo_unreference(query->bo);
    query->bo = drm_intel_bo_alloc(brw->bufmgr, "timestamp query", 4096, 4096);
    brw_write_timestamp(brw, query->bo, 0);
+
+   query->flushed = false;
 }
 
 /**

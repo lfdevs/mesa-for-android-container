@@ -58,15 +58,15 @@ gen6_upload_push_constants(struct brw_context *brw,
 {
    struct gl_context *ctx = &brw->ctx;
 
-   /* Updates the ParamaterValues[i] pointers for all parameters of the
-    * basic type of PROGRAM_STATE_VAR.
-    */
-   /* XXX: Should this happen somewhere before to get our state flag set? */
-   _mesa_load_state_parameters(ctx, prog->Parameters);
-
    if (prog_data->nr_params == 0) {
       stage_state->push_const_size = 0;
    } else {
+      /* Updates the ParamaterValues[i] pointers for all parameters of the
+       * basic type of PROGRAM_STATE_VAR.
+       */
+      /* XXX: Should this happen somewhere before to get our state flag set? */
+      _mesa_load_state_parameters(ctx, prog->Parameters);
+
       gl_constant_value *param;
       int i;
 
@@ -130,7 +130,7 @@ gen6_upload_vs_push_constants(struct brw_context *brw)
    /* _BRW_NEW_VERTEX_PROGRAM */
    const struct brw_vertex_program *vp =
       brw_vertex_program_const(brw->vertex_program);
-   /* CACHE_NEW_VS_PROG */
+   /* BRW_NEW_VS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = &brw->vs.prog_data->base.base;
 
    gen6_upload_push_constants(brw, &vp->program.Base, prog_data,
@@ -147,11 +147,12 @@ gen6_upload_vs_push_constants(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_vs_push_constants = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
-      .brw   = (BRW_NEW_BATCH |
-                BRW_NEW_VERTEX_PROGRAM |
-                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
-      .cache = CACHE_NEW_VS_PROG,
+      .mesa  = _NEW_PROGRAM_CONSTANTS |
+               _NEW_TRANSFORM,
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_PUSH_CONSTANT_ALLOCATION |
+               BRW_NEW_VERTEX_PROGRAM |
+               BRW_NEW_VS_PROG_DATA,
    },
    .emit = gen6_upload_vs_push_constants,
 };
@@ -159,7 +160,6 @@ const struct brw_tracked_state gen6_vs_push_constants = {
 static void
 upload_vs_state(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->ctx;
    const struct brw_stage_state *stage_state = &brw->vs.base;
    uint32_t floating_point_mode = 0;
 
@@ -201,10 +201,7 @@ upload_vs_state(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   /* Use ALT floating point mode for ARB vertex programs, because they
-    * require 0^0 == 1.
-    */
-   if (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX] == NULL)
+   if (brw->vs.prog_data->base.base.use_alt_mode)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
    BEGIN_BATCH(6);
@@ -259,12 +256,13 @@ upload_vs_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_vs_state = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
-      .brw   = (BRW_NEW_CONTEXT |
-		BRW_NEW_VERTEX_PROGRAM |
-		BRW_NEW_BATCH |
-                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
-      .cache = CACHE_NEW_VS_PROG
+      .mesa  = _NEW_PROGRAM_CONSTANTS |
+               _NEW_TRANSFORM,
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_CONTEXT |
+               BRW_NEW_PUSH_CONSTANT_ALLOCATION |
+               BRW_NEW_VERTEX_PROGRAM |
+               BRW_NEW_VS_PROG_DATA,
    },
    .emit = upload_vs_state,
 };

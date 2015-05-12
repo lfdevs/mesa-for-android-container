@@ -28,16 +28,56 @@
 
 #include "si_state.h"
 
+#include <llvm-c/TargetMachine.h>
+
 #ifdef PIPE_ARCH_BIG_ENDIAN
 #define SI_BIG_ENDIAN 1
 #else
 #define SI_BIG_ENDIAN 0
 #endif
 
+/* The base vertex and primitive restart can be any number, but we must pick
+ * one which will mean "unknown" for the purpose of state tracking and
+ * the number shouldn't be a commonly-used one. */
+#define SI_BASE_VERTEX_UNKNOWN INT_MIN
+#define SI_RESTART_INDEX_UNKNOWN INT_MIN
+
 #define SI_TRACE_CS 0
 #define SI_TRACE_CS_DWORDS		6
 
-#define SI_MAX_DRAW_CS_DWORDS 18
+#define SI_MAX_DRAW_CS_DWORDS \
+	(/*derived prim state:*/ 6 + /*draw regs:*/ 16 + /*draw packets:*/ 31)
+
+/* Instruction cache. */
+#define SI_CONTEXT_INV_ICACHE		(R600_CONTEXT_PRIVATE_FLAG << 0)
+/* Cache used by scalar memory (SMEM) instructions. They also use TC
+ * as a second level cache, which isn't flushed by this.
+ * Other names: constant cache, data cache, DCACHE */
+#define SI_CONTEXT_INV_KCACHE		(R600_CONTEXT_PRIVATE_FLAG << 1)
+/* Caches used by vector memory (VMEM) instructions.
+ * L1 can optionally be bypassed (GLC=1) and can only be used by shaders.
+ * L2 is used by shaders and can be used by other blocks (CP, sDMA). */
+#define SI_CONTEXT_INV_TC_L1		(R600_CONTEXT_PRIVATE_FLAG << 2)
+#define SI_CONTEXT_INV_TC_L2		(R600_CONTEXT_PRIVATE_FLAG << 3)
+/* Framebuffer caches. */
+#define SI_CONTEXT_FLUSH_AND_INV_CB_META (R600_CONTEXT_PRIVATE_FLAG << 4)
+#define SI_CONTEXT_FLUSH_AND_INV_DB_META (R600_CONTEXT_PRIVATE_FLAG << 5)
+#define SI_CONTEXT_FLUSH_AND_INV_DB	(R600_CONTEXT_PRIVATE_FLAG << 6)
+#define SI_CONTEXT_FLUSH_AND_INV_CB	(R600_CONTEXT_PRIVATE_FLAG << 7)
+/* Engine synchronization. */
+#define SI_CONTEXT_VS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 8)
+#define SI_CONTEXT_PS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 9)
+#define SI_CONTEXT_CS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 10)
+#define SI_CONTEXT_VGT_FLUSH		(R600_CONTEXT_PRIVATE_FLAG << 11)
+#define SI_CONTEXT_VGT_STREAMOUT_SYNC	(R600_CONTEXT_PRIVATE_FLAG << 12)
+/* Compute only. */
+#define SI_CONTEXT_FLUSH_WITH_INV_L2	(R600_CONTEXT_PRIVATE_FLAG << 13) /* TODO: merge with TC? */
+#define SI_CONTEXT_FLAG_COMPUTE		(R600_CONTEXT_PRIVATE_FLAG << 14)
+
+#define SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER (SI_CONTEXT_FLUSH_AND_INV_CB | \
+					      SI_CONTEXT_FLUSH_AND_INV_CB_META | \
+					      SI_CONTEXT_FLUSH_AND_INV_DB | \
+					      SI_CONTEXT_FLUSH_AND_INV_DB_META)
 
 struct si_compute;
 
@@ -49,6 +89,8 @@ struct si_sampler_view {
 	struct pipe_sampler_view	base;
 	struct list_head		list;
 	struct r600_resource		*resource;
+        /* [0..7] = image descriptor
+         * [4..7] = buffer descriptor */
 	uint32_t			state[8];
 	uint32_t			fmask_state[8];
 };
@@ -90,7 +132,9 @@ struct si_context {
 	void				*custom_blend_resolve;
 	void				*custom_blend_decompress;
 	void				*custom_blend_fastclear;
+	void				*pstipple_sampler_state;
 	struct si_screen		*screen;
+	struct si_pm4_state		*init_config;
 
 	union {
 		struct {
@@ -108,6 +152,7 @@ struct si_context {
 			struct r600_atom *framebuffer;
 			struct r600_atom *db_render_state;
 			struct r600_atom *msaa_config;
+			struct r600_atom *clip_regs;
 		} s;
 		struct r600_atom *array[0];
 	} atoms;
@@ -125,21 +170,18 @@ struct si_context {
 	struct si_cs_shader_state	cs_shader_state;
 	/* shader information */
 	unsigned			sprite_coord_enable;
+	bool				flatshade;
 	struct si_descriptors		vertex_buffers;
 	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
 	struct si_buffer_resources	rw_buffers[SI_NUM_SHADERS];
 	struct si_textures_info		samplers[SI_NUM_SHADERS];
+	struct r600_resource		*scratch_buffer;
 	struct r600_resource		*border_color_table;
 	unsigned			border_color_offset;
 
+	struct r600_atom		clip_regs;
 	struct r600_atom		msaa_config;
 	int				ps_iter_samples;
-
-	unsigned default_ps_gprs, default_vs_gprs;
-
-	/* Below are variables from the old r600_context.
-	 */
-	unsigned		pm4_dirty_cdwords;
 
 	/* Vertex and index buffers. */
 	bool			vertex_buffers_dirty;
@@ -157,6 +199,8 @@ struct si_context {
 	struct pipe_resource	*esgs_ring;
 	struct pipe_resource	*gsvs_ring;
 
+	LLVMTargetMachineRef		tm;
+
 	/* SI state handling */
 	union si_state	queued;
 	union si_state	emitted;
@@ -170,6 +214,23 @@ struct si_context {
 	bool			db_depth_clear;
 	bool			db_depth_disable_expclear;
 	unsigned		ps_db_shader_control;
+
+	/* Draw state. */
+	int			last_base_vertex;
+	int			last_start_instance;
+	int			last_sh_base_reg;
+	int			last_primitive_restart_en;
+	int			last_restart_index;
+	int			last_gs_out_prim;
+	int			last_prim;
+	int			last_multi_vgt_param;
+	int			last_rast_prim;
+	int			current_rast_prim; /* primitive type after TES, GS */
+
+	/* Scratch buffer */
+	boolean                 emit_scratch_reloc;
+	unsigned		scratch_waves;
+	unsigned		spi_tmpring_size;
 };
 
 /* si_blit.c */
@@ -226,6 +287,14 @@ si_resource_create_custom(struct pipe_screen *screen,
 	assert(size);
 	return r600_resource(pipe_buffer_create(screen,
 		PIPE_BIND_CUSTOM, usage, size));
+}
+
+static INLINE void
+si_invalidate_draw_sh_constants(struct si_context *sctx)
+{
+	sctx->last_base_vertex = SI_BASE_VERTEX_UNKNOWN;
+	sctx->last_start_instance = -1; /* reset to an unknown value */
+	sctx->last_sh_base_reg = -1; /* reset to an unknown value */
 }
 
 #endif

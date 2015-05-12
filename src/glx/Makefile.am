@@ -26,6 +26,8 @@ endif
 
 SUBDIRS =
 
+EXTRA_DIST = SConscript
+
 if HAVE_XF86VIDMODE
 EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
 endif
@@ -54,68 +56,86 @@ lib_LTLIBRARIES = lib@GL_LIB@.la
 noinst_LTLIBRARIES = libglx.la
 
 libglx_la_SOURCES = \
-	  clientattrib.c \
-	  clientinfo.c \
-	  compsize.c \
-	  create_context.c \
-	  eval.c \
-	  glxconfig.c \
-	  glxcmds.c \
-	  glxcurrent.c \
-	  glx_error.c \
-	  glxext.c \
-	  glxextensions.c \
-	  indirect_glx.c \
-	  indirect.c \
-	  indirect_init.c \
-	  indirect_size.c \
-	  indirect_window_pos.c \
-	  indirect_texture_compression.c \
-	  indirect_transpose_matrix.c \
-	  indirect_vertex_array.c \
-	  indirect_vertex_program.c \
-	  pixel.c \
-	  pixelstore.c \
-	  query_renderer.c \
-	  render2.c \
-	  renderpix.c \
-	  single2.c \
-	  singlepix.c \
-	  vertarr.c \
-	  glx_pbuffer.c \
-	  glx_query.c \
-	  glxhash.c
+	clientattrib.c \
+	clientinfo.c \
+	compsize.c \
+	create_context.c \
+	eval.c \
+	glxclient.h \
+	glxcmds.c \
+	glxconfig.c \
+	glxconfig.h \
+	glxcurrent.c \
+	glx_error.c \
+	glx_error.h \
+	glxext.c \
+	glxextensions.c \
+	glxextensions.h \
+	glxhash.c \
+	glxhash.h \
+	glx_pbuffer.c \
+	glx_query.c \
+	indirect.c \
+	indirect_glx.c \
+	indirect_init.c \
+	indirect_init.h \
+	indirect_size.c \
+	indirect_texture_compression.c \
+	indirect_transpose_matrix.c \
+	indirect_vertex_array.c \
+	indirect_vertex_array.h \
+	indirect_vertex_array_priv.h \
+	indirect_vertex_program.c \
+	indirect_window_pos.c \
+	packrender.h \
+	packsingle.h \
+	pixel.c \
+	pixelstore.c \
+	query_renderer.c \
+	render2.c \
+	renderpix.c \
+	single2.c \
+	singlepix.c \
+	vertarr.c
 
 libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la
 
 if HAVE_DRISW
 libglx_la_SOURCES += \
-	  drisw_glx.c
+	drisw_glx.c \
+	drisw_priv.h
 endif
 
 if HAVE_DRICOMMON
 libglx_la_SOURCES += \
-	  xfont.c \
-	  dri_common.c \
-	  dri_common_query_renderer.c
+	dri_common.c \
+	dri_common.h \
+	dri_common_query_renderer.c \
+	xfont.c
 endif
 
 if HAVE_DRI2
 libglx_la_SOURCES += \
-	  dri_glx.c \
-	  XF86dri.c \
-	  dri2_glx.c \
-	  dri2.c
+	dri2.c \
+	dri2_glx.c \
+	dri2.h \
+	dri2_priv.h \
+	dri_glx.c \
+	dri_sarea.h \
+	XF86dri.c \
+	xf86dri.h \
+	xf86dristr.h
 endif
 
 if HAVE_DRI3
 libglx_la_SOURCES += \
-          dri3_glx.c
+	dri3_glx.c \
+	dri3_priv.h
 endif
 
 if HAVE_APPLEDRI
 libglx_la_SOURCES += \
-	  applegl_glx.c
+	applegl_glx.c
 
 SUBDIRS += apple
 libglx_la_LIBADD += $(builddir)/apple/libappleglx.la

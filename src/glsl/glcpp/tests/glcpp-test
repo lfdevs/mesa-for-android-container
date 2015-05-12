@@ -2,9 +2,11 @@
 
 if [ ! -z "$srcdir" ]; then
    testdir=$srcdir/glcpp/tests
+   outdir=`pwd`/glcpp/tests
    glcpp=`pwd`/glcpp/glcpp
 else
    testdir=.
+   outdir=.
    glcpp=../glcpp
 fi
 
@@ -43,6 +45,7 @@ for option; do
             ;;
         "--testdir="*)
             testdir="${option#--testdir=}"
+            outdir="${outdir}/${option#--testdir=}"
             ;;
         *)
 	    echo "Unrecognized option: $option" >&2
@@ -57,17 +60,21 @@ total=0
 pass=0
 clean=0
 
+mkdir -p $outdir
+
 echo "====== Testing for correctness ======"
 for test in $testdir/*.c; do
-    printf "Testing $test..."
-    $glcpp $(test_specific_args $test) < $test > $test.out 2>&1
+    out=$outdir/${test##*/}.out
+
+    printf "Testing $test... > $out ($test.expected) "
+    $glcpp $(test_specific_args $test) < $test > $out 2>&1
     total=$((total+1))
-    if cmp $test.expected $test.out >/dev/null 2>&1; then
+    if cmp $test.expected $out >/dev/null 2>&1; then
 	echo "PASS"
 	pass=$((pass+1))
     else
 	echo "FAIL"
-	diff -u $test.expected $test.out
+	diff -u $test.expected $out
     fi
 done
 

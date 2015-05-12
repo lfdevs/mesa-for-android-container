@@ -1597,14 +1597,18 @@ ast_expression::do_hir(exec_list *instructions,
       }
 
       ir_constant *cond_val = op[0]->constant_expression_value();
-      ir_constant *then_val = op[1]->constant_expression_value();
-      ir_constant *else_val = op[2]->constant_expression_value();
 
       if (then_instructions.is_empty()
           && else_instructions.is_empty()
-          && (cond_val != NULL) && (then_val != NULL) && (else_val != NULL)) {
-         result = (cond_val->value.b[0]) ? then_val : else_val;
+          && cond_val != NULL) {
+         result = cond_val->value.b[0] ? op[1] : op[2];
       } else {
+         /* The copy to conditional_tmp reads the whole array. */
+         if (type->is_array()) {
+            mark_whole_array_access(op[1]);
+            mark_whole_array_access(op[2]);
+         }
+
          ir_variable *const tmp =
             new(ctx) ir_variable(type, "conditional_tmp", ir_var_temporary);
          instructions->push_tail(tmp);
@@ -5203,6 +5207,13 @@ ast_process_structure_or_interface_block(exec_list *instructions,
                              "members");
          }
 
+         if (qual->flags.q.constant) {
+            YYLTYPE loc = decl_list->get_location();
+            _mesa_glsl_error(&loc, state,
+                             "const storage qualifier cannot be applied "
+                             "to struct or interface block members");
+         }
+
          field_type = process_array_type(&loc, decl_type,
                                          decl->array_specifier, state);
          fields[i].type = field_type;
@@ -5383,6 +5394,14 @@ ast_interface_block::hir(exec_list *instructions,
 {
    YYLTYPE loc = this->get_location();
 
+   /* Interface blocks must be declared at global scope */
+   if (state->current_function != NULL) {
+      _mesa_glsl_error(&loc, state,
+                       "Interface block `%s' must be declared "
+                       "at global scope",
+                       this->block_name);
+   }
+
    /* The ast_interface_block has a list of ast_declarator_lists.  We
     * need to turn those into ir_variables with an association
     * with this uniform block.
@@ -5443,8 +5462,22 @@ ast_interface_block::hir(exec_list *instructions,
 
    state->struct_specifier_depth--;
 
-   if (!redeclaring_per_vertex)
+   if (!redeclaring_per_vertex) {
       validate_identifier(this->block_name, loc, state);
+
+      /* From section 4.3.9 ("Interface Blocks") of the GLSL 4.50 spec:
+       *
+       *     "Block names have no other use within a shader beyond interface
+       *     matching; it is a compile-time error to use a block name at global
+       *     scope for anything other than as a block name."
+       */
+      ir_variable *var = state->symbols->get_variable(this->block_name);
+      if (var && !var->type->is_interface()) {
+         _mesa_glsl_error(&loc, state, "Block name `%s' is "
+                          "already used in the scope.",
+                          this->block_name);
+      }
+   }
 
    const glsl_type *earlier_per_vertex = NULL;
    if (redeclaring_per_vertex) {
@@ -5908,7 +5941,7 @@ ast_cs_input_layout::hir(exec_list *instructions,
     * declare it earlier).
     */
    ir_variable *var = new(state->symbols)
-      ir_variable(glsl_type::ivec3_type, "gl_WorkGroupSize", ir_var_auto);
+      ir_variable(glsl_type::uvec3_type, "gl_WorkGroupSize", ir_var_auto);
    var->data.how_declared = ir_var_declared_implicitly;
    var->data.read_only = true;
    instructions->push_tail(var);
@@ -5916,10 +5949,10 @@ ast_cs_input_layout::hir(exec_list *instructions,
    ir_constant_data data;
    memset(&data, 0, sizeof(data));
    for (int i = 0; i < 3; i++)
-      data.i[i] = this->local_size[i];
-   var->constant_value = new(var) ir_constant(glsl_type::ivec3_type, &data);
+      data.u[i] = this->local_size[i];
+   var->constant_value = new(var) ir_constant(glsl_type::uvec3_type, &data);
    var->constant_initializer =
-      new(var) ir_constant(glsl_type::ivec3_type, &data);
+      new(var) ir_constant(glsl_type::uvec3_type, &data);
    var->data.has_initializer = true;
 
    return NULL;

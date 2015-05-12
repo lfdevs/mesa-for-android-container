@@ -365,8 +365,7 @@ out_err:
          nouveau_bufctx_del(&nvc0->bufctx_cp);
       if (nvc0->bufctx)
          nouveau_bufctx_del(&nvc0->bufctx);
-      if (nvc0->blit)
-         FREE(nvc0->blit);
+      FREE(nvc0->blit);
       FREE(nvc0);
    }
    return NULL;

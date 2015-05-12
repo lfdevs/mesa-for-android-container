@@ -75,7 +75,7 @@ _eglInitConfig(_EGLConfig *conf, _EGLDisplay *dpy, EGLint id)
  *
  * Note that we just save the ptr to the config (we don't copy the config).
  */
-PUBLIC EGLConfig
+EGLConfig
 _eglLinkConfig(_EGLConfig *conf)
 {
    _EGLDisplay *dpy = conf->Display;

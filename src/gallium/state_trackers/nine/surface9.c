@@ -38,6 +38,8 @@
 
 #define DBG_CHANNEL DBG_SURFACE
 
+#define is_ATI1_ATI2(format) (format == PIPE_FORMAT_RGTC1_UNORM || format == PIPE_FORMAT_RGTC2_UNORM)
+
 HRESULT
 NineSurface9_ctor( struct NineSurface9 *This,
                    struct NineUnknownParams *pParams,
@@ -67,7 +69,6 @@ NineSurface9_ctor( struct NineSurface9 *This,
 
     This->base.info.screen = pParams->device->screen;
     This->base.info.target = PIPE_TEXTURE_2D;
-    This->base.info.format = d3d9_to_pipe_format(pDesc->Format);
     This->base.info.width0 = pDesc->Width;
     This->base.info.height0 = pDesc->Height;
     This->base.info.depth0 = 1;
@@ -77,6 +78,12 @@ NineSurface9_ctor( struct NineSurface9 *This,
     This->base.info.usage = PIPE_USAGE_DEFAULT;
     This->base.info.bind = PIPE_BIND_SAMPLER_VIEW;
     This->base.info.flags = 0;
+    This->base.info.format = d3d9_to_pipe_format_checked(This->base.info.screen,
+                                                         pDesc->Format,
+                                                         This->base.info.target,
+                                                         This->base.info.nr_samples,
+                                                         This->base.info.bind,
+                                                         FALSE);
 
     if (pDesc->Usage & D3DUSAGE_RENDERTARGET)
         This->base.info.bind |= PIPE_BIND_RENDER_TARGET;
@@ -150,14 +157,22 @@ struct pipe_surface *
 NineSurface9_CreatePipeSurface( struct NineSurface9 *This, const int sRGB )
 {
     struct pipe_context *pipe = This->pipe;
+    struct pipe_screen *screen = pipe->screen;
     struct pipe_resource *resource = This->base.resource;
     struct pipe_surface templ;
+    enum pipe_format srgb_format;
 
     assert(This->desc.Pool == D3DPOOL_DEFAULT ||
            This->desc.Pool == D3DPOOL_MANAGED);
     assert(resource);
 
-    templ.format = sRGB ? util_format_srgb(resource->format) : resource->format;
+    srgb_format = util_format_srgb(resource->format);
+    if (sRGB && srgb_format != PIPE_FORMAT_NONE &&
+        screen->is_format_supported(screen, srgb_format,
+                                    resource->target, 0, resource->bind))
+        templ.format = srgb_format;
+    else
+        templ.format = resource->format;
     templ.u.tex.level = This->level;
     templ.u.tex.first_layer = This->layer;
     templ.u.tex.last_layer = This->layer;
@@ -374,10 +389,19 @@ NineSurface9_LockRect( struct NineSurface9 *This,
 
     if (This->data) {
         DBG("returning system memory\n");
-
-        pLockedRect->Pitch = This->stride;
-        pLockedRect->pBits = NineSurface9_GetSystemMemPointer(This,
-                                                              box.x, box.y);
+        /* ATI1 and ATI2 need special handling, because of d3d9 bug.
+         * We must advertise to the application as if it is uncompressed
+         * and bpp 8, and the app has a workaround to work with the fact
+         * that it is actually compressed. */
+        if (is_ATI1_ATI2(This->base.info.format)) {
+            pLockedRect->Pitch = This->desc.Height;
+            pLockedRect->pBits = This->data + box.y * This->desc.Height + box.x;
+        } else {
+            pLockedRect->Pitch = This->stride;
+            pLockedRect->pBits = NineSurface9_GetSystemMemPointer(This,
+                                                                  box.x,
+                                                                  box.y);
+        }
     } else {
         DBG("mapping pipe_resource %p (level=%u usage=%x)\n",
             resource, This->level, usage);
@@ -530,6 +554,30 @@ NineSurface9_CopySurface( struct NineSurface9 *This,
             r_src = NULL;
     }
 
+    /* check source block align for compressed textures */
+    if (util_format_is_compressed(From->base.info.format) &&
+        ((src_box.width != From->desc.Width) ||
+         (src_box.height != From->desc.Height))) {
+        const unsigned w = util_format_get_blockwidth(From->base.info.format);
+        const unsigned h = util_format_get_blockheight(From->base.info.format);
+        user_assert(!(src_box.width % w) &&
+                    !(src_box.height % h),
+                    D3DERR_INVALIDCALL);
+    }
+
+    /* check destination block align for compressed textures */
+    if (util_format_is_compressed(This->base.info.format) &&
+        ((dst_box.width != This->desc.Width) ||
+         (dst_box.height != This->desc.Height) ||
+         dst_box.x != 0 ||
+         dst_box.y != 0)) {
+        const unsigned w = util_format_get_blockwidth(This->base.info.format);
+        const unsigned h = util_format_get_blockheight(This->base.info.format);
+        user_assert(!(dst_box.x % w) && !(dst_box.width % w) &&
+                    !(dst_box.y % h) && !(dst_box.height % h),
+                    D3DERR_INVALIDCALL);
+    }
+
     if (r_dst && r_src) {
         pipe->resource_copy_region(pipe,
                                    r_dst, This->level,
@@ -628,6 +676,7 @@ NineSurface9_SetResourceResize( struct NineSurface9 *This,
 
     This->desc.Width = This->base.info.width0 = resource->width0;
     This->desc.Height = This->base.info.height0 = resource->height0;
+    This->desc.MultiSampleType = This->base.info.nr_samples = resource->nr_samples;
 
     This->stride = util_format_get_stride(This->base.info.format,
                                           This->desc.Width);

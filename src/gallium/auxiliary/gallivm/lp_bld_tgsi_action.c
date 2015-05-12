@@ -691,28 +691,6 @@ const struct lp_build_tgsi_action scs_action = {
    scs_emit	 /* emit */
 };
 
-/* TGSI_OPCODE_SFL */
-
-static void
-sfl_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   emit_data->output[emit_data->chan] = bld_base->base.zero;
-}
-
-/* TGSI_OPCODE_STR */
-
-static void
-str_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   emit_data->output[emit_data->chan] = bld_base->base.one;
-}
-
 /* TGSI_OPCODE_SUB */
 static void
 sub_emit(
@@ -958,8 +936,6 @@ lp_set_default_actions(struct lp_build_tgsi_context * bld_base)
    bld_base->op_actions[TGSI_OPCODE_MUL].emit = mul_emit;
    bld_base->op_actions[TGSI_OPCODE_DIV].emit = fdiv_emit;
    bld_base->op_actions[TGSI_OPCODE_RCP].emit = rcp_emit;
-   bld_base->op_actions[TGSI_OPCODE_SFL].emit = sfl_emit;
-   bld_base->op_actions[TGSI_OPCODE_STR].emit = str_emit;
    bld_base->op_actions[TGSI_OPCODE_SUB].emit = sub_emit;
 
    bld_base->op_actions[TGSI_OPCODE_UARL].emit = mov_emit;
@@ -1079,24 +1055,6 @@ ucmp_emit_cpu(
    emit_data->output[emit_data->chan] =
       lp_build_select(&bld_base->base,
                       cond, emit_data->args[1], emit_data->args[2]);
-}
-
-
-/* TGSI_OPCODE_CND (CPU Only) */
-static void
-cnd_emit_cpu(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   LLVMValueRef half, tmp;
-   half = lp_build_const_vec(bld_base->base.gallivm, bld_base->base.type, 0.5);
-   tmp = lp_build_cmp(&bld_base->base, PIPE_FUNC_GREATER,
-                      emit_data->args[2], half);
-   emit_data->output[emit_data->chan] = lp_build_select(&bld_base->base,
-                                          tmp,
-                                          emit_data->args[0],
-                                          emit_data->args[1]);
 }
 
 /* TGSI_OPCODE_COS (CPU Only) */
@@ -1845,7 +1803,6 @@ lp_set_default_actions_cpu(
    bld_base->op_actions[TGSI_OPCODE_ARL].emit = arl_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_ARR].emit = arr_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_CEIL].emit = ceil_emit_cpu;
-   bld_base->op_actions[TGSI_OPCODE_CND].emit = cnd_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_COS].emit = cos_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_CMP].emit = cmp_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_DIV].emit = div_emit_cpu;

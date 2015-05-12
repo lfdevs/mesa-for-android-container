@@ -32,8 +32,6 @@ LOCAL_PATH := $(call my-dir)
 #     MESA_FILES
 #     X86_FILES
 include $(LOCAL_PATH)/Makefile.sources
-SRCDIR :=
-BUILDDIR :=
 
 include $(CLEAR_VARS)
 
@@ -51,8 +49,8 @@ endif # MESA_ENABLE_ASM
 
 ifeq ($(ARCH_X86_HAVE_SSE4_1),true)
 LOCAL_SRC_FILES += \
-	$(SRCDIR)main/streaming-load-memcpy.c \
-	$(SRCDIR)main/sse_minmax.c
+	main/streaming-load-memcpy.c \
+	mesa/main/sse_minmax.c
 LOCAL_CFLAGS := -msse4.1
 endif
 
@@ -63,8 +61,8 @@ endif
 
 LOCAL_C_INCLUDES := \
 	$(call intermediates-dir-for STATIC_LIBRARIES,libmesa_program,,) \
-	$(MESA_TOP)/src \
 	$(MESA_TOP)/src/mapi \
+	$(MESA_TOP)/src/mesa/main \
 	$(MESA_TOP)/src/glsl \
 	$(MESA_TOP)/src/gallium/auxiliary
 

@@ -1156,7 +1156,6 @@ static void r300_delete_fs_state(struct pipe_context* pipe, void* shader)
 static void r300_set_polygon_stipple(struct pipe_context* pipe,
                                      const struct pipe_poly_stipple* state)
 {
-    /* XXX no idea how to set this up, but not terribly important */
 }
 
 /* Create a new rasterizer state based on the CSO rasterizer state.

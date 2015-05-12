@@ -1304,8 +1304,8 @@ nv50_blit_eng2d(struct nv50_context *nv50, const struct pipe_blit_info *info)
       BEGIN_NV04(push, NV50_2D(ROP), 1);
       PUSH_DATA (push, 0xca); /* DPSDxax */
       BEGIN_NV04(push, NV50_2D(PATTERN_COLOR_FORMAT), 1);
-      PUSH_DATA (push, NV50_2D_PATTERN_COLOR_FORMAT_32BPP);
-      BEGIN_NV04(push, NV50_2D(PATTERN_COLOR(0)), 4);
+      PUSH_DATA (push, NV50_2D_PATTERN_COLOR_FORMAT_A8R8G8B8);
+      BEGIN_NV04(push, NV50_2D(PATTERN_BITMAP_COLOR(0)), 4);
       PUSH_DATA (push, 0x00000000);
       PUSH_DATA (push, mask);
       PUSH_DATA (push, 0xffffffff);

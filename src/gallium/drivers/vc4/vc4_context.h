@@ -44,7 +44,7 @@
 #define VC4_DIRTY_FRAGTEX       (1 <<  3)
 #define VC4_DIRTY_VERTTEX       (1 <<  4)
 #define VC4_DIRTY_TEXSTATE      (1 <<  5)
-#define VC4_DIRTY_PROG          (1 <<  6)
+
 #define VC4_DIRTY_BLEND_COLOR   (1 <<  7)
 #define VC4_DIRTY_STENCIL_REF   (1 <<  8)
 #define VC4_DIRTY_SAMPLE_MASK   (1 <<  9)
@@ -59,9 +59,9 @@
 #define VC4_DIRTY_FLAT_SHADE_FLAGS (1 << 18)
 #define VC4_DIRTY_PRIM_MODE     (1 << 19)
 #define VC4_DIRTY_CLIP          (1 << 20)
-
-#define VC4_SHADER_DIRTY_VP     (1 << 0)
-#define VC4_SHADER_DIRTY_FP     (1 << 1)
+#define VC4_DIRTY_UNCOMPILED_VS (1 << 21)
+#define VC4_DIRTY_UNCOMPILED_FS (1 << 22)
+#define VC4_DIRTY_COMPILED_FS   (1 << 24)
 
 struct vc4_texture_stateobj {
         struct pipe_sampler_view *textures[PIPE_MAX_SAMPLERS];
@@ -121,6 +121,12 @@ struct vc4_compiled_shader {
 
         uint8_t num_inputs;
 
+        /* Byte offsets for the start of the vertex attributes 0-7, and the
+         * total size as "attribute" 8.
+         */
+        uint8_t vattr_offsets[9];
+        uint8_t vattrs_live;
+
         /**
          * Array of the meanings of the VPM inputs this shader needs.
          *
@@ -133,7 +139,6 @@ struct vc4_compiled_shader {
 struct vc4_program_stateobj {
         struct vc4_uncompiled_shader *bind_vs, *bind_fs;
         struct vc4_compiled_shader *cs, *vs, *fs;
-        uint32_t dirty;
         uint8_t num_exports;
         /* Indexed by semantic name or TGSI_SEMANTIC_COUNT + semantic index
          * for TGSI_SEMANTIC_GENERIC.  Special vs exports (position and point-
@@ -173,6 +178,16 @@ struct vc4_context {
         struct vc4_cl bo_handles;
         struct vc4_cl bo_pointers;
         uint32_t shader_rec_count;
+        /** @{
+         * Bounding box of the scissor across all queued drawing.
+         *
+         * Note that the max values are exclusive.
+         */
+        uint32_t draw_min_x;
+        uint32_t draw_min_y;
+        uint32_t draw_max_x;
+        uint32_t draw_max_y;
+        /** @} */
 
         struct vc4_bo *tile_alloc;
         struct vc4_bo *tile_state;
@@ -209,7 +224,7 @@ struct vc4_context {
 
         struct primconvert_context *primconvert;
 
-        struct util_hash_table *fs_cache, *vs_cache;
+        struct hash_table *fs_cache, *vs_cache;
         uint32_t next_uncompiled_program_id;
         uint64_t next_compiled_program_id;
 
@@ -218,6 +233,9 @@ struct vc4_context {
         unsigned int reg_class_a;
 
         uint8_t prim_mode;
+
+        /** Seqno of the last CL flush's job. */
+        uint64_t last_emit_seqno;
 
         /** @{ Current pipeline state objects */
         struct pipe_scissor_state scissor;
@@ -290,6 +308,7 @@ struct pipe_context *vc4_context_create(struct pipe_screen *pscreen,
 void vc4_draw_init(struct pipe_context *pctx);
 void vc4_state_init(struct pipe_context *pctx);
 void vc4_program_init(struct pipe_context *pctx);
+void vc4_program_fini(struct pipe_context *pctx);
 void vc4_query_init(struct pipe_context *pctx);
 void vc4_simulator_init(struct vc4_screen *screen);
 int vc4_simulator_flush(struct vc4_context *vc4,

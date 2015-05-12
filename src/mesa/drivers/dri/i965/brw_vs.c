@@ -209,6 +209,10 @@ do_vs_prog(struct brw_context *brw,
    memcpy(&c.key, key, sizeof(*key));
    memset(&prog_data, 0, sizeof(prog_data));
 
+   /* Use ALT floating point mode for ARB programs so that 0^0 == 1. */
+   if (!prog)
+      stage_prog_data->use_alt_mode = true;
+
    mem_ctx = ralloc_context(NULL);
 
    c.vp = vp;
@@ -237,15 +241,7 @@ do_vs_prog(struct brw_context *brw,
       rzalloc_array(NULL, const gl_constant_value *, param_count);
    stage_prog_data->pull_param =
       rzalloc_array(NULL, const gl_constant_value *, param_count);
-
-   /* Setting nr_params here NOT to the size of the param and pull_param
-    * arrays, but to the number of uniform components vec4_visitor
-    * needs. vec4_visitor::setup_uniforms() will set it back to a proper value.
-    */
-   stage_prog_data->nr_params = ALIGN(param_count, 4) / 4;
-   if (vs) {
-      stage_prog_data->nr_params += vs->num_samplers;
-   }
+   stage_prog_data->nr_params = param_count;
 
    GLbitfield64 outputs_written = vp->program.Base.OutputsWritten;
    prog_data.inputs_read = vp->program.Base.InputsRead;
@@ -312,7 +308,7 @@ do_vs_prog(struct brw_context *brw,
                          brw->max_vs_threads);
    }
 
-   brw_upload_cache(&brw->cache, BRW_VS_PROG,
+   brw_upload_cache(&brw->cache, BRW_CACHE_VS_PROG,
 		    &c.key, sizeof(c.key),
 		    program, program_size,
 		    &prog_data, sizeof(prog_data),
@@ -345,7 +341,7 @@ brw_vs_debug_recompile(struct brw_context *brw,
 
    for (unsigned int i = 0; i < brw->cache.size; i++) {
       for (c = brw->cache.items[i]; c; c = c->next) {
-         if (c->cache_id == BRW_VS_PROG) {
+         if (c->cache_id == BRW_CACHE_VS_PROG) {
             old_key = c->key;
 
             if (old_key->base.program_string_id == key->base.program_string_id)
@@ -380,7 +376,7 @@ brw_vs_debug_recompile(struct brw_context *brw,
    found |= key_debug(brw, "PointCoord replace",
                       old_key->point_coord_replace, key->point_coord_replace);
    found |= key_debug(brw, "vertex color clamping",
-                      old_key->base.clamp_vertex_color, key->base.clamp_vertex_color);
+                      old_key->clamp_vertex_color, key->clamp_vertex_color);
 
    found |= brw_debug_recompile_sampler_key(brw, &old_key->base.tex,
                                             &key->base.tex);
@@ -392,9 +388,9 @@ brw_vs_debug_recompile(struct brw_context *brw,
 
 
 void
-brw_setup_vec4_key_clip_info(struct brw_context *brw,
-                             struct brw_vec4_prog_key *key,
-                             bool program_uses_clip_distance)
+brw_setup_vue_key_clip_info(struct brw_context *brw,
+                            struct brw_vue_prog_key *key,
+                            bool program_uses_clip_distance)
 {
    struct gl_context *ctx = &brw->ctx;
 
@@ -422,8 +418,8 @@ static void brw_upload_vs_prog(struct brw_context *brw)
     * the inputs it asks for, whether they are varying or not.
     */
    key.base.program_string_id = vp->id;
-   brw_setup_vec4_key_clip_info(brw, &key.base,
-                                vp->program.Base.UsesClipDistanceOut);
+   brw_setup_vue_key_clip_info(brw, &key.base,
+                               vp->program.Base.UsesClipDistanceOut);
 
    /* _NEW_POLYGON */
    if (brw->gen < 6) {
@@ -431,8 +427,11 @@ static void brw_upload_vs_prog(struct brw_context *brw)
                            ctx->Polygon.BackMode != GL_FILL);
    }
 
-   /* _NEW_LIGHT | _NEW_BUFFERS */
-   key.base.clamp_vertex_color = ctx->Light._ClampVertexColor;
+   if (prog->OutputsWritten & (VARYING_BIT_COL0 | VARYING_BIT_COL1 |
+                               VARYING_BIT_BFC0 | VARYING_BIT_BFC1)) {
+      /* _NEW_LIGHT | _NEW_BUFFERS */
+      key.clamp_vertex_color = ctx->Light._ClampVertexColor;
+   }
 
    /* _NEW_POINT */
    if (brw->gen < 6 && ctx->Point.PointSprite) {
@@ -446,44 +445,11 @@ static void brw_upload_vs_prog(struct brw_context *brw)
    brw_populate_sampler_prog_key_data(ctx, prog, brw->vs.base.sampler_count,
                                       &key.base.tex);
 
-   /* BRW_NEW_VERTICES */
-   if (brw->gen < 8 && !brw->is_haswell) {
-      /* Prior to Haswell, the hardware can't natively support GL_FIXED or
-       * 2_10_10_10_REV vertex formats.  Set appropriate workaround flags.
-       */
-      for (i = 0; i < VERT_ATTRIB_MAX; i++) {
-         if (!(vp->program.Base.InputsRead & BITFIELD64_BIT(i)))
-            continue;
+   /* BRW_NEW_VS_ATTRIB_WORKAROUNDS */
+   memcpy(key.gl_attrib_wa_flags, brw->vb.attrib_wa_flags,
+          sizeof(brw->vb.attrib_wa_flags));
 
-         uint8_t wa_flags = 0;
-
-         switch (brw->vb.inputs[i].glarray->Type) {
-
-         case GL_FIXED:
-            wa_flags = brw->vb.inputs[i].glarray->Size;
-            break;
-
-         case GL_INT_2_10_10_10_REV:
-            wa_flags |= BRW_ATTRIB_WA_SIGN;
-            /* fallthough */
-
-         case GL_UNSIGNED_INT_2_10_10_10_REV:
-            if (brw->vb.inputs[i].glarray->Format == GL_BGRA)
-               wa_flags |= BRW_ATTRIB_WA_BGRA;
-
-            if (brw->vb.inputs[i].glarray->Normalized)
-               wa_flags |= BRW_ATTRIB_WA_NORMALIZE;
-            else if (!brw->vb.inputs[i].glarray->Integer)
-               wa_flags |= BRW_ATTRIB_WA_SCALE;
-
-            break;
-         }
-
-         key.gl_attrib_wa_flags[i] = wa_flags;
-      }
-   }
-
-   if (!brw_search_cache(&brw->cache, BRW_VS_PROG,
+   if (!brw_search_cache(&brw->cache, BRW_CACHE_VS_PROG,
 			 &key, sizeof(key),
 			 &brw->vs.base.prog_offset, &brw->vs.prog_data)) {
       bool success =
@@ -512,18 +478,22 @@ static void brw_upload_vs_prog(struct brw_context *brw)
  */
 const struct brw_tracked_state brw_vs_prog = {
    .dirty = {
-      .mesa  = (_NEW_TRANSFORM | _NEW_POLYGON | _NEW_POINT | _NEW_LIGHT |
-		_NEW_TEXTURE |
-		_NEW_BUFFERS),
-      .brw   = (BRW_NEW_VERTEX_PROGRAM |
-		BRW_NEW_VERTICES),
-      .cache = 0
+      .mesa  = _NEW_BUFFERS |
+               _NEW_LIGHT |
+               _NEW_POINT |
+               _NEW_POLYGON |
+               _NEW_TEXTURE |
+               _NEW_TRANSFORM,
+      .brw   = BRW_NEW_VERTEX_PROGRAM |
+               BRW_NEW_VS_ATTRIB_WORKAROUNDS,
    },
    .emit = brw_upload_vs_prog
 };
 
 bool
-brw_vs_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
+brw_vs_precompile(struct gl_context *ctx,
+                  struct gl_shader_program *shader_prog,
+                  struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_vs_prog_key key;
@@ -531,18 +501,17 @@ brw_vs_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
    struct brw_vs_prog_data *old_prog_data = brw->vs.prog_data;
    bool success;
 
-   if (!prog->_LinkedShaders[MESA_SHADER_VERTEX])
-      return true;
-
-   struct gl_vertex_program *vp = (struct gl_vertex_program *)
-      prog->_LinkedShaders[MESA_SHADER_VERTEX]->Program;
+   struct gl_vertex_program *vp = (struct gl_vertex_program *) prog;
    struct brw_vertex_program *bvp = brw_vertex_program(vp);
 
    memset(&key, 0, sizeof(key));
 
-   brw_vec4_setup_prog_key_for_precompile(ctx, &key.base, bvp->id, &vp->Base);
+   brw_vue_setup_prog_key_for_precompile(ctx, &key.base, bvp->id, &vp->Base);
+   key.clamp_vertex_color =
+      (prog->OutputsWritten & (VARYING_BIT_COL0 | VARYING_BIT_COL1 |
+                               VARYING_BIT_BFC0 | VARYING_BIT_BFC1));
 
-   success = do_vs_prog(brw, prog, bvp, &key);
+   success = do_vs_prog(brw, shader_prog, bvp, &key);
 
    brw->vs.base.prog_offset = old_prog_offset;
    brw->vs.prog_data = old_prog_data;

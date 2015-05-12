@@ -356,6 +356,7 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
  * Fetch a pixel into a 4 float AoS.
  *
  * \param format_desc  describes format of the image we're fetching from
+ * \param aligned  whether the data is guaranteed to be aligned
  * \param ptr  address of the pixel block (or the texel if uncompressed)
  * \param i, j  the sub-block pixel coordinates.  For non-compressed formats
  *              these will always be (0, 0).
@@ -365,6 +366,7 @@ LLVMValueRef
 lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
                         const struct util_format_description *format_desc,
                         struct lp_type type,
+                        boolean aligned,
                         LLVMValueRef base_ptr,
                         LLVMValueRef offset,
                         LLVMValueRef i,
@@ -400,7 +402,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
 
       packed = lp_build_gather(gallivm, type.length/4,
                                format_desc->block.bits, type.width*4,
-                               base_ptr, offset, TRUE);
+                               aligned, base_ptr, offset, TRUE);
 
       assert(format_desc->block.bits <= vec_len);
 
@@ -437,7 +439,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
          LLVMValueRef packed;
 
          packed = lp_build_gather_elem(gallivm, num_pixels,
-                                       format_desc->block.bits, 32,
+                                       format_desc->block.bits, 32, aligned,
                                        base_ptr, offset, k, FALSE);
 
          tmps[k] = lp_build_unpack_arith_rgba_aos(gallivm,

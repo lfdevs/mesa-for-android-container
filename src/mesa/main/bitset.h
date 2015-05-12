@@ -32,6 +32,7 @@
 #define BITSET_H
 
 #include "imports.h"
+#include "macros.h"
 
 /****************************************************************************
  * generic bitset implementation

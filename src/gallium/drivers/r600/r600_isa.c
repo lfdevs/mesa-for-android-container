@@ -89,14 +89,10 @@ int r600_isa_destroy(struct r600_isa *isa) {
 	if (!isa)
 		return 0;
 
-	if (isa->alu_op2_map)
-		free(isa->alu_op2_map);
-	if (isa->alu_op3_map)
-		free(isa->alu_op3_map);
-	if (isa->fetch_map)
-		free(isa->fetch_map);
-	if (isa->cf_map)
-		free(isa->cf_map);
+	free(isa->alu_op2_map);
+	free(isa->alu_op3_map);
+	free(isa->fetch_map);
+	free(isa->cf_map);
 
 	free(isa);
 	return 0;

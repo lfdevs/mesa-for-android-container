@@ -18,15 +18,31 @@ if env['platform'] == 'windows':
         '_EGL_GET_CORE_ADDRESSES',
         'KHRONOS_DLL_EXPORTS',
     ])
+elif env['platform'] == 'haiku':
+    env.Append(CPPDEFINES = [
+        '_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_HAIKU',
+        '_EGL_OS_UNIX',
+        '_EGL_BUILT_IN_DRIVER_HAIKU',
+    ])
+    env.Prepend(LIBS = [
+        egl_haiku,
+        libloader,
+    ])
 else:
     env.Append(CPPDEFINES = [
         '_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_X11',
         '_EGL_OS_UNIX',
     ])
+    if env['dri']:
+        env.Prepend(LIBS = [
+            egl_dri2,
+            libloader,
+        ])
 
 env.Append(CPPPATH = [
     '#/include',
 ])
+
 
 # parse Makefile.sources
 egl_sources = env.ParseSourceList('Makefile.sources', 'LIBEGL_C_FILES')

@@ -165,6 +165,17 @@ lp_setup_rasterize_scene( struct lp_setup_context *setup )
       setup->last_fence->issued = TRUE;
 
    pipe_mutex_lock(screen->rast_mutex);
+
+   /* FIXME: We enqueue the scene then wait on the rasterizer to finish.
+    * This means we never actually run any vertex stuff in parallel to
+    * rasterization (not in the same context at least) which is what the
+    * multiple scenes per setup is about - when we get a new empty scene
+    * any old one is already empty again because we waited here for
+    * raster tasks to be finished. Ideally, we shouldn't need to wait here
+    * and rely on fences elsewhere when waiting is necessary.
+    * Certainly, lp_scene_end_rasterization() would need to be deferred too
+    * and there's probably other bits why this doesn't actually work.
+    */
    lp_rast_queue_scene(screen->rast, scene);
    lp_rast_finish(screen->rast);
    pipe_mutex_unlock(screen->rast_mutex);

@@ -288,10 +288,10 @@ upload_sol_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen7_sol_state = {
    .dirty = {
-      .mesa  = (_NEW_LIGHT),
-      .brw   = (BRW_NEW_BATCH |
-                BRW_NEW_VUE_MAP_GEOM_OUT |
-                BRW_NEW_TRANSFORM_FEEDBACK)
+      .mesa  = _NEW_LIGHT,
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_VUE_MAP_GEOM_OUT |
+               BRW_NEW_TRANSFORM_FEEDBACK,
    },
    .emit = upload_sol_state,
 };

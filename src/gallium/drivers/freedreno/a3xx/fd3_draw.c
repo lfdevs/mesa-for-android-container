@@ -39,9 +39,19 @@
 #include "fd3_context.h"
 #include "fd3_emit.h"
 #include "fd3_program.h"
-#include "fd3_util.h"
+#include "fd3_format.h"
 #include "fd3_zsa.h"
 
+static inline uint32_t
+add_sat(uint32_t a, int32_t b)
+{
+	int64_t ret = (uint64_t)a + (int64_t)b;
+	if (ret > ~0U)
+		return ~0U;
+	if (ret < 0)
+		return 0;
+	return (uint32_t)ret;
+}
 
 static void
 draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
@@ -58,10 +68,10 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, 0x0000000b);             /* PC_VERTEX_REUSE_BLOCK_CNTL */
 
 	OUT_PKT0(ring, REG_A3XX_VFD_INDEX_MIN, 4);
-	OUT_RING(ring, info->min_index);        /* VFD_INDEX_MIN */
-	OUT_RING(ring, info->max_index);        /* VFD_INDEX_MAX */
+	OUT_RING(ring, add_sat(info->min_index, info->index_bias)); /* VFD_INDEX_MIN */
+	OUT_RING(ring, add_sat(info->max_index, info->index_bias)); /* VFD_INDEX_MAX */
 	OUT_RING(ring, info->start_instance);   /* VFD_INSTANCEID_OFFSET */
-	OUT_RING(ring, info->start);            /* VFD_INDEX_OFFSET */
+	OUT_RING(ring, info->indexed ? info->index_bias : info->start); /* VFD_INDEX_OFFSET */
 
 	OUT_PKT0(ring, REG_A3XX_PC_RESTART_INDEX, 1);
 	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
@@ -88,12 +98,14 @@ fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 		if (last_key->has_per_samp || key->has_per_samp) {
 			if ((last_key->vsaturate_s != key->vsaturate_s) ||
 					(last_key->vsaturate_t != key->vsaturate_t) ||
-					(last_key->vsaturate_r != key->vsaturate_r))
+					(last_key->vsaturate_r != key->vsaturate_r) ||
+					(last_key->vinteger_s != key->vinteger_s))
 				ctx->prog.dirty |= FD_SHADER_DIRTY_VP;
 
 			if ((last_key->fsaturate_s != key->fsaturate_s) ||
 					(last_key->fsaturate_t != key->fsaturate_t) ||
-					(last_key->fsaturate_r != key->fsaturate_r))
+					(last_key->fsaturate_r != key->fsaturate_r) ||
+					(last_key->finteger_s != key->finteger_s))
 				ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
 		}
 
@@ -114,6 +126,7 @@ static void
 fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 {
 	struct fd3_context *fd3_ctx = fd3_context(ctx);
+	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
 	struct fd3_emit emit = {
 		.vtx  = &ctx->vtx,
 		.prog = &ctx->prog,
@@ -122,18 +135,22 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 			/* do binning pass first: */
 			.binning_pass = true,
 			.color_two_side = ctx->rasterizer ? ctx->rasterizer->light_twoside : false,
-			.alpha = util_format_is_alpha(pipe_surface_format(ctx->framebuffer.cbufs[0])),
+			.alpha = util_format_is_alpha(pipe_surface_format(pfb->cbufs[0])),
 			// TODO set .half_precision based on render target format,
 			// ie. float16 and smaller use half, float32 use full..
 			.half_precision = !!(fd_mesa_debug & FD_DBG_FRAGHALF),
-			.has_per_samp = fd3_ctx->fsaturate || fd3_ctx->vsaturate,
+			.has_per_samp = (fd3_ctx->fsaturate || fd3_ctx->vsaturate ||
+							 fd3_ctx->vinteger_s || fd3_ctx->finteger_s),
 			.vsaturate_s = fd3_ctx->vsaturate_s,
 			.vsaturate_t = fd3_ctx->vsaturate_t,
 			.vsaturate_r = fd3_ctx->vsaturate_r,
 			.fsaturate_s = fd3_ctx->fsaturate_s,
 			.fsaturate_t = fd3_ctx->fsaturate_t,
 			.fsaturate_r = fd3_ctx->fsaturate_r,
+			.vinteger_s = fd3_ctx->vinteger_s,
+			.finteger_s = fd3_ctx->finteger_s,
 		},
+		.format = pipe_surface_format(pfb->cbufs[0]),
 		.rasterflat = ctx->rasterizer && ctx->rasterizer->flatshade,
 	};
 	unsigned dirty;
@@ -218,6 +235,8 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 		const union pipe_color_union *color, double depth, unsigned stencil)
 {
 	struct fd3_context *fd3_ctx = fd3_context(ctx);
+	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 	struct fd_ringbuffer *ring = ctx->ring;
 	unsigned dirty = ctx->dirty;
 	unsigned ce, i;
@@ -225,8 +244,9 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 		.vtx  = &fd3_ctx->solid_vbuf_state,
 		.prog = &ctx->solid_prog,
 		.key = {
-			.half_precision = true,
+			.half_precision = fd3_half_precision(format),
 		},
+		.format = format,
 	};
 
 	dirty &= FD_DIRTY_FRAMEBUFFER | FD_DIRTY_SCISSOR;
@@ -321,8 +341,7 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(FACTOR_ZERO) |
 				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_SRC_FACTOR(FACTOR_ONE) |
 				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_BLEND_OPCODE(BLEND_DST_PLUS_SRC) |
-				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(FACTOR_ZERO) |
-				A3XX_RB_MRT_BLEND_CONTROL_CLAMP_ENABLE);
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(FACTOR_ZERO));
 	}
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SU_MODE_CONTROL, 1);

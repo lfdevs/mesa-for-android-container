@@ -207,23 +207,21 @@ static void init_fs_constbuf( void )
 
 static void set_viewport( float x, float y,
                           float width, float height,
-                          float near, float far)
+                          float zNear, float zFar)
 {
-   float z = far;
+   float z = zFar;
    float half_width = (float)width / 2.0f;
    float half_height = (float)height / 2.0f;
-   float half_depth = ((float)far - (float)near) / 2.0f;
+   float half_depth = ((float)zFar - (float)zNear) / 2.0f;
    struct pipe_viewport_state vp;
 
    vp.scale[0] = half_width;
    vp.scale[1] = half_height;
    vp.scale[2] = half_depth;
-   vp.scale[3] = 1.0f;
 
    vp.translate[0] = half_width + x;
    vp.translate[1] = half_height + y;
    vp.translate[2] = half_depth + z;
-   vp.translate[3] = 0.0f;
 
    ctx->set_viewport_states( ctx, 0, 1, &vp );
 }

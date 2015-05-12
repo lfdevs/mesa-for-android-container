@@ -47,6 +47,84 @@ dump_VC4_PACKET_BRANCH_TO_SUB_LIST(void *cl, uint32_t offset, uint32_t hw_offset
 }
 
 static void
+dump_VC4_PACKET_STORE_TILE_BUFFER_GENERAL(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        uint8_t *bytes = cl + offset;
+        uint32_t *addr = cl + offset + 2;
+
+        const char *fullvg = "";
+        const char *fullzs = "";
+        const char *fullcolor = "";
+        const char *buffer = "???";
+
+        switch ((bytes[0] & 0x7)){
+        case 0:
+                buffer = "none";
+                break;
+        case 1:
+                buffer = "color";
+                break;
+        case 2:
+                buffer = "zs";
+                break;
+        case 3:
+                buffer = "z";
+                break;
+        case 4:
+                buffer = "vgmask";
+                break;
+        case 5:
+                buffer = "full";
+                if (*addr & (1 << 0))
+                        fullcolor = " !color";
+                if (*addr & (1 << 1))
+                        fullzs = " !zs";
+                if (*addr & (1 << 2))
+                        fullvg = " !vgmask";
+                break;
+        }
+
+        const char *tiling = "???";
+        switch ((bytes[0] >> 4) & 7) {
+        case 0:
+                tiling = "linear";
+                break;
+        case 1:
+                tiling = "T";
+                break;
+        case 2:
+                tiling = "LT";
+                break;
+        }
+
+        const char *format = "???";
+        switch (bytes[1] & 3) {
+        case 0:
+                format = "RGBA8888";
+                break;
+        case 1:
+                format = "BGR565_DITHER";
+                break;
+        case 2:
+                format = "BGR565";
+                break;
+        }
+
+        fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s %s\n",
+                offset + 0, hw_offset + 0, bytes[0],
+                buffer, tiling);
+
+        fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s\n",
+                offset + 1, hw_offset + 1, bytes[1],
+                format);
+
+        fprintf(stderr, "0x%08x 0x%08x:      addr 0x%08x %s%s%s%s\n",
+                offset + 2, hw_offset + 2, *addr & ~15,
+                fullcolor, fullzs, fullvg,
+                (*addr & (1 << 3)) ? " EOF" : "");
+}
+
+static void
 dump_VC4_PACKET_FLAT_SHADE_FLAGS(void *cl, uint32_t offset, uint32_t hw_offset)
 {
         uint32_t *bits = cl + offset;
@@ -96,6 +174,75 @@ dump_VC4_PACKET_CLIPPER_Z_SCALING(void *cl, uint32_t offset, uint32_t hw_offset)
 }
 
 static void
+dump_VC4_PACKET_TILE_RENDERING_MODE_CONFIG(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        uint32_t *render_offset = cl + offset;
+        uint16_t *shorts = cl + offset + 4;
+        uint8_t *bytes = cl + offset + 8;
+
+        fprintf(stderr, "0x%08x 0x%08x:       color offset 0x%08x\n",
+                offset, hw_offset,
+                *render_offset);
+
+        fprintf(stderr, "0x%08x 0x%08x:       width %d\n",
+                offset + 4, hw_offset + 4,
+                shorts[0]);
+
+        fprintf(stderr, "0x%08x 0x%08x:       height %d\n",
+                offset + 6, hw_offset + 6,
+                shorts[1]);
+
+        const char *format = "???";
+        switch ((bytes[0] >> 2) & 3) {
+        case 0:
+                format = "BGR565_DITHERED";
+                break;
+        case 1:
+                format = "RGBA8888";
+                break;
+        case 2:
+                format = "BGR565";
+                break;
+        }
+        if (shorts[2] & VC4_RENDER_CONFIG_TILE_BUFFER_64BIT)
+                format = "64bit";
+
+        const char *tiling = "???";
+        switch ((bytes[0] >> 6) & 3) {
+        case 0:
+                tiling = "linear";
+                break;
+        case 1:
+                tiling = "T";
+                break;
+        case 2:
+                tiling = "LT";
+                break;
+        }
+
+        fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s %s %s\n",
+                offset + 8, hw_offset + 8,
+                bytes[0],
+                format, tiling,
+                (bytes[0] & VC4_RENDER_CONFIG_MS_MODE_4X) ? "ms" : "ss");
+
+        const char *earlyz = "";
+        if (bytes[1] & (1 << 3)) {
+                earlyz = "early_z disabled";
+        } else {
+                if (bytes[1] & (1 << 2))
+                        earlyz = "early_z >";
+                else
+                        earlyz = "early_z <";
+        }
+
+        fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s\n",
+                offset + 9, hw_offset + 9,
+                bytes[1],
+                earlyz);
+}
+
+static void
 dump_VC4_PACKET_TILE_COORDINATES(void *cl, uint32_t offset, uint32_t hw_offset)
 {
         uint8_t *tilecoords = cl + offset;
@@ -137,7 +284,7 @@ static const struct packet_info {
         PACKET(VC4_PACKET_STORE_MS_TILE_BUFFER_AND_EOF, 1),
         PACKET(VC4_PACKET_STORE_FULL_RES_TILE_BUFFER, 5),
         PACKET(VC4_PACKET_LOAD_FULL_RES_TILE_BUFFER, 5),
-        PACKET(VC4_PACKET_STORE_TILE_BUFFER_GENERAL, 7),
+        PACKET_DUMP(VC4_PACKET_STORE_TILE_BUFFER_GENERAL, 7),
         PACKET(VC4_PACKET_LOAD_TILE_BUFFER_GENERAL, 7),
 
         PACKET(VC4_PACKET_GL_INDEXED_PRIMITIVE, 14),
@@ -165,7 +312,7 @@ static const struct packet_info {
         PACKET_DUMP(VC4_PACKET_CLIPPER_Z_SCALING, 9),
 
         PACKET(VC4_PACKET_TILE_BINNING_MODE_CONFIG, 16),
-        PACKET(VC4_PACKET_TILE_RENDERING_MODE_CONFIG, 11),
+        PACKET_DUMP(VC4_PACKET_TILE_RENDERING_MODE_CONFIG, 11),
         PACKET(VC4_PACKET_CLEAR_COLORS, 14),
         PACKET_DUMP(VC4_PACKET_TILE_COORDINATES, 3),
 

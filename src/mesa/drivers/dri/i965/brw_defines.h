@@ -551,6 +551,7 @@
 #define BRW_SURFACE_PITCH_MASK		INTEL_MASK(19, 3)
 #define BRW_SURFACE_TILED		(1 << 1)
 #define BRW_SURFACE_TILED_Y		(1 << 0)
+#define HSW_SURFACE_IS_INTEGER_FORMAT   (1 << 18)
 
 /* Surface state DW4 */
 #define BRW_SURFACE_MIN_LOD_SHIFT	28
@@ -820,6 +821,7 @@ enum opcode {
    BRW_OPCODE_MSAVE =	44,  /**< Pre-Gen6 */
    BRW_OPCODE_MRESTORE = 45, /**< Pre-Gen6 */
    BRW_OPCODE_PUSH =	46,  /**< Pre-Gen6 */
+   BRW_OPCODE_GOTO =	46,  /**< Gen8+    */
    BRW_OPCODE_POP =	47,  /**< Pre-Gen6 */
    BRW_OPCODE_WAIT =	48,
    BRW_OPCODE_SEND =	49,
@@ -907,8 +909,20 @@ enum opcode {
    SHADER_OPCODE_GEN4_SCRATCH_WRITE,
    SHADER_OPCODE_GEN7_SCRATCH_READ,
 
-   FS_OPCODE_DDX,
-   FS_OPCODE_DDY,
+   SHADER_OPCODE_URB_WRITE_SIMD8,
+
+   VEC4_OPCODE_MOV_BYTES,
+   VEC4_OPCODE_PACK_BYTES,
+   VEC4_OPCODE_UNPACK_UNIFORM,
+
+   FS_OPCODE_DDX_COARSE,
+   FS_OPCODE_DDX_FINE,
+   /**
+    * Compute dFdy(), dFdyCoarse(), or dFdyFine().
+    * src1 is an immediate storing the key->render_to_fbo boolean.
+    */
+   FS_OPCODE_DDY_COARSE,
+   FS_OPCODE_DDY_FINE,
    FS_OPCODE_PIXEL_X,
    FS_OPCODE_PIXEL_Y,
    FS_OPCODE_CINTERP,
@@ -1088,12 +1102,6 @@ enum opcode {
     *   and number of SO primitives needed.
     */
    GS_OPCODE_FF_SYNC_SET_PRIMITIVES,
-};
-
-enum brw_derivative_quality {
-   BRW_DERIVATIVE_BY_HINT = 0,
-   BRW_DERIVATIVE_FINE = 1,
-   BRW_DERIVATIVE_COARSE = 2,
 };
 
 enum brw_urb_write_flags {
@@ -1367,6 +1375,11 @@ enum brw_message_target {
 #define BRW_SAMPLER_SIMD_MODE_SIMD16                    2
 #define BRW_SAMPLER_SIMD_MODE_SIMD32_64                 3
 
+/* GEN9 changes SIMD mode 0 to mean SIMD8D, but lets us get the SIMD4x2
+ * behavior by setting bit 22 of dword 2 in the message header. */
+#define GEN9_SAMPLER_SIMD_MODE_SIMD8D                   0
+#define GEN9_SAMPLER_SIMD_MODE_EXTENSION_SIMD4X2        (1 << 22)
+
 #define BRW_DATAPORT_OWORD_BLOCK_1_OWORDLOW   0
 #define BRW_DATAPORT_OWORD_BLOCK_1_OWORDHIGH  1
 #define BRW_DATAPORT_OWORD_BLOCK_2_OWORDS     2
@@ -1525,6 +1538,7 @@ enum brw_message_target {
 
 #define BRW_URB_OPCODE_WRITE_HWORD  0
 #define BRW_URB_OPCODE_WRITE_OWORD  1
+#define GEN8_URB_OPCODE_SIMD8_WRITE  7
 
 #define BRW_URB_SWIZZLE_NONE          0
 #define BRW_URB_SWIZZLE_INTERLEAVE    1
@@ -1690,6 +1704,8 @@ enum brw_message_target {
 # define GEN6_VS_STATISTICS_ENABLE			(1 << 10)
 # define GEN6_VS_CACHE_DISABLE				(1 << 1)
 # define GEN6_VS_ENABLE					(1 << 0)
+/* Gen8+ DW7 */
+# define GEN8_VS_SIMD8_ENABLE                           (1 << 2)
 /* Gen8+ DW8 */
 # define GEN8_VS_URB_ENTRY_OUTPUT_OFFSET_SHIFT          21
 # define GEN8_VS_URB_OUTPUT_LENGTH_SHIFT                16
@@ -2048,16 +2064,20 @@ enum brw_message_target {
 # define GEN9_WM_DS_BF_STENCIL_REF_MASK                 INTEL_MASK(7, 0)
 # define GEN9_WM_DS_BF_STENCIL_REF_SHIFT                0
 
+enum brw_pixel_shader_computed_depth_mode {
+   BRW_PSCDEPTH_OFF   = 0, /* PS does not compute depth */
+   BRW_PSCDEPTH_ON    = 1, /* PS computes depth; no guarantee about value */
+   BRW_PSCDEPTH_ON_GE = 2, /* PS guarantees output depth >= source depth */
+   BRW_PSCDEPTH_ON_LE = 3, /* PS guarantees output depth <= source depth */
+};
+
 #define _3DSTATE_PS_EXTRA                       0x784F /* GEN8+ */
 /* DW1 */
 # define GEN8_PSX_PIXEL_SHADER_VALID                    (1 << 31)
 # define GEN8_PSX_PIXEL_SHADER_NO_RT_WRITE              (1 << 30)
 # define GEN8_PSX_OMASK_TO_RENDER_TARGET                (1 << 29)
 # define GEN8_PSX_KILL_ENABLE                           (1 << 28)
-# define GEN8_PSX_PSCDEPTH_OFF                          (0 << 26)
-# define GEN8_PSX_PSCDEPTH_ON                           (1 << 26)
-# define GEN8_PSX_PSCDEPTH_ON_GE                        (2 << 26)
-# define GEN8_PSX_PSCDEPTH_ON_LE                        (3 << 26)
+# define GEN8_PSX_COMPUTED_DEPTH_MODE_SHIFT             26
 # define GEN8_PSX_FORCE_COMPUTED_DEPTH                  (1 << 25)
 # define GEN8_PSX_USES_SOURCE_DEPTH                     (1 << 24)
 # define GEN8_PSX_USES_SOURCE_W                         (1 << 23)
@@ -2199,10 +2219,7 @@ enum brw_wm_barycentric_interp_mode {
 # define GEN7_WM_DEPTH_RESOLVE				(1 << 28)
 # define GEN7_WM_HIERARCHICAL_DEPTH_RESOLVE		(1 << 27)
 # define GEN7_WM_KILL_ENABLE				(1 << 25)
-# define GEN7_WM_PSCDEPTH_OFF			        (0 << 23)
-# define GEN7_WM_PSCDEPTH_ON			        (1 << 23)
-# define GEN7_WM_PSCDEPTH_ON_GE			        (2 << 23)
-# define GEN7_WM_PSCDEPTH_ON_LE			        (3 << 23)
+# define GEN7_WM_COMPUTED_DEPTH_MODE_SHIFT              23
 # define GEN7_WM_USES_SOURCE_DEPTH			(1 << 20)
 # define GEN7_WM_USES_SOURCE_W			        (1 << 19)
 # define GEN7_WM_POSITION_ZW_PIXEL			(0 << 17)

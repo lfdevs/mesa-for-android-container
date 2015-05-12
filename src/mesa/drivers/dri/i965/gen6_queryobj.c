@@ -121,20 +121,7 @@ gen6_queryobj_get_results(struct gl_context *ctx,
    if (query->bo == NULL)
       return;
 
-   /* If the application has requested the query result, but this batch is
-    * still contributing to it, flush it now so the results will be present
-    * when mapped.
-    */
-   if (drm_intel_bo_references(brw->batch.bo, query->bo))
-      intel_batchbuffer_flush(brw);
-
-   if (unlikely(brw->perf_debug)) {
-      if (drm_intel_bo_busy(query->bo)) {
-         perf_debug("Stalling on the GPU waiting for a query object.\n");
-      }
-   }
-
-   drm_intel_bo_map(query->bo, false);
+   brw_bo_map(brw, query->bo, false, "query object");
    uint64_t *results = query->bo->virtual;
    switch (query->Base.Target) {
    case GL_TIME_ELAPSED:
@@ -195,6 +182,8 @@ gen6_queryobj_get_results(struct gl_context *ctx,
     */
    drm_intel_bo_unreference(query->bo);
    query->bo = NULL;
+
+   query->Base.Ready = true;
 }
 
 /**
@@ -292,6 +281,27 @@ gen6_end_query(struct gl_context *ctx, struct gl_query_object *q)
    default:
       unreachable("Unrecognized query target in brw_end_query()");
    }
+
+   /* The current batch contains the commands to handle EndQuery(),
+    * but they won't actually execute until it is flushed.
+    */
+   query->flushed = false;
+}
+
+/**
+ * Flush the batch if it still references the query object BO.
+ */
+static void
+flush_batch_if_needed(struct brw_context *brw, struct brw_query_object *query)
+{
+   /* If the batch doesn't reference the BO, it must have been flushed
+    * (for example, due to being full).  Record that it's been flushed.
+    */
+   query->flushed = query->flushed ||
+      !drm_intel_bo_references(brw->batch.bo, query->bo);
+
+   if (!query->flushed)
+      intel_batchbuffer_flush(brw);
 }
 
 /**
@@ -302,10 +312,16 @@ gen6_end_query(struct gl_context *ctx, struct gl_query_object *q)
  */
 static void gen6_wait_query(struct gl_context *ctx, struct gl_query_object *q)
 {
+   struct brw_context *brw = brw_context(ctx);
    struct brw_query_object *query = (struct brw_query_object *)q;
 
+   /* If the application has requested the query result, but this batch is
+    * still contributing to it, flush it now to finish that work so the
+    * result will become available (eventually).
+    */
+   flush_batch_if_needed(brw, query);
+
    gen6_queryobj_get_results(ctx, query);
-   query->Base.Ready = true;
 }
 
 /**
@@ -319,6 +335,12 @@ static void gen6_check_query(struct gl_context *ctx, struct gl_query_object *q)
    struct brw_context *brw = brw_context(ctx);
    struct brw_query_object *query = (struct brw_query_object *)q;
 
+   /* If query->bo is NULL, we've already gathered the results - this is a
+    * redundant CheckQuery call.  Ignore it.
+    */
+   if (query->bo == NULL)
+      return;
+
    /* From the GL_ARB_occlusion_query spec:
     *
     *     "Instead of allowing for an infinite loop, performing a
@@ -326,12 +348,10 @@ static void gen6_check_query(struct gl_context *ctx, struct gl_query_object *q)
     *      not ready yet on the first time it is queried.  This ensures that
     *      the async query will return true in finite time.
     */
-   if (query->bo && drm_intel_bo_references(brw->batch.bo, query->bo))
-      intel_batchbuffer_flush(brw);
+   flush_batch_if_needed(brw, query);
 
-   if (query->bo == NULL || !drm_intel_bo_busy(query->bo)) {
+   if (!drm_intel_bo_busy(query->bo)) {
       gen6_queryobj_get_results(ctx, query);
-      query->Base.Ready = true;
    }
 }
 

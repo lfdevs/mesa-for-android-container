@@ -318,13 +318,13 @@ nve4_validate_tic(struct nvc0_context *nvc0, unsigned s)
          tic->id = nvc0_screen_tic_alloc(nvc0->screen, tic);
 
          PUSH_SPACE(push, 16);
-         BEGIN_NVC0(push, NVE4_P2MF(DST_ADDRESS_HIGH), 2);
+         BEGIN_NVC0(push, NVE4_P2MF(UPLOAD_DST_ADDRESS_HIGH), 2);
          PUSH_DATAh(push, txc->offset + (tic->id * 32));
          PUSH_DATA (push, txc->offset + (tic->id * 32));
-         BEGIN_NVC0(push, NVE4_P2MF(LINE_LENGTH_IN), 2);
+         BEGIN_NVC0(push, NVE4_P2MF(UPLOAD_LINE_LENGTH_IN), 2);
          PUSH_DATA (push, 32);
          PUSH_DATA (push, 1);
-         BEGIN_1IC0(push, NVE4_P2MF(EXEC), 9);
+         BEGIN_1IC0(push, NVE4_P2MF(UPLOAD_EXEC), 9);
          PUSH_DATA (push, 0x1001);
          PUSH_DATAp(push, &tic->tic[0], 8);
 
@@ -437,13 +437,13 @@ nve4_validate_tsc(struct nvc0_context *nvc0, int s)
          tsc->id = nvc0_screen_tsc_alloc(nvc0->screen, tsc);
 
          PUSH_SPACE(push, 16);
-         BEGIN_NVC0(push, NVE4_P2MF(DST_ADDRESS_HIGH), 2);
+         BEGIN_NVC0(push, NVE4_P2MF(UPLOAD_DST_ADDRESS_HIGH), 2);
          PUSH_DATAh(push, txc->offset + 65536 + (tsc->id * 32));
          PUSH_DATA (push, txc->offset + 65536 + (tsc->id * 32));
-         BEGIN_NVC0(push, NVE4_P2MF(LINE_LENGTH_IN), 2);
+         BEGIN_NVC0(push, NVE4_P2MF(UPLOAD_LINE_LENGTH_IN), 2);
          PUSH_DATA (push, 32);
          PUSH_DATA (push, 1);
-         BEGIN_1IC0(push, NVE4_P2MF(EXEC), 9);
+         BEGIN_1IC0(push, NVE4_P2MF(UPLOAD_EXEC), 9);
          PUSH_DATA (push, 0x1001);
          PUSH_DATAp(push, &tsc->tsc[0], 8);
 

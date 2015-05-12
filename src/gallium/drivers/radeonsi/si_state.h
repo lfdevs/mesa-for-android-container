@@ -64,17 +64,15 @@ struct si_state_rasterizer {
 	unsigned		pa_sc_line_stipple;
 	unsigned		pa_su_sc_mode_cntl;
 	unsigned		pa_cl_clip_cntl;
-	unsigned		pa_cl_vs_out_cntl;
 	unsigned		clip_plane_enable;
 	float			offset_units;
 	float			offset_scale;
+	bool			poly_stipple_enable;
 };
 
 struct si_state_dsa {
 	struct si_pm4_state	pm4;
-	float			alpha_ref;
 	unsigned		alpha_func;
-	unsigned		db_render_control;
 	uint8_t			valuemask[2];
 	uint8_t			writemask[2];
 };
@@ -89,7 +87,6 @@ struct si_vertex_element
 
 union si_state {
 	struct {
-		struct si_pm4_state		*init;
 		struct si_state_blend		*blend;
 		struct si_pm4_state		*blend_color;
 		struct si_pm4_state		*clip;
@@ -109,20 +106,21 @@ union si_state {
 		struct si_pm4_state		*vs;
 		struct si_pm4_state		*ps;
 		struct si_pm4_state		*spi;
-		struct si_pm4_state		*draw_info;
-		struct si_pm4_state		*draw;
 	} named;
 	struct si_pm4_state	*array[0];
 };
 
-#define SI_NUM_USER_SAMPLERS 16 /* AKA OpenGL textures units per shader */
+#define SI_NUM_USER_SAMPLERS            16 /* AKA OpenGL textures units per shader */
+#define SI_POLY_STIPPLE_SAMPLER         SI_NUM_USER_SAMPLERS
+#define SI_NUM_SAMPLERS                 (SI_POLY_STIPPLE_SAMPLER + 1)
 
 /* User sampler views:   0..15
- * FMASK sampler views: 16..31 (no sampler states)
+ * Polygon stipple tex:  16
+ * FMASK sampler views:  17..33 (no sampler states)
  */
-#define SI_FMASK_TEX_OFFSET		SI_NUM_USER_SAMPLERS
-#define SI_NUM_SAMPLER_VIEWS		(SI_FMASK_TEX_OFFSET + SI_NUM_USER_SAMPLERS)
-#define SI_NUM_SAMPLER_STATES		SI_NUM_USER_SAMPLERS
+#define SI_FMASK_TEX_OFFSET		SI_NUM_SAMPLERS
+#define SI_NUM_SAMPLER_VIEWS		(SI_FMASK_TEX_OFFSET + SI_NUM_SAMPLERS)
+#define SI_NUM_SAMPLER_STATES		SI_NUM_SAMPLERS
 
 /* User constant buffers:   0..15
  * Driver state constants:  16
@@ -161,9 +159,9 @@ struct si_descriptors {
 	unsigned buffer_offset;
 
 	/* The i-th bit is set if that element is dirty (changed but not emitted). */
-	unsigned dirty_mask;
+	uint64_t dirty_mask;
 	/* The i-th bit is set if that element is enabled (non-NULL resource). */
-	unsigned enabled_mask;
+	uint64_t enabled_mask;
 
 	/* We can't update descriptors directly because the GPU might be
 	 * reading them at the same time, so we have to update them
@@ -244,7 +242,7 @@ void si_release_all_descriptors(struct si_context *sctx);
 void si_all_descriptors_begin_new_cs(struct si_context *sctx);
 void si_copy_buffer(struct si_context *sctx,
 		    struct pipe_resource *dst, struct pipe_resource *src,
-		    uint64_t dst_offset, uint64_t src_offset, unsigned size);
+		    uint64_t dst_offset, uint64_t src_offset, unsigned size, bool is_framebuffer);
 void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuffer,
 			    const uint8_t *ptr, unsigned size, uint32_t *const_offset);
 
@@ -256,9 +254,6 @@ boolean si_is_format_supported(struct pipe_screen *screen,
                                enum pipe_texture_target target,
                                unsigned sample_count,
                                unsigned usage);
-int si_shader_select(struct pipe_context *ctx,
-		     struct si_shader_selector *sel);
-void si_make_dummy_ps(struct si_context *sctx);
 void si_init_state_functions(struct si_context *sctx);
 void si_init_config(struct si_context *sctx);
 unsigned cik_bank_wh(unsigned bankwh);
@@ -268,26 +263,17 @@ unsigned cik_tile_split(unsigned tile_split);
 uint32_t si_num_banks(struct si_screen *sscreen, struct r600_texture *tex);
 unsigned si_tile_mode_index(struct r600_texture *rtex, unsigned level, bool stencil);
 
+/* si_state_shader.c */
+void si_update_shaders(struct si_context *sctx);
+void si_init_shader_functions(struct si_context *sctx);
+
 /* si_state_draw.c */
 extern const struct r600_atom si_atom_cache_flush;
 extern const struct r600_atom si_atom_msaa_config;
-void si_shader_init_pm4_state(struct si_shader *shader);
 void si_emit_cache_flush(struct r600_common_context *sctx, struct r600_atom *atom);
 void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *dinfo);
 
 /* si_commands.c */
 void si_cmd_context_control(struct si_pm4_state *pm4);
-void si_cmd_draw_index_2(struct si_pm4_state *pm4, uint32_t max_size,
-			 uint64_t index_base, uint32_t index_count,
-			 uint32_t initiator, bool predicate);
-void si_cmd_draw_index_auto(struct si_pm4_state *pm4, uint32_t count,
-			    uint32_t initiator, bool predicate);
-void si_cmd_draw_indirect(struct si_pm4_state *pm4, uint64_t indirect_va,
-			  uint32_t indirect_offset, uint32_t base_vtx_loc,
-			  uint32_t start_inst_loc, bool predicate);
-void si_cmd_draw_index_indirect(struct si_pm4_state *pm4, uint64_t indirect_va,
-				uint64_t index_va, uint32_t index_max_size,
-				uint32_t indirect_offset, uint32_t base_vtx_loc,
-				uint32_t start_inst_loc, bool predicate);
 
 #endif

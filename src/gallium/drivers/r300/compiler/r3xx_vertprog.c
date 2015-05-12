@@ -405,6 +405,7 @@ static void translate_vertex_program(struct radeon_compiler *c, void *user)
 		switch (vpi->Opcode) {
 		case RC_OPCODE_ADD: ei_vector2(compiler->code, VE_ADD, vpi, inst); break;
 		case RC_OPCODE_ARL: ei_vector1(compiler->code, VE_FLT2FIX_DX, vpi, inst); break;
+		case RC_OPCODE_ARR: ei_vector1(compiler->code, VE_FLT2FIX_DX_RND, vpi, inst); break;
 		case RC_OPCODE_COS: ei_math1(compiler->code, ME_COS, vpi, inst); break;
 		case RC_OPCODE_DP4: ei_vector2(compiler->code, VE_DOT_PRODUCT, vpi, inst); break;
 		case RC_OPCODE_DST: ei_vector2(compiler->code, VE_DISTANCE_VECTOR, vpi, inst); break;
@@ -798,7 +799,7 @@ static void transform_negative_addressing(struct r300_vertex_program_compiler *c
 	struct rc_instruction *inst, *add;
 	unsigned const_swizzle;
 
-	/* Transform ARL */
+	/* Transform ARL/ARR */
 	add = rc_insert_new_instruction(&c->Base, arl->Prev);
 	add->U.I.Opcode = RC_OPCODE_ADD;
 	add->U.I.DstReg.File = RC_FILE_TEMPORARY;
@@ -833,7 +834,7 @@ static void rc_emulate_negative_addressing(struct radeon_compiler *compiler, voi
 	for (inst = c->Base.Program.Instructions.Next; inst != &c->Base.Program.Instructions; inst = inst->Next) {
 		const struct rc_opcode_info * opcode = rc_get_opcode_info(inst->U.I.Opcode);
 
-		if (inst->U.I.Opcode == RC_OPCODE_ARL) {
+		if (inst->U.I.Opcode == RC_OPCODE_ARL || inst->U.I.Opcode == RC_OPCODE_ARR) {
 			if (lastARL != NULL && min_offset < 0)
 				transform_negative_addressing(c, lastARL, inst, min_offset);
 
@@ -847,7 +848,7 @@ static void rc_emulate_negative_addressing(struct radeon_compiler *compiler, voi
 			    inst->U.I.SrcReg[i].Index < 0) {
 				/* ARL must precede any indirect addressing. */
 				if (lastARL == NULL) {
-					rc_error(&c->Base, "Vertex shader: Found relative addressing without ARL.");
+					rc_error(&c->Base, "Vertex shader: Found relative addressing without ARL/ARR.");
 					return;
 				}
 

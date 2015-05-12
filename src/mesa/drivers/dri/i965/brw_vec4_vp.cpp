@@ -43,8 +43,7 @@ vec4_visitor::emit_vp_sop(enum brw_conditional_mod conditional_mod,
 {
    vec4_instruction *inst;
 
-   inst = emit(BRW_OPCODE_CMP, dst_null_d(), src0, src1);
-   inst->conditional_mod = conditional_mod;
+   inst = emit(CMP(dst_null_f(), src0, src1, conditional_mod));
 
    inst = emit(BRW_OPCODE_SEL, dst, one, src_reg(0.0f));
    inst->predicate = BRW_PREDICATE_NORMAL;

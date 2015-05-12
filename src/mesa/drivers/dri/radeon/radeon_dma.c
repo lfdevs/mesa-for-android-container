@@ -33,7 +33,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <errno.h>
 #include "radeon_common.h"
 #include "radeon_fog.h"
-#include "main/simple_list.h"
+#include "util/simple_list.h"
 
 #if defined(USE_X86_ASM)
 #define COPY_DWORDS( dst, src, nr )					\

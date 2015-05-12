@@ -78,7 +78,6 @@ ilo_blitter_set_invariants(struct ilo_blitter *blitter)
    vp.scale[0] = 1.0f;
    vp.scale[1] = 1.0f;
    vp.scale[2] = 1.0f;
-   vp.scale[3] = 1.0f;
    ilo_gpe_set_viewport_cso(blitter->ilo->dev, &vp, &blitter->viewport);
 
    blitter->initialized = true;

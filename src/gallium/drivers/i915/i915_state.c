@@ -628,12 +628,10 @@ void i915_delete_fs_state(struct pipe_context *pipe, void *shader)
    FREE(ifs->decl);
    ifs->decl = NULL;
 
-   if (ifs->program) {
-      FREE(ifs->program);
-      ifs->program = NULL;
-      FREE((struct tgsi_token *)ifs->state.tokens);
-      ifs->state.tokens = NULL;
-   }
+   FREE(ifs->program);
+   ifs->program = NULL;
+   FREE((struct tgsi_token *)ifs->state.tokens);
+   ifs->state.tokens = NULL;
 
    ifs->program_len = 0;
    ifs->decl_len = 0;

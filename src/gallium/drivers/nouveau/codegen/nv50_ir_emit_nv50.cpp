@@ -1059,16 +1059,22 @@ CodeEmitterNV50::emitFMUL(const Instruction *i)
       emitForm_IMM(i);
       if (neg)
          code[0] |= 0x8000;
+      if (i->saturate)
+         code[0] |= 1 << 8;
    } else
    if (i->encSize == 8) {
       code[1] = i->rnd == ROUND_Z ? 0x0000c000 : 0;
       if (neg)
          code[1] |= 0x08000000;
+      if (i->saturate)
+         code[1] |= 1 << 20;
       emitForm_MAD(i);
    } else {
       emitForm_MUL(i);
       if (neg)
          code[0] |= 0x8000;
+      if (i->saturate)
+         code[0] |= 1 << 8;
    }
 }
 

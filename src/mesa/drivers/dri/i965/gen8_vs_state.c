@@ -36,13 +36,10 @@ upload_vs_state(struct brw_context *brw)
    const struct brw_stage_state *stage_state = &brw->vs.base;
    uint32_t floating_point_mode = 0;
 
-   /* CACHE_NEW_VS_PROG */
-   const struct brw_vec4_prog_data *prog_data = &brw->vs.prog_data->base;
+   /* BRW_NEW_VS_PROG_DATA */
+   const struct brw_vue_prog_data *prog_data = &brw->vs.prog_data->base;
 
-   /* Use ALT floating point mode for ARB vertex programs, because they
-    * require 0^0 == 1.
-    */
-   if (ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX] == NULL)
+   if (prog_data->base.use_alt_mode)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
    BEGIN_BATCH(9);
@@ -69,8 +66,10 @@ upload_vs_state(struct brw_context *brw)
              (prog_data->urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
              (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));
 
+   uint32_t simd8_enable = prog_data->simd8 ? GEN8_VS_SIMD8_ENABLE : 0;
    OUT_BATCH(((brw->max_vs_threads - 1) << HSW_VS_MAX_THREADS_SHIFT) |
              GEN6_VS_STATISTICS_ENABLE |
+             simd8_enable |
              GEN6_VS_ENABLE);
 
    /* _NEW_TRANSFORM */
@@ -82,10 +81,9 @@ upload_vs_state(struct brw_context *brw)
 const struct brw_tracked_state gen8_vs_state = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM,
-      .brw   = BRW_NEW_CONTEXT |
-               BRW_NEW_VERTEX_PROGRAM |
-               BRW_NEW_BATCH,
-      .cache = CACHE_NEW_VS_PROG
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_CONTEXT |
+               BRW_NEW_VS_PROG_DATA,
    },
    .emit = upload_vs_state,
 };

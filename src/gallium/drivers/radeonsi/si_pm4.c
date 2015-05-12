@@ -103,6 +103,13 @@ void si_pm4_add_bo(struct si_pm4_state *state,
 	state->bo_priority[idx] = priority;
 }
 
+void si_pm4_free_state_simple(struct si_pm4_state *state)
+{
+	for (int i = 0; i < state->nbo; ++i)
+		r600_resource_reference(&state->bo[i], NULL);
+	FREE(state);
+}
+
 void si_pm4_free_state(struct si_context *sctx,
 		       struct si_pm4_state *state,
 		       unsigned idx)
@@ -114,10 +121,7 @@ void si_pm4_free_state(struct si_context *sctx,
 		sctx->emitted.array[idx] = NULL;
 	}
 
-	for (int i = 0; i < state->nbo; ++i) {
-		r600_resource_reference(&state->bo[i], NULL);
-	}
-	FREE(state);
+	si_pm4_free_state_simple(state);
 }
 
 unsigned si_pm4_dirty_dw(struct si_context *sctx)
@@ -173,7 +177,6 @@ void si_pm4_emit_dirty(struct si_context *sctx)
 		if (!state || sctx->emitted.array[i] == state)
 			continue;
 
-		assert(state != sctx->queued.named.init);
 		si_pm4_emit(sctx, state);
 		sctx->emitted.array[i] = state;
 	}

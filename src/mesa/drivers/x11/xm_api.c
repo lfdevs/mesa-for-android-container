@@ -783,7 +783,7 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
     * the struct but we may need some of the information contained in it
     * at a later time.
     */
-   v->visinfo = (XVisualInfo *) malloc(sizeof(*visinfo));
+   v->visinfo = malloc(sizeof(*visinfo));
    if(!v->visinfo) {
       free(v);
       return NULL;

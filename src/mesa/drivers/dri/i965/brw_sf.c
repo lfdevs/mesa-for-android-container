@@ -123,7 +123,7 @@ static void compile_sf_prog( struct brw_context *brw,
       fprintf(stderr, "\n");
    }
 
-   brw_upload_cache(&brw->cache, BRW_SF_PROG,
+   brw_upload_cache(&brw->cache, BRW_CACHE_SF_PROG,
 		    &c.key, sizeof(c.key),
 		    program, program_size,
 		    &c.prog_data, sizeof(c.prog_data),
@@ -207,7 +207,7 @@ brw_upload_sf_prog(struct brw_context *brw)
       key.frontface_ccw = (ctx->Polygon.FrontFace == GL_CCW) != render_to_fbo;
    }
 
-   if (!brw_search_cache(&brw->cache, BRW_SF_PROG,
+   if (!brw_search_cache(&brw->cache, BRW_CACHE_SF_PROG,
 			 &key, sizeof(key),
 			 &brw->sf.prog_offset, &brw->sf.prog_data)) {
       compile_sf_prog( brw, &key );
@@ -217,11 +217,16 @@ brw_upload_sf_prog(struct brw_context *brw)
 
 const struct brw_tracked_state brw_sf_prog = {
    .dirty = {
-      .mesa  = (_NEW_HINT | _NEW_LIGHT | _NEW_POLYGON | _NEW_POINT |
-                _NEW_TRANSFORM | _NEW_BUFFERS | _NEW_PROGRAM),
-      .brw   = (BRW_NEW_REDUCED_PRIMITIVE |
-                BRW_NEW_VUE_MAP_GEOM_OUT |
-                BRW_NEW_INTERPOLATION_MAP)
+      .mesa  = _NEW_BUFFERS |
+               _NEW_HINT |
+               _NEW_LIGHT |
+               _NEW_POINT |
+               _NEW_POLYGON |
+               _NEW_PROGRAM |
+               _NEW_TRANSFORM,
+      .brw   = BRW_NEW_INTERPOLATION_MAP |
+               BRW_NEW_REDUCED_PRIMITIVE |
+               BRW_NEW_VUE_MAP_GEOM_OUT,
    },
    .emit = brw_upload_sf_prog
 };

@@ -42,6 +42,7 @@
 #include "glsl/ir.h"
 
 #include "brw_context.h"
+#include "brw_shader.h"
 #include "brw_wm.h"
 
 static unsigned
@@ -136,6 +137,10 @@ brwProgramStringNotify(struct gl_context *ctx,
       if (newFP == curFP)
 	 brw->state.dirty.brw |= BRW_NEW_FRAGMENT_PROGRAM;
       newFP->id = get_new_program_id(brw->intelScreen);
+
+      brw_add_texrect_params(prog);
+
+      brw_fs_precompile(ctx, NULL, prog);
       break;
    }
    case GL_VERTEX_PROGRAM_ARB: {
@@ -154,6 +159,10 @@ brwProgramStringNotify(struct gl_context *ctx,
       /* Also tell tnl about it:
        */
       _tnl_program_string(ctx, target, prog);
+
+      brw_add_texrect_params(prog);
+
+      brw_vs_precompile(ctx, NULL, prog);
       break;
    }
    default:
@@ -166,8 +175,6 @@ brwProgramStringNotify(struct gl_context *ctx,
        */
       unreachable("Unexpected target in brwProgramStringNotify");
    }
-
-   brw_add_texrect_params(prog);
 
    return true;
 }

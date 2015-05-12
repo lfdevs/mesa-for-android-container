@@ -133,11 +133,17 @@ check_tmu_write(uint64_t inst,
 	int tmu = waddr > QPU_W_TMU0_B;
 	bool submit = is_tmu_submit(waddr);
 	bool is_direct = submit && validation_state->tmu_write_count[tmu] == 0;
+	uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
 
 	if (is_direct) {
 		uint32_t add_a = QPU_GET_FIELD(inst, QPU_ADD_A);
 		uint32_t add_b = QPU_GET_FIELD(inst, QPU_ADD_B);
 		uint32_t clamp_offset = ~0;
+
+		if (sig == QPU_SIG_SMALL_IMM) {
+			DRM_ERROR("direct TMU read used small immediate\n");
+			return false;
+		}
 
 		/* Make sure that this texture load is an add of the base
 		 * address of the UBO to a clamped offset within the UBO.
@@ -180,7 +186,8 @@ check_tmu_write(uint64_t inst,
 
 		validation_state->tmu_setup[tmu].is_direct = true;
 	} else {
-		if (raddr_a == QPU_R_UNIF || raddr_b == QPU_R_UNIF) {
+		if (raddr_a == QPU_R_UNIF || (sig != QPU_SIG_SMALL_IMM &&
+					      raddr_b == QPU_R_UNIF)) {
 			DRM_ERROR("uniform read in the same instruction as "
 				  "texture setup.\n");
 			return false;
@@ -222,7 +229,7 @@ check_register_write(uint64_t inst,
 	uint32_t waddr = (is_mul ?
 			  QPU_GET_FIELD(inst, QPU_WADDR_MUL) :
 			  QPU_GET_FIELD(inst, QPU_WADDR_ADD));
-	bool is_b = is_mul != ((inst & QPU_PM) != 0);
+	bool is_b = is_mul != ((inst & QPU_WS) != 0);
 	uint32_t live_reg_index;
 
 	switch (waddr) {
@@ -298,18 +305,20 @@ track_live_clamps(uint64_t inst,
 	uint32_t add_b = QPU_GET_FIELD(inst, QPU_ADD_B);
 	uint32_t raddr_a = QPU_GET_FIELD(inst, QPU_RADDR_A);
 	uint32_t raddr_b = QPU_GET_FIELD(inst, QPU_RADDR_B);
-	bool pm = inst & QPU_PM;
+	uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
+	bool is_b = inst & QPU_WS;
 	uint32_t live_reg_index;
 
 	if (QPU_GET_FIELD(inst, QPU_OP_ADD) != QPU_A_MIN)
 		return;
 
 	if (!(add_b == QPU_MUX_A && raddr_a == QPU_R_UNIF) &&
-	    !(add_b == QPU_MUX_B && raddr_b == QPU_R_UNIF)) {
+	    !(add_b == QPU_MUX_B && raddr_b == QPU_R_UNIF &&
+	      sig != QPU_SIG_SMALL_IMM)) {
 		return;
 	}
 
-	live_reg_index = waddr_to_live_reg_index(waddr_add, pm);
+	live_reg_index = waddr_to_live_reg_index(waddr_add, is_b);
 	if (live_reg_index != ~0) {
 		validation_state->live_clamp_offsets[live_reg_index] =
 			validated_shader->uniforms_size;
@@ -344,9 +353,10 @@ check_instruction_reads(uint64_t inst,
 {
 	uint32_t raddr_a = QPU_GET_FIELD(inst, QPU_RADDR_A);
 	uint32_t raddr_b = QPU_GET_FIELD(inst, QPU_RADDR_B);
+	uint32_t sig = QPU_GET_FIELD(inst, QPU_SIG);
 
 	if (raddr_a == QPU_R_UNIF ||
-	    raddr_b == QPU_R_UNIF) {
+	    (raddr_b == QPU_R_UNIF && sig != QPU_SIG_SMALL_IMM)) {
 		/* This can't overflow the uint32_t, because we're reading 8
 		 * bytes of instruction to increment by 4 here, so we'd
 		 * already be OOM.
@@ -401,6 +411,7 @@ vc4_validate_shader(struct drm_gem_cma_object *shader_obj,
 		case QPU_SIG_LOAD_TMU0:
 		case QPU_SIG_LOAD_TMU1:
 		case QPU_SIG_PROG_END:
+		case QPU_SIG_SMALL_IMM:
 			if (!check_instruction_writes(inst, validated_shader,
 						      &validation_state)) {
 				DRM_ERROR("Bad write at ip %d\n", ip);

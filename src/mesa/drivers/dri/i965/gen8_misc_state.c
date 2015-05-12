@@ -32,9 +32,6 @@
 static void upload_state_base_address(struct brw_context *brw)
 {
    uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
-
-   perf_debug("Missing MOCS setup for STATE_BASE_ADDRESS.");
-
    int pkt_len = brw->gen >= 9 ? 19 : 16;
 
    BEGIN_BATCH(pkt_len);
@@ -78,8 +75,8 @@ static void upload_state_base_address(struct brw_context *brw)
 const struct brw_tracked_state gen8_state_base_address = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_BATCH | BRW_NEW_PROGRAM_CACHE,
-      .cache = 0,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_PROGRAM_CACHE,
    },
    .emit = upload_state_base_address
 };

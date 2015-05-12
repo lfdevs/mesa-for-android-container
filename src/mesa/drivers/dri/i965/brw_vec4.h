@@ -49,36 +49,14 @@ struct brw_vec4_compile {
    GLuint last_scratch; /**< measured in 32-byte (register size) units */
 };
 
-
-struct brw_vec4_prog_key {
-   GLuint program_string_id;
-
-   /**
-    * True if at least one clip flag is enabled, regardless of whether the
-    * shader uses clip planes or gl_ClipDistance.
-    */
-   GLuint userclip_active:1;
-
-   /**
-    * How many user clipping planes are being uploaded to the vertex shader as
-    * push constants.
-    */
-   GLuint nr_userclip_plane_consts:4;
-
-   GLuint clamp_vertex_color:1;
-
-   struct brw_sampler_prog_key_data tex;
-};
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void
-brw_vec4_setup_prog_key_for_precompile(struct gl_context *ctx,
-                                       struct brw_vec4_prog_key *key,
-                                       GLuint id, struct gl_program *prog);
+brw_vue_setup_prog_key_for_precompile(struct gl_context *ctx,
+                                      struct brw_vue_prog_key *key,
+                                      GLuint id, struct gl_program *prog);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -86,6 +64,8 @@ brw_vec4_setup_prog_key_for_precompile(struct gl_context *ctx,
 namespace brw {
 
 class dst_reg;
+
+class vec4_live_variables;
 
 unsigned
 swizzle_for_size(int size);
@@ -102,6 +82,8 @@ public:
    src_reg(float f);
    src_reg(uint32_t u);
    src_reg(int32_t i);
+   src_reg(uint8_t vf[4]);
+   src_reg(uint8_t vf0, uint8_t vf1, uint8_t vf2, uint8_t vf3);
    src_reg(struct brw_reg reg);
 
    bool equals(const src_reg &r) const;
@@ -210,15 +192,12 @@ public:
                     const src_reg &src2 = src_reg());
 
    struct brw_reg get_dst(void);
-   struct brw_reg get_src(const struct brw_vec4_prog_data *prog_data, int i);
+   struct brw_reg get_src(const struct brw_vue_prog_data *prog_data, int i);
 
    dst_reg dst;
    src_reg src[3];
 
-   bool shadow_compare;
-
    enum brw_urb_write_flags urb_write_flags;
-   bool header_present;
 
    unsigned sol_binding; /**< gen6: SOL binding table index */
    bool sol_final_write; /**< gen6: send commit message */
@@ -236,7 +215,9 @@ public:
 
    bool writes_flag()
    {
-      return conditional_mod && opcode != BRW_OPCODE_SEL;
+      return (conditional_mod && (opcode != BRW_OPCODE_SEL &&
+                                  opcode != BRW_OPCODE_IF &&
+                                  opcode != BRW_OPCODE_WHILE));
    }
 };
 
@@ -252,8 +233,8 @@ public:
    vec4_visitor(struct brw_context *brw,
                 struct brw_vec4_compile *c,
                 struct gl_program *prog,
-                const struct brw_vec4_prog_key *key,
-                struct brw_vec4_prog_data *prog_data,
+                const struct brw_vue_prog_key *key,
+                struct brw_vue_prog_data *prog_data,
 		struct gl_shader_program *shader_prog,
                 gl_shader_stage stage,
 		void *mem_ctx,
@@ -280,8 +261,8 @@ public:
    }
 
    struct brw_vec4_compile * const c;
-   const struct brw_vec4_prog_key * const key;
-   struct brw_vec4_prog_data * const prog_data;
+   const struct brw_vue_prog_key * const key;
+   struct brw_vue_prog_data * const prog_data;
    unsigned int sanity_param_count;
 
    char *fail_msg;
@@ -301,6 +282,7 @@ public:
    unsigned int max_grf;
    int *virtual_grf_start;
    int *virtual_grf_end;
+   brw::vec4_live_variables *live_intervals;
    dst_reg userplane[MAX_CLIP_PLANES];
 
    /**
@@ -310,8 +292,6 @@ public:
    int virtual_grf_reg_count;
    /** Per-virtual-grf indices into an array of size virtual_grf_reg_count */
    int *virtual_grf_reg_map;
-
-   bool live_intervals_valid;
 
    dst_reg *variable_storage(ir_variable *var);
 
@@ -385,14 +365,16 @@ public:
    void calculate_live_intervals();
    void invalidate_live_intervals();
    void split_virtual_grfs();
+   bool opt_vector_float();
    bool opt_reduce_swizzle();
    bool dead_code_eliminate();
    bool virtual_grf_interferes(int a, int b);
-   bool opt_copy_propagation();
+   bool opt_copy_propagation(bool do_constant_prop = true);
    bool opt_cse_local(bblock_t *block);
    bool opt_cse();
    bool opt_algebraic();
    bool opt_register_coalesce();
+   bool is_dep_ctrl_unsafe(const vec4_instruction *inst);
    void opt_set_dependency_control();
    void opt_schedule_instructions();
 
@@ -509,6 +491,10 @@ public:
 
    void emit_pack_half_2x16(dst_reg dst, src_reg src0);
    void emit_unpack_half_2x16(dst_reg dst, src_reg src0);
+   void emit_unpack_unorm_4x8(const dst_reg &dst, src_reg src0);
+   void emit_unpack_snorm_4x8(const dst_reg &dst, src_reg src0);
+   void emit_pack_unorm_4x8(const dst_reg &dst, const src_reg &src0);
+   void emit_pack_snorm_4x8(const dst_reg &dst, const src_reg &src0);
 
    uint32_t gather_channel(ir_texture *ir, uint32_t sampler);
    src_reg emit_mcs_fetch(ir_texture *ir, src_reg coordinate, src_reg sampler);
@@ -518,7 +504,7 @@ public:
    void emit_ndc_computation();
    void emit_psiz_and_flags(dst_reg reg);
    void emit_clip_distances(dst_reg reg, int offset);
-   void emit_generic_urb_slot(dst_reg reg, int varying);
+   vec4_instruction *emit_generic_urb_slot(dst_reg reg, int varying);
    void emit_urb_slot(dst_reg reg, int varying);
 
    void emit_shader_time_begin();
@@ -551,6 +537,7 @@ public:
    bool try_emit_mad(ir_expression *ir);
    bool try_emit_b2f_of_compare(ir_expression *ir);
    void resolve_ud_negate(src_reg *reg);
+   void resolve_bool_comparison(ir_rvalue *rvalue, src_reg *reg);
 
    src_reg get_timestamp();
 
@@ -602,9 +589,11 @@ public:
    vec4_generator(struct brw_context *brw,
                   struct gl_shader_program *shader_prog,
                   struct gl_program *prog,
-                  struct brw_vec4_prog_data *prog_data,
+                  struct brw_vue_prog_data *prog_data,
                   void *mem_ctx,
-                  bool debug_flag);
+                  bool debug_flag,
+                  const char *stage_name,
+                  const char *stage_abbrev);
    ~vec4_generator();
 
    const unsigned *generate_assembly(const cfg_t *cfg, unsigned *asm_size);
@@ -694,9 +683,11 @@ private:
    struct gl_shader_program *shader_prog;
    const struct gl_program *prog;
 
-   struct brw_vec4_prog_data *prog_data;
+   struct brw_vue_prog_data *prog_data;
 
    void *mem_ctx;
+   const char *stage_name;
+   const char *stage_abbrev;
    const bool debug_flag;
 };
 

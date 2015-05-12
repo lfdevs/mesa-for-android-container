@@ -81,6 +81,7 @@ intel_batchbuffer_reset(struct brw_context *brw)
    brw->batch.state_batch_offset = brw->batch.bo->size;
    brw->batch.used = 0;
    brw->batch.needs_sol_reset = false;
+   brw->batch.pipe_controls_since_last_cs_stall = 0;
 
    /* We don't know what ring the new batch will be sent to until we see the
     * first BEGIN_BATCH or BEGIN_BATCH_BLT.  Mark it as unknown.
@@ -357,10 +358,9 @@ intel_batchbuffer_emit_reloc(struct brw_context *brw,
    assert(ret == 0);
    (void)ret;
 
-   /*
-    * Using the old buffer offset, write in what the right data would be, in case
-    * the buffer doesn't move and we can short-circuit the relocation processing
-    * in the kernel
+   /* Using the old buffer offset, write in what the right data would be, in
+    * case the buffer doesn't move and we can short-circuit the relocation
+    * processing in the kernel
     */
    intel_batchbuffer_emit_dword(brw, buffer->offset64 + delta);
 
@@ -433,6 +433,33 @@ gen8_add_cs_stall_workaround_bits(uint32_t *flags)
       *flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
 }
 
+/* Implement the WaCsStallAtEveryFourthPipecontrol workaround on IVB, BYT:
+ *
+ * "Every 4th PIPE_CONTROL command, not counting the PIPE_CONTROL with
+ *  only read-cache-invalidate bit(s) set, must have a CS_STALL bit set."
+ *
+ * Note that the kernel does CS stalls between batches, so we only need
+ * to count them within a batch.
+ */
+static uint32_t
+gen7_cs_stall_every_four_pipe_controls(struct brw_context *brw, uint32_t flags)
+{
+   if (brw->gen == 7 && !brw->is_haswell) {
+      if (flags & PIPE_CONTROL_CS_STALL) {
+         /* If we're doing a CS stall, reset the counter and carry on. */
+         brw->batch.pipe_controls_since_last_cs_stall = 0;
+         return 0;
+      }
+
+      /* If this is the fourth pipe control without a CS stall, do one now. */
+      if (++brw->batch.pipe_controls_since_last_cs_stall == 4) {
+         brw->batch.pipe_controls_since_last_cs_stall = 0;
+         return PIPE_CONTROL_CS_STALL;
+      }
+   }
+   return 0;
+}
+
 /**
  * Emit a PIPE_CONTROL with various flushing flags.
  *
@@ -454,6 +481,8 @@ brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else if (brw->gen >= 6) {
+      flags |= gen7_cs_stall_every_four_pipe_controls(brw, flags);
+
       BEGIN_BATCH(5);
       OUT_BATCH(_3DSTATE_PIPE_CONTROL | (5 - 2));
       OUT_BATCH(flags);
@@ -496,6 +525,8 @@ brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
       OUT_BATCH(imm_upper);
       ADVANCE_BATCH();
    } else if (brw->gen >= 6) {
+      flags |= gen7_cs_stall_every_four_pipe_controls(brw, flags);
+
       /* PPGTT/GGTT is selected by DW2 bit 2 on Sandybridge, but DW1 bit 24
        * on later platforms.  We always use PPGTT on Gen7+.
        */
@@ -535,7 +566,7 @@ brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
 void
 intel_emit_depth_stall_flushes(struct brw_context *brw)
 {
-   assert(brw->gen >= 6 && brw->gen <= 8);
+   assert(brw->gen >= 6 && brw->gen <= 9);
 
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_STALL);
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_CACHE_FLUSH);

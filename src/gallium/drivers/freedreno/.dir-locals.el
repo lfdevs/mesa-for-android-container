@@ -1,4 +1,4 @@
-((nil
+((prog-mode
   (indent-tabs-mode . true)
   (tab-width . 4)
   (c-basic-offset . 4)

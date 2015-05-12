@@ -44,7 +44,8 @@ static void dump_comm_vp(struct nouveau_vp3_decoder *dec, struct comm *comm, u32
 
 	if ((comm->pvp_stage & 0xff) != 0xff) {
 		unsigned *map;
-		assert(nouveau_bo_map(inter_bo, NOUVEAU_BO_RD|NOUVEAU_BO_NOBLOCK, dec->client) >= 0);
+		int ret = nouveau_bo_map(inter_bo, NOUVEAU_BO_RD|NOUVEAU_BO_NOBLOCK, dec->client);
+		assert(ret >= 0);
 		map = inter_bo->map;
 		for (i = 0; i < comm->byte_ofs + slice_size; i += 0x10) {
 			debug_printf("%05x: %08x %08x %08x %08x\n", i, map[i/4], map[i/4+1], map[i/4+2], map[i/4+3]);

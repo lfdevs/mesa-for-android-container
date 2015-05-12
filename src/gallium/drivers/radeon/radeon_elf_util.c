@@ -53,7 +53,8 @@ static void parse_symbol_table(Elf_Data *symbol_table_data,
 
 	while (gelf_getsym(symbol_table_data, i++, &symbol)) {
 		unsigned i;
-		if (GELF_ST_BIND(symbol.st_info) != STB_GLOBAL) {
+		if (GELF_ST_BIND(symbol.st_info) != STB_GLOBAL ||
+		    symbol.st_shndx == 0 /* Undefined symbol */) {
 			continue;
 		}
 
@@ -75,6 +76,32 @@ static void parse_symbol_table(Elf_Data *symbol_table_data,
 	}
 }
 
+static void parse_relocs(Elf *elf, Elf_Data *relocs, Elf_Data *symbols,
+			unsigned symbol_sh_link,
+			struct radeon_shader_binary *binary)
+{
+	unsigned i;
+
+	if (!relocs || !symbols || !binary->reloc_count) {
+		return;
+	}
+	binary->relocs = CALLOC(binary->reloc_count,
+			sizeof(struct radeon_shader_reloc));
+	for (i = 0; i < binary->reloc_count; i++) {
+		GElf_Sym symbol;
+		GElf_Rel rel;
+		char *symbol_name;
+		struct radeon_shader_reloc *reloc = &binary->relocs[i];
+
+		gelf_getrel(relocs, i, &rel);
+		gelf_getsym(symbols, GELF_R_SYM(rel.r_info), &symbol);
+		symbol_name = elf_strptr(elf, symbol_sh_link, symbol.st_name);
+
+		reloc->offset = rel.r_offset;
+		reloc->name = strdup(symbol_name);
+	}
+}
+
 void radeon_elf_read(const char *elf_data, unsigned elf_size,
 					struct radeon_shader_binary *binary,
 					unsigned debug)
@@ -82,7 +109,9 @@ void radeon_elf_read(const char *elf_data, unsigned elf_size,
 	char *elf_buffer;
 	Elf *elf;
 	Elf_Scn *section = NULL;
+	Elf_Data *symbols = NULL, *relocs = NULL;
 	size_t section_str_index;
+	unsigned symbol_sh_link;
 
 	/* One of the libelf implementations
 	 * (http://www.mr511.de/software/english.htm) requires calling
@@ -128,10 +157,17 @@ void radeon_elf_read(const char *elf_data, unsigned elf_size,
 			binary->rodata = MALLOC(binary->rodata_size * sizeof(unsigned char));
 			memcpy(binary->rodata, section_data->d_buf, binary->rodata_size);
 		} else if (!strncmp(name, ".symtab", 7)) {
-			section_data = elf_getdata(section, section_data);
-			parse_symbol_table(section_data, &section_header, binary);
+			symbols = elf_getdata(section, section_data);
+			symbol_sh_link = section_header.sh_link;
+			parse_symbol_table(symbols, &section_header, binary);
+		} else if (!strcmp(name, ".rel.text")) {
+			relocs = elf_getdata(section, section_data);
+			binary->reloc_count = section_header.sh_size /
+					section_header.sh_entsize;
 		}
 	}
+
+	parse_relocs(elf, relocs, symbols, symbol_sh_link, binary);
 
 	if (elf){
 		elf_end(elf);
@@ -160,4 +196,27 @@ const unsigned char *radeon_shader_binary_config_start(
 		}
 	}
 	return binary->config;
+}
+
+void radeon_shader_binary_free_relocs(struct radeon_shader_reloc *relocs,
+					unsigned reloc_count)
+{
+	unsigned i;
+	for (i = 0; i < reloc_count; i++) {
+		FREE(relocs[i].name);
+	}
+	FREE(relocs);
+}
+
+void radeon_shader_binary_free_members(struct radeon_shader_binary *binary,
+					unsigned free_relocs)
+{
+	FREE(binary->code);
+	FREE(binary->config);
+	FREE(binary->rodata);
+
+	if (free_relocs) {
+		radeon_shader_binary_free_relocs(binary->relocs,
+						binary->reloc_count);
+	}
 }

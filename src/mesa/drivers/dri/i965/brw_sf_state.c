@@ -109,16 +109,15 @@ static void upload_sf_vp(struct brw_context *brw)
       sfv->scissor.ymax = ctx->DrawBuffer->Height - ctx->DrawBuffer->_Ymin - 1;
    }
 
-   brw->state.dirty.cache |= CACHE_NEW_SF_VP;
+   brw->state.dirty.brw |= BRW_NEW_SF_VP;
 }
 
 const struct brw_tracked_state brw_sf_vp = {
    .dirty = {
-      .mesa  = (_NEW_VIEWPORT |
-		_NEW_SCISSOR |
-		_NEW_BUFFERS),
+      .mesa  = _NEW_BUFFERS |
+               _NEW_SCISSOR |
+               _NEW_VIEWPORT,
       .brw   = BRW_NEW_BATCH,
-      .cache = 0
    },
    .emit = upload_sf_vp
 };
@@ -136,7 +135,7 @@ static void upload_sf_unit( struct brw_context *brw )
 
    memset(sf, 0, sizeof(*sf));
 
-   /* BRW_NEW_PROGRAM_CACHE | CACHE_NEW_SF_PROG */
+   /* BRW_NEW_PROGRAM_CACHE | BRW_NEW_SF_PROG_DATA */
    sf->thread0.grf_reg_count = ALIGN(brw->sf.prog_data->total_grf, 16) / 16 - 1;
    sf->thread0.kernel_start_pointer =
       brw_program_reloc(brw,
@@ -150,7 +149,7 @@ static void upload_sf_unit( struct brw_context *brw )
    sf->thread3.dispatch_grf_start_reg = 3;
    sf->thread3.urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
 
-   /* CACHE_NEW_SF_PROG */
+   /* BRW_NEW_SF_PROG_DATA */
    sf->thread3.urb_entry_read_length = brw->sf.prog_data->urb_read_length;
 
    /* BRW_NEW_URB_FENCE */
@@ -172,7 +171,7 @@ static void upload_sf_unit( struct brw_context *brw )
    if (unlikely(INTEL_DEBUG & DEBUG_STATS))
       sf->thread4.stats_enable = 1;
 
-   /* CACHE_NEW_SF_VP */
+   /* BRW_NEW_SF_VP */
    sf->sf5.sf_viewport_state_offset = (brw->batch.bo->offset64 +
 				       brw->sf.vp_offset) >> 5; /* reloc */
 
@@ -292,23 +291,23 @@ static void upload_sf_unit( struct brw_context *brw )
 					     (sf->sf5.viewport_transform << 1)),
 			   I915_GEM_DOMAIN_INSTRUCTION, 0);
 
-   brw->state.dirty.cache |= CACHE_NEW_SF_UNIT;
+   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
 }
 
 const struct brw_tracked_state brw_sf_unit = {
    .dirty = {
-      .mesa  = (_NEW_POLYGON |
-		_NEW_PROGRAM |
-		_NEW_LIGHT |
-		_NEW_LINE |
-		_NEW_POINT |
-		_NEW_SCISSOR |
-		_NEW_BUFFERS),
-      .brw   = (BRW_NEW_BATCH |
-		BRW_NEW_PROGRAM_CACHE |
-		BRW_NEW_URB_FENCE),
-      .cache = (CACHE_NEW_SF_VP |
-		CACHE_NEW_SF_PROG)
+      .mesa  = _NEW_BUFFERS |
+               _NEW_LIGHT |
+               _NEW_LINE |
+               _NEW_POINT |
+               _NEW_POLYGON |
+               _NEW_PROGRAM |
+               _NEW_SCISSOR,
+      .brw   = BRW_NEW_BATCH |
+               BRW_NEW_PROGRAM_CACHE |
+               BRW_NEW_SF_PROG_DATA |
+               BRW_NEW_SF_VP |
+               BRW_NEW_URB_FENCE,
    },
    .emit = upload_sf_unit,
 };

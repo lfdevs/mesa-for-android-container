@@ -53,10 +53,10 @@ using namespace brw;
  */
 
 void
-fs_live_variables::setup_one_read(bblock_t *block, fs_inst *inst,
-                                  int ip, fs_reg reg)
+fs_live_variables::setup_one_read(struct block_data *bd, fs_inst *inst,
+                                  int ip, const fs_reg &reg)
 {
-   int var = var_from_reg(&reg);
+   int var = var_from_reg(reg);
    assert(var < num_vars);
 
    /* In most cases, a register can be written over safely by the
@@ -100,15 +100,15 @@ fs_live_variables::setup_one_read(bblock_t *block, fs_inst *inst,
     * channel) without having completely defined that variable within the
     * block.
     */
-   if (!BITSET_TEST(bd[block->num].def, var))
-      BITSET_SET(bd[block->num].use, var);
+   if (!BITSET_TEST(bd->def, var))
+      BITSET_SET(bd->use, var);
 }
 
 void
-fs_live_variables::setup_one_write(bblock_t *block, fs_inst *inst,
-                                   int ip, fs_reg reg)
+fs_live_variables::setup_one_write(struct block_data *bd, fs_inst *inst,
+                                   int ip, const fs_reg &reg)
 {
-   int var = var_from_reg(&reg);
+   int var = var_from_reg(reg);
    assert(var < num_vars);
 
    start[var] = MIN2(start[var], ip);
@@ -118,8 +118,8 @@ fs_live_variables::setup_one_write(bblock_t *block, fs_inst *inst,
     * screens off previous updates of that variable (VGRF channel).
     */
    if (inst->dst.file == GRF && !inst->is_partial_write()) {
-      if (!BITSET_TEST(bd[block->num].use, var))
-         BITSET_SET(bd[block->num].def, var);
+      if (!BITSET_TEST(bd->use, var))
+         BITSET_SET(bd->def, var);
    }
 }
 
@@ -142,6 +142,8 @@ fs_live_variables::setup_def_use()
       if (block->num > 0)
 	 assert(cfg->blocks[block->num - 1]->end_ip == ip - 1);
 
+      struct block_data *bd = &block_data[block->num];
+
       foreach_inst_in_block(fs_inst, inst, block) {
 	 /* Set use[] for this instruction */
 	 for (unsigned int i = 0; i < inst->sources; i++) {
@@ -151,19 +153,37 @@ fs_live_variables::setup_def_use()
                continue;
 
             for (int j = 0; j < inst->regs_read(v, i); j++) {
-               setup_one_read(block, inst, ip, reg);
+               setup_one_read(bd, inst, ip, reg);
                reg.reg_offset++;
             }
 	 }
+         if (inst->reads_flag()) {
+            /* The vertical combination predicates read f0.0 and f0.1. */
+            if (inst->predicate == BRW_PREDICATE_ALIGN1_ANYV ||
+                inst->predicate == BRW_PREDICATE_ALIGN1_ALLV) {
+               assert(inst->flag_subreg == 0);
+               if (!BITSET_TEST(bd->flag_def, 1)) {
+                  BITSET_SET(bd->flag_use, 1);
+               }
+            }
+            if (!BITSET_TEST(bd->flag_def, inst->flag_subreg)) {
+               BITSET_SET(bd->flag_use, inst->flag_subreg);
+            }
+         }
 
          /* Set def[] for this instruction */
          if (inst->dst.file == GRF) {
             fs_reg reg = inst->dst;
             for (int j = 0; j < inst->regs_written; j++) {
-               setup_one_write(block, inst, ip, reg);
+               setup_one_write(bd, inst, ip, reg);
                reg.reg_offset++;
             }
 	 }
+         if (inst->writes_flag()) {
+            if (!BITSET_TEST(bd->flag_use, inst->flag_subreg)) {
+               BITSET_SET(bd->flag_def, inst->flag_subreg);
+            }
+         }
 
 	 ip++;
       }
@@ -185,29 +205,44 @@ fs_live_variables::compute_live_variables()
       cont = false;
 
       foreach_block (block, cfg) {
+         struct block_data *bd = &block_data[block->num];
+
 	 /* Update livein */
 	 for (int i = 0; i < bitset_words; i++) {
-            BITSET_WORD new_livein = (bd[block->num].use[i] |
-                                      (bd[block->num].liveout[i] &
-                                       ~bd[block->num].def[i]));
-	    if (new_livein & ~bd[block->num].livein[i]) {
-               bd[block->num].livein[i] |= new_livein;
+            BITSET_WORD new_livein = (bd->use[i] |
+                                      (bd->liveout[i] &
+                                       ~bd->def[i]));
+	    if (new_livein & ~bd->livein[i]) {
+               bd->livein[i] |= new_livein;
                cont = true;
 	    }
 	 }
+         BITSET_WORD new_livein = (bd->flag_use[0] |
+                                   (bd->flag_liveout[0] &
+                                    ~bd->flag_def[0]));
+         if (new_livein & ~bd->flag_livein[0]) {
+            bd->flag_livein[0] |= new_livein;
+            cont = true;
+         }
 
 	 /* Update liveout */
 	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-	    bblock_t *child = child_link->block;
+            struct block_data *child_bd = &block_data[child_link->block->num];
 
 	    for (int i = 0; i < bitset_words; i++) {
-               BITSET_WORD new_liveout = (bd[child->num].livein[i] &
-                                          ~bd[block->num].liveout[i]);
+               BITSET_WORD new_liveout = (child_bd->livein[i] &
+                                          ~bd->liveout[i]);
                if (new_liveout) {
-                  bd[block->num].liveout[i] |= new_liveout;
+                  bd->liveout[i] |= new_liveout;
                   cont = true;
                }
 	    }
+            BITSET_WORD new_liveout = (child_bd->flag_livein[0] &
+                                       ~bd->flag_liveout[0]);
+            if (new_liveout) {
+               bd->flag_liveout[0] |= new_liveout;
+               cont = true;
+            }
 	 }
       }
    }
@@ -221,25 +256,21 @@ void
 fs_live_variables::compute_start_end()
 {
    foreach_block (block, cfg) {
+      struct block_data *bd = &block_data[block->num];
+
       for (int i = 0; i < num_vars; i++) {
-	 if (BITSET_TEST(bd[block->num].livein, i)) {
+	 if (BITSET_TEST(bd->livein, i)) {
 	    start[i] = MIN2(start[i], block->start_ip);
 	    end[i] = MAX2(end[i], block->start_ip);
 	 }
 
-	 if (BITSET_TEST(bd[block->num].liveout, i)) {
+	 if (BITSET_TEST(bd->liveout, i)) {
 	    start[i] = MIN2(start[i], block->end_ip);
 	    end[i] = MAX2(end[i], block->end_ip);
 	 }
 
       }
    }
-}
-
-int
-fs_live_variables::var_from_reg(fs_reg *reg)
-{
-   return var_from_vgrf[reg->reg] + reg->reg_offset;
 }
 
 fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
@@ -269,14 +300,19 @@ fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
       end[i] = -1;
    }
 
-   bd = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
+   block_data= rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
    for (int i = 0; i < cfg->num_blocks; i++) {
-      bd[i].def = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      bd[i].use = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      bd[i].livein = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
-      bd[i].liveout = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      block_data[i].def = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      block_data[i].use = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      block_data[i].livein = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      block_data[i].liveout = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+
+      block_data[i].flag_def[0] = 0;
+      block_data[i].flag_use[0] = 0;
+      block_data[i].flag_livein[0] = 0;
+      block_data[i].flag_liveout[0] = 0;
    }
 
    setup_def_use();

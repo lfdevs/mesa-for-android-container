@@ -26,7 +26,24 @@
  *
  **************************************************************************/
 
+#include "util/u_memory.h"
+#include "util/u_handle_table.h"
+#include "util/u_sampler.h"
+
 #include "va_private.h"
+
+static VAImageFormat subpic_formats[] = {
+   {
+   .fourcc = VA_FOURCC_BGRA,
+   .byte_order = VA_LSB_FIRST,
+   .bits_per_pixel = 32,
+   .depth = 32,
+   .red_mask   = 0x00ff0000ul,
+   .green_mask = 0x0000ff00ul,
+   .blue_mask  = 0x000000fful,
+   .alpha_mask = 0xff000000ul,
+   },
+};
 
 VAStatus
 vlVaQuerySubpictureFormats(VADriverContextP ctx, VAImageFormat *format_list,
@@ -38,36 +55,74 @@ vlVaQuerySubpictureFormats(VADriverContextP ctx, VAImageFormat *format_list,
    if (!(format_list && flags && num_formats))
       return VA_STATUS_ERROR_UNKNOWN;
 
-   *num_formats = 0;
+   *num_formats = sizeof(subpic_formats)/sizeof(VAImageFormat);
+   memcpy(format_list, subpic_formats, sizeof(subpic_formats));
 
    return VA_STATUS_SUCCESS;
 }
 
 VAStatus
-vlVaCreateSubpicture(VADriverContextP ctx, VAImageID image, VASubpictureID *subpicture)
+vlVaCreateSubpicture(VADriverContextP ctx, VAImageID image,
+                     VASubpictureID *subpicture)
 {
+   vlVaSubpicture *sub;
+   VAImage *img;
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   return VA_STATUS_ERROR_UNIMPLEMENTED;
+   img = handle_table_get(VL_VA_DRIVER(ctx)->htab, image);
+   if (!img)
+      return VA_STATUS_ERROR_INVALID_IMAGE;
+
+   sub = CALLOC(1, sizeof(*sub));
+   if (!sub)
+      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+   sub->image = img;
+   *subpicture = handle_table_add(VL_VA_DRIVER(ctx)->htab, sub);
+
+   return VA_STATUS_SUCCESS;
 }
 
 VAStatus
 vlVaDestroySubpicture(VADriverContextP ctx, VASubpictureID subpicture)
 {
+   vlVaSubpicture *sub;
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   return VA_STATUS_ERROR_UNIMPLEMENTED;
+   sub = handle_table_get(VL_VA_DRIVER(ctx)->htab, subpicture);
+   if (!sub)
+      return VA_STATUS_ERROR_INVALID_SUBPICTURE;
+
+   FREE(sub);
+   handle_table_remove(VL_VA_DRIVER(ctx)->htab, subpicture);
+
+   return VA_STATUS_SUCCESS;
 }
 
 VAStatus
 vlVaSubpictureImage(VADriverContextP ctx, VASubpictureID subpicture, VAImageID image)
 {
+   vlVaSubpicture *sub;
+   VAImage *img;
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   return VA_STATUS_ERROR_UNIMPLEMENTED;
+   img = handle_table_get(VL_VA_DRIVER(ctx)->htab, image);
+   if (!img)
+      return VA_STATUS_ERROR_INVALID_IMAGE;
+
+   sub = handle_table_get(VL_VA_DRIVER(ctx)->htab, subpicture);
+   if (!sub)
+      return VA_STATUS_ERROR_INVALID_SUBPICTURE;
+
+   sub->image = img;
+
+   return VA_STATUS_SUCCESS;
 }
 
 VAStatus
@@ -90,26 +145,107 @@ vlVaSetSubpictureGlobalAlpha(VADriverContextP ctx, VASubpictureID subpicture, fl
 }
 
 VAStatus
-vlVaAssociateSubpicture(VADriverContextP ctx, VASubpictureID subpicture, VASurfaceID *target_surfaces,
-                        int num_surfaces, short src_x, short src_y,
-                        unsigned short src_width, unsigned short src_height,
-                        short dest_x, short dest_y,
-                        unsigned short dest_width,
-                        unsigned short dest_height,
+vlVaAssociateSubpicture(VADriverContextP ctx, VASubpictureID subpicture,
+                        VASurfaceID *target_surfaces, int num_surfaces,
+                        short src_x, short src_y, unsigned short src_width,
+                        unsigned short src_height, short dest_x, short dest_y,
+                        unsigned short dest_width, unsigned short dest_height,
                         unsigned int flags)
 {
+   vlVaSubpicture *sub;
+   struct pipe_resource tex_temp, *tex;
+   struct pipe_sampler_view sampler_templ;
+   vlVaDriver *drv;
+   vlVaSurface *surf;
+   int i;
+   struct u_rect src_rect = {src_x, src_x + src_width, src_y, src_y + src_height};
+   struct u_rect dst_rect = {dest_x, dest_x + dest_width, dest_y, dest_y + dest_height};
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+   drv = VL_VA_DRIVER(ctx);
 
-   return VA_STATUS_ERROR_UNIMPLEMENTED;
+   sub = handle_table_get(drv->htab, subpicture);
+   if (!sub)
+      return VA_STATUS_ERROR_INVALID_SUBPICTURE;
+
+   for (i = 0; i < num_surfaces; i++) {
+      surf = handle_table_get(drv->htab, target_surfaces[i]);
+      if (!surf)
+         return VA_STATUS_ERROR_INVALID_SURFACE;
+   }
+
+   sub->src_rect = src_rect;
+   sub->dst_rect = dst_rect;
+
+   memset(&tex_temp, 0, sizeof(tex_temp));
+   tex_temp.target = PIPE_TEXTURE_2D;
+   tex_temp.format = PIPE_FORMAT_B8G8R8A8_UNORM;
+   tex_temp.last_level = 0;
+   tex_temp.width0 = src_width;
+   tex_temp.height0 = src_height;
+   tex_temp.depth0 = 1;
+   tex_temp.array_size = 1;
+   tex_temp.usage = PIPE_USAGE_DYNAMIC;
+   tex_temp.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
+   tex_temp.flags = 0;
+   if (!drv->pipe->screen->is_format_supported(
+          drv->pipe->screen, tex_temp.format, tex_temp.target,
+          tex_temp.nr_samples, tex_temp.bind))
+      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+   tex = drv->pipe->screen->resource_create(drv->pipe->screen, &tex_temp);
+
+   memset(&sampler_templ, 0, sizeof(sampler_templ));
+   u_sampler_view_default_template(&sampler_templ, tex, tex->format);
+   sub->sampler = drv->pipe->create_sampler_view(drv->pipe, tex, &sampler_templ);
+   pipe_resource_reference(&tex, NULL);
+   if (!sub->sampler)
+      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+   for (i = 0; i < num_surfaces; i++) {
+      surf = handle_table_get(drv->htab, target_surfaces[i]);
+      util_dynarray_append(&surf->subpics, vlVaSubpicture *, sub);
+   }
+
+   return VA_STATUS_SUCCESS;
 }
 
 VAStatus
 vlVaDeassociateSubpicture(VADriverContextP ctx, VASubpictureID subpicture,
                           VASurfaceID *target_surfaces, int num_surfaces)
 {
+   int i;
+   int j;
+   vlVaSurface *surf;
+   vlVaSubpicture *sub, **array;
+   vlVaDriver *drv;
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+   drv = VL_VA_DRIVER(ctx);
 
-   return VA_STATUS_ERROR_UNIMPLEMENTED;
+   sub = handle_table_get(drv->htab, subpicture);
+   if (!sub)
+      return VA_STATUS_ERROR_INVALID_SUBPICTURE;
+
+   for (i = 0; i < num_surfaces; i++) {
+      surf = handle_table_get(drv->htab, target_surfaces[i]);
+      if (!surf)
+         return VA_STATUS_ERROR_INVALID_SURFACE;
+
+      array = surf->subpics.data;
+      if (!array)
+         continue;
+
+      for (j = 0; j < surf->subpics.size/sizeof(vlVaSubpicture *); j++) {
+         if (array[j] == sub)
+            array[j] = NULL;
+      }
+
+      while (surf->subpics.size && util_dynarray_top(&surf->subpics, vlVaSubpicture *) == NULL)
+         (void)util_dynarray_pop(&surf->subpics, vlVaSubpicture *);
+   }
+
+   return VA_STATUS_SUCCESS;
 }

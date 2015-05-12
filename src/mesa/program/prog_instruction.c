@@ -75,29 +75,6 @@ _mesa_alloc_instructions(GLuint numInst)
 
 
 /**
- * Reallocate memory storing an array of program instructions.
- * This is used when we need to append additional instructions onto an
- * program.
- * \param oldInst  pointer to first of old/src instructions
- * \param numOldInst  number of instructions at <oldInst>
- * \param numNewInst  desired size of new instruction array.
- * \return  pointer to start of new instruction array.
- */
-struct prog_instruction *
-_mesa_realloc_instructions(struct prog_instruction *oldInst,
-                           GLuint numOldInst, GLuint numNewInst)
-{
-   struct prog_instruction *newInst;
-
-   newInst = (struct prog_instruction *)
-      realloc(oldInst,
-              numNewInst * sizeof(struct prog_instruction));
-
-   return newInst;
-}
-
-
-/**
  * Copy an array of program instructions.
  * \param dest  pointer to destination.
  * \param src  pointer to source.
@@ -191,18 +168,12 @@ static const struct instruction_info InstInfo[MAX_OPCODE] = {
    { OPCODE_NOISE2, "NOISE2",  1, 1 },
    { OPCODE_NOISE3, "NOISE3",  1, 1 },
    { OPCODE_NOISE4, "NOISE4",  1, 1 },
-   { OPCODE_PK2H,   "PK2H",    1, 1 },
-   { OPCODE_PK2US,  "PK2US",   1, 1 },
-   { OPCODE_PK4B,   "PK4B",    1, 1 },
-   { OPCODE_PK4UB,  "PK4UB",   1, 1 },
    { OPCODE_POW,    "POW",     2, 1 },
    { OPCODE_RCP,    "RCP",     1, 1 },
    { OPCODE_RET,    "RET",     0, 0 },
-   { OPCODE_RFL,    "RFL",     1, 1 },
    { OPCODE_RSQ,    "RSQ",     1, 1 },
    { OPCODE_SCS,    "SCS",     1, 1 },
    { OPCODE_SEQ,    "SEQ",     2, 1 },
-   { OPCODE_SFL,    "SFL",     0, 1 },
    { OPCODE_SGE,    "SGE",     2, 1 },
    { OPCODE_SGT,    "SGT",     2, 1 },
    { OPCODE_SIN,    "SIN",     1, 1 },
@@ -210,7 +181,6 @@ static const struct instruction_info InstInfo[MAX_OPCODE] = {
    { OPCODE_SLT,    "SLT",     2, 1 },
    { OPCODE_SNE,    "SNE",     2, 1 },
    { OPCODE_SSG,    "SSG",     1, 1 },
-   { OPCODE_STR,    "STR",     0, 1 },
    { OPCODE_SUB,    "SUB",     2, 1 },
    { OPCODE_SWZ,    "SWZ",     1, 1 },
    { OPCODE_TEX,    "TEX",     1, 1 },
@@ -220,11 +190,6 @@ static const struct instruction_info InstInfo[MAX_OPCODE] = {
    { OPCODE_TXP,    "TXP",     1, 1 },
    { OPCODE_TXP_NV, "TXP_NV",  1, 1 },
    { OPCODE_TRUNC,  "TRUNC",   1, 1 },
-   { OPCODE_UP2H,   "UP2H",    1, 1 },
-   { OPCODE_UP2US,  "UP2US",   1, 1 },
-   { OPCODE_UP4B,   "UP4B",    1, 1 },
-   { OPCODE_UP4UB,  "UP4UB",   1, 1 },
-   { OPCODE_X2D,    "X2D",     3, 1 },
    { OPCODE_XPD,    "XPD",     2, 1 }
 };
 

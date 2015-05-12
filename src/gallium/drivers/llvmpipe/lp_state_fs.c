@@ -65,7 +65,7 @@
 #include "util/u_format.h"
 #include "util/u_dump.h"
 #include "util/u_string.h"
-#include "util/u_simple_list.h"
+#include "util/simple_list.h"
 #include "util/u_dual_blend.h"
 #include "os/os_time.h"
 #include "pipe/p_shader_tokens.h"
@@ -174,10 +174,10 @@ generate_quad_mask(struct gallivm_state *gallivm,
 
    for (i = 0; i < fs_type.length / 4; i++) {
       unsigned j = 2 * (i % 2) + (i / 2) * 8;
-      bits[4*i + 0] = LLVMConstInt(i32t, 1 << (j + 0), 0);
-      bits[4*i + 1] = LLVMConstInt(i32t, 1 << (j + 1), 0);
-      bits[4*i + 2] = LLVMConstInt(i32t, 1 << (j + 4), 0);
-      bits[4*i + 3] = LLVMConstInt(i32t, 1 << (j + 5), 0);
+      bits[4*i + 0] = LLVMConstInt(i32t, 1ULL << (j + 0), 0);
+      bits[4*i + 1] = LLVMConstInt(i32t, 1ULL << (j + 1), 0);
+      bits[4*i + 2] = LLVMConstInt(i32t, 1ULL << (j + 4), 0);
+      bits[4*i + 3] = LLVMConstInt(i32t, 1ULL << (j + 5), 0);
    }
    mask = LLVMBuildAnd(builder, mask, LLVMConstVector(bits, fs_type.length), "");
 

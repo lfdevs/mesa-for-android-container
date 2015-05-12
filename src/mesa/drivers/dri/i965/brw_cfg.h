@@ -297,6 +297,9 @@ struct cfg_t {
 #define foreach_block(__block, __cfg)                          \
    foreach_list_typed (bblock_t, __block, link, &(__cfg)->block_list)
 
+#define foreach_block_reverse(__block, __cfg)                  \
+   foreach_list_typed_reverse (bblock_t, __block, link, &(__cfg)->block_list)
+
 #define foreach_block_safe(__block, __cfg)                     \
    foreach_list_typed_safe (bblock_t, __block, link, &(__cfg)->block_list)
 
@@ -313,6 +316,9 @@ struct cfg_t {
 
 #define foreach_inst_in_block_reverse(__type, __inst, __block) \
    foreach_in_list_reverse(__type, __inst, &(__block)->instructions)
+
+#define foreach_inst_in_block_reverse_safe(__type, __inst, __block) \
+   foreach_in_list_reverse_safe(__type, __inst, &(__block)->instructions)
 
 #define foreach_inst_in_block_starting_from(__type, __scan_inst, __inst, __block) \
    for (__type *__scan_inst = (__type *)__inst->next;          \

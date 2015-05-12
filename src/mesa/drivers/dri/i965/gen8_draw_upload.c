@@ -233,8 +233,9 @@ gen8_emit_vertices(struct brw_context *brw)
 const struct brw_tracked_state gen8_vertices = {
    .dirty = {
       .mesa = _NEW_POLYGON,
-      .brw = BRW_NEW_BATCH | BRW_NEW_VERTICES,
-      .cache = CACHE_NEW_VS_PROG,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_VERTICES |
+             BRW_NEW_VS_PROG_DATA,
    },
    .emit = gen8_emit_vertices,
 };
@@ -250,7 +251,7 @@ gen8_emit_index_buffer(struct brw_context *brw)
 
    BEGIN_BATCH(5);
    OUT_BATCH(CMD_INDEX_BUFFER << 16 | (5 - 2));
-   OUT_BATCH(brw_get_index_type(index_buffer->type) << 8 | mocs_wb);
+   OUT_BATCH(brw_get_index_type(index_buffer->type) | mocs_wb);
    OUT_RELOC64(brw->ib.bo, I915_GEM_DOMAIN_VERTEX, 0, 0);
    OUT_BATCH(brw->ib.bo->size);
    ADVANCE_BATCH();
@@ -259,8 +260,8 @@ gen8_emit_index_buffer(struct brw_context *brw)
 const struct brw_tracked_state gen8_index_buffer = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_BATCH | BRW_NEW_INDEX_BUFFER,
-      .cache = 0,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_INDEX_BUFFER,
    },
    .emit = gen8_emit_index_buffer,
 };
@@ -278,7 +279,6 @@ const struct brw_tracked_state gen8_vf_topology = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_PRIMITIVE,
-      .cache = 0,
    },
    .emit = gen8_emit_vf_topology,
 };

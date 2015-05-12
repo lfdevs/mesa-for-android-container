@@ -29,6 +29,7 @@
 #include "main/enums.h"
 #include "main/image.h"
 #include "main/teximage.h"
+#include "main/texobj.h"
 #include "main/texstate.h"
 #include "main/fbobject.h"
 

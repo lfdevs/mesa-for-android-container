@@ -1271,13 +1271,22 @@ _mesa_GetSamplerParameteriv(GLuint sampler, GLenum pname, GLint *params)
       *params = sampObj->MagFilter;
       break;
    case GL_TEXTURE_MIN_LOD:
-      *params = (GLint) sampObj->MinLod;
+      /* GL spec 'Data Conversions' section specifies that floating-point
+       * value in integer Get function is rounded to nearest integer
+       */
+      *params = IROUND(sampObj->MinLod);
       break;
    case GL_TEXTURE_MAX_LOD:
-      *params = (GLint) sampObj->MaxLod;
+      /* GL spec 'Data Conversions' section specifies that floating-point
+       * value in integer Get function is rounded to nearest integer
+       */
+      *params = IROUND(sampObj->MaxLod);
       break;
    case GL_TEXTURE_LOD_BIAS:
-      *params = (GLint) sampObj->LodBias;
+      /* GL spec 'Data Conversions' section specifies that floating-point
+       * value in integer Get function is rounded to nearest integer
+       */
+      *params = IROUND(sampObj->LodBias);
       break;
    case GL_TEXTURE_COMPARE_MODE:
       if (!ctx->Extensions.ARB_shadow)
@@ -1290,7 +1299,10 @@ _mesa_GetSamplerParameteriv(GLuint sampler, GLenum pname, GLint *params)
       *params = sampObj->CompareFunc;
       break;
    case GL_TEXTURE_MAX_ANISOTROPY_EXT:
-      *params = (GLint) sampObj->MaxAnisotropy;
+      /* GL spec 'Data Conversions' section specifies that floating-point
+       * value in integer Get function is rounded to nearest integer
+       */
+      *params = IROUND(sampObj->MaxAnisotropy);
       break;
    case GL_TEXTURE_BORDER_COLOR:
       params[0] = FLOAT_TO_INT(sampObj->BorderColor.f[0]);

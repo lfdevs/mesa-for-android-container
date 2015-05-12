@@ -41,10 +41,12 @@
 #include "vl/vl_compositor.h"
 #include "vl/vl_csc.h"
 
+#include "util/u_dynarray.h"
+
 #define VL_VA_DRIVER(ctx) ((vlVaDriver *)ctx->pDriverData)
 #define VL_VA_PSCREEN(ctx) (VL_VA_DRIVER(ctx)->vscreen->pscreen)
 
-#define VL_VA_MAX_IMAGE_FORMATS 5
+#define VL_VA_MAX_IMAGE_FORMATS 6
 
 static inline enum pipe_video_chroma_format
 ChromaToPipe(int format)
@@ -76,6 +78,8 @@ YCbCrToPipe(unsigned format)
       return PIPE_FORMAT_YUYV;
    case VA_FOURCC('U','Y','V','Y'):
       return PIPE_FORMAT_UYVY;
+   case VA_FOURCC('B','G','R','A'):
+      return PIPE_FORMAT_B8G8R8A8_UNORM;
    default:
       assert(0);
       return PIPE_FORMAT_NONE;
@@ -153,6 +157,15 @@ typedef struct {
 } vlVaDriver;
 
 typedef struct {
+   VAImage *image;
+
+   struct u_rect src_rect;
+   struct u_rect dst_rect;
+
+   struct pipe_sampler_view *sampler;
+} vlVaSubpicture;
+
+typedef struct {
    struct pipe_video_codec *decoder;
    struct pipe_video_buffer *target;
    union {
@@ -183,6 +196,7 @@ typedef struct {
 typedef struct {
    struct pipe_video_buffer templat, *buffer;
    struct pipe_fence_handle *fence;
+   struct util_dynarray subpics; /* vlVaSubpicture */
 } vlVaSurface;
 
 // Public functions:

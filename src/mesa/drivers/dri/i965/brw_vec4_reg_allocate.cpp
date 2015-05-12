@@ -335,14 +335,6 @@ vec4_visitor::spill_reg(int spill_reg_nr)
             inst->src[i].reg = virtual_grf_alloc(1);
             dst_reg temp = dst_reg(inst->src[i]);
 
-            /* Only read the necessary channels, to avoid overwriting the rest
-             * with data that may not have been written to scratch.
-             */
-            temp.writemask = 0;
-            for (int c = 0; c < 4; c++)
-               temp.writemask |= (1 << BRW_GET_SWZ(inst->src[i].swizzle, c));
-            assert(temp.writemask != 0);
-
             emit_scratch_read(block, inst, temp, spill_reg, spill_offset);
          }
       }

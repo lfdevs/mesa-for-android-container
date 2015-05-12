@@ -554,11 +554,9 @@ vl_mc_init_buffer(struct vl_mc *renderer, struct vl_mc_buffer *buffer)
    assert(renderer && buffer);
 
    buffer->viewport.scale[2] = 1;
-   buffer->viewport.scale[3] = 1;
    buffer->viewport.translate[0] = 0;
    buffer->viewport.translate[1] = 0;
    buffer->viewport.translate[2] = 0;
-   buffer->viewport.translate[3] = 0;
 
    buffer->fb_state.nr_cbufs = 1;
    buffer->fb_state.zsbuf = NULL;

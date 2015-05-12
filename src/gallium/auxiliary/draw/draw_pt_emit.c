@@ -143,7 +143,7 @@ draw_pt_emit(struct pt_emit *emit,
    /* XXX: and work out some way to coordinate the render primitive
     * between vbuf.c and here...
     */
-   draw->render->set_primitive(draw->render, emit->prim);
+   render->set_primitive(draw->render, prim_info->prim);
 
    render->allocate_vertices(render,
                              (ushort)translate->key.output_stride,
@@ -214,7 +214,7 @@ draw_pt_emit_linear(struct pt_emit *emit,
    /* XXX: and work out some way to coordinate the render primitive
     * between vbuf.c and here...
     */
-   draw->render->set_primitive(draw->render, emit->prim);
+   render->set_primitive(draw->render, prim_info->prim);
 
    if (!render->allocate_vertices(render,
                                   (ushort)translate->key.output_stride,

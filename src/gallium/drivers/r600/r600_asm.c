@@ -1133,6 +1133,11 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		return -ENOMEM;
 	memcpy(nalu, alu, sizeof(struct r600_bytecode_alu));
 
+	if (alu->is_op3) {
+		/* will fail later since alu does not support it. */
+		assert(!alu->src[0].abs && !alu->src[1].abs && !alu->src[2].abs);
+	}
+
 	if (bc->cf_last != NULL && bc->cf_last->op != type) {
 		/* check if we could add it anyway */
 		if (bc->cf_last->op == CF_OP_ALU &&
@@ -1491,6 +1496,7 @@ static int r600_bytecode_alu_build(struct r600_bytecode *bc, struct r600_bytecod
 				S_SQ_ALU_WORD0_LAST(alu->last);
 
 	if (alu->is_op3) {
+		assert(!alu->src[0].abs && !alu->src[1].abs && !alu->src[2].abs);
 		bc->bytecode[id++] = S_SQ_ALU_WORD1_DST_GPR(alu->dst.sel) |
 					S_SQ_ALU_WORD1_DST_CHAN(alu->dst.chan) |
 					S_SQ_ALU_WORD1_DST_REL(alu->dst.rel) |

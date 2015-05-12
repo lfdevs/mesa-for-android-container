@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <ctype.h>
 #include "brw_vec4.h"
 #include "brw_cfg.h"
 
@@ -66,7 +67,7 @@ vec4_instruction::get_dst(void)
 }
 
 struct brw_reg
-vec4_instruction::get_src(const struct brw_vec4_prog_data *prog_data, int i)
+vec4_instruction::get_src(const struct brw_vue_prog_data *prog_data, int i)
 {
    struct brw_reg brw_reg;
 
@@ -92,6 +93,9 @@ vec4_instruction::get_src(const struct brw_vec4_prog_data *prog_data, int i)
       case BRW_REGISTER_TYPE_UD:
 	 brw_reg = brw_imm_ud(src[i].fixed_hw_reg.dw1.ud);
 	 break;
+      case BRW_REGISTER_TYPE_VF:
+         brw_reg = brw_imm_vf(src[i].fixed_hw_reg.dw1.ud);
+         break;
       default:
 	 unreachable("not reached");
       }
@@ -133,11 +137,14 @@ vec4_instruction::get_src(const struct brw_vec4_prog_data *prog_data, int i)
 vec4_generator::vec4_generator(struct brw_context *brw,
                                struct gl_shader_program *shader_prog,
                                struct gl_program *prog,
-                               struct brw_vec4_prog_data *prog_data,
+                               struct brw_vue_prog_data *prog_data,
                                void *mem_ctx,
-                               bool debug_flag)
+                               bool debug_flag,
+                               const char *stage_name,
+                               const char *stage_abbrev)
    : brw(brw), shader_prog(shader_prog), prog(prog), prog_data(prog_data),
-     mem_ctx(mem_ctx), debug_flag(debug_flag)
+     mem_ctx(mem_ctx), stage_name(stage_name), stage_abbrev(stage_abbrev),
+     debug_flag(debug_flag)
 {
    p = rzalloc(mem_ctx, struct brw_compile);
    brw_init_compile(brw, p, mem_ctx);
@@ -319,12 +326,13 @@ vec4_generator::generate_tex(vec4_instruction *inst,
     * use an implied move from g0 to the first message register.
     */
    if (inst->header_present) {
-      if (brw->gen < 6 && !inst->texture_offset) {
+      if (brw->gen < 6 && !inst->offset) {
          /* Set up an implied move from g0 to the MRF. */
          src = brw_vec8_grf(0, 0);
       } else {
          struct brw_reg header =
             retype(brw_message_reg(inst->base_mrf), BRW_REGISTER_TYPE_UD);
+         uint32_t dw2 = 0;
 
          /* Explicitly set up the message header by copying g0 to the MRF. */
          brw_push_insn_state(p);
@@ -333,13 +341,20 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 
          brw_set_default_access_mode(p, BRW_ALIGN_1);
 
-         if (inst->texture_offset) {
+         if (inst->offset)
             /* Set the texel offset bits in DWord 2. */
-            brw_MOV(p, get_element_ud(header, 2),
-                    brw_imm_ud(inst->texture_offset));
-         }
+            dw2 = inst->offset;
 
-         brw_adjust_sampler_state_pointer(p, header, sampler_index, dst);
+         if (brw->gen >= 9)
+            /* SKL+ overloads BRW_SAMPLER_SIMD_MODE_SIMD4X2 to also do SIMD8D,
+             * based on bit 22 in the header.
+             */
+            dw2 |= GEN9_SAMPLER_SIMD_MODE_EXTENSION_SIMD4X2;
+
+         if (dw2)
+            brw_MOV(p, get_element_ud(header, 2), brw_imm_ud(dw2));
+
+         brw_adjust_sampler_state_pointer(p, header, sampler_index);
          brw_pop_insn_state(p);
       }
    }
@@ -1184,6 +1199,7 @@ vec4_generator::generate_code(const cfg_t *cfg)
       }
 
       switch (inst->opcode) {
+      case VEC4_OPCODE_UNPACK_UNIFORM:
       case BRW_OPCODE_MOV:
          brw_MOV(p, dst, src[0]);
          break;
@@ -1365,6 +1381,7 @@ vec4_generator::generate_code(const cfg_t *cfg)
       case SHADER_OPCODE_LOG2:
       case SHADER_OPCODE_SIN:
       case SHADER_OPCODE_COS:
+         assert(inst->conditional_mod == BRW_CONDITIONAL_NONE);
          if (brw->gen >= 7) {
             gen6_math(p, dst, brw_math_function(inst->opcode), src[0],
                       brw_null_reg());
@@ -1378,6 +1395,7 @@ vec4_generator::generate_code(const cfg_t *cfg)
       case SHADER_OPCODE_POW:
       case SHADER_OPCODE_INT_QUOTIENT:
       case SHADER_OPCODE_INT_REMAINDER:
+         assert(inst->conditional_mod == BRW_CONDITIONAL_NONE);
          if (brw->gen >= 7) {
             gen6_math(p, dst, brw_math_function(inst->opcode), src[0], src[1]);
          } else if (brw->gen == 6) {
@@ -1494,6 +1512,64 @@ vec4_generator::generate_code(const cfg_t *cfg)
          generate_unpack_flags(inst, dst);
          break;
 
+      case VEC4_OPCODE_MOV_BYTES: {
+         /* Moves the low byte from each channel, using an Align1 access mode
+          * and a <4,1,0> source region.
+          */
+         assert(src[0].type == BRW_REGISTER_TYPE_UB ||
+                src[0].type == BRW_REGISTER_TYPE_B);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_1);
+         src[0].vstride = BRW_VERTICAL_STRIDE_4;
+         src[0].width = BRW_WIDTH_1;
+         src[0].hstride = BRW_HORIZONTAL_STRIDE_0;
+         brw_MOV(p, dst, src[0]);
+         brw_set_default_access_mode(p, BRW_ALIGN_16);
+         break;
+      }
+
+      case VEC4_OPCODE_PACK_BYTES: {
+         /* Is effectively:
+          *
+          *   mov(8) dst<16,4,1>:UB src<4,1,0>:UB
+          *
+          * but destinations' only regioning is horizontal stride, so instead we
+          * have to use two instructions:
+          *
+          *   mov(4) dst<1>:UB     src<4,1,0>:UB
+          *   mov(4) dst.16<1>:UB  src.16<4,1,0>:UB
+          *
+          * where they pack the four bytes from the low and high four DW.
+          */
+         assert(is_power_of_two(dst.dw1.bits.writemask) &&
+                dst.dw1.bits.writemask != 0);
+         unsigned offset = __builtin_ctz(dst.dw1.bits.writemask);
+
+         dst.type = BRW_REGISTER_TYPE_UB;
+
+         brw_set_default_access_mode(p, BRW_ALIGN_1);
+
+         src[0].type = BRW_REGISTER_TYPE_UB;
+         src[0].vstride = BRW_VERTICAL_STRIDE_4;
+         src[0].width = BRW_WIDTH_1;
+         src[0].hstride = BRW_HORIZONTAL_STRIDE_0;
+         dst.subnr = offset * 4;
+         struct brw_inst *insn = brw_MOV(p, dst, src[0]);
+         brw_inst_set_exec_size(brw, insn, BRW_EXECUTE_4);
+         brw_inst_set_no_dd_clear(brw, insn, true);
+         brw_inst_set_no_dd_check(brw, insn, inst->no_dd_check);
+
+         src[0].subnr = 16;
+         dst.subnr = 16 + offset * 4;
+         insn = brw_MOV(p, dst, src[0]);
+         brw_inst_set_exec_size(brw, insn, BRW_EXECUTE_4);
+         brw_inst_set_no_dd_clear(brw, insn, inst->no_dd_clear);
+         brw_inst_set_no_dd_check(brw, insn, true);
+
+         brw_set_default_access_mode(p, BRW_ALIGN_16);
+         break;
+      }
+
       default:
          if (inst->opcode < (int) ARRAY_SIZE(opcode_descs)) {
             _mesa_problem(&brw->ctx, "Unsupported opcode in `%s' in vec4\n",
@@ -1504,14 +1580,19 @@ vec4_generator::generate_code(const cfg_t *cfg)
          abort();
       }
 
-      if (inst->no_dd_clear || inst->no_dd_check || inst->conditional_mod) {
+      if (inst->opcode == VEC4_OPCODE_PACK_BYTES) {
+         /* Handled dependency hints in the generator. */
+
+         assert(!inst->conditional_mod);
+      } else if (inst->no_dd_clear || inst->no_dd_check || inst->conditional_mod) {
          assert(p->nr_insn == pre_emit_nr_insn + 1 ||
                 !"conditional_mod, no_dd_check, or no_dd_clear set for IR "
                  "emitting more than 1 instruction");
 
          brw_inst *last = &p->store[pre_emit_nr_insn];
 
-         brw_inst_set_cond_modifier(brw, last, inst->conditional_mod);
+         if (inst->conditional_mod)
+            brw_inst_set_cond_modifier(brw, last, inst->conditional_mod);
          brw_inst_set_no_dd_clear(brw, last, inst->no_dd_clear);
          brw_inst_set_no_dd_check(brw, last, inst->no_dd_check);
       }
@@ -1526,20 +1607,33 @@ vec4_generator::generate_code(const cfg_t *cfg)
 
    if (unlikely(debug_flag)) {
       if (shader_prog) {
-         fprintf(stderr, "Native code for %s vertex shader %d:\n",
+         fprintf(stderr, "Native code for %s %s shader %d:\n",
                  shader_prog->Label ? shader_prog->Label : "unnamed",
-                 shader_prog->Name);
+                 stage_name, shader_prog->Name);
       } else {
-         fprintf(stderr, "Native code for vertex program %d:\n", prog->Id);
+         fprintf(stderr, "Native code for %s program %d:\n", stage_name,
+                 prog->Id);
       }
-      fprintf(stderr, "vec4 shader: %d instructions. %d loops. Compacted %d to %d"
+      fprintf(stderr, "%s vec4 shader: %d instructions. %d loops. Compacted %d to %d"
                       " bytes (%.0f%%)\n",
+              stage_abbrev,
               before_size / 16, loop_count, before_size, after_size,
               100.0f * (before_size - after_size) / before_size);
 
       dump_assembly(p->store, annotation.ann_count, annotation.ann, brw, prog);
       ralloc_free(annotation.ann);
    }
+
+   static GLuint msg_id = 0;
+   _mesa_gl_debug(&brw->ctx, &msg_id,
+                  MESA_DEBUG_SOURCE_SHADER_COMPILER,
+                  MESA_DEBUG_TYPE_OTHER,
+                  MESA_DEBUG_SEVERITY_NOTIFICATION,
+                  "%s vec4 shader: %d inst, %d loops, "
+                  "compacted %d to %d bytes.\n",
+                  stage_abbrev,
+                  before_size / 16, loop_count,
+                  before_size, after_size);
 }
 
 const unsigned *
