@@ -58,7 +58,7 @@ nv30_clear(struct pipe_context *pipe, unsigned buffers,
    struct pipe_framebuffer_state *fb = &nv30->framebuffer;
    uint32_t colr = 0, zeta = 0, mode = 0;
 
-   if (!nv30_state_validate(nv30, TRUE))
+   if (!nv30_state_validate(nv30, NV30_NEW_FRAMEBUFFER | NV30_NEW_SCISSOR, TRUE))
       return;
 
    if (buffers & PIPE_CLEAR_COLOR && fb->nr_cbufs) {

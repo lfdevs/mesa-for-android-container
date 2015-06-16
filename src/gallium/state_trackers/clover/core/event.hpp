@@ -23,6 +23,7 @@
 #ifndef CLOVER_CORE_EVENT_HPP
 #define CLOVER_CORE_EVENT_HPP
 
+#include <condition_variable>
 #include <functional>
 
 #include "core/object.hpp"
@@ -65,24 +66,29 @@ namespace clover {
       void abort(cl_int status);
       bool signalled() const;
 
-      virtual cl_int status() const = 0;
+      virtual cl_int status() const;
       virtual command_queue *queue() const = 0;
       virtual cl_command_type command() const = 0;
-      virtual void wait() const = 0;
+      virtual void wait() const;
 
       const intrusive_ref<clover::context> context;
 
    protected:
       void chain(event &ev);
 
-      cl_int _status;
       std::vector<intrusive_ref<event>> deps;
 
    private:
+      std::vector<intrusive_ref<event>> trigger_self();
+      std::vector<intrusive_ref<event>> abort_self(cl_int status);
+
       unsigned wait_count;
+      cl_int _status;
       action action_ok;
       action action_fail;
       std::vector<intrusive_ref<event>> _chain;
+      mutable std::condition_variable cv;
+      mutable std::mutex mutex;
    };
 
    ///

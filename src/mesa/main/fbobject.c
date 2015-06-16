@@ -2387,7 +2387,7 @@ framebuffer_texture(struct gl_context *ctx, const char *caller, GLenum target,
       GLboolean err = GL_TRUE;
 
       texObj = _mesa_lookup_texture(ctx, texture);
-      if (texObj != NULL) {
+      if (texObj != NULL && texObj->Target != 0) {
          if (textarget == 0) {
             if (layered) {
                /* We're being called by glFramebufferTexture() and textarget
@@ -2438,10 +2438,19 @@ framebuffer_texture(struct gl_context *ctx, const char *caller, GLenum target,
          }
       }
       else {
-         /* can't render to a non-existant texture */
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "glFramebufferTexture%s(non existant texture)",
-                     caller);
+         /* Can't render to a non-existent texture object.
+          *
+          * The OpenGL 4.5 core spec (02.02.2015) in Section 9.2 Binding and
+          * Managing Framebuffer Objects specifies a different error
+          * depending upon the calling function (PDF pages 325-328).
+          * *FramebufferTexture (where layered = GL_TRUE) throws invalid
+          * value, while the other commands throw invalid operation (where
+          * layered = GL_FALSE).
+          */
+         const GLenum error = layered ? GL_INVALID_VALUE :
+                              GL_INVALID_OPERATION;
+         _mesa_error(ctx, error,
+                     "%s(non-existent texture %u)", caller, texture);
          return;
       }
 
@@ -2449,6 +2458,18 @@ framebuffer_texture(struct gl_context *ctx, const char *caller, GLenum target,
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glFramebufferTexture%s(texture target mismatch)",
                      caller);
+         return;
+      }
+
+      /* Page 306 (page 328 of the PDF) of the OpenGL 4.5 (Core Profile)
+       * spec says:
+       *
+       *    "An INVALID_VALUE error is generated if texture is non-zero
+       *     and layer is negative."
+       */
+      if (zoffset < 0) {
+         _mesa_error(ctx, GL_INVALID_VALUE,
+                     "glFramebufferTexture%s(layer %u < 0)", caller, zoffset);
          return;
       }
 
@@ -3062,9 +3083,26 @@ invalidate_framebuffer_storage(GLenum target, GLsizei numAttachments,
       return;
    }
 
+   /* Section 17.4 Whole Framebuffer Operations of the OpenGL 4.5 Core
+    * Spec (2.2.2015, PDF page 522) says:
+    *    "An INVALID_VALUE error is generated if numAttachments, width, or
+    *    height is negative."
+    */
    if (numAttachments < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "%s(numAttachments < 0)", name);
+      return;
+   }
+
+   if (width < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "%s(width < 0)", name);
+      return;
+   }
+
+   if (height < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "%s(height < 0)", name);
       return;
    }
 
@@ -3160,7 +3198,8 @@ invalidate_framebuffer_storage(GLenum target, GLsizei numAttachments,
    return;
 
 invalid_enum:
-   _mesa_error(ctx, GL_INVALID_ENUM, "%s(attachment)", name);
+   _mesa_error(ctx, GL_INVALID_ENUM, "%s(invalid attachment %s)", name,
+               _mesa_lookup_enum_by_nr(attachments[i]));
    return;
 }
 

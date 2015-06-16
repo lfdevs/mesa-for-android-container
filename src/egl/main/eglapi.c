@@ -1029,8 +1029,9 @@ eglGetProcAddress(const char *procname)
       const char *name;
       _EGLProc function;
    } egl_functions[] = {
-      /* core functions should not be queryable, but, well... */
-#ifdef _EGL_GET_CORE_ADDRESSES
+      /* core functions queryable in the presence of
+       * EGL_KHR_get_all_proc_addresses or EGL 1.5
+       */
       /* alphabetical order */
       { "eglBindAPI", (_EGLProc) eglBindAPI },
       { "eglBindTexImage", (_EGLProc) eglBindTexImage },
@@ -1066,7 +1067,6 @@ eglGetProcAddress(const char *procname)
       { "eglWaitClient", (_EGLProc) eglWaitClient },
       { "eglWaitGL", (_EGLProc) eglWaitGL },
       { "eglWaitNative", (_EGLProc) eglWaitNative },
-#endif /* _EGL_GET_CORE_ADDRESSES */
 #ifdef EGL_MESA_screen_surface
       { "eglChooseModeMESA", (_EGLProc) eglChooseModeMESA },
       { "eglGetModesMESA", (_EGLProc) eglGetModesMESA },

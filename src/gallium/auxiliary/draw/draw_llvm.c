@@ -2049,7 +2049,7 @@ generate_mask_value(struct draw_gs_llvm_variant *variant,
 
    num_prims = lp_build_broadcast(gallivm, lp_build_vec_type(gallivm, mask_type),
                                   variant->num_prims);
-   for (i = 0; i <= gs_type.length; i++) {
+   for (i = 0; i < gs_type.length; i++) {
       LLVMValueRef idx = lp_build_const_int32(gallivm, i);
       mask_val = LLVMBuildInsertElement(builder, mask_val, idx, idx, "");
    }

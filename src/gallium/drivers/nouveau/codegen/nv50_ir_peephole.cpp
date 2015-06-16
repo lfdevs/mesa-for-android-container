@@ -207,6 +207,9 @@ LoadPropagation::visit(BasicBlock *bb)
       if (i->op == OP_CALL) // calls have args as sources, they must be in regs
          continue;
 
+      if (i->op == OP_PFETCH) // pfetch expects arg1 to be a reg
+         continue;
+
       if (i->srcExists(1))
          checkSwapSrc01(i);
 
@@ -545,6 +548,11 @@ ConstantFolding::expr(Instruction *i,
    case OP_POPCNT:
       res.data.u32 = util_bitcount(a->data.u32 & b->data.u32);
       break;
+   case OP_PFETCH:
+      // The two arguments to pfetch are logically added together. Normally
+      // the second argument will not be constant, but that can happen.
+      res.data.u32 = a->data.u32 + b->data.u32;
+      break;
    default:
       return;
    }
@@ -559,7 +567,9 @@ ConstantFolding::expr(Instruction *i,
 
    i->getSrc(0)->reg.data = res.data;
 
-   if (i->op == OP_MAD || i->op == OP_FMA) {
+   switch (i->op) {
+   case OP_MAD:
+   case OP_FMA: {
       i->op = OP_ADD;
 
       i->setSrc(1, i->getSrc(0));
@@ -574,8 +584,14 @@ ConstantFolding::expr(Instruction *i,
          bld.setPosition(i, false);
          i->setSrc(1, bld.loadImm(NULL, res.data.u32));
       }
-   } else {
+      break;
+   }
+   case OP_PFETCH:
+      // Leave PFETCH alone... we just folded its 2 args into 1.
+      break;
+   default:
       i->op = i->saturate ? OP_SAT : OP_MOV; /* SAT handled by unary() */
+      break;
    }
    i->subOp = 0;
 }
@@ -676,6 +692,7 @@ ConstantFolding::tryCollapseChainedMULs(Instruction *mul2,
             mul1->setSrc(s1, bld.loadImm(NULL, f * imm1.reg.data.f32));
             mul1->src(s1).mod = Modifier(0);
             mul2->def(0).replace(mul1->getDef(0), false);
+            mul1->saturate = mul2->saturate;
          } else
          if (prog->getTarget()->isPostMultiplySupported(OP_MUL, f, e)) {
             // c = mul a, b
@@ -684,8 +701,8 @@ ConstantFolding::tryCollapseChainedMULs(Instruction *mul2,
             mul2->def(0).replace(mul1->getDef(0), false);
             if (f < 0)
                mul1->src(0).mod *= Modifier(NV50_IR_MOD_NEG);
+            mul1->saturate = mul2->saturate;
          }
-         mul1->saturate = mul2->saturate;
          return;
       }
    }

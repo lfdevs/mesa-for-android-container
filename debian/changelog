@@ -1,3 +1,10 @@
+mesa (10.5.7-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Bump policy to 3.9.6, no changes.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 16 Jun 2015 11:57:08 +0300
+
 mesa (10.5.5-1) unstable; urgency=medium
 
   [ Maarten Lankhorst ]

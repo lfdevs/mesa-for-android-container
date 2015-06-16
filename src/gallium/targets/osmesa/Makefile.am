@@ -42,7 +42,6 @@ nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
 lib@OSMESA_LIB@_la_SOURCES = target.c
 
 lib@OSMESA_LIB@_la_LDFLAGS = \
-	-module \
 	-no-undefined \
 	-version-number @OSMESA_VERSION@ \
 	$(GC_SECTIONS) \

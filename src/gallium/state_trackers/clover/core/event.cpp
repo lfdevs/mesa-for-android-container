@@ -27,7 +27,7 @@ using namespace clover;
 
 event::event(clover::context &ctx, const ref_vector<event> &deps,
              action action_ok, action action_fail) :
-   context(ctx), _status(0), wait_count(1),
+   context(ctx), wait_count(1), _status(0),
    action_ok(action_ok), action_fail(action_fail) {
    for (auto &ev : deps)
       ev.chain(*this);
@@ -36,41 +36,83 @@ event::event(clover::context &ctx, const ref_vector<event> &deps,
 event::~event() {
 }
 
+std::vector<intrusive_ref<event>>
+event::trigger_self() {
+   std::lock_guard<std::mutex> lock(mutex);
+   std::vector<intrusive_ref<event>> evs;
+
+   if (!--wait_count)
+      std::swap(_chain, evs);
+
+   return evs;
+}
+
 void
 event::trigger() {
-   if (!--wait_count) {
-      action_ok(*this);
+   auto evs = trigger_self();
 
-      while (!_chain.empty()) {
-         _chain.back()().trigger();
-         _chain.pop_back();
-      }
+   if (signalled()) {
+      action_ok(*this);
+      cv.notify_all();
    }
+
+   for (event &ev : evs)
+      ev.trigger();
+}
+
+std::vector<intrusive_ref<event>>
+event::abort_self(cl_int status) {
+   std::lock_guard<std::mutex> lock(mutex);
+   std::vector<intrusive_ref<event>> evs;
+
+   _status = status;
+   std::swap(_chain, evs);
+
+   return evs;
 }
 
 void
 event::abort(cl_int status) {
-   _status = status;
+   auto evs = abort_self(status);
+
    action_fail(*this);
 
-   while (!_chain.empty()) {
-      _chain.back()().abort(status);
-      _chain.pop_back();
-   }
+   for (event &ev : evs)
+      ev.abort(status);
 }
 
 bool
 event::signalled() const {
+   std::lock_guard<std::mutex> lock(mutex);
    return !wait_count;
+}
+
+cl_int
+event::status() const {
+   std::lock_guard<std::mutex> lock(mutex);
+   return _status;
 }
 
 void
 event::chain(event &ev) {
+   std::unique_lock<std::mutex> lock(mutex, std::defer_lock);
+   std::unique_lock<std::mutex> lock_ev(ev.mutex, std::defer_lock);
+   std::lock(lock, lock_ev);
+
    if (wait_count) {
       ev.wait_count++;
       _chain.push_back(ev);
    }
    ev.deps.push_back(*this);
+}
+
+void
+event::wait() const {
+   for (event &ev : deps)
+      ev.wait();
+
+   std::unique_lock<std::mutex> lock(mutex);
+   cv.wait(lock, [=]{ return !wait_count; });
 }
 
 hard_event::hard_event(command_queue &q, cl_command_type command,
@@ -93,8 +135,8 @@ cl_int
 hard_event::status() const {
    pipe_screen *screen = queue()->device().pipe;
 
-   if (_status < 0)
-      return _status;
+   if (event::status() < 0)
+      return event::status();
 
    else if (!_fence)
       return CL_QUEUED;
@@ -119,6 +161,8 @@ hard_event::command() const {
 void
 hard_event::wait() const {
    pipe_screen *screen = queue()->device().pipe;
+
+   event::wait();
 
    if (status() == CL_QUEUED)
       queue()->flush();
@@ -182,8 +226,8 @@ soft_event::soft_event(clover::context &ctx, const ref_vector<event> &deps,
 
 cl_int
 soft_event::status() const {
-   if (_status < 0)
-      return _status;
+   if (event::status() < 0)
+      return event::status();
 
    else if (!signalled() ||
             any_of([](const event &ev) {
@@ -207,8 +251,7 @@ soft_event::command() const {
 
 void
 soft_event::wait() const {
-   for (event &ev : deps)
-      ev.wait();
+   event::wait();
 
    if (status() != CL_COMPLETE)
       throw error(CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST);

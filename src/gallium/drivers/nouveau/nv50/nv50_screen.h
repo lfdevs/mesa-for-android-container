@@ -25,10 +25,34 @@ struct nv50_context;
 
 struct nv50_blitter;
 
+struct nv50_graph_state {
+   uint32_t instance_elts; /* bitmask of per-instance elements */
+   uint32_t instance_base;
+   uint32_t interpolant_ctrl;
+   uint32_t semantic_color;
+   uint32_t semantic_psize;
+   int32_t index_bias;
+   boolean uniform_buffer_bound[3];
+   boolean prim_restart;
+   boolean point_sprite;
+   boolean rt_serialize;
+   boolean flushed;
+   boolean rasterizer_discard;
+   uint8_t tls_required;
+   boolean new_tls_space;
+   uint8_t num_vtxbufs;
+   uint8_t num_vtxelts;
+   uint8_t num_textures[3];
+   uint8_t num_samplers[3];
+   uint8_t prim_size;
+   uint16_t scissor;
+};
+
 struct nv50_screen {
    struct nouveau_screen base;
 
    struct nv50_context *cur_ctx;
+   struct nv50_graph_state save_state;
 
    struct nouveau_bo *code;
    struct nouveau_bo *uniforms;

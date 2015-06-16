@@ -60,6 +60,11 @@
 #include "swrast_priv.h"
 #include "swrast/s_context.h"
 
+#include <sys/types.h>
+#ifdef HAVE_SYS_SYSCTL_H
+# include <sys/sysctl.h>
+#endif
+
 const __DRIextension **__driDriverGetExtensions_swrast(void);
 
 const char * const swrast_vendor_string = "Mesa Project";
@@ -136,6 +141,16 @@ swrast_query_renderer_integer(__DRIscreen *psp, int param,
       value[0] = 0;
       return 0;
    case __DRI2_RENDERER_VIDEO_MEMORY: {
+      /* This should probably share code with os_get_total_physical_memory()
+       * from src/gallium/auxiliary/os/os_misc.c
+       */
+#if defined(CTL_HW) && defined(HW_MEMSIZE)
+        int mib[2] = { CTL_HW, HW_MEMSIZE };
+        unsigned long system_memory_bytes;
+        size_t len = sizeof(system_memory_bytes);
+        if (sysctl(mib, 2, &system_memory_bytes, &len, NULL, 0) != 0)
+            return -1;
+#elif defined(_SC_PHYS_PAGES) && defined(_SC_PAGE_SIZE)
       /* XXX: Do we want to return the full amount of system memory ? */
       const long system_memory_pages = sysconf(_SC_PHYS_PAGES);
       const long system_page_size = sysconf(_SC_PAGE_SIZE);
@@ -145,6 +160,9 @@ swrast_query_renderer_integer(__DRIscreen *psp, int param,
 
       const uint64_t system_memory_bytes = (uint64_t) system_memory_pages
          * (uint64_t) system_page_size;
+#else
+#error "Unsupported platform"
+#endif
 
       const unsigned system_memory_megabytes =
          (unsigned) (system_memory_bytes / (1024 * 1024));

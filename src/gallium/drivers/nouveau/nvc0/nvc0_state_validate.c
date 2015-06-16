@@ -543,6 +543,8 @@ nvc0_switch_pipe_context(struct nvc0_context *ctx_to)
 
    if (ctx_from)
       ctx_to->state = ctx_from->state;
+   else
+      ctx_to->state = ctx_to->screen->save_state;
 
    ctx_to->dirty = ~0;
    ctx_to->viewports_dirty = ~0;

@@ -2570,8 +2570,11 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
             link_intrastage_shaders(mem_ctx, ctx, prog, shader_list[stage],
                                     num_shaders[stage]);
 
-         if (!prog->LinkStatus)
+         if (!prog->LinkStatus) {
+            if (sh)
+               ctx->Driver.DeleteShader(ctx, sh);
             goto done;
+         }
 
          switch (stage) {
          case MESA_SHADER_VERTEX:
@@ -2584,8 +2587,11 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
             validate_fragment_shader_executable(prog, sh);
             break;
          }
-         if (!prog->LinkStatus)
+         if (!prog->LinkStatus) {
+            if (sh)
+               ctx->Driver.DeleteShader(ctx, sh);
             goto done;
+         }
 
          _mesa_reference_shader(ctx, &prog->_LinkedShaders[stage], sh);
       }

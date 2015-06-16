@@ -240,6 +240,7 @@ GM107LoweringPass::visit(Instruction *i)
             Value *ptr = bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
                                     i->getIndirect(0, 0), bld.mkImm(4));
             i->setIndirect(0, 0, ptr);
+            i->op = OP_VFETCH;
          } else {
             i->op = OP_VFETCH;
             assert(prog->getType() != Program::TYPE_FRAGMENT); // INTERP

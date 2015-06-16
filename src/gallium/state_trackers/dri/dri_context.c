@@ -233,11 +233,10 @@ dri_make_current(__DRIcontext * cPriv,
 
    ctx->stapi->make_current(ctx->stapi, ctx->st, &draw->base, &read->base);
 
-   // This is ok to call here. If they are already init, it's a no-op.
-   if (draw->textures[ST_ATTACHMENT_BACK_LEFT] && draw->textures[ST_ATTACHMENT_DEPTH_STENCIL]
-      && ctx->pp)
-         pp_init_fbos(ctx->pp, draw->textures[ST_ATTACHMENT_BACK_LEFT]->width0,
-            draw->textures[ST_ATTACHMENT_BACK_LEFT]->height0);
+   /* This is ok to call here. If they are already init, it's a no-op. */
+   if (ctx->pp && draw->textures[ST_ATTACHMENT_BACK_LEFT])
+      pp_init_fbos(ctx->pp, draw->textures[ST_ATTACHMENT_BACK_LEFT]->width0,
+                   draw->textures[ST_ATTACHMENT_BACK_LEFT]->height0);
 
    return GL_TRUE;
 }

@@ -1985,6 +1985,11 @@ dri3_create_screen(int screen, struct glx_display * priv)
       goto handle_error;
    }
 
+   if (psc->is_different_gpu && !psc->image->blitImage) {
+      ErrorMessageF("Different GPU, but blitImage not implemented for this driver\n");
+      goto handle_error;
+   }
+
    if (!psc->is_different_gpu && (
        !psc->texBuffer || psc->texBuffer->base.version < 2 ||
        !psc->texBuffer->setTexBuffer2

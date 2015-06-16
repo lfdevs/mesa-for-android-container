@@ -873,9 +873,8 @@ nvfx_vertprog_parse_decl_output(struct nvfx_vpc *vpc,
       }
       break;
    case TGSI_SEMANTIC_EDGEFLAG:
-      /* not really an error just a fallback */
-      NOUVEAU_ERR("cannot handle edgeflag output\n");
-      return FALSE;
+      vpc->r_result[idx] = nvfx_reg(NVFXSR_NONE, 0);
+      return TRUE;
    default:
       NOUVEAU_ERR("bad output semantic\n");
       return FALSE;

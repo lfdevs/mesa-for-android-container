@@ -113,29 +113,7 @@ struct nvc0_context {
    uint32_t dirty;
    uint32_t dirty_cp; /* dirty flags for compute state */
 
-   struct {
-      boolean flushed;
-      boolean rasterizer_discard;
-      boolean early_z_forced;
-      boolean prim_restart;
-      uint32_t instance_elts; /* bitmask of per-instance elements */
-      uint32_t instance_base;
-      uint32_t constant_vbos;
-      uint32_t constant_elts;
-      int32_t index_bias;
-      uint16_t scissor;
-      uint8_t vbo_mode; /* 0 = normal, 1 = translate, 3 = translate, forced */
-      uint8_t num_vtxbufs;
-      uint8_t num_vtxelts;
-      uint8_t num_textures[6];
-      uint8_t num_samplers[6];
-      uint8_t tls_required; /* bitmask of shader types using l[] */
-      uint8_t c14_bound; /* whether immediate array constbuf is bound */
-      uint8_t clip_enable;
-      uint32_t clip_mode;
-      uint32_t uniform_buffer_bound[5];
-      struct nvc0_transform_feedback_state *tfb;
-   } state;
+   struct nvc0_graph_state state;
 
    struct nvc0_blend_stateobj *blend;
    struct nvc0_rasterizer_stateobj *rast;

@@ -703,6 +703,8 @@ dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
 #ifdef HAVE_WAYLAND_PLATFORM
    case _EGL_PLATFORM_WAYLAND:
       wl_drm_destroy(dri2_dpy->wl_drm);
+      wl_registry_destroy(dri2_dpy->wl_registry);
+      wl_event_queue_destroy(dri2_dpy->wl_queue);
       if (dri2_dpy->own_device) {
          wl_display_disconnect(dri2_dpy->wl_dpy);
       }

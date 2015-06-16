@@ -44,6 +44,7 @@ command_queue::flush() {
    pipe_screen *screen = device().pipe;
    pipe_fence_handle *fence = NULL;
 
+   std::lock_guard<std::mutex> lock(queued_events_mutex);
    if (!queued_events.empty()) {
       pipe->flush(pipe, &fence, 0);
 
@@ -69,6 +70,7 @@ command_queue::profiling_enabled() const {
 
 void
 command_queue::sequence(hard_event &ev) {
+   std::lock_guard<std::mutex> lock(queued_events_mutex);
    if (!queued_events.empty())
       queued_events.back()().chain(ev);
 

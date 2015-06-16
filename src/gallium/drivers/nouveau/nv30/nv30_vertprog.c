@@ -23,6 +23,7 @@
  *
  */
 
+#include "draw/draw_context.h"
 #include "util/u_dynarray.h"
 #include "tgsi/tgsi_parse.h"
 
@@ -237,6 +238,10 @@ nv30_vp_state_delete(struct pipe_context *pipe, void *hwcso)
 
    if (vp->translated)
       nv30_vertprog_destroy(vp);
+
+   if (vp->draw)
+      draw_delete_vertex_shader(nv30_context(pipe)->draw, vp->draw);
+
    FREE((void *)vp->pipe.tokens);
    FREE(vp);
 }

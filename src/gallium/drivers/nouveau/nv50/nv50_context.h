@@ -104,28 +104,7 @@ struct nv50_context {
    uint32_t dirty;
    boolean cb_dirty;
 
-   struct {
-      uint32_t instance_elts; /* bitmask of per-instance elements */
-      uint32_t instance_base;
-      uint32_t interpolant_ctrl;
-      uint32_t semantic_color;
-      uint32_t semantic_psize;
-      int32_t index_bias;
-      boolean uniform_buffer_bound[3];
-      boolean prim_restart;
-      boolean point_sprite;
-      boolean rt_serialize;
-      boolean flushed;
-      boolean rasterizer_discard;
-      uint8_t tls_required;
-      boolean new_tls_space;
-      uint8_t num_vtxbufs;
-      uint8_t num_vtxelts;
-      uint8_t num_textures[3];
-      uint8_t num_samplers[3];
-      uint8_t prim_size;
-      uint16_t scissor;
-   } state;
+   struct nv50_graph_state state;
 
    struct nv50_blend_stateobj *blend;
    struct nv50_rasterizer_stateobj *rast;
@@ -189,12 +168,6 @@ static INLINE struct nv50_context *
 nv50_context(struct pipe_context *pipe)
 {
    return (struct nv50_context *)pipe;
-}
-
-static INLINE struct nv50_screen *
-nv50_context_screen(struct nv50_context *nv50)
-{
-   return nv50_screen(&nv50->base.screen->base);
 }
 
 /* return index used in nv50_context arrays for a specific shader type */

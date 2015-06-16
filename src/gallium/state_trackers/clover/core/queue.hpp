@@ -24,6 +24,7 @@
 #define CLOVER_CORE_QUEUE_HPP
 
 #include <deque>
+#include <mutex>
 
 #include "core/object.hpp"
 #include "core/context.hpp"
@@ -69,6 +70,7 @@ namespace clover {
 
       cl_command_queue_properties props;
       pipe_context *pipe;
+      std::mutex queued_events_mutex;
       std::deque<intrusive_ref<hard_event>> queued_events;
    };
 }

@@ -564,7 +564,7 @@ nv30_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (nv30->vbo_user && !(nv30->dirty & (NV30_NEW_VERTEX | NV30_NEW_ARRAYS)))
       nv30_update_user_vbufs(nv30);
 
-   nv30_state_validate(nv30, TRUE);
+   nv30_state_validate(nv30, ~0, TRUE);
    if (nv30->draw_flags) {
       nv30_render_vbo(pipe, info);
       return;

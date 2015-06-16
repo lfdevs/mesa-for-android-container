@@ -24,3 +24,6 @@ fe5fddd7e2df74233a2a02ae021418485f39d11c
 
 # The optimisations mentioned are not available in 10.5
 627c68308683abbd6e563a09af6013a33938a790 i965/fs: in MAD optimizations, switch last argument to be immediate
+
+# 10.5 has the compat string implementation, which includes the <string>
+967825d053f71c5f5fc3ba31eabc0c6004fde4f1 clover: Build fix for FreeBSD.

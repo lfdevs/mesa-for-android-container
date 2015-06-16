@@ -138,8 +138,11 @@ nv50_destroy(struct pipe_context *pipe)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
 
-   if (nv50_context_screen(nv50)->cur_ctx == nv50)
-      nv50_context_screen(nv50)->cur_ctx = NULL;
+   if (nv50->screen->cur_ctx == nv50) {
+      nv50->screen->cur_ctx = NULL;
+      /* Save off the state in case another context gets created */
+      nv50->screen->save_state = nv50->state;
+   }
    nouveau_pushbuf_bufctx(nv50->base.pushbuf, NULL);
    nouveau_pushbuf_kick(nv50->base.pushbuf, nv50->base.pushbuf->channel);
 
@@ -290,6 +293,10 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
    pipe->get_sample_position = nv50_context_get_sample_position;
 
    if (!screen->cur_ctx) {
+      /* Restore the last context's state here, normally handled during
+       * context switch
+       */
+      nv50->state = screen->save_state;
       screen->cur_ctx = nv50;
       nouveau_pushbuf_bufctx(screen->base.pushbuf, nv50->bufctx);
    }

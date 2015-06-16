@@ -226,8 +226,30 @@ intelReadPixels(struct gl_context * ctx,
 
    if (_mesa_is_bufferobj(pack->BufferObj)) {
       if (_mesa_meta_pbo_GetTexSubImage(ctx, 2, NULL, x, y, 0, width, height, 1,
-                                        format, type, pixels, pack))
+                                        format, type, pixels, pack)) {
+         /* _mesa_meta_pbo_GetTexSubImage() implements PBO transfers by
+          * binding the user-provided BO as a fake framebuffer and rendering
+          * to it.  This breaks the invariant of the GL that nothing is able
+          * to render to a BO, causing nondeterministic corruption issues
+          * because the render cache is not coherent with a number of other
+          * caches that the BO could potentially be bound to afterwards.
+          *
+          * This could be solved in the same way that we guarantee texture
+          * coherency after a texture is attached to a framebuffer and
+          * rendered to, but that would involve checking *all* BOs bound to
+          * the pipeline for the case we need to emit a cache flush due to
+          * previous rendering to any of them -- Including vertex, index,
+          * uniform, atomic counter, shader image, transform feedback,
+          * indirect draw buffers, etc.
+          *
+          * That would increase the per-draw call overhead even though it's
+          * very unlikely that any of the BOs bound to the pipeline has been
+          * rendered to via a PBO at any point, so it seems better to just
+          * flush here unconditionally.
+          */
+         intel_batchbuffer_emit_mi_flush(brw);
          return;
+      }
 
       perf_debug("%s: fallback to CPU mapping in PBO case\n", __FUNCTION__);
    }

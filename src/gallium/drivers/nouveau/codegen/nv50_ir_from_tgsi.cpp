@@ -1270,18 +1270,20 @@ Converter::srcToSym(tgsi::Instruction::SrcRegister src, int c)
 {
    const int swz = src.getSwizzle(c);
 
+   /* TODO: Use Array ID when it's available for the index */
    return makeSym(src.getFile(),
                   src.is2D() ? src.getIndex(1) : 0,
-                  src.isIndirect(0) ? -1 : src.getIndex(0), swz,
+                  src.getIndex(0), swz,
                   src.getIndex(0) * 16 + swz * 4);
 }
 
 Symbol *
 Converter::dstToSym(tgsi::Instruction::DstRegister dst, int c)
 {
+   /* TODO: Use Array ID when it's available for the index */
    return makeSym(dst.getFile(),
                   dst.is2D() ? dst.getIndex(1) : 0,
-                  dst.isIndirect(0) ? -1 : dst.getIndex(0), c,
+                  dst.getIndex(0), c,
                   dst.getIndex(0) * 16 + c * 4);
 }
 

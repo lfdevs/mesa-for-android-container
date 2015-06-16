@@ -71,12 +71,12 @@ nv30_render_allocate_vertices(struct vbuf_render *render,
    struct nv30_render *r = nv30_render(render);
    struct nv30_context *nv30 = r->nv30;
 
-   r->length = vertex_size * nr_vertices;
+   r->length = (uint32_t)vertex_size * (uint32_t)nr_vertices;
 
    if (r->offset + r->length >= render->max_vertex_buffer_bytes) {
       pipe_resource_reference(&r->buffer, NULL);
       r->buffer = pipe_buffer_create(&nv30->screen->base.base,
-                                     PIPE_BIND_VERTEX_BUFFER, 0,
+                                     PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM,
                                      render->max_vertex_buffer_bytes);
       if (!r->buffer)
          return FALSE;
@@ -91,10 +91,14 @@ static void *
 nv30_render_map_vertices(struct vbuf_render *render)
 {
    struct nv30_render *r = nv30_render(render);
-   char *map = pipe_buffer_map(&r->nv30->base.pipe, r->buffer,
-                               PIPE_TRANSFER_WRITE |
-                               PIPE_TRANSFER_UNSYNCHRONIZED, &r->transfer);
-   return map + r->offset;
+   char *map = pipe_buffer_map_range(
+         &r->nv30->base.pipe, r->buffer,
+         r->offset, r->length,
+         PIPE_TRANSFER_WRITE |
+         PIPE_TRANSFER_DISCARD_RANGE,
+         &r->transfer);
+   assert(map);
+   return map;
 }
 
 static void
@@ -103,6 +107,7 @@ nv30_render_unmap_vertices(struct vbuf_render *render,
 {
    struct nv30_render *r = nv30_render(render);
    pipe_buffer_unmap(&r->nv30->base.pipe, r->transfer);
+   r->transfer = NULL;
 }
 
 static void
@@ -126,10 +131,10 @@ nv30_render_draw_elements(struct vbuf_render *render,
    for (i = 0; i < r->vertex_info.num_attribs; i++) {
       PUSH_RESRC(push, NV30_3D(VTXBUF(i)), BUFCTX_VTXTMP,
                        nv04_resource(r->buffer), r->offset + r->vtxptr[i],
-                       NOUVEAU_BO_LOW | NOUVEAU_BO_RD, 0, 0);
+                       NOUVEAU_BO_LOW | NOUVEAU_BO_RD, 0, NV30_3D_VTXBUF_DMA1);
    }
 
-   if (!nv30_state_validate(nv30, FALSE))
+   if (!nv30_state_validate(nv30, ~0, FALSE))
       return;
 
    BEGIN_NV04(push, NV30_3D(VERTEX_BEGIN_END), 1);
@@ -171,10 +176,10 @@ nv30_render_draw_arrays(struct vbuf_render *render, unsigned start, uint nr)
    for (i = 0; i < r->vertex_info.num_attribs; i++) {
       PUSH_RESRC(push, NV30_3D(VTXBUF(i)), BUFCTX_VTXTMP,
                        nv04_resource(r->buffer), r->offset + r->vtxptr[i],
-                       NOUVEAU_BO_LOW | NOUVEAU_BO_RD, 0, 0);
+                       NOUVEAU_BO_LOW | NOUVEAU_BO_RD, 0, NV30_3D_VTXBUF_DMA1);
    }
 
-   if (!nv30_state_validate(nv30, FALSE))
+   if (!nv30_state_validate(nv30, ~0, FALSE))
       return;
 
    BEGIN_NV04(push, NV30_3D(VERTEX_BEGIN_END), 1);
@@ -213,22 +218,24 @@ static const struct {
    [TGSI_SEMANTIC_BCOLOR  ] = { EMIT_4F, INTERP_LINEAR     , 1, 3, 0x00000004 },
    [TGSI_SEMANTIC_FOG     ] = { EMIT_4F, INTERP_PERSPECTIVE, 5, 5, 0x00000010 },
    [TGSI_SEMANTIC_PSIZE   ] = { EMIT_1F_PSIZE, INTERP_POS  , 6, 6, 0x00000020 },
-   [TGSI_SEMANTIC_GENERIC ] = { EMIT_4F, INTERP_PERSPECTIVE, 8, 7, 0x00004000 }
+   [TGSI_SEMANTIC_TEXCOORD] = { EMIT_4F, INTERP_PERSPECTIVE, 8, 7, 0x00004000 },
 };
 
 static boolean
 vroute_add(struct nv30_render *r, uint attrib, uint sem, uint *idx)
 {
-   struct pipe_screen *pscreen = &r->nv30->screen->base.base;
+   struct nv30_screen *screen = r->nv30->screen;
    struct nv30_fragprog *fp = r->nv30->fragprog.program;
    struct vertex_info *vinfo = &r->vertex_info;
    enum pipe_format format;
    uint emit = EMIT_OMIT;
    uint result = *idx;
 
-   if (sem == TGSI_SEMANTIC_GENERIC && result >= 8) {
-      for (result = 0; result < 8; result++) {
-         if (fp->texcoord[result] == *idx) {
+   if (sem == TGSI_SEMANTIC_GENERIC) {
+      uint num_texcoords = (screen->eng3d->oclass < NV40_3D_CLASS) ? 8 : 10;
+      for (result = 0; result < num_texcoords; result++) {
+         if (fp->texcoord[result] == *idx + 8) {
+            sem = TGSI_SEMANTIC_TEXCOORD;
             emit = vroute[sem].emit;
             break;
          }
@@ -243,11 +250,11 @@ vroute_add(struct nv30_render *r, uint attrib, uint sem, uint *idx)
    draw_emit_vertex_attr(vinfo, emit, vroute[sem].interp, attrib);
    format = draw_translate_vinfo_format(emit);
 
-   r->vtxfmt[attrib] = nv30_vtxfmt(pscreen, format)->hw;
-   r->vtxptr[attrib] = vinfo->size | NV30_3D_VTXBUF_DMA1;
+   r->vtxfmt[attrib] = nv30_vtxfmt(&screen->base.base, format)->hw;
+   r->vtxptr[attrib] = vinfo->size;
    vinfo->size += draw_translate_vinfo_size(emit);
 
-   if (nv30_screen(pscreen)->eng3d->oclass < NV40_3D_CLASS) {
+   if (screen->eng3d->oclass < NV40_3D_CLASS) {
       r->vtxprog[attrib][0] = 0x001f38d8;
       r->vtxprog[attrib][1] = 0x0080001b | (attrib << 9);
       r->vtxprog[attrib][2] = 0x0836106c;
@@ -259,7 +266,12 @@ vroute_add(struct nv30_render *r, uint attrib, uint sem, uint *idx)
       r->vtxprog[attrib][3] = 0x6041ff80 | (result + vroute[sem].vp40) << 2;
    }
 
-   *idx = vroute[sem].ow40 << result;
+   if (result < 8)
+      *idx = vroute[sem].ow40 << result;
+   else {
+      assert(sem == TGSI_SEMANTIC_TEXCOORD);
+      *idx = 0x00001000 << (result - 8);
+   }
    return TRUE;
 }
 
@@ -313,7 +325,7 @@ nv30_render_validate(struct nv30_context *nv30)
 
    while (pntc && attrib < 16) {
       uint index = ffs(pntc) - 1; pntc &= ~(1 << index);
-      if (vroute_add(r, attrib, TGSI_SEMANTIC_GENERIC, &index)) {
+      if (vroute_add(r, attrib, TGSI_SEMANTIC_TEXCOORD, &index)) {
          vp_attribs |= (1 << attrib++);
          vp_results |= index;
       }
@@ -398,17 +410,17 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       if (nv30->vertprog.constbuf) {
          void *map = nv04_resource(nv30->vertprog.constbuf)->data;
          draw_set_mapped_constant_buffer(draw, PIPE_SHADER_VERTEX, 0,
-                                         map, nv30->vertprog.constbuf_nr);
+                                         map, nv30->vertprog.constbuf_nr * 16);
+      } else {
+         draw_set_mapped_constant_buffer(draw, PIPE_SHADER_VERTEX, 0, NULL, 0);
       }
    }
 
    for (i = 0; i < nv30->num_vtxbufs; i++) {
       const void *map = nv30->vtxbuf[i].user_buffer;
       if (!map) {
-         if (!nv30->vtxbuf[i].buffer) {
-            continue;
-         }
-         map = pipe_buffer_map(pipe, nv30->vtxbuf[i].buffer,
+         if (nv30->vtxbuf[i].buffer)
+            map = pipe_buffer_map(pipe, nv30->vtxbuf[i].buffer,
                                   PIPE_TRANSFER_UNSYNCHRONIZED |
                                   PIPE_TRANSFER_READ, &transfer[i]);
       }
@@ -418,9 +430,9 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (info->indexed) {
       const void *map = nv30->idxbuf.user_buffer;
       if (!map)
-         pipe_buffer_map(pipe, nv30->idxbuf.buffer,
-                                  PIPE_TRANSFER_UNSYNCHRONIZED |
-                                  PIPE_TRANSFER_READ, &transferi);
+         map = pipe_buffer_map(pipe, nv30->idxbuf.buffer,
+                               PIPE_TRANSFER_UNSYNCHRONIZED |
+                               PIPE_TRANSFER_READ, &transferi);
       draw_set_indexes(draw,
                        (ubyte *) map + nv30->idxbuf.offset,
                        nv30->idxbuf.index_size, ~0);
@@ -444,6 +456,12 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 static void
 nv30_render_destroy(struct vbuf_render *render)
 {
+   struct nv30_render *r = nv30_render(render);
+
+   if (r->transfer)
+      pipe_buffer_unmap(&r->nv30->base.pipe, r->transfer);
+   pipe_resource_reference(&r->buffer, NULL);
+   nouveau_heap_free(&r->vertprog);
    FREE(render);
 }
 

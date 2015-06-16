@@ -1152,6 +1152,12 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
                       NVC0_3D_VERTEX_ATTRIB_FORMAT_SIZE_32 |
                       NVC0_3D_VERTEX_ATTRIB_FORMAT_CONST);
    }
+   if (nvc0->state.instance_elts) {
+      nvc0->state.instance_elts = 0;
+      BEGIN_NVC0(push, NVC0_3D(MACRO_VERTEX_ARRAY_PER_INSTANCE), 2);
+      PUSH_DATA (push, n);
+      PUSH_DATA (push, 0);
+   }
    nvc0->state.num_vtxelts = 2;
 
    for (i = 0; i < info->dst.box.depth; ++i, z += dz) {
