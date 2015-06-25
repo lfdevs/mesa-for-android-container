@@ -1966,7 +1966,7 @@ draw_llvm_set_sampler_state(struct draw_context *draw,
       for (i = 0; i < draw->num_samplers[PIPE_SHADER_VERTEX]; i++) {
          struct draw_jit_sampler *jit_sam = &draw->llvm->jit_context.samplers[i];
 
-         if (draw->samplers[i]) {
+         if (draw->samplers[PIPE_SHADER_VERTEX][i]) {
             const struct pipe_sampler_state *s
                = draw->samplers[PIPE_SHADER_VERTEX][i];
             jit_sam->min_lod = s->min_lod;
@@ -1979,7 +1979,7 @@ draw_llvm_set_sampler_state(struct draw_context *draw,
       for (i = 0; i < draw->num_samplers[PIPE_SHADER_GEOMETRY]; i++) {
          struct draw_jit_sampler *jit_sam = &draw->llvm->gs_jit_context.samplers[i];
 
-         if (draw->samplers[i]) {
+         if (draw->samplers[PIPE_SHADER_GEOMETRY][i]) {
             const struct pipe_sampler_state *s
                = draw->samplers[PIPE_SHADER_GEOMETRY][i];
             jit_sam->min_lod = s->min_lod;

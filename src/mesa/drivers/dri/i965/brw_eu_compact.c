@@ -843,10 +843,66 @@ set_3src_source_index(struct brw_context *brw, brw_compact_inst *dst, brw_inst *
 }
 
 static bool
+has_unmapped_bits(struct brw_context *brw, brw_inst *src)
+{
+   /* EOT can only be mapped on a send if the src1 is an immediate */
+   if ((brw_inst_opcode(brw, src) == BRW_OPCODE_SENDC ||
+        brw_inst_opcode(brw, src) == BRW_OPCODE_SEND) &&
+       brw_inst_eot(brw, src))
+      return true;
+
+   /* Check for instruction bits that don't map to any of the fields of the
+    * compacted instruction.  The instruction cannot be compacted if any of
+    * them are set.  They overlap with:
+    *  - NibCtrl (bit 47 on Gen7, bit 11 on Gen8)
+    *  - Dst.AddrImm[9] (bit 47 on Gen8)
+    *  - Src0.AddrImm[9] (bit 95 on Gen8)
+    *  - Imm64[27:31] (bits 91-95 on Gen7, bit 95 on Gen8)
+    *  - UIP[31] (bit 95 on Gen8)
+    */
+   if (brw->gen >= 8) {
+      assert(!brw_inst_bits(src, 7,  7));
+      return brw_inst_bits(src, 95, 95) ||
+             brw_inst_bits(src, 47, 47) ||
+             brw_inst_bits(src, 11, 11);
+   } else {
+      assert(!brw_inst_bits(src, 7,  7) &&
+             !(brw->gen < 7 && brw_inst_bits(src, 90, 90)));
+      return brw_inst_bits(src, 95, 91) ||
+             brw_inst_bits(src, 47, 47);
+   }
+}
+
+static bool
+has_3src_unmapped_bits(struct brw_context *brw, brw_inst *src)
+{
+   /* Check for three-source instruction bits that don't map to any of the
+    * fields of the compacted instruction.  All of them seem to be reserved
+    * bits currently.
+    */
+   if (brw->gen >= 9 || brw->is_cherryview) {
+      assert(!brw_inst_bits(src, 127, 127) &&
+             !brw_inst_bits(src, 7,  7));
+   } else {
+      assert(brw->gen >= 8);
+      assert(!brw_inst_bits(src, 127, 126) &&
+             !brw_inst_bits(src, 105, 105) &&
+             !brw_inst_bits(src, 84, 84) &&
+             !brw_inst_bits(src, 36, 35) &&
+             !brw_inst_bits(src, 7,  7));
+   }
+
+   return false;
+}
+
+static bool
 brw_try_compact_3src_instruction(struct brw_context *brw, brw_compact_inst *dst,
                                  brw_inst *src)
 {
    assert(brw->gen >= 8);
+
+   if (has_3src_unmapped_bits(brw, src))
+      return false;
 
 #define compact(field) \
    brw_compact_inst_set_3src_##field(dst, brw_inst_3src_##field(brw, src))
@@ -936,6 +992,9 @@ brw_try_compact_instruction(struct brw_context *brw, brw_compact_inst *dst,
        (brw->gen < 6 || !is_compactable_immediate(brw_inst_imm_ud(brw, src)))) {
       return false;
    }
+
+   if (has_unmapped_bits(brw, src))
+      return false;
 
    memset(&temp, 0, sizeof(temp));
 

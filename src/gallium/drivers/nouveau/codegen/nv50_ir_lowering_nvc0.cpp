@@ -145,7 +145,7 @@ NVC0LegalizePostRA::insnDominatedBy(const Instruction *later,
 
 void
 NVC0LegalizePostRA::addTexUse(std::list<TexUse> &uses,
-                              Instruction *usei, const Instruction *insn)
+                              Instruction *usei, const Instruction *texi)
 {
    bool add = true;
    for (std::list<TexUse>::iterator it = uses.begin();
@@ -160,7 +160,7 @@ NVC0LegalizePostRA::addTexUse(std::list<TexUse> &uses,
          ++it;
    }
    if (add)
-      uses.push_back(TexUse(usei, insn));
+      uses.push_back(TexUse(usei, texi));
 }
 
 void
@@ -172,7 +172,8 @@ NVC0LegalizePostRA::findOverwritingDefs(const Instruction *texi,
    while (insn->op == OP_MOV && insn->getDef(0)->equals(insn->getSrc(0)))
       insn = insn->getSrc(0)->getUniqueInsn();
 
-   if (!insn->bb->reachableBy(texi->bb, term))
+   // NOTE: the tex itself is, of course, not an overwriting definition
+   if (insn == texi || !insn->bb->reachableBy(texi->bb, term))
       return;
 
    switch (insn->op) {
@@ -220,7 +221,12 @@ NVC0LegalizePostRA::findFirstUses(
          visited.insert(usei);
 
          if (usei->op == OP_PHI || usei->op == OP_UNION) {
-            // need a barrier before WAW cases
+            // need a barrier before WAW cases, like:
+            //   %r0 = tex
+            //   if ...
+            //     texbar <- is required or tex might replace x again
+            //     %r1 = x <- overwriting def
+            //   %r2 = phi %r0, %r1
             for (int s = 0; usei->srcExists(s); ++s) {
                Instruction *defi = usei->getSrc(s)->getUniqueInsn();
                if (defi && &usei->src(s) != *u)
@@ -239,7 +245,7 @@ NVC0LegalizePostRA::findFirstUses(
              usei->subOp != NV50_IR_SUBOP_MOV_FINAL) {
             findFirstUses(texi, usei, uses, visited);
          } else {
-            addTexUse(uses, usei, insn);
+            addTexUse(uses, usei, texi);
          }
       }
    }

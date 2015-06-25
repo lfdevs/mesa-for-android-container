@@ -811,12 +811,12 @@ nv50_set_constant_buffer(struct pipe_context *pipe, uint shader, uint index,
    nv50->constbuf[s][i].user = (cb && cb->user_buffer) ? TRUE : FALSE;
    if (nv50->constbuf[s][i].user) {
       nv50->constbuf[s][i].u.data = cb->user_buffer;
-      nv50->constbuf[s][i].size = cb->buffer_size;
+      nv50->constbuf[s][i].size = MIN2(cb->buffer_size, 0x10000);
       nv50->constbuf_valid[s] |= 1 << i;
    } else
    if (res) {
       nv50->constbuf[s][i].offset = cb->buffer_offset;
-      nv50->constbuf[s][i].size = align(cb->buffer_size, 0x100);
+      nv50->constbuf[s][i].size = MIN2(align(cb->buffer_size, 0x100), 0x10000);
       nv50->constbuf_valid[s] |= 1 << i;
    } else {
       nv50->constbuf_valid[s] &= ~(1 << i);

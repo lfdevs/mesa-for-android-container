@@ -46,6 +46,7 @@ libi965_dri_la_LIBADD = $(INTEL_LIBS)
 TEST_LIBS = \
 	libi965_dri.la \
 	../common/libdricommon.la \
+	../common/libxmlconfig.la \
 	../common/libmegadriver_stub.la \
         ../../../libmesa.la \
 	$(DRI_LIB_DEPS) \

@@ -55,12 +55,6 @@ gallium_dri_la_LIBADD = \
 	$(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
-# XXX: Temporary allow duplicated symbols, as the loader pulls in xmlconfig.c
-# which already provides driParse* and driQuery* amongst others.
-# Remove this hack as we come up with a cleaner solution.
-gallium_dri_la_LDFLAGS += \
-	-Wl,--allow-multiple-definition
-
 EXTRA_gallium_dri_la_DEPENDENCIES = \
 	dri.sym \
 	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn

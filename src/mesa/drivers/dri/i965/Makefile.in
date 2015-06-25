@@ -208,9 +208,9 @@ am__EXEEXT_1 = test_fs_cmod_propagation$(EXEEXT) \
 am_test_eu_compact_OBJECTS = test_eu_compact.$(OBJEXT)
 test_eu_compact_OBJECTS = $(am_test_eu_compact_OBJECTS)
 am__DEPENDENCIES_2 = libi965_dri.la ../common/libdricommon.la \
-	../common/libmegadriver_stub.la ../../../libmesa.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	../common/libdri_test_stubs.la
+	../common/libxmlconfig.la ../common/libmegadriver_stub.la \
+	../../../libmesa.la $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1) ../common/libdri_test_stubs.la
 test_eu_compact_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_test_fs_cmod_propagation_OBJECTS =  \
 	test_fs_cmod_propagation.$(OBJEXT)
@@ -1047,6 +1047,7 @@ libi965_dri_la_LIBADD = $(INTEL_LIBS)
 TEST_LIBS = \
 	libi965_dri.la \
 	../common/libdricommon.la \
+	../common/libxmlconfig.la \
 	../common/libmegadriver_stub.la \
         ../../../libmesa.la \
 	$(DRI_LIB_DEPS) \

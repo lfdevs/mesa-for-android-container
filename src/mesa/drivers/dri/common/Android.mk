@@ -47,7 +47,9 @@ else
 LOCAL_SHARED_LIBRARIES := libdrm
 endif
 
-LOCAL_SRC_FILES := $(DRI_COMMON_FILES)
+LOCAL_SRC_FILES := \
+	$(DRI_COMMON_FILES) \
+	$(XMLCONFIG_FILES)
 
 LOCAL_GENERATED_SOURCES := \
     $(intermediates)/xmlpool/options.h

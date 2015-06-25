@@ -498,11 +498,13 @@ fs_visitor::get_used_mrfs(bool *mrf_used)
  * messages (treated as MRFs in code generation).
  */
 void
-fs_visitor::setup_mrf_hack_interference(struct ra_graph *g, int first_mrf_node)
+fs_visitor::setup_mrf_hack_interference(struct ra_graph *g, int first_mrf_node,
+                                        int *first_used_mrf)
 {
    bool mrf_used[BRW_MAX_MRF];
    get_used_mrfs(mrf_used);
 
+   *first_used_mrf = BRW_MAX_MRF;
    for (int i = 0; i < BRW_MAX_MRF; i++) {
       /* Mark each MRF reg node as being allocated to its physical register.
        *
@@ -515,6 +517,9 @@ fs_visitor::setup_mrf_hack_interference(struct ra_graph *g, int first_mrf_node)
        * that are used as conflicting with all virtual GRFs.
        */
       if (mrf_used[i]) {
+         if (i < *first_used_mrf)
+            *first_used_mrf = i;
+
          for (int j = 0; j < this->virtual_grf_count; j++) {
             ra_add_node_interference(g, first_mrf_node + i, j);
          }
@@ -581,7 +586,8 @@ fs_visitor::assign_regs(bool allow_spilling)
 
    setup_payload_interference(g, payload_node_count, first_payload_node);
    if (brw->gen >= 7) {
-      setup_mrf_hack_interference(g, first_mrf_hack_node);
+      int first_used_mrf = BRW_MAX_MRF;
+      setup_mrf_hack_interference(g, first_mrf_hack_node, &first_used_mrf);
 
       foreach_block_and_inst(block, fs_inst, inst, cfg) {
          /* When we do send-from-GRF for FB writes, we need to ensure that
@@ -597,6 +603,13 @@ fs_visitor::assign_regs(bool allow_spilling)
          if (inst->eot) {
             int size = virtual_grf_sizes[inst->src[0].reg];
             int reg = screen->wm_reg_sets[rsi].class_to_ra_reg_range[size] - 1;
+
+            /* If something happened to spill, we want to push the EOT send
+             * register early enough in the register file that we don't
+             * conflict with any used MRF hack registers.
+             */
+            reg -= BRW_MAX_MRF - first_used_mrf;
+
             ra_set_node_reg(g, inst->src[0].reg, reg);
             break;
          }

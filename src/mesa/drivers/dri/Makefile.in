@@ -161,7 +161,8 @@ LTLIBRARIES = $(dri_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 mesa_dri_drivers_la_DEPENDENCIES = ../../libmesa.la \
 	common/libmegadriver_stub.la common/libdricommon.la \
-	$(MEGADRIVERS_DEPS) $(am__DEPENDENCIES_1)
+	common/libxmlconfig.la $(MEGADRIVERS_DEPS) \
+	$(am__DEPENDENCIES_1)
 am_mesa_dri_drivers_la_OBJECTS =
 mesa_dri_drivers_la_OBJECTS = $(am_mesa_dri_drivers_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -579,6 +580,7 @@ mesa_dri_drivers_la_LIBADD = \
         ../../libmesa.la \
         common/libmegadriver_stub.la \
         common/libdricommon.la \
+        common/libxmlconfig.la \
         $(MEGADRIVERS_DEPS) \
         $(DRI_LIB_DEPS) \
         $()

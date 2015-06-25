@@ -131,7 +131,7 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *dpy,
             break;
          }
 
-         ctx->Flags = val;
+         ctx->Flags |= val;
          break;
 
       case EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR:
@@ -194,7 +194,8 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *dpy,
             break;
          }
 
-         ctx->Flags = EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR;
+         if (val == EGL_TRUE)
+            ctx->Flags |= EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR;
          break;
 
       default:

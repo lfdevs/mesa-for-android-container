@@ -772,13 +772,9 @@ dridir = $(DRI_DRIVER_INSTALL_DIR)
 dri_LTLIBRARIES = gallium_dri.la
 nodist_EXTRA_gallium_dri_la_SOURCES = dummy.cpp
 gallium_dri_la_SOURCES = $(am__append_40)
-
-# XXX: Temporary allow duplicated symbols, as the loader pulls in xmlconfig.c
-# which already provides driParse* and driQuery* amongst others.
-# Remove this hack as we come up with a cleaner solution.
 gallium_dri_la_LDFLAGS = -shared -shrext .so -module -avoid-version \
 	$(GC_SECTIONS) $(am__append_3) $(am__append_4) \
-	-Wl,--allow-multiple-definition $(am__append_44)
+	$(am__append_44)
 gallium_dri_la_LIBADD = $(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/mesa/drivers/dri/common/libdricommon.la \
 	$(top_builddir)/src/mesa/drivers/dri/common/libmegadriver_stub.la \

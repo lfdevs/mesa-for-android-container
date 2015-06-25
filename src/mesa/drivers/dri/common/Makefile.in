@@ -147,13 +147,21 @@ libdri_test_stubs_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 am__DEPENDENCIES_1 =
 @DRICOMMON_NEED_LIBDRM_TRUE@libdricommon_la_DEPENDENCIES =  \
 @DRICOMMON_NEED_LIBDRM_TRUE@	$(am__DEPENDENCIES_1)
-am__objects_2 = utils.lo dri_util.lo xmlconfig.lo
+am__objects_2 = utils.lo dri_util.lo
 am_libdricommon_la_OBJECTS = $(am__objects_2)
 libdricommon_la_OBJECTS = $(am_libdricommon_la_OBJECTS)
 libmegadriver_stub_la_LIBADD =
 am__objects_3 = megadriver_stub.lo
 am_libmegadriver_stub_la_OBJECTS = $(am__objects_3)
 libmegadriver_stub_la_OBJECTS = $(am_libmegadriver_stub_la_OBJECTS)
+libxmlconfig_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am__objects_4 = libxmlconfig_la-xmlconfig.lo
+am_libxmlconfig_la_OBJECTS = $(am__objects_4)
+libxmlconfig_la_OBJECTS = $(am_libxmlconfig_la_OBJECTS)
+libxmlconfig_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libxmlconfig_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
+	-o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -189,9 +197,10 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libdri_test_stubs_la_SOURCES) $(libdricommon_la_SOURCES) \
-	$(libmegadriver_stub_la_SOURCES)
+	$(libmegadriver_stub_la_SOURCES) $(libxmlconfig_la_SOURCES)
 DIST_SOURCES = $(libdri_test_stubs_la_SOURCES) \
-	$(libdricommon_la_SOURCES) $(libmegadriver_stub_la_SOURCES)
+	$(libdricommon_la_SOURCES) $(libmegadriver_stub_la_SOURCES) \
+	$(libxmlconfig_la_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -568,7 +577,9 @@ DRI_COMMON_FILES := \
 	utils.c \
 	utils.h \
 	dri_util.c \
-	dri_util.h \
+	dri_util.h
+
+XMLCONFIG_FILES := \
 	xmlconfig.c \
 	xmlconfig.h
 
@@ -591,14 +602,17 @@ megadriver_stub_FILES := \
 EXTRA_DIST = drirc xmlpool.h SConscript
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/ \
 	-I$(top_srcdir)/src/mapi -I$(top_srcdir)/src/mesa/ $(DEFINES) \
-	$(EXPAT_CFLAGS) $(VISIBILITY_CFLAGS) $(am__append_1) \
-	$(am__append_2)
+	$(VISIBILITY_CFLAGS) $(am__append_1) $(am__append_2)
 noinst_LTLIBRARIES = \
 	libdricommon.la \
+	libxmlconfig.la \
 	libmegadriver_stub.la \
 	libdri_test_stubs.la
 
 libdricommon_la_SOURCES = $(DRI_COMMON_FILES)
+libxmlconfig_la_SOURCES = $(XMLCONFIG_FILES)
+libxmlconfig_la_CFLAGS = $(AM_CFLAGS) $(EXPAT_CFLAGS)
+libxmlconfig_la_LIBADD = $(EXPAT_LIBS) -lm
 libdri_test_stubs_la_SOURCES = $(test_stubs_FILES)
 libdri_test_stubs_la_CFLAGS = $(AM_CFLAGS) -DNO_MAIN
 libmegadriver_stub_la_SOURCES = $(megadriver_stub_FILES)
@@ -659,6 +673,9 @@ libdricommon.la: $(libdricommon_la_OBJECTS) $(libdricommon_la_DEPENDENCIES) $(EX
 libmegadriver_stub.la: $(libmegadriver_stub_la_OBJECTS) $(libmegadriver_stub_la_DEPENDENCIES) $(EXTRA_libmegadriver_stub_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libmegadriver_stub_la_OBJECTS) $(libmegadriver_stub_la_LIBADD) $(LIBS)
 
+libxmlconfig.la: $(libxmlconfig_la_OBJECTS) $(libxmlconfig_la_DEPENDENCIES) $(EXTRA_libxmlconfig_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libxmlconfig_la_LINK)  $(libxmlconfig_la_OBJECTS) $(libxmlconfig_la_LIBADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -667,9 +684,9 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdri_test_stubs_la-dri_test.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libxmlconfig_la-xmlconfig.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/megadriver_stub.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utils.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xmlconfig.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -698,6 +715,13 @@ libdri_test_stubs_la-dri_test.lo: dri_test.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='dri_test.c' object='libdri_test_stubs_la-dri_test.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libdri_test_stubs_la_CFLAGS) $(CFLAGS) -c -o libdri_test_stubs_la-dri_test.lo `test -f 'dri_test.c' || echo '$(srcdir)/'`dri_test.c
+
+libxmlconfig_la-xmlconfig.lo: xmlconfig.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libxmlconfig_la_CFLAGS) $(CFLAGS) -MT libxmlconfig_la-xmlconfig.lo -MD -MP -MF $(DEPDIR)/libxmlconfig_la-xmlconfig.Tpo -c -o libxmlconfig_la-xmlconfig.lo `test -f 'xmlconfig.c' || echo '$(srcdir)/'`xmlconfig.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libxmlconfig_la-xmlconfig.Tpo $(DEPDIR)/libxmlconfig_la-xmlconfig.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='xmlconfig.c' object='libxmlconfig_la-xmlconfig.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libxmlconfig_la_CFLAGS) $(CFLAGS) -c -o libxmlconfig_la-xmlconfig.lo `test -f 'xmlconfig.c' || echo '$(srcdir)/'`xmlconfig.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

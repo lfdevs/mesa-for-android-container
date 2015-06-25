@@ -31,15 +31,19 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
 	$(DEFINES) \
-	$(EXPAT_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
 noinst_LTLIBRARIES = \
 	libdricommon.la \
+	libxmlconfig.la \
 	libmegadriver_stub.la \
 	libdri_test_stubs.la
 
 libdricommon_la_SOURCES = $(DRI_COMMON_FILES)
+
+libxmlconfig_la_SOURCES = $(XMLCONFIG_FILES)
+libxmlconfig_la_CFLAGS = $(AM_CFLAGS) $(EXPAT_CFLAGS)
+libxmlconfig_la_LIBADD = $(EXPAT_LIBS) -lm
 
 libdri_test_stubs_la_SOURCES = $(test_stubs_FILES)
 libdri_test_stubs_la_CFLAGS = $(AM_CFLAGS) -DNO_MAIN

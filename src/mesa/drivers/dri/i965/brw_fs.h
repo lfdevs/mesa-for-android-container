@@ -435,7 +435,8 @@ public:
    void setup_payload_interference(struct ra_graph *g, int payload_reg_count,
                                    int first_payload_node);
    void setup_mrf_hack_interference(struct ra_graph *g,
-                                    int first_mrf_hack_node);
+                                    int first_mrf_hack_node,
+                                    int *first_used_mrf);
    int choose_spill_reg(struct ra_graph *g);
    void spill_reg(int spill_reg);
    void split_virtual_grfs();
