@@ -829,6 +829,7 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
    }
    PUSH_DATA(push, nvc0_prim_gl(info->mode));
 #define NVC0_IB_ENTRY_1_NO_PREFETCH (1 << (31 - 8))
+   PUSH_REFN(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
    nouveau_pushbuf_space(push, 0, 0, 1);
    nouveau_pushbuf_data(push,
                         buf->bo, offset, NVC0_IB_ENTRY_1_NO_PREFETCH | size);

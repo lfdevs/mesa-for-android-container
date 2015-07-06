@@ -311,6 +311,14 @@ dri_open_driver(struct gbm_dri_device *dri)
    if (search_paths == NULL)
       search_paths = DEFAULT_DRIVER_DIR;
 
+   /* Temporarily work around dri driver libs that need symbols in libglapi
+    * but don't automatically link it in.
+    */
+   /* XXX: Library name differs on per platforms basis. Update this as
+    * osx/cygwin/windows/bsd gets support for GBM..
+    */
+   dlopen("libglapi.so.0", RTLD_LAZY | RTLD_GLOBAL);
+
    dri->driver = NULL;
    end = search_paths + strlen(search_paths);
    for (p = search_paths; p < end && dri->driver == NULL; p = next + 1) {

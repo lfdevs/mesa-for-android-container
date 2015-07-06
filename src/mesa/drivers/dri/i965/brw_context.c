@@ -562,6 +562,10 @@ brw_initialize_context_constants(struct brw_context *brw)
 	 (i == MESA_SHADER_FRAGMENT);
       ctx->Const.ShaderCompilerOptions[i].EmitNoIndirectUniform = false;
       ctx->Const.ShaderCompilerOptions[i].LowerClipDistance = true;
+
+      /* !ARB_gpu_shader5 */
+      if (brw->gen < 7)
+         ctx->Const.ShaderCompilerOptions[i].EmitNoIndirectSampler = true;
    }
 
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = true;

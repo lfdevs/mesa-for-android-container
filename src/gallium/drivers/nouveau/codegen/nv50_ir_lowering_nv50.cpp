@@ -871,6 +871,7 @@ NV50LoweringPreSSA::handleTXL(TexInstruction *i)
    BasicBlock *joinBB = i->bb->splitAfter(i);
 
    bld.setPosition(currBB, true);
+   assert(!currBB->joinAt);
    currBB->joinAt = bld.mkFlow(OP_JOINAT, joinBB, CC_ALWAYS, NULL);
 
    for (int l = 0; l <= 3; ++l) {

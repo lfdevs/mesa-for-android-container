@@ -628,6 +628,7 @@ nv50_draw_elements(struct nv50_context *nv50, boolean shorten,
          BEGIN_NV04(push, NV50_3D(VERTEX_BEGIN_GL), 1);
          PUSH_DATA (push, prim);
 
+         PUSH_REFN(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
          nouveau_pushbuf_space(push, 8, 0, 1);
 
          switch (index_size) {

@@ -120,7 +120,11 @@ nouveau_drm_screen_create(int fd)
 	if (!screen)
 		goto err;
 
-	util_hash_table_set(fd_tab, intptr_to_pointer(fd), screen);
+	/* Use dupfd in hash table, to avoid errors if the original fd gets
+	 * closed by its owner. The hash key needs to live at least as long as
+	 * the screen.
+	 */
+	util_hash_table_set(fd_tab, intptr_to_pointer(dupfd), screen);
 	screen->refcount = 1;
 	pipe_mutex_unlock(nouveau_screen_mutex);
 	return &screen->base;

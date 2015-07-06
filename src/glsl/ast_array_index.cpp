@@ -228,24 +228,26 @@ _mesa_ast_array_index_to_hir(void *mem_ctx,
        * dynamically uniform expression is undefined.
        */
       if (array->type->element_type()->is_sampler()) {
-	 if (!state->is_version(130, 100)) {
-	    if (state->es_shader) {
-	       _mesa_glsl_warning(&loc, state,
-				  "sampler arrays indexed with non-constant "
-				  "expressions is optional in %s",
-				  state->get_version_string());
-	    } else {
-	       _mesa_glsl_warning(&loc, state,
-				  "sampler arrays indexed with non-constant "
-				  "expressions will be forbidden in GLSL 1.30 "
-				  "and later");
-	    }
-	 } else if (!state->is_version(400, 0) && !state->ARB_gpu_shader5_enable) {
-	    _mesa_glsl_error(&loc, state,
-			     "sampler arrays indexed with non-constant "
-			     "expressions is forbidden in GLSL 1.30 and "
-			     "later");
-	 }
+         if (!state->is_version(400, 0) && !state->ARB_gpu_shader5_enable) {
+            if (!state->is_version(130, 100)) {
+               if (state->es_shader) {
+                  _mesa_glsl_warning(&loc, state,
+                                     "sampler arrays indexed with non-constant "
+                                     "expressions is optional in %s",
+                                     state->get_version_string());
+               } else {
+                  _mesa_glsl_warning(&loc, state,
+                                    "sampler arrays indexed with non-constant "
+                                    "expressions will be forbidden in GLSL 1.30 "
+                                    "and later");
+               }
+            } else if (!state->is_version(400, 0) && !state->ARB_gpu_shader5_enable) {
+               _mesa_glsl_error(&loc, state,
+                                "sampler arrays indexed with non-constant "
+                                "expressions is forbidden in GLSL 1.30 and "
+                                "later");
+            }
+         }
       }
    }
 

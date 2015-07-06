@@ -305,13 +305,33 @@ static void radeon_bo_destroy(struct pb_buffer *_buf)
     if (bo->ptr)
         os_munmap(bo->ptr, bo->base.size);
 
+    if (mgr->va) {
+        if (bo->rws->va_unmap_working) {
+            struct drm_radeon_gem_va va;
+
+            va.handle = bo->handle;
+            va.vm_id = 0;
+            va.operation = RADEON_VA_UNMAP;
+            va.flags = RADEON_VM_PAGE_READABLE |
+                       RADEON_VM_PAGE_WRITEABLE |
+                       RADEON_VM_PAGE_SNOOPED;
+            va.offset = bo->va;
+
+            if (drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_VA, &va,
+				    sizeof(va)) != 0 &&
+		va.operation == RADEON_VA_RESULT_ERROR) {
+                fprintf(stderr, "radeon: Failed to deallocate virtual address for buffer:\n");
+                fprintf(stderr, "radeon:    size      : %d bytes\n", bo->base.size);
+                fprintf(stderr, "radeon:    va        : 0x%016llx\n", (unsigned long long)bo->va);
+            }
+	}
+
+	radeon_bomgr_free_va(mgr, bo->va, bo->base.size);
+    }
+
     /* Close object. */
     args.handle = bo->handle;
     drmIoctl(bo->rws->fd, DRM_IOCTL_GEM_CLOSE, &args);
-
-    if (mgr->va) {
-        radeon_bomgr_free_va(mgr, bo->va, bo->base.size);
-    }
 
     pipe_mutex_destroy(bo->map_mutex);
 

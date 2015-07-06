@@ -276,6 +276,11 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe,
    /* For vertex shaders, make sure not to emit saturate when SM 3.0 is not supported */
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoSat = !st->has_shader_model3;
 
+   if (!ctx->Extensions.ARB_gpu_shader5) {
+      for (i = 0; i < MESA_SHADER_STAGES; i++)
+         ctx->Const.ShaderCompilerOptions[i].EmitNoIndirectSampler = true;
+   }
+
    _mesa_compute_version(ctx);
 
    if (ctx->Version == 0) {

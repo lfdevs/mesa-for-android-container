@@ -1612,6 +1612,7 @@ Converter::insertConvergenceOps(BasicBlock *conv, BasicBlock *fork)
    join->fixed = 1;
    conv->insertHead(join);
 
+   assert(!fork->joinAt);
    fork->joinAt = new_FlowInstruction(func, OP_JOINAT, conv);
    fork->insertBefore(fork->getExit(), fork->joinAt);
 }

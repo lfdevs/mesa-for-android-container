@@ -262,10 +262,12 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
       if (tfb)
          targ->stride = tfb->stride[b];
 
+      buf = nv04_resource(targ->pipe.buffer);
+
+      BCTX_REFN(nvc0->bufctx_3d, TFB, buf, WR);
+
       if (!(nvc0->tfbbuf_dirty & (1 << b)))
          continue;
-
-      buf = nv04_resource(targ->pipe.buffer);
 
       if (!targ->clean)
          nvc0_query_fifo_wait(push, targ->pq);
@@ -280,7 +282,6 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
          PUSH_DATA(push, 0); /* TFB_BUFFER_OFFSET */
          targ->clean = FALSE;
       }
-      BCTX_REFN(nvc0->bufctx_3d, TFB, buf, WR);
    }
    for (; b < 4; ++b)
       IMMED_NVC0(push, NVC0_3D(TFB_BUFFER_ENABLE(b)), 0);

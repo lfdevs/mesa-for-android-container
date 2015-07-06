@@ -65,6 +65,7 @@ _mesa_delete_pipeline_object(struct gl_context *ctx,
 
    _mesa_reference_shader_program(ctx, &obj->ActiveProgram, NULL);
    mtx_destroy(&obj->Mutex);
+   free(obj->Label);
    ralloc_free(obj);
 }
 
@@ -136,8 +137,8 @@ _mesa_free_pipeline_data(struct gl_context *ctx)
  * a non-existent ID.  The spec defines ID 0 as being technically
  * non-existent.
  */
-static inline struct gl_pipeline_object *
-lookup_pipeline_object(struct gl_context *ctx, GLuint id)
+struct gl_pipeline_object *
+_mesa_lookup_pipeline_object(struct gl_context *ctx, GLuint id)
 {
    if (id == 0)
       return NULL;
@@ -225,7 +226,7 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   struct gl_pipeline_object *pipe = lookup_pipeline_object(ctx, pipeline);
+   struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
    struct gl_shader_program *shProg = NULL;
    GLbitfield any_valid_stages;
 
@@ -337,7 +338,7 @@ _mesa_ActiveShaderProgram(GLuint pipeline, GLuint program)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *shProg = NULL;
-   struct gl_pipeline_object *pipe = lookup_pipeline_object(ctx, pipeline);
+   struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
 
    if (program != 0) {
       shProg = _mesa_lookup_shader_program_err(ctx, program,
@@ -399,7 +400,7 @@ _mesa_BindProgramPipeline(GLuint pipeline)
     */
    if (pipeline) {
       /* non-default pipeline object */
-      newObj = lookup_pipeline_object(ctx, pipeline);
+      newObj = _mesa_lookup_pipeline_object(ctx, pipeline);
       if (!newObj) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glBindProgramPipeline(non-gen name)");
@@ -468,7 +469,7 @@ _mesa_DeleteProgramPipelines(GLsizei n, const GLuint *pipelines)
 
    for (i = 0; i < n; i++) {
       struct gl_pipeline_object *obj =
-         lookup_pipeline_object(ctx, pipelines[i]);
+         _mesa_lookup_pipeline_object(ctx, pipelines[i]);
 
       if (obj) {
          ASSERT(obj->Name == pipelines[i]);
@@ -545,7 +546,7 @@ _mesa_IsProgramPipeline(GLuint pipeline)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   struct gl_pipeline_object *obj = lookup_pipeline_object(ctx, pipeline);
+   struct gl_pipeline_object *obj = _mesa_lookup_pipeline_object(ctx, pipeline);
    if (obj == NULL)
       return GL_FALSE;
 
@@ -559,7 +560,7 @@ void GLAPIENTRY
 _mesa_GetProgramPipelineiv(GLuint pipeline, GLenum pname, GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
-   struct gl_pipeline_object *pipe = lookup_pipeline_object(ctx, pipeline);
+   struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
 
    /* Are geometry shaders available in this context?
     */
@@ -797,7 +798,7 @@ _mesa_ValidateProgramPipeline(GLuint pipeline)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   struct gl_pipeline_object *pipe = lookup_pipeline_object(ctx, pipeline);
+   struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
 
    if (!pipe) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
@@ -815,7 +816,7 @@ _mesa_GetProgramPipelineInfoLog(GLuint pipeline, GLsizei bufSize,
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   struct gl_pipeline_object *pipe = lookup_pipeline_object(ctx, pipeline);
+   struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
 
    if (!pipe) {
       _mesa_error(ctx, GL_INVALID_VALUE,

@@ -255,6 +255,8 @@ i915CreateContext(int api,
     * FINISHME: vertex shaders?
     */
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitCondCodes = true;
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoIndirectSampler =
+      true;
 
    struct gl_shader_compiler_options *const fs_options =
       & ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
@@ -266,6 +268,7 @@ i915CreateContext(int api,
    fs_options->EmitNoIndirectOutput = true;
    fs_options->EmitNoIndirectUniform = true;
    fs_options->EmitNoIndirectTemp = true;
+   fs_options->EmitNoIndirectSampler = true;
 
    ctx->Const.MaxDrawBuffers = 1;
    ctx->Const.QueryCounterBits.SamplesPassed = 0;

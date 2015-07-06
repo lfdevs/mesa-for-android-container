@@ -911,7 +911,7 @@ x*yes*yes*)
 esac
 
 # Building Xlib-GLX requires shared glapi to be disabled.
-if test "x$enable_xlib_glx" = xyes; then
+if test "x$enable_shared_glapi$enable_xlib_glx" = xyesyes; then
     AC_MSG_NOTICE([Shared GLAPI should not used with Xlib-GLX, disabling])
     enable_shared_glapi=no
 fi
@@ -1379,8 +1379,15 @@ if test "x$enable_egl" = xyes; then
 
     if test "$enable_static" != yes; then
         if test "x$enable_dri" = xyes; then
-	    HAVE_EGL_DRIVER_DRI2=1
-	fi
+            HAVE_EGL_DRIVER_DRI2=1
+            if test "x$enable_shared_glapi" = xno; then
+                AC_MSG_ERROR([egl_dri2 requires --enable-shared-glapi])
+            fi
+        else
+            # Avoid building an "empty" libEGL. Drop/update this
+            # when other backends (haiku?) come along.
+            AC_MSG_ERROR([egl requires --enable-dri])
+        fi
 
     fi
 fi

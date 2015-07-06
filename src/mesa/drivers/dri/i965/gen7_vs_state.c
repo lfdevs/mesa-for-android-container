@@ -43,17 +43,51 @@ gen7_upload_constant_state(struct brw_context *brw,
    int dwords = brw->gen >= 8 ? 11 : 7;
    BEGIN_BATCH(dwords);
    OUT_BATCH(opcode << 16 | (dwords - 2));
-   OUT_BATCH(active ? stage_state->push_const_size : 0);
-   OUT_BATCH(0);
+
+   /* Workaround for SKL+ (we use option #2 until we have a need for more
+    * constant buffers). This comes from the documentation for 3DSTATE_CONSTANT_*
+    *
+    * The driver must ensure The following case does not occur without a flush
+    * to the 3D engine: 3DSTATE_CONSTANT_* with buffer 3 read length equal to
+    * zero committed followed by a 3DSTATE_CONSTANT_* with buffer 0 read length
+    * not equal to zero committed. Possible ways to avoid this condition
+    * include:
+    *     1. always force buffer 3 to have a non zero read length
+    *     2. always force buffer 0 to a zero read length
+    */
+   if (brw->gen >= 9 && active) {
+      OUT_BATCH(0);
+      OUT_BATCH(stage_state->push_const_size);
+   } else {
+      OUT_BATCH(active ? stage_state->push_const_size : 0);
+      OUT_BATCH(0);
+   }
    /* Pointer to the constant buffer.  Covered by the set of state flags
     * from gen6_prepare_wm_contants
     */
-   OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   if (brw->gen >= 8) {
+   if (brw->gen >= 9 && active) {
       OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      /* XXX: When using buffers other than 0, you need to specify the
+       * graphics virtual address regardless of INSPM/debug bits
+       */
+      OUT_RELOC64(brw->batch.bo, I915_GEM_DOMAIN_RENDER, 0,
+                  stage_state->push_const_offset);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+   } else if (brw->gen>= 8) {
+      OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+   } else {
+      OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);

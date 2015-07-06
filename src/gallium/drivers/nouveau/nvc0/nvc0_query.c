@@ -610,6 +610,7 @@ nvc0_query_pushbuf_submit(struct nouveau_pushbuf *push,
 
 #define NVC0_IB_ENTRY_1_NO_PREFETCH (1 << (31 - 8))
 
+   PUSH_REFN(push, q->bo, NOUVEAU_BO_RD | NOUVEAU_BO_GART);
    nouveau_pushbuf_space(push, 0, 0, 1);
    nouveau_pushbuf_data(push, q->bo, q->offset + result_offset, 4 |
                         NVC0_IB_ENTRY_1_NO_PREFETCH);

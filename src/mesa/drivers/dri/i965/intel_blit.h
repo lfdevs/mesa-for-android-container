@@ -46,6 +46,8 @@ intelEmitCopyBlit(struct brw_context *brw,
                               GLshort w, GLshort h,
 			      GLenum logicop );
 
+bool intel_miptree_blit_compatible_formats(mesa_format src, mesa_format dst);
+
 bool intel_miptree_blit(struct brw_context *brw,
                         struct intel_mipmap_tree *src_mt,
                         int src_level, int src_slice,

@@ -406,6 +406,7 @@ nv50_query_pushbuf_submit(struct nouveau_pushbuf *push,
    /* XXX: does this exist ? */
 #define NV50_IB_ENTRY_1_NO_PREFETCH (0 << (31 - 8))
 
+   PUSH_REFN(push, q->bo, NOUVEAU_BO_RD | NOUVEAU_BO_GART);
    nouveau_pushbuf_space(push, 0, 0, 1);
    nouveau_pushbuf_data(push, q->bo, q->offset + result_offset, 4 |
                         NV50_IB_ENTRY_1_NO_PREFETCH);

@@ -572,9 +572,12 @@ ConstantFolding::expr(Instruction *i,
    case OP_FMA: {
       i->op = OP_ADD;
 
+      /* Move the immediate to the second arg, otherwise the ADD operation
+       * won't be emittable
+       */
       i->setSrc(1, i->getSrc(0));
-      i->src(1).mod = i->src(2).mod;
       i->setSrc(0, i->getSrc(2));
+      i->src(0).mod = i->src(2).mod;
       i->setSrc(2, NULL);
 
       ImmediateValue src0;

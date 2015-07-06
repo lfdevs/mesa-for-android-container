@@ -499,10 +499,14 @@ CodeEmitterNV50::emitForm_MAD(const Instruction *i)
    setSrc(i, 2, 2);
 
    if (i->getIndirect(0, 0)) {
-      assert(!i->getIndirect(1, 0));
+      assert(!i->srcExists(1) || !i->getIndirect(1, 0));
+      assert(!i->srcExists(2) || !i->getIndirect(2, 0));
       setAReg16(i, 0);
-   } else {
+   } else if (i->srcExists(1) && i->getIndirect(1, 0)) {
+      assert(!i->srcExists(2) || !i->getIndirect(2, 0));
       setAReg16(i, 1);
+   } else {
+      setAReg16(i, 2);
    }
 }
 

@@ -97,7 +97,8 @@ target_triplet = @target@
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_1 = $(WAYLAND_CFLAGS)
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_2 = $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la $(WAYLAND_LIBS)
 @HAVE_DRI2_TRUE@am__append_3 = \
-@HAVE_DRI2_TRUE@	libgbm_dri.la $(top_builddir)/src/mapi/shared-glapi/libglapi.la $(LIBDRM_LIBS)
+@HAVE_DRI2_TRUE@	libgbm_dri.la \
+@HAVE_DRI2_TRUE@	$(LIBDRM_LIBS)
 
 subdir = src/gbm
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -152,7 +153,6 @@ am__DEPENDENCIES_1 =
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1)
 @HAVE_DRI2_TRUE@am__DEPENDENCIES_3 = libgbm_dri.la \
-@HAVE_DRI2_TRUE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
 @HAVE_DRI2_TRUE@	$(am__DEPENDENCIES_1)
 libgbm_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
