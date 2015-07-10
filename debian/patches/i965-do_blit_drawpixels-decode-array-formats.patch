@@ -1,0 +1,29 @@
+commit bd38f91f8d80897ca91979962d80d4bc0acef586
+Author: Alexander Monakov <amonakov@gmail.com>
+Date:   Tue Jun 9 20:58:22 2015 +0300
+
+    i965: do_blit_drawpixels: decode array formats
+    
+    Correct a regression introduced by commit 922c0c9fd526 by converting "array
+    format", if received from _mesa_format_from_format_and_type, to mesa_format.
+    
+    References: https://bugs.freedesktop.org/show_bug.cgi?id=90839
+    Signed-off-by: Alexander Monakov <amonakov@gmail.com>
+    Tested-by: AnAkkk <anakin.cs@gmail.com>
+    Reviewed-by: Jason Ekstrand <jason.ekstrand@intel.com>
+    Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+    Cc: mesa-stable@lists.freedesktop.org
+
+diff --git a/src/mesa/drivers/dri/i965/intel_pixel_draw.c b/src/mesa/drivers/dri/i965/intel_pixel_draw.c
+index d68cbb6..189a592 100644
+--- a/src/mesa/drivers/dri/i965/intel_pixel_draw.c
++++ b/src/mesa/drivers/dri/i965/intel_pixel_draw.c
+@@ -78,6 +78,8 @@ do_blit_drawpixels(struct gl_context * ctx,
+    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+ 
+    mesa_format src_format = _mesa_format_from_format_and_type(format, type);
++   if (_mesa_format_is_mesa_array_format(src_format))
++      src_format = _mesa_format_from_array_format(src_format);
+    mesa_format dst_format = irb->mt->format;
+ 
+    /* We can safely discard sRGB encode/decode for the DrawPixels interface */
