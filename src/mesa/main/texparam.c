@@ -32,7 +32,6 @@
 #include <stdbool.h>
 #include "main/glheader.h"
 #include "main/blend.h"
-#include "main/colormac.h"
 #include "main/context.h"
 #include "main/enums.h"
 #include "main/formats.h"
@@ -217,8 +216,8 @@ comp_to_swizzle(GLenum comp)
 static void
 set_swizzle_component(GLuint *swizzle, GLuint comp, GLuint swz)
 {
-   ASSERT(comp < 4);
-   ASSERT(swz <= SWIZZLE_NIL);
+   assert(comp < 4);
+   assert(swz <= SWIZZLE_NIL);
    {
       GLuint mask = 0x7 << (3 * comp);
       GLuint s = (*swizzle & ~mask) | (swz << (3 * comp));
@@ -537,7 +536,7 @@ set_tex_parameteri(struct gl_context *ctx,
                         "glTex%sParameter(swizzle 0x%x)", suffix, params[0]);
             return GL_FALSE;
          }
-         ASSERT(comp < 4);
+         assert(comp < 4);
 
          flush(ctx);
          texObj->Swizzle[comp] = params[0];
@@ -1710,7 +1709,7 @@ get_tex_parameterfv(struct gl_context *ctx,
 
          if (ctx->NewState & (_NEW_BUFFERS | _NEW_FRAG_CLAMP))
             _mesa_update_state_locked(ctx);
-         if (_mesa_get_clamp_fragment_color(ctx)) {
+         if (_mesa_get_clamp_fragment_color(ctx, ctx->DrawBuffer)) {
             params[0] = CLAMP(obj->Sampler.BorderColor.f[0], 0.0F, 1.0F);
             params[1] = CLAMP(obj->Sampler.BorderColor.f[1], 0.0F, 1.0F);
             params[2] = CLAMP(obj->Sampler.BorderColor.f[2], 0.0F, 1.0F);

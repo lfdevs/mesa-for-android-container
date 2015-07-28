@@ -107,8 +107,8 @@ GLint
 _mesa_get_format_bytes(mesa_format format)
 {
    const struct gl_format_info *info = _mesa_get_format_info(format);
-   ASSERT(info->BytesPerBlock);
-   ASSERT(info->BytesPerBlock <= MAX_PIXEL_BYTES ||
+   assert(info->BytesPerBlock);
+   assert(info->BytesPerBlock <= MAX_PIXEL_BYTES ||
           _mesa_is_format_compressed(format));
    return info->BytesPerBlock;
 }
@@ -388,7 +388,7 @@ array_formats_equal(const void *a, const void *b)
 }
 
 static void
-format_array_format_table_init()
+format_array_format_table_init(void)
 {
    const struct gl_format_info *info;
    mesa_array_format array_format;
@@ -811,7 +811,7 @@ _mesa_format_image_size(mesa_format format, GLsizei width,
 
 /**
  * Same as _mesa_format_image_size() but returns a 64-bit value to
- * accomodate very large textures.
+ * accommodate very large textures.
  */
 uint64_t
 _mesa_format_image_size64(mesa_format format, GLsizei width,
@@ -887,7 +887,7 @@ _mesa_test_formats(void)
 {
    GLuint i;
 
-   STATIC_ASSERT(Elements(format_info) == MESA_FORMAT_COUNT);
+   STATIC_ASSERT(ARRAY_SIZE(format_info) == MESA_FORMAT_COUNT);
 
    for (i = 0; i < MESA_FORMAT_COUNT; i++) {
       const struct gl_format_info *info = _mesa_get_format_info(i);

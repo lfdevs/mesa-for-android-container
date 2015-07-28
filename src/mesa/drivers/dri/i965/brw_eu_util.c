@@ -35,7 +35,7 @@
 #include "brw_eu.h"
 
 
-void brw_math_invert( struct brw_compile *p,
+void brw_math_invert( struct brw_codegen *p,
 			     struct brw_reg dst,
 			     struct brw_reg src)
 {
@@ -49,7 +49,7 @@ void brw_math_invert( struct brw_compile *p,
 
 
 
-void brw_copy4(struct brw_compile *p,
+void brw_copy4(struct brw_codegen *p,
 	       struct brw_reg dst,
 	       struct brw_reg src,
 	       unsigned count)
@@ -68,7 +68,7 @@ void brw_copy4(struct brw_compile *p,
 }
 
 
-void brw_copy8(struct brw_compile *p,
+void brw_copy8(struct brw_codegen *p,
 	       struct brw_reg dst,
 	       struct brw_reg src,
 	       unsigned count)
@@ -86,7 +86,7 @@ void brw_copy8(struct brw_compile *p,
 }
 
 
-void brw_copy_indirect_to_indirect(struct brw_compile *p,
+void brw_copy_indirect_to_indirect(struct brw_codegen *p,
 				   struct brw_indirect dst_ptr,
 				   struct brw_indirect src_ptr,
 				   unsigned count)
@@ -102,7 +102,7 @@ void brw_copy_indirect_to_indirect(struct brw_compile *p,
 }
 
 
-void brw_copy_from_indirect(struct brw_compile *p,
+void brw_copy_from_indirect(struct brw_codegen *p,
 			    struct brw_reg dst,
 			    struct brw_indirect ptr,
 			    unsigned count)

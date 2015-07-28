@@ -100,7 +100,7 @@ gen7_upload_constant_state(struct brw_context *brw,
    * that is sent
    */
    if (brw->gen >= 9)
-      brw->state.dirty.brw |= BRW_NEW_SURFACES;
+      brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
 }
 
 

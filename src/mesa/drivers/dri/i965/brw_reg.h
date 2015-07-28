@@ -45,6 +45,7 @@
 #include <stdbool.h>
 #include "main/imports.h"
 #include "main/compiler.h"
+#include "main/macros.h"
 #include "program/prog_instruction.h"
 #include "brw_defines.h"
 
@@ -52,7 +53,7 @@
 extern "C" {
 #endif
 
-struct brw_context;
+struct brw_device_info;
 
 /** Number of general purpose registers (VS, WM, etc) */
 #define BRW_MAX_GRF 128
@@ -86,12 +87,109 @@ struct brw_context;
 #define BRW_SWIZZLE_ZWZW      BRW_SWIZZLE4(2,3,2,3)
 
 static inline bool
-brw_is_single_value_swizzle(int swiz)
+brw_is_single_value_swizzle(unsigned swiz)
 {
    return (swiz == BRW_SWIZZLE_XXXX ||
            swiz == BRW_SWIZZLE_YYYY ||
            swiz == BRW_SWIZZLE_ZZZZ ||
            swiz == BRW_SWIZZLE_WWWW);
+}
+
+/**
+ * Compute the swizzle obtained from the application of \p swz0 on the result
+ * of \p swz1.  The argument ordering is expected to match function
+ * composition.
+ */
+static inline unsigned
+brw_compose_swizzle(unsigned swz0, unsigned swz1)
+{
+   return BRW_SWIZZLE4(
+      BRW_GET_SWZ(swz1, BRW_GET_SWZ(swz0, 0)),
+      BRW_GET_SWZ(swz1, BRW_GET_SWZ(swz0, 1)),
+      BRW_GET_SWZ(swz1, BRW_GET_SWZ(swz0, 2)),
+      BRW_GET_SWZ(swz1, BRW_GET_SWZ(swz0, 3)));
+}
+
+/**
+ * Return the result of applying swizzle \p swz to shuffle the bits of \p mask
+ * (AKA image).
+ */
+static inline unsigned
+brw_apply_swizzle_to_mask(unsigned swz, unsigned mask)
+{
+   unsigned result = 0;
+
+   for (unsigned i = 0; i < 4; i++) {
+      if (mask & (1 << BRW_GET_SWZ(swz, i)))
+         result |= 1 << i;
+   }
+
+   return result;
+}
+
+/**
+ * Return the result of applying the inverse of swizzle \p swz to shuffle the
+ * bits of \p mask (AKA preimage).  Useful to find out which components are
+ * read from a swizzled source given the instruction writemask.
+ */
+static inline unsigned
+brw_apply_inv_swizzle_to_mask(unsigned swz, unsigned mask)
+{
+   unsigned result = 0;
+
+   for (unsigned i = 0; i < 4; i++) {
+      if (mask & (1 << i))
+         result |= 1 << BRW_GET_SWZ(swz, i);
+   }
+
+   return result;
+}
+
+/**
+ * Construct an identity swizzle for the set of enabled channels given by \p
+ * mask.  The result will only reference channels enabled in the provided \p
+ * mask, assuming that \p mask is non-zero.  The constructed swizzle will
+ * satisfy the property that for any instruction OP and any mask:
+ *
+ *    brw_OP(p, brw_writemask(dst, mask),
+ *           brw_swizzle(src, brw_swizzle_for_mask(mask)));
+ *
+ * will be equivalent to the same instruction without swizzle:
+ *
+ *    brw_OP(p, brw_writemask(dst, mask), src);
+ */
+static inline unsigned
+brw_swizzle_for_mask(unsigned mask)
+{
+   unsigned last = (mask ? ffs(mask) - 1 : 0);
+   unsigned swz[4];
+
+   for (unsigned i = 0; i < 4; i++)
+      last = swz[i] = (mask & (1 << i) ? i : last);
+
+   return BRW_SWIZZLE4(swz[0], swz[1], swz[2], swz[3]);
+}
+
+/**
+ * Construct an identity swizzle for the first \p n components of a vector.
+ * When only a subset of channels of a vec4 are used we don't want to
+ * reference the other channels, as that will tell optimization passes that
+ * those other channels are used.
+ */
+static inline unsigned
+brw_swizzle_for_size(unsigned n)
+{
+   return brw_swizzle_for_mask((1 << n) - 1);
+}
+
+/**
+ * Converse of brw_swizzle_for_mask().  Returns the mask of components
+ * accessed by the specified swizzle \p swz.
+ */
+static inline unsigned
+brw_mask_for_swizzle(unsigned swz)
+{
+   return brw_apply_inv_swizzle_to_mask(swz, ~0);
 }
 
 enum PACKED brw_reg_type {
@@ -120,7 +218,7 @@ enum PACKED brw_reg_type {
    BRW_REGISTER_TYPE_Q,
 };
 
-unsigned brw_reg_type_to_hw_type(const struct brw_context *brw,
+unsigned brw_reg_type_to_hw_type(const struct brw_device_info *devinfo,
                                  enum brw_reg_type type, unsigned file);
 const char *brw_reg_type_letters(unsigned brw_reg_type);
 
@@ -167,7 +265,7 @@ struct brw_indirect {
 };
 
 
-static inline int
+static inline unsigned
 type_sz(unsigned type)
 {
    switch(type) {
@@ -606,6 +704,13 @@ brw_vec8_grf(unsigned nr, unsigned subnr)
    return brw_vec8_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
 }
 
+/** Construct float[16] general-purpose register */
+static inline struct brw_reg
+brw_vec16_grf(unsigned nr, unsigned subnr)
+{
+   return brw_vec16_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
+}
+
 
 static inline struct brw_reg
 brw_uw8_grf(unsigned nr, unsigned subnr)
@@ -673,7 +778,11 @@ brw_flag_reg(int reg, int subreg)
                       BRW_ARF_FLAG + reg, subreg);
 }
 
-
+/**
+ * Return the mask register present in Gen4-5, or the related register present
+ * in Gen7.5 and later hardware referred to as "channel enable" register in
+ * the documentation.
+ */
 static inline struct brw_reg
 brw_mask_reg(unsigned subnr)
 {
@@ -720,6 +829,27 @@ stride(struct brw_reg reg, unsigned vstride, unsigned width, unsigned hstride)
    return reg;
 }
 
+/**
+ * Multiply the vertical and horizontal stride of a register by the given
+ * factor \a s.
+ */
+static inline struct brw_reg
+spread(struct brw_reg reg, unsigned s)
+{
+   if (s) {
+      assert(is_power_of_two(s));
+
+      if (reg.hstride)
+         reg.hstride += cvt(s) - 1;
+
+      if (reg.vstride)
+         reg.vstride += cvt(s) - 1;
+
+      return reg;
+   } else {
+      return stride(reg, 0, 1, 0);
+   }
+}
 
 static inline struct brw_reg
 vec16(struct brw_reg reg)
@@ -776,10 +906,8 @@ brw_swizzle(struct brw_reg reg, unsigned x, unsigned y, unsigned z, unsigned w)
 {
    assert(reg.file != BRW_IMMEDIATE_VALUE);
 
-   reg.dw1.bits.swizzle = BRW_SWIZZLE4(BRW_GET_SWZ(reg.dw1.bits.swizzle, x),
-                                       BRW_GET_SWZ(reg.dw1.bits.swizzle, y),
-                                       BRW_GET_SWZ(reg.dw1.bits.swizzle, z),
-                                       BRW_GET_SWZ(reg.dw1.bits.swizzle, w));
+   reg.dw1.bits.swizzle = brw_compose_swizzle(BRW_SWIZZLE4(x, y, z, w),
+                                              reg.dw1.bits.swizzle);
    return reg;
 }
 

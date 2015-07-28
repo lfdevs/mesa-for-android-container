@@ -31,6 +31,10 @@
 #define PV_LAST       1
 #define PV_COUNT      2
 
+/* primitive restart disable/enable flags */
+#define PR_DISABLE 0
+#define PR_ENABLE 1
+#define PR_COUNT 2
 /**
  * Index translator function (for glDrawElements() case)
  *
@@ -42,7 +46,9 @@
  */
 typedef void (*u_translate_func)( const void *in,
                                   unsigned start,
-                                  unsigned nr,
+                                  unsigned in_nr,
+                                  unsigned out_nr,
+                                  unsigned restart_index,
                                   void *out );
 
 /**
@@ -77,6 +83,7 @@ int u_index_translator( unsigned hw_mask,
                         unsigned nr,
                         unsigned in_pv,   /* API */
                         unsigned out_pv,  /* hardware */
+                        unsigned prim_restart,
                         unsigned *out_prim,
                         unsigned *out_index_size,
                         unsigned *out_nr,

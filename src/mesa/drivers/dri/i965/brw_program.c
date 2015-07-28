@@ -43,7 +43,9 @@
 
 #include "brw_context.h"
 #include "brw_shader.h"
+#include "brw_nir.h"
 #include "brw_wm.h"
+#include "intel_batchbuffer.h"
 
 static unsigned
 get_new_program_id(struct intel_screen *screen)
@@ -135,10 +137,14 @@ brwProgramStringNotify(struct gl_context *ctx,
          brw_fragment_program_const(brw->fragment_program);
 
       if (newFP == curFP)
-	 brw->state.dirty.brw |= BRW_NEW_FRAGMENT_PROGRAM;
+	 brw->ctx.NewDriverState |= BRW_NEW_FRAGMENT_PROGRAM;
       newFP->id = get_new_program_id(brw->intelScreen);
 
       brw_add_texrect_params(prog);
+
+      if (ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT].NirOptions) {
+         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_FRAGMENT);
+      }
 
       brw_fs_precompile(ctx, NULL, prog);
       break;
@@ -150,7 +156,7 @@ brwProgramStringNotify(struct gl_context *ctx,
          brw_vertex_program_const(brw->vertex_program);
 
       if (newVP == curVP)
-	 brw->state.dirty.brw |= BRW_NEW_VERTEX_PROGRAM;
+	 brw->ctx.NewDriverState |= BRW_NEW_VERTEX_PROGRAM;
       if (newVP->program.IsPositionInvariant) {
 	 _mesa_insert_mvp_code(ctx, &newVP->program);
       }
@@ -161,6 +167,10 @@ brwProgramStringNotify(struct gl_context *ctx,
       _tnl_program_string(ctx, target, prog);
 
       brw_add_texrect_params(prog);
+
+      if (ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].NirOptions) {
+         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_VERTEX);
+      }
 
       brw_vs_precompile(ctx, NULL, prog);
       break;
@@ -177,6 +187,43 @@ brwProgramStringNotify(struct gl_context *ctx,
    }
 
    return true;
+}
+
+static void
+brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
+{
+   struct brw_context *brw = brw_context(ctx);
+   unsigned bits = (PIPE_CONTROL_DATA_CACHE_INVALIDATE |
+                    PIPE_CONTROL_NO_WRITE |
+                    PIPE_CONTROL_CS_STALL);
+   assert(brw->gen >= 7 && brw->gen <= 8);
+
+   if (barriers & (GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT |
+                   GL_ELEMENT_ARRAY_BARRIER_BIT |
+                   GL_COMMAND_BARRIER_BIT))
+      bits |= PIPE_CONTROL_VF_CACHE_INVALIDATE;
+
+   if (barriers & GL_UNIFORM_BARRIER_BIT)
+      bits |= (PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
+               PIPE_CONTROL_CONST_CACHE_INVALIDATE);
+
+   if (barriers & GL_TEXTURE_FETCH_BARRIER_BIT)
+      bits |= PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE;
+
+   if (barriers & GL_TEXTURE_UPDATE_BARRIER_BIT)
+      bits |= PIPE_CONTROL_RENDER_TARGET_FLUSH;
+
+   if (barriers & GL_FRAMEBUFFER_BARRIER_BIT)
+      bits |= (PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+               PIPE_CONTROL_RENDER_TARGET_FLUSH);
+
+   /* Typed surface messages are handled by the render cache on IVB, so we
+    * need to flush it too.
+    */
+   if (brw->gen == 7 && !brw->is_haswell)
+      bits |= PIPE_CONTROL_RENDER_TARGET_FLUSH;
+
+   brw_emit_pipe_control_flush(brw, bits);
 }
 
 void
@@ -236,6 +283,8 @@ void brwInitFragProgFuncs( struct dd_function_table *functions )
 
    functions->NewShader = brw_new_shader;
    functions->LinkShader = brw_link_shader;
+
+   functions->MemoryBarrier = brw_memory_barrier;
 }
 
 void
@@ -245,10 +294,8 @@ brw_init_shader_time(struct brw_context *brw)
    brw->shader_time.bo = drm_intel_bo_alloc(brw->bufmgr, "shader time",
                                             max_entries * SHADER_TIME_STRIDE,
                                             4096);
-   brw->shader_time.shader_programs = rzalloc_array(brw, struct gl_shader_program *,
-                                                    max_entries);
-   brw->shader_time.programs = rzalloc_array(brw, struct gl_program *,
-                                             max_entries);
+   brw->shader_time.names = rzalloc_array(brw, const char *, max_entries);
+   brw->shader_time.ids = rzalloc_array(brw, int, max_entries);
    brw->shader_time.types = rzalloc_array(brw, enum shader_time_shader_type,
                                           max_entries);
    brw->shader_time.cumulative = rzalloc_array(brw, uint64_t,
@@ -276,7 +323,8 @@ get_written_and_reset(struct brw_context *brw, int i,
                       uint64_t *written, uint64_t *reset)
 {
    enum shader_time_shader_type type = brw->shader_time.types[i];
-   assert(type == ST_VS || type == ST_GS || type == ST_FS8 || type == ST_FS16);
+   assert(type == ST_VS || type == ST_GS || type == ST_FS8 ||
+          type == ST_FS16 || type == ST_CS);
 
    /* Find where we recorded written and reset. */
    int wi, ri;
@@ -297,7 +345,7 @@ print_shader_time_line(const char *stage, const char *name,
 {
    fprintf(stderr, "%-6s%-18s", stage, name);
 
-   if (shader_num != -1)
+   if (shader_num != 0)
       fprintf(stderr, "%4d: ", shader_num);
    else
       fprintf(stderr, "    : ");
@@ -316,7 +364,7 @@ brw_report_shader_time(struct brw_context *brw)
 
    uint64_t scaled[brw->shader_time.num_entries];
    uint64_t *sorted[brw->shader_time.num_entries];
-   uint64_t total_by_type[ST_FS16 + 1];
+   uint64_t total_by_type[ST_CS + 1];
    memset(total_by_type, 0, sizeof(total_by_type));
    double total = 0;
    for (int i = 0; i < brw->shader_time.num_entries; i++) {
@@ -334,6 +382,8 @@ brw_report_shader_time(struct brw_context *brw)
       case ST_FS8_RESET:
       case ST_FS16_WRITTEN:
       case ST_FS16_RESET:
+      case ST_CS_WRITTEN:
+      case ST_CS_RESET:
          /* We'll handle these when along with the time. */
          scaled[i] = 0;
          continue;
@@ -342,6 +392,7 @@ brw_report_shader_time(struct brw_context *brw)
       case ST_GS:
       case ST_FS8:
       case ST_FS16:
+      case ST_CS:
          get_written_and_reset(brw, i, &written, &reset);
          break;
 
@@ -366,6 +417,7 @@ brw_report_shader_time(struct brw_context *brw)
       case ST_GS:
       case ST_FS8:
       case ST_FS16:
+      case ST_CS:
          total_by_type[type] += scaled[i];
          break;
       default:
@@ -385,43 +437,15 @@ brw_report_shader_time(struct brw_context *brw)
    fprintf(stderr, "\n");
    fprintf(stderr, "type          ID                  cycles spent                   %% of total\n");
    for (int s = 0; s < brw->shader_time.num_entries; s++) {
-      const char *shader_name;
       const char *stage;
       /* Work back from the sorted pointers times to a time to print. */
       int i = sorted[s] - scaled;
-      struct gl_shader_program *prog = brw->shader_time.shader_programs[i];
 
       if (scaled[i] == 0)
          continue;
 
-      int shader_num = -1;
-      if (prog) {
-         shader_num = prog->Name;
-
-         /* The fixed function fragment shader generates GLSL IR with a Name
-          * of 0, and nothing else does.
-          */
-         if (prog->Label) {
-            shader_name = prog->Label;
-         } else if (shader_num == 0 &&
-             (brw->shader_time.types[i] == ST_FS8 ||
-              brw->shader_time.types[i] == ST_FS16)) {
-            shader_name = "ff";
-            shader_num = -1;
-         } else {
-            shader_name = "glsl";
-         }
-      } else if (brw->shader_time.programs[i]) {
-         shader_num = brw->shader_time.programs[i]->Id;
-         if (shader_num == 0) {
-            shader_name = "ff";
-            shader_num = -1;
-         } else {
-            shader_name = "prog";
-         }
-      } else {
-         shader_name = "other";
-      }
+      int shader_num = brw->shader_time.ids[i];
+      const char *shader_name = brw->shader_time.names[i];
 
       switch (brw->shader_time.types[i]) {
       case ST_VS:
@@ -436,6 +460,9 @@ brw_report_shader_time(struct brw_context *brw)
       case ST_FS16:
          stage = "fs16";
          break;
+      case ST_CS:
+         stage = "cs";
+         break;
       default:
          stage = "other";
          break;
@@ -446,10 +473,11 @@ brw_report_shader_time(struct brw_context *brw)
    }
 
    fprintf(stderr, "\n");
-   print_shader_time_line("total", "vs", -1, total_by_type[ST_VS], total);
-   print_shader_time_line("total", "gs", -1, total_by_type[ST_GS], total);
-   print_shader_time_line("total", "fs8", -1, total_by_type[ST_FS8], total);
-   print_shader_time_line("total", "fs16", -1, total_by_type[ST_FS16], total);
+   print_shader_time_line("total", "vs", 0, total_by_type[ST_VS], total);
+   print_shader_time_line("total", "gs", 0, total_by_type[ST_GS], total);
+   print_shader_time_line("total", "fs8", 0, total_by_type[ST_FS8], total);
+   print_shader_time_line("total", "fs16", 0, total_by_type[ST_FS16], total);
+   print_shader_time_line("total", "cs", 0, total_by_type[ST_CS], total);
 }
 
 static void
@@ -501,19 +529,24 @@ brw_get_shader_time_index(struct brw_context *brw,
                           struct gl_program *prog,
                           enum shader_time_shader_type type)
 {
-   struct gl_context *ctx = &brw->ctx;
-
    int shader_time_index = brw->shader_time.num_entries++;
    assert(shader_time_index < brw->shader_time.max_entries);
    brw->shader_time.types[shader_time_index] = type;
 
-   _mesa_reference_shader_program(ctx,
-                                  &brw->shader_time.shader_programs[shader_time_index],
-                                  shader_prog);
+   int id = shader_prog ? shader_prog->Name : prog->Id;
+   const char *name;
+   if (id == 0) {
+      name = "ff";
+   } else if (!shader_prog) {
+      name = "prog";
+   } else if (shader_prog->Label) {
+      name = ralloc_strdup(brw->shader_time.names, shader_prog->Label);
+   } else {
+      name = "glsl";
+   }
 
-   _mesa_reference_program(ctx,
-                           &brw->shader_time.programs[shader_time_index],
-                           prog);
+   brw->shader_time.names[shader_time_index] = name;
+   brw->shader_time.ids[shader_time_index] = id;
 
    return shader_time_index;
 }
@@ -566,10 +599,13 @@ brw_dump_ir(const char *stage, struct gl_shader_program *shader_prog,
             struct gl_shader *shader, struct gl_program *prog)
 {
    if (shader_prog) {
-      fprintf(stderr,
-              "GLSL IR for native %s shader %d:\n", stage, shader_prog->Name);
-      _mesa_print_ir(stderr, shader->ir, NULL);
-      fprintf(stderr, "\n\n");
+      if (shader->ir) {
+         fprintf(stderr,
+                 "GLSL IR for native %s shader %d:\n",
+                 stage, shader_prog->Name);
+         _mesa_print_ir(stderr, shader->ir, NULL);
+         fprintf(stderr, "\n\n");
+      }
    } else {
       fprintf(stderr, "ARB_%s_program %d ir for native %s shader\n",
               stage, prog->Id, stage);

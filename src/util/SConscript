@@ -6,11 +6,15 @@ from sys import executable as python_cmd
 
 env = env.Clone()
 
+env.MSVC2008Compat()
+
 env.Prepend(CPPPATH = [
     '#include',
     '#src',
     '#src/mapi',
     '#src/mesa',
+    '#src/gallium/include',
+    '#src/gallium/auxiliary',
     '#src/util',
 ])
 

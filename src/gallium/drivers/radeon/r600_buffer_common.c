@@ -185,6 +185,7 @@ bool r600_init_resource(struct r600_common_screen *rscreen,
 	pb_reference(&old_buf, NULL);
 
 	util_range_set_empty(&res->valid_buffer_range);
+	res->TC_L2_dirty = false;
 
 	if (rscreen->debug_flags & DBG_VM && res->b.b.target == PIPE_BUFFER) {
 		fprintf(stderr, "VM start=0x%"PRIX64"  end=0x%"PRIX64" | Buffer %u bytes\n",
@@ -384,11 +385,10 @@ static const struct u_resource_vtbl r600_buffer_vtbl =
 	NULL				/* transfer_inline_write */
 };
 
-struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
-					 const struct pipe_resource *templ,
-					 unsigned alignment)
+static struct r600_resource *
+r600_alloc_buffer_struct(struct pipe_screen *screen,
+			 const struct pipe_resource *templ)
 {
-	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	struct r600_resource *rbuffer;
 
 	rbuffer = MALLOC_STRUCT(r600_resource);
@@ -398,11 +398,51 @@ struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 	rbuffer->b.b.screen = screen;
 	rbuffer->b.vtbl = &r600_buffer_vtbl;
 	rbuffer->buf = NULL;
+	rbuffer->TC_L2_dirty = false;
 	util_range_init(&rbuffer->valid_buffer_range);
+	return rbuffer;
+}
+
+struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
+					 const struct pipe_resource *templ,
+					 unsigned alignment)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
+	struct r600_resource *rbuffer = r600_alloc_buffer_struct(screen, templ);
 
 	if (!r600_init_resource(rscreen, rbuffer, templ->width0, alignment, TRUE)) {
 		FREE(rbuffer);
 		return NULL;
 	}
+	return &rbuffer->b.b;
+}
+
+struct pipe_resource *
+r600_buffer_from_user_memory(struct pipe_screen *screen,
+			     const struct pipe_resource *templ,
+			     void *user_memory)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
+	struct radeon_winsys *ws = rscreen->ws;
+	struct r600_resource *rbuffer = r600_alloc_buffer_struct(screen, templ);
+
+	rbuffer->domains = RADEON_DOMAIN_GTT;
+	util_range_add(&rbuffer->valid_buffer_range, 0, templ->width0);
+
+	/* Convert a user pointer to a buffer. */
+	rbuffer->buf = ws->buffer_from_ptr(ws, user_memory, templ->width0);
+	if (!rbuffer->buf) {
+		FREE(rbuffer);
+		return NULL;
+	}
+
+	rbuffer->cs_buf = ws->buffer_get_cs_handle(rbuffer->buf);
+
+	if (rscreen->info.r600_virtual_address)
+		rbuffer->gpu_address =
+			ws->buffer_get_virtual_address(rbuffer->cs_buf);
+	else
+		rbuffer->gpu_address = 0;
+
 	return &rbuffer->b.b;
 }

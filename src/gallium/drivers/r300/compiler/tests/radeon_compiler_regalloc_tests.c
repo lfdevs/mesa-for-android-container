@@ -23,6 +23,8 @@
  * Author: Tom Stellard <thomas.stellard@amd.com>
  */
 
+#include <stdio.h>
+
 #include "radeon_program_pair.h"
 
 #include "r300_compiler_tests.h"

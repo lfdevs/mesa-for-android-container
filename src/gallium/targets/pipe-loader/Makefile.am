@@ -30,8 +30,7 @@ AM_CPPFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	-DGALLIUM_RBUG \
-	-DGALLIUM_TRACE \
-	-DGALLIUM_GALAHAD
+	-DGALLIUM_TRACE
 
 pipedir = $(libdir)/gallium-pipe
 pipe_LTLIBRARIES =
@@ -53,10 +52,11 @@ endif
 
 PIPE_LIBS += \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
-	$(top_builddir)/src/gallium/drivers/galahad/libgalahad.la \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
 AM_LDFLAGS = \

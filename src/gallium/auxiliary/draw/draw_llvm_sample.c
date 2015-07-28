@@ -59,8 +59,6 @@ struct draw_llvm_sampler_dynamic_state
    struct lp_sampler_dynamic_state base;
 
    const struct draw_sampler_static_state *static_state;
-
-   LLVMValueRef context_ptr;
 };
 
 
@@ -86,14 +84,13 @@ struct draw_llvm_sampler_soa
 static LLVMValueRef
 draw_llvm_texture_member(const struct lp_sampler_dynamic_state *base,
                          struct gallivm_state *gallivm,
+                         LLVMValueRef context_ptr,
                          unsigned texture_unit,
                          unsigned member_index,
                          const char *member_name,
                          boolean emit_load)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   struct draw_llvm_sampler_dynamic_state *state =
-      (struct draw_llvm_sampler_dynamic_state *)base;
    LLVMValueRef indices[4];
    LLVMValueRef ptr;
    LLVMValueRef res;
@@ -109,7 +106,7 @@ draw_llvm_texture_member(const struct lp_sampler_dynamic_state *base,
    /* context[0].textures[unit].member */
    indices[3] = lp_build_const_int32(gallivm, member_index);
 
-   ptr = LLVMBuildGEP(builder, state->context_ptr, indices, Elements(indices), "");
+   ptr = LLVMBuildGEP(builder, context_ptr, indices, Elements(indices), "");
 
    if (emit_load)
       res = LLVMBuildLoad(builder, ptr, "");
@@ -133,14 +130,13 @@ draw_llvm_texture_member(const struct lp_sampler_dynamic_state *base,
 static LLVMValueRef
 draw_llvm_sampler_member(const struct lp_sampler_dynamic_state *base,
                          struct gallivm_state *gallivm,
+                         LLVMValueRef context_ptr,
                          unsigned sampler_unit,
                          unsigned member_index,
                          const char *member_name,
                          boolean emit_load)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   struct draw_llvm_sampler_dynamic_state *state =
-      (struct draw_llvm_sampler_dynamic_state *)base;
    LLVMValueRef indices[4];
    LLVMValueRef ptr;
    LLVMValueRef res;
@@ -156,7 +152,7 @@ draw_llvm_sampler_member(const struct lp_sampler_dynamic_state *base,
    /* context[0].samplers[unit].member */
    indices[3] = lp_build_const_int32(gallivm, member_index);
 
-   ptr = LLVMBuildGEP(builder, state->context_ptr, indices, Elements(indices), "");
+   ptr = LLVMBuildGEP(builder, context_ptr, indices, Elements(indices), "");
 
    if (emit_load)
       res = LLVMBuildLoad(builder, ptr, "");
@@ -182,9 +178,11 @@ draw_llvm_sampler_member(const struct lp_sampler_dynamic_state *base,
    static LLVMValueRef \
    draw_llvm_texture_##_name( const struct lp_sampler_dynamic_state *base, \
                               struct gallivm_state *gallivm,               \
+                              LLVMValueRef context_ptr,                    \
                               unsigned texture_unit)                       \
    { \
-      return draw_llvm_texture_member(base, gallivm, texture_unit, _index, #_name, _emit_load ); \
+      return draw_llvm_texture_member(base, gallivm, context_ptr, \
+                                      texture_unit, _index, #_name, _emit_load ); \
    }
 
 
@@ -203,9 +201,11 @@ DRAW_LLVM_TEXTURE_MEMBER(mip_offsets, DRAW_JIT_TEXTURE_MIP_OFFSETS, FALSE)
    static LLVMValueRef \
    draw_llvm_sampler_##_name( const struct lp_sampler_dynamic_state *base, \
                               struct gallivm_state *gallivm,               \
+                              LLVMValueRef context_ptr,                    \
                               unsigned sampler_unit)                       \
    { \
-      return draw_llvm_sampler_member(base, gallivm, sampler_unit, _index, #_name, _emit_load ); \
+      return draw_llvm_sampler_member(base, gallivm, context_ptr, \
+                                      sampler_unit, _index, #_name, _emit_load ); \
    }
 
 
@@ -229,36 +229,19 @@ draw_llvm_sampler_soa_destroy(struct lp_build_sampler_soa *sampler)
 static void
 draw_llvm_sampler_soa_emit_fetch_texel(const struct lp_build_sampler_soa *base,
                                        struct gallivm_state *gallivm,
-                                       struct lp_type type,
-                                       boolean is_fetch,
-                                       unsigned texture_index,
-                                       unsigned sampler_index,
-                                       const LLVMValueRef *coords,
-                                       const LLVMValueRef *offsets,
-                                       const struct lp_derivatives *derivs,
-                                       LLVMValueRef lod_bias, /* optional */
-                                       LLVMValueRef explicit_lod, /* optional */
-                                       enum lp_sampler_lod_property lod_property,
-                                       LLVMValueRef *texel)
+                                       const struct lp_sampler_params *params)
 {
    struct draw_llvm_sampler_soa *sampler = (struct draw_llvm_sampler_soa *)base;
+   unsigned texture_index = params->texture_index;
+   unsigned sampler_index = params->sampler_index;
 
    assert(texture_index < PIPE_MAX_SHADER_SAMPLER_VIEWS);
    assert(sampler_index < PIPE_MAX_SAMPLERS);
 
-   lp_build_sample_soa(gallivm,
-                       &sampler->dynamic_state.static_state[texture_index].texture_state,
+   lp_build_sample_soa(&sampler->dynamic_state.static_state[texture_index].texture_state,
                        &sampler->dynamic_state.static_state[sampler_index].sampler_state,
                        &sampler->dynamic_state.base,
-                       type,
-                       is_fetch,
-                       texture_index,
-                       sampler_index,
-                       coords,
-                       offsets,
-                       derivs,
-                       lod_bias, explicit_lod, lod_property,
-                       texel);
+                       gallivm, params);
 }
 
 
@@ -271,6 +254,7 @@ draw_llvm_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
                                       struct lp_type type,
                                       unsigned texture_unit,
                                       unsigned target,
+                                      LLVMValueRef context_ptr,
                                       boolean is_sviewinfo,
                                       enum lp_sampler_lod_property lod_property,
                                       LLVMValueRef explicit_lod, /* optional */
@@ -286,6 +270,7 @@ draw_llvm_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
                            type,
                            texture_unit,
                            target,
+                           context_ptr,
                            is_sviewinfo,
                            lod_property,
                            explicit_lod,
@@ -293,8 +278,7 @@ draw_llvm_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
 }
 
 struct lp_build_sampler_soa *
-draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_state,
-                             LLVMValueRef context_ptr)
+draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_state)
 {
    struct draw_llvm_sampler_soa *sampler;
 
@@ -303,7 +287,7 @@ draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_stat
       return NULL;
 
    sampler->base.destroy = draw_llvm_sampler_soa_destroy;
-   sampler->base.emit_fetch_texel = draw_llvm_sampler_soa_emit_fetch_texel;
+   sampler->base.emit_tex_sample = draw_llvm_sampler_soa_emit_fetch_texel;
    sampler->base.emit_size_query = draw_llvm_sampler_soa_emit_size_query;
    sampler->dynamic_state.base.width = draw_llvm_texture_width;
    sampler->dynamic_state.base.height = draw_llvm_texture_height;
@@ -319,7 +303,6 @@ draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_stat
    sampler->dynamic_state.base.lod_bias = draw_llvm_sampler_lod_bias;
    sampler->dynamic_state.base.border_color = draw_llvm_sampler_border_color;
    sampler->dynamic_state.static_state = static_state;
-   sampler->dynamic_state.context_ptr = context_ptr;
 
    return &sampler->base;
 }

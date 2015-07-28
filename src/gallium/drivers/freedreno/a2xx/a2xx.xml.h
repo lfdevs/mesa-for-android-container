@@ -12,9 +12,9 @@ The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32901 bytes, from 2014-06-02 15:21:30)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10551 bytes, from 2014-11-13 22:44:30)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  15085 bytes, from 2014-12-20 21:49:41)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  64771 bytes, from 2015-03-15 21:55:57)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  51942 bytes, from 2015-02-24 17:14:02)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14895 bytes, from 2015-04-19 15:23:28)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  66709 bytes, from 2015-04-12 18:16:35)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  59314 bytes, from 2015-04-19 16:21:40)
 
 Copyright (C) 2013-2014 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)

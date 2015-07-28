@@ -36,8 +36,6 @@ libGLESv1_CM.so.1 libgles1-mesa #MINVER# | libgles1
  glDisableClientState@Base 7.8.1
  glDrawArrays@Base 7.8.1
  glDrawElements@Base 7.8.1
- glEGLImageTargetRenderbufferStorageOES@Base 7.8.1
- glEGLImageTargetTexture2DOES@Base 7.8.1
  glEnable@Base 7.8.1
  glEnableClientState@Base 7.8.1
  glFinish@Base 7.8.1

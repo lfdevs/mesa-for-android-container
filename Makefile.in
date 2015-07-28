@@ -364,6 +364,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -425,7 +429,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -537,12 +540,14 @@ EXTRA_DIST = \
 	SConstruct
 
 noinst_HEADERS = \
-	include/c99_compat.h				\
-	include/c99					\
-	include/c11					\
-	include/D3D9					\
-	include/VG					\
-	include/HaikuGL					\
+	include/c99_alloca.h \
+	include/c99_compat.h \
+	include/c99_math.h \
+	include/c99 \
+	include/c11 \
+	include/D3D9 \
+	include/HaikuGL \
+	include/no_extern_c.h \
 	include/pci_ids
 
 all: all-recursive

@@ -128,7 +128,7 @@ static void TAG(render_points_verts)( struct gl_context *ctx,
       }
 
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -163,7 +163,7 @@ static void TAG(render_lines_verts)( struct gl_context *ctx,
       }
 
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -195,7 +195,7 @@ static void TAG(render_line_strip_verts)( struct gl_context *ctx,
       FLUSH();
 
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -261,7 +261,7 @@ static void TAG(render_line_loop_verts)( struct gl_context *ctx,
       FLUSH();
 
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -331,7 +331,7 @@ static void TAG(render_tri_strip_verts)( struct gl_context *ctx,
       FLUSH();
 
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -370,7 +370,7 @@ static void TAG(render_tri_fan_verts)( struct gl_context *ctx,
       /* Could write code to emit these as indexed vertices (for the
        * g400, for instance).
        */
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -409,7 +409,7 @@ static void TAG(render_poly_verts)( struct gl_context *ctx,
    else if (HAVE_TRI_FANS && ctx->Light.ShadeModel == GL_SMOOTH) {
       TAG(render_tri_fan_verts)( ctx, start, count, flags );
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -500,7 +500,7 @@ static void TAG(render_quad_strip_verts)( struct gl_context *ctx,
 	 /* Vertices won't fit in a single buffer or elts not
 	  * available - should never happen.
 	  */
-	 fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+        fprintf(stderr, "%s - cannot draw primitive\n", __func__);
 	 return;
       }
    }
@@ -534,7 +534,7 @@ static void TAG(render_quad_strip_verts)( struct gl_context *ctx,
       FLUSH();
 
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -644,7 +644,7 @@ static void TAG(render_quads_verts)( struct gl_context *ctx,
    else {
       /* Vertices won't fit in a single buffer, should never happen.
        */
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -705,7 +705,7 @@ static void TAG(render_points_elts)( struct gl_context *ctx,
 	 currentsz = dmasz;
       }
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -743,7 +743,7 @@ static void TAG(render_lines_elts)( struct gl_context *ctx,
 	 currentsz = dmasz;
       }
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -777,7 +777,7 @@ static void TAG(render_line_strip_elts)( struct gl_context *ctx,
    } else {
       /* TODO: Try to emit as indexed lines.
        */
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -845,7 +845,7 @@ static void TAG(render_line_loop_elts)( struct gl_context *ctx,
       FLUSH();
    } else {
       /* TODO: Try to emit as indexed lines */
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -922,7 +922,7 @@ static void TAG(render_tri_strip_elts)( struct gl_context *ctx,
       }
    } else {
       /* TODO: try to emit as indexed triangles */
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -959,7 +959,7 @@ static void TAG(render_tri_fan_elts)( struct gl_context *ctx,
       }
    } else {
       /* TODO: try to emit as indexed triangles */
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }
@@ -998,7 +998,7 @@ static void TAG(render_poly_elts)( struct gl_context *ctx,
    } else if (HAVE_TRI_FANS && ctx->Light.ShadeModel == GL_SMOOTH) {
       TAG(render_tri_fan_verts)( ctx, start, count, flags );
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __FUNCTION__);
+      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
       return;
    }
 }

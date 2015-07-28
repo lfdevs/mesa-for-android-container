@@ -23,23 +23,21 @@
 #ifndef CLOVER_CORE_COMPILER_HPP
 #define CLOVER_CORE_COMPILER_HPP
 
-#include "util/compat.hpp"
 #include "core/error.hpp"
 #include "core/module.hpp"
 #include "pipe/p_defines.h"
 
 namespace clover {
-   typedef compat::vector<compat::pair<compat::string,
-                                       compat::string> > header_map;
+   typedef std::vector<std::pair<std::string, std::string> > header_map;
 
-   module compile_program_llvm(const compat::string &source,
+   module compile_program_llvm(const std::string &source,
                                const header_map &headers,
                                pipe_shader_ir ir,
-                               const compat::string &target,
-                               const compat::string &opts,
-                               compat::string &r_log);
+                               const std::string &target,
+                               const std::string &opts,
+                               std::string &r_log);
 
-   module compile_program_tgsi(const compat::string &source);
+   module compile_program_tgsi(const std::string &source);
 }
 
 #endif

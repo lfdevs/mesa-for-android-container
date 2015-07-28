@@ -73,15 +73,13 @@ do {                        \
    assert(!str);            \
    __builtin_unreachable(); \
 } while (0)
-#elif _MSC_VER >= 1200
+#elif defined (_MSC_VER)
 #define unreachable(str)    \
 do {                        \
    assert(!str);            \
    __assume(0);             \
 } while (0)
-#endif
-
-#ifndef unreachable
+#else
 #define unreachable(str) assert(!str)
 #endif
 
@@ -99,7 +97,7 @@ do {                       \
 #define assume(expr) ((expr) ? ((void) 0) \
                              : (assert(!"assumption failed"), \
                                 __builtin_unreachable()))
-#elif _MSC_VER >= 1200
+#elif defined (_MSC_VER)
 #define assume(expr) __assume(expr)
 #else
 #define assume(expr) assert(expr)
@@ -155,5 +153,36 @@ do {                       \
 #      define HAS_TRIVIAL_DESTRUCTOR(T) (false)
 #   endif
 #endif
+
+/**
+ * PUBLIC/USED macros
+ *
+ * If we build the library with gcc's -fvisibility=hidden flag, we'll
+ * use the PUBLIC macro to mark functions that are to be exported.
+ *
+ * We also need to define a USED attribute, so the optimizer doesn't
+ * inline a static function that we later use in an alias. - ajax
+ */
+#ifndef PUBLIC
+#  if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
+#    define PUBLIC __attribute__((visibility("default")))
+#    define USED __attribute__((used))
+#  elif defined(_MSC_VER)
+#    define PUBLIC __declspec(dllexport)
+#    define USED
+#  else
+#    define PUBLIC
+#    define USED
+#  endif
+#endif
+
+#ifdef HAVE_FUNC_ATTRIBUTE_UNUSED
+#define UNUSED __attribute__((unused))
+#else
+#define UNUSED
+#endif
+
+/** Compute ceiling of integer quotient of A divided by B. */
+#define DIV_ROUND_UP( A, B )  ( (A) % (B) == 0 ? (A)/(B) : (A)/(B)+1 )
 
 #endif /* UTIL_MACROS_H */

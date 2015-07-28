@@ -2,7 +2,6 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 #include "util/u_dynarray.h"
-#include "util/u_linkage.h"
 #include "util/u_debug.h"
 
 #include "pipe/p_shader_tokens.h"

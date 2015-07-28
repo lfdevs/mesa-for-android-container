@@ -145,7 +145,7 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE:
-      buf.as_scalar<cl_uint>() = 2;
+      buf.as_scalar<cl_uint>() = dev.has_doubles() ? 2 : 0;
       break;
 
    case CL_DEVICE_PREFERRED_VECTOR_WIDTH_HALF:
@@ -196,13 +196,34 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_MEM_BASE_ADDR_ALIGN:
+      buf.as_scalar<cl_uint>() = 128 * 8;
+      break;
+
    case CL_DEVICE_MIN_DATA_TYPE_ALIGN_SIZE:
       buf.as_scalar<cl_uint>() = 128;
       break;
 
    case CL_DEVICE_SINGLE_FP_CONFIG:
+      // This is the "mandated minimum single precision floating-point
+      // capability" for OpenCL 1.1.  In OpenCL 1.2, nothing is required for
+      // custom devices.
       buf.as_scalar<cl_device_fp_config>() =
-         CL_FP_DENORM | CL_FP_INF_NAN | CL_FP_ROUND_TO_NEAREST;
+         CL_FP_INF_NAN | CL_FP_ROUND_TO_NEAREST;
+      break;
+
+   case CL_DEVICE_DOUBLE_FP_CONFIG:
+      if (dev.has_doubles())
+         // This is the "mandated minimum double precision floating-point
+         // capability"
+         buf.as_scalar<cl_device_fp_config>() =
+               CL_FP_FMA
+             | CL_FP_ROUND_TO_NEAREST
+             | CL_FP_ROUND_TO_ZERO
+             | CL_FP_ROUND_TO_INF
+             | CL_FP_INF_NAN
+             | CL_FP_DENORM;
+      else
+         buf.as_scalar<cl_device_fp_config>() = 0;
       break;
 
    case CL_DEVICE_GLOBAL_MEM_CACHE_TYPE:
@@ -283,7 +304,13 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_EXTENSIONS:
-      buf.as_string() = "";
+      buf.as_string() =
+         "cl_khr_global_int32_base_atomics"
+         " cl_khr_global_int32_extended_atomics"
+         " cl_khr_local_int32_base_atomics"
+         " cl_khr_local_int32_extended_atomics"
+         " cl_khr_byte_addressable_store"
+         + std::string(dev.has_doubles() ? " cl_khr_fp64" : "");
       break;
 
    case CL_DEVICE_PLATFORM:
@@ -315,7 +342,7 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_NATIVE_VECTOR_WIDTH_DOUBLE:
-      buf.as_scalar<cl_uint>() = 2;
+      buf.as_scalar<cl_uint>() = dev.has_doubles() ? 2 : 0;
       break;
 
    case CL_DEVICE_NATIVE_VECTOR_WIDTH_HALF:
@@ -323,7 +350,7 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_OPENCL_C_VERSION:
-      buf.as_string() = "OpenCL C 1.1";
+      buf.as_string() = "OpenCL C 1.1 ";
       break;
 
    case CL_DEVICE_PARENT_DEVICE:

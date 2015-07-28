@@ -166,7 +166,7 @@ ilo_blit_resolve_slices_for_hiz(struct ilo_context *ilo,
    unsigned i;
 
    assert(tex->base.target != PIPE_BUFFER &&
-          ilo_texture_can_enable_hiz(tex, level, first_slice, num_slices));
+          ilo_image_can_enable_aux(&tex->image, level));
 
    if (resolve_flags & ILO_TEXTURE_RENDER_WRITE) {
       /*
@@ -190,8 +190,9 @@ ilo_blit_resolve_slices_for_hiz(struct ilo_context *ilo,
       assert(!(resolve_flags & (other_writers | any_reader)));
 
       if (!(resolve_flags & ILO_TEXTURE_CLEAR)) {
+         const uint32_t first_clear_value = ilo_texture_get_slice(tex,
+               level, first_slice)->clear_value;
          bool set_clear_value = false;
-         uint32_t first_clear_value;
 
          for (i = 0; i < num_slices; i++) {
             const struct ilo_texture_slice *slice =
@@ -200,12 +201,8 @@ ilo_blit_resolve_slices_for_hiz(struct ilo_context *ilo,
             if (slice->flags & other_writers) {
                ilo_blitter_rectlist_resolve_hiz(ilo->blitter,
                      res, level, first_slice + i);
-            }
-            else if (i == 0) {
-               first_clear_value = slice->clear_value;
-            }
-            else if (slice->clear_value != first_clear_value &&
-                     (slice->flags & ILO_TEXTURE_RENDER_WRITE)) {
+            } else if (slice->clear_value != first_clear_value &&
+                       (slice->flags & ILO_TEXTURE_RENDER_WRITE)) {
                ilo_blitter_rectlist_resolve_z(ilo->blitter,
                      res, level, first_slice + i);
                set_clear_value = true;

@@ -61,12 +61,10 @@ EXTRA_DIST = \
 	SConscript
 
 BUILT_SOURCES = options.h
-CLEANFILES = $(MOS) options.h
-
-# All generated files are cleaned up.
-clean:
-	-rm -f $(POT) options.h *~
-	-rm -rf $(LANGS)
+CLEANFILES = \
+	options.h
+	$(POS) \
+	$(MOS)
 
 # Default target options.h
 options.h: LOCALEDIR := .

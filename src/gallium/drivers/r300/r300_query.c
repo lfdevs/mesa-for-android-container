@@ -85,24 +85,25 @@ void r300_resume_query(struct r300_context *r300,
     r300_mark_atom_dirty(r300, &r300->query_start);
 }
 
-static void r300_begin_query(struct pipe_context* pipe,
-                             struct pipe_query* query)
+static boolean r300_begin_query(struct pipe_context* pipe,
+                                struct pipe_query* query)
 {
     struct r300_context* r300 = r300_context(pipe);
     struct r300_query* q = r300_query(query);
 
     if (q->type == PIPE_QUERY_GPU_FINISHED)
-        return;
+        return true;
 
     if (r300->query_current != NULL) {
         fprintf(stderr, "r300: begin_query: "
                 "Some other query has already been started.\n");
         assert(0);
-        return;
+        return false;
     }
 
     q->num_results = 0;
     r300_resume_query(r300, q);
+    return true;
 }
 
 void r300_stop_query(struct r300_context *r300)

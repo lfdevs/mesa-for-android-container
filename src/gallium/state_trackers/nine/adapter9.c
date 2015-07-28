@@ -311,7 +311,8 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
     if (CheckFormat == D3DFMT_ATOC && RType == D3DRTYPE_SURFACE)
         return D3D_OK;
 
-    if (Usage & D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING)
+    if ((Usage & D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING) &&
+        (Usage & D3DUSAGE_RENDERTARGET))
         bind |= PIPE_BIND_BLENDABLE;
 
     if (Usage & D3DUSAGE_DMAP) {
@@ -545,7 +546,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                      /*D3DDEVCAPS_RTPATCHHANDLEZERO |*/
                      /*D3DDEVCAPS_SEPARATETEXTUREMEMORIES |*/
                      /*D3DDEVCAPS_TEXTURENONLOCALVIDMEM |*/
-                     D3DDEVCAPS_TEXTURESYSTEMMEMORY |
+                     /* D3DDEVCAPS_TEXTURESYSTEMMEMORY |*/
                      D3DDEVCAPS_TEXTUREVIDEOMEMORY |
                      D3DDEVCAPS_TLVERTEXSYSTEMMEMORY |
                      D3DDEVCAPS_TLVERTEXVIDEOMEMORY;

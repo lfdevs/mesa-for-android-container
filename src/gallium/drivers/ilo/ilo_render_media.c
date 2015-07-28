@@ -26,10 +26,10 @@
  */
 
 #include "genhw/genhw.h"
+#include "core/ilo_builder_media.h"
+#include "core/ilo_builder_mi.h"
+#include "core/ilo_builder_render.h"
 
-#include "ilo_builder_media.h"
-#include "ilo_builder_mi.h"
-#include "ilo_builder_render.h"
 #include "ilo_state.h"
 #include "ilo_render_gen.h"
 

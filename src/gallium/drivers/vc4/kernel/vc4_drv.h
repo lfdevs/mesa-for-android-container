@@ -39,7 +39,10 @@ struct vc4_bo_exec_state {
 	enum vc4_bo_mode mode;
 };
 
-struct exec_info {
+struct vc4_exec_info {
+	/* Sequence number for this bin/render job. */
+	uint64_t seqno;
+
 	/* Kernel-space copy of the ioctl arguments */
 	struct drm_vc4_submit_cl *args;
 
@@ -159,13 +162,13 @@ vc4_validate_cl(struct drm_device *dev,
                 void *unvalidated,
                 uint32_t len,
                 bool is_bin,
-                struct exec_info *exec);
+                bool has_bin,
+                struct vc4_exec_info *exec);
 
 int
-vc4_validate_shader_recs(struct drm_device *dev, struct exec_info *exec);
+vc4_validate_shader_recs(struct drm_device *dev, struct vc4_exec_info *exec);
 
 struct vc4_validated_shader_info *
-vc4_validate_shader(struct drm_gem_cma_object *shader_obj,
-                    uint32_t start_offset);
+vc4_validate_shader(struct drm_gem_cma_object *shader_obj);
 
 #endif /* VC4_DRV_H */

@@ -113,7 +113,7 @@ fs_visitor::dead_code_eliminate()
             if (inst->src[i].file == GRF) {
                int var = live_intervals->var_from_reg(inst->src[i]);
 
-               for (int j = 0; j < inst->regs_read(this, i); j++) {
+               for (int j = 0; j < inst->regs_read(i); j++) {
                   BITSET_SET(live, var + j);
                }
             }

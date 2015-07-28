@@ -70,7 +70,7 @@ translate_indices(struct svga_hwtnl *hwtnl, struct pipe_resource *src,
    if (dst_map == NULL)
       goto fail;
 
-   translate((const char *) src_map + offset, 0, nr, dst_map);
+   translate((const char *) src_map + offset, 0, 0, nr, 0, dst_map);
 
    pipe_buffer_unmap(pipe, src_transfer);
    pipe_buffer_unmap(pipe, dst_transfer);
@@ -153,6 +153,7 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                                     count,
                                     hwtnl->api_pv,
                                     hwtnl->hw_pv,
+                                    PR_DISABLE,
                                     &gen_prim, &gen_size, &gen_nr, &gen_func);
    }
 

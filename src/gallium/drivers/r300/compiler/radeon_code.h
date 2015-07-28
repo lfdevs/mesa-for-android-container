@@ -175,12 +175,6 @@ struct r300_fragment_program_external_state {
 		 * and right before texture fetch. The scaling factor is given by
 		 * RC_STATE_R300_TEXSCALE_FACTOR. */
 		unsigned clamp_and_scale_before_fetch : 1;
-
-		/**
-		 * Fetch RGTC1_SNORM or LATC1_SNORM as UNORM and convert UNORM -> SNORM
-		 * in the shader.
-		 */
-		unsigned convert_unorm_to_snorm:1;
 	} unit[16];
 
 	unsigned alpha_to_one:1;

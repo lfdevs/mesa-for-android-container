@@ -156,7 +156,7 @@ emit_gmem2mem_surf(struct fd_context *ctx,
 			A4XX_RB_COPY_DEST_INFO_SWAP(fd4_pipe2swap(psurf->format)));
 
 	fd4_draw(ctx, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
-			DI_SRC_SEL_AUTO_INDEX, 2, INDEX_SIZE_IGN, 0, 0, NULL);
+			DI_SRC_SEL_AUTO_INDEX, 2, 1, INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
@@ -270,7 +270,7 @@ emit_mem2gmem_surf(struct fd_context *ctx, uint32_t base,
 	fd4_emit_gmem_restore_tex(ring, psurf);
 
 	fd4_draw(ctx, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
-			DI_SRC_SEL_AUTO_INDEX, 2, INDEX_SIZE_IGN, 0, 0, NULL);
+			DI_SRC_SEL_AUTO_INDEX, 2, 1, INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
@@ -282,7 +282,7 @@ fd4_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
 	struct fd4_emit emit = {
 			.vtx = &fd4_ctx->blit_vbuf_state,
-			.prog = &ctx->blit_prog,
+			.prog = &ctx->blit_prog[0],
 			.key = key,
 			.format = fd4_emit_format(pfb->cbufs[0]),
 	};

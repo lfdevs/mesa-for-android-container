@@ -37,19 +37,20 @@
 using namespace brw;
 
 static bool
-can_do_writemask(const struct brw_context *brw,
+can_do_writemask(const struct brw_device_info *devinfo,
                  const vec4_instruction *inst)
 {
    switch (inst->opcode) {
    case SHADER_OPCODE_GEN4_SCRATCH_READ:
    case VS_OPCODE_PULL_CONSTANT_LOAD:
    case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
+   case VS_OPCODE_SET_SIMD4X2_HEADER_GEN9:
       return false;
    default:
       /* The MATH instruction on Gen6 only executes in align1 mode, which does
        * not support writemasking.
        */
-      if (brw->gen == 6 && inst->is_math())
+      if (devinfo->gen == 6 && inst->is_math())
          return false;
 
       if (inst->is_tex())
@@ -80,15 +81,16 @@ vec4_visitor::dead_code_eliminate()
          if (inst->dst.file == GRF && !inst->has_side_effects()) {
             bool result_live[4] = { false };
 
-            for (int c = 0; c < 4; c++) {
-               int var = inst->dst.reg * 4 + c;
-               result_live[c] = BITSET_TEST(live, var);
+            for (unsigned i = 0; i < inst->regs_written; i++) {
+               for (int c = 0; c < 4; c++)
+                  result_live[c] |= BITSET_TEST(
+                     live, var_from_reg(alloc, offset(inst->dst, i), c));
             }
 
             /* If the instruction can't do writemasking, then it's all or
              * nothing.
              */
-            if (!can_do_writemask(brw, inst)) {
+            if (!can_do_writemask(devinfo, inst)) {
                bool result = result_live[0] | result_live[1] |
                              result_live[2] | result_live[3];
                result_live[0] = result;
@@ -123,10 +125,12 @@ vec4_visitor::dead_code_eliminate()
          }
 
          if (inst->dst.file == GRF && !inst->predicate) {
-            for (int c = 0; c < 4; c++) {
-               if (inst->dst.writemask & (1 << c)) {
-                  int var = inst->dst.reg * 4 + c;
-                  BITSET_CLEAR(live, var);
+            for (unsigned i = 0; i < inst->regs_written; i++) {
+               for (int c = 0; c < 4; c++) {
+                  if (inst->dst.writemask & (1 << c)) {
+                     BITSET_CLEAR(live, var_from_reg(alloc,
+                                                     offset(inst->dst, i), c));
+                  }
                }
             }
          }
@@ -137,11 +141,11 @@ vec4_visitor::dead_code_eliminate()
 
          for (int i = 0; i < 3; i++) {
             if (inst->src[i].file == GRF) {
-               for (int c = 0; c < 4; c++) {
-                  int swiz = BRW_GET_SWZ(inst->src[i].swizzle, c);
-                  int var = inst->src[i].reg * 4 + swiz;
-
-                  BITSET_SET(live, var);
+               for (unsigned j = 0; j < inst->regs_read(i); j++) {
+                  for (int c = 0; c < 4; c++) {
+                     BITSET_SET(live, var_from_reg(alloc,
+                                                   offset(inst->src[i], j), c));
+                  }
                }
             }
          }

@@ -254,7 +254,7 @@ gen6_gs_visitor::visit(ir_end_primitive *)
        * vertex.
        */
       src_reg offset(this, glsl_type::uint_type);
-      emit(ADD(dst_reg(offset), this->vertex_output_offset, brw_imm_d(-1)));
+      emit(ADD(dst_reg(offset), this->vertex_output_offset, src_reg(-1)));
 
       src_reg dst(this->vertex_output);
       dst.reladdr = ralloc(mem_ctx, src_reg);
@@ -384,7 +384,7 @@ gen6_gs_visitor::emit_thread_end()
                      dst_reg(this->temp), this->prim_count, this->svbi);
       } else {
          inst = emit(GS_OPCODE_FF_SYNC,
-                     dst_reg(this->temp), this->prim_count, brw_imm_ud(0u));
+                     dst_reg(this->temp), this->prim_count, src_reg(0u));
       }
       inst->base_mrf = base_mrf;
 
@@ -487,8 +487,8 @@ gen6_gs_visitor::emit_thread_end()
    if (c->prog_data.gen6_xfb_enabled) {
       /* When emitting EOT, set SONumPrimsWritten Increment Value. */
       src_reg data(this, glsl_type::uint_type);
-      emit(AND(dst_reg(data), this->sol_prim_written, brw_imm_ud(0xffffu)));
-      emit(SHL(dst_reg(data), data, brw_imm_ud(16u)));
+      emit(AND(dst_reg(data), this->sol_prim_written, src_reg(0xffffu)));
+      emit(SHL(dst_reg(data), data, src_reg(16u)));
       emit(GS_OPCODE_SET_DWORD_2, dst_reg(MRF, base_mrf), data);
    }
 
@@ -624,7 +624,7 @@ gen6_gs_visitor::xfb_write()
     * transform feedback is in interleaved or separate attribs mode.
     */
    src_reg sol_temp(this, glsl_type::uvec4_type);
-   emit(ADD(dst_reg(sol_temp), this->svbi, brw_imm_ud(num_verts)));
+   emit(ADD(dst_reg(sol_temp), this->svbi, src_reg(num_verts)));
 
    /* Compare SVBI calculated number with the maximum value, which is
     * in R1.4 (previously saved in this->max_svbi) for gen6.
@@ -671,7 +671,7 @@ gen6_gs_visitor::xfb_program(unsigned vertex, unsigned num_verts)
     * (all vertices). Otherwise, avoid writing any vertices for it
     */
    emit(ADD(dst_reg(sol_temp), this->sol_prim_written, 1u));
-   emit(MUL(dst_reg(sol_temp), sol_temp, brw_imm_ud(num_verts)));
+   emit(MUL(dst_reg(sol_temp), sol_temp, src_reg(num_verts)));
    emit(ADD(dst_reg(sol_temp), sol_temp, this->svbi));
    emit(CMP(dst_null_d(), sol_temp, this->max_svbi, BRW_CONDITIONAL_LE));
    emit(IF(BRW_PREDICATE_NORMAL));
@@ -736,7 +736,7 @@ gen6_gs_visitor::xfb_program(unsigned vertex, unsigned num_verts)
              */
             emit(ADD(dst_reg(this->destination_indices),
                      this->destination_indices,
-                     brw_imm_ud(num_verts)));
+                     src_reg(num_verts)));
             emit(ADD(dst_reg(this->sol_prim_written),
                      this->sol_prim_written, 1u));
          }

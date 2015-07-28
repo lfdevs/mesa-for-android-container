@@ -38,6 +38,12 @@
 #include "vc4_cl.h"
 #include "vc4_qir.h"
 
+#ifdef USE_VC4_SIMULATOR
+#define using_vc4_simulator true
+#else
+#define using_vc4_simulator false
+#endif
+
 #define VC4_DIRTY_BLEND         (1 <<  0)
 #define VC4_DIRTY_RASTERIZER    (1 <<  1)
 #define VC4_DIRTY_ZSA           (1 <<  2)
@@ -297,6 +303,11 @@ struct vc4_depth_stencil_alpha_state {
         uint32_t stencil_uniforms[3];
 };
 
+#define perf_debug(...) do {                            \
+        if (unlikely(vc4_debug & VC4_DEBUG_PERF))       \
+                fprintf(stderr, __VA_ARGS__);           \
+} while (0)
+
 static inline struct vc4_context *
 vc4_context(struct pipe_context *pcontext)
 {
@@ -320,6 +331,9 @@ void vc4_write_uniforms(struct vc4_context *vc4,
                         struct vc4_texture_stateobj *texstate);
 
 void vc4_flush(struct pipe_context *pctx);
+void vc4_job_init(struct vc4_context *vc4);
+void vc4_job_submit(struct vc4_context *vc4);
+void vc4_job_reset(struct vc4_context *vc4);
 bool vc4_cl_references_bo(struct pipe_context *pctx, struct vc4_bo *bo);
 void vc4_emit_state(struct pipe_context *pctx);
 void vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c);
@@ -332,4 +346,5 @@ bool vc4_tex_format_supported(enum pipe_format f);
 uint8_t vc4_get_tex_format(enum pipe_format f);
 const uint8_t *vc4_get_format_swizzle(enum pipe_format f);
 void vc4_init_query_functions(struct vc4_context *vc4);
+void vc4_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info);
 #endif /* VC4_CONTEXT_H */

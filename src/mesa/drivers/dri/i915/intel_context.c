@@ -422,7 +422,7 @@ intelInitContext(struct intel_context *intel,
    if (!_mesa_initialize_context(&intel->ctx, api, mesaVis, shareCtx,
                                  functions)) {
       *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
-      printf("%s: failed to init mesa context\n", __FUNCTION__);
+      printf("%s: failed to init mesa context\n", __func__);
       return false;
    }
 

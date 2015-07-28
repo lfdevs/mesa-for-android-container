@@ -83,11 +83,9 @@ update_max_array_access(ir_rvalue *ir, int idx, YYLTYPE *loc,
 
       if (deref_var != NULL) {
          if (deref_var->var->is_interface_instance()) {
-            const glsl_type *interface_type =
-               deref_var->var->get_interface_type();
             unsigned field_index =
                deref_record->record->type->field_index(deref_record->field);
-            assert(field_index < interface_type->length);
+            assert(field_index < deref_var->var->get_interface_type()->length);
 
             unsigned *const max_ifc_array_access =
                deref_var->var->get_max_ifc_array_access();
@@ -227,26 +225,24 @@ _mesa_ast_array_index_to_hir(void *mem_ctx,
        * values *do* diverge, then the behavior of the operation requiring a
        * dynamically uniform expression is undefined.
        */
-      if (array->type->element_type()->is_sampler()) {
+      if (array->type->without_array()->is_sampler()) {
          if (!state->is_version(400, 0) && !state->ARB_gpu_shader5_enable) {
-            if (!state->is_version(130, 100)) {
-               if (state->es_shader) {
-                  _mesa_glsl_warning(&loc, state,
-                                     "sampler arrays indexed with non-constant "
-                                     "expressions is optional in %s",
-                                     state->get_version_string());
-               } else {
-                  _mesa_glsl_warning(&loc, state,
-                                    "sampler arrays indexed with non-constant "
-                                    "expressions will be forbidden in GLSL 1.30 "
-                                    "and later");
-               }
-            } else if (!state->is_version(400, 0) && !state->ARB_gpu_shader5_enable) {
+            if (state->is_version(130, 300))
                _mesa_glsl_error(&loc, state,
                                 "sampler arrays indexed with non-constant "
-                                "expressions is forbidden in GLSL 1.30 and "
-                                "later");
-            }
+                                "expressions are forbidden in GLSL %s "
+                                "and later",
+                                state->es_shader ? "ES 3.00" : "1.30");
+            else if (state->es_shader)
+               _mesa_glsl_warning(&loc, state,
+                                  "sampler arrays indexed with non-constant "
+                                  "expressions will be forbidden in GLSL "
+                                  "3.00 and later");
+            else
+               _mesa_glsl_warning(&loc, state,
+                                  "sampler arrays indexed with non-constant "
+                                  "expressions will be forbidden in GLSL "
+                                  "1.30 and later");
          }
       }
    }

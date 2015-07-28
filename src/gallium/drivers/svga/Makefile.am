@@ -26,7 +26,8 @@ include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
-	$(GALLIUM_DRIVER_CFLAGS)
+	$(GALLIUM_DRIVER_CFLAGS) \
+	$(MSVC2013_COMPAT_CFLAGS)
 
 #On some systems -std= must be added to CFLAGS to be the last -std=
 CFLAGS += -std=gnu99

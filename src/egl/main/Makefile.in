@@ -126,11 +126,10 @@ target_triplet = @target@
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	../wayland/wayland-drm/libwayland-drm.la
 @HAVE_EGL_PLATFORM_DRM_TRUE@am__append_5 = -DHAVE_DRM_PLATFORM
 @HAVE_EGL_PLATFORM_DRM_TRUE@am__append_6 = ../../gbm/libgbm.la
-@HAVE_EGL_PLATFORM_FBDEV_TRUE@am__append_7 = -DHAVE_FBDEV_PLATFORM
-@HAVE_EGL_PLATFORM_NULL_TRUE@am__append_8 = -DHAVE_NULL_PLATFORM
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_9 = -D_EGL_BUILT_IN_DRIVER_DRI2 \
+@HAVE_EGL_PLATFORM_NULL_TRUE@am__append_7 = -DHAVE_NULL_PLATFORM
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_8 = -D_EGL_BUILT_IN_DRIVER_DRI2 \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-DHAVE_XCB_DRI2
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_10 =  \
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_9 =  \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	../drivers/dri2/libegl_dri2.la \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(DLOPEN_LIBS) $(LIBDRM_LIBS)
 subdir = src/egl/main
@@ -197,8 +196,8 @@ libEGL_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
 	$(am__DEPENDENCIES_3) $(am__append_6) $(am__DEPENDENCIES_4)
 am__objects_1 = eglapi.lo eglarray.lo eglconfig.lo eglcontext.lo \
 	eglcurrent.lo egldisplay.lo egldriver.lo eglfallbacks.lo \
-	eglglobals.lo eglimage.lo egllog.lo eglmisc.lo eglmode.lo \
-	eglscreen.lo eglstring.lo eglsurface.lo eglsync.lo
+	eglglobals.lo eglimage.lo egllog.lo eglstring.lo eglsurface.lo \
+	eglsync.lo
 am_libEGL_la_OBJECTS = $(am__objects_1)
 libEGL_la_OBJECTS = $(am_libEGL_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -398,6 +397,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -459,7 +462,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -571,13 +573,6 @@ LIBEGL_C_FILES := \
 	eglimage.h \
 	egllog.c \
 	egllog.h \
-	eglmisc.c \
-	eglmisc.h \
-	eglmode.c \
-	eglmode.h \
-	eglmutex.h \
-	eglscreen.c \
-	eglscreen.h \
 	eglstring.c \
 	eglstring.h \
 	eglsurface.c \
@@ -591,13 +586,13 @@ AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/gbm/main \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM) \
 	-D_EGL_DRIVER_SEARCH_DIR=\"$(libdir)/egl\" -D_EGL_OS_UNIX=1 \
 	$(am__append_1) $(am__append_3) $(am__append_5) \
-	$(am__append_7) $(am__append_8) $(am__append_9)
+	$(am__append_7) $(am__append_8)
 lib_LTLIBRARIES = libEGL.la
 libEGL_la_SOURCES = \
 	${LIBEGL_C_FILES}
 
 libEGL_la_LIBADD = $(EGL_LIB_DEPS) $(am__append_2) $(am__append_4) \
-	$(am__append_6) $(am__append_10)
+	$(am__append_6) $(am__append_9)
 libEGL_la_LDFLAGS = \
 	-no-undefined \
 	-version-number 1:0 \
@@ -714,9 +709,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglglobals.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/egllog.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglmisc.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglmode.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglscreen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglstring.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglsurface.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eglsync.Plo@am__quote@

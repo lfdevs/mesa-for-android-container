@@ -68,6 +68,8 @@
 #include "tnl/t_pipeline.h"
 #include "util/ralloc.h"
 
+#include "glsl/nir/nir.h"
+
 /***************************************
  * Mesa's Driver Functions
  ***************************************/
@@ -232,8 +234,8 @@ intel_glFlush(struct gl_context *ctx)
 
    intel_batchbuffer_flush(brw);
    intel_flush_front(ctx);
-   if (brw_is_front_buffer_drawing(ctx->DrawBuffer))
-      brw->need_throttle = true;
+
+   brw->need_flush_throttle = true;
 }
 
 static void
@@ -286,6 +288,9 @@ brw_init_driver_functions(struct brw_context *brw,
       gen6_init_queryobj_functions(functions);
    else
       gen4_init_queryobj_functions(functions);
+   brw_init_compute_functions(functions);
+   if (brw->gen >= 7)
+      brw_init_conditional_render_functions(functions);
 
    functions->QuerySamplesForFormat = brw_query_samples_for_format;
 
@@ -428,14 +433,21 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.MaxLineWidthAA = 40.0;
       ctx->Const.LineWidthGranularity = 0.125;
    } else if (brw->gen >= 6) {
-      ctx->Const.MaxLineWidth = 7.875;
-      ctx->Const.MaxLineWidthAA = 7.875;
+      ctx->Const.MaxLineWidth = 7.375;
+      ctx->Const.MaxLineWidthAA = 7.375;
       ctx->Const.LineWidthGranularity = 0.125;
    } else {
       ctx->Const.MaxLineWidth = 7.0;
       ctx->Const.MaxLineWidthAA = 7.0;
       ctx->Const.LineWidthGranularity = 0.5;
    }
+
+   /* For non-antialiased lines, we have to round the line width to the
+    * nearest whole number. Make sure that we don't advertise a line
+    * width that, when rounded, will be beyond the actual hardware
+    * maximum.
+    */
+   assert(roundf(ctx->Const.MaxLineWidth) <= ctx->Const.MaxLineWidth);
 
    ctx->Const.MinPointSize = 1.0;
    ctx->Const.MinPointSizeAA = 1.0;
@@ -549,6 +561,16 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxInputComponents = 128;
    }
 
+   static const nir_shader_compiler_options nir_options = {
+      .native_integers = true,
+      /* In order to help allow for better CSE at the NIR level we tell NIR
+       * to split all ffma instructions during opt_algebraic and we then
+       * re-combine them as a later step.
+       */
+      .lower_ffma = true,
+      .lower_sub = true,
+   };
+
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (int i = 0; i < MESA_SHADER_STAGES; i++) {
       ctx->Const.ShaderCompilerOptions[i].MaxIfDepth = brw->gen < 6 ? 16 : UINT_MAX;
@@ -578,14 +600,22 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoIndirectOutput = true;
       ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoIndirectTemp = true;
       ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS = false;
+
+      if (brw_env_var_as_boolean("INTEL_USE_NIR", true))
+         ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].NirOptions = &nir_options;
    }
 
+   if (brw_env_var_as_boolean("INTEL_USE_NIR", true))
+      ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT].NirOptions = &nir_options;
+
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_COMPUTE].NirOptions = &nir_options;
+
    /* ARB_viewport_array */
-   if (brw->gen >= 7 && ctx->API == API_OPENGL_CORE) {
-      ctx->Const.MaxViewports = GEN7_NUM_VIEWPORTS;
+   if (brw->gen >= 6 && ctx->API == API_OPENGL_CORE) {
+      ctx->Const.MaxViewports = GEN6_NUM_VIEWPORTS;
       ctx->Const.ViewportSubpixelBits = 0;
 
-      /* Cast to float before negating becuase MaxViewportWidth is unsigned.
+      /* Cast to float before negating because MaxViewportWidth is unsigned.
        */
       ctx->Const.ViewportBounds.Min = -(float)ctx->Const.MaxViewportWidth;
       ctx->Const.ViewportBounds.Max = ctx->Const.MaxViewportWidth;
@@ -594,6 +624,28 @@ brw_initialize_context_constants(struct brw_context *brw)
    /* ARB_gpu_shader5 */
    if (brw->gen >= 7)
       ctx->Const.MaxVertexStreams = MIN2(4, MAX_VERTEX_STREAMS);
+}
+
+static void
+brw_adjust_cs_context_constants(struct brw_context *brw)
+{
+   struct gl_context *ctx = &brw->ctx;
+
+   /* For ES, we set these constants based on SIMD8.
+    *
+    * TODO: Once we can always generate SIMD16, we should update this.
+    *
+    * For GL, we assume we can generate a SIMD16 program, but this currently
+    * is not always true. This allows us to run more test cases, and will be
+    * required based on desktop GL compute shader requirements.
+    */
+   const int simd_size = ctx->API == API_OPENGL_CORE ? 16 : 8;
+
+   const uint32_t max_invocations = simd_size * brw->max_cs_threads;
+   ctx->Const.MaxComputeWorkGroupSize[0] = max_invocations;
+   ctx->Const.MaxComputeWorkGroupSize[1] = max_invocations;
+   ctx->Const.MaxComputeWorkGroupSize[2] = max_invocations;
+   ctx->Const.MaxComputeWorkGroupInvocations = max_invocations;
 }
 
 /**
@@ -688,7 +740,7 @@ brwCreateContext(gl_api api,
 
    struct brw_context *brw = rzalloc(NULL, struct brw_context);
    if (!brw) {
-      fprintf(stderr, "%s: failed to alloc context\n", __FUNCTION__);
+      fprintf(stderr, "%s: failed to alloc context\n", __func__);
       *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
       return false;
    }
@@ -743,7 +795,7 @@ brwCreateContext(gl_api api,
 
    if (!_mesa_initialize_context(ctx, api, mesaVis, shareCtx, &functions)) {
       *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
-      fprintf(stderr, "%s: failed to init mesa context\n", __FUNCTION__);
+      fprintf(stderr, "%s: failed to init mesa context\n", __func__);
       intelDestroyContext(driContextPriv);
       return false;
    }
@@ -815,12 +867,19 @@ brwCreateContext(gl_api api,
    brw_init_surface_formats(brw);
 
    brw->max_vs_threads = devinfo->max_vs_threads;
+   brw->max_hs_threads = devinfo->max_hs_threads;
+   brw->max_ds_threads = devinfo->max_ds_threads;
    brw->max_gs_threads = devinfo->max_gs_threads;
    brw->max_wm_threads = devinfo->max_wm_threads;
+   brw->max_cs_threads = devinfo->max_cs_threads;
    brw->urb.size = devinfo->urb.size;
    brw->urb.min_vs_entries = devinfo->urb.min_vs_entries;
    brw->urb.max_vs_entries = devinfo->urb.max_vs_entries;
+   brw->urb.max_hs_entries = devinfo->urb.max_hs_entries;
+   brw->urb.max_ds_entries = devinfo->urb.max_ds_entries;
    brw->urb.max_gs_entries = devinfo->urb.max_gs_entries;
+
+   brw_adjust_cs_context_constants(brw);
 
    /* Estimate the size of the mappable aperture into the GTT.  There's an
     * ioctl to get the whole GTT size, but not one to get the mappable subset.
@@ -844,6 +903,8 @@ brwCreateContext(gl_api api,
    brw->prim_restart.enable_cut_index = false;
    brw->gs.enabled = false;
    brw->sf.viewport_transform_enable = true;
+
+   brw->predicate.state = BRW_PREDICATE_STATE_RENDER;
 
    ctx->VertexProgram._MaintainTnlProgram = true;
    ctx->FragmentProgram._MaintainTexEnvProgram = true;
@@ -883,10 +944,6 @@ intelDestroyContext(__DRIcontext * driContextPriv)
       (struct brw_context *) driContextPriv->driverPrivate;
    struct gl_context *ctx = &brw->ctx;
 
-   assert(brw); /* should never be null */
-   if (!brw)
-      return;
-
    /* Dump a final BMP in case the application doesn't call SwapBuffers */
    if (INTEL_DEBUG & DEBUG_AUB) {
       intel_batchbuffer_flush(brw);
@@ -908,6 +965,12 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    brw_draw_destroy(brw);
 
    drm_intel_bo_unreference(brw->curbe.curbe_bo);
+   if (brw->vs.base.scratch_bo)
+      drm_intel_bo_unreference(brw->vs.base.scratch_bo);
+   if (brw->gs.base.scratch_bo)
+      drm_intel_bo_unreference(brw->gs.base.scratch_bo);
+   if (brw->wm.base.scratch_bo)
+      drm_intel_bo_unreference(brw->wm.base.scratch_bo);
 
    drm_intel_gem_context_destroy(brw->hw_ctx);
 
@@ -922,8 +985,10 @@ intelDestroyContext(__DRIcontext * driContextPriv)
 
    intel_batchbuffer_free(brw);
 
-   drm_intel_bo_unreference(brw->first_post_swapbuffers_batch);
-   brw->first_post_swapbuffers_batch = NULL;
+   drm_intel_bo_unreference(brw->throttle_batch[1]);
+   drm_intel_bo_unreference(brw->throttle_batch[0]);
+   brw->throttle_batch[1] = NULL;
+   brw->throttle_batch[0] = NULL;
 
    driDestroyOptionCache(&brw->optionCache);
 
@@ -952,7 +1017,7 @@ intelUnbindContext(__DRIcontext * driContextPriv)
  * sRGB encode if the renderbuffer can handle it.  You can ask specifically
  * for a visual where you're guaranteed to be capable, but it turns out that
  * everyone just makes all their ARGB8888 visuals capable and doesn't offer
- * incapable ones, becuase there's no difference between the two in resources
+ * incapable ones, because there's no difference between the two in resources
  * used.  Applications thus get built that accidentally rely on the default
  * visual choice being sRGB, so we make ours sRGB capable.  Everything sounds
  * great...
@@ -1216,29 +1281,6 @@ intel_prepare_render(struct brw_context *brw)
     */
    if (brw_is_front_buffer_drawing(ctx->DrawBuffer))
       brw->front_buffer_dirty = true;
-
-   /* Wait for the swapbuffers before the one we just emitted, so we
-    * don't get too many swaps outstanding for apps that are GPU-heavy
-    * but not CPU-heavy.
-    *
-    * We're using intelDRI2Flush (called from the loader before
-    * swapbuffer) and glFlush (for front buffer rendering) as the
-    * indicator that a frame is done and then throttle when we get
-    * here as we prepare to render the next frame.  At this point for
-    * round trips for swap/copy and getting new buffers are done and
-    * we'll spend less time waiting on the GPU.
-    *
-    * Unfortunately, we don't have a handle to the batch containing
-    * the swap, and getting our hands on that doesn't seem worth it,
-    * so we just us the first batch we emitted after the last swap.
-    */
-   if (brw->need_throttle && brw->first_post_swapbuffers_batch) {
-      if (!brw->disable_throttling)
-         drm_intel_bo_wait_rendering(brw->first_post_swapbuffers_batch);
-      drm_intel_bo_unreference(brw->first_post_swapbuffers_batch);
-      brw->first_post_swapbuffers_batch = NULL;
-      brw->need_throttle = false;
-   }
 }
 
 /**

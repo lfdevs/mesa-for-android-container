@@ -107,11 +107,11 @@ alloc_buffer_object(struct brw_context *brw,
    /* the buffer might be bound as a uniform buffer, need to update it
     */
    if (intel_obj->Base.UsageHistory & USAGE_UNIFORM_BUFFER)
-      brw->state.dirty.brw |= BRW_NEW_UNIFORM_BUFFER;
+      brw->ctx.NewDriverState |= BRW_NEW_UNIFORM_BUFFER;
    if (intel_obj->Base.UsageHistory & USAGE_TEXTURE_BUFFER)
-      brw->state.dirty.brw |= BRW_NEW_TEXTURE_BUFFER;
+      brw->ctx.NewDriverState |= BRW_NEW_TEXTURE_BUFFER;
    if (intel_obj->Base.UsageHistory & USAGE_ATOMIC_COUNTER_BUFFER)
-      brw->state.dirty.brw |= BRW_NEW_ATOMIC_BUFFER;
+      brw->ctx.NewDriverState |= BRW_NEW_ATOMIC_BUFFER;
 
    mark_buffer_inactive(intel_obj);
 }
@@ -254,9 +254,9 @@ brw_buffer_subdata(struct gl_context *ctx,
     * (otherwise, an app that might occasionally stall but mostly not will end
     * up with blitting all the time, at the cost of bandwidth)
     */
-   if (brw->has_llc) {
-      if (offset + size <= intel_obj->gpu_active_start ||
-          intel_obj->gpu_active_end <= offset) {
+   if (offset + size <= intel_obj->gpu_active_start ||
+       intel_obj->gpu_active_end <= offset) {
+      if (brw->has_llc) {
          drm_intel_gem_bo_map_unsynchronized(intel_obj->buffer);
          memcpy(intel_obj->buffer->virtual + offset, data, size);
          drm_intel_bo_unmap(intel_obj->buffer);
@@ -264,6 +264,8 @@ brw_buffer_subdata(struct gl_context *ctx,
          if (intel_obj->gpu_active_end > intel_obj->gpu_active_start)
             intel_obj->prefer_stall_to_blit = true;
          return;
+      } else {
+         perf_debug("BufferSubData could be unsynchronized, but !LLC doesn't support it yet\n");
       }
    }
 
@@ -437,9 +439,13 @@ brw_map_buffer_range(struct gl_context *ctx,
       return obj->Mappings[index].Pointer;
    }
 
-   if (access & GL_MAP_UNSYNCHRONIZED_BIT)
+   if (access & GL_MAP_UNSYNCHRONIZED_BIT) {
+      if (!brw->has_llc && brw->perf_debug &&
+          drm_intel_bo_busy(intel_obj->buffer)) {
+         perf_debug("MapBufferRange with GL_MAP_UNSYNCHRONIZED_BIT stalling (it's actually synchronized on non-LLC platforms)\n");
+      }
       drm_intel_gem_bo_map_unsynchronized(intel_obj->buffer);
-   else if (!brw->has_llc && (!(access & GL_MAP_READ_BIT) ||
+   } else if (!brw->has_llc && (!(access & GL_MAP_READ_BIT) ||
                               (access & GL_MAP_PERSISTENT_BIT))) {
       drm_intel_gem_bo_map_gtt(intel_obj->buffer);
       mark_buffer_inactive(intel_obj);

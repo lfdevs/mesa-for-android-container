@@ -119,6 +119,8 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    cso_save_depth_stencil_alpha(cso);
    cso_save_fragment_shader(cso);
    cso_save_framebuffer(cso);
+   cso_save_tessctrl_shader(cso);
+   cso_save_tesseval_shader(cso);
    cso_save_geometry_shader(cso);
    cso_save_rasterizer(cso);
    cso_save_sample_mask(cso);
@@ -139,6 +141,8 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    cso_set_sample_mask(cso, ~0);
    cso_set_min_samples(cso, 1);
    cso_set_stream_outputs(cso, 0, NULL, NULL);
+   cso_set_tessctrl_shader_handle(cso, NULL);
+   cso_set_tesseval_shader_handle(cso, NULL);
    cso_set_geometry_shader_handle(cso, NULL);
    cso_set_render_condition(cso, NULL, FALSE, 0);
 
@@ -186,6 +190,8 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    cso_restore_depth_stencil_alpha(cso);
    cso_restore_fragment_shader(cso);
    cso_restore_framebuffer(cso);
+   cso_restore_tessctrl_shader(cso);
+   cso_restore_tesseval_shader(cso);
    cso_restore_geometry_shader(cso);
    cso_restore_rasterizer(cso);
    cso_restore_sample_mask(cso);

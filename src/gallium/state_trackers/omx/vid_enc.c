@@ -1015,6 +1015,9 @@ static void enc_ControlPicture(omx_base_PortType *port, struct pipe_h264_enc_pic
       break;
    } 
       
+   rate_ctrl->frame_rate_den = OMX_VID_ENC_CONTROL_FRAME_RATE_DEN_DEFAULT;
+   rate_ctrl->frame_rate_num = ((priv->frame_rate) >> 16) * rate_ctrl->frame_rate_den;
+
    if (rate_ctrl->rate_ctrl_method != PIPE_H264_ENC_RATE_CONTROL_METHOD_DISABLE) {
       if (priv->bitrate.nTargetBitrate < OMX_VID_ENC_BITRATE_MIN)
          rate_ctrl->target_bitrate = OMX_VID_ENC_BITRATE_MIN;
@@ -1023,8 +1026,6 @@ static void enc_ControlPicture(omx_base_PortType *port, struct pipe_h264_enc_pic
       else
          rate_ctrl->target_bitrate = OMX_VID_ENC_BITRATE_MAX;
       rate_ctrl->peak_bitrate = rate_ctrl->target_bitrate;    
-      rate_ctrl->frame_rate_den = OMX_VID_ENC_CONTROL_FRAME_RATE_DEN_DEFAULT;
-      rate_ctrl->frame_rate_num = ((priv->frame_rate) >> 16) * rate_ctrl->frame_rate_den;
       if (rate_ctrl->target_bitrate < OMX_VID_ENC_BITRATE_MEDIAN)
          rate_ctrl->vbv_buffer_size = MIN2((rate_ctrl->target_bitrate * 2.75), OMX_VID_ENC_BITRATE_MEDIAN);
       else
@@ -1039,8 +1040,7 @@ static void enc_ControlPicture(omx_base_PortType *port, struct pipe_h264_enc_pic
       }
       rate_ctrl->peak_bits_picture_integer = rate_ctrl->target_bits_picture;
       rate_ctrl->peak_bits_picture_fraction = 0;
-   } else
-      memset(rate_ctrl, 0, sizeof(struct pipe_h264_enc_rate_control));
+   }
    
    picture->quant_i_frames = priv->quant.nQpI;
    picture->quant_p_frames = priv->quant.nQpP;

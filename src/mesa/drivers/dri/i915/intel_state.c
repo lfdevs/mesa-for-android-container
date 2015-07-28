@@ -58,7 +58,7 @@ intel_translate_shadow_compare_func(GLenum func)
        return COMPAREFUNC_NEVER;
    }
 
-   fprintf(stderr, "Unknown value in %s: %x\n", __FUNCTION__, func);
+   fprintf(stderr, "Unknown value in %s: %x\n", __func__, func);
    return COMPAREFUNC_NEVER;
 }
 
@@ -84,7 +84,7 @@ intel_translate_compare_func(GLenum func)
       return COMPAREFUNC_ALWAYS;
    }
 
-   fprintf(stderr, "Unknown value in %s: %x\n", __FUNCTION__, func);
+   fprintf(stderr, "Unknown value in %s: %x\n", __func__, func);
    return COMPAREFUNC_ALWAYS;
 }
 
@@ -149,7 +149,7 @@ intel_translate_blend_factor(GLenum factor)
       return BLENDFACT_INV_CONST_ALPHA;
    }
 
-   fprintf(stderr, "Unknown value in %s: %x\n", __FUNCTION__, factor);
+   fprintf(stderr, "Unknown value in %s: %x\n", __func__, factor);
    return BLENDFACT_ZERO;
 }
 

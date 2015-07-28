@@ -46,9 +46,6 @@ struct vc4_surface {
         struct pipe_surface base;
         uint32_t offset;
         uint32_t stride;
-        uint32_t width;
-        uint16_t height;
-        uint16_t depth;
         uint8_t tiling;
 };
 
@@ -112,5 +109,6 @@ void vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
                                          struct pipe_sampler_view *view);
 void vc4_update_shadow_index_buffer(struct pipe_context *pctx,
                                     const struct pipe_index_buffer *ib);
+void vc4_dump_surface(struct pipe_surface *psurf);
 
 #endif /* VC4_RESOURCE_H */

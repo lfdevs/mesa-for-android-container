@@ -50,6 +50,7 @@
 #include "brw_vs.h"
 #include "brw_wm.h"
 #include "brw_gs.h"
+#include "brw_cs.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -157,7 +158,7 @@ brw_search_cache(struct brw_cache *cache,
    *(void **)out_aux = ((char *)item->key + item->key_size);
 
    if (item->offset != *inout_offset) {
-      brw->state.dirty.brw |= (1 << cache_id);
+      brw->ctx.NewDriverState |= (1 << cache_id);
       *inout_offset = item->offset;
    }
 
@@ -195,7 +196,7 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
    /* Since we have a new BO in place, we need to signal the units
     * that depend on it (state base address on gen5+, or unit state before).
     */
-   brw->state.dirty.brw |= BRW_NEW_PROGRAM_CACHE;
+   brw->ctx.NewDriverState |= BRW_NEW_PROGRAM_CACHE;
 }
 
 /**
@@ -339,7 +340,7 @@ brw_upload_cache(struct brw_cache *cache,
 
    *out_offset = item->offset;
    *(void **)out_aux = (void *)((char *)item->key + item->key_size);
-   cache->brw->state.dirty.brw |= 1 << cache_id;
+   cache->brw->ctx.NewDriverState |= 1 << cache_id;
 }
 
 void
@@ -363,9 +364,11 @@ brw_init_caches(struct brw_context *brw)
    cache->aux_compare[BRW_CACHE_VS_PROG] = brw_vs_prog_data_compare;
    cache->aux_compare[BRW_CACHE_GS_PROG] = brw_gs_prog_data_compare;
    cache->aux_compare[BRW_CACHE_FS_PROG] = brw_wm_prog_data_compare;
+   cache->aux_compare[BRW_CACHE_CS_PROG] = brw_cs_prog_data_compare;
    cache->aux_free[BRW_CACHE_VS_PROG] = brw_stage_prog_data_free;
    cache->aux_free[BRW_CACHE_GS_PROG] = brw_stage_prog_data_free;
    cache->aux_free[BRW_CACHE_FS_PROG] = brw_stage_prog_data_free;
+   cache->aux_free[BRW_CACHE_CS_PROG] = brw_stage_prog_data_free;
 }
 
 static void
@@ -374,7 +377,7 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
    struct brw_cache_item *c, *next;
    GLuint i;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    for (i = 0; i < cache->size; i++) {
       for (c = cache->items[i]; c; c = next) {
@@ -399,8 +402,8 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
    /* We need to make sure that the programs get regenerated, since
     * any offsets leftover in brw_context will no longer be valid.
     */
-   brw->state.dirty.mesa |= ~0;
-   brw->state.dirty.brw |= ~0ull;
+   brw->NewGLState |= ~0;
+   brw->ctx.NewDriverState |= ~0ull;
    intel_batchbuffer_flush(brw);
 }
 
@@ -422,7 +425,7 @@ static void
 brw_destroy_cache(struct brw_context *brw, struct brw_cache *cache)
 {
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    if (brw->has_llc)
       drm_intel_bo_unmap(cache->bo);

@@ -59,6 +59,8 @@
 #define SWIZZLE_NOOP           MAKE_SWIZZLE4(0,1,2,3)
 #define GET_SWZ(swz, idx)      (((swz) >> ((idx)*3)) & 0x7)
 #define GET_BIT(msk, idx)      (((msk) >> (idx)) & 0x1)
+/** Determine if swz contains SWIZZLE_ZERO/ONE/NIL for any components. */
+#define HAS_EXTENDED_SWIZZLE(swz) (swz & 0x924)
 
 #define SWIZZLE_XYZW MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y, SWIZZLE_Z, SWIZZLE_W)
 #define SWIZZLE_XXXX MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_X, SWIZZLE_X, SWIZZLE_X)
@@ -366,11 +368,11 @@ struct prog_instruction
     */
    GLint BranchTarget;
 
-   /** for debugging purposes */
-   const char *Comment;
-
    /** for driver use (try to remove someday) */
    GLint Aux;
+
+   /** for debugging purposes */
+   const char *Comment;
 };
 
 

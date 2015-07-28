@@ -49,7 +49,8 @@ vlVdpVideoMixerCreate(VdpDevice device,
    vlVdpVideoMixer *vmixer = NULL;
    VdpStatus ret;
    struct pipe_screen *screen;
-   unsigned max_width, max_height, i;
+   uint32_t max_2d_texture_level;
+   unsigned max_size, i;
 
    vlVdpDevice *dev = vlGetDataHTAB(device);
    if (!dev)
@@ -134,18 +135,17 @@ vlVdpVideoMixerCreate(VdpDevice device,
       VDPAU_MSG(VDPAU_WARN, "[VDPAU] Max layers > 4 not supported\n", vmixer->max_layers);
       goto no_params;
    }
-   max_width = screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
-                                       PIPE_VIDEO_ENTRYPOINT_BITSTREAM, PIPE_VIDEO_CAP_MAX_WIDTH);
-   max_height = screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
-                                        PIPE_VIDEO_ENTRYPOINT_BITSTREAM, PIPE_VIDEO_CAP_MAX_HEIGHT);
-   if (vmixer->video_width < 48 ||
-       vmixer->video_width > max_width) {
-      VDPAU_MSG(VDPAU_WARN, "[VDPAU] 48 < %u < %u not valid for width\n", vmixer->video_width, max_width);
+
+   max_2d_texture_level = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+   max_size = pow(2, max_2d_texture_level-1);
+   if (vmixer->video_width < 48 || vmixer->video_width > max_size) {
+      VDPAU_MSG(VDPAU_WARN, "[VDPAU] 48 < %u < %u not valid for width\n",
+                vmixer->video_width, max_size);
       goto no_params;
    }
-   if (vmixer->video_height < 48 ||
-       vmixer->video_height > max_height) {
-      VDPAU_MSG(VDPAU_WARN, "[VDPAU] 48 < %u < %u  not valid for height\n", vmixer->video_height, max_height);
+   if (vmixer->video_height < 48 || vmixer->video_height > max_size) {
+      VDPAU_MSG(VDPAU_WARN, "[VDPAU] 48 < %u < %u  not valid for height\n",
+                vmixer->video_height, max_size);
       goto no_params;
    }
    vmixer->luma_key_min = 0.f;

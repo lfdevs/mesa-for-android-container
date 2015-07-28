@@ -72,18 +72,25 @@ def generate(env):
             return
 
         # Try to determine the LLVM version from llvm/Config/config.h
-        llvm_config = os.path.join(llvm_dir, 'include/llvm/Config/config.h')
+        llvm_config = os.path.join(llvm_dir, 'include/llvm/Config/llvm-config.h')
         if not os.path.exists(llvm_config):
             print 'scons: could not find %s' % llvm_config
             return
-        llvm_version_re = re.compile(r'^#define PACKAGE_VERSION "([^"]*)"')
+        llvm_version_major_re = re.compile(r'^#define LLVM_VERSION_MAJOR ([0-9]+)')
+        llvm_version_minor_re = re.compile(r'^#define LLVM_VERSION_MINOR ([0-9]+)')
         llvm_version = None
+        llvm_version_major = None
+        llvm_version_minor = None
         for line in open(llvm_config, 'rt'):
-            mo = llvm_version_re.match(line)
+            mo = llvm_version_major_re.match(line)
             if mo:
-                llvm_version = mo.group(1)
-                llvm_version = distutils.version.LooseVersion(llvm_version)
-                break
+                llvm_version_major = mo.group(1)
+            mo = llvm_version_minor_re.match(line)
+            if mo:
+                llvm_version_minor = mo.group(1)
+        if llvm_version_major is not None and llvm_version_minor is not None:
+            llvm_version = distutils.version.LooseVersion('%s.%s' % (llvm_version_major, llvm_version_minor))
+
         if llvm_version is None:
             print 'scons: could not determine the LLVM version from %s' % llvm_config
             return
@@ -99,7 +106,19 @@ def generate(env):
         ])
         env.Prepend(LIBPATH = [os.path.join(llvm_dir, 'lib')])
         # LIBS should match the output of `llvm-config --libs engine mcjit bitwriter x86asmprinter`
-        if llvm_version >= distutils.version.LooseVersion('3.5'):
+        if llvm_version >= distutils.version.LooseVersion('3.6'):
+            env.Prepend(LIBS = [
+                'LLVMBitWriter', 'LLVMX86Disassembler', 'LLVMX86AsmParser',
+                'LLVMX86CodeGen', 'LLVMSelectionDAG', 'LLVMAsmPrinter',
+                'LLVMCodeGen', 'LLVMScalarOpts', 'LLVMProfileData',
+                'LLVMInstCombine', 'LLVMTransformUtils', 'LLVMipa',
+                'LLVMAnalysis', 'LLVMX86Desc', 'LLVMMCDisassembler',
+                'LLVMX86Info', 'LLVMX86AsmPrinter', 'LLVMX86Utils',
+                'LLVMMCJIT', 'LLVMTarget', 'LLVMExecutionEngine',
+                'LLVMRuntimeDyld', 'LLVMObject', 'LLVMMCParser',
+                'LLVMBitReader', 'LLVMMC', 'LLVMCore', 'LLVMSupport'
+            ])
+        elif llvm_version >= distutils.version.LooseVersion('3.5'):
             env.Prepend(LIBS = [
                 'LLVMBitWriter', 'LLVMMCJIT', 'LLVMRuntimeDyld',
                 'LLVMX86Disassembler', 'LLVMX86AsmParser', 'LLVMX86CodeGen',
@@ -132,6 +151,11 @@ def generate(env):
             # Some of the LLVM C headers use the inline keyword without
             # defining it.
             env.Append(CPPDEFINES = [('inline', '__inline')])
+            # Match some of the warning options from llvm/cmake/modules/HandleLLVMOptions.cmake
+            env.AppendUnique(CXXFLAGS = [
+                '/wd4355', # 'this' : used in base member initializer list
+                '/wd4624', # 'derived class' : destructor could not be generated because a base class destructor is inaccessible
+            ])
             if env['build'] in ('debug', 'checked'):
                 # LLVM libraries are static, build with /MT, and they
                 # automatically link agains LIBCMT. When we're doing a

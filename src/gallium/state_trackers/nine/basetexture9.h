@@ -25,7 +25,7 @@
 
 #include "resource9.h"
 #include "util/u_inlines.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 struct NineBaseTexture9
 {
@@ -38,17 +38,20 @@ struct NineBaseTexture9
 
     D3DFORMAT format;
 
-    D3DTEXTUREFILTERTYPE mipfilter;
-    DWORD lod;
-    DWORD lod_resident;
-
     int16_t bind_count; /* to Device9->state.texture */
 
     boolean shadow;
     uint8_t pstype; /* 0: 2D, 1: 1D, 2: CUBE, 3: 3D */
 
-    boolean dirty;
     boolean dirty_mip;
+    D3DTEXTUREFILTERTYPE mipfilter;
+
+    /* Specific to managed textures */
+    struct {
+        boolean dirty;
+        DWORD lod;
+        DWORD lod_resident;
+    } managed;
 };
 static INLINE struct NineBaseTexture9 *
 NineBaseTexture9( void *data )
@@ -108,9 +111,9 @@ static INLINE void
 NineBaseTexture9_Validate( struct NineBaseTexture9 *This )
 {
     DBG_FLAG(DBG_BASETEXTURE, "This=%p dirty=%i dirty_mip=%i lod=%u/%u\n",
-             This, This->dirty, This->dirty_mip, This->lod, This->lod_resident);
+             This, This->managed.dirty, This->dirty_mip, This->managed.lod, This->managed.lod_resident);
     if ((This->base.pool == D3DPOOL_MANAGED) &&
-        (This->dirty || This->lod != This->lod_resident))
+        (This->managed.dirty || This->managed.lod != This->managed.lod_resident))
         NineBaseTexture9_UploadSelf(This);
     if (This->dirty_mip)
         NineBaseTexture9_GenerateMipSubLevels(This);
@@ -133,7 +136,7 @@ NineBaseTexture9_Dump( struct NineBaseTexture9 *This ) { }
 #endif
 
 #define BASETEX_REGISTER_UPDATE(t) do { \
-    if (((t)->dirty | ((t)->dirty_mip)) && (t)->base.base.bind) \
+    if (((t)->managed.dirty | ((t)->dirty_mip)) && (t)->base.base.bind) \
         if (LIST_IS_EMPTY(&(t)->list)) \
             list_add(&(t)->list, &(t)->base.base.device->update_textures); \
     } while(0)

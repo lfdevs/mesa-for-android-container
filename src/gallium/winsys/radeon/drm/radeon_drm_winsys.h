@@ -30,8 +30,27 @@
 #ifndef RADEON_DRM_WINSYS_H
 #define RADEON_DRM_WINSYS_H
 
-#include "radeon_winsys.h"
+#include "gallium/drivers/radeon/radeon_winsys.h"
 #include "os/os_thread.h"
+#include <radeon_drm.h>
+
+#ifndef DRM_RADEON_GEM_USERPTR
+
+#define DRM_RADEON_GEM_USERPTR		0x2d
+
+#define RADEON_GEM_USERPTR_READONLY	(1 << 0)
+#define RADEON_GEM_USERPTR_ANONONLY	(1 << 1)
+#define RADEON_GEM_USERPTR_VALIDATE	(1 << 2)
+#define RADEON_GEM_USERPTR_REGISTER	(1 << 3)
+
+struct drm_radeon_gem_userptr {
+       uint64_t                addr;
+       uint64_t                size;
+       uint32_t                flags;
+       uint32_t                handle;
+};
+
+#endif
 
 struct radeon_drm_cs;
 
@@ -85,5 +104,6 @@ radeon_drm_winsys(struct radeon_winsys *base)
 }
 
 void radeon_drm_ws_queue_cs(struct radeon_drm_winsys *ws, struct radeon_drm_cs *cs);
+void radeon_surface_init_functions(struct radeon_drm_winsys *ws);
 
 #endif

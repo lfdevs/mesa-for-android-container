@@ -50,6 +50,7 @@ struct radeon_bo {
 
     struct radeon_bomgr *mgr;
     struct radeon_drm_winsys *rws;
+    void *user_ptr; /* from buffer_from_ptr */
 
     void *ptr;
     pipe_mutex map_mutex;

@@ -51,13 +51,9 @@ NineVolumeTexture9_ctor( struct NineVolumeTexture9 *This,
     /* An IDirect3DVolume9 cannot be bound as a render target can it ? */
     user_assert(!(Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)),
                 D3DERR_INVALIDCALL);
-    user_assert(!(Usage & D3DUSAGE_AUTOGENMIPMAP) ||
-                (Pool != D3DPOOL_SYSTEMMEM && Levels <= 1), D3DERR_INVALIDCALL);
+    user_assert(!(Usage & D3DUSAGE_AUTOGENMIPMAP), D3DERR_INVALIDCALL);
 
     user_assert(!pSharedHandle, D3DERR_INVALIDCALL); /* TODO */
-
-    if (Usage & D3DUSAGE_AUTOGENMIPMAP)
-        Levels = 0;
 
     pf = d3d9_to_pipe_format_checked(screen, Format, PIPE_TEXTURE_3D, 0,
                                      PIPE_BIND_SAMPLER_VIEW, FALSE);
@@ -90,6 +86,9 @@ NineVolumeTexture9_ctor( struct NineVolumeTexture9 *This,
             PIPE_BIND_TRANSFER_READ |
             PIPE_BIND_TRANSFER_WRITE;
     }
+    if (Usage & D3DUSAGE_SOFTWAREPROCESSING)
+        DBG("Application asked for Software Vertex Processing, "
+            "but this is unimplemented\n");
 
     This->volumes = CALLOC(info->last_level + 1, sizeof(*This->volumes));
     if (!This->volumes)
@@ -142,8 +141,6 @@ NineVolumeTexture9_GetLevelDesc( struct NineVolumeTexture9 *This,
                                  D3DVOLUME_DESC *pDesc )
 {
     user_assert(Level <= This->base.base.info.last_level, D3DERR_INVALIDCALL);
-    user_assert(Level == 0 || !(This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP),
-                D3DERR_INVALIDCALL);
 
     *pDesc = This->volumes[Level]->desc;
 
@@ -156,8 +153,6 @@ NineVolumeTexture9_GetVolumeLevel( struct NineVolumeTexture9 *This,
                                    IDirect3DVolume9 **ppVolumeLevel )
 {
     user_assert(Level <= This->base.base.info.last_level, D3DERR_INVALIDCALL);
-    user_assert(Level == 0 || !(This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP),
-                D3DERR_INVALIDCALL);
 
     NineUnknown_AddRef(NineUnknown(This->volumes[Level]));
     *ppVolumeLevel = (IDirect3DVolume9 *)This->volumes[Level];
@@ -176,8 +171,6 @@ NineVolumeTexture9_LockBox( struct NineVolumeTexture9 *This,
         This, Level, pLockedVolume, pBox, Flags);
 
     user_assert(Level <= This->base.base.info.last_level, D3DERR_INVALIDCALL);
-    user_assert(Level == 0 || !(This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP),
-                D3DERR_INVALIDCALL);
 
     return NineVolume9_LockBox(This->volumes[Level], pLockedVolume, pBox,
                                Flags);
@@ -201,11 +194,9 @@ NineVolumeTexture9_AddDirtyBox( struct NineVolumeTexture9 *This,
     DBG("This=%p pDirtybox=%p\n", This, pDirtyBox);
 
     if (This->base.base.pool != D3DPOOL_MANAGED) {
-        if (This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP)
-            This->base.dirty_mip = TRUE;
         return D3D_OK;
     }
-    This->base.dirty = TRUE;
+    This->base.managed.dirty = TRUE;
 
     BASETEX_REGISTER_UPDATE(&This->base);
 
@@ -220,6 +211,15 @@ NineVolumeTexture9_AddDirtyBox( struct NineVolumeTexture9 *This,
         struct pipe_box box;
         d3dbox_to_pipe_box(&box, pDirtyBox);
         u_box_union_3d(&This->dirty_box, &This->dirty_box, &box);
+        This->dirty_box.x = MAX2(This->dirty_box.x, 0);
+        This->dirty_box.y = MAX2(This->dirty_box.y, 0);
+        This->dirty_box.z = MAX2(This->dirty_box.z, 0);
+        This->dirty_box.width = MIN2(This->dirty_box.width,
+                                     This->base.base.info.width0 - This->dirty_box.x);
+        This->dirty_box.height = MIN2(This->dirty_box.height,
+                                     This->base.base.info.height0 - This->dirty_box.y);
+        This->dirty_box.depth = MIN2(This->dirty_box.depth,
+                                     This->base.base.info.depth0 - This->dirty_box.z);
     }
     return D3D_OK;
 }

@@ -264,7 +264,14 @@ tsrc_imm_mdesc_urb(const struct toy_compiler *tc,
    const bool header_present = true;
    uint32_t ctrl;
 
-   if (ilo_dev_gen(tc->dev) >= ILO_GEN(7)) {
+   if (ilo_dev_gen(tc->dev) >= ILO_GEN(8)) {
+      const bool per_slot_offset = false;
+
+      ctrl = per_slot_offset << 17 |
+             swizzle_control << 15 |
+             global_offset << 4 |
+             urb_opcode;
+   } else if (ilo_dev_gen(tc->dev) >= ILO_GEN(7)) {
       const bool per_slot_offset = false;
 
       ctrl = per_slot_offset << 16 |
@@ -272,8 +279,7 @@ tsrc_imm_mdesc_urb(const struct toy_compiler *tc,
              swizzle_control << 14 |
              global_offset << 3 |
              urb_opcode;
-   }
-   else {
+   } else {
       ctrl = complete << 15 |
              used << 14 |
              allocate << 13 |

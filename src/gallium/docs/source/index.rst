@@ -20,6 +20,7 @@ Contents:
    context
    cso
    distro
+   drivers
    glossary
 
 Indices and tables

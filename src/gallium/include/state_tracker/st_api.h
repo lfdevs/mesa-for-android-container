@@ -89,6 +89,7 @@ enum st_api_feature
 #define ST_CONTEXT_FLAG_DEBUG               (1 << 0)
 #define ST_CONTEXT_FLAG_FORWARD_COMPATIBLE  (1 << 1)
 #define ST_CONTEXT_FLAG_ROBUST_ACCESS       (1 << 2)
+#define ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED (1 << 3)
 
 /**
  * Reasons that context creation might fail.

@@ -118,6 +118,7 @@
 #include "scissor.h"
 #include "shared.h"
 #include "shaderobj.h"
+#include "shaderimage.h"
 #include "util/simple_list.h"
 #include "state.h"
 #include "stencil.h"
@@ -134,6 +135,7 @@
 #include "math/m_matrix.h"
 #include "main/dispatch.h" /* for _gloffset_COUNT */
 #include "uniforms.h"
+#include "macros.h"
 
 #ifdef USE_SPARC_ASM
 #include "sparc/sparc.h"
@@ -446,7 +448,7 @@ _mesa_init_current(struct gl_context *ctx)
    GLuint i;
 
    /* Init all to (0,0,0,1) */
-   for (i = 0; i < Elements(ctx->Current.Attrib); i++) {
+   for (i = 0; i < ARRAY_SIZE(ctx->Current.Attrib); i++) {
       ASSIGN_4V( ctx->Current.Attrib[i], 0.0, 0.0, 0.0, 1.0 );
    }
 
@@ -656,7 +658,7 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    consts->MaxSamples = 0;
 
    /* GLSL default if NativeIntegers == FALSE */
-   consts->UniformBooleanTrue = FLT_AS_UINT(1.0f);
+   consts->UniformBooleanTrue = FLOAT_AS_UNION(1.0f).u;
 
    /* GL_ARB_sync */
    consts->MaxServerWaitTimeout = 0x1fff7fffffffULL;
@@ -820,6 +822,7 @@ init_attrib_groups(struct gl_context *ctx)
    _mesa_init_feedback( ctx );
    _mesa_init_fog( ctx );
    _mesa_init_hint( ctx );
+   _mesa_init_image_units( ctx );
    _mesa_init_line( ctx );
    _mesa_init_lighting( ctx );
    _mesa_init_matrix( ctx );
@@ -880,20 +883,52 @@ update_default_objects(struct gl_context *ctx)
 }
 
 
-/**
- * This is the default function we plug into all dispatch table slots
- * This helps prevents a segfault when someone calls a GL function without
- * first checking if the extension's supported.
+/* XXX this is temporary and should be removed at some point in the
+ * future when there's a reasonable expectation that the libGL library
+ * contains the _glapi_new_nop_table() and _glapi_set_nop_handler()
+ * functions which were added in Mesa 10.6.
  */
-int
-_mesa_generic_nop(void)
+#if !defined(_WIN32)
+/* Avoid libGL / driver ABI break */
+#define USE_GLAPI_NOP_FEATURES 0
+#else
+#define USE_GLAPI_NOP_FEATURES 1
+#endif
+
+
+/**
+ * This function is called by the glapi no-op functions.  For each OpenGL
+ * function/entrypoint there's a simple no-op function.  These "no-op"
+ * functions call this function.
+ *
+ * If there's a current OpenGL context for the calling thread, we record a
+ * GL_INVALID_OPERATION error.  This can happen either because the app's
+ * calling an unsupported extension function, or calling an illegal function
+ * (such as glClear between glBegin/glEnd).
+ *
+ * If there's no current OpenGL context for the calling thread, we can
+ * print a message to stderr.
+ *
+ * \param name  the name of the OpenGL function
+ */
+#if USE_GLAPI_NOP_FEATURES
+static void
+nop_handler(const char *name)
 {
    GET_CURRENT_CONTEXT(ctx);
-   _mesa_error(ctx, GL_INVALID_OPERATION,
-               "unsupported function called "
-               "(unsupported extension or deprecated function?)");
-   return 0;
+   if (ctx) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(invalid call)", name);
+   }
+#if defined(DEBUG)
+   else if (getenv("MESA_DEBUG") || getenv("LIBGL_DEBUG")) {
+      fprintf(stderr,
+              "GL User Error: gl%s called without a rendering context\n",
+              name);
+      fflush(stderr);
+   }
+#endif
 }
+#endif
 
 
 /**
@@ -903,45 +938,70 @@ _mesa_generic_nop(void)
 static void GLAPIENTRY
 nop_glFlush(void)
 {
-   /* don't record an error like we do in _mesa_generic_nop() */
+   /* don't record an error like we do in nop_handler() */
 }
 #endif
 
 
-extern void (*__glapi_noop_table[])(void);
+#if !USE_GLAPI_NOP_FEATURES
+static int
+generic_nop(void)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_error(ctx, GL_INVALID_OPERATION,
+               "unsupported function called "
+               "(unsupported extension or deprecated function?)");
+   return 0;
+}
+#endif
 
 
 /**
- * Allocate and initialize a new dispatch table.  All the dispatch
- * function pointers will point at the _mesa_generic_nop() function
- * which raises GL_INVALID_OPERATION.
+ * Create a new API dispatch table in which all entries point to the
+ * generic_nop() function.  This will not work on Windows because of
+ * the __stdcall convention which requires the callee to clean up the
+ * call stack.  That's impossible with one generic no-op function.
  */
 struct _glapi_table *
-_mesa_alloc_dispatch_table(void)
+_mesa_new_nop_table(unsigned numEntries)
 {
-   /* Find the larger of Mesa's dispatch table and libGL's dispatch table.
-    * In practice, this'll be the same for stand-alone Mesa.  But for DRI
-    * Mesa we do this to accomodate different versions of libGL and various
-    * DRI drivers.
-    */
-   GLint numEntries = MAX2(_glapi_get_dispatch_table_size(), _gloffset_COUNT);
    struct _glapi_table *table;
 
+#if !USE_GLAPI_NOP_FEATURES
    table = malloc(numEntries * sizeof(_glapi_proc));
    if (table) {
       _glapi_proc *entry = (_glapi_proc *) table;
-      GLint i;
+      unsigned i;
       for (i = 0; i < numEntries; i++) {
-#if defined(_WIN32)
-         /* FIXME: This will not generate an error, but at least it won't
-          * corrupt the stack like _mesa_generic_nop does. */
-         entry[i] = __glapi_noop_table[i];
-#else
-         entry[i] = (_glapi_proc) _mesa_generic_nop;
-#endif
+         entry[i] = (_glapi_proc) generic_nop;
       }
+   }
+#else
+   table = _glapi_new_nop_table(numEntries);
+#endif
+   return table;
+}
+
+
+/**
+ * Allocate and initialize a new dispatch table.  The table will be
+ * populated with pointers to "no-op" functions.  In turn, the no-op
+ * functions will call nop_handler() above.
+ */
+static struct _glapi_table *
+alloc_dispatch_table(void)
+{
+   /* Find the larger of Mesa's dispatch table and libGL's dispatch table.
+    * In practice, this'll be the same for stand-alone Mesa.  But for DRI
+    * Mesa we do this to accommodate different versions of libGL and various
+    * DRI drivers.
+    */
+   int numEntries = MAX2(_glapi_get_dispatch_table_size(), _gloffset_COUNT);
+
+   struct _glapi_table *table = _mesa_new_nop_table(numEntries);
 
 #if defined(_WIN32)
+   if (table) {
       /* This is a special case for Windows in the event that
        * wglGetProcAddress is called between glBegin/End().
        *
@@ -959,8 +1019,13 @@ _mesa_alloc_dispatch_table(void)
        * assertion passes and the test continues.
        */
       SET_Flush(table, nop_glFlush);
-#endif
    }
+#endif
+
+#if USE_GLAPI_NOP_FEATURES
+   _glapi_set_nop_handler(nop_handler);
+#endif
+
    return table;
 }
 
@@ -996,7 +1061,7 @@ create_beginend_table(const struct gl_context *ctx)
 {
    struct _glapi_table *table;
 
-   table = _mesa_alloc_dispatch_table();
+   table = alloc_dispatch_table();
    if (!table)
       return NULL;
 
@@ -1135,7 +1200,7 @@ _mesa_initialize_context(struct gl_context *ctx,
       goto fail;
 
    /* setup the API dispatch tables with all nop functions */
-   ctx->OutsideBeginEnd = _mesa_alloc_dispatch_table();
+   ctx->OutsideBeginEnd = alloc_dispatch_table();
    if (!ctx->OutsideBeginEnd)
       goto fail;
    ctx->Exec = ctx->OutsideBeginEnd;
@@ -1162,7 +1227,7 @@ _mesa_initialize_context(struct gl_context *ctx,
    switch (ctx->API) {
    case API_OPENGL_COMPAT:
       ctx->BeginEnd = create_beginend_table(ctx);
-      ctx->Save = _mesa_alloc_dispatch_table();
+      ctx->Save = alloc_dispatch_table();
       if (!ctx->BeginEnd || !ctx->Save)
          goto fail;
 
@@ -1280,11 +1345,9 @@ _mesa_free_context_data( struct gl_context *ctx )
 
    _mesa_free_attrib_data(ctx);
    _mesa_free_buffer_objects(ctx);
-   _mesa_free_lighting_data( ctx );
    _mesa_free_eval_data( ctx );
    _mesa_free_texture_data( ctx );
    _mesa_free_matrix_data( ctx );
-   _mesa_free_viewport_data( ctx );
    _mesa_free_pipeline_data(ctx);
    _mesa_free_program_data(ctx);
    _mesa_free_shader_state(ctx);
@@ -1445,17 +1508,10 @@ _mesa_copy_context( const struct gl_context *src, struct gl_context *dst,
       dst->Transform = src->Transform;
    }
    if (mask & GL_VIEWPORT_BIT) {
-      /* Cannot use memcpy, because of pointers in GLmatrix _WindowMap */
       unsigned i;
       for (i = 0; i < src->Const.MaxViewports; i++) {
-         dst->ViewportArray[i].X = src->ViewportArray[i].X;
-         dst->ViewportArray[i].Y = src->ViewportArray[i].Y;
-         dst->ViewportArray[i].Width = src->ViewportArray[i].Width;
-         dst->ViewportArray[i].Height = src->ViewportArray[i].Height;
-         dst->ViewportArray[i].Near = src->ViewportArray[i].Near;
-         dst->ViewportArray[i].Far = src->ViewportArray[i].Far;
-         _math_matrix_copy(&dst->ViewportArray[i]._WindowMap,
-                           &src->ViewportArray[i]._WindowMap);
+         /* OK to memcpy */
+         dst->ViewportArray[i] = src->ViewportArray[i];
       }
    }
 
@@ -1567,7 +1623,8 @@ handle_first_current(struct gl_context *ctx)
          else
             buffer = GL_FRONT;
 
-         _mesa_drawbuffers(ctx, 1, &buffer, NULL /* destMask */);
+         _mesa_drawbuffers(ctx, ctx->DrawBuffer, 1, &buffer,
+                           NULL /* destMask */);
       }
 
       if (ctx->ReadBuffer != _mesa_get_incomplete_framebuffer()) {
@@ -1580,7 +1637,7 @@ handle_first_current(struct gl_context *ctx)
             bufferIndex = BUFFER_FRONT_LEFT;
          }
 
-         _mesa_readbuffer(ctx, buffer, bufferIndex);
+         _mesa_readbuffer(ctx, ctx->ReadBuffer, buffer, bufferIndex);
       }
    }
 
@@ -1645,7 +1702,7 @@ _mesa_make_current( struct gl_context *newCtx,
 
    /* We used to call _glapi_check_multithread() here.  Now do it in drivers */
    _glapi_set_context((void *) newCtx);
-   ASSERT(_mesa_get_current_context() == newCtx);
+   assert(_mesa_get_current_context() == newCtx);
 
    if (!newCtx) {
       _glapi_set_dispatch(NULL);  /* none current */
@@ -1654,8 +1711,8 @@ _mesa_make_current( struct gl_context *newCtx,
       _glapi_set_dispatch(newCtx->CurrentDispatch);
 
       if (drawBuffer && readBuffer) {
-         ASSERT(_mesa_is_winsys_fbo(drawBuffer));
-         ASSERT(_mesa_is_winsys_fbo(readBuffer));
+         assert(_mesa_is_winsys_fbo(drawBuffer));
+         assert(_mesa_is_winsys_fbo(readBuffer));
          _mesa_reference_framebuffer(&newCtx->WinSysDrawBuffer, drawBuffer);
          _mesa_reference_framebuffer(&newCtx->WinSysReadBuffer, readBuffer);
 

@@ -128,7 +128,11 @@ def preamble(intype, outtype, prim):
     if intype != GENERATE:
         print '    const void * _in,'
     print '    unsigned start,'
-    print '    unsigned nr,'
+    if intype != GENERATE:
+        print '    unsigned in_nr,'
+    print '    unsigned out_nr,'
+    if intype != GENERATE:
+        print '    unsigned restart_index,'
     print '    void *_out )'
     print '{'
     if intype != GENERATE:
@@ -143,7 +147,7 @@ def postamble():
 
 def tris(intype, outtype):
     preamble(intype, outtype, prim='tris')
-    print '  for (i = start, j = 0; j < nr; j+=6, i+=3) { '
+    print '  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { '
     do_tri( intype, outtype, 'out+j',  'i', 'i+1', 'i+2' );
     print '   }'
     postamble()
@@ -151,7 +155,7 @@ def tris(intype, outtype):
 
 def tristrip(intype, outtype):
     preamble(intype, outtype, prim='tristrip')
-    print '  for (i = start, j = 0; j < nr; j+=6, i++) { '
+    print '  for (i = start, j = 0; j < out_nr; j+=6, i++) { '
     do_tri( intype, outtype, 'out+j',  'i', 'i+1/*+(i&1)*/', 'i+2/*-(i&1)*/' );
     print '   }'
     postamble()
@@ -159,7 +163,7 @@ def tristrip(intype, outtype):
 
 def trifan(intype, outtype):
     preamble(intype, outtype, prim='trifan')
-    print '  for (i = start, j = 0; j < nr; j+=6, i++) { '
+    print '  for (i = start, j = 0; j < out_nr; j+=6, i++) { '
     do_tri( intype, outtype, 'out+j',  '0', 'i+1', 'i+2' );
     print '   }'
     postamble()
@@ -168,15 +172,15 @@ def trifan(intype, outtype):
 
 def polygon(intype, outtype):
     preamble(intype, outtype, prim='polygon')
-    print '  for (i = start, j = 0; j < nr; j+=2, i++) { '
-    line( intype, outtype, 'out+j', 'i', '(i+1)%(nr/2)' )
+    print '  for (i = start, j = 0; j < out_nr; j+=2, i++) { '
+    line( intype, outtype, 'out+j', 'i', '(i+1)%(out_nr/2)' )
     print '   }'
     postamble()
 
 
 def quads(intype, outtype):
     preamble(intype, outtype, prim='quads')
-    print '  for (i = start, j = 0; j < nr; j+=8, i+=4) { '
+    print '  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { '
     do_quad( intype, outtype, 'out+j', 'i+0', 'i+1', 'i+2', 'i+3' );
     print '   }'
     postamble()
@@ -184,7 +188,7 @@ def quads(intype, outtype):
 
 def quadstrip(intype, outtype):
     preamble(intype, outtype, prim='quadstrip')
-    print '  for (i = start, j = 0; j < nr; j+=8, i+=2) { '
+    print '  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { '
     do_quad( intype, outtype, 'out+j', 'i+2', 'i+0', 'i+1', 'i+3' );
     print '   }'
     postamble()

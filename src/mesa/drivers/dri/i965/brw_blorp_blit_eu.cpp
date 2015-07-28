@@ -31,7 +31,7 @@ brw_blorp_eu_emitter::brw_blorp_eu_emitter(struct brw_context *brw,
    : mem_ctx(ralloc_context(NULL)),
      generator(brw, mem_ctx, (void *) rzalloc(mem_ctx, struct brw_wm_prog_key),
                (struct brw_stage_prog_data *) rzalloc(mem_ctx, struct brw_wm_prog_data),
-               NULL, false, "BLORP")
+               NULL, 0, false, "BLORP")
 {
    if (debug_flag)
       generator.enable_debug("blorp");
@@ -88,7 +88,7 @@ brw_blorp_eu_emitter::emit_texture_lookup(const struct brw_reg &dst,
 
    inst->base_mrf = base_mrf;
    inst->mlen = msg_length;
-   inst->header_present = false;
+   inst->header_size = 0;
 
    insts.push_tail(inst);
 }
@@ -104,7 +104,7 @@ brw_blorp_eu_emitter::emit_render_target_write(const struct brw_reg &src0,
    inst->src[0] = src0;
    inst->base_mrf = msg_reg_nr;
    inst->mlen = msg_length;
-   inst->header_present = use_header;
+   inst->header_size = use_header ? 2 : 0;
    inst->target = BRW_BLORP_RENDERBUFFER_BINDING_TABLE_INDEX;
 
    insts.push_tail(inst);

@@ -522,7 +522,7 @@ int radeon_validate_texture_miptree(struct gl_context * ctx,
 
 	radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
 			"%s: Validating texture %p now, minLod = %d, maxLod = %d\n",
-			__FUNCTION__, texObj ,t->minLod, t->maxLod);
+			__func__, texObj ,t->minLod, t->maxLod);
 
 	dst_miptree = get_biggest_matching_miptree(t, t->base.BaseLevel, t->base._MaxLevel);
 
@@ -531,12 +531,12 @@ int radeon_validate_texture_miptree(struct gl_context * ctx,
 		radeon_try_alloc_miptree(rmesa, t);
 		radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
 			"%s: No matching miptree found, allocated new one %p\n",
-			__FUNCTION__, t->mt);
+			__func__, t->mt);
 
 	} else {
 		radeon_miptree_reference(dst_miptree, &t->mt);
 		radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
-			"%s: Using miptree %p\n", __FUNCTION__, t->mt);
+			"%s: Using miptree %p\n", __func__, t->mt);
 	}
 
 	const unsigned faces = _mesa_num_tex_faces(texObj->Target);

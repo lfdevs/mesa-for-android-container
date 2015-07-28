@@ -118,6 +118,35 @@ CopyPropagation::visit(BasicBlock *bb)
 
 // =============================================================================
 
+class MergeSplits : public Pass
+{
+private:
+   virtual bool visit(BasicBlock *);
+};
+
+// For SPLIT / MERGE pairs that operate on the same registers, replace the
+// post-merge def with the SPLIT's source.
+bool
+MergeSplits::visit(BasicBlock *bb)
+{
+   Instruction *i, *next, *si;
+
+   for (i = bb->getEntry(); i; i = next) {
+      next = i->next;
+      if (i->op != OP_MERGE || typeSizeof(i->dType) != 8)
+         continue;
+      si = i->getSrc(0)->getInsn();
+      if (si->op != OP_SPLIT || si != i->getSrc(1)->getInsn())
+         continue;
+      i->def(0).replace(si->getSrc(0), false);
+      delete_Instruction(prog, i);
+   }
+
+   return true;
+}
+
+// =============================================================================
+
 class LoadPropagation : public Pass
 {
 private:
@@ -2283,6 +2312,57 @@ FlatteningPass::tryPredicateConditional(BasicBlock *bb)
 
 // =============================================================================
 
+// Fold Immediate into MAD; must be done after register allocation due to
+// constraint SDST == SSRC2
+// TODO:
+// Does NVC0+ have other situations where this pass makes sense?
+class NV50PostRaConstantFolding : public Pass
+{
+private:
+   virtual bool visit(BasicBlock *);
+};
+
+bool
+NV50PostRaConstantFolding::visit(BasicBlock *bb)
+{
+   Value *vtmp;
+   Instruction *def;
+
+   for (Instruction *i = bb->getFirst(); i; i = i->next) {
+      switch (i->op) {
+      case OP_MAD:
+         if (i->def(0).getFile() != FILE_GPR ||
+             i->src(0).getFile() != FILE_GPR ||
+             i->src(1).getFile() != FILE_GPR ||
+             i->src(2).getFile() != FILE_GPR ||
+             i->getDef(0)->reg.data.id != i->getSrc(2)->reg.data.id ||
+             !isFloatType(i->dType))
+            break;
+
+         def = i->getSrc(1)->getInsn();
+         if (def->op == OP_MOV && def->src(0).getFile() == FILE_IMMEDIATE) {
+            vtmp = i->getSrc(1);
+            i->setSrc(1, def->getSrc(0));
+
+            /* There's no post-RA dead code elimination, so do it here
+             * XXX: if we add more code-removing post-RA passes, we might
+             *      want to create a post-RA dead-code elim pass */
+            if (vtmp->refCount() == 0)
+               delete_Instruction(bb->getProgram(), def);
+
+            break;
+         }
+         break;
+      default:
+         break;
+      }
+   }
+
+   return true;
+}
+
+// =============================================================================
+
 // Common subexpression elimination. Stupid O^2 implementation.
 class LocalCSE : public Pass
 {
@@ -2636,6 +2716,7 @@ Program::optimizeSSA(int level)
 {
    RUN_PASS(1, DeadCodeElim, buryAll);
    RUN_PASS(1, CopyPropagation, run);
+   RUN_PASS(1, MergeSplits, run);
    RUN_PASS(2, GlobalCSE, run);
    RUN_PASS(1, LocalCSE, run);
    RUN_PASS(2, AlgebraicOpt, run);
@@ -2653,6 +2734,9 @@ bool
 Program::optimizePostRA(int level)
 {
    RUN_PASS(2, FlatteningPass, run);
+   if (getTarget()->getChipset() < 0xc0)
+      RUN_PASS(2, NV50PostRaConstantFolding, run);
+
    return true;
 }
 

@@ -3,7 +3,7 @@
 
 #include "util/u_range.h"
 #include "util/u_transfer.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 struct pipe_resource;
 struct nouveau_context;

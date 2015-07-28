@@ -492,7 +492,7 @@ static void teximage_assign_miptree(radeonContextPtr rmesa,
 		radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
 			     "%s: texObj %p, texImage %p, "
 				"texObj miptree doesn't match, allocated new miptree %p\n",
-				__FUNCTION__, texObj, texImage, t->mt);
+				__func__, texObj, texImage, t->mt);
 	}
 
 	/* Miptree alocation may have failed,

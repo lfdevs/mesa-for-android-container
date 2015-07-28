@@ -208,17 +208,12 @@ struct brw_blorp_prog_data
 };
 
 
-enum gen7_fast_clear_op {
-   GEN7_FAST_CLEAR_OP_NONE,
-   GEN7_FAST_CLEAR_OP_FAST_CLEAR,
-   GEN7_FAST_CLEAR_OP_RESOLVE,
-};
-
-
 class brw_blorp_params
 {
 public:
-   brw_blorp_params();
+   brw_blorp_params(unsigned num_varyings = 0,
+                    unsigned num_draw_buffers = 1,
+                    unsigned num_layers = 1);
 
    virtual uint32_t get_wm_prog(struct brw_context *brw,
                                 brw_blorp_prog_data **prog_data) const = 0;
@@ -232,10 +227,11 @@ public:
    brw_blorp_surface_info src;
    brw_blorp_surface_info dst;
    enum gen6_hiz_op hiz_op;
-   enum gen7_fast_clear_op fast_clear_op;
    bool use_wm_prog;
    brw_blorp_wm_push_constants wm_push_consts;
-   bool color_write_disable[4];
+   const unsigned num_varyings;
+   const unsigned num_draw_buffers;
+   const unsigned num_layers;
 };
 
 
@@ -388,8 +384,7 @@ gen6_blorp_emit_blend_state(struct brw_context *brw,
                             const brw_blorp_params *params);
 
 uint32_t
-gen6_blorp_emit_cc_state(struct brw_context *brw,
-                         const brw_blorp_params *params);
+gen6_blorp_emit_cc_state(struct brw_context *brw);
 
 uint32_t
 gen6_blorp_emit_wm_constants(struct brw_context *brw,
@@ -401,7 +396,6 @@ gen6_blorp_emit_vs_disable(struct brw_context *brw,
 
 uint32_t
 gen6_blorp_emit_binding_table(struct brw_context *brw,
-                              const brw_blorp_params *params,
                               uint32_t wm_surf_offset_renderbuffer,
                               uint32_t wm_surf_offset_texture);
 
@@ -414,8 +408,7 @@ gen6_blorp_emit_gs_disable(struct brw_context *brw,
                            const brw_blorp_params *params);
 
 void
-gen6_blorp_emit_clip_disable(struct brw_context *brw,
-                             const brw_blorp_params *params);
+gen6_blorp_emit_clip_disable(struct brw_context *brw);
 
 void
 gen6_blorp_emit_drawing_rectangle(struct brw_context *brw,
@@ -423,7 +416,9 @@ gen6_blorp_emit_drawing_rectangle(struct brw_context *brw,
 
 uint32_t
 gen6_blorp_emit_sampler_state(struct brw_context *brw,
-                              const brw_blorp_params *params);
+                              unsigned tex_filter, unsigned max_lod,
+                              bool non_normalized_coords);
+
 /** \} */
 
 #endif /* __cplusplus */

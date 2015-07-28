@@ -29,9 +29,14 @@
 #ifndef EGLARRAY_INCLUDED
 #define EGLARRAY_INCLUDED
 
+#include "c99_compat.h"
 
 #include "egltypedefs.h"
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef EGLBoolean (*_EGLArrayForEach)(void *elem, void *foreach_data);
 
@@ -75,11 +80,15 @@ _eglFlattenArray(_EGLArray *array, void *buffer, EGLint elem_size, EGLint size,
                  _EGLArrayForEach flatten);
 
 
-static INLINE EGLint
+static inline EGLint
 _eglGetArraySize(_EGLArray *array)
 {
    return (array) ? array->Size : 0;
 }
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* EGLARRAY_INCLUDED */

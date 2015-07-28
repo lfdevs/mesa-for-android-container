@@ -62,7 +62,7 @@ static void compile_clip_prog( struct brw_context *brw,
 
    /* Begin the compilation:
     */
-   brw_init_compile(brw, &c.func, mem_ctx);
+   brw_init_codegen(brw->intelScreen->devinfo, &c.func, mem_ctx);
 
    c.func.single_program_flow = 1;
 
@@ -117,7 +117,8 @@ static void compile_clip_prog( struct brw_context *brw,
 
    if (unlikely(INTEL_DEBUG & DEBUG_CLIP)) {
       fprintf(stderr, "clip:\n");
-      brw_disassemble(brw, c.func.store, 0, program_size, stderr);
+      brw_disassemble(brw->intelScreen->devinfo, c.func.store,
+                      0, program_size, stderr);
       fprintf(stderr, "\n");
    }
 
@@ -224,8 +225,7 @@ brw_upload_clip_prog(struct brw_context *brw)
 	       key.offset_factor = ctx->Polygon.OffsetFactor * ctx->DrawBuffer->_MRD;
 	    }
 
-	    switch (ctx->Polygon.FrontFace) {
-	    case GL_CCW:
+	    if (!ctx->Polygon._FrontBit) {
 	       key.fill_ccw = fill_front;
 	       key.fill_cw = fill_back;
 	       key.offset_ccw = offset_front;
@@ -233,8 +233,7 @@ brw_upload_clip_prog(struct brw_context *brw)
 	       if (ctx->Light.Model.TwoSide &&
 		   key.fill_cw != CLIP_CULL)
 		  key.copy_bfc_cw = 1;
-	       break;
-	    case GL_CW:
+	    } else {
 	       key.fill_cw = fill_front;
 	       key.fill_ccw = fill_back;
 	       key.offset_cw = offset_front;
@@ -242,7 +241,6 @@ brw_upload_clip_prog(struct brw_context *brw)
 	       if (ctx->Light.Model.TwoSide &&
 		   key.fill_ccw != CLIP_CULL)
 		  key.copy_bfc_ccw = 1;
-	       break;
 	    }
 	 }
       }

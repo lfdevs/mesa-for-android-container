@@ -25,6 +25,7 @@
  *
  */
 
+#include <stdlib.h>
 #include "radeon_remove_constants.h"
 #include "radeon_dataflow.h"
 

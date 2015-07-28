@@ -124,7 +124,7 @@ intel_region_alloc_internal(struct intel_screen *screen,
    region->bo = buffer;
    region->tiling = tiling;
 
-   _DBG("%s <-- %p\n", __FUNCTION__, region);
+   _DBG("%s <-- %p\n", __func__, region);
    return region;
 }
 
@@ -241,7 +241,7 @@ intel_region_alloc_for_fd(struct intel_screen *screen,
 void
 intel_region_reference(struct intel_region **dst, struct intel_region *src)
 {
-   _DBG("%s: %p(%d) -> %p(%d)\n", __FUNCTION__,
+   _DBG("%s: %p(%d) -> %p(%d)\n", __func__,
 	*dst, *dst ? (*dst)->refcount : 0, src, src ? src->refcount : 0);
 
    if (src != *dst) {
@@ -260,13 +260,13 @@ intel_region_release(struct intel_region **region_handle)
    struct intel_region *region = *region_handle;
 
    if (region == NULL) {
-      _DBG("%s NULL\n", __FUNCTION__);
+      _DBG("%s NULL\n", __func__);
       return;
    }
 
-   _DBG("%s %p %d\n", __FUNCTION__, region, region->refcount - 1);
+   _DBG("%s %p %d\n", __func__, region, region->refcount - 1);
 
-   ASSERT(region->refcount > 0);
+   assert(region->refcount > 0);
    region->refcount--;
 
    if (region->refcount == 0) {

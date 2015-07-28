@@ -54,7 +54,7 @@ static void TAG(emit)( struct gl_context *ctx,
 
    union emit_union *v = (union emit_union *)dest;
 
-   radeon_print(RADEON_SWRENDER, RADEON_VERBOSE, "%s\n", __FUNCTION__);
+   radeon_print(RADEON_SWRENDER, RADEON_VERBOSE, "%s\n", __func__);
 
    coord = (GLuint (*)[4])VB->AttribPtr[_TNL_ATTRIB_POS]->data;
    coord_stride = VB->AttribPtr[_TNL_ATTRIB_POS]->stride;

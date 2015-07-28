@@ -34,10 +34,10 @@
 
 #include <stdio.h>
 
-#include "radeon/drm/radeon_winsys.h"
+#include "radeon/radeon_winsys.h"
 
 #include "util/u_blitter.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_range.h"
 #include "util/u_slab.h"
 #include "util/u_suballoc.h"
@@ -55,6 +55,10 @@
 #define R600_QUERY_NUM_BYTES_MOVED	(PIPE_QUERY_DRIVER_SPECIFIC + 5)
 #define R600_QUERY_VRAM_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 6)
 #define R600_QUERY_GTT_USAGE		(PIPE_QUERY_DRIVER_SPECIFIC + 7)
+#define R600_QUERY_GPU_TEMPERATURE	(PIPE_QUERY_DRIVER_SPECIFIC + 8)
+#define R600_QUERY_CURRENT_GPU_SCLK	(PIPE_QUERY_DRIVER_SPECIFIC + 9)
+#define R600_QUERY_CURRENT_GPU_MCLK	(PIPE_QUERY_DRIVER_SPECIFIC + 10)
+#define R600_QUERY_GPU_LOAD		(PIPE_QUERY_DRIVER_SPECIFIC + 11)
 
 #define R600_CONTEXT_STREAMOUT_FLUSH		(1u << 0)
 #define R600_CONTEXT_PRIVATE_FLAG		(1u << 1)
@@ -83,6 +87,8 @@
 #define DBG_NO_TILING		(1 << 14)
 #define DBG_SWITCH_ON_EOP	(1 << 15)
 #define DBG_FORCE_DMA		(1 << 16)
+#define DBG_PRECOMPILE		(1 << 17)
+#define DBG_INFO		(1 << 18)
 /* The maximum allowed bit is 20. */
 
 #define R600_MAP_BUFFER_ALIGNMENT 64
@@ -193,7 +199,7 @@ struct r600_texture {
 	unsigned			dirty_level_mask; /* each bit says if that mipmap is compressed */
 	struct r600_texture		*flushed_depth_texture;
 	boolean				is_flushing_texture;
-	struct radeon_surface		surface;
+	struct radeon_surf		surface;
 
 	/* Colorbuffer compression and fast clear. */
 	struct r600_fmask_info		fmask;
@@ -278,6 +284,13 @@ struct r600_common_screen {
 	struct r600_resource		*trace_bo;
 	uint32_t			*trace_ptr;
 	unsigned			cs_count;
+
+	/* GPU load thread. */
+	pipe_mutex			gpu_load_mutex;
+	pipe_thread			gpu_load_thread;
+	unsigned			gpu_load_counter_busy;
+	unsigned			gpu_load_counter_idle;
+	unsigned			gpu_load_stop_thread; /* bool */
 };
 
 /* This encapsulates a state or an operation which can emitted into the GPU
@@ -361,7 +374,6 @@ struct r600_common_context {
 	/* Queries. */
 	/* The list of active queries. Only one query of each type can be active. */
 	int				num_occlusion_queries;
-	int				num_pipelinestat_queries;
 	/* Keep track of non-timer queries, because they should be suspended
 	 * during context flushing.
 	 * The timer queries (TIME_ELAPSED) shouldn't be suspended. */
@@ -445,6 +457,10 @@ bool r600_init_resource(struct r600_common_screen *rscreen,
 struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 					 const struct pipe_resource *templ,
 					 unsigned alignment);
+struct pipe_resource *
+r600_buffer_from_user_memory(struct pipe_screen *screen,
+			     const struct pipe_resource *templ,
+			     void *user_memory);
 
 /* r600_common_pipe.c */
 void r600_draw_rectangle(struct blitter_context *blitter,
@@ -469,6 +485,11 @@ struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 						  const struct pipe_resource *templ);
 const char *r600_get_llvm_processor_name(enum radeon_family family);
 void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw);
+
+/* r600_gpu_load.c */
+void r600_gpu_load_kill_thread(struct r600_common_screen *rscreen);
+uint64_t r600_gpu_load_begin(struct r600_common_screen *rscreen);
+unsigned r600_gpu_load_end(struct r600_common_screen *rscreen, uint64_t begin);
 
 /* r600_query.c */
 void r600_query_init(struct r600_common_context *rctx);
@@ -523,7 +544,7 @@ void cayman_get_sample_position(struct pipe_context *ctx, unsigned sample_count,
 void cayman_init_msaa(struct pipe_context *ctx);
 void cayman_emit_msaa_sample_locs(struct radeon_winsys_cs *cs, int nr_samples);
 void cayman_emit_msaa_config(struct radeon_winsys_cs *cs, int nr_samples,
-			     int ps_iter_samples);
+			     int ps_iter_samples, int overrast_samples);
 
 
 /* Inline helpers. */

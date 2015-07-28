@@ -32,7 +32,6 @@
 
 
 #include "main/glheader.h"
-#include "main/colormac.h"
 #include "main/macros.h"
 #include "main/imports.h"
 #include "main/samplerobj.h"
@@ -392,7 +391,7 @@ run_vp( struct gl_context *ctx, struct tnl_pipeline_stage *stage )
          store->results[VARYING_SLOT_FOGC].data[i][3] = 1.0;
       }
 #ifdef NAN_CHECK
-      ASSERT(machine->Outputs[0][3] != 0.0F);
+      assert(machine->Outputs[0][3] != 0.0F);
 #endif
 #if 0
       printf("HPOS: %f %f %f %f\n",

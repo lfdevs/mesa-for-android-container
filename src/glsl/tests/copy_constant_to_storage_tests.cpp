@@ -70,7 +70,7 @@ copy_constant_to_storage::int_test(unsigned rows)
    ir_constant *val;
    generate_data(mem_ctx, GLSL_TYPE_INT, 1, rows, val);
 
-   const unsigned red_zone_size = Elements(storage) - val->type->components();
+   const unsigned red_zone_size = ARRAY_SIZE(storage) - val->type->components();
    fill_storage_array_with_sentinels(storage,
 				     val->type->components(),
 				     red_zone_size);
@@ -90,7 +90,7 @@ copy_constant_to_storage::uint_test(unsigned rows)
    ir_constant *val;
    generate_data(mem_ctx, GLSL_TYPE_UINT, 1, rows, val);
 
-   const unsigned red_zone_size = Elements(storage) - val->type->components();
+   const unsigned red_zone_size = ARRAY_SIZE(storage) - val->type->components();
    fill_storage_array_with_sentinels(storage,
 				     val->type->components(),
 				     red_zone_size);
@@ -110,7 +110,7 @@ copy_constant_to_storage::float_test(unsigned columns, unsigned rows)
    ir_constant *val;
    generate_data(mem_ctx, GLSL_TYPE_FLOAT, columns, rows, val);
 
-   const unsigned red_zone_size = Elements(storage) - val->type->components();
+   const unsigned red_zone_size = ARRAY_SIZE(storage) - val->type->components();
    fill_storage_array_with_sentinels(storage,
 				     val->type->components(),
 				     red_zone_size);
@@ -130,7 +130,7 @@ copy_constant_to_storage::bool_test(unsigned rows)
    ir_constant *val;
    generate_data(mem_ctx, GLSL_TYPE_BOOL, 1, rows, val);
 
-   const unsigned red_zone_size = Elements(storage) - val->type->components();
+   const unsigned red_zone_size = ARRAY_SIZE(storage) - val->type->components();
    fill_storage_array_with_sentinels(storage,
 				     val->type->components(),
 				     red_zone_size);
@@ -155,7 +155,7 @@ copy_constant_to_storage::sampler_test(void)
    ir_constant *val;
    generate_data(mem_ctx, GLSL_TYPE_INT, 1, 1, val);
 
-   const unsigned red_zone_size = Elements(storage) - val->type->components();
+   const unsigned red_zone_size = ARRAY_SIZE(storage) - val->type->components();
    fill_storage_array_with_sentinels(storage,
 				     val->type->components(),
 				     red_zone_size);

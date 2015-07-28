@@ -39,12 +39,7 @@
 #include <GL/internal/dri_interface.h>
 #include <stdbool.h>
 #include "loader.h"
-
-#if (__GNUC__)
-#define PRINTFLIKE(f, a) __attribute__ ((format(__printf__, f, a)))
-#else
-#define PRINTFLIKE(f, a)
-#endif
+#include "util/macros.h" /* for PRINTFLIKE */
 
 typedef struct __GLXDRIconfigPrivateRec __GLXDRIconfigPrivate;
 

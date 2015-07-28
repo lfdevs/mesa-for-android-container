@@ -85,7 +85,7 @@ brw_upload_gs_unit(struct brw_context *brw)
 
    gs->gs6.max_vp_index = brw->ctx.Const.MaxViewports - 1;
 
-   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
+   brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 }
 
 const struct brw_tracked_state brw_gs_unit = {

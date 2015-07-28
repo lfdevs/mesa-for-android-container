@@ -58,9 +58,6 @@ static void dump_instr_name(struct ir3_dump_ctx *ctx,
 		case OPC_META_PHI:
 			fprintf(ctx->f, "&#934;");
 			break;
-		case OPC_META_DEREF:
-			fprintf(ctx->f, "(*)");
-			break;
 		default:
 			/* shouldn't hit here.. just for debugging: */
 			switch (instr->opc) {
@@ -110,11 +107,12 @@ static void dump_instr_name(struct ir3_dump_ctx *ctx,
 static void dump_reg_name(struct ir3_dump_ctx *ctx,
 		struct ir3_register *reg, bool followssa)
 {
-	if ((reg->flags & IR3_REG_ABS) && (reg->flags & IR3_REG_NEGATE))
+	if ((reg->flags & (IR3_REG_FABS | IR3_REG_SABS)) &&
+			(reg->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT)))
 		fprintf(ctx->f, "(absneg)");
-	else if (reg->flags & IR3_REG_NEGATE)
+	else if (reg->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT))
 		fprintf(ctx->f, "(neg)");
-	else if (reg->flags & IR3_REG_ABS)
+	else if (reg->flags & (IR3_REG_FABS | IR3_REG_SABS))
 		fprintf(ctx->f, "(abs)");
 
 	if (reg->flags & IR3_REG_IMMED) {
@@ -161,12 +159,9 @@ static void dump_instr(struct ir3_dump_ctx *ctx,
 	if (is_meta(instr)) {
 		if ((instr->opc == OPC_META_FO) ||
 				(instr->opc == OPC_META_FI)) {
-			unsigned i;
-			for (i = 1; i < instr->regs_count; i++) {
-				struct ir3_register *reg = instr->regs[i];
-				if (reg->flags & IR3_REG_SSA)
-					dump_instr(ctx, reg->instr);
-			}
+			struct ir3_instruction *src;
+			foreach_ssa_src(src, instr)
+				dump_instr(ctx, src);
 		} else if (instr->opc == OPC_META_FLOW) {
 			struct ir3_register *reg = instr->regs[1];
 			ir3_block_dump(ctx, instr->flow.if_block, "if");
@@ -174,8 +169,7 @@ static void dump_instr(struct ir3_dump_ctx *ctx,
 				ir3_block_dump(ctx, instr->flow.else_block, "else");
 			if (reg->flags & IR3_REG_SSA)
 				dump_instr(ctx, reg->instr);
-		} else if ((instr->opc == OPC_META_PHI) ||
-				(instr->opc == OPC_META_DEREF)) {
+		} else if (instr->opc == OPC_META_PHI) {
 			/* treat like a normal instruction: */
 			ir3_instr_dump(ctx, instr);
 		}
@@ -226,23 +220,18 @@ static void dump_link2(struct ir3_dump_ctx *ctx,
 			printdef(ctx, defer, "[label=\".%c\"]",
 					"xyzw"[instr->fo.off & 0x3]);
 		} else if (instr->opc == OPC_META_FI) {
-			unsigned i;
+			struct ir3_instruction *src;
 
-			/* recursively dump all parents and links */
-			for (i = 1; i < instr->regs_count; i++) {
-				struct ir3_register *reg = instr->regs[i];
-				if (reg->flags & IR3_REG_SSA) {
-					dump_link2(ctx, reg->instr, target, defer);
-					printdef(ctx, defer, "[label=\".%c\"]",
-							"xyzw"[(i - 1) & 0x3]);
-				}
+			foreach_ssa_src_n(src, i, instr) {
+				dump_link2(ctx, src, target, defer);
+				printdef(ctx, defer, "[label=\".%c\"]",
+						"xyzw"[i & 0x3]);
 			}
 		} else if (instr->opc == OPC_META_OUTPUT) {
 			printdef(ctx, defer, "output%lx:<out%u>:w -> %s",
 					PTRID(instr->inout.block),
 					instr->regs[0]->num, target);
-		} else if ((instr->opc == OPC_META_PHI) ||
-				(instr->opc == OPC_META_DEREF)) {
+		} else if (instr->opc == OPC_META_PHI) {
 			/* treat like a normal instruction: */
 			printdef(ctx, defer, "instr%lx:<dst0> -> %s", PTRID(instr), target);
 		}
@@ -274,7 +263,7 @@ static struct ir3_register *follow_flow(struct ir3_register *reg)
 static void ir3_instr_dump(struct ir3_dump_ctx *ctx,
 		struct ir3_instruction *instr)
 {
-	unsigned i;
+	struct ir3_register *src;
 
 	fprintf(ctx->f, "instr%lx [shape=record,style=filled,fillcolor=lightgrey,label=\"{",
 			PTRID(instr));
@@ -284,13 +273,13 @@ static void ir3_instr_dump(struct ir3_dump_ctx *ctx,
 	fprintf(ctx->f, "|<dst0>");
 
 	/* source register(s): */
-	for (i = 1; i < instr->regs_count; i++) {
-		struct ir3_register *reg = follow_flow(instr->regs[i]);
+	foreach_src_n(src, i, instr) {
+		struct ir3_register *reg = follow_flow(src);
 
 		fprintf(ctx->f, "|");
 
 		if (reg->flags & IR3_REG_SSA)
-			fprintf(ctx->f, "<src%u> ", (i - 1));
+			fprintf(ctx->f, "<src%u> ", i);
 
 		dump_reg_name(ctx, reg, true);
 	}
@@ -298,18 +287,18 @@ static void ir3_instr_dump(struct ir3_dump_ctx *ctx,
 	fprintf(ctx->f, "}\"];\n");
 
 	/* and recursively dump dependent instructions: */
-	for (i = 1; i < instr->regs_count; i++) {
-		struct ir3_register *reg = instr->regs[i];
+	foreach_src_n(src, i, instr) {
+		struct ir3_register *reg = follow_flow(src);
 		char target[32];  /* link target */
 
 		if (!(reg->flags & IR3_REG_SSA))
 			continue;
 
 		snprintf(target, sizeof(target), "instr%lx:<src%u>",
-				PTRID(instr), (i - 1));
+				PTRID(instr), i);
 
 		dump_instr(ctx, reg->instr);
-		dump_link(ctx, follow_flow(reg)->instr, instr->block, target);
+		dump_link(ctx, reg->instr, instr->block, target);
 	}
 }
 
@@ -419,8 +408,27 @@ ir3_dump_instr_single(struct ir3_instruction *instr)
 		dump_reg_name(&ctx, reg, !!i);
 	}
 
-	if (is_meta(instr) && (instr->opc == OPC_META_FO))
-		printf(", off=%d", instr->fo.off);
+	if (instr->address) {
+		fprintf(ctx.f, ", address=_");
+		fprintf(ctx.f, "[");
+		dump_instr_name(&ctx, instr->address);
+		fprintf(ctx.f, "]");
+	}
+
+	if (instr->fanin) {
+		fprintf(ctx.f, ", fanin=_");
+		fprintf(ctx.f, "[");
+		dump_instr_name(&ctx, instr->fanin);
+		fprintf(ctx.f, "]");
+	}
+
+	if (is_meta(instr)) {
+		if (instr->opc == OPC_META_FO) {
+			printf(", off=%d", instr->fo.off);
+		} else if ((instr->opc == OPC_META_FI) && instr->fi.aid) {
+			printf(", aid=%d", instr->fi.aid);
+		}
+	}
 
 	printf("\n");
 }

@@ -3,7 +3,7 @@
 #define __NOUVEAU_FENCE_H__
 
 #include "util/u_inlines.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #define NOUVEAU_FENCE_STATE_AVAILABLE 0
 #define NOUVEAU_FENCE_STATE_EMITTING  1

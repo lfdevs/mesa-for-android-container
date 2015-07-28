@@ -45,7 +45,7 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
    intel_miptree_get_dimensions_for_image(&intelImage->base.Base,
                                           &width, &height, &depth);
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    /* Figure out image dimensions at start level. */
    for (i = intelImage->base.Base.Level; i > 0; i--) {
@@ -98,16 +98,25 @@ intelTexImage(struct gl_context * ctx,
    bool tex_busy = intelImage->mt && drm_intel_bo_busy(intelImage->mt->bo);
 
    DBG("%s mesa_format %s target %s format %s type %s level %d %dx%dx%d\n",
-       __FUNCTION__, _mesa_get_format_name(texImage->TexFormat),
+       __func__, _mesa_get_format_name(texImage->TexFormat),
        _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
        _mesa_lookup_enum_by_nr(format), _mesa_lookup_enum_by_nr(type),
        texImage->Level, texImage->Width, texImage->Height, texImage->Depth);
+
+   /* Allocate storage for texture data. */
+   if (!ctx->Driver.AllocTextureImageBuffer(ctx, texImage)) {
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage%uD", dims);
+      return;
+   }
+
+   assert(intelImage->mt);
 
    ok = _mesa_meta_pbo_TexSubImage(ctx, dims, texImage, 0, 0, 0,
                                    texImage->Width, texImage->Height,
                                    texImage->Depth,
                                    format, type, pixels,
-                                   true, tex_busy, unpack);
+                                   false /*allocate_storage*/,
+                                   tex_busy, unpack);
    if (ok)
       return;
 
@@ -117,12 +126,12 @@ intelTexImage(struct gl_context * ctx,
                                        texImage->Height,
                                        texImage->Depth,
                                        format, type, pixels, unpack,
-                                       true /*for_glTexImage*/);
+                                       false /*allocate_storage*/);
    if (ok)
       return;
 
    DBG("%s: upload image %dx%dx%d pixels %p\n",
-       __FUNCTION__, texImage->Width, texImage->Height, texImage->Depth,
+       __func__, texImage->Width, texImage->Height, texImage->Depth,
        pixels);
 
    _mesa_store_teximage(ctx, dims, texImage,
@@ -145,7 +154,8 @@ intel_set_texture_image_bo(struct gl_context *ctx,
                            uint32_t offset,
                            GLuint width, GLuint height,
                            GLuint pitch,
-                           GLuint tile_x, GLuint tile_y)
+                           GLuint tile_x, GLuint tile_y,
+                           bool disable_aux_buffers)
 {
    struct brw_context *brw = brw_context(ctx);
    struct intel_texture_image *intel_image = intel_texture_image(image);
@@ -160,7 +170,8 @@ intel_set_texture_image_bo(struct gl_context *ctx,
    ctx->Driver.FreeTextureImageBuffer(ctx, image);
 
    intel_image->mt = intel_miptree_create_for_bo(brw, bo, image->TexFormat,
-                                                 0, width, height, 1, pitch);
+                                                 0, width, height, 1, pitch,
+                                                 disable_aux_buffers);
    if (intel_image->mt == NULL)
        return;
    intel_image->mt->target = target;
@@ -244,7 +255,8 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
                               rb->Base.Base.Width,
                               rb->Base.Base.Height,
                               rb->mt->pitch,
-                              0, 0);
+                              0, 0,
+                              false /*disable_aux_buffers*/);
    _mesa_unlock_texture(&brw->ctx, texObj);
 }
 
@@ -308,17 +320,9 @@ intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
    if (image == NULL)
       return;
 
-   /**
-    * Images originating via EGL_EXT_image_dma_buf_import can be used only
-    * with GL_OES_EGL_image_external only.
+   /* We support external textures only for EGLImages created with
+    * EGL_EXT_image_dma_buf_import. We may lift that restriction in the future.
     */
-   if (image->dma_buf_imported && target != GL_TEXTURE_EXTERNAL_OES) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-            "glEGLImageTargetTexture2DOES(dma buffers can be used with "
-               "GL_OES_EGL_image_external only");
-      return;
-   }
-
    if (target == GL_TEXTURE_EXTERNAL_OES && !image->dma_buf_imported) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
             "glEGLImageTargetTexture2DOES(external target is enabled only "
@@ -334,12 +338,18 @@ intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
       return;
    }
 
+   /* Disable creation of the texture's aux buffers because the driver exposes
+    * no EGL API to manage them. That is, there is no API for resolving the aux
+    * buffer's content to the main buffer nor for invalidating the aux buffer's
+    * content.
+    */
    intel_set_texture_image_bo(ctx, texImage, image->bo,
                               target, image->internal_format,
                               image->format, image->offset,
                               image->width,  image->height,
                               image->pitch,
-                              image->tile_x, image->tile_y);
+                              image->tile_x, image->tile_y,
+                              true /*disable_aux_buffers*/);
 }
 
 /**
@@ -428,7 +438,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
 
    error = brw_bo_map(brw, bo, false /* write enable */, "miptree");
    if (error) {
-      DBG("%s: failed to map bo\n", __FUNCTION__);
+      DBG("%s: failed to map bo\n", __func__);
       return false;
    }
 
@@ -437,7 +447,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
    DBG("%s: level=%d x,y=(%d,%d) (w,h)=(%d,%d) format=0x%x type=0x%x "
        "mesa_format=0x%x tiling=%d "
        "packing=(alignment=%d row_length=%d skip_pixels=%d skip_rows=%d)\n",
-       __FUNCTION__, texImage->Level, xoffset, yoffset, width, height,
+       __func__, texImage->Level, xoffset, yoffset, width, height,
        format, type, texImage->TexFormat, image->mt->tiling,
        packing->Alignment, packing->RowLength, packing->SkipPixels,
        packing->SkipRows);
@@ -470,7 +480,7 @@ intel_get_tex_image(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    bool ok;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    if (_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
       if (_mesa_meta_pbo_GetTexSubImage(ctx, 3, texImage, 0, 0, 0,
@@ -486,7 +496,7 @@ intel_get_tex_image(struct gl_context *ctx,
          return;
       }
 
-      perf_debug("%s: fallback to CPU mapping in PBO case\n", __FUNCTION__);
+      perf_debug("%s: fallback to CPU mapping in PBO case\n", __func__);
    }
 
    ok = intel_gettexsubimage_tiled_memcpy(ctx, texImage, 0, 0,
@@ -498,7 +508,7 @@ intel_get_tex_image(struct gl_context *ctx,
 
    _mesa_meta_GetTexImage(ctx, format, type, pixels, texImage);
 
-   DBG("%s - DONE\n", __FUNCTION__);
+   DBG("%s - DONE\n", __func__);
 }
 
 void

@@ -41,7 +41,7 @@
 #include "os/os_thread.h"
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_time.h"
 
 #include "pb_buffer.h"

@@ -22,12 +22,12 @@ extern "C" {
  *   - Disabling OA counters on Gen6+ (3 DWords = 12 bytes)
  *   - Ending MI_REPORT_PERF_COUNT on Gen5+, plus associated PIPE_CONTROLs:
  *     - Two sets of PIPE_CONTROLs, which become 3 PIPE_CONTROLs each on SNB,
- *       which are 4 DWords each ==> 2 * 3 * 4 * 4 = 96 bytes
+ *       which are 5 DWords each ==> 2 * 3 * 5 * 4 = 120 bytes
  *     - 3 DWords for MI_REPORT_PERF_COUNT itself on Gen6+.  ==> 12 bytes.
  *       On Ironlake, it's 6 DWords, but we have some slack due to the lack of
  *       Sandybridge PIPE_CONTROL madness.
  */
-#define BATCH_RESERVED 146
+#define BATCH_RESERVED 152
 
 struct intel_batchbuffer;
 

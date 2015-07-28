@@ -46,15 +46,18 @@
 /**
  * Return true if the conversion L=R+G+B is needed.
  */
-static GLboolean
-need_rgb_to_luminance_conversion(mesa_format texFormat, GLenum format)
+GLboolean
+_mesa_need_rgb_to_luminance_conversion(mesa_format texFormat, GLenum format)
 {
    GLenum baseTexFormat = _mesa_get_format_base_format(texFormat);
 
    return (baseTexFormat == GL_RG ||
            baseTexFormat == GL_RGB ||
            baseTexFormat == GL_RGBA) &&
-          (format == GL_LUMINANCE || format == GL_LUMINANCE_ALPHA);
+          (format == GL_LUMINANCE ||
+           format == GL_LUMINANCE_ALPHA ||
+           format == GL_LUMINANCE_INTEGER_EXT ||
+           format == GL_LUMINANCE_ALPHA_INTEGER_EXT);
 }
 
 
@@ -83,7 +86,7 @@ get_readpixels_transfer_ops(const struct gl_context *ctx, mesa_format texFormat,
    if (uses_blit) {
       /* For blit-based ReadPixels packing, the clamping is done automatically
        * unless the type is float. */
-      if (_mesa_get_clamp_read_color(ctx) &&
+      if (_mesa_get_clamp_read_color(ctx, ctx->ReadBuffer) &&
           (type == GL_FLOAT || type == GL_HALF_FLOAT)) {
          transferOps |= IMAGE_CLAMP_BIT;
       }
@@ -91,7 +94,7 @@ get_readpixels_transfer_ops(const struct gl_context *ctx, mesa_format texFormat,
    else {
       /* For CPU-based ReadPixels packing, the clamping must always be done
        * for non-float types, */
-      if (_mesa_get_clamp_read_color(ctx) ||
+      if (_mesa_get_clamp_read_color(ctx, ctx->ReadBuffer) ||
           (type != GL_FLOAT && type != GL_HALF_FLOAT)) {
          transferOps |= IMAGE_CLAMP_BIT;
       }
@@ -102,7 +105,7 @@ get_readpixels_transfer_ops(const struct gl_context *ctx, mesa_format texFormat,
     * have any effect anyway.
     */
    if (_mesa_get_format_datatype(texFormat) == GL_UNSIGNED_NORMALIZED &&
-       !need_rgb_to_luminance_conversion(texFormat, format)) {
+       !_mesa_need_rgb_to_luminance_conversion(texFormat, format)) {
       transferOps &= ~IMAGE_CLAMP_BIT;
    }
 
@@ -127,7 +130,7 @@ _mesa_readpixels_needs_slow_path(const struct gl_context *ctx, GLenum format,
          _mesa_get_read_renderbuffer_for_format(ctx, format);
    GLenum srcType;
 
-   ASSERT(rb);
+   assert(rb);
 
    /* There are different rules depending on the base format. */
    switch (format) {
@@ -146,7 +149,7 @@ _mesa_readpixels_needs_slow_path(const struct gl_context *ctx, GLenum format,
 
    default:
       /* Color formats. */
-      if (need_rgb_to_luminance_conversion(rb->Format, format)) {
+      if (_mesa_need_rgb_to_luminance_conversion(rb->Format, format)) {
          return GL_TRUE;
       }
 
@@ -180,7 +183,7 @@ readpixels_can_use_memcpy(const struct gl_context *ctx, GLenum format, GLenum ty
    struct gl_renderbuffer *rb =
          _mesa_get_read_renderbuffer_for_format(ctx, format);
 
-   ASSERT(rb);
+   assert(rb);
 
    if (_mesa_readpixels_needs_slow_path(ctx, format, type, GL_FALSE)) {
       return GL_FALSE;
@@ -313,10 +316,10 @@ read_depth_pixels( struct gl_context *ctx,
       return;
 
    /* clipping should have been done already */
-   ASSERT(x >= 0);
-   ASSERT(y >= 0);
-   ASSERT(x + width <= (GLint) rb->Width);
-   ASSERT(y + height <= (GLint) rb->Height);
+   assert(x >= 0);
+   assert(y >= 0);
+   assert(x + width <= (GLint) rb->Width);
+   assert(y + height <= (GLint) rb->Height);
 
    if (type == GL_UNSIGNED_INT &&
        read_uint_depth_pixels(ctx, x, y, width, height, type, pixels, packing)) {
@@ -418,7 +421,7 @@ read_rgba_pixels( struct gl_context *ctx,
                   const struct gl_pixelstore_attrib *packing )
 {
    GLbitfield transferOps;
-   bool dst_is_integer, dst_is_luminance, needs_rebase;
+   bool dst_is_integer, convert_rgb_to_lum, needs_rebase;
    int dst_stride, src_stride, rb_stride;
    uint32_t dst_format, src_format;
    GLubyte *dst, *map;
@@ -439,10 +442,8 @@ read_rgba_pixels( struct gl_context *ctx,
    dst_is_integer = _mesa_is_enum_format_integer(format);
    dst_stride = _mesa_image_row_stride(packing, width, format, type);
    dst_format = _mesa_format_from_format_and_type(format, type);
-   dst_is_luminance = format == GL_LUMINANCE ||
-                      format == GL_LUMINANCE_ALPHA ||
-                      format == GL_LUMINANCE_INTEGER_EXT ||
-                      format == GL_LUMINANCE_ALPHA_INTEGER_EXT;
+   convert_rgb_to_lum =
+      _mesa_need_rgb_to_luminance_conversion(rb->Format, format);
    dst = (GLubyte *) _mesa_image_address2d(packing, pixels, width, height,
                                            format, type, 0, 0);
 
@@ -490,7 +491,7 @@ read_rgba_pixels( struct gl_context *ctx,
     */
    assert(!transferOps || (transferOps && !dst_is_integer));
 
-   needs_rgba = transferOps || dst_is_luminance;
+   needs_rgba = transferOps || convert_rgb_to_lum;
    rgba = NULL;
    if (needs_rgba) {
       uint32_t rgba_format;
@@ -563,7 +564,7 @@ read_rgba_pixels( struct gl_context *ctx,
     * If the dst format is Luminance, we need to do the conversion by computing
     * L=R+G+B values.
     */
-   if (!dst_is_luminance) {
+   if (!convert_rgb_to_lum) {
       _mesa_format_convert(dst, dst_format, dst_stride,
                            src, src_format, src_stride,
                            width, height,

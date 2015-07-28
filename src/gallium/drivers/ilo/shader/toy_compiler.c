@@ -535,7 +535,7 @@ tc_init_inst_templ(struct toy_compiler *tc)
  * Initialize the toy compiler.
  */
 void
-toy_compiler_init(struct toy_compiler *tc, const struct ilo_dev_info *dev)
+toy_compiler_init(struct toy_compiler *tc, const struct ilo_dev *dev)
 {
    memset(tc, 0, sizeof(*tc));
 

@@ -27,13 +27,14 @@ ifeq ($(LOCAL_MODULE_CLASS),)
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 endif
 
-intermediates := $(call local-intermediates-dir)
+intermediates := $(call local-generated-sources-dir)
 
 sources := \
 	glsl_lexer.cpp \
 	glsl_parser.cpp \
 	glcpp/glcpp-lex.c \
 	glcpp/glcpp-parse.c \
+	nir/nir_builder_opcodes.h \
 	nir/nir_constant_expressions.c \
 	nir/nir_opcodes.c \
 	nir/nir_opcodes.h \
@@ -42,7 +43,6 @@ sources := \
 LOCAL_SRC_FILES := $(filter-out $(sources), $(LOCAL_SRC_FILES))
 
 LOCAL_C_INCLUDES += \
-	$(intermediates) \
 	$(intermediates)/glcpp \
 	$(intermediates)/nir \
 	$(MESA_TOP)/src/glsl/glcpp \
@@ -89,6 +89,15 @@ $(intermediates)/glcpp/glcpp-lex.c: $(LOCAL_PATH)/glcpp/glcpp-lex.l
 
 $(intermediates)/glcpp/glcpp-parse.c: $(LOCAL_PATH)/glcpp/glcpp-parse.y
 	$(call glsl_local-y-to-c-and-h)
+
+nir_builder_opcodes_gen := $(LOCAL_PATH)/nir/nir_builder_opcodes_h.py
+nir_builder_opcodes_deps := \
+	$(LOCAL_PATH)/nir/nir_opcodes.py \
+	$(LOCAL_PATH)/nir/nir_builder_opcodes_h.py
+
+$(intermediates)/nir/nir_builder_opcodes.h: $(nir_builder_opcodes_deps)
+	@mkdir -p $(dir $@)
+	$(hide) $(MESA_PYTHON2) $(nir_builder_opcodes_gen) $< > $@
 
 nir_constant_expressions_gen := $(LOCAL_PATH)/nir/nir_constant_expressions.py
 nir_constant_expressions_deps := \

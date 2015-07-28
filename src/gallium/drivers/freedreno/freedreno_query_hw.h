@@ -29,7 +29,7 @@
 #ifndef FREEDRENO_QUERY_HW_H_
 #define FREEDRENO_QUERY_HW_H_
 
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #include "freedreno_query.h"
 #include "freedreno_context.h"

@@ -184,7 +184,7 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
 }
 
 
-static void
+static boolean
 llvmpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
@@ -235,6 +235,7 @@ llvmpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    default:
       break;
    }
+   return true;
 }
 
 
@@ -314,7 +315,7 @@ llvmpipe_check_render_cond(struct llvmpipe_context *lp)
 
    b = pipe->get_query_result(pipe, lp->render_cond_query, wait, (void*)&result);
    if (b)
-      return (!result == lp->render_cond_cond);
+      return ((!result) == lp->render_cond_cond);
    else
       return TRUE;
 }

@@ -256,8 +256,13 @@ disassemble(const void* func, llvm::raw_ostream & Out)
    }
 
 
+#if HAVE_LLVM >= 0x0307
+   OwningPtr<MCInstPrinter> Printer(
+         T->createMCInstPrinter(llvm::Triple(Triple), AsmPrinterVariant, *AsmInfo, *MII, *MRI));
+#else
    OwningPtr<MCInstPrinter> Printer(
          T->createMCInstPrinter(AsmPrinterVariant, *AsmInfo, *MII, *MRI, *STI));
+#endif
    if (!Printer) {
       Out << "error: no instruction printer for target " << Triple.c_str() << "\n";
       Out.flush();
@@ -265,7 +270,7 @@ disassemble(const void* func, llvm::raw_ostream & Out)
    }
 
    TargetOptions options;
-#if defined(DEBUG)
+#if defined(DEBUG) && HAVE_LLVM < 0x0307
    options.JITEmitDebugInfo = true;
 #endif
 #if defined(PIPE_ARCH_X86)
@@ -275,12 +280,6 @@ disassemble(const void* func, llvm::raw_ostream & Out)
    options.NoFramePointerElim = true;
 #endif
    OwningPtr<TargetMachine> TM(T->createTargetMachine(Triple, sys::getHostCPUName(), "", options));
-
-#if HAVE_LLVM >= 0x0306
-   const TargetInstrInfo *TII = TM->getSubtargetImpl()->getInstrInfo();
-#else
-   const TargetInstrInfo *TII = TM->getInstrInfo();
-#endif
 
    /*
     * Wrap the data in a MemoryObject
@@ -328,7 +327,11 @@ disassemble(const void* func, llvm::raw_ostream & Out)
       /*
        * Print the instruction.
        */
+#if HAVE_LLVM >= 0x0307
+      Printer->printInst(&Inst, Out, "", *STI);
+#else
       Printer->printInst(&Inst, Out, "");
+#endif
 
       /*
        * Advance.
@@ -336,7 +339,7 @@ disassemble(const void* func, llvm::raw_ostream & Out)
 
       pc += Size;
 
-      const MCInstrDesc &TID = TII->get(Inst.getOpcode());
+      const MCInstrDesc &TID = MII->get(Inst.getOpcode());
 
       /*
        * Keep track of forward jumps to a nearby address.
@@ -399,18 +402,22 @@ disassemble(const void* func, llvm::raw_ostream & Out)
             break;
          }
       }
-   }
 
-   /*
-    * Print GDB command, useful to verify output.
-    */
-
-   if (0) {
-      _debug_printf("disassemble %p %p\n", bytes, bytes + pc);
+      if (pc >= extent) {
+         Out << "disassembly larger than " << extent << "bytes, aborting\n";
+         break;
+      }
    }
 
    Out << "\n";
    Out.flush();
+
+   /*
+    * Print GDB command, useful to verify output.
+    */
+   if (0) {
+      _debug_printf("disassemble %p %p\n", bytes, bytes + pc);
+   }
 
    return pc;
 }

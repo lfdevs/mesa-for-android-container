@@ -144,7 +144,7 @@ nv30_query_destroy(struct pipe_context *pipe, struct pipe_query *pq)
    FREE(pq);
 }
 
-static void
+static boolean
 nv30_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
 {
    struct nv30_context *nv30 = nv30_context(pipe);
@@ -160,7 +160,7 @@ nv30_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
       }
       break;
    case PIPE_QUERY_TIMESTAMP:
-      return;
+      return true;
    default:
       BEGIN_NV04(push, NV30_3D(QUERY_RESET), 1);
       PUSH_DATA (push, q->report);
@@ -171,6 +171,7 @@ nv30_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
       BEGIN_NV04(push, SUBC_3D(q->enable), 1);
       PUSH_DATA (push, 1);
    }
+   return true;
 }
 
 static void

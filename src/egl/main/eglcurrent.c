@@ -28,8 +28,10 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include "c99_compat.h"
+#include "c11/threads.h"
+
 #include "egllog.h"
-#include "eglmutex.h"
 #include "eglcurrent.h"
 #include "eglglobals.h"
 
@@ -40,14 +42,9 @@
 
 /* a fallback thread info to guarantee that every thread always has one */
 static _EGLThreadInfo dummy_thread = _EGL_THREAD_INFO_INITIALIZER;
-
-
-#if HAVE_PTHREAD
-#include <pthread.h>
-
-static _EGLMutex _egl_TSDMutex = _EGL_MUTEX_INITIALIZER;
+static mtx_t _egl_TSDMutex = _MTX_INITIALIZER_NP;
 static EGLBoolean _egl_TSDInitialized;
-static pthread_key_t _egl_TSD;
+static tss_t _egl_TSD;
 static void (*_egl_FreeTSD)(_EGLThreadInfo *);
 
 #ifdef GLX_USE_TLS
@@ -55,46 +52,46 @@ static __thread const _EGLThreadInfo *_egl_TLS
    __attribute__ ((tls_model("initial-exec")));
 #endif
 
-static INLINE void _eglSetTSD(const _EGLThreadInfo *t)
+static inline void _eglSetTSD(const _EGLThreadInfo *t)
 {
-   pthread_setspecific(_egl_TSD, (const void *) t);
+   tss_set(_egl_TSD, (void *) t);
 #ifdef GLX_USE_TLS
    _egl_TLS = t;
 #endif
 }
 
-static INLINE _EGLThreadInfo *_eglGetTSD(void)
+static inline _EGLThreadInfo *_eglGetTSD(void)
 {
 #ifdef GLX_USE_TLS
    return (_EGLThreadInfo *) _egl_TLS;
 #else
-   return (_EGLThreadInfo *) pthread_getspecific(_egl_TSD);
+   return (_EGLThreadInfo *) tss_get(_egl_TSD);
 #endif
 }
 
-static INLINE void _eglFiniTSD(void)
+static inline void _eglFiniTSD(void)
 {
-   _eglLockMutex(&_egl_TSDMutex);
+   mtx_lock(&_egl_TSDMutex);
    if (_egl_TSDInitialized) {
       _EGLThreadInfo *t = _eglGetTSD();
 
       _egl_TSDInitialized = EGL_FALSE;
       if (t && _egl_FreeTSD)
          _egl_FreeTSD((void *) t);
-      pthread_key_delete(_egl_TSD);
+      tss_delete(_egl_TSD);
    }
-   _eglUnlockMutex(&_egl_TSDMutex);
+   mtx_unlock(&_egl_TSDMutex);
 }
 
-static INLINE EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
+static inline EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
 {
    if (!_egl_TSDInitialized) {
-      _eglLockMutex(&_egl_TSDMutex);
+      mtx_lock(&_egl_TSDMutex);
 
       /* check again after acquiring lock */
       if (!_egl_TSDInitialized) {
-         if (pthread_key_create(&_egl_TSD, (void (*)(void *)) dtor) != 0) {
-            _eglUnlockMutex(&_egl_TSDMutex);
+         if (tss_create(&_egl_TSD, (void (*)(void *)) dtor) != thrd_success) {
+            mtx_unlock(&_egl_TSDMutex);
             return EGL_FALSE;
          }
          _egl_FreeTSD = dtor;
@@ -102,43 +99,11 @@ static INLINE EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
          _egl_TSDInitialized = EGL_TRUE;
       }
 
-      _eglUnlockMutex(&_egl_TSDMutex);
+      mtx_unlock(&_egl_TSDMutex);
    }
 
    return EGL_TRUE;
 }
-
-#else /* HAVE_PTHREAD */
-static const _EGLThreadInfo *_egl_TSD;
-static void (*_egl_FreeTSD)(_EGLThreadInfo *);
-
-static INLINE void _eglSetTSD(const _EGLThreadInfo *t)
-{
-   _egl_TSD = t;
-}
-
-static INLINE _EGLThreadInfo *_eglGetTSD(void)
-{
-   return (_EGLThreadInfo *) _egl_TSD;
-}
-
-static INLINE void _eglFiniTSD(void)
-{
-   if (_egl_FreeTSD && _egl_TSD)
-      _egl_FreeTSD((_EGLThreadInfo *) _egl_TSD);
-}
-
-static INLINE EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
-{
-   if (!_egl_FreeTSD && dtor) {
-      _egl_FreeTSD = dtor;
-      _eglAddAtExitCall(_eglFiniTSD);
-   }
-   return EGL_TRUE;
-}
-
-#endif /* !HAVE_PTHREAD */
-
 
 static void
 _eglInitThreadInfo(_EGLThreadInfo *t)
@@ -179,7 +144,7 @@ _eglDestroyThreadInfo(_EGLThreadInfo *t)
 /**
  * Make sure TSD is initialized and return current value.
  */
-static INLINE _EGLThreadInfo *
+static inline _EGLThreadInfo *
 _eglCheckedGetTSD(void)
 {
    if (_eglInitTSD(&_eglDestroyThreadInfo) != EGL_TRUE) {
@@ -317,14 +282,6 @@ _eglError(EGLint errCode, const char *msg)
       case EGL_NOT_INITIALIZED:
          s = "EGL_NOT_INITIALIZED";
          break;
-#ifdef EGL_MESA_screen_surface
-      case EGL_BAD_SCREEN_MESA:
-         s = "EGL_BAD_SCREEN_MESA";
-         break;
-      case EGL_BAD_MODE_MESA:
-         s = "EGL_BAD_MODE_MESA";
-         break;
-#endif
       default:
          s = "other EGL error";
       }

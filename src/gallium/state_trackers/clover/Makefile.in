@@ -126,17 +126,17 @@ libclllvm_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 libclover_la_DEPENDENCIES = libcltgsi.la libclllvm.la
 am__objects_2 = api/libclover_la-context.lo api/libclover_la-device.lo \
 	api/libclover_la-dispatch.lo api/libclover_la-event.lo \
-	api/libclover_la-kernel.lo api/libclover_la-memory.lo \
-	api/libclover_la-platform.lo api/libclover_la-program.lo \
-	api/libclover_la-queue.lo api/libclover_la-sampler.lo \
-	api/libclover_la-transfer.lo core/libclover_la-context.lo \
-	core/libclover_la-device.lo core/libclover_la-event.lo \
-	core/libclover_la-format.lo core/libclover_la-kernel.lo \
-	core/libclover_la-memory.lo core/libclover_la-module.lo \
-	core/libclover_la-platform.lo core/libclover_la-program.lo \
-	core/libclover_la-queue.lo core/libclover_la-resource.lo \
-	core/libclover_la-sampler.lo core/libclover_la-timestamp.lo \
-	util/libclover_la-compat.lo
+	api/libclover_la-interop.lo api/libclover_la-kernel.lo \
+	api/libclover_la-memory.lo api/libclover_la-platform.lo \
+	api/libclover_la-program.lo api/libclover_la-queue.lo \
+	api/libclover_la-sampler.lo api/libclover_la-transfer.lo \
+	core/libclover_la-context.lo core/libclover_la-device.lo \
+	core/libclover_la-event.lo core/libclover_la-format.lo \
+	core/libclover_la-kernel.lo core/libclover_la-memory.lo \
+	core/libclover_la-module.lo core/libclover_la-platform.lo \
+	core/libclover_la-program.lo core/libclover_la-queue.lo \
+	core/libclover_la-resource.lo core/libclover_la-sampler.lo \
+	core/libclover_la-timestamp.lo
 am_libclover_la_OBJECTS = $(am__objects_2)
 libclover_la_OBJECTS = $(am_libclover_la_OBJECTS)
 libclover_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
@@ -396,6 +396,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -457,7 +461,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -552,6 +555,7 @@ CPP_SOURCES := \
 	api/dispatch.cpp \
 	api/dispatch.hpp \
 	api/event.cpp \
+	api/interop.cpp \
 	api/kernel.cpp \
 	api/memory.cpp \
 	api/platform.cpp \
@@ -593,8 +597,6 @@ CPP_SOURCES := \
 	util/adaptor.hpp \
 	util/algebra.hpp \
 	util/algorithm.hpp \
-	util/compat.cpp \
-	util/compat.hpp \
 	util/factor.hpp \
 	util/functional.hpp \
 	util/lazy.hpp \
@@ -632,11 +634,12 @@ AM_CPPFLAGS = $(GALLIUM_PIPE_LOADER_DEFINES) \
 
 noinst_LTLIBRARIES = libclover.la libcltgsi.la libclllvm.la
 libcltgsi_la_CXXFLAGS = \
-	-std=c++0x \
+	-std=c++11 \
 	$(VISIBILITY_CXXFLAGS)
 
 libcltgsi_la_SOURCES = $(TGSI_SOURCES)
 libclllvm_la_CXXFLAGS = \
+	-std=c++11 \
 	$(VISIBILITY_CXXFLAGS) \
 	$(LLVM_CXXFLAGS) \
 	$(DEFINES) \
@@ -724,6 +727,8 @@ api/libclover_la-dispatch.lo: api/$(am__dirstamp) \
 	api/$(DEPDIR)/$(am__dirstamp)
 api/libclover_la-event.lo: api/$(am__dirstamp) \
 	api/$(DEPDIR)/$(am__dirstamp)
+api/libclover_la-interop.lo: api/$(am__dirstamp) \
+	api/$(DEPDIR)/$(am__dirstamp)
 api/libclover_la-kernel.lo: api/$(am__dirstamp) \
 	api/$(DEPDIR)/$(am__dirstamp)
 api/libclover_la-memory.lo: api/$(am__dirstamp) \
@@ -770,14 +775,6 @@ core/libclover_la-sampler.lo: core/$(am__dirstamp) \
 	core/$(DEPDIR)/$(am__dirstamp)
 core/libclover_la-timestamp.lo: core/$(am__dirstamp) \
 	core/$(DEPDIR)/$(am__dirstamp)
-util/$(am__dirstamp):
-	@$(MKDIR_P) util
-	@: > util/$(am__dirstamp)
-util/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) util/$(DEPDIR)
-	@: > util/$(DEPDIR)/$(am__dirstamp)
-util/libclover_la-compat.lo: util/$(am__dirstamp) \
-	util/$(DEPDIR)/$(am__dirstamp)
 
 libclover.la: $(libclover_la_OBJECTS) $(libclover_la_DEPENDENCIES) $(EXTRA_libclover_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(libclover_la_LINK)  $(libclover_la_OBJECTS) $(libclover_la_LIBADD) $(LIBS)
@@ -803,8 +800,6 @@ mostlyclean-compile:
 	-rm -f llvm/*.lo
 	-rm -f tgsi/*.$(OBJEXT)
 	-rm -f tgsi/*.lo
-	-rm -f util/*.$(OBJEXT)
-	-rm -f util/*.lo
 
 distclean-compile:
 	-rm -f *.tab.c
@@ -813,6 +808,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@api/$(DEPDIR)/libclover_la-device.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@api/$(DEPDIR)/libclover_la-dispatch.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@api/$(DEPDIR)/libclover_la-event.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@api/$(DEPDIR)/libclover_la-interop.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@api/$(DEPDIR)/libclover_la-kernel.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@api/$(DEPDIR)/libclover_la-memory.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@api/$(DEPDIR)/libclover_la-platform.Plo@am__quote@
@@ -835,7 +831,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/libclover_la-timestamp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@llvm/$(DEPDIR)/libclllvm_la-invocation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/libcltgsi_la-compiler.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/libclover_la-compat.Plo@am__quote@
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -895,6 +890,13 @@ api/libclover_la-event.lo: api/event.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/event.cpp' object='api/libclover_la-event.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-event.lo `test -f 'api/event.cpp' || echo '$(srcdir)/'`api/event.cpp
+
+api/libclover_la-interop.lo: api/interop.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-interop.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-interop.Tpo -c -o api/libclover_la-interop.lo `test -f 'api/interop.cpp' || echo '$(srcdir)/'`api/interop.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) api/$(DEPDIR)/libclover_la-interop.Tpo api/$(DEPDIR)/libclover_la-interop.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='api/interop.cpp' object='api/libclover_la-interop.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o api/libclover_la-interop.lo `test -f 'api/interop.cpp' || echo '$(srcdir)/'`api/interop.cpp
 
 api/libclover_la-kernel.lo: api/kernel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT api/libclover_la-kernel.lo -MD -MP -MF api/$(DEPDIR)/libclover_la-kernel.Tpo -c -o api/libclover_la-kernel.lo `test -f 'api/kernel.cpp' || echo '$(srcdir)/'`api/kernel.cpp
@@ -1036,13 +1038,6 @@ core/libclover_la-timestamp.lo: core/timestamp.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o core/libclover_la-timestamp.lo `test -f 'core/timestamp.cpp' || echo '$(srcdir)/'`core/timestamp.cpp
 
-util/libclover_la-compat.lo: util/compat.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -MT util/libclover_la-compat.lo -MD -MP -MF util/$(DEPDIR)/libclover_la-compat.Tpo -c -o util/libclover_la-compat.lo `test -f 'util/compat.cpp' || echo '$(srcdir)/'`util/compat.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) util/$(DEPDIR)/libclover_la-compat.Tpo util/$(DEPDIR)/libclover_la-compat.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='util/compat.cpp' object='util/libclover_la-compat.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclover_la_CXXFLAGS) $(CXXFLAGS) -c -o util/libclover_la-compat.lo `test -f 'util/compat.cpp' || echo '$(srcdir)/'`util/compat.cpp
-
 tgsi/libcltgsi_la-compiler.lo: tgsi/compiler.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcltgsi_la_CXXFLAGS) $(CXXFLAGS) -MT tgsi/libcltgsi_la-compiler.lo -MD -MP -MF tgsi/$(DEPDIR)/libcltgsi_la-compiler.Tpo -c -o tgsi/libcltgsi_la-compiler.lo `test -f 'tgsi/compiler.cpp' || echo '$(srcdir)/'`tgsi/compiler.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) tgsi/$(DEPDIR)/libcltgsi_la-compiler.Tpo tgsi/$(DEPDIR)/libcltgsi_la-compiler.Plo
@@ -1059,7 +1054,6 @@ clean-libtool:
 	-rm -rf core/.libs core/_libs
 	-rm -rf llvm/.libs llvm/_libs
 	-rm -rf tgsi/.libs tgsi/_libs
-	-rm -rf util/.libs util/_libs
 install-clHEADERS: $(cl_HEADERS)
 	@$(NORMAL_INSTALL)
 	@list='$(cl_HEADERS)'; test -n "$(cldir)" || list=; \
@@ -1205,8 +1199,6 @@ distclean-generic:
 	-rm -f llvm/$(am__dirstamp)
 	-rm -f tgsi/$(DEPDIR)/$(am__dirstamp)
 	-rm -f tgsi/$(am__dirstamp)
-	-rm -f util/$(DEPDIR)/$(am__dirstamp)
-	-rm -f util/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -1217,7 +1209,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) tgsi/$(DEPDIR) util/$(DEPDIR)
+	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) tgsi/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -1263,7 +1255,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) tgsi/$(DEPDIR) util/$(DEPDIR)
+	-rm -rf api/$(DEPDIR) core/$(DEPDIR) llvm/$(DEPDIR) tgsi/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

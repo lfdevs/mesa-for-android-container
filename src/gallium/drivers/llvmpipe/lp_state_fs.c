@@ -417,7 +417,8 @@ generate_fs_loop(struct gallivm_state *gallivm,
    lp_build_tgsi_soa(gallivm, tokens, type, &mask,
                      consts_ptr, num_consts_ptr, &system_values,
                      interp->inputs,
-                     outputs, sampler, &shader->info.base, NULL);
+                     outputs, context_ptr,
+                     sampler, &shader->info.base, NULL);
 
    /* Alpha test */
    if (key->alpha.enabled) {
@@ -2302,7 +2303,7 @@ generate_fragment(struct llvmpipe_context *lp,
    LLVMPositionBuilderAtEnd(builder, block);
 
    /* code generated texture sampling */
-   sampler = lp_llvm_sampler_soa_create(key->state, context_ptr);
+   sampler = lp_llvm_sampler_soa_create(key->state);
 
    num_fs = 16 / fs_type.length; /* number of loops per 4x4 stamp */
    /* for 1d resources only run "upper half" of stamp */

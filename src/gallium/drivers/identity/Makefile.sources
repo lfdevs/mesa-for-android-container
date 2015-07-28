@@ -1,8 +1,0 @@
-C_SOURCES := \
-	id_context.c \
-	id_context.h \
-	id_objects.c \
-	id_objects.h \
-	id_public.h \
-	id_screen.c \
-	id_screen.h

@@ -240,6 +240,8 @@ CodeEmitterGM107::emitSYS(int pos, const Value *val)
    int id = val ? val->reg.data.id : -1;
 
    switch (id) {
+   case SV_LANEID         : id = 0x00; break;
+   case SV_VERTEX_COUNT   : id = 0x10; break;
    case SV_INVOCATION_ID  : id = 0x11; break;
    case SV_INVOCATION_INFO: id = 0x1d; break;
    default:
@@ -731,8 +733,8 @@ CodeEmitterGM107::emitF2F()
    emitField(0x2d, 1, (insn->op == OP_NEG) || insn->src(0).mod.neg());
    emitFMZ  (0x2c, 1);
    emitRND  (0x27, rnd, 0x2a);
-   emitField(0x0a, 2, util_logbase2(typeSizeof(insn->dType)));
-   emitField(0x08, 2, util_logbase2(typeSizeof(insn->sType)));
+   emitField(0x0a, 2, util_logbase2(typeSizeof(insn->sType)));
+   emitField(0x08, 2, util_logbase2(typeSizeof(insn->dType)));
    emitGPR  (0x00, insn->def(0));
 }
 
@@ -924,15 +926,15 @@ CodeEmitterGM107::emitDMUL()
 {
    switch (insn->src(1).getFile()) {
    case FILE_GPR:
-      emitInsn(0x5c680000);
+      emitInsn(0x5c800000);
       emitGPR (0x14, insn->src(1));
       break;
    case FILE_MEMORY_CONST:
-      emitInsn(0x4c680000);
+      emitInsn(0x4c800000);
       emitCBUF(0x22, -1, 0x14, 16, 2, insn->src(1));
       break;
    case FILE_IMMEDIATE:
-      emitInsn(0x38680000);
+      emitInsn(0x38800000);
       emitIMMD(0x14, 19, insn->src(1));
       break;
    default:
@@ -1060,6 +1062,7 @@ CodeEmitterGM107::emitDSET()
 
    emitABS  (0x36, insn->src(0));
    emitNEG  (0x35, insn->src(1));
+   emitField(0x34, 1, insn->dType == TYPE_F32);
    emitCond4(0x30, insn->setCond);
    emitCC   (0x2f);
    emitABS  (0x2c, insn->src(1));
@@ -1264,8 +1267,8 @@ CodeEmitterGM107::emitMUFU()
    case OP_SIN: mufu = 1; break;
    case OP_EX2: mufu = 2; break;
    case OP_LG2: mufu = 3; break;
-   case OP_RCP: mufu = 4; break;
-   case OP_RSQ: mufu = 5; break;
+   case OP_RCP: mufu = 4 + 2 * insn->subOp; break;
+   case OP_RSQ: mufu = 5 + 2 * insn->subOp; break;
    default:
       assert(!"invalid mufu");
       break;
@@ -2434,8 +2437,14 @@ CodeEmitterGM107::emitTXQ()
       break;
    }
 
-   emitInsn (0xdf4a0000);
-   emitField(0x24, 13, insn->tex.r);
+   if (insn->tex.rIndirectSrc >= 0) {
+      emitInsn (0xdf500000);
+   } else {
+      emitInsn (0xdf480000);
+      emitField(0x24, 13, insn->tex.r);
+   }
+
+   emitField(0x31, 1, insn->tex.liveOnly);
    emitField(0x1f, 4, insn->tex.mask);
    emitField(0x16, 6, type);
    emitGPR  (0x08, insn->src(0));

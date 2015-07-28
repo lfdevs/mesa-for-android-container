@@ -72,6 +72,14 @@ struct pipe_screen {
    const char *(*get_vendor)( struct pipe_screen * );
 
    /**
+    * Returns the device vendor.
+    *
+    * The returned value should return the actual device vendor/manufacturer,
+    * rather than a potentially generic driver string.
+    */
+   const char *(*get_device_vendor)( struct pipe_screen * );
+
+   /**
     * Query an integer-valued capability/parameter/limit
     * \param param  one of PIPE_CAP_x
     */
@@ -147,7 +155,7 @@ struct pipe_screen {
     */
    boolean (*can_create_resource)(struct pipe_screen *screen,
                                   const struct pipe_resource *templat);
-                               
+
    /**
     * Create a new texture object, using the given template info.
     */
@@ -162,6 +170,14 @@ struct pipe_screen {
    struct pipe_resource * (*resource_from_handle)(struct pipe_screen *,
 						  const struct pipe_resource *templat,
 						  struct winsys_handle *handle);
+
+   /**
+    * Create a resource from user memory. This maps the user memory into
+    * the device address space.
+    */
+   struct pipe_resource * (*resource_from_user_memory)(struct pipe_screen *,
+                                                       const struct pipe_resource *t,
+                                                       void *user_memory);
 
    /**
     * Get a winsys_handle from a texture. Some platforms/winsys requires
@@ -219,6 +235,17 @@ struct pipe_screen {
    int (*get_driver_query_info)(struct pipe_screen *screen,
                                 unsigned index,
                                 struct pipe_driver_query_info *info);
+
+   /**
+    * Returns a driver-specific query group.
+    *
+    * If \p info is NULL, the number of available groups is returned.
+    * Otherwise, the driver query group at the specified \p index is returned
+    * in \p info. The function returns non-zero on success.
+    */
+   int (*get_driver_query_group_info)(struct pipe_screen *screen,
+                                      unsigned index,
+                                      struct pipe_driver_query_group_info *info);
 
 };
 

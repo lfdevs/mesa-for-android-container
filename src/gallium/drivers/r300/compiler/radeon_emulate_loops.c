@@ -29,8 +29,9 @@
  * \file
  */
 
+#include <stdio.h>
+#include "c99_math.h"
 #include "radeon_emulate_loops.h"
-
 #include "radeon_compiler.h"
 #include "radeon_compiler_util.h"
 #include "radeon_dataflow.h"

@@ -61,7 +61,7 @@
  * We'll only return non-null for window system framebuffers.
  * Note that this function may fail.
  */
-static INLINE struct st_framebuffer *
+static inline struct st_framebuffer *
 st_ws_framebuffer(struct gl_framebuffer *fb)
 {
    /* FBO cannot be casted.  See st_new_framebuffer */
@@ -73,7 +73,7 @@ st_ws_framebuffer(struct gl_framebuffer *fb)
 /**
  * Map an attachment to a buffer index.
  */
-static INLINE gl_buffer_index
+static inline gl_buffer_index
 attachment_to_buffer_index(enum st_attachment_type statt)
 {
    gl_buffer_index index;
@@ -109,7 +109,7 @@ attachment_to_buffer_index(enum st_attachment_type statt)
 /**
  * Map a buffer index to an attachment.
  */
-static INLINE enum st_attachment_type
+static inline enum st_attachment_type
 buffer_index_to_attachment(gl_buffer_index index)
 {
    enum st_attachment_type statt;
@@ -680,6 +680,10 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
 
    if (attribs->flags & ST_CONTEXT_FLAG_FORWARD_COMPATIBLE)
       st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
+   if (attribs->flags & ST_CONTEXT_FLAG_ROBUST_ACCESS)
+      st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT_ARB;
+   if (attribs->flags & ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED)
+      st->ctx->Const.ResetStrategy = GL_LOSE_CONTEXT_ON_RESET_ARB;
 
    /* need to perform version check */
    if (attribs->major > 1 || attribs->minor > 0) {

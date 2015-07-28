@@ -28,6 +28,10 @@
 #ifndef RBUG_PUBLIC_H
 #define RBUG_PUBLIC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct pipe_screen;
 struct pipe_context;
 
@@ -36,5 +40,9 @@ rbug_screen_create(struct pipe_screen *screen);
 
 boolean
 rbug_enabled(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* RBUG_PUBLIC_H */

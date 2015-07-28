@@ -30,6 +30,8 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/ \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 

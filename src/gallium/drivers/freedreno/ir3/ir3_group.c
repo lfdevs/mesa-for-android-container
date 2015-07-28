@@ -118,12 +118,6 @@ static void instr_insert_mov(void *arr, int idx, struct ir3_instruction *instr)
 static struct group_ops instr_ops = { instr_get, instr_insert_mov };
 
 
-
-static bool conflicts(struct ir3_instruction *a, struct ir3_instruction *b)
-{
-	return (a && b) && (a != b);
-}
-
 static void group_n(struct group_ops *ops, void *arr, unsigned n)
 {
 	unsigned i, j;
@@ -189,7 +183,7 @@ restart:
 
 static void instr_find_neighbors(struct ir3_instruction *instr)
 {
-	unsigned i;
+	struct ir3_instruction *src;
 
 	if (check_stop(instr))
 		return;
@@ -197,11 +191,8 @@ static void instr_find_neighbors(struct ir3_instruction *instr)
 	if (is_meta(instr) && (instr->opc == OPC_META_FI))
 		group_n(&instr_ops, instr, instr->regs_count - 1);
 
-	for (i = 1; i < instr->regs_count; i++) {
-		struct ir3_instruction *src_instr = ssa(instr->regs[i]);
-		if (src_instr)
-			instr_find_neighbors(src_instr);
-	}
+	foreach_ssa_src(src, instr)
+		instr_find_neighbors(src);
 }
 
 /* a bit of sadness.. we can't have "holes" in inputs from PoV of

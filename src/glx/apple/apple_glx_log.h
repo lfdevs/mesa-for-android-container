@@ -39,14 +39,14 @@ __printflike(5, 6)
 void _apple_glx_log(int level, const char *file, const char *function,
                     int line, const char *fmt, ...);
 #define apple_glx_log(l, f, args ...) \
-    _apple_glx_log(l, __FILE__, __FUNCTION__, __LINE__, f, ## args)
+    _apple_glx_log(l, __FILE__, __func__, __LINE__, f, ## args)
 
 
 __printflike(5, 0)
 void _apple_glx_vlog(int level, const char *file, const char *function,
                      int line, const char *fmt, va_list v);
 #define apple_glx_vlog(l, f, v) \
-    _apple_glx_vlog(l, __FILE__, __FUNCTION__, __LINE__, f, v)
+    _apple_glx_vlog(l, __FILE__, __func__, __LINE__, f, v)
 
 /* This is just here to help the transition.
  * TODO: Replace calls to apple_glx_diagnostic

@@ -25,6 +25,12 @@
 
 #include "r600_asm.h"
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 struct r600_shader_io {
 	unsigned		name;
 	unsigned		gpr;
@@ -124,5 +130,11 @@ struct r600_pipe_shader {
 /* return the table index 0-5 for TGSI_INTERPOLATE_LINEAR/PERSPECTIVE and
  TGSI_INTERPOLATE_LOC_CENTER/SAMPLE/COUNT. Other input values return -1. */
 int eg_get_interpolator_index(unsigned interpolate, unsigned location);
+
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
 
 #endif

@@ -108,17 +108,6 @@ rect_to_pipe_box_flip(struct pipe_box *dst, const RECT *src)
 }
 
 static INLINE void
-nine_u_rect_to_pipe_box(struct pipe_box *dst, const struct u_rect *rect, int z)
-{
-    dst->x = rect->x0;
-    dst->y = rect->y0;
-    dst->z = z;
-    dst->width = rect->x1 - rect->x0;
-    dst->height = rect->y1 - rect->y0;
-    dst->depth = 1;
-}
-
-static INLINE void
 rect_to_pipe_box_xy_only(struct pipe_box *dst, const RECT *src)
 {
     user_warn(src->left > src->right || src->top > src->bottom);
@@ -222,7 +211,7 @@ d3d9_get_pipe_depth_format_bindings(D3DFORMAT format)
     case D3DFMT_DF24:
     case D3DFMT_INTZ:
         return PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_SAMPLER_VIEW;
-    default: assert(0);
+    default: unreachable("Unexpected format");
     }
 }
 
@@ -671,6 +660,47 @@ d3dtexturefiltertype_to_pipe_tex_mipfilter(D3DTEXTUREFILTERTYPE filter)
         assert(0);
         return PIPE_TEX_MIPFILTER_NONE;
     }
+}
+
+static INLINE unsigned nine_format_get_stride(enum pipe_format format,
+                                              unsigned width)
+{
+    unsigned stride = util_format_get_stride(format, width);
+
+    return align(stride, 4);
+}
+
+static INLINE unsigned nine_format_get_level_alloc_size(enum pipe_format format,
+                                                        unsigned width,
+                                                        unsigned height,
+                                                        unsigned level)
+{
+    unsigned w, h, size;
+
+    w = u_minify(width, level);
+    h = u_minify(height, level);
+    size = nine_format_get_stride(format, w) *
+        util_format_get_nblocksy(format, h);
+    return size;
+}
+
+static INLINE unsigned nine_format_get_size_and_offsets(enum pipe_format format,
+                                                        unsigned *offsets,
+                                                        unsigned width,
+                                                        unsigned height,
+                                                        unsigned last_level)
+{
+    unsigned l, w, h, size = 0;
+
+    for (l = 0; l <= last_level; ++l) {
+        w = u_minify(width, l);
+        h = u_minify(height, l);
+        offsets[l] = size;
+        size += nine_format_get_stride(format, w) *
+            util_format_get_nblocksy(format, h);
+    }
+
+    return size;
 }
 
 #endif /* _NINE_PIPE_H_ */

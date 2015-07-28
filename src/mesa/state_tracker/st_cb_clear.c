@@ -102,7 +102,7 @@ st_destroy_clear(struct st_context *st)
 /**
  * Helper function to set the fragment shaders.
  */
-static INLINE void
+static inline void
 set_fragment_shader(struct st_context *st)
 {
    if (!st->clear.fs)
@@ -118,7 +118,7 @@ set_fragment_shader(struct st_context *st)
 /**
  * Helper function to set the vertex shader.
  */
-static INLINE void
+static inline void
 set_vertex_shader(struct st_context *st)
 {
    /* vertex shader - still required to provide the linkage between
@@ -247,7 +247,7 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
       util_framebuffer_get_num_layers(&st->state.framebuffer);
 
    /*
-   printf("%s %s%s%s %f,%f %f,%f\n", __FUNCTION__, 
+   printf("%s %s%s%s %f,%f %f,%f\n", __func__,
 	  color ? "color, " : "",
 	  depth ? "depth, " : "",
 	  stencil ? "stencil" : "",
@@ -265,6 +265,8 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
    cso_save_fragment_shader(st->cso_context);
    cso_save_stream_outputs(st->cso_context);
    cso_save_vertex_shader(st->cso_context);
+   cso_save_tessctrl_shader(st->cso_context);
+   cso_save_tesseval_shader(st->cso_context);
    cso_save_geometry_shader(st->cso_context);
    cso_save_vertex_elements(st->cso_context);
    cso_save_aux_vertex_buffer_slot(st->cso_context);
@@ -347,6 +349,8 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
    }
 
    set_fragment_shader(st);
+   cso_set_tessctrl_shader_handle(st->cso_context, NULL);
+   cso_set_tesseval_shader_handle(st->cso_context, NULL);
 
    if (num_layers > 1)
       set_vertex_shader_layered(st);
@@ -371,6 +375,8 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
    cso_restore_viewport(st->cso_context);
    cso_restore_fragment_shader(st->cso_context);
    cso_restore_vertex_shader(st->cso_context);
+   cso_restore_tessctrl_shader(st->cso_context);
+   cso_restore_tesseval_shader(st->cso_context);
    cso_restore_geometry_shader(st->cso_context);
    cso_restore_vertex_elements(st->cso_context);
    cso_restore_aux_vertex_buffer_slot(st->cso_context);
@@ -381,7 +387,7 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
 /**
  * Return if the scissor must be enabled during the clear.
  */
-static INLINE GLboolean
+static inline GLboolean
 is_scissor_enabled(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
    return (ctx->Scissor.EnableFlags & 1) &&
@@ -395,7 +401,7 @@ is_scissor_enabled(struct gl_context *ctx, struct gl_renderbuffer *rb)
 /**
  * Return if all of the color channels are masked.
  */
-static INLINE GLboolean
+static inline GLboolean
 is_color_disabled(struct gl_context *ctx, int i)
 {
    return !ctx->Color.ColorMask[i][0] &&
@@ -408,7 +414,7 @@ is_color_disabled(struct gl_context *ctx, int i)
 /**
  * Return if any of the color channels are masked.
  */
-static INLINE GLboolean
+static inline GLboolean
 is_color_masked(struct gl_context *ctx, int i)
 {
    return !ctx->Color.ColorMask[i][0] ||
@@ -421,7 +427,7 @@ is_color_masked(struct gl_context *ctx, int i)
 /**
  * Return if all of the stencil bits are masked.
  */
-static INLINE GLboolean
+static inline GLboolean
 is_stencil_disabled(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
    const GLuint stencilMax = 0xff;
@@ -434,7 +440,7 @@ is_stencil_disabled(struct gl_context *ctx, struct gl_renderbuffer *rb)
 /**
  * Return if any of the stencil bits are masked.
  */
-static INLINE GLboolean
+static inline GLboolean
 is_stencil_masked(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
    const GLuint stencilMax = 0xff;

@@ -227,7 +227,7 @@ static void radeonSetVertexFormat( struct gl_context *ctx )
       rmesa->radeon.swtcl.vertex_size /= 4;
       rmesa->radeon.tnl_index_bitset = index_bitset;
       radeon_print(RADEON_SWRENDER, RADEON_VERBOSE,
-	  "%s: vertex_size= %d floats\n",  __FUNCTION__, rmesa->radeon.swtcl.vertex_size);
+	  "%s: vertex_size= %d floats\n",  __func__, rmesa->radeon.swtcl.vertex_size);
    }
 }
 
@@ -243,7 +243,7 @@ static void radeon_predict_emit_size( r100ContextPtr rmesa )
         if (rcommonEnsureCmdBufSpace(&rmesa->radeon,
                     state_size +
                     (scissor_size + prims_size + vertex_size),
-                    __FUNCTION__))
+                    __func__))
             rmesa->radeon.swtcl.emit_prediction = radeonCountStateEmitSize( &rmesa->radeon );
         else
             rmesa->radeon.swtcl.emit_prediction = state_size;
@@ -374,7 +374,7 @@ static const GLuint hw_prim[GL_POLYGON+1] = {
    0
 };
 
-static INLINE void
+static inline void
 radeonDmaPrimitive( r100ContextPtr rmesa, GLenum prim )
 {
    RADEON_NEWPRIM( rmesa );

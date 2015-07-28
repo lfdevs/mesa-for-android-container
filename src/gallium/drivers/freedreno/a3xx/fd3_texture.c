@@ -223,8 +223,6 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.reference.count = 1;
 	so->base.context = pctx;
 
-	so->tex_resource =  rsc;
-
 	so->texconst0 =
 			A3XX_TEX_CONST_0_TYPE(tex_type(prsc->target)) |
 			A3XX_TEX_CONST_0_FMT(fd3_pipe2tex(cso->format)) |
@@ -247,8 +245,7 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	case PIPE_TEXTURE_2D_ARRAY:
 		so->texconst3 =
 				A3XX_TEX_CONST_3_DEPTH(prsc->array_size - 1) |
-				A3XX_TEX_CONST_3_LAYERSZ1(rsc->slices[0].size0) |
-				A3XX_TEX_CONST_3_LAYERSZ2(rsc->slices[0].size0);
+				A3XX_TEX_CONST_3_LAYERSZ1(rsc->slices[0].size0);
 		break;
 	case PIPE_TEXTURE_3D:
 		so->texconst3 =

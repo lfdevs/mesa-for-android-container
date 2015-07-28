@@ -45,7 +45,7 @@ struct inst_key {
         enum qop op;
         struct qreg src[4];
         /**
-         * If the instruction depends on the flags, how many QOP_SFs have been
+         * If the instruction depends on the flags, how many SFs have been
          * seen before this instruction, or if it depends on r4, how many r4
          * writes have been seen.
          */
@@ -122,7 +122,6 @@ qir_opt_cse(struct vc4_compile *c)
 {
         bool progress = false;
         struct simple_node *node, *t;
-        struct qinst *last_sf = NULL;
         uint32_t sf_count = 0, r4_count = 0;
 
         struct hash_table *ht = _mesa_hash_table_create(NULL, NULL,
@@ -135,27 +134,11 @@ qir_opt_cse(struct vc4_compile *c)
 
                 if (qir_has_side_effects(c, inst) ||
                     qir_has_side_effect_reads(c, inst)) {
-                        if (inst->op == QOP_TLB_DISCARD_SETUP)
-                                last_sf = NULL;
                         continue;
                 }
 
-                if (inst->op == QOP_SF) {
-                        if (last_sf &&
-                            qir_reg_equals(last_sf->src[0], inst->src[0])) {
-                                if (debug) {
-                                        fprintf(stderr,
-                                                "Removing redundant SF: ");
-                                        qir_dump_inst(c, inst);
-                                        fprintf(stderr, "\n");
-                                }
-                                qir_remove_instruction(inst);
-                                progress = true;
-                                continue;
-                        } else {
-                                last_sf = inst;
-                                sf_count++;
-                        }
+                if (inst->sf) {
+                        sf_count++;
                 } else {
                         struct qinst *cse = vc4_find_cse(c, ht, inst,
                                                          sf_count, r4_count);

@@ -61,6 +61,7 @@ EXTRA_DIST= \
 	$(MESA_GLAPI_DIR)/glapi_x86-64.S \
 	$(MESA_GLAPI_DIR)/glapi_sparc.S \
 	$(COMMON_GLX) \
+	apiexec.py \
 	gl_apitemp.py \
 	gl_enums.py \
 	gl_genexec.py \
@@ -75,6 +76,7 @@ EXTRA_DIST= \
 	glX_proto_size.py \
 	glX_server_table.py \
 	remap_helper.py \
+	static_data.py \
 	SConscript \
 	gl_API.dtd
 
@@ -132,12 +134,15 @@ API_XML = \
 	ARB_framebuffer_object.xml \
 	ARB_geometry_shader4.xml \
 	ARB_get_program_binary.xml \
+	ARB_gpu_shader_fp64.xml \
 	ARB_gpu_shader5.xml \
 	ARB_instanced_arrays.xml \
 	ARB_internalformat_query.xml \
 	ARB_invalidate_subdata.xml \
 	ARB_map_buffer_range.xml \
 	ARB_multi_bind.xml \
+	ARB_pipeline_statistics_query.xml \
+	ARB_program_interface_query.xml \
 	ARB_robustness.xml \
 	ARB_sample_shading.xml \
 	ARB_sampler_objects.xml \
@@ -161,6 +166,7 @@ API_XML = \
 	ARB_texture_view.xml \
 	ARB_uniform_buffer_object.xml \
 	ARB_vertex_array_object.xml \
+	ARB_vertex_attrib_64bit.xml \
 	ARB_vertex_attrib_binding.xml \
 	ARB_viewport_array.xml \
 	AMD_draw_buffers_blend.xml \
@@ -194,6 +200,7 @@ COMMON = $(API_XML) \
 	gl_XML.py \
 	glX_XML.py \
 	license.py \
+	static_data.py \
 	typeexpr.py
 
 COMMON_GLX = $(COMMON) glX_API.xml glX_XML.py glX_proto_common.py
@@ -261,7 +268,7 @@ $(MESA_GLAPI_DIR)/glapi_sparc.S: gl_SPARC_asm.py $(COMMON)
 $(MESA_DIR)/main/enums.c: gl_enums.py $(COMMON)
 	$(PYTHON_GEN) $< -f $(srcdir)/gl_and_es_API.xml > $@
 
-$(MESA_DIR)/main/api_exec.c: gl_genexec.py $(COMMON)
+$(MESA_DIR)/main/api_exec.c: gl_genexec.py apiexec.py $(COMMON)
 	$(PYTHON_GEN) $< -f $(srcdir)/gl_and_es_API.xml > $@
 
 $(MESA_DIR)/main/dispatch.h: gl_table.py $(COMMON)

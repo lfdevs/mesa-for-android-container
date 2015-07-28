@@ -57,6 +57,10 @@
 #define AA_SOMETIMES 1
 #define AA_ALWAYS    2
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Compile a fragment shader.
  *
@@ -74,13 +78,20 @@ GLboolean brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog
 struct gl_shader *brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type);
 
 bool brw_color_buffer_write_enabled(struct brw_context *brw);
-bool do_wm_prog(struct brw_context *brw,
-		struct gl_shader_program *prog,
-		struct brw_fragment_program *fp,
-		struct brw_wm_prog_key *key);
+bool brw_codegen_wm_prog(struct brw_context *brw,
+                         struct gl_shader_program *prog,
+                         struct brw_fragment_program *fp,
+                         struct brw_wm_prog_key *key);
 void brw_wm_debug_recompile(struct brw_context *brw,
                             struct gl_shader_program *prog,
                             const struct brw_wm_prog_key *key);
 bool brw_wm_prog_data_compare(const void *a, const void *b);
+
+void
+brw_upload_wm_prog(struct brw_context *brw);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif

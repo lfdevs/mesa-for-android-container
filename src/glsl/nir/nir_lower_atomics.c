@@ -26,6 +26,7 @@
  */
 
 #include "nir.h"
+#include "main/config.h"
 #include <assert.h>
 
 /*
@@ -77,7 +78,8 @@ lower_instr(nir_intrinsic_instr *instr, nir_function_impl *impl)
          nir_deref_as_array(instr->variables[0]->deref.child);
       assert(deref_array->deref.child == NULL);
 
-      offset_const->value.u[0] += deref_array->base_offset;
+      offset_const->value.u[0] +=
+         deref_array->base_offset * ATOMIC_COUNTER_SIZE;
 
       if (deref_array->deref_array_type == nir_deref_array_type_indirect) {
          nir_load_const_instr *atomic_counter_size =
@@ -128,8 +130,7 @@ lower_block(nir_block *block, void *state)
 {
    nir_foreach_instr_safe(block, instr) {
       if (instr->type == nir_instr_type_intrinsic)
-         lower_instr(nir_instr_as_intrinsic(instr),
-                     (nir_function_impl *) state);
+         lower_instr(nir_instr_as_intrinsic(instr), state);
    }
 
    return true;

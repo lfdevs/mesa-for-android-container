@@ -306,6 +306,7 @@ static const struct debug_named_value common_debug_options[] = {
 	{ "compute", DBG_COMPUTE, "Print compute info" },
 	{ "vm", DBG_VM, "Print virtual addresses when creating resources" },
 	{ "trace_cs", DBG_TRACE_CS, "Trace cs and write rlockup_<csid>.c file with faulty cs" },
+	{ "info", DBG_INFO, "Print driver information" },
 
 	/* shaders */
 	{ "fs", DBG_FS, "Print fetch shaders" },
@@ -323,6 +324,7 @@ static const struct debug_named_value common_debug_options[] = {
 	{ "notiling", DBG_NO_TILING, "Disable tiling" },
 	{ "switch_on_eop", DBG_SWITCH_ON_EOP, "Program WD/IA to switch on end-of-packet." },
 	{ "forcedma", DBG_FORCE_DMA, "Use asynchronous DMA for all operations when possible." },
+	{ "precompile", DBG_PRECOMPILE, "Compile one shader variant at shader creation." },
 
 	DEBUG_NAMED_VALUE_END /* must be last */
 };
@@ -330,6 +332,11 @@ static const struct debug_named_value common_debug_options[] = {
 static const char* r600_get_vendor(struct pipe_screen* pscreen)
 {
 	return "X.Org";
+}
+
+static const char* r600_get_device_vendor(struct pipe_screen* pscreen)
+{
+	return "AMD";
 }
 
 static const char* r600_get_name(struct pipe_screen* pscreen)
@@ -650,20 +657,30 @@ static int r600_get_driver_query_info(struct pipe_screen *screen,
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	struct pipe_driver_query_info list[] = {
-		{"draw-calls", R600_QUERY_DRAW_CALLS, 0},
-		{"requested-VRAM", R600_QUERY_REQUESTED_VRAM, rscreen->info.vram_size, TRUE},
-		{"requested-GTT", R600_QUERY_REQUESTED_GTT, rscreen->info.gart_size, TRUE},
-		{"buffer-wait-time", R600_QUERY_BUFFER_WAIT_TIME, 0, FALSE},
-		{"num-cs-flushes", R600_QUERY_NUM_CS_FLUSHES, 0, FALSE},
-		{"num-bytes-moved", R600_QUERY_NUM_BYTES_MOVED, 0, TRUE},
-		{"VRAM-usage", R600_QUERY_VRAM_USAGE, rscreen->info.vram_size, TRUE},
-		{"GTT-usage", R600_QUERY_GTT_USAGE, rscreen->info.gart_size, TRUE},
+		{"draw-calls", R600_QUERY_DRAW_CALLS, {0}},
+		{"requested-VRAM", R600_QUERY_REQUESTED_VRAM, {rscreen->info.vram_size}, PIPE_DRIVER_QUERY_TYPE_BYTES},
+		{"requested-GTT", R600_QUERY_REQUESTED_GTT, {rscreen->info.gart_size}, PIPE_DRIVER_QUERY_TYPE_BYTES},
+		{"buffer-wait-time", R600_QUERY_BUFFER_WAIT_TIME, {0}},
+		{"num-cs-flushes", R600_QUERY_NUM_CS_FLUSHES, {0}},
+		{"num-bytes-moved", R600_QUERY_NUM_BYTES_MOVED, {0}, PIPE_DRIVER_QUERY_TYPE_BYTES},
+		{"VRAM-usage", R600_QUERY_VRAM_USAGE, {rscreen->info.vram_size}, PIPE_DRIVER_QUERY_TYPE_BYTES},
+		{"GTT-usage", R600_QUERY_GTT_USAGE, {rscreen->info.gart_size}, PIPE_DRIVER_QUERY_TYPE_BYTES},
+		{"temperature", R600_QUERY_GPU_TEMPERATURE, {100}},
+		{"shader-clock", R600_QUERY_CURRENT_GPU_SCLK, {0}},
+		{"memory-clock", R600_QUERY_CURRENT_GPU_MCLK, {0}},
+		{"GPU-load", R600_QUERY_GPU_LOAD, {100}}
 	};
+	unsigned num_queries;
+
+	if (rscreen->info.drm_major == 2 && rscreen->info.drm_minor >= 42)
+		num_queries = Elements(list);
+	else
+		num_queries = 8;
 
 	if (!info)
-		return Elements(list);
+		return num_queries;
 
-	if (index >= Elements(list))
+	if (index >= num_queries)
 		return 0;
 
 	*info = list[index];
@@ -825,6 +842,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 
 	rscreen->b.get_name = r600_get_name;
 	rscreen->b.get_vendor = r600_get_vendor;
+	rscreen->b.get_device_vendor = r600_get_device_vendor;
 	rscreen->b.get_compute_param = r600_get_compute_param;
 	rscreen->b.get_paramf = r600_get_paramf;
 	rscreen->b.get_driver_query_info = r600_get_driver_query_info;
@@ -833,6 +851,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	rscreen->b.fence_reference = r600_fence_reference;
 	rscreen->b.fence_signalled = r600_fence_signalled;
 	rscreen->b.resource_destroy = u_resource_destroy_vtbl;
+	rscreen->b.resource_from_user_memory = r600_buffer_from_user_memory;
 
 	if (rscreen->info.has_uvd) {
 		rscreen->b.get_video_param = rvid_get_video_param;
@@ -854,6 +873,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	}
 	util_format_s3tc_init();
 	pipe_mutex_init(rscreen->aux_context_lock);
+	pipe_mutex_init(rscreen->gpu_load_mutex);
 
 	if (rscreen->info.drm_minor >= 28 && (rscreen->debug_flags & DBG_TRACE_CS)) {
 		rscreen->trace_bo = (struct r600_resource*)pipe_buffer_create(&rscreen->b,
@@ -866,11 +886,40 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		}
 	}
 
+	if (rscreen->debug_flags & DBG_INFO) {
+		printf("pci_id = 0x%x\n", rscreen->info.pci_id);
+		printf("family = %i\n", rscreen->info.family);
+		printf("chip_class = %i\n", rscreen->info.chip_class);
+		printf("gart_size = %i MB\n", (int)(rscreen->info.gart_size >> 20));
+		printf("vram_size = %i MB\n", (int)(rscreen->info.vram_size >> 20));
+		printf("max_sclk = %i\n", rscreen->info.max_sclk);
+		printf("max_compute_units = %i\n", rscreen->info.max_compute_units);
+		printf("max_se = %i\n", rscreen->info.max_se);
+		printf("max_sh_per_se = %i\n", rscreen->info.max_sh_per_se);
+		printf("drm = %i.%i.%i\n", rscreen->info.drm_major,
+		       rscreen->info.drm_minor, rscreen->info.drm_patchlevel);
+		printf("has_uvd = %i\n", rscreen->info.has_uvd);
+		printf("vce_fw_version = %i\n", rscreen->info.vce_fw_version);
+		printf("r600_num_backends = %i\n", rscreen->info.r600_num_backends);
+		printf("r600_clock_crystal_freq = %i\n", rscreen->info.r600_clock_crystal_freq);
+		printf("r600_tiling_config = 0x%x\n", rscreen->info.r600_tiling_config);
+		printf("r600_num_tile_pipes = %i\n", rscreen->info.r600_num_tile_pipes);
+		printf("r600_max_pipes = %i\n", rscreen->info.r600_max_pipes);
+		printf("r600_virtual_address = %i\n", rscreen->info.r600_virtual_address);
+		printf("r600_has_dma = %i\n", rscreen->info.r600_has_dma);
+		printf("r600_backend_map = %i\n", rscreen->info.r600_backend_map);
+		printf("r600_backend_map_valid = %i\n", rscreen->info.r600_backend_map_valid);
+		printf("si_tile_mode_array_valid = %i\n", rscreen->info.si_tile_mode_array_valid);
+		printf("cik_macrotile_mode_array_valid = %i\n", rscreen->info.cik_macrotile_mode_array_valid);
+	}
 	return true;
 }
 
 void r600_destroy_common_screen(struct r600_common_screen *rscreen)
 {
+	r600_gpu_load_kill_thread(rscreen);
+
+	pipe_mutex_destroy(rscreen->gpu_load_mutex);
 	pipe_mutex_destroy(rscreen->aux_context_lock);
 	rscreen->aux_context->destroy(rscreen->aux_context);
 

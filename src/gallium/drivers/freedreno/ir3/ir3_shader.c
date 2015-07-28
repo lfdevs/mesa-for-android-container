@@ -116,7 +116,7 @@ void * ir3_shader_assemble(struct ir3_shader_variant *v, uint32_t gpu_id)
 	 * the compiler (to worst-case value) since we don't know in
 	 * the assembler what the max addr reg value can be:
 	 */
-	v->constlen = MAX2(v->constlen, v->info.max_const + 1);
+	v->constlen = MIN2(255, MAX2(v->constlen, v->info.max_const + 1));
 
 	fixup_regfootprint(v);
 
@@ -177,20 +177,21 @@ create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 		tgsi_dump(tokens, 0);
 	}
 
-	if (!(fd_mesa_debug & FD_DBG_NOOPT)) {
+	if (fd_mesa_debug & FD_DBG_NIR) {
+		ret = ir3_compile_shader_nir(v, tokens, key);
+		if (ret)
+			reset_variant(v, "NIR compiler failed, fallback to TGSI!");
+	} else {
+		ret = -1;
+	}
+
+	if (ret) {
 		ret = ir3_compile_shader(v, tokens, key, true);
 		if (ret) {
 			reset_variant(v, "new compiler failed, trying without copy propagation!");
 			ret = ir3_compile_shader(v, tokens, key, false);
-			if (ret)
-				reset_variant(v, "new compiler failed, trying fallback!");
 		}
-	} else {
-		ret = -1;  /* force fallback to old compiler */
 	}
-
-	if (ret)
-		ret = ir3_compile_shader_old(v, tokens, key);
 
 	if (ret) {
 		debug_error("compile failed!");
@@ -245,7 +246,6 @@ ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 	case SHADER_VERTEX:
 		key.color_two_side = false;
 		key.half_precision = false;
-		key.alpha = false;
 		key.rasterflat = false;
 		if (key.has_per_samp) {
 			key.fsaturate_s = 0;

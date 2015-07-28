@@ -181,7 +181,7 @@ do_blit_copypixels(struct gl_context * ctx,
                            width, height,
                            (ctx->Color.ColorLogicOpEnabled ?
                             ctx->Color.LogicOp : GL_COPY))) {
-      DBG("%s: blit failure\n", __FUNCTION__);
+      DBG("%s: blit failure\n", __func__);
       return false;
    }
 
@@ -190,7 +190,7 @@ do_blit_copypixels(struct gl_context * ctx,
 
 out:
 
-   DBG("%s: success\n", __FUNCTION__);
+   DBG("%s: success\n", __func__);
    return true;
 }
 
@@ -201,7 +201,7 @@ intelCopyPixels(struct gl_context * ctx,
                 GLsizei width, GLsizei height,
                 GLint destx, GLint desty, GLenum type)
 {
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    if (!_mesa_check_conditional_render(ctx))
       return;

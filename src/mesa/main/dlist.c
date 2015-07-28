@@ -29,6 +29,7 @@
  * Display lists management functions.
  */
 
+#include "c99_math.h"
 #include "glheader.h"
 #include "imports.h"
 #include "api_arrayelt.h"
@@ -912,7 +913,7 @@ translate_id(GLsizei n, GLenum type, const GLvoid * list)
       return (GLint) uiptr[n];
    case GL_FLOAT:
       fptr = (GLfloat *) list;
-      return (GLint) FLOORF(fptr[n]);
+      return (GLint) floorf(fptr[n]);
    case GL_2_BYTES:
       ubptr = ((GLubyte *) list) + 2 * n;
       return (GLint) ubptr[0] * 256
@@ -1035,7 +1036,7 @@ dlist_alloc(struct gl_context *ctx, OpCode opcode, GLuint bytes, bool align8)
       }
       else {
          /* make sure instruction size agrees */
-         ASSERT(numNodes == InstSize[opcode]);
+         assert(numNodes == InstSize[opcode]);
       }
    }
 
@@ -5089,7 +5090,7 @@ save_Attr1fNV(GLenum attr, GLfloat x)
       n[2].f = x;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 1;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, 0, 0, 1);
 
@@ -5111,7 +5112,7 @@ save_Attr2fNV(GLenum attr, GLfloat x, GLfloat y)
       n[3].f = y;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 2;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, 0, 1);
 
@@ -5134,7 +5135,7 @@ save_Attr3fNV(GLenum attr, GLfloat x, GLfloat y, GLfloat z)
       n[4].f = z;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 3;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, z, 1);
 
@@ -5158,7 +5159,7 @@ save_Attr4fNV(GLenum attr, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
       n[5].f = w;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 4;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, z, w);
 
@@ -5180,7 +5181,7 @@ save_Attr1fARB(GLenum attr, GLfloat x)
       n[2].f = x;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 1;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, 0, 0, 1);
 
@@ -5202,7 +5203,7 @@ save_Attr2fARB(GLenum attr, GLfloat x, GLfloat y)
       n[3].f = y;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 2;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, 0, 1);
 
@@ -5225,7 +5226,7 @@ save_Attr3fARB(GLenum attr, GLfloat x, GLfloat y, GLfloat z)
       n[4].f = z;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 3;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, z, 1);
 
@@ -5249,7 +5250,7 @@ save_Attr4fARB(GLenum attr, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
       n[5].f = w;
    }
 
-   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
+   assert(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 4;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, z, w);
 
@@ -7591,28 +7592,6 @@ save_FramebufferTexture(GLenum target, GLenum attachment,
    }
 }
 
-static void GLAPIENTRY
-save_FramebufferTextureFace(GLenum target, GLenum attachment,
-                            GLuint texture, GLint level, GLenum face)
-{
-   Node *n;
-   GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
-   n = alloc_instruction(ctx, OPCODE_FRAMEBUFFER_TEXTURE_FACE, 5);
-   if (n) {
-      n[1].e = target;
-      n[2].e = attachment;
-      n[3].ui = texture;
-      n[4].i = level;
-      n[5].e = face;
-   }
-   if (ctx->ExecuteFlag) {
-      CALL_FramebufferTextureFaceARB(ctx->Exec, (target, attachment, texture,
-                                                 level, face));
-   }
-}
-
-
 
 static void GLAPIENTRY
 save_WaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
@@ -8872,11 +8851,6 @@ execute_list(struct gl_context *ctx, GLuint list)
             CALL_FramebufferTexture(ctx->Exec, (n[1].e, n[2].e,
                                                    n[3].ui, n[4].i));
             break;
-         case OPCODE_FRAMEBUFFER_TEXTURE_FACE:
-            CALL_FramebufferTextureFaceARB(ctx->Exec, (n[1].e, n[2].e,
-                                                       n[3].ui, n[4].i, n[5].e));
-            break;
-
          /* GL_ARB_sync */
          case OPCODE_WAIT_SYNC:
             {
@@ -9643,10 +9617,9 @@ _mesa_initialize_save_table(const struct gl_context *ctx)
    SET_BlendEquationiARB(table, save_BlendEquationi);
    SET_BlendEquationSeparateiARB(table, save_BlendEquationSeparatei);
 
-   /* GL_ARB_geometry_shader4 */
+   /* OpenGL 3.2 */
    SET_ProgramParameteri(table, save_ProgramParameteri);
    SET_FramebufferTexture(table, save_FramebufferTexture);
-   SET_FramebufferTextureFaceARB(table, save_FramebufferTextureFace);
 
    /* GL_NV_conditional_render */
    SET_BeginConditionalRender(table, save_BeginConditionalRender);

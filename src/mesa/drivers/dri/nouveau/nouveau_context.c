@@ -25,6 +25,7 @@
  */
 
 #include <stdbool.h>
+#include <stdio.h>
 #include "nouveau_driver.h"
 #include "nouveau_context.h"
 #include "nouveau_bufferobj.h"

@@ -182,7 +182,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         This->mode = NULL;
     }
 
-    /* Note: It is the role of the backend to fill if neccessary
+    /* Note: It is the role of the backend to fill if necessary
      * BackBufferWidth and BackBufferHeight */
     ID3DPresent_SetPresentParameters(This->present, pParams, This->mode);
 
@@ -554,6 +554,7 @@ handle_draw_cursor_and_hud( struct NineSwapChain9 *This, struct pipe_resource *r
     struct pipe_blit_info blit;
 
     if (device->cursor.software && device->cursor.visible && device->cursor.w) {
+        memset(&blit, 0, sizeof(blit));
         blit.src.resource = device->cursor.image;
         blit.src.level = 0;
         blit.src.format = device->cursor.image->format;
@@ -677,6 +678,7 @@ present( struct NineSwapChain9 *This,
         handle_draw_cursor_and_hud(This, resource);
 
     if (This->present_buffers) {
+        memset(&blit, 0, sizeof(blit));
         blit.src.resource = resource;
         blit.src.level = 0;
         blit.src.format = resource->format;

@@ -34,6 +34,7 @@ class copy_propagation_test : public ::testing::Test {
 
 public:
    struct brw_context *brw;
+   struct brw_device_info *devinfo;
    struct gl_context *ctx;
    struct gl_shader_program *shader_prog;
    struct brw_vertex_program *vp;
@@ -47,7 +48,7 @@ public:
                                   struct gl_shader_program *shader_prog)
       : vec4_visitor(brw, NULL, NULL, NULL, NULL, shader_prog,
                      MESA_SHADER_VERTEX, NULL,
-                     false, false /* no_spills */,
+                     false /* no_spills */,
                      ST_NONE, ST_NONE, ST_NONE)
    {
    }
@@ -93,6 +94,9 @@ protected:
 void copy_propagation_test::SetUp()
 {
    brw = (struct brw_context *)calloc(1, sizeof(*brw));
+   devinfo = (struct brw_device_info *)calloc(1, sizeof(*brw));
+   brw->intelScreen = (struct intel_screen *)calloc(1, sizeof(*brw->intelScreen));
+   brw->intelScreen->devinfo = devinfo;
    ctx = &brw->ctx;
 
    vp = ralloc(NULL, struct brw_vertex_program);
@@ -103,7 +107,7 @@ void copy_propagation_test::SetUp()
 
    _mesa_init_vertex_program(ctx, &vp->program, GL_VERTEX_SHADER, 0);
 
-   brw->gen = 4;
+   brw->gen = devinfo->gen = 4;
 }
 
 static void

@@ -45,6 +45,15 @@ dri2_fallback_create_pbuffer_surface(_EGLDriver *drv, _EGLDisplay *disp,
    return NULL;
 }
 
+static inline _EGLImage*
+dri2_fallback_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
+                               _EGLContext *ctx, EGLenum target,
+                               EGLClientBuffer buffer,
+                               const EGLint *attr_list)
+{
+   return NULL;
+}
+
 static inline EGLBoolean
 dri2_fallback_swap_interval(_EGLDriver *drv, _EGLDisplay *dpy,
                             _EGLSurface *surf, EGLint interval)

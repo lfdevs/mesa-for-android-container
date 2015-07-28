@@ -53,7 +53,8 @@
 
 
 static char dri2ExtensionName[] = DRI2_NAME;
-static XExtensionInfo *dri2Info;
+static XExtensionInfo _dri2Info_data;
+static XExtensionInfo *dri2Info = &_dri2Info_data;
 static XEXT_GENERATE_CLOSE_DISPLAY (DRI2CloseDisplay, dri2Info)
 
 static Bool

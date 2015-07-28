@@ -40,7 +40,6 @@
 
 #include "vl/vl_video_buffer.h"
 
-#include "radeon/drm/radeon_winsys.h"
 #include "r600_pipe_common.h"
 #include "radeon_video.h"
 #include "radeon_vce.h"
@@ -248,6 +247,57 @@ static void rdo(struct rvce_encoder *enc)
 	RVCE_END();
 }
 
+static void vui(struct rvce_encoder *enc)
+{
+	int i;
+
+	RVCE_BEGIN(0x04000009); // vui
+	RVCE_CS(0x00000000); //aspectRatioInfoPresentFlag
+	RVCE_CS(0x00000000); //aspectRatioInfo.aspectRatioIdc
+	RVCE_CS(0x00000000); //aspectRatioInfo.sarWidth
+	RVCE_CS(0x00000000); //aspectRatioInfo.sarHeight
+	RVCE_CS(0x00000000); //overscanInfoPresentFlag
+	RVCE_CS(0x00000000); //overScanInfo.overscanAppropFlag
+	RVCE_CS(0x00000000); //videoSignalTypePresentFlag
+	RVCE_CS(0x00000005); //videoSignalTypeInfo.videoFormat
+	RVCE_CS(0x00000000); //videoSignalTypeInfo.videoFullRangeFlag
+	RVCE_CS(0x00000000); //videoSignalTypeInfo.colorDescriptionPresentFlag
+	RVCE_CS(0x00000002); //videoSignalTypeInfo.colorPrim
+	RVCE_CS(0x00000002); //videoSignalTypeInfo.transferChar
+	RVCE_CS(0x00000002); //videoSignalTypeInfo.matrixCoef
+	RVCE_CS(0x00000000); //chromaLocInfoPresentFlag
+	RVCE_CS(0x00000000); //chromaLocInfo.chromaLocTop
+	RVCE_CS(0x00000000); //chromaLocInfo.chromaLocBottom
+	RVCE_CS(0x00000001); //timingInfoPresentFlag
+	RVCE_CS(enc->pic.rate_ctrl.frame_rate_den); //timingInfo.numUnitsInTick
+	RVCE_CS(enc->pic.rate_ctrl.frame_rate_num * 2); //timingInfo.timeScale;
+	RVCE_CS(0x00000001); //timingInfo.fixedFrameRateFlag
+	RVCE_CS(0x00000000); //nalHRDParametersPresentFlag
+	RVCE_CS(0x00000000); //hrdParam.cpbCntMinus1
+	RVCE_CS(0x00000004); //hrdParam.bitRateScale
+	RVCE_CS(0x00000006); //hrdParam.cpbSizeScale
+	for (i = 0; i < 32; i++) {
+		RVCE_CS(0x00000000); //hrdParam.bitRateValueMinus
+		RVCE_CS(0x00000000); //hrdParam.cpbSizeValueMinus
+		RVCE_CS(0x00000000); //hrdParam.cbrFlag
+	}
+	RVCE_CS(0x00000017); //hrdParam.initialCpbRemovalDelayLengthMinus1
+	RVCE_CS(0x00000017); //hrdParam.cpbRemovalDelayLengthMinus1
+	RVCE_CS(0x00000017); //hrdParam.dpbOutputDelayLengthMinus1
+	RVCE_CS(0x00000018); //hrdParam.timeOffsetLength
+	RVCE_CS(0x00000000); //lowDelayHRDFlag
+	RVCE_CS(0x00000000); //picStructPresentFlag
+	RVCE_CS(0x00000000); //bitstreamRestrictionPresentFlag
+	RVCE_CS(0x00000001); //bitstreamRestrictions.motionVectorsOverPicBoundariesFlag
+	RVCE_CS(0x00000002); //bitstreamRestrictions.maxBytesPerPicDenom
+	RVCE_CS(0x00000001); //bitstreamRestrictions.maxBitsPerMbDenom
+	RVCE_CS(0x00000010); //bitstreamRestrictions.log2MaxMvLengthHori
+	RVCE_CS(0x00000010); //bitstreamRestrictions.log2MaxMvLengthVert
+	RVCE_CS(0x00000003); //bitstreamRestrictions.numReorderFrames
+	RVCE_CS(0x00000003); //bitstreamRestrictions.maxDecFrameBuffering
+	RVCE_END();
+}
+
 static void encode(struct rvce_encoder *enc)
 {
 	int i;
@@ -396,6 +446,7 @@ void radeon_vce_40_2_2_init(struct rvce_encoder *enc)
 	enc->pic_control = pic_control;
 	enc->motion_estimation = motion_estimation;
 	enc->rdo = rdo;
+	enc->vui = vui;
 	enc->encode = encode;
 	enc->destroy = destroy;
 }

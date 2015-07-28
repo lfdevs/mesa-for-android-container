@@ -66,14 +66,20 @@ brw_write_timestamp(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
 void
 brw_write_depth_count(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
 {
-   /* Emit Sandybridge workaround flush: */
-   if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
+   uint32_t flags;
 
-   brw_emit_pipe_control_write(brw,
-                               PIPE_CONTROL_WRITE_DEPTH_COUNT
-                               | PIPE_CONTROL_DEPTH_STALL,
-                               query_bo, idx * sizeof(uint64_t), 0, 0);
+   flags = (PIPE_CONTROL_WRITE_DEPTH_COUNT |
+            PIPE_CONTROL_DEPTH_STALL);
+
+   /* Needed to ensure the memory is coherent for the MI_LOAD_REGISTER_MEM
+    * command when loading the values into the predicate source registers for
+    * conditional rendering.
+    */
+   if (brw->predicate.supported)
+      flags |= PIPE_CONTROL_FLUSH_ENABLE;
+
+   brw_emit_pipe_control_write(brw, flags, query_bo,
+                               idx * sizeof(uint64_t), 0, 0);
 }
 
 /**
@@ -255,7 +261,7 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
        * so turn them on now.
        */
       brw->stats_wm++;
-      brw->state.dirty.brw |= BRW_NEW_STATS_WM;
+      brw->ctx.NewDriverState |= BRW_NEW_STATS_WM;
       break;
 
    default:
@@ -312,7 +318,7 @@ brw_end_query(struct gl_context *ctx, struct gl_query_object *q)
       brw->query.obj = NULL;
 
       brw->stats_wm--;
-      brw->state.dirty.brw |= BRW_NEW_STATS_WM;
+      brw->ctx.NewDriverState |= BRW_NEW_STATS_WM;
       break;
 
    default:

@@ -31,8 +31,6 @@
 #include "pipe/p_state.h"
 #include "util/u_transfer.h"
 
-#include "util/u_double_list.h"
-
 #include "svga_screen_cache.h"
 #include "svga_screen.h"
 #include "svga_cmd.h"

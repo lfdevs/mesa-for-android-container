@@ -303,9 +303,6 @@ public:
    void emit_scalar(ir_instruction *ir, enum prog_opcode op,
 		    dst_reg dst, src_reg src0, src_reg src1);
 
-   void emit_scs(ir_instruction *ir, enum prog_opcode op,
-		 dst_reg dst, const src_reg &src);
-
    bool try_emit_mad(ir_expression *ir,
 			  int mul_operand);
    bool try_emit_mad_for_and_not(ir_expression *ir,
@@ -479,101 +476,6 @@ ir_to_mesa_visitor::emit_scalar(ir_instruction *ir, enum prog_opcode op,
    emit_scalar(ir, op, dst, src0, undef);
 }
 
-/**
- * Emit an OPCODE_SCS instruction
- *
- * The \c SCS opcode functions a bit differently than the other Mesa (or
- * ARB_fragment_program) opcodes.  Instead of splatting its result across all
- * four components of the destination, it writes one value to the \c x
- * component and another value to the \c y component.
- *
- * \param ir        IR instruction being processed
- * \param op        Either \c OPCODE_SIN or \c OPCODE_COS depending on which
- *                  value is desired.
- * \param dst       Destination register
- * \param src       Source register
- */
-void
-ir_to_mesa_visitor::emit_scs(ir_instruction *ir, enum prog_opcode op,
-			     dst_reg dst,
-			     const src_reg &src)
-{
-   /* Vertex programs cannot use the SCS opcode.
-    */
-   if (this->prog->Target == GL_VERTEX_PROGRAM_ARB) {
-      emit_scalar(ir, op, dst, src);
-      return;
-   }
-
-   const unsigned component = (op == OPCODE_SIN) ? 0 : 1;
-   const unsigned scs_mask = (1U << component);
-   int done_mask = ~dst.writemask;
-   src_reg tmp;
-
-   assert(op == OPCODE_SIN || op == OPCODE_COS);
-
-   /* If there are compnents in the destination that differ from the component
-    * that will be written by the SCS instrution, we'll need a temporary.
-    */
-   if (scs_mask != unsigned(dst.writemask)) {
-      tmp = get_temp(glsl_type::vec4_type);
-   }
-
-   for (unsigned i = 0; i < 4; i++) {
-      unsigned this_mask = (1U << i);
-      src_reg src0 = src;
-
-      if ((done_mask & this_mask) != 0)
-	 continue;
-
-      /* The source swizzle specified which component of the source generates
-       * sine / cosine for the current component in the destination.  The SCS
-       * instruction requires that this value be swizzle to the X component.
-       * Replace the current swizzle with a swizzle that puts the source in
-       * the X component.
-       */
-      unsigned src0_swiz = GET_SWZ(src.swizzle, i);
-
-      src0.swizzle = MAKE_SWIZZLE4(src0_swiz, src0_swiz,
-				   src0_swiz, src0_swiz);
-      for (unsigned j = i + 1; j < 4; j++) {
-	 /* If there is another enabled component in the destination that is
-	  * derived from the same inputs, generate its value on this pass as
-	  * well.
-	  */
-	 if (!(done_mask & (1 << j)) &&
-	     GET_SWZ(src0.swizzle, j) == src0_swiz) {
-	    this_mask |= (1 << j);
-	 }
-      }
-
-      if (this_mask != scs_mask) {
-	 ir_to_mesa_instruction *inst;
-	 dst_reg tmp_dst = dst_reg(tmp);
-
-	 /* Emit the SCS instruction.
-	  */
-	 inst = emit(ir, OPCODE_SCS, tmp_dst, src0);
-	 inst->dst.writemask = scs_mask;
-
-	 /* Move the result of the SCS instruction to the desired location in
-	  * the destination.
-	  */
-	 tmp.swizzle = MAKE_SWIZZLE4(component, component,
-				     component, component);
-	 inst = emit(ir, OPCODE_SCS, dst, tmp);
-	 inst->dst.writemask = this_mask;
-      } else {
-	 /* Emit the SCS instruction to write directly to the destination.
-	  */
-	 ir_to_mesa_instruction *inst = emit(ir, OPCODE_SCS, dst, src0);
-	 inst->dst.writemask = scs_mask;
-      }
-
-      done_mask |= this_mask;
-   }
-}
-
 src_reg
 ir_to_mesa_visitor::src_reg_for_float(float val)
 {
@@ -606,6 +508,20 @@ type_size(const struct glsl_type *type)
 	  */
 	 return 1;
       }
+      break;
+   case GLSL_TYPE_DOUBLE:
+      if (type->is_matrix()) {
+         if (type->vector_elements > 2)
+            return type->matrix_columns * 2;
+         else
+            return type->matrix_columns;
+      } else {
+         if (type->vector_elements > 2)
+            return 2;
+         else
+            return 1;
+      }
+      break;
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
       return type_size(type->fields.array) * type->length;
@@ -1004,7 +920,7 @@ void
 ir_to_mesa_visitor::visit(ir_expression *ir)
 {
    unsigned int operand;
-   src_reg op[Elements(ir->operands)];
+   src_reg op[ARRAY_SIZE(ir->operands)];
    src_reg result_src;
    dst_reg result_dst;
 
@@ -1107,12 +1023,6 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       break;
    case ir_unop_cos:
       emit_scalar(ir, OPCODE_COS, result_dst, op[0]);
-      break;
-   case ir_unop_sin_reduced:
-      emit_scs(ir, OPCODE_SIN, result_dst, op[0]);
-      break;
-   case ir_unop_cos_reduced:
-      emit_scs(ir, OPCODE_COS, result_dst, op[0]);
       break;
 
    case ir_unop_dFdx:
@@ -1348,6 +1258,7 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
    case ir_unop_pack_unorm_2x16:
    case ir_unop_pack_unorm_4x8:
    case ir_unop_pack_half_2x16:
+   case ir_unop_pack_double_2x32:
    case ir_unop_unpack_snorm_2x16:
    case ir_unop_unpack_snorm_4x8:
    case ir_unop_unpack_unorm_2x16:
@@ -1355,11 +1266,21 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
    case ir_unop_unpack_half_2x16:
    case ir_unop_unpack_half_2x16_split_x:
    case ir_unop_unpack_half_2x16_split_y:
+   case ir_unop_unpack_double_2x32:
    case ir_binop_pack_half_2x16_split:
    case ir_unop_bitfield_reverse:
    case ir_unop_bit_count:
    case ir_unop_find_msb:
    case ir_unop_find_lsb:
+   case ir_unop_d2f:
+   case ir_unop_f2d:
+   case ir_unop_d2i:
+   case ir_unop_i2d:
+   case ir_unop_d2u:
+   case ir_unop_u2d:
+   case ir_unop_d2b:
+   case ir_unop_frexp_sig:
+   case ir_unop_frexp_exp:
       assert(!"not supported");
       break;
    case ir_binop_min:
@@ -2385,6 +2306,8 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
 
    if (type->is_vector() || type->is_scalar()) {
       size = type->vector_elements;
+      if (type->is_double())
+         size *= 2;
    } else {
       size = type_size(type) * 4;
    }
@@ -2489,6 +2412,7 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
 	 enum gl_uniform_driver_format format = uniform_native;
 
 	 unsigned columns = 0;
+	 int dmul = 4 * sizeof(float);
 	 switch (storage->type->base_type) {
 	 case GLSL_TYPE_UINT:
 	    assert(ctx->Const.NativeIntegers);
@@ -2500,6 +2424,11 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
 	       (ctx->Const.NativeIntegers) ? uniform_native : uniform_int_float;
 	    columns = 1;
 	    break;
+
+	 case GLSL_TYPE_DOUBLE:
+	    if (storage->type->vector_elements > 2)
+               dmul *= 2;
+	    /* fallthrough */
 	 case GLSL_TYPE_FLOAT:
 	    format = uniform_native;
 	    columns = storage->type->matrix_columns;
@@ -2524,8 +2453,8 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
 	 }
 
 	 _mesa_uniform_attach_driver_storage(storage,
-					     4 * sizeof(float) * columns,
-					     4 * sizeof(float),
+					     dmul * columns,
+					     dmul,
 					     format,
 					     &params->ParameterValues[i]);
 

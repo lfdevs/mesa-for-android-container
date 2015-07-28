@@ -204,9 +204,6 @@ typedef enum {
 	/* branches/flow control */
 	OPC_META_FLOW = 4,
 	OPC_META_PHI = 5,
-	/* relative addressing */
-	OPC_META_DEREF = 6,
-
 
 } opc_t;
 
@@ -320,8 +317,9 @@ typedef struct PACKED {
 			uint32_t unknown : 20;
 		};
 		/* for immediate: */
-		int32_t iim_val;
-		float   fim_val;
+		int32_t  iim_val;
+		uint32_t uim_val;
+		float    fim_val;
 	};
 
 	/* dword1: */
@@ -627,9 +625,10 @@ typedef union PACKED {
 		uint32_t pad1     : 31;
 
 		/* dword1: */
-		uint32_t pad2     : 17;
+		uint32_t dst      : 8;
+		uint32_t dummy2   : 9;
 		uint32_t type     : 3;
-		uint32_t pad3     : 2;
+		uint32_t dummy3   : 2;
 		uint32_t opc      : 5;
 		uint32_t jmp_tgt  : 1;
 		uint32_t sync     : 1;
@@ -678,13 +677,22 @@ static inline bool is_mad(opc_t opc)
 {
 	switch (opc) {
 	case OPC_MAD_U16:
-	case OPC_MADSH_U16:
 	case OPC_MAD_S16:
-	case OPC_MADSH_M16:
 	case OPC_MAD_U24:
 	case OPC_MAD_S24:
 	case OPC_MAD_F16:
 	case OPC_MAD_F32:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool is_madsh(opc_t opc)
+{
+	switch (opc) {
+	case OPC_MADSH_U16:
+	case OPC_MADSH_M16:
 		return true;
 	default:
 		return false;

@@ -38,6 +38,7 @@
 #include "main/version.h"
 #include "swrast/s_renderbuffer.h"
 #include "util/ralloc.h"
+#include "brw_shader.h"
 
 #include "utils.h"
 #include "xmlpool.h"
@@ -174,10 +175,10 @@ intel_dri2_flush_with_flags(__DRIcontext *cPriv,
    if (flags & __DRI2_FLUSH_DRAWABLE)
       intel_resolve_for_dri2_flush(brw, dPriv);
 
-   if (reason == __DRI2_THROTTLE_SWAPBUFFER ||
-       reason == __DRI2_THROTTLE_FLUSHFRONT) {
-      brw->need_throttle = true;
-   }
+   if (reason == __DRI2_THROTTLE_SWAPBUFFER)
+      brw->need_swap_throttle = true;
+   if (reason == __DRI2_THROTTLE_FLUSHFRONT)
+      brw->need_flush_throttle = true;
 
    intel_batchbuffer_flush(brw);
 
@@ -298,6 +299,17 @@ intel_image_format_lookup(int fourcc)
    }
 
    return f;
+}
+
+static boolean intel_lookup_fourcc(int dri_format, int *fourcc)
+{
+   for (unsigned i = 0; i < ARRAY_SIZE(intel_image_formats); i++) {
+      if (intel_image_formats[i].planes[0].dri_format == dri_format) {
+         *fourcc = intel_image_formats[i].fourcc;
+         return true;
+      }
+   }
+   return false;
 }
 
 static __DRIimage *
@@ -559,6 +571,14 @@ intel_query_image(__DRIimage *image, int attrib, int *value)
       if (drm_intel_bo_gem_export_to_prime(image->bo, value) == 0)
          return true;
       return false;
+   case __DRI_IMAGE_ATTRIB_FOURCC:
+      if (intel_lookup_fourcc(image->dri_format, value))
+         return true;
+      return false;
+   case __DRI_IMAGE_ATTRIB_NUM_PLANES:
+      *value = 1;
+      return true;
+
   default:
       return false;
    }
@@ -687,7 +707,7 @@ intel_create_image_from_fds(__DRIscreen *screen,
 
    if (f->nplanes == 1) {
       image->offset = image->offsets[0];
-      intel_image_warn_if_unaligned(image, __FUNCTION__);
+      intel_image_warn_if_unaligned(image, __func__);
    }
 
    return image;
@@ -778,13 +798,13 @@ intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
     image->pitch = stride;
     image->offset = offset;
 
-    intel_image_warn_if_unaligned(image, __FUNCTION__);
+    intel_image_warn_if_unaligned(image, __func__);
 
     return image;
 }
 
 static const __DRIimageExtension intelImageExtension = {
-    .base = { __DRI_IMAGE, 8 },
+    .base = { __DRI_IMAGE, 11 },
 
     .createImageFromName                = intel_create_image_from_name,
     .createImageFromRenderbuffer        = intel_create_image_from_renderbuffer,
@@ -797,7 +817,9 @@ static const __DRIimageExtension intelImageExtension = {
     .fromPlanar                         = intel_from_planar,
     .createImageFromTexture             = intel_create_image_from_texture,
     .createImageFromFds                 = intel_create_image_from_fds,
-    .createImageFromDmaBufs             = intel_create_image_from_dma_bufs
+    .createImageFromDmaBufs             = intel_create_image_from_dma_bufs,
+    .blitImage                          = NULL,
+    .getCapabilities                    = NULL
 };
 
 static int
@@ -887,6 +909,7 @@ static const __DRIrobustnessExtension dri2Robustness = {
 
 static const __DRIextension *intelScreenExtensions[] = {
     &intelTexBufferExtension.base,
+    &intelFenceExtension.base,
     &intelFlushExtension.base,
     &intelImageExtension.base,
     &intelRendererQueryExtension.base,
@@ -896,6 +919,7 @@ static const __DRIextension *intelScreenExtensions[] = {
 
 static const __DRIextension *intelRobustScreenExtensions[] = {
     &intelTexBufferExtension.base,
+    &intelFenceExtension.base,
     &intelFlushExtension.base,
     &intelImageExtension.base,
     &intelRendererQueryExtension.base,
@@ -1284,6 +1308,29 @@ set_max_gl_versions(struct intel_screen *screen)
    }
 }
 
+/* drop when libdrm 2.4.61 is released */
+#ifndef I915_PARAM_REVISION
+#define I915_PARAM_REVISION 32
+#endif
+
+static int
+brw_get_revision(int fd)
+{
+   struct drm_i915_getparam gp;
+   int revision;
+   int ret;
+
+   memset(&gp, 0, sizeof(gp));
+   gp.param = I915_PARAM_REVISION;
+   gp.value = &revision;
+
+   ret = drmCommandWriteRead(fd, DRM_I915_GETPARAM, &gp, sizeof(gp));
+   if (ret)
+      revision = -1;
+
+   return revision;
+}
+
 /**
  * This is the driver specific part of the createNewScreen entry point.
  * Called when using DRI2.
@@ -1320,7 +1367,8 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
        return false;
 
    intelScreen->deviceID = drm_intel_bufmgr_gem_get_devid(intelScreen->bufmgr);
-   intelScreen->devinfo = brw_get_device_info(intelScreen->deviceID);
+   intelScreen->devinfo = brw_get_device_info(intelScreen->deviceID,
+                                              brw_get_revision(psp->fd));
    if (!intelScreen->devinfo)
       return false;
 
@@ -1359,11 +1407,18 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
          (ret != -1 || errno != EINVAL);
    }
 
+   struct drm_i915_getparam getparam;
+   getparam.param = I915_PARAM_CMD_PARSER_VERSION;
+   getparam.value = &intelScreen->cmd_parser_version;
+   const int ret = drmIoctl(psp->fd, DRM_IOCTL_I915_GETPARAM, &getparam);
+   if (ret == -1)
+      intelScreen->cmd_parser_version = 0;
+
    psp->extensions = !intelScreen->has_context_reset_notification
       ? intelScreenExtensions : intelRobustScreenExtensions;
 
-   brw_fs_alloc_reg_sets(intelScreen);
-   brw_vec4_alloc_reg_set(intelScreen);
+   intelScreen->compiler = brw_compiler_create(intelScreen,
+                                               intelScreen->devinfo);
 
    return (const __DRIconfig**) intel_screen_make_configs(psp);
 }

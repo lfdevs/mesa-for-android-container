@@ -42,8 +42,14 @@ uint32_t fd3_tex_swiz(enum pipe_format format, unsigned swizzle_r,
 		unsigned swizzle_g, unsigned swizzle_b, unsigned swizzle_a);
 
 static INLINE bool
-fd3_half_precision(enum pipe_format format)
+fd3_half_precision(const struct pipe_surface *surface)
 {
+	enum pipe_format format;
+	if (!surface)
+		return true;
+
+	format = surface->format;
+
 	/* colors are provided in consts, which go through cov.f32f16, which will
 	 * break these values
 	 */

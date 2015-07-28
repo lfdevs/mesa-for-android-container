@@ -39,7 +39,7 @@ worklist_push(struct exec_list *worklist, nir_instr *instr)
 {
    worklist_elem *elem = ralloc(worklist, worklist_elem);
    elem->instr = instr;
-   instr->live = true;
+   instr->pass_flags = 1;
    exec_list_push_tail(worklist, &elem->node);
 }
 
@@ -56,7 +56,7 @@ mark_live_cb(nir_src *src, void *_state)
 {
    struct exec_list *worklist = (struct exec_list *) _state;
 
-   if (src->is_ssa && !src->ssa->parent_instr->live) {
+   if (src->is_ssa && !src->ssa->parent_instr->pass_flags) {
       worklist_push(worklist, src->ssa->parent_instr);
    }
 
@@ -70,7 +70,11 @@ init_instr(nir_instr *instr, struct exec_list *worklist)
    nir_intrinsic_instr *intrin_instr;
    nir_tex_instr *tex_instr;
 
-   instr->live = false;
+   /* We use the pass_flags to store the live/dead information.  In DCE, we
+    * just treat it as a zero/non-zerl boolean for whether or not the
+    * instruction is live.
+    */
+   instr->pass_flags = 0;
 
    switch (instr->type) {
    case nir_instr_type_call:
@@ -119,7 +123,7 @@ init_block_cb(nir_block *block, void *_state)
    nir_if *following_if = nir_block_get_following_if(block);
    if (following_if) {
       if (following_if->condition.is_ssa &&
-          !following_if->condition.ssa->parent_instr->live)
+          !following_if->condition.ssa->parent_instr->pass_flags)
          worklist_push(worklist, following_if->condition.ssa->parent_instr);
    }
 
@@ -132,7 +136,7 @@ delete_block_cb(nir_block *block, void *_state)
    bool *progress = (bool *) _state;
 
    nir_foreach_instr_safe(block, instr) {
-      if (!instr->live) {
+      if (!instr->pass_flags) {
          nir_instr_remove(instr);
          *progress = true;
       }

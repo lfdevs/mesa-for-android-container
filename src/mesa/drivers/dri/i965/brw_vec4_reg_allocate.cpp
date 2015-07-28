@@ -21,11 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-extern "C" {
 #include "main/macros.h"
 #include "util/register_allocate.h"
-} /* extern "C" */
-
 #include "brw_vec4.h"
 #include "brw_vs.h"
 #include "brw_cfg.h"
@@ -38,22 +35,22 @@ static void
 assign(unsigned int *reg_hw_locations, backend_reg *reg)
 {
    if (reg->file == GRF) {
-      reg->reg = reg_hw_locations[reg->reg];
+      reg->reg = reg_hw_locations[reg->reg] + reg->reg_offset;
+      reg->reg_offset = 0;
    }
 }
 
 bool
 vec4_visitor::reg_allocate_trivial()
 {
-   unsigned int hw_reg_mapping[this->virtual_grf_count];
-   bool virtual_grf_used[this->virtual_grf_count];
-   int i;
+   unsigned int hw_reg_mapping[this->alloc.count];
+   bool virtual_grf_used[this->alloc.count];
    int next;
 
    /* Calculate which virtual GRFs are actually in use after whatever
     * optimization passes have occurred.
     */
-   for (int i = 0; i < this->virtual_grf_count; i++) {
+   for (unsigned i = 0; i < this->alloc.count; i++) {
       virtual_grf_used[i] = false;
    }
 
@@ -61,18 +58,18 @@ vec4_visitor::reg_allocate_trivial()
       if (inst->dst.file == GRF)
 	 virtual_grf_used[inst->dst.reg] = true;
 
-      for (int i = 0; i < 3; i++) {
+      for (unsigned i = 0; i < 3; i++) {
 	 if (inst->src[i].file == GRF)
 	    virtual_grf_used[inst->src[i].reg] = true;
       }
    }
 
    hw_reg_mapping[0] = this->first_non_payload_grf;
-   next = hw_reg_mapping[0] + this->virtual_grf_sizes[0];
-   for (i = 1; i < this->virtual_grf_count; i++) {
+   next = hw_reg_mapping[0] + this->alloc.sizes[0];
+   for (unsigned i = 1; i < this->alloc.count; i++) {
       if (virtual_grf_used[i]) {
 	 hw_reg_mapping[i] = next;
-	 next += this->virtual_grf_sizes[i];
+	 next += this->alloc.sizes[i];
       }
    }
    prog_data->total_grf = next;
@@ -94,17 +91,20 @@ vec4_visitor::reg_allocate_trivial()
 }
 
 extern "C" void
-brw_vec4_alloc_reg_set(struct intel_screen *screen)
+brw_vec4_alloc_reg_set(struct brw_compiler *compiler)
 {
    int base_reg_count =
-      screen->devinfo->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
+      compiler->devinfo->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
 
    /* After running split_virtual_grfs(), almost all VGRFs will be of size 1.
     * SEND-from-GRF sources cannot be split, so we also need classes for each
     * potential message length.
     */
-   const int class_count = 2;
-   const int class_sizes[class_count] = {1, 2};
+   const int class_count = MAX_VGRF_SIZE;
+   int class_sizes[MAX_VGRF_SIZE];
+
+   for (int i = 0; i < class_count; i++)
+      class_sizes[i] = i + 1;
 
    /* Compute the total number of registers across all classes. */
    int ra_reg_count = 0;
@@ -112,40 +112,56 @@ brw_vec4_alloc_reg_set(struct intel_screen *screen)
       ra_reg_count += base_reg_count - (class_sizes[i] - 1);
    }
 
-   ralloc_free(screen->vec4_reg_set.ra_reg_to_grf);
-   screen->vec4_reg_set.ra_reg_to_grf = ralloc_array(screen, uint8_t, ra_reg_count);
-   ralloc_free(screen->vec4_reg_set.regs);
-   screen->vec4_reg_set.regs = ra_alloc_reg_set(screen, ra_reg_count);
-   if (screen->devinfo->gen >= 6)
-      ra_set_allocate_round_robin(screen->vec4_reg_set.regs);
-   ralloc_free(screen->vec4_reg_set.classes);
-   screen->vec4_reg_set.classes = ralloc_array(screen, int, class_count);
+   ralloc_free(compiler->vec4_reg_set.ra_reg_to_grf);
+   compiler->vec4_reg_set.ra_reg_to_grf = ralloc_array(compiler, uint8_t, ra_reg_count);
+   ralloc_free(compiler->vec4_reg_set.regs);
+   compiler->vec4_reg_set.regs = ra_alloc_reg_set(compiler, ra_reg_count);
+   if (compiler->devinfo->gen >= 6)
+      ra_set_allocate_round_robin(compiler->vec4_reg_set.regs);
+   ralloc_free(compiler->vec4_reg_set.classes);
+   compiler->vec4_reg_set.classes = ralloc_array(compiler, int, class_count);
 
    /* Now, add the registers to their classes, and add the conflicts
     * between them and the base GRF registers (and also each other).
     */
    int reg = 0;
+   unsigned *q_values[MAX_VGRF_SIZE];
    for (int i = 0; i < class_count; i++) {
       int class_reg_count = base_reg_count - (class_sizes[i] - 1);
-      screen->vec4_reg_set.classes[i] = ra_alloc_reg_class(screen->vec4_reg_set.regs);
+      compiler->vec4_reg_set.classes[i] = ra_alloc_reg_class(compiler->vec4_reg_set.regs);
+
+      q_values[i] = new unsigned[MAX_VGRF_SIZE];
 
       for (int j = 0; j < class_reg_count; j++) {
-	 ra_class_add_reg(screen->vec4_reg_set.regs, screen->vec4_reg_set.classes[i], reg);
+	 ra_class_add_reg(compiler->vec4_reg_set.regs, compiler->vec4_reg_set.classes[i], reg);
 
-	 screen->vec4_reg_set.ra_reg_to_grf[reg] = j;
+	 compiler->vec4_reg_set.ra_reg_to_grf[reg] = j;
 
 	 for (int base_reg = j;
 	      base_reg < j + class_sizes[i];
 	      base_reg++) {
-	    ra_add_transitive_reg_conflict(screen->vec4_reg_set.regs, base_reg, reg);
+	    ra_add_transitive_reg_conflict(compiler->vec4_reg_set.regs, base_reg, reg);
 	 }
 
 	 reg++;
       }
+
+      for (int j = 0; j < class_count; j++) {
+         /* Calculate the q values manually because the algorithm used by
+          * ra_set_finalize() to do it has higher complexity affecting the
+          * start-up time of some applications.  q(i, j) is just the maximum
+          * number of registers from class i a register from class j can
+          * conflict with.
+          */
+         q_values[i][j] = class_sizes[i] + class_sizes[j] - 1;
+      }
    }
    assert(reg == ra_reg_count);
 
-   ra_set_finalize(screen->vec4_reg_set.regs, NULL);
+   ra_set_finalize(compiler->vec4_reg_set.regs, q_values);
+
+   for (int i = 0; i < MAX_VGRF_SIZE; i++)
+      delete[] q_values[i];
 }
 
 void
@@ -175,8 +191,8 @@ vec4_visitor::setup_payload_interference(struct ra_graph *g,
 bool
 vec4_visitor::reg_allocate()
 {
-   struct intel_screen *screen = brw->intelScreen;
-   unsigned int hw_reg_mapping[virtual_grf_count];
+   struct brw_compiler *compiler = brw->intelScreen->compiler;
+   unsigned int hw_reg_mapping[alloc.count];
    int payload_reg_count = this->first_non_payload_grf;
 
    /* Using the trivial allocator can be useful in debugging undefined
@@ -187,19 +203,18 @@ vec4_visitor::reg_allocate()
 
    calculate_live_intervals();
 
-   int node_count = virtual_grf_count;
+   int node_count = alloc.count;
    int first_payload_node = node_count;
    node_count += payload_reg_count;
    struct ra_graph *g =
-      ra_alloc_interference_graph(screen->vec4_reg_set.regs, node_count);
+      ra_alloc_interference_graph(compiler->vec4_reg_set.regs, node_count);
 
-   for (int i = 0; i < virtual_grf_count; i++) {
-      int size = this->virtual_grf_sizes[i];
-      assert(size >= 1 && size <= 2 &&
-             "Register allocation relies on split_virtual_grfs().");
-      ra_set_node_class(g, i, screen->vec4_reg_set.classes[size - 1]);
+   for (unsigned i = 0; i < alloc.count; i++) {
+      int size = this->alloc.sizes[i];
+      assert(size >= 1 && size <= MAX_VGRF_SIZE);
+      ra_set_node_class(g, i, compiler->vec4_reg_set.classes[size - 1]);
 
-      for (int j = 0; j < i; j++) {
+      for (unsigned j = 0; j < i; j++) {
 	 if (virtual_grf_interferes(i, j)) {
 	    ra_add_node_interference(g, i, j);
 	 }
@@ -230,12 +245,12 @@ vec4_visitor::reg_allocate()
     * numbers.
     */
    prog_data->total_grf = payload_reg_count;
-   for (int i = 0; i < virtual_grf_count; i++) {
+   for (unsigned i = 0; i < alloc.count; i++) {
       int reg = ra_get_node_reg(g, i);
 
-      hw_reg_mapping[i] = screen->vec4_reg_set.ra_reg_to_grf[reg];
+      hw_reg_mapping[i] = compiler->vec4_reg_set.ra_reg_to_grf[reg];
       prog_data->total_grf = MAX2(prog_data->total_grf,
-				  hw_reg_mapping[i] + virtual_grf_sizes[i]);
+				  hw_reg_mapping[i] + alloc.sizes[i]);
    }
 
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
@@ -255,9 +270,9 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
 {
    float loop_scale = 1.0;
 
-   for (int i = 0; i < this->virtual_grf_count; i++) {
+   for (unsigned i = 0; i < this->alloc.count; i++) {
       spill_costs[i] = 0.0;
-      no_spill[i] = virtual_grf_sizes[i] != 1;
+      no_spill[i] = alloc.sizes[i] != 1;
    }
 
    /* Calculate costs for spilling nodes.  Call it a cost of 1 per
@@ -308,12 +323,12 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
 int
 vec4_visitor::choose_spill_reg(struct ra_graph *g)
 {
-   float spill_costs[this->virtual_grf_count];
-   bool no_spill[this->virtual_grf_count];
+   float spill_costs[this->alloc.count];
+   bool no_spill[this->alloc.count];
 
    evaluate_spill_costs(spill_costs, no_spill);
 
-   for (int i = 0; i < this->virtual_grf_count; i++) {
+   for (unsigned i = 0; i < this->alloc.count; i++) {
       if (!no_spill[i])
          ra_set_node_spill_cost(g, i, spill_costs[i]);
    }
@@ -324,7 +339,7 @@ vec4_visitor::choose_spill_reg(struct ra_graph *g)
 void
 vec4_visitor::spill_reg(int spill_reg_nr)
 {
-   assert(virtual_grf_sizes[spill_reg_nr] == 1);
+   assert(alloc.sizes[spill_reg_nr] == 1);
    unsigned int spill_offset = c->last_scratch++;
 
    /* Generate spill/unspill instructions for the objects being spilled. */
@@ -332,7 +347,7 @@ vec4_visitor::spill_reg(int spill_reg_nr)
       for (unsigned int i = 0; i < 3; i++) {
          if (inst->src[i].file == GRF && inst->src[i].reg == spill_reg_nr) {
             src_reg spill_reg = inst->src[i];
-            inst->src[i].reg = virtual_grf_alloc(1);
+            inst->src[i].reg = alloc.allocate(1);
             dst_reg temp = dst_reg(inst->src[i]);
 
             emit_scratch_read(block, inst, temp, spill_reg, spill_offset);

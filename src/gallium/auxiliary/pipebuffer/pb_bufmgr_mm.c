@@ -37,7 +37,7 @@
 #include "util/u_debug.h"
 #include "os/os_thread.h"
 #include "util/u_memory.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_mm.h"
 #include "pb_buffer.h"
 #include "pb_bufmgr.h"

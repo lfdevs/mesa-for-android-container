@@ -34,11 +34,11 @@
 #include "brw_ff_gs.h"
 
 
-static bool
-do_gs_prog(struct brw_context *brw,
-           struct gl_shader_program *prog,
-           struct brw_geometry_program *gp,
-           struct brw_gs_prog_key *key)
+bool
+brw_codegen_gs_prog(struct brw_context *brw,
+                    struct gl_shader_program *prog,
+                    struct brw_geometry_program *gp,
+                    struct brw_gs_prog_key *key)
 {
    struct brw_stage_state *stage_state = &brw->gs.base;
    struct brw_gs_compile c;
@@ -126,7 +126,8 @@ do_gs_prog(struct brw_context *brw,
       outputs_written |= BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1);
    }
 
-   brw_compute_vue_map(brw, &c.prog_data.base.vue_map, outputs_written);
+   brw_compute_vue_map(brw->intelScreen->devinfo,
+                       &c.prog_data.base.vue_map, outputs_written);
 
    /* Compute the output vertex size.
     *
@@ -248,7 +249,8 @@ do_gs_prog(struct brw_context *brw,
    c.prog_data.output_topology =
       get_hw_prim_for_gl_prim(gp->program.OutputType);
 
-   brw_compute_vue_map(brw, &c.input_vue_map, c.key.input_varyings);
+   brw_compute_vue_map(brw->intelScreen->devinfo,
+                       &c.input_vue_map, c.key.input_varyings);
 
    /* GS inputs are read from the VUE 256 bits (2 vec4's) at a time, so we
     * need to program a URB read length of ceiling(num_slots / 2).
@@ -288,26 +290,63 @@ do_gs_prog(struct brw_context *brw,
    return true;
 }
 
+static bool
+brw_gs_state_dirty(struct brw_context *brw)
+{
+   return brw_state_dirty(brw,
+                          _NEW_TEXTURE,
+                          BRW_NEW_GEOMETRY_PROGRAM |
+                          BRW_NEW_TRANSFORM_FEEDBACK |
+                          BRW_NEW_VUE_MAP_VS);
+}
 
 static void
+brw_gs_populate_key(struct brw_context *brw,
+                    struct brw_gs_prog_key *key)
+{
+   struct gl_context *ctx = &brw->ctx;
+   struct brw_stage_state *stage_state = &brw->gs.base;
+   struct brw_geometry_program *gp =
+      (struct brw_geometry_program *) brw->geometry_program;
+   struct gl_program *prog = &gp->program.Base;
+
+   memset(key, 0, sizeof(*key));
+
+   key->base.program_string_id = gp->id;
+   brw_setup_vue_key_clip_info(brw, &key->base,
+                               gp->program.Base.UsesClipDistanceOut);
+
+   /* _NEW_TEXTURE */
+   brw_populate_sampler_prog_key_data(ctx, prog, stage_state->sampler_count,
+                                      &key->base.tex);
+
+   /* BRW_NEW_VUE_MAP_VS */
+   key->input_varyings = brw->vue_map_vs.slots_valid;
+}
+
+void
 brw_upload_gs_prog(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   struct gl_shader_program **current = ctx->_Shader->CurrentProgram;
    struct brw_stage_state *stage_state = &brw->gs.base;
    struct brw_gs_prog_key key;
    /* BRW_NEW_GEOMETRY_PROGRAM */
    struct brw_geometry_program *gp =
       (struct brw_geometry_program *) brw->geometry_program;
 
+   if (!brw_gs_state_dirty(brw))
+      return;
+
    if (gp == NULL) {
       /* No geometry shader.  Vertex data just passes straight through. */
-      if (brw->state.dirty.brw & BRW_NEW_VUE_MAP_VS) {
+      if (brw->ctx.NewDriverState & BRW_NEW_VUE_MAP_VS) {
          brw->vue_map_geom_out = brw->vue_map_vs;
-         brw->state.dirty.brw |= BRW_NEW_VUE_MAP_GEOM_OUT;
+         brw->ctx.NewDriverState |= BRW_NEW_VUE_MAP_GEOM_OUT;
       }
 
       if (brw->gen == 6 &&
-          (brw->state.dirty.brw & BRW_NEW_TRANSFORM_FEEDBACK)) {
+          (brw->ctx.NewDriverState & BRW_NEW_TRANSFORM_FEEDBACK)) {
          gen6_brw_upload_ff_gs_prog(brw);
          return;
       }
@@ -321,27 +360,13 @@ brw_upload_gs_prog(struct brw_context *brw)
       return;
    }
 
-   struct gl_program *prog = &gp->program.Base;
-
-   memset(&key, 0, sizeof(key));
-
-   key.base.program_string_id = gp->id;
-   brw_setup_vue_key_clip_info(brw, &key.base,
-                               gp->program.Base.UsesClipDistanceOut);
-
-   /* _NEW_TEXTURE */
-   brw_populate_sampler_prog_key_data(ctx, prog, stage_state->sampler_count,
-                                      &key.base.tex);
-
-   /* BRW_NEW_VUE_MAP_VS */
-   key.input_varyings = brw->vue_map_vs.slots_valid;
+   brw_gs_populate_key(brw, &key);
 
    if (!brw_search_cache(&brw->cache, BRW_CACHE_GS_PROG,
                          &key, sizeof(key),
                          &stage_state->prog_offset, &brw->gs.prog_data)) {
-      bool success =
-         do_gs_prog(brw, ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY], gp,
-                    &key);
+      bool success = brw_codegen_gs_prog(brw, current[MESA_SHADER_GEOMETRY],
+                                         gp, &key);
       assert(success);
       (void)success;
    }
@@ -350,21 +375,9 @@ brw_upload_gs_prog(struct brw_context *brw)
    if (memcmp(&brw->gs.prog_data->base.vue_map, &brw->vue_map_geom_out,
               sizeof(brw->vue_map_geom_out)) != 0) {
       brw->vue_map_geom_out = brw->gs.prog_data->base.vue_map;
-      brw->state.dirty.brw |= BRW_NEW_VUE_MAP_GEOM_OUT;
+      brw->ctx.NewDriverState |= BRW_NEW_VUE_MAP_GEOM_OUT;
    }
 }
-
-
-const struct brw_tracked_state brw_gs_prog = {
-   .dirty = {
-      .mesa  = _NEW_TEXTURE,
-      .brw   = BRW_NEW_GEOMETRY_PROGRAM |
-               BRW_NEW_TRANSFORM_FEEDBACK |
-               BRW_NEW_VUE_MAP_VS,
-   },
-   .emit = brw_upload_gs_prog
-};
-
 
 bool
 brw_gs_precompile(struct gl_context *ctx,
@@ -389,7 +402,7 @@ brw_gs_precompile(struct gl_context *ctx,
     */
    key.input_varyings = gp->Base.InputsRead;
 
-   success = do_gs_prog(brw, shader_prog, bgp, &key);
+   success = brw_codegen_gs_prog(brw, shader_prog, bgp, &key);
 
    brw->gs.base.prog_offset = old_prog_offset;
    brw->gs.prog_data = old_prog_data;

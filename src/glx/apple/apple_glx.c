@@ -93,7 +93,7 @@ apple_glx_get_client_id(void)
    return id;
 }
 
-/* Return true if an error occured. */
+/* Return true if an error occurred. */
 bool
 apple_init_glx(Display * dpy)
 {

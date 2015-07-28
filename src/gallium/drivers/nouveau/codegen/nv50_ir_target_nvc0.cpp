@@ -337,6 +337,8 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
    if (sf == FILE_IMMEDIATE) {
       Storage &reg = ld->getSrc(0)->asImm()->reg;
 
+      if (typeSizeof(i->sType) > 4)
+         return false;
       if (opInfo[i->op].immdBits != 0xffffffff) {
          if (i->sType == TYPE_F32) {
             if (reg.data.u32 & 0xfff)

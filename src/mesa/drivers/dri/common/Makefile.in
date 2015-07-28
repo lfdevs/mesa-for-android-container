@@ -423,6 +423,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -484,7 +488,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -601,7 +604,9 @@ megadriver_stub_FILES := \
 
 EXTRA_DIST = drirc xmlpool.h SConscript
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/ \
-	-I$(top_srcdir)/src/mapi -I$(top_srcdir)/src/mesa/ $(DEFINES) \
+	-I$(top_srcdir)/src/mapi -I$(top_srcdir)/src/mesa/ \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary $(DEFINES) \
 	$(VISIBILITY_CFLAGS) $(am__append_1) $(am__append_2)
 noinst_LTLIBRARIES = \
 	libdricommon.la \

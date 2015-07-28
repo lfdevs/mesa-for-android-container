@@ -41,6 +41,8 @@
 #define CARRY_TO_ARITH     0x200
 #define BORROW_TO_ARITH    0x400
 #define SAT_TO_CLAMP       0x800
+#define DOPS_TO_DFRAC      0x1000
+#define DFREXP_DLDEXP_TO_ARITH    0x2000
 
 /**
  * \see class lower_packing_builtins_visitor
@@ -75,6 +77,7 @@ bool do_common_optimization(exec_list *ir, bool linked,
 bool do_rebalance_tree(exec_list *instructions);
 bool do_algebraic(exec_list *instructions, bool native_integers,
                   const struct gl_shader_compiler_options *options);
+bool opt_conditional_discard(exec_list *instructions);
 bool do_constant_folding(exec_list *instructions);
 bool do_constant_variable(exec_list *instructions);
 bool do_constant_variable_unlinked(exec_list *instructions);

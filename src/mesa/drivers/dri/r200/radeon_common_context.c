@@ -236,7 +236,7 @@ void radeonDestroyContext(__DRIcontext *driContextPriv )
 
 	radeon_firevertices(radeon);
 	if (!is_empty_list(&radeon->dma.reserved)) {
-		rcommonFlushCmdBuf( radeon, __FUNCTION__ );
+		rcommonFlushCmdBuf( radeon, __func__ );
 	}
 
 	radeonFreeDmaRegions(radeon);
@@ -276,7 +276,7 @@ GLboolean radeonUnbindContext(__DRIcontext * driContextPriv)
 	radeonContextPtr radeon = (radeonContextPtr) driContextPriv->driverPrivate;
 
 	if (RADEON_DEBUG & RADEON_DRI)
-		fprintf(stderr, "%s ctx %p\n", __FUNCTION__,
+		fprintf(stderr, "%s ctx %p\n", __func__,
 			&radeon->glCtx);
 
 	/* Unset current context and dispath table */
@@ -578,7 +578,7 @@ GLboolean radeonMakeCurrent(__DRIcontext * driContextPriv,
 
 	if (!driContextPriv) {
 		if (RADEON_DEBUG & RADEON_DRI)
-			fprintf(stderr, "%s ctx is null\n", __FUNCTION__);
+			fprintf(stderr, "%s ctx is null\n", __func__);
 		_mesa_make_current(NULL, NULL, NULL);
 		return GL_TRUE;
 	}
@@ -602,7 +602,7 @@ GLboolean radeonMakeCurrent(__DRIcontext * driContextPriv,
 		&(radeon_get_renderbuffer(drfb, BUFFER_DEPTH)->base.Base));
 
 	if (RADEON_DEBUG & RADEON_DRI)
-	     fprintf(stderr, "%s ctx %p dfb %p rfb %p\n", __FUNCTION__, &radeon->glCtx, drfb, readfb);
+	     fprintf(stderr, "%s ctx %p dfb %p rfb %p\n", __func__, &radeon->glCtx, drfb, readfb);
 
 	if(driDrawPriv)
 		driUpdateFramebufferSize(&radeon->glCtx, driDrawPriv);
@@ -625,7 +625,7 @@ GLboolean radeonMakeCurrent(__DRIcontext * driContextPriv,
 
 
 	if (RADEON_DEBUG & RADEON_DRI)
-		fprintf(stderr, "End %s\n", __FUNCTION__);
+		fprintf(stderr, "End %s\n", __func__);
 
 	return GL_TRUE;
 }

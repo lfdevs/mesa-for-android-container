@@ -177,6 +177,8 @@
 #define   S_028804_INTERPOLATE_SRC_Z(x)			(((x) & 0x1) << 19)
 #define   S_028804_STATIC_ANCHOR_ASSOCIATIONS(x)	(((x) & 0x1) << 20)
 #define   S_028804_ALPHA_TO_MASK_EQAA_DISABLE(x)	(((x) & 0x1) << 21)
+#define   S_028804_OVERRASTERIZATION_AMOUNT(x)		(((x) & 0x7) << 24)
+#define   S_028804_ENABLE_POSTZ_OVERRASTERIZATION(x)	(((x) & 0x1) << 27)
 #define CM_R_028BDC_PA_SC_LINE_CNTL                  0x28bdc
 #define   S_028BDC_EXPAND_LINE_WIDTH(x)                (((x) & 0x1) << 9)
 #define   G_028BDC_EXPAND_LINE_WIDTH(x)                (((x) >> 9) & 0x1)

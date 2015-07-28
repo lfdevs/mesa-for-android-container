@@ -143,15 +143,17 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libilo_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_1 = ilo_blit.lo ilo_blitter.lo ilo_blitter_blt.lo \
-	ilo_blitter_pipe.lo ilo_blitter_rectlist.lo ilo_builder.lo \
-	ilo_builder_decode.lo ilo_context.lo ilo_cp.lo ilo_draw.lo \
-	ilo_format.lo ilo_gpgpu.lo ilo_layout.lo ilo_query.lo \
+am__objects_1 = core/ilo_builder.lo core/ilo_builder_decode.lo \
+	core/ilo_debug.lo core/ilo_dev.lo core/ilo_format.lo \
+	core/ilo_image.lo core/ilo_state_3d_bottom.lo \
+	core/ilo_state_3d_top.lo ilo_blit.lo ilo_blitter.lo \
+	ilo_blitter_blt.lo ilo_blitter_pipe.lo ilo_blitter_rectlist.lo \
+	ilo_context.lo ilo_cp.lo ilo_draw.lo ilo_gpgpu.lo ilo_query.lo \
 	ilo_resource.lo ilo_render.lo ilo_render_dynamic.lo \
-	ilo_render_gen6.lo ilo_render_gen7.lo ilo_render_media.lo \
-	ilo_render_surface.lo ilo_screen.lo ilo_shader.lo ilo_state.lo \
-	ilo_state_3d_bottom.lo ilo_state_3d_top.lo ilo_transfer.lo \
-	ilo_video.lo shader/ilo_shader_cs.lo shader/ilo_shader_fs.lo \
+	ilo_render_gen6.lo ilo_render_gen7.lo ilo_render_gen8.lo \
+	ilo_render_media.lo ilo_render_surface.lo ilo_screen.lo \
+	ilo_shader.lo ilo_state.lo ilo_transfer.lo ilo_video.lo \
+	shader/ilo_shader_cs.lo shader/ilo_shader_fs.lo \
 	shader/ilo_shader_gs.lo shader/ilo_shader_vs.lo \
 	shader/toy_compiler.lo shader/toy_compiler_asm.lo \
 	shader/toy_compiler_disasm.lo shader/toy_legalize.lo \
@@ -352,6 +354,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -413,7 +419,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -503,6 +508,31 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 C_SOURCES := \
+	core/ilo_buffer.h \
+	core/ilo_builder.c \
+	core/ilo_builder.h \
+	core/ilo_builder_3d.h \
+	core/ilo_builder_3d_bottom.h \
+	core/ilo_builder_3d_top.h \
+	core/ilo_builder_blt.h \
+	core/ilo_builder_decode.c \
+	core/ilo_builder_media.h \
+	core/ilo_builder_mi.h \
+	core/ilo_builder_render.h \
+	core/ilo_core.h \
+	core/ilo_debug.c \
+	core/ilo_debug.h \
+	core/ilo_dev.c \
+	core/ilo_dev.h \
+	core/ilo_format.c \
+	core/ilo_format.h \
+	core/ilo_fence.h \
+	core/ilo_image.c \
+	core/ilo_image.h \
+	core/ilo_state_3d.h \
+	core/ilo_state_3d_bottom.c \
+	core/ilo_state_3d_top.c \
+	core/intel_winsys.h \
 	ilo_blit.c \
 	ilo_blit.h \
 	ilo_blitter.c \
@@ -510,16 +540,6 @@ C_SOURCES := \
 	ilo_blitter_blt.c \
 	ilo_blitter_pipe.c \
 	ilo_blitter_rectlist.c \
-	ilo_builder.c \
-	ilo_builder.h \
-	ilo_builder_3d.h \
-	ilo_builder_3d_bottom.h \
-	ilo_builder_3d_top.h \
-	ilo_builder_blt.h \
-	ilo_builder_decode.c \
-	ilo_builder_media.h \
-	ilo_builder_mi.h \
-	ilo_builder_render.h \
 	ilo_common.h \
 	ilo_context.c \
 	ilo_context.h \
@@ -527,12 +547,8 @@ C_SOURCES := \
 	ilo_cp.h \
 	ilo_draw.c \
 	ilo_draw.h \
-	ilo_format.c \
-	ilo_format.h \
 	ilo_gpgpu.c \
 	ilo_gpgpu.h \
-	ilo_layout.c \
-	ilo_layout.h \
 	ilo_public.h \
 	ilo_query.c \
 	ilo_query.h \
@@ -544,6 +560,7 @@ C_SOURCES := \
 	ilo_render_dynamic.c \
 	ilo_render_gen6.c \
 	ilo_render_gen7.c \
+	ilo_render_gen8.c \
 	ilo_render_media.c \
 	ilo_render_surface.c \
 	ilo_screen.c \
@@ -552,14 +569,10 @@ C_SOURCES := \
 	ilo_shader.h \
 	ilo_state.c \
 	ilo_state.h \
-	ilo_state_3d.h \
-	ilo_state_3d_bottom.c \
-	ilo_state_3d_top.c \
 	ilo_transfer.c \
 	ilo_transfer.h \
 	ilo_video.c \
 	ilo_video.h \
-	intel_winsys.h \
 	\
 	shader/ilo_shader_cs.c \
 	shader/ilo_shader_fs.c \
@@ -709,6 +722,25 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+core/$(am__dirstamp):
+	@$(MKDIR_P) core
+	@: > core/$(am__dirstamp)
+core/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) core/$(DEPDIR)
+	@: > core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_builder.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_builder_decode.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_debug.lo: core/$(am__dirstamp) core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_dev.lo: core/$(am__dirstamp) core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_format.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_image.lo: core/$(am__dirstamp) core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_state_3d_bottom.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
+core/ilo_state_3d_top.lo: core/$(am__dirstamp) \
+	core/$(DEPDIR)/$(am__dirstamp)
 shader/$(am__dirstamp):
 	@$(MKDIR_P) shader
 	@: > shader/$(am__dirstamp)
@@ -743,6 +775,8 @@ libilo.la: $(libilo_la_OBJECTS) $(libilo_la_DEPENDENCIES) $(EXTRA_libilo_la_DEPE
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f core/*.$(OBJEXT)
+	-rm -f core/*.lo
 	-rm -f shader/*.$(OBJEXT)
 	-rm -f shader/*.lo
 
@@ -754,29 +788,32 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_blitter_blt.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_blitter_pipe.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_blitter_rectlist.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_builder.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_builder_decode.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_cp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_draw.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_format.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_gpgpu.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_layout.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_render.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_render_dynamic.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_render_gen6.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_render_gen7.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_render_gen8.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_render_media.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_render_surface.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_screen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_state_3d_bottom.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_state_3d_top.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_transfer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ilo_video.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_builder.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_builder_decode.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_debug.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_dev.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_format.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_image.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_state_3d_bottom.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@core/$(DEPDIR)/ilo_state_3d_top.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@shader/$(DEPDIR)/ilo_shader_cs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@shader/$(DEPDIR)/ilo_shader_fs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@shader/$(DEPDIR)/ilo_shader_gs.Plo@am__quote@
@@ -818,6 +855,7 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf core/.libs core/_libs
 	-rm -rf shader/.libs shader/_libs
 
 ID: $(am__tagged_files)
@@ -932,6 +970,8 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f core/$(DEPDIR)/$(am__dirstamp)
+	-rm -f core/$(am__dirstamp)
 	-rm -f shader/$(DEPDIR)/$(am__dirstamp)
 	-rm -f shader/$(am__dirstamp)
 
@@ -944,7 +984,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR) shader/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) core/$(DEPDIR) shader/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -990,7 +1030,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR) shader/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) core/$(DEPDIR) shader/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

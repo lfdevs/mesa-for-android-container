@@ -20,6 +20,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <stdio.h>
 #include "r300_tgsi_to_rc.h"
 
 #include "compiler/radeon_compiler.h"

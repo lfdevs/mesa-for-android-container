@@ -27,18 +27,22 @@
 
 static void translate_memcpy_ushort( const void *in,
                                      unsigned start,
-                                     unsigned nr,
+                                     unsigned in_nr,
+                                     unsigned out_nr,
+                                     unsigned restart_index,
                                      void *out )
 {
-   memcpy(out, &((short *)in)[start], nr*sizeof(short));
+   memcpy(out, &((short *)in)[start], out_nr*sizeof(short));
 }
                               
 static void translate_memcpy_uint( const void *in,
                                    unsigned start,
-                                   unsigned nr,
+                                   unsigned in_nr,
+                                   unsigned out_nr,
+                                   unsigned restart_index,
                                    void *out )
 {
-   memcpy(out, &((int *)in)[start], nr*sizeof(int));
+   memcpy(out, &((int *)in)[start], out_nr*sizeof(int));
 }
                               
 
@@ -58,6 +62,7 @@ static void translate_memcpy_uint( const void *in,
  * \param nr  number of incoming vertices
  * \param in_pv  incoming provoking vertex convention (PV_FIRST or PV_LAST)
  * \param out_pv  desired provoking vertex convention (PV_FIRST or PV_LAST)
+ * \param prim_restart  whether primitive restart is disable or enabled
  * \param out_prim  returns new PIPE_PRIM_x we'll translate to
  * \param out_index_size  returns bytes per new index value (2 or 4)
  * \param out_nr  returns number of new vertices
@@ -69,6 +74,7 @@ int u_index_translator( unsigned hw_mask,
                         unsigned nr,
                         unsigned in_pv,
                         unsigned out_pv,
+                        unsigned prim_restart,
                         unsigned *out_prim,
                         unsigned *out_index_size,
                         unsigned *out_nr,
@@ -106,68 +112,68 @@ int u_index_translator( unsigned hw_mask,
    else {
       switch (prim) {
       case PIPE_PRIM_POINTS:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_POINTS;
          *out_nr = nr;
          break;
 
       case PIPE_PRIM_LINES:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = nr;
          break;
 
       case PIPE_PRIM_LINE_STRIP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = (nr - 1) * 2;
          break;
 
       case PIPE_PRIM_LINE_LOOP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_LINES;
          *out_nr = nr * 2;
          break;
 
       case PIPE_PRIM_TRIANGLES:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = nr;
          break;
 
       case PIPE_PRIM_TRIANGLE_STRIP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
       case PIPE_PRIM_TRIANGLE_FAN:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
       case PIPE_PRIM_QUADS:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr / 4) * 6;
          break;
 
       case PIPE_PRIM_QUAD_STRIP:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
       case PIPE_PRIM_POLYGON:
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_TRIANGLES;
          *out_nr = (nr - 2) * 3;
          break;
 
       default:
          assert(0);
-         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim];
+         *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
          *out_prim = PIPE_PRIM_POINTS;
          *out_nr = nr;
          return U_TRANSLATE_ERROR;

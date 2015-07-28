@@ -347,8 +347,8 @@ init_format_extensions(struct pipe_screen *screen,
    GLboolean *extension_table = (GLboolean *) extensions;
    unsigned i;
    int j;
-   int num_formats = Elements(mapping->format);
-   int num_ext = Elements(mapping->extension_offset);
+   int num_formats = ARRAY_SIZE(mapping->format);
+   int num_ext = ARRAY_SIZE(mapping->extension_offset);
 
    for (i = 0; i < num_mappings; i++) {
       int num_supported = 0;
@@ -426,6 +426,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_instanced_arrays),             PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR  },
       { o(ARB_occlusion_query),              PIPE_CAP_OCCLUSION_QUERY                  },
       { o(ARB_occlusion_query2),             PIPE_CAP_OCCLUSION_QUERY                  },
+      { o(ARB_pipeline_statistics_query),    PIPE_CAP_QUERY_PIPELINE_STATISTICS        },
       { o(ARB_point_sprite),                 PIPE_CAP_POINT_SPRITE                     },
       { o(ARB_seamless_cube_map),            PIPE_CAP_SEAMLESS_CUBE_MAP                },
       { o(ARB_shader_stencil_export),        PIPE_CAP_SHADER_STENCIL_EXPORT            },
@@ -446,6 +447,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(EXT_texture_swizzle),              PIPE_CAP_TEXTURE_SWIZZLE                  },
       { o(EXT_transform_feedback),           PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS        },
 
+      { o(AMD_pinned_memory),                PIPE_CAP_RESOURCE_FROM_USER_MEMORY        },
       { o(AMD_seamless_cubemap_per_texture), PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE    },
       { o(ATI_separate_stencil),             PIPE_CAP_TWO_SIDED_STENCIL                },
       { o(ATI_texture_mirror_once),          PIPE_CAP_TEXTURE_MIRROR_CLAMP             },
@@ -628,7 +630,7 @@ void st_init_extensions(struct pipe_screen *screen,
    extensions->OES_draw_texture = GL_TRUE;
 
    /* Expose the extensions which directly correspond to gallium caps. */
-   for (i = 0; i < Elements(cap_mapping); i++) {
+   for (i = 0; i < ARRAY_SIZE(cap_mapping); i++) {
       if (screen->get_param(screen, cap_mapping[i].cap)) {
          extension_table[cap_mapping[i].extension_offset] = GL_TRUE;
       }
@@ -636,24 +638,27 @@ void st_init_extensions(struct pipe_screen *screen,
 
    /* Expose the extensions which directly correspond to gallium formats. */
    init_format_extensions(screen, extensions, rendertarget_mapping,
-                          Elements(rendertarget_mapping), PIPE_TEXTURE_2D,
+                          ARRAY_SIZE(rendertarget_mapping), PIPE_TEXTURE_2D,
                           PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW);
    init_format_extensions(screen, extensions, depthstencil_mapping,
-                          Elements(depthstencil_mapping), PIPE_TEXTURE_2D,
+                          ARRAY_SIZE(depthstencil_mapping), PIPE_TEXTURE_2D,
                           PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_SAMPLER_VIEW);
    init_format_extensions(screen, extensions, texture_mapping,
-                          Elements(texture_mapping), PIPE_TEXTURE_2D,
+                          ARRAY_SIZE(texture_mapping), PIPE_TEXTURE_2D,
                           PIPE_BIND_SAMPLER_VIEW);
    init_format_extensions(screen, extensions, vertex_mapping,
-                          Elements(vertex_mapping), PIPE_BUFFER,
+                          ARRAY_SIZE(vertex_mapping), PIPE_BUFFER,
                           PIPE_BIND_VERTEX_BUFFER);
+
+   if (extensions->ARB_stencil_texturing)
+      extensions->ARB_texture_stencil8 = GL_TRUE;
 
    /* Figure out GLSL support. */
    glsl_feature_level = screen->get_param(screen, PIPE_CAP_GLSL_FEATURE_LEVEL);
 
    consts->GLSLVersion = glsl_feature_level;
-   if (glsl_feature_level >= 330)
-      consts->GLSLVersion = 330;
+   if (glsl_feature_level >= 410)
+      consts->GLSLVersion = 410;
 
    _mesa_override_glsl_version(consts);
 
@@ -664,6 +669,8 @@ void st_init_extensions(struct pipe_screen *screen,
 
    if (glsl_feature_level >= 400)
       extensions->ARB_gpu_shader5 = GL_TRUE;
+   if (glsl_feature_level >= 410)
+      extensions->ARB_shader_precision = GL_TRUE;
 
    /* This extension needs full OpenGL 3.2, but we don't know if that's
     * supported at this point. Only check the GLSL version. */
@@ -756,22 +763,22 @@ void st_init_extensions(struct pipe_screen *screen,
       };
 
       consts->MaxSamples =
-         get_max_samples_for_formats(screen, Elements(color_formats),
+         get_max_samples_for_formats(screen, ARRAY_SIZE(color_formats),
                                      color_formats, 16,
                                      PIPE_BIND_RENDER_TARGET);
 
       consts->MaxColorTextureSamples =
-         get_max_samples_for_formats(screen, Elements(color_formats),
+         get_max_samples_for_formats(screen, ARRAY_SIZE(color_formats),
                                      color_formats, consts->MaxSamples,
                                      PIPE_BIND_SAMPLER_VIEW);
 
       consts->MaxDepthTextureSamples =
-         get_max_samples_for_formats(screen, Elements(depth_formats),
+         get_max_samples_for_formats(screen, ARRAY_SIZE(depth_formats),
                                      depth_formats, consts->MaxSamples,
                                      PIPE_BIND_SAMPLER_VIEW);
 
       consts->MaxIntegerSamples =
-         get_max_samples_for_formats(screen, Elements(int_formats),
+         get_max_samples_for_formats(screen, ARRAY_SIZE(int_formats),
                                      int_formats, consts->MaxSamples,
                                      PIPE_BIND_SAMPLER_VIEW);
    }
@@ -829,7 +836,7 @@ void st_init_extensions(struct pipe_screen *screen,
          extensions->ARB_texture_buffer_range = GL_TRUE;
 
       init_format_extensions(screen, extensions, tbo_rgb32,
-                             Elements(tbo_rgb32), PIPE_BUFFER,
+                             ARRAY_SIZE(tbo_rgb32), PIPE_BUFFER,
                              PIPE_BIND_SAMPLER_VIEW);
    }
 
@@ -897,5 +904,13 @@ void st_init_extensions(struct pipe_screen *screen,
                                PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
                                PIPE_VIDEO_CAP_SUPPORTS_INTERLACED)) {
       extensions->NV_vdpau_interop = GL_TRUE;
+   }
+
+   if (screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
+                                PIPE_SHADER_CAP_DOUBLES) &&
+       screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
+                                PIPE_SHADER_CAP_DOUBLES)) {
+      extensions->ARB_gpu_shader_fp64 = GL_TRUE;
+      extensions->ARB_vertex_attrib_64bit = GL_TRUE;
    }
 }

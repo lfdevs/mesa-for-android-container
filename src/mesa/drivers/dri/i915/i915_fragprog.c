@@ -671,21 +671,7 @@ upload_program(struct i915_fragment_program *p)
          break;
 
       case OPCODE_MIN:
-         src0 = src_vector(p, &inst->SrcReg[0], program);
-         src1 = src_vector(p, &inst->SrcReg[1], program);
-         tmp = i915_get_utemp(p);
-         flags = get_result_flags(inst);
-
-         i915_emit_arith(p,
-                         A0_MAX,
-                         tmp, flags & A0_DEST_CHANNEL_ALL, 0,
-                         negate(src0, 1, 1, 1, 1),
-                         negate(src1, 1, 1, 1, 1), 0);
-
-         i915_emit_arith(p,
-                         A0_MOV,
-                         get_result_vector(p, inst),
-                         flags, 0, negate(tmp, 1, 1, 1, 1), 0, 0);
+         EMIT_2ARG_ARITH(A0_MIN);
          break;
 
       case OPCODE_MOV:
@@ -1464,8 +1450,6 @@ i915ValidateFragmentProgram(struct i915_context *i915)
 
    if (s2 != i915->state.Ctx[I915_CTXREG_LIS2] ||
        s4 != i915->state.Ctx[I915_CTXREG_LIS4]) {
-      int k;
-
       I915_STATECHANGE(i915, I915_UPLOAD_CTX);
 
       /* Must do this *after* statechange, so as not to affect
@@ -1485,8 +1469,7 @@ i915ValidateFragmentProgram(struct i915_context *i915)
       i915->state.Ctx[I915_CTXREG_LIS2] = s2;
       i915->state.Ctx[I915_CTXREG_LIS4] = s4;
 
-      k = intel->vtbl.check_vertex_size(intel, intel->vertex_size);
-      assert(k);
+      assert(intel->vtbl.check_vertex_size(intel, intel->vertex_size));
    }
 
    if (!p->params_uptodate)

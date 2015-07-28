@@ -854,9 +854,10 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                      jit_tex->img_stride[j] = lp_tex->img_stride[j];
                   }
 
-                  if (res->target == PIPE_TEXTURE_1D_ARRAY ||
-                      res->target == PIPE_TEXTURE_2D_ARRAY ||
-                      res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+                  if (view->target == PIPE_TEXTURE_1D_ARRAY ||
+                      view->target == PIPE_TEXTURE_2D_ARRAY ||
+                      view->target == PIPE_TEXTURE_CUBE ||
+                      view->target == PIPE_TEXTURE_CUBE_ARRAY) {
                      /*
                       * For array textures, we don't have first_layer, instead
                       * adjust last_layer (stored as depth) plus the mip level offsets
@@ -868,7 +869,8 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                         jit_tex->mip_offsets[j] += view->u.tex.first_layer *
                                                    lp_tex->img_stride[j];
                      }
-                     if (res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+                     if (view->target == PIPE_TEXTURE_CUBE ||
+                         view->target == PIPE_TEXTURE_CUBE_ARRAY) {
                         assert(jit_tex->depth % 6 == 0);
                      }
                      assert(view->u.tex.first_layer <= view->u.tex.last_layer);
@@ -999,6 +1001,7 @@ lp_setup_is_resource_referenced( const struct lp_setup_context *setup,
 static boolean
 try_update_scene_state( struct lp_setup_context *setup )
 {
+   static const float fake_const_buf[4];
    boolean new_scene = (setup->fs.stored == NULL);
    struct lp_scene *scene = setup->scene;
    unsigned i;
@@ -1103,14 +1106,15 @@ try_update_scene_state( struct lp_setup_context *setup )
                setup->constants[i].stored_size = current_size;
                setup->constants[i].stored_data = stored;
             }
+            setup->fs.current.jit_context.constants[i] =
+               setup->constants[i].stored_data;
          }
          else {
             setup->constants[i].stored_size = 0;
             setup->constants[i].stored_data = NULL;
+            setup->fs.current.jit_context.constants[i] = fake_const_buf;
          }
 
-         setup->fs.current.jit_context.constants[i] =
-            setup->constants[i].stored_data;
          num_constants =
             setup->constants[i].stored_size / (sizeof(float) * 4);
          setup->fs.current.jit_context.num_constants[i] = num_constants;

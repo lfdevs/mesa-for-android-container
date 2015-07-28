@@ -31,6 +31,7 @@ class saturate_propagation_test : public ::testing::Test {
 
 public:
    struct brw_context *brw;
+   struct brw_device_info *devinfo;
    struct gl_context *ctx;
    struct brw_wm_prog_data *prog_data;
    struct gl_shader_program *shader_prog;
@@ -44,13 +45,17 @@ public:
    saturate_propagation_fs_visitor(struct brw_context *brw,
                                    struct brw_wm_prog_data *prog_data,
                                    struct gl_shader_program *shader_prog)
-      : fs_visitor(brw, NULL, NULL, prog_data, shader_prog, NULL, 8) {}
+      : fs_visitor(brw, NULL, MESA_SHADER_FRAGMENT, NULL, &prog_data->base,
+                   shader_prog, (struct gl_program *) NULL, 8) {}
 };
 
 
 void saturate_propagation_test::SetUp()
 {
    brw = (struct brw_context *)calloc(1, sizeof(*brw));
+   devinfo = (struct brw_device_info *)calloc(1, sizeof(*brw));
+   brw->intelScreen = (struct intel_screen *)calloc(1, sizeof(*brw->intelScreen));
+   brw->intelScreen->devinfo = devinfo;
    ctx = &brw->ctx;
 
    fp = ralloc(NULL, struct brw_fragment_program);
@@ -61,7 +66,7 @@ void saturate_propagation_test::SetUp()
 
    _mesa_init_fragment_program(ctx, &fp->program, GL_FRAGMENT_SHADER, 0);
 
-   brw->gen = 4;
+   brw->gen = devinfo->gen = 4;
 }
 
 static fs_inst *

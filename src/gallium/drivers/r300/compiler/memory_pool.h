@@ -49,7 +49,7 @@ void * memory_pool_malloc(struct memory_pool * pool, unsigned int bytes);
 
 /**
  * Generic helper for growing an array that has separate size/count
- * and reserved counters to accomodate up to num new element.
+ * and reserved counters to accommodate up to num new element.
  *
  *  type * Array;
  *  unsigned int Size;

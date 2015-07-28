@@ -26,6 +26,7 @@
  */
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -1016,15 +1017,6 @@ dri2_x11_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
    }
 }
 
-static _EGLImage*
-dri2_x11_swrast_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
-                                 _EGLContext *ctx, EGLenum target,
-                                 EGLClientBuffer buffer,
-                                 const EGLint *attr_list)
-{
-   return NULL;
-}
-
 static EGLBoolean
 dri2_x11_get_sync_values(_EGLDisplay *display, _EGLSurface *surface,
                          EGLuint64KHR *ust, EGLuint64KHR *msc,
@@ -1057,7 +1049,7 @@ static struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .create_pixmap_surface = dri2_x11_create_pixmap_surface,
    .create_pbuffer_surface = dri2_x11_create_pbuffer_surface,
    .destroy_surface = dri2_x11_destroy_surface,
-   .create_image = dri2_x11_swrast_create_image_khr,
+   .create_image = dri2_fallback_create_image_khr,
    .swap_interval = dri2_fallback_swap_interval,
    .swap_buffers = dri2_x11_swap_buffers,
    .swap_buffers_region = dri2_fallback_swap_buffers_region,

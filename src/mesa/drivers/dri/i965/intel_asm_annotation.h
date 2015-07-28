@@ -60,10 +60,11 @@ struct annotation_info {
 
 void
 dump_assembly(void *assembly, int num_annotations, struct annotation *annotation,
-              struct brw_context *brw, const struct gl_program *prog);
+              const struct brw_device_info *devinfo,
+              const struct gl_program *prog);
 
 void
-annotate(struct brw_context *brw,
+annotate(const struct brw_device_info *devinfo,
          struct annotation_info *annotation, const struct cfg_t *cfg,
          struct backend_instruction *inst, unsigned offset);
 void

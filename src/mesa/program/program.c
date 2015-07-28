@@ -37,6 +37,7 @@
 #include "prog_cache.h"
 #include "prog_parameter.h"
 #include "prog_instruction.h"
+#include "util/ralloc.h"
 
 
 /**
@@ -56,21 +57,21 @@ _mesa_init_program(struct gl_context *ctx)
     * If this assertion fails, we need to increase the field
     * size for register indexes (see INST_INDEX_BITS).
     */
-   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents / 4
+   assert(ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents / 4
           <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents / 4
+   assert(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents / 4
           <= (1 << INST_INDEX_BITS));
 
-   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxTemps <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxLocalParams <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTemps <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxLocalParams <= (1 << INST_INDEX_BITS));
+   assert(ctx->Const.Program[MESA_SHADER_VERTEX].MaxTemps <= (1 << INST_INDEX_BITS));
+   assert(ctx->Const.Program[MESA_SHADER_VERTEX].MaxLocalParams <= (1 << INST_INDEX_BITS));
+   assert(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTemps <= (1 << INST_INDEX_BITS));
+   assert(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxLocalParams <= (1 << INST_INDEX_BITS));
 
-   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents <= 4 * MAX_UNIFORMS);
-   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents <= 4 * MAX_UNIFORMS);
+   assert(ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents <= 4 * MAX_UNIFORMS);
+   assert(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents <= 4 * MAX_UNIFORMS);
 
-   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxAddressOffset <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAddressOffset <= (1 << INST_INDEX_BITS));
+   assert(ctx->Const.Program[MESA_SHADER_VERTEX].MaxAddressOffset <= (1 << INST_INDEX_BITS));
+   assert(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAddressOffset <= (1 << INST_INDEX_BITS));
 
    /* If this fails, increase prog_instruction::TexSrcUnit size */
    STATIC_ASSERT(MAX_TEXTURE_UNITS <= (1 << 5));
@@ -79,7 +80,7 @@ _mesa_init_program(struct gl_context *ctx)
    STATIC_ASSERT(NUM_TEXTURE_TARGETS <= (1 << 4));
 
    ctx->Program.ErrorPos = -1;
-   ctx->Program.ErrorString = _mesa_strdup("");
+   ctx->Program.ErrorString = strdup("");
 
    ctx->VertexProgram.Enabled = GL_FALSE;
    ctx->VertexProgram.PointSizeEnabled =
@@ -101,6 +102,8 @@ _mesa_init_program(struct gl_context *ctx)
    _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current,
                             NULL);
 
+   _mesa_reference_compprog(ctx, &ctx->ComputeProgram.Current, NULL);
+
    /* XXX probably move this stuff */
    ctx->ATIFragmentShader.Enabled = GL_FALSE;
    ctx->ATIFragmentShader.Current = ctx->Shared->DefaultFragmentShader;
@@ -120,6 +123,7 @@ _mesa_free_program_data(struct gl_context *ctx)
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current, NULL);
    _mesa_delete_shader_cache(ctx, ctx->FragmentProgram.Cache);
    _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current, NULL);
+   _mesa_reference_compprog(ctx, &ctx->ComputeProgram.Current, NULL);
 
    /* XXX probably move this stuff */
    if (ctx->ATIFragmentShader.Current) {
@@ -176,7 +180,7 @@ _mesa_set_program_error(struct gl_context *ctx, GLint pos, const char *string)
    free((void *) ctx->Program.ErrorString);
    if (!string)
       string = "";
-   ctx->Program.ErrorString = _mesa_strdup(string);
+   ctx->Program.ErrorString = strdup(string);
 }
 
 
@@ -364,8 +368,8 @@ void
 _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog)
 {
    (void) ctx;
-   ASSERT(prog);
-   ASSERT(prog->RefCount==0);
+   assert(prog);
+   assert(prog->RefCount==0);
 
    if (prog == &_mesa_DummyProgram)
       return;
@@ -378,6 +382,10 @@ _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog)
    }
    if (prog->Parameters) {
       _mesa_free_parameter_list(prog->Parameters);
+   }
+
+   if (prog->nir) {
+      ralloc_free(prog->nir);
    }
 
    free(prog);
@@ -414,12 +422,12 @@ _mesa_reference_program_(struct gl_context *ctx,
    if (*ptr && prog) {
       /* sanity check */
       if ((*ptr)->Target == GL_VERTEX_PROGRAM_ARB)
-         ASSERT(prog->Target == GL_VERTEX_PROGRAM_ARB);
+         assert(prog->Target == GL_VERTEX_PROGRAM_ARB);
       else if ((*ptr)->Target == GL_FRAGMENT_PROGRAM_ARB)
-         ASSERT(prog->Target == GL_FRAGMENT_PROGRAM_ARB ||
+         assert(prog->Target == GL_FRAGMENT_PROGRAM_ARB ||
                 prog->Target == GL_FRAGMENT_PROGRAM_NV);
       else if ((*ptr)->Target == MESA_GEOMETRY_PROGRAM)
-         ASSERT(prog->Target == MESA_GEOMETRY_PROGRAM);
+         assert(prog->Target == MESA_GEOMETRY_PROGRAM);
    }
 #endif
 
@@ -434,14 +442,14 @@ _mesa_reference_program_(struct gl_context *ctx,
               ((*ptr)->Target == MESA_GEOMETRY_PROGRAM ? "GP" : "FP")),
              (*ptr)->RefCount - 1);
 #endif
-      ASSERT((*ptr)->RefCount > 0);
+      assert((*ptr)->RefCount > 0);
       (*ptr)->RefCount--;
 
       deleteFlag = ((*ptr)->RefCount == 0);
       /*mtx_lock(&(*ptr)->Mutex);*/
 
       if (deleteFlag) {
-         ASSERT(ctx);
+         assert(ctx);
          ctx->Driver.DeleteProgram(ctx, *ptr);
       }
 
@@ -483,7 +491,7 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
    assert(clone->Target == prog->Target);
    assert(clone->RefCount == 1);
 
-   clone->String = (GLubyte *) _mesa_strdup((char *) prog->String);
+   clone->String = (GLubyte *) strdup((char *) prog->String);
    clone->Format = prog->Format;
    clone->Instructions = _mesa_alloc_instructions(prog->NumInstructions);
    if (!clone->Instructions) {
@@ -733,7 +741,7 @@ _mesa_combine_programs(struct gl_context *ctx,
    GLbitfield64 inputsB;
    GLuint i;
 
-   ASSERT(progA->Target == progB->Target);
+   assert(progA->Target == progB->Target);
 
    newInst = _mesa_alloc_instructions(newLength);
    if (!newInst)
@@ -867,14 +875,14 @@ _mesa_find_used_registers(const struct gl_program *prog,
       const GLuint n = _mesa_num_inst_src_regs(inst->Opcode);
 
       if (inst->DstReg.File == file) {
-         ASSERT(inst->DstReg.Index < usedSize);
+         assert(inst->DstReg.Index < usedSize);
          if(inst->DstReg.Index < usedSize)
             used[inst->DstReg.Index] = GL_TRUE;
       }
 
       for (j = 0; j < n; j++) {
          if (inst->SrcReg[j].File == file) {
-            ASSERT(inst->SrcReg[j].Index < (GLint) usedSize);
+            assert(inst->SrcReg[j].Index < (GLint) usedSize);
             if (inst->SrcReg[j].Index < (GLint) usedSize)
                used[inst->SrcReg[j].Index] = GL_TRUE;
          }

@@ -52,7 +52,7 @@ program::build(const ref_vector<device> &devs, const char *opts,
 
          _opts.insert({ &dev, opts });
 
-         compat::string log;
+         std::string log;
 
          try {
             auto module = (dev.ir_format() == PIPE_SHADER_IR_TGSI ?
@@ -106,7 +106,7 @@ program::build_log(const device &dev) const {
    return _logs.count(&dev) ? _logs.find(&dev)->second : "";
 }
 
-const compat::vector<module::symbol> &
+const std::vector<module::symbol> &
 program::symbols() const {
    if (_binaries.empty())
       throw error(CL_INVALID_PROGRAM_EXECUTABLE);

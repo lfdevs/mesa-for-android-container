@@ -155,7 +155,7 @@ _mesa_pack_bitmap( GLint width, GLint height, const GLubyte *source,
    if (!source)
       return;
 
-   width_in_bytes = CEILING( width, 8 );
+   width_in_bytes = DIV_ROUND_UP( width, 8 );
    src = source;
    for (row = 0; row < height; row++) {
       GLubyte *dst = (GLubyte *) _mesa_image_address2d(packing, dest,
@@ -257,9 +257,9 @@ extract_uint_indexes(GLuint n, GLuint indexes[],
                      GLenum srcFormat, GLenum srcType, const GLvoid *src,
                      const struct gl_pixelstore_attrib *unpack )
 {
-   ASSERT(srcFormat == GL_COLOR_INDEX || srcFormat == GL_STENCIL_INDEX);
+   assert(srcFormat == GL_COLOR_INDEX || srcFormat == GL_STENCIL_INDEX);
 
-   ASSERT(srcType == GL_BITMAP ||
+   assert(srcType == GL_BITMAP ||
           srcType == GL_UNSIGNED_BYTE ||
           srcType == GL_BYTE ||
           srcType == GL_UNSIGNED_SHORT ||
@@ -503,7 +503,7 @@ _mesa_unpack_stencil_span( struct gl_context *ctx, GLuint n,
                            const struct gl_pixelstore_attrib *srcPacking,
                            GLbitfield transferOps )
 {
-   ASSERT(srcType == GL_BITMAP ||
+   assert(srcType == GL_BITMAP ||
           srcType == GL_UNSIGNED_BYTE ||
           srcType == GL_BYTE ||
           srcType == GL_UNSIGNED_SHORT ||
@@ -516,7 +516,7 @@ _mesa_unpack_stencil_span( struct gl_context *ctx, GLuint n,
           srcType == GL_FLOAT ||
           srcType == GL_FLOAT_32_UNSIGNED_INT_24_8_REV);
 
-   ASSERT(dstType == GL_UNSIGNED_BYTE ||
+   assert(dstType == GL_UNSIGNED_BYTE ||
           dstType == GL_UNSIGNED_SHORT ||
           dstType == GL_UNSIGNED_INT ||
           dstType == GL_FLOAT_32_UNSIGNED_INT_24_8_REV);
@@ -988,7 +988,7 @@ _mesa_unpack_depth_span( struct gl_context *ctx, GLuint n,
    else if (dstType == GL_UNSIGNED_SHORT) {
       GLushort *zValues = (GLushort *) dest;
       GLuint i;
-      ASSERT(depthMax <= 0xffff);
+      assert(depthMax <= 0xffff);
       for (i = 0; i < n; i++) {
          zValues[i] = (GLushort) (depthValues[i] * (GLfloat) depthMax);
       }
@@ -1004,7 +1004,7 @@ _mesa_unpack_depth_span( struct gl_context *ctx, GLuint n,
       }
    }
    else {
-      ASSERT(0);
+      assert(0);
    }
 
    free(depthTemp);

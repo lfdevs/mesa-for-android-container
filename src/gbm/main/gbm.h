@@ -209,6 +209,10 @@ enum gbm_bo_flags {
     * with GBM_BO_USE_CURSOR. but may not work for other combinations.
     */
    GBM_BO_USE_WRITE    = (1 << 3),
+   /**
+    * Buffer is linear, i.e. not tiled.
+    */
+   GBM_BO_USE_LINEAR = (1 << 4),
 };
 
 int

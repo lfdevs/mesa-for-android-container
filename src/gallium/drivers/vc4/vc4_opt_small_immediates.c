@@ -38,13 +38,9 @@ qir_opt_small_immediates(struct vc4_compile *c)
 {
         bool progress = false;
         struct simple_node *node;
-        struct qinst *defs[c->num_temps];
 
         foreach(node, &c->instructions) {
                 struct qinst *inst = (struct qinst *)node;
-
-                if (inst->dst.file == QFILE_TEMP)
-                        defs[inst->dst.index] = inst;
 
                 /* The small immediate value sits in the raddr B field, so we
                  * can't have 2 small immediates in one instruction (unless
@@ -60,7 +56,7 @@ qir_opt_small_immediates(struct vc4_compile *c)
                         continue;
 
                 for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
-                        struct qreg src = qir_follow_movs(defs, inst->src[i]);
+                        struct qreg src = qir_follow_movs(c, inst->src[i]);
 
                         if (src.file != QFILE_UNIF ||
                             c->uniform_contents[src.index] !=

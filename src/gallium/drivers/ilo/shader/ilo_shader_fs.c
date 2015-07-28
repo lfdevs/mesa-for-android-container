@@ -1476,7 +1476,7 @@ fs_write_fb(struct fs_compile_context *fcc)
       base_mrf += fcc->num_grf_per_vrf;
 
       /* this is a two-register header */
-      if (fcc->dispatch_mode == GEN6_WM_DW5_8_PIXEL_DISPATCH) {
+      if (fcc->dispatch_mode == GEN6_PS_DISPATCH_8) {
          inst = tc_MOV(tc, tdst_offset(header, 1, 0), tsrc_offset(r0, 1, 0));
          inst->mask_ctrl = GEN6_MASKCTRL_NOMASK;
          base_mrf += fcc->num_grf_per_vrf;
@@ -1559,7 +1559,7 @@ fs_write_fb(struct fs_compile_context *fcc)
          mrf += fcc->num_grf_per_vrf;
       }
 
-      msg_type = (fcc->dispatch_mode == GEN6_WM_DW5_16_PIXEL_DISPATCH) ?
+      msg_type = (fcc->dispatch_mode == GEN6_PS_DISPATCH_16) ?
          GEN6_MSG_DP_RT_MODE_SIMD16 >> 8 :
          GEN6_MSG_DP_RT_MODE_SIMD8_LO >> 8;
 
@@ -1670,11 +1670,11 @@ fs_setup_payloads(struct fs_compile_context *fcc)
    grf++;
 
    /* r1-r2: coordinates and etc. */
-   grf += (fcc->dispatch_mode == GEN6_WM_DW5_32_PIXEL_DISPATCH) ? 2 : 1;
+   grf += (fcc->dispatch_mode == GEN6_PS_DISPATCH_32) ? 2 : 1;
 
    for (i = 0; i < Elements(fcc->payloads); i++) {
       const int reg_scale =
-         (fcc->dispatch_mode == GEN6_WM_DW5_8_PIXEL_DISPATCH) ? 1 : 2;
+         (fcc->dispatch_mode == GEN6_PS_DISPATCH_8) ? 1 : 2;
 
       /* r3-r26 or r32-r55: barycentric interpolation parameters */
       if (sh->in.barycentric_interpolation_mode &
@@ -1726,7 +1726,7 @@ fs_setup_payloads(struct fs_compile_context *fcc)
          grf++;
       }
 
-      if (fcc->dispatch_mode != GEN6_WM_DW5_32_PIXEL_DISPATCH)
+      if (fcc->dispatch_mode != GEN6_PS_DISPATCH_32)
          break;
    }
 
@@ -1785,10 +1785,10 @@ fs_setup(struct fs_compile_context *fcc,
 
    toy_compiler_init(&fcc->tc, state->info.dev);
 
-   fcc->dispatch_mode = GEN6_WM_DW5_8_PIXEL_DISPATCH;
+   fcc->dispatch_mode = GEN6_PS_DISPATCH_8;
 
    fcc->tc.templ.access_mode = GEN6_ALIGN_1;
-   if (fcc->dispatch_mode == GEN6_WM_DW5_16_PIXEL_DISPATCH) {
+   if (fcc->dispatch_mode == GEN6_PS_DISPATCH_16) {
       fcc->tc.templ.qtr_ctrl = GEN6_QTRCTRL_1H;
       fcc->tc.templ.exec_size = GEN6_EXECSIZE_16;
    }
@@ -1848,7 +1848,7 @@ fs_setup(struct fs_compile_context *fcc,
 
    /* instructions are compressed with GEN6_EXECSIZE_16 */
    fcc->num_grf_per_vrf =
-      (fcc->dispatch_mode == GEN6_WM_DW5_16_PIXEL_DISPATCH) ? 2 : 1;
+      (fcc->dispatch_mode == GEN6_PS_DISPATCH_16) ? 2 : 1;
 
    if (ilo_dev_gen(fcc->tc.dev) >= ILO_GEN(7)) {
       fcc->last_free_grf -= 15;
@@ -1859,7 +1859,7 @@ fs_setup(struct fs_compile_context *fcc,
    fcc->shader->in.start_grf = fcc->first_const_grf;
    fcc->shader->has_kill = fcc->tgsi.uses_kill;
    fcc->shader->dispatch_16 =
-      (fcc->dispatch_mode == GEN6_WM_DW5_16_PIXEL_DISPATCH);
+      (fcc->dispatch_mode == GEN6_PS_DISPATCH_16);
 
    fcc->shader->bt.rt_base = 0;
    fcc->shader->bt.rt_count = fcc->variant->u.fs.num_cbufs;

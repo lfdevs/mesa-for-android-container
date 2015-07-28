@@ -45,17 +45,18 @@
  * While it is only used for the front/back buffer currently, it should be
  * usable for further buffers when doing ARB_draw_buffer support.
  */
-static void
+static uint32_t
 gen6_update_renderbuffer_surface(struct brw_context *brw,
                                  struct gl_renderbuffer *rb,
-                                 bool layered,
-                                 unsigned int unit)
+                                 bool layered, unsigned unit /* unused */,
+                                 uint32_t surf_index)
 {
    struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_mipmap_tree *mt = irb->mt;
    uint32_t *surf;
    uint32_t format = 0;
+   uint32_t offset;
    /* _NEW_BUFFERS */
    mesa_format rb_format = _mesa_get_render_format(ctx, intel_rb_format(irb));
    uint32_t surftype;
@@ -63,18 +64,14 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
    const GLenum gl_target =
       rb->TexImage ? rb->TexImage->TexObject->Target : GL_TEXTURE_2D;
 
-   uint32_t surf_index =
-      brw->wm.prog_data->binding_table.render_target_start + unit;
-
    intel_miptree_used_for_rendering(irb->mt);
 
-   surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE, 6 * 4, 32,
-                          &brw->wm.base.surf_offset[surf_index]);
+   surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE, 6 * 4, 32, &offset);
 
    format = brw->render_target_format[rb_format];
    if (unlikely(!brw->format_supported_as_render_target[rb_format])) {
       _mesa_problem(ctx, "%s: renderbuffer format %s unsupported\n",
-                    __FUNCTION__, _mesa_get_format_name(rb_format));
+                    __func__, _mesa_get_format_name(rb_format));
    }
 
    switch (gl_target) {
@@ -131,11 +128,13 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
    surf[5] = (mt->align_h == 4 ? BRW_SURFACE_VERTICAL_ALIGN_ENABLE : 0);
 
    drm_intel_bo_emit_reloc(brw->batch.bo,
-			   brw->wm.base.surf_offset[surf_index] + 4,
-			   mt->bo,
-			   surf[1] - mt->bo->offset64,
-			   I915_GEM_DOMAIN_RENDER,
-			   I915_GEM_DOMAIN_RENDER);
+                           offset + 4,
+                           mt->bo,
+                           surf[1] - mt->bo->offset64,
+                           I915_GEM_DOMAIN_RENDER,
+                           I915_GEM_DOMAIN_RENDER);
+
+   return offset;
 }
 
 void

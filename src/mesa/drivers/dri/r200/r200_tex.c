@@ -104,7 +104,7 @@ static void r200SetTexWrap( radeonTexObjPtr t, GLenum swrap, GLenum twrap, GLenu
       is_clamp_to_border = GL_TRUE;
       break;
    default:
-      _mesa_problem(NULL, "bad S wrap mode in %s", __FUNCTION__);
+      _mesa_problem(NULL, "bad S wrap mode in %s", __func__);
    }
 
    if (tObj->Target != GL_TEXTURE_1D) {
@@ -138,7 +138,7 @@ static void r200SetTexWrap( radeonTexObjPtr t, GLenum swrap, GLenum twrap, GLenu
          is_clamp_to_border = GL_TRUE;
          break;
       default:
-         _mesa_problem(NULL, "bad T wrap mode in %s", __FUNCTION__);
+         _mesa_problem(NULL, "bad T wrap mode in %s", __func__);
       }
    }
 
@@ -174,7 +174,7 @@ static void r200SetTexWrap( radeonTexObjPtr t, GLenum swrap, GLenum twrap, GLenu
       is_clamp_to_border = GL_TRUE;
       break;
    default:
-      _mesa_problem(NULL, "bad R wrap mode in %s", __FUNCTION__);
+      _mesa_problem(NULL, "bad R wrap mode in %s", __func__);
    }
 
    if ( is_clamp_to_border ) {
@@ -302,7 +302,7 @@ static void r200TexEnv( struct gl_context *ctx, GLenum target,
    struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
 
    radeon_print(RADEON_TEXTURE | RADEON_STATE, RADEON_VERBOSE, "%s( %s )\n",
-	       __FUNCTION__, _mesa_lookup_enum_by_nr( pname ) );
+	       __func__, _mesa_lookup_enum_by_nr( pname ) );
 
    /* This is incorrect: Need to maintain this data for each of
     * GL_TEXTURE_{123}D, GL_TEXTURE_RECTANGLE_NV, etc, and switch
@@ -383,7 +383,7 @@ static void r200TexParameter( struct gl_context *ctx,
 
    radeon_print(RADEON_TEXTURE | RADEON_STATE, RADEON_VERBOSE,
 		"%s(%p, tex %p)  pname %s\n",
-		__FUNCTION__, ctx, texObj,
+		__func__, ctx, texObj,
 	       _mesa_lookup_enum_by_nr( pname ) );
 
    switch ( pname ) {
@@ -413,7 +413,7 @@ static void r200DeleteTexture(struct gl_context * ctx, struct gl_texture_object 
    radeonTexObj* t = radeon_tex_obj(texObj);
 
    radeon_print(RADEON_TEXTURE | RADEON_STATE, RADEON_NORMAL,
-           "%s( %p (target = %s) )\n", __FUNCTION__,
+           "%s( %p (target = %s) )\n", __func__,
 	   (void *)texObj,
 	   _mesa_lookup_enum_by_nr(texObj->Target));
 
@@ -472,7 +472,7 @@ static struct gl_texture_object *r200NewTextureObject(struct gl_context * ctx,
 
    radeon_print(RADEON_STATE | RADEON_TEXTURE, RADEON_NORMAL,
            "%s(%p) target %s, new texture %p.\n",
-	   __FUNCTION__, ctx,
+	   __func__, ctx,
 	   _mesa_lookup_enum_by_nr(target), t);
 
    _mesa_initialize_texture_object(ctx, &t->base, name, target);

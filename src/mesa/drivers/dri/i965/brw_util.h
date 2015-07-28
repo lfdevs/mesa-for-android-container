@@ -35,9 +35,24 @@
 
 #include "main/mtypes.h"
 #include "main/imports.h"
+#include "brw_context.h"
 
 extern GLuint brw_translate_blend_factor( GLenum factor );
 extern GLuint brw_translate_blend_equation( GLenum mode );
 extern GLenum brw_fix_xRGB_alpha(GLenum function);
+
+static inline float
+brw_get_line_width(struct brw_context *brw)
+{
+   /* From the OpenGL 4.4 spec:
+    *
+    * "The actual width of non-antialiased lines is determined by rounding
+    * the supplied width to the nearest integer, then clamping it to the
+    * implementation-dependent maximum non-antialiased line width."
+    */
+   return CLAMP(!brw->ctx.Multisample._Enabled && !brw->ctx.Line.SmoothFlag
+                ? roundf(brw->ctx.Line.Width) : brw->ctx.Line.Width,
+                0.0, brw->ctx.Const.MaxLineWidth);
+}
 
 #endif

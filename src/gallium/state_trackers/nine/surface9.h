@@ -26,7 +26,7 @@
 #include "resource9.h"
 
 #include "pipe/p_state.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_rect.h"
 #include "util/u_inlines.h"
 
@@ -48,11 +48,7 @@ struct NineSurface9
     D3DSURFACE_DESC desc;
 
     uint8_t *data; /* system memory backing */
-    boolean manage_data;
     unsigned stride; /* for system memory backing */
-
-    /* wine doesn't even use these, 2 will be enough */
-    struct u_rect dirty_rects[2];
 };
 static INLINE struct NineSurface9 *
 NineSurface9( void *data )
@@ -86,6 +82,9 @@ void
 NineSurface9_dtor( struct NineSurface9 *This );
 
 /*** Nine private ***/
+
+void
+NineSurface9_MarkContainerDirty( struct NineSurface9 *This );
 
 struct pipe_surface *
 NineSurface9_CreatePipeSurface( struct NineSurface9 *This, const int sRGB );
@@ -122,14 +121,9 @@ void
 NineSurface9_AddDirtyRect( struct NineSurface9 *This,
                            const struct pipe_box *box );
 
-static INLINE void
-NineSurface9_ClearDirtyRects( struct NineSurface9 *This )
-{
-    memset(&This->dirty_rects, 0, sizeof(This->dirty_rects));
-}
-
 HRESULT
-NineSurface9_UploadSelf( struct NineSurface9 *This );
+NineSurface9_UploadSelf( struct NineSurface9 *This,
+                         const struct pipe_box *damaged );
 
 HRESULT
 NineSurface9_CopySurface( struct NineSurface9 *This,

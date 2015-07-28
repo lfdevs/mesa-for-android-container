@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Broadcom
+ * Copyright © 2014-2015 Broadcom
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -29,10 +29,14 @@
 #define DRM_VC4_SUBMIT_CL                         0x00
 #define DRM_VC4_WAIT_SEQNO                        0x01
 #define DRM_VC4_WAIT_BO                           0x02
+#define DRM_VC4_CREATE_BO                         0x03
+#define DRM_VC4_MMAP_BO                           0x04
 
 #define DRM_IOCTL_VC4_SUBMIT_CL           DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_SUBMIT_CL, struct drm_vc4_submit_cl)
 #define DRM_IOCTL_VC4_WAIT_SEQNO          DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_WAIT_SEQNO, struct drm_vc4_wait_seqno)
 #define DRM_IOCTL_VC4_WAIT_BO             DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_WAIT_BO, struct drm_vc4_wait_bo)
+#define DRM_IOCTL_VC4_CREATE_BO           DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_CREATE_BO, struct drm_vc4_create_bo)
+#define DRM_IOCTL_VC4_MMAP_BO             DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_MMAP_BO, struct drm_vc4_mmap_bo)
 
 
 /**
@@ -56,7 +60,7 @@ struct drm_vc4_submit_cl {
 	 * then writes out the state updates and draw calls necessary per tile
 	 * to the tile allocation BO.
 	 */
-	void __user *bin_cl;
+	uint64_t bin_cl;
 
 	/* Pointer to the render command list.
 	 *
@@ -66,7 +70,7 @@ struct drm_vc4_submit_cl {
 	 * stored rendering for that tile, then store the tile's state back to
 	 * memory.
 	 */
-	void __user *render_cl;
+	uint64_t render_cl;
 
 	/* Pointer to the shader records.
 	 *
@@ -77,7 +81,7 @@ struct drm_vc4_submit_cl {
 	 * and an attribute count), so those BO indices into bo_handles are
 	 * just stored as uint32_ts before each shader record passed in.
 	 */
-	void __user *shader_rec;
+	uint64_t shader_rec;
 
 	/* Pointer to uniform data and texture handles for the textures
 	 * referenced by the shader.
@@ -93,8 +97,8 @@ struct drm_vc4_submit_cl {
 	 * because the kernel has to determine the sizes anyway during shader
 	 * code validation.
 	 */
-	void __user *uniforms;
-	void __user *bo_handles;
+	uint64_t uniforms;
+	uint64_t bo_handles;
 
 	/* Size in bytes of the binner command list. */
 	uint32_t bin_cl_size;
@@ -115,6 +119,7 @@ struct drm_vc4_submit_cl {
 	/* Number of BO handles passed in (size is that times 4). */
 	uint32_t bo_handle_count;
 
+	uint32_t flags;
 	uint32_t pad;
 
 	/* Returned value of the seqno of this render job (for the
@@ -147,6 +152,39 @@ struct drm_vc4_wait_bo {
 	uint32_t handle;
 	uint32_t pad;
 	uint64_t timeout_ns;
+};
+
+/**
+ * struct drm_vc4_create_bo - ioctl argument for creating VC4 BOs.
+ *
+ * There are currently no values for the flags argument, but it may be
+ * used in a future extension.
+ */
+struct drm_vc4_create_bo {
+	uint32_t size;
+	uint32_t flags;
+	/** Returned GEM handle for the BO. */
+	uint32_t handle;
+	uint32_t pad;
+};
+
+/**
+ * struct drm_vc4_mmap_bo - ioctl argument for mapping VC4 BOs.
+ *
+ * This doesn't actually perform an mmap.  Instead, it returns the
+ * offset you need to use in an mmap on the DRM device node.  This
+ * means that tools like valgrind end up knowing about the mapped
+ * memory.
+ *
+ * There are currently no values for the flags argument, but it may be
+ * used in a future extension.
+ */
+struct drm_vc4_mmap_bo {
+	/** Handle for the object being mapped. */
+	uint32_t handle;
+	uint32_t flags;
+	/** offset into the drm node to use for subsequent mmap call. */
+	uint64_t offset;
 };
 
 #endif /* _UAPI_VC4_DRM_H_ */

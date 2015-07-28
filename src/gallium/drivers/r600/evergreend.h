@@ -72,7 +72,6 @@
 #define PKT3_REG_RMW                           0x21
 #define PKT3_COND_EXEC                         0x22
 #define PKT3_PRED_EXEC                         0x23
-#define PKT3_START_3D_CMDBUF                   0x24
 #define PKT3_DRAW_INDEX_2                      0x27
 #define PKT3_CONTEXT_CONTROL                   0x28
 #define PKT3_DRAW_INDEX_IMMD_BE                0x29

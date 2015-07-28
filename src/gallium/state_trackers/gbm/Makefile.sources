@@ -1,3 +1,0 @@
-C_SOURCES := \
-	gbm_drm.c \
-	gbm_gallium_drmint.h

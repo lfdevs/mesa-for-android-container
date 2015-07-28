@@ -59,11 +59,11 @@ fd_destroy_query(struct pipe_context *pctx, struct pipe_query *pq)
 	q->funcs->destroy_query(fd_context(pctx), q);
 }
 
-static void
+static boolean
 fd_begin_query(struct pipe_context *pctx, struct pipe_query *pq)
 {
 	struct fd_query *q = fd_query(pq);
-	q->funcs->begin_query(fd_context(pctx), q);
+	return q->funcs->begin_query(fd_context(pctx), q);
 }
 
 static void
@@ -86,12 +86,12 @@ fd_get_driver_query_info(struct pipe_screen *pscreen,
 		unsigned index, struct pipe_driver_query_info *info)
 {
 	struct pipe_driver_query_info list[] = {
-			{"draw-calls", FD_QUERY_DRAW_CALLS, 0},
-			{"batches", FD_QUERY_BATCH_TOTAL, 0},
-			{"batches-sysmem", FD_QUERY_BATCH_SYSMEM, 0},
-			{"batches-gmem", FD_QUERY_BATCH_GMEM, 0},
-			{"restores", FD_QUERY_BATCH_RESTORE, 0},
-			{"prims-emitted", PIPE_QUERY_PRIMITIVES_EMITTED, 0},
+			{"draw-calls", FD_QUERY_DRAW_CALLS, {0}},
+			{"batches", FD_QUERY_BATCH_TOTAL, {0}},
+			{"batches-sysmem", FD_QUERY_BATCH_SYSMEM, {0}},
+			{"batches-gmem", FD_QUERY_BATCH_GMEM, {0}},
+			{"restores", FD_QUERY_BATCH_RESTORE, {0}},
+			{"prims-emitted", PIPE_QUERY_PRIMITIVES_EMITTED, {0}},
 	};
 
 	if (!info)

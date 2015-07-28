@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #include "nouveau_debug.h"
 #include "nouveau_screen.h"

@@ -27,6 +27,12 @@
 #ifndef R600_SB_H_
 #define R600_SB_H_
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 struct r600_shader;
 
 void r600_sb_context_destroy(void *sctx);
@@ -36,5 +42,11 @@ int r600_sb_bytecode_process(struct r600_context *rctx,
                              struct r600_shader *pshader,
                              int dump_source_bytecode,
                              int optimize);
+
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
 
 #endif //R600_SB_H_

@@ -127,6 +127,14 @@ void bc_finalizer::finalize_loop(region_node* r) {
 	cf_node *loop_start = sh.create_cf(CF_OP_LOOP_START_DX10);
 	cf_node *loop_end = sh.create_cf(CF_OP_LOOP_END);
 
+	// Update last_cf, but don't overwrite it if it's outside the current loop nest since
+	// it may point to a cf that is later in program order.
+	// The single parent level check is sufficient since finalize_loop() is processed in
+	// reverse order from innermost to outermost loop nest level.
+	if (!last_cf || last_cf->get_parent_region() == r) {
+		last_cf = loop_end;
+	}
+
 	loop_start->jump_after(loop_end);
 	loop_end->jump_after(loop_start);
 
@@ -282,7 +290,7 @@ void bc_finalizer::finalize_alu_group(alu_group_node* g, node *prev_node) {
 		value *d = n->dst.empty() ? NULL : n->dst[0];
 
 		if (d && d->is_special_reg()) {
-			assert(n->bc.op_ptr->flags & AF_MOVA);
+			assert((n->bc.op_ptr->flags & AF_MOVA) || d->is_geometry_emit());
 			d = NULL;
 		}
 

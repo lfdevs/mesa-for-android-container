@@ -103,7 +103,7 @@ glsl_get_matrix_columns(const struct glsl_type *type)
 unsigned
 glsl_get_length(const struct glsl_type *type)
 {
-   return type->length;
+   return type->is_matrix() ? type->matrix_columns : type->length;
 }
 
 const char *
@@ -140,6 +140,12 @@ const glsl_type *
 glsl_void_type(void)
 {
    return glsl_type::void_type;
+}
+
+const glsl_type *
+glsl_float_type(void)
+{
+   return glsl_type::float_type;
 }
 
 const glsl_type *

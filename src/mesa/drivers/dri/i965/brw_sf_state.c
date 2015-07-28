@@ -34,6 +34,7 @@
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/fbobject.h"
+#include "main/viewport.h"
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
@@ -42,11 +43,10 @@
 static void upload_sf_vp(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   const GLfloat depth_scale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    struct brw_sf_viewport *sfv;
    GLfloat y_scale, y_bias;
+   double scale[3], translate[3];
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
-   const GLfloat *v = ctx->ViewportArray[0]._WindowMap.m;
 
    sfv = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
 			 sizeof(*sfv), 32, &brw->sf.vp_offset);
@@ -63,12 +63,13 @@ static void upload_sf_vp(struct brw_context *brw)
 
    /* _NEW_VIEWPORT */
 
-   sfv->viewport.m00 = v[MAT_SX];
-   sfv->viewport.m11 = v[MAT_SY] * y_scale;
-   sfv->viewport.m22 = v[MAT_SZ] * depth_scale;
-   sfv->viewport.m30 = v[MAT_TX];
-   sfv->viewport.m31 = v[MAT_TY] * y_scale + y_bias;
-   sfv->viewport.m32 = v[MAT_TZ] * depth_scale;
+   _mesa_get_viewport_xform(ctx, 0, scale, translate);
+   sfv->viewport.m00 = scale[0];
+   sfv->viewport.m11 = scale[1] * y_scale;
+   sfv->viewport.m22 = scale[2];
+   sfv->viewport.m30 = translate[0];
+   sfv->viewport.m31 = translate[1] * y_scale + y_bias;
+   sfv->viewport.m32 = translate[2];
 
    /* _NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT
     * for DrawBuffer->_[XY]{min,max}
@@ -109,7 +110,7 @@ static void upload_sf_vp(struct brw_context *brw)
       sfv->scissor.ymax = ctx->DrawBuffer->Height - ctx->DrawBuffer->_Ymin - 1;
    }
 
-   brw->state.dirty.brw |= BRW_NEW_SF_VP;
+   brw->ctx.NewDriverState |= BRW_NEW_SF_VP;
 }
 
 const struct brw_tracked_state brw_sf_vp = {
@@ -182,10 +183,10 @@ static void upload_sf_unit( struct brw_context *brw )
       sf->sf6.scissor = 1;
 
    /* _NEW_POLYGON */
-   if (ctx->Polygon.FrontFace == GL_CCW)
-      sf->sf5.front_winding = BRW_FRONTWINDING_CCW;
-   else
+   if (ctx->Polygon._FrontBit)
       sf->sf5.front_winding = BRW_FRONTWINDING_CW;
+   else
+      sf->sf5.front_winding = BRW_FRONTWINDING_CCW;
 
    /* _NEW_BUFFERS
     * The viewport is inverted for rendering to a FBO, and that inverts
@@ -291,7 +292,7 @@ static void upload_sf_unit( struct brw_context *brw )
 					     (sf->sf5.viewport_transform << 1)),
 			   I915_GEM_DOMAIN_INSTRUCTION, 0);
 
-   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
+   brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 }
 
 const struct brw_tracked_state brw_sf_unit = {

@@ -1152,7 +1152,7 @@ transform_samp(struct tgsi_transform_context *tctx,
  */
 #define TWOSIDE_GROW(n)  (                      \
       2 +         /* FACE */                    \
-      ((n) * 2) + /* IN[] BCOLOR[n] */          \
+      ((n) * 3) + /* IN[], BCOLOR[n], <intrp> */\
       ((n) * 1) + /* TEMP[] */                  \
       ((n) * NINST(3))   /* CMP instr */        \
       )
@@ -1172,13 +1172,17 @@ emit_twoside(struct tgsi_transform_context *tctx)
 
    /* additional inputs for BCOLOR's */
    for (i = 0; i < ctx->two_side_colors; i++) {
+      unsigned in_idx = ctx->two_side_idx[i];
       decl = tgsi_default_full_declaration();
       decl.Declaration.File = TGSI_FILE_INPUT;
       decl.Declaration.Semantic = true;
       decl.Range.First = decl.Range.Last = inbase + i;
       decl.Semantic.Name = TGSI_SEMANTIC_BCOLOR;
-      decl.Semantic.Index =
-         info->input_semantic_index[ctx->two_side_idx[i]];
+      decl.Semantic.Index = info->input_semantic_index[in_idx];
+      decl.Declaration.Interpolate = true;
+      decl.Interp.Interpolate = info->input_interpolate[in_idx];
+      decl.Interp.Location = info->input_interpolate_loc[in_idx];
+      decl.Interp.CylindricalWrap = info->input_cylindrical_wrap[in_idx];
       tctx->emit_declaration(tctx, &decl);
    }
 

@@ -266,7 +266,7 @@ i915_vbuf_render_map_vertices(struct vbuf_render *render)
    struct i915_context *i915 = i915_render->i915;
 
    if (i915->vbo_flushed)
-      debug_printf("%s bad vbo flush occured stalling on hw\n", __FUNCTION__);
+      debug_printf("%s bad vbo flush occurred stalling on hw\n", __FUNCTION__);
 
 #ifdef VBUF_MAP_BUFFER
    return (unsigned char *)i915_render->vbo_ptr + i915_render->vbo_sw_offset;

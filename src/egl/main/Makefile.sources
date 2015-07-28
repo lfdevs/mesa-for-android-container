@@ -22,13 +22,6 @@ LIBEGL_C_FILES := \
 	eglimage.h \
 	egllog.c \
 	egllog.h \
-	eglmisc.c \
-	eglmisc.h \
-	eglmode.c \
-	eglmode.h \
-	eglmutex.h \
-	eglscreen.c \
-	eglscreen.h \
 	eglstring.c \
 	eglstring.h \
 	eglsurface.c \

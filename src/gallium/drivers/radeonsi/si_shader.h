@@ -126,6 +126,7 @@ union si_shader_key {
 		unsigned	alpha_func:3;
 		unsigned	alpha_to_one:1;
 		unsigned	poly_stipple:1;
+		unsigned	poly_line_smoothing:1;
 	} ps;
 	struct {
 		unsigned	instance_divisors[SI_NUM_VERTEX_BUFFERS];
@@ -149,6 +150,7 @@ struct si_shader {
 	unsigned			num_vgprs;
 	unsigned			lds_size;
 	unsigned			spi_ps_input_ena;
+	unsigned			float_mode;
 	unsigned			scratch_bytes_per_wave;
 	unsigned			spi_shader_col_format;
 	unsigned			spi_shader_z_format;

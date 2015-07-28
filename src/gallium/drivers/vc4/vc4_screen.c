@@ -43,6 +43,8 @@ static const struct debug_named_value debug_options[] = {
           "Dump generated QPU instructions" },
         { "qir",      VC4_DEBUG_QIR,
           "Dump QPU IR during program compile" },
+        { "nir",      VC4_DEBUG_NIR,
+          "Dump NIR during program compile" },
         { "tgsi",     VC4_DEBUG_TGSI,
           "Dump TGSI during program compile" },
         { "shaderdb", VC4_DEBUG_SHADERDB,
@@ -172,6 +174,8 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_VERTEXID_NOBASE:
         case PIPE_CAP_POLYGON_OFFSET_CLAMP:
         case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+        case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+        case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
                 return 0;
 
                 /* Stream output. */
@@ -316,6 +320,9 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_INTEGERS:
                 return 1;
         case PIPE_SHADER_CAP_DOUBLES:
+        case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
+        case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+        case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
                 return 0;
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -468,6 +475,7 @@ vc4_screen_create(int fd)
 
         pscreen->get_name = vc4_screen_get_name;
         pscreen->get_vendor = vc4_screen_get_vendor;
+        pscreen->get_device_vendor = vc4_screen_get_vendor;
 
         return pscreen;
 }

@@ -24,6 +24,7 @@
  *
  */
 
+#include <stdio.h>
 #include <xf86drm.h>
 #include <nouveau_drm.h>
 #include "nouveau_driver.h"
@@ -64,16 +65,16 @@ nouveau_get_configs(void)
 		GLX_NONE, GLX_SWAP_UNDEFINED_OML
 	};
 
-	for (i = 0; i < Elements(formats); i++) {
+	for (i = 0; i < ARRAY_SIZE(formats); i++) {
 		__DRIconfig **config;
 
 		config = driCreateConfigs(formats[i],
 					  depth_bits, stencil_bits,
-					  Elements(depth_bits),
+					  ARRAY_SIZE(depth_bits),
 					  back_buffer_modes,
-					  Elements(back_buffer_modes),
+					  ARRAY_SIZE(back_buffer_modes),
 					  msaa_samples,
-					  Elements(msaa_samples),
+					  ARRAY_SIZE(msaa_samples),
 					  GL_TRUE);
 		assert(config);
 

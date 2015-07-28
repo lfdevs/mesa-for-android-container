@@ -46,6 +46,10 @@
 #include "lp_query.h"
 #include "lp_setup.h"
 
+/* This is only safe if there's just one concurrent context */
+#ifdef PIPE_SUBSYSTEM_EMBEDDED
+#define USE_GLOBAL_LLVM_CONTEXT
+#endif
 
 static void llvmpipe_destroy( struct pipe_context *pipe )
 {
@@ -93,7 +97,9 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
 
    lp_delete_setup_variants(llvmpipe);
 
+#ifndef USE_GLOBAL_LLVM_CONTEXT
    LLVMContextDispose(llvmpipe->context);
+#endif
    llvmpipe->context = NULL;
 
    align_free( llvmpipe );
@@ -164,7 +170,12 @@ llvmpipe_create_context( struct pipe_screen *screen, void *priv )
    llvmpipe_init_context_resource_funcs( &llvmpipe->pipe );
    llvmpipe_init_surface_functions(llvmpipe);
 
+#ifdef USE_GLOBAL_LLVM_CONTEXT
+   llvmpipe->context = LLVMGetGlobalContext();
+#else
    llvmpipe->context = LLVMContextCreate();
+#endif
+
    if (!llvmpipe->context)
       goto fail;
 

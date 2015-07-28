@@ -141,6 +141,18 @@ void cso_save_geometry_shader(struct cso_context *cso);
 void cso_restore_geometry_shader(struct cso_context *cso);
 
 
+void cso_set_tessctrl_shader_handle(struct cso_context *ctx, void *handle);
+void cso_delete_tessctrl_shader(struct cso_context *ctx, void *handle);
+void cso_save_tessctrl_shader(struct cso_context *cso);
+void cso_restore_tessctrl_shader(struct cso_context *cso);
+
+
+void cso_set_tesseval_shader_handle(struct cso_context *ctx, void *handle);
+void cso_delete_tesseval_shader(struct cso_context *ctx, void *handle);
+void cso_save_tesseval_shader(struct cso_context *cso);
+void cso_restore_tesseval_shader(struct cso_context *cso);
+
+
 void cso_set_framebuffer(struct cso_context *cso,
                          const struct pipe_framebuffer_state *fb);
 void cso_save_framebuffer(struct cso_context *cso);

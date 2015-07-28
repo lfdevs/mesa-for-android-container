@@ -72,7 +72,6 @@ static void dump_info(struct ir3_shader_variant *so, const char *str)
 
 		debug_printf("; %s: %s\n", type, str);
 
-if (block) {
 		for (i = 0; i < block->ninputs; i++) {
 			if (!block->inputs[i]) {
 				debug_printf("; in%d unused\n", i);
@@ -99,28 +98,15 @@ if (block) {
 					(reg->flags & IR3_REG_HALF) ? "h" : "",
 					(regid >> 2), "xyzw"[regid & 0x3], i);
 		}
-} else {
-		/* hack to deal w/ old compiler:
-		 * TODO maybe we can just keep this path?  I guess should
-		 * be good enough (other than not able to deal w/ half)
-		 */
-		for (i = 0; i < so->inputs_count; i++) {
-			unsigned j, regid = so->inputs[i].regid;
-			for (j = 0; j < so->inputs[i].ncomp; j++) {
-				debug_printf("@in(r%d.%c)\tin%d\n",
-						(regid >> 2), "xyzw"[regid & 0x3], (i * 4) + j);
-				regid++;
-			}
+
+		for (i = 0; i < so->immediates_count; i++) {
+			debug_printf("@const(c%d.x)\t", so->first_immediate + i);
+			debug_printf("0x%08x, 0x%08x, 0x%08x, 0x%08x\n",
+					so->immediates[i].val[0],
+					so->immediates[i].val[1],
+					so->immediates[i].val[2],
+					so->immediates[i].val[3]);
 		}
-		for (i = 0; i < so->outputs_count; i++) {
-			unsigned j, regid = so->outputs[i].regid;
-			for (j = 0; j < 4; j++) {
-				debug_printf("@out(r%d.%c)\tout%d\n",
-						(regid >> 2), "xyzw"[regid & 0x3], (i * 4) + j);
-				regid++;
-			}
-		}
-}
 
 		disasm_a3xx(bin, so->info.sizedwords, 0, so->type);
 
@@ -210,7 +196,7 @@ read_file(const char *filename, void **ptr, size_t *size)
 
 static void reset_variant(struct ir3_shader_variant *v, const char *msg)
 {
-	debug_error(msg);
+	printf("; %s\n", msg);
 	v->inputs_count = 0;
 	v->outputs_count = 0;
 	v->total_in = 0;
@@ -225,11 +211,11 @@ static void print_usage(void)
 	printf("    --binning-pass    - generate binning pass shader (VERT)\n");
 	printf("    --color-two-side  - emulate two-sided color (FRAG)\n");
 	printf("    --half-precision  - use half-precision\n");
-	printf("    --alpha           - generate render-to-alpha shader (FRAG)\n");
 	printf("    --saturate-s MASK - bitmask of samplers to saturate S coord\n");
 	printf("    --saturate-t MASK - bitmask of samplers to saturate T coord\n");
 	printf("    --saturate-r MASK - bitmask of samplers to saturate R coord\n");
 	printf("    --nocp            - disable copy propagation\n");
+	printf("    --nir             - use NIR compiler\n");
 	printf("    --help            - show this message\n");
 }
 
@@ -244,6 +230,7 @@ int main(int argc, char **argv)
 	const char *info;
 	void *ptr;
 	size_t size;
+	int use_nir = 0;
 
 	fd_mesa_debug |= FD_DBG_DISASM;
 
@@ -282,13 +269,6 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[n], "--alpha")) {
-			debug_printf(" %s", argv[n]);
-			key.alpha = true;
-			n++;
-			continue;
-		}
-
 		if (!strcmp(argv[n], "--saturate-s")) {
 			debug_printf(" %s %s", argv[n], argv[n+1]);
 			key.vsaturate_s = key.fsaturate_s = strtol(argv[n+1], NULL, 0);
@@ -315,6 +295,11 @@ int main(int argc, char **argv)
 			n++;
 			continue;
 		}
+		if (!strcmp(argv[n], "--nir")) {
+			use_nir = true;
+			n++;
+			continue;
+		}
 
 		if (!strcmp(argv[n], "--help")) {
 			print_usage();
@@ -336,6 +321,9 @@ int main(int argc, char **argv)
 		return ret;
 	}
 
+	if (fd_mesa_debug & FD_DBG_OPTMSGS)
+		debug_printf("%s\n", (char *)ptr);
+
 	if (!tgsi_text_translate(ptr, toks, Elements(toks)))
 		errx(1, "could not parse `%s'", filename);
 
@@ -352,27 +340,22 @@ int main(int argc, char **argv)
 		break;
 	}
 
-	if (!(fd_mesa_debug & FD_DBG_NOOPT)) {
-		/* with new compiler: */
-		info = "new compiler";
+	if (use_nir) {
+		info = "NIR compiler";
+		ret = ir3_compile_shader_nir(&v, toks, key);
+	} else {
+		info = "TGSI compiler";
 		ret = ir3_compile_shader(&v, toks, key, true);
-
-		if (ret) {
-			reset_variant(&v, "new compiler failed, trying without copy propagation!");
-			info = "new compiler (no copy propagation)";
-			ret = ir3_compile_shader(&v, toks, key, false);
-			if (ret)
-				reset_variant(&v, "new compiler failed, trying fallback!\n");
-		}
 	}
 
 	if (ret) {
-		info = "old compiler";
-		ret = ir3_compile_shader_old(&v, toks, key);
+		reset_variant(&v, "compiler failed, trying without copy propagation!");
+		info = "compiler (no copy propagation)";
+		ret = ir3_compile_shader(&v, toks, key, false);
 	}
 
 	if (ret) {
-		fprintf(stderr, "old compiler failed!\n");
+		fprintf(stderr, "compiler failed!\n");
 		return ret;
 	}
 	dump_info(&v, info);

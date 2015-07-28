@@ -74,9 +74,8 @@ is_channel_updated(vec4_instruction *inst, src_reg *values[4], int ch)
    if (!src || src->file != GRF)
       return false;
 
-   return (src->reg == inst->dst.reg &&
-	   src->reg_offset == inst->dst.reg_offset &&
-	   inst->dst.writemask & (1 << BRW_GET_SWZ(src->swizzle, ch)));
+   return (src->in_range(inst->dst, inst->regs_written) &&
+           inst->dst.writemask & (1 << BRW_GET_SWZ(src->swizzle, ch)));
 }
 
 static unsigned
@@ -96,7 +95,17 @@ swizzle_vf_imm(unsigned vf4, unsigned swizzle)
 }
 
 static bool
-try_constant_propagate(struct brw_context *brw, vec4_instruction *inst,
+is_logic_op(enum opcode opcode)
+{
+   return (opcode == BRW_OPCODE_AND ||
+           opcode == BRW_OPCODE_OR  ||
+           opcode == BRW_OPCODE_XOR ||
+           opcode == BRW_OPCODE_NOT);
+}
+
+static bool
+try_constant_propagate(const struct brw_device_info *devinfo,
+                       vec4_instruction *inst,
                        int arg, struct copy_entry *entry)
 {
    /* For constant propagation, we only handle the same constant
@@ -113,14 +122,26 @@ try_constant_propagate(struct brw_context *brw, vec4_instruction *inst,
    if (value.file != IMM)
       return false;
 
+   if (value.type == BRW_REGISTER_TYPE_VF) {
+      /* The result of bit-casting the component values of a vector float
+       * cannot in general be represented as an immediate.
+       */
+      if (inst->src[arg].type != BRW_REGISTER_TYPE_F)
+         return false;
+   } else {
+      value.type = inst->src[arg].type;
+   }
+
    if (inst->src[arg].abs) {
-      if (!brw_abs_immediate(value.type, &value.fixed_hw_reg)) {
+      if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
+          !brw_abs_immediate(value.type, &value.fixed_hw_reg)) {
          return false;
       }
    }
 
    if (inst->src[arg].negate) {
-      if (!brw_negate_immediate(value.type, &value.fixed_hw_reg)) {
+      if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
+          !brw_negate_immediate(value.type, &value.fixed_hw_reg)) {
          return false;
       }
    }
@@ -131,13 +152,14 @@ try_constant_propagate(struct brw_context *brw, vec4_instruction *inst,
 
    switch (inst->opcode) {
    case BRW_OPCODE_MOV:
+   case SHADER_OPCODE_BROADCAST:
       inst->src[arg] = value;
       return true;
 
    case SHADER_OPCODE_POW:
    case SHADER_OPCODE_INT_QUOTIENT:
    case SHADER_OPCODE_INT_REMAINDER:
-      if (brw->gen < 8)
+      if (devinfo->gen < 8)
          break;
       /* fallthrough */
    case BRW_OPCODE_DP2:
@@ -226,17 +248,9 @@ try_constant_propagate(struct brw_context *brw, vec4_instruction *inst,
 }
 
 static bool
-is_logic_op(enum opcode opcode)
-{
-   return (opcode == BRW_OPCODE_AND ||
-           opcode == BRW_OPCODE_OR  ||
-           opcode == BRW_OPCODE_XOR ||
-           opcode == BRW_OPCODE_NOT);
-}
-
-static bool
-try_copy_propagate(struct brw_context *brw, vec4_instruction *inst,
-                   int arg, struct copy_entry *entry, int reg)
+try_copy_propagate(const struct brw_device_info *devinfo,
+                   vec4_instruction *inst,
+                   int arg, struct copy_entry *entry)
 {
    /* For constant propagation, we only handle the same constant
     * across all 4 channels.  Some day, we should handle the 8-bit
@@ -262,17 +276,17 @@ try_copy_propagate(struct brw_context *brw, vec4_instruction *inst,
     */
    int s[4];
    for (int i = 0; i < 4; i++) {
-      s[i] = BRW_GET_SWZ(entry->value[i]->swizzle,
-			 BRW_GET_SWZ(inst->src[arg].swizzle, i));
+      s[i] = BRW_GET_SWZ(entry->value[i]->swizzle, i);
    }
-   value.swizzle = BRW_SWIZZLE4(s[0], s[1], s[2], s[3]);
+   value.swizzle = brw_compose_swizzle(inst->src[arg].swizzle,
+                                       BRW_SWIZZLE4(s[0], s[1], s[2], s[3]));
 
    if (value.file != UNIFORM &&
        value.file != GRF &&
        value.file != ATTR)
       return false;
 
-   if (brw->gen >= 8 && (value.negate || value.abs) &&
+   if (devinfo->gen >= 8 && (value.negate || value.abs) &&
        is_logic_op(inst->opcode)) {
       return false;
    }
@@ -290,7 +304,7 @@ try_copy_propagate(struct brw_context *brw, vec4_instruction *inst,
     * instructions.
     */
    if ((has_source_modifiers || value.file == UNIFORM ||
-        value.swizzle != BRW_SWIZZLE_XYZW) && !inst->can_do_source_mods(brw))
+        value.swizzle != BRW_SWIZZLE_XYZW) && !inst->can_do_source_mods(devinfo))
       return false;
 
    if (has_source_modifiers && value.type != inst->src[arg].type)
@@ -318,13 +332,23 @@ try_copy_propagate(struct brw_context *brw, vec4_instruction *inst,
    if (value.equals(inst->src[arg]))
       return false;
 
-   /* Limit saturate propagation only to SEL with src1 bounded within 1.0 and 1.0
-    * otherwise, skip copy propagate altogether
-    */
-   if (entry->saturatemask & (1 << arg)) {
+   const unsigned dst_saturate_mask = inst->dst.writemask &
+      brw_apply_swizzle_to_mask(inst->src[arg].swizzle, entry->saturatemask);
+
+   if (dst_saturate_mask) {
+      /* We either saturate all or nothing. */
+      if (dst_saturate_mask != inst->dst.writemask)
+         return false;
+
+      /* Limit saturate propagation only to SEL with src1 bounded within 0.0
+       * and 1.0, otherwise skip copy propagate altogether.
+       */
       switch(inst->opcode) {
       case BRW_OPCODE_SEL:
-         if (inst->src[1].file != IMM ||
+         if (arg != 0 ||
+             inst->src[0].type != BRW_REGISTER_TYPE_F ||
+             inst->src[1].file != IMM ||
+             inst->src[1].type != BRW_REGISTER_TYPE_F ||
              inst->src[1].fixed_hw_reg.dw1.f < 0.0 ||
              inst->src[1].fixed_hw_reg.dw1.f > 1.0) {
             return false;
@@ -346,7 +370,7 @@ bool
 vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 {
    bool progress = false;
-   struct copy_entry entries[virtual_grf_reg_count];
+   struct copy_entry entries[alloc.total_size];
 
    memset(&entries, 0, sizeof(entries));
 
@@ -375,7 +399,11 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 	     inst->src[i].reladdr)
 	    continue;
 
-	 int reg = (virtual_grf_reg_map[inst->src[i].reg] +
+         /* We only handle single-register copies. */
+         if (inst->regs_read(i) != 1)
+            continue;
+
+	 int reg = (alloc.offsets[inst->src[i].reg] +
 		    inst->src[i].reg_offset);
 
 	 /* Find the regs that each swizzle component came from.
@@ -408,29 +436,30 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 	 if (c != 4)
 	    continue;
 
-         if (do_constant_prop && try_constant_propagate(brw, inst, i, &entry))
+         if (do_constant_prop && try_constant_propagate(devinfo, inst, i, &entry))
             progress = true;
 
-	 if (try_copy_propagate(brw, inst, i, &entry, reg))
+	 if (try_copy_propagate(devinfo, inst, i, &entry))
 	    progress = true;
       }
 
       /* Track available source registers. */
       if (inst->dst.file == GRF) {
 	 const int reg =
-	    virtual_grf_reg_map[inst->dst.reg] + inst->dst.reg_offset;
+	    alloc.offsets[inst->dst.reg] + inst->dst.reg_offset;
 
 	 /* Update our destination's current channel values.  For a direct copy,
 	  * the value is the newly propagated source.  Otherwise, we don't know
 	  * the new value, so clear it.
 	  */
 	 bool direct_copy = is_direct_copy(inst);
-	 entries[reg].saturatemask = 0x0;
+         entries[reg].saturatemask &= ~inst->dst.writemask;
 	 for (int i = 0; i < 4; i++) {
 	    if (inst->dst.writemask & (1 << i)) {
-               entries[reg].value[i] = (!inst->saturate && direct_copy) ? &inst->src[0] : NULL;
-               entries[reg].saturatemask |= (((inst->saturate && direct_copy) ? 1 : 0) << i);
-	    }
+               entries[reg].value[i] = direct_copy ? &inst->src[0] : NULL;
+               entries[reg].saturatemask |=
+                  inst->saturate && direct_copy ? 1 << i : 0;
+            }
 	 }
 
 	 /* Clear the records for any registers whose current value came from
@@ -439,9 +468,9 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 	 if (inst->dst.reladdr)
 	    memset(&entries, 0, sizeof(entries));
 	 else {
-	    for (int i = 0; i < virtual_grf_reg_count; i++) {
+	    for (unsigned i = 0; i < alloc.total_size; i++) {
 	       for (int j = 0; j < 4; j++) {
-		  if (is_channel_updated(inst, entries[i].value, j)){
+		  if (is_channel_updated(inst, entries[i].value, j)) {
 		     entries[i].value[j] = NULL;
 		     entries[i].saturatemask &= ~(1 << j);
                   }

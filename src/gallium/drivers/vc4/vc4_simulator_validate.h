@@ -34,7 +34,7 @@
 #include "vc4_context.h"
 #include "vc4_qpu_defines.h"
 
-struct exec_info;
+struct vc4_exec_info;
 
 #define DRM_INFO(...) fprintf(stderr, __VA_ARGS__)
 #define DRM_ERROR(...) fprintf(stderr, __VA_ARGS__)
@@ -78,6 +78,6 @@ struct drm_gem_cma_object *
 drm_gem_cma_create(struct drm_device *dev, size_t size);
 
 int
-vc4_cl_validate(struct drm_device *dev, struct exec_info *exec);
+vc4_cl_validate(struct drm_device *dev, struct vc4_exec_info *exec);
 
 #endif /* VC4_SIMULATOR_VALIDATE_H */

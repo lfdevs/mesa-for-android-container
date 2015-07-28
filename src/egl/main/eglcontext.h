@@ -31,10 +31,15 @@
 #ifndef EGLCONTEXT_INCLUDED
 #define EGLCONTEXT_INCLUDED
 
+#include "c99_compat.h"
 
 #include "egltypedefs.h"
 #include "egldisplay.h"
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * "Base" class for device driver contexts.
@@ -81,7 +86,7 @@ _eglBindContext(_EGLContext *ctx, _EGLSurface *draw, _EGLSurface *read,
 /**
  * Increment reference count for the context.
  */
-static INLINE _EGLContext *
+static inline _EGLContext *
 _eglGetContext(_EGLContext *ctx)
 {
    if (ctx)
@@ -93,7 +98,7 @@ _eglGetContext(_EGLContext *ctx)
 /**
  * Decrement reference count for the context.
  */
-static INLINE EGLBoolean
+static inline EGLBoolean
 _eglPutContext(_EGLContext *ctx)
 {
    return (ctx) ? _eglPutResource(&ctx->Resource) : EGL_FALSE;
@@ -104,7 +109,7 @@ _eglPutContext(_EGLContext *ctx)
  * Link a context to its display and return the handle of the link.
  * The handle can be passed to client directly.
  */
-static INLINE EGLContext
+static inline EGLContext
 _eglLinkContext(_EGLContext *ctx)
 {
    _eglLinkResource(&ctx->Resource, _EGL_RESOURCE_CONTEXT);
@@ -116,7 +121,7 @@ _eglLinkContext(_EGLContext *ctx)
  * Unlink a linked context from its display.
  * Accessing an unlinked context should generate EGL_BAD_CONTEXT error.
  */
-static INLINE void
+static inline void
 _eglUnlinkContext(_EGLContext *ctx)
 {
    _eglUnlinkResource(&ctx->Resource, _EGL_RESOURCE_CONTEXT);
@@ -127,7 +132,7 @@ _eglUnlinkContext(_EGLContext *ctx)
  * Lookup a handle to find the linked context.
  * Return NULL if the handle has no corresponding linked context.
  */
-static INLINE _EGLContext *
+static inline _EGLContext *
 _eglLookupContext(EGLContext context, _EGLDisplay *dpy)
 {
    _EGLContext *ctx = (_EGLContext *) context;
@@ -140,7 +145,7 @@ _eglLookupContext(EGLContext context, _EGLDisplay *dpy)
 /**
  * Return the handle of a linked context, or EGL_NO_CONTEXT.
  */
-static INLINE EGLContext
+static inline EGLContext
 _eglGetContextHandle(_EGLContext *ctx)
 {
    _EGLResource *res = (_EGLResource *) ctx;
@@ -148,5 +153,9 @@ _eglGetContextHandle(_EGLContext *ctx)
       (EGLContext) ctx : EGL_NO_CONTEXT;
 }
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* EGLCONTEXT_INCLUDED */

@@ -164,7 +164,7 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
        * for fake "hole" components, rather than simply taking the offset
        * for each real varying.  Each hole can have size 1, 2, 3, or 4; we
        * program as many size = 4 holes as we can, then a final hole to
-       * accomodate the final 1, 2, or 3 remaining.
+       * accommodate the final 1, 2, or 3 remaining.
        */
       int skip_components =
          linked_xfb_info->Outputs[i].DstOffset - next_offset[buffer];
@@ -245,17 +245,17 @@ upload_3dstate_streamout(struct brw_context *brw, bool active,
        * point by reading less and offsetting the register index in the
        * SO_DECLs.
        */
-      dw2 |= urb_entry_read_offset << SO_STREAM_0_VERTEX_READ_OFFSET_SHIFT;
-      dw2 |= (urb_entry_read_length - 1) << SO_STREAM_0_VERTEX_READ_LENGTH_SHIFT;
+      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_0_VERTEX_READ_OFFSET);
+      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_0_VERTEX_READ_LENGTH);
 
-      dw2 |= urb_entry_read_offset << SO_STREAM_1_VERTEX_READ_OFFSET_SHIFT;
-      dw2 |= (urb_entry_read_length - 1) << SO_STREAM_1_VERTEX_READ_LENGTH_SHIFT;
+      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_1_VERTEX_READ_OFFSET);
+      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_1_VERTEX_READ_LENGTH);
 
-      dw2 |= urb_entry_read_offset << SO_STREAM_2_VERTEX_READ_OFFSET_SHIFT;
-      dw2 |= (urb_entry_read_length - 1) << SO_STREAM_2_VERTEX_READ_LENGTH_SHIFT;
+      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_2_VERTEX_READ_OFFSET);
+      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_2_VERTEX_READ_LENGTH);
 
-      dw2 |= urb_entry_read_offset << SO_STREAM_3_VERTEX_READ_OFFSET_SHIFT;
-      dw2 |= (urb_entry_read_length - 1) << SO_STREAM_3_VERTEX_READ_LENGTH_SHIFT;
+      dw2 |= SET_FIELD(urb_entry_read_offset, SO_STREAM_3_VERTEX_READ_OFFSET);
+      dw2 |= SET_FIELD(urb_entry_read_length - 1, SO_STREAM_3_VERTEX_READ_LENGTH);
    }
 
    BEGIN_BATCH(3);

@@ -164,7 +164,7 @@ exec_run( const struct sp_fragment_shader_variant *var,
                uint j;
 
                for (j = 0; j < 4; j++)
-                  quad->output.stencil[j] = (unsigned)machine->Outputs[i].xyzw[1].f[j];
+                  quad->output.stencil[j] = (unsigned)machine->Outputs[i].xyzw[1].u[j];
             }
             break;
          }

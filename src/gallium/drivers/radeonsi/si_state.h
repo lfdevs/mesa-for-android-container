@@ -62,12 +62,13 @@ struct si_state_rasterizer {
 	bool			line_stipple_enable;
 	unsigned		sprite_coord_enable;
 	unsigned		pa_sc_line_stipple;
-	unsigned		pa_su_sc_mode_cntl;
 	unsigned		pa_cl_clip_cntl;
 	unsigned		clip_plane_enable;
 	float			offset_units;
 	float			offset_scale;
 	bool			poly_stipple_enable;
+	bool			line_smooth;
+	bool			poly_smooth;
 };
 
 struct si_state_dsa {
@@ -269,6 +270,7 @@ void si_init_shader_functions(struct si_context *sctx);
 
 /* si_state_draw.c */
 extern const struct r600_atom si_atom_cache_flush;
+extern const struct r600_atom si_atom_msaa_sample_locs;
 extern const struct r600_atom si_atom_msaa_config;
 void si_emit_cache_flush(struct r600_common_context *sctx, struct r600_atom *atom);
 void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *dinfo);

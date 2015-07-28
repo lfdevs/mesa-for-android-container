@@ -32,7 +32,7 @@
 #include "pipe/p_state.h"
 
 #include "util/u_blitter.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #include "tgsi/tgsi_scan.h"
 

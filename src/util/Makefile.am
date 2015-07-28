@@ -25,19 +25,27 @@ include Makefile.sources
 
 noinst_LTLIBRARIES = libmesautil.la
 
+AM_CPPFLAGS = \
+	-I$(top_srcdir)/include
+
 libmesautil_la_CPPFLAGS = \
 	$(DEFINES) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
-	$(VISIBILITY_CFLAGS)
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	$(VISIBILITY_CFLAGS) \
+	$(MSVC2008_COMPAT_CFLAGS)
 
 libmesautil_la_SOURCES = \
 	$(MESA_UTIL_FILES) \
 	$(MESA_UTIL_GENERATED_FILES)
 
-check_PROGRAMS = u_atomic_test
+roundeven_test_LDADD = -lm
+
+check_PROGRAMS = u_atomic_test roundeven_test
 TESTS = $(check_PROGRAMS)
 
 BUILT_SOURCES = $(MESA_UTIL_GENERATED_FILES)

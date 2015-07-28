@@ -68,6 +68,15 @@ rbug_screen_get_vendor(struct pipe_screen *_screen)
    return screen->get_vendor(screen);
 }
 
+static const char *
+rbug_screen_get_device_vendor(struct pipe_screen *_screen)
+{
+   struct rbug_screen *rb_screen = rbug_screen(_screen);
+   struct pipe_screen *screen = rb_screen->screen;
+
+   return screen->get_device_vendor(screen);
+}
+
 static int
 rbug_screen_get_param(struct pipe_screen *_screen,
                       enum pipe_cap param)
@@ -267,6 +276,7 @@ rbug_screen_create(struct pipe_screen *screen)
    rb_screen->base.destroy = rbug_screen_destroy;
    rb_screen->base.get_name = rbug_screen_get_name;
    rb_screen->base.get_vendor = rbug_screen_get_vendor;
+   rb_screen->base.get_device_vendor = rbug_screen_get_device_vendor;
    rb_screen->base.get_param = rbug_screen_get_param;
    rb_screen->base.get_shader_param = rbug_screen_get_shader_param;
    rb_screen->base.get_paramf = rbug_screen_get_paramf;

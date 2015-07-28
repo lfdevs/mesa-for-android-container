@@ -178,6 +178,7 @@ intelInitExtensions(struct gl_context *ctx)
 
    ctx->Extensions.ARB_buffer_storage = true;
    ctx->Extensions.ARB_clear_texture = true;
+   ctx->Extensions.ARB_clip_control = true;
    ctx->Extensions.ARB_copy_image = true;
    ctx->Extensions.ARB_depth_buffer_float = true;
    ctx->Extensions.ARB_depth_clamp = true;
@@ -198,6 +199,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.ARB_map_buffer_range = true;
    ctx->Extensions.ARB_occlusion_query = true;
    ctx->Extensions.ARB_occlusion_query2 = true;
+   ctx->Extensions.ARB_pipeline_statistics_query = true;
    ctx->Extensions.ARB_point_sprite = true;
    ctx->Extensions.ARB_seamless_cube_map = true;
    ctx->Extensions.ARB_shader_bit_encoding = true;
@@ -230,6 +232,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_pixel_buffer_object = true;
    ctx->Extensions.EXT_point_parameters = true;
    ctx->Extensions.EXT_provoking_vertex = true;
+   ctx->Extensions.EXT_stencil_two_side = true;
    ctx->Extensions.EXT_texture_array = true;
    ctx->Extensions.EXT_texture_env_dot3 = true;
    ctx->Extensions.EXT_texture_filter_anisotropic = true;
@@ -239,7 +242,6 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_texture_sRGB = true;
    ctx->Extensions.EXT_texture_sRGB_decode = true;
    ctx->Extensions.EXT_texture_swizzle = true;
-   ctx->Extensions.EXT_stencil_two_side = true;
    ctx->Extensions.EXT_vertex_array_bgra = true;
    ctx->Extensions.AMD_seamless_cubemap_per_texture = true;
    ctx->Extensions.APPLE_object_purgeable = true;
@@ -252,10 +254,14 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.NV_texture_rectangle = true;
    ctx->Extensions.TDFX_texture_compression_FXT1 = true;
    ctx->Extensions.OES_compressed_ETC1_RGB8_texture = true;
-   ctx->Extensions.OES_EGL_image = true;
    ctx->Extensions.OES_draw_texture = true;
-   ctx->Extensions.OES_standard_derivatives = true;
+   ctx->Extensions.OES_EGL_image = true;
    ctx->Extensions.OES_EGL_image_external = true;
+   ctx->Extensions.OES_standard_derivatives = true;
+   ctx->Extensions.OES_texture_float = true;
+   ctx->Extensions.OES_texture_float_linear = true;
+   ctx->Extensions.OES_texture_half_float = true;
+   ctx->Extensions.OES_texture_half_float_linear = true;
 
    if (brw->gen >= 6)
       ctx->Const.GLSLVersion = 330;
@@ -263,50 +269,75 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Const.GLSLVersion = 120;
    _mesa_override_glsl_version(&ctx->Const);
 
+   if (brw->gen >= 5) {
+      ctx->Extensions.ARB_texture_query_levels = ctx->Const.GLSLVersion >= 130;
+      ctx->Extensions.ARB_texture_query_lod = true;
+      ctx->Extensions.EXT_shader_integer_mix = ctx->Const.GLSLVersion >= 130;
+      ctx->Extensions.EXT_timer_query = true;
+
+      if (brw->gen == 5 || can_write_oacontrol(brw)) {
+         ctx->Extensions.AMD_performance_monitor = true;
+         ctx->Extensions.INTEL_performance_query = true;
+      }
+   }
+
    if (brw->gen >= 6) {
       uint64_t dummy;
 
-      ctx->Extensions.EXT_framebuffer_multisample = true;
-      ctx->Extensions.EXT_transform_feedback = true;
-      ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = true;
-      ctx->Extensions.ARB_blend_func_extended = !driQueryOptionb(&brw->optionCache, "disable_blend_func_extended");
+      ctx->Extensions.ARB_blend_func_extended =
+         !driQueryOptionb(&brw->optionCache, "disable_blend_func_extended");
+      ctx->Extensions.ARB_conditional_render_inverted = true;
       ctx->Extensions.ARB_draw_buffers_blend = true;
       ctx->Extensions.ARB_ES3_compatibility = true;
-      ctx->Extensions.ARB_uniform_buffer_object = true;
+      ctx->Extensions.ARB_sample_shading = true;
       ctx->Extensions.ARB_shading_language_420pack = true;
+      ctx->Extensions.ARB_shading_language_packing = true;
       ctx->Extensions.ARB_texture_buffer_object = true;
       ctx->Extensions.ARB_texture_buffer_object_rgb32 = true;
       ctx->Extensions.ARB_texture_buffer_range = true;
       ctx->Extensions.ARB_texture_cube_map_array = true;
-      ctx->Extensions.OES_depth_texture_cube_map = true;
-      ctx->Extensions.ARB_shading_language_packing = true;
-      ctx->Extensions.ARB_texture_multisample = true;
-      ctx->Extensions.ARB_sample_shading = true;
       ctx->Extensions.ARB_texture_gather = true;
-      ctx->Extensions.ARB_conditional_render_inverted = true;
+      ctx->Extensions.ARB_texture_multisample = true;
+      ctx->Extensions.ARB_uniform_buffer_object = true;
+
       ctx->Extensions.AMD_vertex_shader_layer = true;
+      ctx->Extensions.EXT_framebuffer_multisample = true;
+      ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = true;
       ctx->Extensions.EXT_polygon_offset_clamp = true;
+      ctx->Extensions.EXT_transform_feedback = true;
+      ctx->Extensions.OES_depth_texture_cube_map = true;
 
       /* Test if the kernel has the ioctl. */
       if (drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &dummy) == 0)
          ctx->Extensions.ARB_timer_query = true;
+
+      /* Only enable this in core profile because other parts of Mesa behave
+       * slightly differently when the extension is enabled.
+       */
+      if (ctx->API == API_OPENGL_CORE) {
+         ctx->Extensions.ARB_viewport_array = true;
+         ctx->Extensions.AMD_vertex_shader_viewport_index = true;
+      }
    }
 
-   if (brw->gen >= 5) {
-      ctx->Extensions.ARB_texture_query_lod = true;
-      ctx->Extensions.EXT_timer_query = true;
-      ctx->Extensions.EXT_shader_integer_mix = ctx->Const.GLSLVersion >= 130;
-      ctx->Extensions.ARB_texture_query_levels = ctx->Const.GLSLVersion >= 130;
-   }
+   brw->predicate.supported = false;
 
    if (brw->gen >= 7) {
       ctx->Extensions.ARB_conservative_depth = true;
+      ctx->Extensions.ARB_derivative_control = true;
+      ctx->Extensions.ARB_gpu_shader5 = true;
+      ctx->Extensions.ARB_shader_atomic_counters = true;
+      ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
+
       if (can_do_pipelined_register_writes(brw)) {
+         ctx->Extensions.ARB_draw_indirect = true;
          ctx->Extensions.ARB_transform_feedback2 = true;
          ctx->Extensions.ARB_transform_feedback3 = true;
          ctx->Extensions.ARB_transform_feedback_instanced = true;
-         ctx->Extensions.ARB_draw_indirect = true;
+
+         if (brw->intelScreen->cmd_parser_version >= 2)
+            brw->predicate.supported = true;
       }
 
       /* Only enable this in core profile because other parts of Mesa behave
@@ -316,18 +347,10 @@ intelInitExtensions(struct gl_context *ctx)
          ctx->Extensions.ARB_viewport_array = true;
          ctx->Extensions.AMD_vertex_shader_viewport_index = true;
       }
-
-      ctx->Extensions.ARB_texture_compression_bptc = true;
-      ctx->Extensions.ARB_derivative_control = true;
    }
 
    if (brw->gen >= 8) {
       ctx->Extensions.ARB_stencil_texturing = true;
-   }
-
-   if (brw->gen == 5 || can_write_oacontrol(brw)) {
-      ctx->Extensions.AMD_performance_monitor = true;
-      ctx->Extensions.INTEL_performance_query = true;
    }
 
    if (ctx->API == API_OPENGL_CORE)
@@ -339,15 +362,4 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.EXT_texture_compression_s3tc = true;
 
    ctx->Extensions.ANGLE_texture_compression_dxt = true;
-
-   if (brw->gen >= 7)
-      ctx->Extensions.ARB_shader_atomic_counters = true;
-
-   if (brw->gen == 7)
-      ctx->Extensions.ARB_gpu_shader5 = true;
-
-   ctx->Extensions.OES_texture_float = true;
-   ctx->Extensions.OES_texture_float_linear = true;
-   ctx->Extensions.OES_texture_half_float = true;
-   ctx->Extensions.OES_texture_half_float_linear = true;
 }

@@ -593,8 +593,6 @@ static struct reg_names vector_names[] = {
    { 1000, "" },
 };
 
-union fi { float f; int i; };
-
 #define ISVEC   1
 #define ISFLOAT 2
 #define TOUCHED 4
@@ -611,7 +609,7 @@ struct reg {
 };
 
 
-static struct reg regs[Elements(reg_names)+1];
+static struct reg regs[ARRAY_SIZE(reg_names)+1];
 static struct reg scalars[512+1];
 static struct reg vectors[512*4+1];
 
@@ -622,29 +620,29 @@ static void init_regs( void )
    struct reg_names *tmp;
    int i;
 
-   for (i = 0 ; i < Elements(reg_names) ; i++) {
+   for (i = 0 ; i < ARRAY_SIZE(reg_names) ; i++) {
       regs[i].idx = reg_names[i].idx;
       regs[i].closest = &reg_names[i];
       regs[i].flags = 0;
    }
 
-   for (i = 0, tmp = scalar_names ; i < Elements(scalars) ; i++) {
+   for (i = 0, tmp = scalar_names ; i < ARRAY_SIZE(scalars) ; i++) {
       if (tmp[1].idx == i) tmp++;
       scalars[i].idx = i;
       scalars[i].closest = tmp;
       scalars[i].flags = ISFLOAT;
    }
 
-   for (i = 0, tmp = vector_names ; i < Elements(vectors) ; i++) {
+   for (i = 0, tmp = vector_names ; i < ARRAY_SIZE(vectors) ; i++) {
       if (tmp[1].idx*4 == i) tmp++;
       vectors[i].idx = i;
       vectors[i].closest = tmp;
       vectors[i].flags = ISFLOAT|ISVEC;
    }
 
-   regs[Elements(regs)-1].idx = -1;
-   scalars[Elements(scalars)-1].idx = -1;
-   vectors[Elements(vectors)-1].idx = -1;
+   regs[ARRAY_SIZE(regs)-1].idx = -1;
+   scalars[ARRAY_SIZE(scalars)-1].idx = -1;
+   vectors[ARRAY_SIZE(vectors)-1].idx = -1;
 }
 
 static int find_or_add_value( struct reg *reg, int val )
@@ -788,13 +786,13 @@ static void dump_state( void )
 {
    int i;
 
-   for (i = 0 ; i < Elements(regs) ; i++) 
+   for (i = 0 ; i < ARRAY_SIZE(regs) ; i++) 
       print_reg( &regs[i] );
 
-   for (i = 0 ; i < Elements(scalars) ; i++) 
+   for (i = 0 ; i < ARRAY_SIZE(scalars) ; i++) 
       print_reg( &scalars[i] );
 
-   for (i = 0 ; i < Elements(vectors) ; i++) 
+   for (i = 0 ; i < ARRAY_SIZE(vectors) ; i++) 
       print_reg( &vectors[i] );
 }
 
@@ -1449,7 +1447,7 @@ int r200SanityCmdBuffer( r200ContextPtr rmesa,
       }
    }
 
-   fprintf(stderr, "leaving %s\n\n\n", __FUNCTION__);
+   fprintf(stderr, "leaving %s\n\n\n", __func__);
 
    return 0;
 }

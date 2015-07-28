@@ -270,6 +270,9 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
 		return 1;
 
+	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+		return !R600_BIG_ENDIAN && rscreen->b.info.has_userptr;
+
 	case PIPE_CAP_COMPUTE:
 		return rscreen->b.chip_class > R700;
 
@@ -314,6 +317,9 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return family >= CHIP_CEDAR ? 1 : 0;
 	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 		return family >= CHIP_CEDAR ? 4 : 0;
+	case PIPE_CAP_DRAW_INDIRECT:
+		/* kernel command checker support is also required */
+		return family >= CHIP_CEDAR && rscreen->b.info.drm_minor >= 41;
 
 	/* Unsupported features. */
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
@@ -323,10 +329,10 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
-	case PIPE_CAP_DRAW_INDIRECT:
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_VERTEXID_NOBASE:
+	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
 		return 0;
 
 	/* Stream output. */
@@ -369,7 +375,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 8;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
-		return 16;
+		return R600_MAX_VIEWPORTS;
 
 	/* Timer queries, present when the clock frequency is non zero. */
 	case PIPE_CAP_QUERY_TIME_ELAPSED:
@@ -485,6 +491,10 @@ static int r600_get_shader_param(struct pipe_screen* pscreen, unsigned shader, e
 			return PIPE_SHADER_IR_TGSI;
 		}
 	case PIPE_SHADER_CAP_DOUBLES:
+		return 0;
+	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
+	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+	case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
 		return 0;
 	}
 	return 0;

@@ -81,6 +81,7 @@ struct bblock_t {
 
    struct exec_node link;
    struct cfg_t *cfg;
+   struct bblock_t *idom;
 
    int start_ip;
    int end_ip;
@@ -269,8 +270,12 @@ struct cfg_t {
    bblock_t *new_block();
    void set_next_block(bblock_t **cur, bblock_t *block, int ip);
    void make_block_array();
+   void calculate_idom();
+   static bblock_t *intersect(bblock_t *b1, bblock_t *b2);
 
-   void dump(backend_visitor *v) const;
+   void dump(backend_visitor *v);
+   void dump_cfg();
+   void dump_domtree();
 #endif
    void *mem_ctx;
 
@@ -278,6 +283,8 @@ struct cfg_t {
    struct exec_list block_list;
    struct bblock_t **blocks;
    int num_blocks;
+
+   bool idom_dirty;
 };
 
 /* Note that this is implemented with a double for loop -- break will

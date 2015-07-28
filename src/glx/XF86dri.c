@@ -440,7 +440,7 @@ XF86DRIDestroyDrawable(Display * dpy, int screen, XID drawable)
     *     destroyDrawable(drawable);
     *
     * which is a textbook race condition - the window may disappear
-    * from the server between checking for its existance and
+    * from the server between checking for its existence and
     * destroying it.  Instead we change the semantics of
     * __DRIinterfaceMethodsRec::destroyDrawable() to succeed even if
     * the windows is gone, by wrapping the destroy call in an error

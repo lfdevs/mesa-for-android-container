@@ -132,9 +132,6 @@ gen6_emit_3dstate_multisample(struct brw_context *brw,
       unreachable("Unrecognized num_samples in gen6_emit_3dstate_multisample");
    }
 
-   /* 3DSTATE_MULTISAMPLE is nonpipelined. */
-   intel_emit_post_sync_nonzero_flush(brw);
-
    int len = brw->gen >= 7 ? 4 : 3;
    BEGIN_BATCH(len);
    OUT_BATCH(_3DSTATE_MULTISAMPLE << 16 | (len - 2));

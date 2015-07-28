@@ -63,7 +63,7 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 	r600_need_dma_space(&rctx->b, ncopy * 5);
 	for (i = 0; i < ncopy; i++) {
 		csize = size < EG_DMA_COPY_MAX_SIZE ? size : EG_DMA_COPY_MAX_SIZE;
-		/* emit reloc before writting cs so that cs is always in consistent state */
+		/* emit reloc before writing cs so that cs is always in consistent state */
 		r600_context_bo_reloc(&rctx->b, &rctx->b.rings.dma, rsrc, RADEON_USAGE_READ,
 				      RADEON_PRIO_MIN);
 		r600_context_bo_reloc(&rctx->b, &rctx->b.rings.dma, rdst, RADEON_USAGE_WRITE,

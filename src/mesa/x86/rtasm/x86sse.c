@@ -1,6 +1,8 @@
 #ifdef USE_X86_ASM
 #if defined(__i386__) || defined(__386__)
 
+#include <stdio.h>
+
 #include "main/imports.h"
 #include "x86sse.h"
 

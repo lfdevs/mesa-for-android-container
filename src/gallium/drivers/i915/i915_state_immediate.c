@@ -230,5 +230,5 @@ static void update_immediate(struct i915_context *i915)
 struct i915_tracked_state i915_hw_immediate = {
    "immediate",
    update_immediate,
-   ~0 /* all state atoms, becuase we do internal checking */
+   ~0 /* all state atoms, because we do internal checking */
 };

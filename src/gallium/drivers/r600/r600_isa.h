@@ -641,7 +641,7 @@ static const struct cf_op_info cf_op_table[] = {
 
 		{"MEM_SCRATCH",                   { 0x24, 0x24, 0x50, 0x50 },  CF_MEM  },
 		{"MEM_REDUCT",                    { 0x25, 0x25,   -1,   -1 },  CF_MEM  },
-		{"MEM_RING",                      { 0x26, 0x26, 0x52, 0x52 },  CF_MEM  },
+		{"MEM_RING",                      { 0x26, 0x26, 0x52, 0x52 },  CF_MEM | CF_EMIT },
 
 		{"EXPORT",                        { 0x27, 0x27, 0x53, 0x53 },  CF_EXP  },
 		{"EXPORT_DONE",                   { 0x28, 0x28, 0x54, 0x54 },  CF_EXP  },
@@ -649,9 +649,9 @@ static const struct cf_op_info cf_op_table[] = {
 		{"MEM_EXPORT",                    {   -1, 0x3A, 0x55, 0x55 },  CF_MEM  },
 		{"MEM_RAT",                       {   -1,   -1, 0x56, 0x56 },  CF_MEM | CF_RAT },
 		{"MEM_RAT_NOCACHE",               {   -1,   -1, 0x57, 0x57 },  CF_MEM | CF_RAT },
-		{"MEM_RING1",                     {   -1,   -1, 0x58, 0x58 },  CF_MEM  },
-		{"MEM_RING2",                     {   -1,   -1, 0x59, 0x59 },  CF_MEM  },
-		{"MEM_RING3",                     {   -1,   -1, 0x5A, 0x5A },  CF_MEM  },
+		{"MEM_RING1",                     {   -1,   -1, 0x58, 0x58 },  CF_MEM | CF_EMIT },
+		{"MEM_RING2",                     {   -1,   -1, 0x59, 0x59 },  CF_MEM | CF_EMIT },
+		{"MEM_RING3",                     {   -1,   -1, 0x5A, 0x5A },  CF_MEM | CF_EMIT },
 		{"MEM_MEM_COMBINED",              {   -1,   -1, 0x5B, 0x5B },  CF_MEM  },
 		{"MEM_RAT_COMBINED_NOCACHE",      {   -1,   -1, 0x5C, 0x5C },  CF_MEM | CF_RAT },
 		{"MEM_RAT_COMBINED",              {   -1,   -1,   -1, 0x5D },  CF_MEM | CF_RAT }, /* ??? not in cayman isa doc */

@@ -31,6 +31,9 @@
 int
 main(int argc, char **argv)
 {
+   (void) argc;
+   (void) argv;
+
    _mesa_hash_table_destroy(NULL, NULL);
 
    return 0;

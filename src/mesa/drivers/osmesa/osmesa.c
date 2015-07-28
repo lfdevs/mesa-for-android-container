@@ -33,6 +33,7 @@
  */
 
 
+#include <stdio.h>
 #include "main/glheader.h"
 #include "GL/osmesa.h"
 #include "main/api_exec.h"
@@ -519,7 +520,7 @@ osmesa_renderbuffer_storage(struct gl_context *ctx, struct gl_renderbuffer *rb,
       }
    }
    else if (osmesa->format == OSMESA_RGB_565) {
-      ASSERT(osmesa->DataType == GL_UNSIGNED_BYTE);
+      assert(osmesa->DataType == GL_UNSIGNED_BYTE);
       rb->Format = MESA_FORMAT_B5G6R5_UNORM;
    }
    else {
@@ -1123,7 +1124,7 @@ static struct name_function functions[] = {
    { "OSMesaDestroyContext", (OSMESAproc) OSMesaDestroyContext },
    { "OSMesaMakeCurrent", (OSMESAproc) OSMesaMakeCurrent },
    { "OSMesaGetCurrentContext", (OSMESAproc) OSMesaGetCurrentContext },
-   { "OSMesaPixelsStore", (OSMESAproc) OSMesaPixelStore },
+   { "OSMesaPixelStore", (OSMESAproc) OSMesaPixelStore },
    { "OSMesaGetIntegerv", (OSMESAproc) OSMesaGetIntegerv },
    { "OSMesaGetDepthBuffer", (OSMESAproc) OSMesaGetDepthBuffer },
    { "OSMesaGetColorBuffer", (OSMESAproc) OSMesaGetColorBuffer },

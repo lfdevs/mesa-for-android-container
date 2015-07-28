@@ -26,7 +26,7 @@
  */
 
 #include "util/u_prim.h"
-#include "intel_winsys.h"
+#include "core/intel_winsys.h"
 
 #include "ilo_render.h"
 #include "ilo_blit.h"
@@ -183,7 +183,7 @@ ilo_init_draw_query(struct ilo_context *ilo, struct ilo_query *q)
    q->stride <<= q->in_pairs;
 
    bo_size = (q->stride > 4096) ? q->stride : 4096;
-   q->bo = intel_winsys_alloc_buffer(ilo->winsys, "query", bo_size, false);
+   q->bo = intel_winsys_alloc_bo(ilo->winsys, "query", bo_size, false);
    if (!q->bo)
       return false;
 
@@ -296,8 +296,9 @@ draw_vbo(struct ilo_context *ilo, const struct ilo_state_vector *vec)
    bool success = true;
    int max_len, before_space;
 
-   /* on GEN7+, we need SOL_RESET to reset the SO write offsets */
+   /* on Gen7 and Gen7.5, we need SOL_RESET to reset the SO write offsets */
    if (ilo_dev_gen(ilo->dev) >= ILO_GEN(7) &&
+       ilo_dev_gen(ilo->dev) <= ILO_GEN(7.5) &&
        (vec->dirty & ILO_DIRTY_SO) && vec->so.enabled &&
        !vec->so.append_bitmask) {
       ilo_cp_submit(ilo->cp, "SOL_RESET");

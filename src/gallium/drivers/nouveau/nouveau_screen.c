@@ -43,6 +43,12 @@ nouveau_screen_get_vendor(struct pipe_screen *pscreen)
 	return "nouveau";
 }
 
+static const char *
+nouveau_screen_get_device_vendor(struct pipe_screen *pscreen)
+{
+	return "NVIDIA";
+}
+
 static uint64_t
 nouveau_screen_get_timestamp(struct pipe_screen *pscreen)
 {
@@ -182,6 +188,7 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 
 	pscreen->get_name = nouveau_screen_get_name;
 	pscreen->get_vendor = nouveau_screen_get_vendor;
+	pscreen->get_device_vendor = nouveau_screen_get_device_vendor;
 
 	pscreen->get_timestamp = nouveau_screen_get_timestamp;
 

@@ -56,6 +56,21 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    struct st_context_iface *st_share = NULL;
    struct st_context_attribs attribs;
    enum st_context_error ctx_err = 0;
+   unsigned allowed_flags = __DRI_CTX_FLAG_DEBUG |
+                            __DRI_CTX_FLAG_FORWARD_COMPATIBLE;
+
+   if (screen->has_reset_status_query)
+      allowed_flags |= __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS;
+
+   if (flags & ~allowed_flags) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
+      goto fail;
+   }
+
+   if (!screen->has_reset_status_query && notify_reset) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+      goto fail;
+   }
 
    memset(&attribs, 0, sizeof(attribs));
    switch (api) {
@@ -83,15 +98,11 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    if ((flags & __DRI_CTX_FLAG_DEBUG) != 0)
       attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
 
-   if (flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE)) {
-      *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
-      goto fail;
-   }
+   if (flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS)
+      attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
 
-   if (notify_reset) {
-      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
-      goto fail;
-   }
+   if (notify_reset)
+      attribs.flags |= ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED;
 
    if (sharedContextPrivate) {
       st_share = ((struct dri_context *)sharedContextPrivate)->st;

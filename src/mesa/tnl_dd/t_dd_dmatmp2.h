@@ -121,7 +121,7 @@ static void TAG(render_points_verts)( struct gl_context *ctx,
 {
    if (start < count) {
       LOCAL_VARS;
-      if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+      if (0) fprintf(stderr, "%s\n", __func__);
       EMIT_PRIM( ctx, GL_POINTS, HW_POINTS, start, count );
    }
 }
@@ -132,7 +132,7 @@ static void TAG(render_lines_verts)( struct gl_context *ctx,
 				     GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
    count -= (count-start) & 1;
 
    if (start+1 >= count)
@@ -156,7 +156,7 @@ static void TAG(render_line_strip_verts)( struct gl_context *ctx,
 					  GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    if (start+1 >= count)
       return;
@@ -204,7 +204,7 @@ static void TAG(render_line_loop_verts)( struct gl_context *ctx,
 {
    LOCAL_VARS;
    GLuint j, nr;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    if (flags & PRIM_BEGIN) {
       j = start;
@@ -292,7 +292,7 @@ static void TAG(render_triangles_verts)( struct gl_context *ctx,
 					 GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    count -= (count-start)%3;
 
@@ -313,7 +313,7 @@ static void TAG(render_tri_strip_verts)( struct gl_context *ctx,
 					 GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    if (start + 2 >= count)
       return;
@@ -358,7 +358,7 @@ static void TAG(render_tri_fan_verts)( struct gl_context *ctx,
 				       GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    if (start+2 >= count) 
       return;
@@ -401,7 +401,7 @@ static void TAG(render_poly_verts)( struct gl_context *ctx,
 				    GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    if (start+2 >= count) 
       return;
@@ -415,7 +415,7 @@ static void TAG(render_quad_strip_verts)( struct gl_context *ctx,
 					  GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    count -= (count-start) & 1;
 
@@ -466,7 +466,7 @@ static void TAG(render_quads_verts)( struct gl_context *ctx,
 				     GLuint flags )
 {
    LOCAL_VARS;
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
    count -= (count-start)%4;
 
    if (start+3 >= count) 
@@ -642,7 +642,7 @@ static void TAG(render_line_loop_elts)( struct gl_context *ctx,
    GLuint j, nr;
    ELT_TYPE *dest;
 
-   if (0) fprintf(stderr, "%s\n", __FUNCTION__);
+   if (0) fprintf(stderr, "%s\n", __func__);
 
    if (flags & PRIM_BEGIN)
       j = start;

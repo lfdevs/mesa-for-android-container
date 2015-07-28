@@ -348,6 +348,17 @@ enum pipe_format {
    PIPE_FORMAT_A8B8G8R8_SNORM          = 267,
    PIPE_FORMAT_X8B8G8R8_SNORM          = 268,
 
+   PIPE_FORMAT_ETC2_RGB8               = 269,
+   PIPE_FORMAT_ETC2_SRGB8              = 270,
+   PIPE_FORMAT_ETC2_RGB8A1             = 271,
+   PIPE_FORMAT_ETC2_SRGB8A1            = 272,
+   PIPE_FORMAT_ETC2_RGBA8              = 273,
+   PIPE_FORMAT_ETC2_SRGBA8             = 274,
+   PIPE_FORMAT_ETC2_R11_UNORM          = 275,
+   PIPE_FORMAT_ETC2_R11_SNORM          = 276,
+   PIPE_FORMAT_ETC2_RG11_UNORM         = 277,
+   PIPE_FORMAT_ETC2_RG11_SNORM         = 278,
+
    PIPE_FORMAT_COUNT
 };
 

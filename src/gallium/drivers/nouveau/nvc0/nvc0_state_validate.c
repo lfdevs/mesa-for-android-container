@@ -535,6 +535,23 @@ nvc0_validate_derived_1(struct nvc0_context *nvc0)
    }
 }
 
+/* alpha test is disabled if there are no color RTs, so make sure we have at
+ * least one if alpha test is enabled. Note that this must run after
+ * nvc0_validate_fb, otherwise that will override the RT count setting.
+ */
+static void
+nvc0_validate_derived_2(struct nvc0_context *nvc0)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+
+   if (nvc0->zsa && nvc0->zsa->pipe.alpha.enabled &&
+       nvc0->framebuffer.nr_cbufs == 0) {
+      nvc0_fb_set_null_rt(push, 0);
+      BEGIN_NVC0(push, NVC0_3D(RT_CONTROL), 1);
+      PUSH_DATA (push, (076543210 << 4) | 1);
+   }
+}
+
 static void
 nvc0_switch_pipe_context(struct nvc0_context *ctx_to)
 {
@@ -597,6 +614,7 @@ static struct state_validate {
     { nvc0_fragprog_validate,      NVC0_NEW_FRAGPROG },
     { nvc0_validate_derived_1,     NVC0_NEW_FRAGPROG | NVC0_NEW_ZSA |
                                    NVC0_NEW_RASTERIZER },
+    { nvc0_validate_derived_2,     NVC0_NEW_ZSA | NVC0_NEW_FRAMEBUFFER },
     { nvc0_validate_clip,          NVC0_NEW_CLIP | NVC0_NEW_RASTERIZER |
                                    NVC0_NEW_VERTPROG |
                                    NVC0_NEW_TEVLPROG |

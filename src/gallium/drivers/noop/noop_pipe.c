@@ -58,8 +58,9 @@ static void noop_destroy_query(struct pipe_context *ctx, struct pipe_query *quer
 	FREE(query);
 }
 
-static void noop_begin_query(struct pipe_context *ctx, struct pipe_query *query)
+static boolean noop_begin_query(struct pipe_context *ctx, struct pipe_query *query)
 {
+   return true;
 }
 
 static void noop_end_query(struct pipe_context *ctx, struct pipe_query *query)
@@ -305,6 +306,11 @@ static const char *noop_get_vendor(struct pipe_screen* pscreen)
 	return "X.Org";
 }
 
+static const char *noop_get_device_vendor(struct pipe_screen* pscreen)
+{
+	return "NONE";
+}
+
 static const char *noop_get_name(struct pipe_screen* pscreen)
 {
 	return "NOOP";
@@ -376,6 +382,7 @@ struct pipe_screen *noop_screen_create(struct pipe_screen *oscreen)
 	screen->destroy = noop_destroy_screen;
 	screen->get_name = noop_get_name;
 	screen->get_vendor = noop_get_vendor;
+	screen->get_device_vendor = noop_get_device_vendor;
 	screen->get_param = noop_get_param;
 	screen->get_shader_param = noop_get_shader_param;
 	screen->get_paramf = noop_get_paramf;

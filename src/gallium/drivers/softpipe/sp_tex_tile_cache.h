@@ -55,7 +55,6 @@ union tex_tile_address {
       unsigned x:TEX_ADDR_BITS;  /* 16K / TILE_SIZE */
       unsigned y:TEX_ADDR_BITS;  /* 16K / TILE_SIZE */
       unsigned z:TEX_Z_BITS;     /* 16K -- z not tiled */
-      unsigned face:3;
       unsigned level:4;
       unsigned invalid:1;
    } bits;
@@ -94,7 +93,7 @@ struct softpipe_tex_tile_cache
 
    struct pipe_transfer *tex_trans;
    void *tex_trans_map;
-   int tex_face, tex_level, tex_z;
+   int tex_level, tex_z;
 
    unsigned swizzle_r;
    unsigned swizzle_g;
@@ -141,7 +140,6 @@ tex_tile_address( unsigned x,
    addr.bits.x = x / TEX_TILE_SIZE;
    addr.bits.y = y / TEX_TILE_SIZE;
    addr.bits.z = z;
-   addr.bits.face = face;
    addr.bits.level = level;
 
    return addr;

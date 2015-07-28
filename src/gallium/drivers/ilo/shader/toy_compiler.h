@@ -141,13 +141,16 @@ struct toy_compaction_table {
    uint32_t datatype[32];
    uint32_t subreg[32];
    uint32_t src[32];
+
+   uint32_t control_3src[4];
+   uint64_t source_3src[4];
 };
 
 /**
  * Toy compiler.
  */
 struct toy_compiler {
-   const struct ilo_dev_info *dev;
+   const struct ilo_dev *dev;
 
    struct toy_inst templ;
    struct util_slab_mempool mempool;
@@ -465,7 +468,7 @@ tc_fail(struct toy_compiler *tc, const char *reason)
 }
 
 void
-toy_compiler_init(struct toy_compiler *tc, const struct ilo_dev_info *dev);
+toy_compiler_init(struct toy_compiler *tc, const struct ilo_dev *dev);
 
 void
 toy_compiler_cleanup(struct toy_compiler *tc);
@@ -477,10 +480,10 @@ void *
 toy_compiler_assemble(struct toy_compiler *tc, int *size);
 
 const struct toy_compaction_table *
-toy_compiler_get_compaction_table(const struct ilo_dev_info *dev);
+toy_compiler_get_compaction_table(const struct ilo_dev *dev);
 
 void
-toy_compiler_disassemble(const struct ilo_dev_info *dev,
+toy_compiler_disassemble(const struct ilo_dev *dev,
                          const void *kernel, int size,
                          bool dump_hex);
 

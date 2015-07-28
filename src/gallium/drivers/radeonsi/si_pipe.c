@@ -30,9 +30,6 @@
 #include "util/u_memory.h"
 #include "vl/vl_decoder.h"
 
-#include <llvm-c/Target.h>
-#include <llvm-c/TargetMachine.h>
-
 /*
  * pipe_context
  */
@@ -85,8 +82,6 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	LLVMTargetRef r600_target;
 #if HAVE_LLVM >= 0x0306
 	const char *triple = "amdgcn--";
-#else
-	const char *triple = "r600--";
 #endif
 	int shader, i;
 
@@ -122,6 +117,9 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	/* Initialize cache_flush. */
 	sctx->cache_flush = si_atom_cache_flush;
 	sctx->atoms.s.cache_flush = &sctx->cache_flush;
+
+	sctx->msaa_sample_locs = si_atom_msaa_sample_locs;
+	sctx->atoms.s.msaa_sample_locs = &sctx->msaa_sample_locs;
 
 	sctx->msaa_config = si_atom_msaa_config;
 	sctx->atoms.s.msaa_config = &sctx->msaa_config;
@@ -252,7 +250,11 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+	case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
 		return 1;
+
+	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+		return !SI_BIG_ENDIAN && sscreen->b.info.has_userptr;
 
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
 		/* 2D tiling on CIK is supported since DRM 2.35.0 */
@@ -283,7 +285,6 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
 	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
-	case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_TGSI_TEXCOORD:
 	case PIPE_CAP_FAKE_SW_MSAA:
@@ -292,6 +293,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_VERTEXID_NOBASE:
+	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
 		return 0;
 
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
@@ -382,8 +384,8 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 			return PIPE_SHADER_IR_NATIVE;
 #endif
 		case PIPE_SHADER_CAP_DOUBLES:
-			return 0; /* XXX: Enable doubles once the compiler can
-			             handle them. */
+			return HAVE_LLVM >= 0x0307;
+
 		case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE: {
 			uint64_t max_const_buffer_size;
 			pscreen->get_compute_param(pscreen,
@@ -392,8 +394,12 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 			return max_const_buffer_size;
 		}
 		default:
-			return 0;
+			/* If compute shaders don't require a special value
+			 * for this cap, we can return the same value we
+			 * do for other shader types. */
+			break;
 		}
+		break;
 	default:
 		/* TODO: support tessellation */
 		return 0;
@@ -422,7 +428,7 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
 		return 1;
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
-		return 0;
+		return 1;
 	case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
 		/* Indirection of geometry shader input dimension is not
 		 * handled yet
@@ -442,7 +448,11 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	case PIPE_SHADER_CAP_PREFERRED_IR:
 		return PIPE_SHADER_IR_TGSI;
 	case PIPE_SHADER_CAP_DOUBLES:
+	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
+	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
 		return 0;
+	case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+		return 1;
 	}
 	return 0;
 }

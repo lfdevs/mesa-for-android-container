@@ -1,71 +1,35 @@
 libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
-# These are all internal symbols between libEGL and the
-# drivers.  Handle the dependency explicitly in the driver
-# package.
  eglBindAPI@Base 7.8.1
  eglBindTexImage@Base 7.8.1
- eglBindWaylandDisplayWL@Base 7.11~0
  eglChooseConfig@Base 7.8.1
- eglChooseModeMESA@Base 7.8.1
- eglClientWaitSyncKHR@Base 7.9
  eglCopyBuffers@Base 7.8.1
- eglCopyContextMESA@Base 7.8.1
  eglCreateContext@Base 7.8.1
- eglCreateDRMImageMESA@Base 7.9
- eglCreateImageKHR@Base 7.8.1
  eglCreatePbufferFromClientBuffer@Base 7.8.1
  eglCreatePbufferSurface@Base 7.8.1
  eglCreatePixmapSurface@Base 7.8.1
- eglCreatePlatformPixmapSurfaceEXT@Base 10.2
- eglCreatePlatformWindowSurfaceEXT@Base 10.2
- eglCreateScreenSurfaceMESA@Base 7.8.1
- eglCreateSyncKHR@Base 7.9
- eglCreateWaylandBufferFromImageWL@Base 10.0.1
  eglCreateWindowSurface@Base 7.8.1
  eglDestroyContext@Base 7.8.1
- eglDestroyImageKHR@Base 7.8.1
  eglDestroySurface@Base 7.8.1
- eglDestroySyncKHR@Base 7.9
- eglExportDRMImageMESA@Base 7.9
  eglGetConfigAttrib@Base 7.8.1
  eglGetConfigs@Base 7.8.1
  eglGetCurrentContext@Base 7.8.1
  eglGetCurrentDisplay@Base 7.8.1
  eglGetCurrentSurface@Base 7.8.1
- eglGetDRMDisplayMESA@Base 7.9
  eglGetDisplay@Base 7.8.1
  eglGetError@Base 7.8.1
- eglGetModeAttribMESA@Base 7.8.1
- eglGetSyncAttribKHR@Base 7.9
- eglGetModesMESA@Base 7.8.1
- eglGetPlatformDisplayEXT@Base 10.2
  eglGetProcAddress@Base 7.8.1
- eglGetScreensMESA@Base 7.8.1
- eglGetSyncValuesCHROMIUM@Base 10.3~git
  eglInitialize@Base 7.8.1
  eglMakeCurrent@Base 7.8.1
- eglPostSubBufferNV@Base 8.0~rc1
  eglQueryAPI@Base 7.8.1
  eglQueryContext@Base 7.8.1
- eglQueryModeStringMESA@Base 7.8.1
- eglQueryScreenMESA@Base 7.8.1
- eglQueryScreenModeMESA@Base 7.8.1
- eglQueryScreenSurfaceMESA@Base 7.8.1
  eglQueryString@Base 7.8.1
  eglQuerySurface@Base 7.8.1
- eglQueryWaylandBufferWL@Base 8.1~0
  eglReleaseTexImage@Base 7.8.1
  eglReleaseThread@Base 7.8.1
- eglScreenPositionMESA@Base 7.8.1
- eglShowScreenSurfaceMESA@Base 7.8.1
- eglSignalSyncKHR@Base 7.9
  eglSurfaceAttrib@Base 7.8.1
  eglSwapBuffers@Base 7.8.1
- eglSwapBuffersRegionNOK@Base 7.9
- eglSwapBuffersWithDamageEXT@Base 9.2~0
  eglSwapInterval@Base 7.8.1
  eglTerminate@Base 7.8.1
- eglUnbindWaylandDisplayWL@Base 7.11~0
  eglWaitClient@Base 7.8.1
  eglWaitGL@Base 7.8.1
  eglWaitNative@Base 7.8.1

@@ -48,7 +48,7 @@ struct ilo_context {
    struct pipe_context base;
 
    struct intel_winsys *winsys;
-   struct ilo_dev_info *dev;
+   struct ilo_dev *dev;
 
    struct util_slab_mempool transfer_mempool;
 

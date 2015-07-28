@@ -84,6 +84,7 @@ extern const struct brw_tracked_state brw_gs_binding_table;
 extern const struct brw_tracked_state brw_vs_binding_table;
 extern const struct brw_tracked_state brw_wm_ubo_surfaces;
 extern const struct brw_tracked_state brw_wm_abo_surfaces;
+extern const struct brw_tracked_state brw_cs_abo_surfaces;
 extern const struct brw_tracked_state brw_wm_unit;
 extern const struct brw_tracked_state brw_interpolation_map;
 
@@ -93,6 +94,7 @@ extern const struct brw_tracked_state brw_drawing_rect;
 extern const struct brw_tracked_state brw_indices;
 extern const struct brw_tracked_state brw_vertices;
 extern const struct brw_tracked_state brw_index_buffer;
+extern const struct brw_tracked_state brw_cs_state;
 extern const struct brw_tracked_state gen6_binding_table_pointers;
 extern const struct brw_tracked_state gen6_blend_state;
 extern const struct brw_tracked_state gen6_cc_state_pointers;
@@ -152,19 +154,50 @@ extern const struct brw_tracked_state gen8_vertices;
 extern const struct brw_tracked_state gen8_vf_topology;
 extern const struct brw_tracked_state gen8_vs_state;
 
+static inline bool
+brw_state_dirty(struct brw_context *brw, GLuint mesa_flags, uint64_t brw_flags)
+{
+   return ((brw->NewGLState & mesa_flags) |
+           (brw->ctx.NewDriverState & brw_flags)) != 0;
+}
+
+/* brw_binding_tables.c */
+void brw_upload_binding_table(struct brw_context *brw,
+                              uint32_t packet_name,
+                              GLbitfield brw_new_binding_table,
+                              const struct brw_stage_prog_data *prog_data,
+                              struct brw_stage_state *stage_state);
+
 /* brw_misc_state.c */
 void brw_upload_invariant_state(struct brw_context *brw);
 uint32_t
 brw_depthbuffer_format(struct brw_context *brw);
 
+/* gen8_misc_state.c */
+void gen8_upload_state_base_address(struct brw_context *brw);
+
 
 /***********************************************************************
  * brw_state.c
  */
-void brw_upload_state(struct brw_context *brw);
-void brw_clear_dirty_bits(struct brw_context *brw);
+void brw_upload_render_state(struct brw_context *brw);
+void brw_render_state_finished(struct brw_context *brw);
+void brw_upload_compute_state(struct brw_context *brw);
+void brw_compute_state_finished(struct brw_context *brw);
 void brw_init_state(struct brw_context *brw);
 void brw_destroy_state(struct brw_context *brw);
+void brw_emit_select_pipeline(struct brw_context *brw,
+                              enum brw_pipeline pipeline);
+
+static inline void
+brw_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
+{
+   if (unlikely(brw->last_pipeline != pipeline)) {
+      assert(pipeline < BRW_NUM_PIPELINES);
+      brw_emit_select_pipeline(brw, pipeline);
+      brw->last_pipeline = pipeline;
+   }
+}
 
 /***********************************************************************
  * brw_state_cache.c
@@ -196,11 +229,14 @@ void brw_destroy_caches( struct brw_context *brw );
 #define BRW_BATCH_STRUCT(brw, s) \
    intel_batchbuffer_data(brw, (s), sizeof(*(s)), RENDER_RING)
 
-void *brw_state_batch(struct brw_context *brw,
-		      enum aub_state_struct_type type,
-		      int size,
-		      int alignment,
-		      uint32_t *out_offset);
+void *__brw_state_batch(struct brw_context *brw,
+                        enum aub_state_struct_type type,
+                        int size,
+                        int alignment,
+                        int index,
+                        uint32_t *out_offset);
+#define brw_state_batch(brw, type, size, alignment, out_offset) \
+   __brw_state_batch(brw, type, size, alignment, 0, out_offset)
 
 /* brw_wm_surface_state.c */
 void gen4_init_vtable_surface_functions(struct brw_context *brw);
@@ -213,6 +249,7 @@ void brw_configure_w_tiled(const struct intel_mipmap_tree *mt,
                            unsigned *pitch, uint32_t *tiling,
                            unsigned *format);
 
+const char *brw_surface_format_name(unsigned format);
 uint32_t brw_format_for_mesa_format(mesa_format mesa_format);
 
 GLuint translate_tex_target(GLenum target);
@@ -224,6 +261,20 @@ GLuint translate_tex_format(struct brw_context *brw,
 int brw_get_texture_swizzle(const struct gl_context *ctx,
                             const struct gl_texture_object *t);
 
+void brw_update_renderbuffer_surfaces(struct brw_context *brw,
+                                      const struct gl_framebuffer *fb,
+                                      uint32_t render_target_start,
+                                      uint32_t *surf_offset);
+
+/* gen7_wm_state.c */
+void
+gen7_upload_ps_state(struct brw_context *brw,
+                     const struct gl_fragment_program *fp,
+                     const struct brw_stage_state *stage_state,
+                     const struct brw_wm_prog_data *prog_data,
+                     bool enable_dual_src_blend, unsigned sample_mask,
+                     unsigned fast_clear_op);
+
 /* gen7_wm_surface_state.c */
 uint32_t gen7_surface_tiling_mode(uint32_t tiling);
 uint32_t gen7_surface_msaa_bits(unsigned num_samples, enum intel_msaa_layout l);
@@ -234,6 +285,18 @@ void gen7_set_surface_mcs_info(struct brw_context *brw,
                                bool is_render_target);
 void gen7_check_surface_setup(uint32_t *surf, bool is_render_target);
 void gen7_init_vtable_surface_functions(struct brw_context *brw);
+
+/* gen8_ps_state.c */
+void gen8_upload_ps_state(struct brw_context *brw,
+                          const struct gl_fragment_program *fp,
+                          const struct brw_stage_state *stage_state,
+                          const struct brw_wm_prog_data *prog_data,
+                          uint32_t fast_clear_op);
+
+void gen8_upload_ps_extra(struct brw_context *brw,
+                          const struct gl_fragment_program *fp,
+                          const struct brw_wm_prog_data *prog_data,
+                          bool multisampled_fbo);
 
 /* gen7_sol_state.c */
 void gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
@@ -261,6 +324,27 @@ void brw_emit_sampler_state(struct brw_context *brw,
                             unsigned shadow_function,
                             bool non_normalized_coordinates,
                             uint32_t border_color_offset);
+
+void brw_update_sampler_state(struct brw_context *brw,
+                              GLenum target, bool tex_cube_map_seamless,
+                              GLfloat tex_unit_lod_bias,
+                              mesa_format format, GLenum base_format,
+                              bool is_integer_format,
+                              const struct gl_sampler_object *sampler,
+                              uint32_t *sampler_state,
+                              uint32_t batch_offset_for_sampler_state);
+
+/* gen6_wm_state.c */
+void
+gen6_upload_wm_state(struct brw_context *brw,
+                     const struct brw_fragment_program *fp,
+                     const struct brw_wm_prog_data *prog_data,
+                     const struct brw_stage_state *stage_state,
+                     bool multisampled_fbo, int min_inv_per_frag,
+                     bool dual_source_blend_enable, bool kill_enable,
+                     bool color_buffer_write_enable, bool msaa_enabled,
+                     bool line_stipple_enable, bool polygon_stipple_enable,
+                     bool statistic_enable);
 
 /* gen6_sf_state.c */
 void

@@ -26,13 +26,19 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/glsl/glcpp \
 	-I$(top_srcdir)/src/glsl/nir \
 	-I$(top_srcdir)/src/gtest/include \
 	-I$(top_builddir)/src/glsl/nir \
 	$(DEFINES)
-AM_CFLAGS = $(VISIBILITY_CFLAGS)
-AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS)
+AM_CFLAGS = \
+	$(VISIBILITY_CFLAGS) \
+	$(MSVC2013_COMPAT_CFLAGS)
+AM_CXXFLAGS = \
+	$(VISIBILITY_CXXFLAGS) \
+	$(MSVC2013_COMPAT_CXXFLAGS)
 
 EXTRA_DIST = tests glcpp/tests README TODO glcpp/README	\
 	glsl_lexer.ll					\
@@ -40,6 +46,7 @@ EXTRA_DIST = tests glcpp/tests README TODO glcpp/README	\
 	glcpp/glcpp-lex.l				\
 	glcpp/glcpp-parse.y				\
 	nir/nir_algebraic.py				\
+	nir/nir_builder_opcodes_h.py			\
 	nir/nir_constant_expressions.py			\
 	nir/nir_opcodes.py				\
 	nir/nir_opcodes_c.py				\
@@ -61,7 +68,7 @@ TESTS_ENVIRONMENT= \
 	export PYTHON2=$(PYTHON2); \
 	export PYTHON_FLAGS=$(PYTHON_FLAGS);
 
-noinst_LTLIBRARIES = libglsl.la libglcpp.la
+noinst_LTLIBRARIES = libnir.la libglsl.la libglcpp.la
 check_PROGRAMS =					\
 	glcpp/glcpp					\
 	glsl_test					\
@@ -82,8 +89,7 @@ tests_general_ir_test_SOURCES =		\
 	tests/builtin_variable_test.cpp			\
 	tests/invalidate_locations_test.cpp		\
 	tests/general_ir_test.cpp			\
-	tests/varyings_test.cpp				\
-	tests/common.c
+	tests/varyings_test.cpp
 tests_general_ir_test_CFLAGS =				\
 	$(PTHREAD_CFLAGS)
 tests_general_ir_test_LDADD =				\
@@ -96,8 +102,7 @@ tests_uniform_initializer_test_SOURCES =		\
 	tests/copy_constant_to_storage_tests.cpp	\
 	tests/set_uniform_initializer_tests.cpp		\
 	tests/uniform_initializer_utils.cpp		\
-	tests/uniform_initializer_utils.h		\
-	tests/common.c
+	tests/uniform_initializer_utils.h
 tests_uniform_initializer_test_CFLAGS =			\
 	$(PTHREAD_CFLAGS)
 tests_uniform_initializer_test_LDADD =			\
@@ -107,8 +112,7 @@ tests_uniform_initializer_test_LDADD =			\
 	$(PTHREAD_LIBS)
 
 tests_sampler_types_test_SOURCES =			\
-	tests/sampler_types_test.cpp			\
-	tests/common.c
+	tests/sampler_types_test.cpp
 tests_sampler_types_test_CFLAGS =			\
 	$(PTHREAD_CFLAGS)
 tests_sampler_types_test_LDADD =			\
@@ -126,8 +130,7 @@ libglcpp_la_SOURCES =					\
 	$(LIBGLCPP_FILES)
 
 glcpp_glcpp_SOURCES =					\
-	glcpp/glcpp.c					\
-	tests/common.c
+	glcpp/glcpp.c
 glcpp_glcpp_LDADD =					\
 	libglcpp.la					\
 	$(top_builddir)/src/libglsl_util.la		\
@@ -141,6 +144,12 @@ libglsl_la_SOURCES =					\
 	$(LIBGLSL_FILES)				\
 	$(NIR_FILES)
 
+libnir_la_SOURCES =					\
+	glsl_types.cpp					\
+	builtin_types.cpp				\
+	glsl_symbol_table.cpp				\
+	$(NIR_FILES)
+
 glsl_compiler_SOURCES = \
 	$(GLSL_COMPILER_CXX_FILES)
 
@@ -151,7 +160,6 @@ glsl_compiler_LDADD =					\
 
 glsl_test_SOURCES = \
 	standalone_scaffolding.cpp \
-	tests/common.c \
 	test.cpp \
 	test_optpass.cpp \
 	test_optpass.h
@@ -216,6 +224,7 @@ BUILT_SOURCES =						\
 	glsl_lexer.cpp					\
 	glcpp/glcpp-parse.c				\
 	glcpp/glcpp-lex.c				\
+	nir/nir_builder_opcodes.h				\
 	nir/nir_constant_expressions.c			\
 	nir/nir_opcodes.c				\
 	nir/nir_opcodes.h				\
@@ -232,6 +241,10 @@ dist-hook:
 	$(RM) glcpp/tests/*.out
 	$(RM) glcpp/tests/subtest*/*.out
 
+nir/nir_builder_opcodes.h: nir/nir_opcodes.py nir/nir_builder_opcodes_h.py
+	$(MKDIR_P) nir;							\
+	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_builder_opcodes_h.py > $@
+
 nir/nir_constant_expressions.c: nir/nir_opcodes.py nir/nir_constant_expressions.py nir/nir_constant_expressions.h
 	$(MKDIR_P) nir;							\
 	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_constant_expressions.py > $@
@@ -239,8 +252,6 @@ nir/nir_constant_expressions.c: nir/nir_opcodes.py nir/nir_constant_expressions.
 nir/nir_opcodes.h: nir/nir_opcodes.py nir/nir_opcodes_h.py
 	$(MKDIR_P) nir;							\
 	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opcodes_h.py > $@
-
-nir/nir.h: nir/nir_opcodes.h
 
 nir/nir_opcodes.c: nir/nir_opcodes.py nir/nir_opcodes_c.py
 	$(MKDIR_P) nir;							\

@@ -178,7 +178,7 @@ brw_upload_vs_unit(struct brw_context *brw)
 			      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
    }
 
-   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
+   brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 }
 
 const struct brw_tracked_state brw_vs_unit = {

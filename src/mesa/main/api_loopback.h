@@ -27,13 +27,7 @@
 #ifndef API_LOOPBACK_H
 #define API_LOOPBACK_H
 
-#include "main/compiler.h"
-#include "main/glheader.h" // ?
-#include "main/macros.h" // ?
-#include "main/mtypes.h" // ?
-#include "glapi/glapi.h" // ?
-#include "main/dispatch.h" // ?
-#include "main/context.h" // ?
+#include "main/glheader.h"
 
 struct _glapi_table;
 struct gl_context;
@@ -470,5 +464,21 @@ _mesa_VertexAttribI4ubv(GLuint index, const GLubyte *v);
 void GLAPIENTRY
 _mesa_VertexAttribI4usv(GLuint index, const GLushort *v);
 
+void GLAPIENTRY
+_mesa_VertexAttribL1d(GLuint index, GLdouble x);
+void GLAPIENTRY
+_mesa_VertexAttribL2d(GLuint index, GLdouble x, GLdouble y);
+void GLAPIENTRY
+_mesa_VertexAttribL3d(GLuint index, GLdouble x, GLdouble y, GLdouble z);
+void GLAPIENTRY
+_mesa_VertexAttribL4d(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
 
+void GLAPIENTRY
+_mesa_VertexAttribL1dv(GLuint index, const GLdouble *v);
+void GLAPIENTRY
+_mesa_VertexAttribL2dv(GLuint index, const GLdouble *v);
+void GLAPIENTRY
+_mesa_VertexAttribL3dv(GLuint index, const GLdouble *v);
+void GLAPIENTRY
+_mesa_VertexAttribL4dv(GLuint index, const GLdouble *v);
 #endif /* API_LOOPBACK_H */

@@ -54,9 +54,10 @@ static void i915_destroy_query(struct pipe_context *ctx,
    FREE(query);
 }
 
-static void i915_begin_query(struct pipe_context *ctx,
+static boolean i915_begin_query(struct pipe_context *ctx,
                              struct pipe_query *query)
 {
+   return true;
 }
 
 static void i915_end_query(struct pipe_context *ctx, struct pipe_query *query)

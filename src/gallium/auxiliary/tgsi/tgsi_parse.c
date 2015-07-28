@@ -148,6 +148,7 @@ tgsi_parse_token(
 
       switch (imm->Immediate.DataType) {
       case TGSI_IMM_FLOAT32:
+      case TGSI_IMM_FLOAT64:
          for (i = 0; i < imm_count; i++) {
             next_token(ctx, &imm->u[i].Float);
          }

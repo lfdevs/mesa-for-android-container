@@ -30,6 +30,7 @@
 
 #include "eglsync.h"
 #include "eglcurrent.h"
+#include "egldriver.h"
 #include "egllog.h"
 
 
@@ -65,24 +66,75 @@ _eglParseSyncAttribList(_EGLSync *sync, const EGLint *attrib_list)
 }
 
 
+static EGLint
+_eglParseSyncAttribList64(_EGLSync *sync, const EGLAttribKHR *attrib_list)
+{
+   EGLint i, err = EGL_SUCCESS;
+
+   if (!attrib_list)
+      return EGL_SUCCESS;
+
+   for (i = 0; attrib_list[i] != EGL_NONE; i++) {
+      EGLint attr = attrib_list[i++];
+      EGLint val = attrib_list[i];
+
+      switch (attr) {
+      case EGL_CL_EVENT_HANDLE_KHR:
+         if (sync->Type == EGL_SYNC_CL_EVENT_KHR) {
+            sync->CLEvent = val;
+            break;
+         }
+         /* fall through */
+      default:
+         (void) val;
+         err = EGL_BAD_ATTRIBUTE;
+         break;
+      }
+
+      if (err != EGL_SUCCESS) {
+         _eglLog(_EGL_DEBUG, "bad sync attribute 0x%04x", attr);
+         break;
+      }
+   }
+
+   return err;
+}
+
+
 EGLBoolean
 _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
-             const EGLint *attrib_list)
+             const EGLint *attrib_list, const EGLAttribKHR *attrib_list64)
 {
    EGLint err;
 
    if (!(type == EGL_SYNC_REUSABLE_KHR && dpy->Extensions.KHR_reusable_sync) &&
-       !(type == EGL_SYNC_FENCE_KHR && dpy->Extensions.KHR_fence_sync))
+       !(type == EGL_SYNC_FENCE_KHR && dpy->Extensions.KHR_fence_sync) &&
+       !(type == EGL_SYNC_CL_EVENT_KHR && dpy->Extensions.KHR_cl_event2 &&
+         attrib_list64))
       return _eglError(EGL_BAD_ATTRIBUTE, "eglCreateSyncKHR");
 
    _eglInitResource(&sync->Resource, sizeof(*sync), dpy);
    sync->Type = type;
    sync->SyncStatus = EGL_UNSIGNALED_KHR;
-   sync->SyncCondition = EGL_SYNC_PRIOR_COMMANDS_COMPLETE_KHR;
 
-   err = _eglParseSyncAttribList(sync, attrib_list);
+   switch (type) {
+   case EGL_SYNC_CL_EVENT_KHR:
+      sync->SyncCondition = EGL_SYNC_CL_EVENT_COMPLETE_KHR;
+      break;
+   default:
+      sync->SyncCondition = EGL_SYNC_PRIOR_COMMANDS_COMPLETE_KHR;
+   }
+
+   if (attrib_list64)
+      err = _eglParseSyncAttribList64(sync, attrib_list64);
+   else
+      err = _eglParseSyncAttribList(sync, attrib_list);
+
    if (err != EGL_SUCCESS)
       return _eglError(err, "eglCreateSyncKHR");
+
+   if (type == EGL_SYNC_CL_EVENT_KHR && !sync->CLEvent)
+      return _eglError(EGL_BAD_ATTRIBUTE, "eglCreateSyncKHR");
 
    return EGL_TRUE;
 }
@@ -93,17 +145,24 @@ _eglGetSyncAttribKHR(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
                      EGLint attribute, EGLint *value)
 {
    if (!value)
-      return _eglError(EGL_BAD_PARAMETER, "eglGetConfigs");
+      return _eglError(EGL_BAD_PARAMETER, "eglGetSyncAttribKHR");
 
    switch (attribute) {
    case EGL_SYNC_TYPE_KHR:
       *value = sync->Type;
       break;
    case EGL_SYNC_STATUS_KHR:
+      /* update the sync status */
+      if (sync->SyncStatus != EGL_SIGNALED_KHR &&
+          (sync->Type == EGL_SYNC_FENCE_KHR ||
+           sync->Type == EGL_SYNC_CL_EVENT_KHR))
+         drv->API.ClientWaitSyncKHR(drv, dpy, sync, 0, 0);
+
       *value = sync->SyncStatus;
       break;
    case EGL_SYNC_CONDITION_KHR:
-      if (sync->Type != EGL_SYNC_FENCE_KHR)
+      if (sync->Type != EGL_SYNC_FENCE_KHR &&
+          sync->Type != EGL_SYNC_CL_EVENT_KHR)
          return _eglError(EGL_BAD_ATTRIBUTE, "eglGetSyncAttribKHR");
       *value = sync->SyncCondition;
       break;

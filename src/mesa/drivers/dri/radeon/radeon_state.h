@@ -56,7 +56,7 @@ extern GLboolean radeonValidateState( struct gl_context *ctx );
 extern void radeonFallback( struct gl_context *ctx, GLuint bit, GLboolean mode );
 #define FALLBACK( rmesa, bit, mode ) do {				\
    if ( 0 ) fprintf( stderr, "FALLBACK in %s: #%d=%d\n",		\
-		     __FUNCTION__, bit, mode );				\
+		     __func__, bit, mode );				\
    radeonFallback( &rmesa->radeon.glCtx, bit, mode );				\
 } while (0)
 

@@ -45,11 +45,9 @@
 
 #include <gtest/gtest.h>
 #include "main/glheader.h"
-extern "C" {
 #include "../indirect_init.h"
 #include "glapi/glapi.h"
 #include "../../mesa/main/dispatch.h"
-}
 
 static const void *nil = 0;
 

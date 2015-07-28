@@ -11,10 +11,6 @@ no longer shipped or supported.
 
 Run
 
-  scons osmesa mesagdi
-
-to build classic mesa Windows GDI drivers; or
-
   scons libgl-gdi
 
 to build gallium based GDI driver.

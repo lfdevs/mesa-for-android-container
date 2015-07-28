@@ -40,7 +40,7 @@ namespace {
          std::istringstream ts(line);
          std::string name, tok;
          module::size_t offset;
-         compat::vector<module::argument> args;
+         std::vector<module::argument> args;
 
          if (!(ts >> name))
             continue;
@@ -83,16 +83,18 @@ namespace {
          throw build_error("translate failed");
 
       unsigned sz = tgsi_num_tokens(prog) * sizeof(tgsi_token);
-      m.secs.push_back({ 0, module::section::text, sz, { (char *)prog, sz } });
+      std::vector<char> data( (char *)prog, (char *)prog + sz );
+      m.secs.push_back({ 0, module::section::text, sz, data });
    }
 }
 
 module
-clover::compile_program_tgsi(const compat::string &source) {
-   const char *body = source.find("COMP\n");
+clover::compile_program_tgsi(const std::string &source) {
+   const size_t body_pos = source.find("COMP\n");
+   const char *body = &source[body_pos];
    module m;
 
-   read_header({ source.begin(), body }, m);
+   read_header({ source.begin(), source.begin() + body_pos }, m);
    read_body(body, m);
 
    return m;

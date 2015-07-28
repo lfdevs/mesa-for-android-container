@@ -50,7 +50,6 @@ fd2_sampler_stateobj(struct pipe_sampler_state *samp)
 
 struct fd2_pipe_sampler_view {
 	struct pipe_sampler_view base;
-	struct fd_resource *tex_resource;
 	enum a2xx_sq_surfaceformat fmt;
 	uint32_t tex0, tex2, tex3;
 };

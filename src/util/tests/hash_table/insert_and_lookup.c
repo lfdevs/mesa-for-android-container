@@ -38,6 +38,9 @@ main(int argc, char **argv)
    const char *str2 = "test2";
    struct hash_entry *entry;
 
+   (void) argc;
+   (void) argv;
+
    ht = _mesa_hash_table_create(NULL, _mesa_key_hash_string,
                                 _mesa_key_string_equal);
 

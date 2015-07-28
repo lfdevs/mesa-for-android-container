@@ -2,6 +2,7 @@ Import('*')
 
 env = env.Clone()
 
+env.MSVC2008Compat()
 
 softpipe = env.ConvenienceLibrary(
 	target = 'softpipe',

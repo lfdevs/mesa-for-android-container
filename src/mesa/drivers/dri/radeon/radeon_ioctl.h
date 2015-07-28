@@ -95,7 +95,7 @@ do {						\
       rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );	\
 } while (0)
 
-/* Can accomodate several state changes and primitive changes without
+/* Can accommodate several state changes and primitive changes without
  * actually firing the buffer.
  */
 
@@ -110,7 +110,7 @@ do {								\
    memcpy( rmesa->hw.ATOM.lastcmd, rmesa->hw.ATOM.cmd,	\
 	   rmesa->hw.ATOM.cmd_size * 4)
 
-static INLINE int RADEON_DB_STATECHANGE(r100ContextPtr rmesa,
+static inline int RADEON_DB_STATECHANGE(r100ContextPtr rmesa,
 					struct radeon_state_atom *atom )
 {
    if (memcmp(atom->cmd, atom->lastcmd, atom->cmd_size*4)) {

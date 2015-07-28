@@ -63,12 +63,14 @@ NineIndexBuffer9_ctor( struct NineIndexBuffer9 *This,
     if (pDesc->Pool == D3DPOOL_SYSTEMMEM)
         info->usage = PIPE_USAGE_STAGING;
 
-    /* if (This->desc.Usage & D3DUSAGE_DONOTCLIP) { } */
-    /* if (This->desc.Usage & D3DUSAGE_NONSECURE) { } */
-    /* if (This->desc.Usage & D3DUSAGE_NPATCHES) { } */
-    /* if (This->desc.Usage & D3DUSAGE_POINTS) { } */
-    /* if (This->desc.Usage & D3DUSAGE_RTPATCHES) { } */
-    /* if (This->desc.Usage & D3DUSAGE_SOFTWAREPROCESSING) { } */
+    /* if (pDesc->Usage & D3DUSAGE_DONOTCLIP) { } */
+    /* if (pDesc->Usage & D3DUSAGE_NONSECURE) { } */
+    /* if (pDesc->Usage & D3DUSAGE_NPATCHES) { } */
+    /* if (pDesc->Usage & D3DUSAGE_POINTS) { } */
+    /* if (pDesc->Usage & D3DUSAGE_RTPATCHES) { } */
+    if (pDesc->Usage & D3DUSAGE_SOFTWAREPROCESSING)
+        DBG("Application asked for Software Vertex Processing, "
+            "but this is unimplemented\n");
 
     info->height0 = 1;
     info->depth0 = 1;

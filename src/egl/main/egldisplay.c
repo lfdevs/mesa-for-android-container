@@ -35,13 +35,14 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include "c11/threads.h"
+
 #include "eglcontext.h"
 #include "eglcurrent.h"
 #include "eglsurface.h"
 #include "egldisplay.h"
 #include "egldriver.h"
 #include "eglglobals.h"
-#include "eglmutex.h"
 #include "egllog.h"
 
 /* Includes for _eglNativePlatformDetectNativeDisplay */
@@ -54,11 +55,6 @@
 #endif
 #ifdef HAVE_DRM_PLATFORM
 #include <gbm.h>
-#endif
-#ifdef HAVE_FBDEV_PLATFORM
-#include <stdint.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #endif
 
 
@@ -73,7 +69,6 @@ static const struct {
    { _EGL_PLATFORM_X11, "x11" },
    { _EGL_PLATFORM_WAYLAND, "wayland" },
    { _EGL_PLATFORM_DRM, "drm" },
-   { _EGL_PLATFORM_FBDEV, "fbdev" },
    { _EGL_PLATFORM_NULL, "null" },
    { _EGL_PLATFORM_ANDROID, "android" },
    { _EGL_PLATFORM_HAIKU, "haiku" }
@@ -143,18 +138,8 @@ _eglPointerIsDereferencable(void *p)
 static _EGLPlatformType
 _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
 {
-#ifdef HAVE_FBDEV_PLATFORM
-   struct stat buf;
-#endif
-
    if (nativeDisplay == EGL_DEFAULT_DISPLAY)
       return _EGL_INVALID_PLATFORM;
-
-#ifdef HAVE_FBDEV_PLATFORM
-   /* fbdev is the only platform that can be a file descriptor. */
-   if (fstat((intptr_t) nativeDisplay, &buf) == 0 && S_ISCHR(buf.st_mode))
-      return _EGL_PLATFORM_FBDEV;
-#endif
 
    if (_eglPointerIsDereferencable(nativeDisplay)) {
       void *first_pointer = *(void **) nativeDisplay;
@@ -260,7 +245,7 @@ _eglFindDisplay(_EGLPlatformType plat, void *plat_dpy)
    if (plat == _EGL_INVALID_PLATFORM)
       return NULL;
 
-   _eglLockMutex(_eglGlobal.Mutex);
+   mtx_lock(_eglGlobal.Mutex);
 
    /* search the display list first */
    dpy = _eglGlobal.DisplayList;
@@ -274,7 +259,7 @@ _eglFindDisplay(_EGLPlatformType plat, void *plat_dpy)
    if (!dpy) {
       dpy = calloc(1, sizeof(_EGLDisplay));
       if (dpy) {
-         _eglInitMutex(&dpy->Mutex);
+         mtx_init(&dpy->Mutex, mtx_plain);
          dpy->Platform = plat;
          dpy->PlatformDisplay = plat_dpy;
 
@@ -284,7 +269,7 @@ _eglFindDisplay(_EGLPlatformType plat, void *plat_dpy)
       }
    }
 
-   _eglUnlockMutex(_eglGlobal.Mutex);
+   mtx_unlock(_eglGlobal.Mutex);
 
    return dpy;
 }
@@ -344,14 +329,14 @@ _eglCheckDisplayHandle(EGLDisplay dpy)
 {
    _EGLDisplay *cur;
 
-   _eglLockMutex(_eglGlobal.Mutex);
+   mtx_lock(_eglGlobal.Mutex);
    cur = _eglGlobal.DisplayList;
    while (cur) {
       if (cur == (_EGLDisplay *) dpy)
          break;
       cur = cur->Next;
    }
-   _eglUnlockMutex(_eglGlobal.Mutex);
+   mtx_unlock(_eglGlobal.Mutex);
    return (cur != NULL);
 }
 

@@ -29,19 +29,17 @@
 #include "brw_eu.h"
 
 static bool
-test_compact_instruction(struct brw_compile *p, brw_inst src)
+test_compact_instruction(struct brw_codegen *p, brw_inst src)
 {
-   struct brw_context *brw = p->brw;
-
    brw_compact_inst dst;
    memset(&dst, 0xd0, sizeof(dst));
 
-   if (brw_try_compact_instruction(brw, &dst, &src)) {
+   if (brw_try_compact_instruction(p->devinfo, &dst, &src)) {
       brw_inst uncompacted;
 
-      brw_uncompact_instruction(brw, &uncompacted, &dst);
+      brw_uncompact_instruction(p->devinfo, &uncompacted, &dst);
       if (memcmp(&uncompacted, &src, sizeof(src))) {
-	 brw_debug_compact_uncompact(brw, &src, &uncompacted);
+	 brw_debug_compact_uncompact(p->devinfo, &src, &uncompacted);
 	 return false;
       }
    } else {
@@ -51,7 +49,7 @@ test_compact_instruction(struct brw_compile *p, brw_inst src)
       if (memcmp(&unchanged, &dst, sizeof(dst))) {
 	 fprintf(stderr, "Failed to compact, but dst changed\n");
 	 fprintf(stderr, "  Instruction: ");
-	 brw_disassemble_inst(stderr, brw, &src, false);
+	 brw_disassemble_inst(stderr, p->devinfo, &src, false);
 	 return false;
       }
    }
@@ -67,20 +65,20 @@ test_compact_instruction(struct brw_compile *p, brw_inst src)
  * become meaningless once fuzzing twiddles a related bit.
  */
 static void
-clear_pad_bits(const struct brw_context *brw, brw_inst *inst)
+clear_pad_bits(const struct brw_device_info *devinfo, brw_inst *inst)
 {
-   if (brw_inst_opcode(brw, inst) != BRW_OPCODE_SEND &&
-       brw_inst_opcode(brw, inst) != BRW_OPCODE_SENDC &&
-       brw_inst_opcode(brw, inst) != BRW_OPCODE_BREAK &&
-       brw_inst_opcode(brw, inst) != BRW_OPCODE_CONTINUE &&
-       brw_inst_src0_reg_file(brw, inst) != BRW_IMMEDIATE_VALUE &&
-       brw_inst_src1_reg_file(brw, inst) != BRW_IMMEDIATE_VALUE) {
+   if (brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SEND &&
+       brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SENDC &&
+       brw_inst_opcode(devinfo, inst) != BRW_OPCODE_BREAK &&
+       brw_inst_opcode(devinfo, inst) != BRW_OPCODE_CONTINUE &&
+       brw_inst_src0_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE &&
+       brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE) {
       brw_inst_set_bits(inst, 127, 111, 0);
    }
 }
 
 static bool
-skip_bit(const struct brw_context *brw, brw_inst *src, int bit)
+skip_bit(const struct brw_device_info *devinfo, brw_inst *src, int bit)
 {
    /* pad bit */
    if (bit == 7)
@@ -99,12 +97,12 @@ skip_bit(const struct brw_context *brw, brw_inst *src, int bit)
       return true;
 
    /* sometimes these are pad bits. */
-   if (brw_inst_opcode(brw, src) != BRW_OPCODE_SEND &&
-       brw_inst_opcode(brw, src) != BRW_OPCODE_SENDC &&
-       brw_inst_opcode(brw, src) != BRW_OPCODE_BREAK &&
-       brw_inst_opcode(brw, src) != BRW_OPCODE_CONTINUE &&
-       brw_inst_src0_reg_file(brw, src) != BRW_IMMEDIATE_VALUE &&
-       brw_inst_src1_reg_file(brw, src) != BRW_IMMEDIATE_VALUE &&
+   if (brw_inst_opcode(devinfo, src) != BRW_OPCODE_SEND &&
+       brw_inst_opcode(devinfo, src) != BRW_OPCODE_SENDC &&
+       brw_inst_opcode(devinfo, src) != BRW_OPCODE_BREAK &&
+       brw_inst_opcode(devinfo, src) != BRW_OPCODE_CONTINUE &&
+       brw_inst_src0_reg_file(devinfo, src) != BRW_IMMEDIATE_VALUE &&
+       brw_inst_src1_reg_file(devinfo, src) != BRW_IMMEDIATE_VALUE &&
        bit >= 121) {
       return true;
    }
@@ -113,23 +111,23 @@ skip_bit(const struct brw_context *brw, brw_inst *src, int bit)
 }
 
 static bool
-test_fuzz_compact_instruction(struct brw_compile *p, brw_inst src)
+test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
 {
    for (int bit0 = 0; bit0 < 128; bit0++) {
-      if (skip_bit(p->brw, &src, bit0))
+      if (skip_bit(p->devinfo, &src, bit0))
 	 continue;
 
       for (int bit1 = 0; bit1 < 128; bit1++) {
          brw_inst instr = src;
 	 uint32_t *bits = (uint32_t *)&instr;
 
-         if (skip_bit(p->brw, &src, bit1))
+         if (skip_bit(p->devinfo, &src, bit1))
 	    continue;
 
 	 bits[bit0 / 32] ^= (1 << (bit0 & 31));
 	 bits[bit1 / 32] ^= (1 << (bit1 & 31));
 
-         clear_pad_bits(p->brw, &instr);
+         clear_pad_bits(p->devinfo, &instr);
 
 	 if (!test_compact_instruction(p, instr)) {
 	    printf("  twiddled bits for fuzzing %d, %d\n", bit0, bit1);
@@ -142,7 +140,7 @@ test_fuzz_compact_instruction(struct brw_compile *p, brw_inst src)
 }
 
 static void
-gen_ADD_GRF_GRF_GRF(struct brw_compile *p)
+gen_ADD_GRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -152,7 +150,7 @@ gen_ADD_GRF_GRF_GRF(struct brw_compile *p)
 }
 
 static void
-gen_ADD_GRF_GRF_IMM(struct brw_compile *p)
+gen_ADD_GRF_GRF_IMM(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -161,7 +159,7 @@ gen_ADD_GRF_GRF_IMM(struct brw_compile *p)
 }
 
 static void
-gen_ADD_GRF_GRF_IMM_d(struct brw_compile *p)
+gen_ADD_GRF_GRF_IMM_d(struct brw_codegen *p)
 {
    struct brw_reg g0 = retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_D);
    struct brw_reg g2 = retype(brw_vec8_grf(2, 0), BRW_REGISTER_TYPE_D);
@@ -170,7 +168,7 @@ gen_ADD_GRF_GRF_IMM_d(struct brw_compile *p)
 }
 
 static void
-gen_MOV_GRF_GRF(struct brw_compile *p)
+gen_MOV_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -179,7 +177,7 @@ gen_MOV_GRF_GRF(struct brw_compile *p)
 }
 
 static void
-gen_ADD_MRF_GRF_GRF(struct brw_compile *p)
+gen_ADD_MRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -189,7 +187,7 @@ gen_ADD_MRF_GRF_GRF(struct brw_compile *p)
 }
 
 static void
-gen_ADD_vec1_GRF_GRF_GRF(struct brw_compile *p)
+gen_ADD_vec1_GRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec1_grf(0, 0);
    struct brw_reg g2 = brw_vec1_grf(2, 0);
@@ -199,7 +197,7 @@ gen_ADD_vec1_GRF_GRF_GRF(struct brw_compile *p)
 }
 
 static void
-gen_PLN_MRF_GRF_GRF(struct brw_compile *p)
+gen_PLN_MRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
    struct brw_reg interp = brw_vec1_grf(2, 0);
@@ -209,7 +207,7 @@ gen_PLN_MRF_GRF_GRF(struct brw_compile *p)
 }
 
 static void
-gen_f0_0_MOV_GRF_GRF(struct brw_compile *p)
+gen_f0_0_MOV_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -225,7 +223,7 @@ gen_f0_0_MOV_GRF_GRF(struct brw_compile *p)
  * interact with it.
  */
 static void
-gen_f0_1_MOV_GRF_GRF(struct brw_compile *p)
+gen_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -233,12 +231,12 @@ gen_f0_1_MOV_GRF_GRF(struct brw_compile *p)
    brw_push_insn_state(p);
    brw_set_default_predicate_control(p, true);
    brw_inst *mov = brw_MOV(p, g0, g2);
-   brw_inst_set_flag_subreg_nr(p->brw, mov, 1);
+   brw_inst_set_flag_subreg_nr(p->devinfo, mov, 1);
    brw_pop_insn_state(p);
 }
 
 struct {
-   void (*func)(struct brw_compile *p);
+   void (*func)(struct brw_codegen *p);
 } tests[] = {
    { gen_MOV_GRF_GRF },
    { gen_ADD_GRF_GRF_GRF },
@@ -252,14 +250,14 @@ struct {
 };
 
 static bool
-run_tests(struct brw_context *brw)
+run_tests(const struct brw_device_info *devinfo)
 {
    bool fail = false;
 
    for (int i = 0; i < ARRAY_SIZE(tests); i++) {
       for (int align_16 = 0; align_16 <= 1; align_16++) {
-	 struct brw_compile *p = rzalloc(NULL, struct brw_compile);
-	 brw_init_compile(brw, p, p);
+	 struct brw_codegen *p = rzalloc(NULL, struct brw_codegen);
+	 brw_init_codegen(devinfo, p, p);
 
 	 brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
 	 if (align_16)
@@ -290,12 +288,12 @@ run_tests(struct brw_context *brw)
 int
 main(int argc, char **argv)
 {
-   struct brw_context *brw = calloc(1, sizeof(*brw));
-   brw->gen = 6;
+   struct brw_device_info *devinfo = calloc(1, sizeof(*devinfo));
+   devinfo->gen = 6;
    bool fail = false;
 
-   for (brw->gen = 6; brw->gen <= 7; brw->gen++) {
-      fail |= run_tests(brw);
+   for (devinfo->gen = 6; devinfo->gen <= 7; devinfo->gen++) {
+      fail |= run_tests(devinfo);
    }
 
    return fail;

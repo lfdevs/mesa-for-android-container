@@ -694,7 +694,7 @@ static void r300_emit_query_end_frag_pipes(struct r300_context *r300,
             OUT_CS_RELOC(r300->query_current);
         case 2:
             /* pipe 1 only */
-            /* As mentioned above, accomodate RV380 and older. */
+            /* As mentioned above, accommodate RV380 and older. */
             OUT_CS_REG(R300_SU_REG_DEST,
                     1 << (caps->high_second_pipe ? 3 : 1));
             OUT_CS_REG(R300_ZB_ZPASS_ADDR, (query->num_results + 1) * 4);

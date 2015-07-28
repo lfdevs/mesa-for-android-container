@@ -48,7 +48,7 @@ struct tgsi_to_rc {
      * until rc grows proper support, indicate if they're safe to use. */
     boolean use_half_swizzles;
 
-    /* If an error occured. */
+    /* If an error occurred. */
     boolean error;
 };
 

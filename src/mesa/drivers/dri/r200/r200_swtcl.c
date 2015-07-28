@@ -210,7 +210,7 @@ static void r200_predict_emit_size( r200ContextPtr rmesa )
       if (rcommonEnsureCmdBufSpace(&rmesa->radeon,
 	       state_size +
 	       vertex_array_size + prim_size,
-	       __FUNCTION__))
+	       __func__))
 	 rmesa->radeon.swtcl.emit_prediction = radeonCountStateEmitSize(&rmesa->radeon);
       else
 	 rmesa->radeon.swtcl.emit_prediction = state_size;
@@ -318,7 +318,7 @@ void r200_swtcl_flush(struct gl_context *ctx, uint32_t current_offset)
 /**************************************************************************/
 
 
-static INLINE GLuint reduced_hw_prim( struct gl_context *ctx, GLuint prim)
+static inline GLuint reduced_hw_prim( struct gl_context *ctx, GLuint prim)
 {
    switch (prim) {
    case GL_POINTS:

@@ -184,7 +184,24 @@ setup_stages(struct fd4_emit *emit, struct stage *s)
 	 * space and FS taking entire remaining space.  We probably don't
 	 * need to do that the same way, but for now mimic what the blob
 	 * does to make it easier to diff against register values from blob
+	 *
+	 * NOTE: if VS.instrlen + FS.instrlen > 64, then one or both shaders
+	 * is run from external memory.
 	 */
+	if ((s[VS].instrlen + s[FS].instrlen) > 64) {
+		/* prioritize FS for internal memory: */
+		if (s[FS].instrlen < 64) {
+			/* if FS can fit, kick VS out to external memory: */
+			s[VS].instrlen = 0;
+		} else if (s[VS].instrlen < 64) {
+			/* otherwise if VS can fit, kick out FS: */
+			s[FS].instrlen = 0;
+		} else {
+			/* neither can fit, run both from external memory: */
+			s[VS].instrlen = 0;
+			s[FS].instrlen = 0;
+		}
+	}
 	s[VS].constlen = 66;
 	s[FS].constlen = 128 - s[VS].constlen;
 	s[VS].instroff = 0;
@@ -200,7 +217,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 {
 	struct stage s[MAX_STAGES];
 	uint32_t pos_regid, posz_regid, psize_regid, color_regid;
-	uint32_t face_regid, coord_regid;
+	uint32_t face_regid, coord_regid, zwcoord_regid;
 	int constmode;
 	int i, j, k;
 
@@ -218,9 +235,13 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 	color_regid = ir3_find_output_regid(s[FS].v,
 		ir3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
 
+	if (util_format_is_alpha(emit->pformat))
+		color_regid += 3;
+
 	/* TODO get these dynamically: */
 	face_regid = s[FS].v->frag_face ? regid(0,0) : regid(63,0);
 	coord_regid = s[FS].v->frag_coord ? regid(0,0) : regid(63,0);
+	zwcoord_regid = s[FS].v->frag_coord ? regid(0,2) : regid(63,0);
 
 	/* we could probably divide this up into things that need to be
 	 * emitted if frag-prog is dirty vs if vert-prog is dirty..
@@ -229,7 +250,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 	OUT_PKT0(ring, REG_A4XX_HLSQ_UPDATE_CONTROL, 1);
 	OUT_RING(ring, 0x00000003);
 
-	OUT_PKT0(ring, REG_A4XX_HLSQ_CONTROL_0_REG, 4);
+	OUT_PKT0(ring, REG_A4XX_HLSQ_CONTROL_0_REG, 5);
 	OUT_RING(ring, A4XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(FOUR_QUADS) |
 			A4XX_HLSQ_CONTROL_0_REG_CONSTMODE(constmode) |
 			A4XX_HLSQ_CONTROL_0_REG_FSSUPERTHREADENABLE |
@@ -240,14 +261,15 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			A4XX_HLSQ_CONTROL_0_REG_SPSHADERRESTART |
 			A4XX_HLSQ_CONTROL_0_REG_SPCONSTFULLUPDATE);
 	OUT_RING(ring, A4XX_HLSQ_CONTROL_1_REG_VSTHREADSIZE(TWO_QUADS) |
-			0xfc000000 |          /* XXX */
 			A4XX_HLSQ_CONTROL_1_REG_VSSUPERTHREADENABLE |
-			A4XX_HLSQ_CONTROL_1_REG_COORDREGID(coord_regid));
+			A4XX_HLSQ_CONTROL_1_REG_COORDREGID(coord_regid) |
+			A4XX_HLSQ_CONTROL_1_REG_ZWCOORDREGID(zwcoord_regid));
 	OUT_RING(ring, A4XX_HLSQ_CONTROL_2_REG_PRIMALLOCTHRESHOLD(63) |
 			0x3f3f000 |           /* XXX */
 			A4XX_HLSQ_CONTROL_2_REG_FACEREGID(face_regid));
 	OUT_RING(ring, A4XX_HLSQ_CONTROL_3_REG_REGID(s[FS].v->pos_regid) |
 			0xfcfcfc00);
+	OUT_RING(ring, 0x00fcfcfc);   /* XXX HLSQ_CONTROL_4 */
 
 	OUT_PKT0(ring, REG_A4XX_HLSQ_VS_CONTROL_REG, 5);
 	OUT_RING(ring, A4XX_HLSQ_VS_CONTROL_REG_CONSTLENGTH(s[VS].constlen) |
@@ -276,7 +298,11 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			COND(emit->key.binning_pass, A4XX_SP_SP_CTRL_REG_BINNING_PASS));
 
 	OUT_PKT0(ring, REG_A4XX_SP_INSTR_CACHE_CTRL, 1);
-	OUT_RING(ring, 0x1c3);   /* XXX SP_INSTR_CACHE_CTRL */
+	OUT_RING(ring, 0x7f | /* XXX */
+			COND(s[VS].instrlen, A4XX_SP_INSTR_CACHE_CTRL_VS_BUFFER) |
+			COND(s[FS].instrlen, A4XX_SP_INSTR_CACHE_CTRL_FS_BUFFER) |
+			COND(s[VS].instrlen && s[FS].instrlen,
+					A4XX_SP_INSTR_CACHE_CTRL_INSTR_BUFFER));
 
 	OUT_PKT0(ring, REG_A4XX_SP_VS_LENGTH_REG, 1);
 	OUT_RING(ring, s[VS].v->instrlen);      /* SP_VS_LENGTH_REG */
@@ -386,10 +412,14 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			COND(s[FS].v->total_in > 0, A4XX_RB_RENDER_CONTROL2_VARYING) |
 			COND(s[FS].v->frag_face, A4XX_RB_RENDER_CONTROL2_FACENESS) |
 			COND(s[FS].v->frag_coord, A4XX_RB_RENDER_CONTROL2_XCOORD |
-					A4XX_RB_RENDER_CONTROL2_YCOORD));
+					A4XX_RB_RENDER_CONTROL2_YCOORD |
+// TODO enabling gl_FragCoord.z is causing lockups on 0ad (but seems
+// to work everywhere else).
+//					A4XX_RB_RENDER_CONTROL2_ZCOORD |
+					A4XX_RB_RENDER_CONTROL2_WCOORD));
 
 	OUT_PKT0(ring, REG_A4XX_RB_FS_OUTPUT_REG, 1);
-	OUT_RING(ring, A4XX_RB_FS_OUTPUT_REG_COLOR_PIPE_ENABLE |
+	OUT_RING(ring, A4XX_RB_FS_OUTPUT_REG_MRT(1) |
 			COND(s[FS].v->writes_pos, A4XX_RB_FS_OUTPUT_REG_FRAG_WRITES_Z));
 
 	OUT_PKT0(ring, REG_A4XX_SP_FS_OUTPUT_REG, 1);
@@ -425,8 +455,8 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 		memset(vinterp, 0, sizeof(vinterp));
 		memset(flatshade, 0, sizeof(flatshade));
 
-		/* TODO: looks like we need to do int varyings in the frag
-		 * shader on a4xx (no flatshad reg?):
+		/* looks like we need to do int varyings in the frag
+		 * shader on a4xx (no flatshad reg?  or a420.0 bug?):
 		 *
 		 *    (sy)(ss)nop
 		 *    (sy)ldlv.u32 r0.x,l[r0.x], 1
@@ -436,10 +466,9 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 		 *    (rpt5)nop
 		 *    sam (f16)(xyzw)hr0.x, hr0.x, s#0, t#0
 		 *
-		 * for now, don't set FLAT on vinterp[], since that
-		 * at least works well enough for pure float impl (ie.
-		 * pre glsl130).. we'll have to do a bit more work to
-		 * handle this properly:
+		 * Possibly on later a4xx variants we'll be able to use
+		 * something like the code below instead of workaround
+		 * in the shader:
 		 */
 #if 0
 		/* figure out VARYING_INTERP / FLAT_SHAD register values: */
@@ -483,10 +512,12 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			OUT_RING(ring, s[FS].v->shader->vpsrepl[i]);   /* VPC_VARYING_PS_REPL[i] */
 	}
 
-	emit_shader(ring, s[VS].v);
+	if (s[VS].instrlen)
+		emit_shader(ring, s[VS].v);
 
 	if (!emit->key.binning_pass)
-		emit_shader(ring, s[FS].v);
+		if (s[FS].instrlen)
+			emit_shader(ring, s[FS].v);
 }
 
 /* hack.. until we figure out how to deal w/ vpsrepl properly.. */
@@ -494,7 +525,7 @@ static void
 fix_blit_fp(struct pipe_context *pctx)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	struct fd4_shader_stateobj *so = ctx->blit_prog.fp;
+	struct fd4_shader_stateobj *so = ctx->blit_prog[0].fp;
 
 	so->shader->vpsrepl[0] = 0x99999999;
 	so->shader->vpsrepl[1] = 0x99999999;

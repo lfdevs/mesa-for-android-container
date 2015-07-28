@@ -271,6 +271,7 @@ struct pipe_vc1_picture_desc
 
 struct pipe_h264_sps
 {
+   uint8_t  level_idc;
    uint8_t  chroma_format_idc;
    uint8_t  separate_colour_plane_flag;
    uint8_t  bit_depth_luma_minus8;

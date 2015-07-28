@@ -32,6 +32,7 @@
  * The back-buffer is allocated by the driver and is private.
  */
 
+#include <stdio.h>
 #include "main/api_exec.h"
 #include "main/context.h"
 #include "main/extensions.h"
@@ -343,7 +344,7 @@ choose_pixel_format(const struct gl_config *v)
 	     && v->blueMask  == 0xc0)
 	return PF_R3G3B2;
 
-    _mesa_problem( NULL, "unexpected format in %s", __FUNCTION__ );
+    _mesa_problem( NULL, "unexpected format in %s", __func__ );
     return 0;
 }
 
@@ -359,7 +360,7 @@ swrast_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 }
 
 /* see bytes_per_line in libGL */
-static INLINE int
+static inline int
 bytes_per_line(unsigned pitch_bits, unsigned mul)
 {
    unsigned mask = mul - 1;
@@ -499,7 +500,7 @@ swrast_map_renderbuffer(struct gl_context *ctx,
       return;
    }
 
-   ASSERT(xrb->Base.Buffer);
+   assert(xrb->Base.Buffer);
 
    if (rb->AllocStorage == swrast_alloc_back_storage) {
       map += (rb->Height - 1) * stride;
@@ -959,6 +960,7 @@ static const __DRIextension *swrast_driver_extensions[] = {
     &driCoreExtension.base,
     &driSWRastExtension.base,
     &driCopySubBufferExtension.base,
+    &dri2ConfigQueryExtension.base,
     &swrast_vtable.base,
     NULL
 };

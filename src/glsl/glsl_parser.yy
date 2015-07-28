@@ -34,6 +34,10 @@
 #include "glsl_types.h"
 #include "main/context.h"
 
+#ifdef _MSC_VER
+#pragma warning( disable : 4065 ) // switch statement contains 'default' but no 'case' labels
+#endif
+
 #undef yyerror
 
 static void yyerror(YYLTYPE *loc, _mesa_glsl_parse_state *st, const char *msg)
@@ -94,6 +98,7 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 %union {
    int n;
    float real;
+   double dreal;
    const char *identifier;
 
    struct ast_type_qualifier type_qualifier;
@@ -128,14 +133,17 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
    } selection_rest_statement;
 }
 
-%token ATTRIBUTE CONST_TOK BOOL_TOK FLOAT_TOK INT_TOK UINT_TOK
+%token ATTRIBUTE CONST_TOK BOOL_TOK FLOAT_TOK INT_TOK UINT_TOK DOUBLE_TOK
 %token BREAK CONTINUE DO ELSE FOR IF DISCARD RETURN SWITCH CASE DEFAULT
-%token BVEC2 BVEC3 BVEC4 IVEC2 IVEC3 IVEC4 UVEC2 UVEC3 UVEC4 VEC2 VEC3 VEC4
+%token BVEC2 BVEC3 BVEC4 IVEC2 IVEC3 IVEC4 UVEC2 UVEC3 UVEC4 VEC2 VEC3 VEC4 DVEC2 DVEC3 DVEC4
 %token CENTROID IN_TOK OUT_TOK INOUT_TOK UNIFORM VARYING SAMPLE
 %token NOPERSPECTIVE FLAT SMOOTH
 %token MAT2X2 MAT2X3 MAT2X4
 %token MAT3X2 MAT3X3 MAT3X4
 %token MAT4X2 MAT4X3 MAT4X4
+%token DMAT2X2 DMAT2X3 DMAT2X4
+%token DMAT3X2 DMAT3X3 DMAT3X4
+%token DMAT4X2 DMAT4X3 DMAT4X4
 %token SAMPLER1D SAMPLER2D SAMPLER3D SAMPLERCUBE SAMPLER1DSHADOW SAMPLER2DSHADOW
 %token SAMPLERCUBESHADOW SAMPLER1DARRAY SAMPLER2DARRAY SAMPLER1DARRAYSHADOW
 %token SAMPLER2DARRAYSHADOW SAMPLERCUBEARRAY SAMPLERCUBEARRAYSHADOW
@@ -162,6 +170,7 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 %type <identifier> any_identifier
 %type <interface_block> instance_name_opt
 %token <real> FLOATCONSTANT
+%token <dreal> DOUBLECONSTANT
 %token <n> INTCONSTANT UINTCONSTANT BOOLCONSTANT
 %token <identifier> FIELD_SELECTION
 %token LEFT_OP RIGHT_OP
@@ -182,8 +191,8 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
     */
 %token ASM CLASS UNION ENUM TYPEDEF TEMPLATE THIS PACKED_TOK GOTO
 %token INLINE_TOK NOINLINE PUBLIC_TOK STATIC EXTERN EXTERNAL
-%token LONG_TOK SHORT_TOK DOUBLE_TOK HALF FIXED_TOK UNSIGNED INPUT_TOK
-%token HVEC2 HVEC3 HVEC4 DVEC2 DVEC3 DVEC4 FVEC2 FVEC3 FVEC4
+%token LONG_TOK SHORT_TOK HALF FIXED_TOK UNSIGNED INPUT_TOK
+%token HVEC2 HVEC3 HVEC4 FVEC2 FVEC3 FVEC4
 %token SAMPLER3DRECT
 %token SIZEOF CAST NAMESPACE USING
 %token RESOURCE PATCH
@@ -205,6 +214,7 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 %type <type_qualifier> layout_qualifier
 %type <type_qualifier> layout_qualifier_id_list layout_qualifier_id
 %type <type_qualifier> interface_block_layout_qualifier
+%type <type_qualifier> memory_qualifier
 %type <type_qualifier> interface_qualifier
 %type <type_specifier> type_specifier
 %type <type_specifier> type_specifier_nonarray
@@ -433,6 +443,13 @@ primary_expression:
       $$ = new(ctx) ast_expression(ast_float_constant, NULL, NULL, NULL);
       $$->set_location(@1);
       $$->primary_expression.float_constant = $1;
+   }
+   | DOUBLECONSTANT
+   {
+      void *ctx = state;
+      $$ = new(ctx) ast_expression(ast_double_constant, NULL, NULL, NULL);
+      $$->set_location(@1);
+      $$->primary_expression.double_constant = $1;
    }
    | BOOLCONSTANT
    {
@@ -984,6 +1001,11 @@ parameter_qualifier:
       $$ = $2;
       $$.precision = $1;
    }
+   | memory_qualifier parameter_qualifier
+   {
+      $$ = $1;
+      $$.merge_qualifier(&@1, state, $2);
+   }
 
 parameter_direction_qualifier:
    IN_TOK
@@ -1268,7 +1290,7 @@ layout_qualifier_id:
                  { "triangles_adjacency", GL_TRIANGLES_ADJACENCY },
                  { "triangle_strip", GL_TRIANGLE_STRIP },
          };
-         for (unsigned i = 0; i < Elements(map); i++) {
+         for (unsigned i = 0; i < ARRAY_SIZE(map); i++) {
             if (match_layout_qualifier($1, map[i].s, state) == 0) {
                $$.flags.q.prim_type = 1;
                $$.prim_type = map[i].e;
@@ -1332,7 +1354,7 @@ layout_qualifier_id:
                { "r8_snorm", GL_R8_SNORM, GLSL_TYPE_FLOAT }
             };
 
-            for (unsigned i = 0; i < Elements(map); i++) {
+            for (unsigned i = 0; i < ARRAY_SIZE(map); i++) {
                if (match_layout_qualifier($1, map[i].name, state) == 0) {
                   $$.flags.q.explicit_image_format = 1;
                   $$.image_format = map[i].format;
@@ -1344,6 +1366,21 @@ layout_qualifier_id:
 
          if (!$$.flags.i &&
              match_layout_qualifier($1, "early_fragment_tests", state) == 0) {
+            /* From section 4.4.1.3 of the GLSL 4.50 specification
+             * (Fragment Shader Inputs):
+             *
+             *  "Fragment shaders also allow the following layout
+             *   qualifier on in only (not with variable declarations)
+             *     layout-qualifier-id
+             *        early_fragment_tests
+             *   [...]"
+             */
+            if (state->stage != MESA_SHADER_FRAGMENT) {
+               _mesa_glsl_error(& @1, state,
+                                "early_fragment_tests layout qualifier only "
+                                "valid in fragment shaders");
+            }
+
             $$.flags.q.early_fragment_tests = 1;
          }
       }
@@ -1388,13 +1425,13 @@ layout_qualifier_id:
       }
 
       if ((state->ARB_shading_language_420pack_enable ||
-           state->ARB_shader_atomic_counters_enable) &&
+           state->has_atomic_counters()) &&
           match_layout_qualifier("binding", $1, state) == 0) {
          $$.flags.q.explicit_binding = 1;
          $$.binding = $3;
       }
 
-      if (state->ARB_shader_atomic_counters_enable &&
+      if (state->has_atomic_counters() &&
           match_layout_qualifier("offset", $1, state) == 0) {
          $$.flags.q.explicit_offset = 1;
          $$.offset = $3;
@@ -1565,6 +1602,7 @@ type_qualifier:
    | storage_qualifier
    | interpolation_qualifier
    | layout_qualifier
+   | memory_qualifier
    | precision_qualifier
    {
       memset(&$$, 0, sizeof($$));
@@ -1702,6 +1740,11 @@ type_qualifier:
       $$ = $2;
       $$.precision = $1;
    }
+   | memory_qualifier type_qualifier
+   {
+      $$ = $1;
+      $$.merge_qualifier(&@1, state, $2);
+   }
    ;
 
 auxiliary_storage_qualifier:
@@ -1762,7 +1805,10 @@ storage_qualifier:
       memset(& $$, 0, sizeof($$));
       $$.flags.q.uniform = 1;
    }
-   | COHERENT
+   ;
+
+memory_qualifier:
+   COHERENT
    {
       memset(& $$, 0, sizeof($$));
       $$.flags.q.coherent = 1;
@@ -1864,6 +1910,7 @@ type_specifier_nonarray:
 basic_type_specifier_nonarray:
    VOID_TOK                 { $$ = "void"; }
    | FLOAT_TOK              { $$ = "float"; }
+   | DOUBLE_TOK             { $$ = "double"; }
    | INT_TOK                { $$ = "int"; }
    | UINT_TOK               { $$ = "uint"; }
    | BOOL_TOK               { $$ = "bool"; }
@@ -1879,6 +1926,9 @@ basic_type_specifier_nonarray:
    | UVEC2                  { $$ = "uvec2"; }
    | UVEC3                  { $$ = "uvec3"; }
    | UVEC4                  { $$ = "uvec4"; }
+   | DVEC2                  { $$ = "dvec2"; }
+   | DVEC3                  { $$ = "dvec3"; }
+   | DVEC4                  { $$ = "dvec4"; }
    | MAT2X2                 { $$ = "mat2"; }
    | MAT2X3                 { $$ = "mat2x3"; }
    | MAT2X4                 { $$ = "mat2x4"; }
@@ -1888,6 +1938,15 @@ basic_type_specifier_nonarray:
    | MAT4X2                 { $$ = "mat4x2"; }
    | MAT4X3                 { $$ = "mat4x3"; }
    | MAT4X4                 { $$ = "mat4"; }
+   | DMAT2X2                { $$ = "dmat2"; }
+   | DMAT2X3                { $$ = "dmat2x3"; }
+   | DMAT2X4                { $$ = "dmat2x4"; }
+   | DMAT3X2                { $$ = "dmat3x2"; }
+   | DMAT3X3                { $$ = "dmat3"; }
+   | DMAT3X4                { $$ = "dmat3x4"; }
+   | DMAT4X2                { $$ = "dmat4x2"; }
+   | DMAT4X3                { $$ = "dmat4x3"; }
+   | DMAT4X4                { $$ = "dmat4"; }
    | SAMPLER1D              { $$ = "sampler1D"; }
    | SAMPLER2D              { $$ = "sampler2D"; }
    | SAMPLER2DRECT          { $$ = "sampler2DRect"; }
@@ -2539,6 +2598,28 @@ basic_interface_block:
                              "interface block member does not match "
                              "the interface block");
          }
+
+         /* From GLSL ES 3.0, chapter 4.3.7 "Interface Blocks":
+          *
+          * "GLSL ES 3.0 does not support interface blocks for shader inputs or
+          * outputs."
+          *
+          * And from GLSL ES 3.0, chapter 4.6.1 "The invariant qualifier":.
+          *
+          * "Only variables output from a shader can be candidates for
+          * invariance."
+          *
+          * From GLSL 4.40 and GLSL 1.50, section "Interface Blocks":
+          *
+          * "If optional qualifiers are used, they can include interpolation
+          * qualifiers, auxiliary storage qualifiers, and storage qualifiers
+          * and they must declare an input, output, or uniform member
+          * consistent with the interface qualifier of the block"
+          */
+         if (qualifier.flags.q.invariant)
+            _mesa_glsl_error(&@1, state,
+                             "invariant qualifiers cannot be used "
+                             "with interface blocks members");
       }
 
       $$ = block;

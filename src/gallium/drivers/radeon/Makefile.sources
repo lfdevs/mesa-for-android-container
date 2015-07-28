@@ -3,6 +3,7 @@ C_SOURCES := \
 	r600_buffer_common.c \
 	r600_cs.h \
 	r600d_common.h \
+	r600_gpu_load.c \
 	r600_pipe_common.c \
 	r600_pipe_common.h \
 	r600_query.c \
@@ -14,7 +15,8 @@ C_SOURCES := \
 	radeon_vce.c \
 	radeon_vce.h \
 	radeon_video.c \
-	radeon_video.h
+	radeon_video.h \
+	radeon_winsys.h
 
 LLVM_C_FILES := \
 	radeon_elf_util.c \

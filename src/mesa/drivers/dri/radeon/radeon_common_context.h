@@ -171,7 +171,7 @@ struct _radeon_texture_image {
 };
 
 
-static INLINE radeon_texture_image *get_radeon_texture_image(struct gl_texture_image *image)
+static inline radeon_texture_image *get_radeon_texture_image(struct gl_texture_image *image)
 {
 	return (radeon_texture_image*)image;
 }
@@ -213,7 +213,7 @@ struct radeon_tex_obj {
 	GLboolean border_fallback;
 };
 
-static INLINE radeonTexObj* radeon_tex_obj(struct gl_texture_object *texObj)
+static inline radeonTexObj* radeon_tex_obj(struct gl_texture_object *texObj)
 {
 	return (radeonTexObj*)texObj;
 }
@@ -316,7 +316,7 @@ struct radeon_prim {
 	GLuint prim;
 };
 
-static INLINE GLuint radeonPackColor(GLuint cpp,
+static inline GLuint radeonPackColor(GLuint cpp,
                                      GLubyte r, GLubyte g,
                                      GLubyte b, GLubyte a)
 {
@@ -433,7 +433,7 @@ struct radeon_context {
   GLboolean front_cliprects;
 
    /**
-    * Set if rendering has occured to the drawable's front buffer.
+    * Set if rendering has occurred to the drawable's front buffer.
     *
     * This is used in the DRI2 case to detect that glFlush should also copy
     * the contents of the fake front buffer to the real front buffer.

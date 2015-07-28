@@ -246,6 +246,14 @@ The integer capabilities:
 * ``PIPE_CAP_MULTISAMPLE_Z_RESOLVE``: Whether the driver supports blitting
   a multisampled depth buffer into a single-sampled texture (or depth buffer).
   Only the first sampled should be copied.
+* ``PIPE_CAP_RESOURCE_FROM_USER_MEMORY``: Whether the driver can create
+  a pipe_resource where an already-existing piece of (malloc'd) user memory
+  is used as its backing storage. In other words, whether the driver can map
+  existing user memory into the device address space for direct device access.
+  The create function is pipe_screen::resource_from_user_memory. The address
+  and size must be page-aligned.
+* ``PIPE_CAP_DEVICE_RESET_STATUS_QUERY``:
+  Whether pipe_context::get_device_reset_status is implemented.
 
 
 .. _pipe_capf:
@@ -326,6 +334,12 @@ to be 0.
   sampler views. Must not be lower than PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS.
 * ``PIPE_SHADER_CAP_DOUBLES``: Whether double precision floating-point
   operations are supported.
+* ``PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED``: Whether double precision rounding
+  is supported. If it is, DTRUNC/DCEIL/DFLR/DROUND opcodes may be used.
+* ``PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED``: Whether DFRACEXP and
+  DLDEXP are supported.
+* ``PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED``: Whether FMA and DFMA (doubles only)
+  are supported.
 
 
 .. _pipe_compute_cap:
@@ -450,6 +464,12 @@ get_vendor
 
 Returns the screen vendor.
 
+get_device_vendor
+^^^^^^^^^^^^^^^^^
+
+Returns the actual vendor of the device driving the screen
+(as opposed to the driver vendor).
+
 .. _get_param:
 
 get_param
@@ -570,3 +590,13 @@ query at the specified **index** is returned in **info**.
 The function returns non-zero on success.
 The driver-specific query is described with the pipe_driver_query_info
 structure.
+
+get_driver_query_group_info
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Return a driver-specific query group. If the **info** parameter is NULL,
+the number of available groups is returned.  Otherwise, the driver
+query group at the specified **index** is returned in **info**.
+The function returns non-zero on success.
+The driver-specific query group is described with the
+pipe_driver_query_group_info structure.

@@ -54,7 +54,7 @@ bool intel_batchbuffer_emit_reloc_fenced(struct intel_context *intel,
 					      uint32_t offset);
 void intel_batchbuffer_emit_mi_flush(struct intel_context *intel);
 
-static INLINE uint32_t float_as_int(float f)
+static inline uint32_t float_as_int(float f)
 {
    union {
       float f;
@@ -70,7 +70,7 @@ static INLINE uint32_t float_as_int(float f)
  * be passed as structs rather than dwords, but that's a little bit of
  * work...
  */
-static INLINE unsigned
+static inline unsigned
 intel_batchbuffer_space(struct intel_context *intel)
 {
    return (intel->batch.bo->size - intel->batch.reserved_space)
@@ -78,7 +78,7 @@ intel_batchbuffer_space(struct intel_context *intel)
 }
 
 
-static INLINE void
+static inline void
 intel_batchbuffer_emit_dword(struct intel_context *intel, GLuint dword)
 {
 #ifdef DEBUG
@@ -87,13 +87,13 @@ intel_batchbuffer_emit_dword(struct intel_context *intel, GLuint dword)
    intel->batch.map[intel->batch.used++] = dword;
 }
 
-static INLINE void
+static inline void
 intel_batchbuffer_emit_float(struct intel_context *intel, float f)
 {
    intel_batchbuffer_emit_dword(intel, float_as_int(f));
 }
 
-static INLINE void
+static inline void
 intel_batchbuffer_require_space(struct intel_context *intel,
                                 GLuint sz)
 {
@@ -104,7 +104,7 @@ intel_batchbuffer_require_space(struct intel_context *intel,
       intel_batchbuffer_flush(intel);
 }
 
-static INLINE void
+static inline void
 intel_batchbuffer_begin(struct intel_context *intel, int n)
 {
    intel_batchbuffer_require_space(intel, n * 4);
@@ -115,7 +115,7 @@ intel_batchbuffer_begin(struct intel_context *intel, int n)
 #endif
 }
 
-static INLINE void
+static inline void
 intel_batchbuffer_advance(struct intel_context *intel)
 {
 #ifdef DEBUG

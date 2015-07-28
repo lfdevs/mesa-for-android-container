@@ -41,7 +41,8 @@ enum special_regs {
 	SV_ALU_PRED = 128,
 	SV_EXEC_MASK,
 	SV_AR_INDEX,
-	SV_VALID_MASK
+	SV_VALID_MASK,
+	SV_GEOMETRY_EMIT
 };
 
 class node;
@@ -505,6 +506,9 @@ public:
 
 	bool is_AR() {
 		return is_special_reg() && select == sel_chan(SV_AR_INDEX, 0);
+	}
+	bool is_geometry_emit() {
+		return is_special_reg() && select == sel_chan(SV_GEOMETRY_EMIT, 0);
 	}
 
 	node* any_def() {

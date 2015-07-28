@@ -47,8 +47,10 @@ intel_update_max_level(struct intel_texture_object *intelObj,
 {
    struct gl_texture_object *tObj = &intelObj->base;
 
-   if (sampler->MinFilter == GL_NEAREST ||
-       sampler->MinFilter == GL_LINEAR) {
+   if (!tObj->_MipmapComplete ||
+       (tObj->_RenderToTexture &&
+        (sampler->MinFilter == GL_NEAREST ||
+         sampler->MinFilter == GL_LINEAR))) {
       intelObj->_MaxLevel = tObj->BaseLevel;
    } else {
       intelObj->_MaxLevel = tObj->_MaxLevel;
@@ -98,10 +100,17 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
       return true;
    }
 
-   /* Immutable textures should not get this far -- they should have been
-    * created in a validated state, and nothing can invalidate them.
+   /* On recent generations, immutable textures should not get this far
+    * -- they should have been created in a validated state, and nothing
+    * can invalidate them.
+    *
+    * Unfortunately, this is not true on pre-Sandybridge hardware -- when
+    * rendering into an immutable-format depth texture we may have to rebase
+    * the rendered levels to meet alignment requirements.
+    *
+    * FINISHME: Avoid doing this.
     */
-   assert(!tObj->Immutable);
+   assert(!tObj->Immutable || brw->gen < 6);
 
    firstImage = intel_texture_image(tObj->Image[0][tObj->BaseLevel]);
 

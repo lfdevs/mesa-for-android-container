@@ -51,7 +51,7 @@ gen6_upload_blend_state(struct brw_context *brw)
     * with render target 0, which will reference BLEND_STATE[0] for
     * alpha test enable.
     */
-   if (nr_draw_buffers == 0 && ctx->Color.AlphaEnabled)
+   if (nr_draw_buffers == 0)
       nr_draw_buffers = 1;
 
    size = sizeof(*blend) * nr_draw_buffers;

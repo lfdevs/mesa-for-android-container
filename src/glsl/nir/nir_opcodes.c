@@ -647,20 +647,6 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       0
 },
 {
-   .name = "fcos_reduced",
-   .num_inputs = 1,
-   .output_size = 0,
-   .output_type = nir_type_float,
-   .input_sizes = {
-      0
-   },
-   .input_types = {
-      nir_type_float
-   },
-   .algebraic_properties =
-      0
-},
-{
    .name = "fcsel",
    .num_inputs = 3,
    .output_size = 0,
@@ -829,20 +815,6 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       NIR_OP_IS_COMMUTATIVE
 },
 {
-   .name = "fexp",
-   .num_inputs = 1,
-   .output_size = 0,
-   .output_type = nir_type_float,
-   .input_sizes = {
-      0
-   },
-   .input_types = {
-      nir_type_float
-   },
-   .algebraic_properties =
-      0
-},
-{
    .name = "fexp2",
    .num_inputs = 1,
    .output_size = 0,
@@ -922,20 +894,6 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
    },
    .input_types = {
       nir_type_int
-   },
-   .algebraic_properties =
-      0
-},
-{
-   .name = "flog",
-   .num_inputs = 1,
-   .output_size = 0,
-   .output_type = nir_type_float,
-   .input_sizes = {
-      0
-   },
-   .input_types = {
-      nir_type_float
    },
    .algebraic_properties =
       0
@@ -1418,20 +1376,6 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
 },
 {
    .name = "fsin",
-   .num_inputs = 1,
-   .output_size = 0,
-   .output_type = nir_type_float,
-   .input_sizes = {
-      0
-   },
-   .input_types = {
-      nir_type_float
-   },
-   .algebraic_properties =
-      0
-},
-{
-   .name = "fsin_reduced",
    .num_inputs = 1,
    .output_size = 0,
    .output_type = nir_type_float,

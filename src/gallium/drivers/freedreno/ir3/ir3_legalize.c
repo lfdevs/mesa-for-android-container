@@ -175,9 +175,8 @@ static void legalize(struct ir3_legalize_ctx *ctx)
 		/* both tex/sfu appear to not always immediately consume
 		 * their src register(s):
 		 */
-		if (is_tex(n) || is_sfu(n)) {
-			for (i = 1; i < n->regs_count; i++) {
-				reg = n->regs[i];
+		if (is_tex(n) || is_sfu(n) || is_mem(n)) {
+			foreach_src(reg, n) {
 				if (reg_gpr(reg))
 					regmask_set(&needs_ss_war, reg);
 			}

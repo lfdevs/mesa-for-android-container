@@ -250,6 +250,9 @@ fs_visitor::emit_fragment_program_code()
                                     fs_reg(0.0f), BRW_CONDITIONAL_GE));
             cmp->predicate = BRW_PREDICATE_NORMAL;
             cmp->flag_subreg = 1;
+
+            if (devinfo->gen >= 6)
+               emit_discard_jump();
          }
          break;
       }
@@ -316,9 +319,14 @@ fs_visitor::emit_fragment_program_code()
       case OPCODE_MAD:
          for (int i = 0; i < 4; i++) {
             if (fpi->DstReg.WriteMask & (1 << i)) {
-               fs_reg temp = vgrf(glsl_type::float_type);
-               emit(MUL(temp, offset(src[0], i), offset(src[1], i)));
-               emit(ADD(offset(dst, i), temp, offset(src[2], i)));
+               if (devinfo->gen >= 6) {
+                  emit(MAD(offset(dst, i), offset(src[2], i),
+                           offset(src[1], i), offset(src[0], i)));
+               } else {
+                  fs_reg temp = vgrf(glsl_type::float_type);
+                  emit(MUL(temp, offset(src[0], i), offset(src[1], i)));
+                  emit(ADD(offset(dst, i), temp, offset(src[2], i)));
+               }
             }
          }
          break;
@@ -440,7 +448,7 @@ fs_visitor::emit_fragment_program_code()
             break;
 
          case TEXTURE_CUBE_INDEX: {
-            coord_components = 4;
+            coord_components = 3;
 
             fs_reg temp = vgrf(glsl_type::float_type);
             fs_reg cubecoord = vgrf(glsl_type::vec3_type);
@@ -470,7 +478,7 @@ fs_visitor::emit_fragment_program_code()
 
          emit_texture(op, glsl_type::vec4_type, coordinate, coord_components,
                       shadow_c, lod, dpdy, 0, sample_index,
-                      reg_undef, 0, /* offset, components */
+                      reg_undef, /* offset */
                       reg_undef, /* mcs */
                       0, /* gather component */
                       false, /* is cube array */
@@ -517,7 +525,7 @@ fs_visitor::emit_fragment_program_code()
       /* To handle saturates, we emit a MOV with a saturate bit, which
        * optimization should fold into the preceding instructions when safe.
        */
-      if (fpi->Opcode != OPCODE_END) {
+      if (_mesa_num_inst_dst_regs(fpi->Opcode) != 0) {
          fs_reg real_dst = get_fp_dst_reg(&fpi->DstReg);
 
          for (int i = 0; i < 4; i++) {

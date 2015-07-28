@@ -354,7 +354,9 @@ void dump::dump_op(node &n, const char *name) {
 					"WRITE_IND_ACK"};
 			sblog << "  " << exp_type[c->bc.type] << " " << c->bc.array_base
 					<< "   ES:" << c->bc.elem_size;
-			has_dst = false;
+			if (!(c->bc.op_ptr->flags & CF_EMIT)) {
+				has_dst = false;
+			}
 		}
 	}
 

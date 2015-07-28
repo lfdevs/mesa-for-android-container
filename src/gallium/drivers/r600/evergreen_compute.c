@@ -30,7 +30,7 @@
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
 #include "util/u_blitter.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_transfer.h"
 #include "util/u_surface.h"
 #include "util/u_pack_color.h"

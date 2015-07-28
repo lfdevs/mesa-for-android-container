@@ -154,8 +154,8 @@ upload_sf(struct brw_context *brw)
        dw1 |= GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;
 
    /* _NEW_LINE */
-   uint32_t line_width_u3_7 =
-      U_FIXED(CLAMP(ctx->Line.Width, 0.0, ctx->Const.MaxLineWidth), 7);
+   float line_width = brw_get_line_width(brw);
+   uint32_t line_width_u3_7 = U_FIXED(line_width, 7);
    if (line_width_u3_7 == 0)
       line_width_u3_7 = 1;
    if (brw->gen >= 9 || brw->is_cherryview) {
@@ -225,7 +225,7 @@ upload_raster(struct brw_context *brw)
    bool render_to_fbo = _mesa_is_user_fbo(brw->ctx.DrawBuffer);
 
    /* _NEW_POLYGON */
-   if ((ctx->Polygon.FrontFace == GL_CCW) ^ render_to_fbo)
+   if (ctx->Polygon._FrontBit == render_to_fbo)
       dw1 |= GEN8_RASTER_FRONT_WINDING_CCW;
 
    if (ctx->Polygon.CullFlag) {

@@ -35,12 +35,13 @@ endif
 noinst_LTLIBRARIES = libclover.la libcltgsi.la libclllvm.la
 
 libcltgsi_la_CXXFLAGS = \
-	-std=c++0x \
+	-std=c++11 \
 	$(VISIBILITY_CXXFLAGS)
 
 libcltgsi_la_SOURCES = $(TGSI_SOURCES)
 
 libclllvm_la_CXXFLAGS = \
+	-std=c++11 \
 	$(VISIBILITY_CXXFLAGS) \
 	$(LLVM_CXXFLAGS) \
 	$(DEFINES) \

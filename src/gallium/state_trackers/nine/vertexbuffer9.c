@@ -76,7 +76,9 @@ NineVertexBuffer9_ctor( struct NineVertexBuffer9 *This,
     /* if (pDesc->Usage & D3DUSAGE_NPATCHES) { } */
     /* if (pDesc->Usage & D3DUSAGE_POINTS) { } */
     /* if (pDesc->Usage & D3DUSAGE_RTPATCHES) { } */
-    /* if (pDesc->Usage & D3DUSAGE_SOFTWAREPROCESSING) { } */
+    if (pDesc->Usage & D3DUSAGE_SOFTWAREPROCESSING)
+        DBG("Application asked for Software Vertex Processing, "
+            "but this is unimplemented\n");
     /* if (pDesc->Usage & D3DUSAGE_TEXTAPI) { } */
 
     info->height0 = 1;

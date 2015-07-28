@@ -101,9 +101,12 @@ update_program(struct gl_context *ctx)
       ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY];
    struct gl_shader_program *fsProg =
       ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT];
+   const struct gl_shader_program *csProg =
+      ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
    const struct gl_vertex_program *prevVP = ctx->VertexProgram._Current;
    const struct gl_fragment_program *prevFP = ctx->FragmentProgram._Current;
    const struct gl_geometry_program *prevGP = ctx->GeometryProgram._Current;
+   const struct gl_compute_program *prevCP = ctx->ComputeProgram._Current;
    GLbitfield new_state = 0x0;
 
    /*
@@ -199,6 +202,16 @@ update_program(struct gl_context *ctx)
       _mesa_reference_vertprog(ctx, &ctx->VertexProgram._Current, NULL);
    }
 
+   if (csProg && csProg->LinkStatus
+       && csProg->_LinkedShaders[MESA_SHADER_COMPUTE]) {
+      /* Use GLSL compute shader */
+      _mesa_reference_compprog(ctx, &ctx->ComputeProgram._Current,
+                               gl_compute_program(csProg->_LinkedShaders[MESA_SHADER_COMPUTE]->Program));
+   } else {
+      /* no compute program */
+      _mesa_reference_compprog(ctx, &ctx->ComputeProgram._Current, NULL);
+   }
+
    /* Let the driver know what's happening:
     */
    if (ctx->FragmentProgram._Current != prevFP) {
@@ -222,6 +235,14 @@ update_program(struct gl_context *ctx)
       if (ctx->Driver.BindProgram) {
          ctx->Driver.BindProgram(ctx, GL_VERTEX_PROGRAM_ARB,
                             (struct gl_program *) ctx->VertexProgram._Current);
+      }
+   }
+
+   if (ctx->ComputeProgram._Current != prevCP) {
+      new_state |= _NEW_PROGRAM;
+      if (ctx->Driver.BindProgram) {
+         ctx->Driver.BindProgram(ctx, GL_COMPUTE_PROGRAM_NV,
+                                 (struct gl_program *) ctx->ComputeProgram._Current);
       }
    }
 
@@ -267,28 +288,6 @@ update_program_constants(struct gl_context *ctx)
 }
 
 
-
-
-static void
-update_viewport_matrix(struct gl_context *ctx)
-{
-   const GLfloat depthMax = ctx->DrawBuffer->_DepthMaxF;
-   unsigned i;
-
-   ASSERT(depthMax > 0);
-
-   /* Compute scale and bias values. This is really driver-specific
-    * and should be maintained elsewhere if at all.
-    * NOTE: RasterPos uses this.
-    */
-   for (i = 0; i < ctx->Const.MaxViewports; i++) {
-      double scale[3], translate[3];
-
-      _mesa_get_viewport_xform(ctx, i, scale, translate);
-      _math_matrix_viewport(&ctx->ViewportArray[i]._WindowMap,
-                            scale, translate, depthMax);
-   }
-}
 
 
 /**
@@ -390,10 +389,10 @@ _mesa_update_state_locked( struct gl_context *ctx )
       update_frontbit( ctx );
 
    if (new_state & _NEW_BUFFERS)
-      _mesa_update_framebuffer(ctx);
+      _mesa_update_framebuffer(ctx, ctx->ReadBuffer, ctx->DrawBuffer);
 
    if (new_state & (_NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT))
-      _mesa_update_draw_buffer_bounds( ctx );
+      _mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
 
    if (new_state & _NEW_LIGHT)
       _mesa_update_lighting( ctx );
@@ -406,9 +405,6 @@ _mesa_update_state_locked( struct gl_context *ctx )
 
    if (new_state & _NEW_PIXEL)
       _mesa_update_pixel( ctx, new_state );
-
-   if (new_state & (_NEW_BUFFERS | _NEW_VIEWPORT))
-      update_viewport_matrix(ctx);
 
    if (new_state & (_NEW_MULTISAMPLE | _NEW_BUFFERS))
       update_multisample( ctx );
@@ -507,7 +503,7 @@ _mesa_set_varying_vp_inputs( struct gl_context *ctx,
           ctx->FragmentProgram._TexEnvProgram) {
          ctx->NewState |= _NEW_VARYING_VP_INPUTS;
       }
-      /*printf("%s %x\n", __FUNCTION__, varying_inputs);*/
+      /*printf("%s %x\n", __func__, varying_inputs);*/
    }
 }
 

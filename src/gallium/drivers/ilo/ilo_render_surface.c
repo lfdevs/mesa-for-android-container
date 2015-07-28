@@ -25,9 +25,10 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "core/ilo_builder_3d.h"
+
 #include "ilo_common.h"
 #include "ilo_blitter.h"
-#include "ilo_builder_3d.h"
 #include "ilo_state.h"
 #include "ilo_render_gen.h"
 
@@ -43,7 +44,7 @@ gen6_emit_draw_surface_rt(struct ilo_render *r,
    uint32_t *surface_state;
    int base, count, i;
 
-   ILO_DEV_ASSERT(r->dev, 6, 7.5);
+   ILO_DEV_ASSERT(r->dev, 6, 8);
 
    if (!DIRTY(FS) && !DIRTY(FB))
       return;
@@ -134,7 +135,7 @@ gen6_emit_draw_surface_view(struct ilo_render *r,
    uint32_t *surface_state;
    int base, count, i;
 
-   ILO_DEV_ASSERT(r->dev, 6, 7.5);
+   ILO_DEV_ASSERT(r->dev, 6, 8);
 
    switch (shader_type) {
    case PIPE_SHADER_VERTEX:
@@ -191,7 +192,7 @@ gen6_emit_draw_surface_const(struct ilo_render *r,
    uint32_t *surface_state;
    int base, count, i;
 
-   ILO_DEV_ASSERT(r->dev, 6, 7.5);
+   ILO_DEV_ASSERT(r->dev, 6, 8);
 
    switch (shader_type) {
    case PIPE_SHADER_VERTEX:
@@ -244,7 +245,7 @@ gen6_emit_draw_surface_binding_tables(struct ilo_render *r,
 {
    int count;
 
-   ILO_DEV_ASSERT(r->dev, 6, 7.5);
+   ILO_DEV_ASSERT(r->dev, 6, 8);
 
    /* BINDING_TABLE_STATE */
    switch (shader_type) {
@@ -301,12 +302,13 @@ ilo_render_get_draw_surface_states_len(const struct ilo_render *render,
 {
    int sh_type, len;
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    len = 0;
 
    for (sh_type = 0; sh_type < PIPE_SHADER_TYPES; sh_type++) {
-      const int alignment = 32 / 4;
+      const int alignment =
+         (ilo_dev_gen(render->dev) >= ILO_GEN(8) ? 64 : 32) / 4;
       int num_surfaces = 0;
 
       switch (sh_type) {
@@ -355,7 +357,7 @@ ilo_render_emit_draw_surface_states(struct ilo_render *render,
    const unsigned surface_used = ilo_builder_surface_used(render->builder);
    int shader_type;
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    /*
     * upload all SURAFCE_STATEs together so that we know there are minimal

@@ -43,7 +43,9 @@ struct tgsi_header
 #define TGSI_PROCESSOR_FRAGMENT  0
 #define TGSI_PROCESSOR_VERTEX    1
 #define TGSI_PROCESSOR_GEOMETRY  2
-#define TGSI_PROCESSOR_COMPUTE   3
+#define TGSI_PROCESSOR_TESSCTRL  3
+#define TGSI_PROCESSOR_TESSEVAL  4
+#define TGSI_PROCESSOR_COMPUTE   5
 
 struct tgsi_processor
 {
@@ -178,7 +180,12 @@ struct tgsi_declaration_interp
 #define TGSI_SEMANTIC_INVOCATIONID 27
 #define TGSI_SEMANTIC_VERTEXID_NOBASE 28
 #define TGSI_SEMANTIC_BASEVERTEX 29
-#define TGSI_SEMANTIC_COUNT      30 /**< number of semantic values */
+#define TGSI_SEMANTIC_PATCH      30 /**< generic per-patch semantic */
+#define TGSI_SEMANTIC_TESSCOORD  31 /**< coordinate being processed by tess */
+#define TGSI_SEMANTIC_TESSOUTER  32 /**< outer tessellation levels */
+#define TGSI_SEMANTIC_TESSINNER  33 /**< inner tessellation levels */
+#define TGSI_SEMANTIC_VERTICESIN 34 /**< number of input vertices */
+#define TGSI_SEMANTIC_COUNT      35 /**< number of semantic values */
 
 struct tgsi_declaration_semantic
 {
@@ -228,6 +235,7 @@ struct tgsi_declaration_array {
 #define TGSI_IMM_FLOAT32   0
 #define TGSI_IMM_UINT32    1
 #define TGSI_IMM_INT32     2
+#define TGSI_IMM_FLOAT64   3
 
 struct tgsi_immediate
 {
@@ -254,7 +262,12 @@ union tgsi_immediate_data
 #define TGSI_PROPERTY_VS_PROHIBIT_UCPS       7
 #define TGSI_PROPERTY_GS_INVOCATIONS         8
 #define TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION 9
-#define TGSI_PROPERTY_COUNT                  10
+#define TGSI_PROPERTY_TCS_VERTICES_OUT       10
+#define TGSI_PROPERTY_TES_PRIM_MODE          11
+#define TGSI_PROPERTY_TES_SPACING            12
+#define TGSI_PROPERTY_TES_VERTEX_ORDER_CW    13
+#define TGSI_PROPERTY_TES_POINT_MODE         14
+#define TGSI_PROPERTY_COUNT                  15
 
 struct tgsi_property {
    unsigned Type         : 4;  /**< TGSI_TOKEN_TYPE_PROPERTY */
@@ -305,7 +318,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_MAD                 16
 #define TGSI_OPCODE_SUB                 17
 #define TGSI_OPCODE_LRP                 18
-                                /* gap */
+#define TGSI_OPCODE_FMA                 19
 #define TGSI_OPCODE_SQRT                20
 #define TGSI_OPCODE_DP2A                21
                                 /* gap */
@@ -403,7 +416,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_BREAKC              115
 #define TGSI_OPCODE_KILL_IF             116  /* conditional kill */
 #define TGSI_OPCODE_END                 117  /* aka HALT */
-                                /* gap */
+#define TGSI_OPCODE_DFMA                118
 #define TGSI_OPCODE_F2I                 119
 #define TGSI_OPCODE_IDIV                120
 #define TGSI_OPCODE_IMAX                121
@@ -494,7 +507,36 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_INTERP_SAMPLE       193
 #define TGSI_OPCODE_INTERP_OFFSET       194
 
-#define TGSI_OPCODE_LAST                195
+/* sm5 marked opcodes are supported in D3D11 optionally - also DMOV, DMOVC */
+#define TGSI_OPCODE_F2D                 195 /* SM5 */
+#define TGSI_OPCODE_D2F                 196
+#define TGSI_OPCODE_DABS                197
+#define TGSI_OPCODE_DNEG                198 /* SM5 */
+#define TGSI_OPCODE_DADD                199 /* SM5 */
+#define TGSI_OPCODE_DMUL                200 /* SM5 */
+#define TGSI_OPCODE_DMAX                201 /* SM5 */
+#define TGSI_OPCODE_DMIN                202 /* SM5 */
+#define TGSI_OPCODE_DSLT                203 /* SM5 */
+#define TGSI_OPCODE_DSGE                204 /* SM5 */
+#define TGSI_OPCODE_DSEQ                205 /* SM5 */
+#define TGSI_OPCODE_DSNE                206 /* SM5 */
+#define TGSI_OPCODE_DRCP                207 /* eg, cayman */
+#define TGSI_OPCODE_DSQRT               208 /* eg, cayman also has DRSQ */
+#define TGSI_OPCODE_DMAD                209
+#define TGSI_OPCODE_DFRAC               210 /* eg, cayman */
+#define TGSI_OPCODE_DLDEXP              211 /* eg, cayman */
+#define TGSI_OPCODE_DFRACEXP            212 /* eg, cayman */
+#define TGSI_OPCODE_D2I                 213
+#define TGSI_OPCODE_I2D                 214
+#define TGSI_OPCODE_D2U                 215
+#define TGSI_OPCODE_U2D                 216
+#define TGSI_OPCODE_DRSQ                217 /* eg, cayman also has DRSQ */
+#define TGSI_OPCODE_DTRUNC              218 /* nvc0 */
+#define TGSI_OPCODE_DCEIL               219 /* nvc0 */
+#define TGSI_OPCODE_DFLR                220 /* nvc0 */
+#define TGSI_OPCODE_DROUND              221 /* nvc0 */
+#define TGSI_OPCODE_DSSG                222
+#define TGSI_OPCODE_LAST                223
 
 #define TGSI_SAT_NONE            0  /* do not saturate */
 #define TGSI_SAT_ZERO_ONE        1  /* clamp to [0,1] */

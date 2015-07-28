@@ -46,6 +46,7 @@ _mesa_GetActiveUniform(GLuint program, GLuint index,
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *shProg;
+   struct gl_program_resource *res;
 
    if (maxLength < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glGetActiveUniform(maxLength < 0)");
@@ -56,26 +57,51 @@ _mesa_GetActiveUniform(GLuint program, GLuint index,
    if (!shProg)
       return;
 
-   if (index >= shProg->NumUserUniformStorage) {
+   res = _mesa_program_resource_find_index((struct gl_shader_program *) shProg,
+                                           GL_UNIFORM, index);
+
+   if (!res) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glGetActiveUniform(index)");
       return;
    }
 
-   const struct gl_uniform_storage *const uni = &shProg->UniformStorage[index];
+   if (nameOut)
+      _mesa_get_program_resource_name(shProg, GL_UNIFORM, index, maxLength,
+                                      length, nameOut, "glGetActiveUniform");
+   if (type)
+      _mesa_program_resource_prop((struct gl_shader_program *) shProg,
+                                  res, index, GL_TYPE, (GLint*) type,
+                                  "glGetActiveUniform");
+   if (size)
+      _mesa_program_resource_prop((struct gl_shader_program *) shProg,
+                                  res, index, GL_ARRAY_SIZE, (GLint*) size,
+                                  "glGetActiveUniform");
+}
 
-   if (nameOut) {
-      _mesa_get_uniform_name(uni, maxLength, length, nameOut);
-   }
-
-   if (size) {
-      /* array_elements is zero for non-arrays, but the API requires that 1 be
-       * returned.
-       */
-      *size = MAX2(1, uni->array_elements);
-   }
-
-   if (type) {
-      *type = uni->type->gl_type;
+static GLenum
+resource_prop_from_uniform_prop(GLenum uni_prop)
+{
+   switch (uni_prop) {
+   case GL_UNIFORM_TYPE:
+      return GL_TYPE;
+   case GL_UNIFORM_SIZE:
+      return GL_ARRAY_SIZE;
+   case GL_UNIFORM_NAME_LENGTH:
+      return GL_NAME_LENGTH;
+   case GL_UNIFORM_BLOCK_INDEX:
+      return GL_BLOCK_INDEX;
+   case GL_UNIFORM_OFFSET:
+      return GL_OFFSET;
+   case GL_UNIFORM_ARRAY_STRIDE:
+      return GL_ARRAY_STRIDE;
+   case GL_UNIFORM_MATRIX_STRIDE:
+      return GL_MATRIX_STRIDE;
+   case GL_UNIFORM_IS_ROW_MAJOR:
+      return GL_IS_ROW_MAJOR;
+   case GL_UNIFORM_ATOMIC_COUNTER_BUFFER_INDEX:
+      return GL_ATOMIC_COUNTER_BUFFER_INDEX;
+   default:
+      return 0;
    }
 }
 
@@ -88,7 +114,8 @@ _mesa_GetActiveUniformsiv(GLuint program,
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *shProg;
-   GLsizei i;
+   struct gl_program_resource *res;
+   GLenum res_prop;
 
    if (uniformCount < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE,
@@ -100,80 +127,33 @@ _mesa_GetActiveUniformsiv(GLuint program,
    if (!shProg)
       return;
 
-   for (i = 0; i < uniformCount; i++) {
-      GLuint index = uniformIndices[i];
+   res_prop = resource_prop_from_uniform_prop(pname);
 
-      if (index >= shProg->NumUserUniformStorage) {
-	 _mesa_error(ctx, GL_INVALID_VALUE, "glGetActiveUniformsiv(index)");
-	 return;
+   /* We need to first verify that each entry exists as active uniform. If
+    * not, generate error and do not cause any other side effects.
+    *
+    * In the case of and error condition, Page 16 (section 2.3.1 Errors)
+    * of the OpenGL 4.5 spec says:
+    *
+    *     "If the generating command modifies values through a pointer argu-
+    *     ment, no change is made to these values."
+    */
+   for (int i = 0; i < uniformCount; i++) {
+      if (!_mesa_program_resource_find_index(shProg, GL_UNIFORM,
+                                              uniformIndices[i])) {
+         _mesa_error(ctx, GL_INVALID_VALUE, "glGetActiveUniformsiv(index)");
+         return;
       }
    }
 
-   for (i = 0; i < uniformCount; i++) {
-      GLuint index = uniformIndices[i];
-      const struct gl_uniform_storage *uni = &shProg->UniformStorage[index];
-
-      switch (pname) {
-      case GL_UNIFORM_TYPE:
-	 params[i] = uni->type->gl_type;
-	 break;
-
-      case GL_UNIFORM_SIZE:
-	 /* array_elements is zero for non-arrays, but the API requires that 1 be
-	  * returned.
-	  */
-	 params[i] = MAX2(1, uni->array_elements);
-	 break;
-
-      case GL_UNIFORM_NAME_LENGTH:
-	 params[i] = strlen(uni->name) + 1;
-
-         /* Page 61 (page 73 of the PDF) in section 2.11 of the OpenGL ES 3.0
-          * spec says:
-          *
-          *     "If the active uniform is an array, the uniform name returned
-          *     in name will always be the name of the uniform array appended
-          *     with "[0]"."
-          */
-         if (uni->array_elements != 0)
-            params[i] += 3;
-	 break;
-
-      case GL_UNIFORM_BLOCK_INDEX:
-	 params[i] = uni->block_index;
-	 break;
-
-      case GL_UNIFORM_OFFSET:
-	 params[i] = uni->offset;
-	 break;
-
-      case GL_UNIFORM_ARRAY_STRIDE:
-	 params[i] = uni->array_stride;
-	 break;
-
-      case GL_UNIFORM_MATRIX_STRIDE:
-	 params[i] = uni->matrix_stride;
-	 break;
-
-      case GL_UNIFORM_IS_ROW_MAJOR:
-	 params[i] = uni->row_major;
-	 break;
-
-      case GL_UNIFORM_ATOMIC_COUNTER_BUFFER_INDEX:
-         if (!ctx->Extensions.ARB_shader_atomic_counters)
-            goto invalid_enum;
-         params[i] = uni->atomic_buffer_index;
+   for (int i = 0; i < uniformCount; i++) {
+      res = _mesa_program_resource_find_index(shProg, GL_UNIFORM,
+                                              uniformIndices[i]);
+      if (!_mesa_program_resource_prop(shProg, res, uniformIndices[i],
+                                       res_prop, &params[i],
+                                       "glGetActiveUniformsiv"))
          break;
-
-      default:
-         goto invalid_enum;
-      }
    }
-
-   return;
-
- invalid_enum:
-   _mesa_error(ctx, GL_INVALID_ENUM, "glGetActiveUniformsiv(pname)");
 }
 
 static struct gl_uniform_storage *
@@ -260,8 +240,8 @@ validate_uniform_parameters(struct gl_context *ctx,
    if (uni->array_elements == 0) {
       if (count > 1) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "%s(count > 1 for non-array, location=%d)",
-                     caller, location);
+                     "%s(count = %u for non-array \"%s\"@%d)",
+                     caller, count, uni->name, location);
          return NULL;
       }
 
@@ -367,7 +347,8 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 	      &&
 	      (uni->type->base_type == GLSL_TYPE_INT
 	       || uni->type->base_type == GLSL_TYPE_UINT
-	       || uni->type->base_type == GLSL_TYPE_SAMPLER))) {
+               || uni->type->base_type == GLSL_TYPE_SAMPLER
+               || uni->type->base_type == GLSL_TYPE_IMAGE))) {
 	 memcpy(paramsOut, src, bytes);
       } else {
 	 union gl_constant_value *const dst =
@@ -386,6 +367,7 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 		  break;
 	       case GLSL_TYPE_INT:
 	       case GLSL_TYPE_SAMPLER:
+               case GLSL_TYPE_IMAGE:
 		  dst[i].f = (float) src[i].i;
 		  break;
 	       case GLSL_TYPE_BOOL:
@@ -469,6 +451,9 @@ log_uniform(const void *values, enum glsl_base_type basicType,
       case GLSL_TYPE_FLOAT:
 	 printf("%g ", v[i].f);
 	 break;
+      case GLSL_TYPE_DOUBLE:
+         printf("%g ", *(double* )&v[i * 2].f);
+         break;
       default:
 	 assert(!"Should not get here.");
 	 break;
@@ -529,11 +514,12 @@ _mesa_propagate_uniforms_to_driver_storage(struct gl_uniform_storage *uni,
     */
    const unsigned components = MAX2(1, uni->type->vector_elements);
    const unsigned vectors = MAX2(1, uni->type->matrix_columns);
+   const int dmul = uni->type->base_type == GLSL_TYPE_DOUBLE ? 2 : 1;
 
    /* Store the data in the driver's requested type in the driver's storage
     * areas.
     */
-   unsigned src_vector_byte_stride = components * 4;
+   unsigned src_vector_byte_stride = components * 4 * dmul;
 
    for (i = 0; i < uni->num_driver_storage; i++) {
       struct gl_uniform_driver_storage *const store = &uni->driver_storage[i];
@@ -541,7 +527,7 @@ _mesa_propagate_uniforms_to_driver_storage(struct gl_uniform_storage *uni,
       const unsigned extra_stride =
 	 store->element_stride - (vectors * store->vector_stride);
       const uint8_t *src =
-	 (uint8_t *) (&uni->storage[array_index * (components * vectors)].i);
+	 (uint8_t *) (&uni->storage[array_index * (dmul * components * vectors)].i);
 
 #if 0
       printf("%s: %p[%d] components=%u vectors=%u count=%u vector_stride=%u "
@@ -597,6 +583,46 @@ _mesa_propagate_uniforms_to_driver_storage(struct gl_uniform_storage *uni,
    }
 }
 
+
+/**
+ * Return printable string for a given GLSL_TYPE_x
+ */
+static const char *
+glsl_type_name(enum glsl_base_type type)
+{
+   switch (type) {
+   case GLSL_TYPE_UINT:
+      return "uint";
+   case GLSL_TYPE_INT:
+      return "int";
+   case GLSL_TYPE_FLOAT:
+      return "float";
+   case GLSL_TYPE_DOUBLE:
+      return "double";
+   case GLSL_TYPE_BOOL:
+      return "bool";
+   case GLSL_TYPE_SAMPLER:
+      return "sampler";
+   case GLSL_TYPE_IMAGE:
+      return "image";
+   case GLSL_TYPE_ATOMIC_UINT:
+      return "atomic_uint";
+   case GLSL_TYPE_STRUCT:
+      return "struct";
+   case GLSL_TYPE_INTERFACE:
+      return "interface";
+   case GLSL_TYPE_ARRAY:
+      return "array";
+   case GLSL_TYPE_VOID:
+      return "void";
+   case GLSL_TYPE_ERROR:
+      return "error";
+   default:
+      return "other";
+   }
+}
+
+
 /**
  * Called via glUniform*() functions.
  */
@@ -608,6 +634,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
               unsigned src_components)
 {
    unsigned offset;
+   int size_mul = basicType == GLSL_TYPE_DOUBLE ? 2 : 1;
 
    struct gl_uniform_storage *const uni =
       validate_uniform_parameters(ctx, shProg, location, count,
@@ -615,15 +642,32 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
    if (uni == NULL)
       return;
 
+   if (uni->type->is_matrix()) {
+      /* Can't set matrix uniforms (like mat4) with glUniform */
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "glUniform%u(uniform \"%s\"@%d is matrix)",
+                  src_components, uni->name, location);
+      return;
+   }
+
    /* Verify that the types are compatible.
     */
    const unsigned components = uni->type->is_sampler()
       ? 1 : uni->type->vector_elements;
 
+   if (components != src_components) {
+      /* glUniformN() must match float/vecN type */
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "glUniform%u(\"%s\"@%u has %u components, not %u)",
+                  src_components, uni->name, location,
+                  components, src_components);
+      return;
+   }
+
    bool match;
    switch (uni->type->base_type) {
    case GLSL_TYPE_BOOL:
-      match = true;
+      match = (basicType != GLSL_TYPE_DOUBLE);
       break;
    case GLSL_TYPE_SAMPLER:
    case GLSL_TYPE_IMAGE:
@@ -634,8 +678,12 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
       break;
    }
 
-   if (uni->type->is_matrix() || components != src_components || !match) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glUniform(type mismatch)");
+   if (!match) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "glUniform%u(\"%s\"@%d is %s, not %s)",
+                  src_components, uni->name, location,
+                  glsl_type_name(uni->type->base_type),
+                  glsl_type_name(basicType));
       return;
    }
 
@@ -710,8 +758,8 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
    /* Store the data in the "actual type" backing storage for the uniform.
     */
    if (!uni->type->is_boolean()) {
-      memcpy(&uni->storage[components * offset], values,
-	     sizeof(uni->storage[0]) * components * count);
+      memcpy(&uni->storage[size_mul * components * offset], values,
+	     sizeof(uni->storage[0]) * components * count * size_mul);
    } else {
       const union gl_constant_value *src =
 	 (const union gl_constant_value *) values;
@@ -757,7 +805,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
 	  * been modified.
 	  */
 	 bool changed = false;
-	 for (unsigned j = 0; j < Elements(prog->SamplerUnits); j++) {
+	 for (unsigned j = 0; j < ARRAY_SIZE(prog->SamplerUnits); j++) {
 	    if ((sh->active_samplers & (1U << j)) != 0
 		&& (prog->SamplerUnits[j] != sh->SamplerUnits[j])) {
 	       changed = true;
@@ -808,13 +856,14 @@ extern "C" void
 _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
 		     GLuint cols, GLuint rows,
                      GLint location, GLsizei count,
-                     GLboolean transpose, const GLfloat *values)
+                     GLboolean transpose,
+                     const GLvoid *values, GLenum type)
 {
    unsigned offset;
    unsigned vectors;
    unsigned components;
    unsigned elements;
-
+   int size_mul;
    struct gl_uniform_storage *const uni =
       validate_uniform_parameters(ctx, shProg, location, count,
                                   &offset, "glUniformMatrix");
@@ -826,6 +875,9 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
 		  "glUniformMatrix(non-matrix uniform)");
       return;
    }
+
+   assert(type == GL_FLOAT || type == GL_DOUBLE);
+   size_mul = type == GL_DOUBLE ? 2 : 1;
 
    assert(!uni->type->is_sampler());
    vectors = uni->type->matrix_columns;
@@ -852,7 +904,7 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
    }
 
    if (unlikely(ctx->_Shader->Flags & GLSL_UNIFORMS)) {
-      log_uniform(values, GLSL_TYPE_FLOAT, components, vectors, count,
+      log_uniform(values, uni->type->base_type, components, vectors, count,
 		  bool(transpose), shProg, location, uni);
    }
 
@@ -879,12 +931,27 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
 
    if (!transpose) {
       memcpy(&uni->storage[elements * offset], values,
-	     sizeof(uni->storage[0]) * elements * count);
-   } else {
+	     sizeof(uni->storage[0]) * elements * count * size_mul);
+   } else if (type == GL_FLOAT) {
       /* Copy and transpose the matrix.
        */
-      const float *src = values;
+      const float *src = (const float *)values;
       float *dst = &uni->storage[elements * offset].f;
+
+      for (int i = 0; i < count; i++) {
+	 for (unsigned r = 0; r < rows; r++) {
+	    for (unsigned c = 0; c < cols; c++) {
+	       dst[(c * components) + r] = src[c + (r * vectors)];
+	    }
+	 }
+
+	 dst += elements;
+	 src += elements;
+      }
+   } else {
+      assert(type == GL_DOUBLE);
+      const double *src = (const double *)values;
+      double *dst = (double *)&uni->storage[elements * offset].f;
 
       for (int i = 0; i < count; i++) {
 	 for (unsigned r = 0; r < rows; r++) {

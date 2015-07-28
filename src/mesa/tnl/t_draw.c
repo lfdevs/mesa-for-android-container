@@ -25,6 +25,8 @@
  *    Keith Whitwell <keithw@vmware.com>
  */
 
+#include <stdio.h>
+
 #include "main/glheader.h"
 #include "main/bufferobj.h"
 #include "main/condrender.h"
@@ -446,7 +448,7 @@ void _tnl_draw_prims(struct gl_context *ctx,
 
    if (0)
    {
-      printf("%s %d..%d\n", __FUNCTION__, min_index, max_index);
+      printf("%s %d..%d\n", __func__, min_index, max_index);
       for (i = 0; i < nr_prims; i++)
 	 printf("prim %d: %s start %d count %d\n", i, 
 		_mesa_lookup_enum_by_nr(prim[i].mode),

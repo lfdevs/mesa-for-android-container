@@ -208,7 +208,7 @@ intel_miptree_blit(struct brw_context *brw,
     */
    if (!intel_miptree_blit_compatible_formats(src_format, dst_format)) {
       perf_debug("%s: Can't use hardware blitter from %s to %s, "
-                 "falling back.\n", __FUNCTION__,
+                 "falling back.\n", __func__,
                  _mesa_get_format_name(src_format),
                  _mesa_get_format_name(dst_format));
       return false;
@@ -372,7 +372,7 @@ intelEmitCopyBlit(struct brw_context *brw,
 
    intel_batchbuffer_require_space(brw, length * 4, BLT_RING);
    DBG("%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
-       __FUNCTION__,
+       __func__,
        src_buffer, src_pitch, src_offset, src_x, src_y,
        dst_buffer, dst_pitch, dst_offset, dst_x, dst_y, w, h);
 
@@ -498,7 +498,7 @@ intelEmitImmediateColorExpandBlit(struct brw_context *brw,
       return true;
 
    DBG("%s dst:buf(%p)/%d+%d %d,%d sz:%dx%d, %d bytes %d dwords\n",
-       __FUNCTION__,
+       __func__,
        dst_buffer, dst_pitch, dst_offset, x, y, w, h, src_size, dwords);
 
    unsigned xy_setup_blt_length = brw->gen >= 8 ? 10 : 8;
@@ -629,7 +629,7 @@ intel_miptree_set_alpha_to_one(struct brw_context *brw,
    cpp = mt->cpp;
 
    DBG("%s dst:buf(%p)/%d %d,%d sz:%dx%d\n",
-       __FUNCTION__, mt->bo, pitch, x, y, width, height);
+       __func__, mt->bo, pitch, x, y, width, height);
 
    BR13 = br13_for_cpp(cpp) | 0xf0 << 16;
    CMD = XY_COLOR_BLT_CMD;

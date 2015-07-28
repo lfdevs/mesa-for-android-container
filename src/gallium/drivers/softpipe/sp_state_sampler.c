@@ -202,7 +202,7 @@ prepare_shader_sampling(
             struct pipe_resource *res = view->texture;
             int j;
 
-            if (res->target != PIPE_BUFFER) {
+            if (view->target != PIPE_BUFFER) {
                first_level = view->u.tex.first_level;
                last_level = view->u.tex.last_level;
                assert(first_level <= last_level);
@@ -214,15 +214,17 @@ prepare_shader_sampling(
                   row_stride[j] = sp_tex->stride[j];
                   img_stride[j] = sp_tex->img_stride[j];
                }
-               if (res->target == PIPE_TEXTURE_1D_ARRAY ||
-                   res->target == PIPE_TEXTURE_2D_ARRAY ||
-                   res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+               if (view->target == PIPE_TEXTURE_1D_ARRAY ||
+                   view->target == PIPE_TEXTURE_2D_ARRAY ||
+                   view->target == PIPE_TEXTURE_CUBE ||
+                   view->target == PIPE_TEXTURE_CUBE_ARRAY) {
                   num_layers = view->u.tex.last_layer - view->u.tex.first_layer + 1;
                   for (j = first_level; j <= last_level; j++) {
                      mip_offsets[j] += view->u.tex.first_layer *
                                        sp_tex->img_stride[j];
                   }
-                  if (res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+                  if (view->target == PIPE_TEXTURE_CUBE ||
+                      view->target == PIPE_TEXTURE_CUBE_ARRAY) {
                      assert(num_layers % 6 == 0);
                   }
                   assert(view->u.tex.first_layer <= view->u.tex.last_layer);

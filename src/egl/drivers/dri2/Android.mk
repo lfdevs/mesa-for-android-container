@@ -32,9 +32,15 @@ LOCAL_SRC_FILES := \
 	platform_android.c
 
 LOCAL_CFLAGS := \
-	-DDEFAULT_DRIVER_DIR=\"/system/lib/dri\" \
 	-DHAVE_SHARED_GLAPI \
 	-DHAVE_ANDROID_PLATFORM
+
+ifeq ($(MESA_LOLLIPOP_BUILD),true)
+LOCAL_CFLAGS_x86 := -DDEFAULT_DRIVER_DIR=\"/system/lib/dri\"
+LOCAL_CFLAGS_x86_64 := -DDEFAULT_DRIVER_DIR=\"/system/lib64/dri\"
+else
+LOCAL_CFLAGS += -DDEFAULT_DRIVER_DIR=\"/system/lib/dri\"
+endif
 
 LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/mapi \

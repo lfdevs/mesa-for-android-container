@@ -10,14 +10,19 @@ include $(top_srcdir)/src/gallium/Automake.inc
 noinst_LTLIBRARIES = libgallium.la
 
 AM_CFLAGS = \
+	-I$(top_builddir)/src/glsl/nir \
 	-I$(top_srcdir)/src/gallium/auxiliary/util \
 	$(GALLIUM_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
+	$(VISIBILITY_CFLAGS) \
+	$(MSVC2008_COMPAT_CXXFLAGS)
 
-AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS)
+AM_CXXFLAGS = \
+	$(VISIBILITY_CXXFLAGS) \
+	$(MSVC2008_COMPAT_CXXFLAGS)
 
 libgallium_la_SOURCES = \
 	$(C_SOURCES) \
+	$(NIR_SOURCES) \
 	$(GENERATED_SOURCES)
 
 if HAVE_MESA_LLVM

@@ -39,6 +39,19 @@
 #include "pipe/p_compiler.h"
 
 
+
+/**
+ * Add two size_t values with integer overflow check.
+ * TODO: leverage __builtin_add_overflow where available
+ */
+static inline bool
+add_overflow_size_t(size_t a, size_t b, size_t *res)
+{
+   *res = a + b;
+   return *res < a || *res < b;
+}
+
+
 /**
  * Return memory on given byte alignment
  */
@@ -46,8 +59,21 @@ static INLINE void *
 os_malloc_aligned(size_t size, size_t alignment)
 {
    char *ptr, *buf;
+   size_t alloc_size;
 
-   ptr = (char *) os_malloc(size + alignment + sizeof(void *));
+   /*
+    * Calculate
+    *
+    *   alloc_size = size + alignment + sizeof(void *)
+    *
+    * while checking for overflow.
+    */
+   if (add_overflow_size_t(size, alignment, &alloc_size) ||
+       add_overflow_size_t(alloc_size, sizeof(void *), &alloc_size)) {
+      return NULL;
+   }
+
+   ptr = (char *) os_malloc(alloc_size);
    if (!ptr)
       return NULL;
 

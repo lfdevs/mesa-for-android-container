@@ -216,7 +216,7 @@ extern void i830_update_provoking_vertex(struct gl_context *ctx);
  * Inline conversion functions.  These are better-typed than the
  * macros used previously:
  */
-static INLINE struct i830_context *
+static inline struct i830_context *
 i830_context(struct gl_context * ctx)
 {
    return (struct i830_context *) ctx;

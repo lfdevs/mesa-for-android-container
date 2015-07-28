@@ -51,7 +51,7 @@ fd4_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
 		enum pc_di_src_sel src_sel, uint32_t count,
-		enum a4xx_index_size idx_type,
+		uint32_t instances, enum a4xx_index_size idx_type,
 		uint32_t idx_size, uint32_t idx_offset,
 		struct fd_bo *idx_bo)
 {
@@ -73,7 +73,7 @@ fd4_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	} else {
 		OUT_RING(ring, DRAW4(primtype, src_sel, idx_type, vismode));
 	}
-	OUT_RING(ring, 0x1);               /* XXX */
+	OUT_RING(ring, instances);         /* NumInstances */
 	OUT_RING(ring, count);             /* NumIndices */
 	if (idx_bo) {
 		OUT_RING(ring, 0x0);           /* XXX */
@@ -127,7 +127,8 @@ fd4_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 
 	fd4_draw(ctx, ring, ctx->primtypes[info->mode], vismode, src_sel,
-			info->count, idx_type, idx_size, idx_offset, idx_bo);
+			info->count, info->instance_count,
+			idx_type, idx_size, idx_offset, idx_bo);
 }
 
 #endif /* FD4_DRAW_H_ */

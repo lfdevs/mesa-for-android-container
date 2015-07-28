@@ -59,7 +59,7 @@ intel_copy_texsubimage(struct intel_context *intel,
    if (!intelImage->mt || !irb || !irb->mt) {
       if (unlikely(INTEL_DEBUG & DEBUG_PERF))
 	 fprintf(stderr, "%s fail %p %p (0x%08x)\n",
-		 __FUNCTION__, intelImage->mt, irb, internalFormat);
+		 __func__, intelImage->mt, irb, internalFormat);
       return false;
    }
 
@@ -97,7 +97,7 @@ intelCopyTexSubImage(struct gl_context *ctx, GLuint dims,
    }
 
    /* Otherwise, fall back to meta.  This will likely be slow. */
-   perf_debug("%s - fallback to swrast\n", __FUNCTION__);
+   perf_debug("%s - fallback to swrast\n", __func__);
    _mesa_meta_CopyTexSubImage(ctx, dims, texImage,
                               xoffset, yoffset, slice,
                               rb, x, y, width, height);

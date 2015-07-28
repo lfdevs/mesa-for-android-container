@@ -1137,7 +1137,6 @@ const struct name_offset known_dispatch[] = {
    { "glDrawElementsInstancedARB", _O(DrawElementsInstancedARB) },
    { "glRenderbufferStorageMultisample", _O(RenderbufferStorageMultisample) },
    { "glFramebufferTexture", _O(FramebufferTexture) },
-   { "glFramebufferTextureFaceARB", _O(FramebufferTextureFaceARB) },
    { "glProgramParameteri", _O(ProgramParameteri) },
    { "glVertexAttribDivisor", _O(VertexAttribDivisor) },
    { "glFlushMappedBufferRange", _O(FlushMappedBufferRange) },

@@ -33,6 +33,7 @@
 
 #include "pipe/p_video_codec.h"
 #include "util/u_memory.h"
+#include "util/u_video.h"
 #include "vl/vl_rbsp.h"
 
 #include "entrypoint.h"
@@ -105,6 +106,22 @@ static void vid_dec_h264_BeginFrame(vid_dec_PrivateType *priv)
 
    priv->picture.h264.num_ref_frames = priv->picture.h264.pps->sps->max_num_ref_frames;
 
+   if (!priv->codec) {
+      struct pipe_video_codec templat = {};
+      omx_base_video_PortType *port;
+
+      port = (omx_base_video_PortType *)priv->ports[OMX_BASE_FILTER_INPUTPORT_INDEX];
+      templat.profile = priv->profile;
+      templat.entrypoint = PIPE_VIDEO_ENTRYPOINT_BITSTREAM;
+      templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
+      templat.max_references = priv->picture.h264.num_ref_frames;
+      templat.expect_chunked_decode = true;
+      templat.width = port->sPortParam.format.video.nFrameWidth;
+      templat.height = port->sPortParam.format.video.nFrameHeight;
+      templat.level = priv->picture.h264.pps->sps->level_idc;
+
+      priv->codec = priv->pipe->create_video_codec(priv->pipe, &templat);
+   }
    priv->codec->begin_frame(priv->codec, priv->target, &priv->picture.base);
    priv->frame_started = true;
 }
@@ -224,7 +241,7 @@ static struct pipe_h264_sps *seq_parameter_set_id(vid_dec_PrivateType *priv, str
 static void seq_parameter_set(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp)
 {
    struct pipe_h264_sps *sps;
-   unsigned profile_idc;
+   unsigned profile_idc, level_idc;
    unsigned i;
 
    /* Sequence parameter set */
@@ -252,7 +269,7 @@ static void seq_parameter_set(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp)
    vl_rbsp_u(rbsp, 2);
 
    /* level_idc */
-   vl_rbsp_u(rbsp, 8);
+   level_idc = vl_rbsp_u(rbsp, 8);
 
    sps = seq_parameter_set_id(priv, rbsp);
    if (!sps)
@@ -261,6 +278,8 @@ static void seq_parameter_set(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp)
    memset(sps, 0, sizeof(*sps));
    memset(sps->ScalingList4x4, 16, sizeof(sps->ScalingList4x4));
    memset(sps->ScalingList8x8, 16, sizeof(sps->ScalingList8x8));
+
+   sps->level_idc = level_idc;
 
    if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 ||
        profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 ||

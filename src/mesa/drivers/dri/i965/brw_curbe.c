@@ -134,7 +134,7 @@ static void calculate_curbe_offsets( struct brw_context *brw )
                  brw->curbe.vs_start,
                  brw->curbe.vs_size );
 
-      brw->state.dirty.brw |= BRW_NEW_CURBE_OFFSETS;
+      brw->ctx.NewDriverState |= BRW_NEW_CURBE_OFFSETS;
    }
 }
 
@@ -285,19 +285,6 @@ brw_upload_constant_buffer(struct brw_context *brw)
     */
 
 emit:
-   /* Work around mysterious 965 hangs that appear to happen if you do
-    * two 3DPRIMITIVEs with only a CONSTANT_BUFFER inbetween.  If we
-    * haven't already flushed for some other reason, explicitly do so.
-    *
-    * We've found no documented reason why this should be necessary.
-    */
-   if (brw->gen == 4 && !brw->is_g4x &&
-       (brw->state.dirty.brw & (BRW_NEW_BATCH | BRW_NEW_PSP)) == 0) {
-      BEGIN_BATCH(1);
-      OUT_BATCH(MI_FLUSH);
-      ADVANCE_BATCH();
-   }
-
    /* BRW_NEW_URB_FENCE: From the gen4 PRM, volume 1, section 3.9.8
     * (CONSTANT_BUFFER (CURBE Load)):
     *
@@ -317,6 +304,31 @@ emit:
 		(brw->curbe.total_size - 1) + brw->curbe.curbe_offset);
    }
    ADVANCE_BATCH();
+
+   /* Work around a Broadwater/Crestline depth interpolator bug.  The
+    * following sequence will cause GPU hangs:
+    *
+    * 1. Change state so that all depth related fields in CC_STATE are
+    *    disabled, and in WM_STATE, only "PS Use Source Depth" is enabled.
+    * 2. Emit a CONSTANT_BUFFER packet.
+    * 3. Draw via 3DPRIMITIVE.
+    *
+    * The recommended workaround is to emit a non-pipelined state change after
+    * emitting CONSTANT_BUFFER, in order to drain the windowizer pipeline.
+    *
+    * We arbitrarily choose 3DSTATE_GLOBAL_DEPTH_CLAMP_OFFSET (as it's small),
+    * and always emit it when "PS Use Source Depth" is set.  We could be more
+    * precise, but the additional complexity is probably not worth it.
+    *
+    * BRW_NEW_FRAGMENT_PROGRAM
+    */
+   if (brw->gen == 4 && !brw->is_g4x &&
+       (brw->fragment_program->Base.InputsRead & (1 << VARYING_SLOT_POS))) {
+      BEGIN_BATCH(2);
+      OUT_BATCH(_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP << 16 | (2 - 2));
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
+   }
 }
 
 const struct brw_tracked_state brw_constant_buffer = {
@@ -324,6 +336,7 @@ const struct brw_tracked_state brw_constant_buffer = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw  = BRW_NEW_BATCH |
               BRW_NEW_CURBE_OFFSETS |
+              BRW_NEW_FRAGMENT_PROGRAM |
               BRW_NEW_FS_PROG_DATA |
               BRW_NEW_PSP | /* Implicit - hardware requires this, not used above */
               BRW_NEW_URB_FENCE |

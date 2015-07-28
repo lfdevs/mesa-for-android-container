@@ -91,6 +91,8 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	_T(I8_UINT,    8_UINT,  NONE,     WZYX),
 	_T(I8_SINT,    8_SINT,  NONE,     WZYX),
 
+	_T(S8_UINT,    8_UINT,  R8_UNORM, WZYX),
+
 	/* 16-bit */
 	VT(R16_UNORM,   16_UNORM, NONE,     WZYX),
 	VT(R16_SNORM,   16_SNORM, NONE,     WZYX),
@@ -98,7 +100,7 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R16_SINT,    16_SINT,  R16_SINT, WZYX),
 	V_(R16_USCALED, 16_UINT,  NONE,     WZYX),
 	V_(R16_SSCALED, 16_UINT,  NONE,     WZYX),
-	VT(R16_FLOAT,   16_FLOAT, NONE,     WZYX),
+	VT(R16_FLOAT,   16_FLOAT, R16_FLOAT,WZYX),
 
 	_T(A16_UINT,    16_UINT,  NONE,     WZYX),
 	_T(A16_SINT,    16_SINT,  NONE,     WZYX),
@@ -136,7 +138,7 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R32_SINT,    32_SINT,  R32_SINT, WZYX),
 	V_(R32_USCALED, 32_UINT,  NONE,     WZYX),
 	V_(R32_SSCALED, 32_UINT,  NONE,     WZYX),
-	VT(R32_FLOAT,   32_FLOAT, NONE,     WZYX),
+	VT(R32_FLOAT,   32_FLOAT, R32_FLOAT,WZYX),
 	V_(R32_FIXED,   32_FIXED, NONE,     WZYX),
 
 	_T(A32_UINT,    32_UINT,  NONE,     WZYX),
@@ -152,7 +154,7 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R16G16_SINT,    16_16_SINT,  R16G16_SINT, WZYX),
 	V_(R16G16_USCALED, 16_16_UINT,  NONE,        WZYX),
 	V_(R16G16_SSCALED, 16_16_SINT,  NONE,        WZYX),
-	VT(R16G16_FLOAT,   16_16_FLOAT, NONE,        WZYX),
+	VT(R16G16_FLOAT,   16_16_FLOAT, R16G16_FLOAT,WZYX),
 
 	_T(L16A16_UINT,    16_16_UINT,  NONE,        WZYX),
 	_T(L16A16_SINT,    16_16_SINT,  NONE,        WZYX),
@@ -195,7 +197,8 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 
 	_T(Z24X8_UNORM,       X8Z24_UNORM, R8G8B8A8_UNORM, WZYX),
 	_T(Z24_UNORM_S8_UINT, X8Z24_UNORM, R8G8B8A8_UNORM, WZYX),
-	/*_T(Z32_FLOAT,         Z32_FLOAT,   R8G8B8A8_UNORM, WZYX),*/
+	_T(Z32_FLOAT,         Z32_FLOAT,   R8G8B8A8_UNORM, WZYX),
+	_T(Z32_FLOAT_S8X24_UINT, Z32_FLOAT,R8G8B8A8_UNORM, WZYX),
 
 	/* 48-bit */
 	V_(R16G16B16_UNORM,   16_16_16_UNORM, NONE, WZYX),
@@ -222,7 +225,7 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R32G32_SINT,    32_32_SINT,  R32G32_SINT, WZYX),
 	V_(R32G32_USCALED, 32_32_UINT,  NONE,        WZYX),
 	V_(R32G32_SSCALED, 32_32_SINT,  NONE,        WZYX),
-	VT(R32G32_FLOAT,   32_32_FLOAT, NONE,        WZYX),
+	VT(R32G32_FLOAT,   32_32_FLOAT, R32G32_FLOAT,WZYX),
 	V_(R32G32_FIXED,   32_32_FIXED, NONE,        WZYX),
 
 	_T(L32A32_UINT,    32_32_UINT,  NONE,        WZYX),
@@ -246,6 +249,19 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R32G32B32A32_FLOAT,   32_32_32_32_FLOAT, R32G32B32A32_FLOAT, WZYX),
 	_T(R32G32B32X32_FLOAT,   32_32_32_32_FLOAT, R32G32B32A32_FLOAT, WZYX),
 	V_(R32G32B32A32_FIXED,   32_32_32_32_FIXED, NONE,               WZYX),
+
+	/* compressed */
+	_T(ETC1_RGB8, ETC1, NONE, WZYX),
+	_T(ETC2_RGB8, ETC2_RGB8, NONE, WZYX),
+	_T(ETC2_SRGB8, ETC2_RGB8, NONE, WZYX),
+	_T(ETC2_RGB8A1, ETC2_RGB8A1, NONE, WZYX),
+	_T(ETC2_SRGB8A1, ETC2_RGB8A1, NONE, WZYX),
+	_T(ETC2_RGBA8, ETC2_RGBA8, NONE, WZYX),
+	_T(ETC2_SRGBA8, ETC2_RGBA8, NONE, WZYX),
+	_T(ETC2_R11_UNORM, ETC2_R11_UNORM, NONE, WZYX),
+	_T(ETC2_R11_SNORM, ETC2_R11_SNORM, NONE, WZYX),
+	_T(ETC2_RG11_UNORM, ETC2_RG11_UNORM, NONE, WZYX),
+	_T(ETC2_RG11_SNORM, ETC2_RG11_SNORM, NONE, WZYX),
 };
 
 enum a3xx_vtx_fmt
@@ -283,6 +299,8 @@ fd3_pipe2swap(enum pipe_format format)
 enum a3xx_tex_fetchsize
 fd3_pipe2fetchsize(enum pipe_format format)
 {
+	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
+		format = PIPE_FORMAT_Z32_FLOAT;
 	switch (util_format_get_blocksizebits(format)) {
 	case 8: return TFETCH_1_BYTE;
 	case 16: return TFETCH_2_BYTE;
@@ -311,6 +329,8 @@ fd3_gmem_restore_format(enum pipe_format format)
 		return PIPE_FORMAT_R8G8B8A8_UNORM;
 	case PIPE_FORMAT_Z16_UNORM:
 		return PIPE_FORMAT_R8G8_UNORM;
+	case PIPE_FORMAT_S8_UINT:
+		return PIPE_FORMAT_R8_UNORM;
 	default:
 		return format;
 	}
@@ -322,6 +342,8 @@ fd3_fs_output_format(enum pipe_format format)
 	if (util_format_is_srgb(format))
 		return RB_R16G16B16A16_FLOAT;
 	switch (format) {
+	case PIPE_FORMAT_R16_FLOAT:
+	case PIPE_FORMAT_R16G16_FLOAT:
 	case PIPE_FORMAT_R11G11B10_FLOAT:
 		return RB_R16G16B16A16_FLOAT;
 	default:

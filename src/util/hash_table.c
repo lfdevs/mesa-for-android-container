@@ -267,6 +267,7 @@ hash_table_insert(struct hash_table *ht, uint32_t hash,
                   const void *key, void *data)
 {
    uint32_t start_hash_address, hash_address;
+   struct hash_entry *available_entry = NULL;
 
    if (ht->entries >= ht->max_entries) {
       _mesa_hash_table_rehash(ht, ht->size_index + 1);
@@ -281,13 +282,11 @@ hash_table_insert(struct hash_table *ht, uint32_t hash,
       uint32_t double_hash;
 
       if (!entry_is_present(ht, entry)) {
-         if (entry_is_deleted(ht, entry))
-            ht->deleted_entries--;
-         entry->hash = hash;
-         entry->key = key;
-         entry->data = data;
-         ht->entries++;
-         return entry;
+         /* Stash the first available entry we find */
+         if (available_entry == NULL)
+            available_entry = entry;
+         if (entry_is_free(entry))
+            break;
       }
 
       /* Implement replacement when another insert happens
@@ -313,6 +312,16 @@ hash_table_insert(struct hash_table *ht, uint32_t hash,
 
       hash_address = (hash_address + double_hash) % ht->size;
    } while (hash_address != start_hash_address);
+
+   if (available_entry) {
+      if (entry_is_deleted(ht, available_entry))
+         ht->deleted_entries--;
+      available_entry->hash = hash;
+      available_entry->key = key;
+      available_entry->data = data;
+      ht->entries++;
+      return available_entry;
+   }
 
    /* We could hit here if a required resize failed. An unchecked-malloc
     * application could ignore this result.

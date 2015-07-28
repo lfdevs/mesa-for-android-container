@@ -25,12 +25,12 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "core/ilo_state_3d.h"
 #include "util/u_draw.h"
 #include "util/u_pack_color.h"
 
 #include "ilo_draw.h"
 #include "ilo_state.h"
-#include "ilo_state_3d.h"
 #include "ilo_blit.h"
 #include "ilo_blitter.h"
 
@@ -138,8 +138,8 @@ ilo_blitter_set_fb(struct ilo_blitter *blitter,
 {
    struct ilo_texture *tex = ilo_texture(res);
 
-   blitter->fb.width = u_minify(tex->layout.width0, level);
-   blitter->fb.height = u_minify(tex->layout.height0, level);
+   blitter->fb.width = u_minify(tex->image.width0, level);
+   blitter->fb.height = u_minify(tex->image.height0, level);
 
    blitter->fb.num_samples = res->nr_samples;
    if (!blitter->fb.num_samples)
@@ -303,7 +303,7 @@ hiz_can_clear_zs(const struct ilo_blitter *blitter,
     * The truth is when HiZ is enabled, separate stencil is also enabled on
     * all GENs.  The depth buffer format cannot be combined depth/stencil.
     */
-   switch (tex->layout.format) {
+   switch (tex->image.format) {
    case PIPE_FORMAT_Z16_UNORM:
       if (ilo_dev_gen(blitter->ilo->dev) == ILO_GEN(6) &&
           tex->base.width0 % 16)
@@ -331,15 +331,16 @@ ilo_blitter_rectlist_clear_zs(struct ilo_blitter *blitter,
    struct pipe_depth_stencil_alpha_state dsa_state;
    uint32_t uses, clear_value;
 
-   if (!ilo_texture_can_enable_hiz(tex,
-            zs->u.tex.level, zs->u.tex.first_layer,
-            zs->u.tex.last_layer - zs->u.tex.first_layer + 1))
+   if (!ilo_image_can_enable_aux(&tex->image, zs->u.tex.level))
       return false;
 
    if (!hiz_can_clear_zs(blitter, tex))
       return false;
 
-   clear_value = util_pack_z(tex->layout.format, depth);
+   if (ilo_dev_gen(blitter->ilo->dev) >= ILO_GEN(8))
+      clear_value = fui(depth);
+   else
+      clear_value = util_pack_z(tex->image.format, depth);
 
    ilo_blit_resolve_surface(blitter->ilo, zs,
          ILO_TEXTURE_RENDER_WRITE | ILO_TEXTURE_CLEAR);
@@ -424,7 +425,7 @@ ilo_blitter_rectlist_resolve_z(struct ilo_blitter *blitter,
    const struct ilo_texture_slice *s =
       ilo_texture_get_slice(tex, level, slice);
 
-   if (!ilo_texture_can_enable_hiz(tex, level, slice, 1))
+   if (!ilo_image_can_enable_aux(&tex->image, level))
       return;
 
    /*
@@ -459,7 +460,7 @@ ilo_blitter_rectlist_resolve_hiz(struct ilo_blitter *blitter,
    struct ilo_texture *tex = ilo_texture(res);
    struct pipe_depth_stencil_alpha_state dsa_state;
 
-   if (!ilo_texture_can_enable_hiz(tex, level, slice, 1))
+   if (!ilo_image_can_enable_aux(&tex->image, level))
       return;
 
    /*

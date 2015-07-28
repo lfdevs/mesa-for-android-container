@@ -26,7 +26,7 @@
 #include "vc4_drv.h"
 
 int
-vc4_cl_validate(struct drm_device *dev, struct exec_info *exec)
+vc4_cl_validate(struct drm_device *dev, struct vc4_exec_info *exec)
 {
 	struct drm_vc4_submit_cl *args = exec->args;
 	void *temp = NULL;
@@ -72,26 +72,32 @@ vc4_cl_validate(struct drm_device *dev, struct exec_info *exec)
 	exec->shader_state = temp + exec_size;
 	exec->shader_state_size = args->shader_rec_count;
 
-	ret = copy_from_user(bin, args->bin_cl, args->bin_cl_size);
+	ret = copy_from_user(bin,
+			     (void __user *)(uintptr_t)args->bin_cl,
+			     args->bin_cl_size);
 	if (ret) {
 		DRM_ERROR("Failed to copy in bin cl\n");
 		goto fail;
 	}
 
-	ret = copy_from_user(render, args->render_cl, args->render_cl_size);
+	ret = copy_from_user(render,
+			     (void __user *)(uintptr_t)args->render_cl,
+			     args->render_cl_size);
 	if (ret) {
 		DRM_ERROR("Failed to copy in render cl\n");
 		goto fail;
 	}
 
-	ret = copy_from_user(exec->shader_rec_u, args->shader_rec,
+	ret = copy_from_user(exec->shader_rec_u,
+			     (void __user *)(uintptr_t)args->shader_rec,
 			     args->shader_rec_size);
 	if (ret) {
 		DRM_ERROR("Failed to copy in shader recs\n");
 		goto fail;
 	}
 
-	ret = copy_from_user(exec->uniforms_u, args->uniforms,
+	ret = copy_from_user(exec->uniforms_u,
+			     (void __user *)(uintptr_t)args->uniforms,
 			     args->uniforms_size);
 	if (ret) {
 		DRM_ERROR("Failed to copy in uniforms cl\n");
@@ -124,6 +130,7 @@ vc4_cl_validate(struct drm_device *dev, struct exec_info *exec)
 			      bin,
 			      args->bin_cl_size,
 			      true,
+			      args->bin_cl_size != 0,
 			      exec);
 	if (ret)
 		goto fail;
@@ -133,6 +140,7 @@ vc4_cl_validate(struct drm_device *dev, struct exec_info *exec)
 			      render,
 			      args->render_cl_size,
 			      false,
+			      args->bin_cl_size != 0,
 			      exec);
 	if (ret)
 		goto fail;

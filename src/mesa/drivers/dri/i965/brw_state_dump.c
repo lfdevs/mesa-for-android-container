@@ -1,5 +1,5 @@
 /*
- * Copyright © 2007 Intel Corporation
+ * Copyright © 2007-2015 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -31,6 +31,41 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_eu.h"
+#include "brw_state.h"
+
+static const char *sampler_mip_filter[] = {
+   "NONE",
+   "NEAREST",
+   "RSVD",
+   "LINEAR"
+};
+
+static const char *sampler_mag_filter[] = {
+   "NEAREST",
+   "LINEAR",
+   "ANISOTROPIC",
+   "FLEXIBLE (GEN8+)",
+   "RSVD", "RSVD",
+   "MONO",
+   "RSVD"
+};
+
+static const char *sampler_addr_mode[] = {
+   "WRAP",
+   "MIRROR",
+   "CLAMP",
+   "CUBE",
+   "CLAMP_BORDER",
+   "MIRROR_ONCE",
+   "HALF_BORDER"
+};
+
+static const char *surface_tiling[] = {
+   "LINEAR",
+   "W-tiled",
+   "X-tiled",
+   "Y-tiled"
+};
 
 static void
 batch_out(struct brw_context *brw, const char *name, uint32_t offset,
@@ -50,6 +85,25 @@ batch_out(struct brw_context *brw, const char *name, uint32_t offset,
    va_end(va);
 }
 
+static void
+batch_out64(struct brw_context *brw, const char *name, uint32_t offset,
+            int index, char *fmt, ...)
+{
+   uint32_t *tmp = brw->batch.bo->virtual + offset;
+
+   /* Swap the dwords since we want to handle this as a 64b value, but the data
+    * is typically emitted as dwords.
+    */
+   uint64_t data = ((uint64_t)tmp[index + 1]) << 32 | tmp[index];
+   va_list va;
+
+   fprintf(stderr, "0x%08x:      0x%016" PRIx64 ": %8s: ",
+          offset + index * 4, data, name);
+   va_start(va, fmt);
+   vfprintf(stderr, fmt, va);
+   va_end(va);
+}
+
 static const char *
 get_965_surfacetype(unsigned int surfacetype)
 {
@@ -60,19 +114,6 @@ get_965_surfacetype(unsigned int surfacetype)
     case 3: return "CUBE";
     case 4: return "BUFFER";
     case 7: return "NULL";
-    default: return "unknown";
-    }
-}
-
-static const char *
-get_965_surface_format(unsigned int surface_format)
-{
-    switch (surface_format) {
-    case 0x000: return "r32g32b32a32_float";
-    case 0x0c1: return "b8g8r8a8_unorm";
-    case 0x100: return "b5g6r5_unorm";
-    case 0x102: return "b5g5r5a1_unorm";
-    case 0x104: return "b4g4r4a4_unorm";
     default: return "unknown";
     }
 }
@@ -176,7 +217,7 @@ static void dump_surface_state(struct brw_context *brw, uint32_t offset)
 
    batch_out(brw, name, offset, 0, "%s %s\n",
 	     get_965_surfacetype(GET_FIELD(surf[0], BRW_SURFACE_TYPE)),
-	     get_965_surface_format(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)));
+             brw_surface_format_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)));
    batch_out(brw, name, offset, 1, "offset\n");
    batch_out(brw, name, offset, 2, "%dx%d size, %d mips\n",
 	     GET_FIELD(surf[2], BRW_SURFACE_WIDTH) + 1,
@@ -200,7 +241,7 @@ static void dump_gen7_surface_state(struct brw_context *brw, uint32_t offset)
 
    batch_out(brw, name, offset, 0, "%s %s %s\n",
              get_965_surfacetype(GET_FIELD(surf[0], BRW_SURFACE_TYPE)),
-             get_965_surface_format(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)),
+             brw_surface_format_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)),
              (surf[0] & GEN7_SURFACE_IS_ARRAY) ? "array" : "");
    batch_out(brw, name, offset, 1, "offset\n");
    batch_out(brw, name, offset, 2, "%dx%d size, %d mips, %d slices\n",
@@ -222,6 +263,87 @@ static void dump_gen7_surface_state(struct brw_context *brw, uint32_t offset)
    batch_out(brw, name, offset, 7, "\n");
 }
 
+static float q_to_float(uint32_t data, int integer_end, int integer_start,
+                        int fractional_end, int fractional_start)
+{
+   /* Convert the number to floating point. */
+   float n = GET_BITS(data, integer_start, fractional_end);
+
+   /* Multiply by 2^-n */
+   return n * exp2(-(fractional_end - fractional_start + 1));
+}
+
+static void
+dump_gen8_surface_state(struct brw_context *brw, uint32_t offset, int index)
+{
+   uint32_t *surf = brw->batch.bo->virtual + offset;
+   int aux_mode = surf[6] & INTEL_MASK(2, 0);
+   const char *aux_str;
+   char *name;
+
+   if (brw->gen >= 9 && (aux_mode == 1 || aux_mode == 5)) {
+      bool msrt = GET_BITS(surf[4], 5, 3) > 0;
+      bool compression = GET_FIELD(surf[7], GEN9_SURFACE_RT_COMPRESSION) == 1;
+      aux_str = ralloc_asprintf(NULL, "AUX_CCS_%c (%s, MULTISAMPLE_COUNT%c1)",
+                                (aux_mode == 1) ? 'D' : 'E',
+                                compression ? "Compressed RT" : "Uncompressed",
+                                msrt ? '>' : '=');
+   } else {
+      static const char *surface_aux_mode[] = { "AUX_NONE", "AUX_MCS",
+                                                "AUX_APPEND", "AUX_HIZ",
+                                                "RSVD", "RSVD"};
+      aux_str = ralloc_asprintf(NULL, "%s", surface_aux_mode[aux_mode]);
+   }
+
+   name = ralloc_asprintf(NULL, "SURF%03d", index);
+   batch_out(brw, name, offset, 0, "%s %s %s VALIGN%d HALIGN%d %s\n",
+             get_965_surfacetype(GET_FIELD(surf[0], BRW_SURFACE_TYPE)),
+             brw_surface_format_name(GET_FIELD(surf[0], BRW_SURFACE_FORMAT)),
+             (surf[0] & GEN7_SURFACE_IS_ARRAY) ? "array" : "",
+             1 << (GET_BITS(surf[0], 17, 16) + 1), /* VALIGN */
+             1 << (GET_BITS(surf[0], 15, 14) + 1), /* HALIGN */
+             surface_tiling[GET_BITS(surf[0], 13, 12)]);
+   batch_out(brw, name, offset, 1, "MOCS: 0x%x Base MIP: %.1f (%u mips) Surface QPitch: %d\n",
+             GET_FIELD(surf[1], GEN8_SURFACE_MOCS),
+             q_to_float(surf[1], 23, 20, 19, 19),
+             surf[5] & INTEL_MASK(3, 0),
+             GET_FIELD(surf[1], GEN8_SURFACE_QPITCH) << 2);
+   batch_out(brw, name, offset, 2, "%dx%d [%s]\n",
+             GET_FIELD(surf[2], GEN7_SURFACE_WIDTH) + 1,
+             GET_FIELD(surf[2], GEN7_SURFACE_HEIGHT) + 1,
+             aux_str);
+   batch_out(brw, name, offset, 3, "%d slices (depth), pitch: %d\n",
+             GET_FIELD(surf[3], BRW_SURFACE_DEPTH) + 1,
+             (surf[3] & INTEL_MASK(17, 0)) + 1);
+   batch_out(brw, name, offset, 4, "min array element: %d, array extent %d, MULTISAMPLE_%d\n",
+             GET_FIELD(surf[4], GEN7_SURFACE_MIN_ARRAY_ELEMENT),
+             GET_FIELD(surf[4], GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT) + 1,
+             1 << GET_BITS(surf[4], 5, 3));
+   batch_out(brw, name, offset, 5, "x,y offset: %d,%d, min LOD: %d\n",
+             GET_FIELD(surf[5], BRW_SURFACE_X_OFFSET),
+             GET_FIELD(surf[5], BRW_SURFACE_Y_OFFSET),
+             GET_FIELD(surf[5], GEN7_SURFACE_MIN_LOD));
+   batch_out(brw, name, offset, 6, "AUX pitch: %d qpitch: %d\n",
+             GET_FIELD(surf[6], GEN8_SURFACE_AUX_QPITCH) << 2,
+             GET_FIELD(surf[6], GEN8_SURFACE_AUX_PITCH) << 2);
+   if (brw->gen >= 9) {
+      batch_out(brw, name, offset, 7, "Clear color: R(%x)G(%x)B(%x)A(%x)\n",
+                surf[12], surf[13], surf[14], surf[15]);
+   } else {
+      batch_out(brw, name, offset, 7, "Clear color: %c%c%c%c\n",
+                GET_BITS(surf[7], 31, 31) ? 'R' : '-',
+                GET_BITS(surf[7], 30, 30) ? 'G' : '-',
+                GET_BITS(surf[7], 29, 29) ? 'B' : '-',
+                GET_BITS(surf[7], 28, 28) ? 'A' : '-');
+   }
+
+   for (int i = 8; i < 12; i++)
+      batch_out(brw, name, offset, i, "0x%08x\n", surf[i]);
+
+   ralloc_free((void *)aux_str);
+   ralloc_free(name);
+}
+
 static void
 dump_sdc(struct brw_context *brw, uint32_t offset)
 {
@@ -229,7 +351,7 @@ dump_sdc(struct brw_context *brw, uint32_t offset)
 
    if (brw->gen >= 5 && brw->gen <= 6) {
       struct gen5_sampler_default_color *sdc = (brw->batch.bo->virtual +
-						offset);
+                                                offset);
       batch_out(brw, name, offset, 0, "unorm rgba\n");
       batch_out(brw, name, offset, 1, "r %f\n", sdc->f[0]);
       batch_out(brw, name, offset, 2, "b %f\n", sdc->f[1]);
@@ -265,6 +387,45 @@ static void dump_sampler_state(struct brw_context *brw,
       batch_out(brw, name, offset, 1, "wrapping, lod\n");
       batch_out(brw, name, offset, 2, "default color pointer\n");
       batch_out(brw, name, offset, 3, "chroma key, aniso\n");
+
+      samp += 4;
+      offset += 4 * sizeof(uint32_t);
+   }
+}
+
+static void gen7_dump_sampler_state(struct brw_context *brw,
+                                    uint32_t offset, uint32_t size)
+{
+   const uint32_t *samp = brw->batch.bo->virtual + offset;
+   char name[20];
+
+   for (int i = 0; i < size / 16; i++) {
+      sprintf(name, "SAMPLER_STATE %d", i);
+      batch_out(brw, name, offset, i,
+                "Disabled = %s, Base Mip: %u.%u, Mip/Mag/Min Filter: %s/%s/%s, LOD Bias: %d.%d\n",
+                GET_BITS(samp[0], 31, 31) ? "yes" : "no",
+                GET_BITS(samp[0], 26, 23),
+                GET_BITS(samp[0], 22, 22),
+                sampler_mip_filter[GET_FIELD(samp[0], BRW_SAMPLER_MIP_FILTER)],
+                sampler_mag_filter[GET_FIELD(samp[0], BRW_SAMPLER_MAG_FILTER)],
+                /* min filter defs are the same as mag */
+                sampler_mag_filter[GET_FIELD(samp[0], BRW_SAMPLER_MIN_FILTER)],
+                GET_BITS(samp[0], 13, 10),
+                GET_BITS(samp[0], 9, 1)
+               );
+      batch_out(brw, name, offset, i+1, "Min LOD: %u.%u, Max LOD: %u.%u\n",
+                GET_BITS(samp[1], 31, 28),
+                GET_BITS(samp[1], 27, 20),
+                GET_BITS(samp[1], 19, 16),
+                GET_BITS(samp[1], 15, 8)
+               );
+      batch_out(brw, name, offset, i+2, "Border Color\n"); /* FINISHME: gen8+ */
+      batch_out(brw, name, offset, i+3, "Max aniso: RATIO %d:1, TC[XYZ] Address Control: %s|%s|%s\n",
+                (GET_FIELD(samp[3], BRW_SAMPLER_MAX_ANISOTROPY) + 1) * 2,
+                sampler_addr_mode[GET_FIELD(samp[3], BRW_SAMPLER_TCX_WRAP_MODE)],
+                sampler_addr_mode[GET_FIELD(samp[3], BRW_SAMPLER_TCY_WRAP_MODE)],
+                sampler_addr_mode[GET_FIELD(samp[3], BRW_SAMPLER_TCZ_WRAP_MODE)]
+               );
 
       samp += 4;
       offset += 4 * sizeof(uint32_t);
@@ -320,10 +481,17 @@ static void dump_sf_clip_viewport_state(struct brw_context *brw,
    batch_out(brw, name, offset, 3, "m30 = %f\n", vp->viewport.m30);
    batch_out(brw, name, offset, 4, "m31 = %f\n", vp->viewport.m31);
    batch_out(brw, name, offset, 5, "m32 = %f\n", vp->viewport.m32);
-   batch_out(brw, name, offset, 6, "guardband xmin = %f\n", vp->guardband.xmin);
-   batch_out(brw, name, offset, 7, "guardband xmax = %f\n", vp->guardband.xmax);
-   batch_out(brw, name, offset, 8, "guardband ymin = %f\n", vp->guardband.ymin);
-   batch_out(brw, name, offset, 9, "guardband ymax = %f\n", vp->guardband.ymax);
+   batch_out(brw, name, offset, 8, "guardband xmin = %f\n", vp->guardband.xmin);
+   batch_out(brw, name, offset, 9, "guardband xmax = %f\n", vp->guardband.xmax);
+   batch_out(brw, name, offset, 9, "guardband ymin = %f\n", vp->guardband.ymin);
+   batch_out(brw, name, offset, 10, "guardband ymax = %f\n", vp->guardband.ymax);
+   if (brw->gen >= 8) {
+      float *cc_vp = brw->batch.bo->virtual + offset;
+      batch_out(brw, name, offset, 12, "Min extents: %.2fx%.2f\n",
+                cc_vp[12], cc_vp[14]);
+      batch_out(brw, name, offset, 14, "Max extents: %.2fx%.2f\n",
+                cc_vp[13], cc_vp[15]);
+   }
 }
 
 
@@ -395,6 +563,92 @@ static void dump_blend_state(struct brw_context *brw, uint32_t offset)
 
    batch_out(brw, name, offset, 0, "\n");
    batch_out(brw, name, offset, 1, "\n");
+}
+
+static void
+gen8_dump_blend_state(struct brw_context *brw, uint32_t offset, uint32_t size)
+{
+   const uint32_t *blend = brw->batch.bo->virtual + offset;
+   const char *logicop[] =
+   {
+        "LOGICOP_CLEAR (BLACK)",
+        "LOGICOP_NOR",
+        "LOGICOP_AND_INVERTED",
+        "LOGICOP_COPY_INVERTED",
+        "LOGICOP_AND_REVERSE",
+        "LOGICOP_INVERT",
+        "LOGICOP_XOR",
+        "LOGICOP_NAND",
+        "LOGICOP_AND",
+        "LOGICOP_EQUIV",
+        "LOGICOP_NOOP",
+        "LOGICOP_OR_INVERTED",
+        "LOGICOP_COPY",
+        "LOGICOP_OR_REVERSE",
+        "LOGICOP_OR",
+        "LOGICOP_SET (WHITE)"
+   };
+
+   const char *blend_function[] =
+   { "ADD", "SUBTRACT", "REVERSE_SUBTRACT", "MIN", "MAX};" };
+
+   const char *blend_factor[0x1b] =
+   {
+      "RSVD",
+      "ONE",
+      "SRC_COLOR", "SRC_ALPHA",
+      "DST_ALPHA", "DST_COLOR",
+      "SRC_ALPHA_SATURATE",
+      "CONST_COLOR", "CONST_ALPHA",
+      "SRC1_COLOR", "SRC1_ALPHA",
+      "RSVD", "RSVD", "RSVD", "RSVD", "RSVD", "RSVD",
+      "ZERO",
+      "INV_SRC_COLOR", "INV_SRC_ALPHA",
+      "INV_DST_ALPHA", "INV_DST_COLOR",
+      "RSVD",
+      "INV_CONST_COLOR", "INV_CONST_ALPHA",
+      "INV_SRC1_COLOR", "INV_SRC1_ALPHA"
+   };
+
+   batch_out(brw, "BLEND", offset, 0, "Alpha blend/test\n");
+
+   if (((size) % 2) != 0)
+      fprintf(stderr, "Invalid blend state size %d\n", size);
+
+   for (int i = 1; i < size / 4; i += 2) {
+      char name[sizeof("BLEND_ENTRYXXX")];
+      sprintf(name, "BLEND_ENTRY%02d", (i - 1) / 2);
+      if (blend[i + 1] & GEN8_BLEND_LOGIC_OP_ENABLE) {
+         batch_out(brw, name, offset, i + 1, "%s\n",
+                   logicop[GET_FIELD(blend[i + 1],
+                                     GEN8_BLEND_LOGIC_OP_FUNCTION)]);
+      } else if (blend[i] & GEN8_BLEND_COLOR_BUFFER_BLEND_ENABLE) {
+         batch_out64(brw, name, offset, i,
+                   "\n\t\t\tColor Buffer Blend factor %s,%s,%s,%s (src,dst,src alpha, dst alpha)"
+                   "\n\t\t\tfunction %s,%s (color, alpha), Disables: %c%c%c%c\n",
+                   blend_factor[GET_FIELD(blend[i],
+                                          GEN8_BLEND_SRC_BLEND_FACTOR)],
+                   blend_factor[GET_FIELD(blend[i],
+                                          GEN8_BLEND_DST_BLEND_FACTOR)],
+                   blend_factor[GET_FIELD(blend[i],
+                                          GEN8_BLEND_SRC_ALPHA_BLEND_FACTOR)],
+                   blend_factor[GET_FIELD(blend[i],
+                                          GEN8_BLEND_DST_ALPHA_BLEND_FACTOR)],
+                   blend_function[GET_FIELD(blend[i],
+                                            GEN8_BLEND_COLOR_BLEND_FUNCTION)],
+                   blend_function[GET_FIELD(blend[i],
+                                            GEN8_BLEND_ALPHA_BLEND_FUNCTION)],
+                   blend[i] & GEN8_BLEND_WRITE_DISABLE_RED ? 'R' : '-',
+                   blend[i] & GEN8_BLEND_WRITE_DISABLE_GREEN ? 'G' : '-',
+                   blend[i] & GEN8_BLEND_WRITE_DISABLE_BLUE ? 'B' : '-',
+                   blend[i] & GEN8_BLEND_WRITE_DISABLE_ALPHA ? 'A' : '-'
+                   );
+      } else if (!blend[i] && (blend[i + 1] == 0xb)) {
+         batch_out64(brw, name, offset, i, "NOP blend state\n");
+      } else {
+         batch_out64(brw, name, offset, i, "????\n");
+      }
+   }
 }
 
 static void
@@ -490,14 +744,17 @@ dump_prog_cache(struct brw_context *brw)
 	 case BRW_CACHE_FS_PROG:
 	    name = "FS kernel";
 	    break;
+         case BRW_CACHE_CS_PROG:
+            name = "CS kernel";
+            break;
 	 default:
 	    name = "unknown";
 	    break;
 	 }
 
          fprintf(stderr, "%s:\n", name);
-         brw_disassemble(brw, brw->cache.bo->virtual, item->offset, item->size,
-                         stderr);
+         brw_disassemble(brw->intelScreen->devinfo, brw->cache.bo->virtual,
+                         item->offset, item->size, stderr);
       }
    }
 
@@ -552,20 +809,29 @@ dump_state_batch(struct brw_context *brw)
 	    dump_cc_state_gen4(brw, offset);
 	 break;
       case AUB_TRACE_BLEND_STATE:
-	 dump_blend_state(brw, offset);
+         if (brw->gen >= 8)
+            gen8_dump_blend_state(brw, offset, size);
+         else
+            dump_blend_state(brw, offset);
 	 break;
       case AUB_TRACE_BINDING_TABLE:
 	 dump_binding_table(brw, offset, size);
 	 break;
       case AUB_TRACE_SURFACE_STATE:
-	 if (brw->gen < 7) {
-	    dump_surface_state(brw, offset);
-	 } else {
+         if (brw->gen >= 8) {
+            dump_gen8_surface_state(brw, offset,
+                                    brw->state_batch_list[i].index);
+         } else if (brw->gen >= 7) {
 	    dump_gen7_surface_state(brw, offset);
-	 }
+         } else {
+            dump_surface_state(brw, offset);
+         }
 	 break;
       case AUB_TRACE_SAMPLER_STATE:
-         dump_sampler_state(brw, offset, size);
+         if (brw->gen >= 7)
+            gen7_dump_sampler_state(brw, offset, size);
+         else
+            dump_sampler_state(brw, offset, size);
 	 break;
       case AUB_TRACE_SAMPLER_DEFAULT_COLOR:
 	 dump_sdc(brw, offset);

@@ -34,7 +34,7 @@
 #ifndef RADEON_VIDEO_H
 #define RADEON_VIDEO_H
 
-#include "radeon/drm/radeon_winsys.h"
+#include "radeon/radeon_winsys.h"
 #include "vl/vl_video_buffer.h"
 
 #define RVID_ERR(fmt, args...) \
@@ -68,7 +68,7 @@ void rvid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer)
    sumup their sizes and replace the backend buffers with a single bo */
 void rvid_join_surfaces(struct radeon_winsys* ws, unsigned bind,
                         struct pb_buffer** buffers[VL_NUM_COMPONENTS],
-                        struct radeon_surface *surfaces[VL_NUM_COMPONENTS]);
+                        struct radeon_surf *surfaces[VL_NUM_COMPONENTS]);
 
 /* returns supported codecs and other parameters */
 int rvid_get_video_param(struct pipe_screen *screen,

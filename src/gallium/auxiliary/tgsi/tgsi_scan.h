@@ -33,6 +33,10 @@
 #include "pipe/p_state.h"
 #include "pipe/p_shader_tokens.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Shader summary info
  */
@@ -114,5 +118,8 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
 extern boolean
 tgsi_is_passthrough_shader(const struct tgsi_token *tokens);
 
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif /* TGSI_SCAN_H */

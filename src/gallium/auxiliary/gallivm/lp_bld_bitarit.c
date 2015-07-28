@@ -182,6 +182,8 @@ lp_build_shl(struct lp_build_context *bld, LLVMValueRef a, LLVMValueRef b)
    assert(lp_check_value(type, a));
    assert(lp_check_value(type, b));
 
+   (void)type;
+
    res = LLVMBuildShl(builder, a, b, "");
 
    return res;

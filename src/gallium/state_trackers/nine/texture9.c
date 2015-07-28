@@ -20,6 +20,8 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include "c99_alloca.h"
+
 #include "device9.h"
 #include "surface9.h"
 #include "texture9.h"
@@ -48,10 +50,11 @@ NineTexture9_ctor( struct NineTexture9 *This,
     struct pipe_resource *info = &This->base.base.info;
     struct pipe_resource *resource;
     enum pipe_format pf;
+    unsigned *level_offsets;
     unsigned l;
     D3DSURFACE_DESC sfdesc;
     HRESULT hr;
-    void *user_buffer = NULL;
+    void *user_buffer = NULL, *user_buffer_for_level;
 
     DBG("(%p) Width=%u Height=%u Levels=%u Usage=%s Format=%s Pool=%s "
         "pSharedHandle=%p\n", This, Width, Height, Levels,
@@ -125,6 +128,11 @@ NineTexture9_ctor( struct NineTexture9 *This,
             PIPE_BIND_TRANSFER_READ |
             PIPE_BIND_TRANSFER_WRITE;
     }
+
+    if (Usage & D3DUSAGE_SOFTWAREPROCESSING)
+        DBG("Application asked for Software Vertex Processing, "
+            "but this is unimplemented\n");
+
     if (pSharedHandle)
         info->bind |= PIPE_BIND_SHARED;
 
@@ -133,6 +141,24 @@ NineTexture9_ctor( struct NineTexture9 *This,
 
     if (pSharedHandle && *pSharedHandle) { /* Pool == D3DPOOL_SYSTEMMEM */
         user_buffer = (void *)*pSharedHandle;
+        level_offsets = alloca(sizeof(unsigned) * (info->last_level + 1));
+        (void) nine_format_get_size_and_offsets(pf, level_offsets,
+                                                Width, Height,
+                                                info->last_level);
+    } else if (Pool != D3DPOOL_DEFAULT) {
+        /* TODO: For D3DUSAGE_AUTOGENMIPMAP, it is likely we only have to
+         * allocate only for the first level, since it is the only lockable
+         * level. Check apps don't crash if we allocate smaller buffer (some
+         * apps access sublevels of texture even if they locked only first
+         * level) */
+        level_offsets = alloca(sizeof(unsigned) * (info->last_level + 1));
+        user_buffer = MALLOC(
+            nine_format_get_size_and_offsets(pf, level_offsets,
+                                             Width, Height,
+                                             info->last_level));
+        This->managed_buffer = user_buffer;
+        if (!This->managed_buffer)
+            return E_OUTOFMEMORY;
     }
 
     This->surfaces = CALLOC(info->last_level + 1, sizeof(*This->surfaces));
@@ -163,9 +189,13 @@ NineTexture9_ctor( struct NineTexture9 *This,
     for (l = 0; l <= info->last_level; ++l) {
         sfdesc.Width = u_minify(Width, l);
         sfdesc.Height = u_minify(Height, l);
+        /* Some apps expect the memory to be allocated in
+         * continous blocks */
+        user_buffer_for_level = user_buffer ? user_buffer +
+            level_offsets[l] : NULL;
 
         hr = NineSurface9_new(This->base.base.base.device, NineUnknown(This),
-                              resource, user_buffer,
+                              resource, user_buffer_for_level,
                               D3DRTYPE_TEXTURE, l, 0,
                               &sfdesc, &This->surfaces[l]);
         if (FAILED(hr))
@@ -192,6 +222,9 @@ NineTexture9_dtor( struct NineTexture9 *This )
             NineUnknown_Destroy(&This->surfaces[l]->base.base);
         FREE(This->surfaces);
     }
+
+    if (This->managed_buffer)
+        FREE(This->managed_buffer);
 
     NineBaseTexture9_dtor(&This->base);
 }
@@ -271,7 +304,7 @@ NineTexture9_AddDirtyRect( struct NineTexture9 *This,
             This->base.dirty_mip = TRUE;
         return D3D_OK;
     }
-    This->base.dirty = TRUE;
+    This->base.managed.dirty = TRUE;
 
     BASETEX_REGISTER_UPDATE(&This->base);
 
@@ -282,6 +315,9 @@ NineTexture9_AddDirtyRect( struct NineTexture9 *This,
         struct pipe_box box;
         rect_to_pipe_box_clamp(&box, pDirtyRect);
         u_box_union_2d(&This->dirty_rect, &This->dirty_rect, &box);
+        (void) u_box_clip_2d(&This->dirty_rect, &This->dirty_rect,
+                             This->base.base.info.width0,
+                             This->base.base.info.height0);
     }
     return D3D_OK;
 }

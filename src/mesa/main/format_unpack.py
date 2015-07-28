@@ -43,7 +43,6 @@ string = """/*
 
 #include <stdint.h>
 
-#include "colormac.h"
 #include "format_unpack.h"
 #include "format_utils.h"
 #include "macros.h"
@@ -333,7 +332,7 @@ _mesa_unpack_rgba_row(mesa_format format, GLuint n,
       unpack_float_ycbcr_rev(src, dst, n);
       break;
    default:
-      _mesa_problem(NULL, "%s: bad format %s", __FUNCTION__,
+      _mesa_problem(NULL, "%s: bad format %s", __func__,
                     _mesa_get_format_name(format));
       return;
    }
@@ -402,7 +401,7 @@ _mesa_unpack_uint_rgba_row(mesa_format format, GLuint n,
       break;
 %endfor
    default:
-      _mesa_problem(NULL, "%s: bad format %s", __FUNCTION__,
+      _mesa_problem(NULL, "%s: bad format %s", __func__,
                     _mesa_get_format_name(format));
       return;
    }
@@ -463,8 +462,8 @@ unpack_float_z_X8_UINT_Z24_UNORM(GLuint n, const void *src, GLfloat *dst)
    GLuint i;
    for (i = 0; i < n; i++) {
       dst[i] = (GLfloat) ((s[i] >> 8) * scale);
-      ASSERT(dst[i] >= 0.0F);
-      ASSERT(dst[i] <= 1.0F);
+      assert(dst[i] >= 0.0F);
+      assert(dst[i] <= 1.0F);
    }
 }
 
@@ -477,8 +476,8 @@ unpack_float_z_Z24_UNORM_X8_UINT(GLuint n, const void *src, GLfloat *dst)
    GLuint i;
    for (i = 0; i < n; i++) {
       dst[i] = (GLfloat) ((s[i] & 0x00ffffff) * scale);
-      ASSERT(dst[i] >= 0.0F);
-      ASSERT(dst[i] <= 1.0F);
+      assert(dst[i] >= 0.0F);
+      assert(dst[i] <= 1.0F);
    }
 }
 

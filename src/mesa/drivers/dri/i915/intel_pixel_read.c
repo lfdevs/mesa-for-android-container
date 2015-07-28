@@ -82,7 +82,7 @@ do_blit_readpixels(struct gl_context * ctx,
    GLint dst_x, dst_y;
    GLuint dirty;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    assert(_mesa_is_bufferobj(pack->BufferObj));
 
@@ -92,12 +92,12 @@ do_blit_readpixels(struct gl_context * ctx,
    if (ctx->_ImageTransferState ||
        !_mesa_format_matches_format_and_type(irb->mt->format, format, type,
                                              false)) {
-      DBG("%s - bad format for blit\n", __FUNCTION__);
+      DBG("%s - bad format for blit\n", __func__);
       return false;
    }
 
    if (pack->SwapBytes || pack->LsbFirst) {
-      DBG("%s: bad packing params\n", __FUNCTION__);
+      DBG("%s: bad packing params\n", __func__);
       return false;
    }
 
@@ -148,7 +148,7 @@ do_blit_readpixels(struct gl_context * ctx,
 
    intel_miptree_release(&pbo_mt);
 
-   DBG("%s - DONE\n", __FUNCTION__);
+   DBG("%s - DONE\n", __func__);
 
    return true;
 }
@@ -164,7 +164,7 @@ intelReadPixels(struct gl_context * ctx,
 
    intel_flush_rendering_to_batch(ctx);
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    if (_mesa_is_bufferobj(pack->BufferObj)) {
       /* Using PBOs, so try the BLT based path. */
@@ -173,7 +173,7 @@ intelReadPixels(struct gl_context * ctx,
          return;
       }
 
-      perf_debug("%s: fallback to CPU mapping in PBO case\n", __FUNCTION__);
+      perf_debug("%s: fallback to CPU mapping in PBO case\n", __func__);
    }
 
    /* glReadPixels() wont dirty the front buffer, so reset the dirty

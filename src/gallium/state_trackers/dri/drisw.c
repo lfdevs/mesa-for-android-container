@@ -333,6 +333,7 @@ drisw_update_tex_buffer(struct dri_drawable *drawable,
 static const __DRIextension *drisw_screen_extensions[] = {
    &driTexBufferExtension.base,
    &dri2RendererQueryExtension.base,
+   &dri2ConfigQueryExtension.base,
    NULL
 };
 

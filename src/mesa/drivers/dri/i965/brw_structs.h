@@ -639,6 +639,8 @@ struct gen6_sf_viewport {
    float m30;
    float m31;
    float m32;
+
+   unsigned pad0[2];
 };
 
 struct gen7_sf_clip_viewport {

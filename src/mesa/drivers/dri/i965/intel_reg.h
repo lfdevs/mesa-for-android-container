@@ -48,6 +48,20 @@
 #define GEN7_MI_LOAD_REGISTER_MEM	(CMD_MI | (0x29 << 23))
 # define MI_LOAD_REGISTER_MEM_USE_GGTT		(1 << 22)
 
+/* Manipulate the predicate bit based on some register values. Only on Gen7+ */
+#define GEN7_MI_PREDICATE		(CMD_MI | (0xC << 23))
+# define MI_PREDICATE_LOADOP_KEEP		(0 << 6)
+# define MI_PREDICATE_LOADOP_LOAD		(2 << 6)
+# define MI_PREDICATE_LOADOP_LOADINV		(3 << 6)
+# define MI_PREDICATE_COMBINEOP_SET		(0 << 3)
+# define MI_PREDICATE_COMBINEOP_AND		(1 << 3)
+# define MI_PREDICATE_COMBINEOP_OR		(2 << 3)
+# define MI_PREDICATE_COMBINEOP_XOR		(3 << 3)
+# define MI_PREDICATE_COMPAREOP_TRUE		(0 << 0)
+# define MI_PREDICATE_COMPAREOP_FALSE		(1 << 0)
+# define MI_PREDICATE_COMPAREOP_SRCS_EQUAL	(2 << 0)
+# define MI_PREDICATE_COMPAREOP_DELTAS_EQUAL	(3 << 0)
+
 /** @{
  *
  * PIPE_CONTROL operation, a combination MI_FLUSH and register write with
@@ -64,12 +78,14 @@
 #define PIPE_CONTROL_WRITE_DEPTH_COUNT	(2 << 14)
 #define PIPE_CONTROL_WRITE_TIMESTAMP	(3 << 14)
 #define PIPE_CONTROL_DEPTH_STALL	(1 << 13)
-#define PIPE_CONTROL_WRITE_FLUSH	(1 << 12)
-#define PIPE_CONTROL_INSTRUCTION_FLUSH	(1 << 11)
-#define PIPE_CONTROL_TC_FLUSH		(1 << 10) /* GM45+ only */
+#define PIPE_CONTROL_RENDER_TARGET_FLUSH (1 << 12)
+#define PIPE_CONTROL_INSTRUCTION_INVALIDATE (1 << 11)
+#define PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE	(1 << 10) /* GM45+ only */
 #define PIPE_CONTROL_ISP_DIS		(1 << 9)
 #define PIPE_CONTROL_INTERRUPT_ENABLE	(1 << 8)
+#define PIPE_CONTROL_FLUSH_ENABLE	(1 << 7) /* Gen7+ only */
 /* GT */
+#define PIPE_CONTROL_DATA_CACHE_INVALIDATE	(1 << 5)
 #define PIPE_CONTROL_VF_CACHE_INVALIDATE	(1 << 4)
 #define PIPE_CONTROL_CONST_CACHE_INVALIDATE	(1 << 3)
 #define PIPE_CONTROL_STATE_CACHE_INVALIDATE	(1 << 2)
@@ -111,6 +127,7 @@
 #define CL_INVOCATION_COUNT             0x2338
 #define CL_PRIMITIVES_COUNT             0x2340
 #define PS_INVOCATION_COUNT             0x2348
+#define CS_INVOCATION_COUNT             0x2290
 #define PS_DEPTH_COUNT                  0x2350
 
 #define GEN6_SO_PRIM_STORAGE_NEEDED     0x2280
@@ -142,5 +159,14 @@
 #define GEN7_CACHE_MODE_1               0x7004
 # define GEN8_HIZ_NP_PMA_FIX_ENABLE        (1 << 11)
 # define GEN8_HIZ_NP_EARLY_Z_FAILS_DISABLE (1 << 13)
+# define GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC (1 << 1)
 # define GEN8_HIZ_PMA_MASK_BITS \
    ((GEN8_HIZ_NP_PMA_FIX_ENABLE | GEN8_HIZ_NP_EARLY_Z_FAILS_DISABLE) << 16)
+
+/* Predicate registers */
+#define MI_PREDICATE_SRC0               0x2400
+#define MI_PREDICATE_SRC1               0x2408
+#define MI_PREDICATE_DATA               0x2410
+#define MI_PREDICATE_RESULT             0x2418
+#define MI_PREDICATE_RESULT_1           0x241C
+#define MI_PREDICATE_RESULT_2           0x2214

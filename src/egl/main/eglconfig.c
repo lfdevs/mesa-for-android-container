@@ -36,6 +36,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include "c99_compat.h"
+
 #include "eglconfig.h"
 #include "egldisplay.h"
 #include "eglcurrent.h"
@@ -321,10 +323,6 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
                    EGL_VG_ALPHA_FORMAT_PRE_BIT |
                    EGL_MULTISAMPLE_RESOLVE_BOX_BIT |
                    EGL_SWAP_BEHAVIOR_PRESERVED_BIT;
-#ifdef EGL_MESA_screen_surface
-            if (conf->Display->Extensions.MESA_screen_surface)
-               mask |= EGL_SCREEN_BIT_MESA;
-#endif
             break;
          case EGL_RENDERABLE_TYPE:
          case EGL_CONFORMANT:
@@ -481,7 +479,7 @@ _eglMatchConfig(const _EGLConfig *conf, const _EGLConfig *criteria)
    return matched;
 }
 
-static INLINE EGLBoolean
+static inline EGLBoolean
 _eglIsConfigAttribValid(_EGLConfig *conf, EGLint attr)
 {
    if (_eglOffsetOfConfig(attr) < 0)
@@ -651,7 +649,7 @@ _eglCompareConfigs(const _EGLConfig *conf1, const _EGLConfig *conf2,
 }
 
 
-static INLINE
+static inline
 void _eglSwapConfigs(const _EGLConfig **conf1, const _EGLConfig **conf2)
 {
    const _EGLConfig *tmp = *conf1;

@@ -26,10 +26,10 @@
  */
 
 #include "genhw/genhw.h"
+#include "core/ilo_builder_mi.h"
+#include "core/ilo_builder_blt.h"
 #include "util/u_pack_color.h"
 
-#include "ilo_builder_mi.h"
-#include "ilo_builder_blt.h"
 #include "ilo_context.h"
 #include "ilo_cp.h"
 #include "ilo_blit.h"
@@ -38,8 +38,10 @@
 
 static uint32_t
 ilo_blitter_blt_begin(struct ilo_blitter *blitter, int max_cmd_size,
-                      struct intel_bo *dst, enum intel_tiling_mode dst_tiling,
-                      struct intel_bo *src, enum intel_tiling_mode src_tiling)
+                      struct intel_bo *dst,
+                      enum gen_surface_tiling dst_tiling,
+                      struct intel_bo *src,
+                      enum gen_surface_tiling src_tiling)
 {
    struct ilo_cp *cp = blitter->ilo->cp;
    struct intel_bo *aper_check[2];
@@ -64,12 +66,19 @@ ilo_blitter_blt_begin(struct ilo_blitter *blitter, int max_cmd_size,
    /* set BCS_SWCTRL */
    swctrl = 0x0;
 
-   if (dst_tiling == INTEL_TILING_Y) {
+   assert(dst_tiling == GEN6_TILING_NONE ||
+          dst_tiling == GEN6_TILING_X ||
+          dst_tiling == GEN6_TILING_Y);
+   assert(src_tiling == GEN6_TILING_NONE ||
+          src_tiling == GEN6_TILING_X ||
+          src_tiling == GEN6_TILING_Y);
+
+   if (dst_tiling == GEN6_TILING_Y) {
       swctrl |= GEN6_REG_BCS_SWCTRL_DST_TILING_Y << 16 |
                 GEN6_REG_BCS_SWCTRL_DST_TILING_Y;
    }
 
-   if (src && src_tiling == INTEL_TILING_Y) {
+   if (src && src_tiling == GEN6_TILING_Y) {
       swctrl |= GEN6_REG_BCS_SWCTRL_SRC_TILING_Y << 16 |
                 GEN6_REG_BCS_SWCTRL_SRC_TILING_Y;
    }
@@ -136,7 +145,7 @@ buf_clear_region(struct ilo_blitter *blitter,
 
    ilo_blitter_blt_begin(blitter, GEN6_COLOR_BLT__SIZE *
          (1 + size / 32764 / gen6_blt_max_scanlines),
-         dst.bo, INTEL_TILING_NONE, NULL, INTEL_TILING_NONE);
+         dst.bo, GEN6_TILING_NONE, NULL, GEN6_TILING_NONE);
 
    while (size) {
       unsigned width, height;
@@ -188,7 +197,7 @@ buf_copy_region(struct ilo_blitter *blitter,
 
    ilo_blitter_blt_begin(blitter, GEN6_SRC_COPY_BLT__SIZE *
          (1 + size / 32764 / gen6_blt_max_scanlines),
-         dst_buf->bo, INTEL_TILING_NONE, src_buf->bo, INTEL_TILING_NONE);
+         dst_buf->bo, GEN6_TILING_NONE, src_buf->bo, GEN6_TILING_NONE);
 
    while (size) {
       unsigned width, height;
@@ -239,29 +248,29 @@ tex_clear_region(struct ilo_blitter *blitter,
    uint32_t swctrl;
    int slice;
 
-   /* no W-tiling support */
-   if (dst_tex->separate_s8)
+   /* no W-tiling nor separate stencil support */
+   if (dst_tex->image.tiling == GEN8_TILING_W || dst_tex->separate_s8)
       return false;
 
-   if (dst_tex->layout.bo_stride > max_extent)
+   if (dst_tex->image.bo_stride > max_extent)
       return false;
 
    if (dst_box->width * cpp > gen6_blt_max_bytes_per_scanline)
       return false;
 
-   dst.bo = dst_tex->bo;
+   dst.bo = dst_tex->image.bo;
    dst.offset = 0;
-   dst.pitch = dst_tex->layout.bo_stride;
-   dst.tiling = dst_tex->layout.tiling;
+   dst.pitch = dst_tex->image.bo_stride;
+   dst.tiling = dst_tex->image.tiling;
 
    swctrl = ilo_blitter_blt_begin(blitter,
          GEN6_XY_COLOR_BLT__SIZE * dst_box->depth,
-         dst_tex->bo, dst_tex->layout.tiling, NULL, INTEL_TILING_NONE);
+         dst_tex->image.bo, dst_tex->image.tiling, NULL, GEN6_TILING_NONE);
 
    for (slice = 0; slice < dst_box->depth; slice++) {
       unsigned x, y;
 
-      ilo_layout_get_slice_pos(&dst_tex->layout,
+      ilo_image_get_slice_pos(&dst_tex->image,
             dst_level, dst_box->z + slice, &x, &y);
 
       dst.x = x + dst_box->x;
@@ -290,7 +299,7 @@ tex_copy_region(struct ilo_blitter *blitter,
                 const struct pipe_box *src_box)
 {
    const struct util_format_description *desc =
-      util_format_description(dst_tex->layout.format);
+      util_format_description(dst_tex->image.format);
    const unsigned max_extent = 32767; /* INT16_MAX */
    const uint8_t rop = 0xcc; /* SRCCOPY */
    struct ilo_builder *builder = &blitter->ilo->cp->builder;
@@ -299,12 +308,13 @@ tex_copy_region(struct ilo_blitter *blitter,
    uint32_t swctrl;
    int cpp, xscale, slice;
 
-   /* no W-tiling support */
-   if (dst_tex->separate_s8 || src_tex->separate_s8)
+   /* no W-tiling nor separate stencil support */
+   if (dst_tex->image.tiling == GEN8_TILING_W || dst_tex->separate_s8 ||
+       src_tex->image.tiling == GEN8_TILING_W || src_tex->separate_s8)
       return false;
 
-   if (dst_tex->layout.bo_stride > max_extent ||
-       src_tex->layout.bo_stride > max_extent)
+   if (dst_tex->image.bo_stride > max_extent ||
+       src_tex->image.bo_stride > max_extent)
       return false;
 
    cpp = desc->block.bits / 8;
@@ -337,15 +347,15 @@ tex_copy_region(struct ilo_blitter *blitter,
       break;
    }
 
-   dst.bo = dst_tex->bo;
+   dst.bo = dst_tex->image.bo;
    dst.offset = 0;
-   dst.pitch = dst_tex->layout.bo_stride;
-   dst.tiling = dst_tex->layout.tiling;
+   dst.pitch = dst_tex->image.bo_stride;
+   dst.tiling = dst_tex->image.tiling;
 
-   src.bo = src_tex->bo;
+   src.bo = src_tex->image.bo;
    src.offset = 0;
-   src.pitch = src_tex->layout.bo_stride;
-   src.tiling = src_tex->layout.tiling;
+   src.pitch = src_tex->image.bo_stride;
+   src.tiling = src_tex->image.tiling;
 
    swctrl = ilo_blitter_blt_begin(blitter,
          GEN6_XY_SRC_COPY_BLT__SIZE * src_box->depth,
@@ -354,9 +364,9 @@ tex_copy_region(struct ilo_blitter *blitter,
    for (slice = 0; slice < src_box->depth; slice++) {
       unsigned dx, dy, sx, sy, width, height;
 
-      ilo_layout_get_slice_pos(&dst_tex->layout,
+      ilo_image_get_slice_pos(&dst_tex->image,
             dst_level, dst_z + slice, &dx, &dy);
-      ilo_layout_get_slice_pos(&src_tex->layout,
+      ilo_image_get_slice_pos(&src_tex->image,
             src_level, src_box->z + slice, &sx, &sy);
 
       dst.x = (dx + dst_x) * xscale;

@@ -118,6 +118,11 @@ vlVdpDecoderCreate(VdpDevice device,
    templat.height = height;
    templat.max_references = max_references;
 
+   if (u_reduce_video_profile(templat.profile) ==
+       PIPE_VIDEO_FORMAT_MPEG4_AVC)
+      templat.level = u_get_h264_level(templat.width, templat.height,
+                            &templat.max_references);
+
    vldecoder->decoder = pipe->create_video_codec(pipe, &templat);
 
    if (!vldecoder->decoder) {

@@ -28,6 +28,8 @@
 #ifndef EGL_DRI2_INCLUDED
 #define EGL_DRI2_INCLUDED
 
+#include <stdint.h>
+
 #ifdef HAVE_X11_PLATFORM
 #include <xcb/xcb.h>
 #include <xcb/dri2.h>
@@ -72,6 +74,7 @@
 #include "egllog.h"
 #include "eglsurface.h"
 #include "eglimage.h"
+#include "eglsync.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -162,6 +165,7 @@ struct dri2_egl_display
    const __DRIimageExtension      *image;
    const __DRIrobustnessExtension *robustness;
    const __DRI2configQueryExtension *config;
+   const __DRI2fenceExtension *fence;
    int                       fd;
 
    int                       own_device;
@@ -192,10 +196,13 @@ struct dri2_egl_display
    struct wl_registry       *wl_registry;
    struct wl_drm            *wl_server_drm;
    struct wl_drm            *wl_drm;
+   struct wl_shm            *wl_shm;
    struct wl_event_queue    *wl_queue;
    int			     authenticated;
    int			     formats;
    uint32_t                  capabilities;
+   int			     is_render_node;
+   int			     is_different_gpu;
 #endif
 };
 
@@ -249,6 +256,11 @@ struct dri2_egl_surface
 #ifdef HAVE_WAYLAND_PLATFORM
       struct wl_buffer   *wl_buffer;
       __DRIimage         *dri_image;
+      /* for is_different_gpu case. NULL else */
+      __DRIimage         *linear_copy;
+      /* for swrast */
+      void *data;
+      int data_size;
 #endif
 #ifdef HAVE_DRM_PLATFORM
       struct gbm_bo       *bo;
@@ -281,6 +293,12 @@ struct dri2_egl_image
    __DRIimage *dri_image;
 };
 
+struct dri2_egl_sync {
+   _EGLSync base;
+   int refcount;
+   void *fence;
+};
+
 /* From xmlpool/options.h, user exposed so should be stable */
 #define DRI_CONF_VBLANK_NEVER 0
 #define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
@@ -290,6 +308,7 @@ struct dri2_egl_image
 /* standard typecasts */
 _EGL_DRIVER_STANDARD_TYPECASTS(dri2_egl)
 _EGL_DRIVER_TYPECAST(dri2_egl_image, _EGLImage, obj)
+_EGL_DRIVER_TYPECAST(dri2_egl_sync, _EGLSync, obj)
 
 extern const __DRIimageLookupExtension image_lookup_extension;
 extern const __DRIuseInvalidateExtension use_invalidate;

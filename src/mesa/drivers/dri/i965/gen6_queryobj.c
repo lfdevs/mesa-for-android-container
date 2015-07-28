@@ -109,6 +109,60 @@ write_xfb_primitives_written(struct brw_context *brw,
    }
 }
 
+static inline const int
+pipeline_target_to_index(int target)
+{
+   if (target == GL_GEOMETRY_SHADER_INVOCATIONS)
+      return MAX_PIPELINE_STATISTICS - 1;
+   else
+      return target - GL_VERTICES_SUBMITTED_ARB;
+}
+
+static void
+emit_pipeline_stat(struct brw_context *brw, drm_intel_bo *bo,
+                   int stream, int target, int idx)
+{
+   /* One source of confusion is the tessellation shader statistics. The
+    * hardware has no statistics specific to the TE unit. Ideally we could have
+    * the HS primitives for TESS_CONTROL_SHADER_PATCHES_ARB, and the DS
+    * invocations as the register for TESS_CONTROL_SHADER_PATCHES_ARB.
+    * Unfortunately we don't have HS primitives, we only have HS invocations.
+    */
+
+   /* Everything except GEOMETRY_SHADER_INVOCATIONS can be kept in a simple
+    * lookup table
+    */
+   static const uint32_t target_to_register[] = {
+      IA_VERTICES_COUNT,   /* VERTICES_SUBMITTED */
+      IA_PRIMITIVES_COUNT, /* PRIMITIVES_SUBMITTED */
+      VS_INVOCATION_COUNT, /* VERTEX_SHADER_INVOCATIONS */
+      0, /* HS_INVOCATION_COUNT,*/  /* TESS_CONTROL_SHADER_PATCHES */
+      0, /* DS_INVOCATION_COUNT,*/  /* TESS_EVALUATION_SHADER_INVOCATIONS */
+      GS_PRIMITIVES_COUNT, /* GEOMETRY_SHADER_PRIMITIVES_EMITTED */
+      PS_INVOCATION_COUNT, /* FRAGMENT_SHADER_INVOCATIONS */
+      CS_INVOCATION_COUNT, /* COMPUTE_SHADER_INVOCATIONS */
+      CL_INVOCATION_COUNT, /* CLIPPING_INPUT_PRIMITIVES */
+      CL_PRIMITIVES_COUNT, /* CLIPPING_OUTPUT_PRIMITIVES */
+      GS_INVOCATION_COUNT /* This one is special... */
+   };
+   STATIC_ASSERT(ARRAY_SIZE(target_to_register) == MAX_PIPELINE_STATISTICS);
+   uint32_t reg = target_to_register[pipeline_target_to_index(target)];
+   /* Gen6 GS code counts full primitives, that is, it won't count individual
+    * triangles in a triangle strip. Use CL_INVOCATION_COUNT for that.
+    */
+   if (brw->gen == 6 && target == GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB)
+      reg = CL_INVOCATION_COUNT;
+   assert(reg != 0);
+
+   /* Emit a flush to make sure various parts of the pipeline are complete and
+    * we get an accurate value
+    */
+   intel_batchbuffer_emit_mi_flush(brw);
+
+   brw_store_register_mem64(brw, bo, reg, idx);
+}
+
+
 /**
  * Wait on the query object's BO and calculate the final result.
  */
@@ -169,9 +223,35 @@ gen6_queryobj_get_results(struct gl_context *ctx,
 
    case GL_PRIMITIVES_GENERATED:
    case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
+   case GL_VERTICES_SUBMITTED_ARB:
+   case GL_PRIMITIVES_SUBMITTED_ARB:
+   case GL_VERTEX_SHADER_INVOCATIONS_ARB:
+   case GL_GEOMETRY_SHADER_INVOCATIONS:
+   case GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB:
+   case GL_CLIPPING_INPUT_PRIMITIVES_ARB:
+   case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
+   case GL_COMPUTE_SHADER_INVOCATIONS_ARB:
       query->Base.Result = results[1] - results[0];
       break;
 
+   case GL_FRAGMENT_SHADER_INVOCATIONS_ARB:
+      query->Base.Result = (results[1] - results[0]);
+      /* Implement the "WaDividePSInvocationCountBy4:HSW,BDW" workaround:
+       * "Invocation counter is 4 times actual.  WA: SW to divide HW reported
+       *  PS Invocations value by 4."
+       *
+       * Prior to Haswell, invocation count was counted by the WM, and it
+       * buggily counted invocations in units of subspans (2x2 unit). To get the
+       * correct value, the CS multiplied this by 4. With HSW the logic moved,
+       * and correctly emitted the number of pixel shader invocations, but,
+       * whomever forgot to undo the multiply by 4.
+       */
+      if (brw->gen >= 8 || brw->is_haswell)
+         query->Base.Result /= 4;
+      break;
+
+   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
+   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
    default:
       unreachable("Unrecognized query target in brw_queryobj_get_results()");
    }
@@ -240,6 +320,20 @@ gen6_begin_query(struct gl_context *ctx, struct gl_query_object *q)
       write_xfb_primitives_written(brw, query->bo, query->Base.Stream, 0);
       break;
 
+   case GL_VERTICES_SUBMITTED_ARB:
+   case GL_PRIMITIVES_SUBMITTED_ARB:
+   case GL_VERTEX_SHADER_INVOCATIONS_ARB:
+   case GL_GEOMETRY_SHADER_INVOCATIONS:
+   case GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB:
+   case GL_FRAGMENT_SHADER_INVOCATIONS_ARB:
+   case GL_CLIPPING_INPUT_PRIMITIVES_ARB:
+   case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
+   case GL_COMPUTE_SHADER_INVOCATIONS_ARB:
+      emit_pipeline_stat(brw, query->bo, query->Base.Stream, query->Base.Target, 0);
+      break;
+
+   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
+   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
    default:
       unreachable("Unrecognized query target in brw_begin_query()");
    }
@@ -278,6 +372,21 @@ gen6_end_query(struct gl_context *ctx, struct gl_query_object *q)
       write_xfb_primitives_written(brw, query->bo, query->Base.Stream, 1);
       break;
 
+   case GL_VERTICES_SUBMITTED_ARB:
+   case GL_PRIMITIVES_SUBMITTED_ARB:
+   case GL_VERTEX_SHADER_INVOCATIONS_ARB:
+   case GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB:
+   case GL_FRAGMENT_SHADER_INVOCATIONS_ARB:
+   case GL_COMPUTE_SHADER_INVOCATIONS_ARB:
+   case GL_CLIPPING_INPUT_PRIMITIVES_ARB:
+   case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
+   case GL_GEOMETRY_SHADER_INVOCATIONS:
+      emit_pipeline_stat(brw, query->bo,
+                         query->Base.Stream, query->Base.Target, 1);
+      break;
+
+   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
+   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
    default:
       unreachable("Unrecognized query target in brw_end_query()");
    }

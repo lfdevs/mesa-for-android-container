@@ -104,6 +104,7 @@ fd2_screen_is_format_supported(struct pipe_screen *pscreen,
 void
 fd2_screen_init(struct pipe_screen *pscreen)
 {
+	fd_screen(pscreen)->max_rts = 1;
 	pscreen->context_create = fd2_context_create;
 	pscreen->is_format_supported = fd2_screen_is_format_supported;
 }

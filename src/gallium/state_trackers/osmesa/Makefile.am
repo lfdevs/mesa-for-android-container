@@ -39,3 +39,5 @@ AM_CPPFLAGS = \
 noinst_LTLIBRARIES = libosmesa.la
 
 libosmesa_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = SConscript

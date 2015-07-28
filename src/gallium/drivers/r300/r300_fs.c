@@ -170,7 +170,6 @@ static void get_external_state(
         }
 
         state->unit[i].non_normalized_coords = !s->state.normalized_coords;
-        state->unit[i].convert_unorm_to_snorm = 0;
 
         /* Pass texture swizzling to the compiler, some lowering passes need it. */
         if (state->unit[i].compare_mode_enabled) {
@@ -565,9 +564,10 @@ static void r300_translate_fragment_shader(
 boolean r300_pick_fragment_shader(struct r300_context* r300)
 {
     struct r300_fragment_shader* fs = r300_fs(r300);
-    struct r300_fragment_program_external_state state = {{{ 0 }}};
+    struct r300_fragment_program_external_state state;
     struct r300_fragment_shader_code* ptr;
 
+    memset(&state, 0, sizeof(state));
     get_external_state(r300, &state);
 
     if (!fs->first) {

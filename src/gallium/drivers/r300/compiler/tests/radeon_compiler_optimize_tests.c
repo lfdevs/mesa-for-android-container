@@ -23,6 +23,7 @@
  * Author: Tom Stellard <thomas.stellard@amd.com>
  */
 
+#include <stdio.h>
 #include "radeon_compiler.h"
 #include "radeon_dataflow.h"
 

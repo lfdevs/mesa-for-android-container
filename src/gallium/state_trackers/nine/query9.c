@@ -227,8 +227,13 @@ NineQuery9_GetData( struct NineQuery9 *This,
         wait_query_result = TRUE;
     }
 
-    /* Wine tests: D3DQUERYTYPE_TIMESTAMP always succeeds */
-    wait_query_result |= This->type == D3DQUERYTYPE_TIMESTAMP;
+    /* The documention mentions no special case for D3DQUERYTYPE_TIMESTAMP.
+     * However Windows tests show that the query always succeeds when
+     * D3DGETDATA_FLUSH is specified. */
+    if (This->type == D3DQUERYTYPE_TIMESTAMP &&
+        (dwGetDataFlags & D3DGETDATA_FLUSH))
+        wait_query_result = TRUE;
+
 
     /* Note: We ignore dwGetDataFlags, because get_query_result will
      * flush automatically if needed */
@@ -254,7 +259,15 @@ NineQuery9_GetData( struct NineQuery9 *This,
         nresult.b = presult.timestamp_disjoint.disjoint;
         break;
     case D3DQUERYTYPE_TIMESTAMPFREQ:
-        nresult.u64 = presult.timestamp_disjoint.frequency;
+        /* Applications use it to convert the TIMESTAMP value to time.
+           AMD drivers on win seem to return the actual hardware clock
+           resolution and corresponding values in TIMESTAMP.
+           However, this behaviour is not easy to replicate here.
+           So instead we do what wine and opengl do, and use
+           nanoseconds TIMESTAMPs.
+           (Which is also the unit used by PIPE_QUERY_TIMESTAMP.)
+        */
+        nresult.u64 = 1000000000;
         break;
     case D3DQUERYTYPE_VERTEXSTATS:
         nresult.vertexstats.NumRenderedTriangles =

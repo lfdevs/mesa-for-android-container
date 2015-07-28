@@ -33,6 +33,8 @@
 #define GLX_GLXEXT_PROTOTYPES
 #include "GL/glx.h"
 
+#include <stdio.h>
+#include <string.h>
 #include <X11/Xmd.h>
 #include <GL/glxproto.h>
 
@@ -643,7 +645,7 @@ register_with_display(Display *dpy)
       ext = dpy->ext_procs;  /* new extension is at head of list */
       assert(c->extension == ext->codes.extension);
       (void) c;
-      ext->name = _mesa_strdup(extName);
+      ext->name = strdup(extName);
       ext->close_display = close_display_callback;
    }
 }
@@ -1483,7 +1485,7 @@ glXQueryVersion( Display *dpy, int *maj, int *min )
 static int
 get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
 {
-   ASSERT(xmvis);
+   assert(xmvis);
    switch(attrib) {
       case GLX_USE_GL:
          if (fbconfig)
@@ -1634,7 +1636,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
       case GLX_MAX_PBUFFER_WIDTH:
          if (!fbconfig)
             return GLX_BAD_ATTRIBUTE;
-         /* XXX or MAX_WIDTH? */
+         /* XXX should be same as ctx->Const.MaxRenderbufferSize */
          *value = DisplayWidth(xmvis->display, xmvis->visinfo->screen);
          break;
       case GLX_MAX_PBUFFER_HEIGHT:

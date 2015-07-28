@@ -25,6 +25,7 @@
 #include "main/mtypes.h"
 #include "main/samplerobj.h"
 #include "main/texformat.h"
+#include "main/teximage.h"
 #include "program/prog_parameter.h"
 
 #include "intel_mipmap_tree.h"
@@ -69,7 +70,7 @@ surface_tiling_mode(uint32_t tiling)
 }
 
 static unsigned
-vertical_alignment(struct intel_mipmap_tree *mt)
+vertical_alignment(const struct intel_mipmap_tree *mt)
 {
    switch (mt->align_h) {
    case 4:
@@ -84,7 +85,7 @@ vertical_alignment(struct intel_mipmap_tree *mt)
 }
 
 static unsigned
-horizontal_alignment(struct intel_mipmap_tree *mt)
+horizontal_alignment(const struct intel_mipmap_tree *mt)
 {
    switch (mt->align_w) {
    case 4:
@@ -99,11 +100,11 @@ horizontal_alignment(struct intel_mipmap_tree *mt)
 }
 
 static uint32_t *
-allocate_surface_state(struct brw_context *brw, uint32_t *out_offset)
+allocate_surface_state(struct brw_context *brw, uint32_t *out_offset, int index)
 {
    int dwords = brw->gen >= 9 ? 16 : 13;
-   uint32_t *surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
-                                    dwords * 4, 64, out_offset);
+   uint32_t *surf = __brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
+                                      dwords * 4, 64, index, out_offset);
    memset(surf, 0, dwords * 4);
    return surf;
 }
@@ -119,7 +120,7 @@ gen8_emit_buffer_surface_state(struct brw_context *brw,
                                bool rw)
 {
    const unsigned mocs = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
-   uint32_t *surf = allocate_surface_state(brw, out_offset);
+   uint32_t *surf = allocate_surface_state(brw, out_offset, -1);
 
    surf[0] = BRW_SURFACE_BUFFER << BRW_SURFACE_TYPE_SHIFT |
              surface_format << BRW_SURFACE_FORMAT_SHIFT |
@@ -128,8 +129,11 @@ gen8_emit_buffer_surface_state(struct brw_context *brw,
 
    surf[2] = SET_FIELD((buffer_size - 1) & 0x7f, GEN7_SURFACE_WIDTH) |
              SET_FIELD(((buffer_size - 1) >> 7) & 0x3fff, GEN7_SURFACE_HEIGHT);
-   surf[3] = SET_FIELD(((buffer_size - 1) >> 21) & 0x3f, BRW_SURFACE_DEPTH) |
-             (pitch - 1);
+   if (surface_format == BRW_SURFACEFORMAT_RAW)
+      surf[3] = SET_FIELD(((buffer_size - 1) >> 21) & 0x3ff, BRW_SURFACE_DEPTH);
+   else
+      surf[3] = SET_FIELD(((buffer_size - 1) >> 21) & 0x3f, BRW_SURFACE_DEPTH);
+   surf[3] |= (pitch - 1);
    surf[7] = SET_FIELD(HSW_SCS_RED,   GEN7_SURFACE_SCS_R) |
              SET_FIELD(HSW_SCS_GREEN, GEN7_SURFACE_SCS_G) |
              SET_FIELD(HSW_SCS_BLUE,  GEN7_SURFACE_SCS_B) |
@@ -146,34 +150,24 @@ gen8_emit_buffer_surface_state(struct brw_context *brw,
 }
 
 static void
-gen8_update_texture_surface(struct gl_context *ctx,
-                            unsigned unit,
-                            uint32_t *surf_offset,
-                            bool for_gather)
+gen8_emit_texture_surface_state(struct brw_context *brw,
+                                struct intel_mipmap_tree *mt,
+                                GLenum target,
+                                unsigned min_layer, unsigned max_layer,
+                                unsigned min_level, unsigned max_level,
+                                unsigned format,
+                                unsigned swizzle,
+                                uint32_t *surf_offset,
+                                bool rw, bool for_gather)
 {
-   struct brw_context *brw = brw_context(ctx);
-   struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
-   struct intel_texture_object *intelObj = intel_texture_object(tObj);
-   struct intel_mipmap_tree *mt = intelObj->mt;
-   struct gl_texture_image *firstImage = tObj->Image[0][tObj->BaseLevel];
-   struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, unit);
+   const unsigned depth = max_layer - min_layer;
    struct intel_mipmap_tree *aux_mt = NULL;
    uint32_t aux_mode = 0;
-   mesa_format format = intelObj->_Format;
    uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
-
-   if (tObj->Target == GL_TEXTURE_BUFFER) {
-      brw_update_buffer_texture_surface(ctx, unit, surf_offset);
-      return;
-   }
-
-   if (tObj->StencilSampling && firstImage->_BaseFormat == GL_DEPTH_STENCIL) {
-      mt = mt->stencil_mt;
-      format = MESA_FORMAT_S_UINT8;
-   }
-
+   int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
    unsigned tiling_mode, pitch;
-   if (format == MESA_FORMAT_S_UINT8) {
+
+   if (mt->format == MESA_FORMAT_S_UINT8) {
       tiling_mode = GEN8_SURFACE_TILING_W;
       pitch = 2 * mt->pitch;
    } else {
@@ -186,29 +180,20 @@ gen8_update_texture_surface(struct gl_context *ctx,
       aux_mode = GEN8_SURFACE_AUX_MODE_MCS;
    }
 
-   /* If this is a view with restricted NumLayers, then our effective depth
-    * is not just the miptree depth.
-    */
-   uint32_t effective_depth =
-      (tObj->Immutable && tObj->Target != GL_TEXTURE_3D) ? tObj->NumLayers
-                                                         : mt->logical_depth0;
+   uint32_t *surf = allocate_surface_state(brw, surf_offset, surf_index);
 
-   uint32_t tex_format = translate_tex_format(brw, format, sampler->sRGBDecode);
-
-   uint32_t *surf = allocate_surface_state(brw, surf_offset);
-
-   surf[0] = translate_tex_target(tObj->Target) << BRW_SURFACE_TYPE_SHIFT |
-             tex_format << BRW_SURFACE_FORMAT_SHIFT |
+   surf[0] = translate_tex_target(target) << BRW_SURFACE_TYPE_SHIFT |
+             format << BRW_SURFACE_FORMAT_SHIFT |
              vertical_alignment(mt) |
              horizontal_alignment(mt) |
              tiling_mode;
 
-   if (tObj->Target == GL_TEXTURE_CUBE_MAP ||
-       tObj->Target == GL_TEXTURE_CUBE_MAP_ARRAY) {
+   if (target == GL_TEXTURE_CUBE_MAP ||
+       target == GL_TEXTURE_CUBE_MAP_ARRAY) {
       surf[0] |= BRW_SURFACE_CUBEFACE_ENABLES;
    }
 
-   if (mt->logical_depth0 > 1 && tObj->Target != GL_TEXTURE_3D)
+   if (_mesa_is_array_texture(target) || target == GL_TEXTURE_CUBE_MAP)
       surf[0] |= GEN8_SURFACE_IS_ARRAY;
 
    surf[1] = SET_FIELD(mocs_wb, GEN8_SURFACE_MOCS) | mt->qpitch >> 2;
@@ -216,16 +201,14 @@ gen8_update_texture_surface(struct gl_context *ctx,
    surf[2] = SET_FIELD(mt->logical_width0 - 1, GEN7_SURFACE_WIDTH) |
              SET_FIELD(mt->logical_height0 - 1, GEN7_SURFACE_HEIGHT);
 
-   surf[3] = SET_FIELD(effective_depth - 1, BRW_SURFACE_DEPTH) | (pitch - 1);
+   surf[3] = SET_FIELD(depth - 1, BRW_SURFACE_DEPTH) | (pitch - 1);
 
    surf[4] = gen7_surface_msaa_bits(mt->num_samples, mt->msaa_layout) |
-             SET_FIELD(tObj->MinLayer, GEN7_SURFACE_MIN_ARRAY_ELEMENT) |
-             SET_FIELD(effective_depth - 1,
-                       GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT);
+             SET_FIELD(min_layer, GEN7_SURFACE_MIN_ARRAY_ELEMENT) |
+             SET_FIELD(depth - 1, GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT);
 
-   surf[5] = SET_FIELD(tObj->MinLevel + tObj->BaseLevel - mt->first_level,
-                       GEN7_SURFACE_MIN_LOD) |
-             (intelObj->_MaxLevel - tObj->BaseLevel); /* mip count */
+   surf[5] = SET_FIELD(min_level - mt->first_level, GEN7_SURFACE_MIN_LOD) |
+             (max_level - min_level - 1); /* mip count */
 
    if (aux_mt) {
       surf[6] = SET_FIELD(mt->qpitch / 4, GEN8_SURFACE_AUX_QPITCH) |
@@ -235,19 +218,7 @@ gen8_update_texture_surface(struct gl_context *ctx,
       surf[6] = 0;
    }
 
-   /* Handling GL_ALPHA as a surface format override breaks 1.30+ style
-    * texturing functions that return a float, as our code generation always
-    * selects the .x channel (which would always be 0).
-    */
-   const bool alpha_depth = tObj->DepthMode == GL_ALPHA &&
-      (firstImage->_BaseFormat == GL_DEPTH_COMPONENT ||
-       firstImage->_BaseFormat == GL_DEPTH_STENCIL);
-
-   surf[7] = mt->fast_clear_color_value;
-
-   const int swizzle =
-      unlikely(alpha_depth) ? SWIZZLE_XYZW : brw_get_texture_swizzle(ctx, tObj);
-   surf[7] |=
+   surf[7] = mt->fast_clear_color_value |
       SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 0)), GEN7_SURFACE_SCS_R) |
       SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 1)), GEN7_SURFACE_SCS_G) |
       SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 2)), GEN7_SURFACE_SCS_B) |
@@ -259,7 +230,8 @@ gen8_update_texture_surface(struct gl_context *ctx,
       *((uint64_t *) &surf[10]) = aux_mt->bo->offset64;
       drm_intel_bo_emit_reloc(brw->batch.bo, *surf_offset + 10 * 4,
                               aux_mt->bo, 0,
-                              I915_GEM_DOMAIN_SAMPLER, 0);
+                              I915_GEM_DOMAIN_SAMPLER,
+                              (rw ? I915_GEM_DOMAIN_SAMPLER : 0));
    } else {
       surf[10] = 0;
       surf[11] = 0;
@@ -271,26 +243,61 @@ gen8_update_texture_surface(struct gl_context *ctx,
                            *surf_offset + 8 * 4,
                            mt->bo,
                            mt->offset,
-                           I915_GEM_DOMAIN_SAMPLER, 0);
+                           I915_GEM_DOMAIN_SAMPLER,
+                           (rw ? I915_GEM_DOMAIN_SAMPLER : 0));
 }
 
 static void
-gen8_create_raw_surface(struct brw_context *brw, drm_intel_bo *bo,
-                        uint32_t offset, uint32_t size,
-                        uint32_t *out_offset, bool rw)
+gen8_update_texture_surface(struct gl_context *ctx,
+                            unsigned unit,
+                            uint32_t *surf_offset,
+                            bool for_gather)
 {
-   gen8_emit_buffer_surface_state(brw,
-                                  out_offset,
-                                  bo,
-                                  offset,
-                                  BRW_SURFACEFORMAT_RAW,
-                                  size,
-                                  1,
-                                  true /* rw */);
+   struct brw_context *brw = brw_context(ctx);
+   struct gl_texture_object *obj = ctx->Texture.Unit[unit]._Current;
+
+   if (obj->Target == GL_TEXTURE_BUFFER) {
+      brw_update_buffer_texture_surface(ctx, unit, surf_offset);
+
+   } else {
+      struct gl_texture_image *firstImage = obj->Image[0][obj->BaseLevel];
+      struct intel_texture_object *intel_obj = intel_texture_object(obj);
+      struct intel_mipmap_tree *mt = intel_obj->mt;
+      struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, unit);
+      /* If this is a view with restricted NumLayers, then our effective depth
+       * is not just the miptree depth.
+       */
+      const unsigned depth = (obj->Immutable && obj->Target != GL_TEXTURE_3D ?
+                              obj->NumLayers : mt->logical_depth0);
+
+      /* Handling GL_ALPHA as a surface format override breaks 1.30+ style
+       * texturing functions that return a float, as our code generation always
+       * selects the .x channel (which would always be 0).
+       */
+      const bool alpha_depth = obj->DepthMode == GL_ALPHA &&
+         (firstImage->_BaseFormat == GL_DEPTH_COMPONENT ||
+          firstImage->_BaseFormat == GL_DEPTH_STENCIL);
+      const unsigned swizzle = (unlikely(alpha_depth) ? SWIZZLE_XYZW :
+                                brw_get_texture_swizzle(&brw->ctx, obj));
+
+      unsigned format = translate_tex_format(brw, intel_obj->_Format,
+                                             sampler->sRGBDecode);
+      if (obj->StencilSampling && firstImage->_BaseFormat == GL_DEPTH_STENCIL) {
+         mt = mt->stencil_mt;
+         format = BRW_SURFACEFORMAT_R8_UINT;
+      }
+
+      gen8_emit_texture_surface_state(brw, mt, obj->Target,
+                                      obj->MinLayer, obj->MinLayer + depth,
+                                      obj->MinLevel + obj->BaseLevel,
+                                      obj->MinLevel + intel_obj->_MaxLevel + 1,
+                                      format, swizzle, surf_offset,
+                                      false, for_gather);
+   }
 }
 
 /**
- * Creates a null renderbuffer surface.
+ * Creates a null surface.
  *
  * This is used when the shader doesn't write to any color output.  An FB
  * write to target 0 will still be emitted, because that's how the thread is
@@ -298,23 +305,19 @@ gen8_create_raw_surface(struct brw_context *brw, drm_intel_bo *bo,
  * hardware discard the target 0 color output..
  */
 static void
-gen8_update_null_renderbuffer_surface(struct brw_context *brw, unsigned unit)
+gen8_emit_null_surface_state(struct brw_context *brw,
+                             unsigned width,
+                             unsigned height,
+                             unsigned samples,
+                             uint32_t *out_offset)
 {
-   struct gl_context *ctx = &brw->ctx;
-
-   /* _NEW_BUFFERS */
-   const struct gl_framebuffer *fb = ctx->DrawBuffer;
-   uint32_t surf_index =
-      brw->wm.prog_data->binding_table.render_target_start + unit;
-
-   uint32_t *surf =
-      allocate_surface_state(brw, &brw->wm.base.surf_offset[surf_index]);
+   uint32_t *surf = allocate_surface_state(brw, out_offset, -1);
 
    surf[0] = BRW_SURFACE_NULL << BRW_SURFACE_TYPE_SHIFT |
              BRW_SURFACEFORMAT_B8G8R8A8_UNORM << BRW_SURFACE_FORMAT_SHIFT |
              GEN8_SURFACE_TILING_Y;
-   surf[2] = SET_FIELD(fb->Width - 1, GEN7_SURFACE_WIDTH) |
-             SET_FIELD(fb->Height - 1, GEN7_SURFACE_HEIGHT);
+   surf[2] = SET_FIELD(width - 1, GEN7_SURFACE_WIDTH) |
+             SET_FIELD(height - 1, GEN7_SURFACE_HEIGHT);
 }
 
 /**
@@ -322,11 +325,11 @@ gen8_update_null_renderbuffer_surface(struct brw_context *brw, unsigned unit)
  * While it is only used for the front/back buffer currently, it should be
  * usable for further buffers when doing ARB_draw_buffer support.
  */
-static void
+static uint32_t
 gen8_update_renderbuffer_surface(struct brw_context *brw,
                                  struct gl_renderbuffer *rb,
-                                 bool layered,
-                                 unsigned unit)
+                                 bool layered, unsigned unit /* unused */,
+                                 uint32_t surf_index)
 {
    struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
@@ -339,16 +342,14 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    uint32_t tiling = mt->tiling;
    uint32_t format = 0;
    uint32_t surf_type;
+   uint32_t offset;
    bool is_array = false;
    int depth = MAX2(irb->layer_count, 1);
    const int min_array_element = (mt->format == MESA_FORMAT_S_UINT8) ?
       irb->mt_layer : (irb->mt_layer / MAX2(mt->num_samples, 1));
    GLenum gl_target =
       rb->TexImage ? rb->TexImage->TexObject->Target : GL_TEXTURE_2D;
-   uint32_t surf_index =
-      brw->wm.prog_data->binding_table.render_target_start + unit;
-   /* FINISHME: Use PTE MOCS on Skylake. */
-   uint32_t mocs = brw->gen >= 9 ? SKL_MOCS_WT : BDW_MOCS_PTE;
+   const uint32_t mocs = brw->gen >= 9 ? SKL_MOCS_PTE : BDW_MOCS_PTE;
 
    intel_miptree_used_for_rendering(mt);
 
@@ -383,7 +384,7 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
       format = brw->render_target_format[rb_format];
       if (unlikely(!brw->format_supported_as_render_target[rb_format]))
          _mesa_problem(ctx, "%s: renderbuffer format %s unsupported\n",
-                       __FUNCTION__, _mesa_get_format_name(rb_format));
+                       __func__, _mesa_get_format_name(rb_format));
    }
 
    if (mt->mcs_mt) {
@@ -391,8 +392,7 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
       aux_mode = GEN8_SURFACE_AUX_MODE_MCS;
    }
 
-   uint32_t *surf =
-      allocate_surface_state(brw, &brw->wm.base.surf_offset[surf_index]);
+   uint32_t *surf = allocate_surface_state(brw, &offset, surf_index);
 
    surf[0] = (surf_type << BRW_SURFACE_TYPE_SHIFT) |
              (is_array ? GEN7_SURFACE_IS_ARRAY : 0) |
@@ -437,7 +437,7 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    if (aux_mt) {
       *((uint64_t *) &surf[10]) = aux_mt->bo->offset64;
       drm_intel_bo_emit_reloc(brw->batch.bo,
-                              brw->wm.base.surf_offset[surf_index] + 10 * 4,
+                              offset + 10 * 4,
                               aux_mt->bo, 0,
                               I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
    } else {
@@ -447,11 +447,13 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    surf[12] = 0;
 
    drm_intel_bo_emit_reloc(brw->batch.bo,
-                           brw->wm.base.surf_offset[surf_index] + 8 * 4,
+                           offset + 8 * 4,
                            mt->bo,
                            mt->offset,
                            I915_GEM_DOMAIN_RENDER,
                            I915_GEM_DOMAIN_RENDER);
+
+   return offset;
 }
 
 void
@@ -459,8 +461,7 @@ gen8_init_vtable_surface_functions(struct brw_context *brw)
 {
    brw->vtbl.update_texture_surface = gen8_update_texture_surface;
    brw->vtbl.update_renderbuffer_surface = gen8_update_renderbuffer_surface;
-   brw->vtbl.update_null_renderbuffer_surface =
-      gen8_update_null_renderbuffer_surface;
-   brw->vtbl.create_raw_surface = gen8_create_raw_surface;
+   brw->vtbl.emit_null_surface_state = gen8_emit_null_surface_state;
+   brw->vtbl.emit_texture_surface_state = gen8_emit_texture_surface_state;
    brw->vtbl.emit_buffer_surface_state = gen8_emit_buffer_surface_state;
 }

@@ -167,7 +167,7 @@ DRI_CONF_OPT_END
 #define DRI_CONF_FORCE_GLSL_VERSION(def) \
 DRI_CONF_OPT_BEGIN_V(force_glsl_version, int, def, "0:999") \
         DRI_CONF_DESC(en,"Force a default GLSL version for shaders that lack an explicit #version line") \
-        DRI_CONF_DESC(ca,"Força una versió GLSL per defecte en els shaders als quals falta una línia #version explícita") \
+        DRI_CONF_DESC(ca,"Força una versió GLSL per defecte en els shaders als quals lis manca una línia #version explícita") \
         DRI_CONF_DESC(de,"Force a default GLSL version for shaders that lack an explicit #version line") \
         DRI_CONF_DESC(es,"Forzar una versión de GLSL por defecto en los shaders a los cuales les falta una línea #version explícita") \
         DRI_CONF_DESC(nl,"Force a default GLSL version for shaders that lack an explicit #version line") \
@@ -194,7 +194,7 @@ DRI_CONF_OPT_END
 #define DRI_CONF_SECTION_QUALITY \
 DRI_CONF_SECTION_BEGIN \
 	DRI_CONF_DESC(en,"Image Quality") \
-	DRI_CONF_DESC(ca,"Qualitat d'Imatge") \
+	DRI_CONF_DESC(ca,"Qualitat d'imatge") \
 	DRI_CONF_DESC(de,"Bildqualität") \
 	DRI_CONF_DESC(es,"Calidad de imagen") \
 	DRI_CONF_DESC(nl,"Beeldkwaliteit") \
@@ -332,8 +332,8 @@ DRI_CONF_OPT_BEGIN_V(round_mode,enum,def,"0:1") \
                 DRI_CONF_ENUM(1,"Round to nearest color") \
         DRI_CONF_DESC_END \
 	DRI_CONF_DESC_BEGIN(ca,"Mètode d'arrodoniment de color") \
-                DRI_CONF_ENUM(0,"Arrondeix els components de color a baix") \
-                DRI_CONF_ENUM(1,"Arrondeix al color més proper") \
+                DRI_CONF_ENUM(0,"Arrodoneix els components de color a baix") \
+                DRI_CONF_ENUM(1,"Arrodoneix al color més proper") \
         DRI_CONF_DESC_END \
 	DRI_CONF_DESC_BEGIN(de,"Farbrundungsmethode") \
                 DRI_CONF_ENUM(0,"Farbkomponenten abrunden") \
@@ -424,7 +424,7 @@ DRI_CONF_OPT_END
 #define DRI_CONF_PP_NORED(def) \
 DRI_CONF_OPT_BEGIN_V(pp_nored,enum,def,"0:1") \
         DRI_CONF_DESC(en,"A post-processing filter to remove the red channel") \
-        DRI_CONF_DESC(ca,"Un filtre de postprocessament per a treure el canal vermell") \
+        DRI_CONF_DESC(ca,"Un filtre de postprocessament per a eliminar el canal vermell") \
         DRI_CONF_DESC(de,"Nachbearbeitungsfilter zum Entfernen des Rotkanals") \
         DRI_CONF_DESC(es,"Un filtro de postprocesamiento para eliminar el canal rojo") \
         DRI_CONF_DESC(nl,"A post-processing filter to remove the red channel") \
@@ -435,7 +435,7 @@ DRI_CONF_OPT_END
 #define DRI_CONF_PP_NOGREEN(def) \
 DRI_CONF_OPT_BEGIN_V(pp_nogreen,enum,def,"0:1") \
         DRI_CONF_DESC(en,"A post-processing filter to remove the green channel") \
-        DRI_CONF_DESC(ca,"Un filtre de postprocessament per a treure el canal verd") \
+        DRI_CONF_DESC(ca,"Un filtre de postprocessament per a eliminar el canal verd") \
         DRI_CONF_DESC(de,"Nachbearbeitungsfilter zum Entfernen des Grünkanals") \
         DRI_CONF_DESC(es,"Un filtro de postprocesamiento para eliminar el canal verde") \
         DRI_CONF_DESC(nl,"A post-processing filter to remove the green channel") \
@@ -446,7 +446,7 @@ DRI_CONF_OPT_END
 #define DRI_CONF_PP_NOBLUE(def) \
 DRI_CONF_OPT_BEGIN_V(pp_noblue,enum,def,"0:1") \
         DRI_CONF_DESC(en,"A post-processing filter to remove the blue channel") \
-        DRI_CONF_DESC(ca,"Un filtre de postprocessament per a treure el canal blau") \
+        DRI_CONF_DESC(ca,"Un filtre de postprocessament per a eliminar el canal blau") \
         DRI_CONF_DESC(de,"Nachbearbeitungsfilter zum Entfernen des Blaukanals") \
         DRI_CONF_DESC(es,"Un filtro de postprocesamiento para eliminar el canal azul") \
         DRI_CONF_DESC(nl,"A post-processing filter to remove the blue channel") \
@@ -505,9 +505,9 @@ DRI_CONF_OPT_BEGIN_V(tcl_mode,enum,def,"0:3") \
         DRI_CONF_DESC_END \
         DRI_CONF_DESC_BEGIN(ca,"Mode TCL (Transformació, Retall, Il·luminació)") \
                 DRI_CONF_ENUM(0,"Utilitza la canonada TCL de programari") \
-                DRI_CONF_ENUM(1,"Utilitza el TCL maquinàri com la primera fase de la canonada TCL") \
-                DRI_CONF_ENUM(2,"Passar per alt la canonada TCL") \
-                DRI_CONF_ENUM(3,"Passar per alt la canonada TCL amb codi màquina basat en estats, generat sobre la marxa") \
+                DRI_CONF_ENUM(1,"Utilitza el TCL de maquinari com a la primera fase de la canonada TCL") \
+                DRI_CONF_ENUM(2,"Passa per alt la canonada TCL") \
+                DRI_CONF_ENUM(3,"Passa per alt la canonada TCL amb codi de màquina basat en estats, generat sobre la marxa") \
         DRI_CONF_DESC_END \
         DRI_CONF_DESC_BEGIN(de,"TCL-Modus (Transformation, Clipping, Licht)") \
                 DRI_CONF_ENUM(0,"Benutze die Software-TCL-Pipeline") \
@@ -553,7 +553,7 @@ DRI_CONF_OPT_BEGIN_V(fthrottle_mode,enum,def,"0:2") \
         DRI_CONF_DESC_END \
         DRI_CONF_DESC_BEGIN(ca,"Mètode per a limitar la latència de renderització") \
                 DRI_CONF_ENUM(0,"Espera activa pel maquinari de gràfics") \
-                DRI_CONF_ENUM(1,"Dormi per intervals breus mentre s'espera al maquinari de gràfics") \
+                DRI_CONF_ENUM(1,"Dorm per intervals breus mentre s'espera al maquinari de gràfics") \
                 DRI_CONF_ENUM(2,"Deixa que el maquinari de gràfics emeti una interrupció de programari i dormi") \
         DRI_CONF_DESC_END \
         DRI_CONF_DESC_BEGIN(de,"Methode zur Begrenzung der Bildverzögerung") \
@@ -596,7 +596,7 @@ DRI_CONF_OPT_BEGIN_V(vblank_mode,enum,def,"0:3") \
                 DRI_CONF_ENUM(3,"Always synchronize with vertical refresh, application chooses the minimum swap interval") \
         DRI_CONF_DESC_END \
         DRI_CONF_DESC_BEGIN(ca,"Sincronització amb refresc vertical (intervals d'intercanvi)") \
-                DRI_CONF_ENUM(0,"Mai sincronitzis amb el refresc vertial, ignora l'elecció de l'aplicació") \
+                DRI_CONF_ENUM(0,"Mai sincronitzis amb el refresc vertical, ignora l'elecció de l'aplicació") \
                 DRI_CONF_ENUM(1,"Interval d'intercanvi inicial 0, obeeix l'elecció de l'aplicació") \
                 DRI_CONF_ENUM(2,"Interval d'intercanvi inicial 1, obeeix l'elecció de l'aplicació") \
                 DRI_CONF_ENUM(3,"Sempre sincronitza amb el refresc vertical, l'aplicació tria l'interval mínim d'intercanvi") \
@@ -680,7 +680,7 @@ DRI_CONF_OPT_BEGIN_V(texture_heaps,enum,def,"0:2") \
 	DRI_CONF_DESC_END \
 	DRI_CONF_DESC_BEGIN(ca,"Tipus utilitzats de memòria de textura") \
 		DRI_CONF_ENUM(0,"Tota la memòria disponible") \
-		DRI_CONF_ENUM(1,"Només memòria de tarjeta (si està disponible)") \
+		DRI_CONF_ENUM(1,"Només memòria de targeta (si està disponible)") \
 		DRI_CONF_ENUM(2,"Només memòria GART (AGP/PCIE) (si està disponible)") \
 	DRI_CONF_DESC_END \
 	DRI_CONF_DESC_BEGIN(de,"Benutzte Arten von Texturspeicher") \
@@ -747,7 +747,7 @@ DRI_CONF_SECTION_BEGIN \
         DRI_CONF_DESC(en,"Miscellaneous") \
         DRI_CONF_DESC(ca,"Miscel·lània") \
         DRI_CONF_DESC(de,"Miscellaneous") \
-        DRI_CONF_DESC(es,"Misceláneo") \
+        DRI_CONF_DESC(es,"Misceláneos") \
         DRI_CONF_DESC(nl,"Miscellaneous") \
         DRI_CONF_DESC(fr,"Miscellaneous") \
         DRI_CONF_DESC(sv,"Miscellaneous")
@@ -757,7 +757,7 @@ DRI_CONF_OPT_BEGIN_B(always_have_depth_buffer, def) \
         DRI_CONF_DESC(en,"Create all visuals with a depth buffer") \
         DRI_CONF_DESC(ca,"Crea tots els visuals amb buffer de profunditat") \
         DRI_CONF_DESC(de,"Create all visuals with a depth buffer") \
-        DRI_CONF_DESC(es,"Crear todos los visuales con buffer de profundidad") \
+        DRI_CONF_DESC(es,"Crear todos los visuales con búfer de profundidad") \
         DRI_CONF_DESC(nl,"Create all visuals with a depth buffer") \
         DRI_CONF_DESC(fr,"Create all visuals with a depth buffer") \
         DRI_CONF_DESC(sv,"Create all visuals with a depth buffer") \
@@ -781,7 +781,7 @@ DRI_CONF_SECTION_BEGIN \
 #define DRI_CONF_DEVICE_ID_PATH_TAG(def) \
 DRI_CONF_OPT_BEGIN(device_id, string, def) \
         DRI_CONF_DESC(en,"Define the graphic device to use if possible") \
-        DRI_CONF_DESC(ca,"Defineix el dispositiu de gràfics que usar si és possible") \
+        DRI_CONF_DESC(ca,"Defineix el dispositiu de gràfics que utilitzar si és possible") \
         DRI_CONF_DESC(de,"Define the graphic device to use if possible") \
         DRI_CONF_DESC(es,"Define el dispositivo de gráficos que usar si es posible") \
         DRI_CONF_DESC(nl,"Define the graphic device to use if possible") \
@@ -806,9 +806,9 @@ DRI_CONF_SECTION_BEGIN \
 #define DRI_CONF_NINE_THROTTLE(def) \
 DRI_CONF_OPT_BEGIN(throttle_value, int, def) \
         DRI_CONF_DESC(en,"Define the throttling value. -1 for no throttling, -2 for default (usually 2), 0 for glfinish behaviour") \
-        DRI_CONF_DESC(ca,"Define the throttling value. -1 for no throttling, -2 for default (usually 2), 0 for glfinish behaviour") \
+        DRI_CONF_DESC(ca,"Defineix el valor de regulació. -1 per a no regular, -2 per al predeterminat (generalment 2), 0 per al comportament de glfinish") \
         DRI_CONF_DESC(de,"Define the throttling value. -1 for no throttling, -2 for default (usually 2), 0 for glfinish behaviour") \
-        DRI_CONF_DESC(es,"Define the throttling value. -1 for no throttling, -2 for default (usually 2), 0 for glfinish behaviour") \
+        DRI_CONF_DESC(es,"Define el valor de regulación. -1 para no regular, -2 para el por defecto (generalmente 2), 0 para el comportamiento de glfinish") \
         DRI_CONF_DESC(nl,"Define the throttling value. -1 for no throttling, -2 for default (usually 2), 0 for glfinish behaviour") \
         DRI_CONF_DESC(fr,"Define the throttling value. -1 for no throttling, -2 for default (usually 2), 0 for glfinish behaviour") \
         DRI_CONF_DESC(sv,"Define the throttling value. -1 for no throttling, -2 for default (usually 2), 0 for glfinish behaviour") \
@@ -817,9 +817,9 @@ DRI_CONF_OPT_END
 #define DRI_CONF_NINE_THREADSUBMIT(def) \
 DRI_CONF_OPT_BEGIN_B(thread_submit, def) \
         DRI_CONF_DESC(en,"Use an additional thread to submit buffers.") \
-        DRI_CONF_DESC(ca,"Use an additional thread to submit buffers.") \
+        DRI_CONF_DESC(ca,"Utilitza un fil addicional per a entregar els buffers.") \
         DRI_CONF_DESC(de,"Use an additional thread to submit buffers.") \
-        DRI_CONF_DESC(es,"Use an additional thread to submit buffers.") \
+        DRI_CONF_DESC(es,"Usar un hilo adicional para entregar los búfer.") \
         DRI_CONF_DESC(nl,"Use an additional thread to submit buffers.") \
         DRI_CONF_DESC(fr,"Use an additional thread to submit buffers.") \
         DRI_CONF_DESC(sv,"Use an additional thread to submit buffers.") \

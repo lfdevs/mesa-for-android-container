@@ -17,8 +17,12 @@ i965_FILES = \
 	brw_clip_tri.c \
 	brw_clip_unfilled.c \
 	brw_clip_util.c \
+	brw_compute.c \
+	brw_conditional_render.c \
 	brw_context.c \
 	brw_context.h \
+	brw_cs.cpp \
+	brw_cs.h \
 	brw_cubemap_normalize.cpp \
 	brw_curbe.c \
 	brw_dead_control_flow.cpp \
@@ -40,6 +44,7 @@ i965_FILES = \
 	brw_ff_gs.h \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_cmod_propagation.cpp \
+	brw_fs_combine_constants.cpp \
 	brw_fs_copy_propagation.cpp \
 	brw_fs.cpp \
 	brw_fs_cse.cpp \
@@ -63,6 +68,9 @@ i965_FILES = \
 	brw_gs_surface_state.c \
 	brw_inst.h \
 	brw_interpolation_map.c \
+	brw_ir_allocator.h \
+	brw_ir_fs.h \
+	brw_ir_vec4.h \
 	brw_lower_texture_gradients.cpp \
 	brw_lower_unnormalized_offset.cpp \
 	brw_meta_fast_clear.c \
@@ -72,6 +80,9 @@ i965_FILES = \
 	brw_meta_util.h \
 	brw_misc_state.c \
 	brw_multisample_state.h \
+	brw_nir.h \
+	brw_nir.c \
+	brw_nir_analyze_boolean_resolves.c \
 	brw_object_purgeable.c \
 	brw_packed_float.c \
 	brw_performance_monitor.c \

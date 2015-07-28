@@ -151,7 +151,7 @@ sp_tex_tile_cache_set_sampler_view(struct softpipe_tex_tile_cache *tc,
          tc->entries[i].addr.bits.invalid = 1;
       }
 
-      tc->tex_face = -1; /* any invalid value here */
+      tc->tex_z = -1; /* any invalid value here */
    }
 }
 
@@ -172,7 +172,7 @@ sp_flush_tex_tile_cache(struct softpipe_tex_tile_cache *tc)
       for (pos = 0; pos < Elements(tc->entries); pos++) {
          tc->entries[pos].addr.bits.invalid = 1;
       }
-      tc->tex_face = -1;
+      tc->tex_z = -1;
    }
 
 }
@@ -190,8 +190,7 @@ tex_cache_pos( union tex_tile_address addr )
 {
    uint entry = (addr.bits.x + 
                  addr.bits.y * 9 + 
-                 addr.bits.z * 3 + 
-                 addr.bits.face + 
+                 addr.bits.z +
                  addr.bits.level * 7);
 
    return entry % NUM_TEX_TILE_ENTRIES;
@@ -226,7 +225,6 @@ sp_find_cached_tile_tex(struct softpipe_tex_tile_cache *tc,
 
       /* check if we need to get a new transfer */
       if (!tc->tex_trans ||
-          tc->tex_face != addr.bits.face ||
           tc->tex_level != addr.bits.level ||
           tc->tex_z != addr.bits.z) {
          /* get new transfer (view into texture) */
@@ -245,7 +243,7 @@ sp_find_cached_tile_tex(struct softpipe_tex_tile_cache *tc,
          }
          else {
             height = u_minify(tc->texture->height0, addr.bits.level);
-            layer = addr.bits.face + addr.bits.z;
+            layer = addr.bits.z;
          }
 
          tc->tex_trans_map =
@@ -255,7 +253,6 @@ sp_find_cached_tile_tex(struct softpipe_tex_tile_cache *tc,
                               PIPE_TRANSFER_READ | PIPE_TRANSFER_UNSYNCHRONIZED,
                               0, 0, width, height, &tc->tex_trans);
 
-         tc->tex_face = addr.bits.face;
          tc->tex_level = addr.bits.level;
          tc->tex_z = addr.bits.z;
       }

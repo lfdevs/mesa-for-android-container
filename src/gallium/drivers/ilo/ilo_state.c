@@ -25,6 +25,7 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "core/ilo_state_3d.h"
 #include "util/u_dynarray.h"
 #include "util/u_helpers.h"
 #include "util/u_upload_mgr.h"
@@ -33,7 +34,6 @@
 #include "ilo_resource.h"
 #include "ilo_shader.h"
 #include "ilo_state.h"
-#include "ilo_state_3d.h"
 
 static void
 finalize_shader_states(struct ilo_state_vector *vec)
@@ -300,7 +300,7 @@ static void *
 ilo_create_blend_state(struct pipe_context *pipe,
                        const struct pipe_blend_state *state)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_blend_state *blend;
 
    blend = MALLOC_STRUCT(ilo_blend_state);
@@ -331,7 +331,7 @@ static void *
 ilo_create_sampler_state(struct pipe_context *pipe,
                          const struct pipe_sampler_state *state)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_sampler_cso *sampler;
 
    sampler = MALLOC_STRUCT(ilo_sampler_cso);
@@ -401,7 +401,7 @@ static void *
 ilo_create_rasterizer_state(struct pipe_context *pipe,
                             const struct pipe_rasterizer_state *state)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_rasterizer_state *rast;
 
    rast = MALLOC_STRUCT(ilo_rasterizer_state);
@@ -433,7 +433,7 @@ static void *
 ilo_create_depth_stencil_alpha_state(struct pipe_context *pipe,
                                      const struct pipe_depth_stencil_alpha_state *state)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_dsa_state *dsa;
 
    dsa = MALLOC_STRUCT(ilo_dsa_state);
@@ -574,7 +574,7 @@ ilo_create_vertex_elements_state(struct pipe_context *pipe,
                                  unsigned num_elements,
                                  const struct pipe_vertex_element *elements)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_ve_state *ve;
 
    ve = MALLOC_STRUCT(ilo_ve_state);
@@ -660,7 +660,7 @@ ilo_set_constant_buffer(struct pipe_context *pipe,
                         uint shader, uint index,
                         struct pipe_constant_buffer *buf)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;
    struct ilo_cbuf_state *cbuf = &vec->cbuf[shader];
    const unsigned count = 1;
@@ -728,7 +728,7 @@ static void
 ilo_set_framebuffer_state(struct pipe_context *pipe,
                           const struct pipe_framebuffer_state *state)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;
 
    ilo_gpe_set_fb(dev, state, &vec->fb);
@@ -753,7 +753,7 @@ ilo_set_scissor_states(struct pipe_context *pipe,
                        unsigned num_scissors,
                        const struct pipe_scissor_state *scissors)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;
 
    ilo_gpe_set_scissor(dev, start_slot, num_scissors,
@@ -768,7 +768,7 @@ ilo_set_viewport_states(struct pipe_context *pipe,
                         unsigned num_viewports,
                         const struct pipe_viewport_state *viewports)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_state_vector *vec = &ilo_context(pipe)->state_vector;
 
    if (viewports) {
@@ -988,7 +988,7 @@ ilo_create_sampler_view(struct pipe_context *pipe,
                         struct pipe_resource *res,
                         const struct pipe_sampler_view *templ)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
    struct ilo_view_cso *view;
 
    view = MALLOC_STRUCT(ilo_view_cso);
@@ -1013,14 +1013,14 @@ ilo_create_sampler_view(struct pipe_context *pipe,
       struct ilo_texture *tex = ilo_texture(res);
 
       /* warn about degraded performance because of a missing binding flag */
-      if (tex->layout.tiling == INTEL_TILING_NONE &&
+      if (tex->image.tiling == GEN6_TILING_NONE &&
           !(tex->base.bind & PIPE_BIND_SAMPLER_VIEW)) {
          ilo_warn("creating sampler view for a resource "
                   "not created for sampling\n");
       }
 
-      ilo_gpe_init_view_surface_for_texture(dev, tex,
-            templ->format,
+      ilo_gpe_init_view_surface_for_image(dev, &tex->image,
+            tex->base.target, templ->format,
             templ->u.tex.first_level,
             templ->u.tex.last_level - templ->u.tex.first_level + 1,
             templ->u.tex.first_layer,
@@ -1044,7 +1044,8 @@ ilo_create_surface(struct pipe_context *pipe,
                    struct pipe_resource *res,
                    const struct pipe_surface *templ)
 {
-   const struct ilo_dev_info *dev = ilo_context(pipe)->dev;
+   const struct ilo_dev *dev = ilo_context(pipe)->dev;
+   struct ilo_texture *tex = ilo_texture(res);
    struct ilo_surface_cso *surf;
 
    surf = MALLOC_STRUCT(ilo_surface_cso);
@@ -1053,34 +1054,35 @@ ilo_create_surface(struct pipe_context *pipe,
    surf->base = *templ;
    pipe_reference_init(&surf->base.reference, 1);
    surf->base.texture = NULL;
-   pipe_resource_reference(&surf->base.texture, res);
+   pipe_resource_reference(&surf->base.texture, &tex->base);
 
    surf->base.context = pipe;
-   surf->base.width = u_minify(res->width0, templ->u.tex.level);
-   surf->base.height = u_minify(res->height0, templ->u.tex.level);
+   surf->base.width = u_minify(tex->base.width0, templ->u.tex.level);
+   surf->base.height = u_minify(tex->base.height0, templ->u.tex.level);
 
    surf->is_rt = !util_format_is_depth_or_stencil(templ->format);
 
    if (surf->is_rt) {
       /* relax this? */
-      assert(res->target != PIPE_BUFFER);
+      assert(tex->base.target != PIPE_BUFFER);
 
       /*
        * classic i965 sets render_cache_rw for constant buffers and sol
        * surfaces but not render buffers.  Why?
        */
-      ilo_gpe_init_view_surface_for_texture(dev, ilo_texture(res),
+      ilo_gpe_init_view_surface_for_image(dev,
+            &tex->image, tex->base.target,
             templ->format, templ->u.tex.level, 1,
             templ->u.tex.first_layer,
             templ->u.tex.last_layer - templ->u.tex.first_layer + 1,
             true, &surf->u.rt);
-   }
-   else {
+   } else {
       assert(res->target != PIPE_BUFFER);
 
-      ilo_gpe_init_zs_surface(dev, ilo_texture(res),
-            templ->format, templ->u.tex.level,
-            templ->u.tex.first_layer,
+      ilo_gpe_init_zs_surface(dev, &tex->image,
+            (tex->separate_s8) ? &tex->separate_s8->image : NULL,
+            tex->base.target, templ->format,
+            templ->u.tex.level, templ->u.tex.first_layer,
             templ->u.tex.last_layer - templ->u.tex.first_layer + 1,
             &surf->u.zs);
    }
@@ -1289,13 +1291,13 @@ ilo_init_state_functions(struct ilo_context *ilo)
 }
 
 void
-ilo_state_vector_init(const struct ilo_dev_info *dev,
+ilo_state_vector_init(const struct ilo_dev *dev,
                       struct ilo_state_vector *vec)
 {
    ilo_gpe_set_scissor_null(dev, &vec->scissor);
 
-   ilo_gpe_init_zs_surface(dev, NULL, PIPE_FORMAT_NONE,
-         0, 0, 1, &vec->fb.null_zs);
+   ilo_gpe_init_zs_surface(dev, NULL, NULL, PIPE_TEXTURE_2D,
+         PIPE_FORMAT_NONE, 0, 0, 1, &vec->fb.null_zs);
 
    util_dynarray_init(&vec->global_binding.bindings);
 

@@ -111,6 +111,11 @@ nvc0_screen(struct pipe_screen *screen)
    return (struct nvc0_screen *)screen;
 }
 
+/*
+ * Performance counters groups:
+ */
+#define NVC0_QUERY_MP_COUNTER_GROUP 0
+#define NVC0_QUERY_DRV_STAT_GROUP   1
 
 /* Performance counter queries:
  */
@@ -267,6 +272,9 @@ nvc0_screen(struct pipe_screen *screen)
 
 int nvc0_screen_get_driver_query_info(struct pipe_screen *, unsigned,
                                       struct pipe_driver_query_info *);
+
+int nvc0_screen_get_driver_query_group_info(struct pipe_screen *, unsigned,
+                                            struct pipe_driver_query_group_info *);
 
 boolean nvc0_blitter_create(struct nvc0_screen *);
 void nvc0_blitter_destroy(struct nvc0_screen *);

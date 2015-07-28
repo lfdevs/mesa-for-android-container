@@ -12,13 +12,6 @@ Intel i915
 
 Driver for Intel i915 and i945 chipsets.
 
-Identity
-^^^^^^^^
-
-Wrapper driver. The identity driver is a simple skeleton that passes through
-all of its :ref:`Context` and :ref:`Screen` methods to an underlying Context
-and Screen, and as such, it is an excellent starting point for new drivers.
-
 LLVM Softpipe
 ^^^^^^^^^^^^^
 
@@ -60,6 +53,11 @@ AMD radeonsi
 
 Driver for the AMD Southern Islands family of GPUs.
 
+freedreno
+^^^^^^^^^
+
+Driver for Qualcomm Adreno a2xx, a3xx, and a4xx series of GPUs.
+
 .. _softpipe:
 
 Softpipe
@@ -80,15 +78,6 @@ Rbug
 
 Wrapper driver. :ref:`rbug` driver used with stand alone rbug-gui.
 
-.. _galahad:
-
-Galahad
-^^^^^^^
-
-Wrapper driver. Sanity checker for the internal gallium state. Normally
-a driver should n't have to sanity check the input it gets from a state
-tracker. Any wrong state received should be perceived as a state tracker bug.
-
 State Trackers
 --------------
 
@@ -106,14 +95,6 @@ Tracker that implements the client-side DRI protocol, for providing direct
 acceleration services to X11 servers with the DRI extension. Supports DRI1
 and DRI2. Only GL is supported.
 
-.. _egl:
-
-EGL
-^^^
-
-Tracker for the Khronos EGL standard, used to set up GL and GLES contexts
-without extra knowledge of the underlying windowing system.
-
 GLX
 ^^^
 
@@ -123,11 +104,6 @@ MesaGL
 Tracker implementing a GL state machine. Not usable as a standalone tracker;
 Mesa should be built with another state tracker, such as :ref:`DRI` or
 :ref:`EGL`.
-
-OpenVG
-^^^^^^
-
-Tracker that implements the Khronos OpenVG standard.
 
 VDPAU
 ^^^^^

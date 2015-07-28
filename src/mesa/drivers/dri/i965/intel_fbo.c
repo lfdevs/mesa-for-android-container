@@ -74,7 +74,7 @@ intel_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
 
-   ASSERT(irb);
+   assert(irb);
 
    intel_miptree_release(&irb->mt);
    intel_miptree_release(&irb->singlesample_mt);
@@ -190,7 +190,7 @@ intel_map_renderbuffer(struct gl_context *ctx,
    }
 
    DBG("%s: rb %d (%s) mt mapped: (%d, %d) (%dx%d) -> %p/%"PRIdPTR"\n",
-       __FUNCTION__, rb->Name, _mesa_get_format_name(rb->Format),
+       __func__, rb->Name, _mesa_get_format_name(rb->Format),
        x, y, w, h, map, stride);
 
    *out_map = map;
@@ -214,7 +214,7 @@ intel_unmap_renderbuffer(struct gl_context *ctx,
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_mipmap_tree *mt;
 
-   DBG("%s: rb %d (%s)\n", __FUNCTION__,
+   DBG("%s: rb %d (%s)\n", __func__,
        rb->Name, _mesa_get_format_name(rb->Format));
 
    if (srb->Buffer) {
@@ -309,7 +309,7 @@ intel_alloc_private_renderbuffer_storage(struct gl_context * ctx, struct gl_rend
 
    intel_miptree_release(&irb->mt);
 
-   DBG("%s: %s: %s (%dx%d)\n", __FUNCTION__,
+   DBG("%s: %s: %s (%dx%d)\n", __func__,
        _mesa_lookup_enum_by_nr(internalFormat),
        _mesa_get_format_name(rb->Format), width, height);
 
@@ -363,13 +363,6 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
       return;
    }
 
-   /* Buffers originating from outside are for read-only. */
-   if (image->dma_buf_imported) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-            "glEGLImageTargetRenderbufferStorage(dma buffers are read-only)");
-      return;
-   }
-
    /* __DRIimage is opaque to the core so it has to be checked here */
    switch (image->format) {
    case MESA_FORMAT_R8G8B8A8_UNORM:
@@ -383,6 +376,12 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
 
    irb = intel_renderbuffer(rb);
    intel_miptree_release(&irb->mt);
+
+   /* Disable creation of the miptree's aux buffers because the driver exposes
+    * no EGL API to manage them. That is, there is no API for resolving the aux
+    * buffer's content to the main buffer nor for invalidating the aux buffer's
+    * content.
+    */
    irb->mt = intel_miptree_create_for_bo(brw,
                                          image->bo,
                                          image->format,
@@ -390,7 +389,8 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
                                          image->width,
                                          image->height,
                                          1,
-                                         image->pitch);
+                                         image->pitch,
+                                         true /*disable_aux_buffers*/);
    if (!irb->mt)
       return;
 
@@ -415,7 +415,7 @@ static GLboolean
 intel_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
                            GLenum internalFormat, GLuint width, GLuint height)
 {
-   ASSERT(rb->Name == 0);
+   assert(rb->Name == 0);
    rb->Width = width;
    rb->Height = height;
    rb->InternalFormat = internalFormat;
@@ -561,9 +561,9 @@ intel_renderbuffer_update_wrapper(struct brw_context *brw,
 
    intel_renderbuffer_set_draw_offset(irb);
 
-   if (mt->hiz_mt == NULL && brw_is_hiz_depth_format(brw, rb->Format)) {
+   if (intel_miptree_wants_hiz_buffer(brw, mt)) {
       intel_miptree_alloc_hiz(brw, mt);
-      if (!mt->hiz_mt)
+      if (!mt->hiz_buf)
 	 return false;
    }
 
@@ -662,7 +662,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
    struct intel_mipmap_tree *depth_mt = NULL, *stencil_mt = NULL;
    int i;
 
-   DBG("%s() on fb %p (%s)\n", __FUNCTION__,
+   DBG("%s() on fb %p (%s)\n", __func__,
        fb, (fb == ctx->DrawBuffer ? "drawbuffer" :
 	    (fb == ctx->ReadBuffer ? "readbuffer" : "other buffer")));
 
@@ -729,7 +729,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
       }
    }
 
-   for (i = 0; i < Elements(fb->Attachment); i++) {
+   for (i = 0; i < ARRAY_SIZE(fb->Attachment); i++) {
       struct gl_renderbuffer *rb;
       struct intel_renderbuffer *irb;
 
@@ -1032,7 +1032,7 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
                                  INTEL_MIPTREE_TILING_ANY,
                                  false);
 
-   if (brw_is_hiz_depth_format(brw, new_mt->format)) {
+   if (intel_miptree_wants_hiz_buffer(brw, new_mt)) {
       intel_miptree_alloc_hiz(brw, new_mt);
    }
 

@@ -115,9 +115,6 @@ _mesa_init_shader_state(struct gl_context *ctx)
    options.MaxUnrollIterations = 32;
    options.MaxIfDepth = UINT_MAX;
 
-   /* Default pragma settings */
-   options.DefaultPragmas.Optimize = GL_TRUE;
-
    for (sh = 0; sh < MESA_SHADER_STAGES; ++sh)
       memcpy(&ctx->Const.ShaderCompilerOptions[sh], &options, sizeof(options));
 
@@ -523,7 +520,7 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname,
               GLint *params)
 {
    struct gl_shader_program *shProg
-      = _mesa_lookup_shader_program(ctx, program);
+      = _mesa_lookup_shader_program_err(ctx, program, "glGetProgramiv(program)");
 
    /* Is transform feedback available in this context?
     */
@@ -546,7 +543,6 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname,
       || _mesa_is_gles3(ctx);
 
    if (!shProg) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glGetProgramiv(program)");
       return;
    }
 
@@ -764,11 +760,25 @@ static void
 get_program_info_log(struct gl_context *ctx, GLuint program, GLsizei bufSize,
                      GLsizei *length, GLchar *infoLog)
 {
-   struct gl_shader_program *shProg = _mesa_lookup_shader_program(ctx, program);
-   if (!shProg) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glGetProgramInfoLog(program)");
+   struct gl_shader_program *shProg;
+
+   /* Section 2.5 GL Errors (page 18) of the OpenGL ES 3.0.4 spec and
+    * section 2.3.1 (Errors) of the OpenGL 4.5 spec say:
+    *
+    *     "If a negative number is provided where an argument of type sizei or
+    *     sizeiptr is specified, an INVALID_VALUE error is generated."
+    */
+   if (bufSize < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glGetProgramInfoLog(bufSize < 0)");
       return;
    }
+
+   shProg = _mesa_lookup_shader_program_err(ctx, program,
+                                            "glGetProgramInfoLog(program)");
+   if (!shProg) {
+      return;
+   }
+
    _mesa_copy_string(infoLog, bufSize, length, shProg->InfoLog);
 }
 
@@ -777,11 +787,24 @@ static void
 get_shader_info_log(struct gl_context *ctx, GLuint shader, GLsizei bufSize,
                     GLsizei *length, GLchar *infoLog)
 {
-   struct gl_shader *sh = _mesa_lookup_shader(ctx, shader);
-   if (!sh) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glGetShaderInfoLog(shader)");
+   struct gl_shader *sh;
+
+   /* Section 2.5 GL Errors (page 18) of the OpenGL ES 3.0.4 spec and
+    * section 2.3.1 (Errors) of the OpenGL 4.5 spec say:
+    *
+    *     "If a negative number is provided where an argument of type sizei or
+    *     sizeiptr is specified, an INVALID_VALUE error is generated."
+    */
+   if (bufSize < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glGetShaderInfoLog(bufSize < 0)");
       return;
    }
+
+   sh = _mesa_lookup_shader_err(ctx, shader, "glGetShaderInfoLog(shader)");
+   if (!sh) {
+      return;
+   }
+
    _mesa_copy_string(infoLog, bufSize, length, sh->InfoLog);
 }
 
@@ -838,16 +861,10 @@ static void
 compile_shader(struct gl_context *ctx, GLuint shaderObj)
 {
    struct gl_shader *sh;
-   struct gl_shader_compiler_options *options;
 
    sh = _mesa_lookup_shader_err(ctx, shaderObj, "glCompileShader");
    if (!sh)
       return;
-
-   options = &ctx->Const.ShaderCompilerOptions[sh->Stage];
-
-   /* set default pragma state for shader */
-   sh->Pragmas = options->DefaultPragmas;
 
    if (!sh->Source) {
       /* If the user called glCompileShader without first calling
@@ -856,10 +873,9 @@ compile_shader(struct gl_context *ctx, GLuint shaderObj)
       sh->CompileStatus = GL_FALSE;
    } else {
       if (ctx->_Shader->Flags & GLSL_DUMP) {
-         fprintf(stderr, "GLSL source for %s shader %d:\n",
+         _mesa_log("GLSL source for %s shader %d:\n",
                  _mesa_shader_stage_to_string(sh->Stage), sh->Name);
-         fprintf(stderr, "%s\n", sh->Source);
-         fflush(stderr);
+         _mesa_log("%s\n", sh->Source);
       }
 
       /* this call will set the shader->CompileStatus field to indicate if
@@ -873,27 +889,25 @@ compile_shader(struct gl_context *ctx, GLuint shaderObj)
 
       if (ctx->_Shader->Flags & GLSL_DUMP) {
          if (sh->CompileStatus) {
-            fprintf(stderr, "GLSL IR for shader %d:\n", sh->Name);
-            _mesa_print_ir(stderr, sh->ir, NULL);
-            fprintf(stderr, "\n\n");
+            _mesa_log("GLSL IR for shader %d:\n", sh->Name);
+            _mesa_print_ir(_mesa_get_log_file(), sh->ir, NULL);
+            _mesa_log("\n\n");
          } else {
-            fprintf(stderr, "GLSL shader %d failed to compile.\n", sh->Name);
+            _mesa_log("GLSL shader %d failed to compile.\n", sh->Name);
          }
          if (sh->InfoLog && sh->InfoLog[0] != 0) {
-            fprintf(stderr, "GLSL shader %d info log:\n", sh->Name);
-            fprintf(stderr, "%s\n", sh->InfoLog);
+            _mesa_log("GLSL shader %d info log:\n", sh->Name);
+            _mesa_log("%s\n", sh->InfoLog);
          }
-         fflush(stderr);
       }
    }
 
    if (!sh->CompileStatus) {
       if (ctx->_Shader->Flags & GLSL_DUMP_ON_ERROR) {
-         fprintf(stderr, "GLSL source for %s shader %d:\n",
+         _mesa_log("GLSL source for %s shader %d:\n",
                  _mesa_shader_stage_to_string(sh->Stage), sh->Name);
-         fprintf(stderr, "%s\n", sh->Source);
-         fprintf(stderr, "Info Log:\n%s\n", sh->InfoLog);
-         fflush(stderr);
+         _mesa_log("%s\n", sh->Source);
+         _mesa_log("Info Log:\n%s\n", sh->InfoLog);
       }
 
       if (ctx->_Shader->Flags & GLSL_REPORT_ERRORS) {
@@ -1001,15 +1015,14 @@ _mesa_active_program(struct gl_context *ctx, struct gl_shader_program *shProg,
 
 
 static void
-use_shader_program(struct gl_context *ctx, GLenum type,
+use_shader_program(struct gl_context *ctx, gl_shader_stage stage,
                    struct gl_shader_program *shProg,
                    struct gl_pipeline_object *shTarget)
 {
    struct gl_shader_program **target;
-   gl_shader_stage stage = _mesa_shader_enum_to_shader_stage(type);
 
    target = &shTarget->CurrentProgram[stage];
-   if ((shProg == NULL) || (shProg->_LinkedShaders[stage] == NULL))
+   if ((shProg != NULL) && (shProg->_LinkedShaders[stage] == NULL))
       shProg = NULL;
 
    if (*target != shProg) {
@@ -1022,17 +1035,17 @@ use_shader_program(struct gl_context *ctx, GLenum type,
        * it from that binding point as well.  This ensures that the correct
        * semantics of glDeleteProgram are maintained.
        */
-      switch (type) {
-      case GL_VERTEX_SHADER:
+      switch (stage) {
+      case MESA_SHADER_VERTEX:
 	 /* Empty for now. */
 	 break;
-      case GL_GEOMETRY_SHADER_ARB:
+      case MESA_SHADER_GEOMETRY:
 	 /* Empty for now. */
 	 break;
-      case GL_COMPUTE_SHADER:
+      case MESA_SHADER_COMPUTE:
          /* Empty for now. */
          break;
-      case GL_FRAGMENT_SHADER:
+      case MESA_SHADER_FRAGMENT:
          if (*target == ctx->_Shader->_CurrentFragmentProgram) {
 	    _mesa_reference_shader_program(ctx,
                                            &ctx->_Shader->_CurrentFragmentProgram,
@@ -1053,10 +1066,9 @@ use_shader_program(struct gl_context *ctx, GLenum type,
 void
 _mesa_use_program(struct gl_context *ctx, struct gl_shader_program *shProg)
 {
-   use_shader_program(ctx, GL_VERTEX_SHADER, shProg, &ctx->Shader);
-   use_shader_program(ctx, GL_GEOMETRY_SHADER_ARB, shProg, &ctx->Shader);
-   use_shader_program(ctx, GL_FRAGMENT_SHADER, shProg, &ctx->Shader);
-   use_shader_program(ctx, GL_COMPUTE_SHADER, shProg, &ctx->Shader);
+   int i;
+   for (i = 0; i < MESA_SHADER_STAGES; i++)
+      use_shader_program(ctx, i, shProg, &ctx->Shader);
    _mesa_active_program(ctx, shProg, "glUseProgram");
 
    if (ctx->Driver.UseProgram)
@@ -1434,7 +1446,7 @@ read_shader(const char *fname)
 
    fclose(f);
 
-   shader = _mesa_strdup(buffer);
+   shader = strdup(buffer);
    free(buffer);
 
    return shader;
@@ -1863,7 +1875,8 @@ _mesa_use_shader_program(struct gl_context *ctx, GLenum type,
                          struct gl_shader_program *shProg,
                          struct gl_pipeline_object *shTarget)
 {
-   use_shader_program(ctx, type, shProg, shTarget);
+   gl_shader_stage stage = _mesa_shader_enum_to_shader_stage(type);
+   use_shader_program(ctx, stage, shProg, shTarget);
 
    if (ctx->Driver.UseProgram)
       ctx->Driver.UseProgram(ctx, shProg);

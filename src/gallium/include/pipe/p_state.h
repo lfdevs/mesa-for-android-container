@@ -58,8 +58,8 @@ extern "C" {
 #define PIPE_MAX_COLOR_BUFS        8
 #define PIPE_MAX_CONSTANT_BUFFERS 32
 #define PIPE_MAX_SAMPLERS         18 /* 16 public + 2 driver internal */
-#define PIPE_MAX_SHADER_INPUTS    32
-#define PIPE_MAX_SHADER_OUTPUTS   48 /* 32 GENERICs + POS, PSIZE, FOG, etc. */
+#define PIPE_MAX_SHADER_INPUTS    80 /* 32 GENERIC + 32 PATCH + 16 others */
+#define PIPE_MAX_SHADER_OUTPUTS   80 /* 32 GENERIC + 32 PATCH + 16 others */
 #define PIPE_MAX_SHADER_SAMPLER_VIEWS 32
 #define PIPE_MAX_SHADER_RESOURCES 32
 #define PIPE_MAX_TEXTURE_LEVELS   16
@@ -542,6 +542,8 @@ struct pipe_draw_info
 
    unsigned start_instance; /**< first instance id */
    unsigned instance_count; /**< number of instances */
+
+   unsigned vertices_per_patch; /**< the number of vertices per patch */
 
    /**
     * For indexed drawing, these fields apply after index lookup.

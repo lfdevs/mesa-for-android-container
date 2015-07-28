@@ -200,8 +200,9 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
       return 1;
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
-   case PIPE_CAP_SAMPLER_VIEW_TARGET:
       return 0;
+   case PIPE_CAP_SAMPLER_VIEW_TARGET:
+      return 1;
    case PIPE_CAP_FAKE_SW_MSAA:
       return 1;
    case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
@@ -236,6 +237,8 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
       return 0;
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+   case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+   case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
       return 0;
    }
    /* should only get here on unhandled cases */
@@ -352,6 +355,10 @@ softpipe_is_format_supported( struct pipe_screen *screen,
       return FALSE;
    }
 
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_ETC &&
+       format != PIPE_FORMAT_ETC1_RGB8)
+      return FALSE;
+
    /*
     * All other operations (sampling, transfer, etc).
     */
@@ -422,6 +429,7 @@ softpipe_create_screen(struct sw_winsys *winsys)
 
    screen->base.get_name = softpipe_get_name;
    screen->base.get_vendor = softpipe_get_vendor;
+   screen->base.get_device_vendor = softpipe_get_vendor; // TODO should be the CPU vendor
    screen->base.get_param = softpipe_get_param;
    screen->base.get_shader_param = softpipe_get_shader_param;
    screen->base.get_paramf = softpipe_get_paramf;

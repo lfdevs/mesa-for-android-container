@@ -25,6 +25,7 @@
  *
  */
 
+#include <stdio.h>
 #include "radeon_variable.h"
 
 #include "memory_pool.h"
@@ -97,7 +98,7 @@ void rc_variable_change_dst(
 				/* Reuse the source index of the source that
 				 * was just deleted and set its register
 				 * index.  We can't use rc_pair_alloc_source
-				 * for this becuase it might return a source
+				 * for this because it might return a source
 				 * index that is already being used. */
 				if (src_type & RC_SOURCE_RGB) {
 					pair_inst->RGB.Src[src_index]

@@ -56,7 +56,8 @@ struct nvc0_query {
 
 #define NVC0_QUERY_ALLOC_SPACE 256
 
-static void nvc0_mp_pm_query_begin(struct nvc0_context *, struct nvc0_query *);
+static boolean nvc0_mp_pm_query_begin(struct nvc0_context *,
+                                      struct nvc0_query *);
 static void nvc0_mp_pm_query_end(struct nvc0_context *, struct nvc0_query *);
 static boolean nvc0_mp_pm_query_result(struct nvc0_context *,
                                        struct nvc0_query *, void *, boolean);
@@ -250,12 +251,13 @@ nvc0_query_rotate(struct nvc0_context *nvc0, struct nvc0_query *q)
       nvc0_query_allocate(nvc0, q, NVC0_QUERY_ALLOC_SPACE);
 }
 
-static void
+static boolean
 nvc0_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_query *q = nvc0_query(pq);
+   boolean ret = true;
 
    /* For occlusion queries we have to change the storage, because a previous
     * query might set the initial render conition to FALSE even *after* we re-
@@ -327,11 +329,12 @@ nvc0_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
 #endif
       if ((q->type >= NVE4_PM_QUERY(0) && q->type <= NVE4_PM_QUERY_LAST) ||
           (q->type >= NVC0_PM_QUERY(0) && q->type <= NVC0_PM_QUERY_LAST)) {
-         nvc0_mp_pm_query_begin(nvc0, q);
+         ret = nvc0_mp_pm_query_begin(nvc0, q);
       }
       break;
    }
    q->state = NVC0_QUERY_STATE_ACTIVE;
+   return ret;
 }
 
 static void
@@ -396,6 +399,10 @@ nvc0_query_end(struct pipe_context *pipe, struct pipe_query *pq)
    case NVC0_QUERY_TFB_BUFFER_OFFSET:
       /* indexed by TFB buffer instead of by vertex stream */
       nvc0_query_get(push, q, 0x00, 0x0d005002 | (q->index << 5));
+      break;
+   case PIPE_QUERY_TIMESTAMP_DISJOINT:
+      /* This query is not issued on GPU because disjoint is forced to FALSE */
+      q->state = NVC0_QUERY_STATE_READY;
       break;
    default:
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
@@ -1068,7 +1075,7 @@ nvc0_mp_pm_query_get_cfg(struct nvc0_context *nvc0, struct nvc0_query *q)
    return &nvc0_mp_pm_queries[q->type - NVC0_PM_QUERY(0)];
 }
 
-void
+boolean
 nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
 {
    struct nvc0_screen *screen = nvc0->screen;
@@ -1087,7 +1094,7 @@ nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
    if (screen->pm.num_mp_pm_active[0] + num_ab[0] > 4 ||
        screen->pm.num_mp_pm_active[1] + num_ab[1] > 4) {
       NOUVEAU_ERR("Not enough free MP counter slots !\n");
-      return;
+      return false;
    }
 
    assert(cfg->num_counters <= 4);
@@ -1152,6 +1159,7 @@ nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
          }
       }
    }
+   return true;
 }
 
 static void
@@ -1400,48 +1408,126 @@ nvc0_screen_get_driver_query_info(struct pipe_screen *pscreen,
    count += NVC0_QUERY_DRV_STAT_COUNT;
 
    if (screen->base.device->drm_version >= 0x01000101) {
-      if (screen->base.class_3d >= NVE4_3D_CLASS) {
-         count += NVE4_PM_QUERY_COUNT;
-      } else
       if (screen->compute) {
-         count += NVC0_PM_QUERY_COUNT; /* NVC0_COMPUTE is not always enabled */
+         if (screen->base.class_3d == NVE4_3D_CLASS) {
+            count += NVE4_PM_QUERY_COUNT;
+         } else
+         if (screen->base.class_3d < NVE4_3D_CLASS) {
+            /* NVC0_COMPUTE is not always enabled */
+            count += NVC0_PM_QUERY_COUNT;
+         }
       }
    }
 
    if (!info)
       return count;
 
+   /* Init default values. */
+   info->name = "this_is_not_the_query_you_are_looking_for";
+   info->query_type = 0xdeadd01d;
+   info->max_value.u64 = 0;
+   info->type = PIPE_DRIVER_QUERY_TYPE_UINT64;
+   info->group_id = -1;
+
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
    if (id < NVC0_QUERY_DRV_STAT_COUNT) {
       info->name = nvc0_drv_stat_names[id];
       info->query_type = NVC0_QUERY_DRV_STAT(id);
-      info->max_value = ~0ULL;
-      info->uses_byte_units = !!strstr(info->name, "bytes");
+      info->max_value.u64 = 0;
+      if (strstr(info->name, "bytes"))
+         info->type = PIPE_DRIVER_QUERY_TYPE_BYTES;
+      info->group_id = NVC0_QUERY_DRV_STAT_GROUP;
       return 1;
    } else
 #endif
    if (id < count) {
-      if (screen->base.class_3d >= NVE4_3D_CLASS) {
-         info->name = nve4_pm_query_names[id - NVC0_QUERY_DRV_STAT_COUNT];
-         info->query_type = NVE4_PM_QUERY(id - NVC0_QUERY_DRV_STAT_COUNT);
-         info->max_value = (id < NVE4_PM_QUERY_METRIC_MP_OCCUPANCY) ?
-            ~0ULL : 100;
-         info->uses_byte_units = FALSE;
-         return 1;
-      } else
       if (screen->compute) {
-         info->name = nvc0_pm_query_names[id - NVC0_QUERY_DRV_STAT_COUNT];
-         info->query_type = NVC0_PM_QUERY(id - NVC0_QUERY_DRV_STAT_COUNT);
-         info->max_value = ~0ULL;
-         info->uses_byte_units = FALSE;
-         return 1;
+         if (screen->base.class_3d == NVE4_3D_CLASS) {
+            info->name = nve4_pm_query_names[id - NVC0_QUERY_DRV_STAT_COUNT];
+            info->query_type = NVE4_PM_QUERY(id - NVC0_QUERY_DRV_STAT_COUNT);
+            info->max_value.u64 =
+               (id < NVE4_PM_QUERY_METRIC_MP_OCCUPANCY) ? 0 : 100;
+            info->group_id = NVC0_QUERY_MP_COUNTER_GROUP;
+            return 1;
+         } else
+         if (screen->base.class_3d < NVE4_3D_CLASS) {
+            info->name = nvc0_pm_query_names[id - NVC0_QUERY_DRV_STAT_COUNT];
+            info->query_type = NVC0_PM_QUERY(id - NVC0_QUERY_DRV_STAT_COUNT);
+            info->group_id = NVC0_QUERY_MP_COUNTER_GROUP;
+            return 1;
+         }
       }
    }
    /* user asked for info about non-existing query */
-   info->name = "this_is_not_the_query_you_are_looking_for";
-   info->query_type = 0xdeadd01d;
-   info->max_value = 0;
-   info->uses_byte_units = FALSE;
+   return 0;
+}
+
+int
+nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
+                                        unsigned id,
+                                        struct pipe_driver_query_group_info *info)
+{
+   struct nvc0_screen *screen = nvc0_screen(pscreen);
+   int count = 0;
+
+#ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
+   count++;
+#endif
+
+   if (screen->base.device->drm_version >= 0x01000101) {
+      if (screen->compute) {
+         if (screen->base.class_3d == NVE4_3D_CLASS) {
+            count++;
+         } else
+         if (screen->base.class_3d < NVE4_3D_CLASS) {
+            count++; /* NVC0_COMPUTE is not always enabled */
+         }
+      }
+   }
+
+   if (!info)
+      return count;
+
+   if (id == NVC0_QUERY_MP_COUNTER_GROUP) {
+      if (screen->compute) {
+         info->name = "MP counters";
+         info->type = PIPE_DRIVER_QUERY_GROUP_TYPE_GPU;
+
+         if (screen->base.class_3d == NVE4_3D_CLASS) {
+            info->num_queries = NVE4_PM_QUERY_COUNT;
+
+             /* On NVE4+, each multiprocessor have 8 hardware counters separated
+              * in two distinct domains, but we allow only one active query
+              * simultaneously because some of them use more than one hardware
+              * counter and this will result in an undefined behaviour. */
+             info->max_active_queries = 1; /* TODO: handle multiple hw counters */
+             return 1;
+         } else
+         if (screen->base.class_3d < NVE4_3D_CLASS) {
+            info->num_queries = NVC0_PM_QUERY_COUNT;
+
+            /* On NVC0:NVE4, each multiprocessor have 8 hardware counters
+             * in a single domain. */
+            info->max_active_queries = 8;
+            return 1;
+         }
+      }
+   }
+#ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
+   else if (id == NVC0_QUERY_DRV_STAT_GROUP) {
+      info->name = "Driver statistics";
+      info->type = PIPE_DRIVER_QUERY_GROUP_TYPE_CPU;
+      info->max_active_queries = NVC0_QUERY_DRV_STAT_COUNT;
+      info->num_queries = NVC0_QUERY_DRV_STAT_COUNT;
+      return 1;
+   }
+#endif
+
+   /* user asked for info about non-existing query group */
+   info->name = "this_is_not_the_query_group_you_are_looking_for";
+   info->max_active_queries = 0;
+   info->num_queries = 0;
+   info->type = 0;
    return 0;
 }
 

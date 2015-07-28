@@ -53,7 +53,7 @@ static void emit_s0_vec(uint32_t *out, GLvoid *data, int stride, int count)
    int i;
    if (RADEON_DEBUG & RADEON_VERTS)
       fprintf(stderr, "%s count %d stride %d\n",
-	      __FUNCTION__, count, stride);
+	      __func__, count, stride);
 
    for (i = 0; i < count; i++) {
       out[0] = *(int *)data;
@@ -69,7 +69,7 @@ static void emit_stq_vec(uint32_t *out, GLvoid *data, int stride, int count)
 
    if (RADEON_DEBUG & RADEON_VERTS)
       fprintf(stderr, "%s count %d stride %d\n",
-	      __FUNCTION__, count, stride);
+	      __func__, count, stride);
 
    for (i = 0; i < count; i++) {
       out[0] = *(int *)data;
@@ -88,7 +88,7 @@ static void emit_tex_vector(struct gl_context *ctx, struct radeon_aos *aos,
    uint32_t *out;
 
    if (RADEON_DEBUG & RADEON_VERTS)
-      fprintf(stderr, "%s %d/%d\n", __FUNCTION__, count, size);
+      fprintf(stderr, "%s %d/%d\n", __func__, count, size);
 
    switch (size) {
    case 4: emitsize = 3; break;
@@ -152,7 +152,7 @@ void radeonEmitArrays( struct gl_context *ctx, GLuint inputs )
    
 #if 0
    if (RADEON_DEBUG & RADEON_VERTS)
-      _tnl_print_vert_flags( __FUNCTION__, inputs );
+      _tnl_print_vert_flags( __func__, inputs );
 #endif
 
    if (1) {

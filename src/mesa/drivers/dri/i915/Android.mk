@@ -26,8 +26,12 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := i915_dri
+ifeq ($(MESA_LOLLIPOP_BUILD),true)
+LOCAL_MODULE_RELATIVE_PATH := $(notdir $(MESA_DRI_MODULE_PATH))
+else
 LOCAL_MODULE_PATH := $(MESA_DRI_MODULE_PATH)
 LOCAL_UNSTRIPPED_PATH := $(MESA_DRI_MODULE_UNSTRIPPED_PATH)
+endif
 
 # Import variables i915_FILES.
 include $(LOCAL_PATH)/Makefile.sources

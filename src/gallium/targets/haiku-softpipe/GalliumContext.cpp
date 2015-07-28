@@ -10,17 +10,18 @@
 
 #include "GalliumContext.h"
 
+#include <stdio.h>
+
 #include "GLView.h"
 
 #include "bitmap_wrapper.h"
-extern "C" {
+
 #include "glapi/glapi.h"
 #include "pipe/p_format.h"
-#include "state_tracker/st_cb_fbo.h"
-#include "state_tracker/st_cb_flush.h"
+//#include "state_tracker/st_cb_fbo.h"
+//#include "state_tracker/st_cb_flush.h"
 #include "state_tracker/st_context.h"
 #include "state_tracker/st_gl_api.h"
-#include "state_tracker/st_manager.h"
 #include "state_tracker/sw_winsys.h"
 #include "sw/hgl/hgl_sw_winsys.h"
 #include "util/u_atomic.h"
@@ -28,7 +29,6 @@ extern "C" {
 
 #include "target-helpers/inline_sw_helper.h"
 #include "target-helpers/inline_debug_helper.h"
-}
 
 
 #ifdef DEBUG
@@ -125,7 +125,8 @@ GalliumContext::CreateContext(Bitmap *bitmap)
 	context->read = NULL;
 	context->st = NULL;
 
-	context->api = st_gl_api_create();
+	// Create st_gl_api
+	context->api = hgl_create_st_api();
 	if (!context->api) {
 		ERROR("%s: Couldn't obtain Mesa state tracker API!\n", __func__);
 		return -1;
@@ -157,12 +158,10 @@ GalliumContext::CreateContext(Bitmap *bitmap)
 	attribs.minor = 0;
 	//attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
 
-	struct st_api* api = context->api;
-
 	// Create context using state tracker api call
 	enum st_context_error result;
-	context->st = api->create_context(api, context->manager, &attribs,
-		&result, context->st);
+	context->st = context->api->create_context(context->api, context->manager,
+		&attribs, &result, context->st);
 
 	if (!context->st) {
 		ERROR("%s: Couldn't create mesa state tracker context!\n",
@@ -287,10 +286,8 @@ GalliumContext::SetCurrentContext(Bitmap *bitmap, context_id contextID)
 		return B_ERROR;
 	}
 
-	struct st_api* api = context->api;
-
 	if (!bitmap) {
-		api->make_current(context->api, NULL, NULL, NULL);
+		context->api->make_current(context->api, NULL, NULL, NULL);
 		return B_OK;
 	}
 
@@ -303,7 +300,7 @@ GalliumContext::SetCurrentContext(Bitmap *bitmap, context_id contextID)
 	}
 
 	// We need to lock and unlock framebuffers before accessing them
-	api->make_current(context->api, context->st, context->draw->stfbi,
+	context->api->make_current(context->api, context->st, context->draw->stfbi,
 		context->read->stfbi);
 
 	//if (context->textures[ST_ATTACHMENT_BACK_LEFT]

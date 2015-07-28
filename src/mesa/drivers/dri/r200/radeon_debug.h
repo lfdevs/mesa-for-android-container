@@ -156,7 +156,7 @@ static inline void radeon_debug_remove_indent(void)
        if(__warn_once){ \
                radeon_warning("*********************************WARN_ONCE*********************************\n"); \
                radeon_warning("File %s function %s line %d\n", \
-                       __FILE__, __FUNCTION__, __LINE__); \
+                       __FILE__, __func__, __LINE__); \
                radeon_warning(__VA_ARGS__);\
                radeon_warning("***************************************************************************\n"); \
                __warn_once=0;\

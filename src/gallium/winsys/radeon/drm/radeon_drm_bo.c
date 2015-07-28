@@ -29,7 +29,7 @@
 #include "util/u_hash_table.h"
 #include "util/u_memory.h"
 #include "util/simple_list.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "os/os_thread.h"
 #include "os/os_mman.h"
 #include "os/os_time.h"
@@ -42,7 +42,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-extern const struct pb_vtbl radeon_bo_vtbl;
+static const struct pb_vtbl radeon_bo_vtbl;
 
 static INLINE struct radeon_bo *radeon_bo(struct pb_buffer *bo)
 {
@@ -347,6 +347,10 @@ void *radeon_bo_do_map(struct radeon_bo *bo)
     struct drm_radeon_gem_mmap args = {0};
     void *ptr;
 
+    /* If the buffer is created from user memory, return the user pointer. */
+    if (bo->user_ptr)
+        return bo->user_ptr;
+
     /* Return the pointer if it's already mapped. */
     if (bo->ptr)
         return bo->ptr;
@@ -487,7 +491,7 @@ static void radeon_bo_fence(struct pb_buffer *buf,
 {
 }
 
-const struct pb_vtbl radeon_bo_vtbl = {
+static const struct pb_vtbl radeon_bo_vtbl = {
     radeon_bo_destroy,
     NULL, /* never called */
     NULL, /* never called */
@@ -866,6 +870,90 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
     return (struct pb_buffer*)buffer;
 }
 
+static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
+                                                   void *pointer, unsigned size)
+{
+    struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
+    struct radeon_bomgr *mgr = radeon_bomgr(ws->kman);
+    struct drm_radeon_gem_userptr args;
+    struct radeon_bo *bo;
+    int r;
+
+    bo = CALLOC_STRUCT(radeon_bo);
+    if (!bo)
+        return NULL;
+
+    memset(&args, 0, sizeof(args));
+    args.addr = (uintptr_t)pointer;
+    args.size = align(size, sysconf(_SC_PAGE_SIZE));
+    args.flags = RADEON_GEM_USERPTR_ANONONLY |
+        RADEON_GEM_USERPTR_VALIDATE |
+        RADEON_GEM_USERPTR_REGISTER;
+    if (drmCommandWriteRead(ws->fd, DRM_RADEON_GEM_USERPTR,
+                            &args, sizeof(args))) {
+        FREE(bo);
+        return NULL;
+    }
+
+    pipe_mutex_lock(mgr->bo_handles_mutex);
+
+    /* Initialize it. */
+    pipe_reference_init(&bo->base.reference, 1);
+    bo->handle = args.handle;
+    bo->base.alignment = 0;
+    bo->base.usage = PB_USAGE_GPU_WRITE | PB_USAGE_GPU_READ;
+    bo->base.size = size;
+    bo->base.vtbl = &radeon_bo_vtbl;
+    bo->mgr = mgr;
+    bo->rws = mgr->rws;
+    bo->user_ptr = pointer;
+    bo->va = 0;
+    bo->initial_domain = RADEON_DOMAIN_GTT;
+    pipe_mutex_init(bo->map_mutex);
+
+    util_hash_table_set(mgr->bo_handles, (void*)(uintptr_t)bo->handle, bo);
+
+    pipe_mutex_unlock(mgr->bo_handles_mutex);
+
+    if (mgr->va) {
+        struct drm_radeon_gem_va va;
+
+        bo->va = radeon_bomgr_find_va(mgr, bo->base.size, 1 << 20);
+
+        va.handle = bo->handle;
+        va.operation = RADEON_VA_MAP;
+        va.vm_id = 0;
+        va.offset = bo->va;
+        va.flags = RADEON_VM_PAGE_READABLE |
+                   RADEON_VM_PAGE_WRITEABLE |
+                   RADEON_VM_PAGE_SNOOPED;
+        va.offset = bo->va;
+        r = drmCommandWriteRead(ws->fd, DRM_RADEON_GEM_VA, &va, sizeof(va));
+        if (r && va.operation == RADEON_VA_RESULT_ERROR) {
+            fprintf(stderr, "radeon: Failed to assign virtual address space\n");
+            radeon_bo_destroy(&bo->base);
+            return NULL;
+        }
+        pipe_mutex_lock(mgr->bo_handles_mutex);
+        if (va.operation == RADEON_VA_RESULT_VA_EXIST) {
+            struct pb_buffer *b = &bo->base;
+            struct radeon_bo *old_bo =
+                util_hash_table_get(mgr->bo_vas, (void*)(uintptr_t)va.offset);
+
+            pipe_mutex_unlock(mgr->bo_handles_mutex);
+            pb_reference(&b, &old_bo->base);
+            return b;
+        }
+
+        util_hash_table_set(mgr->bo_vas, (void*)(uintptr_t)bo->va, bo);
+        pipe_mutex_unlock(mgr->bo_handles_mutex);
+    }
+
+    ws->allocated_gtt += align(bo->base.size, 4096);
+
+    return (struct pb_buffer*)bo;
+}
+
 static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
                                                       struct winsys_handle *whandle,
                                                       unsigned *stride)
@@ -1060,6 +1148,7 @@ void radeon_bomgr_init_functions(struct radeon_drm_winsys *ws)
     ws->base.buffer_is_busy = radeon_bo_is_busy;
     ws->base.buffer_create = radeon_winsys_bo_create;
     ws->base.buffer_from_handle = radeon_winsys_bo_from_handle;
+    ws->base.buffer_from_ptr = radeon_winsys_bo_from_ptr;
     ws->base.buffer_get_handle = radeon_winsys_bo_get_handle;
     ws->base.buffer_get_virtual_address = radeon_winsys_bo_va;
     ws->base.buffer_get_initial_domain = radeon_bo_get_initial_domain;

@@ -94,7 +94,7 @@ intelClear(struct gl_context *ctx, GLbitfield mask)
    }
 
    if (0)
-      fprintf(stderr, "%s\n", __FUNCTION__);
+      fprintf(stderr, "%s\n", __func__);
 
    /* Get SW clears out of the way: Anything without an intel_renderbuffer */
    for (i = 0; i < BUFFER_COUNT; i++) {

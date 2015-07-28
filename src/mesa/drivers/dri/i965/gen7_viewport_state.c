@@ -26,12 +26,12 @@
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
 #include "main/fbobject.h"
+#include "main/viewport.h"
 
 static void
 gen7_upload_sf_clip_viewport(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   const GLfloat depth_scale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    GLfloat y_scale, y_bias;
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    struct gen7_sf_clip_viewport *vp;
@@ -52,7 +52,8 @@ gen7_upload_sf_clip_viewport(struct brw_context *brw)
    }
 
    for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
-      const GLfloat *const v = ctx->ViewportArray[i]._WindowMap.m;
+      double scale[3], translate[3];
+      _mesa_get_viewport_xform(ctx, i, scale, translate);
 
       /* According to the "Vertex X,Y Clamping and Quantization" section of
        * the Strips and Fans documentation, objects must not have a
@@ -76,12 +77,12 @@ gen7_upload_sf_clip_viewport(struct brw_context *brw)
       vp[i].guardband.ymax = gby;
 
       /* _NEW_VIEWPORT */
-      vp[i].viewport.m00 = v[MAT_SX];
-      vp[i].viewport.m11 = v[MAT_SY] * y_scale;
-      vp[i].viewport.m22 = v[MAT_SZ] * depth_scale;
-      vp[i].viewport.m30 = v[MAT_TX];
-      vp[i].viewport.m31 = v[MAT_TY] * y_scale + y_bias;
-      vp[i].viewport.m32 = v[MAT_TZ] * depth_scale;
+      vp[i].viewport.m00 = scale[0];
+      vp[i].viewport.m11 = scale[1] * y_scale;
+      vp[i].viewport.m22 = scale[2];
+      vp[i].viewport.m30 = translate[0];
+      vp[i].viewport.m31 = translate[1] * y_scale + y_bias;
+      vp[i].viewport.m32 = translate[2];
    }
 
    BEGIN_BATCH(2);

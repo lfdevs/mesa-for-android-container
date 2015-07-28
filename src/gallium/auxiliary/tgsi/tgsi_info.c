@@ -56,7 +56,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 3, 0, 0, 0, 0, COMP, "MAD", TGSI_OPCODE_MAD },
    { 1, 2, 0, 0, 0, 0, COMP, "SUB", TGSI_OPCODE_SUB },
    { 1, 3, 0, 0, 0, 0, COMP, "LRP", TGSI_OPCODE_LRP },
-   { 0, 0, 0, 0, 0, 0, NONE, "", 19 },      /* removed */
+   { 1, 3, 0, 0, 0, 0, COMP, "FMA", TGSI_OPCODE_FMA },
    { 1, 1, 0, 0, 0, 0, REPL, "SQRT", TGSI_OPCODE_SQRT },
    { 1, 3, 0, 0, 0, 0, REPL, "DP2A", TGSI_OPCODE_DP2A },
    { 0, 0, 0, 0, 0, 0, NONE, "", 22 },      /* removed */
@@ -155,7 +155,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 0, 1, 0, 0, 0, 0, NONE, "BREAKC", TGSI_OPCODE_BREAKC },
    { 0, 1, 0, 0, 0, 0, NONE, "KILL_IF", TGSI_OPCODE_KILL_IF },
    { 0, 0, 0, 0, 0, 0, NONE, "END", TGSI_OPCODE_END },
-   { 0, 0, 0, 0, 0, 0, NONE, "", 118 },     /* removed */
+   { 1, 3, 0, 0, 0, 0, COMP, "DFMA", TGSI_OPCODE_DFMA },
    { 1, 1, 0, 0, 0, 0, COMP, "F2I", TGSI_OPCODE_F2I },
    { 1, 2, 0, 0, 0, 0, COMP, "IDIV", TGSI_OPCODE_IDIV },
    { 1, 2, 0, 0, 0, 0, COMP, "IMAX", TGSI_OPCODE_IMAX },
@@ -231,10 +231,37 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 1, 0, 0, 0, 0, COMP, "LSB", TGSI_OPCODE_LSB },
    { 1, 1, 0, 0, 0, 0, COMP, "IMSB", TGSI_OPCODE_IMSB },
    { 1, 1, 0, 0, 0, 0, COMP, "UMSB", TGSI_OPCODE_UMSB },
-
    { 1, 1, 0, 0, 0, 0, OTHR, "INTERP_CENTROID", TGSI_OPCODE_INTERP_CENTROID },
    { 1, 2, 0, 0, 0, 0, OTHR, "INTERP_SAMPLE", TGSI_OPCODE_INTERP_SAMPLE },
    { 1, 2, 0, 0, 0, 0, OTHR, "INTERP_OFFSET", TGSI_OPCODE_INTERP_OFFSET },
+   { 1, 1, 0, 0, 0, 0, COMP, "F2D", TGSI_OPCODE_F2D },
+   { 1, 1, 0, 0, 0, 0, COMP, "D2F", TGSI_OPCODE_D2F },
+   { 1, 1, 0, 0, 0, 0, COMP, "DABS", TGSI_OPCODE_DABS },
+   { 1, 1, 0, 0, 0, 0, COMP, "DNEG", TGSI_OPCODE_DNEG },
+   { 1, 2, 0, 0, 0, 0, COMP, "DADD", TGSI_OPCODE_DADD },
+   { 1, 2, 0, 0, 0, 0, COMP, "DMUL", TGSI_OPCODE_DMUL },
+   { 1, 2, 0, 0, 0, 0, COMP, "DMAX", TGSI_OPCODE_DMAX },
+   { 1, 2, 0, 0, 0, 0, COMP, "DMIN", TGSI_OPCODE_DMIN },
+   { 1, 2, 0, 0, 0, 0, COMP, "DSLT", TGSI_OPCODE_DSLT },
+   { 1, 2, 0, 0, 0, 0, COMP, "DSGE", TGSI_OPCODE_DSGE },
+   { 1, 2, 0, 0, 0, 0, COMP, "DSEQ", TGSI_OPCODE_DSEQ },
+   { 1, 2, 0, 0, 0, 0, COMP, "DSNE", TGSI_OPCODE_DSNE },
+   { 1, 1, 0, 0, 0, 0, COMP, "DRCP", TGSI_OPCODE_DRCP },
+   { 1, 1, 0, 0 ,0, 0, COMP, "DSQRT", TGSI_OPCODE_DSQRT },
+   { 1, 3, 0, 0 ,0, 0, COMP, "DMAD", TGSI_OPCODE_DMAD },
+   { 1, 1, 0, 0, 0, 0, COMP, "DFRAC", TGSI_OPCODE_DFRAC},
+   { 1, 2, 0, 0, 0, 0, COMP, "DLDEXP", TGSI_OPCODE_DLDEXP},
+   { 2, 1, 0, 0, 0, 0, COMP, "DFRACEXP", TGSI_OPCODE_DFRACEXP},
+   { 1, 1, 0, 0, 0, 0, COMP, "D2I", TGSI_OPCODE_D2I },
+   { 1, 1, 0, 0, 0, 0, COMP, "I2D", TGSI_OPCODE_I2D },
+   { 1, 1, 0, 0, 0, 0, COMP, "D2U", TGSI_OPCODE_D2U },
+   { 1, 1, 0, 0, 0, 0, COMP, "U2D", TGSI_OPCODE_U2D },
+   { 1, 1, 0, 0 ,0, 0, COMP, "DRSQ", TGSI_OPCODE_DRSQ },
+   { 1, 1, 0, 0, 0, 0, COMP, "DTRUNC", TGSI_OPCODE_DTRUNC },
+   { 1, 1, 0, 0, 0, 0, COMP, "DCEIL", TGSI_OPCODE_DCEIL },
+   { 1, 1, 0, 0, 0, 0, COMP, "DFLR", TGSI_OPCODE_DFLR },
+   { 1, 1, 0, 0, 0, 0, COMP, "DROUND", TGSI_OPCODE_DROUND },
+   { 1, 1, 0, 0, 0, 0, COMP, "DSSG", TGSI_OPCODE_DSSG },
 };
 
 const struct tgsi_opcode_info *
@@ -275,6 +302,10 @@ tgsi_get_processor_name( uint processor )
       return "fragment shader";
    case TGSI_PROCESSOR_GEOMETRY:
       return "geometry shader";
+   case TGSI_PROCESSOR_TESSCTRL:
+      return "tessellation control shader";
+   case TGSI_PROCESSOR_TESSEVAL:
+      return "tessellation evaluation shader";
    default:
       return "unknown shader type!";
    }
@@ -314,6 +345,12 @@ tgsi_opcode_infer_type( uint opcode )
    case TGSI_OPCODE_USNE:
    case TGSI_OPCODE_SVIEWINFO:
    case TGSI_OPCODE_UMUL_HI:
+   case TGSI_OPCODE_UBFE:
+   case TGSI_OPCODE_BFI:
+   case TGSI_OPCODE_BREV:
+   case TGSI_OPCODE_POPC:
+   case TGSI_OPCODE_LSB:
+   case TGSI_OPCODE_UMSB:
       return TGSI_TYPE_UNSIGNED;
    case TGSI_OPCODE_ARL:
    case TGSI_OPCODE_ARR:
@@ -335,6 +372,8 @@ tgsi_opcode_infer_type( uint opcode )
    case TGSI_OPCODE_IABS:
    case TGSI_OPCODE_ISSG:
    case TGSI_OPCODE_IMUL_HI:
+   case TGSI_OPCODE_IBFE:
+   case TGSI_OPCODE_IMSB:
       return TGSI_TYPE_SIGNED;
    default:
       return TGSI_TYPE_FLOAT;

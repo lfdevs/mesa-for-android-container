@@ -61,7 +61,7 @@ radeon_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 		"%s(rb %p, rrb %p) \n",
 		__func__, rb, rrb);
 
-  ASSERT(rrb);
+  assert(rrb);
 
   if (rrb && rrb->bo) {
     radeon_bo_unref(rrb->bo);
@@ -474,7 +474,7 @@ radeon_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffe
 		"%s(%p, rb %p) \n",
 		__func__, ctx, rb);
 
-   ASSERT(rb->Name != 0);
+   assert(rb->Name != 0);
   switch (internalFormat) {
    case GL_R3_G3_B2:
    case GL_RGB4:
@@ -609,7 +609,7 @@ static GLboolean
 radeon_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
                            GLenum internalFormat, GLuint width, GLuint height)
 {
-   ASSERT(rb->Name == 0);
+   assert(rb->Name == 0);
    rb->Width = width;
    rb->Height = height;
    rb->InternalFormat = internalFormat;
@@ -723,7 +723,7 @@ radeon_framebuffer_renderbuffer(struct gl_context * ctx,
 		"%s(%p, fb %p, rb %p) \n",
 		__func__, ctx, fb, rb);
 
-   _mesa_framebuffer_renderbuffer(ctx, fb, attachment, rb);
+   _mesa_FramebufferRenderbuffer_sw(ctx, fb, attachment, rb);
    radeon_draw_buffer(ctx, fb);
 }
 
@@ -767,7 +767,7 @@ radeon_render_texture(struct gl_context * ctx,
 
    (void) fb;
 
-   ASSERT(newImage);
+   assert(newImage);
 
    radeon_image = (radeon_texture_image *)newImage;
 
@@ -856,7 +856,7 @@ radeon_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 			fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED;
 			radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 						"%s: HW doesn't support format %s as output format of attachment %d\n",
-						__FUNCTION__, _mesa_get_format_name(mesa_format), i);
+						__func__, _mesa_get_format_name(mesa_format), i);
 			return;
 		}
 	}

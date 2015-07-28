@@ -82,6 +82,27 @@ trace_screen_get_vendor(struct pipe_screen *_screen)
 }
 
 
+static const char *
+trace_screen_get_device_vendor(struct pipe_screen *_screen)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+   const char *result;
+
+   trace_dump_call_begin("pipe_screen", "get_device_vendor");
+
+   trace_dump_arg(ptr, screen);
+
+   result = screen->get_device_vendor(screen);
+
+   trace_dump_ret(string, result);
+
+   trace_dump_call_end();
+
+   return result;
+}
+
+
 static int
 trace_screen_get_param(struct pipe_screen *_screen,
                        enum pipe_cap param)
@@ -470,6 +491,7 @@ trace_screen_create(struct pipe_screen *screen)
    tr_scr->base.destroy = trace_screen_destroy;
    tr_scr->base.get_name = trace_screen_get_name;
    tr_scr->base.get_vendor = trace_screen_get_vendor;
+   tr_scr->base.get_device_vendor = trace_screen_get_device_vendor;
    tr_scr->base.get_param = trace_screen_get_param;
    tr_scr->base.get_shader_param = trace_screen_get_shader_param;
    tr_scr->base.get_paramf = trace_screen_get_paramf;

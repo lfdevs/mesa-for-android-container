@@ -474,11 +474,11 @@ wrap_linear_unorm_clamp_to_edge(float s, unsigned size,
 /**
  * Do coordinate to array index conversion.  For array textures.
  */
-static INLINE void
-wrap_array_layer(float coord, unsigned size, int *layer)
+static INLINE int
+coord_to_layer(float coord, unsigned first_layer, unsigned last_layer)
 {
    int c = util_ifloor(coord + 0.5F);
-   *layer = CLAMP(c, 0, (int) size - 1);
+   return CLAMP(c, (int)first_layer, (int)last_layer);
 }
 
 
@@ -757,61 +757,6 @@ get_next_ycoord(unsigned face, unsigned fall_off_index, int max, int xc, int yc)
 }
 
 
-static INLINE const float *
-get_texel_cube_seamless(const struct sp_sampler_view *sp_sview,
-                        union tex_tile_address addr, int x, int y,
-                        float *corner)
-{
-   const struct pipe_resource *texture = sp_sview->base.texture;
-   unsigned level = addr.bits.level;
-   unsigned face = addr.bits.face;
-   int new_x, new_y, max_x;
-
-   max_x = (int) u_minify(texture->width0, level);
-
-   assert(texture->width0 == texture->height0);
-   new_x = x;
-   new_y = y;
-
-   /* change the face */
-   if (x < 0) {
-      /*
-       * Cheat with corners. They are difficult and I believe because we don't get
-       * per-pixel faces we can actually have multiple corner texels per pixel,
-       * which screws things up majorly in any case (as the per spec behavior is
-       * to average the 3 remaining texels, which we might not have).
-       * Hence just make sure that the 2nd coord is clamped, will simply pick the
-       * sample which would have fallen off the x coord, but not y coord.
-       * So the filter weight of the samples will be wrong, but at least this
-       * ensures that only valid texels near the corner are used.
-       */
-      if (y < 0 || y >= max_x) {
-         y = CLAMP(y, 0, max_x - 1);
-      }
-      new_x = get_next_xcoord(face, 0, max_x -1, x, y);
-      new_y = get_next_ycoord(face, 0, max_x -1, x, y);
-      face = get_next_face(face, 0);
-   } else if (x >= max_x) {
-      if (y < 0 || y >= max_x) {
-         y = CLAMP(y, 0, max_x - 1);
-      }
-      new_x = get_next_xcoord(face, 1, max_x -1, x, y);
-      new_y = get_next_ycoord(face, 1, max_x -1, x, y);
-      face = get_next_face(face, 1);
-   } else if (y < 0) {
-      new_x = get_next_xcoord(face, 2, max_x -1, x, y);
-      new_y = get_next_ycoord(face, 2, max_x -1, x, y);
-      face = get_next_face(face, 2);
-   } else if (y >= max_x) {
-      new_x = get_next_xcoord(face, 3, max_x -1, x, y);
-      new_y = get_next_ycoord(face, 3, max_x -1, x, y);
-      face = get_next_face(face, 3);
-   }
-
-   addr.bits.face = face;
-   return get_texel_2d_no_border( sp_sview, addr, new_x, new_y );
-}
-
 /* Gather a quad of adjacent texels within a tile:
  */
 static INLINE void
@@ -945,6 +890,60 @@ get_texel_2d_array(const struct sp_sampler_view *sp_sview,
    else {
       return get_texel_3d_no_border(sp_sview, addr, x, y, layer);
    }
+}
+
+
+static INLINE const float *
+get_texel_cube_seamless(const struct sp_sampler_view *sp_sview,
+                        union tex_tile_address addr, int x, int y,
+                        float *corner, int layer, unsigned face)
+{
+   const struct pipe_resource *texture = sp_sview->base.texture;
+   unsigned level = addr.bits.level;
+   int new_x, new_y, max_x;
+
+   max_x = (int) u_minify(texture->width0, level);
+
+   assert(texture->width0 == texture->height0);
+   new_x = x;
+   new_y = y;
+
+   /* change the face */
+   if (x < 0) {
+      /*
+       * Cheat with corners. They are difficult and I believe because we don't get
+       * per-pixel faces we can actually have multiple corner texels per pixel,
+       * which screws things up majorly in any case (as the per spec behavior is
+       * to average the 3 remaining texels, which we might not have).
+       * Hence just make sure that the 2nd coord is clamped, will simply pick the
+       * sample which would have fallen off the x coord, but not y coord.
+       * So the filter weight of the samples will be wrong, but at least this
+       * ensures that only valid texels near the corner are used.
+       */
+      if (y < 0 || y >= max_x) {
+         y = CLAMP(y, 0, max_x - 1);
+      }
+      new_x = get_next_xcoord(face, 0, max_x -1, x, y);
+      new_y = get_next_ycoord(face, 0, max_x -1, x, y);
+      face = get_next_face(face, 0);
+   } else if (x >= max_x) {
+      if (y < 0 || y >= max_x) {
+         y = CLAMP(y, 0, max_x - 1);
+      }
+      new_x = get_next_xcoord(face, 1, max_x -1, x, y);
+      new_y = get_next_ycoord(face, 1, max_x -1, x, y);
+      face = get_next_face(face, 1);
+   } else if (y < 0) {
+      new_x = get_next_xcoord(face, 2, max_x -1, x, y);
+      new_y = get_next_ycoord(face, 2, max_x -1, x, y);
+      face = get_next_face(face, 2);
+   } else if (y >= max_x) {
+      new_x = get_next_xcoord(face, 3, max_x -1, x, y);
+      new_y = get_next_ycoord(face, 3, max_x -1, x, y);
+      face = get_next_face(face, 3);
+   }
+
+   return get_texel_3d_no_border(sp_sview, addr, new_x, new_y, layer + face);
 }
 
 
@@ -1208,7 +1207,8 @@ img_filter_1d_array_nearest(struct sp_sampler_view *sp_sview,
    addr.bits.level = level;
 
    sp_samp->nearest_texcoord_s(s, width, &x);
-   wrap_array_layer(t, texture->array_size, &layer);
+   layer = coord_to_layer(t, sp_sview->base.u.tex.first_layer,
+                          sp_sview->base.u.tex.last_layer);
 
    out = get_texel_1d_array(sp_sview, sp_samp, addr, x, layer);
    for (c = 0; c < TGSI_QUAD_SIZE; c++)
@@ -1287,7 +1287,8 @@ img_filter_2d_array_nearest(struct sp_sampler_view *sp_sview,
 
    sp_samp->nearest_texcoord_s(s, width, &x);
    sp_samp->nearest_texcoord_t(t, height, &y);
-   wrap_array_layer(p, texture->array_size, &layer);
+   layer = coord_to_layer(p, sp_sview->base.u.tex.first_layer,
+                          sp_sview->base.u.tex.last_layer);
 
    out = get_texel_2d_array(sp_sview, sp_samp, addr, x, y, layer);
    for (c = 0; c < TGSI_QUAD_SIZE; c++)
@@ -1296,14 +1297,6 @@ img_filter_2d_array_nearest(struct sp_sampler_view *sp_sview,
    if (DEBUG_TEX) {
       print_sample(__FUNCTION__, rgba);
    }
-}
-
-
-static INLINE union tex_tile_address
-face(union tex_tile_address addr, unsigned face )
-{
-   addr.bits.face = face;
-   return addr;
 }
 
 
@@ -1319,7 +1312,7 @@ img_filter_cube_nearest(struct sp_sampler_view *sp_sview,
 {
    const struct pipe_resource *texture = sp_sview->base.texture;
    int width, height;
-   int x, y;
+   int x, y, layerface;
    union tex_tile_address addr;
    const float *out;
    int c;
@@ -1346,7 +1339,8 @@ img_filter_cube_nearest(struct sp_sampler_view *sp_sview,
       sp_samp->nearest_texcoord_t(t, height, &y);
    }
 
-   out = get_texel_2d(sp_sview, sp_samp, face(addr, face_id), x, y);
+   layerface = face_id + sp_sview->base.u.tex.first_layer;
+   out = get_texel_cube_array(sp_sview, sp_samp, addr, x, y, layerface);
    for (c = 0; c < TGSI_QUAD_SIZE; c++)
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
@@ -1367,7 +1361,7 @@ img_filter_cube_array_nearest(struct sp_sampler_view *sp_sview,
 {
    const struct pipe_resource *texture = sp_sview->base.texture;
    int width, height;
-   int x, y, layer;
+   int x, y, layerface;
    union tex_tile_address addr;
    const float *out;
    int c;
@@ -1383,9 +1377,11 @@ img_filter_cube_array_nearest(struct sp_sampler_view *sp_sview,
 
    sp_samp->nearest_texcoord_s(s, width, &x);
    sp_samp->nearest_texcoord_t(t, height, &y);
-   wrap_array_layer(p, texture->array_size, &layer);
+   layerface = coord_to_layer(6 * p + sp_sview->base.u.tex.first_layer,
+                              sp_sview->base.u.tex.first_layer,
+                              sp_sview->base.u.tex.last_layer - 5) + face_id;
 
-   out = get_texel_cube_array(sp_sview, sp_samp, addr, x, y, layer * 6 + face_id);
+   out = get_texel_cube_array(sp_sview, sp_samp, addr, x, y, layerface);
    for (c = 0; c < TGSI_QUAD_SIZE; c++)
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
@@ -1494,7 +1490,8 @@ img_filter_1d_array_linear(struct sp_sampler_view *sp_sview,
    addr.bits.level = level;
 
    sp_samp->linear_texcoord_s(s, width, &x0, &x1, &xw);
-   wrap_array_layer(t, texture->array_size, &layer);
+   layer = coord_to_layer(t, sp_sview->base.u.tex.first_layer,
+                          sp_sview->base.u.tex.last_layer);
 
    tx0 = get_texel_1d_array(sp_sview, sp_samp, addr, x0, layer);
    tx1 = get_texel_1d_array(sp_sview, sp_samp, addr, x1, layer);
@@ -1577,7 +1574,8 @@ img_filter_2d_array_linear(struct sp_sampler_view *sp_sview,
 
    sp_samp->linear_texcoord_s(s, width,  &x0, &x1, &xw);
    sp_samp->linear_texcoord_t(t, height, &y0, &y1, &yw);
-   wrap_array_layer(p, texture->array_size, &layer);
+   layer = coord_to_layer(p, sp_sview->base.u.tex.first_layer,
+                          sp_sview->base.u.tex.last_layer);
 
    tx0 = get_texel_2d_array(sp_sview, sp_samp, addr, x0, y0, layer);
    tx1 = get_texel_2d_array(sp_sview, sp_samp, addr, x1, y0, layer);
@@ -1604,9 +1602,9 @@ img_filter_cube_linear(struct sp_sampler_view *sp_sview,
 {
    const struct pipe_resource *texture = sp_sview->base.texture;
    int width, height;
-   int x0, y0, x1, y1;
+   int x0, y0, x1, y1, layer;
    float xw, yw; /* weights */
-   union tex_tile_address addr, addrj;
+   union tex_tile_address addr;
    const float *tx0, *tx1, *tx2, *tx3;
    float corner0[TGSI_QUAD_SIZE], corner1[TGSI_QUAD_SIZE],
          corner2[TGSI_QUAD_SIZE], corner3[TGSI_QUAD_SIZE];
@@ -1635,19 +1633,20 @@ img_filter_cube_linear(struct sp_sampler_view *sp_sview,
       sp_samp->linear_texcoord_t(t, height, &y0, &y1, &yw);
    }
 
-   addrj = face(addr, face_id);
+   layer = sp_sview->base.u.tex.first_layer;
 
    if (sp_samp->base.seamless_cube_map) {
-      tx0 = get_texel_cube_seamless(sp_sview, addrj, x0, y0, corner0);
-      tx1 = get_texel_cube_seamless(sp_sview, addrj, x1, y0, corner1);
-      tx2 = get_texel_cube_seamless(sp_sview, addrj, x0, y1, corner2);
-      tx3 = get_texel_cube_seamless(sp_sview, addrj, x1, y1, corner3);
+      tx0 = get_texel_cube_seamless(sp_sview, addr, x0, y0, corner0, layer, face_id);
+      tx1 = get_texel_cube_seamless(sp_sview, addr, x1, y0, corner1, layer, face_id);
+      tx2 = get_texel_cube_seamless(sp_sview, addr, x0, y1, corner2, layer, face_id);
+      tx3 = get_texel_cube_seamless(sp_sview, addr, x1, y1, corner3, layer, face_id);
    } else {
-      tx0 = get_texel_2d(sp_sview, sp_samp, addrj, x0, y0);
-      tx1 = get_texel_2d(sp_sview, sp_samp, addrj, x1, y0);
-      tx2 = get_texel_2d(sp_sview, sp_samp, addrj, x0, y1);
-      tx3 = get_texel_2d(sp_sview, sp_samp, addrj, x1, y1);
+      tx0 = get_texel_cube_array(sp_sview, sp_samp, addr, x0, y0, layer + face_id);
+      tx1 = get_texel_cube_array(sp_sview, sp_samp, addr, x1, y0, layer + face_id);
+      tx2 = get_texel_cube_array(sp_sview, sp_samp, addr, x0, y1, layer + face_id);
+      tx3 = get_texel_cube_array(sp_sview, sp_samp, addr, x1, y1, layer + face_id);
    }
+
    /* interpolate R, G, B, A */
    for (c = 0; c < TGSI_QUAD_SIZE; c++)
       rgba[TGSI_NUM_CHANNELS*c] = lerp_2d(xw, yw,
@@ -1672,6 +1671,8 @@ img_filter_cube_array_linear(struct sp_sampler_view *sp_sview,
    float xw, yw; /* weights */
    union tex_tile_address addr;
    const float *tx0, *tx1, *tx2, *tx3;
+   float corner0[TGSI_QUAD_SIZE], corner1[TGSI_QUAD_SIZE],
+         corner2[TGSI_QUAD_SIZE], corner3[TGSI_QUAD_SIZE];
    int c;
 
    width = u_minify(texture->width0, level);
@@ -1683,14 +1684,35 @@ img_filter_cube_array_linear(struct sp_sampler_view *sp_sview,
    addr.value = 0;
    addr.bits.level = level;
 
-   sp_samp->linear_texcoord_s(s, width,  &x0, &x1, &xw);
-   sp_samp->linear_texcoord_t(t, height, &y0, &y1, &yw);
-   wrap_array_layer(p, texture->array_size, &layer);
+   /*
+    * For seamless if LINEAR filtering is done within a miplevel,
+    * always apply wrap mode CLAMP_TO_BORDER.
+    */
+   if (sp_samp->base.seamless_cube_map) {
+      /* Note this is a bit overkill, actual clamping is not required */
+      wrap_linear_clamp_to_border(s, width, &x0, &x1, &xw);
+      wrap_linear_clamp_to_border(t, height, &y0, &y1, &yw);
+   } else {
+      /* Would probably make sense to ignore mode and just do edge clamp */
+      sp_samp->linear_texcoord_s(s, width,  &x0, &x1, &xw);
+      sp_samp->linear_texcoord_t(t, height, &y0, &y1, &yw);
+   }
 
-   tx0 = get_texel_cube_array(sp_sview, sp_samp, addr, x0, y0, layer * 6 + face_id);
-   tx1 = get_texel_cube_array(sp_sview, sp_samp, addr, x1, y0, layer * 6 + face_id);
-   tx2 = get_texel_cube_array(sp_sview, sp_samp, addr, x0, y1, layer * 6 + face_id);
-   tx3 = get_texel_cube_array(sp_sview, sp_samp, addr, x1, y1, layer * 6 + face_id);
+   layer = coord_to_layer(6 * p + sp_sview->base.u.tex.first_layer,
+                          sp_sview->base.u.tex.first_layer,
+                          sp_sview->base.u.tex.last_layer - 5);
+
+   if (sp_samp->base.seamless_cube_map) {
+      tx0 = get_texel_cube_seamless(sp_sview, addr, x0, y0, corner0, layer, face_id);
+      tx1 = get_texel_cube_seamless(sp_sview, addr, x1, y0, corner1, layer, face_id);
+      tx2 = get_texel_cube_seamless(sp_sview, addr, x0, y1, corner2, layer, face_id);
+      tx3 = get_texel_cube_seamless(sp_sview, addr, x1, y1, corner3, layer, face_id);
+   } else {
+      tx0 = get_texel_cube_array(sp_sview, sp_samp, addr, x0, y0, layer + face_id);
+      tx1 = get_texel_cube_array(sp_sview, sp_samp, addr, x1, y0, layer + face_id);
+      tx2 = get_texel_cube_array(sp_sview, sp_samp, addr, x0, y1, layer + face_id);
+      tx3 = get_texel_cube_array(sp_sview, sp_samp, addr, x1, y1, layer + face_id);
+   }
 
    /* interpolate R, G, B, A */
    for (c = 0; c < TGSI_QUAD_SIZE; c++)
@@ -2065,7 +2087,7 @@ img_filter_2d_ewa(struct sp_sampler_view *sp_sview,
    float F = A*C-B*B/4.0f;
 
    /* check if it is an ellipse */
-   /* ASSERT(F > 0.0); */
+   /* assert(F > 0.0); */
 
    /* Compute the ellipse's (u,v) bounding box in texture space */
    float d = -B*B+4.0f*C*A;
@@ -2408,13 +2430,13 @@ sample_compare(struct sp_sampler_view *sp_sview,
     * RGBA channels.  We look at the red channel here.
     */
 
-   if (sp_sview->base.texture->target == PIPE_TEXTURE_2D_ARRAY ||
-       sp_sview->base.texture->target == PIPE_TEXTURE_CUBE) {
+   if (sp_sview->base.target == PIPE_TEXTURE_2D_ARRAY ||
+       sp_sview->base.target == PIPE_TEXTURE_CUBE) {
       pc[0] = c0[0];
       pc[1] = c0[1];
       pc[2] = c0[2];
       pc[3] = c0[3];
-   } else if (sp_sview->base.texture->target == PIPE_TEXTURE_CUBE_ARRAY) {
+   } else if (sp_sview->base.target == PIPE_TEXTURE_CUBE_ARRAY) {
       pc[0] = c1[0];
       pc[1] = c1[1];
       pc[2] = c1[2];
@@ -2681,7 +2703,7 @@ get_img_filter(const struct sp_sampler_view *sp_sview,
                const struct pipe_sampler_state *sampler,
                unsigned filter)
 {
-   switch (sp_sview->base.texture->target) {
+   switch (sp_sview->base.target) {
    case PIPE_BUFFER:
    case PIPE_TEXTURE_1D:
       if (filter == PIPE_TEX_FILTER_NEAREST) 
@@ -2907,7 +2929,7 @@ sp_get_dims(struct sp_sampler_view *sp_sview, int level,
    const struct pipe_sampler_view *view = &sp_sview->base;
    const struct pipe_resource *texture = view->texture;
 
-   if (texture->target == PIPE_BUFFER) {
+   if (view->target == PIPE_BUFFER) {
       dims[0] = (view->u.buf.last_element - view->u.buf.first_element) + 1;
       /* the other values are undefined, but let's avoid potential valgrind
        * warnings.
@@ -2924,7 +2946,7 @@ sp_get_dims(struct sp_sampler_view *sp_sview, int level,
    dims[3] = view->u.tex.last_level - view->u.tex.first_level + 1;
    dims[0] = u_minify(texture->width0, level);
 
-   switch(texture->target) {
+   switch (view->target) {
    case PIPE_TEXTURE_1D_ARRAY:
       dims[1] = view->u.tex.last_layer - view->u.tex.first_layer + 1;
       /* fallthrough */
@@ -2975,13 +2997,16 @@ sp_get_texels(struct sp_sampler_view *sp_sview,
 
    addr.value = 0;
    /* TODO write a better test for LOD */
-   addr.bits.level = lod[0];
+   addr.bits.level = sp_sview->base.target == PIPE_BUFFER ? 0 :
+                        CLAMP(lod[0] + sp_sview->base.u.tex.first_level, 
+                              sp_sview->base.u.tex.first_level,
+                              sp_sview->base.u.tex.last_level);
 
    width = u_minify(texture->width0, addr.bits.level);
    height = u_minify(texture->height0, addr.bits.level);
    depth = u_minify(texture->depth0, addr.bits.level);
 
-   switch(texture->target) {
+   switch (sp_sview->base.target) {
    case PIPE_BUFFER:
    case PIPE_TEXTURE_1D:
       for (j = 0; j < TGSI_QUAD_SIZE; j++) {
@@ -2995,7 +3020,8 @@ sp_get_texels(struct sp_sampler_view *sp_sview,
    case PIPE_TEXTURE_1D_ARRAY:
       for (j = 0; j < TGSI_QUAD_SIZE; j++) {
          int x = CLAMP(v_i[j] + offset[0], 0, width - 1);
-         int y = CLAMP(v_j[j], sp_sview->base.u.tex.first_layer, sp_sview->base.u.tex.last_layer);
+         int y = CLAMP(v_j[j], sp_sview->base.u.tex.first_layer,
+                       sp_sview->base.u.tex.last_layer);
          tx = get_texel_2d_no_border(sp_sview, addr, x, y);
          for (c = 0; c < 4; c++) {
             rgba[c][j] = tx[c];
@@ -3017,7 +3043,8 @@ sp_get_texels(struct sp_sampler_view *sp_sview,
       for (j = 0; j < TGSI_QUAD_SIZE; j++) {
          int x = CLAMP(v_i[j] + offset[0], 0, width - 1);
          int y = CLAMP(v_j[j] + offset[1], 0, height - 1);
-         int layer = CLAMP(v_k[j], sp_sview->base.u.tex.first_layer, sp_sview->base.u.tex.last_layer);
+         int layer = CLAMP(v_k[j], sp_sview->base.u.tex.first_layer,
+                           sp_sview->base.u.tex.last_layer);
          tx = get_texel_3d_no_border(sp_sview, addr, x, y, layer);
          for (c = 0; c < 4; c++) {
             rgba[c][j] = tx[c];
@@ -3140,7 +3167,7 @@ softpipe_get_lambda_func(const struct pipe_sampler_view *view, unsigned shader)
    if (shader != PIPE_SHADER_FRAGMENT)
       return compute_lambda_vert;
 
-   switch (view->texture->target) {
+   switch (view->target) {
    case PIPE_BUFFER:
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_1D_ARRAY:
@@ -3176,19 +3203,49 @@ softpipe_create_sampler_view(struct pipe_context *pipe,
       pipe_resource_reference(&view->texture, resource);
       view->context = pipe;
 
+#ifdef DEBUG
+     /*
+      * This is possibly too lenient, but the primary reason is just
+      * to catch state trackers which forget to initialize this, so
+      * it only catches clearly impossible view targets.
+      */
+      if (view->target != resource->target) {
+         if (view->target == PIPE_TEXTURE_1D)
+            assert(resource->target == PIPE_TEXTURE_1D_ARRAY);
+         else if (view->target == PIPE_TEXTURE_1D_ARRAY)
+            assert(resource->target == PIPE_TEXTURE_1D);
+         else if (view->target == PIPE_TEXTURE_2D)
+            assert(resource->target == PIPE_TEXTURE_2D_ARRAY ||
+                   resource->target == PIPE_TEXTURE_CUBE ||
+                   resource->target == PIPE_TEXTURE_CUBE_ARRAY);
+         else if (view->target == PIPE_TEXTURE_2D_ARRAY)
+            assert(resource->target == PIPE_TEXTURE_2D ||
+                   resource->target == PIPE_TEXTURE_CUBE ||
+                   resource->target == PIPE_TEXTURE_CUBE_ARRAY);
+         else if (view->target == PIPE_TEXTURE_CUBE)
+            assert(resource->target == PIPE_TEXTURE_CUBE_ARRAY ||
+                   resource->target == PIPE_TEXTURE_2D_ARRAY);
+         else if (view->target == PIPE_TEXTURE_CUBE_ARRAY)
+            assert(resource->target == PIPE_TEXTURE_CUBE ||
+                   resource->target == PIPE_TEXTURE_2D_ARRAY);
+         else
+            assert(0);
+      }
+#endif
+
       if (any_swizzle(view)) {
          sview->need_swizzle = TRUE;
       }
 
-      if (resource->target == PIPE_TEXTURE_CUBE ||
-          resource->target == PIPE_TEXTURE_CUBE_ARRAY)
+      if (view->target == PIPE_TEXTURE_CUBE ||
+          view->target == PIPE_TEXTURE_CUBE_ARRAY)
          sview->get_samples = sample_cube;
       else {
          sview->get_samples = sample_mip;
       }
       sview->pot2d = spr->pot &&
-                     (resource->target == PIPE_TEXTURE_2D ||
-                      resource->target == PIPE_TEXTURE_RECT);
+                     (view->target == PIPE_TEXTURE_2D ||
+                      view->target == PIPE_TEXTURE_RECT);
 
       sview->xpot = util_logbase2( resource->width0 );
       sview->ypot = util_logbase2( resource->height0 );

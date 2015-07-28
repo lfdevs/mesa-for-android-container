@@ -41,7 +41,7 @@ static void radeonQueryGetResult(struct gl_context *ctx, struct gl_query_object 
 
 	radeon_print(RADEON_STATE, RADEON_VERBOSE,
 			"%s: query id %d, result %d\n",
-			__FUNCTION__, query->Base.Id, (int) query->Base.Result);
+			__func__, query->Base.Id, (int) query->Base.Result);
 
 	radeon_bo_map(query->bo, GL_FALSE);
         result = query->bo->ptr;
@@ -66,7 +66,7 @@ static struct gl_query_object * radeonNewQueryObject(struct gl_context *ctx, GLu
 	query->Base.Active = GL_FALSE;
 	query->Base.Ready = GL_TRUE;
 
-	radeon_print(RADEON_STATE, RADEON_VERBOSE,"%s: query id %d\n", __FUNCTION__, query->Base.Id);
+	radeon_print(RADEON_STATE, RADEON_VERBOSE,"%s: query id %d\n", __func__, query->Base.Id);
 
 	return &query->Base;
 }
@@ -75,7 +75,7 @@ static void radeonDeleteQuery(struct gl_context *ctx, struct gl_query_object *q)
 {
 	struct radeon_query_object *query = (struct radeon_query_object *)q;
 
-	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d\n", __FUNCTION__, q->Id);
+	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d\n", __func__, q->Id);
 
 	if (query->bo) {
 		radeon_bo_unref(query->bo);
@@ -93,7 +93,7 @@ static void radeonWaitQuery(struct gl_context *ctx, struct gl_query_object *q)
 	if (radeon_bo_is_referenced_by_cs(query->bo, radeon->cmdbuf.cs))
 		ctx->Driver.Flush(ctx);
 
-	radeon_print(RADEON_STATE, RADEON_VERBOSE, "%s: query id %d, bo %p, offset %d\n", __FUNCTION__, q->Id, query->bo, query->curr_offset);
+	radeon_print(RADEON_STATE, RADEON_VERBOSE, "%s: query id %d, bo %p, offset %d\n", __func__, q->Id, query->bo, query->curr_offset);
 
 	radeonQueryGetResult(ctx, q);
 
@@ -106,7 +106,7 @@ static void radeonBeginQuery(struct gl_context *ctx, struct gl_query_object *q)
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
 	struct radeon_query_object *query = (struct radeon_query_object *)q;
 
-	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d\n", __FUNCTION__, q->Id);
+	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d\n", __func__, q->Id);
 
 	assert(radeon->query.current == NULL);
 
@@ -135,7 +135,7 @@ void radeonEmitQueryEnd(struct gl_context *ctx)
 	if (query->emitted_begin == GL_FALSE)
 		return;
 
-	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d, bo %p, offset %d\n", __FUNCTION__, query->Base.Id, query->bo, query->curr_offset);
+	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d, bo %p, offset %d\n", __func__, query->Base.Id, query->bo, query->curr_offset);
 
 	radeon_cs_space_check_with_bo(radeon->cmdbuf.cs,
 				      query->bo,
@@ -148,7 +148,7 @@ static void radeonEndQuery(struct gl_context *ctx, struct gl_query_object *q)
 {
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
 
-	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d\n", __FUNCTION__, q->Id);
+	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s: query id %d\n", __func__, q->Id);
 
 	if (radeon->dma.flush)
 		radeon->dma.flush(&radeon->glCtx);
@@ -159,7 +159,7 @@ static void radeonEndQuery(struct gl_context *ctx, struct gl_query_object *q)
 
 static void radeonCheckQuery(struct gl_context *ctx, struct gl_query_object *q)
 {
-	radeon_print(RADEON_STATE, RADEON_TRACE, "%s: query id %d\n", __FUNCTION__, q->Id);
+	radeon_print(RADEON_STATE, RADEON_TRACE, "%s: query id %d\n", __func__, q->Id);
 \
 #ifdef DRM_RADEON_GEM_BUSY
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);

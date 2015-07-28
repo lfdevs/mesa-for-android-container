@@ -141,12 +141,13 @@ am__objects_1 = brw_binding_tables.lo brw_blorp_blit.lo \
 	brw_blorp_blit_eu.lo brw_blorp.lo brw_cc.lo brw_cfg.lo \
 	brw_clear.lo brw_clip.lo brw_clip_line.lo brw_clip_point.lo \
 	brw_clip_state.lo brw_clip_tri.lo brw_clip_unfilled.lo \
-	brw_clip_util.lo brw_context.lo brw_cubemap_normalize.lo \
-	brw_curbe.lo brw_dead_control_flow.lo brw_device_info.lo \
-	brw_disasm.lo brw_draw.lo brw_draw_upload.lo brw_eu.lo \
-	brw_eu_compact.lo brw_eu_emit.lo brw_eu_util.lo brw_ff_gs.lo \
-	brw_ff_gs_emit.lo brw_fs_channel_expressions.lo \
-	brw_fs_cmod_propagation.lo brw_fs_copy_propagation.lo \
+	brw_clip_util.lo brw_compute.lo brw_conditional_render.lo \
+	brw_context.lo brw_cs.lo brw_cubemap_normalize.lo brw_curbe.lo \
+	brw_dead_control_flow.lo brw_device_info.lo brw_disasm.lo \
+	brw_draw.lo brw_draw_upload.lo brw_eu.lo brw_eu_compact.lo \
+	brw_eu_emit.lo brw_eu_util.lo brw_ff_gs.lo brw_ff_gs_emit.lo \
+	brw_fs_channel_expressions.lo brw_fs_cmod_propagation.lo \
+	brw_fs_combine_constants.lo brw_fs_copy_propagation.lo \
 	brw_fs.lo brw_fs_cse.lo brw_fs_dead_code_eliminate.lo \
 	brw_fs_fp.lo brw_fs_generator.lo brw_fs_live_variables.lo \
 	brw_fs_nir.lo brw_fs_peephole_predicated_break.lo \
@@ -157,7 +158,8 @@ am__objects_1 = brw_binding_tables.lo brw_blorp_blit.lo \
 	brw_interpolation_map.lo brw_lower_texture_gradients.lo \
 	brw_lower_unnormalized_offset.lo brw_meta_fast_clear.lo \
 	brw_meta_stencil_blit.lo brw_meta_updownsample.lo \
-	brw_meta_util.lo brw_misc_state.lo brw_object_purgeable.lo \
+	brw_meta_util.lo brw_misc_state.lo brw_nir.lo \
+	brw_nir_analyze_boolean_resolves.lo brw_object_purgeable.lo \
 	brw_packed_float.lo brw_performance_monitor.lo \
 	brw_primitive_restart.lo brw_program.lo brw_queryobj.lo \
 	brw_reset.lo brw_sampler_state.lo brw_schedule_instructions.lo \
@@ -662,6 +664,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -723,7 +729,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -830,8 +835,12 @@ i965_FILES = \
 	brw_clip_tri.c \
 	brw_clip_unfilled.c \
 	brw_clip_util.c \
+	brw_compute.c \
+	brw_conditional_render.c \
 	brw_context.c \
 	brw_context.h \
+	brw_cs.cpp \
+	brw_cs.h \
 	brw_cubemap_normalize.cpp \
 	brw_curbe.c \
 	brw_dead_control_flow.cpp \
@@ -853,6 +862,7 @@ i965_FILES = \
 	brw_ff_gs.h \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_cmod_propagation.cpp \
+	brw_fs_combine_constants.cpp \
 	brw_fs_copy_propagation.cpp \
 	brw_fs.cpp \
 	brw_fs_cse.cpp \
@@ -876,6 +886,9 @@ i965_FILES = \
 	brw_gs_surface_state.c \
 	brw_inst.h \
 	brw_interpolation_map.c \
+	brw_ir_allocator.h \
+	brw_ir_fs.h \
+	brw_ir_vec4.h \
 	brw_lower_texture_gradients.cpp \
 	brw_lower_unnormalized_offset.cpp \
 	brw_meta_fast_clear.c \
@@ -885,6 +898,9 @@ i965_FILES = \
 	brw_meta_util.h \
 	brw_misc_state.c \
 	brw_multisample_state.h \
+	brw_nir.h \
+	brw_nir.c \
+	brw_nir_analyze_boolean_resolves.c \
 	brw_object_purgeable.c \
 	brw_packed_float.c \
 	brw_performance_monitor.c \
@@ -1031,6 +1047,8 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/ \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/mesa/drivers/dri/intel/server \
 	-I$(top_srcdir)/src/gtest/include \
@@ -1196,7 +1214,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_clip_tri.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_clip_unfilled.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_clip_util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_compute.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_conditional_render.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_cs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_cubemap_normalize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_curbe.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_dead_control_flow.Plo@am__quote@
@@ -1213,6 +1234,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_channel_expressions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_cmod_propagation.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_combine_constants.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_copy_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_cse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_dead_code_eliminate.Plo@am__quote@
@@ -1238,6 +1260,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_updownsample.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_misc_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_analyze_boolean_resolves.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_packed_float.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_performance_monitor.Plo@am__quote@

@@ -1,3 +1,16 @@
+mesa (10.6.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * libegl1-mesa.symbols: Updated.
+  * not-installed: Dropped wmesa.h which is gone.
+  * libgles{1,2}-mesa.symbols: Updated.
+  * libegl1-mesa.symbols: Drop a spurious comment.
+  * source/local-options: Updated extend-diff-ignore.
+  * mesa-common-dev.docs: Updated.
+  * Delete i965-do_blit...patch, upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 28 Jul 2015 11:12:44 +0300
+
 mesa (10.5.9-2) unstable; urgency=medium
 
   * i965-do_blit_drawpixels-decode-array-formats.patch: Fix a regression

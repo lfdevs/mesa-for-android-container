@@ -24,6 +24,7 @@
 #ifndef VC4_QIR_H
 #define VC4_QIR_H
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -31,8 +32,9 @@
 #include <string.h>
 
 #include "util/macros.h"
+#include "glsl/nir/nir.h"
 #include "util/simple_list.h"
-#include "tgsi/tgsi_parse.h"
+#include "util/u_math.h"
 
 enum qfile {
         QFILE_NULL,
@@ -75,9 +77,6 @@ enum qop {
         QOP_OR,
         QOP_XOR,
         QOP_NOT,
-
-        /* Sets the flag register according to src. */
-        QOP_SF,
 
         /* Note: Orderings of these compares must be the same as in
          * qpu_defines.h.  Selects the src[0] if the ns flag bit is set,
@@ -173,6 +172,7 @@ struct qinst {
         enum qop op;
         struct qreg dst;
         struct qreg *src;
+        bool sf;
 };
 
 enum qstage {
@@ -282,8 +282,20 @@ struct vc4_compiler_ubo_range {
 
 struct vc4_compile {
         struct vc4_context *vc4;
-        struct tgsi_parse_context parser;
-        struct qreg *temps;
+        nir_shader *s;
+        nir_function_impl *impl;
+        struct exec_list *cf_node_list;
+
+        /**
+         * Mapping from nir_register * or nir_ssa_def * to array of struct
+         * qreg for the values.
+         */
+        struct hash_table *def_ht;
+
+        /* For each temp, the instruction generating its value. */
+        struct qinst **defs;
+        uint32_t defs_array_size;
+
         /**
          * Inputs to the shader, arranged by TGSI declaration order.
          *
@@ -291,17 +303,15 @@ struct vc4_compile {
          */
         struct qreg *inputs;
         struct qreg *outputs;
-        struct qreg *consts;
-        struct qreg addr[4]; /* TGSI ARL destination. */
-        uint32_t temps_array_size;
         uint32_t inputs_array_size;
         uint32_t outputs_array_size;
         uint32_t uniforms_array_size;
-        uint32_t consts_array_size;
-        uint32_t num_consts;
 
         struct vc4_compiler_ubo_range *ubo_ranges;
         uint32_t ubo_ranges_array_size;
+        /** Number of uniform areas declared in ubo_ranges. */
+        uint32_t num_uniform_ranges;
+        /** Number of uniform areas used for indirect addressed loads. */
         uint32_t num_ubo_ranges;
         uint32_t next_ubo_dst_offset;
 
@@ -368,7 +378,10 @@ struct qinst *qir_inst4(enum qop op, struct qreg dst,
                         struct qreg b,
                         struct qreg c,
                         struct qreg d);
-void qir_remove_instruction(struct qinst *qinst);
+void qir_remove_instruction(struct vc4_compile *c, struct qinst *qinst);
+struct qreg qir_uniform(struct vc4_compile *c,
+                        enum quniform_contents contents,
+                        uint32_t data);
 void qir_reorder_uniforms(struct vc4_compile *c);
 void qir_emit(struct vc4_compile *c, struct qinst *inst);
 struct qreg qir_get_temp(struct vc4_compile *c);
@@ -377,11 +390,12 @@ bool qir_reg_equals(struct qreg a, struct qreg b);
 bool qir_has_side_effects(struct vc4_compile *c, struct qinst *inst);
 bool qir_has_side_effect_reads(struct vc4_compile *c, struct qinst *inst);
 bool qir_is_multi_instruction(struct qinst *inst);
+bool qir_is_tex(struct qinst *inst);
 bool qir_depends_on_flags(struct qinst *inst);
 bool qir_writes_r4(struct qinst *inst);
 bool qir_reads_r4(struct qinst *inst);
 bool qir_src_needs_a_file(struct qinst *inst);
-struct qreg qir_follow_movs(struct qinst **defs, struct qreg reg);
+struct qreg qir_follow_movs(struct vc4_compile *c, struct qreg reg);
 
 void qir_dump(struct vc4_compile *c);
 void qir_dump_inst(struct vc4_compile *c, struct qinst *inst);
@@ -389,13 +403,29 @@ const char *qir_get_stage_name(enum qstage stage);
 
 void qir_optimize(struct vc4_compile *c);
 bool qir_opt_algebraic(struct vc4_compile *c);
+bool qir_opt_constant_folding(struct vc4_compile *c);
 bool qir_opt_copy_propagation(struct vc4_compile *c);
 bool qir_opt_cse(struct vc4_compile *c);
 bool qir_opt_dead_code(struct vc4_compile *c);
 bool qir_opt_small_immediates(struct vc4_compile *c);
 bool qir_opt_vpm_writes(struct vc4_compile *c);
+void qir_lower_uniforms(struct vc4_compile *c);
 
 void qpu_schedule_instructions(struct vc4_compile *c);
+
+void qir_SF(struct vc4_compile *c, struct qreg src);
+
+static inline struct qreg
+qir_uniform_ui(struct vc4_compile *c, uint32_t ui)
+{
+        return qir_uniform(c, QUNIFORM_CONSTANT, ui);
+}
+
+static inline struct qreg
+qir_uniform_f(struct vc4_compile *c, float f)
+{
+        return qir_uniform(c, QUNIFORM_CONSTANT, fui(f));
+}
 
 #define QIR_ALU0(name)                                                   \
 static inline struct qreg                                                \
@@ -443,7 +473,6 @@ QIR_ALU2(FADD)
 QIR_ALU2(FSUB)
 QIR_ALU2(FMUL)
 QIR_ALU2(MUL24)
-QIR_NODST_1(SF)
 QIR_ALU1(SEL_X_0_ZS)
 QIR_ALU1(SEL_X_0_ZC)
 QIR_ALU1(SEL_X_0_NS)

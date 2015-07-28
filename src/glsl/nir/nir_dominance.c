@@ -177,6 +177,17 @@ calc_dom_children(nir_function_impl* impl)
    nir_foreach_block(impl, block_add_child, NULL);
 }
 
+static void
+calc_dfs_indicies(nir_block *block, unsigned *index)
+{
+   block->dom_pre_index = (*index)++;
+
+   for (unsigned i = 0; i < block->num_dom_children; i++)
+      calc_dfs_indicies(block->dom_children[i], index);
+
+   block->dom_post_index = (*index)++;
+}
+
 void
 nir_calc_dominance_impl(nir_function_impl *impl)
 {
@@ -201,6 +212,9 @@ nir_calc_dominance_impl(nir_function_impl *impl)
    impl->start_block->imm_dom = NULL;
 
    calc_dom_children(impl);
+
+   unsigned dfs_index = 0;
+   calc_dfs_indicies(impl->start_block, &dfs_index);
 }
 
 void
@@ -212,10 +226,48 @@ nir_calc_dominance(nir_shader *shader)
    }
 }
 
+/**
+ * Computes the least common anscestor of two blocks.  If one of the blocks
+ * is null, the other block is returned.
+ */
+nir_block *
+nir_dominance_lca(nir_block *b1, nir_block *b2)
+{
+   if (b1 == NULL)
+      return b2;
+
+   if (b2 == NULL)
+      return b1;
+
+   assert(nir_cf_node_get_function(&b1->cf_node) ==
+          nir_cf_node_get_function(&b2->cf_node));
+
+   assert(nir_cf_node_get_function(&b1->cf_node)->valid_metadata &
+          nir_metadata_dominance);
+
+   return intersect(b1, b2);
+}
+
+/**
+ * Returns true if parent dominates child
+ */
+bool
+nir_block_dominates(nir_block *parent, nir_block *child)
+{
+   assert(nir_cf_node_get_function(&parent->cf_node) ==
+          nir_cf_node_get_function(&child->cf_node));
+
+   assert(nir_cf_node_get_function(&parent->cf_node)->valid_metadata &
+          nir_metadata_dominance);
+
+   return child->dom_pre_index >= parent->dom_pre_index &&
+          child->dom_post_index <= parent->dom_post_index;
+}
+
 static bool
 dump_block_dom(nir_block *block, void *state)
 {
-   FILE *fp = (FILE *) state;
+   FILE *fp = state;
    if (block->imm_dom)
       fprintf(fp, "\t%u -> %u\n", block->imm_dom->index, block->index);
    return true;
@@ -241,7 +293,7 @@ nir_dump_dom_tree(nir_shader *shader, FILE *fp)
 static bool
 dump_block_dom_frontier(nir_block *block, void *state)
 {
-   FILE *fp = (FILE *) state;
+   FILE *fp = state;
 
    fprintf(fp, "DF(%u) = {", block->index);
    struct set_entry *entry;
@@ -271,7 +323,7 @@ nir_dump_dom_frontier(nir_shader *shader, FILE *fp)
 static bool
 dump_block_succs(nir_block *block, void *state)
 {
-   FILE *fp = (FILE *) state;
+   FILE *fp = state;
    if (block->successors[0])
       fprintf(fp, "\t%u -> %u\n", block->index, block->successors[0]->index);
    if (block->successors[1])

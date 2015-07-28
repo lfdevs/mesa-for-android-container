@@ -2041,6 +2041,8 @@ dri3_create_screen(int screen, struct glx_display * priv)
    if (psc->show_fps_interval < 0)
       psc->show_fps_interval = 0;
 
+   InfoMessageF("Using DRI3 for screen %d\n", screen);
+
    return &psc->base;
 
 handle_error:

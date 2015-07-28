@@ -43,7 +43,8 @@ dce(struct vc4_compile *c, struct qinst *inst)
                 qir_dump_inst(c, inst);
                 fprintf(stderr, "\n");
         }
-        qir_remove_instruction(inst);
+        assert(!inst->sf);
+        qir_remove_instruction(c, inst);
 }
 
 static bool
@@ -93,6 +94,7 @@ qir_opt_dead_code(struct vc4_compile *c)
 
                 if (inst->dst.file == QFILE_TEMP &&
                     !used[inst->dst.index] &&
+                    !inst->sf &&
                     (!qir_has_side_effects(c, inst) ||
                      inst->op == QOP_TEX_RESULT) &&
                     !has_nonremovable_reads(c, inst)) {
@@ -120,11 +122,16 @@ qir_opt_dead_code(struct vc4_compile *c)
 
                 if (qir_depends_on_flags(inst))
                         sf_used = true;
-                if (inst->op == QOP_SF) {
+                if (inst->sf) {
                         if (!sf_used) {
-                                dce(c, inst);
+                                if (debug) {
+                                        fprintf(stderr, "Removing SF on: ");
+                                        qir_dump_inst(c, inst);
+                                        fprintf(stderr, "\n");
+                                }
+
+                                inst->sf = false;
                                 progress = true;
-                                continue;
                         }
                         sf_used = false;
                 }

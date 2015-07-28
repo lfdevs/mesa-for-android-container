@@ -28,6 +28,7 @@
 #pragma once
 
 #include "brw_shader.h"
+#include "brw_ir_fs.h"
 
 extern "C" {
 
@@ -44,16 +45,12 @@ extern "C" {
 #include "brw_context.h"
 #include "brw_eu.h"
 #include "brw_wm.h"
-#include "brw_shader.h"
 #include "intel_asm_annotation.h"
 }
 #include "glsl/glsl_types.h"
 #include "glsl/ir.h"
 #include "glsl/nir/nir.h"
 #include "program/sampler.h"
-
-#define MAX_SAMPLER_MESSAGE_SIZE 11
-#define MAX_VGRF_SIZE 16
 
 struct bblock_t;
 namespace {
@@ -63,231 +60,6 @@ namespace {
 namespace brw {
    class fs_live_variables;
 }
-
-class fs_inst;
-class fs_visitor;
-
-class fs_reg : public backend_reg {
-public:
-   DECLARE_RALLOC_CXX_OPERATORS(fs_reg)
-
-   void init();
-
-   fs_reg();
-   explicit fs_reg(float f);
-   explicit fs_reg(int32_t i);
-   explicit fs_reg(uint32_t u);
-   explicit fs_reg(uint8_t vf[4]);
-   explicit fs_reg(uint8_t vf0, uint8_t vf1, uint8_t vf2, uint8_t vf3);
-   fs_reg(struct brw_reg fixed_hw_reg);
-   fs_reg(enum register_file file, int reg);
-   fs_reg(enum register_file file, int reg, enum brw_reg_type type);
-   fs_reg(enum register_file file, int reg, enum brw_reg_type type, uint8_t width);
-
-   bool equals(const fs_reg &r) const;
-   bool is_contiguous() const;
-
-   /** Smear a channel of the reg to all channels. */
-   fs_reg &set_smear(unsigned subreg);
-
-   /**
-    * Offset in bytes from the start of the register.  Values up to a
-    * backend_reg::reg_offset unit are valid.
-    */
-   int subreg_offset;
-
-   fs_reg *reladdr;
-
-   /**
-    * The register width.  This indicates how many hardware values are
-    * represented by each virtual value.  Valid values are 1, 8, or 16.
-    * For immediate values, this is 1.  Most of the rest of the time, it
-    * will be equal to the dispatch width.
-    */
-   uint8_t width;
-
-   /**
-    * Returns the effective register width when used as a source in the
-    * given instruction.  Registers such as uniforms and immediates
-    * effectively take on the width of the instruction in which they are
-    * used.
-    */
-   uint8_t effective_width;
-
-   /** Register region horizontal stride */
-   uint8_t stride;
-};
-
-static inline fs_reg
-negate(fs_reg reg)
-{
-   assert(reg.file != HW_REG && reg.file != IMM);
-   reg.negate = !reg.negate;
-   return reg;
-}
-
-static inline fs_reg
-retype(fs_reg reg, enum brw_reg_type type)
-{
-   reg.fixed_hw_reg.type = reg.type = type;
-   return reg;
-}
-
-static inline fs_reg
-byte_offset(fs_reg reg, unsigned delta)
-{
-   switch (reg.file) {
-   case BAD_FILE:
-      break;
-   case GRF:
-   case ATTR:
-      reg.reg_offset += delta / 32;
-      break;
-   case MRF:
-      reg.reg += delta / 32;
-      break;
-   default:
-      assert(delta == 0);
-   }
-   reg.subreg_offset += delta % 32;
-   return reg;
-}
-
-static inline fs_reg
-horiz_offset(fs_reg reg, unsigned delta)
-{
-   switch (reg.file) {
-   case BAD_FILE:
-   case UNIFORM:
-   case IMM:
-      /* These only have a single component that is implicitly splatted.  A
-       * horizontal offset should be a harmless no-op.
-       */
-      break;
-   case GRF:
-   case MRF:
-   case ATTR:
-      return byte_offset(reg, delta * reg.stride * type_sz(reg.type));
-   default:
-      assert(delta == 0);
-   }
-   return reg;
-}
-
-static inline fs_reg
-offset(fs_reg reg, unsigned delta)
-{
-   assert(reg.stride > 0);
-   switch (reg.file) {
-   case BAD_FILE:
-      break;
-   case GRF:
-   case MRF:
-   case ATTR:
-      return byte_offset(reg, delta * reg.width * reg.stride * type_sz(reg.type));
-   case UNIFORM:
-      reg.reg_offset += delta;
-      break;
-   default:
-      assert(delta == 0);
-   }
-   return reg;
-}
-
-static inline fs_reg
-component(fs_reg reg, unsigned idx)
-{
-   assert(reg.subreg_offset == 0);
-   assert(idx < reg.width);
-   reg.subreg_offset = idx * type_sz(reg.type);
-   reg.width = 1;
-   return reg;
-}
-
-/**
- * Get either of the 8-component halves of a 16-component register.
- *
- * Note: this also works if \c reg represents a SIMD16 pair of registers.
- */
-static inline fs_reg
-half(fs_reg reg, unsigned idx)
-{
-   assert(idx < 2);
-
-   if (reg.file == UNIFORM)
-      return reg;
-
-   assert(idx == 0 || (reg.file != HW_REG && reg.file != IMM));
-   assert(reg.width == 16);
-   reg.width = 8;
-   return horiz_offset(reg, 8 * idx);
-}
-
-static const fs_reg reg_undef;
-
-class fs_inst : public backend_instruction {
-   fs_inst &operator=(const fs_inst &);
-
-   void init(enum opcode opcode, uint8_t exec_width, const fs_reg &dst,
-             fs_reg *src, int sources);
-
-public:
-   DECLARE_RALLOC_CXX_OPERATORS(fs_inst)
-
-   fs_inst();
-   fs_inst(enum opcode opcode, uint8_t exec_size);
-   fs_inst(enum opcode opcode, const fs_reg &dst);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           const fs_reg &src0);
-   fs_inst(enum opcode opcode, const fs_reg &dst, const fs_reg &src0);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           const fs_reg &src0, const fs_reg &src1);
-   fs_inst(enum opcode opcode, const fs_reg &dst, const fs_reg &src0,
-           const fs_reg &src1);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           const fs_reg &src0, const fs_reg &src1, const fs_reg &src2);
-   fs_inst(enum opcode opcode, const fs_reg &dst, const fs_reg &src0,
-           const fs_reg &src1, const fs_reg &src2);
-   fs_inst(enum opcode opcode, const fs_reg &dst, fs_reg src[], int sources);
-   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
-           fs_reg src[], int sources);
-   fs_inst(const fs_inst &that);
-
-   void resize_sources(uint8_t num_sources);
-
-   bool equals(fs_inst *inst) const;
-   bool overwrites_reg(const fs_reg &reg) const;
-   bool is_send_from_grf() const;
-   bool is_partial_write() const;
-   int regs_read(fs_visitor *v, int arg) const;
-   bool can_do_source_mods(struct brw_context *brw);
-
-   bool reads_flag() const;
-   bool writes_flag() const;
-
-   fs_reg dst;
-   fs_reg *src;
-
-   uint8_t sources; /**< Number of fs_reg sources. */
-
-   /**
-    * Execution size of the instruction.  This is used by the generator to
-    * generate the correct binary for the given fs_inst.  Current valid
-    * values are 1, 8, 16.
-    */
-   uint8_t exec_size;
-
-   /* Chooses which flag subregister (f0.0 or f0.1) is used for conditional
-    * mod and predication.
-    */
-   uint8_t flag_subreg;
-
-   uint8_t regs_written; /**< Number of vgrfs written by a SEND message, or 1 */
-   bool eot:1;
-   bool force_uncompressed:1;
-   bool force_sechalf:1;
-   bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
-};
 
 /**
  * The fragment shader front-end.
@@ -303,25 +75,16 @@ public:
 
    fs_visitor(struct brw_context *brw,
               void *mem_ctx,
-              const struct brw_wm_prog_key *key,
-              struct brw_wm_prog_data *prog_data,
+              gl_shader_stage stage,
+              const void *key,
+              struct brw_stage_prog_data *prog_data,
               struct gl_shader_program *shader_prog,
-              struct gl_fragment_program *fp,
-              unsigned dispatch_width);
-
-   fs_visitor(struct brw_context *brw,
-              void *mem_ctx,
-              const struct brw_vs_prog_key *key,
-              struct brw_vs_prog_data *prog_data,
-              struct gl_shader_program *shader_prog,
-              struct gl_vertex_program *cp,
+              struct gl_program *prog,
               unsigned dispatch_width);
 
    ~fs_visitor();
-   void init();
 
    fs_reg *variable_storage(ir_variable *var);
-   int virtual_grf_alloc(int size);
    fs_reg vgrf(const glsl_type *const type);
    fs_reg vgrf(int num_components);
    void import_uniforms(fs_visitor *v);
@@ -409,7 +172,8 @@ public:
 					   fs_inst *end,
 					   const fs_reg &reg);
 
-   fs_inst *LOAD_PAYLOAD(const fs_reg &dst, fs_reg *src, int sources);
+   fs_inst *LOAD_PAYLOAD(const fs_reg &dst, fs_reg *src, int sources,
+                         int header_size);
 
    exec_list VARYING_PULL_CONSTANT_LOAD(const fs_reg &dst,
                                         const fs_reg &surf_index,
@@ -418,12 +182,14 @@ public:
 
    bool run_fs();
    bool run_vs();
+   bool run_cs();
    void optimize();
    void allocate_registers();
    void assign_binding_table_offsets();
    void setup_payload_gen4();
    void setup_payload_gen6();
    void setup_vs_payload();
+   void setup_cs_payload();
    void fixup_3src_null_dest();
    void assign_curb_setup();
    void calculate_urb_setup();
@@ -448,6 +214,7 @@ public:
    void calculate_live_intervals();
    void calculate_register_pressure();
    bool opt_algebraic();
+   bool opt_redundant_discard_jumps();
    bool opt_cse();
    bool opt_cse_local(bblock_t *block);
    bool opt_copy_propagate();
@@ -458,8 +225,11 @@ public:
    bool opt_register_renaming();
    bool register_coalesce();
    bool compute_to_mrf();
+   bool eliminate_find_live_channel();
    bool dead_code_eliminate();
    bool remove_duplicate_mrf_writes();
+
+   bool opt_sampler_eot();
    bool virtual_grf_interferes(int a, int b);
    void schedule_instructions(instruction_scheduler_mode mode);
    void insert_gen4_send_dependency_workarounds();
@@ -472,6 +242,8 @@ public:
    void no16(const char *msg, ...);
    void lower_uniform_pull_constant_loads();
    bool lower_load_payload();
+   bool lower_integer_multiplication();
+   bool opt_combine_constants();
 
    void emit_dummy_fs();
    void emit_repclear_shader();
@@ -488,7 +260,7 @@ public:
                                    glsl_interp_qualifier interpolation_mode,
                                    int location, bool mod_centroid,
                                    bool mod_sample);
-   fs_reg *emit_vs_system_value(enum brw_reg_type type, int location);
+   fs_reg *emit_vs_system_value(int location);
    void emit_interpolation_setup_gen4();
    void emit_interpolation_setup_gen6();
    void compute_sample_position(fs_reg dst, fs_reg int_sample_pos);
@@ -499,6 +271,10 @@ public:
                               fs_reg shadow_comp,
                               fs_reg lod, fs_reg lod2, int grad_components,
                               uint32_t sampler);
+   fs_inst *emit_texture_gen4_simd16(ir_texture_opcode op, fs_reg dst,
+                                     fs_reg coordinate, int vector_elements,
+                                     fs_reg shadow_c, fs_reg lod,
+                                     uint32_t sampler);
    fs_inst *emit_texture_gen5(ir_texture_opcode op, fs_reg dst,
                               fs_reg coordinate, int coord_components,
                               fs_reg shadow_comp,
@@ -517,7 +293,7 @@ public:
                      fs_reg shadow_c,
                      fs_reg lod, fs_reg dpdy, int grad_components,
                      fs_reg sample_index,
-                     fs_reg offset, unsigned offset_components,
+                     fs_reg offset,
                      fs_reg mcs,
                      int gather_component,
                      bool is_cube_array,
@@ -527,22 +303,30 @@ public:
                      int texunit);
    fs_reg emit_mcs_fetch(fs_reg coordinate, int components, fs_reg sampler);
    void emit_gen6_gather_wa(uint8_t wa, fs_reg dst);
+   void resolve_source_modifiers(fs_reg *src);
    fs_reg fix_math_operand(fs_reg src);
    fs_inst *emit_math(enum opcode op, fs_reg dst, fs_reg src0);
    fs_inst *emit_math(enum opcode op, fs_reg dst, fs_reg src0, fs_reg src1);
-   void emit_lrp(const fs_reg &dst, const fs_reg &x, const fs_reg &y,
-                 const fs_reg &a);
+   fs_inst *emit_lrp(const fs_reg &dst, const fs_reg &x, const fs_reg &y,
+                     const fs_reg &a);
    void emit_minmax(enum brw_conditional_mod conditionalmod, const fs_reg &dst,
                     const fs_reg &src0, const fs_reg &src1);
+   void emit_discard_jump();
+   /** Copy any live channel from \p src to the first channel of \p dst. */
+   void emit_uniformize(const fs_reg &dst, const fs_reg &src);
+   bool try_emit_b2f_of_comparison(ir_expression *ir);
    bool try_emit_saturate(ir_expression *ir);
    bool try_emit_line(ir_expression *ir);
    bool try_emit_mad(ir_expression *ir);
    bool try_replace_with_sel();
+   bool try_opt_frontfacing_ternary(ir_if *ir);
    bool opt_peephole_sel();
    bool opt_peephole_predicated_break();
    bool opt_saturate_propagation();
    bool opt_cmod_propagation();
+   bool opt_zero_samples();
    void emit_bool_to_cond_code(ir_rvalue *condition);
+   void emit_bool_to_cond_code_of_reg(ir_expression *expr, fs_reg op[3]);
    void emit_if_gen6(ir_if *ir);
    void emit_unspill(bblock_t *block, fs_inst *inst, fs_reg reg,
                      uint32_t spill_offset, int count);
@@ -593,12 +377,18 @@ public:
    fs_reg get_nir_dest(nir_dest dest);
    void emit_percomp(fs_inst *inst, unsigned wr_mask);
 
-   int setup_color_payload(fs_reg *dst, fs_reg color, unsigned components);
+   bool optimize_frontfacing_ternary(nir_alu_instr *instr,
+                                     const fs_reg &result);
+
+   void setup_color_payload(fs_reg *dst, fs_reg color, unsigned components,
+                            unsigned exec_size, bool use_2nd_half);
    void emit_alpha_test();
    fs_inst *emit_single_fb_write(fs_reg color1, fs_reg color2,
-                                 fs_reg src0_alpha, unsigned components);
+                                 fs_reg src0_alpha, unsigned components,
+                                 unsigned exec_size, bool use_2nd_half = false);
    void emit_fb_writes();
    void emit_urb_writes();
+   void emit_cs_terminate();
 
    void emit_shader_time_begin();
    void emit_shader_time_end();
@@ -638,14 +428,13 @@ public:
    void visit_atomic_counter_intrinsic(ir_call *ir);
 
    const void *const key;
+   const struct brw_sampler_prog_key_data *key_tex;
+
    struct brw_stage_prog_data *prog_data;
    unsigned int sanity_param_count;
 
    int *param_size;
 
-   int *virtual_grf_sizes;
-   int virtual_grf_count;
-   int virtual_grf_array_size;
    int *virtual_grf_start;
    int *virtual_grf_end;
    brw::fs_live_variables *live_intervals;
@@ -654,6 +443,9 @@ public:
 
    /** Number of uniform variable components visited. */
    unsigned uniforms;
+
+   /** Total number of direct uniforms we can get from NIR */
+   unsigned num_direct_uniforms;
 
    /** Byte-offset for the next available spot in the scratch space buffer. */
    unsigned last_scratch;
@@ -679,7 +471,7 @@ public:
    bool do_dual_src;
    int first_non_payload_grf;
    /** Either BRW_MAX_GRF or GEN7_MRF_HACK_START */
-   int max_grf;
+   unsigned max_grf;
 
    fs_reg *fp_temp_regs;
    fs_reg *fp_input_regs;
@@ -688,7 +480,6 @@ public:
    fs_reg *nir_globals;
    fs_reg nir_inputs;
    fs_reg nir_outputs;
-   fs_reg nir_uniforms;
    fs_reg *nir_system_values;
 
    /** @{ debug annotation info */
@@ -725,15 +516,16 @@ public:
    fs_reg pixel_y;
    fs_reg wpos_w;
    fs_reg pixel_w;
-   fs_reg delta_x[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
-   fs_reg delta_y[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
+   fs_reg delta_xy[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
    fs_reg shader_start_time;
    fs_reg userplane[MAX_CLIP_PLANES];
 
-   int grf_used;
+   unsigned grf_used;
    bool spilled_any_registers;
 
    const unsigned dispatch_width; /**< 8 or 16 */
+
+   unsigned promoted_constants;
 };
 
 /**
@@ -749,6 +541,7 @@ public:
                 const void *key,
                 struct brw_stage_prog_data *prog_data,
                 struct gl_program *fp,
+                unsigned promoted_constants,
                 bool runtime_check_aads_emit,
                 const char *stage_abbrev);
    ~fs_generator();
@@ -764,8 +557,8 @@ private:
                       GLuint nr);
    void generate_fb_write(fs_inst *inst, struct brw_reg payload);
    void generate_urb_write(fs_inst *inst, struct brw_reg payload);
+   void generate_cs_terminate(fs_inst *inst, struct brw_reg payload);
    void generate_blorp_fb_write(fs_inst *inst);
-   void generate_pixel_xy(struct brw_reg dst, bool is_x);
    void generate_linterp(fs_inst *inst, struct brw_reg dst,
 			 struct brw_reg *src);
    void generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src,
@@ -835,23 +628,12 @@ private:
                                  struct brw_reg offset,
                                  struct brw_reg value);
 
-   void generate_untyped_atomic(fs_inst *inst,
-                                struct brw_reg dst,
-                                struct brw_reg payload,
-                                struct brw_reg atomic_op,
-                                struct brw_reg surf_index);
-
-   void generate_untyped_surface_read(fs_inst *inst,
-                                      struct brw_reg dst,
-                                      struct brw_reg payload,
-                                      struct brw_reg surf_index);
-
    bool patch_discard_jumps_to_fb_writes();
 
    struct brw_context *brw;
-   struct gl_context *ctx;
+   const struct brw_device_info *devinfo;
 
-   struct brw_compile *p;
+   struct brw_codegen *p;
    const void * const key;
    struct brw_stage_prog_data * const prog_data;
 
@@ -860,6 +642,7 @@ private:
    unsigned dispatch_width; /**< 8 or 16 */
 
    exec_list discard_halt_patches;
+   unsigned promoted_constants;
    bool runtime_check_aads_emit;
    bool debug_flag;
    const char *shader_name;
@@ -869,3 +652,6 @@ private:
 
 bool brw_do_channel_expressions(struct exec_list *instructions);
 bool brw_do_vector_splitting(struct exec_list *instructions);
+void brw_setup_tex_for_precompile(struct brw_context *brw,
+                                  struct brw_sampler_prog_key_data *tex,
+                                  struct gl_program *prog);

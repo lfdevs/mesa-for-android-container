@@ -30,7 +30,6 @@
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/u_double_list.h"
 
 #include "svga_cmd.h"
 #include "svga_context.h"

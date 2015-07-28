@@ -119,7 +119,7 @@ static unsigned r600_texture_get_offset(struct r600_texture *rtex, unsigned leve
 }
 
 static int r600_init_surface(struct r600_common_screen *rscreen,
-			     struct radeon_surface *surface,
+			     struct radeon_surf *surface,
 			     const struct pipe_resource *ptex,
 			     unsigned array_mode,
 			     bool is_flushed_depth)
@@ -234,7 +234,7 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 {
 	struct r600_texture *rtex = (struct r600_texture*)ptex;
 	struct r600_resource *resource = &rtex->resource;
-	struct radeon_surface *surface = &rtex->surface;
+	struct radeon_surf *surface = &rtex->surface;
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 
 	rscreen->ws->buffer_set_tiling(resource->buf,
@@ -280,7 +280,7 @@ void r600_texture_get_fmask_info(struct r600_common_screen *rscreen,
 				 struct r600_fmask_info *out)
 {
 	/* FMASK is allocated like an ordinary texture. */
-	struct radeon_surface fmask = rtex->surface;
+	struct radeon_surf fmask = rtex->surface;
 
 	memset(out, 0, sizeof(*out));
 
@@ -570,7 +570,7 @@ r600_texture_create_object(struct pipe_screen *screen,
 			   const struct pipe_resource *base,
 			   unsigned pitch_in_bytes_override,
 			   struct pb_buffer *buf,
-			   struct radeon_surface *surface)
+			   struct radeon_surf *surface)
 {
 	struct r600_texture *rtex;
 	struct r600_resource *resource;
@@ -764,7 +764,7 @@ struct pipe_resource *r600_texture_create(struct pipe_screen *screen,
 					  const struct pipe_resource *templ)
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
-	struct radeon_surface surface = {0};
+	struct radeon_surf surface = {0};
 	int r;
 
 	r = r600_init_surface(rscreen, &surface, templ,
@@ -790,7 +790,7 @@ static struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen
 	unsigned stride = 0;
 	unsigned array_mode;
 	enum radeon_bo_layout micro, macro;
-	struct radeon_surface surface;
+	struct radeon_surf surface;
 	bool scanout;
 	int r;
 

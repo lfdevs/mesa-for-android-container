@@ -63,7 +63,7 @@ struct lp_rast_state;
 #define LP_SCENE_MAX_SIZE (9*1024*1024)
 
 /* The maximum amount of texture storage referenced by a scene is
- * clamped ot this size:
+ * clamped to this size:
  */
 #define LP_SCENE_MAX_RESOURCE_SIZE (64*1024*1024)
 
@@ -142,6 +142,7 @@ struct lp_scene {
       uint8_t *map;
       unsigned stride;
       unsigned layer_stride;
+      unsigned format_bytes;
    } zsbuf, cbufs[PIPE_MAX_COLOR_BUFS];
 
    /* The amount of layers in the fb (minimum of all attachments) */

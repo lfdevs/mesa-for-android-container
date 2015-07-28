@@ -413,11 +413,11 @@ extern _X_HIDDEN void __indirect_glColorTableParameterfv(GLenum target, GLenum p
 extern _X_HIDDEN void __indirect_glColorTableParameteriv(GLenum target, GLenum pname, const GLint * params);
 extern _X_HIDDEN void __indirect_glCopyColorTable(GLenum target, GLenum internalformat, GLint x, GLint y, GLsizei width);
 extern _X_HIDDEN void __indirect_glGetColorTable(GLenum target, GLenum format, GLenum type, GLvoid * table);
-GLAPI void GLAPIENTRY glGetColorTableEXT(GLenum target, GLenum format, GLenum type, GLvoid * table);
+extern _X_HIDDEN void gl_dispatch_stub_343(GLenum target, GLenum format, GLenum type, GLvoid * table);
 extern _X_HIDDEN void __indirect_glGetColorTableParameterfv(GLenum target, GLenum pname, GLfloat * params);
-GLAPI void GLAPIENTRY glGetColorTableParameterfvEXT(GLenum target, GLenum pname, GLfloat * params);
+extern _X_HIDDEN void gl_dispatch_stub_344(GLenum target, GLenum pname, GLfloat * params);
 extern _X_HIDDEN void __indirect_glGetColorTableParameteriv(GLenum target, GLenum pname, GLint * params);
-GLAPI void GLAPIENTRY glGetColorTableParameterivEXT(GLenum target, GLenum pname, GLint * params);
+extern _X_HIDDEN void gl_dispatch_stub_345(GLenum target, GLenum pname, GLint * params);
 extern _X_HIDDEN void __indirect_glColorSubTable(GLenum target, GLsizei start, GLsizei count, GLenum format, GLenum type, const GLvoid * data);
 extern _X_HIDDEN void __indirect_glCopyColorSubTable(GLenum target, GLsizei start, GLint x, GLint y, GLsizei width);
 extern _X_HIDDEN void __indirect_glConvolutionFilter1D(GLenum target, GLenum internalformat, GLsizei width, GLenum format, GLenum type, const GLvoid * image);
@@ -625,7 +625,7 @@ extern _X_HIDDEN void __indirect_glDeleteRenderbuffers(GLsizei n, const GLuint *
 extern _X_HIDDEN void __indirect_glFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
 extern _X_HIDDEN void __indirect_glFramebufferTexture1D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
 extern _X_HIDDEN void __indirect_glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
-extern _X_HIDDEN void __indirect_glFramebufferTexture3D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level, GLint zoffset);
+extern _X_HIDDEN void __indirect_glFramebufferTexture3D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level, GLint layer);
 extern _X_HIDDEN void __indirect_glFramebufferTextureLayer(GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer);
 extern _X_HIDDEN void __indirect_glGenFramebuffers(GLsizei n, GLuint * framebuffers);
 extern _X_HIDDEN void __indirect_glGenRenderbuffers(GLsizei n, GLuint * renderbuffers);

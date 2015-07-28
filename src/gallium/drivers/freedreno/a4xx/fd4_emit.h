@@ -54,6 +54,7 @@ struct fd4_emit {
 	const struct pipe_draw_info *info;
 	struct ir3_shader_key key;
 	enum a4xx_color_fmt format;
+	enum pipe_format pformat;
 	uint32_t dirty;
 
 	/* cached to avoid repeated lookups of same variants: */

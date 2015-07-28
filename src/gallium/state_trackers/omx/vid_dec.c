@@ -44,8 +44,6 @@
 #include <bellagio/omxcore.h>
 #endif
 
-#include <bellagio/omx_base_video_port.h>
-
 #include "pipe/p_screen.h"
 #include "pipe/p_video_codec.h"
 #include "util/u_memory.h"
@@ -364,22 +362,6 @@ static OMX_ERRORTYPE vid_dec_MessageHandler(OMX_COMPONENTTYPE* comp, internalReq
 
    if (msg->messageType == OMX_CommandStateSet) {
       if ((msg->messageParam == OMX_StateIdle ) && (priv->state == OMX_StateLoaded)) {
-
-         struct pipe_video_codec templat = {};
-         omx_base_video_PortType *port;
-
-         port = (omx_base_video_PortType *)priv->ports[OMX_BASE_FILTER_INPUTPORT_INDEX];
-
-         templat.profile = priv->profile;
-         templat.entrypoint = PIPE_VIDEO_ENTRYPOINT_BITSTREAM;
-         templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
-         templat.width = port->sPortParam.format.video.nFrameWidth;
-         templat.height = port->sPortParam.format.video.nFrameHeight;
-         templat.max_references = 2;
-         templat.expect_chunked_decode = true;
-
-         priv->codec = priv->pipe->create_video_codec(priv->pipe, &templat);
-
          if (priv->profile == PIPE_VIDEO_PROFILE_MPEG2_MAIN)
             vid_dec_mpeg12_Init(priv);
          else if (priv->profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH)

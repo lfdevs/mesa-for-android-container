@@ -58,7 +58,7 @@ struct brw_sf_prog_key {
 };
 
 struct brw_sf_compile {
-   struct brw_compile func;
+   struct brw_codegen func;
    struct brw_sf_prog_key key;
    struct brw_sf_prog_data prog_data;
 

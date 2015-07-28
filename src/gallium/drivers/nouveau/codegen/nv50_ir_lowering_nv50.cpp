@@ -1095,8 +1095,9 @@ NV50LoweringPreSSA::handleRDSV(Instruction *i)
    case SV_FACE:
       bld.mkInterp(NV50_IR_INTERP_FLAT, def, addr, NULL);
       if (i->dType == TYPE_F32) {
-         bld.mkOp2(OP_AND, TYPE_U32, def, def, bld.mkImm(0x80000000));
-         bld.mkOp2(OP_XOR, TYPE_U32, def, def, bld.mkImm(0xbf800000));
+         bld.mkOp2(OP_OR, TYPE_U32, def, def, bld.mkImm(0x00000001));
+         bld.mkOp1(OP_NEG, TYPE_S32, def, def);
+         bld.mkCvt(OP_CVT, TYPE_F32, def, TYPE_S32, def);
       }
       break;
    case SV_NCTAID:

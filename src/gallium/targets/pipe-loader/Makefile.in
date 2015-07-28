@@ -200,10 +200,11 @@ am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 @HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1)
 am__DEPENDENCIES_4 = $(am__append_3) $(am__append_4) $(am__append_5) \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
-	$(top_builddir)/src/gallium/drivers/galahad/libgalahad.la \
 	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
 @HAVE_GALLIUM_I915_TRUE@pipe_i915_la_DEPENDENCIES =  \
 @HAVE_GALLIUM_I915_TRUE@	$(am__DEPENDENCIES_4) \
@@ -529,6 +530,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -590,7 +595,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -747,17 +751,18 @@ AM_CPPFLAGS = $(GALLIUM_CFLAGS) -I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys $(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) -DGALLIUM_RBUG -DGALLIUM_TRACE \
-	-DGALLIUM_GALAHAD $(am__append_17) $(am__append_19)
+	$(am__append_17) $(am__append_19)
 pipedir = $(libdir)/gallium-pipe
 pipe_LTLIBRARIES = $(am__append_9) $(am__append_10) $(am__append_11) \
 	$(am__append_12) $(am__append_13) $(am__append_14) \
 	$(am__append_15) $(am__append_16) $(am__append_18)
 PIPE_LIBS = $(am__append_3) $(am__append_4) $(am__append_5) \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
-	$(top_builddir)/src/gallium/drivers/galahad/libgalahad.la \
 	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_7)
 AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED) $(am__append_6) $(am__append_8)

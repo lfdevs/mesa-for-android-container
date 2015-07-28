@@ -72,6 +72,15 @@ void brw_vs_debug_recompile(struct brw_context *brw,
                             const struct brw_vs_prog_key *key);
 bool brw_vs_prog_data_compare(const void *a, const void *b);
 
+void
+brw_upload_vs_prog(struct brw_context *brw);
+
+bool
+brw_codegen_vs_prog(struct brw_context *brw,
+                    struct gl_shader_program *prog,
+                    struct brw_vertex_program *vp,
+                    struct brw_vs_prog_key *key);
+
 #ifdef __cplusplus
 } /* extern "C" */
 

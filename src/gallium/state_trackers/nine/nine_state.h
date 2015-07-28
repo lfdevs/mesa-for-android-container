@@ -26,7 +26,7 @@
 #include "d3d9.h"
 #include "nine_defines.h"
 #include "pipe/p_state.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #define NINED3DSAMP_MINLOD (D3DSAMP_DMAPOFFSET + 1)
 #define NINED3DSAMP_SHADOW (D3DSAMP_DMAPOFFSET + 2)

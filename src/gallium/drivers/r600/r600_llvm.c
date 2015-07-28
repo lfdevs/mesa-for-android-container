@@ -4,7 +4,7 @@
 #include "gallivm/lp_bld_intr.h"
 #include "gallivm/lp_bld_gather.h"
 #include "tgsi/tgsi_parse.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_memory.h"
 
 #include "evergreend.h"

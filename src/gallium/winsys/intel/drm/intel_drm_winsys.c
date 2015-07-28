@@ -41,7 +41,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_debug.h"
-#include "ilo/intel_winsys.h"
+#include "ilo/core/intel_winsys.h"
 #include "intel_drm_public.h"
 
 struct intel_winsys {
@@ -54,6 +54,12 @@ struct intel_winsys {
    drm_intel_context *first_gem_ctx;
    struct drm_intel_decode *decode;
 };
+
+static drm_intel_context *
+gem_ctx(const struct intel_context *ctx)
+{
+   return (drm_intel_context *) ctx;
+}
 
 static drm_intel_bo *
 gem_bo(const struct intel_bo *bo)
@@ -244,7 +250,7 @@ void
 intel_winsys_destroy_context(struct intel_winsys *winsys,
                              struct intel_context *ctx)
 {
-   drm_intel_gem_context_destroy((drm_intel_context *) ctx);
+   drm_intel_gem_context_destroy(gem_ctx(ctx));
 }
 
 int
@@ -254,57 +260,45 @@ intel_winsys_read_reg(struct intel_winsys *winsys,
    return drm_intel_reg_read(winsys->bufmgr, reg, val);
 }
 
+int
+intel_winsys_get_reset_stats(struct intel_winsys *winsys,
+                             struct intel_context *ctx,
+                             uint32_t *active_lost,
+                             uint32_t *pending_lost)
+{
+   uint32_t reset_count;
+
+   return drm_intel_get_reset_stats(gem_ctx(ctx),
+         &reset_count, active_lost, pending_lost);
+}
+
 struct intel_bo *
 intel_winsys_alloc_bo(struct intel_winsys *winsys,
                       const char *name,
-                      enum intel_tiling_mode tiling,
-                      unsigned long pitch,
-                      unsigned long height,
+                      unsigned long size,
                       bool cpu_init)
 {
    const unsigned int alignment = 4096; /* always page-aligned */
-   unsigned long size;
    drm_intel_bo *bo;
-
-   switch (tiling) {
-   case INTEL_TILING_X:
-      if (pitch % 512)
-         return NULL;
-      break;
-   case INTEL_TILING_Y:
-      if (pitch % 128)
-         return NULL;
-      break;
-   default:
-      break;
-   }
-
-   if (pitch > ULONG_MAX / height)
-      return NULL;
-
-   size = pitch * height;
 
    if (cpu_init) {
       bo = drm_intel_bo_alloc(winsys->bufmgr, name, size, alignment);
-   }
-   else {
+   } else {
       bo = drm_intel_bo_alloc_for_render(winsys->bufmgr,
             name, size, alignment);
    }
 
-   if (bo && tiling != INTEL_TILING_NONE) {
-      uint32_t real_tiling = tiling;
-      int err;
-
-      err = drm_intel_bo_set_tiling(bo, &real_tiling, pitch);
-      if (err || real_tiling != tiling) {
-         assert(!"tiling mismatch");
-         drm_intel_bo_unreference(bo);
-         return NULL;
-      }
-   }
-
    return (struct intel_bo *) bo;
+}
+
+struct intel_bo *
+intel_winsys_import_userptr(struct intel_winsys *winsys,
+                            const char *name,
+                            void *userptr,
+                            unsigned long size,
+                            unsigned long flags)
+{
+   return NULL;
 }
 
 struct intel_bo *
@@ -470,16 +464,50 @@ intel_winsys_decode_bo(struct intel_winsys *winsys,
    intel_bo_unmap(bo);
 }
 
-void
-intel_bo_reference(struct intel_bo *bo)
+struct intel_bo *
+intel_bo_ref(struct intel_bo *bo)
 {
-   drm_intel_bo_reference(gem_bo(bo));
+   if (bo)
+      drm_intel_bo_reference(gem_bo(bo));
+
+   return bo;
 }
 
 void
-intel_bo_unreference(struct intel_bo *bo)
+intel_bo_unref(struct intel_bo *bo)
 {
-   drm_intel_bo_unreference(gem_bo(bo));
+   if (bo)
+      drm_intel_bo_unreference(gem_bo(bo));
+}
+
+int
+intel_bo_set_tiling(struct intel_bo *bo,
+                    enum intel_tiling_mode tiling,
+                    unsigned long pitch)
+{
+   uint32_t real_tiling = tiling;
+   int err;
+
+   switch (tiling) {
+   case INTEL_TILING_X:
+      if (pitch % 512)
+         return -1;
+      break;
+   case INTEL_TILING_Y:
+      if (pitch % 128)
+         return -1;
+      break;
+   default:
+      break;
+   }
+
+   err = drm_intel_bo_set_tiling(gem_bo(bo), &real_tiling, pitch);
+   if (err || real_tiling != tiling) {
+      assert(!"tiling mismatch");
+      return -1;
+   }
+
+   return 0;
 }
 
 void *
@@ -494,6 +522,12 @@ intel_bo_map(struct intel_bo *bo, bool write_enable)
    }
 
    return gem_bo(bo)->virtual;
+}
+
+void *
+intel_bo_map_async(struct intel_bo *bo)
+{
+   return NULL;
 }
 
 void *

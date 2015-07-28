@@ -23,6 +23,26 @@
 #ifndef __NOUVEAU_HEAP_H__
 #define __NOUVEAU_HEAP_H__
 
+/* This datastructure represents a memory allocation heap. Fundamentally, this
+ * is a doubly-linked list with a few properties, and a usage convention.
+ *
+ * On initial allocation, there is a single node with the full size that's
+ * marked as not in-use. As allocations are made, blocks are taken off the end
+ * of that first node, and inserted right after it. If the first node doesn't
+ * have enough free space, we look for free space down in the rest of the
+ * list. This can happen if an allocation is made and then freed.
+ *
+ * The first node will remain with in_use == 0 even if the whole heap is
+ * exhausted. Another invariant is that there will never be two sequential
+ * in_use == 0 nodes. If a node is freed and it has one (or both) adjacent
+ * free nodes, they are merged into one, and the relevant heap entries are
+ * freed.
+ *
+ * The pattern to free the whole heap is to start with the first node and then
+ * just free the "next" node, until there is no next node. This should assure
+ * that at the end the first (and only) node is not in use and contains the
+ * full size of the heap.
+ */
 struct nouveau_heap {
 	struct nouveau_heap *prev;
 	struct nouveau_heap *next;

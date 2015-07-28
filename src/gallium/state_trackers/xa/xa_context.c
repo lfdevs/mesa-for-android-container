@@ -37,7 +37,11 @@
 XA_EXPORT void
 xa_context_flush(struct xa_context *ctx)
 {
-	ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
+    if (ctx->last_fence) {
+        struct pipe_screen *screen = ctx->xa->screen;
+        screen->fence_reference(screen, &ctx->last_fence, NULL);
+    }
+    ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
 }
 
 XA_EXPORT struct xa_context *

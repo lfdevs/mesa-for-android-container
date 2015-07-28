@@ -34,6 +34,7 @@
 #include "macros.h"
 #include "meta.h"
 #include "pbo.h"
+#include "readpix.h"
 #include "shaderapi.h"
 #include "state.h"
 #include "teximage.h"
@@ -78,6 +79,8 @@ create_texture_for_pbo(struct gl_context *ctx, bool create_pbo,
       *tmp_pbo = 0;
       buffer_obj = packing->BufferObj;
    } else {
+      bool is_pixel_pack = pbo_target == GL_PIXEL_PACK_BUFFER;
+
       assert(create_pbo);
 
       _mesa_GenBuffers(1, tmp_pbo);
@@ -88,9 +91,17 @@ create_texture_for_pbo(struct gl_context *ctx, bool create_pbo,
        */
       _mesa_BindBuffer(pbo_target, *tmp_pbo);
 
-      _mesa_BufferData(pbo_target, row_stride * height, pixels, GL_STREAM_DRAW);
+      /* In case of GL_PIXEL_PACK_BUFFER, pass null pointer for the pixel
+       * data to avoid unnecessary data copying in _mesa_BufferData().
+       */
+      if (is_pixel_pack)
+         _mesa_BufferData(pbo_target, row_stride * height, NULL,
+                          GL_STREAM_READ);
+      else
+         _mesa_BufferData(pbo_target, row_stride * height, pixels,
+                          GL_STREAM_DRAW);
 
-      buffer_obj = ctx->Unpack.BufferObj;
+      buffer_obj = packing->BufferObj;
       pixels = NULL;
 
       _mesa_BindBuffer(pbo_target, 0);
@@ -140,9 +151,6 @@ _mesa_meta_pbo_TexSubImage(struct gl_context *ctx, GLuint dims,
    bool success = false;
    int z;
 
-   /* XXX: This should probably be passed in from somewhere */
-   const char *where = "_mesa_meta_pbo_TexSubImage";
-
    if (!_mesa_is_bufferobj(packing->BufferObj) && !create_pbo)
       return false;
 
@@ -154,19 +162,6 @@ _mesa_meta_pbo_TexSubImage(struct gl_context *ctx, GLuint dims,
 
    if (ctx->_ImageTransferState)
       return false;
-
-   if (!_mesa_validate_pbo_access(dims, packing, width, height, depth,
-                                  format, type, INT_MAX, pixels)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(out of bounds PBO access)", where);
-      return true;
-   }
-
-   if (_mesa_check_disallowed_mapping(packing->BufferObj)) {
-      /* buffer is mapped - that's an error */
-      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(PBO is mapped)", where);
-      return true;
-   }
 
    /* For arrays, use a tall (height * depth) 2D texture but taking into
     * account the inter-image padding specified with the image height packing
@@ -263,12 +258,10 @@ _mesa_meta_pbo_GetTexSubImage(struct gl_context *ctx, GLuint dims,
    GLuint pbo = 0, pbo_tex = 0, fbos[2] = { 0, 0 };
    int full_height, image_height;
    struct gl_texture_image *pbo_tex_image;
+   struct gl_renderbuffer *rb = NULL;
    GLenum status;
    bool success = false;
    int z;
-
-   /* XXX: This should probably be passed in from somewhere */
-   const char *where = "_mesa_meta_pbo_GetTexSubImage";
 
    if (!_mesa_is_bufferobj(packing->BufferObj))
       return false;
@@ -282,17 +275,11 @@ _mesa_meta_pbo_GetTexSubImage(struct gl_context *ctx, GLuint dims,
    if (ctx->_ImageTransferState)
       return false;
 
-   if (!_mesa_validate_pbo_access(dims, packing, width, height, depth,
-                                  format, type, INT_MAX, pixels)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(out of bounds PBO access)", where);
-      return true;
-   }
 
-   if (_mesa_check_disallowed_mapping(packing->BufferObj)) {
-      /* buffer is mapped - that's an error */
-      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(PBO is mapped)", where);
-      return true;
+   if (!tex_image) {
+      rb = ctx->ReadBuffer->_ColorReadBuffer;
+      if (_mesa_need_rgb_to_luminance_conversion(rb->Format, format))
+         return false;
    }
 
    /* For arrays, use a tall (height * depth) 2D texture but taking into

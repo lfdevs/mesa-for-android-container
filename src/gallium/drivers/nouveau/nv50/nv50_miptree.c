@@ -419,7 +419,7 @@ nv50_miptree_from_handle(struct pipe_screen *pscreen,
       FREE(mt);
       return NULL;
    }
-   mt->base.domain = NOUVEAU_BO_VRAM;
+   mt->base.domain = mt->base.bo->flags & NOUVEAU_BO_APER;
    mt->base.address = mt->base.bo->offset;
 
    mt->base.base = *templ;

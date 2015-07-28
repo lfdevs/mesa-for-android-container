@@ -155,20 +155,20 @@ brw_blorp_surface_info::compute_tile_offsets(uint32_t *tile_x,
 }
 
 
-brw_blorp_params::brw_blorp_params()
+brw_blorp_params::brw_blorp_params(unsigned num_varyings,
+                                   unsigned num_draw_buffers,
+                                   unsigned num_layers)
    : x0(0),
      y0(0),
      x1(0),
      y1(0),
      depth_format(0),
      hiz_op(GEN6_HIZ_OP_NONE),
-     fast_clear_op(GEN7_FAST_CLEAR_OP_NONE),
-     use_wm_prog(false)
+     use_wm_prog(false),
+     num_varyings(num_varyings),
+     num_draw_buffers(num_draw_buffers),
+     num_layers(num_layers)
 {
-   color_write_disable[0] = false;
-   color_write_disable[1] = false;
-   color_write_disable[2] = false;
-   color_write_disable[3] = false;
 }
 
 extern "C" {
@@ -194,7 +194,7 @@ intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
    }
 
    DBG("%s %s to mt %p level %d layer %d\n",
-       __FUNCTION__, opname, mt, level, layer);
+       __func__, opname, mt, level, layer);
 
    if (brw->gen >= 8) {
       gen8_hiz_exec(brw, mt, level, layer, op);
@@ -276,7 +276,7 @@ retry:
    /* We've smashed all state compared to what the normal 3D pipeline
     * rendering tracks for GL.
     */
-   brw->state.dirty.brw = ~0ull;
+   brw->ctx.NewDriverState = ~0ull;
    brw->no_depth_or_stencil = false;
    brw->ib.type = -1;
 

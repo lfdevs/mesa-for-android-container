@@ -120,22 +120,22 @@ void
 ilo_shader_cache_invalidate(struct ilo_shader_cache *shc);
 
 struct ilo_shader_state *
-ilo_shader_create_vs(const struct ilo_dev_info *dev,
+ilo_shader_create_vs(const struct ilo_dev *dev,
                      const struct pipe_shader_state *state,
                      const struct ilo_state_vector *precompile);
 
 struct ilo_shader_state *
-ilo_shader_create_gs(const struct ilo_dev_info *dev,
+ilo_shader_create_gs(const struct ilo_dev *dev,
                      const struct pipe_shader_state *state,
                      const struct ilo_state_vector *precompile);
 
 struct ilo_shader_state *
-ilo_shader_create_fs(const struct ilo_dev_info *dev,
+ilo_shader_create_fs(const struct ilo_dev *dev,
                      const struct pipe_shader_state *state,
                      const struct ilo_state_vector *precompile);
 
 struct ilo_shader_state *
-ilo_shader_create_cs(const struct ilo_dev_info *dev,
+ilo_shader_create_cs(const struct ilo_dev *dev,
                      const struct pipe_compute_state *state,
                      const struct ilo_state_vector *precompile);
 

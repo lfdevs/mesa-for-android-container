@@ -30,40 +30,25 @@
  * Translate GLSL IR to TGSI.
  */
 
-#include <stdio.h>
-#include "main/compiler.h"
-#include "ir.h"
-#include "ir_visitor.h"
-#include "ir_expression_flattening.h"
-#include "glsl_types.h"
-#include "glsl_parser_extras.h"
-#include "../glsl/program.h"
-#include "ir_optimization.h"
-#include "ast.h"
+#include "st_glsl_to_tgsi.h"
 
-#include "main/mtypes.h"
+#include "glsl_parser_extras.h"
+#include "ir_optimization.h"
+
+#include "main/errors.h"
 #include "main/shaderobj.h"
 #include "main/uniforms.h"
 #include "main/shaderapi.h"
-#include "program/hash_table.h"
 #include "program/prog_instruction.h"
-#include "program/prog_optimize.h"
-#include "program/prog_print.h"
-#include "program/program.h"
-#include "program/prog_parameter.h"
 #include "program/sampler.h"
 
-#include "pipe/p_compiler.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
-#include "pipe/p_shader_tokens.h"
-#include "pipe/p_state.h"
-#include "util/u_math.h"
 #include "tgsi/tgsi_ureg.h"
 #include "tgsi/tgsi_info.h"
-#include "st_context.h"
+#include "util/u_math.h"
+#include "util/u_memory.h"
 #include "st_program.h"
-#include "st_glsl_to_tgsi.h"
 #include "st_mesa_to_tgsi.h"
 
 
@@ -103,6 +88,7 @@ public:
       this->reladdr = NULL;
       this->reladdr2 = NULL;
       this->has_index2 = false;
+      this->double_reg2 = false;
    }
 
    st_src_reg(gl_register_file file, int index, int type)
@@ -116,6 +102,7 @@ public:
       this->reladdr = NULL;
       this->reladdr2 = NULL;
       this->has_index2 = false;
+      this->double_reg2 = false;
    }
 
    st_src_reg(gl_register_file file, int index, int type, int index2D)
@@ -129,6 +116,7 @@ public:
       this->reladdr = NULL;
       this->reladdr2 = NULL;
       this->has_index2 = false;
+      this->double_reg2 = false;
    }
 
    st_src_reg()
@@ -142,6 +130,7 @@ public:
       this->reladdr = NULL;
       this->reladdr2 = NULL;
       this->has_index2 = false;
+      this->double_reg2 = false;
    }
 
    explicit st_src_reg(st_dst_reg reg);
@@ -156,6 +145,11 @@ public:
    st_src_reg *reladdr;
    st_src_reg *reladdr2;
    bool has_index2;
+   /*
+    * Is this the second half of a double register pair?
+    * currently used for input mapping only.
+    */
+   bool double_reg2;
 };
 
 class st_dst_reg {
@@ -212,6 +206,7 @@ st_src_reg::st_src_reg(st_dst_reg reg)
    this->index2D = 0;
    this->reladdr2 = NULL;
    this->has_index2 = false;
+   this->double_reg2 = false;
 }
 
 st_dst_reg::st_dst_reg(st_src_reg reg)
@@ -229,7 +224,7 @@ public:
    DECLARE_RALLOC_CXX_OPERATORS(glsl_to_tgsi_instruction)
 
    unsigned op;
-   st_dst_reg dst;
+   st_dst_reg dst[2];
    st_src_reg src[4];
    /** Pointer to the ir source this tree came from for debugging */
    ir_instruction *ir;
@@ -262,16 +257,17 @@ public:
 
 class immediate_storage : public exec_node {
 public:
-   immediate_storage(gl_constant_value *values, int size, int type)
+   immediate_storage(gl_constant_value *values, int size32, int type)
    {
-      memcpy(this->values, values, size * sizeof(gl_constant_value));
-      this->size = size;
+      memcpy(this->values, values, size32 * sizeof(gl_constant_value));
+      this->size32 = size32;
       this->type = type;
    }
-   
+
+   /* doubles are stored across 2 gl_constant_values */
    gl_constant_value values[4];
-   int size; /**< Number of components (1-4) */
-   int type; /**< GL_FLOAT, GL_INT, GL_BOOL, or GL_UNSIGNED_INT */
+   int size32; /**< Number of 32-bit components (1-4) */
+   int type; /**< GL_DOUBLE, GL_FLOAT, GL_INT, GL_BOOL, or GL_UNSIGNED_INT */
 };
 
 class function_entry : public exec_node {
@@ -327,14 +323,16 @@ public:
    int num_address_regs;
    int samplers_used;
    bool indirect_addr_consts;
-   
+   int wpos_transform_const;
+
    int glsl_version;
    bool native_integers;
    bool have_sqrt;
+   bool have_fma;
 
    variable_storage *find_variable_storage(ir_variable *var);
 
-   int add_constant(gl_register_file file, gl_constant_value values[4],
+   int add_constant(gl_register_file file, gl_constant_value values[8],
                     int size, int datatype, GLuint *swizzle_out);
 
    function_entry *get_function_signature(ir_function_signature *sig);
@@ -342,6 +340,7 @@ public:
    st_src_reg get_temp(const glsl_type *type);
    void reladdr_to_temp(ir_instruction *ir, st_src_reg *reg, int *num_reladdr);
 
+   st_src_reg st_src_reg_for_double(double val);
    st_src_reg st_src_reg_for_float(float val);
    st_src_reg st_src_reg_for_int(int val);
    st_src_reg st_src_reg_for_type(int type, int val);
@@ -394,17 +393,26 @@ public:
    glsl_to_tgsi_instruction *emit(ir_instruction *ir, unsigned op);
 
    glsl_to_tgsi_instruction *emit(ir_instruction *ir, unsigned op,
-        		        st_dst_reg dst, st_src_reg src0);
+                                  st_dst_reg dst, st_src_reg src0);
 
    glsl_to_tgsi_instruction *emit(ir_instruction *ir, unsigned op,
-        		        st_dst_reg dst, st_src_reg src0, st_src_reg src1);
+                                  st_dst_reg dst, st_dst_reg dst1,
+                                  st_src_reg src0);
 
    glsl_to_tgsi_instruction *emit(ir_instruction *ir, unsigned op,
-        		        st_dst_reg dst,
-        		        st_src_reg src0, st_src_reg src1, st_src_reg src2);
+                                  st_dst_reg dst, st_src_reg src0, st_src_reg src1);
 
    glsl_to_tgsi_instruction *emit(ir_instruction *ir, unsigned op,
                                   st_dst_reg dst,
+                                  st_src_reg src0, st_src_reg src1, st_src_reg src2);
+
+   glsl_to_tgsi_instruction *emit(ir_instruction *ir, unsigned op,
+                                  st_dst_reg dst,
+                                  st_src_reg src0, st_src_reg src1,
+                                  st_src_reg src2, st_src_reg src3);
+
+   glsl_to_tgsi_instruction *emit(ir_instruction *ir, unsigned op,
+                                  st_dst_reg dst, st_dst_reg dst1,
                                   st_src_reg src0, st_src_reg src1,
                                   st_src_reg src2, st_src_reg src3);
 
@@ -422,15 +430,12 @@ public:
                                      unsigned elements);
 
    void emit_scalar(ir_instruction *ir, unsigned op,
-        	    st_dst_reg dst, st_src_reg src0);
+                    st_dst_reg dst, st_src_reg src0);
 
    void emit_scalar(ir_instruction *ir, unsigned op,
-        	    st_dst_reg dst, st_src_reg src0, st_src_reg src1);
+                    st_dst_reg dst, st_src_reg src0, st_src_reg src1);
 
    void emit_arl(ir_instruction *ir, st_dst_reg dst, st_src_reg src0);
-
-   void emit_scs(ir_instruction *ir, unsigned op,
-        	 st_dst_reg dst, const st_src_reg &src);
 
    bool try_emit_mad(ir_expression *ir,
               int mul_operand);
@@ -451,6 +456,8 @@ public:
 
    void copy_propagate(void);
    int eliminate_dead_code(void);
+
+   void merge_two_dsts(void);
    void merge_registers(void);
    void renumber_registers(void);
 
@@ -520,13 +527,13 @@ num_inst_src_regs(unsigned opcode)
 
 glsl_to_tgsi_instruction *
 glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
-                           st_dst_reg dst,
+                           st_dst_reg dst, st_dst_reg dst1,
                            st_src_reg src0, st_src_reg src1,
                            st_src_reg src2, st_src_reg src3)
 {
    glsl_to_tgsi_instruction *inst = new(mem_ctx) glsl_to_tgsi_instruction();
-   int num_reladdr = 0, i;
-   
+   int num_reladdr = 0, i, j;
+
    op = get_opcode(ir, op, dst, src0, src1);
 
    /* If we have to do relative addressing, we want to load the ARL
@@ -534,6 +541,7 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
     * sources into temps.
     */
    num_reladdr += dst.reladdr != NULL;
+   num_reladdr += dst1.reladdr != NULL;
    num_reladdr += src0.reladdr != NULL || src0.reladdr2 != NULL;
    num_reladdr += src1.reladdr != NULL || src1.reladdr2 != NULL;
    num_reladdr += src2.reladdr != NULL || src2.reladdr2 != NULL;
@@ -548,10 +556,15 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
       emit_arl(ir, address_reg, *dst.reladdr);
       num_reladdr--;
    }
+   if (dst1.reladdr) {
+      emit_arl(ir, address_reg, *dst1.reladdr);
+      num_reladdr--;
+   }
    assert(num_reladdr == 0);
 
    inst->op = op;
-   inst->dst = dst;
+   inst->dst[0] = dst;
+   inst->dst[1] = dst1;
    inst->src[0] = src0;
    inst->src[1] = src1;
    inst->src[2] = src2;
@@ -560,7 +573,7 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
    inst->dead_mask = 0;
 
    inst->function = NULL;
-   
+
    /* Update indirect addressing status used by TGSI */
    if (dst.reladdr) {
       switch(dst.file) {
@@ -577,7 +590,7 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
       }
    }
    else {
-      for (i=0; i<4; i++) {
+      for (i = 0; i < 4; i++) {
          if(inst->src[i].reladdr) {
             switch(inst->src[i].file) {
             case PROGRAM_STATE_VAR:
@@ -597,7 +610,118 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
 
    this->instructions.push_tail(inst);
 
+   /*
+    * This section contains the double processing.
+    * GLSL just represents doubles as single channel values,
+    * however most HW and TGSI represent doubles as pairs of register channels.
+    *
+    * so we have to fixup destination writemask/index and src swizzle/indexes.
+    * dest writemasks need to translate from single channel write mask
+    * to a dual-channel writemask, but also need to modify the index,
+    * if we are touching the Z,W fields in the pre-translated writemask.
+    *
+    * src channels have similiar index modifications along with swizzle
+    * changes to we pick the XY, ZW pairs from the correct index.
+    *
+    * GLSL [0].x -> TGSI [0].xy
+    * GLSL [0].y -> TGSI [0].zw
+    * GLSL [0].z -> TGSI [1].xy
+    * GLSL [0].w -> TGSI [1].zw
+    */
+   if (inst->dst[0].type == GLSL_TYPE_DOUBLE || inst->dst[1].type == GLSL_TYPE_DOUBLE ||
+       inst->src[0].type == GLSL_TYPE_DOUBLE) {
+      glsl_to_tgsi_instruction *dinst = NULL;
+      int initial_src_swz[4], initial_src_idx[4];
+      int initial_dst_idx[2], initial_dst_writemask[2];
+      /* select the writemask for dst0 or dst1 */
+      unsigned writemask = inst->dst[0].file == PROGRAM_UNDEFINED ? inst->dst[1].writemask : inst->dst[0].writemask;
+
+      /* copy out the writemask, index and swizzles for all src/dsts. */
+      for (j = 0; j < 2; j++) {
+         initial_dst_writemask[j] = inst->dst[j].writemask;
+         initial_dst_idx[j] = inst->dst[j].index;
+      }
+
+      for (j = 0; j < 4; j++) {
+         initial_src_swz[j] = inst->src[j].swizzle;
+         initial_src_idx[j] = inst->src[j].index;
+      }
+
+      /*
+       * scan all the components in the dst writemask
+       * generate an instruction for each of them if required.
+       */
+      while (writemask) {
+
+         int i = u_bit_scan(&writemask);
+
+         /* first time use previous instruction */
+         if (dinst == NULL) {
+            dinst = inst;
+         } else {
+            /* create a new instructions for subsequent attempts */
+            dinst = new(mem_ctx) glsl_to_tgsi_instruction();
+            *dinst = *inst;
+            dinst->next = NULL;
+            dinst->prev = NULL;
+            this->instructions.push_tail(dinst);
+         }
+
+         /* modify the destination if we are splitting */
+         for (j = 0; j < 2; j++) {
+            if (dinst->dst[j].type == GLSL_TYPE_DOUBLE) {
+               dinst->dst[j].writemask = (i & 1) ? WRITEMASK_ZW : WRITEMASK_XY;
+               dinst->dst[j].index = initial_dst_idx[j];
+               if (i > 1)
+                     dinst->dst[j].index++;
+            } else {
+               /* if we aren't writing to a double, just get the bit of the initial writemask
+                  for this channel */
+               dinst->dst[j].writemask = initial_dst_writemask[j] & (1 << i);
+            }
+         }
+
+         /* modify the src registers */
+         for (j = 0; j < 4; j++) {
+            int swz = GET_SWZ(initial_src_swz[j], i);
+
+            if (dinst->src[j].type == GLSL_TYPE_DOUBLE) {
+               dinst->src[j].index = initial_src_idx[j];
+               if (swz > 1) {
+                  dinst->src[j].double_reg2 = true;
+                  dinst->src[j].index++;
+	       }
+
+               if (swz & 1)
+                  dinst->src[j].swizzle = MAKE_SWIZZLE4(SWIZZLE_Z, SWIZZLE_W, SWIZZLE_Z, SWIZZLE_W);
+               else
+                  dinst->src[j].swizzle = MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y, SWIZZLE_X, SWIZZLE_Y);
+
+            } else {
+               /* some opcodes are special case in what they use as sources
+                  - F2D is a float src0, DLDEXP is integer src1 */
+               if (op == TGSI_OPCODE_F2D ||
+                   op == TGSI_OPCODE_DLDEXP ||
+                   (op == TGSI_OPCODE_UCMP && dinst->dst[0].type == GLSL_TYPE_DOUBLE)) {
+                  dinst->src[j].swizzle = MAKE_SWIZZLE4(swz, swz, swz, swz);
+               }
+            }
+         }
+      }
+      inst = dinst;
+   }
+
+
    return inst;
+}
+
+glsl_to_tgsi_instruction *
+glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
+                           st_dst_reg dst,
+                           st_src_reg src0, st_src_reg src1,
+                           st_src_reg src2, st_src_reg src3)
+{
+   return emit(ir, op, dst, undef_dst, src0, src1, src2, src3);
 }
 
 glsl_to_tgsi_instruction *
@@ -605,38 +729,45 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
                            st_dst_reg dst, st_src_reg src0,
                            st_src_reg src1, st_src_reg src2)
 {
-   return emit(ir, op, dst, src0, src1, src2, undef_src);
+   return emit(ir, op, dst, undef_dst, src0, src1, src2, undef_src);
 }
 
 glsl_to_tgsi_instruction *
 glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
-        		 st_dst_reg dst, st_src_reg src0, st_src_reg src1)
+                           st_dst_reg dst, st_src_reg src0, st_src_reg src1)
 {
-   return emit(ir, op, dst, src0, src1, undef_src, undef_src);
+   return emit(ir, op, dst, undef_dst, src0, src1, undef_src, undef_src);
 }
 
 glsl_to_tgsi_instruction *
 glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
-        		 st_dst_reg dst, st_src_reg src0)
+                           st_dst_reg dst, st_src_reg src0)
 {
    assert(dst.writemask != 0);
-   return emit(ir, op, dst, src0, undef_src, undef_src, undef_src);
+   return emit(ir, op, dst, undef_dst, src0, undef_src, undef_src, undef_src);
+}
+
+glsl_to_tgsi_instruction *
+glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
+                           st_dst_reg dst, st_dst_reg dst1, st_src_reg src0)
+{
+   return emit(ir, op, dst, dst1, src0, undef_src, undef_src, undef_src);
 }
 
 glsl_to_tgsi_instruction *
 glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op)
 {
-   return emit(ir, op, undef_dst, undef_src, undef_src, undef_src, undef_src);
+   return emit(ir, op, undef_dst, undef_dst, undef_src, undef_src, undef_src, undef_src);
 }
 
 /**
- * Determines whether to use an integer, unsigned integer, or float opcode 
+ * Determines whether to use an integer, unsigned integer, or float opcode
  * based on the operands and input opcode, then emits the result.
  */
 unsigned
 glsl_to_tgsi_visitor::get_opcode(ir_instruction *ir, unsigned op,
-        		 st_dst_reg dst,
-        		 st_src_reg src0, st_src_reg src1)
+                                 st_dst_reg dst,
+                                 st_src_reg src0, st_src_reg src1)
 {
    int type = GLSL_TYPE_FLOAT;
 
@@ -648,12 +779,26 @@ glsl_to_tgsi_visitor::get_opcode(ir_instruction *ir, unsigned op,
    assert(src1.type != GLSL_TYPE_ARRAY);
    assert(src1.type != GLSL_TYPE_STRUCT);
 
-   if (src0.type == GLSL_TYPE_FLOAT || src1.type == GLSL_TYPE_FLOAT)
+   if (src0.type == GLSL_TYPE_DOUBLE || src1.type == GLSL_TYPE_DOUBLE)
+      type = GLSL_TYPE_DOUBLE;
+   else if (src0.type == GLSL_TYPE_FLOAT || src1.type == GLSL_TYPE_FLOAT)
       type = GLSL_TYPE_FLOAT;
    else if (native_integers)
       type = src0.type == GLSL_TYPE_BOOL ? GLSL_TYPE_INT : src0.type;
 
-#define case4(c, f, i, u) \
+#define case5(c, f, i, u, d)                    \
+   case TGSI_OPCODE_##c: \
+      if (type == GLSL_TYPE_DOUBLE)           \
+         op = TGSI_OPCODE_##d; \
+      else if (type == GLSL_TYPE_INT)       \
+         op = TGSI_OPCODE_##i; \
+      else if (type == GLSL_TYPE_UINT) \
+         op = TGSI_OPCODE_##u; \
+      else \
+         op = TGSI_OPCODE_##f; \
+      break;
+
+#define case4(c, f, i, u)                    \
    case TGSI_OPCODE_##c: \
       if (type == GLSL_TYPE_INT) \
          op = TGSI_OPCODE_##i; \
@@ -664,12 +809,16 @@ glsl_to_tgsi_visitor::get_opcode(ir_instruction *ir, unsigned op,
       break;
 
 #define case3(f, i, u)  case4(f, f, i, u)
+#define case4d(f, i, u, d)  case5(f, f, i, u, d)
+#define case3fid(f, i, d) case5(f, f, i, i, d)
 #define case2fi(f, i)   case4(f, f, i, i)
 #define case2iu(i, u)   case4(i, LAST, i, u)
 
-#define casecomp(c, f, i, u) \
+#define casecomp(c, f, i, u, d)                   \
    case TGSI_OPCODE_##c: \
-      if (type == GLSL_TYPE_INT) \
+      if (type == GLSL_TYPE_DOUBLE) \
+         op = TGSI_OPCODE_##d; \
+      else if (type == GLSL_TYPE_INT)       \
          op = TGSI_OPCODE_##i; \
       else if (type == GLSL_TYPE_UINT) \
          op = TGSI_OPCODE_##u; \
@@ -680,38 +829,51 @@ glsl_to_tgsi_visitor::get_opcode(ir_instruction *ir, unsigned op,
       break;
 
    switch(op) {
-      case2fi(ADD, UADD);
-      case2fi(MUL, UMUL);
-      case2fi(MAD, UMAD);
+      case3fid(ADD, UADD, DADD);
+      case3fid(MUL, UMUL, DMUL);
+      case3fid(MAD, UMAD, DMAD);
+      case3fid(FMA, UMAD, DFMA);
       case3(DIV, IDIV, UDIV);
-      case3(MAX, IMAX, UMAX);
-      case3(MIN, IMIN, UMIN);
+      case4d(MAX, IMAX, UMAX, DMAX);
+      case4d(MIN, IMIN, UMIN, DMIN);
       case2iu(MOD, UMOD);
 
-      casecomp(SEQ, FSEQ, USEQ, USEQ);
-      casecomp(SNE, FSNE, USNE, USNE);
-      casecomp(SGE, FSGE, ISGE, USGE);
-      casecomp(SLT, FSLT, ISLT, USLT);
+      casecomp(SEQ, FSEQ, USEQ, USEQ, DSEQ);
+      casecomp(SNE, FSNE, USNE, USNE, DSNE);
+      casecomp(SGE, FSGE, ISGE, USGE, DSGE);
+      casecomp(SLT, FSLT, ISLT, USLT, DSLT);
 
       case2iu(ISHR, USHR);
 
-      case2fi(SSG, ISSG);
-      case3(ABS, IABS, IABS);
+      case3fid(SSG, ISSG, DSSG);
+      case3fid(ABS, IABS, DABS);
 
       case2iu(IBFE, UBFE);
       case2iu(IMSB, UMSB);
       case2iu(IMUL_HI, UMUL_HI);
+
+      case3fid(SQRT, SQRT, DSQRT);
+
+      case3fid(RCP, RCP, DRCP);
+      case3fid(RSQ, RSQ, DRSQ);
+
+      case3fid(FRC, FRC, DFRAC);
+      case3fid(TRUNC, TRUNC, DTRUNC);
+      case3fid(CEIL, CEIL, DCEIL);
+      case3fid(FLR, FLR, DFLR);
+      case3fid(ROUND, ROUND, DROUND);
+
       default: break;
    }
-   
+
    assert(op != TGSI_OPCODE_LAST);
    return op;
 }
 
 glsl_to_tgsi_instruction *
 glsl_to_tgsi_visitor::emit_dp(ir_instruction *ir,
-        		    st_dst_reg dst, st_src_reg src0, st_src_reg src1,
-        		    unsigned elements)
+                              st_dst_reg dst, st_src_reg src0, st_src_reg src1,
+                              unsigned elements)
 {
    static const unsigned dot_opcodes[] = {
       TGSI_OPCODE_DP2, TGSI_OPCODE_DP3, TGSI_OPCODE_DP4
@@ -730,8 +892,8 @@ glsl_to_tgsi_visitor::emit_dp(ir_instruction *ir,
  */
 void
 glsl_to_tgsi_visitor::emit_scalar(ir_instruction *ir, unsigned op,
-        		        st_dst_reg dst,
-        			st_src_reg orig_src0, st_src_reg orig_src1)
+                                  st_dst_reg dst,
+                                  st_src_reg orig_src0, st_src_reg orig_src1)
 {
    int i, j;
    int done_mask = ~dst.writemask;
@@ -742,7 +904,6 @@ glsl_to_tgsi_visitor::emit_scalar(ir_instruction *ir, unsigned op,
     */
    for (i = 0; i < 4; i++) {
       GLuint this_mask = (1 << i);
-      glsl_to_tgsi_instruction *inst;
       st_src_reg src0 = orig_src0;
       st_src_reg src1 = orig_src1;
 
@@ -763,19 +924,19 @@ glsl_to_tgsi_visitor::emit_scalar(ir_instruction *ir, unsigned op,
          }
       }
       src0.swizzle = MAKE_SWIZZLE4(src0_swiz, src0_swiz,
-        			   src0_swiz, src0_swiz);
+                                   src0_swiz, src0_swiz);
       src1.swizzle = MAKE_SWIZZLE4(src1_swiz, src1_swiz,
-        			  src1_swiz, src1_swiz);
+                                   src1_swiz, src1_swiz);
 
-      inst = emit(ir, op, dst, src0, src1);
-      inst->dst.writemask = this_mask;
+      dst.writemask = this_mask;
+      emit(ir, op, dst, src0, src1);
       done_mask |= this_mask;
    }
 }
 
 void
 glsl_to_tgsi_visitor::emit_scalar(ir_instruction *ir, unsigned op,
-        		        st_dst_reg dst, st_src_reg src0)
+                                  st_dst_reg dst, st_src_reg src0)
 {
    st_src_reg undef = undef_src;
 
@@ -786,7 +947,7 @@ glsl_to_tgsi_visitor::emit_scalar(ir_instruction *ir, unsigned op,
 
 void
 glsl_to_tgsi_visitor::emit_arl(ir_instruction *ir,
-        		        st_dst_reg dst, st_src_reg src0)
+                               st_dst_reg dst, st_src_reg src0)
 {
    int op = TGSI_OPCODE_ARL;
 
@@ -800,132 +961,56 @@ glsl_to_tgsi_visitor::emit_arl(ir_instruction *ir,
    emit(NULL, op, dst, src0);
 }
 
-/**
- * Emit an TGSI_OPCODE_SCS instruction
- *
- * The \c SCS opcode functions a bit differently than the other TGSI opcodes.
- * Instead of splatting its result across all four components of the 
- * destination, it writes one value to the \c x component and another value to 
- * the \c y component.
- *
- * \param ir        IR instruction being processed
- * \param op        Either \c TGSI_OPCODE_SIN or \c TGSI_OPCODE_COS depending 
- *                  on which value is desired.
- * \param dst       Destination register
- * \param src       Source register
- */
-void
-glsl_to_tgsi_visitor::emit_scs(ir_instruction *ir, unsigned op,
-        		     st_dst_reg dst,
-        		     const st_src_reg &src)
-{
-   /* Vertex programs cannot use the SCS opcode.
-    */
-   if (this->prog->Target == GL_VERTEX_PROGRAM_ARB) {
-      emit_scalar(ir, op, dst, src);
-      return;
-   }
-
-   const unsigned component = (op == TGSI_OPCODE_SIN) ? 0 : 1;
-   const unsigned scs_mask = (1U << component);
-   int done_mask = ~dst.writemask;
-   st_src_reg tmp;
-
-   assert(op == TGSI_OPCODE_SIN || op == TGSI_OPCODE_COS);
-
-   /* If there are compnents in the destination that differ from the component
-    * that will be written by the SCS instrution, we'll need a temporary.
-    */
-   if (scs_mask != unsigned(dst.writemask)) {
-      tmp = get_temp(glsl_type::vec4_type);
-   }
-
-   for (unsigned i = 0; i < 4; i++) {
-      unsigned this_mask = (1U << i);
-      st_src_reg src0 = src;
-
-      if ((done_mask & this_mask) != 0)
-         continue;
-
-      /* The source swizzle specified which component of the source generates
-       * sine / cosine for the current component in the destination.  The SCS
-       * instruction requires that this value be swizzle to the X component.
-       * Replace the current swizzle with a swizzle that puts the source in
-       * the X component.
-       */
-      unsigned src0_swiz = GET_SWZ(src.swizzle, i);
-
-      src0.swizzle = MAKE_SWIZZLE4(src0_swiz, src0_swiz,
-        			   src0_swiz, src0_swiz);
-      for (unsigned j = i + 1; j < 4; j++) {
-         /* If there is another enabled component in the destination that is
-          * derived from the same inputs, generate its value on this pass as
-          * well.
-          */
-         if (!(done_mask & (1 << j)) &&
-             GET_SWZ(src0.swizzle, j) == src0_swiz) {
-            this_mask |= (1 << j);
-         }
-      }
-
-      if (this_mask != scs_mask) {
-         glsl_to_tgsi_instruction *inst;
-         st_dst_reg tmp_dst = st_dst_reg(tmp);
-
-         /* Emit the SCS instruction.
-          */
-         inst = emit(ir, TGSI_OPCODE_SCS, tmp_dst, src0);
-         inst->dst.writemask = scs_mask;
-
-         /* Move the result of the SCS instruction to the desired location in
-          * the destination.
-          */
-         tmp.swizzle = MAKE_SWIZZLE4(component, component,
-        			     component, component);
-         inst = emit(ir, TGSI_OPCODE_SCS, dst, tmp);
-         inst->dst.writemask = this_mask;
-      } else {
-         /* Emit the SCS instruction to write directly to the destination.
-          */
-         glsl_to_tgsi_instruction *inst = emit(ir, TGSI_OPCODE_SCS, dst, src0);
-         inst->dst.writemask = scs_mask;
-      }
-
-      done_mask |= this_mask;
-   }
-}
-
 int
 glsl_to_tgsi_visitor::add_constant(gl_register_file file,
-        		     gl_constant_value values[4], int size, int datatype,
-        		     GLuint *swizzle_out)
+                                   gl_constant_value values[8], int size, int datatype,
+                                   GLuint *swizzle_out)
 {
    if (file == PROGRAM_CONSTANT) {
       return _mesa_add_typed_unnamed_constant(this->prog->Parameters, values,
                                               size, datatype, swizzle_out);
-   } else {
-      int index = 0;
-      immediate_storage *entry;
-      assert(file == PROGRAM_IMMEDIATE);
+   }
 
-      /* Search immediate storage to see if we already have an identical
-       * immediate that we can use instead of adding a duplicate entry.
-       */
-      foreach_in_list(immediate_storage, entry, &this->immediates) {
-         if (entry->size == size &&
-             entry->type == datatype &&
-             !memcmp(entry->values, values, size * sizeof(gl_constant_value))) {
-             return index;
-         }
-         index++;
+   assert(file == PROGRAM_IMMEDIATE);
+
+   int index = 0;
+   immediate_storage *entry;
+   int size32 = size * (datatype == GL_DOUBLE ? 2 : 1);
+   int i;
+
+   /* Search immediate storage to see if we already have an identical
+    * immediate that we can use instead of adding a duplicate entry.
+    */
+   foreach_in_list(immediate_storage, entry, &this->immediates) {
+      immediate_storage *tmp = entry;
+
+      for (i = 0; i * 4 < size32; i++) {
+         int slot_size = MIN2(size32 - (i * 4), 4);
+         if (tmp->type != datatype || tmp->size32 != slot_size)
+            break;
+         if (memcmp(tmp->values, &values[i * 4],
+                    slot_size * sizeof(gl_constant_value)))
+            break;
+
+         /* Everything matches, keep going until the full size is matched */
+         tmp = (immediate_storage *)tmp->next;
       }
-      
+
+      /* The full value matched */
+      if (i * 4 >= size32)
+         return index;
+
+      index++;
+   }
+
+   for (i = 0; i * 4 < size32; i++) {
+      int slot_size = MIN2(size32 - (i * 4), 4);
       /* Add this immediate to the list. */
-      entry = new(mem_ctx) immediate_storage(values, size, datatype);
+      entry = new(mem_ctx) immediate_storage(&values[i * 4], slot_size, datatype);
       this->immediates.push_tail(entry);
       this->num_immediates++;
-      return index;
    }
+   return index;
 }
 
 st_src_reg
@@ -941,11 +1026,24 @@ glsl_to_tgsi_visitor::st_src_reg_for_float(float val)
 }
 
 st_src_reg
+glsl_to_tgsi_visitor::st_src_reg_for_double(double val)
+{
+   st_src_reg src(PROGRAM_IMMEDIATE, -1, GLSL_TYPE_DOUBLE);
+   union gl_constant_value uval[2];
+
+   uval[0].u = *(uint32_t *)&val;
+   uval[1].u = *(((uint32_t *)&val) + 1);
+   src.index = add_constant(src.file, uval, 1, GL_DOUBLE, &src.swizzle);
+
+   return src;
+}
+
+st_src_reg
 glsl_to_tgsi_visitor::st_src_reg_for_int(int val)
 {
    st_src_reg src(PROGRAM_IMMEDIATE, -1, GLSL_TYPE_INT);
    union gl_constant_value uval;
-   
+
    assert(native_integers);
 
    uval.i = val;
@@ -958,7 +1056,7 @@ st_src_reg
 glsl_to_tgsi_visitor::st_src_reg_for_type(int type, int val)
 {
    if (native_integers)
-      return type == GLSL_TYPE_FLOAT ? st_src_reg_for_float(val) : 
+      return type == GLSL_TYPE_FLOAT ? st_src_reg_for_float(val) :
                                        st_src_reg_for_int(val);
    else
       return st_src_reg_for_float(val);
@@ -985,6 +1083,23 @@ type_size(const struct glsl_type *type)
           */
          return 1;
       }
+      break;
+   case GLSL_TYPE_DOUBLE:
+      if (type->is_matrix()) {
+         if (type->vector_elements <= 2)
+            return type->matrix_columns;
+         else
+            return type->matrix_columns * 2;
+      } else {
+         /* For doubles if we have a double or dvec2 they fit in one
+          * vec4, else they need 2 vec4s.
+          */
+         if (type->vector_elements <= 2)
+            return 1;
+         else
+            return 2;
+      }
+      break;
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
       return type_size(type->fields.array) * type->length;
@@ -1050,7 +1165,7 @@ glsl_to_tgsi_visitor::get_temp(const glsl_type *type)
 variable_storage *
 glsl_to_tgsi_visitor::find_variable_storage(ir_variable *var)
 {
-   
+
    foreach_in_list(variable_storage, entry, &this->variables) {
       if (entry->var == var)
          return entry;
@@ -1111,7 +1226,7 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
 
       for (unsigned int i = 0; i < ir->get_num_state_slots(); i++) {
          int index = _mesa_add_state_reference(this->prog->Parameters,
-        				       (gl_state_index *)slots[i].tokens);
+                                               (gl_state_index *)slots[i].tokens);
 
          if (storage->file == PROGRAM_STATE_VAR) {
             if (storage->index == -1) {
@@ -1120,11 +1235,11 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
                assert(index == storage->index + (int)i);
             }
          } else {
-         	/* We use GLSL_TYPE_FLOAT here regardless of the actual type of
-         	 * the data being moved since MOV does not care about the type of
-         	 * data it is moving, and we don't want to declare registers with
-         	 * array or struct types.
-         	 */
+            /* We use GLSL_TYPE_FLOAT here regardless of the actual type of
+             * the data being moved since MOV does not care about the type of
+             * data it is moving, and we don't want to declare registers with
+             * array or struct types.
+             */
             st_src_reg src(PROGRAM_STATE_VAR, index, GLSL_TYPE_FLOAT);
             src.swizzle = slots[i].swizzle;
             emit(ir, TGSI_OPCODE_MOV, dst, src);
@@ -1136,9 +1251,9 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
       if (storage->file == PROGRAM_TEMPORARY &&
           dst.index != storage->index + (int) ir->get_num_state_slots()) {
          fail_link(this->shader_program,
-        	   "failed to load builtin uniform `%s'  (%d/%d regs loaded)\n",
-        	   ir->name, dst.index - storage->index,
-        	   type_size(ir->type));
+                  "failed to load builtin uniform `%s'  (%d/%d regs loaded)\n",
+                  ir->name, dst.index - storage->index,
+                  type_size(ir->type));
       }
    }
 }
@@ -1262,7 +1377,7 @@ glsl_to_tgsi_visitor::try_emit_mad_for_and_not(ir_expression *ir, int try_operan
 
 void
 glsl_to_tgsi_visitor::reladdr_to_temp(ir_instruction *ir,
-        			    st_src_reg *reg, int *num_reladdr)
+                                      st_src_reg *reg, int *num_reladdr)
 {
    if (!reg->reladdr && !reg->reladdr2)
       return;
@@ -1284,7 +1399,7 @@ void
 glsl_to_tgsi_visitor::visit(ir_expression *ir)
 {
    unsigned int operand;
-   st_src_reg op[Elements(ir->operands)];
+   st_src_reg op[ARRAY_SIZE(ir->operands)];
    st_src_reg result_src;
    st_dst_reg result_dst;
 
@@ -1301,9 +1416,9 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
     */
    if (!native_integers && ir->operation == ir_binop_logic_and) {
       if (try_emit_mad_for_and_not(ir, 1))
-	 return;
+         return;
       if (try_emit_mad_for_and_not(ir, 0))
-	 return;
+         return;
    }
 
    if (ir->operation == ir_quadop_vector)
@@ -1329,7 +1444,7 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
    int vector_elements = ir->operands[0]->type->vector_elements;
    if (ir->operands[1]) {
       vector_elements = MAX2(vector_elements,
-        		     ir->operands[1]->type->vector_elements);
+                             ir->operands[1]->type->vector_elements);
    }
 
    this->result.file = PROGRAM_UNDEFINED;
@@ -1363,6 +1478,8 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
    case ir_unop_neg:
       if (result_dst.type == GLSL_TYPE_INT || result_dst.type == GLSL_TYPE_UINT)
          emit(ir, TGSI_OPCODE_INEG, result_dst, op[0]);
+      else if (result_dst.type == GLSL_TYPE_DOUBLE)
+         emit(ir, TGSI_OPCODE_DNEG, result_dst, op[0]);
       else {
          op[0].negate = ~op[0].negate;
          result_src = op[0];
@@ -1393,12 +1510,6 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       break;
    case ir_unop_cos:
       emit_scalar(ir, TGSI_OPCODE_COS, result_dst, op[0]);
-      break;
-   case ir_unop_sin_reduced:
-      emit_scs(ir, TGSI_OPCODE_SIN, result_dst, op[0]);
-      break;
-   case ir_unop_cos_reduced:
-      emit_scs(ir, TGSI_OPCODE_COS, result_dst, op[0]);
       break;
    case ir_unop_saturate: {
       glsl_to_tgsi_instruction *inst;
@@ -1442,6 +1553,14 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       break;
    }
 
+   case ir_unop_frexp_sig:
+      emit(ir, TGSI_OPCODE_DFRACEXP, result_dst, undef_dst, op[0]);
+      break;
+
+   case ir_unop_frexp_exp:
+      emit(ir, TGSI_OPCODE_DFRACEXP, undef_dst, result_dst, op[0]);
+      break;
+
    case ir_unop_noise: {
       /* At some point, a motivated person could add a better
        * implementation of noise.  Currently not even the nvidia
@@ -1464,7 +1583,7 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       emit(ir, TGSI_OPCODE_MUL, result_dst, op[0], op[1]);
       break;
    case ir_binop_div:
-      if (result_dst.type == GLSL_TYPE_FLOAT)
+      if (result_dst.type == GLSL_TYPE_FLOAT || result_dst.type == GLSL_TYPE_DOUBLE)
          assert(!"not reached: should be handled by ir_div_to_mul_rcp");
       else
          emit(ir, TGSI_OPCODE_DIV, result_dst, op[0], op[1]);
@@ -1499,15 +1618,15 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       if (ir->operands[0]->type->is_vector() ||
           ir->operands[1]->type->is_vector()) {
          st_src_reg temp = get_temp(native_integers ?
-               glsl_type::get_instance(ir->operands[0]->type->base_type, 4, 1) :
-               glsl_type::vec4_type);
-         
+                                    glsl_type::uvec4_type :
+                                    glsl_type::vec4_type);
+
          if (native_integers) {
             st_dst_reg temp_dst = st_dst_reg(temp);
             st_src_reg temp1 = st_src_reg(temp), temp2 = st_src_reg(temp);
-            
+
             emit(ir, TGSI_OPCODE_SEQ, st_dst_reg(temp), op[0], op[1]);
-            
+
             /* Emit 1-3 AND operations to combine the SEQ results. */
             switch (ir->operands[0]->type->vector_elements) {
             case 2:
@@ -1528,13 +1647,13 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
                temp2.swizzle = SWIZZLE_WWWW;
                emit(ir, TGSI_OPCODE_AND, temp_dst, temp1, temp2);
             }
-            
+
             temp1.swizzle = SWIZZLE_XXXX;
             temp2.swizzle = SWIZZLE_YYYY;
             emit(ir, TGSI_OPCODE_AND, result_dst, temp1, temp2);
          } else {
             emit(ir, TGSI_OPCODE_SNE, st_dst_reg(temp), op[0], op[1]);
-            
+
             /* After the dot-product, the value will be an integer on the
              * range [0,4].  Zero becomes 1.0, and positive values become zero.
              */
@@ -1557,14 +1676,14 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       if (ir->operands[0]->type->is_vector() ||
           ir->operands[1]->type->is_vector()) {
          st_src_reg temp = get_temp(native_integers ?
-               glsl_type::get_instance(ir->operands[0]->type->base_type, 4, 1) :
-               glsl_type::vec4_type);
+                                    glsl_type::uvec4_type :
+                                    glsl_type::vec4_type);
          emit(ir, TGSI_OPCODE_SNE, st_dst_reg(temp), op[0], op[1]);
 
          if (native_integers) {
             st_dst_reg temp_dst = st_dst_reg(temp);
             st_src_reg temp1 = st_src_reg(temp), temp2 = st_src_reg(temp);
-            
+
             /* Emit 1-3 OR operations to combine the SNE results. */
             switch (ir->operands[0]->type->vector_elements) {
             case 2:
@@ -1585,7 +1704,7 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
                temp2.swizzle = SWIZZLE_WWWW;
                emit(ir, TGSI_OPCODE_OR, temp_dst, temp1, temp2);
             }
-            
+
             temp1.swizzle = SWIZZLE_XXXX;
             temp2.swizzle = SWIZZLE_YYYY;
             emit(ir, TGSI_OPCODE_OR, result_dst, temp1, temp2);
@@ -1707,7 +1826,7 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
 
    case ir_binop_logic_or: {
       if (native_integers) {
-         /* If integers are used as booleans, we can use an actual "or" 
+         /* If integers are used as booleans, we can use an actual "or"
           * instruction.
           */
          assert(native_integers);
@@ -1757,8 +1876,7 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
    case ir_unop_sqrt:
       if (have_sqrt) {
          emit_scalar(ir, TGSI_OPCODE_SQRT, result_dst, op[0]);
-      }
-      else {
+      } else {
          /* sqrt(x) = x * rsq(x). */
          emit_scalar(ir, TGSI_OPCODE_RSQ, result_dst, op[0]);
          emit(ir, TGSI_OPCODE_MUL, result_dst, result_src, op[0]);
@@ -1796,7 +1914,7 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
           */
          emit(ir, TGSI_OPCODE_AND, result_dst, op[0], st_src_reg_for_int(1));
       } else {
-         /* Booleans and integers are both stored as floats when native 
+         /* Booleans and integers are both stored as floats when native
           * integers are disabled.
           */
          result_src = op[0];
@@ -1829,6 +1947,9 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       break;
    case ir_unop_f2b:
       emit(ir, TGSI_OPCODE_SNE, result_dst, op[0], st_src_reg_for_float(0.0));
+      break;
+   case ir_unop_d2b:
+      emit(ir, TGSI_OPCODE_SNE, result_dst, op[0], st_src_reg_for_double(0.0));
       break;
    case ir_unop_i2b:
       if (native_integers)
@@ -1909,12 +2030,12 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       st_src_reg index_reg = get_temp(glsl_type::uint_type);
       st_src_reg cbuf;
 
-      cbuf.type = glsl_type::vec4_type->base_type;
+      cbuf.type = ir->type->base_type;
       cbuf.file = PROGRAM_CONSTANT;
       cbuf.index = 0;
       cbuf.reladdr = NULL;
       cbuf.negate = 0;
-      
+
       assert(ir->type->is_vector() || ir->type->is_scalar());
 
       if (const_offset_ir) {
@@ -1945,10 +2066,16 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       }
 
       cbuf.swizzle = swizzle_for_size(ir->type->vector_elements);
-      cbuf.swizzle += MAKE_SWIZZLE4(const_offset % 16 / 4,
-                                    const_offset % 16 / 4,
-                                    const_offset % 16 / 4,
-                                    const_offset % 16 / 4);
+      if (cbuf.type == GLSL_TYPE_DOUBLE)
+         cbuf.swizzle += MAKE_SWIZZLE4(const_offset % 16 / 8,
+                                       const_offset % 16 / 8,
+                                       const_offset % 16 / 8,
+                                       const_offset % 16 / 8);
+      else
+         cbuf.swizzle += MAKE_SWIZZLE4(const_offset % 16 / 4,
+                                       const_offset % 16 / 4,
+                                       const_offset % 16 / 4,
+                                       const_offset % 16 / 4);
 
       if (ir->type->base_type == GLSL_TYPE_BOOL) {
          emit(ir, TGSI_OPCODE_USNE, result_dst, cbuf, st_src_reg_for_int(0));
@@ -1991,10 +2118,11 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
       emit(ir, TGSI_OPCODE_IMUL_HI, result_dst, op[0], op[1]);
       break;
    case ir_triop_fma:
-      /* NOTE: Perhaps there should be a special opcode that enforces fused
-       * mul-add. Just use MAD for now.
-       */
-      emit(ir, TGSI_OPCODE_MAD, result_dst, op[0], op[1], op[2]);
+      /* In theory, MAD is incorrect here. */
+      if (have_fma)
+         emit(ir, TGSI_OPCODE_FMA, result_dst, op[0], op[1], op[2]);
+      else
+         emit(ir, TGSI_OPCODE_MAD, result_dst, op[0], op[1], op[2]);
       break;
    case ir_unop_interpolate_at_centroid:
       emit(ir, TGSI_OPCODE_INTERP_CENTROID, result_dst, op[0]);
@@ -2005,11 +2133,44 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
    case ir_binop_interpolate_at_sample:
       emit(ir, TGSI_OPCODE_INTERP_SAMPLE, result_dst, op[0], op[1]);
       break;
+
+   case ir_unop_d2f:
+      emit(ir, TGSI_OPCODE_D2F, result_dst, op[0]);
+      break;
+   case ir_unop_f2d:
+      emit(ir, TGSI_OPCODE_F2D, result_dst, op[0]);
+      break;
+   case ir_unop_d2i:
+      emit(ir, TGSI_OPCODE_D2I, result_dst, op[0]);
+      break;
+   case ir_unop_i2d:
+      emit(ir, TGSI_OPCODE_I2D, result_dst, op[0]);
+      break;
+   case ir_unop_d2u:
+      emit(ir, TGSI_OPCODE_D2U, result_dst, op[0]);
+      break;
+   case ir_unop_u2d:
+      emit(ir, TGSI_OPCODE_U2D, result_dst, op[0]);
+      break;
+   case ir_unop_unpack_double_2x32:
+   case ir_unop_pack_double_2x32:
+      emit(ir, TGSI_OPCODE_MOV, result_dst, op[0]);
+      break;
+
+   case ir_binop_ldexp:
+      if (ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE) {
+         emit(ir, TGSI_OPCODE_DLDEXP, result_dst, op[0], op[1]);
+      } else {
+         assert(!"Invalid ldexp for non-double opcode in glsl_to_tgsi_visitor::visit()");
+      }
+      break;
+
    case ir_unop_pack_snorm_2x16:
    case ir_unop_pack_unorm_2x16:
    case ir_unop_pack_half_2x16:
    case ir_unop_pack_snorm_4x8:
    case ir_unop_pack_unorm_4x8:
+
    case ir_unop_unpack_snorm_2x16:
    case ir_unop_unpack_unorm_2x16:
    case ir_unop_unpack_half_2x16:
@@ -2017,13 +2178,13 @@ glsl_to_tgsi_visitor::visit(ir_expression *ir)
    case ir_unop_unpack_half_2x16_split_y:
    case ir_unop_unpack_snorm_4x8:
    case ir_unop_unpack_unorm_4x8:
+
    case ir_binop_pack_half_2x16_split:
    case ir_binop_bfm:
    case ir_triop_bfi:
    case ir_quadop_vector:
    case ir_binop_vector_extract:
    case ir_triop_vector_insert:
-   case ir_binop_ldexp:
    case ir_binop_carry:
    case ir_binop_borrow:
       /* This operation is not supported, or should have already been handled.
@@ -2092,7 +2253,7 @@ glsl_to_tgsi_visitor::visit(ir_dereference_variable *ir)
       switch (var->data.mode) {
       case ir_var_uniform:
          entry = new(mem_ctx) variable_storage(var, PROGRAM_UNIFORM,
-        				       var->data.location);
+                                               var->data.location);
          this->variables.push_tail(entry);
          break;
       case ir_var_shader_in:
@@ -2462,6 +2623,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
       assert(!ir->lhs->type->is_scalar() && !ir->lhs->type->is_vector());
       l.writemask = WRITEMASK_XYZW;
    } else if (ir->lhs->type->is_scalar() &&
+              !ir->lhs->type->is_double() &&
               ir->lhs->variable_referenced()->data.mode == ir_var_shader_out) {
       /* FINISHME: This hack makes writing to gl_FragDepth, which lives in the
        * FINISHME: W component of fragment shader output zero, work correctly.
@@ -2509,8 +2671,8 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
               this->instructions.get_tail() &&
               ir->rhs == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->ir &&
               type_size(ir->lhs->type) == 1 &&
-              l.writemask == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->dst.writemask) {
-      /* To avoid emitting an extra MOV when assigning an expression to a 
+              l.writemask == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->dst[0].writemask) {
+      /* To avoid emitting an extra MOV when assigning an expression to a
        * variable, emit the last instruction of the expression again, but
        * replace the destination register with the target of the assignment.
        * Dead code elimination will remove the original instruction.
@@ -2519,7 +2681,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
       inst = (glsl_to_tgsi_instruction *)this->instructions.get_tail();
       new_inst = emit(ir, inst->op, l, inst->src[0], inst->src[1], inst->src[2]);
       new_inst->saturate = inst->saturate;
-      inst->dead_mask = inst->dst.writemask;
+      inst->dead_mask = inst->dst[0].writemask;
    } else {
       emit_block_mov(ir, ir->rhs->type, &l, &r, NULL, false);
    }
@@ -2530,7 +2692,7 @@ void
 glsl_to_tgsi_visitor::visit(ir_constant *ir)
 {
    st_src_reg src;
-   GLfloat stack_vals[4] = { 0 };
+   GLdouble stack_vals[4] = { 0 };
    gl_constant_value *values = (gl_constant_value *) stack_vals;
    GLenum gl_type = GL_NONE;
    unsigned int i;
@@ -2616,6 +2778,13 @@ glsl_to_tgsi_visitor::visit(ir_constant *ir)
       gl_type = GL_FLOAT;
       for (i = 0; i < ir->type->vector_elements; i++) {
          values[i].f = ir->value.f[i];
+      }
+      break;
+   case GLSL_TYPE_DOUBLE:
+      gl_type = GL_DOUBLE;
+      for (i = 0; i < ir->type->vector_elements; i++) {
+         values[i * 2].i = *(uint32_t *)&ir->value.d[i];
+         values[i * 2 + 1].i = *(((uint32_t *)&ir->value.d[i]) + 1);
       }
       break;
    case GLSL_TYPE_UINT:
@@ -2812,7 +2981,7 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
 
    switch (ir->op) {
    case ir_tex:
-      opcode = (is_cube_array && ir->shadow_comparitor) ? TGSI_OPCODE_TEX2 : TGSI_OPCODE_TEX; 
+      opcode = (is_cube_array && ir->shadow_comparitor) ? TGSI_OPCODE_TEX2 : TGSI_OPCODE_TEX;
       if (ir->offset) {
          ir->offset->accept(this);
          offset[0] = this->result;
@@ -2932,8 +3101,8 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
             tmp_src = get_temp(glsl_type::vec4_type);
             st_dst_reg tmp_dst = st_dst_reg(tmp_src);
 
-	    /* Projective division not allowed for array samplers. */
-	    assert(!sampler_type->sampler_array);
+            /* Projective division not allowed for array samplers. */
+            assert(!sampler_type->sampler_array);
 
             tmp_dst.writemask = WRITEMASK_Z;
             emit(ir, TGSI_OPCODE_MOV, tmp_dst, this->result);
@@ -2975,7 +3144,6 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
          } else {
             coord_dst.writemask = WRITEMASK_Z;
          }
-         
          emit(ir, TGSI_OPCODE_MOV, coord_dst, this->result);
          coord_dst.writemask = WRITEMASK_XYZW;
       }
@@ -3183,6 +3351,7 @@ glsl_to_tgsi_visitor::glsl_to_tgsi_visitor()
    num_address_regs = 0;
    samplers_used = 0;
    indirect_addr_consts = false;
+   wpos_transform_const = -1;
    glsl_version = 0;
    native_integers = false;
    mem_ctx = ralloc_context(NULL);
@@ -3192,6 +3361,7 @@ glsl_to_tgsi_visitor::glsl_to_tgsi_visitor()
    shader = NULL;
    options = NULL;
    have_sqrt = false;
+   have_fma = false;
 }
 
 glsl_to_tgsi_visitor::~glsl_to_tgsi_visitor()
@@ -3225,7 +3395,6 @@ count_resources(glsl_to_tgsi_visitor *v, gl_program *prog)
          }
       }
    }
-   
    prog->SamplersUsed = v->samplers_used;
 
    if (v->shader_program != NULL)
@@ -3246,7 +3415,7 @@ get_src_arg_mask(st_dst_reg dst, st_src_reg src)
     */
    for (comp = 0; comp < 4; ++comp) {
       const unsigned coord = GET_SWZ(src.swizzle, comp);
-      ASSERT(coord < 4);
+      assert(coord < 4);
       if (dst.writemask & (1 << comp) && coord <= SWIZZLE_W)
          read_mask |= 1 << coord;
    }
@@ -3264,9 +3433,9 @@ get_src_arg_mask(st_dst_reg dst, st_src_reg src)
  * Here is why this conversion is safe:
  * CMP T0, T1 T2 T0 can be expanded to:
  * if (T1 < 0.0)
- * 	MOV T0, T2;
+ *   MOV T0, T2;
  * else
- * 	MOV T0, T0;
+ *   MOV T0, T0;
  *
  * If (T1 < 0.0) evaluates to true then our replacement MOV T0, T2 is the same
  * as the original program.  If (T1 < 0.0) evaluates to false, executing
@@ -3288,7 +3457,8 @@ glsl_to_tgsi_visitor::simplify_cmp(void)
       unsigned prevWriteMask = 0;
 
       /* Give up if we encounter relative addressing or flow control. */
-      if (inst->dst.reladdr ||
+      if (inst->dst[0].reladdr ||
+          inst->dst[1].reladdr ||
           tgsi_get_opcode_info(inst->op)->is_branch ||
           inst->op == TGSI_OPCODE_BGNSUB ||
           inst->op == TGSI_OPCODE_CONT ||
@@ -3298,12 +3468,12 @@ glsl_to_tgsi_visitor::simplify_cmp(void)
          break;
       }
 
-      if (inst->dst.file == PROGRAM_OUTPUT) {
-         assert(inst->dst.index < MAX_PROGRAM_OUTPUTS);
-         prevWriteMask = outputWrites[inst->dst.index];
-         outputWrites[inst->dst.index] |= inst->dst.writemask;
-      } else if (inst->dst.file == PROGRAM_TEMPORARY) {
-         if (inst->dst.index >= tempWritesSize) {
+      if (inst->dst[0].file == PROGRAM_OUTPUT) {
+         assert(inst->dst[0].index < MAX_PROGRAM_OUTPUTS);
+         prevWriteMask = outputWrites[inst->dst[0].index];
+         outputWrites[inst->dst[0].index] |= inst->dst[0].writemask;
+      } else if (inst->dst[0].file == PROGRAM_TEMPORARY) {
+         if (inst->dst[0].index >= tempWritesSize) {
             const int inc = 4096;
 
             tempWrites = (unsigned*)
@@ -3316,18 +3486,18 @@ glsl_to_tgsi_visitor::simplify_cmp(void)
             tempWritesSize += inc;
          }
 
-         prevWriteMask = tempWrites[inst->dst.index];
-         tempWrites[inst->dst.index] |= inst->dst.writemask;
+         prevWriteMask = tempWrites[inst->dst[0].index];
+         tempWrites[inst->dst[0].index] |= inst->dst[0].writemask;
       } else
          continue;
 
       /* For a CMP to be considered a conditional write, the destination
        * register and source register two must be the same. */
       if (inst->op == TGSI_OPCODE_CMP
-          && !(inst->dst.writemask & prevWriteMask)
-          && inst->src[2].file == inst->dst.file
-          && inst->src[2].index == inst->dst.index
-          && inst->dst.writemask == get_src_arg_mask(inst->dst, inst->src[2])) {
+          && !(inst->dst[0].writemask & prevWriteMask)
+          && inst->src[2].file == inst->dst[0].file
+          && inst->src[2].index == inst->dst[0].index
+          && inst->dst[0].writemask == get_src_arg_mask(inst->dst[0], inst->src[2])) {
 
          inst->op = TGSI_OPCODE_MOV;
          inst->src[0] = inst->src[1];
@@ -3343,23 +3513,25 @@ glsl_to_tgsi_visitor::rename_temp_register(int index, int new_index)
 {
    foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
       unsigned j;
-      
-      for (j=0; j < num_inst_src_regs(inst->op); j++) {
-         if (inst->src[j].file == PROGRAM_TEMPORARY && 
+
+      for (j = 0; j < num_inst_src_regs(inst->op); j++) {
+         if (inst->src[j].file == PROGRAM_TEMPORARY &&
              inst->src[j].index == index) {
             inst->src[j].index = new_index;
          }
       }
 
-      for (j=0; j < inst->tex_offset_num_offset; j++) {
-         if (inst->tex_offsets[j].file == PROGRAM_TEMPORARY && 
+      for (j = 0; j < inst->tex_offset_num_offset; j++) {
+         if (inst->tex_offsets[j].file == PROGRAM_TEMPORARY &&
              inst->tex_offsets[j].index == index) {
             inst->tex_offsets[j].index = new_index;
          }
       }
-      
-      if (inst->dst.file == PROGRAM_TEMPORARY && inst->dst.index == index) {
-         inst->dst.index = new_index;
+
+      for (j = 0; j < num_inst_dst_regs(inst->op); j++) {
+         if (inst->dst[j].file == PROGRAM_TEMPORARY && inst->dst[j].index == index) {
+            inst->dst[j].index = new_index;
+         }
       }
    }
 }
@@ -3370,21 +3542,20 @@ glsl_to_tgsi_visitor::get_first_temp_read(int index)
    int depth = 0; /* loop depth */
    int loop_start = -1; /* index of the first active BGNLOOP (if any) */
    unsigned i = 0, j;
-   
+
    foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
-      for (j=0; j < num_inst_src_regs(inst->op); j++) {
-         if (inst->src[j].file == PROGRAM_TEMPORARY && 
+      for (j = 0; j < num_inst_src_regs(inst->op); j++) {
+         if (inst->src[j].file == PROGRAM_TEMPORARY &&
              inst->src[j].index == index) {
             return (depth == 0) ? i : loop_start;
          }
       }
-      for (j=0; j < inst->tex_offset_num_offset; j++) {
-         if (inst->tex_offsets[j].file == PROGRAM_TEMPORARY && 
+      for (j = 0; j < inst->tex_offset_num_offset; j++) {
+         if (inst->tex_offsets[j].file == PROGRAM_TEMPORARY &&
              inst->tex_offsets[j].index == index) {
             return (depth == 0) ? i : loop_start;
          }
       }
-      
       if (inst->op == TGSI_OPCODE_BGNLOOP) {
          if(depth++ == 0)
             loop_start = i;
@@ -3393,10 +3564,8 @@ glsl_to_tgsi_visitor::get_first_temp_read(int index)
             loop_start = -1;
       }
       assert(depth >= 0);
-      
       i++;
    }
-   
    return -1;
 }
 
@@ -3406,12 +3575,14 @@ glsl_to_tgsi_visitor::get_first_temp_write(int index)
    int depth = 0; /* loop depth */
    int loop_start = -1; /* index of the first active BGNLOOP (if any) */
    int i = 0;
-   
+   unsigned j;
+
    foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
-      if (inst->dst.file == PROGRAM_TEMPORARY && inst->dst.index == index) {
-         return (depth == 0) ? i : loop_start;
+      for (j = 0; j < num_inst_dst_regs(inst->op); j++) {
+         if (inst->dst[j].file == PROGRAM_TEMPORARY && inst->dst[j].index == index) {
+            return (depth == 0) ? i : loop_start;
+         }
       }
-      
       if (inst->op == TGSI_OPCODE_BGNLOOP) {
          if(depth++ == 0)
             loop_start = i;
@@ -3420,10 +3591,8 @@ glsl_to_tgsi_visitor::get_first_temp_write(int index)
             loop_start = -1;
       }
       assert(depth >= 0);
-      
       i++;
    }
-   
    return -1;
 }
 
@@ -3433,30 +3602,27 @@ glsl_to_tgsi_visitor::get_last_temp_read(int index)
    int depth = 0; /* loop depth */
    int last = -1; /* index of last instruction that reads the temporary */
    unsigned i = 0, j;
-   
+
    foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
-      for (j=0; j < num_inst_src_regs(inst->op); j++) {
-         if (inst->src[j].file == PROGRAM_TEMPORARY && 
+      for (j = 0; j < num_inst_src_regs(inst->op); j++) {
+         if (inst->src[j].file == PROGRAM_TEMPORARY &&
              inst->src[j].index == index) {
             last = (depth == 0) ? i : -2;
          }
       }
-      for (j=0; j < inst->tex_offset_num_offset; j++) {
+      for (j = 0; j < inst->tex_offset_num_offset; j++) {
           if (inst->tex_offsets[j].file == PROGRAM_TEMPORARY &&
               inst->tex_offsets[j].index == index)
               last = (depth == 0) ? i : -2;
       }
-      
       if (inst->op == TGSI_OPCODE_BGNLOOP)
          depth++;
       else if (inst->op == TGSI_OPCODE_ENDLOOP)
          if (--depth == 0 && last == -2)
             last = i;
       assert(depth >= 0);
-      
       i++;
    }
-   
    assert(last >= -1);
    return last;
 }
@@ -3467,21 +3633,22 @@ glsl_to_tgsi_visitor::get_last_temp_write(int index)
    int depth = 0; /* loop depth */
    int last = -1; /* index of last instruction that writes to the temporary */
    int i = 0;
-   
+   unsigned j;
+
    foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
-      if (inst->dst.file == PROGRAM_TEMPORARY && inst->dst.index == index)
-         last = (depth == 0) ? i : -2;
-      
+      for (j = 0; j < num_inst_dst_regs(inst->op); j++) {
+         if (inst->dst[j].file == PROGRAM_TEMPORARY && inst->dst[j].index == index)
+            last = (depth == 0) ? i : -2;
+      }
+
       if (inst->op == TGSI_OPCODE_BGNLOOP)
          depth++;
       else if (inst->op == TGSI_OPCODE_ENDLOOP)
          if (--depth == 0 && last == -2)
             last = i;
       assert(depth >= 0);
-      
       i++;
    }
-   
    assert(last >= -1);
    return last;
 }
@@ -3510,14 +3677,14 @@ void
 glsl_to_tgsi_visitor::copy_propagate(void)
 {
    glsl_to_tgsi_instruction **acp = rzalloc_array(mem_ctx,
-        					    glsl_to_tgsi_instruction *,
-        					    this->next_temp * 4);
+                                                  glsl_to_tgsi_instruction *,
+                                                  this->next_temp * 4);
    int *acp_level = rzalloc_array(mem_ctx, int, this->next_temp * 4);
    int level = 0;
 
    foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
-      assert(inst->dst.file != PROGRAM_TEMPORARY
-             || inst->dst.index < this->next_temp);
+      assert(inst->dst[0].file != PROGRAM_TEMPORARY
+             || inst->dst[0].index < this->next_temp);
 
       /* First, do any copy propagation possible into the src regs. */
       for (int r = 0; r < 3; r++) {
@@ -3550,9 +3717,10 @@ glsl_to_tgsi_visitor::copy_propagate(void)
             } else {
                if (first->src[0].file != copy_chan->src[0].file ||
                    first->src[0].index != copy_chan->src[0].index ||
+                   first->src[0].double_reg2 != copy_chan->src[0].double_reg2 ||
                    first->src[0].index2D != copy_chan->src[0].index2D) {
-        	  good = false;
-        	  break;
+                  good = false;
+                  break;
                }
             }
          }
@@ -3565,13 +3733,13 @@ glsl_to_tgsi_visitor::copy_propagate(void)
             inst->src[r].index = first->src[0].index;
             inst->src[r].index2D = first->src[0].index2D;
             inst->src[r].has_index2 = first->src[0].has_index2;
+            inst->src[r].double_reg2 = first->src[0].double_reg2;
 
             int swizzle = 0;
             for (int i = 0; i < 4; i++) {
                int src_chan = GET_SWZ(inst->src[r].swizzle, i);
                glsl_to_tgsi_instruction *copy_inst = acp[acp_base + src_chan];
-               swizzle |= (GET_SWZ(copy_inst->src[0].swizzle, src_chan) <<
-        		   (3 * i));
+               swizzle |= (GET_SWZ(copy_inst->src[0].swizzle, src_chan) << (3 * i));
             }
             inst->src[r].swizzle = swizzle;
          }
@@ -3597,10 +3765,10 @@ glsl_to_tgsi_visitor::copy_propagate(void)
          for (int r = 0; r < this->next_temp; r++) {
             for (int c = 0; c < 4; c++) {
                if (!acp[4 * r + c])
-        	  continue;
+                  continue;
 
                if (acp_level[4 * r + c] >= level)
-        	  acp[4 * r + c] = NULL;
+                  acp[4 * r + c] = NULL;
             }
          }
          if (inst->op == TGSI_OPCODE_ENDIF)
@@ -3611,50 +3779,50 @@ glsl_to_tgsi_visitor::copy_propagate(void)
          /* Continuing the block, clear any written channels from
           * the ACP.
           */
-         if (inst->dst.file == PROGRAM_TEMPORARY && inst->dst.reladdr) {
-            /* Any temporary might be written, so no copy propagation
-             * across this instruction.
-             */
-            memset(acp, 0, sizeof(*acp) * this->next_temp * 4);
-         } else if (inst->dst.file == PROGRAM_OUTPUT &&
-        	    inst->dst.reladdr) {
-            /* Any output might be written, so no copy propagation
-             * from outputs across this instruction.
-             */
-            for (int r = 0; r < this->next_temp; r++) {
-               for (int c = 0; c < 4; c++) {
-        	  if (!acp[4 * r + c])
-        	     continue;
+         for (int d = 0; d < 2; d++) {
+            if (inst->dst[d].file == PROGRAM_TEMPORARY && inst->dst[d].reladdr) {
+               /* Any temporary might be written, so no copy propagation
+                * across this instruction.
+                */
+               memset(acp, 0, sizeof(*acp) * this->next_temp * 4);
+            } else if (inst->dst[d].file == PROGRAM_OUTPUT &&
+                       inst->dst[d].reladdr) {
+               /* Any output might be written, so no copy propagation
+                * from outputs across this instruction.
+                */
+               for (int r = 0; r < this->next_temp; r++) {
+                  for (int c = 0; c < 4; c++) {
+                     if (!acp[4 * r + c])
+                        continue;
 
-        	  if (acp[4 * r + c]->src[0].file == PROGRAM_OUTPUT)
-        	     acp[4 * r + c] = NULL;
+                     if (acp[4 * r + c]->src[0].file == PROGRAM_OUTPUT)
+                        acp[4 * r + c] = NULL;
+                  }
                }
-            }
-         } else if (inst->dst.file == PROGRAM_TEMPORARY ||
-        	    inst->dst.file == PROGRAM_OUTPUT) {
-            /* Clear where it's used as dst. */
-            if (inst->dst.file == PROGRAM_TEMPORARY) {
-               for (int c = 0; c < 4; c++) {
-        	  if (inst->dst.writemask & (1 << c)) {
-        	     acp[4 * inst->dst.index + c] = NULL;
-        	  }
+            } else if (inst->dst[d].file == PROGRAM_TEMPORARY ||
+                       inst->dst[d].file == PROGRAM_OUTPUT) {
+               /* Clear where it's used as dst. */
+               if (inst->dst[d].file == PROGRAM_TEMPORARY) {
+                  for (int c = 0; c < 4; c++) {
+                     if (inst->dst[d].writemask & (1 << c))
+                        acp[4 * inst->dst[d].index + c] = NULL;
+                  }
                }
-            }
 
-            /* Clear where it's used as src. */
-            for (int r = 0; r < this->next_temp; r++) {
-               for (int c = 0; c < 4; c++) {
-        	  if (!acp[4 * r + c])
-        	     continue;
+               /* Clear where it's used as src. */
+               for (int r = 0; r < this->next_temp; r++) {
+                  for (int c = 0; c < 4; c++) {
+                     if (!acp[4 * r + c])
+                        continue;
 
-        	  int src_chan = GET_SWZ(acp[4 * r + c]->src[0].swizzle, c);
+                     int src_chan = GET_SWZ(acp[4 * r + c]->src[0].swizzle, c);
 
-        	  if (acp[4 * r + c]->src[0].file == inst->dst.file &&
-        	      acp[4 * r + c]->src[0].index == inst->dst.index &&
-        	      inst->dst.writemask & (1 << src_chan))
-        	  {
-        	     acp[4 * r + c] = NULL;
-        	  }
+                     if (acp[4 * r + c]->src[0].file == inst->dst[d].file &&
+                         acp[4 * r + c]->src[0].index == inst->dst[d].index &&
+                         inst->dst[d].writemask & (1 << src_chan)) {
+                        acp[4 * r + c] = NULL;
+                     }
+                  }
                }
             }
          }
@@ -3663,19 +3831,19 @@ glsl_to_tgsi_visitor::copy_propagate(void)
 
       /* If this is a copy, add it to the ACP. */
       if (inst->op == TGSI_OPCODE_MOV &&
-          inst->dst.file == PROGRAM_TEMPORARY &&
-          !(inst->dst.file == inst->src[0].file &&
-             inst->dst.index == inst->src[0].index) &&
-          !inst->dst.reladdr &&
+          inst->dst[0].file == PROGRAM_TEMPORARY &&
+          !(inst->dst[0].file == inst->src[0].file &&
+             inst->dst[0].index == inst->src[0].index) &&
+          !inst->dst[0].reladdr &&
           !inst->saturate &&
           inst->src[0].file != PROGRAM_ARRAY &&
           !inst->src[0].reladdr &&
           !inst->src[0].reladdr2 &&
           !inst->src[0].negate) {
          for (int i = 0; i < 4; i++) {
-            if (inst->dst.writemask & (1 << i)) {
-               acp[4 * inst->dst.index + i] = inst;
-               acp_level[4 * inst->dst.index + i] = level;
+            if (inst->dst[0].writemask & (1 << i)) {
+               acp[4 * inst->dst[0].index + i] = inst;
+               acp_level[4 * inst->dst[0].index + i] = level;
             }
          }
       }
@@ -3690,7 +3858,7 @@ glsl_to_tgsi_visitor::copy_propagate(void)
  * code elimination.
  *
  * The glsl_to_tgsi_visitor lazily produces code assuming that this pass
- * will occur.  As an example, a TXP production after copy propagation but 
+ * will occur.  As an example, a TXP production after copy propagation but
  * before this pass:
  *
  * 0: MOV TEMP[1], INPUT[4].xyyy;
@@ -3712,9 +3880,9 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
    int removed = 0;
 
    foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
-      assert(inst->dst.file != PROGRAM_TEMPORARY
-             || inst->dst.index < this->next_temp);
-      
+      assert(inst->dst[0].file != PROGRAM_TEMPORARY
+             || inst->dst[0].index < this->next_temp);
+
       switch (inst->op) {
       case TGSI_OPCODE_BGNLOOP:
       case TGSI_OPCODE_ENDLOOP:
@@ -3739,30 +3907,27 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
          for (int r = 0; r < this->next_temp; r++) {
             for (int c = 0; c < 4; c++) {
                if (!writes[4 * r + c])
-        	         continue;
+                  continue;
 
                if (write_level[4 * r + c] == level)
-        	         write_level[4 * r + c] = level-1;
+                  write_level[4 * r + c] = level-1;
             }
          }
-
          if(inst->op == TGSI_OPCODE_ENDIF)
             --level;
-         
          break;
 
       case TGSI_OPCODE_IF:
       case TGSI_OPCODE_UIF:
          ++level;
          /* fallthrough to default case to mark the condition as read */
-      
       default:
          /* Continuing the block, clear any channels from the write array that
           * are read by this instruction.
           */
-         for (unsigned i = 0; i < Elements(inst->src); i++) {
+         for (unsigned i = 0; i < ARRAY_SIZE(inst->src); i++) {
             if (inst->src[i].file == PROGRAM_TEMPORARY && inst->src[i].reladdr){
-               /* Any temporary might be read, so no dead code elimination 
+               /* Any temporary might be read, so no dead code elimination
                 * across this instruction.
                 */
                memset(writes, 0, sizeof(*writes) * this->next_temp * 4);
@@ -3772,17 +3937,16 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
                src_chans |= 1 << GET_SWZ(inst->src[i].swizzle, 1);
                src_chans |= 1 << GET_SWZ(inst->src[i].swizzle, 2);
                src_chans |= 1 << GET_SWZ(inst->src[i].swizzle, 3);
-               
+
                for (int c = 0; c < 4; c++) {
-              	   if (src_chans & (1 << c)) {
-              	      writes[4 * inst->src[i].index + c] = NULL;
-              	   }
+                  if (src_chans & (1 << c))
+                     writes[4 * inst->src[i].index + c] = NULL;
                }
             }
          }
          for (unsigned i = 0; i < inst->tex_offset_num_offset; i++) {
             if (inst->tex_offsets[i].file == PROGRAM_TEMPORARY && inst->tex_offsets[i].reladdr){
-               /* Any temporary might be read, so no dead code elimination 
+               /* Any temporary might be read, so no dead code elimination
                 * across this instruction.
                 */
                memset(writes, 0, sizeof(*writes) * this->next_temp * 4);
@@ -3792,11 +3956,10 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
                src_chans |= 1 << GET_SWZ(inst->tex_offsets[i].swizzle, 1);
                src_chans |= 1 << GET_SWZ(inst->tex_offsets[i].swizzle, 2);
                src_chans |= 1 << GET_SWZ(inst->tex_offsets[i].swizzle, 3);
-               
+
                for (int c = 0; c < 4; c++) {
-              	   if (src_chans & (1 << c)) {
-              	      writes[4 * inst->tex_offsets[i].index + c] = NULL;
-              	   }
+                  if (src_chans & (1 << c))
+                     writes[4 * inst->tex_offsets[i].index + c] = NULL;
                }
             }
          }
@@ -3807,19 +3970,21 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
        * If there is already an instruction in the write array for one or more
        * of the channels, flag that channel write as dead.
        */
-      if (inst->dst.file == PROGRAM_TEMPORARY &&
-          !inst->dst.reladdr &&
-          !inst->saturate) {
-         for (int c = 0; c < 4; c++) {
-            if (inst->dst.writemask & (1 << c)) {
-               if (writes[4 * inst->dst.index + c]) {
-                  if (write_level[4 * inst->dst.index + c] < level)
-                     continue;
-                  else
-                     writes[4 * inst->dst.index + c]->dead_mask |= (1 << c);
+      for (unsigned i = 0; i < ARRAY_SIZE(inst->dst); i++) {
+         if (inst->dst[i].file == PROGRAM_TEMPORARY &&
+             !inst->dst[i].reladdr &&
+             !inst->saturate) {
+            for (int c = 0; c < 4; c++) {
+               if (inst->dst[i].writemask & (1 << c)) {
+                  if (writes[4 * inst->dst[i].index + c]) {
+                     if (write_level[4 * inst->dst[i].index + c] < level)
+                        continue;
+                     else
+                        writes[4 * inst->dst[i].index + c]->dead_mask |= (1 << c);
+                  }
+                  writes[4 * inst->dst[i].index + c] = inst;
+                  write_level[4 * inst->dst[i].index + c] = level;
                }
-               writes[4 * inst->dst.index + c] = inst;
-               write_level[4 * inst->dst.index + c] = level;
             }
          }
       }
@@ -3838,26 +4003,75 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
     * the writemask of other instructions with dead channels.
     */
    foreach_in_list_safe(glsl_to_tgsi_instruction, inst, &this->instructions) {
-      if (!inst->dead_mask || !inst->dst.writemask)
+      if (!inst->dead_mask || !inst->dst[0].writemask)
          continue;
-      else if ((inst->dst.writemask & ~inst->dead_mask) == 0) {
+      else if ((inst->dst[0].writemask & ~inst->dead_mask) == 0) {
          inst->remove();
          delete inst;
          removed++;
-      } else
-         inst->dst.writemask &= ~(inst->dead_mask);
+      } else {
+         if (inst->dst[0].type == GLSL_TYPE_DOUBLE) {
+            if (inst->dead_mask == WRITEMASK_XY ||
+                inst->dead_mask == WRITEMASK_ZW)
+               inst->dst[0].writemask &= ~(inst->dead_mask);
+         } else
+            inst->dst[0].writemask &= ~(inst->dead_mask);
+      }
    }
 
    ralloc_free(write_level);
    ralloc_free(writes);
-   
+
    return removed;
 }
 
-/* Merges temporary registers together where possible to reduce the number of 
+/* merge DFRACEXP instructions into one. */
+void
+glsl_to_tgsi_visitor::merge_two_dsts(void)
+{
+   foreach_in_list_safe(glsl_to_tgsi_instruction, inst, &this->instructions) {
+      glsl_to_tgsi_instruction *inst2;
+      bool merged;
+      if (num_inst_dst_regs(inst->op) != 2)
+         continue;
+
+      if (inst->dst[0].file != PROGRAM_UNDEFINED &&
+          inst->dst[1].file != PROGRAM_UNDEFINED)
+         continue;
+
+      inst2 = (glsl_to_tgsi_instruction *) inst->next;
+      do {
+
+         if (inst->src[0].file == inst2->src[0].file &&
+             inst->src[0].index == inst2->src[0].index &&
+             inst->src[0].type == inst2->src[0].type &&
+             inst->src[0].swizzle == inst2->src[0].swizzle)
+            break;
+         inst2 = (glsl_to_tgsi_instruction *) inst2->next;
+      } while (inst2);
+
+      if (!inst2)
+         continue;
+      merged = false;
+      if (inst->dst[0].file == PROGRAM_UNDEFINED) {
+         merged = true;
+         inst->dst[0] = inst2->dst[0];
+      } else if (inst->dst[1].file == PROGRAM_UNDEFINED) {
+         inst->dst[1] = inst2->dst[1];
+         merged = true;
+      }
+
+      if (merged) {
+         inst2->remove();
+         delete inst2;
+      }
+   }
+}
+
+/* Merges temporary registers together where possible to reduce the number of
  * registers needed to run a program.
- * 
- * Produces optimal code only after copy propagation and dead code elimination 
+ *
+ * Produces optimal code only after copy propagation and dead code elimination
  * have been run. */
 void
 glsl_to_tgsi_visitor::merge_registers(void)
@@ -3865,36 +4079,35 @@ glsl_to_tgsi_visitor::merge_registers(void)
    int *last_reads = rzalloc_array(mem_ctx, int, this->next_temp);
    int *first_writes = rzalloc_array(mem_ctx, int, this->next_temp);
    int i, j;
-   
+
    /* Read the indices of the last read and first write to each temp register
-    * into an array so that we don't have to traverse the instruction list as 
+    * into an array so that we don't have to traverse the instruction list as
     * much. */
-   for (i=0; i < this->next_temp; i++) {
+   for (i = 0; i < this->next_temp; i++) {
       last_reads[i] = get_last_temp_read(i);
       first_writes[i] = get_first_temp_write(i);
    }
-   
-   /* Start looking for registers with non-overlapping usages that can be 
+
+   /* Start looking for registers with non-overlapping usages that can be
     * merged together. */
-   for (i=0; i < this->next_temp; i++) {
+   for (i = 0; i < this->next_temp; i++) {
       /* Don't touch unused registers. */
       if (last_reads[i] < 0 || first_writes[i] < 0) continue;
-      
-      for (j=0; j < this->next_temp; j++) {
+
+      for (j = 0; j < this->next_temp; j++) {
          /* Don't touch unused registers. */
          if (last_reads[j] < 0 || first_writes[j] < 0) continue;
-         
-         /* We can merge the two registers if the first write to j is after or 
-          * in the same instruction as the last read from i.  Note that the 
-          * register at index i will always be used earlier or at the same time 
+
+         /* We can merge the two registers if the first write to j is after or
+          * in the same instruction as the last read from i.  Note that the
+          * register at index i will always be used earlier or at the same time
           * as the register at index j. */
-         if (first_writes[i] <= first_writes[j] && 
-             last_reads[i] <= first_writes[j])
-         {
+         if (first_writes[i] <= first_writes[j] &&
+             last_reads[i] <= first_writes[j]) {
             rename_temp_register(j, i); /* Replace all references to j with i.*/
-            
-            /* Update the first_writes and last_reads arrays with the new 
-             * values for the merged register index, and mark the newly unused 
+
+            /* Update the first_writes and last_reads arrays with the new
+             * values for the merged register index, and mark the newly unused
              * register index as such. */
             last_reads[i] = last_reads[j];
             first_writes[j] = -1;
@@ -3902,26 +4115,26 @@ glsl_to_tgsi_visitor::merge_registers(void)
          }
       }
    }
-   
+
    ralloc_free(last_reads);
    ralloc_free(first_writes);
 }
 
-/* Reassign indices to temporary registers by reusing unused indices created 
+/* Reassign indices to temporary registers by reusing unused indices created
  * by optimization passes. */
 void
 glsl_to_tgsi_visitor::renumber_registers(void)
 {
    int i = 0;
    int new_index = 0;
-   
-   for (i=0; i < this->next_temp; i++) {
+
+   for (i = 0; i < this->next_temp; i++) {
       if (get_first_temp_read(i) < 0) continue;
       if (i != new_index)
          rename_temp_register(i, new_index);
       new_index++;
    }
-   
+
    this->next_temp = new_index;
 }
 
@@ -4029,14 +4242,13 @@ get_pixel_transfer_visitor(struct st_fragment_program *fp,
       glsl_to_tgsi_instruction *newinst;
       st_src_reg src_regs[3];
 
-      if (inst->dst.file == PROGRAM_OUTPUT)
-         prog->OutputsWritten |= BITFIELD64_BIT(inst->dst.index);
+      if (inst->dst[0].file == PROGRAM_OUTPUT)
+         prog->OutputsWritten |= BITFIELD64_BIT(inst->dst[0].index);
 
-      for (int i=0; i<3; i++) {
+      for (int i = 0; i < 3; i++) {
          src_regs[i] = inst->src[i];
          if (src_regs[i].file == PROGRAM_INPUT &&
-             src_regs[i].index == VARYING_SLOT_COL0)
-         {
+             src_regs[i].index == VARYING_SLOT_COL0) {
             src_regs[i].file = PROGRAM_TEMPORARY;
             src_regs[i].index = src0.index;
          }
@@ -4044,7 +4256,7 @@ get_pixel_transfer_visitor(struct st_fragment_program *fp,
             prog->InputsRead |= BITFIELD64_BIT(src_regs[i].index);
       }
 
-      newinst = v->emit(NULL, inst->op, inst->dst, src_regs[0], src_regs[1], src_regs[2]);
+      newinst = v->emit(NULL, inst->op, inst->dst[0], src_regs[0], src_regs[1], src_regs[2]);
       newinst->tex_target = inst->tex_target;
       newinst->sampler_array_size = inst->sampler_array_size;
    }
@@ -4115,16 +4327,16 @@ get_bitmap_visitor(struct st_fragment_program *fp,
       glsl_to_tgsi_instruction *newinst;
       st_src_reg src_regs[3];
 
-      if (inst->dst.file == PROGRAM_OUTPUT)
-         prog->OutputsWritten |= BITFIELD64_BIT(inst->dst.index);
+      if (inst->dst[0].file == PROGRAM_OUTPUT)
+         prog->OutputsWritten |= BITFIELD64_BIT(inst->dst[0].index);
 
-      for (int i=0; i<3; i++) {
+      for (int i = 0; i < 3; i++) {
          src_regs[i] = inst->src[i];
          if (src_regs[i].file == PROGRAM_INPUT)
             prog->InputsRead |= BITFIELD64_BIT(src_regs[i].index);
       }
 
-      newinst = v->emit(NULL, inst->op, inst->dst, src_regs[0], src_regs[1], src_regs[2]);
+      newinst = v->emit(NULL, inst->op, inst->dst[0], src_regs[0], src_regs[1], src_regs[2]);
       newinst->tex_target = inst->tex_target;
       newinst->sampler_array_size = inst->sampler_array_size;
    }
@@ -4154,6 +4366,7 @@ struct st_translate {
    struct ureg_src *constants;
    int num_constants;
    struct ureg_src *immediates;
+   int num_immediates;
    struct ureg_dst outputs[PIPE_MAX_SHADER_OUTPUTS];
    struct ureg_src inputs[PIPE_MAX_SHADER_INPUTS];
    struct ureg_dst address[3];
@@ -4219,7 +4432,7 @@ static unsigned *get_label(struct st_translate *t, unsigned branch_target)
 
    if (t->labels_count + 1 >= t->labels_size) {
       t->labels_size = 1 << (util_logbase2(t->labels_size) + 1);
-      t->labels = (struct label *)realloc(t->labels, 
+      t->labels = (struct label *)realloc(t->labels,
                                           t->labels_size * sizeof(struct label));
       if (t->labels == NULL) {
          static unsigned dummy;
@@ -4267,6 +4480,8 @@ emit_immediate(struct st_translate *t,
    {
    case GL_FLOAT:
       return ureg_DECL_immediate(ureg, &values[0].f, size);
+   case GL_DOUBLE:
+      return ureg_DECL_immediate_f64(ureg, (double *)&values[0].f, size);
    case GL_INT:
       return ureg_DECL_immediate_int(ureg, &values[0].i, size);
    case GL_UNSIGNED_INT:
@@ -4315,7 +4530,7 @@ dst_register(struct st_translate *t,
    case PROGRAM_ARRAY:
       array = index >> 16;
 
-      assert(array < Elements(t->arrays));
+      assert(array < ARRAY_SIZE(t->arrays));
 
       if (ureg_dst_is_undef(t->arrays[array]))
          t->arrays[array] = ureg_DECL_array_temporary(
@@ -4332,7 +4547,7 @@ dst_register(struct st_translate *t,
       else
          assert(index < VARYING_SLOT_MAX);
 
-      assert(t->outputMapping[index] < Elements(t->outputs));
+      assert(t->outputMapping[index] < ARRAY_SIZE(t->outputs));
 
       return t->outputs[t->outputMapping[index]];
 
@@ -4349,8 +4564,11 @@ dst_register(struct st_translate *t,
  * Map a glsl_to_tgsi src register to a TGSI ureg_src register.
  */
 static struct ureg_src
-src_register(struct st_translate *t, const struct st_src_reg *reg)
+src_register(struct st_translate *t, const st_src_reg *reg)
 {
+   int index = reg->index;
+   int double_reg2 = reg->double_reg2 ? 1 : 0;
+
    switch(reg->file) {
    case PROGRAM_UNDEFINED:
       return ureg_imm4f(t->ureg, 0, 0, 0, 0);
@@ -4372,21 +4590,26 @@ src_register(struct st_translate *t, const struct st_src_reg *reg)
                   t->constants[reg->index] : ureg_imm4f(t->ureg, 0, 0, 0, 0);
 
    case PROGRAM_IMMEDIATE:
+      assert(reg->index >= 0 && reg->index < t->num_immediates);
       return t->immediates[reg->index];
 
    case PROGRAM_INPUT:
-      assert(t->inputMapping[reg->index] < Elements(t->inputs));
-      return t->inputs[t->inputMapping[reg->index]];
+      /* GLSL inputs are 64-bit containers, so we have to
+       * map back to the original index and add the offset after
+       * mapping. */
+      index -= double_reg2;
+      assert(t->inputMapping[index] < ARRAY_SIZE(t->inputs));
+      return t->inputs[t->inputMapping[index] + double_reg2];
 
    case PROGRAM_OUTPUT:
-      assert(t->outputMapping[reg->index] < Elements(t->outputs));
+      assert(t->outputMapping[reg->index] < ARRAY_SIZE(t->outputs));
       return ureg_src(t->outputs[t->outputMapping[reg->index]]); /* not needed? */
 
    case PROGRAM_ADDRESS:
       return ureg_src(t->address[reg->index]);
 
    case PROGRAM_SYSTEM_VALUE:
-      assert(reg->index < (int) Elements(t->systemValues));
+      assert(reg->index < (int) ARRAY_SIZE(t->systemValues));
       return t->systemValues[reg->index];
 
    default:
@@ -4403,12 +4626,15 @@ translate_dst(struct st_translate *t,
               const st_dst_reg *dst_reg,
               bool saturate, bool clamp_color)
 {
-   struct ureg_dst dst = dst_register(t, 
+   struct ureg_dst dst = dst_register(t,
                                       dst_reg->file,
                                       dst_reg->index);
 
+   if (dst.File == TGSI_FILE_NULL)
+      return dst;
+
    dst = ureg_writemask(dst, dst_reg->writemask);
-   
+
    if (saturate)
       dst = ureg_saturate(dst);
    else if (clamp_color && dst_reg->file == PROGRAM_OUTPUT) {
@@ -4489,6 +4715,7 @@ translate_tex_offset(struct st_translate *t,
 
    switch (in_offset->file) {
    case PROGRAM_IMMEDIATE:
+      assert(in_offset->index >= 0 && in_offset->index < t->num_immediates);
       imm_src = t->immediates[in_offset->index];
 
       offset.File = imm_src.File;
@@ -4511,7 +4738,7 @@ translate_tex_offset(struct st_translate *t,
       array = in_offset->index >> 16;
 
       assert(array >= 0);
-      assert(array < (int) Elements(t->arrays));
+      assert(array < (int) ARRAY_SIZE(t->arrays));
 
       dst = t->arrays[array];
       offset.File = dst.File;
@@ -4534,7 +4761,7 @@ compile_tgsi_instruction(struct st_translate *t,
 {
    struct ureg_program *ureg = t->ureg;
    GLuint i;
-   struct ureg_dst dst[1];
+   struct ureg_dst dst[2];
    struct ureg_src src[4];
    struct tgsi_texture_offset texoffsets[MAX_GLSL_TEXTURE_OFFSET];
 
@@ -4545,9 +4772,9 @@ compile_tgsi_instruction(struct st_translate *t,
    num_dst = num_inst_dst_regs(inst->op);
    num_src = num_inst_src_regs(inst->op);
 
-   if (num_dst) 
-      dst[0] = translate_dst(t, 
-                             &inst->dst,
+   for (i = 0; i < num_dst; i++)
+      dst[i] = translate_dst(t,
+                             &inst->dst[i],
                              inst->saturate,
                              clamp_dst_color_output);
 
@@ -4565,7 +4792,7 @@ compile_tgsi_instruction(struct st_translate *t,
       ureg_label_insn(ureg,
                       inst->op,
                       src, num_src,
-                      get_label(t, 
+                      get_label(t,
                                 inst->op == TGSI_OPCODE_CAL ? inst->function->sig_id : 0));
       return;
 
@@ -4621,28 +4848,19 @@ compile_tgsi_instruction(struct st_translate *t,
  */
 static void
 emit_wpos_adjustment( struct st_translate *t,
-                      const struct gl_program *program,
+                      int wpos_transform_const,
                       boolean invert,
                       GLfloat adjX, GLfloat adjY[2])
 {
    struct ureg_program *ureg = t->ureg;
 
+   assert(wpos_transform_const >= 0);
+
    /* Fragment program uses fragment position input.
     * Need to replace instances of INPUT[WPOS] with temp T
-    * where T = INPUT[WPOS] by y is inverted.
+    * where T = INPUT[WPOS] is inverted by Y.
     */
-   static const gl_state_index wposTransformState[STATE_LENGTH]
-      = { STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM, 
-          (gl_state_index)0, (gl_state_index)0, (gl_state_index)0 };
-   
-   /* XXX: note we are modifying the incoming shader here!  Need to
-    * do this before emitting the constant decls below, or this
-    * will be missed:
-    */
-   unsigned wposTransConst = _mesa_add_state_reference(program->Parameters,
-                                                       wposTransformState);
-
-   struct ureg_src wpostrans = ureg_DECL_constant( ureg, wposTransConst );
+   struct ureg_src wpostrans = ureg_DECL_constant(ureg, wpos_transform_const);
    struct ureg_dst wpos_temp = ureg_DECL_temporary( ureg );
    struct ureg_src wpos_input = t->inputs[t->inputMapping[VARYING_SLOT_POS]];
 
@@ -4706,7 +4924,8 @@ static void
 emit_wpos(struct st_context *st,
           struct st_translate *t,
           const struct gl_program *program,
-          struct ureg_program *ureg)
+          struct ureg_program *ureg,
+          int wpos_transform_const)
 {
    const struct gl_fragment_program *fp =
       (const struct gl_fragment_program *) program;
@@ -4768,7 +4987,7 @@ emit_wpos(struct st_context *st,
       else
          assert(0);
    }
-   
+
    if (fp->PixelCenterInteger) {
       /* Fragment shader wants pixel center integer */
       if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER)) {
@@ -4803,7 +5022,7 @@ emit_wpos(struct st_context *st,
 
    /* we invert after adjustment so that we avoid the MOV to temporary,
     * and reuse the adjustment ADD instead */
-   emit_wpos_adjustment(t, program, invert, adjX, adjY);
+   emit_wpos_adjustment(t, wpos_transform_const, invert, adjX, adjY);
 }
 
 /**
@@ -4885,8 +5104,8 @@ st_translate_program(
    unsigned i;
    enum pipe_error ret = PIPE_OK;
 
-   assert(numInputs <= Elements(t->inputs));
-   assert(numOutputs <= Elements(t->outputs));
+   assert(numInputs <= ARRAY_SIZE(t->inputs));
+   assert(numOutputs <= ARRAY_SIZE(t->outputs));
 
    assert(_mesa_sysval_to_semantic[SYSTEM_VALUE_FRONT_FACE] ==
           TGSI_SEMANTIC_FACE);
@@ -4920,15 +5139,6 @@ st_translate_program(
    t->outputMapping = outputMapping;
    t->ureg = ureg;
 
-   if (program->shader_program) {
-      for (i = 0; i < program->shader_program->NumUserUniformStorage; i++) {
-         struct gl_uniform_storage *const storage =
-               &program->shader_program->UniformStorage[i];
-
-         _mesa_uniform_detach_all_driver_storage(storage);
-      }
-   }
-
    /*
     * Declare input attributes.
     */
@@ -4942,10 +5152,9 @@ st_translate_program(
       }
 
       if (proginfo->InputsRead & VARYING_BIT_POS) {
-         /* Must do this after setting up t->inputs, and before
-          * emitting constant references, below:
-          */
-          emit_wpos(st_context(ctx), t, proginfo, ureg);
+          /* Must do this after setting up t->inputs. */
+          emit_wpos(st_context(ctx), t, proginfo, ureg,
+                    program->wpos_transform_const);
       }
 
       if (proginfo->InputsRead & VARYING_BIT_FACE)
@@ -5020,7 +5229,7 @@ st_translate_program(
                      ureg_writemask(t->outputs[i], TGSI_WRITEMASK_YZW),
                      ureg_imm4f(ureg, 0.0f, 0.0f, 0.0f, 1.0f));
             t->outputs[i] = ureg_writemask(t->outputs[i], TGSI_WRITEMASK_X);
-	 }
+         }
       }
       if (passthrough_edgeflags)
          emit_edgeflags(t);
@@ -5072,7 +5281,7 @@ st_translate_program(
     */
    memcpy(t->array_sizes, program->array_sizes, sizeof(unsigned) * program->next_array);
 
-   /* Emit constants and uniforms.  TGSI uses a single index space for these, 
+   /* Emit constants and uniforms.  TGSI uses a single index space for these,
     * so we put all the translated regs in t->constants.
     */
    if (proginfo->Parameters) {
@@ -5125,7 +5334,7 @@ st_translate_program(
          ureg_DECL_constant2D(t->ureg, first, last, i + 1);
       }
    }
-   
+
    /* Emit immediate values.
     */
    t->immediates = (struct ureg_src *)
@@ -5134,10 +5343,12 @@ st_translate_program(
       ret = PIPE_ERROR_OUT_OF_MEMORY;
       goto out;
    }
+   t->num_immediates = program->num_immediates;
+
    i = 0;
    foreach_in_list(immediate_storage, imm, &program->immediates) {
       assert(i < program->num_immediates);
-      t->immediates[i++] = emit_immediate(t, imm->values, imm->type, imm->size);
+      t->immediates[i++] = emit_immediate(t, imm->values, imm->type, imm->size32);
    }
    assert(i == program->num_immediates);
 
@@ -5162,20 +5373,6 @@ st_translate_program(
                        t->insn[t->labels[i].branch_target]);
    }
 
-   if (program->shader_program) {
-      /* This has to be done last.  Any operation the can cause
-       * prog->ParameterValues to get reallocated (e.g., anything that adds a
-       * program constant) has to happen before creating this linkage.
-       */
-      for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
-         if (program->shader_program->_LinkedShaders[i] == NULL)
-            continue;
-
-         _mesa_associate_uniform_storage(ctx, program->shader_program,
-               program->shader_program->_LinkedShaders[i]->Program->Parameters);
-      }
-   }
-
 out:
    if (t) {
       free(t->temps);
@@ -5184,12 +5381,13 @@ out:
       free(t->constants);
       t->num_constants = 0;
       free(t->immediates);
+      t->num_immediates = 0;
 
       if (t->error) {
-         debug_printf("%s: translate error flag set\n", __FUNCTION__);
+         debug_printf("%s: translate error flag set\n", __func__);
       }
 
-      free(t);
+      FREE(t);
    }
 
    return ret;
@@ -5217,7 +5415,7 @@ shader_stage_to_ptarget(gl_shader_stage stage)
 
 
 /**
- * Convert a shader's GLSL IR into a Mesa gl_program, although without 
+ * Convert a shader's GLSL IR into a Mesa gl_program, although without
  * generating Mesa IR.
  */
 static struct gl_program *
@@ -5251,10 +5449,12 @@ get_mesa_program(struct gl_context *ctx,
 
    v->have_sqrt = pscreen->get_shader_param(pscreen, ptarget,
                                             PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED);
+   v->have_fma = pscreen->get_shader_param(pscreen, ptarget,
+                                           PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED);
 
    _mesa_copy_linked_program_data(shader->Stage, shader_program, prog);
    _mesa_generate_parameters_list_for_uniforms(shader_program, shader,
-					       prog->Parameters);
+                                               prog->Parameters);
 
    /* Remove reads from output registers. */
    lower_output_reads(shader->ir);
@@ -5290,14 +5490,14 @@ get_mesa_program(struct gl_context *ctx,
    } while (progress);
 
 #if 0
-   /* Print out some information (for debugging purposes) used by the 
+   /* Print out some information (for debugging purposes) used by the
     * optimization passes. */
-   for (i=0; i < v->next_temp; i++) {
+   for (i = 0; i < v->next_temp; i++) {
       int fr = v->get_first_temp_read(i);
       int fw = v->get_first_temp_write(i);
       int lr = v->get_last_temp_read(i);
       int lw = v->get_last_temp_write(i);
-      
+
       printf("Temp %d: FR=%3d FW=%3d LR=%3d LW=%3d\n", i, fr, fw, lr, lw);
       assert(fw <= fr);
    }
@@ -5308,21 +5508,20 @@ get_mesa_program(struct gl_context *ctx,
    v->copy_propagate();
    while (v->eliminate_dead_code());
 
+   v->merge_two_dsts();
    v->merge_registers();
    v->renumber_registers();
-   
+
    /* Write the END instruction. */
    v->emit(NULL, TGSI_OPCODE_END);
 
    if (ctx->_Shader->Flags & GLSL_DUMP) {
-      printf("\n");
-      printf("GLSL IR for linked %s program %d:\n",
+      _mesa_log("\n");
+      _mesa_log("GLSL IR for linked %s program %d:\n",
              _mesa_shader_stage_to_string(shader->Stage),
              shader_program->Name);
-      _mesa_print_ir(stdout, shader->ir, NULL);
-      printf("\n");
-      printf("\n");
-      fflush(stdout);
+      _mesa_print_ir(_mesa_get_log_file(), shader->ir, NULL);
+      _mesa_log("\n\n");
    }
 
    prog->Instructions = NULL;
@@ -5331,8 +5530,19 @@ get_mesa_program(struct gl_context *ctx,
    do_set_program_inouts(shader->ir, prog, shader->Stage);
    count_resources(v, prog);
 
+   /* This must be done before the uniform storage is associated. */
+   if (shader->Type == GL_FRAGMENT_SHADER &&
+       prog->InputsRead & VARYING_BIT_POS){
+      static const gl_state_index wposTransformState[STATE_LENGTH] = {
+         STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM
+      };
+
+      v->wpos_transform_const = _mesa_add_state_reference(prog->Parameters,
+                                                          wposTransformState);
+   }
+
    _mesa_reference_program(ctx, &shader->Program, prog);
-   
+
    /* This has to be done last.  Any operation the can cause
     * prog->ParameterValues to get reallocated (e.g., anything that adds a
     * program constant) has to happen before creating this linkage.
@@ -5346,7 +5556,7 @@ get_mesa_program(struct gl_context *ctx,
    struct st_vertex_program *stvp;
    struct st_fragment_program *stfp;
    struct st_geometry_program *stgp;
-   
+
    switch (shader->Type) {
    case GL_VERTEX_SHADER:
       stvp = (struct st_vertex_program *)prog;
@@ -5373,7 +5583,7 @@ extern "C" {
 /**
  * Link a shader.
  * Called via ctx->Driver.LinkShader()
- * This actually involves converting GLSL IR into an intermediate TGSI-like IR 
+ * This actually involves converting GLSL IR into an intermediate TGSI-like IR
  * with code lowering and other optimizations.
  */
 GLboolean
@@ -5388,8 +5598,14 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
       bool progress;
       exec_list *ir = prog->_LinkedShaders[i]->ir;
+      gl_shader_stage stage = _mesa_shader_enum_to_shader_stage(prog->_LinkedShaders[i]->Type);
       const struct gl_shader_compiler_options *options =
-            &ctx->Const.ShaderCompilerOptions[_mesa_shader_enum_to_shader_stage(prog->_LinkedShaders[i]->Type)];
+            &ctx->Const.ShaderCompilerOptions[stage];
+      unsigned ptarget = shader_stage_to_ptarget(stage);
+      bool have_dround = pscreen->get_shader_param(pscreen, ptarget,
+                                                   PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED);
+      bool have_dfrexp = pscreen->get_shader_param(pscreen, ptarget,
+                                                   PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED);
 
       /* If there are forms of indirect addressing that the driver
        * cannot handle, perform the lowering pass.
@@ -5427,8 +5643,10 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
                          EXP_TO_EXP2 |
                          LOG_TO_LOG2 |
                          LDEXP_TO_ARITH |
+                         (have_dfrexp ? 0 : DFREXP_DLDEXP_TO_ARITH) |
                          CARRY_TO_ARITH |
                          BORROW_TO_ARITH |
+                         (have_dround ? 0 : DOPS_TO_DFRAC) |
                          (options->EmitNoPow ? POW_TO_EXP2 : 0) |
                          (!ctx->Const.NativeIntegers ? INT_DIV_TO_MUL_RCP : 0) |
                          (options->EmitNoSat ? SAT_TO_CLAMP : 0));
@@ -5449,7 +5667,7 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
          progress = do_common_optimization(ir, true, true, options,
                                            ctx->Const.NativeIntegers)
-	   || progress;
+           || progress;
 
          progress = lower_if_to_cond_assign(ir, options->MaxIfDepth) || progress;
 
@@ -5467,13 +5685,13 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       linked_prog = get_mesa_program(ctx, prog, prog->_LinkedShaders[i]);
 
       if (linked_prog) {
-	 _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
-				 linked_prog);
+         _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
+                                 linked_prog);
          if (!ctx->Driver.ProgramStringNotify(ctx,
                                               _mesa_shader_stage_to_program(i),
                                               linked_prog)) {
-	    _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
-				    NULL);
+            _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
+                                    NULL);
             _mesa_reference_program(ctx, &linked_prog, NULL);
             return GL_FALSE;
          }

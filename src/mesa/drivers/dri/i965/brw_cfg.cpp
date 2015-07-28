@@ -51,7 +51,7 @@ link(void *mem_ctx, bblock_t *block)
 }
 
 bblock_t::bblock_t(cfg_t *cfg) :
-   cfg(cfg), start_ip(0), end_ip(0), num(0)
+   cfg(cfg), idom(NULL), start_ip(0), end_ip(0), num(0)
 {
    instructions.make_empty();
    parents.make_empty();
@@ -157,6 +157,7 @@ cfg_t::cfg_t(exec_list *instructions)
    block_list.make_empty();
    blocks = NULL;
    num_blocks = 0;
+   idom_dirty = true;
 
    bblock_t *cur = NULL;
    int ip = 0;
@@ -373,6 +374,7 @@ cfg_t::remove_block(bblock_t *block)
 
    this->blocks[this->num_blocks - 1]->num = this->num_blocks - 2;
    this->num_blocks--;
+   idom_dirty = true;
 }
 
 bblock_t *
@@ -409,16 +411,20 @@ cfg_t::make_block_array()
 }
 
 void
-cfg_t::dump(backend_visitor *v) const
+cfg_t::dump(backend_visitor *v)
 {
+   if (idom_dirty)
+      calculate_idom();
+
    foreach_block (block, this) {
-      fprintf(stderr, "START B%d", block->num);
+      fprintf(stderr, "START B%d IDOM(B%d)", block->num, block->idom->num);
       foreach_list_typed(bblock_link, link, link, &block->parents) {
          fprintf(stderr, " <-B%d",
                  link->block->num);
       }
       fprintf(stderr, "\n");
-      block->dump(v);
+      if (v != NULL)
+         block->dump(v);
       fprintf(stderr, "END B%d", block->num);
       foreach_list_typed(bblock_link, link, link, &block->children) {
          fprintf(stderr, " ->B%d",
@@ -426,4 +432,90 @@ cfg_t::dump(backend_visitor *v) const
       }
       fprintf(stderr, "\n");
    }
+}
+
+/* Calculates the immediate dominator of each block, according to "A Simple,
+ * Fast Dominance Algorithm" by Keith D. Cooper, Timothy J. Harvey, and Ken
+ * Kennedy.
+ *
+ * The authors claim that for control flow graphs of sizes normally encountered
+ * (less than 1000 nodes) that this algorithm is significantly faster than
+ * others like Lengauer-Tarjan.
+ */
+void
+cfg_t::calculate_idom()
+{
+   foreach_block(block, this) {
+      block->idom = NULL;
+   }
+   blocks[0]->idom = blocks[0];
+
+   bool changed;
+   do {
+      changed = false;
+
+      foreach_block(block, this) {
+         if (block->num == 0)
+            continue;
+
+         bblock_t *new_idom = NULL;
+         foreach_list_typed(bblock_link, parent, link, &block->parents) {
+            if (parent->block->idom) {
+               if (new_idom == NULL) {
+                  new_idom = parent->block;
+               } else if (parent->block->idom != NULL) {
+                  new_idom = intersect(parent->block, new_idom);
+               }
+            }
+         }
+
+         if (block->idom != new_idom) {
+            block->idom = new_idom;
+            changed = true;
+         }
+      }
+   } while (changed);
+
+   idom_dirty = false;
+}
+
+bblock_t *
+cfg_t::intersect(bblock_t *b1, bblock_t *b2)
+{
+   /* Note, the comparisons here are the opposite of what the paper says
+    * because we index blocks from beginning -> end (i.e. reverse post-order)
+    * instead of post-order like they assume.
+    */
+   while (b1->num != b2->num) {
+      while (b1->num > b2->num)
+         b1 = b1->idom;
+      while (b2->num > b1->num)
+         b2 = b2->idom;
+   }
+   assert(b1);
+   return b1;
+}
+
+void
+cfg_t::dump_cfg()
+{
+   printf("digraph CFG {\n");
+   for (int b = 0; b < num_blocks; b++) {
+      bblock_t *block = this->blocks[b];
+
+      foreach_list_typed_safe (bblock_link, child, link, &block->children) {
+         printf("\t%d -> %d\n", b, child->block->num);
+      }
+   }
+   printf("}\n");
+}
+
+void
+cfg_t::dump_domtree()
+{
+   printf("digraph DominanceTree {\n");
+   foreach_block(block, this) {
+      printf("\t%d -> %d\n", block->idom->num, block->num);
+   }
+   printf("}\n");
 }

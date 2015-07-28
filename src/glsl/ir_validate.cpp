@@ -61,6 +61,7 @@ public:
    virtual ir_visitor_status visit(ir_variable *v);
    virtual ir_visitor_status visit(ir_dereference_variable *ir);
 
+   virtual ir_visitor_status visit_enter(ir_discard *ir);
    virtual ir_visitor_status visit_enter(ir_if *ir);
 
    virtual ir_visitor_status visit_enter(ir_function *ir);
@@ -126,6 +127,20 @@ ir_validate::visit_enter(class ir_dereference_array *ir)
    if (!ir->array_index->type->is_integer()) {
       printf("ir_dereference_array @ %p does not have integer index: %s\n",
              (void *) ir, ir->array_index->type->name);
+      abort();
+   }
+
+   return visit_continue;
+}
+
+ir_visitor_status
+ir_validate::visit_enter(ir_discard *ir)
+{
+   if (ir->condition && ir->condition->type != glsl_type::bool_type) {
+      printf("ir_discard condition %s type instead of bool.\n",
+	     ir->condition->type->name);
+      ir->print();
+      printf("\n");
       abort();
    }
 
@@ -313,10 +328,12 @@ ir_validate::visit_leave(ir_expression *ir)
    case ir_unop_ceil:
    case ir_unop_floor:
    case ir_unop_fract:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->operands[0]->type == ir->type);
+      break;
    case ir_unop_sin:
    case ir_unop_cos:
-   case ir_unop_sin_reduced:
-   case ir_unop_cos_reduced:
    case ir_unop_dFdx:
    case ir_unop_dFdx_coarse:
    case ir_unop_dFdx_fine:
@@ -340,6 +357,11 @@ ir_validate::visit_leave(ir_expression *ir)
       assert(ir->operands[0]->type == glsl_type::vec4_type);
       break;
 
+   case ir_unop_pack_double_2x32:
+      assert(ir->type == glsl_type::double_type);
+      assert(ir->operands[0]->type == glsl_type::uvec2_type);
+      break;
+
    case ir_unop_unpack_snorm_2x16:
    case ir_unop_unpack_unorm_2x16:
    case ir_unop_unpack_half_2x16:
@@ -357,6 +379,11 @@ ir_validate::visit_leave(ir_expression *ir)
    case ir_unop_unpack_half_2x16_split_y:
       assert(ir->type == glsl_type::float_type);
       assert(ir->operands[0]->type == glsl_type::uint_type);
+      break;
+
+   case ir_unop_unpack_double_2x32:
+      assert(ir->type == glsl_type::uvec2_type);
+      assert(ir->operands[0]->type == glsl_type::double_type);
       break;
 
    case ir_unop_bitfield_reverse:
@@ -381,6 +408,45 @@ ir_validate::visit_leave(ir_expression *ir)
       assert(ir->operands[0]->type->is_float());
       break;
 
+   case ir_unop_d2f:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->type->base_type == GLSL_TYPE_FLOAT);
+      break;
+   case ir_unop_f2d:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT);
+      assert(ir->type->base_type == GLSL_TYPE_DOUBLE);
+      break;
+   case ir_unop_d2i:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->type->base_type == GLSL_TYPE_INT);
+      break;
+   case ir_unop_i2d:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_INT);
+      assert(ir->type->base_type == GLSL_TYPE_DOUBLE);
+      break;
+   case ir_unop_d2u:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->type->base_type == GLSL_TYPE_UINT);
+      break;
+   case ir_unop_u2d:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_UINT);
+      assert(ir->type->base_type == GLSL_TYPE_DOUBLE);
+      break;
+   case ir_unop_d2b:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->type->base_type == GLSL_TYPE_BOOL);
+      break;
+
+   case ir_unop_frexp_sig:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->type->base_type == GLSL_TYPE_DOUBLE);
+      break;
+   case ir_unop_frexp_exp:
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
+      assert(ir->type->base_type == GLSL_TYPE_INT);
+      break;
    case ir_binop_add:
    case ir_binop_sub:
    case ir_binop_mul:
@@ -475,14 +541,16 @@ ir_validate::visit_leave(ir_expression *ir)
    case ir_binop_logic_and:
    case ir_binop_logic_xor:
    case ir_binop_logic_or:
-      assert(ir->type == glsl_type::bool_type);
-      assert(ir->operands[0]->type == glsl_type::bool_type);
-      assert(ir->operands[1]->type == glsl_type::bool_type);
+      assert(ir->type->base_type == GLSL_TYPE_BOOL);
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_BOOL);
+      assert(ir->operands[1]->type->base_type == GLSL_TYPE_BOOL);
       break;
 
    case ir_binop_dot:
-      assert(ir->type == glsl_type::float_type);
-      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT);
+      assert(ir->type == glsl_type::float_type ||
+             ir->type == glsl_type::double_type);
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
       assert(ir->operands[0]->type->is_vector());
       assert(ir->operands[0]->type == ir->operands[1]->type);
       break;
@@ -507,7 +575,8 @@ ir_validate::visit_leave(ir_expression *ir)
 
    case ir_binop_ldexp:
       assert(ir->operands[0]->type == ir->type);
-      assert(ir->operands[0]->type->is_float());
+      assert(ir->operands[0]->type->is_float() ||
+             ir->operands[0]->type->is_double());
       assert(ir->operands[1]->type->base_type == GLSL_TYPE_INT);
       assert(ir->operands[0]->type->components() ==
              ir->operands[1]->type->components());
@@ -533,16 +602,20 @@ ir_validate::visit_leave(ir_expression *ir)
       break;
 
    case ir_triop_fma:
-      assert(ir->type->base_type == GLSL_TYPE_FLOAT);
+      assert(ir->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->type->base_type == GLSL_TYPE_DOUBLE);
       assert(ir->type == ir->operands[0]->type);
       assert(ir->type == ir->operands[1]->type);
       assert(ir->type == ir->operands[2]->type);
       break;
 
    case ir_triop_lrp:
-      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT);
+      assert(ir->operands[0]->type->base_type == GLSL_TYPE_FLOAT ||
+             ir->operands[0]->type->base_type == GLSL_TYPE_DOUBLE);
       assert(ir->operands[0]->type == ir->operands[1]->type);
-      assert(ir->operands[2]->type == ir->operands[0]->type || ir->operands[2]->type == glsl_type::float_type);
+      assert(ir->operands[2]->type == ir->operands[0]->type ||
+             ir->operands[2]->type == glsl_type::float_type ||
+             ir->operands[2]->type == glsl_type::double_type);
       break;
 
    case ir_triop_csel:

@@ -164,17 +164,18 @@ rbug_destroy_query(struct pipe_context *_pipe,
    pipe_mutex_unlock(rb_pipe->call_mutex);
 }
 
-static void
+static boolean
 rbug_begin_query(struct pipe_context *_pipe,
                  struct pipe_query *query)
 {
    struct rbug_context *rb_pipe = rbug_context(_pipe);
    struct pipe_context *pipe = rb_pipe->pipe;
+   boolean ret;
 
    pipe_mutex_lock(rb_pipe->call_mutex);
-   pipe->begin_query(pipe,
-                     query);
+   ret = pipe->begin_query(pipe, query);
    pipe_mutex_unlock(rb_pipe->call_mutex);
+   return ret;
 }
 
 static void

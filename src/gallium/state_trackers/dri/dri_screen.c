@@ -178,10 +178,10 @@ dri_fill_in_modes(struct dri_screen *screen)
       stencil_bits_array[depth_buffer_factor++] = 0;
    }
 
-   assert(Elements(mesa_formats) == Elements(pipe_formats));
+   assert(ARRAY_SIZE(mesa_formats) == ARRAY_SIZE(pipe_formats));
 
    /* Add configs. */
-   for (format = 0; format < Elements(mesa_formats); format++) {
+   for (format = 0; format < ARRAY_SIZE(mesa_formats); format++) {
       __DRIconfig **new_configs = NULL;
       unsigned num_msaa_modes = 0; /* includes a single-sample mode */
       uint8_t msaa_modes[MSAA_VISUAL_MAX_SAMPLES];
@@ -201,7 +201,7 @@ dri_fill_in_modes(struct dri_screen *screen)
          new_configs = driCreateConfigs(mesa_formats[format],
                                         depth_bits_array, stencil_bits_array,
                                         depth_buffer_factor, back_buffer_modes,
-                                        Elements(back_buffer_modes),
+                                        ARRAY_SIZE(back_buffer_modes),
                                         msaa_modes, 1,
                                         GL_TRUE);
          configs = driConcatConfigs(configs, new_configs);
@@ -211,7 +211,7 @@ dri_fill_in_modes(struct dri_screen *screen)
             new_configs = driCreateConfigs(mesa_formats[format],
                                            depth_bits_array, stencil_bits_array,
                                            depth_buffer_factor, back_buffer_modes,
-                                           Elements(back_buffer_modes),
+                                           ARRAY_SIZE(back_buffer_modes),
                                            msaa_modes+1, num_msaa_modes-1,
                                            GL_FALSE);
             configs = driConcatConfigs(configs, new_configs);
@@ -365,6 +365,7 @@ dri_destroy_screen_helper(struct dri_screen * screen)
       screen->base.screen->destroy(screen->base.screen);
 
    dri_destroy_option_cache(screen);
+   pipe_mutex_destroy(screen->opencl_func_mutex);
 }
 
 void

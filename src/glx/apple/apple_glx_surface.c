@@ -124,7 +124,7 @@ surface_destroy(Display * dpy, struct apple_glx_drawable *d)
    }
 }
 
-/* Return true if an error occured. */
+/* Return true if an error occurred. */
 static bool
 create_surface(Display * dpy, int screen, struct apple_glx_drawable *d)
 {
@@ -158,7 +158,7 @@ create_surface(Display * dpy, int screen, struct apple_glx_drawable *d)
    return true;                 /* unable to create a surface. */
 }
 
-/* Return true if an error occured. */
+/* Return true if an error occurred. */
 /* This returns a referenced object via resultptr. */
 bool
 apple_glx_surface_create(Display * dpy, int screen,

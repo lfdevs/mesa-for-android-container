@@ -34,6 +34,8 @@
 #include "clear.h"
 #include "context.h"
 #include "enums.h"
+#include "fbobject.h"
+#include "get.h"
 #include "macros.h"
 #include "mtypes.h"
 #include "state.h"
@@ -218,7 +220,7 @@ _mesa_Clear( GLbitfield mask )
          bufferMask |= BUFFER_BIT_ACCUM;
       }
 
-      ASSERT(ctx->Driver.Clear);
+      assert(ctx->Driver.Clear);
       ctx->Driver.Clear(ctx, bufferMask);
    }
 }
@@ -400,6 +402,24 @@ _mesa_ClearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *value)
 
 
 /**
+ * The ClearBuffer framework is so complicated and so riddled with the
+ * assumption that the framebuffer is bound that, for now, we will just fake
+ * direct state access clearing for the user.
+ */
+void GLAPIENTRY
+_mesa_ClearNamedFramebufferiv(GLuint framebuffer, GLenum buffer,
+                              GLint drawbuffer, const GLint *value)
+{
+   GLint oldfb;
+
+   _mesa_GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldfb);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
+   _mesa_ClearBufferiv(buffer, drawbuffer, value);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint) oldfb);
+}
+
+
+/**
  * New in GL 3.0
  * Clear unsigned integer color buffer (not depth, not stencil).
  */
@@ -468,6 +488,24 @@ _mesa_ClearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint *value)
                   _mesa_lookup_enum_by_nr(buffer));
       return;
    }
+}
+
+
+/**
+ * The ClearBuffer framework is so complicated and so riddled with the
+ * assumption that the framebuffer is bound that, for now, we will just fake
+ * direct state access clearing for the user.
+ */
+void GLAPIENTRY
+_mesa_ClearNamedFramebufferuiv(GLuint framebuffer, GLenum buffer,
+                               GLint drawbuffer, const GLuint *value)
+{
+   GLint oldfb;
+
+   _mesa_GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldfb);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
+   _mesa_ClearBufferuiv(buffer, drawbuffer, value);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint) oldfb);
 }
 
 
@@ -565,6 +603,24 @@ _mesa_ClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *value)
 
 
 /**
+ * The ClearBuffer framework is so complicated and so riddled with the
+ * assumption that the framebuffer is bound that, for now, we will just fake
+ * direct state access clearing for the user.
+ */
+void GLAPIENTRY
+_mesa_ClearNamedFramebufferfv(GLuint framebuffer, GLenum buffer,
+                              GLint drawbuffer, const GLfloat *value)
+{
+   GLint oldfb;
+
+   _mesa_GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldfb);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
+   _mesa_ClearBufferfv(buffer, drawbuffer, value);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint) oldfb);
+}
+
+
+/**
  * New in GL 3.0
  * Clear depth/stencil buffer only.
  */
@@ -625,4 +681,22 @@ _mesa_ClearBufferfi(GLenum buffer, GLint drawbuffer,
       ctx->Depth.Clear = clearDepthSave;
       ctx->Stencil.Clear = clearStencilSave;
    }
+}
+
+
+/**
+ * The ClearBuffer framework is so complicated and so riddled with the
+ * assumption that the framebuffer is bound that, for now, we will just fake
+ * direct state access clearing for the user.
+ */
+void GLAPIENTRY
+_mesa_ClearNamedFramebufferfi(GLuint framebuffer, GLenum buffer,
+                              GLfloat depth, GLint stencil)
+{
+   GLint oldfb;
+
+   _mesa_GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldfb);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
+   _mesa_ClearBufferfi(buffer, 0, depth, stencil);
+   _mesa_BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint) oldfb);
 }

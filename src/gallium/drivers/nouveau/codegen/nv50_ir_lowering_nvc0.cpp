@@ -70,7 +70,30 @@ NVC0LegalizeSSA::handleDIV(Instruction *i)
 void
 NVC0LegalizeSSA::handleRCPRSQ(Instruction *i)
 {
-   // TODO
+   assert(i->dType == TYPE_F64);
+   // There are instructions that will compute the high 32 bits of the 64-bit
+   // float. We will just stick 0 in the bottom 32 bits.
+
+   bld.setPosition(i, false);
+
+   // 1. Take the source and it up.
+   Value *src[2], *dst[2], *def = i->getDef(0);
+   bld.mkSplit(src, 4, i->getSrc(0));
+
+   // 2. We don't care about the low 32 bits of the destination. Stick a 0 in.
+   dst[0] = bld.loadImm(NULL, 0);
+   dst[1] = bld.getSSA();
+
+   // 3. The new version of the instruction takes the high 32 bits of the
+   // source and outputs the high 32 bits of the destination.
+   i->setSrc(0, src[1]);
+   i->setDef(0, dst[1]);
+   i->setType(TYPE_F32);
+   i->subOp = NV50_IR_SUBOP_RCPRSQ_64H;
+
+   // 4. Recombine the two dst pieces back into the original destination.
+   bld.setPosition(i, true);
+   bld.mkOp2(OP_MERGE, TYPE_U64, def, dst[0], dst[1]);
 }
 
 void
@@ -933,7 +956,47 @@ NVC0LoweringPass::handleTXD(TexInstruction *txd)
 bool
 NVC0LoweringPass::handleTXQ(TexInstruction *txq)
 {
-   // TODO: indirect resource/sampler index
+   if (txq->tex.rIndirectSrc < 0)
+      return true;
+
+   Value *ticRel = txq->getIndirectR();
+   const int chipset = prog->getTarget()->getChipset();
+
+   txq->setIndirectS(NULL);
+   txq->tex.sIndirectSrc = -1;
+
+   assert(ticRel);
+
+   if (chipset < NVISA_GK104_CHIPSET) {
+      LValue *src = new_LValue(func, FILE_GPR); // 0xttxsaaaa
+
+      txq->setSrc(txq->tex.rIndirectSrc, NULL);
+      if (txq->tex.r)
+         ticRel = bld.mkOp2v(OP_ADD, TYPE_U32, bld.getScratch(),
+                             ticRel, bld.mkImm(txq->tex.r));
+
+      bld.mkOp2(OP_SHL, TYPE_U32, src, ticRel, bld.mkImm(0x17));
+
+      txq->moveSources(0, 1);
+      txq->setSrc(0, src);
+   } else {
+      Value *hnd = loadTexHandle(
+            bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                       txq->getIndirectR(), bld.mkImm(2)),
+            txq->tex.r);
+      txq->tex.r = 0xff;
+      txq->tex.s = 0x1f;
+
+      if (chipset < NVISA_GM107_CHIPSET) {
+         txq->setIndirectR(NULL);
+         txq->moveSources(0, 1);
+         txq->setSrc(0, hnd);
+         txq->tex.rIndirectSrc = 0;
+      } else {
+         txq->setIndirectR(hnd);
+      }
+   }
+
    return true;
 }
 
@@ -1482,8 +1545,9 @@ NVC0LoweringPass::handleRDSV(Instruction *i)
       Value *face = i->getDef(0);
       bld.mkInterp(NV50_IR_INTERP_FLAT, face, addr, NULL);
       if (i->dType == TYPE_F32) {
-         bld.mkOp2(OP_AND, TYPE_U32, face, face, bld.mkImm(0x80000000));
-         bld.mkOp2(OP_XOR, TYPE_U32, face, face, bld.mkImm(0xbf800000));
+         bld.mkOp2(OP_OR, TYPE_U32, face, face, bld.mkImm(0x00000001));
+         bld.mkOp1(OP_NEG, TYPE_S32, face, face);
+         bld.mkCvt(OP_CVT, TYPE_F32, face, TYPE_S32, face);
       }
    }
       break;
@@ -1547,7 +1611,7 @@ NVC0LoweringPass::handleDIV(Instruction *i)
    if (!isFloatType(i->dType))
       return true;
    bld.setPosition(i, false);
-   Instruction *rcp = bld.mkOp1(OP_RCP, i->dType, bld.getSSA(), i->getSrc(1));
+   Instruction *rcp = bld.mkOp1(OP_RCP, i->dType, bld.getSSA(typeSizeof(i->dType)), i->getSrc(1));
    i->op = OP_MUL;
    i->setSrc(1, rcp->getDef(0));
    return true;
@@ -1556,13 +1620,13 @@ NVC0LoweringPass::handleDIV(Instruction *i)
 bool
 NVC0LoweringPass::handleMOD(Instruction *i)
 {
-   if (i->dType != TYPE_F32)
+   if (!isFloatType(i->dType))
       return true;
-   LValue *value = bld.getScratch();
-   bld.mkOp1(OP_RCP, TYPE_F32, value, i->getSrc(1));
-   bld.mkOp2(OP_MUL, TYPE_F32, value, i->getSrc(0), value);
-   bld.mkOp1(OP_TRUNC, TYPE_F32, value, value);
-   bld.mkOp2(OP_MUL, TYPE_F32, value, i->getSrc(1), value);
+   LValue *value = bld.getScratch(typeSizeof(i->dType));
+   bld.mkOp1(OP_RCP, i->dType, value, i->getSrc(1));
+   bld.mkOp2(OP_MUL, i->dType, value, i->getSrc(0), value);
+   bld.mkOp1(OP_TRUNC, i->dType, value, value);
+   bld.mkOp2(OP_MUL, i->dType, value, i->getSrc(1), value);
    i->op = OP_SUB;
    i->setSrc(1, value);
    return true;
@@ -1571,10 +1635,22 @@ NVC0LoweringPass::handleMOD(Instruction *i)
 bool
 NVC0LoweringPass::handleSQRT(Instruction *i)
 {
-   Instruction *rsq = bld.mkOp1(OP_RSQ, TYPE_F32,
-                                bld.getSSA(), i->getSrc(0));
+   Value *pred = bld.getSSA(1, FILE_PREDICATE);
+   Value *zero = bld.getSSA();
+   Instruction *rsq;
+
+   bld.mkOp1(OP_MOV, TYPE_U32, zero, bld.mkImm(0));
+   if (i->dType == TYPE_F64)
+      zero = bld.mkOp2v(OP_MERGE, TYPE_U64, bld.getSSA(8), zero, zero);
+   bld.mkCmp(OP_SET, CC_LE, i->dType, pred, i->dType, i->getSrc(0), zero);
+   bld.mkOp1(OP_MOV, i->dType, i->getDef(0), zero)->setPredicate(CC_P, pred);
+   rsq = bld.mkOp1(OP_RSQ, i->dType,
+                   bld.getSSA(typeSizeof(i->dType)), i->getSrc(0));
+   rsq->setPredicate(CC_NOT_P, pred);
    i->op = OP_MUL;
    i->setSrc(1, rsq->getDef(0));
+   i->setPredicate(CC_NOT_P, pred);
+
 
    return true;
 }

@@ -29,22 +29,19 @@
 #include <clang/Basic/TargetInfo.h>
 #include <llvm/Bitcode/BitstreamWriter.h>
 #include <llvm/Bitcode/ReaderWriter.h>
-#if HAVE_LLVM < 0x0305
-#include <llvm/Linker.h>
-#else
 #include <llvm/Linker/Linker.h>
 #include <llvm/IR/DiagnosticInfo.h>
 #include <llvm/IR/DiagnosticPrinter.h>
-#endif
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/IRReader/IRReader.h>
-#if HAVE_LLVM < 0x0305
-#include <llvm/ADT/OwningPtr.h>
-#endif
+#if HAVE_LLVM >= 0x0307
+#include <llvm/IR/LegacyPassManager.h>
+#else
 #include <llvm/PassManager.h>
+#endif
 #include <llvm/Support/CodeGen.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/MemoryBuffer.h>
@@ -139,7 +136,7 @@ namespace {
                 const std::string &name, const std::string &triple,
                 const std::string &processor, const std::string &opts,
                 clang::LangAS::Map& address_spaces, unsigned &optimization_level,
-                compat::string &r_log) {
+                std::string &r_log) {
 
       clang::CompilerInstance c;
       clang::EmitLLVMOnlyAction act(&llvm_ctx);
@@ -199,7 +196,6 @@ namespace {
 
       // clc.h requires that this macro be defined:
       c.getPreprocessorOpts().addMacroDef("cl_clang_storage_class_specifiers");
-      c.getPreprocessorOpts().addMacroDef("cl_khr_fp64");
 
       c.getLangOpts().NoBuiltin = true;
       c.getTargetOpts().Triple = triple;
@@ -298,7 +294,12 @@ namespace {
    optimize(llvm::Module *mod, unsigned optimization_level,
             const std::vector<llvm::Function *> &kernels) {
 
+#if HAVE_LLVM >= 0x0307
+      llvm::legacy::PassManager PM;
+#else
       llvm::PassManager PM;
+#endif
+
       // Add a function internalizer pass.
       //
       // By default, the function internalizer pass will look for a function
@@ -320,11 +321,9 @@ namespace {
          llvm::Function *kernel = *I;
          export_list.push_back(kernel->getName().data());
       }
-#if HAVE_LLVM < 0x0305
-      PM.add(new llvm::DataLayout(mod));
-#elif HAVE_LLVM < 0x0306
+#if HAVE_LLVM < 0x0306
       PM.add(new llvm::DataLayoutPass(mod));
-#else
+#elif HAVE_LLVM < 0x0307
       PM.add(new llvm::DataLayoutPass());
 #endif
       PM.add(llvm::createInternalizePass(export_list));
@@ -341,18 +340,14 @@ namespace {
       PM.run(*mod);
    }
 
-   compat::vector<module::argument>
+   std::vector<module::argument>
    get_kernel_args(const llvm::Module *mod, const std::string &kernel_name,
                    const clang::LangAS::Map &address_spaces) {
 
-      compat::vector<module::argument> args;
+      std::vector<module::argument> args;
       llvm::Function *kernel_func = mod->getFunction(kernel_name);
 
-#if HAVE_LLVM < 0x0305
-         llvm::DataLayout TD(kernel_func->getParent()->getDataLayout());
-#else
-         llvm::DataLayout TD(mod);
-#endif
+      llvm::DataLayout TD(mod);
 
       for (llvm::Function::const_arg_iterator I = kernel_func->arg_begin(),
                                       E = kernel_func->arg_end(); I != E; ++I) {
@@ -454,15 +449,16 @@ namespace {
 
       for (unsigned i = 0; i < kernels.size(); ++i) {
          std::string kernel_name = kernels[i]->getName();
-         compat::vector<module::argument> args =
+         std::vector<module::argument> args =
                get_kernel_args(mod, kernel_name, address_spaces);
 
          m.syms.push_back(module::symbol(kernel_name, 0, i, args ));
       }
 
       header.num_bytes = llvm_bitcode.size();
-      std::string data;
-      data.insert(0, (char*)(&header), sizeof(header));
+      std::vector<char> data;
+      data.insert(data.end(), (char*)(&header),
+                              (char*)(&header) + sizeof(header));
       data.insert(data.end(), llvm_bitcode.begin(),
                                   llvm_bitcode.end());
       m.secs.push_back(module::section(0, module::section::text,
@@ -475,7 +471,7 @@ namespace {
    emit_code(LLVMTargetMachineRef tm, LLVMModuleRef mod,
              LLVMCodeGenFileType file_type,
              LLVMMemoryBufferRef *out_buffer,
-             compat::string &r_log) {
+             std::string &r_log) {
       LLVMBool err;
       char *err_message = NULL;
 
@@ -496,7 +492,7 @@ namespace {
    std::vector<char>
    compile_native(const llvm::Module *mod, const std::string &triple,
                   const std::string &processor, unsigned dump_asm,
-                  compat::string &r_log) {
+                  std::string &r_log) {
 
       std::string log;
       LLVMTargetRef target;
@@ -550,7 +546,7 @@ namespace {
    std::map<std::string, unsigned>
    get_kernel_offsets(std::vector<char> &code,
                       const std::vector<llvm::Function *> &kernels,
-                      compat::string &r_log) {
+                      std::string &r_log) {
 
       // One of the libelf implementations
       // (http://www.mr511.de/software/english.htm) requires calling
@@ -616,7 +612,7 @@ namespace {
                        const llvm::Module *mod,
                        const std::vector<llvm::Function *> &kernels,
                        const clang::LangAS::Map &address_spaces,
-                       compat::string &r_log) {
+                       std::string &r_log) {
 
       std::map<std::string, unsigned> kernel_offsets =
             get_kernel_offsets(code, kernels, r_log);
@@ -627,15 +623,16 @@ namespace {
 
       // Store the generated ELF binary in the module's text section.
       header.num_bytes = code.size();
-      std::string data;
-      data.append((char*)(&header), sizeof(header));
-      data.append(code.begin(), code.end());
+      std::vector<char> data;
+      data.insert(data.end(), (char*)(&header),
+                              (char*)(&header) + sizeof(header));
+      data.insert(data.end(), code.begin(), code.end());
       m.secs.push_back(module::section(0, module::section::text,
                                        header.num_bytes, data));
 
       for (std::map<std::string, unsigned>::iterator i = kernel_offsets.begin(),
            e = kernel_offsets.end(); i != e; ++i) {
-         compat::vector<module::argument> args =
+         std::vector<module::argument> args =
                get_kernel_args(mod, i->first, address_spaces);
          m.syms.push_back(module::symbol(i->first, 0, i->second, args ));
       }
@@ -643,23 +640,19 @@ namespace {
       return m;
    }
 
-#if HAVE_LLVM >= 0x0305
-
    void
    diagnostic_handler(const llvm::DiagnosticInfo &di, void *data) {
       if (di.getSeverity() == llvm::DS_Error) {
-         std::string message = *(compat::string*)data;
+         std::string message = *(std::string*)data;
          llvm::raw_string_ostream stream(message);
          llvm::DiagnosticPrinterRawOStream dp(stream);
          di.print(dp);
          stream.flush();
-         *(compat::string*)data = message;
+         *(std::string*)data = message;
 
          throw build_error();
       }
    }
-
-#endif
 
    void
    init_targets() {
@@ -695,12 +688,12 @@ namespace {
 } // End anonymous namespace
 
 module
-clover::compile_program_llvm(const compat::string &source,
+clover::compile_program_llvm(const std::string &source,
                              const header_map &headers,
                              enum pipe_shader_ir ir,
-                             const compat::string &target,
-                             const compat::string &opts,
-                             compat::string &r_log) {
+                             const std::string &target,
+                             const std::string &opts,
+                             std::string &r_log) {
 
    init_targets();
 
@@ -713,9 +706,7 @@ clover::compile_program_llvm(const compat::string &source,
    llvm::LLVMContext llvm_ctx;
    unsigned optimization_level;
 
-#if HAVE_LLVM >= 0x0305
    llvm_ctx.setDiagnosticHandler(diagnostic_handler, &r_log);
-#endif
 
    if (get_debug_flags() & DBG_CLC)
       debug_log(source, ".cl");

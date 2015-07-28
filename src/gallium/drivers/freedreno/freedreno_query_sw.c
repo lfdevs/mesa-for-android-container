@@ -85,7 +85,7 @@ is_rate_query(struct fd_query *q)
 	}
 }
 
-static void
+static boolean
 fd_sw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_sw_query *sq = fd_sw_query(q);
@@ -93,6 +93,7 @@ fd_sw_begin_query(struct fd_context *ctx, struct fd_query *q)
 	sq->begin_value = read_counter(ctx, q->type);
 	if (is_rate_query(q))
 		sq->begin_time = os_time_get();
+   return true;
 }
 
 static void

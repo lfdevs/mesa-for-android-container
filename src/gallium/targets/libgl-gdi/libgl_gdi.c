@@ -38,6 +38,7 @@
 
 #include "util/u_debug.h"
 #include "stw_winsys.h"
+#include "stw_device.h"
 #include "gdi/gdi_sw_winsys.h"
 
 #include "softpipe/sp_texture.h"
@@ -143,8 +144,12 @@ static const struct stw_winsys stw_winsys = {
 };
 
 
+EXTERN_C BOOL WINAPI
+DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved);
+
+
 BOOL WINAPI
-DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
+DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
    switch (fdwReason) {
    case DLL_PROCESS_ATTACH:
@@ -161,9 +166,22 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
       break;
 
    case DLL_PROCESS_DETACH:
-      if (lpReserved == NULL) {
+      if (lpvReserved == NULL) {
+         // We're being unloaded from the process.
          stw_cleanup_thread();
          stw_cleanup();
+      } else {
+         // Process itself is terminating, and all threads and modules are
+         // being detached.
+         //
+         // The order threads (including llvmpipe rasterizer threads) are
+         // destroyed can not be relied up, so it's not safe to cleanup.
+         //
+         // However global destructors (e.g., LLVM's) will still be called, and
+         // if Microsoft OPENGL32.DLL's DllMain is called after us, it will
+         // still try to invoke DrvDeleteContext to destroys all outstanding,
+         // so set stw_dev to NULL to return immediately if that happens.
+         stw_dev = NULL;
       }
       break;
    }

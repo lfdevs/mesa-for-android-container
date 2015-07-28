@@ -31,9 +31,11 @@
 #define CG_REG_NUM(origin) ((origin) >> CG_REG_SHIFT)
 
 struct codegen {
+   const struct ilo_dev *dev;
    const struct toy_inst *inst;
    int pc;
 
+   unsigned flag_reg_num;
    unsigned flag_sub_reg_num;
 
    struct codegen_dst {
@@ -384,11 +386,36 @@ static const struct toy_compaction_table toy_compaction_table_gen7 = {
    },
 };
 
+static const struct toy_compaction_table toy_compaction_table_gen8 = {
+   .control = {
+   },
+   .datatype = {
+   },
+   .subreg = {
+   },
+   .src = {
+   },
+   .control_3src = {
+   },
+   .source_3src = {
+   },
+};
+
 const struct toy_compaction_table *
-toy_compiler_get_compaction_table(const struct ilo_dev_info *dev)
+toy_compiler_get_compaction_table(const struct ilo_dev *dev)
 {
-   return (ilo_dev_gen(dev) >= ILO_GEN(7)) ?
-      &toy_compaction_table_gen7 : &toy_compaction_table_gen6;
+   switch (ilo_dev_gen(dev)) {
+   case ILO_GEN(8):
+      return &toy_compaction_table_gen8;
+   case ILO_GEN(7.5):
+   case ILO_GEN(7):
+      return &toy_compaction_table_gen7;
+   case ILO_GEN(6):
+      return &toy_compaction_table_gen6;
+   default:
+      assert(!"unsupported gen");
+      return NULL;
+   }
 }
 
 /**
@@ -407,21 +434,33 @@ src_is_null(const struct codegen *cg, int idx)
  * Translate a source operand to DW2 or DW3 of the 1-src/2-src format.
  */
 static uint32_t
-translate_src(const struct codegen *cg, int idx)
+translate_src_gen6(const struct codegen *cg, int idx)
 {
    const struct codegen_src *src = &cg->src[idx];
    uint32_t dw;
 
+   ILO_DEV_ASSERT(cg->dev, 6, 8);
+
    /* special treatment may be needed if any of the operand is immediate */
    if (cg->src[0].file == GEN6_FILE_IMM) {
       assert(!cg->src[0].absolute && !cg->src[0].negate);
-      /* only the last src operand can be an immediate */
-      assert(src_is_null(cg, 1));
 
-      if (idx == 0)
-         return cg->flag_sub_reg_num << 25;
-      else
+      /* only the last src operand can be an immediate unless it is Gen8+ */
+      assert(ilo_dev_gen(cg->dev) >= ILO_GEN(8) || src_is_null(cg, 1));
+
+      if (!src_is_null(cg, 1))
+         return cg->src[idx].origin;
+
+      if (idx == 0) {
+         if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+            return cg->src[1].type << 27 |
+                   cg->src[1].file << 25;
+         } else {
+            return cg->flag_sub_reg_num << 25;
+         }
+      } else {
          return cg->src[0].origin;
+      }
    }
    else if (idx && cg->src[1].file == GEN6_FILE_IMM) {
       assert(!cg->src[1].absolute && !cg->src[1].negate);
@@ -449,10 +488,15 @@ translate_src(const struct codegen *cg, int idx)
               GEN6_ADDRMODE_INDIRECT << 15 |
               src->negate << 14 |
               src->absolute << 13 |
-              src->indirect_subreg << 10 |
-              (src->origin & 0x3f0) |
               src->swizzle[1] << 2 |
               src->swizzle[0];
+         if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+            dw |= src->indirect_subreg << 9 |
+                  (src->origin & 0x1f0);
+         } else {
+            dw |= src->indirect_subreg << 10 |
+                  (src->origin & 0x3f0);
+         }
       }
       else {
          assert(src->swizzle[0] == TOY_SWIZZLE_X &&
@@ -465,9 +509,14 @@ translate_src(const struct codegen *cg, int idx)
               src->horz_stride << 16 |
               GEN6_ADDRMODE_INDIRECT << 15 |
               src->negate << 14 |
-              src->absolute << 13 |
-              src->indirect_subreg << 10 |
-              (src->origin & 0x3ff);
+              src->absolute << 13;
+         if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+            dw |= src->indirect_subreg << 9 |
+                  (src->origin & 0x1ff);
+         } else {
+            dw |= src->indirect_subreg << 10 |
+                  (src->origin & 0x3ff);
+         }
       }
    }
    else {
@@ -521,8 +570,21 @@ translate_src(const struct codegen *cg, int idx)
       }
    }
 
-   if (idx == 0)
-      dw |= cg->flag_sub_reg_num << 25;
+   if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+      const bool indirect_origin_bit9 = (cg->dst.indirect) ?
+         (src->origin & 0x200) : 0;
+
+      if (idx == 0) {
+         dw |= indirect_origin_bit9 << 31 |
+               cg->src[1].type << 27 |
+               cg->src[1].file << 25;
+      } else {
+         dw |= indirect_origin_bit9 << 25;
+      }
+   } else {
+      if (idx == 0)
+         dw |= cg->flag_sub_reg_num << 25;
+   }
 
    return dw;
 }
@@ -532,10 +594,12 @@ translate_src(const struct codegen *cg, int idx)
  * 1-src/2-src format.
  */
 static uint16_t
-translate_dst_region(const struct codegen *cg)
+translate_dst_region_gen6(const struct codegen *cg)
 {
    const struct codegen_dst *dst = &cg->dst;
    uint16_t dw1_region;
+
+   ILO_DEV_ASSERT(cg->dev, 6, 8);
 
    if (dst->file == GEN6_FILE_IMM) {
       /* dst is immediate (JIP) when the opcode is a conditional branch */
@@ -575,17 +639,27 @@ translate_dst_region(const struct codegen *cg)
 
          dw1_region = GEN6_ADDRMODE_INDIRECT << 15 |
                       dst->horz_stride << 13 |
-                      dst->indirect_subreg << 10 |
-                      (dst->origin & 0x3f0) |
                       dst->writemask;
+         if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+            dw1_region |= dst->indirect_subreg << 9 |
+                          (dst->origin & 0x1f0);
+         } else {
+            dw1_region |= dst->indirect_subreg << 10 |
+                          (dst->origin & 0x3f0);
+         }
       }
       else {
          assert(dst->writemask == TOY_WRITEMASK_XYZW);
 
          dw1_region = GEN6_ADDRMODE_INDIRECT << 15 |
-                      dst->horz_stride << 13 |
-                      dst->indirect_subreg << 10 |
-                      (dst->origin & 0x3ff);
+                      dst->horz_stride << 13;
+         if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+            dw1_region |= dst->indirect_subreg << 9 |
+                          (dst->origin & 0x1ff);
+         } else {
+            dw1_region |= dst->indirect_subreg << 10 |
+                          (dst->origin & 0x3ff);
+         }
       }
    }
    else {
@@ -621,9 +695,11 @@ translate_dst_region(const struct codegen *cg)
  * Translate the destination operand to DW1 of the 1-src/2-src format.
  */
 static uint32_t
-translate_dst(const struct codegen *cg)
+translate_dst_gen6(const struct codegen *cg)
 {
-   return translate_dst_region(cg) << 16 |
+   ILO_DEV_ASSERT(cg->dev, 6, 7.5);
+
+   return translate_dst_region_gen6(cg) << 16 |
           cg->src[1].type << 12 |
           cg->src[1].file << 10 |
           cg->src[0].type << 7 |
@@ -632,14 +708,35 @@ translate_dst(const struct codegen *cg)
           cg->dst.file;
 }
 
+static uint32_t
+translate_dst_gen8(const struct codegen *cg)
+{
+   const bool indirect_origin_bit9 = (cg->dst.indirect) ?
+      (cg->dst.origin & 0x200) : 0;
+
+   ILO_DEV_ASSERT(cg->dev, 8, 8);
+
+   return translate_dst_region_gen6(cg) << 16 |
+          indirect_origin_bit9 << 15 |
+          cg->src[0].type << 11 |
+          cg->src[0].file << 9 |
+          cg->dst.type << 5 |
+          cg->dst.file << 3 |
+          cg->inst->mask_ctrl << 2 |
+          cg->flag_reg_num << 1 |
+          cg->flag_sub_reg_num;
+}
+
 /**
  * Translate the instruction to DW0 of the 1-src/2-src format.
  */
 static uint32_t
-translate_inst(const struct codegen *cg)
+translate_inst_gen6(const struct codegen *cg)
 {
    const bool debug_ctrl = false;
    const bool cmpt_ctrl = false;
+
+   ILO_DEV_ASSERT(cg->dev, 6, 7.5);
 
    assert(cg->inst->opcode < 128);
 
@@ -659,16 +756,49 @@ translate_inst(const struct codegen *cg)
           cg->inst->opcode;
 }
 
+static uint32_t
+translate_inst_gen8(const struct codegen *cg)
+{
+   const bool debug_ctrl = false;
+   const bool cmpt_ctrl = false;
+
+   ILO_DEV_ASSERT(cg->dev, 8, 8);
+
+   assert(cg->inst->opcode < 128);
+
+   return cg->inst->saturate << 31 |
+          debug_ctrl << 30 |
+          cmpt_ctrl << 29 |
+          cg->inst->acc_wr_ctrl << 28 |
+          cg->inst->cond_modifier << 24 |
+          cg->inst->exec_size << 21 |
+          cg->inst->pred_inv << 20 |
+          cg->inst->pred_ctrl << 16 |
+          cg->inst->thread_ctrl << 14 |
+          cg->inst->qtr_ctrl << 12 |
+          cg->inst->dep_ctrl << 9 |
+          cg->inst->access_mode << 8 |
+          cg->inst->opcode;
+}
+
 /**
  * Codegen an instruction in 1-src/2-src format.
  */
 static void
-codegen_inst(const struct codegen *cg, uint32_t *code)
+codegen_inst_gen6(const struct codegen *cg, uint32_t *code)
 {
-   code[0] = translate_inst(cg);
-   code[1] = translate_dst(cg);
-   code[2] = translate_src(cg, 0);
-   code[3] = translate_src(cg, 1);
+   ILO_DEV_ASSERT(cg->dev, 6, 8);
+
+   if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+      code[0] = translate_inst_gen8(cg);
+      code[1] = translate_dst_gen8(cg);
+   } else {
+      code[0] = translate_inst_gen6(cg);
+      code[1] = translate_dst_gen6(cg);
+   }
+
+   code[2] = translate_src_gen6(cg, 0);
+   code[3] = translate_src_gen6(cg, 1);
    assert(src_is_null(cg, 2));
 }
 
@@ -676,13 +806,18 @@ codegen_inst(const struct codegen *cg, uint32_t *code)
  * Codegen an instruction in 3-src format.
  */
 static void
-codegen_inst_3src(const struct codegen *cg, uint32_t *code)
+codegen_inst_3src_gen6(const struct codegen *cg, uint32_t *code)
 {
    const struct codegen_dst *dst = &cg->dst;
    uint32_t dw0, dw1, dw_src[3];
    int i;
 
-   dw0 = translate_inst(cg);
+   ILO_DEV_ASSERT(cg->dev, 6, 8);
+
+   if (ilo_dev_gen(cg->dev) >= ILO_GEN(8))
+      dw0 = translate_inst_gen8(cg);
+   else
+      dw0 = translate_inst_gen6(cg);
 
    /*
     * 3-src instruction restrictions
@@ -697,30 +832,42 @@ codegen_inst_3src(const struct codegen *cg, uint32_t *code)
    assert(cg->inst->access_mode == GEN6_ALIGN_16);
 
    assert(!dst->indirect);
-   assert((dst->file == GEN6_FILE_GRF &&
-           CG_REG_NUM(dst->origin) < 128) ||
-          (dst->file == GEN6_FILE_MRF &&
-           CG_REG_NUM(dst->origin) < 16));
+   assert((dst->file == GEN6_FILE_GRF && CG_REG_NUM(dst->origin) < 128) ||
+          (dst->file == GEN6_FILE_MRF && CG_REG_NUM(dst->origin) < 16));
    assert(!(dst->origin & 0x3));
    assert(dst->horz_stride == GEN6_HORZSTRIDE_1);
 
-   dw1 = dst->origin << 19 |
-         dst->writemask << 17 |
-         cg->src[2].negate << 9 |
-         cg->src[2].absolute << 8 |
-         cg->src[1].negate << 7 |
-         cg->src[1].absolute << 6 |
-         cg->src[0].negate << 5 |
-         cg->src[0].absolute << 4 |
-         cg->flag_sub_reg_num << 1 |
-         (dst->file == GEN6_FILE_MRF);
+   if (ilo_dev_gen(cg->dev) >= ILO_GEN(8)) {
+      dw1 = dst->origin << 19 |
+            dst->writemask << 17 |
+            cg->src[2].negate << 10 |
+            cg->src[2].negate << 10 |
+            cg->src[2].absolute << 9 |
+            cg->src[1].negate << 8 |
+            cg->src[1].absolute << 7 |
+            cg->src[0].negate << 6 |
+            cg->src[0].absolute << 5 |
+            cg->inst->mask_ctrl << 2 |
+            cg->flag_reg_num << 1 |
+            cg->flag_sub_reg_num;
+   } else {
+      dw1 = dst->origin << 19 |
+            dst->writemask << 17 |
+            cg->src[2].negate << 9 |
+            cg->src[2].absolute << 8 |
+            cg->src[1].negate << 7 |
+            cg->src[1].absolute << 6 |
+            cg->src[0].negate << 5 |
+            cg->src[0].absolute << 4 |
+            cg->flag_sub_reg_num << 1 |
+            (dst->file == GEN6_FILE_MRF);
+   }
 
    for (i = 0; i < 3; i++) {
       const struct codegen_src *src = &cg->src[i];
 
       assert(!src->indirect);
-      assert(src->file == GEN6_FILE_GRF &&
-             CG_REG_NUM(src->origin) < 128);
+      assert(src->file == GEN6_FILE_GRF && CG_REG_NUM(src->origin) < 128);
       assert(!(src->origin & 0x3));
 
       assert((src->vert_stride == GEN6_VERTSTRIDE_4 &&
@@ -881,14 +1028,16 @@ translate_swizzle(enum toy_swizzle swizzle)
  * Prepare for generating an instruction.
  */
 static void
-codegen_prepare(struct codegen *cg, const struct toy_inst *inst,
-                int pc, int rect_linear_width)
+codegen_prepare(struct codegen *cg, const struct ilo_dev *dev,
+                const struct toy_inst *inst, int pc, int rect_linear_width)
 {
    int i;
 
+   cg->dev = dev;
    cg->inst = inst;
    cg->pc = pc;
 
+   cg->flag_reg_num = 0;
    cg->flag_sub_reg_num = 0;
 
    cg->dst.file = translate_vfile(inst->dst.file);
@@ -1048,15 +1197,15 @@ toy_compiler_assemble(struct toy_compiler *tc, int *size)
          break;
       }
 
-      codegen_prepare(&cg, inst, pc, tc->rect_linear_width);
+      codegen_prepare(&cg, tc->dev, inst, pc, tc->rect_linear_width);
       codegen_validate_region_restrictions(&cg);
 
       switch (inst->opcode) {
       case GEN6_OPCODE_MAD:
-         codegen_inst_3src(&cg, dw);
+         codegen_inst_3src_gen6(&cg, dw);
          break;
       default:
-         codegen_inst(&cg, dw);
+         codegen_inst_gen6(&cg, dw);
          break;
       }
 

@@ -69,8 +69,23 @@ static const struct dri_debug_control debug_control[] = {
    { "ann",         DEBUG_ANNOTATION },
    { "no8",         DEBUG_NO8 },
    { "vec4vs",      DEBUG_VEC4VS },
+   { "spill",       DEBUG_SPILL },
+   { "cs",          DEBUG_CS },
    { NULL,    0 }
 };
+
+uint64_t
+intel_debug_flag_for_shader_stage(gl_shader_stage stage)
+{
+   uint64_t flags[] = {
+      [MESA_SHADER_VERTEX] = DEBUG_VS,
+      [MESA_SHADER_GEOMETRY] = DEBUG_GS,
+      [MESA_SHADER_FRAGMENT] = DEBUG_WM,
+      [MESA_SHADER_COMPUTE] = DEBUG_CS,
+   };
+   STATIC_ASSERT(MESA_SHADER_STAGES == 4);
+   return flags[stage];
+}
 
 void
 brw_process_intel_debug_variable(struct brw_context *brw)
@@ -92,4 +107,29 @@ brw_process_intel_debug_variable(struct brw_context *brw)
 
    if (INTEL_DEBUG & DEBUG_AUB)
       drm_intel_bufmgr_gem_set_aub_dump(brw->bufmgr, true);
+}
+
+/**
+ * Reads an environment variable and interprets its value as a boolean.
+ *
+ * Recognizes 0/false/no and 1/true/yes.  Other values result in the default value.
+ */
+bool
+brw_env_var_as_boolean(const char *var_name, bool default_value)
+{
+   const char *str = getenv(var_name);
+   if (str == NULL)
+      return default_value;
+
+   if (strcmp(str, "1") == 0 ||
+       strcasecmp(str, "true") == 0 ||
+       strcasecmp(str, "yes") == 0) {
+      return true;
+   } else if (strcmp(str, "0") == 0 ||
+              strcasecmp(str, "false") == 0 ||
+              strcasecmp(str, "no") == 0) {
+      return false;
+   } else {
+      return default_value;
+   }
 }

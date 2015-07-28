@@ -120,7 +120,7 @@ static GLuint get_bitmap_rect(GLsizei width, GLsizei height,
    GLuint count = 0;
 
    DBG("%s %d,%d %dx%d bitmap %dx%d skip %d src_offset %d mask %d\n",
-       __FUNCTION__, x,y,w,h,width,height,unpack->SkipPixels, src_offset, mask);
+       __func__, x,y,w,h,width,height,unpack->SkipPixels, src_offset, mask);
 
    if (invert) {
       first = h-1;

@@ -31,8 +31,6 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_format.h"
-#include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_parse.h"
 
 #include "freedreno_program.h"
 
@@ -127,13 +125,14 @@ emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 }
 
 void
-fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit)
+fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
+				 int nr, struct pipe_surface **bufs)
 {
 	const struct ir3_shader_variant *vp, *fp;
 	const struct ir3_info *vsi, *fsi;
 	enum a3xx_instrbuffermode fpbuffer, vpbuffer;
 	uint32_t fpbuffersz, vpbuffersz, fsoff;
-	uint32_t pos_regid, posz_regid, psize_regid, color_regid;
+	uint32_t pos_regid, posz_regid, psize_regid, color_regid[4] = {0};
 	int constmode;
 	int i, j, k;
 
@@ -199,8 +198,26 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 		ir3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
 	psize_regid = ir3_find_output_regid(vp,
 		ir3_semantic_name(TGSI_SEMANTIC_PSIZE, 0));
-	color_regid = ir3_find_output_regid(fp,
-		ir3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
+	if (fp->color0_mrt) {
+		color_regid[0] = color_regid[1] = color_regid[2] = color_regid[3] =
+			ir3_find_output_regid(fp, ir3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
+	} else {
+		for (int i = 0; i < fp->outputs_count; i++) {
+			ir3_semantic sem = fp->outputs[i].semantic;
+			unsigned idx = sem2idx(sem);
+			if (sem2name(sem) != TGSI_SEMANTIC_COLOR)
+				continue;
+			assert(idx < 4);
+			color_regid[idx] = fp->outputs[i].regid;
+		}
+	}
+
+	/* adjust regids for alpha output formats. there is no alpha render
+	 * format, so it's just treated like red
+	 */
+	for (i = 0; i < nr; i++)
+		if (util_format_is_alpha(pipe_surface_format(bufs[i])))
+			color_regid[i] += 3;
 
 	/* we could probably divide this up into things that need to be
 	 * emitted if frag-prog is dirty vs if vert-prog is dirty..
@@ -342,21 +359,23 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 	}
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_OUTPUT_REG, 1);
-	if (fp->writes_pos) {
-		OUT_RING(ring, A3XX_SP_FS_OUTPUT_REG_DEPTH_ENABLE |
-				A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID(posz_regid));
-	} else {
-		OUT_RING(ring, 0x00000000);
-	}
+	OUT_RING(ring,
+			 COND(fp->writes_pos, A3XX_SP_FS_OUTPUT_REG_DEPTH_ENABLE) |
+			 A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID(posz_regid) |
+			 A3XX_SP_FS_OUTPUT_REG_MRT(MAX2(1, nr) - 1));
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_MRT_REG(0), 4);
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(color_regid) |
-			COND(fp->key.half_precision, A3XX_SP_FS_MRT_REG_HALF_PRECISION) |
-			COND(util_format_is_pure_uint(emit->format), A3XX_SP_FS_MRT_REG_UINT) |
-			COND(util_format_is_pure_sint(emit->format), A3XX_SP_FS_MRT_REG_SINT));
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
+	for (i = 0; i < 4; i++) {
+		uint32_t mrt_reg = A3XX_SP_FS_MRT_REG_REGID(color_regid[i]) |
+			COND(fp->key.half_precision, A3XX_SP_FS_MRT_REG_HALF_PRECISION);
+
+		if (i < nr) {
+			enum pipe_format fmt = pipe_surface_format(bufs[i]);
+			mrt_reg |= COND(util_format_is_pure_uint(fmt), A3XX_SP_FS_MRT_REG_UINT) |
+				COND(util_format_is_pure_sint(fmt), A3XX_SP_FS_MRT_REG_SINT);
+		}
+		OUT_RING(ring, mrt_reg);
+	}
 
 	if (emit->key.binning_pass) {
 		OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
@@ -365,30 +384,43 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 				COND(vp->writes_psize, A3XX_VPC_ATTR_PSIZE));
 		OUT_RING(ring, 0x00000000);
 	} else {
-		uint32_t vinterp[4], flatshade[2];
+		uint32_t vinterp[4], flatshade[2], vpsrepl[4];
 
 		memset(vinterp, 0, sizeof(vinterp));
 		memset(flatshade, 0, sizeof(flatshade));
+		memset(vpsrepl, 0, sizeof(vpsrepl));
 
 		/* figure out VARYING_INTERP / FLAT_SHAD register values: */
 		for (j = -1; (j = ir3_next_varying(fp, j)) < (int)fp->inputs_count; ) {
 			uint32_t interp = fp->inputs[j].interpolate;
+
+			/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
+			 * instead.. rather than -8 everywhere else..
+			 */
+			uint32_t inloc = fp->inputs[j].inloc - 8;
+
+			/* currently assuming varyings aligned to 4 (not
+			 * packed):
+			 */
+			debug_assert((inloc % 4) == 0);
+
 			if ((interp == TGSI_INTERPOLATE_CONSTANT) ||
 					((interp == TGSI_INTERPOLATE_COLOR) && emit->rasterflat)) {
-				/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
-				 * instead.. rather than -8 everywhere else..
-				 */
-				uint32_t loc = fp->inputs[j].inloc - 8;
-
-				/* currently assuming varyings aligned to 4 (not
-				 * packed):
-				 */
-				debug_assert((loc % 4) == 0);
-
+				uint32_t loc = inloc;
 				for (i = 0; i < 4; i++, loc++) {
 					vinterp[loc / 16] |= FLAT << ((loc % 16) * 2);
 					flatshade[loc / 32] |= 1 << (loc % 32);
 				}
+			}
+
+			/* Replace the .xy coordinates with S/T from the point sprite. Set
+			 * interpolation bits for .zw such that they become .01
+			 */
+			if (emit->sprite_coord_enable & (1 << sem2idx(fp->inputs[j].semantic))) {
+				vpsrepl[inloc / 16] |= (emit->sprite_coord_mode ? 0x0d : 0x09)
+					<< ((inloc % 16) * 2);
+				vinterp[(inloc + 2) / 16] |= 2 << (((inloc + 2) % 16) * 2);
+				vinterp[(inloc + 3) / 16] |= 3 << (((inloc + 3) % 16) * 2);
 			}
 		}
 
@@ -407,10 +439,10 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 		OUT_RING(ring, vinterp[3]);    /* VPC_VARYING_INTERP[3].MODE */
 
 		OUT_PKT0(ring, REG_A3XX_VPC_VARYING_PS_REPL_MODE(0), 4);
-		OUT_RING(ring, fp->shader->vpsrepl[0]);    /* VPC_VARYING_PS_REPL[0].MODE */
-		OUT_RING(ring, fp->shader->vpsrepl[1]);    /* VPC_VARYING_PS_REPL[1].MODE */
-		OUT_RING(ring, fp->shader->vpsrepl[2]);    /* VPC_VARYING_PS_REPL[2].MODE */
-		OUT_RING(ring, fp->shader->vpsrepl[3]);    /* VPC_VARYING_PS_REPL[3].MODE */
+		OUT_RING(ring, vpsrepl[0]);    /* VPC_VARYING_PS_REPL[0].MODE */
+		OUT_RING(ring, vpsrepl[1]);    /* VPC_VARYING_PS_REPL[1].MODE */
+		OUT_RING(ring, vpsrepl[2]);    /* VPC_VARYING_PS_REPL[2].MODE */
+		OUT_RING(ring, vpsrepl[3]);    /* VPC_VARYING_PS_REPL[3].MODE */
 
 		OUT_PKT0(ring, REG_A3XX_SP_FS_FLAT_SHAD_MODE_REG_0, 2);
 		OUT_RING(ring, flatshade[0]);        /* SP_FS_FLAT_SHAD_MODE_REG_0 */
@@ -436,19 +468,6 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 	}
 }
 
-/* hack.. until we figure out how to deal w/ vpsrepl properly.. */
-static void
-fix_blit_fp(struct pipe_context *pctx)
-{
-	struct fd_context *ctx = fd_context(pctx);
-	struct fd3_shader_stateobj *so = ctx->blit_prog.fp;
-
-	so->shader->vpsrepl[0] = 0x99999999;
-	so->shader->vpsrepl[1] = 0x99999999;
-	so->shader->vpsrepl[2] = 0x99999999;
-	so->shader->vpsrepl[3] = 0x99999999;
-}
-
 void
 fd3_prog_init(struct pipe_context *pctx)
 {
@@ -459,6 +478,4 @@ fd3_prog_init(struct pipe_context *pctx)
 	pctx->delete_vs_state = fd3_vp_state_delete;
 
 	fd_prog_init(pctx);
-
-	fix_blit_fp(pctx);
 }

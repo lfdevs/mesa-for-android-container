@@ -386,10 +386,10 @@ xmesa_DrawPixels_8R8G8B( struct gl_context *ctx,
          const int rowLength = clippedUnpack.RowLength;
          XMesaImage ximage;
 
-         ASSERT(xmesa->xm_visual->dithered_pf == PF_8R8G8B);
-         ASSERT(xmesa->xm_visual->undithered_pf == PF_8R8G8B);
-         ASSERT(dpy);
-         ASSERT(gc);
+         assert(xmesa->xm_visual->dithered_pf == PF_8R8G8B);
+         assert(xmesa->xm_visual->undithered_pf == PF_8R8G8B);
+         assert(dpy);
+         assert(gc);
 
          /* This is a little tricky since all coordinates up to now have
           * been in the OpenGL bottom-to-top orientation.  X is top-to-bottom
@@ -518,9 +518,9 @@ xmesa_DrawPixels_5R6G5B( struct gl_context *ctx,
          const int rowLength = clippedUnpack.RowLength;
          XMesaImage ximage;
 
-         ASSERT(xmesa->xm_visual->undithered_pf == PF_5R6G5B);
-         ASSERT(dpy);
-         ASSERT(gc);
+         assert(xmesa->xm_visual->undithered_pf == PF_5R6G5B);
+         assert(dpy);
+         assert(gc);
 
          /* This is a little tricky since all coordinates up to now have
           * been in the OpenGL bottom-to-top orientation.  X is top-to-bottom
@@ -614,8 +614,8 @@ xmesa_CopyPixels( struct gl_context *ctx,
       struct xmesa_renderbuffer *dstXrb
          = xmesa_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]);
 
-      ASSERT(dpy);
-      ASSERT(gc);
+      assert(dpy);
+      assert(gc);
 
       /* Note: we don't do any special clipping work here.  We could,
        * but X will do it for us.

@@ -37,12 +37,15 @@ LOCAL_MODULE := libmesa_glsl_utils
 
 LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/glsl \
-	$(MESA_TOP)/src/mapi
+	$(MESA_TOP)/src/mapi \
+	$(MESA_TOP)/src/gallium/include \
+	$(MESA_TOP)/src/gallium/auxiliary
 
 LOCAL_SRC_FILES := \
 	main/imports.c \
 	program/prog_hash_table.c \
-	program/symbol_table.c
+	program/symbol_table.c \
+	program/dummy_errors.c
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
@@ -59,12 +62,15 @@ LOCAL_CFLAGS := -D_POSIX_C_SOURCE=199309L
 
 LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/glsl \
-	$(MESA_TOP)/src/mapi
+	$(MESA_TOP)/src/mapi \
+	$(MESA_TOP)/src/gallium/include \
+	$(MESA_TOP)/src/gallium/auxiliary
 
 LOCAL_SRC_FILES := \
 	main/imports.c \
 	program/prog_hash_table.c \
-	program/symbol_table.c
+	program/symbol_table.c \
+	program/dummy_errors.c
 
 include $(MESA_COMMON_MK)
 include $(BUILD_HOST_STATIC_LIBRARY)

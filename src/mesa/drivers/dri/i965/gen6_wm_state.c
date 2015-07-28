@@ -65,19 +65,18 @@ const struct brw_tracked_state gen6_wm_push_constants = {
    .emit = gen6_upload_wm_push_constants,
 };
 
-static void
-upload_wm_state(struct brw_context *brw)
+void
+gen6_upload_wm_state(struct brw_context *brw,
+                     const struct brw_fragment_program *fp,
+                     const struct brw_wm_prog_data *prog_data,
+                     const struct brw_stage_state *stage_state,
+                     bool multisampled_fbo, int min_inv_per_frag,
+                     bool dual_source_blend_enable, bool kill_enable,
+                     bool color_buffer_write_enable, bool msaa_enabled,
+                     bool line_stipple_enable, bool polygon_stipple_enable,
+                     bool statistic_enable)
 {
-   struct gl_context *ctx = &brw->ctx;
-   /* BRW_NEW_FRAGMENT_PROGRAM */
-   const struct brw_fragment_program *fp =
-      brw_fragment_program_const(brw->fragment_program);
-   /* BRW_NEW_FS_PROG_DATA */
-   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
    uint32_t dw2, dw4, dw5, dw6, ksp0, ksp2;
-
-   /* _NEW_BUFFERS */
-   bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
 
    /* We can't fold this into gen6_upload_wm_push_constants(), because
     * according to the SNB PRM, vol 2 part 1 section 7.2.2
@@ -102,8 +101,8 @@ upload_wm_state(struct brw_context *brw)
       /* Pointer to the WM constant buffer.  Covered by the set of
        * state flags from gen6_upload_wm_push_constants.
        */
-      OUT_BATCH(brw->wm.base.push_const_offset +
-		brw->wm.base.push_const_size - 1);
+      OUT_BATCH(stage_state->push_const_offset +
+                stage_state->push_const_size - 1);
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
@@ -111,14 +110,17 @@ upload_wm_state(struct brw_context *brw)
    }
 
    dw2 = dw4 = dw5 = dw6 = ksp2 = 0;
-   dw4 |= GEN6_WM_STATISTICS_ENABLE;
+
+   if (statistic_enable)
+      dw4 |= GEN6_WM_STATISTICS_ENABLE;
+
    dw5 |= GEN6_WM_LINE_AA_WIDTH_1_0;
    dw5 |= GEN6_WM_LINE_END_CAP_AA_WIDTH_0_5;
 
    if (prog_data->base.use_alt_mode)
       dw2 |= GEN6_WM_FLOATING_POINT_MODE_ALT;
 
-   dw2 |= (ALIGN(brw->wm.base.sampler_count, 4) / 4) <<
+   dw2 |= (ALIGN(stage_state->sampler_count, 4) / 4) <<
            GEN6_WM_SAMPLER_COUNT_SHIFT;
 
    dw2 |= ((prog_data->base.binding_table.size_bytes / 4) <<
@@ -126,13 +128,6 @@ upload_wm_state(struct brw_context *brw)
 
    dw5 |= (brw->max_wm_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
 
-   /* In case of non 1x per sample shading, only one of SIMD8 and SIMD16
-    * should be enabled. We do 'SIMD16 only' dispatch if a SIMD16 shader
-    * is successfully compiled. In majority of the cases that bring us
-    * better performance than 'SIMD8 only' dispatch.
-    */
-   int min_inv_per_frag =
-      _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program, false);
    assert(min_inv_per_frag >= 1);
 
    if (prog_data->prog_offset_16 || prog_data->no_8) {
@@ -144,34 +139,28 @@ upload_wm_state(struct brw_context *brw)
                  GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
          dw4 |= (prog_data->dispatch_grf_start_reg_16 <<
                  GEN6_WM_DISPATCH_START_GRF_SHIFT_2);
-         ksp0 = brw->wm.base.prog_offset;
-         ksp2 = brw->wm.base.prog_offset + prog_data->prog_offset_16;
+         ksp0 = stage_state->prog_offset;
+         ksp2 = stage_state->prog_offset + prog_data->prog_offset_16;
       } else {
          dw4 |= (prog_data->dispatch_grf_start_reg_16 <<
                 GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
-         ksp0 = brw->wm.base.prog_offset + prog_data->prog_offset_16;
+         ksp0 = stage_state->prog_offset + prog_data->prog_offset_16;
       }
    }
    else {
       dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
       dw4 |= (prog_data->base.dispatch_grf_start_reg <<
               GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
-      ksp0 = brw->wm.base.prog_offset;
+      ksp0 = stage_state->prog_offset;
    }
 
-   /* BRW_NEW_FS_PROG_DATA | _NEW_COLOR */
-   if (prog_data->dual_src_blend &&
-       (ctx->Color.BlendEnabled & 1) &&
-       ctx->Color.Blend[0]._UsesDualSrc) {
+   if (dual_source_blend_enable)
       dw5 |= GEN6_WM_DUAL_SOURCE_BLEND_ENABLE;
-   }
 
-   /* _NEW_LINE */
-   if (ctx->Line.StippleFlag)
+   if (line_stipple_enable)
       dw5 |= GEN6_WM_LINE_STIPPLE_ENABLE;
 
-   /* _NEW_POLYGON */
-   if (ctx->Polygon.StippleFlag)
+   if (polygon_stipple_enable)
       dw5 |= GEN6_WM_POLYGON_STIPPLE_ENABLE;
 
    /* BRW_NEW_FRAGMENT_PROGRAM */
@@ -182,17 +171,12 @@ upload_wm_state(struct brw_context *brw)
    dw6 |= prog_data->barycentric_interp_modes <<
       GEN6_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT;
 
-   /* _NEW_COLOR, _NEW_MULTISAMPLE */
-   if (prog_data->uses_kill || ctx->Color.AlphaEnabled ||
-       ctx->Multisample.SampleAlphaToCoverage ||
-       prog_data->uses_omask)
+   if (kill_enable)
       dw5 |= GEN6_WM_KILL_ENABLE;
 
-   /* _NEW_BUFFERS | _NEW_COLOR */
-   if (brw_color_buffer_write_enabled(brw) ||
-       dw5 & (GEN6_WM_KILL_ENABLE | GEN6_WM_COMPUTED_DEPTH)) {
+   if (color_buffer_write_enable ||
+       dw5 & (GEN6_WM_KILL_ENABLE | GEN6_WM_COMPUTED_DEPTH))
       dw5 |= GEN6_WM_DISPATCH_ENABLE;
-   }
 
    /* From the SNB PRM, volume 2 part 1, page 278:
     * "This bit is inserted in the PS payload header and made available to
@@ -207,8 +191,7 @@ upload_wm_state(struct brw_context *brw)
    dw6 |= prog_data->num_varying_inputs <<
       GEN6_WM_NUM_SF_OUTPUTS_SHIFT;
    if (multisampled_fbo) {
-      /* _NEW_MULTISAMPLE */
-      if (ctx->Multisample.Enabled)
+      if (msaa_enabled)
          dw6 |= GEN6_WM_MSRAST_ON_PATTERN;
       else
          dw6 |= GEN6_WM_MSRAST_OFF_PIXEL;
@@ -276,7 +259,7 @@ upload_wm_state(struct brw_context *brw)
    OUT_BATCH(ksp0);
    OUT_BATCH(dw2);
    if (prog_data->base.total_scratch) {
-      OUT_RELOC(brw->wm.base.scratch_bo,
+      OUT_RELOC(stage_state->scratch_bo,
                 I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
 		ffs(prog_data->base.total_scratch) - 11);
    } else {
@@ -288,6 +271,52 @@ upload_wm_state(struct brw_context *brw)
    OUT_BATCH(0); /* kernel 1 pointer */
    OUT_BATCH(ksp2);
    ADVANCE_BATCH();
+}
+
+static void
+upload_wm_state(struct brw_context *brw)
+{
+   struct gl_context *ctx = &brw->ctx;
+   /* BRW_NEW_FRAGMENT_PROGRAM */
+   const struct brw_fragment_program *fp =
+      brw_fragment_program_const(brw->fragment_program);
+   /* BRW_NEW_FS_PROG_DATA */
+   const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
+
+   /* _NEW_BUFFERS */
+   const bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
+
+   /* In case of non 1x per sample shading, only one of SIMD8 and SIMD16
+    * should be enabled. We do 'SIMD16 only' dispatch if a SIMD16 shader
+    * is successfully compiled. In majority of the cases that bring us
+    * better performance than 'SIMD8 only' dispatch.
+    */
+   const int min_inv_per_frag = _mesa_get_min_invocations_per_fragment(
+                                   ctx, brw->fragment_program, false);
+
+   /* BRW_NEW_FS_PROG_DATA | _NEW_COLOR */
+   const bool dual_src_blend_enable = prog_data->dual_src_blend &&
+                                      (ctx->Color.BlendEnabled & 1) &&
+                                      ctx->Color.Blend[0]._UsesDualSrc;
+
+   /* _NEW_COLOR, _NEW_MULTISAMPLE */
+   const bool kill_enable = prog_data->uses_kill || ctx->Color.AlphaEnabled ||
+                            ctx->Multisample.SampleAlphaToCoverage ||
+                            prog_data->uses_omask;
+
+   /* Rendering against the gl-context is always taken into account. */
+   const bool statistic_enable = true;
+
+   /* _NEW_LINE | _NEW_POLYGON | _NEW_BUFFERS | _NEW_COLOR |
+    * _NEW_MULTISAMPLE
+    */
+   gen6_upload_wm_state(brw, fp, prog_data, &brw->wm.base,
+                        multisampled_fbo, min_inv_per_frag,
+                        dual_src_blend_enable, kill_enable,
+                        brw_color_buffer_write_enabled(brw),
+                        ctx->Multisample.Enabled,
+                        ctx->Line.StippleFlag, ctx->Polygon.StippleFlag,
+                        statistic_enable);
 }
 
 const struct brw_tracked_state gen6_wm_state = {

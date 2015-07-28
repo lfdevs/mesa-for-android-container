@@ -9,6 +9,8 @@ if not env['llvm']:
 
 env = env.Clone()
 
+env.MSVC2008Compat()
+
 llvmpipe = env.ConvenienceLibrary(
 	target = 'llvmpipe',
 	source = env.ParseSourceList('Makefile.sources', 'C_SOURCES')

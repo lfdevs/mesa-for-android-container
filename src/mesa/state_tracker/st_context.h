@@ -93,6 +93,7 @@ struct st_context
    boolean has_time_elapsed;
    boolean has_shader_model3;
    boolean has_etc1;
+   boolean has_etc2;
    boolean prefer_blit_based_texture_transfer;
 
    boolean needs_texcoord_semantic;
@@ -213,7 +214,7 @@ struct st_context
 
 /* Need this so that we can implement Mesa callbacks in this module.
  */
-static INLINE struct st_context *st_context(struct gl_context *ctx)
+static inline struct st_context *st_context(struct gl_context *ctx)
 {
    return ctx->st;
 }
@@ -236,7 +237,8 @@ struct st_framebuffer
 };
 
 
-extern void st_init_driver_functions(struct dd_function_table *functions);
+extern void st_init_driver_functions(struct pipe_screen *screen,
+                                     struct dd_function_table *functions);
 
 void st_invalidate_state(struct gl_context * ctx, GLuint new_state);
 
@@ -245,7 +247,7 @@ void st_invalidate_state(struct gl_context * ctx, GLuint new_state);
 #define Y_0_TOP 1
 #define Y_0_BOTTOM 2
 
-static INLINE GLuint
+static inline GLuint
 st_fb_orientation(const struct gl_framebuffer *fb)
 {
    if (fb && _mesa_is_winsys_fbo(fb)) {

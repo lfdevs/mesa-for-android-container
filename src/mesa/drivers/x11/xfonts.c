@@ -28,6 +28,7 @@
  * Copyright (C) 1995 Thorsten.Ohl @ Physik.TH-Darmstadt.de
  */
 
+#include <stdio.h>
 #include "glxheader.h"
 #include "main/context.h"
 #include "main/imports.h"

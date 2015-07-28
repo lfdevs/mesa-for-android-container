@@ -65,11 +65,6 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
     */
    bool enable_hiz_ss = hiz || separate_stencil;
 
-
-   /* 3DSTATE_DEPTH_BUFFER, 3DSTATE_STENCIL_BUFFER are both
-    * non-pipelined state that will need the PIPE_CONTROL workaround.
-    */
-   intel_emit_post_sync_nonzero_flush(brw);
    intel_emit_depth_stall_flushes(brw);
 
    irb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
@@ -161,7 +156,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
 
       /* Emit hiz buffer. */
       if (hiz) {
-         struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_mt;
+         struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_buf->mt;
          uint32_t offset = 0;
 
          if (hiz_mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
@@ -238,8 +233,6 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
     *     3DSTATE_CLEAR_PARAMS packet must follow the DEPTH_BUFFER_STATE packet
     *     when HiZ is enabled and the DEPTH_BUFFER_STATE changes.
     */
-   intel_emit_post_sync_nonzero_flush(brw);
-
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_CLEAR_PARAMS << 16 |
              GEN5_DEPTH_CLEAR_VALID |

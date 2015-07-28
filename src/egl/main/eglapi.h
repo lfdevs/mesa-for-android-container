@@ -31,6 +31,11 @@
 #ifndef EGLAPI_INCLUDED
 #define EGLAPI_INCLUDED
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * A generic function ptr type
  */
@@ -71,29 +76,12 @@ typedef EGLBoolean (*SwapBuffers_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurfa
 typedef EGLBoolean (*CopyBuffers_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface, void *native_pixmap_target);
 
 /* misc funcs */
-typedef const char *(*QueryString_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLint name);
 typedef EGLBoolean (*WaitClient_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx);
 typedef EGLBoolean (*WaitNative_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLint engine);
 
 /* this function may be called from multiple threads at the same time */
 typedef _EGLProc (*GetProcAddress_t)(_EGLDriver *drv, const char *procname);
 
-
-
-#ifdef EGL_MESA_screen_surface
-typedef EGLBoolean (*ChooseModeMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLScreen *screen, const EGLint *attrib_list, EGLModeMESA *modes, EGLint modes_size, EGLint *num_modes);
-typedef EGLBoolean (*GetModesMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLScreen *screen, EGLModeMESA *modes, EGLint mode_size, EGLint *num_mode);
-typedef EGLBoolean (*GetModeAttribMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLMode *mode, EGLint attribute, EGLint *value);
-typedef EGLBoolean (*CopyContextMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *source, _EGLContext *dest, EGLint mask);
-typedef EGLBoolean (*GetScreensMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLScreenMESA *screens, EGLint max_screens, EGLint *num_screens);
-typedef _EGLSurface *(*CreateScreenSurfaceMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *config, const EGLint *attrib_list);
-typedef EGLBoolean (*ShowScreenSurfaceMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLScreen *screen, _EGLSurface *surface, _EGLMode *mode);
-typedef EGLBoolean (*ScreenPositionMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLScreen *screen, EGLint x, EGLint y);
-typedef EGLBoolean (*QueryScreenMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLScreen *screen, EGLint attribute, EGLint *value);
-typedef EGLBoolean (*QueryScreenSurfaceMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLScreen *screen, _EGLSurface **surface);
-typedef EGLBoolean (*QueryScreenModeMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLScreen *screen, _EGLMode **mode);
-typedef const char * (*QueryModeStringMESA_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLMode *mode);
-#endif /* EGL_MESA_screen_surface */
 
 
 typedef _EGLSurface *(*CreatePbufferFromClientBuffer_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLenum buftype, EGLClientBuffer buffer, _EGLConfig *config, const EGLint *attrib_list);
@@ -103,9 +91,10 @@ typedef _EGLImage *(*CreateImageKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLCo
 typedef EGLBoolean (*DestroyImageKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLImage *image);
 
 
-typedef _EGLSync *(*CreateSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLenum type, const EGLint *attrib_list);
+typedef _EGLSync *(*CreateSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, EGLenum type, const EGLint *attrib_list, const EGLAttribKHR *attrib_list64);
 typedef EGLBoolean (*DestroySyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync);
 typedef EGLint (*ClientWaitSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync, EGLint flags, EGLTimeKHR timeout);
+typedef EGLint (*WaitSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync);
 typedef EGLBoolean (*SignalSyncKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync, EGLenum mode);
 typedef EGLBoolean (*GetSyncAttribKHR_t)(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync, EGLint attribute, EGLint *value);
 
@@ -141,6 +130,11 @@ typedef EGLBoolean (*SwapBuffersWithDamageEXT_t) (_EGLDriver *drv, _EGLDisplay *
 
 typedef EGLBoolean (*GetSyncValuesCHROMIUM_t) (_EGLDisplay *dpy, _EGLSurface *surface, EGLuint64KHR *ust, EGLuint64KHR *msc, EGLuint64KHR *sbc);
 
+#ifdef EGL_MESA_image_dma_buf_export
+typedef EGLBoolean (*ExportDMABUFImageQueryMESA_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img, EGLint *fourcc, EGLint *nplanes, EGLuint64KHR *modifiers);
+typedef EGLBoolean (*ExportDMABUFImageMESA_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img, EGLint *fds, EGLint *strides, EGLint *offsets);
+#endif
+
 /**
  * The API dispatcher jumps through these functions
  */
@@ -170,25 +164,9 @@ struct _egl_api
    SwapBuffers_t SwapBuffers;
    CopyBuffers_t CopyBuffers;
 
-   QueryString_t QueryString;
    WaitClient_t WaitClient;
    WaitNative_t WaitNative;
    GetProcAddress_t GetProcAddress;
-
-#ifdef EGL_MESA_screen_surface
-   ChooseModeMESA_t ChooseModeMESA;
-   GetModesMESA_t GetModesMESA;
-   GetModeAttribMESA_t GetModeAttribMESA;
-   CopyContextMESA_t CopyContextMESA;
-   GetScreensMESA_t GetScreensMESA;
-   CreateScreenSurfaceMESA_t CreateScreenSurfaceMESA;
-   ShowScreenSurfaceMESA_t ShowScreenSurfaceMESA;
-   ScreenPositionMESA_t ScreenPositionMESA;
-   QueryScreenMESA_t QueryScreenMESA;
-   QueryScreenSurfaceMESA_t QueryScreenSurfaceMESA;
-   QueryScreenModeMESA_t QueryScreenModeMESA;
-   QueryModeStringMESA_t QueryModeStringMESA;
-#endif /* EGL_MESA_screen_surface */
 
    CreatePbufferFromClientBuffer_t CreatePbufferFromClientBuffer;
 
@@ -198,6 +176,7 @@ struct _egl_api
    CreateSyncKHR_t CreateSyncKHR;
    DestroySyncKHR_t DestroySyncKHR;
    ClientWaitSyncKHR_t ClientWaitSyncKHR;
+   WaitSyncKHR_t WaitSyncKHR;
    SignalSyncKHR_t SignalSyncKHR;
    GetSyncAttribKHR_t GetSyncAttribKHR;
 
@@ -228,6 +207,16 @@ struct _egl_api
 
    QueryBufferAge_t QueryBufferAge;
    GetSyncValuesCHROMIUM_t GetSyncValuesCHROMIUM;
+
+#ifdef EGL_MESA_image_dma_buf_export
+   ExportDMABUFImageQueryMESA_t ExportDMABUFImageQueryMESA;
+   ExportDMABUFImageMESA_t ExportDMABUFImageMESA;
+#endif
 };
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* EGLAPI_INCLUDED */

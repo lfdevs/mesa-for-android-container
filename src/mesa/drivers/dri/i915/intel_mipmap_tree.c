@@ -80,7 +80,7 @@ intel_miptree_create_layout(struct intel_context *intel,
    if (!mt)
       return NULL;
 
-   DBG("%s target %s format %s level %d..%d <-- %p\n", __FUNCTION__,
+   DBG("%s target %s format %s level %d..%d <-- %p\n", __func__,
        _mesa_lookup_enum_by_nr(target),
        _mesa_get_format_name(format),
        first_level, last_level, mt);
@@ -381,7 +381,7 @@ intel_miptree_reference(struct intel_mipmap_tree **dst,
 
    if (src) {
       src->refcount++;
-      DBG("%s %p refcount now %d\n", __FUNCTION__, src, src->refcount);
+      DBG("%s %p refcount now %d\n", __func__, src, src->refcount);
    }
 
    *dst = src;
@@ -394,11 +394,11 @@ intel_miptree_release(struct intel_mipmap_tree **mt)
    if (!*mt)
       return;
 
-   DBG("%s %p refcount will be %d\n", __FUNCTION__, *mt, (*mt)->refcount - 1);
+   DBG("%s %p refcount will be %d\n", __func__, *mt, (*mt)->refcount - 1);
    if (--(*mt)->refcount <= 0) {
       GLuint i;
 
-      DBG("%s deleting %p\n", __FUNCTION__, *mt);
+      DBG("%s deleting %p\n", __func__, *mt);
 
       intel_region_release(&((*mt)->region));
 
@@ -499,7 +499,7 @@ intel_miptree_set_level_info(struct intel_mipmap_tree *mt,
    mt->level[level].level_x = x;
    mt->level[level].level_y = y;
 
-   DBG("%s level %d size: %d,%d,%d offset %d,%d\n", __FUNCTION__,
+   DBG("%s level %d size: %d,%d,%d offset %d,%d\n", __func__,
        level, w, h, d, x, y);
 
    assert(mt->level[level].slice == NULL);
@@ -524,7 +524,7 @@ intel_miptree_set_image_offset(struct intel_mipmap_tree *mt,
    mt->level[level].slice[img].y_offset = mt->level[level].level_y + y;
 
    DBG("%s level %d img %d pos %d,%d\n",
-       __FUNCTION__, level, img,
+       __func__, level, img,
        mt->level[level].slice[img].x_offset,
        mt->level[level].slice[img].y_offset);
 }
@@ -765,7 +765,7 @@ intel_miptree_map_gtt(struct intel_context *intel,
       map->ptr = base + y * map->stride + x * mt->cpp;
    }
 
-   DBG("%s: %d,%d %dx%d from mt %p (%s) %d,%d = %p/%d\n", __FUNCTION__,
+   DBG("%s: %d,%d %dx%d from mt %p (%s) %d,%d = %p/%d\n", __func__,
        map->x, map->y, map->w, map->h,
        mt, _mesa_get_format_name(mt->format),
        x, y, map->ptr, map->stride);
@@ -811,7 +811,7 @@ intel_miptree_map_blit(struct intel_context *intel,
    intel_batchbuffer_flush(intel);
    map->ptr = intel_miptree_map_raw(intel, map->mt);
 
-   DBG("%s: %d,%d %dx%d from mt %p (%s) %d,%d = %p/%d\n", __FUNCTION__,
+   DBG("%s: %d,%d %dx%d from mt %p (%s) %d,%d = %p/%d\n", __func__,
        map->x, map->y, map->w, map->h,
        mt, _mesa_get_format_name(mt->format),
        level, slice, map->ptr, map->stride);
@@ -943,7 +943,7 @@ intel_miptree_unmap(struct intel_context *intel,
    if (!map)
       return;
 
-   DBG("%s: mt %p (%s) level %d slice %d\n", __FUNCTION__,
+   DBG("%s: mt %p (%s) level %d slice %d\n", __func__,
        mt, _mesa_get_format_name(mt->format), level, slice);
 
    if (map->mt) {

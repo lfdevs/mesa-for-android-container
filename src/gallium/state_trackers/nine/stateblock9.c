@@ -501,7 +501,7 @@ NineStateBlock9_Apply( struct NineStateBlock9 *This )
                 continue;
             if (tex) {
                 tex->bind_count++;
-                if ((tex->dirty | tex->dirty_mip) && LIST_IS_EMPTY(&tex->list))
+                if ((tex->managed.dirty | tex->dirty_mip) && LIST_IS_EMPTY(&tex->list))
                     list_add(&tex->list, &This->base.device->update_textures);
                 dst->samplers_shadow |= tex->shadow << s;
             }

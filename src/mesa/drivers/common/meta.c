@@ -41,7 +41,6 @@
 #include "main/bufferobj.h"
 #include "main/buffers.h"
 #include "main/clear.h"
-#include "main/colortab.h"
 #include "main/condrender.h"
 #include "main/depth.h"
 #include "main/enable.h"
@@ -247,9 +246,9 @@ _mesa_meta_setup_blit_shader(struct gl_context *ctx,
                              struct blit_shader_table *table)
 {
    char *vs_source, *fs_source;
-   void *const mem_ctx = ralloc_context(NULL);
    struct blit_shader *shader = choose_blit_shader(target, table);
    const char *vs_input, *vs_output, *fs_input, *vs_preprocess, *fs_preprocess;
+   void *mem_ctx;
 
    if (ctx->Const.GLSLVersion < 130) {
       vs_preprocess = "";
@@ -272,6 +271,8 @@ _mesa_meta_setup_blit_shader(struct gl_context *ctx,
       _mesa_UseProgram(shader->shader_prog);
       return;
    }
+
+   mem_ctx = ralloc_context(NULL);
 
    vs_source = ralloc_asprintf(mem_ctx,
                 "%s\n"
@@ -393,7 +394,7 @@ _mesa_meta_setup_vertex_objects(GLuint *VAO, GLuint *VBO,
 void
 _mesa_meta_init(struct gl_context *ctx)
 {
-   ASSERT(!ctx->Meta);
+   assert(!ctx->Meta);
 
    ctx->Meta = CALLOC_STRUCT(gl_meta_state);
 }
@@ -727,7 +728,7 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       save->DepthNear = ctx->ViewportArray[0].Near;
       save->DepthFar = ctx->ViewportArray[0].Far;
       /* set depth range to default */
-      _mesa_DepthRange(0.0, 1.0);
+      _mesa_set_depth_range(ctx, 0, 0.0, 1.0);
    }
 
    if (state & MESA_META_CLAMP_FRAGMENT_COLOR) {
@@ -823,6 +824,8 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
 void
 _mesa_meta_end(struct gl_context *ctx)
 {
+   assert(ctx->Meta->SaveStackDepth > 0);
+
    struct save_state *save = &ctx->Meta->Save[ctx->Meta->SaveStackDepth - 1];
    const GLbitfield state = save->SavedState;
    int i;
@@ -1045,7 +1048,7 @@ _mesa_meta_end(struct gl_context *ctx)
    if (state & MESA_META_TEXTURE) {
       GLuint u, tgt;
 
-      ASSERT(ctx->Texture.CurrentUnit == 0);
+      assert(ctx->Texture.CurrentUnit == 0);
 
       /* restore texenv for unit[0] */
       _mesa_TexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, save->EnvMode);
@@ -1126,7 +1129,7 @@ _mesa_meta_end(struct gl_context *ctx)
          _mesa_set_viewport(ctx, 0, save->ViewportX, save->ViewportY,
                             save->ViewportW, save->ViewportH);
       }
-      _mesa_DepthRange(save->DepthNear, save->DepthFar);
+      _mesa_set_depth_range(ctx, 0, save->DepthNear, save->DepthFar);
    }
 
    if (state & MESA_META_CLAMP_FRAGMENT_COLOR &&
@@ -1208,7 +1211,8 @@ _mesa_meta_end(struct gl_context *ctx)
       _mesa_BindRenderbuffer(GL_RENDERBUFFER, save->RenderbufferName);
 
    if (state & MESA_META_DRAW_BUFFERS) {
-      _mesa_drawbuffers(ctx, ctx->Const.MaxDrawBuffers, save->ColorDrawBuffers, NULL);
+      _mesa_drawbuffers(ctx, ctx->DrawBuffer, ctx->Const.MaxDrawBuffers,
+                        save->ColorDrawBuffers, NULL);
    }
 
    ctx->Meta->SaveStackDepth--;
@@ -1332,8 +1336,8 @@ _mesa_meta_alloc_texture(struct temp_texture *tex,
 {
    GLboolean newTex = GL_FALSE;
 
-   ASSERT(width <= tex->MaxSize);
-   ASSERT(height <= tex->MaxSize);
+   assert(width <= tex->MaxSize);
+   assert(height <= tex->MaxSize);
 
    if (width > tex->Width ||
        height > tex->Height ||
@@ -1747,7 +1751,7 @@ meta_clear(struct gl_context *ctx, GLbitfield buffers, bool glsl)
          _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
    }
    else {
-      ASSERT(metaSave & MESA_META_COLOR_MASK);
+      assert(metaSave & MESA_META_COLOR_MASK);
       _mesa_ColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
    }
 

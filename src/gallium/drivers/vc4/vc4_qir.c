@@ -59,7 +59,6 @@ static const struct qir_op_info qir_op_info[] = {
         [QOP_XOR] = { "xor", 1, 2 },
         [QOP_NOT] = { "not", 1, 1 },
 
-        [QOP_SF] = { "sf", 0, 1 },
         [QOP_SEL_X_0_NS] = { "fsel_x_0_ns", 1, 1, false, true },
         [QOP_SEL_X_0_NC] = { "fsel_x_0_nc", 1, 1, false, true },
         [QOP_SEL_X_0_ZS] = { "fsel_x_0_zs", 1, 1, false, true },
@@ -175,6 +174,12 @@ qir_is_multi_instruction(struct qinst *inst)
 }
 
 bool
+qir_is_tex(struct qinst *inst)
+{
+        return inst->op >= QOP_TEX_S && inst->op <= QOP_TEX_DIRECT;
+}
+
+bool
 qir_depends_on_flags(struct qinst *inst)
 {
         switch (inst->op) {
@@ -282,7 +287,9 @@ qir_print_reg(struct vc4_compile *c, struct qreg reg, bool write)
 void
 qir_dump_inst(struct vc4_compile *c, struct qinst *inst)
 {
-        fprintf(stderr, "%s ", qir_get_op_name(inst->op));
+        fprintf(stderr, "%s%s ",
+                qir_get_op_name(inst->op),
+                inst->sf ? ".sf" : "");
 
         qir_print_reg(c, inst->dst, true);
         for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
@@ -310,6 +317,15 @@ qir_get_temp(struct vc4_compile *c)
 
         reg.file = QFILE_TEMP;
         reg.index = c->num_temps++;
+
+        if (c->num_temps > c->defs_array_size) {
+                uint32_t old_size = c->defs_array_size;
+                c->defs_array_size = MAX2(old_size * 2, 16);
+                c->defs = reralloc(c, c->defs, struct qinst *,
+                                   c->defs_array_size);
+                memset(&c->defs[old_size], 0,
+                       sizeof(c->defs[0]) * (c->defs_array_size - old_size));
+        }
 
         return reg;
 }
@@ -351,6 +367,9 @@ qir_inst4(enum qop op, struct qreg dst,
 void
 qir_emit(struct vc4_compile *c, struct qinst *inst)
 {
+        if (inst->dst.file == QFILE_TEMP)
+                c->defs[inst->dst.index] = inst;
+
         insert_at_tail(&c->instructions, &inst->link);
 }
 
@@ -372,22 +391,28 @@ qir_compile_init(void)
         c->output_color_index = -1;
         c->output_point_size_index = -1;
 
+        c->def_ht = _mesa_hash_table_create(c, _mesa_hash_pointer,
+                                            _mesa_key_pointer_equal);
+
         return c;
 }
 
 void
-qir_remove_instruction(struct qinst *qinst)
+qir_remove_instruction(struct vc4_compile *c, struct qinst *qinst)
 {
+        if (qinst->dst.file == QFILE_TEMP)
+                c->defs[qinst->dst.index] = NULL;
+
         remove_from_list(&qinst->link);
         free(qinst->src);
         free(qinst);
 }
 
 struct qreg
-qir_follow_movs(struct qinst **defs, struct qreg reg)
+qir_follow_movs(struct vc4_compile *c, struct qreg reg)
 {
-        while (reg.file == QFILE_TEMP && defs[reg.index]->op == QOP_MOV)
-                reg = defs[reg.index]->src[0];
+        while (reg.file == QFILE_TEMP && c->defs[reg.index]->op == QOP_MOV)
+                reg = c->defs[reg.index]->src[0];
 
         return reg;
 }
@@ -398,7 +423,7 @@ qir_compile_destroy(struct vc4_compile *c)
         while (!is_empty_list(&c->instructions)) {
                 struct qinst *qinst =
                         (struct qinst *)first_elem(&c->instructions);
-                qir_remove_instruction(qinst);
+                qir_remove_instruction(c, qinst);
         }
 
         ralloc_free(c);
@@ -414,6 +439,56 @@ qir_get_stage_name(enum qstage stage)
         };
 
         return names[stage];
+}
+
+struct qreg
+qir_uniform(struct vc4_compile *c,
+            enum quniform_contents contents,
+            uint32_t data)
+{
+        for (int i = 0; i < c->num_uniforms; i++) {
+                if (c->uniform_contents[i] == contents &&
+                    c->uniform_data[i] == data) {
+                        return (struct qreg) { QFILE_UNIF, i };
+                }
+        }
+
+        uint32_t uniform = c->num_uniforms++;
+        struct qreg u = { QFILE_UNIF, uniform };
+
+        if (uniform >= c->uniform_array_size) {
+                c->uniform_array_size = MAX2(MAX2(16, uniform + 1),
+                                             c->uniform_array_size * 2);
+
+                c->uniform_data = reralloc(c, c->uniform_data,
+                                           uint32_t,
+                                           c->uniform_array_size);
+                c->uniform_contents = reralloc(c, c->uniform_contents,
+                                               enum quniform_contents,
+                                               c->uniform_array_size);
+        }
+
+        c->uniform_contents[uniform] = contents;
+        c->uniform_data[uniform] = data;
+
+        return u;
+}
+
+void
+qir_SF(struct vc4_compile *c, struct qreg src)
+{
+        struct qinst *last_inst = NULL;
+        if (!is_empty_list(&c->instructions))
+                last_inst = (struct qinst *)c->instructions.prev;
+
+        if (!last_inst ||
+            last_inst->dst.file != src.file ||
+            last_inst->dst.index != src.index ||
+            qir_is_multi_instruction(last_inst)) {
+                src = qir_MOV(c, src);
+                last_inst = (struct qinst *)c->instructions.prev;
+        }
+        last_inst->sf = true;
 }
 
 #define OPTPASS(func)                                                   \
@@ -440,6 +515,7 @@ qir_optimize(struct vc4_compile *c)
 
                 OPTPASS(qir_opt_algebraic);
                 OPTPASS(qir_opt_cse);
+                OPTPASS(qir_opt_constant_folding);
                 OPTPASS(qir_opt_copy_propagation);
                 OPTPASS(qir_opt_dead_code);
                 OPTPASS(qir_opt_small_immediates);

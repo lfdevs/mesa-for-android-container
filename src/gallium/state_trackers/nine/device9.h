@@ -42,7 +42,7 @@ struct u_upload_mgr;
 struct NineSwapChain9;
 struct NineStateBlock9;
 
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 struct NineDevice9
 {
@@ -117,6 +117,10 @@ struct NineDevice9
         boolean vs_integer;
         boolean ps_integer;
     } driver_caps;
+
+    struct {
+        boolean buggy_barycentrics;
+    } driver_bugs;
 
     struct u_upload_mgr *upload;
 

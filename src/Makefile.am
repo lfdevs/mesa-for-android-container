@@ -58,6 +58,9 @@ EXTRA_DIST = \
 	egl/docs \
 	getopt hgl SConscript
 
+AM_CFLAGS = $(VISIBILITY_CFLAGS)
+AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS)
+
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include/ \
 	-I$(top_srcdir)/src/mapi/ \
@@ -69,4 +72,5 @@ noinst_LTLIBRARIES = libglsl_util.la
 libglsl_util_la_SOURCES = \
 	mesa/main/imports.c \
 	mesa/program/prog_hash_table.c \
-	mesa/program/symbol_table.c
+	mesa/program/symbol_table.c \
+	mesa/program/dummy_errors.c

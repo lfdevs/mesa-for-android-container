@@ -175,6 +175,51 @@ get_tex_depth_stencil(struct gl_context *ctx, GLuint dimensions,
    }
 }
 
+/**
+ * glGetTexImage for stencil pixels.
+ */
+static void
+get_tex_stencil(struct gl_context *ctx, GLuint dimensions,
+                GLenum format, GLenum type, GLvoid *pixels,
+                struct gl_texture_image *texImage)
+{
+   const GLint width = texImage->Width;
+   const GLint height = texImage->Height;
+   const GLint depth = texImage->Depth;
+   GLint img, row;
+
+   assert(format == GL_STENCIL_INDEX);
+
+   for (img = 0; img < depth; img++) {
+      GLubyte *srcMap;
+      GLint rowstride;
+
+      /* map src texture buffer */
+      ctx->Driver.MapTextureImage(ctx, texImage, img,
+                                  0, 0, width, height, GL_MAP_READ_BIT,
+                                  &srcMap, &rowstride);
+
+      if (srcMap) {
+         for (row = 0; row < height; row++) {
+            const GLubyte *src = srcMap + row * rowstride;
+            void *dest = _mesa_image_address(dimensions, &ctx->Pack, pixels,
+                                             width, height, format, type,
+                                             img, row, 0);
+            _mesa_unpack_ubyte_stencil_row(texImage->TexFormat,
+                                           width,
+                                           (const GLuint *) src,
+                                           dest);
+         }
+
+         ctx->Driver.UnmapTextureImage(ctx, texImage, img);
+      }
+      else {
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage");
+         break;
+      }
+   }
+}
+
 
 /**
  * glGetTexImage for YCbCr pixels.
@@ -285,7 +330,7 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
    }
 
    /* Depending on the base format involved we may need to apply a rebase
-    * tranaform (for example: if we download to a Luminance format we want
+    * transform (for example: if we download to a Luminance format we want
     * G=0 and B=0).
     */
    if (baseFormat == GL_LUMINANCE ||
@@ -375,7 +420,7 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
    GLuint height = texImage->Height;
    GLuint depth = texImage->Depth;
    GLuint img;
-   GLboolean dst_is_integer = _mesa_is_enum_format_integer(format);
+   GLboolean dst_is_integer;
    uint32_t dst_format;
    int dst_stride;
    uint8_t rebaseSwizzle[4];
@@ -388,7 +433,7 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
    }
 
    /* Depending on the base format involved we may need to apply a rebase
-    * tranaform (for example: if we download to a Luminance format we want
+    * transform (for example: if we download to a Luminance format we want
     * G=0 and B=0).
     */
    if (texImage->_BaseFormat == GL_LUMINANCE ||
@@ -423,6 +468,7 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
     * integer then transferOps do not apply.
     */
    assert(!transferOps || (transferOps && !dst_is_integer));
+   (void) dst_is_integer; /* silence unused var warning */
 
    for (img = 0; img < depth; img++) {
       GLubyte *srcMap;
@@ -450,7 +496,7 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
       if (transferOps) {
          uint32_t rgba_format;
          int rgba_stride;
-         bool need_convert;
+         bool need_convert = false;
 
          /* We will convert to RGBA float */
          rgba_format = RGBA32_FLOAT;
@@ -462,7 +508,6 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
           * buffer.
           */
          if (format == rgba_format) {
-            need_convert = false;
             rgba = dest;
          } else if (rgba == NULL) { /* Allocate the RGBA buffer only once */
             need_convert = true;
@@ -684,6 +729,9 @@ _mesa_GetTexImage_sw(struct gl_context *ctx,
    else if (format == GL_DEPTH_STENCIL_EXT) {
       get_tex_depth_stencil(ctx, dimensions, format, type, pixels, texImage);
    }
+   else if (format == GL_STENCIL_INDEX) {
+      get_tex_stencil(ctx, dimensions, format, type, pixels, texImage);
+   }
    else if (format == GL_YCBCR_MESA) {
       get_tex_ycbcr(ctx, dimensions, format, type, pixels, texImage);
    }
@@ -879,7 +927,7 @@ getteximage_error_check(struct gl_context *ctx,
                   "glGetTex%sImage(format mismatch)", suffix);
       return GL_TRUE;
    }
-   else if (_mesa_is_enum_format_integer(format) !=
+   else if (!_mesa_is_stencil_format(format) && _mesa_is_enum_format_integer(format) !=
             _mesa_is_format_integer(texImage->TexFormat)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glGetTex%sImage(format mismatch)", suffix);
@@ -1088,48 +1136,9 @@ _mesa_GetTextureImage(GLuint texture, GLint level, GLenum format,
    /* Must handle special case GL_TEXTURE_CUBE_MAP. */
    if (texObj->Target == GL_TEXTURE_CUBE_MAP) {
 
-      /* Error checking */
-      if (texObj->NumLayers < 6) {
-         /* Not enough image planes for a cube map.  The spec does not say
-          * what should happen in this case because the user has always
-          * specified each cube face separately (using
-          * GL_TEXTURE_CUBE_MAP_POSITIVE_X+i) in previous GL versions.
-          * This is addressed in Khronos Bug 13223.
-          */
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "glGetTextureImage(insufficient cube map storage)");
-         return;
-      }
-
-      /*
-       * What do we do if the user created a texture with the following code
-       * and then called this function with its handle?
-       *
-       *    GLuint tex;
-       *    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &tex);
-       *    glBindTexture(GL_TEXTURE_CUBE_MAP, tex);
-       *    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, ...);
-       *    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0, ...);
-       *    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0, ...);
-       *    // Note: GL_TEXTURE_CUBE_MAP_NEGATIVE_Y not set, or given the
-       *    // wrong format, or given the wrong size, etc.
-       *    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0, ...);
-       *    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, ...);
-       *
-       * A bug has been filed against the spec for this case.  In the
-       * meantime, we will check for cube completeness.
-       *
-       * According to Section 8.17 Texture Completeness in the OpenGL 4.5
-       * Core Profile spec (30.10.2014):
-       *    "[A] cube map texture is cube complete if the
-       *    following conditions all hold true: The [base level] texture
-       *    images of each of the six cube map faces have identical, positive,
-       *    and square dimensions. The [base level] images were each specified
-       *    with the same internal format."
-       *
-       * It seems reasonable to check for cube completeness of an arbitrary
-       * level here so that the returned data has a consistent format and size
-       * and therefore fits in the user's buffer.
+      /* Make sure the texture object is a proper cube.
+       * (See texturesubimage in teximage.c for details on why this check is
+       * performed.)
        */
       if (!_mesa_cube_level_complete(texObj, level)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
@@ -1140,6 +1149,8 @@ _mesa_GetTextureImage(GLuint texture, GLint level, GLenum format,
       /* Copy each face. */
       for (i = 0; i < 6; ++i) {
          texImage = texObj->Image[i][level];
+         assert(texImage);
+
          _mesa_get_texture_image(ctx, texObj, texImage, texObj->Target, level,
                                  format, type, bufSize, pixels, true);
 
@@ -1340,13 +1351,21 @@ _mesa_GetCompressedTextureImage(GLuint texture, GLint level,
 
    /* Must handle special case GL_TEXTURE_CUBE_MAP. */
    if (texObj->Target == GL_TEXTURE_CUBE_MAP) {
-      assert(texObj->NumLayers >= 6);
+
+      /* Make sure the texture object is a proper cube.
+       * (See texturesubimage in teximage.c for details on why this check is
+       * performed.)
+       */
+      if (!_mesa_cube_level_complete(texObj, level)) {
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "glGetCompressedTextureImage(cube map incomplete)");
+         return;
+      }
 
       /* Copy each face. */
       for (i = 0; i < 6; ++i) {
          texImage = texObj->Image[i][level];
-         if (!texImage)
-            return;
+         assert(texImage);
 
          _mesa_get_compressed_texture_image(ctx, texObj, texImage,
                                             texObj->Target, level,

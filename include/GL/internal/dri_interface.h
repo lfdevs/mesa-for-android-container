@@ -85,6 +85,7 @@ typedef struct __DRIdri2ExtensionRec		__DRIdri2Extension;
 typedef struct __DRIdri2LoaderExtensionRec	__DRIdri2LoaderExtension;
 typedef struct __DRI2flushExtensionRec	__DRI2flushExtension;
 typedef struct __DRI2throttleExtensionRec	__DRI2throttleExtension;
+typedef struct __DRI2fenceExtensionRec          __DRI2fenceExtension;
 
 
 typedef struct __DRIimageLoaderExtensionRec     __DRIimageLoaderExtension;
@@ -338,6 +339,65 @@ struct __DRI2throttleExtensionRec {
 		    __DRIdrawable *drawable,
 		    enum __DRI2throttleReason reason);
 };
+
+
+/**
+ * Extension for fences / synchronization objects.
+ */
+
+#define __DRI2_FENCE "DRI2_Fence"
+#define __DRI2_FENCE_VERSION 1
+
+#define __DRI2_FENCE_TIMEOUT_INFINITE     0xffffffffffffffffllu
+
+#define __DRI2_FENCE_FLAG_FLUSH_COMMANDS  (1 << 0)
+
+struct __DRI2fenceExtensionRec {
+   __DRIextension base;
+
+   /**
+    * Create and insert a fence into the command stream of the context.
+    */
+   void *(*create_fence)(__DRIcontext *ctx);
+
+   /**
+    * Get a fence associated with the OpenCL event object.
+    * This can be NULL, meaning that OpenCL interoperability is not supported.
+    */
+   void *(*get_fence_from_cl_event)(__DRIscreen *screen, intptr_t cl_event);
+
+   /**
+    * Destroy a fence.
+    */
+   void (*destroy_fence)(__DRIscreen *screen, void *fence);
+
+   /**
+    * This function waits and doesn't return until the fence is signalled
+    * or the timeout expires. It returns true if the fence has been signaled.
+    *
+    * \param ctx     the context where commands are flushed
+    * \param fence   the fence
+    * \param flags   a combination of __DRI2_FENCE_FLAG_xxx flags
+    * \param timeout the timeout in ns or __DRI2_FENCE_TIMEOUT_INFINITE
+    */
+   GLboolean (*client_wait_sync)(__DRIcontext *ctx, void *fence,
+                                 unsigned flags, uint64_t timeout);
+
+   /**
+    * This function enqueues a wait command into the command stream of
+    * the context and then returns. When the execution reaches the wait
+    * command, no further execution will be done in the context until
+    * the fence is signaled. This is a no-op if the device doesn't support
+    * parallel execution of contexts.
+    *
+    * \param ctx     the context where the waiting is done
+    * \param fence   the fence
+    * \param flags   a combination of __DRI2_FENCE_FLAG_xxx flags that make
+    *                sense with this function (right now there are none)
+    */
+   void (*server_wait_sync)(__DRIcontext *ctx, void *fence, unsigned flags);
+};
+
 
 /*@}*/
 
@@ -1006,7 +1066,7 @@ struct __DRIdri2ExtensionRec {
  * extensions.
  */
 #define __DRI_IMAGE "DRI_IMAGE"
-#define __DRI_IMAGE_VERSION 10
+#define __DRI_IMAGE_VERSION 11
 
 /**
  * These formats correspond to the similarly named MESA_FORMAT_*
@@ -1097,6 +1157,8 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_ATTRIB_FD           0x2007 /* available in versions
                                                 * 7+. Each query will return a
                                                 * new fd. */
+#define __DRI_IMAGE_ATTRIB_FOURCC       0x2008 /* available in versions 11 */
+#define __DRI_IMAGE_ATTRIB_NUM_PLANES   0x2009 /* available in versions 11 */
 
 enum __DRIYUVColorSpace {
    __DRI_YUV_COLOR_SPACE_UNDEFINED = 0,

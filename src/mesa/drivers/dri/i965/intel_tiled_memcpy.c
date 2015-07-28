@@ -398,6 +398,8 @@ linear_to_xtiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return linear_to_xtiled(0, 0, xtile_width, xtile_width, 0, xtile_height,
                                  dst, src, src_pitch, swizzle_bit,
                                  rgba8_copy_aligned_dst);
+      else
+         unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return linear_to_xtiled(x0, x1, x2, x3, y0, y1,
@@ -406,6 +408,8 @@ linear_to_xtiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return linear_to_xtiled(x0, x1, x2, x3, y0, y1,
                                  dst, src, src_pitch, swizzle_bit,
                                  rgba8_copy_aligned_dst);
+      else
+         unreachable("not reached");
    }
    linear_to_xtiled(x0, x1, x2, x3, y0, y1,
                     dst, src, src_pitch, swizzle_bit, mem_copy);
@@ -436,6 +440,8 @@ linear_to_ytiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return linear_to_ytiled(0, 0, ytile_width, ytile_width, 0, ytile_height,
                                  dst, src, src_pitch, swizzle_bit,
                                  rgba8_copy_aligned_dst);
+      else
+         unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return linear_to_ytiled(x0, x1, x2, x3, y0, y1,
@@ -444,6 +450,8 @@ linear_to_ytiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return linear_to_ytiled(x0, x1, x2, x3, y0, y1,
                                  dst, src, src_pitch, swizzle_bit,
                                  rgba8_copy_aligned_dst);
+      else
+         unreachable("not reached");
    }
    linear_to_ytiled(x0, x1, x2, x3, y0, y1,
                     dst, src, src_pitch, swizzle_bit, mem_copy);
@@ -474,6 +482,8 @@ xtiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return xtiled_to_linear(0, 0, xtile_width, xtile_width, 0, xtile_height,
                                  dst, src, dst_pitch, swizzle_bit,
                                  rgba8_copy_aligned_src);
+      else
+         unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return xtiled_to_linear(x0, x1, x2, x3, y0, y1,
@@ -482,6 +492,8 @@ xtiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return xtiled_to_linear(x0, x1, x2, x3, y0, y1,
                                  dst, src, dst_pitch, swizzle_bit,
                                  rgba8_copy_aligned_src);
+      else
+         unreachable("not reached");
    }
    xtiled_to_linear(x0, x1, x2, x3, y0, y1,
                     dst, src, dst_pitch, swizzle_bit, mem_copy);
@@ -512,6 +524,8 @@ ytiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return ytiled_to_linear(0, 0, ytile_width, ytile_width, 0, ytile_height,
                                  dst, src, dst_pitch, swizzle_bit,
                                  rgba8_copy_aligned_src);
+      else
+         unreachable("not reached");
    } else {
       if (mem_copy == memcpy)
          return ytiled_to_linear(x0, x1, x2, x3, y0, y1,
@@ -520,6 +534,8 @@ ytiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
          return ytiled_to_linear(x0, x1, x2, x3, y0, y1,
                                  dst, src, dst_pitch, swizzle_bit,
                                  rgba8_copy_aligned_src);
+      else
+         unreachable("not reached");
    }
    ytiled_to_linear(x0, x1, x2, x3, y0, y1,
                     dst, src, dst_pitch, swizzle_bit, mem_copy);

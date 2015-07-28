@@ -104,9 +104,9 @@ st_bufferobj_subdata(struct gl_context *ctx,
    struct st_buffer_object *st_obj = st_buffer_object(obj);
 
    /* we may be called from VBO code, so double-check params here */
-   ASSERT(offset >= 0);
-   ASSERT(size >= 0);
-   ASSERT(offset + size <= obj->Size);
+   assert(offset >= 0);
+   assert(size >= 0);
+   assert(offset + size <= obj->Size);
 
    if (!size)
       return;
@@ -148,9 +148,9 @@ st_bufferobj_get_subdata(struct gl_context *ctx,
    struct st_buffer_object *st_obj = st_buffer_object(obj);
 
    /* we may be called from VBO code, so double-check params here */
-   ASSERT(offset >= 0);
-   ASSERT(size >= 0);
-   ASSERT(offset + size <= obj->Size);
+   assert(offset >= 0);
+   assert(size >= 0);
+   assert(offset + size <= obj->Size);
 
    if (!size)
       return;
@@ -186,7 +186,8 @@ st_bufferobj_data(struct gl_context *ctx,
    struct st_buffer_object *st_obj = st_buffer_object(obj);
    unsigned bind, pipe_usage, pipe_flags = 0;
 
-   if (size && data && st_obj->buffer &&
+   if (target != GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD &&
+       size && data && st_obj->buffer &&
        st_obj->Base.Size == size &&
        st_obj->Base.Usage == usage &&
        st_obj->Base.StorageFlags == storageFlags) {
@@ -287,6 +288,7 @@ st_bufferobj_data(struct gl_context *ctx,
    }
 
    if (size != 0) {
+      struct pipe_screen *screen = pipe->screen;
       struct pipe_resource buffer;
 
       memset(&buffer, 0, sizeof buffer);
@@ -300,16 +302,22 @@ st_bufferobj_data(struct gl_context *ctx,
       buffer.depth0 = 1;
       buffer.array_size = 1;
 
-      st_obj->buffer = pipe->screen->resource_create(pipe->screen, &buffer);
+      if (target == GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD) {
+         st_obj->buffer =
+            screen->resource_from_user_memory(screen, &buffer, (void*)data);
+      }
+      else {
+         st_obj->buffer = screen->resource_create(screen, &buffer);
+
+         if (st_obj->buffer && data)
+            pipe_buffer_write(pipe, st_obj->buffer, 0, size, data);
+      }
 
       if (!st_obj->buffer) {
          /* out of memory */
          st_obj->Base.Size = 0;
          return GL_FALSE;
       }
-
-      if (data)
-         pipe_buffer_write(pipe, st_obj->buffer, 0, size, data);
    }
 
    /* BufferData may change an array or uniform buffer, need to update it */
@@ -477,8 +485,8 @@ st_clear_buffer_subdata(struct gl_context *ctx,
    static const char zeros[16] = {0};
 
    if (!pipe->clear_buffer) {
-      _mesa_buffer_clear_subdata(ctx, offset, size,
-                                 clearValue, clearValueSize, bufObj);
+      _mesa_ClearBufferSubData_sw(ctx, offset, size,
+                                  clearValue, clearValueSize, bufObj);
       return;
    }
 

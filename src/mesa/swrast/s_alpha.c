@@ -29,7 +29,6 @@
 
 #include "main/glheader.h"
 #include "main/context.h"
-#include "main/colormac.h"
 #include "main/macros.h"
 
 #include "s_alpha.h"
@@ -130,7 +129,7 @@ _swrast_alpha_test(const struct gl_context *ctx, SWspan *span)
    }
    else {
       /* Interpolate alpha values */
-      ASSERT(span->interpMask & SPAN_RGBA);
+      assert(span->interpMask & SPAN_RGBA);
       if (span->array->ChanType == GL_UNSIGNED_BYTE) {
          const GLfixed alphaStep = span->alphaStep;
          GLfixed alpha = span->alpha;

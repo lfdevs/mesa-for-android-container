@@ -1376,6 +1376,7 @@ static void
 nvc0_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    boolean eng3d = FALSE;
 
    if (util_format_is_depth_or_stencil(info->dst.resource->format)) {
@@ -1439,10 +1440,16 @@ nvc0_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
         info->src.box.height != -info->dst.box.height))
       eng3d = TRUE;
 
+   if (nvc0->screen->num_occlusion_queries_active)
+      IMMED_NVC0(push, NVC0_3D(SAMPLECNT_ENABLE), 0);
+
    if (!eng3d)
       nvc0_blit_eng2d(nvc0, info);
    else
       nvc0_blit_3d(nvc0, info);
+
+   if (nvc0->screen->num_occlusion_queries_active)
+      IMMED_NVC0(push, NVC0_3D(SAMPLECNT_ENABLE), 1);
 
    NOUVEAU_DRV_STAT(&nvc0->screen->base, tex_blit_count, 1);
 }

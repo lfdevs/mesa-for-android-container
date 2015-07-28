@@ -271,30 +271,38 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
 static void
 llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
 {
+   static const float fake_const_buf[4];
    struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_context *draw = fpme->draw;
+   struct draw_llvm *llvm = fpme->llvm;
    unsigned i;
 
-   for (i = 0; i < Elements(fpme->llvm->jit_context.vs_constants); ++i) {
+   for (i = 0; i < Elements(llvm->jit_context.vs_constants); ++i) {
       int num_consts =
          draw->pt.user.vs_constants_size[i] / (sizeof(float) * 4);
-      fpme->llvm->jit_context.vs_constants[i] = draw->pt.user.vs_constants[i];
-      fpme->llvm->jit_context.num_vs_constants[i] = num_consts;
+      llvm->jit_context.vs_constants[i] = draw->pt.user.vs_constants[i];
+      llvm->jit_context.num_vs_constants[i] = num_consts;
+      if (num_consts == 0) {
+         llvm->jit_context.vs_constants[i] = fake_const_buf;
+      }
    }
-   for (i = 0; i < Elements(fpme->llvm->gs_jit_context.constants); ++i) {
+   for (i = 0; i < Elements(llvm->gs_jit_context.constants); ++i) {
       int num_consts =
          draw->pt.user.gs_constants_size[i] / (sizeof(float) * 4);
-      fpme->llvm->gs_jit_context.constants[i] = draw->pt.user.gs_constants[i];
-      fpme->llvm->gs_jit_context.num_constants[i] = num_consts;
+      llvm->gs_jit_context.constants[i] = draw->pt.user.gs_constants[i];
+      llvm->gs_jit_context.num_constants[i] = num_consts;
+      if (num_consts == 0) {
+         llvm->gs_jit_context.constants[i] = fake_const_buf;
+      }
    }
 
-   fpme->llvm->jit_context.planes =
+   llvm->jit_context.planes =
       (float (*)[DRAW_TOTAL_CLIP_PLANES][4]) draw->pt.user.planes[0];
-   fpme->llvm->gs_jit_context.planes =
+   llvm->gs_jit_context.planes =
       (float (*)[DRAW_TOTAL_CLIP_PLANES][4]) draw->pt.user.planes[0];
 
-   fpme->llvm->jit_context.viewports = draw->viewports;
-   fpme->llvm->gs_jit_context.viewports = draw->viewports;
+   llvm->jit_context.viewports = draw->viewports;
+   llvm->gs_jit_context.viewports = draw->viewports;
 }
 
 

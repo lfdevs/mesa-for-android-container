@@ -86,7 +86,7 @@ do_copy_texsubimage(struct gl_context *ctx,
 
     if (0) {
         fprintf(stderr, "%s: copying to face %d, level %d\n",
-                __FUNCTION__, face, level);
+                __func__, face, level);
         fprintf(stderr, "to: x %d, y %d, offset %d\n", dstx, dsty, (uint32_t) dst_offset);
         fprintf(stderr, "from (%dx%d) width %d, height %d, offset %d, pitch %d\n",
                 x, y, rrb->base.Base.Width, rrb->base.Base.Height, (uint32_t) src_offset, rrb->pitch/rrb->cpp);

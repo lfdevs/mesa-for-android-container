@@ -40,7 +40,6 @@
 
 #include "vl/vl_video_buffer.h"
 
-#include "radeon/drm/radeon_winsys.h"
 #include "r600_pipe_common.h"
 #include "radeon_video.h"
 #include "radeon_vce.h"
@@ -242,6 +241,8 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder,
 		enc->config_extension(enc);
 		enc->motion_estimation(enc);
 		enc->rdo(enc);
+		if (enc->use_vui)
+			enc->vui(enc);
 		enc->pic_control(enc);
 		enc->feedback(enc);
 		flush(enc);
@@ -336,7 +337,7 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 	struct r600_common_screen *rscreen = (struct r600_common_screen *)context->screen;
 	struct rvce_encoder *enc;
 	struct pipe_video_buffer *tmp_buf, templat = {};
-	struct radeon_surface *tmp_surf;
+	struct radeon_surf *tmp_surf;
 	unsigned cpb_size;
 
 	if (!rscreen->info.vce_fw_version) {
@@ -351,6 +352,9 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 	enc = CALLOC_STRUCT(rvce_encoder);
 	if (!enc)
 		return NULL;
+
+	if ((rscreen->info.drm_major > 2) || (rscreen->info.drm_minor >= 42))
+		enc->use_vui = true;
 
 	enc->base = *templ;
 	enc->base.context = context;

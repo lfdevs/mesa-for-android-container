@@ -192,7 +192,7 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
       if (st)
          _q->pipe->delete_compute_state(_q->pipe, st);
 
-      cs.prog = msec.data.begin();
+      cs.prog = &(msec.data[0]);
       cs.req_local_mem = mem_local;
       cs.req_input_mem = input.size();
       st = q->pipe->create_compute_state(q->pipe, &cs);

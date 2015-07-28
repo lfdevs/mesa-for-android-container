@@ -1,3 +1,0 @@
-C_SOURCES := \
-	wayland_sw_winsys.c \
-	wayland_sw_winsys.h

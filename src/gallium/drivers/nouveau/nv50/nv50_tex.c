@@ -71,6 +71,7 @@ nv50_create_texture_view(struct pipe_context *pipe,
                          uint32_t flags,
                          enum pipe_texture_target target)
 {
+   const uint32_t class_3d = nouveau_context(pipe)->screen->class_3d;
    const struct util_format_description *desc;
    uint64_t addr;
    uint32_t *tic;
@@ -201,11 +202,17 @@ nv50_create_texture_view(struct pipe_context *pipe,
 
    tic[5] = (mt->base.base.height0 << mt->ms_y) & 0xffff;
    tic[5] |= depth << 16;
-   tic[5] |= mt->base.base.last_level << NV50_TIC_5_LAST_LEVEL__SHIFT;
+   if (class_3d > NV50_3D_CLASS)
+      tic[5] |= mt->base.base.last_level << NV50_TIC_5_LAST_LEVEL__SHIFT;
+   else
+      tic[5] |= view->pipe.u.tex.last_level << NV50_TIC_5_LAST_LEVEL__SHIFT;
 
    tic[6] = (mt->ms_x > 1) ? 0x88000000 : 0x03000000; /* sampling points */
 
-   tic[7] = (view->pipe.u.tex.last_level << 4) | view->pipe.u.tex.first_level;
+   if (class_3d > NV50_3D_CLASS)
+      tic[7] = (view->pipe.u.tex.last_level << 4) | view->pipe.u.tex.first_level;
+   else
+      tic[7] = 0;
 
    if (unlikely(!(tic[2] & NV50_TIC_2_NORMALIZED_COORDS)))
       if (mt->base.base.last_level)

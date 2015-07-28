@@ -27,9 +27,16 @@
 #ifndef _HGL_SOFTWAREWINSYS_H
 #define _HGL_SOFTWAREWINSYS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct sw_winsys;
 
 struct sw_winsys* hgl_create_sw_winsys(void);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

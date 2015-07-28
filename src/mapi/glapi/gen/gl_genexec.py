@@ -29,6 +29,7 @@ import collections
 import license
 import gl_XML
 import sys, getopt
+import apiexec
 
 
 exec_flavor_map = {
@@ -92,6 +93,7 @@ header = """/**
 #include "main/pixelstore.h"
 #include "main/points.h"
 #include "main/polygon.h"
+#include "main/program_resource.h"
 #include "main/querymatrix.h"
 #include "main/queryobj.h"
 #include "main/readpix.h"
@@ -174,18 +176,49 @@ class PrintCode(gl_XML.gl_print_base):
                 raise Exception(
                     'Unrecognized exec flavor {0!r}'.format(f.exec_flavor))
             condition_parts = []
-            if f.desktop:
-                if f.deprecated:
+            if f.name in apiexec.functions:
+                ex = apiexec.functions[f.name]
+                unconditional_count = 0
+
+                if ex.compatibility is not None:
                     condition_parts.append('ctx->API == API_OPENGL_COMPAT')
-                else:
-                    condition_parts.append('_mesa_is_desktop_gl(ctx)')
-            if 'es1' in f.api_map:
-                condition_parts.append('ctx->API == API_OPENGLES')
-            if 'es2' in f.api_map:
-                if f.api_map['es2'] == 3:
-                    condition_parts.append('_mesa_is_gles3(ctx)')
-                else:
-                    condition_parts.append('ctx->API == API_OPENGLES2')
+                    unconditional_count += 1
+
+                if ex.core is not None:
+                    condition_parts.append('ctx->API == API_OPENGL_CORE')
+                    unconditional_count += 1
+
+                if ex.es1 is not None:
+                    condition_parts.append('ctx->API == API_OPENGLES')
+                    unconditional_count += 1
+
+                if ex.es2 is not None:
+                    if ex.es2 > 20:
+                        condition_parts.append('(ctx->API == API_OPENGLES2 && ctx->Version >= {0})'.format(ex.es2))
+                    else:
+                        condition_parts.append('ctx->API == API_OPENGLES2')
+                        unconditional_count += 1
+
+                # If the function is unconditionally available in all four
+                # APIs, then it is always available.  Replace the complex
+                # tautology condition with "true" and let GCC do the right
+                # thing.
+                if unconditional_count == 4:
+                    condition_parts = ['true']
+            else:
+                if f.desktop:
+                    if f.deprecated:
+                        condition_parts.append('ctx->API == API_OPENGL_COMPAT')
+                    else:
+                        condition_parts.append('_mesa_is_desktop_gl(ctx)')
+                if 'es1' in f.api_map:
+                    condition_parts.append('ctx->API == API_OPENGLES')
+                if 'es2' in f.api_map:
+                    if f.api_map['es2'] > 2.0:
+                        condition_parts.append('(ctx->API == API_OPENGLES2 && ctx->Version >= {0})'.format(int(f.api_map['es2'] * 10)))
+                    else:
+                        condition_parts.append('ctx->API == API_OPENGLES2')
+
             if not condition_parts:
                 # This function does not exist in any API.
                 continue

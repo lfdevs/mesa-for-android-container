@@ -78,7 +78,7 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
 
    DBG("%s from %dx %s mt %p %d %d (%f,%f) (%f,%f)"
        "to %dx %s mt %p %d %d (%f,%f) (%f,%f) (flip %d,%d)\n",
-       __FUNCTION__,
+       __func__,
        src_mt->num_samples, _mesa_get_format_name(src_mt->format), src_mt,
        src_level, src_layer, src_x0, src_y0, src_x1, src_y1,
        dst_mt->num_samples, _mesa_get_format_name(dst_mt->format), dst_mt,
@@ -223,8 +223,8 @@ brw_blorp_copytexsubimage(struct brw_context *brw,
    struct intel_mipmap_tree *src_mt = src_irb->mt;
    struct intel_mipmap_tree *dst_mt = intel_image->mt;
 
-   /* BLORP is not supported before Gen6. */
-   if (brw->gen < 6 || brw->gen >= 8)
+   /* BLORP is only supported for Gen6-7. */
+   if (brw->gen < 6 || brw->gen > 7)
       return false;
 
    if (_mesa_get_format_base_format(src_rb->Format) !=
@@ -1255,10 +1255,8 @@ brw_blorp_blit_program::translate_dst_to_src()
    emit_mov(Xp_f, X);
    emit_mov(Yp_f, Y);
    /* Scale and offset */
-   emit_mul(X_f, Xp_f, x_transform.multiplier);
-   emit_mul(Y_f, Yp_f, y_transform.multiplier);
-   emit_add(X_f, X_f, x_transform.offset);
-   emit_add(Y_f, Y_f, y_transform.offset);
+   emit_mad(X_f, x_transform.offset, Xp_f, x_transform.multiplier);
+   emit_mad(Y_f, y_transform.offset, Yp_f, y_transform.multiplier);
    if (key->blit_scaled && key->blend) {
       /* Translate coordinates to lay out the samples in a rectangular  grid
        * roughly corresponding to sample locations.
@@ -1308,10 +1306,10 @@ brw_blorp_blit_program::clamp_tex_coords(struct brw_reg regX,
                                          struct brw_reg clampX1,
                                          struct brw_reg clampY1)
 {
-   emit_cond_mov(regX, clampX0, BRW_CONDITIONAL_L, regX, clampX0);
-   emit_cond_mov(regX, clampX1, BRW_CONDITIONAL_G, regX, clampX1);
-   emit_cond_mov(regY, clampY0, BRW_CONDITIONAL_L, regY, clampY0);
-   emit_cond_mov(regY, clampY1, BRW_CONDITIONAL_G, regY, clampY1);
+   emit_max(regX, regX, clampX0);
+   emit_max(regY, regY, clampY0);
+   emit_min(regX, regX, clampX1);
+   emit_min(regY, regY, clampY1);
 }
 
 /**
@@ -1994,10 +1992,13 @@ brw_blorp_blit_params::brw_blorp_blit_params(struct brw_context *brw,
 
    wm_prog_key.src_tiled_w = src.map_stencil_as_y_tiled;
    wm_prog_key.dst_tiled_w = dst.map_stencil_as_y_tiled;
-   x0 = wm_push_consts.dst_x0 = dst_x0;
-   y0 = wm_push_consts.dst_y0 = dst_y0;
-   x1 = wm_push_consts.dst_x1 = dst_x1;
-   y1 = wm_push_consts.dst_y1 = dst_y1;
+   /* Round floating point values to nearest integer to avoid "off by one texel"
+    * kind of errors when blitting.
+    */
+   x0 = wm_push_consts.dst_x0 = roundf(dst_x0);
+   y0 = wm_push_consts.dst_y0 = roundf(dst_y0);
+   x1 = wm_push_consts.dst_x1 = roundf(dst_x1);
+   y1 = wm_push_consts.dst_y1 = roundf(dst_y1);
    wm_push_consts.rect_grid_x1 = (minify(src_mt->logical_width0, src_level) *
                                   wm_prog_key.x_scale - 1.0);
    wm_push_consts.rect_grid_y1 = (minify(src_mt->logical_height0, src_level) *

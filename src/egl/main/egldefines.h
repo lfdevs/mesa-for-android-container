@@ -34,6 +34,9 @@
 #ifndef EGLDEFINES_INCLUDED
 #define EGLDEFINES_INCLUDED
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define _EGL_MAX_EXTENSIONS_LEN 1000
 
@@ -41,5 +44,8 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* EGLDEFINES_INCLUDED */

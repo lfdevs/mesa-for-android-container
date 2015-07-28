@@ -147,7 +147,10 @@ brw_upload_clip_unit(struct brw_context *brw)
       clip->clip5.viewport_z_clip_enable = 1;
    clip->clip5.viewport_xy_clip_enable = 1;
    clip->clip5.vertex_position_space = BRW_CLIP_NDCSPACE;
-   clip->clip5.api_mode = BRW_CLIP_API_OGL;
+   if (ctx->Transform.ClipDepthMode == GL_ZERO_TO_ONE)
+      clip->clip5.api_mode = BRW_CLIP_API_DX;
+   else
+      clip->clip5.api_mode = BRW_CLIP_API_OGL;
    clip->clip5.clip_mode = brw->clip.prog_data->clip_mode;
 
    if (brw->is_g4x)
@@ -158,7 +161,7 @@ brw_upload_clip_unit(struct brw_context *brw)
    clip->viewport_ymin = -1;
    clip->viewport_ymax = 1;
 
-   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
+   brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 }
 
 const struct brw_tracked_state brw_clip_unit = {

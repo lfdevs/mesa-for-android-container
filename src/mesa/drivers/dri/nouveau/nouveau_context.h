@@ -32,7 +32,7 @@
 #include "nouveau_scratch.h"
 #include "nouveau_render.h"
 
-#include "main/bitset.h"
+#include "util/bitset.h"
 
 enum nouveau_fallback {
 	HWTNL = 0,

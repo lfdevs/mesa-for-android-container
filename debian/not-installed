@@ -3,7 +3,6 @@
 # Common list:
 NOT_INSTALLED := \
 	dri/usr/include/GL/wglext.h \
-	dri/usr/include/GL/wmesa.h \
 	dri/usr/lib/*/libglapi.so \
 	usr/include/GL/glcorearb.h \
 	usr/include/GL/glext.h \
@@ -13,8 +12,7 @@ NOT_INSTALLED := \
 	usr/include/GL/glx.h \
 	usr/include/GL/glx_mangle.h \
 	usr/include/GL/osmesa.h \
-	usr/include/GL/wglext.h \
-	usr/include/GL/wmesa.h
+	usr/include/GL/wglext.h
 
 # Architecture-specific additional files:
 NOT_INSTALLED_i386 = \

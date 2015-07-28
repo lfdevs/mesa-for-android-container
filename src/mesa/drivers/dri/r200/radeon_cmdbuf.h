@@ -31,7 +31,7 @@ void rcommonBeginBatch(radeonContextPtr rmesa,
  * Prepare writing n dwords to the command buffer.  Does not cause automatic
  * state emits.
  */
-#define BEGIN_BATCH(n) rcommonBeginBatch(b_l_rmesa, n, __FILE__, __FUNCTION__, __LINE__)
+#define BEGIN_BATCH(n) rcommonBeginBatch(b_l_rmesa, n, __FILE__, __func__, __LINE__)
 
 /**
  * Write one dword to the command buffer.
@@ -49,7 +49,7 @@ void rcommonBeginBatch(radeonContextPtr rmesa,
 	int  __offset = (offset);				\
         if (0 && __offset) {					\
             fprintf(stderr, "(%s:%s:%d) offset : %d\n",		\
-            __FILE__, __FUNCTION__, __LINE__, __offset);	\
+            __FILE__, __func__, __LINE__, __offset);	\
         }							\
         radeon_cs_write_dword(b_l_rmesa->cmdbuf.cs, __offset);	\
         radeon_cs_write_reloc(b_l_rmesa->cmdbuf.cs, 		\
@@ -72,7 +72,7 @@ void rcommonBeginBatch(radeonContextPtr rmesa,
  */
 #define END_BATCH() \
 	do { \
-        radeon_cs_end(b_l_rmesa->cmdbuf.cs, __FILE__, __FUNCTION__, __LINE__);\
+        radeon_cs_end(b_l_rmesa->cmdbuf.cs, __FILE__, __func__, __LINE__);\
 	} while(0)
 
 /**
@@ -98,7 +98,7 @@ void rcommonBeginBatch(radeonContextPtr rmesa,
 
 /* Fire the buffered vertices no matter what.
  */
-static INLINE void radeon_firevertices(radeonContextPtr radeon)
+static inline void radeon_firevertices(radeonContextPtr radeon)
 {
    if (radeon->cmdbuf.cs->cdw || radeon->dma.flush )
       radeon->glCtx.Driver.Flush(&radeon->glCtx); /* +r6/r7 */

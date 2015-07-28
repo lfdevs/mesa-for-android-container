@@ -110,7 +110,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-check_PROGRAMS = u_atomic_test$(EXEEXT)
+check_PROGRAMS = u_atomic_test$(EXEEXT) roundeven_test$(EXEEXT)
 subdir = src/util
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -141,6 +141,9 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+roundeven_test_SOURCES = roundeven_test.c
+roundeven_test_OBJECTS = roundeven_test.$(OBJEXT)
+roundeven_test_DEPENDENCIES =
 u_atomic_test_SOURCES = u_atomic_test.c
 u_atomic_test_OBJECTS = u_atomic_test.$(OBJEXT)
 u_atomic_test_LDADD = $(LDADD)
@@ -196,8 +199,9 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(libmesautil_la_SOURCES) u_atomic_test.c
-DIST_SOURCES = $(libmesautil_la_SOURCES) u_atomic_test.c
+SOURCES = $(libmesautil_la_SOURCES) roundeven_test.c u_atomic_test.c
+DIST_SOURCES = $(libmesautil_la_SOURCES) roundeven_test.c \
+	u_atomic_test.c
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -594,6 +598,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -655,7 +663,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -745,9 +752,11 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = . tests/hash_table
 MESA_UTIL_FILES := \
+	bitset.h \
 	format_srgb.h \
 	hash_table.c	\
 	hash_table.h \
+	list.h \
 	macros.h \
 	ralloc.c \
 	ralloc.h \
@@ -755,6 +764,7 @@ MESA_UTIL_FILES := \
 	register_allocate.h \
 	rgtc.c \
 	rgtc.h \
+	rounding.h \
 	set.c \
 	set.h \
 	simple_list.h \
@@ -767,18 +777,25 @@ MESA_UTIL_GENERATED_FILES = \
 	format_srgb.c
 
 noinst_LTLIBRARIES = libmesautil.la
+AM_CPPFLAGS = \
+	-I$(top_srcdir)/include
+
 libmesautil_la_CPPFLAGS = \
 	$(DEFINES) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
-	$(VISIBILITY_CFLAGS)
+	-I$(top_srcdir)/src/gallium/include \
+	-I$(top_srcdir)/src/gallium/auxiliary \
+	$(VISIBILITY_CFLAGS) \
+	$(MSVC2008_COMPAT_CFLAGS)
 
 libmesautil_la_SOURCES = \
 	$(MESA_UTIL_FILES) \
 	$(MESA_UTIL_GENERATED_FILES)
 
+roundeven_test_LDADD = -lm
 TESTS = $(check_PROGRAMS)
 BUILT_SOURCES = $(MESA_UTIL_GENERATED_FILES)
 CLEANFILES = $(BUILT_SOURCES)
@@ -842,6 +859,10 @@ clean-checkPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+roundeven_test$(EXEEXT): $(roundeven_test_OBJECTS) $(roundeven_test_DEPENDENCIES) $(EXTRA_roundeven_test_DEPENDENCIES) 
+	@rm -f roundeven_test$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(roundeven_test_OBJECTS) $(roundeven_test_LDADD) $(LIBS)
+
 u_atomic_test$(EXEEXT): $(u_atomic_test_OBJECTS) $(u_atomic_test_DEPENDENCIES) $(EXTRA_u_atomic_test_DEPENDENCIES) 
 	@rm -f u_atomic_test$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(u_atomic_test_OBJECTS) $(u_atomic_test_LDADD) $(LIBS)
@@ -859,6 +880,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-rgtc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-set.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-strtod.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/roundeven_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/u_atomic_test.Po@am__quote@
 
 .c.o:
@@ -1201,6 +1223,13 @@ recheck: all $(check_PROGRAMS)
 u_atomic_test.log: u_atomic_test$(EXEEXT)
 	@p='u_atomic_test$(EXEEXT)'; \
 	b='u_atomic_test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+roundeven_test.log: roundeven_test$(EXEEXT)
+	@p='roundeven_test$(EXEEXT)'; \
+	b='roundeven_test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

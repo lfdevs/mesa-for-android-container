@@ -20,7 +20,6 @@
  */
 
 #include "main/glheader.h"
-#include "main/colormac.h"
 #include "main/macros.h"
 #include "main/atifragshader.h"
 #include "main/samplerobj.h"
@@ -571,7 +570,7 @@ _swrast_exec_fragment_shader(struct gl_context * ctx, SWspan *span)
    GLuint i;
 
    /* incoming colors should be floats */
-   ASSERT(span->array->ChanType == GL_FLOAT);
+   assert(span->array->ChanType == GL_FLOAT);
 
    for (i = 0; i < span->end; i++) {
       if (span->array->mask[i]) {

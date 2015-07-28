@@ -54,7 +54,7 @@ extern "C" {
 #endif
 
 
-#if defined(PIPE_OS_ANDROID)
+#if defined(PIPE_OS_ANDROID) && !defined(__LP64__)
 
 extern void *__mmap2(void *, size_t, int, int, int, size_t);
 

@@ -158,7 +158,7 @@ ir_call::clone(void *mem_ctx, struct hash_table *ht) const
 ir_expression *
 ir_expression::clone(void *mem_ctx, struct hash_table *ht) const
 {
-   ir_rvalue *op[Elements(this->operands)] = { NULL, };
+   ir_rvalue *op[ARRAY_SIZE(this->operands)] = { NULL, };
    unsigned int i;
 
    for (i = 0; i < get_num_operands(); i++) {
@@ -327,6 +327,7 @@ ir_constant::clone(void *mem_ctx, struct hash_table *ht) const
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
+   case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_BOOL:
       return new(mem_ctx) ir_constant(this->type, &this->value);
 

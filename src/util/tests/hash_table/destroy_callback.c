@@ -51,6 +51,9 @@ main(int argc, char **argv)
 {
    struct hash_table *ht;
 
+   (void) argc;
+   (void) argv;
+
    ht = _mesa_hash_table_create(NULL, _mesa_key_hash_string,
                                 _mesa_key_string_equal);
 

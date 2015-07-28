@@ -281,7 +281,7 @@ __glXInitVertexArrayState(struct glx_context * gc)
    i += vertex_program_attribs;
 
 
-   /* Vertex array *must* be last becuase of the way that
+   /* Vertex array *must* be last because of the way that
     * emit_DrawArrays_none works.
     */
 

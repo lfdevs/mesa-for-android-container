@@ -65,13 +65,13 @@ static u_translate_func translate_line[IN_COUNT][OUT_COUNT][PRIM_COUNT];
 
 static void generate_tris_ushort(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (ushort)(i);
       (out+j)[1] = (ushort)(i+1);
       (out+j+2)[0] = (ushort)(i+1);
@@ -82,13 +82,13 @@ static void generate_tris_ushort(
 }
 static void generate_tristrip_ushort(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)(i);
       (out+j)[1] = (ushort)(i+1/*+(i&1)*/);
       (out+j+2)[0] = (ushort)(i+1/*+(i&1)*/);
@@ -99,13 +99,13 @@ static void generate_tristrip_ushort(
 }
 static void generate_trifan_ushort(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)(0);
       (out+j)[1] = (ushort)(i+1);
       (out+j+2)[0] = (ushort)(i+1);
@@ -116,13 +116,13 @@ static void generate_trifan_ushort(
 }
 static void generate_quads_ushort(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (ushort)(i+0);
       (out+j)[1] = (ushort)(i+1);
       (out+j+2)[0] = (ushort)(i+1);
@@ -135,13 +135,13 @@ static void generate_quads_ushort(
 }
 static void generate_quadstrip_ushort(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (ushort)(i+2);
       (out+j)[1] = (ushort)(i+0);
       (out+j+2)[0] = (ushort)(i+0);
@@ -154,26 +154,26 @@ static void generate_quadstrip_ushort(
 }
 static void generate_polygon_ushort(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (ushort)(i);
-      (out+j)[1] = (ushort)((i+1)%(nr/2));
+      (out+j)[1] = (ushort)((i+1)%(out_nr/2));
    }
 }
 static void generate_tris_uint(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (uint)(i);
       (out+j)[1] = (uint)(i+1);
       (out+j+2)[0] = (uint)(i+1);
@@ -184,13 +184,13 @@ static void generate_tris_uint(
 }
 static void generate_tristrip_uint(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)(i);
       (out+j)[1] = (uint)(i+1/*+(i&1)*/);
       (out+j+2)[0] = (uint)(i+1/*+(i&1)*/);
@@ -201,13 +201,13 @@ static void generate_tristrip_uint(
 }
 static void generate_trifan_uint(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)(0);
       (out+j)[1] = (uint)(i+1);
       (out+j+2)[0] = (uint)(i+1);
@@ -218,13 +218,13 @@ static void generate_trifan_uint(
 }
 static void generate_quads_uint(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (uint)(i+0);
       (out+j)[1] = (uint)(i+1);
       (out+j+2)[0] = (uint)(i+1);
@@ -237,13 +237,13 @@ static void generate_quads_uint(
 }
 static void generate_quadstrip_uint(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (uint)(i+2);
       (out+j)[1] = (uint)(i+0);
       (out+j+2)[0] = (uint)(i+0);
@@ -256,28 +256,30 @@ static void generate_quadstrip_uint(
 }
 static void generate_polygon_uint(
     unsigned start,
-    unsigned nr,
+    unsigned out_nr,
     void *_out )
 {
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (uint)(i);
-      (out+j)[1] = (uint)((i+1)%(nr/2));
+      (out+j)[1] = (uint)((i+1)%(out_nr/2));
    }
 }
 static void translate_tris_ubyte2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (ushort)in[i];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -289,14 +291,16 @@ static void translate_tris_ubyte2ushort(
 static void translate_tristrip_ubyte2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)in[i];
       (out+j)[1] = (ushort)in[i+1/*+(i&1)*/];
       (out+j+2)[0] = (ushort)in[i+1/*+(i&1)*/];
@@ -308,14 +312,16 @@ static void translate_tristrip_ubyte2ushort(
 static void translate_trifan_ubyte2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)in[0];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -327,14 +333,16 @@ static void translate_trifan_ubyte2ushort(
 static void translate_quads_ubyte2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (ushort)in[i+0];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -348,14 +356,16 @@ static void translate_quads_ubyte2ushort(
 static void translate_quadstrip_ubyte2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (ushort)in[i+2];
       (out+j)[1] = (ushort)in[i+0];
       (out+j+2)[0] = (ushort)in[i+0];
@@ -369,29 +379,33 @@ static void translate_quadstrip_ubyte2ushort(
 static void translate_polygon_ubyte2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (ushort)in[i];
-      (out+j)[1] = (ushort)in[(i+1)%(nr/2)];
+      (out+j)[1] = (ushort)in[(i+1)%(out_nr/2)];
    }
 }
 static void translate_tris_ubyte2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (uint)in[i];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -403,14 +417,16 @@ static void translate_tris_ubyte2uint(
 static void translate_tristrip_ubyte2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)in[i];
       (out+j)[1] = (uint)in[i+1/*+(i&1)*/];
       (out+j+2)[0] = (uint)in[i+1/*+(i&1)*/];
@@ -422,14 +438,16 @@ static void translate_tristrip_ubyte2uint(
 static void translate_trifan_ubyte2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)in[0];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -441,14 +459,16 @@ static void translate_trifan_ubyte2uint(
 static void translate_quads_ubyte2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (uint)in[i+0];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -462,14 +482,16 @@ static void translate_quads_ubyte2uint(
 static void translate_quadstrip_ubyte2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (uint)in[i+2];
       (out+j)[1] = (uint)in[i+0];
       (out+j+2)[0] = (uint)in[i+0];
@@ -483,29 +505,33 @@ static void translate_quadstrip_ubyte2uint(
 static void translate_polygon_ubyte2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ubyte*in = (const ubyte*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (uint)in[i];
-      (out+j)[1] = (uint)in[(i+1)%(nr/2)];
+      (out+j)[1] = (uint)in[(i+1)%(out_nr/2)];
    }
 }
 static void translate_tris_ushort2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (ushort)in[i];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -517,14 +543,16 @@ static void translate_tris_ushort2ushort(
 static void translate_tristrip_ushort2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)in[i];
       (out+j)[1] = (ushort)in[i+1/*+(i&1)*/];
       (out+j+2)[0] = (ushort)in[i+1/*+(i&1)*/];
@@ -536,14 +564,16 @@ static void translate_tristrip_ushort2ushort(
 static void translate_trifan_ushort2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)in[0];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -555,14 +585,16 @@ static void translate_trifan_ushort2ushort(
 static void translate_quads_ushort2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (ushort)in[i+0];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -576,14 +608,16 @@ static void translate_quads_ushort2ushort(
 static void translate_quadstrip_ushort2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (ushort)in[i+2];
       (out+j)[1] = (ushort)in[i+0];
       (out+j+2)[0] = (ushort)in[i+0];
@@ -597,29 +631,33 @@ static void translate_quadstrip_ushort2ushort(
 static void translate_polygon_ushort2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (ushort)in[i];
-      (out+j)[1] = (ushort)in[(i+1)%(nr/2)];
+      (out+j)[1] = (ushort)in[(i+1)%(out_nr/2)];
    }
 }
 static void translate_tris_ushort2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (uint)in[i];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -631,14 +669,16 @@ static void translate_tris_ushort2uint(
 static void translate_tristrip_ushort2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)in[i];
       (out+j)[1] = (uint)in[i+1/*+(i&1)*/];
       (out+j+2)[0] = (uint)in[i+1/*+(i&1)*/];
@@ -650,14 +690,16 @@ static void translate_tristrip_ushort2uint(
 static void translate_trifan_ushort2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)in[0];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -669,14 +711,16 @@ static void translate_trifan_ushort2uint(
 static void translate_quads_ushort2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (uint)in[i+0];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -690,14 +734,16 @@ static void translate_quads_ushort2uint(
 static void translate_quadstrip_ushort2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (uint)in[i+2];
       (out+j)[1] = (uint)in[i+0];
       (out+j+2)[0] = (uint)in[i+0];
@@ -711,29 +757,33 @@ static void translate_quadstrip_ushort2uint(
 static void translate_polygon_ushort2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const ushort*in = (const ushort*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (uint)in[i];
-      (out+j)[1] = (uint)in[(i+1)%(nr/2)];
+      (out+j)[1] = (uint)in[(i+1)%(out_nr/2)];
    }
 }
 static void translate_tris_uint2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (ushort)in[i];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -745,14 +795,16 @@ static void translate_tris_uint2ushort(
 static void translate_tristrip_uint2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)in[i];
       (out+j)[1] = (ushort)in[i+1/*+(i&1)*/];
       (out+j+2)[0] = (ushort)in[i+1/*+(i&1)*/];
@@ -764,14 +816,16 @@ static void translate_tristrip_uint2ushort(
 static void translate_trifan_uint2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (ushort)in[0];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -783,14 +837,16 @@ static void translate_trifan_uint2ushort(
 static void translate_quads_uint2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (ushort)in[i+0];
       (out+j)[1] = (ushort)in[i+1];
       (out+j+2)[0] = (ushort)in[i+1];
@@ -804,14 +860,16 @@ static void translate_quads_uint2ushort(
 static void translate_quadstrip_uint2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (ushort)in[i+2];
       (out+j)[1] = (ushort)in[i+0];
       (out+j+2)[0] = (ushort)in[i+0];
@@ -825,29 +883,33 @@ static void translate_quadstrip_uint2ushort(
 static void translate_polygon_uint2ushort(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   ushort *out = (ushort*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (ushort)in[i];
-      (out+j)[1] = (ushort)in[(i+1)%(nr/2)];
+      (out+j)[1] = (ushort)in[(i+1)%(out_nr/2)];
    }
 }
 static void translate_tris_uint2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i+=3) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i+=3) { 
       (out+j)[0] = (uint)in[i];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -859,14 +921,16 @@ static void translate_tris_uint2uint(
 static void translate_tristrip_uint2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)in[i];
       (out+j)[1] = (uint)in[i+1/*+(i&1)*/];
       (out+j+2)[0] = (uint)in[i+1/*+(i&1)*/];
@@ -878,14 +942,16 @@ static void translate_tristrip_uint2uint(
 static void translate_trifan_uint2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=6, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=6, i++) { 
       (out+j)[0] = (uint)in[0];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -897,14 +963,16 @@ static void translate_trifan_uint2uint(
 static void translate_quads_uint2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=4) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=4) { 
       (out+j)[0] = (uint)in[i+0];
       (out+j)[1] = (uint)in[i+1];
       (out+j+2)[0] = (uint)in[i+1];
@@ -918,14 +986,16 @@ static void translate_quads_uint2uint(
 static void translate_quadstrip_uint2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=8, i+=2) { 
+  for (i = start, j = 0; j < out_nr; j+=8, i+=2) { 
       (out+j)[0] = (uint)in[i+2];
       (out+j)[1] = (uint)in[i+0];
       (out+j+2)[0] = (uint)in[i+0];
@@ -939,16 +1009,18 @@ static void translate_quadstrip_uint2uint(
 static void translate_polygon_uint2uint(
     const void * _in,
     unsigned start,
-    unsigned nr,
+    unsigned in_nr,
+    unsigned out_nr,
+    unsigned restart_index,
     void *_out )
 {
   const uint*in = (const uint*)_in;
   uint *out = (uint*)_out;
   unsigned i, j;
   (void)j;
-  for (i = start, j = 0; j < nr; j+=2, i++) { 
+  for (i = start, j = 0; j < out_nr; j+=2, i++) { 
       (out+j)[0] = (uint)in[i];
-      (out+j)[1] = (uint)in[(i+1)%(nr/2)];
+      (out+j)[1] = (uint)in[(i+1)%(out_nr/2)];
    }
 }
 void u_unfilled_init( void )

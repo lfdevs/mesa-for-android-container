@@ -33,6 +33,11 @@
 #include "stw_icd.h"
 #include "stw_context.h"
 #include "stw_device.h"
+#include "stw_ext_context.h"
+
+
+wglCreateContext_t wglCreateContext_func = 0;
+wglDeleteContext_t wglDeleteContext_func = 0;
 
 
 /**
@@ -50,12 +55,7 @@
 HGLRC WINAPI
 wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
 {
-   typedef HGLRC (WINAPI *wglCreateContext_t)(HDC hdc);
-   typedef BOOL (WINAPI *wglDeleteContext_t)(HGLRC hglrc);
    HGLRC context;
-   static HMODULE opengl_lib = 0;
-   static wglCreateContext_t wglCreateContext_func = 0;
-   static wglDeleteContext_t wglDeleteContext_func = 0;
 
    int majorVersion = 1, minorVersion = 0, layerPlane = 0;
    int contextFlags = 0x0;
@@ -135,11 +135,11 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
    }
 
    /* Get pointer to OPENGL32.DLL's wglCreate/DeleteContext() functions */
-   if (opengl_lib == 0) {
-      /* Open the OPENGL32.DLL library */
-      opengl_lib = LoadLibraryA("OPENGL32.DLL");
+   if (!wglCreateContext_func || !wglDeleteContext_func) {
+      /* Get the OPENGL32.DLL library */
+      HMODULE opengl_lib = GetModuleHandleA("opengl32.dll");
       if (!opengl_lib) {
-         _debug_printf("wgl: LoadLibrary(OPENGL32.DLL) failed\n");
+         _debug_printf("wgl: GetModuleHandleA(\"opengl32.dll\") failed\n");
          return 0;
       }
 

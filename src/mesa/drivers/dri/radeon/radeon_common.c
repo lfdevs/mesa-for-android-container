@@ -167,7 +167,7 @@ uint32_t radeonGetAge(radeonContextPtr radeon)
 	ret = drmCommandWriteRead(radeon->dri.fd, DRM_RADEON_GETPARAM,
 				  &gp, sizeof(gp));
 	if (ret) {
-		fprintf(stderr, "%s: drmRadeonGetParam: %d\n", __FUNCTION__,
+		fprintf(stderr, "%s: drmRadeonGetParam: %d\n", __func__,
 			ret);
 		exit(1);
 	}
@@ -220,9 +220,9 @@ void radeon_draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	 */
 	if (ctx->NewState & (_NEW_BUFFERS | _NEW_COLOR | _NEW_PIXEL)) {
 		/* this updates the DrawBuffer->_NumColorDrawBuffers fields, etc */
-		_mesa_update_framebuffer(ctx);
+		_mesa_update_framebuffer(ctx, ctx->ReadBuffer, ctx->DrawBuffer);
 		/* this updates the DrawBuffer's Width/Height if it's a FBO */
-		_mesa_update_draw_buffer_bounds(ctx);
+		_mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
 	}
 
 	if (fb->_Status != GL_FRAMEBUFFER_COMPLETE_EXT) {
@@ -342,7 +342,7 @@ void radeon_draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 void radeonDrawBuffer( struct gl_context *ctx, GLenum mode )
 {
 	if (RADEON_DEBUG & RADEON_DRI)
-		fprintf(stderr, "%s %s\n", __FUNCTION__,
+		fprintf(stderr, "%s %s\n", __func__,
 			_mesa_lookup_enum_by_nr( mode ));
 
 	if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
@@ -486,7 +486,7 @@ out:
 	return dwords;
 }
 
-static INLINE void radeon_emit_atom(radeonContextPtr radeon, struct radeon_state_atom *atom)
+static inline void radeon_emit_atom(radeonContextPtr radeon, struct radeon_state_atom *atom)
 {
 	BATCH_LOCALS(radeon);
 	int dwords;
@@ -511,7 +511,7 @@ static INLINE void radeon_emit_atom(radeonContextPtr radeon, struct radeon_state
 
 }
 
-static INLINE void radeonEmitAtoms(radeonContextPtr radeon, GLboolean emitAll)
+static inline void radeonEmitAtoms(radeonContextPtr radeon, GLboolean emitAll)
 {
 	struct radeon_state_atom *atom;
 
@@ -531,7 +531,7 @@ static INLINE void radeonEmitAtoms(radeonContextPtr radeon, GLboolean emitAll)
 
 void radeonEmitState(radeonContextPtr radeon)
 {
-	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s\n", __FUNCTION__);
+	radeon_print(RADEON_STATE, RADEON_NORMAL, "%s\n", __func__);
 
 	if (radeon->vtbl.pre_emit_state)
 		radeon->vtbl.pre_emit_state(radeon);
@@ -562,7 +562,7 @@ void radeonFlush(struct gl_context *ctx)
 {
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
 	if (RADEON_DEBUG & RADEON_IOCTL)
-		fprintf(stderr, "%s %d\n", __FUNCTION__, radeon->cmdbuf.cs->cdw);
+		fprintf(stderr, "%s %d\n", __func__, radeon->cmdbuf.cs->cdw);
 
 	/* okay if we have no cmds in the buffer &&
 	   we have no DMA flush &&
@@ -576,7 +576,7 @@ void radeonFlush(struct gl_context *ctx)
 		radeon->dma.flush( ctx );
 
 	if (radeon->cmdbuf.cs->cdw)
-		rcommonFlushCmdBuf(radeon, __FUNCTION__);
+		rcommonFlushCmdBuf(radeon, __func__);
 
 flush_front:
 	if (_mesa_is_winsys_fbo(ctx->DrawBuffer) && radeon->front_buffer_dirty) {
@@ -635,7 +635,7 @@ int rcommonFlushCmdBufLocked(radeonContextPtr rmesa, const char *caller)
 	rmesa->cmdbuf.flushing = 1;
 
 	if (RADEON_DEBUG & RADEON_IOCTL) {
-		fprintf(stderr, "%s from %s\n", __FUNCTION__, caller);
+		fprintf(stderr, "%s from %s\n", __func__, caller);
 	}
 
 	radeonEmitQueryEnd(&rmesa->glCtx);

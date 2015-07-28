@@ -83,7 +83,7 @@ intel_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
 
-   ASSERT(irb);
+   assert(irb);
 
    intel_miptree_release(&irb->mt);
 
@@ -135,7 +135,7 @@ intel_map_renderbuffer(struct gl_context *ctx,
    }
 
    DBG("%s: rb %d (%s) mt mapped: (%d, %d) (%dx%d) -> %p/%d\n",
-       __FUNCTION__, rb->Name, _mesa_get_format_name(rb->Format),
+       __func__, rb->Name, _mesa_get_format_name(rb->Format),
        x, y, w, h, map, stride);
 
    *out_map = map;
@@ -153,7 +153,7 @@ intel_unmap_renderbuffer(struct gl_context *ctx,
    struct swrast_renderbuffer *srb = (struct swrast_renderbuffer *)rb;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
 
-   DBG("%s: rb %d (%s)\n", __FUNCTION__,
+   DBG("%s: rb %d (%s)\n", __func__,
        rb->Name, _mesa_get_format_name(rb->Format));
 
    if (srb->Buffer) {
@@ -215,7 +215,7 @@ intel_alloc_private_renderbuffer_storage(struct gl_context * ctx, struct gl_rend
 
    intel_miptree_release(&irb->mt);
 
-   DBG("%s: %s: %s (%dx%d)\n", __FUNCTION__,
+   DBG("%s: %s: %s (%dx%d)\n", __func__,
        _mesa_lookup_enum_by_nr(internalFormat),
        _mesa_get_format_name(rb->Format), width, height);
 
@@ -303,7 +303,7 @@ static GLboolean
 intel_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
                            GLenum internalFormat, GLuint width, GLuint height)
 {
-   ASSERT(rb->Name == 0);
+   assert(rb->Name == 0);
    rb->Width = width;
    rb->Height = height;
    rb->InternalFormat = internalFormat;
@@ -427,7 +427,7 @@ intel_framebuffer_renderbuffer(struct gl_context * ctx,
 {
    DBG("Intel FramebufferRenderbuffer %u %u\n", fb->Name, rb ? rb->Name : 0);
 
-   _mesa_framebuffer_renderbuffer(ctx, fb, attachment, rb);
+   _mesa_FramebufferRenderbuffer_sw(ctx, fb, attachment, rb);
    intel_draw_buffer(ctx);
 }
 
@@ -568,7 +568,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
    struct intel_mipmap_tree *depth_mt = NULL, *stencil_mt = NULL;
    int i;
 
-   DBG("%s() on fb %p (%s)\n", __FUNCTION__,
+   DBG("%s() on fb %p (%s)\n", __func__,
        fb, (fb == ctx->DrawBuffer ? "drawbuffer" :
 	    (fb == ctx->ReadBuffer ? "readbuffer" : "other buffer")));
 
@@ -598,7 +598,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
       }
    }
 
-   for (i = 0; i < Elements(fb->Attachment); i++) {
+   for (i = 0; i < ARRAY_SIZE(fb->Attachment); i++) {
       struct gl_renderbuffer *rb;
       struct intel_renderbuffer *irb;
 

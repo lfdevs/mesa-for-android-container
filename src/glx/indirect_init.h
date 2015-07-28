@@ -36,6 +36,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "glxclient.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern struct _glapi_table *__glXNewIndirectAPI(void);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif /* _INDIRECT_INIT_H_ */

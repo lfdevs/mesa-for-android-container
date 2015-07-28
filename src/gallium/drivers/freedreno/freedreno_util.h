@@ -62,11 +62,11 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_NOBYPASS 0x0040
 #define FD_DBG_FRAGHALF 0x0080
 #define FD_DBG_NOBIN    0x0100
-#define FD_DBG_NOOPT    0x0200
 #define FD_DBG_OPTMSGS  0x0400
 #define FD_DBG_OPTDUMP  0x0800
-#define FD_DBG_GLSL130  0x1000
+#define FD_DBG_GLSL120  0x1000
 #define FD_DBG_NOCP     0x2000
+#define FD_DBG_NIR      0x4000
 
 extern int fd_mesa_debug;
 extern bool fd_binning_enabled;
@@ -76,8 +76,6 @@ extern bool fd_binning_enabled;
 			debug_printf("%s:%d: "fmt "\n", \
 				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-
 /* for conditionally setting boolean flag(s): */
 #define COND(bool, val) ((bool) ? (val) : 0)
 
@@ -85,14 +83,16 @@ extern bool fd_binning_enabled;
 
 static inline uint32_t DRAW(enum pc_di_primtype prim_type,
 		enum pc_di_src_sel source_select, enum pc_di_index_size index_size,
-		enum pc_di_vis_cull_mode vis_cull_mode)
+		enum pc_di_vis_cull_mode vis_cull_mode,
+		uint8_t instances)
 {
 	return (prim_type         << 0) |
 			(source_select     << 6) |
 			((index_size & 1)  << 11) |
 			((index_size >> 1) << 13) |
 			(vis_cull_mode     << 9) |
-			(1                 << 14);
+			(1                 << 14) |
+			(instances         << 24);
 }
 
 /* for tracking cmdstream positions that need to be patched: */

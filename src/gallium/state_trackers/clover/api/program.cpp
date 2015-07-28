@@ -23,6 +23,8 @@
 #include "api/util.hpp"
 #include "core/program.hpp"
 
+#include <sstream>
+
 using namespace clover;
 
 namespace {
@@ -94,12 +96,12 @@ clCreateProgramWithBinary(cl_context d_ctx, cl_uint n,
             return { CL_INVALID_VALUE, {} };
 
          try {
-            compat::istream::buffer_t bin(p, l);
-            compat::istream s(bin);
+            std::stringbuf bin( { (char*)p, l } );
+            std::istream s(&bin);
 
             return { CL_SUCCESS, module::deserialize(s) };
 
-         } catch (compat::istream::error &e) {
+         } catch (std::istream::failure &e) {
             return { CL_INVALID_BINARY, {} };
          }
       },
@@ -216,7 +218,7 @@ clCompileProgram(cl_program d_prog, cl_uint num_devs,
             throw error(CL_INVALID_OPERATION);
 
          if (!any_of(key_equals(name), headers))
-            headers.push_back(compat::pair<compat::string, compat::string>(
+            headers.push_back(std::pair<std::string, std::string>(
                                  name, header.source()));
       },
       range(header_names, num_headers),
@@ -279,10 +281,10 @@ clGetProgramInfo(cl_program d_prog, cl_program_info param,
 
    case CL_PROGRAM_BINARIES:
       buf.as_matrix<unsigned char>() = map([&](const device &dev) {
-            compat::ostream::buffer_t bin;
-            compat::ostream s(bin);
+            std::stringbuf bin;
+            std::ostream s(&bin);
             prog.binary(dev).serialize(s);
-            return bin;
+            return bin.str();
          },
          prog.devices());
       break;
@@ -293,8 +295,7 @@ clGetProgramInfo(cl_program d_prog, cl_program_info param,
 
    case CL_PROGRAM_KERNEL_NAMES:
       buf.as_string() = fold([](const std::string &a, const module::symbol &s) {
-            return ((a.empty() ? "" : a + ";") +
-                    std::string(s.name.begin(), s.name.size()));
+            return ((a.empty() ? "" : a + ";") + s.name);
          }, std::string(), prog.symbols());
       break;
 

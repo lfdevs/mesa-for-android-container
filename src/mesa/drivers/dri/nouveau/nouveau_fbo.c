@@ -242,7 +242,7 @@ static void
 nouveau_framebuffer_renderbuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
 				 GLenum attachment, struct gl_renderbuffer *rb)
 {
-	_mesa_framebuffer_renderbuffer(ctx, fb, attachment, rb);
+	_mesa_FramebufferRenderbuffer_sw(ctx, fb, attachment, rb);
 
 	context_dirty(ctx, FRAMEBUFFER);
 }

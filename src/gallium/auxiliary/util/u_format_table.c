@@ -32,7 +32,7 @@
 #include "u_format_rgtc.h"
 #include "u_format_latc.h"
 #include "u_format_etc.h"
-#include "u_format_bptc.h"
+#include "u_format_fake.h"
 
 
 #include "pipe/p_compiler.h"
@@ -37538,6 +37538,446 @@ util_format_etc1_rgb8_description = {
 };
 
 const struct util_format_description
+util_format_etc2_rgb8_description = {
+   PIPE_FORMAT_ETC2_RGB8,
+   "PIPE_FORMAT_ETC2_RGB8",
+   "etc2_rgb8",
+   {4, 4, 64},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* r */
+      UTIL_FORMAT_SWIZZLE_Y,	/* g */
+      UTIL_FORMAT_SWIZZLE_Z,	/* b */
+      UTIL_FORMAT_SWIZZLE_1	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_RGB,
+   &util_format_etc2_rgb8_unpack_rgba_8unorm,
+   &util_format_etc2_rgb8_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_rgb8_unpack_rgba_float,
+   &util_format_etc2_rgb8_pack_rgba_float,
+   &util_format_etc2_rgb8_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_srgb8_description = {
+   PIPE_FORMAT_ETC2_SRGB8,
+   "PIPE_FORMAT_ETC2_SRGB8",
+   "etc2_srgb8",
+   {4, 4, 64},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* sr */
+      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
+      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
+      UTIL_FORMAT_SWIZZLE_1	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_SRGB,
+   &util_format_etc2_srgb8_unpack_rgba_8unorm,
+   &util_format_etc2_srgb8_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_srgb8_unpack_rgba_float,
+   &util_format_etc2_srgb8_pack_rgba_float,
+   &util_format_etc2_srgb8_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_rgb8a1_description = {
+   PIPE_FORMAT_ETC2_RGB8A1,
+   "PIPE_FORMAT_ETC2_RGB8A1",
+   "etc2_rgb8a1",
+   {4, 4, 64},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* r */
+      UTIL_FORMAT_SWIZZLE_Y,	/* g */
+      UTIL_FORMAT_SWIZZLE_Z,	/* b */
+      UTIL_FORMAT_SWIZZLE_W	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_RGB,
+   &util_format_etc2_rgb8a1_unpack_rgba_8unorm,
+   &util_format_etc2_rgb8a1_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_rgb8a1_unpack_rgba_float,
+   &util_format_etc2_rgb8a1_pack_rgba_float,
+   &util_format_etc2_rgb8a1_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_srgb8a1_description = {
+   PIPE_FORMAT_ETC2_SRGB8A1,
+   "PIPE_FORMAT_ETC2_SRGB8A1",
+   "etc2_srgb8a1",
+   {4, 4, 64},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* sr */
+      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
+      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
+      UTIL_FORMAT_SWIZZLE_W	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_SRGB,
+   &util_format_etc2_srgb8a1_unpack_rgba_8unorm,
+   &util_format_etc2_srgb8a1_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_srgb8a1_unpack_rgba_float,
+   &util_format_etc2_srgb8a1_pack_rgba_float,
+   &util_format_etc2_srgb8a1_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_rgba8_description = {
+   PIPE_FORMAT_ETC2_RGBA8,
+   "PIPE_FORMAT_ETC2_RGBA8",
+   "etc2_rgba8",
+   {4, 4, 128},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* r */
+      UTIL_FORMAT_SWIZZLE_Y,	/* g */
+      UTIL_FORMAT_SWIZZLE_Z,	/* b */
+      UTIL_FORMAT_SWIZZLE_W	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_RGB,
+   &util_format_etc2_rgba8_unpack_rgba_8unorm,
+   &util_format_etc2_rgba8_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_rgba8_unpack_rgba_float,
+   &util_format_etc2_rgba8_pack_rgba_float,
+   &util_format_etc2_rgba8_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_srgba8_description = {
+   PIPE_FORMAT_ETC2_SRGBA8,
+   "PIPE_FORMAT_ETC2_SRGBA8",
+   "etc2_srgba8",
+   {4, 4, 128},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* sr */
+      UTIL_FORMAT_SWIZZLE_Y,	/* sg */
+      UTIL_FORMAT_SWIZZLE_Z,	/* sb */
+      UTIL_FORMAT_SWIZZLE_W	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_SRGB,
+   &util_format_etc2_srgba8_unpack_rgba_8unorm,
+   &util_format_etc2_srgba8_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_srgba8_unpack_rgba_float,
+   &util_format_etc2_srgba8_pack_rgba_float,
+   &util_format_etc2_srgba8_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_r11_unorm_description = {
+   PIPE_FORMAT_ETC2_R11_UNORM,
+   "PIPE_FORMAT_ETC2_R11_UNORM",
+   "etc2_r11_unorm",
+   {4, 4, 64},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* r */
+      UTIL_FORMAT_SWIZZLE_0,	/* g */
+      UTIL_FORMAT_SWIZZLE_0,	/* b */
+      UTIL_FORMAT_SWIZZLE_1	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_RGB,
+   &util_format_etc2_r11_unorm_unpack_rgba_8unorm,
+   &util_format_etc2_r11_unorm_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_r11_unorm_unpack_rgba_float,
+   &util_format_etc2_r11_unorm_pack_rgba_float,
+   &util_format_etc2_r11_unorm_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_r11_snorm_description = {
+   PIPE_FORMAT_ETC2_R11_SNORM,
+   "PIPE_FORMAT_ETC2_R11_SNORM",
+   "etc2_r11_snorm",
+   {4, 4, 64},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* r */
+      UTIL_FORMAT_SWIZZLE_0,	/* g */
+      UTIL_FORMAT_SWIZZLE_0,	/* b */
+      UTIL_FORMAT_SWIZZLE_1	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_RGB,
+   &util_format_etc2_r11_snorm_unpack_rgba_8unorm,
+   &util_format_etc2_r11_snorm_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_r11_snorm_unpack_rgba_float,
+   &util_format_etc2_r11_snorm_pack_rgba_float,
+   &util_format_etc2_r11_snorm_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_rg11_unorm_description = {
+   PIPE_FORMAT_ETC2_RG11_UNORM,
+   "PIPE_FORMAT_ETC2_RG11_UNORM",
+   "etc2_rg11_unorm",
+   {4, 4, 128},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* r */
+      UTIL_FORMAT_SWIZZLE_Y,	/* g */
+      UTIL_FORMAT_SWIZZLE_0,	/* b */
+      UTIL_FORMAT_SWIZZLE_1	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_RGB,
+   &util_format_etc2_rg11_unorm_unpack_rgba_8unorm,
+   &util_format_etc2_rg11_unorm_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_rg11_unorm_unpack_rgba_float,
+   &util_format_etc2_rg11_unorm_pack_rgba_float,
+   &util_format_etc2_rg11_unorm_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_etc2_rg11_snorm_description = {
+   PIPE_FORMAT_ETC2_RG11_SNORM,
+   "PIPE_FORMAT_ETC2_RG11_SNORM",
+   "etc2_rg11_snorm",
+   {4, 4, 128},	/* block */
+   UTIL_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      UTIL_FORMAT_SWIZZLE_X,	/* r */
+      UTIL_FORMAT_SWIZZLE_Y,	/* g */
+      UTIL_FORMAT_SWIZZLE_0,	/* b */
+      UTIL_FORMAT_SWIZZLE_1	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_RGB,
+   &util_format_etc2_rg11_snorm_unpack_rgba_8unorm,
+   &util_format_etc2_rg11_snorm_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_etc2_rg11_snorm_unpack_rgba_float,
+   &util_format_etc2_rg11_snorm_pack_rgba_float,
+   &util_format_etc2_rg11_snorm_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
 util_format_bptc_rgba_unorm_description = {
    PIPE_FORMAT_BPTC_RGBA_UNORM,
    "PIPE_FORMAT_BPTC_RGBA_UNORM",
@@ -47479,6 +47919,26 @@ util_format_description(enum pipe_format format)
       return &util_format_latc2_snorm_description;
    case PIPE_FORMAT_ETC1_RGB8:
       return &util_format_etc1_rgb8_description;
+   case PIPE_FORMAT_ETC2_RGB8:
+      return &util_format_etc2_rgb8_description;
+   case PIPE_FORMAT_ETC2_SRGB8:
+      return &util_format_etc2_srgb8_description;
+   case PIPE_FORMAT_ETC2_RGB8A1:
+      return &util_format_etc2_rgb8a1_description;
+   case PIPE_FORMAT_ETC2_SRGB8A1:
+      return &util_format_etc2_srgb8a1_description;
+   case PIPE_FORMAT_ETC2_RGBA8:
+      return &util_format_etc2_rgba8_description;
+   case PIPE_FORMAT_ETC2_SRGBA8:
+      return &util_format_etc2_srgba8_description;
+   case PIPE_FORMAT_ETC2_R11_UNORM:
+      return &util_format_etc2_r11_unorm_description;
+   case PIPE_FORMAT_ETC2_R11_SNORM:
+      return &util_format_etc2_r11_snorm_description;
+   case PIPE_FORMAT_ETC2_RG11_UNORM:
+      return &util_format_etc2_rg11_unorm_description;
+   case PIPE_FORMAT_ETC2_RG11_SNORM:
+      return &util_format_etc2_rg11_snorm_description;
    case PIPE_FORMAT_BPTC_RGBA_UNORM:
       return &util_format_bptc_rgba_unorm_description;
    case PIPE_FORMAT_BPTC_SRGBA:

@@ -113,7 +113,7 @@ static void
 intelDmaPrimitive(struct intel_context *intel, GLenum prim)
 {
    if (0)
-      fprintf(stderr, "%s %s\n", __FUNCTION__, _mesa_lookup_enum_by_nr(prim));
+      fprintf(stderr, "%s %s\n", __func__, _mesa_lookup_enum_by_nr(prim));
    INTEL_FIREVERTICES(intel);
    intel->vtbl.reduced_primitive_state(intel, reduced_prim[prim]);
    intel_set_prim(intel, hw_prim[prim]);
@@ -121,7 +121,7 @@ intelDmaPrimitive(struct intel_context *intel, GLenum prim)
 
 #define INTEL_NO_VBO_STATE_RESERVED 1500
 
-static INLINE GLuint intel_get_vb_max(struct intel_context *intel)
+static inline GLuint intel_get_vb_max(struct intel_context *intel)
 {
    GLuint ret;
 
@@ -133,7 +133,7 @@ static INLINE GLuint intel_get_vb_max(struct intel_context *intel)
    return ret;
 }
 
-static INLINE GLuint intel_get_current_max(struct intel_context *intel)
+static inline GLuint intel_get_current_max(struct intel_context *intel)
 {
    GLuint ret;
 

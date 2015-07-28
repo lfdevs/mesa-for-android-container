@@ -278,7 +278,7 @@ apple_glx_destroy_context(void **ptr, Display * dpy)
 }
 
 
-/* Return true if an error occured. */
+/* Return true if an error occurred. */
 bool
 apple_glx_make_current_context(Display * dpy, void *oldptr, void *ptr,
                                GLXDrawable drawable)

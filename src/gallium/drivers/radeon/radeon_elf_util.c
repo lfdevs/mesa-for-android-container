@@ -111,7 +111,7 @@ void radeon_elf_read(const char *elf_data, unsigned elf_size,
 	Elf_Scn *section = NULL;
 	Elf_Data *symbols = NULL, *relocs = NULL;
 	size_t section_str_index;
-	unsigned symbol_sh_link;
+	unsigned symbol_sh_link = 0;
 
 	/* One of the libelf implementations
 	 * (http://www.mr511.de/software/english.htm) requires calling

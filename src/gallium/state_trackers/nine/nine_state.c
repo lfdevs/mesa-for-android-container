@@ -138,10 +138,9 @@ update_viewport(struct NineDevice9 *device)
     const D3DVIEWPORT9 *vport = &device->state.viewport;
     struct pipe_viewport_state pvport;
 
-    /* XXX:
-     * I hope D3D clip coordinates are still
+    /* D3D coordinates are:
      * -1 .. +1 for X,Y and
-     *  0 .. +1 for Z (use pipe_rasterizer_state.clip_halfz)
+     *  0 .. +1 for Z (we use pipe_rasterizer_state.clip_halfz)
      */
     pvport.scale[0] = (float)vport->Width * 0.5f;
     pvport.scale[1] = (float)vport->Height * -0.5f;
@@ -149,6 +148,30 @@ update_viewport(struct NineDevice9 *device)
     pvport.translate[0] = (float)vport->Width * 0.5f + (float)vport->X;
     pvport.translate[1] = (float)vport->Height * 0.5f + (float)vport->Y;
     pvport.translate[2] = vport->MinZ;
+
+    /* We found R600 and SI cards have some imprecision
+     * on the barycentric coordinates used for interpolation.
+     * Some shaders rely on having something precise.
+     * We found that the proprietary driver has the imprecision issue,
+     * except when the render target width and height are powers of two.
+     * It is using some sort of workaround for these cases
+     * which covers likely all the cases the applications rely
+     * on something precise.
+     * We haven't found the workaround, but it seems like it's better
+     * for applications if the imprecision is biased towards infinity
+     * instead of -infinity (which is what measured). So shift slightly
+     * the viewport: not enough to change rasterization result (in particular
+     * for multisampling), but enough to make the imprecision biased
+     * towards infinity. We do this shift only if render target width and
+     * height are powers of two.
+     * Solves 'red shadows' bug on UE3 games.
+     */
+    if (device->driver_bugs.buggy_barycentrics &&
+        ((vport->Width & (vport->Width-1)) == 0) &&
+        ((vport->Height & (vport->Height-1)) == 0)) {
+        pvport.translate[0] -= 1.0f / 128.0f;
+        pvport.translate[1] -= 1.0f / 128.0f;
+    }
 
     pipe->set_viewport_states(pipe, 0, 1, &pvport);
 }
@@ -201,9 +224,6 @@ update_vertex_elements(struct NineDevice9 *device)
     memset(vdecl_index_map, -1, 16);
     memset(used_streams, 0, device->caps.MaxStreams);
     vs = device->state.vs ? device->state.vs : device->ff.vs;
-
-    if (!vdecl) /* no inputs */
-        return;
 
     if (vdecl) {
         for (n = 0; n < vs->num_inputs; ++n) {
@@ -608,7 +628,6 @@ update_vertex_buffers(struct NineDevice9 *device)
     uint32_t mask = state->changed.vtxbuf;
     unsigned i;
     unsigned start;
-    unsigned count = 0;
 
     DBG("mask=%x\n", mask);
 
@@ -627,18 +646,12 @@ update_vertex_buffers(struct NineDevice9 *device)
 
     for (i = 0; mask; mask >>= 1, ++i) {
         if (mask & 1) {
-            if (!count)
-                start = i;
-            ++count;
-        } else {
-            if (count)
-                pipe->set_vertex_buffers(pipe, start, count,
-                                         &state->vtxbuf[start]);
-            count = 0;
+            if (state->vtxbuf[i].buffer)
+                pipe->set_vertex_buffers(pipe, i, 1, &state->vtxbuf[i]);
+            else
+                pipe->set_vertex_buffers(pipe, i, 1, NULL);
         }
     }
-    if (count)
-        pipe->set_vertex_buffers(pipe, start, count, &state->vtxbuf[start]);
 
     state->changed.vtxbuf = 0;
 }
@@ -675,7 +688,7 @@ update_sampler_derived(struct nine_state *state, unsigned s)
     }
 
     if (state->samp[s][D3DSAMP_MIPFILTER] != D3DTEXF_NONE) {
-        int lod = state->samp[s][D3DSAMP_MAXMIPLEVEL] - state->texture[s]->lod;
+        int lod = state->samp[s][D3DSAMP_MAXMIPLEVEL] - state->texture[s]->managed.lod;
         if (lod < 0)
             lod = 0;
         if (state->samp[s][NINED3DSAMP_MINLOD] != lod) {

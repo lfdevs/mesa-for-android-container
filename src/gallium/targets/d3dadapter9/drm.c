@@ -39,7 +39,7 @@
 #include "xmlconfig.h"
 #include "xmlpool.h"
 
-#include <libdrm/drm.h>
+#include <drm.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -216,7 +216,7 @@ drm_create_adapter( int fd,
 {
     struct d3dadapter9drm_context *ctx = CALLOC_STRUCT(d3dadapter9drm_context);
     HRESULT hr;
-    int i, different_device;
+    int different_device;
     const struct drm_conf_ret *throttle_ret = NULL;
     const struct drm_conf_ret *dmabuf_ret = NULL;
     driOptionCache defaultInitOptions;

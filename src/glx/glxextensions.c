@@ -61,12 +61,73 @@ struct extension_info
     */
    unsigned char version_major;
    unsigned char version_minor;
+
+   /**
+    * The client (i.e., libGL) supports this extension.
+    *
+    * Except during bring up, all extensions should have this set to Y.  There
+    * are a few cases of extensions that have partial (or speculative)
+    * support, but these are rare.  There also shouldn't be any new ones
+    * added.
+    *
+    * Generally, extensions require server support and ::client_support to be
+    * enabled.  If the display is capable of direct rendering,
+    * ::direct_support is also required.
+    *
+    * \sa ::client_only
+    */
    unsigned char client_support;
+
+   /**
+    * The direct-renderer (e.g., i965_dri.so) supports this extension.
+    *
+    * For cases where all of the infrastructure to support the extension is a
+    * required part of the loader/driver interface, this can default to Y.
+    * For most cases, extended functionality, usually in the form of DRI2
+    * extensions, is necessary to support the extension.  The loader will set
+    * the flag true if all the requirements are met.
+    *
+    * If the display is capable of direct rendering, ::direct_support is
+    * required for the extension to be enabled.
+    */
    unsigned char direct_support;
-   unsigned char client_only;        /** Is the extension client-side only? */
-   unsigned char direct_only;        /** Is the extension for direct
-				      * contexts only?
-				      */
+
+   /**
+    * The extension depends only on client support.
+    *
+    * This is for extensions like GLX_ARB_get_proc_address that are contained
+    * entirely in the client library.  There is no dependency on the server or
+    * the direct-renderer.
+    *
+    * These extensions will be enabled if ::client_support is set.
+    *
+    * \note
+    * An extension \b cannot be both client-only and direct-only because being
+    * direct-only implies a dependency on the direct renderer.
+    *
+    * \sa ::client_support, ::direct_only
+    */
+   unsigned char client_only;
+
+   /**
+    * The extension only functions with direct-rendering contexts
+    *
+    * The extension has no GLX protocol, and, therefore, no explicit
+    * dependency on the server.  The functionality is contained entirely in
+    * the client library and the direct renderer.  A few of the swap-related
+    * extensions are intended to behave this way.
+    *
+    * These extensions will be enabled if both ::client_support and
+    * ::direct_support are set.
+    *
+    * \note
+    * An extension \b cannot be both client-only and direct-only because being
+    * client-only implies that all functionality is outside the
+    * direct-renderer.
+    *
+    * \sa ::direct_support, ::client_only
+    */
+   unsigned char direct_only;
 };
 
 /* *INDENT-OFF* */
@@ -84,7 +145,7 @@ static const struct extension_info known_glx_extensions[] = {
    { GLX(EXT_visual_rating),           VER(0,0), Y, Y, N, N },
    { GLX(EXT_fbconfig_packed_float),   VER(0,0), Y, Y, N, N },
    { GLX(EXT_framebuffer_sRGB),        VER(0,0), Y, Y, N, N },
-   { GLX(EXT_create_context_es2_profile), VER(0,0), Y, N, N, Y },
+   { GLX(EXT_create_context_es2_profile), VER(0,0), Y, N, N, N },
    { GLX(MESA_copy_sub_buffer),        VER(0,0), Y, N, N, N },
    { GLX(MESA_multithread_makecurrent),VER(0,0), Y, N, Y, N },
    { GLX(MESA_query_renderer),         VER(0,0), Y, N, N, Y },
@@ -625,16 +686,6 @@ __glXCalculateUsableExtensions(struct glx_screen * psc,
          usable[i] = (client_glx_support[i] & client_glx_only[i])
             | (client_glx_support[i] & server_support[i]);
       }
-   }
-
-   /* This hack is necessary because GLX_ARB_create_context_profile depends on
-    * server support, but GLX_EXT_create_context_es2_profile is direct-only.
-    * Without this hack, it would be possible to advertise
-    * GLX_EXT_create_context_es2_profile without
-    * GLX_ARB_create_context_profile.  That would be a problem.
-    */
-   if (!IS_SET(server_support, ARB_create_context_profile_bit)) {
-      CLR_BIT(usable, EXT_create_context_es2_profile_bit);
    }
 
    psc->effectiveGLXexts = __glXGetStringFromTable(known_glx_extensions,

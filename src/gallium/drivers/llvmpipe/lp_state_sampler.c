@@ -170,6 +170,36 @@ llvmpipe_create_sampler_view(struct pipe_context *pipe,
       view->texture = NULL;
       pipe_resource_reference(&view->texture, texture);
       view->context = pipe;
+
+#ifdef DEBUG
+     /*
+      * This is possibly too lenient, but the primary reason is just
+      * to catch state trackers which forget to initialize this, so
+      * it only catches clearly impossible view targets.
+      */
+      if (view->target != texture->target) {
+         if (view->target == PIPE_TEXTURE_1D)
+            assert(texture->target == PIPE_TEXTURE_1D_ARRAY);
+         else if (view->target == PIPE_TEXTURE_1D_ARRAY)
+            assert(texture->target == PIPE_TEXTURE_1D);
+         else if (view->target == PIPE_TEXTURE_2D)
+            assert(texture->target == PIPE_TEXTURE_2D_ARRAY ||
+                   texture->target == PIPE_TEXTURE_CUBE ||
+                   texture->target == PIPE_TEXTURE_CUBE_ARRAY);
+         else if (view->target == PIPE_TEXTURE_2D_ARRAY)
+            assert(texture->target == PIPE_TEXTURE_2D ||
+                   texture->target == PIPE_TEXTURE_CUBE ||
+                   texture->target == PIPE_TEXTURE_CUBE_ARRAY);
+         else if (view->target == PIPE_TEXTURE_CUBE)
+            assert(texture->target == PIPE_TEXTURE_CUBE_ARRAY ||
+                   texture->target == PIPE_TEXTURE_2D_ARRAY);
+         else if (view->target == PIPE_TEXTURE_CUBE_ARRAY)
+            assert(texture->target == PIPE_TEXTURE_CUBE ||
+                   texture->target == PIPE_TEXTURE_2D_ARRAY);
+         else
+            assert(0);
+      }
+#endif
    }
 
    return view;
@@ -245,15 +275,17 @@ prepare_shader_sampling(
                   row_stride[j] = lp_tex->row_stride[j];
                   img_stride[j] = lp_tex->img_stride[j];
                }
-               if (res->target == PIPE_TEXTURE_1D_ARRAY ||
-                   res->target == PIPE_TEXTURE_2D_ARRAY ||
-                   res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+               if (view->target == PIPE_TEXTURE_1D_ARRAY ||
+                   view->target == PIPE_TEXTURE_2D_ARRAY ||
+                   view->target == PIPE_TEXTURE_CUBE ||
+                   view->target == PIPE_TEXTURE_CUBE_ARRAY) {
                   num_layers = view->u.tex.last_layer - view->u.tex.first_layer + 1;
                   for (j = first_level; j <= last_level; j++) {
                      mip_offsets[j] += view->u.tex.first_layer *
                                        lp_tex->img_stride[j];
                   }
-                  if (res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+                  if (view->target == PIPE_TEXTURE_CUBE ||
+                      view->target == PIPE_TEXTURE_CUBE_ARRAY) {
                      assert(num_layers % 6 == 0);
                   }
                   assert(view->u.tex.first_layer <= view->u.tex.last_layer);

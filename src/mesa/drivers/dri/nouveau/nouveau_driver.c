@@ -24,6 +24,7 @@
  *
  */
 
+#include <stdio.h>
 #include "main/mtypes.h"
 #include "main/fbobject.h"
 

@@ -76,12 +76,15 @@ struct fd4_context {
 	/* bitmask of sampler which needs coords clamped for vertex
 	 * shader:
 	 */
-	unsigned vsaturate_s, vsaturate_t, vsaturate_r;
+	uint16_t vsaturate_s, vsaturate_t, vsaturate_r;
 
 	/* bitmask of sampler which needs coords clamped for frag
 	 * shader:
 	 */
-	unsigned fsaturate_s, fsaturate_t, fsaturate_r;
+	uint16_t fsaturate_s, fsaturate_t, fsaturate_r;
+
+	/* bitmask of integer texture samplers */
+	uint16_t vinteger_s, finteger_s;
 
 	/* some state changes require a different shader variant.  Keep
 	 * track of this so we know when we need to re-emit shader state

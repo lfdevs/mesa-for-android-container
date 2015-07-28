@@ -29,6 +29,8 @@
 /* Split indexed primitives with per-vertex copying.
  */
 
+#include <stdio.h>
+
 #include "main/glheader.h"
 #include "main/bufferobj.h"
 #include "main/imports.h"
@@ -531,6 +533,7 @@ replay_init( struct copy_context *copy )
       dst->Enabled = GL_TRUE;
       dst->Normalized = src->Normalized; 
       dst->Integer = src->Integer;
+      dst->Doubles = src->Doubles;
       dst->BufferObj = ctx->Shared->NullBufferObj;
       dst->_ElementSize = src->_ElementSize;
 

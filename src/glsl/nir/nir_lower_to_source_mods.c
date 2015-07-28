@@ -67,6 +67,13 @@ nir_lower_to_source_mods_block(nir_block *block, void *state)
             continue;
          }
 
+         /* We can only do a rewrite if the source we are copying is SSA.
+          * Otherwise, moving the read might invalidly reorder reads/writes
+          * on a register.
+          */
+         if (!parent->src[0].src.is_ssa)
+            continue;
+
          nir_instr_rewrite_src(instr, &alu->src[i].src, parent->src[0].src);
          if (alu->src[i].abs) {
             /* abs trumps both neg and abs, do nothing */
@@ -81,8 +88,8 @@ nir_lower_to_source_mods_block(nir_block *block, void *state)
             alu->src[i].swizzle[j] = parent->src[0].swizzle[alu->src[i].swizzle[j]];
          }
 
-         if (parent->dest.dest.ssa.uses->entries == 0 &&
-             parent->dest.dest.ssa.if_uses->entries == 0)
+         if (list_empty(&parent->dest.dest.ssa.uses) &&
+             list_empty(&parent->dest.dest.ssa.if_uses))
             nir_instr_remove(&parent->instr);
       }
 
@@ -124,13 +131,13 @@ nir_lower_to_source_mods_block(nir_block *block, void *state)
       if (nir_op_infos[alu->op].output_type != nir_type_float)
          continue;
 
-      if (alu->dest.dest.ssa.if_uses->entries != 0)
+      if (!list_empty(&alu->dest.dest.ssa.if_uses))
          continue;
 
       bool all_children_are_sat = true;
-      struct set_entry *entry;
-      set_foreach(alu->dest.dest.ssa.uses, entry) {
-         const nir_instr *child = entry->key;
+      nir_foreach_use(&alu->dest.dest.ssa, child_src) {
+         assert(child_src->is_ssa);
+         nir_instr *child = child_src->parent_instr;
          if (child->type != nir_instr_type_alu) {
             all_children_are_sat = false;
             continue;
@@ -154,8 +161,12 @@ nir_lower_to_source_mods_block(nir_block *block, void *state)
 
       alu->dest.saturate = true;
 
-      set_foreach(alu->dest.dest.ssa.uses, entry) {
-         nir_alu_instr *child_alu = nir_instr_as_alu((nir_instr *)entry->key);
+      nir_foreach_use(&alu->dest.dest.ssa, child_src) {
+         assert(child_src->is_ssa);
+         nir_instr *child = child_src->parent_instr;
+         assert(child->type == nir_instr_type_alu);
+         nir_alu_instr *child_alu = nir_instr_as_alu(child);
+
          child_alu->op = nir_op_fmov;
          child_alu->dest.saturate = false;
          /* We could propagate the dest of our instruction to the

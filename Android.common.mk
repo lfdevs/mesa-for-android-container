@@ -24,7 +24,7 @@
 # use c99 compiler by default
 ifeq ($(LOCAL_CC),)
 ifeq ($(LOCAL_IS_HOST_MODULE),true)
-LOCAL_CC := $(HOST_CC) -std=c99
+LOCAL_CC := $(HOST_CC) -std=c99 -D_GNU_SOURCE
 else
 LOCAL_CC := $(TARGET_CC) -std=c99
 endif
@@ -34,7 +34,7 @@ LOCAL_C_INCLUDES += \
 	$(MESA_TOP)/src \
 	$(MESA_TOP)/include
 
-MESA_VERSION=$(shell cat $(MESA_TOP)/VERSION)
+MESA_VERSION := $(shell cat $(MESA_TOP)/VERSION)
 # define ANDROID_VERSION (e.g., 4.0.x => 0x0400)
 LOCAL_CFLAGS += \
 	-DPACKAGE_VERSION=\"$(MESA_VERSION)\" \

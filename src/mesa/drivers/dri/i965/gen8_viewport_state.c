@@ -26,12 +26,12 @@
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
 #include "main/fbobject.h"
+#include "main/viewport.h"
 
 static void
 gen8_upload_sf_clip_viewport(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   const GLfloat depth_scale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    float y_scale, y_bias;
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
@@ -51,15 +51,16 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
    }
 
    for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
-      const GLfloat *const v = ctx->ViewportArray[i]._WindowMap.m;
+      double scale[3], translate[3];
+      _mesa_get_viewport_xform(ctx, i, scale, translate);
 
       /* _NEW_VIEWPORT: Viewport Matrix Elements */
-      vp[0] = v[MAT_SX];                    /* m00 */
-      vp[1] = v[MAT_SY] * y_scale;          /* m11 */
-      vp[2] = v[MAT_SZ] * depth_scale;      /* m22 */
-      vp[3] = v[MAT_TX];                    /* m30 */
-      vp[4] = v[MAT_TY] * y_scale + y_bias; /* m31 */
-      vp[5] = v[MAT_TZ] * depth_scale;      /* m32 */
+      vp[0] = scale[0];                        /* m00 */
+      vp[1] = scale[1] * y_scale;              /* m11 */
+      vp[2] = scale[2];                        /* m22 */
+      vp[3] = translate[0];                    /* m30 */
+      vp[4] = translate[1] * y_scale + y_bias; /* m31 */
+      vp[5] = translate[2];                    /* m32 */
 
       /* Reserved */
       vp[6] = 0;

@@ -41,7 +41,7 @@
 #include <bellagio/st_static_component_loader.h>
 #include <bellagio/omx_base_filter.h>
 
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #include "vl/vl_defines.h"
 #include "vl/vl_compositor.h"

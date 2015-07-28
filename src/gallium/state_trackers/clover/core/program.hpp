@@ -60,7 +60,7 @@ namespace clover {
       std::string build_opts(const device &dev) const;
       std::string build_log(const device &dev) const;
 
-      const compat::vector<module::symbol> &symbols() const;
+      const std::vector<module::symbol> &symbols() const;
 
       unsigned kernel_ref_count() const;
 

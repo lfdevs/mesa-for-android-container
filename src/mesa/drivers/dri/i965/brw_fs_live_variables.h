@@ -26,7 +26,7 @@
  */
 
 #include "brw_fs.h"
-#include "main/bitset.h"
+#include "util/bitset.h"
 
 struct cfg_t;
 
@@ -77,7 +77,7 @@ public:
    /**
     * Map from any index in block_data to the virtual GRF containing it.
     *
-    * For virtual_grf_sizes of [1, 2, 3], vgrf_from_var would contain
+    * For alloc.sizes of [1, 2, 3], vgrf_from_var would contain
     * [0, 1, 1, 2, 2, 2].
     */
    int *vgrf_from_var;

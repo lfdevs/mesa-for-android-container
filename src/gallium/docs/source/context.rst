@@ -79,6 +79,11 @@ objects. They all follow simple, one-method binding calls, e.g.
   should be the same as the number of set viewports and can be up to
   PIPE_MAX_VIEWPORTS.
 * ``set_viewport_states``
+* ``set_tess_state`` configures the default tessellation parameters:
+  * ``default_outer_level`` is the default value for the outer tessellation
+    levels. This corresponds to GL's ``PATCH_DEFAULT_OUTER_LEVEL``.
+  * ``default_inner_level`` is the default value for the inner tessellation
+    levels. This corresponds to GL's ``PATCH_DEFAULT_INNER_LEVEL``.
 
 
 Sampler Views

@@ -139,7 +139,8 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 libglsl_util_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
 am_libglsl_util_la_OBJECTS = mesa/main/imports.lo \
-	mesa/program/prog_hash_table.lo mesa/program/symbol_table.lo
+	mesa/program/prog_hash_table.lo mesa/program/symbol_table.lo \
+	mesa/program/dummy_errors.lo
 libglsl_util_la_OBJECTS = $(am_libglsl_util_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -375,6 +376,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -436,7 +441,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -533,6 +537,8 @@ EXTRA_DIST = \
 	egl/docs \
 	getopt hgl SConscript
 
+AM_CFLAGS = $(VISIBILITY_CFLAGS)
+AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include/ \
 	-I$(top_srcdir)/src/mapi/ \
@@ -543,7 +549,8 @@ noinst_LTLIBRARIES = libglsl_util.la
 libglsl_util_la_SOURCES = \
 	mesa/main/imports.c \
 	mesa/program/prog_hash_table.c \
-	mesa/program/symbol_table.c
+	mesa/program/symbol_table.c \
+	mesa/program/dummy_errors.c
 
 all: all-recursive
 
@@ -607,6 +614,8 @@ mesa/program/prog_hash_table.lo: mesa/program/$(am__dirstamp) \
 	mesa/program/$(DEPDIR)/$(am__dirstamp)
 mesa/program/symbol_table.lo: mesa/program/$(am__dirstamp) \
 	mesa/program/$(DEPDIR)/$(am__dirstamp)
+mesa/program/dummy_errors.lo: mesa/program/$(am__dirstamp) \
+	mesa/program/$(DEPDIR)/$(am__dirstamp)
 
 libglsl_util.la: $(libglsl_util_la_OBJECTS) $(libglsl_util_la_DEPENDENCIES) $(EXTRA_libglsl_util_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libglsl_util_la_OBJECTS) $(libglsl_util_la_LIBADD) $(LIBS)
@@ -622,6 +631,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@mesa/main/$(DEPDIR)/imports.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@mesa/program/$(DEPDIR)/dummy_errors.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@mesa/program/$(DEPDIR)/prog_hash_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@mesa/program/$(DEPDIR)/symbol_table.Plo@am__quote@
 

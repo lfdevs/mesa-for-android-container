@@ -94,7 +94,7 @@ gen7_allocate_push_constants(struct brw_context *brw)
     * Similar text exists for the other 3DSTATE_PUSH_CONSTANT_ALLOC_*
     * commands.
     */
-   brw->state.dirty.brw |= BRW_NEW_PUSH_CONSTANT_ALLOCATION;
+   brw->ctx.NewDriverState |= BRW_NEW_PUSH_CONSTANT_ALLOCATION;
 }
 
 void
@@ -152,7 +152,7 @@ gen7_upload_urb(struct brw_context *brw)
    /* If we're just switching between programs with the same URB requirements,
     * skip the rest of the logic.
     */
-   if (!(brw->state.dirty.brw & BRW_NEW_CONTEXT) &&
+   if (!(brw->ctx.NewDriverState & BRW_NEW_CONTEXT) &&
        brw->urb.vsize == vs_size &&
        brw->urb.gs_present == gs_present &&
        brw->urb.gsize == gs_size) {

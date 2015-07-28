@@ -526,8 +526,7 @@ void
 draw_gs_llvm_dump_variant_key(struct draw_gs_llvm_variant_key *key);
 
 struct lp_build_sampler_soa *
-draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_state,
-                             LLVMValueRef context_ptr);
+draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_state);
 
 void
 draw_llvm_set_sampler_state(struct draw_context *draw, unsigned shader_stage);

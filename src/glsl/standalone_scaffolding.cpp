@@ -30,6 +30,7 @@
 #include "standalone_scaffolding.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 #include "util/ralloc.h"
 
@@ -127,6 +128,7 @@ void initialize_context_to_defaults(struct gl_context *ctx, gl_api api)
    ctx->Extensions.ARB_fragment_coord_conventions = true;
    ctx->Extensions.ARB_fragment_layer_viewport = true;
    ctx->Extensions.ARB_gpu_shader5 = true;
+   ctx->Extensions.ARB_gpu_shader_fp64 = true;
    ctx->Extensions.ARB_sample_shading = true;
    ctx->Extensions.ARB_shader_bit_encoding = true;
    ctx->Extensions.ARB_shader_stencil_export = true;
@@ -186,9 +188,6 @@ void initialize_context_to_defaults(struct gl_context *ctx, gl_api api)
    memset(&options, 0, sizeof(options));
    options.MaxUnrollIterations = 32;
    options.MaxIfDepth = UINT_MAX;
-
-   /* Default pragma settings */
-   options.DefaultPragmas.Optimize = true;
 
    for (int sh = 0; sh < MESA_SHADER_STAGES; ++sh)
       memcpy(&ctx->Const.ShaderCompilerOptions[sh], &options, sizeof(options));

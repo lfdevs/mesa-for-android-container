@@ -68,7 +68,7 @@ brw_upload_cc_vp(struct brw_context *brw)
       OUT_BATCH(brw->cc.vp_offset);
       ADVANCE_BATCH();
    } else {
-      brw->state.dirty.brw |= BRW_NEW_CC_VP;
+      brw->ctx.NewDriverState |= BRW_NEW_CC_VP;
    }
 }
 
@@ -230,7 +230,7 @@ static void upload_cc_unit(struct brw_context *brw)
    cc->cc4.cc_viewport_state_offset = (brw->batch.bo->offset64 +
 				       brw->cc.vp_offset) >> 5; /* reloc */
 
-   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
+   brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 
    /* Emit CC viewport relocation */
    drm_intel_bo_emit_reloc(brw->batch.bo,

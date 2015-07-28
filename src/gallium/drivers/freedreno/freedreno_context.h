@@ -32,7 +32,7 @@
 #include "pipe/p_context.h"
 #include "indices/u_primconvert.h"
 #include "util/u_blitter.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_slab.h"
 #include "util/u_string.h"
 
@@ -165,6 +165,9 @@ struct fd_context {
 	struct fd_bo *query_bo;
 	uint32_t query_tile_stride;
 
+	/* list of resources used by currently-unsubmitted renders */
+	struct list_head used_resources;
+
 	/* table with PIPE_PRIM_MAX entries mapping PIPE_PRIM_x to
 	 * DI_PT_x value to use for draw initiator.  There are some
 	 * slight differences between generation:
@@ -176,7 +179,8 @@ struct fd_context {
 	struct fd_program_stateobj solid_prog; // TODO move to screen?
 
 	/* shaders used by mem->gmem blits: */
-	struct fd_program_stateobj blit_prog; // TODO move to screen?
+	struct fd_program_stateobj blit_prog[8]; // TODO move to screen?
+	struct fd_program_stateobj blit_z, blit_zs;
 
 	/* do we need to mem2gmem before rendering.  We don't, if for example,
 	 * there was a glClear() that invalidated the entire previous buffer
@@ -189,7 +193,7 @@ struct fd_context {
 	 */
 	enum {
 		/* align bitmask values w/ PIPE_CLEAR_*.. since that is convenient.. */
-		FD_BUFFER_COLOR   = PIPE_CLEAR_COLOR0,
+		FD_BUFFER_COLOR   = PIPE_CLEAR_COLOR,
 		FD_BUFFER_DEPTH   = PIPE_CLEAR_DEPTH,
 		FD_BUFFER_STENCIL = PIPE_CLEAR_STENCIL,
 		FD_BUFFER_ALL     = FD_BUFFER_COLOR | FD_BUFFER_DEPTH | FD_BUFFER_STENCIL,

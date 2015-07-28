@@ -28,30 +28,36 @@
 
 static void translate_ubyte_ushort( const void *in,
                                     unsigned start,
-                                    unsigned nr,
+                                    unsigned in_nr,
+                                    unsigned out_nr,
+                                    unsigned restart_index,
                                     void *out )
 {
    const ubyte *in_ub = (const ubyte *)in;
    ushort *out_us = (ushort *)out;
    unsigned i;
-   for (i = 0; i < nr; i++)
+   for (i = 0; i < out_nr; i++)
       out_us[i] = (ushort) in_ub[i+start];
 }
 
 static void translate_memcpy_ushort( const void *in,
                                      unsigned start,
-                                     unsigned nr,
+                                     unsigned in_nr,
+                                     unsigned out_nr,
+                                     unsigned restart_index,
                                      void *out )
 {
-   memcpy(out, &((short *)in)[start], nr*sizeof(short));
+   memcpy(out, &((short *)in)[start], out_nr*sizeof(short));
 }
                               
 static void translate_memcpy_uint( const void *in,
                                    unsigned start,
-                                   unsigned nr,
+                                   unsigned in_nr,
+                                   unsigned out_nr,
+                                   unsigned restart_index,
                                    void *out )
 {
-   memcpy(out, &((int *)in)[start], nr*sizeof(int));
+   memcpy(out, &((int *)in)[start], out_nr*sizeof(int));
 }
 
 

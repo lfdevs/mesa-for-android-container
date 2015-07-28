@@ -448,7 +448,7 @@ void bc_dump::dump(fetch_node& n) {
 			s << " FWQ";
 		if (ctx.is_egcm() && n.bc.resource_index_mode)
 			s << " RIM:SQ_CF_INDEX_" << n.bc.resource_index_mode;
-		if (ctx.is_egcm() && n.bc.resource_index_mode)
+		if (ctx.is_egcm() && n.bc.sampler_index_mode)
 			s << " SID:SQ_CF_INDEX_" << n.bc.sampler_index_mode;
 
 		s << " UCF:" << n.bc.use_const_fields

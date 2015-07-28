@@ -97,7 +97,10 @@ static uint32_t reg(struct ir3_register *reg, struct ir3_info *info,
 {
 	reg_t val = { .dummy32 = 0 };
 
-	assert(!(reg->flags & ~valid_flags));
+	if (reg->flags & ~valid_flags) {
+		debug_printf("INVALID FLAGS: %x vs %x\n",
+				reg->flags, valid_flags);
+	}
 
 	if (!(reg->flags & IR3_REG_R))
 		repeat = 0;
@@ -105,11 +108,18 @@ static uint32_t reg(struct ir3_register *reg, struct ir3_info *info,
 	if (reg->flags & IR3_REG_IMMED) {
 		val.iim_val = reg->iim_val;
 	} else {
-		int8_t components = util_last_bit(reg->wrmask);
-		int16_t max = (reg->num + repeat + components - 1) >> 2;
+		unsigned components;
 
-		val.comp = reg->num & 0x3;
-		val.num  = reg->num >> 2;
+		if (reg->flags & IR3_REG_RELATIV) {
+			components = reg->size;
+			val.dummy10 = reg->offset;
+		} else {
+			components = util_last_bit(reg->wrmask);
+			val.comp = reg->num & 0x3;
+			val.num  = reg->num >> 2;
+		}
+
+		int16_t max = (reg->num + repeat + components - 1) >> 2;
 
 		if (reg->flags & IR3_REG_CONST) {
 			info->max_const = MAX2(info->max_const, max);
@@ -166,13 +176,13 @@ static int emit_cat1(struct ir3_instruction *instr, void *ptr,
 		cat1->iim_val = src->iim_val;
 		cat1->src_im  = 1;
 	} else if (src->flags & IR3_REG_RELATIV) {
-		cat1->off       = src->offset;
+		cat1->off       = reg(src, info, instr->repeat,
+				IR3_REG_R | IR3_REG_CONST | IR3_REG_HALF | IR3_REG_RELATIV);
 		cat1->src_rel   = 1;
 		cat1->src_rel_c = !!(src->flags & IR3_REG_CONST);
 	} else {
 		cat1->src  = reg(src, info, instr->repeat,
-				IR3_REG_IMMED | IR3_REG_R |
-				IR3_REG_CONST | IR3_REG_HALF);
+				IR3_REG_R | IR3_REG_CONST | IR3_REG_HALF);
 		cat1->src_c     = !!(src->flags & IR3_REG_CONST);
 	}
 
@@ -202,31 +212,31 @@ static int emit_cat2(struct ir3_instruction *instr, void *ptr,
 	struct ir3_register *src1 = instr->regs[1];
 	struct ir3_register *src2 = instr->regs[2];
 	instr_cat2_t *cat2 = ptr;
+	unsigned absneg = ir3_cat2_absneg(instr->opc);
 
 	iassert((instr->regs_count == 2) || (instr->regs_count == 3));
 
 	if (src1->flags & IR3_REG_RELATIV) {
 		iassert(src1->num < (1 << 10));
 		cat2->rel1.src1      = reg(src1, info, instr->repeat,
-				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_NEGATE |
-				IR3_REG_ABS | IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
+				IR3_REG_HALF | absneg);
 		cat2->rel1.src1_c    = !!(src1->flags & IR3_REG_CONST);
 		cat2->rel1.src1_rel  = 1;
 	} else if (src1->flags & IR3_REG_CONST) {
 		iassert(src1->num < (1 << 12));
 		cat2->c1.src1   = reg(src1, info, instr->repeat,
-				IR3_REG_CONST | IR3_REG_NEGATE | IR3_REG_ABS |
-				IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_CONST | IR3_REG_R | IR3_REG_HALF);
 		cat2->c1.src1_c = 1;
 	} else {
 		iassert(src1->num < (1 << 11));
 		cat2->src1 = reg(src1, info, instr->repeat,
-				IR3_REG_IMMED | IR3_REG_NEGATE | IR3_REG_ABS |
-				IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_IMMED | IR3_REG_R | IR3_REG_HALF |
+				absneg);
 	}
 	cat2->src1_im  = !!(src1->flags & IR3_REG_IMMED);
-	cat2->src1_neg = !!(src1->flags & IR3_REG_NEGATE);
-	cat2->src1_abs = !!(src1->flags & IR3_REG_ABS);
+	cat2->src1_neg = !!(src1->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT));
+	cat2->src1_abs = !!(src1->flags & (IR3_REG_FABS | IR3_REG_SABS));
 	cat2->src1_r   = !!(src1->flags & IR3_REG_R);
 
 	if (src2) {
@@ -236,26 +246,25 @@ static int emit_cat2(struct ir3_instruction *instr, void *ptr,
 		if (src2->flags & IR3_REG_RELATIV) {
 			iassert(src2->num < (1 << 10));
 			cat2->rel2.src2      = reg(src2, info, instr->repeat,
-					IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_NEGATE |
-					IR3_REG_ABS | IR3_REG_R | IR3_REG_HALF);
+					IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
+					IR3_REG_HALF | absneg);
 			cat2->rel2.src2_c    = !!(src2->flags & IR3_REG_CONST);
 			cat2->rel2.src2_rel  = 1;
 		} else if (src2->flags & IR3_REG_CONST) {
 			iassert(src2->num < (1 << 12));
 			cat2->c2.src2   = reg(src2, info, instr->repeat,
-					IR3_REG_CONST | IR3_REG_NEGATE | IR3_REG_ABS |
-					IR3_REG_R | IR3_REG_HALF);
+					IR3_REG_CONST | IR3_REG_R | IR3_REG_HALF);
 			cat2->c2.src2_c = 1;
 		} else {
 			iassert(src2->num < (1 << 11));
 			cat2->src2 = reg(src2, info, instr->repeat,
-					IR3_REG_IMMED | IR3_REG_NEGATE | IR3_REG_ABS |
-					IR3_REG_R | IR3_REG_HALF);
+					IR3_REG_IMMED | IR3_REG_R | IR3_REG_HALF |
+					absneg);
 		}
 
 		cat2->src2_im  = !!(src2->flags & IR3_REG_IMMED);
-		cat2->src2_neg = !!(src2->flags & IR3_REG_NEGATE);
-		cat2->src2_abs = !!(src2->flags & IR3_REG_ABS);
+		cat2->src2_neg = !!(src2->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT));
+		cat2->src2_abs = !!(src2->flags & (IR3_REG_FABS | IR3_REG_SABS));
 		cat2->src2_r   = !!(src2->flags & IR3_REG_R);
 	}
 
@@ -283,6 +292,7 @@ static int emit_cat3(struct ir3_instruction *instr, void *ptr,
 	struct ir3_register *src1 = instr->regs[1];
 	struct ir3_register *src2 = instr->regs[2];
 	struct ir3_register *src3 = instr->regs[3];
+	unsigned absneg = ir3_cat3_absneg(instr->opc);
 	instr_cat3_t *cat3 = ptr;
 	uint32_t src_flags = 0;
 
@@ -309,53 +319,50 @@ static int emit_cat3(struct ir3_instruction *instr, void *ptr,
 	if (src1->flags & IR3_REG_RELATIV) {
 		iassert(src1->num < (1 << 10));
 		cat3->rel1.src1      = reg(src1, info, instr->repeat,
-				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_NEGATE |
-				IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
+				IR3_REG_HALF | absneg);
 		cat3->rel1.src1_c    = !!(src1->flags & IR3_REG_CONST);
 		cat3->rel1.src1_rel  = 1;
 	} else if (src1->flags & IR3_REG_CONST) {
 		iassert(src1->num < (1 << 12));
 		cat3->c1.src1   = reg(src1, info, instr->repeat,
-				IR3_REG_CONST | IR3_REG_NEGATE | IR3_REG_R |
-				IR3_REG_HALF);
+				IR3_REG_CONST | IR3_REG_R | IR3_REG_HALF);
 		cat3->c1.src1_c = 1;
 	} else {
 		iassert(src1->num < (1 << 11));
 		cat3->src1 = reg(src1, info, instr->repeat,
-				IR3_REG_NEGATE | IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_R | IR3_REG_HALF | absneg);
 	}
 
-	cat3->src1_neg = !!(src1->flags & IR3_REG_NEGATE);
+	cat3->src1_neg = !!(src1->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT));
 	cat3->src1_r   = !!(src1->flags & IR3_REG_R);
 
 	cat3->src2     = reg(src2, info, instr->repeat,
-			IR3_REG_CONST | IR3_REG_NEGATE |
-			IR3_REG_R | IR3_REG_HALF);
+			IR3_REG_CONST | IR3_REG_R | IR3_REG_HALF | absneg);
 	cat3->src2_c   = !!(src2->flags & IR3_REG_CONST);
-	cat3->src2_neg = !!(src2->flags & IR3_REG_NEGATE);
+	cat3->src2_neg = !!(src2->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT));
 	cat3->src2_r   = !!(src2->flags & IR3_REG_R);
 
 
 	if (src3->flags & IR3_REG_RELATIV) {
 		iassert(src3->num < (1 << 10));
 		cat3->rel2.src3      = reg(src3, info, instr->repeat,
-				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_NEGATE |
-				IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_R |
+				IR3_REG_HALF | absneg);
 		cat3->rel2.src3_c    = !!(src3->flags & IR3_REG_CONST);
 		cat3->rel2.src3_rel  = 1;
 	} else if (src3->flags & IR3_REG_CONST) {
 		iassert(src3->num < (1 << 12));
 		cat3->c2.src3   = reg(src3, info, instr->repeat,
-				IR3_REG_CONST | IR3_REG_NEGATE | IR3_REG_R |
-				IR3_REG_HALF);
+				IR3_REG_CONST | IR3_REG_R | IR3_REG_HALF);
 		cat3->c2.src3_c = 1;
 	} else {
 		iassert(src3->num < (1 << 11));
 		cat3->src3 = reg(src3, info, instr->repeat,
-				IR3_REG_NEGATE | IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_R | IR3_REG_HALF | absneg);
 	}
 
-	cat3->src3_neg = !!(src3->flags & IR3_REG_NEGATE);
+	cat3->src3_neg = !!(src3->flags & (IR3_REG_FNEG | IR3_REG_SNEG | IR3_REG_BNOT));
 	cat3->src3_r   = !!(src3->flags & IR3_REG_R);
 
 	cat3->dst      = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
@@ -383,26 +390,26 @@ static int emit_cat4(struct ir3_instruction *instr, void *ptr,
 	if (src->flags & IR3_REG_RELATIV) {
 		iassert(src->num < (1 << 10));
 		cat4->rel.src      = reg(src, info, instr->repeat,
-				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_NEGATE |
-				IR3_REG_ABS | IR3_REG_R | IR3_REG_HALF);
+				IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_FNEG |
+				IR3_REG_FABS | IR3_REG_R | IR3_REG_HALF);
 		cat4->rel.src_c    = !!(src->flags & IR3_REG_CONST);
 		cat4->rel.src_rel  = 1;
 	} else if (src->flags & IR3_REG_CONST) {
 		iassert(src->num < (1 << 12));
 		cat4->c.src   = reg(src, info, instr->repeat,
-				IR3_REG_CONST | IR3_REG_NEGATE | IR3_REG_ABS |
+				IR3_REG_CONST | IR3_REG_FNEG | IR3_REG_FABS |
 				IR3_REG_R | IR3_REG_HALF);
 		cat4->c.src_c = 1;
 	} else {
 		iassert(src->num < (1 << 11));
 		cat4->src = reg(src, info, instr->repeat,
-				IR3_REG_IMMED | IR3_REG_NEGATE | IR3_REG_ABS |
+				IR3_REG_IMMED | IR3_REG_FNEG | IR3_REG_FABS |
 				IR3_REG_R | IR3_REG_HALF);
 	}
 
 	cat4->src_im   = !!(src->flags & IR3_REG_IMMED);
-	cat4->src_neg  = !!(src->flags & IR3_REG_NEGATE);
-	cat4->src_abs  = !!(src->flags & IR3_REG_ABS);
+	cat4->src_neg  = !!(src->flags & IR3_REG_FNEG);
+	cat4->src_abs  = !!(src->flags & IR3_REG_FABS);
 	cat4->src_r    = !!(src->flags & IR3_REG_R);
 
 	cat4->dst      = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
@@ -483,7 +490,7 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 
 	iassert(instr->regs_count >= 2);
 
-	if (instr->cat6.offset) {
+	if (instr->cat6.offset || instr->opc == OPC_LDG) {
 		instr_cat6a_t *cat6a = ptr;
 
 		cat6->has_off = true;
@@ -581,21 +588,10 @@ static void insert_instr(struct ir3 *shader,
 	static uint32_t serialno = 0;
 	instr->serialno = ++serialno;
 #endif
-	if (shader->instrs_count == shader->instrs_sz) {
-		shader->instrs_sz = MAX2(2 * shader->instrs_sz, 16);
-		shader->instrs = realloc(shader->instrs,
-				shader->instrs_sz * sizeof(shader->instrs[0]));
-	}
-	shader->instrs[shader->instrs_count++] = instr;
+	array_insert(shader->instrs, instr);
 
-	if (is_input(instr)) {
-		if (shader->baryfs_count == shader->baryfs_sz) {
-			shader->baryfs_sz = MAX2(2 * shader->baryfs_sz, 16);
-			shader->baryfs = realloc(shader->baryfs,
-					shader->baryfs_sz * sizeof(shader->baryfs[0]));
-		}
-		shader->baryfs[shader->baryfs_count++] = instr;
-	}
+	if (is_input(instr))
+		array_insert(shader->baryfs, instr);
 }
 
 struct ir3_block * ir3_block_create(struct ir3 *shader,

@@ -84,7 +84,7 @@ fs_visitor::opt_peephole_predicated_break()
       /* For Sandybridge with IF with embedded comparison we need to emit an
        * instruction to set the flag register.
        */
-      if (brw->gen == 6 && if_inst->conditional_mod) {
+      if (devinfo->gen == 6 && if_inst->conditional_mod) {
          fs_inst *cmp_inst = CMP(reg_null_d, if_inst->src[0], if_inst->src[1],
                                  if_inst->conditional_mod);
          if_inst->insert_before(if_block, cmp_inst);

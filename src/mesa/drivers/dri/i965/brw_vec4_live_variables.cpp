@@ -76,12 +76,13 @@ vec4_live_variables::setup_def_use()
 	 /* Set use[] for this instruction */
 	 for (unsigned int i = 0; i < 3; i++) {
 	    if (inst->src[i].file == GRF) {
-	       int reg = inst->src[i].reg;
-
-               for (int j = 0; j < 4; j++) {
-                  int c = BRW_GET_SWZ(inst->src[i].swizzle, j);
-                  if (!BITSET_TEST(bd->def, reg * 4 + c))
-                     BITSET_SET(bd->use, reg * 4 + c);
+               for (unsigned j = 0; j < inst->regs_read(i); j++) {
+                  for (int c = 0; c < 4; c++) {
+                     const unsigned v =
+                        var_from_reg(alloc, offset(inst->src[i], j), c);
+                     if (!BITSET_TEST(bd->def, v))
+                        BITSET_SET(bd->use, v);
+                  }
                }
 	    }
 	 }
@@ -95,14 +96,15 @@ vec4_live_variables::setup_def_use()
 	  * are the things that screen off preceding definitions of a
 	  * variable, and thus qualify for being in def[].
 	  */
-	 if (inst->dst.file == GRF &&
-	     v->virtual_grf_sizes[inst->dst.reg] == 1 &&
-	     !inst->predicate) {
-            for (int c = 0; c < 4; c++) {
-               if (inst->dst.writemask & (1 << c)) {
-                  int reg = inst->dst.reg;
-                  if (!BITSET_TEST(bd->use, reg * 4 + c))
-                     BITSET_SET(bd->def, reg * 4 + c);
+	 if (inst->dst.file == GRF && !inst->predicate) {
+            for (unsigned i = 0; i < inst->regs_written; i++) {
+               for (int c = 0; c < 4; c++) {
+                  if (inst->dst.writemask & (1 << c)) {
+                     const unsigned v =
+                        var_from_reg(alloc, offset(inst->dst, i), c);
+                     if (!BITSET_TEST(bd->use, v))
+                        BITSET_SET(bd->def, v);
+                  }
                }
             }
          }
@@ -175,12 +177,13 @@ vec4_live_variables::compute_live_variables()
    }
 }
 
-vec4_live_variables::vec4_live_variables(vec4_visitor *v, cfg_t *cfg)
-   : v(v), cfg(cfg)
+vec4_live_variables::vec4_live_variables(const simple_allocator &alloc,
+                                         cfg_t *cfg)
+   : alloc(alloc), cfg(cfg)
 {
    mem_ctx = ralloc_context(NULL);
 
-   num_vars = v->virtual_grf_count * 4;
+   num_vars = alloc.total_size * 4;
    block_data = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
@@ -230,14 +233,14 @@ vec4_visitor::calculate_live_intervals()
    if (this->live_intervals)
       return;
 
-   int *start = ralloc_array(mem_ctx, int, this->virtual_grf_count * 4);
-   int *end = ralloc_array(mem_ctx, int, this->virtual_grf_count * 4);
+   int *start = ralloc_array(mem_ctx, int, this->alloc.total_size * 4);
+   int *end = ralloc_array(mem_ctx, int, this->alloc.total_size * 4);
    ralloc_free(this->virtual_grf_start);
    ralloc_free(this->virtual_grf_end);
    this->virtual_grf_start = start;
    this->virtual_grf_end = end;
 
-   for (int i = 0; i < this->virtual_grf_count * 4; i++) {
+   for (unsigned i = 0; i < this->alloc.total_size * 4; i++) {
       start[i] = MAX_INSTRUCTION;
       end[i] = -1;
    }
@@ -249,24 +252,26 @@ vec4_visitor::calculate_live_intervals()
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (unsigned int i = 0; i < 3; i++) {
 	 if (inst->src[i].file == GRF) {
-	    int reg = inst->src[i].reg;
-
-            for (int j = 0; j < 4; j++) {
-               int c = BRW_GET_SWZ(inst->src[i].swizzle, j);
-
-               start[reg * 4 + c] = MIN2(start[reg * 4 + c], ip);
-               end[reg * 4 + c] = ip;
+            for (unsigned j = 0; j < inst->regs_read(i); j++) {
+               for (int c = 0; c < 4; c++) {
+                  const unsigned v =
+                     var_from_reg(alloc, offset(inst->src[i], j), c);
+                  start[v] = MIN2(start[v], ip);
+                  end[v] = ip;
+               }
             }
 	 }
       }
 
       if (inst->dst.file == GRF) {
-         int reg = inst->dst.reg;
-
-         for (int c = 0; c < 4; c++) {
-            if (inst->dst.writemask & (1 << c)) {
-               start[reg * 4 + c] = MIN2(start[reg * 4 + c], ip);
-               end[reg * 4 + c] = ip;
+         for (unsigned i = 0; i < inst->regs_written; i++) {
+            for (int c = 0; c < 4; c++) {
+               if (inst->dst.writemask & (1 << c)) {
+                  const unsigned v =
+                     var_from_reg(alloc, offset(inst->dst, i), c);
+                  start[v] = MIN2(start[v], ip);
+                  end[v] = ip;
+               }
             }
          }
       }
@@ -279,7 +284,7 @@ vec4_visitor::calculate_live_intervals()
     * The control flow-aware analysis was done at a channel level, while at
     * this point we're distilling it down to vgrfs.
     */
-   this->live_intervals = new(mem_ctx) vec4_live_variables(this, cfg);
+   this->live_intervals = new(mem_ctx) vec4_live_variables(alloc, cfg);
 
    foreach_block (block, cfg) {
       struct block_data *bd = &live_intervals->block_data[block->num];
@@ -305,25 +310,33 @@ vec4_visitor::invalidate_live_intervals()
    live_intervals = NULL;
 }
 
+int
+vec4_visitor::var_range_start(unsigned v, unsigned n) const
+{
+   int start = INT_MAX;
+
+   for (unsigned i = 0; i < n; i++)
+      start = MIN2(start, virtual_grf_start[v + i]);
+
+   return start;
+}
+
+int
+vec4_visitor::var_range_end(unsigned v, unsigned n) const
+{
+   int end = INT_MIN;
+
+   for (unsigned i = 0; i < n; i++)
+      end = MAX2(end, virtual_grf_end[v + i]);
+
+   return end;
+}
+
 bool
 vec4_visitor::virtual_grf_interferes(int a, int b)
 {
-   int start_a = MIN2(MIN2(virtual_grf_start[a * 4 + 0],
-                           virtual_grf_start[a * 4 + 1]),
-                      MIN2(virtual_grf_start[a * 4 + 2],
-                           virtual_grf_start[a * 4 + 3]));
-   int start_b = MIN2(MIN2(virtual_grf_start[b * 4 + 0],
-                           virtual_grf_start[b * 4 + 1]),
-                      MIN2(virtual_grf_start[b * 4 + 2],
-                           virtual_grf_start[b * 4 + 3]));
-   int end_a = MAX2(MAX2(virtual_grf_end[a * 4 + 0],
-                         virtual_grf_end[a * 4 + 1]),
-                    MAX2(virtual_grf_end[a * 4 + 2],
-                         virtual_grf_end[a * 4 + 3]));
-   int end_b = MAX2(MAX2(virtual_grf_end[b * 4 + 0],
-                         virtual_grf_end[b * 4 + 1]),
-                    MAX2(virtual_grf_end[b * 4 + 2],
-                         virtual_grf_end[b * 4 + 3]));
-   return !(end_a <= start_b ||
-            end_b <= start_a);
+   return !((var_range_end(4 * alloc.offsets[a], 4 * alloc.sizes[a]) <=
+             var_range_start(4 * alloc.offsets[b], 4 * alloc.sizes[b])) ||
+            (var_range_end(4 * alloc.offsets[b], 4 * alloc.sizes[b]) <=
+             var_range_start(4 * alloc.offsets[a], 4 * alloc.sizes[a])));
 }

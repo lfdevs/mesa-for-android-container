@@ -69,14 +69,6 @@ struct ir3_shader_key {
 			 */
 			unsigned color_two_side : 1;
 			unsigned half_precision : 1;
-			/* For rendering to alpha, we need a bit of special handling
-			 * since the hw always takes gl_FragColor starting from x
-			 * component, rather than figuring out to take the w component.
-			 * We could be more clever and generate variants for other
-			 * render target formats (ie. luminance formats are xxx1), but
-			 * let's start with this and see how it goes:
-			 */
-			unsigned alpha : 1;
 			/* used when shader needs to handle flat varyings (a4xx),
 			 * for TGSI_INTERPOLATE_COLOR:
 			 */
@@ -141,7 +133,7 @@ struct ir3_shader_variant {
 	 * to bary.f instructions
 	 */
 	uint8_t pos_regid;
-	bool frag_coord, frag_face;
+	bool frag_coord, frag_face, color0_mrt;
 
 	/* varyings/outputs: */
 	unsigned outputs_count;
@@ -186,6 +178,7 @@ struct ir3_shader_variant {
 	 * (not regid, because TGSI thinks in terms of vec4 registers,
 	 * not scalar registers)
 	 */
+	unsigned first_driver_param;
 	unsigned first_immediate;
 	unsigned immediates_count;
 	struct {

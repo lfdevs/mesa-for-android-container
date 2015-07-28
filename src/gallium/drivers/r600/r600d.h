@@ -52,12 +52,18 @@
 
 
 #define PKT3_NOP                               0x10
+#define EG_PKT3_SET_BASE                       0x11 /* >= evergreen */
+#define     EG_DRAW_INDEX_INDIRECT_PATCH_TABLE_BASE 1 /* DX11 Draw_Index_Indirect Patch Table Base */
+#define EG_PKT3_INDEX_BUFFER_SIZE              0x13
 #define PKT3_INDIRECT_BUFFER_END               0x17
 #define PKT3_SET_PREDICATION                   0x20
 #define PKT3_REG_RMW                           0x21
 #define PKT3_COND_EXEC                         0x22
 #define PKT3_PRED_EXEC                         0x23
-#define PKT3_START_3D_CMDBUF                   0x24
+#define PKT3_START_3D_CMDBUF                   0x24 /* removed on evergreen */
+#define EG_PKT3_DRAW_INDIRECT                  0x24 /* >= evergreen */
+#define EG_PKT3_DRAW_INDEX_INDIRECT            0x25
+#define EG_PKT3_INDEX_BASE                     0x26
 #define PKT3_DRAW_INDEX_2                      0x27
 #define PKT3_CONTEXT_CONTROL                   0x28
 #define PKT3_DRAW_INDEX_IMMD_BE                0x29

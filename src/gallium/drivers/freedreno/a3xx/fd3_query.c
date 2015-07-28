@@ -65,7 +65,7 @@ occlusion_get_sample(struct fd_context *ctx, struct fd_ringbuffer *ring)
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
 	OUT_RING(ring, DRAW(DI_PT_POINTLIST_A2XX, DI_SRC_SEL_AUTO_INDEX,
-			INDEX_SIZE_IGN, USE_VISIBILITY));
+						INDEX_SIZE_IGN, USE_VISIBILITY, 0));
 	OUT_RING(ring, 0);             /* NumIndices */
 
 	fd_event_write(ctx, ring, ZPASS_DONE);

@@ -96,7 +96,7 @@ vec4_vs_visitor::emit_program_code()
          break;
 
       case OPCODE_ARL:
-         if (brw->gen >= 6) {
+         if (devinfo->gen >= 6) {
             dst.writemask = WRITEMASK_X;
             dst_reg dst_f = dst;
             dst_f.type = BRW_REGISTER_TYPE_F;
@@ -226,7 +226,7 @@ vec4_vs_visitor::emit_program_code()
                /* if (tmp.y < 0) tmp.y = 0; */
                src_reg tmp_y = swizzle(src[0], BRW_SWIZZLE_YYYY);
                result.writemask = WRITEMASK_Z;
-               emit_minmax(BRW_CONDITIONAL_G, result, tmp_y, src_reg(0.0f));
+               emit_minmax(BRW_CONDITIONAL_GE, result, tmp_y, src_reg(0.0f));
 
                src_reg clamped_y(result);
                clamped_y.swizzle = BRW_SWIZZLE_ZZZZ;
@@ -313,7 +313,7 @@ vec4_vs_visitor::emit_program_code()
       }
 
       case OPCODE_MAX:
-         emit_minmax(BRW_CONDITIONAL_G, dst, src[0], src[1]);
+         emit_minmax(BRW_CONDITIONAL_GE, dst, src[0], src[1]);
          break;
 
       case OPCODE_MIN:
@@ -386,7 +386,7 @@ vec4_vs_visitor::emit_program_code()
       }
 
       /* Copy the temporary back into the actual destination register. */
-      if (vpi->Opcode != OPCODE_END) {
+      if (_mesa_num_inst_dst_regs(vpi->Opcode) != 0) {
          emit(MOV(get_vp_dst_reg(vpi->DstReg), src_reg(dst)));
       }
    }
@@ -527,11 +527,12 @@ vec4_vs_visitor::get_vp_src_reg(const prog_src_register &src)
 
          /* Add the small constant index to the address register */
          src_reg reladdr = src_reg(this, glsl_type::int_type);
+
          dst_reg dst_reladdr = dst_reg(reladdr);
          dst_reladdr.writemask = WRITEMASK_X;
          emit(ADD(dst_reladdr, this->vp_addr_reg, src_reg(src.Index)));
 
-         if (brw->gen < 6)
+         if (devinfo->gen < 6)
             emit(MUL(dst_reladdr, reladdr, src_reg(16)));
 
       #if 0
@@ -544,19 +545,11 @@ vec4_vs_visitor::get_vp_src_reg(const prog_src_register &src)
 
          result = src_reg(this, glsl_type::vec4_type);
          src_reg surf_index = src_reg(unsigned(prog_data->base.binding_table.pull_constants_start));
-         vec4_instruction *load;
-         if (brw->gen >= 7) {
-            load = new(mem_ctx)
-               vec4_instruction(this, VS_OPCODE_PULL_CONSTANT_LOAD_GEN7,
-                                dst_reg(result), surf_index, reladdr);
-         } else {
-            load = new(mem_ctx)
-               vec4_instruction(this, VS_OPCODE_PULL_CONSTANT_LOAD,
-                                dst_reg(result), surf_index, reladdr);
-            load->base_mrf = 14;
-            load->mlen = 1;
-         }
-         emit(load);
+
+         emit_pull_constant_load_reg(dst_reg(result),
+                                     surf_index,
+                                     reladdr,
+                                     NULL, NULL /* before_block/inst */);
          break;
       }
 

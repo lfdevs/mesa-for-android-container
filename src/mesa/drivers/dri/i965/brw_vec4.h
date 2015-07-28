@@ -31,6 +31,8 @@
 #include "brw_program.h"
 
 #ifdef __cplusplus
+#include "brw_ir_vec4.h"
+
 extern "C" {
 #endif
 
@@ -63,163 +65,7 @@ brw_vue_setup_prog_key_for_precompile(struct gl_context *ctx,
 
 namespace brw {
 
-class dst_reg;
-
 class vec4_live_variables;
-
-unsigned
-swizzle_for_size(int size);
-
-class src_reg : public backend_reg
-{
-public:
-   DECLARE_RALLOC_CXX_OPERATORS(src_reg)
-
-   void init();
-
-   src_reg(register_file file, int reg, const glsl_type *type);
-   src_reg();
-   src_reg(float f);
-   src_reg(uint32_t u);
-   src_reg(int32_t i);
-   src_reg(uint8_t vf[4]);
-   src_reg(uint8_t vf0, uint8_t vf1, uint8_t vf2, uint8_t vf3);
-   src_reg(struct brw_reg reg);
-
-   bool equals(const src_reg &r) const;
-
-   src_reg(class vec4_visitor *v, const struct glsl_type *type);
-   src_reg(class vec4_visitor *v, const struct glsl_type *type, int size);
-
-   explicit src_reg(dst_reg reg);
-
-   GLuint swizzle; /**< BRW_SWIZZLE_XYZW macros from brw_reg.h. */
-
-   src_reg *reladdr;
-};
-
-static inline src_reg
-retype(src_reg reg, enum brw_reg_type type)
-{
-   reg.fixed_hw_reg.type = reg.type = type;
-   return reg;
-}
-
-static inline src_reg
-offset(src_reg reg, unsigned delta)
-{
-   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
-   reg.reg_offset += delta;
-   return reg;
-}
-
-/**
- * Reswizzle a given source register.
- * \sa brw_swizzle().
- */
-static inline src_reg
-swizzle(src_reg reg, unsigned swizzle)
-{
-   assert(reg.file != HW_REG);
-   reg.swizzle = BRW_SWIZZLE4(
-      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 0)),
-      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 1)),
-      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 2)),
-      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 3)));
-   return reg;
-}
-
-static inline src_reg
-negate(src_reg reg)
-{
-   assert(reg.file != HW_REG && reg.file != IMM);
-   reg.negate = !reg.negate;
-   return reg;
-}
-
-class dst_reg : public backend_reg
-{
-public:
-   DECLARE_RALLOC_CXX_OPERATORS(dst_reg)
-
-   void init();
-
-   dst_reg();
-   dst_reg(register_file file, int reg);
-   dst_reg(register_file file, int reg, const glsl_type *type, int writemask);
-   dst_reg(struct brw_reg reg);
-   dst_reg(class vec4_visitor *v, const struct glsl_type *type);
-
-   explicit dst_reg(src_reg reg);
-
-   int writemask; /**< Bitfield of WRITEMASK_[XYZW] */
-
-   src_reg *reladdr;
-};
-
-static inline dst_reg
-retype(dst_reg reg, enum brw_reg_type type)
-{
-   reg.fixed_hw_reg.type = reg.type = type;
-   return reg;
-}
-
-static inline dst_reg
-offset(dst_reg reg, unsigned delta)
-{
-   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
-   reg.reg_offset += delta;
-   return reg;
-}
-
-static inline dst_reg
-writemask(dst_reg reg, unsigned mask)
-{
-   assert(reg.file != HW_REG && reg.file != IMM);
-   assert((reg.writemask & mask) != 0);
-   reg.writemask &= mask;
-   return reg;
-}
-
-class vec4_instruction : public backend_instruction {
-public:
-   DECLARE_RALLOC_CXX_OPERATORS(vec4_instruction)
-
-   vec4_instruction(vec4_visitor *v, enum opcode opcode,
-                    const dst_reg &dst = dst_reg(),
-                    const src_reg &src0 = src_reg(),
-                    const src_reg &src1 = src_reg(),
-                    const src_reg &src2 = src_reg());
-
-   struct brw_reg get_dst(void);
-   struct brw_reg get_src(const struct brw_vue_prog_data *prog_data, int i);
-
-   dst_reg dst;
-   src_reg src[3];
-
-   enum brw_urb_write_flags urb_write_flags;
-
-   unsigned sol_binding; /**< gen6: SOL binding table index */
-   bool sol_final_write; /**< gen6: send commit message */
-   unsigned sol_vertex; /**< gen6: used for setting dst index in SVB header */
-
-   bool is_send_from_grf();
-   bool can_reswizzle(int dst_writemask, int swizzle, int swizzle_mask);
-   void reswizzle(int dst_writemask, int swizzle);
-   bool can_do_source_mods(struct brw_context *brw);
-
-   bool reads_flag()
-   {
-      return predicate || opcode == VS_OPCODE_UNPACK_FLAGS_SIMD4X2;
-   }
-
-   bool writes_flag()
-   {
-      return (conditional_mod && (opcode != BRW_OPCODE_SEL &&
-                                  opcode != BRW_OPCODE_IF &&
-                                  opcode != BRW_OPCODE_WHILE));
-   }
-};
 
 /**
  * The vertex shader front-end.
@@ -238,7 +84,6 @@ public:
 		struct gl_shader_program *shader_prog,
                 gl_shader_stage stage,
 		void *mem_ctx,
-                bool debug_flag,
                 bool no_spills,
                 shader_time_shader_type st_base,
                 shader_time_shader_type st_written,
@@ -275,23 +120,12 @@ public:
    const void *base_ir;
    const char *current_annotation;
 
-   int *virtual_grf_sizes;
-   int virtual_grf_count;
-   int virtual_grf_array_size;
    int first_non_payload_grf;
    unsigned int max_grf;
    int *virtual_grf_start;
    int *virtual_grf_end;
    brw::vec4_live_variables *live_intervals;
    dst_reg userplane[MAX_CLIP_PLANES];
-
-   /**
-    * This is the size to be used for an array with an element per
-    * reg_offset
-    */
-   int virtual_grf_reg_count;
-   /** Per-virtual-grf indices into an array of size virtual_grf_reg_count */
-   int *virtual_grf_reg_map;
 
    dst_reg *variable_storage(ir_variable *var);
 
@@ -347,7 +181,6 @@ public:
    bool run(void);
    void fail(const char *msg, ...);
 
-   int virtual_grf_alloc(int size);
    void setup_uniform_clipplane_values();
    void setup_uniform_values(ir_variable *ir);
    void setup_builtin_uniform_values(ir_variable *ir);
@@ -368,12 +201,15 @@ public:
    bool opt_vector_float();
    bool opt_reduce_swizzle();
    bool dead_code_eliminate();
+   int var_range_start(unsigned v, unsigned n) const;
+   int var_range_end(unsigned v, unsigned n) const;
    bool virtual_grf_interferes(int a, int b);
    bool opt_copy_propagation(bool do_constant_prop = true);
    bool opt_cse_local(bblock_t *block);
    bool opt_cse();
    bool opt_algebraic();
    bool opt_register_coalesce();
+   bool eliminate_find_live_channel();
    bool is_dep_ctrl_unsafe(const vec4_instruction *inst);
    void opt_set_dependency_control();
    void opt_schedule_instructions();
@@ -423,7 +259,6 @@ public:
    vec4_instruction *IF(src_reg src0, src_reg src1,
                         enum brw_conditional_mod condition);
    vec4_instruction *IF(enum brw_predicate predicate);
-   EMIT1(PULL_CONSTANT_LOAD)
    EMIT1(SCRATCH_READ)
    EMIT2(SCRATCH_WRITE)
    EMIT3(LRP)
@@ -464,6 +299,9 @@ public:
    void emit_lrp(const dst_reg &dst,
                  const src_reg &x, const src_reg &y, const src_reg &a);
 
+   /** Copy any live channel from \p src to the first channel of \p dst. */
+   void emit_uniformize(const dst_reg &dst, const src_reg &src);
+
    void emit_block_move(dst_reg *dst, src_reg *src,
                         const struct glsl_type *type, brw_predicate predicate);
 
@@ -479,9 +317,6 @@ public:
 
    void emit_scalar(ir_instruction *ir, enum prog_opcode op,
 		    dst_reg dst, src_reg src0, src_reg src1);
-
-   void emit_scs(ir_instruction *ir, enum prog_opcode op,
-		 dst_reg dst, const src_reg &src);
 
    src_reg fix_3src_operand(src_reg src);
 
@@ -533,6 +368,13 @@ public:
 				dst_reg dst,
 				src_reg orig_src,
 				int base_offset);
+   void emit_pull_constant_load_reg(dst_reg dst,
+                                    src_reg surf_index,
+                                    src_reg offset,
+                                    bblock_t *before_block,
+                                    vec4_instruction *before_inst);
+   src_reg emit_resolve_reladdr(int scratch_loc[], bblock_t *block,
+                                vec4_instruction *inst, src_reg src);
 
    bool try_emit_mad(ir_expression *ir);
    bool try_emit_b2f_of_compare(ir_expression *ir);
@@ -563,8 +405,6 @@ protected:
    virtual void emit_urb_write_header(int mrf) = 0;
    virtual vec4_instruction *emit_urb_write_opcode(bool complete) = 0;
    virtual int compute_array_stride(ir_dereference_array *ir);
-
-   const bool debug_flag;
 
 private:
    /**
@@ -664,21 +504,14 @@ private:
                                          struct brw_reg dst,
                                          struct brw_reg surf_index,
                                          struct brw_reg offset);
-   void generate_unpack_flags(vec4_instruction *inst,
-                              struct brw_reg dst);
-
-   void generate_untyped_atomic(vec4_instruction *inst,
-                                struct brw_reg dst,
-                                struct brw_reg atomic_op,
-                                struct brw_reg surf_index);
-
-   void generate_untyped_surface_read(vec4_instruction *inst,
-                                      struct brw_reg dst,
-                                      struct brw_reg surf_index);
+   void generate_set_simd4x2_header_gen9(vec4_instruction *inst,
+                                         struct brw_reg dst);
+   void generate_unpack_flags(struct brw_reg dst);
 
    struct brw_context *brw;
+   const struct brw_device_info *devinfo;
 
-   struct brw_compile *p;
+   struct brw_codegen *p;
 
    struct gl_shader_program *shader_prog;
    const struct gl_program *prog;

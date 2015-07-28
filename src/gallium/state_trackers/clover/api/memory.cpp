@@ -27,10 +27,37 @@
 
 using namespace clover;
 
+namespace {
+   const cl_mem_flags dev_access_flags =
+      CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY;
+   const cl_mem_flags host_ptr_flags =
+      CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR;
+   const cl_mem_flags host_access_flags =
+      CL_MEM_HOST_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_HOST_NO_ACCESS;
+   const cl_mem_flags all_mem_flags =
+      dev_access_flags | host_ptr_flags | host_access_flags;
+
+   void
+   validate_flags(cl_mem_flags flags, cl_mem_flags valid) {
+      if ((flags & ~valid) ||
+          util_bitcount(flags & dev_access_flags) > 1 ||
+          util_bitcount(flags & host_access_flags) > 1)
+         throw error(CL_INVALID_VALUE);
+
+      if ((flags & CL_MEM_USE_HOST_PTR) &&
+          (flags & (CL_MEM_COPY_HOST_PTR | CL_MEM_ALLOC_HOST_PTR)))
+         throw error(CL_INVALID_VALUE);
+   }
+}
+
 CLOVER_API cl_mem
-clCreateBuffer(cl_context d_ctx, cl_mem_flags flags, size_t size,
+clCreateBuffer(cl_context d_ctx, cl_mem_flags d_flags, size_t size,
                void *host_ptr, cl_int *r_errcode) try {
+   const cl_mem_flags flags = d_flags |
+      (d_flags & dev_access_flags ? 0 : CL_MEM_READ_WRITE);
    auto &ctx = obj(d_ctx);
+
+   validate_flags(d_flags, all_mem_flags);
 
    if (bool(host_ptr) != bool(flags & (CL_MEM_USE_HOST_PTR |
                                        CL_MEM_COPY_HOST_PTR)))
@@ -42,19 +69,6 @@ clCreateBuffer(cl_context d_ctx, cl_mem_flags flags, size_t size,
           ))
       throw error(CL_INVALID_BUFFER_SIZE);
 
-   if (flags & ~(CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY |
-                 CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR |
-                 CL_MEM_COPY_HOST_PTR))
-      throw error(CL_INVALID_VALUE);
-
-   if (util_bitcount(flags & (CL_MEM_READ_ONLY | CL_MEM_WRITE_ONLY |
-                              CL_MEM_READ_WRITE)) > 1)
-      throw error(CL_INVALID_VALUE);
-
-   if ((flags & CL_MEM_USE_HOST_PTR) &&
-       (flags & (CL_MEM_COPY_HOST_PTR | CL_MEM_ALLOC_HOST_PTR)))
-      throw error(CL_INVALID_VALUE);
-
    ret_error(r_errcode, CL_SUCCESS);
    return new root_buffer(ctx, flags, size, host_ptr);
 
@@ -64,16 +78,19 @@ clCreateBuffer(cl_context d_ctx, cl_mem_flags flags, size_t size,
 }
 
 CLOVER_API cl_mem
-clCreateSubBuffer(cl_mem d_mem, cl_mem_flags flags,
+clCreateSubBuffer(cl_mem d_mem, cl_mem_flags d_flags,
                   cl_buffer_create_type op,
                   const void *op_info, cl_int *r_errcode) try {
    auto &parent = obj<root_buffer>(d_mem);
+   const cl_mem_flags flags = d_flags |
+      (d_flags & dev_access_flags ? 0 : parent.flags() & dev_access_flags) |
+      (d_flags & host_access_flags ? 0 : parent.flags() & host_access_flags) |
+      (parent.flags() & host_ptr_flags);
 
-   if ((flags & (CL_MEM_USE_HOST_PTR |
-                 CL_MEM_ALLOC_HOST_PTR |
-                 CL_MEM_COPY_HOST_PTR)) ||
-       (~flags & parent.flags() & (CL_MEM_READ_ONLY |
-                                   CL_MEM_WRITE_ONLY)))
+   validate_flags(d_flags, dev_access_flags | host_access_flags);
+
+   if (~flags & parent.flags() &
+       ((dev_access_flags & ~CL_MEM_READ_WRITE) | host_access_flags))
       throw error(CL_INVALID_VALUE);
 
    if (op == CL_BUFFER_CREATE_TYPE_REGION) {
@@ -100,19 +117,18 @@ clCreateSubBuffer(cl_mem d_mem, cl_mem_flags flags,
 }
 
 CLOVER_API cl_mem
-clCreateImage2D(cl_context d_ctx, cl_mem_flags flags,
+clCreateImage2D(cl_context d_ctx, cl_mem_flags d_flags,
                 const cl_image_format *format,
                 size_t width, size_t height, size_t row_pitch,
                 void *host_ptr, cl_int *r_errcode) try {
+   const cl_mem_flags flags = d_flags |
+      (d_flags & dev_access_flags ? 0 : CL_MEM_READ_WRITE);
    auto &ctx = obj(d_ctx);
+
+   validate_flags(d_flags, all_mem_flags);
 
    if (!any_of(std::mem_fn(&device::image_support), ctx.devices()))
       throw error(CL_INVALID_OPERATION);
-
-   if (flags & ~(CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY |
-                 CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR |
-                 CL_MEM_COPY_HOST_PTR))
-      throw error(CL_INVALID_VALUE);
 
    if (!format)
       throw error(CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
@@ -137,20 +153,19 @@ clCreateImage2D(cl_context d_ctx, cl_mem_flags flags,
 }
 
 CLOVER_API cl_mem
-clCreateImage3D(cl_context d_ctx, cl_mem_flags flags,
+clCreateImage3D(cl_context d_ctx, cl_mem_flags d_flags,
                 const cl_image_format *format,
                 size_t width, size_t height, size_t depth,
                 size_t row_pitch, size_t slice_pitch,
                 void *host_ptr, cl_int *r_errcode) try {
+   const cl_mem_flags flags = d_flags |
+      (d_flags & dev_access_flags ? 0 : CL_MEM_READ_WRITE);
    auto &ctx = obj(d_ctx);
+
+   validate_flags(d_flags, all_mem_flags);
 
    if (!any_of(std::mem_fn(&device::image_support), ctx.devices()))
       throw error(CL_INVALID_OPERATION);
-
-   if (flags & ~(CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY |
-                 CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR |
-                 CL_MEM_COPY_HOST_PTR))
-      throw error(CL_INVALID_VALUE);
 
    if (!format)
       throw error(CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
@@ -179,16 +194,12 @@ clGetSupportedImageFormats(cl_context d_ctx, cl_mem_flags flags,
                            cl_mem_object_type type, cl_uint count,
                            cl_image_format *r_buf, cl_uint *r_count) try {
    auto &ctx = obj(d_ctx);
+   auto formats = supported_formats(ctx, type);
 
-   if (flags & ~(CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY |
-                 CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR |
-                 CL_MEM_COPY_HOST_PTR))
-      throw error(CL_INVALID_VALUE);
+   validate_flags(flags, all_mem_flags);
 
    if (r_buf && !r_count)
       throw error(CL_INVALID_VALUE);
-
-   auto formats = supported_formats(ctx, type);
 
    if (r_buf)
       std::copy_n(formats.begin(),

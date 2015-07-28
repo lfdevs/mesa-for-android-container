@@ -44,7 +44,7 @@ brw_setup_vue_interpolation(struct brw_context *brw)
 
    memset(&brw->interpolation_mode, INTERP_QUALIFIER_NONE, sizeof(brw->interpolation_mode));
 
-   brw->state.dirty.brw |= BRW_NEW_INTERPOLATION_MAP;
+   brw->ctx.NewDriverState |= BRW_NEW_INTERPOLATION_MAP;
 
    if (!fprog)
       return;

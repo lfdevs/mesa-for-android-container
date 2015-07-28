@@ -93,7 +93,7 @@ emit_factor(GLuint blendUnit, GLuint * state, GLuint count,
 }
 
 
-static INLINE GLuint
+static inline GLuint
 GetTexelOp(GLint unit)
 {
    switch (unit) {
@@ -159,7 +159,7 @@ i830SetTexEnvCombine(struct i830_context * i830,
    };
 
    if (INTEL_DEBUG & DEBUG_TEXTURE)
-      fprintf(stderr, "%s\n", __FUNCTION__);
+      fprintf(stderr, "%s\n", __func__);
 
 
    /* The EXT version of the DOT3 extension does not support the
@@ -395,7 +395,7 @@ emit_texblend(struct i830_context *i830, GLuint unit, GLuint blendUnit,
 
 
    if (0)
-      fprintf(stderr, "%s unit %d\n", __FUNCTION__, unit);
+      fprintf(stderr, "%s unit %d\n", __func__, unit);
 
    /* Update i830->state.TexBlend
     */

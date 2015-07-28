@@ -21,6 +21,7 @@
 //
 
 #include <type_traits>
+#include <iostream>
 
 #include "core/module.hpp"
 
@@ -33,20 +34,20 @@ namespace {
    /// Serialize the specified object.
    template<typename T>
    void
-   _proc(compat::ostream &os, const T &x) {
+   _proc(std::ostream &os, const T &x) {
       _serializer<T>::proc(os, x);
    }
 
    /// Deserialize the specified object.
    template<typename T>
    void
-   _proc(compat::istream &is, T &x) {
+   _proc(std::istream &is, T &x) {
       _serializer<T>::proc(is, x);
    }
 
    template<typename T>
    T
-   _proc(compat::istream &is) {
+   _proc(std::istream &is) {
       T x;
       _serializer<T>::proc(is, x);
       return x;
@@ -64,12 +65,12 @@ namespace {
    struct _serializer<T, typename std::enable_if<
                             std::is_scalar<T>::value>::type> {
       static void
-      proc(compat::ostream &os, const T &x) {
+      proc(std::ostream &os, const T &x) {
          os.write(reinterpret_cast<const char *>(&x), sizeof(x));
       }
 
       static void
-      proc(compat::istream &is, T &x) {
+      proc(std::istream &is, T &x) {
          is.read(reinterpret_cast<char *>(&x), sizeof(x));
       }
 
@@ -81,11 +82,11 @@ namespace {
 
    /// (De)serialize a vector.
    template<typename T>
-   struct _serializer<compat::vector<T>,
+   struct _serializer<std::vector<T>,
                       typename std::enable_if<
                          !std::is_scalar<T>::value>::type> {
       static void
-      proc(compat::ostream &os, const compat::vector<T> &v) {
+      proc(std::ostream &os, const std::vector<T> &v) {
          _proc<uint32_t>(os, v.size());
 
          for (size_t i = 0; i < v.size(); i++)
@@ -93,7 +94,7 @@ namespace {
       }
 
       static void
-      proc(compat::istream &is, compat::vector<T> &v) {
+      proc(std::istream &is, std::vector<T> &v) {
          v.resize(_proc<uint32_t>(is));
 
          for (size_t i = 0; i < v.size(); i++)
@@ -101,7 +102,7 @@ namespace {
       }
 
       static void
-      proc(module::size_t &sz, const compat::vector<T> &v) {
+      proc(module::size_t &sz, const std::vector<T> &v) {
          sz += sizeof(uint32_t);
 
          for (size_t i = 0; i < v.size(); i++)
@@ -110,26 +111,47 @@ namespace {
    };
 
    template<typename T>
-   struct _serializer<compat::vector<T>,
+   struct _serializer<std::vector<T>,
                       typename std::enable_if<
                          std::is_scalar<T>::value>::type> {
       static void
-      proc(compat::ostream &os, const compat::vector<T> &v) {
+      proc(std::ostream &os, const std::vector<T> &v) {
          _proc<uint32_t>(os, v.size());
-         os.write(reinterpret_cast<const char *>(v.begin()),
+         os.write(reinterpret_cast<const char *>(&v[0]),
                   v.size() * sizeof(T));
       }
 
       static void
-      proc(compat::istream &is, compat::vector<T> &v) {
+      proc(std::istream &is, std::vector<T> &v) {
          v.resize(_proc<uint32_t>(is));
-         is.read(reinterpret_cast<char *>(v.begin()),
+         is.read(reinterpret_cast<char *>(&v[0]),
                  v.size() * sizeof(T));
       }
 
       static void
-      proc(module::size_t &sz, const compat::vector<T> &v) {
+      proc(module::size_t &sz, const std::vector<T> &v) {
          sz += sizeof(uint32_t) + sizeof(T) * v.size();
+      }
+   };
+
+   /// (De)serialize a string.
+   template<>
+   struct _serializer<std::string> {
+      static void
+      proc(std::ostream &os, const std::string &s) {
+         _proc<uint32_t>(os, s.size());
+         os.write(&s[0], s.size() * sizeof(std::string::value_type));
+      }
+
+      static void
+      proc(std::istream &is, std::string &s) {
+         s.resize(_proc<uint32_t>(is));
+         is.read(&s[0], s.size() * sizeof(std::string::value_type));
+      }
+
+      static void
+      proc(module::size_t &sz, const std::string &s) {
+         sz += sizeof(uint32_t) + sizeof(std::string::value_type) * s.size();
       }
    };
 
@@ -188,12 +210,12 @@ namespace {
 
 namespace clover {
    void
-   module::serialize(compat::ostream &os) const {
+   module::serialize(std::ostream &os) const {
       _proc(os, *this);
    }
 
    module
-   module::deserialize(compat::istream &is) {
+   module::deserialize(std::istream &is) {
       return _proc<module>(is);
    }
 

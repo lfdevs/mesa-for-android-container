@@ -29,7 +29,7 @@
  * ushorts, uints, etc.
  */
 
-
+#include <stdio.h>
 #include "glheader.h"
 #include "imports.h"
 #include "blend.h"
@@ -223,8 +223,8 @@ _mesa_free_framebuffer_data(struct gl_framebuffer *fb)
       if (att->Texture) {
          _mesa_reference_texobj(&att->Texture, NULL);
       }
-      ASSERT(!att->Renderbuffer);
-      ASSERT(!att->Texture);
+      assert(!att->Renderbuffer);
+      assert(!att->Texture);
       att->Type = GL_NONE;
    }
 }
@@ -245,7 +245,7 @@ _mesa_reference_framebuffer_(struct gl_framebuffer **ptr,
       struct gl_framebuffer *oldFb = *ptr;
 
       mtx_lock(&oldFb->Mutex);
-      ASSERT(oldFb->RefCount > 0);
+      assert(oldFb->RefCount > 0);
       oldFb->RefCount--;
       deleteFlag = (oldFb->RefCount == 0);
       mtx_unlock(&oldFb->Mutex);
@@ -296,8 +296,8 @@ _mesa_resize_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
          /* only resize if size is changing */
          if (rb->Width != width || rb->Height != height) {
             if (rb->AllocStorage(ctx, rb, rb->InternalFormat, width, height)) {
-               ASSERT(rb->Width == width);
-               ASSERT(rb->Height == height);
+               assert(rb->Width == width);
+               assert(rb->Height == height);
             }
             else {
                _mesa_error(ctx, GL_OUT_OF_MEMORY, "Resizing framebuffer");
@@ -312,7 +312,7 @@ _mesa_resize_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
 
    if (ctx) {
       /* update scissor / window bounds */
-      _mesa_update_draw_buffer_bounds(ctx);
+      _mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
       /* Signal new buffer state so that swrast will update its clipping
        * info (the CLIP_BIT flag).
        */
@@ -402,8 +402,8 @@ _mesa_scissor_bounding_box(const struct gl_context *ctx,
       }
    }
 
-   ASSERT(bbox[0] <= bbox[1]);
-   ASSERT(bbox[2] <= bbox[3]);
+   assert(bbox[0] <= bbox[1]);
+   assert(bbox[2] <= bbox[3]);
 }
 
 /**
@@ -413,9 +413,9 @@ _mesa_scissor_bounding_box(const struct gl_context *ctx,
  * \param ctx  the GL context.
  */
 void
-_mesa_update_draw_buffer_bounds(struct gl_context *ctx)
+_mesa_update_draw_buffer_bounds(struct gl_context *ctx,
+                                struct gl_framebuffer *buffer)
 {
-   struct gl_framebuffer *buffer = ctx->DrawBuffer;
    int bbox[4];
 
    if (!buffer)
@@ -621,8 +621,8 @@ update_color_read_buffer(struct gl_context *ctx, struct gl_framebuffer *fb)
       fb->_ColorReadBuffer = NULL; /* legal! */
    }
    else {
-      ASSERT(fb->_ColorReadBufferIndex >= 0);
-      ASSERT(fb->_ColorReadBufferIndex < BUFFER_COUNT);
+      assert(fb->_ColorReadBufferIndex >= 0);
+      assert(fb->_ColorReadBufferIndex < BUFFER_COUNT);
       fb->_ColorReadBuffer
          = fb->Attachment[fb->_ColorReadBufferIndex].Renderbuffer;
    }
@@ -652,7 +652,7 @@ update_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
        * context state (GL_READ_BUFFER too).
        */
       if (fb->ColorDrawBuffer[0] != ctx->Color.DrawBuffer[0]) {
-         _mesa_drawbuffers(ctx, ctx->Const.MaxDrawBuffers,
+         _mesa_drawbuffers(ctx, fb, ctx->Const.MaxDrawBuffers,
                            ctx->Color.DrawBuffer, NULL);
       }
    }
@@ -678,24 +678,21 @@ update_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 
 
 /**
- * Update state related to the current draw/read framebuffers.
+ * Update state related to the draw/read framebuffers.
  */
 void
-_mesa_update_framebuffer(struct gl_context *ctx)
+_mesa_update_framebuffer(struct gl_context *ctx,
+                         struct gl_framebuffer *readFb,
+                         struct gl_framebuffer *drawFb)
 {
-   struct gl_framebuffer *drawFb;
-   struct gl_framebuffer *readFb;
-
    assert(ctx);
-   drawFb = ctx->DrawBuffer;
-   readFb = ctx->ReadBuffer;
 
    update_framebuffer(ctx, drawFb);
    if (readFb != drawFb)
       update_framebuffer(ctx, readFb);
 
-   _mesa_update_clamp_vertex_color(ctx);
-   _mesa_update_clamp_fragment_color(ctx);
+   _mesa_update_clamp_vertex_color(ctx, drawFb);
+   _mesa_update_clamp_fragment_color(ctx, drawFb);
 }
 
 
@@ -756,7 +753,7 @@ renderbuffer_exists(struct gl_context *ctx,
          if (!readBuf) {
             return GL_FALSE;
          }
-         ASSERT(_mesa_get_format_bits(readBuf->Format, GL_RED_BITS) > 0 ||
+         assert(_mesa_get_format_bits(readBuf->Format, GL_RED_BITS) > 0 ||
                 _mesa_get_format_bits(readBuf->Format, GL_ALPHA_BITS) > 0 ||
                 _mesa_get_format_bits(readBuf->Format, GL_TEXTURE_LUMINANCE_SIZE) > 0 ||
                 _mesa_get_format_bits(readBuf->Format, GL_TEXTURE_INTENSITY_SIZE) > 0 ||

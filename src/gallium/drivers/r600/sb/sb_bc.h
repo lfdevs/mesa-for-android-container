@@ -27,10 +27,8 @@
 #ifndef SB_BC_H_
 #define SB_BC_H_
 
-extern "C" {
 #include <stdint.h>
 #include "r600_isa.h"
-}
 
 #include <cstdio>
 #include <string>
@@ -784,7 +782,7 @@ public: \
 
 // CLAMP macro defined elsewhere interferes with bytecode field name
 #undef CLAMP
-
+#undef ARRAY_SIZE
 #include "sb_bc_fmt_def.inc"
 
 #undef BC_FORMAT_BEGIN

@@ -84,6 +84,9 @@ static const unsigned const_empty_block_mask_420[3][2][2] = {
 
 struct video_buffer_private
 {
+   struct list_head list;
+   struct pipe_video_buffer *video_buffer;
+
    struct pipe_sampler_view *sampler_view_planes[VL_NUM_COMPONENTS];
    struct pipe_surface      *surfaces[VL_MAX_SURFACES];
 
@@ -98,6 +101,8 @@ destroy_video_buffer_private(void *private)
 {
    struct video_buffer_private *priv = private;
    unsigned i;
+
+   list_del(&priv->list);
 
    for (i = 0; i < VL_NUM_COMPONENTS; ++i)
       pipe_sampler_view_reference(&priv->sampler_view_planes[i], NULL);
@@ -126,6 +131,9 @@ get_video_buffer_private(struct vl_mpeg12_decoder *dec, struct pipe_video_buffer
 
    priv = CALLOC_STRUCT(video_buffer_private);
 
+   list_add(&priv->list, &dec->buffer_privates);
+   priv->video_buffer = buf;
+
    sv = buf->get_sampler_view_planes(buf);
    for (i = 0; i < VL_NUM_COMPONENTS; ++i)
       if (sv[i])
@@ -139,6 +147,18 @@ get_video_buffer_private(struct vl_mpeg12_decoder *dec, struct pipe_video_buffer
    vl_video_buffer_set_associated_data(buf, &dec->base, priv, destroy_video_buffer_private);
 
    return priv;
+}
+
+static void
+free_video_buffer_privates(struct vl_mpeg12_decoder *dec)
+{
+   struct video_buffer_private *priv, *next;
+
+   LIST_FOR_EACH_ENTRY_SAFE(priv, next, &dec->buffer_privates, list) {
+      struct pipe_video_buffer *buf = priv->video_buffer;
+
+      vl_video_buffer_set_associated_data(buf, &dec->base, NULL, NULL);
+   }
 }
 
 static bool
@@ -463,6 +483,8 @@ vl_mpeg12_destroy(struct pipe_video_codec *decoder)
    unsigned i;
 
    assert(decoder);
+
+   free_video_buffer_privates(dec);
 
    /* Asserted in softpipe_delete_fs_state() for some reason */
    dec->context->bind_vs_state(dec->context, NULL);
@@ -1186,6 +1208,8 @@ vl_create_mpeg12_decoder(struct pipe_context *context,
 
    if (!init_pipe_state(dec))
       goto error_pipe_state;
+
+   list_inithead(&dec->buffer_privates);
 
    return &dec->base;
 

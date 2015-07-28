@@ -197,9 +197,9 @@ i915AlphaFunc(struct gl_context * ctx, GLenum func, GLfloat ref)
 }
 
 /* This function makes sure that the proper enables are
- * set for LogicOp, Independant Alpha Blend, and Blending.
+ * set for LogicOp, Independent Alpha Blend, and Blending.
  * It needs to be called from numerous places where we
- * could change the LogicOp or Independant Alpha Blend without subsequent
+ * could change the LogicOp or Independent Alpha Blend without subsequent
  * calls to glEnable.
  */
 static void
@@ -241,7 +241,7 @@ i915BlendColor(struct gl_context * ctx, const GLfloat color[4])
    GLubyte r, g, b, a;
    GLuint dw;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
    
    UNCLAMPED_FLOAT_TO_UBYTE(r, color[RCOMP]);
    UNCLAMPED_FLOAT_TO_UBYTE(g, color[GCOMP]);
@@ -357,7 +357,7 @@ i915DepthFunc(struct gl_context * ctx, GLenum func)
    int test = intel_translate_compare_func(func);
    GLuint dw;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
    
    dw = i915->state.Ctx[I915_CTXREG_LIS6];
    dw &= ~S6_DEPTH_TEST_FUNC_MASK;
@@ -374,7 +374,7 @@ i915DepthMask(struct gl_context * ctx, GLboolean flag)
    struct i915_context *i915 = I915_CONTEXT(ctx);
    GLuint dw;
 
-   DBG("%s flag (%d)\n", __FUNCTION__, flag);
+   DBG("%s flag (%d)\n", __func__, flag);
 
    if (!ctx->DrawBuffer || !ctx->DrawBuffer->Visual.depthBits)
       flag = false;
@@ -501,7 +501,7 @@ i915Scissor(struct gl_context * ctx)
    if (!ctx->DrawBuffer)
       return;
 
-   DBG("%s %d,%d %dx%d\n", __FUNCTION__,
+   DBG("%s %d,%d %dx%d\n", __func__,
        ctx->Scissor.ScissorArray[0].X,     ctx->Scissor.ScissorArray[0].Y,
        ctx->Scissor.ScissorArray[0].Width, ctx->Scissor.ScissorArray[0].Height);
 
@@ -512,7 +512,7 @@ i915Scissor(struct gl_context * ctx)
       x2 = ctx->Scissor.ScissorArray[0].X
          + ctx->Scissor.ScissorArray[0].Width - 1;
       y2 = y1 + ctx->Scissor.ScissorArray[0].Height - 1;
-      DBG("%s %d..%d,%d..%d (inverted)\n", __FUNCTION__, x1, x2, y1, y2);
+      DBG("%s %d..%d,%d..%d (inverted)\n", __func__, x1, x2, y1, y2);
    }
    else {
       /* FBO - not inverted
@@ -523,7 +523,7 @@ i915Scissor(struct gl_context * ctx)
          + ctx->Scissor.ScissorArray[0].Width - 1;
       y2 = ctx->Scissor.ScissorArray[0].Y
          + ctx->Scissor.ScissorArray[0].Height - 1;
-      DBG("%s %d..%d,%d..%d (not inverted)\n", __FUNCTION__, x1, x2, y1, y2);
+      DBG("%s %d..%d,%d..%d (not inverted)\n", __func__, x1, x2, y1, y2);
    }
    
    x1 = CLAMP(x1, 0, ctx->DrawBuffer->Width - 1);
@@ -531,7 +531,7 @@ i915Scissor(struct gl_context * ctx)
    x2 = CLAMP(x2, 0, ctx->DrawBuffer->Width - 1);
    y2 = CLAMP(y2, 0, ctx->DrawBuffer->Height - 1);
    
-   DBG("%s %d..%d,%d..%d (clamped)\n", __FUNCTION__, x1, x2, y1, y2);
+   DBG("%s %d..%d,%d..%d (clamped)\n", __func__, x1, x2, y1, y2);
 
    I915_STATECHANGE(i915, I915_UPLOAD_BUFFERS);
    i915->state.Buffer[I915_DESTREG_SR1] = (y1 << 16) | (x1 & 0xffff);
@@ -544,7 +544,7 @@ i915LogicOp(struct gl_context * ctx, GLenum opcode)
    struct i915_context *i915 = I915_CONTEXT(ctx);
    int tmp = intel_translate_logic_op(opcode);
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
    
    I915_STATECHANGE(i915, I915_UPLOAD_CTX);
    i915->state.Ctx[I915_CTXREG_STATE4] &= ~LOGICOP_MASK;
@@ -559,7 +559,7 @@ i915CullFaceFrontFace(struct gl_context * ctx, GLenum unused)
    struct i915_context *i915 = I915_CONTEXT(ctx);
    GLuint mode, dw;
 
-   DBG("%s %d\n", __FUNCTION__,
+   DBG("%s %d\n", __func__,
        ctx->DrawBuffer ? ctx->DrawBuffer->Name : 0);
 
    if (!ctx->Polygon.CullFlag) {
@@ -595,7 +595,7 @@ i915LineWidth(struct gl_context * ctx, GLfloat widthf)
    int lis4 = i915->state.Ctx[I915_CTXREG_LIS4] & ~S4_LINE_WIDTH_MASK;
    int width;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
    
    width = (int) (widthf * 2);
    width = CLAMP(width, 1, 0xf);
@@ -614,7 +614,7 @@ i915PointSize(struct gl_context * ctx, GLfloat size)
    int lis4 = i915->state.Ctx[I915_CTXREG_LIS4] & ~S4_POINT_WIDTH_MASK;
    GLint point_size = (int) round(size);
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
    
    point_size = CLAMP(point_size, 1, 255);
    lis4 |= point_size << S4_POINT_WIDTH_SHIFT;
@@ -697,7 +697,7 @@ i915ColorMask(struct gl_context * ctx,
    struct i915_context *i915 = I915_CONTEXT(ctx);
    GLuint tmp = i915->state.Ctx[I915_CTXREG_LIS5] & ~S5_WRITEDISABLE_MASK;
 
-   DBG("%s r(%d) g(%d) b(%d) a(%d)\n", __FUNCTION__, r, g, b,
+   DBG("%s r(%d) g(%d) b(%d) a(%d)\n", __func__, r, g, b,
        a);
 
    if (!r)
@@ -726,7 +726,7 @@ update_specular(struct gl_context * ctx)
 static void
 i915LightModelfv(struct gl_context * ctx, GLenum pname, const GLfloat * param)
 {
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
    
    if (pname == GL_LIGHT_MODEL_COLOR_CONTROL) {
       update_specular(ctx);

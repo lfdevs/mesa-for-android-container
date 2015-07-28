@@ -7,18 +7,10 @@ Import('*')
 env = env.Clone()
 
 env.Append(CPPDEFINES = [
-    '_EGL_BUILT_IN_DRIVER_GALLIUM',
     '_EGL_DRIVER_SEARCH_DIR=\\"\\"',
 ])
 
-if env['platform'] == 'windows':
-    env.Append(CPPDEFINES = [
-        '_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_WINDOWS',
-        '_EGL_OS_WINDOWS',
-        '_EGL_GET_CORE_ADDRESSES',
-        'KHRONOS_DLL_EXPORTS',
-    ])
-elif env['platform'] == 'haiku':
+if env['platform'] == 'haiku':
     env.Append(CPPDEFINES = [
         '_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_HAIKU',
         '_EGL_OS_UNIX',
@@ -38,6 +30,9 @@ else:
             egl_dri2,
             libloader,
         ])
+    # Disallow undefined symbols
+    if env['platform'] != 'darwin':
+        env.Append(SHLINKFLAGS = ['-Wl,-z,defs'])
 
 env.Append(CPPPATH = [
     '#/include',
@@ -47,9 +42,11 @@ env.Append(CPPPATH = [
 # parse Makefile.sources
 egl_sources = env.ParseSourceList('Makefile.sources', 'LIBEGL_C_FILES')
 
-egl = env.ConvenienceLibrary(
-    target = 'egl',
+egl = env.SharedLibrary(
+    target = 'EGL',
     source = egl_sources,
 )
 
-Export('egl')
+egl = env.InstallSharedLibrary(egl, version=(1, 0, 0))
+
+env.Alias('egl', egl)

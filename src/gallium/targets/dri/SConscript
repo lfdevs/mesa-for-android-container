@@ -18,8 +18,8 @@ if env['build'] == 'release':
     env.Append(CPPDEFINES = ['GALLIUM_RBUG'])
     env.Prepend(LIBS = [rbug])
 else:
-    env.Append(CPPDEFINES = ['GALLIUM_TRACE', 'GALLIUM_RBUG', 'GALLIUM_GALAHAD'])
-    env.Prepend(LIBS = [trace, rbug, galahad])
+    env.Append(CPPDEFINES = ['GALLIUM_TRACE', 'GALLIUM_RBUG'])
+    env.Prepend(LIBS = [trace, rbug])
 
 if env['llvm']:
     env.Append(CPPDEFINES = 'GALLIUM_LLVMPIPE')

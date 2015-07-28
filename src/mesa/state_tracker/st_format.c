@@ -443,21 +443,25 @@ st_mesa_format_to_pipe_format(struct st_context *st, mesa_format mesaFormat)
     * The destination formats mustn't be changed, because they are also
     * destination formats of the unpack/decompression function. */
    case MESA_FORMAT_ETC2_RGB8:
-   case MESA_FORMAT_ETC2_RGBA8_EAC:
-   case MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1:
-      return PIPE_FORMAT_R8G8B8A8_UNORM;
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_RGB8 : PIPE_FORMAT_R8G8B8A8_UNORM;
    case MESA_FORMAT_ETC2_SRGB8:
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_SRGB8 : PIPE_FORMAT_B8G8R8A8_SRGB;
+   case MESA_FORMAT_ETC2_RGBA8_EAC:
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_RGBA8 : PIPE_FORMAT_R8G8B8A8_UNORM;
    case MESA_FORMAT_ETC2_SRGB8_ALPHA8_EAC:
-   case MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1:
-      return PIPE_FORMAT_B8G8R8A8_SRGB;
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_SRGBA8 : PIPE_FORMAT_B8G8R8A8_SRGB;
    case MESA_FORMAT_ETC2_R11_EAC:
-      return PIPE_FORMAT_R16_UNORM;
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_R11_UNORM : PIPE_FORMAT_R16_UNORM;
    case MESA_FORMAT_ETC2_RG11_EAC:
-      return PIPE_FORMAT_R16G16_UNORM;
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_RG11_UNORM : PIPE_FORMAT_R16G16_UNORM;
    case MESA_FORMAT_ETC2_SIGNED_R11_EAC:
-      return PIPE_FORMAT_R16_SNORM;
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_R11_SNORM : PIPE_FORMAT_R16_SNORM;
    case MESA_FORMAT_ETC2_SIGNED_RG11_EAC:
-      return PIPE_FORMAT_R16G16_SNORM;
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_RG11_SNORM : PIPE_FORMAT_R16G16_SNORM;
+   case MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1:
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_RGB8A1 : PIPE_FORMAT_R8G8B8A8_UNORM;
+   case MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1:
+      return st->has_etc2 ? PIPE_FORMAT_ETC2_SRGB8A1 : PIPE_FORMAT_B8G8R8A8_SRGB;
 
    default:
       return PIPE_FORMAT_NONE;
@@ -856,6 +860,27 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
    case PIPE_FORMAT_XRGB8888_SRGB:
       return MESA_FORMAT_X8R8G8B8_SRGB;
 
+   case PIPE_FORMAT_ETC2_RGB8:
+      return MESA_FORMAT_ETC2_RGB8;
+   case PIPE_FORMAT_ETC2_SRGB8:
+      return MESA_FORMAT_ETC2_SRGB8;
+   case PIPE_FORMAT_ETC2_RGB8A1:
+      return MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1;
+   case PIPE_FORMAT_ETC2_SRGB8A1:
+      return MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1;
+   case PIPE_FORMAT_ETC2_RGBA8:
+      return MESA_FORMAT_ETC2_RGBA8_EAC;
+   case PIPE_FORMAT_ETC2_SRGBA8:
+      return MESA_FORMAT_ETC2_SRGB8_ALPHA8_EAC;
+   case PIPE_FORMAT_ETC2_R11_UNORM:
+      return MESA_FORMAT_ETC2_R11_EAC;
+   case PIPE_FORMAT_ETC2_R11_SNORM:
+      return MESA_FORMAT_ETC2_SIGNED_R11_EAC;
+   case PIPE_FORMAT_ETC2_RG11_UNORM:
+      return MESA_FORMAT_ETC2_RG11_EAC;
+   case PIPE_FORMAT_ETC2_RG11_SNORM:
+      return MESA_FORMAT_ETC2_SIGNED_RG11_EAC;
+
    default:
       return MESA_FORMAT_NONE;
    }
@@ -894,6 +919,9 @@ test_format_conversion(struct st_context *st)
 
       /* ETC formats are translated differently, skip them. */
       if (i == PIPE_FORMAT_ETC1_RGB8 && !st->has_etc1)
+         continue;
+
+      if (_mesa_is_format_etc2(mf) && !st->has_etc2)
          continue;
 
       if (mf != MESA_FORMAT_NONE) {
@@ -963,7 +991,7 @@ static const struct format_mapping format_map[] = {
    {
       { GL_RGB10, 0 },
       { PIPE_FORMAT_B10G10R10X2_UNORM, PIPE_FORMAT_B10G10R10A2_UNORM,
-        DEFAULT_RGB_FORMATS }
+        PIPE_FORMAT_R10G10B10A2_UNORM, DEFAULT_RGB_FORMATS }
    },
    {
       { GL_RGB10_A2, 0 },
@@ -1827,7 +1855,7 @@ st_choose_format(struct st_context *st, GLenum internalFormat,
       return pf;
 
    /* search table for internalFormat */
-   for (i = 0; i < Elements(format_map); i++) {
+   for (i = 0; i < ARRAY_SIZE(format_map); i++) {
       const struct format_mapping *mapping = &format_map[i];
       for (j = 0; mapping->glFormats[j]; j++) {
          if (mapping->glFormats[j] == internalFormat) {
@@ -1914,11 +1942,6 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
                        GLint internalFormat,
                        GLenum format, GLenum type)
 {
-   const boolean want_renderable =
-      internalFormat == 3 || internalFormat == 4 ||
-      internalFormat == GL_RGB || internalFormat == GL_RGBA ||
-      internalFormat == GL_RGB8 || internalFormat == GL_RGBA8 ||
-      internalFormat == GL_BGRA;
    struct st_context *st = st_context(ctx);
    enum pipe_format pFormat;
    unsigned bindings;
@@ -1934,15 +1957,17 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
    }
 
    /* GL textures may wind up being render targets, but we don't know
-    * that in advance.  Specify potential render target flags now.
+    * that in advance.  Specify potential render target flags now for formats
+    * that we know should always be renderable.
     */
    bindings = PIPE_BIND_SAMPLER_VIEW;
-   if (want_renderable) {
-      if (_mesa_is_depth_or_stencil_format(internalFormat))
-	 bindings |= PIPE_BIND_DEPTH_STENCIL;
-      else
+   if (_mesa_is_depth_or_stencil_format(internalFormat))
+      bindings |= PIPE_BIND_DEPTH_STENCIL;
+   else if (internalFormat == 3 || internalFormat == 4 ||
+            internalFormat == GL_RGB || internalFormat == GL_RGBA ||
+            internalFormat == GL_RGB8 || internalFormat == GL_RGBA8 ||
+            internalFormat == GL_BGRA)
 	 bindings |= PIPE_BIND_RENDER_TARGET;
-   }
 
    /* GLES allows the driver to choose any format which matches
     * the format+type combo, because GLES only supports unsized internal

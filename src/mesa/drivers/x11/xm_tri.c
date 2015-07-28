@@ -30,6 +30,8 @@
  */
 
 
+#include <stdio.h>
+#include "c99_math.h"
 #include "main/imports.h"
 #include "main/mtypes.h"
 #include "glxheader.h"

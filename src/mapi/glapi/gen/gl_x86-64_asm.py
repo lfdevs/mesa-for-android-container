@@ -138,10 +138,6 @@ class PrintGenericStubs(gl_XML.gl_print_base):
         print '#  define GL_PREFIX(n) GLNAME(CONCAT(gl,n))'
         print '# endif'
         print ''
-        print '#if defined(HAVE_PTHREAD) || defined(_WIN32)'
-        print '#  define THREADS'
-        print '#endif'
-        print ''
         print '\t.text'
         print ''
         print '#ifdef GLX_USE_TLS'
@@ -170,7 +166,7 @@ class PrintGenericStubs(gl_XML.gl_print_base):
         print '\tmovl\t(%rax), %edi'
         print '\tjmp\tpthread_getspecific@PLT'
         print ''
-        print '#elif defined(THREADS)'
+        print '#else'
         print ''
         print '\t.extern\t_glapi_get_dispatch'
         print ''
@@ -191,7 +187,7 @@ class PrintGenericStubs(gl_XML.gl_print_base):
 
         # The x86-64 ABI divides function parameters into a couple
         # classes.  For the OpenGL interface, the only ones that are
-        # relevent are INTEGER and SSE.  Basically, the first 8
+        # relevant are INTEGER and SSE.  Basically, the first 8
         # GLfloat or GLdouble parameters are placed in %xmm0 - %xmm7,
         # the first 6 non-GLfloat / non-GLdouble parameters are placed
         # in registers listed in int_parameters.

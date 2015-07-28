@@ -26,42 +26,79 @@
  */
 
 #include "genhw/genhw.h"
+#include "core/ilo_builder.h"
+#include "core/ilo_builder_mi.h"
+#include "core/ilo_builder_render.h"
+#include "core/intel_winsys.h"
 #include "util/u_prim.h"
-#include "intel_winsys.h"
 
-#include "ilo_builder.h"
-#include "ilo_builder_mi.h"
-#include "ilo_builder_render.h"
 #include "ilo_query.h"
 #include "ilo_render_gen.h"
 
-/* in U0.4 */
+/* in S1.3 */
 struct sample_position {
-   uint8_t x, y;
+   int8_t x, y;
 };
 
-/* \see gen6_get_sample_position() */
-static const struct sample_position sample_position_1x[1] = {
-   {  8,  8 },
+static const struct sample_position ilo_sample_pattern_1x[1] = {
+   {  0,  0 },
 };
 
-static const struct sample_position sample_position_4x[4] = {
-   {  6,  2 }, /* distance from the center is sqrt(40) */
-   { 14,  6 }, /* distance from the center is sqrt(40) */
-   {  2, 10 }, /* distance from the center is sqrt(40) */
-   { 10, 14 }, /* distance from the center is sqrt(40) */
+static const struct sample_position ilo_sample_pattern_2x[2] = {
+   { -4, -4 },
+   {  4,  4 },
 };
 
-static const struct sample_position sample_position_8x[8] = {
-   {  7,  9 }, /* distance from the center is sqrt(2) */
-   {  9, 13 }, /* distance from the center is sqrt(26) */
-   { 11,  3 }, /* distance from the center is sqrt(34) */
-   { 13, 11 }, /* distance from the center is sqrt(34) */
-   {  1,  7 }, /* distance from the center is sqrt(50) */
-   {  5,  1 }, /* distance from the center is sqrt(58) */
-   { 15,  5 }, /* distance from the center is sqrt(58) */
-   {  3, 15 }, /* distance from the center is sqrt(74) */
+static const struct sample_position ilo_sample_pattern_4x[4] = {
+   { -2, -6 },
+   {  6, -2 },
+   { -6,  2 },
+   {  2,  6 },
 };
+
+/* \see brw_multisample_positions_8x */
+static const struct sample_position ilo_sample_pattern_8x[8] = {
+   { -1,  1 },
+   {  1,  5 },
+   {  3, -5 },
+   {  5,  3 },
+   { -7, -1 },
+   { -3, -7 },
+   {  7, -3 },
+   { -5,  7 },
+};
+
+static const struct sample_position ilo_sample_pattern_16x[16] = {
+   {  0,  2 },
+   {  3,  0 },
+   { -3, -2 },
+   { -2, -4 },
+   {  4,  3 },
+   {  5,  1 },
+   {  6, -1 },
+   {  2, -6 },
+   { -4,  5 },
+   { -5, -5 },
+   { -1, -7 },
+   {  7, -3 },
+   { -7,  4 },
+   {  1, -8 },
+   { -6,  6 },
+   { -8,  7 },
+};
+
+static uint8_t
+pack_sample_position(const struct sample_position *pos)
+{
+   return (pos->x + 8) << 4 | (pos->y + 8);
+}
+
+static void
+get_sample_position(const struct sample_position *pos, float *x, float *y)
+{
+   *x = (float) (pos->x + 8) / 16.0f;
+   *y = (float) (pos->y + 8) / 16.0f;
+}
 
 struct ilo_render *
 ilo_render_create(struct ilo_builder *builder)
@@ -76,7 +113,7 @@ ilo_render_create(struct ilo_builder *builder)
    render->dev = builder->dev;
    render->builder = builder;
 
-   render->workaround_bo = intel_winsys_alloc_buffer(builder->winsys,
+   render->workaround_bo = intel_winsys_alloc_bo(builder->winsys,
          "PIPE_CONTROL workaround", 4096, false);
    if (!render->workaround_bo) {
       ilo_warn("failed to allocate PIPE_CONTROL workaround bo\n");
@@ -84,23 +121,28 @@ ilo_render_create(struct ilo_builder *builder)
       return NULL;
    }
 
-   render->packed_sample_position_1x =
-      sample_position_1x[0].x << 4 |
-      sample_position_1x[0].y;
-
    /* pack into dwords */
+   render->sample_pattern_1x = pack_sample_position(ilo_sample_pattern_1x);
+   render->sample_pattern_2x =
+      pack_sample_position(&ilo_sample_pattern_2x[1]) << 8 |
+      pack_sample_position(&ilo_sample_pattern_2x[0]);
    for (i = 0; i < 4; i++) {
-      render->packed_sample_position_4x |=
-         sample_position_4x[i].x << (8 * i + 4) |
-         sample_position_4x[i].y << (8 * i);
+      render->sample_pattern_4x |=
+         pack_sample_position(&ilo_sample_pattern_4x[i]) << (8 * i);
 
-      render->packed_sample_position_8x[0] |=
-         sample_position_8x[i].x << (8 * i + 4) |
-         sample_position_8x[i].y << (8 * i);
+      render->sample_pattern_8x[0] |=
+         pack_sample_position(&ilo_sample_pattern_8x[i]) << (8 * i);
+      render->sample_pattern_8x[1] |=
+         pack_sample_position(&ilo_sample_pattern_8x[i + 4]) << (8 * i);
 
-      render->packed_sample_position_8x[1] |=
-         sample_position_8x[4 + i].x << (8 * i + 4) |
-         sample_position_8x[4 + i].y << (8 * i);
+      render->sample_pattern_16x[0] |=
+         pack_sample_position(&ilo_sample_pattern_16x[i]) << (8 * i);
+      render->sample_pattern_16x[1] |=
+         pack_sample_position(&ilo_sample_pattern_16x[i + 4]) << (8 * i);
+      render->sample_pattern_16x[2] |=
+         pack_sample_position(&ilo_sample_pattern_16x[i + 8]) << (8 * i);
+      render->sample_pattern_16x[3] |=
+         pack_sample_position(&ilo_sample_pattern_16x[i + 12]) << (8 * i);
    }
 
    ilo_render_invalidate_hw(render);
@@ -112,9 +154,7 @@ ilo_render_create(struct ilo_builder *builder)
 void
 ilo_render_destroy(struct ilo_render *render)
 {
-   if (render->workaround_bo)
-      intel_bo_unreference(render->workaround_bo);
-
+   intel_bo_unref(render->workaround_bo);
    FREE(render);
 }
 
@@ -124,20 +164,28 @@ ilo_render_get_sample_position(const struct ilo_render *render,
                                unsigned sample_index,
                                float *x, float *y)
 {
-   const struct sample_position *pos;
+   const struct sample_position *pattern;
 
    switch (sample_count) {
    case 1:
-      assert(sample_index < Elements(sample_position_1x));
-      pos = sample_position_1x;
+      assert(sample_index < Elements(ilo_sample_pattern_1x));
+      pattern = ilo_sample_pattern_1x;
+      break;
+   case 2:
+      assert(sample_index < Elements(ilo_sample_pattern_2x));
+      pattern = ilo_sample_pattern_2x;
       break;
    case 4:
-      assert(sample_index < Elements(sample_position_4x));
-      pos = sample_position_4x;
+      assert(sample_index < Elements(ilo_sample_pattern_4x));
+      pattern = ilo_sample_pattern_4x;
       break;
    case 8:
-      assert(sample_index < Elements(sample_position_8x));
-      pos = sample_position_8x;
+      assert(sample_index < Elements(ilo_sample_pattern_8x));
+      pattern = ilo_sample_pattern_8x;
+      break;
+   case 16:
+      assert(sample_index < Elements(ilo_sample_pattern_16x));
+      pattern = ilo_sample_pattern_16x;
       break;
    default:
       assert(!"unknown sample count");
@@ -147,8 +195,7 @@ ilo_render_get_sample_position(const struct ilo_render *render,
       break;
    }
 
-   *x = (float) pos[sample_index].x / 16.0f;
-   *y = (float) pos[sample_index].y / 16.0f;
+   get_sample_position(&pattern[sample_index], x, y);
 }
 
 void
@@ -176,7 +223,7 @@ ilo_render_get_flush_len(const struct ilo_render *render)
 {
    int len;
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    len = GEN6_PIPE_CONTROL__SIZE;
 
@@ -201,15 +248,12 @@ ilo_render_emit_flush(struct ilo_render *render)
                         GEN6_PIPE_CONTROL_CS_STALL;
    const unsigned batch_used = ilo_builder_batch_used(render->builder);
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    if (ilo_dev_gen(render->dev) == ILO_GEN(6))
       gen6_wa_pre_pipe_control(render, dw1);
 
-   gen6_PIPE_CONTROL(render->builder, dw1, NULL, 0, false);
-
-   render->state.current_pipe_control_dw1 |= dw1;
-   render->state.deferred_pipe_control_dw1 &= ~dw1;
+   ilo_render_pipe_control(render, dw1);
 
    assert(ilo_builder_batch_used(render->builder) <= batch_used +
          ilo_render_get_flush_len(render));
@@ -224,7 +268,7 @@ ilo_render_get_query_len(const struct ilo_render *render,
 {
    int len;
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    /* always a flush or a variant of flush */
    len = ilo_render_get_flush_len(render);
@@ -293,7 +337,7 @@ ilo_render_emit_query(struct ilo_render *render,
    int reg_count = 0, i;
    uint32_t pipe_control_dw1 = 0;
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
@@ -326,8 +370,7 @@ ilo_render_emit_query(struct ilo_render *render,
       if (ilo_dev_gen(render->dev) == ILO_GEN(6))
          gen6_wa_pre_pipe_control(render, pipe_control_dw1);
 
-      gen6_PIPE_CONTROL(render->builder, pipe_control_dw1,
-            q->bo, offset, true);
+      gen6_PIPE_CONTROL(render->builder, pipe_control_dw1, q->bo, offset, 0);
 
       render->state.current_pipe_control_dw1 |= pipe_control_dw1;
       render->state.deferred_pipe_control_dw1 &= ~pipe_control_dw1;
@@ -338,12 +381,12 @@ ilo_render_emit_query(struct ilo_render *render,
    for (i = 0; i < reg_count; i++) {
       if (regs[i]) {
          /* store lower 32 bits */
-         gen6_MI_STORE_REGISTER_MEM(render->builder, q->bo, offset, regs[i]);
+         gen6_MI_STORE_REGISTER_MEM(render->builder, regs[i], q->bo, offset);
          /* store higher 32 bits */
-         gen6_MI_STORE_REGISTER_MEM(render->builder, q->bo,
-               offset + 4, regs[i] + 4);
+         gen6_MI_STORE_REGISTER_MEM(render->builder, regs[i] + 4,
+               q->bo, offset + 4);
       } else {
-         gen6_MI_STORE_DATA_IMM(render->builder, q->bo, offset, 0, true);
+         gen6_MI_STORE_DATA_IMM(render->builder, q->bo, offset, 0);
       }
 
       offset += 8;
@@ -357,7 +400,7 @@ int
 ilo_render_get_rectlist_len(const struct ilo_render *render,
                             const struct ilo_blitter *blitter)
 {
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    return ilo_render_get_rectlist_dynamic_states_len(render, blitter) +
           ilo_render_get_rectlist_commands_len(render, blitter);
@@ -369,7 +412,7 @@ ilo_render_emit_rectlist(struct ilo_render *render,
 {
    struct ilo_render_rectlist_session session;
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    memset(&session, 0, sizeof(session));
    ilo_render_emit_rectlist_dynamic_states(render, blitter, &session);
@@ -380,7 +423,7 @@ int
 ilo_render_get_draw_len(const struct ilo_render *render,
                         const struct ilo_state_vector *vec)
 {
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    return ilo_render_get_draw_dynamic_states_len(render, vec) +
           ilo_render_get_draw_surface_states_len(render, vec) +
@@ -433,7 +476,7 @@ ilo_render_emit_draw(struct ilo_render *render,
 {
    struct ilo_render_draw_session session;
 
-   ILO_DEV_ASSERT(render->dev, 6, 7.5);
+   ILO_DEV_ASSERT(render->dev, 6, 8);
 
    draw_session_prepare(render, vec, &session);
 

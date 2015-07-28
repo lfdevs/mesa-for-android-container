@@ -573,6 +573,9 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
 	 result = new(ctx) ir_expression(ir_unop_i2u,
 		  new(ctx) ir_expression(ir_unop_b2i, src));
 	 break;
+      case GLSL_TYPE_DOUBLE:
+	 result = new(ctx) ir_expression(ir_unop_d2u, src);
+	 break;
       }
       break;
    case GLSL_TYPE_INT:
@@ -586,6 +589,9 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
       case GLSL_TYPE_BOOL:
 	 result = new(ctx) ir_expression(ir_unop_b2i, src);
 	 break;
+      case GLSL_TYPE_DOUBLE:
+	 result = new(ctx) ir_expression(ir_unop_d2i, src);
+	 break;
       }
       break;
    case GLSL_TYPE_FLOAT:
@@ -598,6 +604,9 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
 	 break;
       case GLSL_TYPE_BOOL:
 	 result = new(ctx) ir_expression(ir_unop_b2f, desired_type, src, NULL);
+	 break;
+      case GLSL_TYPE_DOUBLE:
+	 result = new(ctx) ir_expression(ir_unop_d2f, desired_type, src, NULL);
 	 break;
       }
       break;
@@ -613,8 +622,27 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
       case GLSL_TYPE_FLOAT:
 	 result = new(ctx) ir_expression(ir_unop_f2b, desired_type, src, NULL);
 	 break;
+      case GLSL_TYPE_DOUBLE:
+         result = new(ctx) ir_expression(ir_unop_d2b, desired_type, src, NULL);
+         break;
       }
       break;
+   case GLSL_TYPE_DOUBLE:
+      switch (b) {
+      case GLSL_TYPE_INT:
+         result = new(ctx) ir_expression(ir_unop_i2d, src);
+         break;
+      case GLSL_TYPE_UINT:
+         result = new(ctx) ir_expression(ir_unop_u2d, src);
+         break;
+      case GLSL_TYPE_BOOL:
+         result = new(ctx) ir_expression(ir_unop_f2d,
+                  new(ctx) ir_expression(ir_unop_b2f, src));
+         break;
+      case GLSL_TYPE_FLOAT:
+         result = new(ctx) ir_expression(ir_unop_f2d, desired_type, src, NULL);
+         break;
+      }
    }
 
    assert(result != NULL);
@@ -711,9 +739,9 @@ process_vec_mat_constructor(exec_list *instructions,
 
       /* Apply implicit conversions (not the scalar constructor rules!). See
        * the spec quote above. */
-      if (constructor_type->is_float()) {
+      if (constructor_type->base_type != result->type->base_type) {
          const glsl_type *desired_type =
-            glsl_type::get_instance(GLSL_TYPE_FLOAT,
+            glsl_type::get_instance(constructor_type->base_type,
                                     ir->type->vector_elements,
                                     ir->type->matrix_columns);
          if (result->type->can_implicitly_convert_to(desired_type, state)) {
@@ -847,13 +875,17 @@ process_array_constructor(exec_list *instructions,
    foreach_in_list_safe(ir_rvalue, ir, &actual_parameters) {
       ir_rvalue *result = ir;
 
+      const glsl_base_type element_base_type =
+         constructor_type->element_type()->base_type;
+
       /* Apply implicit conversions (not the scalar constructor rules!). See
        * the spec quote above. */
-      if (constructor_type->element_type()->is_float()) {
-	 const glsl_type *desired_type =
-	    glsl_type::get_instance(GLSL_TYPE_FLOAT,
-				    ir->type->vector_elements,
-				    ir->type->matrix_columns);
+      if (element_base_type != result->type->base_type) {
+         const glsl_type *desired_type =
+            glsl_type::get_instance(element_base_type,
+                                    ir->type->vector_elements,
+                                    ir->type->matrix_columns);
+
 	 if (result->type->can_implicitly_convert_to(desired_type, state)) {
 	    /* Even though convert_component() implements the constructor
 	     * conversion rules (not the implicit conversion rules), its safe
@@ -1012,6 +1044,9 @@ emit_inline_vector_constructor(const glsl_type *type,
 	       case GLSL_TYPE_FLOAT:
 		  data.f[i + base_component] = c->get_float_component(i);
 		  break;
+	       case GLSL_TYPE_DOUBLE:
+		  data.d[i + base_component] = c->get_double_component(i);
+		  break;
 	       case GLSL_TYPE_BOOL:
 		  data.b[i + base_component] = c->get_bool_component(i);
 		  break;
@@ -1156,7 +1191,7 @@ emit_inline_matrix_constructor(const glsl_type *type,
     *
     *  - Construct a matrix from an arbirary combination of vectors and
     *    scalars.  The components of the constructor parameters are assigned
-    *    to the matrix in colum-major order until the matrix is full.
+    *    to the matrix in column-major order until the matrix is full.
     *
     *  - Construct a matrix from a single matrix.  The source matrix is copied
     *    to the upper left portion of the constructed matrix, and the remaining
@@ -1167,16 +1202,21 @@ emit_inline_matrix_constructor(const glsl_type *type,
       /* Assign the scalar to the X component of a vec4, and fill the remaining
        * components with zero.
        */
+      glsl_base_type param_base_type = first_param->type->base_type;
+      assert(param_base_type == GLSL_TYPE_FLOAT ||
+             param_base_type == GLSL_TYPE_DOUBLE);
       ir_variable *rhs_var =
-	 new(ctx) ir_variable(glsl_type::vec4_type, "mat_ctor_vec",
-			      ir_var_temporary);
+         new(ctx) ir_variable(glsl_type::get_instance(param_base_type, 4, 1),
+                              "mat_ctor_vec",
+                              ir_var_temporary);
       instructions->push_tail(rhs_var);
 
       ir_constant_data zero;
-      zero.f[0] = 0.0;
-      zero.f[1] = 0.0;
-      zero.f[2] = 0.0;
-      zero.f[3] = 0.0;
+      for (unsigned i = 0; i < 4; i++)
+         if (param_base_type == GLSL_TYPE_FLOAT)
+            zero.f[i] = 0.0;
+         else
+            zero.d[i] = 0.0;
 
       ir_instruction *inst =
 	 new(ctx) ir_assignment(new(ctx) ir_dereference_variable(rhs_var),
@@ -1330,71 +1370,59 @@ emit_inline_matrix_constructor(const glsl_type *type,
    } else {
       const unsigned cols = type->matrix_columns;
       const unsigned rows = type->vector_elements;
+      unsigned remaining_slots = rows * cols;
       unsigned col_idx = 0;
       unsigned row_idx = 0;
 
       foreach_in_list(ir_rvalue, rhs, parameters) {
-	 const unsigned components_remaining_this_column = rows - row_idx;
-	 unsigned rhs_components = rhs->type->components();
-	 unsigned rhs_base = 0;
+         unsigned rhs_components = rhs->type->components();
+         unsigned rhs_base = 0;
 
-	 /* Since the parameter might be used in the RHS of two assignments,
-	  * generate a temporary and copy the paramter there.
-	  */
-	 ir_variable *rhs_var =
-	    new(ctx) ir_variable(rhs->type, "mat_ctor_vec", ir_var_temporary);
-	 instructions->push_tail(rhs_var);
+         if (remaining_slots == 0)
+            break;
 
-	 ir_dereference *rhs_var_ref =
-	    new(ctx) ir_dereference_variable(rhs_var);
-	 ir_instruction *inst = new(ctx) ir_assignment(rhs_var_ref, rhs, NULL);
-	 instructions->push_tail(inst);
+         /* Since the parameter might be used in the RHS of two assignments,
+          * generate a temporary and copy the paramter there.
+          */
+         ir_variable *rhs_var =
+            new(ctx) ir_variable(rhs->type, "mat_ctor_vec", ir_var_temporary);
+         instructions->push_tail(rhs_var);
 
-	 /* Assign the current parameter to as many components of the matrix
-	  * as it will fill.
-	  *
-	  * NOTE: A single vector parameter can span two matrix columns.  A
-	  * single vec4, for example, can completely fill a mat2.
-	  */
-	 if (rhs_components >= components_remaining_this_column) {
-	    const unsigned count = MIN2(rhs_components,
-					components_remaining_this_column);
+         ir_dereference *rhs_var_ref =
+            new(ctx) ir_dereference_variable(rhs_var);
+         ir_instruction *inst = new(ctx) ir_assignment(rhs_var_ref, rhs, NULL);
+         instructions->push_tail(inst);
 
-	    rhs_var_ref = new(ctx) ir_dereference_variable(rhs_var);
+         do {
+            /* Assign the current parameter to as many components of the matrix
+             * as it will fill.
+             *
+             * NOTE: A single vector parameter can span two matrix columns.  A
+             * single vec4, for example, can completely fill a mat2.
+             */
+            unsigned count = MIN2(rows - row_idx,
+                                  rhs_components - rhs_base);
 
-	    ir_instruction *inst = assign_to_matrix_column(var, col_idx,
-							   row_idx,
-							   rhs_var_ref, 0,
-							   count, ctx);
-	    instructions->push_tail(inst);
+            rhs_var_ref = new(ctx) ir_dereference_variable(rhs_var);
+            ir_instruction *inst = assign_to_matrix_column(var, col_idx,
+                                                         row_idx,
+                                                         rhs_var_ref,
+                                                         rhs_base,
+                                                         count, ctx);
+            instructions->push_tail(inst);
+            rhs_base += count;
+            row_idx += count;
+            remaining_slots -= count;
 
-	    rhs_base = count;
-
-	    col_idx++;
-	    row_idx = 0;
-	 }
-
-	 /* If there is data left in the parameter and components left to be
-	  * set in the destination, emit another assignment.  It is possible
-	  * that the assignment could be of a vec4 to the last element of the
-	  * matrix.  In this case col_idx==cols, but there is still data
-	  * left in the source parameter.  Obviously, don't emit an assignment
-	  * to data outside the destination matrix.
-	  */
-	 if ((col_idx < cols) && (rhs_base < rhs_components)) {
-	    const unsigned count = rhs_components - rhs_base;
-
-	    rhs_var_ref = new(ctx) ir_dereference_variable(rhs_var);
-
-	    ir_instruction *inst = assign_to_matrix_column(var, col_idx,
-							   row_idx,
-							   rhs_var_ref,
-							   rhs_base,
-							   count, ctx);
-	    instructions->push_tail(inst);
-
-	    row_idx += count;
-	 }
+            /* Sometimes, there is still data left in the parameters and
+             * components left to be set in the destination but in other
+             * column.
+             */
+            if (row_idx >= rows) {
+               row_idx = 0;
+               col_idx++;
+            }
+         } while(remaining_slots > 0 && rhs_base < rhs_components);
       }
    }
 
@@ -1524,10 +1552,10 @@ ast_function_expression::hir(exec_list *instructions,
       }
 
 
-      /* Constructors for samplers are illegal.
+      /* Constructors for opaque types are illegal.
        */
-      if (constructor_type->is_sampler()) {
-	 _mesa_glsl_error(& loc, state, "cannot construct sampler type `%s'",
+      if (constructor_type->contains_opaque()) {
+	 _mesa_glsl_error(& loc, state, "cannot construct opaque type `%s'",
 			  constructor_type->name);
 	 return ir_rvalue::error_value(ctx);
       }
@@ -1751,7 +1779,7 @@ ast_function_expression::hir(exec_list *instructions,
       return value;
    }
 
-   return ir_rvalue::error_value(ctx);
+   unreachable("not reached");
 }
 
 ir_rvalue *

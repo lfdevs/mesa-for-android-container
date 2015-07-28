@@ -25,6 +25,7 @@
  *    Kristian Høgsberg <krh@bitplanet.net>
  */
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

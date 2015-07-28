@@ -35,7 +35,7 @@
  * the built-in varyings have pre-assigned locations. Also, the elimination
  * of unused gl_TexCoord elements requires its own lowering pass anyway.
  *
- * It's implemented by replacing all occurences of dead varyings with
+ * It's implemented by replacing all occurrences of dead varyings with
  * temporary variables, which creates dead code. It is recommended to run
  * a dead-code elimination pass after this.
  *
@@ -99,6 +99,16 @@ public:
          }
          else {
             this->fragdata_usage |= 1 << index->get_uint_component(0);
+            /* Don't lower fragdata array if the output variable
+             * is not a float variable (or float vector) because it will
+             * generate wrong register assignments because of different
+             * data types.
+             */
+            if (var->type->gl_type != GL_FLOAT &&
+                var->type->gl_type != GL_FLOAT_VEC2 &&
+                var->type->gl_type != GL_FLOAT_VEC3 &&
+                var->type->gl_type != GL_FLOAT_VEC4)
+               this->lower_fragdata_array = false;
          }
 
          /* Don't visit the leaves of ir_dereference_array. */
@@ -280,7 +290,7 @@ public:
        *
        * We're going to break down the gl_TexCoord array into separate
        * variables. First, add declarations of the new variables all
-       * occurences of gl_TexCoord will be replaced with.
+       * occurrences of gl_TexCoord will be replaced with.
        */
       if (info->lower_texcoord_array) {
          prepare_array(ir, this->new_texcoord, ARRAY_SIZE(this->new_texcoord),
@@ -411,7 +421,7 @@ public:
        * variable dereference representing gl_TexCoord[i].
        */
       if (this->info->lower_texcoord_array) {
-         /* gl_TexCoord[i] occurence */
+         /* gl_TexCoord[i] occurrence */
          ir_dereference_array *const da = (*rvalue)->as_dereference_array();
 
          if (da && da->variable_referenced() ==
@@ -425,7 +435,7 @@ public:
 
       /* Same for gl_FragData. */
       if (this->info->lower_fragdata_array) {
-         /* gl_FragData[i] occurence */
+         /* gl_FragData[i] occurrence */
          ir_dereference_array *const da = (*rvalue)->as_dereference_array();
 
          if (da && da->variable_referenced() == this->info->fragdata_array) {

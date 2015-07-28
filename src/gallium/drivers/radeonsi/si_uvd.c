@@ -44,7 +44,7 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 {
 	struct si_context *ctx = (struct si_context *)pipe;
 	struct r600_texture *resources[VL_NUM_COMPONENTS] = {};
-	struct radeon_surface *surfaces[VL_NUM_COMPONENTS] = {};
+	struct radeon_surf *surfaces[VL_NUM_COMPONENTS] = {};
 	struct pb_buffer **pbs[VL_NUM_COMPONENTS] = {};
 	const enum pipe_format *resource_formats;
 	struct pipe_video_buffer template;
@@ -136,7 +136,7 @@ static struct radeon_winsys_cs_handle* si_uvd_set_dtb(struct ruvd_msg *msg, stru
 /* get the radeon resources for VCE */
 static void si_vce_get_buffer(struct pipe_resource *resource,
 			      struct radeon_winsys_cs_handle **handle,
-			      struct radeon_surface **surface)
+			      struct radeon_surf **surface)
 {
 	struct r600_texture *res = (struct r600_texture *)resource;
 

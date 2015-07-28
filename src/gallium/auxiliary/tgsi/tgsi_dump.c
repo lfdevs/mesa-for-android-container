@@ -83,6 +83,7 @@ dump_enum(
 #define INSTID(I)       ctx->dump_printf( ctx, "% 3u", I )
 #define SID(I)          ctx->dump_printf( ctx, "%d", I )
 #define FLT(F)          ctx->dump_printf( ctx, "%10.4f", F )
+#define DBL(D)          ctx->dump_printf( ctx, "%10.8f", D )
 #define ENM(E,ENUMS)    dump_enum( ctx, E, ENUMS, sizeof( ENUMS ) / sizeof( *ENUMS ) )
 
 const char *
@@ -238,6 +239,13 @@ dump_imm_data(struct tgsi_iterate_context *iter,
    assert( num_tokens <= 4 );
    for (i = 0; i < num_tokens; i++) {
       switch (data_type) {
+      case TGSI_IMM_FLOAT64: {
+         union di d;
+         d.ui = data[i].Uint | (uint64_t)data[i+1].Uint << 32;
+         DBL( d.d );
+         i++;
+         break;
+      }
       case TGSI_IMM_FLOAT32:
          FLT( data[i].Float );
          break;
@@ -263,14 +271,30 @@ iter_declaration(
    struct tgsi_full_declaration *decl )
 {
    struct dump_ctx *ctx = (struct dump_ctx *)iter;
+   boolean patch = decl->Semantic.Name == TGSI_SEMANTIC_PATCH ||
+      decl->Semantic.Name == TGSI_SEMANTIC_TESSINNER ||
+      decl->Semantic.Name == TGSI_SEMANTIC_TESSOUTER ||
+      decl->Semantic.Name == TGSI_SEMANTIC_PRIMID;
 
    TXT( "DCL " );
 
    TXT(tgsi_file_name(decl->Declaration.File));
 
-   /* all geometry shader inputs are two dimensional */
+   /* all geometry shader inputs and non-patch tessellation shader inputs are
+    * two dimensional
+    */
    if (decl->Declaration.File == TGSI_FILE_INPUT &&
-       iter->processor.Processor == TGSI_PROCESSOR_GEOMETRY) {
+       (iter->processor.Processor == TGSI_PROCESSOR_GEOMETRY ||
+        (!patch &&
+         (iter->processor.Processor == TGSI_PROCESSOR_TESSCTRL ||
+          iter->processor.Processor == TGSI_PROCESSOR_TESSEVAL)))) {
+      TXT("[]");
+   }
+
+   /* all non-patch tess ctrl shader outputs are two dimensional */
+   if (decl->Declaration.File == TGSI_FILE_OUTPUT &&
+       !patch &&
+       iter->processor.Processor == TGSI_PROCESSOR_TESSCTRL) {
       TXT("[]");
    }
 
@@ -598,6 +622,7 @@ iter_instruction(
    case TGSI_OPCODE_BGNLOOP:
    case TGSI_OPCODE_ENDLOOP:
    case TGSI_OPCODE_CAL:
+   case TGSI_OPCODE_BGNSUB:
       TXT( " :" );
       UID( inst->Label.Label );
       break;

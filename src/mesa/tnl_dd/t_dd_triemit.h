@@ -16,13 +16,6 @@ do {									\
 			        "D" ((long)vb),				\
 			        "S" ((long)v) );			\
 } while (0)
-#elif defined(HAVE_LE32_VERTS)
-#define COPY_DWORDS( j, vb, vertsize, v )				\
-do {									\
-   for ( j = 0 ; j < vertsize ; j++ )					\
-      vb[j] = CPU_TO_LE32(((GLuint *)v)[j]);				\
-   vb += vertsize;							\
-} while (0)
 #else
 #define COPY_DWORDS( j, vb, vertsize, v )				\
 do {									\
@@ -46,7 +39,7 @@ static __inline void TAG(quad)( CTX_ARG,
    GLuint j;
 
    if (DO_DEBUG_VERTS) {
-      fprintf(stderr, "%s\n", __FUNCTION__);
+      fprintf(stderr, "%s\n", __func__);
       PRINT_VERTEX(v0);
       PRINT_VERTEX(v1);
       PRINT_VERTEX(v2);
@@ -70,7 +63,7 @@ static __inline void TAG(quad)( CTX_ARG,
    GLuint j;
 
    if (DO_DEBUG_VERTS) {
-      fprintf(stderr, "%s\n", __FUNCTION__);
+      fprintf(stderr, "%s\n", __func__);
       PRINT_VERTEX(v0);
       PRINT_VERTEX(v1);
       PRINT_VERTEX(v2);
@@ -97,7 +90,7 @@ static __inline void TAG(triangle)( CTX_ARG,
    GLuint j;
 
    if (DO_DEBUG_VERTS) {
-      fprintf(stderr, "%s\n", __FUNCTION__);
+      fprintf(stderr, "%s\n", __func__);
       PRINT_VERTEX(v0);
       PRINT_VERTEX(v1);
       PRINT_VERTEX(v2);
@@ -146,7 +139,7 @@ static void TAG(fast_clipped_poly)( struct gl_context *ctx, const GLuint *elts,
    GLuint i,j;
 
    if (DO_DEBUG_VERTS) {
-      fprintf(stderr, "%s\n", __FUNCTION__);
+      fprintf(stderr, "%s\n", __func__);
       PRINT_VERTEX(VERT(elts[0]));
       PRINT_VERTEX(VERT(elts[1]));
    }

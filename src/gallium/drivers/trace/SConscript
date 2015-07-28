@@ -2,6 +2,8 @@ Import('*')
 
 env = env.Clone()
 
+env.MSVC2008Compat()
+
 trace = env.ConvenienceLibrary(
     target = 'trace',
     source = env.ParseSourceList('Makefile.sources', 'C_SOURCES')

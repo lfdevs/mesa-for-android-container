@@ -32,9 +32,9 @@
 #define EGLGLOBALS_INCLUDED
 
 #include <stdbool.h>
+#include "c11/threads.h"
 
 #include "egltypedefs.h"
-#include "eglmutex.h"
 
 
 /**
@@ -42,7 +42,7 @@
  */
 struct _egl_global
 {
-   _EGLMutex *Mutex;
+   mtx_t *Mutex;
 
    /* the list of all displays */
    _EGLDisplay *DisplayList;

@@ -969,7 +969,7 @@ intelCreateContext(gl_api api,
       return false;
    }
 
-   if (IS_9XX(intelScreen->deviceID)) {
+   if (IS_GEN3(intelScreen->deviceID)) {
       success = i915CreateContext(api, mesaVis, driContextPriv,
                                   major_version, minor_version, flags,
                                   error, sharedContextPrivate);
@@ -1177,7 +1177,7 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
 
    intelScreen->deviceID = drm_intel_bufmgr_gem_get_devid(intelScreen->bufmgr);
 
-   if (IS_9XX(intelScreen->deviceID)) {
+   if (IS_GEN3(intelScreen->deviceID)) {
       intelScreen->gen = 3;
    } else {
       intelScreen->gen = 2;

@@ -193,6 +193,30 @@ static int get_param_index(unsigned semantic_name, unsigned index,
 }
 
 /**
+ * Get the value of a shader input parameter and extract a bitfield.
+ */
+static LLVMValueRef unpack_param(struct si_shader_context *si_shader_ctx,
+				 unsigned param, unsigned rshift,
+				 unsigned bitwidth)
+{
+	struct gallivm_state *gallivm = &si_shader_ctx->radeon_bld.gallivm;
+	LLVMValueRef value = LLVMGetParam(si_shader_ctx->radeon_bld.main_fn,
+					  param);
+
+	if (rshift)
+		value = LLVMBuildLShr(gallivm->builder, value,
+				      lp_build_const_int32(gallivm, rshift), "");
+
+	if (rshift + bitwidth < 32) {
+		unsigned mask = (1 << bitwidth) - 1;
+		value = LLVMBuildAnd(gallivm->builder, value,
+				     lp_build_const_int32(gallivm, mask), "");
+	}
+
+	return value;
+}
+
+/**
  * Build an LLVM bytecode indexed load using LLVMBuildGEP + LLVMBuildLoad.
  * It's equivalent to doing a load from &base_ptr[index].
  *
@@ -562,14 +586,8 @@ static void declare_input_fs(
 
 static LLVMValueRef get_sample_id(struct radeon_llvm_context *radeon_bld)
 {
-	struct gallivm_state *gallivm = &radeon_bld->gallivm;
-	LLVMValueRef value = LLVMGetParam(radeon_bld->main_fn,
-					  SI_PARAM_ANCILLARY);
-	value = LLVMBuildLShr(gallivm->builder, value,
-			      lp_build_const_int32(gallivm, 8), "");
-	value = LLVMBuildAnd(gallivm->builder, value,
-			     lp_build_const_int32(gallivm, 0xf), "");
-	return value;
+	return unpack_param(si_shader_context(&radeon_bld->soa.bld_base),
+			    SI_PARAM_ANCILLARY, 8, 4);
 }
 
 /**
@@ -643,6 +661,15 @@ static void declare_system_value(
 		value = lp_build_gather_values(gallivm, pos, 4);
 		break;
 	}
+
+	case TGSI_SEMANTIC_SAMPLEMASK:
+		/* Smoothing isn't MSAA in GL, but it's MSAA in hardware.
+		 * Therefore, force gl_SampleMaskIn to 1 for GL. */
+		if (si_shader_ctx->shader->key.ps.poly_line_smoothing)
+			value = uint_bld->one;
+		else
+			value = LLVMGetParam(radeon_bld->main_fn, SI_PARAM_SAMPLE_COVERAGE);
+		break;
 
 	default:
 		assert(!"unknown system value");
@@ -791,7 +818,7 @@ static void si_llvm_init_export_args_load(struct lp_build_tgsi_context *bld_base
 }
 
 static void si_alpha_test(struct lp_build_tgsi_context *bld_base,
-			  LLVMValueRef *out_ptr)
+			  LLVMValueRef alpha_ptr)
 {
 	struct si_shader_context *si_shader_ctx = si_shader_context(bld_base);
 	struct gallivm_state *gallivm = bld_base->base.gallivm;
@@ -803,7 +830,7 @@ static void si_alpha_test(struct lp_build_tgsi_context *bld_base,
 		LLVMValueRef alpha_pass =
 			lp_build_cmp(&bld_base->base,
 				     si_shader_ctx->shader->key.ps.alpha_func,
-				     LLVMBuildLoad(gallivm->builder, out_ptr[3], ""),
+				     LLVMBuildLoad(gallivm->builder, alpha_ptr, ""),
 				     alpha_ref);
 		LLVMValueRef arg =
 			lp_build_select(&bld_base->base,
@@ -823,6 +850,34 @@ static void si_alpha_test(struct lp_build_tgsi_context *bld_base,
 	}
 
 	si_shader_ctx->shader->db_shader_control |= S_02880C_KILL_ENABLE(1);
+}
+
+static void si_scale_alpha_by_sample_mask(struct lp_build_tgsi_context *bld_base,
+					  LLVMValueRef alpha_ptr)
+{
+	struct si_shader_context *si_shader_ctx = si_shader_context(bld_base);
+	struct gallivm_state *gallivm = bld_base->base.gallivm;
+	LLVMValueRef coverage, alpha;
+
+	/* alpha = alpha * popcount(coverage) / SI_NUM_SMOOTH_AA_SAMPLES */
+	coverage = LLVMGetParam(si_shader_ctx->radeon_bld.main_fn,
+				SI_PARAM_SAMPLE_COVERAGE);
+	coverage = bitcast(bld_base, TGSI_TYPE_SIGNED, coverage);
+
+	coverage = build_intrinsic(gallivm->builder, "llvm.ctpop.i32",
+				   bld_base->int_bld.elem_type,
+				   &coverage, 1, LLVMReadNoneAttribute);
+
+	coverage = LLVMBuildUIToFP(gallivm->builder, coverage,
+				   bld_base->base.elem_type, "");
+
+	coverage = LLVMBuildFMul(gallivm->builder, coverage,
+				 lp_build_const_float(gallivm,
+					1.0 / SI_NUM_SMOOTH_AA_SAMPLES), "");
+
+	alpha = LLVMBuildLoad(gallivm->builder, alpha_ptr, "");
+	alpha = LLVMBuildFMul(gallivm->builder, alpha, coverage, "");
+	LLVMBuildStore(gallivm->builder, alpha, alpha_ptr);
 }
 
 static void si_llvm_emit_clipvertex(struct lp_build_tgsi_context * bld_base,
@@ -977,16 +1032,9 @@ static void si_llvm_emit_streamout(struct si_shader_context *shader,
 
 	LLVMTypeRef i32 = LLVMInt32TypeInContext(gallivm->context);
 
-	LLVMValueRef so_param =
-		LLVMGetParam(shader->radeon_bld.main_fn,
-			     shader->param_streamout_config);
-
 	/* Get bits [22:16], i.e. (so_param >> 16) & 127; */
 	LLVMValueRef so_vtx_count =
-		LLVMBuildAnd(builder,
-			     LLVMBuildLShr(builder, so_param,
-					   LLVMConstInt(i32, 16, 0), ""),
-			     LLVMConstInt(i32, 127, 0), "");
+		unpack_param(shader, shader->param_streamout_config, 16, 7);
 
 	LLVMValueRef tid = build_intrinsic(builder, "llvm.SI.tid", i32,
 					   NULL, 0, LLVMReadNoneAttribute);
@@ -1334,6 +1382,7 @@ static void si_llvm_emit_fs_epilogue(struct lp_build_tgsi_context * bld_base)
 		unsigned semantic_name = info->output_semantic_name[i];
 		unsigned semantic_index = info->output_semantic_index[i];
 		unsigned target;
+		LLVMValueRef alpha_ptr;
 
 		/* Select the correct target */
 		switch (semantic_name) {
@@ -1348,15 +1397,18 @@ static void si_llvm_emit_fs_epilogue(struct lp_build_tgsi_context * bld_base)
 			continue;
 		case TGSI_SEMANTIC_COLOR:
 			target = V_008DFC_SQ_EXP_MRT + semantic_index;
+			alpha_ptr = si_shader_ctx->radeon_bld.soa.outputs[i][3];
+
 			if (si_shader_ctx->shader->key.ps.alpha_to_one)
-				LLVMBuildStore(bld_base->base.gallivm->builder,
-					       bld_base->base.one,
-					       si_shader_ctx->radeon_bld.soa.outputs[i][3]);
+				LLVMBuildStore(base->gallivm->builder,
+					       base->one, alpha_ptr);
 
 			if (semantic_index == 0 &&
 			    si_shader_ctx->shader->key.ps.alpha_func != PIPE_FUNC_ALWAYS)
-				si_alpha_test(bld_base,
-					      si_shader_ctx->radeon_bld.soa.outputs[i]);
+				si_alpha_test(bld_base, alpha_ptr);
+
+			if (si_shader_ctx->shader->key.ps.poly_line_smoothing)
+				si_scale_alpha_by_sample_mask(bld_base, alpha_ptr);
 			break;
 		default:
 			target = 0;
@@ -2547,6 +2599,7 @@ void si_shader_binary_read_config(const struct si_screen *sscreen,
 		case R_00B848_COMPUTE_PGM_RSRC1:
 			shader->num_sgprs = MAX2(shader->num_sgprs, (G_00B028_SGPRS(value) + 1) * 8);
 			shader->num_vgprs = MAX2(shader->num_vgprs, (G_00B028_VGPRS(value) + 1) * 4);
+			shader->float_mode =  G_00B028_FLOAT_MODE(value);
 			break;
 		case R_00B02C_SPI_SHADER_PGM_RSRC2_PS:
 			shader->lds_size = MAX2(shader->lds_size, G_00B02C_EXTRA_LDS_SIZE(value));
@@ -2605,16 +2658,24 @@ int si_shader_binary_read(struct si_screen *sscreen,
 	bool dump  = r600_can_dump_shader(&sscreen->b,
 		shader->selector ? shader->selector->tokens : NULL);
 
-	if (dump && !binary->disassembled) {
-		fprintf(stderr, "SI CODE:\n");
-		for (i = 0; i < binary->code_size; i+=4 ) {
-			fprintf(stderr, "@0x%x: %02x%02x%02x%02x\n", i, binary->code[i + 3],
+	si_shader_binary_read_config(sscreen, shader, 0);
+
+	if (dump) {
+		if (!binary->disassembled) {
+			fprintf(stderr, "SI CODE:\n");
+			for (i = 0; i < binary->code_size; i+=4 ) {
+				fprintf(stderr, "@0x%x: %02x%02x%02x%02x\n", i, binary->code[i + 3],
 				binary->code[i + 2], binary->code[i + 1],
 				binary->code[i]);
+			}
 		}
-	}
 
-	si_shader_binary_read_config(sscreen, shader, 0);
+		fprintf(stderr, "*** SHADER STATS ***\n"
+			"SGPRS: %d\nVGPRS: %d\nCode Size: %d bytes\nLDS: %d blocks\n"
+			"Scratch: %d bytes per wave\n********************\n",
+			shader->num_sgprs, shader->num_vgprs, binary->code_size,
+			shader->lds_size, shader->scratch_bytes_per_wave);
+	}
 
 	/* copy new shader */
 	code_size = binary->code_size + binary->rodata_size;
@@ -2741,6 +2802,43 @@ static int si_generate_gs_copy_shader(struct si_screen *sscreen,
 	return r;
 }
 
+static void si_dump_key(unsigned shader, union si_shader_key *key)
+{
+	int i;
+
+	fprintf(stderr, "SHADER KEY\n");
+
+	switch (shader) {
+	case PIPE_SHADER_VERTEX:
+		fprintf(stderr, "  instance_divisors = {");
+		for (i = 0; i < Elements(key->vs.instance_divisors); i++)
+			fprintf(stderr, !i ? "%u" : ", %u",
+				key->vs.instance_divisors[i]);
+		fprintf(stderr, "}\n");
+
+		if (key->vs.as_es)
+			fprintf(stderr, "  gs_used_inputs = 0x%"PRIx64"\n",
+				key->vs.gs_used_inputs);
+		fprintf(stderr, "  as_es = %u\n", key->vs.as_es);
+		break;
+
+	case PIPE_SHADER_GEOMETRY:
+		break;
+
+	case PIPE_SHADER_FRAGMENT:
+		fprintf(stderr, "  export_16bpc = 0x%X\n", key->ps.export_16bpc);
+		fprintf(stderr, "  last_cbuf = %u\n", key->ps.last_cbuf);
+		fprintf(stderr, "  color_two_side = %u\n", key->ps.color_two_side);
+		fprintf(stderr, "  alpha_func = %u\n", key->ps.alpha_func);
+		fprintf(stderr, "  alpha_to_one = %u\n", key->ps.alpha_to_one);
+		fprintf(stderr, "  poly_stipple = %u\n", key->ps.poly_stipple);
+		break;
+
+	default:
+		assert(0);
+	}
+}
+
 int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
 		     struct si_shader *shader)
 {
@@ -2764,6 +2862,7 @@ int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
 	/* Dump TGSI code before doing TGSI->LLVM conversion in case the
 	 * conversion fails. */
 	if (dump) {
+		si_dump_key(sel->type, &shader->key);
 		tgsi_dump(tokens, 0);
 		si_dump_streamout(&sel->so);
 	}

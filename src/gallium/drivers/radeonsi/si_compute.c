@@ -378,7 +378,8 @@ static void si_launch_grid(
 		 * XXX: The compiler should account for this.
 		 */
 		|  S_00B848_SGPRS(((MAX2(4 + arg_user_sgpr_count,
-		                        shader->num_sgprs)) - 1) / 8))
+		                        shader->num_sgprs)) - 1) / 8)
+		|  S_00B028_FLOAT_MODE(shader->float_mode))
 		;
 
 	lds_blocks = shader->lds_size;

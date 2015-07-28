@@ -79,11 +79,12 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
    ir_constant_data data;
    memset(&data, 0, sizeof(data));
    for (unsigned i = 0; i < type->components(); i++) {
-      const unsigned idx = (i + data_index_base) % Elements(values);
+      const unsigned idx = (i + data_index_base) % ARRAY_SIZE(values);
       switch (type->base_type) {
       case GLSL_TYPE_UINT:
       case GLSL_TYPE_INT:
       case GLSL_TYPE_SAMPLER:
+      case GLSL_TYPE_IMAGE:
 	 data.i[i] = values[idx];
 	 break;
       case GLSL_TYPE_FLOAT:
@@ -91,6 +92,9 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
 	 break;
       case GLSL_TYPE_BOOL:
 	 data.b[i] = bool(values[idx]);
+	 break;
+      case GLSL_TYPE_DOUBLE:
+	 data.d[i] = double(values[idx]);
 	 break;
       case GLSL_TYPE_ATOMIC_UINT:
       case GLSL_TYPE_STRUCT:
@@ -112,6 +116,7 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
       case GLSL_TYPE_UINT:
       case GLSL_TYPE_INT:
       case GLSL_TYPE_SAMPLER:
+      case GLSL_TYPE_IMAGE:
 	 ASSERT_EQ(data.i[i], val->value.i[i]);
 	 break;
       case GLSL_TYPE_FLOAT:
@@ -119,6 +124,9 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
 	 break;
       case GLSL_TYPE_BOOL:
 	 ASSERT_EQ(data.b[i], val->value.b[i]);
+	 break;
+      case GLSL_TYPE_DOUBLE:
+	 ASSERT_EQ(data.d[i], val->value.d[i]);
 	 break;
       case GLSL_TYPE_ATOMIC_UINT:
       case GLSL_TYPE_STRUCT:
@@ -212,6 +220,7 @@ verify_data(gl_constant_value *storage, unsigned storage_array_size,
 	 case GLSL_TYPE_UINT:
 	 case GLSL_TYPE_INT:
 	 case GLSL_TYPE_SAMPLER:
+	 case GLSL_TYPE_IMAGE:
 	    EXPECT_EQ(val->value.i[i], storage[i].i);
 	    break;
 	 case GLSL_TYPE_FLOAT:
@@ -219,6 +228,9 @@ verify_data(gl_constant_value *storage, unsigned storage_array_size,
 	    break;
 	 case GLSL_TYPE_BOOL:
 	    EXPECT_EQ(val->value.b[i] ? boolean_true : 0, storage[i].i);
+	    break;
+	 case GLSL_TYPE_DOUBLE:
+	    EXPECT_EQ(val->value.d[i], *(double *)&storage[i*2].i);
 	    break;
          case GLSL_TYPE_ATOMIC_UINT:
 	 case GLSL_TYPE_STRUCT:

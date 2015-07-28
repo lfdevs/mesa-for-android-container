@@ -32,10 +32,8 @@
 #define BCP_DUMP(q)
 #endif
 
-extern "C" {
 #include "r600_pipe.h"
 #include "r600_shader.h"
-}
 
 #include <stack>
 
@@ -134,6 +132,16 @@ int bc_parser::parse_decls() {
 			}
 		} else {
 			sh->add_gpr_array(0, pshader->bc.ngpr, 0x0F);
+		}
+	}
+
+	// GS inputs can add indirect addressing
+	if (sh->target == TARGET_GS) {
+		if (pshader->num_arrays) {
+			for (unsigned i = 0; i < pshader->num_arrays; ++i) {
+				r600_shader_array &a = pshader->arrays[i];
+				sh->add_gpr_array(a.gpr_start, a.gpr_count, a.comp_mask);
+			}
 		}
 	}
 
@@ -722,6 +730,16 @@ int bc_parser::prepare_ir() {
 					c->flags |= NF_DONT_HOIST | NF_DONT_MOVE;
 				}
 
+				if (flags & CF_EMIT) {
+					// Instruction implicitly depends on prior [EMIT_][CUT]_VERTEX
+					c->src.push_back(sh->get_special_value(SV_GEOMETRY_EMIT));
+					c->dst.push_back(sh->get_special_value(SV_GEOMETRY_EMIT));
+					if (sh->target == TARGET_ES) {
+						// For ES shaders this is an export
+						c->flags |= NF_DONT_KILL;
+					}
+				}
+
 				if (!burst_count--)
 					break;
 
@@ -738,6 +756,11 @@ int bc_parser::prepare_ir() {
 
 			c->bc.end_of_program = eop;
 
+		} else if (flags & CF_EMIT) {
+			c->flags |= NF_DONT_KILL | NF_DONT_HOIST | NF_DONT_MOVE;
+
+			c->src.push_back(sh->get_special_value(SV_GEOMETRY_EMIT));
+			c->dst.push_back(sh->get_special_value(SV_GEOMETRY_EMIT));
 		}
 	}
 

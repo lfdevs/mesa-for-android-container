@@ -474,6 +474,6 @@ fd2_prog_init(struct pipe_context *pctx)
 
 	ctx->solid_prog.fp = create_solid_fp();
 	ctx->solid_prog.vp = create_solid_vp();
-	ctx->blit_prog.fp = create_blit_fp();
-	ctx->blit_prog.vp = create_blit_vp();
+	ctx->blit_prog[0].fp = create_blit_fp();
+	ctx->blit_prog[0].vp = create_blit_vp();
 }

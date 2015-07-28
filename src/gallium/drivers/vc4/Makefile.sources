@@ -1,4 +1,5 @@
 C_SOURCES := \
+	vc4_blit.c \
 	vc4_bufmgr.c \
 	vc4_bufmgr.h \
 	vc4_cl.c \
@@ -11,7 +12,9 @@ C_SOURCES := \
 	vc4_emit.c \
 	vc4_fence.c \
 	vc4_formats.c \
+	vc4_job.c \
 	vc4_opt_algebraic.c \
+	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \
 	vc4_opt_cse.c \
 	vc4_opt_dead_code.c \
@@ -20,6 +23,7 @@ C_SOURCES := \
 	vc4_packet.h \
 	vc4_program.c \
 	vc4_qir.c \
+	vc4_qir_lower_uniforms.c \
 	vc4_qir.h \
 	vc4_qpu.c \
 	vc4_qpu_defines.h \

@@ -24,10 +24,8 @@
 #include <gtest/gtest.h>
 #include "../../../mesa/main/glheader.h"
 
-extern "C" {
 #include "glapi/glapi.h"
 #include "glapi/glapitable.h"
-}
 
 struct name_offset {
    const char *name;

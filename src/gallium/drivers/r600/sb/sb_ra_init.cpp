@@ -707,7 +707,7 @@ void ra_split::split_vec(vvec &vv, vvec &v1, vvec &v2, bool allow_swz) {
 
 			assert(!o->is_dead());
 
-			if (o->is_undef())
+			if (o->is_undef() || o->is_geometry_emit())
 				continue;
 
 			if (allow_swz && o->is_float_0_or_1())
@@ -751,7 +751,7 @@ void ra_split::split_vector_inst(node* n) {
 		// src vectors 1 (src[4-7] and 2 (src[8-11])
 
 		unsigned nvec = n->src.size() >> 2;
-		assert(nvec << 2 == n->src.size());
+		assert(nvec << 2 <= n->src.size());
 
 		for (unsigned nv = 0; nv < nvec; ++nv) {
 			vvec sv, tv, nsrc(4);

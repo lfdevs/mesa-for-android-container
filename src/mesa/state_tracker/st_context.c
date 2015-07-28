@@ -51,6 +51,7 @@
 #include "st_cb_fbo.h"
 #include "st_cb_feedback.h"
 #include "st_cb_msaa.h"
+#include "st_cb_perfmon.h"
 #include "st_cb_program.h"
 #include "st_cb_queryobj.h"
 #include "st_cb_readpixels.h"
@@ -116,9 +117,10 @@ st_destroy_context_priv(struct st_context *st)
    st_destroy_bitmap(st);
    st_destroy_drawpix(st);
    st_destroy_drawtex(st);
+   st_destroy_perfmon(st);
 
-   for (shader = 0; shader < Elements(st->state.sampler_views); shader++) {
-      for (i = 0; i < Elements(st->state.sampler_views[0]); i++) {
+   for (shader = 0; shader < ARRAY_SIZE(st->state.sampler_views); shader++) {
+      for (i = 0; i < ARRAY_SIZE(st->state.sampler_views[0]); i++) {
          pipe_sampler_view_release(st->pipe,
                                    &st->state.sampler_views[shader][i]);
       }
@@ -200,7 +202,7 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe,
    /* Vertex element objects used for drawing rectangles for glBitmap,
     * glDrawPixels, glClear, etc.
     */
-   for (i = 0; i < Elements(st->velems_util_draw); i++) {
+   for (i = 0; i < ARRAY_SIZE(st->velems_util_draw); i++) {
       memset(&st->velems_util_draw[i], 0, sizeof(struct pipe_vertex_element));
       st->velems_util_draw[i].src_offset = i * 4 * sizeof(float);
       st->velems_util_draw[i].instance_divisor = 0;
@@ -230,6 +232,9 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe,
    st->has_etc1 = screen->is_format_supported(screen, PIPE_FORMAT_ETC1_RGB8,
                                               PIPE_TEXTURE_2D, 0,
                                               PIPE_BIND_SAMPLER_VIEW);
+   st->has_etc2 = screen->is_format_supported(screen, PIPE_FORMAT_ETC2_RGB8,
+                                              PIPE_TEXTURE_2D, 0,
+                                              PIPE_BIND_SAMPLER_VIEW);
    st->prefer_blit_based_texture_transfer = screen->get_param(screen,
                               PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER);
 
@@ -246,6 +251,12 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe,
    st_init_limits(st->pipe->screen, &ctx->Const, &ctx->Extensions);
    st_init_extensions(st->pipe->screen, &ctx->Const,
                       &ctx->Extensions, &st->options, ctx->Mesa_DXTn);
+
+   if (st_init_perfmon(st)) {
+      /* GL_AMD_performance_monitor is only enabled when the underlying
+       * driver expose GPU hardware performance counters. */
+      ctx->Extensions.AMD_performance_monitor = GL_TRUE;
+   }
 
    /* Enable shader-based fallbacks for ARB_color_buffer_float if needed. */
    if (screen->get_param(screen, PIPE_CAP_VERTEX_COLOR_UNCLAMPED)) {
@@ -315,7 +326,7 @@ struct st_context *st_create_context(gl_api api, struct pipe_context *pipe,
    struct st_context *st;
 
    memset(&funcs, 0, sizeof(funcs));
-   st_init_driver_functions(&funcs);
+   st_init_driver_functions(pipe->screen, &funcs);
 
    ctx = _mesa_create_context(api, visual, shareCtx, &funcs);
    if (!ctx) {
@@ -370,12 +381,6 @@ void st_destroy_context( struct st_context *st )
    }
    pipe_surface_reference(&st->state.framebuffer.zsbuf, NULL);
 
-   pipe->set_index_buffer(pipe, NULL);
-
-   for (i = 0; i < PIPE_SHADER_TYPES; i++) {
-      pipe->set_constant_buffer(pipe, i, 0, NULL);
-   }
-
    _mesa_delete_program_cache(st->ctx, st->pixel_xfer.cache);
 
    _vbo_DestroyContext(st->ctx);
@@ -395,7 +400,8 @@ void st_destroy_context( struct st_context *st )
 }
 
 
-void st_init_driver_functions(struct dd_function_table *functions)
+void st_init_driver_functions(struct pipe_screen *screen,
+                              struct dd_function_table *functions)
 {
    _mesa_init_shader_object_functions(functions);
    _mesa_init_sampler_object_functions(functions);
@@ -416,13 +422,14 @@ void st_init_driver_functions(struct dd_function_table *functions)
    st_init_fbo_functions(functions);
    st_init_feedback_functions(functions);
    st_init_msaa_functions(functions);
+   st_init_perfmon_functions(functions);
    st_init_program_functions(functions);
    st_init_query_functions(functions);
    st_init_cond_render_functions(functions);
    st_init_readpixels_functions(functions);
    st_init_texture_functions(functions);
    st_init_texture_barrier_functions(functions);
-   st_init_flush_functions(functions);
+   st_init_flush_functions(screen, functions);
    st_init_string_functions(functions);
    st_init_viewport_functions(functions);
 

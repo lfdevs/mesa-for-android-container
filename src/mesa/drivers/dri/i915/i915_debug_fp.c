@@ -299,12 +299,11 @@ print_dcl_op(GLuint opcode, const GLuint * program)
 void
 i915_disassemble_program(const GLuint * program, GLuint sz)
 {
-   GLuint size = program[0] & 0x1ff;
    GLint i;
 
    printf("\t\tBEGIN\n");
 
-   assert(size + 2 == sz);
+   assert((program[0] & 0x1ff) + 2 == sz);
 
    program++;
    for (i = 1; i < sz; i += 3, program += 3) {

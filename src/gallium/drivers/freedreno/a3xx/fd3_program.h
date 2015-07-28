@@ -39,7 +39,8 @@ struct fd3_shader_stateobj {
 
 struct fd3_emit;
 
-void fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit);
+void fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
+					  int nr, struct pipe_surface **bufs);
 
 void fd3_prog_init(struct pipe_context *pctx);
 

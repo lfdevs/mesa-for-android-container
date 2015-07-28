@@ -20,8 +20,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "util/u_double_list.h"
-
 #include "nouveau_screen.h"
 #include "nouveau_winsys.h"
 #include "nouveau_fence.h"

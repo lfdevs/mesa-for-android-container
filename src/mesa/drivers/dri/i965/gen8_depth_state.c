@@ -92,10 +92,10 @@ emit_depth_packets(struct brw_context *brw,
    } else {
       BEGIN_BATCH(5);
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (5 - 2));
-      OUT_BATCH((depth_mt->hiz_mt->pitch - 1) | mocs_wb << 25);
-      OUT_RELOC64(depth_mt->hiz_mt->bo,
+      OUT_BATCH((depth_mt->hiz_buf->pitch - 1) | mocs_wb << 25);
+      OUT_RELOC64(depth_mt->hiz_buf->bo,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, 0);
-      OUT_BATCH(depth_mt->hiz_mt->qpitch >> 2);
+      OUT_BATCH(depth_mt->hiz_buf->qpitch >> 2);
       ADVANCE_BATCH();
    }
 
@@ -340,7 +340,7 @@ write_pma_stall_bits(struct brw_context *brw, uint32_t pma_stall_bits)
     * Flush is also necessary.
     */
    const uint32_t render_cache_flush =
-      ctx->Stencil._WriteEnabled ? PIPE_CONTROL_WRITE_FLUSH : 0;
+      ctx->Stencil._WriteEnabled ? PIPE_CONTROL_RENDER_TARGET_FLUSH : 0;
    brw_emit_pipe_control_flush(brw,
                                PIPE_CONTROL_CS_STALL |
                                PIPE_CONTROL_DEPTH_CACHE_FLUSH |
@@ -368,6 +368,10 @@ static void
 gen8_emit_pma_stall_workaround(struct brw_context *brw)
 {
    uint32_t bits = 0;
+
+   if (brw->gen >= 9)
+      return;
+
    if (pma_fix_enable(brw))
       bits |= GEN8_HIZ_NP_PMA_FIX_ENABLE | GEN8_HIZ_NP_EARLY_Z_FAILS_DISABLE;
 
@@ -400,7 +404,8 @@ gen8_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
       return;
 
    /* Disable the PMA stall fix since we're about to do a HiZ operation. */
-   write_pma_stall_bits(brw, 0);
+   if (brw->gen == 8)
+      write_pma_stall_bits(brw, 0);
 
    assert(mt->first_level == 0);
    assert(mt->logical_depth0 >= 1);
@@ -514,5 +519,5 @@ gen8_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
     *
     * Setting _NEW_DEPTH and _NEW_BUFFERS covers it, but is rather overkill.
     */
-   brw->state.dirty.mesa |= _NEW_DEPTH | _NEW_BUFFERS;
+   brw->NewGLState |= _NEW_DEPTH | _NEW_BUFFERS;
 }

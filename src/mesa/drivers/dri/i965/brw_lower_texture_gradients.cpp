@@ -124,7 +124,9 @@ lower_texture_grad_visitor::visit_leave(ir_texture *ir)
       new(mem_ctx) ir_variable(grad_type, "size", ir_var_temporary);
    if (ir->sampler->type->sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE) {
       base_ir->insert_before(size);
-      base_ir->insert_before(assign(size, expr(ir_unop_i2f, txs), WRITEMASK_XY));
+      base_ir->insert_before(assign(size,
+                                    swizzle_for_size(expr(ir_unop_i2f, txs), 2),
+                                    WRITEMASK_XY));
       base_ir->insert_before(assign(size, new(mem_ctx) ir_constant(1.0f), WRITEMASK_Z));
    } else {
       emit(size, expr(ir_unop_i2f,

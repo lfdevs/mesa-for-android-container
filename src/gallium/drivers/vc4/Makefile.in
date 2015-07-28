@@ -138,16 +138,17 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libvc4_la_DEPENDENCIES = kernel/libvc4_kernel.la
-am__objects_1 = vc4_bufmgr.lo vc4_cl.lo vc4_cl_dump.lo vc4_context.lo \
-	vc4_draw.lo vc4_emit.lo vc4_fence.lo vc4_formats.lo \
-	vc4_opt_algebraic.lo vc4_opt_copy_propagation.lo \
+am__objects_1 = vc4_blit.lo vc4_bufmgr.lo vc4_cl.lo vc4_cl_dump.lo \
+	vc4_context.lo vc4_draw.lo vc4_emit.lo vc4_fence.lo \
+	vc4_formats.lo vc4_job.lo vc4_opt_algebraic.lo \
+	vc4_opt_constant_folding.lo vc4_opt_copy_propagation.lo \
 	vc4_opt_cse.lo vc4_opt_dead_code.lo \
 	vc4_opt_small_immediates.lo vc4_opt_vpm_writes.lo \
-	vc4_program.lo vc4_qir.lo vc4_qpu.lo vc4_qpu_disasm.lo \
-	vc4_qpu_emit.lo vc4_qpu_schedule.lo vc4_qpu_validate.lo \
-	vc4_query.lo vc4_register_allocate.lo vc4_reorder_uniforms.lo \
-	vc4_resource.lo vc4_screen.lo vc4_simulator.lo vc4_state.lo \
-	vc4_tiling.lo
+	vc4_program.lo vc4_qir.lo vc4_qir_lower_uniforms.lo vc4_qpu.lo \
+	vc4_qpu_disasm.lo vc4_qpu_emit.lo vc4_qpu_schedule.lo \
+	vc4_qpu_validate.lo vc4_query.lo vc4_register_allocate.lo \
+	vc4_reorder_uniforms.lo vc4_resource.lo vc4_screen.lo \
+	vc4_simulator.lo vc4_state.lo vc4_tiling.lo
 am_libvc4_la_OBJECTS = $(am__objects_1)
 libvc4_la_OBJECTS = $(am_libvc4_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -387,6 +388,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -448,7 +453,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -538,6 +542,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = kernel
 C_SOURCES := \
+	vc4_blit.c \
 	vc4_bufmgr.c \
 	vc4_bufmgr.h \
 	vc4_cl.c \
@@ -550,7 +555,9 @@ C_SOURCES := \
 	vc4_emit.c \
 	vc4_fence.c \
 	vc4_formats.c \
+	vc4_job.c \
 	vc4_opt_algebraic.c \
+	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \
 	vc4_opt_cse.c \
 	vc4_opt_dead_code.c \
@@ -559,6 +566,7 @@ C_SOURCES := \
 	vc4_packet.h \
 	vc4_program.c \
 	vc4_qir.c \
+	vc4_qir_lower_uniforms.c \
 	vc4_qir.h \
 	vc4_qpu.c \
 	vc4_qpu_defines.h \
@@ -714,6 +722,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_bufmgr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_cl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_cl_dump.Plo@am__quote@
@@ -722,7 +731,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_emit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_fence.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_formats.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_job.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_algebraic.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_constant_folding.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_copy_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_cse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_dead_code.Plo@am__quote@
@@ -730,6 +741,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_vpm_writes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qir_lower_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qpu.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qpu_disasm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_qpu_emit.Plo@am__quote@

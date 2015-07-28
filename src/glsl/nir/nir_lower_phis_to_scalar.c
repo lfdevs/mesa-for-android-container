@@ -65,9 +65,9 @@ is_phi_src_scalarizable(nir_phi_src *src,
        * are ok too.
        */
       return nir_op_infos[src_alu->op].output_size == 0 ||
-             src_alu->op != nir_op_vec2 ||
-             src_alu->op != nir_op_vec3 ||
-             src_alu->op != nir_op_vec4;
+             src_alu->op == nir_op_vec2 ||
+             src_alu->op == nir_op_vec3 ||
+             src_alu->op == nir_op_vec4;
    }
 
    case nir_instr_type_phi:
@@ -223,7 +223,7 @@ lower_phis_to_scalar_block(nir_block *block, void *void_state)
             else
                nir_instr_insert_after_block(src->pred, &mov->instr);
 
-            nir_phi_src *new_src = ralloc(state->mem_ctx, nir_phi_src);
+            nir_phi_src *new_src = ralloc(new_phi, nir_phi_src);
             new_src->pred = src->pred;
             new_src->src = nir_src_for_ssa(&mov->dest.dest.ssa);
 

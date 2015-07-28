@@ -31,7 +31,6 @@
 
 #include "main/glheader.h"
 #include "main/context.h"
-#include "main/colormac.h"
 #include "main/imports.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
@@ -78,8 +77,8 @@ _swrast_culltriangle( struct gl_context *ctx,
 #define NAME flat_rgba_triangle
 #define INTERP_Z 1
 #define SETUP_CODE				\
-   ASSERT(ctx->Texture._EnabledCoordUnits == 0);\
-   ASSERT(ctx->Light.ShadeModel==GL_FLAT);	\
+   assert(ctx->Texture._EnabledCoordUnits == 0);\
+   assert(ctx->Light.ShadeModel==GL_FLAT);	\
    span.interpMask |= SPAN_RGBA;		\
    span.red = ChanToFixed(v2->color[0]);	\
    span.green = ChanToFixed(v2->color[1]);	\
@@ -104,8 +103,8 @@ _swrast_culltriangle( struct gl_context *ctx,
 #define SETUP_CODE				\
    {						\
       /* texturing must be off */		\
-      ASSERT(ctx->Texture._EnabledCoordUnits == 0);	\
-      ASSERT(ctx->Light.ShadeModel==GL_SMOOTH);	\
+      assert(ctx->Texture._EnabledCoordUnits == 0);	\
+      assert(ctx->Light.ShadeModel==GL_SMOOTH);	\
    }
 #define RENDER_SPAN( span )  _swrast_write_rgba_span(ctx, &span);
 #include "s_tritemp.h"
@@ -137,7 +136,7 @@ _swrast_culltriangle( struct gl_context *ctx,
    const GLubyte *texture = (const GLubyte *) swImg->ImageSlices[0];	\
    const GLint smask = texImg->Width - 1;				\
    const GLint tmask = texImg->Height - 1;				\
-   ASSERT(texImg->TexFormat == MESA_FORMAT_BGR_UNORM8);			\
+   assert(texImg->TexFormat == MESA_FORMAT_BGR_UNORM8);			\
    if (!rb || !texture) {						\
       return;								\
    }
@@ -195,7 +194,7 @@ _swrast_culltriangle( struct gl_context *ctx,
    const GLubyte *texture = (const GLubyte *) swImg->ImageSlices[0];	\
    const GLint smask = texImg->Width - 1;				\
    const GLint tmask = texImg->Height - 1;				\
-   ASSERT(texImg->TexFormat == MESA_FORMAT_BGR_UNORM8);			\
+   assert(texImg->TexFormat == MESA_FORMAT_BGR_UNORM8);			\
    if (!rb || !texture) {						\
       return;								\
    }
@@ -513,7 +512,7 @@ affine_span(struct gl_context *ctx, SWspan *span,
       break;
    }
    span->interpMask &= ~SPAN_RGBA;
-   ASSERT(span->arrayMask & SPAN_RGBA);
+   assert(span->arrayMask & SPAN_RGBA);
 
    _swrast_write_rgba_span(ctx, span);
 
@@ -783,7 +782,7 @@ fast_persp_span(struct gl_context *ctx, SWspan *span,
       break;
    }
    
-   ASSERT(span->arrayMask & SPAN_RGBA);
+   assert(span->arrayMask & SPAN_RGBA);
    _swrast_write_rgba_span(ctx, span);
 
 #undef SPAN_NEAREST
@@ -885,9 +884,9 @@ fast_persp_span(struct gl_context *ctx, SWspan *span,
    struct gl_renderbuffer *rb =                                         \
       ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Renderbuffer;           \
    struct gl_query_object *q = ctx->Query.CurrentOcclusionObject;	\
-   ASSERT(ctx->Depth.Test);						\
-   ASSERT(!ctx->Depth.Mask);						\
-   ASSERT(ctx->Depth.Func == GL_LESS);					\
+   assert(ctx->Depth.Test);						\
+   assert(!ctx->Depth.Mask);						\
+   assert(ctx->Depth.Func == GL_LESS);					\
    assert(rb->Format == MESA_FORMAT_Z_UNORM16);                               \
    if (!q) {								\
       return;								\
@@ -1015,7 +1014,7 @@ _swrast_choose_triangle( struct gl_context *ctx )
 
       if (ctx->Polygon.SmoothFlag) {
          _swrast_set_aa_triangle_function(ctx);
-         ASSERT(swrast->Triangle);
+         assert(swrast->Triangle);
          return;
       }
 
@@ -1134,8 +1133,8 @@ _swrast_choose_triangle( struct gl_context *ctx )
          }
       }
       else {
-         ASSERT(!swrast->_FogEnabled);
-         ASSERT(!_mesa_need_secondary_color(ctx));
+         assert(!swrast->_FogEnabled);
+         assert(!_mesa_need_secondary_color(ctx));
 	 if (ctx->Light.ShadeModel==GL_SMOOTH) {
 	    /* smooth shaded, no texturing, stippled or some raster ops */
 #if CHAN_BITS != 8

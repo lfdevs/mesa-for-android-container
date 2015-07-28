@@ -32,9 +32,16 @@
 #define EGLDRIVER_INCLUDED
 
 
+#include "c99_compat.h"
+
 #include "egltypedefs.h"
 #include "eglapi.h"
 #include <stddef.h>
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * Define an inline driver typecast function.
@@ -43,7 +50,7 @@
  * semicolon when used.
  */
 #define _EGL_DRIVER_TYPECAST(drvtype, egltype, code)           \
-   static INLINE struct drvtype *drvtype(const egltype *obj)   \
+   static inline struct drvtype *drvtype(const egltype *obj)   \
    { return (struct drvtype *) code; }
 
 
@@ -85,19 +92,11 @@ struct _egl_driver
 
 
 extern _EGLDriver *
-_eglBuiltInDriverGALLIUM(const char *args);
-
-
-extern _EGLDriver *
 _eglBuiltInDriverDRI2(const char *args);
 
 
-extern _EGLDriver *
-_eglBuiltInDriverGLX(const char *args);
-
-
-extern _EGLDriver *
-_eglMain(const char *args);
+extern _EGLDriver*
+_eglBuiltInDriverHaiku(const char* args);
 
 
 extern _EGLDriver *
@@ -120,6 +119,11 @@ _eglInitDriverFallbacks(_EGLDriver *drv);
 extern void
 _eglSearchPathForEach(EGLBoolean (*callback)(const char *, size_t, void *),
                       void *callback_data);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif /* EGLDRIVER_INCLUDED */

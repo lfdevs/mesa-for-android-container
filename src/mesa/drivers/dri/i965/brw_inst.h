@@ -44,7 +44,7 @@ typedef struct brw_inst {
    uint64_t data[2];
 } brw_inst;
 
-static inline uint64_t brw_inst_bits(brw_inst *inst,
+static inline uint64_t brw_inst_bits(const brw_inst *inst,
                                      unsigned high, unsigned low);
 static inline void brw_inst_set_bits(brw_inst *inst,
                                      unsigned high, unsigned low,
@@ -52,19 +52,19 @@ static inline void brw_inst_set_bits(brw_inst *inst,
 
 #define FC(name, high, low, assertions)                       \
 static inline void                                            \
-brw_inst_set_##name(const struct brw_context *brw,            \
+brw_inst_set_##name(const struct brw_device_info *devinfo,    \
                     brw_inst *inst, uint64_t v)               \
 {                                                             \
    assert(assertions);                                        \
-   (void) brw;                                                \
+   (void) devinfo;                                            \
    brw_inst_set_bits(inst, high, low, v);                     \
 }                                                             \
 static inline uint64_t                                        \
-brw_inst_##name(const struct brw_context *brw,                \
-                brw_inst *inst)                               \
+brw_inst_##name(const struct brw_device_info *devinfo,        \
+                const brw_inst *inst)                         \
 {                                                             \
    assert(assertions);                                        \
-   (void) brw;                                                \
+   (void) devinfo;                                            \
    return brw_inst_bits(inst, high, low);                     \
 }
 
@@ -73,15 +73,15 @@ brw_inst_##name(const struct brw_context *brw,                \
 
 #define BOUNDS(hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6, hi7, lo7, hi8, lo8) \
    unsigned high, low;                                                       \
-   if (brw->gen >= 8) {                                                      \
+   if (devinfo->gen >= 8) {                                                  \
       high = hi8;  low = lo8;                                                \
-   } else if (brw->gen >= 7) {                                               \
+   } else if (devinfo->gen >= 7) {                                           \
       high = hi7;  low = lo7;                                                \
-   } else if (brw->gen >= 6) {                                               \
+   } else if (devinfo->gen >= 6) {                                           \
       high = hi6;  low = lo6;                                                \
-   } else if (brw->gen >= 5) {                                               \
+   } else if (devinfo->gen >= 5) {                                           \
       high = hi5;  low = lo5;                                                \
-   } else if (brw->is_g4x) {                                                 \
+   } else if (devinfo->is_g4x) {                                             \
       high = hi45; low = lo45;                                               \
    } else {                                                                  \
       high = hi4;  low = lo4;                                                \
@@ -94,14 +94,14 @@ brw_inst_##name(const struct brw_context *brw,                \
  */
 #define FF(name, hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6, hi7, lo7, hi8, lo8)\
 static inline void                                                            \
-brw_inst_set_##name(const struct brw_context *brw,                            \
+brw_inst_set_##name(const struct brw_device_info *devinfo,                    \
                     brw_inst *inst, uint64_t value)                           \
 {                                                                             \
    BOUNDS(hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6, hi7, lo7, hi8, lo8)       \
    brw_inst_set_bits(inst, high, low, value);                                 \
 }                                                                             \
 static inline uint64_t                                                        \
-brw_inst_##name(const struct brw_context *brw, brw_inst *inst)                \
+brw_inst_##name(const struct brw_device_info *devinfo, const brw_inst *inst)  \
 {                                                                             \
    BOUNDS(hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6, hi7, lo7, hi8, lo8)       \
    return brw_inst_bits(inst, high, low);                                     \
@@ -171,10 +171,10 @@ F8(flag_subreg_nr,     /* 4+ */  89, 89, /* 8+ */ 32, 32)
 F(saturate,             31,  31)
 F(debug_control,        30,  30)
 F(cmpt_control,         29,  29)
-FC(branch_control,      28,  28, brw->gen >= 8)
+FC(branch_control,      28,  28, devinfo->gen >= 8)
 F(acc_wr_control,       28,  28)
 F(cond_modifier,        27,  24)
-FC(math_function,       27,  24, brw->gen >= 6)
+FC(math_function,       27,  24, devinfo->gen >= 6)
 F(exec_size,            23,  21)
 F(pred_inv,             20,  20)
 F(pred_control,         19,  16)
@@ -247,12 +247,12 @@ F(3src_opcode,           6,  0)
  *  @{
  */
 static inline void
-brw_inst_set_uip(const struct brw_context *brw,
+brw_inst_set_uip(const struct brw_device_info *devinfo,
                  brw_inst *inst, int32_t value)
 {
-   assert(brw->gen >= 6);
+   assert(devinfo->gen >= 6);
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       brw_inst_set_bits(inst, 95, 64, (uint32_t)value);
    } else {
       assert(value <= (1 << 16) - 1);
@@ -262,11 +262,11 @@ brw_inst_set_uip(const struct brw_context *brw,
 }
 
 static inline int32_t
-brw_inst_uip(const struct brw_context *brw, brw_inst *inst)
+brw_inst_uip(const struct brw_device_info *devinfo, const brw_inst *inst)
 {
-   assert(brw->gen >= 6);
+   assert(devinfo->gen >= 6);
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       return brw_inst_bits(inst, 95, 64);
    } else {
       return (int16_t)brw_inst_bits(inst, 127, 112);
@@ -274,12 +274,12 @@ brw_inst_uip(const struct brw_context *brw, brw_inst *inst)
 }
 
 static inline void
-brw_inst_set_jip(const struct brw_context *brw,
+brw_inst_set_jip(const struct brw_device_info *devinfo,
                  brw_inst *inst, int32_t value)
 {
-   assert(brw->gen >= 6);
+   assert(devinfo->gen >= 6);
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       brw_inst_set_bits(inst, 127, 96, (uint32_t)value);
    } else {
       assert(value <= (1 << 16) - 1);
@@ -289,11 +289,11 @@ brw_inst_set_jip(const struct brw_context *brw,
 }
 
 static inline int32_t
-brw_inst_jip(const struct brw_context *brw, brw_inst *inst)
+brw_inst_jip(const struct brw_device_info *devinfo, const brw_inst *inst)
 {
-   assert(brw->gen >= 6);
+   assert(devinfo->gen >= 6);
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       return brw_inst_bits(inst, 127, 96);
    } else {
       return (int16_t)brw_inst_bits(inst, 111, 96);
@@ -303,23 +303,23 @@ brw_inst_jip(const struct brw_context *brw, brw_inst *inst)
 /** Like FC, but using int16_t to handle negative jump targets. */
 #define FJ(name, high, low, assertions)                                       \
 static inline void                                                            \
-brw_inst_set_##name(const struct brw_context *brw, brw_inst *inst, int16_t v) \
+brw_inst_set_##name(const struct brw_device_info *devinfo, brw_inst *inst, int16_t v) \
 {                                                                             \
    assert(assertions);                                                        \
-   (void) brw;                                                                \
+   (void) devinfo;                                                            \
    brw_inst_set_bits(inst, high, low, (uint16_t) v);                          \
 }                                                                             \
 static inline int16_t                                                         \
-brw_inst_##name(const struct brw_context *brw, brw_inst *inst)                \
+brw_inst_##name(const struct brw_device_info *devinfo, const brw_inst *inst)  \
 {                                                                             \
    assert(assertions);                                                        \
-   (void) brw;                                                                \
+   (void) devinfo;                                                            \
    return brw_inst_bits(inst, high, low);                                     \
 }
 
-FJ(gen6_jump_count,  63,  48, brw->gen == 6)
-FJ(gen4_jump_count, 111,  96, brw->gen < 6)
-FC(gen4_pop_count,  115, 112, brw->gen < 6)
+FJ(gen6_jump_count,  63,  48, devinfo->gen == 6)
+FJ(gen4_jump_count, 111,  96, devinfo->gen < 6)
+FC(gen4_pop_count,  115, 112, devinfo->gen < 6)
 /** @} */
 
 /**
@@ -361,7 +361,7 @@ FF(sfid,
    /* 6:   */  27,  24,
    /* 7:   */  27,  24,
    /* 8:   */  27,  24)
-FC(base_mrf,   27,  24, brw->gen < 6);
+FC(base_mrf,   27,  24, devinfo->gen < 6);
 /** @} */
 
 /* Message descriptor bits */
@@ -375,9 +375,9 @@ FF(urb_per_slot_offset,
    /* 4-6: */ -1, -1, -1, -1, -1, -1, -1, -1,
    /* 7:   */ MD(16), MD(16),
    /* 8:   */ MD(17), MD(17))
-FC(urb_complete, MD(15), MD(15), brw->gen < 8)
-FC(urb_used, MD(14), MD(14), brw->gen < 7)
-FC(urb_allocate, MD(13), MD(13), brw->gen < 7)
+FC(urb_complete, MD(15), MD(15), devinfo->gen < 8)
+FC(urb_used, MD(14), MD(14), devinfo->gen < 7)
+FC(urb_allocate, MD(13), MD(13), devinfo->gen < 7)
 FF(urb_swizzle_control,
    /* 4:   */ MD(11), MD(10),
    /* 4.5: */ MD(11), MD(10),
@@ -405,11 +405,11 @@ FF(urb_opcode,
  * Gen4-5 math messages:
  *  @{
  */
-FC(math_msg_data_type,  MD(7), MD(7), brw->gen < 6)
-FC(math_msg_saturate,   MD(6), MD(6), brw->gen < 6)
-FC(math_msg_precision,  MD(5), MD(5), brw->gen < 6)
-FC(math_msg_signed_int, MD(4), MD(4), brw->gen < 6)
-FC(math_msg_function,   MD(3), MD(0), brw->gen < 6)
+FC(math_msg_data_type,  MD(7), MD(7), devinfo->gen < 6)
+FC(math_msg_saturate,   MD(6), MD(6), devinfo->gen < 6)
+FC(math_msg_precision,  MD(5), MD(5), devinfo->gen < 6)
+FC(math_msg_signed_int, MD(4), MD(4), devinfo->gen < 6)
+FC(math_msg_function,   MD(3), MD(0), devinfo->gen < 6)
 /** @} */
 
 /**
@@ -429,7 +429,7 @@ FF(sampler_msg_type,
    /* 6:   */ MD(15), MD(12),
    /* 7:   */ MD(16), MD(12),
    /* 8:   */ MD(16), MD(12))
-FC(sampler_return_format, MD(13), MD(12), brw->gen == 4 && !brw->is_g4x)
+FC(sampler_return_format, MD(13), MD(12), devinfo->gen == 4 && !devinfo->is_g4x)
 F(sampler,                MD(11), MD(8))
 F(binding_table_index,    MD( 7), MD(0)) /* also used by other messages */
 /** @} */
@@ -438,7 +438,7 @@ F(binding_table_index,    MD( 7), MD(0)) /* also used by other messages */
  * Data port message function control bits:
  *  @{
  */
-FC(dp_category,         MD(18), MD(18), brw->gen >= 7)
+FC(dp_category,         MD(18), MD(18), devinfo->gen >= 7)
 
 /* Gen4-5 store fields in different bits for read/write messages. */
 FF(dp_read_msg_type,
@@ -469,7 +469,7 @@ FF(dp_write_msg_control,
    /* 6:   */ MD(12), MD( 8),
    /* 7:   */ MD(13), MD( 8),
    /* 8:   */ MD(13), MD( 8))
-FC(dp_read_target_cache, MD(15), MD(14), brw->gen < 6);
+FC(dp_read_target_cache, MD(15), MD(14), devinfo->gen < 6);
 
 FF(dp_write_commit,
    /* 4:   */ MD(15),  MD(15),
@@ -497,11 +497,11 @@ FF(dp_msg_control,
  * Scratch message bits (Gen7+):
  *  @{
  */
-FC(scratch_read_write, MD(17), MD(17), brw->gen >= 7) /* 0 = read,  1 = write */
-FC(scratch_type,       MD(16), MD(16), brw->gen >= 7) /* 0 = OWord, 1 = DWord */
-FC(scratch_invalidate_after_read, MD(15), MD(15), brw->gen >= 7)
-FC(scratch_block_size,  MD(13),  MD(12), brw->gen >= 7)
-FC(scratch_addr_offset, MD(11),  MD( 0), brw->gen >= 7)
+FC(scratch_read_write, MD(17), MD(17), devinfo->gen >= 7) /* 0 = read,  1 = write */
+FC(scratch_type,       MD(16), MD(16), devinfo->gen >= 7) /* 0 = OWord, 1 = DWord */
+FC(scratch_invalidate_after_read, MD(15), MD(15), devinfo->gen >= 7)
+FC(scratch_block_size,  MD(13),  MD(12), devinfo->gen >= 7)
+FC(scratch_addr_offset, MD(11),  MD( 0), devinfo->gen >= 7)
 /** @} */
 
 /**
@@ -515,7 +515,7 @@ FF(rt_last,
    /* 6:   */ MD(12), MD(12),
    /* 7:   */ MD(12), MD(12),
    /* 8:   */ MD(12), MD(12))
-FC(rt_slot_group,      MD(11),  MD(11), brw->gen >= 6)
+FC(rt_slot_group,      MD(11),  MD(11), devinfo->gen >= 6)
 F(rt_message_type,     MD(10),  MD( 8))
 /** @} */
 
@@ -544,50 +544,50 @@ F(pi_message_data,   MD(7),   MD(0))
  *  @{
  */
 static inline int
-brw_inst_imm_d(const struct brw_context *brw, brw_inst *insn)
+brw_inst_imm_d(const struct brw_device_info *devinfo, const brw_inst *insn)
 {
-   (void) brw;
+   (void) devinfo;
    return brw_inst_bits(insn, 127, 96);
 }
 
 static inline unsigned
-brw_inst_imm_ud(const struct brw_context *brw, brw_inst *insn)
+brw_inst_imm_ud(const struct brw_device_info *devinfo, const brw_inst *insn)
 {
-   (void) brw;
+   (void) devinfo;
    return brw_inst_bits(insn, 127, 96);
 }
 
 static inline float
-brw_inst_imm_f(const struct brw_context *brw, brw_inst *insn)
+brw_inst_imm_f(const struct brw_device_info *devinfo, const brw_inst *insn)
 {
    fi_type ft;
-   (void) brw;
+   (void) devinfo;
    ft.u = brw_inst_bits(insn, 127, 96);
    return ft.f;
 }
 
 static inline void
-brw_inst_set_imm_d(const struct brw_context *brw,
+brw_inst_set_imm_d(const struct brw_device_info *devinfo,
                    brw_inst *insn, int value)
 {
-   (void) brw;
+   (void) devinfo;
    return brw_inst_set_bits(insn, 127, 96, value);
 }
 
 static inline void
-brw_inst_set_imm_ud(const struct brw_context *brw,
+brw_inst_set_imm_ud(const struct brw_device_info *devinfo,
                     brw_inst *insn, unsigned value)
 {
-   (void) brw;
+   (void) devinfo;
    return brw_inst_set_bits(insn, 127, 96, value);
 }
 
 static inline void
-brw_inst_set_imm_f(const struct brw_context *brw,
+brw_inst_set_imm_f(const struct brw_device_info *devinfo,
                    brw_inst *insn, float value)
 {
    fi_type ft;
-   (void) brw;
+   (void) devinfo;
    ft.f = value;
    brw_inst_set_bits(insn, 127, 96, ft.u);
 }
@@ -597,12 +597,12 @@ brw_inst_set_imm_f(const struct brw_context *brw,
 /* The AddrImm fields are split into two discontiguous sections on Gen8+ */
 #define BRW_IA1_ADDR_IMM(reg, g4_high, g4_low, g8_nine, g8_high, g8_low) \
 static inline void                                                       \
-brw_inst_set_##reg##_ia1_addr_imm(const struct brw_context *brw,         \
+brw_inst_set_##reg##_ia1_addr_imm(const struct brw_device_info *devinfo, \
                                   brw_inst *inst,                        \
                                   unsigned value)                        \
 {                                                                        \
    assert((value & ~0x3ff) == 0);                                        \
-   if (brw->gen >= 8) {                                                  \
+   if (devinfo->gen >= 8) {                                              \
       brw_inst_set_bits(inst, g8_high, g8_low, value & 0x1ff);           \
       brw_inst_set_bits(inst, g8_nine, g8_nine, value >> 9);             \
    } else {                                                              \
@@ -610,10 +610,10 @@ brw_inst_set_##reg##_ia1_addr_imm(const struct brw_context *brw,         \
    }                                                                     \
 }                                                                        \
 static inline unsigned                                                   \
-brw_inst_##reg##_ia1_addr_imm(const struct brw_context *brw,             \
-                              brw_inst *inst)                            \
+brw_inst_##reg##_ia1_addr_imm(const struct brw_device_info *devinfo,     \
+                              const brw_inst *inst)                      \
 {                                                                        \
-   if (brw->gen >= 8) {                                                  \
+   if (devinfo->gen >= 8) {                                              \
       return brw_inst_bits(inst, g8_high, g8_low) |                      \
              (brw_inst_bits(inst, g8_nine, g8_nine) << 9);               \
    } else {                                                              \
@@ -629,11 +629,11 @@ BRW_IA1_ADDR_IMM(dst,   57, 48,  47,  56, 48)
 
 #define BRW_IA16_ADDR_IMM(reg, g4_high, g4_low, g8_nine, g8_high, g8_low) \
 static inline void                                                        \
-brw_inst_set_##reg##_ia16_addr_imm(const struct brw_context *brw,         \
+brw_inst_set_##reg##_ia16_addr_imm(const struct brw_device_info *devinfo, \
                                    brw_inst *inst, unsigned value)        \
 {                                                                         \
    assert((value & ~0x3ff) == 0);                                         \
-   if (brw->gen >= 8) {                                                   \
+   if (devinfo->gen >= 8) {                                               \
       brw_inst_set_bits(inst, g8_high, g8_low, value & 0x1ff);            \
       brw_inst_set_bits(inst, g8_nine, g8_nine, value >> 9);              \
    } else {                                                               \
@@ -641,10 +641,10 @@ brw_inst_set_##reg##_ia16_addr_imm(const struct brw_context *brw,         \
    }                                                                      \
 }                                                                         \
 static inline unsigned                                                    \
-brw_inst_##reg##_ia16_addr_imm(const struct brw_context *brw,             \
-                               brw_inst *inst)                            \
+brw_inst_##reg##_ia16_addr_imm(const struct brw_device_info *devinfo,     \
+                               const brw_inst *inst)                      \
 {                                                                         \
-   if (brw->gen >= 8) {                                                   \
+   if (devinfo->gen >= 8) {                                               \
       return brw_inst_bits(inst, g8_high, g8_low) |                       \
              (brw_inst_bits(inst, g8_nine, g8_nine) << 9);                \
    } else {                                                               \
@@ -666,7 +666,7 @@ BRW_IA16_ADDR_IMM(dst,   57, 52,  47,  56,  52)
  * Bits indices range from 0..127; fields may not cross 64-bit boundaries.
  */
 static inline uint64_t
-brw_inst_bits(brw_inst *inst, unsigned high, unsigned low)
+brw_inst_bits(const brw_inst *inst, unsigned high, unsigned low)
 {
    /* We assume the field doesn't cross 64-bit boundaries. */
    const unsigned word = high / 64;

@@ -41,12 +41,14 @@
  * the number shouldn't be a commonly-used one. */
 #define SI_BASE_VERTEX_UNKNOWN INT_MIN
 #define SI_RESTART_INDEX_UNKNOWN INT_MIN
+#define SI_NUM_SMOOTH_AA_SAMPLES 8
 
 #define SI_TRACE_CS 0
 #define SI_TRACE_CS_DWORDS		6
 
 #define SI_MAX_DRAW_CS_DWORDS \
-	(/*derived prim state:*/ 6 + /*draw regs:*/ 16 + /*draw packets:*/ 31)
+	(/*scratch:*/ 3 + /*derived prim state:*/ 3 + \
+	 /*draw regs:*/ 16 + /*draw packets:*/ 31)
 
 /* Instruction cache. */
 #define SI_CONTEXT_INV_ICACHE		(R600_CONTEXT_PRIVATE_FLAG << 0)
@@ -150,6 +152,7 @@ struct si_context {
 			struct r600_atom *streamout_begin;
 			struct r600_atom *streamout_enable; /* must be after streamout_begin */
 			struct r600_atom *framebuffer;
+			struct r600_atom *msaa_sample_locs;
 			struct r600_atom *db_render_state;
 			struct r600_atom *msaa_config;
 			struct r600_atom *clip_regs;
@@ -159,8 +162,6 @@ struct si_context {
 
 	struct si_framebuffer		framebuffer;
 	struct si_vertex_element	*vertex_elements;
-	unsigned			pa_sc_line_stipple;
-	unsigned			pa_su_sc_mode_cntl;
 	/* for saving when using blitter */
 	struct pipe_stencil_ref		stencil_ref;
 	/* shaders */
@@ -180,8 +181,10 @@ struct si_context {
 	unsigned			border_color_offset;
 
 	struct r600_atom		clip_regs;
+	struct r600_atom		msaa_sample_locs;
 	struct r600_atom		msaa_config;
 	int				ps_iter_samples;
+	bool				smoothing_enabled;
 
 	/* Vertex and index buffers. */
 	bool			vertex_buffers_dirty;
@@ -225,6 +228,7 @@ struct si_context {
 	int			last_prim;
 	int			last_multi_vgt_param;
 	int			last_rast_prim;
+	unsigned		last_sc_line_stipple;
 	int			current_rast_prim; /* primitive type after TES, GS */
 
 	/* Scratch buffer */

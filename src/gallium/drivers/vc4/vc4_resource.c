@@ -26,18 +26,29 @@
 #include "util/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_surface.h"
-#include "util/u_blitter.h"
 
 #include "vc4_screen.h"
 #include "vc4_context.h"
 #include "vc4_resource.h"
 #include "vc4_tiling.h"
 
+static bool miptree_debug = false;
+
 static void
 vc4_resource_bo_alloc(struct vc4_resource *rsc)
 {
         struct pipe_resource *prsc = &rsc->base.b;
         struct pipe_screen *pscreen = prsc->screen;
+
+        if (miptree_debug) {
+                fprintf(stderr, "alloc %p: size %d + offset %d -> %d\n",
+                        rsc,
+                        rsc->slices[0].size,
+                        rsc->slices[0].offset,
+                        rsc->slices[0].offset +
+                        rsc->slices[0].size +
+                        rsc->cube_map_stride * (prsc->array_size - 1));
+        }
 
         vc4_bo_unreference(&rsc->bo);
         rsc->bo = vc4_bo_alloc(vc4_screen(pscreen),
@@ -244,9 +255,9 @@ vc4_setup_slices(struct vc4_resource *rsc)
                         level_height = u_minify(pot_height, i);
                 }
 
-                if (rsc->tiled == VC4_TILING_FORMAT_LINEAR) {
+                if (!rsc->tiled) {
                         slice->tiling = VC4_TILING_FORMAT_LINEAR;
-                        level_width = align(level_width, 16);
+                        level_width = align(level_width, utile_w);
                 } else {
                         if (vc4_size_is_lt(level_width, level_height,
                                            rsc->cpp)) {
@@ -267,6 +278,22 @@ vc4_setup_slices(struct vc4_resource *rsc)
                 slice->size = level_height * slice->stride;
 
                 offset += slice->size;
+
+                if (miptree_debug) {
+                        static const char tiling_chars[] = {
+                                [VC4_TILING_FORMAT_LINEAR] = 'R',
+                                [VC4_TILING_FORMAT_LT] = 'L',
+                                [VC4_TILING_FORMAT_T] = 'T'
+                        };
+                        fprintf(stderr,
+                                "rsc setup %p (format %d), %dx%d: "
+                                "level %d (%c) -> %dx%d, stride %d@0x%08x\n",
+                                rsc, rsc->vc4_format,
+                                prsc->width0, prsc->height0,
+                                i, tiling_chars[slice->tiling],
+                                level_width, level_height,
+                                slice->stride, slice->offset);
+                }
         }
 
         /* The texture base pointer that has to point to level 0 doesn't have
@@ -345,13 +372,13 @@ vc4_resource_create(struct pipe_screen *pscreen,
                 rsc->tiled = true;
         }
 
+        if (tmpl->target != PIPE_BUFFER)
+                rsc->vc4_format = get_resource_texture_format(prsc);
+
         vc4_setup_slices(rsc);
         vc4_resource_bo_alloc(rsc);
         if (!rsc->bo)
                 goto fail;
-
-        if (tmpl->target != PIPE_BUFFER)
-                rsc->vc4_format = get_resource_texture_format(prsc);
 
         return prsc;
 fail:
@@ -376,14 +403,23 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
         if (!rsc->bo)
                 goto fail;
 
-#ifdef USE_VC4_SIMULATOR
-        slice->stride = align(prsc->width0 * rsc->cpp, 16);
-#else
-        slice->stride = handle->stride;
-#endif
+        if (!using_vc4_simulator)
+                slice->stride = handle->stride;
+        else
+                slice->stride = align(prsc->width0 * rsc->cpp, 16);
+
         slice->tiling = VC4_TILING_FORMAT_LINEAR;
 
         rsc->vc4_format = get_resource_texture_format(prsc);
+
+        if (miptree_debug) {
+                fprintf(stderr,
+                        "rsc import %p (format %d), %dx%d: "
+                        "level 0 (R) -> stride %d@0x%08x\n",
+                        rsc, rsc->vc4_format,
+                        prsc->width0, prsc->height0,
+                        slice->stride, slice->offset);
+        }
 
         return prsc;
 
@@ -431,75 +467,112 @@ vc4_surface_destroy(struct pipe_context *pctx, struct pipe_surface *psurf)
         FREE(psurf);
 }
 
+/** Debug routine to dump the contents of an 8888 surface to the console */
+void
+vc4_dump_surface(struct pipe_surface *psurf)
+{
+        if (!psurf)
+                return;
+
+        struct pipe_resource *prsc = psurf->texture;
+        struct vc4_resource *rsc = vc4_resource(prsc);
+        uint32_t *map = vc4_bo_map(rsc->bo);
+        uint32_t stride = rsc->slices[0].stride / 4;
+        uint32_t width = psurf->width;
+        uint32_t height = psurf->height;
+        uint32_t chunk_w = width / 79;
+        uint32_t chunk_h = height / 40;
+        uint32_t found_colors[10];
+        uint32_t num_found_colors = 0;
+
+        if (rsc->vc4_format != VC4_TEXTURE_TYPE_RGBA32R) {
+                fprintf(stderr, "%s: Unsupported format %s\n",
+                        __func__, util_format_short_name(psurf->format));
+                return;
+        }
+
+        for (int by = 0; by < height; by += chunk_h) {
+                for (int bx = 0; bx < width; bx += chunk_w) {
+                        int all_found_color = -1; /* nothing found */
+
+                        for (int y = by; y < MIN2(height, by + chunk_h); y++) {
+                                for (int x = bx; x < MIN2(width, bx + chunk_w); x++) {
+                                        uint32_t pix = map[y * stride + x];
+
+                                        int i;
+                                        for (i = 0; i < num_found_colors; i++) {
+                                                if (pix == found_colors[i])
+                                                        break;
+                                        }
+                                        if (i == num_found_colors &&
+                                            num_found_colors <
+                                            ARRAY_SIZE(found_colors)) {
+                                                found_colors[num_found_colors++] = pix;
+                                        }
+
+                                        if (i < num_found_colors) {
+                                                if (all_found_color == -1)
+                                                        all_found_color = i;
+                                                else if (i != all_found_color)
+                                                        all_found_color = ARRAY_SIZE(found_colors);
+                                        }
+                                }
+                        }
+                        /* If all pixels for this chunk have a consistent
+                         * value, then print a character for it.  Either a
+                         * fixed name (particularly common for piglit tests),
+                         * or a runtime-generated number.
+                         */
+                        if (all_found_color >= 0 &&
+                            all_found_color < ARRAY_SIZE(found_colors)) {
+                                static const struct {
+                                        uint32_t val;
+                                        const char *c;
+                                } named_colors[] = {
+                                        { 0xff000000, "█" },
+                                        { 0x00000000, "█" },
+                                        { 0xffff0000, "r" },
+                                        { 0xff00ff00, "g" },
+                                        { 0xff0000ff, "b" },
+                                        { 0xffffffff, "w" },
+                                };
+                                int i;
+                                for (i = 0; i < ARRAY_SIZE(named_colors); i++) {
+                                        if (named_colors[i].val ==
+                                            found_colors[all_found_color]) {
+                                                fprintf(stderr, "%s",
+                                                        named_colors[i].c);
+                                                break;
+                                        }
+                                }
+                                /* For unnamed colors, print a number and the
+                                 * numbers will have values printed at the
+                                 * end.
+                                 */
+                                if (i == ARRAY_SIZE(named_colors)) {
+                                        fprintf(stderr, "%c",
+                                                '0' + all_found_color);
+                                }
+                        } else {
+                                /* If there's no consistent color, print this.
+                                 */
+                                fprintf(stderr, ".");
+                        }
+                }
+                fprintf(stderr, "\n");
+        }
+
+        for (int i = 0; i < num_found_colors; i++) {
+                fprintf(stderr, "color %d: 0x%08x\n", i, found_colors[i]);
+        }
+}
+
 static void
 vc4_flush_resource(struct pipe_context *pctx, struct pipe_resource *resource)
 {
         /* All calls to flush_resource are followed by a flush of the context,
          * so there's nothing to do.
          */
-}
-
-static bool
-render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
-{
-        struct vc4_context *vc4 = vc4_context(ctx);
-
-        if (!util_blitter_is_blit_supported(vc4->blitter, info)) {
-                fprintf(stderr, "blit unsupported %s -> %s",
-                    util_format_short_name(info->src.resource->format),
-                    util_format_short_name(info->dst.resource->format));
-                return false;
-        }
-
-        util_blitter_save_vertex_buffer_slot(vc4->blitter, vc4->vertexbuf.vb);
-        util_blitter_save_vertex_elements(vc4->blitter, vc4->vtx);
-        util_blitter_save_vertex_shader(vc4->blitter, vc4->prog.bind_vs);
-        util_blitter_save_rasterizer(vc4->blitter, vc4->rasterizer);
-        util_blitter_save_viewport(vc4->blitter, &vc4->viewport);
-        util_blitter_save_scissor(vc4->blitter, &vc4->scissor);
-        util_blitter_save_fragment_shader(vc4->blitter, vc4->prog.bind_fs);
-        util_blitter_save_blend(vc4->blitter, vc4->blend);
-        util_blitter_save_depth_stencil_alpha(vc4->blitter, vc4->zsa);
-        util_blitter_save_stencil_ref(vc4->blitter, &vc4->stencil_ref);
-        util_blitter_save_sample_mask(vc4->blitter, vc4->sample_mask);
-        util_blitter_save_framebuffer(vc4->blitter, &vc4->framebuffer);
-        util_blitter_save_fragment_sampler_states(vc4->blitter,
-                        vc4->fragtex.num_samplers,
-                        (void **)vc4->fragtex.samplers);
-        util_blitter_save_fragment_sampler_views(vc4->blitter,
-                        vc4->fragtex.num_textures, vc4->fragtex.textures);
-
-        util_blitter_blit(vc4->blitter, info);
-
-        return true;
-}
-
-/* Optimal hardware path for blitting pixels.
- * Scaling, format conversion, up- and downsampling (resolve) are allowed.
- */
-static void
-vc4_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
-{
-        struct pipe_blit_info info = *blit_info;
-
-        if (info.src.resource->nr_samples > 1 &&
-            info.dst.resource->nr_samples <= 1 &&
-            !util_format_is_depth_or_stencil(info.src.resource->format) &&
-            !util_format_is_pure_integer(info.src.resource->format)) {
-                fprintf(stderr, "color resolve unimplemented");
-                return;
-        }
-
-        if (util_try_blit_via_copy_region(pctx, &info)) {
-                return; /* done */
-        }
-
-        if (info.mask & PIPE_MASK_S) {
-                fprintf(stderr, "cannot blit stencil, skipping");
-                info.mask &= ~PIPE_MASK_S;
-        }
-
-        render_blit(pctx, &info);
 }
 
 void
@@ -510,24 +583,45 @@ vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
         struct vc4_resource *orig = vc4_resource(shadow->shadow_parent);
         assert(orig);
 
-        if (shadow->writes == orig->writes)
+        if (shadow->writes == orig->writes && orig->bo->private)
                 return;
 
-        for (int i = 0; i <= shadow->base.b.last_level; i++) {
-                struct pipe_box box = {
-                        .x = 0,
-                        .y = 0,
-                        .z = 0,
-                        .width = u_minify(shadow->base.b.width0, i),
-                        .height = u_minify(shadow->base.b.height0, i),
-                        .depth = 1,
-                };
+        perf_debug("Updating shadow texture due to %s\n",
+                   view->u.tex.first_level ? "base level" : "raster layout");
 
-                util_resource_copy_region(pctx,
-                                          &shadow->base.b, i, 0, 0, 0,
-                                          &orig->base.b,
-                                          view->u.tex.first_level + i,
-                                          &box);
+        for (int i = 0; i <= shadow->base.b.last_level; i++) {
+                unsigned width = u_minify(shadow->base.b.width0, i);
+                unsigned height = u_minify(shadow->base.b.height0, i);
+                struct pipe_blit_info info = {
+                        .dst = {
+                                .resource = &shadow->base.b,
+                                .level = i,
+                                .box = {
+                                        .x = 0,
+                                        .y = 0,
+                                        .z = 0,
+                                        .width = width,
+                                        .height = height,
+                                        .depth = 1,
+                                },
+                                .format = shadow->base.b.format,
+                        },
+                        .src = {
+                                .resource = &orig->base.b,
+                                .level = view->u.tex.first_level + i,
+                                .box = {
+                                        .x = 0,
+                                        .y = 0,
+                                        .z = 0,
+                                        .width = width,
+                                        .height = height,
+                                        .depth = 1,
+                                },
+                                .format = orig->base.b.format,
+                        },
+                        .mask = ~0,
+                };
+                pctx->blit(pctx, &info);
         }
 
         shadow->writes = orig->writes;
@@ -554,6 +648,8 @@ vc4_update_shadow_index_buffer(struct pipe_context *pctx,
 
         if (shadow->writes == orig->writes)
                 return;
+
+        perf_debug("Fallback conversion for %d uint indices\n", count);
 
         struct pipe_transfer *src_transfer;
         uint32_t *src = pipe_buffer_map_range(pctx, &orig->base.b,

@@ -166,7 +166,7 @@ svga_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static void
+static boolean
 svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct svga_screen *svgascreen = svga_screen(pipe->screen);
@@ -222,6 +222,7 @@ svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    default:
       assert(!"unexpected query type in svga_begin_query()");
    }
+   return true;
 }
 
 

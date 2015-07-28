@@ -31,34 +31,20 @@
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 #include "genhw/genhw.h" /* for GEN6_REG_TIMESTAMP */
-#include "intel_winsys.h"
+#include "core/ilo_fence.h"
+#include "core/ilo_format.h"
+#include "core/intel_winsys.h"
 
 #include "ilo_context.h"
-#include "ilo_format.h"
 #include "ilo_resource.h"
 #include "ilo_transfer.h" /* for ILO_TRANSFER_MAP_BUFFER_ALIGNMENT */
 #include "ilo_public.h"
 #include "ilo_screen.h"
 
-struct ilo_fence {
+struct pipe_fence_handle {
    struct pipe_reference reference;
-   struct intel_bo *bo;
-};
 
-int ilo_debug;
-
-static const struct debug_named_value ilo_debug_flags[] = {
-   { "batch",     ILO_DEBUG_BATCH,    "Dump batch/state/surface/instruction buffers" },
-   { "vs",        ILO_DEBUG_VS,       "Dump vertex shaders" },
-   { "gs",        ILO_DEBUG_GS,       "Dump geometry shaders" },
-   { "fs",        ILO_DEBUG_FS,       "Dump fragment shaders" },
-   { "cs",        ILO_DEBUG_CS,       "Dump compute shaders" },
-   { "draw",      ILO_DEBUG_DRAW,     "Show draw information" },
-   { "submit",    ILO_DEBUG_SUBMIT,   "Show batch buffer submissions" },
-   { "nohw",      ILO_DEBUG_NOHW,     "Do not send commands to HW" },
-   { "nocache",   ILO_DEBUG_NOCACHE,  "Always invalidate HW caches" },
-   { "nohiz",     ILO_DEBUG_NOHIZ,    "Disable HiZ" },
-   DEBUG_NAMED_VALUE_END
+   struct ilo_fence fence;
 };
 
 static float
@@ -471,6 +457,8 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+   case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+   case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -513,31 +501,44 @@ ilo_get_vendor(struct pipe_screen *screen)
 }
 
 static const char *
+ilo_get_device_vendor(struct pipe_screen *screen)
+{
+   return "Intel";
+}
+
+static const char *
 ilo_get_name(struct pipe_screen *screen)
 {
    struct ilo_screen *is = ilo_screen(screen);
    const char *chipset = NULL;
 
-   if (gen_is_vlv(is->dev.devid)) {
+   if (gen_is_chv(is->dev.devid)) {
+      chipset = "Intel(R) Cherryview";
+   } else if (gen_is_bdw(is->dev.devid)) {
+      /* this is likely wrong */
+      if (gen_is_desktop(is->dev.devid))
+         chipset = "Intel(R) Broadwell Desktop";
+      else if (gen_is_mobile(is->dev.devid))
+         chipset = "Intel(R) Broadwell Mobile";
+      else if (gen_is_server(is->dev.devid))
+         chipset = "Intel(R) Broadwell Server";
+   } else if (gen_is_vlv(is->dev.devid)) {
       chipset = "Intel(R) Bay Trail";
-   }
-   else if (gen_is_hsw(is->dev.devid)) {
+   } else if (gen_is_hsw(is->dev.devid)) {
       if (gen_is_desktop(is->dev.devid))
          chipset = "Intel(R) Haswell Desktop";
       else if (gen_is_mobile(is->dev.devid))
          chipset = "Intel(R) Haswell Mobile";
       else if (gen_is_server(is->dev.devid))
          chipset = "Intel(R) Haswell Server";
-   }
-   else if (gen_is_ivb(is->dev.devid)) {
+   } else if (gen_is_ivb(is->dev.devid)) {
       if (gen_is_desktop(is->dev.devid))
          chipset = "Intel(R) Ivybridge Desktop";
       else if (gen_is_mobile(is->dev.devid))
          chipset = "Intel(R) Ivybridge Mobile";
       else if (gen_is_server(is->dev.devid))
          chipset = "Intel(R) Ivybridge Server";
-   }
-   else if (gen_is_snb(is->dev.devid)) {
+   } else if (gen_is_snb(is->dev.devid)) {
       if (gen_is_desktop(is->dev.devid))
          chipset = "Intel(R) Sandybridge Desktop";
       else if (gen_is_mobile(is->dev.devid))
@@ -561,7 +562,7 @@ ilo_get_timestamp(struct pipe_screen *screen)
       uint32_t dw[2];
    } timestamp;
 
-   intel_winsys_read_reg(is->winsys, GEN6_REG_TIMESTAMP, &timestamp.val);
+   intel_winsys_read_reg(is->dev.winsys, GEN6_REG_TIMESTAMP, &timestamp.val);
 
    /*
     * From the Ivy Bridge PRM, volume 1 part 3, page 107:
@@ -580,86 +581,113 @@ ilo_get_timestamp(struct pipe_screen *screen)
    return (uint64_t) timestamp.dw[1] * 80;
 }
 
-static void
-ilo_fence_reference(struct pipe_screen *screen,
-                    struct pipe_fence_handle **p,
-                    struct pipe_fence_handle *f)
+static boolean
+ilo_is_format_supported(struct pipe_screen *screen,
+                        enum pipe_format format,
+                        enum pipe_texture_target target,
+                        unsigned sample_count,
+                        unsigned bindings)
 {
-   struct ilo_fence *fence = ilo_fence(f);
-   struct ilo_fence *old;
+   struct ilo_screen *is = ilo_screen(screen);
+   const struct ilo_dev *dev = &is->dev;
 
-   if (likely(p)) {
-      old = ilo_fence(*p);
-      *p = f;
-   }
-   else {
+   if (!util_format_is_supported(format, bindings))
+      return false;
+
+   /* no MSAA support yet */
+   if (sample_count > 1)
+      return false;
+
+   if ((bindings & PIPE_BIND_DEPTH_STENCIL) &&
+       !ilo_format_support_zs(dev, format))
+      return false;
+
+   if ((bindings & PIPE_BIND_RENDER_TARGET) &&
+       !ilo_format_support_rt(dev, format))
+      return false;
+
+   if ((bindings & PIPE_BIND_SAMPLER_VIEW) &&
+       !ilo_format_support_sampler(dev, format))
+      return false;
+
+   if ((bindings & PIPE_BIND_VERTEX_BUFFER) &&
+       !ilo_format_support_vb(dev, format))
+      return false;
+
+   return true;
+}
+
+static boolean
+ilo_is_video_format_supported(struct pipe_screen *screen,
+                              enum pipe_format format,
+                              enum pipe_video_profile profile,
+                              enum pipe_video_entrypoint entrypoint)
+{
+   return vl_video_buffer_is_format_supported(screen, format, profile, entrypoint);
+}
+
+static void
+ilo_screen_fence_reference(struct pipe_screen *screen,
+                           struct pipe_fence_handle **ptr,
+                           struct pipe_fence_handle *fence)
+{
+   struct pipe_fence_handle *old;
+
+   if (likely(ptr)) {
+      old = *ptr;
+      *ptr = fence;
+   } else {
       old = NULL;
    }
 
-   STATIC_ASSERT(&((struct ilo_fence *) NULL)->reference == NULL);
+   STATIC_ASSERT(&((struct pipe_fence_handle *) NULL)->reference == NULL);
    if (pipe_reference(&old->reference, &fence->reference)) {
-      if (old->bo)
-         intel_bo_unreference(old->bo);
+      ilo_fence_cleanup(&old->fence);
       FREE(old);
    }
 }
 
 static boolean
-ilo_fence_signalled(struct pipe_screen *screen,
-                    struct pipe_fence_handle *f)
+ilo_screen_fence_finish(struct pipe_screen *screen,
+                        struct pipe_fence_handle *fence,
+                        uint64_t timeout)
 {
-   struct ilo_fence *fence = ilo_fence(f);
+   const int64_t wait_timeout = (timeout > INT64_MAX) ? -1 : timeout;
+   bool signaled;
 
-   /* mark signalled if the bo is idle */
-   if (fence->bo && !intel_bo_is_busy(fence->bo)) {
-      intel_bo_unreference(fence->bo);
-      fence->bo = NULL;
-   }
+   signaled = ilo_fence_wait(&fence->fence, wait_timeout);
+   /* XXX not thread safe */
+   if (signaled)
+      ilo_fence_set_seq_bo(&fence->fence, NULL);
 
-   return (fence->bo == NULL);
+   return signaled;
 }
 
 static boolean
-ilo_fence_finish(struct pipe_screen *screen,
-                 struct pipe_fence_handle *f,
-                 uint64_t timeout)
+ilo_screen_fence_signalled(struct pipe_screen *screen,
+                           struct pipe_fence_handle *fence)
 {
-   struct ilo_fence *fence = ilo_fence(f);
-   const int64_t wait_timeout = (timeout > INT64_MAX) ? -1 : timeout;
-
-   /* already signalled */
-   if (!fence->bo)
-      return true;
-
-   /* wait and see if it returns error */
-   if (intel_bo_wait(fence->bo, wait_timeout))
-      return false;
-
-   /* mark signalled */
-   intel_bo_unreference(fence->bo);
-   fence->bo = NULL;
-
-   return true;
+   return ilo_screen_fence_finish(screen, fence, 0);
 }
 
 /**
  * Create a fence for \p bo.  When \p bo is not NULL, it must be submitted
  * before waited on or checked.
  */
-struct ilo_fence *
-ilo_fence_create(struct pipe_screen *screen, struct intel_bo *bo)
+struct pipe_fence_handle *
+ilo_screen_fence_create(struct pipe_screen *screen, struct intel_bo *bo)
 {
-   struct ilo_fence *fence;
+   struct ilo_screen *is = ilo_screen(screen);
+   struct pipe_fence_handle *fence;
 
-   fence = CALLOC_STRUCT(ilo_fence);
+   fence = CALLOC_STRUCT(pipe_fence_handle);
    if (!fence)
       return NULL;
 
    pipe_reference_init(&fence->reference, 1);
 
-   if (bo)
-      intel_bo_reference(bo);
-   fence->bo = bo;
+   ilo_fence_init(&fence->fence, &is->dev);
+   ilo_fence_set_seq_bo(&fence->fence, bo);
 
    return fence;
 }
@@ -669,150 +697,23 @@ ilo_screen_destroy(struct pipe_screen *screen)
 {
    struct ilo_screen *is = ilo_screen(screen);
 
-   /* as it seems, winsys is owned by the screen */
-   intel_winsys_destroy(is->winsys);
+   ilo_dev_cleanup(&is->dev);
 
    FREE(is);
-}
-
-static bool
-init_dev(struct ilo_dev_info *dev, const struct intel_winsys_info *info)
-{
-   dev->devid = info->devid;
-   dev->aperture_total = info->aperture_total;
-   dev->aperture_mappable = info->aperture_mappable;
-   dev->has_llc = info->has_llc;
-   dev->has_address_swizzling = info->has_address_swizzling;
-   dev->has_logical_context = info->has_logical_context;
-   dev->has_ppgtt = info->has_ppgtt;
-   dev->has_timestamp = info->has_timestamp;
-   dev->has_gen7_sol_reset = info->has_gen7_sol_reset;
-
-   if (!dev->has_logical_context) {
-      ilo_err("missing hardware logical context support\n");
-      return false;
-   }
-
-   /*
-    * PIPE_CONTROL and MI_* use PPGTT writes on GEN7+ and privileged GGTT
-    * writes on GEN6.
-    *
-    * From the Sandy Bridge PRM, volume 1 part 3, page 101:
-    *
-    *     "[DevSNB] When Per-Process GTT Enable is set, it is assumed that all
-    *      code is in a secure environment, independent of address space.
-    *      Under this condition, this bit only specifies the address space
-    *      (GGTT or PPGTT). All commands are executed "as-is""
-    *
-    * We need PPGTT to be enabled on GEN6 too.
-    */
-   if (!dev->has_ppgtt) {
-      /* experiments show that it does not really matter... */
-      ilo_warn("PPGTT disabled\n");
-   }
-
-   if (gen_is_hsw(info->devid)) {
-      /*
-       * From the Haswell PRM, volume 4, page 8:
-       *
-       *     "Description                    GT3      GT2      GT1.5    GT1
-       *      (...)
-       *      EUs (Total)                    40       20       12       10
-       *      Threads (Total)                280      140      84       70
-       *      (...)
-       *      URB Size (max, within L3$)     512KB    256KB    256KB    128KB
-       */
-      dev->gen_opaque = ILO_GEN(7.5);
-      dev->gt = gen_get_hsw_gt(info->devid);
-      if (dev->gt == 3) {
-         dev->eu_count = 40;
-         dev->thread_count = 280;
-         dev->urb_size = 512 * 1024;
-      } else if (dev->gt == 2) {
-         dev->eu_count = 20;
-         dev->thread_count = 140;
-         dev->urb_size = 256 * 1024;
-      } else {
-         dev->eu_count = 10;
-         dev->thread_count = 70;
-         dev->urb_size = 128 * 1024;
-      }
-   } else if (gen_is_ivb(info->devid) || gen_is_vlv(info->devid)) {
-      /*
-       * From the Ivy Bridge PRM, volume 1 part 1, page 18:
-       *
-       *     "Device             # of EUs        #Threads/EU
-       *      Ivy Bridge (GT2)   16              8
-       *      Ivy Bridge (GT1)   6               6"
-       *
-       * From the Ivy Bridge PRM, volume 4 part 2, page 17:
-       *
-       *     "URB Size    URB Rows    URB Rows when SLM Enabled
-       *      128k        4096        2048
-       *      256k        8096        4096"
-       */
-      dev->gen_opaque = ILO_GEN(7);
-      dev->gt = (gen_is_ivb(info->devid)) ? gen_get_ivb_gt(info->devid) : 1;
-      if (dev->gt == 2) {
-         dev->eu_count = 16;
-         dev->thread_count = 128;
-         dev->urb_size = 256 * 1024;
-      } else {
-         dev->eu_count = 6;
-         dev->thread_count = 36;
-         dev->urb_size = 128 * 1024;
-      }
-   } else if (gen_is_snb(info->devid)) {
-      /*
-       * From the Sandy Bridge PRM, volume 1 part 1, page 22:
-       *
-       *     "Device             # of EUs        #Threads/EU
-       *      SNB GT2            12              5
-       *      SNB GT1            6               4"
-       *
-       * From the Sandy Bridge PRM, volume 4 part 2, page 18:
-       *
-       *     "[DevSNB]: The GT1 product's URB provides 32KB of storage,
-       *      arranged as 1024 256-bit rows. The GT2 product's URB provides
-       *      64KB of storage, arranged as 2048 256-bit rows. A row
-       *      corresponds in size to an EU GRF register. Read/write access to
-       *      the URB is generally supported on a row-granular basis."
-       */
-      dev->gen_opaque = ILO_GEN(6);
-      dev->gt = gen_get_snb_gt(info->devid);
-      if (dev->gt == 2) {
-         dev->eu_count = 12;
-         dev->thread_count = 60;
-         dev->urb_size = 64 * 1024;
-      } else {
-         dev->eu_count = 6;
-         dev->thread_count = 24;
-         dev->urb_size = 32 * 1024;
-      }
-   } else {
-      ilo_err("unknown GPU generation\n");
-      return false;
-   }
-
-   return true;
 }
 
 struct pipe_screen *
 ilo_screen_create(struct intel_winsys *ws)
 {
    struct ilo_screen *is;
-   const struct intel_winsys_info *info;
 
-   ilo_debug = debug_get_flags_option("ILO_DEBUG", ilo_debug_flags, 0);
+   ilo_debug_init("ILO_DEBUG");
 
    is = CALLOC_STRUCT(ilo_screen);
    if (!is)
       return NULL;
 
-   is->winsys = ws;
-
-   info = intel_winsys_get_info(is->winsys);
-   if (!init_dev(&is->dev, info)) {
+   if (!ilo_dev_init(&is->dev, ws)) {
       FREE(is);
       return NULL;
    }
@@ -822,6 +723,7 @@ ilo_screen_create(struct intel_winsys *ws)
    is->base.destroy = ilo_screen_destroy;
    is->base.get_name = ilo_get_name;
    is->base.get_vendor = ilo_get_vendor;
+   is->base.get_device_vendor = ilo_get_device_vendor;
    is->base.get_param = ilo_get_param;
    is->base.get_paramf = ilo_get_paramf;
    is->base.get_shader_param = ilo_get_shader_param;
@@ -830,15 +732,17 @@ ilo_screen_create(struct intel_winsys *ws)
 
    is->base.get_timestamp = ilo_get_timestamp;
 
+   is->base.is_format_supported = ilo_is_format_supported;
+   is->base.is_video_format_supported = ilo_is_video_format_supported;
+
    is->base.flush_frontbuffer = NULL;
 
-   is->base.fence_reference = ilo_fence_reference;
-   is->base.fence_signalled = ilo_fence_signalled;
-   is->base.fence_finish = ilo_fence_finish;
+   is->base.fence_reference = ilo_screen_fence_reference;
+   is->base.fence_signalled = ilo_screen_fence_signalled;
+   is->base.fence_finish = ilo_screen_fence_finish;
 
    is->base.get_driver_query_info = NULL;
 
-   ilo_init_format_functions(is);
    ilo_init_context_functions(is);
    ilo_init_resource_functions(is);
 

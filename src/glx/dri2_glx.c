@@ -1310,6 +1310,8 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    if (psc->show_fps_interval < 0)
       psc->show_fps_interval = 0;
 
+   InfoMessageF("Using DRI2 for screen %d\n", screen);
+
    return &psc->base;
 
 handle_error:

@@ -82,6 +82,10 @@ fd3_rasterizer_state_create(struct pipe_context *pctx,
 		A3XX_PC_PRIM_VTX_CNTL_POLYMODE_FRONT_PTYPE(fd_polygon_mode(cso->fill_front)) |
 		A3XX_PC_PRIM_VTX_CNTL_POLYMODE_BACK_PTYPE(fd_polygon_mode(cso->fill_back));
 
+	if (cso->fill_front != PIPE_POLYGON_MODE_FILL ||
+		cso->fill_back != PIPE_POLYGON_MODE_FILL)
+		so->pc_prim_vtx_cntl |= A3XX_PC_PRIM_VTX_CNTL_POLYMODE_ENABLE;
+
 	if (cso->cull_face & PIPE_FACE_FRONT)
 		so->gras_su_mode_control |= A3XX_GRAS_SU_MODE_CONTROL_CULL_FRONT;
 	if (cso->cull_face & PIPE_FACE_BACK)
@@ -93,6 +97,8 @@ fd3_rasterizer_state_create(struct pipe_context *pctx,
 
 	if (cso->offset_tri)
 		so->gras_su_mode_control |= A3XX_GRAS_SU_MODE_CONTROL_POLY_OFFSET;
+	if (!cso->depth_clip)
+		so->gras_cl_clip_cntl |= A3XX_GRAS_CL_CLIP_CNTL_CLIP_DISABLE;
 
 	return so;
 }

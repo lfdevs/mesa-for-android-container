@@ -496,7 +496,7 @@ glXQueryVersion(Display * dpy, int *major, int *minor)
 }
 
 /*
-** Query the existance of the GLX extension
+** Query the existence of the GLX extension
 */
 _X_EXPORT Bool
 glXQueryExtension(Display * dpy, int *errorBase, int *eventBase)

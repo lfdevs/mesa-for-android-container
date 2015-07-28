@@ -30,6 +30,8 @@
 #define EGLSYNC_INCLUDED
 
 
+#include "c99_compat.h"
+
 #include "egltypedefs.h"
 #include "egldisplay.h"
 
@@ -45,12 +47,13 @@ struct _egl_sync
    EGLenum Type;
    EGLenum SyncStatus;
    EGLenum SyncCondition;
+   EGLAttribKHR CLEvent;
 };
 
 
 extern EGLBoolean
 _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
-             const EGLint *attrib_list);
+             const EGLint *attrib_list, const EGLAttribKHR *attrib_list64);
 
 
 extern EGLBoolean
@@ -61,7 +64,7 @@ _eglGetSyncAttribKHR(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
 /**
  * Increment reference count for the sync.
  */
-static INLINE _EGLSync *
+static inline _EGLSync *
 _eglGetSync(_EGLSync *sync)
 {
    if (sync)
@@ -73,7 +76,7 @@ _eglGetSync(_EGLSync *sync)
 /**
  * Decrement reference count for the sync.
  */
-static INLINE EGLBoolean
+static inline EGLBoolean
 _eglPutSync(_EGLSync *sync)
 {
    return (sync) ? _eglPutResource(&sync->Resource) : EGL_FALSE;
@@ -84,7 +87,7 @@ _eglPutSync(_EGLSync *sync)
  * Link a sync to its display and return the handle of the link.
  * The handle can be passed to client directly.
  */
-static INLINE EGLSyncKHR
+static inline EGLSyncKHR
 _eglLinkSync(_EGLSync *sync)
 {
    _eglLinkResource(&sync->Resource, _EGL_RESOURCE_SYNC);
@@ -95,7 +98,7 @@ _eglLinkSync(_EGLSync *sync)
 /**
  * Unlink a linked sync from its display.
  */
-static INLINE void
+static inline void
 _eglUnlinkSync(_EGLSync *sync)
 {
    _eglUnlinkResource(&sync->Resource, _EGL_RESOURCE_SYNC);
@@ -106,7 +109,7 @@ _eglUnlinkSync(_EGLSync *sync)
  * Lookup a handle to find the linked sync.
  * Return NULL if the handle has no corresponding linked sync.
  */
-static INLINE _EGLSync *
+static inline _EGLSync *
 _eglLookupSync(EGLSyncKHR handle, _EGLDisplay *dpy)
 {
    _EGLSync *sync = (_EGLSync *) handle;
@@ -119,7 +122,7 @@ _eglLookupSync(EGLSyncKHR handle, _EGLDisplay *dpy)
 /**
  * Return the handle of a linked sync, or EGL_NO_SYNC_KHR.
  */
-static INLINE EGLSyncKHR
+static inline EGLSyncKHR
 _eglGetSyncHandle(_EGLSync *sync)
 {
    _EGLResource *res = (_EGLResource *) sync;

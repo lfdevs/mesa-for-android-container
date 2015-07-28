@@ -32,7 +32,6 @@
 
 #include "ilo_common.h"
 
-struct intel_winsys;
 struct intel_bo;
 
 struct ilo_fence;
@@ -40,8 +39,7 @@ struct ilo_fence;
 struct ilo_screen {
    struct pipe_screen base;
 
-   struct intel_winsys *winsys;
-   struct ilo_dev_info dev;
+   struct ilo_dev dev;
 };
 
 static inline struct ilo_screen *
@@ -50,13 +48,7 @@ ilo_screen(struct pipe_screen *screen)
    return (struct ilo_screen *) screen;
 }
 
-static inline struct ilo_fence *
-ilo_fence(struct pipe_fence_handle *fence)
-{
-   return (struct ilo_fence *) fence;
-}
-
-struct ilo_fence *
-ilo_fence_create(struct pipe_screen *screen, struct intel_bo *bo);
+struct pipe_fence_handle *
+ilo_screen_fence_create(struct pipe_screen *screen, struct intel_bo *bo);
 
 #endif /* ILO_SCREEN_H */

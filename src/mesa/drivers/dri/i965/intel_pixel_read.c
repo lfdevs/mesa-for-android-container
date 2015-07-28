@@ -164,7 +164,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
 
    error = brw_bo_map(brw, bo, false /* write enable */, "miptree");
    if (error) {
-      DBG("%s: failed to map bo\n", __FUNCTION__);
+      DBG("%s: failed to map bo\n", __func__);
       return false;
    }
 
@@ -191,7 +191,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
    DBG("%s: x,y=(%d,%d) (w,h)=(%d,%d) format=0x%x type=0x%x "
        "mesa_format=0x%x tiling=%d "
        "pack=(alignment=%d row_length=%d skip_pixels=%d skip_rows=%d)\n",
-       __FUNCTION__, xoffset, yoffset, width, height,
+       __func__, xoffset, yoffset, width, height,
        format, type, rb->Format, irb->mt->tiling,
        pack->Alignment, pack->RowLength, pack->SkipPixels,
        pack->SkipRows);
@@ -222,7 +222,7 @@ intelReadPixels(struct gl_context * ctx,
    struct brw_context *brw = brw_context(ctx);
    bool dirty;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    if (_mesa_is_bufferobj(pack->BufferObj)) {
       if (_mesa_meta_pbo_GetTexSubImage(ctx, 2, NULL, x, y, 0, width, height, 1,
@@ -251,7 +251,7 @@ intelReadPixels(struct gl_context * ctx,
          return;
       }
 
-      perf_debug("%s: fallback to CPU mapping in PBO case\n", __FUNCTION__);
+      perf_debug("%s: fallback to CPU mapping in PBO case\n", __func__);
    }
 
    ok = intel_readpixels_tiled_memcpy(ctx, x, y, width, height,

@@ -322,7 +322,7 @@ i915_emit_const1f(struct i915_fragment_program * p, GLfloat c0)
       }
    }
 
-   fprintf(stderr, "%s: out of constants\n", __FUNCTION__);
+   fprintf(stderr, "%s: out of constants\n", __func__);
    p->error = 1;
    return 0;
 }
@@ -359,7 +359,7 @@ i915_emit_const2f(struct i915_fragment_program * p, GLfloat c0, GLfloat c1)
       }
    }
 
-   fprintf(stderr, "%s: out of constants\n", __FUNCTION__);
+   fprintf(stderr, "%s: out of constants\n", __func__);
    p->error = 1;
    return 0;
 }
@@ -391,7 +391,7 @@ i915_emit_const4f(struct i915_fragment_program * p,
       }
    }
 
-   fprintf(stderr, "%s: out of constants\n", __FUNCTION__);
+   fprintf(stderr, "%s: out of constants\n", __func__);
    p->error = 1;
    return 0;
 }
@@ -430,7 +430,7 @@ i915_emit_param4fv(struct i915_fragment_program * p, const GLfloat * values)
       }
    }
 
-   fprintf(stderr, "%s: out of constants\n", __FUNCTION__);
+   fprintf(stderr, "%s: out of constants\n", __func__);
    p->error = 1;
    return 0;
 }

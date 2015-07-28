@@ -58,6 +58,7 @@ struct sanity_check_ctx
    uint errors;
    uint warnings;
    uint implied_array_size;
+   uint implied_out_array_size;
 
    boolean print;
 };
@@ -406,12 +407,26 @@ iter_declaration(
    if (!check_file_name( ctx, file ))
       return TRUE;
    for (i = decl->Range.First; i <= decl->Range.Last; i++) {
-      /* declared TGSI_FILE_INPUT's for geometry processor
+      /* declared TGSI_FILE_INPUT's for geometry and tessellation
        * have an implied second dimension */
-      if (file == TGSI_FILE_INPUT &&
-          ctx->iter.processor.Processor == TGSI_PROCESSOR_GEOMETRY) {
+      uint processor = ctx->iter.processor.Processor;
+      uint patch = decl->Semantic.Name == TGSI_SEMANTIC_PATCH ||
+         decl->Semantic.Name == TGSI_SEMANTIC_TESSOUTER ||
+         decl->Semantic.Name == TGSI_SEMANTIC_TESSINNER;
+      if (file == TGSI_FILE_INPUT && !patch && (
+                processor == TGSI_PROCESSOR_GEOMETRY ||
+                processor == TGSI_PROCESSOR_TESSCTRL ||
+                processor == TGSI_PROCESSOR_TESSEVAL)) {
          uint vert;
          for (vert = 0; vert < ctx->implied_array_size; ++vert) {
+            scan_register *reg = MALLOC(sizeof(scan_register));
+            fill_scan_register2d(reg, file, i, vert);
+            check_and_declare(ctx, reg);
+         }
+      } else if (file == TGSI_FILE_OUTPUT && !patch &&
+                 processor == TGSI_PROCESSOR_TESSCTRL) {
+         uint vert;
+         for (vert = 0; vert < ctx->implied_out_array_size; ++vert) {
             scan_register *reg = MALLOC(sizeof(scan_register));
             fill_scan_register2d(reg, file, i, vert);
             check_and_declare(ctx, reg);
@@ -474,6 +489,19 @@ iter_property(
        prop->Property.PropertyName == TGSI_PROPERTY_GS_INPUT_PRIM) {
       ctx->implied_array_size = u_vertices_per_prim(prop->u[0].Data);
    }
+   if (iter->processor.Processor == TGSI_PROCESSOR_TESSCTRL &&
+       prop->Property.PropertyName == TGSI_PROPERTY_TCS_VERTICES_OUT)
+      ctx->implied_out_array_size = prop->u[0].Data;
+   return TRUE;
+}
+
+static boolean
+prolog(struct tgsi_iterate_context *iter)
+{
+   struct sanity_check_ctx *ctx = (struct sanity_check_ctx *) iter;
+   if (iter->processor.Processor == TGSI_PROCESSOR_TESSCTRL ||
+       iter->processor.Processor == TGSI_PROCESSOR_TESSEVAL)
+      ctx->implied_array_size = 32;
    return TRUE;
 }
 
@@ -532,7 +560,7 @@ tgsi_sanity_check(
 {
    struct sanity_check_ctx ctx;
 
-   ctx.iter.prolog = NULL;
+   ctx.iter.prolog = prolog;
    ctx.iter.iterate_instruction = iter_instruction;
    ctx.iter.iterate_declaration = iter_declaration;
    ctx.iter.iterate_immediate = iter_immediate;

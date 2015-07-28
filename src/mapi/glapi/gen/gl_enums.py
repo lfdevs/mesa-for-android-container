@@ -83,7 +83,7 @@ const char *_mesa_lookup_enum_by_nr( int nr )
    STATIC_ASSERT(sizeof(enum_string_table) < (1 << 16));
 
    elt = bsearch(& nr, enum_string_table_offsets,
-                 Elements(enum_string_table_offsets),
+                 ARRAY_SIZE(enum_string_table_offsets),
                  sizeof(enum_string_table_offsets[0]),
                  (cfunc) compar_nr);
 
@@ -127,7 +127,7 @@ static const char *prim_names[PRIM_MAX+3] = {
 const char *
 _mesa_lookup_prim_by_nr(GLuint nr)
 {
-   if (nr < Elements(prim_names))
+   if (nr < ARRAY_SIZE(prim_names))
       return prim_names[nr];
    else
       return "invalid mode";
@@ -157,6 +157,12 @@ _mesa_lookup_prim_by_nr(GLuint nr)
 
         string_offsets = {}
         i = 0;
+        print '#if defined(__GNUC__)'
+        print '# define LONGSTRING __extension__'
+        print '#else'
+        print '# define LONGSTRING'
+        print '#endif'
+        print ''
         print 'LONGSTRING static const char enum_string_table[] = '
         for enum, name in enum_table:
             print '   "%s\\0"' % (name)

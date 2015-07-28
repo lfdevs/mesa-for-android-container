@@ -81,6 +81,13 @@ is_shader_inout(ir_variable *var)
           var->data.mode == ir_var_system_value;
 }
 
+static inline bool
+is_dual_slot(ir_variable *var)
+{
+   const glsl_type *type = var->type->without_array();
+   return type == glsl_type::dvec4_type || type == glsl_type::dvec3_type;
+}
+
 static void
 mark(struct gl_program *prog, ir_variable *var, int offset, int len,
      bool is_fragment_shader)
@@ -94,14 +101,17 @@ mark(struct gl_program *prog, ir_variable *var, int offset, int len,
     */
 
    for (int i = 0; i < len; i++) {
-      GLbitfield64 bitfield =
-         BITFIELD64_BIT(var->data.location + var->data.index + offset + i);
+      bool dual_slot = is_dual_slot(var);
+      int idx = var->data.location + var->data.index + offset + i;
+      GLbitfield64 bitfield = BITFIELD64_BIT(idx);
+
       if (var->data.mode == ir_var_shader_in) {
-	 prog->InputsRead |= bitfield;
+         prog->InputsRead |= bitfield;
+         if (dual_slot)
+            prog->DoubleInputsRead |= bitfield;
          if (is_fragment_shader) {
             gl_fragment_program *fprog = (gl_fragment_program *) prog;
-            fprog->InterpQualifier[var->data.location +
-                                   var->data.index + offset + i] =
+            fprog->InterpQualifier[idx] =
                (glsl_interp_qualifier) var->data.interpolation;
             if (var->data.centroid)
                fprog->IsCentroid |= bitfield;

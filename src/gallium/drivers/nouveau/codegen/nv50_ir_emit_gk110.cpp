@@ -84,11 +84,14 @@ private:
 
    void emitUADD(const Instruction *);
    void emitFADD(const Instruction *);
+   void emitDADD(const Instruction *);
    void emitIMUL(const Instruction *);
    void emitFMUL(const Instruction *);
+   void emitDMUL(const Instruction *);
    void emitIMAD(const Instruction *);
    void emitISAD(const Instruction *);
    void emitFMAD(const Instruction *);
+   void emitDMAD(const Instruction *);
 
    void emitNOT(const Instruction *);
    void emitLogicOp(const Instruction *, uint8_t subOp);
@@ -479,6 +482,28 @@ CodeEmitterGK110::emitFMAD(const Instruction *i)
 }
 
 void
+CodeEmitterGK110::emitDMAD(const Instruction *i)
+{
+   assert(!i->saturate);
+   assert(!i->ftz);
+
+   emitForm_21(i, 0x1b8, 0xb38);
+
+   NEG_(34, 2);
+   RND_(36, F);
+
+   bool neg1 = (i->src(0).mod ^ i->src(1).mod).neg();
+
+   if (code[0] & 0x1) {
+      if (neg1)
+         code[1] ^= 1 << 27;
+   } else
+   if (neg1) {
+      code[1] |= 1 << 19;
+   }
+}
+
+void
 CodeEmitterGK110::emitFMUL(const Instruction *i)
 {
    bool neg = (i->src(0).mod ^ i->src(1).mod).neg();
@@ -512,6 +537,29 @@ CodeEmitterGK110::emitFMUL(const Instruction *i)
       if (neg) {
          code[1] |= 1 << 19;
       }
+   }
+}
+
+void
+CodeEmitterGK110::emitDMUL(const Instruction *i)
+{
+   bool neg = (i->src(0).mod ^ i->src(1).mod).neg();
+
+   assert(!i->postFactor);
+   assert(!i->saturate);
+   assert(!i->ftz);
+   assert(!i->dnz);
+
+   emitForm_21(i, 0x240, 0xc40);
+
+   RND_(2a, F);
+
+   if (code[0] & 0x1) {
+      if (neg)
+         code[1] ^= 1 << 27;
+   } else
+   if (neg) {
+      code[1] |= 1 << 19;
    }
 }
 
@@ -570,6 +618,26 @@ CodeEmitterGK110::emitFADD(const Instruction *i)
          NEG_(30, 1);
          if (i->op == OP_SUB) code[1] ^= 1 << 16;
       }
+   }
+}
+
+void
+CodeEmitterGK110::emitDADD(const Instruction *i)
+{
+   assert(!i->saturate);
+   assert(!i->ftz);
+
+   emitForm_21(i, 0x238, 0xc38);
+   RND_(2a, F);
+   ABS_(31, 0);
+   NEG_(33, 0);
+   if (code[0] & 0x1) {
+      modNegAbsF32_3b(i, 1);
+      if (i->op == OP_SUB) code[1] ^= 1 << 27;
+   } else {
+      NEG_(30, 1);
+      ABS_(34, 1);
+      if (i->op == OP_SUB) code[1] ^= 1 << 16;
    }
 }
 
@@ -1281,12 +1349,10 @@ CodeEmitterGK110::emitVFETCH(const Instruction *i)
    code[1] = 0x7ec00000 | (offset >> 9);
    code[1] |= (size / 4 - 1) << 18;
 
-#if 0
    if (i->perPatch)
-      code[0] |= 0x100;
+      code[1] |= 0x4;
    if (i->getSrc(0)->reg.file == FILE_SHADER_OUTPUT)
-      code[0] |= 0x200; // yes, TCPs can read from *outputs* of other threads
-#endif
+      code[1] |= 0x8; // yes, TCPs can read from *outputs* of other threads
 
    emitPredicate(i);
 
@@ -1305,10 +1371,8 @@ CodeEmitterGK110::emitEXPORT(const Instruction *i)
    code[1] = 0x7f000000 | (offset >> 9);
    code[1] |= (size / 4 - 1) << 18;
 
-#if 0
    if (i->perPatch)
-      code[0] |= 0x100;
-#endif
+      code[1] |= 0x4;
 
    emitPredicate(i);
 
@@ -1637,20 +1701,26 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
       break;
    case OP_ADD:
    case OP_SUB:
-      if (isFloatType(insn->dType))
+      if (insn->dType == TYPE_F64)
+         emitDADD(insn);
+      else if (isFloatType(insn->dType))
          emitFADD(insn);
       else
          emitUADD(insn);
       break;
    case OP_MUL:
-      if (isFloatType(insn->dType))
+      if (insn->dType == TYPE_F64)
+         emitDMUL(insn);
+      else if (isFloatType(insn->dType))
          emitFMUL(insn);
       else
          emitIMUL(insn);
       break;
    case OP_MAD:
    case OP_FMA:
-      if (isFloatType(insn->dType))
+      if (insn->dType == TYPE_F64)
+         emitDMAD(insn);
+      else if (isFloatType(insn->dType))
          emitFMAD(insn);
       else
          emitIMAD(insn);
@@ -1700,10 +1770,10 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
       emitCVT(insn);
       break;
    case OP_RSQ:
-      emitSFnOp(insn, 5);
+      emitSFnOp(insn, 5 + 2 * insn->subOp);
       break;
    case OP_RCP:
-      emitSFnOp(insn, 4);
+      emitSFnOp(insn, 4 + 2 * insn->subOp);
       break;
    case OP_LG2:
       emitSFnOp(insn, 3);

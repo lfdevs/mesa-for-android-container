@@ -73,8 +73,8 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->uses_builtin_functions = false;
 
    /* Set default language version and extensions */
-   this->language_version = ctx->Const.ForceGLSLVersion ?
-                            ctx->Const.ForceGLSLVersion : 110;
+   this->language_version = 110;
+   this->forced_language_version = ctx->Const.ForceGLSLVersion;
    this->es_shader = false;
    this->ARB_texture_rectangle_enable = true;
 
@@ -117,11 +117,21 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->Const.MaxFragmentAtomicCounters = ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters;
    this->Const.MaxCombinedAtomicCounters = ctx->Const.MaxCombinedAtomicCounters;
    this->Const.MaxAtomicBufferBindings = ctx->Const.MaxAtomicBufferBindings;
+   this->Const.MaxVertexAtomicCounterBuffers =
+      ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicBuffers;
+   this->Const.MaxGeometryAtomicCounterBuffers =
+      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxAtomicBuffers;
+   this->Const.MaxFragmentAtomicCounterBuffers =
+      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers;
+   this->Const.MaxCombinedAtomicCounterBuffers =
+      ctx->Const.MaxCombinedAtomicBuffers;
+   this->Const.MaxAtomicCounterBufferSize =
+      ctx->Const.MaxAtomicBufferSize;
 
    /* Compute shader constants */
-   for (unsigned i = 0; i < Elements(this->Const.MaxComputeWorkGroupCount); i++)
+   for (unsigned i = 0; i < ARRAY_SIZE(this->Const.MaxComputeWorkGroupCount); i++)
       this->Const.MaxComputeWorkGroupCount[i] = ctx->Const.MaxComputeWorkGroupCount[i];
-   for (unsigned i = 0; i < Elements(this->Const.MaxComputeWorkGroupSize); i++)
+   for (unsigned i = 0; i < ARRAY_SIZE(this->Const.MaxComputeWorkGroupSize); i++)
       this->Const.MaxComputeWorkGroupSize[i] = ctx->Const.MaxComputeWorkGroupSize[i];
 
    this->Const.MaxImageUnits = ctx->Const.MaxImageUnits;
@@ -143,9 +153,9 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->num_user_structures = 0;
 
    /* supported_versions should be large enough to support the known desktop
-    * GLSL versions plus 2 GLES versions (ES2 & ES3)
+    * GLSL versions plus 3 GLES versions (ES 1.00, ES 3.00, and ES 3.10))
     */
-   STATIC_ASSERT((ARRAY_SIZE(known_desktop_glsl_versions) + 2) ==
+   STATIC_ASSERT((ARRAY_SIZE(known_desktop_glsl_versions) + 3) ==
                  ARRAY_SIZE(this->supported_versions));
 
    /* Populate the list of supported GLSL versions */
@@ -172,6 +182,11 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    }
    if (_mesa_is_gles3(ctx) || ctx->Extensions.ARB_ES3_compatibility) {
       this->supported_versions[this->num_supported_versions].ver = 300;
+      this->supported_versions[this->num_supported_versions].es = true;
+      this->num_supported_versions++;
+   }
+   if (_mesa_is_gles31(ctx)) {
+      this->supported_versions[this->num_supported_versions].ver = 310;
       this->supported_versions[this->num_supported_versions].es = true;
       this->num_supported_versions++;
    }
@@ -212,7 +227,7 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->gs_input_size = 0;
    this->in_qualifier = new(this) ast_type_qualifier();
    this->out_qualifier = new(this) ast_type_qualifier();
-   this->early_fragment_tests = false;
+   this->fs_early_fragment_tests = false;
    memset(this->atomic_counter_offsets, 0,
           sizeof(this->atomic_counter_offsets));
    this->allow_extension_directive_midshader =
@@ -320,11 +335,14 @@ _mesa_glsl_parse_state::process_version_directive(YYLTYPE *locp, int version,
       this->ARB_texture_rectangle_enable = false;
    }
 
-   this->language_version = version;
+   if (this->forced_language_version)
+      this->language_version = this->forced_language_version;
+   else
+      this->language_version = version;
 
    bool supported = false;
    for (unsigned i = 0; i < this->num_supported_versions; i++) {
-      if (this->supported_versions[i].ver == (unsigned) version
+      if (this->supported_versions[i].ver == this->language_version
           && this->supported_versions[i].es == this->es_shader) {
          supported = true;
          break;
@@ -370,10 +388,27 @@ _mesa_shader_stage_to_string(unsigned stage)
    case MESA_SHADER_VERTEX:   return "vertex";
    case MESA_SHADER_FRAGMENT: return "fragment";
    case MESA_SHADER_GEOMETRY: return "geometry";
+   case MESA_SHADER_COMPUTE:  return "compute";
    }
 
-   assert(!"Should not get here.");
-   return "unknown";
+   unreachable("Unknown shader stage.");
+}
+
+/**
+ * Translate a gl_shader_stage to a shader stage abbreviation (VS, GS, FS)
+ * for debug printouts and error messages.
+ */
+const char *
+_mesa_shader_stage_to_abbrev(unsigned stage)
+{
+   switch (stage) {
+   case MESA_SHADER_VERTEX:   return "VS";
+   case MESA_SHADER_FRAGMENT: return "FS";
+   case MESA_SHADER_GEOMETRY: return "GS";
+   case MESA_SHADER_COMPUTE:  return "CS";
+   }
+
+   unreachable("Unknown shader stage.");
 }
 
 /* This helper function will append the given message to the shader's
@@ -527,6 +562,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_fragment_coord_conventions, true,  false,     ARB_fragment_coord_conventions),
    EXT(ARB_fragment_layer_viewport,    true,  false,     ARB_fragment_layer_viewport),
    EXT(ARB_gpu_shader5,                true,  false,     ARB_gpu_shader5),
+   EXT(ARB_gpu_shader_fp64,            true,  false,     ARB_gpu_shader_fp64),
    EXT(ARB_sample_shading,             true,  false,     ARB_sample_shading),
    EXT(ARB_separate_shader_objects,    true,  false,     dummy_true),
    EXT(ARB_shader_atomic_counters,     true,  false,     ARB_shader_atomic_counters),
@@ -544,6 +580,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_texture_query_lod,          true,  false,     ARB_texture_query_lod),
    EXT(ARB_texture_rectangle,          true,  false,     dummy_true),
    EXT(ARB_uniform_buffer_object,      true,  false,     ARB_uniform_buffer_object),
+   EXT(ARB_vertex_attrib_64bit,        true,  false,     ARB_vertex_attrib_64bit),
    EXT(ARB_viewport_array,             true,  false,     ARB_viewport_array),
 
    /* KHR extensions go here, sorted alphabetically.
@@ -618,7 +655,7 @@ void _mesa_glsl_extension::set_flags(_mesa_glsl_parse_state *state,
  */
 static const _mesa_glsl_extension *find_extension(const char *name)
 {
-   for (unsigned i = 0; i < Elements(_mesa_glsl_supported_extensions); ++i) {
+   for (unsigned i = 0; i < ARRAY_SIZE(_mesa_glsl_supported_extensions); ++i) {
       if (strcmp(name, _mesa_glsl_supported_extensions[i].name) == 0) {
          return &_mesa_glsl_supported_extensions[i];
       }
@@ -656,7 +693,7 @@ _mesa_glsl_process_extension(const char *name, YYLTYPE *name_locp,
 	 return false;
       } else {
          for (unsigned i = 0;
-              i < Elements(_mesa_glsl_supported_extensions); ++i) {
+              i < ARRAY_SIZE(_mesa_glsl_supported_extensions); ++i) {
             const _mesa_glsl_extension *extension
                = &_mesa_glsl_supported_extensions[i];
             if (extension->compatible_with_state(state)) {
@@ -959,6 +996,10 @@ ast_expression::print(void) const
 
    case ast_float_constant:
       printf("%f ", primary_expression.float_constant);
+      break;
+
+   case ast_double_constant:
+      printf("%f ", primary_expression.double_constant);
       break;
 
    case ast_bool_constant:
@@ -1393,6 +1434,7 @@ set_shader_inout_layout(struct gl_shader *shader,
       assert(!state->fs_redeclares_gl_fragcoord);
       assert(!state->fs_pixel_center_integer);
       assert(!state->fs_origin_upper_left);
+      assert(!state->fs_early_fragment_tests);
    }
 
    switch (shader->Stage) {
@@ -1435,6 +1477,7 @@ set_shader_inout_layout(struct gl_shader *shader,
       shader->origin_upper_left = state->fs_origin_upper_left;
       shader->ARB_fragment_coord_conventions_enable =
          state->ARB_fragment_coord_conventions_enable;
+      shader->EarlyFragmentTests = state->fs_early_fragment_tests;
       break;
 
    default:
@@ -1605,6 +1648,7 @@ do_common_optimization(exec_list *ir, bool linked,
    }
    progress = do_if_simplification(ir) || progress;
    progress = opt_flatten_nested_if_blocks(ir) || progress;
+   progress = opt_conditional_discard(ir) || progress;
    progress = do_copy_propagation(ir) || progress;
    progress = do_copy_propagation_elements(ir) || progress;
 

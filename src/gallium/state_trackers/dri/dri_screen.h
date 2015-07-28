@@ -39,6 +39,8 @@
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "state_tracker/st_api.h"
+#include "state_tracker/opencl_interop.h"
+#include "os/os_thread.h"
 #include "postprocess/filters.h"
 
 struct dri_context;
@@ -80,10 +82,18 @@ struct dri_screen
    boolean d_depth_bits_last;
    boolean sd_depth_bits_last;
    boolean auto_fake_front;
+   boolean has_reset_status_query;
    enum pipe_texture_target target;
 
    /* hooks filled in by dri2 & drisw */
    __DRIimage * (*lookup_egl_image)(struct dri_screen *ctx, void *handle);
+
+   /* OpenCL interop */
+   pipe_mutex opencl_func_mutex;
+   opencl_dri_event_add_ref_t opencl_dri_event_add_ref;
+   opencl_dri_event_release_t opencl_dri_event_release;
+   opencl_dri_event_wait_t opencl_dri_event_wait;
+   opencl_dri_event_get_fence_t opencl_dri_event_get_fence;
 };
 
 /** cast wrapper */

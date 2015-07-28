@@ -129,12 +129,6 @@ log2i(unsigned i)
 	return r;
 }
 
-static inline unsigned
-align(unsigned x, unsigned m)
-{
-	return (x + m - 1) & ~(m - 1);
-}
-
 static inline void
 get_scissors(struct gl_framebuffer *fb, int *x, int *y, int *w, int *h)
 {

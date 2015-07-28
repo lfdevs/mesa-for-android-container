@@ -34,7 +34,7 @@
 
 #include "os/os_thread.h"
 
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 
 /* Guess the storage size of cached surfaces and try and keep it under

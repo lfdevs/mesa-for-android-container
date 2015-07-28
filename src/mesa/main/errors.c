@@ -28,6 +28,8 @@
  */
 
 
+#include <stdarg.h>
+#include <stdio.h>
 #include "errors.h"
 #include "enums.h"
 #include "imports.h"
@@ -136,7 +138,7 @@ gl_enum_to_debug_source(GLenum e)
 {
    unsigned i;
 
-   for (i = 0; i < Elements(debug_source_enums); i++) {
+   for (i = 0; i < ARRAY_SIZE(debug_source_enums); i++) {
       if (debug_source_enums[i] == e)
          break;
    }
@@ -148,7 +150,7 @@ gl_enum_to_debug_type(GLenum e)
 {
    unsigned i;
 
-   for (i = 0; i < Elements(debug_type_enums); i++) {
+   for (i = 0; i < ARRAY_SIZE(debug_type_enums); i++) {
       if (debug_type_enums[i] == e)
          break;
    }
@@ -160,7 +162,7 @@ gl_enum_to_debug_severity(GLenum e)
 {
    unsigned i;
 
-   for (i = 0; i < Elements(debug_severity_enums); i++) {
+   for (i = 0; i < ARRAY_SIZE(debug_severity_enums); i++) {
       if (debug_severity_enums[i] == e)
          break;
    }
@@ -1230,12 +1232,14 @@ _mesa_free_errors_data(struct gl_context *ctx)
 /** \name Diagnostics */
 /*@{*/
 
+static FILE *LogFile = NULL;
+
+
 static void
 output_if_debug(const char *prefixString, const char *outputString,
                 GLboolean newline)
 {
    static int debug = -1;
-   static FILE *fout = NULL;
 
    /* Init the local 'debug' var once.
     * Note: the _mesa_init_debug() function should have been called
@@ -1247,9 +1251,9 @@ output_if_debug(const char *prefixString, const char *outputString,
        */
       const char *logFile = getenv("MESA_LOG_FILE");
       if (logFile)
-         fout = fopen(logFile, "w");
-      if (!fout)
-         fout = stderr;
+         LogFile = fopen(logFile, "w");
+      if (!LogFile)
+         LogFile = stderr;
 #ifdef DEBUG
       /* in debug builds, print messages unless MESA_DEBUG="silent" */
       if (MESA_DEBUG_FLAGS & DEBUG_SILENT)
@@ -1264,10 +1268,13 @@ output_if_debug(const char *prefixString, const char *outputString,
 
    /* Now only print the string if we're required to do so. */
    if (debug) {
-      fprintf(fout, "%s: %s", prefixString, outputString);
+      if (prefixString)
+         fprintf(LogFile, "%s: %s", prefixString, outputString);
+      else
+         fprintf(LogFile, "%s", outputString);
       if (newline)
-         fprintf(fout, "\n");
-      fflush(fout);
+         fprintf(LogFile, "\n");
+      fflush(LogFile);
 
 #if defined(_WIN32)
       /* stderr from windows applications without console is not usually 
@@ -1279,6 +1286,18 @@ output_if_debug(const char *prefixString, const char *outputString,
       }
 #endif
    }
+}
+
+
+/**
+ * Return the file handle to use for debug/logging.  Defaults to stderr
+ * unless MESA_LOG_FILE is defined.
+ */
+FILE *
+_mesa_get_log_file(void)
+{
+   assert(LogFile);
+   return LogFile;
 }
 
 
@@ -1465,7 +1484,7 @@ _mesa_error( struct gl_context *ctx, GLenum error, const char *fmtString, ... )
          /* Too long error message. Whoever calls _mesa_error should use
           * shorter strings.
           */
-         ASSERT(0);
+         assert(0);
          return;
       }
 
@@ -1473,7 +1492,7 @@ _mesa_error( struct gl_context *ctx, GLenum error, const char *fmtString, ... )
                            _mesa_lookup_enum_by_nr(error), s);
       if (len >= MAX_DEBUG_MESSAGE_LENGTH) {
          /* Same as above. */
-         ASSERT(0);
+         assert(0);
          return;
       }
 
@@ -1520,6 +1539,18 @@ _mesa_debug( const struct gl_context *ctx, const char *fmtString, ... )
 #endif /* DEBUG */
    (void) ctx;
    (void) fmtString;
+}
+
+
+void
+_mesa_log(const char *fmtString, ...)
+{
+   char s[MAX_DEBUG_MESSAGE_LENGTH];
+   va_list args;
+   va_start(args, fmtString);
+   _mesa_vsnprintf(s, MAX_DEBUG_MESSAGE_LENGTH, fmtString, args);
+   va_end(args);
+   output_if_debug("", s, GL_FALSE);
 }
 
 

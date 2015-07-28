@@ -115,7 +115,7 @@ struct pipe_context {
    void (*destroy_query)(struct pipe_context *pipe,
                          struct pipe_query *q);
 
-   void (*begin_query)(struct pipe_context *pipe, struct pipe_query *q);
+   boolean (*begin_query)(struct pipe_context *pipe, struct pipe_query *q);
    void (*end_query)(struct pipe_context *pipe, struct pipe_query *q);
 
    /**
@@ -170,6 +170,16 @@ struct pipe_context {
    void   (*bind_gs_state)(struct pipe_context *, void *);
    void   (*delete_gs_state)(struct pipe_context *, void *);
 
+   void * (*create_tcs_state)(struct pipe_context *,
+                              const struct pipe_shader_state *);
+   void   (*bind_tcs_state)(struct pipe_context *, void *);
+   void   (*delete_tcs_state)(struct pipe_context *, void *);
+
+   void * (*create_tes_state)(struct pipe_context *,
+                              const struct pipe_shader_state *);
+   void   (*bind_tes_state)(struct pipe_context *, void *);
+   void   (*delete_tes_state)(struct pipe_context *, void *);
+
    void * (*create_vertex_elements_state)(struct pipe_context *,
                                           unsigned num_elements,
                                           const struct pipe_vertex_element *);
@@ -220,6 +230,10 @@ struct pipe_context {
    void (*set_sampler_views)(struct pipe_context *, unsigned shader,
                              unsigned start_slot, unsigned num_views,
                              struct pipe_sampler_view **);
+
+   void (*set_tess_state)(struct pipe_context *,
+                          float default_outer_level[4],
+                          float default_inner_level[2]);
 
    /**
     * Bind an array of shader resources that will be used by the
@@ -562,6 +576,10 @@ struct pipe_context {
    void (*invalidate_resource)(struct pipe_context *ctx,
                                struct pipe_resource *resource);
 
+   /**
+    * Return information about unexpected device resets.
+    */
+   enum pipe_reset_status (*get_device_reset_status)(struct pipe_context *ctx);
 };
 
 

@@ -85,6 +85,33 @@ protected:
          new (mem_ctx) fs_inst(BRW_OPCODE_LRP, 16, dst, src1, src2, src3));
    }
 
+   inline void emit_mad(const struct brw_reg &dst,
+                        const struct brw_reg &src1,
+                        const struct brw_reg &src2,
+                        const struct brw_reg &src3)
+   {
+      insts.push_tail(
+         new (mem_ctx) fs_inst(BRW_OPCODE_MAD, 16, dst, src1, src2, src3));
+   }
+
+   inline void emit_min(const struct brw_reg& dst,
+                        const struct brw_reg& src1,
+                        const struct brw_reg& src2)
+   {
+      fs_inst *inst = new (mem_ctx) fs_inst(BRW_OPCODE_SEL, 16, dst, src1, src2);
+      inst->conditional_mod = BRW_CONDITIONAL_L;
+      insts.push_tail(inst);
+   }
+
+   inline void emit_max(const struct brw_reg& dst,
+                        const struct brw_reg& src1,
+                        const struct brw_reg& src2)
+   {
+      fs_inst *inst = new (mem_ctx) fs_inst(BRW_OPCODE_SEL, 16, dst, src1, src2);
+      inst->conditional_mod = BRW_CONDITIONAL_GE;
+      insts.push_tail(inst);
+   }
+
    inline void emit_mov(const struct brw_reg& dst, const struct brw_reg& src)
    {
       insts.push_tail(new (mem_ctx) fs_inst(BRW_OPCODE_MOV, 16, dst, src));

@@ -117,8 +117,8 @@ void TargetNV50::initOpInfo()
    };
    static const uint32_t shortForm[(OP_LAST + 31) / 32] =
    {
-      // MOV,ADD,SUB,MUL,SAD,L/PINTERP,RCP,TEX,TXF
-      0x00010e40, 0x00000040, 0x00000498, 0x00000000
+      // MOV,ADD,SUB,MUL,MAD,SAD,L/PINTERP,RCP,TEX,TXF
+      0x00014e40, 0x00000040, 0x00000498, 0x00000000
    };
    static const operation noDestList[] =
    {

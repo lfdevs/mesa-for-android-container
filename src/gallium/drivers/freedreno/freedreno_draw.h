@@ -46,6 +46,7 @@ fd_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
 		enum pc_di_src_sel src_sel, uint32_t count,
+		uint8_t instances,
 		enum pc_di_index_size idx_type,
 		uint32_t idx_size, uint32_t idx_offset,
 		struct fd_bo *idx_bo)
@@ -63,7 +64,7 @@ fd_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_PKT3(ring, CP_DRAW_INDX, 3);
 		OUT_RING(ring, 0x00000000);
 		OUT_RING(ring, DRAW(1, DI_SRC_SEL_AUTO_INDEX,
-				INDEX_SIZE_IGN, USE_VISIBILITY));
+							INDEX_SIZE_IGN, USE_VISIBILITY, 0));
 		OUT_RING(ring, 0);             /* NumIndices */
 
 		/* ugg, hard-code register offset to avoid pulling in the
@@ -79,10 +80,10 @@ fd_draw(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		/* leave vis mode blank for now, it will be patched up when
 		 * we know if we are binning or not
 		 */
-		OUT_RINGP(ring, DRAW(primtype, src_sel, idx_type, 0),
+		OUT_RINGP(ring, DRAW(primtype, src_sel, idx_type, 0, instances),
 				&ctx->draw_patches);
 	} else {
-		OUT_RING(ring, DRAW(primtype, src_sel, idx_type, vismode));
+		OUT_RING(ring, DRAW(primtype, src_sel, idx_type, vismode, instances));
 	}
 	OUT_RING(ring, count);             /* NumIndices */
 	if (idx_bo) {
@@ -112,6 +113,7 @@ size2indextype(unsigned index_size)
 /* this is same for a2xx/a3xx, so split into helper: */
 static inline void
 fd_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
 		const struct pipe_draw_info *info)
 {
@@ -137,8 +139,9 @@ fd_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		src_sel = DI_SRC_SEL_AUTO_INDEX;
 	}
 
-	fd_draw(ctx, ring, ctx->primtypes[info->mode], vismode, src_sel,
-			info->count, idx_type, idx_size, idx_offset, idx_bo);
+	fd_draw(ctx, ring, primtype, vismode, src_sel,
+			info->count, info->instance_count - 1,
+			idx_type, idx_size, idx_offset, idx_bo);
 }
 
 #endif /* FREEDRENO_DRAW_H_ */

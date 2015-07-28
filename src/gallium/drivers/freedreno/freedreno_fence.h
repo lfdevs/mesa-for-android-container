@@ -29,37 +29,16 @@
 #ifndef FREEDRENO_FENCE_H_
 #define FREEDRENO_FENCE_H_
 
-#include "util/u_inlines.h"
-#include "util/u_double_list.h"
+#include "pipe/p_context.h"
 
-
-struct fd_fence {
-	int ref;
-};
-
-boolean fd_fence_wait(struct fd_fence *fence);
-boolean fd_fence_signalled(struct fd_fence *fence);
-void fd_fence_del(struct fd_fence *fence);
-
-static INLINE void
-fd_fence_ref(struct fd_fence *fence, struct fd_fence **ref)
-{
-	if (fence)
-		++fence->ref;
-
-	if (*ref) {
-		if (--(*ref)->ref == 0)
-			fd_fence_del(*ref);
-	}
-
-	*ref = fence;
-}
-
-static INLINE struct fd_fence *
-fd_fence(struct pipe_fence_handle *fence)
-{
-	return (struct fd_fence *)fence;
-}
-
+void fd_screen_fence_ref(struct pipe_screen *pscreen,
+		struct pipe_fence_handle **ptr,
+		struct pipe_fence_handle *pfence);
+boolean fd_screen_fence_signalled(struct pipe_screen *screen,
+		struct pipe_fence_handle *pfence);
+boolean fd_screen_fence_finish(struct pipe_screen *screen,
+		struct pipe_fence_handle *pfence,
+		uint64_t timeout);
+struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx);
 
 #endif /* FREEDRENO_FENCE_H_ */

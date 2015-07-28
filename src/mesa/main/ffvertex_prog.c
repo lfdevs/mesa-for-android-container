@@ -479,7 +479,7 @@ static struct ureg register_const4f( struct tnl_program *p,
    values[3].f = s3;
    idx = _mesa_add_unnamed_constant( p->program->Base.Parameters, values, 4,
                                      &swizzle );
-   ASSERT(swizzle == SWIZZLE_NOOP);
+   assert(swizzle == SWIZZLE_NOOP);
    return make_ureg(PROGRAM_CONSTANT, idx);
 }
 
@@ -530,7 +530,7 @@ static void emit_arg( struct prog_src_register *src,
    src->Abs = 0;
    src->RelAddr = 0;
    /* Check that bitfield sizes aren't exceeded */
-   ASSERT(src->Index == reg.idx);
+   assert(src->Index == reg.idx);
 }
 
 
@@ -544,7 +544,7 @@ static void emit_dst( struct prog_dst_register *dst,
    dst->CondMask = COND_TR;  /* always pass cond test */
    dst->CondSwizzle = SWIZZLE_NOOP;
    /* Check that bitfield sizes aren't exceeded */
-   ASSERT(dst->Index == reg.idx);
+   assert(dst->Index == reg.idx);
 }
 
 
@@ -619,13 +619,13 @@ static void emit_op3fn(struct tnl_program *p,
 
 
 #define emit_op3(p, op, dst, mask, src0, src1, src2) \
-   emit_op3fn(p, op, dst, mask, src0, src1, src2, __FUNCTION__, __LINE__)
+   emit_op3fn(p, op, dst, mask, src0, src1, src2, __func__, __LINE__)
 
 #define emit_op2(p, op, dst, mask, src0, src1) \
-    emit_op3fn(p, op, dst, mask, src0, src1, undef, __FUNCTION__, __LINE__)
+    emit_op3fn(p, op, dst, mask, src0, src1, undef, __func__, __LINE__)
 
 #define emit_op1(p, op, dst, mask, src0) \
-    emit_op3fn(p, op, dst, mask, src0, undef, undef, __FUNCTION__, __LINE__)
+    emit_op3fn(p, op, dst, mask, src0, undef, undef, __func__, __LINE__)
 
 
 static struct ureg make_temp( struct tnl_program *p, struct ureg reg )
@@ -1657,7 +1657,7 @@ _mesa_get_fixed_func_vertex_program(struct gl_context *ctx)
    struct gl_vertex_program *prog;
    struct state_key key;
 
-   /* Grab all the relevent state and put it in a single structure:
+   /* Grab all the relevant state and put it in a single structure:
     */
    make_state_key(ctx, &key);
 

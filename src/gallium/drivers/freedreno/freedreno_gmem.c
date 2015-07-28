@@ -76,6 +76,32 @@ static uint32_t bin_width(struct fd_context *ctx)
 	return 512;
 }
 
+static uint32_t
+total_size(uint8_t cbuf_cpp[], uint8_t zsbuf_cpp[2],
+		   uint32_t bin_w, uint32_t bin_h, struct fd_gmem_stateobj *gmem)
+{
+	uint32_t total = 0, i;
+
+	for (i = 0; i < 4; i++) {
+		if (cbuf_cpp[i]) {
+			gmem->cbuf_base[i] = align(total, 0x4000);
+			total = gmem->cbuf_base[i] + cbuf_cpp[i] * bin_w * bin_h;
+		}
+	}
+
+	if (zsbuf_cpp[0]) {
+		gmem->zsbuf_base[0] = align(total, 0x4000);
+		total = gmem->zsbuf_base[0] + zsbuf_cpp[0] * bin_w * bin_h;
+	}
+
+	if (zsbuf_cpp[1]) {
+		gmem->zsbuf_base[1] = align(total, 0x4000);
+		total = gmem->zsbuf_base[1] + zsbuf_cpp[1] * bin_w * bin_h;
+	}
+
+	return total;
+}
+
 static void
 calculate_tiles(struct fd_context *ctx)
 {
@@ -87,25 +113,30 @@ calculate_tiles(struct fd_context *ctx)
 	uint32_t nbins_x = 1, nbins_y = 1;
 	uint32_t bin_w, bin_h;
 	uint32_t max_width = bin_width(ctx);
-	uint32_t cpp = 4;
+	uint8_t cbuf_cpp[4] = {0}, zsbuf_cpp[2] = {0};
 	uint32_t i, j, t, xoff, yoff;
 	uint32_t tpp_x, tpp_y;
 	bool has_zs = !!(ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL));
 	int tile_n[ARRAY_SIZE(ctx->pipe)];
 
-	if (pfb->cbufs[0])
-		cpp = util_format_get_blocksize(pfb->cbufs[0]->format);
-
-	if ((gmem->cpp == cpp) && (gmem->has_zs == has_zs) &&
-			!memcmp(&gmem->scissor, scissor, sizeof(gmem->scissor))) {
-		/* everything is up-to-date */
-		return;
+	if (has_zs) {
+		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
+		zsbuf_cpp[0] = rsc->cpp;
+		if (rsc->stencil)
+			zsbuf_cpp[1] = rsc->stencil->cpp;
+	}
+	for (i = 0; i < pfb->nr_cbufs; i++) {
+		if (pfb->cbufs[i])
+			cbuf_cpp[i] = util_format_get_blocksize(pfb->cbufs[i]->format);
+		else
+			cbuf_cpp[i] = 4;
 	}
 
-	/* if have depth/stencil, we need to leave room: */
-	if (has_zs) {
-		gmem_size /= 2;
-		max_width /= 2;
+	if (!memcmp(gmem->zsbuf_cpp, zsbuf_cpp, sizeof(zsbuf_cpp)) &&
+		!memcmp(gmem->cbuf_cpp, cbuf_cpp, sizeof(cbuf_cpp)) &&
+		!memcmp(&gmem->scissor, scissor, sizeof(gmem->scissor))) {
+		/* everything is up-to-date */
+		return;
 	}
 
 	if (fd_mesa_debug & FD_DBG_NOSCIS) {
@@ -134,7 +165,10 @@ calculate_tiles(struct fd_context *ctx)
 	/* then find a bin width/height that satisfies the memory
 	 * constraints:
 	 */
-	while ((bin_w * bin_h * cpp) > gmem_size) {
+	DBG("binning input: cbuf cpp: %d %d %d %d, zsbuf cpp: %d; %dx%d",
+		cbuf_cpp[0], cbuf_cpp[1], cbuf_cpp[2], cbuf_cpp[3], zsbuf_cpp[0],
+		width, height);
+	while (total_size(cbuf_cpp, zsbuf_cpp, bin_w, bin_h, gmem) > gmem_size) {
 		if (bin_w > bin_h) {
 			nbins_x++;
 			bin_w = align(width / nbins_x, 32);
@@ -147,8 +181,8 @@ calculate_tiles(struct fd_context *ctx)
 	DBG("using %d bins of size %dx%d", nbins_x*nbins_y, bin_w, bin_h);
 
 	gmem->scissor = *scissor;
-	gmem->cpp = cpp;
-	gmem->has_zs = has_zs;
+	memcpy(gmem->cbuf_cpp, cbuf_cpp, sizeof(cbuf_cpp));
+	memcpy(gmem->zsbuf_cpp, zsbuf_cpp, sizeof(zsbuf_cpp));
 	gmem->bin_h = bin_h;
 	gmem->bin_w = bin_w;
 	gmem->nbins_x = nbins_x;
@@ -318,7 +352,6 @@ void
 fd_gmem_render_tiles(struct fd_context *ctx)
 {
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
-	uint32_t timestamp = 0;
 	bool sysmem = false;
 
 	if (ctx->emit_sysmem_prep) {
@@ -369,13 +402,6 @@ fd_gmem_render_tiles(struct fd_context *ctx)
 	fd_ringmarker_mark(ctx->binning_start);
 
 	fd_reset_wfi(ctx);
-
-	/* update timestamps on render targets: */
-	timestamp = fd_ringbuffer_timestamp(ctx->ring);
-	if (pfb->cbufs[0])
-		fd_resource(pfb->cbufs[0]->texture)->timestamp = timestamp;
-	if (pfb->zsbuf)
-		fd_resource(pfb->zsbuf->texture)->timestamp = timestamp;
 
 	/* reset maximal bounds: */
 	ctx->max_scissor.minx = ctx->max_scissor.miny = ~0;

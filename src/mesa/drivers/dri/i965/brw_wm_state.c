@@ -95,23 +95,40 @@ brw_upload_wm_unit(struct brw_context *brw)
    }
 
    /* BRW_NEW_PROGRAM_CACHE | BRW_NEW_FS_PROG_DATA */
-   wm->thread0.grf_reg_count = prog_data->reg_blocks;
-   wm->wm9.grf_reg_count_2 = prog_data->reg_blocks_16;
+   if (prog_data->no_8) {
+      wm->wm5.enable_16_pix = 1;
+      wm->thread0.grf_reg_count = prog_data->reg_blocks_16;
+      wm->thread0.kernel_start_pointer =
+         brw_program_reloc(brw,
+                           brw->wm.base.state_offset +
+                           offsetof(struct brw_wm_unit_state, thread0),
+                           brw->wm.base.prog_offset +
+                           prog_data->prog_offset_16 +
+                           (prog_data->reg_blocks_16 << 1)) >> 6;
 
-   wm->thread0.kernel_start_pointer =
-      brw_program_reloc(brw,
-			brw->wm.base.state_offset +
-			offsetof(struct brw_wm_unit_state, thread0),
-			brw->wm.base.prog_offset +
-			(wm->thread0.grf_reg_count << 1)) >> 6;
+   } else {
+      wm->thread0.grf_reg_count = prog_data->reg_blocks;
+      wm->wm9.grf_reg_count_2 = prog_data->reg_blocks_16;
 
-   wm->wm9.kernel_start_pointer_2 =
-      brw_program_reloc(brw,
-			brw->wm.base.state_offset +
-			offsetof(struct brw_wm_unit_state, wm9),
-			brw->wm.base.prog_offset +
-			prog_data->prog_offset_16 +
-			(wm->wm9.grf_reg_count_2 << 1)) >> 6;
+      wm->wm5.enable_8_pix = 1;
+      if (prog_data->prog_offset_16)
+         wm->wm5.enable_16_pix = 1;
+
+      wm->thread0.kernel_start_pointer =
+         brw_program_reloc(brw,
+                           brw->wm.base.state_offset +
+                           offsetof(struct brw_wm_unit_state, thread0),
+                           brw->wm.base.prog_offset +
+                           (wm->thread0.grf_reg_count << 1)) >> 6;
+
+      wm->wm9.kernel_start_pointer_2 =
+         brw_program_reloc(brw,
+                           brw->wm.base.state_offset +
+                           offsetof(struct brw_wm_unit_state, wm9),
+                           brw->wm.base.prog_offset +
+                           prog_data->prog_offset_16 +
+                           (wm->wm9.grf_reg_count_2 << 1)) >> 6;
+   }
 
    wm->thread1.depth_coef_urb_read_offset = 1;
    if (prog_data->base.use_alt_mode)
@@ -172,10 +189,6 @@ brw_upload_wm_unit(struct brw_context *brw)
    wm->wm5.program_uses_killpixel =
       prog_data->uses_kill || ctx->Color.AlphaEnabled;
 
-   wm->wm5.enable_8_pix = 1;
-   if (prog_data->prog_offset_16)
-      wm->wm5.enable_16_pix = 1;
-
    wm->wm5.max_threads = brw->max_wm_threads - 1;
 
    /* _NEW_BUFFERS | _NEW_COLOR */
@@ -197,7 +210,7 @@ brw_upload_wm_unit(struct brw_context *brw)
    /* _NEW_POLYGON */
    if (ctx->Polygon.OffsetFill) {
       wm->wm5.depth_offset = 1;
-      /* Something wierd going on with legacy_global_depth_bias,
+      /* Something weird going on with legacy_global_depth_bias,
        * offset_constant, scaling and MRD.  This value passes glean
        * but gives some odd results elsewere (eg. the
        * quad-offset-units test).
@@ -237,7 +250,7 @@ brw_upload_wm_unit(struct brw_context *brw)
 			      I915_GEM_DOMAIN_INSTRUCTION, 0);
    }
 
-   brw->state.dirty.brw |= BRW_NEW_GEN4_UNIT_STATE;
+   brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 }
 
 const struct brw_tracked_state brw_wm_unit = {

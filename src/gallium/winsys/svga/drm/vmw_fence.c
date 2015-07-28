@@ -24,7 +24,7 @@
  **********************************************************/
 #include "util/u_memory.h"
 #include "util/u_atomic.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "os/os_thread.h"
 
 #include "pipebuffer/pb_buffer_fenced.h"

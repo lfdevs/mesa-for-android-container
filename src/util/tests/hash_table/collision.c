@@ -36,14 +36,22 @@ main(int argc, char **argv)
    struct hash_table *ht;
    const char *str1 = "test1";
    const char *str2 = "test2";
-   struct hash_entry *entry1, *entry2;
+   const char *str3 = "test3";
+   struct hash_entry *entry1, *entry2, *search_entry;
    uint32_t bad_hash = 5;
    int i;
 
+   (void) argc;
+   (void) argv;
+
    ht = _mesa_hash_table_create(NULL, NULL, _mesa_key_string_equal);
 
+   /* Insert some items.  Inserting 3 items forces a rehash and the new
+    * table size is big enough that we don't get rehashes later.
+    */
    _mesa_hash_table_insert_pre_hashed(ht, bad_hash, str1, NULL);
    _mesa_hash_table_insert_pre_hashed(ht, bad_hash, str2, NULL);
+   _mesa_hash_table_insert_pre_hashed(ht, bad_hash, str3, NULL);
 
    entry1 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str1);
    assert(entry1->key == str1);
@@ -59,6 +67,13 @@ main(int argc, char **argv)
    _mesa_hash_table_remove(ht, entry1);
    entry2 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str2);
    assert(entry2->key == str2);
+
+   /* Try inserting #2 again and make sure it gets overwritten */
+   _mesa_hash_table_insert_pre_hashed(ht, bad_hash, str2, NULL);
+   entry2 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str2);
+   hash_table_foreach(ht, search_entry) {
+      assert(search_entry == entry2 || search_entry->key != str2);
+   }
 
    /* Put str1 back, then spam junk into the table to force a
     * resize and make sure we can still find them both.

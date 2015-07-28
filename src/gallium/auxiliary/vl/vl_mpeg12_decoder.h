@@ -30,6 +30,8 @@
 
 #include "pipe/p_video_codec.h"
 
+#include "util/list.h"
+
 #include "vl_mpeg12_bitstream.h"
 #include "vl_zscan.h"
 #include "vl_idct.h"
@@ -77,6 +79,8 @@ struct vl_mpeg12_decoder
 
    unsigned current_buffer;
    struct vl_mpeg12_buffer *dec_buffers[4];
+
+   struct list_head buffer_privates;
 };
 
 struct vl_mpeg12_buffer

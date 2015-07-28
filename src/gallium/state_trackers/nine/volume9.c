@@ -168,10 +168,7 @@ NineVolume9_MarkContainerDirty( struct NineVolume9 *This )
     tex = NineBaseTexture9(This->base.container);
     assert(tex);
     if (This->desc.Pool == D3DPOOL_MANAGED)
-        tex->dirty = TRUE;
-    else
-    if (This->desc.Usage & D3DUSAGE_AUTOGENMIPMAP)
-        tex->dirty_mip = TRUE;
+        tex->managed.dirty = TRUE;
 
     BASETEX_REGISTER_UPDATE(tex);
 }
@@ -355,6 +352,8 @@ NineVolume9_CopyVolume( struct NineVolume9 *This,
     DBG("This=%p From=%p dstx=%u dsty=%u dstz=%u pSrcBox=%p\n",
         This, From, dstx, dsty, dstz, pSrcBox);
 
+    assert(This->desc.Pool != D3DPOOL_MANAGED &&
+           From->desc.Pool != D3DPOOL_MANAGED);
     user_assert(This->desc.Format == From->desc.Format, D3DERR_INVALIDCALL);
 
     dst_box.x = dstx;
@@ -391,20 +390,6 @@ NineVolume9_CopyVolume( struct NineVolume9 *This,
     dst_box.width = src_box.width;
     dst_box.height = src_box.height;
     dst_box.depth = src_box.depth;
-
-    /* Don't copy to device memory of managed resources.
-     * We don't want to download it back again later.
-     */
-    if (This->desc.Pool == D3DPOOL_MANAGED)
-        r_dst = NULL;
-
-    /* Don't copy from stale device memory of managed resources.
-     * Also, don't copy between system and device if we don't have to.
-     */
-    if (From->desc.Pool == D3DPOOL_MANAGED) {
-        if (!r_dst || NineVolume9_IsDirty(From))
-            r_src = NULL;
-    }
 
     if (r_dst && r_src) {
         pipe->resource_copy_region(pipe,
@@ -452,8 +437,7 @@ NineVolume9_CopyVolume( struct NineVolume9 *This,
                       src_box.x, src_box.y, src_box.z);
     }
 
-    if (This->desc.Pool == D3DPOOL_DEFAULT ||
-        This->desc.Pool == D3DPOOL_MANAGED)
+    if (This->desc.Pool == D3DPOOL_DEFAULT)
         NineVolume9_MarkContainerDirty(This);
     if (!r_dst && This->resource)
         NineVolume9_AddDirtyRegion(This, &dst_box);

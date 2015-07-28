@@ -65,7 +65,7 @@ static struct ir3_register *unwrap(struct ir3_register *reg)
 static void ir3_instr_flatten(struct ir3_flatten_ctx *ctx,
 		struct ir3_instruction *instr)
 {
-	unsigned i;
+	struct ir3_instruction *src;
 
 	/* if we've already visited this instruction, bail now: */
 	if (ir3_instr_check_mark(instr))
@@ -131,11 +131,8 @@ static void ir3_instr_flatten(struct ir3_flatten_ctx *ctx,
 	}
 
 	/* recursively visit children: */
-	for (i = 1; i < instr->regs_count; i++) {
-		struct ir3_register *src = instr->regs[i];
-		if (src->flags & IR3_REG_SSA)
-			ir3_instr_flatten(ctx, src->instr);
-	}
+	foreach_ssa_src(src, instr)
+		ir3_instr_flatten(ctx, src);
 }
 
 /* return >= 0 is # of phi's flattened, < 0 is error */

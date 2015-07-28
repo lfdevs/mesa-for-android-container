@@ -307,6 +307,8 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       /* XXX: Query the host ? */
       return 1;
    case PIPE_CAP_UMA:
+   case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+   case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
       return 0;
    }
 
@@ -372,6 +374,9 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_PREFERRED_IR:
          return PIPE_SHADER_IR_TGSI;
       case PIPE_SHADER_CAP_DOUBLES:
+      case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
          return 0;
       }
       /* If we get here, we failed to handle a cap above */
@@ -426,6 +431,9 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_PREFERRED_IR:
          return PIPE_SHADER_IR_TGSI;
       case PIPE_SHADER_CAP_DOUBLES:
+      case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
          return 0;
       }
       /* If we get here, we failed to handle a cap above */
@@ -561,9 +569,9 @@ svga_get_driver_query_info(struct pipe_screen *screen,
                            struct pipe_driver_query_info *info)
 {
    static const struct pipe_driver_query_info queries[] = {
-      {"draw-calls", SVGA_QUERY_DRAW_CALLS, 0, FALSE},
-      {"fallbacks", SVGA_QUERY_FALLBACKS, 0, FALSE},
-      {"memory-used", SVGA_QUERY_MEMORY_USED, 0, TRUE}
+      {"draw-calls", SVGA_QUERY_DRAW_CALLS, {0}},
+      {"fallbacks", SVGA_QUERY_FALLBACKS, {0}},
+      {"memory-used", SVGA_QUERY_MEMORY_USED, {0}, PIPE_DRIVER_QUERY_TYPE_BYTES}
    };
 
    if (!info)
@@ -628,6 +636,7 @@ svga_screen_create(struct svga_winsys_screen *sws)
    screen->destroy = svga_destroy_screen;
    screen->get_name = svga_get_name;
    screen->get_vendor = svga_get_vendor;
+   screen->get_device_vendor = svga_get_vendor; // TODO actual device vendor
    screen->get_param = svga_get_param;
    screen->get_shader_param = svga_get_shader_param;
    screen->get_paramf = svga_get_paramf;

@@ -764,21 +764,7 @@ i915_translate_instruction(struct i915_fp_compile *p,
       break;
 
    case TGSI_OPCODE_MIN:
-      src0 = src_vector(p, &inst->Src[0], fs);
-      src1 = src_vector(p, &inst->Src[1], fs);
-      tmp = i915_get_utemp(p);
-      flags = get_result_flags(inst);
-
-      i915_emit_arith(p,
-                      A0_MAX,
-                      tmp, flags & A0_DEST_CHANNEL_ALL, 0,
-                      negate(src0, 1, 1, 1, 1),
-                      negate(src1, 1, 1, 1, 1), 0);
-
-      i915_emit_arith(p,
-                      A0_MOV,
-                      get_result_vector(p, &inst->Dst[0]),
-                      flags, 0, negate(tmp, 1, 1, 1, 1), 0, 0);
+      emit_simple_arith(p, inst, A0_MIN, 2, fs);
       break;
 
    case TGSI_OPCODE_MOV:

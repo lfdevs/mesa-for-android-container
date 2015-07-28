@@ -11,8 +11,6 @@ SUBDIRS += auxiliary
 ##
 
 SUBDIRS += \
-	drivers/galahad \
-	drivers/identity \
 	drivers/noop \
 	drivers/trace \
 	drivers/rbug
@@ -97,14 +95,6 @@ if HAVE_DRI2
 SUBDIRS += winsys/sw/kms-dri
 endif
 
-if HAVE_EGL_PLATFORM_FBDEV
-SUBDIRS += winsys/sw/fbdev
-endif
-
-if HAVE_EGL_PLATFORM_WAYLAND
-SUBDIRS += winsys/sw/wayland
-endif
-
 SUBDIRS += winsys/sw/wrapper
 
 ##
@@ -115,10 +105,6 @@ EXTRA_DIST = \
 	docs \
 	README.portability \
 	SConscript \
-	state_trackers/egl \
-	state_trackers/gbm \
-	targets/egl-static \
-	targets/gbm \
 	winsys/sw/gdi \
 	winsys/sw/hgl
 
@@ -137,11 +123,6 @@ endif
 
 if HAVE_DRICOMMON
 SUBDIRS += state_trackers/dri targets/dri
-endif
-
-## the egl target depends on vega
-if HAVE_OPENVG
-SUBDIRS += state_trackers/vega
 endif
 
 if HAVE_X11_DRIVER

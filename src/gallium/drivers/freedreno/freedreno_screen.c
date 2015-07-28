@@ -67,11 +67,11 @@ static const struct debug_named_value debug_options[] = {
 		{"nobypass",  FD_DBG_NOBYPASS, "Disable GMEM bypass"},
 		{"fraghalf",  FD_DBG_FRAGHALF, "Use half-precision in fragment shader"},
 		{"nobin",     FD_DBG_NOBIN,  "Disable hw binning"},
-		{"noopt",     FD_DBG_NOOPT , "Disable optimization passes in compiler"},
-		{"optmsgs",   FD_DBG_OPTMSGS,"Enable optimizater debug messages"},
+		{"optmsgs",   FD_DBG_OPTMSGS,"Enable optimizer debug messages"},
 		{"optdump",   FD_DBG_OPTDUMP,"Dump shader DAG to .dot files"},
-		{"glsl130",   FD_DBG_GLSL130,"Temporary flag to enable GLSL 130 on a3xx+"},
+		{"glsl120",   FD_DBG_GLSL120,"Temporary flag to force GLSL 120 (rather than 130) on a3xx+"},
 		{"nocp",      FD_DBG_NOCP,   "Disable copy-propagation"},
+		{"nir",       FD_DBG_NIR,    "Enable experimental NIR compiler"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -79,7 +79,7 @@ DEBUG_GET_ONCE_FLAGS_OPTION(fd_mesa_debug, "FD_MESA_DEBUG", debug_options, 0)
 
 int fd_mesa_debug = 0;
 bool fd_binning_enabled = true;
-static bool glsl130 = false;
+static bool glsl120 = false;
 
 static const char *
 fd_screen_get_name(struct pipe_screen *pscreen)
@@ -96,34 +96,18 @@ fd_screen_get_vendor(struct pipe_screen *pscreen)
 	return "freedreno";
 }
 
+static const char *
+fd_screen_get_device_vendor(struct pipe_screen *pscreen)
+{
+	return "Qualcomm";
+}
+
+
 static uint64_t
 fd_screen_get_timestamp(struct pipe_screen *pscreen)
 {
 	int64_t cpu_time = os_time_get() * 1000;
 	return cpu_time + fd_screen(pscreen)->cpu_gpu_time_delta;
-}
-
-static void
-fd_screen_fence_ref(struct pipe_screen *pscreen,
-		struct pipe_fence_handle **ptr,
-		struct pipe_fence_handle *pfence)
-{
-	fd_fence_ref(fd_fence(pfence), (struct fd_fence **)ptr);
-}
-
-static boolean
-fd_screen_fence_signalled(struct pipe_screen *screen,
-		struct pipe_fence_handle *pfence)
-{
-	return fd_fence_signalled(fd_fence(pfence));
-}
-
-static boolean
-fd_screen_fence_finish(struct pipe_screen *screen,
-		struct pipe_fence_handle *pfence,
-		uint64_t timeout)
-{
-	return fd_fence_wait(fd_fence(pfence));
 }
 
 static void
@@ -160,7 +144,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_SHADOW_MAP:
 	case PIPE_CAP_BLEND_EQUATION_SEPARATE:
 	case PIPE_CAP_TEXTURE_SWIZZLE:
-	case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
 	case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
@@ -172,6 +155,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_USER_CONSTANT_BUFFERS:
 	case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+	case PIPE_CAP_VERTEXID_NOBASE:
 		return 1;
 
 	case PIPE_CAP_SHADER_STENCIL_EXPORT:
@@ -186,25 +170,30 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
 	case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
-	case PIPE_CAP_TGSI_INSTANCEID:
 	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_COMPUTE:
 		return 0;
 
 	case PIPE_CAP_SM3:
 	case PIPE_CAP_PRIMITIVE_RESTART:
+	case PIPE_CAP_TGSI_INSTANCEID:
+	case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
 		return is_a3xx(screen) || is_a4xx(screen);
+
+	case PIPE_CAP_INDEP_BLEND_ENABLE:
+	case PIPE_CAP_INDEP_BLEND_FUNC:
+	case PIPE_CAP_DEPTH_CLIP_DISABLE:
+		return is_a3xx(screen);
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
 		return 256;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
-		return ((is_a3xx(screen) || is_a4xx(screen)) && glsl130) ? 130 : 120;
+		if (glsl120)
+			return 120;
+		return (is_a3xx(screen) || is_a4xx(screen)) ? 130 : 120;
 
 	/* Unsupported features. */
-	case PIPE_CAP_INDEP_BLEND_ENABLE:
-	case PIPE_CAP_INDEP_BLEND_FUNC:
-	case PIPE_CAP_DEPTH_CLIP_DISABLE:
 	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
@@ -228,9 +217,10 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_CLIP_HALFZ:
-	case PIPE_CAP_VERTEXID_NOBASE:
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
 		return 0;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
@@ -264,7 +254,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:
-		return 1;
+		return screen->max_rts;
 
 	/* Queries. */
 	case PIPE_CAP_QUERY_TIME_ELAPSED:
@@ -368,9 +358,9 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		 * split between VS and FS.  Use lower limit of 256 to
 		 * avoid getting into impossible situations:
 		 */
-		return ((is_a3xx(screen) || is_a4xx(screen)) ? 256 : 64) * sizeof(float[4]);
+		return ((is_a3xx(screen) || is_a4xx(screen)) ? 4096 : 64) * sizeof(float[4]);
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-		return 1;
+		return (is_a3xx(screen) || is_a4xx(screen)) ? 16 : 1;
 	case PIPE_SHADER_CAP_MAX_PREDS:
 		return 0; /* nothing uses this */
 	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -382,17 +372,16 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		return 1;
 	case PIPE_SHADER_CAP_SUBROUTINES:
 	case PIPE_SHADER_CAP_DOUBLES:
+	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
+	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+	case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
 		return 0;
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
 		return 1;
 	case PIPE_SHADER_CAP_INTEGERS:
-		/* we should be able to support this on a3xx, but not
-		 * implemented yet:
-		 *
-		 * TODO looks like a4xx will require some additional
-		 * work for integer varying fetch..
-		 */
-		return (is_a3xx(screen) && glsl130) ? 1 : 0;
+		if (glsl120)
+			return 0;
+		return (is_a3xx(screen) || is_a4xx(screen)) ? 1 : 0;
 	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
 	case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
 		return 16;
@@ -465,7 +454,7 @@ fd_screen_create(struct fd_device *dev)
 	if (fd_mesa_debug & FD_DBG_NOBIN)
 		fd_binning_enabled = false;
 
-	glsl130 = !!(fd_mesa_debug & FD_DBG_GLSL130);
+	glsl120 = !!(fd_mesa_debug & FD_DBG_GLSL120);
 
 	if (!screen)
 		return NULL;
@@ -554,6 +543,7 @@ fd_screen_create(struct fd_device *dev)
 
 	pscreen->get_name = fd_screen_get_name;
 	pscreen->get_vendor = fd_screen_get_vendor;
+	pscreen->get_device_vendor = fd_screen_get_device_vendor;
 
 	pscreen->get_timestamp = fd_screen_get_timestamp;
 

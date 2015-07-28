@@ -112,26 +112,36 @@ static void *udev_handle = NULL;
 static void *
 udev_dlopen_handle(void)
 {
-   if (!udev_handle) {
-      udev_handle = dlopen("libudev.so.1", RTLD_LOCAL | RTLD_LAZY);
+   char name[80];
+   unsigned flags = RTLD_NOLOAD | RTLD_LOCAL | RTLD_LAZY;
+   int version;
 
-      if (!udev_handle) {
-         /* libudev.so.1 changed the return types of the two unref functions
-          * from voids to pointers.  We don't use those return values, and the
-          * only ABI I've heard that cares about this kind of change (calling
-          * a function with a void * return that actually only returns void)
-          * might be ia64.
-          */
-         udev_handle = dlopen("libudev.so.0", RTLD_LOCAL | RTLD_LAZY);
+   /* libudev.so.1 changed the return types of the two unref functions
+    * from voids to pointers.  We don't use those return values, and the
+    * only ABI I've heard that cares about this kind of change (calling
+    * a function with a void * return that actually only returns void)
+    * might be ia64.
+    */
 
-         if (!udev_handle) {
-            log_(_LOADER_WARNING, "Couldn't dlopen libudev.so.1 or "
-                 "libudev.so.0, driver detection may be broken.\n");
-         }
+   /* First try opening an already linked libudev, then try loading one */
+   do {
+      for (version = 1; version >= 0; version--) {
+         snprintf(name, sizeof(name), "libudev.so.%d", version);
+         udev_handle = dlopen(name, flags);
+         if (udev_handle)
+            return udev_handle;
       }
-   }
 
-   return udev_handle;
+      if ((flags & RTLD_NOLOAD) == 0)
+         break;
+
+      flags &= ~RTLD_NOLOAD;
+   } while (1);
+
+   log_(_LOADER_WARNING,
+        "Couldn't dlopen libudev.so.1 or "
+        "libudev.so.0, driver detection may be broken.\n");
+   return NULL;
 }
 
 static int dlsym_failed = 0;
@@ -207,9 +217,12 @@ libudev_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
    }
 
    pci_id = udev_device_get_property_value(parent, "PCI_ID");
-   if (pci_id == NULL ||
-       sscanf(pci_id, "%x:%x", vendor_id, chip_id) != 2) {
-      log_(_LOADER_WARNING, "MESA-LOADER: malformed or no PCI ID\n");
+   if (pci_id == NULL) {
+      log_(_LOADER_INFO, "MESA-LOADER: no PCI ID\n");
+      *chip_id = -1;
+      goto out;
+   } else if (sscanf(pci_id, "%x:%x", vendor_id, chip_id) != 2) {
+      log_(_LOADER_WARNING, "MESA-LOADER: malformed PCI ID\n");
       *chip_id = -1;
       goto out;
    }

@@ -33,10 +33,12 @@
 #include "r600_public.h"
 
 #include "util/u_suballoc.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 #include "util/u_transfer.h"
 
 #define R600_NUM_ATOMS 73
+
+#define R600_MAX_VIEWPORTS 16
 
 /* read caches */
 #define R600_CONTEXT_INV_VERTEX_CACHE		(R600_CONTEXT_PRIVATE_FLAG << 0)
@@ -55,7 +57,7 @@
 
 /* the number of CS dwords for flushing and drawing */
 #define R600_MAX_FLUSH_CS_DWORDS	16
-#define R600_MAX_DRAW_CS_DWORDS		40
+#define R600_MAX_DRAW_CS_DWORDS		47
 #define R600_TRACE_CS_DWORDS		7
 
 #define R600_MAX_USER_CONST_BUFFERS 13
@@ -145,6 +147,7 @@ struct r600_vgt_state {
 	uint32_t vgt_multi_prim_ib_reset_en;
 	uint32_t vgt_multi_prim_ib_reset_indx;
 	uint32_t vgt_indx_offset;
+	bool last_draw_was_indirect;
 };
 
 struct r600_blend_color {
@@ -442,12 +445,12 @@ struct r600_context {
 	struct r600_poly_offset_state	poly_offset_state;
 	struct r600_cso_state		rasterizer_state;
 	struct r600_sample_mask		sample_mask;
-	struct r600_scissor_state	scissor[16];
+	struct r600_scissor_state	scissor[R600_MAX_VIEWPORTS];
 	struct r600_seamless_cube_map	seamless_cube_map;
 	struct r600_config_state	config_state;
 	struct r600_stencil_ref_state	stencil_ref;
 	struct r600_vgt_state		vgt_state;
-	struct r600_viewport_state	viewport[16];
+	struct r600_viewport_state	viewport[R600_MAX_VIEWPORTS];
 	/* Shaders and shader resources. */
 	struct r600_cso_state		vertex_fetch_shader;
 	struct r600_shader_state	vertex_shader;

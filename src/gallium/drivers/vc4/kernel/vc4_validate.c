@@ -43,7 +43,7 @@
 #include "vc4_packet.h"
 
 #define VALIDATE_ARGS \
-	struct exec_info *exec,				\
+	struct vc4_exec_info *exec,			\
 	void *validated,				\
 	void *untrusted
 
@@ -95,7 +95,7 @@ size_is_lt(uint32_t width, uint32_t height, int cpp)
 }
 
 static bool
-vc4_use_bo(struct exec_info *exec,
+vc4_use_bo(struct vc4_exec_info *exec,
 	   uint32_t hindex,
 	   enum vc4_bo_mode mode,
 	   struct drm_gem_cma_object **obj)
@@ -123,7 +123,7 @@ vc4_use_bo(struct exec_info *exec,
 }
 
 static bool
-vc4_use_handle(struct exec_info *exec,
+vc4_use_handle(struct vc4_exec_info *exec,
 	       uint32_t gem_handles_packet_index,
 	       enum vc4_bo_mode mode,
 	       struct drm_gem_cma_object **obj)
@@ -148,7 +148,7 @@ gl_shader_rec_size(uint32_t pointer_bits)
 }
 
 static bool
-check_tex_size(struct exec_info *exec, struct drm_gem_cma_object *fbo,
+check_tex_size(struct vc4_exec_info *exec, struct drm_gem_cma_object *fbo,
 	       uint32_t offset, uint8_t tiling_format,
 	       uint32_t width, uint32_t height, uint8_t cpp)
 {
@@ -164,7 +164,7 @@ check_tex_size(struct exec_info *exec, struct drm_gem_cma_object *fbo,
 
 	switch (tiling_format) {
 	case VC4_TILING_FORMAT_LINEAR:
-		aligned_width = roundup(width, 16 / cpp);
+		aligned_width = roundup(width, utile_w);
 		aligned_height = height;
 		break;
 	case VC4_TILING_FORMAT_T:
@@ -287,7 +287,7 @@ validate_branch_to_sublist(VALIDATE_ARGS)
 
 	offset = *(uint32_t *)(untrusted + 0);
 	if (offset % exec->tile_alloc_init_block_size ||
-	    offset / exec->tile_alloc_init_block_size >
+	    offset / exec->tile_alloc_init_block_size >=
 	    exec->bin_tiles_x * exec->bin_tiles_y) {
 		DRM_ERROR("VC4_PACKET_BRANCH_TO_SUB_LIST must jump to initial "
 			  "tile allocation space.\n");
@@ -589,21 +589,6 @@ validate_tile_rendering_mode_config(VALIDATE_ARGS)
 	exec->fb_width = *(uint16_t *)(untrusted + 4);
 	exec->fb_height = *(uint16_t *)(untrusted + 6);
 
-	/* Make sure that the fb width/height matches the binning config -- we
-	 * rely on being able to interchange these for various assertions.
-	 * (Within a tile, loads and stores will be clipped to the
-	 * width/height, but we allow load/storing to any binned tile).
-	 */
-	if (exec->fb_width <= (exec->bin_tiles_x - 1) * 64 ||
-	    exec->fb_width > exec->bin_tiles_x * 64 ||
-	    exec->fb_height <= (exec->bin_tiles_y - 1) * 64 ||
-	    exec->fb_height > exec->bin_tiles_y * 64) {
-		DRM_ERROR("bin config %dx%d doesn't match FB %dx%d\n",
-			  exec->bin_tiles_x, exec->bin_tiles_y,
-			  exec->fb_width, exec->fb_height);
-		return -EINVAL;
-	}
-
 	flags = *(uint16_t *)(untrusted + 8);
 	if ((flags & VC4_RENDER_CONFIG_FORMAT_MASK) ==
 	    VC4_RENDER_CONFIG_FORMAT_RGBA8888) {
@@ -632,13 +617,9 @@ validate_tile_coordinates(VALIDATE_ARGS)
 	uint8_t tile_x = *(uint8_t *)(untrusted + 0);
 	uint8_t tile_y = *(uint8_t *)(untrusted + 1);
 
-	if (tile_x >= exec->bin_tiles_x ||
-	    tile_y >= exec->bin_tiles_y) {
-		DRM_ERROR("Tile coordinates %d,%d > bin config %d,%d\n",
-			  tile_x,
-			  tile_y,
-			  exec->bin_tiles_x,
-			  exec->bin_tiles_y);
+	if (tile_x * 64 >= exec->fb_width || tile_y * 64 >= exec->fb_height) {
+		DRM_ERROR("Tile coordinates %d,%d > render config %dx%d\n",
+			  tile_x, tile_y, exec->fb_width, exec->fb_height);
 		return -EINVAL;
 	}
 
@@ -657,7 +638,8 @@ static const struct cmd_info {
 	bool render;
 	uint16_t len;
 	const char *name;
-	int (*func)(struct exec_info *exec, void *validated, void *untrusted);
+	int (*func)(struct vc4_exec_info *exec, void *validated,
+		    void *untrusted);
 } cmd_info[] = {
 	[VC4_PACKET_HALT] = { 1, 1, 1, "halt", NULL },
 	[VC4_PACKET_NOP] = { 1, 1, 1, "nop", NULL },
@@ -720,7 +702,8 @@ vc4_validate_cl(struct drm_device *dev,
 		void *unvalidated,
 		uint32_t len,
 		bool is_bin,
-		struct exec_info *exec)
+		bool has_bin,
+		struct vc4_exec_info *exec)
 {
 	uint32_t dst_offset = 0;
 	uint32_t src_offset = 0;
@@ -790,7 +773,7 @@ vc4_validate_cl(struct drm_device *dev,
 	if (is_bin) {
 		exec->ct0ea = exec->ct0ca + dst_offset;
 
-		if (!exec->found_start_tile_binning_packet) {
+		if (has_bin && !exec->found_start_tile_binning_packet) {
 			DRM_ERROR("Bin CL missing VC4_PACKET_START_TILE_BINNING\n");
 			return -EINVAL;
 		}
@@ -804,8 +787,10 @@ vc4_validate_cl(struct drm_device *dev,
 		 * increment from the bin CL.  Otherwise a later submit would
 		 * have render execute immediately.
 		 */
-		if (!exec->found_wait_on_semaphore_packet) {
-			DRM_ERROR("Render CL missing VC4_PACKET_WAIT_ON_SEMAPHORE\n");
+		if (exec->found_wait_on_semaphore_packet != has_bin) {
+			DRM_ERROR("Render CL %s VC4_PACKET_WAIT_ON_SEMAPHORE\n",
+				  exec->found_wait_on_semaphore_packet ?
+				  "has" : "missing");
 			return -EINVAL;
 		}
 		exec->ct1ea = exec->ct1ca + dst_offset;
@@ -815,7 +800,7 @@ vc4_validate_cl(struct drm_device *dev,
 }
 
 static bool
-reloc_tex(struct exec_info *exec,
+reloc_tex(struct vc4_exec_info *exec,
 	  void *uniform_data_u,
 	  struct vc4_texture_sample_info *sample,
 	  uint32_t texture_handle_index)
@@ -950,7 +935,7 @@ reloc_tex(struct exec_info *exec,
 			aligned_height = roundup(level_height, utile_h);
 			break;
 		default:
-			aligned_width = roundup(level_width, 16 / cpp);
+			aligned_width = roundup(level_width, utile_w);
 			aligned_height = level_height;
 			break;
 		}
@@ -976,7 +961,7 @@ reloc_tex(struct exec_info *exec,
 
 static int
 validate_shader_rec(struct drm_device *dev,
-		    struct exec_info *exec,
+		    struct vc4_exec_info *exec,
 		    struct vc4_shader_state *state)
 {
 	uint32_t *src_handles;
@@ -1073,9 +1058,14 @@ validate_shader_rec(struct drm_device *dev,
 
 		switch (relocs[i].type) {
 		case RELOC_CODE:
+			if (src_offset != 0) {
+				DRM_ERROR("Shaders must be at offset 0 of "
+					  "the BO.\n");
+				goto fail;
+			}
+
 			kfree(validated_shader);
-			validated_shader = vc4_validate_shader(bo[i],
-							       src_offset);
+			validated_shader = vc4_validate_shader(bo[i]);
 			if (!validated_shader)
 				goto fail;
 
@@ -1158,7 +1148,7 @@ fail:
 
 int
 vc4_validate_shader_recs(struct drm_device *dev,
-			 struct exec_info *exec)
+			 struct vc4_exec_info *exec)
 {
 	uint32_t i;
 	int ret = 0;

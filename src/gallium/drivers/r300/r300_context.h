@@ -36,7 +36,6 @@
 #include "r300_defines.h"
 #include "r300_screen.h"
 #include "compiler/radeon_regalloc.h"
-#include "radeon/drm/radeon_winsys.h"
 
 struct u_upload_mgr;
 struct r300_context;

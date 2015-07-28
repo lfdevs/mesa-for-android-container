@@ -113,6 +113,11 @@ create_pass_manager(struct gallivm_state *gallivm)
    gallivm->passmgr = LLVMCreateFunctionPassManagerForModule(gallivm->module);
    if (!gallivm->passmgr)
       return FALSE;
+   /*
+    * TODO: some per module pass manager with IPO passes might be helpful -
+    * the generated texture functions may benefit from inlining if they are
+    * simple, or constant propagation into them, etc.
+    */
 
    // Old versions of LLVM get the DataLayout from the pass manager.
    LLVMAddTargetData(gallivm->target, gallivm->passmgr);
@@ -509,7 +514,7 @@ void
 gallivm_compile_module(struct gallivm_state *gallivm)
 {
    LLVMValueRef func;
-   int64_t time_begin;
+   int64_t time_begin = 0;
 
    assert(!gallivm->compiled);
 
@@ -556,6 +561,37 @@ gallivm_compile_module(struct gallivm_state *gallivm)
    assert(gallivm->engine);
 
    ++gallivm->compiled;
+
+   if (gallivm_debug & GALLIVM_DEBUG_ASM) {
+      LLVMValueRef llvm_func = LLVMGetFirstFunction(gallivm->module);
+
+      while (llvm_func) {
+         /*
+          * Need to filter out functions which don't have an implementation,
+          * such as the intrinsics. May not be sufficient in case of IPO?
+          * LLVMGetPointerToGlobal() will abort otherwise.
+          */
+         if (!LLVMIsDeclaration(llvm_func)) {
+            void *func_code = LLVMGetPointerToGlobal(gallivm->engine, llvm_func);
+            lp_disassemble(llvm_func, func_code);
+         }
+         llvm_func = LLVMGetNextFunction(llvm_func);
+      }
+   }
+
+#if defined(PROFILE)
+   {
+      LLVMValueRef llvm_func = LLVMGetFirstFunction(gallivm->module);
+
+      while (llvm_func) {
+         if (!LLVMIsDeclaration(llvm_func)) {
+            void *func_code = LLVMGetPointerToGlobal(gallivm->engine, llvm_func);
+            lp_profile(llvm_func, func_code);
+         }
+         llvm_func = LLVMGetNextFunction(llvm_func);
+      }
+   }
+#endif
 }
 
 
@@ -573,14 +609,6 @@ gallivm_jit_function(struct gallivm_state *gallivm,
    code = LLVMGetPointerToGlobal(gallivm->engine, func);
    assert(code);
    jit_func = pointer_to_func(code);
-
-   if (gallivm_debug & GALLIVM_DEBUG_ASM) {
-      lp_disassemble(func, code);
-   }
-
-#if defined(PROFILE)
-   lp_profile(func, code);
-#endif
 
    return jit_func;
 }

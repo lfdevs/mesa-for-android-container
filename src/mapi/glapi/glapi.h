@@ -44,7 +44,7 @@
 #ifndef _GLAPI_H
 #define _GLAPI_H
 
-#include "u_thread.h"
+#include "util/macros.h"
 
 
 #ifdef __cplusplus
@@ -80,6 +80,9 @@ extern "C" {
 #endif
 
 typedef void (*_glapi_proc)(void);
+
+typedef void (*_glapi_nop_handler_proc)(const char *name);
+
 struct _glapi_table;
 
 
@@ -102,20 +105,11 @@ _GLAPI_EXPORT extern const void *_glapi_Context;
 _GLAPI_EXPORT extern struct _glapi_table *_glapi_Dispatch;
 _GLAPI_EXPORT extern void *_glapi_Context;
 
-# ifdef THREADS
-
-#  define GET_DISPATCH() \
+#define GET_DISPATCH() \
      (likely(_glapi_Dispatch) ? _glapi_Dispatch : _glapi_get_dispatch())
 
-#  define GET_CURRENT_CONTEXT(C)  struct gl_context *C = (struct gl_context *) \
+#define GET_CURRENT_CONTEXT(C)  struct gl_context *C = (struct gl_context *) \
      (likely(_glapi_Context) ? _glapi_Context : _glapi_get_context())
-
-# else
-
-#  define GET_DISPATCH() _glapi_Dispatch
-#  define GET_CURRENT_CONTEXT(C)  struct gl_context *C = (struct gl_context *) _glapi_Context
-
-# endif
 
 #endif /* defined (GLX_USE_TLS) */
 
@@ -166,6 +160,14 @@ _glapi_get_proc_name(unsigned int offset);
 
 _GLAPI_EXPORT struct _glapi_table *
 _glapi_create_table_from_handle(void *handle, const char *symbol_prefix);
+
+
+_GLAPI_EXPORT void
+_glapi_set_nop_handler(_glapi_nop_handler_proc func);
+
+/** Return pointer to new dispatch table filled with no-op functions */
+_GLAPI_EXPORT struct _glapi_table *
+_glapi_new_nop_table(unsigned num_entries);
 
 
 /** Deprecated function */

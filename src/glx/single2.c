@@ -330,7 +330,7 @@ __indirect_glGetBooleanv(GLenum val, GLboolean * b)
 
    if (compsize == 0) {
       /*
-       ** Error occured; don't modify user's buffer.
+       ** Error occurred; don't modify user's buffer.
        */
    }
    else {
@@ -381,7 +381,7 @@ __indirect_glGetDoublev(GLenum val, GLdouble * d)
 
    if (compsize == 0) {
       /*
-       ** Error occured; don't modify user's buffer.
+       ** Error occurred; don't modify user's buffer.
        */
    }
    else {
@@ -432,7 +432,7 @@ __indirect_glGetFloatv(GLenum val, GLfloat * f)
 
    if (compsize == 0) {
       /*
-       ** Error occured; don't modify user's buffer.
+       ** Error occurred; don't modify user's buffer.
        */
    }
    else {
@@ -483,7 +483,7 @@ __indirect_glGetIntegerv(GLenum val, GLint * i)
 
    if (compsize == 0) {
       /*
-       ** Error occured; don't modify user's buffer.
+       ** Error occurred; don't modify user's buffer.
        */
    }
    else {
@@ -588,7 +588,7 @@ __indirect_glRenderMode(GLenum mode)
    if (reply.newMode != mode) {
       /*
        ** Switch to new mode did not take effect, therefore an error
-       ** occured.  When an error happens the server won't send us any
+       ** occurred.  When an error happens the server won't send us any
        ** other data.
        */
    }

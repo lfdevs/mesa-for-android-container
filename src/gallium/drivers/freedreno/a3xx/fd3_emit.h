@@ -45,7 +45,7 @@ void fd3_emit_constant(struct fd_ringbuffer *ring,
 		const uint32_t *dwords, struct pipe_resource *prsc);
 
 void fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
-		struct pipe_surface *psurf);
+		struct pipe_surface **psurf, int bufs);
 
 /* grouped together emit-state for prog/vertex/state emit: */
 struct fd3_emit {
@@ -53,8 +53,10 @@ struct fd3_emit {
 	const struct fd_program_stateobj *prog;
 	const struct pipe_draw_info *info;
 	struct ir3_shader_key key;
-	enum pipe_format format;
 	uint32_t dirty;
+
+	uint32_t sprite_coord_enable;
+	bool sprite_coord_mode;
 	bool rasterflat;
 
 	/* cached to avoid repeated lookups of same variants: */

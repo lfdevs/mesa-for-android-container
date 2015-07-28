@@ -9,9 +9,6 @@
 #define HGL_CONTEXT_H
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include "state_tracker/st_api.h"
 #include "state_tracker/st_manager.h"
 #include "pipe/p_compiler.h"
@@ -20,8 +17,10 @@ extern "C" {
 #include "os/os_thread.h"
 
 #include "bitmap_wrapper.h"
+
+
 #ifdef __cplusplus
-}
+extern "C" {
 #endif
 
 
@@ -82,6 +81,9 @@ struct hgl_context
 };
 
 
+// hgl state_tracker api
+struct st_api* hgl_create_st_api(void);
+
 // hgl state_tracker framebuffer
 struct hgl_buffer* hgl_create_st_framebuffer(struct hgl_context* context);
 
@@ -93,5 +95,9 @@ void hgl_destroy_st_manager(struct st_manager *manager);
 struct st_visual* hgl_create_st_visual(ulong options);
 void hgl_destroy_st_visual(struct st_visual* visual);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HGL_CONTEXT_H */

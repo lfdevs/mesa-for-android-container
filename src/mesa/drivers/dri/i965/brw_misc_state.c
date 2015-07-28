@@ -47,10 +47,6 @@ static void upload_drawing_rect(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
 
-   /* 3DSTATE_DRAWING_RECTANGLE is non-pipelined. */
-   if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
-
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_DRAWING_RECTANGLE << 16 | (4 - 2));
    OUT_BATCH(0); /* xmin, ymin */
@@ -102,7 +98,7 @@ static void upload_pipelined_state_pointers(struct brw_context *brw )
 	     brw->cc.state_offset);
    ADVANCE_BATCH();
 
-   brw->state.dirty.brw |= BRW_NEW_PSP;
+   brw->ctx.NewDriverState |= BRW_NEW_PSP;
 }
 
 static void upload_psp_urb_cbs(struct brw_context *brw )
@@ -176,7 +172,7 @@ brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
 
       if (intel_miptree_level_has_hiz(depth_mt, depth_level)) {
          uint32_t hiz_tile_mask_x, hiz_tile_mask_y;
-         intel_miptree_get_tile_masks(depth_mt->hiz_mt,
+         intel_miptree_get_tile_masks(depth_mt->hiz_buf->mt,
                                       &hiz_tile_mask_x, &hiz_tile_mask_y,
                                       false);
 
@@ -581,7 +577,6 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
     * non-pipelined state that will need the PIPE_CONTROL workaround.
     */
    if (brw->gen == 6) {
-      intel_emit_post_sync_nonzero_flush(brw);
       intel_emit_depth_stall_flushes(brw);
    }
 
@@ -637,7 +632,7 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
 
       /* Emit hiz buffer. */
       if (hiz) {
-         struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_mt;
+         struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_buf->mt;
 	 BEGIN_BATCH(3);
 	 OUT_BATCH((_3DSTATE_HIER_DEPTH_BUFFER << 16) | (3 - 2));
 	 OUT_BATCH(hiz_mt->pitch - 1);
@@ -685,9 +680,6 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
     *     when HiZ is enabled and the DEPTH_BUFFER_STATE changes.
     */
    if (brw->gen >= 6 || hiz) {
-      if (brw->gen == 6)
-	 intel_emit_post_sync_nonzero_flush(brw);
-
       BEGIN_BATCH(2);
       OUT_BATCH(_3DSTATE_CLEAR_PARAMS << 16 |
 		GEN5_DEPTH_CLEAR_VALID |
@@ -719,9 +711,6 @@ static void upload_polygon_stipple(struct brw_context *brw)
    /* _NEW_POLYGON */
    if (!ctx->Polygon.StippleFlag)
       return;
-
-   if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
 
    BEGIN_BATCH(33);
    OUT_BATCH(_3DSTATE_POLY_STIPPLE_PATTERN << 16 | (33 - 2));
@@ -766,9 +755,6 @@ static void upload_polygon_stipple_offset(struct brw_context *brw)
    if (!ctx->Polygon.StippleFlag)
       return;
 
-   if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
-
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_POLY_STIPPLE_OFFSET << 16 | (2-2));
 
@@ -810,9 +796,6 @@ static void upload_aa_line_parameters(struct brw_context *brw)
    if (brw->gen == 4 && !brw->is_g4x)
       return;
 
-   if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
-
    BEGIN_BATCH(3);
    OUT_BATCH(_3DSTATE_AA_LINE_PARAMETERS << 16 | (3 - 2));
    /* use legacy aa line coverage computation */
@@ -841,9 +824,6 @@ static void upload_line_stipple(struct brw_context *brw)
 
    if (!ctx->Line.StippleFlag)
       return;
-
-   if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
 
    BEGIN_BATCH(3);
    OUT_BATCH(_3DSTATE_LINE_STIPPLE_PATTERN << 16 | (3 - 2));
@@ -874,6 +854,22 @@ const struct brw_tracked_state brw_line_stipple = {
 };
 
 
+void
+brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
+{
+   const bool is_965 = brw->gen == 4 && !brw->is_g4x;
+   const uint32_t _3DSTATE_PIPELINE_SELECT =
+      is_965 ? CMD_PIPELINE_SELECT_965 : CMD_PIPELINE_SELECT_GM45;
+
+   /* Select the pipeline */
+   BEGIN_BATCH(1);
+   OUT_BATCH(_3DSTATE_PIPELINE_SELECT << 16 |
+             (brw->gen >= 9 ? (3 << 8) : 0) |
+             (pipeline == BRW_COMPUTE_PIPELINE ? 2 : 0));
+   ADVANCE_BATCH();
+}
+
+
 /***********************************************************************
  * Misc invariant state packets
  */
@@ -883,16 +879,7 @@ brw_upload_invariant_state(struct brw_context *brw)
 {
    const bool is_965 = brw->gen == 4 && !brw->is_g4x;
 
-   /* 3DSTATE_SIP, 3DSTATE_MULTISAMPLE, etc. are nonpipelined. */
-   if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
-
-   /* Select the 3D pipeline (as opposed to media) */
-   const uint32_t _3DSTATE_PIPELINE_SELECT =
-      is_965 ? CMD_PIPELINE_SELECT_965 : CMD_PIPELINE_SELECT_GM45;
-   BEGIN_BATCH(1);
-   OUT_BATCH(_3DSTATE_PIPELINE_SELECT << 16 | (brw->gen >= 9 ? (3 << 8) : 0));
-   ADVANCE_BATCH();
+   brw_select_pipeline(brw, BRW_RENDER_PIPELINE);
 
    if (brw->gen < 6) {
       /* Disable depth offset clamping. */
@@ -953,9 +940,6 @@ static void upload_state_base_address( struct brw_context *brw )
 
    if (brw->gen >= 6) {
       uint8_t mocs = brw->gen == 7 ? GEN7_MOCS_L3 : 0;
-
-      if (brw->gen == 6)
-	 intel_emit_post_sync_nonzero_flush(brw);
 
        BEGIN_BATCH(10);
        OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (10 - 2));
@@ -1041,7 +1025,7 @@ static void upload_state_base_address( struct brw_context *brw )
     * obvious.
     */
 
-   brw->state.dirty.brw |= BRW_NEW_STATE_BASE_ADDRESS;
+   brw->ctx.NewDriverState |= BRW_NEW_STATE_BASE_ADDRESS;
 }
 
 const struct brw_tracked_state brw_state_base_address = {

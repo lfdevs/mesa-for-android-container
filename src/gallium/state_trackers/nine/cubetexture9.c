@@ -20,6 +20,8 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include "c99_alloca.h"
+
 #include "device9.h"
 #include "cubetexture9.h"
 #include "nine_helpers.h"
@@ -40,8 +42,10 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
     struct pipe_resource *info = &This->base.base.info;
     struct pipe_screen *screen = pParams->device->screen;
     enum pipe_format pf;
-    unsigned i;
+    unsigned i, l, f, offset, face_size = 0;
+    unsigned *level_offsets;
     D3DSURFACE_DESC sfdesc;
+    void *p;
     HRESULT hr;
 
     DBG("This=%p pParams=%p EdgeLength=%u Levels=%u Usage=%d "
@@ -93,6 +97,19 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
             PIPE_BIND_TRANSFER_READ |
             PIPE_BIND_TRANSFER_WRITE;
     }
+    if (Usage & D3DUSAGE_SOFTWAREPROCESSING)
+        DBG("Application asked for Software Vertex Processing, "
+            "but this is unimplemented\n");
+
+    if (Pool != D3DPOOL_DEFAULT) {
+        level_offsets = alloca(sizeof(unsigned) * (info->last_level + 1));
+        face_size = nine_format_get_size_and_offsets(pf, level_offsets,
+                                                     EdgeLength, EdgeLength,
+                                                     info->last_level);
+        This->managed_buffer = MALLOC(6 * face_size);
+        if (!This->managed_buffer)
+            return E_OUTOFMEMORY;
+    }
 
     This->surfaces = CALLOC(6 * (info->last_level + 1), sizeof(*This->surfaces));
     if (!This->surfaces)
@@ -114,16 +131,25 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
     sfdesc.Pool = Pool;
     sfdesc.MultiSampleType = D3DMULTISAMPLE_NONE;
     sfdesc.MultiSampleQuality = 0;
-    for (i = 0; i < (info->last_level + 1) * 6; ++i) {
-        sfdesc.Width = sfdesc.Height = u_minify(EdgeLength, i / 6);
+    /* We allocate the memory for the surfaces as continous blocks.
+     * This is the expected behaviour, however we haven't tested for
+     * cube textures in which order the faces/levels should be in memory
+     */
+    for (f = 0; f < 6; f++) {
+        offset = f * face_size;
+        for (l = 0; l <= info->last_level; l++) {
+            sfdesc.Width = sfdesc.Height = u_minify(EdgeLength, l);
+            p = This->managed_buffer ? This->managed_buffer + offset +
+                    level_offsets[l] : NULL;
 
-        hr = NineSurface9_new(This->base.base.base.device, NineUnknown(This),
-                              This->base.base.resource, NULL, D3DRTYPE_CUBETEXTURE,
-                              i / 6, i % 6,
-                              &sfdesc, &This->surfaces[i]);
-        if (FAILED(hr))
-            return hr;
+            hr = NineSurface9_new(This->base.base.base.device, NineUnknown(This),
+                                  This->base.base.resource, p, D3DRTYPE_CUBETEXTURE,
+                                  l, f, &sfdesc, &This->surfaces[f + 6 * l]);
+            if (FAILED(hr))
+                return hr;
+        }
     }
+
     for (i = 0; i < 6; ++i) /* width = 0 means empty, depth stays 1 */
         This->dirty_rect[i].depth = 1;
 
@@ -142,6 +168,9 @@ NineCubeTexture9_dtor( struct NineCubeTexture9 *This )
             NineUnknown_Destroy(&This->surfaces[i]->base.base);
         FREE(This->surfaces);
     }
+
+    if (This->managed_buffer)
+        FREE(This->managed_buffer);
 
     NineBaseTexture9_dtor(&This->base);
 }
@@ -234,7 +263,7 @@ NineCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
             This->base.dirty_mip = TRUE;
         return D3D_OK;
     }
-    This->base.dirty = TRUE;
+    This->base.managed.dirty = TRUE;
 
     BASETEX_REGISTER_UPDATE(&This->base);
 
@@ -247,6 +276,10 @@ NineCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
         rect_to_pipe_box_clamp(&box, pDirtyRect);
         u_box_union_2d(&This->dirty_rect[FaceType], &This->dirty_rect[FaceType],
                        &box);
+        (void) u_box_clip_2d(&This->dirty_rect[FaceType],
+                             &This->dirty_rect[FaceType],
+                             This->base.base.info.width0,
+                             This->base.base.info.height0);
     }
     return D3D_OK;
 }

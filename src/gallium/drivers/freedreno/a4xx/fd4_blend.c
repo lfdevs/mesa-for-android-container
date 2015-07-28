@@ -115,7 +115,7 @@ fd4_blend_state_create(struct pipe_context *pctx,
 					A4XX_RB_MRT_CONTROL_READ_DEST_ENABLE |
 					A4XX_RB_MRT_CONTROL_BLEND |
 					A4XX_RB_MRT_CONTROL_BLEND2;
-			so->rb_fs_output |= A4XX_RB_FS_OUTPUT_ENABLE_BLEND;
+			so->rb_fs_output |= A4XX_RB_FS_OUTPUT_ENABLE_BLEND(1);
 		}
 
 		if (reads_dest)

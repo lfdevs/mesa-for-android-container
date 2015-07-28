@@ -3,7 +3,7 @@
 #define __NV50_RESOURCE_H__
 
 #include "util/u_transfer.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #include "nouveau_winsys.h"
 #include "nouveau_buffer.h"

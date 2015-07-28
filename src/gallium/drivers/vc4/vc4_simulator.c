@@ -65,7 +65,7 @@ drm_gem_cma_create(struct drm_device *dev, size_t size)
 }
 
 static int
-vc4_simulator_pin_bos(struct drm_device *dev, struct exec_info *exec)
+vc4_simulator_pin_bos(struct drm_device *dev, struct vc4_exec_info *exec)
 {
         struct drm_vc4_submit_cl *args = exec->args;
         struct vc4_context *vc4 = dev->vc4;
@@ -90,7 +90,7 @@ vc4_simulator_pin_bos(struct drm_device *dev, struct exec_info *exec)
 }
 
 static int
-vc4_simulator_unpin_bos(struct exec_info *exec)
+vc4_simulator_unpin_bos(struct vc4_exec_info *exec)
 {
         for (int i = 0; i < exec->bo_count; i++) {
                 struct drm_gem_cma_object *obj = exec->bo[i].bo;
@@ -115,7 +115,7 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
         uint32_t winsys_stride = ctex ? ctex->bo->simulator_winsys_stride : 0;
         uint32_t sim_stride = ctex ? ctex->slices[0].stride : 0;
         uint32_t row_len = MIN2(sim_stride, winsys_stride);
-        struct exec_info exec;
+        struct vc4_exec_info exec;
         struct drm_device local_dev = {
                 .vc4 = vc4,
                 .simulator_mem_next = OVERFLOW_SIZE,
@@ -151,14 +151,16 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
         if (ret)
                 return ret;
 
-        int bfc = simpenrose_do_binning(exec.ct0ca, exec.ct0ea);
-        if (bfc != 1) {
-                fprintf(stderr, "Binning returned %d flushes, should be 1.\n",
-                        bfc);
-                fprintf(stderr, "Relocated binning command list:\n");
-                vc4_dump_cl(screen->simulator_mem_base + exec.ct0ca,
-                            exec.ct0ea - exec.ct0ca, false);
-                abort();
+        if (exec.ct0ca != exec.ct0ea) {
+                int bfc = simpenrose_do_binning(exec.ct0ca, exec.ct0ea);
+                if (bfc != 1) {
+                        fprintf(stderr, "Binning returned %d flushes, should be 1.\n",
+                                bfc);
+                        fprintf(stderr, "Relocated binning command list:\n");
+                        vc4_dump_cl(screen->simulator_mem_base + exec.ct0ca,
+                                    exec.ct0ea - exec.ct0ca, false);
+                        abort();
+                }
         }
         int rfc = simpenrose_do_rendering(exec.ct1ca, exec.ct1ea);
         if (rfc != 1) {

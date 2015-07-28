@@ -47,7 +47,7 @@
 
 
 /** Check if we have a front color buffer and if it's been drawn to. */
-static INLINE GLboolean
+static inline GLboolean
 is_front_buffer_dirty(struct st_context *st)
 {
    struct gl_framebuffer *fb = st->ctx->DrawBuffer;
@@ -141,10 +141,43 @@ static void st_glFinish(struct gl_context *ctx)
 }
 
 
-void st_init_flush_functions(struct dd_function_table *functions)
+/**
+ * Query information about GPU resets observed by this context
+ *
+ * Called via \c dd_function_table::GetGraphicsResetStatus.
+ */
+static GLenum
+st_get_graphics_reset_status(struct gl_context *ctx)
+{
+   struct st_context *st = st_context(ctx);
+   enum pipe_reset_status status;
+
+   status = st->pipe->get_device_reset_status(st->pipe);
+
+   switch (status) {
+   case PIPE_NO_RESET:
+      return GL_NO_ERROR;
+   case PIPE_GUILTY_CONTEXT_RESET:
+      return GL_GUILTY_CONTEXT_RESET_ARB;
+   case PIPE_INNOCENT_CONTEXT_RESET:
+      return GL_INNOCENT_CONTEXT_RESET_ARB;
+   case PIPE_UNKNOWN_CONTEXT_RESET:
+      return GL_UNKNOWN_CONTEXT_RESET_ARB;
+   default:
+      assert(0);
+      return GL_NO_ERROR;
+   }
+}
+
+
+void st_init_flush_functions(struct pipe_screen *screen,
+                             struct dd_function_table *functions)
 {
    functions->Flush = st_glFlush;
    functions->Finish = st_glFinish;
+
+   if (screen->get_param(screen, PIPE_CAP_DEVICE_RESET_STATUS_QUERY))
+      functions->GetGraphicsResetStatus = st_get_graphics_reset_status;
 
    /* Windows opengl32.dll calls glFinish prior to every swapbuffers.
     * This is unnecessary and degrades performance.  Luckily we have some
@@ -152,7 +185,7 @@ void st_init_flush_functions(struct dd_function_table *functions)
     * Finish() is identical to Flush() in all cases - no differences in
     * rendering or ReadPixels are visible if we opt not to wait here.
     *
-    * Only set this up on windows to avoid suprise elsewhere.
+    * Only set this up on Windows to avoid surprise elsewhere.
     */
 #ifdef PIPE_OS_WINDOWS
    functions->Finish = st_glFlush;

@@ -175,6 +175,7 @@ enum operation
 #define NV50_IR_SUBOP_MOV_FINAL    1
 #define NV50_IR_SUBOP_EXTBF_REV    1
 #define NV50_IR_SUBOP_BFIND_SAMT   1
+#define NV50_IR_SUBOP_RCPRSQ_64H   1
 #define NV50_IR_SUBOP_PERMT_F4E    1
 #define NV50_IR_SUBOP_PERMT_B4E    2
 #define NV50_IR_SUBOP_PERMT_RC8    3

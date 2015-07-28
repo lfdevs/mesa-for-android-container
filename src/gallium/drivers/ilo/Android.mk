@@ -27,9 +27,6 @@ include $(LOCAL_PATH)/Makefile.sources
 
 include $(CLEAR_VARS)
 
-LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH)/include
-
 LOCAL_SRC_FILES := $(C_SOURCES)
 
 LOCAL_MODULE := libmesa_pipe_ilo

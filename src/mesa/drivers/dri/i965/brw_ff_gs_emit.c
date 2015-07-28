@@ -102,7 +102,7 @@ static void brw_ff_gs_alloc_regs(struct brw_ff_gs_compile *c,
  */
 static void brw_ff_gs_initialize_header(struct brw_ff_gs_compile *c)
 {
-   struct brw_compile *p = &c->func;
+   struct brw_codegen *p = &c->func;
    brw_MOV(p, c->reg.header, c->reg.R0);
 }
 
@@ -116,7 +116,7 @@ static void brw_ff_gs_initialize_header(struct brw_ff_gs_compile *c)
 static void brw_ff_gs_overwrite_header_dw2(struct brw_ff_gs_compile *c,
                                            unsigned dw2)
 {
-   struct brw_compile *p = &c->func;
+   struct brw_codegen *p = &c->func;
    brw_MOV(p, get_element_ud(c->reg.header, 2), brw_imm_ud(dw2));
 }
 
@@ -130,7 +130,7 @@ static void brw_ff_gs_overwrite_header_dw2(struct brw_ff_gs_compile *c,
  */
 static void brw_ff_gs_overwrite_header_dw2_from_r0(struct brw_ff_gs_compile *c)
 {
-   struct brw_compile *p = &c->func;
+   struct brw_codegen *p = &c->func;
    brw_AND(p, get_element_ud(c->reg.header, 2), get_element_ud(c->reg.R0, 2),
            brw_imm_ud(0x1f));
    brw_SHL(p, get_element_ud(c->reg.header, 2),
@@ -146,7 +146,7 @@ static void brw_ff_gs_overwrite_header_dw2_from_r0(struct brw_ff_gs_compile *c)
 static void brw_ff_gs_offset_header_dw2(struct brw_ff_gs_compile *c,
                                         int offset)
 {
-   struct brw_compile *p = &c->func;
+   struct brw_codegen *p = &c->func;
    brw_ADD(p, get_element_d(c->reg.header, 2), get_element_d(c->reg.header, 2),
            brw_imm_d(offset));
 }
@@ -168,7 +168,7 @@ static void brw_ff_gs_emit_vue(struct brw_ff_gs_compile *c,
                                struct brw_reg vert,
                                bool last)
 {
-   struct brw_compile *p = &c->func;
+   struct brw_codegen *p = &c->func;
    int write_offset = 0;
    bool complete = false;
 
@@ -226,7 +226,7 @@ static void brw_ff_gs_emit_vue(struct brw_ff_gs_compile *c,
  */
 static void brw_ff_gs_ff_sync(struct brw_ff_gs_compile *c, int num_prim)
 {
-   struct brw_compile *p = &c->func;
+   struct brw_codegen *p = &c->func;
 
    brw_MOV(p, get_element_ud(c->reg.header, 1), brw_imm_ud(num_prim));
    brw_ff_sync(p,
@@ -244,14 +244,12 @@ static void brw_ff_gs_ff_sync(struct brw_ff_gs_compile *c, int num_prim)
 void
 brw_ff_gs_quads(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key)
 {
-   struct brw_context *brw = c->func.brw;
-
    brw_ff_gs_alloc_regs(c, 4, false);
    brw_ff_gs_initialize_header(c);
    /* Use polygons for correct edgeflag behaviour. Note that vertex 3
     * is the PV for quads, but vertex 0 for polygons:
     */
-   if (brw->gen == 5)
+   if (c->func.devinfo->gen == 5)
       brw_ff_gs_ff_sync(c, 1);
    brw_ff_gs_overwrite_header_dw2(
       c, ((_3DPRIM_POLYGON << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -284,12 +282,10 @@ void
 brw_ff_gs_quad_strip(struct brw_ff_gs_compile *c,
                      struct brw_ff_gs_prog_key *key)
 {
-   struct brw_context *brw = c->func.brw;
-
    brw_ff_gs_alloc_regs(c, 4, false);
    brw_ff_gs_initialize_header(c);
 
-   if (brw->gen == 5)
+   if (c->func.devinfo->gen == 5)
       brw_ff_gs_ff_sync(c, 1);
    brw_ff_gs_overwrite_header_dw2(
       c, ((_3DPRIM_POLYGON << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -320,12 +316,10 @@ brw_ff_gs_quad_strip(struct brw_ff_gs_compile *c,
 
 void brw_ff_gs_lines(struct brw_ff_gs_compile *c)
 {
-   struct brw_context *brw = c->func.brw;
-
    brw_ff_gs_alloc_regs(c, 2, false);
    brw_ff_gs_initialize_header(c);
 
-   if (brw->gen == 5)
+   if (c->func.devinfo->gen == 5)
       brw_ff_gs_ff_sync(c, 1);
    brw_ff_gs_overwrite_header_dw2(
       c, ((_3DPRIM_LINESTRIP << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -345,8 +339,7 @@ void
 gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
 	         unsigned num_verts, bool check_edge_flags)
 {
-   struct brw_compile *p = &c->func;
-   struct brw_context *brw = p->brw;
+   struct brw_codegen *p = &c->func;
    brw_inst *inst;
    c->prog_data.svbi_postincrement_value = num_verts;
 
@@ -412,7 +405,7 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
          inst = brw_MOV(p, destination_indices_uw,
                         brw_imm_v(key->pv_first ? 0x00010200    /* (0, 2, 1) */
                                                 : 0x00020001)); /* (1, 0, 2) */
-         brw_inst_set_pred_control(brw, inst, BRW_PREDICATE_NORMAL);
+         brw_inst_set_pred_control(p->devinfo, inst, BRW_PREDICATE_NORMAL);
       }
       brw_ADD(p, c->reg.destination_indices,
               c->reg.destination_indices, get_element_ud(c->reg.SVBI, 0));
@@ -502,7 +495,7 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
          brw_AND(p, retype(brw_null_reg(), BRW_REGISTER_TYPE_UD),
                  get_element_ud(c->reg.R0, 2),
                  brw_imm_ud(BRW_GS_EDGE_INDICATOR_0));
-         brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
+         brw_inst_set_cond_modifier(p->devinfo, brw_last_inst, BRW_CONDITIONAL_NZ);
          brw_IF(p, BRW_EXECUTE_1);
       }
       brw_ff_gs_offset_header_dw2(c, URB_WRITE_PRIM_START);
@@ -518,7 +511,7 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
          brw_AND(p, retype(brw_null_reg(), BRW_REGISTER_TYPE_UD),
                  get_element_ud(c->reg.R0, 2),
                  brw_imm_ud(BRW_GS_EDGE_INDICATOR_1));
-         brw_inst_set_cond_modifier(brw, brw_last_inst, BRW_CONDITIONAL_NZ);
+         brw_inst_set_cond_modifier(p->devinfo, brw_last_inst, BRW_CONDITIONAL_NZ);
          brw_set_default_predicate_control(p, BRW_PREDICATE_NORMAL);
       }
       brw_ff_gs_offset_header_dw2(c, URB_WRITE_PRIM_END);

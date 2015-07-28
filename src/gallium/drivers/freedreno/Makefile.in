@@ -139,10 +139,10 @@ am__objects_4 = a4xx/fd4_blend.lo a4xx/fd4_context.lo a4xx/fd4_draw.lo \
 	a4xx/fd4_program.lo a4xx/fd4_query.lo a4xx/fd4_rasterizer.lo \
 	a4xx/fd4_screen.lo a4xx/fd4_texture.lo a4xx/fd4_zsa.lo
 am__objects_5 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler.lo \
-	ir3/ir3_compiler_old.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
+	ir3/ir3_compiler_nir.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
 	ir3/ir3_dump.lo ir3/ir3_flatten.lo ir3/ir3_group.lo \
-	ir3/ir3_legalize.lo ir3/ir3_ra.lo ir3/ir3_sched.lo \
-	ir3/ir3_shader.lo
+	ir3/ir3_legalize.lo ir3/ir3_nir_lower_if_else.lo ir3/ir3_ra.lo \
+	ir3/ir3_sched.lo ir3/ir3_shader.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4) $(am__objects_5)
 libfreedreno_la_OBJECTS = $(am_libfreedreno_la_OBJECTS)
@@ -158,6 +158,8 @@ am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 ir3_compiler_DEPENDENCIES = libfreedreno.la \
 	../../auxiliary/libgallium.la \
+	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_2) \
 	$(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -194,7 +196,26 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libfreedreno_la_SOURCES) $(ir3_compiler_SOURCES)
+CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CXXFLAGS) $(CXXFLAGS)
+AM_V_CXX = $(am__v_CXX_@AM_V@)
+am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
+am__v_CXX_0 = @echo "  CXX     " $@;
+am__v_CXX_1 = 
+CXXLD = $(CXX)
+CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
+am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
+am__v_CXXLD_0 = @echo "  CXXLD   " $@;
+am__v_CXXLD_1 = 
+SOURCES = $(libfreedreno_la_SOURCES) $(ir3_compiler_SOURCES) \
+	$(nodist_EXTRA_ir3_compiler_SOURCES)
 DIST_SOURCES = $(libfreedreno_la_SOURCES) $(ir3_compiler_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
@@ -348,6 +369,10 @@ MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
+MSVC2008_COMPAT_CFLAGS = @MSVC2008_COMPAT_CFLAGS@
+MSVC2008_COMPAT_CXXFLAGS = @MSVC2008_COMPAT_CXXFLAGS@
+MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
+MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
 NINE_TINY = @NINE_TINY@
@@ -409,7 +434,6 @@ VDPAU_MAJOR = @VDPAU_MAJOR@
 VDPAU_MINOR = @VDPAU_MINOR@
 VERSION = @VERSION@
 VG_LIB_DEPS = @VG_LIB_DEPS@
-VG_PC_LIB_PRIV = @VG_PC_LIB_PRIV@
 VISIBILITY_CFLAGS = @VISIBILITY_CFLAGS@
 VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
@@ -621,8 +645,8 @@ ir3_SOURCES := \
 	ir3/instr-a3xx.h \
 	ir3/ir3.c \
 	ir3/ir3_compiler.c \
+	ir3/ir3_compiler_nir.c \
 	ir3/ir3_compiler.h \
-	ir3/ir3_compiler_old.c \
 	ir3/ir3_cp.c \
 	ir3/ir3_depth.c \
 	ir3/ir3_dump.c \
@@ -630,6 +654,8 @@ ir3_SOURCES := \
 	ir3/ir3_group.c \
 	ir3/ir3.h \
 	ir3/ir3_legalize.c \
+	ir3/ir3_nir.h \
+	ir3/ir3_nir_lower_if_else.c \
 	ir3/ir3_ra.c \
 	ir3/ir3_sched.c \
 	ir3/ir3_shader.c \
@@ -703,6 +729,7 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 AM_CFLAGS = \
 	-Wno-packed-bitfield-compat \
 	-I$(top_srcdir)/src/gallium/drivers/freedreno/ir3 \
+	-I$(top_builddir)/src/glsl/nir \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(FREEDRENO_CFLAGS)
 
@@ -714,12 +741,17 @@ libfreedreno_la_SOURCES = \
 	$(a4xx_SOURCES) \
 	$(ir3_SOURCES)
 
+
+# XXX: Required due to the C++ sources in libnir/libglsl_util
+nodist_EXTRA_ir3_compiler_SOURCES = dummy.cpp
 ir3_compiler_SOURCES = \
 	ir3/ir3_cmdline.c
 
 ir3_compiler_LDADD = \
 	libfreedreno.la \
 	../../auxiliary/libgallium.la \
+	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS) \
 	$(FREEDRENO_LIBS)
@@ -727,7 +759,7 @@ ir3_compiler_LDADD = \
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .lo .o .obj
+.SUFFIXES: .c .cpp .lo .o .obj
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/Makefile.sources $(top_srcdir)/src/gallium/Automake.inc $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -853,7 +885,7 @@ ir3/$(DEPDIR)/$(am__dirstamp):
 ir3/disasm-a3xx.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_compiler.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
-ir3/ir3_compiler_old.lo: ir3/$(am__dirstamp) \
+ir3/ir3_compiler_nir.lo: ir3/$(am__dirstamp) \
 	ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_cp.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_depth.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
@@ -861,6 +893,8 @@ ir3/ir3_dump.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_flatten.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_group.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_legalize.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_nir_lower_if_else.lo: ir3/$(am__dirstamp) \
+	ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_ra.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_sched.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_shader.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
@@ -881,7 +915,7 @@ ir3/ir3_cmdline.$(OBJEXT): ir3/$(am__dirstamp) \
 
 ir3_compiler$(EXEEXT): $(ir3_compiler_OBJECTS) $(ir3_compiler_DEPENDENCIES) $(EXTRA_ir3_compiler_DEPENDENCIES) 
 	@rm -f ir3_compiler$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(ir3_compiler_OBJECTS) $(ir3_compiler_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(ir3_compiler_OBJECTS) $(ir3_compiler_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -897,6 +931,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_fence.Plo@am__quote@
@@ -953,13 +988,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cmdline.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler_old.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_depth.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_flatten.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_group.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_legalize.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir_lower_if_else.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_ra.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_sched.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_shader.Plo@am__quote@
@@ -987,6 +1023,30 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+.cpp.o:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
+
+.cpp.obj:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.cpp.lo:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
 
 mostlyclean-libtool:
 	-rm -f *.lo

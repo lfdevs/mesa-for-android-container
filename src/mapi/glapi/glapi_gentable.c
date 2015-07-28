@@ -11722,17 +11722,6 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
-    if(!disp->FramebufferTextureFaceARB) {
-        void ** procp = (void **) &disp->FramebufferTextureFaceARB;
-        snprintf(symboln, sizeof(symboln), "%sFramebufferTextureFaceARB", symbol_prefix);
-#ifdef _WIN32
-        *procp = GetProcAddress(handle, symboln);
-#else
-        *procp = dlsym(handle, symboln);
-#endif
-    }
-
-
     if(!disp->FlushMappedBufferRange) {
         void ** procp = (void **) &disp->FlushMappedBufferRange;
         snprintf(symboln, sizeof(symboln), "%sFlushMappedBufferRange", symbol_prefix);
@@ -12965,6 +12954,204 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->GetUniformdv) {
+        void ** procp = (void **) &disp->GetUniformdv;
+        snprintf(symboln, sizeof(symboln), "%sGetUniformdv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform1d) {
+        void ** procp = (void **) &disp->Uniform1d;
+        snprintf(symboln, sizeof(symboln), "%sUniform1d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform1dv) {
+        void ** procp = (void **) &disp->Uniform1dv;
+        snprintf(symboln, sizeof(symboln), "%sUniform1dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform2d) {
+        void ** procp = (void **) &disp->Uniform2d;
+        snprintf(symboln, sizeof(symboln), "%sUniform2d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform2dv) {
+        void ** procp = (void **) &disp->Uniform2dv;
+        snprintf(symboln, sizeof(symboln), "%sUniform2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform3d) {
+        void ** procp = (void **) &disp->Uniform3d;
+        snprintf(symboln, sizeof(symboln), "%sUniform3d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform3dv) {
+        void ** procp = (void **) &disp->Uniform3dv;
+        snprintf(symboln, sizeof(symboln), "%sUniform3dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform4d) {
+        void ** procp = (void **) &disp->Uniform4d;
+        snprintf(symboln, sizeof(symboln), "%sUniform4d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->Uniform4dv) {
+        void ** procp = (void **) &disp->Uniform4dv;
+        snprintf(symboln, sizeof(symboln), "%sUniform4dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix2dv) {
+        void ** procp = (void **) &disp->UniformMatrix2dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix2x3dv) {
+        void ** procp = (void **) &disp->UniformMatrix2x3dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix2x3dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix2x4dv) {
+        void ** procp = (void **) &disp->UniformMatrix2x4dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix2x4dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix3dv) {
+        void ** procp = (void **) &disp->UniformMatrix3dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix3dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix3x2dv) {
+        void ** procp = (void **) &disp->UniformMatrix3x2dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix3x2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix3x4dv) {
+        void ** procp = (void **) &disp->UniformMatrix3x4dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix3x4dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix4dv) {
+        void ** procp = (void **) &disp->UniformMatrix4dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix4dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix4x2dv) {
+        void ** procp = (void **) &disp->UniformMatrix4x2dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix4x2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UniformMatrix4x3dv) {
+        void ** procp = (void **) &disp->UniformMatrix4x3dv;
+        snprintf(symboln, sizeof(symboln), "%sUniformMatrix4x3dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->BindTransformFeedback) {
         void ** procp = (void **) &disp->BindTransformFeedback;
         snprintf(symboln, sizeof(symboln), "%sBindTransformFeedback", symbol_prefix);
@@ -13232,6 +13419,116 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->ProgramParameteri) {
         void ** procp = (void **) &disp->ProgramParameteri;
         snprintf(symboln, sizeof(symboln), "%sProgramParameteriEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetVertexAttribLdv) {
+        void ** procp = (void **) &disp->GetVertexAttribLdv;
+        snprintf(symboln, sizeof(symboln), "%sGetVertexAttribLdv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL1d) {
+        void ** procp = (void **) &disp->VertexAttribL1d;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL1d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL1dv) {
+        void ** procp = (void **) &disp->VertexAttribL1dv;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL1dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL2d) {
+        void ** procp = (void **) &disp->VertexAttribL2d;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL2d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL2dv) {
+        void ** procp = (void **) &disp->VertexAttribL2dv;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL3d) {
+        void ** procp = (void **) &disp->VertexAttribL3d;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL3d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL3dv) {
+        void ** procp = (void **) &disp->VertexAttribL3dv;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL3dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL4d) {
+        void ** procp = (void **) &disp->VertexAttribL4d;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL4d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribL4dv) {
+        void ** procp = (void **) &disp->VertexAttribL4dv;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribL4dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexAttribLPointer) {
+        void ** procp = (void **) &disp->VertexAttribLPointer;
+        snprintf(symboln, sizeof(symboln), "%sVertexAttribLPointer", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -13889,6 +14186,72 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->GetProgramInterfaceiv) {
+        void ** procp = (void **) &disp->GetProgramInterfaceiv;
+        snprintf(symboln, sizeof(symboln), "%sGetProgramInterfaceiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetProgramResourceIndex) {
+        void ** procp = (void **) &disp->GetProgramResourceIndex;
+        snprintf(symboln, sizeof(symboln), "%sGetProgramResourceIndex", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetProgramResourceLocation) {
+        void ** procp = (void **) &disp->GetProgramResourceLocation;
+        snprintf(symboln, sizeof(symboln), "%sGetProgramResourceLocation", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetProgramResourceLocationIndex) {
+        void ** procp = (void **) &disp->GetProgramResourceLocationIndex;
+        snprintf(symboln, sizeof(symboln), "%sGetProgramResourceLocationIndex", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetProgramResourceName) {
+        void ** procp = (void **) &disp->GetProgramResourceName;
+        snprintf(symboln, sizeof(symboln), "%sGetProgramResourceName", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetProgramResourceiv) {
+        void ** procp = (void **) &disp->GetProgramResourceiv;
+        snprintf(symboln, sizeof(symboln), "%sGetProgramResourceiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->TexBufferRange) {
         void ** procp = (void **) &disp->TexBufferRange;
         snprintf(symboln, sizeof(symboln), "%sTexBufferRange", symbol_prefix);
@@ -14043,6 +14406,94 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->BlitNamedFramebuffer) {
+        void ** procp = (void **) &disp->BlitNamedFramebuffer;
+        snprintf(symboln, sizeof(symboln), "%sBlitNamedFramebuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CheckNamedFramebufferStatus) {
+        void ** procp = (void **) &disp->CheckNamedFramebufferStatus;
+        snprintf(symboln, sizeof(symboln), "%sCheckNamedFramebufferStatus", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ClearNamedBufferData) {
+        void ** procp = (void **) &disp->ClearNamedBufferData;
+        snprintf(symboln, sizeof(symboln), "%sClearNamedBufferData", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ClearNamedBufferSubData) {
+        void ** procp = (void **) &disp->ClearNamedBufferSubData;
+        snprintf(symboln, sizeof(symboln), "%sClearNamedBufferSubData", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ClearNamedFramebufferfi) {
+        void ** procp = (void **) &disp->ClearNamedFramebufferfi;
+        snprintf(symboln, sizeof(symboln), "%sClearNamedFramebufferfi", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ClearNamedFramebufferfv) {
+        void ** procp = (void **) &disp->ClearNamedFramebufferfv;
+        snprintf(symboln, sizeof(symboln), "%sClearNamedFramebufferfv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ClearNamedFramebufferiv) {
+        void ** procp = (void **) &disp->ClearNamedFramebufferiv;
+        snprintf(symboln, sizeof(symboln), "%sClearNamedFramebufferiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ClearNamedFramebufferuiv) {
+        void ** procp = (void **) &disp->ClearNamedFramebufferuiv;
+        snprintf(symboln, sizeof(symboln), "%sClearNamedFramebufferuiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->CompressedTextureSubImage1D) {
         void ** procp = (void **) &disp->CompressedTextureSubImage1D;
         snprintf(symboln, sizeof(symboln), "%sCompressedTextureSubImage1D", symbol_prefix);
@@ -14068,6 +14519,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->CompressedTextureSubImage3D) {
         void ** procp = (void **) &disp->CompressedTextureSubImage3D;
         snprintf(symboln, sizeof(symboln), "%sCompressedTextureSubImage3D", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CopyNamedBufferSubData) {
+        void ** procp = (void **) &disp->CopyNamedBufferSubData;
+        snprintf(symboln, sizeof(symboln), "%sCopyNamedBufferSubData", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -14109,9 +14571,130 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->CreateBuffers) {
+        void ** procp = (void **) &disp->CreateBuffers;
+        snprintf(symboln, sizeof(symboln), "%sCreateBuffers", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CreateFramebuffers) {
+        void ** procp = (void **) &disp->CreateFramebuffers;
+        snprintf(symboln, sizeof(symboln), "%sCreateFramebuffers", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CreateProgramPipelines) {
+        void ** procp = (void **) &disp->CreateProgramPipelines;
+        snprintf(symboln, sizeof(symboln), "%sCreateProgramPipelines", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CreateQueries) {
+        void ** procp = (void **) &disp->CreateQueries;
+        snprintf(symboln, sizeof(symboln), "%sCreateQueries", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CreateRenderbuffers) {
+        void ** procp = (void **) &disp->CreateRenderbuffers;
+        snprintf(symboln, sizeof(symboln), "%sCreateRenderbuffers", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CreateSamplers) {
+        void ** procp = (void **) &disp->CreateSamplers;
+        snprintf(symboln, sizeof(symboln), "%sCreateSamplers", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->CreateTextures) {
         void ** procp = (void **) &disp->CreateTextures;
         snprintf(symboln, sizeof(symboln), "%sCreateTextures", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CreateTransformFeedbacks) {
+        void ** procp = (void **) &disp->CreateTransformFeedbacks;
+        snprintf(symboln, sizeof(symboln), "%sCreateTransformFeedbacks", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->CreateVertexArrays) {
+        void ** procp = (void **) &disp->CreateVertexArrays;
+        snprintf(symboln, sizeof(symboln), "%sCreateVertexArrays", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->DisableVertexArrayAttrib) {
+        void ** procp = (void **) &disp->DisableVertexArrayAttrib;
+        snprintf(symboln, sizeof(symboln), "%sDisableVertexArrayAttrib", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->EnableVertexArrayAttrib) {
+        void ** procp = (void **) &disp->EnableVertexArrayAttrib;
+        snprintf(symboln, sizeof(symboln), "%sEnableVertexArrayAttrib", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->FlushMappedNamedBufferRange) {
+        void ** procp = (void **) &disp->FlushMappedNamedBufferRange;
+        snprintf(symboln, sizeof(symboln), "%sFlushMappedNamedBufferRange", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -14134,6 +14717,127 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->GetCompressedTextureImage) {
         void ** procp = (void **) &disp->GetCompressedTextureImage;
         snprintf(symboln, sizeof(symboln), "%sGetCompressedTextureImage", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetNamedBufferParameteri64v) {
+        void ** procp = (void **) &disp->GetNamedBufferParameteri64v;
+        snprintf(symboln, sizeof(symboln), "%sGetNamedBufferParameteri64v", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetNamedBufferParameteriv) {
+        void ** procp = (void **) &disp->GetNamedBufferParameteriv;
+        snprintf(symboln, sizeof(symboln), "%sGetNamedBufferParameteriv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetNamedBufferPointerv) {
+        void ** procp = (void **) &disp->GetNamedBufferPointerv;
+        snprintf(symboln, sizeof(symboln), "%sGetNamedBufferPointerv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetNamedBufferSubData) {
+        void ** procp = (void **) &disp->GetNamedBufferSubData;
+        snprintf(symboln, sizeof(symboln), "%sGetNamedBufferSubData", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetNamedFramebufferAttachmentParameteriv) {
+        void ** procp = (void **) &disp->GetNamedFramebufferAttachmentParameteriv;
+        snprintf(symboln, sizeof(symboln), "%sGetNamedFramebufferAttachmentParameteriv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetNamedFramebufferParameteriv) {
+        void ** procp = (void **) &disp->GetNamedFramebufferParameteriv;
+        snprintf(symboln, sizeof(symboln), "%sGetNamedFramebufferParameteriv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetNamedRenderbufferParameteriv) {
+        void ** procp = (void **) &disp->GetNamedRenderbufferParameteriv;
+        snprintf(symboln, sizeof(symboln), "%sGetNamedRenderbufferParameteriv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetQueryBufferObjecti64v) {
+        void ** procp = (void **) &disp->GetQueryBufferObjecti64v;
+        snprintf(symboln, sizeof(symboln), "%sGetQueryBufferObjecti64v", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetQueryBufferObjectiv) {
+        void ** procp = (void **) &disp->GetQueryBufferObjectiv;
+        snprintf(symboln, sizeof(symboln), "%sGetQueryBufferObjectiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetQueryBufferObjectui64v) {
+        void ** procp = (void **) &disp->GetQueryBufferObjectui64v;
+        snprintf(symboln, sizeof(symboln), "%sGetQueryBufferObjectui64v", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetQueryBufferObjectuiv) {
+        void ** procp = (void **) &disp->GetQueryBufferObjectuiv;
+        snprintf(symboln, sizeof(symboln), "%sGetQueryBufferObjectuiv", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -14219,9 +14923,262 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->GetTransformFeedbacki64_v) {
+        void ** procp = (void **) &disp->GetTransformFeedbacki64_v;
+        snprintf(symboln, sizeof(symboln), "%sGetTransformFeedbacki64_v", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetTransformFeedbacki_v) {
+        void ** procp = (void **) &disp->GetTransformFeedbacki_v;
+        snprintf(symboln, sizeof(symboln), "%sGetTransformFeedbacki_v", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetTransformFeedbackiv) {
+        void ** procp = (void **) &disp->GetTransformFeedbackiv;
+        snprintf(symboln, sizeof(symboln), "%sGetTransformFeedbackiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetVertexArrayIndexed64iv) {
+        void ** procp = (void **) &disp->GetVertexArrayIndexed64iv;
+        snprintf(symboln, sizeof(symboln), "%sGetVertexArrayIndexed64iv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetVertexArrayIndexediv) {
+        void ** procp = (void **) &disp->GetVertexArrayIndexediv;
+        snprintf(symboln, sizeof(symboln), "%sGetVertexArrayIndexediv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetVertexArrayiv) {
+        void ** procp = (void **) &disp->GetVertexArrayiv;
+        snprintf(symboln, sizeof(symboln), "%sGetVertexArrayiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->InvalidateNamedFramebufferData) {
+        void ** procp = (void **) &disp->InvalidateNamedFramebufferData;
+        snprintf(symboln, sizeof(symboln), "%sInvalidateNamedFramebufferData", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->InvalidateNamedFramebufferSubData) {
+        void ** procp = (void **) &disp->InvalidateNamedFramebufferSubData;
+        snprintf(symboln, sizeof(symboln), "%sInvalidateNamedFramebufferSubData", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->MapNamedBuffer) {
+        void ** procp = (void **) &disp->MapNamedBuffer;
+        snprintf(symboln, sizeof(symboln), "%sMapNamedBuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->MapNamedBufferRange) {
+        void ** procp = (void **) &disp->MapNamedBufferRange;
+        snprintf(symboln, sizeof(symboln), "%sMapNamedBufferRange", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedBufferData) {
+        void ** procp = (void **) &disp->NamedBufferData;
+        snprintf(symboln, sizeof(symboln), "%sNamedBufferData", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedBufferStorage) {
+        void ** procp = (void **) &disp->NamedBufferStorage;
+        snprintf(symboln, sizeof(symboln), "%sNamedBufferStorage", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedBufferSubData) {
+        void ** procp = (void **) &disp->NamedBufferSubData;
+        snprintf(symboln, sizeof(symboln), "%sNamedBufferSubData", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedFramebufferDrawBuffer) {
+        void ** procp = (void **) &disp->NamedFramebufferDrawBuffer;
+        snprintf(symboln, sizeof(symboln), "%sNamedFramebufferDrawBuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedFramebufferDrawBuffers) {
+        void ** procp = (void **) &disp->NamedFramebufferDrawBuffers;
+        snprintf(symboln, sizeof(symboln), "%sNamedFramebufferDrawBuffers", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedFramebufferParameteri) {
+        void ** procp = (void **) &disp->NamedFramebufferParameteri;
+        snprintf(symboln, sizeof(symboln), "%sNamedFramebufferParameteri", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedFramebufferReadBuffer) {
+        void ** procp = (void **) &disp->NamedFramebufferReadBuffer;
+        snprintf(symboln, sizeof(symboln), "%sNamedFramebufferReadBuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedFramebufferRenderbuffer) {
+        void ** procp = (void **) &disp->NamedFramebufferRenderbuffer;
+        snprintf(symboln, sizeof(symboln), "%sNamedFramebufferRenderbuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedFramebufferTexture) {
+        void ** procp = (void **) &disp->NamedFramebufferTexture;
+        snprintf(symboln, sizeof(symboln), "%sNamedFramebufferTexture", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedFramebufferTextureLayer) {
+        void ** procp = (void **) &disp->NamedFramebufferTextureLayer;
+        snprintf(symboln, sizeof(symboln), "%sNamedFramebufferTextureLayer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedRenderbufferStorage) {
+        void ** procp = (void **) &disp->NamedRenderbufferStorage;
+        snprintf(symboln, sizeof(symboln), "%sNamedRenderbufferStorage", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->NamedRenderbufferStorageMultisample) {
+        void ** procp = (void **) &disp->NamedRenderbufferStorageMultisample;
+        snprintf(symboln, sizeof(symboln), "%sNamedRenderbufferStorageMultisample", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->TextureBuffer) {
         void ** procp = (void **) &disp->TextureBuffer;
         snprintf(symboln, sizeof(symboln), "%sTextureBuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->TextureBufferRange) {
+        void ** procp = (void **) &disp->TextureBufferRange;
+        snprintf(symboln, sizeof(symboln), "%sTextureBufferRange", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -14376,6 +15333,127 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->TextureSubImage3D) {
         void ** procp = (void **) &disp->TextureSubImage3D;
         snprintf(symboln, sizeof(symboln), "%sTextureSubImage3D", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->TransformFeedbackBufferBase) {
+        void ** procp = (void **) &disp->TransformFeedbackBufferBase;
+        snprintf(symboln, sizeof(symboln), "%sTransformFeedbackBufferBase", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->TransformFeedbackBufferRange) {
+        void ** procp = (void **) &disp->TransformFeedbackBufferRange;
+        snprintf(symboln, sizeof(symboln), "%sTransformFeedbackBufferRange", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->UnmapNamedBuffer) {
+        void ** procp = (void **) &disp->UnmapNamedBuffer;
+        snprintf(symboln, sizeof(symboln), "%sUnmapNamedBuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayAttribBinding) {
+        void ** procp = (void **) &disp->VertexArrayAttribBinding;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayAttribBinding", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayAttribFormat) {
+        void ** procp = (void **) &disp->VertexArrayAttribFormat;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayAttribFormat", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayAttribIFormat) {
+        void ** procp = (void **) &disp->VertexArrayAttribIFormat;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayAttribIFormat", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayAttribLFormat) {
+        void ** procp = (void **) &disp->VertexArrayAttribLFormat;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayAttribLFormat", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayBindingDivisor) {
+        void ** procp = (void **) &disp->VertexArrayBindingDivisor;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayBindingDivisor", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayElementBuffer) {
+        void ** procp = (void **) &disp->VertexArrayElementBuffer;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayElementBuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayVertexBuffer) {
+        void ** procp = (void **) &disp->VertexArrayVertexBuffer;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayVertexBuffer", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->VertexArrayVertexBuffers) {
+        void ** procp = (void **) &disp->VertexArrayVertexBuffers;
+        snprintf(symboln, sizeof(symboln), "%sVertexArrayVertexBuffers", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -14879,6 +15957,28 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ProgramUniform1d) {
+        void ** procp = (void **) &disp->ProgramUniform1d;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform1d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniform1dv) {
+        void ** procp = (void **) &disp->ProgramUniform1dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform1dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ProgramUniform1f) {
         void ** procp = (void **) &disp->ProgramUniform1f;
         snprintf(symboln, sizeof(symboln), "%sProgramUniform1f", symbol_prefix);
@@ -15003,6 +16103,28 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->ProgramUniform1uiv) {
         void ** procp = (void **) &disp->ProgramUniform1uiv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniform1uivEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniform2d) {
+        void ** procp = (void **) &disp->ProgramUniform2d;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform2d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniform2dv) {
+        void ** procp = (void **) &disp->ProgramUniform2dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform2dv", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -15143,6 +16265,28 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ProgramUniform3d) {
+        void ** procp = (void **) &disp->ProgramUniform3d;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform3d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniform3dv) {
+        void ** procp = (void **) &disp->ProgramUniform3dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform3dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ProgramUniform3f) {
         void ** procp = (void **) &disp->ProgramUniform3f;
         snprintf(symboln, sizeof(symboln), "%sProgramUniform3f", symbol_prefix);
@@ -15267,6 +16411,28 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->ProgramUniform3uiv) {
         void ** procp = (void **) &disp->ProgramUniform3uiv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniform3uivEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniform4d) {
+        void ** procp = (void **) &disp->ProgramUniform4d;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform4d", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniform4dv) {
+        void ** procp = (void **) &disp->ProgramUniform4dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniform4dv", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -15407,6 +16573,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ProgramUniformMatrix2dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix2dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ProgramUniformMatrix2fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix2fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix2fv", symbol_prefix);
@@ -15421,6 +16598,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->ProgramUniformMatrix2fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix2fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix2fvEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniformMatrix2x3dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix2x3dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix2x3dv", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -15451,6 +16639,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ProgramUniformMatrix2x4dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix2x4dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix2x4dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ProgramUniformMatrix2x4fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix2x4fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix2x4fv", symbol_prefix);
@@ -15465,6 +16664,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->ProgramUniformMatrix2x4fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix2x4fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix2x4fvEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniformMatrix3dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix3dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix3dv", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -15495,6 +16705,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ProgramUniformMatrix3x2dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix3x2dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix3x2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ProgramUniformMatrix3x2fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix3x2fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix3x2fv", symbol_prefix);
@@ -15509,6 +16730,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->ProgramUniformMatrix3x2fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix3x2fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix3x2fvEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniformMatrix3x4dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix3x4dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix3x4dv", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -15539,6 +16771,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ProgramUniformMatrix4dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix4dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix4dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ProgramUniformMatrix4fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix4fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix4fv", symbol_prefix);
@@ -15561,6 +16804,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ProgramUniformMatrix4x2dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix4x2dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix4x2dv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ProgramUniformMatrix4x2fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix4x2fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix4x2fv", symbol_prefix);
@@ -15575,6 +16829,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->ProgramUniformMatrix4x2fv) {
         void ** procp = (void **) &disp->ProgramUniformMatrix4x2fv;
         snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix4x2fvEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ProgramUniformMatrix4x3dv) {
+        void ** procp = (void **) &disp->ProgramUniformMatrix4x3dv;
+        snprintf(symboln, sizeof(symboln), "%sProgramUniformMatrix4x3dv", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else

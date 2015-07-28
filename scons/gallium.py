@@ -35,7 +35,7 @@ import os
 import os.path
 import re
 import subprocess
-import platform as _platform
+import platform as host_platform
 import sys
 import tempfile
 
@@ -87,6 +87,25 @@ def createInstallMethods(env):
     env.AddMethod(install_shared_library, 'InstallSharedLibrary')
 
 
+def msvc2013_compat(env):
+    if env['gcc']:
+        env.Append(CCFLAGS = [
+            '-Werror=vla',
+            '-Werror=pointer-arith',
+        ])
+
+def msvc2008_compat(env):
+    msvc2013_compat(env)
+    if env['gcc']:
+        env.Append(CFLAGS = [
+            '-Werror=declaration-after-statement',
+        ])
+
+def createMSVCCompatMethods(env):
+    env.AddMethod(msvc2013_compat, 'MSVC2013Compat')
+    env.AddMethod(msvc2008_compat, 'MSVC2008Compat')
+
+
 def num_jobs():
     try:
         return int(os.environ['NUMBER_OF_PROCESSORS'])
@@ -123,6 +142,17 @@ def check_cc(env, cc, expr, cpp_opt = '-E'):
     result = pipe.wait() == 0
 
     os.unlink(source.name)
+
+    sys.stdout.write(' %s\n' % ['no', 'yes'][int(bool(result))])
+    return result
+
+
+def check_prog(env, prog):
+    """Check whether this program exists."""
+
+    sys.stdout.write('Checking for %s ... ' % prog)
+
+    result = env.Detect(prog)
 
     sys.stdout.write(' %s\n' % ['no', 'yes'][int(bool(result))])
     return result
@@ -167,7 +197,7 @@ def generate(env):
     env['gcc'] = 0
     env['clang'] = 0
     env['msvc'] = 0
-    if _platform.system() == 'Windows':
+    if host_platform.system() == 'Windows':
         env['msvc'] = check_cc(env, 'MSVC', 'defined(_MSC_VER)', '/E')
     if not env['msvc']:
         env['gcc'] = check_cc(env, 'GCC', 'defined(__GNUC__) && !defined(__clang__)')
@@ -191,10 +221,10 @@ def generate(env):
 
     # Determine whether we are cross compiling; in particular, whether we need
     # to compile code generators with a different compiler as the target code.
-    host_platform = _platform.system().lower()
-    if host_platform.startswith('cygwin'):
-        host_platform = 'cygwin'
-    host_machine = os.environ.get('PROCESSOR_ARCHITEW6432', os.environ.get('PROCESSOR_ARCHITECTURE', _platform.machine()))
+    hosthost_platform = host_platform.system().lower()
+    if hosthost_platform.startswith('cygwin'):
+        hosthost_platform = 'cygwin'
+    host_machine = os.environ.get('PROCESSOR_ARCHITEW6432', os.environ.get('PROCESSOR_ARCHITECTURE', host_platform.machine()))
     host_machine = {
         'x86': 'x86',
         'i386': 'x86',
@@ -205,7 +235,7 @@ def generate(env):
         'AMD64': 'x86_64',
         'x86_64': 'x86_64',
     }.get(host_machine, 'generic')
-    env['crosscompile'] = platform != host_platform
+    env['crosscompile'] = platform != hosthost_platform
     if machine == 'x86_64' and host_machine != 'x86_64':
         env['crosscompile'] = True
     env['hostonly'] = False
@@ -283,6 +313,7 @@ def generate(env):
             '_SVID_SOURCE',
             '_BSD_SOURCE',
             '_GNU_SOURCE',
+            '_DEFAULT_SOURCE',
             'HAVE_PTHREAD',
             'HAVE_POSIX_MEMALIGN',
         ]
@@ -331,6 +362,7 @@ def generate(env):
                 '_SCL_SECURE_NO_WARNINGS',
                 '_SCL_SECURE_NO_DEPRECATE',
                 '_ALLOW_KEYWORD_MACROS',
+                '_HAS_EXCEPTIONS=0', # Tell C++ STL to not use exceptions
             ]
         if env['build'] in ('debug', 'checked'):
             cppdefines += ['_DEBUG']
@@ -342,6 +374,26 @@ def generate(env):
         print 'warning: Floating-point textures enabled.'
         print 'warning: Please consult docs/patents.txt with your lawyer before building Mesa.'
         cppdefines += ['TEXTURE_FLOAT_ENABLED']
+    if gcc_compat:
+        ccversion = env['CCVERSION']
+        cppdefines += [
+            'HAVE___BUILTIN_EXPECT',
+            'HAVE___BUILTIN_FFS',
+            'HAVE___BUILTIN_FFSLL',
+            'HAVE_FUNC_ATTRIBUTE_FLATTEN',
+            'HAVE_FUNC_ATTRIBUTE_UNUSED',
+            # GCC 3.0
+            'HAVE_FUNC_ATTRIBUTE_FORMAT',
+            'HAVE_FUNC_ATTRIBUTE_PACKED',
+            # GCC 3.4
+            'HAVE___BUILTIN_CTZ',
+            'HAVE___BUILTIN_POPCOUNT',
+            'HAVE___BUILTIN_POPCOUNTLL',
+            'HAVE___BUILTIN_CLZ',
+            'HAVE___BUILTIN_CLZLL',
+        ]
+        if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('4.5'):
+            cppdefines += ['HAVE___BUILTIN_UNREACHABLE']
     env.Append(CPPDEFINES = cppdefines)
 
     # C compiler options
@@ -377,8 +429,7 @@ def generate(env):
                 '-m32',
                 #'-march=pentium4',
             ]
-            if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('4.2') \
-               and platform != 'haiku':
+            if platform != 'haiku':
                 # NOTE: We need to ensure stack is realigned given that we
                 # produce shared objects, and have no control over the stack
                 # alignment policy of the application. Therefore we need
@@ -419,13 +470,6 @@ def generate(env):
             '-Wmissing-prototypes',
             '-std=gnu99',
         ]
-        if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('4.2'):
-            ccflags += [
-                '-Wpointer-arith',
-            ]
-            cflags += [
-                '-Wdeclaration-after-statement',
-            ]
     if icc:
         cflags += [
             '-std=gnu99',
@@ -462,8 +506,13 @@ def generate(env):
             ]
         ccflags += [
             '/W3', # warning level
+            '/wd4018', # signed/unsigned mismatch
+            '/wd4056', # overflow in floating-point constant arithmetic
             '/wd4244', # conversion from 'type1' to 'type2', possible loss of data
+            '/wd4267', # 'var' : conversion from 'size_t' to 'type', possible loss of data
             '/wd4305', # truncation from 'type1' to 'type2'
+            '/wd4351', # new behavior: elements of array 'array' will be default initialized
+            '/wd4756', # overflow in constant arithmetic
             '/wd4800', # forcing value to bool 'true' or 'false' (performance warning)
             '/wd4996', # disable deprecated POSIX name warnings
         ]
@@ -500,6 +549,7 @@ def generate(env):
             env.Append(CCFLAGS = [
                 '/analyze',
                 #'/analyze:log', '${TARGET.base}.xml',
+                '/wd28251', # Inconsistent annotation for function
             ])
         if env['clang']:
             # scan-build will produce more comprehensive output
@@ -584,39 +634,46 @@ def generate(env):
             env.Append(CCFLAGS = ['-fopenmp'])
             env.Append(LIBS = ['gomp'])
 
-    if gcc_compat:
-        ccversion = env['CCVERSION']
-        cppdefines += [
-            'HAVE___BUILTIN_EXPECT',
-            'HAVE___BUILTIN_FFS',
-            'HAVE___BUILTIN_FFSLL',
-            'HAVE_FUNC_ATTRIBUTE_FLATTEN',
-        ]
-        if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('3'):
-            cppdefines += [
-                'HAVE_FUNC_ATTRIBUTE_FORMAT',
-                'HAVE_FUNC_ATTRIBUTE_PACKED',
-            ]
-        if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('3.4'):
-            cppdefines += [
-                'HAVE___BUILTIN_CTZ',
-                'HAVE___BUILTIN_POPCOUNT',
-                'HAVE___BUILTIN_POPCOUNTLL',
-                'HAVE___BUILTIN_CLZ',
-                'HAVE___BUILTIN_CLZLL',
-            ]
-        if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('4.5'):
-            cppdefines += ['HAVE___BUILTIN_UNREACHABLE']
-
     # Load tools
     env.Tool('lex')
+    if env['msvc']:
+        env.Append(LEXFLAGS = [
+            # Force flex to use const keyword in prototypes, as relies on
+            # __cplusplus or __STDC__ macro to determine whether it's safe to
+            # use const keyword, but MSVC never defines __STDC__ unless we
+            # disable all MSVC extensions.
+            '-DYY_USE_CONST=',
+        ])
+        # Flex relies on __STDC_VERSION__>=199901L to decide when to include
+        # C99 inttypes.h.  We always have inttypes.h available with MSVC
+        # (either the one bundled with MSVC 2013, or the one we bundle
+        # ourselves), but we can't just define __STDC_VERSION__ without
+        # breaking stuff, as MSVC doesn't fully support C99.  There's also no
+        # way to premptively include stdint.
+        env.Append(CCFLAGS = ['-FIinttypes.h'])
+    if host_platform.system() == 'Windows':
+        # Prefer winflexbison binaries, as not only they are easier to install
+        # (no additional dependencies), but also better Windows support.
+        if check_prog(env, 'win_flex'):
+            env["LEX"] = 'win_flex'
+            env.Append(LEXFLAGS = [
+                # windows compatibility (uses <io.h> instead of <unistd.h> and
+                # _isatty, _fileno functions)
+                '--wincompat'
+            ])
+
     env.Tool('yacc')
+    if host_platform.system() == 'Windows':
+        if check_prog(env, 'win_bison'):
+            env["YACC"] = 'win_bison'
+
     if env['llvm']:
         env.Tool('llvm')
     
     # Custom builders and methods
     env.Tool('custom')
     createInstallMethods(env)
+    createMSVCCompatMethods(env)
 
     env.PkgCheckModules('X11', ['x11', 'xext', 'xdamage', 'xfixes', 'glproto >= 1.4.13'])
     env.PkgCheckModules('XCB', ['x11-xcb', 'xcb-glx >= 1.8.1', 'xcb-dri2 >= 1.8'])

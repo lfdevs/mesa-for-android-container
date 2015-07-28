@@ -26,6 +26,7 @@
 
 #include <math.h>
 #include "main/core.h"
+#include "util/rounding.h" /* for _mesa_roundeven */
 #include "nir_constant_expressions.h"
 
 #if defined(_MSC_VER) && (_MSC_VER < 1800)
@@ -66,8 +67,8 @@ pack_snorm_1x8(float x)
      * We must first cast the float to an int, because casting a negative
      * float to a uint is undefined.
      */
-   return (uint8_t) (int8_t)
-          _mesa_round_to_even(CLAMP(x, -1.0f, +1.0f) * 127.0f);
+   return (uint8_t) (int)
+          _mesa_roundevenf(CLAMP(x, -1.0f, +1.0f) * 127.0f);
 }
 
 /**
@@ -88,8 +89,8 @@ pack_snorm_1x16(float x)
      * We must first cast the float to an int, because casting a negative
      * float to a uint is undefined.
      */
-   return (uint16_t) (int16_t)
-          _mesa_round_to_even(CLAMP(x, -1.0f, +1.0f) * 32767.0f);
+   return (uint16_t) (int)
+          _mesa_roundevenf(CLAMP(x, -1.0f, +1.0f) * 32767.0f);
 }
 
 /**
@@ -143,7 +144,8 @@ pack_unorm_1x8(float x)
      *
      *       packUnorm4x8: round(clamp(c, 0, +1) * 255.0)
      */
-   return (uint8_t) _mesa_round_to_even(CLAMP(x, 0.0f, 1.0f) * 255.0f);
+   return (uint8_t) (int)
+          _mesa_roundevenf(CLAMP(x, 0.0f, 1.0f) * 255.0f);
 }
 
 /**
@@ -161,7 +163,8 @@ pack_unorm_1x16(float x)
      *
      *       packUnorm2x16: round(clamp(c, 0, +1) * 65535.0)
      */
-   return (uint16_t) _mesa_round_to_even(CLAMP(x, 0.0f, 1.0f) * 65535.0f);
+   return (uint16_t) (int)
+          _mesa_roundevenf(CLAMP(x, 0.0f, 1.0f) * 65535.0f);
 }
 
 /**
@@ -269,7 +272,7 @@ evaluate_b2i(unsigned num_components, nir_const_value *_src)
       for (unsigned _i = 0; _i < num_components; _i++) {
                bool src0 = _src[0].u[_i] != 0;
 
-            int dst = src0 ? 0 : -1;
+            int dst = src0 ? 1 : 0;
 
             _dst_val.i[_i] = dst;
       }
@@ -872,7 +875,7 @@ evaluate_f2b(unsigned num_components, nir_const_value *_src)
       for (unsigned _i = 0; _i < num_components; _i++) {
                float src0 = _src[0].f[_i];
 
-            bool dst = src0 == 0.0f;
+            bool dst = src0 != 0.0f;
 
             _dst_val.u[_i] = dst ? NIR_TRUE : NIR_FALSE;
       }
@@ -1270,22 +1273,6 @@ evaluate_fcos(unsigned num_components, nir_const_value *_src)
    return _dst_val;
 }
 static nir_const_value
-evaluate_fcos_reduced(unsigned num_components, nir_const_value *_src)
-{
-   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
-
-         
-      for (unsigned _i = 0; _i < num_components; _i++) {
-               float src0 = _src[0].f[_i];
-
-            float dst = cosf(src0);
-
-            _dst_val.f[_i] = dst;
-      }
-
-   return _dst_val;
-}
-static nir_const_value
 evaluate_fcsel(unsigned num_components, nir_const_value *_src)
 {
    nir_const_value _dst_val = { { {0, 0, 0, 0} } };
@@ -1506,22 +1493,6 @@ evaluate_feq(unsigned num_components, nir_const_value *_src)
    return _dst_val;
 }
 static nir_const_value
-evaluate_fexp(unsigned num_components, nir_const_value *_src)
-{
-   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
-
-         
-      for (unsigned _i = 0; _i < num_components; _i++) {
-               float src0 = _src[0].f[_i];
-
-            float dst = expf(src0);
-
-            _dst_val.f[_i] = dst;
-      }
-
-   return _dst_val;
-}
-static nir_const_value
 evaluate_fexp2(unsigned num_components, nir_const_value *_src)
 {
    nir_const_value _dst_val = { { {0, 0, 0, 0} } };
@@ -1625,22 +1596,6 @@ for (unsigned bit = 0; bit < 32; bit++) {
 
 
             _dst_val.i[_i] = dst;
-      }
-
-   return _dst_val;
-}
-static nir_const_value
-evaluate_flog(unsigned num_components, nir_const_value *_src)
-{
-   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
-
-         
-      for (unsigned _i = 0; _i < num_components; _i++) {
-               float src0 = _src[0].f[_i];
-
-            float dst = logf(src0);
-
-            _dst_val.f[_i] = dst;
       }
 
    return _dst_val;
@@ -2136,7 +2091,7 @@ evaluate_fround_even(unsigned num_components, nir_const_value *_src)
       for (unsigned _i = 0; _i < num_components; _i++) {
                float src0 = _src[0].f[_i];
 
-            float dst = _mesa_round_to_even(src0);
+            float dst = _mesa_roundevenf(src0);
 
             _dst_val.f[_i] = dst;
       }
@@ -2193,22 +2148,6 @@ evaluate_fsign(unsigned num_components, nir_const_value *_src)
 }
 static nir_const_value
 evaluate_fsin(unsigned num_components, nir_const_value *_src)
-{
-   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
-
-         
-      for (unsigned _i = 0; _i < num_components; _i++) {
-               float src0 = _src[0].f[_i];
-
-            float dst = sinf(src0);
-
-            _dst_val.f[_i] = dst;
-      }
-
-   return _dst_val;
-}
-static nir_const_value
-evaluate_fsin_reduced(unsigned num_components, nir_const_value *_src)
 {
    nir_const_value _dst_val = { { {0, 0, 0, 0} } };
 
@@ -2298,7 +2237,7 @@ evaluate_i2b(unsigned num_components, nir_const_value *_src)
       for (unsigned _i = 0; _i < num_components; _i++) {
                int src0 = _src[0].i[_i];
 
-            bool dst = src0 == 0;
+            bool dst = src0 != 0;
 
             _dst_val.u[_i] = dst ? NIR_TRUE : NIR_FALSE;
       }
@@ -3654,10 +3593,6 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_fcos(num_components, src);
       break;
    }
-   case nir_op_fcos_reduced: {
-      return evaluate_fcos_reduced(num_components, src);
-      break;
-   }
    case nir_op_fcsel: {
       return evaluate_fcsel(num_components, src);
       break;
@@ -3706,10 +3641,6 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_feq(num_components, src);
       break;
    }
-   case nir_op_fexp: {
-      return evaluate_fexp(num_components, src);
-      break;
-   }
    case nir_op_fexp2: {
       return evaluate_fexp2(num_components, src);
       break;
@@ -3732,10 +3663,6 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
    }
    case nir_op_find_lsb: {
       return evaluate_find_lsb(num_components, src);
-      break;
-   }
-   case nir_op_flog: {
-      return evaluate_flog(num_components, src);
       break;
    }
    case nir_op_flog2: {
@@ -3876,10 +3803,6 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
    }
    case nir_op_fsin: {
       return evaluate_fsin(num_components, src);
-      break;
-   }
-   case nir_op_fsin_reduced: {
-      return evaluate_fsin_reduced(num_components, src);
       break;
    }
    case nir_op_fsqrt: {

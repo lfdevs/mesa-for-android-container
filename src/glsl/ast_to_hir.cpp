@@ -172,6 +172,7 @@ get_conversion_operation(const glsl_type *to, const glsl_type *from,
       switch (from->base_type) {
       case GLSL_TYPE_INT: return ir_unop_i2f;
       case GLSL_TYPE_UINT: return ir_unop_u2f;
+      case GLSL_TYPE_DOUBLE: return ir_unop_d2f;
       default: return (ir_expression_operation)0;
       }
 
@@ -181,6 +182,16 @@ get_conversion_operation(const glsl_type *to, const glsl_type *from,
       switch (from->base_type) {
          case GLSL_TYPE_INT: return ir_unop_i2u;
          default: return (ir_expression_operation)0;
+      }
+
+   case GLSL_TYPE_DOUBLE:
+      if (!state->has_double())
+         return (ir_expression_operation)0;
+      switch (from->base_type) {
+      case GLSL_TYPE_INT: return ir_unop_i2d;
+      case GLSL_TYPE_UINT: return ir_unop_u2d;
+      case GLSL_TYPE_FLOAT: return ir_unop_f2d;
+      default: return (ir_expression_operation)0;
       }
 
    default: return (ir_expression_operation)0;
@@ -340,8 +351,10 @@ arithmetic_result_type(ir_rvalue * &value_a, ir_rvalue * &value_b,
     * type of both operands must be float.
     */
    assert(type_a->is_matrix() || type_b->is_matrix());
-   assert(type_a->base_type == GLSL_TYPE_FLOAT);
-   assert(type_b->base_type == GLSL_TYPE_FLOAT);
+   assert(type_a->base_type == GLSL_TYPE_FLOAT ||
+          type_a->base_type == GLSL_TYPE_DOUBLE);
+   assert(type_b->base_type == GLSL_TYPE_FLOAT ||
+          type_b->base_type == GLSL_TYPE_DOUBLE);
 
    /*   "* The operator is add (+), subtract (-), or divide (/), and the
     *      operands are matrices with the same number of rows and the same
@@ -362,66 +375,14 @@ arithmetic_result_type(ir_rvalue * &value_a, ir_rvalue * &value_b,
       if (type_a == type_b)
          return type_a;
    } else {
-      if (type_a->is_matrix() && type_b->is_matrix()) {
-         /* Matrix multiply.  The columns of A must match the rows of B.  Given
-          * the other previously tested constraints, this means the vector type
-          * of a row from A must be the same as the vector type of a column from
-          * B.
-          */
-         if (type_a->row_type() == type_b->column_type()) {
-            /* The resulting matrix has the number of columns of matrix B and
-             * the number of rows of matrix A.  We get the row count of A by
-             * looking at the size of a vector that makes up a column.  The
-             * transpose (size of a row) is done for B.
-             */
-            const glsl_type *const type =
-               glsl_type::get_instance(type_a->base_type,
-                                       type_a->column_type()->vector_elements,
-                                       type_b->row_type()->vector_elements);
-            assert(type != glsl_type::error_type);
+      const glsl_type *type = glsl_type::get_mul_type(type_a, type_b);
 
-            return type;
-         }
-      } else if (type_a->is_matrix()) {
-         /* A is a matrix and B is a column vector.  Columns of A must match
-          * rows of B.  Given the other previously tested constraints, this
-          * means the vector type of a row from A must be the same as the
-          * vector the type of B.
-          */
-         if (type_a->row_type() == type_b) {
-            /* The resulting vector has a number of elements equal to
-             * the number of rows of matrix A. */
-            const glsl_type *const type =
-               glsl_type::get_instance(type_a->base_type,
-                                       type_a->column_type()->vector_elements,
-                                       1);
-            assert(type != glsl_type::error_type);
-
-            return type;
-         }
-      } else {
-         assert(type_b->is_matrix());
-
-         /* A is a row vector and B is a matrix.  Columns of A must match rows
-          * of B.  Given the other previously tested constraints, this means
-          * the type of A must be the same as the vector type of a column from
-          * B.
-          */
-         if (type_a == type_b->column_type()) {
-            /* The resulting vector has a number of elements equal to
-             * the number of columns of matrix B. */
-            const glsl_type *const type =
-               glsl_type::get_instance(type_a->base_type,
-                                       type_b->row_type()->vector_elements,
-                                       1);
-            assert(type != glsl_type::error_type);
-
-            return type;
-         }
+      if (type == glsl_type::error_type) {
+         _mesa_glsl_error(loc, state,
+                          "size mismatch for matrix multiplication");
       }
 
-      _mesa_glsl_error(loc, state, "size mismatch for matrix multiplication");
-      return glsl_type::error_type;
+      return type;
    }
 
 
@@ -959,6 +920,7 @@ do_comparison(void *mem_ctx, int operation, ir_rvalue *op0, ir_rvalue *op1)
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_BOOL:
+   case GLSL_TYPE_DOUBLE:
       return new(mem_ctx) ir_expression(operation, op0, op1);
 
    case GLSL_TYPE_ARRAY: {
@@ -1596,6 +1558,18 @@ ast_expression::do_hir(exec_list *instructions,
          error_emitted = true;
       }
 
+      /* From section 4.1.7 of the GLSL 4.50 spec (Opaque Types):
+       *
+       *  "Except for array indexing, structure member selection, and
+       *   parentheses, opaque variables are not allowed to be operands in
+       *   expressions; such use results in a compile-time error."
+       */
+      if (type->contains_opaque()) {
+         _mesa_glsl_error(&loc, state, "opaque variables cannot be operands "
+                          "of the ?: operator");
+         error_emitted = true;
+      }
+
       ir_constant *cond_val = op[0]->constant_expression_value();
 
       if (then_instructions.is_empty()
@@ -1750,6 +1724,10 @@ ast_expression::do_hir(exec_list *instructions,
 
    case ast_bool_constant:
       result = new(ctx) ir_constant(bool(this->primary_expression.bool_constant));
+      break;
+
+   case ast_double_constant:
+      result = new(ctx) ir_constant(this->primary_expression.double_constant);
       break;
 
    case ast_sequence: {
@@ -2391,6 +2369,14 @@ apply_image_qualifier_to_variable(const struct ast_type_qualifier *qual,
 
          var->data.image_format = GL_NONE;
       }
+   } else if (qual->flags.q.read_only ||
+              qual->flags.q.write_only ||
+              qual->flags.q.coherent ||
+              qual->flags.q._volatile ||
+              qual->flags.q.restrict_flag ||
+              qual->flags.q.explicit_image_format) {
+      _mesa_glsl_error(loc, state, "memory qualifiers may only be applied to "
+                       "images");
    }
 }
 
@@ -2565,6 +2551,8 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
             break;
          _mesa_glsl_error(loc, state,
                           "varying variables may not be of type struct");
+         break;
+      case GLSL_TYPE_DOUBLE:
          break;
       default:
          _mesa_glsl_error(loc, state, "illegal type for a varying variable");
@@ -2813,8 +2801,21 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
       validate_matrix_layout_for_type(state, loc, var->type, var);
    }
 
-   if (var->type->contains_image())
-      apply_image_qualifier_to_variable(qual, var, state, loc);
+   apply_image_qualifier_to_variable(qual, var, state, loc);
+
+   /* From section 4.4.1.3 of the GLSL 4.50 specification (Fragment Shader
+    * Inputs):
+    *
+    *  "Fragment shaders also allow the following layout qualifier on in only
+    *   (not with variable declarations)
+    *     layout-qualifier-id
+    *        early_fragment_tests
+    *   [...]"
+    */
+   if (qual->flags.q.early_fragment_tests) {
+      _mesa_glsl_error(loc, state, "early_fragment_tests layout qualifier only "
+                       "valid in fragment shader input layout declaration.");
+   }
 }
 
 /**
@@ -3564,9 +3565,7 @@ ast_declarator_list::hir(exec_list *instructions,
              *    vectors. Vertex shader inputs cannot be arrays or
              *    structures."
              */
-            const glsl_type *check_type = var->type;
-            while (check_type->is_array())
-               check_type = check_type->element_type();
+            const glsl_type *check_type = var->type->without_array();
 
             switch (check_type->base_type) {
             case GLSL_TYPE_FLOAT:
@@ -3574,6 +3573,9 @@ ast_declarator_list::hir(exec_list *instructions,
             case GLSL_TYPE_UINT:
             case GLSL_TYPE_INT:
                if (state->is_version(120, 300))
+                  break;
+            case GLSL_TYPE_DOUBLE:
+               if (check_type->base_type == GLSL_TYPE_DOUBLE && (state->is_version(410, 0) || state->ARB_vertex_attrib_64bit_enable))
                   break;
             /* FALLTHROUGH */
             default:
@@ -3606,6 +3608,51 @@ ast_declarator_list::hir(exec_list *instructions,
             }
 
             handle_geometry_shader_input_decl(state, loc, var);
+         }
+      } else if (var->data.mode == ir_var_shader_out) {
+         const glsl_type *check_type = var->type->without_array();
+
+         /* From section 4.3.6 (Output variables) of the GLSL 4.40 spec:
+          *
+          *     It is a compile-time error to declare a vertex, tessellation
+          *     evaluation, tessellation control, or geometry shader output
+          *     that contains any of the following:
+          *
+          *     * A Boolean type (bool, bvec2 ...)
+          *     * An opaque type
+          */
+         if (check_type->is_boolean() || check_type->contains_opaque())
+            _mesa_glsl_error(&loc, state,
+                             "%s shader output cannot have type %s",
+                             _mesa_shader_stage_to_string(state->stage),
+                             check_type->name);
+
+         /* From section 4.3.6 (Output variables) of the GLSL 4.40 spec:
+          *
+          *     It is a compile-time error to declare a fragment shader output
+          *     that contains any of the following:
+          *
+          *     * A Boolean type (bool, bvec2 ...)
+          *     * A double-precision scalar or vector (double, dvec2 ...)
+          *     * An opaque type
+          *     * Any matrix type
+          *     * A structure
+          */
+         if (state->stage == MESA_SHADER_FRAGMENT) {
+            if (check_type->is_record() || check_type->is_matrix())
+               _mesa_glsl_error(&loc, state,
+                                "fragment shader output "
+                                "cannot have struct or array type");
+            switch (check_type->base_type) {
+            case GLSL_TYPE_UINT:
+            case GLSL_TYPE_INT:
+            case GLSL_TYPE_FLOAT:
+               break;
+            default:
+               _mesa_glsl_error(&loc, state,
+                                "fragment shader output cannot have "
+                                "type %s", check_type->name);
+            }
          }
       }
 
@@ -3651,6 +3698,15 @@ ast_declarator_list::hir(exec_list *instructions,
                           var_type);
       }
 
+      /* Double fragment inputs must be qualified with 'flat'. */
+      if (var->type->contains_double() &&
+          var->data.interpolation != INTERP_QUALIFIER_FLAT &&
+          state->stage == MESA_SHADER_FRAGMENT &&
+          var->data.mode == ir_var_shader_in) {
+         _mesa_glsl_error(&loc, state, "if a fragment input is (or contains) "
+                          "a double, then it must be qualified with 'flat'",
+                          var_type);
+      }
 
       /* Interpolation qualifiers cannot be applied to 'centroid' and
        * 'centroid varying'.
@@ -4135,6 +4191,27 @@ ast_function::hir(exec_list *instructions,
       }
 
       emit_function(state, f);
+   }
+
+   /* From GLSL ES 3.0 spec, chapter 6.1 "Function Definitions", page 71:
+    *
+    * "A shader cannot redefine or overload built-in functions."
+    *
+    * While in GLSL ES 1.0 specification, chapter 8 "Built-in Functions":
+    *
+    * "User code can overload the built-in functions but cannot redefine
+    * them."
+    */
+   if (state->es_shader && state->language_version >= 300) {
+      /* Local shader has no exact candidates; check the built-ins. */
+      _mesa_glsl_initialize_builtin_functions();
+      if (_mesa_glsl_find_builtin_function_by_name(state, name)) {
+         YYLTYPE loc = this->get_location();
+         _mesa_glsl_error(& loc, state,
+                          "A shader cannot redefine or overload built-in "
+                          "function `%s' in GLSL ES 3.00", name);
+         return NULL;
+      }
    }
 
    /* Verify that this function's signature either doesn't match a previously
@@ -5681,6 +5758,9 @@ ast_interface_block::hir(exec_list *instructions,
       var->data.matrix_layout = matrix_layout == GLSL_MATRIX_LAYOUT_INHERITED
          ? GLSL_MATRIX_LAYOUT_COLUMN_MAJOR : matrix_layout;
 
+      if (var_mode == ir_var_shader_in || var_mode == ir_var_uniform)
+         var->data.read_only = true;
+
       if (state->stage == MESA_SHADER_GEOMETRY && var_mode == ir_var_shader_in)
          handle_geometry_shader_input_decl(state, loc, var);
 
@@ -5720,6 +5800,9 @@ ast_interface_block::hir(exec_list *instructions,
          var->data.centroid = fields[i].centroid;
          var->data.sample = fields[i].sample;
          var->init_interface_type(block_type);
+
+         if (var_mode == ir_var_shader_in || var_mode == ir_var_uniform)
+            var->data.read_only = true;
 
          if (fields[i].matrix_layout == GLSL_MATRIX_LAYOUT_INHERITED) {
             var->data.matrix_layout = matrix_layout == GLSL_MATRIX_LAYOUT_INHERITED

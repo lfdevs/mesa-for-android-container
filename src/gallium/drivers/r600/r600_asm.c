@@ -2411,7 +2411,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 
 		memset(&vtx, 0, sizeof(vtx));
 		vtx.buffer_id = elements[i].vertex_buffer_index + fetch_resource_start;
-		vtx.fetch_type = elements[i].instance_divisor ? 1 : 0;
+		vtx.fetch_type = elements[i].instance_divisor ? SQ_VTX_FETCH_INSTANCE_DATA : SQ_VTX_FETCH_VERTEX_DATA;
 		vtx.src_gpr = elements[i].instance_divisor > 1 ? i + 1 : 0;
 		vtx.src_sel_x = elements[i].instance_divisor ? 3 : 0;
 		vtx.mega_fetch_count = 0x1F;

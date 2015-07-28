@@ -74,7 +74,7 @@ st_texture_create(struct st_context *st,
    if (target == PIPE_TEXTURE_CUBE)
       assert(layers == 6);
 
-   DBG("%s target %d format %s last_level %d\n", __FUNCTION__,
+   DBG("%s target %d format %s last_level %d\n", __func__,
        (int) target, util_format_name(format), last_level);
 
    assert(format);
@@ -250,7 +250,7 @@ st_texture_image_map(struct st_context *st, struct st_texture_image *stImage,
    GLuint level;
    void *map;
 
-   DBG("%s \n", __FUNCTION__);
+   DBG("%s \n", __func__);
 
    if (!stImage->pt)
       return NULL;
@@ -304,51 +304,11 @@ st_texture_image_unmap(struct st_context *st,
       slice += stObj->base.MinLayer;
    transfer = &stImage->transfer[slice + stImage->base.Face].transfer;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    pipe_transfer_unmap(pipe, *transfer);
    *transfer = NULL;
 }
-
-
-/* Upload data for a particular image.
- */
-void
-st_texture_image_data(struct st_context *st,
-                      struct pipe_resource *dst,
-                      GLuint face,
-                      GLuint level,
-                      void *src,
-                      GLuint src_row_stride, GLuint src_image_stride)
-{
-   struct pipe_context *pipe = st->pipe;
-   GLuint i;
-   const GLubyte *srcUB = src;
-   GLuint layers;
-
-   if (dst->target == PIPE_TEXTURE_1D_ARRAY ||
-       dst->target == PIPE_TEXTURE_2D_ARRAY ||
-       dst->target == PIPE_TEXTURE_CUBE_ARRAY)
-      layers = dst->array_size;
-   else
-      layers = u_minify(dst->depth0, level);
-
-   DBG("%s\n", __FUNCTION__);
-
-   for (i = 0; i < layers; i++) {
-      struct pipe_box box;
-      u_box_2d_zslice(0, 0, face + i,
-                      u_minify(dst->width0, level),
-                      u_minify(dst->height0, level),
-                      &box);
-
-      pipe->transfer_inline_write(pipe, dst, level, PIPE_TRANSFER_WRITE,
-                                  &box, srcUB, src_row_stride, 0);
-
-      srcUB += src_image_stride;
-   }
-}
-
 
 /**
  * For debug only: get/print center pixel in the src resource.

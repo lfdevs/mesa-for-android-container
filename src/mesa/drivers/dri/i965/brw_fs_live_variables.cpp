@@ -152,7 +152,7 @@ fs_live_variables::setup_def_use()
             if (reg.file != GRF)
                continue;
 
-            for (int j = 0; j < inst->regs_read(v, i); j++) {
+            for (int j = 0; j < inst->regs_read(i); j++) {
                setup_one_read(bd, inst, ip, reg);
                reg.reg_offset++;
             }
@@ -278,17 +278,17 @@ fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
 {
    mem_ctx = ralloc_context(NULL);
 
-   num_vgrfs = v->virtual_grf_count;
+   num_vgrfs = v->alloc.count;
    num_vars = 0;
    var_from_vgrf = rzalloc_array(mem_ctx, int, num_vgrfs);
    for (int i = 0; i < num_vgrfs; i++) {
       var_from_vgrf[i] = num_vars;
-      num_vars += v->virtual_grf_sizes[i];
+      num_vars += v->alloc.sizes[i];
    }
 
    vgrf_from_var = rzalloc_array(mem_ctx, int, num_vars);
    for (int i = 0; i < num_vgrfs; i++) {
-      for (int j = 0; j < v->virtual_grf_sizes[i]; j++) {
+      for (unsigned j = 0; j < v->alloc.sizes[i]; j++) {
          vgrf_from_var[var_from_vgrf[i] + j] = i;
       }
    }
@@ -344,7 +344,7 @@ fs_visitor::calculate_live_intervals()
    if (this->live_intervals)
       return;
 
-   int num_vgrfs = this->virtual_grf_count;
+   int num_vgrfs = this->alloc.count;
    ralloc_free(this->virtual_grf_start);
    ralloc_free(this->virtual_grf_end);
    virtual_grf_start = ralloc_array(mem_ctx, int, num_vgrfs);

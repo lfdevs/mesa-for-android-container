@@ -29,13 +29,8 @@
  * GL_EXT_texture_compression_s3tc support.
  */
 
-#ifndef USE_EXTERNAL_DXTN_LIB
-#define USE_EXTERNAL_DXTN_LIB 1
-#endif
-
 #include "glheader.h"
 #include "imports.h"
-#include "colormac.h"
 #include "dlopen.h"
 #include "image.h"
 #include "macros.h"
@@ -77,7 +72,6 @@ _mesa_init_texture_s3tc( struct gl_context *ctx )
 {
    /* called during context initialization */
    ctx->Mesa_DXTn = GL_FALSE;
-#if USE_EXTERNAL_DXTN_LIB
    if (!dxtlibhandle) {
       dxtlibhandle = _mesa_dlopen(DXTN_LIBNAME, 0);
       if (!dxtlibhandle) {
@@ -118,9 +112,6 @@ _mesa_init_texture_s3tc( struct gl_context *ctx )
    if (dxtlibhandle) {
       ctx->Mesa_DXTn = GL_TRUE;
    }
-#else
-   (void) ctx;
-#endif
 }
 
 /**
@@ -133,7 +124,7 @@ _mesa_texstore_rgb_dxt1(TEXSTORE_PARAMS)
    GLubyte *dst;
    const GLubyte *tempImage = NULL;
 
-   ASSERT(dstFormat == MESA_FORMAT_RGB_DXT1 ||
+   assert(dstFormat == MESA_FORMAT_RGB_DXT1 ||
           dstFormat == MESA_FORMAT_SRGB_DXT1);
 
    if (srcFormat != GL_RGB ||
@@ -190,7 +181,7 @@ _mesa_texstore_rgba_dxt1(TEXSTORE_PARAMS)
    GLubyte *dst;
    const GLubyte *tempImage = NULL;
 
-   ASSERT(dstFormat == MESA_FORMAT_RGBA_DXT1 ||
+   assert(dstFormat == MESA_FORMAT_RGBA_DXT1 ||
           dstFormat == MESA_FORMAT_SRGBA_DXT1);
 
    if (srcFormat != GL_RGBA ||
@@ -247,7 +238,7 @@ _mesa_texstore_rgba_dxt3(TEXSTORE_PARAMS)
    GLubyte *dst;
    const GLubyte *tempImage = NULL;
 
-   ASSERT(dstFormat == MESA_FORMAT_RGBA_DXT3 ||
+   assert(dstFormat == MESA_FORMAT_RGBA_DXT3 ||
           dstFormat == MESA_FORMAT_SRGBA_DXT3);
 
    if (srcFormat != GL_RGBA ||
@@ -303,7 +294,7 @@ _mesa_texstore_rgba_dxt5(TEXSTORE_PARAMS)
    GLubyte *dst;
    const GLubyte *tempImage = NULL;
 
-   ASSERT(dstFormat == MESA_FORMAT_RGBA_DXT5 ||
+   assert(dstFormat == MESA_FORMAT_RGBA_DXT5 ||
           dstFormat == MESA_FORMAT_SRGBA_DXT5);
 
    if (srcFormat != GL_RGBA ||

@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 
-extern const char *tgsi_processor_type_names[4];
+extern const char *tgsi_processor_type_names[6];
 
 extern const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT];
 
@@ -58,7 +58,7 @@ extern const char *tgsi_fs_coord_origin_names[2];
 
 extern const char *tgsi_fs_coord_pixel_center_names[2];
 
-extern const char *tgsi_immediate_type_names[3];
+extern const char *tgsi_immediate_type_names[4];
 
 
 const char *

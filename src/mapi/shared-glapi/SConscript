@@ -37,6 +37,7 @@ def mapi_objects(env, printer, mode):
     cpppath = [
         header[0].dir,
         '#/include',
+        '#/src',
         '#/src/mapi',
     ]
     

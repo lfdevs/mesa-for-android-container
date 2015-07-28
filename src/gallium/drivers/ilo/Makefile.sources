@@ -1,4 +1,29 @@
 C_SOURCES := \
+	core/ilo_buffer.h \
+	core/ilo_builder.c \
+	core/ilo_builder.h \
+	core/ilo_builder_3d.h \
+	core/ilo_builder_3d_bottom.h \
+	core/ilo_builder_3d_top.h \
+	core/ilo_builder_blt.h \
+	core/ilo_builder_decode.c \
+	core/ilo_builder_media.h \
+	core/ilo_builder_mi.h \
+	core/ilo_builder_render.h \
+	core/ilo_core.h \
+	core/ilo_debug.c \
+	core/ilo_debug.h \
+	core/ilo_dev.c \
+	core/ilo_dev.h \
+	core/ilo_format.c \
+	core/ilo_format.h \
+	core/ilo_fence.h \
+	core/ilo_image.c \
+	core/ilo_image.h \
+	core/ilo_state_3d.h \
+	core/ilo_state_3d_bottom.c \
+	core/ilo_state_3d_top.c \
+	core/intel_winsys.h \
 	ilo_blit.c \
 	ilo_blit.h \
 	ilo_blitter.c \
@@ -6,16 +31,6 @@ C_SOURCES := \
 	ilo_blitter_blt.c \
 	ilo_blitter_pipe.c \
 	ilo_blitter_rectlist.c \
-	ilo_builder.c \
-	ilo_builder.h \
-	ilo_builder_3d.h \
-	ilo_builder_3d_bottom.h \
-	ilo_builder_3d_top.h \
-	ilo_builder_blt.h \
-	ilo_builder_decode.c \
-	ilo_builder_media.h \
-	ilo_builder_mi.h \
-	ilo_builder_render.h \
 	ilo_common.h \
 	ilo_context.c \
 	ilo_context.h \
@@ -23,12 +38,8 @@ C_SOURCES := \
 	ilo_cp.h \
 	ilo_draw.c \
 	ilo_draw.h \
-	ilo_format.c \
-	ilo_format.h \
 	ilo_gpgpu.c \
 	ilo_gpgpu.h \
-	ilo_layout.c \
-	ilo_layout.h \
 	ilo_public.h \
 	ilo_query.c \
 	ilo_query.h \
@@ -40,6 +51,7 @@ C_SOURCES := \
 	ilo_render_dynamic.c \
 	ilo_render_gen6.c \
 	ilo_render_gen7.c \
+	ilo_render_gen8.c \
 	ilo_render_media.c \
 	ilo_render_surface.c \
 	ilo_screen.c \
@@ -48,14 +60,10 @@ C_SOURCES := \
 	ilo_shader.h \
 	ilo_state.c \
 	ilo_state.h \
-	ilo_state_3d.h \
-	ilo_state_3d_bottom.c \
-	ilo_state_3d_top.c \
 	ilo_transfer.c \
 	ilo_transfer.h \
 	ilo_video.c \
 	ilo_video.h \
-	intel_winsys.h \
 	\
 	shader/ilo_shader_cs.c \
 	shader/ilo_shader_fs.c \

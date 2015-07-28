@@ -113,8 +113,11 @@ draw_pt_emit_prepare(struct pt_emit *emit,
       emit->translate = translate_cache_find(emit->cache, &hw_key);
    }
 
-   *max_vertices = (draw->render->max_vertex_buffer_bytes /
-                    (vinfo->size * 4));
+   if (!vinfo->size)
+      *max_vertices = 0;
+   else
+      *max_vertices = (draw->render->max_vertex_buffer_bytes /
+                       (vinfo->size * 4));
 }
 
 

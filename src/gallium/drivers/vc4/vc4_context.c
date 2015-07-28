@@ -118,20 +118,24 @@ vc4_setup_rcl(struct vc4_context *vc4)
         uint32_t tilecoords_size = 3;
         uint32_t branch_size = 5 + reloc_size;
         uint32_t color_store_size = 1;
+        uint32_t semaphore_size = 1;
         cl_ensure_space(&vc4->rcl,
                         clear_size +
                         config_size +
                         loadstore_size +
+                        semaphore_size +
                         xtiles * ytiles * (loadstore_size * 4 +
                                            tilecoords_size * 3 +
                                            branch_size +
                                            color_store_size));
 
-        cl_u8(&vc4->rcl, VC4_PACKET_CLEAR_COLORS);
-        cl_u32(&vc4->rcl, vc4->clear_color[0]);
-        cl_u32(&vc4->rcl, vc4->clear_color[1]);
-        cl_u32(&vc4->rcl, vc4->clear_depth);
-        cl_u8(&vc4->rcl, vc4->clear_stencil);
+        if (vc4->cleared) {
+                cl_u8(&vc4->rcl, VC4_PACKET_CLEAR_COLORS);
+                cl_u32(&vc4->rcl, vc4->clear_color[0]);
+                cl_u32(&vc4->rcl, vc4->clear_color[1]);
+                cl_u32(&vc4->rcl, vc4->clear_depth);
+                cl_u8(&vc4->rcl, vc4->clear_stencil);
+        }
 
         /* The rendering mode config determines the pointer that's used for
          * VC4_PACKET_STORE_MS_TILE_BUFFER address computations.  The kernel
@@ -292,40 +296,6 @@ vc4_setup_rcl(struct vc4_context *vc4)
                 ztex->writes++;
 }
 
-static void
-vc4_draw_reset(struct vc4_context *vc4)
-{
-        struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
-        for (int i = 0; i < (vc4->bo_handles.next -
-                             vc4->bo_handles.base) / 4; i++) {
-                vc4_bo_unreference(&referenced_bos[i]);
-        }
-        vc4_reset_cl(&vc4->bcl);
-        vc4_reset_cl(&vc4->rcl);
-        vc4_reset_cl(&vc4->shader_rec);
-        vc4_reset_cl(&vc4->uniforms);
-        vc4_reset_cl(&vc4->bo_handles);
-        vc4_reset_cl(&vc4->bo_pointers);
-        vc4->shader_rec_count = 0;
-
-        vc4->needs_flush = false;
-        vc4->draw_call_queued = false;
-
-        /* We have no hardware context saved between our draw calls, so we
-         * need to flag the next draw as needing all state emitted.  Emitting
-         * all state at the start of our draws is also what ensures that we
-         * return to the state we need after a previous tile has finished.
-         */
-        vc4->dirty = ~0;
-        vc4->resolve = 0;
-        vc4->cleared = 0;
-
-        vc4->draw_min_x = ~0;
-        vc4->draw_min_y = ~0;
-        vc4->draw_max_x = 0;
-        vc4->draw_max_y = 0;
-}
-
 void
 vc4_flush(struct pipe_context *pctx)
 {
@@ -339,7 +309,7 @@ vc4_flush(struct pipe_context *pctx)
          */
         if (vc4->draw_max_x <= vc4->draw_min_x ||
             vc4->draw_max_y <= vc4->draw_min_y) {
-                vc4_draw_reset(vc4);
+                vc4_job_reset(vc4);
                 return;
         }
 
@@ -347,60 +317,14 @@ vc4_flush(struct pipe_context *pctx)
          * unblocking the render thread.  Note that this doesn't act until the
          * FLUSH completes.
          */
+        cl_ensure_space(&vc4->bcl, 8);
         cl_u8(&vc4->bcl, VC4_PACKET_INCREMENT_SEMAPHORE);
         /* The FLUSH caps all of our bin lists with a VC4_PACKET_RETURN. */
         cl_u8(&vc4->bcl, VC4_PACKET_FLUSH);
 
         vc4_setup_rcl(vc4);
 
-        if (vc4_debug & VC4_DEBUG_CL) {
-                fprintf(stderr, "BCL:\n");
-                vc4_dump_cl(vc4->bcl.base, vc4->bcl.next - vc4->bcl.base, false);
-                fprintf(stderr, "RCL:\n");
-                vc4_dump_cl(vc4->rcl.base, vc4->rcl.next - vc4->rcl.base, true);
-        }
-
-        struct drm_vc4_submit_cl submit;
-        memset(&submit, 0, sizeof(submit));
-
-        submit.bo_handles = vc4->bo_handles.base;
-        submit.bo_handle_count = (vc4->bo_handles.next -
-                                  vc4->bo_handles.base) / 4;
-        submit.bin_cl = vc4->bcl.base;
-        submit.bin_cl_size = vc4->bcl.next - vc4->bcl.base;
-        submit.render_cl = vc4->rcl.base;
-        submit.render_cl_size = vc4->rcl.next - vc4->rcl.base;
-        submit.shader_rec = vc4->shader_rec.base;
-        submit.shader_rec_size = vc4->shader_rec.next - vc4->shader_rec.base;
-        submit.shader_rec_count = vc4->shader_rec_count;
-        submit.uniforms = vc4->uniforms.base;
-        submit.uniforms_size = vc4->uniforms.next - vc4->uniforms.base;
-
-        if (!(vc4_debug & VC4_DEBUG_NORAST)) {
-                int ret;
-
-#ifndef USE_VC4_SIMULATOR
-                ret = drmIoctl(vc4->fd, DRM_IOCTL_VC4_SUBMIT_CL, &submit);
-#else
-                ret = vc4_simulator_flush(vc4, &submit);
-#endif
-                if (ret) {
-                        fprintf(stderr, "VC4 submit failed\n");
-                        abort();
-                }
-        }
-
-        vc4->last_emit_seqno = submit.seqno;
-
-        if (vc4_debug & VC4_DEBUG_ALWAYS_SYNC) {
-                if (!vc4_wait_seqno(vc4->screen, vc4->last_emit_seqno,
-                                    PIPE_TIMEOUT_INFINITE)) {
-                        fprintf(stderr, "Wait failed.\n");
-                        abort();
-                }
-        }
-
-        vc4_draw_reset(vc4);
+        vc4_job_submit(vc4);
 }
 
 static void
@@ -527,13 +451,7 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv)
         vc4_query_init(pctx);
         vc4_resource_context_init(pctx);
 
-        vc4_init_cl(vc4, &vc4->bcl);
-        vc4_init_cl(vc4, &vc4->rcl);
-        vc4_init_cl(vc4, &vc4->shader_rec);
-        vc4_init_cl(vc4, &vc4->uniforms);
-        vc4_init_cl(vc4, &vc4->bo_handles);
-        vc4_init_cl(vc4, &vc4->bo_pointers);
-        vc4_draw_reset(vc4);
+        vc4_job_init(vc4);
 
         vc4->fd = screen->fd;
 

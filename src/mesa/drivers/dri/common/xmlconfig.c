@@ -27,10 +27,13 @@
  * \author Felix Kuehling
  */
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 #include <expat.h>
 #include <fcntl.h>
+#include <math.h>
 #include <unistd.h>
 #include <errno.h>
 #include "main/imports.h"
@@ -53,7 +56,7 @@ extern char *program_invocation_name, *program_invocation_short_name;
 #        include <stdlib.h>
 #        define GET_PROGRAM_NAME() getprogname()
 #    endif
-#elif defined(__NetBSD__) && defined(__NetBSD_Version) && (__NetBSD_Version >= 106000100)
+#elif defined(__NetBSD__) && defined(__NetBSD_Version__) && (__NetBSD_Version__ >= 106000100)
 #    include <stdlib.h>
 #    define GET_PROGRAM_NAME() getprogname()
 #elif defined(__APPLE__)

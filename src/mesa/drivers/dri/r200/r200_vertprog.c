@@ -115,7 +115,7 @@ static GLboolean r200VertexProgUpdateParams(struct gl_context *ctx, struct r200_
    paramList = mesa_vp->Base.Parameters;
 
    if(paramList->NumParameters > R200_VSF_MAX_PARAM){
-      fprintf(stderr, "%s:Params exhausted\n", __FUNCTION__);
+      fprintf(stderr, "%s:Params exhausted\n", __func__);
       return GL_FALSE;
    }
 
@@ -130,7 +130,7 @@ static GLboolean r200VertexProgUpdateParams(struct gl_context *ctx, struct r200_
 	 *fcmd++ = paramList->ParameterValues[pi][3].f;
 	 break;
       default:
-	 _mesa_problem(NULL, "Bad param type in %s", __FUNCTION__);
+	 _mesa_problem(NULL, "Bad param type in %s", __func__);
 	 break;
       }
       if (pi == 95) {
@@ -152,7 +152,7 @@ static GLboolean r200VertexProgUpdateParams(struct gl_context *ctx, struct r200_
    return GL_TRUE;
 }
 
-static INLINE unsigned long t_dst_mask(GLuint mask)
+static inline unsigned long t_dst_mask(GLuint mask)
 {
    /* WRITEMASK_* is equivalent to VSF_FLAG_* */
    return mask & VSF_FLAG_ALL;
@@ -186,7 +186,7 @@ static unsigned long t_dst(struct prog_dst_register *dst)
       case VARYING_SLOT_PSIZ:
 	 return R200_VSF_OUT_CLASS_RESULT_POINTSIZE;
       default:
-	 fprintf(stderr, "problem in %s, unknown dst output reg %d\n", __FUNCTION__, dst->Index);
+	 fprintf(stderr, "problem in %s, unknown dst output reg %d\n", __func__, dst->Index);
 	 exit(0);
 	 return 0;
       }
@@ -194,7 +194,7 @@ static unsigned long t_dst(struct prog_dst_register *dst)
       assert (dst->Index == 0);
       return R200_VSF_OUT_CLASS_ADDR;
    default:
-      fprintf(stderr, "problem in %s, unknown register type %d\n", __FUNCTION__, dst->File);
+      fprintf(stderr, "problem in %s, unknown register type %d\n", __func__, dst->File);
       exit(0);
       return 0;
    }
@@ -218,12 +218,12 @@ static unsigned long t_src_class(gl_register_file file)
    case PROGRAM_ADDRESS:
    */
    default:
-      fprintf(stderr, "problem in %s", __FUNCTION__);
+      fprintf(stderr, "problem in %s", __func__);
       exit(0);
    }
 }
 
-static INLINE unsigned long t_swizzle(GLubyte swizzle)
+static inline unsigned long t_swizzle(GLubyte swizzle)
 {
 /* this is in fact a NOP as the Mesa SWIZZLE_* are all identical to VSF_IN_COMPONENT_* */
    return swizzle;
@@ -235,7 +235,7 @@ static void vp_dump_inputs(struct r200_vertex_program *vp, char *caller)
    int i;
 
    if(vp == NULL){
-      fprintf(stderr, "vp null in call to %s from %s\n", __FUNCTION__, caller);
+      fprintf(stderr, "vp null in call to %s from %s\n", __func__, caller);
       return ;
    }
 
@@ -263,7 +263,7 @@ static unsigned long t_src_index(struct r200_vertex_program *vp, struct prog_src
 
       vp->inputs[src->Index] = max_reg+1;*/
 
-      //vp_dump_inputs(vp, __FUNCTION__);	
+      //vp_dump_inputs(vp, __func__);	
       assert(vp->inputs[src->Index] != -1);
       return vp->inputs[src->Index];
    } else {
@@ -325,7 +325,7 @@ static unsigned long t_opcode(enum prog_opcode opcode)
    case OPCODE_SLT: return R200_VPI_OUT_OP_SLT;
 
    default: 
-      fprintf(stderr, "%s: Should not be called with opcode %d!", __FUNCTION__, opcode);
+      fprintf(stderr, "%s: Should not be called with opcode %d!", __func__, opcode);
    }
    exit(-1);
    return 0;

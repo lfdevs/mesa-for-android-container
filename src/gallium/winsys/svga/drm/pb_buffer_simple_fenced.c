@@ -46,7 +46,7 @@
 #include "util/u_debug.h"
 #include "os/os_thread.h"
 #include "util/u_memory.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #include "pipebuffer/pb_buffer.h"
 #include "pipebuffer/pb_bufmgr.h"
@@ -286,7 +286,7 @@ fenced_buffer_remove_locked(struct fenced_manager *fenced_mgr,
 /**
  * Wait for the fence to expire, and remove it from the fenced list.
  *
- * This function will release and re-aquire the mutex, so any copy of mutable
+ * This function will release and re-acquire the mutex, so any copy of mutable
  * state must be discarded after calling it.
  */
 static INLINE enum pipe_error
@@ -321,7 +321,7 @@ fenced_buffer_finish_locked(struct fenced_manager *fenced_mgr,
       /*
        * Only proceed if the fence object didn't change in the meanwhile.
        * Otherwise assume the work has been already carried out by another
-       * thread that re-aquired the lock before us.
+       * thread that re-acquired the lock before us.
        */
       proceed = fence == fenced_buf->fence ? TRUE : FALSE;
 

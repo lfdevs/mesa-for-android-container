@@ -158,7 +158,7 @@ fs_visitor::opt_peephole_sel()
 
       enum brw_predicate predicate;
       bool predicate_inverse;
-      if (brw->gen == 6 && if_inst->conditional_mod) {
+      if (devinfo->gen == 6 && if_inst->conditional_mod) {
          /* For Sandybridge with IF with embedded comparison */
          predicate = BRW_PREDICATE_NORMAL;
          predicate_inverse = false;
@@ -176,7 +176,9 @@ fs_visitor::opt_peephole_sel()
          /* Check that the MOVs are the right form. */
          if (!then_mov[i]->dst.equals(else_mov[i]->dst) ||
              then_mov[i]->is_partial_write() ||
-             else_mov[i]->is_partial_write()) {
+             else_mov[i]->is_partial_write() ||
+             then_mov[i]->conditional_mod != BRW_CONDITIONAL_NONE ||
+             else_mov[i]->conditional_mod != BRW_CONDITIONAL_NONE) {
             movs = i;
             break;
          }
@@ -211,7 +213,7 @@ fs_visitor::opt_peephole_sel()
          continue;
 
       /* Emit a CMP if our IF used the embedded comparison */
-      if (brw->gen == 6 && if_inst->conditional_mod) {
+      if (devinfo->gen == 6 && if_inst->conditional_mod) {
          fs_inst *cmp_inst = CMP(reg_null_d, if_inst->src[0], if_inst->src[1],
                                  if_inst->conditional_mod);
          if_inst->insert_before(block, cmp_inst);

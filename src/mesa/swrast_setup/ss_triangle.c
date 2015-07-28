@@ -25,8 +25,8 @@
  *    Keith Whitwell <keithw@vmware.com>
  */
 
+#include "c99_math.h"
 #include "main/glheader.h"
-#include "main/colormac.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
 

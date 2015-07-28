@@ -64,6 +64,7 @@
  * \author Ian Romanick <ian.d.romanick@intel.com>
  */
 
+#include <ctype.h>
 #include "main/core.h"
 #include "glsl_symbol_table.h"
 #include "glsl_parser_extras.h"
@@ -713,6 +714,45 @@ validate_geometry_shader_emissions(struct gl_context *ctx,
    }
 }
 
+bool
+validate_intrastage_arrays(struct gl_shader_program *prog,
+                           ir_variable *const var,
+		           ir_variable *const existing)
+{
+   /* Consider the types to be "the same" if both types are arrays
+    * of the same type and one of the arrays is implicitly sized.
+    * In addition, set the type of the linked variable to the
+    * explicitly sized array.
+    */
+   if (var->type->is_array() && existing->type->is_array() &&
+       (var->type->fields.array == existing->type->fields.array) &&
+       ((var->type->length == 0)|| (existing->type->length == 0))) {
+      if (var->type->length != 0) {
+         if (var->type->length <= existing->data.max_array_access) {
+            linker_error(prog, "%s `%s' declared as type "
+                         "`%s' but outermost dimension has an index"
+                         " of `%i'\n",
+                         mode_string(var),
+                         var->name, var->type->name,
+                         existing->data.max_array_access);
+         }
+         existing->type = var->type;
+         return true;
+      } else if (existing->type->length != 0) {
+         if(existing->type->length <= var->data.max_array_access) {
+            linker_error(prog, "%s `%s' declared as type "
+                         "`%s' but outermost dimension has an index"
+                         " of `%i'\n",
+                         mode_string(var),
+                         var->name, existing->type->name,
+                         var->data.max_array_access);
+         }
+         return true;
+      }
+   }
+   return false;
+}
+
 
 /**
  * Perform validation of global variables used across multiple shaders
@@ -752,50 +792,23 @@ cross_validate_globals(struct gl_shader_program *prog,
 	  */
 	 ir_variable *const existing = variables.get_variable(var->name);
 	 if (existing != NULL) {
-	    if (var->type != existing->type) {
-	       /* Consider the types to be "the same" if both types are arrays
-		* of the same type and one of the arrays is implicitly sized.
-		* In addition, set the type of the linked variable to the
-		* explicitly sized array.
-		*/
-	       if (var->type->is_array()
-		   && existing->type->is_array()
-		   && (var->type->fields.array == existing->type->fields.array)
-		   && ((var->type->length == 0)
-		       || (existing->type->length == 0))) {
-		  if (var->type->length != 0) {
-                     if (var->type->length <= existing->data.max_array_access) {
-                        linker_error(prog, "%s `%s' declared as type "
-                                     "`%s' but outermost dimension has an index"
-                                     " of `%i'\n",
-                                     mode_string(var),
-                                     var->name, var->type->name,
-                                     existing->data.max_array_access);
-                        return;
-                     }
-		     existing->type = var->type;
-		  } else if (existing->type->length != 0
-                             && existing->type->length <=
-                                var->data.max_array_access) {
+            /* Check if types match. Interface blocks have some special
+             * rules so we handle those elsewhere.
+             */
+           if (var->type != existing->type &&
+                !var->is_interface_instance()) {
+	       if (!validate_intrastage_arrays(prog, var, existing)) {
+                  if (var->type->is_record() && existing->type->is_record()
+                      && existing->type->record_compare(var->type)) {
+                     existing->type = var->type;
+                  } else {
                      linker_error(prog, "%s `%s' declared as type "
-                                  "`%s' but outermost dimension has an index"
-                                  " of `%i'\n",
+                                  "`%s' and type `%s'\n",
                                   mode_string(var),
-                                  var->name, existing->type->name,
-                                  var->data.max_array_access);
+                                  var->name, var->type->name,
+                                  existing->type->name);
                      return;
                   }
-               } else if (var->type->is_record()
-		   && existing->type->is_record()
-		   && existing->type->record_compare(var->type)) {
-		  existing->type = var->type;
-	       } else {
-		  linker_error(prog, "%s `%s' declared as type "
-			       "`%s' and type `%s'\n",
-			       mode_string(var),
-			       var->name, var->type->name,
-			       existing->type->name);
-		  return;
 	       }
 	    }
 
@@ -1433,6 +1446,8 @@ link_fs_input_layout_qualifiers(struct gl_shader_program *prog,
          linked_shader->origin_upper_left = shader->origin_upper_left;
          linked_shader->pixel_center_integer = shader->pixel_center_integer;
       }
+
+      linked_shader->EarlyFragmentTests |= shader->EarlyFragmentTests;
    }
 }
 
@@ -1995,6 +2010,7 @@ assign_attribute_or_color_locations(gl_shader_program *prog,
    } to_assign[16];
 
    unsigned num_attr = 0;
+   unsigned total_attribs_size = 0;
 
    foreach_in_list(ir_instruction, node, sh->ir) {
       ir_variable *const var = node->as_variable();
@@ -2036,12 +2052,41 @@ assign_attribute_or_color_locations(gl_shader_program *prog,
 	 }
       }
 
+      const unsigned slots = var->type->count_attribute_slots();
+
+      /* From GL4.5 core spec, section 11.1.1 (Vertex Attributes):
+       *
+       * "A program with more than the value of MAX_VERTEX_ATTRIBS active
+       * attribute variables may fail to link, unless device-dependent
+       * optimizations are able to make the program fit within available
+       * hardware resources. For the purposes of this test, attribute variables
+       * of the type dvec3, dvec4, dmat2x3, dmat2x4, dmat3, dmat3x4, dmat4x3,
+       * and dmat4 may count as consuming twice as many attributes as equivalent
+       * single-precision types. While these types use the same number of
+       * generic attributes as their single-precision equivalents,
+       * implementations are permitted to consume two single-precision vectors
+       * of internal storage for each three- or four-component double-precision
+       * vector."
+       * Until someone has a good reason in Mesa, enforce that now.
+       */
+      if (target_index == MESA_SHADER_VERTEX) {
+	 total_attribs_size += slots;
+	 if (var->type->without_array() == glsl_type::dvec3_type ||
+	     var->type->without_array() == glsl_type::dvec4_type ||
+	     var->type->without_array() == glsl_type::dmat2x3_type ||
+	     var->type->without_array() == glsl_type::dmat2x4_type ||
+	     var->type->without_array() == glsl_type::dmat3_type ||
+	     var->type->without_array() == glsl_type::dmat3x4_type ||
+	     var->type->without_array() == glsl_type::dmat4x3_type ||
+	     var->type->without_array() == glsl_type::dmat4_type)
+	    total_attribs_size += slots;
+      }
+
       /* If the variable is not a built-in and has a location statically
        * assigned in the shader (presumably via a layout qualifier), make sure
        * that it doesn't collide with other assigned locations.  Otherwise,
        * add it to the list of variables that need linker-assigned locations.
        */
-      const unsigned slots = var->type->count_attribute_slots();
       if (var->data.location != -1) {
 	 if (var->data.location >= generic_base && var->data.index < 1) {
 	    /* From page 61 of the OpenGL 4.0 spec:
@@ -2159,6 +2204,15 @@ assign_attribute_or_color_locations(gl_shader_program *prog,
       to_assign[num_attr].slots = slots;
       to_assign[num_attr].var = var;
       num_attr++;
+   }
+
+   if (target_index == MESA_SHADER_VERTEX) {
+      if (total_attribs_size > max_index) {
+	 linker_error(prog,
+		      "attempt to use %d vertex attribute slots only %d available ",
+		      total_attribs_size, max_index);
+	 return false;
+      }
    }
 
    /* If all of the attributes were assigned locations by the application (or
@@ -2512,6 +2566,209 @@ check_explicit_uniform_locations(struct gl_context *ctx,
    delete uniform_map;
 }
 
+static bool
+add_program_resource(struct gl_shader_program *prog, GLenum type,
+                     const void *data, uint8_t stages)
+{
+   assert(data);
+
+   /* If resource already exists, do not add it again. */
+   for (unsigned i = 0; i < prog->NumProgramResourceList; i++)
+      if (prog->ProgramResourceList[i].Data == data)
+         return true;
+
+   prog->ProgramResourceList =
+      reralloc(prog,
+               prog->ProgramResourceList,
+               gl_program_resource,
+               prog->NumProgramResourceList + 1);
+
+   if (!prog->ProgramResourceList) {
+      linker_error(prog, "Out of memory during linking.\n");
+      return false;
+   }
+
+   struct gl_program_resource *res =
+      &prog->ProgramResourceList[prog->NumProgramResourceList];
+
+   res->Type = type;
+   res->Data = data;
+   res->StageReferences = stages;
+
+   prog->NumProgramResourceList++;
+
+   return true;
+}
+
+/**
+ * Function builds a stage reference bitmask from variable name.
+ */
+static uint8_t
+build_stageref(struct gl_shader_program *shProg, const char *name)
+{
+   uint8_t stages = 0;
+
+   /* Note, that we assume MAX 8 stages, if there will be more stages, type
+    * used for reference mask in gl_program_resource will need to be changed.
+    */
+   assert(MESA_SHADER_STAGES < 8);
+
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_shader *sh = shProg->_LinkedShaders[i];
+      if (!sh)
+         continue;
+      ir_variable *var = sh->symbols->get_variable(name);
+      if (var)
+         stages |= (1 << i);
+   }
+   return stages;
+}
+
+static bool
+add_interface_variables(struct gl_shader_program *shProg,
+                        struct gl_shader *sh, GLenum programInterface)
+{
+   foreach_in_list(ir_instruction, node, sh->ir) {
+      ir_variable *var = node->as_variable();
+      uint8_t mask = 0;
+
+      if (!var)
+         continue;
+
+      switch (var->data.mode) {
+      /* From GL 4.3 core spec, section 11.1.1 (Vertex Attributes):
+       * "For GetActiveAttrib, all active vertex shader input variables
+       * are enumerated, including the special built-in inputs gl_VertexID
+       * and gl_InstanceID."
+       */
+      case ir_var_system_value:
+         if (var->data.location != SYSTEM_VALUE_VERTEX_ID &&
+             var->data.location != SYSTEM_VALUE_VERTEX_ID_ZERO_BASE &&
+             var->data.location != SYSTEM_VALUE_INSTANCE_ID)
+            continue;
+         /* Mark special built-in inputs referenced by the vertex stage so
+          * that they are considered active by the shader queries.
+          */
+         mask = (1 << (MESA_SHADER_VERTEX));
+         /* FALLTHROUGH */
+      case ir_var_shader_in:
+         if (programInterface != GL_PROGRAM_INPUT)
+            continue;
+         break;
+      case ir_var_shader_out:
+         if (programInterface != GL_PROGRAM_OUTPUT)
+            continue;
+         break;
+      default:
+         continue;
+      };
+
+      if (!add_program_resource(shProg, programInterface, var,
+                                build_stageref(shProg, var->name) | mask))
+         return false;
+   }
+   return true;
+}
+
+/**
+ * Builds up a list of program resources that point to existing
+ * resource data.
+ */
+static void
+build_program_resource_list(struct gl_context *ctx,
+                            struct gl_shader_program *shProg)
+{
+   /* Rebuild resource list. */
+   if (shProg->ProgramResourceList) {
+      ralloc_free(shProg->ProgramResourceList);
+      shProg->ProgramResourceList = NULL;
+      shProg->NumProgramResourceList = 0;
+   }
+
+   int input_stage = MESA_SHADER_STAGES, output_stage = 0;
+
+   /* Determine first input and final output stage. These are used to
+    * detect which variables should be enumerated in the resource list
+    * for GL_PROGRAM_INPUT and GL_PROGRAM_OUTPUT.
+    */
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      if (!shProg->_LinkedShaders[i])
+         continue;
+      if (input_stage == MESA_SHADER_STAGES)
+         input_stage = i;
+      output_stage = i;
+   }
+
+   /* Empty shader, no resources. */
+   if (input_stage == MESA_SHADER_STAGES && output_stage == 0)
+      return;
+
+   /* Add inputs and outputs to the resource list. */
+   if (!add_interface_variables(shProg, shProg->_LinkedShaders[input_stage],
+                                GL_PROGRAM_INPUT))
+      return;
+
+   if (!add_interface_variables(shProg, shProg->_LinkedShaders[output_stage],
+                                GL_PROGRAM_OUTPUT))
+      return;
+
+   /* Add transform feedback varyings. */
+   if (shProg->LinkedTransformFeedback.NumVarying > 0) {
+      for (int i = 0; i < shProg->LinkedTransformFeedback.NumVarying; i++) {
+         uint8_t stageref =
+            build_stageref(shProg,
+                           shProg->LinkedTransformFeedback.Varyings[i].Name);
+         if (!add_program_resource(shProg, GL_TRANSFORM_FEEDBACK_VARYING,
+                                   &shProg->LinkedTransformFeedback.Varyings[i],
+                                   stageref))
+         return;
+      }
+   }
+
+   /* Add uniforms from uniform storage. */
+   for (unsigned i = 0; i < shProg->NumUserUniformStorage; i++) {
+      /* Do not add uniforms internally used by Mesa. */
+      if (shProg->UniformStorage[i].hidden)
+         continue;
+
+      uint8_t stageref =
+         build_stageref(shProg, shProg->UniformStorage[i].name);
+
+      /* Add stagereferences for uniforms in a uniform block. */
+      int block_index = shProg->UniformStorage[i].block_index;
+      if (block_index != -1) {
+         for (unsigned j = 0; j < MESA_SHADER_STAGES; j++) {
+             if (shProg->UniformBlockStageIndex[j][block_index] != -1)
+                stageref |= (1 << j);
+         }
+      }
+
+      if (!add_program_resource(shProg, GL_UNIFORM,
+                                &shProg->UniformStorage[i], stageref))
+         return;
+   }
+
+   /* Add program uniform blocks. */
+   for (unsigned i = 0; i < shProg->NumUniformBlocks; i++) {
+      if (!add_program_resource(shProg, GL_UNIFORM_BLOCK,
+          &shProg->UniformBlocks[i], 0))
+         return;
+   }
+
+   /* Add atomic counter buffers. */
+   for (unsigned i = 0; i < shProg->NumAtomicBuffers; i++) {
+      if (!add_program_resource(shProg, GL_ATOMIC_COUNTER_BUFFER,
+                                &shProg->AtomicBuffers[i], 0))
+         return;
+   }
+
+   /* TODO - following extensions will require more resource types:
+    *
+    *    GL_ARB_shader_storage_buffer_object
+    *    GL_ARB_shader_subroutine
+    */
+}
+
 /**
  * This check is done to make sure we allow only constant expression
  * indexing and "constant-index-expression" (indexing with an expression
@@ -2586,8 +2843,9 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 	 goto done;
       }
 
-      prog->ARB_fragment_coord_conventions_enable |=
-         prog->Shaders[i]->ARB_fragment_coord_conventions_enable;
+      if (prog->Shaders[i]->ARB_fragment_coord_conventions_enable) {
+         prog->ARB_fragment_coord_conventions_enable = true;
+      }
 
       gl_shader_stage shader_type = prog->Shaders[i]->Stage;
       shader_list[shader_type][num_shaders[shader_type]] = prog->Shaders[i];
@@ -2796,10 +3054,18 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       goto done;
    }
 
-   unsigned first;
-   for (first = 0; first <= MESA_SHADER_FRAGMENT; first++) {
-      if (prog->_LinkedShaders[first] != NULL)
-	 break;
+   unsigned first, last;
+
+   first = MESA_SHADER_STAGES;
+   last = 0;
+
+   /* Determine first and last stage. */
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      if (!prog->_LinkedShaders[i])
+         continue;
+      if (first == MESA_SHADER_STAGES)
+         first = i;
+      last = i;
    }
 
    if (num_tfeedback_decls != 0) {
@@ -2828,13 +3094,9 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
     * ensures that inter-shader outputs written to in an earlier stage are
     * eliminated if they are (transitively) not used in a later stage.
     */
-   int last, next;
-   for (last = MESA_SHADER_FRAGMENT; last >= 0; last--) {
-      if (prog->_LinkedShaders[last] != NULL)
-         break;
-   }
+   int next;
 
-   if (last >= 0 && last < MESA_SHADER_FRAGMENT) {
+   if (first < MESA_SHADER_FRAGMENT) {
       gl_shader *const sh = prog->_LinkedShaders[last];
 
       if (first == MESA_SHADER_GEOMETRY) {
@@ -2846,13 +3108,14 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
           * MESA_SHADER_GEOMETRY.
           */
          if (!assign_varying_locations(ctx, mem_ctx, prog,
-                                       NULL, sh,
+                                       NULL, prog->_LinkedShaders[first],
                                        num_tfeedback_decls, tfeedback_decls,
                                        prog->Geom.VerticesIn))
             goto done;
       }
 
-      if (num_tfeedback_decls != 0 || prog->SeparateShader) {
+      if (last != MESA_SHADER_FRAGMENT &&
+         (num_tfeedback_decls != 0 || prog->SeparateShader)) {
          /* There was no fragment shader, but we still have to assign varying
           * locations for use by transform feedback.
           */
@@ -2963,6 +3226,10 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 	 linker_error(prog, "program lacks a fragment shader\n");
       }
    }
+
+   build_program_resource_list(ctx, prog);
+   if (!prog->LinkStatus)
+      goto done;
 
    /* FINISHME: Assign fragment shader output locations. */
 

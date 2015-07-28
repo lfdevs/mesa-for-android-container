@@ -41,10 +41,8 @@
  * we do retain the vector types in that case.
  */
 
-extern "C" {
 #include "main/core.h"
 #include "brw_wm.h"
-}
 #include "glsl/ir.h"
 #include "glsl/ir_expression_flattening.h"
 #include "glsl/glsl_types.h"
@@ -234,8 +232,6 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_round_even:
    case ir_unop_sin:
    case ir_unop_cos:
-   case ir_unop_sin_reduced:
-   case ir_unop_cos_reduced:
    case ir_unop_dFdx:
    case ir_unop_dFdx_coarse:
    case ir_unop_dFdx_fine:
@@ -273,6 +269,9 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_binop_bit_and:
    case ir_binop_bit_xor:
    case ir_binop_bit_or:
+   case ir_binop_logic_and:
+   case ir_binop_logic_xor:
+   case ir_binop_logic_or:
    case ir_binop_less:
    case ir_binop_greater:
    case ir_binop_lequal:
@@ -331,12 +330,6 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
       break;
    }
 
-   case ir_binop_logic_and:
-   case ir_binop_logic_xor:
-   case ir_binop_logic_or:
-      ir->fprint(stderr);
-      fprintf(stderr, "\n");
-      unreachable("not reached: expression operates on scalars only");
    case ir_binop_all_equal:
    case ir_binop_any_nequal: {
       ir_expression *last = NULL;
@@ -445,6 +438,19 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_binop_interpolate_at_offset:
    case ir_binop_interpolate_at_sample:
       unreachable("not reached: expression operates on scalars only");
+
+   case ir_unop_pack_double_2x32:
+   case ir_unop_unpack_double_2x32:
+   case ir_unop_frexp_sig:
+   case ir_unop_frexp_exp:
+   case ir_unop_d2f:
+   case ir_unop_f2d:
+   case ir_unop_d2i:
+   case ir_unop_i2d:
+   case ir_unop_d2u:
+   case ir_unop_u2d:
+   case ir_unop_d2b:
+      unreachable("no fp64 support yet");
    }
 
    ir->remove();

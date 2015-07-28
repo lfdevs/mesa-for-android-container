@@ -39,11 +39,14 @@ EXTRA_DIST = \
 	glapi/SConscript \
 	shared-glapi/SConscript
 
-AM_CFLAGS = $(PTHREAD_CFLAGS)
+AM_CFLAGS = \
+	$(PTHREAD_CFLAGS) \
+	$(MSVC2013_COMPAT_CFLAGS)
 AM_CPPFLAGS =							\
 	$(DEFINES)						\
 	$(SELINUX_CFLAGS)					\
 	-I$(top_srcdir)/include					\
+	-I$(top_srcdir)/src					\
 	-I$(top_srcdir)/src/mapi				\
 	-I$(top_builddir)/src/mapi
 
@@ -229,11 +232,5 @@ endif
 
 es2api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
 	$(call glapi_gen_mapi,$<,es2api)
-
-# XXX: Inline vgapi's Makefile.am here.
-EXTRA_DIST += vgapi mapi.c mapi.h
-# if HAVE_OPENVG
-# SUBDIRS += vgapi
-# endif
 
 include $(top_srcdir)/install-lib-links.mk

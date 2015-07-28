@@ -25,7 +25,7 @@
  *
  */
 
-#include "main/bitset.h"
+#include "util/bitset.h"
 #include "brw_vec4.h"
 
 namespace brw {
@@ -60,7 +60,7 @@ class vec4_live_variables {
 public:
    DECLARE_RALLOC_CXX_OPERATORS(vec4_live_variables)
 
-   vec4_live_variables(vec4_visitor *v, cfg_t *cfg);
+   vec4_live_variables(const simple_allocator &alloc, cfg_t *cfg);
    ~vec4_live_variables();
 
    int num_vars;
@@ -73,9 +73,28 @@ protected:
    void setup_def_use();
    void compute_live_variables();
 
-   vec4_visitor *v;
+   const simple_allocator &alloc;
    cfg_t *cfg;
    void *mem_ctx;
 };
+
+inline unsigned
+var_from_reg(const simple_allocator &alloc, const src_reg &reg,
+             unsigned c = 0)
+{
+   assert(reg.file == GRF && reg.reg < alloc.count &&
+          reg.reg_offset < alloc.sizes[reg.reg] && c < 4);
+   return (4 * (alloc.offsets[reg.reg] + reg.reg_offset) +
+           BRW_GET_SWZ(reg.swizzle, c));
+}
+
+inline unsigned
+var_from_reg(const simple_allocator &alloc, const dst_reg &reg,
+             unsigned c = 0)
+{
+   assert(reg.file == GRF && reg.reg < alloc.count &&
+          reg.reg_offset < alloc.sizes[reg.reg] && c < 4);
+   return 4 * (alloc.offsets[reg.reg] + reg.reg_offset) + c;
+}
 
 } /* namespace brw */

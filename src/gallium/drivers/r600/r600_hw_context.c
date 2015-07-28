@@ -307,7 +307,7 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	ctx->poly_offset_state.atom.dirty = true;
 	ctx->vgt_state.atom.dirty = true;
 	ctx->sample_mask.atom.dirty = true;
-	for (i = 0; i < 16; i++) {
+	for (i = 0; i < R600_MAX_VIEWPORTS; i++) {
 		ctx->scissor[i].atom.dirty = true;
 		ctx->viewport[i].atom.dirty = true;
 	}
@@ -466,7 +466,7 @@ void r600_dma_copy_buffer(struct r600_context *rctx,
 	r600_need_dma_space(&rctx->b, ncopy * 5);
 	for (i = 0; i < ncopy; i++) {
 		csize = size < R600_DMA_COPY_MAX_SIZE_DW ? size : R600_DMA_COPY_MAX_SIZE_DW;
-		/* emit reloc before writting cs so that cs is always in consistent state */
+		/* emit reloc before writing cs so that cs is always in consistent state */
 		r600_context_bo_reloc(&rctx->b, &rctx->b.rings.dma, rsrc, RADEON_USAGE_READ,
 				      RADEON_PRIO_MIN);
 		r600_context_bo_reloc(&rctx->b, &rctx->b.rings.dma, rdst, RADEON_USAGE_WRITE,

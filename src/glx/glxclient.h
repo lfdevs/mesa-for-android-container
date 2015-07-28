@@ -47,19 +47,15 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#ifdef _WIN32
 #include <stdint.h>
-#endif
+#include <pthread.h>
 #include "GL/glxproto.h"
 #include "glxconfig.h"
 #include "glxhash.h"
-#if defined( HAVE_PTHREAD )
-# include <pthread.h>
-#endif
+#include "util/macros.h"
 
 #include "glxextensions.h"
 
-#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
 
 #define GLX_MAJOR_VERSION 1       /* current version numbers */
 #define GLX_MINOR_VERSION 4
@@ -631,7 +627,6 @@ extern void __glXPreferEGL(int state);
 extern int __glXDebug;
 
 /* This is per-thread storage in an MT environment */
-#if defined( HAVE_PTHREAD )
 
 extern void __glXSetCurrentContext(struct glx_context * c);
 
@@ -648,14 +643,6 @@ extern struct glx_context *__glXGetCurrentContext(void);
 
 # endif /* defined( GLX_USE_TLS ) */
 
-#else
-
-extern struct glx_context *__glXcurrentContext;
-#define __glXGetCurrentContext() __glXcurrentContext
-#define __glXSetCurrentContext(gc) __glXcurrentContext = gc
-
-#endif /* defined( HAVE_PTHREAD ) */
-
 extern void __glXSetCurrentContextNull(void);
 
 
@@ -663,14 +650,9 @@ extern void __glXSetCurrentContextNull(void);
 ** Global lock for all threads in this address space using the GLX
 ** extension
 */
-#if defined( HAVE_PTHREAD )
 extern pthread_mutex_t __glXmutex;
 #define __glXLock()    pthread_mutex_lock(&__glXmutex)
 #define __glXUnlock()  pthread_mutex_unlock(&__glXmutex)
-#else
-#define __glXLock()
-#define __glXUnlock()
-#endif
 
 /*
 ** Setup for a command.  Initialize the extension for dpy if necessary.

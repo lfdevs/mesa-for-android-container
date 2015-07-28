@@ -47,12 +47,14 @@ struct fd_tile {
 
 struct fd_gmem_stateobj {
 	struct pipe_scissor_state scissor;
-	uint cpp;
+	uint32_t cbuf_base[4];
+	uint32_t zsbuf_base[2];
+	uint8_t cbuf_cpp[4];
+	uint8_t zsbuf_cpp[2];
 	uint16_t bin_h, nbins_y;
 	uint16_t bin_w, nbins_x;
 	uint16_t minx, miny;
 	uint16_t width, height;
-	bool has_zs;  /* gmem config using depth/stencil? */
 };
 
 struct fd_context;

@@ -251,6 +251,7 @@ static struct set_entry *
 set_add(struct set *ht, uint32_t hash, const void *key)
 {
    uint32_t hash_address;
+   struct set_entry *available_entry = NULL;
 
    if (ht->entries >= ht->max_entries) {
       set_rehash(ht, ht->size_index + 1);
@@ -264,12 +265,11 @@ set_add(struct set *ht, uint32_t hash, const void *key)
       uint32_t double_hash;
 
       if (!entry_is_present(entry)) {
-         if (entry_is_deleted(entry))
-            ht->deleted_entries--;
-         entry->hash = hash;
-         entry->key = key;
-         ht->entries++;
-         return entry;
+         /* Stash the first available entry we find */
+         if (available_entry == NULL)
+            available_entry = entry;
+         if (entry_is_free(entry))
+            break;
       }
 
       /* Implement replacement when another insert happens
@@ -292,6 +292,15 @@ set_add(struct set *ht, uint32_t hash, const void *key)
 
       hash_address = (hash_address + double_hash) % ht->size;
    } while (hash_address != hash % ht->size);
+
+   if (available_entry) {
+      if (entry_is_deleted(available_entry))
+         ht->deleted_entries--;
+      available_entry->hash = hash;
+      available_entry->key = key;
+      ht->entries++;
+      return available_entry;
+   }
 
    /* We could hit here if a required resize failed. An unchecked-malloc
     * application could ignore this result.

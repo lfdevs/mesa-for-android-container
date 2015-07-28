@@ -173,6 +173,12 @@ device::image_support() const {
                                       PIPE_COMPUTE_CAP_IMAGES_SUPPORTED)[0];
 }
 
+bool
+device::has_doubles() const {
+   return pipe->get_shader_param(pipe, PIPE_SHADER_COMPUTE,
+                                 PIPE_SHADER_CAP_DOUBLES);
+}
+
 std::vector<size_t>
 device::max_block_size() const {
    auto v = get_compute_param<uint64_t>(pipe, PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE);
@@ -186,7 +192,7 @@ device::device_name() const {
 
 std::string
 device::vendor_name() const {
-   return pipe->get_vendor(pipe);
+   return pipe->get_device_vendor(pipe);
 }
 
 enum pipe_shader_ir

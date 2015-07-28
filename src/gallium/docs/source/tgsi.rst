@@ -272,6 +272,21 @@ This instruction replicates its result.
   dst.w = src0.w \times src1.w + (1 - src0.w) \times src2.w
 
 
+.. opcode:: FMA - Fused Multiply-Add
+
+Perform a * b + c with no intermediate rounding step.
+
+.. math::
+
+  dst.x = src0.x \times src1.x + src2.x
+
+  dst.y = src0.y \times src1.y + src2.y
+
+  dst.z = src0.z \times src1.z + src2.z
+
+  dst.w = src0.w \times src1.w + src2.w
+
+
 .. opcode:: DP2A - 2-component Dot Product And Add
 
 .. math::
@@ -1808,7 +1823,10 @@ Double ISA
 The double-precision opcodes reinterpret four-component vectors into
 two-component vectors with doubled precision in each component.
 
-Support for these opcodes is XXX undecided. :T
+.. opcode:: DABS - Absolute
+
+  dst.xy = |src0.xy|
+  dst.zw = |src0.zw|
 
 .. opcode:: DADD - Add
 
@@ -1818,30 +1836,37 @@ Support for these opcodes is XXX undecided. :T
 
   dst.zw = src0.zw + src1.zw
 
-
-.. opcode:: DDIV - Divide
-
-.. math::
-
-  dst.xy = src0.xy / src1.xy
-
-  dst.zw = src0.zw / src1.zw
-
 .. opcode:: DSEQ - Set on Equal
 
 .. math::
 
-  dst.xy = src0.xy == src1.xy ? 1.0F : 0.0F
+  dst.x = src0.xy == src1.xy ? \sim 0 : 0
 
-  dst.zw = src0.zw == src1.zw ? 1.0F : 0.0F
+  dst.z = src0.zw == src1.zw ? \sim 0 : 0
+
+.. opcode:: DSNE - Set on Equal
+
+.. math::
+
+  dst.x = src0.xy != src1.xy ? \sim 0 : 0
+
+  dst.z = src0.zw != src1.zw ? \sim 0 : 0
 
 .. opcode:: DSLT - Set on Less than
 
 .. math::
 
-  dst.xy = src0.xy < src1.xy ? 1.0F : 0.0F
+  dst.x = src0.xy < src1.xy ? \sim 0 : 0
 
-  dst.zw = src0.zw < src1.zw ? 1.0F : 0.0F
+  dst.z = src0.zw < src1.zw ? \sim 0 : 0
+
+.. opcode:: DSGE - Set on Greater equal
+
+.. math::
+
+  dst.x = src0.xy >= src1.xy ? \sim 0 : 0
+
+  dst.z = src0.zw >= src1.zw ? \sim 0 : 0
 
 .. opcode:: DFRAC - Fraction
 
@@ -1851,6 +1876,45 @@ Support for these opcodes is XXX undecided. :T
 
   dst.zw = src.zw - \lfloor src.zw\rfloor
 
+.. opcode:: DTRUNC - Truncate
+
+.. math::
+
+  dst.xy = trunc(src.xy)
+
+  dst.zw = trunc(src.zw)
+
+.. opcode:: DCEIL - Ceiling
+
+.. math::
+
+  dst.xy = \lceil src.xy\rceil
+
+  dst.zw = \lceil src.zw\rceil
+
+.. opcode:: DFLR - Floor
+
+.. math::
+
+  dst.xy = \lfloor src.xy\rfloor
+
+  dst.zw = \lfloor src.zw\rfloor
+
+.. opcode:: DROUND - Fraction
+
+.. math::
+
+  dst.xy = round(src.xy)
+
+  dst.zw = round(src.zw)
+
+.. opcode:: DSSG - Set Sign
+
+.. math::
+
+  dst.xy = (src.xy > 0) ? 1.0 : (src.xy < 0) ? -1.0 : 0.0
+
+  dst.zw = (src.zw > 0) ? 1.0 : (src.zw < 0) ? -1.0 : 0.0
 
 .. opcode:: DFRACEXP - Convert Number to Fractional and Integral Components
 
@@ -1870,13 +1934,14 @@ exponent of its source to ``dst0``, and the significand to ``dst1``, such that
 
 .. opcode:: DLDEXP - Multiply Number by Integral Power of 2
 
-This opcode is the inverse of :opcode:`DFRACEXP`.
+This opcode is the inverse of :opcode:`DFRACEXP`. The second
+source is an integer.
 
 .. math::
 
-  dst.xy = src0.xy \times 2^{src1.xy}
+  dst.xy = src0.xy \times 2^{src1.x}
 
-  dst.zw = src0.zw \times 2^{src1.zw}
+  dst.zw = src0.zw \times 2^{src1.y}
 
 .. opcode:: DMIN - Minimum
 
@@ -1912,6 +1977,17 @@ This opcode is the inverse of :opcode:`DFRACEXP`.
   dst.zw = src0.zw \times src1.zw + src2.zw
 
 
+.. opcode:: DFMA - Fused Multiply-Add
+
+Perform a * b + c with no intermediate rounding step.
+
+.. math::
+
+  dst.xy = src0.xy \times src1.xy + src2.xy
+
+  dst.zw = src0.zw \times src1.zw + src2.zw
+
+
 .. opcode:: DRCP - Reciprocal
 
 .. math::
@@ -1928,6 +2004,61 @@ This opcode is the inverse of :opcode:`DFRACEXP`.
 
    dst.zw = \sqrt{src.zw}
 
+.. opcode:: DRSQ - Reciprocal Square Root
+
+.. math::
+
+   dst.xy = \frac{1}{\sqrt{src.xy}}
+
+   dst.zw = \frac{1}{\sqrt{src.zw}}
+
+.. opcode:: F2D - Float to Double
+
+.. math::
+
+   dst.xy = double(src0.x)
+
+   dst.zw = double(src0.y)
+
+.. opcode:: D2F - Double to Float
+
+.. math::
+
+   dst.x = float(src0.xy)
+
+   dst.y = float(src0.zw)
+
+.. opcode:: I2D - Int to Double
+
+.. math::
+
+   dst.xy = double(src0.x)
+
+   dst.zw = double(src0.y)
+
+.. opcode:: D2I - Double to Int
+
+.. math::
+
+   dst.x = int(src0.xy)
+
+   dst.y = int(src0.zw)
+
+.. opcode:: U2D - Unsigned Int to Double
+
+.. math::
+
+   dst.xy = double(src0.x)
+
+   dst.zw = double(src0.y)
+
+.. opcode:: D2U - Double to Unsigned Int
+
+.. math::
+
+   dst.x = unsigned(src0.xy)
+
+   dst.y = unsigned(src0.zw)
 
 .. _samplingopcodes:
 
@@ -2763,6 +2894,43 @@ and only the X component is used.
 FIXME: This right now can be either a ordinary input or a system value...
 
 
+TGSI_SEMANTIC_PATCH
+"""""""""""""""""""
+
+For tessellation evaluation/control shaders, this semantic label indicates a
+generic per-patch attribute. Such semantics will not implicitly be per-vertex
+arrays.
+
+TGSI_SEMANTIC_TESSCOORD
+"""""""""""""""""""""""
+
+For tessellation evaluation shaders, this semantic label indicates the
+coordinates of the vertex being processed. This is available in XYZ; W is
+undefined.
+
+TGSI_SEMANTIC_TESSOUTER
+"""""""""""""""""""""""
+
+For tessellation evaluation/control shaders, this semantic label indicates the
+outer tessellation levels of the patch. Isoline tessellation will only have XY
+defined, triangle will have XYZ and quads will have XYZW defined. This
+corresponds to gl_TessLevelOuter.
+
+TGSI_SEMANTIC_TESSINNER
+"""""""""""""""""""""""
+
+For tessellation evaluation/control shaders, this semantic label indicates the
+inner tessellation levels of the patch. The X value is only defined for
+triangle tessellation, while quads will have XY defined. This is entirely
+undefined for isoline tessellation.
+
+TGSI_SEMANTIC_VERTICESIN
+""""""""""""""""""""""""
+
+For tessellation evaluation/control shaders, this semantic label indicates the
+number of vertices provided in the input patch. Only the X value is defined.
+
+
 Declaration Interpolate
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -2902,6 +3070,39 @@ directly taken from the 4-th component of the shader output.
 Naturally, clipping is not performed on window coordinates either.
 The effect of this property is undefined if a geometry or tessellation shader
 are in use.
+
+TCS_VERTICES_OUT
+""""""""""""""""
+
+The number of vertices written by the tessellation control shader. This
+effectively defines the patch input size of the tessellation evaluation shader
+as well.
+
+TES_PRIM_MODE
+"""""""""""""
+
+This sets the tessellation primitive mode, one of ``PIPE_PRIM_TRIANGLES``,
+``PIPE_PRIM_QUADS``, or ``PIPE_PRIM_LINES``. (Unlike in GL, there is no
+separate isolines settings, the regular lines is assumed to mean isolines.)
+
+TES_SPACING
+"""""""""""
+
+This sets the spacing mode of the tessellation generator, one of
+``PIPE_TESS_SPACING_*``.
+
+TES_VERTEX_ORDER_CW
+"""""""""""""""""""
+
+This sets the vertex order to be clockwise if the value is 1, or
+counter-clockwise if set to 0.
+
+TES_POINT_MODE
+""""""""""""""
+
+If set to a non-zero value, this turns on point mode for the tessellator,
+which means that points will be generated instead of primitives.
+
 
 Texture Sampling and Texture Formats
 ------------------------------------

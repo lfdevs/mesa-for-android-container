@@ -29,7 +29,7 @@
 #define HUD_PRIVATE_H
 
 #include "pipe/p_context.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 struct hud_graph {
    /* initialized by common code */
@@ -62,6 +62,10 @@ struct hud_pane {
    float yscale;
    unsigned max_num_vertices;
    uint64_t max_value;
+   uint64_t initial_max_value;
+   uint64_t ceiling;
+   unsigned dyn_ceil_last_ran;
+   boolean dyn_ceiling;
    boolean uses_byte_units;
    uint64_t period; /* in microseconds */
 

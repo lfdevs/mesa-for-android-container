@@ -136,7 +136,7 @@ void i945_miptree_layout_2d(struct intel_mipmap_tree *mt)
        mt->total_width = ALIGN(mt->physical_width0, mt->align_w);
    }
 
-   /* May need to adjust width to accomodate the placement of
+   /* May need to adjust width to accommodate the placement of
     * the 2nd mipmap.  This occurs when the alignment
     * constraints of mipmap placement push the right edge of the
     * 2nd mipmap out past the width of its parent.

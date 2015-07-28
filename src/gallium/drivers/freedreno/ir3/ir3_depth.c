@@ -71,10 +71,12 @@ int ir3_delayslots(struct ir3_instruction *assigner,
 		return 0;
 
 	/* assigner must be alu: */
-	if (is_flow(consumer) || is_sfu(consumer) || is_tex(consumer)) {
+	if (is_flow(consumer) || is_sfu(consumer) || is_tex(consumer) ||
+			is_mem(consumer)) {
 		return 6;
 	} else if ((consumer->category == 3) &&
-			is_mad(consumer->opc) && (n == 2)) {
+			(is_mad(consumer->opc) || is_madsh(consumer->opc)) &&
+			(n == 2)) {
 		/* special case, 3rd src to cat3 not required on first cycle */
 		return 1;
 	} else {
@@ -102,7 +104,7 @@ static void insert_by_depth(struct ir3_instruction *instr)
 
 static void ir3_instr_depth(struct ir3_instruction *instr)
 {
-	unsigned i;
+	struct ir3_instruction *src;
 
 	/* if we've already visited this instruction, bail now: */
 	if (ir3_instr_check_mark(instr))
@@ -110,19 +112,15 @@ static void ir3_instr_depth(struct ir3_instruction *instr)
 
 	instr->depth = 0;
 
-	for (i = 1; i < instr->regs_count; i++) {
-		struct ir3_register *src = instr->regs[i];
-		if (src->flags & IR3_REG_SSA) {
-			unsigned sd;
+	foreach_ssa_src_n(src, i, instr) {
+		unsigned sd;
 
-			/* visit child to compute it's depth: */
-			ir3_instr_depth(src->instr);
+		/* visit child to compute it's depth: */
+		ir3_instr_depth(src);
 
-			sd = ir3_delayslots(src->instr, instr, i-1) +
-					src->instr->depth;
+		sd = ir3_delayslots(src, instr, i) + src->depth;
 
-			instr->depth = MAX2(instr->depth, sd);
-		}
+		instr->depth = MAX2(instr->depth, sd);
 	}
 
 	/* meta-instructions don't add cycles, other than PHI.. which

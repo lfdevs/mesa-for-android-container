@@ -159,12 +159,14 @@ static void si_shader_vs(struct si_shader *shader)
 	va = shader->bo->gpu_address;
 	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ, RADEON_PRIO_SHADER_DATA);
 
-	vgpr_comp_cnt = shader->uses_instanceid ? 3 : 0;
-
-	if (shader->is_gs_copy_shader)
+	if (shader->is_gs_copy_shader) {
+		vgpr_comp_cnt = 0; /* only VertexID is needed for GS-COPY. */
 		num_user_sgprs = SI_GSCOPY_NUM_USER_SGPR;
-	else
+	} else if (shader->selector->type == PIPE_SHADER_VERTEX) {
+		vgpr_comp_cnt = shader->uses_instanceid ? 3 : 0;
 		num_user_sgprs = SI_VS_NUM_USER_SGPR;
+	} else
+		assert(0);
 
 	num_sgprs = shader->num_sgprs;
 	if (num_user_sgprs > num_sgprs) {
@@ -364,33 +366,38 @@ static INLINE void si_shader_selector_key(struct pipe_context *ctx,
 			key->vs.gs_used_inputs = sctx->gs_shader->gs_used_inputs;
 		}
 	} else if (sel->type == PIPE_SHADER_FRAGMENT) {
+		struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
+
 		if (sel->info.properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS])
 			key->ps.last_cbuf = MAX2(sctx->framebuffer.state.nr_cbufs, 1) - 1;
 		key->ps.export_16bpc = sctx->framebuffer.export_16bpc;
 
-		if (sctx->queued.named.rasterizer) {
-			key->ps.color_two_side = sctx->queued.named.rasterizer->two_side;
+		if (rs) {
+			bool is_poly = (sctx->current_rast_prim >= PIPE_PRIM_TRIANGLES &&
+					sctx->current_rast_prim <= PIPE_PRIM_POLYGON) ||
+				       sctx->current_rast_prim >= PIPE_PRIM_TRIANGLES_ADJACENCY;
+			bool is_line = !is_poly && sctx->current_rast_prim != PIPE_PRIM_POINTS;
+
+			key->ps.color_two_side = rs->two_side;
 
 			if (sctx->queued.named.blend) {
 				key->ps.alpha_to_one = sctx->queued.named.blend->alpha_to_one &&
-						       sctx->queued.named.rasterizer->multisample_enable &&
+						       rs->multisample_enable &&
 						       !sctx->framebuffer.cb0_is_integer;
 			}
 
-			key->ps.poly_stipple = sctx->queued.named.rasterizer->poly_stipple_enable &&
-					       ((sctx->current_rast_prim >= PIPE_PRIM_TRIANGLES &&
-						 sctx->current_rast_prim <= PIPE_PRIM_POLYGON) ||
-						sctx->current_rast_prim >= PIPE_PRIM_TRIANGLES_ADJACENCY);
+			key->ps.poly_stipple = rs->poly_stipple_enable && is_poly;
+			key->ps.poly_line_smoothing = ((is_poly && rs->poly_smooth) ||
+						       (is_line && rs->line_smooth)) &&
+						      sctx->framebuffer.nr_samples <= 1;
 		}
-		if (sctx->queued.named.dsa) {
-			key->ps.alpha_func = sctx->queued.named.dsa->alpha_func;
 
-			/* Alpha-test should be disabled if colorbuffer 0 is integer. */
-			if (sctx->framebuffer.cb0_is_integer)
-				key->ps.alpha_func = PIPE_FUNC_ALWAYS;
-		} else {
-			key->ps.alpha_func = PIPE_FUNC_ALWAYS;
-		}
+		key->ps.alpha_func = PIPE_FUNC_ALWAYS;
+
+		/* Alpha-test should be disabled if colorbuffer 0 is integer. */
+		if (sctx->queued.named.dsa &&
+		    !sctx->framebuffer.cb0_is_integer)
+			key->ps.alpha_func = sctx->queued.named.dsa->alpha_func;
 	}
 }
 
@@ -458,6 +465,7 @@ static void *si_create_shader_state(struct pipe_context *ctx,
 				    const struct pipe_shader_state *state,
 				    unsigned pipe_shader_type)
 {
+	struct si_screen *sscreen = (struct si_screen *)ctx->screen;
 	struct si_shader_selector *sel = CALLOC_STRUCT(si_shader_selector);
 	int i;
 
@@ -486,6 +494,9 @@ static void *si_create_shader_state(struct pipe_context *ctx,
 			}
 		}
 	}
+
+	if (sscreen->b.debug_flags & DBG_PRECOMPILE)
+		si_shader_select(ctx, sel);
 
 	return sel;
 }
@@ -824,8 +835,15 @@ static void si_update_spi_tmpring_size(struct si_context *sctx)
 			si_pm4_bind_state(sctx, ps, sctx->ps_shader->current->pm4);
 		if (si_update_scratch_buffer(sctx, sctx->gs_shader))
 			si_pm4_bind_state(sctx, gs, sctx->gs_shader->current->pm4);
-		if (si_update_scratch_buffer(sctx, sctx->vs_shader))
-			si_pm4_bind_state(sctx, vs, sctx->vs_shader->current->pm4);
+
+		/* VS can be bound as ES or VS. */
+		if (sctx->gs_shader) {
+			if (si_update_scratch_buffer(sctx, sctx->vs_shader))
+				si_pm4_bind_state(sctx, es, sctx->vs_shader->current->pm4);
+		} else {
+			if (si_update_scratch_buffer(sctx, sctx->vs_shader))
+				si_pm4_bind_state(sctx, vs, sctx->vs_shader->current->pm4);
+		}
 	}
 
 	/* The LLVM shader backend should be reporting aligned scratch_sizes. */
@@ -920,6 +938,14 @@ void si_update_shaders(struct si_context *sctx)
 	if (sctx->ps_db_shader_control != sctx->ps_shader->current->db_shader_control) {
 		sctx->ps_db_shader_control = sctx->ps_shader->current->db_shader_control;
 		sctx->db_render_state.dirty = true;
+	}
+
+	if (sctx->smoothing_enabled != sctx->ps_shader->current->key.ps.poly_line_smoothing) {
+		sctx->smoothing_enabled = sctx->ps_shader->current->key.ps.poly_line_smoothing;
+		sctx->msaa_config.dirty = true;
+
+		if (sctx->b.chip_class == SI)
+			sctx->db_render_state.dirty = true;
 	}
 }
 

@@ -39,7 +39,7 @@ struct disasm_printer {
 
 struct disasm_operand {
    unsigned file:2;
-   unsigned type:3;
+   unsigned type:4;
 
    unsigned addr_mode:1;
    unsigned reg:8;
@@ -70,7 +70,7 @@ struct disasm_src_operand {
 };
 
 struct disasm_inst {
-   const struct ilo_dev_info *dev;
+   const struct ilo_dev *dev;
 
    unsigned has_jip:1;
    unsigned has_uip:1;
@@ -90,6 +90,8 @@ struct disasm_inst {
    unsigned fc:4;
 
    unsigned acc_wr_ctrl:1;
+   unsigned branch_ctrl:1;
+
    unsigned cmpt_ctrl:1;
    unsigned debug_ctrl:1;
    unsigned saturate:1;
@@ -104,7 +106,23 @@ struct disasm_inst {
    struct disasm_src_operand src1;
    union {
       struct disasm_src_operand src2;
-      uint32_t imm32;
+      uint64_t imm64;
+
+      uint32_t ud;
+      int32_t d;
+      uint16_t uw;
+      int16_t w;
+      float f;
+
+      struct {
+         int16_t jip;
+         int16_t uip;
+      } ip16;
+
+      struct {
+         int32_t jip;
+         int32_t uip;
+      } ip32;
    } u;
 };
 
@@ -147,6 +165,7 @@ static const struct {
    [GEN75_OPCODE_CALLA]      = { "calla",    1 },
    [GEN6_OPCODE_CALL]        = { "call",     1 },
    [GEN6_OPCODE_RETURN]      = { "return",   1 },
+   [GEN8_OPCODE_GOTO]        = { "goto",     1 },
    [GEN6_OPCODE_WAIT]        = { "wait",     1 },
    [GEN6_OPCODE_SEND]        = { "send",     1 },
    [GEN6_OPCODE_SENDC]       = { "sendc",    1 },
@@ -181,14 +200,20 @@ static const struct {
 };
 
 static void
-disasm_inst_decode_dw0_gen6(struct disasm_inst *inst, uint32_t dw0)
+disasm_inst_decode_dw0_opcode_gen6(struct disasm_inst *inst, uint32_t dw0)
 {
+   ILO_DEV_ASSERT(inst->dev, 6, 8);
+
    inst->opcode = GEN_EXTRACT(dw0, GEN6_INST_OPCODE);
 
    switch (inst->opcode) {
    case GEN6_OPCODE_IF:
       inst->has_jip = true;
       inst->has_uip = (ilo_dev_gen(inst->dev) >= ILO_GEN(7));
+      break;
+   case GEN6_OPCODE_ELSE:
+      inst->has_jip = true;
+      inst->has_uip = (ilo_dev_gen(inst->dev) >= ILO_GEN(8));
       break;
    case GEN6_OPCODE_BREAK:
    case GEN6_OPCODE_CONT:
@@ -198,7 +223,6 @@ disasm_inst_decode_dw0_gen6(struct disasm_inst *inst, uint32_t dw0)
    case GEN6_OPCODE_JMPI:
    case GEN7_OPCODE_BRD:
    case GEN7_OPCODE_BRC:
-   case GEN6_OPCODE_ELSE:
    case GEN6_OPCODE_ENDIF:
    case GEN6_OPCODE_CASE:
    case GEN6_OPCODE_WHILE:
@@ -210,10 +234,25 @@ disasm_inst_decode_dw0_gen6(struct disasm_inst *inst, uint32_t dw0)
    default:
       break;
    }
+}
+
+static void
+disasm_inst_decode_dw0_gen6(struct disasm_inst *inst, uint32_t dw0)
+{
+   ILO_DEV_ASSERT(inst->dev, 6, 8);
+
+   disasm_inst_decode_dw0_opcode_gen6(inst, dw0);
 
    inst->access_mode = GEN_EXTRACT(dw0, GEN6_INST_ACCESSMODE);
-   inst->mask_ctrl = GEN_EXTRACT(dw0, GEN6_INST_MASKCTRL);
-   inst->dep_ctrl = GEN_EXTRACT(dw0, GEN6_INST_DEPCTRL);
+
+   if (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) {
+      inst->dep_ctrl = GEN_EXTRACT(dw0, GEN8_INST_DEPCTRL);
+      inst->nib_ctrl = (bool) (dw0 & GEN8_INST_NIBCTRL);
+   } else {
+      inst->mask_ctrl = GEN_EXTRACT(dw0, GEN6_INST_MASKCTRL);
+      inst->dep_ctrl = GEN_EXTRACT(dw0, GEN6_INST_DEPCTRL);
+   }
+
    inst->qtr_ctrl = GEN_EXTRACT(dw0, GEN6_INST_QTRCTRL);
    inst->thread_ctrl = GEN_EXTRACT(dw0, GEN6_INST_THREADCTRL);
    inst->pred_ctrl = GEN_EXTRACT(dw0, GEN6_INST_PREDCTRL);
@@ -235,22 +274,29 @@ disasm_inst_decode_dw0_gen6(struct disasm_inst *inst, uint32_t dw0)
       break;
    }
 
-   inst->acc_wr_ctrl = (bool) (dw0 & GEN6_INST_ACCWRCTRL);
+   switch (inst->opcode) {
+   case GEN6_OPCODE_IF:
+   case GEN6_OPCODE_ELSE:
+   case GEN8_OPCODE_GOTO:
+      if (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) {
+         inst->branch_ctrl = (bool) (dw0 & GEN8_INST_BRANCHCTRL);
+         break;
+      }
+   default:
+      inst->acc_wr_ctrl = (bool) (dw0 & GEN6_INST_ACCWRCTRL);
+      break;
+   }
+
    inst->cmpt_ctrl = (bool) (dw0 & GEN6_INST_CMPTCTRL);
    inst->debug_ctrl = (bool) (dw0 & GEN6_INST_DEBUGCTRL);
    inst->saturate = (bool) (dw0 & GEN6_INST_SATURATE);
 }
 
-static bool
-disasm_inst_jip_in_dw1_high_gen6(const struct disasm_inst *inst)
-{
-   return (ilo_dev_gen(inst->dev) == ILO_GEN(6) &&
-           inst->has_jip && !inst->has_uip);
-}
-
 static void
-disasm_inst_decode_dw1_gen6(struct disasm_inst *inst, uint32_t dw1)
+disasm_inst_decode_dw1_low_gen6(struct disasm_inst *inst, uint32_t dw1)
 {
+   ILO_DEV_ASSERT(inst->dev, 6, 7.5);
+
    inst->dst.base.file = GEN_EXTRACT(dw1, GEN6_INST_DST_FILE);
    inst->dst.base.type = GEN_EXTRACT(dw1, GEN6_INST_DST_TYPE);
    inst->src0.base.file = GEN_EXTRACT(dw1, GEN6_INST_SRC0_FILE);
@@ -260,11 +306,30 @@ disasm_inst_decode_dw1_gen6(struct disasm_inst *inst, uint32_t dw1)
 
    if (ilo_dev_gen(inst->dev) >= ILO_GEN(7))
       inst->nib_ctrl = (bool) (dw1 & GEN7_INST_NIBCTRL);
+}
 
-   if (disasm_inst_jip_in_dw1_high_gen6(inst)) {
-      inst->u.imm32 = dw1 >> 16;
-      return;
-   }
+static void
+disasm_inst_decode_dw1_low_gen8(struct disasm_inst *inst, uint32_t dw1)
+{
+   ILO_DEV_ASSERT(inst->dev, 8, 8);
+
+   inst->flag_subreg = GEN_EXTRACT(dw1, GEN8_INST_FLAG_SUBREG);
+   inst->flag_reg = GEN_EXTRACT(dw1, GEN8_INST_FLAG_REG);
+   inst->mask_ctrl = GEN_EXTRACT(dw1, GEN8_INST_MASKCTRL);
+
+   inst->dst.base.file = GEN_EXTRACT(dw1, GEN8_INST_DST_FILE);
+   inst->dst.base.type = GEN_EXTRACT(dw1, GEN8_INST_DST_TYPE);
+   inst->src0.base.file = GEN_EXTRACT(dw1, GEN8_INST_SRC0_FILE);
+   inst->src0.base.type = GEN_EXTRACT(dw1, GEN8_INST_SRC0_TYPE);
+
+   inst->dst.base.addr_imm = GEN_EXTRACT(dw1, GEN8_INST_DST_ADDR_IMM_BIT9) <<
+      GEN8_INST_DST_ADDR_IMM_BIT9__SHR;
+}
+
+static void
+disasm_inst_decode_dw1_high_gen6(struct disasm_inst *inst, uint32_t dw1)
+{
+   ILO_DEV_ASSERT(inst->dev, 6, 8);
 
    inst->dst.base.addr_mode = GEN_EXTRACT(dw1, GEN6_INST_DST_ADDRMODE);
 
@@ -279,14 +344,31 @@ disasm_inst_decode_dw1_gen6(struct disasm_inst *inst, uint32_t dw1)
             GEN6_INST_DST_SUBREG_ALIGN16__SHR;
       }
    } else {
-      inst->dst.base.addr_subreg = GEN_EXTRACT(dw1, GEN6_INST_DST_ADDR_SUBREG);
+      if (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) {
+         inst->dst.base.addr_subreg =
+            GEN_EXTRACT(dw1, GEN8_INST_DST_ADDR_SUBREG);
 
-      if (inst->access_mode == GEN6_ALIGN_1) {
-         inst->dst.base.addr_imm = GEN_EXTRACT(dw1, GEN6_INST_DST_ADDR_IMM);
+         /* bit 9 is already set in disasm_inst_decode_dw1_low_gen8() */
+         if (inst->access_mode == GEN6_ALIGN_1) {
+            inst->dst.base.addr_imm |=
+               GEN_EXTRACT(dw1, GEN8_INST_DST_ADDR_IMM);
+         } else {
+            inst->dst.base.addr_imm |=
+               GEN_EXTRACT(dw1, GEN8_INST_DST_ADDR_IMM_ALIGN16) <<
+               GEN8_INST_DST_ADDR_IMM_ALIGN16__SHR;
+         }
       } else {
-         inst->dst.base.addr_imm = GEN_EXTRACT(dw1,
-               GEN6_INST_DST_ADDR_IMM_ALIGN16) <<
-            GEN6_INST_DST_ADDR_IMM_ALIGN16__SHR;
+         inst->dst.base.addr_subreg =
+            GEN_EXTRACT(dw1, GEN6_INST_DST_ADDR_SUBREG);
+
+         if (inst->access_mode == GEN6_ALIGN_1) {
+            inst->dst.base.addr_imm =
+               GEN_EXTRACT(dw1, GEN6_INST_DST_ADDR_IMM);
+         } else {
+            inst->dst.base.addr_imm =
+               GEN_EXTRACT(dw1, GEN6_INST_DST_ADDR_IMM_ALIGN16) <<
+               GEN6_INST_DST_ADDR_IMM_ALIGN16__SHR;
+         }
       }
    }
 
@@ -299,23 +381,66 @@ disasm_inst_decode_dw1_gen6(struct disasm_inst *inst, uint32_t dw1)
 }
 
 static void
+disasm_inst_decode_dw1_gen6(struct disasm_inst *inst, uint32_t dw1)
+{
+   ILO_DEV_ASSERT(inst->dev, 6, 8);
+
+   if (ilo_dev_gen(inst->dev) >= ILO_GEN(8))
+      disasm_inst_decode_dw1_low_gen8(inst, dw1);
+   else
+      disasm_inst_decode_dw1_low_gen6(inst, dw1);
+
+   if (ilo_dev_gen(inst->dev) == ILO_GEN(6) &&
+       inst->has_jip && !inst->has_uip)
+      inst->u.imm64 = dw1 >> 16;
+   else
+      disasm_inst_decode_dw1_high_gen6(inst, dw1);
+}
+
+static void
 disasm_inst_decode_dw2_dw3_gen6(struct disasm_inst *inst,
                                 uint32_t dw2, uint32_t dw3)
 {
-   int count, i;
+   int imm_bits = 0, count, i;
 
-   if (ilo_dev_gen(inst->dev) >= ILO_GEN(7))
-      inst->flag_reg = GEN_EXTRACT(dw2, GEN7_INST_FLAG_REG);
+   ILO_DEV_ASSERT(inst->dev, 6, 8);
 
-   inst->flag_subreg = GEN_EXTRACT(dw2, GEN6_INST_FLAG_SUBREG);
+   if (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) {
+      /* how about real 64-bit immediates? */
+      if (inst->has_uip) {
+         imm_bits = 64;
+         inst->src1.base.file = GEN6_FILE_IMM;
+         inst->src1.base.type = GEN6_TYPE_D;
+      } else {
+         inst->src1.base.file = GEN_EXTRACT(dw2, GEN8_INST_SRC1_FILE);
+         inst->src1.base.type = GEN_EXTRACT(dw2, GEN8_INST_SRC1_TYPE);
 
-   if (inst->src0.base.file == GEN6_FILE_IMM ||
-       inst->src1.base.file == GEN6_FILE_IMM) {
-      count = 1;
-      if (!disasm_inst_jip_in_dw1_high_gen6(inst))
-         inst->u.imm32 = dw3;
+         if (inst->src0.base.file == GEN6_FILE_IMM ||
+             inst->src1.base.file == GEN6_FILE_IMM)
+            imm_bits = 32;
+      }
    } else {
+      if (ilo_dev_gen(inst->dev) >= ILO_GEN(7))
+         inst->flag_reg = GEN_EXTRACT(dw2, GEN7_INST_FLAG_REG);
+      inst->flag_subreg = GEN_EXTRACT(dw2, GEN6_INST_FLAG_SUBREG);
+
+      if (inst->src0.base.file == GEN6_FILE_IMM ||
+          inst->src1.base.file == GEN6_FILE_IMM)
+         imm_bits = 32;
+   }
+
+   switch (imm_bits) {
+   case 32:
+      inst->u.imm64 = dw3;
+      count = 1;
+      break;
+   case 64:
+      inst->u.imm64 = (uint64_t) dw2 << 32 | dw3;
+      count = 0;
+      break;
+   default:
       count = 2;
+      break;
    }
 
    for (i = 0; i < count; i++) {
@@ -334,14 +459,38 @@ disasm_inst_decode_dw2_dw3_gen6(struct disasm_inst *inst,
                GEN6_INST_SRC_SUBREG_ALIGN16__SHR;
          }
       } else {
-         src->base.addr_subreg = GEN_EXTRACT(dw, GEN6_INST_SRC_ADDR_SUBREG);
+         if (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) {
+            src->base.addr_subreg =
+               GEN_EXTRACT(dw, GEN8_INST_SRC_ADDR_SUBREG);
 
-         if (inst->access_mode == GEN6_ALIGN_1) {
-            src->base.addr_imm = GEN_EXTRACT(dw, GEN6_INST_SRC_ADDR_IMM);
+            if (inst->access_mode == GEN6_ALIGN_1) {
+               src->base.addr_imm = GEN_EXTRACT(dw, GEN8_INST_SRC_ADDR_IMM);
+            } else {
+               src->base.addr_imm =
+                  GEN_EXTRACT(dw, GEN8_INST_SRC_ADDR_IMM_ALIGN16) <<
+                  GEN8_INST_SRC_ADDR_IMM_ALIGN16__SHR;
+            }
+
+            if (i == 0) {
+               inst->dst.base.addr_imm |= GEN_EXTRACT(dw,
+                     GEN8_INST_SRC0_ADDR_IMM_BIT9) <<
+                  GEN8_INST_SRC0_ADDR_IMM_BIT9__SHR;
+            } else {
+               inst->dst.base.addr_imm |= GEN_EXTRACT(dw,
+                     GEN8_INST_SRC1_ADDR_IMM_BIT9) <<
+                  GEN8_INST_SRC1_ADDR_IMM_BIT9__SHR;
+            }
          } else {
-            src->base.addr_imm =
-               GEN_EXTRACT(dw, GEN6_INST_SRC_ADDR_IMM_ALIGN16) <<
-               GEN6_INST_SRC_ADDR_IMM_ALIGN16__SHR;
+            src->base.addr_subreg =
+               GEN_EXTRACT(dw, GEN6_INST_SRC_ADDR_SUBREG);
+
+            if (inst->access_mode == GEN6_ALIGN_1) {
+               src->base.addr_imm = GEN_EXTRACT(dw, GEN6_INST_SRC_ADDR_IMM);
+            } else {
+               src->base.addr_imm =
+                  GEN_EXTRACT(dw, GEN6_INST_SRC_ADDR_IMM_ALIGN16) <<
+                  GEN6_INST_SRC_ADDR_IMM_ALIGN16__SHR;
+            }
          }
       }
 
@@ -373,12 +522,14 @@ disasm_inst_decode_dw2_dw3_gen6(struct disasm_inst *inst,
 static void
 disasm_inst_decode_3src_dw1_gen6(struct disasm_inst *inst, uint32_t dw1)
 {
-   static unsigned type_mapping[4] = {
+   static const unsigned type_mapping[4] = {
       [GEN7_TYPE_F_3SRC]   = GEN6_TYPE_F,
       [GEN7_TYPE_D_3SRC]   = GEN6_TYPE_D,
       [GEN7_TYPE_UD_3SRC]  = GEN6_TYPE_UD,
       [GEN7_TYPE_DF_3SRC]  = GEN7_TYPE_DF,
    };
+
+   ILO_DEV_ASSERT(inst->dev, 6, 7.5);
 
    inst->flag_subreg = GEN_EXTRACT(dw1, GEN6_3SRC_FLAG_SUBREG);
 
@@ -425,11 +576,62 @@ disasm_inst_decode_3src_dw1_gen6(struct disasm_inst *inst, uint32_t dw1)
 }
 
 static void
+disasm_inst_decode_3src_dw1_gen8(struct disasm_inst *inst, uint32_t dw1)
+{
+   static const unsigned type_mapping[8] = {
+      [GEN7_TYPE_F_3SRC]   = GEN6_TYPE_F,
+      [GEN7_TYPE_D_3SRC]   = GEN6_TYPE_D,
+      [GEN7_TYPE_UD_3SRC]  = GEN6_TYPE_UD,
+      [GEN7_TYPE_DF_3SRC]  = GEN7_TYPE_DF,
+      /* map unknown types to unknown types */
+      [0x4]                = 0xf,
+      [0x5]                = 0xf,
+      [0x6]                = 0xf,
+      [0x7]                = 0xf,
+   };
+
+   ILO_DEV_ASSERT(inst->dev, 8, 8);
+
+   inst->flag_subreg = GEN_EXTRACT(dw1, GEN8_3SRC_FLAG_SUBREG);
+   inst->flag_reg = GEN_EXTRACT(dw1, GEN8_3SRC_FLAG_REG);
+   inst->mask_ctrl = GEN_EXTRACT(dw1, GEN8_3SRC_MASKCTRL);
+   inst->src0.absolute = (bool) (dw1 & GEN8_3SRC_SRC0_ABSOLUTE);
+   inst->src0.negate = (bool) (dw1 & GEN8_3SRC_SRC0_NEGATE);
+   inst->src1.negate = (bool) (dw1 & GEN8_3SRC_SRC1_NEGATE);
+   inst->src1.absolute = (bool) (dw1 & GEN8_3SRC_SRC1_ABSOLUTE);
+   inst->u.src2.negate = (bool) (dw1 & GEN8_3SRC_SRC2_NEGATE);
+   inst->u.src2.absolute = (bool) (dw1 & GEN8_3SRC_SRC2_ABSOLUTE);
+
+   inst->src0.base.file = GEN6_FILE_GRF;
+   inst->src0.base.type = GEN_EXTRACT(dw1, GEN8_3SRC_SRC_TYPE);
+   inst->src0.base.type = type_mapping[inst->src0.base.type];
+
+   inst->src1.base.file = GEN6_FILE_GRF;
+   inst->src1.base.type = inst->src0.base.type;
+
+   inst->u.src2.base.file = GEN6_FILE_GRF;
+   inst->u.src2.base.type = inst->src0.base.type;
+
+   inst->dst.base.file = GEN6_FILE_GRF;
+   inst->dst.base.type = GEN_EXTRACT(dw1, GEN8_3SRC_DST_TYPE);
+   inst->dst.base.type = type_mapping[inst->dst.base.type];
+   inst->dst.base.addr_mode = GEN6_ADDRMODE_DIRECT;
+   inst->dst.horz_stride = GEN6_HORZSTRIDE_1;
+
+   inst->dst.writemask = GEN_EXTRACT(dw1, GEN6_3SRC_DST_WRITEMASK);
+   inst->dst.base.subreg = GEN_EXTRACT(dw1, GEN6_3SRC_DST_SUBREG) <<
+      GEN6_3SRC_DST_SUBREG__SHR;
+   inst->dst.base.reg = GEN_EXTRACT(dw1, GEN6_3SRC_DST_REG);
+}
+
+static void
 disasm_inst_decode_3src_dw2_dw3_gen6(struct disasm_inst *inst,
                                      uint32_t dw2, uint32_t dw3)
 {
    const uint64_t qw = (uint64_t) dw3 << 32 | dw2;
    int i;
+
+   ILO_DEV_ASSERT(inst->dev, 6, 8);
 
    for (i = 0; i < 3; i++) {
       struct disasm_src_operand *src = (i == 0) ? &inst->src0 :
@@ -499,7 +701,10 @@ disasm_inst_decode(struct disasm_inst *inst,
    disasm_inst_decode_dw0_gen6(inst, dw[0]);
 
    if (disasm_opcode_table[inst->opcode].src_count == 3) {
-      disasm_inst_decode_3src_dw1_gen6(inst, dw[1]);
+      if (ilo_dev_gen(inst->dev) >= ILO_GEN(8))
+         disasm_inst_decode_3src_dw1_gen8(inst, dw[1]);
+      else
+         disasm_inst_decode_3src_dw1_gen6(inst, dw[1]);
       disasm_inst_decode_3src_dw2_dw3_gen6(inst, dw[2], dw[3]);
    } else {
       disasm_inst_decode_dw1_gen6(inst, dw[1]);
@@ -584,6 +789,8 @@ disasm_inst_fc(const struct disasm_inst *inst)
    case GEN6_MATH_INT_DIV:             return "int_div";
    case GEN6_MATH_INT_DIV_QUOTIENT:    return "int_div_quotient";
    case GEN6_MATH_INT_DIV_REMAINDER:   return "int_div_remainder";
+   case GEN8_MATH_INVM:                return "invm";
+   case GEN8_MATH_RSQRTM:              return "rsqrtm";
    default:                            return "BAD";
    }
 }
@@ -736,9 +943,11 @@ disasm_inst_cmpt_ctrl(const struct disasm_inst *inst)
 static const char *
 disasm_inst_eot(const struct disasm_inst *inst)
 {
+   const uint32_t mdesc = inst->u.ud;
+
    if (inst->opcode == GEN6_OPCODE_SEND ||
        inst->opcode == GEN6_OPCODE_SENDC)
-      return (inst->u.imm32 & GEN6_MSG_EOT) ? " EOT" : "";
+      return (mdesc & GEN6_MSG_EOT) ? " EOT" : "";
    else
       return "";
 }
@@ -785,6 +994,8 @@ disasm_inst_type(const struct disasm_inst *inst,
       case GEN6_TYPE_VF_IMM:  return "VF";
       case GEN6_TYPE_V_IMM:   return "V";
       case GEN6_TYPE_F:       return "F";
+      case GEN8_TYPE_DF_IMM:  return "DF";
+      case GEN8_TYPE_HF_IMM:  return "HF";
       default:                return "BAD";
       }
    } else {
@@ -797,6 +1008,9 @@ disasm_inst_type(const struct disasm_inst *inst,
       case GEN6_TYPE_B:       return "B";
       case GEN7_TYPE_DF:      return "DF";
       case GEN6_TYPE_F:       return "F";
+      case GEN8_TYPE_UQ:      return "UQ";
+      case GEN8_TYPE_Q:       return "Q";
+      case GEN8_TYPE_HF:      return "HF";
       default:                return "BAD";
       }
    }
@@ -870,6 +1084,19 @@ disasm_inst_writemask(const struct disasm_inst *inst, unsigned writemask)
 static const char *
 disasm_inst_negate(const struct disasm_inst *inst, bool negate)
 {
+   if (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) {
+      switch (inst->opcode) {
+      case GEN6_OPCODE_AND:
+      case GEN6_OPCODE_NOT:
+      case GEN6_OPCODE_OR:
+      case GEN6_OPCODE_XOR:
+         return (negate) ? "~" : "";
+         break;
+      default:
+         break;
+      }
+   }
+
    return (negate) ? "-" : "";
 }
 
@@ -901,7 +1128,7 @@ disasm_inst_mdesc_sampler_op(const struct disasm_inst *inst, int op)
    case GEN7_MSG_SAMPLER_SAMPLE_D_C:   return "sample_d_c";
    case GEN7_MSG_SAMPLER_SAMPLE_LZ:    return "sample_lz";
    case GEN7_MSG_SAMPLER_SAMPLE_C_LC:  return "sample_c_lc";
-   case GEN7_MSG_SAMPLER_SAMPLE_LD_LZ: return "sample_ld_lz";
+   case GEN7_MSG_SAMPLER_LD_LZ:        return "ld_lz";
    case GEN7_MSG_SAMPLER_LD_MCS:       return "ld_mcs";
    case GEN7_MSG_SAMPLER_LD2DMS:       return "ld2dms";
    case GEN7_MSG_SAMPLER_LD2DSS:       return "ld2dss";
@@ -977,7 +1204,7 @@ disasm_inst_mdesc_dp_op_gen7(const struct disasm_inst *inst,
    switch (sfid) {
    case GEN6_SFID_DP_SAMPLER:
       switch (op) {
-      case GEN7_MSG_DP_SAMPLER_OWORD_BLOCK_READ:         return "OWORD block read";
+      case GEN7_MSG_DP_SAMPLER_UNALIGNED_OWORD_BLOCK_READ: return "OWORD block read";
       case GEN7_MSG_DP_SAMPLER_MEDIA_BLOCK_READ:         return "media block read";
       default:                                           return "BAD";
       }
@@ -1025,7 +1252,7 @@ static const char *
 disasm_inst_mdesc_dp_op_gen75(const struct disasm_inst *inst,
                               int sfid, int op)
 {
-   ILO_DEV_ASSERT(inst->dev, 7.5, 7.5);
+   ILO_DEV_ASSERT(inst->dev, 7.5, 8);
 
    switch (sfid) {
    case GEN6_SFID_DP_SAMPLER:
@@ -1090,6 +1317,7 @@ static const char *
 disasm_inst_mdesc_dp_op(const struct disasm_inst *inst, int sfid, int op)
 {
    switch (ilo_dev_gen(inst->dev)) {
+   case ILO_GEN(8):
    case ILO_GEN(7.5):   return disasm_inst_mdesc_dp_op_gen75(inst, sfid, op);
    case ILO_GEN(7):     return disasm_inst_mdesc_dp_op_gen7(inst, sfid, op);
    case ILO_GEN(6):     return disasm_inst_mdesc_dp_op_gen6(inst, sfid, op);
@@ -1264,28 +1492,28 @@ disasm_printer_add_operand(struct disasm_printer *printer,
    if (operand->file == GEN6_FILE_IMM) {
       switch (operand->type) {
       case GEN6_TYPE_UD:
-         disasm_printer_add(printer, "0x%08xUD", inst->u.imm32);
+         disasm_printer_add(printer, "0x%08xUD", inst->u.ud);
          break;
       case GEN6_TYPE_D:
-         disasm_printer_add(printer, "%dD", inst->u.imm32);
+         disasm_printer_add(printer, "%dD", inst->u.d);
          break;
       case GEN6_TYPE_UW:
-         disasm_printer_add(printer, "0x%04xUW", (uint16_t) inst->u.imm32);
+         disasm_printer_add(printer, "0x%04xUW", inst->u.uw);
          break;
       case GEN6_TYPE_W:
-         disasm_printer_add(printer, "%dW", (int16_t) inst->u.imm32);
+         disasm_printer_add(printer, "%dW", inst->u.w);
          break;
       case GEN6_TYPE_UV_IMM:
-         disasm_printer_add(printer, "0x%08xUV", inst->u.imm32);
+         disasm_printer_add(printer, "0x%08xUV", inst->u.ud);
          break;
       case GEN6_TYPE_VF_IMM:
          disasm_printer_add(printer, "Vector Float");
          break;
       case GEN6_TYPE_V_IMM:
-         disasm_printer_add(printer, "0x%08xV", inst->u.imm32);
+         disasm_printer_add(printer, "0x%08xV", inst->u.ud);
          break;
       case GEN6_TYPE_F:
-         disasm_printer_add(printer, "%-gF", uif(inst->u.imm32));
+         disasm_printer_add(printer, "%-gF", uif(inst->u.f));
          break;
       default:
          disasm_printer_add(printer, "BAD");
@@ -1429,7 +1657,9 @@ disasm_printer_add_mdesc_urb(struct disasm_printer *printer,
       op = GEN_EXTRACT(mdesc, GEN7_MSG_URB_OP);
       offset = GEN_EXTRACT(mdesc, GEN7_MSG_URB_GLOBAL_OFFSET);
       interleaved = mdesc & GEN7_MSG_URB_INTERLEAVED;
-      complete = mdesc & GEN7_MSG_URB_COMPLETE;
+
+      complete = (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) ?
+         false : (mdesc & GEN7_MSG_URB_COMPLETE);
 
       allocate = false;
       used = false;
@@ -1582,7 +1812,7 @@ disasm_printer_add_mdesc_dp_rc(struct disasm_printer *printer,
    if (is_rt_write) {
       disasm_printer_add(printer, " %s%s%s%s",
             disasm_inst_mdesc_dp_rt_write_simd_mode(inst, mdesc),
-            (mdesc & GEN6_MSG_DP_SLOTGRP_HI) ? " Hi" : "",
+            (mdesc & GEN6_MSG_DP_RT_SLOTGRP_HI) ? " Hi" : "",
             (mdesc & GEN6_MSG_DP_RT_LAST) ? " LastRT" : "",
             (ilo_dev_gen(inst->dev) == ILO_GEN(6) &&
              (mdesc & GEN6_MSG_DP_SEND_WRITE_COMMIT)) ? " WriteCommit" : "");
@@ -1596,7 +1826,7 @@ static void
 disasm_printer_add_mdesc(struct disasm_printer *printer,
                          const struct disasm_inst *inst)
 {
-   const uint32_t mdesc = inst->u.imm32;
+   const uint32_t mdesc = inst->u.ud;
 
    assert(inst->opcode == GEN6_OPCODE_SEND ||
           inst->opcode == GEN6_OPCODE_SENDC);
@@ -1650,14 +1880,19 @@ disasm_printer_print_inst(struct disasm_printer *printer,
 
    if (inst->has_jip || inst->has_uip) {
       if (inst->has_jip) {
+         const int32_t jip = (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) ?
+            inst->u.ip32.jip : inst->u.ip16.jip;
+
          disasm_printer_column(printer, col++);
-         disasm_printer_add(printer, "JIP: %d", (int16_t) inst->u.imm32);
+         disasm_printer_add(printer, "JIP: %d", jip);
       }
 
       if (inst->has_uip) {
+         const int32_t uip = (ilo_dev_gen(inst->dev) >= ILO_GEN(8)) ?
+            inst->u.ip32.uip : inst->u.ip16.uip;
+
          disasm_printer_column(printer, col++);
-         disasm_printer_add(printer, "UIP: %d",
-               (int16_t) (inst->u.imm32 >> 16));
+         disasm_printer_add(printer, "UIP: %d", uip);
       }
    } else {
       const int src_count = disasm_opcode_table[inst->opcode].src_count;
@@ -1701,7 +1936,85 @@ disasm_printer_print_inst(struct disasm_printer *printer,
 }
 
 static void
-disasm_uncompact(const struct ilo_dev_info *dev,
+disasm_uncompact_3src(const struct ilo_dev *dev,
+                      uint64_t compact, uint32_t *dw)
+{
+   const struct toy_compaction_table *tbl =
+      toy_compiler_get_compaction_table(dev);
+   uint32_t src[3], tmp;
+   uint64_t tmp64;
+
+   ILO_DEV_ASSERT(dev, 8, 8);
+
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_OPCODE);
+   dw[0] = GEN_SHIFT32(tmp, GEN6_INST_OPCODE);
+
+   /* ControlIndex */
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_CONTROL_INDEX);
+   tmp = tbl->control_3src[tmp];
+
+   dw[0] |= (tmp & 0x1fffff) << GEN6_INST_ACCESSMODE__SHIFT;
+   dw[1] = (tmp >> 21) & ((ilo_dev_gen(dev) >= ILO_GEN(9)) ? 0x1f : 0x7);
+
+   /* SourceIndex */
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_SOURCE_INDEX);
+   tmp64 = tbl->source_3src[tmp];
+
+   dw[1] |= (tmp64 & 0x7ffff) << 5;
+   src[0] = ((tmp64 >> 19) & 0xff) << 1;
+   src[1] = ((tmp64 >> 27) & 0xff) << 1;
+   src[2] = ((tmp64 >> 35) & 0xff) << 1;
+   if (ilo_dev_gen(dev) >= ILO_GEN(9)) {
+      src[0] |= ((tmp64 >> 43) & 0x3) << 19;
+      src[1] |= ((tmp64 >> 45) & 0x3) << 19;
+      src[2] |= ((tmp64 >> 47) & 0x3) << 19;
+   } else {
+      src[0] |= ((tmp64 >> 43) & 0x1) << 19;
+      src[1] |= ((tmp64 >> 44) & 0x1) << 19;
+      src[2] |= ((tmp64 >> 45) & 0x1) << 19;
+   }
+
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_DST_REG);
+   dw[1] |= GEN_SHIFT32(tmp, GEN6_3SRC_DST_REG);
+
+   if (compact & GEN8_COMPACT_3SRC_SRC0_REPCTRL)
+      src[0] |= GEN6_3SRC_SRC_REPCTRL;
+
+   assert(compact & GEN8_COMPACT_3SRC_CMPTCTRL);
+
+   if (compact & GEN8_COMPACT_3SRC_DEBUGCTRL)
+      dw[0] |= GEN6_INST_DEBUGCTRL;
+   if (compact & GEN8_COMPACT_3SRC_SATURATE)
+      dw[0] |= GEN6_INST_SATURATE;
+
+   if (compact & GEN8_COMPACT_3SRC_SRC1_REPCTRL)
+      src[1] |= GEN6_3SRC_SRC_REPCTRL;
+   if (compact & GEN8_COMPACT_3SRC_SRC2_REPCTRL)
+      src[2] |= GEN6_3SRC_SRC_REPCTRL;
+
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_SRC0_SUBREG);
+   src[0] |= GEN_SHIFT32(tmp, GEN6_3SRC_SRC_SUBREG);
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_SRC1_SUBREG);
+   src[1] |= GEN_SHIFT32(tmp, GEN6_3SRC_SRC_SUBREG);
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_SRC2_SUBREG);
+   src[2] |= GEN_SHIFT32(tmp, GEN6_3SRC_SRC_SUBREG);
+
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_SRC0_REG);
+   src[0] |= GEN_SHIFT32(tmp, GEN6_3SRC_SRC_REG);
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_SRC1_REG);
+   src[1] |= GEN_SHIFT32(tmp, GEN6_3SRC_SRC_REG);
+   tmp = GEN_EXTRACT(compact, GEN8_COMPACT_3SRC_SRC2_REG);
+   src[2] |= GEN_SHIFT32(tmp, GEN6_3SRC_SRC_REG);
+
+   tmp64 = (uint64_t) src[2] << 42 |
+           (uint64_t) src[1] << 21 |
+           (uint64_t) src[0];
+   dw[2] = (uint32_t) tmp64;
+   dw[3] = (uint32_t) (tmp64 >> 32);
+}
+
+static void
+disasm_uncompact(const struct ilo_dev *dev,
                  uint64_t compact, uint32_t *dw)
 {
    const struct toy_compaction_table *tbl =
@@ -1709,9 +2022,16 @@ disasm_uncompact(const struct ilo_dev_info *dev,
    bool src_is_imm;
    uint32_t tmp;
 
-   memset(dw, 0, sizeof(*dw) * 4);
+   ILO_DEV_ASSERT(dev, 6, 8);
 
    tmp = GEN_EXTRACT(compact, GEN6_COMPACT_OPCODE);
+   if (disasm_opcode_table[tmp].src_count == 3) {
+      disasm_uncompact_3src(dev, compact, dw);
+      return;
+   }
+
+   memset(dw, 0, sizeof(*dw) * 4);
+
    dw[0] |= GEN_SHIFT32(tmp, GEN6_INST_OPCODE);
 
    if (ilo_dev_gen(dev) >= ILO_GEN(7) && (compact & GEN6_COMPACT_DEBUGCTRL))
@@ -1789,7 +2109,7 @@ disasm_uncompact(const struct ilo_dev_info *dev,
 }
 
 void
-toy_compiler_disassemble(const struct ilo_dev_info *dev,
+toy_compiler_disassemble(const struct ilo_dev *dev,
                          const void *kernel, int size,
                          bool dump_hex)
 {

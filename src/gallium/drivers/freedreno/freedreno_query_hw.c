@@ -131,12 +131,12 @@ fd_hw_destroy_query(struct fd_context *ctx, struct fd_query *q)
 	free(hq);
 }
 
-static void
+static boolean
 fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_hw_query *hq = fd_hw_query(q);
 	if (q->active)
-		return;
+		return false;
 
 	/* begin_query() should clear previous results: */
 	destroy_periods(ctx, &hq->periods);
@@ -149,6 +149,7 @@ fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 	/* add to active list: */
 	list_del(&hq->list);
 	list_addtail(&hq->list, &ctx->active_queries);
+   return true;
 }
 
 static void

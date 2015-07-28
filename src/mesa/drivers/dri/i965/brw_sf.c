@@ -60,7 +60,7 @@ static void compile_sf_prog( struct brw_context *brw,
    mem_ctx = ralloc_context(NULL);
    /* Begin the compilation:
     */
-   brw_init_compile(brw, &c.func, mem_ctx);
+   brw_init_codegen(brw->intelScreen->devinfo, &c.func, mem_ctx);
 
    c.key = *key;
    c.vue_map = brw->vue_map_geom_out;
@@ -119,7 +119,8 @@ static void compile_sf_prog( struct brw_context *brw,
 
    if (unlikely(INTEL_DEBUG & DEBUG_SF)) {
       fprintf(stderr, "sf:\n");
-      brw_disassemble(brw, c.func.store, 0, program_size, stderr);
+      brw_disassemble(brw->intelScreen->devinfo,
+                      c.func.store, 0, program_size, stderr);
       fprintf(stderr, "\n");
    }
 
@@ -204,7 +205,7 @@ brw_upload_sf_prog(struct brw_context *brw)
        * face orientation, just as we invert the viewport in
        * sf_unit_create_from_key().
        */
-      key.frontface_ccw = (ctx->Polygon.FrontFace == GL_CCW) != render_to_fbo;
+      key.frontface_ccw = ctx->Polygon._FrontBit == render_to_fbo;
    }
 
    if (!brw_search_cache(&brw->cache, BRW_CACHE_SF_PROG,

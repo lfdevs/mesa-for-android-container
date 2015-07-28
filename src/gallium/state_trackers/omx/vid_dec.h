@@ -44,11 +44,12 @@
 
 #include <bellagio/st_static_component_loader.h>
 #include <bellagio/omx_base_filter.h>
+#include <bellagio/omx_base_video_port.h>
 
 #include "pipe/p_video_state.h"
 #include "state_tracker/drm_driver.h"
 #include "os/os_thread.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #define OMX_VID_DEC_BASE_NAME "OMX.mesa.video_decoder"
 

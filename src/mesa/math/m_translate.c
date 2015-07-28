@@ -30,7 +30,6 @@
 
 #include "main/glheader.h"
 #include "main/macros.h"
-#include "main/mtypes.h"		/* GLchan hack */
 
 #include "m_translate.h"
 
@@ -85,10 +84,6 @@ typedef void (*trans_3fn_func)(GLfloat (*to)[3],
 #define MAX_TYPES TYPE_IDX(GL_DOUBLE)+1      /* 0xa + 1 */
 
 
-/* This macro is used on other systems, so undefine it for this module */
-
-#undef	CHECK
-
 static trans_1f_func  _math_trans_1f_tab[MAX_TYPES];
 static trans_1ui_func _math_trans_1ui_tab[MAX_TYPES];
 static trans_1ub_func _math_trans_1ub_tab[MAX_TYPES];
@@ -109,7 +104,6 @@ static trans_4f_func  _math_trans_4fn_tab[5][MAX_TYPES];
 #define STRIDE stride
 #define NEXT_F f += stride
 #define NEXT_F2
-#define CHECK
 
 
 
@@ -605,7 +599,6 @@ static void init_translate_raw(void)
 #undef CLASS
 #endif
 #undef ARGS
-#undef CHECK
 #undef SRC_START
 #undef DST_START
 #undef NEXT_F
@@ -673,26 +666,6 @@ void _math_trans_4ub(GLubyte (*to)[4],
 		     GLuint n )
 {
    _math_trans_4ub_tab[size][TYPE_IDX(type)]( to, ptr, stride, start, n );
-}
-
-/**
- * Translate vector of values to GLchan [4].
- */
-void _math_trans_4chan( GLchan (*to)[4],
-			const void *ptr,
-			GLuint stride,
-			GLenum type,
-			GLuint size,
-			GLuint start,
-			GLuint n )
-{
-#if CHAN_TYPE == GL_UNSIGNED_BYTE
-   _math_trans_4ub( to, ptr, stride, type, size, start, n );
-#elif CHAN_TYPE == GL_UNSIGNED_SHORT
-   _math_trans_4us( to, ptr, stride, type, size, start, n );
-#elif CHAN_TYPE == GL_FLOAT
-   _math_trans_4fn( to, ptr, stride, type, size, start, n );
-#endif
 }
 
 /**

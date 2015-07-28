@@ -73,8 +73,6 @@ endif # MESA_BUILD_CLASSIC
 
 ifeq ($(strip $(MESA_BUILD_GALLIUM)),true)
 
-LOCAL_CFLAGS += -D_EGL_BUILT_IN_DRIVER_GALLIUM
-
 gallium_DRIVERS :=
 
 # swrast
@@ -156,7 +154,11 @@ LOCAL_STATIC_LIBRARIES := \
 	libmesa_loader
 
 LOCAL_MODULE := libGLES_mesa
+ifeq ($(MESA_LOLLIPOP_BUILD),true)
+LOCAL_MODULE_RELATIVE_PATH := egl
+else
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/egl
+endif
 
 include $(MESA_COMMON_MK)
 include $(BUILD_SHARED_LIBRARY)

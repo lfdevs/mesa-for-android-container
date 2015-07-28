@@ -136,7 +136,6 @@ fd2_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.reference.count = 1;
 	so->base.context = pctx;
 
-	so->tex_resource =  rsc;
 	so->fmt = fd2_pipe2surface(cso->format);
 
 	so->tex0 = A2XX_SQ_TEX_0_PITCH(rsc->slices[0].pitch);

@@ -1,6 +1,0 @@
-{
-	global:
-		gbm_backend;
-	local:
-		*;
-};

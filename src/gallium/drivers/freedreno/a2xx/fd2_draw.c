@@ -107,7 +107,8 @@ fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 	OUT_RING(ring, info->max_index);        /* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, info->min_index);        /* VGT_MIN_VTX_INDX */
 
-	fd_draw_emit(ctx, ring, IGNORE_VISIBILITY, info);
+	fd_draw_emit(ctx, ring, ctx->primtypes[info->mode],
+				 IGNORE_VISIBILITY, info);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_UNKNOWN_2010));
@@ -264,7 +265,7 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 	OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
 
 	fd_draw(ctx, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
-			DI_SRC_SEL_AUTO_INDEX, 3, INDEX_SIZE_IGN, 0, 0, NULL);
+			DI_SRC_SEL_AUTO_INDEX, 3, 0, INDEX_SIZE_IGN, 0, 0, NULL);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_A220_RB_LRZ_VSC_CONTROL));

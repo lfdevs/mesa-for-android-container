@@ -413,24 +413,6 @@ nvc0_zsa_state_delete(struct pipe_context *pipe, void *hwcso)
 #define NV50_TSC_WRAP_CASE(n) \
     case PIPE_TEX_WRAP_##n: return NV50_TSC_WRAP_##n
 
-static INLINE unsigned
-nv50_tsc_wrap_mode(unsigned wrap)
-{
-   switch (wrap) {
-   NV50_TSC_WRAP_CASE(REPEAT);
-   NV50_TSC_WRAP_CASE(MIRROR_REPEAT);
-   NV50_TSC_WRAP_CASE(CLAMP_TO_EDGE);
-   NV50_TSC_WRAP_CASE(CLAMP_TO_BORDER);
-   NV50_TSC_WRAP_CASE(CLAMP);
-   NV50_TSC_WRAP_CASE(MIRROR_CLAMP_TO_EDGE);
-   NV50_TSC_WRAP_CASE(MIRROR_CLAMP_TO_BORDER);
-   NV50_TSC_WRAP_CASE(MIRROR_CLAMP);
-   default:
-       NOUVEAU_ERR("unknown wrap mode: %d\n", wrap);
-       return NV50_TSC_WRAP_REPEAT;
-   }
-}
-
 static void
 nvc0_sampler_state_delete(struct pipe_context *pipe, void *hwcso)
 {

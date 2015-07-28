@@ -101,7 +101,7 @@ struct stw_framebuffer
     * acquiring the stw_framebuffer::mutex of the framebuffer to be deleted. 
     * This ensures that nobody else is reading/writing to the.
     * 
-    * It is not necessary to aquire the mutex above to navigate the linked list
+    * It is not necessary to acquire the mutex above to navigate the linked list
     * given that deletions are done with stw_device::fb_mutex held, so no other
     * thread can delete.
     */

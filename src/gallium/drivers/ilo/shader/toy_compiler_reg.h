@@ -118,13 +118,13 @@ enum toy_writemask {
  */
 struct toy_dst {
    unsigned file:3;              /* TOY_FILE_x */
-   unsigned type:3;              /* TOY_TYPE_x */
+   unsigned type:4;              /* TOY_TYPE_x */
    unsigned rect:3;              /* TOY_RECT_x */
    unsigned indirect:1;          /* true or false */
    unsigned indirect_subreg:6;   /* which subreg of a0? */
 
    unsigned writemask:4;         /* TOY_WRITEMASK_x */
-   unsigned pad:12;
+   unsigned pad:11;
 
    uint32_t val32;
 };
@@ -134,7 +134,7 @@ struct toy_dst {
  */
 struct toy_src {
    unsigned file:3;              /* TOY_FILE_x */
-   unsigned type:3;              /* TOY_TYPE_x */
+   unsigned type:4;              /* TOY_TYPE_x */
    unsigned rect:3;              /* TOY_RECT_x */
    unsigned indirect:1;          /* true or false */
    unsigned indirect_subreg:6;   /* which subreg of a0? */
@@ -145,7 +145,7 @@ struct toy_src {
    unsigned swizzle_w:2;         /* TOY_SWIZZLE_x */
    unsigned absolute:1;          /* true or false */
    unsigned negate:1;            /* true or false */
-   unsigned pad:6;
+   unsigned pad:5;
 
    uint32_t val32;
 };

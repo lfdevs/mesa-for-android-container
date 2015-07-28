@@ -171,10 +171,9 @@ upload_vs_state(struct brw_context *brw)
     *   flush can be executed by sending a PIPE_CONTROL command with CS
     *   stall bit set and a post sync operation.
     *
-    * Although we don't disable the VS during normal drawing, BLORP sometimes
-    * disables it.  To be safe, do the flush here just in case.
+    * We've already done such a flush at the start of state upload, so we
+    * don't need to do another one here.
     */
-   intel_emit_post_sync_nonzero_flush(brw);
 
    if (stage_state->push_const_size == 0) {
       /* Disable the push constant buffers. */
@@ -247,10 +246,9 @@ upload_vs_state(struct brw_context *brw)
     * bug reports that led to this workaround, and may be more than
     * what is strictly required to avoid the issue.
     */
-   intel_emit_post_sync_nonzero_flush(brw);
    brw_emit_pipe_control_flush(brw,
                                PIPE_CONTROL_DEPTH_STALL |
-                               PIPE_CONTROL_INSTRUCTION_FLUSH |
+                               PIPE_CONTROL_INSTRUCTION_INVALIDATE |
                                PIPE_CONTROL_STATE_CACHE_INVALIDATE);
 }
 

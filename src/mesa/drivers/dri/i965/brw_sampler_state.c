@@ -201,16 +201,13 @@ wrap_mode_needs_border_color(unsigned wrap_mode)
 static void
 upload_default_color(struct brw_context *brw,
                      const struct gl_sampler_object *sampler,
-                     int unit,
+                     mesa_format format, GLenum base_format,
+                     bool is_integer_format,
                      uint32_t *sdc_offset)
 {
-   struct gl_context *ctx = &brw->ctx;
-   struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
-   struct gl_texture_object *texObj = texUnit->_Current;
-   struct gl_texture_image *firstImage = texObj->Image[0][texObj->BaseLevel];
    union gl_color_union color;
 
-   switch (firstImage->_BaseFormat) {
+   switch (base_format) {
    case GL_DEPTH_COMPONENT:
       /* GL specs that border color for depth textures is taken from the
        * R channel, while the hardware uses A.  Spam R into all the
@@ -257,7 +254,7 @@ upload_default_color(struct brw_context *brw,
     * where we've initialized the A channel to 1.0.  We also have to set
     * the border color alpha to 1.0 in that case.
     */
-   if (firstImage->_BaseFormat == GL_RGB)
+   if (base_format == GL_RGB)
       color.ui[3] = float_as_int(1.0);
 
    if (brw->gen >= 8) {
@@ -269,7 +266,7 @@ upload_default_color(struct brw_context *brw,
       uint32_t *sdc = brw_state_batch(brw, AUB_TRACE_SAMPLER_DEFAULT_COLOR,
                                       4 * 4, 64, sdc_offset);
       memcpy(sdc, color.ui, 4 * 4);
-   } else if (brw->is_haswell && texObj->_IsIntegerFormat) {
+   } else if (brw->is_haswell && is_integer_format) {
       /* Haswell's integer border color support is completely insane:
        * SAMPLER_BORDER_COLOR_STATE is 20 DWords.  The first four are
        * for float colors.  The next 12 DWords are MBZ and only exist to
@@ -283,7 +280,6 @@ upload_default_color(struct brw_context *brw,
       memset(sdc, 0, 20 * 4);
       sdc = &sdc[16];
 
-      mesa_format format = firstImage->TexFormat;
       int bits_per_channel = _mesa_get_format_bits(format, GL_RED_BITS);
 
       /* From the Haswell PRM, "Command Reference: Structures", Page 36:
@@ -314,7 +310,7 @@ upload_default_color(struct brw_context *brw,
          ((uint16_t *) sdc)[5] = c[3]; /* A -> DWord 3, bits 31:16 */
          break;
       case 32:
-         if (firstImage->_BaseFormat == GL_RG) {
+         if (base_format == GL_RG) {
             /* Careful inspection of the tables reveals that for RG32 formats,
              * the green channel needs to go where blue normally belongs.
              */
@@ -379,21 +375,16 @@ upload_default_color(struct brw_context *brw,
  * Sets the sampler state for a single unit based off of the sampler key
  * entry.
  */
-static void
+void
 brw_update_sampler_state(struct brw_context *brw,
-                         int unit,
+                         GLenum target, bool tex_cube_map_seamless,
+                         GLfloat tex_unit_lod_bias,
+                         mesa_format format, GLenum base_format,
+                         bool is_integer_format,
+                         const struct gl_sampler_object *sampler,
                          uint32_t *sampler_state,
                          uint32_t batch_offset_for_sampler_state)
 {
-   struct gl_context *ctx = &brw->ctx;
-   const struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
-   const struct gl_texture_object *texObj = texUnit->_Current;
-   const struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, unit);
-
-   /* These don't use samplers at all. */
-   if (texObj->Target == GL_TEXTURE_BUFFER)
-      return;
-
    unsigned min_filter, mag_filter, mip_filter;
 
    /* Select min and mip filters. */
@@ -463,12 +454,12 @@ brw_update_sampler_state(struct brw_context *brw,
    unsigned wrap_t = translate_wrap_mode(brw, sampler->WrapT, either_nearest);
    unsigned wrap_r = translate_wrap_mode(brw, sampler->WrapR, either_nearest);
 
-   if (texObj->Target == GL_TEXTURE_CUBE_MAP ||
-       texObj->Target == GL_TEXTURE_CUBE_MAP_ARRAY) {
+   if (target == GL_TEXTURE_CUBE_MAP ||
+       target == GL_TEXTURE_CUBE_MAP_ARRAY) {
       /* Cube maps must use the same wrap mode for all three coordinate
        * dimensions.  Prior to Haswell, only CUBE and CLAMP are valid.
        */
-      if ((ctx->Texture.CubeMapSeamless || sampler->CubeMapSeamless) &&
+      if ((tex_cube_map_seamless || sampler->CubeMapSeamless) &&
          (sampler->MinFilter != GL_NEAREST ||
           sampler->MagFilter != GL_NEAREST)) {
 	 wrap_s = BRW_TEXCOORDMODE_CUBE;
@@ -479,7 +470,7 @@ brw_update_sampler_state(struct brw_context *brw,
 	 wrap_t = BRW_TEXCOORDMODE_CLAMP;
 	 wrap_r = BRW_TEXCOORDMODE_CLAMP;
       }
-   } else if (texObj->Target == GL_TEXTURE_1D) {
+   } else if (target == GL_TEXTURE_1D) {
       /* There's a bug in 1D texture sampling - it actually pays
        * attention to the wrap_t value, though it should not.
        * Override the wrap_t value here to GL_REPEAT to keep
@@ -499,7 +490,7 @@ brw_update_sampler_state(struct brw_context *brw,
    const unsigned min_lod = U_FIXED(CLAMP(sampler->MinLod, 0, 13), lod_bits);
    const unsigned max_lod = U_FIXED(CLAMP(sampler->MaxLod, 0, 13), lod_bits);
    const int lod_bias =
-      S_FIXED(CLAMP(texUnit->LodBias + sampler->LodBias, -16, 15), lod_bits);
+      S_FIXED(CLAMP(tex_unit_lod_bias + sampler->LodBias, -16, 15), lod_bits);
    const unsigned base_level = U_FIXED(0, 1);
 
    /* Upload the border color if necessary.  If not, just point it at
@@ -510,10 +501,12 @@ brw_update_sampler_state(struct brw_context *brw,
    if (wrap_mode_needs_border_color(wrap_s) ||
        wrap_mode_needs_border_color(wrap_t) ||
        wrap_mode_needs_border_color(wrap_r)) {
-      upload_default_color(brw, sampler, unit, &border_color_offset);
+      upload_default_color(brw, sampler,
+                           format, base_format, is_integer_format,
+                           &border_color_offset);
    }
 
-   const bool non_normalized_coords = texObj->Target == GL_TEXTURE_RECTANGLE;
+   const bool non_normalized_coords = target == GL_TEXTURE_RECTANGLE;
 
    brw_emit_sampler_state(brw,
                           sampler_state,
@@ -528,6 +521,29 @@ brw_update_sampler_state(struct brw_context *brw,
                           border_color_offset);
 }
 
+static void
+update_sampler_state(struct brw_context *brw,
+                     int unit,
+                     uint32_t *sampler_state,
+                     uint32_t batch_offset_for_sampler_state)
+{
+   struct gl_context *ctx = &brw->ctx;
+   const struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
+   const struct gl_texture_object *texObj = texUnit->_Current;
+   const struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, unit);
+
+   /* These don't use samplers at all. */
+   if (texObj->Target == GL_TEXTURE_BUFFER)
+      return;
+
+   struct gl_texture_image *firstImage = texObj->Image[0][texObj->BaseLevel];
+   brw_update_sampler_state(brw, texObj->Target, ctx->Texture.CubeMapSeamless,
+                            texUnit->LodBias,
+                            firstImage->TexFormat, firstImage->_BaseFormat,
+                            texObj->_IsIntegerFormat,
+                            sampler,
+                            sampler_state, batch_offset_for_sampler_state);
+}
 
 static void
 brw_upload_sampler_state_table(struct brw_context *brw,
@@ -557,7 +573,7 @@ brw_upload_sampler_state_table(struct brw_context *brw,
       if (SamplersUsed & (1 << s)) {
          const unsigned unit = prog->SamplerUnits[s];
          if (ctx->Texture.Unit[unit]._Current) {
-            brw_update_sampler_state(brw, unit, sampler_state,
+            update_sampler_state(brw, unit, sampler_state,
                                      batch_offset_for_sampler_state);
          }
       }
@@ -573,7 +589,7 @@ brw_upload_sampler_state_table(struct brw_context *brw,
       /* Flag that the sampler state table pointer has changed; later atoms
        * will handle it.
        */
-      brw->state.dirty.brw |= BRW_NEW_SAMPLER_STATE_TABLE;
+      brw->ctx.NewDriverState |= BRW_NEW_SAMPLER_STATE_TABLE;
    }
 }
 

@@ -296,6 +296,23 @@ nv50_check_program_ucps(struct nv50_context *nv50,
    nv50_fp_linkage_validate(nv50);
 }
 
+/* alpha test is disabled if there are no color RTs, so make sure we have at
+ * least one if alpha test is enabled. Note that this must run after
+ * nv50_validate_fb, otherwise that will override the RT count setting.
+ */
+static void
+nv50_validate_derived_2(struct nv50_context *nv50)
+{
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+
+   if (nv50->zsa && nv50->zsa->pipe.alpha.enabled &&
+       nv50->framebuffer.nr_cbufs == 0) {
+      nv50_fb_set_null_rt(push, 0);
+      BEGIN_NV04(push, NV50_3D(RT_CONTROL), 1);
+      PUSH_DATA (push, (076543210 << 4) | 1);
+   }
+}
+
 static void
 nv50_validate_clip(struct nv50_context *nv50)
 {
@@ -456,6 +473,7 @@ static struct state_validate {
     { nv50_gp_linkage_validate,    NV50_NEW_GMTYPROG | NV50_NEW_VERTPROG },
     { nv50_validate_derived_rs,    NV50_NEW_FRAGPROG | NV50_NEW_RASTERIZER |
                                    NV50_NEW_VERTPROG | NV50_NEW_GMTYPROG },
+    { nv50_validate_derived_2,     NV50_NEW_ZSA | NV50_NEW_FRAMEBUFFER },
     { nv50_validate_clip,          NV50_NEW_CLIP | NV50_NEW_RASTERIZER |
                                    NV50_NEW_VERTPROG | NV50_NEW_GMTYPROG },
     { nv50_constbufs_validate,     NV50_NEW_CONSTBUF },

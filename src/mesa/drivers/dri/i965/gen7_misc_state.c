@@ -145,12 +145,13 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {
-      struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_mt;
+      struct intel_miptree_aux_buffer *hiz_buf = depth_mt->hiz_buf;
+
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (3 - 2));
       OUT_BATCH((mocs << 25) |
-                (hiz_mt->pitch - 1));
-      OUT_RELOC(hiz_mt->bo,
+                (hiz_buf->pitch - 1));
+      OUT_RELOC(hiz_buf->bo,
                 I915_GEM_DOMAIN_RENDER,
                 I915_GEM_DOMAIN_RENDER,
                 0);

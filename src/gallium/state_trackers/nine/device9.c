@@ -41,6 +41,7 @@
 
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
+#include "pipe/p_config.h"
 #include "util/u_math.h"
 #include "util/u_inlines.h"
 #include "util/u_hash_table.h"
@@ -52,6 +53,33 @@
 #include "cso_cache/cso_context.h"
 
 #define DBG_CHANNEL DBG_DEVICE
+
+#if defined(PIPE_CC_GCC) && (defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64))
+
+#include <fpu_control.h>
+
+static void nine_setup_fpu()
+{
+    fpu_control_t c;
+
+    _FPU_GETCW(c);
+    /* clear the control word */
+    c &= _FPU_RESERVED;
+    /* d3d9 doc/wine tests: mask all exceptions, use single-precision
+     * and round to nearest */
+    c |= _FPU_MASK_IM | _FPU_MASK_DM | _FPU_MASK_ZM | _FPU_MASK_OM |
+         _FPU_MASK_UM | _FPU_MASK_PM | _FPU_SINGLE | _FPU_RC_NEAREST;
+    _FPU_SETCW(c);
+}
+
+#else
+
+static void nine_setup_fpu(void)
+{
+    WARN_ONCE("FPU setup not supported on non-x86 platforms\n");
+}
+
+#endif
 
 static void
 NineDevice9_SetDefaultState( struct NineDevice9 *This, boolean is_reset )
@@ -167,6 +195,14 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->present = pPresentationGroup;
     IDirect3D9_AddRef(This->d3d9);
     ID3DPresentGroup_AddRef(This->present);
+
+    if (!(This->params.BehaviorFlags & D3DCREATE_FPU_PRESERVE))
+        nine_setup_fpu();
+
+    if (This->params.BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING)
+        DBG("Application asked full Software Vertex Processing. Ignoring.\n");
+    if (This->params.BehaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING)
+        DBG("Application asked mixed Software Vertex Processing. Ignoring.\n");
 
     This->pipe = This->screen->context_create(This->screen, NULL);
     if (!This->pipe) { return E_OUTOFMEMORY; } /* guess */
@@ -310,8 +346,10 @@ NineDevice9_ctor( struct NineDevice9 *This,
             return E_OUTOFMEMORY;
 
         if (strstr(pScreen->get_name(pScreen), "AMD") ||
-            strstr(pScreen->get_name(pScreen), "ATI"))
+            strstr(pScreen->get_name(pScreen), "ATI")) {
             This->prefer_user_constbuf = TRUE;
+            This->driver_bugs.buggy_barycentrics = TRUE;
+        }
 
         tmpl.target = PIPE_BUFFER;
         tmpl.format = PIPE_FORMAT_R8_UNORM;
@@ -1176,6 +1214,13 @@ NineDevice9_UpdateTexture( struct NineDevice9 *This,
     if (dstb->base.usage & D3DUSAGE_AUTOGENMIPMAP) {
         /* Only the first level is updated, the others regenerated. */
         last_level = 0;
+        /* if the source has D3DUSAGE_AUTOGENMIPMAP, we have to ignore
+         * the sublevels, thus level 0 has to match */
+        user_assert(!(srcb->base.usage & D3DUSAGE_AUTOGENMIPMAP) ||
+                    (srcb->base.info.width0 == dstb->base.info.width0 &&
+                     srcb->base.info.height0 == dstb->base.info.height0 &&
+                     srcb->base.info.depth0 == dstb->base.info.depth0),
+                    D3DERR_INVALIDCALL);
     } else {
         user_assert(!(srcb->base.usage & D3DUSAGE_AUTOGENMIPMAP), D3DERR_INVALIDCALL);
     }
@@ -1238,8 +1283,10 @@ NineDevice9_UpdateTexture( struct NineDevice9 *This,
         assert(!"invalid texture type");
     }
 
-    if (dstb->base.usage & D3DUSAGE_AUTOGENMIPMAP)
+    if (dstb->base.usage & D3DUSAGE_AUTOGENMIPMAP) {
+        dstb->dirty_mip = TRUE;
         NineBaseTexture9_GenerateMipSubLevels(dstb);
+    }
 
     return D3D_OK;
 }
@@ -1342,6 +1389,7 @@ NineDevice9_StretchRect( struct NineDevice9 *This,
                 (pSourceRect->left <= pSourceRect->right &&
                  pSourceRect->top <= pSourceRect->bottom), D3DERR_INVALIDCALL);
 
+    memset(&blit, 0, sizeof(blit));
     blit.dst.resource = dst_res;
     blit.dst.level = dst->level;
     blit.dst.box.z = dst->layer;
@@ -1469,6 +1517,9 @@ NineDevice9_StretchRect( struct NineDevice9 *This,
             blit.src.resource, blit.src.level,
             &blit.src.box);
     }
+
+    /* Communicate the container it needs to update sublevels - if apply */
+    NineSurface9_MarkContainerDirty(dst);
 
     return D3D_OK;
 }
@@ -1756,12 +1807,21 @@ NineDevice9_Clear( struct NineDevice9 *This,
             rt_mask |= 1 << i;
     }
 
+    /* fast path, clears everything at once */
     if (!Count &&
         (!(bufs & PIPE_CLEAR_COLOR) || (rt_mask == This->state.rt_mask)) &&
-        rect.x1 == 0 && rect.x2 >= This->state.fb.width &&
-        rect.y1 == 0 && rect.y2 >= This->state.fb.height) {
-        /* fast path, clears everything at once */
-        DBG("fast path\n");
+        rect.x1 == 0 && rect.y1 == 0 &&
+        /* Case we clear only render target. Check clear region vs rt. */
+        ((!(bufs & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) &&
+         rect.x2 >= This->state.fb.width &&
+         rect.y2 >= This->state.fb.height) ||
+        /* Case we clear depth buffer (and eventually rt too).
+         * depth buffer size is always >= rt size. Compare to clear region */
+        ((bufs & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) &&
+         This->state.fb.zsbuf != NULL &&
+         rect.x2 >= zsbuf_surf->desc.Width &&
+         rect.y2 >= zsbuf_surf->desc.Height))) {
+        DBG("Clear fast path\n");
         pipe->clear(pipe, bufs, &rgba, Z, Stencil);
         return D3D_OK;
     }
@@ -2121,6 +2181,7 @@ NineDevice9_ResolveZ( struct NineDevice9 *This )
     desc = util_format_description(dst->format);
     user_assert(desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS, D3DERR_INVALIDCALL);
 
+    memset(&blit, 0, sizeof(blit));
     blit.src.resource = src;
     blit.src.level = 0;
     blit.src.format = src->format;
@@ -2393,14 +2454,8 @@ NineDevice9_SetTexture( struct NineDevice9 *This,
                 Stage == D3DDMAPSAMPLER ||
                 (Stage >= D3DVERTEXTEXTURESAMPLER0 &&
                  Stage <= D3DVERTEXTEXTURESAMPLER3), D3DERR_INVALIDCALL);
-    user_assert(!tex || tex->base.pool != D3DPOOL_SCRATCH, D3DERR_INVALIDCALL);
-
-    if (unlikely(tex && tex->base.pool == D3DPOOL_SYSTEMMEM)) {
-        /* TODO: Currently not implemented. Better return error
-         * with message telling what's wrong */
-        ERR("This=%p D3DPOOL_SYSTEMMEM not implemented for SetTexture\n", This);
-        user_assert(tex->base.pool != D3DPOOL_SYSTEMMEM, D3DERR_INVALIDCALL);
-    }
+    user_assert(!tex || (tex->base.pool != D3DPOOL_SCRATCH &&
+                tex->base.pool != D3DPOOL_SYSTEMMEM), D3DERR_INVALIDCALL);
 
     if (Stage >= D3DDMAPSAMPLER)
         Stage = Stage - D3DDMAPSAMPLER + NINE_MAX_SAMPLERS_PS;
@@ -2414,7 +2469,7 @@ NineDevice9_SetTexture( struct NineDevice9 *This,
         if (tex) {
             state->samplers_shadow |= tex->shadow << Stage;
 
-            if ((tex->dirty | tex->dirty_mip) && LIST_IS_EMPTY(&tex->list))
+            if ((tex->managed.dirty | tex->dirty_mip) && LIST_IS_EMPTY(&tex->list))
                 list_add(&tex->list, &This->update_textures);
 
             tex->bind_count++;

@@ -62,13 +62,13 @@ do_blit_drawpixels(struct gl_context * ctx,
    GLuint src_offset;
    drm_intel_bo *src_buffer;
 
-   DBG("%s\n", __FUNCTION__);
+   DBG("%s\n", __func__);
 
    if (!intel_check_blit_fragment_ops(ctx, false))
       return false;
 
    if (ctx->DrawBuffer->_NumColorDrawBuffers != 1) {
-      DBG("%s: fallback due to MRT\n", __FUNCTION__);
+      DBG("%s: fallback due to MRT\n", __func__);
       return false;
    }
 
@@ -78,6 +78,8 @@ do_blit_drawpixels(struct gl_context * ctx,
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
 
    mesa_format src_format = _mesa_format_from_format_and_type(format, type);
+   if (_mesa_format_is_mesa_array_format(src_format))
+      src_format = _mesa_format_from_array_format(src_format);
    mesa_format dst_format = irb->mt->format;
 
    /* We can safely discard sRGB encode/decode for the DrawPixels interface */
@@ -85,13 +87,13 @@ do_blit_drawpixels(struct gl_context * ctx,
    dst_format = _mesa_get_srgb_format_linear(dst_format);
 
    if (!intel_miptree_blit_compatible_formats(src_format, dst_format)) {
-      DBG("%s: bad format for blit\n", __FUNCTION__);
+      DBG("%s: bad format for blit\n", __func__);
       return false;
    }
 
    if (unpack->SwapBytes || unpack->LsbFirst ||
        unpack->SkipPixels || unpack->SkipRows) {
-      DBG("%s: bad packing params\n", __FUNCTION__);
+      DBG("%s: bad packing params\n", __func__);
       return false;
    }
 
@@ -118,7 +120,8 @@ do_blit_drawpixels(struct gl_context * ctx,
                                   irb->mt->format,
                                   src_offset,
                                   width, height, 1,
-                                  src_stride);
+                                  src_stride,
+                                  false /*disable_aux_buffers*/);
    if (!pbo_mt)
       return false;
 
@@ -128,7 +131,7 @@ do_blit_drawpixels(struct gl_context * ctx,
                            irb->mt, irb->mt_level, irb->mt_layer,
                            x, y, _mesa_is_winsys_fbo(ctx->DrawBuffer),
                            width, height, GL_COPY)) {
-      DBG("%s: blit failed\n", __FUNCTION__);
+      DBG("%s: blit failed\n", __func__);
       intel_miptree_release(&pbo_mt);
       return false;
    }
@@ -138,7 +141,7 @@ do_blit_drawpixels(struct gl_context * ctx,
    if (ctx->Query.CurrentOcclusionObject)
       ctx->Query.CurrentOcclusionObject->Result += width * height;
 
-   DBG("%s: success\n", __FUNCTION__);
+   DBG("%s: success\n", __func__);
    return true;
 }
 
@@ -168,7 +171,7 @@ intelDrawPixels(struct gl_context * ctx,
 	 return;
       }
 
-      perf_debug("%s: fallback to generic code in PBO case\n", __FUNCTION__);
+      perf_debug("%s: fallback to generic code in PBO case\n", __func__);
    }
 
    _mesa_meta_DrawPixels(ctx, x, y, width, height, format, type,

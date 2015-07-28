@@ -134,7 +134,7 @@ intel_miptree_blit(struct intel_context *intel,
        (dst_format != MESA_FORMAT_B8G8R8A8_UNORM &&
         dst_format != MESA_FORMAT_B8G8R8X8_UNORM))) {
       perf_debug("%s: Can't use hardware blitter from %s to %s, "
-                 "falling back.\n", __FUNCTION__,
+                 "falling back.\n", __func__,
                  _mesa_get_format_name(src_format),
                  _mesa_get_format_name(dst_format));
       return false;
@@ -266,7 +266,7 @@ intelEmitCopyBlit(struct intel_context *intel,
 
    intel_batchbuffer_require_space(intel, 8 * 4);
    DBG("%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
-       __FUNCTION__,
+       __func__,
        src_buffer, src_pitch, src_offset, src_x, src_y,
        dst_buffer, dst_pitch, dst_offset, dst_x, dst_y, w, h);
 
@@ -421,7 +421,7 @@ intelClearWithBlit(struct gl_context *ctx, GLbitfield mask)
       cpp = region->cpp;
 
       DBG("%s dst:buf(%p)/%d %d,%d sz:%dx%d\n",
-	  __FUNCTION__,
+	  __func__,
 	  region->bo, pitch,
 	  x1, y1, x2 - x1, y2 - y1);
 
@@ -542,7 +542,7 @@ intelEmitImmediateColorExpandBlit(struct intel_context *intel,
       return true;
 
    DBG("%s dst:buf(%p)/%d+%d %d,%d sz:%dx%d, %d bytes %d dwords\n",
-       __FUNCTION__,
+       __func__,
        dst_buffer, dst_pitch, dst_offset, x, y, w, h, src_size, dwords);
 
    intel_batchbuffer_require_space(intel,
@@ -658,7 +658,7 @@ intel_miptree_set_alpha_to_one(struct intel_context *intel,
    cpp = region->cpp;
 
    DBG("%s dst:buf(%p)/%d %d,%d sz:%dx%d\n",
-       __FUNCTION__, region->bo, pitch, x, y, width, height);
+       __func__, region->bo, pitch, x, y, width, height);
 
    BR13 = br13_for_cpp(cpp) | 0xf0 << 16;
    CMD = XY_COLOR_BLT_CMD;

@@ -42,6 +42,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/framebuffer.h"
 #include "main/fbobject.h"
 #include "main/stencil.h"
+#include "main/viewport.h"
 
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"
@@ -260,7 +261,7 @@ static void r200_set_blend_state( struct gl_context * ctx )
 
    default:
       fprintf( stderr, "[%s:%u] Invalid RGB blend equation (0x%04x).\n",
-         __FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationRGB );
+         __func__, __LINE__, ctx->Color.Blend[0].EquationRGB );
       return;
    }
 
@@ -294,7 +295,7 @@ static void r200_set_blend_state( struct gl_context * ctx )
 
    default:
       fprintf( stderr, "[%s:%u] Invalid A blend equation (0x%04x).\n",
-         __FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationA );
+         __func__, __LINE__, ctx->Color.Blend[0].EquationA );
       return;
    }
 
@@ -722,7 +723,7 @@ static void r200PolygonOffset( struct gl_context *ctx,
 /*    factor *= 2; */
 /*    constant *= 2; */
 
-/*    fprintf(stderr, "%s f:%f u:%f\n", __FUNCTION__, factor, constant); */
+/*    fprintf(stderr, "%s f:%f u:%f\n", __func__, factor, constant); */
 
    R200_STATECHANGE( rmesa, zbs );
    rmesa->hw.zbs.cmd[ZBS_SE_ZBIAS_FACTOR]   = factoru.ui32;
@@ -866,7 +867,7 @@ static void update_light_colors( struct gl_context *ctx, GLuint p )
 {
    struct gl_light *l = &ctx->Light.Light[p];
 
-/*     fprintf(stderr, "%s\n", __FUNCTION__); */
+/*     fprintf(stderr, "%s\n", __func__); */
 
    if (l->Enabled) {
       r200ContextPtr rmesa = R200_CONTEXT(ctx);
@@ -995,7 +996,7 @@ void r200UpdateMaterial( struct gl_context *ctx )
       mask &= ~ctx->Light._ColorMaterialBitmask;
 
    if (R200_DEBUG & RADEON_STATE)
-      fprintf(stderr, "%s\n", __FUNCTION__);
+      fprintf(stderr, "%s\n", __func__);
 
    if (mask & MAT_BIT_FRONT_EMISSION) {
       fcmd[MTL_EMMISSIVE_RED]   = mat[MAT_ATTRIB_FRONT_EMISSION][0];
@@ -1544,9 +1545,8 @@ void r200UpdateWindow( struct gl_context *ctx )
    __DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
    GLfloat xoffset = 0;
    GLfloat yoffset = dPriv ? (GLfloat) dPriv->h : 0;
-   const GLfloat *v = ctx->ViewportArray[0]._WindowMap.m;
    const GLboolean render_to_fbo = (ctx->DrawBuffer ? _mesa_is_user_fbo(ctx->DrawBuffer) : 0);
-   const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
+   double scale[3], translate[3];
    GLfloat y_scale, y_bias;
 
    if (render_to_fbo) {
@@ -1557,12 +1557,13 @@ void r200UpdateWindow( struct gl_context *ctx )
       y_bias = yoffset;
    }
 
-   float_ui32_type sx = { v[MAT_SX] };
-   float_ui32_type tx = { v[MAT_TX] + xoffset };
-   float_ui32_type sy = { v[MAT_SY] * y_scale };
-   float_ui32_type ty = { (v[MAT_TY] * y_scale) + y_bias };
-   float_ui32_type sz = { v[MAT_SZ] * depthScale };
-   float_ui32_type tz = { v[MAT_TZ] * depthScale };
+   _mesa_get_viewport_xform(ctx, 0, scale, translate);
+   float_ui32_type sx = { scale[0] };
+   float_ui32_type sy = { scale[1] * y_scale };
+   float_ui32_type sz = { scale[2] };
+   float_ui32_type tx = { translate[0] + xoffset };
+   float_ui32_type ty = { (translate[1] * y_scale) + y_bias };
+   float_ui32_type tz = { translate[2] };
 
    R200_STATECHANGE( rmesa, vpt );
 
@@ -1651,7 +1652,7 @@ static void r200LogicOpCode( struct gl_context *ctx, GLenum opcode )
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
    GLuint rop = (GLuint)opcode - GL_CLEAR;
 
-   ASSERT( rop < 16 );
+   assert( rop < 16 );
 
    R200_STATECHANGE( rmesa, msk );
    rmesa->hw.msk.cmd[MSK_RB3D_ROPCNTL] = r200_rop_tab[rop];
@@ -1667,7 +1668,7 @@ static void r200Enable( struct gl_context *ctx, GLenum cap, GLboolean state )
    GLuint p, flag;
 
    if ( R200_DEBUG & RADEON_STATE )
-      fprintf( stderr, "%s( %s = %s )\n", __FUNCTION__,
+      fprintf( stderr, "%s( %s = %s )\n", __func__,
 	       _mesa_lookup_enum_by_nr( cap ),
 	       state ? "GL_TRUE" : "GL_FALSE" );
 
@@ -2049,7 +2050,7 @@ void r200LightingSpaceChange( struct gl_context *ctx )
    GLboolean tmp;
 
    if (R200_DEBUG & RADEON_STATE)
-      fprintf(stderr, "%s %d BEFORE %x\n", __FUNCTION__, ctx->_NeedEyeCoords,
+      fprintf(stderr, "%s %d BEFORE %x\n", __func__, ctx->_NeedEyeCoords,
 	      rmesa->hw.tcl.cmd[TCL_LIGHT_MODEL_CTL_0]);
 
    if (ctx->_NeedEyeCoords)
@@ -2065,7 +2066,7 @@ void r200LightingSpaceChange( struct gl_context *ctx )
    }
 
    if (R200_DEBUG & RADEON_STATE)
-      fprintf(stderr, "%s %d AFTER %x\n", __FUNCTION__, ctx->_NeedEyeCoords,
+      fprintf(stderr, "%s %d AFTER %x\n", __func__, ctx->_NeedEyeCoords,
 	      rmesa->hw.tcl.cmd[TCL_LIGHT_MODEL_CTL_0]);
 }
 
@@ -2108,7 +2109,7 @@ static void update_texturematrix( struct gl_context *ctx )
    int unit;
 
    if (R200_DEBUG & RADEON_STATE)
-      fprintf(stderr, "%s before COMPSEL: %x\n", __FUNCTION__,
+      fprintf(stderr, "%s before COMPSEL: %x\n", __func__,
 	      rmesa->hw.vtx.cmd[VTX_TCL_OUTPUT_COMPSEL]);
 
    rmesa->TexMatEnabled = 0;
@@ -2166,7 +2167,7 @@ GLboolean r200ValidateBuffers(struct gl_context *ctx)
    int i, ret;
 
 	if (RADEON_DEBUG & RADEON_IOCTL)
-		fprintf(stderr, "%s\n", __FUNCTION__);
+		fprintf(stderr, "%s\n", __func__);
    radeon_cs_space_reset_bos(rmesa->radeon.cmdbuf.cs);
 
    rrb = radeon_get_colorbuffer(&rmesa->radeon);
@@ -2214,9 +2215,9 @@ GLboolean r200ValidateState( struct gl_context *ctx )
    GLuint new_state = rmesa->radeon.NewGLState;
 
    if (new_state & _NEW_BUFFERS) {
-      _mesa_update_framebuffer(ctx);
+      _mesa_update_framebuffer(ctx, ctx->ReadBuffer, ctx->DrawBuffer);
       /* this updates the DrawBuffer's Width/Height if it's a FBO */
-      _mesa_update_draw_buffer_bounds(ctx);
+      _mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
 
       R200_STATECHANGE(rmesa, ctx);
    }
@@ -2316,7 +2317,7 @@ static void r200WrapRunPipeline( struct gl_context *ctx )
    GLboolean has_material;
 
    if (0)
-      fprintf(stderr, "%s, newstate: %x\n", __FUNCTION__, rmesa->radeon.NewGLState);
+      fprintf(stderr, "%s, newstate: %x\n", __func__, rmesa->radeon.NewGLState);
 
    /* Validate state:
     */

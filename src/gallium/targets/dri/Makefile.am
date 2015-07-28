@@ -11,7 +11,6 @@ AM_CFLAGS = \
 AM_CPPFLAGS = \
 	$(DEFINES) \
 	-DDRI_TARGET \
-	-DGALLIUM_GALAHAD \
 	-DGALLIUM_NOOP \
 	-DGALLIUM_RBUG \
 	-DGALLIUM_TRACE
@@ -46,7 +45,6 @@ gallium_dri_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/dri/libdri.la \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/drivers/galahad/libgalahad.la \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \

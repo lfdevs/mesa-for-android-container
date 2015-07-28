@@ -99,6 +99,12 @@ is_vec_two(ir_constant *ir)
 }
 
 static inline bool
+is_vec_four(ir_constant *ir)
+{
+   return (ir == NULL) ? false : ir->is_value(4.0, 4);
+}
+
+static inline bool
 is_vec_negative_one(ir_constant *ir)
 {
    return (ir == NULL) ? false : ir->is_negative_one();
@@ -119,6 +125,8 @@ is_valid_vec_const(ir_constant *ir)
 static inline bool
 is_less_than_one(ir_constant *ir)
 {
+   assert(ir->type->base_type == GLSL_TYPE_FLOAT);
+
    if (!is_valid_vec_const(ir))
       return false;
 
@@ -134,6 +142,8 @@ is_less_than_one(ir_constant *ir)
 static inline bool
 is_greater_than_zero(ir_constant *ir)
 {
+   assert(ir->type->base_type == GLSL_TYPE_FLOAT);
+
    if (!is_valid_vec_const(ir))
       return false;
 
@@ -286,6 +296,20 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
    ir_expression *op_expr[4] = {NULL, NULL, NULL, NULL};
    unsigned int i;
 
+   if (ir->operation == ir_binop_mul &&
+       ir->operands[0]->type->is_matrix() &&
+       ir->operands[1]->type->is_vector()) {
+      ir_expression *matrix_mul = ir->operands[0]->as_expression();
+
+      if (matrix_mul && matrix_mul->operation == ir_binop_mul &&
+         matrix_mul->operands[0]->type->is_matrix() &&
+         matrix_mul->operands[1]->type->is_matrix()) {
+
+         return mul(matrix_mul->operands[0],
+                    mul(matrix_mul->operands[1], ir->operands[1]));
+      }
+   }
+
    assert(ir->get_num_operands() <= 4);
    for (i = 0; i < ir->get_num_operands(); i++) {
       if (ir->operands[i]->type->is_matrix())
@@ -376,6 +400,15 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       }
       break;
 
+   case ir_unop_f2i:
+   case ir_unop_f2u:
+      if (op_expr[0] && op_expr[0]->operation == ir_unop_trunc) {
+         return new(mem_ctx) ir_expression(ir->operation,
+                                           ir->type,
+                                           op_expr[0]->operands[0]);
+      }
+      break;
+
    case ir_unop_logic_not: {
       enum ir_expression_operation new_op = ir_unop_logic_not;
 
@@ -407,6 +440,18 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 
       break;
    }
+
+   case ir_unop_saturate:
+      if (op_expr[0] && op_expr[0]->operation == ir_binop_add) {
+         ir_expression *b2f_0 = op_expr[0]->operands[0]->as_expression();
+         ir_expression *b2f_1 = op_expr[0]->operands[1]->as_expression();
+
+         if (b2f_0 && b2f_0->operation == ir_unop_b2f &&
+             b2f_1 && b2f_1->operation == ir_unop_b2f) {
+            return b2f(logic_or(b2f_0->operands[0], b2f_1->operands[0]));
+         }
+      }
+      break;
 
    case ir_binop_add:
       if (is_vec_zero(op_const[0]))
@@ -505,6 +550,10 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       if (is_vec_negative_one(op_const[1]))
          return neg(ir->operands[0]);
 
+      if (op_expr[0] && op_expr[0]->operation == ir_unop_b2f &&
+          op_expr[1] && op_expr[1]->operation == ir_unop_b2f) {
+         return b2f(logic_and(op_expr[0]->operands[0], op_expr[1]->operands[0]));
+      }
 
       /* Reassociate multiplication of constants so that we can do
        * constant folding.
@@ -514,10 +563,47 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       if (op_const[1] && !op_const[0])
 	 reassociate_constant(ir, 1, op_const[1], op_expr[0]);
 
+      /* Optimizes
+       *
+       *    (mul (floor (add (abs x) 0.5) (sign x)))
+       *
+       * into
+       *
+       *    (trunc (add x (mul (sign x) 0.5)))
+       */
+      for (int i = 0; i < 2; i++) {
+         ir_expression *sign_expr = ir->operands[i]->as_expression();
+         ir_expression *floor_expr = ir->operands[1 - i]->as_expression();
+
+         if (!sign_expr || sign_expr->operation != ir_unop_sign ||
+             !floor_expr || floor_expr->operation != ir_unop_floor)
+            continue;
+
+         ir_expression *add_expr = floor_expr->operands[0]->as_expression();
+         if (!add_expr || add_expr->operation != ir_binop_add)
+            continue;
+
+         for (int j = 0; j < 2; j++) {
+            ir_expression *abs_expr = add_expr->operands[j]->as_expression();
+            if (!abs_expr || abs_expr->operation != ir_unop_abs)
+               continue;
+
+            ir_constant *point_five = add_expr->operands[1 - j]->as_constant();
+            if (!point_five || !point_five->is_value(0.5, 0))
+               continue;
+
+            if (abs_expr->operands[0]->equals(sign_expr->operands[0])) {
+               return trunc(add(abs_expr->operands[0],
+                                mul(sign_expr, point_five)));
+            }
+         }
+      }
       break;
 
    case ir_binop_div:
-      if (is_vec_one(op_const[0]) && ir->type->base_type == GLSL_TYPE_FLOAT) {
+      if (is_vec_one(op_const[0]) && (
+                ir->type->base_type == GLSL_TYPE_FLOAT ||
+                ir->type->base_type == GLSL_TYPE_DOUBLE)) {
 	 return new(mem_ctx) ir_expression(ir_unop_rcp,
 					   ir->operands[1]->type,
 					   ir->operands[1],
@@ -538,7 +624,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
          unsigned components[4] = { 0 }, count = 0;
 
          for (unsigned c = 0; c < op_const[i]->type->vector_elements; c++) {
-            if (op_const[i]->value.f[c] == 0.0)
+            if (op_const[i]->is_zero())
                continue;
 
             components[count] = c;
@@ -554,7 +640,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 
          /* Swizzle both operands to remove the channels that were zero. */
          return new(mem_ctx)
-            ir_expression(op, glsl_type::float_type,
+            ir_expression(op, ir->type,
                           new(mem_ctx) ir_swizzle(ir->operands[0],
                                                   components, count),
                           new(mem_ctx) ir_swizzle(ir->operands[1],
@@ -694,6 +780,20 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
          return mul(x, x);
       }
 
+      if (is_vec_four(op_const[1])) {
+         ir_variable *x = new(ir) ir_variable(ir->operands[1]->type, "x",
+                                              ir_var_temporary);
+         base_ir->insert_before(x);
+         base_ir->insert_before(assign(x, ir->operands[0]));
+
+         ir_variable *squared = new(ir) ir_variable(ir->operands[1]->type,
+                                                    "squared",
+                                                    ir_var_temporary);
+         base_ir->insert_before(squared);
+         base_ir->insert_before(assign(squared, mul(x, x)));
+         return mul(squared, squared);
+      }
+
       break;
 
    case ir_binop_min:
@@ -773,6 +873,12 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       if (op_expr[0] && op_expr[0]->operation == ir_unop_rcp)
 	 return op_expr[0]->operands[0];
 
+      if (op_expr[0] && (op_expr[0]->operation == ir_unop_exp2 ||
+                         op_expr[0]->operation == ir_unop_exp)) {
+         return new(mem_ctx) ir_expression(op_expr[0]->operation, ir->type,
+                                           neg(op_expr[0]->operands[0]));
+      }
+
       /* While ir_to_mesa.cpp will lower sqrt(x) to rcp(rsq(x)), it does so at
        * its IR level, so we can always apply this transformation.
        */
@@ -811,7 +917,20 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
          return mul(ir->operands[1], ir->operands[2]);
       } else if (is_vec_zero(op_const[1])) {
          unsigned op2_components = ir->operands[2]->type->vector_elements;
-         ir_constant *one = new(mem_ctx) ir_constant(1.0f, op2_components);
+         ir_constant *one;
+
+         switch (ir->type->base_type) {
+         case GLSL_TYPE_FLOAT:
+            one = new(mem_ctx) ir_constant(1.0f, op2_components);
+            break;
+         case GLSL_TYPE_DOUBLE:
+            one = new(mem_ctx) ir_constant(1.0, op2_components);
+            break;
+         default:
+            one = NULL;
+            unreachable("unexpected type");
+         }
+
          return mul(ir->operands[0], add(one, neg(ir->operands[2])));
       }
       break;

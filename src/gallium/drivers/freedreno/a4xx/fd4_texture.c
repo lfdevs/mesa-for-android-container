@@ -162,14 +162,15 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.reference.count = 1;
 	so->base.context = pctx;
 
-	so->tex_resource =  rsc;
-
 	so->texconst0 =
 		A4XX_TEX_CONST_0_TYPE(tex_type(prsc->target)) |
 		A4XX_TEX_CONST_0_FMT(fd4_pipe2tex(cso->format)) |
 		A4XX_TEX_CONST_0_MIPLVLS(miplevels) |
 		fd4_tex_swiz(cso->format, cso->swizzle_r, cso->swizzle_g,
 				cso->swizzle_b, cso->swizzle_a);
+
+	if (util_format_is_srgb(cso->format))
+		so->texconst0 |= A4XX_TEX_CONST_0_SRGB;
 
 	so->texconst1 =
 		A4XX_TEX_CONST_1_WIDTH(u_minify(prsc->width0, lvl)) |
@@ -204,11 +205,43 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	return &so->base;
 }
 
+static void
+fd4_set_sampler_views(struct pipe_context *pctx, unsigned shader,
+		unsigned start, unsigned nr, struct pipe_sampler_view **views)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd4_context *fd4_ctx = fd4_context(ctx);
+	struct fd_texture_stateobj *tex;
+	uint16_t integer_s = 0, *ptr;
+	int i;
+
+	fd_set_sampler_views(pctx, shader, start, nr, views);
+
+	switch (shader) {
+	case PIPE_SHADER_FRAGMENT:
+		tex = &ctx->fragtex;
+		ptr = &fd4_ctx->finteger_s;
+		break;
+	case PIPE_SHADER_VERTEX:
+		tex = &ctx->verttex;
+		ptr = &fd4_ctx->vinteger_s;
+		break;
+	default:
+		return;
+	}
+
+	for (i = 0; i < tex->num_textures; i++)
+		if (util_format_is_pure_integer(tex->textures[i]->format))
+			integer_s |= 1 << i;
+
+	*ptr = integer_s;
+}
+
 void
 fd4_texture_init(struct pipe_context *pctx)
 {
 	pctx->create_sampler_state = fd4_sampler_state_create;
 	pctx->bind_sampler_states = fd_sampler_states_bind;
 	pctx->create_sampler_view = fd4_sampler_view_create;
-	pctx->set_sampler_views = fd_set_sampler_views;
+	pctx->set_sampler_views = fd4_set_sampler_views;
 }

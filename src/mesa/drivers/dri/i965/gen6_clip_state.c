@@ -54,7 +54,7 @@ upload_clip_state(struct brw_context *brw)
 
    if (brw->gen == 7) {
       /* _NEW_POLYGON */
-      if ((ctx->Polygon.FrontFace == GL_CCW) ^ _mesa_is_user_fbo(fb))
+      if (ctx->Polygon._FrontBit == _mesa_is_user_fbo(fb))
          dw1 |= GEN7_CLIP_WINDING_CCW;
 
       if (ctx->Polygon.CullFlag) {
@@ -95,6 +95,10 @@ upload_clip_state(struct brw_context *brw)
    /* _NEW_TRANSFORM */
    dw2 |= (ctx->Transform.ClipPlanesEnabled <<
            GEN6_USER_CLIP_CLIP_DISTANCES_SHIFT);
+   if (ctx->Transform.ClipDepthMode == GL_ZERO_TO_ONE)
+      dw2 |= GEN6_CLIP_API_D3D;
+   else
+      dw2 |= GEN6_CLIP_API_OGL;
 
    dw2 |= GEN6_CLIP_GB_TEST;
 
@@ -170,7 +174,6 @@ upload_clip_state(struct brw_context *brw)
    OUT_BATCH(_3DSTATE_CLIP << 16 | (4 - 2));
    OUT_BATCH(dw1);
    OUT_BATCH(enable |
-	     GEN6_CLIP_API_OGL |
 	     GEN6_CLIP_MODE_NORMAL |
 	     GEN6_CLIP_XY_TEST |
 	     dw2);

@@ -27,7 +27,66 @@
 #include "main/compiler.h"
 #include "glsl/ir.h"
 
+#ifdef __cplusplus
+#include "brw_ir_allocator.h"
+#endif
+
 #pragma once
+
+#define MAX_SAMPLER_MESSAGE_SIZE 11
+#define MAX_VGRF_SIZE 16
+
+struct brw_compiler {
+   const struct brw_device_info *devinfo;
+
+   struct {
+      struct ra_regs *regs;
+
+      /**
+       * Array of the ra classes for the unaligned contiguous register
+       * block sizes used.
+       */
+      int *classes;
+
+      /**
+       * Mapping for register-allocated objects in *regs to the first
+       * GRF for that object.
+       */
+      uint8_t *ra_reg_to_grf;
+   } vec4_reg_set;
+
+   struct {
+      struct ra_regs *regs;
+
+      /**
+       * Array of the ra classes for the unaligned contiguous register
+       * block sizes used, indexed by register size.
+       */
+      int classes[16];
+
+      /**
+       * Mapping from classes to ra_reg ranges.  Each of the per-size
+       * classes corresponds to a range of ra_reg nodes.  This array stores
+       * those ranges in the form of first ra_reg in each class and the
+       * total number of ra_reg elements in the last array element.  This
+       * way the range of the i'th class is given by:
+       * [ class_to_ra_reg_range[i], class_to_ra_reg_range[i+1] )
+       */
+      int class_to_ra_reg_range[17];
+
+      /**
+       * Mapping for register-allocated objects in *regs to the first
+       * GRF for that object.
+       */
+      uint8_t *ra_reg_to_grf;
+
+      /**
+       * ra class for the aligned pairs we use for PLN, which doesn't
+       * appear in *classes.
+       */
+      int aligned_pairs_class;
+   } fs_reg_sets[2];
+};
 
 enum PACKED register_file {
    BAD_FILE,
@@ -44,8 +103,10 @@ struct backend_reg
 #ifdef __cplusplus
    bool is_zero() const;
    bool is_one() const;
+   bool is_negative_one() const;
    bool is_null() const;
    bool is_accumulator() const;
+   bool in_range(const backend_reg &r, unsigned n) const;
 #endif
 
    enum register_file file; /**< Register file: GRF, MRF, IMM. */
@@ -69,7 +130,7 @@ struct backend_reg
     *
     * For uniforms, this is in units of 1 float.
     */
-   int reg_offset;
+   uint16_t reg_offset;
 
    struct brw_reg fixed_hw_reg;
 
@@ -86,11 +147,12 @@ struct backend_instruction : public exec_node {
    bool is_tex() const;
    bool is_math() const;
    bool is_control_flow() const;
+   bool is_commutative() const;
    bool can_do_source_mods() const;
    bool can_do_saturate() const;
    bool can_do_cmod() const;
    bool reads_accumulator_implicitly() const;
-   bool writes_accumulator_implicitly(struct brw_context *brw) const;
+   bool writes_accumulator_implicitly(const struct brw_device_info *devinfo) const;
 
    void remove(bblock_t *block);
    void insert_after(bblock_t *block, backend_instruction *inst);
@@ -118,6 +180,7 @@ struct backend_instruction {
    uint8_t mlen; /**< SEND message length */
    int8_t base_mrf; /**< First MRF in the SEND message, if mlen is nonzero. */
    uint8_t target; /**< MRT target. */
+   uint8_t regs_written; /**< Number of registers written by the instruction. */
 
    enum opcode opcode; /* BRW_OPCODE_* or FS_OPCODE_* */
    enum brw_conditional_mod conditional_mod; /**< BRW_CONDITIONAL_* */
@@ -129,7 +192,14 @@ struct backend_instruction {
    bool no_dd_check:1;
    bool saturate:1;
    bool shadow_compare:1;
-   bool header_present:1;
+
+   /* Chooses which flag subregister (f0.0 or f0.1) is used for conditional
+    * mod and predication.
+    */
+   unsigned flag_subreg:1;
+
+   /** The number of hardware registers used for a message header. */
+   uint8_t header_size;
 };
 
 #ifdef __cplusplus
@@ -153,6 +223,7 @@ protected:
 public:
 
    struct brw_context * const brw;
+   const struct brw_device_info * const devinfo;
    struct gl_context * const ctx;
    struct brw_shader * const shader;
    struct gl_shader_program * const shader_prog;
@@ -171,6 +242,11 @@ public:
    cfg_t *cfg;
 
    gl_shader_stage stage;
+   bool debug_enabled;
+   const char *stage_name;
+   const char *stage_abbrev;
+
+   brw::simple_allocator alloc;
 
    virtual void dump_instruction(backend_instruction *inst) = 0;
    virtual void dump_instruction(backend_instruction *inst, FILE *file) = 0;
@@ -185,8 +261,7 @@ public:
    virtual void invalidate_live_intervals() = 0;
 };
 
-uint32_t brw_texture_offset(struct gl_context *ctx, int *offsets,
-                            unsigned num_components);
+uint32_t brw_texture_offset(int *offsets, unsigned num_components);
 
 #endif /* __cplusplus */
 
@@ -202,6 +277,9 @@ bool brw_abs_immediate(enum brw_reg_type type, struct brw_reg *reg);
 extern "C" {
 #endif
 
+struct brw_compiler *
+brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo);
+
 bool brw_vs_precompile(struct gl_context *ctx,
                        struct gl_shader_program *shader_prog,
                        struct gl_program *prog);
@@ -209,6 +287,9 @@ bool brw_gs_precompile(struct gl_context *ctx,
                        struct gl_shader_program *shader_prog,
                        struct gl_program *prog);
 bool brw_fs_precompile(struct gl_context *ctx,
+                       struct gl_shader_program *shader_prog,
+                       struct gl_program *prog);
+bool brw_cs_precompile(struct gl_context *ctx,
                        struct gl_shader_program *shader_prog,
                        struct gl_program *prog);
 

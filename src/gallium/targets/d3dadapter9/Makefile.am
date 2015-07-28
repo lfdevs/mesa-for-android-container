@@ -74,6 +74,8 @@ endif # HAVE_LD_VERSION_SCRIPT
 d3dadapter9_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/gallium/state_trackers/nine/libninetracker.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \

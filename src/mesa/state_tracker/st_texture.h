@@ -55,13 +55,7 @@ struct st_texture_image
 {
    struct gl_texture_image base;
 
-   /** Used to store texture data that doesn't fit in the parent
-    * object's mipmap buffer.
-    */
-   GLubyte *TexData;
-
    /* If stImage->pt != NULL, image data is stored here.
-    * Else if stImage->TexData != NULL, image is stored there.
     * Else there is no image data.
     */
    struct pipe_resource *pt;
@@ -117,32 +111,32 @@ struct st_texture_object
 };
 
 
-static INLINE struct st_texture_image *
+static inline struct st_texture_image *
 st_texture_image(struct gl_texture_image *img)
 {
    return (struct st_texture_image *) img;
 }
 
-static INLINE const struct st_texture_image *
+static inline const struct st_texture_image *
 st_texture_image_const(const struct gl_texture_image *img)
 {
    return (const struct st_texture_image *) img;
 }
 
-static INLINE struct st_texture_object *
+static inline struct st_texture_object *
 st_texture_object(struct gl_texture_object *obj)
 {
    return (struct st_texture_object *) obj;
 }
 
-static INLINE const struct st_texture_object *
+static inline const struct st_texture_object *
 st_texture_object_const(const struct gl_texture_object *obj)
 {
    return (const struct st_texture_object *) obj;
 }
 
 
-static INLINE struct pipe_resource *
+static inline struct pipe_resource *
 st_get_texobj_resource(struct gl_texture_object *texObj)
 {
    struct st_texture_object *stObj = st_texture_object(texObj);
@@ -150,14 +144,14 @@ st_get_texobj_resource(struct gl_texture_object *texObj)
 }
 
 
-static INLINE struct pipe_resource *
+static inline struct pipe_resource *
 st_get_stobj_resource(struct st_texture_object *stObj)
 {
    return stObj ? stObj->pt : NULL;
 }
 
 
-static INLINE struct pipe_sampler_view *
+static inline struct pipe_sampler_view *
 st_create_texture_sampler_view_format(struct pipe_context *pipe,
                                       struct pipe_resource *texture,
                                       enum pipe_format format)
@@ -169,7 +163,7 @@ st_create_texture_sampler_view_format(struct pipe_context *pipe,
    return pipe->create_sampler_view(pipe, texture, &templ);
 }
 
-static INLINE struct pipe_sampler_view *
+static inline struct pipe_sampler_view *
 st_create_texture_sampler_view(struct pipe_context *pipe,
                                struct pipe_resource *texture)
 {
@@ -229,16 +223,6 @@ st_texture_image_unmap(struct st_context *st,
  */
 extern const GLuint *
 st_texture_depth_offsets(struct pipe_resource *pt, GLuint level);
-
-
-/* Upload an image into a texture
- */
-extern void
-st_texture_image_data(struct st_context *st,
-                      struct pipe_resource *dst,
-                      GLuint face, GLuint level, void *src,
-                      GLuint src_row_pitch, GLuint src_image_pitch);
-
 
 /* Copy an image between two textures
  */

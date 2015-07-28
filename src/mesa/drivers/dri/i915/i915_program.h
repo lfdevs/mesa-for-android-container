@@ -84,7 +84,7 @@
 
 /* One neat thing about the UREG representation:  
  */
-static INLINE int
+static inline int
 swizzle(int reg, int x, int y, int z, int w)
 {
    return ((reg & ~UREG_XYZW_CHANNEL_MASK) |
@@ -96,7 +96,7 @@ swizzle(int reg, int x, int y, int z, int w)
 
 /* Another neat thing about the UREG representation:  
  */
-static INLINE int
+static inline int
 negate(int reg, int x, int y, int z, int w)
 {
    return reg ^ (((x & 1) << UREG_CHANNEL_X_NEGATE_SHIFT) |

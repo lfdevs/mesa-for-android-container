@@ -30,6 +30,10 @@
 
 #include "pipe/p_state.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct cso_context;
 
 struct pp_queue_t;              /* Forward definition */
@@ -84,5 +88,10 @@ bool pp_jimenezmlaa_init_color(struct pp_queue_t *, unsigned int,
 void pp_celshade_free(struct pp_queue_t *, unsigned int);
 void pp_nocolor_free(struct pp_queue_t *, unsigned int);
 void pp_jimenezmlaa_free(struct pp_queue_t *, unsigned int);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

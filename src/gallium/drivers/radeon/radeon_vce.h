@@ -34,7 +34,7 @@
 #ifndef RADEON_VCE_H
 #define RADEON_VCE_H
 
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #define RVCE_RELOC(buf, usage, domain) (enc->ws->cs_add_reloc(enc->cs, (buf), (usage), domain, RADEON_PRIO_MIN))
 
@@ -50,7 +50,7 @@ struct r600_common_screen;
 /* driver dependent callback */
 typedef void (*rvce_get_buffer)(struct pipe_resource *resource,
 				struct radeon_winsys_cs_handle **handle,
-				struct radeon_surface **surface);
+				struct radeon_surf **surface);
 
 /* Coded picture buffer slot */
 struct rvce_cpb_slot {
@@ -75,6 +75,7 @@ struct rvce_encoder {
 	void (*pic_control)(struct rvce_encoder *enc);
 	void (*motion_estimation)(struct rvce_encoder *enc);
 	void (*rdo)(struct rvce_encoder *enc);
+	void (*vui)(struct rvce_encoder *enc);
 	void (*encode)(struct rvce_encoder *enc);
 	void (*destroy)(struct rvce_encoder *enc);
 
@@ -87,8 +88,8 @@ struct rvce_encoder {
 	rvce_get_buffer			get_buffer;
 
 	struct radeon_winsys_cs_handle*	handle;
-	struct radeon_surface*		luma;
-	struct radeon_surface*		chroma;
+	struct radeon_surf*		luma;
+	struct radeon_surf*		chroma;
 
 	struct radeon_winsys_cs_handle*	bs_handle;
 	unsigned			bs_size;
@@ -100,6 +101,7 @@ struct rvce_encoder {
 	struct rvid_buffer		*fb;
 	struct rvid_buffer		cpb;
 	struct pipe_h264_enc_picture_desc pic;
+	bool use_vui;
 };
 
 struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,

@@ -44,6 +44,7 @@ struct brw_device_info
    bool has_pln;
    bool has_compr4;
    bool has_surface_tile_offset;
+   bool supports_simd16_3src;
 
    /**
     * Quirks:
@@ -66,16 +67,21 @@ struct brw_device_info
     *  @{
     */
    unsigned max_vs_threads;
+   unsigned max_hs_threads;
+   unsigned max_ds_threads;
    unsigned max_gs_threads;
    unsigned max_wm_threads;
+   unsigned max_cs_threads;
 
    struct {
       unsigned size;
       unsigned min_vs_entries;
       unsigned max_vs_entries;
+      unsigned max_hs_entries;
+      unsigned max_ds_entries;
       unsigned max_gs_entries;
    } urb;
    /** @} */
 };
 
-const struct brw_device_info *brw_get_device_info(int devid);
+const struct brw_device_info *brw_get_device_info(int devid, int revision);

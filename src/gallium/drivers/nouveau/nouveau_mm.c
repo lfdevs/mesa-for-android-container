@@ -3,7 +3,7 @@
 
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
-#include "util/u_double_list.h"
+#include "util/list.h"
 
 #include "nouveau_winsys.h"
 #include "nouveau_screen.h"

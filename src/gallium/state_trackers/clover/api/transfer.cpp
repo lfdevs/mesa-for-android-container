@@ -168,13 +168,31 @@ namespace {
    }
 
    ///
+   /// Checks that the host access flags of the memory object are
+   /// within the allowed set \a flags.
+   ///
+   void
+   validate_object_access(const memory_obj &mem, const cl_mem_flags flags) {
+      if (mem.flags() & ~flags &
+          (CL_MEM_HOST_READ_ONLY | CL_MEM_HOST_WRITE_ONLY |
+           CL_MEM_HOST_NO_ACCESS))
+         throw error(CL_INVALID_OPERATION);
+   }
+
+   ///
    /// Checks that the mapping flags are correct.
    ///
    void
-   validate_flags(const cl_map_flags flags) {
+   validate_map_flags(const memory_obj &mem, const cl_map_flags flags) {
       if ((flags & (CL_MAP_WRITE | CL_MAP_READ)) &&
           (flags & CL_MAP_WRITE_INVALIDATE_REGION))
          throw error(CL_INVALID_VALUE);
+
+      if (flags & CL_MAP_READ)
+         validate_object_access(mem, CL_MEM_HOST_READ_ONLY);
+
+      if (flags & (CL_MAP_WRITE | CL_MAP_WRITE_INVALIDATE_REGION))
+         validate_object_access(mem, CL_MEM_HOST_WRITE_ONLY);
    }
 
    ///
@@ -269,6 +287,7 @@ clEnqueueReadBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_common(q, deps);
    validate_object(q, ptr, {}, obj_pitch, region);
    validate_object(q, mem, obj_origin, obj_pitch, region);
+   validate_object_access(mem, CL_MEM_HOST_READ_ONLY);
 
    auto hev = create<hard_event>(
       q, CL_COMMAND_READ_BUFFER, deps,
@@ -298,6 +317,7 @@ clEnqueueWriteBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_common(q, deps);
    validate_object(q, mem, obj_origin, obj_pitch, region);
    validate_object(q, ptr, {}, obj_pitch, region);
+   validate_object_access(mem, CL_MEM_HOST_WRITE_ONLY);
 
    auto hev = create<hard_event>(
       q, CL_COMMAND_WRITE_BUFFER, deps,
@@ -334,6 +354,7 @@ clEnqueueReadBufferRect(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_common(q, deps);
    validate_object(q, ptr, host_origin, host_pitch, region);
    validate_object(q, mem, obj_origin, obj_pitch, region);
+   validate_object_access(mem, CL_MEM_HOST_READ_ONLY);
 
    auto hev = create<hard_event>(
       q, CL_COMMAND_READ_BUFFER_RECT, deps,
@@ -370,6 +391,7 @@ clEnqueueWriteBufferRect(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_common(q, deps);
    validate_object(q, mem, obj_origin, obj_pitch, region);
    validate_object(q, ptr, host_origin, host_pitch, region);
+   validate_object_access(mem, CL_MEM_HOST_WRITE_ONLY);
 
    auto hev = create<hard_event>(
       q, CL_COMMAND_WRITE_BUFFER_RECT, deps,
@@ -474,6 +496,7 @@ clEnqueueReadImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_common(q, deps);
    validate_object(q, ptr, {}, dst_pitch, region);
    validate_object(q, img, src_origin, region);
+   validate_object_access(img, CL_MEM_HOST_READ_ONLY);
 
    auto hev = create<hard_event>(
       q, CL_COMMAND_READ_IMAGE, deps,
@@ -507,6 +530,7 @@ clEnqueueWriteImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
    validate_common(q, deps);
    validate_object(q, img, dst_origin, region);
    validate_object(q, ptr, {}, src_pitch, region);
+   validate_object_access(img, CL_MEM_HOST_WRITE_ONLY);
 
    auto hev = create<hard_event>(
       q, CL_COMMAND_WRITE_IMAGE, deps,
@@ -639,7 +663,7 @@ clEnqueueMapBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    validate_common(q, deps);
    validate_object(q, mem, obj_origin, obj_pitch, region);
-   validate_flags(flags);
+   validate_map_flags(mem, flags);
 
    void *map = mem.resource(q).add_map(q, flags, blocking, obj_origin, region);
 
@@ -667,7 +691,7 @@ clEnqueueMapImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    validate_common(q, deps);
    validate_object(q, img, origin, region);
-   validate_flags(flags);
+   validate_map_flags(img, flags);
 
    void *map = img.resource(q).add_map(q, flags, blocking, origin, region);
 

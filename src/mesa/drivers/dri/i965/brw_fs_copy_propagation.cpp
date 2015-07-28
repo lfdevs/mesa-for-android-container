@@ -34,7 +34,7 @@
 
 #define ACP_HASH_SIZE 16
 
-#include "main/bitset.h"
+#include "util/bitset.h"
 #include "brw_fs.h"
 #include "brw_cfg.h"
 
@@ -275,6 +275,16 @@ is_logic_op(enum opcode opcode)
            opcode == BRW_OPCODE_NOT);
 }
 
+static bool
+can_change_source_types(fs_inst *inst)
+{
+   return !inst->src[0].abs && !inst->src[0].negate &&
+          (inst->opcode == BRW_OPCODE_MOV ||
+           (inst->opcode == BRW_OPCODE_SEL &&
+            inst->predicate != BRW_PREDICATE_NONE &&
+            !inst->src[1].abs && !inst->src[1].negate));
+}
+
 bool
 fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 {
@@ -283,7 +293,8 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 
    if (entry->src.file == IMM)
       return false;
-   assert(entry->src.file == GRF || entry->src.file == UNIFORM);
+   assert(entry->src.file == GRF || entry->src.file == UNIFORM ||
+          entry->src.file == ATTR);
 
    if (entry->opcode == SHADER_OPCODE_LOAD_PAYLOAD &&
        inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD)
@@ -298,7 +309,7 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
     */
    if (inst->src[arg].reg_offset < entry->dst.reg_offset ||
        (inst->src[arg].reg_offset * 32 + inst->src[arg].subreg_offset +
-        inst->regs_read(this, arg) * inst->src[arg].stride * 32) >
+        inst->regs_read(arg) * inst->src[arg].stride * 32) >
        (entry->dst.reg_offset + entry->regs_written) * 32)
       return false;
 
@@ -307,7 +318,7 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
     * instead. See also resolve_ud_negate() and comment in
     * fs_generator::generate_code.
     */
-   if (inst->src[arg].type == BRW_REGISTER_TYPE_UD &&
+   if (entry->src.type == BRW_REGISTER_TYPE_UD &&
        entry->src.negate)
       return false;
 
@@ -315,7 +326,7 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 
    if ((has_source_modifiers || entry->src.file == UNIFORM ||
         !entry->src.is_contiguous()) &&
-       !inst->can_do_source_mods(brw))
+       !inst->can_do_source_mods(devinfo))
       return false;
 
    if (has_source_modifiers &&
@@ -346,10 +357,12 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
         type_sz(inst->src[arg].type)) % type_sz(entry->src.type) != 0)
       return false;
 
-   if (has_source_modifiers && entry->dst.type != inst->src[arg].type)
+   if (has_source_modifiers &&
+       entry->dst.type != inst->src[arg].type &&
+       !can_change_source_types(inst))
       return false;
 
-   if (brw->gen >= 8 && (entry->src.negate || entry->src.abs) &&
+   if (devinfo->gen >= 8 && (entry->src.negate || entry->src.abs) &&
        is_logic_op(inst->opcode)) {
       return false;
    }
@@ -382,6 +395,7 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
       inst->src[arg].reg_offset = entry->src.reg_offset;
       inst->src[arg].subreg_offset = entry->src.subreg_offset;
       break;
+   case ATTR:
    case GRF:
       {
          assert(entry->src.width % inst->src[arg].width == 0);
@@ -412,9 +426,23 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
       break;
    }
 
-   if (!inst->src[arg].abs) {
-      inst->src[arg].abs = entry->src.abs;
-      inst->src[arg].negate ^= entry->src.negate;
+   if (has_source_modifiers) {
+      if (entry->dst.type != inst->src[arg].type) {
+         /* We are propagating source modifiers from a MOV with a different
+          * type.  If we got here, then we can just change the source and
+          * destination types of the instruction and keep going.
+          */
+         assert(can_change_source_types(inst));
+         for (int i = 0; i < inst->sources; i++) {
+            inst->src[i].type = entry->dst.type;
+         }
+         inst->dst.type = entry->dst.type;
+      }
+
+      if (!inst->src[arg].abs) {
+         inst->src[arg].abs = entry->src.abs;
+         inst->src[arg].negate ^= entry->src.negate;
+      }
    }
 
    return true;
@@ -444,22 +472,23 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
        */
       if (inst->src[i].reg_offset < entry->dst.reg_offset ||
           (inst->src[i].reg_offset * 32 + inst->src[i].subreg_offset +
-           inst->regs_read(this, i) * inst->src[i].stride * 32) >
+           inst->regs_read(i) * inst->src[i].stride * 32) >
           (entry->dst.reg_offset + entry->regs_written) * 32)
          continue;
 
       fs_reg val = entry->src;
-      val.effective_width = inst->src[i].effective_width;
       val.type = inst->src[i].type;
 
       if (inst->src[i].abs) {
-         if (!brw_abs_immediate(val.type, &val.fixed_hw_reg)) {
+         if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
+             !brw_abs_immediate(val.type, &val.fixed_hw_reg)) {
             continue;
          }
       }
 
       if (inst->src[i].negate) {
-         if (!brw_negate_immediate(val.type, &val.fixed_hw_reg)) {
+         if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
+             !brw_negate_immediate(val.type, &val.fixed_hw_reg)) {
             continue;
          }
       }
@@ -471,10 +500,20 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          progress = true;
          break;
 
-      case SHADER_OPCODE_POW:
       case SHADER_OPCODE_INT_QUOTIENT:
       case SHADER_OPCODE_INT_REMAINDER:
-         if (brw->gen < 8)
+         /* FINISHME: Promote non-float constants and remove this. */
+         if (devinfo->gen < 8)
+            break;
+         /* fallthrough */
+      case SHADER_OPCODE_POW:
+         /* Allow constant propagation into src1 (except on Gen 6), and let
+          * constant combining promote the constant on Gen < 8.
+          *
+          * While Gen 6 MATH can take a scalar source, its source and
+          * destination offsets must be equal and we cannot ensure that.
+          */
+         if (devinfo->gen == 6)
             break;
          /* fallthrough */
       case BRW_OPCODE_BFI1:
@@ -502,8 +541,16 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
             /* Fit this constant in by commuting the operands.
              * Exception: we can't do this for 32-bit integer MUL/MACH
              * because it's asymmetric.
+             *
+             * The BSpec says for Broadwell that
+             *
+             *    "When multiplying DW x DW, the dst cannot be accumulator."
+             *
+             * Integer MUL with a non-accumulator destination will be lowered
+             * by lower_integer_multiplication(), so don't restrict it.
              */
-            if ((inst->opcode == BRW_OPCODE_MUL ||
+            if (((inst->opcode == BRW_OPCODE_MUL &&
+                  inst->dst.is_accumulator()) ||
                  inst->opcode == BRW_OPCODE_MACH) &&
                 (inst->src[1].type == BRW_REGISTER_TYPE_D ||
                  inst->src[1].type == BRW_REGISTER_TYPE_UD))
@@ -570,6 +617,13 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          break;
 
       case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
+      case SHADER_OPCODE_BROADCAST:
+         inst->src[i] = val;
+         progress = true;
+         break;
+
+      case BRW_OPCODE_MAD:
+      case BRW_OPCODE_LRP:
          inst->src[i] = val;
          progress = true;
          break;
@@ -590,6 +644,7 @@ can_propagate_from(fs_inst *inst)
            ((inst->src[0].file == GRF &&
              (inst->src[0].reg != inst->dst.reg ||
               inst->src[0].reg_offset != inst->dst.reg_offset)) ||
+            inst->src[0].file == ATTR ||
             inst->src[0].file == UNIFORM ||
             inst->src[0].file == IMM) &&
            inst->src[0].type == inst->dst.type &&
@@ -654,13 +709,13 @@ fs_visitor::opt_copy_propagate_local(void *copy_prop_ctx, bblock_t *block,
                  inst->dst.file == GRF) {
          int offset = 0;
          for (int i = 0; i < inst->sources; i++) {
-            int regs_written = ((inst->src[i].effective_width *
-                                 type_sz(inst->src[i].type)) + 31) / 32;
+            int effective_width = i < inst->header_size ? 8 : inst->exec_size;
+            int regs_written = effective_width / 8;
             if (inst->src[i].file == GRF) {
                acp_entry *entry = ralloc(copy_prop_ctx, acp_entry);
                entry->dst = inst->dst;
                entry->dst.reg_offset = offset;
-               entry->dst.width = inst->src[i].effective_width;
+               entry->dst.width = effective_width;
                entry->src = inst->src[i];
                entry->regs_written = regs_written;
                entry->opcode = inst->opcode;

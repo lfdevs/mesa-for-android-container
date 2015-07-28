@@ -47,6 +47,12 @@
  * I'm not really sure a sane way for the CP stage to realize when it
  * cannot remove a mov due to multi-register constraints..
  *
+ * NOTE: http://scopesconf.org/scopes-01/paper/session1_2.ps.gz has
+ * some ideas to handle array allocation with a more conventional
+ * graph coloring algorithm for register assignment, which might be
+ * a good alternative to the current algo.  However afaict it cannot
+ * handle overlapping arrays, which is a scenario that we have to
+ * deal with
  */
 
 struct ir3_ra_ctx {
@@ -56,6 +62,10 @@ struct ir3_ra_ctx {
 	bool frag_face;
 	int cnt;
 	bool error;
+	struct {
+		unsigned base;
+		unsigned size;
+	} arrays[MAX_ARRAYS];
 };
 
 #ifdef DEBUG
@@ -141,6 +151,26 @@ static bool instr_is_output(struct ir3_instruction *instr)
 	return false;
 }
 
+static void mark_sources(struct ir3_instruction *instr,
+		struct ir3_instruction *n, regmask_t *liveregs, regmask_t *written)
+{
+	unsigned i;
+
+	for (i = 1; i < n->regs_count; i++) {
+		struct ir3_register *r = reg_check(n, i);
+		if (r)
+			regmask_set_if_not(liveregs, r, written);
+
+		/* if any src points back to the instruction(s) in
+		 * the block of neighbors that we are assigning then
+		 * mark any written (clobbered) registers as live:
+		 */
+		if (instr_used_by(instr, n->regs[i]))
+			regmask_or(liveregs, liveregs, written);
+	}
+
+}
+
 /* live means read before written */
 static void compute_liveregs(struct ir3_ra_ctx *ctx,
 		struct ir3_instruction *instr, regmask_t *liveregs)
@@ -159,18 +189,13 @@ static void compute_liveregs(struct ir3_ra_ctx *ctx,
 			continue;
 
 		/* check first src's read: */
-		for (i = 1; i < n->regs_count; i++) {
-			r = reg_check(n, i);
-			if (r)
-				regmask_set_if_not(liveregs, r, &written);
+		mark_sources(instr, n, liveregs, &written);
 
-			/* if any src points back to the instruction(s) in
-			 * the block of neighbors that we are assigning then
-			 * mark any written (clobbered) registers as live:
-			 */
-			if (instr_used_by(instr, n->regs[i]))
-				regmask_or(liveregs, liveregs, &written);
-		}
+		/* for instructions that write to an array, we need to
+		 * capture the dependency on the array elements:
+		 */
+		if (n->fanin)
+			mark_sources(instr, n->fanin, liveregs, &written);
 
 		/* meta-instructions don't actually get scheduled,
 		 * so don't let it's write confuse us.. what we
@@ -357,6 +382,11 @@ static void instr_assign(struct ir3_ra_ctx *ctx,
 static void instr_assign_src(struct ir3_ra_ctx *ctx,
 		struct ir3_instruction *instr, unsigned r, unsigned name)
 {
+	struct ir3_register *reg = instr->regs[r];
+
+	if (reg->flags & IR3_REG_RELATIV)
+		name += reg->offset;
+
 	reg_assign(instr, r, name);
 
 	if (is_meta(instr)) {
@@ -372,16 +402,27 @@ static void instr_assign_src(struct ir3_ra_ctx *ctx,
 		case OPC_META_FI:
 			instr_assign(ctx, instr, name - (r - 1));
 			return;
-		case OPC_META_DEREF:
-			/* first arg of meta:deref is the addr reg (do not
-			 * propagate), 2nd is actual src (fanin) which does
-			 * get propagated)
-			 */
-			if (r == 2)
-				instr_assign(ctx, instr, name + instr->deref.off);
-			break;
 		default:
 			break;
+		}
+	}
+}
+
+static void instr_assign_srcs(struct ir3_ra_ctx *ctx,
+		struct ir3_instruction *instr, unsigned name)
+{
+	struct ir3_instruction *n, *src;
+
+	for (n = instr->next; n && !ctx->error; n = n->next) {
+		foreach_ssa_src_n(src, i, n) {
+			unsigned r = i + 1;
+
+			/* skip address / etc (non real sources): */
+			if (r >= n->regs_count)
+				continue;
+
+			if (src == instr)
+				instr_assign_src(ctx, n, r, name);
 		}
 	}
 }
@@ -389,8 +430,10 @@ static void instr_assign_src(struct ir3_ra_ctx *ctx,
 static void instr_assign(struct ir3_ra_ctx *ctx,
 		struct ir3_instruction *instr, unsigned name)
 {
-	struct ir3_instruction *n;
 	struct ir3_register *reg = instr->regs[0];
+
+	if (reg->flags & IR3_REG_RELATIV)
+		return;
 
 	/* check if already assigned: */
 	if (!(reg->flags & IR3_REG_SSA)) {
@@ -403,15 +446,7 @@ static void instr_assign(struct ir3_ra_ctx *ctx,
 	reg_assign(instr, 0, name);
 
 	/* and rename any subsequent use of result of this instr: */
-	for (n = instr->next; n && !ctx->error; n = n->next) {
-		unsigned i;
-
-		for (i = 1; i < n->regs_count; i++) {
-			reg = n->regs[i];
-			if ((reg->flags & IR3_REG_SSA) && (reg->instr == instr))
-				instr_assign_src(ctx, n, i, name);
-		}
-	}
+	instr_assign_srcs(ctx, instr, name);
 
 	/* To simplify the neighbor logic, and to "avoid" dealing with
 	 * instructions which write more than one output, we actually
@@ -420,9 +455,11 @@ static void instr_assign(struct ir3_ra_ctx *ctx,
 	 * to the actual instruction:
 	 */
 	if (is_meta(instr) && (instr->opc == OPC_META_FO)) {
-		struct ir3_instruction *src = ssa(instr->regs[1]);
+		struct ir3_instruction *src;
+
 		debug_assert(name >= instr->fo.off);
-		if (src)
+
+		foreach_ssa_src(src, instr)
 			instr_assign(ctx, src, name - instr->fo.off);
 	}
 }
@@ -441,7 +478,8 @@ static int check_partial_assignment(struct ir3_ra_ctx *ctx,
 
 	for (n = instr; n; n = n->cp.right) {
 		struct ir3_register *dst = n->regs[0];
-		if (!(dst->flags & IR3_REG_SSA)) {
+		if ((n->depth != DEPTH_UNUSED) &&
+				!(dst->flags & IR3_REG_SSA)) {
 			int name = dst->num - off;
 			debug_assert(name >= 0);
 			return name;
@@ -469,6 +507,23 @@ static void instr_alloc_and_assign(struct ir3_ra_ctx *ctx,
 
 	dst = instr->regs[0];
 
+	/* For indirect dst, take the register assignment from the
+	 * fanin and propagate it forward.
+	 */
+	if (dst->flags & IR3_REG_RELATIV) {
+		/* NOTE can be grouped, if for example outputs:
+		 * for now disable cp if indirect writes
+		 */
+		instr_alloc_and_assign(ctx, instr->fanin);
+
+		dst->num += instr->fanin->regs[0]->num;
+		dst->flags &= ~IR3_REG_SSA;
+
+		instr_assign_srcs(ctx, instr, instr->fanin->regs[0]->num);
+
+		return;
+	}
+
 	/* for instructions w/ fanouts, do the actual register assignment
 	 * on the group of fanout neighbor nodes and propagate the reg
 	 * name back up to the texture instruction.
@@ -481,9 +536,6 @@ static void instr_alloc_and_assign(struct ir3_ra_ctx *ctx,
 	/* allocate register(s): */
 	if (name >= 0) {
 		/* already partially assigned, just finish the job */
-	} else if (is_addr(instr)) {
-		debug_assert(!instr->cp.right);
-		name = instr->regs[2]->num + instr->deref.off;
 	} else if (reg_gpr(dst)) {
 		int size;
 		/* number of consecutive registers to assign: */
@@ -510,6 +562,33 @@ static void instr_alloc_and_assign(struct ir3_ra_ctx *ctx,
 	}
 }
 
+static void instr_assign_array(struct ir3_ra_ctx *ctx,
+		struct ir3_instruction *instr)
+{
+	struct ir3_instruction *src;
+	int name, aid = instr->fi.aid;
+
+	if (ctx->arrays[aid].base == ~0) {
+		int size = instr->regs_count - 1;
+		ctx->arrays[aid].base = alloc_block(ctx, instr, size);
+		ctx->arrays[aid].size = size;
+	}
+
+	name = ctx->arrays[aid].base;
+
+	foreach_ssa_src_n(src, i, instr) {
+		unsigned r = i + 1;
+
+		/* skip address / etc (non real sources): */
+		if (r >= instr->regs_count)
+			break;
+
+		instr_assign(ctx, src, name);
+		name++;
+	}
+
+}
+
 static int block_ra(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 {
 	struct ir3_instruction *n;
@@ -531,6 +610,16 @@ static int block_ra(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 
 	ra_dump_list("-------\n", block->head);
 
+	/* first pass, assign arrays: */
+	for (n = block->head; n && !ctx->error; n = n->next) {
+		if (is_meta(n) && (n->opc == OPC_META_FI) && n->fi.aid) {
+			debug_assert(!n->cp.left);  /* don't think this should happen */
+			ra_dump_instr("ASSIGN ARRAY: ", n);
+			instr_assign_array(ctx, n);
+			ra_dump_list("-------\n", block->head);
+		}
+	}
+
 	for (n = block->head; n && !ctx->error; n = n->next) {
 		ra_dump_instr("ASSIGN: ", n);
 		instr_alloc_and_assign(ctx, ir3_neighbor_first(n));
@@ -551,6 +640,8 @@ int ir3_block_ra(struct ir3_block *block, enum shader_t type,
 			.frag_face = frag_face,
 	};
 	int ret;
+
+	memset(&ctx.arrays, ~0, sizeof(ctx.arrays));
 
 	/* mark dst registers w/ SSA flag so we can see which
 	 * have been assigned so far:

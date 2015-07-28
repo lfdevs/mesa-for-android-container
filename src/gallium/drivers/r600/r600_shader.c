@@ -159,8 +159,10 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		goto error;
 	}
 
-	/* disable SB for geom shaders - it can't handle the CF_EMIT instructions */
-	use_sb &= (shader->shader.processor_type != TGSI_PROCESSOR_GEOMETRY);
+    /* disable SB for geom shaders on R6xx/R7xx due to some mysterious gs piglit regressions with it enabled. */
+    if (rctx->b.chip_class <= R700) {
+	    use_sb &= (shader->shader.processor_type != TGSI_PROCESSOR_GEOMETRY);
+    }
 	/* disable SB for shaders using CF_INDEX_0/1 (sampler/ubo array indexing) as it doesn't handle those currently */
 	use_sb &= !shader->shader.uses_index_registers;
 
@@ -283,7 +285,7 @@ struct r600_shader_ctx {
 	unsigned				type;
 	unsigned				file_offset[TGSI_FILE_COUNT];
 	unsigned				temp_reg;
-	struct r600_shader_tgsi_instruction	*inst_info;
+	const struct r600_shader_tgsi_instruction	*inst_info;
 	struct r600_bytecode			*bc;
 	struct r600_shader			*shader;
 	struct r600_shader_src			src[4];
@@ -311,14 +313,12 @@ struct r600_shader_ctx {
 };
 
 struct r600_shader_tgsi_instruction {
-	unsigned	tgsi_opcode;
-	unsigned	is_op3;
 	unsigned	op;
 	int (*process)(struct r600_shader_ctx *ctx);
 };
 
 static int emit_gs_ring_writes(struct r600_shader_ctx *ctx, bool ind);
-static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[], eg_shader_tgsi_instruction[], cm_shader_tgsi_instruction[];
+static const struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[], eg_shader_tgsi_instruction[], cm_shader_tgsi_instruction[];
 static int tgsi_helper_tempx_replicate(struct r600_shader_ctx *ctx);
 static inline void callstack_push(struct r600_shader_ctx *ctx, unsigned reason);
 static void fc_pushlevel(struct r600_shader_ctx *ctx, int type);
@@ -938,7 +938,7 @@ static int load_sample_position(struct r600_shader_ctx *ctx, struct r600_shader_
 	memset(&vtx, 0, sizeof(struct r600_bytecode_vtx));
 	vtx.op = FETCH_OP_VFETCH;
 	vtx.buffer_id = R600_SAMPLE_POSITIONS_CONST_BUFFER;
-	vtx.fetch_type = 2;	/* VTX_FETCH_NO_INDEX_OFFSET */
+	vtx.fetch_type = SQ_VTX_FETCH_NO_INDEX_OFFSET;
 	if (sample_id == NULL) {
 		vtx.src_gpr = ctx->fixed_pt_position_gpr; // SAMPLEID is in .w;
 		vtx.src_sel_x = 3;
@@ -1095,7 +1095,7 @@ static int tgsi_fetch_rel_const(struct r600_shader_ctx *ctx,
 
 	memset(&vtx, 0, sizeof(vtx));
 	vtx.buffer_id = cb_idx;
-	vtx.fetch_type = 2;		/* VTX_FETCH_NO_INDEX_OFFSET */
+	vtx.fetch_type = SQ_VTX_FETCH_NO_INDEX_OFFSET;
 	vtx.src_gpr = ar_reg;
 	vtx.src_sel_x = ar_chan;
 	vtx.mega_fetch_count = 16;
@@ -1143,6 +1143,8 @@ static int fetch_gs_input(struct r600_shader_ctx *ctx, struct tgsi_full_src_regi
 		for (i = 0; i < 3; i++) {
 			treg[i] = r600_get_temp(ctx);
 		}
+		r600_add_gpr_array(ctx->shader, treg[0], 3, 0x0F);
+
 		t2 = r600_get_temp(ctx);
 		for (i = 0; i < 3; i++) {
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
@@ -1173,7 +1175,7 @@ static int fetch_gs_input(struct r600_shader_ctx *ctx, struct tgsi_full_src_regi
 
 	memset(&vtx, 0, sizeof(vtx));
 	vtx.buffer_id = R600_GS_RING_CONST_BUFFER;
-	vtx.fetch_type = 2;		/* VTX_FETCH_NO_INDEX_OFFSET */
+	vtx.fetch_type = SQ_VTX_FETCH_NO_INDEX_OFFSET;
 	vtx.src_gpr = offset_reg;
 	vtx.src_sel_x = offset_chan;
 	vtx.offset = index * 16; /*bytes*/
@@ -1539,7 +1541,7 @@ static int generate_gs_copy_shader(struct r600_context *rctx,
 		memset(&vtx, 0, sizeof(vtx));
 		vtx.op = FETCH_OP_VFETCH;
 		vtx.buffer_id = R600_GS_RING_CONST_BUFFER;
-		vtx.fetch_type = 2;
+		vtx.fetch_type = SQ_VTX_FETCH_NO_INDEX_OFFSET;
 		vtx.offset = out->ring_offset;
 		vtx.dst_gpr = out->gpr;
 		vtx.dst_sel_x = 0;
@@ -1937,9 +1939,9 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 		ctx.bc->index_reg[1] = ctx.bc->ar_reg + 3;
 	}
 
+	shader->max_arrays = 0;
+	shader->num_arrays = 0;
 	if (indirect_gprs) {
-		shader->max_arrays = 0;
-		shader->num_arrays = 0;
 
 		if (ctx.info.indirect_files & (1 << TGSI_FILE_INPUT)) {
 			r600_add_gpr_array(shader, ctx.file_offset[TGSI_FILE_INPUT],
@@ -2543,8 +2545,10 @@ out_err:
 
 static int tgsi_unsupported(struct r600_shader_ctx *ctx)
 {
+	const unsigned tgsi_opcode =
+		ctx->parse.FullToken.FullInstruction.Instruction.Opcode;
 	R600_ERR("%s tgsi opcode unsupported\n",
-		 tgsi_get_opcode_name(ctx->inst_info->tgsi_opcode));
+		 tgsi_get_opcode_name(tgsi_opcode));
 	return -EINVAL;
 }
 
@@ -2639,7 +2643,7 @@ static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap, int trans_only)
 			r600_bytecode_src(&alu.src[1], &ctx->src[0], i);
 		}
 		/* handle some special cases */
-		switch (ctx->inst_info->tgsi_opcode) {
+		switch (inst->Instruction.Opcode) {
 		case TGSI_OPCODE_SUB:
 			r600_bytecode_src_toggle_neg(&alu.src[1]);
 			break;
@@ -2738,7 +2742,7 @@ static int cayman_emit_float_instr(struct r600_shader_ctx *ctx)
 			r600_bytecode_src(&alu.src[j], &ctx->src[j], 0);
 
 			/* RSQ should take the absolute value of src */
-			if (ctx->inst_info->tgsi_opcode == TGSI_OPCODE_RSQ) {
+			if (inst->Instruction.Opcode == TGSI_OPCODE_RSQ) {
 				r600_bytecode_src_set_abs(&alu.src[j]);
 			}
 		}
@@ -3079,6 +3083,7 @@ static int tgsi_scs(struct r600_shader_ctx *ctx)
 
 static int tgsi_kill(struct r600_shader_ctx *ctx)
 {
+	const struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bytecode_alu alu;
 	int i, r;
 
@@ -3090,7 +3095,7 @@ static int tgsi_kill(struct r600_shader_ctx *ctx)
 
 		alu.src[0].sel = V_SQ_ALU_SRC_0;
 
-		if (ctx->inst_info->tgsi_opcode == TGSI_OPCODE_KILL) {
+		if (inst->Instruction.Opcode == TGSI_OPCODE_KILL) {
 			alu.src[1].sel = V_SQ_ALU_SRC_1;
 			alu.src[1].neg = 1;
 		} else {
@@ -4863,10 +4868,9 @@ static int tgsi_helper_copy(struct r600_shader_ctx *ctx, struct tgsi_full_instru
 }
 
 static int tgsi_make_src_for_op3(struct r600_shader_ctx *ctx,
-                                  unsigned temp, int temp_chan,
-                                  struct r600_bytecode_alu_src *bc_src,
-                                  const struct r600_shader_src *shader_src,
-                                  unsigned chan)
+                                 unsigned temp, int chan,
+                                 struct r600_bytecode_alu_src *bc_src,
+                                 const struct r600_shader_src *shader_src)
 {
 	struct r600_bytecode_alu alu;
 	int r;
@@ -4879,7 +4883,7 @@ static int tgsi_make_src_for_op3(struct r600_shader_ctx *ctx,
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ALU_OP1_MOV;
 		alu.dst.sel = temp;
-		alu.dst.chan = temp_chan;
+		alu.dst.chan = chan;
 		alu.dst.write = 1;
 
 		alu.src[0] = *bc_src;
@@ -4890,7 +4894,7 @@ static int tgsi_make_src_for_op3(struct r600_shader_ctx *ctx,
 
 		memset(bc_src, 0, sizeof(*bc_src));
 		bc_src->sel = temp;
-		bc_src->chan = temp_chan;
+		bc_src->chan = chan;
 	}
 	return 0;
 }
@@ -4901,7 +4905,13 @@ static int tgsi_op3(struct r600_shader_ctx *ctx)
 	struct r600_bytecode_alu alu;
 	int i, j, r;
 	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
+	int temp_regs[4];
 
+	for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
+		temp_regs[j] = 0;
+		if (ctx->src[j].abs)
+			temp_regs[j] = r600_get_temp(ctx);
+	}
 	for (i = 0; i < lasti + 1; i++) {
 		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
 			continue;
@@ -4909,7 +4919,7 @@ static int tgsi_op3(struct r600_shader_ctx *ctx)
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ctx->inst_info->op;
 		for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
-			r = tgsi_make_src_for_op3(ctx, ctx->temp_reg, j, &alu.src[j], &ctx->src[j], i);
+			r = tgsi_make_src_for_op3(ctx, temp_regs[j], i, &alu.src[j], &ctx->src[j]);
 			if (r)
 				return r;
 		}
@@ -4945,7 +4955,7 @@ static int tgsi_dp(struct r600_shader_ctx *ctx)
 		alu.dst.chan = i;
 		alu.dst.write = (inst->Dst[0].Register.WriteMask >> i) & 1;
 		/* handle some special cases */
-		switch (ctx->inst_info->tgsi_opcode) {
+		switch (inst->Instruction.Opcode) {
 		case TGSI_OPCODE_DP2:
 			if (i > 1) {
 				alu.src[0].sel = alu.src[1].sel = V_SQ_ALU_SRC_0;
@@ -5025,7 +5035,7 @@ static int do_vtx_fetch_inst(struct r600_shader_ctx *ctx, boolean src_requires_l
 	memset(&vtx, 0, sizeof(vtx));
 	vtx.op = FETCH_OP_VFETCH;
 	vtx.buffer_id = id + R600_MAX_CONST_BUFFERS;
-	vtx.fetch_type = 2;		/* VTX_FETCH_NO_INDEX_OFFSET */
+	vtx.fetch_type = SQ_VTX_FETCH_NO_INDEX_OFFSET;
 	vtx.src_gpr = src_gpr;
 	vtx.mega_fetch_count = 16;
 	vtx.dst_gpr = ctx->file_offset[inst->Dst[0].Register.File] + inst->Dst[0].Register.Index;
@@ -6002,7 +6012,7 @@ static int tgsi_lrp(struct r600_shader_ctx *ctx)
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bytecode_alu alu;
 	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
-	unsigned i, extra_temp;
+	unsigned i, temp_regs[2];
 	int r;
 
 	/* optimize if it's just an equal balance */
@@ -6072,10 +6082,15 @@ static int tgsi_lrp(struct r600_shader_ctx *ctx)
 	}
 
 	/* src0 * src1 + (1 - src0) * src2 */
-	if (ctx->src[0].abs || ctx->src[1].abs) /* XXX avoid dupliating condition */
-		extra_temp = r600_get_temp(ctx);
+        if (ctx->src[0].abs)
+		temp_regs[0] = r600_get_temp(ctx);
 	else
-		extra_temp = 0;
+		temp_regs[0] = 0;
+	if (ctx->src[1].abs)
+		temp_regs[1] = r600_get_temp(ctx);
+	else
+		temp_regs[1] = 0;
+
 	for (i = 0; i < lasti + 1; i++) {
 		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
 			continue;
@@ -6083,10 +6098,10 @@ static int tgsi_lrp(struct r600_shader_ctx *ctx)
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ALU_OP3_MULADD;
 		alu.is_op3 = 1;
-		r = tgsi_make_src_for_op3(ctx, extra_temp, 0, &alu.src[0], &ctx->src[0], i);
+		r = tgsi_make_src_for_op3(ctx, temp_regs[0], i, &alu.src[0], &ctx->src[0]);
 		if (r)
 			return r;
-		r = tgsi_make_src_for_op3(ctx, extra_temp, 1, &alu.src[1], &ctx->src[1], i);
+		r = tgsi_make_src_for_op3(ctx, temp_regs[1], i, &alu.src[1], &ctx->src[1]);
 		if (r)
 			return r;
 		alu.src[2].sel = ctx->temp_reg;
@@ -6108,8 +6123,15 @@ static int tgsi_cmp(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bytecode_alu alu;
-	int i, r;
+	int i, r, j;
 	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
+	int temp_regs[3];
+
+	for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
+		temp_regs[j] = 0;
+		if (ctx->src[j].abs)
+			temp_regs[j] = r600_get_temp(ctx);
+	}
 
 	for (i = 0; i < lasti + 1; i++) {
 		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
@@ -6117,13 +6139,13 @@ static int tgsi_cmp(struct r600_shader_ctx *ctx)
 
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ALU_OP3_CNDGE;
-		r = tgsi_make_src_for_op3(ctx, ctx->temp_reg, 0, &alu.src[0], &ctx->src[0], i);
+		r = tgsi_make_src_for_op3(ctx, temp_regs[0], i, &alu.src[0], &ctx->src[0]);
 		if (r)
 			return r;
-		r = tgsi_make_src_for_op3(ctx, ctx->temp_reg, 1, &alu.src[1], &ctx->src[2], i);
+		r = tgsi_make_src_for_op3(ctx, temp_regs[1], i, &alu.src[1], &ctx->src[2]);
 		if (r)
 			return r;
-		r = tgsi_make_src_for_op3(ctx, ctx->temp_reg, 2, &alu.src[2], &ctx->src[1], i);
+		r = tgsi_make_src_for_op3(ctx, temp_regs[2], i, &alu.src[2], &ctx->src[1]);
 		if (r)
 			return r;
 		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
@@ -7269,605 +7291,605 @@ static int tgsi_umad(struct r600_shader_ctx *ctx)
 	return 0;
 }
 
-static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] = {
-	{TGSI_OPCODE_ARL,	0, ALU_OP0_NOP, tgsi_r600_arl},
-	{TGSI_OPCODE_MOV,	0, ALU_OP1_MOV, tgsi_op2},
-	{TGSI_OPCODE_LIT,	0, ALU_OP0_NOP, tgsi_lit},
+static const struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] = {
+	[TGSI_OPCODE_ARL]	= { ALU_OP0_NOP, tgsi_r600_arl},
+	[TGSI_OPCODE_MOV]	= { ALU_OP1_MOV, tgsi_op2},
+	[TGSI_OPCODE_LIT]	= { ALU_OP0_NOP, tgsi_lit},
 
 	/* XXX:
 	 * For state trackers other than OpenGL, we'll want to use
 	 * _RECIP_IEEE instead.
 	 */
-	{TGSI_OPCODE_RCP,	0, ALU_OP1_RECIP_CLAMPED, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_RCP]	= { ALU_OP1_RECIP_CLAMPED, tgsi_trans_srcx_replicate},
 
-	{TGSI_OPCODE_RSQ,	0, ALU_OP0_NOP, tgsi_rsq},
-	{TGSI_OPCODE_EXP,	0, ALU_OP0_NOP, tgsi_exp},
-	{TGSI_OPCODE_LOG,	0, ALU_OP0_NOP, tgsi_log},
-	{TGSI_OPCODE_MUL,	0, ALU_OP2_MUL, tgsi_op2},
-	{TGSI_OPCODE_ADD,	0, ALU_OP2_ADD, tgsi_op2},
-	{TGSI_OPCODE_DP3,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_DP4,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_DST,	0, ALU_OP0_NOP, tgsi_opdst},
-	{TGSI_OPCODE_MIN,	0, ALU_OP2_MIN, tgsi_op2},
-	{TGSI_OPCODE_MAX,	0, ALU_OP2_MAX, tgsi_op2},
-	{TGSI_OPCODE_SLT,	0, ALU_OP2_SETGT, tgsi_op2_swap},
-	{TGSI_OPCODE_SGE,	0, ALU_OP2_SETGE, tgsi_op2},
-	{TGSI_OPCODE_MAD,	1, ALU_OP3_MULADD, tgsi_op3},
-	{TGSI_OPCODE_SUB,	0, ALU_OP2_ADD, tgsi_op2},
-	{TGSI_OPCODE_LRP,	0, ALU_OP0_NOP, tgsi_lrp},
-	{19,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SQRT,	0, ALU_OP1_SQRT_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_DP2A,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{22,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{23,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FRC,	0, ALU_OP1_FRACT, tgsi_op2},
-	{TGSI_OPCODE_CLAMP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FLR,	0, ALU_OP1_FLOOR, tgsi_op2},
-	{TGSI_OPCODE_ROUND,	0, ALU_OP1_RNDNE, tgsi_op2},
-	{TGSI_OPCODE_EX2,	0, ALU_OP1_EXP_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_LG2,	0, ALU_OP1_LOG_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_POW,	0, ALU_OP0_NOP, tgsi_pow},
-	{TGSI_OPCODE_XPD,	0, ALU_OP0_NOP, tgsi_xpd},
-	{32,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ABS,	0, ALU_OP1_MOV, tgsi_op2},
-	{34,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DPH,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_COS,	0, ALU_OP1_COS, tgsi_trig},
-	{TGSI_OPCODE_DDX,	0, FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
-	{TGSI_OPCODE_DDY,	0, FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
-	{TGSI_OPCODE_KILL,	0, ALU_OP2_KILLGT, tgsi_kill},  /* unconditional kill */
-	{TGSI_OPCODE_PK2H,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK2US,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK4B,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK4UB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{44,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SEQ,	0, ALU_OP2_SETE, tgsi_op2},
-	{46,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SGT,	0, ALU_OP2_SETGT, tgsi_op2},
-	{TGSI_OPCODE_SIN,	0, ALU_OP1_SIN, tgsi_trig},
-	{TGSI_OPCODE_SLE,	0, ALU_OP2_SETGE, tgsi_op2_swap},
-	{TGSI_OPCODE_SNE,	0, ALU_OP2_SETNE, tgsi_op2},
-	{51,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TEX,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXD,	0, FETCH_OP_SAMPLE_G, tgsi_tex},
-	{TGSI_OPCODE_TXP,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_UP2H,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP2US,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP4B,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP4UB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{59,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{60,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ARR,	0, ALU_OP0_NOP, tgsi_r600_arl},
-	{62,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CAL,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_RET,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SSG,	0, ALU_OP0_NOP, tgsi_ssg},
-	{TGSI_OPCODE_CMP,	0, ALU_OP0_NOP, tgsi_cmp},
-	{TGSI_OPCODE_SCS,	0, ALU_OP0_NOP, tgsi_scs},
-	{TGSI_OPCODE_TXB,	0, FETCH_OP_SAMPLE_LB, tgsi_tex},
-	{69,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DIV,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DP2,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_TXL,	0, FETCH_OP_SAMPLE_L, tgsi_tex},
-	{TGSI_OPCODE_BRK,	0, CF_OP_LOOP_BREAK, tgsi_loop_brk_cont},
-	{TGSI_OPCODE_IF,	0, ALU_OP0_NOP, tgsi_if},
-	{TGSI_OPCODE_UIF,	0, ALU_OP0_NOP, tgsi_uif},
-	{76,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ELSE,	0, ALU_OP0_NOP, tgsi_else},
-	{TGSI_OPCODE_ENDIF,	0, ALU_OP0_NOP, tgsi_endif},
-	{TGSI_OPCODE_DDX_FINE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DDY_FINE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PUSHA,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_POPA,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CEIL,	0, ALU_OP1_CEIL, tgsi_op2},
-	{TGSI_OPCODE_I2F,	0, ALU_OP1_INT_TO_FLT, tgsi_op2_trans},
-	{TGSI_OPCODE_NOT,	0, ALU_OP1_NOT_INT, tgsi_op2},
-	{TGSI_OPCODE_TRUNC,	0, ALU_OP1_TRUNC, tgsi_op2},
-	{TGSI_OPCODE_SHL,	0, ALU_OP2_LSHL_INT, tgsi_op2_trans},
-	{88,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_AND,	0, ALU_OP2_AND_INT, tgsi_op2},
-	{TGSI_OPCODE_OR,	0, ALU_OP2_OR_INT, tgsi_op2},
-	{TGSI_OPCODE_MOD,	0, ALU_OP0_NOP, tgsi_imod},
-	{TGSI_OPCODE_XOR,	0, ALU_OP2_XOR_INT, tgsi_op2},
-	{TGSI_OPCODE_SAD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TXF,	0, FETCH_OP_LD, tgsi_tex},
-	{TGSI_OPCODE_TXQ,	0, FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
-	{TGSI_OPCODE_CONT,	0, CF_OP_LOOP_CONTINUE, tgsi_loop_brk_cont},
-	{TGSI_OPCODE_EMIT,	0, CF_OP_EMIT_VERTEX, tgsi_gs_emit},
-	{TGSI_OPCODE_ENDPRIM,	0, CF_OP_CUT_VERTEX, tgsi_gs_emit},
-	{TGSI_OPCODE_BGNLOOP,	0, ALU_OP0_NOP, tgsi_bgnloop},
-	{TGSI_OPCODE_BGNSUB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ENDLOOP,	0, ALU_OP0_NOP, tgsi_endloop},
-	{TGSI_OPCODE_ENDSUB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TXQ_LZ,	0, FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
-	{104,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{105,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{106,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_NOP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FSEQ,	0, ALU_OP2_SETE_DX10, tgsi_op2},
-	{TGSI_OPCODE_FSGE,	0, ALU_OP2_SETGE_DX10, tgsi_op2},
-	{TGSI_OPCODE_FSLT,	0, ALU_OP2_SETGT_DX10, tgsi_op2_swap},
-	{TGSI_OPCODE_FSNE,	0, ALU_OP2_SETNE_DX10, tgsi_op2_swap},
-	{112,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CALLNZ,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{114,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_BREAKC,	0, ALU_OP0_NOP, tgsi_loop_breakc},
-	{TGSI_OPCODE_KILL_IF,	0, ALU_OP2_KILLGT, tgsi_kill},  /* conditional kill */
-	{TGSI_OPCODE_END,	0, ALU_OP0_NOP, tgsi_end},  /* aka HALT */
-	{118,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_F2I,	0, ALU_OP1_FLT_TO_INT, tgsi_op2_trans},
-	{TGSI_OPCODE_IDIV,	0, ALU_OP0_NOP, tgsi_idiv},
-	{TGSI_OPCODE_IMAX,	0, ALU_OP2_MAX_INT, tgsi_op2},
-	{TGSI_OPCODE_IMIN,	0, ALU_OP2_MIN_INT, tgsi_op2},
-	{TGSI_OPCODE_INEG,	0, ALU_OP2_SUB_INT, tgsi_ineg},
-	{TGSI_OPCODE_ISGE,	0, ALU_OP2_SETGE_INT, tgsi_op2},
-	{TGSI_OPCODE_ISHR,	0, ALU_OP2_ASHR_INT, tgsi_op2_trans},
-	{TGSI_OPCODE_ISLT,	0, ALU_OP2_SETGT_INT, tgsi_op2_swap},
-	{TGSI_OPCODE_F2U,	0, ALU_OP1_FLT_TO_UINT, tgsi_op2_trans},
-	{TGSI_OPCODE_U2F,	0, ALU_OP1_UINT_TO_FLT, tgsi_op2_trans},
-	{TGSI_OPCODE_UADD,	0, ALU_OP2_ADD_INT, tgsi_op2},
-	{TGSI_OPCODE_UDIV,	0, ALU_OP0_NOP, tgsi_udiv},
-	{TGSI_OPCODE_UMAD,	0, ALU_OP0_NOP, tgsi_umad},
-	{TGSI_OPCODE_UMAX,	0, ALU_OP2_MAX_UINT, tgsi_op2},
-	{TGSI_OPCODE_UMIN,	0, ALU_OP2_MIN_UINT, tgsi_op2},
-	{TGSI_OPCODE_UMOD,	0, ALU_OP0_NOP, tgsi_umod},
-	{TGSI_OPCODE_UMUL,	0, ALU_OP2_MULLO_UINT, tgsi_op2_trans},
-	{TGSI_OPCODE_USEQ,	0, ALU_OP2_SETE_INT, tgsi_op2},
-	{TGSI_OPCODE_USGE,	0, ALU_OP2_SETGE_UINT, tgsi_op2},
-	{TGSI_OPCODE_USHR,	0, ALU_OP2_LSHR_INT, tgsi_op2_trans},
-	{TGSI_OPCODE_USLT,	0, ALU_OP2_SETGT_UINT, tgsi_op2_swap},
-	{TGSI_OPCODE_USNE,	0, ALU_OP2_SETNE_INT, tgsi_op2_swap},
-	{TGSI_OPCODE_SWITCH,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CASE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DEFAULT,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ENDSWITCH,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE,    0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_I,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_I_MS, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_B,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_C,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_C_LZ, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_D,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_L,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_GATHER4,   0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SVIEWINFO,	0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_POS, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_INFO, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_UARL,      0, ALU_OP1_MOVA_INT, tgsi_r600_arl},
-	{TGSI_OPCODE_UCMP,	0, ALU_OP0_NOP, tgsi_ucmp},
-	{TGSI_OPCODE_IABS,      0, 0, tgsi_iabs},
-	{TGSI_OPCODE_ISSG,      0, 0, tgsi_issg},
-	{TGSI_OPCODE_LOAD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_STORE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_MFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_LFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_BARRIER,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUADD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMXCHG,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMCAS,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMAND,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMOR,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMXOR,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUMIN,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUMAX,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMIMIN,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMIMAX,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TEX2,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXB2,	0, FETCH_OP_SAMPLE_LB, tgsi_tex},
-	{TGSI_OPCODE_TXL2,	0, FETCH_OP_SAMPLE_L, tgsi_tex},
-	{TGSI_OPCODE_IMUL_HI,	0, ALU_OP2_MULHI_INT, tgsi_op2_trans},
-	{TGSI_OPCODE_UMUL_HI,	0, ALU_OP2_MULHI_UINT, tgsi_op2_trans},
-	{TGSI_OPCODE_TG4,   0, FETCH_OP_GATHER4, tgsi_unsupported},
-	{TGSI_OPCODE_LODQ,	0, FETCH_OP_GET_LOD, tgsi_unsupported},
-	{TGSI_OPCODE_IBFE,	1, ALU_OP3_BFE_INT, tgsi_unsupported},
-	{TGSI_OPCODE_UBFE,	1, ALU_OP3_BFE_UINT, tgsi_unsupported},
-	{TGSI_OPCODE_BFI,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_BREV,	0, ALU_OP1_BFREV_INT, tgsi_unsupported},
-	{TGSI_OPCODE_POPC,	0, ALU_OP1_BCNT_INT, tgsi_unsupported},
-	{TGSI_OPCODE_LSB,	0, ALU_OP1_FFBL_INT, tgsi_unsupported},
-	{TGSI_OPCODE_IMSB,	0, ALU_OP1_FFBH_INT, tgsi_unsupported},
-	{TGSI_OPCODE_UMSB,	0, ALU_OP1_FFBH_UINT, tgsi_unsupported},
-	{TGSI_OPCODE_INTERP_CENTROID,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_INTERP_SAMPLE,		0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_INTERP_OFFSET,		0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_LAST,	0, ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_RSQ]	= { ALU_OP0_NOP, tgsi_rsq},
+	[TGSI_OPCODE_EXP]	= { ALU_OP0_NOP, tgsi_exp},
+	[TGSI_OPCODE_LOG]	= { ALU_OP0_NOP, tgsi_log},
+	[TGSI_OPCODE_MUL]	= { ALU_OP2_MUL, tgsi_op2},
+	[TGSI_OPCODE_ADD]	= { ALU_OP2_ADD, tgsi_op2},
+	[TGSI_OPCODE_DP3]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_DP4]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_DST]	= { ALU_OP0_NOP, tgsi_opdst},
+	[TGSI_OPCODE_MIN]	= { ALU_OP2_MIN, tgsi_op2},
+	[TGSI_OPCODE_MAX]	= { ALU_OP2_MAX, tgsi_op2},
+	[TGSI_OPCODE_SLT]	= { ALU_OP2_SETGT, tgsi_op2_swap},
+	[TGSI_OPCODE_SGE]	= { ALU_OP2_SETGE, tgsi_op2},
+	[TGSI_OPCODE_MAD]	= { ALU_OP3_MULADD, tgsi_op3},
+	[TGSI_OPCODE_SUB]	= { ALU_OP2_ADD, tgsi_op2},
+	[TGSI_OPCODE_LRP]	= { ALU_OP0_NOP, tgsi_lrp},
+	[TGSI_OPCODE_FMA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SQRT]	= { ALU_OP1_SQRT_IEEE, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_DP2A]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[22]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[23]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FRC]	= { ALU_OP1_FRACT, tgsi_op2},
+	[TGSI_OPCODE_CLAMP]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FLR]	= { ALU_OP1_FLOOR, tgsi_op2},
+	[TGSI_OPCODE_ROUND]	= { ALU_OP1_RNDNE, tgsi_op2},
+	[TGSI_OPCODE_EX2]	= { ALU_OP1_EXP_IEEE, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_LG2]	= { ALU_OP1_LOG_IEEE, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_POW]	= { ALU_OP0_NOP, tgsi_pow},
+	[TGSI_OPCODE_XPD]	= { ALU_OP0_NOP, tgsi_xpd},
+	[32]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ABS]	= { ALU_OP1_MOV, tgsi_op2},
+	[34]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DPH]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_COS]	= { ALU_OP1_COS, tgsi_trig},
+	[TGSI_OPCODE_DDX]	= { FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
+	[TGSI_OPCODE_DDY]	= { FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
+	[TGSI_OPCODE_KILL]	= { ALU_OP2_KILLGT, tgsi_kill},  /* unconditional kill */
+	[TGSI_OPCODE_PK2H]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK2US]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK4B]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK4UB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[44]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SEQ]	= { ALU_OP2_SETE, tgsi_op2},
+	[46]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SGT]	= { ALU_OP2_SETGT, tgsi_op2},
+	[TGSI_OPCODE_SIN]	= { ALU_OP1_SIN, tgsi_trig},
+	[TGSI_OPCODE_SLE]	= { ALU_OP2_SETGE, tgsi_op2_swap},
+	[TGSI_OPCODE_SNE]	= { ALU_OP2_SETNE, tgsi_op2},
+	[51]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TEX]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_TXD]	= { FETCH_OP_SAMPLE_G, tgsi_tex},
+	[TGSI_OPCODE_TXP]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_UP2H]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP2US]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP4B]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP4UB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[59]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[60]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ARR]	= { ALU_OP0_NOP, tgsi_r600_arl},
+	[62]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CAL]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_RET]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SSG]	= { ALU_OP0_NOP, tgsi_ssg},
+	[TGSI_OPCODE_CMP]	= { ALU_OP0_NOP, tgsi_cmp},
+	[TGSI_OPCODE_SCS]	= { ALU_OP0_NOP, tgsi_scs},
+	[TGSI_OPCODE_TXB]	= { FETCH_OP_SAMPLE_LB, tgsi_tex},
+	[69]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DIV]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DP2]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_TXL]	= { FETCH_OP_SAMPLE_L, tgsi_tex},
+	[TGSI_OPCODE_BRK]	= { CF_OP_LOOP_BREAK, tgsi_loop_brk_cont},
+	[TGSI_OPCODE_IF]	= { ALU_OP0_NOP, tgsi_if},
+	[TGSI_OPCODE_UIF]	= { ALU_OP0_NOP, tgsi_uif},
+	[76]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ELSE]	= { ALU_OP0_NOP, tgsi_else},
+	[TGSI_OPCODE_ENDIF]	= { ALU_OP0_NOP, tgsi_endif},
+	[TGSI_OPCODE_DDX_FINE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DDY_FINE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PUSHA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_POPA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CEIL]	= { ALU_OP1_CEIL, tgsi_op2},
+	[TGSI_OPCODE_I2F]	= { ALU_OP1_INT_TO_FLT, tgsi_op2_trans},
+	[TGSI_OPCODE_NOT]	= { ALU_OP1_NOT_INT, tgsi_op2},
+	[TGSI_OPCODE_TRUNC]	= { ALU_OP1_TRUNC, tgsi_op2},
+	[TGSI_OPCODE_SHL]	= { ALU_OP2_LSHL_INT, tgsi_op2_trans},
+	[88]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_AND]	= { ALU_OP2_AND_INT, tgsi_op2},
+	[TGSI_OPCODE_OR]	= { ALU_OP2_OR_INT, tgsi_op2},
+	[TGSI_OPCODE_MOD]	= { ALU_OP0_NOP, tgsi_imod},
+	[TGSI_OPCODE_XOR]	= { ALU_OP2_XOR_INT, tgsi_op2},
+	[TGSI_OPCODE_SAD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TXF]	= { FETCH_OP_LD, tgsi_tex},
+	[TGSI_OPCODE_TXQ]	= { FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
+	[TGSI_OPCODE_CONT]	= { CF_OP_LOOP_CONTINUE, tgsi_loop_brk_cont},
+	[TGSI_OPCODE_EMIT]	= { CF_OP_EMIT_VERTEX, tgsi_gs_emit},
+	[TGSI_OPCODE_ENDPRIM]	= { CF_OP_CUT_VERTEX, tgsi_gs_emit},
+	[TGSI_OPCODE_BGNLOOP]	= { ALU_OP0_NOP, tgsi_bgnloop},
+	[TGSI_OPCODE_BGNSUB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ENDLOOP]	= { ALU_OP0_NOP, tgsi_endloop},
+	[TGSI_OPCODE_ENDSUB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TXQ_LZ]	= { FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
+	[104]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[105]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[106]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_NOP]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FSEQ]	= { ALU_OP2_SETE_DX10, tgsi_op2},
+	[TGSI_OPCODE_FSGE]	= { ALU_OP2_SETGE_DX10, tgsi_op2},
+	[TGSI_OPCODE_FSLT]	= { ALU_OP2_SETGT_DX10, tgsi_op2_swap},
+	[TGSI_OPCODE_FSNE]	= { ALU_OP2_SETNE_DX10, tgsi_op2_swap},
+	[112]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CALLNZ]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[114]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_BREAKC]	= { ALU_OP0_NOP, tgsi_loop_breakc},
+	[TGSI_OPCODE_KILL_IF]	= { ALU_OP2_KILLGT, tgsi_kill},  /* conditional kill */
+	[TGSI_OPCODE_END]	= { ALU_OP0_NOP, tgsi_end},  /* aka HALT */
+	[118]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_F2I]	= { ALU_OP1_FLT_TO_INT, tgsi_op2_trans},
+	[TGSI_OPCODE_IDIV]	= { ALU_OP0_NOP, tgsi_idiv},
+	[TGSI_OPCODE_IMAX]	= { ALU_OP2_MAX_INT, tgsi_op2},
+	[TGSI_OPCODE_IMIN]	= { ALU_OP2_MIN_INT, tgsi_op2},
+	[TGSI_OPCODE_INEG]	= { ALU_OP2_SUB_INT, tgsi_ineg},
+	[TGSI_OPCODE_ISGE]	= { ALU_OP2_SETGE_INT, tgsi_op2},
+	[TGSI_OPCODE_ISHR]	= { ALU_OP2_ASHR_INT, tgsi_op2_trans},
+	[TGSI_OPCODE_ISLT]	= { ALU_OP2_SETGT_INT, tgsi_op2_swap},
+	[TGSI_OPCODE_F2U]	= { ALU_OP1_FLT_TO_UINT, tgsi_op2_trans},
+	[TGSI_OPCODE_U2F]	= { ALU_OP1_UINT_TO_FLT, tgsi_op2_trans},
+	[TGSI_OPCODE_UADD]	= { ALU_OP2_ADD_INT, tgsi_op2},
+	[TGSI_OPCODE_UDIV]	= { ALU_OP0_NOP, tgsi_udiv},
+	[TGSI_OPCODE_UMAD]	= { ALU_OP0_NOP, tgsi_umad},
+	[TGSI_OPCODE_UMAX]	= { ALU_OP2_MAX_UINT, tgsi_op2},
+	[TGSI_OPCODE_UMIN]	= { ALU_OP2_MIN_UINT, tgsi_op2},
+	[TGSI_OPCODE_UMOD]	= { ALU_OP0_NOP, tgsi_umod},
+	[TGSI_OPCODE_UMUL]	= { ALU_OP2_MULLO_UINT, tgsi_op2_trans},
+	[TGSI_OPCODE_USEQ]	= { ALU_OP2_SETE_INT, tgsi_op2},
+	[TGSI_OPCODE_USGE]	= { ALU_OP2_SETGE_UINT, tgsi_op2},
+	[TGSI_OPCODE_USHR]	= { ALU_OP2_LSHR_INT, tgsi_op2_trans},
+	[TGSI_OPCODE_USLT]	= { ALU_OP2_SETGT_UINT, tgsi_op2_swap},
+	[TGSI_OPCODE_USNE]	= { ALU_OP2_SETNE_INT, tgsi_op2_swap},
+	[TGSI_OPCODE_SWITCH]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CASE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DEFAULT]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ENDSWITCH]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_I]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_I_MS]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_B]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_C]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_C_LZ]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_D]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_L]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_GATHER4]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SVIEWINFO]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_POS]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_INFO]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_UARL]	= { ALU_OP1_MOVA_INT, tgsi_r600_arl},
+	[TGSI_OPCODE_UCMP]	= { ALU_OP0_NOP, tgsi_ucmp},
+	[TGSI_OPCODE_IABS]	= { 0, tgsi_iabs},
+	[TGSI_OPCODE_ISSG]	= { 0, tgsi_issg},
+	[TGSI_OPCODE_LOAD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_STORE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_MFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_LFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_BARRIER]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUADD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMXCHG]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMCAS]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMAND]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMOR]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMXOR]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUMIN]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUMAX]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMIMIN]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMIMAX]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TEX2]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_TXB2]	= { FETCH_OP_SAMPLE_LB, tgsi_tex},
+	[TGSI_OPCODE_TXL2]	= { FETCH_OP_SAMPLE_L, tgsi_tex},
+	[TGSI_OPCODE_IMUL_HI]	= { ALU_OP2_MULHI_INT, tgsi_op2_trans},
+	[TGSI_OPCODE_UMUL_HI]	= { ALU_OP2_MULHI_UINT, tgsi_op2_trans},
+	[TGSI_OPCODE_TG4]	= { FETCH_OP_GATHER4, tgsi_unsupported},
+	[TGSI_OPCODE_LODQ]	= { FETCH_OP_GET_LOD, tgsi_unsupported},
+	[TGSI_OPCODE_IBFE]	= { ALU_OP3_BFE_INT, tgsi_unsupported},
+	[TGSI_OPCODE_UBFE]	= { ALU_OP3_BFE_UINT, tgsi_unsupported},
+	[TGSI_OPCODE_BFI]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_BREV]	= { ALU_OP1_BFREV_INT, tgsi_unsupported},
+	[TGSI_OPCODE_POPC]	= { ALU_OP1_BCNT_INT, tgsi_unsupported},
+	[TGSI_OPCODE_LSB]	= { ALU_OP1_FFBL_INT, tgsi_unsupported},
+	[TGSI_OPCODE_IMSB]	= { ALU_OP1_FFBH_INT, tgsi_unsupported},
+	[TGSI_OPCODE_UMSB]	= { ALU_OP1_FFBH_UINT, tgsi_unsupported},
+	[TGSI_OPCODE_INTERP_CENTROID]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_INTERP_SAMPLE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_INTERP_OFFSET]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_LAST]	= { ALU_OP0_NOP, tgsi_unsupported},
 };
 
-static struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
-	{TGSI_OPCODE_ARL,	0, ALU_OP0_NOP, tgsi_eg_arl},
-	{TGSI_OPCODE_MOV,	0, ALU_OP1_MOV, tgsi_op2},
-	{TGSI_OPCODE_LIT,	0, ALU_OP0_NOP, tgsi_lit},
-	{TGSI_OPCODE_RCP,	0, ALU_OP1_RECIP_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_RSQ,	0, ALU_OP1_RECIPSQRT_IEEE, tgsi_rsq},
-	{TGSI_OPCODE_EXP,	0, ALU_OP0_NOP, tgsi_exp},
-	{TGSI_OPCODE_LOG,	0, ALU_OP0_NOP, tgsi_log},
-	{TGSI_OPCODE_MUL,	0, ALU_OP2_MUL, tgsi_op2},
-	{TGSI_OPCODE_ADD,	0, ALU_OP2_ADD, tgsi_op2},
-	{TGSI_OPCODE_DP3,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_DP4,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_DST,	0, ALU_OP0_NOP, tgsi_opdst},
-	{TGSI_OPCODE_MIN,	0, ALU_OP2_MIN, tgsi_op2},
-	{TGSI_OPCODE_MAX,	0, ALU_OP2_MAX, tgsi_op2},
-	{TGSI_OPCODE_SLT,	0, ALU_OP2_SETGT, tgsi_op2_swap},
-	{TGSI_OPCODE_SGE,	0, ALU_OP2_SETGE, tgsi_op2},
-	{TGSI_OPCODE_MAD,	1, ALU_OP3_MULADD, tgsi_op3},
-	{TGSI_OPCODE_SUB,	0, ALU_OP2_ADD, tgsi_op2},
-	{TGSI_OPCODE_LRP,	0, ALU_OP0_NOP, tgsi_lrp},
-	{19,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SQRT,	0, ALU_OP1_SQRT_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_DP2A,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{22,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{23,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FRC,	0, ALU_OP1_FRACT, tgsi_op2},
-	{TGSI_OPCODE_CLAMP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FLR,	0, ALU_OP1_FLOOR, tgsi_op2},
-	{TGSI_OPCODE_ROUND,	0, ALU_OP1_RNDNE, tgsi_op2},
-	{TGSI_OPCODE_EX2,	0, ALU_OP1_EXP_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_LG2,	0, ALU_OP1_LOG_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_POW,	0, ALU_OP0_NOP, tgsi_pow},
-	{TGSI_OPCODE_XPD,	0, ALU_OP0_NOP, tgsi_xpd},
-	{32,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ABS,	0, ALU_OP1_MOV, tgsi_op2},
-	{34,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DPH,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_COS,	0, ALU_OP1_COS, tgsi_trig},
-	{TGSI_OPCODE_DDX,	0, FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
-	{TGSI_OPCODE_DDY,	0, FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
-	{TGSI_OPCODE_KILL,	0, ALU_OP2_KILLGT, tgsi_kill},  /* unconditional kill */
-	{TGSI_OPCODE_PK2H,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK2US,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK4B,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK4UB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{44,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SEQ,	0, ALU_OP2_SETE, tgsi_op2},
-	{46,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SGT,	0, ALU_OP2_SETGT, tgsi_op2},
-	{TGSI_OPCODE_SIN,	0, ALU_OP1_SIN, tgsi_trig},
-	{TGSI_OPCODE_SLE,	0, ALU_OP2_SETGE, tgsi_op2_swap},
-	{TGSI_OPCODE_SNE,	0, ALU_OP2_SETNE, tgsi_op2},
-	{51,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TEX,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXD,	0, FETCH_OP_SAMPLE_G, tgsi_tex},
-	{TGSI_OPCODE_TXP,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_UP2H,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP2US,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP4B,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP4UB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{59,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{60,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ARR,	0, ALU_OP0_NOP, tgsi_eg_arl},
-	{62,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CAL,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_RET,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SSG,	0, ALU_OP0_NOP, tgsi_ssg},
-	{TGSI_OPCODE_CMP,	0, ALU_OP0_NOP, tgsi_cmp},
-	{TGSI_OPCODE_SCS,	0, ALU_OP0_NOP, tgsi_scs},
-	{TGSI_OPCODE_TXB,	0, FETCH_OP_SAMPLE_LB, tgsi_tex},
-	{69,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DIV,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DP2,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_TXL,	0, FETCH_OP_SAMPLE_L, tgsi_tex},
-	{TGSI_OPCODE_BRK,	0, CF_OP_LOOP_BREAK, tgsi_loop_brk_cont},
-	{TGSI_OPCODE_IF,	0, ALU_OP0_NOP, tgsi_if},
-	{TGSI_OPCODE_UIF,	0, ALU_OP0_NOP, tgsi_uif},
-	{76,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ELSE,	0, ALU_OP0_NOP, tgsi_else},
-	{TGSI_OPCODE_ENDIF,	0, ALU_OP0_NOP, tgsi_endif},
-	{TGSI_OPCODE_DDX_FINE,	0, FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
-	{TGSI_OPCODE_DDY_FINE,	0, FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
-	{TGSI_OPCODE_PUSHA,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_POPA,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CEIL,	0, ALU_OP1_CEIL, tgsi_op2},
-	{TGSI_OPCODE_I2F,	0, ALU_OP1_INT_TO_FLT, tgsi_op2_trans},
-	{TGSI_OPCODE_NOT,	0, ALU_OP1_NOT_INT, tgsi_op2},
-	{TGSI_OPCODE_TRUNC,	0, ALU_OP1_TRUNC, tgsi_op2},
-	{TGSI_OPCODE_SHL,	0, ALU_OP2_LSHL_INT, tgsi_op2},
-	{88,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_AND,	0, ALU_OP2_AND_INT, tgsi_op2},
-	{TGSI_OPCODE_OR,	0, ALU_OP2_OR_INT, tgsi_op2},
-	{TGSI_OPCODE_MOD,	0, ALU_OP0_NOP, tgsi_imod},
-	{TGSI_OPCODE_XOR,	0, ALU_OP2_XOR_INT, tgsi_op2},
-	{TGSI_OPCODE_SAD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TXF,	0, FETCH_OP_LD, tgsi_tex},
-	{TGSI_OPCODE_TXQ,	0, FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
-	{TGSI_OPCODE_CONT,	0, CF_OP_LOOP_CONTINUE, tgsi_loop_brk_cont},
-	{TGSI_OPCODE_EMIT,	0, CF_OP_EMIT_VERTEX, tgsi_gs_emit},
-	{TGSI_OPCODE_ENDPRIM,	0, CF_OP_CUT_VERTEX, tgsi_gs_emit},
-	{TGSI_OPCODE_BGNLOOP,	0, ALU_OP0_NOP, tgsi_bgnloop},
-	{TGSI_OPCODE_BGNSUB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ENDLOOP,	0, ALU_OP0_NOP, tgsi_endloop},
-	{TGSI_OPCODE_ENDSUB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TXQ_LZ,	0, FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
-	{104,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{105,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{106,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_NOP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FSEQ,	0, ALU_OP2_SETE_DX10, tgsi_op2},
-	{TGSI_OPCODE_FSGE,	0, ALU_OP2_SETGE_DX10, tgsi_op2},
-	{TGSI_OPCODE_FSLT,	0, ALU_OP2_SETGT_DX10, tgsi_op2_swap},
-	{TGSI_OPCODE_FSNE,	0, ALU_OP2_SETNE_DX10, tgsi_op2_swap},
-	{112,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CALLNZ,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{114,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_BREAKC,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_KILL_IF,	0, ALU_OP2_KILLGT, tgsi_kill},  /* conditional kill */
-	{TGSI_OPCODE_END,	0, ALU_OP0_NOP, tgsi_end},  /* aka HALT */
-	{118,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_F2I,	0, ALU_OP1_FLT_TO_INT, tgsi_f2i},
-	{TGSI_OPCODE_IDIV,	0, ALU_OP0_NOP, tgsi_idiv},
-	{TGSI_OPCODE_IMAX,	0, ALU_OP2_MAX_INT, tgsi_op2},
-	{TGSI_OPCODE_IMIN,	0, ALU_OP2_MIN_INT, tgsi_op2},
-	{TGSI_OPCODE_INEG,	0, ALU_OP2_SUB_INT, tgsi_ineg},
-	{TGSI_OPCODE_ISGE,	0, ALU_OP2_SETGE_INT, tgsi_op2},
-	{TGSI_OPCODE_ISHR,	0, ALU_OP2_ASHR_INT, tgsi_op2},
-	{TGSI_OPCODE_ISLT,	0, ALU_OP2_SETGT_INT, tgsi_op2_swap},
-	{TGSI_OPCODE_F2U,	0, ALU_OP1_FLT_TO_UINT, tgsi_f2i},
-	{TGSI_OPCODE_U2F,	0, ALU_OP1_UINT_TO_FLT, tgsi_op2_trans},
-	{TGSI_OPCODE_UADD,	0, ALU_OP2_ADD_INT, tgsi_op2},
-	{TGSI_OPCODE_UDIV,	0, ALU_OP0_NOP, tgsi_udiv},
-	{TGSI_OPCODE_UMAD,	0, ALU_OP0_NOP, tgsi_umad},
-	{TGSI_OPCODE_UMAX,	0, ALU_OP2_MAX_UINT, tgsi_op2},
-	{TGSI_OPCODE_UMIN,	0, ALU_OP2_MIN_UINT, tgsi_op2},
-	{TGSI_OPCODE_UMOD,	0, ALU_OP0_NOP, tgsi_umod},
-	{TGSI_OPCODE_UMUL,	0, ALU_OP2_MULLO_UINT, tgsi_op2_trans},
-	{TGSI_OPCODE_USEQ,	0, ALU_OP2_SETE_INT, tgsi_op2},
-	{TGSI_OPCODE_USGE,	0, ALU_OP2_SETGE_UINT, tgsi_op2},
-	{TGSI_OPCODE_USHR,	0, ALU_OP2_LSHR_INT, tgsi_op2},
-	{TGSI_OPCODE_USLT,	0, ALU_OP2_SETGT_UINT, tgsi_op2_swap},
-	{TGSI_OPCODE_USNE,	0, ALU_OP2_SETNE_INT, tgsi_op2},
-	{TGSI_OPCODE_SWITCH,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CASE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DEFAULT,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ENDSWITCH,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE,    0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_I,      0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_I_MS,   0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_B,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_C,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_C_LZ, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_D,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_L,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_GATHER4,   0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SVIEWINFO,	0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_POS, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_INFO, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_UARL,      0, ALU_OP1_MOVA_INT, tgsi_eg_arl},
-	{TGSI_OPCODE_UCMP,	0, ALU_OP0_NOP, tgsi_ucmp},
-	{TGSI_OPCODE_IABS,      0, 0, tgsi_iabs},
-	{TGSI_OPCODE_ISSG,      0, 0, tgsi_issg},
-	{TGSI_OPCODE_LOAD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_STORE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_MFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_LFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_BARRIER,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUADD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMXCHG,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMCAS,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMAND,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMOR,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMXOR,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUMIN,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUMAX,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMIMIN,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMIMAX,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TEX2,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXB2,	0, FETCH_OP_SAMPLE_LB, tgsi_tex},
-	{TGSI_OPCODE_TXL2,	0, FETCH_OP_SAMPLE_L, tgsi_tex},
-	{TGSI_OPCODE_IMUL_HI,	0, ALU_OP2_MULHI_INT, tgsi_op2_trans},
-	{TGSI_OPCODE_UMUL_HI,	0, ALU_OP2_MULHI_UINT, tgsi_op2_trans},
-	{TGSI_OPCODE_TG4,   0, FETCH_OP_GATHER4, tgsi_tex},
-	{TGSI_OPCODE_LODQ,	0, FETCH_OP_GET_LOD, tgsi_tex},
-	{TGSI_OPCODE_IBFE,	1, ALU_OP3_BFE_INT, tgsi_op3},
-	{TGSI_OPCODE_UBFE,	1, ALU_OP3_BFE_UINT, tgsi_op3},
-	{TGSI_OPCODE_BFI,	0, ALU_OP0_NOP, tgsi_bfi},
-	{TGSI_OPCODE_BREV,	0, ALU_OP1_BFREV_INT, tgsi_op2},
-	{TGSI_OPCODE_POPC,	0, ALU_OP1_BCNT_INT, tgsi_op2},
-	{TGSI_OPCODE_LSB,	0, ALU_OP1_FFBL_INT, tgsi_op2},
-	{TGSI_OPCODE_IMSB,	0, ALU_OP1_FFBH_INT, tgsi_msb},
-	{TGSI_OPCODE_UMSB,	0, ALU_OP1_FFBH_UINT, tgsi_msb},
-	{TGSI_OPCODE_INTERP_CENTROID,	0, ALU_OP0_NOP, tgsi_interp_egcm},
-	{TGSI_OPCODE_INTERP_SAMPLE,		0, ALU_OP0_NOP, tgsi_interp_egcm},
-	{TGSI_OPCODE_INTERP_OFFSET,		0, ALU_OP0_NOP, tgsi_interp_egcm},
-	{TGSI_OPCODE_LAST,	0, ALU_OP0_NOP, tgsi_unsupported},
+static const struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
+	[TGSI_OPCODE_ARL]	= { ALU_OP0_NOP, tgsi_eg_arl},
+	[TGSI_OPCODE_MOV]	= { ALU_OP1_MOV, tgsi_op2},
+	[TGSI_OPCODE_LIT]	= { ALU_OP0_NOP, tgsi_lit},
+	[TGSI_OPCODE_RCP]	= { ALU_OP1_RECIP_IEEE, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_RSQ]	= { ALU_OP1_RECIPSQRT_IEEE, tgsi_rsq},
+	[TGSI_OPCODE_EXP]	= { ALU_OP0_NOP, tgsi_exp},
+	[TGSI_OPCODE_LOG]	= { ALU_OP0_NOP, tgsi_log},
+	[TGSI_OPCODE_MUL]	= { ALU_OP2_MUL, tgsi_op2},
+	[TGSI_OPCODE_ADD]	= { ALU_OP2_ADD, tgsi_op2},
+	[TGSI_OPCODE_DP3]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_DP4]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_DST]	= { ALU_OP0_NOP, tgsi_opdst},
+	[TGSI_OPCODE_MIN]	= { ALU_OP2_MIN, tgsi_op2},
+	[TGSI_OPCODE_MAX]	= { ALU_OP2_MAX, tgsi_op2},
+	[TGSI_OPCODE_SLT]	= { ALU_OP2_SETGT, tgsi_op2_swap},
+	[TGSI_OPCODE_SGE]	= { ALU_OP2_SETGE, tgsi_op2},
+	[TGSI_OPCODE_MAD]	= { ALU_OP3_MULADD, tgsi_op3},
+	[TGSI_OPCODE_SUB]	= { ALU_OP2_ADD, tgsi_op2},
+	[TGSI_OPCODE_LRP]	= { ALU_OP0_NOP, tgsi_lrp},
+	[TGSI_OPCODE_FMA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SQRT]	= { ALU_OP1_SQRT_IEEE, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_DP2A]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[22]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[23]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FRC]	= { ALU_OP1_FRACT, tgsi_op2},
+	[TGSI_OPCODE_CLAMP]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FLR]	= { ALU_OP1_FLOOR, tgsi_op2},
+	[TGSI_OPCODE_ROUND]	= { ALU_OP1_RNDNE, tgsi_op2},
+	[TGSI_OPCODE_EX2]	= { ALU_OP1_EXP_IEEE, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_LG2]	= { ALU_OP1_LOG_IEEE, tgsi_trans_srcx_replicate},
+	[TGSI_OPCODE_POW]	= { ALU_OP0_NOP, tgsi_pow},
+	[TGSI_OPCODE_XPD]	= { ALU_OP0_NOP, tgsi_xpd},
+	[32]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ABS]	= { ALU_OP1_MOV, tgsi_op2},
+	[34]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DPH]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_COS]	= { ALU_OP1_COS, tgsi_trig},
+	[TGSI_OPCODE_DDX]	= { FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
+	[TGSI_OPCODE_DDY]	= { FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
+	[TGSI_OPCODE_KILL]	= { ALU_OP2_KILLGT, tgsi_kill},  /* unconditional kill */
+	[TGSI_OPCODE_PK2H]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK2US]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK4B]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK4UB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[44]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SEQ]	= { ALU_OP2_SETE, tgsi_op2},
+	[46]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SGT]	= { ALU_OP2_SETGT, tgsi_op2},
+	[TGSI_OPCODE_SIN]	= { ALU_OP1_SIN, tgsi_trig},
+	[TGSI_OPCODE_SLE]	= { ALU_OP2_SETGE, tgsi_op2_swap},
+	[TGSI_OPCODE_SNE]	= { ALU_OP2_SETNE, tgsi_op2},
+	[51]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TEX]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_TXD]	= { FETCH_OP_SAMPLE_G, tgsi_tex},
+	[TGSI_OPCODE_TXP]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_UP2H]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP2US]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP4B]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP4UB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[59]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[60]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ARR]	= { ALU_OP0_NOP, tgsi_eg_arl},
+	[62]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CAL]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_RET]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SSG]	= { ALU_OP0_NOP, tgsi_ssg},
+	[TGSI_OPCODE_CMP]	= { ALU_OP0_NOP, tgsi_cmp},
+	[TGSI_OPCODE_SCS]	= { ALU_OP0_NOP, tgsi_scs},
+	[TGSI_OPCODE_TXB]	= { FETCH_OP_SAMPLE_LB, tgsi_tex},
+	[69]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DIV]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DP2]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_TXL]	= { FETCH_OP_SAMPLE_L, tgsi_tex},
+	[TGSI_OPCODE_BRK]	= { CF_OP_LOOP_BREAK, tgsi_loop_brk_cont},
+	[TGSI_OPCODE_IF]	= { ALU_OP0_NOP, tgsi_if},
+	[TGSI_OPCODE_UIF]	= { ALU_OP0_NOP, tgsi_uif},
+	[76]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ELSE]	= { ALU_OP0_NOP, tgsi_else},
+	[TGSI_OPCODE_ENDIF]	= { ALU_OP0_NOP, tgsi_endif},
+	[TGSI_OPCODE_DDX_FINE]	= { FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
+	[TGSI_OPCODE_DDY_FINE]	= { FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
+	[TGSI_OPCODE_PUSHA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_POPA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CEIL]	= { ALU_OP1_CEIL, tgsi_op2},
+	[TGSI_OPCODE_I2F]	= { ALU_OP1_INT_TO_FLT, tgsi_op2_trans},
+	[TGSI_OPCODE_NOT]	= { ALU_OP1_NOT_INT, tgsi_op2},
+	[TGSI_OPCODE_TRUNC]	= { ALU_OP1_TRUNC, tgsi_op2},
+	[TGSI_OPCODE_SHL]	= { ALU_OP2_LSHL_INT, tgsi_op2},
+	[88]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_AND]	= { ALU_OP2_AND_INT, tgsi_op2},
+	[TGSI_OPCODE_OR]	= { ALU_OP2_OR_INT, tgsi_op2},
+	[TGSI_OPCODE_MOD]	= { ALU_OP0_NOP, tgsi_imod},
+	[TGSI_OPCODE_XOR]	= { ALU_OP2_XOR_INT, tgsi_op2},
+	[TGSI_OPCODE_SAD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TXF]	= { FETCH_OP_LD, tgsi_tex},
+	[TGSI_OPCODE_TXQ]	= { FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
+	[TGSI_OPCODE_CONT]	= { CF_OP_LOOP_CONTINUE, tgsi_loop_brk_cont},
+	[TGSI_OPCODE_EMIT]	= { CF_OP_EMIT_VERTEX, tgsi_gs_emit},
+	[TGSI_OPCODE_ENDPRIM]	= { CF_OP_CUT_VERTEX, tgsi_gs_emit},
+	[TGSI_OPCODE_BGNLOOP]	= { ALU_OP0_NOP, tgsi_bgnloop},
+	[TGSI_OPCODE_BGNSUB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ENDLOOP]	= { ALU_OP0_NOP, tgsi_endloop},
+	[TGSI_OPCODE_ENDSUB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TXQ_LZ]	= { FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
+	[104]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[105]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[106]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_NOP]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FSEQ]	= { ALU_OP2_SETE_DX10, tgsi_op2},
+	[TGSI_OPCODE_FSGE]	= { ALU_OP2_SETGE_DX10, tgsi_op2},
+	[TGSI_OPCODE_FSLT]	= { ALU_OP2_SETGT_DX10, tgsi_op2_swap},
+	[TGSI_OPCODE_FSNE]	= { ALU_OP2_SETNE_DX10, tgsi_op2_swap},
+	[112]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CALLNZ]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[114]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_BREAKC]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_KILL_IF]	= { ALU_OP2_KILLGT, tgsi_kill},  /* conditional kill */
+	[TGSI_OPCODE_END]	= { ALU_OP0_NOP, tgsi_end},  /* aka HALT */
+	[118]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_F2I]	= { ALU_OP1_FLT_TO_INT, tgsi_f2i},
+	[TGSI_OPCODE_IDIV]	= { ALU_OP0_NOP, tgsi_idiv},
+	[TGSI_OPCODE_IMAX]	= { ALU_OP2_MAX_INT, tgsi_op2},
+	[TGSI_OPCODE_IMIN]	= { ALU_OP2_MIN_INT, tgsi_op2},
+	[TGSI_OPCODE_INEG]	= { ALU_OP2_SUB_INT, tgsi_ineg},
+	[TGSI_OPCODE_ISGE]	= { ALU_OP2_SETGE_INT, tgsi_op2},
+	[TGSI_OPCODE_ISHR]	= { ALU_OP2_ASHR_INT, tgsi_op2},
+	[TGSI_OPCODE_ISLT]	= { ALU_OP2_SETGT_INT, tgsi_op2_swap},
+	[TGSI_OPCODE_F2U]	= { ALU_OP1_FLT_TO_UINT, tgsi_f2i},
+	[TGSI_OPCODE_U2F]	= { ALU_OP1_UINT_TO_FLT, tgsi_op2_trans},
+	[TGSI_OPCODE_UADD]	= { ALU_OP2_ADD_INT, tgsi_op2},
+	[TGSI_OPCODE_UDIV]	= { ALU_OP0_NOP, tgsi_udiv},
+	[TGSI_OPCODE_UMAD]	= { ALU_OP0_NOP, tgsi_umad},
+	[TGSI_OPCODE_UMAX]	= { ALU_OP2_MAX_UINT, tgsi_op2},
+	[TGSI_OPCODE_UMIN]	= { ALU_OP2_MIN_UINT, tgsi_op2},
+	[TGSI_OPCODE_UMOD]	= { ALU_OP0_NOP, tgsi_umod},
+	[TGSI_OPCODE_UMUL]	= { ALU_OP2_MULLO_UINT, tgsi_op2_trans},
+	[TGSI_OPCODE_USEQ]	= { ALU_OP2_SETE_INT, tgsi_op2},
+	[TGSI_OPCODE_USGE]	= { ALU_OP2_SETGE_UINT, tgsi_op2},
+	[TGSI_OPCODE_USHR]	= { ALU_OP2_LSHR_INT, tgsi_op2},
+	[TGSI_OPCODE_USLT]	= { ALU_OP2_SETGT_UINT, tgsi_op2_swap},
+	[TGSI_OPCODE_USNE]	= { ALU_OP2_SETNE_INT, tgsi_op2},
+	[TGSI_OPCODE_SWITCH]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CASE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DEFAULT]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ENDSWITCH]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_I]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_I_MS]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_B]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_C]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_C_LZ]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_D]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_L]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_GATHER4]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SVIEWINFO]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_POS]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_INFO]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_UARL]	= { ALU_OP1_MOVA_INT, tgsi_eg_arl},
+	[TGSI_OPCODE_UCMP]	= { ALU_OP0_NOP, tgsi_ucmp},
+	[TGSI_OPCODE_IABS]	= { 0, tgsi_iabs},
+	[TGSI_OPCODE_ISSG]	= { 0, tgsi_issg},
+	[TGSI_OPCODE_LOAD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_STORE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_MFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_LFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_BARRIER]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUADD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMXCHG]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMCAS]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMAND]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMOR]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMXOR]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUMIN]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUMAX]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMIMIN]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMIMAX]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TEX2]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_TXB2]	= { FETCH_OP_SAMPLE_LB, tgsi_tex},
+	[TGSI_OPCODE_TXL2]	= { FETCH_OP_SAMPLE_L, tgsi_tex},
+	[TGSI_OPCODE_IMUL_HI]	= { ALU_OP2_MULHI_INT, tgsi_op2_trans},
+	[TGSI_OPCODE_UMUL_HI]	= { ALU_OP2_MULHI_UINT, tgsi_op2_trans},
+	[TGSI_OPCODE_TG4]	= { FETCH_OP_GATHER4, tgsi_tex},
+	[TGSI_OPCODE_LODQ]	= { FETCH_OP_GET_LOD, tgsi_tex},
+	[TGSI_OPCODE_IBFE]	= { ALU_OP3_BFE_INT, tgsi_op3},
+	[TGSI_OPCODE_UBFE]	= { ALU_OP3_BFE_UINT, tgsi_op3},
+	[TGSI_OPCODE_BFI]	= { ALU_OP0_NOP, tgsi_bfi},
+	[TGSI_OPCODE_BREV]	= { ALU_OP1_BFREV_INT, tgsi_op2},
+	[TGSI_OPCODE_POPC]	= { ALU_OP1_BCNT_INT, tgsi_op2},
+	[TGSI_OPCODE_LSB]	= { ALU_OP1_FFBL_INT, tgsi_op2},
+	[TGSI_OPCODE_IMSB]	= { ALU_OP1_FFBH_INT, tgsi_msb},
+	[TGSI_OPCODE_UMSB]	= { ALU_OP1_FFBH_UINT, tgsi_msb},
+	[TGSI_OPCODE_INTERP_CENTROID]	= { ALU_OP0_NOP, tgsi_interp_egcm},
+	[TGSI_OPCODE_INTERP_SAMPLE]	= { ALU_OP0_NOP, tgsi_interp_egcm},
+	[TGSI_OPCODE_INTERP_OFFSET]	= { ALU_OP0_NOP, tgsi_interp_egcm},
+	[TGSI_OPCODE_LAST]	= { ALU_OP0_NOP, tgsi_unsupported},
 };
 
-static struct r600_shader_tgsi_instruction cm_shader_tgsi_instruction[] = {
-	{TGSI_OPCODE_ARL,	0, ALU_OP0_NOP, tgsi_eg_arl},
-	{TGSI_OPCODE_MOV,	0, ALU_OP1_MOV, tgsi_op2},
-	{TGSI_OPCODE_LIT,	0, ALU_OP0_NOP, tgsi_lit},
-	{TGSI_OPCODE_RCP,	0, ALU_OP1_RECIP_IEEE, cayman_emit_float_instr},
-	{TGSI_OPCODE_RSQ,	0, ALU_OP1_RECIPSQRT_IEEE, cayman_emit_float_instr},
-	{TGSI_OPCODE_EXP,	0, ALU_OP0_NOP, tgsi_exp},
-	{TGSI_OPCODE_LOG,	0, ALU_OP0_NOP, tgsi_log},
-	{TGSI_OPCODE_MUL,	0, ALU_OP2_MUL, tgsi_op2},
-	{TGSI_OPCODE_ADD,	0, ALU_OP2_ADD, tgsi_op2},
-	{TGSI_OPCODE_DP3,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_DP4,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_DST,	0, ALU_OP0_NOP, tgsi_opdst},
-	{TGSI_OPCODE_MIN,	0, ALU_OP2_MIN, tgsi_op2},
-	{TGSI_OPCODE_MAX,	0, ALU_OP2_MAX, tgsi_op2},
-	{TGSI_OPCODE_SLT,	0, ALU_OP2_SETGT, tgsi_op2_swap},
-	{TGSI_OPCODE_SGE,	0, ALU_OP2_SETGE, tgsi_op2},
-	{TGSI_OPCODE_MAD,	1, ALU_OP3_MULADD, tgsi_op3},
-	{TGSI_OPCODE_SUB,	0, ALU_OP2_ADD, tgsi_op2},
-	{TGSI_OPCODE_LRP,	0, ALU_OP0_NOP, tgsi_lrp},
-	{19,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SQRT,	0, ALU_OP1_SQRT_IEEE, cayman_emit_float_instr},
-	{TGSI_OPCODE_DP2A,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{22,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{23,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FRC,	0, ALU_OP1_FRACT, tgsi_op2},
-	{TGSI_OPCODE_CLAMP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FLR,	0, ALU_OP1_FLOOR, tgsi_op2},
-	{TGSI_OPCODE_ROUND,	0, ALU_OP1_RNDNE, tgsi_op2},
-	{TGSI_OPCODE_EX2,	0, ALU_OP1_EXP_IEEE, cayman_emit_float_instr},
-	{TGSI_OPCODE_LG2,	0, ALU_OP1_LOG_IEEE, cayman_emit_float_instr},
-	{TGSI_OPCODE_POW,	0, ALU_OP0_NOP, cayman_pow},
-	{TGSI_OPCODE_XPD,	0, ALU_OP0_NOP, tgsi_xpd},
-	{32,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ABS,	0, ALU_OP1_MOV, tgsi_op2},
-	{34,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DPH,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_COS,	0, ALU_OP1_COS, cayman_trig},
-	{TGSI_OPCODE_DDX,	0, FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
-	{TGSI_OPCODE_DDY,	0, FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
-	{TGSI_OPCODE_KILL,	0, ALU_OP2_KILLGT, tgsi_kill},  /* unconditional kill */
-	{TGSI_OPCODE_PK2H,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK2US,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK4B,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_PK4UB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{44,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SEQ,	0, ALU_OP2_SETE, tgsi_op2},
-	{46,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SGT,	0, ALU_OP2_SETGT, tgsi_op2},
-	{TGSI_OPCODE_SIN,	0, ALU_OP1_SIN, cayman_trig},
-	{TGSI_OPCODE_SLE,	0, ALU_OP2_SETGE, tgsi_op2_swap},
-	{TGSI_OPCODE_SNE,	0, ALU_OP2_SETNE, tgsi_op2},
-	{51,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TEX,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXD,	0, FETCH_OP_SAMPLE_G, tgsi_tex},
-	{TGSI_OPCODE_TXP,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_UP2H,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP2US,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP4B,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_UP4UB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{59,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{60,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ARR,	0, ALU_OP0_NOP, tgsi_eg_arl},
-	{62,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CAL,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_RET,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SSG,	0, ALU_OP0_NOP, tgsi_ssg},
-	{TGSI_OPCODE_CMP,	0, ALU_OP0_NOP, tgsi_cmp},
-	{TGSI_OPCODE_SCS,	0, ALU_OP0_NOP, tgsi_scs},
-	{TGSI_OPCODE_TXB,	0, FETCH_OP_SAMPLE_LB, tgsi_tex},
-	{69,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DIV,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DP2,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_TXL,	0, FETCH_OP_SAMPLE_L, tgsi_tex},
-	{TGSI_OPCODE_BRK,	0, CF_OP_LOOP_BREAK, tgsi_loop_brk_cont},
-	{TGSI_OPCODE_IF,	0, ALU_OP0_NOP, tgsi_if},
-	{TGSI_OPCODE_UIF,	0, ALU_OP0_NOP, tgsi_uif},
-	{76,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ELSE,	0, ALU_OP0_NOP, tgsi_else},
-	{TGSI_OPCODE_ENDIF,	0, ALU_OP0_NOP, tgsi_endif},
-	{TGSI_OPCODE_DDX_FINE,	0, FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
-	{TGSI_OPCODE_DDY_FINE,	0, FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
-	{TGSI_OPCODE_PUSHA,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_POPA,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CEIL,	0, ALU_OP1_CEIL, tgsi_op2},
-	{TGSI_OPCODE_I2F,	0, ALU_OP1_INT_TO_FLT, tgsi_op2},
-	{TGSI_OPCODE_NOT,	0, ALU_OP1_NOT_INT, tgsi_op2},
-	{TGSI_OPCODE_TRUNC,	0, ALU_OP1_TRUNC, tgsi_op2},
-	{TGSI_OPCODE_SHL,	0, ALU_OP2_LSHL_INT, tgsi_op2},
-	{88,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_AND,	0, ALU_OP2_AND_INT, tgsi_op2},
-	{TGSI_OPCODE_OR,	0, ALU_OP2_OR_INT, tgsi_op2},
-	{TGSI_OPCODE_MOD,	0, ALU_OP0_NOP, tgsi_imod},
-	{TGSI_OPCODE_XOR,	0, ALU_OP2_XOR_INT, tgsi_op2},
-	{TGSI_OPCODE_SAD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TXF,	0, FETCH_OP_LD, tgsi_tex},
-	{TGSI_OPCODE_TXQ,	0, FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
-	{TGSI_OPCODE_CONT,	0, CF_OP_LOOP_CONTINUE, tgsi_loop_brk_cont},
-	{TGSI_OPCODE_EMIT,	0, CF_OP_EMIT_VERTEX, tgsi_gs_emit},
-	{TGSI_OPCODE_ENDPRIM,	0, CF_OP_CUT_VERTEX, tgsi_gs_emit},
-	{TGSI_OPCODE_BGNLOOP,	0, ALU_OP0_NOP, tgsi_bgnloop},
-	{TGSI_OPCODE_BGNSUB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ENDLOOP,	0, ALU_OP0_NOP, tgsi_endloop},
-	{TGSI_OPCODE_ENDSUB,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TXQ_LZ,	0, FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
-	{104,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{105,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{106,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_NOP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_FSEQ,	0, ALU_OP2_SETE_DX10, tgsi_op2},
-	{TGSI_OPCODE_FSGE,	0, ALU_OP2_SETGE_DX10, tgsi_op2},
-	{TGSI_OPCODE_FSLT,	0, ALU_OP2_SETGT_DX10, tgsi_op2_swap},
-	{TGSI_OPCODE_FSNE,	0, ALU_OP2_SETNE_DX10, tgsi_op2_swap},
-	{112,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CALLNZ,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{114,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_BREAKC,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_KILL_IF,	0, ALU_OP2_KILLGT, tgsi_kill},  /* conditional kill */
-	{TGSI_OPCODE_END,	0, ALU_OP0_NOP, tgsi_end},  /* aka HALT */
-	{118,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_F2I,	0, ALU_OP1_FLT_TO_INT, tgsi_op2},
-	{TGSI_OPCODE_IDIV,	0, ALU_OP0_NOP, tgsi_idiv},
-	{TGSI_OPCODE_IMAX,	0, ALU_OP2_MAX_INT, tgsi_op2},
-	{TGSI_OPCODE_IMIN,	0, ALU_OP2_MIN_INT, tgsi_op2},
-	{TGSI_OPCODE_INEG,	0, ALU_OP2_SUB_INT, tgsi_ineg},
-	{TGSI_OPCODE_ISGE,	0, ALU_OP2_SETGE_INT, tgsi_op2},
-	{TGSI_OPCODE_ISHR,	0, ALU_OP2_ASHR_INT, tgsi_op2},
-	{TGSI_OPCODE_ISLT,	0, ALU_OP2_SETGT_INT, tgsi_op2_swap},
-	{TGSI_OPCODE_F2U,	0, ALU_OP1_FLT_TO_UINT, tgsi_op2},
-	{TGSI_OPCODE_U2F,	0, ALU_OP1_UINT_TO_FLT, tgsi_op2},
-	{TGSI_OPCODE_UADD,	0, ALU_OP2_ADD_INT, tgsi_op2},
-	{TGSI_OPCODE_UDIV,	0, ALU_OP0_NOP, tgsi_udiv},
-	{TGSI_OPCODE_UMAD,	0, ALU_OP0_NOP, tgsi_umad},
-	{TGSI_OPCODE_UMAX,	0, ALU_OP2_MAX_UINT, tgsi_op2},
-	{TGSI_OPCODE_UMIN,	0, ALU_OP2_MIN_UINT, tgsi_op2},
-	{TGSI_OPCODE_UMOD,	0, ALU_OP0_NOP, tgsi_umod},
-	{TGSI_OPCODE_UMUL,	0, ALU_OP2_MULLO_INT, cayman_mul_int_instr},
-	{TGSI_OPCODE_USEQ,	0, ALU_OP2_SETE_INT, tgsi_op2},
-	{TGSI_OPCODE_USGE,	0, ALU_OP2_SETGE_UINT, tgsi_op2},
-	{TGSI_OPCODE_USHR,	0, ALU_OP2_LSHR_INT, tgsi_op2},
-	{TGSI_OPCODE_USLT,	0, ALU_OP2_SETGT_UINT, tgsi_op2_swap},
-	{TGSI_OPCODE_USNE,	0, ALU_OP2_SETNE_INT, tgsi_op2},
-	{TGSI_OPCODE_SWITCH,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_CASE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DEFAULT,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ENDSWITCH,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE,    0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_I,      0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_I_MS,   0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_B,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_C,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_C_LZ, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_D,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_L,  0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_GATHER4,   0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SVIEWINFO,	0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_POS, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_SAMPLE_INFO, 0, 0, tgsi_unsupported},
-	{TGSI_OPCODE_UARL,      0, ALU_OP1_MOVA_INT, tgsi_eg_arl},
-	{TGSI_OPCODE_UCMP,	0, ALU_OP0_NOP, tgsi_ucmp},
-	{TGSI_OPCODE_IABS,      0, 0, tgsi_iabs},
-	{TGSI_OPCODE_ISSG,      0, 0, tgsi_issg},
-	{TGSI_OPCODE_LOAD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_STORE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_MFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_LFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_SFENCE,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_BARRIER,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUADD,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMXCHG,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMCAS,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMAND,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMOR,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMXOR,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUMIN,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMUMAX,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMIMIN,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_ATOMIMAX,	0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TEX2,	0, FETCH_OP_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXB2,	0, FETCH_OP_SAMPLE_LB, tgsi_tex},
-	{TGSI_OPCODE_TXL2,	0, FETCH_OP_SAMPLE_L, tgsi_tex},
-	{TGSI_OPCODE_IMUL_HI,	0, ALU_OP2_MULHI_INT, cayman_mul_int_instr},
-	{TGSI_OPCODE_UMUL_HI,	0, ALU_OP2_MULHI_UINT, cayman_mul_int_instr},
-	{TGSI_OPCODE_TG4,   0, FETCH_OP_GATHER4, tgsi_tex},
-	{TGSI_OPCODE_LODQ,	0, FETCH_OP_GET_LOD, tgsi_tex},
-	{TGSI_OPCODE_IBFE,	1, ALU_OP3_BFE_INT, tgsi_op3},
-	{TGSI_OPCODE_UBFE,	1, ALU_OP3_BFE_UINT, tgsi_op3},
-	{TGSI_OPCODE_BFI,	0, ALU_OP0_NOP, tgsi_bfi},
-	{TGSI_OPCODE_BREV,	0, ALU_OP1_BFREV_INT, tgsi_op2},
-	{TGSI_OPCODE_POPC,	0, ALU_OP1_BCNT_INT, tgsi_op2},
-	{TGSI_OPCODE_LSB,	0, ALU_OP1_FFBL_INT, tgsi_op2},
-	{TGSI_OPCODE_IMSB,	0, ALU_OP1_FFBH_INT, tgsi_msb},
-	{TGSI_OPCODE_UMSB,	0, ALU_OP1_FFBH_UINT, tgsi_msb},
-	{TGSI_OPCODE_INTERP_CENTROID,	0, ALU_OP0_NOP, tgsi_interp_egcm},
-	{TGSI_OPCODE_INTERP_SAMPLE,		0, ALU_OP0_NOP, tgsi_interp_egcm},
-	{TGSI_OPCODE_INTERP_OFFSET,		0, ALU_OP0_NOP, tgsi_interp_egcm},
-	{TGSI_OPCODE_LAST,	0, ALU_OP0_NOP, tgsi_unsupported},
+static const struct r600_shader_tgsi_instruction cm_shader_tgsi_instruction[] = {
+	[TGSI_OPCODE_ARL]	= { ALU_OP0_NOP, tgsi_eg_arl},
+	[TGSI_OPCODE_MOV]	= { ALU_OP1_MOV, tgsi_op2},
+	[TGSI_OPCODE_LIT]	= { ALU_OP0_NOP, tgsi_lit},
+	[TGSI_OPCODE_RCP]	= { ALU_OP1_RECIP_IEEE, cayman_emit_float_instr},
+	[TGSI_OPCODE_RSQ]	= { ALU_OP1_RECIPSQRT_IEEE, cayman_emit_float_instr},
+	[TGSI_OPCODE_EXP]	= { ALU_OP0_NOP, tgsi_exp},
+	[TGSI_OPCODE_LOG]	= { ALU_OP0_NOP, tgsi_log},
+	[TGSI_OPCODE_MUL]	= { ALU_OP2_MUL, tgsi_op2},
+	[TGSI_OPCODE_ADD]	= { ALU_OP2_ADD, tgsi_op2},
+	[TGSI_OPCODE_DP3]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_DP4]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_DST]	= { ALU_OP0_NOP, tgsi_opdst},
+	[TGSI_OPCODE_MIN]	= { ALU_OP2_MIN, tgsi_op2},
+	[TGSI_OPCODE_MAX]	= { ALU_OP2_MAX, tgsi_op2},
+	[TGSI_OPCODE_SLT]	= { ALU_OP2_SETGT, tgsi_op2_swap},
+	[TGSI_OPCODE_SGE]	= { ALU_OP2_SETGE, tgsi_op2},
+	[TGSI_OPCODE_MAD]	= { ALU_OP3_MULADD, tgsi_op3},
+	[TGSI_OPCODE_SUB]	= { ALU_OP2_ADD, tgsi_op2},
+	[TGSI_OPCODE_LRP]	= { ALU_OP0_NOP, tgsi_lrp},
+	[TGSI_OPCODE_FMA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SQRT]	= { ALU_OP1_SQRT_IEEE, cayman_emit_float_instr},
+	[TGSI_OPCODE_DP2A]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[22]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[23]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FRC]	= { ALU_OP1_FRACT, tgsi_op2},
+	[TGSI_OPCODE_CLAMP]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FLR]	= { ALU_OP1_FLOOR, tgsi_op2},
+	[TGSI_OPCODE_ROUND]	= { ALU_OP1_RNDNE, tgsi_op2},
+	[TGSI_OPCODE_EX2]	= { ALU_OP1_EXP_IEEE, cayman_emit_float_instr},
+	[TGSI_OPCODE_LG2]	= { ALU_OP1_LOG_IEEE, cayman_emit_float_instr},
+	[TGSI_OPCODE_POW]	= { ALU_OP0_NOP, cayman_pow},
+	[TGSI_OPCODE_XPD]	= { ALU_OP0_NOP, tgsi_xpd},
+	[32]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ABS]	= { ALU_OP1_MOV, tgsi_op2},
+	[34]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DPH]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_COS]	= { ALU_OP1_COS, cayman_trig},
+	[TGSI_OPCODE_DDX]	= { FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
+	[TGSI_OPCODE_DDY]	= { FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
+	[TGSI_OPCODE_KILL]	= { ALU_OP2_KILLGT, tgsi_kill},  /* unconditional kill */
+	[TGSI_OPCODE_PK2H]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK2US]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK4B]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_PK4UB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[44]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SEQ]	= { ALU_OP2_SETE, tgsi_op2},
+	[46]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SGT]	= { ALU_OP2_SETGT, tgsi_op2},
+	[TGSI_OPCODE_SIN]	= { ALU_OP1_SIN, cayman_trig},
+	[TGSI_OPCODE_SLE]	= { ALU_OP2_SETGE, tgsi_op2_swap},
+	[TGSI_OPCODE_SNE]	= { ALU_OP2_SETNE, tgsi_op2},
+	[51]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TEX]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_TXD]	= { FETCH_OP_SAMPLE_G, tgsi_tex},
+	[TGSI_OPCODE_TXP]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_UP2H]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP2US]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP4B]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_UP4UB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[59]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[60]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ARR]	= { ALU_OP0_NOP, tgsi_eg_arl},
+	[62]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CAL]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_RET]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SSG]	= { ALU_OP0_NOP, tgsi_ssg},
+	[TGSI_OPCODE_CMP]	= { ALU_OP0_NOP, tgsi_cmp},
+	[TGSI_OPCODE_SCS]	= { ALU_OP0_NOP, tgsi_scs},
+	[TGSI_OPCODE_TXB]	= { FETCH_OP_SAMPLE_LB, tgsi_tex},
+	[69]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DIV]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DP2]	= { ALU_OP2_DOT4, tgsi_dp},
+	[TGSI_OPCODE_TXL]	= { FETCH_OP_SAMPLE_L, tgsi_tex},
+	[TGSI_OPCODE_BRK]	= { CF_OP_LOOP_BREAK, tgsi_loop_brk_cont},
+	[TGSI_OPCODE_IF]	= { ALU_OP0_NOP, tgsi_if},
+	[TGSI_OPCODE_UIF]	= { ALU_OP0_NOP, tgsi_uif},
+	[76]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ELSE]	= { ALU_OP0_NOP, tgsi_else},
+	[TGSI_OPCODE_ENDIF]	= { ALU_OP0_NOP, tgsi_endif},
+	[TGSI_OPCODE_DDX_FINE]	= { FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
+	[TGSI_OPCODE_DDY_FINE]	= { FETCH_OP_GET_GRADIENTS_V, tgsi_tex},
+	[TGSI_OPCODE_PUSHA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_POPA]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CEIL]	= { ALU_OP1_CEIL, tgsi_op2},
+	[TGSI_OPCODE_I2F]	= { ALU_OP1_INT_TO_FLT, tgsi_op2},
+	[TGSI_OPCODE_NOT]	= { ALU_OP1_NOT_INT, tgsi_op2},
+	[TGSI_OPCODE_TRUNC]	= { ALU_OP1_TRUNC, tgsi_op2},
+	[TGSI_OPCODE_SHL]	= { ALU_OP2_LSHL_INT, tgsi_op2},
+	[88]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_AND]	= { ALU_OP2_AND_INT, tgsi_op2},
+	[TGSI_OPCODE_OR]	= { ALU_OP2_OR_INT, tgsi_op2},
+	[TGSI_OPCODE_MOD]	= { ALU_OP0_NOP, tgsi_imod},
+	[TGSI_OPCODE_XOR]	= { ALU_OP2_XOR_INT, tgsi_op2},
+	[TGSI_OPCODE_SAD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TXF]	= { FETCH_OP_LD, tgsi_tex},
+	[TGSI_OPCODE_TXQ]	= { FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
+	[TGSI_OPCODE_CONT]	= { CF_OP_LOOP_CONTINUE, tgsi_loop_brk_cont},
+	[TGSI_OPCODE_EMIT]	= { CF_OP_EMIT_VERTEX, tgsi_gs_emit},
+	[TGSI_OPCODE_ENDPRIM]	= { CF_OP_CUT_VERTEX, tgsi_gs_emit},
+	[TGSI_OPCODE_BGNLOOP]	= { ALU_OP0_NOP, tgsi_bgnloop},
+	[TGSI_OPCODE_BGNSUB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ENDLOOP]	= { ALU_OP0_NOP, tgsi_endloop},
+	[TGSI_OPCODE_ENDSUB]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TXQ_LZ]	= { FETCH_OP_GET_TEXTURE_RESINFO, tgsi_tex},
+	[104]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[105]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[106]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_NOP]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_FSEQ]	= { ALU_OP2_SETE_DX10, tgsi_op2},
+	[TGSI_OPCODE_FSGE]	= { ALU_OP2_SETGE_DX10, tgsi_op2},
+	[TGSI_OPCODE_FSLT]	= { ALU_OP2_SETGT_DX10, tgsi_op2_swap},
+	[TGSI_OPCODE_FSNE]	= { ALU_OP2_SETNE_DX10, tgsi_op2_swap},
+	[112]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CALLNZ]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[114]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_BREAKC]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_KILL_IF]	= { ALU_OP2_KILLGT, tgsi_kill},  /* conditional kill */
+	[TGSI_OPCODE_END]	= { ALU_OP0_NOP, tgsi_end},  /* aka HALT */
+	[118]			= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_F2I]	= { ALU_OP1_FLT_TO_INT, tgsi_op2},
+	[TGSI_OPCODE_IDIV]	= { ALU_OP0_NOP, tgsi_idiv},
+	[TGSI_OPCODE_IMAX]	= { ALU_OP2_MAX_INT, tgsi_op2},
+	[TGSI_OPCODE_IMIN]	= { ALU_OP2_MIN_INT, tgsi_op2},
+	[TGSI_OPCODE_INEG]	= { ALU_OP2_SUB_INT, tgsi_ineg},
+	[TGSI_OPCODE_ISGE]	= { ALU_OP2_SETGE_INT, tgsi_op2},
+	[TGSI_OPCODE_ISHR]	= { ALU_OP2_ASHR_INT, tgsi_op2},
+	[TGSI_OPCODE_ISLT]	= { ALU_OP2_SETGT_INT, tgsi_op2_swap},
+	[TGSI_OPCODE_F2U]	= { ALU_OP1_FLT_TO_UINT, tgsi_op2},
+	[TGSI_OPCODE_U2F]	= { ALU_OP1_UINT_TO_FLT, tgsi_op2},
+	[TGSI_OPCODE_UADD]	= { ALU_OP2_ADD_INT, tgsi_op2},
+	[TGSI_OPCODE_UDIV]	= { ALU_OP0_NOP, tgsi_udiv},
+	[TGSI_OPCODE_UMAD]	= { ALU_OP0_NOP, tgsi_umad},
+	[TGSI_OPCODE_UMAX]	= { ALU_OP2_MAX_UINT, tgsi_op2},
+	[TGSI_OPCODE_UMIN]	= { ALU_OP2_MIN_UINT, tgsi_op2},
+	[TGSI_OPCODE_UMOD]	= { ALU_OP0_NOP, tgsi_umod},
+	[TGSI_OPCODE_UMUL]	= { ALU_OP2_MULLO_INT, cayman_mul_int_instr},
+	[TGSI_OPCODE_USEQ]	= { ALU_OP2_SETE_INT, tgsi_op2},
+	[TGSI_OPCODE_USGE]	= { ALU_OP2_SETGE_UINT, tgsi_op2},
+	[TGSI_OPCODE_USHR]	= { ALU_OP2_LSHR_INT, tgsi_op2},
+	[TGSI_OPCODE_USLT]	= { ALU_OP2_SETGT_UINT, tgsi_op2_swap},
+	[TGSI_OPCODE_USNE]	= { ALU_OP2_SETNE_INT, tgsi_op2},
+	[TGSI_OPCODE_SWITCH]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_CASE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_DEFAULT]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ENDSWITCH]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_I]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_I_MS]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_B]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_C]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_C_LZ]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_D]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_L]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_GATHER4]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SVIEWINFO]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_POS]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_SAMPLE_INFO]	= { 0, tgsi_unsupported},
+	[TGSI_OPCODE_UARL]	= { ALU_OP1_MOVA_INT, tgsi_eg_arl},
+	[TGSI_OPCODE_UCMP]	= { ALU_OP0_NOP, tgsi_ucmp},
+	[TGSI_OPCODE_IABS]	= { 0, tgsi_iabs},
+	[TGSI_OPCODE_ISSG]	= { 0, tgsi_issg},
+	[TGSI_OPCODE_LOAD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_STORE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_MFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_LFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_SFENCE]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_BARRIER]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUADD]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMXCHG]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMCAS]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMAND]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMOR]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMXOR]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUMIN]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMUMAX]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMIMIN]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_ATOMIMAX]	= { ALU_OP0_NOP, tgsi_unsupported},
+	[TGSI_OPCODE_TEX2]	= { FETCH_OP_SAMPLE, tgsi_tex},
+	[TGSI_OPCODE_TXB2]	= { FETCH_OP_SAMPLE_LB, tgsi_tex},
+	[TGSI_OPCODE_TXL2]	= { FETCH_OP_SAMPLE_L, tgsi_tex},
+	[TGSI_OPCODE_IMUL_HI]	= { ALU_OP2_MULHI_INT, cayman_mul_int_instr},
+	[TGSI_OPCODE_UMUL_HI]	= { ALU_OP2_MULHI_UINT, cayman_mul_int_instr},
+	[TGSI_OPCODE_TG4]	= { FETCH_OP_GATHER4, tgsi_tex},
+	[TGSI_OPCODE_LODQ]	= { FETCH_OP_GET_LOD, tgsi_tex},
+	[TGSI_OPCODE_IBFE]	= { ALU_OP3_BFE_INT, tgsi_op3},
+	[TGSI_OPCODE_UBFE]	= { ALU_OP3_BFE_UINT, tgsi_op3},
+	[TGSI_OPCODE_BFI]	= { ALU_OP0_NOP, tgsi_bfi},
+	[TGSI_OPCODE_BREV]	= { ALU_OP1_BFREV_INT, tgsi_op2},
+	[TGSI_OPCODE_POPC]	= { ALU_OP1_BCNT_INT, tgsi_op2},
+	[TGSI_OPCODE_LSB]	= { ALU_OP1_FFBL_INT, tgsi_op2},
+	[TGSI_OPCODE_IMSB]	= { ALU_OP1_FFBH_INT, tgsi_msb},
+	[TGSI_OPCODE_UMSB]	= { ALU_OP1_FFBH_UINT, tgsi_msb},
+	[TGSI_OPCODE_INTERP_CENTROID]	= { ALU_OP0_NOP, tgsi_interp_egcm},
+	[TGSI_OPCODE_INTERP_SAMPLE]	= { ALU_OP0_NOP, tgsi_interp_egcm},
+	[TGSI_OPCODE_INTERP_OFFSET]	= { ALU_OP0_NOP, tgsi_interp_egcm},
+	[TGSI_OPCODE_LAST]	= { ALU_OP0_NOP, tgsi_unsupported},
 };

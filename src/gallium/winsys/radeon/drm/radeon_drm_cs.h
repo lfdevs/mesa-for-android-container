@@ -28,7 +28,6 @@
 #define RADEON_DRM_CS_H
 
 #include "radeon_drm_bo.h"
-#include <radeon_drm.h>
 
 struct radeon_cs_context {
     uint32_t                    buf[RADEON_MAX_CMDBUF_DWORDS];

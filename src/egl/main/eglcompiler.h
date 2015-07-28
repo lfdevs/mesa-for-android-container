@@ -30,69 +30,17 @@
 #ifndef EGLCOMPILER_INCLUDED
 #define EGLCOMPILER_INCLUDED
 
-
-#include "c99_compat.h" /* inline, __func__, etc. */
-
-
-/**
- * Get standard integer types
- */
-#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || \
-    (defined(_MSC_VER) && _MSC_VER >= 1600)
-#  include <stdint.h>
-#elif defined(_MSC_VER)
-   typedef __int8             int8_t;
-   typedef unsigned __int8    uint8_t;
-   typedef __int16            int16_t;
-   typedef unsigned __int16   uint16_t;
-   typedef __int32            int32_t;
-   typedef unsigned __int32   uint32_t;
-   typedef __int64            int64_t;
-   typedef unsigned __int64   uint64_t;
-
-#  if defined(_WIN64)
-     typedef __int64            intptr_t;
-     typedef unsigned __int64   uintptr_t;
-#  else
-     typedef __int32            intptr_t;
-     typedef unsigned __int32   uintptr_t;
-#  endif
-
-#  define INT64_C(__val) __val##i64
-#  define UINT64_C(__val) __val##ui64
-#else
-/* hope the best instead of adding a bunch of ifdef's */
-#  include <stdint.h>
-#endif
-
-
-/* XXX: Use standard `inline` keyword instead */
-#ifndef INLINE
-#  define INLINE inline
-#endif
-
-
-/**
- * Function visibility
- */
-#ifndef PUBLIC
-#  if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
-#    define PUBLIC __attribute__((visibility("default")))
-#  elif defined(_MSC_VER)
-#    define PUBLIC __declspec(dllexport)
-#  else
-#    define PUBLIC
-#  endif
-#endif
-
-/* XXX: Use standard `__func__` instead */
-#ifndef __FUNCTION__
-#  define __FUNCTION__ __func__
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 #define STATIC_ASSERT(COND) \
    do { \
       (void) sizeof(char [1 - 2*!(COND)]); \
    } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* EGLCOMPILER_INCLUDED */

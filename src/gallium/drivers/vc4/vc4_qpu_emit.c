@@ -270,11 +270,6 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         }
                         break;
 
-                case QOP_SF:
-                        queue(c, qpu_a_MOV(qpu_ra(QPU_W_NOP), src[0]));
-                        *last_inst(c) |= QPU_SF;
-                        break;
-
                 case QOP_SEL_X_0_ZS:
                 case QOP_SEL_X_0_ZC:
                 case QOP_SEL_X_0_NS:
@@ -547,6 +542,11 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         }
 
                         break;
+                }
+
+                if (qinst->sf) {
+                        assert(!qir_is_multi_instruction(qinst));
+                        *last_inst(c) |= QPU_SF;
                 }
         }
 

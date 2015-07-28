@@ -109,6 +109,31 @@ public:
    virtual ir_instruction *clone(void *mem_ctx,
 				 struct hash_table *ht) const = 0;
 
+   bool is_rvalue() const
+   {
+      return ir_type == ir_type_dereference_array ||
+             ir_type == ir_type_dereference_record ||
+             ir_type == ir_type_dereference_variable ||
+             ir_type == ir_type_constant ||
+             ir_type == ir_type_expression ||
+             ir_type == ir_type_swizzle ||
+             ir_type == ir_type_texture;
+   }
+
+   bool is_dereference() const
+   {
+      return ir_type == ir_type_dereference_array ||
+             ir_type == ir_type_dereference_record ||
+             ir_type == ir_type_dereference_variable;
+   }
+
+   bool is_jump() const
+   {
+      return ir_type == ir_type_loop_jump ||
+             ir_type == ir_type_return ||
+             ir_type == ir_type_discard;
+   }
+
    /**
     * \name IR instruction downcast functions
     *
@@ -117,41 +142,33 @@ public:
     * Additional downcast functions will be added as needed.
     */
    /*@{*/
-   class ir_rvalue *as_rvalue()
-   {
-      if (ir_type == ir_type_dereference_array ||
-          ir_type == ir_type_dereference_record ||
-          ir_type == ir_type_dereference_variable ||
-          ir_type == ir_type_constant ||
-          ir_type == ir_type_expression ||
-          ir_type == ir_type_swizzle ||
-          ir_type == ir_type_texture)
-         return (class ir_rvalue *) this;
-      return NULL;
+   #define AS_BASE(TYPE)                                \
+   class ir_##TYPE *as_##TYPE()                         \
+   {                                                    \
+      assume(this != NULL);                             \
+      return is_##TYPE() ? (ir_##TYPE *) this : NULL;   \
+   }                                                    \
+   const class ir_##TYPE *as_##TYPE() const             \
+   {                                                    \
+      assume(this != NULL);                             \
+      return is_##TYPE() ? (ir_##TYPE *) this : NULL;   \
    }
 
-   class ir_dereference *as_dereference()
-   {
-      if (ir_type == ir_type_dereference_array ||
-          ir_type == ir_type_dereference_record ||
-          ir_type == ir_type_dereference_variable)
-         return (class ir_dereference *) this;
-      return NULL;
-   }
-
-   class ir_jump *as_jump()
-   {
-      if (ir_type == ir_type_loop_jump ||
-          ir_type == ir_type_return ||
-          ir_type == ir_type_discard)
-         return (class ir_jump *) this;
-      return NULL;
-   }
+   AS_BASE(rvalue)
+   AS_BASE(dereference)
+   AS_BASE(jump)
+   #undef AS_BASE
 
    #define AS_CHILD(TYPE) \
    class ir_##TYPE * as_##TYPE() \
    { \
+      assume(this != NULL);                                         \
       return ir_type == ir_type_##TYPE ? (ir_##TYPE *) this : NULL; \
+   }                                                                      \
+   const class ir_##TYPE * as_##TYPE() const                              \
+   {                                                                      \
+      assume(this != NULL);                                               \
+      return ir_type == ir_type_##TYPE ? (const ir_##TYPE *) this : NULL; \
    }
    AS_CHILD(variable)
    AS_CHILD(function)
@@ -179,7 +196,8 @@ public:
     * in particular.  No support for other instruction types (assignments,
     * jumps, calls, etc.) is planned.
     */
-   virtual bool equals(ir_instruction *ir, enum ir_node_type ignore = ir_type_unset);
+   virtual bool equals(const ir_instruction *ir,
+                       enum ir_node_type ignore = ir_type_unset) const;
 
 protected:
    ir_instruction(enum ir_node_type t)
@@ -450,11 +468,8 @@ public:
     */
    inline bool is_interface_instance() const
    {
-      const glsl_type *const t = this->type;
-
-      return (t == this->interface_type)
-         || (t->is_array() && t->fields.array == this->interface_type);
-    }
+      return this->type->without_array() == this->interface_type;
+   }
 
    /**
     * Set this->interface_type on a newly created variable.
@@ -1269,6 +1284,13 @@ enum ir_expression_operation {
    ir_unop_u2f,         /**< Unsigned-to-float conversion. */
    ir_unop_i2u,         /**< Integer-to-unsigned conversion. */
    ir_unop_u2i,         /**< Unsigned-to-integer conversion. */
+   ir_unop_d2f,         /**< Double-to-float conversion. */
+   ir_unop_f2d,         /**< Float-to-double conversion. */
+   ir_unop_d2i,         /**< Double-to-integer conversion. */
+   ir_unop_i2d,         /**< Integer-to-double conversion. */
+   ir_unop_d2u,         /**< Double-to-unsigned conversion. */
+   ir_unop_u2d,         /**< Unsigned-to-double conversion. */
+   ir_unop_d2b,         /**< Double-to-boolean conversion. */
    ir_unop_bitcast_i2f, /**< Bit-identical int-to-float "conversion" */
    ir_unop_bitcast_f2i, /**< Bit-identical float-to-int "conversion" */
    ir_unop_bitcast_u2f, /**< Bit-identical uint-to-float "conversion" */
@@ -1292,8 +1314,6 @@ enum ir_expression_operation {
    /*@{*/
    ir_unop_sin,
    ir_unop_cos,
-   ir_unop_sin_reduced,    /**< Reduced range sin. [-pi, pi] */
-   ir_unop_cos_reduced,    /**< Reduced range cos. [-pi, pi] */
    /*@}*/
 
    /**
@@ -1345,6 +1365,18 @@ enum ir_expression_operation {
    /*@}*/
 
    ir_unop_saturate,
+
+   /**
+    * \name Double packing, part of ARB_gpu_shader_fp64.
+    */
+   /*@{*/
+   ir_unop_pack_double_2x32,
+   ir_unop_unpack_double_2x32,
+   /*@}*/
+
+   ir_unop_frexp_sig,
+   ir_unop_frexp_exp,
+
    ir_unop_noise,
 
    /**
@@ -1578,7 +1610,8 @@ public:
     */
    ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1, ir_rvalue *op2);
 
-   virtual bool equals(ir_instruction *ir, enum ir_node_type ignore = ir_type_unset);
+   virtual bool equals(const ir_instruction *ir,
+                       enum ir_node_type ignore = ir_type_unset) const;
 
    virtual ir_expression *clone(void *mem_ctx, struct hash_table *ht) const;
 
@@ -1889,7 +1922,8 @@ public:
 
    virtual ir_visitor_status accept(ir_hierarchical_visitor *);
 
-   virtual bool equals(ir_instruction *ir, enum ir_node_type ignore = ir_type_unset);
+   virtual bool equals(const ir_instruction *ir,
+                       enum ir_node_type ignore = ir_type_unset) const;
 
    /**
     * Return a string representing the ir_texture_opcode.
@@ -1990,7 +2024,8 @@ public:
 
    virtual ir_visitor_status accept(ir_hierarchical_visitor *);
 
-   virtual bool equals(ir_instruction *ir, enum ir_node_type ignore = ir_type_unset);
+   virtual bool equals(const ir_instruction *ir,
+                       enum ir_node_type ignore = ir_type_unset) const;
 
    bool is_lvalue() const
    {
@@ -2043,7 +2078,8 @@ public:
 
    virtual ir_constant *constant_expression_value(struct hash_table *variable_context = NULL);
 
-   virtual bool equals(ir_instruction *ir, enum ir_node_type ignore = ir_type_unset);
+   virtual bool equals(const ir_instruction *ir,
+                       enum ir_node_type ignore = ir_type_unset) const;
 
    /**
     * Get the variable that is ultimately referenced by an r-value
@@ -2089,7 +2125,8 @@ public:
 
    virtual ir_constant *constant_expression_value(struct hash_table *variable_context = NULL);
 
-   virtual bool equals(ir_instruction *ir, enum ir_node_type ignore = ir_type_unset);
+   virtual bool equals(const ir_instruction *ir,
+                       enum ir_node_type ignore = ir_type_unset) const;
 
    /**
     * Get the variable that is ultimately referenced by an r-value
@@ -2153,6 +2190,7 @@ union ir_constant_data {
       int i[16];
       float f[16];
       bool b[16];
+      double d[16];
 };
 
 
@@ -2163,6 +2201,7 @@ public:
    ir_constant(unsigned int u, unsigned vector_elements=1);
    ir_constant(int i, unsigned vector_elements=1);
    ir_constant(float f, unsigned vector_elements=1);
+   ir_constant(double d, unsigned vector_elements=1);
 
    /**
     * Construct an ir_constant from a list of ir_constant values
@@ -2197,7 +2236,8 @@ public:
 
    virtual ir_visitor_status accept(ir_hierarchical_visitor *);
 
-   virtual bool equals(ir_instruction *ir, enum ir_node_type ignore = ir_type_unset);
+   virtual bool equals(const ir_instruction *ir,
+                       enum ir_node_type ignore = ir_type_unset) const;
 
    /**
     * Get a particular component of a constant as a specific type
@@ -2209,6 +2249,7 @@ public:
    /*@{*/
    bool get_bool_component(unsigned i) const;
    float get_float_component(unsigned i) const;
+   double get_double_component(unsigned i) const;
    int get_int_component(unsigned i) const;
    unsigned get_uint_component(unsigned i) const;
    /*@}*/
@@ -2416,6 +2457,10 @@ _mesa_glsl_initialize_builtin_functions();
 extern ir_function_signature *
 _mesa_glsl_find_builtin_function(_mesa_glsl_parse_state *state,
                                  const char *name, exec_list *actual_parameters);
+
+extern ir_function *
+_mesa_glsl_find_builtin_function_by_name(_mesa_glsl_parse_state *state,
+                                         const char *name);
 
 extern gl_shader *
 _mesa_glsl_get_builtin_function_shader(void);

@@ -36,14 +36,13 @@ static int classify_identifier(struct _mesa_glsl_parse_state *, const char *);
 
 #define YY_USER_ACTION						\
    do {								\
-      yylloc->source = 0;					\
       yylloc->first_column = yycolumn + 1;			\
       yylloc->first_line = yylloc->last_line = yylineno + 1;	\
       yycolumn += yyleng;					\
       yylloc->last_column = yycolumn + 1;			\
    } while(0);
 
-#define YY_USER_INIT yylineno = 0; yycolumn = 0;
+#define YY_USER_INIT yylineno = 0; yycolumn = 0; yylloc->source = 0;
 
 /* A macro for handling reserved words and keywords across language versions.
  *
@@ -188,6 +187,15 @@ HASH		^{SPC}#{SPC}
 				    * one-based.
 				    */
 				   yylineno = strtol(ptr, &ptr, 0) - 1;
+
+                                   /* From GLSL 3.30 and GLSL ES on, after processing the
+                                    * line directive (including its new-line), the implementation
+                                    * will behave as if it is compiling at the line number passed
+                                    * as argument. It was line number + 1 in older specifications.
+                                    */
+                                   if (yyextra->is_version(330, 100))
+                                      yylineno--;
+
 				   yylloc->source = strtol(ptr, NULL, 0);
 				}
 {HASH}line{SPCP}{INT}{SPC}$	{
@@ -203,6 +211,14 @@ HASH		^{SPC}#{SPC}
 				    * one-based.
 				    */
 				   yylineno = strtol(ptr, &ptr, 0) - 1;
+
+                                   /* From GLSL 3.30 and GLSL ES on, after processing the
+                                    * line directive (including its new-line), the implementation
+                                    * will behave as if it is compiling at the line number passed
+                                    * as argument. It was line number + 1 in older specifications.
+                                    */
+                                   if (yyextra->is_version(330, 100))
+                                      yylineno--;
 				}
 ^{SPC}#{SPC}pragma{SPCP}debug{SPC}\({SPC}on{SPC}\) {
 				  BEGIN PP;
@@ -393,7 +409,7 @@ restrict	KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_image_load_store
 readonly	KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, READONLY);
 writeonly	KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, WRITEONLY);
 
-atomic_uint     KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_atomic_counters_enable, ATOMIC_UINT);
+atomic_uint     KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_atomic_counters_enable, ATOMIC_UINT);
 
 struct		return STRUCT;
 void		return VOID_TOK;
@@ -458,6 +474,17 @@ layout		{
 			    return FLOATCONSTANT;
 			}
 
+[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?(lf|LF)	|
+\.[0-9]+([eE][+-]?[0-9]+)?(lf|LF)	|
+[0-9]+\.([eE][+-]?[0-9]+)?(lf|LF)	|
+[0-9]+[eE][+-]?[0-9]+(lf|LF)		{
+			    if (!yyextra->is_version(400, 0) &&
+			        !yyextra->ARB_gpu_shader_fp64_enable)
+			        return ERROR_TOK;
+			    yylval->dreal = _mesa_strtod(yytext, NULL);
+			    return DOUBLECONSTANT;
+			}
+
 true			{
 			    yylval->n = 1;
 			    return BOOLCONSTANT;
@@ -489,7 +516,7 @@ external	KEYWORD(110, 100, 0, 0, EXTERNAL);
 interface	KEYWORD(110, 100, 0, 0, INTERFACE);
 long		KEYWORD(110, 100, 0, 0, LONG_TOK);
 short		KEYWORD(110, 100, 0, 0, SHORT_TOK);
-double		KEYWORD(110, 100, 400, 0, DOUBLE_TOK);
+double		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DOUBLE_TOK);
 half		KEYWORD(110, 100, 0, 0, HALF);
 fixed		KEYWORD(110, 100, 0, 0, FIXED_TOK);
 unsigned	KEYWORD(110, 100, 0, 0, UNSIGNED);
@@ -498,9 +525,21 @@ output		KEYWORD(110, 100, 0, 0, OUTPUT);
 hvec2		KEYWORD(110, 100, 0, 0, HVEC2);
 hvec3		KEYWORD(110, 100, 0, 0, HVEC3);
 hvec4		KEYWORD(110, 100, 0, 0, HVEC4);
-dvec2		KEYWORD(110, 100, 400, 0, DVEC2);
-dvec3		KEYWORD(110, 100, 400, 0, DVEC3);
-dvec4		KEYWORD(110, 100, 400, 0, DVEC4);
+dvec2		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DVEC2);
+dvec3		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DVEC3);
+dvec4		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DVEC4);
+dmat2		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT2X2);
+dmat3		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT3X3);
+dmat4		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT4X4);
+dmat2x2		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT2X2);
+dmat2x3		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT2X3);
+dmat2x4		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT2X4);
+dmat3x2		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT3X2);
+dmat3x3		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT3X3);
+dmat3x4		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT3X4);
+dmat4x2		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT4X2);
+dmat4x3		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT4X3);
+dmat4x4		KEYWORD_WITH_ALT(110, 100, 400, 0, yyextra->ARB_gpu_shader_fp64_enable, DMAT4X4);
 fvec2		KEYWORD(110, 100, 0, 0, FVEC2);
 fvec3		KEYWORD(110, 100, 0, 0, FVEC3);
 fvec4		KEYWORD(110, 100, 0, 0, FVEC4);

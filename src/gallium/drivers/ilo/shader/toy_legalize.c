@@ -335,7 +335,9 @@ patch_while_jip(struct toy_compiler *tc, struct toy_inst *inst)
       dist--;
    }
 
-   if (ilo_dev_gen(tc->dev) >= ILO_GEN(7))
+   if (ilo_dev_gen(tc->dev) >= ILO_GEN(8))
+      inst->src[1] = tsrc_imm_d(dist * 16);
+   else if (ilo_dev_gen(tc->dev) >= ILO_GEN(7))
       inst->src[1] = tsrc_imm_w(dist * 2);
    else
       inst->dst = tdst_imm_w(dist * 2);
@@ -388,17 +390,18 @@ patch_if_else_jip(struct toy_compiler *tc, struct toy_inst *inst)
       dist++;
    }
 
-   if (ilo_dev_gen(tc->dev) >= ILO_GEN(7)) {
+   if (ilo_dev_gen(tc->dev) >= ILO_GEN(8)) {
+      inst->dst.type = TOY_TYPE_D;
+      inst->src[0] = tsrc_imm_d(uip * 8);
+      inst->src[1] = tsrc_imm_d(jip * 8);
+   } else if (ilo_dev_gen(tc->dev) >= ILO_GEN(7)) {
       /* what should the type be? */
       inst->dst.type = TOY_TYPE_D;
       inst->src[0].type = TOY_TYPE_D;
       inst->src[1] = tsrc_imm_d(uip << 16 | jip);
-   }
-   else {
+   } else {
       inst->dst = tdst_imm_w(jip);
    }
-
-   inst->thread_ctrl = GEN6_THREADCTRL_SWITCH;
 }
 
 static void
@@ -433,12 +436,12 @@ patch_endif_jip(struct toy_compiler *tc, struct toy_inst *inst)
    if (!found)
       dist = 1;
 
-   if (ilo_dev_gen(tc->dev) >= ILO_GEN(7))
+   if (ilo_dev_gen(tc->dev) >= ILO_GEN(8))
+      inst->src[1] = tsrc_imm_d(dist * 16);
+   else if (ilo_dev_gen(tc->dev) >= ILO_GEN(7))
       inst->src[1] = tsrc_imm_w(dist * 2);
    else
       inst->dst = tdst_imm_w(dist * 2);
-
-   inst->thread_ctrl = GEN6_THREADCTRL_SWITCH;
 }
 
 static void
@@ -499,8 +502,13 @@ patch_break_continue_jip(struct toy_compiler *tc, struct toy_inst *inst)
 
    /* should the type be D or W? */
    inst->dst.type = TOY_TYPE_D;
-   inst->src[0].type = TOY_TYPE_D;
-   inst->src[1] = tsrc_imm_d(uip << 16 | jip);
+   if (ilo_dev_gen(tc->dev) >= ILO_GEN(8)) {
+      inst->src[0] = tsrc_imm_d(uip * 8);
+      inst->src[1] = tsrc_imm_d(jip * 8);
+   } else {
+      inst->src[0].type = TOY_TYPE_D;
+      inst->src[1] = tsrc_imm_d(uip << 16 | jip);
+   }
 }
 
 /**

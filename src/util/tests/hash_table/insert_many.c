@@ -47,9 +47,12 @@ main(int argc, char **argv)
 {
    struct hash_table *ht;
    struct hash_entry *entry;
-   int size = 10000;
+   unsigned size = 10000;
    uint32_t keys[size];
    uint32_t i;
+
+   (void) argc;
+   (void) argv;
 
    ht = _mesa_hash_table_create(NULL, key_value, uint32_t_key_equals);
 

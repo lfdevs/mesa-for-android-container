@@ -232,6 +232,24 @@ static boolean parse_float( const char **pcur, float *val )
    return TRUE;
 }
 
+static boolean parse_double( const char **pcur, uint32_t *val0, uint32_t *val1)
+{
+   const char *cur = *pcur;
+   union {
+      double dval;
+      uint32_t uval[2];
+   } v;
+
+   v.dval = strtod(cur, (char**)pcur);
+   if (*pcur == cur)
+      return FALSE;
+
+   *val0 = v.uval[0];
+   *val1 = v.uval[1];
+
+   return TRUE;
+}
+
 struct translate_ctx
 {
    const char *text;
@@ -1104,6 +1122,10 @@ static boolean parse_immediate_data(struct translate_ctx *ctx, unsigned type,
       }
 
       switch (type) {
+      case TGSI_IMM_FLOAT64:
+         ret = parse_double(&ctx->cur, &values[i].Uint, &values[i+1].Uint);
+         i++;
+         break;
       case TGSI_IMM_FLOAT32:
          ret = parse_float(&ctx->cur, &values[i].Float);
          break;

@@ -31,10 +31,15 @@
 #ifndef EGLSURFACE_INCLUDED
 #define EGLSURFACE_INCLUDED
 
+#include "c99_compat.h"
 
 #include "egltypedefs.h"
 #include "egldisplay.h"
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * "Base" class for device driver surfaces.
@@ -105,7 +110,7 @@ _eglSwapInterval(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint in
 /**
  * Increment reference count for the surface.
  */
-static INLINE _EGLSurface *
+static inline _EGLSurface *
 _eglGetSurface(_EGLSurface *surf)
 {
    if (surf)
@@ -117,7 +122,7 @@ _eglGetSurface(_EGLSurface *surf)
 /**
  * Decrement reference count for the surface.
  */
-static INLINE EGLBoolean
+static inline EGLBoolean
 _eglPutSurface(_EGLSurface *surf)
 {
    return (surf) ? _eglPutResource(&surf->Resource) : EGL_FALSE;
@@ -128,7 +133,7 @@ _eglPutSurface(_EGLSurface *surf)
  * Link a surface to its display and return the handle of the link.
  * The handle can be passed to client directly.
  */
-static INLINE EGLSurface
+static inline EGLSurface
 _eglLinkSurface(_EGLSurface *surf)
 {
    _eglLinkResource(&surf->Resource, _EGL_RESOURCE_SURFACE);
@@ -140,7 +145,7 @@ _eglLinkSurface(_EGLSurface *surf)
  * Unlink a linked surface from its display.
  * Accessing an unlinked surface should generate EGL_BAD_SURFACE error.
  */
-static INLINE void
+static inline void
 _eglUnlinkSurface(_EGLSurface *surf)
 {
    _eglUnlinkResource(&surf->Resource, _EGL_RESOURCE_SURFACE);
@@ -151,7 +156,7 @@ _eglUnlinkSurface(_EGLSurface *surf)
  * Lookup a handle to find the linked surface.
  * Return NULL if the handle has no corresponding linked surface.
  */
-static INLINE _EGLSurface *
+static inline _EGLSurface *
 _eglLookupSurface(EGLSurface surface, _EGLDisplay *dpy)
 {
    _EGLSurface *surf = (_EGLSurface *) surface;
@@ -164,7 +169,7 @@ _eglLookupSurface(EGLSurface surface, _EGLDisplay *dpy)
 /**
  * Return the handle of a linked surface, or EGL_NO_SURFACE.
  */
-static INLINE EGLSurface
+static inline EGLSurface
 _eglGetSurfaceHandle(_EGLSurface *surf)
 {
    _EGLResource *res = (_EGLResource *) surf;
@@ -172,5 +177,9 @@ _eglGetSurfaceHandle(_EGLSurface *surf)
       (EGLSurface) surf : EGL_NO_SURFACE;
 }
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* EGLSURFACE_INCLUDED */

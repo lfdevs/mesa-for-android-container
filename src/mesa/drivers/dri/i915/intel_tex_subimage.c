@@ -71,7 +71,7 @@ intel_blit_texsubimage(struct gl_context * ctx,
       return false;
 
    DBG("BLT subimage %s target %s level %d offset %d,%d %dx%d\n",
-       __FUNCTION__,
+       __func__,
        _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
        texImage->Level, xoffset, yoffset, width, height);
 

@@ -153,20 +153,18 @@ unop("fsat", tfloat, "(src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0)")
 unop("frcp", tfloat, "1.0f / src0")
 unop("frsq", tfloat, "1.0f / sqrtf(src0)")
 unop("fsqrt", tfloat, "sqrtf(src0)")
-unop("fexp", tfloat, "expf(src0)") # < e^x
-unop("flog", tfloat, "logf(src0)") # log base e
 unop("fexp2", tfloat, "exp2f(src0)")
 unop("flog2", tfloat, "log2f(src0)")
 unop_convert("f2i", tfloat, tint, "src0") # Float-to-integer conversion.
 unop_convert("f2u", tfloat, tunsigned, "src0") # Float-to-unsigned conversion
 unop_convert("i2f", tint, tfloat, "src0") # Integer-to-float conversion.
 # Float-to-boolean conversion
-unop_convert("f2b", tfloat, tbool, "src0 == 0.0f")
+unop_convert("f2b", tfloat, tbool, "src0 != 0.0f")
 # Boolean-to-float conversion
 unop_convert("b2f", tbool, tfloat, "src0 ? 1.0f : 0.0f")
 # Int-to-boolean conversion
-unop_convert("i2b", tint, tbool, "src0 == 0")
-unop_convert("b2i", tbool, tint, "src0 ? 0 : -1") # Boolean-to-int conversion
+unop_convert("i2b", tint, tbool, "src0 != 0")
+unop_convert("b2i", tbool, tint, "src0 ? 1 : 0") # Boolean-to-int conversion
 unop_convert("u2f", tunsigned, tfloat, "src0") #Unsigned-to-float conversion.
 
 unop_reduce("bany", 1, tbool, tbool, "{src}", "{src0} || {src1}", "{src}")
@@ -183,7 +181,7 @@ unop("ftrunc", tfloat, "truncf(src0)")
 unop("fceil", tfloat, "ceilf(src0)")
 unop("ffloor", tfloat, "floorf(src0)")
 unop("ffract", tfloat, "src0 - floorf(src0)")
-unop("fround_even", tfloat, "_mesa_round_to_even(src0)")
+unop("fround_even", tfloat, "_mesa_roundevenf(src0)")
 
 
 # Trigonometric operations.
@@ -191,8 +189,6 @@ unop("fround_even", tfloat, "_mesa_round_to_even(src0)")
 
 unop("fsin", tfloat, "sinf(src0)")
 unop("fcos", tfloat, "cosf(src0)")
-unop("fsin_reduced", tfloat, "sinf(src0)")
-unop("fcos_reduced", tfloat, "cosf(src0)")
 
 
 # Partial derivatives.
