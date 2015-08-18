@@ -813,3 +813,112 @@ brw_depth_format(struct brw_context *brw, mesa_format format)
       unreachable("Unexpected depth format.");
    }
 }
+
+mesa_format
+brw_lower_mesa_image_format(const struct brw_device_info *devinfo,
+                            mesa_format format)
+{
+   switch (format) {
+   /* These are never lowered.  Up to BDW we'll have to fall back to untyped
+    * surface access for 128bpp formats.
+    */
+   case MESA_FORMAT_RGBA_UINT32:
+   case MESA_FORMAT_RGBA_SINT32:
+   case MESA_FORMAT_RGBA_FLOAT32:
+   case MESA_FORMAT_R_UINT32:
+   case MESA_FORMAT_R_SINT32:
+   case MESA_FORMAT_R_FLOAT32:
+      return format;
+
+   /* From HSW to BDW the only 64bpp format supported for typed access is
+    * RGBA_UINT16.  IVB falls back to untyped.
+    */
+   case MESA_FORMAT_RGBA_UINT16:
+   case MESA_FORMAT_RGBA_SINT16:
+   case MESA_FORMAT_RGBA_FLOAT16:
+   case MESA_FORMAT_RG_UINT32:
+   case MESA_FORMAT_RG_SINT32:
+   case MESA_FORMAT_RG_FLOAT32:
+      return (devinfo->gen >= 9 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RGBA_UINT16 : MESA_FORMAT_RG_UINT32);
+
+   /* Up to BDW no SINT or FLOAT formats of less than 32 bits per component
+    * are supported.  IVB doesn't support formats with more than one component
+    * for typed access.  For 8 and 16 bpp formats IVB relies on the
+    * undocumented behavior that typed reads from R_UINT8 and R_UINT16
+    * surfaces actually do a 32-bit misaligned read.  The alternative would be
+    * to use two surface state entries with different formats for each image,
+    * one for reading (using R_UINT32) and another one for writing (using
+    * R_UINT8 or R_UINT16), but that would complicate the shaders we generate
+    * even more.
+    */
+   case MESA_FORMAT_RGBA_UINT8:
+   case MESA_FORMAT_RGBA_SINT8:
+      return (devinfo->gen >= 9 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RGBA_UINT8 : MESA_FORMAT_R_UINT32);
+
+   case MESA_FORMAT_RG_UINT16:
+   case MESA_FORMAT_RG_SINT16:
+   case MESA_FORMAT_RG_FLOAT16:
+      return (devinfo->gen >= 9 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RG_UINT16 : MESA_FORMAT_R_UINT32);
+
+   case MESA_FORMAT_RG_UINT8:
+   case MESA_FORMAT_RG_SINT8:
+      return (devinfo->gen >= 9 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RG_UINT8 : MESA_FORMAT_R_UINT16);
+
+   case MESA_FORMAT_R_UINT16:
+   case MESA_FORMAT_R_FLOAT16:
+   case MESA_FORMAT_R_SINT16:
+      return (devinfo->gen >= 9 ? format : MESA_FORMAT_R_UINT16);
+
+   case MESA_FORMAT_R_UINT8:
+   case MESA_FORMAT_R_SINT8:
+      return (devinfo->gen >= 9 ? format : MESA_FORMAT_R_UINT8);
+
+   /* Neither the 2/10/10/10 nor the 11/11/10 packed formats are supported
+    * by the hardware.
+    */
+   case MESA_FORMAT_R10G10B10A2_UINT:
+   case MESA_FORMAT_R10G10B10A2_UNORM:
+   case MESA_FORMAT_R11G11B10_FLOAT:
+      return MESA_FORMAT_R_UINT32;
+
+   /* No normalized fixed-point formats are supported by the hardware. */
+   case MESA_FORMAT_RGBA_UNORM16:
+   case MESA_FORMAT_RGBA_SNORM16:
+      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RGBA_UINT16 : MESA_FORMAT_RG_UINT32);
+
+   case MESA_FORMAT_R8G8B8A8_UNORM:
+   case MESA_FORMAT_R8G8B8A8_SNORM:
+      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RGBA_UINT8 : MESA_FORMAT_R_UINT32);
+
+   case MESA_FORMAT_R16G16_UNORM:
+   case MESA_FORMAT_R16G16_SNORM:
+      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RG_UINT16 : MESA_FORMAT_R_UINT32);
+
+   case MESA_FORMAT_R8G8_UNORM:
+   case MESA_FORMAT_R8G8_SNORM:
+      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+              MESA_FORMAT_RG_UINT8 : MESA_FORMAT_R_UINT16);
+
+   case MESA_FORMAT_R_UNORM16:
+   case MESA_FORMAT_R_SNORM16:
+      return MESA_FORMAT_R_UINT16;
+
+   case MESA_FORMAT_R_UNORM8:
+   case MESA_FORMAT_R_SNORM8:
+      return MESA_FORMAT_R_UINT8;
+
+   default:
+      unreachable("Unknown image format");
+   }
+}

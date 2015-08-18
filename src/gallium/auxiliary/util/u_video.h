@@ -40,7 +40,7 @@ extern "C" {
 #include "util/u_debug.h"
 #include "util/u_math.h"
 
-static INLINE enum pipe_video_format
+static inline enum pipe_video_format
 u_reduce_video_profile(enum pipe_video_profile profile)
 {
    switch (profile)
@@ -68,12 +68,19 @@ u_reduce_video_profile(enum pipe_video_profile profile)
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
          return PIPE_VIDEO_FORMAT_MPEG4_AVC;
 
+      case PIPE_VIDEO_PROFILE_HEVC_MAIN:
+      case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
+      case PIPE_VIDEO_PROFILE_HEVC_MAIN_STILL:
+      case PIPE_VIDEO_PROFILE_HEVC_MAIN_12:
+      case PIPE_VIDEO_PROFILE_HEVC_MAIN_444:
+         return PIPE_VIDEO_FORMAT_HEVC;
+
       default:
          return PIPE_VIDEO_FORMAT_UNKNOWN;
    }
 }
 
-static INLINE void
+static inline void
 u_copy_nv12_to_yv12(void *const *destination_data,
                     uint32_t const *destination_pitches,
                     int src_plane, int src_field,
@@ -99,7 +106,7 @@ u_copy_nv12_to_yv12(void *const *destination_data,
    }
 }
 
-static INLINE void
+static inline void
 u_copy_yv12_to_nv12(void *const *destination_data,
                     uint32_t const *destination_pitches,
                     int src_plane, int src_field,
@@ -122,7 +129,7 @@ u_copy_yv12_to_nv12(void *const *destination_data,
    }
 }
 
-static INLINE void
+static inline void
 u_copy_swap422_packed(void *const *destination_data,
                        uint32_t const *destination_pitches,
                        int src_plane, int src_field,
@@ -147,7 +154,7 @@ u_copy_swap422_packed(void *const *destination_data,
    }
 }
 
-static INLINE uint32_t
+static inline uint32_t
 u_get_h264_level(uint32_t width, uint32_t height, uint32_t *max_reference)
 {
    uint32_t max_dpb_mbs;

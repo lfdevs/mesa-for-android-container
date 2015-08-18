@@ -34,7 +34,7 @@
 #include "tr_dump.h"
 
 
-static INLINE void
+static inline void
 trace_dump_format(enum pipe_format format)
 {
    if (!trace_dumping_enabled_locked())
@@ -44,7 +44,7 @@ trace_dump_format(enum pipe_format format)
 }
 
 
-static INLINE void
+static inline void
 trace_dump_query_type(unsigned value)
 {
    if (!trace_dumping_enabled_locked())

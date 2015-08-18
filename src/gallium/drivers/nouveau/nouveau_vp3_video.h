@@ -135,22 +135,22 @@ struct comm {
 	uint32_t parse_endpos[0x10]; // 1c0
 };
 
-static INLINE uint32_t nouveau_vp3_video_align(uint32_t h)
+static inline uint32_t nouveau_vp3_video_align(uint32_t h)
 {
    return ((h+0x3f)&~0x3f);
 };
 
-static INLINE uint32_t mb(uint32_t coord)
+static inline uint32_t mb(uint32_t coord)
 {
    return (coord + 0xf)>>4;
 }
 
-static INLINE uint32_t mb_half(uint32_t coord)
+static inline uint32_t mb_half(uint32_t coord)
 {
    return (coord + 0x1f)>>5;
 }
 
-static INLINE uint64_t
+static inline uint64_t
 nouveau_vp3_video_addr(struct nouveau_vp3_decoder *dec, struct nouveau_vp3_video_buffer *target)
 {
    uint64_t ret;
@@ -161,7 +161,7 @@ nouveau_vp3_video_addr(struct nouveau_vp3_decoder *dec, struct nouveau_vp3_video
    return dec->ref_bo->offset + ret;
 }
 
-static INLINE void
+static inline void
 nouveau_vp3_ycbcr_offsets(struct nouveau_vp3_decoder *dec, uint32_t *y2,
                           uint32_t *cbcr, uint32_t *cbcr2)
 {
@@ -182,7 +182,7 @@ nouveau_vp3_ycbcr_offsets(struct nouveau_vp3_decoder *dec, uint32_t *y2,
    }
 }
 
-static INLINE void
+static inline void
 nouveau_vp3_inter_sizes(struct nouveau_vp3_decoder *dec, uint32_t slice_count,
                         uint32_t *slice_size, uint32_t *bucket_size,
                         uint32_t *ring_size)

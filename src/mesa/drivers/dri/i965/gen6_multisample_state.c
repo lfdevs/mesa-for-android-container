@@ -26,6 +26,7 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_multisample_state.h"
+#include "main/framebuffer.h"
 
 void
 gen6_get_sample_position(struct gl_context *ctx,
@@ -34,7 +35,7 @@ gen6_get_sample_position(struct gl_context *ctx,
 {
    uint8_t bits;
 
-   switch (fb->Visual.samples) {
+   switch (_mesa_geometric_samples(fb)) {
    case 1:
       result[0] = result[1] = 0.5f;
       return;
@@ -142,12 +143,11 @@ gen6_emit_3dstate_multisample(struct brw_context *brw,
    ADVANCE_BATCH();
 }
 
-
 unsigned
 gen6_determine_sample_mask(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   float coverage = 1.0;
+   float coverage = 1.0f;
    float coverage_invert = false;
    unsigned sample_mask = ~0u;
 
@@ -165,7 +165,7 @@ gen6_determine_sample_mask(struct brw_context *brw)
    }
 
    if (num_samples > 1) {
-      int coverage_int = (int) (num_samples * coverage + 0.5);
+      int coverage_int = (int) (num_samples * coverage + 0.5f);
       uint32_t coverage_bits = (1 << coverage_int) - 1;
       if (coverage_invert)
          coverage_bits ^= (1 << num_samples) - 1;
@@ -174,7 +174,6 @@ gen6_determine_sample_mask(struct brw_context *brw)
       return 1;
    }
 }
-
 
 /**
  * 3DSTATE_SAMPLE_MASK
@@ -188,14 +187,13 @@ gen6_emit_3dstate_sample_mask(struct brw_context *brw, unsigned mask)
    ADVANCE_BATCH();
 }
 
-
-static void upload_multisample_state(struct brw_context *brw)
+static void
+upload_multisample_state(struct brw_context *brw)
 {
    /* BRW_NEW_NUM_SAMPLES */
    gen6_emit_3dstate_multisample(brw, brw->num_samples);
    gen6_emit_3dstate_sample_mask(brw, gen6_determine_sample_mask(brw));
 }
-
 
 const struct brw_tracked_state gen6_multisample_state = {
    .dirty = {

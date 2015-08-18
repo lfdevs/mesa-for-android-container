@@ -81,7 +81,7 @@ intel_miptree_create_layout(struct intel_context *intel,
       return NULL;
 
    DBG("%s target %s format %s level %d..%d <-- %p\n", __func__,
-       _mesa_lookup_enum_by_nr(target),
+       _mesa_enum_to_string(target),
        _mesa_get_format_name(format),
        first_level, last_level, mt);
 

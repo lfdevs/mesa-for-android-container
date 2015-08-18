@@ -63,7 +63,10 @@ _mesa_DepthFunc( GLenum func )
    GET_CURRENT_CONTEXT(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glDepthFunc %s\n", _mesa_lookup_enum_by_nr(func));
+      _mesa_debug(ctx, "glDepthFunc %s\n", _mesa_enum_to_string(func));
+
+   if (ctx->Depth.Func == func)
+      return;
 
    switch (func) {
    case GL_LESS:    /* (default) pass if incoming z < stored z */
@@ -79,9 +82,6 @@ _mesa_DepthFunc( GLenum func )
       _mesa_error( ctx, GL_INVALID_ENUM, "glDepth.Func" );
       return;
    }
-
-   if (ctx->Depth.Func == func)
-      return;
 
    FLUSH_VERTICES(ctx, _NEW_DEPTH);
    ctx->Depth.Func = func;

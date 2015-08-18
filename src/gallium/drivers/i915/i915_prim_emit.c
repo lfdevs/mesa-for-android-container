@@ -53,7 +53,7 @@ struct setup_stage {
 /**
  * Basically a cast wrapper.
  */
-static INLINE struct setup_stage *setup_stage( struct draw_stage *stage )
+static inline struct setup_stage *setup_stage( struct draw_stage *stage )
 {
    return (struct setup_stage *)stage;
 }
@@ -65,7 +65,7 @@ static INLINE struct setup_stage *setup_stage( struct draw_stage *stage )
  * have a couple of slots at the beginning (1-dword header, 4-dword
  * clip pos) that we ignore here.
  */
-static INLINE void
+static inline void
 emit_hw_vertex( struct i915_context *i915,
                 const struct vertex_header *vertex)
 {
@@ -124,7 +124,7 @@ emit_hw_vertex( struct i915_context *i915,
 
 
 
-static INLINE void 
+static inline void 
 emit_prim( struct draw_stage *stage, 
 	   struct prim_header *prim,
 	   unsigned hwprim,

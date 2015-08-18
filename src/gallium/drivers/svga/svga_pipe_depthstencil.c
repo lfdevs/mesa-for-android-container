@@ -32,7 +32,7 @@
 #include "svga_hw_reg.h"
 
 
-static INLINE unsigned
+static inline unsigned
 svga_translate_compare_func(unsigned func)
 {
    switch (func) {
@@ -50,7 +50,7 @@ svga_translate_compare_func(unsigned func)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 svga_translate_stencil_op(unsigned op)
 {
    switch (op) {

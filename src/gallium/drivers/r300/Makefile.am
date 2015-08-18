@@ -1,5 +1,3 @@
-AUTOMAKE_OPTIONS = subdir-objects
-
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 

@@ -8,12 +8,12 @@
     <enum name="DRAW_INDIRECT_BUFFER"                   value="0x8F3F"/>
     <enum name="DRAW_INDIRECT_BUFFER_BINDING"           value="0x8F43"/>
 
-    <function name="DrawArraysIndirect" exec="dynamic">
+    <function name="DrawArraysIndirect" exec="dynamic" es2="3.1">
         <param name="mode" type="GLenum"/>
         <param name="indirect" type="const GLvoid *"/>
     </function>
 
-    <function name="DrawElementsIndirect" exec="dynamic">
+    <function name="DrawElementsIndirect" exec="dynamic" es2="3.1">
         <param name="mode" type="GLenum"/>
         <param name="type" type="GLenum"/>
         <param name="indirect" type="const GLvoid *"/>

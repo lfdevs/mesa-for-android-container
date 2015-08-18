@@ -295,7 +295,7 @@ struct vs_build_ctx
     struct ureg_src mtlE;
 };
 
-static INLINE unsigned
+static inline unsigned
 get_texcoord_sn(struct pipe_screen *screen)
 {
     if (screen->get_param(screen, PIPE_CAP_TGSI_TEXCOORD))
@@ -303,7 +303,7 @@ get_texcoord_sn(struct pipe_screen *screen)
     return TGSI_SEMANTIC_GENERIC;
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 build_vs_add_input(struct vs_build_ctx *vs, uint16_t ndecl)
 {
     const unsigned i = vs->num_inputs++;
@@ -313,7 +313,7 @@ build_vs_add_input(struct vs_build_ctx *vs, uint16_t ndecl)
 }
 
 /* NOTE: dst may alias src */
-static INLINE void
+static inline void
 ureg_normalize3(struct ureg_program *ureg,
                 struct ureg_dst dst, struct ureg_src src,
                 struct ureg_dst tmp)
@@ -422,13 +422,15 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
     oCol[1] = ureg_saturate(ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 1));
 
     if (key->vertexpointsize || key->pointscale) {
-        oPsz = ureg_DECL_output_masked(ureg, TGSI_SEMANTIC_PSIZE, 0, TGSI_WRITEMASK_X);
+        oPsz = ureg_DECL_output_masked(ureg, TGSI_SEMANTIC_PSIZE, 0,
+                                       TGSI_WRITEMASK_X, 0, 1);
         oPsz = ureg_writemask(oPsz, TGSI_WRITEMASK_X);
     }
     if (key->fog_mode) {
         /* We apply fog to the vertex colors, oFog is for programmable shaders only ?
          */
-        oFog = ureg_DECL_output_masked(ureg, TGSI_SEMANTIC_FOG, 0, TGSI_WRITEMASK_X);
+        oFog = ureg_DECL_output_masked(ureg, TGSI_SEMANTIC_FOG, 0,
+                                       TGSI_WRITEMASK_X, 0, 1);
         oFog = ureg_writemask(oFog, TGSI_WRITEMASK_X);
     }
 
@@ -1031,7 +1033,7 @@ static uint8_t ps_d3dtop_args_mask(D3DTEXTUREOP top)
     }
 }
 
-static INLINE boolean
+static inline boolean
 is_MOV_no_op(struct ureg_dst dst, struct ureg_src src)
 {
     return !dst.WriteMask ||
@@ -1971,7 +1973,7 @@ nine_D3DMATRIX_print(const D3DMATRIX *M)
 }
 */
 
-static INLINE float
+static inline float
 nine_DP4_row_col(const D3DMATRIX *A, int r, const D3DMATRIX *B, int c)
 {
     return A->m[r][0] * B->m[0][c] +
@@ -1980,7 +1982,7 @@ nine_DP4_row_col(const D3DMATRIX *A, int r, const D3DMATRIX *B, int c)
            A->m[r][3] * B->m[3][c];
 }
 
-static INLINE float
+static inline float
 nine_DP4_vec_col(const D3DVECTOR *v, const D3DMATRIX *M, int c)
 {
     return v->x * M->m[0][c] +
@@ -1989,7 +1991,7 @@ nine_DP4_vec_col(const D3DVECTOR *v, const D3DMATRIX *M, int c)
            1.0f * M->m[3][c];
 }
 
-static INLINE float
+static inline float
 nine_DP3_vec_col(const D3DVECTOR *v, const D3DMATRIX *M, int c)
 {
     return v->x * M->m[0][c] +

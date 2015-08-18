@@ -65,6 +65,8 @@ __glElementsPerGroup(GLenum format, GLenum type)
    switch (format) {
    case GL_RGB:
    case GL_BGR:
+   case GL_RGB_INTEGER_EXT:
+   case GL_BGR_INTEGER_EXT:
       return 3;
    case GL_RG:
    case GL_422_EXT:
@@ -74,10 +76,13 @@ __glElementsPerGroup(GLenum format, GLenum type)
    case GL_DEPTH_STENCIL_NV:
    case GL_YCBCR_422_APPLE:
    case GL_LUMINANCE_ALPHA:
+   case GL_LUMINANCE_ALPHA_INTEGER_EXT:
       return 2;
    case GL_RGBA:
    case GL_BGRA:
    case GL_ABGR_EXT:
+   case GL_RGBA_INTEGER_EXT:
+   case GL_BGRA_INTEGER_EXT:
       return 4;
    case GL_COLOR_INDEX:
    case GL_STENCIL_INDEX:
@@ -88,6 +93,11 @@ __glElementsPerGroup(GLenum format, GLenum type)
    case GL_ALPHA:
    case GL_LUMINANCE:
    case GL_INTENSITY:
+   case GL_RED_INTEGER_EXT:
+   case GL_GREEN_INTEGER_EXT:
+   case GL_BLUE_INTEGER_EXT:
+   case GL_ALPHA_INTEGER_EXT:
+   case GL_LUMINANCE_INTEGER_EXT:
       return 1;
    default:
       return 0;

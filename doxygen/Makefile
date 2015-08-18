@@ -33,3 +33,4 @@ subset: $(SUBSET:.doxy=.tag)
 clean:
 	-rm -rf $(FULL:.doxy=) $(SUBSET:.doxy=)
 	-rm -rf *.tag
+	-rm -rf *.db

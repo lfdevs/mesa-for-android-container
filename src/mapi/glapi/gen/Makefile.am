@@ -131,9 +131,11 @@ API_XML = \
 	ARB_draw_instanced.xml \
 	ARB_ES2_compatibility.xml \
 	ARB_ES3_compatibility.xml \
+	ARB_framebuffer_no_attachments.xml \
 	ARB_framebuffer_object.xml \
 	ARB_geometry_shader4.xml \
 	ARB_get_program_binary.xml \
+	ARB_get_texture_sub_image.xml \
 	ARB_gpu_shader_fp64.xml \
 	ARB_gpu_shader5.xml \
 	ARB_instanced_arrays.xml \
@@ -150,6 +152,7 @@ API_XML = \
 	ARB_separate_shader_objects.xml \
 	ARB_shader_atomic_counters.xml \
 	ARB_shader_image_load_store.xml \
+	ARB_shader_subroutine.xml \
 	ARB_sync.xml \
 	ARB_texture_barrier.xml \
 	ARB_texture_buffer_object.xml \
@@ -291,7 +294,7 @@ $(MESA_GLX_DIR)/indirect_init.c: glX_proto_send.py $(COMMON_GLX)
 
 $(MESA_GLX_DIR)/indirect_size.h $(XORG_GLX_DIR)/indirect_size.h: glX_proto_size.py $(COMMON_GLX)
 	$(PYTHON_GEN) $< -f $(srcdir)/gl_API.xml -m size_h --only-set \
-	    -h _INDIRECT_SIZE_H_ \
+	    --header-tag _INDIRECT_SIZE_H_ \
 	  | $(INDENT) $(INDENT_FLAGS) > $@
 
 $(MESA_GLX_DIR)/indirect_size.c: glX_proto_size.py $(COMMON_GLX)

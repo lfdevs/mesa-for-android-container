@@ -191,12 +191,12 @@ draw_vs_create_variant_generic( struct draw_vertex_shader *vs,
 
 
 
-static INLINE int draw_vs_variant_keysize( const struct draw_vs_variant_key *key )
+static inline int draw_vs_variant_keysize( const struct draw_vs_variant_key *key )
 {
    return 2 * sizeof(int) + key->nr_elements * sizeof(struct draw_variant_element);
 }
 
-static INLINE int draw_vs_variant_key_compare( const struct draw_vs_variant_key *a,
+static inline int draw_vs_variant_key_compare( const struct draw_vs_variant_key *a,
                                          const struct draw_vs_variant_key *b )
 {
    int keysize = draw_vs_variant_keysize(a);

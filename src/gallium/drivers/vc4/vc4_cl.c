@@ -36,11 +36,12 @@ vc4_init_cl(struct vc4_context *vc4, struct vc4_cl *cl)
 void
 cl_ensure_space(struct vc4_cl *cl, uint32_t space)
 {
-        if ((cl->next - cl->base) + space <= cl->size)
+        uint32_t offset = cl_offset(cl);
+
+        if (offset + space <= cl->size)
                 return;
 
         uint32_t size = MAX2(cl->size + space, cl->size * 2);
-        uint32_t offset = cl->next -cl->base;
 
         cl->base = reralloc(ralloc_parent(cl->base), cl->base, uint8_t, size);
         cl->size = size;
@@ -60,15 +61,20 @@ vc4_gem_hindex(struct vc4_context *vc4, struct vc4_bo *bo)
         uint32_t hindex;
         uint32_t *current_handles = vc4->bo_handles.base;
 
-        for (hindex = 0;
-             hindex < (vc4->bo_handles.next - vc4->bo_handles.base) / 4;
-             hindex++) {
+        for (hindex = 0; hindex < cl_offset(&vc4->bo_handles) / 4; hindex++) {
                 if (current_handles[hindex] == bo->handle)
                         return hindex;
         }
 
-        cl_u32(&vc4->bo_handles, bo->handle);
-        cl_ptr(&vc4->bo_pointers, vc4_bo_reference(bo));
+        struct vc4_cl_out *out;
+
+        out = cl_start(&vc4->bo_handles);
+        cl_u32(&out, bo->handle);
+        cl_end(&vc4->bo_handles, out);
+
+        out = cl_start(&vc4->bo_pointers);
+        cl_ptr(&out, vc4_bo_reference(bo));
+        cl_end(&vc4->bo_pointers, out);
 
         return hindex;
 }

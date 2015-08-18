@@ -26,7 +26,6 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
-#include "pipe/p_shader_tokens.h"
 #include "util/u_math.h"
 
 #include "freedreno_util.h"
@@ -43,20 +42,31 @@
  */
 
 struct ir3_legalize_ctx {
-	struct ir3_block *block;
 	bool has_samp;
 	int max_bary;
 };
 
-static void legalize(struct ir3_legalize_ctx *ctx)
+/* We want to evaluate each block from the position of any other
+ * predecessor block, in order that the flags set are the union
+ * of all possible program paths.  For stopping condition, we
+ * want to stop when the pair of <pred-block, current-block> has
+ * been visited already.
+ *
+ * XXX is that completely true?  We could have different needs_xyz
+ * flags set depending on path leading to pred-block.. we could
+ * do *most* of this based on chasing src instructions ptrs (and
+ * following all phi srcs).. except the write-after-read hazzard.
+ *
+ * For now we just set ss/sy flag on first instruction on block,
+ * and handle everything within the block as before.
+ */
+
+static void
+legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 {
-	struct ir3_block *block = ctx->block;
-	struct ir3_instruction *n;
-	struct ir3 *shader = block->shader;
-	struct ir3_instruction *end =
-			ir3_instr_create(block, 0, OPC_END);
 	struct ir3_instruction *last_input = NULL;
 	struct ir3_instruction *last_rel = NULL;
+	struct list_head instr_list;
 	regmask_t needs_ss_war;       /* write after read */
 	regmask_t needs_ss;
 	regmask_t needs_sy;
@@ -65,9 +75,13 @@ static void legalize(struct ir3_legalize_ctx *ctx)
 	regmask_init(&needs_ss);
 	regmask_init(&needs_sy);
 
-	shader->instrs_count = 0;
+	/* remove all the instructions from the list, we'll be adding
+	 * them back in as we go
+	 */
+	list_replace(&block->instr_list, &instr_list);
+	list_inithead(&block->instr_list);
 
-	for (n = block->head; n; n = n->next) {
+	list_for_each_entry_safe (struct ir3_instruction, n, &instr_list, node) {
 		struct ir3_register *reg;
 		unsigned i;
 
@@ -134,18 +148,18 @@ static void legalize(struct ir3_legalize_ctx *ctx)
 		 */
 		if ((n->flags & IR3_INSTR_SS) && (n->category >= 5)) {
 			struct ir3_instruction *nop;
-			nop = ir3_instr_create(block, 0, OPC_NOP);
+			nop = ir3_NOP(block);
 			nop->flags |= IR3_INSTR_SS;
 			n->flags &= ~IR3_INSTR_SS;
 		}
 
 		/* need to be able to set (ss) on first instruction: */
-		if ((shader->instrs_count == 0) && (n->category >= 5))
-			ir3_instr_create(block, 0, OPC_NOP);
+		if (list_empty(&block->instr_list) && (n->category >= 5))
+			ir3_NOP(block);
 
-		if (is_nop(n) && shader->instrs_count) {
-			struct ir3_instruction *last =
-					shader->instrs[shader->instrs_count-1];
+		if (is_nop(n) && !list_empty(&block->instr_list)) {
+			struct ir3_instruction *last = list_last_entry(&block->instr_list,
+					struct ir3_instruction, node);
 			if (is_nop(last) && (last->repeat < 5)) {
 				last->repeat++;
 				last->flags |= n->flags;
@@ -153,7 +167,7 @@ static void legalize(struct ir3_legalize_ctx *ctx)
 			}
 		}
 
-		shader->instrs[shader->instrs_count++] = n;
+		list_addtail(&n->node, &block->instr_list);
 
 		if (is_sfu(n))
 			regmask_set(&needs_ss, n->regs[0]);
@@ -168,14 +182,14 @@ static void legalize(struct ir3_legalize_ctx *ctx)
 			 */
 			ctx->has_samp = true;
 			regmask_set(&needs_sy, n->regs[0]);
-		} else if (is_mem(n)) {
+		} else if (is_load(n)) {
 			regmask_set(&needs_sy, n->regs[0]);
 		}
 
 		/* both tex/sfu appear to not always immediately consume
 		 * their src register(s):
 		 */
-		if (is_tex(n) || is_sfu(n) || is_mem(n)) {
+		if (is_tex(n) || is_sfu(n) || is_load(n)) {
 			foreach_src(reg, n) {
 				if (reg_gpr(reg))
 					regmask_set(&needs_ss_war, reg);
@@ -192,35 +206,20 @@ static void legalize(struct ir3_legalize_ctx *ctx)
 		 * the (ei) flag:
 		 */
 		if (is_mem(last_input) && (last_input->opc == OPC_LDLV)) {
-			int i, cnt;
+			struct ir3_instruction *baryf;
 
-			/* note that ir3_instr_create() inserts into
-			 * shader->instrs[] and increments the count..
-			 * so we need to bump up the cnt initially (to
-			 * avoid it clobbering the last real instr) and
-			 * restore it after.
-			 */
-			cnt = ++shader->instrs_count;
+			/* (ss)bary.f (ei)r63.x, 0, r0.x */
+			baryf = ir3_instr_create(block, 2, OPC_BARY_F);
+			baryf->flags |= IR3_INSTR_SS;
+			ir3_reg_create(baryf, regid(63, 0), 0);
+			ir3_reg_create(baryf, 0, IR3_REG_IMMED)->iim_val = 0;
+			ir3_reg_create(baryf, regid(0, 0), 0);
 
-			/* inserting instructions would be a bit nicer if list.. */
-			for (i = cnt - 2; i >= 0; i--) {
-				if (shader->instrs[i] == last_input) {
+			/* insert the dummy bary.f after last_input: */
+			list_delinit(&baryf->node);
+			list_add(&baryf->node, &last_input->node);
 
-					/* (ss)bary.f (ei)r63.x, 0, r0.x */
-					last_input = ir3_instr_create(block, 2, OPC_BARY_F);
-					last_input->flags |= IR3_INSTR_SS;
-					ir3_reg_create(last_input, regid(63, 0), 0);
-					ir3_reg_create(last_input, 0, IR3_REG_IMMED)->iim_val = 0;
-					ir3_reg_create(last_input, regid(0, 0), 0);
-
-					shader->instrs[i + 1] = last_input;
-
-					break;
-				}
-				shader->instrs[i + 1] = shader->instrs[i];
-			}
-
-			shader->instrs_count = cnt;
+			last_input = baryf;
 		}
 		last_input->regs[0]->flags |= IR3_REG_EI;
 	}
@@ -228,21 +227,177 @@ static void legalize(struct ir3_legalize_ctx *ctx)
 	if (last_rel)
 		last_rel->flags |= IR3_INSTR_UL;
 
-	shader->instrs[shader->instrs_count++] = end;
-
-	shader->instrs[0]->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
+	list_first_entry(&block->instr_list, struct ir3_instruction, node)
+		->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
 }
 
-void ir3_block_legalize(struct ir3_block *block,
-		bool *has_samp, int *max_bary)
+/* NOTE: branch instructions are always the last instruction(s)
+ * in the block.  We take advantage of this as we resolve the
+ * branches, since "if (foo) break;" constructs turn into
+ * something like:
+ *
+ *   block3 {
+ *   	...
+ *   	0029:021: mov.s32s32 r62.x, r1.y
+ *   	0082:022: br !p0.x, target=block5
+ *   	0083:023: br p0.x, target=block4
+ *   	// succs: if _[0029:021: mov.s32s32] block4; else block5;
+ *   }
+ *   block4 {
+ *   	0084:024: jump, target=block6
+ *   	// succs: block6;
+ *   }
+ *   block5 {
+ *   	0085:025: jump, target=block7
+ *   	// succs: block7;
+ *   }
+ *
+ * ie. only instruction in block4/block5 is a jump, so when
+ * resolving branches we can easily detect this by checking
+ * that the first instruction in the target block is itself
+ * a jump, and setup the br directly to the jump's target
+ * (and strip back out the now unreached jump)
+ *
+ * TODO sometimes we end up with things like:
+ *
+ *    br !p0.x, #2
+ *    br p0.x, #12
+ *    add.u r0.y, r0.y, 1
+ *
+ * If we swapped the order of the branches, we could drop one.
+ */
+static struct ir3_block *
+resolve_dest_block(struct ir3_block *block)
+{
+	/* special case for last block: */
+	if (!block->successors[0])
+		return block;
+
+	/* NOTE that we may or may not have inserted the jump
+	 * in the target block yet, so conditions to resolve
+	 * the dest to the dest block's successor are:
+	 *
+	 *   (1) successor[1] == NULL &&
+	 *   (2) (block-is-empty || only-instr-is-jump)
+	 */
+	if (block->successors[1] == NULL) {
+		if (list_empty(&block->instr_list)) {
+			return block->successors[0];
+		} else if (list_length(&block->instr_list) == 1) {
+			struct ir3_instruction *instr = list_first_entry(
+					&block->instr_list, struct ir3_instruction, node);
+			if (is_flow(instr) && (instr->opc == OPC_JUMP))
+				return block->successors[0];
+		}
+	}
+	return block;
+}
+
+static bool
+resolve_jump(struct ir3_instruction *instr)
+{
+	struct ir3_block *tblock =
+		resolve_dest_block(instr->cat0.target);
+	struct ir3_instruction *target;
+
+	if (tblock != instr->cat0.target) {
+		list_delinit(&instr->cat0.target->node);
+		instr->cat0.target = tblock;
+		return true;
+	}
+
+	target = list_first_entry(&tblock->instr_list,
+				struct ir3_instruction, node);
+
+	if ((!target) || (target->ip == (instr->ip + 1))) {
+		list_delinit(&instr->node);
+		return true;
+	} else {
+		instr->cat0.immed =
+			(int)target->ip - (int)instr->ip;
+	}
+	return false;
+}
+
+/* resolve jumps, removing jumps/branches to immediately following
+ * instruction which we end up with from earlier stages.  Since
+ * removing an instruction can invalidate earlier instruction's
+ * branch offsets, we need to do this iteratively until no more
+ * branches are removed.
+ */
+static bool
+resolve_jumps(struct ir3 *ir)
+{
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node)
+		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node)
+			if (is_flow(instr) && instr->cat0.target)
+				if (resolve_jump(instr))
+					return true;
+
+	return false;
+}
+
+/* we want to mark points where divergent flow control re-converges
+ * with (jp) flags.  For now, since we don't do any optimization for
+ * things that start out as a 'do {} while()', re-convergence points
+ * will always be a branch or jump target.  Note that this is overly
+ * conservative, since unconditional jump targets are not convergence
+ * points, we are just assuming that the other path to reach the jump
+ * target was divergent.  If we were clever enough to optimize the
+ * jump at end of a loop back to a conditional branch into a single
+ * conditional branch, ie. like:
+ *
+ *    add.f r1.w, r0.x, (neg)(r)c2.x   <= loop start
+ *    mul.f r1.z, r1.z, r0.x
+ *    mul.f r1.y, r1.y, r0.x
+ *    mul.f r0.z, r1.x, r0.x
+ *    mul.f r0.w, r0.y, r0.x
+ *    cmps.f.ge r0.x, (r)c2.y, (r)r1.w
+ *    add.s r0.x, (r)r0.x, (r)-1
+ *    sel.f32 r0.x, (r)c3.y, (r)r0.x, c3.x
+ *    cmps.f.eq p0.x, r0.x, c3.y
+ *    mov.f32f32 r0.x, r1.w
+ *    mov.f32f32 r0.y, r0.w
+ *    mov.f32f32 r1.x, r0.z
+ *    (rpt2)nop
+ *    br !p0.x, #-13
+ *    (jp)mul.f r0.x, c263.y, r1.y
+ *
+ * Then we'd have to be more clever, as the convergence point is no
+ * longer a branch or jump target.
+ */
+static void
+mark_convergence_points(struct ir3 *ir)
+{
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+			if (is_flow(instr) && instr->cat0.target) {
+				struct ir3_instruction *target =
+					list_first_entry(&instr->cat0.target->instr_list,
+							struct ir3_instruction, node);
+				target->flags |= IR3_INSTR_JP;
+			}
+		}
+	}
+}
+
+void
+ir3_legalize(struct ir3 *ir, bool *has_samp, int *max_bary)
 {
 	struct ir3_legalize_ctx ctx = {
-			.block = block,
 			.max_bary = -1,
 	};
 
-	legalize(&ctx);
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		legalize_block(&ctx, block);
+	}
 
 	*has_samp = ctx.has_samp;
 	*max_bary = ctx.max_bary;
+
+	do {
+		ir3_count_instructions(ir);
+	} while(resolve_jumps(ir));
+
+	mark_convergence_points(ir);
 }

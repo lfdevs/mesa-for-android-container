@@ -45,7 +45,7 @@ brw_emit_gpgpu_walker(struct brw_context *brw, const GLuint *num_groups)
    unsigned thread_width_max =
       (group_size + simd_size - 1) / simd_size;
 
-   uint32_t right_mask = (1u << simd_size) - 1;
+   uint32_t right_mask = 0xffffffffu >> (32 - simd_size);
    const unsigned right_non_aligned = group_size & (simd_size - 1);
    if (right_non_aligned != 0)
       right_mask >>= (simd_size - right_non_aligned);

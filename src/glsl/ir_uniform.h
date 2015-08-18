@@ -114,6 +114,8 @@ struct gl_uniform_storage {
 
    struct gl_opaque_uniform_index image[MESA_SHADER_STAGES];
 
+   struct gl_opaque_uniform_index subroutine[MESA_SHADER_STAGES];
+
    /**
     * Storage used by the driver for the uniform
     */
@@ -173,14 +175,25 @@ struct gl_uniform_storage {
    /**
     * The 'base location' for this uniform in the uniform remap table. For
     * arrays this is the first element in the array.
+    * for subroutines this is in shader subroutine uniform remap table.
     */
    unsigned remap_location;
+
+   /**
+    * The number of compatible subroutines with this subroutine uniform.
+    */
+   unsigned num_compatible_subroutines;
 
    /**
     * This is a compiler-generated uniform that should not be advertised
     * via the API.
     */
    bool hidden;
+
+   /**
+    * This is a built-in uniform that should not be modified through any gl API.
+    */
+   bool builtin;
 };
 
 #ifdef __cplusplus

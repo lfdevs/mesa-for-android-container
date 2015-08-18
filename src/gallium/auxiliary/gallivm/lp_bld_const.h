@@ -120,14 +120,14 @@ lp_build_const_mask_aos_swizzled(struct gallivm_state *gallivm,
                                  const unsigned char *swizzle);
 
 
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_const_int32(struct gallivm_state *gallivm, int i)
 {
    return LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), i, 0);
 }
 
 
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_const_float(struct gallivm_state *gallivm, float x)
 {
    return LLVMConstReal(LLVMFloatTypeInContext(gallivm->context), x);
@@ -135,7 +135,7 @@ lp_build_const_float(struct gallivm_state *gallivm, float x)
 
 
 /** Return constant-valued pointer to int */
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_const_int_pointer(struct gallivm_state *gallivm, const void *ptr)
 {
    LLVMTypeRef int_type;

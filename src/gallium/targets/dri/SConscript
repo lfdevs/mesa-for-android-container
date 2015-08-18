@@ -25,11 +25,12 @@ if env['llvm']:
     env.Append(CPPDEFINES = 'GALLIUM_LLVMPIPE')
     env.Prepend(LIBS = [llvmpipe])
 
+env.PkgUseModules('DRM')
+
 env.Append(CPPDEFINES = [
     'GALLIUM_VMWGFX',
     'GALLIUM_SOFTPIPE',
     'DRI_TARGET',
-    'HAVE_LIBDRM',
 ])
 
 env.Prepend(LIBS = [
@@ -37,7 +38,6 @@ env.Prepend(LIBS = [
     svgadrm,
     svga,
     ws_dri,
-    ws_kms_dri,
     softpipe,
     libloader,
     mesautil,
@@ -58,9 +58,6 @@ module = env.LoadableModule(
 env.Command('vmwgfx_dri.so', 'gallium_dri.so', "ln -f ${SOURCE} ${TARGET}")
 # swrast_dri.so
 env.Command('swrast_dri.so', 'gallium_dri.so', "ln -f ${SOURCE} ${TARGET}")
-# kms_swrast_dri.so
-env.Command('kms_swrast_dri.so', 'gallium_dri.so', "ln -f ${SOURCE} ${TARGET}")
 
 env.Alias('dri-vmwgfx', module)
 env.Alias('dri-swrast', module)
-env.Alias('dri-kms-swrast', module)

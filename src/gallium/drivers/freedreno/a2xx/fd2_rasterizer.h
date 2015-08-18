@@ -43,7 +43,7 @@ struct fd2_rasterizer_stateobj {
 	uint32_t pa_su_sc_mode_cntl;
 };
 
-static INLINE struct fd2_rasterizer_stateobj *
+static inline struct fd2_rasterizer_stateobj *
 fd2_rasterizer_stateobj(struct pipe_rasterizer_state *rast)
 {
 	return (struct fd2_rasterizer_stateobj *)rast;

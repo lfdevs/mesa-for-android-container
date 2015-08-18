@@ -59,7 +59,7 @@ extern unsigned gallivm_debug;
 #endif
 
 
-static INLINE void
+static inline void
 lp_build_name(LLVMValueRef val, const char *format, ...)
 {
 #ifdef DEBUG

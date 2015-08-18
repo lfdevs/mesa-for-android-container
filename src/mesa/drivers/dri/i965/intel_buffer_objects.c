@@ -560,7 +560,7 @@ brw_unmap_buffer(struct gl_context *ctx,
        * flush.  Once again, we wish for a domain tracker in libdrm to cover
        * usage inside of a batchbuffer.
        */
-      intel_batchbuffer_emit_mi_flush(brw);
+      brw_emit_mi_flush(brw);
 
       drm_intel_bo_unreference(intel_obj->range_map_bo[index]);
       intel_obj->range_map_bo[index] = NULL;
@@ -632,7 +632,7 @@ brw_copy_buffer_subdata(struct gl_context *ctx,
     * flush.  Once again, we wish for a domain tracker in libdrm to cover
     * usage inside of a batchbuffer.
     */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 }
 
 void

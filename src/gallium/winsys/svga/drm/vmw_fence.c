@@ -67,7 +67,7 @@ struct vmw_fence
  * @ops: Pointer to a struct pb_fence_ops.
  *
  */
-static INLINE boolean
+static inline boolean
 vmw_fence_seq_is_signaled(uint32_t seq, uint32_t last, uint32_t cur)
 {
    return (cur - last <= cur - seq);
@@ -81,7 +81,7 @@ vmw_fence_seq_is_signaled(uint32_t seq, uint32_t last, uint32_t cur)
  * @ops: Pointer to a struct pb_fence_ops.
  *
  */
-static INLINE struct vmw_fence_ops *
+static inline struct vmw_fence_ops *
 vmw_fence_ops(struct pb_fence_ops *ops)
 {
    assert(ops);
@@ -162,7 +162,7 @@ out_unlock:
  *
  * @fence: The opaque pipe fence handle.
  */
-static INLINE struct vmw_fence *
+static inline struct vmw_fence *
 vmw_fence(struct pipe_fence_handle *fence)
 {
    return (struct vmw_fence *) fence;

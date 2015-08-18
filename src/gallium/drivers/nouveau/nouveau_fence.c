@@ -28,13 +28,13 @@
 #include <sched.h>
 #endif
 
-boolean
+bool
 nouveau_fence_new(struct nouveau_screen *screen, struct nouveau_fence **fence,
-                  boolean emit)
+                  bool emit)
 {
    *fence = CALLOC_STRUCT(nouveau_fence);
    if (!*fence)
-      return FALSE;
+      return false;
 
    (*fence)->screen = screen;
    (*fence)->ref = 1;
@@ -43,7 +43,7 @@ nouveau_fence_new(struct nouveau_screen *screen, struct nouveau_fence **fence,
    if (emit)
       nouveau_fence_emit(*fence);
 
-   return TRUE;
+   return true;
 }
 
 static void
@@ -58,7 +58,7 @@ nouveau_fence_trigger_work(struct nouveau_fence *fence)
    }
 }
 
-boolean
+bool
 nouveau_fence_work(struct nouveau_fence *fence,
                    void (*func)(void *), void *data)
 {
@@ -66,16 +66,16 @@ nouveau_fence_work(struct nouveau_fence *fence,
 
    if (!fence || fence->state == NOUVEAU_FENCE_STATE_SIGNALLED) {
       func(data);
-      return TRUE;
+      return true;
    }
 
    work = CALLOC_STRUCT(nouveau_fence_work);
    if (!work)
-      return FALSE;
+      return false;
    work->func = func;
    work->data = data;
    LIST_ADD(&work->list, &fence->work);
-   return TRUE;
+   return true;
 }
 
 void
@@ -132,7 +132,7 @@ nouveau_fence_del(struct nouveau_fence *fence)
 }
 
 void
-nouveau_fence_update(struct nouveau_screen *screen, boolean flushed)
+nouveau_fence_update(struct nouveau_screen *screen, bool flushed)
 {
    struct nouveau_fence *fence;
    struct nouveau_fence *next = NULL;
@@ -167,21 +167,21 @@ nouveau_fence_update(struct nouveau_screen *screen, boolean flushed)
 
 #define NOUVEAU_FENCE_MAX_SPINS (1 << 31)
 
-boolean
+bool
 nouveau_fence_signalled(struct nouveau_fence *fence)
 {
    struct nouveau_screen *screen = fence->screen;
 
    if (fence->state == NOUVEAU_FENCE_STATE_SIGNALLED)
-      return TRUE;
+      return true;
 
    if (fence->state >= NOUVEAU_FENCE_STATE_EMITTED)
-      nouveau_fence_update(screen, FALSE);
+      nouveau_fence_update(screen, false);
 
    return fence->state == NOUVEAU_FENCE_STATE_SIGNALLED;
 }
 
-boolean
+bool
 nouveau_fence_wait(struct nouveau_fence *fence)
 {
    struct nouveau_screen *screen = fence->screen;
@@ -195,16 +195,16 @@ nouveau_fence_wait(struct nouveau_fence *fence)
 
    if (fence->state < NOUVEAU_FENCE_STATE_FLUSHED)
       if (nouveau_pushbuf_kick(screen->pushbuf, screen->pushbuf->channel))
-         return FALSE;
+         return false;
 
    if (fence == screen->fence.current)
       nouveau_fence_next(screen);
 
    do {
-      nouveau_fence_update(screen, FALSE);
+      nouveau_fence_update(screen, false);
 
       if (fence->state == NOUVEAU_FENCE_STATE_SIGNALLED)
-         return TRUE;
+         return true;
       if (!spins)
          NOUVEAU_DRV_STAT(screen, any_non_kernel_fence_sync_count, 1);
       spins++;
@@ -218,7 +218,7 @@ nouveau_fence_wait(struct nouveau_fence *fence)
                 fence->sequence,
                 screen->fence.sequence_ack, screen->fence.sequence);
 
-   return FALSE;
+   return false;
 }
 
 void
@@ -229,5 +229,5 @@ nouveau_fence_next(struct nouveau_screen *screen)
 
    nouveau_fence_ref(NULL, &screen->fence.current);
 
-   nouveau_fence_new(screen, &screen->fence.current, FALSE);
+   nouveau_fence_new(screen, &screen->fence.current, false);
 }

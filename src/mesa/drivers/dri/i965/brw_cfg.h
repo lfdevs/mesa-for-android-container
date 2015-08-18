@@ -60,7 +60,7 @@ struct bblock_t {
    bool is_successor_of(const bblock_t *block) const;
    bool can_combine_with(const bblock_t *that) const;
    void combine_with(bblock_t *that);
-   void dump(backend_visitor *v) const;
+   void dump(backend_shader *s) const;
 
    backend_instruction *start();
    const backend_instruction *start() const;
@@ -273,7 +273,7 @@ struct cfg_t {
    void calculate_idom();
    static bblock_t *intersect(bblock_t *b1, bblock_t *b2);
 
-   void dump(backend_visitor *v);
+   void dump(backend_shader *s);
    void dump_cfg();
    void dump_domtree();
 #endif

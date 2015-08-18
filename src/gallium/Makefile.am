@@ -58,6 +58,7 @@ endif
 ## radeonsi
 if HAVE_GALLIUM_RADEONSI
 SUBDIRS += drivers/radeonsi
+SUBDIRS += winsys/amdgpu/drm
 endif
 
 ## the radeon winsys - linked in by r300, r600 and radeonsi

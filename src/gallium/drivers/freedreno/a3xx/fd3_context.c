@@ -88,7 +88,7 @@ create_blit_texcoord_vertexbuf(struct pipe_context *pctx)
 }
 
 static const uint8_t primtypes[PIPE_PRIM_MAX] = {
-		[PIPE_PRIM_POINTS]         = DI_PT_POINTLIST_A3XX,
+		[PIPE_PRIM_POINTS]         = DI_PT_POINTLIST,
 		[PIPE_PRIM_LINES]          = DI_PT_LINELIST,
 		[PIPE_PRIM_LINE_STRIP]     = DI_PT_LINESTRIP,
 		[PIPE_PRIM_LINE_LOOP]      = DI_PT_LINELOOP,
@@ -121,6 +121,7 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv)
 	fd3_gmem_init(pctx);
 	fd3_texture_init(pctx);
 	fd3_prog_init(pctx);
+	fd3_emit_init(pctx);
 
 	pctx = fd_context_init(&fd3_ctx->base, pscreen, primtypes, priv);
 	if (!pctx)

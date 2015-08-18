@@ -176,7 +176,7 @@ void brw_upload_cs_urb_state(struct brw_context *brw)
    ADVANCE_BATCH();
 }
 
-static GLfloat fixed_plane[6][4] = {
+static const GLfloat fixed_plane[6][4] = {
    { 0,    0,   -1, 1 },
    { 0,    0,    1, 1 },
    { 0,   -1,    0, 1 },

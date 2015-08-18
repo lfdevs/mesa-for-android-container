@@ -79,7 +79,7 @@ struct rbug_context {
    struct rbug_list shaders;
 };
 
-static INLINE struct rbug_context *
+static inline struct rbug_context *
 rbug_context(struct pipe_context *pipe)
 {
    return (struct rbug_context *)pipe;

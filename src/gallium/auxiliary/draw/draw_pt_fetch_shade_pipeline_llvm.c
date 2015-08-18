@@ -60,7 +60,7 @@ struct llvm_middle_end {
 
 
 /** cast wrapper */
-static INLINE struct llvm_middle_end *
+static inline struct llvm_middle_end *
 llvm_middle_end(struct draw_pt_middle_end *middle)
 {
    return (struct llvm_middle_end *) middle;

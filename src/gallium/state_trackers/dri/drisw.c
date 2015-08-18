@@ -50,7 +50,7 @@
 DEBUG_GET_ONCE_BOOL_OPTION(swrast_no_present, "SWRAST_NO_PRESENT", FALSE);
 static boolean swrast_no_present = FALSE;
 
-static INLINE void
+static inline void
 get_drawable_info(__DRIdrawable *dPriv, int *x, int *y, int *w, int *h)
 {
    __DRIscreen *sPriv = dPriv->driScreenPriv;
@@ -61,7 +61,7 @@ get_drawable_info(__DRIdrawable *dPriv, int *x, int *y, int *w, int *h)
                            dPriv->loaderPrivate);
 }
 
-static INLINE void
+static inline void
 put_image(__DRIdrawable *dPriv, void *data, unsigned width, unsigned height)
 {
    __DRIscreen *sPriv = dPriv->driScreenPriv;
@@ -72,7 +72,7 @@ put_image(__DRIdrawable *dPriv, void *data, unsigned width, unsigned height)
                     data, dPriv->loaderPrivate);
 }
 
-static INLINE void
+static inline void
 put_image2(__DRIdrawable *dPriv, void *data, int x, int y,
            unsigned width, unsigned height, unsigned stride)
 {
@@ -84,7 +84,7 @@ put_image2(__DRIdrawable *dPriv, void *data, int x, int y,
                      data, dPriv->loaderPrivate);
 }
 
-static INLINE void
+static inline void
 get_image(__DRIdrawable *dPriv, int x, int y, int width, int height, void *data)
 {
    __DRIscreen *sPriv = dPriv->driScreenPriv;
@@ -123,7 +123,7 @@ drisw_put_image2(struct dri_drawable *drawable,
    put_image2(dPriv, data, x, y, width, height, stride);
 }
 
-static INLINE void
+static inline void
 drisw_present_texture(__DRIdrawable *dPriv,
                       struct pipe_resource *ptex, struct pipe_box *sub_box)
 {
@@ -136,7 +136,7 @@ drisw_present_texture(__DRIdrawable *dPriv,
    screen->base.screen->flush_frontbuffer(screen->base.screen, ptex, 0, 0, drawable, sub_box);
 }
 
-static INLINE void
+static inline void
 drisw_invalidate_drawable(__DRIdrawable *dPriv)
 {
    struct dri_drawable *drawable = dri_drawable(dPriv);
@@ -146,7 +146,7 @@ drisw_invalidate_drawable(__DRIdrawable *dPriv)
    p_atomic_inc(&drawable->base.stamp);
 }
 
-static INLINE void
+static inline void
 drisw_copy_to_front(__DRIdrawable * dPriv,
                     struct pipe_resource *ptex)
 {

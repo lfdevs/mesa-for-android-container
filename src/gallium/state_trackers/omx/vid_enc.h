@@ -73,6 +73,7 @@ DERIVEDCLASS(vid_enc_PrivateType, omx_base_filter_PrivateType)
 	struct list_head free_tasks; \
 	struct list_head used_tasks; \
 	struct list_head b_frames; \
+	struct list_head stacked_tasks; \
 	OMX_U32 frame_rate; \
 	OMX_U32 frame_num; \
 	OMX_U32 pic_order_cnt; \
@@ -86,7 +87,8 @@ DERIVEDCLASS(vid_enc_PrivateType, omx_base_filter_PrivateType)
 	struct vl_compositor_state cstate; \
 	struct pipe_video_buffer *scale_buffer[OMX_VID_ENC_NUM_SCALING_BUFFERS]; \
 	OMX_CONFIG_SCALEFACTORTYPE scale; \
-	OMX_U32 current_scale_buffer;
+	OMX_U32 current_scale_buffer; \
+	OMX_U32 stacked_frames_num;
 ENDCLASS(vid_enc_PrivateType)
 
 OMX_ERRORTYPE vid_enc_LoaderComponent(stLoaderComponentType *comp);

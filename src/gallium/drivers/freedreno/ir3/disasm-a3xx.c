@@ -103,7 +103,7 @@ static void print_reg(reg_t reg, bool full, bool r, bool c, bool im,
 	} else if ((reg.num == REG_P0) && !c) {
 		printf("p0.%c", component[reg.comp]);
 	} else {
-		printf("%s%c%d.%c", full ? "" : "h", type, reg.num, component[reg.comp]);
+		printf("%s%c%d.%c", full ? "" : "h", type, reg.num & 0x3f, component[reg.comp]);
 	}
 }
 
@@ -122,6 +122,32 @@ static void print_reg_src(reg_t reg, bool full, bool r, bool c, bool im,
 	print_reg(reg, full, r, c, im, neg, abs, addr_rel);
 }
 
+/* TODO switch to using reginfo struct everywhere, since more readable
+ * than passing a bunch of bools to print_reg_src
+ */
+
+struct reginfo {
+	reg_t reg;
+	bool full;
+	bool r;
+	bool c;
+	bool im;
+	bool neg;
+	bool abs;
+	bool addr_rel;
+};
+
+static void print_src(struct reginfo *info)
+{
+	print_reg_src(info->reg, info->full, info->r, info->c, info->im,
+			info->neg, info->abs, info->addr_rel);
+}
+
+//static void print_dst(struct reginfo *info)
+//{
+//	print_reg_dst(info->reg, info->full, info->addr_rel);
+//}
+
 static void print_instr_cat0(instr_t *instr)
 {
 	instr_cat0_t *cat0 = &instr->cat0;
@@ -133,16 +159,16 @@ static void print_instr_cat0(instr_t *instr)
 		break;
 	case OPC_BR:
 		printf(" %sp0.%c, #%d", cat0->inv ? "!" : "",
-				component[cat0->comp], cat0->immed);
+				component[cat0->comp], cat0->a3xx.immed);
 		break;
 	case OPC_JUMP:
 	case OPC_CALL:
-		printf(" #%d", cat0->immed);
+		printf(" #%d", cat0->a3xx.immed);
 		break;
 	}
 
-	if ((debug & PRINT_VERBOSE) && (cat0->dummy1|cat0->dummy2|cat0->dummy3|cat0->dummy4))
-		printf("\t{0: %x,%x,%x,%x}", cat0->dummy1, cat0->dummy2, cat0->dummy3, cat0->dummy4);
+	if ((debug & PRINT_VERBOSE) && (cat0->a3xx.dummy1|cat0->dummy2|cat0->dummy3|cat0->dummy4))
+		printf("\t{0: %x,%x,%x,%x}", cat0->a3xx.dummy1, cat0->dummy2, cat0->dummy3, cat0->dummy4);
 }
 
 static void print_instr_cat1(instr_t *instr)
@@ -454,10 +480,70 @@ static void print_instr_cat6(instr_t *instr)
 {
 	instr_cat6_t *cat6 = &instr->cat6;
 	char sd = 0, ss = 0;  /* dst/src address space */
-	bool full = type_size(cat6->type) == 32;
 	bool nodst = false;
+	struct reginfo dst, src1, src2;
+	int src1off = 0, dstoff = 0;
 
-	printf(".%s ", type[cat6->type]);
+	memset(&dst, 0, sizeof(dst));
+	memset(&src1, 0, sizeof(src1));
+	memset(&src2, 0, sizeof(src2));
+
+	switch (cat6->opc) {
+	case OPC_RESINFO:
+	case OPC_RESFMT:
+		dst.full  = type_size(cat6->type) == 32;
+		src1.full = type_size(cat6->type) == 32;
+		src2.full = type_size(cat6->type) == 32;
+		break;
+	case OPC_L2G:
+	case OPC_G2L:
+		dst.full = true;
+		src1.full = true;
+		src2.full = true;
+		break;
+	case OPC_STG:
+	case OPC_STL:
+	case OPC_STP:
+	case OPC_STI:
+	case OPC_STLW:
+	case OPC_STGB_4D_4:
+	case OPC_STIB:
+		dst.full  = true;
+		src1.full = type_size(cat6->type) == 32;
+		src2.full = type_size(cat6->type) == 32;
+		break;
+	default:
+		dst.full  = type_size(cat6->type) == 32;
+		src1.full = true;
+		src2.full = true;
+		break;
+	}
+
+	switch (cat6->opc) {
+	case OPC_PREFETCH:
+	case OPC_RESINFO:
+		break;
+	case OPC_ATOMIC_ADD:
+	case OPC_ATOMIC_SUB:
+	case OPC_ATOMIC_XCHG:
+	case OPC_ATOMIC_INC:
+	case OPC_ATOMIC_DEC:
+	case OPC_ATOMIC_CMPXCHG:
+	case OPC_ATOMIC_MIN:
+	case OPC_ATOMIC_MAX:
+	case OPC_ATOMIC_AND:
+	case OPC_ATOMIC_OR:
+	case OPC_ATOMIC_XOR:
+		ss = cat6->g ? 'g' : 'l';
+		printf(".%c", ss);
+		printf(".%s", type[cat6->type]);
+		break;
+	default:
+		dst.im = cat6->g && !cat6->dst_off;
+		printf(".%s", type[cat6->type]);
+		break;
+	}
+	printf(" ");
 
 	switch (cat6->opc) {
 	case OPC_STG:
@@ -499,68 +585,65 @@ static void print_instr_cat6(instr_t *instr)
 		break;
 
 	case OPC_STI:
-		full = false;  // XXX or inverts??
+		dst.full = false;  // XXX or inverts??
 		break;
 	}
 
-	if (cat6->has_off) {
-		if (!nodst) {
-			if (sd)
-				printf("%c[", sd);
-			print_reg_dst((reg_t)(cat6->a.dst), full, false);
-			if (sd)
-				printf("]");
-			printf(", ");
-		}
-		if (ss)
-			printf("%c[", ss);
-		print_reg_src((reg_t)(cat6->a.src1), true,
-				false, false, cat6->a.src1_im, false, false, false);
-		if (cat6->a.off)
-			printf("%+d", cat6->a.off);
-		if (ss)
-			printf("]");
-		printf(", ");
-		print_reg_src((reg_t)(cat6->a.src2), full,
-				false, false, cat6->a.src2_im, false, false, false);
+	if (cat6->dst_off) {
+		dst.reg = (reg_t)(cat6->c.dst);
+		dstoff  = cat6->c.off;
 	} else {
-		if (!nodst) {
-			if (sd)
-				printf("%c[", sd);
-			print_reg_dst((reg_t)(cat6->b.dst), full, false);
-			if (sd)
-				printf("]");
-			printf(", ");
-		}
-		if (ss)
-			printf("%c[", ss);
-		print_reg_src((reg_t)(cat6->b.src1), true,
-				false, false, cat6->b.src1_im, false, false, false);
-		if (ss)
-			printf("]");
-		printf(", ");
-		print_reg_src((reg_t)(cat6->b.src2), full,
-				false, false, cat6->b.src2_im, false, false, false);
+		dst.reg = (reg_t)(cat6->d.dst);
 	}
 
-	if (debug & PRINT_VERBOSE) {
-		switch (cat6->opc) {
-		case OPC_LDG:
-		case OPC_LDP:
-			/* load instructions: */
-			if (cat6->a.dummy2|cat6->a.dummy3)
-				printf("\t{6: %x,%x}", cat6->a.dummy2, cat6->a.dummy3);
-			break;
-		case OPC_STG:
-		case OPC_STP:
-		case OPC_STI:
-			/* store instructions: */
-			if (cat6->b.dummy2|cat6->b.dummy2)
-				printf("\t{6: %x,%x}", cat6->b.dummy2, cat6->b.dummy3);
-			if (cat6->b.ignore0)
-				printf("\t{?? %x}", cat6->b.ignore0);
-			break;
-		}
+	if (cat6->src_off) {
+		src1.reg = (reg_t)(cat6->a.src1);
+		src1.im  = cat6->a.src1_im;
+		src2.reg = (reg_t)(cat6->a.src2);
+		src2.im  = cat6->a.src2_im;
+		src1off  = cat6->a.off;
+	} else {
+		src1.reg = (reg_t)(cat6->b.src1);
+		src1.im  = cat6->b.src1_im;
+		src2.reg = (reg_t)(cat6->b.src2);
+		src2.im  = cat6->b.src2_im;
+	}
+
+	if (!nodst) {
+		if (sd)
+			printf("%c[", sd);
+		/* note: dst might actually be a src (ie. address to store to) */
+		print_src(&dst);
+		if (dstoff)
+			printf("%+d", dstoff);
+		if (sd)
+			printf("]");
+		printf(", ");
+	}
+
+	if (ss)
+		printf("%c[", ss);
+
+	/* can have a larger than normal immed, so hack: */
+	if (src1.im) {
+		printf("%u", src1.reg.dummy13);
+	} else {
+		print_src(&src1);
+	}
+
+	if (src1off)
+		printf("%+d", src1off);
+	if (ss)
+		printf("]");
+
+	switch (cat6->opc) {
+	case OPC_RESINFO:
+	case OPC_RESFMT:
+		break;
+	default:
+		printf(", ");
+		print_src(&src2);
+		break;
 	}
 }
 
@@ -711,19 +794,19 @@ struct opc_info {
 	OPC(6, OPC_LDLW,         ldlw),
 	OPC(6, OPC_STLW,         stlw),
 	OPC(6, OPC_RESFMT,       resfmt),
-	OPC(6, OPC_RESINFO,      resinf),
-	OPC(6, OPC_ATOMIC_ADD_L,     atomic.add.l),
-	OPC(6, OPC_ATOMIC_SUB_L,     atomic.sub.l),
-	OPC(6, OPC_ATOMIC_XCHG_L,    atomic.xchg.l),
-	OPC(6, OPC_ATOMIC_INC_L,     atomic.inc.l),
-	OPC(6, OPC_ATOMIC_DEC_L,     atomic.dec.l),
-	OPC(6, OPC_ATOMIC_CMPXCHG_L, atomic.cmpxchg.l),
-	OPC(6, OPC_ATOMIC_MIN_L,     atomic.min.l),
-	OPC(6, OPC_ATOMIC_MAX_L,     atomic.max.l),
-	OPC(6, OPC_ATOMIC_AND_L,     atomic.and.l),
-	OPC(6, OPC_ATOMIC_OR_L,      atomic.or.l),
-	OPC(6, OPC_ATOMIC_XOR_L,     atomic.xor.l),
-	OPC(6, OPC_LDGB_TYPED_4D,    ldgb.typed.4d),
+	OPC(6, OPC_RESINFO,      resinfo),
+	OPC(6, OPC_ATOMIC_ADD,     atomic.add),
+	OPC(6, OPC_ATOMIC_SUB,     atomic.sub),
+	OPC(6, OPC_ATOMIC_XCHG,    atomic.xchg),
+	OPC(6, OPC_ATOMIC_INC,     atomic.inc),
+	OPC(6, OPC_ATOMIC_DEC,     atomic.dec),
+	OPC(6, OPC_ATOMIC_CMPXCHG, atomic.cmpxchg),
+	OPC(6, OPC_ATOMIC_MIN,     atomic.min),
+	OPC(6, OPC_ATOMIC_MAX,     atomic.max),
+	OPC(6, OPC_ATOMIC_AND,     atomic.and),
+	OPC(6, OPC_ATOMIC_OR,      atomic.or),
+	OPC(6, OPC_ATOMIC_XOR,     atomic.xor),
+	OPC(6, OPC_LDGB_TYPED_4D,    ldgb.typed.3d),
 	OPC(6, OPC_STGB_4D_4,    stgb.4d.4),
 	OPC(6, OPC_STIB,         stib),
 	OPC(6, OPC_LDC_4,        ldc.4),

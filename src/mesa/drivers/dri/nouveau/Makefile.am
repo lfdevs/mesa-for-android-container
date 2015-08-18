@@ -38,8 +38,8 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
-	$(NOUVEAU_CFLAGS)
+	$(NVVIEUX_CFLAGS)
 
 noinst_LTLIBRARIES = libnouveau_dri.la
 libnouveau_dri_la_SOURCES = $(NOUVEAU_C_FILES)
-libnouveau_dri_la_LIBADD = $(NOUVEAU_LIBS)
+libnouveau_dri_la_LIBADD = $(NVVIEUX_LIBS)

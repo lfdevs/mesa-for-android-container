@@ -2,7 +2,7 @@
 #define __eglplatform_h_
 
 /*
-** Copyright (c) 2007-2009 The Khronos Group Inc.
+** Copyright (c) 2007-2013 The Khronos Group Inc.
 **
 ** Permission is hereby granted, free of charge, to any person obtaining a
 ** copy of this software and/or associated documentation files (the
@@ -25,7 +25,7 @@
 */
 
 /* Platform-specific types and definitions for egl.h
- * $Revision: 12306 $ on $Date: 2010-08-25 09:51:28 -0700 (Wed, 25 Aug 2010) $
+ * $Revision: 30994 $ on $Date: 2015-04-30 13:36:48 -0700 (Thu, 30 Apr 2015) $
  *
  * Adopters may modify khrplatform.h and this file to suit their platform.
  * You are encouraged to submit all modifications to the Khronos group so that
@@ -95,16 +95,17 @@ typedef struct gbm_device  *EGLNativeDisplayType;
 typedef struct gbm_bo      *EGLNativePixmapType;
 typedef void               *EGLNativeWindowType;
 
-#elif defined(ANDROID) /* Android */
+#elif defined(__ANDROID__) || defined(ANDROID)
 
-struct ANativeWindow;
+#include <android/native_window.h>
+
 struct egl_native_pixmap_t;
 
-typedef struct ANativeWindow        *EGLNativeWindowType;
-typedef struct egl_native_pixmap_t  *EGLNativePixmapType;
-typedef void                        *EGLNativeDisplayType;
+typedef struct ANativeWindow*           EGLNativeWindowType;
+typedef struct egl_native_pixmap_t*     EGLNativePixmapType;
+typedef void*                           EGLNativeDisplayType;
 
-#elif defined(__unix__)
+#elif defined(__unix__) || defined(__APPLE__)
 
 #if defined(MESA_EGL_NO_X11_HEADERS)
 
@@ -131,9 +132,7 @@ typedef khronos_uintptr_t	 EGLNativePixmapType;
 typedef khronos_uintptr_t	 EGLNativeWindowType;
 
 #else
-
 #error "Platform not recognized"
-
 #endif
 
 /* EGL 1.2 types, renamed for consistency in EGL 1.3 */

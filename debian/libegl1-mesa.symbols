@@ -2,14 +2,21 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglBindAPI@Base 7.8.1
  eglBindTexImage@Base 7.8.1
  eglChooseConfig@Base 7.8.1
+ eglClientWaitSync@Base 10.7.0~
  eglCopyBuffers@Base 7.8.1
  eglCreateContext@Base 7.8.1
+ eglCreateImage@Base 10.7.0~
  eglCreatePbufferFromClientBuffer@Base 7.8.1
  eglCreatePbufferSurface@Base 7.8.1
  eglCreatePixmapSurface@Base 7.8.1
+ eglCreatePlatformPixmapSurface@Base 10.7.0~
+ eglCreatePlatformWindowSurface@Base 10.7.0~
+ eglCreateSync@Base 10.7.0~
  eglCreateWindowSurface@Base 7.8.1
  eglDestroyContext@Base 7.8.1
+ eglDestroyImage@Base 10.7.0~
  eglDestroySurface@Base 7.8.1
+ eglDestroySync@Base 10.7.0~
  eglGetConfigAttrib@Base 7.8.1
  eglGetConfigs@Base 7.8.1
  eglGetCurrentContext@Base 7.8.1
@@ -17,7 +24,9 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglGetCurrentSurface@Base 7.8.1
  eglGetDisplay@Base 7.8.1
  eglGetError@Base 7.8.1
+ eglGetPlatformDisplay@Base 10.7.0~
  eglGetProcAddress@Base 7.8.1
+ eglGetSyncAttrib@Base 10.7.0~
  eglInitialize@Base 7.8.1
  eglMakeCurrent@Base 7.8.1
  eglQueryAPI@Base 7.8.1
@@ -33,4 +42,5 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglWaitClient@Base 7.8.1
  eglWaitGL@Base 7.8.1
  eglWaitNative@Base 7.8.1
+ eglWaitSync@Base 10.7.0~
  (arch=linux-any)wl_drm_interface@Base 8.0-2~

@@ -43,7 +43,7 @@ static bool debug;
 struct schedule_node_child;
 
 struct schedule_node {
-        struct simple_node link;
+        struct list_head link;
         struct queued_qpu_inst *inst;
         struct schedule_node_child *children;
         uint32_t child_count;
@@ -400,22 +400,21 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
 }
 
 static void
-calculate_forward_deps(struct vc4_compile *c, struct simple_node *schedule_list)
+calculate_forward_deps(struct vc4_compile *c, struct list_head *schedule_list)
 {
-        struct simple_node *node;
         struct schedule_state state;
 
         memset(&state, 0, sizeof(state));
         state.dir = F;
 
-        foreach(node, schedule_list)
-                calculate_deps(&state, (struct schedule_node *)node);
+        list_for_each_entry(struct schedule_node, node, schedule_list, link)
+                calculate_deps(&state, node);
 }
 
 static void
-calculate_reverse_deps(struct vc4_compile *c, struct simple_node *schedule_list)
+calculate_reverse_deps(struct vc4_compile *c, struct list_head *schedule_list)
 {
-        struct simple_node *node;
+        struct list_head *node;
         struct schedule_state state;
 
         memset(&state, 0, sizeof(state));
@@ -507,15 +506,13 @@ get_instruction_priority(uint64_t inst)
 
 static struct schedule_node *
 choose_instruction_to_schedule(struct choose_scoreboard *scoreboard,
-                               struct simple_node *schedule_list,
+                               struct list_head *schedule_list,
                                struct schedule_node *prev_inst)
 {
         struct schedule_node *chosen = NULL;
-        struct simple_node *node;
         int chosen_prio = 0;
 
-        foreach(node, schedule_list) {
-                struct schedule_node *n = (struct schedule_node *)node;
+        list_for_each_entry(struct schedule_node, n, schedule_list, link) {
                 uint64_t inst = n->inst->inst;
 
                 /* "An instruction must not read from a location in physical
@@ -596,14 +593,11 @@ update_scoreboard_for_chosen(struct choose_scoreboard *scoreboard,
 }
 
 static void
-dump_state(struct simple_node *schedule_list)
+dump_state(struct list_head *schedule_list)
 {
-        struct simple_node *node;
-
         uint32_t i = 0;
-        foreach(node, schedule_list) {
-                struct schedule_node *n = (struct schedule_node *)node;
 
+        list_for_each_entry(struct schedule_node, n, schedule_list, link) {
                 fprintf(stderr, "%3d: ", i++);
                 vc4_qpu_disasm(&n->inst->inst, 1);
                 fprintf(stderr, "\n");
@@ -639,7 +633,7 @@ compute_delay(struct schedule_node *n)
 }
 
 static void
-mark_instruction_scheduled(struct simple_node *schedule_list,
+mark_instruction_scheduled(struct list_head *schedule_list,
                            struct schedule_node *node,
                            bool war_only)
 {
@@ -658,16 +652,15 @@ mark_instruction_scheduled(struct simple_node *schedule_list,
 
                 child->parent_count--;
                 if (child->parent_count == 0)
-                        insert_at_head(schedule_list, &child->link);
+                        list_add(&child->link, schedule_list);
 
                 node->children[i].node = NULL;
         }
 }
 
 static void
-schedule_instructions(struct vc4_compile *c, struct simple_node *schedule_list)
+schedule_instructions(struct vc4_compile *c, struct list_head *schedule_list)
 {
-        struct simple_node *node, *t;
         struct choose_scoreboard scoreboard;
 
         /* We reorder the uniforms as we schedule instructions, so save the
@@ -693,14 +686,12 @@ schedule_instructions(struct vc4_compile *c, struct simple_node *schedule_list)
         }
 
         /* Remove non-DAG heads from the list. */
-        foreach_s(node, t, schedule_list) {
-                struct schedule_node *n = (struct schedule_node *)node;
-
+        list_for_each_entry_safe(struct schedule_node, n, schedule_list, link) {
                 if (n->parent_count != 0)
-                        remove_from_list(&n->link);
+                        list_del(&n->link);
         }
 
-        while (!is_empty_list(schedule_list)) {
+        while (!list_empty(schedule_list)) {
                 struct schedule_node *chosen =
                         choose_instruction_to_schedule(&scoreboard,
                                                        schedule_list,
@@ -724,7 +715,7 @@ schedule_instructions(struct vc4_compile *c, struct simple_node *schedule_list)
                  * find an instruction to pair with it.
                  */
                 if (chosen) {
-                        remove_from_list(&chosen->link);
+                        list_del(&chosen->link);
                         mark_instruction_scheduled(schedule_list, chosen, true);
                         if (chosen->uniform != -1) {
                                 c->uniform_data[next_uniform] =
@@ -738,7 +729,7 @@ schedule_instructions(struct vc4_compile *c, struct simple_node *schedule_list)
                                                                schedule_list,
                                                                chosen);
                         if (merge) {
-                                remove_from_list(&merge->link);
+                                list_del(&merge->link);
                                 inst = qpu_merge_inst(inst, merge->inst->inst);
                                 assert(inst != 0);
                                 if (merge->uniform != -1) {
@@ -813,16 +804,14 @@ void
 qpu_schedule_instructions(struct vc4_compile *c)
 {
         void *mem_ctx = ralloc_context(NULL);
-        struct simple_node schedule_list;
-        struct simple_node *node;
+        struct list_head schedule_list;
 
-        make_empty_list(&schedule_list);
+        list_inithead(&schedule_list);
 
         if (debug) {
                 fprintf(stderr, "Pre-schedule instructions\n");
-                foreach(node, &c->qpu_inst_list) {
-                        struct queued_qpu_inst *q =
-                                (struct queued_qpu_inst *)node;
+                list_for_each_entry(struct queued_qpu_inst, q,
+                                    &c->qpu_inst_list, link) {
                         vc4_qpu_disasm(&q->inst, 1);
                         fprintf(stderr, "\n");
                 }
@@ -831,7 +820,7 @@ qpu_schedule_instructions(struct vc4_compile *c)
 
         /* Wrap each instruction in a scheduler structure. */
         uint32_t next_uniform = 0;
-        while (!is_empty_list(&c->qpu_inst_list)) {
+        while (!list_empty(&c->qpu_inst_list)) {
                 struct queued_qpu_inst *inst =
                         (struct queued_qpu_inst *)c->qpu_inst_list.next;
                 struct schedule_node *n = rzalloc(mem_ctx, struct schedule_node);
@@ -844,16 +833,15 @@ qpu_schedule_instructions(struct vc4_compile *c)
                 } else {
                         n->uniform = -1;
                 }
-                remove_from_list(&inst->link);
-                insert_at_tail(&schedule_list, &n->link);
+                list_del(&inst->link);
+                list_addtail(&n->link, &schedule_list);
         }
         assert(next_uniform == c->num_uniforms);
 
         calculate_forward_deps(c, &schedule_list);
         calculate_reverse_deps(c, &schedule_list);
 
-        foreach(node, &schedule_list) {
-                struct schedule_node *n = (struct schedule_node *)node;
+        list_for_each_entry(struct schedule_node, n, &schedule_list, link) {
                 compute_delay(n);
         }
 

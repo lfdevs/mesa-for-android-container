@@ -56,7 +56,7 @@ struct sh_reg
    unsigned is_reg:1;
 };
 
-static INLINE unsigned
+static inline unsigned
 sh_reg_type( struct sh_reg reg )
 {
    return reg.type_lo | (reg.type_hi << 3);
@@ -138,7 +138,7 @@ struct sh_dstreg
    unsigned is_reg:1;
 };
 
-static INLINE unsigned
+static inline unsigned
 sh_dstreg_type( struct sh_dstreg reg )
 {
    return reg.type_lo | (reg.type_hi << 3);
@@ -169,7 +169,7 @@ struct sh_srcreg
    unsigned is_reg:1;
 };
 
-static INLINE unsigned
+static inline unsigned
 sh_srcreg_type( struct sh_srcreg reg )
 {
    return reg.type_lo | (reg.type_hi << 3);

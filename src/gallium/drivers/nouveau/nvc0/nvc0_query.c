@@ -44,7 +44,7 @@ struct nvc0_query {
    uint32_t base;
    uint32_t offset; /* base + i * rotate */
    uint8_t state;
-   boolean is64bit;
+   bool is64bit;
    uint8_t rotate;
    int nesting; /* only used for occlusion queries */
    union {
@@ -62,13 +62,13 @@ static void nvc0_mp_pm_query_end(struct nvc0_context *, struct nvc0_query *);
 static boolean nvc0_mp_pm_query_result(struct nvc0_context *,
                                        struct nvc0_query *, void *, boolean);
 
-static INLINE struct nvc0_query *
+static inline struct nvc0_query *
 nvc0_query(struct pipe_query *pipe)
 {
    return (struct nvc0_query *)pipe;
 }
 
-static boolean
+static bool
 nvc0_query_allocate(struct nvc0_context *nvc0, struct nvc0_query *q, int size)
 {
    struct nvc0_screen *screen = nvc0->screen;
@@ -87,17 +87,17 @@ nvc0_query_allocate(struct nvc0_context *nvc0, struct nvc0_query *q, int size)
    if (size) {
       q->u.mm = nouveau_mm_allocate(screen->base.mm_GART, size, &q->bo, &q->base);
       if (!q->bo)
-         return FALSE;
+         return false;
       q->offset = q->base;
 
       ret = nouveau_bo_map(q->bo, 0, screen->base.client);
       if (ret) {
          nvc0_query_allocate(nvc0, q, 0);
-         return FALSE;
+         return false;
       }
       q->data = (uint32_t *)((uint8_t *)q->bo->map + q->base);
    }
-   return TRUE;
+   return true;
 }
 
 static void
@@ -126,17 +126,17 @@ nvc0_query_create(struct pipe_context *pipe, unsigned type, unsigned index)
       space = NVC0_QUERY_ALLOC_SPACE;
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
-      q->is64bit = TRUE;
+      q->is64bit = true;
       space = 512;
       break;
    case PIPE_QUERY_SO_STATISTICS:
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-      q->is64bit = TRUE;
+      q->is64bit = true;
       space = 64;
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      q->is64bit = TRUE;
+      q->is64bit = true;
       q->index = index;
       space = 32;
       break;
@@ -257,11 +257,11 @@ nvc0_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_query *q = nvc0_query(pq);
-   boolean ret = true;
+   bool ret = true;
 
    /* For occlusion queries we have to change the storage, because a previous
-    * query might set the initial render conition to FALSE even *after* we re-
-    * initialized it to TRUE.
+    * query might set the initial render conition to false even *after* we re-
+    * initialized it to true.
     */
    if (q->rotate) {
       nvc0_query_rotate(nvc0, q);
@@ -270,7 +270,7 @@ nvc0_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
        *  query ?
        */
       q->data[0] = q->sequence; /* initialize sequence */
-      q->data[1] = 1; /* initial render condition = TRUE */
+      q->data[1] = 1; /* initial render condition = true */
       q->data[4] = q->sequence + 1; /* for comparison COND_MODE */
       q->data[5] = 0;
    }
@@ -401,7 +401,7 @@ nvc0_query_end(struct pipe_context *pipe, struct pipe_query *pq)
       nvc0_query_get(push, q, 0x00, 0x0d005002 | (q->index << 5));
       break;
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
-      /* This query is not issued on GPU because disjoint is forced to FALSE */
+      /* This query is not issued on GPU because disjoint is forced to false */
       q->state = NVC0_QUERY_STATE_READY;
       break;
    default:
@@ -422,7 +422,7 @@ nvc0_query_end(struct pipe_context *pipe, struct pipe_query *pq)
       nouveau_fence_ref(nvc0->screen->base.fence.current, &q->fence);
 }
 
-static INLINE void
+static inline void
 nvc0_query_update(struct nouveau_client *cli, struct nvc0_query *q)
 {
    if (q->is64bit) {
@@ -442,7 +442,7 @@ nvc0_query_result(struct pipe_context *pipe, struct pipe_query *pq,
    struct nvc0_query *q = nvc0_query(pq);
    uint64_t *res64 = (uint64_t*)result;
    uint32_t *res32 = (uint32_t*)result;
-   boolean *res8 = (boolean*)result;
+   uint8_t *res8 = (uint8_t*)result;
    uint64_t *data64 = (uint64_t *)q->data;
    unsigned i;
 
@@ -450,7 +450,7 @@ nvc0_query_result(struct pipe_context *pipe, struct pipe_query *pq,
    if (q->type >= NVC0_QUERY_DRV_STAT(0) &&
        q->type <= NVC0_QUERY_DRV_STAT_LAST) {
       res64[0] = q->u.value;
-      return TRUE;
+      return true;
    } else
 #endif
    if ((q->type >= NVE4_PM_QUERY(0) && q->type <= NVE4_PM_QUERY_LAST) ||
@@ -468,17 +468,17 @@ nvc0_query_result(struct pipe_context *pipe, struct pipe_query *pq,
             /* flush for silly apps that spin on GL_QUERY_RESULT_AVAILABLE */
             PUSH_KICK(nvc0->base.pushbuf);
          }
-         return FALSE;
+         return false;
       }
       if (nouveau_bo_wait(q->bo, NOUVEAU_BO_RD, nvc0->screen->base.client))
-         return FALSE;
+         return false;
       NOUVEAU_DRV_STAT(&nvc0->screen->base, query_sync_count, 1);
    }
    q->state = NVC0_QUERY_STATE_READY;
 
    switch (q->type) {
    case PIPE_QUERY_GPU_FINISHED:
-      res8[0] = TRUE;
+      res8[0] = true;
       break;
    case PIPE_QUERY_OCCLUSION_COUNTER: /* u32 sequence, u32 count, u64 time */
       res64[0] = q->data[1] - q->data[5];
@@ -502,7 +502,7 @@ nvc0_query_result(struct pipe_context *pipe, struct pipe_query *pq,
       break;
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
       res64[0] = 1000000000;
-      res8[8] = FALSE;
+      res8[8] = false;
       break;
    case PIPE_QUERY_TIME_ELAPSED:
       res64[0] = data64[1] - data64[3];
@@ -516,10 +516,10 @@ nvc0_query_result(struct pipe_context *pipe, struct pipe_query *pq,
       break;
    default:
       assert(0); /* can't happen, we don't create queries with invalid type */
-      return FALSE;
+      return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 void
@@ -549,7 +549,7 @@ nvc0_render_condition(struct pipe_context *pipe,
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_query *q;
    uint32_t cond;
-   boolean wait =
+   bool wait =
       mode != PIPE_RENDER_COND_NO_WAIT &&
       mode != PIPE_RENDER_COND_BY_REGION_NO_WAIT;
 
@@ -563,7 +563,7 @@ nvc0_render_condition(struct pipe_context *pipe,
       case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
          cond = condition ? NVC0_3D_COND_MODE_EQUAL :
                           NVC0_3D_COND_MODE_NOT_EQUAL;
-         wait = TRUE;
+         wait = true;
          break;
       case PIPE_QUERY_OCCLUSION_COUNTER:
       case PIPE_QUERY_OCCLUSION_PREDICATE:
@@ -626,12 +626,12 @@ nvc0_query_pushbuf_submit(struct nouveau_pushbuf *push,
 void
 nvc0_so_target_save_offset(struct pipe_context *pipe,
                            struct pipe_stream_output_target *ptarg,
-                           unsigned index, boolean *serialize)
+                           unsigned index, bool *serialize)
 {
    struct nvc0_so_target *targ = nvc0_so_target(ptarg);
 
    if (*serialize) {
-      *serialize = FALSE;
+      *serialize = false;
       PUSH_SPACE(nvc0_context(pipe)->base.pushbuf, 1);
       IMMED_NVC0(nvc0_context(pipe)->base.pushbuf, NVC0_3D(SERIALIZE), 0);
 
@@ -1080,7 +1080,7 @@ nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
 {
    struct nvc0_screen *screen = nvc0->screen;
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-   const boolean is_nve4 = screen->base.class_3d >= NVE4_3D_CLASS;
+   const bool is_nve4 = screen->base.class_3d >= NVE4_3D_CLASS;
    const struct nvc0_mp_pm_query_cfg *cfg;
    unsigned i, c;
    unsigned num_ab[2] = { 0, 0 };
@@ -1101,7 +1101,7 @@ nvc0_mp_pm_query_begin(struct nvc0_context *nvc0, struct nvc0_query *q)
    PUSH_SPACE(push, 4 * 8 * (is_nve4 ? 1 : 6) + 6);
 
    if (!screen->pm.mp_counters_enabled) {
-      screen->pm.mp_counters_enabled = TRUE;
+      screen->pm.mp_counters_enabled = true;
       BEGIN_NVC0(push, SUBC_SW(0x06ac), 1);
       PUSH_DATA (push, 0x1fcb);
    }
@@ -1168,7 +1168,7 @@ nvc0_mp_pm_query_end(struct nvc0_context *nvc0, struct nvc0_query *q)
    struct nvc0_screen *screen = nvc0->screen;
    struct pipe_context *pipe = &nvc0->base.pipe;
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-   const boolean is_nve4 = screen->base.class_3d >= NVE4_3D_CLASS;
+   const bool is_nve4 = screen->base.class_3d >= NVE4_3D_CLASS;
    uint32_t mask;
    uint32_t input[3];
    const uint block[3] = { 32, is_nve4 ? 4 : 1, 1 };
@@ -1181,7 +1181,7 @@ nvc0_mp_pm_query_end(struct nvc0_context *nvc0, struct nvc0_query *q)
    if (unlikely(!screen->pm.prog)) {
       struct nvc0_program *prog = CALLOC_STRUCT(nvc0_program);
       prog->type = PIPE_SHADER_COMPUTE;
-      prog->translated = TRUE;
+      prog->translated = true;
       prog->num_gprs = 14;
       prog->parm_size = 12;
       if (is_nve4) {
@@ -1249,9 +1249,9 @@ nvc0_mp_pm_query_end(struct nvc0_context *nvc0, struct nvc0_query *q)
    }
 }
 
-static INLINE boolean
+static inline bool
 nvc0_mp_pm_query_read_data(uint32_t count[32][4],
-                           struct nvc0_context *nvc0, boolean wait,
+                           struct nvc0_context *nvc0, bool wait,
                            struct nvc0_query *q,
                            const struct nvc0_mp_pm_query_cfg *cfg,
                            unsigned mp_count)
@@ -1264,19 +1264,19 @@ nvc0_mp_pm_query_read_data(uint32_t count[32][4],
       for (c = 0; c < cfg->num_counters; ++c) {
          if (q->data[b + 8] != q->sequence) {
             if (!wait)
-               return FALSE;
+               return false;
             if (nouveau_bo_wait(q->bo, NOUVEAU_BO_RD, nvc0->base.client))
-               return FALSE;
+               return false;
          }
          count[p][c] = q->data[b + q->ctr[c]];
       }
    }
-   return TRUE;
+   return true;
 }
 
-static INLINE boolean
+static inline bool
 nve4_mp_pm_query_read_data(uint32_t count[32][4],
-                           struct nvc0_context *nvc0, boolean wait,
+                           struct nvc0_context *nvc0, bool wait,
                            struct nvc0_query *q,
                            const struct nvc0_mp_pm_query_cfg *cfg,
                            unsigned mp_count)
@@ -1291,9 +1291,9 @@ nve4_mp_pm_query_read_data(uint32_t count[32][4],
          for (d = 0; d < ((q->ctr[c] & ~3) ? 1 : 4); ++d) {
             if (q->data[b + 20 + d] != q->sequence) {
                if (!wait)
-                  return FALSE;
+                  return false;
                if (nouveau_bo_wait(q->bo, NOUVEAU_BO_RD, nvc0->base.client))
-                  return FALSE;
+                  return false;
             }
             if (q->ctr[c] & ~0x3)
                count[p][c] = q->data[b + 16 + (q->ctr[c] & 3)];
@@ -1302,7 +1302,7 @@ nve4_mp_pm_query_read_data(uint32_t count[32][4],
          }
       }
    }
-   return TRUE;
+   return true;
 }
 
 /* Metric calculations:
@@ -1325,7 +1325,7 @@ nvc0_mp_pm_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
    unsigned mp_count = MIN2(nvc0->screen->mp_count_compute, 32);
    unsigned p, c;
    const struct nvc0_mp_pm_query_cfg *cfg;
-   boolean ret;
+   bool ret;
 
    cfg = nvc0_mp_pm_query_get_cfg(nvc0, q);
 
@@ -1334,7 +1334,7 @@ nvc0_mp_pm_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
    else
       ret = nvc0_mp_pm_query_read_data(count, nvc0, wait, q, cfg, mp_count);
    if (!ret)
-      return FALSE;
+      return false;
 
    if (cfg->op == NVC0_COUNTER_OPn_SUM) {
       for (c = 0; c < cfg->num_counters; ++c)
@@ -1394,7 +1394,7 @@ nvc0_mp_pm_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
    }
 
    *(uint64_t *)result = value;
-   return TRUE;
+   return true;
 }
 
 int

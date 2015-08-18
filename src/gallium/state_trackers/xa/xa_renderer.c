@@ -45,14 +45,14 @@ void
 renderer_set_constants(struct xa_context *r,
 		       int shader_type, const float *params, int param_bytes);
 
-static INLINE boolean
+static inline boolean
 is_affine(float *matrix)
 {
     return floatIsZero(matrix[2]) && floatIsZero(matrix[5])
 	&& floatsEqual(matrix[8], 1);
 }
 
-static INLINE void
+static inline void
 map_point(float *mat, float x, float y, float *out_x, float *out_y)
 {
     if (!mat) {
@@ -71,7 +71,7 @@ map_point(float *mat, float x, float y, float *out_x, float *out_y)
     }
 }
 
-static INLINE void
+static inline void
 renderer_draw(struct xa_context *r)
 {
     int num_verts = r->buffer_size / (r->attrs_per_vertex * NUM_COMPONENTS);
@@ -97,7 +97,7 @@ renderer_draw(struct xa_context *r)
     xa_scissor_reset(r);
 }
 
-static INLINE void
+static inline void
 renderer_draw_conditional(struct xa_context *r, int next_batch)
 {
     if (r->buffer_size + next_batch >= XA_VB_SIZE ||
@@ -135,7 +135,7 @@ renderer_init_state(struct xa_context *r)
     }
 }
 
-static INLINE void
+static inline void
 add_vertex_color(struct xa_context *r, float x, float y, float color[4])
 {
     float *vertex = r->buffer + r->buffer_size;
@@ -153,7 +153,7 @@ add_vertex_color(struct xa_context *r, float x, float y, float color[4])
     r->buffer_size += 8;
 }
 
-static INLINE void
+static inline void
 add_vertex_1tex(struct xa_context *r, float x, float y, float s, float t)
 {
     float *vertex = r->buffer + r->buffer_size;
@@ -171,7 +171,7 @@ add_vertex_1tex(struct xa_context *r, float x, float y, float s, float t)
     r->buffer_size += 8;
 }
 
-static INLINE void
+static inline void
 add_vertex_2tex(struct xa_context *r,
 		float x, float y, float s0, float t0, float s1, float t1)
 {

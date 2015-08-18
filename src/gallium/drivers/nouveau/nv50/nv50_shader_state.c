@@ -60,7 +60,7 @@ nv50_constbufs_validate(struct nv50_context *nv50)
                continue;
             }
             if (!nv50->state.uniform_buffer_bound[s]) {
-               nv50->state.uniform_buffer_bound[s] = TRUE;
+               nv50->state.uniform_buffer_bound[s] = true;
                BEGIN_NV04(push, NV50_3D(SET_PROGRAM_CB), 1);
                PUSH_DATA (push, (b << 12) | (i << 8) | p | 1);
             }
@@ -99,33 +99,35 @@ nv50_constbufs_validate(struct nv50_context *nv50)
                PUSH_DATA (push, (b << 12) | (i << 8) | p | 1);
 
                BCTX_REFN(nv50->bufctx_3d, CB(s, i), res, RD);
+
+               nv50->cb_dirty = 1; /* Force cache flush for UBO. */
             } else {
                BEGIN_NV04(push, NV50_3D(SET_PROGRAM_CB), 1);
                PUSH_DATA (push, (i << 8) | p | 0);
             }
             if (i == 0)
-               nv50->state.uniform_buffer_bound[s] = FALSE;
+               nv50->state.uniform_buffer_bound[s] = false;
          }
       }
    }
 }
 
-static boolean
+static bool
 nv50_program_validate(struct nv50_context *nv50, struct nv50_program *prog)
 {
    if (!prog->translated) {
       prog->translated = nv50_program_translate(
          prog, nv50->screen->base.device->chipset);
       if (!prog->translated)
-         return FALSE;
+         return false;
    } else
    if (prog->mem)
-      return TRUE;
+      return true;
 
    return nv50_program_upload_code(nv50, prog);
 }
 
-static INLINE void
+static inline void
 nv50_program_update_context_state(struct nv50_context *nv50,
                                   struct nv50_program *prog, int stage)
 {
@@ -136,7 +138,7 @@ nv50_program_update_context_state(struct nv50_context *nv50,
          nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_TLS);
       if (!nv50->state.tls_required || nv50->state.new_tls_space)
          BCTX_REFN_bo(nv50->bufctx_3d, TLS, flags, nv50->screen->tls_bo);
-      nv50->state.new_tls_space = FALSE;
+      nv50->state.new_tls_space = false;
       nv50->state.tls_required |= 1 << stage;
    } else {
       if (nv50->state.tls_required == (1 << stage))
@@ -243,11 +245,11 @@ nv50_sprite_coords_validate(struct nv50_context *nv50)
          for (i = 0; i < 8; ++i)
             PUSH_DATA(push, 0);
 
-         nv50->state.point_sprite = FALSE;
+         nv50->state.point_sprite = false;
       }
       return;
    } else {
-      nv50->state.point_sprite = TRUE;
+      nv50->state.point_sprite = true;
    }
 
    memset(pntc, 0, sizeof(pntc));
@@ -646,7 +648,7 @@ nv50_stream_output_validate(struct nv50_context *nv50)
             nv50_query_pushbuf_submit(push, targ->pq, 0x4);
          } else {
             PUSH_DATA(push, 0);
-            targ->clean = FALSE;
+            targ->clean = false;
          }
       } else {
          const unsigned limit = targ->pipe.buffer_size /

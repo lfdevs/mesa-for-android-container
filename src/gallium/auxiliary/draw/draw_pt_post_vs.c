@@ -53,7 +53,7 @@ struct pt_post_vs {
                    const struct draw_prim_info *prim_info );
 };
 
-static INLINE void
+static inline void
 initialize_vertex_header(struct vertex_header *header)
 {
    header->clipmask = 0;
@@ -62,7 +62,7 @@ initialize_vertex_header(struct vertex_header *header)
    header->vertex_id = UNDEFINED_VERTEX_ID;
 }
 
-static INLINE float
+static inline float
 dot4(const float *a, const float *b)
 {
    return (a[0]*b[0] +

@@ -149,7 +149,7 @@ struct fenced_buffer
 };
 
 
-static INLINE struct fenced_manager *
+static inline struct fenced_manager *
 fenced_manager(struct pb_manager *mgr)
 {
    assert(mgr);
@@ -157,7 +157,7 @@ fenced_manager(struct pb_manager *mgr)
 }
 
 
-static INLINE struct fenced_buffer *
+static inline struct fenced_buffer *
 fenced_buffer(struct pb_buffer *buf)
 {
    assert(buf);
@@ -240,7 +240,7 @@ fenced_manager_dump_locked(struct fenced_manager *fenced_mgr)
 }
 
 
-static INLINE void
+static inline void
 fenced_buffer_destroy_locked(struct fenced_manager *fenced_mgr,
                              struct fenced_buffer *fenced_buf)
 {
@@ -265,7 +265,7 @@ fenced_buffer_destroy_locked(struct fenced_manager *fenced_mgr,
  *
  * Reference count should be incremented before calling this function.
  */
-static INLINE void
+static inline void
 fenced_buffer_add_locked(struct fenced_manager *fenced_mgr,
                          struct fenced_buffer *fenced_buf)
 {
@@ -289,7 +289,7 @@ fenced_buffer_add_locked(struct fenced_manager *fenced_mgr,
  *
  * Returns TRUE if the buffer was detroyed.
  */
-static INLINE boolean
+static inline boolean
 fenced_buffer_remove_locked(struct fenced_manager *fenced_mgr,
                             struct fenced_buffer *fenced_buf)
 {
@@ -326,7 +326,7 @@ fenced_buffer_remove_locked(struct fenced_manager *fenced_mgr,
  * This function will release and re-acquire the mutex, so any copy of mutable
  * state must be discarded after calling it.
  */
-static INLINE enum pipe_error
+static inline enum pipe_error
 fenced_buffer_finish_locked(struct fenced_manager *fenced_mgr,
                             struct fenced_buffer *fenced_buf)
 {
@@ -376,6 +376,7 @@ fenced_buffer_finish_locked(struct fenced_manager *fenced_mgr,
          /* TODO: remove consequents buffers with the same fence? */
 
          assert(!destroyed);
+         (void) destroyed; /* silence unused var warning for non-debug build */
 
          fenced_buf->flags &= ~PB_USAGE_GPU_READ_WRITE;
 
@@ -549,7 +550,7 @@ fenced_buffer_destroy_gpu_storage_locked(struct fenced_buffer *fenced_buf)
  * This function is a shorthand around pb_manager::create_buffer for
  * fenced_buffer_create_gpu_storage_locked()'s benefit.
  */
-static INLINE boolean
+static inline boolean
 fenced_buffer_try_create_gpu_storage_locked(struct fenced_manager *fenced_mgr,
                                             struct fenced_buffer *fenced_buf)
 {

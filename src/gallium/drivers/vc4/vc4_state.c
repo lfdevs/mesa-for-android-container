@@ -107,7 +107,7 @@ vc4_create_rasterizer_state(struct pipe_context *pctx,
         /* Workaround: HW-2726 PTB does not handle zero-size points (BCM2835,
          * BCM21553).
          */
-        so->point_size = MAX2(cso->point_size, .125);
+        so->point_size = MAX2(cso->point_size, .125f);
 
         if (cso->front_ccw)
                 so->config_bits[0] |= VC4_CONFIG_BITS_CW_PRIMITIVES;
@@ -304,24 +304,8 @@ vc4_set_index_buffer(struct pipe_context *pctx,
 
         if (ib) {
                 assert(!ib->user_buffer);
-
-                if (ib->index_size == 4) {
-                        struct pipe_resource tmpl = *ib->buffer;
-                        assert(tmpl.format == PIPE_FORMAT_R8_UNORM);
-                        assert(tmpl.height0 == 1);
-                        tmpl.width0 = (tmpl.width0 - ib->offset) / 2;
-                        struct pipe_resource *pshadow =
-                                vc4_resource_create(&vc4->screen->base, &tmpl);
-                        struct vc4_resource *shadow = vc4_resource(pshadow);
-                        pipe_resource_reference(&shadow->shadow_parent, ib->buffer);
-
-                        pipe_resource_reference(&vc4->indexbuf.buffer, NULL);
-                        vc4->indexbuf.buffer = pshadow;
-                        vc4->indexbuf.index_size = 2;
-                } else {
-                        pipe_resource_reference(&vc4->indexbuf.buffer, ib->buffer);
-                        vc4->indexbuf.index_size = ib->index_size;
-                }
+                pipe_resource_reference(&vc4->indexbuf.buffer, ib->buffer);
+                vc4->indexbuf.index_size = ib->index_size;
                 vc4->indexbuf.offset = ib->offset;
         } else {
                 pipe_resource_reference(&vc4->indexbuf.buffer, NULL);
@@ -477,11 +461,64 @@ vc4_get_stage_tex(struct vc4_context *vc4, unsigned shader)
         }
 }
 
+static uint32_t translate_wrap(uint32_t p_wrap, bool using_nearest)
+{
+        switch (p_wrap) {
+        case PIPE_TEX_WRAP_REPEAT:
+                return 0;
+        case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
+                return 1;
+        case PIPE_TEX_WRAP_MIRROR_REPEAT:
+                return 2;
+        case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
+                return 3;
+        case PIPE_TEX_WRAP_CLAMP:
+                return (using_nearest ? 1 : 3);
+        default:
+                fprintf(stderr, "Unknown wrap mode %d\n", p_wrap);
+                assert(!"not reached");
+                return 0;
+        }
+}
+
 static void *
 vc4_create_sampler_state(struct pipe_context *pctx,
                          const struct pipe_sampler_state *cso)
 {
-        return vc4_generic_cso_state_create(cso, sizeof(*cso));
+        static const uint8_t minfilter_map[6] = {
+                VC4_TEX_P1_MINFILT_NEAR_MIP_NEAR,
+                VC4_TEX_P1_MINFILT_LIN_MIP_NEAR,
+                VC4_TEX_P1_MINFILT_NEAR_MIP_LIN,
+                VC4_TEX_P1_MINFILT_LIN_MIP_LIN,
+                VC4_TEX_P1_MINFILT_NEAREST,
+                VC4_TEX_P1_MINFILT_LINEAR,
+        };
+        static const uint32_t magfilter_map[] = {
+                [PIPE_TEX_FILTER_NEAREST] = VC4_TEX_P1_MAGFILT_NEAREST,
+                [PIPE_TEX_FILTER_LINEAR] = VC4_TEX_P1_MAGFILT_LINEAR,
+        };
+        bool either_nearest =
+                (cso->mag_img_filter == PIPE_TEX_MIPFILTER_NEAREST ||
+                 cso->min_img_filter == PIPE_TEX_MIPFILTER_NEAREST);
+        struct vc4_sampler_state *so = CALLOC_STRUCT(vc4_sampler_state);
+
+        if (!so)
+                return NULL;
+
+        memcpy(so, cso, sizeof(*cso));
+
+        so->texture_p1 =
+                (VC4_SET_FIELD(magfilter_map[cso->mag_img_filter],
+                               VC4_TEX_P1_MAGFILT) |
+                 VC4_SET_FIELD(minfilter_map[cso->min_mip_filter * 2 +
+                                             cso->min_img_filter],
+                               VC4_TEX_P1_MINFILT) |
+                 VC4_SET_FIELD(translate_wrap(cso->wrap_s, either_nearest),
+                               VC4_TEX_P1_WRAP_S) |
+                 VC4_SET_FIELD(translate_wrap(cso->wrap_t, either_nearest),
+                               VC4_TEX_P1_WRAP_T));
+
+        return so;
 }
 
 static void
@@ -515,13 +552,13 @@ static struct pipe_sampler_view *
 vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                         const struct pipe_sampler_view *cso)
 {
-        struct pipe_sampler_view *so = malloc(sizeof(*so));
+        struct vc4_sampler_view *so = malloc(sizeof(*so));
         struct vc4_resource *rsc = vc4_resource(prsc);
 
         if (!so)
                 return NULL;
 
-        *so = *cso;
+        so->base = *cso;
 
         pipe_reference(NULL, &prsc->reference);
 
@@ -532,27 +569,43 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
          * Also, Raspberry Pi doesn't support sampling from raster textures,
          * so we also have to copy to a temporary then.
          */
-        if (so->u.tex.first_level ||
+        if (cso->u.tex.first_level ||
             rsc->vc4_format == VC4_TEXTURE_TYPE_RGBA32R) {
                 struct vc4_resource *shadow_parent = vc4_resource(prsc);
                 struct pipe_resource tmpl = shadow_parent->base.b;
                 struct vc4_resource *clone;
 
-                tmpl.width0 = u_minify(tmpl.width0, so->u.tex.first_level);
-                tmpl.height0 = u_minify(tmpl.height0, so->u.tex.first_level);
-                tmpl.last_level = so->u.tex.last_level - so->u.tex.first_level;
+                tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
+                tmpl.width0 = u_minify(tmpl.width0, cso->u.tex.first_level);
+                tmpl.height0 = u_minify(tmpl.height0, cso->u.tex.first_level);
+                tmpl.last_level = cso->u.tex.last_level - cso->u.tex.first_level;
 
                 prsc = vc4_resource_create(pctx->screen, &tmpl);
+                rsc = vc4_resource(prsc);
                 clone = vc4_resource(prsc);
                 clone->shadow_parent = &shadow_parent->base.b;
                 /* Flag it as needing update of the contents from the parent. */
                 clone->writes = shadow_parent->writes - 1;
-        }
-        so->texture = prsc;
-        so->reference.count = 1;
-        so->context = pctx;
 
-        return so;
+                assert(clone->vc4_format != VC4_TEXTURE_TYPE_RGBA32R);
+        }
+        so->base.texture = prsc;
+        so->base.reference.count = 1;
+        so->base.context = pctx;
+
+        so->texture_p0 =
+                (VC4_SET_FIELD(rsc->slices[0].offset >> 12, VC4_TEX_P0_OFFSET) |
+                 VC4_SET_FIELD(rsc->vc4_format & 15, VC4_TEX_P0_TYPE) |
+                 VC4_SET_FIELD(cso->u.tex.last_level -
+                               cso->u.tex.first_level, VC4_TEX_P0_MIPLVLS) |
+                 VC4_SET_FIELD(cso->target == PIPE_TEXTURE_CUBE,
+                               VC4_TEX_P0_CMMODE));
+        so->texture_p1 =
+                (VC4_SET_FIELD(rsc->vc4_format >> 4, VC4_TEX_P1_TYPE4) |
+                 VC4_SET_FIELD(prsc->height0 & 2047, VC4_TEX_P1_HEIGHT) |
+                 VC4_SET_FIELD(prsc->width0 & 2047, VC4_TEX_P1_WIDTH));
+
+        return &so->base;
 }
 
 static void

@@ -106,7 +106,7 @@ typedef struct
 #define XVMC_WARN  2
 #define XVMC_TRACE 3
 
-static INLINE void XVMC_MSG(int level, const char *fmt, ...)
+static inline void XVMC_MSG(int level, const char *fmt, ...)
 {
    static int debug_level = -1;
 

@@ -32,7 +32,7 @@ using namespace clover;
 
 namespace {
    void
-   read_header(const std::string &header, module &m) {
+   read_header(const std::string &header, module &m, std::string &r_log) {
       std::istringstream ls(header);
       std::string line;
 
@@ -45,8 +45,10 @@ namespace {
          if (!(ts >> name))
             continue;
 
-         if (!(ts >> offset))
-            throw build_error("invalid kernel start address");
+         if (!(ts >> offset)) {
+            r_log = "invalid kernel start address";
+            throw compile_error();
+         }
 
          while (ts >> tok) {
             if (tok == "scalar")
@@ -67,8 +69,10 @@ namespace {
                args.push_back({ module::argument::image3d_wr, 4 });
             else if (tok == "sampler")
                args.push_back({ module::argument::sampler, 0 });
-            else
-               throw build_error("invalid kernel argument");
+            else {
+               r_log = "invalid kernel argument";
+               throw compile_error();
+            }
          }
 
          m.syms.push_back({ name, 0, offset, args });
@@ -76,11 +80,13 @@ namespace {
    }
 
    void
-   read_body(const char *source, module &m) {
+   read_body(const char *source, module &m, std::string &r_log) {
       tgsi_token prog[1024];
 
-      if (!tgsi_text_translate(source, prog, Elements(prog)))
-         throw build_error("translate failed");
+      if (!tgsi_text_translate(source, prog, Elements(prog))) {
+         r_log = "translate failed";
+         throw compile_error();
+      }
 
       unsigned sz = tgsi_num_tokens(prog) * sizeof(tgsi_token);
       std::vector<char> data( (char *)prog, (char *)prog + sz );
@@ -89,13 +95,13 @@ namespace {
 }
 
 module
-clover::compile_program_tgsi(const std::string &source) {
+clover::compile_program_tgsi(const std::string &source, std::string &r_log) {
    const size_t body_pos = source.find("COMP\n");
    const char *body = &source[body_pos];
    module m;
 
-   read_header({ source.begin(), source.begin() + body_pos }, m);
-   read_body(body, m);
+   read_header({ source.begin(), source.begin() + body_pos }, m, r_log);
+   read_body(body, m, r_log);
 
    return m;
 }

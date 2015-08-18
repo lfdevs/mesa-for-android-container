@@ -147,6 +147,8 @@ arb_input_attrib_string(GLuint index, GLenum progType)
       "fragment.(twenty-one)", /* VARYING_SLOT_VIEWPORT */
       "fragment.(twenty-two)", /* VARYING_SLOT_FACE */
       "fragment.(twenty-three)", /* VARYING_SLOT_PNTC */
+      "fragment.(twenty-four)", /* VARYING_SLOT_TESS_LEVEL_OUTER */
+      "fragment.(twenty-five)", /* VARYING_SLOT_TESS_LEVEL_INNER */
       "fragment.varying[0]",
       "fragment.varying[1]",
       "fragment.varying[2]",
@@ -272,6 +274,8 @@ arb_output_attrib_string(GLuint index, GLenum progType)
       "result.(twenty-one)", /* VARYING_SLOT_VIEWPORT */
       "result.(twenty-two)", /* VARYING_SLOT_FACE */
       "result.(twenty-three)", /* VARYING_SLOT_PNTC */
+      "result.(twenty-four)", /* VARYING_SLOT_TESS_LEVEL_OUTER */
+      "result.(twenty-five)", /* VARYING_SLOT_TESS_LEVEL_INNER */
       "result.varying[0]",
       "result.varying[1]",
       "result.varying[2]",
@@ -600,7 +604,7 @@ _mesa_fprint_alu_instruction(FILE *f,
       fprintf(f, ".C");
 
    /* frag prog only */
-   if (inst->SaturateMode == SATURATE_ZERO_ONE)
+   if (inst->Saturate)
       fprintf(f, "_SAT");
 
    fprintf(f, " ");
@@ -658,7 +662,7 @@ _mesa_fprint_instruction_opt(FILE *f,
    switch (inst->Opcode) {
    case OPCODE_SWZ:
       fprintf(f, "SWZ");
-      if (inst->SaturateMode == SATURATE_ZERO_ONE)
+      if (inst->Saturate)
          fprintf(f, "_SAT");
       fprintf(f, " ");
       fprint_dst_reg(f, &inst->DstReg, mode, prog);
@@ -675,7 +679,7 @@ _mesa_fprint_instruction_opt(FILE *f,
    case OPCODE_TXB:
    case OPCODE_TXD:
       fprintf(f, "%s", _mesa_opcode_string(inst->Opcode));
-      if (inst->SaturateMode == SATURATE_ZERO_ONE)
+      if (inst->Saturate)
          fprintf(f, "_SAT");
       fprintf(f, " ");
       fprint_dst_reg(f, &inst->DstReg, mode, prog);
@@ -864,7 +868,7 @@ _mesa_fprint_program_opt(FILE *f,
       else
          fprintf(f, "# Fragment Program/Shader %u\n", prog->Id);
       break;
-   case MESA_GEOMETRY_PROGRAM:
+   case GL_GEOMETRY_PROGRAM_NV:
       fprintf(f, "# Geometry Shader\n");
    }
 
@@ -1014,6 +1018,12 @@ _mesa_write_shader_to_file(const struct gl_shader *shader)
    switch (shader->Stage) {
    case MESA_SHADER_FRAGMENT:
       type = "frag";
+      break;
+   case MESA_SHADER_TESS_CTRL:
+      type = "tesc";
+      break;
+   case MESA_SHADER_TESS_EVAL:
+      type = "tese";
       break;
    case MESA_SHADER_VERTEX:
       type = "vert";

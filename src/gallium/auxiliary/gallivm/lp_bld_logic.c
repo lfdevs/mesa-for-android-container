@@ -395,7 +395,7 @@ lp_build_select(struct lp_build_context *bld,
       args[2] = mask;
 
       res = lp_build_intrinsic(builder, intrinsic,
-                               arg_type, args, Elements(args));
+                               arg_type, args, Elements(args), 0);
 
       if (arg_type != bld->vec_type) {
          res = LLVMBuildBitCast(builder, res, bld->vec_type, "");

@@ -62,7 +62,7 @@ struct gdi_sw_displaytarget
 
 
 /** Cast wrapper */
-static INLINE struct gdi_sw_displaytarget *
+static inline struct gdi_sw_displaytarget *
 gdi_sw_displaytarget( struct sw_displaytarget *buf )
 {
    return (struct gdi_sw_displaytarget *)buf;

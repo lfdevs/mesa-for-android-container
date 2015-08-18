@@ -70,7 +70,7 @@ mm_slab_alloc(struct mm_slab *slab)
    return -1;
 }
 
-static INLINE void
+static inline void
 mm_slab_free(struct mm_slab *slab, int i)
 {
    assert(i < slab->count);
@@ -79,7 +79,7 @@ mm_slab_free(struct mm_slab *slab, int i)
    assert(slab->free <= slab->count);
 }
 
-static INLINE int
+static inline int
 mm_get_order(uint32_t size)
 {
    int s = __builtin_clz(size) ^ 31;
@@ -104,7 +104,7 @@ mm_bucket_by_size(struct nouveau_mman *cache, unsigned size)
 }
 
 /* size of bo allocation for slab with chunks of (1 << chunk_order) bytes */
-static INLINE uint32_t
+static inline uint32_t
 mm_default_slab_size(unsigned chunk_order)
 {
    static const int8_t slab_order[MM_MAX_ORDER - MM_MIN_ORDER + 1] =
@@ -263,7 +263,7 @@ nouveau_mm_create(struct nouveau_device *dev, uint32_t domain,
    return cache;
 }
 
-static INLINE void
+static inline void
 nouveau_mm_free_slabs(struct list_head *head)
 {
    struct mm_slab *slab, *next;

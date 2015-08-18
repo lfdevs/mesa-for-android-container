@@ -399,10 +399,10 @@ schedule_node::set_latency_gen7(bool is_haswell)
 
 class instruction_scheduler {
 public:
-   instruction_scheduler(backend_visitor *v, int grf_count,
+   instruction_scheduler(backend_shader *s, int grf_count,
                          instruction_scheduler_mode mode)
    {
-      this->bv = v;
+      this->bs = s;
       this->mem_ctx = ralloc_context(NULL);
       this->grf_count = grf_count;
       this->instructions.make_empty();
@@ -455,7 +455,7 @@ public:
    int grf_count;
    int time;
    exec_list instructions;
-   backend_visitor *bv;
+   backend_shader *bs;
 
    instruction_scheduler_mode mode;
 
@@ -606,7 +606,7 @@ vec4_instruction_scheduler::get_register_pressure_benefit(backend_instruction *b
 schedule_node::schedule_node(backend_instruction *inst,
                              instruction_scheduler *sched)
 {
-   const struct brw_device_info *devinfo = sched->bv->devinfo;
+   const struct brw_device_info *devinfo = sched->bs->devinfo;
 
    this->inst = inst;
    this->child_array_size = 0;
@@ -1314,8 +1314,8 @@ fs_instruction_scheduler::choose_instruction_to_schedule()
                 * single-result send is probably actually reducing register
                 * pressure.
                 */
-               if (inst->regs_written <= inst->dst.width / 8 &&
-                   chosen_inst->regs_written > chosen_inst->dst.width / 8) {
+               if (inst->regs_written <= inst->exec_size / 8 &&
+                   chosen_inst->regs_written > chosen_inst->exec_size / 8) {
                   chosen = n;
                   continue;
                } else if (inst->regs_written > chosen_inst->regs_written) {
@@ -1384,7 +1384,7 @@ vec4_instruction_scheduler::issue_time(backend_instruction *inst)
 void
 instruction_scheduler::schedule_instructions(bblock_t *block)
 {
-   const struct brw_device_info *devinfo = bv->devinfo;
+   const struct brw_device_info *devinfo = bs->devinfo;
    backend_instruction *inst = block->end();
    time = 0;
 
@@ -1419,7 +1419,7 @@ instruction_scheduler::schedule_instructions(bblock_t *block)
 
       if (debug) {
          fprintf(stderr, "clock %4d, scheduled: ", time);
-         bv->dump_instruction(chosen->inst);
+         bs->dump_instruction(chosen->inst);
       }
 
       /* Now that we've scheduled a new instruction, some of its
@@ -1435,7 +1435,7 @@ instruction_scheduler::schedule_instructions(bblock_t *block)
 
          if (debug) {
             fprintf(stderr, "\tchild %d, %d parents: ", i, child->parent_count);
-            bv->dump_instruction(child->inst);
+            bs->dump_instruction(child->inst);
          }
 
          child->cand_generation = cand_generation;
@@ -1474,7 +1474,7 @@ instruction_scheduler::run(cfg_t *cfg)
    if (debug) {
       fprintf(stderr, "\nInstructions before scheduling (reg_alloc %d)\n",
               post_reg_alloc);
-      bv->dump_instructions();
+      bs->dump_instructions();
    }
 
    /* Populate the remaining GRF uses array to improve the pre-regalloc
@@ -1504,7 +1504,7 @@ instruction_scheduler::run(cfg_t *cfg)
    if (debug) {
       fprintf(stderr, "\nInstructions after scheduling (reg_alloc %d)\n",
               post_reg_alloc);
-      bv->dump_instructions();
+      bs->dump_instructions();
    }
 }
 

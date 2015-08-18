@@ -43,6 +43,7 @@ struct query_info {
    struct pipe_context *pipe;
    unsigned query_type;
    unsigned result_index; /* unit depends on query_type */
+   enum pipe_driver_query_result_type result_type;
 
    /* Ring of queries. If a query is busy, we use another slot. */
    struct pipe_query *query[NUM_QUERIES];
@@ -62,7 +63,8 @@ query_new_value(struct hud_graph *gr)
    uint64_t now = os_time_get();
 
    if (info->last_time) {
-      pipe->end_query(pipe, info->query[info->head]);
+      if (info->query[info->head])
+         pipe->end_query(pipe, info->query[info->head]);
 
       /* read query results */
       while (1) {
@@ -70,7 +72,7 @@ query_new_value(struct hud_graph *gr)
          union pipe_query_result result;
          uint64_t *res64 = (uint64_t *)&result;
 
-         if (pipe->get_query_result(pipe, query, FALSE, &result)) {
+         if (query && pipe->get_query_result(pipe, query, FALSE, &result)) {
             info->results_cumulative += res64[info->result_index];
             info->num_results++;
 
@@ -88,7 +90,8 @@ query_new_value(struct hud_graph *gr)
                        "gallium_hud: all queries are busy after %i frames, "
                        "can't add another query\n",
                        NUM_QUERIES);
-               pipe->destroy_query(pipe, info->query[info->head]);
+               if (info->query[info->head])
+                  pipe->destroy_query(pipe, info->query[info->head]);
                info->query[info->head] =
                      pipe->create_query(pipe, info->query_type, 0);
             }
@@ -106,22 +109,33 @@ query_new_value(struct hud_graph *gr)
       }
 
       if (info->num_results && info->last_time + gr->pane->period <= now) {
-         /* compute the average value across all frames */
-         hud_graph_add_value(gr, info->results_cumulative / info->num_results);
+         uint64_t value;
+
+         switch (info->result_type) {
+         default:
+         case PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE:
+            value = info->results_cumulative / info->num_results;
+            break;
+         case PIPE_DRIVER_QUERY_RESULT_TYPE_CUMULATIVE:
+            value = info->results_cumulative;
+            break;
+         }
+
+         hud_graph_add_value(gr, value);
 
          info->last_time = now;
          info->results_cumulative = 0;
          info->num_results = 0;
       }
-
-      pipe->begin_query(pipe, info->query[info->head]);
    }
    else {
       /* initialize */
       info->last_time = now;
       info->query[info->head] = pipe->create_query(pipe, info->query_type, 0);
-      pipe->begin_query(pipe, info->query[info->head]);
    }
+
+   if (info->query[info->head])
+      pipe->begin_query(pipe, info->query[info->head]);
 }
 
 static void
@@ -148,7 +162,8 @@ void
 hud_pipe_query_install(struct hud_pane *pane, struct pipe_context *pipe,
                        const char *name, unsigned query_type,
                        unsigned result_index,
-                       uint64_t max_value, boolean uses_byte_units)
+                       uint64_t max_value, enum pipe_driver_query_type type,
+                       enum pipe_driver_query_result_type result_type)
 {
    struct hud_graph *gr;
    struct query_info *info;
@@ -172,12 +187,12 @@ hud_pipe_query_install(struct hud_pane *pane, struct pipe_context *pipe,
    info->pipe = pipe;
    info->query_type = query_type;
    info->result_index = result_index;
+   info->result_type = result_type;
 
    hud_pane_add_graph(pane, gr);
    if (pane->max_value < max_value)
       hud_pane_set_max_value(pane, max_value);
-   if (uses_byte_units)
-      pane->uses_byte_units = TRUE;
+   pane->type = type;
 }
 
 boolean
@@ -187,7 +202,6 @@ hud_driver_query_install(struct hud_pane *pane, struct pipe_context *pipe,
    struct pipe_screen *screen = pipe->screen;
    struct pipe_driver_query_info query;
    unsigned num_queries, i;
-   boolean uses_byte_units;
    boolean found = FALSE;
 
    if (!screen->get_driver_query_info)
@@ -206,9 +220,8 @@ hud_driver_query_install(struct hud_pane *pane, struct pipe_context *pipe,
    if (!found)
       return FALSE;
 
-   uses_byte_units = query.type == PIPE_DRIVER_QUERY_TYPE_BYTES;
    hud_pipe_query_install(pane, pipe, query.name, query.query_type, 0,
-                          query.max_value.u64, uses_byte_units);
+                          query.max_value.u64, query.type, query.result_type);
 
    return TRUE;
 }

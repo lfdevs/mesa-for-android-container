@@ -69,6 +69,9 @@ boolean fd_screen_fence_finish(struct pipe_screen *screen,
 		struct pipe_fence_handle *fence,
 		uint64_t timeout)
 {
+	if (!timeout)
+		return fd_screen_fence_signalled(screen, fence);
+
 	if (fd_pipe_wait(fence->screen->pipe, fence->timestamp))
 		return false;
 

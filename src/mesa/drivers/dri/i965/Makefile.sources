@@ -42,6 +42,7 @@ i965_FILES = \
 	brw_ff_gs.c \
 	brw_ff_gs_emit.c \
 	brw_ff_gs.h \
+	brw_fs_builder.h \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_cmod_propagation.cpp \
 	brw_fs_combine_constants.cpp \
@@ -49,7 +50,6 @@ i965_FILES = \
 	brw_fs.cpp \
 	brw_fs_cse.cpp \
 	brw_fs_dead_code_eliminate.cpp \
-	brw_fs_fp.cpp \
 	brw_fs_generator.cpp \
 	brw_fs.h \
 	brw_fs_live_variables.cpp \
@@ -60,6 +60,8 @@ i965_FILES = \
 	brw_fs_register_coalesce.cpp \
 	brw_fs_saturate_propagation.cpp \
 	brw_fs_sel_peephole.cpp \
+	brw_fs_surface_builder.cpp \
+	brw_fs_surface_builder.h \
 	brw_fs_vector_splitting.cpp \
 	brw_fs_visitor.cpp \
 	brw_gs.c \
@@ -86,6 +88,7 @@ i965_FILES = \
 	brw_object_purgeable.c \
 	brw_packed_float.c \
 	brw_performance_monitor.c \
+	brw_pipe_control.c \
 	brw_primitive_restart.c \
 	brw_program.c \
 	brw_program.h \
@@ -122,6 +125,8 @@ i965_FILES = \
 	brw_vec4.h \
 	brw_vec4_live_variables.cpp \
 	brw_vec4_live_variables.h \
+	brw_vec4_nir.cpp \
+	brw_vec4_gs_nir.cpp \
 	brw_vec4_reg_allocate.cpp \
 	brw_vec4_visitor.cpp \
 	brw_vec4_vp.cpp \
@@ -130,6 +135,7 @@ i965_FILES = \
 	brw_vs.h \
 	brw_vs_state.c \
 	brw_vs_surface_state.c \
+	brw_vue_map.c \
 	brw_wm.c \
 	brw_wm.h \
 	brw_wm_iz.cpp \

@@ -31,6 +31,7 @@
 #include "brw_util.h"
 #include "intel_batchbuffer.h"
 #include "main/fbobject.h"
+#include "main/framebuffer.h"
 
 static void
 upload_clip_state(struct brw_context *brw)
@@ -145,11 +146,14 @@ upload_clip_state(struct brw_context *brw)
     * the viewport, so we can ignore this restriction.
     */
    if (brw->gen < 8) {
+      const float fb_width = (float)_mesa_geometric_width(fb);
+      const float fb_height = (float)_mesa_geometric_height(fb);
+
       for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
          if (ctx->ViewportArray[i].X != 0 ||
              ctx->ViewportArray[i].Y != 0 ||
-             ctx->ViewportArray[i].Width != (float) fb->Width ||
-             ctx->ViewportArray[i].Height != (float) fb->Height) {
+             ctx->ViewportArray[i].Width != fb_width ||
+             ctx->ViewportArray[i].Height != fb_height) {
             dw2 &= ~GEN6_CLIP_GB_TEST;
             break;
          }
@@ -179,7 +183,7 @@ upload_clip_state(struct brw_context *brw)
 	     dw2);
    OUT_BATCH(U_FIXED(0.125, 3) << GEN6_CLIP_MIN_POINT_WIDTH_SHIFT |
              U_FIXED(255.875, 3) << GEN6_CLIP_MAX_POINT_WIDTH_SHIFT |
-             (fb->MaxNumLayers > 0 ? 0 : GEN6_CLIP_FORCE_ZERO_RTAINDEX) |
+             (_mesa_geometric_layers(fb) > 0 ? 0 : GEN6_CLIP_FORCE_ZERO_RTAINDEX) |
              ((ctx->Const.MaxViewports - 1) & GEN6_CLIP_MAX_VP_INDEX_MASK));
    ADVANCE_BATCH();
 }

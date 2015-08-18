@@ -199,6 +199,7 @@ droid_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
    struct dri2_egl_config *dri2_conf = dri2_egl_config(conf);
    struct dri2_egl_surface *dri2_surf;
    struct ANativeWindow *window = native_window;
+   const __DRIconfig *config;
 
    dri2_surf = calloc(1, sizeof *dri2_surf);
    if (!dri2_surf) {
@@ -230,9 +231,11 @@ droid_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       window->query(window, NATIVE_WINDOW_HEIGHT, &dri2_surf->base.Height);
    }
 
+   config = dri2_get_dri_config(dri2_conf, EGL_WINDOW_BIT,
+                                dri2_surf->base.GLColorspace);
+
    dri2_surf->dri_drawable =
-      (*dri2_dpy->dri2->createNewDrawable)(dri2_dpy->dri_screen,
-					   dri2_conf->dri_double_config,
+      (*dri2_dpy->dri2->createNewDrawable)(dri2_dpy->dri_screen, config,
                                            dri2_surf);
    if (dri2_surf->dri_drawable == NULL) {
       _eglError(EGL_BAD_ALLOC, "dri2->createNewDrawable");
@@ -706,10 +709,6 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *dpy)
 
    dpy->Extensions.ANDROID_image_native_buffer = EGL_TRUE;
    dpy->Extensions.KHR_image_base = EGL_TRUE;
-
-   /* we're supporting EGL 1.4 */
-   dpy->VersionMajor = 1;
-   dpy->VersionMinor = 4;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.

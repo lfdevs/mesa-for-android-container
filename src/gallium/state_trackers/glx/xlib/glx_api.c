@@ -40,6 +40,13 @@
 
 #include "xm_api.h"
 
+/* An "Atrribs/Attribs" typo was fixed in glxproto.h in Nov 2014.
+ * This is in case we don't have the updated header.
+ */
+#if !defined(X_GLXCreateContextAttribsARB) && \
+     defined(X_GLXCreateContextAtrribsARB)
+#define X_GLXCreateContextAttribsARB X_GLXCreateContextAtrribsARB
+#endif 
 
 /* This indicates the client-side GLX API and GLX encoder version. */
 #define CLIENT_MAJOR_VERSION 1
@@ -2168,7 +2175,7 @@ glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute,
 #endif
 
       default:
-         generate_error(dpy, BadValue, 0, X_GLXCreateContextAtrribsARB, true);
+         generate_error(dpy, BadValue, 0, X_GLXCreateContextAttribsARB, true);
          return;
    }
 }
@@ -2762,14 +2769,14 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
          break;
       default:
          /* bad attribute */
-         generate_error(dpy, BadValue, 0, X_GLXCreateContextAtrribsARB, True);
+         generate_error(dpy, BadValue, 0, X_GLXCreateContextAttribsARB, True);
          return NULL;
       }
    }
 
    /* check contextFlags */
    if (contextFlags & ~contextFlagsAll) {
-      generate_error(dpy, BadValue, 0, X_GLXCreateContextAtrribsARB, True);
+      generate_error(dpy, BadValue, 0, X_GLXCreateContextAttribsARB, True);
       return NULL;
    }
 
@@ -2777,14 +2784,14 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
    if (profileMask != GLX_CONTEXT_CORE_PROFILE_BIT_ARB &&
        profileMask != GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB &&
        profileMask != GLX_CONTEXT_ES_PROFILE_BIT_EXT) {
-      generate_error(dpy, GLXBadProfileARB, 0, X_GLXCreateContextAtrribsARB, False);
+      generate_error(dpy, GLXBadProfileARB, 0, X_GLXCreateContextAttribsARB, False);
       return NULL;
    }
 
    /* check renderType */
    if (renderType != GLX_RGBA_TYPE &&
        renderType != GLX_COLOR_INDEX_TYPE) {
-      generate_error(dpy, BadValue, 0, X_GLXCreateContextAtrribsARB, True);
+      generate_error(dpy, BadValue, 0, X_GLXCreateContextAttribsARB, True);
       return NULL;
    }
 
@@ -2797,7 +2804,7 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
          (majorVersion == 3 && minorVersion > 3) ||
          (majorVersion == 4 && minorVersion > 5) ||
          majorVersion > 4))) {
-      generate_error(dpy, BadMatch, 0, X_GLXCreateContextAtrribsARB, True);
+      generate_error(dpy, BadMatch, 0, X_GLXCreateContextAttribsARB, True);
       return NULL;
    }
    if (profileMask == GLX_CONTEXT_ES_PROFILE_BIT_EXT &&
@@ -2809,18 +2816,18 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
        * different error code for invalid ES versions, but this is what NVIDIA
        * does and piglit expects.
        */
-      generate_error(dpy, GLXBadProfileARB, 0, X_GLXCreateContextAtrribsARB, False);
+      generate_error(dpy, GLXBadProfileARB, 0, X_GLXCreateContextAttribsARB, False);
       return NULL;
    }
 
    if ((contextFlags & GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB) &&
        majorVersion < 3) {
-      generate_error(dpy, BadMatch, 0, X_GLXCreateContextAtrribsARB, True);
+      generate_error(dpy, BadMatch, 0, X_GLXCreateContextAttribsARB, True);
       return NULL;
    }
 
    if (renderType == GLX_COLOR_INDEX_TYPE && majorVersion >= 3) {
-      generate_error(dpy, BadMatch, 0, X_GLXCreateContextAtrribsARB, True);
+      generate_error(dpy, BadMatch, 0, X_GLXCreateContextAttribsARB, True);
       return NULL;
    }
 
@@ -2830,7 +2837,7 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
                         majorVersion, minorVersion,
                         profileMask, contextFlags);
    if (!ctx) {
-      generate_error(dpy, GLXBadFBConfig, 0, X_GLXCreateContextAtrribsARB, False);
+      generate_error(dpy, GLXBadFBConfig, 0, X_GLXCreateContextAttribsARB, False);
    }
 
    return ctx;

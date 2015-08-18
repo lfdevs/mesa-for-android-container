@@ -46,12 +46,12 @@ struct cull_stage {
 };
 
 
-static INLINE struct cull_stage *cull_stage( struct draw_stage *stage )
+static inline struct cull_stage *cull_stage( struct draw_stage *stage )
 {
    return (struct cull_stage *)stage;
 }
 
-static INLINE boolean
+static inline boolean
 cull_distance_is_out(float dist)
 {
    return (dist < 0.0f) || util_is_inf_or_nan(dist);

@@ -24,6 +24,8 @@
 #include "brw_fs.h"
 #include "brw_cfg.h"
 
+using namespace brw;
+
 /** @file brw_fs_peephole_predicated_break.cpp
  *
  * Loops are often structured as
@@ -85,9 +87,9 @@ fs_visitor::opt_peephole_predicated_break()
        * instruction to set the flag register.
        */
       if (devinfo->gen == 6 && if_inst->conditional_mod) {
-         fs_inst *cmp_inst = CMP(reg_null_d, if_inst->src[0], if_inst->src[1],
-                                 if_inst->conditional_mod);
-         if_inst->insert_before(if_block, cmp_inst);
+         const fs_builder ibld(this, if_block, if_inst);
+         ibld.CMP(ibld.null_reg_d(), if_inst->src[0], if_inst->src[1],
+                  if_inst->conditional_mod);
          jump_inst->predicate = BRW_PREDICATE_NORMAL;
       } else {
          jump_inst->predicate = if_inst->predicate;

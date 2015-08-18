@@ -99,7 +99,7 @@ struct pb_debug_manager
 };
 
 
-static INLINE struct pb_debug_buffer *
+static inline struct pb_debug_buffer *
 pb_debug_buffer(struct pb_buffer *buf)
 {
    assert(buf);
@@ -107,7 +107,7 @@ pb_debug_buffer(struct pb_buffer *buf)
 }
 
 
-static INLINE struct pb_debug_manager *
+static inline struct pb_debug_manager *
 pb_debug_manager(struct pb_manager *mgr)
 {
    assert(mgr);
@@ -123,7 +123,7 @@ static const uint8_t random_pattern[32] = {
 };
 
 
-static INLINE void 
+static inline void 
 fill_random_pattern(uint8_t *dst, pb_size size)
 {
    pb_size i = 0;
@@ -134,7 +134,7 @@ fill_random_pattern(uint8_t *dst, pb_size size)
 }
 
 
-static INLINE boolean 
+static inline boolean 
 check_random_pattern(const uint8_t *dst, pb_size size, 
                      pb_size *min_ofs, pb_size *max_ofs) 
 {

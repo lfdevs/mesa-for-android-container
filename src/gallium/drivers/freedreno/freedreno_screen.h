@@ -46,7 +46,9 @@ struct fd_screen {
 	uint32_t device_id;
 	uint32_t gpu_id;         /* 220, 305, etc */
 	uint32_t chip_id;        /* coreid:8 majorrev:8 minorrev:8 patch:8 */
-	uint32_t max_rts;
+	uint32_t max_rts;        /* max # of render targets */
+
+	void *compiler;          /* currently unused for a2xx */
 
 	struct fd_device *dev;
 	struct fd_pipe *pipe;
@@ -54,7 +56,7 @@ struct fd_screen {
 	int64_t cpu_gpu_time_delta;
 };
 
-static INLINE struct fd_screen *
+static inline struct fd_screen *
 fd_screen(struct pipe_screen *pscreen)
 {
 	return (struct fd_screen *)pscreen;
@@ -71,6 +73,7 @@ struct fd_bo * fd_screen_bo_from_handle(struct pipe_screen *pscreen,
 struct pipe_screen * fd_screen_create(struct fd_device *dev);
 
 /* is a3xx patch revision 0? */
+/* TODO a306.0 probably doesn't need this.. be more clever?? */
 static inline boolean
 is_a3xx_p0(struct fd_screen *screen)
 {
@@ -87,6 +90,13 @@ static inline boolean
 is_a4xx(struct fd_screen *screen)
 {
 	return (screen->gpu_id >= 400) && (screen->gpu_id < 500);
+}
+
+/* is it using the ir3 compiler (shader isa introduced with a3xx)? */
+static inline boolean
+is_ir3(struct fd_screen *screen)
+{
+	return is_a3xx(screen) || is_a4xx(screen);
 }
 
 #endif /* FREEDRENO_SCREEN_H_ */

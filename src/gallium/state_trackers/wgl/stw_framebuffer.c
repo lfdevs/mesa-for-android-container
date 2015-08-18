@@ -45,7 +45,7 @@
  * Search the framebuffer with the matching HWND while holding the
  * stw_dev::fb_mutex global lock.
  */
-static INLINE struct stw_framebuffer *
+static inline struct stw_framebuffer *
 stw_framebuffer_from_hwnd_locked(
    HWND hwnd )
 {
@@ -376,7 +376,7 @@ stw_framebuffer_cleanup(void)
 /**
  * Given an hdc, return the corresponding stw_framebuffer.
  */
-static INLINE struct stw_framebuffer *
+static inline struct stw_framebuffer *
 stw_framebuffer_from_hdc_locked(
    HDC hdc )
 {

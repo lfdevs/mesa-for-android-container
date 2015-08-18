@@ -40,6 +40,7 @@
 #include "util/u_dynarray.h"
 #include "util/u_pack_color.h"
 
+#include "disasm.h"
 #include "adreno_common.xml.h"
 #include "adreno_pm4.xml.h"
 
@@ -53,6 +54,12 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 /* TBD if it is same on a2xx, but for now: */
 #define MAX_MIP_LEVELS A3XX_MAX_MIP_LEVELS
 
+#define A2XX_MAX_RENDER_TARGETS 1
+#define A3XX_MAX_RENDER_TARGETS 4
+#define A4XX_MAX_RENDER_TARGETS 8
+
+#define MAX_RENDER_TARGETS A4XX_MAX_RENDER_TARGETS
+
 #define FD_DBG_MSGS     0x0001
 #define FD_DBG_DISASM   0x0002
 #define FD_DBG_DCLEAR   0x0004
@@ -62,11 +69,9 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_NOBYPASS 0x0040
 #define FD_DBG_FRAGHALF 0x0080
 #define FD_DBG_NOBIN    0x0100
-#define FD_DBG_OPTMSGS  0x0400
-#define FD_DBG_OPTDUMP  0x0800
-#define FD_DBG_GLSL120  0x1000
-#define FD_DBG_NOCP     0x2000
-#define FD_DBG_NIR      0x4000
+#define FD_DBG_OPTMSGS  0x0200
+#define FD_DBG_GLSL120  0x0400
+#define FD_DBG_SHADERDB 0x0800
 
 extern int fd_mesa_debug;
 extern bool fd_binning_enabled;
@@ -109,6 +114,58 @@ pipe_surface_format(struct pipe_surface *psurf)
 	if (!psurf)
 		return PIPE_FORMAT_NONE;
 	return psurf->format;
+}
+
+static inline bool
+fd_surface_half_precision(const struct pipe_surface *psurf)
+{
+	enum pipe_format format;
+
+	if (!psurf)
+		return true;
+
+	format = psurf->format;
+
+	/* colors are provided in consts, which go through cov.f32f16, which will
+	 * break these values
+	 */
+	if (util_format_is_pure_integer(format))
+		return false;
+
+	/* avoid losing precision on 32-bit float formats */
+	if (util_format_is_float(format) &&
+		util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_RGB, 0) == 32)
+		return false;
+
+	return true;
+}
+
+static inline unsigned
+fd_sampler_first_level(const struct pipe_sampler_view *view)
+{
+	if (view->target == PIPE_BUFFER)
+		return 0;
+	return view->u.tex.first_level;
+}
+
+static inline unsigned
+fd_sampler_last_level(const struct pipe_sampler_view *view)
+{
+	if (view->target == PIPE_BUFFER)
+		return 0;
+	return view->u.tex.last_level;
+}
+
+static inline bool
+fd_half_precision(struct pipe_framebuffer_state *pfb)
+{
+	unsigned i;
+
+	for (i = 0; i < pfb->nr_cbufs; i++)
+		if (!fd_surface_half_precision(pfb->cbufs[i]))
+			return false;
+
+	return true;
 }
 
 #define LOG_DWORDS 0

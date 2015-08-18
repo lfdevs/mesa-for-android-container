@@ -1679,6 +1679,8 @@ dri3_open(Display *dpy,
    fd = xcb_dri3_open_reply_fds(c, reply)[0];
    fcntl(fd, F_SETFD, FD_CLOEXEC);
 
+   free(reply);
+
    return fd;
 }
 

@@ -50,9 +50,10 @@ vc4_destroy_query(struct pipe_context *ctx, struct pipe_query *query)
         free(query);
 }
 
-static void
+static boolean
 vc4_begin_query(struct pipe_context *ctx, struct pipe_query *query)
 {
+        return true;
 }
 
 static void

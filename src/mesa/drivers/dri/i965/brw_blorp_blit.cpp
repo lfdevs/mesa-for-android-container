@@ -1285,8 +1285,8 @@ brw_blorp_blit_program::translate_dst_to_src()
       /* Round the float coordinates down to nearest integer */
       emit_rndd(Xp_f, X_f);
       emit_rndd(Yp_f, Y_f);
-      emit_mul(X_f, Xp_f, brw_imm_f(1 / key->x_scale));
-      emit_mul(Y_f, Yp_f, brw_imm_f(1 / key->y_scale));
+      emit_mul(X_f, Xp_f, brw_imm_f(1.0f / key->x_scale));
+      emit_mul(Y_f, Yp_f, brw_imm_f(1.0f / key->y_scale));
       SWAP_XY_AND_XPYP();
    } else if (!key->bilinear_filter) {
       /* Round the float coordinates down to nearest integer by moving to
@@ -1442,7 +1442,7 @@ brw_blorp_blit_program::manual_blend_average(unsigned num_samples)
       for (int j = 0; j < 4; ++j) {
          emit_mul(offset(texture_data[0], 2*j),
                  offset(vec8(texture_data[0]), 2*j),
-                 brw_imm_f(1.0/num_samples));
+                 brw_imm_f(1.0f / num_samples));
       }
    }
 
@@ -1475,9 +1475,9 @@ brw_blorp_blit_program::manual_blend_bilinear(unsigned num_samples)
 
       /* Compute pixel coordinates */
       emit_add(vec16(x_sample_coords), Xp_f,
-              brw_imm_f((float)(i & 0x1) * (1.0 / key->x_scale)));
+              brw_imm_f((float)(i & 0x1) * (1.0f / key->x_scale)));
       emit_add(vec16(y_sample_coords), Yp_f,
-              brw_imm_f((float)((i >> 1) & 0x1) * (1.0 / key->y_scale)));
+              brw_imm_f((float)((i >> 1) & 0x1) * (1.0f / key->y_scale)));
       emit_mov(vec16(X), x_sample_coords);
       emit_mov(vec16(Y), y_sample_coords);
 
@@ -1789,7 +1789,7 @@ brw_blorp_coord_transform_params::setup(GLfloat src0, GLfloat src1,
        * so 0.5 provides the necessary correction.
        */
       multiplier = scale;
-      offset = src0 + (-dst0 + 0.5) * scale;
+      offset = src0 + (-dst0 + 0.5f) * scale;
    } else {
       /* When mirroring X we need:
        *   src_x - src_x0 = dst_x1 - dst_x - 0.5
@@ -1797,7 +1797,7 @@ brw_blorp_coord_transform_params::setup(GLfloat src0, GLfloat src1,
        *   src_x = src_x0 + (dst_x1 -dst_x - 0.5) * scale
        */
       multiplier = -scale;
-      offset = src0 + (dst1 - 0.5) * scale;
+      offset = src0 + (dst1 - 0.5f) * scale;
    }
 }
 
@@ -1952,8 +1952,8 @@ brw_blorp_blit_params::brw_blorp_blit_params(struct brw_context *brw,
    /* Scaling factors used for bilinear filtering in multisample scaled
     * blits.
     */
-   wm_prog_key.x_scale = 2.0;
-   wm_prog_key.y_scale = src_mt->num_samples / 2.0;
+   wm_prog_key.x_scale = 2.0f;
+   wm_prog_key.y_scale = src_mt->num_samples / 2.0f;
 
    if (filter == GL_LINEAR && src.num_samples <= 1 && dst.num_samples <= 1)
       wm_prog_key.bilinear_filter = true;
@@ -2000,9 +2000,9 @@ brw_blorp_blit_params::brw_blorp_blit_params(struct brw_context *brw,
    x1 = wm_push_consts.dst_x1 = roundf(dst_x1);
    y1 = wm_push_consts.dst_y1 = roundf(dst_y1);
    wm_push_consts.rect_grid_x1 = (minify(src_mt->logical_width0, src_level) *
-                                  wm_prog_key.x_scale - 1.0);
+                                  wm_prog_key.x_scale - 1.0f);
    wm_push_consts.rect_grid_y1 = (minify(src_mt->logical_height0, src_level) *
-                                  wm_prog_key.y_scale - 1.0);
+                                  wm_prog_key.y_scale - 1.0f);
 
    wm_push_consts.x_transform.setup(src_x0, src_x1, dst_x0, dst_x1, mirror_x);
    wm_push_consts.y_transform.setup(src_y0, src_y1, dst_y0, dst_y1, mirror_y);

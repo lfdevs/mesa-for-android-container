@@ -203,7 +203,7 @@ struct softpipe_context {
 };
 
 
-static INLINE struct softpipe_context *
+static inline struct softpipe_context *
 softpipe_context( struct pipe_context *pipe )
 {
    return (struct softpipe_context *)pipe;

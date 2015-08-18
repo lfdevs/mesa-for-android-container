@@ -83,7 +83,8 @@ _eglLinkConfig(_EGLConfig *conf)
    _EGLDisplay *dpy = conf->Display;
 
    /* sanity check */
-   assert(dpy && conf->ConfigID > 0);
+   assert(dpy);
+   assert(conf->ConfigID > 0);
 
    if (!dpy->Configs) {
       dpy->Configs = _eglCreateArray("Config", 16);

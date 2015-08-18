@@ -27,28 +27,28 @@ struct nv30_texfmt {
 };
 
 extern const struct nv30_format_info nv30_format_info_table[];
-static INLINE const struct nv30_format_info *
+static inline const struct nv30_format_info *
 nv30_format_info(struct pipe_screen *pscreen, enum pipe_format format)
 {
    return &nv30_format_info_table[format];
 }
 
 extern const struct nv30_format nv30_format_table[];
-static INLINE const struct nv30_format *
+static inline const struct nv30_format *
 nv30_format(struct pipe_screen *pscreen, enum pipe_format format)
 {
    return &nv30_format_table[format];
 }
 
 extern const struct nv30_vtxfmt nv30_vtxfmt_table[];
-static INLINE const struct nv30_vtxfmt *
+static inline const struct nv30_vtxfmt *
 nv30_vtxfmt(struct pipe_screen *pscreen, enum pipe_format format)
 {
    return &nv30_vtxfmt_table[format];
 }
 
 extern const struct nv30_texfmt nv30_texfmt_table[];
-static INLINE const struct nv30_texfmt *
+static inline const struct nv30_texfmt *
 nv30_texfmt(struct pipe_screen *pscreen, enum pipe_format format)
 {
    return &nv30_texfmt_table[format];

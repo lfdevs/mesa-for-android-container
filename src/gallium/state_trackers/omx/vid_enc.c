@@ -180,6 +180,11 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
                                 PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_SUPPORTED))
       return OMX_ErrorBadParameter;
  
+   priv->stacked_frames_num = screen->get_video_param(screen,
+                                PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH,
+                                PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                PIPE_VIDEO_CAP_STACKED_FRAMES);
+
    priv->s_pipe = screen->context_create(screen, priv->screen);
    if (!priv->s_pipe)
       return OMX_ErrorInsufficientResources;
@@ -259,6 +264,7 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
    LIST_INITHEAD(&priv->free_tasks);
    LIST_INITHEAD(&priv->used_tasks);
    LIST_INITHEAD(&priv->b_frames);
+   LIST_INITHEAD(&priv->stacked_tasks);
 
    return OMX_ErrorNone;
 }
@@ -271,6 +277,7 @@ static OMX_ERRORTYPE vid_enc_Destructor(OMX_COMPONENTTYPE *comp)
    enc_ReleaseTasks(&priv->free_tasks);
    enc_ReleaseTasks(&priv->used_tasks);
    enc_ReleaseTasks(&priv->b_frames);
+   enc_ReleaseTasks(&priv->stacked_tasks);
 
    if (priv->ports) {
       for (i = 0; i < priv->sPortTypesParam[OMX_PortDomainVideo].nPorts; ++i) {
@@ -1116,6 +1123,7 @@ static OMX_ERRORTYPE vid_enc_EncodeFrame(omx_base_PortType *port, OMX_BUFFERHEAD
    struct input_buf_private *inp = buf->pInputPortPrivate;
    enum pipe_h264_enc_picture_type picture_type;
    struct encode_task *task;
+   unsigned stacked_num = 0;
    OMX_ERRORTYPE err;
 
    enc_MoveTasks(&inp->tasks, &priv->free_tasks);
@@ -1127,6 +1135,8 @@ static OMX_ERRORTYPE vid_enc_EncodeFrame(omx_base_PortType *port, OMX_BUFFERHEAD
       if (buf->nFlags & OMX_BUFFERFLAG_EOS) {
          buf->nFilledLen = buf->nAllocLen;
          enc_ClearBframes(port, inp);
+         enc_MoveTasks(&priv->stacked_tasks, &inp->tasks);
+         priv->codec->flush(priv->codec);
       }
       return base_port_SendBufferFunction(port, buf);
    }
@@ -1166,7 +1176,16 @@ static OMX_ERRORTYPE vid_enc_EncodeFrame(omx_base_PortType *port, OMX_BUFFERHEAD
       /* handle I or P frame */
       priv->ref_idx_l0 = priv->ref_idx_l1;
       enc_HandleTask(port, task, picture_type);
-      LIST_ADDTAIL(&task->list, &inp->tasks);
+      LIST_ADDTAIL(&task->list, &priv->stacked_tasks);
+      LIST_FOR_EACH_ENTRY(task, &priv->stacked_tasks, list) {
+         ++stacked_num;
+      }
+      if (stacked_num == priv->stacked_frames_num) {
+         struct encode_task *t;
+         t = LIST_ENTRY(struct encode_task, priv->stacked_tasks.next, list);
+         LIST_DEL(&t->list);
+         LIST_ADDTAIL(&t->list, &inp->tasks);
+      }
       priv->ref_idx_l1 = priv->frame_num++;
 
       /* handle B frames */

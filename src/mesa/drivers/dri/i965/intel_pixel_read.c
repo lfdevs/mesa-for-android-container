@@ -247,7 +247,7 @@ intelReadPixels(struct gl_context * ctx,
           * rendered to via a PBO at any point, so it seems better to just
           * flush here unconditionally.
           */
-         intel_batchbuffer_emit_mi_flush(brw);
+         brw_emit_mi_flush(brw);
          return;
       }
 

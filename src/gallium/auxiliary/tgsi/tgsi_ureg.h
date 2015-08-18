@@ -36,6 +36,7 @@
 extern "C" {
 #endif
    
+struct pipe_screen;
 struct ureg_program;
 struct pipe_stream_output_info;
 
@@ -98,7 +99,10 @@ struct ureg_dst
 struct pipe_context;
 
 struct ureg_program *
-ureg_create( unsigned processor );
+ureg_create(unsigned processor);
+
+struct ureg_program *
+ureg_create_with_screen(unsigned processor, struct pipe_screen *screen);
 
 const struct tgsi_token *
 ureg_finalize( struct ureg_program * );
@@ -136,7 +140,7 @@ ureg_destroy( struct ureg_program * );
 /***********************************************************************
  * Convenience routine:
  */
-static INLINE void *
+static inline void *
 ureg_create_shader_with_so_and_destroy( struct ureg_program *p,
 			struct pipe_context *pipe,
 			const struct pipe_stream_output_info *so )
@@ -146,7 +150,7 @@ ureg_create_shader_with_so_and_destroy( struct ureg_program *p,
    return result;
 }
 
-static INLINE void *
+static inline void *
 ureg_create_shader_and_destroy( struct ureg_program *p,
                                 struct pipe_context *pipe )
 {
@@ -172,9 +176,11 @@ ureg_DECL_fs_input_cyl_centroid(struct ureg_program *,
                        unsigned semantic_index,
                        unsigned interp_mode,
                        unsigned cylindrical_wrap,
-                       unsigned interp_location);
+                       unsigned interp_location,
+                       unsigned array_id,
+                       unsigned array_size);
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_DECL_fs_input_cyl(struct ureg_program *ureg,
                        unsigned semantic_name,
                        unsigned semantic_index,
@@ -186,10 +192,10 @@ ureg_DECL_fs_input_cyl(struct ureg_program *ureg,
                                  semantic_index,
                                  interp_mode,
                                  cylindrical_wrap,
-                                 0);
+                                 0, 0, 1);
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_DECL_fs_input(struct ureg_program *ureg,
                    unsigned semantic_name,
                    unsigned semantic_index,
@@ -199,7 +205,7 @@ ureg_DECL_fs_input(struct ureg_program *ureg,
                                  semantic_name,
                                  semantic_index,
                                  interp_mode,
-                                 0, 0);
+                                 0, 0, 0, 1);
 }
 
 struct ureg_src
@@ -207,10 +213,11 @@ ureg_DECL_vs_input( struct ureg_program *,
                     unsigned index );
 
 struct ureg_src
-ureg_DECL_gs_input(struct ureg_program *,
-                   unsigned index,
-                   unsigned semantic_name,
-                   unsigned semantic_index);
+ureg_DECL_input(struct ureg_program *,
+                unsigned semantic_name,
+                unsigned semantic_index,
+                unsigned array_id,
+                unsigned array_size);
 
 struct ureg_src
 ureg_DECL_system_value(struct ureg_program *,
@@ -219,15 +226,24 @@ ureg_DECL_system_value(struct ureg_program *,
                        unsigned semantic_index);
 
 struct ureg_dst
-ureg_DECL_output_masked( struct ureg_program *,
-                         unsigned semantic_name,
-                         unsigned semantic_index,
-                         unsigned usage_mask );
+ureg_DECL_output_masked(struct ureg_program *,
+                        unsigned semantic_name,
+                        unsigned semantic_index,
+                        unsigned usage_mask,
+                        unsigned array_id,
+                        unsigned array_size);
 
 struct ureg_dst
-ureg_DECL_output( struct ureg_program *,
-                  unsigned semantic_name,
-                  unsigned semantic_index );
+ureg_DECL_output(struct ureg_program *,
+                 unsigned semantic_name,
+                 unsigned semantic_index);
+
+struct ureg_dst
+ureg_DECL_output_array(struct ureg_program *ureg,
+                       unsigned semantic_name,
+                       unsigned semantic_index,
+                       unsigned array_id,
+                       unsigned array_size);
 
 struct ureg_src
 ureg_DECL_immediate( struct ureg_program *,
@@ -312,7 +328,7 @@ ureg_DECL_sampler_view(struct ureg_program *,
                        unsigned return_type_w );
 
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm4f( struct ureg_program *ureg,
                        float a, float b,
                        float c, float d)
@@ -325,7 +341,7 @@ ureg_imm4f( struct ureg_program *ureg,
    return ureg_DECL_immediate( ureg, v, 4 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm3f( struct ureg_program *ureg,
                        float a, float b,
                        float c)
@@ -337,7 +353,7 @@ ureg_imm3f( struct ureg_program *ureg,
    return ureg_DECL_immediate( ureg, v, 3 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm2f( struct ureg_program *ureg,
                        float a, float b)
 {
@@ -347,7 +363,7 @@ ureg_imm2f( struct ureg_program *ureg,
    return ureg_DECL_immediate( ureg, v, 2 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm1f( struct ureg_program *ureg,
                        float a)
 {
@@ -356,7 +372,7 @@ ureg_imm1f( struct ureg_program *ureg,
    return ureg_DECL_immediate( ureg, v, 1 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm4u( struct ureg_program *ureg,
             unsigned a, unsigned b,
             unsigned c, unsigned d)
@@ -369,7 +385,7 @@ ureg_imm4u( struct ureg_program *ureg,
    return ureg_DECL_immediate_uint( ureg, v, 4 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm3u( struct ureg_program *ureg,
             unsigned a, unsigned b,
             unsigned c)
@@ -381,7 +397,7 @@ ureg_imm3u( struct ureg_program *ureg,
    return ureg_DECL_immediate_uint( ureg, v, 3 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm2u( struct ureg_program *ureg,
             unsigned a, unsigned b)
 {
@@ -391,14 +407,14 @@ ureg_imm2u( struct ureg_program *ureg,
    return ureg_DECL_immediate_uint( ureg, v, 2 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm1u( struct ureg_program *ureg,
             unsigned a)
 {
    return ureg_DECL_immediate_uint( ureg, &a, 1 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm4i( struct ureg_program *ureg,
             int a, int b,
             int c, int d)
@@ -411,7 +427,7 @@ ureg_imm4i( struct ureg_program *ureg,
    return ureg_DECL_immediate_int( ureg, v, 4 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm3i( struct ureg_program *ureg,
             int a, int b,
             int c)
@@ -423,7 +439,7 @@ ureg_imm3i( struct ureg_program *ureg,
    return ureg_DECL_immediate_int( ureg, v, 3 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm2i( struct ureg_program *ureg,
             int a, int b)
 {
@@ -433,7 +449,7 @@ ureg_imm2i( struct ureg_program *ureg,
    return ureg_DECL_immediate_int( ureg, v, 2 );
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_imm1i( struct ureg_program *ureg,
             int a)
 {
@@ -443,7 +459,7 @@ ureg_imm1i( struct ureg_program *ureg,
 /* Where the destination register has a valid file, but an empty
  * writemask.
  */
-static INLINE boolean
+static inline boolean
 ureg_dst_is_empty( struct ureg_dst dst )
 {
    return dst.File != TGSI_FILE_NULL &&
@@ -557,7 +573,7 @@ ureg_fixup_insn_size(struct ureg_program *ureg,
 
 
 #define OP00( op )                                              \
-static INLINE void ureg_##op( struct ureg_program *ureg )       \
+static inline void ureg_##op( struct ureg_program *ureg )       \
 {                                                               \
    unsigned opcode = TGSI_OPCODE_##op;                          \
    struct ureg_emit_insn_result insn;                           \
@@ -576,7 +592,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg )       \
 }
 
 #define OP01( op )                                              \
-static INLINE void ureg_##op( struct ureg_program *ureg,        \
+static inline void ureg_##op( struct ureg_program *ureg,        \
                               struct ureg_src src )             \
 {                                                               \
    unsigned opcode = TGSI_OPCODE_##op;                          \
@@ -597,7 +613,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,        \
 }
 
 #define OP00_LBL( op )                                          \
-static INLINE void ureg_##op( struct ureg_program *ureg,        \
+static inline void ureg_##op( struct ureg_program *ureg,        \
                               unsigned *label_token )           \
 {                                                               \
    unsigned opcode = TGSI_OPCODE_##op;                          \
@@ -618,7 +634,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,        \
 }
 
 #define OP01_LBL( op )                                          \
-static INLINE void ureg_##op( struct ureg_program *ureg,        \
+static inline void ureg_##op( struct ureg_program *ureg,        \
                               struct ureg_src src,              \
                               unsigned *label_token )          \
 {                                                               \
@@ -641,7 +657,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,        \
 }
 
 #define OP10( op )                                                      \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst )                     \
 {                                                                       \
    unsigned opcode = TGSI_OPCODE_##op;                                  \
@@ -665,7 +681,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 
 
 #define OP11( op )                                                      \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src )                     \
 {                                                                       \
@@ -690,7 +706,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP12( op )                                                      \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1 )                    \
@@ -717,7 +733,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP12_TEX( op )                                                  \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               unsigned target,                          \
                               struct ureg_src src0,                     \
@@ -746,7 +762,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP12_SAMPLE( op )                                               \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1 )                    \
@@ -775,7 +791,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP13( op )                                                      \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1,                     \
@@ -804,7 +820,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP13_SAMPLE( op )                                               \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1,                     \
@@ -835,7 +851,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP14_TEX( op )                                                  \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               unsigned target,                          \
                               struct ureg_src src0,                     \
@@ -868,7 +884,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP14_SAMPLE( op )                                               \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1,                     \
@@ -902,7 +918,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 
 
 #define OP14( op )                                                      \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1,                     \
@@ -934,7 +950,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 
 
 #define OP15( op )                                                      \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1,                     \
@@ -967,7 +983,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 }
 
 #define OP15_SAMPLE( op )                                               \
-static INLINE void ureg_##op( struct ureg_program *ureg,                \
+static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
                               struct ureg_src src0,                     \
                               struct ureg_src src1,                     \
@@ -1010,7 +1026,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
 /***********************************************************************
  * Inline helpers for manipulating register structs:
  */
-static INLINE struct ureg_src 
+static inline struct ureg_src 
 ureg_negate( struct ureg_src reg )
 {
    assert(reg.File != TGSI_FILE_NULL);
@@ -1018,7 +1034,7 @@ ureg_negate( struct ureg_src reg )
    return reg;
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_abs( struct ureg_src reg )
 {
    assert(reg.File != TGSI_FILE_NULL);
@@ -1027,7 +1043,7 @@ ureg_abs( struct ureg_src reg )
    return reg;
 }
 
-static INLINE struct ureg_src 
+static inline struct ureg_src 
 ureg_swizzle( struct ureg_src reg, 
               int x, int y, int z, int w )
 {
@@ -1049,13 +1065,13 @@ ureg_swizzle( struct ureg_src reg,
    return reg;
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_scalar( struct ureg_src reg, int x )
 {
    return ureg_swizzle(reg, x, x, x, x);
 }
 
-static INLINE struct ureg_dst 
+static inline struct ureg_dst 
 ureg_writemask( struct ureg_dst reg,
                 unsigned writemask )
 {
@@ -1064,7 +1080,7 @@ ureg_writemask( struct ureg_dst reg,
    return reg;
 }
 
-static INLINE struct ureg_dst 
+static inline struct ureg_dst 
 ureg_saturate( struct ureg_dst reg )
 {
    assert(reg.File != TGSI_FILE_NULL);
@@ -1072,7 +1088,7 @@ ureg_saturate( struct ureg_dst reg )
    return reg;
 }
 
-static INLINE struct ureg_dst
+static inline struct ureg_dst
 ureg_predicate(struct ureg_dst reg,
                boolean negate,
                unsigned swizzle_x,
@@ -1090,7 +1106,7 @@ ureg_predicate(struct ureg_dst reg,
    return reg;
 }
 
-static INLINE struct ureg_dst 
+static inline struct ureg_dst 
 ureg_dst_indirect( struct ureg_dst reg, struct ureg_src addr )
 {
    assert(reg.File != TGSI_FILE_NULL);
@@ -1102,7 +1118,7 @@ ureg_dst_indirect( struct ureg_dst reg, struct ureg_src addr )
    return reg;
 }
 
-static INLINE struct ureg_src 
+static inline struct ureg_src 
 ureg_src_indirect( struct ureg_src reg, struct ureg_src addr )
 {
    assert(reg.File != TGSI_FILE_NULL);
@@ -1114,7 +1130,7 @@ ureg_src_indirect( struct ureg_src reg, struct ureg_src addr )
    return reg;
 }
 
-static INLINE struct ureg_dst
+static inline struct ureg_dst
 ureg_dst_dimension( struct ureg_dst reg, int index )
 {
    assert(reg.File != TGSI_FILE_NULL);
@@ -1124,7 +1140,7 @@ ureg_dst_dimension( struct ureg_dst reg, int index )
    return reg;
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_src_dimension( struct ureg_src reg, int index )
 {
    assert(reg.File != TGSI_FILE_NULL);
@@ -1134,7 +1150,7 @@ ureg_src_dimension( struct ureg_src reg, int index )
    return reg;
 }
 
-static INLINE struct ureg_dst
+static inline struct ureg_dst
 ureg_dst_dimension_indirect( struct ureg_dst reg, struct ureg_src addr,
                              int index )
 {
@@ -1148,7 +1164,7 @@ ureg_dst_dimension_indirect( struct ureg_dst reg, struct ureg_src addr,
    return reg;
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_src_dimension_indirect( struct ureg_src reg, struct ureg_src addr,
                              int index )
 {
@@ -1162,17 +1178,24 @@ ureg_src_dimension_indirect( struct ureg_src reg, struct ureg_src addr,
    return reg;
 }
 
-static INLINE struct ureg_dst
-ureg_dst_array_offset( struct ureg_dst reg, int offset )
+static inline struct ureg_src
+ureg_src_array_offset(struct ureg_src reg, int offset)
 {
-   assert(reg.File == TGSI_FILE_TEMPORARY);
    reg.Index += offset;
    return reg;
 }
 
-static INLINE struct ureg_dst
-ureg_dst_register( unsigned file,
-                   unsigned index )
+static inline struct ureg_dst
+ureg_dst_array_offset( struct ureg_dst reg, int offset )
+{
+   reg.Index += offset;
+   return reg;
+}
+
+static inline struct ureg_dst
+ureg_dst_array_register(unsigned file,
+                        unsigned index,
+                        unsigned array_id)
 {
    struct ureg_dst dst;
 
@@ -1196,12 +1219,19 @@ ureg_dst_register( unsigned file,
    dst.DimIndFile = TGSI_FILE_NULL;
    dst.DimIndIndex = 0;
    dst.DimIndSwizzle = 0;
-   dst.ArrayID = 0;
+   dst.ArrayID = array_id;
 
    return dst;
 }
 
-static INLINE struct ureg_dst
+static inline struct ureg_dst
+ureg_dst_register(unsigned file,
+                  unsigned index)
+{
+   return ureg_dst_array_register(file, index, 0);
+}
+
+static inline struct ureg_dst
 ureg_dst( struct ureg_src src )
 {
    struct ureg_dst dst;
@@ -1235,9 +1265,10 @@ ureg_dst( struct ureg_src src )
    return dst;
 }
 
-static INLINE struct ureg_src
-ureg_src_register(unsigned file,
-                  unsigned index)
+static inline struct ureg_src
+ureg_src_array_register(unsigned file,
+                        unsigned index,
+                        unsigned array_id)
 {
    struct ureg_src src;
 
@@ -1259,12 +1290,19 @@ ureg_src_register(unsigned file,
    src.DimIndFile = TGSI_FILE_NULL;
    src.DimIndIndex = 0;
    src.DimIndSwizzle = 0;
-   src.ArrayID = 0;
+   src.ArrayID = array_id;
 
    return src;
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
+ureg_src_register(unsigned file,
+                  unsigned index)
+{
+   return ureg_src_array_register(file, index, 0);
+}
+
+static inline struct ureg_src
 ureg_src( struct ureg_dst dst )
 {
    struct ureg_src src;
@@ -1294,7 +1332,7 @@ ureg_src( struct ureg_dst dst )
 
 
 
-static INLINE struct ureg_dst
+static inline struct ureg_dst
 ureg_dst_undef( void )
 {
    struct ureg_dst dst;
@@ -1324,7 +1362,7 @@ ureg_dst_undef( void )
    return dst;
 }
 
-static INLINE struct ureg_src
+static inline struct ureg_src
 ureg_src_undef( void )
 {
    struct ureg_src src;
@@ -1352,13 +1390,13 @@ ureg_src_undef( void )
    return src;
 }
 
-static INLINE boolean
+static inline boolean
 ureg_src_is_undef( struct ureg_src src )
 {
    return src.File == TGSI_FILE_NULL;
 }
 
-static INLINE boolean
+static inline boolean
 ureg_dst_is_undef( struct ureg_dst dst )
 {
    return dst.File == TGSI_FILE_NULL;

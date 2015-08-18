@@ -11,7 +11,7 @@ struct dri2_buffer
    struct pipe_resource *resource;
 };
 
-static INLINE struct dri2_buffer *
+static inline struct dri2_buffer *
 dri2_buffer(__DRIbuffer * driBufferPriv)
 {
    return (struct dri2_buffer *) driBufferPriv;

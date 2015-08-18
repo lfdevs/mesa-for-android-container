@@ -225,7 +225,7 @@ static const char *qpu_condflags[] = {
 };
 
 #define DESC(array, index)                                        \
-        ((index > ARRAY_SIZE(array) || !(array)[index]) ?         \
+        ((index >= ARRAY_SIZE(array) || !(array)[index]) ?         \
          "???" : (array)[index])
 
 static const char *

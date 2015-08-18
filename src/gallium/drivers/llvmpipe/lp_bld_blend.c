@@ -78,7 +78,7 @@ lp_build_blend_func_reverse(unsigned rgb_func, unsigned alpha_func)
 /**
  * Whether the blending factors are complementary of each other.
  */
-static INLINE boolean
+static inline boolean
 lp_build_blend_factor_complementary(unsigned src_factor, unsigned dst_factor)
 {
    return dst_factor == (src_factor ^ 0x10);

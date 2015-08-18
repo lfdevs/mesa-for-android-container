@@ -91,7 +91,7 @@
 
 struct nv50_blitctx;
 
-boolean nv50_blitctx_create(struct nv50_context *);
+bool nv50_blitctx_create(struct nv50_context *);
 
 struct nv50_context {
    struct nouveau_context base;
@@ -102,7 +102,7 @@ struct nv50_context {
    struct nouveau_bufctx *bufctx;
 
    uint32_t dirty;
-   boolean cb_dirty;
+   bool cb_dirty;
 
    struct nv50_graph_state state;
 
@@ -152,26 +152,26 @@ struct nv50_context {
    unsigned sample_mask;
    unsigned min_samples;
 
-   boolean vbo_push_hint;
+   bool vbo_push_hint;
 
    uint32_t rt_array_mode;
 
    struct pipe_query *cond_query;
-   boolean cond_cond; /* inverted rendering condition */
+   bool cond_cond; /* inverted rendering condition */
    uint cond_mode;
    uint32_t cond_condmode; /* the calculated condition */
 
    struct nv50_blitctx *blit;
 };
 
-static INLINE struct nv50_context *
+static inline struct nv50_context *
 nv50_context(struct pipe_context *pipe)
 {
    return (struct nv50_context *)pipe;
 }
 
 /* return index used in nv50_context arrays for a specific shader type */
-static INLINE unsigned
+static inline unsigned
 nv50_context_shader_stage(unsigned pipe)
 {
    switch (pipe) {
@@ -188,7 +188,7 @@ nv50_context_shader_stage(unsigned pipe)
 /* nv50_context.c */
 struct pipe_context *nv50_create(struct pipe_screen *, void *);
 
-void nv50_bufctx_fence(struct nouveau_bufctx *, boolean on_flush);
+void nv50_bufctx_fence(struct nouveau_bufctx *, bool on_flush);
 
 void nv50_default_kick_notify(struct nouveau_pushbuf *);
 
@@ -202,7 +202,7 @@ void nv50_query_pushbuf_submit(struct nouveau_pushbuf *,
 void nv84_query_fifo_wait(struct nouveau_pushbuf *, struct pipe_query *);
 void nva0_so_target_save_offset(struct pipe_context *,
                                 struct pipe_stream_output_target *,
-                                unsigned index, boolean seralize);
+                                unsigned index, bool seralize);
 
 #define NVA0_QUERY_STREAM_OUTPUT_BUFFER_OFFSET (PIPE_QUERY_TYPES + 0)
 
@@ -221,8 +221,8 @@ extern void nv50_init_state_functions(struct nv50_context *);
 
 /* nv50_state_validate.c */
 /* @words: check for space before emitting relocs */
-extern boolean nv50_state_validate(struct nv50_context *, uint32_t state_mask,
-                                   unsigned space_words);
+extern bool nv50_state_validate(struct nv50_context *, uint32_t state_mask,
+                                unsigned space_words);
 
 /* nv50_surface.c */
 extern void nv50_clear(struct pipe_context *, unsigned buffers,

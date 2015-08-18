@@ -232,23 +232,9 @@ lp_emit_store_aos(
    /*
     * Saturate the value
     */
-
-   switch (inst->Instruction.Saturate) {
-   case TGSI_SAT_NONE:
-      break;
-
-   case TGSI_SAT_ZERO_ONE:
+   if (inst->Instruction.Saturate) {
       value = lp_build_max(&bld->bld_base.base, value, bld->bld_base.base.zero);
       value = lp_build_min(&bld->bld_base.base, value, bld->bld_base.base.one);
-      break;
-
-   case TGSI_SAT_MINUS_PLUS_ONE:
-      value = lp_build_max(&bld->bld_base.base, value, lp_build_const_vec(bld->bld_base.base.gallivm, bld->bld_base.base.type, -1.0));
-      value = lp_build_min(&bld->bld_base.base, value, bld->bld_base.base.one);
-      break;
-
-   default:
-      assert(0);
    }
 
    /*

@@ -402,6 +402,16 @@ static const char *const gen6_sfid[16] = {
    [HSW_SFID_CRE]                      = "cre",
 };
 
+static const char *const gen7_gateway_subfuncid[8] = {
+   [BRW_MESSAGE_GATEWAY_SFID_OPEN_GATEWAY] = "open",
+   [BRW_MESSAGE_GATEWAY_SFID_CLOSE_GATEWAY] = "close",
+   [BRW_MESSAGE_GATEWAY_SFID_FORWARD_MSG] = "forward msg",
+   [BRW_MESSAGE_GATEWAY_SFID_GET_TIMESTAMP] = "get timestamp",
+   [BRW_MESSAGE_GATEWAY_SFID_BARRIER_MSG] = "barrier msg",
+   [BRW_MESSAGE_GATEWAY_SFID_UPDATE_GATEWAY_STATE] = "update state",
+   [BRW_MESSAGE_GATEWAY_SFID_MMIO_READ_WRITE] = "mmio read/write",
+};
+
 static const char *const dp_write_port_msg_type[8] = {
    [0b000] = "OWord block write",
    [0b001] = "OWord dual block write",
@@ -977,13 +987,14 @@ src0_3src(FILE *file, const struct brw_device_info *devinfo, brw_inst *inst)
               brw_inst_3src_src0_reg_nr(devinfo, inst));
    if (err == -1)
       return 0;
-   if (src0_subreg_nr)
+   if (src0_subreg_nr || brw_inst_3src_src0_rep_ctrl(devinfo, inst))
       format(file, ".%d", src0_subreg_nr);
    if (brw_inst_3src_src0_rep_ctrl(devinfo, inst))
       string(file, "<0,1,0>");
-   else
+   else {
       string(file, "<4,4,1>");
-   err |= src_swizzle(file, brw_inst_3src_src0_swizzle(devinfo, inst));
+      err |= src_swizzle(file, brw_inst_3src_src0_swizzle(devinfo, inst));
+   }
    err |= control(file, "src da16 reg type", three_source_reg_encoding,
                   brw_inst_3src_src_type(devinfo, inst), NULL);
    return err;
@@ -1003,13 +1014,14 @@ src1_3src(FILE *file, const struct brw_device_info *devinfo, brw_inst *inst)
               brw_inst_3src_src1_reg_nr(devinfo, inst));
    if (err == -1)
       return 0;
-   if (src1_subreg_nr)
+   if (src1_subreg_nr || brw_inst_3src_src1_rep_ctrl(devinfo, inst))
       format(file, ".%d", src1_subreg_nr);
    if (brw_inst_3src_src1_rep_ctrl(devinfo, inst))
       string(file, "<0,1,0>");
-   else
+   else {
       string(file, "<4,4,1>");
-   err |= src_swizzle(file, brw_inst_3src_src1_swizzle(devinfo, inst));
+      err |= src_swizzle(file, brw_inst_3src_src1_swizzle(devinfo, inst));
+   }
    err |= control(file, "src da16 reg type", three_source_reg_encoding,
                   brw_inst_3src_src_type(devinfo, inst), NULL);
    return err;
@@ -1030,13 +1042,14 @@ src2_3src(FILE *file, const struct brw_device_info *devinfo, brw_inst *inst)
               brw_inst_3src_src2_reg_nr(devinfo, inst));
    if (err == -1)
       return 0;
-   if (src2_subreg_nr)
+   if (src2_subreg_nr || brw_inst_3src_src2_rep_ctrl(devinfo, inst))
       format(file, ".%d", src2_subreg_nr);
    if (brw_inst_3src_src2_rep_ctrl(devinfo, inst))
       string(file, "<0,1,0>");
-   else
+   else {
       string(file, "<4,4,1>");
-   err |= src_swizzle(file, brw_inst_3src_src2_swizzle(devinfo, inst));
+      err |= src_swizzle(file, brw_inst_3src_src2_swizzle(devinfo, inst));
+   }
    err |= control(file, "src da16 reg type", three_source_reg_encoding,
                   brw_inst_3src_src_type(devinfo, inst), NULL);
    return err;
@@ -1495,6 +1508,12 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
             break;
          case BRW_SFID_THREAD_SPAWNER:
             break;
+
+         case BRW_SFID_MESSAGE_GATEWAY:
+            format(file, " (%s)",
+                   gen7_gateway_subfuncid[brw_inst_gateway_subfuncid(devinfo, inst)]);
+            break;
+
          case GEN7_SFID_DATAPORT_DATA_CACHE:
             if (devinfo->gen >= 7) {
                format(file, " (");

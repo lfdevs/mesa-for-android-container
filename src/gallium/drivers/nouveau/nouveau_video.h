@@ -45,7 +45,7 @@ struct nouveau_decoder {
 #define NV31_VIDEO_BIND_CMD     NV31_MPEG_IMAGE_Y_OFFSET__LEN
 #define NV31_VIDEO_BIND_COUNT  (NV31_MPEG_IMAGE_Y_OFFSET__LEN + 1)
 
-static INLINE void
+static inline void
 nouveau_vpe_write(struct nouveau_decoder *dec, unsigned data) {
    dec->cmds[dec->ofs++] = data;
 }
@@ -54,33 +54,33 @@ nouveau_vpe_write(struct nouveau_decoder *dec, unsigned data) {
 #define NV31_MPEG(mthd) SUBC_MPEG(NV31_MPEG_##mthd)
 #define NV84_MPEG(mthd) SUBC_MPEG(NV84_MPEG_##mthd)
 
-static INLINE uint32_t
+static inline uint32_t
 NV04_FIFO_PKHDR(int subc, int mthd, unsigned size)
 {
    return 0x00000000 | (size << 18) | (subc << 13) | mthd;
 }
 
-static INLINE uint32_t
+static inline uint32_t
 NV04_FIFO_PKHDR_NI(int subc, int mthd, unsigned size)
 {
    return 0x40000000 | (size << 18) | (subc << 13) | mthd;
 }
 
-static INLINE void
+static inline void
 BEGIN_NV04(struct nouveau_pushbuf *push, int subc, int mthd, unsigned size)
 {
    PUSH_SPACE(push, size + 1);
    PUSH_DATA (push, NV04_FIFO_PKHDR(subc, mthd, size));
 }
 
-static INLINE void
+static inline void
 BEGIN_NI04(struct nouveau_pushbuf *push, int subc, int mthd, unsigned size)
 {
    PUSH_SPACE(push, size + 1);
    PUSH_DATA (push, NV04_FIFO_PKHDR_NI(subc, mthd, size));
 }
 
-static INLINE void
+static inline void
 PUSH_MTHDl(struct nouveau_pushbuf *push, int subc, int mthd,
            struct nouveau_bo *bo, uint32_t offset,
 	   struct nouveau_bufctx *ctx, int bin, uint32_t rw)

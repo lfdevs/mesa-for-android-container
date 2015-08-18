@@ -372,6 +372,10 @@ static nv50_ir::SVSemantic translateSysVal(uint sysval)
    case TGSI_SEMANTIC_SAMPLEPOS:  return nv50_ir::SV_SAMPLE_POS;
    case TGSI_SEMANTIC_SAMPLEMASK: return nv50_ir::SV_SAMPLE_MASK;
    case TGSI_SEMANTIC_INVOCATIONID: return nv50_ir::SV_INVOCATION_ID;
+   case TGSI_SEMANTIC_TESSCOORD:  return nv50_ir::SV_TESS_COORD;
+   case TGSI_SEMANTIC_TESSOUTER:  return nv50_ir::SV_TESS_OUTER;
+   case TGSI_SEMANTIC_TESSINNER:  return nv50_ir::SV_TESS_INNER;
+   case TGSI_SEMANTIC_VERTICESIN: return nv50_ir::SV_VERTEX_COUNT;
    default:
       assert(0);
       return nv50_ir::SV_CLOCK;
@@ -826,7 +830,7 @@ Source::Source(struct nv50_ir_prog_info *prog) : info(prog)
    if (prog->dbgFlags & NV50_IR_DEBUG_BASIC)
       tgsi_dump(tokens, 0);
 
-   mainTempsInLMem = FALSE;
+   mainTempsInLMem = false;
 }
 
 Source::~Source()
@@ -937,7 +941,7 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
       info->prop.gp.instanceCount = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS:
-      info->prop.fp.separateFragData = TRUE;
+      info->prop.fp.separateFragData = true;
       break;
    case TGSI_PROPERTY_FS_COORD_ORIGIN:
    case TGSI_PROPERTY_FS_COORD_PIXEL_CENTER:
@@ -945,6 +949,24 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
       break;
    case TGSI_PROPERTY_VS_PROHIBIT_UCPS:
       info->io.genUserClip = -1;
+      break;
+   case TGSI_PROPERTY_TCS_VERTICES_OUT:
+      info->prop.tp.outputPatchSize = prop->u[0].Data;
+      break;
+   case TGSI_PROPERTY_TES_PRIM_MODE:
+      info->prop.tp.domain = prop->u[0].Data;
+      break;
+   case TGSI_PROPERTY_TES_SPACING:
+      info->prop.tp.partitioning = prop->u[0].Data;
+      break;
+   case TGSI_PROPERTY_TES_VERTEX_ORDER_CW:
+      info->prop.tp.winding = prop->u[0].Data;
+      break;
+   case TGSI_PROPERTY_TES_POINT_MODE:
+      if (prop->u[0].Data)
+         info->prop.tp.outputPrim = PIPE_PRIM_POINTS;
+      else
+         info->prop.tp.outputPrim = PIPE_PRIM_TRIANGLES; /* anything but points */
       break;
    default:
       INFO("unhandled TGSI property %d\n", prop->Property.PropertyName);
@@ -1034,6 +1056,11 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
                if (decl->Interp.Location || info->io.sampleInterp)
                   info->in[i].centroid = 1;
             }
+
+            if (sn == TGSI_SEMANTIC_PATCH)
+               info->in[i].patch = 1;
+            if (sn == TGSI_SEMANTIC_PATCH)
+               info->numPatchConstants = MAX2(info->numPatchConstants, si + 1);
          }
       }
       break;
@@ -1068,6 +1095,13 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
          case TGSI_SEMANTIC_VIEWPORT_INDEX:
             info->io.viewportId = i;
             break;
+         case TGSI_SEMANTIC_PATCH:
+            info->numPatchConstants = MAX2(info->numPatchConstants, si + 1);
+            /* fallthrough */
+         case TGSI_SEMANTIC_TESSOUTER:
+         case TGSI_SEMANTIC_TESSINNER:
+            info->out[i].patch = 1;
+            break;
          default:
             break;
          }
@@ -1091,6 +1125,13 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
          info->sv[i].sn = sn;
          info->sv[i].si = si;
          info->sv[i].input = inferSysValDirection(sn);
+
+         switch (sn) {
+         case TGSI_SEMANTIC_TESSOUTER:
+         case TGSI_SEMANTIC_TESSINNER:
+            info->sv[i].patch = 1;
+            break;
+         }
       }
       break;
    case TGSI_FILE_RESOURCE:
@@ -1155,7 +1196,7 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
       } else
       if (insn.getDst(0).getFile() == TGSI_FILE_TEMPORARY) {
          if (insn.getDst(0).isIndirect(0))
-            mainTempsInLMem = TRUE;
+            mainTempsInLMem = true;
       }
    }
 
@@ -1163,12 +1204,22 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
       Instruction::SrcRegister src = insn.getSrc(s);
       if (src.getFile() == TGSI_FILE_TEMPORARY) {
          if (src.isIndirect(0))
-            mainTempsInLMem = TRUE;
+            mainTempsInLMem = true;
       } else
       if (src.getFile() == TGSI_FILE_RESOURCE) {
          if (src.getIndex(0) == TGSI_RESOURCE_GLOBAL)
             info->io.globalAccess |= (insn.getOpcode() == TGSI_OPCODE_LOAD) ?
                0x1 : 0x2;
+      } else
+      if (src.getFile() == TGSI_FILE_OUTPUT) {
+         if (src.isIndirect(0)) {
+            // We don't know which one is accessed, just mark everything for
+            // reading. This is an extremely unlikely occurrence.
+            for (unsigned i = 0; i < info->numOutputs; ++i)
+               info->out[i].oread = 1;
+         } else {
+            info->out[src.getIndex(0)].oread = 1;
+         }
       }
       if (src.getFile() != TGSI_FILE_INPUT)
          continue;
@@ -1245,6 +1296,7 @@ private:
 
    Value *shiftAddress(Value *);
    Value *getVertexBase(int s);
+   Value *getOutputBase(int s);
    DataArray *getArrayForFile(unsigned file, int idx);
    Value *fetchSrc(int s, int c);
    Value *acquireDst(int d, int c);
@@ -1341,6 +1393,8 @@ private:
 
    Value *vtxBase[5]; // base address of vertex in primitive (for TP/GP)
    uint8_t vtxBaseValid;
+
+   Value *outBase; // base address of vertex out patch (for TCP)
 
    Stack condBBs;  // fork BB, then else clause BB
    Stack joinBBs;  // fork BB, for inserting join ops on ENDIF
@@ -1475,6 +1529,22 @@ Converter::getVertexBase(int s)
 }
 
 Value *
+Converter::getOutputBase(int s)
+{
+   assert(s < 5);
+   if (!(vtxBaseValid & (1 << s))) {
+      Value *offset = loadImm(NULL, tgsi.getSrc(s).getIndex(1));
+      if (tgsi.getSrc(s).isIndirect(1))
+         offset = mkOp2v(OP_ADD, TYPE_U32, getSSA(),
+                         fetchSrc(tgsi.getSrc(s).getIndirect(1), 0, NULL),
+                         offset);
+      vtxBaseValid |= 1 << s;
+      vtxBase[s] = mkOp2v(OP_ADD, TYPE_U32, getSSA(), outBase, offset);
+   }
+   return vtxBase[s];
+}
+
+Value *
 Converter::fetchSrc(int s, int c)
 {
    Value *res;
@@ -1487,6 +1557,9 @@ Converter::fetchSrc(int s, int c)
 
    if (src.is2D()) {
       switch (src.getFile()) {
+      case TGSI_FILE_OUTPUT:
+         dimRel = getOutputBase(s);
+         break;
       case TGSI_FILE_INPUT:
          dimRel = getVertexBase(s);
          break;
@@ -1541,6 +1614,7 @@ Converter::fetchSrc(tgsi::Instruction::SrcRegister src, int c, Value *ptr)
    const int idx2d = src.is2D() ? src.getIndex(1) : 0;
    const int idx = src.getIndex(0);
    const int swz = src.getSwizzle(c);
+   Instruction *ld;
 
    switch (src.getFile()) {
    case TGSI_FILE_IMMEDIATE:
@@ -1568,13 +1642,19 @@ Converter::fetchSrc(tgsi::Instruction::SrcRegister src, int c, Value *ptr)
          if (ptr)
             return mkLoadv(TYPE_U32, srcToSym(src, c), ptr);
       }
-      return mkLoadv(TYPE_U32, srcToSym(src, c), shiftAddress(ptr));
+      ld = mkLoad(TYPE_U32, getSSA(), srcToSym(src, c), shiftAddress(ptr));
+      ld->perPatch = info->in[idx].patch;
+      return ld->getDef(0);
    case TGSI_FILE_OUTPUT:
-      assert(!"load from output file");
-      return NULL;
+      assert(prog->getType() == Program::TYPE_TESSELLATION_CONTROL);
+      ld = mkLoad(TYPE_U32, getSSA(), srcToSym(src, c), shiftAddress(ptr));
+      ld->perPatch = info->out[idx].patch;
+      return ld->getDef(0);
    case TGSI_FILE_SYSTEM_VALUE:
       assert(!ptr);
-      return mkOp1v(OP_RDSV, TYPE_U32, getSSA(), srcToSym(src, c));
+      ld = mkOp1(OP_RDSV, TYPE_U32, getSSA(), srcToSym(src, c));
+      ld->perPatch = info->sv[idx].patch;
+      return ld->getDef(0);
    default:
       return getArrayForFile(src.getFile(), idx2d)->load(
          sub.cur->values, idx, swz, shiftAddress(ptr));
@@ -1605,19 +1685,8 @@ Converter::storeDst(int d, int c, Value *val)
 {
    const tgsi::Instruction::DstRegister dst = tgsi.getDst(d);
 
-   switch (tgsi.getSaturate()) {
-   case TGSI_SAT_NONE:
-      break;
-   case TGSI_SAT_ZERO_ONE:
+   if (tgsi.getSaturate()) {
       mkOp1(OP_SAT, dstTy, val, val);
-      break;
-   case TGSI_SAT_MINUS_PLUS_ONE:
-      mkOp2(OP_MAX, dstTy, val, val, mkImm(-1.0f));
-      mkOp2(OP_MIN, dstTy, val, val, mkImm(+1.0f));
-      break;
-   default:
-      assert(!"invalid saturation mode");
-      break;
    }
 
    Value *ptr = NULL;
@@ -1655,7 +1724,8 @@ Converter::storeDst(const tgsi::Instruction::DstRegister dst, int c,
              viewport != NULL)
             mkOp1(OP_MOV, TYPE_U32, viewport, val);
          else
-            mkStore(OP_EXPORT, TYPE_U32, dstToSym(dst, c), ptr, val);
+            mkStore(OP_EXPORT, TYPE_U32, dstToSym(dst, c), ptr, val)->perPatch =
+               info->out[idx].patch;
       }
    } else
    if (f == TGSI_FILE_TEMPORARY ||
@@ -3295,10 +3365,21 @@ Converter::run()
          clipVtx[c] = getScratch();
    }
 
-   if (prog->getType() == Program::TYPE_FRAGMENT) {
+   switch (prog->getType()) {
+   case Program::TYPE_TESSELLATION_CONTROL:
+      outBase = mkOp2v(
+         OP_SUB, TYPE_U32, getSSA(),
+         mkOp1v(OP_RDSV, TYPE_U32, getSSA(), mkSysVal(SV_LANEID, 0)),
+         mkOp1v(OP_RDSV, TYPE_U32, getSSA(), mkSysVal(SV_INVOCATION_ID, 0)));
+      break;
+   case Program::TYPE_FRAGMENT: {
       Symbol *sv = mkSysVal(SV_POSITION, 3);
       fragCoord[3] = mkOp1v(OP_RDSV, TYPE_F32, getSSA(), sv);
       mkOp1(OP_RCP, TYPE_F32, fragCoord[3], fragCoord[3]);
+      break;
+   }
+   default:
+      break;
    }
 
    if (info->io.viewportId >= 0)

@@ -39,7 +39,6 @@
 #include <stdlib.h>
 #include "c11/threads.h"
 
-#include "eglstring.h"
 #include "egldefines.h"
 #include "egldisplay.h"
 #include "egldriver.h"
@@ -97,14 +96,9 @@ _eglLoadModule(_EGLModule *mod)
 static void
 _eglUnloadModule(_EGLModule *mod)
 {
-#if defined(_EGL_OS_UNIX)
    /* destroy the driver */
    if (mod->Driver && mod->Driver->Unload)
       mod->Driver->Unload(mod->Driver);
-
-#elif defined(_EGL_OS_WINDOWS)
-   /* XXX Windows unloads DLLs before atexit */
-#endif
 
    mod->Driver = NULL;
 }
@@ -135,7 +129,7 @@ _eglAddModule(const char *name)
    /* allocate a new one */
    mod = calloc(1, sizeof(*mod));
    if (mod) {
-      mod->Name = _eglstrdup(name);
+      mod->Name = strdup(name);
       if (!mod->Name) {
          free(mod);
          mod = NULL;

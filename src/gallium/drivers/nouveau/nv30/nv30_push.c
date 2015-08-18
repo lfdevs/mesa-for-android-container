@@ -47,12 +47,12 @@ struct push_context {
 
    struct translate *translate;
 
-   boolean primitive_restart;
+   bool primitive_restart;
    uint32_t prim;
    uint32_t restart_index;
 };
 
-static INLINE unsigned
+static inline unsigned
 prim_restart_search_i08(uint8_t *elts, unsigned push, uint8_t index)
 {
    unsigned i;
@@ -62,7 +62,7 @@ prim_restart_search_i08(uint8_t *elts, unsigned push, uint8_t index)
    return i;
 }
 
-static INLINE unsigned
+static inline unsigned
 prim_restart_search_i16(uint16_t *elts, unsigned push, uint16_t index)
 {
    unsigned i;
@@ -72,7 +72,7 @@ prim_restart_search_i16(uint16_t *elts, unsigned push, uint16_t index)
    return i;
 }
 
-static INLINE unsigned
+static inline unsigned
 prim_restart_search_i32(uint32_t *elts, unsigned push, uint32_t index)
 {
    unsigned i;
@@ -199,7 +199,7 @@ nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info)
 {
    struct push_context ctx;
    unsigned i, index_size;
-   boolean apply_bias = info->indexed && info->index_bias;
+   bool apply_bias = info->indexed && info->index_bias;
 
    ctx.push = nv30->base.pushbuf;
    ctx.translate = nv30->vertex->translate;
@@ -241,7 +241,7 @@ nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info)
    } else {
       ctx.idxbuf = NULL;
       index_size = 0;
-      ctx.primitive_restart = FALSE;
+      ctx.primitive_restart = false;
       ctx.restart_index = 0;
    }
 

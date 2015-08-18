@@ -33,6 +33,7 @@ NIR_FILES = \
 	nir/nir_lower_alu_to_scalar.c \
 	nir/nir_lower_atomics.c \
 	nir/nir_lower_global_vars_to_local.c \
+	nir/nir_lower_load_const_to_scalar.c \
 	nir/nir_lower_locals_to_regs.c \
 	nir/nir_lower_idiv.c \
 	nir/nir_lower_io.c \
@@ -55,6 +56,7 @@ NIR_FILES = \
 	nir/nir_opt_peephole_ffma.c \
 	nir/nir_opt_peephole_select.c \
 	nir/nir_opt_remove_phis.c \
+	nir/nir_opt_undef.c \
 	nir/nir_print.c \
 	nir/nir_remove_dead_variables.c \
 	nir/nir_search.c \
@@ -154,6 +156,8 @@ LIBGLSL_FILES = \
 	lower_packed_varyings.cpp \
 	lower_named_interface_blocks.cpp \
 	lower_packing_builtins.cpp \
+	lower_subroutine.cpp \
+	lower_tess_level.cpp \
 	lower_texture_projection.cpp \
 	lower_variable_index_to_cond_assign.cpp \
 	lower_vec_index_to_cond_assign.cpp \

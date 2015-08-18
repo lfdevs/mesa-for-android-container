@@ -125,8 +125,8 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    cso_save_rasterizer(cso);
    cso_save_sample_mask(cso);
    cso_save_min_samples(cso);
-   cso_save_samplers(cso, PIPE_SHADER_FRAGMENT);
-   cso_save_sampler_views(cso, PIPE_SHADER_FRAGMENT);
+   cso_save_fragment_samplers(cso);
+   cso_save_fragment_sampler_views(cso);
    cso_save_stencil_ref(cso);
    cso_save_stream_outputs(cso);
    cso_save_vertex_elements(cso);
@@ -196,8 +196,8 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    cso_restore_rasterizer(cso);
    cso_restore_sample_mask(cso);
    cso_restore_min_samples(cso);
-   cso_restore_samplers(cso, PIPE_SHADER_FRAGMENT);
-   cso_restore_sampler_views(cso, PIPE_SHADER_FRAGMENT);
+   cso_restore_fragment_samplers(cso);
+   cso_restore_fragment_sampler_views(cso);
    cso_restore_stencil_ref(cso);
    cso_restore_stream_outputs(cso);
    cso_restore_vertex_elements(cso);

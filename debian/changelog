@@ -1,3 +1,15 @@
+mesa (11.0.0~git20150817-1) experimental; urgency=medium
+
+  * New upstream snapshot
+  * control: Bump libdrm build-dep to 2.4.63.
+  * control: Add libomxil-bellagio-dev to build-deps.
+  * rules: Disable gles1 & 2 for swx11 builds.
+  * libegl1-mesa.symbols, libgles2-mesa.symbols: Updated
+  * control, rules: Migrate to llvm 3.7.
+  * rules: Enable llvmpipe on armhf again.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 18 Aug 2015 07:53:45 +0300
+
 mesa (10.6.3-1) unstable; urgency=medium
 
   * New upstream release.

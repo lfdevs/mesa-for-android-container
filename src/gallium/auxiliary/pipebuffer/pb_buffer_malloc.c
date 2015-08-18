@@ -49,7 +49,7 @@ struct malloc_buffer
 
 extern const struct pb_vtbl malloc_buffer_vtbl;
 
-static INLINE struct malloc_buffer *
+static inline struct malloc_buffer *
 malloc_buffer(struct pb_buffer *buf)
 {
    assert(buf);

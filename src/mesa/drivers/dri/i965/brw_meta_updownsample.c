@@ -116,7 +116,7 @@ brw_meta_updownsample(struct brw_context *brw,
       blit_bit = GL_COLOR_BUFFER_BIT;
    }
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    _mesa_meta_begin(ctx, MESA_META_ALL);
    _mesa_GenFramebuffers(2, fbos);
@@ -147,5 +147,5 @@ brw_meta_updownsample(struct brw_context *brw,
 
    _mesa_meta_end(ctx);
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 }

@@ -62,7 +62,7 @@ struct llvmpipe_screen
 
 
 
-static INLINE struct llvmpipe_screen *
+static inline struct llvmpipe_screen *
 llvmpipe_screen( struct pipe_screen *pipe )
 {
    return (struct llvmpipe_screen *)pipe;

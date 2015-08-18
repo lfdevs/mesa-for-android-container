@@ -322,6 +322,9 @@ FJ(gen4_jump_count, 111,  96, devinfo->gen < 6)
 FC(gen4_pop_count,  115, 112, devinfo->gen < 6)
 /** @} */
 
+/* Message descriptor bits */
+#define MD(x) ((x) + 96)
+
 /**
  * Fields for SEND messages:
  *  @{
@@ -347,6 +350,7 @@ FF(header_present,
    /* 6:   */ 115, 115,
    /* 7:   */ 115, 115,
    /* 8:   */ 115, 115)
+F(gateway_notify, MD(16), MD(15))
 FF(function_control,
    /* 4:   */ 111,  96,
    /* 4.5: */ 111,  96,
@@ -354,6 +358,13 @@ FF(function_control,
    /* 6:   */ 114,  96,
    /* 7:   */ 114,  96,
    /* 8:   */ 114,  96)
+FF(gateway_subfuncid,
+   /* 4:   */ MD(1), MD(0),
+   /* 4.5: */ MD(1), MD(0),
+   /* 5:   */ MD(1), MD(0), /* 2:0, but bit 2 is reserved MBZ */
+   /* 6:   */ MD(2), MD(0),
+   /* 7:   */ MD(2), MD(0),
+   /* 8:   */ MD(2), MD(0))
 FF(sfid,
    /* 4:   */ 123, 120, /* called msg_target */
    /* 4.5  */ 123, 120,
@@ -363,9 +374,6 @@ FF(sfid,
    /* 8:   */  27,  24)
 FC(base_mrf,   27,  24, devinfo->gen < 6);
 /** @} */
-
-/* Message descriptor bits */
-#define MD(x) (x + 96)
 
 /**
  * URB message function control bits:
@@ -675,9 +683,9 @@ brw_inst_bits(const brw_inst *inst, unsigned high, unsigned low)
    high %= 64;
    low %= 64;
 
-   const uint64_t mask = (((1ull << (high - low + 1)) - 1) << low);
+   const uint64_t mask = (1ull << (high - low + 1)) - 1;
 
-   return (inst->data[word] & mask) >> low;
+   return (inst->data[word] >> low) & mask;
 }
 
 /**
@@ -694,12 +702,12 @@ brw_inst_set_bits(brw_inst *inst, unsigned high, unsigned low, uint64_t value)
    high %= 64;
    low %= 64;
 
-   const uint64_t mask = (((1ull << (high - low + 1)) - 1) << low);
+   const uint64_t mask = ((1ull << (high - low + 1)) - 1) << low;
 
    /* Make sure the supplied value actually fits in the given bitfield. */
    assert((value & (mask >> low)) == value);
 
-   inst->data[word] = (inst->data[word] & ~mask) | ((value << low) & mask);
+   inst->data[word] = (inst->data[word] & ~mask) | (value << low);
 }
 
 #undef BRW_IA16_ADDR_IMM
@@ -723,9 +731,9 @@ typedef struct {
 static inline unsigned
 brw_compact_inst_bits(brw_compact_inst *inst, unsigned high, unsigned low)
 {
-   const uint64_t mask = (((1ull << (high - low + 1)) - 1) << low);
+   const uint64_t mask = (1ull << (high - low + 1)) - 1;
 
-   return (inst->data & mask) >> low;
+   return (inst->data >> low) & mask;
 }
 
 /**
@@ -737,12 +745,12 @@ static inline void
 brw_compact_inst_set_bits(brw_compact_inst *inst, unsigned high, unsigned low,
                           uint64_t value)
 {
-   const uint64_t mask = (((1ull << (high - low + 1)) - 1) << low);
+   const uint64_t mask = ((1ull << (high - low + 1)) - 1) << low;
 
    /* Make sure the supplied value actually fits in the given bitfield. */
    assert((value & (mask >> low)) == value);
 
-   inst->data = (inst->data & ~mask) | ((value << low) & mask);
+   inst->data = (inst->data & ~mask) | (value << low);
 }
 
 #define F(name, high, low)                                      \

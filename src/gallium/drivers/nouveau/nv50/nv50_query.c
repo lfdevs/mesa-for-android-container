@@ -27,6 +27,11 @@
 #include "nv50/nv50_context.h"
 #include "nv_object.xml.h"
 
+#define NV50_QUERY_STATE_READY   0
+#define NV50_QUERY_STATE_ACTIVE  1
+#define NV50_QUERY_STATE_ENDED   2
+#define NV50_QUERY_STATE_FLUSHED 3
+
 /* XXX: Nested queries, and simultaneous queries on multiple gallium contexts
  * (since we use only a single GPU channel per screen) will not work properly.
  *
@@ -42,21 +47,22 @@ struct nv50_query {
    struct nouveau_bo *bo;
    uint32_t base;
    uint32_t offset; /* base + i * 32 */
-   boolean ready;
-   boolean flushed;
-   boolean is64bit;
+   uint8_t state;
+   bool is64bit;
+   int nesting; /* only used for occlusion queries */
    struct nouveau_mm_allocation *mm;
+   struct nouveau_fence *fence;
 };
 
 #define NV50_QUERY_ALLOC_SPACE 256
 
-static INLINE struct nv50_query *
+static inline struct nv50_query *
 nv50_query(struct pipe_query *pipe)
 {
    return (struct nv50_query *)pipe;
 }
 
-static boolean
+static bool
 nv50_query_allocate(struct nv50_context *nv50, struct nv50_query *q, int size)
 {
    struct nv50_screen *screen = nv50->screen;
@@ -65,7 +71,7 @@ nv50_query_allocate(struct nv50_context *nv50, struct nv50_query *q, int size)
    if (q->bo) {
       nouveau_bo_ref(NULL, &q->bo);
       if (q->mm) {
-         if (q->ready)
+         if (q->state == NV50_QUERY_STATE_READY)
             nouveau_mm_free(q->mm);
          else
             nouveau_fence_work(screen->base.fence.current, nouveau_mm_free_work,
@@ -75,23 +81,24 @@ nv50_query_allocate(struct nv50_context *nv50, struct nv50_query *q, int size)
    if (size) {
       q->mm = nouveau_mm_allocate(screen->base.mm_GART, size, &q->bo, &q->base);
       if (!q->bo)
-         return FALSE;
+         return false;
       q->offset = q->base;
 
       ret = nouveau_bo_map(q->bo, 0, screen->base.client);
       if (ret) {
          nv50_query_allocate(nv50, q, 0);
-         return FALSE;
+         return false;
       }
       q->data = (uint32_t *)((uint8_t *)q->bo->map + q->base);
    }
-   return TRUE;
+   return true;
 }
 
 static void
 nv50_query_destroy(struct pipe_context *pipe, struct pipe_query *pq)
 {
    nv50_query_allocate(nv50_context(pipe), nv50_query(pq), 0);
+   nouveau_fence_ref(NULL, &nv50_query(pq)->fence);
    FREE(nv50_query(pq));
 }
 
@@ -112,7 +119,8 @@ nv50_query_create(struct pipe_context *pipe, unsigned type, unsigned index)
 
    q->is64bit = (type == PIPE_QUERY_PRIMITIVES_GENERATED ||
                  type == PIPE_QUERY_PRIMITIVES_EMITTED ||
-                 type == PIPE_QUERY_SO_STATISTICS);
+                 type == PIPE_QUERY_SO_STATISTICS ||
+                 type == PIPE_QUERY_PIPELINE_STATISTICS);
    q->type = type;
 
    if (q->type == PIPE_QUERY_OCCLUSION_COUNTER) {
@@ -146,8 +154,8 @@ nv50_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
    struct nv50_query *q = nv50_query(pq);
 
    /* For occlusion queries we have to change the storage, because a previous
-    * query might set the initial render conition to FALSE even *after* we re-
-    * initialized it to TRUE.
+    * query might set the initial render conition to false even *after* we re-
+    * initialized it to true.
     */
    if (q->type == PIPE_QUERY_OCCLUSION_COUNTER) {
       q->offset += 32;
@@ -159,7 +167,7 @@ nv50_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
        *  query ?
        */
       q->data[0] = q->sequence; /* initialize sequence */
-      q->data[1] = 1; /* initial render condition = TRUE */
+      q->data[1] = 1; /* initial render condition = true */
       q->data[4] = q->sequence + 1; /* for comparison COND_MODE */
       q->data[5] = 0;
    }
@@ -168,11 +176,16 @@ nv50_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
 
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
-      PUSH_SPACE(push, 4);
-      BEGIN_NV04(push, NV50_3D(COUNTER_RESET), 1);
-      PUSH_DATA (push, NV50_3D_COUNTER_RESET_SAMPLECNT);
-      BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
-      PUSH_DATA (push, 1);
+      q->nesting = nv50->screen->num_occlusion_queries_active++;
+      if (q->nesting) {
+         nv50_query_get(push, q, 0x10, 0x0100f002);
+      } else {
+         PUSH_SPACE(push, 4);
+         BEGIN_NV04(push, NV50_3D(COUNTER_RESET), 1);
+         PUSH_DATA (push, NV50_3D_COUNTER_RESET_SAMPLECNT);
+         BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
+         PUSH_DATA (push, 1);
+      }
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
       nv50_query_get(push, q, 0x10, 0x06805002);
@@ -200,7 +213,7 @@ nv50_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
    default:
       break;
    }
-   q->ready = FALSE;
+   q->state = NV50_QUERY_STATE_ACTIVE;
    return true;
 }
 
@@ -211,12 +224,16 @@ nv50_query_end(struct pipe_context *pipe, struct pipe_query *pq)
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    struct nv50_query *q = nv50_query(pq);
 
+   q->state = NV50_QUERY_STATE_ENDED;
+
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
       nv50_query_get(push, q, 0, 0x0100f002);
-      PUSH_SPACE(push, 2);
-      BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
-      PUSH_DATA (push, 0);
+      if (--nv50->screen->num_occlusion_queries_active == 0) {
+         PUSH_SPACE(push, 2);
+         BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
+         PUSH_DATA (push, 0);
+      }
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
       nv50_query_get(push, q, 0, 0x06805002);
@@ -252,20 +269,28 @@ nv50_query_end(struct pipe_context *pipe, struct pipe_query *pq)
       nv50_query_get(push, q, 0, 0x0d005002 | (q->index << 5));
       break;
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
-      /* This query is not issued on GPU because disjoint is forced to FALSE */
-      q->ready = TRUE;
+      /* This query is not issued on GPU because disjoint is forced to false */
+      q->state = NV50_QUERY_STATE_READY;
       break;
    default:
       assert(0);
       break;
    }
-   q->ready = q->flushed = FALSE;
+
+   if (q->is64bit)
+      nouveau_fence_ref(nv50->screen->base.fence.current, &q->fence);
 }
 
-static INLINE boolean
-nv50_query_ready(struct nv50_query *q)
+static inline void
+nv50_query_update(struct nv50_query *q)
 {
-   return q->ready || (!q->is64bit && (q->data[0] == q->sequence));
+   if (q->is64bit) {
+      if (nouveau_fence_signalled(q->fence))
+         q->state = NV50_QUERY_STATE_READY;
+   } else {
+      if (q->data[0] == q->sequence)
+         q->state = NV50_QUERY_STATE_READY;
+   }
 }
 
 static boolean
@@ -276,32 +301,33 @@ nv50_query_result(struct pipe_context *pipe, struct pipe_query *pq,
    struct nv50_query *q = nv50_query(pq);
    uint64_t *res64 = (uint64_t *)result;
    uint32_t *res32 = (uint32_t *)result;
-   boolean *res8 = (boolean *)result;
+   uint8_t *res8 = (uint8_t *)result;
    uint64_t *data64 = (uint64_t *)q->data;
    int i;
 
-   if (!q->ready) /* update ? */
-      q->ready = nv50_query_ready(q);
-   if (!q->ready) {
+   if (q->state != NV50_QUERY_STATE_READY)
+      nv50_query_update(q);
+
+   if (q->state != NV50_QUERY_STATE_READY) {
       if (!wait) {
          /* for broken apps that spin on GL_QUERY_RESULT_AVAILABLE */
-         if (!q->flushed) {
-            q->flushed = TRUE;
+         if (q->state != NV50_QUERY_STATE_FLUSHED) {
+            q->state = NV50_QUERY_STATE_FLUSHED;
             PUSH_KICK(nv50->base.pushbuf);
          }
-         return FALSE;
+         return false;
       }
       if (nouveau_bo_wait(q->bo, NOUVEAU_BO_RD, nv50->screen->base.client))
-         return FALSE;
+         return false;
    }
-   q->ready = TRUE;
+   q->state = NV50_QUERY_STATE_READY;
 
    switch (q->type) {
    case PIPE_QUERY_GPU_FINISHED:
-      res8[0] = TRUE;
+      res8[0] = true;
       break;
    case PIPE_QUERY_OCCLUSION_COUNTER: /* u32 sequence, u32 count, u64 time */
-      res64[0] = q->data[1];
+      res64[0] = q->data[1] - q->data[5];
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED: /* u64 count, u64 time */
    case PIPE_QUERY_PRIMITIVES_EMITTED: /* u64 count, u64 time */
@@ -320,7 +346,7 @@ nv50_query_result(struct pipe_context *pipe, struct pipe_query *pq,
       break;
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
       res64[0] = 1000000000;
-      res8[8] = FALSE;
+      res8[8] = false;
       break;
    case PIPE_QUERY_TIME_ELAPSED:
       res64[0] = data64[1] - data64[3];
@@ -329,10 +355,10 @@ nv50_query_result(struct pipe_context *pipe, struct pipe_query *pq,
       res32[0] = q->data[1];
       break;
    default:
-      return FALSE;
+      return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 void
@@ -359,7 +385,7 @@ nv50_render_condition(struct pipe_context *pipe,
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    struct nv50_query *q;
    uint32_t cond;
-   boolean wait =
+   bool wait =
       mode != PIPE_RENDER_COND_NO_WAIT &&
       mode != PIPE_RENDER_COND_BY_REGION_NO_WAIT;
 
@@ -373,13 +399,12 @@ nv50_render_condition(struct pipe_context *pipe,
       case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
          cond = condition ? NV50_3D_COND_MODE_EQUAL :
                             NV50_3D_COND_MODE_NOT_EQUAL;
-         wait = TRUE;
+         wait = true;
          break;
       case PIPE_QUERY_OCCLUSION_COUNTER:
       case PIPE_QUERY_OCCLUSION_PREDICATE:
          if (likely(!condition)) {
-            /* XXX: Placeholder, handle nesting here if available */
-            if (unlikely(false))
+            if (unlikely(q->nesting))
                cond = wait ? NV50_3D_COND_MODE_NOT_EQUAL :
                              NV50_3D_COND_MODE_ALWAYS;
             else
@@ -443,7 +468,7 @@ nv50_query_pushbuf_submit(struct nouveau_pushbuf *push,
 void
 nva0_so_target_save_offset(struct pipe_context *pipe,
                            struct pipe_stream_output_target *ptarg,
-                           unsigned index, boolean serialize)
+                           unsigned index, bool serialize)
 {
    struct nv50_so_target *targ = nv50_so_target(ptarg);
 

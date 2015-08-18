@@ -494,7 +494,7 @@ void draw_update_viewport_flags(struct draw_context *draw);
  * Return index of the given viewport clamping it
  * to be between 0 <= and < PIPE_MAX_VIEWPORTS
  */
-static INLINE unsigned
+static inline unsigned
 draw_clamp_viewport_idx(int idx)
 {
    return ((PIPE_MAX_VIEWPORTS > idx && idx >= 0) ? idx : 0);
@@ -505,7 +505,7 @@ draw_clamp_viewport_idx(int idx)
  * overflows then it returns the value from
  * the overflow_value variable.
  */
-static INLINE unsigned
+static inline unsigned
 draw_overflow_uadd(unsigned a, unsigned b,
                    unsigned overflow_value)
 {

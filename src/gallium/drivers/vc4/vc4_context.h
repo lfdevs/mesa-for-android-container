@@ -67,7 +67,20 @@
 #define VC4_DIRTY_CLIP          (1 << 20)
 #define VC4_DIRTY_UNCOMPILED_VS (1 << 21)
 #define VC4_DIRTY_UNCOMPILED_FS (1 << 22)
-#define VC4_DIRTY_COMPILED_FS   (1 << 24)
+#define VC4_DIRTY_COMPILED_CS   (1 << 23)
+#define VC4_DIRTY_COMPILED_VS   (1 << 24)
+#define VC4_DIRTY_COMPILED_FS   (1 << 25)
+
+struct vc4_sampler_view {
+        struct pipe_sampler_view base;
+        uint32_t texture_p0;
+        uint32_t texture_p1;
+};
+
+struct vc4_sampler_state {
+        struct pipe_sampler_state base;
+        uint32_t texture_p1;
+};
 
 struct vc4_texture_stateobj {
         struct pipe_sampler_view *textures[PIPE_MAX_SAMPLERS];
@@ -121,6 +134,12 @@ struct vc4_compiled_shader {
         struct vc4_ubo_range *ubo_ranges;
         uint32_t num_ubo_ranges;
         uint32_t ubo_size;
+        /**
+         * VC4_DIRTY_* flags that, when set in vc4->dirty, mean that the
+         * uniforms have to be rewritten (and therefore the shader state
+         * reemitted).
+         */
+        uint32_t uniform_dirty_bits;
 
         /** bitmask of which inputs are color inputs, for flat shade handling. */
         uint32_t color_inputs;
@@ -178,12 +197,18 @@ struct vc4_context {
         struct vc4_screen *screen;
 
         struct vc4_cl bcl;
-        struct vc4_cl rcl;
         struct vc4_cl shader_rec;
         struct vc4_cl uniforms;
         struct vc4_cl bo_handles;
         struct vc4_cl bo_pointers;
         uint32_t shader_rec_count;
+
+        /** @{ Surfaces to submit rendering for. */
+        struct pipe_surface *color_read;
+        struct pipe_surface *color_write;
+        struct pipe_surface *zs_read;
+        struct pipe_surface *zs_write;
+        /** @} */
         /** @{
          * Bounding box of the scissor across all queued drawing.
          *
@@ -194,9 +219,13 @@ struct vc4_context {
         uint32_t draw_max_x;
         uint32_t draw_max_y;
         /** @} */
-
-        struct vc4_bo *tile_alloc;
-        struct vc4_bo *tile_state;
+        /** @{
+         * Width/height of the color framebuffer being rendered to,
+         * for VC4_TILE_RENDERING_MODE_CONFIG.
+        */
+        uint32_t draw_width;
+        uint32_t draw_height;
+        /** @} */
 
         struct util_slab_mempool transfer_pool;
         struct blitter_context *blitter;
@@ -228,6 +257,11 @@ struct vc4_context {
          */
         bool draw_call_queued;
 
+        /** Maximum index buffer valid for the current shader_rec. */
+        uint32_t max_index;
+        /** Last index bias baked into the current shader_rec. */
+        uint32_t last_index_bias;
+
         struct primconvert_context *primconvert;
 
         struct hash_table *fs_cache, *vs_cache;
@@ -236,12 +270,15 @@ struct vc4_context {
 
         struct ra_regs *regs;
         unsigned int reg_class_any;
+        unsigned int reg_class_r4_or_a;
         unsigned int reg_class_a;
 
         uint8_t prim_mode;
 
         /** Seqno of the last CL flush's job. */
         uint64_t last_emit_seqno;
+
+        struct u_upload_mgr *uploader;
 
         /** @{ Current pipeline state objects */
         struct pipe_scissor_state scissor;
@@ -314,6 +351,18 @@ vc4_context(struct pipe_context *pcontext)
         return (struct vc4_context *)pcontext;
 }
 
+static inline struct vc4_sampler_view *
+vc4_sampler_view(struct pipe_sampler_view *psview)
+{
+        return (struct vc4_sampler_view *)psview;
+}
+
+static inline struct vc4_sampler_state *
+vc4_sampler_state(struct pipe_sampler_state *psampler)
+{
+        return (struct vc4_sampler_state *)psampler;
+}
+
 struct pipe_context *vc4_context_create(struct pipe_screen *pscreen,
                                         void *priv);
 void vc4_draw_init(struct pipe_context *pctx);
@@ -325,6 +374,7 @@ void vc4_simulator_init(struct vc4_screen *screen);
 int vc4_simulator_flush(struct vc4_context *vc4,
                         struct drm_vc4_submit_cl *args);
 
+void vc4_set_shader_uniform_dirty_flags(struct vc4_compiled_shader *shader);
 void vc4_write_uniforms(struct vc4_context *vc4,
                         struct vc4_compiled_shader *shader,
                         struct vc4_constbuf_stateobj *cb,

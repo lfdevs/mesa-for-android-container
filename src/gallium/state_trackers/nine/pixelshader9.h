@@ -47,7 +47,7 @@ struct NinePixelShader9
 
     uint64_t ff_key[6];
 };
-static INLINE struct NinePixelShader9 *
+static inline struct NinePixelShader9 *
 NinePixelShader9( void *data )
 {
     return (struct NinePixelShader9 *)data;

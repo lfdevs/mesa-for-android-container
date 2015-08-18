@@ -44,10 +44,15 @@ public:
    fs_reg(struct brw_reg fixed_hw_reg);
    fs_reg(enum register_file file, int reg);
    fs_reg(enum register_file file, int reg, enum brw_reg_type type);
-   fs_reg(enum register_file file, int reg, enum brw_reg_type type, uint8_t width);
 
    bool equals(const fs_reg &r) const;
    bool is_contiguous() const;
+
+   /**
+    * Return the size in bytes of a single logical component of the
+    * register assuming the given execution width.
+    */
+   unsigned component_size(unsigned width) const;
 
    /** Smear a channel of the reg to all channels. */
    fs_reg &set_smear(unsigned subreg);
@@ -59,14 +64,6 @@ public:
    int subreg_offset;
 
    fs_reg *reladdr;
-
-   /**
-    * The register width.  This indicates how many hardware values are
-    * represented by each virtual value.  Valid values are 1, 8, or 16.
-    * For immediate values, this is 1.  Most of the rest of the time, it
-    * will be equal to the dispatch width.
-    */
-   uint8_t width;
 
    /** Register region horizontal stride */
    uint8_t stride;
@@ -129,33 +126,10 @@ horiz_offset(fs_reg reg, unsigned delta)
 }
 
 static inline fs_reg
-offset(fs_reg reg, unsigned delta)
-{
-   switch (reg.file) {
-   case BAD_FILE:
-      break;
-   case GRF:
-   case MRF:
-   case ATTR:
-      return byte_offset(reg,
-                         delta * MAX2(reg.width * reg.stride, 1) *
-                         type_sz(reg.type));
-   case UNIFORM:
-      reg.reg_offset += delta;
-      break;
-   default:
-      assert(delta == 0);
-   }
-   return reg;
-}
-
-static inline fs_reg
 component(fs_reg reg, unsigned idx)
 {
    assert(reg.subreg_offset == 0);
-   assert(idx < reg.width);
    reg.subreg_offset = idx * type_sz(reg.type);
-   reg.width = 1;
    reg.stride = 0;
    return reg;
 }
@@ -163,7 +137,7 @@ component(fs_reg reg, unsigned idx)
 static inline bool
 is_uniform(const fs_reg &reg)
 {
-   return (reg.width == 1 || reg.stride == 0 || reg.is_null()) &&
+   return (reg.stride == 0 || reg.is_null()) &&
           (!reg.reladdr || is_uniform(*reg.reladdr));
 }
 
@@ -185,8 +159,6 @@ half(fs_reg reg, unsigned idx)
 
    case GRF:
    case MRF:
-      assert(reg.width == 16);
-      reg.width = 8;
       return horiz_offset(reg, 8 * idx);
 
    case ATTR:
@@ -210,20 +182,13 @@ public:
 
    fs_inst();
    fs_inst(enum opcode opcode, uint8_t exec_size);
-   fs_inst(enum opcode opcode, const fs_reg &dst);
+   fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst);
    fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
            const fs_reg &src0);
-   fs_inst(enum opcode opcode, const fs_reg &dst, const fs_reg &src0);
    fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
            const fs_reg &src0, const fs_reg &src1);
-   fs_inst(enum opcode opcode, const fs_reg &dst, const fs_reg &src0,
-           const fs_reg &src1);
    fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
            const fs_reg &src0, const fs_reg &src1, const fs_reg &src2);
-   fs_inst(enum opcode opcode, const fs_reg &dst, const fs_reg &src0,
-           const fs_reg &src1, const fs_reg &src2);
-   fs_inst(enum opcode opcode, const fs_reg &dst, const fs_reg src[],
-           unsigned sources);
    fs_inst(enum opcode opcode, uint8_t exec_size, const fs_reg &dst,
            const fs_reg src[], unsigned sources);
    fs_inst(const fs_inst &that);
@@ -236,6 +201,7 @@ public:
    bool is_send_from_grf() const;
    bool is_partial_write() const;
    bool is_copy_payload(const brw::simple_allocator &grf_alloc) const;
+   unsigned components_read(unsigned i) const;
    int regs_read(int arg) const;
    bool can_do_source_mods(const struct brw_device_info *devinfo);
    bool has_side_effects() const;
@@ -256,7 +222,6 @@ public:
    uint8_t exec_size;
 
    bool eot:1;
-   bool force_uncompressed:1;
    bool force_sechalf:1;
    bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
 };
@@ -268,6 +233,50 @@ static inline fs_inst *
 set_sechalf(fs_inst *inst)
 {
    inst->force_sechalf = true;
+   return inst;
+}
+
+/**
+ * Make the execution of \p inst dependent on the evaluation of a possibly
+ * inverted predicate.
+ */
+static inline fs_inst *
+set_predicate_inv(enum brw_predicate pred, bool inverse,
+                  fs_inst *inst)
+{
+   inst->predicate = pred;
+   inst->predicate_inverse = inverse;
+   return inst;
+}
+
+/**
+ * Make the execution of \p inst dependent on the evaluation of a predicate.
+ */
+static inline fs_inst *
+set_predicate(enum brw_predicate pred, fs_inst *inst)
+{
+   return set_predicate_inv(pred, false, inst);
+}
+
+/**
+ * Write the result of evaluating the condition given by \p mod to a flag
+ * register.
+ */
+static inline fs_inst *
+set_condmod(enum brw_conditional_mod mod, fs_inst *inst)
+{
+   inst->conditional_mod = mod;
+   return inst;
+}
+
+/**
+ * Clamp the result of \p inst to the saturation range of its destination
+ * datatype.
+ */
+static inline fs_inst *
+set_saturate(bool saturate, fs_inst *inst)
+{
+   inst->saturate = saturate;
    return inst;
 }
 

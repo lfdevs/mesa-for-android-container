@@ -42,12 +42,9 @@
 
 #include "pipebuffer/pb_buffer.h"
 
-#define RADEON_MAX_CMDBUF_DWORDS (16 * 1024)
-
 #define RADEON_FLUSH_ASYNC		(1 << 0)
 #define RADEON_FLUSH_KEEP_TILING_FLAGS	(1 << 1) /* needs DRM 2.12.0 */
-#define RADEON_FLUSH_COMPUTE		(1 << 2)
-#define RADEON_FLUSH_END_OF_FRAME       (1 << 3)
+#define RADEON_FLUSH_END_OF_FRAME       (1 << 2)
 
 /* Tiling flags. */
 enum radeon_bo_layout {
@@ -136,6 +133,10 @@ enum radeon_family {
     CHIP_KABINI,
     CHIP_HAWAII,
     CHIP_MULLINS,
+    CHIP_TONGA,
+    CHIP_ICELAND,
+    CHIP_CARRIZO,
+    CHIP_FIJI,
     CHIP_LAST,
 };
 
@@ -150,10 +151,12 @@ enum chip_class {
     CAYMAN,
     SI,
     CIK,
+    VI,
 };
 
 enum ring_type {
     RING_GFX = 0,
+    RING_COMPUTE,
     RING_DMA,
     RING_UVD,
     RING_VCE,
@@ -169,9 +172,10 @@ enum radeon_value_id {
     RADEON_NUM_BYTES_MOVED,
     RADEON_VRAM_USAGE,
     RADEON_GTT_USAGE,
-    RADEON_GPU_TEMPERATURE,
+    RADEON_GPU_TEMPERATURE, /* DRM 2.42.0 */
     RADEON_CURRENT_SCLK,
-    RADEON_CURRENT_MCLK
+    RADEON_CURRENT_MCLK,
+    RADEON_GPU_RESET_COUNTER, /* DRM 2.43.0 */
 };
 
 enum radeon_bo_priority {
@@ -192,9 +196,11 @@ enum radeon_bo_priority {
 
 struct winsys_handle;
 struct radeon_winsys_cs_handle;
+struct radeon_winsys_ctx;
 
 struct radeon_winsys_cs {
     unsigned                    cdw;  /* Number of used dwords. */
+    unsigned                    max_dw; /* Maximum number of dwords. */
     uint32_t                    *buf; /* The command buffer. */
     enum ring_type              ring_type;
 };
@@ -238,6 +244,7 @@ struct radeon_info {
 
     boolean                     cik_macrotile_mode_array_valid;
     uint32_t                    cik_macrotile_mode_array[16];
+    uint32_t                    vce_harvest_config;
 };
 
 enum radeon_feature_id {
@@ -317,6 +324,8 @@ struct radeon_surf {
     struct radeon_surf_level    stencil_level[RADEON_SURF_MAX_LEVEL];
     uint32_t                    tiling_index[RADEON_SURF_MAX_LEVEL];
     uint32_t                    stencil_tiling_index[RADEON_SURF_MAX_LEVEL];
+    uint32_t                    pipe_config;
+    uint32_t                    num_banks;
 };
 
 struct radeon_winsys {
@@ -398,24 +407,15 @@ struct radeon_winsys {
     void (*buffer_unmap)(struct radeon_winsys_cs_handle *buf);
 
     /**
-     * Return TRUE if a buffer object is being used by the GPU.
+     * Wait for the buffer and return true if the buffer is not used
+     * by the device.
      *
-     * \param buf       A winsys buffer object.
-     * \param usage     Only check whether the buffer is busy for the given usage.
+     * The timeout of 0 will only return the status.
+     * The timeout of PIPE_TIMEOUT_INFINITE will always wait until the buffer
+     * is idle.
      */
-    boolean (*buffer_is_busy)(struct pb_buffer *buf,
-                              enum radeon_bo_usage usage);
-
-    /**
-     * Wait for a buffer object until it is not used by a GPU. This is
-     * equivalent to a fence placed after the last command using the buffer,
-     * and synchronizing to the fence.
-     *
-     * \param buf       A winsys buffer object to wait for.
-     * \param usage     Only wait until the buffer is idle for the given usage,
-     *                  but may still be busy for some other usage.
-     */
-    void (*buffer_wait)(struct pb_buffer *buf, enum radeon_bo_usage usage);
+    bool (*buffer_wait)(struct pb_buffer *buf, uint64_t timeout,
+                        enum radeon_bo_usage usage);
 
     /**
      * Return tiling flags describing a memory layout of a buffer object.
@@ -450,10 +450,11 @@ struct radeon_winsys {
                               struct radeon_winsys_cs *rcs,
                               enum radeon_bo_layout microtile,
                               enum radeon_bo_layout macrotile,
+                              unsigned pipe_config,
                               unsigned bankw, unsigned bankh,
                               unsigned tile_split,
                               unsigned stencil_tile_split,
-                              unsigned mtilea,
+                              unsigned mtilea, unsigned num_banks,
                               unsigned stride,
                               bool scanout);
 
@@ -515,15 +516,31 @@ struct radeon_winsys {
      *************************************************************************/
 
     /**
+     * Create a command submission context.
+     * Various command streams can be submitted to the same context.
+     */
+    struct radeon_winsys_ctx *(*ctx_create)(struct radeon_winsys *ws);
+
+    /**
+     * Destroy a context.
+     */
+    void (*ctx_destroy)(struct radeon_winsys_ctx *ctx);
+
+    /**
+     * Query a GPU reset status.
+     */
+    enum pipe_reset_status (*ctx_query_reset_status)(struct radeon_winsys_ctx *ctx);
+
+    /**
      * Create a command stream.
      *
-     * \param ws        The winsys this function is called from.
+     * \param ctx       The submission context
      * \param ring_type The ring type (GFX, DMA, UVD)
      * \param flush     Flush callback function associated with the command stream.
      * \param user      User pointer that will be passed to the flush callback.
      * \param trace_buf Trace buffer when tracing is enabled
      */
-    struct radeon_winsys_cs *(*cs_create)(struct radeon_winsys *ws,
+    struct radeon_winsys_cs *(*cs_create)(struct radeon_winsys_ctx *ctx,
                                           enum ring_type ring_type,
                                           void (*flush)(void *ctx, unsigned flags,
 							struct pipe_fence_handle **fence),
@@ -668,12 +685,12 @@ struct radeon_winsys {
 };
 
 
-static INLINE void radeon_emit(struct radeon_winsys_cs *cs, uint32_t value)
+static inline void radeon_emit(struct radeon_winsys_cs *cs, uint32_t value)
 {
     cs->buf[cs->cdw++] = value;
 }
 
-static INLINE void radeon_emit_array(struct radeon_winsys_cs *cs,
+static inline void radeon_emit_array(struct radeon_winsys_cs *cs,
 				     const uint32_t *values, unsigned count)
 {
     memcpy(cs->buf+cs->cdw, values, count * 4);

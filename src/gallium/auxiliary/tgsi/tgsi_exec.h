@@ -93,7 +93,8 @@ enum tgsi_sampler_control {
    tgsi_sampler_lod_bias,
    tgsi_sampler_lod_explicit,
    tgsi_sampler_lod_zero,
-   tgsi_sampler_derivs_explicit
+   tgsi_sampler_derivs_explicit,
+   tgsi_sampler_gather,
 };
 
 /**
@@ -212,7 +213,7 @@ struct tgsi_sampler
  * input register files, this is the stride between two 1D
  * arrays.
  */
-#define TGSI_EXEC_MAX_INPUT_ATTRIBS PIPE_MAX_SHADER_INPUTS
+#define TGSI_EXEC_MAX_INPUT_ATTRIBS 32
 
 /* The maximum number of bytes per constant buffer.
  */
@@ -385,7 +386,7 @@ boolean
 tgsi_check_soa_dependencies(const struct tgsi_full_instruction *inst);
 
 
-static INLINE void
+static inline void
 tgsi_set_kill_mask(struct tgsi_exec_machine *mach, unsigned mask)
 {
    mach->Temps[TGSI_EXEC_TEMP_KILMASK_I].xyzw[TGSI_EXEC_TEMP_KILMASK_C].u[0] =
@@ -394,7 +395,7 @@ tgsi_set_kill_mask(struct tgsi_exec_machine *mach, unsigned mask)
 
 
 /** Set execution mask values prior to executing the shader */
-static INLINE void
+static inline void
 tgsi_set_exec_mask(struct tgsi_exec_machine *mach,
                    boolean ch0, boolean ch1, boolean ch2, boolean ch3)
 {
@@ -413,7 +414,7 @@ tgsi_exec_set_constant_buffers(struct tgsi_exec_machine *mach,
                                const unsigned *buf_sizes);
 
 
-static INLINE int
+static inline int
 tgsi_exec_get_shader_param(enum pipe_shader_cap param)
 {
    switch(param) {
@@ -457,6 +458,7 @@ tgsi_exec_get_shader_param(enum pipe_shader_cap param)
       return 1;
    case PIPE_SHADER_CAP_DOUBLES:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+   case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return 1;
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:

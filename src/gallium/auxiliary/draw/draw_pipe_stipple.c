@@ -53,7 +53,7 @@ struct stipple_stage {
 };
 
 
-static INLINE struct stipple_stage *
+static inline struct stipple_stage *
 stipple_stage(struct draw_stage *stage)
 {
    return (struct stipple_stage *) stage;
@@ -108,7 +108,7 @@ emit_segment(struct draw_stage *stage, struct prim_header *header,
 }
 
 
-static INLINE unsigned
+static inline unsigned
 stipple_test(int counter, ushort pattern, int factor)
 {
    int b = (counter / factor) & 0xf;

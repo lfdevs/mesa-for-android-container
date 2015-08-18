@@ -650,7 +650,7 @@ vmw_ioctl_fence_unref(struct vmw_winsys_screen *vws,
       vmw_error("%s Failed\n", __FUNCTION__);
 }
 
-static INLINE uint32_t
+static inline uint32_t
 vmw_drm_fence_flags(uint32_t flags)
 {
     uint32_t dflags = 0;

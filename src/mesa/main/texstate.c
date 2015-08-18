@@ -123,21 +123,21 @@ _mesa_print_texunit_state( struct gl_context *ctx, GLuint unit )
 {
    const struct gl_texture_unit *texUnit = ctx->Texture.Unit + unit;
    printf("Texture Unit %d\n", unit);
-   printf("  GL_TEXTURE_ENV_MODE = %s\n", _mesa_lookup_enum_by_nr(texUnit->EnvMode));
-   printf("  GL_COMBINE_RGB = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.ModeRGB));
-   printf("  GL_COMBINE_ALPHA = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.ModeA));
-   printf("  GL_SOURCE0_RGB = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.SourceRGB[0]));
-   printf("  GL_SOURCE1_RGB = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.SourceRGB[1]));
-   printf("  GL_SOURCE2_RGB = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.SourceRGB[2]));
-   printf("  GL_SOURCE0_ALPHA = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.SourceA[0]));
-   printf("  GL_SOURCE1_ALPHA = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.SourceA[1]));
-   printf("  GL_SOURCE2_ALPHA = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.SourceA[2]));
-   printf("  GL_OPERAND0_RGB = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.OperandRGB[0]));
-   printf("  GL_OPERAND1_RGB = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.OperandRGB[1]));
-   printf("  GL_OPERAND2_RGB = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.OperandRGB[2]));
-   printf("  GL_OPERAND0_ALPHA = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.OperandA[0]));
-   printf("  GL_OPERAND1_ALPHA = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.OperandA[1]));
-   printf("  GL_OPERAND2_ALPHA = %s\n", _mesa_lookup_enum_by_nr(texUnit->Combine.OperandA[2]));
+   printf("  GL_TEXTURE_ENV_MODE = %s\n", _mesa_enum_to_string(texUnit->EnvMode));
+   printf("  GL_COMBINE_RGB = %s\n", _mesa_enum_to_string(texUnit->Combine.ModeRGB));
+   printf("  GL_COMBINE_ALPHA = %s\n", _mesa_enum_to_string(texUnit->Combine.ModeA));
+   printf("  GL_SOURCE0_RGB = %s\n", _mesa_enum_to_string(texUnit->Combine.SourceRGB[0]));
+   printf("  GL_SOURCE1_RGB = %s\n", _mesa_enum_to_string(texUnit->Combine.SourceRGB[1]));
+   printf("  GL_SOURCE2_RGB = %s\n", _mesa_enum_to_string(texUnit->Combine.SourceRGB[2]));
+   printf("  GL_SOURCE0_ALPHA = %s\n", _mesa_enum_to_string(texUnit->Combine.SourceA[0]));
+   printf("  GL_SOURCE1_ALPHA = %s\n", _mesa_enum_to_string(texUnit->Combine.SourceA[1]));
+   printf("  GL_SOURCE2_ALPHA = %s\n", _mesa_enum_to_string(texUnit->Combine.SourceA[2]));
+   printf("  GL_OPERAND0_RGB = %s\n", _mesa_enum_to_string(texUnit->Combine.OperandRGB[0]));
+   printf("  GL_OPERAND1_RGB = %s\n", _mesa_enum_to_string(texUnit->Combine.OperandRGB[1]));
+   printf("  GL_OPERAND2_RGB = %s\n", _mesa_enum_to_string(texUnit->Combine.OperandRGB[2]));
+   printf("  GL_OPERAND0_ALPHA = %s\n", _mesa_enum_to_string(texUnit->Combine.OperandA[0]));
+   printf("  GL_OPERAND1_ALPHA = %s\n", _mesa_enum_to_string(texUnit->Combine.OperandA[1]));
+   printf("  GL_OPERAND2_ALPHA = %s\n", _mesa_enum_to_string(texUnit->Combine.OperandA[2]));
    printf("  GL_RGB_SCALE = %d\n", 1 << texUnit->Combine.ScaleShiftRGB);
    printf("  GL_ALPHA_SCALE = %d\n", 1 << texUnit->Combine.ScaleShiftA);
    printf("  GL_TEXTURE_ENV_COLOR = (%f, %f, %f, %f)\n", texUnit->EnvColor[0], texUnit->EnvColor[1], texUnit->EnvColor[2], texUnit->EnvColor[3]);
@@ -289,22 +289,22 @@ _mesa_ActiveTexture(GLenum texture)
    GLuint k;
    GET_CURRENT_CONTEXT(ctx);
 
+   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
+      _mesa_debug(ctx, "glActiveTexture %s\n",
+                  _mesa_enum_to_string(texture));
+
+   if (ctx->Texture.CurrentUnit == texUnit)
+      return;
+
    k = _mesa_max_tex_unit(ctx);
 
    assert(k <= ARRAY_SIZE(ctx->Texture.Unit));
 
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "glActiveTexture %s\n",
-                  _mesa_lookup_enum_by_nr(texture));
-
    if (texUnit >= k) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glActiveTexture(texture=%s)",
-                  _mesa_lookup_enum_by_nr(texture));
+                  _mesa_enum_to_string(texture));
       return;
    }
-
-   if (ctx->Texture.CurrentUnit == texUnit)
-      return;
 
    FLUSH_VERTICES(ctx, _NEW_TEXTURE);
 
@@ -325,15 +325,15 @@ _mesa_ClientActiveTexture(GLenum texture)
 
    if (MESA_VERBOSE & (VERBOSE_API | VERBOSE_TEXTURE))
       _mesa_debug(ctx, "glClientActiveTexture %s\n",
-                  _mesa_lookup_enum_by_nr(texture));
+                  _mesa_enum_to_string(texture));
+
+   if (ctx->Array.ActiveTexture == texUnit)
+      return;
 
    if (texUnit >= ctx->Const.MaxTextureCoordUnits) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glClientActiveTexture(texture)");
       return;
    }
-
-   if (ctx->Array.ActiveTexture == texUnit)
-      return;
 
    FLUSH_VERTICES(ctx, _NEW_ARRAY);
    ctx->Array.ActiveTexture = texUnit;

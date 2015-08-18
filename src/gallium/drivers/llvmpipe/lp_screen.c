@@ -165,7 +165,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
       return 1;
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
-      return 0;
+      return 1;
    case PIPE_CAP_TGSI_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_START_INSTANCE:
@@ -288,10 +288,14 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VERTEXID_NOBASE:
       return 0;
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
+   case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
       return 1;
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+   case PIPE_CAP_DEPTH_BOUNDS_TEST:
       return 0;
    }
    /* should only get here on unhandled cases */
@@ -529,18 +533,6 @@ llvmpipe_fence_reference(struct pipe_screen *screen,
 
 
 /**
- * Has the fence been executed/finished?
- */
-static boolean
-llvmpipe_fence_signalled(struct pipe_screen *screen,
-                         struct pipe_fence_handle *fence)
-{
-   struct lp_fence *f = (struct lp_fence *) fence;
-   return lp_fence_signalled(f);
-}
-
-
-/**
  * Wait for the fence to finish.
  */
 static boolean
@@ -549,6 +541,9 @@ llvmpipe_fence_finish(struct pipe_screen *screen,
                       uint64_t timeout)
 {
    struct lp_fence *f = (struct lp_fence *) fence_handle;
+
+   if (!timeout)
+      return lp_fence_signalled(f);
 
    lp_fence_wait(f);
    return TRUE;
@@ -601,7 +596,6 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    screen->base.context_create = llvmpipe_create_context;
    screen->base.flush_frontbuffer = llvmpipe_flush_frontbuffer;
    screen->base.fence_reference = llvmpipe_fence_reference;
-   screen->base.fence_signalled = llvmpipe_fence_signalled;
    screen->base.fence_finish = llvmpipe_fence_finish;
 
    screen->base.get_timestamp = llvmpipe_get_timestamp;

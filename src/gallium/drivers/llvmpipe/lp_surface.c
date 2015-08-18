@@ -42,13 +42,6 @@ lp_resource_copy(struct pipe_context *pipe,
                  struct pipe_resource *src, unsigned src_level,
                  const struct pipe_box *src_box)
 {
-   struct llvmpipe_resource *src_tex = llvmpipe_resource(src);
-   struct llvmpipe_resource *dst_tex = llvmpipe_resource(dst);
-   const enum pipe_format format = src_tex->base.format;
-   unsigned width = src_box->width;
-   unsigned height = src_box->height;
-   unsigned depth = src_box->depth;
-
    llvmpipe_flush_resource(pipe,
                            dst, dst_level,
                            FALSE, /* read_only */
@@ -63,58 +56,8 @@ lp_resource_copy(struct pipe_context *pipe,
                            FALSE, /* do_not_block */
                            "blit src");
 
-   /* Fallback for buffers. */
-   if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
-      util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
-                                src, src_level, src_box);
-      return;
-   }
-
-   /*
-   printf("surface copy from %u lvl %u to %u lvl %u: %u,%u,%u to %u,%u,%u %u x %u x %u\n",
-          src_tex->id, src_level, dst_tex->id, dst_level,
-          src_box->x, src_box->y, src_box->z, dstx, dsty, dstz,
-          src_box->width, src_box->height, src_box->depth);
-   */
-
-   /* make sure display target resources (which cannot have levels/layers) are mapped */
-   if (src_tex->dt)
-      (void) llvmpipe_resource_map(src, src_level, 0, LP_TEX_USAGE_READ);
-   if (dst_tex->dt)
-      /*
-       * Could set this to WRITE_ALL if complete dst is covered but it gets
-       * ignored anyway.
-       */
-      (void) llvmpipe_resource_map(dst, dst_level, 0, LP_TEX_USAGE_READ_WRITE);
-
-
-   /* copy */
-   {
-      const ubyte *src_linear_ptr
-         = llvmpipe_get_texture_image_address(src_tex, src_box->z,
-                                              src_level);
-      ubyte *dst_linear_ptr
-         = llvmpipe_get_texture_image_address(dst_tex, dstz,
-                                              dst_level);
-
-      if (dst_linear_ptr && src_linear_ptr) {
-         util_copy_box(dst_linear_ptr, format,
-                       llvmpipe_resource_stride(&dst_tex->base, dst_level),
-                       dst_tex->img_stride[dst_level],
-                       dstx, dsty, 0,
-                       width, height, depth,
-                       src_linear_ptr,
-                       llvmpipe_resource_stride(&src_tex->base, src_level),
-                       src_tex->img_stride[src_level],
-                       src_box->x, src_box->y, 0);
-      }
-   }
-
-   if (src_tex->dt)
-      llvmpipe_resource_unmap(src, 0, 0);
-   if (dst_tex->dt)
-      llvmpipe_resource_unmap(dst, 0, 0);
-
+   util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
+                             src, src_level, src_box);
 }
 
 
@@ -137,11 +80,6 @@ static void lp_blit(struct pipe_context *pipe,
 
    if (util_try_blit_via_copy_region(pipe, &info)) {
       return; /* done */
-   }
-
-   if (info.mask & PIPE_MASK_S) {
-      debug_printf("llvmpipe: cannot blit stencil, skipping\n");
-      info.mask &= ~PIPE_MASK_S;
    }
 
    if (!util_blitter_is_blit_supported(lp->blitter, &info)) {

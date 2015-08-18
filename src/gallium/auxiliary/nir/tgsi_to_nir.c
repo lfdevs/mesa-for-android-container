@@ -58,6 +58,9 @@ struct ttn_compile {
    struct ttn_reg_info *temp_regs;
    nir_ssa_def **imm_defs;
 
+   unsigned num_samp_types;
+   nir_alu_type *samp_types;
+
    nir_register *addr_reg;
 
    /**
@@ -156,8 +159,33 @@ ttn_emit_declaration(struct ttn_compile *c)
       /* Nothing to record for system values. */
    } else if (file == TGSI_FILE_SAMPLER) {
       /* Nothing to record for samplers. */
+   } else if (file == TGSI_FILE_SAMPLER_VIEW) {
+      struct tgsi_declaration_sampler_view *sview = &decl->SamplerView;
+      nir_alu_type type;
+
+      assert((sview->ReturnTypeX == sview->ReturnTypeY) &&
+             (sview->ReturnTypeX == sview->ReturnTypeZ) &&
+             (sview->ReturnTypeX == sview->ReturnTypeW));
+
+      switch (sview->ReturnTypeX) {
+      case TGSI_RETURN_TYPE_SINT:
+         type = nir_type_int;
+         break;
+      case TGSI_RETURN_TYPE_UINT:
+         type = nir_type_unsigned;
+         break;
+      case TGSI_RETURN_TYPE_FLOAT:
+      default:
+         type = nir_type_float;
+         break;
+      }
+
+      for (i = 0; i < array_size; i++) {
+         c->samp_types[decl->Range.First + i] = type;
+      }
    } else {
-      nir_variable *var;
+      bool is_array = (array_size > 1);
+
       assert(file == TGSI_FILE_INPUT ||
              file == TGSI_FILE_OUTPUT ||
              file == TGSI_FILE_CONSTANT);
@@ -166,76 +194,99 @@ ttn_emit_declaration(struct ttn_compile *c)
       if ((file == TGSI_FILE_CONSTANT) && decl->Declaration.Dimension)
          return;
 
-      var = rzalloc(b->shader, nir_variable);
-      var->data.driver_location = decl->Range.First;
-
-      var->type = glsl_vec4_type();
-      if (array_size > 1)
-         var->type = glsl_array_type(var->type, array_size);
-
-      switch (file) {
-      case TGSI_FILE_INPUT:
-         var->data.read_only = true;
-         var->data.mode = nir_var_shader_in;
-         var->name = ralloc_asprintf(var, "in_%d", decl->Range.First);
-
-         /* We should probably translate to a VERT_ATTRIB_* or VARYING_SLOT_*
-          * instead, but nothing in NIR core is looking at the value
-          * currently, and this is less change to drivers.
-          */
-         var->data.location = decl->Semantic.Name;
-         var->data.index = decl->Semantic.Index;
-
-         /* We definitely need to translate the interpolation field, because
-          * nir_print will decode it.
-          */
-         switch (decl->Interp.Interpolate) {
-         case TGSI_INTERPOLATE_CONSTANT:
-            var->data.interpolation = INTERP_QUALIFIER_FLAT;
-            break;
-         case TGSI_INTERPOLATE_LINEAR:
-            var->data.interpolation = INTERP_QUALIFIER_NOPERSPECTIVE;
-            break;
-         case TGSI_INTERPOLATE_PERSPECTIVE:
-            var->data.interpolation = INTERP_QUALIFIER_SMOOTH;
-            break;
-         }
-
-         exec_list_push_tail(&b->shader->inputs, &var->node);
-         break;
-      case TGSI_FILE_OUTPUT: {
-         /* Since we can't load from outputs in the IR, we make temporaries
-          * for the outputs and emit stores to the real outputs at the end of
-          * the shader.
-          */
-         nir_register *reg = nir_local_reg_create(b->impl);
-         reg->num_components = 4;
-         if (array_size > 1)
-            reg->num_array_elems = array_size;
-
-         var->data.mode = nir_var_shader_out;
-         var->name = ralloc_asprintf(var, "out_%d", decl->Range.First);
-
-         var->data.location = decl->Semantic.Name;
-         var->data.index = decl->Semantic.Index;
-
-         for (i = 0; i < array_size; i++) {
-            c->output_regs[decl->Range.First + i].offset = i;
-            c->output_regs[decl->Range.First + i].reg = reg;
-         }
-
-         exec_list_push_tail(&b->shader->outputs, &var->node);
+      if ((file == TGSI_FILE_INPUT) || (file == TGSI_FILE_OUTPUT)) {
+         is_array = (is_array && decl->Declaration.Array &&
+                     (decl->Array.ArrayID != 0));
       }
-         break;
-      case TGSI_FILE_CONSTANT:
-         var->data.mode = nir_var_uniform;
-         var->name = ralloc_asprintf(var, "uniform_%d", decl->Range.First);
 
-         exec_list_push_tail(&b->shader->uniforms, &var->node);
-         break;
-      default:
-         unreachable("bad declaration file");
-         return;
+      for (i = 0; i < array_size; i++) {
+         unsigned idx = decl->Range.First + i;
+         nir_variable *var = rzalloc(b->shader, nir_variable);
+
+         var->data.driver_location = idx;
+
+         var->type = glsl_vec4_type();
+         if (is_array)
+            var->type = glsl_array_type(var->type, array_size);
+
+         switch (file) {
+         case TGSI_FILE_INPUT:
+            var->data.read_only = true;
+            var->data.mode = nir_var_shader_in;
+            var->name = ralloc_asprintf(var, "in_%d", idx);
+
+            /* We should probably translate to a VERT_ATTRIB_* or VARYING_SLOT_*
+             * instead, but nothing in NIR core is looking at the value
+             * currently, and this is less change to drivers.
+             */
+            var->data.location = decl->Semantic.Name;
+            var->data.index = decl->Semantic.Index;
+
+            /* We definitely need to translate the interpolation field, because
+             * nir_print will decode it.
+             */
+            switch (decl->Interp.Interpolate) {
+            case TGSI_INTERPOLATE_CONSTANT:
+               var->data.interpolation = INTERP_QUALIFIER_FLAT;
+               break;
+            case TGSI_INTERPOLATE_LINEAR:
+               var->data.interpolation = INTERP_QUALIFIER_NOPERSPECTIVE;
+               break;
+            case TGSI_INTERPOLATE_PERSPECTIVE:
+               var->data.interpolation = INTERP_QUALIFIER_SMOOTH;
+               break;
+            }
+
+            exec_list_push_tail(&b->shader->inputs, &var->node);
+            break;
+         case TGSI_FILE_OUTPUT: {
+            /* Since we can't load from outputs in the IR, we make temporaries
+             * for the outputs and emit stores to the real outputs at the end of
+             * the shader.
+             */
+            nir_register *reg = nir_local_reg_create(b->impl);
+            reg->num_components = 4;
+            if (is_array)
+               reg->num_array_elems = array_size;
+
+            var->data.mode = nir_var_shader_out;
+            var->name = ralloc_asprintf(var, "out_%d", idx);
+
+            var->data.location = decl->Semantic.Name;
+            if (decl->Semantic.Name == TGSI_SEMANTIC_COLOR &&
+                decl->Semantic.Index == 0 &&
+                c->scan->properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS])
+               var->data.index = -1;
+            else
+               var->data.index = decl->Semantic.Index;
+
+            if (is_array) {
+               unsigned j;
+               for (j = 0; j < array_size; j++) {
+                  c->output_regs[idx + j].offset = i + j;
+                  c->output_regs[idx + j].reg = reg;
+               }
+            } else {
+               c->output_regs[idx].offset = i;
+               c->output_regs[idx].reg = reg;
+            }
+
+            exec_list_push_tail(&b->shader->outputs, &var->node);
+         }
+            break;
+         case TGSI_FILE_CONSTANT:
+            var->data.mode = nir_var_uniform;
+            var->name = ralloc_asprintf(var, "uniform_%d", idx);
+
+            exec_list_push_tail(&b->shader->uniforms, &var->node);
+            break;
+         default:
+            unreachable("bad declaration file");
+            return;
+         }
+
+         if (is_array)
+            break;
       }
 
    }
@@ -401,7 +452,6 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
 
       load->num_components = 4;
       load->const_index[0] = index;
-      load->const_index[1] = 1;
       if (dim) {
          if (dimind) {
             load->src[srcn] =
@@ -949,6 +999,9 @@ static void
 setup_texture_info(nir_tex_instr *instr, unsigned texture)
 {
    switch (texture) {
+   case TGSI_TEXTURE_BUFFER:
+      instr->sampler_dim = GLSL_SAMPLER_DIM_BUF;
+      break;
    case TGSI_TEXTURE_1D:
       instr->sampler_dim = GLSL_SAMPLER_DIM_1D;
       break;
@@ -1027,7 +1080,7 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
    struct tgsi_full_instruction *tgsi_inst = &c->token->FullInstruction;
    nir_tex_instr *instr;
    nir_texop op;
-   unsigned num_srcs, samp = 1, i;
+   unsigned num_srcs, samp = 1, sview, i;
 
    switch (tgsi_inst->Instruction.Opcode) {
    case TGSI_OPCODE_TEX:
@@ -1042,6 +1095,11 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
       op = nir_texop_txb;
       num_srcs = 2;
       break;
+   case TGSI_OPCODE_TXB2:
+      op = nir_texop_txb;
+      num_srcs = 2;
+      samp = 2;
+      break;
    case TGSI_OPCODE_TXL:
       op = nir_texop_txl;
       num_srcs = 2;
@@ -1052,7 +1110,12 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
       samp = 2;
       break;
    case TGSI_OPCODE_TXF:
-      op = nir_texop_txf;
+      if (tgsi_inst->Texture.Texture == TGSI_TEXTURE_2D_MSAA ||
+          tgsi_inst->Texture.Texture == TGSI_TEXTURE_2D_ARRAY_MSAA) {
+         op = nir_texop_txf_ms;
+      } else {
+         op = nir_texop_txf;
+      }
       num_srcs = 2;
       break;
    case TGSI_OPCODE_TXD:
@@ -1106,6 +1169,18 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
    assert(tgsi_inst->Src[samp].Register.File == TGSI_FILE_SAMPLER);
    instr->sampler_index = tgsi_inst->Src[samp].Register.Index;
 
+   /* TODO if we supported any opc's which take an explicit SVIEW
+    * src, we would use that here instead.  But for the "legacy"
+    * texture opc's the SVIEW index is same as SAMP index:
+    */
+   sview = instr->sampler_index;
+
+   if (sview < c->num_samp_types) {
+      instr->dest_type = c->samp_types[sview];
+   } else {
+      instr->dest_type = nir_type_float;
+   }
+
    unsigned src_number = 0;
 
    instr->src[src_number].src =
@@ -1126,6 +1201,12 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
       src_number++;
    }
 
+   if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_TXB2) {
+      instr->src[src_number].src = nir_src_for_ssa(ttn_channel(b, src[1], X));
+      instr->src[src_number].src_type = nir_tex_src_bias;
+      src_number++;
+   }
+
    if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_TXL) {
       instr->src[src_number].src = nir_src_for_ssa(ttn_channel(b, src[0], W));
       instr->src[src_number].src_type = nir_tex_src_lod;
@@ -1140,7 +1221,10 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
 
    if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_TXF) {
       instr->src[src_number].src = nir_src_for_ssa(ttn_channel(b, src[0], W));
-      instr->src[src_number].src_type = nir_tex_src_lod;
+      if (op == nir_texop_txf_ms)
+         instr->src[src_number].src_type = nir_tex_src_ms_index;
+      else
+         instr->src[src_number].src_type = nir_tex_src_lod;
       src_number++;
    }
 
@@ -1286,6 +1370,7 @@ static const nir_op op_trans[TGSI_OPCODE_LAST] = {
    [TGSI_OPCODE_SEQ] = nir_op_seq,
    [TGSI_OPCODE_SGT] = 0,
    [TGSI_OPCODE_SIN] = nir_op_fsin,
+   [TGSI_OPCODE_SNE] = nir_op_sne,
    [TGSI_OPCODE_SLE] = 0,
    [TGSI_OPCODE_TEX] = 0,
    [TGSI_OPCODE_TXD] = 0,
@@ -1433,7 +1518,7 @@ ttn_emit_instruction(struct ttn_compile *c)
       return;
 
    nir_ssa_def *src[TGSI_FULL_MAX_SRC_REGISTERS];
-   for (i = 0; i < TGSI_FULL_MAX_SRC_REGISTERS; i++) {
+   for (i = 0; i < tgsi_inst->Instruction.NumSrcRegs; i++) {
       src[i] = ttn_get_src(c, &tgsi_inst->Src[i]);
    }
    nir_alu_dest dest = ttn_get_dest(c, tgsi_dst);
@@ -1625,7 +1710,6 @@ ttn_emit_instruction(struct ttn_compile *c)
    }
 
    if (tgsi_inst->Instruction.Saturate) {
-      assert(tgsi_inst->Instruction.Saturate == TGSI_SAT_ZERO_ONE);
       assert(!dest.dest.is_ssa);
       ttn_move_dest(b, dest, nir_fsat(b, ttn_src_for_dest(b, &dest)));
    }
@@ -1670,10 +1754,11 @@ ttn_add_output_stores(struct ttn_compile *c)
       for (i = 0; i < array_len; i++) {
          nir_intrinsic_instr *store =
             nir_intrinsic_instr_create(b->shader, nir_intrinsic_store_output);
+         unsigned loc = var->data.driver_location + i;
          store->num_components = 4;
-         store->const_index[0] = var->data.driver_location + i;
-         store->const_index[1] = 1;
-         store->src[0].reg.reg = c->output_regs[var->data.driver_location].reg;
+         store->const_index[0] = loc;
+         store->src[0].reg.reg = c->output_regs[loc].reg;
+         store->src[0].reg.base_offset = c->output_regs[loc].offset;
          nir_instr_insert_after_cf_list(b->cf_node_list, &store->instr);
       }
    }
@@ -1712,6 +1797,9 @@ tgsi_to_nir(const void *tgsi_tokens,
                                 scan.file_max[TGSI_FILE_TEMPORARY] + 1);
    c->imm_defs = rzalloc_array(c, nir_ssa_def *,
                                scan.file_max[TGSI_FILE_IMMEDIATE] + 1);
+
+   c->num_samp_types = scan.file_max[TGSI_FILE_SAMPLER_VIEW] + 1;
+   c->samp_types = rzalloc_array(c, nir_alu_type, c->num_samp_types);
 
    c->if_stack = rzalloc_array(c, struct exec_list *,
                                (scan.opcode_count[TGSI_OPCODE_IF] +

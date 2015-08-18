@@ -20,7 +20,7 @@ struct nouveau_statebuf_builder
 #define sb_data(sb, v) *(sb).p++ = (v)
 #endif
 
-static INLINE uint32_t sb_header(unsigned subc, unsigned mthd, unsigned size)
+static inline uint32_t sb_header(unsigned subc, unsigned mthd, unsigned size)
 {
 	return (size << 18) | (subc << 13) | mthd;
 }

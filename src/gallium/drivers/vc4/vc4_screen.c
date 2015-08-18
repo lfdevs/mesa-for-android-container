@@ -176,6 +176,10 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
         case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
         case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+	case PIPE_CAP_DEPTH_BOUNDS_TEST:
                 return 0;
 
                 /* Stream output. */
@@ -323,6 +327,7 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+        case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
                 return 0;
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -459,7 +464,7 @@ vc4_screen_create(int fd)
         pscreen->is_format_supported = vc4_screen_is_format_supported;
 
         screen->fd = fd;
-        make_empty_list(&screen->bo_cache.time_list);
+        list_inithead(&screen->bo_cache.time_list);
 
         vc4_fence_init(screen);
 
@@ -487,6 +492,12 @@ vc4_screen_bo_get_handle(struct pipe_screen *pscreen,
                          struct winsys_handle *whandle)
 {
         whandle->stride = stride;
+
+        /* If we're passing some reference to our BO out to some other part of
+         * the system, then we can't do any optimizations about only us being
+         * the ones seeing it (like BO caching or shadow update avoidance).
+         */
+        bo->private = false;
 
         switch (whandle->type) {
         case DRM_API_HANDLE_TYPE_SHARED:

@@ -12,6 +12,7 @@ C_SOURCES := \
 	radeon_uvd.c \
 	radeon_uvd.h \
 	radeon_vce_40_2_2.c \
+	radeon_vce_50.c \
 	radeon_vce.c \
 	radeon_vce.h \
 	radeon_video.c \

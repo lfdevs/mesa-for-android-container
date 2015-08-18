@@ -226,17 +226,6 @@ rbug_screen_fence_reference(struct pipe_screen *_screen,
 }
 
 static boolean
-rbug_screen_fence_signalled(struct pipe_screen *_screen,
-                            struct pipe_fence_handle *fence)
-{
-   struct rbug_screen *rb_screen = rbug_screen(_screen);
-   struct pipe_screen *screen = rb_screen->screen;
-
-   return screen->fence_signalled(screen,
-                                  fence);
-}
-
-static boolean
 rbug_screen_fence_finish(struct pipe_screen *_screen,
                          struct pipe_fence_handle *fence,
                          uint64_t timeout)
@@ -288,7 +277,6 @@ rbug_screen_create(struct pipe_screen *screen)
    rb_screen->base.resource_destroy = rbug_screen_resource_destroy;
    rb_screen->base.flush_frontbuffer = rbug_screen_flush_frontbuffer;
    rb_screen->base.fence_reference = rbug_screen_fence_reference;
-   rb_screen->base.fence_signalled = rbug_screen_fence_signalled;
    rb_screen->base.fence_finish = rbug_screen_fence_finish;
 
    rb_screen->screen = screen;

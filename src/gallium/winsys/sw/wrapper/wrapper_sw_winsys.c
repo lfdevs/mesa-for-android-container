@@ -66,13 +66,13 @@ struct wrapper_sw_displaytarget
    void *ptr;
 };
 
-static INLINE struct wrapper_sw_winsys *
+static inline struct wrapper_sw_winsys *
 wrapper_sw_winsys(struct sw_winsys *ws)
 {
    return (struct wrapper_sw_winsys *)ws;
 }
 
-static INLINE struct wrapper_sw_displaytarget *
+static inline struct wrapper_sw_displaytarget *
 wrapper_sw_displaytarget(struct sw_displaytarget *dt)
 {
    return (struct wrapper_sw_displaytarget *)dt;

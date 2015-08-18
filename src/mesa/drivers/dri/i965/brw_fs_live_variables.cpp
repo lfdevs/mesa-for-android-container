@@ -204,26 +204,8 @@ fs_live_variables::compute_live_variables()
    while (cont) {
       cont = false;
 
-      foreach_block (block, cfg) {
+      foreach_block_reverse (block, cfg) {
          struct block_data *bd = &block_data[block->num];
-
-	 /* Update livein */
-	 for (int i = 0; i < bitset_words; i++) {
-            BITSET_WORD new_livein = (bd->use[i] |
-                                      (bd->liveout[i] &
-                                       ~bd->def[i]));
-	    if (new_livein & ~bd->livein[i]) {
-               bd->livein[i] |= new_livein;
-               cont = true;
-	    }
-	 }
-         BITSET_WORD new_livein = (bd->flag_use[0] |
-                                   (bd->flag_liveout[0] &
-                                    ~bd->flag_def[0]));
-         if (new_livein & ~bd->flag_livein[0]) {
-            bd->flag_livein[0] |= new_livein;
-            cont = true;
-         }
 
 	 /* Update liveout */
 	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
@@ -244,6 +226,24 @@ fs_live_variables::compute_live_variables()
                cont = true;
             }
 	 }
+
+         /* Update livein */
+         for (int i = 0; i < bitset_words; i++) {
+            BITSET_WORD new_livein = (bd->use[i] |
+                                      (bd->liveout[i] &
+                                       ~bd->def[i]));
+            if (new_livein & ~bd->livein[i]) {
+               bd->livein[i] |= new_livein;
+               cont = true;
+            }
+         }
+         BITSET_WORD new_livein = (bd->flag_use[0] |
+                                   (bd->flag_liveout[0] &
+                                    ~bd->flag_def[0]));
+         if (new_livein & ~bd->flag_livein[0]) {
+            bd->flag_livein[0] |= new_livein;
+            cont = true;
+         }
       }
    }
 }

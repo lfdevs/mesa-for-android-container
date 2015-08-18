@@ -49,7 +49,7 @@ struct offset_stage {
 
 
 
-static INLINE struct offset_stage *offset_stage( struct draw_stage *stage )
+static inline struct offset_stage *offset_stage( struct draw_stage *stage )
 {
    return (struct offset_stage *) stage;
 }

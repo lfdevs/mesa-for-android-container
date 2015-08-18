@@ -145,7 +145,7 @@ lp_rast_shade_quads_mask(struct lp_rasterizer_task *task,
  * Get the pointer to a 4x4 color block (within a 64x64 tile).
  * \param x, y location of 4x4 block in window coords
  */
-static INLINE uint8_t *
+static inline uint8_t *
 lp_rast_get_color_block_pointer(struct lp_rasterizer_task *task,
                                 unsigned buf, unsigned x, unsigned y,
                                 unsigned layer)
@@ -186,7 +186,7 @@ lp_rast_get_color_block_pointer(struct lp_rasterizer_task *task,
  * Get the pointer to a 4x4 depth block (within a 64x64 tile).
  * \param x, y location of 4x4 block in window coords
  */
-static INLINE uint8_t *
+static inline uint8_t *
 lp_rast_get_depth_block_pointer(struct lp_rasterizer_task *task,
                                 unsigned x, unsigned y, unsigned layer)
 {
@@ -222,7 +222,7 @@ lp_rast_get_depth_block_pointer(struct lp_rasterizer_task *task,
  * triangle in/out tests.
  * \param x, y location of 4x4 block in window coords
  */
-static INLINE void
+static inline void
 lp_rast_shade_quads_all( struct lp_rasterizer_task *task,
                          const struct lp_rast_shader_inputs *inputs,
                          unsigned x, unsigned y )

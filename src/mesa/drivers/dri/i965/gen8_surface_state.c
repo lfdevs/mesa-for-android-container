@@ -57,6 +57,19 @@ swizzle_to_scs(unsigned swizzle)
 }
 
 static uint32_t
+surface_tiling_resource_mode(uint32_t tr_mode)
+{
+   switch (tr_mode) {
+   case INTEL_MIPTREE_TRMODE_YF:
+      return GEN9_SURFACE_TRMODE_TILEYF;
+   case INTEL_MIPTREE_TRMODE_YS:
+      return GEN9_SURFACE_TRMODE_TILEYS;
+   default:
+      return GEN9_SURFACE_TRMODE_NONE;
+   }
+}
+
+static uint32_t
 surface_tiling_mode(uint32_t tiling)
 {
    switch (tiling) {
@@ -70,8 +83,18 @@ surface_tiling_mode(uint32_t tiling)
 }
 
 static unsigned
-vertical_alignment(const struct intel_mipmap_tree *mt)
+vertical_alignment(const struct brw_context *brw,
+                   const struct intel_mipmap_tree *mt,
+                   uint32_t surf_type)
 {
+   /* On Gen9+ vertical alignment is ignored for 1D surfaces and when
+    * tr_mode is not TRMODE_NONE. Set to an arbitrary non-reserved value.
+    */
+   if (brw->gen > 8 &&
+       (mt->tr_mode != INTEL_MIPTREE_TRMODE_NONE ||
+        surf_type == BRW_SURFACE_1D))
+      return GEN8_SURFACE_VALIGN_4;
+
    switch (mt->align_h) {
    case 4:
       return GEN8_SURFACE_VALIGN_4;
@@ -85,8 +108,18 @@ vertical_alignment(const struct intel_mipmap_tree *mt)
 }
 
 static unsigned
-horizontal_alignment(const struct intel_mipmap_tree *mt)
+horizontal_alignment(const struct brw_context *brw,
+                     const struct intel_mipmap_tree *mt,
+                     uint32_t surf_type)
 {
+   /* On Gen9+ horizontal alignment is ignored when tr_mode is not
+    * TRMODE_NONE. Set to an arbitrary non-reserved value.
+    */
+   if (brw->gen > 8 &&
+       (mt->tr_mode != INTEL_MIPTREE_TRMODE_NONE ||
+        gen9_use_linear_1d_layout(brw, mt)))
+      return GEN8_SURFACE_HALIGN_4;
+
    switch (mt->align_w) {
    case 4:
       return GEN8_SURFACE_HALIGN_4;
@@ -166,6 +199,7 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
    uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
    int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
    unsigned tiling_mode, pitch;
+   const unsigned tr_mode = surface_tiling_resource_mode(mt->tr_mode);
 
    if (mt->format == MESA_FORMAT_S_UINT8) {
       tiling_mode = GEN8_SURFACE_TILING_W;
@@ -178,18 +212,29 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
    if (mt->mcs_mt) {
       aux_mt = mt->mcs_mt;
       aux_mode = GEN8_SURFACE_AUX_MODE_MCS;
+
+      /*
+       * From the BDW PRM, Volume 2d, page 260 (RENDER_SURFACE_STATE):
+       * "When MCS is enabled for non-MSRT, HALIGN_16 must be used"
+       *
+       * From the hardware spec for GEN9:
+       * "When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E, HALIGN
+       *  16 must be used."
+       */
+      assert(brw->gen < 9 || mt->align_w == 16);
+      assert(brw->gen < 8 || mt->num_samples > 1 || mt->align_w == 16);
    }
 
+   const uint32_t surf_type = translate_tex_target(target);
    uint32_t *surf = allocate_surface_state(brw, surf_offset, surf_index);
 
-   surf[0] = translate_tex_target(target) << BRW_SURFACE_TYPE_SHIFT |
+   surf[0] = SET_FIELD(surf_type, BRW_SURFACE_TYPE) |
              format << BRW_SURFACE_FORMAT_SHIFT |
-             vertical_alignment(mt) |
-             horizontal_alignment(mt) |
+             vertical_alignment(brw, mt, surf_type) |
+             horizontal_alignment(brw, mt, surf_type) |
              tiling_mode;
 
-   if (target == GL_TEXTURE_CUBE_MAP ||
-       target == GL_TEXTURE_CUBE_MAP_ARRAY) {
+   if (surf_type == BRW_SURFACE_CUBE) {
       surf[0] |= BRW_SURFACE_CUBEFACE_ENABLES;
    }
 
@@ -209,6 +254,12 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
 
    surf[5] = SET_FIELD(min_level - mt->first_level, GEN7_SURFACE_MIN_LOD) |
              (max_level - min_level - 1); /* mip count */
+
+   if (brw->gen >= 9) {
+      surf[5] |= SET_FIELD(tr_mode, GEN9_SURFACE_TRMODE);
+      /* Disable Mip Tail by setting a large value. */
+      surf[5] |= SET_FIELD(15, GEN9_SURFACE_MIP_TAIL_START_LOD);
+   }
 
    if (aux_mt) {
       surf[6] = SET_FIELD(mt->qpitch / 4, GEN8_SURFACE_AUX_QPITCH) |
@@ -340,6 +391,7 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    unsigned height = mt->logical_height0;
    unsigned pitch = mt->pitch;
    uint32_t tiling = mt->tiling;
+   unsigned tr_mode = surface_tiling_resource_mode(mt->tr_mode);
    uint32_t format = 0;
    uint32_t surf_type;
    uint32_t offset;
@@ -390,6 +442,17 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    if (mt->mcs_mt) {
       aux_mt = mt->mcs_mt;
       aux_mode = GEN8_SURFACE_AUX_MODE_MCS;
+
+      /*
+       * From the BDW PRM, Volume 2d, page 260 (RENDER_SURFACE_STATE):
+       * "When MCS is enabled for non-MSRT, HALIGN_16 must be used"
+       *
+       * From the hardware spec for GEN9:
+       * "When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E, HALIGN
+       *  16 must be used."
+       */
+      assert(brw->gen < 9 || mt->align_w == 16);
+      assert(brw->gen < 8 || mt->num_samples > 1 || mt->align_w == 16);
    }
 
    uint32_t *surf = allocate_surface_state(brw, &offset, surf_index);
@@ -397,8 +460,8 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    surf[0] = (surf_type << BRW_SURFACE_TYPE_SHIFT) |
              (is_array ? GEN7_SURFACE_IS_ARRAY : 0) |
              (format << BRW_SURFACE_FORMAT_SHIFT) |
-             vertical_alignment(mt) |
-             horizontal_alignment(mt) |
+             vertical_alignment(brw, mt, surf_type) |
+             horizontal_alignment(brw, mt, surf_type) |
              surface_tiling_mode(tiling);
 
    surf[1] = SET_FIELD(mocs, GEN8_SURFACE_MOCS) | mt->qpitch >> 2;
@@ -416,6 +479,12 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
       surf[4] |= gen7_surface_msaa_bits(mt->num_samples, mt->msaa_layout);
 
    surf[5] = irb->mt_level - irb->mt->first_level;
+
+   if (brw->gen >= 9) {
+      surf[5] |= SET_FIELD(tr_mode, GEN9_SURFACE_TRMODE);
+      /* Disable Mip Tail by setting a large value. */
+      surf[5] |= SET_FIELD(15, GEN9_SURFACE_MIP_TAIL_START_LOD);
+   }
 
    if (aux_mt) {
       surf[6] = SET_FIELD(mt->qpitch / 4, GEN8_SURFACE_AUX_QPITCH) |

@@ -133,7 +133,7 @@ void
 tgsi_parse_token(
    struct tgsi_parse_context *ctx );
 
-static INLINE unsigned
+static inline unsigned
 tgsi_num_tokens(const struct tgsi_token *tokens)
 {
    struct tgsi_header header;

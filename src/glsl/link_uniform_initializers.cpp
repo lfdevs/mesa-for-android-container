@@ -89,6 +89,7 @@ copy_constant_to_storage(union gl_constant_value *storage,
       case GLSL_TYPE_ATOMIC_UINT:
       case GLSL_TYPE_INTERFACE:
       case GLSL_TYPE_VOID:
+      case GLSL_TYPE_SUBROUTINE:
       case GLSL_TYPE_ERROR:
 	 /* All other types should have already been filtered by other
 	  * paths in the caller.
@@ -103,7 +104,7 @@ void
 set_sampler_binding(gl_shader_program *prog, const char *name, int binding)
 {
    struct gl_uniform_storage *const storage =
-      get_storage(prog->UniformStorage, prog->NumUserUniformStorage, name);
+      get_storage(prog->UniformStorage, prog->NumUniformStorage, name);
 
    if (storage == NULL) {
       assert(storage != NULL);
@@ -193,7 +194,7 @@ set_uniform_initializer(void *mem_ctx, gl_shader_program *prog,
 
    struct gl_uniform_storage *const storage =
       get_storage(prog->UniformStorage,
-		  prog->NumUserUniformStorage,
+                  prog->NumUniformStorage,
 		  name);
    if (storage == NULL) {
       assert(storage != NULL);
@@ -256,7 +257,8 @@ link_set_uniform_initializers(struct gl_shader_program *prog,
       foreach_in_list(ir_instruction, node, shader->ir) {
 	 ir_variable *const var = node->as_variable();
 
-	 if (!var || var->data.mode != ir_var_uniform)
+	 if (!var || (var->data.mode != ir_var_uniform &&
+	     var->data.mode != ir_var_shader_storage))
 	    continue;
 
 	 if (!mem_ctx)
@@ -267,7 +269,7 @@ link_set_uniform_initializers(struct gl_shader_program *prog,
 
             if (type->without_array()->is_sampler()) {
                linker::set_sampler_binding(prog, var->name, var->data.binding);
-            } else if (var->is_in_uniform_block()) {
+            } else if (var->is_in_buffer_block()) {
                const glsl_type *const iface_type = var->get_interface_type();
 
                /* If the variable is an array and it is an interface instance,
@@ -280,7 +282,7 @@ link_set_uniform_initializers(struct gl_shader_program *prog,
                 *         float f[4];
                 *     };
                 *
-                * In this case "f" would pass is_in_uniform_block (above) and
+                * In this case "f" would pass is_in_buffer_block (above) and
                 * type->is_array(), but it will fail is_interface_instance().
                 */
                if (var->is_interface_instance() && var->type->is_array()) {

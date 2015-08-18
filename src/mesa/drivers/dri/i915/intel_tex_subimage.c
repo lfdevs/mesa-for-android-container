@@ -72,7 +72,7 @@ intel_blit_texsubimage(struct gl_context * ctx,
 
    DBG("BLT subimage %s target %s level %d offset %d,%d %dx%d\n",
        __func__,
-       _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
+       _mesa_enum_to_string(texImage->TexObject->Target),
        texImage->Level, xoffset, yoffset, width, height);
 
    pixels = _mesa_validate_pbo_teximage(ctx, 2, width, height, 1,

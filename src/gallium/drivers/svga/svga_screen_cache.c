@@ -76,7 +76,7 @@ surface_size(const struct svga_host_surface_cache_key *key)
 /**
  * Compute the bucket for this key.
  */
-static INLINE unsigned
+static inline unsigned
 svga_screen_cache_bucket(const struct svga_host_surface_cache_key *key)
 {
    return util_hash_crc32(key, sizeof *key) % SVGA_HOST_SURFACE_CACHE_BUCKETS;

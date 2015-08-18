@@ -50,22 +50,16 @@
 #define BRW_ATTRIB_WA_SIGN          32  /* interpret as signed in shader */
 #define BRW_ATTRIB_WA_SCALE         64  /* interpret as scaled in shader */
 
-struct brw_vs_compile {
-   struct brw_vec4_compile base;
-   struct brw_vs_prog_key key;
-
-   struct brw_vertex_program *vp;
-};
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 const unsigned *brw_vs_emit(struct brw_context *brw,
-                            struct gl_shader_program *prog,
-                            struct brw_vs_compile *c,
-                            struct brw_vs_prog_data *prog_data,
                             void *mem_ctx,
+                            const struct brw_vs_prog_key *key,
+                            struct brw_vs_prog_data *prog_data,
+                            struct gl_vertex_program *vp,
+                            struct gl_shader_program *shader_prog,
                             unsigned *program_size);
 void brw_vs_debug_recompile(struct brw_context *brw,
                             struct gl_shader_program *prog,
@@ -90,14 +84,19 @@ namespace brw {
 class vec4_vs_visitor : public vec4_visitor
 {
 public:
-   vec4_vs_visitor(struct brw_context *brw,
-                   struct brw_vs_compile *vs_compile,
+   vec4_vs_visitor(const struct brw_compiler *compiler,
+                   void *log_data,
+                   const struct brw_vs_prog_key *key,
                    struct brw_vs_prog_data *vs_prog_data,
+                   struct gl_vertex_program *vp,
                    struct gl_shader_program *prog,
-                   void *mem_ctx);
+                   void *mem_ctx,
+                   int shader_time_index,
+                   bool use_legacy_snorm_formula);
 
 protected:
-   virtual dst_reg *make_reg_for_system_value(ir_variable *ir);
+   virtual dst_reg *make_reg_for_system_value(int location,
+                                              const glsl_type *type);
    virtual void setup_payload();
    virtual void emit_prolog();
    virtual void emit_program_code();
@@ -111,10 +110,13 @@ private:
    dst_reg get_vp_dst_reg(const prog_dst_register &dst);
    src_reg get_vp_src_reg(const prog_src_register &src);
 
-   struct brw_vs_compile * const vs_compile;
+   const struct brw_vs_prog_key *const key;
    struct brw_vs_prog_data * const vs_prog_data;
+   struct gl_vertex_program *const vp;
    src_reg *vp_temp_regs;
    src_reg vp_addr_reg;
+
+   bool use_legacy_snorm_formula;
 };
 
 } /* namespace brw */

@@ -121,7 +121,7 @@ do_blit_drawpixels(struct gl_context * ctx,
                                   src_offset,
                                   width, height, 1,
                                   src_stride,
-                                  false /*disable_aux_buffers*/);
+                                  0);
    if (!pbo_mt)
       return false;
 

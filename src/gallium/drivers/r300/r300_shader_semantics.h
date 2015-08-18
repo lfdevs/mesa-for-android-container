@@ -46,7 +46,7 @@ struct r300_shader_semantics {
     int num_generic;
 };
 
-static INLINE void r300_shader_semantics_reset(
+static inline void r300_shader_semantics_reset(
     struct r300_shader_semantics* info)
 {
     int i;

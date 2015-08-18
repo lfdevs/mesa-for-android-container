@@ -2066,6 +2066,8 @@ RegAlloc::InsertConstraintsPass::visit(BasicBlock *bb)
          condenseDefs(i);
          if (i->src(0).isIndirect(0) && typeSizeof(i->dType) >= 8)
             addHazard(i, i->src(0).getIndirect(0));
+         if (i->src(0).isIndirect(1) && typeSizeof(i->dType) >= 8)
+            addHazard(i, i->src(0).getIndirect(1));
       } else
       if (i->op == OP_UNION ||
           i->op == OP_MERGE ||

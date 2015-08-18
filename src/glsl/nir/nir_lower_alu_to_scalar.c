@@ -100,6 +100,21 @@ lower_alu_instr_scalar(nir_alu_instr *instr, void *mem_ctx)
        */
       return;
 
+   case nir_op_unpack_unorm_4x8:
+   case nir_op_unpack_snorm_4x8:
+   case nir_op_unpack_unorm_2x16:
+   case nir_op_unpack_snorm_2x16:
+      /* There is no scalar version of these ops, unless we were to break it
+       * down to bitshifts and math (which is definitely not intended).
+       */
+      return;
+
+   case nir_op_unpack_half_2x16:
+      /* We could split this into unpack_half_2x16_split_[xy], but should
+       * we?
+       */
+      return;
+
       LOWER_REDUCTION(nir_op_fdot, nir_op_fmul, nir_op_fadd);
       LOWER_REDUCTION(nir_op_ball_fequal, nir_op_feq, nir_op_iand);
       LOWER_REDUCTION(nir_op_ball_iequal, nir_op_ieq, nir_op_iand);
@@ -164,7 +179,7 @@ lower_alu_to_scalar_block(nir_block *block, void *data)
 {
    nir_foreach_instr_safe(block, instr) {
       if (instr->type == nir_instr_type_alu)
-         lower_alu_instr_scalar((nir_alu_instr *)instr, data);
+         lower_alu_instr_scalar(nir_instr_as_alu(instr), data);
    }
 
    return true;

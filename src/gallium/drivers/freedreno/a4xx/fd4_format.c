@@ -89,6 +89,14 @@ static struct fd4_format formats[PIPE_FORMAT_COUNT] = {
 	_T(L8_UNORM,   8_UNORM, R8_UNORM, WZYX),
 	_T(I8_UNORM,   8_UNORM, NONE,     WZYX),
 
+	/* NOTE: should be TFMT_8_UINT (which then gets remapped to
+	 * TFMT_8_UNORM for mem2gmem in _gmem_restore_format()), but
+	 * we don't know TFMT_8_UINT yet.. so just use TFMT_8_UNORM
+	 * for now.. sampling from stencil as a texture might not
+	 * work right, but at least should be fine for zsbuf..
+	 */
+	_T(S8_UINT,    8_UNORM,  R8_UNORM, WZYX),
+
 	/* 16-bit */
 	V_(R16_UNORM,   16_UNORM, NONE,     WZYX),
 	V_(R16_SNORM,   16_SNORM, NONE,     WZYX),
@@ -96,7 +104,7 @@ static struct fd4_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R16_SINT,    16_SINT,  R16_SINT, WZYX),
 	V_(R16_USCALED, 16_UINT,  NONE,     WZYX),
 	V_(R16_SSCALED, 16_UINT,  NONE,     WZYX),
-	VT(R16_FLOAT,   16_FLOAT, NONE,     WZYX),
+	VT(R16_FLOAT,   16_FLOAT, R16_FLOAT,WZYX),
 
 	_T(A16_UINT,    16_UINT,  NONE,     WZYX),
 	_T(A16_SINT,    16_SINT,  NONE,     WZYX),
@@ -132,7 +140,7 @@ static struct fd4_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R32_SINT,    32_SINT,  R32_SINT, WZYX),
 	V_(R32_USCALED, 32_UINT,  NONE,     WZYX),
 	V_(R32_SSCALED, 32_UINT,  NONE,     WZYX),
-	VT(R32_FLOAT,   32_FLOAT, NONE,     WZYX),
+	VT(R32_FLOAT,   32_FLOAT, R32_FLOAT,WZYX),
 	V_(R32_FIXED,   32_FIXED, NONE,     WZYX),
 
 	_T(A32_UINT,    32_UINT,  NONE,     WZYX),
@@ -148,7 +156,7 @@ static struct fd4_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R16G16_SINT,    16_16_SINT,  R16G16_SINT, WZYX),
 	V_(R16G16_USCALED, 16_16_UINT,  NONE,        WZYX),
 	V_(R16G16_SSCALED, 16_16_SINT,  NONE,        WZYX),
-	VT(R16G16_FLOAT,   16_16_FLOAT, NONE,        WZYX),
+	VT(R16G16_FLOAT,   16_16_FLOAT, R16G16_FLOAT,WZYX),
 
 	_T(L16A16_UINT,    16_16_UINT,  NONE,        WZYX),
 	_T(L16A16_SINT,    16_16_SINT,  NONE,        WZYX),
@@ -191,7 +199,8 @@ static struct fd4_format formats[PIPE_FORMAT_COUNT] = {
 
 	_T(Z24X8_UNORM,       X8Z24_UNORM, R8G8B8A8_UNORM, WZYX),
 	_T(Z24_UNORM_S8_UINT, X8Z24_UNORM, R8G8B8A8_UNORM, WZYX),
-	/*_T(Z32_FLOAT,         Z32_FLOAT,   R8G8B8A8_UNORM, WZYX),*/
+	_T(Z32_FLOAT,         32_FLOAT,   R8G8B8A8_UNORM, WZYX),
+	_T(Z32_FLOAT_S8X24_UINT, 32_FLOAT,R8G8B8A8_UNORM, WZYX),
 
 	/* 48-bit */
 	V_(R16G16B16_UNORM,   16_16_16_UNORM, NONE, WZYX),
@@ -218,7 +227,7 @@ static struct fd4_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R32G32_SINT,    32_32_SINT,  R32G32_SINT, WZYX),
 	V_(R32G32_USCALED, 32_32_UINT,  NONE,        WZYX),
 	V_(R32G32_SSCALED, 32_32_SINT,  NONE,        WZYX),
-	VT(R32G32_FLOAT,   32_32_FLOAT, NONE,        WZYX),
+	VT(R32G32_FLOAT,   32_32_FLOAT, R32G32_FLOAT,WZYX),
 	V_(R32G32_FIXED,   32_32_FIXED, NONE,        WZYX),
 
 	_T(L32A32_UINT,    32_32_UINT,  NONE,        WZYX),
@@ -282,6 +291,9 @@ fd4_pipe2swap(enum pipe_format format)
 enum a4xx_tex_fetchsize
 fd4_pipe2fetchsize(enum pipe_format format)
 {
+	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
+		format = PIPE_FORMAT_Z32_FLOAT;
+
 	switch (util_format_get_blocksizebits(format)) {
 	case 8:   return TFETCH4_1_BYTE;
 	case 16:  return TFETCH4_2_BYTE;
@@ -312,6 +324,8 @@ fd4_gmem_restore_format(enum pipe_format format)
 		return PIPE_FORMAT_R8G8B8A8_UNORM;
 	case PIPE_FORMAT_Z16_UNORM:
 		return PIPE_FORMAT_R8G8_UNORM;
+	case PIPE_FORMAT_S8_UINT:
+		return PIPE_FORMAT_R8_UNORM;
 	default:
 		return format;
 	}
@@ -328,6 +342,9 @@ fd4_pipe2depth(enum pipe_format format)
 	case PIPE_FORMAT_X8Z24_UNORM:
 	case PIPE_FORMAT_S8_UINT_Z24_UNORM:
 		return DEPTH4_24_8;
+	case PIPE_FORMAT_Z32_FLOAT:
+	case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+		return DEPTH4_32;
 	default:
 		return ~0;
 	}

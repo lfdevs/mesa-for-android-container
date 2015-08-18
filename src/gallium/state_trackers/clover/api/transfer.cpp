@@ -726,3 +726,15 @@ clEnqueueUnmapMemObject(cl_command_queue d_q, cl_mem d_mem, void *ptr,
 } catch (error &e) {
    return e.get();
 }
+
+CLOVER_API cl_int
+clEnqueueMigrateMemObjects(cl_command_queue command_queue,
+                           cl_uint num_mem_objects,
+                           const cl_mem *mem_objects,
+                           cl_mem_migration_flags flags,
+                           cl_uint num_events_in_wait_list,
+                           const cl_event *event_wait_list,
+                           cl_event *event) {
+   CLOVER_NOT_SUPPORTED_UNTIL("1.2");
+   return CL_INVALID_VALUE;
+}

@@ -71,7 +71,7 @@ extern int LP_DEBUG;
 
 void st_debug_init( void );
 
-static INLINE void
+static inline void
 LP_DBG( unsigned flag, const char *fmt, ... )
 {
     if (LP_DEBUG & flag)

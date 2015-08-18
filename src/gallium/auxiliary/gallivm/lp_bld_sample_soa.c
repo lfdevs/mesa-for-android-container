@@ -2501,7 +2501,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
        * all zero as mandated by d3d10 in this case.
        */
       unsigned chan;
-      LLVMValueRef zero = lp_build_const_vec(gallivm, type, 0.0F);
+      LLVMValueRef zero = lp_build_zero(gallivm, type);
       for (chan = 0; chan < 4; chan++) {
          texel_out[chan] = zero;
       }
@@ -2748,11 +2748,37 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
    else {
       LLVMValueRef lod_fpart = NULL, lod_positive = NULL;
       LLVMValueRef ilevel0 = NULL, ilevel1 = NULL;
-      boolean use_aos = util_format_fits_8unorm(bld.format_desc) &&
-                        op_is_tex &&
-                        /* not sure this is strictly needed or simply impossible */
-                        derived_sampler_state.compare_mode == PIPE_TEX_COMPARE_NONE &&
-                        lp_is_simple_wrap_mode(derived_sampler_state.wrap_s);
+      boolean use_aos;
+
+      if (util_format_is_pure_integer(static_texture_state->format) &&
+          !util_format_has_depth(bld.format_desc) &&
+          (static_sampler_state->min_mip_filter == PIPE_TEX_MIPFILTER_LINEAR ||
+           static_sampler_state->min_img_filter == PIPE_TEX_FILTER_LINEAR ||
+           static_sampler_state->mag_img_filter == PIPE_TEX_FILTER_LINEAR)) {
+         /*
+          * Bail if impossible filtering is specified (the awkard additional
+          * depth check is because it is legal in gallium to have things like S8Z24
+          * here which would say it's pure int despite such formats should sample
+          * the depth component).
+          * In GL such filters make the texture incomplete, this makes it robust
+          * against state trackers which set this up regardless (we'd crash in the
+          * lerp later (except for gather)).
+          * Must do this after fetch_texel code since with GL state tracker we'll
+          * get some junk sampler for buffer textures.
+          */
+         unsigned chan;
+         LLVMValueRef zero = lp_build_zero(gallivm, type);
+         for (chan = 0; chan < 4; chan++) {
+            texel_out[chan] = zero;
+         }
+         return;
+      }
+
+      use_aos = util_format_fits_8unorm(bld.format_desc) &&
+                op_is_tex &&
+                /* not sure this is strictly needed or simply impossible */
+                derived_sampler_state.compare_mode == PIPE_TEX_COMPARE_NONE &&
+                lp_is_simple_wrap_mode(derived_sampler_state.wrap_s);
 
       use_aos &= bld.num_lods <= num_quads ||
                  derived_sampler_state.min_img_filter ==

@@ -507,7 +507,7 @@ static const uint32 SVGA3D_OUTPUT_REG_DEPTH_NUM_PS20 = 1;
  *----------------------------------------------------------------------
  */
 
-static INLINE SVGA3dShaderRegType
+static inline SVGA3dShaderRegType
 SVGA3dShaderGetRegType(uint32 token)
 {
    SVGA3dShaderSrcToken src;

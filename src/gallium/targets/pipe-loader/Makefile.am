@@ -155,10 +155,12 @@ nodist_EXTRA_pipe_radeonsi_la_SOURCES = dummy.cpp
 pipe_radeonsi_la_LIBADD = \
 	$(PIPE_LIBS) \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
+	$(top_builddir)/src/gallium/winsys/amdgpu/drm/libamdgpuwinsys.la \
 	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
 	$(LIBDRM_LIBS) \
-	$(RADEON_LIBS)
+	$(RADEON_LIBS) \
+	$(AMDGPU_LIBS)
 
 endif
 

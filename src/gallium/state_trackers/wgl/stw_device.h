@@ -80,7 +80,7 @@ struct stw_device
 extern struct stw_device *stw_dev;
 
 
-static INLINE struct stw_context *
+static inline struct stw_context *
 stw_lookup_context_locked( DHGLRC dhglrc )
 {
    if (dhglrc == 0 || stw_dev == NULL)

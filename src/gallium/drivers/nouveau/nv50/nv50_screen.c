@@ -51,19 +51,19 @@ nv50_screen_is_format_supported(struct pipe_screen *pscreen,
                                 unsigned bindings)
 {
    if (sample_count > 8)
-      return FALSE;
+      return false;
    if (!(0x117 & (1 << sample_count))) /* 0, 1, 2, 4 or 8 */
-      return FALSE;
+      return false;
    if (sample_count == 8 && util_format_get_blocksizebits(format) >= 128)
-      return FALSE;
+      return false;
 
    if (!util_format_is_supported(format, bindings))
-      return FALSE;
+      return false;
 
    switch (format) {
    case PIPE_FORMAT_Z16_UNORM:
       if (nv50_screen(pscreen)->tesla->oclass < NVA0_3D_CLASS)
-         return FALSE;
+         return false;
       break;
    default:
       break;
@@ -176,6 +176,9 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CLIP_HALFZ:
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
+   case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+   case PIPE_CAP_DEPTH_BOUNDS_TEST:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1; /* class_3d >= NVA0_3D_CLASS; */
@@ -210,6 +213,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE: /* potentially supported on some hw */
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -286,11 +290,12 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       /* The chip could handle more sampler views than samplers */
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
-      return MIN2(32, PIPE_MAX_SAMPLERS);
+      return MIN2(16, PIPE_MAX_SAMPLERS);
    case PIPE_SHADER_CAP_DOUBLES:
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+   case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return 0;
    default:
       NOUVEAU_ERR("unknown PIPE_SHADER_CAP %d\n", param);
@@ -453,7 +458,7 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
    BEGIN_NV04(push, NV50_3D(UNK1400_LANES), 1);
    PUSH_DATA (push, 0xf);
 
-   if (debug_get_bool_option("NOUVEAU_SHADER_WATCHDOG", TRUE)) {
+   if (debug_get_bool_option("NOUVEAU_SHADER_WATCHDOG", true)) {
       BEGIN_NV04(push, NV50_3D(WATCHDOG_TIMER), 1);
       PUSH_DATA (push, 0x18);
    }
@@ -733,7 +738,7 @@ nv50_screen_create(struct nouveau_device *dev)
    nv50_screen_init_resource_functions(pscreen);
 
    if (screen->base.device->chipset < 0x84 ||
-       debug_get_bool_option("NOUVEAU_PMPEG", FALSE)) {
+       debug_get_bool_option("NOUVEAU_PMPEG", false)) {
       /* PMPEG */
       nouveau_screen_init_vdec(&screen->base);
    } else if (screen->base.device->chipset < 0x98 ||
@@ -889,7 +894,7 @@ nv50_screen_create(struct nouveau_device *dev)
 
    nv50_screen_init_hwctx(screen);
 
-   nouveau_fence_new(&screen->base, &screen->base.fence.current, FALSE);
+   nouveau_fence_new(&screen->base, &screen->base.fence.current, false);
 
    return pscreen;
 

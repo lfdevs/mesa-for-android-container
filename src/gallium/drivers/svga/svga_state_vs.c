@@ -41,7 +41,7 @@
 #include "svga_hw_reg.h"
 
 
-static INLINE int
+static inline int
 compare_vs_keys(const struct svga_vs_compile_key *a,
                 const struct svga_vs_compile_key *b)
 {

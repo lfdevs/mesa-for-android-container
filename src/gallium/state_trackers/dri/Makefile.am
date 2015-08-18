@@ -50,10 +50,6 @@ noinst_LTLIBRARIES = libdri.la
 libdri_la_SOURCES = $(common_SOURCES)
 
 if HAVE_DRISW
-if !HAVE_DRI2
-AM_CPPFLAGS += \
-	-D__NOT_HAVE_DRM_H
-endif
 libdri_la_SOURCES += $(drisw_SOURCES)
 endif
 

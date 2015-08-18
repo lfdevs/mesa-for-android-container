@@ -70,21 +70,13 @@ public:
    hash_table *consumer_interface_inputs;
 
    const glsl_type *simple_interface;
-   ir_variable *junk[VARYING_SLOT_MAX];
+   ir_variable *junk[VARYING_SLOT_TESS_MAX];
 };
 
 link_varyings::link_varyings()
 {
    static const glsl_struct_field f[] = {
-      {
-         glsl_type::vec(4),
-         "v",
-         false,
-         0,
-         0,
-         0,
-         0
-      }
+      glsl_struct_field(glsl_type::vec(4), "v")
    };
 
    this->simple_interface =

@@ -1183,15 +1183,7 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       return NULL;
    }
 
-#ifdef O_CLOEXEC
-   psc->fd = open(deviceName, O_RDWR | O_CLOEXEC);
-   if (psc->fd == -1 && errno == EINVAL)
-#endif
-   {
-      psc->fd = open(deviceName, O_RDWR);
-      if (psc->fd != -1)
-         fcntl(psc->fd, F_SETFD, fcntl(psc->fd, F_GETFD) | FD_CLOEXEC);
-   }
+   psc->fd = loader_open_device(deviceName);
    if (psc->fd < 0) {
       ErrorMessageF("failed to open drm device: %s\n", strerror(errno));
       goto handle_error;

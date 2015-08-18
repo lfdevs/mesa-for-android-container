@@ -84,7 +84,7 @@ svga_shader_expand(struct svga_shader_emitter *emit)
 }
 
 
-static INLINE boolean
+static inline boolean
 reserve(struct svga_shader_emitter *emit, unsigned nr_dwords)
 {
    if (emit->ptr - emit->buf + nr_dwords * sizeof(unsigned) >= emit->size) {

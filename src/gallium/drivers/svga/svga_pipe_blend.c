@@ -33,7 +33,7 @@
 #include "svga_hw_reg.h"
 
 
-static INLINE unsigned
+static inline unsigned
 svga_translate_blend_factor(unsigned factor)
 {
    switch (factor) {
@@ -58,7 +58,7 @@ svga_translate_blend_factor(unsigned factor)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 svga_translate_blend_func(unsigned mode)
 {
    switch (mode) {

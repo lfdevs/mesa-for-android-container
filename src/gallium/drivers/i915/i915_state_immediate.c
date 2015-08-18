@@ -39,7 +39,7 @@
 /* Convinience function to check immediate state.
  */
 
-static INLINE void set_immediate(struct i915_context *i915,
+static inline void set_immediate(struct i915_context *i915,
                                  unsigned offset,
                                  const unsigned state)
 {

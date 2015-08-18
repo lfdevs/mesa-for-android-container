@@ -402,7 +402,7 @@ void
 intelCalcViewport(struct gl_context * ctx)
 {
    struct intel_context *intel = intel_context(ctx);
-   double scale[3], translate[3];
+   float scale[3], translate[3];
 
    _mesa_get_viewport_xform(ctx, 0, scale, translate);
 

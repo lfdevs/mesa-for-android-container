@@ -261,7 +261,7 @@ NineSurface9_GetDesc( struct NineSurface9 *This,
 }
 
 /* Add the dirty rects to the source texture */
-INLINE void
+inline void
 NineSurface9_AddDirtyRect( struct NineSurface9 *This,
                            const struct pipe_box *box )
 {
@@ -295,7 +295,7 @@ NineSurface9_AddDirtyRect( struct NineSurface9 *This,
     }
 }
 
-static INLINE uint8_t *
+static inline uint8_t *
 NineSurface9_GetSystemMemPointer(struct NineSurface9 *This, int x, int y)
 {
     unsigned x_offset = util_format_get_stride(This->base.info.format, x);

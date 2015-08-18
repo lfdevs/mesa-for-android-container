@@ -176,7 +176,7 @@ update_viewport(struct NineDevice9 *device)
     pipe->set_viewport_states(pipe, 0, 1, &pvport);
 }
 
-static INLINE void
+static inline void
 update_scissor(struct NineDevice9 *device)
 {
     struct pipe_context *pipe = device->pipe;
@@ -184,19 +184,19 @@ update_scissor(struct NineDevice9 *device)
     pipe->set_scissor_states(pipe, 0, 1, &device->state.scissor);
 }
 
-static INLINE void
+static inline void
 update_blend(struct NineDevice9 *device)
 {
     nine_convert_blend_state(device->cso, device->state.rs);
 }
 
-static INLINE void
+static inline void
 update_dsa(struct NineDevice9 *device)
 {
     nine_convert_dsa_state(device->cso, device->state.rs);
 }
 
-static INLINE void
+static inline void
 update_rasterizer(struct NineDevice9 *device)
 {
     nine_convert_rasterizer_state(device->cso, device->state.rs);
@@ -294,7 +294,7 @@ update_vertex_elements(struct NineDevice9 *device)
     state->changed.stream_freq = 0;
 }
 
-static INLINE uint32_t
+static inline uint32_t
 update_shader_variant_keys(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
@@ -332,7 +332,7 @@ update_shader_variant_keys(struct NineDevice9 *device)
     return mask;
 }
 
-static INLINE uint32_t
+static inline uint32_t
 update_vs(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
@@ -359,7 +359,7 @@ update_vs(struct NineDevice9 *device)
     return changed_group;
 }
 
-static INLINE uint32_t
+static inline uint32_t
 update_ps(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
@@ -656,7 +656,7 @@ update_vertex_buffers(struct NineDevice9 *device)
     state->changed.vtxbuf = 0;
 }
 
-static INLINE void
+static inline void
 update_index_buffer(struct NineDevice9 *device)
 {
     struct pipe_context *pipe = device->pipe;
@@ -677,7 +677,7 @@ validate_textures(struct NineDevice9 *device)
     }
 }
 
-static INLINE boolean
+static inline boolean
 update_sampler_derived(struct nine_state *state, unsigned s)
 {
     boolean changed = FALSE;

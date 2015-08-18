@@ -254,6 +254,19 @@ The integer capabilities:
   and size must be page-aligned.
 * ``PIPE_CAP_DEVICE_RESET_STATUS_QUERY``:
   Whether pipe_context::get_device_reset_status is implemented.
+* ``PIPE_CAP_MAX_SHADER_PATCH_VARYINGS``:
+  How many per-patch outputs and inputs are supported between tessellation
+  control and tessellation evaluation shaders, not counting in TESSINNER and
+  TESSOUTER. The minimum allowed value for OpenGL is 30.
+* ``PIPE_CAP_TEXTURE_FLOAT_LINEAR``: Whether the linear minification and
+  magnification filters are supported with single-precision floating-point
+  textures.
+* ``PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR``: Whether the linear minification and
+  magnification filters are supported with half-precision floating-point
+  textures.
+* ``PIPE_CAP_DEPTH_BOUNDS_TEST``: Whether bounds_test, bounds_min, and
+  bounds_max states of pipe_depth_stencil_alpha_state behave according
+  to the GL_EXT_depth_bounds_test specification.
 
 
 .. _pipe_capf:
@@ -340,6 +353,8 @@ to be 0.
   DLDEXP are supported.
 * ``PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED``: Whether FMA and DFMA (doubles only)
   are supported.
+* ``PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE``: Whether the driver doesn't
+  ignore tgsi_declaration_range::Last for shader inputs and outputs.
 
 
 .. _pipe_compute_cap:
@@ -382,6 +397,8 @@ pipe_screen::get_compute_param.
   Value type: ``uint32_t``
 * ``PIPE_COMPUTE_CAP_IMAGES_SUPPORTED``: Whether images are supported
   non-zero means yes, zero means no. Value type: ``uint32_t``
+* ``PIPE_COMPUTE_CAP_SUBGROUP_SIZE``: The size of a basic execution unit in
+  threads. Also known as wavefront size, warp size or SIMD width.
 
 .. _pipe_bind:
 
@@ -422,8 +439,10 @@ resources might be created and handled quite differently.
   process.
 * ``PIPE_BIND_GLOBAL``: A buffer that can be mapped into the global
   address space of a compute program.
-* ``PIPE_BIND_SHADER_RESOURCE``: A buffer or texture that can be
-  bound to the graphics pipeline as a shader resource.
+* ``PIPE_BIND_SHADER_BUFFER``: A buffer without a format that can be bound
+  to a shader and can be used with load, store, and atomic instructions.
+* ``PIPE_BIND_SHADER_IMAGE``: A buffer or texture with a format that can be
+  bound to a shader and can be used with load, store, and atomic instructions.
 * ``PIPE_BIND_COMPUTE_RESOURCE``: A buffer or texture that can be
   bound to the compute program as a shader resource.
 * ``PIPE_BIND_COMMAND_ARGS_BUFFER``: A buffer that may be sourced by the

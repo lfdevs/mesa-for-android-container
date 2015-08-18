@@ -214,9 +214,9 @@ int rvid_get_video_param(struct pipe_screen *screen,
 	        case PIPE_VIDEO_CAP_NPOT_TEXTURES:
         	        return 1;
 	        case PIPE_VIDEO_CAP_MAX_WIDTH:
-        	        return 2048;
+			return (rscreen->family < CHIP_TONGA) ? 2048 : 4096;
 	        case PIPE_VIDEO_CAP_MAX_HEIGHT:
-        	        return 1152;
+			return (rscreen->family < CHIP_TONGA) ? 1152 : 2304;
 	        case PIPE_VIDEO_CAP_PREFERED_FORMAT:
         	        return PIPE_FORMAT_NV12;
 	        case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
@@ -225,6 +225,8 @@ int rvid_get_video_param(struct pipe_screen *screen,
         	        return false;
 	        case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
         	        return true;
+	        case PIPE_VIDEO_CAP_STACKED_FRAMES:
+			return (rscreen->family < CHIP_TONGA) ? 1 : 2;
 	        default:
         	        return 0;
 		}
@@ -262,20 +264,28 @@ int rvid_get_video_param(struct pipe_screen *screen,
 			/* FIXME: VC-1 simple/main profile is broken */
 			return profile == PIPE_VIDEO_PROFILE_VC1_ADVANCED &&
 			       entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE;
+		case PIPE_VIDEO_FORMAT_HEVC:
+			/* Carrizo only supports HEVC Main */
+			return rscreen->family >= CHIP_CARRIZO &&
+				   profile == PIPE_VIDEO_PROFILE_HEVC_MAIN;
 		default:
 			return false;
 		}
 	case PIPE_VIDEO_CAP_NPOT_TEXTURES:
 		return 1;
 	case PIPE_VIDEO_CAP_MAX_WIDTH:
-		return 2048;
+		return (rscreen->family < CHIP_TONGA) ? 2048 : 4096;
 	case PIPE_VIDEO_CAP_MAX_HEIGHT:
-		return 1152;
+		return (rscreen->family < CHIP_TONGA) ? 1152 : 2304;
 	case PIPE_VIDEO_CAP_PREFERED_FORMAT:
 		return PIPE_FORMAT_NV12;
 	case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
+		if (u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_HEVC)
+			return false; //The hardware doesn't support interlaced HEVC.
 		return true;
 	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
+		if (u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_HEVC)
+			return false; //The hardware doesn't support interlaced HEVC.
 		return true;
 	case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
 		return true;
@@ -300,6 +310,8 @@ int rvid_get_video_param(struct pipe_screen *screen,
 		case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
 		case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
 			return 41;
+		case PIPE_VIDEO_PROFILE_HEVC_MAIN:
+			return 186;
 		default:
 			return 0;
 		}

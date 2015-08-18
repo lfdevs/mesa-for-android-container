@@ -221,7 +221,7 @@ nv84_decoder_vp_h264(struct nv84_decoder *dec,
    PUSH_KICK (push);
 }
 
-static INLINE int16_t inverse_quantize(int16_t val, uint8_t quant, int mpeg1) {
+static inline int16_t inverse_quantize(int16_t val, uint8_t quant, int mpeg1) {
    int16_t ret = val * quant / 16;
    if (mpeg1 && ret) {
       if (ret > 0)

@@ -35,45 +35,45 @@
 #include "ilo_builder_3d_top.h"
 #include "ilo_builder_3d_bottom.h"
 
+struct gen6_3dprimitive_info {
+   enum gen_3dprim_type topology;
+   bool indexed;
+
+   uint32_t vertex_count;
+   uint32_t vertex_start;
+   uint32_t instance_count;
+   uint32_t instance_start;
+   int32_t vertex_base;
+};
+
 static inline void
 gen6_3DPRIMITIVE(struct ilo_builder *builder,
-                 const struct pipe_draw_info *info,
-                 const struct ilo_ib_state *ib)
+                 const struct gen6_3dprimitive_info *info)
 {
    const uint8_t cmd_len = 6;
-   const int prim = gen6_3d_translate_pipe_prim(info->mode);
-   const int vb_access = (info->indexed) ?
-      GEN6_3DPRIM_DW0_ACCESS_RANDOM : GEN6_3DPRIM_DW0_ACCESS_SEQUENTIAL;
-   const uint32_t vb_start = info->start +
-      ((info->indexed) ? ib->draw_start_offset : 0);
    uint32_t *dw;
 
    ILO_DEV_ASSERT(builder->dev, 6, 6);
 
    ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
-   dw[0] = GEN6_RENDER_CMD(3D, 3DPRIMITIVE) |
-           vb_access |
-           prim << GEN6_3DPRIM_DW0_TYPE__SHIFT |
-           (cmd_len - 2);
-   dw[1] = info->count;
-   dw[2] = vb_start;
+   dw[0] = GEN6_RENDER_CMD(3D, 3DPRIMITIVE) | (cmd_len - 2) |
+           info->topology << GEN6_3DPRIM_DW0_TYPE__SHIFT;
+   if (info->indexed)
+      dw[0] |= GEN6_3DPRIM_DW0_ACCESS_RANDOM;
+
+   dw[1] = info->vertex_count;
+   dw[2] = info->vertex_start;
    dw[3] = info->instance_count;
-   dw[4] = info->start_instance;
-   dw[5] = info->index_bias;
+   dw[4] = info->instance_start;
+   dw[5] = info->vertex_base;
 }
 
 static inline void
 gen7_3DPRIMITIVE(struct ilo_builder *builder,
-                 const struct pipe_draw_info *info,
-                 const struct ilo_ib_state *ib)
+                 const struct gen6_3dprimitive_info *info)
 {
    const uint8_t cmd_len = 7;
-   const int prim = gen6_3d_translate_pipe_prim(info->mode);
-   const int vb_access = (info->indexed) ?
-      GEN7_3DPRIM_DW1_ACCESS_RANDOM : GEN7_3DPRIM_DW1_ACCESS_SEQUENTIAL;
-   const uint32_t vb_start = info->start +
-      ((info->indexed) ? ib->draw_start_offset : 0);
    uint32_t *dw;
 
    ILO_DEV_ASSERT(builder->dev, 7, 8);
@@ -81,12 +81,16 @@ gen7_3DPRIMITIVE(struct ilo_builder *builder,
    ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN6_RENDER_CMD(3D, 3DPRIMITIVE) | (cmd_len - 2);
-   dw[1] = vb_access | prim;
-   dw[2] = info->count;
-   dw[3] = vb_start;
+
+   dw[1] = info->topology << GEN7_3DPRIM_DW1_TYPE__SHIFT;
+   if (info->indexed)
+      dw[1] |= GEN7_3DPRIM_DW1_ACCESS_RANDOM;
+
+   dw[2] = info->vertex_count;
+   dw[3] = info->vertex_start;
    dw[4] = info->instance_count;
-   dw[5] = info->start_instance;
-   dw[6] = info->index_bias;
+   dw[5] = info->instance_start;
+   dw[6] = info->vertex_base;
 }
 
 #endif /* ILO_BUILDER_3D_H */

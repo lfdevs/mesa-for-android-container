@@ -1256,7 +1256,7 @@ static GLboolean TAG(validate_render)( struct gl_context *ctx,
       }
       
       if (!ok) {
-/* 	 fprintf(stderr, "not ok %s\n", _mesa_lookup_enum_by_nr(prim & PRIM_MODE_MASK)); */
+/* 	 fprintf(stderr, "not ok %s\n", _mesa_enum_to_string(prim & PRIM_MODE_MASK)); */
 	 return GL_FALSE;
       }
    }

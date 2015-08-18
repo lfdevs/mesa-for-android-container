@@ -159,7 +159,7 @@ void
 lp_setup_end_query(struct lp_setup_context *setup,
                    struct llvmpipe_query *pq);
 
-static INLINE unsigned
+static inline unsigned
 lp_clamp_viewport_idx(int idx)
 {
    return (PIPE_MAX_VIEWPORTS > idx && idx >= 0) ? idx : 0;

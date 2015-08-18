@@ -83,13 +83,13 @@ struct kms_sw_winsys
    struct list_head bo_list;
 };
 
-static INLINE struct kms_sw_displaytarget *
+static inline struct kms_sw_displaytarget *
 kms_sw_displaytarget( struct sw_displaytarget *dt )
 {
    return (struct kms_sw_displaytarget *)dt;
 }
 
-static INLINE struct kms_sw_winsys *
+static inline struct kms_sw_winsys *
 kms_sw_winsys( struct sw_winsys *ws )
 {
    return (struct kms_sw_winsys *)ws;

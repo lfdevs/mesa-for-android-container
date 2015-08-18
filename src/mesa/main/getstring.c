@@ -72,10 +72,18 @@ shading_language_version(struct gl_context *ctx)
       break;
 
    case API_OPENGLES2:
-      return (ctx->Version < 30)
-         ? (const GLubyte *) "OpenGL ES GLSL ES 1.0.16"
-         : (const GLubyte *) "OpenGL ES GLSL ES 3.00";
-
+      switch (ctx->Version) {
+      case 20:
+         return (const GLubyte *) "OpenGL ES GLSL ES 1.0.16";
+      case 30:
+         return (const GLubyte *) "OpenGL ES GLSL ES 3.00";
+      case 31:
+         return (const GLubyte *) "OpenGL ES GLSL ES 3.10";
+      default:
+         _mesa_problem(ctx,
+                       "Invalid OpenGL ES version in shading_language_version()");
+         return (const GLubyte *) 0;
+      }
    case API_OPENGLES:
       /* fall-through */
 
@@ -200,7 +208,7 @@ _mesa_GetPointerv( GLenum pname, GLvoid **params )
       return;
 
    if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glGetPointerv %s\n", _mesa_lookup_enum_by_nr(pname));
+      _mesa_debug(ctx, "glGetPointerv %s\n", _mesa_enum_to_string(pname));
 
    switch (pname) {
       case GL_VERTEX_ARRAY_POINTER:
@@ -291,7 +299,7 @@ _mesa_GetError( void )
    ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, 0);
 
    if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glGetError <-- %s\n", _mesa_lookup_enum_by_nr(e));
+      _mesa_debug(ctx, "glGetError <-- %s\n", _mesa_enum_to_string(e));
 
    ctx->ErrorValue = (GLenum) GL_NO_ERROR;
    ctx->ErrorDebugCount = 0;

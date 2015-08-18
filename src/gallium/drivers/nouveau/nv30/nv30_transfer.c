@@ -41,33 +41,33 @@
  * of different ways.
  */
 
-static INLINE boolean
+static inline bool
 nv30_transfer_scaled(struct nv30_rect *src, struct nv30_rect *dst)
 {
    if (src->x1 - src->x0 != dst->x1 - dst->x0)
-      return TRUE;
+      return true;
    if (src->y1 - src->y0 != dst->y1 - dst->y0)
-      return TRUE;
-   return FALSE;
+      return true;
+   return false;
 }
 
-static INLINE boolean
+static inline bool
 nv30_transfer_blit(XFER_ARGS)
 {
    if (nv30->screen->eng3d->oclass < NV40_3D_CLASS)
-      return FALSE;
+      return false;
    if (dst->offset & 63 || dst->pitch & 63 || dst->d > 1)
-      return FALSE;
+      return false;
    if (dst->w < 2 || dst->h < 2)
-      return FALSE;
+      return false;
    if (dst->cpp > 4 || (dst->cpp == 1 && !dst->pitch))
-      return FALSE;
+      return false;
    if (src->cpp > 4)
-      return FALSE;
-   return TRUE;
+      return false;
+   return true;
 }
 
-static INLINE struct nouveau_heap *
+static inline struct nouveau_heap *
 nv30_transfer_rect_vertprog(struct nv30_context *nv30)
 {
    struct nouveau_heap *heap = nv30->screen->vp_exec_heap;
@@ -108,7 +108,7 @@ nv30_transfer_rect_vertprog(struct nv30_context *nv30)
 }
 
 
-static INLINE struct nv04_resource *
+static inline struct nv04_resource *
 nv30_transfer_rect_fragprog(struct nv30_context *nv30)
 {
    struct nv04_resource *fp = nv04_resource(nv30->blit_fp);
@@ -368,29 +368,29 @@ nv30_transfer_rect_blit(XFER_ARGS)
    PUSH_DATA (push, NV30_3D_VERTEX_BEGIN_END_STOP);
 }
 
-static boolean
+static bool
 nv30_transfer_sifm(XFER_ARGS)
 {
    if (!src->pitch || (src->w | src->h) > 1024 || src->w < 2 || src->h < 2)
-      return FALSE;
+      return false;
 
    if (src->d > 1 || dst->d > 1)
-      return FALSE;
+      return false;
 
    if (dst->offset & 63)
-      return FALSE;
+      return false;
 
    if (!dst->pitch) {
       if ((dst->w | dst->h) > 2048 || dst->w < 2 || dst->h < 2)
-         return FALSE;
+         return false;
    } else {
       if (dst->domain != NOUVEAU_BO_VRAM)
-         return FALSE;
+         return false;
       if (dst->pitch & 63)
-         return FALSE;
+         return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 static void
@@ -481,14 +481,14 @@ nv30_transfer_rect_sifm(XFER_ARGS)
  * that name is still accurate on nv4x) error.
  */
 
-static boolean
+static bool
 nv30_transfer_m2mf(XFER_ARGS)
 {
    if (!src->pitch || !dst->pitch)
-      return FALSE;
+      return false;
    if (nv30_transfer_scaled(src, dst))
-      return FALSE;
-   return TRUE;
+      return false;
+   return true;
 }
 
 static void
@@ -540,12 +540,12 @@ nv30_transfer_rect_m2mf(XFER_ARGS)
    }
 }
 
-static boolean
+static bool
 nv30_transfer_cpu(XFER_ARGS)
 {
    if (nv30_transfer_scaled(src, dst))
-      return FALSE;
-   return TRUE;
+      return false;
+   return true;
 }
 
 static char *
@@ -554,7 +554,7 @@ linear_ptr(struct nv30_rect *rect, char *base, int x, int y, int z)
    return base + (y * rect->pitch) + (x * rect->cpp);
 }
 
-static INLINE unsigned
+static inline unsigned
 swizzle2d(unsigned v, unsigned s)
 {
    v = (v | (v << 8)) & 0x00ff00ff;
@@ -614,7 +614,7 @@ swizzle3d_ptr(struct nv30_rect *rect, char *base, int x, int y, int z)
 
 typedef char *(*get_ptr_t)(struct nv30_rect *, char *, int, int, int);
 
-static INLINE get_ptr_t
+static inline get_ptr_t
 get_ptr(struct nv30_rect *rect)
 {
    if (rect->pitch)
@@ -653,7 +653,7 @@ nv30_transfer_rect(struct nv30_context *nv30, enum nv30_transfer_filter filter,
 {
    static const struct {
       char *name;
-      boolean (*possible)(XFER_ARGS);
+      bool (*possible)(XFER_ARGS);
       void (*execute)(XFER_ARGS);
    } *method, methods[] = {
       { "m2mf", nv30_transfer_m2mf, nv30_transfer_rect_m2mf },

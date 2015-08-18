@@ -309,6 +309,10 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_UMA:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+   case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+   case PIPE_CAP_DEPTH_BOUNDS_TEST:
       return 0;
    }
 
@@ -377,6 +381,7 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
          return 0;
       }
       /* If we get here, we failed to handle a cap above */
@@ -434,6 +439,7 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
          return 0;
       }
       /* If we get here, we failed to handle a cap above */
@@ -441,7 +447,9 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       return 0;
    case PIPE_SHADER_GEOMETRY:
    case PIPE_SHADER_COMPUTE:
-      /* no support for geometry or compute shaders at this time */
+   case PIPE_SHADER_TESS_CTRL:
+   case PIPE_SHADER_TESS_EVAL:
+      /* no support for geometry, tess or compute shaders at this time */
       return 0;
    default:
       debug_printf("Unexpected shader type (%u) query\n", shader);
@@ -541,20 +549,14 @@ svga_fence_reference(struct pipe_screen *screen,
 
 
 static boolean
-svga_fence_signalled(struct pipe_screen *screen,
-                     struct pipe_fence_handle *fence)
-{
-   struct svga_winsys_screen *sws = svga_screen(screen)->sws;
-   return sws->fence_signalled(sws, fence, 0) == 0;
-}
-
-
-static boolean
 svga_fence_finish(struct pipe_screen *screen,
                   struct pipe_fence_handle *fence,
                   uint64_t timeout)
 {
    struct svga_winsys_screen *sws = svga_screen(screen)->sws;
+
+   if (!timeout)
+      return sws->fence_signalled(sws, fence, 0) == 0;
 
    SVGA_DBG(DEBUG_DMA|DEBUG_PERF, "%s fence_ptr %p\n",
             __FUNCTION__, fence);
@@ -643,7 +645,6 @@ svga_screen_create(struct svga_winsys_screen *sws)
    screen->is_format_supported = svga_is_format_supported;
    screen->context_create = svga_context_create;
    screen->fence_reference = svga_fence_reference;
-   screen->fence_signalled = svga_fence_signalled;
    screen->fence_finish = svga_fence_finish;
    screen->get_driver_query_info = svga_get_driver_query_info;
    svgascreen->sws = sws;

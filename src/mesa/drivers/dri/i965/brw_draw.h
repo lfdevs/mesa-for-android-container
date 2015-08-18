@@ -34,7 +34,7 @@
 struct brw_context;
 
 
-void brw_draw_prims( struct gl_context *ctx,
+void brw_draw_prims(struct gl_context *ctx,
 		     const struct _mesa_prim *prims,
 		     GLuint nr_prims,
 		     const struct _mesa_index_buffer *ib,
@@ -42,6 +42,7 @@ void brw_draw_prims( struct gl_context *ctx,
 		     GLuint min_index,
 		     GLuint max_index,
 		     struct gl_transform_feedback_object *unused_tfb_object,
+                     unsigned stream,
 		     struct gl_buffer_object *indirect );
 
 void brw_draw_init( struct brw_context *brw );

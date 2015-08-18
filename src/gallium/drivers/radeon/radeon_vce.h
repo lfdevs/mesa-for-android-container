@@ -36,14 +36,15 @@
 
 #include "util/list.h"
 
-#define RVCE_RELOC(buf, usage, domain) (enc->ws->cs_add_reloc(enc->cs, (buf), (usage), domain, RADEON_PRIO_MIN))
-
 #define RVCE_CS(value) (enc->cs->buf[enc->cs->cdw++] = (value))
 #define RVCE_BEGIN(cmd) { uint32_t *begin = &enc->cs->buf[enc->cs->cdw++]; RVCE_CS(cmd)
-#define RVCE_READ(buf, domain) RVCE_CS(RVCE_RELOC(buf, RADEON_USAGE_READ, domain) * 4)
-#define RVCE_WRITE(buf, domain) RVCE_CS(RVCE_RELOC(buf, RADEON_USAGE_WRITE, domain) * 4)
-#define RVCE_READWRITE(buf, domain) RVCE_CS(RVCE_RELOC(buf, RADEON_USAGE_READWRITE, domain) * 4)
+#define RVCE_READ(buf, domain, off) rvce_add_buffer(enc, (buf), RADEON_USAGE_READ, (domain), (off))
+#define RVCE_WRITE(buf, domain, off) rvce_add_buffer(enc, (buf), RADEON_USAGE_WRITE, (domain), (off))
+#define RVCE_READWRITE(buf, domain, off) rvce_add_buffer(enc, (buf), RADEON_USAGE_READWRITE, (domain), (off))
 #define RVCE_END() *begin = (&enc->cs->buf[enc->cs->cdw] - begin) * 4; }
+
+#define RVCE_MAX_BITSTREAM_OUTPUT_ROW_SIZE (4096 * 16 * 2.5)
+#define RVCE_MAX_AUX_BUFFER_NUM 4
 
 struct r600_common_screen;
 
@@ -76,8 +77,12 @@ struct rvce_encoder {
 	void (*motion_estimation)(struct rvce_encoder *enc);
 	void (*rdo)(struct rvce_encoder *enc);
 	void (*vui)(struct rvce_encoder *enc);
+	void (*config)(struct rvce_encoder *enc);
 	void (*encode)(struct rvce_encoder *enc);
 	void (*destroy)(struct rvce_encoder *enc);
+	void (*task_info)(struct rvce_encoder *enc, uint32_t op,
+			  uint32_t dep, uint32_t fb_idx,
+			  uint32_t ring_idx);
 
 	unsigned			stream_handle;
 
@@ -101,8 +106,22 @@ struct rvce_encoder {
 	struct rvid_buffer		*fb;
 	struct rvid_buffer		cpb;
 	struct pipe_h264_enc_picture_desc pic;
-	bool use_vui;
+
+	unsigned			task_info_idx;
+	unsigned			bs_idx;
+
+	bool				use_vm;
+	bool				use_vui;
+	bool				dual_pipe;
+	bool				dual_inst;
 };
+
+/* CPB handling functions */
+struct rvce_cpb_slot *current_slot(struct rvce_encoder *enc);
+struct rvce_cpb_slot *l0_slot(struct rvce_encoder *enc);
+struct rvce_cpb_slot *l1_slot(struct rvce_encoder *enc);
+void rvce_frame_offset(struct rvce_encoder *enc, struct rvce_cpb_slot *slot,
+		       signed *luma_offset, signed *chroma_offset);
 
 struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 					     const struct pipe_video_codec *templat,
@@ -111,7 +130,14 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 
 bool rvce_is_fw_version_supported(struct r600_common_screen *rscreen);
 
+void rvce_add_buffer(struct rvce_encoder *enc, struct radeon_winsys_cs_handle *buf,
+		     enum radeon_bo_usage usage, enum radeon_bo_domain domain,
+		     signed offset);
+
 /* init vce fw 40.2.2 specific callbacks */
 void radeon_vce_40_2_2_init(struct rvce_encoder *enc);
+
+/* init vce fw 50 specific callbacks */
+void radeon_vce_50_init(struct rvce_encoder *enc);
 
 #endif

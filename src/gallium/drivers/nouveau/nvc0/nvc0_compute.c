@@ -57,7 +57,7 @@ nvc0_screen_compute_setup(struct nvc0_screen *screen,
       return ret;
    }
 
-   ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 0, 1 << 12, NULL,
+   ret = nouveau_bo_new(dev, NV_VRAM_DOMAIN(&screen->base), 0, 1 << 12, NULL,
                         &screen->parm);
    if (ret)
       return ret;
@@ -121,51 +121,51 @@ nvc0_screen_compute_setup(struct nvc0_screen *screen,
    return 0;
 }
 
-boolean
+bool
 nvc0_compute_validate_program(struct nvc0_context *nvc0)
 {
    struct nvc0_program *prog = nvc0->compprog;
 
    if (prog->mem)
-      return TRUE;
+      return true;
 
    if (!prog->translated) {
       prog->translated = nvc0_program_translate(
          prog, nvc0->screen->base.device->chipset);
       if (!prog->translated)
-         return FALSE;
+         return false;
    }
    if (unlikely(!prog->code_size))
-      return FALSE;
+      return false;
 
    if (likely(prog->code_size)) {
       if (nvc0_program_upload_code(nvc0, prog)) {
          struct nouveau_pushbuf *push = nvc0->base.pushbuf;
          BEGIN_NVC0(push, NVC0_COMPUTE(FLUSH), 1);
          PUSH_DATA (push, NVC0_COMPUTE_FLUSH_CODE);
-         return TRUE;
+         return true;
       }
    }
-   return FALSE;
+   return false;
 }
 
-static boolean
+static bool
 nvc0_compute_state_validate(struct nvc0_context *nvc0)
 {
    if (!nvc0_compute_validate_program(nvc0))
-      return FALSE;
+      return false;
 
    /* TODO: textures, samplers, surfaces, global memory buffers */
 
-   nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, FALSE);
+   nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, false);
 
    nouveau_pushbuf_bufctx(nvc0->base.pushbuf, nvc0->bufctx_cp);
    if (unlikely(nouveau_pushbuf_validate(nvc0->base.pushbuf)))
-      return FALSE;
+      return false;
    if (unlikely(nvc0->state.flushed))
-      nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, TRUE);
+      nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, true);
 
-   return TRUE;
+   return true;
 
 }
 

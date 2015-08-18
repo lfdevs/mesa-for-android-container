@@ -206,8 +206,8 @@ intelTexSubImage(struct gl_context * ctx,
 
    DBG("%s mesa_format %s target %s format %s type %s level %d %dx%dx%d\n",
        __func__, _mesa_get_format_name(texImage->TexFormat),
-       _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
-       _mesa_lookup_enum_by_nr(format), _mesa_lookup_enum_by_nr(type),
+       _mesa_enum_to_string(texImage->TexObject->Target),
+       _mesa_enum_to_string(format), _mesa_enum_to_string(type),
        texImage->Level, texImage->Width, texImage->Height, texImage->Depth);
 
    ok = _mesa_meta_pbo_TexSubImage(ctx, dims, texImage,

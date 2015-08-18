@@ -297,6 +297,10 @@ static boolean parse_header( struct translate_ctx *ctx )
       processor = TGSI_PROCESSOR_VERTEX;
    else if (str_match_nocase_whole( &ctx->cur, "GEOM" ))
       processor = TGSI_PROCESSOR_GEOMETRY;
+   else if (str_match_nocase_whole( &ctx->cur, "TESS_CTRL" ))
+      processor = TGSI_PROCESSOR_TESS_CTRL;
+   else if (str_match_nocase_whole( &ctx->cur, "TESS_EVAL" ))
+      processor = TGSI_PROCESSOR_TESS_EVAL;
    else if (str_match_nocase_whole( &ctx->cur, "COMP" ))
       processor = TGSI_PROCESSOR_COMPUTE;
    else {
@@ -903,7 +907,7 @@ match_inst(const char **pcur,
    /* simple case: the whole string matches the instruction name */
    if (str_match_nocase_whole(&cur, info->mnemonic)) {
       *pcur = cur;
-      *saturate = TGSI_SAT_NONE;
+      *saturate = 0;
       return TRUE;
    }
 
@@ -911,13 +915,7 @@ match_inst(const char **pcur,
       /* the instruction has a suffix, figure it out */
       if (str_match_nocase_whole(&cur, "_SAT")) {
          *pcur = cur;
-         *saturate = TGSI_SAT_ZERO_ONE;
-         return TRUE;
-      }
-
-      if (str_match_nocase_whole(&cur, "_SATNV")) {
-         *pcur = cur;
-         *saturate = TGSI_SAT_MINUS_PLUS_ONE;
+         *saturate = 1;
          return TRUE;
       }
    }
@@ -931,7 +929,7 @@ parse_instruction(
    boolean has_label )
 {
    uint i;
-   uint saturate = TGSI_SAT_NONE;
+   uint saturate = 0;
    const struct tgsi_opcode_info *info;
    struct tgsi_full_instruction inst;
    const char *cur;

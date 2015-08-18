@@ -41,27 +41,4 @@ enum a3xx_color_swap fd3_pipe2swap(enum pipe_format format);
 uint32_t fd3_tex_swiz(enum pipe_format format, unsigned swizzle_r,
 		unsigned swizzle_g, unsigned swizzle_b, unsigned swizzle_a);
 
-static INLINE bool
-fd3_half_precision(const struct pipe_surface *surface)
-{
-	enum pipe_format format;
-	if (!surface)
-		return true;
-
-	format = surface->format;
-
-	/* colors are provided in consts, which go through cov.f32f16, which will
-	 * break these values
-	 */
-	if (util_format_is_pure_integer(format))
-		return false;
-
-	/* avoid losing precision on 32-bit float formats */
-	if (util_format_is_float(format) &&
-		util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_RGB, 0) == 32)
-		return false;
-
-	return true;
-}
-
 #endif /* FD3_FORMAT_H_ */

@@ -75,6 +75,7 @@ is_phi_src_scalarizable(nir_phi_src *src,
       return should_lower_phi(nir_instr_as_phi(src_instr), state);
 
    case nir_instr_type_load_const:
+   case nir_instr_type_ssa_undef:
       /* These are trivially scalarizable */
       return true;
 
@@ -152,6 +153,11 @@ should_lower_phi(nir_phi_instr *phi, struct lower_phis_to_scalar_state *state)
       if (!scalarizable)
          break;
    }
+
+   /* The hash table entry for 'phi' may have changed while recursing the
+    * dependence graph, so we need to reset it */
+   entry = _mesa_hash_table_search(state->phi_table, phi);
+   assert(entry);
 
    entry->data = (void *)(intptr_t)scalarizable;
 

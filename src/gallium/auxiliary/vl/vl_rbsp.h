@@ -48,7 +48,7 @@ struct vl_rbsp {
 /**
  * Initialize the RBSP object
  */
-static INLINE void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsigned num_bits)
+static inline void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsigned num_bits)
 {
    unsigned bits_left = vl_vlc_bits_left(nal);
 
@@ -71,7 +71,7 @@ static INLINE void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsign
 /**
  * Make at least 16 more bits available
  */
-static INLINE void vl_rbsp_fillbits(struct vl_rbsp *rbsp)
+static inline void vl_rbsp_fillbits(struct vl_rbsp *rbsp)
 {
    unsigned valid = vl_vlc_valid_bits(&rbsp->nal);
    unsigned i, bits;
@@ -108,7 +108,7 @@ static INLINE void vl_rbsp_fillbits(struct vl_rbsp *rbsp)
 /**
  * Return an unsigned integer from the first n bits
  */
-static INLINE unsigned vl_rbsp_u(struct vl_rbsp *rbsp, unsigned n)
+static inline unsigned vl_rbsp_u(struct vl_rbsp *rbsp, unsigned n)
 {
    if (n == 0)
       return 0;
@@ -120,7 +120,7 @@ static INLINE unsigned vl_rbsp_u(struct vl_rbsp *rbsp, unsigned n)
 /**
  * Return an unsigned exponential Golomb encoded integer
  */
-static INLINE unsigned vl_rbsp_ue(struct vl_rbsp *rbsp)
+static inline unsigned vl_rbsp_ue(struct vl_rbsp *rbsp)
 {
    unsigned bits = 0;
 
@@ -134,7 +134,7 @@ static INLINE unsigned vl_rbsp_ue(struct vl_rbsp *rbsp)
 /**
  * Return an signed exponential Golomb encoded integer
  */
-static INLINE signed vl_rbsp_se(struct vl_rbsp *rbsp)
+static inline signed vl_rbsp_se(struct vl_rbsp *rbsp)
 {
    signed codeNum = vl_rbsp_ue(rbsp);
    if (codeNum & 1)
@@ -146,7 +146,7 @@ static INLINE signed vl_rbsp_se(struct vl_rbsp *rbsp)
 /**
  * Are more data available in the RBSP ?
  */
-static INLINE bool vl_rbsp_more_data(struct vl_rbsp *rbsp)
+static inline bool vl_rbsp_more_data(struct vl_rbsp *rbsp)
 {
    unsigned bits, value;
 

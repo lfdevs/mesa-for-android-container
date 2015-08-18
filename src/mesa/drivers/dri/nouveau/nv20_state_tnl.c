@@ -32,6 +32,8 @@
 #include "nv10_driver.h"
 #include "nv20_driver.h"
 
+#include "util/simple_list.h"
+
 #define LIGHT_MODEL_AMBIENT_R(side)			\
 	((side) ? NV20_3D_LIGHT_MODEL_BACK_AMBIENT_R :	\
 	 NV20_3D_LIGHT_MODEL_FRONT_AMBIENT_R)

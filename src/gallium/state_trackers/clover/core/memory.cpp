@@ -30,7 +30,7 @@ memory_obj::memory_obj(clover::context &ctx, cl_mem_flags flags,
                        size_t size, void *host_ptr) :
    context(ctx), _flags(flags),
    _size(size), _host_ptr(host_ptr) {
-   if (flags & (CL_MEM_COPY_HOST_PTR | CL_MEM_USE_HOST_PTR))
+   if (flags & CL_MEM_COPY_HOST_PTR)
       data.append((char *)host_ptr, size);
 }
 
@@ -189,7 +189,7 @@ image2d::image2d(clover::context &ctx, cl_mem_flags flags,
                  const cl_image_format *format, size_t width,
                  size_t height, size_t row_pitch,
                  void *host_ptr) :
-   image(ctx, flags, format, width, height, 0,
+   image(ctx, flags, format, width, height, 1,
          row_pitch, 0, height * row_pitch, host_ptr) {
 }
 

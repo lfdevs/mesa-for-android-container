@@ -339,7 +339,7 @@ struct i915_context {
 #define I915_DST_VARS                   4
 #define I915_DST_RECT                   8
 
-static INLINE
+static inline
 void i915_set_flush_dirty(struct i915_context *i915, unsigned flush)
 {
    i915->hardware_dirty |= I915_HW_FLUSH;
@@ -408,7 +408,7 @@ struct pipe_context *i915_create_context(struct pipe_screen *screen,
  * Inline conversion functions.  These are better-typed than the
  * macros used previously:
  */
-static INLINE struct i915_context *
+static inline struct i915_context *
 i915_context( struct pipe_context *pipe )
 {
    return (struct i915_context *)pipe;

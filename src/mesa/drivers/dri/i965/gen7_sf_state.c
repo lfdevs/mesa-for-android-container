@@ -27,6 +27,7 @@
 #include "brw_util.h"
 #include "main/macros.h"
 #include "main/fbobject.h"
+#include "main/framebuffer.h"
 #include "intel_batchbuffer.h"
 
 static void
@@ -109,7 +110,7 @@ upload_sf_state(struct brw_context *brw)
    float point_size;
    /* _NEW_BUFFERS */
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
-   bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
+   const bool multisampled_fbo = _mesa_geometric_samples(ctx->DrawBuffer) > 1;
 
    dw1 = GEN6_SF_STATISTICS_ENABLE;
 
@@ -192,26 +193,7 @@ upload_sf_state(struct brw_context *brw)
 
    /* _NEW_LINE */
    {
-      float line_width = brw_get_line_width(brw);
-      uint32_t line_width_u3_7 = U_FIXED(line_width, 7);
-      /* Line width of 0 is not allowed when MSAA enabled */
-      if (ctx->Multisample._Enabled) {
-         if (line_width_u3_7 == 0)
-             line_width_u3_7 = 1;
-      } else if (ctx->Line.SmoothFlag && ctx->Line.Width < 1.5) {
-         /* For 1 pixel line thickness or less, the general
-          * anti-aliasing algorithm gives up, and a garbage line is
-          * generated.  Setting a Line Width of 0.0 specifies the
-          * rasterization of the "thinnest" (one-pixel-wide),
-          * non-antialiased lines.
-          *
-          * Lines rendered with zero Line Width are rasterized using
-          * Grid Intersection Quantization rules as specified by
-          * bspec section 6.3.12.1 Zero-Width (Cosmetic) Line
-          * Rasterization.
-          */
-         line_width_u3_7 = 0;
-      }
+      uint32_t line_width_u3_7 = brw_get_line_width(brw);
       dw2 |= line_width_u3_7 << GEN6_SF_LINE_WIDTH_SHIFT;
    }
    if (ctx->Line.SmoothFlag) {
@@ -238,7 +220,7 @@ upload_sf_state(struct brw_context *brw)
    point_size = CLAMP(ctx->Point.Size, ctx->Point.MinSize, ctx->Point.MaxSize);
 
    /* Clamp to the hardware limits and convert to fixed point */
-   dw3 |= U_FIXED(CLAMP(point_size, 0.125, 255.875), 3);
+   dw3 |= U_FIXED(CLAMP(point_size, 0.125f, 255.875f), 3);
 
    /* _NEW_LIGHT */
    if (ctx->Light.ProvokingVertex != GL_FIRST_VERTEX_CONVENTION) {

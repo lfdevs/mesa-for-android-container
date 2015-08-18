@@ -102,12 +102,12 @@ struct nv84_decoder {
    uint8_t mpeg12_non_intra_matrix[64];
 };
 
-static INLINE uint32_t mb(uint32_t coord)
+static inline uint32_t mb(uint32_t coord)
 {
    return (coord + 0xf)>>4;
 }
 
-static INLINE uint32_t mb_half(uint32_t coord)
+static inline uint32_t mb_half(uint32_t coord)
 {
    return (coord + 0x1f)>>5;
 }

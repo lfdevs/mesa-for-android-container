@@ -82,6 +82,20 @@ struct fd_vertex_stateobj {
 	unsigned num_elements;
 };
 
+struct fd_streamout_stateobj {
+	struct pipe_stream_output_target *targets[PIPE_MAX_SO_BUFFERS];
+	unsigned num_targets;
+	/* Track offset from vtxcnt for streamout data.  This counter
+	 * is just incremented by # of vertices on each draw until
+	 * reset or new streamout buffer bound.
+	 *
+	 * When we eventually have GS, the CPU won't actually know the
+	 * number of vertices per draw, so I think we'll have to do
+	 * something more clever.
+	 */
+	unsigned offsets[PIPE_MAX_SO_BUFFERS];
+};
+
 /* group together the vertex and vertexbuf state.. for ease of passing
  * around, and because various internal operations (gmem<->mem, etc)
  * need their own vertex state:
@@ -179,7 +193,7 @@ struct fd_context {
 	struct fd_program_stateobj solid_prog; // TODO move to screen?
 
 	/* shaders used by mem->gmem blits: */
-	struct fd_program_stateobj blit_prog[8]; // TODO move to screen?
+	struct fd_program_stateobj blit_prog[MAX_RENDER_TARGETS]; // TODO move to screen?
 	struct fd_program_stateobj blit_z, blit_zs;
 
 	/* do we need to mem2gmem before rendering.  We don't, if for example,
@@ -319,6 +333,7 @@ struct fd_context {
 		FD_DIRTY_VTXBUF      = (1 << 15),
 		FD_DIRTY_INDEXBUF    = (1 << 16),
 		FD_DIRTY_SCISSOR     = (1 << 17),
+		FD_DIRTY_STREAMOUT   = (1 << 18),
 	} dirty;
 
 	struct pipe_blend_state *blend;
@@ -339,6 +354,7 @@ struct fd_context {
 	struct pipe_viewport_state viewport;
 	struct fd_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
 	struct pipe_index_buffer indexbuf;
+	struct fd_streamout_stateobj streamout;
 
 	/* GMEM/tile handling fxns: */
 	void (*emit_tile_init)(struct fd_context *ctx);
@@ -351,18 +367,25 @@ struct fd_context {
 	void (*emit_sysmem_prep)(struct fd_context *ctx);
 
 	/* draw: */
-	void (*draw_vbo)(struct fd_context *pctx, const struct pipe_draw_info *info);
+	void (*draw_vbo)(struct fd_context *ctx, const struct pipe_draw_info *info);
 	void (*clear)(struct fd_context *ctx, unsigned buffers,
 			const union pipe_color_union *color, double depth, unsigned stencil);
+
+	/* constant emit:  (note currently not used/needed for a2xx) */
+	void (*emit_const)(struct fd_ringbuffer *ring, enum shader_t type,
+			uint32_t regid, uint32_t offset, uint32_t sizedwords,
+			const uint32_t *dwords, struct pipe_resource *prsc);
+	void (*emit_const_bo)(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
+			uint32_t regid, uint32_t num, struct fd_bo **bos, uint32_t *offsets);
 };
 
-static INLINE struct fd_context *
+static inline struct fd_context *
 fd_context(struct pipe_context *pctx)
 {
 	return (struct fd_context *)pctx;
 }
 
-static INLINE struct pipe_scissor_state *
+static inline struct pipe_scissor_state *
 fd_context_get_scissor(struct fd_context *ctx)
 {
 	if (ctx->rasterizer && ctx->rasterizer->scissor)
@@ -370,13 +393,13 @@ fd_context_get_scissor(struct fd_context *ctx)
 	return &ctx->disabled_scissor;
 }
 
-static INLINE bool
+static inline bool
 fd_supported_prim(struct fd_context *ctx, unsigned prim)
 {
 	return (1 << prim) & ctx->primtype_mask;
 }
 
-static INLINE void
+static inline void
 fd_reset_wfi(struct fd_context *ctx)
 {
 	ctx->needs_wfi = true;

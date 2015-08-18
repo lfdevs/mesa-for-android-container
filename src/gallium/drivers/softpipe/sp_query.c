@@ -277,7 +277,7 @@ softpipe_check_render_cond(struct softpipe_context *sp)
    b = pipe->get_query_result(pipe, sp->render_cond_query, wait,
                               (void*)&result);
    if (b)
-      return (!result == sp->render_cond_cond);
+      return (!result) == sp->render_cond_cond;
    else
       return TRUE;
 }

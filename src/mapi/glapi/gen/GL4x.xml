@@ -44,4 +44,10 @@
   <enum name="DEPTH_STENCIL_TEXTURE_MODE"              value="0x90EA"/>
 </category>
 
+<category name="4.5">
+  <function name="MemoryBarrierByRegion" es2="3.1">
+    <param name="barriers" type="GLbitfield"/>
+  </function>
+</category>
+
 </OpenGLAPI>

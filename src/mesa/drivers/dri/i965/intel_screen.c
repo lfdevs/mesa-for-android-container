@@ -39,6 +39,7 @@
 #include "swrast/s_renderbuffer.h"
 #include "util/ralloc.h"
 #include "brw_shader.h"
+#include "glsl/nir/nir.h"
 
 #include "utils.h"
 #include "xmlpool.h"
@@ -227,6 +228,12 @@ static struct intel_image_format intel_image_formats[] = {
 
    { __DRI_IMAGE_FOURCC_RGB565, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_RGB565, 2 } } },
+
+   { __DRI_IMAGE_FOURCC_R8, __DRI_IMAGE_COMPONENTS_R, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 }, } },
+
+   { __DRI_IMAGE_FOURCC_GR88, __DRI_IMAGE_COMPONENTS_RG, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 }, } },
 
    { __DRI_IMAGE_FOURCC_YUV410, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
@@ -1122,6 +1129,50 @@ intel_detect_swizzling(struct intel_screen *screen)
       return true;
 }
 
+static int
+intel_detect_timestamp(struct intel_screen *screen)
+{
+   uint64_t dummy = 0, last = 0;
+   int upper, lower, loops;
+
+   /* On 64bit systems, some old kernels trigger a hw bug resulting in the
+    * TIMESTAMP register being shifted and the low 32bits always zero.
+    *
+    * More recent kernels offer an interface to read the full 36bits
+    * everywhere.
+    */
+   if (drm_intel_reg_read(screen->bufmgr, TIMESTAMP | 1, &dummy) == 0)
+      return 3;
+
+   /* Determine if we have a 32bit or 64bit kernel by inspecting the
+    * upper 32bits for a rapidly changing timestamp.
+    */
+   if (drm_intel_reg_read(screen->bufmgr, TIMESTAMP, &last))
+      return 0;
+
+   upper = lower = 0;
+   for (loops = 0; loops < 10; loops++) {
+      /* The TIMESTAMP should change every 80ns, so several round trips
+       * through the kernel should be enough to advance it.
+       */
+      if (drm_intel_reg_read(screen->bufmgr, TIMESTAMP, &dummy))
+         return 0;
+
+      upper += (dummy >> 32) != (last >> 32);
+      if (upper > 1) /* beware 32bit counter overflow */
+         return 2; /* upper dword holds the low 32bits of the timestamp */
+
+      lower += (dummy & 0xffffffff) != (last & 0xffffffff);
+      if (lower > 1)
+         return 1; /* timestamp is unshifted */
+
+      last = dummy;
+   }
+
+   /* No advancement? No timestamp! */
+   return 0;
+}
+
 /**
  * Return array of MSAA modes supported by the hardware. The array is
  * zero-terminated and sorted in decreasing order.
@@ -1308,11 +1359,6 @@ set_max_gl_versions(struct intel_screen *screen)
    }
 }
 
-/* drop when libdrm 2.4.61 is released */
-#ifndef I915_PARAM_REVISION
-#define I915_PARAM_REVISION 32
-#endif
-
 static int
 brw_get_revision(int fd)
 {
@@ -1330,6 +1376,11 @@ brw_get_revision(int fd)
 
    return revision;
 }
+
+/* Drop when RS headers get pulled to libdrm */
+#ifndef I915_PARAM_HAS_RESOURCE_STREAMER
+#define I915_PARAM_HAS_RESOURCE_STREAMER 36
+#endif
 
 /**
  * This is the driver specific part of the createNewScreen entry point.
@@ -1372,9 +1423,12 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
    if (!intelScreen->devinfo)
       return false;
 
+   brw_process_intel_debug_variable(intelScreen);
+
    intelScreen->hw_must_use_separate_stencil = intelScreen->devinfo->gen >= 7;
 
    intelScreen->hw_has_swizzling = intel_detect_swizzling(intelScreen);
+   intelScreen->hw_has_timestamp = intel_detect_timestamp(intelScreen);
 
    const char *force_msaa = getenv("INTEL_FORCE_MSAA");
    if (force_msaa) {
@@ -1419,6 +1473,15 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
 
    intelScreen->compiler = brw_compiler_create(intelScreen,
                                                intelScreen->devinfo);
+
+   if (intelScreen->devinfo->has_resource_streamer) {
+      int val = -1;
+      getparam.param = I915_PARAM_HAS_RESOURCE_STREAMER;
+      getparam.value = &val;
+
+      drmIoctl(psp->fd, DRM_IOCTL_I915_GETPARAM, &getparam);
+      intelScreen->has_resource_streamer = val > 0;
+   }
 
    return (const __DRIconfig**) intel_screen_make_configs(psp);
 }

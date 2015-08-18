@@ -29,7 +29,7 @@ struct NineSwapChain9Ex
 {
     struct NineSwapChain9 base;
 };
-static INLINE struct NineSwapChain9Ex *
+static inline struct NineSwapChain9Ex *
 NineSwapChain9Ex( void *data )
 {
     return (struct NineSwapChain9Ex *)data;

@@ -152,7 +152,7 @@ struct vmw_svga_winsys_context
 };
 
 
-static INLINE struct vmw_svga_winsys_context *
+static inline struct vmw_svga_winsys_context *
 vmw_svga_winsys_context(struct svga_winsys_context *swc)
 {
    assert(swc);
@@ -160,7 +160,7 @@ vmw_svga_winsys_context(struct svga_winsys_context *swc)
 }
 
 
-static INLINE unsigned
+static inline unsigned
 vmw_translate_to_pb_flags(unsigned flags)
 {
    unsigned f = 0;

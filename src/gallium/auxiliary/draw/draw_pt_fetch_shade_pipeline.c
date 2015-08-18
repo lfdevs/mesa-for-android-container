@@ -54,7 +54,7 @@ struct fetch_pipeline_middle_end {
 
 
 /** cast wrapper */
-static INLINE struct fetch_pipeline_middle_end *
+static inline struct fetch_pipeline_middle_end *
 fetch_pipeline_middle_end(struct draw_pt_middle_end *middle)
 {
    return (struct fetch_pipeline_middle_end *) middle;

@@ -91,13 +91,13 @@ struct vertex_info
    } attrib[PIPE_MAX_SHADER_OUTPUTS];
 };
 
-static INLINE size_t
+static inline size_t
 draw_vinfo_size( const struct vertex_info *a )
 {
    return offsetof(const struct vertex_info, attrib[a->num_attribs]);
 }
 
-static INLINE int
+static inline int
 draw_vinfo_compare( const struct vertex_info *a,
                     const struct vertex_info *b )
 {
@@ -105,7 +105,7 @@ draw_vinfo_compare( const struct vertex_info *a,
    return memcmp( a, b, sizea );
 }
 
-static INLINE void
+static inline void
 draw_vinfo_copy( struct vertex_info *dst,
                  const struct vertex_info *src )
 {
@@ -121,7 +121,7 @@ draw_vinfo_copy( struct vertex_info *dst,
  *                   corresponds to this attribute.
  * \return slot in which the attribute was added
  */
-static INLINE uint
+static inline uint
 draw_emit_vertex_attr(struct vertex_info *vinfo,
                       enum attrib_emit emit, 
                       enum interp_mode interp, /* only used by softpipe??? */
@@ -150,7 +150,7 @@ void draw_dump_emitted_vertex(const struct vertex_info *vinfo,
                               const uint8_t *data);
 
 
-static INLINE enum pipe_format draw_translate_vinfo_format(enum attrib_emit emit)
+static inline enum pipe_format draw_translate_vinfo_format(enum attrib_emit emit)
 {
    switch (emit) {
    case EMIT_OMIT:
@@ -174,7 +174,7 @@ static INLINE enum pipe_format draw_translate_vinfo_format(enum attrib_emit emit
    }
 }
 
-static INLINE unsigned draw_translate_vinfo_size(enum attrib_emit emit)
+static inline unsigned draw_translate_vinfo_size(enum attrib_emit emit)
 {
    switch (emit) {
    case EMIT_OMIT:

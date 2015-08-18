@@ -26,6 +26,7 @@
 #include "glsl_types.h"
 #include "ir.h"
 #include "main/core.h" /* for MIN2 */
+#include "main/shaderobj.h"
 
 static ir_rvalue *
 convert_component(ir_rvalue *src, const glsl_type *desired_type);
@@ -355,6 +356,8 @@ fix_parameter(void *mem_ctx, ir_rvalue *actual, const glsl_type *formal_type,
 static ir_rvalue *
 generate_call(exec_list *instructions, ir_function_signature *sig,
 	      exec_list *actual_parameters,
+              ir_variable *sub_var,
+	      ir_rvalue *array_idx,
 	      struct _mesa_glsl_parse_state *state)
 {
    void *ctx = state;
@@ -421,7 +424,8 @@ generate_call(exec_list *instructions, ir_function_signature *sig,
 
       deref = new(ctx) ir_dereference_variable(var);
    }
-   ir_call *call = new(ctx) ir_call(sig, deref, actual_parameters);
+
+   ir_call *call = new(ctx) ir_call(sig, deref, actual_parameters, sub_var, array_idx);
    instructions->push_tail(call);
 
    /* Also emit any necessary out-parameter conversions. */
@@ -486,6 +490,40 @@ done:
 	 f->add_signature(sig->clone_prototype(f, NULL));
       }
    }
+   return sig;
+}
+
+static ir_function_signature *
+match_subroutine_by_name(const char *name,
+                         exec_list *actual_parameters,
+                         struct _mesa_glsl_parse_state *state,
+                         ir_variable **var_r)
+{
+   void *ctx = state;
+   ir_function_signature *sig = NULL;
+   ir_function *f, *found = NULL;
+   const char *new_name;
+   ir_variable *var;
+   bool is_exact = false;
+
+   new_name = ralloc_asprintf(ctx, "%s_%s", _mesa_shader_stage_to_subroutine_prefix(state->stage), name);
+   var = state->symbols->get_variable(new_name);
+   if (!var)
+      return NULL;
+
+   for (int i = 0; i < state->num_subroutine_types; i++) {
+      f = state->subroutine_types[i];
+      if (strcmp(f->name, var->type->without_array()->name))
+         continue;
+      found = f;
+      break;
+   }
+
+   if (!found)
+      return NULL;
+   *var_r = var;
+   sig = found->matching_signature(state, actual_parameters,
+                                  false, &is_exact);
    return sig;
 }
 
@@ -863,7 +901,7 @@ process_array_constructor(exec_list *instructions,
 
    if (is_unsized_array) {
       constructor_type =
-	 glsl_type::get_array_instance(constructor_type->element_type(),
+	 glsl_type::get_array_instance(constructor_type->fields.array,
 				       parameter_count);
       assert(constructor_type != NULL);
       assert(constructor_type->length == parameter_count);
@@ -876,7 +914,7 @@ process_array_constructor(exec_list *instructions,
       ir_rvalue *result = ir;
 
       const glsl_base_type element_base_type =
-         constructor_type->element_type()->base_type;
+         constructor_type->fields.array->base_type;
 
       /* Apply implicit conversions (not the scalar constructor rules!). See
        * the spec quote above. */
@@ -896,10 +934,10 @@ process_array_constructor(exec_list *instructions,
 	 }
       }
 
-      if (result->type != constructor_type->element_type()) {
+      if (result->type != constructor_type->fields.array) {
 	 _mesa_glsl_error(loc, state, "type error in array constructor: "
 			  "expected: %s, found %s",
-			  constructor_type->element_type()->name,
+			  constructor_type->fields.array->name,
 			  result->type->name);
          return ir_rvalue::error_value(ctx);
       }
@@ -993,10 +1031,14 @@ emit_inline_vector_constructor(const glsl_type *type,
    ir_variable *var = new(ctx) ir_variable(type, "vec_ctor", ir_var_temporary);
    instructions->push_tail(var);
 
-   /* There are two kinds of vector constructors.
+   /* There are three kinds of vector constructors.
     *
     *  - Construct a vector from a single scalar by replicating that scalar to
     *    all components of the vector.
+    *
+    *  - Construct a vector from at least a matrix. This case should already
+    *    have been taken care of in ast_function_expression::hir by breaking
+    *    down the matrix into a series of column vectors.
     *
     *  - Construct a vector from an arbirary combination of vectors and
     *    scalars.  The components of the constructor parameters are assigned
@@ -1089,6 +1131,14 @@ emit_inline_vector_constructor(const glsl_type *type,
 	  */
 	 if ((rhs_components + base_component) > lhs_components) {
 	    rhs_components = lhs_components - base_component;
+	 }
+
+	 /* If we do not have any components left to copy, break out of the
+	  * loop. This can happen when initializing a vec4 with a mat3 as the
+	  * mat3 would have been broken into a series of column vectors.
+	  */
+	 if (rhs_components == 0) {
+	    break;
 	 }
 
 	 const ir_constant *const c = param->as_constant();
@@ -1519,6 +1569,65 @@ process_record_constructor(exec_list *instructions,
                                              &actual_parameters, state);
 }
 
+ir_rvalue *
+ast_function_expression::handle_method(exec_list *instructions,
+                                       struct _mesa_glsl_parse_state *state)
+{
+   const ast_expression *field = subexpressions[0];
+   ir_rvalue *op;
+   ir_rvalue *result;
+   void *ctx = state;
+   /* Handle "method calls" in GLSL 1.20 - namely, array.length() */
+   YYLTYPE loc = get_location();
+   state->check_version(120, 300, &loc, "methods not supported");
+
+   const char *method;
+   method = field->primary_expression.identifier;
+
+   op = field->subexpressions[0]->hir(instructions, state);
+   if (strcmp(method, "length") == 0) {
+      if (!this->expressions.is_empty()) {
+         _mesa_glsl_error(&loc, state, "length method takes no arguments");
+         goto fail;
+      }
+
+      if (op->type->is_array()) {
+         if (op->type->is_unsized_array()) {
+            _mesa_glsl_error(&loc, state, "length called on unsized array");
+            goto fail;
+         }
+
+         result = new(ctx) ir_constant(op->type->array_size());
+      } else if (op->type->is_vector()) {
+         if (state->ARB_shading_language_420pack_enable) {
+            /* .length() returns int. */
+            result = new(ctx) ir_constant((int) op->type->vector_elements);
+         } else {
+            _mesa_glsl_error(&loc, state, "length method on matrix only available"
+                             "with ARB_shading_language_420pack");
+            goto fail;
+         }
+      } else if (op->type->is_matrix()) {
+         if (state->ARB_shading_language_420pack_enable) {
+            /* .length() returns int. */
+            result = new(ctx) ir_constant((int) op->type->matrix_columns);
+         } else {
+            _mesa_glsl_error(&loc, state, "length method on matrix only available"
+                             "with ARB_shading_language_420pack");
+            goto fail;
+         }
+      } else {
+         _mesa_glsl_error(&loc, state, "length called on scalar.");
+         goto fail;
+      }
+   } else {
+         _mesa_glsl_error(&loc, state, "unknown method: `%s'", method);
+         goto fail;
+   }
+   return result;
+fail:
+   return ir_rvalue::error_value(ctx);
+}
 
 ir_rvalue *
 ast_function_expression::hir(exec_list *instructions,
@@ -1531,8 +1640,6 @@ ast_function_expression::hir(exec_list *instructions,
     * 2. methods - Only the .length() method of array types.
     * 3. functions - Calls to regular old functions.
     *
-    * Method calls are actually detected when the ast_field_selection
-    * expression is handled.
     */
    if (is_constructor()) {
       const ast_type_specifier *type = (ast_type_specifier *) subexpressions[0];
@@ -1681,11 +1788,11 @@ ast_function_expression::hir(exec_list *instructions,
 	 return ir_rvalue::error_value(ctx);
       }
 
-      /* Later, we cast each parameter to the same base type as the
-       * constructor.  Since there are no non-floating point matrices, we
-       * need to break them up into a series of column vectors.
+      /* Matrices can never be consumed as is by any constructor but matrix
+       * constructors. If the constructor type is not matrix, always break the
+       * matrix up into a series of column vectors.
        */
-      if (constructor_type->base_type != GLSL_TYPE_FLOAT) {
+      if (!constructor_type->is_matrix()) {
 	 foreach_in_list_safe(ir_rvalue, matrix, &actual_parameters) {
 	    if (!matrix->type->is_matrix())
 	       continue;
@@ -1753,11 +1860,22 @@ ast_function_expression::hir(exec_list *instructions,
 					       &actual_parameters,
 					       ctx);
       }
+   } else if (subexpressions[0]->oper == ast_field_selection) {
+      return handle_method(instructions, state);
    } else {
       const ast_expression *id = subexpressions[0];
-      const char *func_name = id->primary_expression.identifier;
+      const char *func_name;
       YYLTYPE loc = get_location();
       exec_list actual_parameters;
+      ir_variable *sub_var = NULL;
+      ir_rvalue *array_idx = NULL;
+
+      if (id->oper == ast_array_index) {
+         func_name = id->subexpressions[0]->primary_expression.identifier;
+	 array_idx = id->subexpressions[1]->hir(instructions, state);
+      } else {
+         func_name = id->primary_expression.identifier;
+      }
 
       process_parameters(instructions, &actual_parameters, &this->expressions,
 			 state);
@@ -1767,13 +1885,24 @@ ast_function_expression::hir(exec_list *instructions,
 
       ir_rvalue *value = NULL;
       if (sig == NULL) {
+         sig = match_subroutine_by_name(func_name, &actual_parameters, state, &sub_var);
+      }
+
+      if (sig == NULL) {
 	 no_matching_function_error(func_name, &loc, &actual_parameters, state);
 	 value = ir_rvalue::error_value(ctx);
       } else if (!verify_parameter_modes(state, sig, actual_parameters, this->expressions)) {
 	 /* an error has already been emitted */
 	 value = ir_rvalue::error_value(ctx);
       } else {
-	 value = generate_call(instructions, sig, &actual_parameters, state);
+         value = generate_call(instructions, sig, &actual_parameters, sub_var, array_idx, state);
+         if (!value) {
+            ir_variable *const tmp = new(ctx) ir_variable(glsl_type::void_type,
+                                                          "void_var",
+                                                          ir_var_temporary);
+            instructions->push_tail(tmp);
+            value = new(ctx) ir_dereference_variable(tmp);
+         }
       }
 
       return value;

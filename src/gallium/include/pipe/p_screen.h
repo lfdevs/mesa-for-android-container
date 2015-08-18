@@ -212,12 +212,6 @@ struct pipe_screen {
                             struct pipe_fence_handle *fence );
 
    /**
-    * Checks whether the fence has been signalled.
-    */
-   boolean (*fence_signalled)( struct pipe_screen *screen,
-                               struct pipe_fence_handle *fence );
-
-   /**
     * Wait for the fence to finish.
     * \param timeout  in nanoseconds (may be PIPE_TIMEOUT_INFINITE).
     */

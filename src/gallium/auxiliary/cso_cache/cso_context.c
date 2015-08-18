@@ -56,22 +56,8 @@
  */
 struct sampler_info
 {
-   struct {
-      void *samplers[PIPE_MAX_SAMPLERS];
-      unsigned nr_samplers;
-   } hw;
-
    void *samplers[PIPE_MAX_SAMPLERS];
    unsigned nr_samplers;
-
-   void *samplers_saved[PIPE_MAX_SAMPLERS];
-   unsigned nr_samplers_saved;
-
-   struct pipe_sampler_view *views[PIPE_MAX_SHADER_SAMPLER_VIEWS];
-   unsigned nr_views;
-
-   struct pipe_sampler_view *views_saved[PIPE_MAX_SHADER_SAMPLER_VIEWS];
-   unsigned nr_views_saved;
 };
 
 
@@ -84,6 +70,15 @@ struct cso_context {
    boolean has_geometry_shader;
    boolean has_tessellation;
    boolean has_streamout;
+
+   struct pipe_sampler_view *fragment_views[PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   unsigned nr_fragment_views;
+
+   struct pipe_sampler_view *fragment_views_saved[PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   unsigned nr_fragment_views_saved;
+
+   void *fragment_samplers_saved[PIPE_MAX_SAMPLERS];
+   unsigned nr_fragment_samplers_saved;
 
    struct sampler_info samplers[PIPE_SHADER_TYPES];
 
@@ -115,9 +110,6 @@ struct cso_context {
    struct pipe_query *render_condition, *render_condition_saved;
    uint render_condition_mode, render_condition_mode_saved;
    boolean render_condition_cond, render_condition_cond_saved;
-
-   struct pipe_clip_state clip;
-   struct pipe_clip_state clip_saved;
 
    struct pipe_framebuffer_state fb, fb_saved;
    struct pipe_viewport_state vp, vp_saved;
@@ -192,7 +184,7 @@ static boolean delete_vertex_elements(struct cso_context *ctx,
 }
 
 
-static INLINE boolean delete_cso(struct cso_context *ctx,
+static inline boolean delete_cso(struct cso_context *ctx,
                                  void *state, enum cso_cache_type type)
 {
    switch (type) {
@@ -213,7 +205,7 @@ static INLINE boolean delete_cso(struct cso_context *ctx,
    return FALSE;
 }
 
-static INLINE void
+static inline void
 sanitize_hash(struct cso_hash *hash, enum cso_cache_type type,
               int max_size, void *user_data)
 {
@@ -297,7 +289,7 @@ out:
  */
 void cso_destroy_context( struct cso_context *ctx )
 {
-   unsigned i, shader;
+   unsigned i;
 
    if (ctx->pipe) {
       ctx->pipe->set_index_buffer(ctx->pipe, NULL);
@@ -347,13 +339,9 @@ void cso_destroy_context( struct cso_context *ctx )
          ctx->pipe->set_stream_output_targets(ctx->pipe, 0, NULL, NULL);
    }
 
-   /* free sampler views for each shader stage */
-   for (shader = 0; shader < Elements(ctx->samplers); shader++) {
-      struct sampler_info *info = &ctx->samplers[shader];
-      for (i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++) {
-         pipe_sampler_view_reference(&info->views[i], NULL);
-         pipe_sampler_view_reference(&info->views_saved[i], NULL);
-      }
+   for (i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++) {
+      pipe_sampler_view_reference(&ctx->fragment_views[i], NULL);
+      pipe_sampler_view_reference(&ctx->fragment_views_saved[i], NULL);
    }
 
    util_unreference_framebuffer_state(&ctx->fb);
@@ -919,47 +907,6 @@ void cso_restore_tesseval_shader(struct cso_context *ctx)
    ctx->tesseval_shader_saved = NULL;
 }
 
-/* clip state */
-
-static INLINE void
-clip_state_cpy(struct pipe_clip_state *dst,
-               const struct pipe_clip_state *src)
-{
-   memcpy(dst->ucp, src->ucp, sizeof(dst->ucp));
-}
-
-static INLINE int
-clip_state_cmp(const struct pipe_clip_state *a,
-               const struct pipe_clip_state *b)
-{
-   return memcmp(a->ucp, b->ucp, sizeof(a->ucp));
-}
-
-void
-cso_set_clip(struct cso_context *ctx,
-             const struct pipe_clip_state *clip)
-{
-   if (clip_state_cmp(&ctx->clip, clip)) {
-      clip_state_cpy(&ctx->clip, clip);
-      ctx->pipe->set_clip_state(ctx->pipe, clip);
-   }
-}
-
-void
-cso_save_clip(struct cso_context *ctx)
-{
-   clip_state_cpy(&ctx->clip_saved, &ctx->clip);
-}
-
-void
-cso_restore_clip(struct cso_context *ctx)
-{
-   if (clip_state_cmp(&ctx->clip, &ctx->clip_saved)) {
-      clip_state_cpy(&ctx->clip, &ctx->clip_saved);
-      ctx->pipe->set_clip_state(ctx->pipe, &ctx->clip_saved);
-   }
-}
-
 enum pipe_error
 cso_set_vertex_elements(struct cso_context *ctx,
                         unsigned count,
@@ -1122,11 +1069,9 @@ unsigned cso_get_aux_vertex_buffer_slot(struct cso_context *ctx)
 
 /**************** fragment/vertex sampler view state *************************/
 
-static enum pipe_error
-single_sampler(struct cso_context *ctx,
-               struct sampler_info *info,
-               unsigned idx,
-               const struct pipe_sampler_state *templ)
+enum pipe_error
+cso_single_sampler(struct cso_context *ctx, unsigned shader_stage,
+                   unsigned idx, const struct pipe_sampler_state *templ)
 {
    void *handle = NULL;
 
@@ -1162,24 +1107,13 @@ single_sampler(struct cso_context *ctx,
       }
    }
 
-   info->samplers[idx] = handle;
-
+   ctx->samplers[shader_stage].samplers[idx] = handle;
    return PIPE_OK;
 }
 
-enum pipe_error
-cso_single_sampler(struct cso_context *ctx,
-                   unsigned shader_stage,
-                   unsigned idx,
-                   const struct pipe_sampler_state *templ)
-{
-   return single_sampler(ctx, &ctx->samplers[shader_stage], idx, templ);
-}
 
-
-
-static void
-single_sampler_done(struct cso_context *ctx, unsigned shader_stage)
+void
+cso_single_sampler_done(struct cso_context *ctx, unsigned shader_stage)
 {
    struct sampler_info *info = &ctx->samplers[shader_stage];
    unsigned i;
@@ -1191,33 +1125,8 @@ single_sampler_done(struct cso_context *ctx, unsigned shader_stage)
    }
 
    info->nr_samplers = i;
-
-   if (info->hw.nr_samplers != info->nr_samplers ||
-       memcmp(info->hw.samplers,
-              info->samplers,
-              info->nr_samplers * sizeof(void *)) != 0)
-   {
-      memcpy(info->hw.samplers,
-             info->samplers,
-             info->nr_samplers * sizeof(void *));
-
-      /* set remaining slots/pointers to null */
-      for (i = info->nr_samplers; i < info->hw.nr_samplers; i++)
-         info->samplers[i] = NULL;
-
-      ctx->pipe->bind_sampler_states(ctx->pipe, shader_stage, 0,
-                                     MAX2(info->nr_samplers,
-                                          info->hw.nr_samplers),
-                                     info->samplers);
-
-      info->hw.nr_samplers = info->nr_samplers;
-   }
-}
-
-void
-cso_single_sampler_done(struct cso_context *ctx, unsigned shader_stage)
-{
-   single_sampler_done(ctx, shader_stage);
+   ctx->pipe->bind_sampler_states(ctx->pipe, shader_stage, 0, i,
+                                  info->samplers);
 }
 
 
@@ -1240,38 +1149,42 @@ cso_set_samplers(struct cso_context *ctx,
     */
 
    for (i = 0; i < nr; i++) {
-      temp = single_sampler(ctx, info, i, templates[i]);
+      temp = cso_single_sampler(ctx, shader_stage, i, templates[i]);
       if (temp != PIPE_OK)
          error = temp;
    }
 
    for ( ; i < info->nr_samplers; i++) {
-      temp = single_sampler(ctx, info, i, NULL);
+      temp = cso_single_sampler(ctx, shader_stage, i, NULL);
       if (temp != PIPE_OK)
          error = temp;
    }
 
-   single_sampler_done(ctx, shader_stage);
+   cso_single_sampler_done(ctx, shader_stage);
 
    return error;
 }
 
 void
-cso_save_samplers(struct cso_context *ctx, unsigned shader_stage)
+cso_save_fragment_samplers(struct cso_context *ctx)
 {
-   struct sampler_info *info = &ctx->samplers[shader_stage];
-   info->nr_samplers_saved = info->nr_samplers;
-   memcpy(info->samplers_saved, info->samplers, sizeof(info->samplers));
+   struct sampler_info *info = &ctx->samplers[PIPE_SHADER_FRAGMENT];
+
+   ctx->nr_fragment_samplers_saved = info->nr_samplers;
+   memcpy(ctx->fragment_samplers_saved, info->samplers,
+          sizeof(info->samplers));
 }
 
 
 void
-cso_restore_samplers(struct cso_context *ctx, unsigned shader_stage)
+cso_restore_fragment_samplers(struct cso_context *ctx)
 {
-   struct sampler_info *info = &ctx->samplers[shader_stage];
-   info->nr_samplers = info->nr_samplers_saved;
-   memcpy(info->samplers, info->samplers_saved, sizeof(info->samplers));
-   single_sampler_done(ctx, shader_stage);
+   struct sampler_info *info = &ctx->samplers[PIPE_SHADER_FRAGMENT];
+
+   info->nr_samplers = ctx->nr_fragment_samplers_saved;
+   memcpy(info->samplers, ctx->fragment_samplers_saved,
+          sizeof(info->samplers));
+   cso_single_sampler_done(ctx, PIPE_SHADER_FRAGMENT);
 }
 
 
@@ -1281,71 +1194,74 @@ cso_set_sampler_views(struct cso_context *ctx,
                       unsigned count,
                       struct pipe_sampler_view **views)
 {
-   struct sampler_info *info = &ctx->samplers[shader_stage];
-   unsigned i;
-   boolean any_change = FALSE;
+   if (shader_stage == PIPE_SHADER_FRAGMENT) {
+      unsigned i;
+      boolean any_change = FALSE;
 
-   /* reference new views */
-   for (i = 0; i < count; i++) {
-      any_change |= info->views[i] != views[i];
-      pipe_sampler_view_reference(&info->views[i], views[i]);
-   }
-   /* unref extra old views, if any */
-   for (; i < info->nr_views; i++) {
-      any_change |= info->views[i] != NULL;
-      pipe_sampler_view_reference(&info->views[i], NULL);
-   }
+      /* reference new views */
+      for (i = 0; i < count; i++) {
+         any_change |= ctx->fragment_views[i] != views[i];
+         pipe_sampler_view_reference(&ctx->fragment_views[i], views[i]);
+      }
+      /* unref extra old views, if any */
+      for (; i < ctx->nr_fragment_views; i++) {
+         any_change |= ctx->fragment_views[i] != NULL;
+         pipe_sampler_view_reference(&ctx->fragment_views[i], NULL);
+      }
 
-   /* bind the new sampler views */
-   if (any_change) {
-      ctx->pipe->set_sampler_views(ctx->pipe, shader_stage, 0,
-                                   MAX2(info->nr_views, count),
-                                   info->views);
-   }
+      /* bind the new sampler views */
+      if (any_change) {
+         ctx->pipe->set_sampler_views(ctx->pipe, shader_stage, 0,
+                                      MAX2(ctx->nr_fragment_views, count),
+                                      ctx->fragment_views);
+      }
 
-   info->nr_views = count;
+      ctx->nr_fragment_views = count;
+   }
+   else
+      ctx->pipe->set_sampler_views(ctx->pipe, shader_stage, 0, count, views);
 }
 
 
 void
-cso_save_sampler_views(struct cso_context *ctx, unsigned shader_stage)
+cso_save_fragment_sampler_views(struct cso_context *ctx)
 {
-   struct sampler_info *info = &ctx->samplers[shader_stage];
    unsigned i;
 
-   info->nr_views_saved = info->nr_views;
+   ctx->nr_fragment_views_saved = ctx->nr_fragment_views;
 
-   for (i = 0; i < info->nr_views; i++) {
-      assert(!info->views_saved[i]);
-      pipe_sampler_view_reference(&info->views_saved[i], info->views[i]);
+   for (i = 0; i < ctx->nr_fragment_views; i++) {
+      assert(!ctx->fragment_views_saved[i]);
+      pipe_sampler_view_reference(&ctx->fragment_views_saved[i],
+                                  ctx->fragment_views[i]);
    }
 }
 
 
 void
-cso_restore_sampler_views(struct cso_context *ctx, unsigned shader_stage)
+cso_restore_fragment_sampler_views(struct cso_context *ctx)
 {
-   struct sampler_info *info = &ctx->samplers[shader_stage];
-   unsigned i, nr_saved = info->nr_views_saved;
+   unsigned i, nr_saved = ctx->nr_fragment_views_saved;
    unsigned num;
 
    for (i = 0; i < nr_saved; i++) {
-      pipe_sampler_view_reference(&info->views[i], NULL);
+      pipe_sampler_view_reference(&ctx->fragment_views[i], NULL);
       /* move the reference from one pointer to another */
-      info->views[i] = info->views_saved[i];
-      info->views_saved[i] = NULL;
+      ctx->fragment_views[i] = ctx->fragment_views_saved[i];
+      ctx->fragment_views_saved[i] = NULL;
    }
-   for (; i < info->nr_views; i++) {
-      pipe_sampler_view_reference(&info->views[i], NULL);
+   for (; i < ctx->nr_fragment_views; i++) {
+      pipe_sampler_view_reference(&ctx->fragment_views[i], NULL);
    }
 
-   num = MAX2(info->nr_views, nr_saved);
+   num = MAX2(ctx->nr_fragment_views, nr_saved);
 
    /* bind the old/saved sampler views */
-   ctx->pipe->set_sampler_views(ctx->pipe, shader_stage, 0, num, info->views);
+   ctx->pipe->set_sampler_views(ctx->pipe, PIPE_SHADER_FRAGMENT, 0, num,
+                                ctx->fragment_views);
 
-   info->nr_views = nr_saved;
-   info->nr_views_saved = 0;
+   ctx->nr_fragment_views = nr_saved;
+   ctx->nr_fragment_views_saved = 0;
 }
 
 

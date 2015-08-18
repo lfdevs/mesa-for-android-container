@@ -59,7 +59,8 @@ lp_build_intrinsic(LLVMBuilderRef builder,
                    const char *name,
                    LLVMTypeRef ret_type,
                    LLVMValueRef *args,
-                   unsigned num_args);
+                   unsigned num_args,
+                   LLVMAttribute attr);
 
 
 LLVMValueRef

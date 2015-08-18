@@ -631,7 +631,7 @@ static void pend_present(struct NineSwapChain9 *This,
     return;
 }
 
-static INLINE HRESULT
+static inline HRESULT
 present( struct NineSwapChain9 *This,
          const RECT *pSourceRect,
          const RECT *pDestRect,
@@ -726,7 +726,7 @@ bypass_rendering:
         BOOL still_draw = FALSE;
         fence = swap_fences_see_front(This);
         if (fence) {
-            still_draw = !This->screen->fence_signalled(This->screen, fence);
+            still_draw = !This->screen->fence_finish(This->screen, fence, 0);
             This->screen->fence_reference(This->screen, &fence, NULL);
         }
         if (still_draw)

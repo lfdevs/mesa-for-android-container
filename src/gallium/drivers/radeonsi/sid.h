@@ -206,6 +206,398 @@
  * 6. COMMAND [29:22] | BYTE_COUNT [20:0]
  */
 
+
+#define R_000E4C_SRBM_STATUS2                                           0x000E4C
+#define   S_000E4C_SDMA_RQ_PENDING(x)                                 (((x) & 0x1) << 0)
+#define   G_000E4C_SDMA_RQ_PENDING(x)                                 (((x) >> 0) & 0x1)
+#define   C_000E4C_SDMA_RQ_PENDING                                    0xFFFFFFFE
+#define   S_000E4C_TST_RQ_PENDING(x)                                  (((x) & 0x1) << 1)
+#define   G_000E4C_TST_RQ_PENDING(x)                                  (((x) >> 1) & 0x1)
+#define   C_000E4C_TST_RQ_PENDING                                     0xFFFFFFFD
+#define   S_000E4C_SDMA1_RQ_PENDING(x)                                (((x) & 0x1) << 2)
+#define   G_000E4C_SDMA1_RQ_PENDING(x)                                (((x) >> 2) & 0x1)
+#define   C_000E4C_SDMA1_RQ_PENDING                                   0xFFFFFFFB
+#define   S_000E4C_VCE0_RQ_PENDING(x)                                 (((x) & 0x1) << 3)
+#define   G_000E4C_VCE0_RQ_PENDING(x)                                 (((x) >> 3) & 0x1)
+#define   C_000E4C_VCE0_RQ_PENDING                                    0xFFFFFFF7
+#define   S_000E4C_VP8_BUSY(x)                                        (((x) & 0x1) << 4)
+#define   G_000E4C_VP8_BUSY(x)                                        (((x) >> 4) & 0x1)
+#define   C_000E4C_VP8_BUSY                                           0xFFFFFFEF
+#define   S_000E4C_SDMA_BUSY(x)                                       (((x) & 0x1) << 5)
+#define   G_000E4C_SDMA_BUSY(x)                                       (((x) >> 5) & 0x1)
+#define   C_000E4C_SDMA_BUSY                                          0xFFFFFFDF
+#define   S_000E4C_SDMA1_BUSY(x)                                      (((x) & 0x1) << 6)
+#define   G_000E4C_SDMA1_BUSY(x)                                      (((x) >> 6) & 0x1)
+#define   C_000E4C_SDMA1_BUSY                                         0xFFFFFFBF
+#define   S_000E4C_VCE0_BUSY(x)                                       (((x) & 0x1) << 7)
+#define   G_000E4C_VCE0_BUSY(x)                                       (((x) >> 7) & 0x1)
+#define   C_000E4C_VCE0_BUSY                                          0xFFFFFF7F
+#define   S_000E4C_XDMA_BUSY(x)                                       (((x) & 0x1) << 8)
+#define   G_000E4C_XDMA_BUSY(x)                                       (((x) >> 8) & 0x1)
+#define   C_000E4C_XDMA_BUSY                                          0xFFFFFEFF
+#define   S_000E4C_CHUB_BUSY(x)                                       (((x) & 0x1) << 9)
+#define   G_000E4C_CHUB_BUSY(x)                                       (((x) >> 9) & 0x1)
+#define   C_000E4C_CHUB_BUSY                                          0xFFFFFDFF
+#define   S_000E4C_SDMA2_BUSY(x)                                      (((x) & 0x1) << 10)
+#define   G_000E4C_SDMA2_BUSY(x)                                      (((x) >> 10) & 0x1)
+#define   C_000E4C_SDMA2_BUSY                                         0xFFFFFBFF
+#define   S_000E4C_SDMA3_BUSY(x)                                      (((x) & 0x1) << 11)
+#define   G_000E4C_SDMA3_BUSY(x)                                      (((x) >> 11) & 0x1)
+#define   C_000E4C_SDMA3_BUSY                                         0xFFFFF7FF
+#define   S_000E4C_SAMSCP_BUSY(x)                                     (((x) & 0x1) << 12)
+#define   G_000E4C_SAMSCP_BUSY(x)                                     (((x) >> 12) & 0x1)
+#define   C_000E4C_SAMSCP_BUSY                                        0xFFFFEFFF
+#define   S_000E4C_ISP_BUSY(x)                                        (((x) & 0x1) << 13)
+#define   G_000E4C_ISP_BUSY(x)                                        (((x) >> 13) & 0x1)
+#define   C_000E4C_ISP_BUSY                                           0xFFFFDFFF
+#define   S_000E4C_VCE1_BUSY(x)                                       (((x) & 0x1) << 14)
+#define   G_000E4C_VCE1_BUSY(x)                                       (((x) >> 14) & 0x1)
+#define   C_000E4C_VCE1_BUSY                                          0xFFFFBFFF
+#define   S_000E4C_ODE_BUSY(x)                                        (((x) & 0x1) << 15)
+#define   G_000E4C_ODE_BUSY(x)                                        (((x) >> 15) & 0x1)
+#define   C_000E4C_ODE_BUSY                                           0xFFFF7FFF
+#define   S_000E4C_SDMA2_RQ_PENDING(x)                                (((x) & 0x1) << 16)
+#define   G_000E4C_SDMA2_RQ_PENDING(x)                                (((x) >> 16) & 0x1)
+#define   C_000E4C_SDMA2_RQ_PENDING                                   0xFFFEFFFF
+#define   S_000E4C_SDMA3_RQ_PENDING(x)                                (((x) & 0x1) << 17)
+#define   G_000E4C_SDMA3_RQ_PENDING(x)                                (((x) >> 17) & 0x1)
+#define   C_000E4C_SDMA3_RQ_PENDING                                   0xFFFDFFFF
+#define   S_000E4C_SAMSCP_RQ_PENDING(x)                               (((x) & 0x1) << 18)
+#define   G_000E4C_SAMSCP_RQ_PENDING(x)                               (((x) >> 18) & 0x1)
+#define   C_000E4C_SAMSCP_RQ_PENDING                                  0xFFFBFFFF
+#define   S_000E4C_ISP_RQ_PENDING(x)                                  (((x) & 0x1) << 19)
+#define   G_000E4C_ISP_RQ_PENDING(x)                                  (((x) >> 19) & 0x1)
+#define   C_000E4C_ISP_RQ_PENDING                                     0xFFF7FFFF
+#define   S_000E4C_VCE1_RQ_PENDING(x)                                 (((x) & 0x1) << 20)
+#define   G_000E4C_VCE1_RQ_PENDING(x)                                 (((x) >> 20) & 0x1)
+#define   C_000E4C_VCE1_RQ_PENDING                                    0xFFEFFFFF
+#define R_000E50_SRBM_STATUS                                            0x000E50
+#define   S_000E50_UVD_RQ_PENDING(x)                                  (((x) & 0x1) << 1)
+#define   G_000E50_UVD_RQ_PENDING(x)                                  (((x) >> 1) & 0x1)
+#define   C_000E50_UVD_RQ_PENDING                                     0xFFFFFFFD
+#define   S_000E50_SAMMSP_RQ_PENDING(x)                               (((x) & 0x1) << 2)
+#define   G_000E50_SAMMSP_RQ_PENDING(x)                               (((x) >> 2) & 0x1)
+#define   C_000E50_SAMMSP_RQ_PENDING                                  0xFFFFFFFB
+#define   S_000E50_ACP_RQ_PENDING(x)                                  (((x) & 0x1) << 3)
+#define   G_000E50_ACP_RQ_PENDING(x)                                  (((x) >> 3) & 0x1)
+#define   C_000E50_ACP_RQ_PENDING                                     0xFFFFFFF7
+#define   S_000E50_SMU_RQ_PENDING(x)                                  (((x) & 0x1) << 4)
+#define   G_000E50_SMU_RQ_PENDING(x)                                  (((x) >> 4) & 0x1)
+#define   C_000E50_SMU_RQ_PENDING                                     0xFFFFFFEF
+#define   S_000E50_GRBM_RQ_PENDING(x)                                 (((x) & 0x1) << 5)
+#define   G_000E50_GRBM_RQ_PENDING(x)                                 (((x) >> 5) & 0x1)
+#define   C_000E50_GRBM_RQ_PENDING                                    0xFFFFFFDF
+#define   S_000E50_HI_RQ_PENDING(x)                                   (((x) & 0x1) << 6)
+#define   G_000E50_HI_RQ_PENDING(x)                                   (((x) >> 6) & 0x1)
+#define   C_000E50_HI_RQ_PENDING                                      0xFFFFFFBF
+#define   S_000E50_VMC_BUSY(x)                                        (((x) & 0x1) << 8)
+#define   G_000E50_VMC_BUSY(x)                                        (((x) >> 8) & 0x1)
+#define   C_000E50_VMC_BUSY                                           0xFFFFFEFF
+#define   S_000E50_MCB_BUSY(x)                                        (((x) & 0x1) << 9)
+#define   G_000E50_MCB_BUSY(x)                                        (((x) >> 9) & 0x1)
+#define   C_000E50_MCB_BUSY                                           0xFFFFFDFF
+#define   S_000E50_MCB_NON_DISPLAY_BUSY(x)                            (((x) & 0x1) << 10)
+#define   G_000E50_MCB_NON_DISPLAY_BUSY(x)                            (((x) >> 10) & 0x1)
+#define   C_000E50_MCB_NON_DISPLAY_BUSY                               0xFFFFFBFF
+#define   S_000E50_MCC_BUSY(x)                                        (((x) & 0x1) << 11)
+#define   G_000E50_MCC_BUSY(x)                                        (((x) >> 11) & 0x1)
+#define   C_000E50_MCC_BUSY                                           0xFFFFF7FF
+#define   S_000E50_MCD_BUSY(x)                                        (((x) & 0x1) << 12)
+#define   G_000E50_MCD_BUSY(x)                                        (((x) >> 12) & 0x1)
+#define   C_000E50_MCD_BUSY                                           0xFFFFEFFF
+#define   S_000E50_VMC1_BUSY(x)                                       (((x) & 0x1) << 13)
+#define   G_000E50_VMC1_BUSY(x)                                       (((x) >> 13) & 0x1)
+#define   C_000E50_VMC1_BUSY                                          0xFFFFDFFF
+#define   S_000E50_SEM_BUSY(x)                                        (((x) & 0x1) << 14)
+#define   G_000E50_SEM_BUSY(x)                                        (((x) >> 14) & 0x1)
+#define   C_000E50_SEM_BUSY                                           0xFFFFBFFF
+#define   S_000E50_ACP_BUSY(x)                                        (((x) & 0x1) << 16)
+#define   G_000E50_ACP_BUSY(x)                                        (((x) >> 16) & 0x1)
+#define   C_000E50_ACP_BUSY                                           0xFFFEFFFF
+#define   S_000E50_IH_BUSY(x)                                         (((x) & 0x1) << 17)
+#define   G_000E50_IH_BUSY(x)                                         (((x) >> 17) & 0x1)
+#define   C_000E50_IH_BUSY                                            0xFFFDFFFF
+#define   S_000E50_UVD_BUSY(x)                                        (((x) & 0x1) << 19)
+#define   G_000E50_UVD_BUSY(x)                                        (((x) >> 19) & 0x1)
+#define   C_000E50_UVD_BUSY                                           0xFFF7FFFF
+#define   S_000E50_SAMMSP_BUSY(x)                                     (((x) & 0x1) << 20)
+#define   G_000E50_SAMMSP_BUSY(x)                                     (((x) >> 20) & 0x1)
+#define   C_000E50_SAMMSP_BUSY                                        0xFFEFFFFF
+#define   S_000E50_GCATCL2_BUSY(x)                                    (((x) & 0x1) << 21)
+#define   G_000E50_GCATCL2_BUSY(x)                                    (((x) >> 21) & 0x1)
+#define   C_000E50_GCATCL2_BUSY                                       0xFFDFFFFF
+#define   S_000E50_OSATCL2_BUSY(x)                                    (((x) & 0x1) << 22)
+#define   G_000E50_OSATCL2_BUSY(x)                                    (((x) >> 22) & 0x1)
+#define   C_000E50_OSATCL2_BUSY                                       0xFFBFFFFF
+#define   S_000E50_BIF_BUSY(x)                                        (((x) & 0x1) << 29)
+#define   G_000E50_BIF_BUSY(x)                                        (((x) >> 29) & 0x1)
+#define   C_000E50_BIF_BUSY                                           0xDFFFFFFF
+#define R_000E54_SRBM_STATUS3                                           0x000E54
+#define   S_000E54_MCC0_BUSY(x)                                       (((x) & 0x1) << 0)
+#define   G_000E54_MCC0_BUSY(x)                                       (((x) >> 0) & 0x1)
+#define   C_000E54_MCC0_BUSY                                          0xFFFFFFFE
+#define   S_000E54_MCC1_BUSY(x)                                       (((x) & 0x1) << 1)
+#define   G_000E54_MCC1_BUSY(x)                                       (((x) >> 1) & 0x1)
+#define   C_000E54_MCC1_BUSY                                          0xFFFFFFFD
+#define   S_000E54_MCC2_BUSY(x)                                       (((x) & 0x1) << 2)
+#define   G_000E54_MCC2_BUSY(x)                                       (((x) >> 2) & 0x1)
+#define   C_000E54_MCC2_BUSY                                          0xFFFFFFFB
+#define   S_000E54_MCC3_BUSY(x)                                       (((x) & 0x1) << 3)
+#define   G_000E54_MCC3_BUSY(x)                                       (((x) >> 3) & 0x1)
+#define   C_000E54_MCC3_BUSY                                          0xFFFFFFF7
+#define   S_000E54_MCC4_BUSY(x)                                       (((x) & 0x1) << 4)
+#define   G_000E54_MCC4_BUSY(x)                                       (((x) >> 4) & 0x1)
+#define   C_000E54_MCC4_BUSY                                          0xFFFFFFEF
+#define   S_000E54_MCC5_BUSY(x)                                       (((x) & 0x1) << 5)
+#define   G_000E54_MCC5_BUSY(x)                                       (((x) >> 5) & 0x1)
+#define   C_000E54_MCC5_BUSY                                          0xFFFFFFDF
+#define   S_000E54_MCC6_BUSY(x)                                       (((x) & 0x1) << 6)
+#define   G_000E54_MCC6_BUSY(x)                                       (((x) >> 6) & 0x1)
+#define   C_000E54_MCC6_BUSY                                          0xFFFFFFBF
+#define   S_000E54_MCC7_BUSY(x)                                       (((x) & 0x1) << 7)
+#define   G_000E54_MCC7_BUSY(x)                                       (((x) >> 7) & 0x1)
+#define   C_000E54_MCC7_BUSY                                          0xFFFFFF7F
+#define   S_000E54_MCD0_BUSY(x)                                       (((x) & 0x1) << 8)
+#define   G_000E54_MCD0_BUSY(x)                                       (((x) >> 8) & 0x1)
+#define   C_000E54_MCD0_BUSY                                          0xFFFFFEFF
+#define   S_000E54_MCD1_BUSY(x)                                       (((x) & 0x1) << 9)
+#define   G_000E54_MCD1_BUSY(x)                                       (((x) >> 9) & 0x1)
+#define   C_000E54_MCD1_BUSY                                          0xFFFFFDFF
+#define   S_000E54_MCD2_BUSY(x)                                       (((x) & 0x1) << 10)
+#define   G_000E54_MCD2_BUSY(x)                                       (((x) >> 10) & 0x1)
+#define   C_000E54_MCD2_BUSY                                          0xFFFFFBFF
+#define   S_000E54_MCD3_BUSY(x)                                       (((x) & 0x1) << 11)
+#define   G_000E54_MCD3_BUSY(x)                                       (((x) >> 11) & 0x1)
+#define   C_000E54_MCD3_BUSY                                          0xFFFFF7FF
+#define   S_000E54_MCD4_BUSY(x)                                       (((x) & 0x1) << 12)
+#define   G_000E54_MCD4_BUSY(x)                                       (((x) >> 12) & 0x1)
+#define   C_000E54_MCD4_BUSY                                          0xFFFFEFFF
+#define   S_000E54_MCD5_BUSY(x)                                       (((x) & 0x1) << 13)
+#define   G_000E54_MCD5_BUSY(x)                                       (((x) >> 13) & 0x1)
+#define   C_000E54_MCD5_BUSY                                          0xFFFFDFFF
+#define   S_000E54_MCD6_BUSY(x)                                       (((x) & 0x1) << 14)
+#define   G_000E54_MCD6_BUSY(x)                                       (((x) >> 14) & 0x1)
+#define   C_000E54_MCD6_BUSY                                          0xFFFFBFFF
+#define   S_000E54_MCD7_BUSY(x)                                       (((x) & 0x1) << 15)
+#define   G_000E54_MCD7_BUSY(x)                                       (((x) >> 15) & 0x1)
+#define   C_000E54_MCD7_BUSY                                          0xFFFF7FFF
+#define R_00D034_SDMA0_STATUS_REG                                       0x00D034
+#define   S_00D034_IDLE(x)                                            (((x) & 0x1) << 0)
+#define   G_00D034_IDLE(x)                                            (((x) >> 0) & 0x1)
+#define   C_00D034_IDLE                                               0xFFFFFFFE
+#define   S_00D034_REG_IDLE(x)                                        (((x) & 0x1) << 1)
+#define   G_00D034_REG_IDLE(x)                                        (((x) >> 1) & 0x1)
+#define   C_00D034_REG_IDLE                                           0xFFFFFFFD
+#define   S_00D034_RB_EMPTY(x)                                        (((x) & 0x1) << 2)
+#define   G_00D034_RB_EMPTY(x)                                        (((x) >> 2) & 0x1)
+#define   C_00D034_RB_EMPTY                                           0xFFFFFFFB
+#define   S_00D034_RB_FULL(x)                                         (((x) & 0x1) << 3)
+#define   G_00D034_RB_FULL(x)                                         (((x) >> 3) & 0x1)
+#define   C_00D034_RB_FULL                                            0xFFFFFFF7
+#define   S_00D034_RB_CMD_IDLE(x)                                     (((x) & 0x1) << 4)
+#define   G_00D034_RB_CMD_IDLE(x)                                     (((x) >> 4) & 0x1)
+#define   C_00D034_RB_CMD_IDLE                                        0xFFFFFFEF
+#define   S_00D034_RB_CMD_FULL(x)                                     (((x) & 0x1) << 5)
+#define   G_00D034_RB_CMD_FULL(x)                                     (((x) >> 5) & 0x1)
+#define   C_00D034_RB_CMD_FULL                                        0xFFFFFFDF
+#define   S_00D034_IB_CMD_IDLE(x)                                     (((x) & 0x1) << 6)
+#define   G_00D034_IB_CMD_IDLE(x)                                     (((x) >> 6) & 0x1)
+#define   C_00D034_IB_CMD_IDLE                                        0xFFFFFFBF
+#define   S_00D034_IB_CMD_FULL(x)                                     (((x) & 0x1) << 7)
+#define   G_00D034_IB_CMD_FULL(x)                                     (((x) >> 7) & 0x1)
+#define   C_00D034_IB_CMD_FULL                                        0xFFFFFF7F
+#define   S_00D034_BLOCK_IDLE(x)                                      (((x) & 0x1) << 8)
+#define   G_00D034_BLOCK_IDLE(x)                                      (((x) >> 8) & 0x1)
+#define   C_00D034_BLOCK_IDLE                                         0xFFFFFEFF
+#define   S_00D034_INSIDE_IB(x)                                       (((x) & 0x1) << 9)
+#define   G_00D034_INSIDE_IB(x)                                       (((x) >> 9) & 0x1)
+#define   C_00D034_INSIDE_IB                                          0xFFFFFDFF
+#define   S_00D034_EX_IDLE(x)                                         (((x) & 0x1) << 10)
+#define   G_00D034_EX_IDLE(x)                                         (((x) >> 10) & 0x1)
+#define   C_00D034_EX_IDLE                                            0xFFFFFBFF
+#define   S_00D034_EX_IDLE_POLL_TIMER_EXPIRE(x)                       (((x) & 0x1) << 11)
+#define   G_00D034_EX_IDLE_POLL_TIMER_EXPIRE(x)                       (((x) >> 11) & 0x1)
+#define   C_00D034_EX_IDLE_POLL_TIMER_EXPIRE                          0xFFFFF7FF
+#define   S_00D034_PACKET_READY(x)                                    (((x) & 0x1) << 12)
+#define   G_00D034_PACKET_READY(x)                                    (((x) >> 12) & 0x1)
+#define   C_00D034_PACKET_READY                                       0xFFFFEFFF
+#define   S_00D034_MC_WR_IDLE(x)                                      (((x) & 0x1) << 13)
+#define   G_00D034_MC_WR_IDLE(x)                                      (((x) >> 13) & 0x1)
+#define   C_00D034_MC_WR_IDLE                                         0xFFFFDFFF
+#define   S_00D034_SRBM_IDLE(x)                                       (((x) & 0x1) << 14)
+#define   G_00D034_SRBM_IDLE(x)                                       (((x) >> 14) & 0x1)
+#define   C_00D034_SRBM_IDLE                                          0xFFFFBFFF
+#define   S_00D034_CONTEXT_EMPTY(x)                                   (((x) & 0x1) << 15)
+#define   G_00D034_CONTEXT_EMPTY(x)                                   (((x) >> 15) & 0x1)
+#define   C_00D034_CONTEXT_EMPTY                                      0xFFFF7FFF
+#define   S_00D034_DELTA_RPTR_FULL(x)                                 (((x) & 0x1) << 16)
+#define   G_00D034_DELTA_RPTR_FULL(x)                                 (((x) >> 16) & 0x1)
+#define   C_00D034_DELTA_RPTR_FULL                                    0xFFFEFFFF
+#define   S_00D034_RB_MC_RREQ_IDLE(x)                                 (((x) & 0x1) << 17)
+#define   G_00D034_RB_MC_RREQ_IDLE(x)                                 (((x) >> 17) & 0x1)
+#define   C_00D034_RB_MC_RREQ_IDLE                                    0xFFFDFFFF
+#define   S_00D034_IB_MC_RREQ_IDLE(x)                                 (((x) & 0x1) << 18)
+#define   G_00D034_IB_MC_RREQ_IDLE(x)                                 (((x) >> 18) & 0x1)
+#define   C_00D034_IB_MC_RREQ_IDLE                                    0xFFFBFFFF
+#define   S_00D034_MC_RD_IDLE(x)                                      (((x) & 0x1) << 19)
+#define   G_00D034_MC_RD_IDLE(x)                                      (((x) >> 19) & 0x1)
+#define   C_00D034_MC_RD_IDLE                                         0xFFF7FFFF
+#define   S_00D034_DELTA_RPTR_EMPTY(x)                                (((x) & 0x1) << 20)
+#define   G_00D034_DELTA_RPTR_EMPTY(x)                                (((x) >> 20) & 0x1)
+#define   C_00D034_DELTA_RPTR_EMPTY                                   0xFFEFFFFF
+#define   S_00D034_MC_RD_RET_STALL(x)                                 (((x) & 0x1) << 21)
+#define   G_00D034_MC_RD_RET_STALL(x)                                 (((x) >> 21) & 0x1)
+#define   C_00D034_MC_RD_RET_STALL                                    0xFFDFFFFF
+#define   S_00D034_MC_RD_NO_POLL_IDLE(x)                              (((x) & 0x1) << 22)
+#define   G_00D034_MC_RD_NO_POLL_IDLE(x)                              (((x) >> 22) & 0x1)
+#define   C_00D034_MC_RD_NO_POLL_IDLE                                 0xFFBFFFFF
+#define   S_00D034_PREV_CMD_IDLE(x)                                   (((x) & 0x1) << 25)
+#define   G_00D034_PREV_CMD_IDLE(x)                                   (((x) >> 25) & 0x1)
+#define   C_00D034_PREV_CMD_IDLE                                      0xFDFFFFFF
+#define   S_00D034_SEM_IDLE(x)                                        (((x) & 0x1) << 26)
+#define   G_00D034_SEM_IDLE(x)                                        (((x) >> 26) & 0x1)
+#define   C_00D034_SEM_IDLE                                           0xFBFFFFFF
+#define   S_00D034_SEM_REQ_STALL(x)                                   (((x) & 0x1) << 27)
+#define   G_00D034_SEM_REQ_STALL(x)                                   (((x) >> 27) & 0x1)
+#define   C_00D034_SEM_REQ_STALL                                      0xF7FFFFFF
+#define   S_00D034_SEM_RESP_STATE(x)                                  (((x) & 0x03) << 28)
+#define   G_00D034_SEM_RESP_STATE(x)                                  (((x) >> 28) & 0x03)
+#define   C_00D034_SEM_RESP_STATE                                     0xCFFFFFFF
+#define   S_00D034_INT_IDLE(x)                                        (((x) & 0x1) << 30)
+#define   G_00D034_INT_IDLE(x)                                        (((x) >> 30) & 0x1)
+#define   C_00D034_INT_IDLE                                           0xBFFFFFFF
+#define   S_00D034_INT_REQ_STALL(x)                                   (((x) & 0x1) << 31)
+#define   G_00D034_INT_REQ_STALL(x)                                   (((x) >> 31) & 0x1)
+#define   C_00D034_INT_REQ_STALL                                      0x7FFFFFFF
+#define R_00D834_SDMA1_STATUS_REG                                       0x00D834
+#define R_008008_GRBM_STATUS2                                           0x008008
+#define   S_008008_ME0PIPE1_CMDFIFO_AVAIL(x)                          (((x) & 0x0F) << 0)
+#define   G_008008_ME0PIPE1_CMDFIFO_AVAIL(x)                          (((x) >> 0) & 0x0F)
+#define   C_008008_ME0PIPE1_CMDFIFO_AVAIL                             0xFFFFFFF0
+#define   S_008008_ME0PIPE1_CF_RQ_PENDING(x)                          (((x) & 0x1) << 4)
+#define   G_008008_ME0PIPE1_CF_RQ_PENDING(x)                          (((x) >> 4) & 0x1)
+#define   C_008008_ME0PIPE1_CF_RQ_PENDING                             0xFFFFFFEF
+#define   S_008008_ME0PIPE1_PF_RQ_PENDING(x)                          (((x) & 0x1) << 5)
+#define   G_008008_ME0PIPE1_PF_RQ_PENDING(x)                          (((x) >> 5) & 0x1)
+#define   C_008008_ME0PIPE1_PF_RQ_PENDING                             0xFFFFFFDF
+#define   S_008008_ME1PIPE0_RQ_PENDING(x)                             (((x) & 0x1) << 6)
+#define   G_008008_ME1PIPE0_RQ_PENDING(x)                             (((x) >> 6) & 0x1)
+#define   C_008008_ME1PIPE0_RQ_PENDING                                0xFFFFFFBF
+#define   S_008008_ME1PIPE1_RQ_PENDING(x)                             (((x) & 0x1) << 7)
+#define   G_008008_ME1PIPE1_RQ_PENDING(x)                             (((x) >> 7) & 0x1)
+#define   C_008008_ME1PIPE1_RQ_PENDING                                0xFFFFFF7F
+#define   S_008008_ME1PIPE2_RQ_PENDING(x)                             (((x) & 0x1) << 8)
+#define   G_008008_ME1PIPE2_RQ_PENDING(x)                             (((x) >> 8) & 0x1)
+#define   C_008008_ME1PIPE2_RQ_PENDING                                0xFFFFFEFF
+#define   S_008008_ME1PIPE3_RQ_PENDING(x)                             (((x) & 0x1) << 9)
+#define   G_008008_ME1PIPE3_RQ_PENDING(x)                             (((x) >> 9) & 0x1)
+#define   C_008008_ME1PIPE3_RQ_PENDING                                0xFFFFFDFF
+#define   S_008008_ME2PIPE0_RQ_PENDING(x)                             (((x) & 0x1) << 10)
+#define   G_008008_ME2PIPE0_RQ_PENDING(x)                             (((x) >> 10) & 0x1)
+#define   C_008008_ME2PIPE0_RQ_PENDING                                0xFFFFFBFF
+#define   S_008008_ME2PIPE1_RQ_PENDING(x)                             (((x) & 0x1) << 11)
+#define   G_008008_ME2PIPE1_RQ_PENDING(x)                             (((x) >> 11) & 0x1)
+#define   C_008008_ME2PIPE1_RQ_PENDING                                0xFFFFF7FF
+#define   S_008008_ME2PIPE2_RQ_PENDING(x)                             (((x) & 0x1) << 12)
+#define   G_008008_ME2PIPE2_RQ_PENDING(x)                             (((x) >> 12) & 0x1)
+#define   C_008008_ME2PIPE2_RQ_PENDING                                0xFFFFEFFF
+#define   S_008008_ME2PIPE3_RQ_PENDING(x)                             (((x) & 0x1) << 13)
+#define   G_008008_ME2PIPE3_RQ_PENDING(x)                             (((x) >> 13) & 0x1)
+#define   C_008008_ME2PIPE3_RQ_PENDING                                0xFFFFDFFF
+#define   S_008008_RLC_RQ_PENDING(x)                                  (((x) & 0x1) << 14)
+#define   G_008008_RLC_RQ_PENDING(x)                                  (((x) >> 14) & 0x1)
+#define   C_008008_RLC_RQ_PENDING                                     0xFFFFBFFF
+#define   S_008008_RLC_BUSY(x)                                        (((x) & 0x1) << 24)
+#define   G_008008_RLC_BUSY(x)                                        (((x) >> 24) & 0x1)
+#define   C_008008_RLC_BUSY                                           0xFEFFFFFF
+#define   S_008008_TC_BUSY(x)                                         (((x) & 0x1) << 25)
+#define   G_008008_TC_BUSY(x)                                         (((x) >> 25) & 0x1)
+#define   C_008008_TC_BUSY                                            0xFDFFFFFF
+#define   S_008008_TCC_CC_RESIDENT(x)                                 (((x) & 0x1) << 26)
+#define   G_008008_TCC_CC_RESIDENT(x)                                 (((x) >> 26) & 0x1)
+#define   C_008008_TCC_CC_RESIDENT                                    0xFBFFFFFF
+#define   S_008008_CPF_BUSY(x)                                        (((x) & 0x1) << 28)
+#define   G_008008_CPF_BUSY(x)                                        (((x) >> 28) & 0x1)
+#define   C_008008_CPF_BUSY                                           0xEFFFFFFF
+#define   S_008008_CPC_BUSY(x)                                        (((x) & 0x1) << 29)
+#define   G_008008_CPC_BUSY(x)                                        (((x) >> 29) & 0x1)
+#define   C_008008_CPC_BUSY                                           0xDFFFFFFF
+#define   S_008008_CPG_BUSY(x)                                        (((x) & 0x1) << 30)
+#define   G_008008_CPG_BUSY(x)                                        (((x) >> 30) & 0x1)
+#define   C_008008_CPG_BUSY                                           0xBFFFFFFF
+#define R_008010_GRBM_STATUS                                            0x008010
+#define   S_008010_ME0PIPE0_CMDFIFO_AVAIL(x)                          (((x) & 0x0F) << 0)
+#define   G_008010_ME0PIPE0_CMDFIFO_AVAIL(x)                          (((x) >> 0) & 0x0F)
+#define   C_008010_ME0PIPE0_CMDFIFO_AVAIL                             0xFFFFFFF0
+#define   S_008010_SRBM_RQ_PENDING(x)                                 (((x) & 0x1) << 5)
+#define   G_008010_SRBM_RQ_PENDING(x)                                 (((x) >> 5) & 0x1)
+#define   C_008010_SRBM_RQ_PENDING                                    0xFFFFFFDF
+#define   S_008010_ME0PIPE0_CF_RQ_PENDING(x)                          (((x) & 0x1) << 7)
+#define   G_008010_ME0PIPE0_CF_RQ_PENDING(x)                          (((x) >> 7) & 0x1)
+#define   C_008010_ME0PIPE0_CF_RQ_PENDING                             0xFFFFFF7F
+#define   S_008010_ME0PIPE0_PF_RQ_PENDING(x)                          (((x) & 0x1) << 8)
+#define   G_008010_ME0PIPE0_PF_RQ_PENDING(x)                          (((x) >> 8) & 0x1)
+#define   C_008010_ME0PIPE0_PF_RQ_PENDING                             0xFFFFFEFF
+#define   S_008010_GDS_DMA_RQ_PENDING(x)                              (((x) & 0x1) << 9)
+#define   G_008010_GDS_DMA_RQ_PENDING(x)                              (((x) >> 9) & 0x1)
+#define   C_008010_GDS_DMA_RQ_PENDING                                 0xFFFFFDFF
+#define   S_008010_DB_CLEAN(x)                                        (((x) & 0x1) << 12)
+#define   G_008010_DB_CLEAN(x)                                        (((x) >> 12) & 0x1)
+#define   C_008010_DB_CLEAN                                           0xFFFFEFFF
+#define   S_008010_CB_CLEAN(x)                                        (((x) & 0x1) << 13)
+#define   G_008010_CB_CLEAN(x)                                        (((x) >> 13) & 0x1)
+#define   C_008010_CB_CLEAN                                           0xFFFFDFFF
+#define   S_008010_TA_BUSY(x)                                         (((x) & 0x1) << 14)
+#define   G_008010_TA_BUSY(x)                                         (((x) >> 14) & 0x1)
+#define   C_008010_TA_BUSY                                            0xFFFFBFFF
+#define   S_008010_GDS_BUSY(x)                                        (((x) & 0x1) << 15)
+#define   G_008010_GDS_BUSY(x)                                        (((x) >> 15) & 0x1)
+#define   C_008010_GDS_BUSY                                           0xFFFF7FFF
+#define   S_008010_WD_BUSY_NO_DMA(x)                                  (((x) & 0x1) << 16)
+#define   G_008010_WD_BUSY_NO_DMA(x)                                  (((x) >> 16) & 0x1)
+#define   C_008010_WD_BUSY_NO_DMA                                     0xFFFEFFFF
+#define   S_008010_VGT_BUSY(x)                                        (((x) & 0x1) << 17)
+#define   G_008010_VGT_BUSY(x)                                        (((x) >> 17) & 0x1)
+#define   C_008010_VGT_BUSY                                           0xFFFDFFFF
+#define   S_008010_IA_BUSY_NO_DMA(x)                                  (((x) & 0x1) << 18)
+#define   G_008010_IA_BUSY_NO_DMA(x)                                  (((x) >> 18) & 0x1)
+#define   C_008010_IA_BUSY_NO_DMA                                     0xFFFBFFFF
+#define   S_008010_IA_BUSY(x)                                         (((x) & 0x1) << 19)
+#define   G_008010_IA_BUSY(x)                                         (((x) >> 19) & 0x1)
+#define   C_008010_IA_BUSY                                            0xFFF7FFFF
+#define   S_008010_SX_BUSY(x)                                         (((x) & 0x1) << 20)
+#define   G_008010_SX_BUSY(x)                                         (((x) >> 20) & 0x1)
+#define   C_008010_SX_BUSY                                            0xFFEFFFFF
+#define   S_008010_WD_BUSY(x)                                         (((x) & 0x1) << 21)
+#define   G_008010_WD_BUSY(x)                                         (((x) >> 21) & 0x1)
+#define   C_008010_WD_BUSY                                            0xFFDFFFFF
+#define   S_008010_SPI_BUSY(x)                                        (((x) & 0x1) << 22)
+#define   G_008010_SPI_BUSY(x)                                        (((x) >> 22) & 0x1)
+#define   C_008010_SPI_BUSY                                           0xFFBFFFFF
+#define   S_008010_BCI_BUSY(x)                                        (((x) & 0x1) << 23)
+#define   G_008010_BCI_BUSY(x)                                        (((x) >> 23) & 0x1)
+#define   C_008010_BCI_BUSY                                           0xFF7FFFFF
+#define   S_008010_SC_BUSY(x)                                         (((x) & 0x1) << 24)
+#define   G_008010_SC_BUSY(x)                                         (((x) >> 24) & 0x1)
+#define   C_008010_SC_BUSY                                            0xFEFFFFFF
+#define   S_008010_PA_BUSY(x)                                         (((x) & 0x1) << 25)
+#define   G_008010_PA_BUSY(x)                                         (((x) >> 25) & 0x1)
+#define   C_008010_PA_BUSY                                            0xFDFFFFFF
+#define   S_008010_DB_BUSY(x)                                         (((x) & 0x1) << 26)
+#define   G_008010_DB_BUSY(x)                                         (((x) >> 26) & 0x1)
+#define   C_008010_DB_BUSY                                            0xFBFFFFFF
+#define   S_008010_CP_COHERENCY_BUSY(x)                               (((x) & 0x1) << 28)
+#define   G_008010_CP_COHERENCY_BUSY(x)                               (((x) >> 28) & 0x1)
+#define   C_008010_CP_COHERENCY_BUSY                                  0xEFFFFFFF
+#define   S_008010_CP_BUSY(x)                                         (((x) & 0x1) << 29)
+#define   G_008010_CP_BUSY(x)                                         (((x) >> 29) & 0x1)
+#define   C_008010_CP_BUSY                                            0xDFFFFFFF
+#define   S_008010_CB_BUSY(x)                                         (((x) & 0x1) << 30)
+#define   G_008010_CB_BUSY(x)                                         (((x) >> 30) & 0x1)
+#define   C_008010_CB_BUSY                                            0xBFFFFFFF
+#define   S_008010_GUI_ACTIVE(x)                                      (((x) & 0x1) << 31)
+#define   G_008010_GUI_ACTIVE(x)                                      (((x) >> 31) & 0x1)
+#define   C_008010_GUI_ACTIVE                                         0x7FFFFFFF
 #define GRBM_GFX_INDEX                                                  0x802C
 #define         INSTANCE_INDEX(x)                                     ((x) << 0)
 #define         SH_INDEX(x)                                           ((x) << 8)
@@ -276,12 +668,155 @@
 #define   C_0085F0_SH_ICACHE_ACTION_ENA                               0xDFFFFFFF
 #define R_0085F4_CP_COHER_SIZE                                          0x0085F4
 #define R_0085F8_CP_COHER_BASE                                          0x0085F8
-
+#define R_008014_GRBM_STATUS_SE0                                        0x008014
+#define   S_008014_DB_CLEAN(x)                                        (((x) & 0x1) << 1)
+#define   G_008014_DB_CLEAN(x)                                        (((x) >> 1) & 0x1)
+#define   C_008014_DB_CLEAN                                           0xFFFFFFFD
+#define   S_008014_CB_CLEAN(x)                                        (((x) & 0x1) << 2)
+#define   G_008014_CB_CLEAN(x)                                        (((x) >> 2) & 0x1)
+#define   C_008014_CB_CLEAN                                           0xFFFFFFFB
+#define   S_008014_BCI_BUSY(x)                                        (((x) & 0x1) << 22)
+#define   G_008014_BCI_BUSY(x)                                        (((x) >> 22) & 0x1)
+#define   C_008014_BCI_BUSY                                           0xFFBFFFFF
+#define   S_008014_VGT_BUSY(x)                                        (((x) & 0x1) << 23)
+#define   G_008014_VGT_BUSY(x)                                        (((x) >> 23) & 0x1)
+#define   C_008014_VGT_BUSY                                           0xFF7FFFFF
+#define   S_008014_PA_BUSY(x)                                         (((x) & 0x1) << 24)
+#define   G_008014_PA_BUSY(x)                                         (((x) >> 24) & 0x1)
+#define   C_008014_PA_BUSY                                            0xFEFFFFFF
+#define   S_008014_TA_BUSY(x)                                         (((x) & 0x1) << 25)
+#define   G_008014_TA_BUSY(x)                                         (((x) >> 25) & 0x1)
+#define   C_008014_TA_BUSY                                            0xFDFFFFFF
+#define   S_008014_SX_BUSY(x)                                         (((x) & 0x1) << 26)
+#define   G_008014_SX_BUSY(x)                                         (((x) >> 26) & 0x1)
+#define   C_008014_SX_BUSY                                            0xFBFFFFFF
+#define   S_008014_SPI_BUSY(x)                                        (((x) & 0x1) << 27)
+#define   G_008014_SPI_BUSY(x)                                        (((x) >> 27) & 0x1)
+#define   C_008014_SPI_BUSY                                           0xF7FFFFFF
+#define   S_008014_SC_BUSY(x)                                         (((x) & 0x1) << 29)
+#define   G_008014_SC_BUSY(x)                                         (((x) >> 29) & 0x1)
+#define   C_008014_SC_BUSY                                            0xDFFFFFFF
+#define   S_008014_DB_BUSY(x)                                         (((x) & 0x1) << 30)
+#define   G_008014_DB_BUSY(x)                                         (((x) >> 30) & 0x1)
+#define   C_008014_DB_BUSY                                            0xBFFFFFFF
+#define   S_008014_CB_BUSY(x)                                         (((x) & 0x1) << 31)
+#define   G_008014_CB_BUSY(x)                                         (((x) >> 31) & 0x1)
+#define   C_008014_CB_BUSY                                            0x7FFFFFFF
+#define R_008018_GRBM_STATUS_SE1                                        0x008018
+#define   S_008018_DB_CLEAN(x)                                        (((x) & 0x1) << 1)
+#define   G_008018_DB_CLEAN(x)                                        (((x) >> 1) & 0x1)
+#define   C_008018_DB_CLEAN                                           0xFFFFFFFD
+#define   S_008018_CB_CLEAN(x)                                        (((x) & 0x1) << 2)
+#define   G_008018_CB_CLEAN(x)                                        (((x) >> 2) & 0x1)
+#define   C_008018_CB_CLEAN                                           0xFFFFFFFB
+#define   S_008018_BCI_BUSY(x)                                        (((x) & 0x1) << 22)
+#define   G_008018_BCI_BUSY(x)                                        (((x) >> 22) & 0x1)
+#define   C_008018_BCI_BUSY                                           0xFFBFFFFF
+#define   S_008018_VGT_BUSY(x)                                        (((x) & 0x1) << 23)
+#define   G_008018_VGT_BUSY(x)                                        (((x) >> 23) & 0x1)
+#define   C_008018_VGT_BUSY                                           0xFF7FFFFF
+#define   S_008018_PA_BUSY(x)                                         (((x) & 0x1) << 24)
+#define   G_008018_PA_BUSY(x)                                         (((x) >> 24) & 0x1)
+#define   C_008018_PA_BUSY                                            0xFEFFFFFF
+#define   S_008018_TA_BUSY(x)                                         (((x) & 0x1) << 25)
+#define   G_008018_TA_BUSY(x)                                         (((x) >> 25) & 0x1)
+#define   C_008018_TA_BUSY                                            0xFDFFFFFF
+#define   S_008018_SX_BUSY(x)                                         (((x) & 0x1) << 26)
+#define   G_008018_SX_BUSY(x)                                         (((x) >> 26) & 0x1)
+#define   C_008018_SX_BUSY                                            0xFBFFFFFF
+#define   S_008018_SPI_BUSY(x)                                        (((x) & 0x1) << 27)
+#define   G_008018_SPI_BUSY(x)                                        (((x) >> 27) & 0x1)
+#define   C_008018_SPI_BUSY                                           0xF7FFFFFF
+#define   S_008018_SC_BUSY(x)                                         (((x) & 0x1) << 29)
+#define   G_008018_SC_BUSY(x)                                         (((x) >> 29) & 0x1)
+#define   C_008018_SC_BUSY                                            0xDFFFFFFF
+#define   S_008018_DB_BUSY(x)                                         (((x) & 0x1) << 30)
+#define   G_008018_DB_BUSY(x)                                         (((x) >> 30) & 0x1)
+#define   C_008018_DB_BUSY                                            0xBFFFFFFF
+#define   S_008018_CB_BUSY(x)                                         (((x) & 0x1) << 31)
+#define   G_008018_CB_BUSY(x)                                         (((x) >> 31) & 0x1)
+#define   C_008018_CB_BUSY                                            0x7FFFFFFF
+#define R_008038_GRBM_STATUS_SE2                                        0x008038
+#define   S_008038_DB_CLEAN(x)                                        (((x) & 0x1) << 1)
+#define   G_008038_DB_CLEAN(x)                                        (((x) >> 1) & 0x1)
+#define   C_008038_DB_CLEAN                                           0xFFFFFFFD
+#define   S_008038_CB_CLEAN(x)                                        (((x) & 0x1) << 2)
+#define   G_008038_CB_CLEAN(x)                                        (((x) >> 2) & 0x1)
+#define   C_008038_CB_CLEAN                                           0xFFFFFFFB
+#define   S_008038_BCI_BUSY(x)                                        (((x) & 0x1) << 22)
+#define   G_008038_BCI_BUSY(x)                                        (((x) >> 22) & 0x1)
+#define   C_008038_BCI_BUSY                                           0xFFBFFFFF
+#define   S_008038_VGT_BUSY(x)                                        (((x) & 0x1) << 23)
+#define   G_008038_VGT_BUSY(x)                                        (((x) >> 23) & 0x1)
+#define   C_008038_VGT_BUSY                                           0xFF7FFFFF
+#define   S_008038_PA_BUSY(x)                                         (((x) & 0x1) << 24)
+#define   G_008038_PA_BUSY(x)                                         (((x) >> 24) & 0x1)
+#define   C_008038_PA_BUSY                                            0xFEFFFFFF
+#define   S_008038_TA_BUSY(x)                                         (((x) & 0x1) << 25)
+#define   G_008038_TA_BUSY(x)                                         (((x) >> 25) & 0x1)
+#define   C_008038_TA_BUSY                                            0xFDFFFFFF
+#define   S_008038_SX_BUSY(x)                                         (((x) & 0x1) << 26)
+#define   G_008038_SX_BUSY(x)                                         (((x) >> 26) & 0x1)
+#define   C_008038_SX_BUSY                                            0xFBFFFFFF
+#define   S_008038_SPI_BUSY(x)                                        (((x) & 0x1) << 27)
+#define   G_008038_SPI_BUSY(x)                                        (((x) >> 27) & 0x1)
+#define   C_008038_SPI_BUSY                                           0xF7FFFFFF
+#define   S_008038_SC_BUSY(x)                                         (((x) & 0x1) << 29)
+#define   G_008038_SC_BUSY(x)                                         (((x) >> 29) & 0x1)
+#define   C_008038_SC_BUSY                                            0xDFFFFFFF
+#define   S_008038_DB_BUSY(x)                                         (((x) & 0x1) << 30)
+#define   G_008038_DB_BUSY(x)                                         (((x) >> 30) & 0x1)
+#define   C_008038_DB_BUSY                                            0xBFFFFFFF
+#define   S_008038_CB_BUSY(x)                                         (((x) & 0x1) << 31)
+#define   G_008038_CB_BUSY(x)                                         (((x) >> 31) & 0x1)
+#define   C_008038_CB_BUSY                                            0x7FFFFFFF
+#define R_00803C_GRBM_STATUS_SE3                                        0x00803C
+#define   S_00803C_DB_CLEAN(x)                                        (((x) & 0x1) << 1)
+#define   G_00803C_DB_CLEAN(x)                                        (((x) >> 1) & 0x1)
+#define   C_00803C_DB_CLEAN                                           0xFFFFFFFD
+#define   S_00803C_CB_CLEAN(x)                                        (((x) & 0x1) << 2)
+#define   G_00803C_CB_CLEAN(x)                                        (((x) >> 2) & 0x1)
+#define   C_00803C_CB_CLEAN                                           0xFFFFFFFB
+#define   S_00803C_BCI_BUSY(x)                                        (((x) & 0x1) << 22)
+#define   G_00803C_BCI_BUSY(x)                                        (((x) >> 22) & 0x1)
+#define   C_00803C_BCI_BUSY                                           0xFFBFFFFF
+#define   S_00803C_VGT_BUSY(x)                                        (((x) & 0x1) << 23)
+#define   G_00803C_VGT_BUSY(x)                                        (((x) >> 23) & 0x1)
+#define   C_00803C_VGT_BUSY                                           0xFF7FFFFF
+#define   S_00803C_PA_BUSY(x)                                         (((x) & 0x1) << 24)
+#define   G_00803C_PA_BUSY(x)                                         (((x) >> 24) & 0x1)
+#define   C_00803C_PA_BUSY                                            0xFEFFFFFF
+#define   S_00803C_TA_BUSY(x)                                         (((x) & 0x1) << 25)
+#define   G_00803C_TA_BUSY(x)                                         (((x) >> 25) & 0x1)
+#define   C_00803C_TA_BUSY                                            0xFDFFFFFF
+#define   S_00803C_SX_BUSY(x)                                         (((x) & 0x1) << 26)
+#define   G_00803C_SX_BUSY(x)                                         (((x) >> 26) & 0x1)
+#define   C_00803C_SX_BUSY                                            0xFBFFFFFF
+#define   S_00803C_SPI_BUSY(x)                                        (((x) & 0x1) << 27)
+#define   G_00803C_SPI_BUSY(x)                                        (((x) >> 27) & 0x1)
+#define   C_00803C_SPI_BUSY                                           0xF7FFFFFF
+#define   S_00803C_SC_BUSY(x)                                         (((x) & 0x1) << 29)
+#define   G_00803C_SC_BUSY(x)                                         (((x) >> 29) & 0x1)
+#define   C_00803C_SC_BUSY                                            0xDFFFFFFF
+#define   S_00803C_DB_BUSY(x)                                         (((x) & 0x1) << 30)
+#define   G_00803C_DB_BUSY(x)                                         (((x) >> 30) & 0x1)
+#define   C_00803C_DB_BUSY                                            0xBFFFFFFF
+#define   S_00803C_CB_BUSY(x)                                         (((x) & 0x1) << 31)
+#define   G_00803C_CB_BUSY(x)                                         (((x) >> 31) & 0x1)
+#define   C_00803C_CB_BUSY                                            0x7FFFFFFF
 /* CIK */
+#define R_0300FC_CP_STRMOUT_CNTL                                        0x0300FC
+#define   S_0300FC_OFFSET_UPDATE_DONE(x)                              (((x) & 0x1) << 0)
+#define   G_0300FC_OFFSET_UPDATE_DONE(x)                              (((x) >> 0) & 0x1)
+#define   C_0300FC_OFFSET_UPDATE_DONE                                 0xFFFFFFFE
 #define R_0301E4_CP_COHER_BASE_HI                                       0x0301E4
 #define   S_0301E4_COHER_BASE_HI_256B(x)                              (((x) & 0xFF) << 0)
 #define   G_0301E4_COHER_BASE_HI_256B(x)                              (((x) >> 0) & 0xFF)
 #define   C_0301E4_COHER_BASE_HI_256B                                 0xFFFFFF00
+#define R_0301EC_CP_COHER_START_DELAY                                   0x0301EC
+#define   S_0301EC_START_DELAY_COUNT(x)                               (((x) & 0x3F) << 0)
+#define   G_0301EC_START_DELAY_COUNT(x)                               (((x) >> 0) & 0x3F)
+#define   C_0301EC_START_DELAY_COUNT                                  0xFFFFFFC0
 #define R_0301F0_CP_COHER_CNTL                                          0x0301F0
 #define   S_0301F0_DEST_BASE_0_ENA(x)                                 (((x) & 0x1) << 0)
 #define   G_0301F0_DEST_BASE_0_ENA(x)                                 (((x) >> 0) & 0x1)
@@ -289,6 +824,14 @@
 #define   S_0301F0_DEST_BASE_1_ENA(x)                                 (((x) & 0x1) << 1)
 #define   G_0301F0_DEST_BASE_1_ENA(x)                                 (((x) >> 1) & 0x1)
 #define   C_0301F0_DEST_BASE_1_ENA                                    0xFFFFFFFD
+/* VI */
+#define   S_0301F0_TC_SD_ACTION_ENA(x)                                (((x) & 0x1) << 2)
+#define   G_0301F0_TC_SD_ACTION_ENA(x)                                (((x) >> 2) & 0x1)
+#define   C_0301F0_TC_SD_ACTION_ENA                                   0xFFFFFFFB
+#define   S_0301F0_TC_NC_ACTION_ENA(x)                                (((x) & 0x1) << 3)
+#define   G_0301F0_TC_NC_ACTION_ENA(x)                                (((x) >> 3) & 0x1)
+#define   C_0301F0_TC_NC_ACTION_ENA                                   0xFFFFFFF7
+/*    */
 #define   S_0301F0_CB0_DEST_BASE_ENA(x)                               (((x) & 0x1) << 6)
 #define   G_0301F0_CB0_DEST_BASE_ENA(x)                               (((x) >> 6) & 0x1)
 #define   C_0301F0_CB0_DEST_BASE_ENA                                  0xFFFFFFBF
@@ -319,7 +862,7 @@
 #define   S_0301F0_TCL1_VOL_ACTION_ENA(x)                             (((x) & 0x1) << 15)
 #define   G_0301F0_TCL1_VOL_ACTION_ENA(x)                             (((x) >> 15) & 0x1)
 #define   C_0301F0_TCL1_VOL_ACTION_ENA                                0xFFFF7FFF
-#define   S_0301F0_TC_VOL_ACTION_ENA(x)                               (((x) & 0x1) << 16)
+#define   S_0301F0_TC_VOL_ACTION_ENA(x)                               (((x) & 0x1) << 16) /* not on VI */
 #define   G_0301F0_TC_VOL_ACTION_ENA(x)                               (((x) >> 16) & 0x1)
 #define   C_0301F0_TC_VOL_ACTION_ENA                                  0xFFFEFFFF
 #define   S_0301F0_TC_WB_ACTION_ENA(x)                                (((x) & 0x1) << 18)
@@ -352,8 +895,389 @@
 #define   S_0301F0_SH_ICACHE_ACTION_ENA(x)                            (((x) & 0x1) << 29)
 #define   G_0301F0_SH_ICACHE_ACTION_ENA(x)                            (((x) >> 29) & 0x1)
 #define   C_0301F0_SH_ICACHE_ACTION_ENA                               0xDFFFFFFF
+/* VI */
+#define   S_0301F0_SH_KCACHE_WB_ACTION_ENA(x)                         (((x) & 0x1) << 30)
+#define   G_0301F0_SH_KCACHE_WB_ACTION_ENA(x)                         (((x) >> 30) & 0x1)
+#define   C_0301F0_SH_KCACHE_WB_ACTION_ENA                            0xBFFFFFFF
+#define   S_0301F0_SH_SD_ACTION_ENA(x)                                (((x) & 0x1) << 31)
+#define   G_0301F0_SH_SD_ACTION_ENA(x)                                (((x) >> 31) & 0x1)
+#define   C_0301F0_SH_SD_ACTION_ENA                                   0x7FFFFFFF
+/*    */
 #define R_0301F4_CP_COHER_SIZE                                          0x0301F4
 #define R_0301F8_CP_COHER_BASE                                          0x0301F8
+#define R_0301FC_CP_COHER_STATUS                                        0x0301FC
+#define   S_0301FC_MATCHING_GFX_CNTX(x)                               (((x) & 0xFF) << 0)
+#define   G_0301FC_MATCHING_GFX_CNTX(x)                               (((x) >> 0) & 0xFF)
+#define   C_0301FC_MATCHING_GFX_CNTX                                  0xFFFFFF00
+#define   S_0301FC_MEID(x)                                            (((x) & 0x03) << 24)
+#define   G_0301FC_MEID(x)                                            (((x) >> 24) & 0x03)
+#define   C_0301FC_MEID                                               0xFCFFFFFF
+#define   S_0301FC_PHASE1_STATUS(x)                                   (((x) & 0x1) << 30)
+#define   G_0301FC_PHASE1_STATUS(x)                                   (((x) >> 30) & 0x1)
+#define   C_0301FC_PHASE1_STATUS                                      0xBFFFFFFF
+#define   S_0301FC_STATUS(x)                                          (((x) & 0x1) << 31)
+#define   G_0301FC_STATUS(x)                                          (((x) >> 31) & 0x1)
+#define   C_0301FC_STATUS                                             0x7FFFFFFF
+#define R_008210_CP_CPC_STATUS                                          0x008210
+#define   S_008210_MEC1_BUSY(x)                                       (((x) & 0x1) << 0)
+#define   G_008210_MEC1_BUSY(x)                                       (((x) >> 0) & 0x1)
+#define   C_008210_MEC1_BUSY                                          0xFFFFFFFE
+#define   S_008210_MEC2_BUSY(x)                                       (((x) & 0x1) << 1)
+#define   G_008210_MEC2_BUSY(x)                                       (((x) >> 1) & 0x1)
+#define   C_008210_MEC2_BUSY                                          0xFFFFFFFD
+#define   S_008210_DC0_BUSY(x)                                        (((x) & 0x1) << 2)
+#define   G_008210_DC0_BUSY(x)                                        (((x) >> 2) & 0x1)
+#define   C_008210_DC0_BUSY                                           0xFFFFFFFB
+#define   S_008210_DC1_BUSY(x)                                        (((x) & 0x1) << 3)
+#define   G_008210_DC1_BUSY(x)                                        (((x) >> 3) & 0x1)
+#define   C_008210_DC1_BUSY                                           0xFFFFFFF7
+#define   S_008210_RCIU1_BUSY(x)                                      (((x) & 0x1) << 4)
+#define   G_008210_RCIU1_BUSY(x)                                      (((x) >> 4) & 0x1)
+#define   C_008210_RCIU1_BUSY                                         0xFFFFFFEF
+#define   S_008210_RCIU2_BUSY(x)                                      (((x) & 0x1) << 5)
+#define   G_008210_RCIU2_BUSY(x)                                      (((x) >> 5) & 0x1)
+#define   C_008210_RCIU2_BUSY                                         0xFFFFFFDF
+#define   S_008210_ROQ1_BUSY(x)                                       (((x) & 0x1) << 6)
+#define   G_008210_ROQ1_BUSY(x)                                       (((x) >> 6) & 0x1)
+#define   C_008210_ROQ1_BUSY                                          0xFFFFFFBF
+#define   S_008210_ROQ2_BUSY(x)                                       (((x) & 0x1) << 7)
+#define   G_008210_ROQ2_BUSY(x)                                       (((x) >> 7) & 0x1)
+#define   C_008210_ROQ2_BUSY                                          0xFFFFFF7F
+#define   S_008210_TCIU_BUSY(x)                                       (((x) & 0x1) << 10)
+#define   G_008210_TCIU_BUSY(x)                                       (((x) >> 10) & 0x1)
+#define   C_008210_TCIU_BUSY                                          0xFFFFFBFF
+#define   S_008210_SCRATCH_RAM_BUSY(x)                                (((x) & 0x1) << 11)
+#define   G_008210_SCRATCH_RAM_BUSY(x)                                (((x) >> 11) & 0x1)
+#define   C_008210_SCRATCH_RAM_BUSY                                   0xFFFFF7FF
+#define   S_008210_QU_BUSY(x)                                         (((x) & 0x1) << 12)
+#define   G_008210_QU_BUSY(x)                                         (((x) >> 12) & 0x1)
+#define   C_008210_QU_BUSY                                            0xFFFFEFFF
+#define   S_008210_ATCL2IU_BUSY(x)                                    (((x) & 0x1) << 13)
+#define   G_008210_ATCL2IU_BUSY(x)                                    (((x) >> 13) & 0x1)
+#define   C_008210_ATCL2IU_BUSY                                       0xFFFFDFFF
+#define   S_008210_CPG_CPC_BUSY(x)                                    (((x) & 0x1) << 29)
+#define   G_008210_CPG_CPC_BUSY(x)                                    (((x) >> 29) & 0x1)
+#define   C_008210_CPG_CPC_BUSY                                       0xDFFFFFFF
+#define   S_008210_CPF_CPC_BUSY(x)                                    (((x) & 0x1) << 30)
+#define   G_008210_CPF_CPC_BUSY(x)                                    (((x) >> 30) & 0x1)
+#define   C_008210_CPF_CPC_BUSY                                       0xBFFFFFFF
+#define   S_008210_CPC_BUSY(x)                                        (((x) & 0x1) << 31)
+#define   G_008210_CPC_BUSY(x)                                        (((x) >> 31) & 0x1)
+#define   C_008210_CPC_BUSY                                           0x7FFFFFFF
+#define R_008214_CP_CPC_BUSY_STAT                                       0x008214
+#define   S_008214_MEC1_LOAD_BUSY(x)                                  (((x) & 0x1) << 0)
+#define   G_008214_MEC1_LOAD_BUSY(x)                                  (((x) >> 0) & 0x1)
+#define   C_008214_MEC1_LOAD_BUSY                                     0xFFFFFFFE
+#define   S_008214_MEC1_SEMAPOHRE_BUSY(x)                             (((x) & 0x1) << 1)
+#define   G_008214_MEC1_SEMAPOHRE_BUSY(x)                             (((x) >> 1) & 0x1)
+#define   C_008214_MEC1_SEMAPOHRE_BUSY                                0xFFFFFFFD
+#define   S_008214_MEC1_MUTEX_BUSY(x)                                 (((x) & 0x1) << 2)
+#define   G_008214_MEC1_MUTEX_BUSY(x)                                 (((x) >> 2) & 0x1)
+#define   C_008214_MEC1_MUTEX_BUSY                                    0xFFFFFFFB
+#define   S_008214_MEC1_MESSAGE_BUSY(x)                               (((x) & 0x1) << 3)
+#define   G_008214_MEC1_MESSAGE_BUSY(x)                               (((x) >> 3) & 0x1)
+#define   C_008214_MEC1_MESSAGE_BUSY                                  0xFFFFFFF7
+#define   S_008214_MEC1_EOP_QUEUE_BUSY(x)                             (((x) & 0x1) << 4)
+#define   G_008214_MEC1_EOP_QUEUE_BUSY(x)                             (((x) >> 4) & 0x1)
+#define   C_008214_MEC1_EOP_QUEUE_BUSY                                0xFFFFFFEF
+#define   S_008214_MEC1_IQ_QUEUE_BUSY(x)                              (((x) & 0x1) << 5)
+#define   G_008214_MEC1_IQ_QUEUE_BUSY(x)                              (((x) >> 5) & 0x1)
+#define   C_008214_MEC1_IQ_QUEUE_BUSY                                 0xFFFFFFDF
+#define   S_008214_MEC1_IB_QUEUE_BUSY(x)                              (((x) & 0x1) << 6)
+#define   G_008214_MEC1_IB_QUEUE_BUSY(x)                              (((x) >> 6) & 0x1)
+#define   C_008214_MEC1_IB_QUEUE_BUSY                                 0xFFFFFFBF
+#define   S_008214_MEC1_TC_BUSY(x)                                    (((x) & 0x1) << 7)
+#define   G_008214_MEC1_TC_BUSY(x)                                    (((x) >> 7) & 0x1)
+#define   C_008214_MEC1_TC_BUSY                                       0xFFFFFF7F
+#define   S_008214_MEC1_DMA_BUSY(x)                                   (((x) & 0x1) << 8)
+#define   G_008214_MEC1_DMA_BUSY(x)                                   (((x) >> 8) & 0x1)
+#define   C_008214_MEC1_DMA_BUSY                                      0xFFFFFEFF
+#define   S_008214_MEC1_PARTIAL_FLUSH_BUSY(x)                         (((x) & 0x1) << 9)
+#define   G_008214_MEC1_PARTIAL_FLUSH_BUSY(x)                         (((x) >> 9) & 0x1)
+#define   C_008214_MEC1_PARTIAL_FLUSH_BUSY                            0xFFFFFDFF
+#define   S_008214_MEC1_PIPE0_BUSY(x)                                 (((x) & 0x1) << 10)
+#define   G_008214_MEC1_PIPE0_BUSY(x)                                 (((x) >> 10) & 0x1)
+#define   C_008214_MEC1_PIPE0_BUSY                                    0xFFFFFBFF
+#define   S_008214_MEC1_PIPE1_BUSY(x)                                 (((x) & 0x1) << 11)
+#define   G_008214_MEC1_PIPE1_BUSY(x)                                 (((x) >> 11) & 0x1)
+#define   C_008214_MEC1_PIPE1_BUSY                                    0xFFFFF7FF
+#define   S_008214_MEC1_PIPE2_BUSY(x)                                 (((x) & 0x1) << 12)
+#define   G_008214_MEC1_PIPE2_BUSY(x)                                 (((x) >> 12) & 0x1)
+#define   C_008214_MEC1_PIPE2_BUSY                                    0xFFFFEFFF
+#define   S_008214_MEC1_PIPE3_BUSY(x)                                 (((x) & 0x1) << 13)
+#define   G_008214_MEC1_PIPE3_BUSY(x)                                 (((x) >> 13) & 0x1)
+#define   C_008214_MEC1_PIPE3_BUSY                                    0xFFFFDFFF
+#define   S_008214_MEC2_LOAD_BUSY(x)                                  (((x) & 0x1) << 16)
+#define   G_008214_MEC2_LOAD_BUSY(x)                                  (((x) >> 16) & 0x1)
+#define   C_008214_MEC2_LOAD_BUSY                                     0xFFFEFFFF
+#define   S_008214_MEC2_SEMAPOHRE_BUSY(x)                             (((x) & 0x1) << 17)
+#define   G_008214_MEC2_SEMAPOHRE_BUSY(x)                             (((x) >> 17) & 0x1)
+#define   C_008214_MEC2_SEMAPOHRE_BUSY                                0xFFFDFFFF
+#define   S_008214_MEC2_MUTEX_BUSY(x)                                 (((x) & 0x1) << 18)
+#define   G_008214_MEC2_MUTEX_BUSY(x)                                 (((x) >> 18) & 0x1)
+#define   C_008214_MEC2_MUTEX_BUSY                                    0xFFFBFFFF
+#define   S_008214_MEC2_MESSAGE_BUSY(x)                               (((x) & 0x1) << 19)
+#define   G_008214_MEC2_MESSAGE_BUSY(x)                               (((x) >> 19) & 0x1)
+#define   C_008214_MEC2_MESSAGE_BUSY                                  0xFFF7FFFF
+#define   S_008214_MEC2_EOP_QUEUE_BUSY(x)                             (((x) & 0x1) << 20)
+#define   G_008214_MEC2_EOP_QUEUE_BUSY(x)                             (((x) >> 20) & 0x1)
+#define   C_008214_MEC2_EOP_QUEUE_BUSY                                0xFFEFFFFF
+#define   S_008214_MEC2_IQ_QUEUE_BUSY(x)                              (((x) & 0x1) << 21)
+#define   G_008214_MEC2_IQ_QUEUE_BUSY(x)                              (((x) >> 21) & 0x1)
+#define   C_008214_MEC2_IQ_QUEUE_BUSY                                 0xFFDFFFFF
+#define   S_008214_MEC2_IB_QUEUE_BUSY(x)                              (((x) & 0x1) << 22)
+#define   G_008214_MEC2_IB_QUEUE_BUSY(x)                              (((x) >> 22) & 0x1)
+#define   C_008214_MEC2_IB_QUEUE_BUSY                                 0xFFBFFFFF
+#define   S_008214_MEC2_TC_BUSY(x)                                    (((x) & 0x1) << 23)
+#define   G_008214_MEC2_TC_BUSY(x)                                    (((x) >> 23) & 0x1)
+#define   C_008214_MEC2_TC_BUSY                                       0xFF7FFFFF
+#define   S_008214_MEC2_DMA_BUSY(x)                                   (((x) & 0x1) << 24)
+#define   G_008214_MEC2_DMA_BUSY(x)                                   (((x) >> 24) & 0x1)
+#define   C_008214_MEC2_DMA_BUSY                                      0xFEFFFFFF
+#define   S_008214_MEC2_PARTIAL_FLUSH_BUSY(x)                         (((x) & 0x1) << 25)
+#define   G_008214_MEC2_PARTIAL_FLUSH_BUSY(x)                         (((x) >> 25) & 0x1)
+#define   C_008214_MEC2_PARTIAL_FLUSH_BUSY                            0xFDFFFFFF
+#define   S_008214_MEC2_PIPE0_BUSY(x)                                 (((x) & 0x1) << 26)
+#define   G_008214_MEC2_PIPE0_BUSY(x)                                 (((x) >> 26) & 0x1)
+#define   C_008214_MEC2_PIPE0_BUSY                                    0xFBFFFFFF
+#define   S_008214_MEC2_PIPE1_BUSY(x)                                 (((x) & 0x1) << 27)
+#define   G_008214_MEC2_PIPE1_BUSY(x)                                 (((x) >> 27) & 0x1)
+#define   C_008214_MEC2_PIPE1_BUSY                                    0xF7FFFFFF
+#define   S_008214_MEC2_PIPE2_BUSY(x)                                 (((x) & 0x1) << 28)
+#define   G_008214_MEC2_PIPE2_BUSY(x)                                 (((x) >> 28) & 0x1)
+#define   C_008214_MEC2_PIPE2_BUSY                                    0xEFFFFFFF
+#define   S_008214_MEC2_PIPE3_BUSY(x)                                 (((x) & 0x1) << 29)
+#define   G_008214_MEC2_PIPE3_BUSY(x)                                 (((x) >> 29) & 0x1)
+#define   C_008214_MEC2_PIPE3_BUSY                                    0xDFFFFFFF
+#define R_008218_CP_CPC_STALLED_STAT1                                   0x008218
+#define   S_008218_RCIU_TX_FREE_STALL(x)                              (((x) & 0x1) << 3)
+#define   G_008218_RCIU_TX_FREE_STALL(x)                              (((x) >> 3) & 0x1)
+#define   C_008218_RCIU_TX_FREE_STALL                                 0xFFFFFFF7
+#define   S_008218_RCIU_PRIV_VIOLATION(x)                             (((x) & 0x1) << 4)
+#define   G_008218_RCIU_PRIV_VIOLATION(x)                             (((x) >> 4) & 0x1)
+#define   C_008218_RCIU_PRIV_VIOLATION                                0xFFFFFFEF
+#define   S_008218_TCIU_TX_FREE_STALL(x)                              (((x) & 0x1) << 6)
+#define   G_008218_TCIU_TX_FREE_STALL(x)                              (((x) >> 6) & 0x1)
+#define   C_008218_TCIU_TX_FREE_STALL                                 0xFFFFFFBF
+#define   S_008218_MEC1_DECODING_PACKET(x)                            (((x) & 0x1) << 8)
+#define   G_008218_MEC1_DECODING_PACKET(x)                            (((x) >> 8) & 0x1)
+#define   C_008218_MEC1_DECODING_PACKET                               0xFFFFFEFF
+#define   S_008218_MEC1_WAIT_ON_RCIU(x)                               (((x) & 0x1) << 9)
+#define   G_008218_MEC1_WAIT_ON_RCIU(x)                               (((x) >> 9) & 0x1)
+#define   C_008218_MEC1_WAIT_ON_RCIU                                  0xFFFFFDFF
+#define   S_008218_MEC1_WAIT_ON_RCIU_READ(x)                          (((x) & 0x1) << 10)
+#define   G_008218_MEC1_WAIT_ON_RCIU_READ(x)                          (((x) >> 10) & 0x1)
+#define   C_008218_MEC1_WAIT_ON_RCIU_READ                             0xFFFFFBFF
+#define   S_008218_MEC1_WAIT_ON_ROQ_DATA(x)                           (((x) & 0x1) << 13)
+#define   G_008218_MEC1_WAIT_ON_ROQ_DATA(x)                           (((x) >> 13) & 0x1)
+#define   C_008218_MEC1_WAIT_ON_ROQ_DATA                              0xFFFFDFFF
+#define   S_008218_MEC2_DECODING_PACKET(x)                            (((x) & 0x1) << 16)
+#define   G_008218_MEC2_DECODING_PACKET(x)                            (((x) >> 16) & 0x1)
+#define   C_008218_MEC2_DECODING_PACKET                               0xFFFEFFFF
+#define   S_008218_MEC2_WAIT_ON_RCIU(x)                               (((x) & 0x1) << 17)
+#define   G_008218_MEC2_WAIT_ON_RCIU(x)                               (((x) >> 17) & 0x1)
+#define   C_008218_MEC2_WAIT_ON_RCIU                                  0xFFFDFFFF
+#define   S_008218_MEC2_WAIT_ON_RCIU_READ(x)                          (((x) & 0x1) << 18)
+#define   G_008218_MEC2_WAIT_ON_RCIU_READ(x)                          (((x) >> 18) & 0x1)
+#define   C_008218_MEC2_WAIT_ON_RCIU_READ                             0xFFFBFFFF
+#define   S_008218_MEC2_WAIT_ON_ROQ_DATA(x)                           (((x) & 0x1) << 21)
+#define   G_008218_MEC2_WAIT_ON_ROQ_DATA(x)                           (((x) >> 21) & 0x1)
+#define   C_008218_MEC2_WAIT_ON_ROQ_DATA                              0xFFDFFFFF
+#define   S_008218_ATCL2IU_WAITING_ON_FREE(x)                         (((x) & 0x1) << 22)
+#define   G_008218_ATCL2IU_WAITING_ON_FREE(x)                         (((x) >> 22) & 0x1)
+#define   C_008218_ATCL2IU_WAITING_ON_FREE                            0xFFBFFFFF
+#define   S_008218_ATCL2IU_WAITING_ON_TAGS(x)                         (((x) & 0x1) << 23)
+#define   G_008218_ATCL2IU_WAITING_ON_TAGS(x)                         (((x) >> 23) & 0x1)
+#define   C_008218_ATCL2IU_WAITING_ON_TAGS                            0xFF7FFFFF
+#define   S_008218_ATCL1_WAITING_ON_TRANS(x)                          (((x) & 0x1) << 24)
+#define   G_008218_ATCL1_WAITING_ON_TRANS(x)                          (((x) >> 24) & 0x1)
+#define   C_008218_ATCL1_WAITING_ON_TRANS                             0xFEFFFFFF
+#define R_00821C_CP_CPF_STATUS                                          0x00821C
+#define   S_00821C_POST_WPTR_GFX_BUSY(x)                              (((x) & 0x1) << 0)
+#define   G_00821C_POST_WPTR_GFX_BUSY(x)                              (((x) >> 0) & 0x1)
+#define   C_00821C_POST_WPTR_GFX_BUSY                                 0xFFFFFFFE
+#define   S_00821C_CSF_BUSY(x)                                        (((x) & 0x1) << 1)
+#define   G_00821C_CSF_BUSY(x)                                        (((x) >> 1) & 0x1)
+#define   C_00821C_CSF_BUSY                                           0xFFFFFFFD
+#define   S_00821C_ROQ_ALIGN_BUSY(x)                                  (((x) & 0x1) << 4)
+#define   G_00821C_ROQ_ALIGN_BUSY(x)                                  (((x) >> 4) & 0x1)
+#define   C_00821C_ROQ_ALIGN_BUSY                                     0xFFFFFFEF
+#define   S_00821C_ROQ_RING_BUSY(x)                                   (((x) & 0x1) << 5)
+#define   G_00821C_ROQ_RING_BUSY(x)                                   (((x) >> 5) & 0x1)
+#define   C_00821C_ROQ_RING_BUSY                                      0xFFFFFFDF
+#define   S_00821C_ROQ_INDIRECT1_BUSY(x)                              (((x) & 0x1) << 6)
+#define   G_00821C_ROQ_INDIRECT1_BUSY(x)                              (((x) >> 6) & 0x1)
+#define   C_00821C_ROQ_INDIRECT1_BUSY                                 0xFFFFFFBF
+#define   S_00821C_ROQ_INDIRECT2_BUSY(x)                              (((x) & 0x1) << 7)
+#define   G_00821C_ROQ_INDIRECT2_BUSY(x)                              (((x) >> 7) & 0x1)
+#define   C_00821C_ROQ_INDIRECT2_BUSY                                 0xFFFFFF7F
+#define   S_00821C_ROQ_STATE_BUSY(x)                                  (((x) & 0x1) << 8)
+#define   G_00821C_ROQ_STATE_BUSY(x)                                  (((x) >> 8) & 0x1)
+#define   C_00821C_ROQ_STATE_BUSY                                     0xFFFFFEFF
+#define   S_00821C_ROQ_CE_RING_BUSY(x)                                (((x) & 0x1) << 9)
+#define   G_00821C_ROQ_CE_RING_BUSY(x)                                (((x) >> 9) & 0x1)
+#define   C_00821C_ROQ_CE_RING_BUSY                                   0xFFFFFDFF
+#define   S_00821C_ROQ_CE_INDIRECT1_BUSY(x)                           (((x) & 0x1) << 10)
+#define   G_00821C_ROQ_CE_INDIRECT1_BUSY(x)                           (((x) >> 10) & 0x1)
+#define   C_00821C_ROQ_CE_INDIRECT1_BUSY                              0xFFFFFBFF
+#define   S_00821C_ROQ_CE_INDIRECT2_BUSY(x)                           (((x) & 0x1) << 11)
+#define   G_00821C_ROQ_CE_INDIRECT2_BUSY(x)                           (((x) >> 11) & 0x1)
+#define   C_00821C_ROQ_CE_INDIRECT2_BUSY                              0xFFFFF7FF
+#define   S_00821C_SEMAPHORE_BUSY(x)                                  (((x) & 0x1) << 12)
+#define   G_00821C_SEMAPHORE_BUSY(x)                                  (((x) >> 12) & 0x1)
+#define   C_00821C_SEMAPHORE_BUSY                                     0xFFFFEFFF
+#define   S_00821C_INTERRUPT_BUSY(x)                                  (((x) & 0x1) << 13)
+#define   G_00821C_INTERRUPT_BUSY(x)                                  (((x) >> 13) & 0x1)
+#define   C_00821C_INTERRUPT_BUSY                                     0xFFFFDFFF
+#define   S_00821C_TCIU_BUSY(x)                                       (((x) & 0x1) << 14)
+#define   G_00821C_TCIU_BUSY(x)                                       (((x) >> 14) & 0x1)
+#define   C_00821C_TCIU_BUSY                                          0xFFFFBFFF
+#define   S_00821C_HQD_BUSY(x)                                        (((x) & 0x1) << 15)
+#define   G_00821C_HQD_BUSY(x)                                        (((x) >> 15) & 0x1)
+#define   C_00821C_HQD_BUSY                                           0xFFFF7FFF
+#define   S_00821C_PRT_BUSY(x)                                        (((x) & 0x1) << 16)
+#define   G_00821C_PRT_BUSY(x)                                        (((x) >> 16) & 0x1)
+#define   C_00821C_PRT_BUSY                                           0xFFFEFFFF
+#define   S_00821C_ATCL2IU_BUSY(x)                                    (((x) & 0x1) << 17)
+#define   G_00821C_ATCL2IU_BUSY(x)                                    (((x) >> 17) & 0x1)
+#define   C_00821C_ATCL2IU_BUSY                                       0xFFFDFFFF
+#define   S_00821C_CPF_GFX_BUSY(x)                                    (((x) & 0x1) << 26)
+#define   G_00821C_CPF_GFX_BUSY(x)                                    (((x) >> 26) & 0x1)
+#define   C_00821C_CPF_GFX_BUSY                                       0xFBFFFFFF
+#define   S_00821C_CPF_CMP_BUSY(x)                                    (((x) & 0x1) << 27)
+#define   G_00821C_CPF_CMP_BUSY(x)                                    (((x) >> 27) & 0x1)
+#define   C_00821C_CPF_CMP_BUSY                                       0xF7FFFFFF
+#define   S_00821C_GRBM_CPF_STAT_BUSY(x)                              (((x) & 0x03) << 28)
+#define   G_00821C_GRBM_CPF_STAT_BUSY(x)                              (((x) >> 28) & 0x03)
+#define   C_00821C_GRBM_CPF_STAT_BUSY                                 0xCFFFFFFF
+#define   S_00821C_CPC_CPF_BUSY(x)                                    (((x) & 0x1) << 30)
+#define   G_00821C_CPC_CPF_BUSY(x)                                    (((x) >> 30) & 0x1)
+#define   C_00821C_CPC_CPF_BUSY                                       0xBFFFFFFF
+#define   S_00821C_CPF_BUSY(x)                                        (((x) & 0x1) << 31)
+#define   G_00821C_CPF_BUSY(x)                                        (((x) >> 31) & 0x1)
+#define   C_00821C_CPF_BUSY                                           0x7FFFFFFF
+#define R_008220_CP_CPF_BUSY_STAT                                       0x008220
+#define   S_008220_REG_BUS_FIFO_BUSY(x)                               (((x) & 0x1) << 0)
+#define   G_008220_REG_BUS_FIFO_BUSY(x)                               (((x) >> 0) & 0x1)
+#define   C_008220_REG_BUS_FIFO_BUSY                                  0xFFFFFFFE
+#define   S_008220_CSF_RING_BUSY(x)                                   (((x) & 0x1) << 1)
+#define   G_008220_CSF_RING_BUSY(x)                                   (((x) >> 1) & 0x1)
+#define   C_008220_CSF_RING_BUSY                                      0xFFFFFFFD
+#define   S_008220_CSF_INDIRECT1_BUSY(x)                              (((x) & 0x1) << 2)
+#define   G_008220_CSF_INDIRECT1_BUSY(x)                              (((x) >> 2) & 0x1)
+#define   C_008220_CSF_INDIRECT1_BUSY                                 0xFFFFFFFB
+#define   S_008220_CSF_INDIRECT2_BUSY(x)                              (((x) & 0x1) << 3)
+#define   G_008220_CSF_INDIRECT2_BUSY(x)                              (((x) >> 3) & 0x1)
+#define   C_008220_CSF_INDIRECT2_BUSY                                 0xFFFFFFF7
+#define   S_008220_CSF_STATE_BUSY(x)                                  (((x) & 0x1) << 4)
+#define   G_008220_CSF_STATE_BUSY(x)                                  (((x) >> 4) & 0x1)
+#define   C_008220_CSF_STATE_BUSY                                     0xFFFFFFEF
+#define   S_008220_CSF_CE_INDR1_BUSY(x)                               (((x) & 0x1) << 5)
+#define   G_008220_CSF_CE_INDR1_BUSY(x)                               (((x) >> 5) & 0x1)
+#define   C_008220_CSF_CE_INDR1_BUSY                                  0xFFFFFFDF
+#define   S_008220_CSF_CE_INDR2_BUSY(x)                               (((x) & 0x1) << 6)
+#define   G_008220_CSF_CE_INDR2_BUSY(x)                               (((x) >> 6) & 0x1)
+#define   C_008220_CSF_CE_INDR2_BUSY                                  0xFFFFFFBF
+#define   S_008220_CSF_ARBITER_BUSY(x)                                (((x) & 0x1) << 7)
+#define   G_008220_CSF_ARBITER_BUSY(x)                                (((x) >> 7) & 0x1)
+#define   C_008220_CSF_ARBITER_BUSY                                   0xFFFFFF7F
+#define   S_008220_CSF_INPUT_BUSY(x)                                  (((x) & 0x1) << 8)
+#define   G_008220_CSF_INPUT_BUSY(x)                                  (((x) >> 8) & 0x1)
+#define   C_008220_CSF_INPUT_BUSY                                     0xFFFFFEFF
+#define   S_008220_OUTSTANDING_READ_TAGS(x)                           (((x) & 0x1) << 9)
+#define   G_008220_OUTSTANDING_READ_TAGS(x)                           (((x) >> 9) & 0x1)
+#define   C_008220_OUTSTANDING_READ_TAGS                              0xFFFFFDFF
+#define   S_008220_HPD_PROCESSING_EOP_BUSY(x)                         (((x) & 0x1) << 11)
+#define   G_008220_HPD_PROCESSING_EOP_BUSY(x)                         (((x) >> 11) & 0x1)
+#define   C_008220_HPD_PROCESSING_EOP_BUSY                            0xFFFFF7FF
+#define   S_008220_HQD_DISPATCH_BUSY(x)                               (((x) & 0x1) << 12)
+#define   G_008220_HQD_DISPATCH_BUSY(x)                               (((x) >> 12) & 0x1)
+#define   C_008220_HQD_DISPATCH_BUSY                                  0xFFFFEFFF
+#define   S_008220_HQD_IQ_TIMER_BUSY(x)                               (((x) & 0x1) << 13)
+#define   G_008220_HQD_IQ_TIMER_BUSY(x)                               (((x) >> 13) & 0x1)
+#define   C_008220_HQD_IQ_TIMER_BUSY                                  0xFFFFDFFF
+#define   S_008220_HQD_DMA_OFFLOAD_BUSY(x)                            (((x) & 0x1) << 14)
+#define   G_008220_HQD_DMA_OFFLOAD_BUSY(x)                            (((x) >> 14) & 0x1)
+#define   C_008220_HQD_DMA_OFFLOAD_BUSY                               0xFFFFBFFF
+#define   S_008220_HQD_WAIT_SEMAPHORE_BUSY(x)                         (((x) & 0x1) << 15)
+#define   G_008220_HQD_WAIT_SEMAPHORE_BUSY(x)                         (((x) >> 15) & 0x1)
+#define   C_008220_HQD_WAIT_SEMAPHORE_BUSY                            0xFFFF7FFF
+#define   S_008220_HQD_SIGNAL_SEMAPHORE_BUSY(x)                       (((x) & 0x1) << 16)
+#define   G_008220_HQD_SIGNAL_SEMAPHORE_BUSY(x)                       (((x) >> 16) & 0x1)
+#define   C_008220_HQD_SIGNAL_SEMAPHORE_BUSY                          0xFFFEFFFF
+#define   S_008220_HQD_MESSAGE_BUSY(x)                                (((x) & 0x1) << 17)
+#define   G_008220_HQD_MESSAGE_BUSY(x)                                (((x) >> 17) & 0x1)
+#define   C_008220_HQD_MESSAGE_BUSY                                   0xFFFDFFFF
+#define   S_008220_HQD_PQ_FETCHER_BUSY(x)                             (((x) & 0x1) << 18)
+#define   G_008220_HQD_PQ_FETCHER_BUSY(x)                             (((x) >> 18) & 0x1)
+#define   C_008220_HQD_PQ_FETCHER_BUSY                                0xFFFBFFFF
+#define   S_008220_HQD_IB_FETCHER_BUSY(x)                             (((x) & 0x1) << 19)
+#define   G_008220_HQD_IB_FETCHER_BUSY(x)                             (((x) >> 19) & 0x1)
+#define   C_008220_HQD_IB_FETCHER_BUSY                                0xFFF7FFFF
+#define   S_008220_HQD_IQ_FETCHER_BUSY(x)                             (((x) & 0x1) << 20)
+#define   G_008220_HQD_IQ_FETCHER_BUSY(x)                             (((x) >> 20) & 0x1)
+#define   C_008220_HQD_IQ_FETCHER_BUSY                                0xFFEFFFFF
+#define   S_008220_HQD_EOP_FETCHER_BUSY(x)                            (((x) & 0x1) << 21)
+#define   G_008220_HQD_EOP_FETCHER_BUSY(x)                            (((x) >> 21) & 0x1)
+#define   C_008220_HQD_EOP_FETCHER_BUSY                               0xFFDFFFFF
+#define   S_008220_HQD_CONSUMED_RPTR_BUSY(x)                          (((x) & 0x1) << 22)
+#define   G_008220_HQD_CONSUMED_RPTR_BUSY(x)                          (((x) >> 22) & 0x1)
+#define   C_008220_HQD_CONSUMED_RPTR_BUSY                             0xFFBFFFFF
+#define   S_008220_HQD_FETCHER_ARB_BUSY(x)                            (((x) & 0x1) << 23)
+#define   G_008220_HQD_FETCHER_ARB_BUSY(x)                            (((x) >> 23) & 0x1)
+#define   C_008220_HQD_FETCHER_ARB_BUSY                               0xFF7FFFFF
+#define   S_008220_HQD_ROQ_ALIGN_BUSY(x)                              (((x) & 0x1) << 24)
+#define   G_008220_HQD_ROQ_ALIGN_BUSY(x)                              (((x) >> 24) & 0x1)
+#define   C_008220_HQD_ROQ_ALIGN_BUSY                                 0xFEFFFFFF
+#define   S_008220_HQD_ROQ_EOP_BUSY(x)                                (((x) & 0x1) << 25)
+#define   G_008220_HQD_ROQ_EOP_BUSY(x)                                (((x) >> 25) & 0x1)
+#define   C_008220_HQD_ROQ_EOP_BUSY                                   0xFDFFFFFF
+#define   S_008220_HQD_ROQ_IQ_BUSY(x)                                 (((x) & 0x1) << 26)
+#define   G_008220_HQD_ROQ_IQ_BUSY(x)                                 (((x) >> 26) & 0x1)
+#define   C_008220_HQD_ROQ_IQ_BUSY                                    0xFBFFFFFF
+#define   S_008220_HQD_ROQ_PQ_BUSY(x)                                 (((x) & 0x1) << 27)
+#define   G_008220_HQD_ROQ_PQ_BUSY(x)                                 (((x) >> 27) & 0x1)
+#define   C_008220_HQD_ROQ_PQ_BUSY                                    0xF7FFFFFF
+#define   S_008220_HQD_ROQ_IB_BUSY(x)                                 (((x) & 0x1) << 28)
+#define   G_008220_HQD_ROQ_IB_BUSY(x)                                 (((x) >> 28) & 0x1)
+#define   C_008220_HQD_ROQ_IB_BUSY                                    0xEFFFFFFF
+#define   S_008220_HQD_WPTR_POLL_BUSY(x)                              (((x) & 0x1) << 29)
+#define   G_008220_HQD_WPTR_POLL_BUSY(x)                              (((x) >> 29) & 0x1)
+#define   C_008220_HQD_WPTR_POLL_BUSY                                 0xDFFFFFFF
+#define   S_008220_HQD_PQ_BUSY(x)                                     (((x) & 0x1) << 30)
+#define   G_008220_HQD_PQ_BUSY(x)                                     (((x) >> 30) & 0x1)
+#define   C_008220_HQD_PQ_BUSY                                        0xBFFFFFFF
+#define   S_008220_HQD_IB_BUSY(x)                                     (((x) & 0x1) << 31)
+#define   G_008220_HQD_IB_BUSY(x)                                     (((x) >> 31) & 0x1)
+#define   C_008220_HQD_IB_BUSY                                        0x7FFFFFFF
+#define R_008224_CP_CPF_STALLED_STAT1                                   0x008224
+#define   S_008224_RING_FETCHING_DATA(x)                              (((x) & 0x1) << 0)
+#define   G_008224_RING_FETCHING_DATA(x)                              (((x) >> 0) & 0x1)
+#define   C_008224_RING_FETCHING_DATA                                 0xFFFFFFFE
+#define   S_008224_INDR1_FETCHING_DATA(x)                             (((x) & 0x1) << 1)
+#define   G_008224_INDR1_FETCHING_DATA(x)                             (((x) >> 1) & 0x1)
+#define   C_008224_INDR1_FETCHING_DATA                                0xFFFFFFFD
+#define   S_008224_INDR2_FETCHING_DATA(x)                             (((x) & 0x1) << 2)
+#define   G_008224_INDR2_FETCHING_DATA(x)                             (((x) >> 2) & 0x1)
+#define   C_008224_INDR2_FETCHING_DATA                                0xFFFFFFFB
+#define   S_008224_STATE_FETCHING_DATA(x)                             (((x) & 0x1) << 3)
+#define   G_008224_STATE_FETCHING_DATA(x)                             (((x) >> 3) & 0x1)
+#define   C_008224_STATE_FETCHING_DATA                                0xFFFFFFF7
+#define   S_008224_TCIU_WAITING_ON_FREE(x)                            (((x) & 0x1) << 5)
+#define   G_008224_TCIU_WAITING_ON_FREE(x)                            (((x) >> 5) & 0x1)
+#define   C_008224_TCIU_WAITING_ON_FREE                               0xFFFFFFDF
+#define   S_008224_TCIU_WAITING_ON_TAGS(x)                            (((x) & 0x1) << 6)
+#define   G_008224_TCIU_WAITING_ON_TAGS(x)                            (((x) >> 6) & 0x1)
+#define   C_008224_TCIU_WAITING_ON_TAGS                               0xFFFFFFBF
+#define   S_008224_ATCL2IU_WAITING_ON_FREE(x)                         (((x) & 0x1) << 7)
+#define   G_008224_ATCL2IU_WAITING_ON_FREE(x)                         (((x) >> 7) & 0x1)
+#define   C_008224_ATCL2IU_WAITING_ON_FREE                            0xFFFFFF7F
+#define   S_008224_ATCL2IU_WAITING_ON_TAGS(x)                         (((x) & 0x1) << 8)
+#define   G_008224_ATCL2IU_WAITING_ON_TAGS(x)                         (((x) >> 8) & 0x1)
+#define   C_008224_ATCL2IU_WAITING_ON_TAGS                            0xFFFFFEFF
+#define   S_008224_ATCL1_WAITING_ON_TRANS(x)                          (((x) & 0x1) << 9)
+#define   G_008224_ATCL1_WAITING_ON_TRANS(x)                          (((x) >> 9) & 0x1)
+#define   C_008224_ATCL1_WAITING_ON_TRANS                             0xFFFFFDFF
 #define R_030230_CP_COHER_SIZE_HI                                       0x030230
 #define   S_030230_COHER_SIZE_HI_256B(x)                              (((x) & 0xFF) << 0)
 #define   G_030230_COHER_SIZE_HI_256B(x)                              (((x) >> 0) & 0xFF)
@@ -375,10 +1299,6 @@
 #define   C_0088C4_ES_LIMIT                                           0xFFE0FFFF
 #define R_0088C8_VGT_ESGS_RING_SIZE                                     0x0088C8
 #define R_0088CC_VGT_GSVS_RING_SIZE                                     0x0088CC
-/* CIK */
-#define R_030900_VGT_ESGS_RING_SIZE                                     0x030900
-#define R_030904_VGT_GSVS_RING_SIZE                                     0x030904
-/*     */
 #define R_0088D4_VGT_GS_VERTEX_REUSE                                    0x0088D4
 #define   S_0088D4_VERT_REUSE(x)                                      (((x) & 0x1F) << 0)
 #define   G_0088D4_VERT_REUSE(x)                                      (((x) >> 0) & 0x1F)
@@ -461,7 +1381,293 @@
 #define   S_008B10_CURRENT_COUNT(x)                                   (((x) & 0xFF) << 8)
 #define   G_008B10_CURRENT_COUNT(x)                                   (((x) >> 8) & 0xFF)
 #define   C_008B10_CURRENT_COUNT                                      0xFFFF00FF
+#define R_008670_CP_STALLED_STAT3                                       0x008670
+#define   S_008670_CE_TO_CSF_NOT_RDY_TO_RCV(x)                        (((x) & 0x1) << 0)
+#define   G_008670_CE_TO_CSF_NOT_RDY_TO_RCV(x)                        (((x) >> 0) & 0x1)
+#define   C_008670_CE_TO_CSF_NOT_RDY_TO_RCV                           0xFFFFFFFE
+#define   S_008670_CE_TO_RAM_INIT_FETCHER_NOT_RDY_TO_RCV(x)           (((x) & 0x1) << 1)
+#define   G_008670_CE_TO_RAM_INIT_FETCHER_NOT_RDY_TO_RCV(x)           (((x) >> 1) & 0x1)
+#define   C_008670_CE_TO_RAM_INIT_FETCHER_NOT_RDY_TO_RCV              0xFFFFFFFD
+#define   S_008670_CE_WAITING_ON_DATA_FROM_RAM_INIT_FETCHER(x)        (((x) & 0x1) << 2)
+#define   G_008670_CE_WAITING_ON_DATA_FROM_RAM_INIT_FETCHER(x)        (((x) >> 2) & 0x1)
+#define   C_008670_CE_WAITING_ON_DATA_FROM_RAM_INIT_FETCHER           0xFFFFFFFB
+#define   S_008670_CE_TO_RAM_INIT_NOT_RDY(x)                          (((x) & 0x1) << 3)
+#define   G_008670_CE_TO_RAM_INIT_NOT_RDY(x)                          (((x) >> 3) & 0x1)
+#define   C_008670_CE_TO_RAM_INIT_NOT_RDY                             0xFFFFFFF7
+#define   S_008670_CE_TO_RAM_DUMP_NOT_RDY(x)                          (((x) & 0x1) << 4)
+#define   G_008670_CE_TO_RAM_DUMP_NOT_RDY(x)                          (((x) >> 4) & 0x1)
+#define   C_008670_CE_TO_RAM_DUMP_NOT_RDY                             0xFFFFFFEF
+#define   S_008670_CE_TO_RAM_WRITE_NOT_RDY(x)                         (((x) & 0x1) << 5)
+#define   G_008670_CE_TO_RAM_WRITE_NOT_RDY(x)                         (((x) >> 5) & 0x1)
+#define   C_008670_CE_TO_RAM_WRITE_NOT_RDY                            0xFFFFFFDF
+#define   S_008670_CE_TO_INC_FIFO_NOT_RDY_TO_RCV(x)                   (((x) & 0x1) << 6)
+#define   G_008670_CE_TO_INC_FIFO_NOT_RDY_TO_RCV(x)                   (((x) >> 6) & 0x1)
+#define   C_008670_CE_TO_INC_FIFO_NOT_RDY_TO_RCV                      0xFFFFFFBF
+#define   S_008670_CE_TO_WR_FIFO_NOT_RDY_TO_RCV(x)                    (((x) & 0x1) << 7)
+#define   G_008670_CE_TO_WR_FIFO_NOT_RDY_TO_RCV(x)                    (((x) >> 7) & 0x1)
+#define   C_008670_CE_TO_WR_FIFO_NOT_RDY_TO_RCV                       0xFFFFFF7F
+#define   S_008670_CE_WAITING_ON_BUFFER_DATA(x)                       (((x) & 0x1) << 10)
+#define   G_008670_CE_WAITING_ON_BUFFER_DATA(x)                       (((x) >> 10) & 0x1)
+#define   C_008670_CE_WAITING_ON_BUFFER_DATA                          0xFFFFFBFF
+#define   S_008670_CE_WAITING_ON_CE_BUFFER_FLAG(x)                    (((x) & 0x1) << 11)
+#define   G_008670_CE_WAITING_ON_CE_BUFFER_FLAG(x)                    (((x) >> 11) & 0x1)
+#define   C_008670_CE_WAITING_ON_CE_BUFFER_FLAG                       0xFFFFF7FF
+#define   S_008670_CE_WAITING_ON_DE_COUNTER(x)                        (((x) & 0x1) << 12)
+#define   G_008670_CE_WAITING_ON_DE_COUNTER(x)                        (((x) >> 12) & 0x1)
+#define   C_008670_CE_WAITING_ON_DE_COUNTER                           0xFFFFEFFF
+#define   S_008670_CE_WAITING_ON_DE_COUNTER_UNDERFLOW(x)              (((x) & 0x1) << 13)
+#define   G_008670_CE_WAITING_ON_DE_COUNTER_UNDERFLOW(x)              (((x) >> 13) & 0x1)
+#define   C_008670_CE_WAITING_ON_DE_COUNTER_UNDERFLOW                 0xFFFFDFFF
+#define   S_008670_TCIU_WAITING_ON_FREE(x)                            (((x) & 0x1) << 14)
+#define   G_008670_TCIU_WAITING_ON_FREE(x)                            (((x) >> 14) & 0x1)
+#define   C_008670_TCIU_WAITING_ON_FREE                               0xFFFFBFFF
+#define   S_008670_TCIU_WAITING_ON_TAGS(x)                            (((x) & 0x1) << 15)
+#define   G_008670_TCIU_WAITING_ON_TAGS(x)                            (((x) >> 15) & 0x1)
+#define   C_008670_TCIU_WAITING_ON_TAGS                               0xFFFF7FFF
+#define   S_008670_CE_STALLED_ON_TC_WR_CONFIRM(x)                     (((x) & 0x1) << 16)
+#define   G_008670_CE_STALLED_ON_TC_WR_CONFIRM(x)                     (((x) >> 16) & 0x1)
+#define   C_008670_CE_STALLED_ON_TC_WR_CONFIRM                        0xFFFEFFFF
+#define   S_008670_CE_STALLED_ON_ATOMIC_RTN_DATA(x)                   (((x) & 0x1) << 17)
+#define   G_008670_CE_STALLED_ON_ATOMIC_RTN_DATA(x)                   (((x) >> 17) & 0x1)
+#define   C_008670_CE_STALLED_ON_ATOMIC_RTN_DATA                      0xFFFDFFFF
+#define   S_008670_ATCL2IU_WAITING_ON_FREE(x)                         (((x) & 0x1) << 18)
+#define   G_008670_ATCL2IU_WAITING_ON_FREE(x)                         (((x) >> 18) & 0x1)
+#define   C_008670_ATCL2IU_WAITING_ON_FREE                            0xFFFBFFFF
+#define   S_008670_ATCL2IU_WAITING_ON_TAGS(x)                         (((x) & 0x1) << 19)
+#define   G_008670_ATCL2IU_WAITING_ON_TAGS(x)                         (((x) >> 19) & 0x1)
+#define   C_008670_ATCL2IU_WAITING_ON_TAGS                            0xFFF7FFFF
+#define   S_008670_ATCL1_WAITING_ON_TRANS(x)                          (((x) & 0x1) << 20)
+#define   G_008670_ATCL1_WAITING_ON_TRANS(x)                          (((x) >> 20) & 0x1)
+#define   C_008670_ATCL1_WAITING_ON_TRANS                             0xFFEFFFFF
+#define R_008674_CP_STALLED_STAT1                                       0x008674
+#define   S_008674_RBIU_TO_DMA_NOT_RDY_TO_RCV(x)                      (((x) & 0x1) << 0)
+#define   G_008674_RBIU_TO_DMA_NOT_RDY_TO_RCV(x)                      (((x) >> 0) & 0x1)
+#define   C_008674_RBIU_TO_DMA_NOT_RDY_TO_RCV                         0xFFFFFFFE
+#define   S_008674_RBIU_TO_SEM_NOT_RDY_TO_RCV(x)                      (((x) & 0x1) << 2)
+#define   G_008674_RBIU_TO_SEM_NOT_RDY_TO_RCV(x)                      (((x) >> 2) & 0x1)
+#define   C_008674_RBIU_TO_SEM_NOT_RDY_TO_RCV                         0xFFFFFFFB
+#define   S_008674_RBIU_TO_MEMWR_NOT_RDY_TO_RCV(x)                    (((x) & 0x1) << 4)
+#define   G_008674_RBIU_TO_MEMWR_NOT_RDY_TO_RCV(x)                    (((x) >> 4) & 0x1)
+#define   C_008674_RBIU_TO_MEMWR_NOT_RDY_TO_RCV                       0xFFFFFFEF
+#define   S_008674_ME_HAS_ACTIVE_CE_BUFFER_FLAG(x)                    (((x) & 0x1) << 10)
+#define   G_008674_ME_HAS_ACTIVE_CE_BUFFER_FLAG(x)                    (((x) >> 10) & 0x1)
+#define   C_008674_ME_HAS_ACTIVE_CE_BUFFER_FLAG                       0xFFFFFBFF
+#define   S_008674_ME_HAS_ACTIVE_DE_BUFFER_FLAG(x)                    (((x) & 0x1) << 11)
+#define   G_008674_ME_HAS_ACTIVE_DE_BUFFER_FLAG(x)                    (((x) >> 11) & 0x1)
+#define   C_008674_ME_HAS_ACTIVE_DE_BUFFER_FLAG                       0xFFFFF7FF
+#define   S_008674_ME_STALLED_ON_TC_WR_CONFIRM(x)                     (((x) & 0x1) << 12)
+#define   G_008674_ME_STALLED_ON_TC_WR_CONFIRM(x)                     (((x) >> 12) & 0x1)
+#define   C_008674_ME_STALLED_ON_TC_WR_CONFIRM                        0xFFFFEFFF
+#define   S_008674_ME_STALLED_ON_ATOMIC_RTN_DATA(x)                   (((x) & 0x1) << 13)
+#define   G_008674_ME_STALLED_ON_ATOMIC_RTN_DATA(x)                   (((x) >> 13) & 0x1)
+#define   C_008674_ME_STALLED_ON_ATOMIC_RTN_DATA                      0xFFFFDFFF
+#define   S_008674_ME_WAITING_ON_TC_READ_DATA(x)                      (((x) & 0x1) << 14)
+#define   G_008674_ME_WAITING_ON_TC_READ_DATA(x)                      (((x) >> 14) & 0x1)
+#define   C_008674_ME_WAITING_ON_TC_READ_DATA                         0xFFFFBFFF
+#define   S_008674_ME_WAITING_ON_REG_READ_DATA(x)                     (((x) & 0x1) << 15)
+#define   G_008674_ME_WAITING_ON_REG_READ_DATA(x)                     (((x) >> 15) & 0x1)
+#define   C_008674_ME_WAITING_ON_REG_READ_DATA                        0xFFFF7FFF
+#define   S_008674_RCIU_WAITING_ON_GDS_FREE(x)                        (((x) & 0x1) << 23)
+#define   G_008674_RCIU_WAITING_ON_GDS_FREE(x)                        (((x) >> 23) & 0x1)
+#define   C_008674_RCIU_WAITING_ON_GDS_FREE                           0xFF7FFFFF
+#define   S_008674_RCIU_WAITING_ON_GRBM_FREE(x)                       (((x) & 0x1) << 24)
+#define   G_008674_RCIU_WAITING_ON_GRBM_FREE(x)                       (((x) >> 24) & 0x1)
+#define   C_008674_RCIU_WAITING_ON_GRBM_FREE                          0xFEFFFFFF
+#define   S_008674_RCIU_WAITING_ON_VGT_FREE(x)                        (((x) & 0x1) << 25)
+#define   G_008674_RCIU_WAITING_ON_VGT_FREE(x)                        (((x) >> 25) & 0x1)
+#define   C_008674_RCIU_WAITING_ON_VGT_FREE                           0xFDFFFFFF
+#define   S_008674_RCIU_STALLED_ON_ME_READ(x)                         (((x) & 0x1) << 26)
+#define   G_008674_RCIU_STALLED_ON_ME_READ(x)                         (((x) >> 26) & 0x1)
+#define   C_008674_RCIU_STALLED_ON_ME_READ                            0xFBFFFFFF
+#define   S_008674_RCIU_STALLED_ON_DMA_READ(x)                        (((x) & 0x1) << 27)
+#define   G_008674_RCIU_STALLED_ON_DMA_READ(x)                        (((x) >> 27) & 0x1)
+#define   C_008674_RCIU_STALLED_ON_DMA_READ                           0xF7FFFFFF
+#define   S_008674_RCIU_STALLED_ON_APPEND_READ(x)                     (((x) & 0x1) << 28)
+#define   G_008674_RCIU_STALLED_ON_APPEND_READ(x)                     (((x) >> 28) & 0x1)
+#define   C_008674_RCIU_STALLED_ON_APPEND_READ                        0xEFFFFFFF
+#define   S_008674_RCIU_HALTED_BY_REG_VIOLATION(x)                    (((x) & 0x1) << 29)
+#define   G_008674_RCIU_HALTED_BY_REG_VIOLATION(x)                    (((x) >> 29) & 0x1)
+#define   C_008674_RCIU_HALTED_BY_REG_VIOLATION                       0xDFFFFFFF
+#define R_008678_CP_STALLED_STAT2                                       0x008678
+#define   S_008678_PFP_TO_CSF_NOT_RDY_TO_RCV(x)                       (((x) & 0x1) << 0)
+#define   G_008678_PFP_TO_CSF_NOT_RDY_TO_RCV(x)                       (((x) >> 0) & 0x1)
+#define   C_008678_PFP_TO_CSF_NOT_RDY_TO_RCV                          0xFFFFFFFE
+#define   S_008678_PFP_TO_MEQ_NOT_RDY_TO_RCV(x)                       (((x) & 0x1) << 1)
+#define   G_008678_PFP_TO_MEQ_NOT_RDY_TO_RCV(x)                       (((x) >> 1) & 0x1)
+#define   C_008678_PFP_TO_MEQ_NOT_RDY_TO_RCV                          0xFFFFFFFD
+#define   S_008678_PFP_TO_RCIU_NOT_RDY_TO_RCV(x)                      (((x) & 0x1) << 2)
+#define   G_008678_PFP_TO_RCIU_NOT_RDY_TO_RCV(x)                      (((x) >> 2) & 0x1)
+#define   C_008678_PFP_TO_RCIU_NOT_RDY_TO_RCV                         0xFFFFFFFB
+#define   S_008678_PFP_TO_VGT_WRITES_PENDING(x)                       (((x) & 0x1) << 4)
+#define   G_008678_PFP_TO_VGT_WRITES_PENDING(x)                       (((x) >> 4) & 0x1)
+#define   C_008678_PFP_TO_VGT_WRITES_PENDING                          0xFFFFFFEF
+#define   S_008678_PFP_RCIU_READ_PENDING(x)                           (((x) & 0x1) << 5)
+#define   G_008678_PFP_RCIU_READ_PENDING(x)                           (((x) >> 5) & 0x1)
+#define   C_008678_PFP_RCIU_READ_PENDING                              0xFFFFFFDF
+#define   S_008678_PFP_WAITING_ON_BUFFER_DATA(x)                      (((x) & 0x1) << 8)
+#define   G_008678_PFP_WAITING_ON_BUFFER_DATA(x)                      (((x) >> 8) & 0x1)
+#define   C_008678_PFP_WAITING_ON_BUFFER_DATA                         0xFFFFFEFF
+#define   S_008678_ME_WAIT_ON_CE_COUNTER(x)                           (((x) & 0x1) << 9)
+#define   G_008678_ME_WAIT_ON_CE_COUNTER(x)                           (((x) >> 9) & 0x1)
+#define   C_008678_ME_WAIT_ON_CE_COUNTER                              0xFFFFFDFF
+#define   S_008678_ME_WAIT_ON_AVAIL_BUFFER(x)                         (((x) & 0x1) << 10)
+#define   G_008678_ME_WAIT_ON_AVAIL_BUFFER(x)                         (((x) >> 10) & 0x1)
+#define   C_008678_ME_WAIT_ON_AVAIL_BUFFER                            0xFFFFFBFF
+#define   S_008678_GFX_CNTX_NOT_AVAIL_TO_ME(x)                        (((x) & 0x1) << 11)
+#define   G_008678_GFX_CNTX_NOT_AVAIL_TO_ME(x)                        (((x) >> 11) & 0x1)
+#define   C_008678_GFX_CNTX_NOT_AVAIL_TO_ME                           0xFFFFF7FF
+#define   S_008678_ME_RCIU_NOT_RDY_TO_RCV(x)                          (((x) & 0x1) << 12)
+#define   G_008678_ME_RCIU_NOT_RDY_TO_RCV(x)                          (((x) >> 12) & 0x1)
+#define   C_008678_ME_RCIU_NOT_RDY_TO_RCV                             0xFFFFEFFF
+#define   S_008678_ME_TO_CONST_NOT_RDY_TO_RCV(x)                      (((x) & 0x1) << 13)
+#define   G_008678_ME_TO_CONST_NOT_RDY_TO_RCV(x)                      (((x) >> 13) & 0x1)
+#define   C_008678_ME_TO_CONST_NOT_RDY_TO_RCV                         0xFFFFDFFF
+#define   S_008678_ME_WAITING_DATA_FROM_PFP(x)                        (((x) & 0x1) << 14)
+#define   G_008678_ME_WAITING_DATA_FROM_PFP(x)                        (((x) >> 14) & 0x1)
+#define   C_008678_ME_WAITING_DATA_FROM_PFP                           0xFFFFBFFF
+#define   S_008678_ME_WAITING_ON_PARTIAL_FLUSH(x)                     (((x) & 0x1) << 15)
+#define   G_008678_ME_WAITING_ON_PARTIAL_FLUSH(x)                     (((x) >> 15) & 0x1)
+#define   C_008678_ME_WAITING_ON_PARTIAL_FLUSH                        0xFFFF7FFF
+#define   S_008678_MEQ_TO_ME_NOT_RDY_TO_RCV(x)                        (((x) & 0x1) << 16)
+#define   G_008678_MEQ_TO_ME_NOT_RDY_TO_RCV(x)                        (((x) >> 16) & 0x1)
+#define   C_008678_MEQ_TO_ME_NOT_RDY_TO_RCV                           0xFFFEFFFF
+#define   S_008678_STQ_TO_ME_NOT_RDY_TO_RCV(x)                        (((x) & 0x1) << 17)
+#define   G_008678_STQ_TO_ME_NOT_RDY_TO_RCV(x)                        (((x) >> 17) & 0x1)
+#define   C_008678_STQ_TO_ME_NOT_RDY_TO_RCV                           0xFFFDFFFF
+#define   S_008678_ME_WAITING_DATA_FROM_STQ(x)                        (((x) & 0x1) << 18)
+#define   G_008678_ME_WAITING_DATA_FROM_STQ(x)                        (((x) >> 18) & 0x1)
+#define   C_008678_ME_WAITING_DATA_FROM_STQ                           0xFFFBFFFF
+#define   S_008678_PFP_STALLED_ON_TC_WR_CONFIRM(x)                    (((x) & 0x1) << 19)
+#define   G_008678_PFP_STALLED_ON_TC_WR_CONFIRM(x)                    (((x) >> 19) & 0x1)
+#define   C_008678_PFP_STALLED_ON_TC_WR_CONFIRM                       0xFFF7FFFF
+#define   S_008678_PFP_STALLED_ON_ATOMIC_RTN_DATA(x)                  (((x) & 0x1) << 20)
+#define   G_008678_PFP_STALLED_ON_ATOMIC_RTN_DATA(x)                  (((x) >> 20) & 0x1)
+#define   C_008678_PFP_STALLED_ON_ATOMIC_RTN_DATA                     0xFFEFFFFF
+#define   S_008678_EOPD_FIFO_NEEDS_SC_EOP_DONE(x)                     (((x) & 0x1) << 21)
+#define   G_008678_EOPD_FIFO_NEEDS_SC_EOP_DONE(x)                     (((x) >> 21) & 0x1)
+#define   C_008678_EOPD_FIFO_NEEDS_SC_EOP_DONE                        0xFFDFFFFF
+#define   S_008678_EOPD_FIFO_NEEDS_WR_CONFIRM(x)                      (((x) & 0x1) << 22)
+#define   G_008678_EOPD_FIFO_NEEDS_WR_CONFIRM(x)                      (((x) >> 22) & 0x1)
+#define   C_008678_EOPD_FIFO_NEEDS_WR_CONFIRM                         0xFFBFFFFF
+#define   S_008678_STRMO_WR_OF_PRIM_DATA_PENDING(x)                   (((x) & 0x1) << 23)
+#define   G_008678_STRMO_WR_OF_PRIM_DATA_PENDING(x)                   (((x) >> 23) & 0x1)
+#define   C_008678_STRMO_WR_OF_PRIM_DATA_PENDING                      0xFF7FFFFF
+#define   S_008678_PIPE_STATS_WR_DATA_PENDING(x)                      (((x) & 0x1) << 24)
+#define   G_008678_PIPE_STATS_WR_DATA_PENDING(x)                      (((x) >> 24) & 0x1)
+#define   C_008678_PIPE_STATS_WR_DATA_PENDING                         0xFEFFFFFF
+#define   S_008678_APPEND_RDY_WAIT_ON_CS_DONE(x)                      (((x) & 0x1) << 25)
+#define   G_008678_APPEND_RDY_WAIT_ON_CS_DONE(x)                      (((x) >> 25) & 0x1)
+#define   C_008678_APPEND_RDY_WAIT_ON_CS_DONE                         0xFDFFFFFF
+#define   S_008678_APPEND_RDY_WAIT_ON_PS_DONE(x)                      (((x) & 0x1) << 26)
+#define   G_008678_APPEND_RDY_WAIT_ON_PS_DONE(x)                      (((x) >> 26) & 0x1)
+#define   C_008678_APPEND_RDY_WAIT_ON_PS_DONE                         0xFBFFFFFF
+#define   S_008678_APPEND_WAIT_ON_WR_CONFIRM(x)                       (((x) & 0x1) << 27)
+#define   G_008678_APPEND_WAIT_ON_WR_CONFIRM(x)                       (((x) >> 27) & 0x1)
+#define   C_008678_APPEND_WAIT_ON_WR_CONFIRM                          0xF7FFFFFF
+#define   S_008678_APPEND_ACTIVE_PARTITION(x)                         (((x) & 0x1) << 28)
+#define   G_008678_APPEND_ACTIVE_PARTITION(x)                         (((x) >> 28) & 0x1)
+#define   C_008678_APPEND_ACTIVE_PARTITION                            0xEFFFFFFF
+#define   S_008678_APPEND_WAITING_TO_SEND_MEMWRITE(x)                 (((x) & 0x1) << 29)
+#define   G_008678_APPEND_WAITING_TO_SEND_MEMWRITE(x)                 (((x) >> 29) & 0x1)
+#define   C_008678_APPEND_WAITING_TO_SEND_MEMWRITE                    0xDFFFFFFF
+#define   S_008678_SURF_SYNC_NEEDS_IDLE_CNTXS(x)                      (((x) & 0x1) << 30)
+#define   G_008678_SURF_SYNC_NEEDS_IDLE_CNTXS(x)                      (((x) >> 30) & 0x1)
+#define   C_008678_SURF_SYNC_NEEDS_IDLE_CNTXS                         0xBFFFFFFF
+#define   S_008678_SURF_SYNC_NEEDS_ALL_CLEAN(x)                       (((x) & 0x1) << 31)
+#define   G_008678_SURF_SYNC_NEEDS_ALL_CLEAN(x)                       (((x) >> 31) & 0x1)
+#define   C_008678_SURF_SYNC_NEEDS_ALL_CLEAN                          0x7FFFFFFF
+#define R_008680_CP_STAT                                                0x008680
+#define   S_008680_ROQ_RING_BUSY(x)                                   (((x) & 0x1) << 9)
+#define   G_008680_ROQ_RING_BUSY(x)                                   (((x) >> 9) & 0x1)
+#define   C_008680_ROQ_RING_BUSY                                      0xFFFFFDFF
+#define   S_008680_ROQ_INDIRECT1_BUSY(x)                              (((x) & 0x1) << 10)
+#define   G_008680_ROQ_INDIRECT1_BUSY(x)                              (((x) >> 10) & 0x1)
+#define   C_008680_ROQ_INDIRECT1_BUSY                                 0xFFFFFBFF
+#define   S_008680_ROQ_INDIRECT2_BUSY(x)                              (((x) & 0x1) << 11)
+#define   G_008680_ROQ_INDIRECT2_BUSY(x)                              (((x) >> 11) & 0x1)
+#define   C_008680_ROQ_INDIRECT2_BUSY                                 0xFFFFF7FF
+#define   S_008680_ROQ_STATE_BUSY(x)                                  (((x) & 0x1) << 12)
+#define   G_008680_ROQ_STATE_BUSY(x)                                  (((x) >> 12) & 0x1)
+#define   C_008680_ROQ_STATE_BUSY                                     0xFFFFEFFF
+#define   S_008680_DC_BUSY(x)                                         (((x) & 0x1) << 13)
+#define   G_008680_DC_BUSY(x)                                         (((x) >> 13) & 0x1)
+#define   C_008680_DC_BUSY                                            0xFFFFDFFF
+#define   S_008680_ATCL2IU_BUSY(x)                                    (((x) & 0x1) << 14)
+#define   G_008680_ATCL2IU_BUSY(x)                                    (((x) >> 14) & 0x1)
+#define   C_008680_ATCL2IU_BUSY                                       0xFFFFBFFF
+#define   S_008680_PFP_BUSY(x)                                        (((x) & 0x1) << 15)
+#define   G_008680_PFP_BUSY(x)                                        (((x) >> 15) & 0x1)
+#define   C_008680_PFP_BUSY                                           0xFFFF7FFF
+#define   S_008680_MEQ_BUSY(x)                                        (((x) & 0x1) << 16)
+#define   G_008680_MEQ_BUSY(x)                                        (((x) >> 16) & 0x1)
+#define   C_008680_MEQ_BUSY                                           0xFFFEFFFF
+#define   S_008680_ME_BUSY(x)                                         (((x) & 0x1) << 17)
+#define   G_008680_ME_BUSY(x)                                         (((x) >> 17) & 0x1)
+#define   C_008680_ME_BUSY                                            0xFFFDFFFF
+#define   S_008680_QUERY_BUSY(x)                                      (((x) & 0x1) << 18)
+#define   G_008680_QUERY_BUSY(x)                                      (((x) >> 18) & 0x1)
+#define   C_008680_QUERY_BUSY                                         0xFFFBFFFF
+#define   S_008680_SEMAPHORE_BUSY(x)                                  (((x) & 0x1) << 19)
+#define   G_008680_SEMAPHORE_BUSY(x)                                  (((x) >> 19) & 0x1)
+#define   C_008680_SEMAPHORE_BUSY                                     0xFFF7FFFF
+#define   S_008680_INTERRUPT_BUSY(x)                                  (((x) & 0x1) << 20)
+#define   G_008680_INTERRUPT_BUSY(x)                                  (((x) >> 20) & 0x1)
+#define   C_008680_INTERRUPT_BUSY                                     0xFFEFFFFF
+#define   S_008680_SURFACE_SYNC_BUSY(x)                               (((x) & 0x1) << 21)
+#define   G_008680_SURFACE_SYNC_BUSY(x)                               (((x) >> 21) & 0x1)
+#define   C_008680_SURFACE_SYNC_BUSY                                  0xFFDFFFFF
+#define   S_008680_DMA_BUSY(x)                                        (((x) & 0x1) << 22)
+#define   G_008680_DMA_BUSY(x)                                        (((x) >> 22) & 0x1)
+#define   C_008680_DMA_BUSY                                           0xFFBFFFFF
+#define   S_008680_RCIU_BUSY(x)                                       (((x) & 0x1) << 23)
+#define   G_008680_RCIU_BUSY(x)                                       (((x) >> 23) & 0x1)
+#define   C_008680_RCIU_BUSY                                          0xFF7FFFFF
+#define   S_008680_SCRATCH_RAM_BUSY(x)                                (((x) & 0x1) << 24)
+#define   G_008680_SCRATCH_RAM_BUSY(x)                                (((x) >> 24) & 0x1)
+#define   C_008680_SCRATCH_RAM_BUSY                                   0xFEFFFFFF
+#define   S_008680_CPC_CPG_BUSY(x)                                    (((x) & 0x1) << 25)
+#define   G_008680_CPC_CPG_BUSY(x)                                    (((x) >> 25) & 0x1)
+#define   C_008680_CPC_CPG_BUSY                                       0xFDFFFFFF
+#define   S_008680_CE_BUSY(x)                                         (((x) & 0x1) << 26)
+#define   G_008680_CE_BUSY(x)                                         (((x) >> 26) & 0x1)
+#define   C_008680_CE_BUSY                                            0xFBFFFFFF
+#define   S_008680_TCIU_BUSY(x)                                       (((x) & 0x1) << 27)
+#define   G_008680_TCIU_BUSY(x)                                       (((x) >> 27) & 0x1)
+#define   C_008680_TCIU_BUSY                                          0xF7FFFFFF
+#define   S_008680_ROQ_CE_RING_BUSY(x)                                (((x) & 0x1) << 28)
+#define   G_008680_ROQ_CE_RING_BUSY(x)                                (((x) >> 28) & 0x1)
+#define   C_008680_ROQ_CE_RING_BUSY                                   0xEFFFFFFF
+#define   S_008680_ROQ_CE_INDIRECT1_BUSY(x)                           (((x) & 0x1) << 29)
+#define   G_008680_ROQ_CE_INDIRECT1_BUSY(x)                           (((x) >> 29) & 0x1)
+#define   C_008680_ROQ_CE_INDIRECT1_BUSY                              0xDFFFFFFF
+#define   S_008680_ROQ_CE_INDIRECT2_BUSY(x)                           (((x) & 0x1) << 30)
+#define   G_008680_ROQ_CE_INDIRECT2_BUSY(x)                           (((x) >> 30) & 0x1)
+#define   C_008680_ROQ_CE_INDIRECT2_BUSY                              0xBFFFFFFF
+#define   S_008680_CP_BUSY(x)                                         (((x) & 0x1) << 31)
+#define   G_008680_CP_BUSY(x)                                         (((x) >> 31) & 0x1)
+#define   C_008680_CP_BUSY                                            0x7FFFFFFF
 /* CIK */
+#define R_030800_GRBM_GFX_INDEX                                         0x030800
+#define   S_030800_INSTANCE_INDEX(x)                                  (((x) & 0xFF) << 0)
+#define   G_030800_INSTANCE_INDEX(x)                                  (((x) >> 0) & 0xFF)
+#define   C_030800_INSTANCE_INDEX                                     0xFFFFFF00
+#define   S_030800_SH_INDEX(x)                                        (((x) & 0xFF) << 8)
+#define   G_030800_SH_INDEX(x)                                        (((x) >> 8) & 0xFF)
+#define   C_030800_SH_INDEX                                           0xFFFF00FF
+#define   S_030800_SE_INDEX(x)                                        (((x) & 0xFF) << 16)
+#define   G_030800_SE_INDEX(x)                                        (((x) >> 16) & 0xFF)
+#define   C_030800_SE_INDEX                                           0xFF00FFFF
+#define   S_030800_SH_BROADCAST_WRITES(x)                             (((x) & 0x1) << 29)
+#define   G_030800_SH_BROADCAST_WRITES(x)                             (((x) >> 29) & 0x1)
+#define   C_030800_SH_BROADCAST_WRITES                                0xDFFFFFFF
+#define   S_030800_INSTANCE_BROADCAST_WRITES(x)                       (((x) & 0x1) << 30)
+#define   G_030800_INSTANCE_BROADCAST_WRITES(x)                       (((x) >> 30) & 0x1)
+#define   C_030800_INSTANCE_BROADCAST_WRITES                          0xBFFFFFFF
+#define   S_030800_SE_BROADCAST_WRITES(x)                             (((x) & 0x1) << 31)
+#define   G_030800_SE_BROADCAST_WRITES(x)                             (((x) >> 31) & 0x1)
+#define   C_030800_SE_BROADCAST_WRITES                                0x7FFFFFFF
+#define R_030900_VGT_ESGS_RING_SIZE                                     0x030900
+#define R_030904_VGT_GSVS_RING_SIZE                                     0x030904
 #define R_030908_VGT_PRIMITIVE_TYPE                                     0x030908
 #define   S_030908_PRIM_TYPE(x)                                       (((x) & 0x3F) << 0)
 #define   G_030908_PRIM_TYPE(x)                                       (((x) >> 0) & 0x3F)
@@ -530,6 +1736,34 @@
 #define   S_030A04_CURRENT_COUNT(x)                                   (((x) & 0xFF) << 8)
 #define   G_030A04_CURRENT_COUNT(x)                                   (((x) >> 8) & 0xFF)
 #define   C_030A04_CURRENT_COUNT                                      0xFFFF00FF
+#define R_030A10_PA_SC_SCREEN_EXTENT_MIN_0                              0x030A10
+#define   S_030A10_X(x)                                               (((x) & 0xFFFF) << 0)
+#define   G_030A10_X(x)                                               (((x) >> 0) & 0xFFFF)
+#define   C_030A10_X                                                  0xFFFF0000
+#define   S_030A10_Y(x)                                               (((x) & 0xFFFF) << 16)
+#define   G_030A10_Y(x)                                               (((x) >> 16) & 0xFFFF)
+#define   C_030A10_Y                                                  0x0000FFFF
+#define R_030A14_PA_SC_SCREEN_EXTENT_MAX_0                              0x030A14
+#define   S_030A14_X(x)                                               (((x) & 0xFFFF) << 0)
+#define   G_030A14_X(x)                                               (((x) >> 0) & 0xFFFF)
+#define   C_030A14_X                                                  0xFFFF0000
+#define   S_030A14_Y(x)                                               (((x) & 0xFFFF) << 16)
+#define   G_030A14_Y(x)                                               (((x) >> 16) & 0xFFFF)
+#define   C_030A14_Y                                                  0x0000FFFF
+#define R_030A18_PA_SC_SCREEN_EXTENT_MIN_1                              0x030A18
+#define   S_030A18_X(x)                                               (((x) & 0xFFFF) << 0)
+#define   G_030A18_X(x)                                               (((x) >> 0) & 0xFFFF)
+#define   C_030A18_X                                                  0xFFFF0000
+#define   S_030A18_Y(x)                                               (((x) & 0xFFFF) << 16)
+#define   G_030A18_Y(x)                                               (((x) >> 16) & 0xFFFF)
+#define   C_030A18_Y                                                  0x0000FFFF
+#define R_030A2C_PA_SC_SCREEN_EXTENT_MAX_1                              0x030A2C
+#define   S_030A2C_X(x)                                               (((x) & 0xFFFF) << 0)
+#define   G_030A2C_X(x)                                               (((x) >> 0) & 0xFFFF)
+#define   C_030A2C_X                                                  0xFFFF0000
+#define   S_030A2C_Y(x)                                               (((x) & 0xFFFF) << 16)
+#define   G_030A2C_Y(x)                                               (((x) >> 16) & 0xFFFF)
+#define   C_030A2C_Y                                                  0x0000FFFF
 /*     */
 #define R_008BF0_PA_SC_ENHANCE                                          0x008BF0
 #define   S_008BF0_ENABLE_PA_SC_OUT_OF_ORDER(x)                       (((x) & 0x1) << 0)
@@ -608,6 +1842,32 @@
 #define     V_008DFC_SQ_VGPR                                        0x00
 /*     */
 #define R_008DFC_SQ_INST                                                0x008DFC
+#define R_030D20_SQC_CACHES                                             0x030D20
+#define   S_030D20_TARGET_INST(x)                                     (((x) & 0x1) << 0)
+#define   G_030D20_TARGET_INST(x)                                     (((x) >> 0) & 0x1)
+#define   C_030D20_TARGET_INST                                        0xFFFFFFFE
+#define   S_030D20_TARGET_DATA(x)                                     (((x) & 0x1) << 1)
+#define   G_030D20_TARGET_DATA(x)                                     (((x) >> 1) & 0x1)
+#define   C_030D20_TARGET_DATA                                        0xFFFFFFFD
+#define   S_030D20_INVALIDATE(x)                                      (((x) & 0x1) << 2)
+#define   G_030D20_INVALIDATE(x)                                      (((x) >> 2) & 0x1)
+#define   C_030D20_INVALIDATE                                         0xFFFFFFFB
+#define   S_030D20_WRITEBACK(x)                                       (((x) & 0x1) << 3)
+#define   G_030D20_WRITEBACK(x)                                       (((x) >> 3) & 0x1)
+#define   C_030D20_WRITEBACK                                          0xFFFFFFF7
+#define   S_030D20_VOL(x)                                             (((x) & 0x1) << 4)
+#define   G_030D20_VOL(x)                                             (((x) >> 4) & 0x1)
+#define   C_030D20_VOL                                                0xFFFFFFEF
+#define   S_030D20_COMPLETE(x)                                        (((x) & 0x1) << 16)
+#define   G_030D20_COMPLETE(x)                                        (((x) >> 16) & 0x1)
+#define   C_030D20_COMPLETE                                           0xFFFEFFFF
+#define R_030D24_SQC_WRITEBACK                                          0x030D24
+#define   S_030D24_DWB(x)                                             (((x) & 0x1) << 0)
+#define   G_030D24_DWB(x)                                             (((x) >> 0) & 0x1)
+#define   C_030D24_DWB                                                0xFFFFFFFE
+#define   S_030D24_DIRTY(x)                                           (((x) & 0x1) << 1)
+#define   G_030D24_DIRTY(x)                                           (((x) >> 1) & 0x1)
+#define   C_030D24_DIRTY                                              0xFFFFFFFD
 #define R_008DFC_SQ_VOP1                                                0x008DFC
 #define   S_008DFC_SRC0(x)                                            (((x) & 0x1FF) << 0)
 #define   G_008DFC_SRC0(x)                                            (((x) >> 0) & 0x1FF)
@@ -3740,7 +5000,17 @@
 #define   C_008DFC_ENCODING                                           0x03FFFFFF
 #define     V_008DFC_SQ_ENC_MUBUF_FIELD                             0x38
 #endif
+#define R_030E00_TA_CS_BC_BASE_ADDR                                     0x030E00
+#define R_030E04_TA_CS_BC_BASE_ADDR_HI                                  0x030E04
+#define   S_030E04_ADDRESS(x)                                         (((x) & 0xFF) << 0)
+#define   G_030E04_ADDRESS(x)                                         (((x) >> 0) & 0xFF)
+#define   C_030E04_ADDRESS                                            0xFFFFFF00
+#define R_030F00_DB_OCCLUSION_COUNT0_LOW                                0x030F00
 #define R_008F00_SQ_BUF_RSRC_WORD0                                      0x008F00
+#define R_030F04_DB_OCCLUSION_COUNT0_HI                                 0x030F04
+#define   S_030F04_COUNT_HI(x)                                        (((x) & 0x7FFFFFFF) << 0)
+#define   G_030F04_COUNT_HI(x)                                        (((x) >> 0) & 0x7FFFFFFF)
+#define   C_030F04_COUNT_HI                                           0x80000000
 #define R_008F04_SQ_BUF_RSRC_WORD1                                      0x008F04
 #define   S_008F04_BASE_ADDRESS_HI(x)                                 (((x) & 0xFFFF) << 0)
 #define   G_008F04_BASE_ADDRESS_HI(x)                                 (((x) >> 0) & 0xFFFF)
@@ -3754,7 +5024,12 @@
 #define   S_008F04_SWIZZLE_ENABLE(x)                                  (((x) & 0x1) << 31)
 #define   G_008F04_SWIZZLE_ENABLE(x)                                  (((x) >> 31) & 0x1)
 #define   C_008F04_SWIZZLE_ENABLE                                     0x7FFFFFFF
+#define R_030F08_DB_OCCLUSION_COUNT1_LOW                                0x030F08
 #define R_008F08_SQ_BUF_RSRC_WORD2                                      0x008F08
+#define R_030F0C_DB_OCCLUSION_COUNT1_HI                                 0x030F0C
+#define   S_030F0C_COUNT_HI(x)                                        (((x) & 0x7FFFFFFF) << 0)
+#define   G_030F0C_COUNT_HI(x)                                        (((x) >> 0) & 0x7FFFFFFF)
+#define   C_030F0C_COUNT_HI                                           0x80000000
 #define R_008F0C_SQ_BUF_RSRC_WORD3                                      0x008F0C
 #define   S_008F0C_DST_SEL_X(x)                                       (((x) & 0x07) << 0)
 #define   G_008F0C_DST_SEL_X(x)                                       (((x) >> 0) & 0x07)
@@ -3862,7 +5137,12 @@
 #define     V_008F0C_SQ_RSRC_BUF_RSVD_1                             0x01
 #define     V_008F0C_SQ_RSRC_BUF_RSVD_2                             0x02
 #define     V_008F0C_SQ_RSRC_BUF_RSVD_3                             0x03
+#define R_030F10_DB_OCCLUSION_COUNT2_LOW                                0x030F10
 #define R_008F10_SQ_IMG_RSRC_WORD0                                      0x008F10
+#define R_030F14_DB_OCCLUSION_COUNT2_HI                                 0x030F14
+#define   S_030F14_COUNT_HI(x)                                        (((x) & 0x7FFFFFFF) << 0)
+#define   G_030F14_COUNT_HI(x)                                        (((x) >> 0) & 0x7FFFFFFF)
+#define   C_030F14_COUNT_HI                                           0x80000000
 #define R_008F14_SQ_IMG_RSRC_WORD1                                      0x008F14
 #define   S_008F14_BASE_ADDRESS_HI(x)                                 (((x) & 0xFF) << 0)
 #define   G_008F14_BASE_ADDRESS_HI(x)                                 (((x) >> 0) & 0xFF)
@@ -3961,6 +5241,7 @@
 #define   G_008F14_MTYPE(x)                                           (((x) >> 30) & 0x03)
 #define   C_008F14_MTYPE                                              0x3FFFFFFF
 /*     */
+#define R_030F18_DB_OCCLUSION_COUNT3_LOW                                0x030F18
 #define R_008F18_SQ_IMG_RSRC_WORD2                                      0x008F18
 #define   S_008F18_WIDTH(x)                                           (((x) & 0x3FFF) << 0)
 #define   G_008F18_WIDTH(x)                                           (((x) >> 0) & 0x3FFF)
@@ -3974,6 +5255,10 @@
 #define   S_008F18_INTERLACED(x)                                      (((x) & 0x1) << 31)
 #define   G_008F18_INTERLACED(x)                                      (((x) >> 31) & 0x1)
 #define   C_008F18_INTERLACED                                         0x7FFFFFFF
+#define R_030F1C_DB_OCCLUSION_COUNT3_HI                                 0x030F1C
+#define   S_030F1C_COUNT_HI(x)                                        (((x) & 0x7FFFFFFF) << 0)
+#define   G_030F1C_COUNT_HI(x)                                        (((x) >> 0) & 0x7FFFFFFF)
+#define   C_030F1C_COUNT_HI                                           0x80000000
 #define R_008F1C_SQ_IMG_RSRC_WORD3                                      0x008F1C
 #define   S_008F1C_DST_SEL_X(x)                                       (((x) & 0x07) << 0)
 #define   G_008F1C_DST_SEL_X(x)                                       (((x) >> 0) & 0x07)
@@ -4084,6 +5369,23 @@
 #define   G_008F28_LOD_HDW_CNT_EN(x)                                  (((x) >> 20) & 0x1)
 #define   C_008F28_LOD_HDW_CNT_EN                                     0xFFEFFFFF
 /*     */
+/* VI */
+#define   S_008F28_COMPRESSION_EN(x)                                  (((x) & 0x1) << 21)
+#define   G_008F28_COMPRESSION_EN(x)                                  (((x) >> 21) & 0x1)
+#define   C_008F28_COMPRESSION_EN                                     0xFFDFFFFF
+#define   S_008F28_ALPHA_IS_ON_MSB(x)                                 (((x) & 0x1) << 22)
+#define   G_008F28_ALPHA_IS_ON_MSB(x)                                 (((x) >> 22) & 0x1)
+#define   C_008F28_ALPHA_IS_ON_MSB                                    0xFFBFFFFF
+#define   S_008F28_COLOR_TRANSFORM(x)                                 (((x) & 0x1) << 23)
+#define   G_008F28_COLOR_TRANSFORM(x)                                 (((x) >> 23) & 0x1)
+#define   C_008F28_COLOR_TRANSFORM                                    0xFF7FFFFF
+#define   S_008F28_LOST_ALPHA_BITS(x)                                 (((x) & 0x0F) << 24)
+#define   G_008F28_LOST_ALPHA_BITS(x)                                 (((x) >> 24) & 0x0F)
+#define   C_008F28_LOST_ALPHA_BITS                                    0xF0FFFFFF
+#define   S_008F28_LOST_COLOR_BITS(x)                                 (((x) & 0x0F) << 28)
+#define   G_008F28_LOST_COLOR_BITS(x)                                 (((x) >> 28) & 0x0F)
+#define   C_008F28_LOST_COLOR_BITS                                    0x0FFFFFFF
+/*    */
 #define R_008F2C_SQ_IMG_RSRC_WORD7                                      0x008F2C
 #define R_008F30_SQ_IMG_SAMP_WORD0                                      0x008F30
 #define   S_008F30_CLAMP_X(x)                                         (((x) & 0x07) << 0)
@@ -4148,6 +5450,11 @@
 #define   S_008F30_FILTER_MODE(x)                                     (((x) & 0x03) << 29)
 #define   G_008F30_FILTER_MODE(x)                                     (((x) >> 29) & 0x03)
 #define   C_008F30_FILTER_MODE                                        0x9FFFFFFF
+/* VI */
+#define   S_008F30_COMPAT_MODE(x)                                     (((x) & 0x1) << 31)
+#define   G_008F30_COMPAT_MODE(x)                                     (((x) >> 31) & 0x1)
+#define   C_008F30_COMPAT_MODE                                        0x7FFFFFFF
+/*    */
 #define R_008F34_SQ_IMG_SAMP_WORD1                                      0x008F34
 #define   S_008F34_MIN_LOD(x)                                         (((x) & 0xFFF) << 0)
 #define   G_008F34_MIN_LOD(x)                                         (((x) >> 0) & 0xFFF)
@@ -4313,6 +5620,11 @@
 #define   G_008F44_OFFSET(x)                                          (((x) >> 0) & 0xFFFFFF)
 #define   C_008F44_OFFSET                                             0xFF000000
 /*     */
+#define R_030FF8_DB_ZPASS_COUNT_LOW                                     0x030FF8
+#define R_030FFC_DB_ZPASS_COUNT_HI                                      0x030FFC
+#define   S_030FFC_COUNT_HI(x)                                        (((x) & 0x7FFFFFFF) << 0)
+#define   G_030FFC_COUNT_HI(x)                                        (((x) >> 0) & 0x7FFFFFFF)
+#define   C_030FFC_COUNT_HI                                           0x80000000
 #define R_009100_SPI_CONFIG_CNTL                                        0x009100
 #define   S_009100_GPR_WRITE_PRIORITY(x)                              (((x) & 0x1FFFFF) << 0)
 #define   G_009100_GPR_WRITE_PRIORITY(x)                              (((x) >> 0) & 0x1FFFFF)
@@ -4437,6 +5749,34 @@
 #define   S_009858_MSAA16_Y(x)                                        (((x) & 0x03) << 18)
 #define   G_009858_MSAA16_Y(x)                                        (((x) >> 18) & 0x03)
 #define   C_009858_MSAA16_Y                                           0xFFF3FFFF
+#define R_0098F8_GB_ADDR_CONFIG                                         0x0098F8
+#define   S_0098F8_NUM_PIPES(x)                                       (((x) & 0x07) << 0)
+#define   G_0098F8_NUM_PIPES(x)                                       (((x) >> 0) & 0x07)
+#define   C_0098F8_NUM_PIPES                                          0xFFFFFFF8
+#define   S_0098F8_PIPE_INTERLEAVE_SIZE(x)                            (((x) & 0x07) << 4)
+#define   G_0098F8_PIPE_INTERLEAVE_SIZE(x)                            (((x) >> 4) & 0x07)
+#define   C_0098F8_PIPE_INTERLEAVE_SIZE                               0xFFFFFF8F
+#define   S_0098F8_BANK_INTERLEAVE_SIZE(x)                            (((x) & 0x07) << 8)
+#define   G_0098F8_BANK_INTERLEAVE_SIZE(x)                            (((x) >> 8) & 0x07)
+#define   C_0098F8_BANK_INTERLEAVE_SIZE                               0xFFFFF8FF
+#define   S_0098F8_NUM_SHADER_ENGINES(x)                              (((x) & 0x03) << 12)
+#define   G_0098F8_NUM_SHADER_ENGINES(x)                              (((x) >> 12) & 0x03)
+#define   C_0098F8_NUM_SHADER_ENGINES                                 0xFFFFCFFF
+#define   S_0098F8_SHADER_ENGINE_TILE_SIZE(x)                         (((x) & 0x07) << 16)
+#define   G_0098F8_SHADER_ENGINE_TILE_SIZE(x)                         (((x) >> 16) & 0x07)
+#define   C_0098F8_SHADER_ENGINE_TILE_SIZE                            0xFFF8FFFF
+#define   S_0098F8_NUM_GPUS(x)                                        (((x) & 0x07) << 20)
+#define   G_0098F8_NUM_GPUS(x)                                        (((x) >> 20) & 0x07)
+#define   C_0098F8_NUM_GPUS                                           0xFF8FFFFF
+#define   S_0098F8_MULTI_GPU_TILE_SIZE(x)                             (((x) & 0x03) << 24)
+#define   G_0098F8_MULTI_GPU_TILE_SIZE(x)                             (((x) >> 24) & 0x03)
+#define   C_0098F8_MULTI_GPU_TILE_SIZE                                0xFCFFFFFF
+#define   S_0098F8_ROW_SIZE(x)                                        (((x) & 0x03) << 28)
+#define   G_0098F8_ROW_SIZE(x)                                        (((x) >> 28) & 0x03)
+#define   C_0098F8_ROW_SIZE                                           0xCFFFFFFF
+#define   S_0098F8_NUM_LOWER_PIPES(x)                                 (((x) & 0x1) << 30)
+#define   G_0098F8_NUM_LOWER_PIPES(x)                                 (((x) >> 30) & 0x1)
+#define   C_0098F8_NUM_LOWER_PIPES                                    0xBFFFFFFF
 #define R_009910_GB_TILE_MODE0                                          0x009910
 #define   S_009910_MICRO_TILE_MODE(x)                                 (((x) & 0x03) << 0)
 #define   G_009910_MICRO_TILE_MODE(x)                                 (((x) >> 0) & 0x03)
@@ -4515,6 +5855,87 @@
 #define     V_009910_ADDR_SURF_4_BANK                               0x01
 #define     V_009910_ADDR_SURF_8_BANK                               0x02
 #define     V_009910_ADDR_SURF_16_BANK                              0x03
+#define   S_009910_MICRO_TILE_MODE_NEW(x)                             (((x) & 0x07) << 22)
+#define   G_009910_MICRO_TILE_MODE_NEW(x)                             (((x) >> 22) & 0x07)
+#define   C_009910_MICRO_TILE_MODE_NEW                                0xFE3FFFFF
+#define     V_009910_ADDR_SURF_DISPLAY_MICRO_TILING                 0x00
+#define     V_009910_ADDR_SURF_THIN_MICRO_TILING                    0x01
+#define     V_009910_ADDR_SURF_DEPTH_MICRO_TILING                   0x02
+#define     V_009910_ADDR_SURF_ROTATED_MICRO_TILING                 0x03
+#define   S_009910_SAMPLE_SPLIT(x)                                    (((x) & 0x03) << 25)
+#define   G_009910_SAMPLE_SPLIT(x)                                    (((x) >> 25) & 0x03)
+#define   C_009910_SAMPLE_SPLIT                                       0xF9FFFFFF
+#define R_009914_GB_TILE_MODE1                                          0x009914
+#define R_009918_GB_TILE_MODE2                                          0x009918
+#define R_00991C_GB_TILE_MODE3                                          0x00991C
+#define R_009920_GB_TILE_MODE4                                          0x009920
+#define R_009924_GB_TILE_MODE5                                          0x009924
+#define R_009928_GB_TILE_MODE6                                          0x009928
+#define R_00992C_GB_TILE_MODE7                                          0x00992C
+#define R_009930_GB_TILE_MODE8                                          0x009930
+#define R_009934_GB_TILE_MODE9                                          0x009934
+#define R_009938_GB_TILE_MODE10                                         0x009938
+#define R_00993C_GB_TILE_MODE11                                         0x00993C
+#define R_009940_GB_TILE_MODE12                                         0x009940
+#define R_009944_GB_TILE_MODE13                                         0x009944
+#define R_009948_GB_TILE_MODE14                                         0x009948
+#define R_00994C_GB_TILE_MODE15                                         0x00994C
+#define R_009950_GB_TILE_MODE16                                         0x009950
+#define R_009954_GB_TILE_MODE17                                         0x009954
+#define R_009958_GB_TILE_MODE18                                         0x009958
+#define R_00995C_GB_TILE_MODE19                                         0x00995C
+#define R_009960_GB_TILE_MODE20                                         0x009960
+#define R_009964_GB_TILE_MODE21                                         0x009964
+#define R_009968_GB_TILE_MODE22                                         0x009968
+#define R_00996C_GB_TILE_MODE23                                         0x00996C
+#define R_009970_GB_TILE_MODE24                                         0x009970
+#define R_009974_GB_TILE_MODE25                                         0x009974
+#define R_009978_GB_TILE_MODE26                                         0x009978
+#define R_00997C_GB_TILE_MODE27                                         0x00997C
+#define R_009980_GB_TILE_MODE28                                         0x009980
+#define R_009984_GB_TILE_MODE29                                         0x009984
+#define R_009988_GB_TILE_MODE30                                         0x009988
+#define R_00998C_GB_TILE_MODE31                                         0x00998C
+/* CIK */
+#define R_009990_GB_MACROTILE_MODE0                                     0x009990
+#define   S_009990_BANK_WIDTH(x)                                      (((x) & 0x03) << 0)
+#define   G_009990_BANK_WIDTH(x)                                      (((x) >> 0) & 0x03)
+#define   C_009990_BANK_WIDTH                                         0xFFFFFFFC
+#define   S_009990_BANK_HEIGHT(x)                                     (((x) & 0x03) << 2)
+#define   G_009990_BANK_HEIGHT(x)                                     (((x) >> 2) & 0x03)
+#define   C_009990_BANK_HEIGHT                                        0xFFFFFFF3
+#define   S_009990_MACRO_TILE_ASPECT(x)                               (((x) & 0x03) << 4)
+#define   G_009990_MACRO_TILE_ASPECT(x)                               (((x) >> 4) & 0x03)
+#define   C_009990_MACRO_TILE_ASPECT                                  0xFFFFFFCF
+#define   S_009990_NUM_BANKS(x)                                       (((x) & 0x03) << 6)
+#define   G_009990_NUM_BANKS(x)                                       (((x) >> 6) & 0x03)
+#define   C_009990_NUM_BANKS                                          0xFFFFFF3F
+#define R_009994_GB_MACROTILE_MODE1                                     0x009994
+#define R_009998_GB_MACROTILE_MODE2                                     0x009998
+#define R_00999C_GB_MACROTILE_MODE3                                     0x00999C
+#define R_0099A0_GB_MACROTILE_MODE4                                     0x0099A0
+#define R_0099A4_GB_MACROTILE_MODE5                                     0x0099A4
+#define R_0099A8_GB_MACROTILE_MODE6                                     0x0099A8
+#define R_0099AC_GB_MACROTILE_MODE7                                     0x0099AC
+#define R_0099B0_GB_MACROTILE_MODE8                                     0x0099B0
+#define R_0099B4_GB_MACROTILE_MODE9                                     0x0099B4
+#define R_0099B8_GB_MACROTILE_MODE10                                    0x0099B8
+#define R_0099BC_GB_MACROTILE_MODE11                                    0x0099BC
+#define R_0099C0_GB_MACROTILE_MODE12                                    0x0099C0
+#define R_0099C4_GB_MACROTILE_MODE13                                    0x0099C4
+#define R_0099C8_GB_MACROTILE_MODE14                                    0x0099C8
+#define R_0099CC_GB_MACROTILE_MODE15                                    0x0099CC
+/*     */
+#define R_00B000_SPI_SHADER_TBA_LO_PS                                   0x00B000
+#define R_00B004_SPI_SHADER_TBA_HI_PS                                   0x00B004
+#define   S_00B004_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B004_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B004_MEM_BASE                                           0xFFFFFF00
+#define R_00B008_SPI_SHADER_TMA_LO_PS                                   0x00B008
+#define R_00B00C_SPI_SHADER_TMA_HI_PS                                   0x00B00C
+#define   S_00B00C_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B00C_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B00C_MEM_BASE                                           0xFFFFFF00
 /* CIK */
 #define R_00B01C_SPI_SHADER_PGM_RSRC3_PS                                0x00B01C
 #define   S_00B01C_CU_EN(x)                                           (((x) & 0xFFFF) << 0)
@@ -4575,6 +5996,9 @@
 #define   S_00B02C_USER_SGPR(x)                                       (((x) & 0x1F) << 1)
 #define   G_00B02C_USER_SGPR(x)                                       (((x) >> 1) & 0x1F)
 #define   C_00B02C_USER_SGPR                                          0xFFFFFFC1
+#define   S_00B02C_TRAP_PRESENT(x)                                    (((x) & 0x1) << 6)
+#define   G_00B02C_TRAP_PRESENT(x)                                    (((x) >> 6) & 0x1)
+#define   C_00B02C_TRAP_PRESENT                                       0xFFFFFFBF
 #define   S_00B02C_WAVE_CNT_EN(x)                                     (((x) & 0x1) << 7)
 #define   G_00B02C_WAVE_CNT_EN(x)                                     (((x) >> 7) & 0x1)
 #define   C_00B02C_WAVE_CNT_EN                                        0xFFFFFF7F
@@ -4584,6 +6008,9 @@
 #define   S_00B02C_EXCP_EN(x)                                         (((x) & 0x7F) << 16) /* mask is 0x1FF on CIK */
 #define   G_00B02C_EXCP_EN(x)                                         (((x) >> 16) & 0x7F) /* mask is 0x1FF on CIK */
 #define   C_00B02C_EXCP_EN                                            0xFF80FFFF /* mask is 0x1FF on CIK */
+#define   S_00B02C_EXCP_EN_CIK(x)                                     (((x) & 0x1FF) << 16)
+#define   G_00B02C_EXCP_EN_CIK(x)                                     (((x) >> 16) & 0x1FF)
+#define   C_00B02C_EXCP_EN_CIK                                        0xFE00FFFF
 #define R_00B030_SPI_SHADER_USER_DATA_PS_0                              0x00B030
 #define R_00B034_SPI_SHADER_USER_DATA_PS_1                              0x00B034
 #define R_00B038_SPI_SHADER_USER_DATA_PS_2                              0x00B038
@@ -4600,6 +6027,16 @@
 #define R_00B064_SPI_SHADER_USER_DATA_PS_13                             0x00B064
 #define R_00B068_SPI_SHADER_USER_DATA_PS_14                             0x00B068
 #define R_00B06C_SPI_SHADER_USER_DATA_PS_15                             0x00B06C
+#define R_00B100_SPI_SHADER_TBA_LO_VS                                   0x00B100
+#define R_00B104_SPI_SHADER_TBA_HI_VS                                   0x00B104
+#define   S_00B104_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B104_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B104_MEM_BASE                                           0xFFFFFF00
+#define R_00B108_SPI_SHADER_TMA_LO_VS                                   0x00B108
+#define R_00B10C_SPI_SHADER_TMA_HI_VS                                   0x00B10C
+#define   S_00B10C_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B10C_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B10C_MEM_BASE                                           0xFFFFFF00
 /* CIK */
 #define R_00B118_SPI_SHADER_PGM_RSRC3_VS                                0x00B118
 #define   S_00B118_CU_EN(x)                                           (((x) & 0xFFFF) << 0)
@@ -4667,6 +6104,9 @@
 #define   S_00B12C_USER_SGPR(x)                                       (((x) & 0x1F) << 1)
 #define   G_00B12C_USER_SGPR(x)                                       (((x) >> 1) & 0x1F)
 #define   C_00B12C_USER_SGPR                                          0xFFFFFFC1
+#define   S_00B12C_TRAP_PRESENT(x)                                    (((x) & 0x1) << 6)
+#define   G_00B12C_TRAP_PRESENT(x)                                    (((x) >> 6) & 0x1)
+#define   C_00B12C_TRAP_PRESENT                                       0xFFFFFFBF
 #define   S_00B12C_OC_LDS_EN(x)                                       (((x) & 0x1) << 7)
 #define   G_00B12C_OC_LDS_EN(x)                                       (((x) >> 7) & 0x1)
 #define   C_00B12C_OC_LDS_EN                                          0xFFFFFF7F
@@ -4688,6 +6128,14 @@
 #define   S_00B12C_EXCP_EN(x)                                         (((x) & 0x7F) << 13) /* mask is 0x1FF on CIK */
 #define   G_00B12C_EXCP_EN(x)                                         (((x) >> 13) & 0x7F) /* mask is 0x1FF on CIK */
 #define   C_00B12C_EXCP_EN                                            0xFFF01FFF /* mask is 0x1FF on CIK */
+#define   S_00B12C_EXCP_EN_CIK(x)                                     (((x) & 0x1FF) << 13)
+#define   G_00B12C_EXCP_EN_CIK(x)                                     (((x) >> 13) & 0x1FF)
+#define   C_00B12C_EXCP_EN_CIK                                        0xFFC01FFF
+/* VI */
+#define   S_00B12C_DISPATCH_DRAW_EN(x)                                (((x) & 0x1) << 24)
+#define   G_00B12C_DISPATCH_DRAW_EN(x)                                (((x) >> 24) & 0x1)
+#define   C_00B12C_DISPATCH_DRAW_EN                                   0xFEFFFFFF
+/*    */
 #define R_00B130_SPI_SHADER_USER_DATA_VS_0                              0x00B130
 #define R_00B134_SPI_SHADER_USER_DATA_VS_1                              0x00B134
 #define R_00B138_SPI_SHADER_USER_DATA_VS_2                              0x00B138
@@ -4704,6 +6152,16 @@
 #define R_00B164_SPI_SHADER_USER_DATA_VS_13                             0x00B164
 #define R_00B168_SPI_SHADER_USER_DATA_VS_14                             0x00B168
 #define R_00B16C_SPI_SHADER_USER_DATA_VS_15                             0x00B16C
+#define R_00B200_SPI_SHADER_TBA_LO_GS                                   0x00B200
+#define R_00B204_SPI_SHADER_TBA_HI_GS                                   0x00B204
+#define   S_00B204_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B204_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B204_MEM_BASE                                           0xFFFFFF00
+#define R_00B208_SPI_SHADER_TMA_LO_GS                                   0x00B208
+#define R_00B20C_SPI_SHADER_TMA_HI_GS                                   0x00B20C
+#define   S_00B20C_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B20C_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B20C_MEM_BASE                                           0xFFFFFF00
 /* CIK */
 #define R_00B21C_SPI_SHADER_PGM_RSRC3_GS                                0x00B21C
 #define   S_00B21C_CU_EN(x)                                           (((x) & 0xFFFF) << 0)
@@ -4716,6 +6174,11 @@
 #define   G_00B21C_LOCK_LOW_THRESHOLD(x)                              (((x) >> 22) & 0x0F)
 #define   C_00B21C_LOCK_LOW_THRESHOLD                                 0xFC3FFFFF
 /*     */
+/* VI */
+#define   S_00B21C_GROUP_FIFO_DEPTH(x)                                (((x) & 0x3F) << 26)
+#define   G_00B21C_GROUP_FIFO_DEPTH(x)                                (((x) >> 26) & 0x3F)
+#define   C_00B21C_GROUP_FIFO_DEPTH                                   0x03FFFFFF
+/*    */
 #define R_00B220_SPI_SHADER_PGM_LO_GS                                   0x00B220
 #define R_00B224_SPI_SHADER_PGM_HI_GS                                   0x00B224
 #define   S_00B224_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
@@ -4764,10 +6227,41 @@
 #define   S_00B22C_USER_SGPR(x)                                       (((x) & 0x1F) << 1)
 #define   G_00B22C_USER_SGPR(x)                                       (((x) >> 1) & 0x1F)
 #define   C_00B22C_USER_SGPR                                          0xFFFFFFC1
+#define   S_00B22C_TRAP_PRESENT(x)                                    (((x) & 0x1) << 6)
+#define   G_00B22C_TRAP_PRESENT(x)                                    (((x) >> 6) & 0x1)
+#define   C_00B22C_TRAP_PRESENT                                       0xFFFFFFBF
 #define   S_00B22C_EXCP_EN(x)                                         (((x) & 0x7F) << 7) /* mask is 0x1FF on CIK */
 #define   G_00B22C_EXCP_EN(x)                                         (((x) >> 7) & 0x7F) /* mask is 0x1FF on CIK */
 #define   C_00B22C_EXCP_EN                                            0xFFFFC07F /* mask is 0x1FF on CIK */
+#define   S_00B22C_EXCP_EN_CIK(x)                                     (((x) & 0x1FF) << 7)
+#define   G_00B22C_EXCP_EN_CIK(x)                                     (((x) >> 7) & 0x1FF)
+#define   C_00B22C_EXCP_EN_CIK                                        0xFFFF007F
 #define R_00B230_SPI_SHADER_USER_DATA_GS_0                              0x00B230
+#define R_00B234_SPI_SHADER_USER_DATA_GS_1                              0x00B234
+#define R_00B238_SPI_SHADER_USER_DATA_GS_2                              0x00B238
+#define R_00B23C_SPI_SHADER_USER_DATA_GS_3                              0x00B23C
+#define R_00B240_SPI_SHADER_USER_DATA_GS_4                              0x00B240
+#define R_00B244_SPI_SHADER_USER_DATA_GS_5                              0x00B244
+#define R_00B248_SPI_SHADER_USER_DATA_GS_6                              0x00B248
+#define R_00B24C_SPI_SHADER_USER_DATA_GS_7                              0x00B24C
+#define R_00B250_SPI_SHADER_USER_DATA_GS_8                              0x00B250
+#define R_00B254_SPI_SHADER_USER_DATA_GS_9                              0x00B254
+#define R_00B258_SPI_SHADER_USER_DATA_GS_10                             0x00B258
+#define R_00B25C_SPI_SHADER_USER_DATA_GS_11                             0x00B25C
+#define R_00B260_SPI_SHADER_USER_DATA_GS_12                             0x00B260
+#define R_00B264_SPI_SHADER_USER_DATA_GS_13                             0x00B264
+#define R_00B268_SPI_SHADER_USER_DATA_GS_14                             0x00B268
+#define R_00B26C_SPI_SHADER_USER_DATA_GS_15                             0x00B26C
+#define R_00B300_SPI_SHADER_TBA_LO_ES                                   0x00B300
+#define R_00B304_SPI_SHADER_TBA_HI_ES                                   0x00B304
+#define   S_00B304_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B304_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B304_MEM_BASE                                           0xFFFFFF00
+#define R_00B308_SPI_SHADER_TMA_LO_ES                                   0x00B308
+#define R_00B30C_SPI_SHADER_TMA_HI_ES                                   0x00B30C
+#define   S_00B30C_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B30C_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B30C_MEM_BASE                                           0xFFFFFF00
 /* CIK */
 #define R_00B31C_SPI_SHADER_PGM_RSRC3_ES                                0x00B31C
 #define   S_00B31C_CU_EN(x)                                           (((x) & 0xFFFF) << 0)
@@ -4780,6 +6274,11 @@
 #define   G_00B31C_LOCK_LOW_THRESHOLD(x)                              (((x) >> 22) & 0x0F)
 #define   C_00B31C_LOCK_LOW_THRESHOLD                                 0xFC3FFFFF
 /*     */
+/* VI */
+#define   S_00B31C_GROUP_FIFO_DEPTH(x)                                (((x) & 0x3F) << 26)
+#define   G_00B31C_GROUP_FIFO_DEPTH(x)                                (((x) >> 26) & 0x3F)
+#define   C_00B31C_GROUP_FIFO_DEPTH                                   0x03FFFFFF
+/*    */
 #define R_00B320_SPI_SHADER_PGM_LO_ES                                   0x00B320
 #define R_00B324_SPI_SHADER_PGM_HI_ES                                   0x00B324
 #define   S_00B324_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
@@ -4831,6 +6330,9 @@
 #define   S_00B32C_USER_SGPR(x)                                       (((x) & 0x1F) << 1)
 #define   G_00B32C_USER_SGPR(x)                                       (((x) >> 1) & 0x1F)
 #define   C_00B32C_USER_SGPR                                          0xFFFFFFC1
+#define   S_00B32C_TRAP_PRESENT(x)                                    (((x) & 0x1) << 6)
+#define   G_00B32C_TRAP_PRESENT(x)                                    (((x) >> 6) & 0x1)
+#define   C_00B32C_TRAP_PRESENT                                       0xFFFFFFBF
 #define   S_00B32C_OC_LDS_EN(x)                                       (((x) & 0x1) << 7)
 #define   G_00B32C_OC_LDS_EN(x)                                       (((x) >> 7) & 0x1)
 #define   C_00B32C_OC_LDS_EN                                          0xFFFFFF7F
@@ -4841,6 +6343,31 @@
 #define   G_00B32C_LDS_SIZE(x)                                        (((x) >> 20) & 0x1FF) /* CIK, for on-chip GS */
 #define   C_00B32C_LDS_SIZE                                           0xE00FFFFF /* CIK, for on-chip GS */
 #define R_00B330_SPI_SHADER_USER_DATA_ES_0                              0x00B330
+#define R_00B334_SPI_SHADER_USER_DATA_ES_1                              0x00B334
+#define R_00B338_SPI_SHADER_USER_DATA_ES_2                              0x00B338
+#define R_00B33C_SPI_SHADER_USER_DATA_ES_3                              0x00B33C
+#define R_00B340_SPI_SHADER_USER_DATA_ES_4                              0x00B340
+#define R_00B344_SPI_SHADER_USER_DATA_ES_5                              0x00B344
+#define R_00B348_SPI_SHADER_USER_DATA_ES_6                              0x00B348
+#define R_00B34C_SPI_SHADER_USER_DATA_ES_7                              0x00B34C
+#define R_00B350_SPI_SHADER_USER_DATA_ES_8                              0x00B350
+#define R_00B354_SPI_SHADER_USER_DATA_ES_9                              0x00B354
+#define R_00B358_SPI_SHADER_USER_DATA_ES_10                             0x00B358
+#define R_00B35C_SPI_SHADER_USER_DATA_ES_11                             0x00B35C
+#define R_00B360_SPI_SHADER_USER_DATA_ES_12                             0x00B360
+#define R_00B364_SPI_SHADER_USER_DATA_ES_13                             0x00B364
+#define R_00B368_SPI_SHADER_USER_DATA_ES_14                             0x00B368
+#define R_00B36C_SPI_SHADER_USER_DATA_ES_15                             0x00B36C
+#define R_00B400_SPI_SHADER_TBA_LO_HS                                   0x00B400
+#define R_00B404_SPI_SHADER_TBA_HI_HS                                   0x00B404
+#define   S_00B404_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B404_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B404_MEM_BASE                                           0xFFFFFF00
+#define R_00B408_SPI_SHADER_TMA_LO_HS                                   0x00B408
+#define R_00B40C_SPI_SHADER_TMA_HI_HS                                   0x00B40C
+#define   S_00B40C_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B40C_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B40C_MEM_BASE                                           0xFFFFFF00
 /* CIK */
 #define R_00B41C_SPI_SHADER_PGM_RSRC3_HS                                0x00B41C
 #define   S_00B41C_WAVE_LIMIT(x)                                      (((x) & 0x3F) << 0)
@@ -4850,6 +6377,11 @@
 #define   G_00B41C_LOCK_LOW_THRESHOLD(x)                              (((x) >> 6) & 0x0F)
 #define   C_00B41C_LOCK_LOW_THRESHOLD                                 0xFFFFFC3F
 /*     */
+/* VI */
+#define   S_00B41C_GROUP_FIFO_DEPTH(x)                                (((x) & 0x3F) << 10)
+#define   G_00B41C_GROUP_FIFO_DEPTH(x)                                (((x) >> 10) & 0x3F)
+#define   C_00B41C_GROUP_FIFO_DEPTH                                   0xFFFF03FF
+/*    */
 #define R_00B420_SPI_SHADER_PGM_LO_HS                                   0x00B420
 #define R_00B424_SPI_SHADER_PGM_HI_HS                                   0x00B424
 #define   S_00B424_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
@@ -4895,6 +6427,9 @@
 #define   S_00B42C_USER_SGPR(x)                                       (((x) & 0x1F) << 1)
 #define   G_00B42C_USER_SGPR(x)                                       (((x) >> 1) & 0x1F)
 #define   C_00B42C_USER_SGPR                                          0xFFFFFFC1
+#define   S_00B42C_TRAP_PRESENT(x)                                    (((x) & 0x1) << 6)
+#define   G_00B42C_TRAP_PRESENT(x)                                    (((x) >> 6) & 0x1)
+#define   C_00B42C_TRAP_PRESENT                                       0xFFFFFFBF
 #define   S_00B42C_OC_LDS_EN(x)                                       (((x) & 0x1) << 7)
 #define   G_00B42C_OC_LDS_EN(x)                                       (((x) >> 7) & 0x1)
 #define   C_00B42C_OC_LDS_EN                                          0xFFFFFF7F
@@ -4905,6 +6440,31 @@
 #define   G_00B42C_EXCP_EN(x)                                         (((x) >> 9) & 0x7F) /* mask is 0x1FF on CIK */
 #define   C_00B42C_EXCP_EN                                            0xFFFF01FF /* mask is 0x1FF on CIK */
 #define R_00B430_SPI_SHADER_USER_DATA_HS_0                              0x00B430
+#define R_00B434_SPI_SHADER_USER_DATA_HS_1                              0x00B434
+#define R_00B438_SPI_SHADER_USER_DATA_HS_2                              0x00B438
+#define R_00B43C_SPI_SHADER_USER_DATA_HS_3                              0x00B43C
+#define R_00B440_SPI_SHADER_USER_DATA_HS_4                              0x00B440
+#define R_00B444_SPI_SHADER_USER_DATA_HS_5                              0x00B444
+#define R_00B448_SPI_SHADER_USER_DATA_HS_6                              0x00B448
+#define R_00B44C_SPI_SHADER_USER_DATA_HS_7                              0x00B44C
+#define R_00B450_SPI_SHADER_USER_DATA_HS_8                              0x00B450
+#define R_00B454_SPI_SHADER_USER_DATA_HS_9                              0x00B454
+#define R_00B458_SPI_SHADER_USER_DATA_HS_10                             0x00B458
+#define R_00B45C_SPI_SHADER_USER_DATA_HS_11                             0x00B45C
+#define R_00B460_SPI_SHADER_USER_DATA_HS_12                             0x00B460
+#define R_00B464_SPI_SHADER_USER_DATA_HS_13                             0x00B464
+#define R_00B468_SPI_SHADER_USER_DATA_HS_14                             0x00B468
+#define R_00B46C_SPI_SHADER_USER_DATA_HS_15                             0x00B46C
+#define R_00B500_SPI_SHADER_TBA_LO_LS                                   0x00B500
+#define R_00B504_SPI_SHADER_TBA_HI_LS                                   0x00B504
+#define   S_00B504_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B504_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B504_MEM_BASE                                           0xFFFFFF00
+#define R_00B508_SPI_SHADER_TMA_LO_LS                                   0x00B508
+#define R_00B50C_SPI_SHADER_TMA_HI_LS                                   0x00B50C
+#define   S_00B50C_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
+#define   G_00B50C_MEM_BASE(x)                                        (((x) >> 0) & 0xFF)
+#define   C_00B50C_MEM_BASE                                           0xFFFFFF00
 /* CIK */
 #define R_00B51C_SPI_SHADER_PGM_RSRC3_LS                                0x00B51C
 #define   S_00B51C_CU_EN(x)                                           (((x) & 0xFFFF) << 0)
@@ -4917,6 +6477,11 @@
 #define   G_00B51C_LOCK_LOW_THRESHOLD(x)                              (((x) >> 22) & 0x0F)
 #define   C_00B51C_LOCK_LOW_THRESHOLD                                 0xFC3FFFFF
 /*     */
+/* VI */
+#define   S_00B51C_GROUP_FIFO_DEPTH(x)                                (((x) & 0x3F) << 26)
+#define   G_00B51C_GROUP_FIFO_DEPTH(x)                                (((x) >> 26) & 0x3F)
+#define   C_00B51C_GROUP_FIFO_DEPTH                                   0x03FFFFFF
+/*    */
 #define R_00B520_SPI_SHADER_PGM_LO_LS                                   0x00B520
 #define R_00B524_SPI_SHADER_PGM_HI_LS                                   0x00B524
 #define   S_00B524_MEM_BASE(x)                                        (((x) & 0xFF) << 0)
@@ -4965,6 +6530,9 @@
 #define   S_00B52C_USER_SGPR(x)                                       (((x) & 0x1F) << 1)
 #define   G_00B52C_USER_SGPR(x)                                       (((x) >> 1) & 0x1F)
 #define   C_00B52C_USER_SGPR                                          0xFFFFFFC1
+#define   S_00B52C_TRAP_PRESENT(x)                                    (((x) & 0x1) << 6)
+#define   G_00B52C_TRAP_PRESENT(x)                                    (((x) >> 6) & 0x1)
+#define   C_00B52C_TRAP_PRESENT                                       0xFFFFFFBF
 #define   S_00B52C_LDS_SIZE(x)                                        (((x) & 0x1FF) << 7)
 #define   G_00B52C_LDS_SIZE(x)                                        (((x) >> 7) & 0x1FF)
 #define   C_00B52C_LDS_SIZE                                           0xFFFF007F
@@ -4972,6 +6540,21 @@
 #define   G_00B52C_EXCP_EN(x)                                         (((x) >> 16) & 0x7F) /* mask is 0x1FF on CIK */
 #define   C_00B52C_EXCP_EN                                            0xFF80FFFF /* mask is 0x1FF on CIK */
 #define R_00B530_SPI_SHADER_USER_DATA_LS_0                              0x00B530
+#define R_00B534_SPI_SHADER_USER_DATA_LS_1                              0x00B534
+#define R_00B538_SPI_SHADER_USER_DATA_LS_2                              0x00B538
+#define R_00B53C_SPI_SHADER_USER_DATA_LS_3                              0x00B53C
+#define R_00B540_SPI_SHADER_USER_DATA_LS_4                              0x00B540
+#define R_00B544_SPI_SHADER_USER_DATA_LS_5                              0x00B544
+#define R_00B548_SPI_SHADER_USER_DATA_LS_6                              0x00B548
+#define R_00B54C_SPI_SHADER_USER_DATA_LS_7                              0x00B54C
+#define R_00B550_SPI_SHADER_USER_DATA_LS_8                              0x00B550
+#define R_00B554_SPI_SHADER_USER_DATA_LS_9                              0x00B554
+#define R_00B558_SPI_SHADER_USER_DATA_LS_10                             0x00B558
+#define R_00B55C_SPI_SHADER_USER_DATA_LS_11                             0x00B55C
+#define R_00B560_SPI_SHADER_USER_DATA_LS_12                             0x00B560
+#define R_00B564_SPI_SHADER_USER_DATA_LS_13                             0x00B564
+#define R_00B568_SPI_SHADER_USER_DATA_LS_14                             0x00B568
+#define R_00B56C_SPI_SHADER_USER_DATA_LS_15                             0x00B56C
 #define R_00B800_COMPUTE_DISPATCH_INITIATOR                             0x00B800
 #define   S_00B800_COMPUTE_SHADER_EN(x)                               (((x) & 0x1) << 0)
 #define   G_00B800_COMPUTE_SHADER_EN(x)                               (((x) >> 0) & 0x1)
@@ -5042,6 +6625,16 @@
 #define   S_00B82C_MAX_WAVE_ID(x)                                     (((x) & 0xFFF) << 0)
 #define   G_00B82C_MAX_WAVE_ID(x)                                     (((x) >> 0) & 0xFFF)
 #define   C_00B82C_MAX_WAVE_ID                                        0xFFFFF000
+/* CIK */
+#define R_00B828_COMPUTE_PIPELINESTAT_ENABLE                            0x00B828
+#define   S_00B828_PIPELINESTAT_ENABLE(x)                             (((x) & 0x1) << 0)
+#define   G_00B828_PIPELINESTAT_ENABLE(x)                             (((x) >> 0) & 0x1)
+#define   C_00B828_PIPELINESTAT_ENABLE                                0xFFFFFFFE
+#define R_00B82C_COMPUTE_PERFCOUNT_ENABLE                               0x00B82C
+#define   S_00B82C_PERFCOUNT_ENABLE(x)                                (((x) & 0x1) << 0)
+#define   G_00B82C_PERFCOUNT_ENABLE(x)                                (((x) >> 0) & 0x1)
+#define   C_00B82C_PERFCOUNT_ENABLE                                   0xFFFFFFFE
+/*     */
 #define R_00B830_COMPUTE_PGM_LO                                         0x00B830
 #define R_00B834_COMPUTE_PGM_HI                                         0x00B834
 #define   S_00B834_DATA(x)                                            (((x) & 0xFF) << 0)
@@ -5052,6 +6645,16 @@
 #define   G_00B834_INST_ATC(x)                                        (((x) >> 8) & 0x1)
 #define   C_00B834_INST_ATC                                           0xFFFFFEFF
 /*     */
+#define R_00B838_COMPUTE_TBA_LO                                         0x00B838
+#define R_00B83C_COMPUTE_TBA_HI                                         0x00B83C
+#define   S_00B83C_DATA(x)                                            (((x) & 0xFF) << 0)
+#define   G_00B83C_DATA(x)                                            (((x) >> 0) & 0xFF)
+#define   C_00B83C_DATA                                               0xFFFFFF00
+#define R_00B840_COMPUTE_TMA_LO                                         0x00B840
+#define R_00B844_COMPUTE_TMA_HI                                         0x00B844
+#define   S_00B844_DATA(x)                                            (((x) & 0xFF) << 0)
+#define   G_00B844_DATA(x)                                            (((x) >> 0) & 0xFF)
+#define   C_00B844_DATA                                               0xFFFFFF00
 #define R_00B848_COMPUTE_PGM_RSRC1                                      0x00B848
 #define   S_00B848_VGPRS(x)                                           (((x) & 0x3F) << 0)
 #define   G_00B848_VGPRS(x)                                           (((x) >> 0) & 0x3F)
@@ -5092,6 +6695,9 @@
 #define   S_00B84C_USER_SGPR(x)                                       (((x) & 0x1F) << 1)
 #define   G_00B84C_USER_SGPR(x)                                       (((x) >> 1) & 0x1F)
 #define   C_00B84C_USER_SGPR                                          0xFFFFFFC1
+#define   S_00B84C_TRAP_PRESENT(x)                                    (((x) & 0x1) << 6)
+#define   G_00B84C_TRAP_PRESENT(x)                                    (((x) >> 6) & 0x1)
+#define   C_00B84C_TRAP_PRESENT                                       0xFFFFFFBF
 #define   S_00B84C_TGID_X_EN(x)                                       (((x) & 0x1) << 7)
 #define   G_00B84C_TGID_X_EN(x)                                       (((x) >> 7) & 0x1)
 #define   C_00B84C_TGID_X_EN                                          0xFFFFFF7F
@@ -5118,6 +6724,10 @@
 #define   S_00B84C_EXCP_EN(x)                                         (((x) & 0x7F) << 24)
 #define   G_00B84C_EXCP_EN(x)                                         (((x) >> 24) & 0x7F)
 #define   C_00B84C_EXCP_EN                                            0x80FFFFFF
+#define R_00B850_COMPUTE_VMID                                           0x00B850
+#define   S_00B850_DATA(x)                                            (((x) & 0x0F) << 0)
+#define   G_00B850_DATA(x)                                            (((x) >> 0) & 0x0F)
+#define   C_00B850_DATA                                               0xFFFFFFF0
 #define R_00B854_COMPUTE_RESOURCE_LIMITS                                0x00B854
 #define   S_00B854_WAVES_PER_SH(x)                                    (((x) & 0x3F) << 0) /* mask is 0x3FF on CIK */
 #define   G_00B854_WAVES_PER_SH(x)                                    (((x) >> 0) & 0x3F) /* mask is 0x3FF on CIK */
@@ -5160,7 +6770,84 @@
 #define   S_00B860_WAVESIZE(x)                                        (((x) & 0x1FFF) << 12)
 #define   G_00B860_WAVESIZE(x)                                        (((x) >> 12) & 0x1FFF)
 #define   C_00B860_WAVESIZE                                           0xFE000FFF
+/* CIK */
+#define R_00B864_COMPUTE_STATIC_THREAD_MGMT_SE2                         0x00B864
+#define   S_00B864_SH0_CU_EN(x)                                       (((x) & 0xFFFF) << 0)
+#define   G_00B864_SH0_CU_EN(x)                                       (((x) >> 0) & 0xFFFF)
+#define   C_00B864_SH0_CU_EN                                          0xFFFF0000
+#define   S_00B864_SH1_CU_EN(x)                                       (((x) & 0xFFFF) << 16)
+#define   G_00B864_SH1_CU_EN(x)                                       (((x) >> 16) & 0xFFFF)
+#define   C_00B864_SH1_CU_EN                                          0x0000FFFF
+#define R_00B868_COMPUTE_STATIC_THREAD_MGMT_SE3                         0x00B868
+#define   S_00B868_SH0_CU_EN(x)                                       (((x) & 0xFFFF) << 0)
+#define   G_00B868_SH0_CU_EN(x)                                       (((x) >> 0) & 0xFFFF)
+#define   C_00B868_SH0_CU_EN                                          0xFFFF0000
+#define   S_00B868_SH1_CU_EN(x)                                       (((x) & 0xFFFF) << 16)
+#define   G_00B868_SH1_CU_EN(x)                                       (((x) >> 16) & 0xFFFF)
+#define   C_00B868_SH1_CU_EN                                          0x0000FFFF
+#define R_00B86C_COMPUTE_RESTART_X                                      0x00B86C
+#define R_00B870_COMPUTE_RESTART_Y                                      0x00B870
+#define R_00B874_COMPUTE_RESTART_Z                                      0x00B874
+#define R_00B87C_COMPUTE_MISC_RESERVED                                  0x00B87C
+#define   S_00B87C_SEND_SEID(x)                                       (((x) & 0x03) << 0)
+#define   G_00B87C_SEND_SEID(x)                                       (((x) >> 0) & 0x03)
+#define   C_00B87C_SEND_SEID                                          0xFFFFFFFC
+#define   S_00B87C_RESERVED2(x)                                       (((x) & 0x1) << 2)
+#define   G_00B87C_RESERVED2(x)                                       (((x) >> 2) & 0x1)
+#define   C_00B87C_RESERVED2                                          0xFFFFFFFB
+#define   S_00B87C_RESERVED3(x)                                       (((x) & 0x1) << 3)
+#define   G_00B87C_RESERVED3(x)                                       (((x) >> 3) & 0x1)
+#define   C_00B87C_RESERVED3                                          0xFFFFFFF7
+#define   S_00B87C_RESERVED4(x)                                       (((x) & 0x1) << 4)
+#define   G_00B87C_RESERVED4(x)                                       (((x) >> 4) & 0x1)
+#define   C_00B87C_RESERVED4                                          0xFFFFFFEF
+/* VI */
+#define   S_00B87C_WAVE_ID_BASE(x)                                    (((x) & 0xFFF) << 5)
+#define   G_00B87C_WAVE_ID_BASE(x)                                    (((x) >> 5) & 0xFFF)
+#define   C_00B87C_WAVE_ID_BASE                                       0xFFFE001F
+#define R_00B880_COMPUTE_DISPATCH_ID                                    0x00B880
+#define R_00B884_COMPUTE_THREADGROUP_ID                                 0x00B884
+#define R_00B888_COMPUTE_RELAUNCH                                       0x00B888
+#define   S_00B888_PAYLOAD(x)                                         (((x) & 0x3FFFFFFF) << 0)
+#define   G_00B888_PAYLOAD(x)                                         (((x) >> 0) & 0x3FFFFFFF)
+#define   C_00B888_PAYLOAD                                            0xC0000000
+#define   S_00B888_IS_EVENT(x)                                        (((x) & 0x1) << 30)
+#define   G_00B888_IS_EVENT(x)                                        (((x) >> 30) & 0x1)
+#define   C_00B888_IS_EVENT                                           0xBFFFFFFF
+#define   S_00B888_IS_STATE(x)                                        (((x) & 0x1) << 31)
+#define   G_00B888_IS_STATE(x)                                        (((x) >> 31) & 0x1)
+#define   C_00B888_IS_STATE                                           0x7FFFFFFF
+#define R_00B88C_COMPUTE_WAVE_RESTORE_ADDR_LO                           0x00B88C
+#define R_00B890_COMPUTE_WAVE_RESTORE_ADDR_HI                           0x00B890
+#define   S_00B890_ADDR(x)                                            (((x) & 0xFFFF) << 0)
+#define   G_00B890_ADDR(x)                                            (((x) >> 0) & 0xFFFF)
+#define   C_00B890_ADDR                                               0xFFFF0000
+#define R_00B894_COMPUTE_WAVE_RESTORE_CONTROL                           0x00B894
+#define   S_00B894_ATC(x)                                             (((x) & 0x1) << 0)
+#define   G_00B894_ATC(x)                                             (((x) >> 0) & 0x1)
+#define   C_00B894_ATC                                                0xFFFFFFFE
+#define   S_00B894_MTYPE(x)                                           (((x) & 0x03) << 1)
+#define   G_00B894_MTYPE(x)                                           (((x) >> 1) & 0x03)
+#define   C_00B894_MTYPE                                              0xFFFFFFF9
+/*    */
+/*     */
 #define R_00B900_COMPUTE_USER_DATA_0                                    0x00B900
+#define R_00B904_COMPUTE_USER_DATA_1                                    0x00B904
+#define R_00B908_COMPUTE_USER_DATA_2                                    0x00B908
+#define R_00B90C_COMPUTE_USER_DATA_3                                    0x00B90C
+#define R_00B910_COMPUTE_USER_DATA_4                                    0x00B910
+#define R_00B914_COMPUTE_USER_DATA_5                                    0x00B914
+#define R_00B918_COMPUTE_USER_DATA_6                                    0x00B918
+#define R_00B91C_COMPUTE_USER_DATA_7                                    0x00B91C
+#define R_00B920_COMPUTE_USER_DATA_8                                    0x00B920
+#define R_00B924_COMPUTE_USER_DATA_9                                    0x00B924
+#define R_00B928_COMPUTE_USER_DATA_10                                   0x00B928
+#define R_00B92C_COMPUTE_USER_DATA_11                                   0x00B92C
+#define R_00B930_COMPUTE_USER_DATA_12                                   0x00B930
+#define R_00B934_COMPUTE_USER_DATA_13                                   0x00B934
+#define R_00B938_COMPUTE_USER_DATA_14                                   0x00B938
+#define R_00B93C_COMPUTE_USER_DATA_15                                   0x00B93C
+#define R_00B9FC_COMPUTE_NOWHERE                                        0x00B9FC
 #define R_028000_DB_RENDER_CONTROL                                      0x028000
 #define   S_028000_DEPTH_CLEAR_ENABLE(x)                              (((x) & 0x1) << 0)
 #define   G_028000_DEPTH_CLEAR_ENABLE(x)                              (((x) >> 0) & 0x1)
@@ -5189,6 +6876,11 @@
 #define   S_028000_COPY_SAMPLE(x)                                     (((x) & 0x0F) << 8)
 #define   G_028000_COPY_SAMPLE(x)                                     (((x) >> 8) & 0x0F)
 #define   C_028000_COPY_SAMPLE                                        0xFFFFF0FF
+/* VI */
+#define   S_028000_DECOMPRESS_ENABLE(x)                               (((x) & 0x1) << 12)
+#define   G_028000_DECOMPRESS_ENABLE(x)                               (((x) >> 12) & 0x1)
+#define   C_028000_DECOMPRESS_ENABLE                                  0xFFFFEFFF
+/*    */
 #define R_028004_DB_COUNT_CONTROL                                       0x028004
 #define   S_028004_ZPASS_INCREMENT_DISABLE(x)                         (((x) & 0x1) << 0)
 #define   G_028004_ZPASS_INCREMENT_DISABLE(x)                         (((x) >> 0) & 0x1)
@@ -5467,9 +7159,6 @@
 #define   S_028040_NUM_SAMPLES(x)                                     (((x) & 0x03) << 2)
 #define   G_028040_NUM_SAMPLES(x)                                     (((x) >> 2) & 0x03)
 #define   C_028040_NUM_SAMPLES                                        0xFFFFFFF3
-#define   S_028040_TILE_MODE_INDEX(x)                                 (((x) & 0x07) << 20) /* not on CIK */
-#define   G_028040_TILE_MODE_INDEX(x)                                 (((x) >> 20) & 0x07) /* not on CIK */
-#define   C_028040_TILE_MODE_INDEX                                    0xFF8FFFFF /* not on CIK */
 /* CIK */
 #define   S_028040_TILE_SPLIT(x)                                      (((x) & 0x07) << 13)
 #define   G_028040_TILE_SPLIT(x)                                      (((x) >> 13) & 0x07)
@@ -5482,6 +7171,14 @@
 #define     V_028040_ADDR_SURF_TILE_SPLIT_2KB                       0x05
 #define     V_028040_ADDR_SURF_TILE_SPLIT_4KB                       0x06
 /*     */
+#define   S_028040_TILE_MODE_INDEX(x)                                 (((x) & 0x07) << 20) /* not on CIK */
+#define   G_028040_TILE_MODE_INDEX(x)                                 (((x) >> 20) & 0x07) /* not on CIK */
+#define   C_028040_TILE_MODE_INDEX                                    0xFF8FFFFF /* not on CIK */
+/* VI */
+#define   S_028040_DECOMPRESS_ON_N_ZPLANES(x)                         (((x) & 0x0F) << 23)
+#define   G_028040_DECOMPRESS_ON_N_ZPLANES(x)                         (((x) >> 23) & 0x0F)
+#define   C_028040_DECOMPRESS_ON_N_ZPLANES                            0xF87FFFFF
+/*    */
 #define   S_028040_ALLOW_EXPCLEAR(x)                                  (((x) & 0x1) << 27)
 #define   G_028040_ALLOW_EXPCLEAR(x)                                  (((x) >> 27) & 0x1)
 #define   C_028040_ALLOW_EXPCLEAR                                     0xF7FFFFFF
@@ -5491,6 +7188,11 @@
 #define   S_028040_TILE_SURFACE_ENABLE(x)                             (((x) & 0x1) << 29)
 #define   G_028040_TILE_SURFACE_ENABLE(x)                             (((x) >> 29) & 0x1)
 #define   C_028040_TILE_SURFACE_ENABLE                                0xDFFFFFFF
+/* VI */
+#define   S_028040_CLEAR_DISALLOWED(x)                                (((x) & 0x1) << 30)
+#define   G_028040_CLEAR_DISALLOWED(x)                                (((x) >> 30) & 0x1)
+#define   C_028040_CLEAR_DISALLOWED                                   0xBFFFFFFF
+/*    */
 #define   S_028040_ZRANGE_PRECISION(x)                                (((x) & 0x1) << 31)
 #define   G_028040_ZRANGE_PRECISION(x)                                (((x) >> 31) & 0x1)
 #define   C_028040_ZRANGE_PRECISION                                   0x7FFFFFFF
@@ -5500,9 +7202,6 @@
 #define   C_028044_FORMAT                                             0xFFFFFFFE
 #define     V_028044_STENCIL_INVALID                                0x00
 #define     V_028044_STENCIL_8                                      0x01
-#define   S_028044_TILE_MODE_INDEX(x)                                 (((x) & 0x07) << 20) /* not on CIK */
-#define   G_028044_TILE_MODE_INDEX(x)                                 (((x) >> 20) & 0x07) /* not on CIK */
-#define   C_028044_TILE_MODE_INDEX                                    0xFF8FFFFF /* not on CIK */
 /* CIK */
 #define   S_028044_TILE_SPLIT(x)                                      (((x) & 0x07) << 13)
 #define   G_028044_TILE_SPLIT(x)                                      (((x) >> 13) & 0x07)
@@ -5515,12 +7214,20 @@
 #define     V_028044_ADDR_SURF_TILE_SPLIT_2KB                       0x05
 #define     V_028044_ADDR_SURF_TILE_SPLIT_4KB                       0x06
 /*     */
+#define   S_028044_TILE_MODE_INDEX(x)                                 (((x) & 0x07) << 20) /* not on CIK */
+#define   G_028044_TILE_MODE_INDEX(x)                                 (((x) >> 20) & 0x07) /* not on CIK */
+#define   C_028044_TILE_MODE_INDEX                                    0xFF8FFFFF /* not on CIK */
 #define   S_028044_ALLOW_EXPCLEAR(x)                                  (((x) & 0x1) << 27)
 #define   G_028044_ALLOW_EXPCLEAR(x)                                  (((x) >> 27) & 0x1)
 #define   C_028044_ALLOW_EXPCLEAR                                     0xF7FFFFFF
 #define   S_028044_TILE_STENCIL_DISABLE(x)                            (((x) & 0x1) << 29)
 #define   G_028044_TILE_STENCIL_DISABLE(x)                            (((x) >> 29) & 0x1)
 #define   C_028044_TILE_STENCIL_DISABLE                               0xDFFFFFFF
+/* VI */
+#define   S_028044_CLEAR_DISALLOWED(x)                                (((x) & 0x1) << 30)
+#define   G_028044_CLEAR_DISALLOWED(x)                                (((x) >> 30) & 0x1)
+#define   C_028044_CLEAR_DISALLOWED                                   0xBFFFFFFF
+/*    */
 #define R_028048_DB_Z_READ_BASE                                         0x028048
 #define R_02804C_DB_STENCIL_READ_BASE                                   0x02804C
 #define R_028050_DB_Z_WRITE_BASE                                        0x028050
@@ -5542,7 +7249,13 @@
 #define   S_028084_ADDRESS(x)                                         (((x) & 0xFF) << 0)
 #define   G_028084_ADDRESS(x)                                         (((x) >> 0) & 0xFF)
 #define   C_028084_ADDRESS                                            0xFFFFFF00
-/* */
+#define R_0281E8_COHER_DEST_BASE_HI_0                                   0x0281E8
+#define R_0281EC_COHER_DEST_BASE_HI_1                                   0x0281EC
+#define R_0281F0_COHER_DEST_BASE_HI_2                                   0x0281F0
+#define R_0281F4_COHER_DEST_BASE_HI_3                                   0x0281F4
+/*     */
+#define R_0281F8_COHER_DEST_BASE_2                                      0x0281F8
+#define R_0281FC_COHER_DEST_BASE_3                                      0x0281FC
 #define R_028200_PA_SC_WINDOW_OFFSET                                    0x028200
 #define   S_028200_WINDOW_X_OFFSET(x)                                 (((x) & 0xFFFF) << 0)
 #define   G_028200_WINDOW_X_OFFSET(x)                                 (((x) >> 0) & 0xFFFF)
@@ -5687,6 +7400,8 @@
 #define   S_028244_BR_Y(x)                                            (((x) & 0x7FFF) << 16)
 #define   G_028244_BR_Y(x)                                            (((x) >> 16) & 0x7FFF)
 #define   C_028244_BR_Y                                               0x8000FFFF
+#define R_028248_COHER_DEST_BASE_0                                      0x028248
+#define R_02824C_COHER_DEST_BASE_1                                      0x02824C
 #define R_028250_PA_SC_VPORT_SCISSOR_0_TL                               0x028250
 #define   S_028250_TL_X(x)                                            (((x) & 0x7FFF) << 0)
 #define   G_028250_TL_X(x)                                            (((x) >> 0) & 0x7FFF)
@@ -5704,8 +7419,68 @@
 #define   S_028254_BR_Y(x)                                            (((x) & 0x7FFF) << 16)
 #define   G_028254_BR_Y(x)                                            (((x) >> 16) & 0x7FFF)
 #define   C_028254_BR_Y                                               0x8000FFFF
+#define R_028258_PA_SC_VPORT_SCISSOR_1_TL                               0x028258
+#define R_02825C_PA_SC_VPORT_SCISSOR_1_BR                               0x02825C
+#define R_028260_PA_SC_VPORT_SCISSOR_2_TL                               0x028260
+#define R_028264_PA_SC_VPORT_SCISSOR_2_BR                               0x028264
+#define R_028268_PA_SC_VPORT_SCISSOR_3_TL                               0x028268
+#define R_02826C_PA_SC_VPORT_SCISSOR_3_BR                               0x02826C
+#define R_028270_PA_SC_VPORT_SCISSOR_4_TL                               0x028270
+#define R_028274_PA_SC_VPORT_SCISSOR_4_BR                               0x028274
+#define R_028278_PA_SC_VPORT_SCISSOR_5_TL                               0x028278
+#define R_02827C_PA_SC_VPORT_SCISSOR_5_BR                               0x02827C
+#define R_028280_PA_SC_VPORT_SCISSOR_6_TL                               0x028280
+#define R_028284_PA_SC_VPORT_SCISSOR_6_BR                               0x028284
+#define R_028288_PA_SC_VPORT_SCISSOR_7_TL                               0x028288
+#define R_02828C_PA_SC_VPORT_SCISSOR_7_BR                               0x02828C
+#define R_028290_PA_SC_VPORT_SCISSOR_8_TL                               0x028290
+#define R_028294_PA_SC_VPORT_SCISSOR_8_BR                               0x028294
+#define R_028298_PA_SC_VPORT_SCISSOR_9_TL                               0x028298
+#define R_02829C_PA_SC_VPORT_SCISSOR_9_BR                               0x02829C
+#define R_0282A0_PA_SC_VPORT_SCISSOR_10_TL                              0x0282A0
+#define R_0282A4_PA_SC_VPORT_SCISSOR_10_BR                              0x0282A4
+#define R_0282A8_PA_SC_VPORT_SCISSOR_11_TL                              0x0282A8
+#define R_0282AC_PA_SC_VPORT_SCISSOR_11_BR                              0x0282AC
+#define R_0282B0_PA_SC_VPORT_SCISSOR_12_TL                              0x0282B0
+#define R_0282B4_PA_SC_VPORT_SCISSOR_12_BR                              0x0282B4
+#define R_0282B8_PA_SC_VPORT_SCISSOR_13_TL                              0x0282B8
+#define R_0282BC_PA_SC_VPORT_SCISSOR_13_BR                              0x0282BC
+#define R_0282C0_PA_SC_VPORT_SCISSOR_14_TL                              0x0282C0
+#define R_0282C4_PA_SC_VPORT_SCISSOR_14_BR                              0x0282C4
+#define R_0282C8_PA_SC_VPORT_SCISSOR_15_TL                              0x0282C8
+#define R_0282CC_PA_SC_VPORT_SCISSOR_15_BR                              0x0282CC
 #define R_0282D0_PA_SC_VPORT_ZMIN_0                                     0x0282D0
 #define R_0282D4_PA_SC_VPORT_ZMAX_0                                     0x0282D4
+#define R_0282D8_PA_SC_VPORT_ZMIN_1                                     0x0282D8
+#define R_0282DC_PA_SC_VPORT_ZMAX_1                                     0x0282DC
+#define R_0282E0_PA_SC_VPORT_ZMIN_2                                     0x0282E0
+#define R_0282E4_PA_SC_VPORT_ZMAX_2                                     0x0282E4
+#define R_0282E8_PA_SC_VPORT_ZMIN_3                                     0x0282E8
+#define R_0282EC_PA_SC_VPORT_ZMAX_3                                     0x0282EC
+#define R_0282F0_PA_SC_VPORT_ZMIN_4                                     0x0282F0
+#define R_0282F4_PA_SC_VPORT_ZMAX_4                                     0x0282F4
+#define R_0282F8_PA_SC_VPORT_ZMIN_5                                     0x0282F8
+#define R_0282FC_PA_SC_VPORT_ZMAX_5                                     0x0282FC
+#define R_028300_PA_SC_VPORT_ZMIN_6                                     0x028300
+#define R_028304_PA_SC_VPORT_ZMAX_6                                     0x028304
+#define R_028308_PA_SC_VPORT_ZMIN_7                                     0x028308
+#define R_02830C_PA_SC_VPORT_ZMAX_7                                     0x02830C
+#define R_028310_PA_SC_VPORT_ZMIN_8                                     0x028310
+#define R_028314_PA_SC_VPORT_ZMAX_8                                     0x028314
+#define R_028318_PA_SC_VPORT_ZMIN_9                                     0x028318
+#define R_02831C_PA_SC_VPORT_ZMAX_9                                     0x02831C
+#define R_028320_PA_SC_VPORT_ZMIN_10                                    0x028320
+#define R_028324_PA_SC_VPORT_ZMAX_10                                    0x028324
+#define R_028328_PA_SC_VPORT_ZMIN_11                                    0x028328
+#define R_02832C_PA_SC_VPORT_ZMAX_11                                    0x02832C
+#define R_028330_PA_SC_VPORT_ZMIN_12                                    0x028330
+#define R_028334_PA_SC_VPORT_ZMAX_12                                    0x028334
+#define R_028338_PA_SC_VPORT_ZMIN_13                                    0x028338
+#define R_02833C_PA_SC_VPORT_ZMAX_13                                    0x02833C
+#define R_028340_PA_SC_VPORT_ZMIN_14                                    0x028340
+#define R_028344_PA_SC_VPORT_ZMAX_14                                    0x028344
+#define R_028348_PA_SC_VPORT_ZMIN_15                                    0x028348
+#define R_02834C_PA_SC_VPORT_ZMAX_15                                    0x02834C
 #define R_028350_PA_SC_RASTER_CONFIG                                    0x028350
 #define   S_028350_RB_MAP_PKR0(x)                                     (((x) & 0x03) << 0)
 #define   G_028350_RB_MAP_PKR0(x)                                     (((x) >> 0) & 0x03)
@@ -5827,6 +7602,13 @@
 #define     V_028354_RASTER_CONFIG_SE_PAIR_YSEL_16_WIDE_TILE        0x01
 #define     V_028354_RASTER_CONFIG_SE_PAIR_YSEL_32_WIDE_TILE        0x02
 #define     V_028354_RASTER_CONFIG_SE_PAIR_YSEL_64_WIDE_TILE        0x03
+#define R_028358_PA_SC_SCREEN_EXTENT_CONTROL                            0x028358
+#define   S_028358_SLICE_EVEN_ENABLE(x)                               (((x) & 0x03) << 0)
+#define   G_028358_SLICE_EVEN_ENABLE(x)                               (((x) >> 0) & 0x03)
+#define   C_028358_SLICE_EVEN_ENABLE                                  0xFFFFFFFC
+#define   S_028358_SLICE_ODD_ENABLE(x)                                (((x) & 0x03) << 2)
+#define   G_028358_SLICE_ODD_ENABLE(x)                                (((x) >> 2) & 0x03)
+#define   C_028358_SLICE_ODD_ENABLE                                   0xFFFFFFF3
 /*     */
 #define R_028400_VGT_MAX_VTX_INDX                                       0x028400
 #define R_028404_VGT_MIN_VTX_INDX                                       0x028404
@@ -5836,6 +7618,18 @@
 #define R_028418_CB_BLEND_GREEN                                         0x028418
 #define R_02841C_CB_BLEND_BLUE                                          0x02841C
 #define R_028420_CB_BLEND_ALPHA                                         0x028420
+/* VI */
+#define R_028424_CB_DCC_CONTROL                                         0x028424
+#define   S_028424_OVERWRITE_COMBINER_DISABLE(x)                      (((x) & 0x1) << 0)
+#define   G_028424_OVERWRITE_COMBINER_DISABLE(x)                      (((x) >> 0) & 0x1)
+#define   C_028424_OVERWRITE_COMBINER_DISABLE                         0xFFFFFFFE
+#define   S_028424_OVERWRITE_COMBINER_MRT_SHARING_DISABLE(x)          (((x) & 0x1) << 1)
+#define   G_028424_OVERWRITE_COMBINER_MRT_SHARING_DISABLE(x)          (((x) >> 1) & 0x1)
+#define   C_028424_OVERWRITE_COMBINER_MRT_SHARING_DISABLE             0xFFFFFFFD
+#define   S_028424_OVERWRITE_COMBINER_WATERMARK(x)                    (((x) & 0x1F) << 2)
+#define   G_028424_OVERWRITE_COMBINER_WATERMARK(x)                    (((x) >> 2) & 0x1F)
+#define   C_028424_OVERWRITE_COMBINER_WATERMARK                       0xFFFFFF83
+/*    */
 #define R_02842C_DB_STENCIL_CONTROL                                     0x02842C
 #define   S_02842C_STENCILFAIL(x)                                     (((x) & 0x0F) << 0)
 #define   G_02842C_STENCILFAIL(x)                                     (((x) >> 0) & 0x0F)
@@ -5977,12 +7771,102 @@
 #define   S_028434_STENCILOPVAL_BF(x)                                 (((x) & 0xFF) << 24)
 #define   G_028434_STENCILOPVAL_BF(x)                                 (((x) >> 24) & 0xFF)
 #define   C_028434_STENCILOPVAL_BF                                    0x00FFFFFF
-#define R_02843C_PA_CL_VPORT_XSCALE_0                                   0x02843C
-#define R_028440_PA_CL_VPORT_XOFFSET_0                                  0x028440
-#define R_028444_PA_CL_VPORT_YSCALE_0                                   0x028444
-#define R_028448_PA_CL_VPORT_YOFFSET_0                                  0x028448
-#define R_02844C_PA_CL_VPORT_ZSCALE_0                                   0x02844C
-#define R_028450_PA_CL_VPORT_ZOFFSET_0                                  0x028450
+#define R_02843C_PA_CL_VPORT_XSCALE                                     0x02843C
+#define R_028440_PA_CL_VPORT_XOFFSET                                    0x028440
+#define R_028444_PA_CL_VPORT_YSCALE                                     0x028444
+#define R_028448_PA_CL_VPORT_YOFFSET                                    0x028448
+#define R_02844C_PA_CL_VPORT_ZSCALE                                     0x02844C
+#define R_028450_PA_CL_VPORT_ZOFFSET                                    0x028450
+#define R_028454_PA_CL_VPORT_XSCALE_1                                   0x028454
+#define R_028458_PA_CL_VPORT_XOFFSET_1                                  0x028458
+#define R_02845C_PA_CL_VPORT_YSCALE_1                                   0x02845C
+#define R_028460_PA_CL_VPORT_YOFFSET_1                                  0x028460
+#define R_028464_PA_CL_VPORT_ZSCALE_1                                   0x028464
+#define R_028468_PA_CL_VPORT_ZOFFSET_1                                  0x028468
+#define R_02846C_PA_CL_VPORT_XSCALE_2                                   0x02846C
+#define R_028470_PA_CL_VPORT_XOFFSET_2                                  0x028470
+#define R_028474_PA_CL_VPORT_YSCALE_2                                   0x028474
+#define R_028478_PA_CL_VPORT_YOFFSET_2                                  0x028478
+#define R_02847C_PA_CL_VPORT_ZSCALE_2                                   0x02847C
+#define R_028480_PA_CL_VPORT_ZOFFSET_2                                  0x028480
+#define R_028484_PA_CL_VPORT_XSCALE_3                                   0x028484
+#define R_028488_PA_CL_VPORT_XOFFSET_3                                  0x028488
+#define R_02848C_PA_CL_VPORT_YSCALE_3                                   0x02848C
+#define R_028490_PA_CL_VPORT_YOFFSET_3                                  0x028490
+#define R_028494_PA_CL_VPORT_ZSCALE_3                                   0x028494
+#define R_028498_PA_CL_VPORT_ZOFFSET_3                                  0x028498
+#define R_02849C_PA_CL_VPORT_XSCALE_4                                   0x02849C
+#define R_0284A0_PA_CL_VPORT_XOFFSET_4                                  0x0284A0
+#define R_0284A4_PA_CL_VPORT_YSCALE_4                                   0x0284A4
+#define R_0284A8_PA_CL_VPORT_YOFFSET_4                                  0x0284A8
+#define R_0284AC_PA_CL_VPORT_ZSCALE_4                                   0x0284AC
+#define R_0284B0_PA_CL_VPORT_ZOFFSET_4                                  0x0284B0
+#define R_0284B4_PA_CL_VPORT_XSCALE_5                                   0x0284B4
+#define R_0284B8_PA_CL_VPORT_XOFFSET_5                                  0x0284B8
+#define R_0284BC_PA_CL_VPORT_YSCALE_5                                   0x0284BC
+#define R_0284C0_PA_CL_VPORT_YOFFSET_5                                  0x0284C0
+#define R_0284C4_PA_CL_VPORT_ZSCALE_5                                   0x0284C4
+#define R_0284C8_PA_CL_VPORT_ZOFFSET_5                                  0x0284C8
+#define R_0284CC_PA_CL_VPORT_XSCALE_6                                   0x0284CC
+#define R_0284D0_PA_CL_VPORT_XOFFSET_6                                  0x0284D0
+#define R_0284D4_PA_CL_VPORT_YSCALE_6                                   0x0284D4
+#define R_0284D8_PA_CL_VPORT_YOFFSET_6                                  0x0284D8
+#define R_0284DC_PA_CL_VPORT_ZSCALE_6                                   0x0284DC
+#define R_0284E0_PA_CL_VPORT_ZOFFSET_6                                  0x0284E0
+#define R_0284E4_PA_CL_VPORT_XSCALE_7                                   0x0284E4
+#define R_0284E8_PA_CL_VPORT_XOFFSET_7                                  0x0284E8
+#define R_0284EC_PA_CL_VPORT_YSCALE_7                                   0x0284EC
+#define R_0284F0_PA_CL_VPORT_YOFFSET_7                                  0x0284F0
+#define R_0284F4_PA_CL_VPORT_ZSCALE_7                                   0x0284F4
+#define R_0284F8_PA_CL_VPORT_ZOFFSET_7                                  0x0284F8
+#define R_0284FC_PA_CL_VPORT_XSCALE_8                                   0x0284FC
+#define R_028500_PA_CL_VPORT_XOFFSET_8                                  0x028500
+#define R_028504_PA_CL_VPORT_YSCALE_8                                   0x028504
+#define R_028508_PA_CL_VPORT_YOFFSET_8                                  0x028508
+#define R_02850C_PA_CL_VPORT_ZSCALE_8                                   0x02850C
+#define R_028510_PA_CL_VPORT_ZOFFSET_8                                  0x028510
+#define R_028514_PA_CL_VPORT_XSCALE_9                                   0x028514
+#define R_028518_PA_CL_VPORT_XOFFSET_9                                  0x028518
+#define R_02851C_PA_CL_VPORT_YSCALE_9                                   0x02851C
+#define R_028520_PA_CL_VPORT_YOFFSET_9                                  0x028520
+#define R_028524_PA_CL_VPORT_ZSCALE_9                                   0x028524
+#define R_028528_PA_CL_VPORT_ZOFFSET_9                                  0x028528
+#define R_02852C_PA_CL_VPORT_XSCALE_10                                  0x02852C
+#define R_028530_PA_CL_VPORT_XOFFSET_10                                 0x028530
+#define R_028534_PA_CL_VPORT_YSCALE_10                                  0x028534
+#define R_028538_PA_CL_VPORT_YOFFSET_10                                 0x028538
+#define R_02853C_PA_CL_VPORT_ZSCALE_10                                  0x02853C
+#define R_028540_PA_CL_VPORT_ZOFFSET_10                                 0x028540
+#define R_028544_PA_CL_VPORT_XSCALE_11                                  0x028544
+#define R_028548_PA_CL_VPORT_XOFFSET_11                                 0x028548
+#define R_02854C_PA_CL_VPORT_YSCALE_11                                  0x02854C
+#define R_028550_PA_CL_VPORT_YOFFSET_11                                 0x028550
+#define R_028554_PA_CL_VPORT_ZSCALE_11                                  0x028554
+#define R_028558_PA_CL_VPORT_ZOFFSET_11                                 0x028558
+#define R_02855C_PA_CL_VPORT_XSCALE_12                                  0x02855C
+#define R_028560_PA_CL_VPORT_XOFFSET_12                                 0x028560
+#define R_028564_PA_CL_VPORT_YSCALE_12                                  0x028564
+#define R_028568_PA_CL_VPORT_YOFFSET_12                                 0x028568
+#define R_02856C_PA_CL_VPORT_ZSCALE_12                                  0x02856C
+#define R_028570_PA_CL_VPORT_ZOFFSET_12                                 0x028570
+#define R_028574_PA_CL_VPORT_XSCALE_13                                  0x028574
+#define R_028578_PA_CL_VPORT_XOFFSET_13                                 0x028578
+#define R_02857C_PA_CL_VPORT_YSCALE_13                                  0x02857C
+#define R_028580_PA_CL_VPORT_YOFFSET_13                                 0x028580
+#define R_028584_PA_CL_VPORT_ZSCALE_13                                  0x028584
+#define R_028588_PA_CL_VPORT_ZOFFSET_13                                 0x028588
+#define R_02858C_PA_CL_VPORT_XSCALE_14                                  0x02858C
+#define R_028590_PA_CL_VPORT_XOFFSET_14                                 0x028590
+#define R_028594_PA_CL_VPORT_YSCALE_14                                  0x028594
+#define R_028598_PA_CL_VPORT_YOFFSET_14                                 0x028598
+#define R_02859C_PA_CL_VPORT_ZSCALE_14                                  0x02859C
+#define R_0285A0_PA_CL_VPORT_ZOFFSET_14                                 0x0285A0
+#define R_0285A4_PA_CL_VPORT_XSCALE_15                                  0x0285A4
+#define R_0285A8_PA_CL_VPORT_XOFFSET_15                                 0x0285A8
+#define R_0285AC_PA_CL_VPORT_YSCALE_15                                  0x0285AC
+#define R_0285B0_PA_CL_VPORT_YOFFSET_15                                 0x0285B0
+#define R_0285B4_PA_CL_VPORT_ZSCALE_15                                  0x0285B4
+#define R_0285B8_PA_CL_VPORT_ZOFFSET_15                                 0x0285B8
 #define R_0285BC_PA_CL_UCP_0_X                                          0x0285BC
 #define R_0285C0_PA_CL_UCP_0_Y                                          0x0285C0
 #define R_0285C4_PA_CL_UCP_0_Z                                          0x0285C4
@@ -6029,6 +7913,26 @@
 #define   G_028644_DUP(x)                                             (((x) >> 18) & 0x1)
 #define   C_028644_DUP                                                0xFFFBFFFF
 /*     */
+/* VI */
+#define   S_028644_FP16_INTERP_MODE(x)                                (((x) & 0x1) << 19)
+#define   G_028644_FP16_INTERP_MODE(x)                                (((x) >> 19) & 0x1)
+#define   C_028644_FP16_INTERP_MODE                                   0xFFF7FFFF
+#define   S_028644_USE_DEFAULT_ATTR1(x)                               (((x) & 0x1) << 20)
+#define   G_028644_USE_DEFAULT_ATTR1(x)                               (((x) >> 20) & 0x1)
+#define   C_028644_USE_DEFAULT_ATTR1                                  0xFFEFFFFF
+#define   S_028644_DEFAULT_VAL_ATTR1(x)                               (((x) & 0x03) << 21)
+#define   G_028644_DEFAULT_VAL_ATTR1(x)                               (((x) >> 21) & 0x03)
+#define   C_028644_DEFAULT_VAL_ATTR1                                  0xFF9FFFFF
+#define   S_028644_PT_SPRITE_TEX_ATTR1(x)                             (((x) & 0x1) << 23)
+#define   G_028644_PT_SPRITE_TEX_ATTR1(x)                             (((x) >> 23) & 0x1)
+#define   C_028644_PT_SPRITE_TEX_ATTR1                                0xFF7FFFFF
+#define   S_028644_ATTR0_VALID(x)                                     (((x) & 0x1) << 24)
+#define   G_028644_ATTR0_VALID(x)                                     (((x) >> 24) & 0x1)
+#define   C_028644_ATTR0_VALID                                        0xFEFFFFFF
+#define   S_028644_ATTR1_VALID(x)                                     (((x) & 0x1) << 25)
+#define   G_028644_ATTR1_VALID(x)                                     (((x) >> 25) & 0x1)
+#define   C_028644_ATTR1_VALID                                        0xFDFFFFFF
+/*    */
 #define R_028648_SPI_PS_INPUT_CNTL_1                                    0x028648
 #define R_02864C_SPI_PS_INPUT_CNTL_2                                    0x02864C
 #define R_028650_SPI_PS_INPUT_CNTL_3                                    0x028650
@@ -6552,6 +8456,10 @@
 #define R_028794_CB_BLEND5_CONTROL                                      0x028794
 #define R_028798_CB_BLEND6_CONTROL                                      0x028798
 #define R_02879C_CB_BLEND7_CONTROL                                      0x02879C
+#define R_0287CC_CS_COPY_STATE                                          0x0287CC
+#define   S_0287CC_SRC_STATE_ID(x)                                    (((x) & 0x07) << 0)
+#define   G_0287CC_SRC_STATE_ID(x)                                    (((x) >> 0) & 0x07)
+#define   C_0287CC_SRC_STATE_ID                                       0xFFFFFFF8
 #define R_0287D4_PA_CL_POINT_X_RAD                                      0x0287D4
 #define R_0287D8_PA_CL_POINT_Y_RAD                                      0x0287D8
 #define R_0287DC_PA_CL_POINT_SIZE                                       0x0287DC
@@ -6581,6 +8489,10 @@
 #define   G_0287F0_USE_OPAQUE(x)                                      (((x) >> 6) & 0x1)
 #define   C_0287F0_USE_OPAQUE                                         0xFFFFFFBF
 #define R_0287F4_VGT_IMMED_DATA                                         0x0287F4 /* not on CIK */
+#define R_0287F8_VGT_EVENT_ADDRESS_REG                                  0x0287F8
+#define   S_0287F8_ADDRESS_LOW(x)                                     (((x) & 0xFFFFFFF) << 0)
+#define   G_0287F8_ADDRESS_LOW(x)                                     (((x) >> 0) & 0xFFFFFFF)
+#define   C_0287F8_ADDRESS_LOW                                        0xF0000000
 #define R_028800_DB_DEPTH_CONTROL                                       0x028800
 #define   S_028800_STENCIL_ENABLE(x)                                  (((x) & 0x1) << 0)
 #define   G_028800_STENCIL_ENABLE(x)                                  (((x) >> 0) & 0x1)
@@ -6637,36 +8549,42 @@
 #define   G_028800_DISABLE_COLOR_WRITES_ON_DEPTH_PASS(x)              (((x) >> 31) & 0x1)
 #define   C_028800_DISABLE_COLOR_WRITES_ON_DEPTH_PASS                 0x7FFFFFFF
 #define R_028804_DB_EQAA                                                0x028804
-#define   S_028804_MAX_ANCHOR_SAMPLES(x)		(((x) & 0x7) << 0)
-#define   G_028804_MAX_ANCHOR_SAMPLES(x)		(((x) >> 0) & 0x7)
-#define   C_028804_MAX_ANCHOR_SAMPLES			(~(((~0) & 0x7) << 0))
-#define   S_028804_PS_ITER_SAMPLES(x)			(((x) & 0x7) << 4)
-#define   G_028804_PS_ITER_SAMPLES(x)			(((x) >> 4) & 0x7)
-#define   C_028804_PS_ITER_SAMPLES			(~(((~0) & 0x7) << 4))
-#define   S_028804_MASK_EXPORT_NUM_SAMPLES(x)		(((x) & 0x7) << 8)
-#define   G_028804_MASK_EXPORT_NUM_SAMPLES(x)		(((x) >> 8) & 0x7)
-#define   C_028804_MASK_EXPORT_NUM_SAMPLES		(~(((~0) & 0x7) << 8))
-#define   S_028804_ALPHA_TO_MASK_NUM_SAMPLES(x)		(((x) & 0x7) << 12)
-#define   G_028804_ALPHA_TO_MASK_NUM_SAMPLES(x)		(((x) >> 12) & 0x7)
-#define   C_028804_ALPHA_TO_MASK_NUM_SAMPLES		(~(((~0) & 0x7) << 12))
-#define   S_028804_HIGH_QUALITY_INTERSECTIONS(x)	(((x) & 0x1) << 16)
-#define   G_028804_HIGH_QUALITY_INTERSECTIONS(x)	(((x) >> 16) & 0x1)
-#define   C_028804_HIGH_QUALITY_INTERSECTIONS		(~(((~0) & 0x1) << 16))
-#define   S_028804_INCOHERENT_EQAA_READS(x)		(((x) & 0x1) << 17)
-#define   G_028804_INCOHERENT_EQAA_READS(x)		(((x) >> 17) & 0x1)
-#define   C_028804_INCOHERENT_EQAA_READS		(~(((~0) & 0x1) << 17))
-#define   S_028804_INTERPOLATE_COMP_Z(x)		(((x) & 0x1) << 18)
-#define   G_028804_INTERPOLATE_COMP_Z(x)		(((x) >> 18) & 0x1)
-#define   C_028804_INTERPOLATE_COMP_Z			(~(((~0) >> 18) & 0x1))
-#define   S_028804_INTERPOLATE_SRC_Z(x)			(((x) & 0x1) << 19)
-#define   G_028804_INTERPOLATE_SRC_Z(x)			(((x) >> 19) & 0x1)
-#define   C_028804_INTERPOLATE_SRC_Z			(~(((~0) & 0x1) << 19))
-#define   S_028804_STATIC_ANCHOR_ASSOCIATIONS(x)	(((x) & 0x1) << 20)
-#define   G_028804_STATIC_ANCHOR_ASSOCIATIONS(x)	(((x) >> 20) & 0x1)
-#define   C_028804_STATIC_ANCHOR_ASSOCIATIONS		(~(((~0) & 0x1) << 20))
-#define   S_028804_ALPHA_TO_MASK_EQAA_DISABLE(x)	(((x) & 0x1) << 21)
-#define   G_028804_ALPHA_TO_MASK_EQAA_DISABLE(x)	(((x) >> 21) & 0x1)
-#define   C_028804_ALPHA_TO_MASK_EQAA_DISABLE		(~(((~0) & 0x1) << 21))
+#define   S_028804_MAX_ANCHOR_SAMPLES(x)                              (((x) & 0x7) << 0)
+#define   G_028804_MAX_ANCHOR_SAMPLES(x)                              (((x) >> 0) & 0x07)
+#define   C_028804_MAX_ANCHOR_SAMPLES                                 0xFFFFFFF8
+#define   S_028804_PS_ITER_SAMPLES(x)                                 (((x) & 0x7) << 4)
+#define   G_028804_PS_ITER_SAMPLES(x)                                 (((x) >> 4) & 0x07)
+#define   C_028804_PS_ITER_SAMPLES                                    0xFFFFFF8F
+#define   S_028804_MASK_EXPORT_NUM_SAMPLES(x)                         (((x) & 0x7) << 8)
+#define   G_028804_MASK_EXPORT_NUM_SAMPLES(x)                         (((x) >> 8) & 0x07)
+#define   C_028804_MASK_EXPORT_NUM_SAMPLES                            0xFFFFF8FF
+#define   S_028804_ALPHA_TO_MASK_NUM_SAMPLES(x)                       (((x) & 0x7) << 12)
+#define   G_028804_ALPHA_TO_MASK_NUM_SAMPLES(x)                       (((x) >> 12) & 0x07)
+#define   C_028804_ALPHA_TO_MASK_NUM_SAMPLES                          0xFFFF8FFF
+#define   S_028804_HIGH_QUALITY_INTERSECTIONS(x)                      (((x) & 0x1) << 16)
+#define   G_028804_HIGH_QUALITY_INTERSECTIONS(x)                      (((x) >> 16) & 0x1)
+#define   C_028804_HIGH_QUALITY_INTERSECTIONS                         0xFFFEFFFF
+#define   S_028804_INCOHERENT_EQAA_READS(x)                           (((x) & 0x1) << 17)
+#define   G_028804_INCOHERENT_EQAA_READS(x)                           (((x) >> 17) & 0x1)
+#define   C_028804_INCOHERENT_EQAA_READS                              0xFFFDFFFF
+#define   S_028804_INTERPOLATE_COMP_Z(x)                              (((x) & 0x1) << 18)
+#define   G_028804_INTERPOLATE_COMP_Z(x)                              (((x) >> 18) & 0x1)
+#define   C_028804_INTERPOLATE_COMP_Z                                 0xFFFBFFFF
+#define   S_028804_INTERPOLATE_SRC_Z(x)                               (((x) & 0x1) << 19)
+#define   G_028804_INTERPOLATE_SRC_Z(x)                               (((x) >> 19) & 0x1)
+#define   C_028804_INTERPOLATE_SRC_Z                                  0xFFF7FFFF
+#define   S_028804_STATIC_ANCHOR_ASSOCIATIONS(x)                      (((x) & 0x1) << 20)
+#define   G_028804_STATIC_ANCHOR_ASSOCIATIONS(x)                      (((x) >> 20) & 0x1)
+#define   C_028804_STATIC_ANCHOR_ASSOCIATIONS                         0xFFEFFFFF
+#define   S_028804_ALPHA_TO_MASK_EQAA_DISABLE(x)                      (((x) & 0x1) << 21)
+#define   G_028804_ALPHA_TO_MASK_EQAA_DISABLE(x)                      (((x) >> 21) & 0x1)
+#define   C_028804_ALPHA_TO_MASK_EQAA_DISABLE                         0xFFDFFFFF
+#define   S_028804_OVERRASTERIZATION_AMOUNT(x)                        (((x) & 0x07) << 24)
+#define   G_028804_OVERRASTERIZATION_AMOUNT(x)                        (((x) >> 24) & 0x07)
+#define   C_028804_OVERRASTERIZATION_AMOUNT                           0xF8FFFFFF
+#define   S_028804_ENABLE_POSTZ_OVERRASTERIZATION(x)                  (((x) & 0x1) << 27)
+#define   G_028804_ENABLE_POSTZ_OVERRASTERIZATION(x)                  (((x) >> 27) & 0x1)
+#define   C_028804_ENABLE_POSTZ_OVERRASTERIZATION                     0xF7FFFFFF
 #define R_028808_CB_COLOR_CONTROL                                       0x028808
 #define   S_028808_DEGAMMA_ENABLE(x)                                  (((x) & 0x1) << 3)
 #define   G_028808_DEGAMMA_ENABLE(x)                                  (((x) >> 3) & 0x1)
@@ -6970,6 +8888,11 @@
 #define   S_02881C_USE_VTX_GS_CUT_FLAG(x)                             (((x) & 0x1) << 25)
 #define   G_02881C_USE_VTX_GS_CUT_FLAG(x)                             (((x) >> 25) & 0x1)
 #define   C_02881C_USE_VTX_GS_CUT_FLAG                                0xFDFFFFFF
+/* VI */
+#define   S_02881C_USE_VTX_LINE_WIDTH(x)                              (((x) & 0x1) << 26)
+#define   G_02881C_USE_VTX_LINE_WIDTH(x)                              (((x) >> 26) & 0x1)
+#define   C_02881C_USE_VTX_LINE_WIDTH                                 0xFBFFFFFF
+/*    */
 #define R_028820_PA_CL_NANINF_CNTL                                      0x028820
 #define   S_028820_VTE_XY_INF_DISCARD(x)                              (((x) & 0x1) << 0)
 #define   G_028820_VTE_XY_INF_DISCARD(x)                              (((x) >> 0) & 0x1)
@@ -7440,9 +9363,21 @@
 #define   S_028A4C_PS_ITER_SAMPLE(x)                                  (((x) & 0x1) << 16)
 #define   G_028A4C_PS_ITER_SAMPLE(x)                                  (((x) >> 16) & 0x1)
 #define   C_028A4C_PS_ITER_SAMPLE                                     0xFFFEFFFF
-#define   S_028A4C_MULTI_SHADER_ENGINE_PRIM_DISC(x)                   (((x) & 0x1) << 17)
-#define   G_028A4C_MULTI_SHADER_ENGINE_PRIM_DISC(x)                   (((x) >> 17) & 0x1)
-#define   C_028A4C_MULTI_SHADER_ENGINE_PRIM_DISC                      0xFFFDFFFF
+#define   S_028A4C_MULTI_SHADER_ENGINE_PRIM_DISCARD_ENABLE(x)         (((x) & 0x1) << 17)
+#define   G_028A4C_MULTI_SHADER_ENGINE_PRIM_DISCARD_ENABLE(x)         (((x) >> 17) & 0x1)
+#define   C_028A4C_MULTI_SHADER_ENGINE_PRIM_DISCARD_ENABLE            0xFFFDFFFF
+#define   S_028A4C_MULTI_GPU_SUPERTILE_ENABLE(x)                      (((x) & 0x1) << 18)
+#define   G_028A4C_MULTI_GPU_SUPERTILE_ENABLE(x)                      (((x) >> 18) & 0x1)
+#define   C_028A4C_MULTI_GPU_SUPERTILE_ENABLE                         0xFFFBFFFF
+#define   S_028A4C_GPU_ID_OVERRIDE_ENABLE(x)                          (((x) & 0x1) << 19)
+#define   G_028A4C_GPU_ID_OVERRIDE_ENABLE(x)                          (((x) >> 19) & 0x1)
+#define   C_028A4C_GPU_ID_OVERRIDE_ENABLE                             0xFFF7FFFF
+#define   S_028A4C_GPU_ID_OVERRIDE(x)                                 (((x) & 0x0F) << 20)
+#define   G_028A4C_GPU_ID_OVERRIDE(x)                                 (((x) >> 20) & 0x0F)
+#define   C_028A4C_GPU_ID_OVERRIDE                                    0xFF0FFFFF
+#define   S_028A4C_MULTI_GPU_PRIM_DISCARD_ENABLE(x)                   (((x) & 0x1) << 24)
+#define   G_028A4C_MULTI_GPU_PRIM_DISCARD_ENABLE(x)                   (((x) >> 24) & 0x1)
+#define   C_028A4C_MULTI_GPU_PRIM_DISCARD_ENABLE                      0xFEFFFFFF
 #define   S_028A4C_FORCE_EOV_CNTDWN_ENABLE(x)                         (((x) & 0x1) << 25)
 #define   G_028A4C_FORCE_EOV_CNTDWN_ENABLE(x)                         (((x) >> 25) & 0x1)
 #define   C_028A4C_FORCE_EOV_CNTDWN_ENABLE                            0xFDFFFFFF
@@ -7508,6 +9443,7 @@
 #define   C_028A7C_INDEX_TYPE                                         0xFFFFFFFC
 #define     V_028A7C_VGT_INDEX_16                                   0x00
 #define     V_028A7C_VGT_INDEX_32                                   0x01
+#define     V_028A7C_VGT_INDEX_8                                    0x02 /* VI */
 #define   S_028A7C_SWAP_MODE(x)                                       (((x) & 0x03) << 2)
 #define   G_028A7C_SWAP_MODE(x)                                       (((x) >> 2) & 0x03)
 #define   C_028A7C_SWAP_MODE                                          0xFFFFFFF3
@@ -7537,6 +9473,12 @@
 #define   G_028A7C_REQ_PATH(x)                                        (((x) >> 10) & 0x1)
 #define   C_028A7C_REQ_PATH                                           0xFFFFFBFF
 /*     */
+/* VI */
+#define   S_028A7C_MTYPE(x)                                           (((x) & 0x03) << 11)
+#define   G_028A7C_MTYPE(x)                                           (((x) >> 11) & 0x03)
+#define   C_028A7C_MTYPE                                              0xFFFFE7FF
+/*    */
+#define R_028A80_WD_ENHANCE                                             0x028A80
 #define R_028A84_VGT_PRIMITIVEID_EN                                     0x028A84
 #define   S_028A84_PRIMITIVEID_EN(x)                                  (((x) & 0x1) << 0)
 #define   G_028A84_PRIMITIVEID_EN(x)                                  (((x) >> 0) & 0x1)
@@ -7635,6 +9577,10 @@
 #define   S_028AA8_WD_SWITCH_ON_EOP(x)                                (((x) & 0x1) << 20)
 #define   G_028AA8_WD_SWITCH_ON_EOP(x)                                (((x) >> 20) & 0x1)
 #define   C_028AA8_WD_SWITCH_ON_EOP                                   0xFFEFFFFF
+/* VI */
+#define   S_028AA8_MAX_PRIMGRP_IN_WAVE(x)                             (((x) & 0x0F) << 28)
+#define   G_028AA8_MAX_PRIMGRP_IN_WAVE(x)                             (((x) >> 28) & 0x0F)
+#define   C_028AA8_MAX_PRIMGRP_IN_WAVE                                0x0FFFFFFF
 /*     */
 #define R_028AAC_VGT_ESGS_RING_ITEMSIZE                                 0x028AAC
 #define   S_028AAC_ITEMSIZE(x)                                        (((x) & 0x7FFF) << 0)
@@ -7674,6 +9620,11 @@
 #define   S_028ABC_DST_OUTSIDE_ZERO_TO_ONE(x)                         (((x) & 0x1) << 16)
 #define   G_028ABC_DST_OUTSIDE_ZERO_TO_ONE(x)                         (((x) >> 16) & 0x1)
 #define   C_028ABC_DST_OUTSIDE_ZERO_TO_ONE                            0xFFFEFFFF
+/* VI */
+#define   S_028ABC_TC_COMPATIBLE(x)                                   (((x) & 0x1) << 17)
+#define   G_028ABC_TC_COMPATIBLE(x)                                   (((x) >> 17) & 0x1)
+#define   C_028ABC_TC_COMPATIBLE                                      0xFFFDFFFF
+/*    */
 #define R_028AC0_DB_SRESULTS_COMPARE_STATE0                             0x028AC0
 #define   S_028AC0_COMPAREFUNC0(x)                                    (((x) & 0x07) << 0)
 #define   G_028AC0_COMPAREFUNC0(x)                                    (((x) >> 0) & 0x07)
@@ -7763,6 +9714,21 @@
 #define   S_028B38_MAX_VERT_OUT(x)                                    (((x) & 0x7FF) << 0)
 #define   G_028B38_MAX_VERT_OUT(x)                                    (((x) >> 0) & 0x7FF)
 #define   C_028B38_MAX_VERT_OUT                                       0xFFFFF800
+/* VI */
+#define R_028B50_VGT_TESS_DISTRIBUTION                                  0x028B50
+#define   S_028B50_ACCUM_ISOLINE(x)                                   (((x) & 0xFF) << 0)
+#define   G_028B50_ACCUM_ISOLINE(x)                                   (((x) >> 0) & 0xFF)
+#define   C_028B50_ACCUM_ISOLINE                                      0xFFFFFF00
+#define   S_028B50_ACCUM_TRI(x)                                       (((x) & 0xFF) << 8)
+#define   G_028B50_ACCUM_TRI(x)                                       (((x) >> 8) & 0xFF)
+#define   C_028B50_ACCUM_TRI                                          0xFFFF00FF
+#define   S_028B50_ACCUM_QUAD(x)                                      (((x) & 0xFF) << 16)
+#define   G_028B50_ACCUM_QUAD(x)                                      (((x) >> 16) & 0xFF)
+#define   C_028B50_ACCUM_QUAD                                         0xFF00FFFF
+#define   S_028B50_DONUT_SPLIT(x)                                     (((x) & 0xFF) << 24)
+#define   G_028B50_DONUT_SPLIT(x)                                     (((x) >> 24) & 0xFF)
+#define   C_028B50_DONUT_SPLIT                                        0x00FFFFFF
+/*    */
 #define R_028B54_VGT_SHADER_STAGES_EN                                   0x028B54
 #define   S_028B54_LS_EN(x)                                           (((x) & 0x03) << 0)
 #define   G_028B54_LS_EN(x)                                           (((x) >> 0) & 0x03)
@@ -7791,6 +9757,20 @@
 #define   S_028B54_DYNAMIC_HS(x)                                      (((x) & 0x1) << 8)
 #define   G_028B54_DYNAMIC_HS(x)                                      (((x) >> 8) & 0x1)
 #define   C_028B54_DYNAMIC_HS                                         0xFFFFFEFF
+/* VI */
+#define   S_028B54_DISPATCH_DRAW_EN(x)                                (((x) & 0x1) << 9)
+#define   G_028B54_DISPATCH_DRAW_EN(x)                                (((x) >> 9) & 0x1)
+#define   C_028B54_DISPATCH_DRAW_EN                                   0xFFFFFDFF
+#define   S_028B54_DIS_DEALLOC_ACCUM_0(x)                             (((x) & 0x1) << 10)
+#define   G_028B54_DIS_DEALLOC_ACCUM_0(x)                             (((x) >> 10) & 0x1)
+#define   C_028B54_DIS_DEALLOC_ACCUM_0                                0xFFFFFBFF
+#define   S_028B54_DIS_DEALLOC_ACCUM_1(x)                             (((x) & 0x1) << 11)
+#define   G_028B54_DIS_DEALLOC_ACCUM_1(x)                             (((x) >> 11) & 0x1)
+#define   C_028B54_DIS_DEALLOC_ACCUM_1                                0xFFFFF7FF
+#define   S_028B54_VS_WAVE_ID_EN(x)                                   (((x) & 0x1) << 12)
+#define   G_028B54_VS_WAVE_ID_EN(x)                                   (((x) >> 12) & 0x1)
+#define   C_028B54_VS_WAVE_ID_EN                                      0xFFFFEFFF
+/*    */
 #define R_028B58_VGT_LS_HS_CONFIG                                       0x028B58
 #define   S_028B58_NUM_PATCHES(x)                                     (((x) & 0xFF) << 0)
 #define   G_028B58_NUM_PATCHES(x)                                     (((x) >> 0) & 0xFF)
@@ -7841,6 +9821,9 @@
 #define   S_028B6C_RESERVED_REDUC_AXIS(x)                             (((x) & 0x1) << 8) /* not on CIK */
 #define   G_028B6C_RESERVED_REDUC_AXIS(x)                             (((x) >> 8) & 0x1) /* not on CIK */
 #define   C_028B6C_RESERVED_REDUC_AXIS                                0xFFFFFEFF /* not on CIK */
+#define   S_028B6C_DEPRECATED(x)                                      (((x) & 0x1) << 9)
+#define   G_028B6C_DEPRECATED(x)                                      (((x) >> 9) & 0x1)
+#define   C_028B6C_DEPRECATED                                         0xFFFFFDFF
 #define   S_028B6C_NUM_DS_WAVES_PER_SIMD(x)                           (((x) & 0x0F) << 10)
 #define   G_028B6C_NUM_DS_WAVES_PER_SIMD(x)                           (((x) >> 10) & 0x0F)
 #define   C_028B6C_NUM_DS_WAVES_PER_SIMD                              0xFFFFC3FF
@@ -7855,6 +9838,14 @@
 #define     V_028B6C_VGT_POLICY_STREAM                              0x01
 #define     V_028B6C_VGT_POLICY_BYPASS                              0x02
 /*     */
+/* VI */
+#define   S_028B6C_DISTRIBUTION_MODE(x)                               (((x) & 0x03) << 17)
+#define   G_028B6C_DISTRIBUTION_MODE(x)                               (((x) >> 17) & 0x03)
+#define   C_028B6C_DISTRIBUTION_MODE                                  0xFFF9FFFF
+#define   S_028B6C_MTYPE(x)                                           (((x) & 0x03) << 19)
+#define   G_028B6C_MTYPE(x)                                           (((x) >> 19) & 0x03)
+#define   C_028B6C_MTYPE                                              0xFFE7FFFF
+/*    */
 #define R_028B70_DB_ALPHA_TO_MASK                                       0x028B70
 #define   S_028B70_ALPHA_TO_MASK_ENABLE(x)                            (((x) & 0x1) << 0)
 #define   G_028B70_ALPHA_TO_MASK_ENABLE(x)                            (((x) >> 0) & 0x1)
@@ -7994,6 +9985,22 @@
 #define   S_028BDC_DX10_DIAMOND_TEST_ENA(x)                           (((x) & 0x1) << 12)
 #define   G_028BDC_DX10_DIAMOND_TEST_ENA(x)                           (((x) >> 12) & 0x1)
 #define   C_028BDC_DX10_DIAMOND_TEST_ENA                              0xFFFFEFFF
+#define R_028BE0_PA_SC_AA_CONFIG                                        0x028BE0
+#define   S_028BE0_MSAA_NUM_SAMPLES(x)                                (((x) & 0x7) << 0)
+#define   G_028BE0_MSAA_NUM_SAMPLES(x)                                (((x) >> 0) & 0x07)
+#define   C_028BE0_MSAA_NUM_SAMPLES                                   0xFFFFFFF8
+#define   S_028BE0_AA_MASK_CENTROID_DTMN(x)                           (((x) & 0x1) << 4)
+#define   G_028BE0_AA_MASK_CENTROID_DTMN(x)                           (((x) >> 4) & 0x1)
+#define   C_028BE0_AA_MASK_CENTROID_DTMN                              0xFFFFFFEF
+#define   S_028BE0_MAX_SAMPLE_DIST(x)                                 (((x) & 0xf) << 13)
+#define   G_028BE0_MAX_SAMPLE_DIST(x)                                 (((x) >> 13) & 0x0F)
+#define   C_028BE0_MAX_SAMPLE_DIST                                    0xFFFE1FFF
+#define   S_028BE0_MSAA_EXPOSED_SAMPLES(x)                            (((x) & 0x7) << 20)
+#define   G_028BE0_MSAA_EXPOSED_SAMPLES(x)                            (((x) >> 20) & 0x07)
+#define   C_028BE0_MSAA_EXPOSED_SAMPLES                               0xFF8FFFFF
+#define   S_028BE0_DETAIL_TO_EXPOSED_MODE(x)                          (((x) & 0x3) << 24)
+#define   G_028BE0_DETAIL_TO_EXPOSED_MODE(x)                          (((x) >> 24) & 0x03)
+#define   C_028BE0_DETAIL_TO_EXPOSED_MODE                             0xFCFFFFFF
 #define R_028BE4_PA_SU_VTX_CNTL                                         0x028BE4
 #define   S_028BE4_PIX_CENTER(x)                                      (((x) & 0x1) << 0)
 #define   G_028BE4_PIX_CENTER(x)                                      (((x) >> 0) & 0x1)
@@ -8562,6 +10569,17 @@
 #define   G_028C70_FMASK_COMPRESSION_DISABLE(x)                       (((x) >> 26) & 0x1)
 #define   C_028C70_FMASK_COMPRESSION_DISABLE                          0xFBFFFFFF
 /*     */
+/* VI */
+#define   S_028C70_FMASK_COMPRESS_1FRAG_ONLY(x)                       (((x) & 0x1) << 27)
+#define   G_028C70_FMASK_COMPRESS_1FRAG_ONLY(x)                       (((x) >> 27) & 0x1)
+#define   C_028C70_FMASK_COMPRESS_1FRAG_ONLY                          0xF7FFFFFF
+#define   S_028C70_DCC_ENABLE(x)                                      (((x) & 0x1) << 28)
+#define   G_028C70_DCC_ENABLE(x)                                      (((x) >> 28) & 0x1)
+#define   C_028C70_DCC_ENABLE                                         0xEFFFFFFF
+#define   S_028C70_CMASK_ADDR_TYPE(x)                                 (((x) & 0x03) << 29)
+#define   G_028C70_CMASK_ADDR_TYPE(x)                                 (((x) >> 29) & 0x03)
+#define   C_028C70_CMASK_ADDR_TYPE                                    0x9FFFFFFF
+/*    */
 #define R_028C74_CB_COLOR0_ATTRIB                                       0x028C74
 #define   S_028C74_TILE_MODE_INDEX(x)                                 (((x) & 0x1F) << 0)
 #define   G_028C74_TILE_MODE_INDEX(x)                                 (((x) >> 0) & 0x1F)
@@ -8569,7 +10587,9 @@
 #define   S_028C74_FMASK_TILE_MODE_INDEX(x)                           (((x) & 0x1F) << 5)
 #define   G_028C74_FMASK_TILE_MODE_INDEX(x)                           (((x) >> 5) & 0x1F)
 #define   C_028C74_FMASK_TILE_MODE_INDEX                              0xFFFFFC1F
-#define   S_028C74_FMASK_BANK_HEIGHT(x)				      (((x) & 0x3) << 10) /* SI errata */
+#define   S_028C74_FMASK_BANK_HEIGHT(x)                               (((x) & 0x03) << 10)
+#define   G_028C74_FMASK_BANK_HEIGHT(x)                               (((x) >> 10) & 0x03)
+#define   C_028C74_FMASK_BANK_HEIGHT                                  0xFFFFF3FF
 #define   S_028C74_NUM_SAMPLES(x)                                     (((x) & 0x07) << 12)
 #define   G_028C74_NUM_SAMPLES(x)                                     (((x) >> 12) & 0x07)
 #define   C_028C74_NUM_SAMPLES                                        0xFFFF8FFF
@@ -8579,6 +10599,36 @@
 #define   S_028C74_FORCE_DST_ALPHA_1(x)                               (((x) & 0x1) << 17)
 #define   G_028C74_FORCE_DST_ALPHA_1(x)                               (((x) >> 17) & 0x1)
 #define   C_028C74_FORCE_DST_ALPHA_1                                  0xFFFDFFFF
+/* VI */
+#define R_028C78_CB_COLOR0_DCC_CONTROL                                  0x028C78
+#define   S_028C78_OVERWRITE_COMBINER_DISABLE(x)                      (((x) & 0x1) << 0)
+#define   G_028C78_OVERWRITE_COMBINER_DISABLE(x)                      (((x) >> 0) & 0x1)
+#define   C_028C78_OVERWRITE_COMBINER_DISABLE                         0xFFFFFFFE
+#define   S_028C78_KEY_CLEAR_ENABLE(x)                                (((x) & 0x1) << 1)
+#define   G_028C78_KEY_CLEAR_ENABLE(x)                                (((x) >> 1) & 0x1)
+#define   C_028C78_KEY_CLEAR_ENABLE                                   0xFFFFFFFD
+#define   S_028C78_MAX_UNCOMPRESSED_BLOCK_SIZE(x)                     (((x) & 0x03) << 2)
+#define   G_028C78_MAX_UNCOMPRESSED_BLOCK_SIZE(x)                     (((x) >> 2) & 0x03)
+#define   C_028C78_MAX_UNCOMPRESSED_BLOCK_SIZE                        0xFFFFFFF3
+#define   S_028C78_MIN_COMPRESSED_BLOCK_SIZE(x)                       (((x) & 0x1) << 4)
+#define   G_028C78_MIN_COMPRESSED_BLOCK_SIZE(x)                       (((x) >> 4) & 0x1)
+#define   C_028C78_MIN_COMPRESSED_BLOCK_SIZE                          0xFFFFFFEF
+#define   S_028C78_MAX_COMPRESSED_BLOCK_SIZE(x)                       (((x) & 0x03) << 5)
+#define   G_028C78_MAX_COMPRESSED_BLOCK_SIZE(x)                       (((x) >> 5) & 0x03)
+#define   C_028C78_MAX_COMPRESSED_BLOCK_SIZE                          0xFFFFFF9F
+#define   S_028C78_COLOR_TRANSFORM(x)                                 (((x) & 0x03) << 7)
+#define   G_028C78_COLOR_TRANSFORM(x)                                 (((x) >> 7) & 0x03)
+#define   C_028C78_COLOR_TRANSFORM                                    0xFFFFFE7F
+#define   S_028C78_INDEPENDENT_64B_BLOCKS(x)                          (((x) & 0x1) << 9)
+#define   G_028C78_INDEPENDENT_64B_BLOCKS(x)                          (((x) >> 9) & 0x1)
+#define   C_028C78_INDEPENDENT_64B_BLOCKS                             0xFFFFFDFF
+#define   S_028C78_LOSSY_RGB_PRECISION(x)                             (((x) & 0x0F) << 10)
+#define   G_028C78_LOSSY_RGB_PRECISION(x)                             (((x) >> 10) & 0x0F)
+#define   C_028C78_LOSSY_RGB_PRECISION                                0xFFFFC3FF
+#define   S_028C78_LOSSY_ALPHA_PRECISION(x)                           (((x) & 0x0F) << 14)
+#define   G_028C78_LOSSY_ALPHA_PRECISION(x)                           (((x) >> 14) & 0x0F)
+#define   C_028C78_LOSSY_ALPHA_PRECISION                              0xFFFC3FFF
+/*    */
 #define R_028C7C_CB_COLOR0_CMASK                                        0x028C7C
 #define R_028C80_CB_COLOR0_CMASK_SLICE                                  0x028C80
 #define   S_028C80_TILE_MAX(x)                                        (((x) & 0x3FFF) << 0)
@@ -8591,90 +10641,105 @@
 #define   C_028C88_TILE_MAX                                           0xFFC00000
 #define R_028C8C_CB_COLOR0_CLEAR_WORD0                                  0x028C8C
 #define R_028C90_CB_COLOR0_CLEAR_WORD1                                  0x028C90
+#define R_028C94_CB_COLOR0_DCC_BASE                                     0x028C94 /* VI */
 #define R_028C9C_CB_COLOR1_BASE                                         0x028C9C
 #define R_028CA0_CB_COLOR1_PITCH                                        0x028CA0
 #define R_028CA4_CB_COLOR1_SLICE                                        0x028CA4
 #define R_028CA8_CB_COLOR1_VIEW                                         0x028CA8
 #define R_028CAC_CB_COLOR1_INFO                                         0x028CAC
 #define R_028CB0_CB_COLOR1_ATTRIB                                       0x028CB0
-#define R_028CD4_CB_COLOR1_CMASK                                        0x028CB8
+#define R_028CB4_CB_COLOR1_DCC_CONTROL                                  0x028CB4 /* VI */
+#define R_028CB8_CB_COLOR1_CMASK                                        0x028CB8
 #define R_028CBC_CB_COLOR1_CMASK_SLICE                                  0x028CBC
 #define R_028CC0_CB_COLOR1_FMASK                                        0x028CC0
 #define R_028CC4_CB_COLOR1_FMASK_SLICE                                  0x028CC4
 #define R_028CC8_CB_COLOR1_CLEAR_WORD0                                  0x028CC8
 #define R_028CCC_CB_COLOR1_CLEAR_WORD1                                  0x028CCC
+#define R_028CD0_CB_COLOR1_DCC_BASE                                     0x028CD0 /* VI */
 #define R_028CD8_CB_COLOR2_BASE                                         0x028CD8
 #define R_028CDC_CB_COLOR2_PITCH                                        0x028CDC
 #define R_028CE0_CB_COLOR2_SLICE                                        0x028CE0
 #define R_028CE4_CB_COLOR2_VIEW                                         0x028CE4
 #define R_028CE8_CB_COLOR2_INFO                                         0x028CE8
 #define R_028CEC_CB_COLOR2_ATTRIB                                       0x028CEC
+#define R_028CF0_CB_COLOR2_DCC_CONTROL                                  0x028CF0 /* VI */
 #define R_028CF4_CB_COLOR2_CMASK                                        0x028CF4
 #define R_028CF8_CB_COLOR2_CMASK_SLICE                                  0x028CF8
 #define R_028CFC_CB_COLOR2_FMASK                                        0x028CFC
 #define R_028D00_CB_COLOR2_FMASK_SLICE                                  0x028D00
 #define R_028D04_CB_COLOR2_CLEAR_WORD0                                  0x028D04
 #define R_028D08_CB_COLOR2_CLEAR_WORD1                                  0x028D08
+#define R_028D0C_CB_COLOR2_DCC_BASE                                     0x028D0C /* VI */
 #define R_028D14_CB_COLOR3_BASE                                         0x028D14
 #define R_028D18_CB_COLOR3_PITCH                                        0x028D18
 #define R_028D1C_CB_COLOR3_SLICE                                        0x028D1C
 #define R_028D20_CB_COLOR3_VIEW                                         0x028D20
 #define R_028D24_CB_COLOR3_INFO                                         0x028D24
 #define R_028D28_CB_COLOR3_ATTRIB                                       0x028D28
+#define R_028D2C_CB_COLOR3_DCC_CONTROL                                  0x028D2C /* VI */
 #define R_028D30_CB_COLOR3_CMASK                                        0x028D30
 #define R_028D34_CB_COLOR3_CMASK_SLICE                                  0x028D34
 #define R_028D38_CB_COLOR3_FMASK                                        0x028D38
 #define R_028D3C_CB_COLOR3_FMASK_SLICE                                  0x028D3C
 #define R_028D40_CB_COLOR3_CLEAR_WORD0                                  0x028D40
 #define R_028D44_CB_COLOR3_CLEAR_WORD1                                  0x028D44
+#define R_028D48_CB_COLOR3_DCC_BASE                                     0x028D48 /* VI */
 #define R_028D50_CB_COLOR4_BASE                                         0x028D50
 #define R_028D54_CB_COLOR4_PITCH                                        0x028D54
 #define R_028D58_CB_COLOR4_SLICE                                        0x028D58
 #define R_028D5C_CB_COLOR4_VIEW                                         0x028D5C
 #define R_028D60_CB_COLOR4_INFO                                         0x028D60
 #define R_028D64_CB_COLOR4_ATTRIB                                       0x028D64
+#define R_028D68_CB_COLOR4_DCC_CONTROL                                  0x028D68 /* VI */
 #define R_028D6C_CB_COLOR4_CMASK                                        0x028D6C
 #define R_028D70_CB_COLOR4_CMASK_SLICE                                  0x028D70
 #define R_028D74_CB_COLOR4_FMASK                                        0x028D74
 #define R_028D78_CB_COLOR4_FMASK_SLICE                                  0x028D78
 #define R_028D7C_CB_COLOR4_CLEAR_WORD0                                  0x028D7C
 #define R_028D80_CB_COLOR4_CLEAR_WORD1                                  0x028D80
+#define R_028D84_CB_COLOR4_DCC_BASE                                     0x028D84 /* VI */
 #define R_028D8C_CB_COLOR5_BASE                                         0x028D8C
 #define R_028D90_CB_COLOR5_PITCH                                        0x028D90
 #define R_028D94_CB_COLOR5_SLICE                                        0x028D94
 #define R_028D98_CB_COLOR5_VIEW                                         0x028D98
 #define R_028D9C_CB_COLOR5_INFO                                         0x028D9C
 #define R_028DA0_CB_COLOR5_ATTRIB                                       0x028DA0
+#define R_028DA4_CB_COLOR5_DCC_CONTROL                                  0x028DA4 /* VI */
 #define R_028DA8_CB_COLOR5_CMASK                                        0x028DA8
 #define R_028DAC_CB_COLOR5_CMASK_SLICE                                  0x028DAC
 #define R_028DB0_CB_COLOR5_FMASK                                        0x028DB0
 #define R_028DB4_CB_COLOR5_FMASK_SLICE                                  0x028DB4
 #define R_028DB8_CB_COLOR5_CLEAR_WORD0                                  0x028DB8
 #define R_028DBC_CB_COLOR5_CLEAR_WORD1                                  0x028DBC
+#define R_028DC0_CB_COLOR5_DCC_BASE                                     0x028DC0 /* VI */
 #define R_028DC8_CB_COLOR6_BASE                                         0x028DC8
 #define R_028DCC_CB_COLOR6_PITCH                                        0x028DCC
 #define R_028DD0_CB_COLOR6_SLICE                                        0x028DD0
 #define R_028DD4_CB_COLOR6_VIEW                                         0x028DD4
 #define R_028DD8_CB_COLOR6_INFO                                         0x028DD8
 #define R_028DDC_CB_COLOR6_ATTRIB                                       0x028DDC
+#define R_028DE0_CB_COLOR6_DCC_CONTROL                                  0x028DE0 /* VI */
 #define R_028DE4_CB_COLOR6_CMASK                                        0x028DE4
 #define R_028DE8_CB_COLOR6_CMASK_SLICE                                  0x028DE8
 #define R_028DEC_CB_COLOR6_FMASK                                        0x028DEC
 #define R_028DF0_CB_COLOR6_FMASK_SLICE                                  0x028DF0
 #define R_028DF4_CB_COLOR6_CLEAR_WORD0                                  0x028DF4
 #define R_028DF8_CB_COLOR6_CLEAR_WORD1                                  0x028DF8
+#define R_028DFC_CB_COLOR6_DCC_BASE                                     0x028DFC /* VI */
 #define R_028E04_CB_COLOR7_BASE                                         0x028E04
 #define R_028E08_CB_COLOR7_PITCH                                        0x028E08
 #define R_028E0C_CB_COLOR7_SLICE                                        0x028E0C
 #define R_028E10_CB_COLOR7_VIEW                                         0x028E10
 #define R_028E14_CB_COLOR7_INFO                                         0x028E14
 #define R_028E18_CB_COLOR7_ATTRIB                                       0x028E18
+#define R_028E1C_CB_COLOR7_DCC_CONTROL                                  0x028E1C /* VI */
 #define R_028E20_CB_COLOR7_CMASK                                        0x028E20
 #define R_028E24_CB_COLOR7_CMASK_SLICE                                  0x028E24
 #define R_028E28_CB_COLOR7_FMASK                                        0x028E28
 #define R_028E2C_CB_COLOR7_FMASK_SLICE                                  0x028E2C
 #define R_028E30_CB_COLOR7_CLEAR_WORD0                                  0x028E30
 #define R_028E34_CB_COLOR7_CLEAR_WORD1                                  0x028E34
+#define R_028E38_CB_COLOR7_DCC_BASE                                     0x028E38 /* VI */
 
 /* SI async DMA packets */
 #define SI_DMA_PACKET(cmd, sub_cmd, n) ((((cmd) & 0xF) << 28) |    \
@@ -8695,6 +10760,30 @@
 #define    SI_DMA_PACKET_SRBM_WRITE                0x9
 #define    SI_DMA_PACKET_CONSTANT_FILL             0xd
 #define    SI_DMA_PACKET_NOP                       0xf
+
+/* CIK async DMA packets */
+#define CIK_SDMA_PACKET(op, sub_op, n)   ((((n) & 0xFFFF) << 16) |	\
+					 (((sub_op) & 0xFF) << 8) |	\
+					 (((op) & 0xFF) << 0))
+/* CIK async DMA packet types */
+#define    CIK_SDMA_OPCODE_NOP                     0x0
+#define    CIK_SDMA_OPCODE_COPY                    0x1
+#define        CIK_SDMA_COPY_SUB_OPCODE_LINEAR            0x0
+#define        CIK_SDMA_COPY_SUB_OPCODE_TILED             0x1
+#define        CIK_SDMA_COPY_SUB_OPCODE_SOA               0x3
+#define        CIK_SDMA_COPY_SUB_OPCODE_LINEAR_SUB_WINDOW 0x4
+#define        CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW  0x5
+#define        CIK_SDMA_COPY_SUB_OPCODE_T2T_SUB_WINDOW    0x6
+#define    CIK_SDMA_OPCODE_WRITE                   0x2
+#define        SDMA_WRITE_SUB_OPCODE_LINEAR               0x0
+#define        SDMA_WRTIE_SUB_OPCODE_TILED                0x1
+#define    CIK_SDMA_OPCODE_INDIRECT_BUFFER         0x4
+#define    CIK_SDMA_PACKET_FENCE                   0x5
+#define    CIK_SDMA_PACKET_TRAP                    0x6
+#define    CIK_SDMA_PACKET_SEMAPHORE               0x7
+#define    CIK_SDMA_PACKET_CONSTANT_FILL           0xb
+#define    CIK_SDMA_PACKET_SRBM_WRITE              0xe
+#define    CIK_SDMA_COPY_MAX_SIZE                  0x1fffff
 
 #endif /* _SID_H */
 

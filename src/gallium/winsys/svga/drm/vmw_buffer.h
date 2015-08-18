@@ -59,7 +59,7 @@ struct debug_flush_buf *
 vmw_debug_flush_buf(struct svga_winsys_buffer *buffer);
 
 #else
-static INLINE struct pb_buffer *
+static inline struct pb_buffer *
 vmw_pb_buffer(struct svga_winsys_buffer *buffer)
 {
    assert(buffer);
@@ -67,7 +67,7 @@ vmw_pb_buffer(struct svga_winsys_buffer *buffer)
 }
 
 
-static INLINE struct svga_winsys_buffer *
+static inline struct svga_winsys_buffer *
 vmw_svga_winsys_buffer_wrap(struct pb_buffer *buffer)
 {
    return (struct svga_winsys_buffer *)buffer;

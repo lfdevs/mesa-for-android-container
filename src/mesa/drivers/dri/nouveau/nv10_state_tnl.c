@@ -31,6 +31,8 @@
 #include "nv10_3d.xml.h"
 #include "nv10_driver.h"
 
+#include "util/simple_list.h"
+
 void
 nv10_emit_clip_plane(struct gl_context *ctx, int emit)
 {

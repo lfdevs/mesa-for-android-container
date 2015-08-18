@@ -35,6 +35,7 @@
 #include "glapi/glapi.h"
 #include "stw_device.h"
 #include "stw_icd.h"
+#include "stw_nopfuncs.h"
 
 struct stw_extension_entry
 {
@@ -79,6 +80,7 @@ DrvGetProcAddress(
    LPCSTR lpszProc )
 {
    const struct stw_extension_entry *entry;
+   PROC p;
 
    if (!stw_dev)
       return NULL;
@@ -88,8 +90,23 @@ DrvGetProcAddress(
          if (strcmp( lpszProc, entry->name ) == 0)
             return entry->proc;
 
-   if (lpszProc[0] == 'g' && lpszProc[1] == 'l')
-      return (PROC) _glapi_get_proc_address( lpszProc );
+   if (lpszProc[0] == 'g' && lpszProc[1] == 'l') {
+      p = (PROC) _glapi_get_proc_address(lpszProc);
+      if (p)
+         return p;
+   }
 
+   /* If we get here, we'd normally just return NULL, but since some apps
+    * (like Viewperf12) crash when they try to use the null pointer, try
+    * returning a pointer to a no-op function instead.
+    */
+   p = stw_get_nop_function(lpszProc);
+   if (p) {
+      debug_printf("wglGetProcAddress(\"%s\") returning no-op function\n",
+                   lpszProc);
+      return p;
+   }
+
+   debug_printf("wglGetProcAddress(\"%s\") returning NULL\n", lpszProc);
    return NULL;
 }

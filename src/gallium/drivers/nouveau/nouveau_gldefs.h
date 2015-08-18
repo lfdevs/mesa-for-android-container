@@ -1,7 +1,7 @@
 #ifndef __NOUVEAU_GLDEFS_H__
 #define __NOUVEAU_GLDEFS_H__
 
-static INLINE unsigned
+static inline unsigned
 nvgl_blend_func(unsigned factor)
 {
 	switch (factor) {
@@ -40,7 +40,7 @@ nvgl_blend_func(unsigned factor)
 	}
 }
 
-static INLINE unsigned
+static inline unsigned
 nvgl_blend_eqn(unsigned func)
 {
 	switch (func) {
@@ -59,7 +59,7 @@ nvgl_blend_eqn(unsigned func)
 	}
 }
 
-static INLINE unsigned
+static inline unsigned
 nvgl_logicop_func(unsigned func)
 {
 	switch (func) {
@@ -100,7 +100,7 @@ nvgl_logicop_func(unsigned func)
 	}
 }
 
-static INLINE unsigned
+static inline unsigned
 nvgl_comparison_op(unsigned op)
 {
 	switch (op) {
@@ -125,7 +125,7 @@ nvgl_comparison_op(unsigned op)
 	}
 }
 
-static INLINE unsigned
+static inline unsigned
 nvgl_polygon_mode(unsigned mode)
 {
 	switch (mode) {
@@ -140,7 +140,7 @@ nvgl_polygon_mode(unsigned mode)
 	}
 }
 
-static INLINE unsigned
+static inline unsigned
 nvgl_stencil_op(unsigned op)
 {
 	switch (op) {
@@ -165,7 +165,7 @@ nvgl_stencil_op(unsigned op)
 	}
 }
 
-static INLINE unsigned
+static inline unsigned
 nvgl_primitive(unsigned prim) {
 	switch (prim) {
 	case PIPE_PRIM_POINTS:

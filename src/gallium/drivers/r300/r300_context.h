@@ -449,6 +449,8 @@ struct r300_context {
 
     /* The interface to the windowing system, etc. */
     struct radeon_winsys *rws;
+    /* The submission context. */
+    struct radeon_winsys_ctx *ctx;
     /* The command stream. */
     struct radeon_winsys_cs *cs;
     /* Screen. */
@@ -647,32 +649,32 @@ struct r300_context {
     for (atom = r300->first_dirty; atom != r300->last_dirty; atom++)
 
 /* Convenience cast wrappers. */
-static INLINE struct r300_query* r300_query(struct pipe_query* q)
+static inline struct r300_query* r300_query(struct pipe_query* q)
 {
     return (struct r300_query*)q;
 }
 
-static INLINE struct r300_surface* r300_surface(struct pipe_surface* surf)
+static inline struct r300_surface* r300_surface(struct pipe_surface* surf)
 {
     return (struct r300_surface*)surf;
 }
 
-static INLINE struct r300_resource* r300_resource(struct pipe_resource* tex)
+static inline struct r300_resource* r300_resource(struct pipe_resource* tex)
 {
     return (struct r300_resource*)tex;
 }
 
-static INLINE struct r300_context* r300_context(struct pipe_context* context)
+static inline struct r300_context* r300_context(struct pipe_context* context)
 {
     return (struct r300_context*)context;
 }
 
-static INLINE struct r300_fragment_shader *r300_fs(struct r300_context *r300)
+static inline struct r300_fragment_shader *r300_fs(struct r300_context *r300)
 {
     return (struct r300_fragment_shader*)r300->fs.state;
 }
 
-static INLINE void r300_mark_atom_dirty(struct r300_context *r300,
+static inline void r300_mark_atom_dirty(struct r300_context *r300,
                                         struct r300_atom *atom)
 {
     atom->dirty = TRUE;
@@ -688,7 +690,7 @@ static INLINE void r300_mark_atom_dirty(struct r300_context *r300,
     }
 }
 
-static INLINE struct pipe_surface *
+static inline struct pipe_surface *
 r300_get_nonnull_cb(struct pipe_framebuffer_state *fb, unsigned i)
 {
     if (fb->cbufs[i])
@@ -777,12 +779,12 @@ void r300_update_derived_state(struct r300_context* r300);
 void r500_dump_rs_block(struct r300_rs_block *rs);
 
 
-static INLINE boolean CTX_DBG_ON(struct r300_context * ctx, unsigned flags)
+static inline boolean CTX_DBG_ON(struct r300_context * ctx, unsigned flags)
 {
     return SCREEN_DBG_ON(ctx->screen, flags);
 }
 
-static INLINE void CTX_DBG(struct r300_context * ctx, unsigned flags,
+static inline void CTX_DBG(struct r300_context * ctx, unsigned flags,
                        const char * fmt, ...)
 {
     if (CTX_DBG_ON(ctx, flags)) {

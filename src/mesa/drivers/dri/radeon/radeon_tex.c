@@ -263,7 +263,7 @@ static void radeonTexEnv( struct gl_context *ctx, GLenum target,
 
    if ( RADEON_DEBUG & RADEON_STATE ) {
       fprintf( stderr, "%s( %s )\n",
-	       __func__, _mesa_lookup_enum_by_nr( pname ) );
+	       __func__, _mesa_enum_to_string( pname ) );
    }
 
    switch ( pname ) {
@@ -335,7 +335,7 @@ static void radeonTexParameter( struct gl_context *ctx,
    radeonTexObj* t = radeon_tex_obj(texObj);
 
    radeon_print(RADEON_TEXTURE, RADEON_VERBOSE, "%s( %s )\n", __func__,
-	       _mesa_lookup_enum_by_nr( pname ) );
+	       _mesa_enum_to_string( pname ) );
 
    switch ( pname ) {
    case GL_TEXTURE_BASE_LEVEL:
@@ -359,7 +359,7 @@ static void radeonDeleteTexture( struct gl_context *ctx,
 
    radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
 	 "%s( %p (target = %s) )\n", __func__, (void *)texObj,
-	       _mesa_lookup_enum_by_nr( texObj->Target ) );
+	       _mesa_enum_to_string( texObj->Target ) );
 
    if ( rmesa ) {
      radeon_firevertices(&rmesa->radeon);

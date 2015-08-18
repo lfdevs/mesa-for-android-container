@@ -42,7 +42,7 @@ struct fd4_sampler_stateobj {
 	uint32_t texsamp0, texsamp1;
 };
 
-static INLINE struct fd4_sampler_stateobj *
+static inline struct fd4_sampler_stateobj *
 fd4_sampler_stateobj(struct pipe_sampler_state *samp)
 {
 	return (struct fd4_sampler_stateobj *)samp;
@@ -53,7 +53,7 @@ struct fd4_pipe_sampler_view {
 	uint32_t texconst0, texconst1, texconst2, texconst3, textconst4;
 };
 
-static INLINE struct fd4_pipe_sampler_view *
+static inline struct fd4_pipe_sampler_view *
 fd4_pipe_sampler_view(struct pipe_sampler_view *pview)
 {
 	return (struct fd4_pipe_sampler_view *)pview;

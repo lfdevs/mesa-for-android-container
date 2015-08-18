@@ -69,7 +69,7 @@ struct vmw_gmr_buffer
 extern const struct pb_vtbl vmw_gmr_buffer_vtbl;
 
 
-static INLINE struct vmw_gmr_buffer *
+static inline struct vmw_gmr_buffer *
 vmw_gmr_buffer(struct pb_buffer *buf)
 {
    assert(buf);
@@ -86,7 +86,7 @@ struct vmw_gmr_bufmgr
 };
 
 
-static INLINE struct vmw_gmr_bufmgr *
+static inline struct vmw_gmr_bufmgr *
 vmw_gmr_bufmgr(struct pb_manager *mgr)
 {
    assert(mgr);

@@ -115,6 +115,7 @@ fd3_sampler_state_create(struct pipe_context *pctx,
 
 	so->texsamp0 =
 			COND(!cso->normalized_coords, A3XX_TEX_SAMP_0_UNNORM_COORDS) |
+			COND(!cso->seamless_cube_map, A3XX_TEX_SAMP_0_CUBEMAPSEAMLESSFILTOFF) |
 			COND(miplinear, A3XX_TEX_SAMP_0_MIPFILTER_LINEAR) |
 			A3XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
 			A3XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
@@ -210,8 +211,8 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 {
 	struct fd3_pipe_sampler_view *so = CALLOC_STRUCT(fd3_pipe_sampler_view);
 	struct fd_resource *rsc = fd_resource(prsc);
-	unsigned lvl = cso->u.tex.first_level;
-	unsigned miplevels = cso->u.tex.last_level - lvl;
+	unsigned lvl = fd_sampler_first_level(cso);
+	unsigned miplevels = fd_sampler_last_level(cso) - lvl;
 	uint32_t sz2 = 0;
 
 	if (!so)
@@ -263,44 +264,11 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	return &so->base;
 }
 
-static void
-fd3_set_sampler_views(struct pipe_context *pctx, unsigned shader,
-					  unsigned start, unsigned nr,
-					  struct pipe_sampler_view **views)
-{
-	struct fd_context *ctx = fd_context(pctx);
-	struct fd3_context *fd3_ctx = fd3_context(ctx);
-	struct fd_texture_stateobj *tex;
-	uint16_t integer_s = 0, *ptr;
-	int i;
-
-	fd_set_sampler_views(pctx, shader, start, nr, views);
-
-	switch (shader) {
-	case PIPE_SHADER_FRAGMENT:
-		tex = &ctx->fragtex;
-		ptr = &fd3_ctx->finteger_s;
-		break;
-	case PIPE_SHADER_VERTEX:
-		tex = &ctx->verttex;
-		ptr = &fd3_ctx->vinteger_s;
-		break;
-	default:
-		return;
-	}
-
-	for (i = 0; i < tex->num_textures; i++)
-		if (util_format_is_pure_integer(tex->textures[i]->format))
-			integer_s |= 1 << i;
-	*ptr = integer_s;
-}
-
-
 void
 fd3_texture_init(struct pipe_context *pctx)
 {
 	pctx->create_sampler_state = fd3_sampler_state_create;
 	pctx->bind_sampler_states = fd3_sampler_states_bind;
 	pctx->create_sampler_view = fd3_sampler_view_create;
-	pctx->set_sampler_views = fd3_set_sampler_views;
+	pctx->set_sampler_views = fd_set_sampler_views;
 }

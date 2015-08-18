@@ -52,7 +52,7 @@ sp_alloc_tile(struct softpipe_tile_cache *tc);
    (((x) + (y) * 5 + (l) * 10) % NUM_ENTRIES)
 
 
-static INLINE int addr_to_clear_pos(union tile_address addr)
+static inline int addr_to_clear_pos(union tile_address addr)
 {
    int pos;
    pos = addr.bits.layer * (MAX_WIDTH / TILE_SIZE) * (MAX_HEIGHT / TILE_SIZE);
@@ -63,7 +63,7 @@ static INLINE int addr_to_clear_pos(union tile_address addr)
 /**
  * Is the tile at (x,y) in cleared state?
  */
-static INLINE uint
+static inline uint
 is_clear_flag_set(const uint *bitvec, union tile_address addr, unsigned max)
 {
    int pos, bit;
@@ -77,7 +77,7 @@ is_clear_flag_set(const uint *bitvec, union tile_address addr, unsigned max)
 /**
  * Mark the tile at (x,y) as not cleared.
  */
-static INLINE void
+static inline void
 clear_clear_flag(uint *bitvec, union tile_address addr, unsigned max)
 {
    int pos;

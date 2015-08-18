@@ -29,7 +29,7 @@ struct NineAuthenticatedChannel9
 {
     struct NineUnknown base;
 };
-static INLINE struct NineAuthenticatedChannel9 *
+static inline struct NineAuthenticatedChannel9 *
 NineAuthenticatedChannel9( void *data )
 {
     return (struct NineAuthenticatedChannel9 *)data;

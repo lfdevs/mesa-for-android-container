@@ -176,7 +176,7 @@ GM107LoweringPass::handlePOPCNT(Instruction *i)
                            i->getSrc(0), i->getSrc(1));
    i->setSrc(0, tmp);
    i->setSrc(1, NULL);
-   return TRUE;
+   return true;
 }
 
 //
@@ -193,100 +193,16 @@ GM107LoweringPass::visit(Instruction *i)
       checkPredicate(i);
 
    switch (i->op) {
-   case OP_TEX:
-   case OP_TXB:
-   case OP_TXL:
-   case OP_TXF:
-   case OP_TXG:
-      return handleTEX(i->asTex());
-   case OP_TXD:
-      return handleTXD(i->asTex());
-   case OP_TXLQ:
-      return handleTXLQ(i->asTex());
-   case OP_TXQ:
-      return handleTXQ(i->asTex());
-   case OP_EX2:
-      bld.mkOp1(OP_PREEX2, TYPE_F32, i->getDef(0), i->getSrc(0));
-      i->setSrc(0, i->getDef(0));
-      break;
-   case OP_POW:
-      return handlePOW(i);
-   case OP_DIV:
-      return handleDIV(i);
-   case OP_MOD:
-      return handleMOD(i);
-   case OP_SQRT:
-      return handleSQRT(i);
-   case OP_EXPORT:
-      return handleEXPORT(i);
    case OP_PFETCH:
       return handlePFETCH(i);
-   case OP_EMIT:
-   case OP_RESTART:
-      return handleOUT(i);
-   case OP_RDSV:
-      return handleRDSV(i);
-   case OP_WRSV:
-      return handleWRSV(i);
-   case OP_LOAD:
-      if (i->src(0).getFile() == FILE_SHADER_INPUT) {
-         if (prog->getType() == Program::TYPE_COMPUTE) {
-            i->getSrc(0)->reg.file = FILE_MEMORY_CONST;
-            i->getSrc(0)->reg.fileIndex = 0;
-         } else
-         if (prog->getType() == Program::TYPE_GEOMETRY &&
-             i->src(0).isIndirect(0)) {
-            // XXX: this assumes vec4 units
-            Value *ptr = bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
-                                    i->getIndirect(0, 0), bld.mkImm(4));
-            i->setIndirect(0, 0, ptr);
-            i->op = OP_VFETCH;
-         } else {
-            i->op = OP_VFETCH;
-            assert(prog->getType() != Program::TYPE_FRAGMENT); // INTERP
-         }
-      } else if (i->src(0).getFile() == FILE_MEMORY_CONST) {
-         if (i->src(0).isIndirect(1)) {
-            Value *ptr;
-            if (i->src(0).isIndirect(0))
-               ptr = bld.mkOp3v(OP_INSBF, TYPE_U32, bld.getSSA(),
-                                i->getIndirect(0, 1), bld.mkImm(0x1010),
-                                i->getIndirect(0, 0));
-            else
-               ptr = bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
-                                i->getIndirect(0, 1), bld.mkImm(16));
-            i->setIndirect(0, 1, NULL);
-            i->setIndirect(0, 0, ptr);
-            i->subOp = NV50_IR_SUBOP_LDC_IS;
-         }
-      }
-      break;
-   case OP_ATOM:
-   {
-      const bool cctl = i->src(0).getFile() == FILE_MEMORY_GLOBAL;
-      handleATOM(i);
-      handleCasExch(i, cctl);
-   }
-      break;
-   case OP_SULDB:
-   case OP_SULDP:
-   case OP_SUSTB:
-   case OP_SUSTP:
-   case OP_SUREDB:
-   case OP_SUREDP:
-      handleSurfaceOpNVE4(i->asTex());
-      break;
    case OP_DFDX:
    case OP_DFDY:
-      handleDFDX(i);
-      break;
+      return handleDFDX(i);
    case OP_POPCNT:
-      handlePOPCNT(i);
-      break;
+      return handlePOPCNT(i);
    default:
-      break;
+      return NVC0LoweringPass::visit(i);
    }
-   return true;
 }
 
 } // namespace nv50_ir

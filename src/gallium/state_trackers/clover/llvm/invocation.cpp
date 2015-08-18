@@ -108,7 +108,7 @@ namespace {
          name, llvm::MemoryBuffer::getMemBuffer(source));
 
       if (!c.ExecuteAction(act))
-         throw build_error(log);
+         throw compile_error(log);
    }
 
    module
@@ -256,7 +256,7 @@ namespace {
       r_log = log;
 
       if (!ExecSuccess)
-         throw build_error();
+         throw compile_error();
 
       // Get address spaces map to be able to find kernel argument address space
       memcpy(address_spaces, c.getTarget().getAddressSpaceMap(),
@@ -269,17 +269,19 @@ namespace {
 #endif
    }
 
-   void
-   find_kernels(llvm::Module *mod, std::vector<llvm::Function *> &kernels) {
+   std::vector<llvm::Function *>
+   find_kernels(const llvm::Module *mod) {
       const llvm::NamedMDNode *kernel_node =
                                  mod->getNamedMetadata("opencl.kernels");
       // This means there are no kernels in the program.  The spec does not
       // require that we return an error here, but there will be an error if
       // the user tries to pass this program to a clCreateKernel() call.
       if (!kernel_node) {
-         return;
+         return std::vector<llvm::Function *>();
       }
 
+      std::vector<llvm::Function *> kernels;
+      kernels.reserve(kernel_node->getNumOperands());
       for (unsigned i = 0; i < kernel_node->getNumOperands(); ++i) {
 #if HAVE_LLVM >= 0x0306
          kernels.push_back(llvm::mdconst::dyn_extract<llvm::Function>(
@@ -288,17 +290,19 @@ namespace {
 #endif
                                     kernel_node->getOperand(i)->getOperand(0)));
       }
+      return kernels;
    }
 
    void
-   optimize(llvm::Module *mod, unsigned optimization_level,
-            const std::vector<llvm::Function *> &kernels) {
+   optimize(llvm::Module *mod, unsigned optimization_level) {
 
 #if HAVE_LLVM >= 0x0307
       llvm::legacy::PassManager PM;
 #else
       llvm::PassManager PM;
 #endif
+
+      const std::vector<llvm::Function *> kernels = find_kernels(mod);
 
       // Add a function internalizer pass.
       //
@@ -340,18 +344,91 @@ namespace {
       PM.run(*mod);
    }
 
+   // Kernel metadata
+
+   const llvm::MDNode *
+   get_kernel_metadata(const llvm::Function *kernel_func) {
+      auto mod = kernel_func->getParent();
+      auto kernels_node = mod->getNamedMetadata("opencl.kernels");
+      if (!kernels_node) {
+         return nullptr;
+      }
+
+      const llvm::MDNode *kernel_node = nullptr;
+      for (unsigned i = 0; i < kernels_node->getNumOperands(); ++i) {
+#if HAVE_LLVM >= 0x0306
+         auto func = llvm::mdconst::dyn_extract<llvm::Function>(
+#else
+         auto func = llvm::dyn_cast<llvm::Function>(
+#endif
+                                    kernels_node->getOperand(i)->getOperand(0));
+         if (func == kernel_func) {
+            kernel_node = kernels_node->getOperand(i);
+            break;
+         }
+      }
+
+      return kernel_node;
+   }
+
+   llvm::MDNode*
+   node_from_op_checked(const llvm::MDOperand &md_operand,
+                        llvm::StringRef expect_name,
+                        unsigned expect_num_args)
+   {
+      auto node = llvm::cast<llvm::MDNode>(md_operand);
+      assert(node->getNumOperands() == expect_num_args &&
+             "Wrong number of operands.");
+
+      auto str_node = llvm::cast<llvm::MDString>(node->getOperand(0));
+      assert(str_node->getString() == expect_name &&
+             "Wrong metadata node name.");
+
+      return node;
+   }
+
+   struct kernel_arg_md {
+      llvm::StringRef type_name;
+      llvm::StringRef access_qual;
+      kernel_arg_md(llvm::StringRef type_name_, llvm::StringRef access_qual_):
+         type_name(type_name_), access_qual(access_qual_) {}
+   };
+
+   std::vector<kernel_arg_md>
+   get_kernel_arg_md(const llvm::Function *kernel_func) {
+      auto num_args = kernel_func->getArgumentList().size();
+
+      auto kernel_node = get_kernel_metadata(kernel_func);
+      auto aq = node_from_op_checked(kernel_node->getOperand(2),
+                                     "kernel_arg_access_qual", num_args + 1);
+      auto ty = node_from_op_checked(kernel_node->getOperand(3),
+                                     "kernel_arg_type", num_args + 1);
+
+      std::vector<kernel_arg_md> res;
+      res.reserve(num_args);
+      for (unsigned i = 0; i < num_args; ++i) {
+         res.push_back(kernel_arg_md(
+            llvm::cast<llvm::MDString>(ty->getOperand(i+1))->getString(),
+            llvm::cast<llvm::MDString>(aq->getOperand(i+1))->getString()));
+      }
+
+      return res;
+   }
+
    std::vector<module::argument>
    get_kernel_args(const llvm::Module *mod, const std::string &kernel_name,
                    const clang::LangAS::Map &address_spaces) {
 
       std::vector<module::argument> args;
       llvm::Function *kernel_func = mod->getFunction(kernel_name);
+      assert(kernel_func && "Kernel name not found in module.");
+      auto arg_md = get_kernel_arg_md(kernel_func);
 
       llvm::DataLayout TD(mod);
+      llvm::Type *size_type =
+         TD.getSmallestLegalIntType(mod->getContext(), sizeof(cl_uint) * 8);
 
-      for (llvm::Function::const_arg_iterator I = kernel_func->arg_begin(),
-                                      E = kernel_func->arg_end(); I != E; ++I) {
-         const llvm::Argument &arg = *I;
+      for (const auto &arg: kernel_func->args()) {
 
          llvm::Type *arg_type = arg.getType();
          const unsigned arg_store_size = TD.getTypeStoreSize(arg_type);
@@ -369,6 +446,59 @@ namespace {
          unsigned target_size = TD.getTypeStoreSize(target_type);
          unsigned target_align = TD.getABITypeAlignment(target_type);
 
+         llvm::StringRef type_name = arg_md[arg.getArgNo()].type_name;
+         llvm::StringRef access_qual = arg_md[arg.getArgNo()].access_qual;
+
+         // Image
+         const bool is_image2d = type_name == "image2d_t";
+         const bool is_image3d = type_name == "image3d_t";
+         if (is_image2d || is_image3d) {
+            const bool is_write_only = access_qual == "write_only";
+            const bool is_read_only = access_qual == "read_only";
+
+            typename module::argument::type marg_type;
+            if (is_image2d && is_read_only) {
+               marg_type = module::argument::image2d_rd;
+            } else if (is_image2d && is_write_only) {
+               marg_type = module::argument::image2d_wr;
+            } else if (is_image3d && is_read_only) {
+               marg_type = module::argument::image3d_rd;
+            } else if (is_image3d && is_write_only) {
+               marg_type = module::argument::image3d_wr;
+            } else {
+               assert(0 && "Wrong image access qualifier");
+            }
+
+            args.push_back(module::argument(marg_type,
+                                            arg_store_size, target_size,
+                                            target_align,
+                                            module::argument::zero_ext));
+            continue;
+         }
+
+         // Image size implicit argument
+         if (type_name == "__llvm_image_size") {
+            args.push_back(module::argument(module::argument::scalar,
+                                            sizeof(cl_uint),
+                                            TD.getTypeStoreSize(size_type),
+                                            TD.getABITypeAlignment(size_type),
+                                            module::argument::zero_ext,
+                                            module::argument::image_size));
+            continue;
+         }
+
+         // Image format implicit argument
+         if (type_name == "__llvm_image_format") {
+            args.push_back(module::argument(module::argument::scalar,
+                                            sizeof(cl_uint),
+                                            TD.getTypeStoreSize(size_type),
+                                            TD.getABITypeAlignment(size_type),
+                                            module::argument::zero_ext,
+                                            module::argument::image_format));
+            continue;
+         }
+
+         // Other types
          if (llvm::isa<llvm::PointerType>(arg_type) && arg.hasByValAttr()) {
             arg_type =
                   llvm::dyn_cast<llvm::PointerType>(arg_type)->getElementType();
@@ -413,9 +543,6 @@ namespace {
       // Append implicit arguments.  XXX - The types, ordering and
       // vector size of the implicit arguments should depend on the
       // target according to the selected calling convention.
-      llvm::Type *size_type =
-         TD.getSmallestLegalIntType(mod->getContext(), sizeof(cl_uint) * 8);
-
       args.push_back(
          module::argument(module::argument::scalar, sizeof(cl_uint),
                           TD.getTypeStoreSize(size_type),
@@ -435,7 +562,6 @@ namespace {
 
    module
    build_module_llvm(llvm::Module *mod,
-                     const std::vector<llvm::Function *> &kernels,
                      clang::LangAS::Map& address_spaces) {
 
       module m;
@@ -445,8 +571,11 @@ namespace {
       llvm::raw_svector_ostream bitcode_ostream(llvm_bitcode);
       llvm::BitstreamWriter writer(llvm_bitcode);
       llvm::WriteBitcodeToFile(mod, bitcode_ostream);
+#if HAVE_LLVM < 0x0308
       bitcode_ostream.flush();
+#endif
 
+      const std::vector<llvm::Function *> kernels = find_kernels(mod);
       for (unsigned i = 0; i < kernels.size(); ++i) {
          std::string kernel_name = kernels[i]->getName();
          std::vector<module::argument> args =
@@ -485,7 +614,7 @@ namespace {
       LLVMDisposeMessage(err_message);
 
       if (err) {
-         throw build_error();
+         throw compile_error();
       }
    }
 
@@ -505,7 +634,7 @@ namespace {
       if (LLVMGetTargetFromTriple(triple.c_str(), &target, &error_message)) {
          r_log = std::string(error_message);
          LLVMDisposeMessage(error_message);
-         throw build_error();
+         throw compile_error();
       }
 
       LLVMTargetMachineRef tm = LLVMCreateTargetMachine(
@@ -514,7 +643,7 @@ namespace {
 
       if (!tm) {
          r_log = "Could not create TargetMachine: " + triple;
-         throw build_error();
+         throw compile_error();
       }
 
       if (dump_asm) {
@@ -567,7 +696,7 @@ namespace {
             const char *name;
             if (gelf_getshdr(section, &symtab_header) != &symtab_header) {
                r_log = "Failed to read ELF section header.";
-               throw build_error();
+               throw compile_error();
             }
             name = elf_strptr(elf, section_str_index, symtab_header.sh_name);
            if (!strcmp(name, ".symtab")) {
@@ -577,9 +706,9 @@ namespace {
          }
          if (!symtab) {
             r_log = "Unable to find symbol table.";
-            throw build_error();
+            throw compile_error();
          }
-      } catch (build_error &e) {
+      } catch (compile_error &e) {
          elf_end(elf);
          throw e;
       }
@@ -610,9 +739,10 @@ namespace {
    module
    build_module_native(std::vector<char> &code,
                        const llvm::Module *mod,
-                       const std::vector<llvm::Function *> &kernels,
                        const clang::LangAS::Map &address_spaces,
                        std::string &r_log) {
+
+      const std::vector<llvm::Function *> kernels = find_kernels(mod);
 
       std::map<std::string, unsigned> kernel_offsets =
             get_kernel_offsets(code, kernels, r_log);
@@ -650,7 +780,7 @@ namespace {
          stream.flush();
          *(std::string*)data = message;
 
-         throw build_error();
+         throw compile_error();
       }
    }
 
@@ -697,7 +827,6 @@ clover::compile_program_llvm(const std::string &source,
 
    init_targets();
 
-   std::vector<llvm::Function *> kernels;
    size_t processor_str_len = std::string(target).find_first_of("-");
    std::string processor(target, 0, processor_str_len);
    std::string triple(target, processor_str_len + 1,
@@ -709,7 +838,7 @@ clover::compile_program_llvm(const std::string &source,
    llvm_ctx.setDiagnosticHandler(diagnostic_handler, &r_log);
 
    if (get_debug_flags() & DBG_CLC)
-      debug_log(source, ".cl");
+      debug_log("// Build options: " + opts + '\n' + source, ".cl");
 
    // The input file name must have the .cl extension in order for the
    // CompilerInvocation class to recognize it as an OpenCL source file.
@@ -717,9 +846,7 @@ clover::compile_program_llvm(const std::string &source,
                                     triple, processor, opts, address_spaces,
                                     optimization_level, r_log);
 
-   find_kernels(mod, kernels);
-
-   optimize(mod, optimization_level, kernels);
+   optimize(mod, optimization_level);
 
    if (get_debug_flags() & DBG_LLVM) {
       std::string log;
@@ -738,13 +865,13 @@ clover::compile_program_llvm(const std::string &source,
          m = module();
          break;
       case PIPE_SHADER_IR_LLVM:
-         m = build_module_llvm(mod, kernels, address_spaces);
+         m = build_module_llvm(mod, address_spaces);
          break;
       case PIPE_SHADER_IR_NATIVE: {
          std::vector<char> code = compile_native(mod, triple, processor,
                                                  get_debug_flags() & DBG_ASM,
                                                  r_log);
-         m = build_module_native(code, mod, kernels, address_spaces, r_log);
+         m = build_module_native(code, mod, address_spaces, r_log);
          break;
       }
    }

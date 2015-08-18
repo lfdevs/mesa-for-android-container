@@ -8,11 +8,13 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glBindBufferBase@Base 9.1~
  glBindBufferRange@Base 9.1~
  glBindFramebuffer@Base 7.8.1
+ glBindImageTexture@Base 10.7.0~
  glBindRenderbuffer@Base 7.8.1
  glBindSampler@Base 9.1~
  glBindTexture@Base 7.8.1
  glBindTransformFeedback@Base 9.1~
  glBindVertexArray@Base 9.1~
+ glBindVertexBuffer@Base 10.7.0~
  glBlendColor@Base 7.8.1
  glBlendEquation@Base 7.8.1
  glBlendEquationSeparate@Base 7.8.1
@@ -61,10 +63,14 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glDetachShader@Base 7.8.1
  glDisable@Base 7.8.1
  glDisableVertexAttribArray@Base 7.8.1
+ glDispatchCompute@Base 10.7.0~
+ glDispatchComputeIndirect@Base 10.7.0~
  glDrawArrays@Base 7.8.1
+ glDrawArraysIndirect@Base 10.7.0~
  glDrawArraysInstanced@Base 9.1~
  glDrawBuffers@Base 9.1~
  glDrawElements@Base 7.8.1
+ glDrawElementsIndirect@Base 10.7.0~
  glDrawElementsInstanced@Base 9.1~
  glDrawRangeElements@Base 9.1~
  glEnable@Base 7.8.1
@@ -95,6 +101,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetActiveUniformsiv@Base 9.1~
  glGetAttachedShaders@Base 7.8.1
  glGetAttribLocation@Base 7.8.1
+ glGetBooleani_v@Base 10.7.0~
  glGetBooleanv@Base 7.8.1
  glGetBufferParameteri64v@Base 9.1~
  glGetBufferParameteriv@Base 7.8.1
@@ -108,6 +115,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetIntegeri_v@Base 9.1~
  glGetIntegerv@Base 7.8.1
  glGetInternalformativ@Base 9.1~
+ glGetMultisamplefv@Base 10.7.0~
  glGetProgramBinary@Base 9.1~
  glGetProgramInfoLog@Base 7.8.1
  glGetProgramiv@Base 7.8.1
@@ -123,6 +131,8 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glGetString@Base 7.8.1
  glGetStringi@Base 9.1~
  glGetSynciv@Base 9.1~
+ glGetTexLevelParameterfv@Base 10.7.0~
+ glGetTexLevelParameteriv@Base 10.7.0~
  glGetTexParameterfv@Base 7.8.1
  glGetTexParameteriv@Base 7.8.1
  glGetTransformFeedbackVarying@Base 9.1~
@@ -155,6 +165,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glLineWidth@Base 7.8.1
  glLinkProgram@Base 7.8.1
  glMapBufferRange@Base 9.1~
+ glMemoryBarrier@Base 10.7.0~
  glMultiDrawArraysEXT@Base 7.8.1
  glMultiDrawElementsEXT@Base 7.8.1
  glPauseTransformFeedback@Base 9.1~
@@ -169,6 +180,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glRenderbufferStorageMultisample@Base 9.1~
  glResumeTransformFeedback@Base 9.1~
  glSampleCoverage@Base 7.8.1
+ glSampleMaski@Base 10.7.0~
  glSamplerParameterf@Base 9.1~
  glSamplerParameterfv@Base 9.1~
  glSamplerParameteri@Base 9.1~
@@ -189,6 +201,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glTexParameteri@Base 7.8.1
  glTexParameteriv@Base 7.8.1
  glTexStorage2D@Base 9.1~
+ glTexStorage2DMultisample@Base 10.7.0~
  glTexStorage3D@Base 9.1~
  glTexSubImage2D@Base 7.8.1
  glTexSubImage3D@Base 9.1~
@@ -238,12 +251,16 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glVertexAttrib3fv@Base 7.8.1
  glVertexAttrib4f@Base 7.8.1
  glVertexAttrib4fv@Base 7.8.1
+ glVertexAttribBinding@Base 10.7.0~
  glVertexAttribDivisor@Base 9.1~
+ glVertexAttribFormat@Base 10.7.0~
  glVertexAttribI4i@Base 9.1~
  glVertexAttribI4iv@Base 9.1~
  glVertexAttribI4ui@Base 9.1~
  glVertexAttribI4uiv@Base 9.1~
+ glVertexAttribIFormat@Base 10.7.0~
  glVertexAttribIPointer@Base 9.1~
  glVertexAttribPointer@Base 7.8.1
+ glVertexBindingDivisor@Base 10.7.0~
  glViewport@Base 7.8.1
  glWaitSync@Base 9.1~

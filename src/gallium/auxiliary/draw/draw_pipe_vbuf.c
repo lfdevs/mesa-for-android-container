@@ -85,7 +85,7 @@ struct vbuf_stage {
 /**
  * Basically a cast wrapper.
  */
-static INLINE struct vbuf_stage *
+static inline struct vbuf_stage *
 vbuf_stage( struct draw_stage *stage )
 {
    assert(stage);
@@ -97,7 +97,7 @@ static void vbuf_flush_vertices( struct vbuf_stage *vbuf );
 static void vbuf_alloc_vertices( struct vbuf_stage *vbuf );
 
 
-static INLINE boolean 
+static inline boolean 
 overflow( void *map, void *ptr, unsigned bytes, unsigned bufsz )
 {
    unsigned long used = (unsigned long) ((char *)ptr - (char *)map);
@@ -105,7 +105,7 @@ overflow( void *map, void *ptr, unsigned bytes, unsigned bufsz )
 }
 
 
-static INLINE void 
+static inline void 
 check_space( struct vbuf_stage *vbuf, unsigned nr )
 {
    if (vbuf->nr_vertices + nr > vbuf->max_vertices ||
@@ -126,7 +126,7 @@ check_space( struct vbuf_stage *vbuf, unsigned nr )
  * have a couple of slots at the beginning (1-dword header, 4-dword
  * clip pos) that we ignore here.  We only use the vertex->data[] fields.
  */
-static INLINE ushort 
+static inline ushort 
 emit_vertex( struct vbuf_stage *vbuf,
              struct vertex_header *vertex )
 {

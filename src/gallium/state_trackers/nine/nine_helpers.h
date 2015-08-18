@@ -123,7 +123,7 @@ static inline void _nine_bind(void **dst, void *obj)
     } \
     return D3D_OK
 
-static INLINE float asfloat(DWORD value)
+static inline float asfloat(DWORD value)
 {
     union {
         float f;
@@ -149,14 +149,14 @@ struct nine_range_pool
     unsigned num_slabs_max;
 };
 
-static INLINE void
+static inline void
 nine_range_pool_put(struct nine_range_pool *pool, struct nine_range *r)
 {
     r->next = pool->free;
     pool->free = r;
 }
 
-static INLINE void
+static inline void
 nine_range_pool_put_chain(struct nine_range_pool *pool,
                           struct nine_range *head,
                           struct nine_range *tail)

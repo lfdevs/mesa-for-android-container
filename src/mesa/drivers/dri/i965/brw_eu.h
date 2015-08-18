@@ -361,6 +361,8 @@ brw_jump_scale(const struct brw_device_info *devinfo)
    return 1;
 }
 
+void brw_barrier(struct brw_codegen *p, struct brw_reg src);
+
 /* If/else/endif.  Works by manipulating the execution flags on each
  * channel.
  */
@@ -389,6 +391,8 @@ brw_inst *brw_JMPI(struct brw_codegen *p, struct brw_reg index,
                    unsigned predicate_control);
 
 void brw_NOP(struct brw_codegen *p);
+
+void brw_WAIT(struct brw_codegen *p);
 
 /* Special case: there is never a destination, execution size will be
  * taken from src0:

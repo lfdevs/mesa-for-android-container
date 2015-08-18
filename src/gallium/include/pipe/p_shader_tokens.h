@@ -43,8 +43,8 @@ struct tgsi_header
 #define TGSI_PROCESSOR_FRAGMENT  0
 #define TGSI_PROCESSOR_VERTEX    1
 #define TGSI_PROCESSOR_GEOMETRY  2
-#define TGSI_PROCESSOR_TESSCTRL  3
-#define TGSI_PROCESSOR_TESSEVAL  4
+#define TGSI_PROCESSOR_TESS_CTRL 3
+#define TGSI_PROCESSOR_TESS_EVAL 4
 #define TGSI_PROCESSOR_COMPUTE   5
 
 struct tgsi_processor
@@ -538,10 +538,6 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_DSSG                222
 #define TGSI_OPCODE_LAST                223
 
-#define TGSI_SAT_NONE            0  /* do not saturate */
-#define TGSI_SAT_ZERO_ONE        1  /* clamp to [0,1] */
-#define TGSI_SAT_MINUS_PLUS_ONE  2  /* clamp to [-1,1] */
-
 /**
  * Opcode is the operation code to execute. A given operation defines the
  * semantics how the source registers (if any) are interpreted and what is
@@ -561,13 +557,13 @@ struct tgsi_instruction
    unsigned Type       : 4;  /* TGSI_TOKEN_TYPE_INSTRUCTION */
    unsigned NrTokens   : 8;  /* UINT */
    unsigned Opcode     : 8;  /* TGSI_OPCODE_ */
-   unsigned Saturate   : 2;  /* TGSI_SAT_ */
+   unsigned Saturate   : 1;  /* BOOL */
    unsigned NumDstRegs : 2;  /* UINT */
    unsigned NumSrcRegs : 4;  /* UINT */
    unsigned Predicate  : 1;  /* BOOL */
    unsigned Label      : 1;
    unsigned Texture    : 1;
-   unsigned Padding    : 1;
+   unsigned Padding    : 2;
 };
 
 /*
@@ -689,7 +685,7 @@ struct tgsi_src_register
  *
  * File, Index and Swizzle are handled the same as in tgsi_src_register.
  *
- * If ArrayID is zero the whole register file might be is indirectly addressed,
+ * If ArrayID is zero the whole register file might be indirectly addressed,
  * if not only the Declaration with this ArrayID is accessed by this operand.
  *
  */

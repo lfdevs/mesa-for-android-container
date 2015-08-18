@@ -63,7 +63,7 @@ struct blend_quad_stage
 
 
 /** cast wrapper */
-static INLINE struct blend_quad_stage *
+static inline struct blend_quad_stage *
 blend_quad_stage(struct quad_stage *stage)
 {
    return (struct blend_quad_stage *) stage;

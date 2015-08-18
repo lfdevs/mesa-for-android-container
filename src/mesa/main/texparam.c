@@ -381,7 +381,7 @@ set_tex_parameteri(struct gl_context *ctx,
       if (texObj->Target == GL_TEXTURE_RECTANGLE_ARB && params[0] != 0) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glTex%sParameter(target=%s, param=%d)", suffix,
-                     _mesa_lookup_enum_by_nr(texObj->Target), params[0]);
+                     _mesa_enum_to_string(texObj->Target), params[0]);
          return GL_FALSE;
       }
       incomplete(ctx, texObj);
@@ -500,7 +500,9 @@ set_tex_parameteri(struct gl_context *ctx,
       goto invalid_pname;
 
    case GL_DEPTH_STENCIL_TEXTURE_MODE:
-      if (_mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_stencil_texturing) {
+      if ((_mesa_is_desktop_gl(ctx) &&
+           ctx->Extensions.ARB_stencil_texturing) ||
+          _mesa_is_gles31(ctx)) {
          bool stencil = params[0] == GL_STENCIL_INDEX;
          if (!stencil && params[0] != GL_DEPTH_COMPONENT)
             goto invalid_param;
@@ -610,22 +612,22 @@ set_tex_parameteri(struct gl_context *ctx,
 
 invalid_pname:
    _mesa_error(ctx, GL_INVALID_ENUM, "glTex%sParameter(pname=%s)",
-               suffix, _mesa_lookup_enum_by_nr(pname));
+               suffix, _mesa_enum_to_string(pname));
    return GL_FALSE;
 
 invalid_param:
    _mesa_error(ctx, GL_INVALID_ENUM, "glTex%sParameter(param=%s)",
-               suffix, _mesa_lookup_enum_by_nr(params[0]));
+               suffix, _mesa_enum_to_string(params[0]));
    return GL_FALSE;
 
 invalid_operation:
    _mesa_error(ctx, GL_INVALID_OPERATION, "glTex%sParameter(pname=%s)",
-               suffix, _mesa_lookup_enum_by_nr(pname));
+               suffix, _mesa_enum_to_string(pname));
    return GL_FALSE;
 
 invalid_enum:
    _mesa_error(ctx, GL_INVALID_ENUM, "glTex%sParameter(pname=%s)",
-               suffix, _mesa_lookup_enum_by_nr(pname));
+               suffix, _mesa_enum_to_string(pname));
    return GL_FALSE;
 }
 
@@ -683,7 +685,7 @@ set_tex_parameterf(struct gl_context *ctx,
 
          if (texObj->Sampler.MaxAnisotropy == params[0])
             return GL_FALSE;
-         if (params[0] < 1.0) {
+         if (params[0] < 1.0F) {
             _mesa_error(ctx, GL_INVALID_VALUE, "glTex%sParameter(param)",
                         suffix);
             return GL_FALSE;
@@ -745,12 +747,12 @@ set_tex_parameterf(struct gl_context *ctx,
 
 invalid_pname:
    _mesa_error(ctx, GL_INVALID_ENUM, "glTex%sParameter(pname=%s)",
-               suffix, _mesa_lookup_enum_by_nr(pname));
+               suffix, _mesa_enum_to_string(pname));
    return GL_FALSE;
 
 invalid_enum:
    _mesa_error(ctx, GL_INVALID_ENUM, "glTex%sParameter(pname=%s)",
-               suffix, _mesa_lookup_enum_by_nr(pname));
+               suffix, _mesa_enum_to_string(pname));
    return GL_FALSE;
 }
 
@@ -1395,7 +1397,7 @@ get_tex_level_parameter_image(struct gl_context *ctx,
     else {
        _mesa_error(ctx, GL_INVALID_OPERATION,
                    "glGetTex%sLevelParameter[if]v(pname=%s)", suffix,
-                   _mesa_lookup_enum_by_nr(pname));
+                   _mesa_enum_to_string(pname));
     }
          break;
       case GL_TEXTURE_COMPRESSED:
@@ -1444,7 +1446,7 @@ get_tex_level_parameter_image(struct gl_context *ctx,
 invalid_pname:
    _mesa_error(ctx, GL_INVALID_ENUM,
                "glGetTex%sLevelParameter[if]v(pname=%s)", suffix,
-               _mesa_lookup_enum_by_nr(pname));
+               _mesa_enum_to_string(pname));
 }
 
 
@@ -1528,7 +1530,7 @@ get_tex_level_parameter_buffer(struct gl_context *ctx,
          /* Always illegal for GL_TEXTURE_BUFFER */
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glGetTex%sLevelParameter[if]v(pname=%s)", suffix,
-                     _mesa_lookup_enum_by_nr(pname));
+                     _mesa_enum_to_string(pname));
          break;
 
       /* GL_ARB_texture_float */
@@ -1557,9 +1559,22 @@ get_tex_level_parameter_buffer(struct gl_context *ctx,
 invalid_pname:
    _mesa_error(ctx, GL_INVALID_ENUM,
                "glGetTex%sLevelParameter[if]v(pname=%s)", suffix,
-               _mesa_lookup_enum_by_nr(pname));
+               _mesa_enum_to_string(pname));
 }
 
+static bool
+valid_tex_level_parameteriv_target(struct gl_context *ctx, GLenum target,
+                                   bool dsa)
+{
+   const char *suffix = dsa ? "ture" : "";
+   if (!legal_get_tex_level_parameter_target(ctx, target, dsa)) {
+      _mesa_error(ctx, GL_INVALID_ENUM,
+                  "glGetTex%sLevelParameter[if]v(target=%s)", suffix,
+                  _mesa_enum_to_string(target));
+      return false;
+   }
+   return true;
+}
 
 /**
  * This isn't exposed to the rest of the driver because it is a part of the
@@ -1580,13 +1595,6 @@ get_tex_level_parameteriv(struct gl_context *ctx,
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glGetTex%sLevelParameter[if]v("
                   "current unit >= max combined texture units)", suffix);
-      return;
-   }
-
-   if (!legal_get_tex_level_parameter_target(ctx, target, dsa)) {
-      _mesa_error(ctx, GL_INVALID_ENUM,
-                  "glGetTex%sLevelParameter[if]v(target=%s)", suffix,
-                  _mesa_lookup_enum_by_nr(target));
       return;
    }
 
@@ -1617,6 +1625,9 @@ _mesa_GetTexLevelParameterfv( GLenum target, GLint level,
    GLint iparam;
    GET_CURRENT_CONTEXT(ctx);
 
+   if (!valid_tex_level_parameteriv_target(ctx, target, false))
+      return;
+
    texObj = _mesa_get_current_tex_object(ctx, target);
    if (!texObj)
       return;
@@ -1633,6 +1644,9 @@ _mesa_GetTexLevelParameteriv( GLenum target, GLint level,
 {
    struct gl_texture_object *texObj;
    GET_CURRENT_CONTEXT(ctx);
+
+   if (!valid_tex_level_parameteriv_target(ctx, target, false))
+      return;
 
    texObj = _mesa_get_current_tex_object(ctx, target);
    if (!texObj)
@@ -1655,6 +1669,9 @@ _mesa_GetTextureLevelParameterfv(GLuint texture, GLint level,
    if (!texObj)
       return;
 
+   if (!valid_tex_level_parameteriv_target(ctx, texObj->Target, true))
+      return;
+
    get_tex_level_parameteriv(ctx, texObj, texObj->Target, level,
                              pname, &iparam, true);
 
@@ -1671,6 +1688,9 @@ _mesa_GetTextureLevelParameteriv(GLuint texture, GLint level,
    texObj = _mesa_lookup_texture_err(ctx, texture,
                                      "glGetTextureLevelParameteriv");
    if (!texObj)
+      return;
+
+   if (!valid_tex_level_parameteriv_target(ctx, texObj->Target, true))
       return;
 
    get_tex_level_parameteriv(ctx, texObj, texObj->Target, level,

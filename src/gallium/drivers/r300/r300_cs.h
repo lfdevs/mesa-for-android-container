@@ -46,7 +46,7 @@
 #ifdef DEBUG
 
 #define BEGIN_CS(size) do { \
-    assert(size <= (RADEON_MAX_CMDBUF_DWORDS - cs_copy->cdw)); \
+    assert(size <= (cs_copy->max_dw - cs_copy->cdw)); \
     cs_count = size; \
 } while (0)
 

@@ -241,6 +241,7 @@ static const struct extension_info known_gl_extensions[] = {
    { GL(EXT_texture_env_combine),        VER(1,3), Y, N, N, N },
    { GL(EXT_texture_env_dot3),           VER(0,0), Y, N, N, N },
    { GL(EXT_texture_filter_anisotropic), VER(0,0), Y, N, N, N },
+   { GL(EXT_texture_integer),            VER(0,0), Y, N, N, N },
    { GL(EXT_texture_lod),                VER(1,2), Y, N, N, N },
    { GL(EXT_texture_lod_bias),           VER(1,4), Y, N, N, N },
    { GL(EXT_texture_mirror_clamp),       VER(0,0), Y, N, N, N },

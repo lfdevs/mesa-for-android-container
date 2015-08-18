@@ -64,12 +64,16 @@ brw_codegen_gs_prog(struct brw_context *brw,
 
    /* We also upload clip plane data as uniforms */
    param_count += MAX_CLIP_PLANES * 4;
+   param_count += gs->NumImages * BRW_IMAGE_PARAM_SIZE;
 
    c.prog_data.base.base.param =
       rzalloc_array(NULL, const gl_constant_value *, param_count);
    c.prog_data.base.base.pull_param =
       rzalloc_array(NULL, const gl_constant_value *, param_count);
+   c.prog_data.base.base.image_param =
+      rzalloc_array(NULL, struct brw_image_param, gs->NumImages);
    c.prog_data.base.base.nr_params = param_count;
+   c.prog_data.base.base.nr_image_params = gs->NumImages;
 
    if (brw->gen >= 7) {
       if (gp->program.OutputType == GL_POINTS) {
@@ -267,14 +271,7 @@ brw_codegen_gs_prog(struct brw_context *brw,
    }
 
    /* Scratch space is used for register spilling */
-   if (c.base.last_scratch) {
-      perf_debug("Geometry shader triggered register spilling.  "
-                 "Try reducing the number of live vec4 values to "
-                 "improve performance.\n");
-
-      c.prog_data.base.base.total_scratch
-         = brw_get_scratch_size(c.base.last_scratch*REG_SIZE);
-
+   if (c.prog_data.base.base.total_scratch) {
       brw_get_scratch_bo(brw, &stage_state->scratch_bo,
 			 c.prog_data.base.base.total_scratch *
                          brw->max_gs_threads);

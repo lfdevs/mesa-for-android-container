@@ -68,7 +68,7 @@ struct vmw_svga_winsys_surface
 };
 
 
-static INLINE struct svga_winsys_surface *
+static inline struct svga_winsys_surface *
 svga_winsys_surface(struct vmw_svga_winsys_surface *surf)
 {
    assert(!surf || surf->sid != SVGA3D_INVALID_ID);
@@ -76,7 +76,7 @@ svga_winsys_surface(struct vmw_svga_winsys_surface *surf)
 }
 
 
-static INLINE struct vmw_svga_winsys_surface *
+static inline struct vmw_svga_winsys_surface *
 vmw_svga_winsys_surface(struct svga_winsys_surface *surf)
 {
    return (struct vmw_svga_winsys_surface *)surf;

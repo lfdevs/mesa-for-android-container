@@ -50,7 +50,7 @@ struct pb_alt_manager
 };
 
 
-static INLINE struct pb_alt_manager *
+static inline struct pb_alt_manager *
 pb_alt_manager(struct pb_manager *mgr)
 {
    assert(mgr);

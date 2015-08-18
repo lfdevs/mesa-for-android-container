@@ -36,32 +36,42 @@
 static void si_destroy_context(struct pipe_context *context)
 {
 	struct si_context *sctx = (struct si_context *)context;
+	int i;
 
 	si_release_all_descriptors(sctx);
 
 	pipe_resource_reference(&sctx->esgs_ring, NULL);
 	pipe_resource_reference(&sctx->gsvs_ring, NULL);
+	pipe_resource_reference(&sctx->tf_ring, NULL);
 	pipe_resource_reference(&sctx->null_const_buf.buffer, NULL);
 	r600_resource_reference(&sctx->border_color_table, NULL);
 	r600_resource_reference(&sctx->scratch_buffer, NULL);
+	sctx->b.ws->fence_reference(&sctx->last_gfx_fence, NULL);
 
 	si_pm4_free_state(sctx, sctx->init_config, ~0);
 	si_pm4_delete_state(sctx, gs_rings, sctx->gs_rings);
-	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_on);
-	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_off);
+	si_pm4_delete_state(sctx, tf_ring, sctx->tf_state);
+	for (i = 0; i < Elements(sctx->vgt_shader_config); i++)
+		si_pm4_delete_state(sctx, vgt_shader_config, sctx->vgt_shader_config[i]);
 
 	if (sctx->pstipple_sampler_state)
 		sctx->b.b.delete_sampler_state(&sctx->b.b, sctx->pstipple_sampler_state);
-	if (sctx->dummy_pixel_shader) {
+	if (sctx->dummy_pixel_shader)
 		sctx->b.b.delete_fs_state(&sctx->b.b, sctx->dummy_pixel_shader);
-	}
-	sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush);
-	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_resolve);
-	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_decompress);
-	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_fastclear);
+	if (sctx->fixed_func_tcs_shader)
+		sctx->b.b.delete_tcs_state(&sctx->b.b, sctx->fixed_func_tcs_shader);
+	if (sctx->custom_dsa_flush)
+		sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush);
+	if (sctx->custom_blend_resolve)
+		sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_resolve);
+	if (sctx->custom_blend_decompress)
+		sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_decompress);
+	if (sctx->custom_blend_fastclear)
+		sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_fastclear);
 	util_unreference_framebuffer_state(&sctx->framebuffer.state);
 
-	util_blitter_destroy(sctx->blitter);
+	if (sctx->blitter)
+		util_blitter_destroy(sctx->blitter);
 
 	si_pm4_cleanup(sctx);
 
@@ -72,6 +82,14 @@ static void si_destroy_context(struct pipe_context *context)
 #endif
 
 	FREE(sctx);
+}
+
+static enum pipe_reset_status
+si_amdgpu_get_reset_status(struct pipe_context *ctx)
+{
+	struct si_context *sctx = (struct si_context *)ctx;
+
+	return sctx->b.ws->ctx_query_reset_status(sctx->b.ctx);
 }
 
 static struct pipe_context *si_create_context(struct pipe_screen *screen, void *priv)
@@ -91,13 +109,18 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	sctx->b.b.screen = screen; /* this must be set first */
 	sctx->b.b.priv = priv;
 	sctx->b.b.destroy = si_destroy_context;
+	sctx->b.set_atom_dirty = (void *)si_set_atom_dirty;
 	sctx->screen = sscreen; /* Easy accessing of screen/winsys. */
 
 	if (!r600_common_context_init(&sctx->b, &sscreen->b))
 		goto fail;
 
+	if (sscreen->b.info.drm_major == 3)
+		sctx->b.b.get_device_reset_status = si_amdgpu_get_reset_status;
+
 	si_init_blit_functions(sctx);
 	si_init_compute_functions(sctx);
+	si_init_cp_dma_functions(sctx);
 
 	if (sscreen->b.info.has_uvd) {
 		sctx->b.b.create_video_codec = si_uvd_create_decoder;
@@ -107,7 +130,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 		sctx->b.b.create_video_buffer = vl_video_buffer_create;
 	}
 
-	sctx->b.rings.gfx.cs = ws->cs_create(ws, RING_GFX, si_context_gfx_flush,
+	sctx->b.rings.gfx.cs = ws->cs_create(sctx->b.ctx, RING_GFX, si_context_gfx_flush,
 					     sctx, sscreen->b.trace_bo ?
 						sscreen->b.trace_bo->cs_buf : NULL);
 	sctx->b.rings.gfx.flush = si_context_gfx_flush;
@@ -127,17 +150,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	sctx->atoms.s.streamout_begin = &sctx->b.streamout.begin_atom;
 	sctx->atoms.s.streamout_enable = &sctx->b.streamout.enable_atom;
 
-	switch (sctx->b.chip_class) {
-	case SI:
-	case CIK:
-		si_init_state_functions(sctx);
-		si_init_shader_functions(sctx);
-		si_init_config(sctx);
-		break;
-	default:
-		R600_ERR("Unsupported chip class %d.\n", sctx->b.chip_class);
-		goto fail;
-	}
+	si_init_state_functions(sctx);
+	si_init_shader_functions(sctx);
 
 	if (sscreen->b.debug_flags & DBG_FORCE_DMA)
 		sctx->b.b.resource_copy_region = sctx->b.dma_copy;
@@ -181,7 +195,9 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	r600_target = radeon_llvm_get_r600_target(triple);
 	sctx->tm = LLVMCreateTargetMachine(r600_target, triple,
 					   r600_get_llvm_processor_name(sscreen->b.family),
-					   "+DumpCode,+vgpr-spilling",
+					   sctx->b.chip_class >= VI ?
+						   "+DumpCode" :
+						   "+DumpCode,+vgpr-spilling",
 					   LLVMCodeGenLevelDefault,
 					   LLVMRelocDefault,
 					   LLVMCodeModelDefault);
@@ -251,15 +267,28 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 	case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
+	case PIPE_CAP_TGSI_TEXCOORD:
+	case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+	case PIPE_CAP_DEPTH_BOUNDS_TEST:
 		return 1;
 
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
 		return !SI_BIG_ENDIAN && sscreen->b.info.has_userptr;
 
+	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+		return (sscreen->b.info.drm_major == 2 &&
+			sscreen->b.info.drm_minor >= 43) ||
+		       sscreen->b.info.drm_major == 3;
+
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
 		/* 2D tiling on CIK is supported since DRM 2.35.0 */
 		return sscreen->b.chip_class < CIK ||
-		       sscreen->b.info.drm_minor >= 35;
+		       (sscreen->b.info.drm_major == 2 &&
+			sscreen->b.info.drm_minor >= 35) ||
+		       sscreen->b.info.drm_major == 3;
 
         case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
                 return R600_MAP_BUFFER_ALIGNMENT;
@@ -269,7 +298,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 4;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
-		return 330;
+		return HAVE_LLVM >= 0x0307 ? 410 : 330;
 
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
 		return MIN2(sscreen->b.info.vram_size, 0xFFFFFFFF);
@@ -286,15 +315,14 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
-	case PIPE_CAP_TGSI_TEXCOORD:
 	case PIPE_CAP_FAKE_SW_MSAA:
 	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
-	case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
-	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_VERTEXID_NOBASE:
-	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
 		return 0;
+
+	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+		return 30;
 
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
 		return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600;
@@ -314,7 +342,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
 		return 4095;
 	case PIPE_CAP_MAX_VERTEX_STREAMS:
-		return 1;
+		return 4;
 
 	case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
 		return 2048;
@@ -335,7 +363,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 8;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
-		return 1;
+		return 16;
 
 	/* Timer queries, present when the clock frequency is non zero. */
 	case PIPE_CAP_QUERY_TIMESTAMP:
@@ -375,6 +403,13 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	case PIPE_SHADER_VERTEX:
 	case PIPE_SHADER_GEOMETRY:
 		break;
+	case PIPE_SHADER_TESS_CTRL:
+	case PIPE_SHADER_TESS_EVAL:
+		/* LLVM 3.6.2 is required for tessellation because of bug fixes there */
+		if (HAVE_LLVM < 0x0306 ||
+		    (HAVE_LLVM == 0x0306 && MESA_LLVM_VERSION_PATCH < 2))
+			return 0;
+		break;
 	case PIPE_SHADER_COMPUTE:
 		switch (param) {
 		case PIPE_SHADER_CAP_PREFERRED_IR:
@@ -401,7 +436,6 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 		}
 		break;
 	default:
-		/* TODO: support tessellation */
 		return 0;
 	}
 
@@ -433,7 +467,7 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 		/* Indirection of geometry shader input dimension is not
 		 * handled yet
 		 */
-		return shader < PIPE_SHADER_GEOMETRY;
+		return shader != PIPE_SHADER_GEOMETRY;
 	case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
@@ -448,10 +482,12 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	case PIPE_SHADER_CAP_PREFERRED_IR:
 		return PIPE_SHADER_IR_TGSI;
 	case PIPE_SHADER_CAP_DOUBLES:
+		return HAVE_LLVM >= 0x0307;
 	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
 		return 0;
 	case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+	case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
 		return 1;
 	}
 	return 0;

@@ -26,7 +26,7 @@ struct graw_info
 
 
 
-static INLINE boolean
+static inline boolean
 graw_util_create_window(struct graw_info *info,
                         int width, int height,
                         int num_cbufs, bool zstencil_buf)
@@ -144,7 +144,7 @@ graw_util_create_window(struct graw_info *info,
 }
 
 
-static INLINE void
+static inline void
 graw_util_default_state(struct graw_info *info, boolean depth_test)
 {
    {
@@ -181,7 +181,7 @@ graw_util_default_state(struct graw_info *info, boolean depth_test)
 }
 
 
-static INLINE void
+static inline void
 graw_util_viewport(struct graw_info *info,
                    float x, float y,
                    float width, float height,
@@ -205,7 +205,7 @@ graw_util_viewport(struct graw_info *info,
 }
 
 
-static INLINE void
+static inline void
 graw_util_flush_front(const struct graw_info *info)
 {
    info->screen->flush_frontbuffer(info->screen, info->color_buf[0],
@@ -213,7 +213,7 @@ graw_util_flush_front(const struct graw_info *info)
 }
 
 
-static INLINE struct pipe_resource *
+static inline struct pipe_resource *
 graw_util_create_tex2d(const struct graw_info *info,
                        int width, int height, enum pipe_format format,
                        const void *data)
@@ -278,7 +278,7 @@ graw_util_create_tex2d(const struct graw_info *info,
 }
 
 
-static INLINE void *
+static inline void *
 graw_util_create_simple_sampler(const struct graw_info *info,
                                 unsigned wrap_mode,
                                 unsigned img_filter)
@@ -304,7 +304,7 @@ graw_util_create_simple_sampler(const struct graw_info *info,
 }
 
 
-static INLINE struct pipe_sampler_view *
+static inline struct pipe_sampler_view *
 graw_util_create_simple_sampler_view(const struct graw_info *info,
                                      struct pipe_resource *texture)
 {

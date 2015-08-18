@@ -185,7 +185,7 @@ sp_flush_tex_tile_cache(struct softpipe_tex_tile_cache *tc)
  * This is basically a direct-map cache.
  * XXX There's probably lots of ways in which we can improve this.
  */
-static INLINE uint
+static inline uint
 tex_cache_pos( union tex_tile_address addr )
 {
    uint entry = (addr.bits.x + 

@@ -97,6 +97,9 @@ enum gen_mi_alu_operand {
 #define GEN6_MI_LENGTH__MASK					0x0000003f
 #define GEN6_MI_LENGTH__SHIFT					0
 #define GEN6_MI_NOOP__SIZE					1
+#define GEN6_MI_NOOP_DW0_WRITE_NOPID				(0x1 << 22)
+#define GEN6_MI_NOOP_DW0_VALUE__MASK				0x003fffff
+#define GEN6_MI_NOOP_DW0_VALUE__SHIFT				0
 
 #define GEN75_MI_SET_PREDICATE__SIZE				1
 #define GEN75_MI_SET_PREDICATE_DW0_PREDICATE__MASK		0x00000003

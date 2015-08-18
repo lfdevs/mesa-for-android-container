@@ -33,7 +33,6 @@ void
 vc4_job_init(struct vc4_context *vc4)
 {
         vc4_init_cl(vc4, &vc4->bcl);
-        vc4_init_cl(vc4, &vc4->rcl);
         vc4_init_cl(vc4, &vc4->shader_rec);
         vc4_init_cl(vc4, &vc4->uniforms);
         vc4_init_cl(vc4, &vc4->bo_handles);
@@ -45,12 +44,10 @@ void
 vc4_job_reset(struct vc4_context *vc4)
 {
         struct vc4_bo **referenced_bos = vc4->bo_pointers.base;
-        for (int i = 0; i < (vc4->bo_handles.next -
-                             vc4->bo_handles.base) / 4; i++) {
+        for (int i = 0; i < cl_offset(&vc4->bo_handles) / 4; i++) {
                 vc4_bo_unreference(&referenced_bos[i]);
         }
         vc4_reset_cl(&vc4->bcl);
-        vc4_reset_cl(&vc4->rcl);
         vc4_reset_cl(&vc4->shader_rec);
         vc4_reset_cl(&vc4->uniforms);
         vc4_reset_cl(&vc4->bo_handles);
@@ -75,6 +72,70 @@ vc4_job_reset(struct vc4_context *vc4)
         vc4->draw_max_y = 0;
 }
 
+static void
+vc4_submit_setup_rcl_surface(struct vc4_context *vc4,
+                             struct drm_vc4_submit_rcl_surface *submit_surf,
+                             struct pipe_surface *psurf,
+                             bool is_depth, bool is_write)
+{
+        struct vc4_surface *surf = vc4_surface(psurf);
+
+        if (!surf) {
+                submit_surf->hindex = ~0;
+                return;
+        }
+
+        struct vc4_resource *rsc = vc4_resource(psurf->texture);
+        submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
+        submit_surf->offset = surf->offset;
+
+        if (is_depth) {
+                submit_surf->bits =
+                        VC4_SET_FIELD(VC4_LOADSTORE_TILE_BUFFER_ZS,
+                                      VC4_LOADSTORE_TILE_BUFFER_BUFFER);
+
+        } else {
+                submit_surf->bits =
+                        VC4_SET_FIELD(VC4_LOADSTORE_TILE_BUFFER_COLOR,
+                                      VC4_LOADSTORE_TILE_BUFFER_BUFFER) |
+                        VC4_SET_FIELD(vc4_rt_format_is_565(psurf->format) ?
+                                      VC4_LOADSTORE_TILE_BUFFER_BGR565 :
+                                      VC4_LOADSTORE_TILE_BUFFER_RGBA8888,
+                                      VC4_LOADSTORE_TILE_BUFFER_FORMAT);
+        }
+        submit_surf->bits |=
+                VC4_SET_FIELD(surf->tiling, VC4_LOADSTORE_TILE_BUFFER_TILING);
+
+        if (is_write)
+                rsc->writes++;
+}
+
+static void
+vc4_submit_setup_ms_rcl_surface(struct vc4_context *vc4,
+                                struct drm_vc4_submit_rcl_surface *submit_surf,
+                                struct pipe_surface *psurf)
+{
+        struct vc4_surface *surf = vc4_surface(psurf);
+
+        if (!surf) {
+                submit_surf->hindex = ~0;
+                return;
+        }
+
+        struct vc4_resource *rsc = vc4_resource(psurf->texture);
+        submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
+        submit_surf->offset = surf->offset;
+
+        submit_surf->bits =
+                VC4_SET_FIELD(vc4_rt_format_is_565(surf->base.format) ?
+                              VC4_RENDER_CONFIG_FORMAT_BGR565 :
+                              VC4_RENDER_CONFIG_FORMAT_RGBA8888,
+                              VC4_RENDER_CONFIG_FORMAT) |
+                VC4_SET_FIELD(surf->tiling, VC4_RENDER_CONFIG_MEMORY_FORMAT);
+
+        rsc->writes++;
+}
+
 /**
  * Submits the job to the kernel and then reinitializes it.
  */
@@ -83,26 +144,48 @@ vc4_job_submit(struct vc4_context *vc4)
 {
         if (vc4_debug & VC4_DEBUG_CL) {
                 fprintf(stderr, "BCL:\n");
-                vc4_dump_cl(vc4->bcl.base, vc4->bcl.next - vc4->bcl.base, false);
-                fprintf(stderr, "RCL:\n");
-                vc4_dump_cl(vc4->rcl.base, vc4->rcl.next - vc4->rcl.base, true);
+                vc4_dump_cl(vc4->bcl.base, cl_offset(&vc4->bcl), false);
         }
 
         struct drm_vc4_submit_cl submit;
         memset(&submit, 0, sizeof(submit));
 
+        cl_ensure_space(&vc4->bo_handles, 4 * sizeof(uint32_t));
+        cl_ensure_space(&vc4->bo_pointers, 4 * sizeof(struct vc4_bo *));
+
+        vc4_submit_setup_rcl_surface(vc4, &submit.color_read,
+                                     vc4->color_read, false, false);
+        vc4_submit_setup_ms_rcl_surface(vc4, &submit.color_ms_write,
+                                        vc4->color_write);
+        vc4_submit_setup_rcl_surface(vc4, &submit.zs_read,
+                                     vc4->zs_read, true, false);
+        vc4_submit_setup_rcl_surface(vc4, &submit.zs_write,
+                                     vc4->zs_write, true, true);
+
         submit.bo_handles = (uintptr_t)vc4->bo_handles.base;
-        submit.bo_handle_count = (vc4->bo_handles.next -
-                                  vc4->bo_handles.base) / 4;
+        submit.bo_handle_count = cl_offset(&vc4->bo_handles) / 4;
         submit.bin_cl = (uintptr_t)vc4->bcl.base;
-        submit.bin_cl_size = vc4->bcl.next - vc4->bcl.base;
-        submit.render_cl = (uintptr_t)vc4->rcl.base;
-        submit.render_cl_size = vc4->rcl.next - vc4->rcl.base;
+        submit.bin_cl_size = cl_offset(&vc4->bcl);
         submit.shader_rec = (uintptr_t)vc4->shader_rec.base;
-        submit.shader_rec_size = vc4->shader_rec.next - vc4->shader_rec.base;
+        submit.shader_rec_size = cl_offset(&vc4->shader_rec);
         submit.shader_rec_count = vc4->shader_rec_count;
         submit.uniforms = (uintptr_t)vc4->uniforms.base;
-        submit.uniforms_size = vc4->uniforms.next - vc4->uniforms.base;
+        submit.uniforms_size = cl_offset(&vc4->uniforms);
+
+        assert(vc4->draw_min_x != ~0 && vc4->draw_min_y != ~0);
+        submit.min_x_tile = vc4->draw_min_x / 64;
+        submit.min_y_tile = vc4->draw_min_y / 64;
+        submit.max_x_tile = (vc4->draw_max_x - 1) / 64;
+        submit.max_y_tile = (vc4->draw_max_y - 1) / 64;
+        submit.width = vc4->draw_width;
+        submit.height = vc4->draw_height;
+        if (vc4->cleared) {
+                submit.flags |= VC4_SUBMIT_CL_USE_CLEAR_COLOR;
+                submit.clear_color[0] = vc4->clear_color[0];
+                submit.clear_color[1] = vc4->clear_color[1];
+                submit.clear_z = vc4->clear_depth;
+                submit.clear_s = vc4->clear_stencil;
+        }
 
         if (!(vc4_debug & VC4_DEBUG_NORAST)) {
                 int ret;
@@ -122,7 +205,7 @@ vc4_job_submit(struct vc4_context *vc4)
 
         if (vc4_debug & VC4_DEBUG_ALWAYS_SYNC) {
                 if (!vc4_wait_seqno(vc4->screen, vc4->last_emit_seqno,
-                                    PIPE_TIMEOUT_INFINITE)) {
+                                    PIPE_TIMEOUT_INFINITE, "sync")) {
                         fprintf(stderr, "Wait failed.\n");
                         abort();
                 }

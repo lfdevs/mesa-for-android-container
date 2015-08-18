@@ -70,7 +70,7 @@ struct pb_ondemand_manager
 
 extern const struct pb_vtbl pb_ondemand_buffer_vtbl;
 
-static INLINE struct pb_ondemand_buffer *
+static inline struct pb_ondemand_buffer *
 pb_ondemand_buffer(struct pb_buffer *buf)
 {
    assert(buf);
@@ -80,7 +80,7 @@ pb_ondemand_buffer(struct pb_buffer *buf)
    return (struct pb_ondemand_buffer *)buf;
 }
 
-static INLINE struct pb_ondemand_manager *
+static inline struct pb_ondemand_manager *
 pb_ondemand_manager(struct pb_manager *mgr)
 {
    assert(mgr);

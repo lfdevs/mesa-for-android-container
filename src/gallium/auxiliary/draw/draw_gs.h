@@ -90,6 +90,8 @@ struct draw_geometry_shader {
    unsigned vector_length;
    unsigned max_out_prims;
 
+   unsigned num_invocations;
+   unsigned invocation_id;
 #ifdef HAVE_LLVM
    struct draw_gs_inputs *gs_input;
    struct draw_gs_jit_context *jit_context;

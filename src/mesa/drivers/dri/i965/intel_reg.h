@@ -47,6 +47,9 @@
 /* Load a value from memory into a register.  Only available on Gen7+. */
 #define GEN7_MI_LOAD_REGISTER_MEM	(CMD_MI | (0x29 << 23))
 # define MI_LOAD_REGISTER_MEM_USE_GGTT		(1 << 22)
+/* Haswell RS control */
+#define MI_RS_CONTROL                   (CMD_MI | (0x6 << 23))
+#define MI_RS_STORE_DATA_IMM            (CMD_MI | (0x2b << 23))
 
 /* Manipulate the predicate bit based on some register values. Only on Gen7+ */
 #define GEN7_MI_PREDICATE		(CMD_MI | (0xC << 23))
@@ -102,6 +105,8 @@
 
 #define XY_SRC_COPY_BLT_CMD             (CMD_2D | (0x53 << 22))
 
+#define XY_FAST_COPY_BLT_CMD             (CMD_2D | (0x42 << 22))
+
 #define XY_TEXT_IMMEDIATE_BLIT_CMD	(CMD_2D | (0x31 << 22))
 # define XY_TEXT_BYTE_PACKED		(1 << 16)
 
@@ -111,10 +116,24 @@
 #define XY_SRC_TILED		(1 << 15)
 #define XY_DST_TILED		(1 << 11)
 
+/* BR00 */
+#define XY_FAST_SRC_TILED_64K        (3 << 20)
+#define XY_FAST_SRC_TILED_Y          (2 << 20)
+#define XY_FAST_SRC_TILED_X          (1 << 20)
+
+#define XY_FAST_DST_TILED_64K        (3 << 13)
+#define XY_FAST_DST_TILED_Y          (2 << 13)
+#define XY_FAST_DST_TILED_X          (1 << 13)
+
 /* BR13 */
 #define BR13_8			(0x0 << 24)
 #define BR13_565		(0x1 << 24)
 #define BR13_8888		(0x3 << 24)
+#define BR13_16161616		(0x4 << 24)
+#define BR13_32323232		(0x5 << 24)
+
+#define XY_FAST_SRC_TRMODE_YF        (1 << 31)
+#define XY_FAST_DST_TRMODE_YF        (1 << 30)
 
 /* Pipeline Statistics Counter Registers */
 #define IA_VERTICES_COUNT               0x2310

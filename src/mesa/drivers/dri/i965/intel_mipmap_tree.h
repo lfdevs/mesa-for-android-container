@@ -330,6 +330,13 @@ struct intel_miptree_aux_buffer
    struct intel_mipmap_tree *mt; /**< hiz miptree used with Gen6 */
 };
 
+/* Tile resource modes */
+enum intel_miptree_tr_mode {
+   INTEL_MIPTREE_TRMODE_NONE,
+   INTEL_MIPTREE_TRMODE_YF,
+   INTEL_MIPTREE_TRMODE_YS
+};
+
 struct intel_mipmap_tree
 {
    /** Buffer object containing the pixel data. */
@@ -338,6 +345,7 @@ struct intel_mipmap_tree
    uint32_t pitch; /**< pitch in bytes. */
 
    uint32_t tiling; /**< One of the I915_TILING_* flags */
+   enum intel_miptree_tr_mode tr_mode;
 
    /* Effectively the key:
     */
@@ -508,24 +516,31 @@ struct intel_mipmap_tree
    GLuint refcount;
 };
 
-enum intel_miptree_tiling_mode {
-   INTEL_MIPTREE_TILING_ANY,
-   INTEL_MIPTREE_TILING_Y,
-   INTEL_MIPTREE_TILING_NONE,
-};
-
-bool
-intel_is_non_msrt_mcs_buffer_supported(struct brw_context *brw,
-                                       struct intel_mipmap_tree *mt);
-
 void
 intel_get_non_msrt_mcs_alignment(struct brw_context *brw,
                                  struct intel_mipmap_tree *mt,
                                  unsigned *width_px, unsigned *height);
-
+bool
+intel_tiling_supports_non_msrt_mcs(struct brw_context *brw, unsigned tiling);
+bool
+intel_miptree_is_fast_clear_capable(struct brw_context *brw,
+                                    struct intel_mipmap_tree *mt);
 bool
 intel_miptree_alloc_non_msrt_mcs(struct brw_context *brw,
                                  struct intel_mipmap_tree *mt);
+
+enum {
+   MIPTREE_LAYOUT_ACCELERATED_UPLOAD       = 1 << 0,
+   MIPTREE_LAYOUT_FORCE_ALL_SLICE_AT_LOD   = 1 << 1,
+   MIPTREE_LAYOUT_FOR_BO                   = 1 << 2,
+   MIPTREE_LAYOUT_DISABLE_AUX              = 1 << 3,
+   MIPTREE_LAYOUT_FORCE_HALIGN16           = 1 << 4,
+
+   MIPTREE_LAYOUT_TILING_Y                 = 1 << 5,
+   MIPTREE_LAYOUT_TILING_NONE              = 1 << 6,
+   MIPTREE_LAYOUT_TILING_ANY               = MIPTREE_LAYOUT_TILING_Y |
+                                             MIPTREE_LAYOUT_TILING_NONE,
+};
 
 struct intel_mipmap_tree *intel_miptree_create(struct brw_context *brw,
                                                GLenum target,
@@ -535,10 +550,8 @@ struct intel_mipmap_tree *intel_miptree_create(struct brw_context *brw,
                                                GLuint width0,
                                                GLuint height0,
                                                GLuint depth0,
-					       bool expect_accelerated_upload,
                                                GLuint num_samples,
-                                               enum intel_miptree_tiling_mode,
-                                               bool force_all_slices_at_each_lod);
+                                               uint32_t flags);
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_bo(struct brw_context *brw,
@@ -549,7 +562,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
                             uint32_t height,
                             uint32_t depth,
                             int pitch,
-                            bool disable_aux_buffers);
+                            uint32_t layout_flags);
 
 void
 intel_update_winsys_renderbuffer_miptree(struct brw_context *intel,
@@ -753,7 +766,10 @@ brw_miptree_get_vertical_slice_pitch(const struct brw_context *brw,
                                      const struct intel_mipmap_tree *mt,
                                      unsigned level);
 
-void brw_miptree_layout(struct brw_context *brw, struct intel_mipmap_tree *mt);
+void
+brw_miptree_layout(struct brw_context *brw,
+                   struct intel_mipmap_tree *mt,
+                   uint32_t layout_flags);
 
 void *intel_miptree_map_raw(struct brw_context *brw,
                             struct intel_mipmap_tree *mt);

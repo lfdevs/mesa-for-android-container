@@ -66,6 +66,9 @@
 #define PKT3_SET_SH_REG                        0x76 /* SI and later */
 #define PKT3_SET_UCONFIG_REG                   0x79 /* CIK and later */
 
+#define EVENT_TYPE_SAMPLE_STREAMOUTSTATS1      0x1 /* EG and later */
+#define EVENT_TYPE_SAMPLE_STREAMOUTSTATS2      0x2 /* EG and later */
+#define EVENT_TYPE_SAMPLE_STREAMOUTSTATS3      0x3 /* EG and later */
 #define EVENT_TYPE_PS_PARTIAL_FLUSH            0x10
 #define EVENT_TYPE_CACHE_FLUSH_AND_INV_TS_EVENT 0x14
 #define EVENT_TYPE_ZPASS_DONE                  0x15
@@ -177,7 +180,7 @@
 #define   S_028804_INTERPOLATE_SRC_Z(x)			(((x) & 0x1) << 19)
 #define   S_028804_STATIC_ANCHOR_ASSOCIATIONS(x)	(((x) & 0x1) << 20)
 #define   S_028804_ALPHA_TO_MASK_EQAA_DISABLE(x)	(((x) & 0x1) << 21)
-#define   S_028804_OVERRASTERIZATION_AMOUNT(x)		(((x) & 0x7) << 24)
+#define   S_028804_OVERRASTERIZATION_AMOUNT(x)		(((x) & 0x07) << 24)
 #define   S_028804_ENABLE_POSTZ_OVERRASTERIZATION(x)	(((x) & 0x1) << 27)
 #define CM_R_028BDC_PA_SC_LINE_CNTL                  0x28bdc
 #define   S_028BDC_EXPAND_LINE_WIDTH(x)                (((x) & 0x1) << 9)

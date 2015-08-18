@@ -1460,7 +1460,7 @@ dri2_init_screen(__DRIscreen * sPriv)
    throttle_ret = dd_configuration(DRM_CONF_THROTTLE);
    dmabuf_ret = dd_configuration(DRM_CONF_SHARE_FD);
 #else
-   if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false)) {
+   if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd)) {
       pscreen = pipe_loader_create_screen(screen->dev, PIPE_SEARCH_DIR);
 
       throttle_ret = pipe_loader_configuration(screen->dev, DRM_CONF_THROTTLE);

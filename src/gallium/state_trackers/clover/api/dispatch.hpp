@@ -693,7 +693,13 @@ struct _cl_icd_dispatch {
    CL_API_ENTRY cl_int (CL_API_CALL *clUnloadPlatformCompiler)(
       cl_platform_id platform);
 
-   void *clGetKernelArgInfo;
+   CL_API_ENTRY cl_int (CL_API_CALL *clGetKernelArgInfo)(
+      cl_kernel kernel,
+      cl_uint arg_indx,
+      cl_kernel_arg_info  param_name,
+      size_t param_value_size,
+      void *param_value,
+      size_t *param_value_size_ret);
 
    CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueFillBuffer)(
       cl_command_queue command_queue,
@@ -701,7 +707,7 @@ struct _cl_icd_dispatch {
       const void *pattern,
       size_t pattern_size,
       size_t offset,
-      size_t cb,
+      size_t size,
       cl_uint num_events_in_wait_list,
       const cl_event *event_wait_list,
       cl_event *event);
@@ -710,13 +716,20 @@ struct _cl_icd_dispatch {
       cl_command_queue command_queue,
       cl_mem image,
       const void *fill_color,
-      const size_t origin[3],
-      const size_t region[3],
+      const size_t *origin,
+      const size_t *region,
       cl_uint num_events_in_wait_list,
       const cl_event *event_wait_list,
       cl_event *event);
 
-   void *clEnqueueMigrateMemObjects;
+   CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueMigrateMemObjects)(
+      cl_command_queue command_queue,
+      cl_uint num_mem_objects,
+      const cl_mem *mem_objects,
+      cl_mem_migration_flags flags,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
 
    CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueMarkerWithWaitList)(
       cl_command_queue command_queue,

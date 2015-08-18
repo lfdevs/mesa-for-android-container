@@ -444,6 +444,7 @@ draw_vbo_with_sw_restart(struct ilo_context *ilo,
                          const struct pipe_draw_info *info)
 {
    const struct ilo_ib_state *ib = &ilo->state_vector.ib;
+   const struct ilo_vma *vma;
    union {
       const void *ptr;
       const uint8_t *u8;
@@ -452,12 +453,14 @@ draw_vbo_with_sw_restart(struct ilo_context *ilo,
    } u;
 
    /* we will draw with IB mapped */
-   if (ib->buffer) {
-      u.ptr = intel_bo_map(ilo_buffer(ib->buffer)->bo, false);
+   if (ib->state.buffer) {
+      vma = ilo_resource_get_vma(ib->state.buffer);
+      u.ptr = intel_bo_map(vma->bo, false);
       if (u.ptr)
-         u.u8 += ib->offset;
+         u.u8 += vma->bo_offset + ib->state.offset;
    } else {
-      u.ptr = ib->user_buffer;
+      vma = NULL;
+      u.ptr = ib->state.user_buffer;
    }
 
    if (!u.ptr)
@@ -483,7 +486,7 @@ draw_vbo_with_sw_restart(struct ilo_context *ilo,
       (pipe)->draw_vbo(pipe, &subinfo);                  \
 } while (0)
 
-   switch (ib->index_size) {
+   switch (ib->state.index_size) {
    case 1:
       DRAW_VBO_WITH_SW_RESTART(&ilo->base, info, u.u8);
       break;
@@ -500,8 +503,8 @@ draw_vbo_with_sw_restart(struct ilo_context *ilo,
 
 #undef DRAW_VBO_WITH_SW_RESTART
 
-   if (ib->buffer)
-      intel_bo_unmap(ilo_buffer(ib->buffer)->bo);
+   if (vma)
+      intel_bo_unmap(vma->bo);
 }
 
 static bool
@@ -511,9 +514,9 @@ draw_vbo_need_sw_restart(const struct ilo_context *ilo,
    /* the restart index is fixed prior to GEN7.5 */
    if (ilo_dev_gen(ilo->dev) < ILO_GEN(7.5)) {
       const unsigned cut_index =
-         (ilo->state_vector.ib.index_size == 1) ? 0xff :
-         (ilo->state_vector.ib.index_size == 2) ? 0xffff :
-         (ilo->state_vector.ib.index_size == 4) ? 0xffffffff : 0;
+         (ilo->state_vector.ib.state.index_size == 1) ? 0xff :
+         (ilo->state_vector.ib.state.index_size == 2) ? 0xffff :
+         (ilo->state_vector.ib.state.index_size == 4) ? 0xffffffff : 0;
 
       if (info->restart_index < cut_index)
          return true;

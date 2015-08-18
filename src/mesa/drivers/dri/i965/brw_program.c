@@ -88,7 +88,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
 	 return NULL;
    }
 
-   case MESA_GEOMETRY_PROGRAM: {
+   case GL_GEOMETRY_PROGRAM_NV: {
       struct brw_geometry_program *prog = CALLOC_STRUCT(brw_geometry_program);
       if (prog) {
          prog->id = get_new_program_id(brw->intelScreen);
@@ -143,7 +143,7 @@ brwProgramStringNotify(struct gl_context *ctx,
       brw_add_texrect_params(prog);
 
       if (ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT].NirOptions) {
-         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_FRAGMENT);
+         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_FRAGMENT, true);
       }
 
       brw_fs_precompile(ctx, NULL, prog);
@@ -169,7 +169,8 @@ brwProgramStringNotify(struct gl_context *ctx,
       brw_add_texrect_params(prog);
 
       if (ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].NirOptions) {
-         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_VERTEX);
+         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_VERTEX,
+                                    brw->intelScreen->compiler->scalar_vs);
       }
 
       brw_vs_precompile(ctx, NULL, prog);
@@ -196,7 +197,7 @@ brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
    unsigned bits = (PIPE_CONTROL_DATA_CACHE_INVALIDATE |
                     PIPE_CONTROL_NO_WRITE |
                     PIPE_CONTROL_CS_STALL);
-   assert(brw->gen >= 7 && brw->gen <= 8);
+   assert(brw->gen >= 7 && brw->gen <= 9);
 
    if (barriers & (GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT |
                    GL_ELEMENT_ARRAY_BARRIER_BIT |
@@ -287,18 +288,24 @@ void brwInitFragProgFuncs( struct dd_function_table *functions )
    functions->MemoryBarrier = brw_memory_barrier;
 }
 
+struct shader_times {
+   uint64_t time;
+   uint64_t written;
+   uint64_t reset;
+};
+
 void
 brw_init_shader_time(struct brw_context *brw)
 {
-   const int max_entries = 4096;
-   brw->shader_time.bo = drm_intel_bo_alloc(brw->bufmgr, "shader time",
-                                            max_entries * SHADER_TIME_STRIDE,
-                                            4096);
+   const int max_entries = 2048;
+   brw->shader_time.bo =
+      drm_intel_bo_alloc(brw->bufmgr, "shader time",
+                         max_entries * SHADER_TIME_STRIDE * 3, 4096);
    brw->shader_time.names = rzalloc_array(brw, const char *, max_entries);
    brw->shader_time.ids = rzalloc_array(brw, int, max_entries);
    brw->shader_time.types = rzalloc_array(brw, enum shader_time_shader_type,
                                           max_entries);
-   brw->shader_time.cumulative = rzalloc_array(brw, uint64_t,
+   brw->shader_time.cumulative = rzalloc_array(brw, struct shader_times,
                                                max_entries);
    brw->shader_time.max_entries = max_entries;
 }
@@ -316,27 +323,6 @@ compare_time(const void *a, const void *b)
       return 0;
    else
       return 1;
-}
-
-static void
-get_written_and_reset(struct brw_context *brw, int i,
-                      uint64_t *written, uint64_t *reset)
-{
-   enum shader_time_shader_type type = brw->shader_time.types[i];
-   assert(type == ST_VS || type == ST_GS || type == ST_FS8 ||
-          type == ST_FS16 || type == ST_CS);
-
-   /* Find where we recorded written and reset. */
-   int wi, ri;
-
-   for (wi = i; brw->shader_time.types[wi] != type + 1; wi++)
-      ;
-
-   for (ri = i; brw->shader_time.types[ri] != type + 2; ri++)
-      ;
-
-   *written = brw->shader_time.cumulative[wi];
-   *reset = brw->shader_time.cumulative[ri];
 }
 
 static void
@@ -374,26 +360,13 @@ brw_report_shader_time(struct brw_context *brw)
       sorted[i] = &scaled[i];
 
       switch (type) {
-      case ST_VS_WRITTEN:
-      case ST_VS_RESET:
-      case ST_GS_WRITTEN:
-      case ST_GS_RESET:
-      case ST_FS8_WRITTEN:
-      case ST_FS8_RESET:
-      case ST_FS16_WRITTEN:
-      case ST_FS16_RESET:
-      case ST_CS_WRITTEN:
-      case ST_CS_RESET:
-         /* We'll handle these when along with the time. */
-         scaled[i] = 0;
-         continue;
-
       case ST_VS:
       case ST_GS:
       case ST_FS8:
       case ST_FS16:
       case ST_CS:
-         get_written_and_reset(brw, i, &written, &reset);
+         written = brw->shader_time.cumulative[i].written;
+         reset = brw->shader_time.cumulative[i].reset;
          break;
 
       default:
@@ -405,7 +378,7 @@ brw_report_shader_time(struct brw_context *brw)
          break;
       }
 
-      uint64_t time = brw->shader_time.cumulative[i];
+      uint64_t time = brw->shader_time.cumulative[i].time;
       if (written) {
          scaled[i] = time / written * (written + reset);
       } else {
@@ -491,16 +464,19 @@ brw_collect_shader_time(struct brw_context *brw)
     * overhead compared to the cost of tracking the time in the first place.
     */
    drm_intel_bo_map(brw->shader_time.bo, true);
-
-   uint32_t *times = brw->shader_time.bo->virtual;
+   void *bo_map = brw->shader_time.bo->virtual;
 
    for (int i = 0; i < brw->shader_time.num_entries; i++) {
-      brw->shader_time.cumulative[i] += times[i * SHADER_TIME_STRIDE / 4];
+      uint32_t *times = bo_map + i * 3 * SHADER_TIME_STRIDE;
+
+      brw->shader_time.cumulative[i].time += times[SHADER_TIME_STRIDE * 0 / 4];
+      brw->shader_time.cumulative[i].written += times[SHADER_TIME_STRIDE * 1 / 4];
+      brw->shader_time.cumulative[i].reset += times[SHADER_TIME_STRIDE * 2 / 4];
    }
 
    /* Zero the BO out to clear it out for our next collection.
     */
-   memset(times, 0, brw->shader_time.bo->size);
+   memset(bo_map, 0, brw->shader_time.bo->size);
    drm_intel_bo_unmap(brw->shader_time.bo);
 }
 

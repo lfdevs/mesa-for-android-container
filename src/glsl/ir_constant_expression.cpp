@@ -40,23 +40,11 @@
 #include "glsl_types.h"
 #include "program/hash_table.h"
 
-#if defined(_MSC_VER) && (_MSC_VER < 1800)
-static int isnormal(double x)
-{
-   return _fpclass(x) == _FPCLASS_NN || _fpclass(x) == _FPCLASS_PN;
-}
-#elif defined(__SUNPRO_CC) && !defined(isnormal)
+#if defined(__SUNPRO_CC) && !defined(isnormal)
 #include <ieeefp.h>
 static int isnormal(double x)
 {
    return fpclass(x) == FP_NORMAL;
-}
-#endif
-
-#if defined(_MSC_VER)
-static double copysign(double x, double y)
-{
-   return _copysign(x, y);
 }
 #endif
 
@@ -242,12 +230,9 @@ pack_snorm_1x8(float x)
      *    follows:
      *
      *      packSnorm4x8: round(clamp(c, -1, +1) * 127.0)
-     *
-     * We must first cast the float to an int, because casting a negative
-     * float to a uint is undefined.
      */
-   return (uint8_t) (int)
-          _mesa_roundevenf(CLAMP(x, -1.0f, +1.0f) * 127.0f);
+   return (uint8_t)
+          _mesa_lroundevenf(CLAMP(x, -1.0f, +1.0f) * 127.0f);
 }
 
 /**
@@ -264,12 +249,9 @@ pack_snorm_1x16(float x)
      *    follows:
      *
      *      packSnorm2x16: round(clamp(c, -1, +1) * 32767.0)
-     *
-     * We must first cast the float to an int, because casting a negative
-     * float to a uint is undefined.
      */
-   return (uint16_t) (int)
-          _mesa_roundevenf(CLAMP(x, -1.0f, +1.0f) * 32767.0f);
+   return (uint16_t)
+          _mesa_lroundevenf(CLAMP(x, -1.0f, +1.0f) * 32767.0f);
 }
 
 /**
@@ -1674,10 +1656,10 @@ ir_expression::constant_expression_value(struct hash_table *variable_context)
             if (!isnormal(data.d[c]))
                data.d[c] = copysign(0.0, op[0]->value.d[c]);
          } else {
-            data.f[c] = ldexp(op[0]->value.f[c], op[1]->value.i[c]);
+            data.f[c] = ldexpf(op[0]->value.f[c], op[1]->value.i[c]);
             /* Flush subnormal values to zero. */
             if (!isnormal(data.f[c]))
-               data.f[c] = copysign(0.0f, op[0]->value.f[c]);
+               data.f[c] = copysignf(0.0f, op[0]->value.f[c]);
          }
       }
       break;

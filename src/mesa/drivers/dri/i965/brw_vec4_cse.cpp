@@ -62,6 +62,7 @@ is_expression(const vec4_instruction *const inst)
    case BRW_OPCODE_CMPN:
    case BRW_OPCODE_ADD:
    case BRW_OPCODE_MUL:
+   case SHADER_OPCODE_MULH:
    case BRW_OPCODE_FRC:
    case BRW_OPCODE_RNDU:
    case BRW_OPCODE_RNDD:
@@ -114,8 +115,16 @@ instructions_match(vec4_instruction *a, vec4_instruction *b)
 {
    return a->opcode == b->opcode &&
           a->saturate == b->saturate &&
+          a->predicate == b->predicate &&
+          a->predicate_inverse == b->predicate_inverse &&
           a->conditional_mod == b->conditional_mod &&
+          a->flag_subreg == b->flag_subreg &&
           a->dst.type == b->dst.type &&
+          a->offset == b->offset &&
+          a->mlen == b->mlen &&
+          a->base_mrf == b->base_mrf &&
+          a->header_size == b->header_size &&
+          a->shadow_compare == b->shadow_compare &&
           a->dst.writemask == b->dst.writemask &&
           a->force_writemask_all == b->force_writemask_all &&
           a->regs_written == b->regs_written &&

@@ -48,6 +48,7 @@ struct dump_ctx
    int indent;
    
    uint indentation;
+   FILE *file;
 
    void (*dump_printf)(struct dump_ctx *ctx, const char *format, ...);
 };
@@ -58,7 +59,10 @@ dump_ctx_printf(struct dump_ctx *ctx, const char *format, ...)
    va_list ap;
    (void)ctx;
    va_start(ap, format);
-   _debug_vprintf(format, ap);
+   if (ctx->file)
+      vfprintf(ctx->file, format, ap);
+   else
+      _debug_vprintf(format, ap);
    va_end(ap);
 }
 
@@ -286,15 +290,15 @@ iter_declaration(
    if (decl->Declaration.File == TGSI_FILE_INPUT &&
        (iter->processor.Processor == TGSI_PROCESSOR_GEOMETRY ||
         (!patch &&
-         (iter->processor.Processor == TGSI_PROCESSOR_TESSCTRL ||
-          iter->processor.Processor == TGSI_PROCESSOR_TESSEVAL)))) {
+         (iter->processor.Processor == TGSI_PROCESSOR_TESS_CTRL ||
+          iter->processor.Processor == TGSI_PROCESSOR_TESS_EVAL)))) {
       TXT("[]");
    }
 
    /* all non-patch tess ctrl shader outputs are two dimensional */
    if (decl->Declaration.File == TGSI_FILE_OUTPUT &&
        !patch &&
-       iter->processor.Processor == TGSI_PROCESSOR_TESSCTRL) {
+       iter->processor.Processor == TGSI_PROCESSOR_TESS_CTRL) {
       TXT("[]");
    }
 
@@ -539,17 +543,8 @@ iter_instruction(
 
    TXT( info->mnemonic );
 
-   switch (inst->Instruction.Saturate) {
-   case TGSI_SAT_NONE:
-      break;
-   case TGSI_SAT_ZERO_ONE:
+   if (inst->Instruction.Saturate) {
       TXT( "_SAT" );
-      break;
-   case TGSI_SAT_MINUS_PLUS_ONE:
-      TXT( "_SATNV" );
-      break;
-   default:
-      assert( 0 );
    }
 
    for (i = 0; i < inst->Instruction.NumDstRegs; i++) {
@@ -668,9 +663,7 @@ prolog(
 }
 
 void
-tgsi_dump(
-   const struct tgsi_token *tokens,
-   uint flags )
+tgsi_dump_to_file(const struct tgsi_token *tokens, uint flags, FILE *file)
 {
    struct dump_ctx ctx;
 
@@ -686,8 +679,15 @@ tgsi_dump(
    ctx.indent = 0;
    ctx.dump_printf = dump_ctx_printf;
    ctx.indentation = 0;
+   ctx.file = file;
 
    tgsi_iterate_shader( tokens, &ctx.iter );
+}
+
+void
+tgsi_dump(const struct tgsi_token *tokens, uint flags)
+{
+   tgsi_dump_to_file(tokens, flags, NULL);
 }
 
 struct str_dump_ctx
@@ -742,6 +742,7 @@ tgsi_dump_str(
    ctx.base.indent = 0;
    ctx.base.dump_printf = &str_dump_ctx_printf;
    ctx.base.indentation = 0;
+   ctx.base.file = NULL;
 
    ctx.str = str;
    ctx.str[0] = 0;
@@ -765,6 +766,7 @@ tgsi_dump_instruction_str(
    ctx.base.indent = 0;
    ctx.base.dump_printf = &str_dump_ctx_printf;
    ctx.base.indentation = 0;
+   ctx.base.file = NULL;
 
    ctx.str = str;
    ctx.str[0] = 0;

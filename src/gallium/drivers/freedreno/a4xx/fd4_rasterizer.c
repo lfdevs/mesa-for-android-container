@@ -50,7 +50,7 @@ fd4_rasterizer_state_create(struct pipe_context *pctx,
 
 	if (cso->point_size_per_vertex) {
 		psize_min = util_get_min_point_size(cso);
-		psize_max = 8192;
+		psize_max = 4092;
 	} else {
 		/* Force the point size to be as if the vertex output was disabled. */
 		psize_min = cso->point_size;
@@ -67,9 +67,9 @@ fd4_rasterizer_state_create(struct pipe_context *pctx,
 */
 	so->gras_cl_clip_cntl = 0x80000; /* ??? */
 	so->gras_su_point_minmax =
-			A4XX_GRAS_SU_POINT_MINMAX_MIN(psize_min/2) |
-			A4XX_GRAS_SU_POINT_MINMAX_MAX(psize_max/2);
-	so->gras_su_point_size   = A4XX_GRAS_SU_POINT_SIZE(cso->point_size/2);
+			A4XX_GRAS_SU_POINT_MINMAX_MIN(psize_min) |
+			A4XX_GRAS_SU_POINT_MINMAX_MAX(psize_max);
+	so->gras_su_point_size   = A4XX_GRAS_SU_POINT_SIZE(cso->point_size);
 	so->gras_su_poly_offset_scale =
 			A4XX_GRAS_SU_POLY_OFFSET_SCALE(cso->offset_scale);
 	so->gras_su_poly_offset_offset =

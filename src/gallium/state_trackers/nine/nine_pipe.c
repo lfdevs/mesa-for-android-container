@@ -118,7 +118,7 @@ nine_convert_rasterizer_state(struct cso_context *ctx, const DWORD *rs)
     cso_set_rasterizer(ctx, &rast);
 }
 
-static INLINE void
+static inline void
 nine_convert_blend_state_fixup(struct pipe_blend_state *blend, const DWORD *rs)
 {
     if (unlikely(rs[D3DRS_SRCBLEND] == D3DBLEND_BOTHSRCALPHA ||

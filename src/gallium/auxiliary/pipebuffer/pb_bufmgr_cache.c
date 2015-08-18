@@ -88,7 +88,7 @@ struct pb_cache_manager
 };
 
 
-static INLINE struct pb_cache_buffer *
+static inline struct pb_cache_buffer *
 pb_cache_buffer(struct pb_buffer *buf)
 {
    assert(buf);
@@ -96,7 +96,7 @@ pb_cache_buffer(struct pb_buffer *buf)
 }
 
 
-static INLINE struct pb_cache_manager *
+static inline struct pb_cache_manager *
 pb_cache_manager(struct pb_manager *mgr)
 {
    assert(mgr);
@@ -107,7 +107,7 @@ pb_cache_manager(struct pb_manager *mgr)
 /**
  * Actually destroy the buffer.
  */
-static INLINE void
+static inline void
 _pb_cache_buffer_destroy(struct pb_cache_buffer *buf)
 {
    struct pb_cache_manager *mgr = buf->mgr;
@@ -235,7 +235,7 @@ pb_cache_buffer_vtbl = {
 };
 
 
-static INLINE int
+static inline int
 pb_cache_is_buffer_compat(struct pb_cache_buffer *buf,  
                           pb_size size,
                           const struct pb_desc *desc)

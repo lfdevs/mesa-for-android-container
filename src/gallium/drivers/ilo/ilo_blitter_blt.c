@@ -127,7 +127,7 @@ ilo_blitter_blt_end(struct ilo_blitter *blitter, uint32_t swctrl)
 
 static bool
 buf_clear_region(struct ilo_blitter *blitter,
-                 struct ilo_buffer *buf, unsigned offset,
+                 struct ilo_buffer_resource *buf, unsigned offset,
                  uint32_t val, unsigned size,
                  enum gen6_blt_mask value_mask,
                  enum gen6_blt_mask write_mask)
@@ -140,8 +140,8 @@ buf_clear_region(struct ilo_blitter *blitter,
    if (offset % cpp || size % cpp)
       return false;
 
-   dst.bo = buf->bo;
-   dst.offset = offset;
+   dst.bo = buf->vma.bo;
+   dst.offset = buf->vma.bo_offset + offset;
 
    ilo_blitter_blt_begin(blitter, GEN6_COLOR_BLT__SIZE *
          (1 + size / 32764 / gen6_blt_max_scanlines),
@@ -179,25 +179,26 @@ buf_clear_region(struct ilo_blitter *blitter,
 
 static bool
 buf_copy_region(struct ilo_blitter *blitter,
-                struct ilo_buffer *dst_buf, unsigned dst_offset,
-                struct ilo_buffer *src_buf, unsigned src_offset,
+                struct ilo_buffer_resource *dst_buf, unsigned dst_offset,
+                struct ilo_buffer_resource *src_buf, unsigned src_offset,
                 unsigned size)
 {
    const uint8_t rop = 0xcc; /* SRCCOPY */
    struct ilo_builder *builder = &blitter->ilo->cp->builder;
    struct gen6_blt_bo dst, src;
 
-   dst.bo = dst_buf->bo;
-   dst.offset = dst_offset;
+   dst.bo = dst_buf->vma.bo;
+   dst.offset = dst_buf->vma.bo_offset + dst_offset;
    dst.pitch = 0;
 
-   src.bo = src_buf->bo;
-   src.offset = src_offset;
+   src.bo = src_buf->vma.bo;
+   src.offset = src_buf->vma.bo_offset + src_offset;
    src.pitch = 0;
 
    ilo_blitter_blt_begin(blitter, GEN6_SRC_COPY_BLT__SIZE *
          (1 + size / 32764 / gen6_blt_max_scanlines),
-         dst_buf->bo, GEN6_TILING_NONE, src_buf->bo, GEN6_TILING_NONE);
+         dst_buf->vma.bo, GEN6_TILING_NONE,
+         src_buf->vma.bo, GEN6_TILING_NONE);
 
    while (size) {
       unsigned width, height;
@@ -258,14 +259,14 @@ tex_clear_region(struct ilo_blitter *blitter,
    if (dst_box->width * cpp > gen6_blt_max_bytes_per_scanline)
       return false;
 
-   dst.bo = dst_tex->image.bo;
-   dst.offset = 0;
+   dst.bo = dst_tex->vma.bo;
+   dst.offset = dst_tex->vma.bo_offset;
    dst.pitch = dst_tex->image.bo_stride;
    dst.tiling = dst_tex->image.tiling;
 
    swctrl = ilo_blitter_blt_begin(blitter,
          GEN6_XY_COLOR_BLT__SIZE * dst_box->depth,
-         dst_tex->image.bo, dst_tex->image.tiling, NULL, GEN6_TILING_NONE);
+         dst_tex->vma.bo, dst_tex->image.tiling, NULL, GEN6_TILING_NONE);
 
    for (slice = 0; slice < dst_box->depth; slice++) {
       unsigned x, y;
@@ -299,7 +300,7 @@ tex_copy_region(struct ilo_blitter *blitter,
                 const struct pipe_box *src_box)
 {
    const struct util_format_description *desc =
-      util_format_description(dst_tex->image.format);
+      util_format_description(dst_tex->image_format);
    const unsigned max_extent = 32767; /* INT16_MAX */
    const uint8_t rop = 0xcc; /* SRCCOPY */
    struct ilo_builder *builder = &blitter->ilo->cp->builder;
@@ -347,13 +348,13 @@ tex_copy_region(struct ilo_blitter *blitter,
       break;
    }
 
-   dst.bo = dst_tex->image.bo;
-   dst.offset = 0;
+   dst.bo = dst_tex->vma.bo;
+   dst.offset = dst_tex->vma.bo_offset;
    dst.pitch = dst_tex->image.bo_stride;
    dst.tiling = dst_tex->image.tiling;
 
-   src.bo = src_tex->image.bo;
-   src.offset = 0;
+   src.bo = src_tex->vma.bo;
+   src.offset = src_tex->vma.bo_offset;
    src.pitch = src_tex->image.bo_stride;
    src.tiling = src_tex->image.tiling;
 
@@ -423,8 +424,8 @@ ilo_blitter_blt_copy_resource(struct ilo_blitter *blitter,
              src_box->height == 1 &&
              src_box->depth == 1);
 
-      success = buf_copy_region(blitter,
-            ilo_buffer(dst), dst_offset, ilo_buffer(src), src_offset, size);
+      success = buf_copy_region(blitter, ilo_buffer_resource(dst), dst_offset,
+            ilo_buffer_resource(src), src_offset, size);
    }
    else if (dst->target != PIPE_BUFFER && src->target != PIPE_BUFFER) {
       success = tex_copy_region(blitter,
@@ -488,7 +489,7 @@ ilo_blitter_blt_clear_rt(struct ilo_blitter *blitter,
       if (offset + size > end)
          size = end - offset;
 
-      success = buf_clear_region(blitter, ilo_buffer(rt->texture),
+      success = buf_clear_region(blitter, ilo_buffer_resource(rt->texture),
             offset, packed.ui[0], size, mask, mask);
    }
    else {

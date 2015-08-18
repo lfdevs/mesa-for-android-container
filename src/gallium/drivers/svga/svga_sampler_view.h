@@ -86,7 +86,7 @@ svga_destroy_sampler_view_priv(struct svga_sampler_view *v);
 void
 svga_debug_describe_sampler_view(char *buf, const struct svga_sampler_view *sv);
 
-static INLINE void
+static inline void
 svga_sampler_view_reference(struct svga_sampler_view **ptr, struct svga_sampler_view *v)
 {
    struct svga_sampler_view *old = *ptr;

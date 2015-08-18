@@ -26,6 +26,7 @@
 #include "brw_defines.h"
 #include "main/compiler.h"
 #include "glsl/ir.h"
+#include "program/prog_parameter.h"
 
 #ifdef __cplusplus
 #include "brw_ir_allocator.h"
@@ -86,6 +87,12 @@ struct brw_compiler {
        */
       int aligned_pairs_class;
    } fs_reg_sets[2];
+
+   void (*shader_debug_log)(void *, const char *str, ...) PRINTFLIKE(2, 3);
+   void (*shader_perf_log)(void *, const char *str, ...) PRINTFLIKE(2, 3);
+
+   bool scalar_vs;
+   struct gl_shader_compiler_options glsl_compiler_options[MESA_SHADER_STAGES];
 };
 
 enum PACKED register_file {
@@ -211,20 +218,23 @@ enum instruction_scheduler_mode {
    SCHEDULE_POST,
 };
 
-class backend_visitor : public ir_visitor {
+class backend_shader {
 protected:
 
-   backend_visitor(struct brw_context *brw,
-                   struct gl_shader_program *shader_prog,
-                   struct gl_program *prog,
-                   struct brw_stage_prog_data *stage_prog_data,
-                   gl_shader_stage stage);
+   backend_shader(const struct brw_compiler *compiler,
+                  void *log_data,
+                  void *mem_ctx,
+                  struct gl_shader_program *shader_prog,
+                  struct gl_program *prog,
+                  struct brw_stage_prog_data *stage_prog_data,
+                  gl_shader_stage stage);
 
 public:
 
-   struct brw_context * const brw;
+   const struct brw_compiler *compiler;
+   void *log_data; /* Passed to compiler->*_log functions */
+
    const struct brw_device_info * const devinfo;
-   struct gl_context * const ctx;
    struct brw_shader * const shader;
    struct gl_shader_program * const shader_prog;
    struct gl_program * const prog;
@@ -259,6 +269,10 @@ public:
    void assign_common_binding_table_offsets(uint32_t next_binding_table_offset);
 
    virtual void invalidate_live_intervals() = 0;
+
+   virtual void setup_vector_uniform_values(const gl_constant_value *values,
+                                            unsigned n) = 0;
+   void setup_image_uniform_values(const gl_uniform_storage *storage);
 };
 
 uint32_t brw_texture_offset(int *offsets, unsigned num_components);

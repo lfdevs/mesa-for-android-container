@@ -42,12 +42,12 @@ nv30_memory_barrier(struct pipe_context *pipe, unsigned flags)
          if (!nv30->vtxbuf[i].buffer)
             continue;
          if (nv30->vtxbuf[i].buffer->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
-            nv30->base.vbo_dirty = TRUE;
+            nv30->base.vbo_dirty = true;
       }
 
       if (nv30->idxbuf.buffer &&
           nv30->idxbuf.buffer->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
-         nv30->base.vbo_dirty = TRUE;
+         nv30->base.vbo_dirty = true;
    }
 }
 

@@ -165,6 +165,7 @@ struct lp_bld_tgsi_system_values {
    LLVMValueRef vertex_id_nobase;
    LLVMValueRef prim_id;
    LLVMValueRef basevertex;
+   LLVMValueRef invocation_id;
 };
 
 
@@ -337,6 +338,7 @@ struct lp_build_tgsi_context
    struct lp_build_context uint_bld;
    struct lp_build_context int_bld;
 
+   struct lp_build_context dbl_bld;
    /** This array stores functions that are used to transform TGSI opcodes to
      * LLVM instructions.
      */
@@ -348,6 +350,9 @@ struct lp_build_tgsi_context
 
    struct lp_build_tgsi_action sqrt_action;
 
+   struct lp_build_tgsi_action drsq_action;
+
+   struct lp_build_tgsi_action dsqrt_action;
    const struct tgsi_shader_info *info;
 
    lp_build_emit_fetch_fn emit_fetch_funcs[TGSI_FILE_COUNT];
@@ -557,13 +562,13 @@ struct lp_build_tgsi_aos_context
 
 };
 
-static INLINE struct lp_build_tgsi_soa_context *
+static inline struct lp_build_tgsi_soa_context *
 lp_soa_context(struct lp_build_tgsi_context *bld_base)
 {
    return (struct lp_build_tgsi_soa_context *)bld_base;
 }
 
-static INLINE struct lp_build_tgsi_aos_context *
+static inline struct lp_build_tgsi_aos_context *
 lp_aos_context(struct lp_build_tgsi_context *bld_base)
 {
    return (struct lp_build_tgsi_aos_context *)bld_base;

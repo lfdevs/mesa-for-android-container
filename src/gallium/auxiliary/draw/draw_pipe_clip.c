@@ -70,12 +70,12 @@ struct clip_stage {
 
 
 /** Cast wrapper */
-static INLINE struct clip_stage *clip_stage( struct draw_stage *stage )
+static inline struct clip_stage *clip_stage( struct draw_stage *stage )
 {
    return (struct clip_stage *)stage;
 }
 
-static INLINE unsigned
+static inline unsigned
 draw_viewport_index(struct draw_context *draw,
                     const struct vertex_header *leading_vertex)
 {
@@ -210,7 +210,7 @@ static void interp( const struct clip_stage *clip,
  * true, otherwise returns false.
  * Triangle is considered null/empty if it's area is qual to zero.
  */
-static INLINE boolean
+static inline boolean
 is_tri_null(struct draw_context *draw, const struct prim_header *header)
 {
    const unsigned pos_attr = draw_current_shader_position_output(draw);
@@ -322,7 +322,7 @@ static void emit_poly( struct draw_stage *stage,
 }
 
 
-static INLINE float
+static inline float
 dot4(const float *a, const float *b)
 {
    return (a[0] * b[0] +
@@ -336,7 +336,7 @@ dot4(const float *a, const float *b)
  * it first checks if the shader provided a clip distance, otherwise
  * it works out the value using the clipvertex
  */
-static INLINE float getclipdist(const struct clip_stage *clipper,
+static inline float getclipdist(const struct clip_stage *clipper,
                                 struct vertex_header *vert,
                                 int plane_idx)
 {

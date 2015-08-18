@@ -125,6 +125,7 @@ struct r600_pipe_shader {
 	struct r600_shader_key	key;
 	unsigned		db_shader_control;
 	unsigned		ps_depth_export;
+	unsigned		enabled_stream_buffers_mask;
 };
 
 /* return the table index 0-5 for TGSI_INTERPOLATE_LINEAR/PERSPECTIVE and

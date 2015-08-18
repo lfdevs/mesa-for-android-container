@@ -77,6 +77,7 @@ private:
    void emitMOV(const Instruction *);
 
    void emitINTERP(const Instruction *);
+   void emitAFETCH(const Instruction *);
    void emitPFETCH(const Instruction *);
    void emitVFETCH(const Instruction *);
    void emitEXPORT(const Instruction *);
@@ -119,6 +120,8 @@ private:
    void emitQUADOP(const Instruction *, uint8_t qOp, uint8_t laneMask);
 
    void emitPIXLD(const Instruction *);
+
+   void emitBAR(const Instruction *);
 
    void emitFlow(const Instruction *);
 
@@ -967,8 +970,8 @@ CodeEmitterGK110::emitSET(const CmpInstruction *i)
       code[0] = (code[0] & ~0xfc) | ((code[0] << 3) & 0xe0);
       if (i->defExists(1))
          defId(i->def(1), 2);
-   else
-      code[0] |= 0x1c;
+      else
+         code[0] |= 0x1c;
    } else {
       switch (i->sType) {
       case TYPE_F32: op2 = 0x000; op1 = 0x800; break;
@@ -990,8 +993,12 @@ CodeEmitterGK110::emitSET(const CmpInstruction *i)
       }
       FTZ_(3a);
 
-      if (i->dType == TYPE_F32)
-         code[1] |= 1 << 23;
+      if (i->dType == TYPE_F32) {
+         if (isFloatType(i->sType))
+            code[1] |= 1 << 23;
+         else
+            code[1] |= 1 << 15;
+      }
    }
    if (i->sType == TYPE_S32)
       code[1] |= 1 << 19;
@@ -1246,6 +1253,13 @@ CodeEmitterGK110::emitPIXLD(const Instruction *i)
 }
 
 void
+CodeEmitterGK110::emitBAR(const Instruction *i)
+{
+   /* TODO */
+   emitNOP(i);
+}
+
+void
 CodeEmitterGK110::emitFlow(const Instruction *i)
 {
    const FlowInstruction *f = i->asFlow();
@@ -1316,11 +1330,30 @@ CodeEmitterGK110::emitFlow(const Instruction *i)
    } else
    if (mask & 2) {
       int32_t pcRel = f->target.bb->binPos - (codeSize + 8);
+      if (writeIssueDelays && !(f->target.bb->binPos & 0x3f))
+         pcRel += 8;
       // currently we don't want absolute branches
       assert(!f->absolute);
       code[0] |= (pcRel & 0x1ff) << 23;
       code[1] |= (pcRel >> 9) & 0x7fff;
    }
+}
+
+void
+CodeEmitterGK110::emitAFETCH(const Instruction *i)
+{
+   uint32_t offset = i->src(0).get()->reg.data.offset & 0x7ff;
+
+   code[0] = 0x00000002 | (offset << 23);
+   code[1] = 0x7d000000 | (offset >> 9);
+
+   if (i->getSrc(0)->reg.file == FILE_SHADER_OUTPUT)
+      code[1] |= 0x8;
+
+   emitPredicate(i);
+
+   defId(i->def(0), 2);
+   srcId(i->src(0).getIndirect(0), 10);
 }
 
 void
@@ -1692,6 +1725,9 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
    case OP_EXPORT:
       emitEXPORT(insn);
       break;
+   case OP_AFETCH:
+      emitAFETCH(insn);
+      break;
    case OP_PFETCH:
       emitPFETCH(insn);
       break;
@@ -1849,6 +1885,9 @@ CodeEmitterGK110::emitInstruction(Instruction *insn)
    case OP_JOIN:
       emitNOP(insn);
       insn->join = 1;
+      break;
+   case OP_BAR:
+      emitBAR(insn);
       break;
    case OP_PHI:
    case OP_UNION:

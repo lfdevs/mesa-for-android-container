@@ -239,10 +239,10 @@ setup_coord_coeff(GLuint prog, GLuint multiplier, GLuint offset,
 
    if (mirror) {
       _mesa_Uniform1f(multiplier, -scale);
-      _mesa_Uniform1f(offset, src_0 + (dst_1 - 0.5) * scale);
+      _mesa_Uniform1f(offset, src_0 + (dst_1 - 0.5f) * scale);
    } else {
       _mesa_Uniform1f(multiplier, scale);
-      _mesa_Uniform1f(offset, src_0 + (-dst_0 + 0.5) * scale);
+      _mesa_Uniform1f(offset, src_0 + (-dst_0 + 0.5f) * scale);
    }
 }
 
@@ -414,6 +414,12 @@ brw_meta_stencil_blit(struct brw_context *brw,
    GLenum target;
 
    _mesa_meta_fb_tex_blit_begin(ctx, &blit);
+   /* XXX: Pretend to support stencil textures so _mesa_base_tex_format()
+    * returns a valid format.  When we properly support the extension, we
+    * should remove this.
+    */
+   assert(ctx->Extensions.ARB_texture_stencil8 == false);
+   ctx->Extensions.ARB_texture_stencil8 = true;
 
    _mesa_GenFramebuffers(1, &fbo);
    /* Force the surface to be configured for level zero. */
@@ -451,6 +457,7 @@ brw_meta_stencil_blit(struct brw_context *brw,
    _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
 error:
+   ctx->Extensions.ARB_texture_stencil8 = false;
    _mesa_meta_fb_tex_blit_end(ctx, target, &blit);
    _mesa_meta_end(ctx);
 
@@ -493,11 +500,11 @@ brw_meta_fbo_stencil_blit(struct brw_context *brw,
                              .mirror_x = mirror_x, .mirror_y = mirror_y };
    adjust_mip_level(dst_mt, dst_irb->mt_level, dst_irb->mt_layer, &dims);
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
    _mesa_meta_begin(ctx, MESA_META_ALL);
    brw_meta_stencil_blit(brw,
                          dst_mt, dst_irb->mt_level, dst_irb->mt_layer, &dims);
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 }
 
 void
@@ -517,7 +524,7 @@ brw_meta_stencil_updownsample(struct brw_context *brw,
    if (dst->stencil_mt)
       dst = dst->stencil_mt;
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
    _mesa_meta_begin(ctx, MESA_META_ALL);
 
    _mesa_GenFramebuffers(1, &fbo);
@@ -528,7 +535,7 @@ brw_meta_stencil_updownsample(struct brw_context *brw,
                                  GL_RENDERBUFFER, rbo);
 
    brw_meta_stencil_blit(brw, dst, 0, 0, &dims);
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    _mesa_DeleteRenderbuffers(1, &rbo);
    _mesa_DeleteFramebuffers(1, &fbo);

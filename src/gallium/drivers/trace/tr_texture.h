@@ -85,7 +85,7 @@ struct trace_transfer
 };
 
 
-static INLINE struct trace_resource *
+static inline struct trace_resource *
 trace_resource(struct pipe_resource *texture)
 {
    if(!texture)
@@ -95,7 +95,7 @@ trace_resource(struct pipe_resource *texture)
 }
 
 
-static INLINE struct trace_surface *
+static inline struct trace_surface *
 trace_surface(struct pipe_surface *surface)
 {
    if(!surface)
@@ -105,7 +105,7 @@ trace_surface(struct pipe_surface *surface)
 }
 
 
-static INLINE struct trace_sampler_view *
+static inline struct trace_sampler_view *
 trace_sampler_view(struct pipe_sampler_view *sampler_view)
 {
    if (!sampler_view)
@@ -114,7 +114,7 @@ trace_sampler_view(struct pipe_sampler_view *sampler_view)
 }
 
 
-static INLINE struct trace_transfer *
+static inline struct trace_transfer *
 trace_transfer(struct pipe_transfer *transfer)
 {
    if(!transfer)

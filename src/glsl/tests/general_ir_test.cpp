@@ -31,11 +31,7 @@ TEST(ir_variable_constructor, interface)
    void *mem_ctx = ralloc_context(NULL);
 
    static const glsl_struct_field f[] = {
-      {
-         glsl_type::vec(4),
-         "v",
-         false
-      }
+      glsl_struct_field(glsl_type::vec(4), "v")
    };
 
    const glsl_type *const interface =
@@ -60,11 +56,7 @@ TEST(ir_variable_constructor, interface_array)
    void *mem_ctx = ralloc_context(NULL);
 
    static const glsl_struct_field f[] = {
-      {
-         glsl_type::vec(4),
-         "v",
-         false
-      }
+      glsl_struct_field(glsl_type::vec(4), "v")
    };
 
    const glsl_type *const interface =

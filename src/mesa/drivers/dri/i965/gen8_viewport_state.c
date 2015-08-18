@@ -26,6 +26,7 @@
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
 #include "main/fbobject.h"
+#include "main/framebuffer.h"
 #include "main/viewport.h"
 
 static void
@@ -33,6 +34,7 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    float y_scale, y_bias;
+   const float fb_height = (float)_mesa_geometric_height(ctx->DrawBuffer);
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
    float *vp = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
@@ -47,11 +49,11 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
       y_bias = 0;
    } else {
       y_scale = -1.0;
-      y_bias = ctx->DrawBuffer->Height;
+      y_bias = fb_height;
    }
 
    for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
-      double scale[3], translate[3];
+      float scale[3], translate[3];
       _mesa_get_viewport_xform(ctx, i, scale, translate);
 
       /* _NEW_VIEWPORT: Viewport Matrix Elements */
@@ -116,8 +118,8 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
       } else {
          vp[12] = ctx->ViewportArray[i].X;
          vp[13] = viewport_Xmax - 1;
-         vp[14] = ctx->DrawBuffer->Height - viewport_Ymax;
-         vp[15] = ctx->DrawBuffer->Height - ctx->ViewportArray[i].Y - 1;
+         vp[14] = fb_height - viewport_Ymax;
+         vp[15] = fb_height - ctx->ViewportArray[i].Y - 1;
       }
 
       vp += 16;

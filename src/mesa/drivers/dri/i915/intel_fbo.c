@@ -216,7 +216,7 @@ intel_alloc_private_renderbuffer_storage(struct gl_context * ctx, struct gl_rend
    intel_miptree_release(&irb->mt);
 
    DBG("%s: %s: %s (%dx%d)\n", __func__,
-       _mesa_lookup_enum_by_nr(internalFormat),
+       _mesa_enum_to_string(internalFormat),
        _mesa_get_format_name(rb->Format), width, height);
 
    if (width == 0 || height == 0)

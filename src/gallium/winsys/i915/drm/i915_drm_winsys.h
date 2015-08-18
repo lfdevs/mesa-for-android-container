@@ -28,7 +28,7 @@ struct i915_drm_winsys
    drm_intel_bufmgr *gem_manager;
 };
 
-static INLINE struct i915_drm_winsys *
+static inline struct i915_drm_winsys *
 i915_drm_winsys(struct i915_winsys *iws)
 {
    return (struct i915_drm_winsys *)iws;
@@ -58,13 +58,13 @@ struct i915_drm_buffer {
    unsigned flink;
 };
 
-static INLINE struct i915_drm_buffer *
+static inline struct i915_drm_buffer *
 i915_drm_buffer(struct i915_winsys_buffer *buffer)
 {
    return (struct i915_drm_buffer *)buffer;
 }
 
-static INLINE drm_intel_bo *
+static inline drm_intel_bo *
 intel_bo(struct i915_winsys_buffer *buffer)
 {
    return i915_drm_buffer(buffer)->bo;

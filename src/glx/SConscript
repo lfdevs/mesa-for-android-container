@@ -125,7 +125,7 @@ env.CodeGenerate(
     target = 'indirect_size.h',
     script = GLAPI + 'gen/glX_proto_size.py',
     source = sources,
-    command = python_cmd + ' $SCRIPT -f $SOURCE -m size_h --only-set -h _INDIRECT_SIZE_H > $TARGET'
+    command = python_cmd + ' $SCRIPT -f $SOURCE -m size_h --only-set --header-tag _INDIRECT_SIZE_H > $TARGET'
 )
 
 env.CodeGenerate(

@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,13 +22,13 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 
 /**
  * @file
- * 
+ *
  * Abstract graphics pipe state objects.
  *
  * Basic notes:
@@ -61,7 +61,8 @@ extern "C" {
 #define PIPE_MAX_SHADER_INPUTS    80 /* 32 GENERIC + 32 PATCH + 16 others */
 #define PIPE_MAX_SHADER_OUTPUTS   80 /* 32 GENERIC + 32 PATCH + 16 others */
 #define PIPE_MAX_SHADER_SAMPLER_VIEWS 32
-#define PIPE_MAX_SHADER_RESOURCES 32
+#define PIPE_MAX_SHADER_BUFFERS   32
+#define PIPE_MAX_SHADER_IMAGES    32
 #define PIPE_MAX_TEXTURE_LEVELS   16
 #define PIPE_MAX_SO_BUFFERS        4
 #define PIPE_MAX_SO_OUTPUTS       64
@@ -217,11 +218,14 @@ struct pipe_shader_state
 };
 
 
-struct pipe_depth_state 
+struct pipe_depth_state
 {
    unsigned enabled:1;         /**< depth test enabled? */
    unsigned writemask:1;       /**< allow depth buffer writes? */
    unsigned func:3;            /**< depth test func (PIPE_FUNC_x) */
+   unsigned bounds_test:1;     /**< depth bounds test enabled? */
+   float bounds_min;           /**< minimum depth bound */
+   float bounds_max;           /**< maximum depth bound */
 };
 
 
@@ -268,6 +272,7 @@ struct pipe_rt_blend_state
    unsigned colormask:4;         /**< bitmask of PIPE_MASK_R/G/B/A */
 };
 
+
 struct pipe_blend_state
 {
    unsigned independent_blend_enable:1;
@@ -285,10 +290,12 @@ struct pipe_blend_color
    float color[4];
 };
 
+
 struct pipe_stencil_ref
 {
    ubyte ref_value[2];
 };
+
 
 struct pipe_framebuffer_state
 {
@@ -367,10 +374,10 @@ struct pipe_sampler_view
    struct pipe_context *context; /**< context this view belongs to */
    union {
       struct {
-         unsigned first_layer:16;     /**< first layer to use for array textures */
-         unsigned last_layer:16;      /**< last layer to use for array textures */
-         unsigned first_level:8;      /**< first mipmap level to use */
-         unsigned last_level:8;       /**< last mipmap level to use */
+         unsigned first_layer:16;  /**< first layer to use for array textures */
+         unsigned last_layer:16;   /**< last layer to use for array textures */
+         unsigned first_level:8;   /**< first mipmap level to use */
+         unsigned last_level:8;    /**< last mipmap level to use */
       } tex;
       struct {
          unsigned first_element;
@@ -381,6 +388,31 @@ struct pipe_sampler_view
    unsigned swizzle_g:3;         /**< PIPE_SWIZZLE_x for green component */
    unsigned swizzle_b:3;         /**< PIPE_SWIZZLE_x for blue component */
    unsigned swizzle_a:3;         /**< PIPE_SWIZZLE_x for alpha component */
+};
+
+
+/**
+ * A view into a writable buffer or texture that can be bound to a shader
+ * stage.
+ */
+struct pipe_image_view
+{
+   struct pipe_reference reference;
+   struct pipe_resource *resource; /**< resource into which this is a view  */
+   struct pipe_context *context; /**< context this view belongs to */
+   enum pipe_format format;      /**< typed PIPE_FORMAT_x */
+
+   union {
+      struct {
+         unsigned first_layer:16;     /**< first layer to use for array textures */
+         unsigned last_layer:16;      /**< last layer to use for array textures */
+         unsigned level:8;            /**< mipmap level to use */
+      } tex;
+      struct {
+         unsigned first_element;
+         unsigned last_element;
+      } buf;
+   } u;
 };
 
 
@@ -455,11 +487,22 @@ struct pipe_vertex_buffer
  * A constant buffer.  A subrange of an existing buffer can be set
  * as a constant buffer.
  */
-struct pipe_constant_buffer {
+struct pipe_constant_buffer
+{
    struct pipe_resource *buffer; /**< the actual buffer */
    unsigned buffer_offset; /**< offset to start of data in buffer, in bytes */
    unsigned buffer_size;   /**< how much data can be read in shader */
    const void *user_buffer;  /**< pointer to a user buffer if buffer == NULL */
+};
+
+
+/**
+ * An untyped shader buffer supporting loads, stores, and atomics.
+ */
+struct pipe_shader_buffer {
+   struct pipe_resource *buffer; /**< the actual buffer */
+   unsigned buffer_offset; /**< offset to start of data in buffer, in bytes */
+   unsigned buffer_size;   /**< how much data can be read in shader */
 };
 
 
@@ -474,8 +517,8 @@ struct pipe_constant_buffer {
  * and the CPU actually doesn't have to query it.
  *
  * Note that the buffer_size variable is actually specifying the available
- * space in the buffer, not the size of the attached buffer. 
- * In other words in majority of cases buffer_size would simply be 
+ * space in the buffer, not the size of the attached buffer.
+ * In other words in majority of cases buffer_size would simply be
  * 'buffer->width0 - buffer_offset', so buffer_size refers to the size
  * of the buffer left, after accounting for buffer offset, for stream output
  * to write to.
@@ -511,7 +554,7 @@ struct pipe_vertex_element
     * this attribute live in?
     */
    unsigned vertex_buffer_index;
- 
+
    enum pipe_format src_format;
 };
 
@@ -642,5 +685,5 @@ struct pipe_compute_state
 #ifdef __cplusplus
 }
 #endif
-   
+
 #endif

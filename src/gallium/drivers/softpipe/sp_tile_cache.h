@@ -128,7 +128,7 @@ sp_find_cached_tile(struct softpipe_tile_cache *tc,
                     union tile_address addr );
 
 
-static INLINE union tile_address
+static inline union tile_address
 tile_address( unsigned x,
               unsigned y, unsigned layer )
 {
@@ -143,7 +143,7 @@ tile_address( unsigned x,
 
 /* Quickly retrieve tile if it matches last lookup.
  */
-static INLINE struct softpipe_cached_tile *
+static inline struct softpipe_cached_tile *
 sp_get_cached_tile(struct softpipe_tile_cache *tc, 
                    int x, int y, int layer )
 {

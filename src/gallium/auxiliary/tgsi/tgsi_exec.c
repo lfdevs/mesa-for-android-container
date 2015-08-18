@@ -735,7 +735,7 @@ static const union tgsi_exec_channel M128Vec = {
  * not lead to crashes, etc.  But when debugging, it's helpful to catch
  * them.
  */
-static INLINE void
+static inline void
 check_inf_or_nan(const union tgsi_exec_channel *chan)
 {
    assert(!util_is_inf_or_nan((chan)->f[0]));
@@ -1765,14 +1765,12 @@ store_dest(struct tgsi_exec_machine *mach,
    if (!dst)
       return;
 
-   switch (inst->Instruction.Saturate) {
-   case TGSI_SAT_NONE:
+   if (!inst->Instruction.Saturate) {
       for (i = 0; i < TGSI_QUAD_SIZE; i++)
          if (execmask & (1 << i))
             dst->i[i] = chan->i[i];
-      break;
-
-   case TGSI_SAT_ZERO_ONE:
+   }
+   else {
       for (i = 0; i < TGSI_QUAD_SIZE; i++)
          if (execmask & (1 << i)) {
             if (chan->f[i] < 0.0f)
@@ -1782,22 +1780,6 @@ store_dest(struct tgsi_exec_machine *mach,
             else
                dst->i[i] = chan->i[i];
          }
-      break;
-
-   case TGSI_SAT_MINUS_PLUS_ONE:
-      for (i = 0; i < TGSI_QUAD_SIZE; i++)
-         if (execmask & (1 << i)) {
-            if (chan->f[i] < -1.0f)
-               dst->f[i] = -1.0f;
-            else if (chan->f[i] > 1.0f)
-               dst->f[i] = 1.0f;
-            else
-               dst->i[i] = chan->i[i];
-         }
-      break;
-
-   default:
-      assert( 0 );
    }
 }
 
@@ -1952,7 +1934,7 @@ fetch_texel( struct tgsi_sampler *sampler,
 #define TEX_MODIFIER_LOD_BIAS       2
 #define TEX_MODIFIER_EXPLICIT_LOD   3
 #define TEX_MODIFIER_LEVEL_ZERO     4
-
+#define TEX_MODIFIER_GATHER         5
 
 /*
  * Fetch all 3 (for s,t,r coords) texel offsets, put them into int array.
@@ -2006,6 +1988,35 @@ fetch_assign_deriv_channel(struct tgsi_exec_machine *mach,
    derivs[1][3] = d.f[3];
 }
 
+static uint
+fetch_sampler_unit(struct tgsi_exec_machine *mach,
+                   const struct tgsi_full_instruction *inst,
+                   uint sampler)
+{
+   uint unit;
+
+   if (inst->Src[sampler].Register.Indirect) {
+      const struct tgsi_full_src_register *reg = &inst->Src[sampler];
+      union tgsi_exec_channel indir_index, index2;
+
+      index2.i[0] =
+      index2.i[1] =
+      index2.i[2] =
+      index2.i[3] = reg->Indirect.Index;
+
+      fetch_src_file_channel(mach,
+                             0,
+                             reg->Indirect.File,
+                             reg->Indirect.Swizzle,
+                             &index2,
+                             &ZeroVec,
+                             &indir_index);
+      unit = inst->Src[sampler].Register.Index + indir_index.i[0];
+   } else {
+      unit = inst->Src[sampler].Register.Index;
+   }
+   return unit;
+}
 
 /*
  * execute a texture instruction.
@@ -2019,14 +2030,15 @@ exec_tex(struct tgsi_exec_machine *mach,
          const struct tgsi_full_instruction *inst,
          uint modifier, uint sampler)
 {
-   const uint unit = inst->Src[sampler].Register.Index;
    const union tgsi_exec_channel *args[5], *proj = NULL;
    union tgsi_exec_channel r[5];
    enum tgsi_sampler_control control =  tgsi_sampler_lod_none;
    uint chan;
+   uint unit;
    int8_t offsets[3];
    int dim, shadow_ref, i;
 
+   unit = fetch_sampler_unit(mach, inst, sampler);
    /* always fetch all 3 offsets, overkill but keeps code simple */
    fetch_texel_offsets(mach, inst, offsets);
 
@@ -2069,6 +2081,8 @@ exec_tex(struct tgsi_exec_machine *mach,
          control = tgsi_sampler_lod_explicit;
       else if (modifier == TEX_MODIFIER_LOD_BIAS)
          control = tgsi_sampler_lod_bias;
+      else if (modifier == TEX_MODIFIER_GATHER)
+         control = tgsi_sampler_gather;
    }
    else {
       for (i = dim; i < Elements(args); i++)
@@ -2123,12 +2137,13 @@ static void
 exec_txd(struct tgsi_exec_machine *mach,
          const struct tgsi_full_instruction *inst)
 {
-   const uint unit = inst->Src[3].Register.Index;
    union tgsi_exec_channel r[4];
    float derivs[3][2][TGSI_QUAD_SIZE];
    uint chan;
+   uint unit;
    int8_t offsets[3];
 
+   unit = fetch_sampler_unit(mach, inst, 3);
    /* always fetch all 3 offsets, overkill but keeps code simple */
    fetch_texel_offsets(mach, inst, offsets);
 
@@ -2230,14 +2245,15 @@ static void
 exec_txf(struct tgsi_exec_machine *mach,
          const struct tgsi_full_instruction *inst)
 {
-   const uint unit = inst->Src[1].Register.Index;
    union tgsi_exec_channel r[4];
    uint chan;
+   uint unit;
    float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE];
    int j;
    int8_t offsets[3];
    unsigned target;
 
+   unit = fetch_sampler_unit(mach, inst, 1);
    /* always fetch all 3 offsets, overkill but keeps code simple */
    fetch_texel_offsets(mach, inst, offsets);
 
@@ -2312,11 +2328,13 @@ static void
 exec_txq(struct tgsi_exec_machine *mach,
          const struct tgsi_full_instruction *inst)
 {
-   const uint unit = inst->Src[1].Register.Index;
    int result[4];
    union tgsi_exec_channel r[4], src;
    uint chan;
+   uint unit;
    int i,j;
+
+   unit = fetch_sampler_unit(mach, inst, 1);
 
    fetch_source(mach, &src, &inst->Src[0], TGSI_CHAN_X, TGSI_EXEC_DATA_INT);
 
@@ -3315,16 +3333,14 @@ store_double_channel(struct tgsi_exec_machine *mach,
    union tgsi_double_channel temp;
    const uint execmask = mach->ExecMask;
 
-   switch (inst->Instruction.Saturate) {
-   case TGSI_SAT_NONE:
+   if (!inst->Instruction.Saturate) {
       for (i = 0; i < TGSI_QUAD_SIZE; i++)
          if (execmask & (1 << i)) {
             dst[0].u[i] = chan->u[i][0];
             dst[1].u[i] = chan->u[i][1];
          }
-      break;
-
-   case TGSI_SAT_ZERO_ONE:
+   }
+   else {
       for (i = 0; i < TGSI_QUAD_SIZE; i++)
          if (execmask & (1 << i)) {
             if (chan->d[i] < 0.0)
@@ -3337,25 +3353,6 @@ store_double_channel(struct tgsi_exec_machine *mach,
             dst[0].u[i] = temp.u[i][0];
             dst[1].u[i] = temp.u[i][1];
          }
-      break;
-
-   case TGSI_SAT_MINUS_PLUS_ONE:
-      for (i = 0; i < TGSI_QUAD_SIZE; i++)
-         if (execmask & (1 << i)) {
-            if (chan->d[i] < -1.0)
-               temp.d[i] = -1.0;
-            else if (chan->d[i] > 1.0)
-               temp.d[i] = 1.0;
-            else
-               temp.d[i] = chan->d[i];
-
-            dst[0].u[i] = temp.u[i][0];
-            dst[1].u[i] = temp.u[i][1];
-         }
-      break;
-
-   default:
-      assert( 0 );
    }
 
    store_dest_double(mach, &dst[0], reg, inst, chan_0, TGSI_EXEC_DATA_UINT);
@@ -4374,6 +4371,13 @@ exec_instruction(
       exec_tex(mach, inst, TEX_MODIFIER_PROJECTED, 1);
       break;
 
+   case TGSI_OPCODE_TG4:
+      /* src[0] = texcoord */
+      /* src[1] = component */
+      /* src[2] = sampler unit */
+      exec_tex(mach, inst, TEX_MODIFIER_GATHER, 2);
+      break;
+
    case TGSI_OPCODE_UP2H:
       assert (0);
       break;
@@ -4431,8 +4435,12 @@ exec_instruction(
          mach->BreakStack[mach->BreakStackTop++] = mach->BreakType;
          mach->FuncStack[mach->FuncStackTop++] = mach->FuncMask;
 
-         /* Finally, jump to the subroutine */
+         /* Finally, jump to the subroutine.  The label is a pointer
+          * (an instruction number) to the BGNSUB instruction.
+          */
          *pc = inst->Label.Label;
+         assert(mach->Instructions[*pc].Instruction.Opcode
+                == TGSI_OPCODE_BGNSUB);
       }
       break;
 

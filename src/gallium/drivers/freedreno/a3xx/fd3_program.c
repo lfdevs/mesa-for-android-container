@@ -51,7 +51,7 @@ create_shader_stateobj(struct pipe_context *pctx, const struct pipe_shader_state
 		enum shader_t type)
 {
 	struct fd3_shader_stateobj *so = CALLOC_STRUCT(fd3_shader_stateobj);
-	so->shader = ir3_shader_create(pctx, cso->tokens, type);
+	so->shader = ir3_shader_create(pctx, cso, type);
 	return so;
 }
 
@@ -136,6 +136,8 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	int constmode;
 	int i, j, k;
 
+	debug_assert(nr <= ARRAY_SIZE(color_regid));
+
 	vp = fd3_emit_get_vp(emit);
 
 	if (emit->key.binning_pass) {
@@ -202,12 +204,12 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 		color_regid[0] = color_regid[1] = color_regid[2] = color_regid[3] =
 			ir3_find_output_regid(fp, ir3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
 	} else {
-		for (int i = 0; i < fp->outputs_count; i++) {
+		for (i = 0; i < fp->outputs_count; i++) {
 			ir3_semantic sem = fp->outputs[i].semantic;
 			unsigned idx = sem2idx(sem);
 			if (sem2name(sem) != TGSI_SEMANTIC_COLOR)
 				continue;
-			assert(idx < 4);
+			debug_assert(idx < ARRAY_SIZE(color_regid));
 			color_regid[idx] = fp->outputs[i].regid;
 		}
 	}
@@ -448,10 +450,6 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 		OUT_RING(ring, flatshade[0]);        /* SP_FS_FLAT_SHAD_MODE_REG_0 */
 		OUT_RING(ring, flatshade[1]);        /* SP_FS_FLAT_SHAD_MODE_REG_1 */
 	}
-
-	OUT_PKT0(ring, REG_A3XX_VFD_VS_THREADING_THRESHOLD, 1);
-	OUT_RING(ring, A3XX_VFD_VS_THREADING_THRESHOLD_REGID_THRESHOLD(15) |
-			A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT(252));
 
 	if (vpbuffer == BUFFER)
 		emit_shader(ring, vp);

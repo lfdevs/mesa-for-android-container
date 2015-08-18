@@ -76,7 +76,7 @@ struct svga_vbuf_render {
 /**
  * Basically a cast wrapper.
  */
-static INLINE struct svga_vbuf_render *
+static inline struct svga_vbuf_render *
 svga_vbuf_render( struct vbuf_render *render )
 {
    assert(render);

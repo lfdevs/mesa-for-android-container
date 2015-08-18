@@ -28,6 +28,8 @@
 #ifndef TR_PUBLIC_H
 #define TR_PUBLIC_H
 
+#include "pipe/p_compiler.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

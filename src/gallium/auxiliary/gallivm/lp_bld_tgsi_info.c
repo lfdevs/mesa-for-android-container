@@ -462,7 +462,7 @@ analyse_instruction(struct analysis_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 dump_info(const struct tgsi_token *tokens,
           struct lp_tgsi_info *info)
 {

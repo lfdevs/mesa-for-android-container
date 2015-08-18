@@ -57,7 +57,7 @@ static const unsigned svga_hw_prims =
  * PIPE_PRIM_QUADS, PIPE_PRIM_QUAD_STRIP or PIPE_PRIM_POLYGON.  We convert
  * those to other types of primitives with index/translation code.
  */
-static INLINE unsigned
+static inline unsigned
 svga_translate_prim(unsigned mode, unsigned vcount,unsigned *prim_count)
 {
    switch (mode) {

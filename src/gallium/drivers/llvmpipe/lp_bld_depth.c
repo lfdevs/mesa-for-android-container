@@ -975,10 +975,6 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
                                          s_bld.int_vec_type, "");
       }
 
-      /* convert scalar stencil refs into vectors */
-      stencil_refs[0] = lp_build_broadcast_scalar(&s_bld, stencil_refs[0]);
-      stencil_refs[1] = lp_build_broadcast_scalar(&s_bld, stencil_refs[1]);
-
       s_pass_mask = lp_build_stencil_test(&s_bld, stencil,
                                           stencil_refs, stencil_vals,
                                           front_facing);

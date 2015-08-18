@@ -40,7 +40,7 @@ struct fd_surface {
 	uint16_t depth;
 };
 
-static INLINE struct fd_surface *
+static inline struct fd_surface *
 fd_surface(struct pipe_surface *psurf)
 {
 	return (struct fd_surface *)psurf;

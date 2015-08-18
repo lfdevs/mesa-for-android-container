@@ -30,6 +30,7 @@
 
 #include "glxclient.h"
 #include "indirect.h"
+#include "util/rounding.h"
 
 #if !defined(__GNUC__)
 #  define __builtin_expect(x, y) x
@@ -77,7 +78,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
 
    switch (pname) {
    case GL_PACK_ROW_LENGTH:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -85,7 +86,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storePack.rowLength = a;
       break;
    case GL_PACK_IMAGE_HEIGHT:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -93,7 +94,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storePack.imageHeight = a;
       break;
    case GL_PACK_SKIP_ROWS:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -101,7 +102,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storePack.skipRows = a;
       break;
    case GL_PACK_SKIP_PIXELS:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -109,7 +110,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storePack.skipPixels = a;
       break;
    case GL_PACK_SKIP_IMAGES:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -117,7 +118,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storePack.skipImages = a;
       break;
    case GL_PACK_ALIGNMENT:
-      a = (GLint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       switch (a) {
       case 1:
       case 2:
@@ -138,7 +139,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       break;
 
    case GL_UNPACK_ROW_LENGTH:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -146,7 +147,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storeUnpack.rowLength = a;
       break;
    case GL_UNPACK_IMAGE_HEIGHT:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -154,7 +155,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storeUnpack.imageHeight = a;
       break;
    case GL_UNPACK_SKIP_ROWS:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -162,7 +163,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storeUnpack.skipRows = a;
       break;
    case GL_UNPACK_SKIP_PIXELS:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -170,7 +171,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storeUnpack.skipPixels = a;
       break;
    case GL_UNPACK_SKIP_IMAGES:
-      a = (GLuint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       if (((GLint) a) < 0) {
          __glXSetError(gc, GL_INVALID_VALUE);
          return;
@@ -178,7 +179,7 @@ __indirect_glPixelStoref(GLenum pname, GLfloat param)
       state->storeUnpack.skipImages = a;
       break;
    case GL_UNPACK_ALIGNMENT:
-      a = (GLint) (param + 0.5);
+      a = _mesa_lroundevenf(param);
       switch (a) {
       case 1:
       case 2:

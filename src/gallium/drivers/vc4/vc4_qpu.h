@@ -122,23 +122,23 @@ static inline struct qpu_reg qpu_r3(void) { return qpu_rn(3); }
 static inline struct qpu_reg qpu_r4(void) { return qpu_rn(4); }
 static inline struct qpu_reg qpu_r5(void) { return qpu_rn(5); }
 
-uint64_t qpu_NOP(void);
-uint64_t qpu_a_MOV(struct qpu_reg dst, struct qpu_reg src);
-uint64_t qpu_m_MOV(struct qpu_reg dst, struct qpu_reg src);
+uint64_t qpu_NOP(void) ATTRIBUTE_CONST;
+uint64_t qpu_a_MOV(struct qpu_reg dst, struct qpu_reg src) ATTRIBUTE_CONST;
+uint64_t qpu_m_MOV(struct qpu_reg dst, struct qpu_reg src) ATTRIBUTE_CONST;
 uint64_t qpu_a_alu2(enum qpu_op_add op, struct qpu_reg dst,
-                    struct qpu_reg src0, struct qpu_reg src1);
+                    struct qpu_reg src0, struct qpu_reg src1) ATTRIBUTE_CONST;
 uint64_t qpu_m_alu2(enum qpu_op_mul op, struct qpu_reg dst,
-                    struct qpu_reg src0, struct qpu_reg src1);
-uint64_t qpu_merge_inst(uint64_t a, uint64_t b);
-uint64_t qpu_load_imm_ui(struct qpu_reg dst, uint32_t val);
-uint64_t qpu_set_sig(uint64_t inst, uint32_t sig);
-uint64_t qpu_set_cond_add(uint64_t inst, uint32_t cond);
-uint64_t qpu_set_cond_mul(uint64_t inst, uint32_t cond);
-uint32_t qpu_encode_small_immediate(uint32_t i);
+                    struct qpu_reg src0, struct qpu_reg src1) ATTRIBUTE_CONST;
+uint64_t qpu_merge_inst(uint64_t a, uint64_t b) ATTRIBUTE_CONST;
+uint64_t qpu_load_imm_ui(struct qpu_reg dst, uint32_t val) ATTRIBUTE_CONST;
+uint64_t qpu_set_sig(uint64_t inst, uint32_t sig) ATTRIBUTE_CONST;
+uint64_t qpu_set_cond_add(uint64_t inst, uint32_t cond) ATTRIBUTE_CONST;
+uint64_t qpu_set_cond_mul(uint64_t inst, uint32_t cond) ATTRIBUTE_CONST;
+uint32_t qpu_encode_small_immediate(uint32_t i) ATTRIBUTE_CONST;
 
-bool qpu_waddr_is_tlb(uint32_t waddr);
-bool qpu_inst_is_tlb(uint64_t inst);
-int qpu_num_sf_accesses(uint64_t inst);
+bool qpu_waddr_is_tlb(uint32_t waddr) ATTRIBUTE_CONST;
+bool qpu_inst_is_tlb(uint64_t inst) ATTRIBUTE_CONST;
+int qpu_num_sf_accesses(uint64_t inst) ATTRIBUTE_CONST;
 void qpu_serialize_one_inst(struct vc4_compile *c, uint64_t inst);
 
 static inline uint64_t

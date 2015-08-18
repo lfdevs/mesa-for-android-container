@@ -111,7 +111,7 @@ static const float cos_constants[4] = { 1.0,
 /**
  * component-wise negation of ureg
  */
-static INLINE int
+static inline int
 negate(int reg, int x, int y, int z, int w)
 {
    /* Another neat thing about the UREG representation */
@@ -329,7 +329,7 @@ get_result_flags(const struct i915_full_instruction *inst)
       = inst->Dst[0].Register.WriteMask;
    uint flags = 0x0;
 
-   if (inst->Instruction.Saturate == TGSI_SAT_ZERO_ONE)
+   if (inst->Instruction.Saturate)
       flags |= A0_DEST_SATURATE;
 
    if (writeMask & TGSI_WRITEMASK_X)

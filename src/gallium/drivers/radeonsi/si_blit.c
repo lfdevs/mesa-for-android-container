@@ -57,17 +57,19 @@ static void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
 	util_blitter_save_rasterizer(sctx->blitter, sctx->queued.named.rasterizer);
 	util_blitter_save_fragment_shader(sctx->blitter, sctx->ps_shader);
 	util_blitter_save_geometry_shader(sctx->blitter, sctx->gs_shader);
+	util_blitter_save_tessctrl_shader(sctx->blitter, sctx->tcs_shader);
+	util_blitter_save_tesseval_shader(sctx->blitter, sctx->tes_shader);
 	util_blitter_save_vertex_shader(sctx->blitter, sctx->vs_shader);
 	util_blitter_save_vertex_elements(sctx->blitter, sctx->vertex_elements);
 	if (sctx->queued.named.sample_mask) {
 		util_blitter_save_sample_mask(sctx->blitter,
 					      sctx->queued.named.sample_mask->sample_mask);
 	}
-	if (sctx->queued.named.viewport) {
-		util_blitter_save_viewport(sctx->blitter, &sctx->queued.named.viewport->viewport);
+	if (sctx->queued.named.viewport[0]) {
+		util_blitter_save_viewport(sctx->blitter, &sctx->queued.named.viewport[0]->viewport);
 	}
-	if (sctx->queued.named.scissor) {
-		util_blitter_save_scissor(sctx->blitter, &sctx->queued.named.scissor->scissor);
+	if (sctx->queued.named.scissor[0]) {
+		util_blitter_save_scissor(sctx->blitter, &sctx->queued.named.scissor[0]->scissor);
 	}
 	util_blitter_save_vertex_buffer_slot(sctx->blitter, sctx->vertex_buffer);
 	util_blitter_save_so_targets(sctx->blitter, sctx->b.streamout.num_targets,
@@ -146,7 +148,7 @@ static void si_blit_decompress_depth(struct pipe_context *ctx,
 				struct pipe_surface *zsurf, *cbsurf, surf_tmpl;
 
 				sctx->dbcb_copy_sample = sample;
-				sctx->db_render_state.dirty = true;
+				si_mark_atom_dirty(sctx, &sctx->db_render_state);
 
 				surf_tmpl.format = texture->resource.b.b.format;
 				surf_tmpl.u.tex.level = level;
@@ -180,7 +182,7 @@ static void si_blit_decompress_depth(struct pipe_context *ctx,
 
 	sctx->dbcb_depth_copy_enabled = false;
 	sctx->dbcb_stencil_copy_enabled = false;
-	sctx->db_render_state.dirty = true;
+	si_mark_atom_dirty(sctx, &sctx->db_render_state);
 }
 
 static void si_blit_decompress_depth_in_place(struct si_context *sctx,
@@ -192,7 +194,7 @@ static void si_blit_decompress_depth_in_place(struct si_context *sctx,
 	unsigned layer, max_layer, checked_last_layer, level;
 
 	sctx->db_inplace_flush_enabled = true;
-	sctx->db_render_state.dirty = true;
+	si_mark_atom_dirty(sctx, &sctx->db_render_state);
 
 	surf_tmpl.format = texture->resource.b.b.format;
 
@@ -230,7 +232,7 @@ static void si_blit_decompress_depth_in_place(struct si_context *sctx,
 	}
 
 	sctx->db_inplace_flush_enabled = false;
-	sctx->db_render_state.dirty = true;
+	si_mark_atom_dirty(sctx, &sctx->db_render_state);
 }
 
 void si_flush_depth_textures(struct si_context *sctx,
@@ -340,6 +342,8 @@ static void si_clear(struct pipe_context *ctx, unsigned buffers,
 	if (buffers & PIPE_CLEAR_COLOR) {
 		evergreen_do_fast_color_clear(&sctx->b, fb, &sctx->framebuffer.atom,
 					      &buffers, color);
+		if (!buffers)
+			return; /* all buffers have been fast cleared */
 	}
 
 	if (buffers & PIPE_CLEAR_COLOR) {
@@ -374,9 +378,9 @@ static void si_clear(struct pipe_context *ctx, unsigned buffers,
 		}
 
 		zstex->depth_clear_value = depth;
-		sctx->framebuffer.atom.dirty = true; /* updates DB_DEPTH_CLEAR */
+		si_mark_atom_dirty(sctx, &sctx->framebuffer.atom); /* updates DB_DEPTH_CLEAR */
 		sctx->db_depth_clear = true;
-		sctx->db_render_state.dirty = true;
+		si_mark_atom_dirty(sctx, &sctx->db_render_state);
 	}
 
 	si_blitter_begin(ctx, SI_CLEAR);
@@ -389,7 +393,7 @@ static void si_clear(struct pipe_context *ctx, unsigned buffers,
 		sctx->db_depth_clear = false;
 		sctx->db_depth_disable_expclear = false;
 		zstex->depth_cleared = true;
-		sctx->db_render_state.dirty = true;
+		si_mark_atom_dirty(sctx, &sctx->db_render_state);
 	}
 }
 
@@ -455,89 +459,6 @@ struct texture_orig_info {
 	unsigned npix0_y;
 };
 
-static void si_compressed_to_blittable(struct pipe_resource *tex,
-				       unsigned level,
-				       struct texture_orig_info *orig)
-{
-	struct r600_texture *rtex = (struct r600_texture*)tex;
-	unsigned pixsize = util_format_get_blocksize(rtex->resource.b.b.format);
-	int new_format;
-	int new_height, new_width;
-
-	orig->format = tex->format;
-	orig->width0 = tex->width0;
-	orig->height0 = tex->height0;
-	orig->npix0_x = rtex->surface.level[0].npix_x;
-	orig->npix0_y = rtex->surface.level[0].npix_y;
-	orig->npix_x = rtex->surface.level[level].npix_x;
-	orig->npix_y = rtex->surface.level[level].npix_y;
-
-	if (pixsize == 8)
-		new_format = PIPE_FORMAT_R16G16B16A16_UINT; /* 64-bit block */
-	else
-		new_format = PIPE_FORMAT_R32G32B32A32_UINT; /* 128-bit block */
-
-	new_width = util_format_get_nblocksx(tex->format, orig->width0);
-	new_height = util_format_get_nblocksy(tex->format, orig->height0);
-
-	tex->width0 = new_width;
-	tex->height0 = new_height;
-	tex->format = new_format;
-	rtex->surface.level[0].npix_x = util_format_get_nblocksx(orig->format, orig->npix0_x);
-	rtex->surface.level[0].npix_y = util_format_get_nblocksy(orig->format, orig->npix0_y);
-	rtex->surface.level[level].npix_x = util_format_get_nblocksx(orig->format, orig->npix_x);
-	rtex->surface.level[level].npix_y = util_format_get_nblocksy(orig->format, orig->npix_y);
-
-	/* By dividing the dimensions by 4, we effectively decrement
-	 * last_level by 2, therefore the last 2 mipmap levels disappear and
-	 * aren't blittable. Note that the last 3 mipmap levels (4x4, 2x2,
-	 * 1x1) have equal slice sizes, which is an important assumption
-	 * for this to work.
-	 *
-	 * In order to make the last 2 mipmap levels blittable, we have to
-	 * add the slice size of the last mipmap level to the texture
-	 * address, so that even though the hw thinks it reads last_level-2,
-	 * it will actually read last_level-1, and if we add the slice size*2,
-	 * it will read last_level. That's how this workaround works.
-	 */
-	if (level > rtex->resource.b.b.last_level-2)
-		rtex->mipmap_shift = level - (rtex->resource.b.b.last_level-2);
-}
-
-static void si_change_format(struct pipe_resource *tex,
-			     unsigned level,
-			     struct texture_orig_info *orig,
-			     enum pipe_format format)
-{
-	struct r600_texture *rtex = (struct r600_texture*)tex;
-
-	orig->format = tex->format;
-	orig->width0 = tex->width0;
-	orig->height0 = tex->height0;
-	orig->npix0_x = rtex->surface.level[0].npix_x;
-	orig->npix0_y = rtex->surface.level[0].npix_y;
-	orig->npix_x = rtex->surface.level[level].npix_x;
-	orig->npix_y = rtex->surface.level[level].npix_y;
-
-	tex->format = format;
-}
-
-static void si_reset_blittable_to_orig(struct pipe_resource *tex,
-				       unsigned level,
-				       struct texture_orig_info *orig)
-{
-	struct r600_texture *rtex = (struct r600_texture*)tex;
-
-	tex->format = orig->format;
-	tex->width0 = orig->width0;
-	tex->height0 = orig->height0;
-	rtex->surface.level[0].npix_x = orig->npix0_x;
-	rtex->surface.level[0].npix_y = orig->npix0_y;
-	rtex->surface.level[level].npix_x = orig->npix_x;
-	rtex->surface.level[level].npix_y = orig->npix_y;
-	rtex->mipmap_shift = 0;
-}
-
 void si_resource_copy_region(struct pipe_context *ctx,
 			     struct pipe_resource *dst,
 			     unsigned dst_level,
@@ -547,114 +468,116 @@ void si_resource_copy_region(struct pipe_context *ctx,
 			     const struct pipe_box *src_box)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
-	struct r600_texture *rdst = (struct r600_texture*)dst;
 	struct pipe_surface *dst_view, dst_templ;
 	struct pipe_sampler_view src_templ, *src_view;
-	struct texture_orig_info orig_info[2];
+	unsigned dst_width, dst_height, src_width0, src_height0;
+	unsigned src_force_level = 0;
 	struct pipe_box sbox, dstbox;
-	boolean restore_orig[2];
 
-	/* Fallback for buffers. */
+	/* Handle buffers first. */
 	if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
 		si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width, false);
 		return;
 	}
 
-	memset(orig_info, 0, sizeof(orig_info));
+	assert(u_max_sample(dst) == u_max_sample(src));
 
 	/* The driver doesn't decompress resources automatically while
 	 * u_blitter is rendering. */
 	si_decompress_subresource(ctx, src, src_level,
 				  src_box->z, src_box->z + src_box->depth - 1);
 
-	restore_orig[0] = restore_orig[1] = FALSE;
+	dst_width = u_minify(dst->width0, dst_level);
+	dst_height = u_minify(dst->height0, dst_level);
+	src_width0 = src->width0;
+	src_height0 = src->height0;
+
+	util_blitter_default_dst_texture(&dst_templ, dst, dst_level, dstz);
+	util_blitter_default_src_texture(&src_templ, src, src_level);
 
 	if (util_format_is_compressed(src->format) &&
 	    util_format_is_compressed(dst->format)) {
-		si_compressed_to_blittable(src, src_level, &orig_info[0]);
-		restore_orig[0] = TRUE;
-		sbox.x = util_format_get_nblocksx(orig_info[0].format, src_box->x);
-		sbox.y = util_format_get_nblocksy(orig_info[0].format, src_box->y);
+		unsigned blocksize = util_format_get_blocksize(src->format);
+
+		if (blocksize == 8)
+			src_templ.format = PIPE_FORMAT_R16G16B16A16_UINT; /* 64-bit block */
+		else
+			src_templ.format = PIPE_FORMAT_R32G32B32A32_UINT; /* 128-bit block */
+		dst_templ.format = src_templ.format;
+
+		dst_width = util_format_get_nblocksx(dst->format, dst_width);
+		dst_height = util_format_get_nblocksy(dst->format, dst_height);
+		src_width0 = util_format_get_nblocksx(src->format, src_width0);
+		src_height0 = util_format_get_nblocksy(src->format, src_height0);
+
+		dstx = util_format_get_nblocksx(dst->format, dstx);
+		dsty = util_format_get_nblocksy(dst->format, dsty);
+
+		sbox.x = util_format_get_nblocksx(src->format, src_box->x);
+		sbox.y = util_format_get_nblocksy(src->format, src_box->y);
 		sbox.z = src_box->z;
-		sbox.width = util_format_get_nblocksx(orig_info[0].format, src_box->width);
-		sbox.height = util_format_get_nblocksy(orig_info[0].format, src_box->height);
+		sbox.width = util_format_get_nblocksx(src->format, src_box->width);
+		sbox.height = util_format_get_nblocksy(src->format, src_box->height);
 		sbox.depth = src_box->depth;
 		src_box = &sbox;
 
-		si_compressed_to_blittable(dst, dst_level, &orig_info[1]);
-		restore_orig[1] = TRUE;
-		/* translate the dst box as well */
-		dstx = util_format_get_nblocksx(orig_info[1].format, dstx);
-		dsty = util_format_get_nblocksy(orig_info[1].format, dsty);
-	} else if (!util_blitter_is_copy_supported(sctx->blitter, dst, src)) {
+		src_force_level = src_level;
+	} else if (!util_blitter_is_copy_supported(sctx->blitter, dst, src) ||
+		   /* also *8_SNORM has precision issues, use UNORM instead */
+		   util_format_is_snorm(src->format)) {
 		if (util_format_is_subsampled_422(src->format)) {
-			/* XXX untested */
-			si_change_format(src, src_level, &orig_info[0],
-					 PIPE_FORMAT_R8G8B8A8_UINT);
-			si_change_format(dst, dst_level, &orig_info[1],
-					 PIPE_FORMAT_R8G8B8A8_UINT);
+			src_templ.format = PIPE_FORMAT_R8G8B8A8_UINT;
+			dst_templ.format = PIPE_FORMAT_R8G8B8A8_UINT;
+
+			dst_width = util_format_get_nblocksx(dst->format, dst_width);
+			src_width0 = util_format_get_nblocksx(src->format, src_width0);
+
+			dstx = util_format_get_nblocksx(dst->format, dstx);
 
 			sbox = *src_box;
-			sbox.x = util_format_get_nblocksx(orig_info[0].format, src_box->x);
-			sbox.width = util_format_get_nblocksx(orig_info[0].format, src_box->width);
+			sbox.x = util_format_get_nblocksx(src->format, src_box->x);
+			sbox.width = util_format_get_nblocksx(src->format, src_box->width);
 			src_box = &sbox;
-			dstx = util_format_get_nblocksx(orig_info[1].format, dstx);
-
-			restore_orig[0] = TRUE;
-			restore_orig[1] = TRUE;
 		} else {
 			unsigned blocksize = util_format_get_blocksize(src->format);
 
 			switch (blocksize) {
 			case 1:
-				si_change_format(src, src_level, &orig_info[0],
-						PIPE_FORMAT_R8_UNORM);
-				si_change_format(dst, dst_level, &orig_info[1],
-						PIPE_FORMAT_R8_UNORM);
+				dst_templ.format = PIPE_FORMAT_R8_UNORM;
+				src_templ.format = PIPE_FORMAT_R8_UNORM;
 				break;
 			case 2:
-				si_change_format(src, src_level, &orig_info[0],
-						PIPE_FORMAT_R8G8_UNORM);
-				si_change_format(dst, dst_level, &orig_info[1],
-						PIPE_FORMAT_R8G8_UNORM);
+				dst_templ.format = PIPE_FORMAT_R8G8_UNORM;
+				src_templ.format = PIPE_FORMAT_R8G8_UNORM;
 				break;
 			case 4:
-				si_change_format(src, src_level, &orig_info[0],
-						PIPE_FORMAT_R8G8B8A8_UNORM);
-				si_change_format(dst, dst_level, &orig_info[1],
-						PIPE_FORMAT_R8G8B8A8_UNORM);
+				dst_templ.format = PIPE_FORMAT_R8G8B8A8_UNORM;
+				src_templ.format = PIPE_FORMAT_R8G8B8A8_UNORM;
 				break;
 			case 8:
-				si_change_format(src, src_level, &orig_info[0],
-						PIPE_FORMAT_R16G16B16A16_UINT);
-				si_change_format(dst, dst_level, &orig_info[1],
-						PIPE_FORMAT_R16G16B16A16_UINT);
+				dst_templ.format = PIPE_FORMAT_R16G16B16A16_UINT;
+				src_templ.format = PIPE_FORMAT_R16G16B16A16_UINT;
 				break;
 			case 16:
-				si_change_format(src, src_level, &orig_info[0],
-						PIPE_FORMAT_R32G32B32A32_UINT);
-				si_change_format(dst, dst_level, &orig_info[1],
-						PIPE_FORMAT_R32G32B32A32_UINT);
+				dst_templ.format = PIPE_FORMAT_R32G32B32A32_UINT;
+				src_templ.format = PIPE_FORMAT_R32G32B32A32_UINT;
 				break;
 			default:
 				fprintf(stderr, "Unhandled format %s with blocksize %u\n",
 					util_format_short_name(src->format), blocksize);
 				assert(0);
 			}
-			restore_orig[0] = TRUE;
-			restore_orig[1] = TRUE;
 		}
 	}
 
 	/* Initialize the surface. */
-	util_blitter_default_dst_texture(&dst_templ, dst, dst_level, dstz);
 	dst_view = r600_create_surface_custom(ctx, dst, &dst_templ,
-					      rdst->surface.level[dst_level].npix_x,
-					      rdst->surface.level[dst_level].npix_y);
+					      dst_width, dst_height);
 
 	/* Initialize the sampler view. */
-	util_blitter_default_src_texture(&src_templ, src, src_level);
-	src_view = ctx->create_sampler_view(ctx, src, &src_templ);
+	src_view = si_create_sampler_view_custom(ctx, src, &src_templ,
+						 src_width0, src_height0,
+						 src_force_level);
 
 	u_box_3d(dstx, dsty, dstz, abs(src_box->width), abs(src_box->height),
 		 abs(src_box->depth), &dstbox);
@@ -662,18 +585,12 @@ void si_resource_copy_region(struct pipe_context *ctx,
 	/* Copy. */
 	si_blitter_begin(ctx, SI_COPY);
 	util_blitter_blit_generic(sctx->blitter, dst_view, &dstbox,
-				  src_view, src_box, src->width0, src->height0,
+				  src_view, src_box, src_width0, src_height0,
 				  PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL);
 	si_blitter_end(ctx);
 
 	pipe_surface_reference(&dst_view, NULL);
 	pipe_sampler_view_reference(&src_view, NULL);
-
-	if (restore_orig[0])
-		si_reset_blittable_to_orig(src, src_level, &orig_info[0]);
-
-	if (restore_orig[1])
-		si_reset_blittable_to_orig(dst, dst_level, &orig_info[1]);
 }
 
 /* For MSAA integer resolving to work, we change the format to NORM using this function. */

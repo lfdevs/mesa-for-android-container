@@ -1,4 +1,10 @@
 C_SOURCES := \
+	kernel/vc4_drv.h \
+	kernel/vc4_gem.c \
+	kernel/vc4_packet.h \
+	kernel/vc4_render_cl.c \
+	kernel/vc4_validate.c \
+	kernel/vc4_validate_shaders.c \
 	vc4_blit.c \
 	vc4_bufmgr.c \
 	vc4_bufmgr.h \
@@ -13,6 +19,8 @@ C_SOURCES := \
 	vc4_fence.c \
 	vc4_formats.c \
 	vc4_job.c \
+	vc4_nir_lower_blend.c \
+	vc4_nir_lower_io.c \
 	vc4_opt_algebraic.c \
 	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \
@@ -20,7 +28,6 @@ C_SOURCES := \
 	vc4_opt_dead_code.c \
 	vc4_opt_small_immediates.c \
 	vc4_opt_vpm_writes.c \
-	vc4_packet.h \
 	vc4_program.c \
 	vc4_qir.c \
 	vc4_qir_lower_uniforms.c \
@@ -44,4 +51,5 @@ C_SOURCES := \
 	vc4_state.c \
 	vc4_tiling.c \
 	vc4_tiling.h \
+	vc4_uniforms.c \
 	$()

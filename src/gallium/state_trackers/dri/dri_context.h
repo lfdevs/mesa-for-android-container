@@ -59,7 +59,7 @@ struct dri_context
    struct hud_context *hud;
 };
 
-static INLINE struct dri_context *
+static inline struct dri_context *
 dri_context(__DRIcontext * driContextPriv)
 {
    if (!driContextPriv)

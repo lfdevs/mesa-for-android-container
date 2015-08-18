@@ -1,5 +1,3 @@
-AUTOMAKE_OPTIONS = subdir-objects
-
 include Makefile.sources
 
 AM_CPPFLAGS = \

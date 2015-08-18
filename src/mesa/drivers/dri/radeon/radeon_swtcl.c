@@ -442,7 +442,7 @@ static GLboolean radeon_run_render( struct gl_context *ctx,
 
       radeon_print(RADEON_SWRENDER, RADEON_NORMAL,
 	  "radeon_render.c: prim %s %d..%d\n",
-		 _mesa_lookup_enum_by_nr(prim & PRIM_MODE_MASK), 
+		 _mesa_enum_to_string(prim & PRIM_MODE_MASK), 
 		 start, start+length);
 
       if (length)

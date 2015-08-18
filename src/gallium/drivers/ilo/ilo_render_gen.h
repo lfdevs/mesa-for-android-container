@@ -31,6 +31,7 @@
 #include "core/ilo_builder.h"
 #include "core/ilo_builder_3d.h"
 #include "core/ilo_builder_render.h"
+#include "core/ilo_state_raster.h"
 
 #include "ilo_common.h"
 #include "ilo_state.h"
@@ -50,11 +51,7 @@ struct ilo_render {
 
    struct intel_bo *workaround_bo;
 
-   uint32_t sample_pattern_1x;
-   uint32_t sample_pattern_2x;
-   uint32_t sample_pattern_4x;
-   uint32_t sample_pattern_8x[2];
-   uint32_t sample_pattern_16x[4];
+   struct ilo_state_sample_pattern sample_pattern;
 
    bool hw_ctx_changed;
 
@@ -85,9 +82,12 @@ struct ilo_render {
        */
       uint32_t deferred_pipe_control_dw1;
 
-      bool primitive_restart;
       int reduced_prim;
       int so_max_vertices;
+
+      struct ilo_state_urb urb;
+      struct ilo_state_raster rs;
+      struct ilo_state_cc cc;
 
       uint32_t SF_VIEWPORT;
       uint32_t CLIP_VIEWPORT;
@@ -142,7 +142,12 @@ struct ilo_render_draw_session {
    int reduced_prim;
 
    bool prim_changed;
-   bool primitive_restart_changed;
+
+   struct ilo_state_urb_delta urb_delta;
+   struct ilo_state_vf_delta vf_delta;
+   struct ilo_state_raster_delta rs_delta;
+   struct ilo_state_viewport_delta vp_delta;
+   struct ilo_state_cc_delta cc_delta;
 
    /* dynamic states */
    bool viewport_changed;
@@ -180,6 +185,9 @@ struct ilo_render_launch_grid_session {
 
    uint32_t idrt;
    int idrt_size;
+
+   uint32_t compute_data[6];
+   struct ilo_state_compute compute;
 };
 
 int
@@ -381,8 +389,7 @@ ilo_render_pipe_control(struct ilo_render *r, uint32_t dw1)
  */
 static inline void
 ilo_render_3dprimitive(struct ilo_render *r,
-                       const struct pipe_draw_info *info,
-                       const struct ilo_ib_state *ib)
+                       const struct gen6_3dprimitive_info *info)
 {
    ILO_DEV_ASSERT(r->dev, 6, 8);
 
@@ -391,9 +398,9 @@ ilo_render_3dprimitive(struct ilo_render *r,
 
    /* 3DPRIMITIVE */
    if (ilo_dev_gen(r->dev) >= ILO_GEN(7))
-      gen7_3DPRIMITIVE(r->builder, info, ib);
+      gen7_3DPRIMITIVE(r->builder, info);
    else
-      gen6_3DPRIMITIVE(r->builder, info, ib);
+      gen6_3DPRIMITIVE(r->builder, info);
 
    r->state.current_pipe_control_dw1 = 0;
    assert(!r->state.deferred_pipe_control_dw1);

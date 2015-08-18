@@ -1,0 +1,91 @@
+commit 90754d2df05eafe1a3ee3cd9bb1611a19099fc49
+Author: Ben Widawsky <benjamin.widawsky@intel.com>
+Date:   Wed Jun 3 21:35:51 2015 -0700
+
+    i965/gen9: Implement Push Constant Buffer workaround
+    
+    This implements a workaround (exact excerpt as a comment in the code). The docs
+    specify [clearly, after you struggle for a while] that the offset isn't relative
+    to state base. This actually makes sense. This fixes hangs on SKL.
+    
+    Buffer #0 is meant to be used for normal uniforms.
+    Buffer #1 is typically used for gather constants when using RS.
+    Buffer #1-#3 could be used to push a bunch of UBO data which would just be
+      somewhere in memory, and not relative to the dynamic state.
+    
+    NOTE: I've moved away from the ternary operator for the new gen9 conditions.
+    Admittedly it's probably not great to do this, but I really want to fix this all
+    up in the subsequent patch and doing it here makes that diff a lot nicer. I want
+    to split out the gen8/9 code to make the function a bit more readable, but to
+    keep this easily cherry-pickable I am doing this fix first. If we decide not to
+    merge the cleanup patch then I can revisit this.
+    
+    Cc: "10.5 10.6" <mesa-stable@lists.freedesktop.org>
+    Signed-off-by: Ben Widawsky <ben@bwidawsk.net>
+    Reviewed-by: Anuj Phogat <anuj.phogat@gmail.com>
+    Tested-by: Valtteri Rantala <Valtteri.rantala@intel.com>
+
+diff --git a/src/mesa/drivers/dri/i965/gen7_vs_state.c b/src/mesa/drivers/dri/i965/gen7_vs_state.c
+index 278b3ec..4b17d06 100644
+--- a/src/mesa/drivers/dri/i965/gen7_vs_state.c
++++ b/src/mesa/drivers/dri/i965/gen7_vs_state.c
+@@ -43,18 +43,52 @@ gen7_upload_constant_state(struct brw_context *brw,
+    int dwords = brw->gen >= 8 ? 11 : 7;
+    BEGIN_BATCH(dwords);
+    OUT_BATCH(opcode << 16 | (dwords - 2));
+-   OUT_BATCH(active ? stage_state->push_const_size : 0);
+-   OUT_BATCH(0);
++
++   /* Workaround for SKL+ (we use option #2 until we have a need for more
++    * constant buffers). This comes from the documentation for 3DSTATE_CONSTANT_*
++    *
++    * The driver must ensure The following case does not occur without a flush
++    * to the 3D engine: 3DSTATE_CONSTANT_* with buffer 3 read length equal to
++    * zero committed followed by a 3DSTATE_CONSTANT_* with buffer 0 read length
++    * not equal to zero committed. Possible ways to avoid this condition
++    * include:
++    *     1. always force buffer 3 to have a non zero read length
++    *     2. always force buffer 0 to a zero read length
++    */
++   if (brw->gen >= 9 && active) {
++      OUT_BATCH(0);
++      OUT_BATCH(stage_state->push_const_size);
++   } else {
++      OUT_BATCH(active ? stage_state->push_const_size : 0);
++      OUT_BATCH(0);
++   }
+    /* Pointer to the constant buffer.  Covered by the set of state flags
+     * from gen6_prepare_wm_contants
+     */
+-   OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
+-   OUT_BATCH(0);
+-   OUT_BATCH(0);
+-   OUT_BATCH(0);
+-   if (brw->gen >= 8) {
++   if (brw->gen >= 9 && active) {
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      /* XXX: When using buffers other than 0, you need to specify the
++       * graphics virtual address regardless of INSPM/debug bits
++       */
++      OUT_RELOC64(brw->batch.bo, I915_GEM_DOMAIN_RENDER, 0,
++                  stage_state->push_const_offset);
+       OUT_BATCH(0);
+       OUT_BATCH(0);
++   } else if (brw->gen>= 8) {
++      OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++      OUT_BATCH(0);
++   } else {
++      OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
++      OUT_BATCH(0);
+       OUT_BATCH(0);
+       OUT_BATCH(0);
+    }

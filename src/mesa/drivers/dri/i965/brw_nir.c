@@ -27,19 +27,27 @@
 #include "program/prog_to_nir.h"
 
 static void
-nir_optimize(nir_shader *nir)
+nir_optimize(nir_shader *nir, bool is_scalar)
 {
    bool progress;
    do {
       progress = false;
       nir_lower_vars_to_ssa(nir);
       nir_validate_shader(nir);
-      nir_lower_alu_to_scalar(nir);
-      nir_validate_shader(nir);
+
+      if (is_scalar) {
+         nir_lower_alu_to_scalar(nir);
+         nir_validate_shader(nir);
+      }
+
       progress |= nir_copy_prop(nir);
       nir_validate_shader(nir);
-      nir_lower_phis_to_scalar(nir);
-      nir_validate_shader(nir);
+
+      if (is_scalar) {
+         nir_lower_phis_to_scalar(nir);
+         nir_validate_shader(nir);
+      }
+
       progress |= nir_copy_prop(nir);
       nir_validate_shader(nir);
       progress |= nir_opt_dce(nir);
@@ -57,33 +65,12 @@ nir_optimize(nir_shader *nir)
    } while (progress);
 }
 
-static bool
-count_nir_instrs_in_block(nir_block *block, void *state)
-{
-   int *count = (int *) state;
-   nir_foreach_instr(block, instr) {
-      *count = *count + 1;
-   }
-   return true;
-}
-
-static int
-count_nir_instrs(nir_shader *nir)
-{
-   int count = 0;
-   nir_foreach_overload(nir, overload) {
-      if (!overload->impl)
-         continue;
-      nir_foreach_block(overload->impl, count_nir_instrs_in_block, &count);
-   }
-   return count;
-}
-
 nir_shader *
 brw_create_nir(struct brw_context *brw,
                const struct gl_shader_program *shader_prog,
                const struct gl_program *prog,
-               gl_shader_stage stage)
+               gl_shader_stage stage,
+               bool is_scalar)
 {
    struct gl_context *ctx = &brw->ctx;
    const nir_shader_compiler_options *options =
@@ -113,31 +100,33 @@ brw_create_nir(struct brw_context *brw,
    nir_split_var_copies(nir);
    nir_validate_shader(nir);
 
-   nir_optimize(nir);
+   nir_optimize(nir, is_scalar);
 
    /* Lower a bunch of stuff */
    nir_lower_var_copies(nir);
    nir_validate_shader(nir);
 
    /* Get rid of split copies */
-   nir_optimize(nir);
+   nir_optimize(nir, is_scalar);
 
-   if (shader_prog) {
-      nir_assign_var_locations_scalar_direct_first(nir, &nir->uniforms,
-                                                   &nir->num_direct_uniforms,
-                                                   &nir->num_uniforms);
+   if (is_scalar) {
+      nir_assign_var_locations_direct_first(nir, &nir->uniforms,
+                                            &nir->num_direct_uniforms,
+                                            &nir->num_uniforms,
+                                            is_scalar);
+      nir_assign_var_locations(&nir->outputs, &nir->num_outputs, is_scalar);
    } else {
-      /* ARB programs generally create a giant array of "uniform" data, and allow
-       * indirect addressing without any boundaries.  In the absence of bounds
-       * analysis, it's all or nothing.  num_direct_uniforms is only useful when
-       * we have some direct and some indirect access; it doesn't matter here.
-       */
-      nir->num_direct_uniforms = 0;
-   }
-   nir_assign_var_locations_scalar(&nir->inputs, &nir->num_inputs);
-   nir_assign_var_locations_scalar(&nir->outputs, &nir->num_outputs);
+      nir_assign_var_locations(&nir->uniforms,
+                               &nir->num_uniforms,
+                               is_scalar);
 
-   nir_lower_io(nir);
+      foreach_list_typed(nir_variable, var, node, &nir->outputs)
+         var->data.driver_location = var->data.location;
+   }
+   nir_assign_var_locations(&nir->inputs, &nir->num_inputs, is_scalar);
+
+   nir_lower_io(nir, is_scalar);
+
    nir_validate_shader(nir);
 
    nir_remove_dead_variables(nir);
@@ -154,7 +143,7 @@ brw_create_nir(struct brw_context *brw,
    nir_lower_atomics(nir);
    nir_validate_shader(nir);
 
-   nir_optimize(nir);
+   nir_optimize(nir, is_scalar);
 
    if (brw->gen >= 6) {
       /* Try and fuse multiply-adds */
@@ -176,22 +165,24 @@ brw_create_nir(struct brw_context *brw,
    nir_validate_shader(nir);
 
    if (unlikely(debug_enabled)) {
+      /* Re-index SSA defs so we print more sensible numbers. */
+      nir_foreach_overload(nir, overload) {
+         if (overload->impl)
+            nir_index_ssa_defs(overload->impl);
+      }
+
       fprintf(stderr, "NIR (SSA form) for %s shader:\n",
               _mesa_shader_stage_to_string(stage));
       nir_print_shader(nir, stderr);
    }
 
-   static GLuint msg_id = 0;
-   _mesa_gl_debug(&brw->ctx, &msg_id,
-                  MESA_DEBUG_SOURCE_SHADER_COMPILER,
-                  MESA_DEBUG_TYPE_OTHER,
-                  MESA_DEBUG_SEVERITY_NOTIFICATION,
-                  "%s NIR shader: %d inst\n",
-                  _mesa_shader_stage_to_abbrev(stage),
-                  count_nir_instrs(nir));
-
-   nir_convert_from_ssa(nir);
+   nir_convert_from_ssa(nir, is_scalar);
    nir_validate_shader(nir);
+
+   if (!is_scalar) {
+      nir_lower_vec_to_movs(nir);
+      nir_validate_shader(nir);
+   }
 
    /* This is the last pass we run before we start emitting stuff.  It
     * determines when we need to insert boolean resolves on Gen <= 5.  We
@@ -210,4 +201,43 @@ brw_create_nir(struct brw_context *brw,
    }
 
    return nir;
+}
+
+enum brw_reg_type
+brw_type_for_nir_type(nir_alu_type type)
+{
+   switch (type) {
+   case nir_type_unsigned:
+      return BRW_REGISTER_TYPE_UD;
+   case nir_type_bool:
+   case nir_type_int:
+      return BRW_REGISTER_TYPE_D;
+   case nir_type_float:
+      return BRW_REGISTER_TYPE_F;
+   default:
+      unreachable("unknown type");
+   }
+
+   return BRW_REGISTER_TYPE_F;
+}
+
+/* Returns the glsl_base_type corresponding to a nir_alu_type.
+ * This is used by both brw_vec4_nir and brw_fs_nir.
+ */
+enum glsl_base_type
+brw_glsl_base_type_for_nir_type(nir_alu_type type)
+{
+   switch (type) {
+   case nir_type_float:
+      return GLSL_TYPE_FLOAT;
+
+   case nir_type_int:
+      return GLSL_TYPE_INT;
+
+   case nir_type_unsigned:
+      return GLSL_TYPE_UINT;
+
+   default:
+      unreachable("bad type");
+   }
 }

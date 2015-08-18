@@ -141,7 +141,7 @@ hard_event::status() const {
    else if (!_fence)
       return CL_QUEUED;
 
-   else if (!screen->fence_signalled(screen, _fence))
+   else if (!screen->fence_finish(screen, _fence, 0))
       return CL_SUBMITTED;
 
    else

@@ -190,7 +190,7 @@ struct svga_buffer
 };
 
 
-static INLINE struct svga_buffer *
+static inline struct svga_buffer *
 svga_buffer(struct pipe_resource *buffer)
 {
    if (buffer) {
@@ -205,7 +205,7 @@ svga_buffer(struct pipe_resource *buffer)
  * Returns TRUE for user buffers.  We may
  * decide to use an alternate upload path for these buffers.
  */
-static INLINE boolean 
+static inline boolean 
 svga_buffer_is_user_buffer( struct pipe_resource *buffer )
 {
    if (buffer) {
@@ -219,7 +219,7 @@ svga_buffer_is_user_buffer( struct pipe_resource *buffer )
  * Returns a pointer to a struct svga_winsys_screen given a
  * struct svga_buffer.
  */
-static INLINE struct svga_winsys_screen *
+static inline struct svga_winsys_screen *
 svga_buffer_winsys_screen(struct svga_buffer *sbuf)
 {
    return svga_screen(sbuf->b.b.screen)->sws;
@@ -230,7 +230,7 @@ svga_buffer_winsys_screen(struct svga_buffer *sbuf)
  * Returns whether a buffer has hardware storage that is
  * visible to the GPU.
  */
-static INLINE boolean
+static inline boolean
 svga_buffer_has_hw_storage(struct svga_buffer *sbuf)
 {
    if (svga_buffer_winsys_screen(sbuf)->have_gb_objects)
@@ -242,7 +242,7 @@ svga_buffer_has_hw_storage(struct svga_buffer *sbuf)
 /**
  * Map the hardware storage of a buffer.
  */
-static INLINE void *
+static inline void *
 svga_buffer_hw_storage_map(struct svga_context *svga,
                            struct svga_buffer *sbuf,
                            unsigned flags, boolean *retry)
@@ -259,7 +259,7 @@ svga_buffer_hw_storage_map(struct svga_context *svga,
 /**
  * Unmap the hardware storage of a buffer.
  */
-static INLINE void
+static inline void
 svga_buffer_hw_storage_unmap(struct svga_context *svga,
                              struct svga_buffer *sbuf)
 {

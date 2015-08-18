@@ -53,7 +53,7 @@ extern int SVGA_DEBUG;
 #define DBSTR(x) ""
 #endif
 
-static INLINE void
+static inline void
 SVGA_DBG( unsigned flag, const char *fmt, ... )
 {
 #ifdef DEBUG 

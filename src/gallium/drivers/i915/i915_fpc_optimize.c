@@ -552,7 +552,7 @@ static boolean i915_fpc_useless_mov(union tgsi_full_token *tgsi_current)
    if ( current.Token.Type == TGSI_TOKEN_TYPE_INSTRUCTION  &&
         current.FullInstruction.Instruction.Opcode == TGSI_OPCODE_MOV &&
         op_has_dst(current.FullInstruction.Instruction.Opcode) &&
-        current.FullInstruction.Instruction.Saturate == TGSI_SAT_NONE &&
+        !current.FullInstruction.Instruction.Saturate &&
         current.FullInstruction.Src[0].Register.Absolute == 0 &&
         current.FullInstruction.Src[0].Register.Negate == 0 &&
         is_unswizzled(&current.FullInstruction.Src[0], current.FullInstruction.Dst[0].Register.WriteMask) &&
@@ -582,7 +582,7 @@ static void i915_fpc_optimize_useless_mov_after_inst(struct i915_optimize_contex
         next->Token.Type == TGSI_TOKEN_TYPE_INSTRUCTION  &&
         next->FullInstruction.Instruction.Opcode == TGSI_OPCODE_MOV &&
         op_has_dst(current->FullInstruction.Instruction.Opcode) &&
-        next->FullInstruction.Instruction.Saturate == TGSI_SAT_NONE &&
+        !next->FullInstruction.Instruction.Saturate &&
         next->FullInstruction.Src[0].Register.Absolute == 0 &&
         next->FullInstruction.Src[0].Register.Negate == 0 &&
         unused_from(ctx, &current->FullInstruction.Dst[0], index) &&

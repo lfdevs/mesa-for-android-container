@@ -26,7 +26,7 @@ struct i915_drm_batchbuffer
    drm_intel_bo *bo;
 };
 
-static INLINE struct i915_drm_batchbuffer *
+static inline struct i915_drm_batchbuffer *
 i915_drm_batchbuffer(struct i915_winsys_batchbuffer *batch)
 {
    return (struct i915_drm_batchbuffer *)batch;

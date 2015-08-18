@@ -97,13 +97,6 @@ _mesa_init_program(struct gl_context *ctx)
    assert(ctx->FragmentProgram.Current);
    ctx->FragmentProgram.Cache = _mesa_new_program_cache();
 
-   ctx->GeometryProgram.Enabled = GL_FALSE;
-   /* right now by default we don't have a geometry program */
-   _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current,
-                            NULL);
-
-   _mesa_reference_compprog(ctx, &ctx->ComputeProgram.Current, NULL);
-
    /* XXX probably move this stuff */
    ctx->ATIFragmentShader.Enabled = GL_FALSE;
    ctx->ATIFragmentShader.Current = ctx->Shared->DefaultFragmentShader;
@@ -122,8 +115,6 @@ _mesa_free_program_data(struct gl_context *ctx)
    _mesa_delete_program_cache(ctx, ctx->VertexProgram.Cache);
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current, NULL);
    _mesa_delete_shader_cache(ctx, ctx->FragmentProgram.Cache);
-   _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current, NULL);
-   _mesa_reference_compprog(ctx, &ctx->ComputeProgram.Current, NULL);
 
    /* XXX probably move this stuff */
    if (ctx->ATIFragmentShader.Current) {
@@ -152,9 +143,6 @@ _mesa_update_default_objects_program(struct gl_context *ctx)
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current,
                             ctx->Shared->DefaultFragmentProgram);
    assert(ctx->FragmentProgram.Current);
-
-   _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current,
-                      ctx->Shared->DefaultGeometryProgram);
 
    /* XXX probably move this stuff */
    if (ctx->ATIFragmentShader.Current) {
@@ -298,6 +286,38 @@ _mesa_init_compute_program(struct gl_context *ctx,
 
 
 /**
+ * Initialize a new tessellation control program object.
+ */
+struct gl_program *
+_mesa_init_tess_ctrl_program(struct gl_context *ctx,
+                             struct gl_tess_ctrl_program *prog,
+                             GLenum target, GLuint id)
+{
+   if (prog) {
+      init_program_struct(&prog->Base, target, id);
+      return &prog->Base;
+   }
+   return NULL;
+}
+
+
+/**
+ * Initialize a new tessellation evaluation program object.
+ */
+struct gl_program *
+_mesa_init_tess_eval_program(struct gl_context *ctx,
+                             struct gl_tess_eval_program *prog,
+                             GLenum target, GLuint id)
+{
+   if (prog) {
+      init_program_struct(&prog->Base, target, id);
+      return &prog->Base;
+   }
+   return NULL;
+}
+
+
+/**
  * Initialize a new geometry program object.
  */
 struct gl_program *
@@ -340,9 +360,19 @@ _mesa_new_program(struct gl_context *ctx, GLenum target, GLuint id)
                                          CALLOC_STRUCT(gl_fragment_program),
                                          target, id );
       break;
-   case MESA_GEOMETRY_PROGRAM:
+   case GL_GEOMETRY_PROGRAM_NV:
       prog = _mesa_init_geometry_program(ctx,
                                          CALLOC_STRUCT(gl_geometry_program),
+                                         target, id);
+      break;
+   case GL_TESS_CONTROL_PROGRAM_NV:
+      prog = _mesa_init_tess_ctrl_program(ctx,
+                                          CALLOC_STRUCT(gl_tess_ctrl_program),
+                                          target, id);
+      break;
+   case GL_TESS_EVALUATION_PROGRAM_NV:
+      prog = _mesa_init_tess_eval_program(ctx,
+                                         CALLOC_STRUCT(gl_tess_eval_program),
                                          target, id);
       break;
    case GL_COMPUTE_PROGRAM_NV:
@@ -426,8 +456,8 @@ _mesa_reference_program_(struct gl_context *ctx,
       else if ((*ptr)->Target == GL_FRAGMENT_PROGRAM_ARB)
          assert(prog->Target == GL_FRAGMENT_PROGRAM_ARB ||
                 prog->Target == GL_FRAGMENT_PROGRAM_NV);
-      else if ((*ptr)->Target == MESA_GEOMETRY_PROGRAM)
-         assert(prog->Target == MESA_GEOMETRY_PROGRAM);
+      else if ((*ptr)->Target == GL_GEOMETRY_PROGRAM_NV)
+         assert(prog->Target == GL_GEOMETRY_PROGRAM_NV);
    }
 #endif
 
@@ -439,7 +469,7 @@ _mesa_reference_program_(struct gl_context *ctx,
       printf("Program %p ID=%u Target=%s  Refcount-- to %d\n",
              *ptr, (*ptr)->Id,
              ((*ptr)->Target == GL_VERTEX_PROGRAM_ARB ? "VP" :
-              ((*ptr)->Target == MESA_GEOMETRY_PROGRAM ? "GP" : "FP")),
+              ((*ptr)->Target == GL_GEOMETRY_PROGRAM_NV ? "GP" : "FP")),
              (*ptr)->RefCount - 1);
 #endif
       assert((*ptr)->RefCount > 0);
@@ -464,7 +494,7 @@ _mesa_reference_program_(struct gl_context *ctx,
       printf("Program %p ID=%u Target=%s  Refcount++ to %d\n",
              prog, prog->Id,
              (prog->Target == GL_VERTEX_PROGRAM_ARB ? "VP" :
-              (prog->Target == MESA_GEOMETRY_PROGRAM ? "GP" : "FP")),
+              (prog->Target == GL_GEOMETRY_PROGRAM_NV ? "GP" : "FP")),
              prog->RefCount);
 #endif
       /*mtx_unlock(&prog->Mutex);*/
@@ -554,7 +584,7 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
          fpc->PixelCenterInteger = fp->PixelCenterInteger;
       }
       break;
-   case MESA_GEOMETRY_PROGRAM:
+   case GL_GEOMETRY_PROGRAM_NV:
       {
          const struct gl_geometry_program *gp = gl_geometry_program_const(prog);
          struct gl_geometry_program *gpc = gl_geometry_program(clone);
@@ -564,6 +594,23 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
          gpc->OutputType = gp->OutputType;
          gpc->UsesEndPrimitive = gp->UsesEndPrimitive;
          gpc->UsesStreams = gp->UsesStreams;
+      }
+      break;
+   case GL_TESS_CONTROL_PROGRAM_NV:
+      {
+         const struct gl_tess_ctrl_program *tcp = gl_tess_ctrl_program_const(prog);
+         struct gl_tess_ctrl_program *tcpc = gl_tess_ctrl_program(clone);
+         tcpc->VerticesOut = tcp->VerticesOut;
+      }
+      break;
+   case GL_TESS_EVALUATION_PROGRAM_NV:
+      {
+         const struct gl_tess_eval_program *tep = gl_tess_eval_program_const(prog);
+         struct gl_tess_eval_program *tepc = gl_tess_eval_program(clone);
+         tepc->PrimitiveMode = tep->PrimitiveMode;
+         tepc->Spacing = tep->Spacing;
+         tepc->VertexOrder = tep->VertexOrder;
+         tepc->PointMode = tep->PointMode;
       }
       break;
    default:

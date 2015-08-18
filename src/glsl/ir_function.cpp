@@ -72,6 +72,7 @@ parameter_lists_match(_mesa_glsl_parse_state *state,
       switch ((enum ir_variable_mode)(param->data.mode)) {
       case ir_var_auto:
       case ir_var_uniform:
+      case ir_var_shader_storage:
       case ir_var_temporary:
 	 /* These are all error conditions.  It is invalid for a parameter to
 	  * a function to be declared as auto (not in, out, or inout) or

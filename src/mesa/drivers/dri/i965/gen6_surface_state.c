@@ -88,7 +88,8 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
       break;
    }
 
-   const int min_array_element = layered ? 0 : irb->mt_layer;
+   const int min_array_element = irb->mt_layer;
+   assert(!layered || irb->mt_layer == 0);
 
    surf[0] = SET_FIELD(surftype, BRW_SURFACE_TYPE) |
              SET_FIELD(format, BRW_SURFACE_FORMAT);

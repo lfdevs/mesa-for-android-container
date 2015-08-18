@@ -40,7 +40,7 @@ struct nv30_screen {
    struct nouveau_heap *vp_data_heap;
 };
 
-static INLINE struct nv30_screen *
+static inline struct nv30_screen *
 nv30_screen(struct pipe_screen *pscreen)
 {
    return (struct nv30_screen *)pscreen;

@@ -57,7 +57,7 @@ struct NineVolume9
     /* for [GS]etPrivateData/FreePrivateData */
     struct util_hash_table *pdata;
 };
-static INLINE struct NineVolume9 *
+static inline struct NineVolume9 *
 NineVolume9( void *data )
 {
     return (struct NineVolume9 *)data;
@@ -73,7 +73,7 @@ NineVolume9_new( struct NineDevice9 *pDevice,
 
 /*** Nine private ***/
 
-static INLINE void
+static inline void
 NineVolume9_SetResource( struct NineVolume9 *This,
                          struct pipe_resource *resource, unsigned level )
 {
@@ -85,7 +85,7 @@ void
 NineVolume9_AddDirtyRegion( struct NineVolume9 *This,
                             const struct pipe_box *box );
 
-static INLINE void
+static inline void
 NineVolume9_ClearDirtyRegion( struct NineVolume9 *This )
 {
     memset(&This->dirty_box, 0, sizeof(This->dirty_box));

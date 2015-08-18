@@ -72,19 +72,17 @@ cso_set_samplers(struct cso_context *cso,
                  const struct pipe_sampler_state **states);
 
 void
-cso_save_samplers(struct cso_context *cso, unsigned shader_stage);
+cso_save_fragment_samplers(struct cso_context *cso);
 
 void
-cso_restore_samplers(struct cso_context *cso, unsigned shader_stage);
+cso_restore_fragment_samplers(struct cso_context *cso);
 
 /* Alternate interface to support state trackers that like to modify
  * samplers one at a time:
  */
 enum pipe_error
-cso_single_sampler(struct cso_context *cso,
-                   unsigned shader_stage,
-                   unsigned count,
-                   const struct pipe_sampler_state *states);
+cso_single_sampler(struct cso_context *cso, unsigned shader_stage,
+                   unsigned idx, const struct pipe_sampler_state *states);
 
 void
 cso_single_sampler_done(struct cso_context *cso, unsigned shader_stage);
@@ -188,19 +186,6 @@ void cso_save_render_condition(struct cso_context *cso);
 void cso_restore_render_condition(struct cso_context *cso);
 
 
-/* clip state */
-
-void
-cso_set_clip(struct cso_context *cso,
-             const struct pipe_clip_state *clip);
-
-void
-cso_save_clip(struct cso_context *cso);
-
-void
-cso_restore_clip(struct cso_context *cso);
-
-
 /* sampler view state */
 
 void
@@ -210,10 +195,10 @@ cso_set_sampler_views(struct cso_context *cso,
                       struct pipe_sampler_view **views);
 
 void
-cso_save_sampler_views(struct cso_context *cso, unsigned shader_stage);
+cso_save_fragment_sampler_views(struct cso_context *ctx);
 
 void
-cso_restore_sampler_views(struct cso_context *cso, unsigned shader_stage);
+cso_restore_fragment_sampler_views(struct cso_context *ctx);
 
 
 /* constant buffers */

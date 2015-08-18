@@ -15,34 +15,34 @@
 #define NOUVEAU_MIN_BUFFER_MAP_ALIGN      64
 #define NOUVEAU_MIN_BUFFER_MAP_ALIGN_MASK (NOUVEAU_MIN_BUFFER_MAP_ALIGN - 1)
 
-static INLINE uint32_t
+static inline uint32_t
 PUSH_AVAIL(struct nouveau_pushbuf *push)
 {
    return push->end - push->cur;
 }
 
-static INLINE boolean
+static inline bool
 PUSH_SPACE(struct nouveau_pushbuf *push, uint32_t size)
 {
    if (PUSH_AVAIL(push) < size)
       return nouveau_pushbuf_space(push, size, 0, 0) == 0;
-   return TRUE;
+   return true;
 }
 
-static INLINE void
+static inline void
 PUSH_DATA(struct nouveau_pushbuf *push, uint32_t data)
 {
    *push->cur++ = data;
 }
 
-static INLINE void
+static inline void
 PUSH_DATAp(struct nouveau_pushbuf *push, const void *data, uint32_t size)
 {
    memcpy(push->cur, data, size * 4);
    push->cur += size;
 }
 
-static INLINE void
+static inline void
 PUSH_DATAf(struct nouveau_pushbuf *push, float f)
 {
    union { float f; uint32_t i; } u;
@@ -50,7 +50,7 @@ PUSH_DATAf(struct nouveau_pushbuf *push, float f)
    PUSH_DATA(push, u.i);
 }
 
-static INLINE void
+static inline void
 PUSH_KICK(struct nouveau_pushbuf *push)
 {
    nouveau_pushbuf_kick(push, push->channel);
@@ -60,7 +60,7 @@ PUSH_KICK(struct nouveau_pushbuf *push)
 #define NOUVEAU_RESOURCE_FLAG_LINEAR   (PIPE_RESOURCE_FLAG_DRV_PRIV << 0)
 #define NOUVEAU_RESOURCE_FLAG_DRV_PRIV (PIPE_RESOURCE_FLAG_DRV_PRIV << 1)
 
-static INLINE uint32_t
+static inline uint32_t
 nouveau_screen_transfer_flags(unsigned pipe)
 {
 	uint32_t flags = 0;

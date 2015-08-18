@@ -59,6 +59,8 @@
 #define R600_QUERY_CURRENT_GPU_SCLK	(PIPE_QUERY_DRIVER_SPECIFIC + 9)
 #define R600_QUERY_CURRENT_GPU_MCLK	(PIPE_QUERY_DRIVER_SPECIFIC + 10)
 #define R600_QUERY_GPU_LOAD		(PIPE_QUERY_DRIVER_SPECIFIC + 11)
+#define R600_QUERY_NUM_COMPILATIONS	(PIPE_QUERY_DRIVER_SPECIFIC + 12)
+#define R600_QUERY_NUM_SHADERS_CREATED	(PIPE_QUERY_DRIVER_SPECIFIC + 13)
 
 #define R600_CONTEXT_STREAMOUT_FLUSH		(1u << 0)
 #define R600_CONTEXT_PRIVATE_FLAG		(1u << 1)
@@ -79,17 +81,23 @@
 #define DBG_GS			(1 << 7)
 #define DBG_PS			(1 << 8)
 #define DBG_CS			(1 << 9)
+#define DBG_TCS			(1 << 10)
+#define DBG_TES			(1 << 11)
+#define DBG_NO_IR		(1 << 12)
+#define DBG_NO_TGSI		(1 << 13)
+#define DBG_NO_ASM		(1 << 14)
+/* Bits 21-31 are reserved for the r600g driver. */
 /* features */
-#define DBG_NO_ASYNC_DMA	(1 << 10)
-#define DBG_NO_HYPERZ		(1 << 11)
-#define DBG_NO_DISCARD_RANGE	(1 << 12)
-#define DBG_NO_2D_TILING	(1 << 13)
-#define DBG_NO_TILING		(1 << 14)
-#define DBG_SWITCH_ON_EOP	(1 << 15)
-#define DBG_FORCE_DMA		(1 << 16)
-#define DBG_PRECOMPILE		(1 << 17)
-#define DBG_INFO		(1 << 18)
-/* The maximum allowed bit is 20. */
+#define DBG_NO_ASYNC_DMA	(1llu << 32)
+#define DBG_NO_HYPERZ		(1llu << 33)
+#define DBG_NO_DISCARD_RANGE	(1llu << 34)
+#define DBG_NO_2D_TILING	(1llu << 35)
+#define DBG_NO_TILING		(1llu << 36)
+#define DBG_SWITCH_ON_EOP	(1llu << 37)
+#define DBG_FORCE_DMA		(1llu << 38)
+#define DBG_PRECOMPILE		(1llu << 39)
+#define DBG_INFO		(1llu << 40)
+#define DBG_NO_WC		(1llu << 41)
 
 #define R600_MAP_BUFFER_ALIGNMENT 64
 
@@ -127,9 +135,8 @@ struct radeon_shader_binary {
 	struct radeon_shader_reloc *relocs;
 	unsigned reloc_count;
 
-	/** Set to 1 if the disassembly for this binary has been dumped to
-	 *  stderr. */
-	int disassembled;
+	/** Disassembled shader in a string. */
+	char *disasm_string;
 };
 
 struct r600_resource {
@@ -214,7 +221,6 @@ struct r600_texture {
 	float				depth_clear_value;
 
 	bool				non_disp_tiling; /* R600-Cayman only */
-	unsigned			mipmap_shift;
 };
 
 struct r600_surface {
@@ -236,6 +242,7 @@ struct r600_surface {
 	unsigned cb_color_pitch;	/* EG and later */
 	unsigned cb_color_slice;	/* EG and later */
 	unsigned cb_color_attrib;	/* EG and later */
+	unsigned cb_dcc_control;	/* VI and later */
 	unsigned cb_color_fmask;	/* CB_COLORn_FMASK (EG and later) or CB_COLORn_FRAG (r600) */
 	unsigned cb_color_fmask_slice;	/* EG and later */
 	unsigned cb_color_cmask;	/* CB_COLORn_TILE (r600 only) */
@@ -272,7 +279,7 @@ struct r600_common_screen {
 	enum chip_class			chip_class;
 	struct radeon_info		info;
 	struct r600_tiling_info		tiling_info;
-	unsigned			debug_flags;
+	uint64_t			debug_flags;
 	bool				has_cp_dma;
 	bool				has_streamout;
 
@@ -285,12 +292,23 @@ struct r600_common_screen {
 	uint32_t			*trace_ptr;
 	unsigned			cs_count;
 
+	/* This must be in the screen, because UE4 uses one context for
+	 * compilation and another one for rendering.
+	 */
+	unsigned			num_compilations;
+	/* Along with ST_DEBUG=precompile, this should show if applications
+	 * are loading shaders on demand. This is a monotonic counter.
+	 */
+	unsigned			num_shaders_created;
+
 	/* GPU load thread. */
 	pipe_mutex			gpu_load_mutex;
 	pipe_thread			gpu_load_thread;
 	unsigned			gpu_load_counter_busy;
 	unsigned			gpu_load_counter_idle;
-	unsigned			gpu_load_stop_thread; /* bool */
+	volatile unsigned		gpu_load_stop_thread; /* bool */
+
+	char				renderer_string[64];
 };
 
 /* This encapsulates a state or an operation which can emitted into the GPU
@@ -298,6 +316,7 @@ struct r600_common_screen {
 struct r600_atom {
 	void (*emit)(struct r600_common_context *ctx, struct r600_atom *state);
 	unsigned		num_dw;
+	unsigned short		id;	/* used by r600 only */
 	bool			dirty;
 };
 
@@ -327,6 +346,10 @@ struct r600_streamout {
 	/* External state which comes from the vertex shader,
 	 * it must be set explicitly when binding a shader. */
 	unsigned			*stride_in_dw;
+	unsigned			enabled_stream_buffers_mask; /* stream0 buffers0-3 in 4 LSB */
+
+	/* The state of VGT_STRMOUT_BUFFER_(CONFIG|EN). */
+	unsigned			hw_enabled_mask;
 
 	/* The state of VGT_STRMOUT_(CONFIG|EN). */
 	struct r600_atom		enable_atom;
@@ -352,10 +375,12 @@ struct r600_common_context {
 
 	struct r600_common_screen	*screen;
 	struct radeon_winsys		*ws;
+	struct radeon_winsys_ctx	*ctx;
 	enum radeon_family		family;
 	enum chip_class			chip_class;
 	struct r600_rings		rings;
 	unsigned			initial_gfx_cs_size;
+	unsigned			gpu_reset_counter;
 
 	struct u_upload_mgr		*uploader;
 	struct u_suballocator		*allocator_so_filled_size;
@@ -376,11 +401,14 @@ struct r600_common_context {
 	int				num_occlusion_queries;
 	/* Keep track of non-timer queries, because they should be suspended
 	 * during context flushing.
-	 * The timer queries (TIME_ELAPSED) shouldn't be suspended. */
+	 * The timer queries (TIME_ELAPSED) shouldn't be suspended for blits,
+	 * but they should be suspended between IBs. */
 	struct list_head		active_nontimer_queries;
+	struct list_head		active_timer_queries;
 	unsigned			num_cs_dw_nontimer_queries_suspend;
+	unsigned			num_cs_dw_timer_queries_suspend;
 	/* If queries have been suspended. */
-	bool				nontimer_queries_suspended;
+	bool				queries_suspended_for_flush;
 	/* Additional hardware info. */
 	unsigned			backend_mask;
 	unsigned			max_db; /* for OQ */
@@ -441,6 +469,9 @@ struct r600_common_context {
 	/* This ensures there is enough space in the command stream. */
 	void (*need_gfx_cs_space)(struct pipe_context *ctx, unsigned num_dw,
 				  bool include_draw_vbo);
+
+	void (*set_atom_dirty)(struct r600_common_context *ctx,
+			       struct r600_atom *atom, bool dirty);
 };
 
 /* r600_buffer.c */
@@ -495,6 +526,8 @@ unsigned r600_gpu_load_end(struct r600_common_screen *rscreen, uint64_t begin);
 void r600_query_init(struct r600_common_context *rctx);
 void r600_suspend_nontimer_queries(struct r600_common_context *ctx);
 void r600_resume_nontimer_queries(struct r600_common_context *ctx);
+void r600_suspend_timer_queries(struct r600_common_context *ctx);
+void r600_resume_timer_queries(struct r600_common_context *ctx);
 void r600_query_init_backend_mask(struct r600_common_context *ctx);
 
 /* r600_streamout.c */
@@ -549,12 +582,12 @@ void cayman_emit_msaa_config(struct radeon_winsys_cs *cs, int nr_samples,
 
 /* Inline helpers. */
 
-static INLINE struct r600_resource *r600_resource(struct pipe_resource *r)
+static inline struct r600_resource *r600_resource(struct pipe_resource *r)
 {
 	return (struct r600_resource*)r;
 }
 
-static INLINE void
+static inline void
 r600_resource_reference(struct r600_resource **ptr, struct r600_resource *res)
 {
 	pipe_resource_reference((struct pipe_resource **)ptr,
@@ -568,6 +601,26 @@ static inline unsigned r600_tex_aniso_filter(unsigned filter)
 	if (filter <= 4)   return 2;
 	if (filter <= 8)   return 3;
 	 /* else */        return 4;
+}
+
+static inline unsigned r600_wavefront_size(enum radeon_family family)
+{
+	switch (family) {
+	case CHIP_RV610:
+	case CHIP_RS780:
+	case CHIP_RV620:
+	case CHIP_RS880:
+		return 16;
+	case CHIP_RV630:
+	case CHIP_RV635:
+	case CHIP_RV730:
+	case CHIP_RV710:
+	case CHIP_PALM:
+	case CHIP_CEDAR:
+		return 32;
+	default:
+		return 64;
+	}
 }
 
 #define COMPUTE_DBG(rscreen, fmt, args...) \

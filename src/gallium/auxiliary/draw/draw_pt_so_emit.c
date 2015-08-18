@@ -65,7 +65,7 @@ draw_so_info(const struct draw_context *draw)
    return state;
 }
 
-static INLINE boolean
+static inline boolean
 draw_has_so(const struct draw_context *draw)
 {
    const struct pipe_stream_output_info *state = draw_so_info(draw);

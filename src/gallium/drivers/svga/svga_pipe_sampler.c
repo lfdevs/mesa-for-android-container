@@ -35,7 +35,7 @@
 
 #include "svga_debug.h"
 
-static INLINE unsigned
+static inline unsigned
 translate_wrap_mode(unsigned wrap)
 {
    switch (wrap) {
@@ -68,7 +68,7 @@ translate_wrap_mode(unsigned wrap)
    }
 }
 
-static INLINE unsigned translate_img_filter( unsigned filter )
+static inline unsigned translate_img_filter( unsigned filter )
 {
    switch (filter) {
    case PIPE_TEX_FILTER_NEAREST: return SVGA3D_TEX_FILTER_NEAREST;
@@ -79,7 +79,7 @@ static INLINE unsigned translate_img_filter( unsigned filter )
    }
 }
 
-static INLINE unsigned translate_mip_filter( unsigned filter )
+static inline unsigned translate_mip_filter( unsigned filter )
 {
    switch (filter) {
    case PIPE_TEX_MIPFILTER_NONE:    return SVGA3D_TEX_FILTER_NONE;

@@ -285,7 +285,6 @@ nv04_render_init(struct gl_context *ctx)
 	_tnl_init_vertices(ctx, tnl->vb.Size,
 			   NUM_VERTEX_ATTRS * 4 * sizeof(GLfloat));
 	_tnl_allow_pixel_fog(ctx, GL_FALSE);
-	_tnl_wakeup(ctx);
 }
 
 void

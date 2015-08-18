@@ -169,7 +169,7 @@ clGetKernelWorkGroupInfo(cl_kernel d_kern, cl_device_id d_dev,
       break;
 
    case CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE:
-      buf.as_scalar<size_t>() = 1;
+      buf.as_scalar<size_t>() = dev.subgroup_size();
       break;
 
    case CL_KERNEL_PRIVATE_MEM_SIZE:
@@ -187,6 +187,14 @@ clGetKernelWorkGroupInfo(cl_kernel d_kern, cl_device_id d_dev,
 
 } catch (std::out_of_range &e) {
    return CL_INVALID_DEVICE;
+}
+
+CLOVER_API cl_int
+clGetKernelArgInfo(cl_kernel d_kern,
+                   cl_uint idx, cl_kernel_arg_info param,
+                   size_t size, void *r_buf, size_t *r_size) {
+   CLOVER_NOT_SUPPORTED_UNTIL("1.2");
+   return CL_KERNEL_ARG_INFO_NOT_AVAILABLE;
 }
 
 namespace {

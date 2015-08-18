@@ -98,7 +98,7 @@ struct nv30_query {
    uint64_t result;
 };
 
-static INLINE struct nv30_query *
+static inline struct nv30_query *
 nv30_query(struct pipe_query *pipe)
 {
    return (struct nv30_query *)pipe;
@@ -208,7 +208,7 @@ nv30_query_result(struct pipe_context *pipe, struct pipe_query *pq,
    if (ntfy1) {
       while (ntfy1[3] & 0xff000000) {
          if (!wait)
-            return FALSE;
+            return false;
       }
 
       switch (q->type) {
@@ -228,7 +228,7 @@ nv30_query_result(struct pipe_context *pipe, struct pipe_query *pq,
    }
 
    *res64 = q->result;
-   return TRUE;
+   return true;
 }
 
 static void

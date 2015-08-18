@@ -453,8 +453,8 @@ nv30_state_context_switch(struct nv30_context *nv30)
    nv30->base.pushbuf->user_priv = &nv30->bufctx;
 }
 
-boolean
-nv30_state_validate(struct nv30_context *nv30, uint32_t mask, boolean hwtnl)
+bool
+nv30_state_validate(struct nv30_context *nv30, uint32_t mask, bool hwtnl)
 {
    struct nouveau_screen *screen = &nv30->screen->base;
    struct nouveau_pushbuf *push = nv30->base.pushbuf;
@@ -494,7 +494,7 @@ nv30_state_validate(struct nv30_context *nv30, uint32_t mask, boolean hwtnl)
    nouveau_pushbuf_bufctx(push, bctx);
    if (nouveau_pushbuf_validate(push)) {
       nouveau_pushbuf_bufctx(push, NULL);
-      return FALSE;
+      return false;
    }
 
    /*XXX*/
@@ -528,7 +528,7 @@ nv30_state_validate(struct nv30_context *nv30, uint32_t mask, boolean hwtnl)
       }
    }
 
-   return TRUE;
+   return true;
 }
 
 void

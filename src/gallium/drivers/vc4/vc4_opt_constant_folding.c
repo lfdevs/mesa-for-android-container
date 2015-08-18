@@ -98,10 +98,8 @@ bool
 qir_opt_constant_folding(struct vc4_compile *c)
 {
         bool progress = false;
-        struct simple_node *node;
 
-        foreach(node, &c->instructions) {
-                struct qinst *inst = (struct qinst *)node;
+        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 if (constant_fold(c, inst))
                         progress = true;
         }

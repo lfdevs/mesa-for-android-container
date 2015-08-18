@@ -354,14 +354,22 @@ _mesa_array_format_flip_channels(mesa_array_format format)
       return format;
 
    if (num_channels == 2) {
-      _mesa_array_format_set_swizzle(&format, swizzle[1], swizzle[0],
-                                     swizzle[2], swizzle[3]);
+      /* Assert that the swizzle makes sense for 2 channels */
+      for (unsigned i = 0; i < 4; i++)
+         assert(swizzle[i] != 2 && swizzle[i] != 3);
+
+      static const uint8_t flip_xy[6] = { 1, 0, 2, 3, 4, 5 };
+      _mesa_array_format_set_swizzle(&format,
+                                     flip_xy[swizzle[0]], flip_xy[swizzle[1]],
+                                     flip_xy[swizzle[2]], flip_xy[swizzle[3]]);
       return format;
    }
 
    if (num_channels == 4) {
-      _mesa_array_format_set_swizzle(&format, swizzle[3], swizzle[2],
-                                     swizzle[1], swizzle[0]);
+      static const uint8_t flip[6] = { 3, 2, 1, 0, 4, 5 };
+      _mesa_array_format_set_swizzle(&format,
+                                     flip[swizzle[0]], flip[swizzle[1]],
+                                     flip[swizzle[2]], flip[swizzle[3]]);
       return format;
    }
 
@@ -372,10 +380,11 @@ uint32_t
 _mesa_format_to_array_format(mesa_format format)
 {
    const struct gl_format_info *info = _mesa_get_format_info(format);
-   if (_mesa_little_endian())
-      return info->ArrayFormat;
-   else
+   if (info->ArrayFormat && !_mesa_little_endian() &&
+       info->Layout == MESA_FORMAT_LAYOUT_PACKED)
       return _mesa_array_format_flip_channels(info->ArrayFormat);
+   else
+      return info->ArrayFormat;
 }
 
 static struct hash_table *format_array_format_table;
@@ -396,6 +405,11 @@ format_array_format_table_init(void)
 
    format_array_format_table = _mesa_hash_table_create(NULL, NULL,
                                                        array_formats_equal);
+
+   if (!format_array_format_table) {
+      _mesa_error_no_memory(__func__);
+      return;
+   }
 
    for (f = 1; f < MESA_FORMAT_COUNT; ++f) {
       info = _mesa_get_format_info(f);
@@ -431,6 +445,12 @@ _mesa_format_from_array_format(uint32_t array_format)
    assert(_mesa_format_is_mesa_array_format(array_format));
 
    call_once(&format_array_format_table_exists, format_array_format_table_init);
+
+   if (!format_array_format_table) {
+      static const once_flag once_flag_init = ONCE_FLAG_INIT;
+      format_array_format_table_exists = once_flag_init;
+      return MESA_FORMAT_NONE;
+   }
 
    entry = _mesa_hash_table_search_pre_hashed(format_array_format_table,
                                               array_format,

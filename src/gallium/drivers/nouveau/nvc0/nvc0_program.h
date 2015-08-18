@@ -21,8 +21,8 @@ struct nvc0_program {
    struct pipe_shader_state pipe;
 
    ubyte type;
-   boolean translated;
-   boolean need_tls;
+   bool translated;
+   bool need_tls;
    uint8_t num_gprs;
 
    uint32_t *code;
@@ -41,7 +41,7 @@ struct nvc0_program {
       uint8_t clip_enable; /* mask of defined clip planes */
       uint8_t num_ucps; /* also set to max if ClipDistance is used */
       uint8_t edgeflag; /* attribute index of edgeflag input */
-      boolean need_vertex_id;
+      bool need_vertex_id;
    } vp;
    struct {
       uint8_t early_z;

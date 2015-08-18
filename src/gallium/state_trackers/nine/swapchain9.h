@@ -76,7 +76,7 @@ struct NineSwapChain9
     BOOL enable_threadpool;
 };
 
-static INLINE struct NineSwapChain9 *
+static inline struct NineSwapChain9 *
 NineSwapChain9( void *data )
 {
     return (struct NineSwapChain9 *)data;

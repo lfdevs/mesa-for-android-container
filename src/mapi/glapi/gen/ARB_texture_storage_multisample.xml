@@ -7,7 +7,7 @@
 
 <category name="GL_ARB_texture_storage_multisample" number="141">
 
-   <function name="TexStorage2DMultisample">
+   <function name="TexStorage2DMultisample" es2="3.1">
       <param name="target" type="GLenum"/>
       <param name="samples" type="GLsizei"/>
       <param name="internalformat" type="GLenum"/>

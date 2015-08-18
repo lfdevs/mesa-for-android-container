@@ -46,7 +46,7 @@ struct pipe_resource *r300_buffer_create(struct pipe_screen *screen,
 
 /* Inline functions. */
 
-static INLINE struct r300_buffer *r300_buffer(struct pipe_resource *buffer)
+static inline struct r300_buffer *r300_buffer(struct pipe_resource *buffer)
 {
     return (struct r300_buffer *)buffer;
 }

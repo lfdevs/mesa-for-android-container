@@ -51,7 +51,11 @@
 
 #define LP_MAX_TGSI_PREDS 16
 
+#define LP_MAX_TGSI_CONSTS 4096
+
 #define LP_MAX_TGSI_CONST_BUFFERS 16
+
+#define LP_MAX_TGSI_CONST_BUFFER_SIZE (LP_MAX_TGSI_CONSTS * sizeof(float[4]))
 
 /*
  * For quick access we cache registers in statically
@@ -84,7 +88,7 @@
  * actually try to allocate the maximum and run out of memory and crash.  So
  * stick with something reasonable here.
  */
-static INLINE int
+static inline int
 gallivm_get_shader_param(enum pipe_shader_cap param)
 {
    switch(param) {
@@ -96,11 +100,11 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
    case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
       return LP_MAX_TGSI_NESTING;
    case PIPE_SHADER_CAP_MAX_INPUTS:
-      return PIPE_MAX_SHADER_INPUTS;
+      return 32;
    case PIPE_SHADER_CAP_MAX_OUTPUTS:
       return 32;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
-      return sizeof(float[4]) * 4096;
+      return LP_MAX_TGSI_CONST_BUFFER_SIZE;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
       return PIPE_MAX_CONSTANT_BUFFERS;
    case PIPE_SHADER_CAP_MAX_TEMPS:
@@ -125,8 +129,10 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
    case PIPE_SHADER_CAP_PREFERRED_IR:
       return PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+   case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return 1;
    case PIPE_SHADER_CAP_DOUBLES:
+      return 1;
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:

@@ -37,7 +37,7 @@ nv50_resource_resolve(struct pipe_context *, const struct pipe_resolve_info *);
 #define NV50_BLIT_TEXTURE_2D_ARRAY  5
 #define NV50_BLIT_MAX_TEXTURE_TYPES 6
 
-static INLINE unsigned
+static inline unsigned
 nv50_blit_texture_type(enum pipe_texture_target target)
 {
    switch (target) {
@@ -52,7 +52,7 @@ nv50_blit_texture_type(enum pipe_texture_target target)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 nv50_blit_get_tgsi_texture_target(enum pipe_texture_target target)
 {
    switch (target) {
@@ -67,7 +67,7 @@ nv50_blit_get_tgsi_texture_target(enum pipe_texture_target target)
    }
 }
 
-static INLINE enum pipe_texture_target
+static inline enum pipe_texture_target
 nv50_blit_reinterpret_pipe_texture_target(enum pipe_texture_target target)
 {
    switch (target) {
@@ -81,7 +81,7 @@ nv50_blit_reinterpret_pipe_texture_target(enum pipe_texture_target target)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 nv50_blit_get_filter(const struct pipe_blit_info *info)
 {
    if (info->dst.resource->nr_samples < info->src.resource->nr_samples)
@@ -102,7 +102,7 @@ nv50_blit_get_filter(const struct pipe_blit_info *info)
 /* Since shaders cannot export stencil, we cannot copy stencil values when
  * rendering to ZETA, so we attach the ZS surface to a colour render target.
  */
-static INLINE enum pipe_format
+static inline enum pipe_format
 nv50_blit_zeta_to_colour_format(enum pipe_format format)
 {
    switch (format) {
@@ -127,7 +127,7 @@ nv50_blit_zeta_to_colour_format(enum pipe_format format)
 }
 
 
-static INLINE uint16_t
+static inline uint16_t
 nv50_blit_derive_color_mask(const struct pipe_blit_info *info)
 {
    const unsigned mask = info->mask;
@@ -162,7 +162,7 @@ nv50_blit_derive_color_mask(const struct pipe_blit_info *info)
    return color_mask;
 }
 
-static INLINE uint32_t
+static inline uint32_t
 nv50_blit_eng2d_get_mask(const struct pipe_blit_info *info)
 {
    uint32_t mask = 0;
@@ -191,8 +191,8 @@ nv50_blit_eng2d_get_mask(const struct pipe_blit_info *info)
 # define nv50_format_table nvc0_format_table
 #endif
 
-/* return TRUE for formats that can be converted among each other by NVC0_2D */
-static INLINE boolean
+/* return true for formats that can be converted among each other by NVC0_2D */
+static inline bool
 nv50_2d_dst_format_faithful(enum pipe_format format)
 {
    const uint64_t mask =
@@ -201,7 +201,7 @@ nv50_2d_dst_format_faithful(enum pipe_format format)
    uint8_t id = nv50_format_table[format].rt;
    return (id >= 0xc0) && (mask & (1ULL << (id - 0xc0)));
 }
-static INLINE boolean
+static inline bool
 nv50_2d_src_format_faithful(enum pipe_format format)
 {
    const uint64_t mask =
@@ -211,7 +211,7 @@ nv50_2d_src_format_faithful(enum pipe_format format)
    return (id >= 0xc0) && (mask & (1ULL << (id - 0xc0)));
 }
 
-static INLINE boolean
+static inline bool
 nv50_2d_format_supported(enum pipe_format format)
 {
    uint8_t id = nv50_format_table[format].rt;
@@ -219,7 +219,7 @@ nv50_2d_format_supported(enum pipe_format format)
       (NV50_ENG2D_SUPPORTED_FORMATS & (1ULL << (id - 0xc0)));
 }
 
-static INLINE boolean
+static inline bool
 nv50_2d_dst_format_ops_supported(enum pipe_format format)
 {
    uint8_t id = nv50_format_table[format].rt;

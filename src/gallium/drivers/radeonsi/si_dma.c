@@ -30,21 +30,6 @@
 
 #include "util/u_format.h"
 
-static unsigned si_array_mode(unsigned mode)
-{
-	switch (mode) {
-	case RADEON_SURF_MODE_LINEAR_ALIGNED:
-		return V_009910_ARRAY_LINEAR_ALIGNED;
-	case RADEON_SURF_MODE_1D:
-		return V_009910_ARRAY_1D_TILED_THIN1;
-	case RADEON_SURF_MODE_2D:
-		return V_009910_ARRAY_2D_TILED_THIN1;
-	default:
-	case RADEON_SURF_MODE_LINEAR:
-		return V_009910_ARRAY_LINEAR_GENERAL;
-	}
-}
-
 static uint32_t si_micro_tile_mode(struct si_screen *sscreen, unsigned tile_mode)
 {
 	if (sscreen->b.info.si_tile_mode_array_valid) {
@@ -237,11 +222,6 @@ void si_dma_copy(struct pipe_context *ctx,
 	unsigned dst_x = dstx, dst_y = dsty, dst_z = dstz;
 
 	if (sctx->b.rings.dma.cs == NULL) {
-		goto fallback;
-	}
-
-	/* TODO: Implement DMA copy for CIK */
-	if (sctx->b.chip_class >= CIK) {
 		goto fallback;
 	}
 

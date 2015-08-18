@@ -274,7 +274,7 @@ do {                                                                    \
 } while (0)
 
 
-static INLINE void 
+static inline void 
 svga_queue_tss( struct ts_queue *q,
                 unsigned unit,
                 unsigned tss,

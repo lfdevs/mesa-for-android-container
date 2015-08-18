@@ -33,7 +33,7 @@
 #include "nv30/nv30_resource.h"
 #include "nv30/nv30_transfer.h"
 
-static INLINE unsigned
+static inline unsigned
 layer_offset(struct pipe_resource *pt, unsigned level, unsigned layer)
 {
    struct nv30_miptree *mt = nv30_miptree(pt);
@@ -54,7 +54,7 @@ nv30_miptree_get_handle(struct pipe_screen *pscreen,
    unsigned stride;
 
    if (!mt || !mt->base.bo)
-      return FALSE;
+      return false;
 
    stride = mt->level[0].pitch;
 
@@ -78,13 +78,13 @@ struct nv30_transfer {
    unsigned nblocksy;
 };
 
-static INLINE struct nv30_transfer *
+static inline struct nv30_transfer *
 nv30_transfer(struct pipe_transfer *ptx)
 {
    return (struct nv30_transfer *)ptx;
 }
 
-static INLINE void
+static inline void
 define_rect(struct pipe_resource *pt, unsigned level, unsigned z,
             unsigned x, unsigned y, unsigned w, unsigned h,
             struct nv30_rect *rect)
@@ -242,8 +242,8 @@ nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
    tx->base.level = level;
    tx->base.usage = usage;
    tx->base.box = *box;
-   tx->base.stride = util_format_get_nblocksx(pt->format, box->width) *
-                     util_format_get_blocksize(pt->format);
+   tx->base.stride = align(util_format_get_nblocksx(pt->format, box->width) *
+                           util_format_get_blocksize(pt->format), 64);
    tx->base.layer_stride = util_format_get_nblocksy(pt->format, box->height) *
                            tx->base.stride;
 
@@ -372,7 +372,7 @@ nv30_miptree_create(struct pipe_screen *pscreen,
    }
 
    if (!mt->uniform_pitch)
-      mt->swizzled = TRUE;
+      mt->swizzled = true;
 
    size = 0;
    for (l = 0; l <= pt->last_level; l++) {

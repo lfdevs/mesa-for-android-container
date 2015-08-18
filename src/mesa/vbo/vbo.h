@@ -97,7 +97,8 @@ typedef void (*vbo_draw_func)( struct gl_context *ctx,
 			       GLuint min_index,
 			       GLuint max_index,
 			       struct gl_transform_feedback_object *tfb_vertcount,
-			       struct gl_buffer_object *indirect );
+                               unsigned stream,
+			       struct gl_buffer_object *indirect);
 
 
 

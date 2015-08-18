@@ -71,6 +71,11 @@ struct lp_build_emit_data {
     */
    unsigned chan;
 
+   /**
+    * This is used to specify the src channel to read from for doubles.
+    */
+   unsigned src_chan;
+
    /** The lp_build_tgsi_action::emit 'executes' the opcode and writes the
     * results to this array.
     */

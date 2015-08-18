@@ -370,29 +370,6 @@ trace_screen_fence_reference(struct pipe_screen *_screen,
 
 
 static boolean
-trace_screen_fence_signalled(struct pipe_screen *_screen,
-                             struct pipe_fence_handle *fence)
-{
-   struct trace_screen *tr_scr = trace_screen(_screen);
-   struct pipe_screen *screen = tr_scr->screen;
-   int result;
-
-   trace_dump_call_begin("pipe_screen", "fence_signalled");
-
-   trace_dump_arg(ptr, screen);
-   trace_dump_arg(ptr, fence);
-
-   result = screen->fence_signalled(screen, fence);
-
-   trace_dump_ret(bool, result);
-
-   trace_dump_call_end();
-
-   return result;
-}
-
-
-static boolean
 trace_screen_fence_finish(struct pipe_screen *_screen,
                           struct pipe_fence_handle *fence,
                           uint64_t timeout)
@@ -503,7 +480,6 @@ trace_screen_create(struct pipe_screen *screen)
    tr_scr->base.resource_get_handle = trace_screen_resource_get_handle;
    tr_scr->base.resource_destroy = trace_screen_resource_destroy;
    tr_scr->base.fence_reference = trace_screen_fence_reference;
-   tr_scr->base.fence_signalled = trace_screen_fence_signalled;
    tr_scr->base.fence_finish = trace_screen_fence_finish;
    tr_scr->base.flush_frontbuffer = trace_screen_flush_frontbuffer;
    tr_scr->base.get_timestamp = trace_screen_get_timestamp;

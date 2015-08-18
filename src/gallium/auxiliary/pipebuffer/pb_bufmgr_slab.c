@@ -163,7 +163,7 @@ struct pb_slab_range_manager
 };
 
 
-static INLINE struct pb_slab_buffer *
+static inline struct pb_slab_buffer *
 pb_slab_buffer(struct pb_buffer *buf)
 {
    assert(buf);
@@ -171,7 +171,7 @@ pb_slab_buffer(struct pb_buffer *buf)
 }
 
 
-static INLINE struct pb_slab_manager *
+static inline struct pb_slab_manager *
 pb_slab_manager(struct pb_manager *mgr)
 {
    assert(mgr);
@@ -179,7 +179,7 @@ pb_slab_manager(struct pb_manager *mgr)
 }
 
 
-static INLINE struct pb_slab_range_manager *
+static inline struct pb_slab_range_manager *
 pb_slab_range_manager(struct pb_manager *mgr)
 {
    assert(mgr);

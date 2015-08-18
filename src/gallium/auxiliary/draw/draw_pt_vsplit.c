@@ -84,7 +84,7 @@ vsplit_flush_cache(struct vsplit_frontend *vsplit, unsigned flags)
 /**
  * Add a fetch element and add it to the draw elements.
  */
-static INLINE void
+static inline void
 vsplit_add_cache(struct vsplit_frontend *vsplit, unsigned fetch, unsigned ofbias)
 {
    unsigned hash;
@@ -111,7 +111,7 @@ vsplit_add_cache(struct vsplit_frontend *vsplit, unsigned fetch, unsigned ofbias
  * The value is checked for overflows (both integer overflows
  * and the elements array overflow).
  */
-static INLINE unsigned
+static inline unsigned
 vsplit_get_base_idx(struct vsplit_frontend *vsplit,
                     unsigned start, unsigned fetch, unsigned *ofbit)
 {
@@ -137,7 +137,7 @@ vsplit_get_base_idx(struct vsplit_frontend *vsplit,
  * index, plus the element bias, clamped to maximum elememt
  * index if that addition overflows.
  */
-static INLINE unsigned
+static inline unsigned
 vsplit_get_bias_idx(struct vsplit_frontend *vsplit,
                     int idx, int bias, unsigned *ofbias)
 {
@@ -170,7 +170,7 @@ vsplit_get_bias_idx(struct vsplit_frontend *vsplit,
    elt_idx = vsplit_get_base_idx(vsplit, start, fetch, &ofbit);          \
    elt_idx = vsplit_get_bias_idx(vsplit, ofbit ? 0 : DRAW_GET_IDX(elts, elt_idx), elt_bias, &ofbias)
 
-static INLINE void
+static inline void
 vsplit_add_cache_ubyte(struct vsplit_frontend *vsplit, const ubyte *elts,
                        unsigned start, unsigned fetch, int elt_bias)
 {
@@ -179,7 +179,7 @@ vsplit_add_cache_ubyte(struct vsplit_frontend *vsplit, const ubyte *elts,
    vsplit_add_cache(vsplit, elt_idx, ofbias);
 }
 
-static INLINE void
+static inline void
 vsplit_add_cache_ushort(struct vsplit_frontend *vsplit, const ushort *elts,
                        unsigned start, unsigned fetch, int elt_bias)
 {
@@ -193,7 +193,7 @@ vsplit_add_cache_ushort(struct vsplit_frontend *vsplit, const ushort *elts,
  * Add a fetch element and add it to the draw elements.  The fetch element is
  * in full range (uint).
  */
-static INLINE void
+static inline void
 vsplit_add_cache_uint(struct vsplit_frontend *vsplit, const uint *elts,
                       unsigned start, unsigned fetch, int elt_bias)
 {

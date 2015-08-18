@@ -82,7 +82,7 @@ struct svga_screen
 
 #ifndef DEBUG
 /** cast wrapper */
-static INLINE struct svga_screen *
+static inline struct svga_screen *
 svga_screen(struct pipe_screen *pscreen)
 {
    return (struct svga_screen *) pscreen;

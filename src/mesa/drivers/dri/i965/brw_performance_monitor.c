@@ -581,7 +581,7 @@ snapshot_statistics_registers(struct brw_context *brw,
    const int group = PIPELINE_STATS_COUNTERS;
    const int num_counters = ctx->PerfMonitor.Groups[group].NumCounters;
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    for (int i = 0; i < num_counters; i++) {
       if (BITSET_TEST(monitor->base.ActiveCounters[group], i)) {
@@ -687,7 +687,7 @@ stop_oa_counters(struct brw_context *brw)
  * The amount of batch space it takes to emit an MI_REPORT_PERF_COUNT snapshot,
  * including the required PIPE_CONTROL flushes.
  *
- * Sandybridge is the worst case scenario: intel_batchbuffer_emit_mi_flush
+ * Sandybridge is the worst case scenario: brw_emit_mi_flush
  * expands to three PIPE_CONTROLs which are 4 DWords each.  We have to flush
  * before and after MI_REPORT_PERF_COUNT, so multiply by two.  Finally, add
  * the 3 DWords for MI_REPORT_PERF_COUNT itself.
@@ -710,10 +710,10 @@ emit_mi_report_perf_count(struct brw_context *brw,
    /* Make sure the commands to take a snapshot fits in a single batch. */
    intel_batchbuffer_require_space(brw, MI_REPORT_PERF_COUNT_BATCH_DWORDS * 4,
                                    RENDER_RING);
-   int batch_used = brw->batch.used;
+   int batch_used = USED_BATCH(brw->batch);
 
    /* Reports apparently don't always get written unless we flush first. */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    if (brw->gen == 5) {
       /* Ironlake requires two MI_REPORT_PERF_COUNT commands to write all
@@ -751,10 +751,10 @@ emit_mi_report_perf_count(struct brw_context *brw,
    }
 
    /* Reports apparently don't always get written unless we flush after. */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    (void) batch_used;
-   assert(brw->batch.used - batch_used <= MI_REPORT_PERF_COUNT_BATCH_DWORDS * 4);
+   assert(USED_BATCH(brw->batch) - batch_used <= MI_REPORT_PERF_COUNT_BATCH_DWORDS * 4);
 }
 
 /**
@@ -1386,7 +1386,7 @@ void
 brw_perf_monitor_new_batch(struct brw_context *brw)
 {
    assert(brw->batch.ring == RENDER_RING);
-   assert(brw->gen < 6 || brw->batch.used == 0);
+   assert(brw->gen < 6 || USED_BATCH(brw->batch) == 0);
 
    if (brw->perfmon.oa_users == 0)
       return;

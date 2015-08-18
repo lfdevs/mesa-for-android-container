@@ -234,7 +234,7 @@ get_label_pointer(struct gl_context *ctx, GLenum identifier, GLuint name,
 
 invalid_enum:
    _mesa_error(ctx, GL_INVALID_ENUM, "%s(identifier = %s)",
-               caller, _mesa_lookup_enum_by_nr(identifier));
+               caller, _mesa_enum_to_string(identifier));
    return NULL;
 }
 

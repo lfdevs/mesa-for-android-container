@@ -110,7 +110,7 @@ establish_uniform_storage(struct gl_shader_program *prog, unsigned num_storage,
 
    prog->UniformStorage = rzalloc_array(prog, struct gl_uniform_storage,
 					num_storage);
-   prog->NumUserUniformStorage = num_storage;
+   prog->NumUniformStorage = num_storage;
 
    prog->UniformStorage[index_to_set].name = (char *) name;
    prog->UniformStorage[index_to_set].type = type;
@@ -155,7 +155,7 @@ establish_uniform_storage(struct gl_shader_program *prog, unsigned num_storage,
 static void
 verify_initialization(struct gl_shader_program *prog, unsigned actual_index)
 {
-   for (unsigned i = 0; i < prog->NumUserUniformStorage; i++) {
+   for (unsigned i = 0; i < prog->NumUniformStorage; i++) {
       if (i == actual_index) {
 	 EXPECT_TRUE(prog->UniformStorage[actual_index].initialized);
       } else {

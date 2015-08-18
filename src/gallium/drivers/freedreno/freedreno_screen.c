@@ -68,10 +68,8 @@ static const struct debug_named_value debug_options[] = {
 		{"fraghalf",  FD_DBG_FRAGHALF, "Use half-precision in fragment shader"},
 		{"nobin",     FD_DBG_NOBIN,  "Disable hw binning"},
 		{"optmsgs",   FD_DBG_OPTMSGS,"Enable optimizer debug messages"},
-		{"optdump",   FD_DBG_OPTDUMP,"Dump shader DAG to .dot files"},
-		{"glsl120",   FD_DBG_GLSL120,"Temporary flag to force GLSL 120 (rather than 130) on a3xx+"},
-		{"nocp",      FD_DBG_NOCP,   "Disable copy-propagation"},
-		{"nir",       FD_DBG_NIR,    "Enable experimental NIR compiler"},
+		{"glsl120",   FD_DBG_GLSL120,"Temporary flag to force GLSL 1.20 (rather than 1.30) on a3xx+"},
+		{"shaderdb",  FD_DBG_SHADERDB, "Enable shaderdb output"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -165,10 +163,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
 	case PIPE_CAP_TEXTURE_BARRIER:
 	case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-	case PIPE_CAP_CUBE_MAP_ARRAY:
-	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
-	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
 	case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
 	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_COMPUTE:
@@ -178,12 +172,31 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_PRIMITIVE_RESTART:
 	case PIPE_CAP_TGSI_INSTANCEID:
 	case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
-		return is_a3xx(screen) || is_a4xx(screen);
-
 	case PIPE_CAP_INDEP_BLEND_ENABLE:
 	case PIPE_CAP_INDEP_BLEND_FUNC:
+	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
+	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+		return is_a3xx(screen) || is_a4xx(screen);
+
+	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+		/* ignoring first/last_element.. but I guess that should be
+		 * easy to add..
+		 */
+		return 0;
+	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
+		/* I think 32k on a4xx.. and we could possibly emulate more
+		 * by pretending 2d/rect textures and splitting high bits
+		 * of index into 2nd dimension..
+		 */
+		return 16383;
+
 	case PIPE_CAP_DEPTH_CLIP_DISABLE:
+	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
 		return is_a3xx(screen);
+
+	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+	case PIPE_CAP_CUBE_MAP_ARRAY:
+		return is_a4xx(screen);
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
 		return 256;
@@ -191,10 +204,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
 		if (glsl120)
 			return 120;
-		return (is_a3xx(screen) || is_a4xx(screen)) ? 130 : 120;
+		return is_ir3(screen) ? 130 : 120;
 
 	/* Unsupported features. */
-	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
 	case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
@@ -221,6 +233,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+	case PIPE_CAP_DEPTH_BOUNDS_TEST:
 		return 0;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
@@ -228,9 +242,17 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	/* Stream output. */
 	case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
+		if (is_ir3(screen))
+			return PIPE_MAX_SO_BUFFERS;
+		return 0;
 	case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+		if (is_ir3(screen))
+			return 1;
+		return 0;
 	case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
 	case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
+		if (is_ir3(screen))
+			return 16 * 4;   /* should only be shader out limit? */
 		return 0;
 
 	/* Geometry shader output, unsupported. */
@@ -261,9 +283,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_QUERY_TIMESTAMP:
 		return 0;
 	case PIPE_CAP_OCCLUSION_QUERY:
-		/* TODO still missing on a4xx, but we lie to get gl2..
-		 * it's not a feature, it's a bug!
-		 */
 		return is_a3xx(screen) || is_a4xx(screen);
 
 	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
@@ -360,7 +379,7 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		 */
 		return ((is_a3xx(screen) || is_a4xx(screen)) ? 4096 : 64) * sizeof(float[4]);
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-		return (is_a3xx(screen) || is_a4xx(screen)) ? 16 : 1;
+		return is_ir3(screen) ? 16 : 1;
 	case PIPE_SHADER_CAP_MAX_PREDS:
 		return 0; /* nothing uses this */
 	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -375,13 +394,14 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+        case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
 		return 0;
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
 		return 1;
 	case PIPE_SHADER_CAP_INTEGERS:
 		if (glsl120)
 			return 0;
-		return (is_a3xx(screen) || is_a4xx(screen)) ? 1 : 0;
+		return is_ir3(screen) ? 1 : 0;
 	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
 	case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
 		return 16;
@@ -548,7 +568,6 @@ fd_screen_create(struct fd_device *dev)
 	pscreen->get_timestamp = fd_screen_get_timestamp;
 
 	pscreen->fence_reference = fd_screen_fence_ref;
-	pscreen->fence_signalled = fd_screen_fence_signalled;
 	pscreen->fence_finish = fd_screen_fence_finish;
 
 	util_format_s3tc_init();

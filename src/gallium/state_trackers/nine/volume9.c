@@ -152,7 +152,7 @@ NineVolume9_GetContainer( struct NineVolume9 *This,
     return NineUnknown_QueryInterface(NineUnknown(This)->container, riid, ppContainer);
 }
 
-static INLINE void
+static inline void
 NineVolume9_MarkContainerDirty( struct NineVolume9 *This )
 {
     struct NineBaseTexture9 *tex;
@@ -182,13 +182,13 @@ NineVolume9_GetDesc( struct NineVolume9 *This,
     return D3D_OK;
 }
 
-static INLINE boolean
+static inline boolean
 NineVolume9_IsDirty(struct NineVolume9 *This)
 {
     return This->dirty_box[0].width != 0;
 }
 
-INLINE void
+inline void
 NineVolume9_AddDirtyRegion( struct NineVolume9 *This,
                             const struct pipe_box *box )
 {
@@ -226,7 +226,7 @@ NineVolume9_AddDirtyRegion( struct NineVolume9 *This,
     }
 }
 
-static INLINE uint8_t *
+static inline uint8_t *
 NineVolume9_GetSystemMemPointer(struct NineVolume9 *This, int x, int y, int z)
 {
     unsigned x_offset = util_format_get_stride(This->info.format, x);

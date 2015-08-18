@@ -131,14 +131,14 @@ from a shader without an associated sampler.  This means that they
 have no support for floating point coordinates, address wrap modes or
 filtering.
 
-Shader resources are specified for all the shader stages at once using
-the ``set_shader_resources`` method.  When binding texture resources,
-the ``level``, ``first_layer`` and ``last_layer`` pipe_surface fields
-specify the mipmap level and the range of layers the texture will be
-constrained to.  In the case of buffers, ``first_element`` and
-``last_element`` specify the range within the buffer that will be used
-by the shader resource.  Writes to a shader resource are only allowed
-when the ``writable`` flag is set.
+There are 2 types of shader resources: buffers and images.
+
+Buffers are specified using the ``set_shader_buffers`` method.
+
+Images are specified using the ``set_shader_images`` method. When binding
+images, the ``level``, ``first_layer`` and ``last_layer`` pipe_image_view
+fields specify the mipmap level and the range of layers the image will be
+constrained to.
 
 Surfaces
 ^^^^^^^^

@@ -56,7 +56,7 @@ struct NineVertexShader9
 
     uint64_t ff_key[2];
 };
-static INLINE struct NineVertexShader9 *
+static inline struct NineVertexShader9 *
 NineVertexShader9( void *data )
 {
     return (struct NineVertexShader9 *)data;

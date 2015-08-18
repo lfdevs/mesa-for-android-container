@@ -489,7 +489,7 @@ bool alu_group_tracker::try_reserve(alu_node* n) {
 
 	n->bc.bank_swizzle = 0;
 
-	if (!trans & fbs)
+	if (!trans && fbs)
 		n->bc.bank_swizzle = VEC_210;
 
 	if (gpr.try_reserve(n)) {

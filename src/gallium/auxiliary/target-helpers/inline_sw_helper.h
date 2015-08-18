@@ -20,7 +20,7 @@
 #endif
 
 
-static INLINE struct pipe_screen *
+static inline struct pipe_screen *
 sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
 {
    struct pipe_screen *screen = NULL;
@@ -39,7 +39,7 @@ sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
 }
 
 
-static INLINE struct pipe_screen *
+static inline struct pipe_screen *
 sw_screen_create(struct sw_winsys *winsys)
 {
    const char *default_driver;
@@ -71,7 +71,7 @@ PUBLIC const __DRIextension **__driDriverGetExtensions_swrast(void)
    return galliumsw_driver_extensions;
 }
 
-INLINE struct pipe_screen *
+inline struct pipe_screen *
 drisw_create_screen(struct drisw_loader_funcs *lf)
 {
    struct sw_winsys *winsys = NULL;
@@ -98,7 +98,7 @@ drisw_create_screen(struct drisw_loader_funcs *lf)
 
 extern struct pipe_screen *ninesw_create_screen(struct pipe_screen *screen);
 
-INLINE struct pipe_screen *
+inline struct pipe_screen *
 ninesw_create_screen(struct pipe_screen *pscreen)
 {
    struct sw_winsys *winsys = NULL;

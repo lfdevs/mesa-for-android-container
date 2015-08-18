@@ -37,7 +37,7 @@
 #define NV40_WRAP(n) \
    case PIPE_TEX_WRAP_##n: ret = NV40_3D_TEX_WRAP_S_##n; break
 
-static INLINE unsigned
+static inline unsigned
 wrap_mode(unsigned pipe)
 {
    unsigned ret = NV30_3D_TEX_WRAP_S_REPEAT;
@@ -58,7 +58,7 @@ wrap_mode(unsigned pipe)
    return ret >> NV30_3D_TEX_WRAP_S__SHIFT;
 }
 
-static INLINE unsigned
+static inline unsigned
 filter_mode(const struct pipe_sampler_state *cso)
 {
    unsigned filter;
@@ -104,7 +104,7 @@ filter_mode(const struct pipe_sampler_state *cso)
    return filter;
 }
 
-static INLINE unsigned
+static inline unsigned
 compare_mode(const struct pipe_sampler_state *cso)
 {
    if (cso->compare_mode != PIPE_TEX_COMPARE_R_TO_TEXTURE)
@@ -201,7 +201,7 @@ nv30_bind_sampler_states(struct pipe_context *pipe,
    }
 }
 
-static INLINE uint32_t
+static inline uint32_t
 swizzle(const struct nv30_texfmt *fmt, unsigned cmp, unsigned swz)
 {
    uint32_t data = fmt->swz[swz].src << 8;

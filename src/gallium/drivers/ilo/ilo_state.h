@@ -28,11 +28,36 @@
 #ifndef ILO_STATE_H
 #define ILO_STATE_H
 
-#include "core/ilo_state_3d.h"
+#include "core/ilo_builder_3d.h" /* for gen6_3dprimitive_info */
+#include "core/ilo_state_cc.h"
+#include "core/ilo_state_compute.h"
+#include "core/ilo_state_raster.h"
+#include "core/ilo_state_sampler.h"
+#include "core/ilo_state_sbe.h"
+#include "core/ilo_state_shader.h"
+#include "core/ilo_state_sol.h"
+#include "core/ilo_state_surface.h"
+#include "core/ilo_state_urb.h"
+#include "core/ilo_state_vf.h"
+#include "core/ilo_state_viewport.h"
+#include "core/ilo_state_zs.h"
 #include "pipe/p_state.h"
 #include "util/u_dynarray.h"
 
 #include "ilo_common.h"
+
+/**
+ * \see brw_context.h
+ */
+#define ILO_MAX_DRAW_BUFFERS    8
+#define ILO_MAX_CONST_BUFFERS   (1 + 12)
+#define ILO_MAX_SAMPLER_VIEWS   16
+#define ILO_MAX_SAMPLERS        16
+#define ILO_MAX_SO_BINDINGS     64
+#define ILO_MAX_SO_BUFFERS      4
+#define ILO_MAX_VIEWPORTS       1
+
+#define ILO_MAX_SURFACES        256
 
 /**
  * States that we track.
@@ -120,6 +145,172 @@ enum ilo_dirty_flags {
 };
 
 struct ilo_context;
+struct ilo_shader_state;
+
+struct ilo_ve_state {
+   unsigned vb_mapping[PIPE_MAX_ATTRIBS];
+   unsigned vb_count;
+
+   /* these are not valid until the state is finalized */
+   uint32_t vf_data[PIPE_MAX_ATTRIBS][4];
+   struct ilo_state_vf_params_info vf_params;
+   struct ilo_state_vf vf;
+};
+
+struct ilo_vb_state {
+   struct pipe_vertex_buffer states[PIPE_MAX_ATTRIBS];
+   struct ilo_state_vertex_buffer vb[PIPE_MAX_ATTRIBS];
+   uint32_t enabled_mask;
+};
+
+struct ilo_ib_state {
+   struct pipe_index_buffer state;
+
+   /* these are not valid until the state is finalized */
+   struct pipe_resource *hw_resource;
+   unsigned hw_index_size;
+   struct ilo_state_index_buffer ib;
+};
+
+struct ilo_cbuf_cso {
+   struct pipe_resource *resource;
+   struct ilo_state_surface_buffer_info info;
+   struct ilo_state_surface surface;
+
+   /*
+    * this CSO is not so constant because user buffer needs to be uploaded in
+    * finalize_constant_buffers()
+    */
+   const void *user_buffer;
+};
+
+struct ilo_sampler_cso {
+   struct ilo_state_sampler sampler;
+   struct ilo_state_sampler_border border;
+   bool saturate_s;
+   bool saturate_t;
+   bool saturate_r;
+};
+
+struct ilo_sampler_state {
+   const struct ilo_sampler_cso *cso[ILO_MAX_SAMPLERS];
+};
+
+struct ilo_cbuf_state {
+   struct ilo_cbuf_cso cso[ILO_MAX_CONST_BUFFERS];
+   uint32_t enabled_mask;
+};
+
+struct ilo_resource_state {
+   struct pipe_surface *states[PIPE_MAX_SHADER_IMAGES];
+   unsigned count;
+};
+
+struct ilo_view_cso {
+   struct pipe_sampler_view base;
+
+   struct ilo_state_surface surface;
+};
+
+struct ilo_view_state {
+   struct pipe_sampler_view *states[ILO_MAX_SAMPLER_VIEWS];
+   unsigned count;
+};
+
+struct ilo_stream_output_target {
+   struct pipe_stream_output_target base;
+
+   struct ilo_state_sol_buffer sb;
+};
+
+struct ilo_so_state {
+   struct pipe_stream_output_target *states[ILO_MAX_SO_BUFFERS];
+   unsigned count;
+   unsigned append_bitmask;
+
+   struct ilo_state_sol_buffer dummy_sb;
+
+   bool enabled;
+};
+
+struct ilo_rasterizer_state {
+   struct pipe_rasterizer_state state;
+
+   /* these are invalid until finalize_rasterizer() */
+   struct ilo_state_raster_info info;
+   struct ilo_state_raster rs;
+};
+
+struct ilo_viewport_state {
+   struct ilo_state_viewport_matrix_info matrices[ILO_MAX_VIEWPORTS];
+   struct ilo_state_viewport_scissor_info scissors[ILO_MAX_VIEWPORTS];
+   struct ilo_state_viewport_params_info params;
+
+   struct pipe_viewport_state viewport0;
+   struct pipe_scissor_state scissor0;
+
+   struct ilo_state_viewport vp;
+   uint32_t vp_data[20 * ILO_MAX_VIEWPORTS];
+};
+
+struct ilo_surface_cso {
+   struct pipe_surface base;
+
+   bool is_rt;
+   union {
+      struct ilo_state_surface rt;
+      struct ilo_state_zs zs;
+   } u;
+};
+
+struct ilo_fb_state {
+   struct pipe_framebuffer_state state;
+
+   struct ilo_state_surface null_rt;
+   struct ilo_state_zs null_zs;
+
+   struct ilo_fb_blend_caps {
+      bool is_unorm;
+      bool is_integer;
+      bool force_dst_alpha_one;
+
+      bool can_logicop;
+      bool can_blend;
+      bool can_alpha_test;
+   } blend_caps[PIPE_MAX_COLOR_BUFS];
+
+   unsigned num_samples;
+
+   bool has_integer_rt;
+   bool has_hiz;
+   enum gen_depth_format depth_offset_format;
+};
+
+struct ilo_dsa_state {
+   struct ilo_state_cc_depth_info depth;
+
+   struct ilo_state_cc_stencil_info stencil;
+   struct {
+      uint8_t test_mask;
+      uint8_t write_mask;
+   } stencil_front, stencil_back;
+
+   bool alpha_test;
+   float alpha_ref;
+   enum gen_compare_function alpha_func;
+};
+
+struct ilo_blend_state {
+   struct ilo_state_cc_blend_rt_info rt[PIPE_MAX_COLOR_BUFS];
+   struct ilo_state_cc_blend_rt_info dummy_rt;
+   bool dual_blend;
+
+   /* these are invalid until finalize_blend() */
+   struct ilo_state_cc_blend_rt_info effective_rt[PIPE_MAX_COLOR_BUFS];
+   struct ilo_state_cc_info info;
+   struct ilo_state_cc cc;
+   bool alpha_may_kill;
+};
 
 struct ilo_global_binding_cso {
    struct pipe_resource *resource;
@@ -147,6 +338,7 @@ struct ilo_global_binding {
 
 struct ilo_state_vector {
    const struct pipe_draw_info *draw;
+   struct gen6_3dprimitive_info draw_info;
 
    uint32_t dirty;
 
@@ -157,29 +349,40 @@ struct ilo_state_vector {
    struct ilo_shader_state *vs;
    struct ilo_shader_state *gs;
 
+   struct ilo_state_hs disabled_hs;
+   struct ilo_state_ds disabled_ds;
+   struct ilo_state_gs disabled_gs;
+
    struct ilo_so_state so;
 
    struct pipe_clip_state clip;
-   struct ilo_viewport_state viewport;
-   struct ilo_scissor_state scissor;
 
-   const struct ilo_rasterizer_state *rasterizer;
-   struct pipe_poly_stipple poly_stipple;
+   struct ilo_viewport_state viewport;
+
+   struct ilo_rasterizer_state *rasterizer;
+
+   struct ilo_state_line_stipple line_stipple;
+   struct ilo_state_poly_stipple poly_stipple;
    unsigned sample_mask;
 
    struct ilo_shader_state *fs;
 
-   const struct ilo_dsa_state *dsa;
+   struct ilo_state_cc_params_info cc_params;
    struct pipe_stencil_ref stencil_ref;
-   const struct ilo_blend_state *blend;
-   struct pipe_blend_color blend_color;
+   const struct ilo_dsa_state *dsa;
+   struct ilo_blend_state *blend;
+
    struct ilo_fb_state fb;
+
+   struct ilo_state_urb urb;
 
    /* shader resources */
    struct ilo_sampler_state sampler[PIPE_SHADER_TYPES];
    struct ilo_view_state view[PIPE_SHADER_TYPES];
    struct ilo_cbuf_state cbuf[PIPE_SHADER_TYPES];
    struct ilo_resource_state resource;
+
+   struct ilo_state_sampler disabled_sampler;
 
    /* GPGPU */
    struct ilo_shader_state *cs;

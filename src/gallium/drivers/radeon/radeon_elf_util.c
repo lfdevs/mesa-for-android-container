@@ -103,8 +103,7 @@ static void parse_relocs(Elf *elf, Elf_Data *relocs, Elf_Data *symbols,
 }
 
 void radeon_elf_read(const char *elf_data, unsigned elf_size,
-					struct radeon_shader_binary *binary,
-					unsigned debug)
+		     struct radeon_shader_binary *binary)
 {
 	char *elf_buffer;
 	Elf *elf;
@@ -124,7 +123,6 @@ void radeon_elf_read(const char *elf_data, unsigned elf_size,
 	elf = elf_memory(elf_buffer, elf_size);
 
 	elf_getshdrstrndx(elf, &section_str_index);
-	binary->disassembled = 0;
 
 	while ((section = elf_nextscn(elf, section))) {
 		const char *name;
@@ -145,12 +143,11 @@ void radeon_elf_read(const char *elf_data, unsigned elf_size,
 			binary->config_size = section_data->d_size;
 			binary->config = MALLOC(binary->config_size * sizeof(unsigned char));
 			memcpy(binary->config, section_data->d_buf, binary->config_size);
-		} else if (debug && !strcmp(name, ".AMDGPU.disasm")) {
-			binary->disassembled = 1;
+		} else if (!strcmp(name, ".AMDGPU.disasm")) {
+			/* Always read disassembly if it's available. */
 			section_data = elf_getdata(section, section_data);
-			fprintf(stderr, "\nShader Disassembly:\n\n");
-			fprintf(stderr, "%.*s\n", (int)section_data->d_size,
-						  (char *)section_data->d_buf);
+			binary->disasm_string = strndup(section_data->d_buf,
+							section_data->d_size);
 		} else if (!strncmp(name, ".rodata", 7)) {
 			section_data = elf_getdata(section, section_data);
 			binary->rodata_size = section_data->d_size;

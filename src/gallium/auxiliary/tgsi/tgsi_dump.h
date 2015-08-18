@@ -32,6 +32,8 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_shader_tokens.h"
 
+#include <stdio.h>
+
 #if defined __cplusplus
 extern "C" {
 #endif
@@ -42,6 +44,9 @@ tgsi_dump_str(
    uint flags,
    char *str,
    size_t size);
+
+void
+tgsi_dump_to_file(const struct tgsi_token *tokens, uint flags, FILE *file);
 
 void
 tgsi_dump(

@@ -200,36 +200,23 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
 }
 
 /**
- * Attempts to find an item in the cache with identical data and aux
- * data to use
+ * Attempts to find an item in the cache with identical data.
  */
-static bool
-brw_try_upload_using_copy(struct brw_cache *cache,
-			  struct brw_cache_item *result_item,
-			  const void *data,
-			  const void *aux)
+static const struct brw_cache_item *
+brw_lookup_prog(const struct brw_cache *cache,
+                enum brw_cache_id cache_id,
+                const void *data, unsigned data_size)
 {
-   struct brw_context *brw = cache->brw;
+   const struct brw_context *brw = cache->brw;
    int i;
-   struct brw_cache_item *item;
+   const struct brw_cache_item *item;
 
    for (i = 0; i < cache->size; i++) {
       for (item = cache->items[i]; item; item = item->next) {
-	 const void *item_aux = item->key + item->key_size;
 	 int ret;
 
-	 if (item->cache_id != result_item->cache_id ||
-	     item->size != result_item->size ||
-	     item->aux_size != result_item->aux_size) {
+	 if (item->cache_id != cache_id || item->size != data_size)
 	    continue;
-	 }
-
-         if (cache->aux_compare[result_item->cache_id]) {
-            if (!cache->aux_compare[result_item->cache_id](item_aux, aux))
-               continue;
-         } else if (memcmp(item_aux, aux, item->aux_size) != 0) {
-	    continue;
-	 }
 
          if (!brw->has_llc)
             drm_intel_bo_map(cache->bo, false);
@@ -239,27 +226,24 @@ brw_try_upload_using_copy(struct brw_cache *cache,
 	 if (ret)
 	    continue;
 
-	 result_item->offset = item->offset;
-
-	 return true;
+	 return item;
       }
    }
 
-   return false;
+   return NULL;
 }
 
-static void
-brw_upload_item_data(struct brw_cache *cache,
-		     struct brw_cache_item *item,
-		     const void *data)
+static uint32_t
+brw_alloc_item_data(struct brw_cache *cache, uint32_t size)
 {
+   uint32_t offset;
    struct brw_context *brw = cache->brw;
 
    /* Allocate space in the cache BO for our new program. */
-   if (cache->next_offset + item->size > cache->bo->size) {
+   if (cache->next_offset + size > cache->bo->size) {
       uint32_t new_size = cache->bo->size * 2;
 
-      while (cache->next_offset + item->size > new_size)
+      while (cache->next_offset + size > new_size)
 	 new_size *= 2;
 
       brw_cache_new_bo(cache, new_size);
@@ -273,10 +257,12 @@ brw_upload_item_data(struct brw_cache *cache,
       brw_cache_new_bo(cache, cache->bo->size);
    }
 
-   item->offset = cache->next_offset;
+   offset = cache->next_offset;
 
    /* Programs are always 64-byte aligned, so set up the next one now */
-   cache->next_offset = ALIGN(item->offset + item->size, 64);
+   cache->next_offset = ALIGN(offset + size, 64);
+
+   return offset;
 }
 
 void
@@ -293,6 +279,8 @@ brw_upload_cache(struct brw_cache *cache,
 {
    struct brw_context *brw = cache->brw;
    struct brw_cache_item *item = CALLOC_STRUCT(brw_cache_item);
+   const struct brw_cache_item *matching_data =
+      brw_lookup_prog(cache, cache_id, data, data_size);
    GLuint hash;
    void *tmp;
 
@@ -304,15 +292,23 @@ brw_upload_cache(struct brw_cache *cache,
    hash = hash_key(item);
    item->hash = hash;
 
-   /* If we can find a matching prog/prog_data combo in the cache
-    * already, then reuse the existing stuff.  This will mean not
-    * flagging CACHE_NEW_* when transitioning between the two
-    * equivalent hash keys.  This is notably useful for programs
-    * generating shaders at runtime, where multiple shaders may
-    * compile to the thing in our backend.
+   /* If we can find a matching prog in the cache already, then reuse the
+    * existing stuff without creating new copy into the underlying buffer
+    * object. This is notably useful for programs generating shaders at
+    * runtime, where multiple shaders may compile to the same thing in our
+    * backend.
     */
-   if (!brw_try_upload_using_copy(cache, item, data, aux)) {
-      brw_upload_item_data(cache, item, data);
+   if (matching_data) {
+      item->offset = matching_data->offset;
+   } else {
+      item->offset = brw_alloc_item_data(cache, data_size);
+
+      /* Copy data to the buffer */
+      if (brw->has_llc) {
+         memcpy((char *)cache->bo->virtual + item->offset, data, data_size);
+      } else {
+         drm_intel_bo_subdata(cache->bo, item->offset, data_size, data);
+      }
    }
 
    /* Set up the memory containing the key and aux_data */
@@ -323,20 +319,13 @@ brw_upload_cache(struct brw_cache *cache,
 
    item->key = tmp;
 
-   if (cache->n_items > cache->size * 1.5)
+   if (cache->n_items > cache->size * 1.5f)
       rehash(cache);
 
    hash %= cache->size;
    item->next = cache->items[hash];
    cache->items[hash] = item;
    cache->n_items++;
-
-   /* Copy data to the buffer */
-   if (brw->has_llc) {
-      memcpy((char *) cache->bo->virtual + item->offset, data, data_size);
-   } else {
-      drm_intel_bo_subdata(cache->bo, item->offset, data_size, data);
-   }
 
    *out_offset = item->offset;
    *(void **)out_aux = (void *)((char *)item->key + item->key_size);

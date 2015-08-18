@@ -30,6 +30,7 @@
 #include "program/program.h"
 #include "program/prog_parameter.h"
 #include "program/prog_statevars.h"
+#include "main/framebuffer.h"
 #include "intel_batchbuffer.h"
 
 static void
@@ -45,7 +46,7 @@ upload_wm_state(struct brw_context *brw)
    uint32_t dw1, dw2;
 
    /* _NEW_BUFFERS */
-   bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
+   const bool multisampled_fbo = _mesa_geometric_samples(ctx->DrawBuffer) > 1;
 
    dw1 = dw2 = 0;
    dw1 |= GEN7_WM_STATISTICS_ENABLE;
@@ -76,8 +77,13 @@ upload_wm_state(struct brw_context *brw)
       dw1 |= GEN7_WM_KILL_ENABLE;
    }
 
+   if (_mesa_active_fragment_shader_has_atomic_ops(&brw->ctx)) {
+      dw1 |= GEN7_WM_DISPATCH_ENABLE;
+   }
+
    /* _NEW_BUFFERS | _NEW_COLOR */
    if (brw_color_buffer_write_enabled(brw) || writes_depth ||
+       prog_data->base.nr_image_params ||
        dw1 & GEN7_WM_KILL_ENABLE) {
       dw1 |= GEN7_WM_DISPATCH_ENABLE;
    }
@@ -101,6 +107,18 @@ upload_wm_state(struct brw_context *brw)
       dw1 |= GEN7_WM_USES_INPUT_COVERAGE_MASK;
    }
 
+   /* BRW_NEW_FS_PROG_DATA */
+   if (prog_data->early_fragment_tests)
+      dw1 |= GEN7_WM_EARLY_DS_CONTROL_PREPS;
+   else if (prog_data->base.nr_image_params)
+      dw1 |= GEN7_WM_EARLY_DS_CONTROL_PSEXEC;
+
+   /* _NEW_BUFFERS | _NEW_COLOR */
+   if (brw->is_haswell &&
+       !(brw_color_buffer_write_enabled(brw) || writes_depth) &&
+       prog_data->base.nr_image_params)
+      dw2 |= HSW_WM_UAV_ONLY;
+
    BEGIN_BATCH(3);
    OUT_BATCH(_3DSTATE_WM << 16 | (3 - 2));
    OUT_BATCH(dw1);
@@ -122,7 +140,7 @@ const struct brw_tracked_state gen7_wm_state = {
    .emit = upload_wm_state,
 };
 
-void
+static void
 gen7_upload_ps_state(struct brw_context *brw,
                      const struct gl_fragment_program *fp,
                      const struct brw_stage_state *stage_state,
@@ -202,6 +220,9 @@ gen7_upload_ps_state(struct brw_context *brw,
    int min_inv_per_frag =
       _mesa_get_min_invocations_per_fragment(ctx, fp, false);
    assert(min_inv_per_frag >= 1);
+
+   if (brw->is_haswell && prog_data->base.nr_image_params)
+      dw4 |= HSW_PS_UAV_ACCESS_ENABLE;
 
    if (prog_data->prog_offset_16 || prog_data->no_8) {
       dw4 |= GEN7_PS_16_DISPATCH_ENABLE;

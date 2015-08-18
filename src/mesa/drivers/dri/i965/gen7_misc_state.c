@@ -57,7 +57,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       return;
    }
 
-   intel_emit_depth_stall_flushes(brw);
+   brw_emit_depth_stall_flushes(brw);
 
    irb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
    if (!irb)

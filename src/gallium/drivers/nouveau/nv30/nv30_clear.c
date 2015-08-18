@@ -32,7 +32,7 @@
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_format.h"
 
-static INLINE uint32_t
+static inline uint32_t
 pack_rgba(enum pipe_format format, const float *rgba)
 {
    union util_color uc;
@@ -40,7 +40,7 @@ pack_rgba(enum pipe_format format, const float *rgba)
    return uc.ui[0];
 }
 
-static INLINE uint32_t
+static inline uint32_t
 pack_zeta(enum pipe_format format, double depth, unsigned stencil)
 {
    uint32_t zuint = (uint32_t)(depth * 4294967295.0);
@@ -58,7 +58,7 @@ nv30_clear(struct pipe_context *pipe, unsigned buffers,
    struct pipe_framebuffer_state *fb = &nv30->framebuffer;
    uint32_t colr = 0, zeta = 0, mode = 0;
 
-   if (!nv30_state_validate(nv30, NV30_NEW_FRAMEBUFFER | NV30_NEW_SCISSOR, TRUE))
+   if (!nv30_state_validate(nv30, NV30_NEW_FRAMEBUFFER | NV30_NEW_SCISSOR, true))
       return;
 
    if (buffers & PIPE_CLEAR_COLOR && fb->nr_cbufs) {

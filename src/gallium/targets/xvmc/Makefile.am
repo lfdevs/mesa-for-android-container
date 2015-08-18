@@ -52,11 +52,9 @@ libXvMCgallium_la_LIBADD += $(TARGET_LIB_DEPS) \
 	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
-# XXX: Use the pipe-loader-client over pipe-loader ?
 libXvMCgallium_la_LIBADD += \
 	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
-	$(GALLIUM_PIPE_LOADER_LIBS)
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 

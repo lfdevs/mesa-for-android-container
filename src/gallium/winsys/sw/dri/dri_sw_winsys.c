@@ -55,13 +55,13 @@ struct dri_sw_winsys
    struct drisw_loader_funcs *lf;
 };
 
-static INLINE struct dri_sw_displaytarget *
+static inline struct dri_sw_displaytarget *
 dri_sw_displaytarget( struct sw_displaytarget *dt )
 {
    return (struct dri_sw_displaytarget *)dt;
 }
 
-static INLINE struct dri_sw_winsys *
+static inline struct dri_sw_winsys *
 dri_sw_winsys( struct sw_winsys *ws )
 {
    return (struct dri_sw_winsys *)ws;

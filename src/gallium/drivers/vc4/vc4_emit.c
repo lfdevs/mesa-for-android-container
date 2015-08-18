@@ -28,23 +28,24 @@ vc4_emit_state(struct pipe_context *pctx)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 
+        struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
         if (vc4->dirty & (VC4_DIRTY_SCISSOR | VC4_DIRTY_VIEWPORT)) {
                 float *vpscale = vc4->viewport.scale;
                 float *vptranslate = vc4->viewport.translate;
-                float vp_minx = -fabs(vpscale[0]) + vptranslate[0];
-                float vp_maxx = fabs(vpscale[0]) + vptranslate[0];
-                float vp_miny = -fabs(vpscale[1]) + vptranslate[1];
-                float vp_maxy = fabs(vpscale[1]) + vptranslate[1];
+                float vp_minx = -fabsf(vpscale[0]) + vptranslate[0];
+                float vp_maxx = fabsf(vpscale[0]) + vptranslate[0];
+                float vp_miny = -fabsf(vpscale[1]) + vptranslate[1];
+                float vp_maxy = fabsf(vpscale[1]) + vptranslate[1];
                 uint32_t minx = MAX2(vc4->scissor.minx, vp_minx);
                 uint32_t miny = MAX2(vc4->scissor.miny, vp_miny);
                 uint32_t maxx = MIN2(vc4->scissor.maxx, vp_maxx);
                 uint32_t maxy = MIN2(vc4->scissor.maxy, vp_maxy);
 
-                cl_u8(&vc4->bcl, VC4_PACKET_CLIP_WINDOW);
-                cl_u16(&vc4->bcl, minx);
-                cl_u16(&vc4->bcl, miny);
-                cl_u16(&vc4->bcl, maxx - minx);
-                cl_u16(&vc4->bcl, maxy - miny);
+                cl_u8(&bcl, VC4_PACKET_CLIP_WINDOW);
+                cl_u16(&bcl, minx);
+                cl_u16(&bcl, miny);
+                cl_u16(&bcl, maxx - minx);
+                cl_u16(&bcl, maxy - miny);
 
                 vc4->draw_min_x = MIN2(vc4->draw_min_x, minx);
                 vc4->draw_min_y = MIN2(vc4->draw_min_y, miny);
@@ -53,47 +54,49 @@ vc4_emit_state(struct pipe_context *pctx)
         }
 
         if (vc4->dirty & (VC4_DIRTY_RASTERIZER | VC4_DIRTY_ZSA)) {
-                cl_u8(&vc4->bcl, VC4_PACKET_CONFIGURATION_BITS);
-                cl_u8(&vc4->bcl,
+                cl_u8(&bcl, VC4_PACKET_CONFIGURATION_BITS);
+                cl_u8(&bcl,
                       vc4->rasterizer->config_bits[0] |
                       vc4->zsa->config_bits[0]);
-                cl_u8(&vc4->bcl,
+                cl_u8(&bcl,
                       vc4->rasterizer->config_bits[1] |
                       vc4->zsa->config_bits[1]);
-                cl_u8(&vc4->bcl,
+                cl_u8(&bcl,
                       vc4->rasterizer->config_bits[2] |
                       vc4->zsa->config_bits[2]);
         }
 
         if (vc4->dirty & VC4_DIRTY_RASTERIZER) {
-                cl_u8(&vc4->bcl, VC4_PACKET_DEPTH_OFFSET);
-                cl_u16(&vc4->bcl, vc4->rasterizer->offset_factor);
-                cl_u16(&vc4->bcl, vc4->rasterizer->offset_units);
+                cl_u8(&bcl, VC4_PACKET_DEPTH_OFFSET);
+                cl_u16(&bcl, vc4->rasterizer->offset_factor);
+                cl_u16(&bcl, vc4->rasterizer->offset_units);
 
-                cl_u8(&vc4->bcl, VC4_PACKET_POINT_SIZE);
-                cl_f(&vc4->bcl, vc4->rasterizer->point_size);
+                cl_u8(&bcl, VC4_PACKET_POINT_SIZE);
+                cl_f(&bcl, vc4->rasterizer->point_size);
 
-                cl_u8(&vc4->bcl, VC4_PACKET_LINE_WIDTH);
-                cl_f(&vc4->bcl, vc4->rasterizer->base.line_width);
+                cl_u8(&bcl, VC4_PACKET_LINE_WIDTH);
+                cl_f(&bcl, vc4->rasterizer->base.line_width);
         }
 
         if (vc4->dirty & VC4_DIRTY_VIEWPORT) {
-                cl_u8(&vc4->bcl, VC4_PACKET_CLIPPER_XY_SCALING);
-                cl_f(&vc4->bcl, vc4->viewport.scale[0] * 16.0f);
-                cl_f(&vc4->bcl, vc4->viewport.scale[1] * 16.0f);
+                cl_u8(&bcl, VC4_PACKET_CLIPPER_XY_SCALING);
+                cl_f(&bcl, vc4->viewport.scale[0] * 16.0f);
+                cl_f(&bcl, vc4->viewport.scale[1] * 16.0f);
 
-                cl_u8(&vc4->bcl, VC4_PACKET_CLIPPER_Z_SCALING);
-                cl_f(&vc4->bcl, vc4->viewport.translate[2]);
-                cl_f(&vc4->bcl, vc4->viewport.scale[2]);
+                cl_u8(&bcl, VC4_PACKET_CLIPPER_Z_SCALING);
+                cl_f(&bcl, vc4->viewport.translate[2]);
+                cl_f(&bcl, vc4->viewport.scale[2]);
 
-                cl_u8(&vc4->bcl, VC4_PACKET_VIEWPORT_OFFSET);
-                cl_u16(&vc4->bcl, 16 * vc4->viewport.translate[0]);
-                cl_u16(&vc4->bcl, 16 * vc4->viewport.translate[1]);
+                cl_u8(&bcl, VC4_PACKET_VIEWPORT_OFFSET);
+                cl_u16(&bcl, 16 * vc4->viewport.translate[0]);
+                cl_u16(&bcl, 16 * vc4->viewport.translate[1]);
         }
 
         if (vc4->dirty & VC4_DIRTY_FLAT_SHADE_FLAGS) {
-                cl_u8(&vc4->bcl, VC4_PACKET_FLAT_SHADE_FLAGS);
-                cl_u32(&vc4->bcl, vc4->rasterizer->base.flatshade ?
+                cl_u8(&bcl, VC4_PACKET_FLAT_SHADE_FLAGS);
+                cl_u32(&bcl, vc4->rasterizer->base.flatshade ?
                        vc4->prog.fs->color_inputs : 0);
         }
+
+        cl_end(&vc4->bcl, bcl);
 }

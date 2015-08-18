@@ -93,7 +93,7 @@ struct rbug_transfer
 };
 
 
-static INLINE struct rbug_resource *
+static inline struct rbug_resource *
 rbug_resource(struct pipe_resource *_resource)
 {
    if (!_resource)
@@ -102,7 +102,7 @@ rbug_resource(struct pipe_resource *_resource)
    return (struct rbug_resource *)_resource;
 }
 
-static INLINE struct rbug_sampler_view *
+static inline struct rbug_sampler_view *
 rbug_sampler_view(struct pipe_sampler_view *_sampler_view)
 {
    if (!_sampler_view)
@@ -111,7 +111,7 @@ rbug_sampler_view(struct pipe_sampler_view *_sampler_view)
    return (struct rbug_sampler_view *)_sampler_view;
 }
 
-static INLINE struct rbug_surface *
+static inline struct rbug_surface *
 rbug_surface(struct pipe_surface *_surface)
 {
    if (!_surface)
@@ -120,7 +120,7 @@ rbug_surface(struct pipe_surface *_surface)
    return (struct rbug_surface *)_surface;
 }
 
-static INLINE struct rbug_transfer *
+static inline struct rbug_transfer *
 rbug_transfer(struct pipe_transfer *_transfer)
 {
    if (!_transfer)
@@ -129,7 +129,7 @@ rbug_transfer(struct pipe_transfer *_transfer)
    return (struct rbug_transfer *)_transfer;
 }
 
-static INLINE struct rbug_shader *
+static inline struct rbug_shader *
 rbug_shader(void *_state)
 {
    if (!_state)
@@ -137,7 +137,7 @@ rbug_shader(void *_state)
    return (struct rbug_shader *)_state;
 }
 
-static INLINE struct pipe_resource *
+static inline struct pipe_resource *
 rbug_resource_unwrap(struct pipe_resource *_resource)
 {
    if (!_resource)
@@ -145,7 +145,7 @@ rbug_resource_unwrap(struct pipe_resource *_resource)
    return rbug_resource(_resource)->resource;
 }
 
-static INLINE struct pipe_sampler_view *
+static inline struct pipe_sampler_view *
 rbug_sampler_view_unwrap(struct pipe_sampler_view *_sampler_view)
 {
    if (!_sampler_view)
@@ -153,7 +153,7 @@ rbug_sampler_view_unwrap(struct pipe_sampler_view *_sampler_view)
    return rbug_sampler_view(_sampler_view)->sampler_view;
 }
 
-static INLINE struct pipe_surface *
+static inline struct pipe_surface *
 rbug_surface_unwrap(struct pipe_surface *_surface)
 {
    if (!_surface)
@@ -161,7 +161,7 @@ rbug_surface_unwrap(struct pipe_surface *_surface)
    return rbug_surface(_surface)->surface;
 }
 
-static INLINE struct pipe_transfer *
+static inline struct pipe_transfer *
 rbug_transfer_unwrap(struct pipe_transfer *_transfer)
 {
    if (!_transfer)
@@ -169,7 +169,7 @@ rbug_transfer_unwrap(struct pipe_transfer *_transfer)
    return rbug_transfer(_transfer)->transfer;
 }
 
-static INLINE void *
+static inline void *
 rbug_shader_unwrap(void *_state)
 {
    struct rbug_shader *shader;

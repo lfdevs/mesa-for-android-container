@@ -46,7 +46,7 @@ struct NineResource9
     /* for [GS]etPrivateData/FreePrivateData */
     struct util_hash_table *pdata;
 };
-static INLINE struct NineResource9 *
+static inline struct NineResource9 *
 NineResource9( void *data )
 {
     return (struct NineResource9 *)data;

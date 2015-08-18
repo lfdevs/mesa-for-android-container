@@ -53,7 +53,7 @@ struct NineBaseTexture9
         DWORD lod_resident;
     } managed;
 };
-static INLINE struct NineBaseTexture9 *
+static inline struct NineBaseTexture9 *
 NineBaseTexture9( void *data )
 {
     return (struct NineBaseTexture9 *)data;
@@ -107,7 +107,7 @@ HRESULT
 NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
                                     const int sRGB );
 
-static INLINE void
+static inline void
 NineBaseTexture9_Validate( struct NineBaseTexture9 *This )
 {
     DBG_FLAG(DBG_BASETEXTURE, "This=%p dirty=%i dirty_mip=%i lod=%u/%u\n",
@@ -119,7 +119,7 @@ NineBaseTexture9_Validate( struct NineBaseTexture9 *This )
         NineBaseTexture9_GenerateMipSubLevels(This);
 }
 
-static INLINE struct pipe_sampler_view *
+static inline struct pipe_sampler_view *
 NineBaseTexture9_GetSamplerView( struct NineBaseTexture9 *This, const int sRGB )
 {
     if (!This->view[sRGB])
@@ -131,7 +131,7 @@ NineBaseTexture9_GetSamplerView( struct NineBaseTexture9 *This, const int sRGB )
 void
 NineBaseTexture9_Dump( struct NineBaseTexture9 *This );
 #else
-static INLINE void
+static inline void
 NineBaseTexture9_Dump( struct NineBaseTexture9 *This ) { }
 #endif
 

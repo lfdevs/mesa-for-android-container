@@ -56,14 +56,14 @@ program::build(const ref_vector<device> &devs, const char *opts,
 
          try {
             auto module = (dev.ir_format() == PIPE_SHADER_IR_TGSI ?
-                           compile_program_tgsi(_source) :
+                           compile_program_tgsi(_source, log) :
                            compile_program_llvm(_source, headers,
                                                 dev.ir_format(),
                                                 dev.ir_target(), build_opts(dev),
                                                 log));
             _binaries.insert({ &dev, module });
             _logs.insert({ &dev, log });
-         } catch (const build_error &) {
+         } catch (const error &) {
             _logs.insert({ &dev, log });
             throw;
          }

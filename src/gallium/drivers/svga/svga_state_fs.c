@@ -41,7 +41,7 @@
 
 
 
-static INLINE int
+static inline int
 compare_fs_keys(const struct svga_fs_compile_key *a,
                 const struct svga_fs_compile_key *b)
 {

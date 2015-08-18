@@ -329,17 +329,17 @@ nve4_m2mf_copy_linear(struct nouveau_context *nv,
 }
 
 
-static INLINE boolean
+static inline bool
 nvc0_mt_transfer_can_map_directly(struct nv50_miptree *mt)
 {
    if (mt->base.domain == NOUVEAU_BO_VRAM)
-      return FALSE;
+      return false;
    if (mt->base.base.usage != PIPE_USAGE_STAGING)
-      return FALSE;
+      return false;
    return !nouveau_bo_memtype(mt->base.bo);
 }
 
-static INLINE boolean
+static inline bool
 nvc0_mt_sync(struct nvc0_context *nvc0, struct nv50_miptree *mt, unsigned usage)
 {
    if (!mt->base.mm) {

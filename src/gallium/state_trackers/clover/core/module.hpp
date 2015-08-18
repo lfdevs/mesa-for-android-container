@@ -72,7 +72,9 @@ namespace clover {
          enum semantic {
             general,
             grid_dimension,
-            grid_offset
+            grid_offset,
+            image_size,
+            image_format
          };
 
          argument(enum type type, size_t size,

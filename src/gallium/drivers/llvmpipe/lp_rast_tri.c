@@ -63,7 +63,7 @@ block_full_16(struct lp_rasterizer_task *task,
 	 block_full_4(task, tri, x + ix, y + iy);
 }
 
-static INLINE unsigned
+static inline unsigned
 build_mask_linear(int64_t c, int64_t dcdx, int64_t dcdy)
 {
    unsigned mask = 0;
@@ -94,7 +94,7 @@ build_mask_linear(int64_t c, int64_t dcdx, int64_t dcdy)
 }
 
 
-static INLINE void
+static inline void
 build_masks(int64_t c,
             int64_t cdiff,
             int64_t dcdx,
@@ -167,7 +167,7 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 #include "util/u_sse.h"
 
 
-static INLINE void
+static inline void
 build_masks_32(int c, 
                int cdiff,
                int dcdx,
@@ -213,7 +213,7 @@ build_masks_32(int c,
 }
 
 
-static INLINE unsigned
+static inline unsigned
 build_mask_linear_32(int c, int dcdx, int dcdy)
 {
    __m128i cstep0 = _mm_setr_epi32(c, c+dcdx, c+dcdx*2, c+dcdx*3);
@@ -239,7 +239,7 @@ build_mask_linear_32(int c, int dcdx, int dcdy)
    return _mm_movemask_epi8(result);
 }
 
-static INLINE unsigned
+static inline unsigned
 sign_bits4(const __m128i *cstep, int cdiff)
 {
 

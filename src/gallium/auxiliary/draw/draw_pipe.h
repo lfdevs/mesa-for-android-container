@@ -115,7 +115,7 @@ void draw_unfilled_prepare_outputs(struct draw_context *context,
  * \param idx  index into stage's tmp[] array to put the copy (dest)
  * \return  pointer to the copied vertex
  */
-static INLINE struct vertex_header *
+static inline struct vertex_header *
 dup_vert( struct draw_stage *stage,
 	  const struct vertex_header *vert,
 	  unsigned idx )

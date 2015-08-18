@@ -96,7 +96,11 @@ fd_prog_blit(struct pipe_context *pctx, int rts, bool depth)
 {
 	int i;
 	struct ureg_src tc;
-	struct ureg_program *ureg = ureg_create(TGSI_PROCESSOR_FRAGMENT);
+	struct ureg_program *ureg;
+
+	debug_assert(rts <= MAX_RENDER_TARGETS);
+
+	ureg = ureg_create(TGSI_PROCESSOR_FRAGMENT);
 	if (!ureg)
 		return NULL;
 

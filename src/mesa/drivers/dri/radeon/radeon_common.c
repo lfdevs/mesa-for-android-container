@@ -164,7 +164,7 @@ uint32_t radeonGetAge(radeonContextPtr radeon)
 
 	gp.param = RADEON_PARAM_LAST_CLEAR;
 	gp.value = (int *)&age;
-	ret = drmCommandWriteRead(radeon->dri.fd, DRM_RADEON_GETPARAM,
+	ret = drmCommandWriteRead(radeon->radeonScreen->driScreen->fd, DRM_RADEON_GETPARAM,
 				  &gp, sizeof(gp));
 	if (ret) {
 		fprintf(stderr, "%s: drmRadeonGetParam: %d\n", __func__,
@@ -343,7 +343,7 @@ void radeonDrawBuffer( struct gl_context *ctx, GLenum mode )
 {
 	if (RADEON_DEBUG & RADEON_DRI)
 		fprintf(stderr, "%s %s\n", __func__,
-			_mesa_lookup_enum_by_nr( mode ));
+			_mesa_enum_to_string( mode ));
 
 	if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
 		radeonContextPtr radeon = RADEON_CONTEXT(ctx);
@@ -358,8 +358,8 @@ void radeonDrawBuffer( struct gl_context *ctx, GLenum mode )
        * that the front-buffer has actually been allocated.
        */
 		if (!was_front_buffer_rendering && radeon->is_front_buffer_rendering) {
-			radeon_update_renderbuffers(radeon->dri.context,
-				radeon->dri.context->driDrawablePriv, GL_FALSE);
+			radeon_update_renderbuffers(radeon->driContext,
+				radeon->driContext->driDrawablePriv, GL_FALSE);
       }
 	}
 
@@ -375,8 +375,8 @@ void radeonReadBuffer( struct gl_context *ctx, GLenum mode )
 					|| (mode == GL_FRONT);
 
 		if (!was_front_buffer_reading && rmesa->is_front_buffer_reading) {
-			radeon_update_renderbuffers(rmesa->dri.context,
-						    rmesa->dri.context->driReadablePriv, GL_FALSE);
+			radeon_update_renderbuffers(rmesa->driContext,
+						    rmesa->driContext->driReadablePriv, GL_FALSE);
 	 	}
 	}
 	/* nothing, until we implement h/w glRead/CopyPixels or CopyTexImage */
@@ -399,7 +399,7 @@ void radeon_window_moved(radeonContextPtr radeon)
 void radeon_viewport(struct gl_context *ctx)
 {
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
-	__DRIcontext *driContext = radeon->dri.context;
+	__DRIcontext *driContext = radeon->driContext;
 	void (*old_viewport)(struct gl_context *ctx);
 
 	if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
@@ -693,6 +693,7 @@ void rcommonInitCmdBuf(radeonContextPtr rmesa)
 {
 	GLuint size;
 	struct drm_radeon_gem_info mminfo = { 0 };
+	int fd = rmesa->radeonScreen->driScreen->fd;
 
 	/* Initialize command buffer */
 	size = 256 * driQueryOptioni(&rmesa->optionCache,
@@ -711,8 +712,7 @@ void rcommonInitCmdBuf(radeonContextPtr rmesa)
 			"Allocating %d bytes command buffer (max state is %d bytes)\n",
 			size * 4, rmesa->hw.max_state_size * 4);
 
-	rmesa->cmdbuf.csm =
-		radeon_cs_manager_gem_ctor(rmesa->radeonScreen->driScreen->fd);
+	rmesa->cmdbuf.csm = radeon_cs_manager_gem_ctor(fd);
 	if (rmesa->cmdbuf.csm == NULL) {
 		/* FIXME: fatal error */
 		return;
@@ -725,7 +725,7 @@ void rcommonInitCmdBuf(radeonContextPtr rmesa)
 				  (void (*)(void *))rmesa->glCtx.Driver.Flush, &rmesa->glCtx);
 
 
-	if (!drmCommandWriteRead(rmesa->dri.fd, DRM_RADEON_GEM_INFO,
+	if (!drmCommandWriteRead(fd, DRM_RADEON_GEM_INFO,
 				 &mminfo, sizeof(mminfo))) {
 		radeon_cs_set_limit(rmesa->cmdbuf.cs, RADEON_GEM_DOMAIN_VRAM,
 				    mminfo.vram_visible);

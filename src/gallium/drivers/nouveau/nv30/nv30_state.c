@@ -211,6 +211,7 @@ static void *
 nv30_zsa_state_create(struct pipe_context *pipe,
                       const struct pipe_depth_stencil_alpha_state *cso)
 {
+   struct nouveau_object *eng3d = nv30_context(pipe)->screen->eng3d;
    struct nv30_zsa_stateobj *so;
 
    so = CALLOC_STRUCT(nv30_zsa_stateobj);
@@ -222,6 +223,13 @@ nv30_zsa_state_create(struct pipe_context *pipe,
    SB_DATA  (so, nvgl_comparison_op(cso->depth.func));
    SB_DATA  (so, cso->depth.writemask);
    SB_DATA  (so, cso->depth.enabled);
+
+   if (eng3d->oclass == NV35_3D_CLASS || eng3d->oclass >= NV40_3D_CLASS) {
+      SB_MTHD35(so, DEPTH_BOUNDS_TEST_ENABLE, 3);
+      SB_DATA  (so, cso->depth.bounds_test);
+      SB_DATA  (so, fui(cso->depth.bounds_min));
+      SB_DATA  (so, fui(cso->depth.bounds_max));
+   }
 
    if (cso->stencil[0].enabled) {
       SB_MTHD30(so, STENCIL_ENABLE(0), 3);

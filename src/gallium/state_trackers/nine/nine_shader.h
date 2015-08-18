@@ -70,19 +70,19 @@ struct nine_shader_info
     struct nine_lconstf lconstf; /* out, NOTE: members to be free'd by user */
 };
 
-static INLINE void
+static inline void
 nine_info_mark_const_f_used(struct nine_shader_info *info, int idx)
 {
     if (info->const_float_slots < (idx + 1))
         info->const_float_slots = idx + 1;
 }
-static INLINE void
+static inline void
 nine_info_mark_const_i_used(struct nine_shader_info *info, int idx)
 {
     if (info->const_int_slots < (idx + 1))
         info->const_int_slots = idx + 1;
 }
-static INLINE void
+static inline void
 nine_info_mark_const_b_used(struct nine_shader_info *info, int idx)
 {
     if (info->const_bool_slots < (idx + 1))
@@ -100,7 +100,7 @@ struct nine_shader_variant
     uint32_t key;
 };
 
-static INLINE void *
+static inline void *
 nine_shader_variant_get(struct nine_shader_variant *list, uint32_t key)
 {
     while (list->key != key && list->next)
@@ -110,7 +110,7 @@ nine_shader_variant_get(struct nine_shader_variant *list, uint32_t key)
     return NULL;
 }
 
-static INLINE boolean
+static inline boolean
 nine_shader_variant_add(struct nine_shader_variant *list,
                         uint32_t key, void *cso)
 {
@@ -127,7 +127,7 @@ nine_shader_variant_add(struct nine_shader_variant *list,
     return TRUE;
 }
 
-static INLINE void
+static inline void
 nine_shader_variants_free(struct nine_shader_variant *list)
 {
     while (list->next) {

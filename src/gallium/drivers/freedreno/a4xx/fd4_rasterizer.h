@@ -44,7 +44,7 @@ struct fd4_rasterizer_stateobj {
 	uint32_t pc_prim_vtx_cntl;
 };
 
-static INLINE struct fd4_rasterizer_stateobj *
+static inline struct fd4_rasterizer_stateobj *
 fd4_rasterizer_stateobj(struct pipe_rasterizer_state *rast)
 {
 	return (struct fd4_rasterizer_stateobj *)rast;

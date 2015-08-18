@@ -84,7 +84,7 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 		}
 	}
 
-	if (busy || ctx->ws->buffer_is_busy(resource->buf, rusage)) {
+	if (busy || !ctx->ws->buffer_wait(resource->buf, 0, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
 			return NULL;
 		} else {
@@ -121,7 +121,8 @@ bool r600_init_resource(struct r600_common_screen *rscreen,
 		/* Older kernels didn't always flush the HDP cache before
 		 * CS execution
 		 */
-		if (rscreen->info.drm_minor < 40) {
+		if (rscreen->info.drm_major == 2 &&
+		    rscreen->info.drm_minor < 40) {
 			res->domains = RADEON_DOMAIN_GTT;
 			flags |= RADEON_FLAG_GTT_WC;
 			break;
@@ -147,7 +148,8 @@ bool r600_init_resource(struct r600_common_screen *rscreen,
 		 * Write-combined CPU mappings are fine, the kernel ensures all CPU
 		 * writes finish before the GPU executes a command stream.
 		 */
-		if (rscreen->info.drm_minor < 40)
+		if (rscreen->info.drm_major == 2 &&
+		    rscreen->info.drm_minor < 40)
 			res->domains = RADEON_DOMAIN_GTT;
 		else if (res->domains & RADEON_DOMAIN_VRAM)
 			flags |= RADEON_FLAG_CPU_ACCESS;
@@ -160,6 +162,9 @@ bool r600_init_resource(struct r600_common_screen *rscreen,
 		flags &= ~RADEON_FLAG_CPU_ACCESS;
 		flags |= RADEON_FLAG_NO_CPU_ACCESS;
 	}
+
+	if (rscreen->debug_flags & DBG_NO_WC)
+		flags &= ~RADEON_FLAG_GTT_WC;
 
 	/* Allocate a new resource. */
 	new_buf = rscreen->ws->buffer_create(rscreen->ws, size, alignment,
@@ -274,7 +279,7 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 
 		/* Check if mapping this buffer would cause waiting for the GPU. */
 		if (r600_rings_is_buffer_referenced(rctx, rbuffer->cs_buf, RADEON_USAGE_READWRITE) ||
-		    rctx->ws->buffer_is_busy(rbuffer->buf, RADEON_USAGE_READWRITE)) {
+		    !rctx->ws->buffer_wait(rbuffer->buf, 0, RADEON_USAGE_READWRITE)) {
 			rctx->invalidate_buffer(&rctx->b, &rbuffer->b.b);
 		}
 		/* At this point, the buffer is always idle. */
@@ -288,7 +293,7 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 
 		/* Check if mapping this buffer would cause waiting for the GPU. */
 		if (r600_rings_is_buffer_referenced(rctx, rbuffer->cs_buf, RADEON_USAGE_READWRITE) ||
-		    rctx->ws->buffer_is_busy(rbuffer->buf, RADEON_USAGE_READWRITE)) {
+		    !rctx->ws->buffer_wait(rbuffer->buf, 0, RADEON_USAGE_READWRITE)) {
 			/* Do a wait-free write-only transfer using a temporary buffer. */
 			unsigned offset;
 			struct r600_resource *staging = NULL;

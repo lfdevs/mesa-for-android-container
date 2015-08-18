@@ -17,7 +17,7 @@ static struct util_hash_table *fd_tab = NULL;
 
 pipe_static_mutex(nouveau_screen_mutex);
 
-boolean nouveau_drm_screen_unref(struct nouveau_screen *screen)
+bool nouveau_drm_screen_unref(struct nouveau_screen *screen)
 {
 	int ret;
 	if (screen->refcount == -1)

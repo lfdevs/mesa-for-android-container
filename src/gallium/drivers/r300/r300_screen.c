@@ -191,6 +191,10 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
         case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
         case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+        case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+        case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+        case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+        case PIPE_CAP_DEPTH_BOUNDS_TEST:
             return 0;
 
         /* SWTCL-only features. */
@@ -274,6 +278,7 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
         case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
             return (is_r500 ? 256 : 32) * sizeof(float[4]);
         case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
+        case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
             return 1;
         case PIPE_SHADER_CAP_MAX_TEMPS:
             return is_r500 ? 128 : is_r400 ? 64 : 32;
@@ -333,6 +338,7 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
         case PIPE_SHADER_CAP_MAX_PREDS:
             return 0; /* unused */
         case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
+        case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
             return 1;
         case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
         case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
@@ -425,7 +431,7 @@ static int r300_get_video_param(struct pipe_screen *screen,
  * Whether the format matches:
  *   PIPE_FORMAT_?10?10?10?2_UNORM
  */
-static INLINE boolean
+static inline boolean
 util_format_is_rgba1010102_variant(const struct util_format_description *desc)
 {
    static const unsigned size[4] = {10, 10, 10, 2};
@@ -658,14 +664,6 @@ static void r300_fence_reference(struct pipe_screen *screen,
     rws->fence_reference(ptr, fence);
 }
 
-static boolean r300_fence_signalled(struct pipe_screen *screen,
-                                    struct pipe_fence_handle *fence)
-{
-    struct radeon_winsys *rws = r300_screen(screen)->rws;
-
-    return rws->fence_wait(rws, fence, 0);
-}
-
 static boolean r300_fence_finish(struct pipe_screen *screen,
                                  struct pipe_fence_handle *fence,
                                  uint64_t timeout)
@@ -710,7 +708,6 @@ struct pipe_screen* r300_screen_create(struct radeon_winsys *rws)
     r300screen->screen.is_video_format_supported = vl_video_buffer_is_format_supported;
     r300screen->screen.context_create = r300_create_context;
     r300screen->screen.fence_reference = r300_fence_reference;
-    r300screen->screen.fence_signalled = r300_fence_signalled;
     r300screen->screen.fence_finish = r300_fence_finish;
 
     r300_init_screen_resource_functions(r300screen);

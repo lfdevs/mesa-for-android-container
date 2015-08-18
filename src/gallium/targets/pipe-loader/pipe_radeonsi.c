@@ -2,6 +2,7 @@
 #include "target-helpers/inline_debug_helper.h"
 #include "radeon/drm/radeon_drm_public.h"
 #include "radeon/radeon_winsys.h"
+#include "amdgpu/drm/amdgpu_public.h"
 #include "radeonsi/si_public.h"
 
 static struct pipe_screen *
@@ -9,7 +10,12 @@ create_screen(int fd)
 {
    struct radeon_winsys *rw;
 
-   rw = radeon_drm_winsys_create(fd, radeonsi_screen_create);
+   /* First, try amdgpu. */
+   rw = amdgpu_winsys_create(fd, radeonsi_screen_create);
+
+   if (!rw)
+      rw = radeon_drm_winsys_create(fd, radeonsi_screen_create);
+
    return rw ? debug_screen_wrap(rw->screen) : NULL;
 }
 

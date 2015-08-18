@@ -133,13 +133,7 @@ static unsigned translate_opcode(unsigned opcode)
 
 static unsigned translate_saturate(unsigned saturate)
 {
-    switch(saturate) {
-        default:
-            fprintf(stderr, "Unknown saturate mode: %i\n", saturate);
-            /* fall-through */
-        case TGSI_SAT_NONE: return RC_SATURATE_NONE;
-        case TGSI_SAT_ZERO_ONE: return RC_SATURATE_ZERO_ONE;
-    }
+    return saturate ? RC_SATURATE_ZERO_ONE : RC_SATURATE_NONE;
 }
 
 static unsigned translate_register_file(unsigned file)

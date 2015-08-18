@@ -29,15 +29,15 @@ struct nouveau_fence {
 void nouveau_fence_emit(struct nouveau_fence *);
 void nouveau_fence_del(struct nouveau_fence *);
 
-boolean nouveau_fence_new(struct nouveau_screen *, struct nouveau_fence **,
-                          boolean emit);
-boolean nouveau_fence_work(struct nouveau_fence *, void (*)(void *), void *);
-void    nouveau_fence_update(struct nouveau_screen *, boolean flushed);
-void    nouveau_fence_next(struct nouveau_screen *);
-boolean nouveau_fence_wait(struct nouveau_fence *);
-boolean nouveau_fence_signalled(struct nouveau_fence *);
+bool nouveau_fence_new(struct nouveau_screen *, struct nouveau_fence **,
+                       bool emit);
+bool nouveau_fence_work(struct nouveau_fence *, void (*)(void *), void *);
+void nouveau_fence_update(struct nouveau_screen *, bool flushed);
+void nouveau_fence_next(struct nouveau_screen *);
+bool nouveau_fence_wait(struct nouveau_fence *);
+bool nouveau_fence_signalled(struct nouveau_fence *);
 
-static INLINE void
+static inline void
 nouveau_fence_ref(struct nouveau_fence *fence, struct nouveau_fence **ref)
 {
    if (fence)
@@ -51,7 +51,7 @@ nouveau_fence_ref(struct nouveau_fence *fence, struct nouveau_fence **ref)
    *ref = fence;
 }
 
-static INLINE struct nouveau_fence *
+static inline struct nouveau_fence *
 nouveau_fence(struct pipe_fence_handle *fence)
 {
    return (struct nouveau_fence *)fence;

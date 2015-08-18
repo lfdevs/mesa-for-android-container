@@ -28,17 +28,20 @@
 #include <stdbool.h>
 
 #include "util/u_debug.h"
+#include "util/list.h"
 
 #include "instr-a3xx.h"
 #include "disasm.h"  /* TODO move 'enum shader_t' somewhere else.. */
 
 /* low level intermediate representation of an adreno shader program */
 
+struct ir3_compiler;
 struct ir3;
 struct ir3_instruction;
 struct ir3_block;
 
 struct ir3_info {
+	uint32_t gpu_id;
 	uint16_t sizedwords;
 	uint16_t instrs_count;   /* expanded to account for rpt's */
 	/* NOTE: max_reg, etc, does not include registers not touched
@@ -80,8 +83,8 @@ struct ir3_register {
 		 * before register assignment is done:
 		 */
 		IR3_REG_SSA    = 0x2000,   /* 'instr' is ptr to assigning instr */
-		IR3_REG_IA     = 0x4000,   /* meta-input dst is "assigned" */
-		IR3_REG_ADDR   = 0x8000,   /* register is a0.x */
+		IR3_REG_PHI_SRC= 0x4000,   /* phi src, regs[0]->instr points to phi */
+
 	} flags;
 	union {
 		/* normal registers:
@@ -169,6 +172,7 @@ struct ir3_instruction {
 		IR3_INSTR_P     = 0x080,
 		IR3_INSTR_S     = 0x100,
 		IR3_INSTR_S2EN  = 0x200,
+		IR3_INSTR_G     = 0x400,
 		/* meta-flags, for intermediate stages of IR, ie.
 		 * before register assignment is done:
 		 */
@@ -185,6 +189,7 @@ struct ir3_instruction {
 			char inv;
 			char comp;
 			int  immed;
+			struct ir3_block *target;
 		} cat0;
 		struct {
 			type_t src_type, dst_type;
@@ -205,7 +210,8 @@ struct ir3_instruction {
 		} cat5;
 		struct {
 			type_t type;
-			int offset;
+			int src_offset;
+			int dst_offset;
 			int iim_val;
 		} cat6;
 		/* for meta-instructions, just used to hold extra data
@@ -218,14 +224,14 @@ struct ir3_instruction {
 			int aid;
 		} fi;
 		struct {
-			struct ir3_block *if_block, *else_block;
-		} flow;
+			/* used to temporarily hold reference to nir_phi_instr
+			 * until we resolve the phi srcs
+			 */
+			void *nphi;
+		} phi;
 		struct {
 			struct ir3_block *block;
 		} inout;
-
-		/* XXX keep this as big as all other union members! */
-		uint32_t info[3];
 	};
 
 	/* transient values used during various algorithms: */
@@ -243,6 +249,13 @@ struct ir3_instruction {
 		 */
 #define DEPTH_UNUSED  ~0
 		unsigned depth;
+		/* When we get to the RA stage, we no longer need depth, but
+		 * we do need instruction's position/name:
+		 */
+		struct {
+			uint16_t ip;
+			uint16_t name;
+		};
 	};
 
 	/* Used during CP and RA stages.  For fanin and shader inputs/
@@ -274,6 +287,8 @@ struct ir3_instruction {
 
 	/* an instruction can reference at most one address register amongst
 	 * it's src/dst registers.  Beyond that, you need to insert mov's.
+	 *
+	 * NOTE: do not write this directly, use ir3_instr_set_address()
 	 */
 	struct ir3_instruction *address;
 
@@ -290,7 +305,9 @@ struct ir3_instruction {
 	 */
 	struct ir3_instruction *fanin;
 
-	struct ir3_instruction *next;
+	/* Entry in ir3_block's instruction list: */
+	struct list_head node;
+
 #ifdef DEBUG
 	uint32_t serialno;
 #endif
@@ -321,8 +338,11 @@ static inline int ir3_neighbor_count(struct ir3_instruction *instr)
 struct ir3_heap_chunk;
 
 struct ir3 {
-	unsigned instrs_count, instrs_sz;
-	struct ir3_instruction **instrs;
+	struct ir3_compiler *compiler;
+
+	unsigned ninputs, noutputs;
+	struct ir3_instruction **inputs;
+	struct ir3_instruction **outputs;
 
 	/* Track bary.f (and ldlv) instructions.. this is needed in
 	 * scheduling to ensure that all varying fetches happen before
@@ -345,33 +365,60 @@ struct ir3 {
 	 */
 	unsigned indirects_count, indirects_sz;
 	struct ir3_instruction **indirects;
+	/* and same for instructions that consume predicate register: */
+	unsigned predicates_count, predicates_sz;
+	struct ir3_instruction **predicates;
 
-	struct ir3_block *block;
+	/* Track instructions which do not write a register but other-
+	 * wise must not be discarded (such as kill, stg, etc)
+	 */
+	unsigned keeps_count, keeps_sz;
+	struct ir3_instruction **keeps;
+
+	/* List of blocks: */
+	struct list_head block_list;
+
 	unsigned heap_idx;
 	struct ir3_heap_chunk *chunk;
 };
 
+typedef struct nir_block nir_block;
+
 struct ir3_block {
+	struct list_head node;
 	struct ir3 *shader;
-	unsigned ntemporaries, ninputs, noutputs;
-	/* maps TGSI_FILE_TEMPORARY index back to the assigning instruction: */
-	struct ir3_instruction **temporaries;
-	struct ir3_instruction **inputs;
-	struct ir3_instruction **outputs;
-	/* only a single address register: */
-	struct ir3_instruction *address;
-	struct ir3_block *parent;
-	struct ir3_instruction *head;
+
+	nir_block *nblock;
+
+	struct list_head instr_list;  /* list of ir3_instruction */
+
+	/* each block has either one or two successors.. in case of
+	 * two successors, 'condition' decides which one to follow.
+	 * A block preceding an if/else has two successors.
+	 */
+	struct ir3_instruction *condition;
+	struct ir3_block *successors[2];
+
+	uint16_t start_ip, end_ip;
+
+	/* used for per-pass extra block data.  Mainly used right
+	 * now in RA step to track livein/liveout.
+	 */
+	void *bd;
+
+#ifdef DEBUG
+	uint32_t serialno;
+#endif
 };
 
-struct ir3 * ir3_create(void);
+struct ir3 * ir3_create(struct ir3_compiler *compiler,
+		unsigned nin, unsigned nout);
 void ir3_destroy(struct ir3 *shader);
 void * ir3_assemble(struct ir3 *shader,
 		struct ir3_info *info, uint32_t gpu_id);
 void * ir3_alloc(struct ir3 *shader, int sz);
 
-struct ir3_block * ir3_block_create(struct ir3 *shader,
-		unsigned ntmp, unsigned nin, unsigned nout);
+struct ir3_block * ir3_block_create(struct ir3 *shader);
 
 struct ir3_instruction * ir3_instr_create(struct ir3_block *block,
 		int category, opc_t opc);
@@ -383,6 +430,8 @@ const char *ir3_instr_name(struct ir3_instruction *instr);
 struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
 		int num, int flags);
 
+void ir3_instr_set_address(struct ir3_instruction *instr,
+		struct ir3_instruction *addr);
 
 static inline bool ir3_instr_check_mark(struct ir3_instruction *instr)
 {
@@ -392,22 +441,10 @@ static inline bool ir3_instr_check_mark(struct ir3_instruction *instr)
 	return false;
 }
 
-static inline void ir3_clear_mark(struct ir3 *shader)
-{
-	/* TODO would be nice to drop the instruction array.. for
-	 * new compiler, _clear_mark() is all we use it for, and
-	 * we could probably manage a linked list instead..
-	 *
-	 * Also, we'll probably want to mark instructions within
-	 * a block, so tracking the list of instrs globally is
-	 * unlikely to be what we want.
-	 */
-	unsigned i;
-	for (i = 0; i < shader->instrs_count; i++) {
-		struct ir3_instruction *instr = shader->instrs[i];
-		instr->flags &= ~IR3_INSTR_MARK;
-	}
-}
+void ir3_block_clear_mark(struct ir3_block *block);
+void ir3_clear_mark(struct ir3 *shader);
+
+unsigned ir3_count_instructions(struct ir3 *ir);
 
 static inline int ir3_instr_regno(struct ir3_instruction *instr,
 		struct ir3_register *reg)
@@ -501,6 +538,48 @@ static inline bool is_mem(struct ir3_instruction *instr)
 	return (instr->category == 6);
 }
 
+static inline bool
+is_store(struct ir3_instruction *instr)
+{
+	if (is_mem(instr)) {
+		/* these instructions, the "destination" register is
+		 * actually a source, the address to store to.
+		 */
+		switch (instr->opc) {
+		case OPC_STG:
+		case OPC_STP:
+		case OPC_STL:
+		case OPC_STLW:
+		case OPC_L2G:
+		case OPC_G2L:
+			return true;
+		default:
+			break;
+		}
+	}
+	return false;
+}
+
+static inline bool is_load(struct ir3_instruction *instr)
+{
+	if (is_mem(instr)) {
+		switch (instr->opc) {
+		case OPC_LDG:
+		case OPC_LDL:
+		case OPC_LDP:
+		case OPC_L2G:
+		case OPC_LDLW:
+		case OPC_LDC_4:
+		case OPC_LDLV:
+		/* probably some others too.. */
+			return true;
+		default:
+			break;
+		}
+	}
+	return false;
+}
+
 static inline bool is_input(struct ir3_instruction *instr)
 {
 	/* in some cases, ldlv is used to fetch varying without
@@ -525,7 +604,7 @@ static inline bool writes_addr(struct ir3_instruction *instr)
 {
 	if (instr->regs_count > 0) {
 		struct ir3_register *dst = instr->regs[0];
-		return !!(dst->flags & IR3_REG_ADDR);
+		return reg_num(dst) == REG_A0;
 	}
 	return false;
 }
@@ -556,11 +635,27 @@ static inline bool conflicts(struct ir3_instruction *a,
 
 static inline bool reg_gpr(struct ir3_register *r)
 {
-	if (r->flags & (IR3_REG_CONST | IR3_REG_IMMED | IR3_REG_ADDR))
+	if (r->flags & (IR3_REG_CONST | IR3_REG_IMMED))
 		return false;
 	if ((reg_num(r) == REG_A0) || (reg_num(r) == REG_P0))
 		return false;
 	return true;
+}
+
+static inline type_t half_type(type_t type)
+{
+	switch (type) {
+	case TYPE_F32: return TYPE_F16;
+	case TYPE_U32: return TYPE_U16;
+	case TYPE_S32: return TYPE_S16;
+	case TYPE_F16:
+	case TYPE_U16:
+	case TYPE_S16:
+		return type;
+	default:
+		assert(0);
+		return ~0;
+	}
 }
 
 /* some cat2 instructions (ie. those which are not float) can embed an
@@ -747,37 +842,31 @@ static inline struct ir3_instruction * __ssa_src_n(struct ir3_instruction *instr
 
 
 /* dump: */
-#include <stdio.h>
-void ir3_dump(struct ir3 *shader, const char *name,
-		struct ir3_block *block /* XXX maybe 'block' ptr should move to ir3? */,
-		FILE *f);
-void ir3_dump_instr_single(struct ir3_instruction *instr);
-void ir3_dump_instr_list(struct ir3_instruction *instr);
-
-/* flatten if/else: */
-int ir3_block_flatten(struct ir3_block *block);
+void ir3_print(struct ir3 *ir);
+void ir3_print_instr(struct ir3_instruction *instr);
 
 /* depth calculation: */
 int ir3_delayslots(struct ir3_instruction *assigner,
 		struct ir3_instruction *consumer, unsigned n);
-void ir3_block_depth(struct ir3_block *block);
+void ir3_insert_by_depth(struct ir3_instruction *instr, struct list_head *list);
+void ir3_depth(struct ir3 *ir);
 
 /* copy-propagate: */
-void ir3_block_cp(struct ir3_block *block);
+void ir3_cp(struct ir3 *ir);
 
-/* group neightbors and insert mov's to resolve conflicts: */
-void ir3_block_group(struct ir3_block *block);
+/* group neighbors and insert mov's to resolve conflicts: */
+void ir3_group(struct ir3 *ir);
 
 /* scheduling: */
-int ir3_block_sched(struct ir3_block *block);
+int ir3_sched(struct ir3 *ir);
 
 /* register assignment: */
-int ir3_block_ra(struct ir3_block *block, enum shader_t type,
+struct ir3_ra_reg_set * ir3_ra_alloc_reg_set(void *memctx);
+int ir3_ra(struct ir3 *ir3, enum shader_t type,
 		bool frag_coord, bool frag_face);
 
 /* legalize: */
-void ir3_block_legalize(struct ir3_block *block,
-		bool *has_samp, int *max_bary);
+void ir3_legalize(struct ir3 *ir, bool *has_samp, int *max_bary);
 
 /* ************************************************************************* */
 /* instruction helpers */
@@ -805,6 +894,21 @@ ir3_COV(struct ir3_block *block, struct ir3_instruction *src,
 	instr->cat1.src_type = src_type;
 	instr->cat1.dst_type = dst_type;
 	return instr;
+}
+
+static inline struct ir3_instruction *
+ir3_NOP(struct ir3_block *block)
+{
+	return ir3_instr_create(block, 0, OPC_NOP);
+}
+
+#define INSTR0(CAT, name)                                                \
+static inline struct ir3_instruction *                                   \
+ir3_##name(struct ir3_block *block)                                      \
+{                                                                        \
+	struct ir3_instruction *instr =                                      \
+		ir3_instr_create(block, CAT, OPC_##name);                        \
+	return instr;                                                        \
 }
 
 #define INSTR1(CAT, name)                                                \
@@ -850,7 +954,10 @@ ir3_##name(struct ir3_block *block,                                      \
 }
 
 /* cat0 instructions: */
+INSTR0(0, BR);
+INSTR0(0, JUMP);
 INSTR1(0, KILL);
+INSTR0(0, END);
 
 /* cat2 instructions, most 2 src but some 1 src: */
 INSTR2(2, ADD_F)
@@ -962,6 +1069,7 @@ ir3_SAM(struct ir3_block *block, opc_t opc, type_t type,
 /* cat6 instructions: */
 INSTR2(6, LDLV)
 INSTR2(6, LDG)
+INSTR3(6, STG)
 
 /* ************************************************************************* */
 /* split this out or find some helper to use.. like main/bitset.h.. */

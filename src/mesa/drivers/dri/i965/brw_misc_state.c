@@ -39,19 +39,23 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 
+#include "main/framebuffer.h"
 #include "main/fbobject.h"
 #include "main/glformats.h"
 
 /* Constant single cliprect for framebuffer object or DRI2 drawing */
-static void upload_drawing_rect(struct brw_context *brw)
+static void
+upload_drawing_rect(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   const struct gl_framebuffer *fb = ctx->DrawBuffer;
+   const unsigned int fb_width = _mesa_geometric_width(fb);
+   const unsigned int fb_height = _mesa_geometric_height(fb);
 
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_DRAWING_RECTANGLE << 16 | (4 - 2));
    OUT_BATCH(0); /* xmin, ymin */
-   OUT_BATCH(((ctx->DrawBuffer->Width - 1) & 0xffff) |
-	    ((ctx->DrawBuffer->Height - 1) << 16));
+   OUT_BATCH(((fb_width - 1) & 0xffff) | ((fb_height - 1) << 16));
    OUT_BATCH(0);
    ADVANCE_BATCH();
 }
@@ -70,7 +74,8 @@ const struct brw_tracked_state brw_drawing_rect = {
  * The state pointers in this packet are all relative to the general state
  * base address set by CMD_STATE_BASE_ADDRESS, which is 0.
  */
-static void upload_pipelined_state_pointers(struct brw_context *brw )
+static void
+upload_pipelined_state_pointers(struct brw_context *brw)
 {
    if (brw->gen == 5) {
       /* Need to flush before changing clip max threads for errata. */
@@ -101,7 +106,8 @@ static void upload_pipelined_state_pointers(struct brw_context *brw )
    brw->ctx.NewDriverState |= BRW_NEW_PSP;
 }
 
-static void upload_psp_urb_cbs(struct brw_context *brw )
+static void
+upload_psp_urb_cbs(struct brw_context *brw)
 {
    upload_pipelined_state_pointers(brw);
    brw_upload_urb_fence(brw);
@@ -577,7 +583,7 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
     * non-pipelined state that will need the PIPE_CONTROL workaround.
     */
    if (brw->gen == 6) {
-      intel_emit_depth_stall_flushes(brw);
+      brw_emit_depth_stall_flushes(brw);
    }
 
    unsigned int len;
@@ -697,13 +703,11 @@ const struct brw_tracked_state brw_depthbuffer = {
    .emit = brw_emit_depthbuffer,
 };
 
-
-
-/***********************************************************************
+/**
  * Polygon stipple packet
  */
-
-static void upload_polygon_stipple(struct brw_context *brw)
+static void
+upload_polygon_stipple(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    GLuint i;
@@ -725,8 +729,7 @@ static void upload_polygon_stipple(struct brw_context *brw)
    if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
       for (i = 0; i < 32; i++)
 	  OUT_BATCH(ctx->PolygonStipple[31 - i]); /* invert */
-   }
-   else {
+   } else {
       for (i = 0; i < 32; i++)
 	 OUT_BATCH(ctx->PolygonStipple[i]);
    }
@@ -742,12 +745,11 @@ const struct brw_tracked_state brw_polygon_stipple = {
    .emit = upload_polygon_stipple
 };
 
-
-/***********************************************************************
+/**
  * Polygon stipple offset packet
  */
-
-static void upload_polygon_stipple_offset(struct brw_context *brw)
+static void
+upload_polygon_stipple_offset(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
 
@@ -767,7 +769,7 @@ static void upload_polygon_stipple_offset(struct brw_context *brw)
     * works just fine, and there's no window system to worry about.
     */
    if (_mesa_is_winsys_fbo(ctx->DrawBuffer))
-      OUT_BATCH((32 - (ctx->DrawBuffer->Height & 31)) & 31);
+      OUT_BATCH((32 - (_mesa_geometric_height(ctx->DrawBuffer) & 31)) & 31);
    else
       OUT_BATCH(0);
    ADVANCE_BATCH();
@@ -782,10 +784,11 @@ const struct brw_tracked_state brw_polygon_stipple_offset = {
    .emit = upload_polygon_stipple_offset
 };
 
-/**********************************************************************
+/**
  * AA Line parameters
  */
-static void upload_aa_line_parameters(struct brw_context *brw)
+static void
+upload_aa_line_parameters(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
 
@@ -812,11 +815,11 @@ const struct brw_tracked_state brw_aa_line_parameters = {
    .emit = upload_aa_line_parameters
 };
 
-/***********************************************************************
+/**
  * Line stipple packet
  */
-
-static void upload_line_stipple(struct brw_context *brw)
+static void
+upload_line_stipple(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    GLfloat tmp;
@@ -831,13 +834,12 @@ static void upload_line_stipple(struct brw_context *brw)
 
    if (brw->gen >= 7) {
       /* in U1.16 */
-      tmp = 1.0 / (GLfloat) ctx->Line.StippleFactor;
+      tmp = 1.0f / ctx->Line.StippleFactor;
       tmpi = tmp * (1<<16);
       OUT_BATCH(tmpi << 15 | ctx->Line.StippleFactor);
-   }
-   else {
+   } else {
       /* in U1.13 */
-      tmp = 1.0 / (GLfloat) ctx->Line.StippleFactor;
+      tmp = 1.0f / ctx->Line.StippleFactor;
       tmpi = tmp * (1<<13);
       OUT_BATCH(tmpi << 16 | ctx->Line.StippleFactor);
    }
@@ -852,7 +854,6 @@ const struct brw_tracked_state brw_line_stipple = {
    },
    .emit = upload_line_stipple
 };
-
 
 void
 brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
@@ -869,11 +870,9 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
    ADVANCE_BATCH();
 }
 
-
-/***********************************************************************
+/**
  * Misc invariant state packets
  */
-
 void
 brw_upload_invariant_state(struct brw_context *brw)
 {
@@ -927,7 +926,8 @@ const struct brw_tracked_state brw_invariant_state = {
  * surface state objects, but not the surfaces that the surface state
  * objects point to.
  */
-static void upload_state_base_address( struct brw_context *brw )
+static void
+upload_state_base_address(struct brw_context *brw)
 {
    /* FINISHME: According to section 3.6.1 "STATE_BASE_ADDRESS" of
     * vol1a of the G45 PRM, MI_FLUSH with the ISC invalidate should be

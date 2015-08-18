@@ -63,7 +63,7 @@ nve4_screen_compute_setup(struct nvc0_screen *screen,
       return ret;
    }
 
-   ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 0, NVE4_CP_PARAM_SIZE, NULL,
+   ret = nouveau_bo_new(dev, NV_VRAM_DOMAIN(&screen->base), 0, NVE4_CP_PARAM_SIZE, NULL,
                         &screen->parm);
    if (ret)
       return ret;
@@ -250,7 +250,7 @@ nve4_compute_validate_surfaces(struct nvc0_context *nvc0)
 static void
 nve4_compute_validate_samplers(struct nvc0_context *nvc0)
 {
-   boolean need_flush = nve4_validate_tsc(nvc0, 5);
+   bool need_flush = nve4_validate_tsc(nvc0, 5);
    if (need_flush) {
       BEGIN_NVC0(nvc0->base.pushbuf, NVE4_COMPUTE(TSC_FLUSH), 1);
       PUSH_DATA (nvc0->base.pushbuf, 0);
@@ -299,11 +299,11 @@ nve4_compute_set_tex_handles(struct nvc0_context *nvc0)
 }
 
 
-static boolean
+static bool
 nve4_compute_state_validate(struct nvc0_context *nvc0)
 {
    if (!nvc0_compute_validate_program(nvc0))
-      return FALSE;
+      return false;
    if (nvc0->dirty_cp & NVC0_NEW_CP_TEXTURES)
       nve4_compute_validate_textures(nvc0);
    if (nvc0->dirty_cp & NVC0_NEW_CP_SAMPLERS)
@@ -316,15 +316,15 @@ nve4_compute_state_validate(struct nvc0_context *nvc0)
       nvc0_validate_global_residents(nvc0,
                                      nvc0->bufctx_cp, NVC0_BIND_CP_GLOBAL);
 
-   nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, FALSE);
+   nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, false);
 
    nouveau_pushbuf_bufctx(nvc0->base.pushbuf, nvc0->bufctx_cp);
    if (unlikely(nouveau_pushbuf_validate(nvc0->base.pushbuf)))
-      return FALSE;
+      return false;
    if (unlikely(nvc0->state.flushed))
-      nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, TRUE);
+      nvc0_bufctx_fence(nvc0, nvc0->bufctx_cp, true);
 
-   return TRUE;
+   return true;
 }
 
 
@@ -364,7 +364,7 @@ nve4_compute_upload_input(struct nvc0_context *nvc0, const void *input,
    PUSH_DATA (push, NVE4_COMPUTE_FLUSH_CB);
 }
 
-static INLINE uint8_t
+static inline uint8_t
 nve4_compute_derive_cache_split(struct nvc0_context *nvc0, uint32_t shared_size)
 {
    if (shared_size > (32 << 10))
@@ -413,7 +413,7 @@ nve4_compute_setup_launch_desc(struct nvc0_context *nvc0,
    nve4_cp_launch_desc_set_cb(desc, 0, screen->parm, 0, NVE4_CP_INPUT_SIZE);
 }
 
-static INLINE struct nve4_cp_launch_desc *
+static inline struct nve4_cp_launch_desc *
 nve4_compute_alloc_launch_desc(struct nouveau_context *nv,
                                struct nouveau_bo **pbo, uint64_t *pgpuaddr)
 {
@@ -505,7 +505,7 @@ nve4_compute_validate_textures(struct nvc0_context *nvc0)
    for (i = 0; i < nvc0->num_textures[s]; ++i) {
       struct nv50_tic_entry *tic = nv50_tic_entry(nvc0->textures[s][i]);
       struct nv04_resource *res;
-      const boolean dirty = !!(nvc0->textures_dirty[s] & (1 << i));
+      const bool dirty = !!(nvc0->textures_dirty[s] & (1 << i));
 
       if (!tic) {
          nvc0->tex_handles[s][i] |= NVE4_TIC_ENTRY_INVALID;
@@ -575,18 +575,18 @@ nve4_compute_dump_launch_desc(const struct nve4_cp_launch_desc *desc)
 {
    const uint32_t *data = (const uint32_t *)desc;
    unsigned i;
-   boolean zero = FALSE;
+   bool zero = false;
 
    debug_printf("COMPUTE LAUNCH DESCRIPTOR:\n");
 
    for (i = 0; i < sizeof(*desc); i += 4) {
       if (data[i / 4]) {
          debug_printf("[%x]: 0x%08x\n", i, data[i / 4]);
-         zero = FALSE;
+         zero = false;
       } else
       if (!zero) {
          debug_printf("...\n");
-         zero = TRUE;
+         zero = true;
       }
    }
 
@@ -606,7 +606,7 @@ nve4_compute_dump_launch_desc(const struct nve4_cp_launch_desc *desc)
    for (i = 0; i < 8; ++i) {
       uint64_t address;
       uint32_t size = desc->cb[i].size;
-      boolean valid = !!(desc->cb_mask & (1 << i));
+      bool valid = !!(desc->cb_mask & (1 << i));
 
       address = ((uint64_t)desc->cb[i].address_h << 32) | desc->cb[i].address_l;
 

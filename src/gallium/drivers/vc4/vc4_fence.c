@@ -60,16 +60,6 @@ vc4_fence_reference(struct pipe_screen *pscreen,
 }
 
 static boolean
-vc4_fence_signalled(struct pipe_screen *pscreen,
-                    struct pipe_fence_handle *pf)
-{
-        struct vc4_screen *screen = vc4_screen(pscreen);
-        struct vc4_fence *f = (struct vc4_fence *)pf;
-
-        return vc4_wait_seqno(screen, f->seqno, 0);
-}
-
-static boolean
 vc4_fence_finish(struct pipe_screen *pscreen,
                  struct pipe_fence_handle *pf,
                  uint64_t timeout_ns)
@@ -77,7 +67,7 @@ vc4_fence_finish(struct pipe_screen *pscreen,
         struct vc4_screen *screen = vc4_screen(pscreen);
         struct vc4_fence *f = (struct vc4_fence *)pf;
 
-        return vc4_wait_seqno(screen, f->seqno, timeout_ns);
+        return vc4_wait_seqno(screen, f->seqno, timeout_ns, "fence wait");
 }
 
 struct vc4_fence *
@@ -98,6 +88,5 @@ void
 vc4_fence_init(struct vc4_screen *screen)
 {
         screen->base.fence_reference = vc4_fence_reference;
-        screen->base.fence_signalled = vc4_fence_signalled;
         screen->base.fence_finish = vc4_fence_finish;
 }

@@ -338,7 +338,6 @@ TAG(swtnl_init)(struct gl_context *ctx)
 			   NUM_VERTEX_ATTRS * 4 * sizeof(GLfloat));
 	_tnl_need_projected_coords(ctx, GL_FALSE);
 	_tnl_allow_vertex_fog(ctx, GL_FALSE);
-	_tnl_wakeup(ctx);
 
 	swtnl_alloc_vertices(ctx);
 }

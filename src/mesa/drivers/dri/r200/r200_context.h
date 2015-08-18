@@ -109,7 +109,6 @@ struct r200_texture_state {
 #define CTX_RB3D_COLOROFFSET  11
 #define CTX_CMD_2             12 /* why */
 #define CTX_RB3D_COLORPITCH   13 /* why */
-#define CTX_STATE_SIZE_OLDDRM 14
 #define CTX_CMD_3             14
 #define CTX_RB3D_BLENDCOLOR   15
 #define CTX_RB3D_ABLENDCNTL   16
@@ -167,9 +166,6 @@ struct r200_texture_state {
 #define TEX_PP_TXSIZE               4  /*2c0c*/
 #define TEX_PP_TXPITCH              5  /*2c10*/
 #define TEX_PP_BORDER_COLOR         6  /*2c14*/
-#define TEX_CMD_1_OLDDRM            7
-#define TEX_PP_TXOFFSET_OLDDRM      8  /*2d00 */
-#define TEX_STATE_SIZE_OLDDRM       9
 #define TEX_PP_CUBIC_FACES          7
 #define TEX_PP_TXMULTI_CTL          8
 #define TEX_CMD_1_NEWDRM            9
@@ -618,7 +614,6 @@ struct r200_context {
    struct r200_swtcl_info swtcl;
 
    GLboolean using_hyperz;
-   GLboolean texmicrotile;
 
   struct ati_fragment_shader *afs_loaded;
 };

@@ -43,8 +43,8 @@
 static uint8_t
 get_resolve_status_for_src(nir_src *src)
 {
-   nir_instr *src_instr = nir_src_get_parent_instr(src);
-   if (src_instr) {
+   if (src->is_ssa) {
+      nir_instr *src_instr = src->ssa->parent_instr;
       uint8_t resolve_status = src_instr->pass_flags & BRW_NIR_BOOLEAN_MASK;
 
       /* If the source instruction needs resolve, then from the perspective
@@ -66,8 +66,8 @@ get_resolve_status_for_src(nir_src *src)
 static bool
 src_mark_needs_resolve(nir_src *src, void *void_state)
 {
-   nir_instr *src_instr = nir_src_get_parent_instr(src);
-   if (src_instr) {
+   if (src->is_ssa) {
+      nir_instr *src_instr = src->ssa->parent_instr;
       uint8_t resolve_status = src_instr->pass_flags & BRW_NIR_BOOLEAN_MASK;
 
       /* If the source instruction is unresolved, then mark it as needing
@@ -109,28 +109,27 @@ analyze_boolean_resolves_block(nir_block *block, void *void_state)
          uint8_t resolve_status;
          nir_alu_instr *alu = nir_instr_as_alu(instr);
          switch (alu->op) {
-         case nir_op_flt:
-         case nir_op_ilt:
-         case nir_op_ult:
-         case nir_op_fge:
-         case nir_op_ige:
-         case nir_op_uge:
-         case nir_op_feq:
-         case nir_op_ieq:
-         case nir_op_fne:
-         case nir_op_ine:
-         case nir_op_f2b:
-         case nir_op_i2b:
-            /* This instruction will turn into a CMP when we actually emit
-             * so the result will have to be resolved before it can be used.
+         case nir_op_bany2:
+         case nir_op_bany3:
+         case nir_op_bany4:
+         case nir_op_ball_fequal2:
+         case nir_op_ball_iequal2:
+         case nir_op_ball_fequal3:
+         case nir_op_ball_iequal3:
+         case nir_op_ball_fequal4:
+         case nir_op_ball_iequal4:
+         case nir_op_bany_fnequal2:
+         case nir_op_bany_inequal2:
+         case nir_op_bany_fnequal3:
+         case nir_op_bany_inequal3:
+         case nir_op_bany_fnequal4:
+         case nir_op_bany_inequal4:
+            /* These are only implemented by the vec4 backend and its
+             * implementation emits resolved booleans.  At some point in the
+             * future, this may change and we'll have to remove some of the
+             * above cases.
              */
-            resolve_status = BRW_NIR_BOOLEAN_UNRESOLVED;
-
-            /* Even though the destination is allowed to be left unresolved,
-             * the sources are treated as regular integers or floats so
-             * they need to be resolved.
-             */
-            nir_foreach_src(instr, src_mark_needs_resolve, NULL);
+            resolve_status = BRW_NIR_BOOLEAN_NO_RESOLVE;
             break;
 
          case nir_op_imov:
@@ -169,14 +168,28 @@ analyze_boolean_resolves_block(nir_block *block, void *void_state)
          }
 
          default:
-            resolve_status = BRW_NIR_NON_BOOLEAN;
+            if (nir_op_infos[alu->op].output_type == nir_type_bool) {
+               /* This instructions will turn into a CMP when we actually emit
+                * them so the result will have to be resolved before it can be
+                * used.
+                */
+               resolve_status = BRW_NIR_BOOLEAN_UNRESOLVED;
+
+               /* Even though the destination is allowed to be left
+                * unresolved, the sources are treated as regular integers or
+                * floats so they need to be resolved.
+                */
+               nir_foreach_src(instr, src_mark_needs_resolve, NULL);
+            } else {
+               resolve_status = BRW_NIR_NON_BOOLEAN;
+            }
          }
 
-         /* If the destination is SSA-like, go ahead allow unresolved booleans.
+         /* If the destination is SSA, go ahead allow unresolved booleans.
           * If the destination register doesn't have a well-defined parent_instr
           * we need to resolve immediately.
           */
-         if (alu->dest.dest.reg.reg->parent_instr == NULL &&
+         if (!alu->dest.dest.is_ssa &&
              resolve_status == BRW_NIR_BOOLEAN_UNRESOLVED) {
             resolve_status = BRW_NIR_BOOLEAN_NEEDS_RESOLVE;
          }

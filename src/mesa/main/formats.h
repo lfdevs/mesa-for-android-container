@@ -191,6 +191,11 @@ static inline void
 _mesa_array_format_set_swizzle(mesa_array_format *f,
                                int32_t x, int32_t y, int32_t z, int32_t w)
 {
+   *f &= ~(MESA_ARRAY_FORMAT_SWIZZLE_X_MASK |
+           MESA_ARRAY_FORMAT_SWIZZLE_Y_MASK |
+           MESA_ARRAY_FORMAT_SWIZZLE_Z_MASK |
+           MESA_ARRAY_FORMAT_SWIZZLE_W_MASK);
+
    *f |= ((x << 8 ) & MESA_ARRAY_FORMAT_SWIZZLE_X_MASK) |
          ((y << 11) & MESA_ARRAY_FORMAT_SWIZZLE_Y_MASK) |
          ((z << 14) & MESA_ARRAY_FORMAT_SWIZZLE_Z_MASK) |

@@ -82,7 +82,7 @@ total_size(uint8_t cbuf_cpp[], uint8_t zsbuf_cpp[2],
 {
 	uint32_t total = 0, i;
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < MAX_RENDER_TARGETS; i++) {
 		if (cbuf_cpp[i]) {
 			gmem->cbuf_base[i] = align(total, 0x4000);
 			total = gmem->cbuf_base[i] + cbuf_cpp[i] * bin_w * bin_h;
@@ -113,7 +113,7 @@ calculate_tiles(struct fd_context *ctx)
 	uint32_t nbins_x = 1, nbins_y = 1;
 	uint32_t bin_w, bin_h;
 	uint32_t max_width = bin_width(ctx);
-	uint8_t cbuf_cpp[4] = {0}, zsbuf_cpp[2] = {0};
+	uint8_t cbuf_cpp[MAX_RENDER_TARGETS] = {0}, zsbuf_cpp[2] = {0};
 	uint32_t i, j, t, xoff, yoff;
 	uint32_t tpp_x, tpp_y;
 	bool has_zs = !!(ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL));
@@ -162,12 +162,17 @@ calculate_tiles(struct fd_context *ctx)
 		bin_w = align(width / nbins_x, 32);
 	}
 
+	if (fd_mesa_debug & FD_DBG_MSGS) {
+		debug_printf("binning input: cbuf cpp:");
+		for (i = 0; i < pfb->nr_cbufs; i++)
+			debug_printf(" %d", cbuf_cpp[i]);
+		debug_printf(", zsbuf cpp: %d; %dx%d\n",
+				zsbuf_cpp[0], width, height);
+	}
+
 	/* then find a bin width/height that satisfies the memory
 	 * constraints:
 	 */
-	DBG("binning input: cbuf cpp: %d %d %d %d, zsbuf cpp: %d; %dx%d",
-		cbuf_cpp[0], cbuf_cpp[1], cbuf_cpp[2], cbuf_cpp[3], zsbuf_cpp[0],
-		width, height);
 	while (total_size(cbuf_cpp, zsbuf_cpp, bin_w, bin_h, gmem) > gmem_size) {
 		if (bin_w > bin_h) {
 			nbins_x++;

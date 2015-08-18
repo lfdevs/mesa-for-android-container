@@ -103,14 +103,18 @@ dri_fill_st_options(struct st_config_options *options,
 static const __DRIconfig **
 dri_fill_in_modes(struct dri_screen *screen)
 {
-   static const mesa_format mesa_formats[3] = {
+   static const mesa_format mesa_formats[] = {
       MESA_FORMAT_B8G8R8A8_UNORM,
       MESA_FORMAT_B8G8R8X8_UNORM,
+      MESA_FORMAT_B8G8R8A8_SRGB,
+      MESA_FORMAT_B8G8R8X8_SRGB,
       MESA_FORMAT_B5G6R5_UNORM,
    };
-   static const enum pipe_format pipe_formats[3] = {
+   static const enum pipe_format pipe_formats[] = {
       PIPE_FORMAT_BGRA8888_UNORM,
       PIPE_FORMAT_BGRX8888_UNORM,
+      PIPE_FORMAT_BGRA8888_SRGB,
+      PIPE_FORMAT_BGRX8888_SRGB,
       PIPE_FORMAT_B5G6R5_UNORM,
    };
    mesa_format format;
@@ -186,6 +190,11 @@ dri_fill_in_modes(struct dri_screen *screen)
       unsigned num_msaa_modes = 0; /* includes a single-sample mode */
       uint8_t msaa_modes[MSAA_VISUAL_MAX_SAMPLES];
 
+      if (!p_screen->is_format_supported(p_screen, pipe_formats[format],
+                                         PIPE_TEXTURE_2D, 0,
+                                         PIPE_BIND_RENDER_TARGET))
+         continue;
+
       for (i = 1; i <= msaa_samples_max; i++) {
          int samples = i > 1 ? i : 0;
 
@@ -241,9 +250,15 @@ dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
 
    if (mode->redBits == 8) {
       if (mode->alphaBits == 8)
-         stvis->color_format = PIPE_FORMAT_BGRA8888_UNORM;
+         if (mode->sRGBCapable)
+            stvis->color_format = PIPE_FORMAT_BGRA8888_SRGB;
+         else
+            stvis->color_format = PIPE_FORMAT_BGRA8888_UNORM;
       else
-         stvis->color_format = PIPE_FORMAT_BGRX8888_UNORM;
+         if (mode->sRGBCapable)
+            stvis->color_format = PIPE_FORMAT_BGRX8888_SRGB;
+         else
+            stvis->color_format = PIPE_FORMAT_BGRX8888_UNORM;
    } else {
       stvis->color_format = PIPE_FORMAT_B5G6R5_UNORM;
    }

@@ -58,7 +58,7 @@ extern "C" {
 void _debug_vprintf(const char *format, va_list ap);
    
 
-static INLINE void
+static inline void
 _debug_printf(const char *format, ...)
 {
    va_list ap;
@@ -78,10 +78,10 @@ _debug_printf(const char *format, ...)
  * that is guaranteed to be printed in all platforms)
  */
 #if !defined(PIPE_OS_HAIKU)
-static INLINE void
+static inline void
 debug_printf(const char *format, ...) _util_printf_format(1,2);
 
-static INLINE void
+static inline void
 debug_printf(const char *format, ...)
 {
 #ifdef DEBUG
@@ -269,7 +269,7 @@ void _debug_assert_fail(const char *expr,
 struct debug_named_value
 {
    const char *name;
-   unsigned long value;
+   uint64_t value;
    const char *desc;
 };
 
@@ -377,10 +377,10 @@ debug_get_bool_option(const char *name, boolean dfault);
 long
 debug_get_num_option(const char *name, long dfault);
 
-unsigned long
+uint64_t
 debug_get_flags_option(const char *name, 
                        const struct debug_named_value *flags,
-                       unsigned long dfault);
+                       uint64_t dfault);
 
 #define DEBUG_GET_ONCE_BOOL_OPTION(sufix, name, dfault) \
 static boolean \

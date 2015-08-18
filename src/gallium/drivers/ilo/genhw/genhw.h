@@ -1,6 +1,4 @@
 /*
- * Mesa 3-D graphics library
- *
  * Copyright (C) 2014 LunarG, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -25,8 +23,9 @@
 #ifndef GENHW_H
 #define GENHW_H
 
-#include "pipe/p_compiler.h"
-#include "util/u_debug.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <assert.h>
 
 #include "gen_regs.xml.h"
 #include "gen_mi.xml.h"

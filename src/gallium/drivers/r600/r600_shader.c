@@ -310,6 +310,7 @@ struct r600_shader_ctx {
 	int					gs_next_vertex;
 	struct r600_shader	*gs_for_vs;
 	int					gs_export_gpr_treg;
+	unsigned				enabled_stream_buffers_mask;
 };
 
 struct r600_shader_tgsi_instruction {
@@ -617,98 +618,100 @@ static int tgsi_declaration(struct r600_shader_ctx *ctx)
 
 	switch (d->Declaration.File) {
 	case TGSI_FILE_INPUT:
-		i = ctx->shader->ninput;
-                assert(i < Elements(ctx->shader->input));
+		for (j = 0; j < count; j++) {
+			i = ctx->shader->ninput + j;
+			assert(i < Elements(ctx->shader->input));
+			ctx->shader->input[i].name = d->Semantic.Name;
+			ctx->shader->input[i].sid = d->Semantic.Index + j;
+			ctx->shader->input[i].interpolate = d->Interp.Interpolate;
+			ctx->shader->input[i].interpolate_location = d->Interp.Location;
+			ctx->shader->input[i].gpr = ctx->file_offset[TGSI_FILE_INPUT] + d->Range.First + j;
+			if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
+				ctx->shader->input[i].spi_sid = r600_spi_sid(&ctx->shader->input[i]);
+				switch (ctx->shader->input[i].name) {
+				case TGSI_SEMANTIC_FACE:
+					if (ctx->face_gpr != -1)
+						ctx->shader->input[i].gpr = ctx->face_gpr; /* already allocated by allocate_system_value_inputs */
+					else
+						ctx->face_gpr = ctx->shader->input[i].gpr;
+					break;
+				case TGSI_SEMANTIC_COLOR:
+					ctx->colors_used++;
+					break;
+				case TGSI_SEMANTIC_POSITION:
+					ctx->fragcoord_input = i;
+					break;
+				case TGSI_SEMANTIC_PRIMID:
+					/* set this for now */
+					ctx->shader->gs_prim_id_input = true;
+					ctx->shader->ps_prim_id_input = i;
+					break;
+				}
+				if (ctx->bc->chip_class >= EVERGREEN) {
+					if ((r = evergreen_interp_input(ctx, i)))
+						return r;
+				}
+			} else if (ctx->type == TGSI_PROCESSOR_GEOMETRY) {
+				/* FIXME probably skip inputs if they aren't passed in the ring */
+				ctx->shader->input[i].ring_offset = ctx->next_ring_offset;
+				ctx->next_ring_offset += 16;
+				if (ctx->shader->input[i].name == TGSI_SEMANTIC_PRIMID)
+					ctx->shader->gs_prim_id_input = true;
+			}
+		}
 		ctx->shader->ninput += count;
-		ctx->shader->input[i].name = d->Semantic.Name;
-		ctx->shader->input[i].sid = d->Semantic.Index;
-		ctx->shader->input[i].interpolate = d->Interp.Interpolate;
-		ctx->shader->input[i].interpolate_location = d->Interp.Location;
-		ctx->shader->input[i].gpr = ctx->file_offset[TGSI_FILE_INPUT] + d->Range.First;
-		if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
-			ctx->shader->input[i].spi_sid = r600_spi_sid(&ctx->shader->input[i]);
-			switch (ctx->shader->input[i].name) {
-			case TGSI_SEMANTIC_FACE:
-				if (ctx->face_gpr != -1)
-					ctx->shader->input[i].gpr = ctx->face_gpr; /* already allocated by allocate_system_value_inputs */
-				else
-					ctx->face_gpr = ctx->shader->input[i].gpr;
-				break;
-			case TGSI_SEMANTIC_COLOR:
-				ctx->colors_used++;
-				break;
-			case TGSI_SEMANTIC_POSITION:
-				ctx->fragcoord_input = i;
-				break;
-			case TGSI_SEMANTIC_PRIMID:
-				/* set this for now */
-				ctx->shader->gs_prim_id_input = true;
-				ctx->shader->ps_prim_id_input = i;
-				break;
-			}
-			if (ctx->bc->chip_class >= EVERGREEN) {
-				if ((r = evergreen_interp_input(ctx, i)))
-					return r;
-			}
-		} else if (ctx->type == TGSI_PROCESSOR_GEOMETRY) {
-			/* FIXME probably skip inputs if they aren't passed in the ring */
-			ctx->shader->input[i].ring_offset = ctx->next_ring_offset;
-			ctx->next_ring_offset += 16;
-			if (ctx->shader->input[i].name == TGSI_SEMANTIC_PRIMID)
-				ctx->shader->gs_prim_id_input = true;
-		}
-		for (j = 1; j < count; ++j) {
-			ctx->shader->input[i + j] = ctx->shader->input[i];
-			ctx->shader->input[i + j].gpr += j;
-		}
 		break;
 	case TGSI_FILE_OUTPUT:
-		i = ctx->shader->noutput++;
-                assert(i < Elements(ctx->shader->output));
-		ctx->shader->output[i].name = d->Semantic.Name;
-		ctx->shader->output[i].sid = d->Semantic.Index;
-		ctx->shader->output[i].gpr = ctx->file_offset[TGSI_FILE_OUTPUT] + d->Range.First;
-		ctx->shader->output[i].interpolate = d->Interp.Interpolate;
-		ctx->shader->output[i].write_mask = d->Declaration.UsageMask;
-		if (ctx->type == TGSI_PROCESSOR_VERTEX ||
-				ctx->type == TGSI_PROCESSOR_GEOMETRY) {
-			ctx->shader->output[i].spi_sid = r600_spi_sid(&ctx->shader->output[i]);
-			switch (d->Semantic.Name) {
-			case TGSI_SEMANTIC_CLIPDIST:
-				ctx->shader->clip_dist_write |= d->Declaration.UsageMask << (d->Semantic.Index << 2);
-				break;
-			case TGSI_SEMANTIC_PSIZE:
-				ctx->shader->vs_out_misc_write = 1;
-				ctx->shader->vs_out_point_size = 1;
-				break;
-			case TGSI_SEMANTIC_EDGEFLAG:
-				ctx->shader->vs_out_misc_write = 1;
-				ctx->shader->vs_out_edgeflag = 1;
-				ctx->edgeflag_output = i;
-				break;
-			case TGSI_SEMANTIC_VIEWPORT_INDEX:
-				ctx->shader->vs_out_misc_write = 1;
-				ctx->shader->vs_out_viewport = 1;
-				break;
-			case TGSI_SEMANTIC_LAYER:
-				ctx->shader->vs_out_misc_write = 1;
-				ctx->shader->vs_out_layer = 1;
-				break;
-			case TGSI_SEMANTIC_CLIPVERTEX:
-				ctx->clip_vertex_write = TRUE;
-				ctx->cv_output = i;
-				break;
-			}
-			if (ctx->type == TGSI_PROCESSOR_GEOMETRY) {
-				ctx->gs_out_ring_offset += 16;
-			}
-		} else if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
-			switch (d->Semantic.Name) {
-			case TGSI_SEMANTIC_COLOR:
-				ctx->shader->nr_ps_max_color_exports++;
-				break;
+		for (j = 0; j < count; j++) {
+			i = ctx->shader->noutput + j;
+			assert(i < Elements(ctx->shader->output));
+			ctx->shader->output[i].name = d->Semantic.Name;
+			ctx->shader->output[i].sid = d->Semantic.Index + j;
+			ctx->shader->output[i].gpr = ctx->file_offset[TGSI_FILE_OUTPUT] + d->Range.First + j;
+			ctx->shader->output[i].interpolate = d->Interp.Interpolate;
+			ctx->shader->output[i].write_mask = d->Declaration.UsageMask;
+			if (ctx->type == TGSI_PROCESSOR_VERTEX ||
+			    ctx->type == TGSI_PROCESSOR_GEOMETRY) {
+				ctx->shader->output[i].spi_sid = r600_spi_sid(&ctx->shader->output[i]);
+				switch (d->Semantic.Name) {
+				case TGSI_SEMANTIC_CLIPDIST:
+					ctx->shader->clip_dist_write |= d->Declaration.UsageMask <<
+									((d->Semantic.Index + j) << 2);
+					break;
+				case TGSI_SEMANTIC_PSIZE:
+					ctx->shader->vs_out_misc_write = 1;
+					ctx->shader->vs_out_point_size = 1;
+					break;
+				case TGSI_SEMANTIC_EDGEFLAG:
+					ctx->shader->vs_out_misc_write = 1;
+					ctx->shader->vs_out_edgeflag = 1;
+					ctx->edgeflag_output = i;
+					break;
+				case TGSI_SEMANTIC_VIEWPORT_INDEX:
+					ctx->shader->vs_out_misc_write = 1;
+					ctx->shader->vs_out_viewport = 1;
+					break;
+				case TGSI_SEMANTIC_LAYER:
+					ctx->shader->vs_out_misc_write = 1;
+					ctx->shader->vs_out_layer = 1;
+					break;
+				case TGSI_SEMANTIC_CLIPVERTEX:
+					ctx->clip_vertex_write = TRUE;
+					ctx->cv_output = i;
+					break;
+				}
+				if (ctx->type == TGSI_PROCESSOR_GEOMETRY) {
+					ctx->gs_out_ring_offset += 16;
+				}
+			} else if (ctx->type == TGSI_PROCESSOR_FRAGMENT) {
+				switch (d->Semantic.Name) {
+				case TGSI_SEMANTIC_COLOR:
+					ctx->shader->nr_ps_max_color_exports++;
+					break;
+				}
 			}
 		}
+		ctx->shader->noutput += count;
 		break;
 	case TGSI_FILE_TEMPORARY:
 		if (ctx->info.indirect_files & (1 << TGSI_FILE_TEMPORARY)) {
@@ -723,6 +726,7 @@ static int tgsi_declaration(struct r600_shader_ctx *ctx)
 
 	case TGSI_FILE_CONSTANT:
 	case TGSI_FILE_SAMPLER:
+	case TGSI_FILE_SAMPLER_VIEW:
 	case TGSI_FILE_ADDRESS:
 		break;
 
@@ -1337,7 +1341,7 @@ static int emit_streamout(struct r600_shader_ctx *ctx, struct pipe_stream_output
 	int i, j, r;
 
 	/* Sanity checking. */
-	if (so->num_outputs > PIPE_MAX_SHADER_OUTPUTS) {
+	if (so->num_outputs > PIPE_MAX_SO_OUTPUTS) {
 		R600_ERR("Too many stream outputs: %d\n", so->num_outputs);
 		r = -EINVAL;
 		goto out_err;
@@ -1399,6 +1403,9 @@ static int emit_streamout(struct r600_shader_ctx *ctx, struct pipe_stream_output
 		 * with MEM_STREAM instructions */
 		output.array_size = 0xFFF;
 		output.comp_mask = ((1 << so->output[i].num_components) - 1) << so->output[i].start_component;
+
+		ctx->enabled_stream_buffers_mask |= (1 << so->output[i].output_buffer);
+
 		if (ctx->bc->chip_class >= EVERGREEN) {
 			switch (so->output[i].output_buffer) {
 			case 0:
@@ -1715,6 +1722,8 @@ static int generate_gs_copy_shader(struct r600_context *rctx,
 	gs->gs_copy_shader = cshader;
 
 	ctx.bc->nstack = 1;
+
+	cshader->enabled_stream_buffers_mask = ctx.enabled_stream_buffers_mask;
 	cshader->shader.ring_item_size = ocnt * 16;
 
 	return r600_bytecode_build(ctx.bc);
@@ -1928,15 +1937,14 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	ctx.file_offset[TGSI_FILE_IMMEDIATE] = V_SQ_ALU_SRC_LITERAL;
 	ctx.bc->ar_reg = ctx.file_offset[TGSI_FILE_TEMPORARY] +
 			ctx.info.file_max[TGSI_FILE_TEMPORARY] + 1;
+	ctx.bc->index_reg[0] = ctx.bc->ar_reg + 1;
+	ctx.bc->index_reg[1] = ctx.bc->ar_reg + 2;
+
 	if (ctx.type == TGSI_PROCESSOR_GEOMETRY) {
-		ctx.gs_export_gpr_treg = ctx.bc->ar_reg + 1;
-		ctx.temp_reg = ctx.bc->ar_reg + 2;
-		ctx.bc->index_reg[0] = ctx.bc->ar_reg + 3;
-		ctx.bc->index_reg[1] = ctx.bc->ar_reg + 4;
+		ctx.gs_export_gpr_treg = ctx.bc->ar_reg + 3;
+		ctx.temp_reg = ctx.bc->ar_reg + 4;
 	} else {
-		ctx.temp_reg = ctx.bc->ar_reg + 1;
-		ctx.bc->index_reg[0] = ctx.bc->ar_reg + 2;
-		ctx.bc->index_reg[1] = ctx.bc->ar_reg + 3;
+		ctx.temp_reg = ctx.bc->ar_reg + 3;
 	}
 
 	shader->max_arrays = 0;
@@ -2083,7 +2091,6 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 		radeon_llvm_ctx.chip_class = ctx.bc->chip_class;
 		radeon_llvm_ctx.fs_color_all = shader->fs_write_all && (rscreen->b.chip_class >= EVERGREEN);
 		radeon_llvm_ctx.stream_outputs = &so;
-		radeon_llvm_ctx.clip_vertex = ctx.cv_output;
 		radeon_llvm_ctx.alpha_to_one = key.alpha_to_one;
 		radeon_llvm_ctx.has_compressed_msaa_texturing =
 			ctx.bc->has_compressed_msaa_texturing;
@@ -2259,6 +2266,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	    so.num_outputs && !use_llvm)
 		emit_streamout(&ctx, &so);
 
+	pipeshader->enabled_stream_buffers_mask = ctx.enabled_stream_buffers_mask;
 	convert_edgeflag_to_int(&ctx);
 
 	if (ring_outputs) {
@@ -2482,6 +2490,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 			output[j].array_base = 0;
 			output[j].op = CF_OP_EXPORT;
 			j++;
+			shader->nr_ps_color_exports++;
 		}
 
 		noutput = j;

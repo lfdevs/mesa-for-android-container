@@ -39,13 +39,13 @@ TEST(EnumStrings, LookUpByNumber)
 {
    for (unsigned i = 0; everything[i].name != NULL; i++) {
       EXPECT_STREQ(everything[i].name,
-		   _mesa_lookup_enum_by_nr(everything[i].value));
+		   _mesa_enum_to_string(everything[i].value));
    }
 }
 
 TEST(EnumStrings, LookUpUnknownNumber)
 {
-   EXPECT_STRCASEEQ("0xEEEE", _mesa_lookup_enum_by_nr(0xEEEE));
+   EXPECT_STRCASEEQ("0xEEEE", _mesa_enum_to_string(0xEEEE));
 }
 
 /* Please type the name and the value.  This makes it easier to detect
@@ -1731,6 +1731,10 @@ const struct enum_info everything[] = {
    { 0x8DDF, "GL_MAX_GEOMETRY_UNIFORM_COMPONENTS" },
    { 0x8DE0, "GL_MAX_GEOMETRY_OUTPUT_VERTICES" },
    { 0x8DE1, "GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS" },
+   { 0x8DE5, "GL_ACTIVE_SUBROUTINES" },
+   { 0x8DE6, "GL_ACTIVE_SUBROUTINE_UNIFORMS" },
+   { 0x8DE7, "GL_MAX_SUBROUTINES" },
+   { 0x8DE8, "GL_MAX_SUBROUTINE_UNIFORM_LOCATIONS" },
    { 0x8DF0, "GL_LOW_FLOAT" },
    { 0x8DF1, "GL_MEDIUM_FLOAT" },
    { 0x8DF2, "GL_HIGH_FLOAT" },
@@ -1759,6 +1763,11 @@ const struct enum_info everything[] = {
    { 0x8E44, "GL_TEXTURE_SWIZZLE_B" },
    { 0x8E45, "GL_TEXTURE_SWIZZLE_A" },
    { 0x8E46, "GL_TEXTURE_SWIZZLE_RGBA" },
+   { 0x8E47, "GL_ACTIVE_SUBROUTINE_UNIFORM_LOCATIONS" },
+   { 0x8E48, "GL_ACTIVE_SUBROUTINE_MAX_LENGTH" },
+   { 0x8E49, "GL_ACTIVE_SUBROUTINE_UNIFORM_MAX_LENGTH" },
+   { 0x8E4A, "GL_NUM_COMPATIBLE_SUBROUTINES" },
+   { 0x8E4B, "GL_COMPATIBLE_SUBROUTINES" },
    { 0x8E4C, "GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION" },
    { 0x8E4D, "GL_FIRST_VERTEX_CONVENTION" },
    { 0x8E4E, "GL_LAST_VERTEX_CONVENTION" },

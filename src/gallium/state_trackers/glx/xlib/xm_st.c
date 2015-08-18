@@ -46,7 +46,7 @@ struct xmesa_st_framebuffer {
 };
 
 
-static INLINE struct xmesa_st_framebuffer *
+static inline struct xmesa_st_framebuffer *
 xmesa_st_framebuffer(struct st_framebuffer_iface *stfbi)
 {
    return (struct xmesa_st_framebuffer *) stfbi->st_manager_private;

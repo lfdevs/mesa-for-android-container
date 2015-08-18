@@ -414,32 +414,16 @@ add_src_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 static void
 add_vector_clamp(struct tgsi_full_instruction *inst, struct ir2_instruction *alu)
 {
-	switch (inst->Instruction.Saturate) {
-	case TGSI_SAT_NONE:
-		break;
-	case TGSI_SAT_ZERO_ONE:
+	if (inst->Instruction.Saturate) {
 		alu->alu.vector_clamp = true;
-		break;
-	case TGSI_SAT_MINUS_PLUS_ONE:
-		DBG("unsupported saturate");
-		assert(0);
-		break;
 	}
 }
 
 static void
 add_scalar_clamp(struct tgsi_full_instruction *inst, struct ir2_instruction *alu)
 {
-	switch (inst->Instruction.Saturate) {
-	case TGSI_SAT_NONE:
-		break;
-	case TGSI_SAT_ZERO_ONE:
+	if (inst->Instruction.Saturate) {
 		alu->alu.scalar_clamp = true;
-		break;
-	case TGSI_SAT_MINUS_PLUS_ONE:
-		DBG("unsupported saturate");
-		assert(0);
-		break;
 	}
 }
 
@@ -758,7 +742,7 @@ translate_tex(struct fd2_compile_context *ctx,
 	struct tgsi_src_register tmp_src;
 	const struct tgsi_src_register *coord;
 	bool using_temp = (inst->Dst[0].Register.File == TGSI_FILE_OUTPUT) ||
-			(inst->Instruction.Saturate != TGSI_SAT_NONE);
+			inst->Instruction.Saturate;
 	int idx;
 
 	if (using_temp || (opc == TGSI_OPCODE_TXP))

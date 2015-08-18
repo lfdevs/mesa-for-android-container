@@ -29,13 +29,13 @@
 #include "nvc0/nvc0_resource.h"
 
 static uint32_t
-nvc0_tex_choose_tile_dims(unsigned nx, unsigned ny, unsigned nz, boolean is_3d)
+nvc0_tex_choose_tile_dims(unsigned nx, unsigned ny, unsigned nz, bool is_3d)
 {
    return nv50_tex_choose_tile_dims_helper(nx, ny, nz, is_3d);
 }
 
 static uint32_t
-nvc0_mt_choose_storage_type(struct nv50_miptree *mt, boolean compressed)
+nvc0_mt_choose_storage_type(struct nv50_miptree *mt, bool compressed)
 {
    const unsigned ms = util_logbase2(mt->base.base.nr_samples);
 
@@ -133,7 +133,7 @@ nvc0_mt_choose_storage_type(struct nv50_miptree *mt, boolean compressed)
    return tile_flags;
 }
 
-static INLINE boolean
+static inline bool
 nvc0_miptree_init_ms_mode(struct nv50_miptree *mt)
 {
    switch (mt->base.base.nr_samples) {
@@ -157,9 +157,9 @@ nvc0_miptree_init_ms_mode(struct nv50_miptree *mt)
       break;
    default:
       NOUVEAU_ERR("invalid nr_samples: %u\n", mt->base.base.nr_samples);
-      return FALSE;
+      return false;
    }
-   return TRUE;
+   return true;
 }
 
 static void
@@ -250,7 +250,7 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
    struct nouveau_device *dev = nouveau_screen(pscreen)->device;
    struct nv50_miptree *mt = CALLOC_STRUCT(nv50_miptree);
    struct pipe_resource *pt = &mt->base.base;
-   boolean compressed = dev->drm_version >= 0x01000101;
+   bool compressed = dev->drm_version >= 0x01000101;
    int ret;
    union nouveau_bo_config bo_config;
    uint32_t bo_flags;
@@ -302,7 +302,7 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
    if (!bo_config.nvc0.memtype && (pt->usage == PIPE_USAGE_STAGING || pt->bind & PIPE_BIND_SHARED))
       mt->base.domain = NOUVEAU_BO_GART;
    else
-      mt->base.domain = NOUVEAU_BO_VRAM;
+      mt->base.domain = NV_VRAM_DOMAIN(nouveau_screen(pscreen));
 
    bo_flags = mt->base.domain | NOUVEAU_BO_NOSNOOP;
 
@@ -325,7 +325,7 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
 }
 
 /* Offset of zslice @z from start of level @l. */
-INLINE unsigned
+inline unsigned
 nvc0_mt_zslice_offset(const struct nv50_miptree *mt, unsigned l, unsigned z)
 {
    const struct pipe_resource *pt = &mt->base.base;

@@ -28,9 +28,9 @@
 #include "genhw/genhw.h"
 #include "core/ilo_builder_3d.h"
 #include "core/ilo_builder_render.h"
-#include "util/u_dual_blend.h"
 
 #include "ilo_blitter.h"
+#include "ilo_resource.h"
 #include "ilo_shader.h"
 #include "ilo_state.h"
 #include "ilo_render_gen.h"
@@ -66,26 +66,20 @@ gen8_draw_sf(struct ilo_render *r,
              struct ilo_render_draw_session *session)
 {
    /* 3DSTATE_RASTER */
-   if (DIRTY(RASTERIZER)) {
-      gen8_3DSTATE_RASTER(r->builder, (vec->rasterizer) ?
-            &vec->rasterizer->sf : NULL);
-   }
+   if (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_RASTER)
+      gen8_3DSTATE_RASTER(r->builder, &vec->rasterizer->rs);
 
-   /* 3DSTATE_SBE */
-   if (DIRTY(RASTERIZER) || DIRTY(FS)) {
-      gen8_3DSTATE_SBE(r->builder, vec->fs, (vec->rasterizer) ?
-            vec->rasterizer->state.sprite_coord_mode : 0);
-   }
+   /* 3DSTATE_SBE and 3DSTATE_SBE_SWIZ */
+   if (DIRTY(FS)) {
+      const struct ilo_state_sbe *sbe = ilo_shader_get_kernel_sbe(vec->fs);
 
-   /* 3DSTATE_SBE_SWIZ */
-   if (DIRTY(FS))
-      gen8_3DSTATE_SBE_SWIZ(r->builder, vec->fs);
+      gen8_3DSTATE_SBE(r->builder, sbe);
+      gen8_3DSTATE_SBE_SWIZ(r->builder, sbe);
+   }
 
    /* 3DSTATE_SF */
-   if (DIRTY(RASTERIZER)) {
-      gen8_3DSTATE_SF(r->builder, (vec->rasterizer) ?
-            &vec->rasterizer->sf : NULL);
-   }
+   if (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_SF)
+      gen7_3DSTATE_SF(r->builder, &vec->rasterizer->rs);
 }
 
 static void
@@ -93,12 +87,15 @@ gen8_draw_wm(struct ilo_render *r,
              const struct ilo_state_vector *vec,
              struct ilo_render_draw_session *session)
 {
-   /* 3DSTATE_WM */
-   if (DIRTY(FS) || DIRTY(RASTERIZER))
-      gen8_3DSTATE_WM(r->builder, vec->fs, vec->rasterizer);
+   const union ilo_shader_cso *cso = ilo_shader_get_kernel_cso(vec->fs);
+   const uint32_t kernel_offset = ilo_shader_get_kernel_offset(vec->fs);
 
-   if (DIRTY(DSA))
-      gen8_3DSTATE_WM_DEPTH_STENCIL(r->builder, vec->dsa);
+   /* 3DSTATE_WM */
+   if (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_WM)
+      gen8_3DSTATE_WM(r->builder, &vec->rasterizer->rs);
+
+   if (session->cc_delta.dirty & ILO_STATE_CC_3DSTATE_WM_DEPTH_STENCIL)
+      gen8_3DSTATE_WM_DEPTH_STENCIL(r->builder, &vec->blend->cc);
 
    /* 3DSTATE_WM_HZ_OP and 3DSTATE_WM_CHROMAKEY */
    if (r->hw_ctx_changed) {
@@ -128,18 +125,15 @@ gen8_draw_wm(struct ilo_render *r,
 
    /* 3DSTATE_PS */
    if (DIRTY(FS) || r->instruction_bo_changed)
-      gen8_3DSTATE_PS(r->builder, vec->fs);
+      gen8_3DSTATE_PS(r->builder, &cso->ps, kernel_offset);
 
    /* 3DSTATE_PS_EXTRA */
-   if (DIRTY(FS) || DIRTY(DSA) || DIRTY(BLEND)) {
-      const bool cc_may_kill = (vec->dsa->dw_blend_alpha ||
-                                vec->blend->alpha_to_coverage);
-      gen8_3DSTATE_PS_EXTRA(r->builder, vec->fs, cc_may_kill, false);
-   }
+   if (DIRTY(FS))
+      gen8_3DSTATE_PS_EXTRA(r->builder, &cso->ps);
 
    /* 3DSTATE_PS_BLEND */
-   if (DIRTY(BLEND) || DIRTY(FB) || DIRTY(DSA))
-      gen8_3DSTATE_PS_BLEND(r->builder, vec->blend, &vec->fb, vec->dsa);
+   if (session->cc_delta.dirty & ILO_STATE_CC_3DSTATE_PS_BLEND)
+      gen8_3DSTATE_PS_BLEND(r->builder, &vec->blend->cc);
 
    /* 3DSTATE_SCISSOR_STATE_POINTERS */
    if (session->scissor_changed) {
@@ -149,7 +143,7 @@ gen8_draw_wm(struct ilo_render *r,
 
    /* 3DSTATE_DEPTH_BUFFER and 3DSTATE_CLEAR_PARAMS */
    if (DIRTY(FB) || r->batch_bo_changed) {
-      const struct ilo_zs_surface *zs;
+      const struct ilo_state_zs *zs;
       uint32_t clear_params;
 
       if (vec->fb.state.zsbuf) {
@@ -170,7 +164,7 @@ gen8_draw_wm(struct ilo_render *r,
 
       gen8_wa_pre_depth(r);
 
-      gen6_3DSTATE_DEPTH_BUFFER(r->builder, zs, false);
+      gen6_3DSTATE_DEPTH_BUFFER(r->builder, zs);
       gen6_3DSTATE_HIER_DEPTH_BUFFER(r->builder, zs);
       gen6_3DSTATE_STENCIL_BUFFER(r->builder, zs);
       gen7_3DSTATE_CLEAR_PARAMS(r->builder, clear_params);
@@ -183,14 +177,8 @@ gen8_draw_wm_sample_pattern(struct ilo_render *r,
                             struct ilo_render_draw_session *session)
 {
    /* 3DSTATE_SAMPLE_PATTERN */
-   if (r->hw_ctx_changed) {
-      gen8_3DSTATE_SAMPLE_PATTERN(r->builder,
-            &r->sample_pattern_1x,
-            &r->sample_pattern_2x,
-            &r->sample_pattern_4x,
-            r->sample_pattern_8x,
-            r->sample_pattern_16x);
-   }
+   if (r->hw_ctx_changed)
+      gen8_3DSTATE_SAMPLE_PATTERN(r->builder, &r->sample_pattern);
 }
 
 static void
@@ -198,15 +186,13 @@ gen8_draw_wm_multisample(struct ilo_render *r,
                          const struct ilo_state_vector *vec,
                          struct ilo_render_draw_session *session)
 {
-   /* 3DSTATE_MULTISAMPLE and 3DSTATE_SAMPLE_MASK */
-   if (DIRTY(SAMPLE_MASK) || DIRTY(FB) || DIRTY(RASTERIZER)) {
-      gen8_3DSTATE_MULTISAMPLE(r->builder, vec->fb.num_samples,
-            vec->rasterizer->state.half_pixel_center);
+   /* 3DSTATE_MULTISAMPLE */
+   if (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_MULTISAMPLE)
+      gen8_3DSTATE_MULTISAMPLE(r->builder, &vec->rasterizer->rs);
 
-      gen7_3DSTATE_SAMPLE_MASK(r->builder,
-            (vec->fb.num_samples > 1) ? vec->sample_mask : 0x1,
-            vec->fb.num_samples);
-   }
+   /* 3DSTATE_SAMPLE_MASK */
+   if (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_SAMPLE_MASK)
+      gen6_3DSTATE_SAMPLE_MASK(r->builder, &vec->rasterizer->rs);
 }
 
 static void
@@ -214,36 +200,38 @@ gen8_draw_vf(struct ilo_render *r,
              const struct ilo_state_vector *vec,
              struct ilo_render_draw_session *session)
 {
-   int i;
-
    /* 3DSTATE_INDEX_BUFFER */
-   if (DIRTY(IB) || r->batch_bo_changed)
-      gen8_3DSTATE_INDEX_BUFFER(r->builder, &vec->ib);
+   if ((session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_INDEX_BUFFER) ||
+       DIRTY(IB) || r->batch_bo_changed)
+      gen8_3DSTATE_INDEX_BUFFER(r->builder, &vec->ve->vf, &vec->ib.ib);
 
    /* 3DSTATE_VF */
-   if (session->primitive_restart_changed) {
-      gen75_3DSTATE_VF(r->builder, vec->draw->primitive_restart,
-            vec->draw->restart_index);
-   }
+   if (session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VF)
+      gen75_3DSTATE_VF(r->builder, &vec->ve->vf);
 
    /* 3DSTATE_VERTEX_BUFFERS */
-   if (DIRTY(VB) || DIRTY(VE) || r->batch_bo_changed)
-      gen6_3DSTATE_VERTEX_BUFFERS(r->builder, vec->ve, &vec->vb);
-
-   /* 3DSTATE_VERTEX_ELEMENTS */
-   if (DIRTY(VE))
-      gen6_3DSTATE_VERTEX_ELEMENTS(r->builder, vec->ve);
-
-   gen8_3DSTATE_VF_TOPOLOGY(r->builder, vec->draw->mode);
-
-   for (i = 0; i < vec->ve->vb_count; i++) {
-      gen8_3DSTATE_VF_INSTANCING(r->builder, i,
-            vec->ve->instance_divisors[i]);
+   if ((session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VERTEX_BUFFERS) ||
+       DIRTY(VB) || DIRTY(VE) || r->batch_bo_changed) {
+      gen6_3DSTATE_VERTEX_BUFFERS(r->builder, &vec->ve->vf,
+            vec->vb.vb, vec->ve->vb_count);
    }
 
-   gen8_3DSTATE_VF_SGVS(r->builder,
-         false, 0, 0,
-         false, 0, 0);
+   /* 3DSTATE_VERTEX_ELEMENTS */
+   if (session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VERTEX_ELEMENTS)
+      gen6_3DSTATE_VERTEX_ELEMENTS(r->builder, &vec->ve->vf);
+
+   gen8_3DSTATE_VF_TOPOLOGY(r->builder, vec->draw_info.topology);
+
+   if (session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VF_INSTANCING) {
+      const uint8_t attr_count = ilo_state_vf_get_attr_count(&vec->ve->vf);
+      uint8_t i;
+
+      for (i = 0; i < attr_count; i++)
+         gen8_3DSTATE_VF_INSTANCING(r->builder, &vec->ve->vf, i);
+   }
+
+   if (session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VF_SGVS)
+      gen8_3DSTATE_VF_SGVS(r->builder, &vec->ve->vf);
 }
 
 void
@@ -281,7 +269,7 @@ ilo_render_emit_draw_commands_gen8(struct ilo_render *render,
    gen6_draw_sf_rect(render, vec, session);
    gen8_draw_vf(render, vec, session);
 
-   ilo_render_3dprimitive(render, vec->draw, &vec->ib);
+   ilo_render_3dprimitive(render, &vec->draw_info);
 }
 
 int
@@ -365,17 +353,13 @@ ilo_render_emit_rectlist_commands_gen8(struct ilo_render *r,
                                        const struct ilo_blitter *blitter,
                                        const struct ilo_render_rectlist_session *session)
 {
-   uint32_t op;
-
    ILO_DEV_ASSERT(r->dev, 8, 8);
 
    gen8_wa_pre_depth(r);
 
    if (blitter->uses & (ILO_BLITTER_USE_FB_DEPTH |
-                        ILO_BLITTER_USE_FB_STENCIL)) {
-      gen6_3DSTATE_DEPTH_BUFFER(r->builder,
-            &blitter->fb.dst.u.zs, true);
-   }
+                        ILO_BLITTER_USE_FB_STENCIL))
+      gen6_3DSTATE_DEPTH_BUFFER(r->builder, &blitter->fb.dst.u.zs);
 
    if (blitter->uses & ILO_BLITTER_USE_FB_DEPTH) {
       gen6_3DSTATE_HIER_DEPTH_BUFFER(r->builder,
@@ -393,27 +377,8 @@ ilo_render_emit_rectlist_commands_gen8(struct ilo_render *r,
    gen6_3DSTATE_DRAWING_RECTANGLE(r->builder, 0, 0,
          blitter->fb.width, blitter->fb.height);
 
-   switch (blitter->op) {
-   case ILO_BLITTER_RECTLIST_CLEAR_ZS:
-      op = 0;
-      if (blitter->uses & ILO_BLITTER_USE_FB_DEPTH)
-         op |= GEN8_WM_HZ_DW1_DEPTH_CLEAR;
-      if (blitter->uses & ILO_BLITTER_USE_FB_STENCIL)
-         op |= GEN8_WM_HZ_DW1_STENCIL_CLEAR;
-      break;
-   case ILO_BLITTER_RECTLIST_RESOLVE_Z:
-      op = GEN8_WM_HZ_DW1_DEPTH_RESOLVE;
-      break;
-   case ILO_BLITTER_RECTLIST_RESOLVE_HIZ:
-      op = GEN8_WM_HZ_DW1_HIZ_RESOLVE;
-      break;
-   default:
-      op = 0;
-      break;
-   }
-
-   gen8_3DSTATE_WM_HZ_OP(r->builder, op, blitter->fb.width,
-         blitter->fb.height, blitter->fb.num_samples);
+   gen8_3DSTATE_WM_HZ_OP(r->builder, &blitter->fb.rs,
+         blitter->fb.width, blitter->fb.height);
 
    ilo_render_pipe_control(r, GEN6_PIPE_CONTROL_WRITE_IMM);
 

@@ -497,13 +497,22 @@ brw_get_timestamp(struct gl_context *ctx)
    struct brw_context *brw = brw_context(ctx);
    uint64_t result = 0;
 
-   drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &result);
+   switch (brw->intelScreen->hw_has_timestamp) {
+   case 3: /* New kernel, always full 36bit accuracy */
+      drm_intel_reg_read(brw->bufmgr, TIMESTAMP | 1, &result);
+      break;
+   case 2: /* 64bit kernel, result is left-shifted by 32bits, losing 4bits */
+      drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &result);
+      result = result >> 32;
+      break;
+   case 1: /* 32bit kernel, result is 36bit wide but may be inaccurate! */
+      drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &result);
+      break;
+   }
 
    /* See logic in brw_queryobj_get_results() */
-   result = result >> 32;
    result *= 80;
    result &= (1ull << 36) - 1;
-
    return result;
 }
 

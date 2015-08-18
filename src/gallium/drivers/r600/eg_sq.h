@@ -521,4 +521,11 @@
 
 #define V_SQ_REL_ABSOLUTE 0
 #define V_SQ_REL_RELATIVE 1
+
+/* CAYMAN has special encoding for MOVA_INT destination */
+#define CM_V_SQ_MOVA_DST_AR_X 0
+#define CM_V_SQ_MOVA_DST_CF_PC 1
+#define CM_V_SQ_MOVA_DST_CF_IDX0 2
+#define CM_V_SQ_MOVA_DST_CF_IDX1 3
+
 #endif

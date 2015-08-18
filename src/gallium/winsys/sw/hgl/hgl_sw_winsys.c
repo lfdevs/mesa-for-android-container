@@ -67,7 +67,7 @@ struct haiku_displaytarget
 
 
 // Cast
-static INLINE struct haiku_displaytarget*
+static inline struct haiku_displaytarget*
 hgl_sw_displaytarget(struct sw_displaytarget* target)
 {
 	return (struct haiku_displaytarget *)target;

@@ -313,6 +313,8 @@ static void st_init_driver_flags(struct gl_driver_flags *f)
    f->NewArray = ST_NEW_VERTEX_ARRAYS;
    f->NewRasterizerDiscard = ST_NEW_RASTERIZER;
    f->NewUniformBuffer = ST_NEW_UNIFORM_BUFFER;
+   f->NewDefaultTessLevels = ST_NEW_TESS_STATE;
+   f->NewTextureBuffer = ST_NEW_SAMPLER_VIEWS;
 }
 
 struct st_context *st_create_context(gl_api api, struct pipe_context *pipe,
@@ -374,6 +376,8 @@ void st_destroy_context( struct st_context *st )
    st_reference_fragprog(st, &st->fp, NULL);
    st_reference_geomprog(st, &st->gp, NULL);
    st_reference_vertprog(st, &st->vp, NULL);
+   st_reference_tesscprog(st, &st->tcp, NULL);
+   st_reference_tesseprog(st, &st->tep, NULL);
 
    /* release framebuffer surfaces */
    for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {

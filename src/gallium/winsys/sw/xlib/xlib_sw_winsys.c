@@ -92,7 +92,7 @@ struct xlib_sw_winsys
 
 
 /** Cast wrapper */
-static INLINE struct xlib_displaytarget *
+static inline struct xlib_displaytarget *
 xlib_displaytarget(struct sw_displaytarget *dt)
 {
    return (struct xlib_displaytarget *) dt;

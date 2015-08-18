@@ -48,13 +48,13 @@
 #include <emmintrin.h>
 #endif
 
-static INLINE int
+static inline int
 subpixel_snap(float a)
 {
    return util_iround(FIXED_ONE * a);
 }
 
-static INLINE float
+static inline float
 fixed_to_float(int a)
 {
    return a * (1.0f / FIXED_ONE);
@@ -579,7 +579,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
  *
  * Undefined if no bit set exists, so code should check against 0 first.
  */
-static INLINE uint32_t 
+static inline uint32_t 
 floor_pot(uint32_t n)
 {
 #if defined(PIPE_CC_GCC) && defined(PIPE_ARCH_X86)
@@ -841,7 +841,7 @@ static void retry_triangle_ccw( struct lp_setup_context *setup,
 /**
  * Calculate fixed position data for a triangle
  */
-static INLINE void
+static inline void
 calc_fixed_position( struct lp_setup_context *setup,
                      struct fixed_position* position,
                      const float (*v0)[4],
@@ -873,7 +873,7 @@ calc_fixed_position( struct lp_setup_context *setup,
  * Rotate a triangle, flipping its clockwise direction,
  * Swaps values for xy[0] and xy[1]
  */
-static INLINE void
+static inline void
 rotate_fixed_position_01( struct fixed_position* position )
 {
    int x, y;
@@ -898,7 +898,7 @@ rotate_fixed_position_01( struct fixed_position* position )
  * Rotate a triangle, flipping its clockwise direction,
  * Swaps values for xy[1] and xy[2]
  */
-static INLINE void
+static inline void
 rotate_fixed_position_12( struct fixed_position* position )
 {
    int x, y;

@@ -182,6 +182,34 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
          }
          break;
       }
+      case module::argument::image_size: {
+         auto img = dynamic_cast<image_argument &>(**(explicit_arg - 1)).get();
+         std::vector<cl_uint> image_size{
+               static_cast<cl_uint>(img->width()),
+               static_cast<cl_uint>(img->height()),
+               static_cast<cl_uint>(img->depth())};
+         for (auto x : image_size) {
+            auto arg = argument::create(marg);
+
+            arg->set(sizeof(x), &x);
+            arg->bind(*this, marg);
+         }
+         break;
+      }
+      case module::argument::image_format: {
+         auto img = dynamic_cast<image_argument &>(**(explicit_arg - 1)).get();
+         cl_image_format fmt = img->format();
+         std::vector<cl_uint> image_format{
+               static_cast<cl_uint>(fmt.image_channel_data_type),
+               static_cast<cl_uint>(fmt.image_channel_order)};
+         for (auto x : image_format) {
+            auto arg = argument::create(marg);
+
+            arg->set(sizeof(x), &x);
+            arg->bind(*this, marg);
+         }
+         break;
+      }
       }
    }
 
@@ -339,6 +367,9 @@ kernel::scalar_argument::scalar_argument(size_t size) : size(size) {
 
 void
 kernel::scalar_argument::set(size_t size, const void *value) {
+   if (!value)
+      throw error(CL_INVALID_ARG_VALUE);
+
    if (size != this->size)
       throw error(CL_INVALID_ARG_SIZE);
 
@@ -407,6 +438,9 @@ kernel::local_argument::set(size_t size, const void *value) {
    if (value)
       throw error(CL_INVALID_ARG_VALUE);
 
+   if (!size)
+      throw error(CL_INVALID_ARG_SIZE);
+
    _storage = size;
    _set = true;
 }
@@ -466,6 +500,9 @@ kernel::constant_argument::unbind(exec_context &ctx) {
 
 void
 kernel::image_rd_argument::set(size_t size, const void *value) {
+   if (!value)
+      throw error(CL_INVALID_ARG_VALUE);
+
    if (size != sizeof(cl_mem))
       throw error(CL_INVALID_ARG_SIZE);
 
@@ -494,6 +531,9 @@ kernel::image_rd_argument::unbind(exec_context &ctx) {
 
 void
 kernel::image_wr_argument::set(size_t size, const void *value) {
+   if (!value)
+      throw error(CL_INVALID_ARG_VALUE);
+
    if (size != sizeof(cl_mem))
       throw error(CL_INVALID_ARG_SIZE);
 
@@ -522,6 +562,9 @@ kernel::image_wr_argument::unbind(exec_context &ctx) {
 
 void
 kernel::sampler_argument::set(size_t size, const void *value) {
+   if (!value)
+      throw error(CL_INVALID_SAMPLER);
+
    if (size != sizeof(cl_sampler))
       throw error(CL_INVALID_ARG_SIZE);
 

@@ -146,6 +146,7 @@ enum
    GL_EXT_texture_env_combine_bit,
    GL_EXT_texture_env_dot3_bit,
    GL_EXT_texture_filter_anisotropic_bit,
+   GL_EXT_texture_integer_bit,
    GL_EXT_texture_lod_bit,
    GL_EXT_texture_lod_bias_bit,
    GL_EXT_texture_mirror_clamp_bit,

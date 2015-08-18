@@ -173,17 +173,17 @@ typedef enum {
 	OPC_STLW = 11,
 	OPC_RESFMT = 14,
 	OPC_RESINFO = 15,
-	OPC_ATOMIC_ADD_L = 16,
-	OPC_ATOMIC_SUB_L = 17,
-	OPC_ATOMIC_XCHG_L = 18,
-	OPC_ATOMIC_INC_L = 19,
-	OPC_ATOMIC_DEC_L = 20,
-	OPC_ATOMIC_CMPXCHG_L = 21,
-	OPC_ATOMIC_MIN_L = 22,
-	OPC_ATOMIC_MAX_L = 23,
-	OPC_ATOMIC_AND_L = 24,
-	OPC_ATOMIC_OR_L = 25,
-	OPC_ATOMIC_XOR_L = 26,
+	OPC_ATOMIC_ADD = 16,
+	OPC_ATOMIC_SUB = 17,
+	OPC_ATOMIC_XCHG = 18,
+	OPC_ATOMIC_INC = 19,
+	OPC_ATOMIC_DEC = 20,
+	OPC_ATOMIC_CMPXCHG = 21,
+	OPC_ATOMIC_MIN = 22,
+	OPC_ATOMIC_MAX = 23,
+	OPC_ATOMIC_AND = 24,
+	OPC_ATOMIC_OR = 25,
+	OPC_ATOMIC_XOR = 26,
 	OPC_LDGB_TYPED_4D = 27,
 	OPC_STGB_4D_4 = 28,
 	OPC_STIB = 29,
@@ -191,9 +191,9 @@ typedef enum {
 	OPC_LDLV = 31,
 
 	/* meta instructions (category -1): */
-	/* placeholder instr to mark inputs/outputs: */
+	/* placeholder instr to mark shader inputs: */
 	OPC_META_INPUT = 0,
-	OPC_META_OUTPUT = 1,
+	OPC_META_PHI = 1,
 	/* The "fan-in" and "fan-out" instructions are used for keeping
 	 * track of instructions that write to multiple dst registers
 	 * (fan-out) like texture sample instructions, or read multiple
@@ -201,9 +201,6 @@ typedef enum {
 	 */
 	OPC_META_FO = 2,
 	OPC_META_FI = 3,
-	/* branches/flow control */
-	OPC_META_FLOW = 4,
-	OPC_META_PHI = 5,
 
 } opc_t;
 
@@ -281,8 +278,16 @@ static inline int reg_special(reg_t reg)
 
 typedef struct PACKED {
 	/* dword0: */
-	int16_t  immed    : 16;
-	uint32_t dummy1   : 16;
+	union PACKED {
+		struct PACKED {
+			int16_t  immed    : 16;
+			uint32_t dummy1   : 16;
+		} a3xx;
+		struct PACKED {
+			int32_t  immed    : 20;
+			uint32_t dummy1   : 12;
+		} a4xx;
+	};
 
 	/* dword1: */
 	uint32_t dummy2   : 8;
@@ -570,7 +575,7 @@ typedef struct PACKED {
 	uint32_t opc_cat  : 3;
 } instr_cat5_t;
 
-/* [src1 + off], src2: */
+/* dword0 encoding for src_off: [src1 + off], src2: */
 typedef struct PACKED {
 	/* dword0: */
 	uint32_t mustbe1  : 1;
@@ -581,36 +586,49 @@ typedef struct PACKED {
 	uint32_t src2     : 8;
 
 	/* dword1: */
-	uint32_t dst      : 8;
-	uint32_t dummy2   : 9;
-	uint32_t type     : 3;
-	uint32_t dummy3   : 2;
-	uint32_t opc      : 5;
-	uint32_t jmp_tgt  : 1;
-	uint32_t sync     : 1;
-	uint32_t opc_cat  : 3;
+	uint32_t dword1;
 } instr_cat6a_t;
 
-/* [src1], src2: */
+/* dword0 encoding for !src_off: [src1], src2 */
 typedef struct PACKED {
 	/* dword0: */
 	uint32_t mustbe0  : 1;
-	uint32_t src1     : 8;
-	uint32_t ignore0  : 13;
+	uint32_t src1     : 13;
+	uint32_t ignore0  : 8;
 	uint32_t src1_im  : 1;
 	uint32_t src2_im  : 1;
 	uint32_t src2     : 8;
 
 	/* dword1: */
-	uint32_t dst      : 8;
-	uint32_t dummy2   : 9;
-	uint32_t type     : 3;
-	uint32_t dummy3   : 2;
-	uint32_t opc      : 5;
-	uint32_t jmp_tgt  : 1;
-	uint32_t sync     : 1;
-	uint32_t opc_cat  : 3;
+	uint32_t dword1;
 } instr_cat6b_t;
+
+/* dword1 encoding for dst_off: */
+typedef struct PACKED {
+	/* dword0: */
+	uint32_t dword0;
+
+	/* note: there is some weird stuff going on where sometimes
+	 * cat6->a.off is involved.. but that seems like a bug in
+	 * the blob, since it is used even if !cat6->src_off
+	 * It would make sense for there to be some more bits to
+	 * bring us to 11 bits worth of offset, but not sure..
+	 */
+	int32_t off       : 8;
+	uint32_t mustbe1  : 1;
+	uint32_t dst      : 8;
+	uint32_t pad1     : 15;
+} instr_cat6c_t;
+
+/* dword1 encoding for !dst_off: */
+typedef struct PACKED {
+	/* dword0: */
+	uint32_t dword0;
+
+	uint32_t dst      : 8;
+	uint32_t mustbe0  : 1;
+	uint32_t pad0     : 23;
+} instr_cat6d_t;
 
 /* I think some of the other cat6 instructions use additional
  * sub-encodings..
@@ -619,16 +637,20 @@ typedef struct PACKED {
 typedef union PACKED {
 	instr_cat6a_t a;
 	instr_cat6b_t b;
+	instr_cat6c_t c;
+	instr_cat6d_t d;
 	struct PACKED {
 		/* dword0: */
-		uint32_t has_off  : 1;
+		uint32_t src_off  : 1;
 		uint32_t pad1     : 31;
 
 		/* dword1: */
-		uint32_t dst      : 8;
-		uint32_t dummy2   : 9;
+		uint32_t pad2     : 8;
+		uint32_t dst_off  : 1;
+		uint32_t pad3     : 8;
 		uint32_t type     : 3;
-		uint32_t dummy3   : 2;
+		uint32_t g        : 1;  /* or in some cases it means dst immed */
+		uint32_t pad4     : 1;
 		uint32_t opc      : 5;
 		uint32_t jmp_tgt  : 1;
 		uint32_t sync     : 1;

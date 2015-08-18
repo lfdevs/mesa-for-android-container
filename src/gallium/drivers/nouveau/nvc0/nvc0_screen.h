@@ -28,16 +28,17 @@ struct nvc0_context;
 struct nvc0_blitter;
 
 struct nvc0_graph_state {
-   boolean flushed;
-   boolean rasterizer_discard;
-   boolean early_z_forced;
-   boolean prim_restart;
+   bool flushed;
+   bool rasterizer_discard;
+   bool early_z_forced;
+   bool prim_restart;
    uint32_t instance_elts; /* bitmask of per-instance elements */
    uint32_t instance_base;
    uint32_t constant_vbos;
    uint32_t constant_elts;
    int32_t index_bias;
    uint16_t scissor;
+   uint8_t patch_vertices;
    uint8_t vbo_mode; /* 0 = normal, 1 = translate, 3 = translate, forced */
    uint8_t num_vtxbufs;
    uint8_t num_vtxelts;
@@ -95,7 +96,7 @@ struct nvc0_screen {
       struct nvc0_program *prog; /* compute state object to read MP counters */
       struct pipe_query *mp_counter[8]; /* counter to query allocation */
       uint8_t num_mp_pm_active[2];
-      boolean mp_counters_enabled;
+      bool mp_counters_enabled;
    } pm;
 
    struct nouveau_object *eng3d; /* sqrt(1/2)|kepler> + sqrt(1/2)|fermi> */
@@ -105,7 +106,7 @@ struct nvc0_screen {
    struct nouveau_object *nvsw;
 };
 
-static INLINE struct nvc0_screen *
+static inline struct nvc0_screen *
 nvc0_screen(struct pipe_screen *screen)
 {
    return (struct nvc0_screen *)screen;
@@ -276,7 +277,7 @@ int nvc0_screen_get_driver_query_info(struct pipe_screen *, unsigned,
 int nvc0_screen_get_driver_query_group_info(struct pipe_screen *, unsigned,
                                             struct pipe_driver_query_group_info *);
 
-boolean nvc0_blitter_create(struct nvc0_screen *);
+bool nvc0_blitter_create(struct nvc0_screen *);
 void nvc0_blitter_destroy(struct nvc0_screen *);
 
 void nvc0_screen_make_buffers_resident(struct nvc0_screen *);
@@ -287,10 +288,10 @@ int nvc0_screen_tsc_alloc(struct nvc0_screen *, void *);
 int nve4_screen_compute_setup(struct nvc0_screen *, struct nouveau_pushbuf *);
 int nvc0_screen_compute_setup(struct nvc0_screen *, struct nouveau_pushbuf *);
 
-boolean nvc0_screen_resize_tls_area(struct nvc0_screen *, uint32_t lpos,
-                                    uint32_t lneg, uint32_t cstack);
+bool nvc0_screen_resize_tls_area(struct nvc0_screen *, uint32_t lpos,
+                                 uint32_t lneg, uint32_t cstack);
 
-static INLINE void
+static inline void
 nvc0_resource_fence(struct nv04_resource *res, uint32_t flags)
 {
    struct nvc0_screen *screen = nvc0_screen(res->base.screen);
@@ -302,7 +303,7 @@ nvc0_resource_fence(struct nv04_resource *res, uint32_t flags)
    }
 }
 
-static INLINE void
+static inline void
 nvc0_resource_validate(struct nv04_resource *res, uint32_t flags)
 {
    if (likely(res->bo)) {
@@ -325,21 +326,21 @@ struct nvc0_format {
 
 extern const struct nvc0_format nvc0_format_table[];
 
-static INLINE void
+static inline void
 nvc0_screen_tic_unlock(struct nvc0_screen *screen, struct nv50_tic_entry *tic)
 {
    if (tic->id >= 0)
       screen->tic.lock[tic->id / 32] &= ~(1 << (tic->id % 32));
 }
 
-static INLINE void
+static inline void
 nvc0_screen_tsc_unlock(struct nvc0_screen *screen, struct nv50_tsc_entry *tsc)
 {
    if (tsc->id >= 0)
       screen->tsc.lock[tsc->id / 32] &= ~(1 << (tsc->id % 32));
 }
 
-static INLINE void
+static inline void
 nvc0_screen_tic_free(struct nvc0_screen *screen, struct nv50_tic_entry *tic)
 {
    if (tic->id >= 0) {
@@ -348,7 +349,7 @@ nvc0_screen_tic_free(struct nvc0_screen *screen, struct nv50_tic_entry *tic)
    }
 }
 
-static INLINE void
+static inline void
 nvc0_screen_tsc_free(struct nvc0_screen *screen, struct nv50_tsc_entry *tsc)
 {
    if (tsc->id >= 0) {

@@ -106,7 +106,7 @@ struct svga_transfer
 };
 
 
-static INLINE struct svga_texture *svga_texture( struct pipe_resource *resource )
+static inline struct svga_texture *svga_texture( struct pipe_resource *resource )
 {
    struct svga_texture *tex = (struct svga_texture *)resource;
    assert(tex == NULL || tex->b.vtbl == &svga_texture_vtbl);
@@ -114,7 +114,7 @@ static INLINE struct svga_texture *svga_texture( struct pipe_resource *resource 
 }
 
 
-static INLINE struct svga_transfer *
+static inline struct svga_transfer *
 svga_transfer(struct pipe_transfer *transfer)
 {
    assert(transfer);
@@ -127,7 +127,7 @@ svga_transfer(struct pipe_transfer *transfer)
  * This is used to track updates to textures when we draw into
  * them via a surface.
  */
-static INLINE void
+static inline void
 svga_age_texture_view(struct svga_texture *tex, unsigned level)
 {
    assert(level < Elements(tex->view_age));
@@ -138,7 +138,7 @@ svga_age_texture_view(struct svga_texture *tex, unsigned level)
 /**
  * Mark the given texture face/level as being defined.
  */
-static INLINE void
+static inline void
 svga_define_texture_level(struct svga_texture *tex,
                           unsigned face,unsigned level)
 {
@@ -148,7 +148,7 @@ svga_define_texture_level(struct svga_texture *tex,
 }
 
 
-static INLINE bool
+static inline bool
 svga_is_texture_level_defined(const struct svga_texture *tex,
                               unsigned face, unsigned level)
 {
@@ -177,7 +177,7 @@ check_face_level(const struct svga_texture *tex,
 }
 
 
-static INLINE void
+static inline void
 svga_set_texture_rendered_to(struct svga_texture *tex,
                              unsigned face, unsigned level)
 {
@@ -186,7 +186,7 @@ svga_set_texture_rendered_to(struct svga_texture *tex,
 }
 
 
-static INLINE void
+static inline void
 svga_clear_texture_rendered_to(struct svga_texture *tex,
                                unsigned face, unsigned level)
 {
@@ -195,7 +195,7 @@ svga_clear_texture_rendered_to(struct svga_texture *tex,
 }
 
 
-static INLINE boolean
+static inline boolean
 svga_was_texture_rendered_to(const struct svga_texture *tex,
                              unsigned face, unsigned level)
 {

@@ -35,12 +35,6 @@
 #include <xf86drm.h>
 #include <unistd.h>
 
-#ifdef HAVE_PIPE_LOADER_XCB
-
-#include <xcb/dri2.h>
-
-#endif
-
 #include "loader.h"
 #include "state_tracker/drm_driver.h"
 #include "pipe_loader_priv.h"
@@ -64,78 +58,8 @@ struct pipe_loader_drm_device {
 
 static struct pipe_loader_ops pipe_loader_drm_ops;
 
-#ifdef HAVE_PIPE_LOADER_XCB
-
-static xcb_screen_t *
-get_xcb_screen(xcb_screen_iterator_t iter, int screen)
-{
-    for (; iter.rem; --screen, xcb_screen_next(&iter))
-        if (screen == 0)
-            return iter.data;
-
-    return NULL;
-}
-
-#endif
-
-static void
-pipe_loader_drm_x_auth(int fd)
-{
-#ifdef HAVE_PIPE_LOADER_XCB
-   /* Try authenticate with the X server to give us access to devices that X
-    * is running on. */
-   xcb_connection_t *xcb_conn;
-   const xcb_setup_t *xcb_setup;
-   xcb_screen_iterator_t s;
-   xcb_dri2_connect_cookie_t connect_cookie;
-   xcb_dri2_connect_reply_t *connect;
-   drm_magic_t magic;
-   xcb_dri2_authenticate_cookie_t authenticate_cookie;
-   xcb_dri2_authenticate_reply_t *authenticate;
-   int screen;
-
-   xcb_conn = xcb_connect(NULL, &screen);
-
-   if(!xcb_conn)
-      return;
-
-   xcb_setup = xcb_get_setup(xcb_conn);
-
-  if (!xcb_setup)
-    goto disconnect;
-
-   s = xcb_setup_roots_iterator(xcb_setup);
-   connect_cookie = xcb_dri2_connect_unchecked(xcb_conn,
-                                               get_xcb_screen(s, screen)->root,
-                                               XCB_DRI2_DRIVER_TYPE_DRI);
-   connect = xcb_dri2_connect_reply(xcb_conn, connect_cookie, NULL);
-
-   if (!connect || connect->driver_name_length
-                   + connect->device_name_length == 0) {
-
-      goto disconnect;
-   }
-
-   if (drmGetMagic(fd, &magic))
-      goto disconnect;
-
-   authenticate_cookie = xcb_dri2_authenticate_unchecked(xcb_conn,
-                                                         s.data->root,
-                                                         magic);
-   authenticate = xcb_dri2_authenticate_reply(xcb_conn,
-                                              authenticate_cookie,
-                                              NULL);
-   FREE(authenticate);
-
-disconnect:
-   xcb_disconnect(xcb_conn);
-
-#endif
-}
-
 bool
-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd,
-                         boolean auth_x)
+pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
 {
    struct pipe_loader_drm_device *ddev = CALLOC_STRUCT(pipe_loader_drm_device);
    int vendor_id, chip_id;
@@ -153,9 +77,6 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd,
    ddev->base.ops = &pipe_loader_drm_ops;
    ddev->fd = fd;
 
-   if (auth_x)
-      pipe_loader_drm_x_auth(fd);
-
    ddev->base.driver_name = loader_get_driver_for_fd(fd, _LOADER_GALLIUM);
    if (!ddev->base.driver_name)
       goto fail;
@@ -169,34 +90,19 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd,
 }
 
 static int
-open_drm_minor(int minor)
-{
-   char path[PATH_MAX];
-   snprintf(path, sizeof(path), DRM_DEV_NAME, DRM_DIR_NAME, minor);
-   return open(path, O_RDWR, 0);
-}
-
-static int
 open_drm_render_node_minor(int minor)
 {
    char path[PATH_MAX];
    snprintf(path, sizeof(path), DRM_RENDER_NODE_DEV_NAME_FORMAT, DRM_DIR_NAME,
             minor);
-   return open(path, O_RDWR, 0);
+   return loader_open_device(path);
 }
 
 int
 pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
 {
-   int i, k, fd, num_render_node_devs;
-   int j = 0;
+   int i, j, fd;
 
-   struct {
-      unsigned vendor_id;
-      unsigned chip_id;
-   } render_node_devs[DRM_RENDER_NODE_MAX_NODES];
-
-   /* Look for render nodes first */
    for (i = DRM_RENDER_NODE_MIN_MINOR, j = 0;
         i <= DRM_RENDER_NODE_MAX_MINOR; i++) {
       fd = open_drm_render_node_minor(i);
@@ -204,13 +110,10 @@ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
       if (fd < 0)
          continue;
 
-      if (!pipe_loader_drm_probe_fd(&dev, fd, false)) {
+      if (!pipe_loader_drm_probe_fd(&dev, fd)) {
          close(fd);
          continue;
       }
-
-      render_node_devs[j].vendor_id = dev->u.pci.vendor_id;
-      render_node_devs[j].chip_id = dev->u.pci.chip_id;
 
       if (j < ndev) {
          devs[j] = dev;
@@ -218,46 +121,6 @@ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
          close(fd);
          dev->ops->release(&dev);
       }
-      j++;
-   }
-
-   num_render_node_devs = j;
-
-   /* Next look for drm devices. */
-   for (i = 0; i < DRM_MAX_MINOR; i++) {
-      struct pipe_loader_device *dev;
-      boolean duplicate = FALSE;
-      fd = open_drm_minor(i);
-      if (fd < 0)
-         continue;
-
-      if (!pipe_loader_drm_probe_fd(&dev, fd, true)) {
-         close(fd);
-         continue;
-      }
-
-      /* Check to make sure we aren't already accessing this device via
-       * render nodes.
-       */
-      for (k = 0; k < num_render_node_devs; k++) {
-         if (dev->u.pci.vendor_id == render_node_devs[k].vendor_id &&
-             dev->u.pci.chip_id == render_node_devs[k].chip_id) {
-            close(fd);
-            dev->ops->release(&dev);
-            duplicate = TRUE;
-            break;
-         }
-      }
-
-      if (duplicate)
-         continue;
-
-      if (j < ndev) {
-         devs[j] = dev;
-      } else {
-         dev->ops->release(&dev);
-      }
-
       j++;
    }
 

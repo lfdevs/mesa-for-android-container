@@ -87,7 +87,7 @@ struct dri_drawable
                              struct pipe_resource *res);
 };
 
-static INLINE struct dri_drawable *
+static inline struct dri_drawable *
 dri_drawable(__DRIdrawable * driDrawPriv)
 {
    return (struct dri_drawable *) (driDrawPriv)

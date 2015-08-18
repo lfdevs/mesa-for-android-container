@@ -38,6 +38,13 @@
 #define CLOVER_ICD_API PUBLIC
 #endif
 
+#define CLOVER_NOT_SUPPORTED_UNTIL(version)                    \
+   do {                                                        \
+      std::cerr << "CL user error: " << __func__               \
+                << "() requires OpenCL version " << (version)  \
+                << " or greater." << std::endl;                \
+   } while (0)
+
 namespace clover {
    ///
    /// Return an error code in \a p if non-zero.

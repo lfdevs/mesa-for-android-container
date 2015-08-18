@@ -113,7 +113,9 @@ stw_pf_doublebuffer[] = {
 const unsigned 
 stw_pf_multisample[] = {
    0,
-   4
+   4,
+   8,
+   16
 };
 
 
@@ -222,22 +224,31 @@ add_color_format_variants(const struct stw_pf_color_info *color,
    unsigned ms, db, ds, acc;
    unsigned bind_flags = PIPE_BIND_RENDER_TARGET;
    unsigned num_added = 0;
+   int force_samples = 0;
+
+   /* Since GLUT for Windows doesn't support MSAA we have an env var
+    * to force all pixel formats to have a particular number of samples.
+    */
+   {
+      const char *samples= getenv("SVGA_FORCE_MSAA");
+      if (samples)
+         force_samples = atoi(samples);
+   }
 
    if (!extended) {
       bind_flags |= PIPE_BIND_DISPLAY_TARGET;
    }
 
-   if (!screen->is_format_supported(screen, color->format,
-                                    PIPE_TEXTURE_2D, 0, bind_flags)) {
-      return 0;
-   }
-
    for (ms = 0; ms < Elements(stw_pf_multisample); ms++) {
       unsigned samples = stw_pf_multisample[ms];
 
-      /* FIXME: re-enabled MSAA when we can query it */
-      if (samples)
+      if (force_samples && samples != force_samples)
          continue;
+
+      if (!screen->is_format_supported(screen, color->format,
+                                       PIPE_TEXTURE_2D, samples, bind_flags)) {
+         continue;
+      }
 
       for (db = 0; db < Elements(stw_pf_doublebuffer); db++) {
          unsigned doublebuffer = stw_pf_doublebuffer[db];
@@ -246,7 +257,7 @@ add_color_format_variants(const struct stw_pf_color_info *color,
             const struct stw_pf_depth_info *depth = &stw_pf_depth_stencil[ds];
 
             if (!screen->is_format_supported(screen, depth->format,
-                                             PIPE_TEXTURE_2D, 0,
+                                             PIPE_TEXTURE_2D, samples,
                                              PIPE_BIND_DEPTH_STENCIL)) {
                continue;
             }

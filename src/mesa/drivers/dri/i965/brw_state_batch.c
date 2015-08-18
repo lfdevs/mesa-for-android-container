@@ -87,7 +87,7 @@ brw_annotate_aub(struct brw_context *brw)
    drm_intel_aub_annotation annotations[annotation_count];
    int a = 0;
    make_annotation(&annotations[a++], AUB_TRACE_TYPE_BATCH, 0,
-                   4*brw->batch.used);
+                   4 * USED_BATCH(brw->batch));
    for (int i = brw->state_batch_count; i-- > 0; ) {
       uint32_t type = brw->state_batch_list[i].type;
       uint32_t start_offset = brw->state_batch_list[i].offset;
@@ -136,7 +136,7 @@ __brw_state_batch(struct brw_context *brw,
     * space, then flush and try again.
     */
    if (batch->state_batch_offset < size ||
-       offset < 4*batch->used + batch->reserved_space) {
+       offset < 4 * USED_BATCH(*batch) + batch->reserved_space) {
       intel_batchbuffer_flush(brw);
       offset = ROUND_DOWN_TO(batch->state_batch_offset - size, alignment);
    }

@@ -1900,7 +1900,7 @@ emit_tex(struct svga_shader_emitter *emit,
                       emit->key.fkey.tex[unit].swizzle_b != PIPE_SWIZZLE_BLUE ||
                       emit->key.fkey.tex[unit].swizzle_a != PIPE_SWIZZLE_ALPHA);
 
-   boolean saturate = insn->Instruction.Saturate != TGSI_SAT_NONE;
+   boolean saturate = insn->Instruction.Saturate;
 
    /* If doing compare processing or tex swizzle or saturation, we need to put
     * the fetched color into a temporary so it can be used as a source later on.

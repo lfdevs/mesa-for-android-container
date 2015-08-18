@@ -25,7 +25,12 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "core/ilo_state_vf.h"
+#include "core/ilo_state_sol.h"
+#include "core/ilo_state_surface.h"
+
 #include "ilo_screen.h"
+#include "ilo_format.h"
 #include "ilo_resource.h"
 
 /*
@@ -81,6 +86,134 @@ resource_get_cpu_init(const struct pipe_resource *templ)
    return (templ->bind & (PIPE_BIND_DEPTH_STENCIL |
                           PIPE_BIND_RENDER_TARGET |
                           PIPE_BIND_STREAM_OUTPUT)) ? false : true;
+}
+
+static enum gen_surface_type
+get_surface_type(enum pipe_texture_target target)
+{
+   switch (target) {
+   case PIPE_TEXTURE_1D:
+   case PIPE_TEXTURE_1D_ARRAY:
+      return GEN6_SURFTYPE_1D;
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_RECT:
+   case PIPE_TEXTURE_2D_ARRAY:
+      return GEN6_SURFTYPE_2D;
+   case PIPE_TEXTURE_3D:
+      return GEN6_SURFTYPE_3D;
+   case PIPE_TEXTURE_CUBE:
+   case PIPE_TEXTURE_CUBE_ARRAY:
+      return GEN6_SURFTYPE_CUBE;
+   default:
+      assert(!"unknown texture target");
+      return GEN6_SURFTYPE_NULL;
+   }
+}
+
+static enum pipe_format
+resource_get_image_format(const struct pipe_resource *templ,
+                          const struct ilo_dev *dev,
+                          bool *separate_stencil_ret)
+{
+   enum pipe_format format = templ->format;
+   bool separate_stencil;
+
+   /* silently promote ETC1 */
+   if (templ->format == PIPE_FORMAT_ETC1_RGB8)
+      format = PIPE_FORMAT_R8G8B8X8_UNORM;
+
+   /* separate stencil buffers */
+   separate_stencil = false;
+   if ((templ->bind & PIPE_BIND_DEPTH_STENCIL) &&
+       util_format_is_depth_and_stencil(templ->format)) {
+      switch (templ->format) {
+      case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+         /* Gen6 requires HiZ to be available for all levels */
+         if (ilo_dev_gen(dev) >= ILO_GEN(7) || templ->last_level == 0) {
+            format = PIPE_FORMAT_Z32_FLOAT;
+            separate_stencil = true;
+         }
+         break;
+      case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+         format = PIPE_FORMAT_Z24X8_UNORM;
+         separate_stencil = true;
+         break;
+      default:
+         break;
+      }
+   }
+
+   if (separate_stencil_ret)
+      *separate_stencil_ret = separate_stencil;
+
+   return format;
+}
+
+static inline enum gen_surface_format
+pipe_to_surface_format(const struct ilo_dev *dev, enum pipe_format format)
+{
+   switch (format) {
+   case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+      return GEN6_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+   case PIPE_FORMAT_Z32_FLOAT:
+      return GEN6_FORMAT_R32_FLOAT;
+   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+   case PIPE_FORMAT_Z24X8_UNORM:
+      return GEN6_FORMAT_R24_UNORM_X8_TYPELESS;
+   case PIPE_FORMAT_Z16_UNORM:
+      return GEN6_FORMAT_R16_UNORM;
+   case PIPE_FORMAT_S8_UINT:
+      return GEN6_FORMAT_R8_UINT;
+   default:
+      return ilo_format_translate_color(dev, format);
+   }
+}
+
+static void
+resource_get_image_info(const struct pipe_resource *templ,
+                        const struct ilo_dev *dev,
+                        enum pipe_format image_format,
+                        struct ilo_image_info *info)
+{
+   memset(info, 0, sizeof(*info));
+
+   info->type = get_surface_type(templ->target);
+
+   info->format = pipe_to_surface_format(dev, image_format);
+   info->interleaved_stencil = util_format_is_depth_and_stencil(image_format);
+   info->is_integer = util_format_is_pure_integer(image_format);
+   info->compressed = util_format_is_compressed(image_format);
+   info->block_width = util_format_get_blockwidth(image_format);
+   info->block_height = util_format_get_blockheight(image_format);
+   info->block_size = util_format_get_blocksize(image_format);
+
+   info->width = templ->width0;
+   info->height = templ->height0;
+   info->depth = templ->depth0;
+   info->array_size = templ->array_size;
+   info->level_count = templ->last_level + 1;
+   info->sample_count = (templ->nr_samples) ? templ->nr_samples : 1;
+
+   info->aux_disable = (templ->usage == PIPE_USAGE_STAGING);
+
+   if (templ->bind & PIPE_BIND_LINEAR)
+      info->valid_tilings = 1 << GEN6_TILING_NONE;
+
+   /*
+    * Tiled images must be mapped via GTT to get a linear view.  Prefer linear
+    * images when the image size is greater than one-fourth of the mappable
+    * aperture.
+    */
+   if (templ->bind & (PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_TRANSFER_READ))
+      info->prefer_linear_threshold = dev->aperture_mappable / 4;
+
+   info->bind_surface_sampler = (templ->bind & PIPE_BIND_SAMPLER_VIEW);
+   info->bind_surface_dp_render = (templ->bind & PIPE_BIND_RENDER_TARGET);
+   info->bind_surface_dp_typed = (templ->bind &
+         (PIPE_BIND_SHADER_IMAGE | PIPE_BIND_COMPUTE_RESOURCE));
+   info->bind_zs = (templ->bind & PIPE_BIND_DEPTH_STENCIL);
+   info->bind_scanout = (templ->bind & PIPE_BIND_SCANOUT);
+   info->bind_cursor = (templ->bind & PIPE_BIND_CURSOR);
 }
 
 static enum gen_surface_tiling
@@ -178,8 +311,8 @@ tex_create_bo(struct ilo_texture *tex)
    if (!bo)
       return false;
 
-   ilo_image_set_bo(&tex->image, bo);
-   intel_bo_unref(bo);
+   intel_bo_unref(tex->vma.bo);
+   ilo_vma_set_bo(&tex->vma, &is->dev, bo, 0);
 
    return true;
 }
@@ -206,7 +339,7 @@ tex_create_separate_stencil(struct ilo_texture *tex)
 
    tex->separate_s8 = ilo_texture(s8);
 
-   assert(tex->separate_s8->image.format == PIPE_FORMAT_S8_UINT);
+   assert(tex->separate_s8->image_format == PIPE_FORMAT_S8_UINT);
 
    return true;
 }
@@ -215,15 +348,16 @@ static bool
 tex_create_hiz(struct ilo_texture *tex)
 {
    const struct pipe_resource *templ = &tex->base;
+   const uint32_t size = tex->image.aux.bo_stride * tex->image.aux.bo_height;
    struct ilo_screen *is = ilo_screen(tex->base.screen);
    struct intel_bo *bo;
 
-   bo = intel_winsys_alloc_bo(is->dev.winsys, "hiz texture",
-         tex->image.aux.bo_stride * tex->image.aux.bo_height, false);
+   bo = intel_winsys_alloc_bo(is->dev.winsys, "hiz texture", size, false);
    if (!bo)
       return false;
 
-   ilo_image_set_aux_bo(&tex->image, bo);
+   ilo_vma_init(&tex->aux_vma, &is->dev, size, 4096);
+   ilo_vma_set_bo(&tex->aux_vma, &is->dev, bo, 0);
 
    if (tex->imported) {
       unsigned lv;
@@ -246,17 +380,18 @@ tex_create_hiz(struct ilo_texture *tex)
 static bool
 tex_create_mcs(struct ilo_texture *tex)
 {
+   const uint32_t size = tex->image.aux.bo_stride * tex->image.aux.bo_height;
    struct ilo_screen *is = ilo_screen(tex->base.screen);
    struct intel_bo *bo;
 
    assert(tex->image.aux.enables == (1 << (tex->base.last_level + 1)) - 1);
 
-   bo = intel_winsys_alloc_bo(is->dev.winsys, "mcs texture",
-         tex->image.aux.bo_stride * tex->image.aux.bo_height, false);
+   bo = intel_winsys_alloc_bo(is->dev.winsys, "mcs texture", size, false);
    if (!bo)
       return false;
 
-   ilo_image_set_aux_bo(&tex->image, bo);
+   ilo_vma_init(&tex->aux_vma, &is->dev, size, 4096);
+   ilo_vma_set_bo(&tex->aux_vma, &is->dev, bo, 0);
 
    return true;
 }
@@ -267,7 +402,8 @@ tex_destroy(struct ilo_texture *tex)
    if (tex->separate_s8)
       tex_destroy(tex->separate_s8);
 
-   ilo_image_cleanup(&tex->image);
+   intel_bo_unref(tex->vma.bo);
+   intel_bo_unref(tex->aux_vma.bo);
 
    tex_free_slices(tex);
    FREE(tex);
@@ -276,23 +412,13 @@ tex_destroy(struct ilo_texture *tex)
 static bool
 tex_alloc_bos(struct ilo_texture *tex)
 {
-   struct ilo_screen *is = ilo_screen(tex->base.screen);
-
    if (!tex->imported && !tex_create_bo(tex))
-      return false;
-
-   /* allocate separate stencil resource */
-   if (tex->image.separate_stencil && !tex_create_separate_stencil(tex))
       return false;
 
    switch (tex->image.aux.type) {
    case ILO_IMAGE_AUX_HIZ:
-      if (!tex_create_hiz(tex)) {
-         /* Separate Stencil Buffer requires HiZ to be enabled */
-         if (ilo_dev_gen(&is->dev) == ILO_GEN(6) &&
-             tex->image.separate_stencil)
-            return false;
-      }
+      if (!tex_create_hiz(tex))
+         return false;
       break;
    case ILO_IMAGE_AUX_MCS:
       if (!tex_create_mcs(tex))
@@ -305,9 +431,10 @@ tex_alloc_bos(struct ilo_texture *tex)
    return true;
 }
 
-static bool
+static struct intel_bo *
 tex_import_handle(struct ilo_texture *tex,
-                  const struct winsys_handle *handle)
+                  const struct winsys_handle *handle,
+                  struct ilo_image_info *info)
 {
    struct ilo_screen *is = ilo_screen(tex->base.screen);
    const struct pipe_resource *templ = &tex->base;
@@ -318,46 +445,94 @@ tex_import_handle(struct ilo_texture *tex,
 
    bo = intel_winsys_import_handle(is->dev.winsys, name, handle,
          tex->image.bo_height, &tiling, &pitch);
-   if (!bo)
-      return false;
+   /* modify image info */
+   if (bo) {
+      const uint8_t valid_tilings = 1 << winsys_to_surface_tiling(tiling);
 
-   if (!ilo_image_init_for_imported(&tex->image, &is->dev, templ,
-            winsys_to_surface_tiling(tiling), pitch)) {
-      ilo_err("failed to import handle for texture\n");
-      intel_bo_unref(bo);
-      return false;
+      if (info->valid_tilings && !(info->valid_tilings & valid_tilings)) {
+         intel_bo_unref(bo);
+         return NULL;
+      }
+
+      info->valid_tilings = valid_tilings;
+      info->force_bo_stride = pitch;
+
+      /* assume imported RTs are also scanouts */
+      if (!info->bind_scanout)
+         info->bind_scanout = (templ->usage & PIPE_BIND_RENDER_TARGET);
    }
 
-   ilo_image_set_bo(&tex->image, bo);
-   intel_bo_unref(bo);
-
-   tex->imported = true;
-
-   return true;
+   return bo;
 }
 
 static bool
 tex_init_image(struct ilo_texture *tex,
-               const struct winsys_handle *handle)
+               const struct winsys_handle *handle,
+               bool *separate_stencil)
 {
    struct ilo_screen *is = ilo_screen(tex->base.screen);
    const struct pipe_resource *templ = &tex->base;
    struct ilo_image *img = &tex->image;
+   struct intel_bo *imported_bo = NULL;;
+   struct ilo_image_info info;
+
+   tex->image_format = resource_get_image_format(templ,
+         &is->dev, separate_stencil);
+   resource_get_image_info(templ, &is->dev, tex->image_format, &info);
 
    if (handle) {
-      if (!tex_import_handle(tex, handle))
+      imported_bo = tex_import_handle(tex, handle, &info);
+      if (!imported_bo)
          return false;
-   } else {
-      ilo_image_init(img, &is->dev, templ);
    }
 
-   if (img->bo_height > ilo_max_resource_size / img->bo_stride)
+   if (!ilo_image_init(img, &is->dev, &info)) {
+      intel_bo_unref(imported_bo);
       return false;
+   }
+
+   /*
+    * HiZ requires 8x4 alignment and some levels might need HiZ disabled.  It
+    * is generally fine except on Gen6, where HiZ and separate stencil must be
+    * enabled together.  For PIPE_FORMAT_Z24X8_UNORM with separate stencil, we
+    * can live with stencil values being interleaved for levels where HiZ is
+    * disabled.  But it is not the case for PIPE_FORMAT_Z32_FLOAT with
+    * separate stencil.  If HiZ was disabled for a level, we had to change the
+    * format to PIPE_FORMAT_Z32_FLOAT_S8X24_UINT for the level and that format
+    * had a different bpp.  In other words, HiZ has to be available for all
+    * levels.
+    */
+   if (ilo_dev_gen(&is->dev) == ILO_GEN(6) &&
+       templ->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT &&
+       tex->image_format == PIPE_FORMAT_Z32_FLOAT &&
+       img->aux.enables != (1 << templ->last_level)) {
+      tex->image_format = templ->format;
+      info.format = pipe_to_surface_format(&is->dev, tex->image_format);
+      info.interleaved_stencil = true;
+
+      memset(img, 0, sizeof(*img));
+      if (!ilo_image_init(img, &is->dev, &info)) {
+         intel_bo_unref(imported_bo);
+         return false;
+      }
+   }
+
+   if (img->bo_height > ilo_max_resource_size / img->bo_stride ||
+       !ilo_vma_init(&tex->vma, &is->dev, img->bo_stride * img->bo_height,
+          4096)) {
+      intel_bo_unref(imported_bo);
+      return false;
+   }
+
+   if (imported_bo) {
+      ilo_vma_set_bo(&tex->vma, &is->dev, imported_bo, 0);
+      tex->imported = true;
+   }
 
    if (templ->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) {
       /* require on-the-fly tiling/untiling or format conversion */
-      if (img->tiling == GEN8_TILING_W || img->separate_stencil ||
-          img->format != templ->format)
+      if (img->tiling == GEN8_TILING_W || *separate_stencil ||
+          tex->image_format != templ->format)
          return false;
    }
 
@@ -373,6 +548,7 @@ tex_create(struct pipe_screen *screen,
            const struct winsys_handle *handle)
 {
    struct ilo_texture *tex;
+   bool separate_stencil;
 
    tex = CALLOC_STRUCT(ilo_texture);
    if (!tex)
@@ -382,12 +558,13 @@ tex_create(struct pipe_screen *screen,
    tex->base.screen = screen;
    pipe_reference_init(&tex->base.reference, 1);
 
-   if (!tex_init_image(tex, handle)) {
+   if (!tex_init_image(tex, handle, &separate_stencil)) {
       FREE(tex);
       return NULL;
    }
 
-   if (!tex_alloc_bos(tex)) {
+   if (!tex_alloc_bos(tex) ||
+       (separate_stencil && !tex_create_separate_stencil(tex))) {
       tex_destroy(tex);
       return NULL;
    }
@@ -408,7 +585,7 @@ tex_get_handle(struct ilo_texture *tex, struct winsys_handle *handle)
    else
       tiling = surface_to_winsys_tiling(tex->image.tiling);
 
-   err = intel_winsys_export_handle(is->dev.winsys, tex->image.bo, tiling,
+   err = intel_winsys_export_handle(is->dev.winsys, tex->vma.bo, tiling,
          tex->image.bo_stride, tex->image.bo_height, handle);
 
    return !err;
@@ -422,13 +599,12 @@ buf_create_bo(struct ilo_buffer_resource *buf)
    const bool cpu_init = resource_get_cpu_init(&buf->base);
    struct intel_bo *bo;
 
-   bo = intel_winsys_alloc_bo(is->dev.winsys, name,
-         buf->buffer.bo_size, cpu_init);
+   bo = intel_winsys_alloc_bo(is->dev.winsys, name, buf->bo_size, cpu_init);
    if (!bo)
       return false;
 
-   ilo_buffer_set_bo(&buf->buffer, bo);
-   intel_bo_unref(bo);
+   intel_bo_unref(buf->vma.bo);
+   ilo_vma_set_bo(&buf->vma, &is->dev, bo, 0);
 
    return true;
 }
@@ -436,7 +612,7 @@ buf_create_bo(struct ilo_buffer_resource *buf)
 static void
 buf_destroy(struct ilo_buffer_resource *buf)
 {
-   ilo_buffer_cleanup(&buf->buffer);
+   intel_bo_unref(buf->vma.bo);
    FREE(buf);
 }
 
@@ -445,6 +621,8 @@ buf_create(struct pipe_screen *screen, const struct pipe_resource *templ)
 {
    const struct ilo_screen *is = ilo_screen(screen);
    struct ilo_buffer_resource *buf;
+   uint32_t alignment;
+   unsigned size;
 
    buf = CALLOC_STRUCT(ilo_buffer_resource);
    if (!buf)
@@ -454,11 +632,35 @@ buf_create(struct pipe_screen *screen, const struct pipe_resource *templ)
    buf->base.screen = screen;
    pipe_reference_init(&buf->base.reference, 1);
 
-   ilo_buffer_init(&buf->buffer, &is->dev,
-         templ->width0, templ->bind, templ->flags);
+   size = templ->width0;
 
-   if (buf->buffer.bo_size < templ->width0 ||
-       buf->buffer.bo_size > ilo_max_resource_size ||
+   /*
+    * As noted in ilo_format_translate(), we treat some 3-component formats as
+    * 4-component formats to work around hardware limitations.  Imagine the
+    * case where the vertex buffer holds a single PIPE_FORMAT_R16G16B16_FLOAT
+    * vertex, and buf->bo_size is 6.  The hardware would fail to fetch it at
+    * boundary check because the vertex buffer is expected to hold a
+    * PIPE_FORMAT_R16G16B16A16_FLOAT vertex and that takes at least 8 bytes.
+    *
+    * For the workaround to work, we should add 2 to the bo size.  But that
+    * would waste a page when the bo size is already page aligned.  Let's
+    * round it to page size for now and revisit this when needed.
+    */
+   if ((templ->bind & PIPE_BIND_VERTEX_BUFFER) &&
+       ilo_dev_gen(&is->dev) < ILO_GEN(7.5))
+      size = align(size, 4096);
+
+   if (templ->bind & PIPE_BIND_VERTEX_BUFFER)
+      size = ilo_state_vertex_buffer_size(&is->dev, size, &alignment);
+   if (templ->bind & PIPE_BIND_INDEX_BUFFER)
+      size = ilo_state_index_buffer_size(&is->dev, size, &alignment);
+   if (templ->bind & PIPE_BIND_STREAM_OUTPUT)
+      size = ilo_state_sol_buffer_size(&is->dev, size, &alignment);
+
+   buf->bo_size = size;
+   ilo_vma_init(&buf->vma, &is->dev, buf->bo_size, 4096);
+
+   if (buf->bo_size < templ->width0 || buf->bo_size > ilo_max_resource_size ||
        !buf_create_bo(buf)) {
       FREE(buf);
       return NULL;
@@ -471,13 +673,30 @@ static boolean
 ilo_can_create_resource(struct pipe_screen *screen,
                         const struct pipe_resource *templ)
 {
+   struct ilo_screen *is = ilo_screen(screen);
+   enum pipe_format image_format;
+   struct ilo_image_info info;
    struct ilo_image img;
 
    if (templ->target == PIPE_BUFFER)
       return (templ->width0 <= ilo_max_resource_size);
 
+   image_format = resource_get_image_format(templ, &is->dev, NULL);
+   resource_get_image_info(templ, &is->dev, image_format, &info);
+
    memset(&img, 0, sizeof(img));
-   ilo_image_init(&img, &ilo_screen(screen)->dev, templ);
+   ilo_image_init(&img, &ilo_screen(screen)->dev, &info);
+
+   /* as in tex_init_image() */
+   if (ilo_dev_gen(&is->dev) == ILO_GEN(6) &&
+       templ->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT &&
+       image_format == PIPE_FORMAT_Z32_FLOAT &&
+       img.aux.enables != (1 << templ->last_level)) {
+      info.format = pipe_to_surface_format(&is->dev, templ->format);
+      info.interleaved_stencil = true;
+      memset(&img, 0, sizeof(img));
+      ilo_image_init(&img, &ilo_screen(screen)->dev, &info);
+   }
 
    return (img.bo_height <= ilo_max_resource_size / img.bo_stride);
 }

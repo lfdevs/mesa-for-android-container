@@ -135,36 +135,26 @@ DRI_CONF_END
 static int
 radeonGetParam(__DRIscreen *sPriv, int param, void *value)
 {
-  int ret;
-  drm_radeon_getparam_t gp = { 0 };
   struct drm_radeon_info info = { 0 };
 
-  if (sPriv->drm_version.major >= 2) {
-      info.value = (uint64_t)(uintptr_t)value;
-      switch (param) {
-      case RADEON_PARAM_DEVICE_ID:
-          info.request = RADEON_INFO_DEVICE_ID;
-          break;
-      case RADEON_PARAM_NUM_GB_PIPES:
-          info.request = RADEON_INFO_NUM_GB_PIPES;
-          break;
-      case RADEON_PARAM_NUM_Z_PIPES:
-          info.request = RADEON_INFO_NUM_Z_PIPES;
-          break;
-      case RADEON_INFO_TILE_CONFIG:
-	  info.request = RADEON_INFO_TILE_CONFIG;
-          break;
-      default:
-          return -EINVAL;
-      }
-      ret = drmCommandWriteRead(sPriv->fd, DRM_RADEON_INFO, &info, sizeof(info));
-  } else {
-      gp.param = param;
-      gp.value = value;
-
-      ret = drmCommandWriteRead(sPriv->fd, DRM_RADEON_GETPARAM, &gp, sizeof(gp));
+  info.value = (uint64_t)(uintptr_t)value;
+  switch (param) {
+  case RADEON_PARAM_DEVICE_ID:
+    info.request = RADEON_INFO_DEVICE_ID;
+    break;
+  case RADEON_PARAM_NUM_GB_PIPES:
+    info.request = RADEON_INFO_NUM_GB_PIPES;
+    break;
+  case RADEON_PARAM_NUM_Z_PIPES:
+    info.request = RADEON_INFO_NUM_Z_PIPES;
+    break;
+  case RADEON_INFO_TILE_CONFIG:
+    info.request = RADEON_INFO_TILE_CONFIG;
+    break;
+  default:
+    return -EINVAL;
   }
-  return ret;
+  return drmCommandWriteRead(sPriv->fd, DRM_RADEON_INFO, &info, sizeof(info));
 }
 
 #if defined(RADEON_R100)

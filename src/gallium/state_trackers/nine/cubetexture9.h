@@ -33,7 +33,7 @@ struct NineCubeTexture9
     struct pipe_box dirty_rect[6]; /* covers all mip levels */
     uint8_t *managed_buffer;
 };
-static INLINE struct NineCubeTexture9 *
+static inline struct NineCubeTexture9 *
 NineCubeTexture9( void *data )
 {
     return (struct NineCubeTexture9 *)data;

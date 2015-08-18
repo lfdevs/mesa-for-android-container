@@ -485,20 +485,20 @@ svga_context_create(struct pipe_screen *screen,
  * Inline conversion functions.  These are better-typed than the
  * macros used previously:
  */
-static INLINE struct svga_context *
+static inline struct svga_context *
 svga_context( struct pipe_context *pipe )
 {
    return (struct svga_context *)pipe;
 }
 
 
-static INLINE boolean
+static inline boolean
 svga_have_gb_objects(const struct svga_context *svga)
 {
    return svga_screen(svga->pipe.screen)->sws->have_gb_objects;
 }
 
-static INLINE boolean
+static inline boolean
 svga_have_gb_dma(const struct svga_context *svga)
 {
    return svga_screen(svga->pipe.screen)->sws->have_gb_dma;

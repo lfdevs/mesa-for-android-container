@@ -31,6 +31,8 @@
 
 #include "pipe/p_context.h"
 
+#include "freedreno_util.h"
+
 /* per-pipe configuration for hw binning: */
 struct fd_vsc_pipe {
 	struct fd_bo *bo;
@@ -47,9 +49,9 @@ struct fd_tile {
 
 struct fd_gmem_stateobj {
 	struct pipe_scissor_state scissor;
-	uint32_t cbuf_base[4];
+	uint32_t cbuf_base[MAX_RENDER_TARGETS];
 	uint32_t zsbuf_base[2];
-	uint8_t cbuf_cpp[4];
+	uint8_t cbuf_cpp[MAX_RENDER_TARGETS];
 	uint8_t zsbuf_cpp[2];
 	uint16_t bin_h, nbins_y;
 	uint16_t bin_w, nbins_x;

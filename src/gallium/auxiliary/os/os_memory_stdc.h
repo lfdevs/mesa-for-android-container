@@ -50,7 +50,7 @@
 
 #if defined(HAVE_POSIX_MEMALIGN)
 
-static INLINE void *
+static inline void *
 os_malloc_aligned(size_t size, size_t alignment)
 {
    void *ptr;

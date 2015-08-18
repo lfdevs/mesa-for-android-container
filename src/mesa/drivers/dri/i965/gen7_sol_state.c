@@ -365,7 +365,7 @@ gen7_save_primitives_written_counters(struct brw_context *brw,
    }
 
    /* Flush any drawing so that the counters have the right values. */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    /* Emit MI_STORE_REGISTER_MEM commands to write the values. */
    for (int i = 0; i < streams; i++) {
@@ -502,7 +502,7 @@ gen7_pause_transform_feedback(struct gl_context *ctx,
       (struct brw_transform_feedback_object *) obj;
 
    /* Flush any drawing so that the counters have the right values. */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    /* Save the SOL buffer offset register values. */
    if (brw->gen < 8) {

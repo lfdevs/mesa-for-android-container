@@ -42,6 +42,14 @@
 
 #include <errno.h>
 
+
+static bool
+pending(struct fd_resource *rsc, enum fd_resource_status status)
+{
+	return (rsc->status & status) ||
+		(rsc->stencil && (rsc->stencil->status & status));
+}
+
 static void
 fd_invalidate_resource(struct fd_context *ctx, struct pipe_resource *prsc)
 {
@@ -72,11 +80,11 @@ fd_invalidate_resource(struct fd_context *ctx, struct pipe_resource *prsc)
 
 	/* Textures */
 	for (i = 0; i < ctx->verttex.num_textures && !(ctx->dirty & FD_DIRTY_VERTTEX); i++) {
-		if (ctx->verttex.textures[i]->texture == prsc)
+		if (ctx->verttex.textures[i] && (ctx->verttex.textures[i]->texture == prsc))
 			ctx->dirty |= FD_DIRTY_VERTTEX;
 	}
 	for (i = 0; i < ctx->fragtex.num_textures && !(ctx->dirty & FD_DIRTY_FRAGTEX); i++) {
-		if (ctx->fragtex.textures[i]->texture == prsc)
+		if (ctx->fragtex.textures[i] && (ctx->fragtex.textures[i]->texture == prsc))
 			ctx->dirty |= FD_DIRTY_FRAGTEX;
 	}
 }
@@ -97,7 +105,8 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
 
 	rsc->bo = fd_bo_new(screen->dev, size, flags);
 	rsc->timestamp = 0;
-	rsc->dirty = rsc->reading = false;
+	rsc->status = 0;
+	rsc->pending_ctx = NULL;
 	list_delinit(&rsc->list);
 	util_range_set_empty(&rsc->valid_buffer_range);
 }
@@ -238,8 +247,9 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 		/* If the GPU is writing to the resource, or if it is reading from the
 		 * resource and we're trying to write to it, flush the renders.
 		 */
-		if (rsc->dirty || (rsc->stencil && rsc->stencil->dirty) ||
-			((ptrans->usage & PIPE_TRANSFER_WRITE) && rsc->reading))
+		if (((ptrans->usage & PIPE_TRANSFER_WRITE) &&
+					pending(rsc, FD_PENDING_READ | FD_PENDING_WRITE)) ||
+				pending(rsc, FD_PENDING_WRITE))
 			fd_context_render(pctx);
 
 		/* The GPU keeps track of how the various bo's are being used, and
@@ -449,7 +459,6 @@ fd_resource_create(struct pipe_screen *pscreen,
 	if (is_a4xx(fd_screen(pscreen))) {
 		switch (tmpl->target) {
 		case PIPE_TEXTURE_3D:
-			/* TODO 3D_ARRAY? */
 			rsc->layer_first = false;
 			break;
 		default:
@@ -646,6 +655,8 @@ fd_blitter_pipe_begin(struct fd_context *ctx)
 	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vtx.vertexbuf.vb);
 	util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx.vtx);
 	util_blitter_save_vertex_shader(ctx->blitter, ctx->prog.vp);
+	util_blitter_save_so_targets(ctx->blitter, ctx->streamout.num_targets,
+			ctx->streamout.targets);
 	util_blitter_save_rasterizer(ctx->blitter, ctx->rasterizer);
 	util_blitter_save_viewport(ctx->blitter, &ctx->viewport);
 	util_blitter_save_scissor(ctx->blitter, &ctx->scissor);
@@ -675,7 +686,7 @@ fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
 	struct fd_resource *rsc = fd_resource(prsc);
 
-	if (rsc->dirty || (rsc->stencil && rsc->stencil->dirty))
+	if (pending(rsc, FD_PENDING_WRITE | FD_PENDING_READ))
 		fd_context_render(pctx);
 }
 

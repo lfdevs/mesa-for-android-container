@@ -46,8 +46,7 @@ struct inst_key {
         struct qreg src[4];
         /**
          * If the instruction depends on the flags, how many SFs have been
-         * seen before this instruction, or if it depends on r4, how many r4
-         * writes have been seen.
+         * seen before this instruction.
          */
         uint32_t implicit_arg_update_count;
 };
@@ -63,8 +62,7 @@ inst_key_equals(const void *a, const void *b)
 
 static struct qinst *
 vc4_find_cse(struct vc4_compile *c, struct hash_table *ht,
-             struct qinst *inst, uint32_t sf_count,
-             uint32_t r4_count)
+             struct qinst *inst, uint32_t sf_count)
 {
         if (inst->dst.file != QFILE_TEMP ||
             inst->op == QOP_MOV ||
@@ -79,8 +77,6 @@ vc4_find_cse(struct vc4_compile *c, struct hash_table *ht,
                qir_get_op_nsrc(inst->op) * sizeof(key.src[0]));
         if (qir_depends_on_flags(inst))
                 key.implicit_arg_update_count = sf_count;
-        if (qir_reads_r4(inst))
-                key.implicit_arg_update_count = r4_count;
 
         uint32_t hash = _mesa_hash_data(&key, sizeof(key));
         struct hash_entry *entry =
@@ -121,27 +117,24 @@ bool
 qir_opt_cse(struct vc4_compile *c)
 {
         bool progress = false;
-        struct simple_node *node, *t;
-        uint32_t sf_count = 0, r4_count = 0;
+        uint32_t sf_count = 0;
 
         struct hash_table *ht = _mesa_hash_table_create(NULL, NULL,
                                                         inst_key_equals);
         if (!ht)
                 return false;
 
-        foreach_s(node, t, &c->instructions) {
-                struct qinst *inst = (struct qinst *)node;
-
+        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 if (qir_has_side_effects(c, inst) ||
-                    qir_has_side_effect_reads(c, inst)) {
+                    qir_has_side_effect_reads(c, inst) ||
+                    inst->op == QOP_TLB_COLOR_READ) {
                         continue;
                 }
 
                 if (inst->sf) {
                         sf_count++;
                 } else {
-                        struct qinst *cse = vc4_find_cse(c, ht, inst,
-                                                         sf_count, r4_count);
+                        struct qinst *cse = vc4_find_cse(c, ht, inst, sf_count);
                         if (cse) {
                                 inst->src[0] = cse->dst;
                                 for (int i = 1; i < qir_get_op_nsrc(inst->op);
@@ -157,9 +150,6 @@ qir_opt_cse(struct vc4_compile *c)
                                 }
                         }
                 }
-
-                if (qir_writes_r4(inst))
-                        r4_count++;
         }
 
         ralloc_free(ht);

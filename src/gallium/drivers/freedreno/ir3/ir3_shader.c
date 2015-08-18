@@ -46,7 +46,8 @@ delete_variant(struct ir3_shader_variant *v)
 {
 	if (v->ir)
 		ir3_destroy(v->ir);
-	fd_bo_del(v->bo);
+	if (v->bo)
+		fd_bo_del(v->bo);
 	free(v);
 }
 
@@ -127,7 +128,7 @@ static void
 assemble_variant(struct ir3_shader_variant *v)
 {
 	struct fd_context *ctx = fd_context(v->shader->pctx);
-	uint32_t gpu_id = ir3_shader_gpuid(v->shader);
+	uint32_t gpu_id = v->shader->compiler->gpu_id;
 	uint32_t sz, *bin;
 
 	bin = ir3_shader_assemble(v, gpu_id);
@@ -139,6 +140,32 @@ assemble_variant(struct ir3_shader_variant *v)
 
 	memcpy(fd_bo_map(v->bo), bin, sz);
 
+	if (fd_mesa_debug & FD_DBG_DISASM) {
+		struct ir3_shader_key key = v->key;
+		DBG("disassemble: type=%d, k={bp=%u,cts=%u,hp=%u}", v->type,
+			key.binning_pass, key.color_two_side, key.half_precision);
+		ir3_shader_disasm(v, bin);
+	}
+
+	if (fd_mesa_debug & FD_DBG_SHADERDB) {
+		/* print generic shader info: */
+		fprintf(stderr, "SHADER-DB: %s prog %d/%d: %u instructions, %u dwords\n",
+				ir3_shader_stage(v->shader),
+				v->shader->id, v->id,
+				v->info.instrs_count,
+				v->info.sizedwords);
+		fprintf(stderr, "SHADER-DB: %s prog %d/%d: %u half, %u full\n",
+				ir3_shader_stage(v->shader),
+				v->shader->id, v->id,
+				v->info.max_half_reg + 1,
+				v->info.max_reg + 1);
+		fprintf(stderr, "SHADER-DB: %s prog %d/%d: %u const, %u constlen\n",
+				ir3_shader_stage(v->shader),
+				v->shader->id, v->id,
+				v->info.max_const + 1,
+				v->constlen);
+	}
+
 	free(bin);
 
 	/* no need to keep the ir around beyond this point: */
@@ -146,27 +173,16 @@ assemble_variant(struct ir3_shader_variant *v)
 	v->ir = NULL;
 }
 
-/* reset before attempting to compile again.. */
-static void reset_variant(struct ir3_shader_variant *v, const char *msg)
-{
-	debug_error(msg);
-	v->inputs_count = 0;
-	v->outputs_count = 0;
-	v->total_in = 0;
-	v->has_samp = false;
-	v->immediates_count = 0;
-}
-
 static struct ir3_shader_variant *
 create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 {
 	struct ir3_shader_variant *v = CALLOC_STRUCT(ir3_shader_variant);
-	const struct tgsi_token *tokens = shader->tokens;
 	int ret;
 
 	if (!v)
 		return NULL;
 
+	v->id = ++shader->variant_count;
 	v->shader = shader;
 	v->key = key;
 	v->type = shader->type;
@@ -174,25 +190,10 @@ create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 	if (fd_mesa_debug & FD_DBG_DISASM) {
 		DBG("dump tgsi: type=%d, k={bp=%u,cts=%u,hp=%u}", shader->type,
 			key.binning_pass, key.color_two_side, key.half_precision);
-		tgsi_dump(tokens, 0);
+		tgsi_dump(shader->tokens, 0);
 	}
 
-	if (fd_mesa_debug & FD_DBG_NIR) {
-		ret = ir3_compile_shader_nir(v, tokens, key);
-		if (ret)
-			reset_variant(v, "NIR compiler failed, fallback to TGSI!");
-	} else {
-		ret = -1;
-	}
-
-	if (ret) {
-		ret = ir3_compile_shader(v, tokens, key, true);
-		if (ret) {
-			reset_variant(v, "new compiler failed, trying without copy propagation!");
-			ret = ir3_compile_shader(v, tokens, key, false);
-		}
-	}
-
+	ret = ir3_compile_shader_nir(shader->compiler, v);
 	if (ret) {
 		debug_error("compile failed!");
 		goto fail;
@@ -204,24 +205,11 @@ create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 		goto fail;
 	}
 
-	if (fd_mesa_debug & FD_DBG_DISASM) {
-		DBG("disassemble: type=%d, k={bp=%u,cts=%u,hp=%u}", v->type,
-			key.binning_pass, key.color_two_side, key.half_precision);
-		disasm_a3xx(fd_bo_map(v->bo), v->info.sizedwords, 0, v->type);
-	}
-
 	return v;
 
 fail:
 	delete_variant(v);
 	return NULL;
-}
-
-uint32_t
-ir3_shader_gpuid(struct ir3_shader *shader)
-{
-	struct fd_context *ctx = fd_context(shader->pctx);
-	return ctx->screen->gpu_id;
 }
 
 struct ir3_shader_variant *
@@ -261,8 +249,10 @@ ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 
 	/* compile new variant if it doesn't exist already: */
 	v = create_variant(shader, key);
-	v->next = shader->variants;
-	shader->variants = v;
+	if (v) {
+		v->next = shader->variants;
+		shader->variants = v;
+	}
 
 	return v;
 }
@@ -282,12 +272,372 @@ ir3_shader_destroy(struct ir3_shader *shader)
 }
 
 struct ir3_shader *
-ir3_shader_create(struct pipe_context *pctx, const struct tgsi_token *tokens,
+ir3_shader_create(struct pipe_context *pctx,
+		const struct pipe_shader_state *cso,
 		enum shader_t type)
 {
 	struct ir3_shader *shader = CALLOC_STRUCT(ir3_shader);
+	shader->compiler = fd_context(pctx)->screen->compiler;
+	shader->id = ++shader->compiler->shader_count;
 	shader->pctx = pctx;
 	shader->type = type;
-	shader->tokens = tgsi_dup_tokens(tokens);
+	shader->tokens = tgsi_dup_tokens(cso->tokens);
+	shader->stream_output = cso->stream_output;
+	if (fd_mesa_debug & FD_DBG_SHADERDB) {
+		/* if shader-db run, create a standard variant immediately
+		 * (as otherwise nothing will trigger the shader to be
+		 * actually compiled)
+		 */
+		static struct ir3_shader_key key = {};
+		ir3_shader_variant(shader, key);
+	}
 	return shader;
+}
+
+static void dump_reg(const char *name, uint32_t r)
+{
+	if (r != regid(63,0))
+		debug_printf("; %s: r%d.%c\n", name, r >> 2, "xyzw"[r & 0x3]);
+}
+
+static void dump_semantic(struct ir3_shader_variant *so,
+		unsigned sem, const char *name)
+{
+	uint32_t regid;
+	regid = ir3_find_output_regid(so, ir3_semantic_name(sem, 0));
+	dump_reg(name, regid);
+}
+
+void
+ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin)
+{
+	struct ir3 *ir = so->ir;
+	struct ir3_register *reg;
+	const char *type = ir3_shader_stage(so->shader);
+	uint8_t regid;
+	unsigned i;
+
+	for (i = 0; i < ir->ninputs; i++) {
+		if (!ir->inputs[i]) {
+			debug_printf("; in%d unused\n", i);
+			continue;
+		}
+		reg = ir->inputs[i]->regs[0];
+		regid = reg->num;
+		debug_printf("@in(%sr%d.%c)\tin%d\n",
+				(reg->flags & IR3_REG_HALF) ? "h" : "",
+				(regid >> 2), "xyzw"[regid & 0x3], i);
+	}
+
+	for (i = 0; i < ir->noutputs; i++) {
+		if (!ir->outputs[i]) {
+			debug_printf("; out%d unused\n", i);
+			continue;
+		}
+		/* kill shows up as a virtual output.. skip it! */
+		if (is_kill(ir->outputs[i]))
+			continue;
+		reg = ir->outputs[i]->regs[0];
+		regid = reg->num;
+		debug_printf("@out(%sr%d.%c)\tout%d\n",
+				(reg->flags & IR3_REG_HALF) ? "h" : "",
+				(regid >> 2), "xyzw"[regid & 0x3], i);
+	}
+
+	for (i = 0; i < so->immediates_count; i++) {
+		debug_printf("@const(c%d.x)\t", so->first_immediate + i);
+		debug_printf("0x%08x, 0x%08x, 0x%08x, 0x%08x\n",
+				so->immediates[i].val[0],
+				so->immediates[i].val[1],
+				so->immediates[i].val[2],
+				so->immediates[i].val[3]);
+	}
+
+	disasm_a3xx(bin, so->info.sizedwords, 0, so->type);
+
+	debug_printf("; %s: outputs:", type);
+	for (i = 0; i < so->outputs_count; i++) {
+		uint8_t regid = so->outputs[i].regid;
+		ir3_semantic sem = so->outputs[i].semantic;
+		debug_printf(" r%d.%c (%u:%u)",
+				(regid >> 2), "xyzw"[regid & 0x3],
+				sem2name(sem), sem2idx(sem));
+	}
+	debug_printf("\n");
+	debug_printf("; %s: inputs:", type);
+	for (i = 0; i < so->inputs_count; i++) {
+		uint8_t regid = so->inputs[i].regid;
+		ir3_semantic sem = so->inputs[i].semantic;
+		debug_printf(" r%d.%c (%u:%u,cm=%x,il=%u,b=%u)",
+				(regid >> 2), "xyzw"[regid & 0x3],
+				sem2name(sem), sem2idx(sem),
+				so->inputs[i].compmask,
+				so->inputs[i].inloc,
+				so->inputs[i].bary);
+	}
+	debug_printf("\n");
+
+	/* print generic shader info: */
+	debug_printf("; %s prog %d/%d: %u instructions, %d half, %d full\n",
+			type, so->shader->id, so->id,
+			so->info.instrs_count,
+			so->info.max_half_reg + 1,
+			so->info.max_reg + 1);
+
+	debug_printf("; %d const, %u constlen\n",
+			so->info.max_const + 1,
+			so->constlen);
+
+	/* print shader type specific info: */
+	switch (so->type) {
+	case SHADER_VERTEX:
+		dump_semantic(so, TGSI_SEMANTIC_POSITION, "pos");
+		dump_semantic(so, TGSI_SEMANTIC_PSIZE, "psize");
+		break;
+	case SHADER_FRAGMENT:
+		dump_reg("pos (bary)", so->pos_regid);
+		dump_semantic(so, TGSI_SEMANTIC_POSITION, "posz");
+		dump_semantic(so, TGSI_SEMANTIC_COLOR, "color");
+		/* these two are hard-coded since we don't know how to
+		 * program them to anything but all 0's...
+		 */
+		if (so->frag_coord)
+			debug_printf("; fragcoord: r0.x\n");
+		if (so->frag_face)
+			debug_printf("; fragface: hr0.x\n");
+		break;
+	case SHADER_COMPUTE:
+		break;
+	}
+
+	debug_printf("\n");
+}
+
+/* This has to reach into the fd_context a bit more than the rest of
+ * ir3, but it needs to be aligned with the compiler, so both agree
+ * on which const regs hold what.  And the logic is identical between
+ * a3xx/a4xx, the only difference is small details in the actual
+ * CP_LOAD_STATE packets (which is handled inside the generation
+ * specific ctx->emit_const(_bo)() fxns)
+ */
+
+#include "freedreno_resource.h"
+
+static void
+emit_user_consts(struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
+		struct fd_constbuf_stateobj *constbuf)
+{
+	struct fd_context *ctx = fd_context(v->shader->pctx);
+	const unsigned index = 0;     /* user consts are index 0 */
+	/* TODO save/restore dirty_mask for binning pass instead: */
+	uint32_t dirty_mask = constbuf->enabled_mask;
+
+	if (dirty_mask & (1 << index)) {
+		struct pipe_constant_buffer *cb = &constbuf->cb[index];
+		unsigned size = align(cb->buffer_size, 4) / 4; /* size in dwords */
+
+		/* in particular, with binning shader we may end up with
+		 * unused consts, ie. we could end up w/ constlen that is
+		 * smaller than first_driver_param.  In that case truncate
+		 * the user consts early to avoid HLSQ lockup caused by
+		 * writing too many consts
+		 */
+		uint32_t max_const = MIN2(v->first_driver_param, v->constlen);
+
+		// I expect that size should be a multiple of vec4's:
+		assert(size == align(size, 4));
+
+		/* and even if the start of the const buffer is before
+		 * first_immediate, the end may not be:
+		 */
+		size = MIN2(size, 4 * max_const);
+
+		if (size > 0) {
+			fd_wfi(ctx, ring);
+			ctx->emit_const(ring, v->type, 0,
+					cb->buffer_offset, size,
+					cb->user_buffer, cb->buffer);
+			constbuf->dirty_mask &= ~(1 << index);
+		}
+	}
+}
+
+static void
+emit_ubos(struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
+		struct fd_constbuf_stateobj *constbuf)
+{
+	uint32_t offset = v->first_driver_param;  /* UBOs after user consts */
+	if (v->constlen > offset) {
+		struct fd_context *ctx = fd_context(v->shader->pctx);
+		uint32_t params = MIN2(4, v->constlen - offset) * 4;
+		uint32_t offsets[params];
+		struct fd_bo *bos[params];
+
+		for (uint32_t i = 0; i < params; i++) {
+			const uint32_t index = i + 1;   /* UBOs start at index 1 */
+			struct pipe_constant_buffer *cb = &constbuf->cb[index];
+			assert(!cb->user_buffer);
+
+			if ((constbuf->enabled_mask & (1 << index)) && cb->buffer) {
+				offsets[i] = cb->buffer_offset;
+				bos[i] = fd_resource(cb->buffer)->bo;
+			} else {
+				offsets[i] = 0;
+				bos[i] = NULL;
+			}
+		}
+
+		fd_wfi(ctx, ring);
+		ctx->emit_const_bo(ring, v->type, false, offset * 4, params, bos, offsets);
+	}
+}
+
+static void
+emit_immediates(struct ir3_shader_variant *v, struct fd_ringbuffer *ring)
+{
+	struct fd_context *ctx = fd_context(v->shader->pctx);
+	int size = v->immediates_count;
+	uint32_t base = v->first_immediate;
+
+	/* truncate size to avoid writing constants that shader
+	 * does not use:
+	 */
+	size = MIN2(size + base, v->constlen) - base;
+
+	/* convert out of vec4: */
+	base *= 4;
+	size *= 4;
+
+	if (size > 0) {
+		fd_wfi(ctx, ring);
+		ctx->emit_const(ring, v->type, base,
+			0, size, v->immediates[0].val, NULL);
+	}
+}
+
+/* emit stream-out buffers: */
+static void
+emit_tfbos(struct ir3_shader_variant *v, struct fd_ringbuffer *ring)
+{
+	uint32_t offset = v->first_driver_param + 5;  /* streamout addresses after driver-params*/
+	if (v->constlen > offset) {
+		struct fd_context *ctx = fd_context(v->shader->pctx);
+		struct fd_streamout_stateobj *so = &ctx->streamout;
+		struct pipe_stream_output_info *info = &v->shader->stream_output;
+		uint32_t params = 4;
+		uint32_t offsets[params];
+		struct fd_bo *bos[params];
+
+		for (uint32_t i = 0; i < params; i++) {
+			struct pipe_stream_output_target *target = so->targets[i];
+
+			if (target) {
+				offsets[i] = (so->offsets[i] * info->stride[i] * 4) +
+						target->buffer_offset;
+				bos[i] = fd_resource(target->buffer)->bo;
+			} else {
+				offsets[i] = 0;
+				bos[i] = NULL;
+			}
+		}
+
+		fd_wfi(ctx, ring);
+		ctx->emit_const_bo(ring, v->type, true, offset * 4, params, bos, offsets);
+	}
+}
+
+static uint32_t
+max_tf_vtx(struct ir3_shader_variant *v)
+{
+	struct fd_context *ctx = fd_context(v->shader->pctx);
+	struct fd_streamout_stateobj *so = &ctx->streamout;
+	struct pipe_stream_output_info *info = &v->shader->stream_output;
+	uint32_t maxvtxcnt = 0x7fffffff;
+
+	if (v->key.binning_pass)
+		return 0;
+	if (v->shader->stream_output.num_outputs == 0)
+		return 0;
+	if (so->num_targets == 0)
+		return 0;
+
+	/* offset to write to is:
+	 *
+	 *   total_vtxcnt = vtxcnt + offsets[i]
+	 *   offset = total_vtxcnt * stride[i]
+	 *
+	 *   offset =   vtxcnt * stride[i]       ; calculated in shader
+	 *            + offsets[i] * stride[i]   ; calculated at emit_tfbos()
+	 *
+	 * assuming for each vtx, each target buffer will have data written
+	 * up to 'offset + stride[i]', that leaves maxvtxcnt as:
+	 *
+	 *   buffer_size = (maxvtxcnt * stride[i]) + stride[i]
+	 *   maxvtxcnt   = (buffer_size - stride[i]) / stride[i]
+	 *
+	 * but shader is actually doing a less-than (rather than less-than-
+	 * equal) check, so we can drop the -stride[i].
+	 *
+	 * TODO is assumption about `offset + stride[i]` legit?
+	 */
+	for (unsigned i = 0; i < so->num_targets; i++) {
+		struct pipe_stream_output_target *target = so->targets[i];
+		unsigned stride = info->stride[i] * 4;   /* convert dwords->bytes */
+		if (target) {
+			uint32_t max = target->buffer_size / stride;
+			maxvtxcnt = MIN2(maxvtxcnt, max);
+		}
+	}
+
+	return maxvtxcnt;
+}
+
+void
+ir3_emit_consts(struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
+		const struct pipe_draw_info *info, uint32_t dirty)
+{
+	struct fd_context *ctx = fd_context(v->shader->pctx);
+
+	if (dirty & (FD_DIRTY_PROG | FD_DIRTY_CONSTBUF)) {
+		struct fd_constbuf_stateobj *constbuf;
+		bool shader_dirty;
+
+		if (v->type == SHADER_VERTEX) {
+			constbuf = &ctx->constbuf[PIPE_SHADER_VERTEX];
+			shader_dirty = !!(ctx->prog.dirty & FD_SHADER_DIRTY_VP);
+		} else if (v->type == SHADER_FRAGMENT) {
+			constbuf = &ctx->constbuf[PIPE_SHADER_FRAGMENT];
+			shader_dirty = !!(ctx->prog.dirty & FD_SHADER_DIRTY_FP);
+		} else {
+			unreachable("bad shader type");
+			return;
+		}
+
+		emit_user_consts(v, ring, constbuf);
+		emit_ubos(v, ring, constbuf);
+		if (shader_dirty)
+			emit_immediates(v, ring);
+	}
+
+	/* emit driver params every time: */
+	/* TODO skip emit if shader doesn't use driver params to avoid WFI.. */
+	if (info && (v->type == SHADER_VERTEX)) {
+		uint32_t offset = v->first_driver_param + 4;  /* driver params after UBOs */
+		if (v->constlen >= offset) {
+			uint32_t vertex_params[4] = {
+				[IR3_DP_VTXID_BASE] = info->indexed ?
+						info->index_bias : info->start,
+				[IR3_DP_VTXCNT_MAX] = max_tf_vtx(v),
+			};
+
+			fd_wfi(ctx, ring);
+			ctx->emit_const(ring, SHADER_VERTEX, offset * 4, 0,
+					ARRAY_SIZE(vertex_params), vertex_params, NULL);
+
+			/* if needed, emit stream-out buffer addresses: */
+			if (vertex_params[IR3_DP_VTXCNT_MAX] > 0) {
+				emit_tfbos(v, ring);
+			}
+		}
+	}
 }

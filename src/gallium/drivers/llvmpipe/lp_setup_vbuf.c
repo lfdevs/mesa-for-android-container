@@ -122,7 +122,7 @@ lp_setup_set_primitive(struct vbuf_render *vbr, unsigned prim)
 
 typedef const float (*const_float4_ptr)[4];
 
-static INLINE const_float4_ptr get_vert( const void *vertex_buffer,
+static inline const_float4_ptr get_vert( const void *vertex_buffer,
                                          int index,
                                          int stride )
 {

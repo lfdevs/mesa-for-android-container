@@ -38,6 +38,8 @@
 #include "brw_fs_live_variables.h"
 #include "brw_cfg.h"
 
+using namespace brw;
+
 /* Returns whether an instruction could co-issue if its immediate source were
  * replaced with a GRF source.
  */
@@ -270,15 +272,14 @@ fs_visitor::opt_combine_constants()
    reg.stride = 0;
    for (int i = 0; i < table.len; i++) {
       struct imm *imm = &table.imm[i];
+      /* Insert it either before the instruction that generated the immediate
+       * or after the last non-control flow instruction of the common ancestor.
+       */
+      exec_node *n = (imm->inst ? imm->inst :
+                      imm->block->last_non_control_flow_inst()->next);
+      const fs_builder ibld = bld.at(imm->block, n).exec_all().group(1, 0);
 
-      fs_inst *mov = MOV(reg, fs_reg(imm->val));
-      mov->force_writemask_all = true;
-      if (imm->inst) {
-         imm->inst->insert_before(imm->block, mov);
-      } else {
-         backend_instruction *inst = imm->block->last_non_control_flow_inst();
-         inst->insert_after(imm->block, mov);
-      }
+      ibld.MOV(reg, fs_reg(imm->val));
       imm->reg = reg.reg;
       imm->subreg_offset = reg.subreg_offset;
 

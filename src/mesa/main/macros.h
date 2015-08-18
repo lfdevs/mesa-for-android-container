@@ -33,6 +33,7 @@
 
 #include "util/macros.h"
 #include "util/u_math.h"
+#include "util/rounding.h"
 #include "imports.h"
 
 
@@ -131,12 +132,12 @@ extern GLfloat _mesa_ubyte_to_float_color_tab[256];
 #define INT_TO_USHORT(i)   ((i) < 0 ? 0 : ((GLushort) ((i) >> 15)))
 #define UINT_TO_USHORT(i)  ((i) < 0 ? 0 : ((GLushort) ((i) >> 16)))
 #define UNCLAMPED_FLOAT_TO_USHORT(us, f)  \
-        us = ( (GLushort) F_TO_I( CLAMP((f), 0.0F, 1.0F) * 65535.0F) )
+        us = ( (GLushort) _mesa_lroundevenf( CLAMP((f), 0.0F, 1.0F) * 65535.0F) )
 #define CLAMPED_FLOAT_TO_USHORT(us, f)  \
-        us = ( (GLushort) F_TO_I( (f) * 65535.0F) )
+        us = ( (GLushort) _mesa_lroundevenf( (f) * 65535.0F) )
 
 #define UNCLAMPED_FLOAT_TO_SHORT(s, f)  \
-        s = ( (GLshort) F_TO_I( CLAMP((f), -1.0F, 1.0F) * 32767.0F) )
+        s = ( (GLshort) _mesa_lroundevenf( CLAMP((f), -1.0F, 1.0F) * 32767.0F) )
 
 /***
  *** UNCLAMPED_FLOAT_TO_UBYTE: clamp float to [0,1] and map to ubyte in [0,255]
@@ -167,9 +168,9 @@ extern GLfloat _mesa_ubyte_to_float_color_tab[256];
         } while (0)
 #else
 #define UNCLAMPED_FLOAT_TO_UBYTE(ub, f) \
-	ub = ((GLubyte) F_TO_I(CLAMP((f), 0.0F, 1.0F) * 255.0F))
+	ub = ((GLubyte) _mesa_lroundevenf(CLAMP((f), 0.0F, 1.0F) * 255.0F))
 #define CLAMPED_FLOAT_TO_UBYTE(ub, f) \
-	ub = ((GLubyte) F_TO_I((f) * 255.0F))
+	ub = ((GLubyte) _mesa_lroundevenf((f) * 255.0F))
 #endif
 
 static fi_type UINT_AS_UNION(GLuint u)
@@ -676,17 +677,6 @@ static inline unsigned
 minify(unsigned value, unsigned levels)
 {
     return MAX2(1, value >> levels);
-}
-
-/**
- * Return true if the given value is a power of two.
- *
- * Note that this considers 0 a power of two.
- */
-static inline bool
-is_power_of_two(unsigned value)
-{
-   return (value & (value - 1)) == 0;
 }
 
 /**

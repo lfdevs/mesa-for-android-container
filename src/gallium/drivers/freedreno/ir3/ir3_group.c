@@ -34,35 +34,6 @@
  * Find/group instruction neighbors:
  */
 
-/* stop condition for iteration: */
-static bool check_stop(struct ir3_instruction *instr)
-{
-	if (ir3_instr_check_mark(instr))
-		return true;
-
-	/* stay within the block.. don't try to operate across
-	 * basic block boundaries or we'll have problems when
-	 * dealing with multiple basic blocks:
-	 */
-	if (is_meta(instr) && (instr->opc == OPC_META_INPUT))
-		return true;
-
-	return false;
-}
-
-static struct ir3_instruction * create_mov(struct ir3_instruction *instr)
-{
-	struct ir3_instruction *mov;
-
-	mov = ir3_instr_create(instr->block, 1, 0);
-	mov->cat1.src_type = TYPE_F32;
-	mov->cat1.dst_type = TYPE_F32;
-	ir3_reg_create(mov, 0, 0);    /* dst */
-	ir3_reg_create(mov, 0, IR3_REG_SSA)->instr = instr;
-
-	return mov;
-}
-
 /* bleh.. we need to do the same group_n() thing for both inputs/outputs
  * (where we have a simple instr[] array), and fanin nodes (where we have
  * an extra indirection via reg->instr).
@@ -78,7 +49,8 @@ static struct ir3_instruction *arr_get(void *arr, int idx)
 }
 static void arr_insert_mov_out(void *arr, int idx, struct ir3_instruction *instr)
 {
-	((struct ir3_instruction **)arr)[idx] = create_mov(instr);
+	((struct ir3_instruction **)arr)[idx] =
+			ir3_MOV(instr->block, instr, TYPE_F32);
 }
 static void arr_insert_mov_in(void *arr, int idx, struct ir3_instruction *instr)
 {
@@ -111,14 +83,17 @@ static struct ir3_instruction *instr_get(void *arr, int idx)
 {
 	return ssa(((struct ir3_instruction *)arr)->regs[idx+1]);
 }
-static void instr_insert_mov(void *arr, int idx, struct ir3_instruction *instr)
+static void
+instr_insert_mov(void *arr, int idx, struct ir3_instruction *instr)
 {
-	((struct ir3_instruction *)arr)->regs[idx+1]->instr = create_mov(instr);
+	((struct ir3_instruction *)arr)->regs[idx+1]->instr =
+			ir3_MOV(instr->block, instr, TYPE_F32);
 }
 static struct group_ops instr_ops = { instr_get, instr_insert_mov };
 
 
-static void group_n(struct group_ops *ops, void *arr, unsigned n)
+static void
+group_n(struct group_ops *ops, void *arr, unsigned n)
 {
 	unsigned i, j;
 
@@ -140,6 +115,10 @@ restart:
 			/* check for left/right neighbor conflicts: */
 			conflict = conflicts(instr->cp.left, left) ||
 				conflicts(instr->cp.right, right);
+
+			/* RA can't yet deal very well w/ group'd phi's: */
+			if (is_meta(instr) && (instr->opc == OPC_META_PHI))
+				conflict = true;
 
 			/* we also can't have an instr twice in the group: */
 			for (j = i + 1; (j < n) && !conflict; j++)
@@ -181,11 +160,12 @@ restart:
 	}
 }
 
-static void instr_find_neighbors(struct ir3_instruction *instr)
+static void
+instr_find_neighbors(struct ir3_instruction *instr)
 {
 	struct ir3_instruction *src;
 
-	if (check_stop(instr))
+	if (ir3_instr_check_mark(instr))
 		return;
 
 	if (is_meta(instr) && (instr->opc == OPC_META_FI))
@@ -200,7 +180,8 @@ static void instr_find_neighbors(struct ir3_instruction *instr)
  * we need to insert dummy/padding instruction for grouping, and
  * then take it back out again before anyone notices.
  */
-static void pad_and_group_input(struct ir3_instruction **input, unsigned n)
+static void
+pad_and_group_input(struct ir3_instruction **input, unsigned n)
 {
 	int i, mask = 0;
 	struct ir3_block *block = NULL;
@@ -210,8 +191,8 @@ static void pad_and_group_input(struct ir3_instruction **input, unsigned n)
 		if (instr) {
 			block = instr->block;
 		} else if (block) {
-			instr = ir3_instr_create(block, 0, OPC_NOP);
-			ir3_reg_create(instr, 0, IR3_REG_SSA);    /* dst */
+			instr = ir3_NOP(block);
+			ir3_reg_create(instr, 0, IR3_REG_SSA);    /* dummy dst */
 			input[i] = instr;
 			mask |= (1 << i);
 		}
@@ -225,42 +206,46 @@ static void pad_and_group_input(struct ir3_instruction **input, unsigned n)
 	}
 }
 
-static void block_find_neighbors(struct ir3_block *block)
+static void
+find_neighbors(struct ir3 *ir)
 {
 	unsigned i;
 
-	for (i = 0; i < block->noutputs; i++) {
-		if (block->outputs[i]) {
-			struct ir3_instruction *instr = block->outputs[i];
+	/* shader inputs/outputs themselves must be contiguous as well:
+	 *
+	 * NOTE: group inputs first, since we only insert mov's
+	 * *before* the conflicted instr (and that would go badly
+	 * for inputs).  By doing inputs first, we should never
+	 * have a conflict on inputs.. pushing any conflict to
+	 * resolve to the outputs, for stuff like:
+	 *
+	 *     MOV OUT[n], IN[m].wzyx
+	 *
+	 * NOTE: we assume here inputs/outputs are grouped in vec4.
+	 * This logic won't quite cut it if we don't align smaller
+	 * on vec4 boundaries
+	 */
+	for (i = 0; i < ir->ninputs; i += 4)
+		pad_and_group_input(&ir->inputs[i], 4);
+	for (i = 0; i < ir->noutputs; i += 4)
+		group_n(&arr_ops_out, &ir->outputs[i], 4);
+
+	for (i = 0; i < ir->noutputs; i++) {
+		if (ir->outputs[i]) {
+			struct ir3_instruction *instr = ir->outputs[i];
 			instr_find_neighbors(instr);
 		}
 	}
 
-	/* shader inputs/outputs themselves must be contiguous as well:
-	 */
-	if (!block->parent) {
-		/* NOTE: group inputs first, since we only insert mov's
-		 * *before* the conflicted instr (and that would go badly
-		 * for inputs).  By doing inputs first, we should never
-		 * have a conflict on inputs.. pushing any conflict to
-		 * resolve to the outputs, for stuff like:
-		 *
-		 *     MOV OUT[n], IN[m].wzyx
-		 *
-		 * NOTE: we assume here inputs/outputs are grouped in vec4.
-		 * This logic won't quite cut it if we don't align smaller
-		 * on vec4 boundaries
-		 */
-		for (i = 0; i < block->ninputs; i += 4)
-			pad_and_group_input(&block->inputs[i], 4);
-		for (i = 0; i < block->noutputs; i += 4)
-			group_n(&arr_ops_out, &block->outputs[i], 4);
-
+	for (i = 0; i < ir->keeps_count; i++) {
+		struct ir3_instruction *instr = ir->keeps[i];
+		instr_find_neighbors(instr);
 	}
 }
 
-void ir3_block_group(struct ir3_block *block)
+void
+ir3_group(struct ir3 *ir)
 {
-	ir3_clear_mark(block->shader);
-	block_find_neighbors(block);
+	ir3_clear_mark(ir);
+	find_neighbors(ir);
 }

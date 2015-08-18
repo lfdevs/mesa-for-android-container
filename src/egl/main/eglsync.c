@@ -67,7 +67,7 @@ _eglParseSyncAttribList(_EGLSync *sync, const EGLint *attrib_list)
 
 
 static EGLint
-_eglParseSyncAttribList64(_EGLSync *sync, const EGLAttribKHR *attrib_list)
+_eglParseSyncAttribList64(_EGLSync *sync, const EGLAttrib *attrib_list)
 {
    EGLint i, err = EGL_SUCCESS;
 
@@ -103,7 +103,7 @@ _eglParseSyncAttribList64(_EGLSync *sync, const EGLAttribKHR *attrib_list)
 
 EGLBoolean
 _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
-             const EGLint *attrib_list, const EGLAttribKHR *attrib_list64)
+             const EGLint *attrib_list, const EGLAttrib *attrib_list64)
 {
    EGLint err;
 
@@ -141,8 +141,8 @@ _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
 
 
 EGLBoolean
-_eglGetSyncAttribKHR(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
-                     EGLint attribute, EGLint *value)
+_eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
+                  EGLint attribute, EGLAttrib *value)
 {
    if (!value)
       return _eglError(EGL_BAD_PARAMETER, "eglGetSyncAttribKHR");

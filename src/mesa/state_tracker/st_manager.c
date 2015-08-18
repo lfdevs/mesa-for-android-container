@@ -368,6 +368,7 @@ st_visual_to_context_mode(const struct st_visual *visual,
 
       mode->rgbBits = mode->redBits +
          mode->greenBits + mode->blueBits + mode->alphaBits;
+      mode->sRGBCapable = util_format_is_srgb(visual->color_format);
    }
 
    if (visual->depth_stencil_format != PIPE_FORMAT_NONE) {
@@ -924,8 +925,7 @@ static unsigned get_version(struct pipe_screen *screen,
    struct gl_extensions extensions = {0};
    GLuint version;
 
-   if ((api == API_OPENGL_COMPAT || api == API_OPENGL_CORE) &&
-       _mesa_override_gl_version_contextless(&consts, &api, &version)) {
+   if (_mesa_override_gl_version_contextless(&consts, &api, &version)) {
       return version;
    }
 

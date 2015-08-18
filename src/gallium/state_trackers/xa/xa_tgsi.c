@@ -106,7 +106,7 @@ struct xa_shaders {
     struct cso_hash *fs_hash;
 };
 
-static INLINE void
+static inline void
 src_in_mask(struct ureg_program *ureg,
 	    struct ureg_dst dst,
 	    struct ureg_src src,
@@ -368,7 +368,7 @@ create_yuv_shader(struct pipe_context *pipe, struct ureg_program *ureg)
     return ureg_create_shader_and_destroy(ureg, pipe);
 }
 
-static INLINE void
+static inline void
 xrender_tex(struct ureg_program *ureg,
 	    struct ureg_dst dst,
 	    struct ureg_src coords,
@@ -617,7 +617,7 @@ xa_shaders_destroy(struct xa_shaders *sc)
     FREE(sc);
 }
 
-static INLINE void *
+static inline void *
 shader_from_cache(struct pipe_context *pipe,
 		  unsigned type, struct cso_hash *hash, unsigned key)
 {

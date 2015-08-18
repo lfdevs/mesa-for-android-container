@@ -73,8 +73,10 @@ are_all_uses_fadd(nir_ssa_def *def)
 }
 
 static nir_alu_instr *
-get_mul_for_src(nir_alu_src *src, uint8_t swizzle[4], bool *negate, bool *abs)
+get_mul_for_src(nir_alu_src *src, int num_components,
+                uint8_t swizzle[4], bool *negate, bool *abs)
 {
+   uint8_t swizzle_tmp[4];
    assert(src->src.is_ssa && !src->abs && !src->negate);
 
    nir_instr *instr = src->src.ssa->parent_instr;
@@ -85,16 +87,16 @@ get_mul_for_src(nir_alu_src *src, uint8_t swizzle[4], bool *negate, bool *abs)
    switch (alu->op) {
    case nir_op_imov:
    case nir_op_fmov:
-      alu = get_mul_for_src(&alu->src[0], swizzle, negate, abs);
+      alu = get_mul_for_src(&alu->src[0], num_components, swizzle, negate, abs);
       break;
 
    case nir_op_fneg:
-      alu = get_mul_for_src(&alu->src[0], swizzle, negate, abs);
+      alu = get_mul_for_src(&alu->src[0], num_components, swizzle, negate, abs);
       *negate = !*negate;
       break;
 
    case nir_op_fabs:
-      alu = get_mul_for_src(&alu->src[0], swizzle, negate, abs);
+      alu = get_mul_for_src(&alu->src[0], num_components, swizzle, negate, abs);
       *negate = false;
       *abs = true;
       break;
@@ -115,12 +117,18 @@ get_mul_for_src(nir_alu_src *src, uint8_t swizzle[4], bool *negate, bool *abs)
    if (!alu)
       return NULL;
 
-   for (unsigned i = 0; i < 4; i++) {
-      if (!(alu->dest.write_mask & (1 << i)))
-         break;
-
-      swizzle[i] = swizzle[src->swizzle[i]];
-   }
+   /* Copy swizzle data before overwriting it to avoid setting a wrong swizzle.
+    *
+    * Example:
+    *   Former swizzle[] = xyzw
+    *   src->swizzle[] = zyxx
+    *
+    *   Expected output swizzle = zyxx
+    *   If we reuse swizzle in the loop, then output swizzle would be zyzz.
+    */
+   memcpy(swizzle_tmp, swizzle, 4*sizeof(uint8_t));
+   for (unsigned i = 0; i < num_components; i++)
+      swizzle[i] = swizzle_tmp[src->swizzle[i]];
 
    return alu;
 }
@@ -160,7 +168,9 @@ nir_opt_peephole_ffma_block(nir_block *block, void *void_state)
          negate = false;
          abs = false;
 
-         mul = get_mul_for_src(&add->src[add_mul_src], swizzle, &negate, &abs);
+         mul = get_mul_for_src(&add->src[add_mul_src],
+                               add->dest.dest.ssa.num_components,
+                               swizzle, &negate, &abs);
 
          if (mul != NULL)
             break;

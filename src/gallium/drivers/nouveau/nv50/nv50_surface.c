@@ -49,8 +49,8 @@
 #define NOUVEAU_DRIVER 0x50
 #include "nv50/nv50_blit.h"
 
-static INLINE uint8_t
-nv50_2d_format(enum pipe_format format, boolean dst, boolean dst_src_equal)
+static inline uint8_t
+nv50_2d_format(enum pipe_format format, bool dst, bool dst_src_equal)
 {
    uint8_t id = nv50_format_table[format].rt;
 
@@ -76,7 +76,7 @@ nv50_2d_format(enum pipe_format format, boolean dst, boolean dst_src_equal)
 static int
 nv50_2d_texture_set(struct nouveau_pushbuf *push, int dst,
                     struct nv50_miptree *mt, unsigned level, unsigned layer,
-                    enum pipe_format pformat, boolean dst_src_pformat_equal)
+                    enum pipe_format pformat, bool dst_src_pformat_equal)
 {
    struct nouveau_bo *bo = mt->base.bo;
    uint32_t width, height, depth;
@@ -153,7 +153,7 @@ nv50_2d_texture_do_copy(struct nouveau_pushbuf *push,
    const enum pipe_format dfmt = dst->base.base.format;
    const enum pipe_format sfmt = src->base.base.format;
    int ret;
-   boolean eqfmt = dfmt == sfmt;
+   bool eqfmt = dfmt == sfmt;
 
    if (!PUSH_SPACE(push, 2 * 16 + 32))
       return PIPE_ERROR;
@@ -196,7 +196,7 @@ nv50_resource_copy_region(struct pipe_context *pipe,
 {
    struct nv50_context *nv50 = nv50_context(pipe);
    int ret;
-   boolean m2mf;
+   bool m2mf;
    unsigned dst_layer = dstz, src_layer = src_box->z;
 
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
@@ -658,7 +658,7 @@ nv50_blitter_make_vp(struct nv50_blitter *blit)
    };
 
    blit->vp.type = PIPE_SHADER_VERTEX;
-   blit->vp.translated = TRUE;
+   blit->vp.translated = true;
    blit->vp.code = (uint32_t *)code; /* const_cast */
    blit->vp.code_size = sizeof(code);
    blit->vp.max_gpr = 4;
@@ -687,24 +687,24 @@ nv50_blitter_make_fp(struct pipe_context *pipe,
 
    const unsigned target = nv50_blit_get_tgsi_texture_target(ptarg);
 
-   boolean tex_rgbaz = FALSE;
-   boolean tex_s = FALSE;
-   boolean cvt_un8 = FALSE;
+   bool tex_rgbaz = false;
+   bool tex_s = false;
+   bool cvt_un8 = false;
 
    if (mode != NV50_BLIT_MODE_PASS &&
        mode != NV50_BLIT_MODE_Z24X8 &&
        mode != NV50_BLIT_MODE_X8Z24)
-      tex_s = TRUE;
+      tex_s = true;
 
    if (mode != NV50_BLIT_MODE_X24S8 &&
        mode != NV50_BLIT_MODE_S8X24 &&
        mode != NV50_BLIT_MODE_XS)
-      tex_rgbaz = TRUE;
+      tex_rgbaz = true;
 
    if (mode != NV50_BLIT_MODE_PASS &&
        mode != NV50_BLIT_MODE_ZS &&
        mode != NV50_BLIT_MODE_XS)
-      cvt_un8 = TRUE;
+      cvt_un8 = true;
 
    ureg = ureg_create(TGSI_PROCESSOR_FRAGMENT);
    if (!ureg)
@@ -1271,7 +1271,7 @@ nv50_blit_eng2d(struct nv50_context *nv50, const struct pipe_blit_info *info)
    int i;
    uint32_t mode;
    uint32_t mask = nv50_blit_eng2d_get_mask(info);
-   boolean b;
+   bool b;
 
    mode = nv50_blit_get_filter(info) ?
       NV50_2D_BLIT_CONTROL_FILTER_BILINEAR :
@@ -1387,18 +1387,24 @@ nv50_blit_eng2d(struct nv50_context *nv50, const struct pipe_blit_info *info)
             PUSH_DATA (push, info->dst.box.z + i);
          } else {
             const unsigned z = info->dst.box.z + i;
+            const uint64_t address = dst->base.address +
+               dst->level[info->dst.level].offset +
+               z * dst->layer_stride;
             BEGIN_NV04(push, NV50_2D(DST_ADDRESS_HIGH), 2);
-            PUSH_DATAh(push, dst->base.address + z * dst->layer_stride);
-            PUSH_DATA (push, dst->base.address + z * dst->layer_stride);
+            PUSH_DATAh(push, address);
+            PUSH_DATA (push, address);
          }
          if (src->layout_3d) {
             /* not possible because of depth tiling */
             assert(0);
          } else {
             const unsigned z = info->src.box.z + i;
+            const uint64_t address = src->base.address +
+               src->level[info->src.level].offset +
+               z * src->layer_stride;
             BEGIN_NV04(push, NV50_2D(SRC_ADDRESS_HIGH), 2);
-            PUSH_DATAh(push, src->base.address + z * src->layer_stride);
-            PUSH_DATA (push, src->base.address + z * src->layer_stride);
+            PUSH_DATAh(push, address);
+            PUSH_DATA (push, address);
          }
          BEGIN_NV04(push, NV50_2D(BLIT_SRC_Y_INT), 1); /* trigger */
          PUSH_DATA (push, srcy >> 32);
@@ -1410,7 +1416,7 @@ nv50_blit_eng2d(struct nv50_context *nv50, const struct pipe_blit_info *info)
          PUSH_DATA (push, srcy >> 32);
       }
    }
-   nv50_bufctx_fence(nv50->bufctx, FALSE);
+   nv50_bufctx_fence(nv50->bufctx, false);
 
    nouveau_bufctx_reset(nv50->bufctx, NV50_BIND_2D);
 
@@ -1432,71 +1438,82 @@ static void
 nv50_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
-   boolean eng3d = FALSE;
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   bool eng3d = FALSE;
 
    if (util_format_is_depth_or_stencil(info->dst.resource->format)) {
       if (!(info->mask & PIPE_MASK_ZS))
          return;
       if (info->dst.resource->format == PIPE_FORMAT_Z32_FLOAT ||
           info->dst.resource->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
-         eng3d = TRUE;
+         eng3d = true;
       if (info->filter != PIPE_TEX_FILTER_NEAREST)
-         eng3d = TRUE;
+         eng3d = true;
    } else {
       if (!(info->mask & PIPE_MASK_RGBA))
          return;
       if (info->mask != PIPE_MASK_RGBA)
-         eng3d = TRUE;
+         eng3d = true;
    }
 
    if (nv50_miptree(info->src.resource)->layout_3d) {
-      eng3d = TRUE;
+      eng3d = true;
    } else
    if (info->src.box.depth != info->dst.box.depth) {
-      eng3d = TRUE;
+      eng3d = true;
       debug_printf("blit: cannot filter array or cube textures in z direction");
    }
 
    if (!eng3d && info->dst.format != info->src.format) {
       if (!nv50_2d_dst_format_faithful(info->dst.format) ||
           !nv50_2d_src_format_faithful(info->src.format)) {
-         eng3d = TRUE;
+         eng3d = true;
       } else
       if (!nv50_2d_src_format_faithful(info->src.format)) {
          if (!util_format_is_luminance(info->src.format)) {
             if (util_format_is_intensity(info->src.format))
-               eng3d = TRUE;
+               eng3d = true;
             else
             if (!nv50_2d_dst_format_ops_supported(info->dst.format))
-               eng3d = TRUE;
+               eng3d = true;
             else
                eng3d = !nv50_2d_format_supported(info->src.format);
          }
       } else
       if (util_format_is_luminance_alpha(info->src.format))
-         eng3d = TRUE;
+         eng3d = true;
    }
 
    if (info->src.resource->nr_samples == 8 &&
        info->dst.resource->nr_samples <= 1)
-      eng3d = TRUE;
+      eng3d = true;
 
    /* FIXME: can't make this work with eng2d anymore */
    if ((info->src.resource->nr_samples | 1) !=
        (info->dst.resource->nr_samples | 1))
-      eng3d = TRUE;
+      eng3d = true;
 
    /* FIXME: find correct src coordinate adjustments */
    if ((info->src.box.width !=  info->dst.box.width &&
         info->src.box.width != -info->dst.box.width) ||
        (info->src.box.height !=  info->dst.box.height &&
         info->src.box.height != -info->dst.box.height))
-      eng3d = TRUE;
+      eng3d = true;
+
+   if (nv50->screen->num_occlusion_queries_active) {
+      BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
+      PUSH_DATA (push, 0);
+   }
 
    if (!eng3d)
       nv50_blit_eng2d(nv50, info);
    else
       nv50_blit_3d(nv50, info);
+
+   if (nv50->screen->num_occlusion_queries_active) {
+      BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
+      PUSH_DATA (push, 1);
+   }
 }
 
 static void
@@ -1505,13 +1522,13 @@ nv50_flush_resource(struct pipe_context *ctx,
 {
 }
 
-boolean
+bool
 nv50_blitter_create(struct nv50_screen *screen)
 {
    screen->blitter = CALLOC_STRUCT(nv50_blitter);
    if (!screen->blitter) {
       NOUVEAU_ERR("failed to allocate blitter struct\n");
-      return FALSE;
+      return false;
    }
 
    pipe_mutex_init(screen->blitter->mutex);
@@ -1519,7 +1536,7 @@ nv50_blitter_create(struct nv50_screen *screen)
    nv50_blitter_make_vp(screen->blitter);
    nv50_blitter_make_sampler(screen->blitter);
 
-   return TRUE;
+   return true;
 }
 
 void
@@ -1542,20 +1559,20 @@ nv50_blitter_destroy(struct nv50_screen *screen)
    FREE(blitter);
 }
 
-boolean
+bool
 nv50_blitctx_create(struct nv50_context *nv50)
 {
    nv50->blit = CALLOC_STRUCT(nv50_blitctx);
    if (!nv50->blit) {
       NOUVEAU_ERR("failed to allocate blit context\n");
-      return FALSE;
+      return false;
    }
 
    nv50->blit->nv50 = nv50;
 
    nv50->blit->rast.pipe.half_pixel_center = 1;
 
-   return TRUE;
+   return true;
 }
 
 void

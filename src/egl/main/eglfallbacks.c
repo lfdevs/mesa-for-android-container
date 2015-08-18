@@ -91,19 +91,13 @@ _eglInitDriverFallbacks(_EGLDriver *drv)
    drv->API.ClientWaitSyncKHR = NULL;
    drv->API.WaitSyncKHR = NULL;
    drv->API.SignalSyncKHR = NULL;
-   drv->API.GetSyncAttribKHR = _eglGetSyncAttribKHR;
+   drv->API.GetSyncAttrib = _eglGetSyncAttrib;
 
-#ifdef EGL_MESA_drm_image
    drv->API.CreateDRMImageMESA = NULL;
    drv->API.ExportDRMImageMESA = NULL;
-#endif
 
-#ifdef EGL_NOK_swap_region
    drv->API.SwapBuffersRegionNOK = NULL;
-#endif
 
-#ifdef EGL_MESA_image_dma_buf_export
    drv->API.ExportDMABUFImageQueryMESA = NULL;
    drv->API.ExportDMABUFImageMESA = NULL;
-#endif
 }

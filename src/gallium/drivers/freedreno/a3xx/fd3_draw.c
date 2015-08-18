@@ -60,6 +60,9 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	const struct pipe_draw_info *info = emit->info;
 	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
 
+	if (!(fd3_emit_get_vp(emit) && fd3_emit_get_fp(emit)))
+		return;
+
 	fd3_emit_state(ctx, ring, emit);
 
 	if (emit->dirty & (FD_DIRTY_VTXBUF | FD_DIRTY_VTXSTATE))
@@ -79,8 +82,8 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			info->restart_index : 0xffffffff);
 
 	if (ctx->rasterizer && ctx->rasterizer->point_size_per_vertex &&
-		info->mode == PIPE_PRIM_POINTS)
-		primtype = DI_PT_POINTLIST_A2XX;
+			(info->mode == PIPE_PRIM_POINTS))
+		primtype = DI_PT_POINTLIST_PSIZE;
 
 	fd_draw_emit(ctx, ring,
 			primtype,
@@ -104,14 +107,12 @@ fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 		if (last_key->has_per_samp || key->has_per_samp) {
 			if ((last_key->vsaturate_s != key->vsaturate_s) ||
 					(last_key->vsaturate_t != key->vsaturate_t) ||
-					(last_key->vsaturate_r != key->vsaturate_r) ||
-					(last_key->vinteger_s != key->vinteger_s))
+					(last_key->vsaturate_r != key->vsaturate_r))
 				ctx->prog.dirty |= FD_SHADER_DIRTY_VP;
 
 			if ((last_key->fsaturate_s != key->fsaturate_s) ||
 					(last_key->fsaturate_t != key->fsaturate_t) ||
-					(last_key->fsaturate_r != key->fsaturate_r) ||
-					(last_key->finteger_s != key->finteger_s))
+					(last_key->fsaturate_r != key->fsaturate_r))
 				ctx->prog.dirty |= FD_SHADER_DIRTY_FP;
 		}
 
@@ -140,16 +141,13 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 			// TODO set .half_precision based on render target format,
 			// ie. float16 and smaller use half, float32 use full..
 			.half_precision = !!(fd_mesa_debug & FD_DBG_FRAGHALF),
-			.has_per_samp = (fd3_ctx->fsaturate || fd3_ctx->vsaturate ||
-							 fd3_ctx->vinteger_s || fd3_ctx->finteger_s),
+			.has_per_samp = (fd3_ctx->fsaturate || fd3_ctx->vsaturate),
 			.vsaturate_s = fd3_ctx->vsaturate_s,
 			.vsaturate_t = fd3_ctx->vsaturate_t,
 			.vsaturate_r = fd3_ctx->vsaturate_r,
 			.fsaturate_s = fd3_ctx->fsaturate_s,
 			.fsaturate_t = fd3_ctx->fsaturate_t,
 			.fsaturate_r = fd3_ctx->fsaturate_r,
-			.vinteger_s = fd3_ctx->vinteger_s,
-			.finteger_s = fd3_ctx->finteger_s,
 		},
 		.rasterflat = ctx->rasterizer && ctx->rasterizer->flatshade,
 		.sprite_coord_enable = ctx->rasterizer ? ctx->rasterizer->sprite_coord_enable : 0,
@@ -245,10 +243,7 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 		.vtx  = &fd3_ctx->solid_vbuf_state,
 		.prog = &ctx->solid_prog,
 		.key = {
-			.half_precision = (fd3_half_precision(pfb->cbufs[0]) &&
-							   fd3_half_precision(pfb->cbufs[1]) &&
-							   fd3_half_precision(pfb->cbufs[2]) &&
-							   fd3_half_precision(pfb->cbufs[3])),
+			.half_precision = fd_half_precision(pfb),
 		},
 	};
 
@@ -326,7 +321,7 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 				A3XX_RB_STENCIL_CONTROL_ZFAIL_BF(STENCIL_KEEP));
 	}
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < A3XX_MAX_RENDER_TARGETS; i++) {
 		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 1);
 		OUT_RING(ring, A3XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY) |
 				A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS) |
@@ -347,7 +342,7 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 
 	fd3_emit_vertex_bufs(ring, &emit);
 
-	fd3_emit_constant(ring, SB_FRAG_SHADER, 0, 0, 4, color->ui, NULL);
+	fd3_emit_const(ring, SHADER_FRAGMENT, 0, 0, 4, color->ui, NULL);
 
 	OUT_PKT0(ring, REG_A3XX_PC_PRIM_VTX_CNTL, 1);
 	OUT_RING(ring, A3XX_PC_PRIM_VTX_CNTL_STRIDE_IN_VPC(0) |

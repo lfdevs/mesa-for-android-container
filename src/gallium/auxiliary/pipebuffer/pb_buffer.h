@@ -158,7 +158,7 @@ struct pb_vtbl
 
 /* Accessor functions for pb->vtbl:
  */
-static INLINE void *
+static inline void *
 pb_map(struct pb_buffer *buf, 
        unsigned flags, void *flush_ctx)
 {
@@ -170,7 +170,7 @@ pb_map(struct pb_buffer *buf,
 }
 
 
-static INLINE void 
+static inline void 
 pb_unmap(struct pb_buffer *buf)
 {
    assert(buf);
@@ -181,7 +181,7 @@ pb_unmap(struct pb_buffer *buf)
 }
 
 
-static INLINE void
+static inline void
 pb_get_base_buffer( struct pb_buffer *buf,
 		    struct pb_buffer **base_buf,
 		    pb_size *offset )
@@ -200,7 +200,7 @@ pb_get_base_buffer( struct pb_buffer *buf,
 }
 
 
-static INLINE enum pipe_error 
+static inline enum pipe_error 
 pb_validate(struct pb_buffer *buf, struct pb_validate *vl, unsigned flags)
 {
    assert(buf);
@@ -211,7 +211,7 @@ pb_validate(struct pb_buffer *buf, struct pb_validate *vl, unsigned flags)
 }
 
 
-static INLINE void 
+static inline void 
 pb_fence(struct pb_buffer *buf, struct pipe_fence_handle *fence)
 {
    assert(buf);
@@ -222,7 +222,7 @@ pb_fence(struct pb_buffer *buf, struct pipe_fence_handle *fence)
 }
 
 
-static INLINE void 
+static inline void 
 pb_destroy(struct pb_buffer *buf)
 {
    assert(buf);
@@ -232,7 +232,7 @@ pb_destroy(struct pb_buffer *buf)
    buf->vtbl->destroy(buf);
 }
 
-static INLINE void
+static inline void
 pb_reference(struct pb_buffer **dst,
              struct pb_buffer *src)
 {
@@ -248,7 +248,7 @@ pb_reference(struct pb_buffer **dst,
  * Utility function to check whether the provided alignment is consistent with
  * the requested or not.
  */
-static INLINE boolean
+static inline boolean
 pb_check_alignment(pb_size requested, pb_size provided)
 {
    if(!requested)
@@ -265,7 +265,7 @@ pb_check_alignment(pb_size requested, pb_size provided)
  * Utility function to check whether the provided alignment is consistent with
  * the requested or not.
  */
-static INLINE boolean
+static inline boolean
 pb_check_usage(unsigned requested, unsigned provided)
 {
    return (requested & provided) == requested ? TRUE : FALSE;

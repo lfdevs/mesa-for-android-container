@@ -106,21 +106,21 @@ struct llvmpipe_transfer
 
 
 /** cast wrappers */
-static INLINE struct llvmpipe_resource *
+static inline struct llvmpipe_resource *
 llvmpipe_resource(struct pipe_resource *pt)
 {
    return (struct llvmpipe_resource *) pt;
 }
 
 
-static INLINE const struct llvmpipe_resource *
+static inline const struct llvmpipe_resource *
 llvmpipe_resource_const(const struct pipe_resource *pt)
 {
    return (const struct llvmpipe_resource *) pt;
 }
 
 
-static INLINE struct llvmpipe_transfer *
+static inline struct llvmpipe_transfer *
 llvmpipe_transfer(struct pipe_transfer *pt)
 {
    return (struct llvmpipe_transfer *) pt;
@@ -131,7 +131,7 @@ void llvmpipe_init_screen_resource_funcs(struct pipe_screen *screen);
 void llvmpipe_init_context_resource_funcs(struct pipe_context *pipe);
 
 
-static INLINE boolean
+static inline boolean
 llvmpipe_resource_is_texture(const struct pipe_resource *resource)
 {
    switch (resource->target) {
@@ -153,7 +153,7 @@ llvmpipe_resource_is_texture(const struct pipe_resource *resource)
 }
 
 
-static INLINE boolean
+static inline boolean
 llvmpipe_resource_is_1d(const struct pipe_resource *resource)
 {
    switch (resource->target) {
@@ -175,7 +175,7 @@ llvmpipe_resource_is_1d(const struct pipe_resource *resource)
 }
 
 
-static INLINE unsigned
+static inline unsigned
 llvmpipe_layer_stride(struct pipe_resource *resource,
                       unsigned level)
 {
@@ -185,7 +185,7 @@ llvmpipe_layer_stride(struct pipe_resource *resource,
 }
 
 
-static INLINE unsigned
+static inline unsigned
 llvmpipe_resource_stride(struct pipe_resource *resource,
                          unsigned level)
 {

@@ -184,7 +184,7 @@ union lp_rast_cmd_arg {
 
 /* Cast wrappers.  Hopefully these compile to noops!
  */
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_inputs( const struct lp_rast_shader_inputs *shade_tile )
 {
    union lp_rast_cmd_arg arg;
@@ -192,7 +192,7 @@ lp_rast_arg_inputs( const struct lp_rast_shader_inputs *shade_tile )
    return arg;
 }
 
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_triangle( const struct lp_rast_triangle *triangle,
                       unsigned plane_mask)
 {
@@ -208,7 +208,7 @@ lp_rast_arg_triangle( const struct lp_rast_triangle *triangle,
  * All planes are enabled, so instead of the plane mask we pass the upper
  * left coordinates of the a block that fully encloses the triangle.
  */
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_triangle_contained( const struct lp_rast_triangle *triangle,
                                 unsigned x, unsigned y)
 {
@@ -218,7 +218,7 @@ lp_rast_arg_triangle_contained( const struct lp_rast_triangle *triangle,
    return arg;
 }
 
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_state( const struct lp_rast_state *state )
 {
    union lp_rast_cmd_arg arg;
@@ -226,7 +226,7 @@ lp_rast_arg_state( const struct lp_rast_state *state )
    return arg;
 }
 
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_fence( struct lp_fence *fence )
 {
    union lp_rast_cmd_arg arg;
@@ -235,7 +235,7 @@ lp_rast_arg_fence( struct lp_fence *fence )
 }
 
 
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_clearzs( uint64_t value, uint64_t mask )
 {
    union lp_rast_cmd_arg arg;
@@ -245,7 +245,7 @@ lp_rast_arg_clearzs( uint64_t value, uint64_t mask )
 }
 
 
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_query( struct llvmpipe_query *pq )
 {
    union lp_rast_cmd_arg arg;
@@ -253,7 +253,7 @@ lp_rast_arg_query( struct llvmpipe_query *pq )
    return arg;
 }
 
-static INLINE union lp_rast_cmd_arg
+static inline union lp_rast_cmd_arg
 lp_rast_arg_null( void )
 {
    union lp_rast_cmd_arg arg;
@@ -312,7 +312,7 @@ lp_debug_draw_bins_by_coverage( struct lp_scene *scene );
 #include <emmintrin.h>
 #include "util/u_sse.h"
 
-static INLINE __m128i
+static inline __m128i
 lp_plane_to_m128i(const struct lp_rast_plane *plane)
 {
    return _mm_setr_epi32((int32_t)plane->c, (int32_t)plane->dcdx,

@@ -57,7 +57,7 @@ i830StencilFuncSeparate(struct gl_context * ctx, GLenum face, GLenum func, GLint
    mask = mask & 0xff;
 
    DBG("%s : func: %s, ref : 0x%x, mask: 0x%x\n", __func__,
-       _mesa_lookup_enum_by_nr(func), ref, mask);
+       _mesa_enum_to_string(func), ref, mask);
 
 
    I830_STATECHANGE(i830, I830_UPLOAD_CTX);
@@ -95,9 +95,9 @@ i830StencilOpSeparate(struct gl_context * ctx, GLenum face, GLenum fail, GLenum 
    int fop, dfop, dpop;
 
    DBG("%s: fail : %s, zfail: %s, zpass : %s\n", __func__,
-       _mesa_lookup_enum_by_nr(fail),
-       _mesa_lookup_enum_by_nr(zfail), 
-       _mesa_lookup_enum_by_nr(zpass));
+       _mesa_enum_to_string(fail),
+       _mesa_enum_to_string(zfail), 
+       _mesa_enum_to_string(zpass));
 
    fop = 0;
    dfop = 0;
@@ -389,8 +389,8 @@ static void
 i830BlendEquationSeparate(struct gl_context * ctx, GLenum modeRGB, GLenum modeA)
 {
    DBG("%s -> %s, %s\n", __func__,
-       _mesa_lookup_enum_by_nr(modeRGB),
-       _mesa_lookup_enum_by_nr(modeA));
+       _mesa_enum_to_string(modeRGB),
+       _mesa_enum_to_string(modeA));
 
    (void) modeRGB;
    (void) modeA;
@@ -403,10 +403,10 @@ i830BlendFuncSeparate(struct gl_context * ctx, GLenum sfactorRGB,
                       GLenum dfactorRGB, GLenum sfactorA, GLenum dfactorA)
 {
    DBG("%s -> RGB(%s, %s) A(%s, %s)\n", __func__,
-       _mesa_lookup_enum_by_nr(sfactorRGB),
-       _mesa_lookup_enum_by_nr(dfactorRGB),
-       _mesa_lookup_enum_by_nr(sfactorA),
-       _mesa_lookup_enum_by_nr(dfactorA));
+       _mesa_enum_to_string(sfactorRGB),
+       _mesa_enum_to_string(dfactorRGB),
+       _mesa_enum_to_string(sfactorA),
+       _mesa_enum_to_string(dfactorA));
 
    (void) sfactorRGB;
    (void) dfactorRGB;

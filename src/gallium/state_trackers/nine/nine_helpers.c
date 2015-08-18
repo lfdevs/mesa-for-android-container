@@ -49,7 +49,7 @@ nine_range_pool_more(struct nine_range_pool *pool)
     return pool->free;
 }
 
-static INLINE struct nine_range *
+static inline struct nine_range *
 nine_range_pool_get(struct nine_range_pool *pool, int16_t bgn, int16_t end)
 {
     struct nine_range *r = pool->free;
@@ -62,7 +62,7 @@ nine_range_pool_get(struct nine_range_pool *pool, int16_t bgn, int16_t end)
     return r;
 }
 
-static INLINE void
+static inline void
 nine_ranges_coalesce(struct nine_range *r, struct nine_range_pool *pool)
 {
     struct nine_range *n;

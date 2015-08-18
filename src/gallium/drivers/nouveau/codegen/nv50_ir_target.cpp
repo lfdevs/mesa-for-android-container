@@ -41,7 +41,7 @@ const uint8_t Target::operationSrcNr[] =
    0, 0, 0, 0, 0,          // BRA, CALL, RET, CONT, BREAK,
    0, 0, 0,                // PRERET,CONT,BREAK
    0, 0, 0, 0, 0, 0,       // BRKPT, JOINAT, JOIN, DISCARD, EXIT, MEMBAR
-   1, 1, 2, 1, 2,          // VFETCH, PFETCH, EXPORT, LINTERP, PINTERP
+   1, 1, 1, 2, 1, 2,       // VFETCH, PFETCH, AFETCH, EXPORT, LINTERP, PINTERP
    1, 1,                   // EMIT, RESTART
    1, 1, 1,                // TEX, TXB, TXL,
    1, 1, 1, 1, 1, 1, 2,    // TXF, TXQ, TXD, TXG, TXLQ, TEXCSAA, TEXPREP
@@ -96,8 +96,8 @@ const OpClass Target::operationClass[] =
    OPCLASS_FLOW, OPCLASS_FLOW,
    // MEMBAR
    OPCLASS_CONTROL,
-   // VFETCH, PFETCH, EXPORT
-   OPCLASS_LOAD, OPCLASS_OTHER, OPCLASS_STORE,
+   // VFETCH, PFETCH, AFETCH, EXPORT
+   OPCLASS_LOAD, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_STORE,
    // LINTERP, PINTERP
    OPCLASS_SFU, OPCLASS_SFU,
    // EMIT, RESTART

@@ -48,21 +48,18 @@ gen8_upload_gs_state(struct brw_context *brw)
       OUT_BATCH(_3DSTATE_GS << 16 | (10 - 2));
       OUT_BATCH(stage_state->prog_offset);
       OUT_BATCH(0);
-      OUT_BATCH(GEN6_GS_VECTOR_MASK_ENABLE |
-                brw->geometry_program->VerticesIn |
+      OUT_BATCH(brw->geometry_program->VerticesIn |
                 ((ALIGN(stage_state->sampler_count, 4)/4) <<
                  GEN6_GS_SAMPLER_COUNT_SHIFT) |
                 ((prog_data->base.binding_table.size_bytes / 4) <<
-                 GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
+                 GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT) |
+                (prog_data->base.nr_image_params ?
+                 HSW_GS_UAV_ACCESS_ENABLE : 0));
 
       if (brw->gs.prog_data->base.base.total_scratch) {
          OUT_RELOC64(stage_state->scratch_bo,
                      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                      ffs(brw->gs.prog_data->base.base.total_scratch) - 11);
-         WARN_ONCE(true,
-                   "May need to implement a temporary workaround: GS Number of "
-                   "URB Entries must be less than or equal to the GS Maximum "
-                   "Number of Threads.\n");
       } else {
          OUT_BATCH(0);
          OUT_BATCH(0);
@@ -81,7 +78,8 @@ gen8_upload_gs_state(struct brw_context *brw)
 
       uint32_t dw7 = (brw->gs.prog_data->control_data_header_size_hwords <<
                       GEN7_GS_CONTROL_DATA_HEADER_SIZE_SHIFT) |
-                      brw->gs.prog_data->dispatch_mode |
+                     SET_FIELD(prog_data->dispatch_mode,
+                               GEN7_GS_DISPATCH_MODE) |
                      ((brw->gs.prog_data->invocations - 1) <<
                       GEN7_GS_INSTANCE_CONTROL_SHIFT) |
                       GEN6_GS_STATISTICS_ENABLE |

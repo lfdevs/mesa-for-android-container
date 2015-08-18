@@ -168,7 +168,7 @@ get_st_manager(void)
 }
 
 
-static INLINE boolean
+static inline boolean
 little_endian(void)
 {
    const unsigned ui = 1;
@@ -292,7 +292,7 @@ osmesa_init_st_visual(struct st_visual *vis,
 /**
  * Return the osmesa_buffer that corresponds to an st_framebuffer_iface.
  */
-static INLINE struct osmesa_buffer *
+static inline struct osmesa_buffer *
 stfbi_to_osbuffer(struct st_framebuffer_iface *stfbi)
 {
    return (struct osmesa_buffer *) stfbi->st_manager_private;

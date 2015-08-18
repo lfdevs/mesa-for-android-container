@@ -53,7 +53,7 @@
 
 
 /** Approx number of new tokens for instructions in pstip_transform_inst() */
-#define NUM_NEW_TOKENS 50
+#define NUM_NEW_TOKENS 53
 
 
 /**
@@ -126,6 +126,7 @@ struct pstip_transform_context {
    int wincoordInput;
    int maxInput;
    uint samplersUsed;  /**< bitfield of samplers used */
+   bool hasSview;
    int freeSampler;  /** an available sampler for the pstipple */
    int texTemp;  /**< temp registers */
    int numImmed;
@@ -148,6 +149,9 @@ pstip_transform_decl(struct tgsi_transform_context *ctx,
            i <= decl->Range.Last; i++) {
          pctx->samplersUsed |= 1 << i;
       }
+   }
+   else if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
+      pctx->hasSview = true;
    }
    else if (decl->Declaration.File == TGSI_FILE_INPUT) {
       pctx->maxInput = MAX2(pctx->maxInput, (int) decl->Range.Last);
@@ -231,6 +235,17 @@ pstip_transform_prolog(struct tgsi_transform_context *ctx)
 
    /* declare new sampler */
    tgsi_transform_sampler_decl(ctx, pctx->freeSampler);
+
+   /* if the src shader has SVIEW decl's for each SAMP decl, we
+    * need to continue the trend and ensure there is a matching
+    * SVIEW for the new SAMP we just created
+    */
+   if (pctx->hasSview) {
+      tgsi_transform_sampler_view_decl(ctx,
+                                       pctx->freeSampler,
+                                       TGSI_TEXTURE_2D,
+                                       TGSI_RETURN_TYPE_FLOAT);
+   }
 
    /* declare new temp regs */
    tgsi_transform_temp_decl(ctx, pctx->texTemp);
@@ -447,7 +462,7 @@ bind_pstip_fragment_shader(struct pstip_stage *pstip)
 }
 
 
-static INLINE struct pstip_stage *
+static inline struct pstip_stage *
 pstip_stage( struct draw_stage *stage )
 {
    return (struct pstip_stage *) stage;

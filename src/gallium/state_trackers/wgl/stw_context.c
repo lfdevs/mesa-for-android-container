@@ -226,14 +226,13 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
        *         be implemented, as determined by the implementation.
        *       * The core profile of version 3.2 or greater."
        *
-       * and because Mesa doesn't support GL_ARB_compatibility, the only chance to
-       * honour a 3.1 context is through core profile.
+       * But Mesa doesn't support GL_ARB_compatibility, while most prevalent
+       * Windows OpenGL implementations do, and unfortunately many Windows
+       * applications don't check whether they receive or not a context with
+       * GL_ARB_compatibility, so returning a core profile here does more harm
+       * than good.
        */
-      if (majorVersion == 3 && minorVersion == 1) {
-         attribs.profile = ST_PROFILE_OPENGL_CORE;
-      } else {
-         attribs.profile = ST_PROFILE_DEFAULT;
-      }
+      attribs.profile = ST_PROFILE_DEFAULT;
       break;
    case WGL_CONTEXT_ES_PROFILE_BIT_EXT:
       if (majorVersion >= 2) {

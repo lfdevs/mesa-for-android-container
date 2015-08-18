@@ -59,7 +59,7 @@ struct i915_screen
  */
 
 
-static INLINE struct i915_screen *
+static inline struct i915_screen *
 i915_screen(struct pipe_screen *pscreen)
 {
    return (struct i915_screen *) pscreen;

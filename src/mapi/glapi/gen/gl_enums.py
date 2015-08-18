@@ -1,8 +1,8 @@
 #!/usr/bin/python2
 # -*- Mode: Python; py-indent-offset: 8 -*-
 
-# (C) Copyright Zack Rusin 2005
-# All Rights Reserved.
+# (C) Copyright Zack Rusin 2005. All Rights Reserved.
+# Copyright (C) 2015 Intel Corporation
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -25,6 +25,8 @@
 #
 # Authors:
 #    Zack Rusin <zack@kde.org>
+
+import argparse
 
 import license
 import gl_XML
@@ -76,7 +78,7 @@ static int compar_nr( const int *a, enum_elt *b )
 
 static char token_tmp[20];
 
-const char *_mesa_lookup_enum_by_nr( int nr )
+const char *_mesa_enum_to_string( int nr )
 {
    enum_elt *elt;
 
@@ -116,6 +118,7 @@ static const char *prim_names[PRIM_MAX+3] = {
    "GL_LINE_STRIP_ADJACENCY",
    "GL_TRIANGLES_ADJACENCY",
    "GL_TRIANGLE_STRIP_ADJACENCY",
+   "GL_PATCHES",
    "outside begin/end",
    "unknown state"
 };
@@ -201,21 +204,21 @@ _mesa_lookup_prim_by_nr(GLuint nr)
                 enum.append( [name, priority] )
 
 
-def show_usage():
-    print "Usage: %s [-f input_file_name]" % sys.argv[0]
-    sys.exit(1)
+def _parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--input_file',
+                        required=True,
+                        help="Choose an xml file to parse.")
+    return parser.parse_args()
 
-if __name__ == '__main__':
-    try:
-        (args, trail) = getopt.getopt(sys.argv[1:], "f:")
-    except Exception,e:
-        show_usage()
 
-    api_list = []
-    for (arg,val) in args:
-        if arg == "-f":
-            api = gl_XML.parse_GL_API( val )
-            api_list.append(api);
+def main():
+    args = _parser()
+    api_list = [gl_XML.parse_GL_API(args.input_file)]
 
     printer = PrintGlEnums()
-    printer.Print( api_list )
+    printer.Print(api_list)
+
+
+if __name__ == '__main__':
+    main()

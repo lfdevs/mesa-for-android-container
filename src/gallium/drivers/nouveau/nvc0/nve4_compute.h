@@ -68,7 +68,7 @@ struct nve4_cp_launch_desc
    u32 unk48[16];
 };
 
-static INLINE void
+static inline void
 nve4_cp_launch_desc_init_default(struct nve4_cp_launch_desc *desc)
 {
    memset(desc, 0, sizeof(*desc));
@@ -78,7 +78,7 @@ nve4_cp_launch_desc_init_default(struct nve4_cp_launch_desc *desc)
    desc->unk47_20 = 0x300;
 }
 
-static INLINE void
+static inline void
 nve4_cp_launch_desc_set_cb(struct nve4_cp_launch_desc *desc,
                            unsigned index,
                            struct nouveau_bo *bo,
@@ -96,7 +96,7 @@ nve4_cp_launch_desc_set_cb(struct nve4_cp_launch_desc *desc,
    desc->cb_mask |= 1 << index;
 }
 
-static INLINE void
+static inline void
 nve4_cp_launch_desc_set_ctx_cb(struct nve4_cp_launch_desc *desc,
                                unsigned index,
                                const struct nvc0_constbuf *cb)

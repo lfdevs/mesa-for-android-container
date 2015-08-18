@@ -71,64 +71,40 @@ vc4_start_draw(struct vc4_context *vc4)
         uint32_t height = vc4->framebuffer.height;
         uint32_t tilew = align(width, 64) / 64;
         uint32_t tileh = align(height, 64) / 64;
-
-        /* Tile alloc memory setup: We use an initial alloc size of 32b.  The
-         * hardware then aligns that to 256b (we use 4096, because all of our
-         * BO allocations align to that anyway), then for some reason the
-         * simulator wants an extra page available, even if you have overflow
-         * memory set up.
-         *
-         * XXX: The binner only does 28-bit addressing math, so the tile alloc
-         * and tile state should be in the same BO and that BO needs to not
-         * cross a 256MB boundary, somehow.
-         */
-        uint32_t tile_alloc_size = 32 * tilew * tileh;
-        tile_alloc_size = align(tile_alloc_size, 4096);
-        tile_alloc_size += 4096;
-        uint32_t tile_state_size = 48 * tilew * tileh;
-        if (!vc4->tile_alloc || vc4->tile_alloc->size < tile_alloc_size) {
-                vc4_bo_unreference(&vc4->tile_alloc);
-                vc4->tile_alloc = vc4_bo_alloc(vc4->screen, tile_alloc_size,
-                                               "tile_alloc");
-        }
-        if (!vc4->tile_state || vc4->tile_state->size < tile_state_size) {
-                vc4_bo_unreference(&vc4->tile_state);
-                vc4->tile_state = vc4_bo_alloc(vc4->screen, tile_state_size,
-                                               "tile_state");
-        }
+        struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
 
         //   Tile state data is 48 bytes per tile, I think it can be thrown away
         //   as soon as binning is finished.
-        cl_start_reloc(&vc4->bcl, 2);
-        cl_u8(&vc4->bcl, VC4_PACKET_TILE_BINNING_MODE_CONFIG);
-        cl_reloc(vc4, &vc4->bcl, vc4->tile_alloc, 0);
-        cl_u32(&vc4->bcl, vc4->tile_alloc->size);
-        cl_reloc(vc4, &vc4->bcl, vc4->tile_state, 0);
-        cl_u8(&vc4->bcl, tilew);
-        cl_u8(&vc4->bcl, tileh);
-        cl_u8(&vc4->bcl,
-              VC4_BIN_CONFIG_AUTO_INIT_TSDA |
-              VC4_BIN_CONFIG_ALLOC_BLOCK_SIZE_32 |
-              VC4_BIN_CONFIG_ALLOC_INIT_BLOCK_SIZE_32);
+        cl_u8(&bcl, VC4_PACKET_TILE_BINNING_MODE_CONFIG);
+        cl_u32(&bcl, 0); /* tile alloc addr, filled by kernel */
+        cl_u32(&bcl, 0); /* tile alloc size, filled by kernel */
+        cl_u32(&bcl, 0); /* tile state addr, filled by kernel */
+        cl_u8(&bcl, tilew);
+        cl_u8(&bcl, tileh);
+        cl_u8(&bcl, 0); /* flags, filled by kernel. */
 
         /* START_TILE_BINNING resets the statechange counters in the hardware,
          * which are what is used when a primitive is binned to a tile to
          * figure out what new state packets need to be written to that tile's
          * command list.
          */
-        cl_u8(&vc4->bcl, VC4_PACKET_START_TILE_BINNING);
+        cl_u8(&bcl, VC4_PACKET_START_TILE_BINNING);
 
         /* Reset the current compressed primitives format.  This gets modified
          * by VC4_PACKET_GL_INDEXED_PRIMITIVE and
          * VC4_PACKET_GL_ARRAY_PRIMITIVE, so it needs to be reset at the start
          * of every tile.
          */
-        cl_u8(&vc4->bcl, VC4_PACKET_PRIMITIVE_LIST_FORMAT);
-        cl_u8(&vc4->bcl, (VC4_PRIMITIVE_LIST_FORMAT_16_INDEX |
-                          VC4_PRIMITIVE_LIST_FORMAT_TYPE_TRIANGLES));
+        cl_u8(&bcl, VC4_PACKET_PRIMITIVE_LIST_FORMAT);
+        cl_u8(&bcl, (VC4_PRIMITIVE_LIST_FORMAT_16_INDEX |
+                     VC4_PRIMITIVE_LIST_FORMAT_TYPE_TRIANGLES));
 
         vc4->needs_flush = true;
         vc4->draw_call_queued = true;
+        vc4->draw_width = width;
+        vc4->draw_height = height;
+
+        cl_end(&vc4->bcl, bcl);
 }
 
 static void
@@ -143,6 +119,111 @@ vc4_update_shadow_textures(struct pipe_context *pctx,
                 if (rsc->shadow_parent)
                         vc4_update_shadow_baselevel_texture(pctx, view);
         }
+}
+
+static void
+vc4_emit_gl_shader_state(struct vc4_context *vc4, const struct pipe_draw_info *info)
+{
+        /* VC4_DIRTY_VTXSTATE */
+        struct vc4_vertex_stateobj *vtx = vc4->vtx;
+        /* VC4_DIRTY_VTXBUF */
+        struct vc4_vertexbuf_stateobj *vertexbuf = &vc4->vertexbuf;
+
+        /* The simulator throws a fit if VS or CS don't read an attribute, so
+         * we emit a dummy read.
+         */
+        uint32_t num_elements_emit = MAX2(vtx->num_elements, 1);
+        /* Emit the shader record. */
+        struct vc4_cl_out *shader_rec =
+                cl_start_shader_reloc(&vc4->shader_rec, 3 + num_elements_emit);
+        /* VC4_DIRTY_PRIM_MODE | VC4_DIRTY_RASTERIZER */
+        cl_u16(&shader_rec,
+               VC4_SHADER_FLAG_ENABLE_CLIPPING |
+               VC4_SHADER_FLAG_FS_SINGLE_THREAD |
+               ((info->mode == PIPE_PRIM_POINTS &&
+                 vc4->rasterizer->base.point_size_per_vertex) ?
+                VC4_SHADER_FLAG_VS_POINT_SIZE : 0));
+
+        /* VC4_DIRTY_COMPILED_FS */
+        cl_u8(&shader_rec, 0); /* fs num uniforms (unused) */
+        cl_u8(&shader_rec, vc4->prog.fs->num_inputs);
+        cl_reloc(vc4, &vc4->shader_rec, &shader_rec, vc4->prog.fs->bo, 0);
+        cl_u32(&shader_rec, 0); /* UBO offset written by kernel */
+
+        /* VC4_DIRTY_COMPILED_VS */
+        cl_u16(&shader_rec, 0); /* vs num uniforms */
+        cl_u8(&shader_rec, vc4->prog.vs->vattrs_live);
+        cl_u8(&shader_rec, vc4->prog.vs->vattr_offsets[8]);
+        cl_reloc(vc4, &vc4->shader_rec, &shader_rec, vc4->prog.vs->bo, 0);
+        cl_u32(&shader_rec, 0); /* UBO offset written by kernel */
+
+        /* VC4_DIRTY_COMPILED_CS */
+        cl_u16(&shader_rec, 0); /* cs num uniforms */
+        cl_u8(&shader_rec, vc4->prog.cs->vattrs_live);
+        cl_u8(&shader_rec, vc4->prog.cs->vattr_offsets[8]);
+        cl_reloc(vc4, &vc4->shader_rec, &shader_rec, vc4->prog.cs->bo, 0);
+        cl_u32(&shader_rec, 0); /* UBO offset written by kernel */
+
+        uint32_t max_index = 0xffff;
+        for (int i = 0; i < vtx->num_elements; i++) {
+                struct pipe_vertex_element *elem = &vtx->pipe[i];
+                struct pipe_vertex_buffer *vb =
+                        &vertexbuf->vb[elem->vertex_buffer_index];
+                struct vc4_resource *rsc = vc4_resource(vb->buffer);
+                /* not vc4->dirty tracked: vc4->last_index_bias */
+                uint32_t offset = (vb->buffer_offset +
+                                   elem->src_offset +
+                                   vb->stride * info->index_bias);
+                uint32_t vb_size = rsc->bo->size - offset;
+                uint32_t elem_size =
+                        util_format_get_blocksize(elem->src_format);
+
+                cl_reloc(vc4, &vc4->shader_rec, &shader_rec, rsc->bo, offset);
+                cl_u8(&shader_rec, elem_size - 1);
+                cl_u8(&shader_rec, vb->stride);
+                cl_u8(&shader_rec, vc4->prog.vs->vattr_offsets[i]);
+                cl_u8(&shader_rec, vc4->prog.cs->vattr_offsets[i]);
+
+                if (vb->stride > 0) {
+                        max_index = MIN2(max_index,
+                                         (vb_size - elem_size) / vb->stride);
+                }
+        }
+
+        if (vtx->num_elements == 0) {
+                assert(num_elements_emit == 1);
+                struct vc4_bo *bo = vc4_bo_alloc(vc4->screen, 4096, "scratch VBO");
+                cl_reloc(vc4, &vc4->shader_rec, &shader_rec, bo, 0);
+                cl_u8(&shader_rec, 16 - 1); /* element size */
+                cl_u8(&shader_rec, 0); /* stride */
+                cl_u8(&shader_rec, 0); /* VS VPM offset */
+                cl_u8(&shader_rec, 0); /* CS VPM offset */
+                vc4_bo_unreference(&bo);
+        }
+        cl_end(&vc4->shader_rec, shader_rec);
+
+        struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
+        /* the actual draw call. */
+        cl_u8(&bcl, VC4_PACKET_GL_SHADER_STATE);
+        assert(vtx->num_elements <= 8);
+        /* Note that number of attributes == 0 in the packet means 8
+         * attributes.  This field also contains the offset into shader_rec.
+         */
+        cl_u32(&bcl, num_elements_emit & 0x7);
+        cl_end(&vc4->bcl, bcl);
+
+        vc4_write_uniforms(vc4, vc4->prog.fs,
+                           &vc4->constbuf[PIPE_SHADER_FRAGMENT],
+                           &vc4->fragtex);
+        vc4_write_uniforms(vc4, vc4->prog.vs,
+                           &vc4->constbuf[PIPE_SHADER_VERTEX],
+                           &vc4->verttex);
+        vc4_write_uniforms(vc4, vc4->prog.cs,
+                           &vc4->constbuf[PIPE_SHADER_VERTEX],
+                           &vc4->verttex);
+
+        vc4->last_index_bias = info->index_bias;
+        vc4->max_index = max_index;
 }
 
 static void
@@ -165,9 +246,6 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
         vc4_get_draw_cl_space(vc4);
 
-        struct vc4_vertex_stateobj *vtx = vc4->vtx;
-        struct vc4_vertexbuf_stateobj *vertexbuf = &vc4->vertexbuf;
-
         if (vc4->prim_mode != info->mode) {
                 vc4->prim_mode = info->mode;
                 vc4->dirty |= VC4_DIRTY_PRIM_MODE;
@@ -177,119 +255,60 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         vc4_update_compiled_shaders(vc4, info->mode);
 
         vc4_emit_state(pctx);
+
+        if ((vc4->dirty & (VC4_DIRTY_VTXBUF |
+                           VC4_DIRTY_VTXSTATE |
+                           VC4_DIRTY_PRIM_MODE |
+                           VC4_DIRTY_RASTERIZER |
+                           VC4_DIRTY_COMPILED_CS |
+                           VC4_DIRTY_COMPILED_VS |
+                           VC4_DIRTY_COMPILED_FS |
+                           vc4->prog.cs->uniform_dirty_bits |
+                           vc4->prog.vs->uniform_dirty_bits |
+                           vc4->prog.fs->uniform_dirty_bits)) ||
+            vc4->last_index_bias != info->index_bias) {
+                vc4_emit_gl_shader_state(vc4, info);
+        }
+
         vc4->dirty = 0;
-
-        vc4_write_uniforms(vc4, vc4->prog.fs,
-                           &vc4->constbuf[PIPE_SHADER_FRAGMENT],
-                           &vc4->fragtex);
-        vc4_write_uniforms(vc4, vc4->prog.vs,
-                           &vc4->constbuf[PIPE_SHADER_VERTEX],
-                           &vc4->verttex);
-        vc4_write_uniforms(vc4, vc4->prog.cs,
-                           &vc4->constbuf[PIPE_SHADER_VERTEX],
-                           &vc4->verttex);
-
-        /* The simulator throws a fit if VS or CS don't read an attribute, so
-         * we emit a dummy read.
-         */
-        uint32_t num_elements_emit = MAX2(vtx->num_elements, 1);
-        /* Emit the shader record. */
-        cl_start_shader_reloc(&vc4->shader_rec, 3 + num_elements_emit);
-        cl_u16(&vc4->shader_rec,
-               VC4_SHADER_FLAG_ENABLE_CLIPPING |
-               ((info->mode == PIPE_PRIM_POINTS &&
-                 vc4->rasterizer->base.point_size_per_vertex) ?
-                VC4_SHADER_FLAG_VS_POINT_SIZE : 0));
-        cl_u8(&vc4->shader_rec, 0); /* fs num uniforms (unused) */
-        cl_u8(&vc4->shader_rec, vc4->prog.fs->num_inputs);
-        cl_reloc(vc4, &vc4->shader_rec, vc4->prog.fs->bo, 0);
-        cl_u32(&vc4->shader_rec, 0); /* UBO offset written by kernel */
-
-        cl_u16(&vc4->shader_rec, 0); /* vs num uniforms */
-        cl_u8(&vc4->shader_rec, vc4->prog.vs->vattrs_live);
-        cl_u8(&vc4->shader_rec, vc4->prog.vs->vattr_offsets[8]);
-        cl_reloc(vc4, &vc4->shader_rec, vc4->prog.vs->bo, 0);
-        cl_u32(&vc4->shader_rec, 0); /* UBO offset written by kernel */
-
-        cl_u16(&vc4->shader_rec, 0); /* cs num uniforms */
-        cl_u8(&vc4->shader_rec, vc4->prog.cs->vattrs_live);
-        cl_u8(&vc4->shader_rec, vc4->prog.cs->vattr_offsets[8]);
-        cl_reloc(vc4, &vc4->shader_rec, vc4->prog.cs->bo, 0);
-        cl_u32(&vc4->shader_rec, 0); /* UBO offset written by kernel */
-
-        uint32_t max_index = 0xffff;
-        uint32_t vpm_offset = 0;
-        for (int i = 0; i < vtx->num_elements; i++) {
-                struct pipe_vertex_element *elem = &vtx->pipe[i];
-                struct pipe_vertex_buffer *vb =
-                        &vertexbuf->vb[elem->vertex_buffer_index];
-                struct vc4_resource *rsc = vc4_resource(vb->buffer);
-                uint32_t offset = vb->buffer_offset + elem->src_offset;
-                uint32_t vb_size = rsc->bo->size - offset;
-                uint32_t elem_size =
-                        util_format_get_blocksize(elem->src_format);
-
-                cl_reloc(vc4, &vc4->shader_rec, rsc->bo, offset);
-                cl_u8(&vc4->shader_rec, elem_size - 1);
-                cl_u8(&vc4->shader_rec, vb->stride);
-                cl_u8(&vc4->shader_rec, vc4->prog.vs->vattr_offsets[i]);
-                cl_u8(&vc4->shader_rec, vc4->prog.cs->vattr_offsets[i]);
-
-                vpm_offset += align(elem_size, 4);
-
-                if (vb->stride > 0) {
-                        max_index = MIN2(max_index,
-                                         (vb_size - elem_size) / vb->stride);
-                }
-        }
-
-        if (vtx->num_elements == 0) {
-                assert(num_elements_emit == 1);
-                struct vc4_bo *bo = vc4_bo_alloc(vc4->screen, 4096, "scratch VBO");
-                cl_reloc(vc4, &vc4->shader_rec, bo, 0);
-                cl_u8(&vc4->shader_rec, 16 - 1); /* element size */
-                cl_u8(&vc4->shader_rec, 0); /* stride */
-                cl_u8(&vc4->shader_rec, 0); /* VS VPM offset */
-                cl_u8(&vc4->shader_rec, 0); /* CS VPM offset */
-                vc4_bo_unreference(&bo);
-        }
-
-        /* the actual draw call. */
-        cl_u8(&vc4->bcl, VC4_PACKET_GL_SHADER_STATE);
-        assert(vtx->num_elements <= 8);
-        /* Note that number of attributes == 0 in the packet means 8
-         * attributes.  This field also contains the offset into shader_rec.
-         */
-        cl_u32(&vc4->bcl, num_elements_emit & 0x7);
 
         /* Note that the primitive type fields match with OpenGL/gallium
          * definitions, up to but not including QUADS.
          */
+        struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
         if (info->indexed) {
-                struct vc4_resource *rsc = vc4_resource(vc4->indexbuf.buffer);
                 uint32_t offset = vc4->indexbuf.offset;
                 uint32_t index_size = vc4->indexbuf.index_size;
-                if (rsc->shadow_parent) {
-                        vc4_update_shadow_index_buffer(pctx, &vc4->indexbuf);
-                        offset = 0;
+                struct pipe_resource *prsc;
+                if (vc4->indexbuf.index_size == 4) {
+                        prsc = vc4_get_shadow_index_buffer(pctx, &vc4->indexbuf,
+                                                           info->count, &offset);
+                        index_size = 2;
+                } else {
+                        prsc = vc4->indexbuf.buffer;
                 }
+                struct vc4_resource *rsc = vc4_resource(prsc);
 
-                cl_start_reloc(&vc4->bcl, 1);
-                cl_u8(&vc4->bcl, VC4_PACKET_GL_INDEXED_PRIMITIVE);
-                cl_u8(&vc4->bcl,
+                cl_start_reloc(&vc4->bcl, &bcl, 1);
+                cl_u8(&bcl, VC4_PACKET_GL_INDEXED_PRIMITIVE);
+                cl_u8(&bcl,
                       info->mode |
                       (index_size == 2 ?
                        VC4_INDEX_BUFFER_U16:
                        VC4_INDEX_BUFFER_U8));
-                cl_u32(&vc4->bcl, info->count);
-                cl_reloc(vc4, &vc4->bcl, rsc->bo, offset);
-                cl_u32(&vc4->bcl, max_index);
+                cl_u32(&bcl, info->count);
+                cl_reloc(vc4, &vc4->bcl, &bcl, rsc->bo, offset);
+                cl_u32(&bcl, vc4->max_index);
+
+                if (vc4->indexbuf.index_size == 4)
+                        pipe_resource_reference(&prsc, NULL);
         } else {
-                cl_u8(&vc4->bcl, VC4_PACKET_GL_ARRAY_PRIMITIVE);
-                cl_u8(&vc4->bcl, info->mode);
-                cl_u32(&vc4->bcl, info->count);
-                cl_u32(&vc4->bcl, info->start);
+                cl_u8(&bcl, VC4_PACKET_GL_ARRAY_PRIMITIVE);
+                cl_u8(&bcl, info->mode);
+                cl_u32(&bcl, info->count);
+                cl_u32(&bcl, info->start);
         }
+        cl_end(&vc4->bcl, bcl);
 
         if (vc4->zsa && vc4->zsa->base.depth.enabled) {
                 vc4->resolve |= PIPE_CLEAR_DEPTH;

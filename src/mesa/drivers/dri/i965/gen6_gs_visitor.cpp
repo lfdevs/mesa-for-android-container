@@ -147,7 +147,12 @@ gen6_gs_visitor::emit_prolog()
 }
 
 void
-gen6_gs_visitor::visit(ir_emit_vertex *)
+gen6_gs_visitor::visit(ir_emit_vertex *ir)
+{
+   gs_emit_vertex(ir->stream_id());
+}
+void
+gen6_gs_visitor::gs_emit_vertex(int stream_id)
 {
    this->current_annotation = "gen6 emit vertex";
    /* Honor max_vertex layout indication in geometry shader by ignoring any
@@ -223,6 +228,12 @@ gen6_gs_visitor::visit(ir_emit_vertex *)
 
 void
 gen6_gs_visitor::visit(ir_end_primitive *)
+{
+   gs_end_primitive();
+}
+
+void
+gen6_gs_visitor::gs_end_primitive()
 {
    this->current_annotation = "gen6 end primitive";
    /* Calling EndPrimitive() is optional for point output. In this case we set

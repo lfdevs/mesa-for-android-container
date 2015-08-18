@@ -73,7 +73,7 @@ struct pool_pb_manager
 };
 
 
-static INLINE struct pool_pb_manager *
+static inline struct pool_pb_manager *
 pool_pb_manager(struct pb_manager *mgr)
 {
    assert(mgr);
@@ -93,7 +93,7 @@ struct pool_buffer
 };
 
 
-static INLINE struct pool_buffer *
+static inline struct pool_buffer *
 pool_buffer(struct pb_buffer *buf)
 {
    assert(buf);

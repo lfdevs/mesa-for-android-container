@@ -212,7 +212,7 @@ radeonReadPixels(struct gl_context * ctx,
      */
     radeon_print(RADEON_FALLBACKS, RADEON_NORMAL,
                  "Falling back to sw for ReadPixels (format %s, type %s)\n",
-                 _mesa_lookup_enum_by_nr(format), _mesa_lookup_enum_by_nr(type));
+                 _mesa_enum_to_string(format), _mesa_enum_to_string(type));
 
     if (ctx->NewState)
         _mesa_update_state(ctx);

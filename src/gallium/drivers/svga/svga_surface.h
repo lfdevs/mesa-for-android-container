@@ -84,7 +84,7 @@ svga_texture_copy_handle(struct svga_context *svga,
                          unsigned width, unsigned height, unsigned depth);
 
 
-static INLINE struct svga_surface *
+static inline struct svga_surface *
 svga_surface(struct pipe_surface *surface)
 {
    assert(surface);
@@ -92,7 +92,7 @@ svga_surface(struct pipe_surface *surface)
 }
 
 
-static INLINE const struct svga_surface *
+static inline const struct svga_surface *
 svga_surface_const(const struct pipe_surface *surface)
 {
    assert(surface);

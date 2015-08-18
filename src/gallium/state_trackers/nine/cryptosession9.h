@@ -29,7 +29,7 @@ struct NineCryptoSession9
 {
     struct NineUnknown base;
 };
-static INLINE struct NineCryptoSession9 *
+static inline struct NineCryptoSession9 *
 NineCryptoSession9( void *data )
 {
     return (struct NineCryptoSession9 *)data;

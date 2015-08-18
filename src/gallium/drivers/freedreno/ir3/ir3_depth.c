@@ -84,25 +84,25 @@ int ir3_delayslots(struct ir3_instruction *assigner,
 	}
 }
 
-static void insert_by_depth(struct ir3_instruction *instr)
+void
+ir3_insert_by_depth(struct ir3_instruction *instr, struct list_head *list)
 {
-	struct ir3_block *block = instr->block;
-	struct ir3_instruction *n = block->head;
-	struct ir3_instruction *p = NULL;
+	/* remove from existing spot in list: */
+	list_delinit(&instr->node);
 
-	while (n && (n != instr) && (n->depth > instr->depth)) {
-		p = n;
-		n = n->next;
+	/* find where to re-insert instruction: */
+	list_for_each_entry (struct ir3_instruction, pos, list, node) {
+		if (pos->depth > instr->depth) {
+			list_add(&instr->node, &pos->node);
+			return;
+		}
 	}
-
-	instr->next = n;
-	if (p)
-		p->next = instr;
-	else
-		block->head = instr;
+	/* if we get here, we didn't find an insertion spot: */
+	list_addtail(&instr->node, list);
 }
 
-static void ir3_instr_depth(struct ir3_instruction *instr)
+static void
+ir3_instr_depth(struct ir3_instruction *instr)
 {
 	struct ir3_instruction *src;
 
@@ -123,47 +123,66 @@ static void ir3_instr_depth(struct ir3_instruction *instr)
 		instr->depth = MAX2(instr->depth, sd);
 	}
 
-	/* meta-instructions don't add cycles, other than PHI.. which
-	 * might translate to a real instruction..
-	 *
-	 * well, not entirely true, fan-in/out, etc might need to need
-	 * to generate some extra mov's in edge cases, etc.. probably
-	 * we might want to do depth calculation considering the worst
-	 * case for these??
-	 */
 	if (!is_meta(instr))
 		instr->depth++;
 
-	insert_by_depth(instr);
+	ir3_insert_by_depth(instr, &instr->block->instr_list);
 }
 
-void ir3_block_depth(struct ir3_block *block)
+static void
+remove_unused_by_block(struct ir3_block *block)
+{
+	list_for_each_entry_safe (struct ir3_instruction, instr, &block->instr_list, node) {
+		if (!ir3_instr_check_mark(instr)) {
+			if (is_flow(instr) && (instr->opc == OPC_END))
+				continue;
+			/* mark it, in case it is input, so we can
+			 * remove unused inputs:
+			 */
+			instr->depth = DEPTH_UNUSED;
+			/* and remove from instruction list: */
+			list_delinit(&instr->node);
+		}
+	}
+}
+
+void
+ir3_depth(struct ir3 *ir)
 {
 	unsigned i;
 
-	block->head = NULL;
+	ir3_clear_mark(ir);
+	for (i = 0; i < ir->noutputs; i++)
+		if (ir->outputs[i])
+			ir3_instr_depth(ir->outputs[i]);
 
-	ir3_clear_mark(block->shader);
-	for (i = 0; i < block->noutputs; i++)
-		if (block->outputs[i])
-			ir3_instr_depth(block->outputs[i]);
+	for (i = 0; i < ir->keeps_count; i++)
+		ir3_instr_depth(ir->keeps[i]);
+
+	/* We also need to account for if-condition: */
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		if (block->condition)
+			ir3_instr_depth(block->condition);
+	}
 
 	/* mark un-used instructions: */
-	for (i = 0; i < block->shader->instrs_count; i++) {
-		struct ir3_instruction *instr = block->shader->instrs[i];
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		remove_unused_by_block(block);
+	}
 
-		/* just consider instructions within this block: */
-		if (instr->block != block)
-			continue;
-
-		if (!ir3_instr_check_mark(instr))
-			instr->depth = DEPTH_UNUSED;
+	/* note that we can end up with unused indirects, but we should
+	 * not end up with unused predicates.
+	 */
+	for (i = 0; i < ir->indirects_count; i++) {
+		struct ir3_instruction *instr = ir->indirects[i];
+		if (instr->depth == DEPTH_UNUSED)
+			ir->indirects[i] = NULL;
 	}
 
 	/* cleanup unused inputs: */
-	for (i = 0; i < block->ninputs; i++) {
-		struct ir3_instruction *in = block->inputs[i];
+	for (i = 0; i < ir->ninputs; i++) {
+		struct ir3_instruction *in = ir->inputs[i];
 		if (in && (in->depth == DEPTH_UNUSED))
-			block->inputs[i] = NULL;
+			ir->inputs[i] = NULL;
 	}
 }

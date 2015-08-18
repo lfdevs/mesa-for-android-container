@@ -46,7 +46,7 @@ struct stw_st_framebuffer {
    unsigned texture_mask;
 };
 
-static INLINE struct stw_st_framebuffer *
+static inline struct stw_st_framebuffer *
 stw_st_framebuffer(struct st_framebuffer_iface *stfb)
 {
    return (struct stw_st_framebuffer *) stfb;
@@ -77,6 +77,7 @@ stw_st_framebuffer_validate_locked(struct st_framebuffer_iface *stfb,
    templ.depth0 = 1;
    templ.array_size = 1;
    templ.last_level = 0;
+   templ.nr_samples = stwfb->stvis.samples;
 
    for (i = 0; i < ST_ATTACHMENT_COUNT; i++) {
       enum pipe_format format;
@@ -95,6 +96,7 @@ stw_st_framebuffer_validate_locked(struct st_framebuffer_iface *stfb,
       case ST_ATTACHMENT_BACK_LEFT:
          format = stwfb->stvis.color_format;
          bind = PIPE_BIND_DISPLAY_TARGET |
+                PIPE_BIND_SAMPLER_VIEW |
                 PIPE_BIND_RENDER_TARGET;
          break;
       case ST_ATTACHMENT_DEPTH_STENCIL:

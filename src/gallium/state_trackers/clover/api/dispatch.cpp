@@ -123,12 +123,12 @@ namespace clover {
       clCreateImage,
       clCreateProgramWithBuiltInKernels,
       clCompileProgram,
-      NULL, // clLinkProgram
+      clLinkProgram,
       clUnloadPlatformCompiler,
-      NULL, // clGetKernelArgInfo
-      NULL, // clEnqueueFillBuffer
-      NULL, // clEnqueueFillImage
-      NULL, // clEnqueueMigrateMemObjects
+      clGetKernelArgInfo,
+      clEnqueueFillBuffer,
+      clEnqueueFillImage,
+      clEnqueueMigrateMemObjects,
       clEnqueueMarkerWithWaitList,
       clEnqueueBarrierWithWaitList,
       NULL, // clGetExtensionFunctionAddressForPlatform

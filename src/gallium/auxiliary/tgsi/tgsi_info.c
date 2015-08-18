@@ -302,9 +302,9 @@ tgsi_get_processor_name( uint processor )
       return "fragment shader";
    case TGSI_PROCESSOR_GEOMETRY:
       return "geometry shader";
-   case TGSI_PROCESSOR_TESSCTRL:
+   case TGSI_PROCESSOR_TESS_CTRL:
       return "tessellation control shader";
-   case TGSI_PROCESSOR_TESSEVAL:
+   case TGSI_PROCESSOR_TESS_EVAL:
       return "tessellation evaluation shader";
    default:
       return "unknown shader type!";
@@ -316,7 +316,7 @@ tgsi_get_processor_name( uint processor )
  *
  * MOV and UCMP is special so return VOID
  */
-static INLINE enum tgsi_opcode_type
+static inline enum tgsi_opcode_type
 tgsi_opcode_infer_type( uint opcode )
 {
    switch (opcode) {
@@ -374,7 +374,34 @@ tgsi_opcode_infer_type( uint opcode )
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_IBFE:
    case TGSI_OPCODE_IMSB:
+   case TGSI_OPCODE_DSEQ:
+   case TGSI_OPCODE_DSGE:
+   case TGSI_OPCODE_DSLT:
+   case TGSI_OPCODE_DSNE:
       return TGSI_TYPE_SIGNED;
+   case TGSI_OPCODE_DADD:
+   case TGSI_OPCODE_DABS:
+   case TGSI_OPCODE_DFMA:
+   case TGSI_OPCODE_DNEG:
+   case TGSI_OPCODE_DMUL:
+   case TGSI_OPCODE_DMAX:
+   case TGSI_OPCODE_DMIN:
+   case TGSI_OPCODE_DRCP:
+   case TGSI_OPCODE_DSQRT:
+   case TGSI_OPCODE_DMAD:
+   case TGSI_OPCODE_DLDEXP:
+   case TGSI_OPCODE_DFRACEXP:
+   case TGSI_OPCODE_DFRAC:
+   case TGSI_OPCODE_DRSQ:
+   case TGSI_OPCODE_DTRUNC:
+   case TGSI_OPCODE_DCEIL:
+   case TGSI_OPCODE_DFLR:
+   case TGSI_OPCODE_DROUND:
+   case TGSI_OPCODE_DSSG:
+   case TGSI_OPCODE_F2D:
+   case TGSI_OPCODE_I2D:
+   case TGSI_OPCODE_U2D:
+      return TGSI_TYPE_DOUBLE;
    default:
       return TGSI_TYPE_FLOAT;
    }
@@ -391,6 +418,7 @@ tgsi_opcode_infer_src_type( uint opcode )
    case TGSI_OPCODE_TXF:
    case TGSI_OPCODE_BREAKC:
    case TGSI_OPCODE_U2F:
+   case TGSI_OPCODE_U2D:
    case TGSI_OPCODE_UADD:
    case TGSI_OPCODE_SWITCH:
    case TGSI_OPCODE_CASE:
@@ -400,10 +428,12 @@ tgsi_opcode_infer_src_type( uint opcode )
       return TGSI_TYPE_UNSIGNED;
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_I2F:
+   case TGSI_OPCODE_I2D:
       return TGSI_TYPE_SIGNED;
    case TGSI_OPCODE_ARL:
    case TGSI_OPCODE_ARR:
    case TGSI_OPCODE_TXQ_LZ:
+   case TGSI_OPCODE_F2D:
    case TGSI_OPCODE_F2I:
    case TGSI_OPCODE_F2U:
    case TGSI_OPCODE_FSEQ:
@@ -412,6 +442,14 @@ tgsi_opcode_infer_src_type( uint opcode )
    case TGSI_OPCODE_FSNE:
    case TGSI_OPCODE_UCMP:
       return TGSI_TYPE_FLOAT;
+   case TGSI_OPCODE_D2F:
+   case TGSI_OPCODE_D2U:
+   case TGSI_OPCODE_D2I:
+   case TGSI_OPCODE_DSEQ:
+   case TGSI_OPCODE_DSGE:
+   case TGSI_OPCODE_DSLT:
+   case TGSI_OPCODE_DSNE:
+      return TGSI_TYPE_DOUBLE;
    default:
       return tgsi_opcode_infer_type(opcode);
    }

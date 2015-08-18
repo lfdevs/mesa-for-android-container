@@ -33,20 +33,20 @@
 
 struct i915_context;
 
-static INLINE size_t
+static inline size_t
 i915_winsys_batchbuffer_space(struct i915_winsys_batchbuffer *batch)
 {
    return batch->size - (batch->ptr - batch->map);
 }
 
-static INLINE boolean
+static inline boolean
 i915_winsys_batchbuffer_check(struct i915_winsys_batchbuffer *batch,
                               size_t dwords)
 {
    return dwords * 4 <= i915_winsys_batchbuffer_space(batch);
 }
 
-static INLINE void
+static inline void
 i915_winsys_batchbuffer_dword_unchecked(struct i915_winsys_batchbuffer *batch,
                                         unsigned dword)
 {
@@ -54,7 +54,7 @@ i915_winsys_batchbuffer_dword_unchecked(struct i915_winsys_batchbuffer *batch,
    batch->ptr += 4;
 }
 
-static INLINE void
+static inline void
 i915_winsys_batchbuffer_float(struct i915_winsys_batchbuffer *batch,
                               float f)
 {
@@ -64,7 +64,7 @@ i915_winsys_batchbuffer_float(struct i915_winsys_batchbuffer *batch,
    i915_winsys_batchbuffer_dword_unchecked(batch, uif.ui);
 }
 
-static INLINE void
+static inline void
 i915_winsys_batchbuffer_dword(struct i915_winsys_batchbuffer *batch,
                               unsigned dword)
 {
@@ -72,7 +72,7 @@ i915_winsys_batchbuffer_dword(struct i915_winsys_batchbuffer *batch,
    i915_winsys_batchbuffer_dword_unchecked(batch, dword);
 }
 
-static INLINE void
+static inline void
 i915_winsys_batchbuffer_write(struct i915_winsys_batchbuffer *batch,
                               void *data,
                               size_t size)
@@ -83,7 +83,7 @@ i915_winsys_batchbuffer_write(struct i915_winsys_batchbuffer *batch,
    batch->ptr += size;
 }
 
-static INLINE boolean
+static inline boolean
 i915_winsys_validate_buffers(struct i915_winsys_batchbuffer *batch,
                              struct i915_winsys_buffer **buffers,
                              int num_of_buffers)
@@ -91,7 +91,7 @@ i915_winsys_validate_buffers(struct i915_winsys_batchbuffer *batch,
    return batch->iws->validate_buffers(batch, buffers, num_of_buffers);
 }
 
-static INLINE int
+static inline int
 i915_winsys_batchbuffer_reloc(struct i915_winsys_batchbuffer *batch,
                               struct i915_winsys_buffer *buffer,
                               enum i915_winsys_buffer_usage usage,

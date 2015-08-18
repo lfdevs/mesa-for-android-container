@@ -333,7 +333,7 @@ ilo_builder_init(struct ilo_builder *builder,
 {
    int i;
 
-   memset(builder, 0, sizeof(*builder));
+   assert(ilo_is_zeroed(builder, sizeof(*builder)));
 
    builder->dev = dev;
    builder->winsys = winsys;

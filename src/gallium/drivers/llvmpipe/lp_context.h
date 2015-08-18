@@ -169,7 +169,7 @@ llvmpipe_user_buffer_create(struct pipe_screen *screen,
                             unsigned bind_flags);
 
 
-static INLINE struct llvmpipe_context *
+static inline struct llvmpipe_context *
 llvmpipe_context( struct pipe_context *pipe )
 {
    return (struct llvmpipe_context *)pipe;

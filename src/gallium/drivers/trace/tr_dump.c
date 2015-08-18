@@ -64,7 +64,7 @@ static long unsigned call_no = 0;
 static boolean dumping = FALSE;
 
 
-static INLINE void
+static inline void
 trace_dump_write(const char *buf, size_t size)
 {
    if (stream) {
@@ -73,14 +73,14 @@ trace_dump_write(const char *buf, size_t size)
 }
 
 
-static INLINE void
+static inline void
 trace_dump_writes(const char *s)
 {
    trace_dump_write(s, strlen(s));
 }
 
 
-static INLINE void
+static inline void
 trace_dump_writef(const char *format, ...)
 {
    static char buf[1024];
@@ -93,7 +93,7 @@ trace_dump_writef(const char *format, ...)
 }
 
 
-static INLINE void
+static inline void
 trace_dump_escape(const char *str)
 {
    const unsigned char *p = (const unsigned char *)str;
@@ -117,7 +117,7 @@ trace_dump_escape(const char *str)
 }
 
 
-static INLINE void
+static inline void
 trace_dump_indent(unsigned level)
 {
    unsigned i;
@@ -126,14 +126,14 @@ trace_dump_indent(unsigned level)
 }
 
 
-static INLINE void
+static inline void
 trace_dump_newline(void)
 {
    trace_dump_writes("\n");
 }
 
 
-static INLINE void
+static inline void
 trace_dump_tag(const char *name)
 {
    trace_dump_writes("<");
@@ -142,7 +142,7 @@ trace_dump_tag(const char *name)
 }
 
 
-static INLINE void
+static inline void
 trace_dump_tag_begin(const char *name)
 {
    trace_dump_writes("<");
@@ -150,7 +150,7 @@ trace_dump_tag_begin(const char *name)
    trace_dump_writes(">");
 }
 
-static INLINE void
+static inline void
 trace_dump_tag_begin1(const char *name,
                       const char *attr1, const char *value1)
 {
@@ -164,7 +164,7 @@ trace_dump_tag_begin1(const char *name,
 }
 
 
-static INLINE void
+static inline void
 trace_dump_tag_begin2(const char *name,
                       const char *attr1, const char *value1,
                       const char *attr2, const char *value2)
@@ -183,7 +183,7 @@ trace_dump_tag_begin2(const char *name,
 }
 
 
-static INLINE void
+static inline void
 trace_dump_tag_begin3(const char *name,
                       const char *attr1, const char *value1,
                       const char *attr2, const char *value2,
@@ -207,7 +207,7 @@ trace_dump_tag_begin3(const char *name,
 }
 
 
-static INLINE void
+static inline void
 trace_dump_tag_end(const char *name)
 {
    trace_dump_writes("</");

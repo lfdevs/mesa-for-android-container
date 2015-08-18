@@ -86,7 +86,7 @@ static void
 write_primitives_generated(struct brw_context *brw,
                            drm_intel_bo *query_bo, int stream, int idx)
 {
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    if (brw->gen >= 7 && stream > 0) {
       brw_store_register_mem64(brw, query_bo,
@@ -100,7 +100,7 @@ static void
 write_xfb_primitives_written(struct brw_context *brw,
                              drm_intel_bo *bo, int stream, int idx)
 {
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    if (brw->gen >= 7) {
       brw_store_register_mem64(brw, bo, GEN7_SO_NUM_PRIMS_WRITTEN(stream), idx);
@@ -157,7 +157,7 @@ emit_pipeline_stat(struct brw_context *brw, drm_intel_bo *bo,
    /* Emit a flush to make sure various parts of the pipeline are complete and
     * we get an accurate value
     */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    brw_store_register_mem64(brw, bo, reg, idx);
 }
@@ -246,7 +246,7 @@ gen6_queryobj_get_results(struct gl_context *ctx,
        * and correctly emitted the number of pixel shader invocations, but,
        * whomever forgot to undo the multiply by 4.
        */
-      if (brw->gen >= 8 || brw->is_haswell)
+      if (brw->gen == 8 || brw->is_haswell)
          query->Base.Result /= 4;
       break;
 

@@ -25,7 +25,7 @@
 
 #include "codegen/nv50_ir_driver.h"
 
-static INLINE unsigned
+static inline unsigned
 bitcount4(const uint32_t val)
 {
    static const uint8_t cnt[16]
@@ -104,7 +104,7 @@ nv50_vertprog_assign_slots(struct nv50_ir_prog_info *info)
          prog->vp.bfc[info->out[i].si] = i;
          break;
       case TGSI_SEMANTIC_LAYER:
-         prog->gp.has_layer = TRUE;
+         prog->gp.has_layer = true;
          prog->gp.layerid = n;
          break;
       case TGSI_SEMANTIC_VIEWPORT_INDEX:
@@ -316,7 +316,7 @@ nv50_program_create_strmout_state(const struct nv50_ir_prog_info *info,
    return so;
 }
 
-boolean
+bool
 nv50_program_translate(struct nv50_program *prog, uint16_t chipset)
 {
    struct nv50_ir_prog_info *info;
@@ -325,7 +325,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset)
 
    info = CALLOC_STRUCT(nv50_ir_prog_info);
    if (!info)
-      return FALSE;
+      return false;
 
    info->type = prog->type;
    info->target = chipset;
@@ -410,7 +410,7 @@ out:
    return !ret;
 }
 
-boolean
+bool
 nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
 {
    struct nouveau_heap *heap;
@@ -423,7 +423,7 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
    case PIPE_SHADER_FRAGMENT: heap = nv50->screen->gp_code_heap; break;
    default:
       assert(!"invalid program type");
-      return FALSE;
+      return false;
    }
 
    ret = nouveau_heap_alloc(heap, size, prog, &prog->mem);
@@ -440,7 +440,7 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
       ret = nouveau_heap_alloc(heap, size, prog, &prog->mem);
       if (ret) {
          NOUVEAU_ERR("shader too large (0x%x) to fit in code space ?\n", size);
-         return FALSE;
+         return false;
       }
    }
    prog->code_base = prog->mem->start;
@@ -448,10 +448,10 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
    ret = nv50_tls_realloc(nv50->screen, prog->tls_space);
    if (ret < 0) {
       nouveau_heap_free(&prog->mem);
-      return FALSE;
+      return false;
    }
    if (ret > 0)
-      nv50->state.new_tls_space = TRUE;
+      nv50->state.new_tls_space = true;
 
    if (prog->fixups)
       nv50_ir_relocate_code(prog->fixups, prog->code, prog->code_base, 0, 0);
@@ -463,7 +463,7 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
    BEGIN_NV04(nv50->base.pushbuf, NV50_3D(CODE_CB_FLUSH), 1);
    PUSH_DATA (nv50->base.pushbuf, 0);
 
-   return TRUE;
+   return true;
 }
 
 void

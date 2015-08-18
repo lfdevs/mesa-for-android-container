@@ -286,7 +286,8 @@ TargetNVC0::getSVAddress(DataFile shaderFile, const Symbol *sym) const
    case SV_CLIP_DISTANCE:  return 0x2c0 + idx * 4;
    case SV_POINT_COORD:    return 0x2e0 + idx * 4;
    case SV_FACE:           return 0x3fc;
-   case SV_TESS_FACTOR:    return 0x000 + idx * 4;
+   case SV_TESS_OUTER:     return 0x000 + idx * 4;
+   case SV_TESS_INNER:     return 0x010 + idx * 4;
    case SV_TESS_COORD:     return 0x2f0 + idx * 4;
    case SV_NTID:           return kepler ? (0x00 + idx * 4) : ~0;
    case SV_NCTAID:         return kepler ? (0x0c + idx * 4) : ~0;

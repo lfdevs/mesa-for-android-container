@@ -37,7 +37,6 @@
  */
 struct brw_gs_compile
 {
-   struct brw_vec4_compile base;
    struct brw_gs_prog_key key;
    struct brw_gs_prog_data prog_data;
    struct brw_vue_map input_vue_map;
@@ -68,14 +67,20 @@ namespace brw {
 class vec4_gs_visitor : public vec4_visitor
 {
 public:
-   vec4_gs_visitor(struct brw_context *brw,
+   vec4_gs_visitor(const struct brw_compiler *compiler,
+                   void *log_data,
                    struct brw_gs_compile *c,
                    struct gl_shader_program *prog,
                    void *mem_ctx,
-                   bool no_spills);
+                   bool no_spills,
+                   int shader_time_index);
+
+   virtual void nir_setup_inputs(nir_shader *shader);
+   virtual void nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr);
 
 protected:
-   virtual dst_reg *make_reg_for_system_value(ir_variable *ir);
+   virtual dst_reg *make_reg_for_system_value(int location,
+                                              const glsl_type *type);
    virtual void setup_payload();
    virtual void emit_prolog();
    virtual void emit_program_code();
@@ -85,6 +90,9 @@ protected:
    virtual int compute_array_stride(ir_dereference_array *ir);
    virtual void visit(ir_emit_vertex *);
    virtual void visit(ir_end_primitive *);
+   virtual void gs_emit_vertex(int stream_id);
+   virtual void gs_end_primitive();
+   virtual void nir_emit_intrinsic(nir_intrinsic_instr *instr);
 
 protected:
    int setup_varying_inputs(int payload_reg, int *attribute_map,

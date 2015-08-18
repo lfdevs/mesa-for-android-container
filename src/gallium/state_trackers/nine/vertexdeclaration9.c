@@ -34,7 +34,7 @@
 
 #define DBG_CHANNEL DBG_VERTEXDECLARATION
 
-static INLINE enum pipe_format decltype_format(BYTE type)
+static inline enum pipe_format decltype_format(BYTE type)
 {
     switch (type) {
     case D3DDECLTYPE_FLOAT1:    return PIPE_FORMAT_R32_FLOAT;
@@ -60,7 +60,7 @@ static INLINE enum pipe_format decltype_format(BYTE type)
     return PIPE_FORMAT_NONE;
 }
 
-static INLINE unsigned decltype_size(BYTE type)
+static inline unsigned decltype_size(BYTE type)
 {
     switch (type) {
     case D3DDECLTYPE_FLOAT1: return 1 * sizeof(float);
@@ -90,7 +90,7 @@ static INLINE unsigned decltype_size(BYTE type)
  * simple lookup table won't work in that case. Let's just wait
  * with making this more generic until we need it.
  */
-static INLINE boolean
+static inline boolean
 nine_d3ddeclusage_check(unsigned usage, unsigned usage_idx)
 {
     switch (usage) {
@@ -162,7 +162,7 @@ static const char *nine_declusage_names[] =
     [NINE_DECLUSAGE_FOG]             = "FOG",
     [NINE_DECLUSAGE_NONE]            = "(NONE)",
 };
-static INLINE const char *
+static inline const char *
 nine_declusage_name(unsigned ndcl)
 {
     return nine_declusage_names[ndcl % NINE_DECLUSAGE_COUNT];

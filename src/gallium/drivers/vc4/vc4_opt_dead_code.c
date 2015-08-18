@@ -86,7 +86,7 @@ qir_opt_dead_code(struct vc4_compile *c)
         /* Whether we're eliminating texture setup currently. */
         bool dce_tex = false;
 
-        struct simple_node *node, *t;
+        struct list_head *node, *t;
         for (node = c->instructions.prev, t = node->prev;
              &c->instructions != node;
              node = t, t = t->prev) {

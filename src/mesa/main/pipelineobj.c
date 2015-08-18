@@ -244,14 +244,13 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
     *
     *     "If stages is not the special value ALL_SHADER_BITS, and has a bit
     *     set that is not recognized, the error INVALID_VALUE is generated."
-    *
-    * NOT YET SUPPORTED:
-    * GL_TESS_CONTROL_SHADER_BIT
-    * GL_TESS_EVALUATION_SHADER_BIT
     */
    any_valid_stages = GL_VERTEX_SHADER_BIT | GL_FRAGMENT_SHADER_BIT;
    if (_mesa_has_geometry_shaders(ctx))
       any_valid_stages |= GL_GEOMETRY_SHADER_BIT;
+   if (_mesa_has_tessellation(ctx))
+      any_valid_stages |= GL_TESS_CONTROL_SHADER_BIT |
+                          GL_TESS_EVALUATION_SHADER_BIT;
 
    if (stages != GL_ALL_SHADER_BITS && (stages & ~any_valid_stages) != 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glUseProgramStages(Stages)");
@@ -327,6 +326,12 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
 
    if ((stages & GL_GEOMETRY_SHADER_BIT) != 0)
       _mesa_use_shader_program(ctx, GL_GEOMETRY_SHADER, shProg, pipe);
+
+   if ((stages & GL_TESS_CONTROL_SHADER_BIT) != 0)
+      _mesa_use_shader_program(ctx, GL_TESS_CONTROL_SHADER, shProg, pipe);
+
+   if ((stages & GL_TESS_EVALUATION_SHADER_BIT) != 0)
+      _mesa_use_shader_program(ctx, GL_TESS_EVALUATION_SHADER, shProg, pipe);
 }
 
 /**
@@ -588,6 +593,7 @@ _mesa_GetProgramPipelineiv(GLuint pipeline, GLenum pname, GLint *params)
    /* Are geometry shaders available in this context?
     */
    const bool has_gs = _mesa_has_geometry_shaders(ctx);
+   const bool has_tess = _mesa_has_tessellation(ctx);;
 
    if (!pipe) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
@@ -615,11 +621,17 @@ _mesa_GetProgramPipelineiv(GLuint pipeline, GLenum pname, GLint *params)
          ? pipe->CurrentProgram[MESA_SHADER_VERTEX]->Name : 0;
       return;
    case GL_TESS_EVALUATION_SHADER:
-      /* NOT YET SUPPORTED */
-      break;
+      if (!has_tess)
+         break;
+      *params = pipe->CurrentProgram[MESA_SHADER_TESS_EVAL]
+         ? pipe->CurrentProgram[MESA_SHADER_TESS_EVAL]->Name : 0;
+      return;
    case GL_TESS_CONTROL_SHADER:
-      /* NOT YET SUPPORTED */
-      break;
+      if (!has_tess)
+         break;
+      *params = pipe->CurrentProgram[MESA_SHADER_TESS_CTRL]
+         ? pipe->CurrentProgram[MESA_SHADER_TESS_CTRL]->Name : 0;
+      return;
    case GL_GEOMETRY_SHADER:
       if (!has_gs)
          break;
@@ -635,7 +647,7 @@ _mesa_GetProgramPipelineiv(GLuint pipeline, GLenum pname, GLint *params)
    }
 
    _mesa_error(ctx, GL_INVALID_ENUM, "glGetProgramPipelineiv(pname=%s)",
-               _mesa_lookup_enum_by_nr(pname));
+               _mesa_enum_to_string(pname));
 }
 
 /**
@@ -672,6 +684,38 @@ program_stages_all_active(struct gl_pipeline_object *pipe,
    }
 
    return status;
+}
+
+static bool
+program_stages_interleaved_illegally(const struct gl_pipeline_object *pipe)
+{
+   struct gl_shader_program *prev = NULL;
+   unsigned i, j;
+
+   /* Look for programs bound to stages: A -> B -> A, with any intervening
+    * sequence of unrelated programs or empty stages.
+    */
+   for (i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_shader_program *cur = pipe->CurrentProgram[i];
+
+      /* Empty stages anywhere in the pipe are OK */
+      if (!cur || cur == prev)
+         continue;
+
+      if (prev) {
+         /* We've seen an A -> B transition; look at the rest of the pipe
+          * to see if we ever see A again.
+          */
+         for (j = i + 1; j < MESA_SHADER_STAGES; j++) {
+            if (pipe->CurrentProgram[j] == prev)
+               return true;
+         }
+      }
+
+      prev = cur;
+   }
+
+   return false;
 }
 
 extern GLboolean
@@ -722,24 +766,13 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     *         - One program object is active for at least two shader stages
     *           and a second program is active for a shader stage between two
     *           stages for which the first program was active."
-    *
-    * Without Tesselation, the only case where this can occur is the geometry
-    * shader between the fragment shader and vertex shader.
     */
-   if (pipe->CurrentProgram[MESA_SHADER_GEOMETRY]
-       && pipe->CurrentProgram[MESA_SHADER_FRAGMENT]
-       && pipe->CurrentProgram[MESA_SHADER_VERTEX]) {
-      if (pipe->CurrentProgram[MESA_SHADER_VERTEX]->Name == pipe->CurrentProgram[MESA_SHADER_FRAGMENT]->Name &&
-          pipe->CurrentProgram[MESA_SHADER_GEOMETRY]->Name != pipe->CurrentProgram[MESA_SHADER_VERTEX]->Name) {
-         pipe->InfoLog =
-            ralloc_asprintf(pipe,
-                            "Program %d is active for geometry stage between "
-                            "two stages for which another program %d is "
-                            "active",
-                            pipe->CurrentProgram[MESA_SHADER_GEOMETRY]->Name,
-                            pipe->CurrentProgram[MESA_SHADER_VERTEX]->Name);
-         goto err;
-      }
+   if (program_stages_interleaved_illegally(pipe)) {
+      pipe->InfoLog =
+         ralloc_strdup(pipe,
+                       "Program is active for multiple shader stages with an "
+                       "intervening stage provided by another program");
+      goto err;
    }
 
    /* Section 2.11.11 (Shader Execution), subheading "Validation," of the
@@ -756,7 +789,9 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     *           executable vertex shader."
     */
    if (!pipe->CurrentProgram[MESA_SHADER_VERTEX]
-       && pipe->CurrentProgram[MESA_SHADER_GEOMETRY]) {
+       && (pipe->CurrentProgram[MESA_SHADER_GEOMETRY] ||
+           pipe->CurrentProgram[MESA_SHADER_TESS_CTRL] ||
+           pipe->CurrentProgram[MESA_SHADER_TESS_EVAL])) {
       pipe->InfoLog = ralloc_strdup(pipe, "Program lacks a vertex shader");
       goto err;
    }

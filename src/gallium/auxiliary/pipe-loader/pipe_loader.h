@@ -36,10 +36,6 @@
 #include "pipe/p_compiler.h"
 #include "state_tracker/drm_driver.h"
 
-#ifdef HAVE_PIPE_LOADER_XLIB
-#include <X11/Xlib.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -116,21 +112,6 @@ pipe_loader_configuration(struct pipe_loader_device *dev,
 void
 pipe_loader_release(struct pipe_loader_device **devs, int ndev);
 
-#ifdef HAVE_PIPE_LOADER_XLIB
-
-/**
- * Initialize Xlib for an associated display.
- *
- * This function is platform-specific.
- *
- * \sa pipe_loader_probe
- */
-bool
-pipe_loader_sw_probe_xlib(struct pipe_loader_device **devs, Display *display);
-
-#endif
-
-
 #ifdef HAVE_PIPE_LOADER_DRI
 
 /**
@@ -195,13 +176,9 @@ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev);
  * This function is platform-specific.
  *
  * \sa pipe_loader_probe
- *
- * \param auth_x If true, the pipe-loader will attempt to
- *               authenticate with the X server.
  */
 bool
-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd,
-                         boolean auth_x);
+pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd);
 
 #endif
 

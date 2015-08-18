@@ -32,6 +32,7 @@
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
+#include "main/framebuffer.h"
 
 static void
 upload_clip_vp(struct brw_context *brw)
@@ -59,7 +60,9 @@ brw_upload_clip_unit(struct brw_context *brw)
    struct brw_clip_unit_state *clip;
 
    /* _NEW_BUFFERS */
-   struct gl_framebuffer *fb = ctx->DrawBuffer;
+   const struct gl_framebuffer *fb = ctx->DrawBuffer;
+   const float fb_width = (float)_mesa_geometric_width(fb);
+   const float fb_height = (float)_mesa_geometric_height(fb);
 
    upload_clip_vp(brw);
 
@@ -127,8 +130,8 @@ brw_upload_clip_unit(struct brw_context *brw)
    /* enable guardband clipping if we can */
    if (ctx->ViewportArray[0].X == 0 &&
        ctx->ViewportArray[0].Y == 0 &&
-       ctx->ViewportArray[0].Width == (float) fb->Width &&
-       ctx->ViewportArray[0].Height == (float) fb->Height)
+       ctx->ViewportArray[0].Width == fb_width &&
+       ctx->ViewportArray[0].Height == fb_height)
    {
       clip->clip5.guard_band_enable = 1;
       clip->clip6.clipper_viewport_state_ptr =

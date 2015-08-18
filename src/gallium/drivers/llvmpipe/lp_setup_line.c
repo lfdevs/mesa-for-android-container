@@ -233,7 +233,7 @@ static void setup_line_coefficients( struct lp_setup_context *setup,
 
 
 
-static INLINE int subpixel_snap( float a )
+static inline int subpixel_snap( float a )
 {
    return util_iround(FIXED_ONE * a);
 }
@@ -262,14 +262,14 @@ print_line(struct lp_setup_context *setup,
 }
 
 
-static INLINE boolean sign(float x){
+static inline boolean sign(float x){
    return x >= 0;  
 }  
 
 
 /* Used on positive floats only:
  */
-static INLINE float fracf(float f)
+static inline float fracf(float f)
 {
    return f - floorf(f);
 }

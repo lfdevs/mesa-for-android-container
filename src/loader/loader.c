@@ -64,6 +64,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include <errno.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -71,10 +73,8 @@
 #ifdef HAVE_LIBUDEV
 #include <assert.h>
 #include <dlfcn.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <errno.h>
 #ifdef USE_DRICONF
 #include "xmlconfig.h"
 #include "xmlpool.h"
@@ -85,7 +85,7 @@
 #endif
 #include "loader.h"
 
-#ifndef __NOT_HAVE_DRM_H
+#ifdef HAVE_LIBDRM
 #include <xf86drm.h>
 #endif
 
@@ -103,6 +103,22 @@ static void default_logger(int level, const char *fmt, ...)
 }
 
 static void (*log_)(int level, const char *fmt, ...) = default_logger;
+
+int
+loader_open_device(const char *device_name)
+{
+   int fd;
+#ifdef O_CLOEXEC
+   fd = open(device_name, O_RDWR | O_CLOEXEC);
+   if (fd == -1 && errno == EINVAL)
+#endif
+   {
+      fd = open(device_name, O_RDWR);
+      if (fd != -1)
+         fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+   }
+   return fd;
+}
 
 #ifdef HAVE_LIBUDEV
 #include <libudev.h>
@@ -257,6 +273,8 @@ get_render_node_from_id_path_tag(struct udev *udev,
                (struct udev_enumerate *));
    UDEV_SYMBOL(struct udev_list_entry *, udev_enumerate_get_list_entry,
                (struct udev_enumerate *));
+   UDEV_SYMBOL(void, udev_enumerate_unref,
+               (struct udev_enumerate *));
    UDEV_SYMBOL(struct udev_list_entry *, udev_list_entry_get_next,
                (struct udev_list_entry *));
    UDEV_SYMBOL(const char *, udev_list_entry_get_name,
@@ -291,6 +309,8 @@ get_render_node_from_id_path_tag(struct udev *udev,
       udev_device_unref(device);
    }
 
+   udev_enumerate_unref(e);
+
    if (found) {
       path_res = strdup(udev_device_get_devnode(device));
       udev_device_unref(device);
@@ -322,22 +342,6 @@ get_id_path_tag_from_fd(struct udev *udev, int fd)
 
    udev_device_unref(device);
    return id_path_tag;
-}
-
-static int
-drm_open_device(const char *device_name)
-{
-   int fd;
-#ifdef O_CLOEXEC
-   fd = open(device_name, O_RDWR | O_CLOEXEC);
-   if (fd == -1 && errno == EINVAL)
-#endif
-   {
-      fd = open(device_name, O_RDWR);
-      if (fd != -1)
-         fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
-   }
-   return fd;
 }
 
 #ifdef USE_DRICONF
@@ -414,7 +418,7 @@ int loader_get_user_preferred_fd(int default_fd, int *different_device)
       goto default_device_clean;
    }
 
-   fd = drm_open_device(device_name);
+   fd = loader_open_device(device_name);
    if (fd >= 0) {
       close(default_fd);
    } else {
@@ -501,7 +505,7 @@ sysfs_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
 }
 #endif
 
-#if !defined(__NOT_HAVE_DRM_H)
+#if defined(HAVE_LIBDRM)
 /* for i915 */
 #include <i915_drm.h>
 /* for radeon */
@@ -584,7 +588,7 @@ loader_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
    if (sysfs_get_pci_id_for_fd(fd, vendor_id, chip_id))
       return 1;
 #endif
-#if !defined(__NOT_HAVE_DRM_H)
+#if HAVE_LIBDRM
    if (drm_get_pci_id_for_fd(fd, vendor_id, chip_id))
       return 1;
 #endif
@@ -695,7 +699,7 @@ loader_get_driver_for_fd(int fd, unsigned driver_types)
 
    if (!loader_get_pci_id_for_fd(fd, &vendor_id, &chip_id)) {
 
-#ifndef __NOT_HAVE_DRM_H
+#if HAVE_LIBDRM
       /* fallback to drmGetVersion(): */
       drmVersionPtr version = drmGetVersion(fd);
 

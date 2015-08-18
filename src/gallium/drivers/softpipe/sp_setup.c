@@ -125,7 +125,7 @@ struct setup_context {
 /**
  * Clip setup->quad against the scissor/surface bounds.
  */
-static INLINE void
+static inline void
 quad_clip(struct setup_context *setup, struct quad_header *quad)
 {
    const struct pipe_scissor_state *cliprect = &setup->softpipe->cliprect;
@@ -156,7 +156,7 @@ quad_clip(struct setup_context *setup, struct quad_header *quad)
 /**
  * Emit a quad (pass to next stage) with clipping.
  */
-static INLINE void
+static inline void
 clip_emit_quad(struct setup_context *setup, struct quad_header *quad)
 {
    quad_clip( setup, quad );
@@ -178,14 +178,14 @@ clip_emit_quad(struct setup_context *setup, struct quad_header *quad)
  * Given an X or Y coordinate, return the block/quad coordinate that it
  * belongs to.
  */
-static INLINE int
+static inline int
 block(int x)
 {
    return x & ~(2-1);
 }
 
 
-static INLINE int
+static inline int
 block_x(int x)
 {
    return x & ~(16-1);
@@ -1039,7 +1039,7 @@ setup_line_coefficients(struct setup_context *setup,
 /**
  * Plot a pixel in a line segment.
  */
-static INLINE void
+static inline void
 plot(struct setup_context *setup, int x, int y)
 {
    const int iy = y & 1;

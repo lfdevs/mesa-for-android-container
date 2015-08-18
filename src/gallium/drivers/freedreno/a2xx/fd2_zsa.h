@@ -44,7 +44,7 @@ struct fd2_zsa_stateobj {
 	uint32_t rb_stencilrefmask_bf;
 };
 
-static INLINE struct fd2_zsa_stateobj *
+static inline struct fd2_zsa_stateobj *
 fd2_zsa_stateobj(struct pipe_depth_stencil_alpha_state *zsa)
 {
 	return (struct fd2_zsa_stateobj *)zsa;

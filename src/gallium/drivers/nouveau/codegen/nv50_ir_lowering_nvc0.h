@@ -111,10 +111,11 @@ protected:
 
    void checkPredicate(Instruction *);
 
+   virtual bool visit(Instruction *);
+
 private:
    virtual bool visit(Function *);
    virtual bool visit(BasicBlock *);
-   virtual bool visit(Instruction *);
 
    void readTessCoord(LValue *dst, int c);
 

@@ -121,11 +121,11 @@ _eglPutImage(_EGLImage *img)
  * Link an image to its display and return the handle of the link.
  * The handle can be passed to client directly.
  */
-static inline EGLImageKHR
+static inline EGLImage
 _eglLinkImage(_EGLImage *img)
 {
    _eglLinkResource(&img->Resource, _EGL_RESOURCE_IMAGE);
-   return (EGLImageKHR) img;
+   return (EGLImage) img;
 }
 
 
@@ -145,7 +145,7 @@ _eglUnlinkImage(_EGLImage *img)
  * Return NULL if the handle has no corresponding linked image.
  */
 static inline _EGLImage *
-_eglLookupImage(EGLImageKHR image, _EGLDisplay *dpy)
+_eglLookupImage(EGLImage image, _EGLDisplay *dpy)
 {
    _EGLImage *img = (_EGLImage *) image;
    if (!dpy || !_eglCheckResource((void *) img, _EGL_RESOURCE_IMAGE, dpy))
@@ -157,12 +157,12 @@ _eglLookupImage(EGLImageKHR image, _EGLDisplay *dpy)
 /**
  * Return the handle of a linked image, or EGL_NO_IMAGE_KHR.
  */
-static inline EGLImageKHR
+static inline EGLImage
 _eglGetImageHandle(_EGLImage *img)
 {
    _EGLResource *res = (_EGLResource *) img;
    return (res && _eglIsResourceLinked(res)) ?
-      (EGLImageKHR) img : EGL_NO_IMAGE_KHR;
+      (EGLImage) img : EGL_NO_IMAGE_KHR;
 }
 
 

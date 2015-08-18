@@ -83,9 +83,6 @@ struct fd4_context {
 	 */
 	uint16_t fsaturate_s, fsaturate_t, fsaturate_r;
 
-	/* bitmask of integer texture samplers */
-	uint16_t vinteger_s, finteger_s;
-
 	/* some state changes require a different shader variant.  Keep
 	 * track of this so we know when we need to re-emit shader state
 	 * due to variant change.  See fixup_shader_state()
@@ -93,7 +90,7 @@ struct fd4_context {
 	struct ir3_shader_key last_key;
 };
 
-static INLINE struct fd4_context *
+static inline struct fd4_context *
 fd4_context(struct fd_context *ctx)
 {
 	return (struct fd4_context *)ctx;

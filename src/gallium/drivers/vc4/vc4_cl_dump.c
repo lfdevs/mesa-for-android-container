@@ -34,7 +34,7 @@ dump_float(void *cl, uint32_t offset, uint32_t hw_offset)
         void *f = cl + offset;
 
         fprintf(stderr, "0x%08x 0x%08x:      %f (0x%08x)\n",
-                offset, hw_offset, *(float *)f, *(uint32_t *)f);
+                offset, hw_offset, uif(*(uint32_t *)f), *(uint32_t *)f);
 }
 
 static void
@@ -47,7 +47,33 @@ dump_VC4_PACKET_BRANCH_TO_SUB_LIST(void *cl, uint32_t offset, uint32_t hw_offset
 }
 
 static void
-dump_VC4_PACKET_STORE_TILE_BUFFER_GENERAL(void *cl, uint32_t offset, uint32_t hw_offset)
+dump_loadstore_full(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        uint32_t bits = *(uint32_t *)(cl + offset);
+
+        fprintf(stderr, "0x%08x 0x%08x:      addr 0x%08x%s%s%s%s\n",
+                offset, hw_offset,
+                bits & ~0xf,
+                (bits & VC4_LOADSTORE_FULL_RES_DISABLE_CLEAR_ALL) ? "" : " clear",
+                (bits & VC4_LOADSTORE_FULL_RES_DISABLE_ZS) ? "" : " zs",
+                (bits & VC4_LOADSTORE_FULL_RES_DISABLE_COLOR) ? "" : " color",
+                (bits & VC4_LOADSTORE_FULL_RES_EOF) ? " eof" : "");
+}
+
+static void
+dump_VC4_PACKET_LOAD_FULL_RES_TILE_BUFFER(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        dump_loadstore_full(cl, offset, hw_offset);
+}
+
+static void
+dump_VC4_PACKET_STORE_FULL_RES_TILE_BUFFER(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        dump_loadstore_full(cl, offset, hw_offset);
+}
+
+static void
+dump_loadstore_general(void *cl, uint32_t offset, uint32_t hw_offset)
 {
         uint8_t *bytes = cl + offset;
         uint32_t *addr = cl + offset + 2;
@@ -125,6 +151,18 @@ dump_VC4_PACKET_STORE_TILE_BUFFER_GENERAL(void *cl, uint32_t offset, uint32_t hw
 }
 
 static void
+dump_VC4_PACKET_STORE_TILE_BUFFER_GENERAL(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        dump_loadstore_general(cl, offset, hw_offset);
+}
+
+static void
+dump_VC4_PACKET_LOAD_TILE_BUFFER_GENERAL(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        dump_loadstore_general(cl, offset, hw_offset);
+}
+
+static void
 dump_VC4_PACKET_FLAT_SHADE_FLAGS(void *cl, uint32_t offset, uint32_t hw_offset)
 {
         uint32_t *bits = cl + offset;
@@ -171,6 +209,37 @@ dump_VC4_PACKET_CLIPPER_Z_SCALING(void *cl, uint32_t offset, uint32_t hw_offset)
                 offset + 8, hw_offset + 8,
                 uif(scale[0]), uif(scale[1]),
                 scale[0], scale[1]);
+}
+
+static void
+dump_VC4_PACKET_TILE_BINNING_MODE_CONFIG(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        uint32_t *tile_alloc_addr = cl + offset;
+        uint32_t *tile_alloc_size = cl + offset + 4;
+        uint32_t *tile_state_addr = cl + offset + 8;
+        uint8_t *bin_x = cl + offset + 12;
+        uint8_t *bin_y = cl + offset + 13;
+        uint8_t *flags = cl + offset + 14;
+
+        fprintf(stderr, "0x%08x 0x%08x:       tile alloc addr 0x%08x\n",
+                offset, hw_offset,
+                *tile_alloc_addr);
+
+        fprintf(stderr, "0x%08x 0x%08x:       tile alloc size %db\n",
+                offset + 4, hw_offset + 4,
+                *tile_alloc_size);
+
+        fprintf(stderr, "0x%08x 0x%08x:       tile state addr 0x%08x\n",
+                offset + 8, hw_offset + 8,
+                *tile_state_addr);
+
+        fprintf(stderr, "0x%08x 0x%08x:       tiles (%d, %d)\n",
+                offset + 12, hw_offset + 12,
+                *bin_x, *bin_y);
+
+        fprintf(stderr, "0x%08x 0x%08x:       flags 0x%02x\n",
+                offset + 14, hw_offset + 14,
+                *flags);
 }
 
 static void
@@ -260,63 +329,63 @@ dump_VC4_PACKET_GEM_HANDLES(void *cl, uint32_t offset, uint32_t hw_offset)
                 offset, hw_offset, handles[0], handles[1]);
 }
 
-#define PACKET_DUMP(name, size) [name] = { #name, size, dump_##name }
-#define PACKET(name, size) [name] = { #name, size, NULL }
+#define PACKET_DUMP(name) [name] = { #name, name ## _SIZE, dump_##name }
+#define PACKET(name) [name] = { #name, name ## _SIZE, NULL }
 
 static const struct packet_info {
         const char *name;
         uint8_t size;
         void (*dump_func)(void *cl, uint32_t offset, uint32_t hw_offset);
 } packet_info[] = {
-        PACKET(VC4_PACKET_HALT, 1),
-        PACKET(VC4_PACKET_NOP, 1),
+        PACKET(VC4_PACKET_HALT),
+        PACKET(VC4_PACKET_NOP),
 
-        PACKET(VC4_PACKET_FLUSH, 1),
-        PACKET(VC4_PACKET_FLUSH_ALL, 1),
-        PACKET(VC4_PACKET_START_TILE_BINNING, 1),
-        PACKET(VC4_PACKET_INCREMENT_SEMAPHORE, 1),
-        PACKET(VC4_PACKET_WAIT_ON_SEMAPHORE, 1),
+        PACKET(VC4_PACKET_FLUSH),
+        PACKET(VC4_PACKET_FLUSH_ALL),
+        PACKET(VC4_PACKET_START_TILE_BINNING),
+        PACKET(VC4_PACKET_INCREMENT_SEMAPHORE),
+        PACKET(VC4_PACKET_WAIT_ON_SEMAPHORE),
 
-        PACKET(VC4_PACKET_BRANCH, 5),
-        PACKET_DUMP(VC4_PACKET_BRANCH_TO_SUB_LIST, 5),
+        PACKET(VC4_PACKET_BRANCH),
+        PACKET_DUMP(VC4_PACKET_BRANCH_TO_SUB_LIST),
 
-        PACKET(VC4_PACKET_STORE_MS_TILE_BUFFER, 1),
-        PACKET(VC4_PACKET_STORE_MS_TILE_BUFFER_AND_EOF, 1),
-        PACKET(VC4_PACKET_STORE_FULL_RES_TILE_BUFFER, 5),
-        PACKET(VC4_PACKET_LOAD_FULL_RES_TILE_BUFFER, 5),
-        PACKET_DUMP(VC4_PACKET_STORE_TILE_BUFFER_GENERAL, 7),
-        PACKET(VC4_PACKET_LOAD_TILE_BUFFER_GENERAL, 7),
+        PACKET(VC4_PACKET_STORE_MS_TILE_BUFFER),
+        PACKET(VC4_PACKET_STORE_MS_TILE_BUFFER_AND_EOF),
+        PACKET_DUMP(VC4_PACKET_STORE_FULL_RES_TILE_BUFFER),
+        PACKET_DUMP(VC4_PACKET_LOAD_FULL_RES_TILE_BUFFER),
+        PACKET_DUMP(VC4_PACKET_STORE_TILE_BUFFER_GENERAL),
+        PACKET_DUMP(VC4_PACKET_LOAD_TILE_BUFFER_GENERAL),
 
-        PACKET(VC4_PACKET_GL_INDEXED_PRIMITIVE, 14),
-        PACKET(VC4_PACKET_GL_ARRAY_PRIMITIVE, 10),
+        PACKET(VC4_PACKET_GL_INDEXED_PRIMITIVE),
+        PACKET(VC4_PACKET_GL_ARRAY_PRIMITIVE),
 
-        PACKET(VC4_PACKET_COMPRESSED_PRIMITIVE, 48),
-        PACKET(VC4_PACKET_CLIPPED_COMPRESSED_PRIMITIVE, 49),
+        PACKET(VC4_PACKET_COMPRESSED_PRIMITIVE),
+        PACKET(VC4_PACKET_CLIPPED_COMPRESSED_PRIMITIVE),
 
-        PACKET(VC4_PACKET_PRIMITIVE_LIST_FORMAT, 2),
+        PACKET(VC4_PACKET_PRIMITIVE_LIST_FORMAT),
 
-        PACKET(VC4_PACKET_GL_SHADER_STATE, 5),
-        PACKET(VC4_PACKET_NV_SHADER_STATE, 5),
-        PACKET(VC4_PACKET_VG_SHADER_STATE, 5),
+        PACKET(VC4_PACKET_GL_SHADER_STATE),
+        PACKET(VC4_PACKET_NV_SHADER_STATE),
+        PACKET(VC4_PACKET_VG_SHADER_STATE),
 
-        PACKET(VC4_PACKET_CONFIGURATION_BITS, 4),
-        PACKET_DUMP(VC4_PACKET_FLAT_SHADE_FLAGS, 5),
-        PACKET_DUMP(VC4_PACKET_POINT_SIZE, 5),
-        PACKET_DUMP(VC4_PACKET_LINE_WIDTH, 5),
-        PACKET(VC4_PACKET_RHT_X_BOUNDARY, 3),
-        PACKET(VC4_PACKET_DEPTH_OFFSET, 5),
-        PACKET(VC4_PACKET_CLIP_WINDOW, 9),
-        PACKET_DUMP(VC4_PACKET_VIEWPORT_OFFSET, 5),
-        PACKET(VC4_PACKET_Z_CLIPPING, 9),
-        PACKET_DUMP(VC4_PACKET_CLIPPER_XY_SCALING, 9),
-        PACKET_DUMP(VC4_PACKET_CLIPPER_Z_SCALING, 9),
+        PACKET(VC4_PACKET_CONFIGURATION_BITS),
+        PACKET_DUMP(VC4_PACKET_FLAT_SHADE_FLAGS),
+        PACKET_DUMP(VC4_PACKET_POINT_SIZE),
+        PACKET_DUMP(VC4_PACKET_LINE_WIDTH),
+        PACKET(VC4_PACKET_RHT_X_BOUNDARY),
+        PACKET(VC4_PACKET_DEPTH_OFFSET),
+        PACKET(VC4_PACKET_CLIP_WINDOW),
+        PACKET_DUMP(VC4_PACKET_VIEWPORT_OFFSET),
+        PACKET(VC4_PACKET_Z_CLIPPING),
+        PACKET_DUMP(VC4_PACKET_CLIPPER_XY_SCALING),
+        PACKET_DUMP(VC4_PACKET_CLIPPER_Z_SCALING),
 
-        PACKET(VC4_PACKET_TILE_BINNING_MODE_CONFIG, 16),
-        PACKET_DUMP(VC4_PACKET_TILE_RENDERING_MODE_CONFIG, 11),
-        PACKET(VC4_PACKET_CLEAR_COLORS, 14),
-        PACKET_DUMP(VC4_PACKET_TILE_COORDINATES, 3),
+        PACKET_DUMP(VC4_PACKET_TILE_BINNING_MODE_CONFIG),
+        PACKET_DUMP(VC4_PACKET_TILE_RENDERING_MODE_CONFIG),
+        PACKET(VC4_PACKET_CLEAR_COLORS),
+        PACKET_DUMP(VC4_PACKET_TILE_COORDINATES),
 
-        PACKET_DUMP(VC4_PACKET_GEM_HANDLES, 9),
+        PACKET_DUMP(VC4_PACKET_GEM_HANDLES),
 };
 
 void
@@ -328,7 +397,7 @@ vc4_dump_cl(void *cl, uint32_t size, bool is_render)
         while (offset < size) {
                 uint8_t header = cmds[offset];
 
-                if (header > ARRAY_SIZE(packet_info) ||
+                if (header >= ARRAY_SIZE(packet_info) ||
                     !packet_info[header].name) {
                         fprintf(stderr, "0x%08x 0x%08x: Unknown packet 0x%02x (%d)!\n",
                                 offset, hw_offset, header, header);

@@ -50,7 +50,7 @@ struct NineSurface9
     uint8_t *data; /* system memory backing */
     unsigned stride; /* for system memory backing */
 };
-static INLINE struct NineSurface9 *
+static inline struct NineSurface9 *
 NineSurface9( void *data )
 {
     return (struct NineSurface9 *)data;
@@ -89,7 +89,7 @@ NineSurface9_MarkContainerDirty( struct NineSurface9 *This );
 struct pipe_surface *
 NineSurface9_CreatePipeSurface( struct NineSurface9 *This, const int sRGB );
 
-static INLINE struct pipe_surface *
+static inline struct pipe_surface *
 NineSurface9_GetSurface( struct NineSurface9 *This, int sRGB )
 {
     if (This->surface[sRGB])
@@ -97,13 +97,13 @@ NineSurface9_GetSurface( struct NineSurface9 *This, int sRGB )
     return NineSurface9_CreatePipeSurface(This, sRGB);
 }
 
-static INLINE struct pipe_resource *
+static inline struct pipe_resource *
 NineSurface9_GetResource( struct NineSurface9 *This )
 {
     return This->base.resource;
 }
 
-static INLINE void
+static inline void
 NineSurface9_SetResource( struct NineSurface9 *This,
                           struct pipe_resource *resource, unsigned level )
 {
@@ -131,7 +131,7 @@ NineSurface9_CopySurface( struct NineSurface9 *This,
                           const POINT *pDestPoint,
                           const RECT *pSourceRect );
 
-static INLINE boolean
+static inline boolean
 NineSurface9_IsOffscreenPlain (struct NineSurface9 *This )
 {
     return This->base.usage == 0 && !This->texture;
@@ -141,7 +141,7 @@ NineSurface9_IsOffscreenPlain (struct NineSurface9 *This )
 void
 NineSurface9_Dump( struct NineSurface9 *This );
 #else
-static INLINE void
+static inline void
 NineSurface9_Dump( struct NineSurface9 *This ) { }
 #endif
 

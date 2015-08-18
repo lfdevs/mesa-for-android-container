@@ -83,7 +83,7 @@ struct widepoint_stage {
 
 
 
-static INLINE struct widepoint_stage *
+static inline struct widepoint_stage *
 widepoint_stage( struct draw_stage *stage )
 {
    return (struct widepoint_stage *)stage;

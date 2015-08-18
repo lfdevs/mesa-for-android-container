@@ -254,7 +254,7 @@ CHECK( never, GL_FALSE, 0 )
 CHECK( tex_any, ctx->Texture._MaxEnabledTexImageUnit != -1, 0 )
 CHECK( tf, (ctx->Texture._MaxEnabledTexImageUnit != -1 && !ctx->ATIFragmentShader._Enabled), 0 );
 CHECK( pix_zero, !ctx->ATIFragmentShader._Enabled, 0 )
-   CHECK( texenv, (rmesa->state.envneeded & (1 << (atom->idx)) && !ctx->ATIFragmentShader._Enabled), 0 )
+CHECK( texenv, (rmesa->state.envneeded & (1 << (atom->idx)) && !ctx->ATIFragmentShader._Enabled), 0 )
 CHECK( afs_pass1, (ctx->ATIFragmentShader._Enabled && (ctx->ATIFragmentShader.Current->NumPasses > 1)), 0 )
 CHECK( afs, ctx->ATIFragmentShader._Enabled, 0 )
 CHECK( tex_cube, rmesa->state.texture.unit[atom->idx].unitneeded & TEXTURE_CUBE_BIT, 3 + 3*5 - CUBE_STATE_SIZE )
@@ -453,12 +453,15 @@ static void ctx_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_ARGB8888;
    else switch (rrb->base.Base.Format) {
    case MESA_FORMAT_B5G6R5_UNORM:
+   case MESA_FORMAT_R5G6B5_UNORM:
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_RGB565;
 	break;
    case MESA_FORMAT_B4G4R4A4_UNORM:
+   case MESA_FORMAT_A4R4G4B4_UNORM:
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_ARGB4444;
 	break;
    case MESA_FORMAT_B5G5R5A1_UNORM:
+   case MESA_FORMAT_A1R5G5B5_UNORM:
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_ARGB1555;
 	break;
    default:

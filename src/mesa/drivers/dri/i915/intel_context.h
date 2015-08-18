@@ -273,8 +273,6 @@ struct intel_context
 
    bool use_early_z;
 
-   int driFd;
-
    __DRIcontext *driContext;
    struct intel_screen *intelScreen;
 

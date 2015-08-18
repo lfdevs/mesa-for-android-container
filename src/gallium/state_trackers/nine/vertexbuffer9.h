@@ -40,7 +40,7 @@ struct NineVertexBuffer9
 
     D3DVERTEXBUFFER_DESC desc;
 };
-static INLINE struct NineVertexBuffer9 *
+static inline struct NineVertexBuffer9 *
 NineVertexBuffer9( void *data )
 {
     return (struct NineVertexBuffer9 *)data;

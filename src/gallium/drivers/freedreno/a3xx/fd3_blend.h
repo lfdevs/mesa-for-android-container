@@ -32,6 +32,8 @@
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
 
+#include "freedreno_util.h"
+
 struct fd3_blend_stateobj {
 	struct pipe_blend_state base;
 	struct {
@@ -42,10 +44,10 @@ struct fd3_blend_stateobj {
 		/* Blend control bits for alpha channel */
 		uint32_t blend_control_alpha;
 		uint32_t control;
-	} rb_mrt[4];
+	} rb_mrt[A3XX_MAX_RENDER_TARGETS];
 };
 
-static INLINE struct fd3_blend_stateobj *
+static inline struct fd3_blend_stateobj *
 fd3_blend_stateobj(struct pipe_blend_state *blend)
 {
 	return (struct fd3_blend_stateobj *)blend;

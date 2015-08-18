@@ -41,7 +41,7 @@ static bool is_eligible_mov(struct ir3_instruction *instr, bool allow_flags)
 		struct ir3_register *dst = instr->regs[0];
 		struct ir3_register *src = instr->regs[1];
 		struct ir3_instruction *src_instr = ssa(src);
-		if (dst->flags & (IR3_REG_ADDR | IR3_REG_RELATIV))
+		if (dst->flags & IR3_REG_RELATIV)
 			return false;
 		if (src->flags & IR3_REG_RELATIV)
 			return false;
@@ -53,6 +53,13 @@ static bool is_eligible_mov(struct ir3_instruction *instr, bool allow_flags)
 			return false;
 		/* TODO: remove this hack: */
 		if (is_meta(src_instr) && (src_instr->opc == OPC_META_FO))
+			return false;
+		/* TODO: we currently don't handle left/right neighbors
+		 * very well when inserting parallel-copies into phi..
+		 * to avoid problems don't eliminate a mov coming out
+		 * of phi..
+		 */
+		if (is_meta(src_instr) && (src_instr->opc == OPC_META_PHI))
 			return false;
 		return true;
 	}
@@ -284,7 +291,7 @@ reg_cp(struct ir3_instruction *instr, struct ir3_register *reg, unsigned n)
 			instr->regs[n+1] = src_reg;
 
 			if (src_reg->flags & IR3_REG_RELATIV)
-				instr->address = reg->instr->address;
+				ir3_instr_set_address(instr, reg->instr->address);
 
 			return;
 		}
@@ -293,7 +300,7 @@ reg_cp(struct ir3_instruction *instr, struct ir3_register *reg, unsigned n)
 				!conflicts(instr->address, reg->instr->address)) {
 			src_reg->flags = new_flags;
 			instr->regs[n+1] = src_reg;
-			instr->address = reg->instr->address;
+			ir3_instr_set_address(instr, reg->instr->address);
 
 			return;
 		}
@@ -354,13 +361,6 @@ instr_cp(struct ir3_instruction *instr, unsigned *flags)
 {
 	struct ir3_register *reg;
 
-	/* stay within the block.. don't try to operate across
-	 * basic block boundaries or we'll have problems when
-	 * dealing with multiple basic blocks:
-	 */
-	if (is_meta(instr) && (instr->opc == OPC_META_INPUT))
-		return instr;
-
 	if (is_eligible_mov(instr, !!flags)) {
 		struct ir3_register *reg = instr->regs[1];
 		struct ir3_instruction *src_instr = ssa(reg);
@@ -389,27 +389,31 @@ instr_cp(struct ir3_instruction *instr, unsigned *flags)
 	}
 
 	if (instr->address)
-		instr->address = instr_cp(instr->address, NULL);
+		ir3_instr_set_address(instr, instr_cp(instr->address, NULL));
 
 	return instr;
 }
 
-static void block_cp(struct ir3_block *block)
+void
+ir3_cp(struct ir3 *ir)
 {
-	unsigned i;
+	ir3_clear_mark(ir);
 
-	for (i = 0; i < block->noutputs; i++) {
-		if (block->outputs[i]) {
+	for (unsigned i = 0; i < ir->noutputs; i++) {
+		if (ir->outputs[i]) {
 			struct ir3_instruction *out =
-					instr_cp(block->outputs[i], NULL);
+					instr_cp(ir->outputs[i], NULL);
 
-			block->outputs[i] = out;
+			ir->outputs[i] = out;
 		}
 	}
-}
 
-void ir3_block_cp(struct ir3_block *block)
-{
-	ir3_clear_mark(block->shader);
-	block_cp(block);
+	for (unsigned i = 0; i < ir->keeps_count; i++) {
+		ir->keeps[i] = instr_cp(ir->keeps[i], NULL);
+	}
+
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		if (block->condition)
+			block->condition = instr_cp(block->condition, NULL);
+	}
 }

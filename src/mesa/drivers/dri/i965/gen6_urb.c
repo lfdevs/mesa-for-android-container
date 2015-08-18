@@ -120,7 +120,7 @@ gen6_upload_urb( struct brw_context *brw )
     * a workaround.
     */
    if (brw->urb.gs_present && !gs_present)
-      intel_batchbuffer_emit_mi_flush(brw);
+      brw_emit_mi_flush(brw);
    brw->urb.gs_present = gs_present;
 }
 

@@ -153,7 +153,7 @@ xa_tracker_create(int drm_fd)
     loader_fd = dup(drm_fd);
     if (loader_fd == -1)
         return NULL;
-    if (pipe_loader_drm_probe_fd(&xa->dev, loader_fd, false))
+    if (pipe_loader_drm_probe_fd(&xa->dev, loader_fd))
 	xa->screen = pipe_loader_create_screen(xa->dev, PIPE_SEARCH_DIR);
 #endif
     if (!xa->screen)

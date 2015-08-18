@@ -29,7 +29,7 @@ struct Nine9ExOverlayExtension
 {
     struct NineUnknown base;
 };
-static INLINE struct Nine9ExOverlayExtension *
+static inline struct Nine9ExOverlayExtension *
 Nine9ExOverlayExtension( void *data )
 {
     return (struct Nine9ExOverlayExtension *)data;

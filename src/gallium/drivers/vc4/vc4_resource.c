@@ -26,6 +26,7 @@
 #include "util/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_surface.h"
+#include "util/u_upload_mgr.h"
 
 #include "vc4_screen.h"
 #include "vc4_context.h"
@@ -101,6 +102,12 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
 
         if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) {
                 vc4_resource_bo_alloc(rsc);
+
+                /* If it might be bound as one of our vertex buffers, make
+                 * sure we re-emit vertex buffer state.
+                 */
+                if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
+                        vc4->dirty |= VC4_DIRTY_VTXBUF;
         } else if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
                 if (vc4_cl_references_bo(pctx, rsc->bo)) {
                         if ((usage & PIPE_TRANSFER_DISCARD_RANGE) &&
@@ -109,6 +116,8 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
                             prsc->height0 == box->height &&
                             prsc->depth0 == box->depth) {
                                 vc4_resource_bo_alloc(rsc);
+                                if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
+                                        vc4->dirty |= VC4_DIRTY_VTXBUF;
                         } else {
                                 vc4_flush(pctx);
                         }
@@ -161,6 +170,8 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
                 /* We need to align the box to utile boundaries, since that's
                  * what load/store operate on.
                  */
+                uint32_t orig_width = ptrans->box.width;
+                uint32_t orig_height = ptrans->box.height;
                 uint32_t box_start_x = ptrans->box.x & (utile_w - 1);
                 uint32_t box_start_y = ptrans->box.y & (utile_h - 1);
                 ptrans->box.width += box_start_x;
@@ -174,7 +185,9 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
                 ptrans->layer_stride = ptrans->stride;
 
                 trans->map = malloc(ptrans->stride * ptrans->box.height);
-                if (usage & PIPE_TRANSFER_READ) {
+                if (usage & PIPE_TRANSFER_READ ||
+                    ptrans->box.width != orig_width ||
+                    ptrans->box.height != orig_height) {
                         vc4_load_tiled_image(trans->map, ptrans->stride,
                                              buf + slice->offset +
                                              box->z * rsc->cube_map_stride,
@@ -638,18 +651,21 @@ vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
  * was in user memory, it would be nice to not have uploaded it to a VBO
  * before translating.
  */
-void
-vc4_update_shadow_index_buffer(struct pipe_context *pctx,
-                               const struct pipe_index_buffer *ib)
+struct pipe_resource *
+vc4_get_shadow_index_buffer(struct pipe_context *pctx,
+                            const struct pipe_index_buffer *ib,
+                            uint32_t count,
+                            uint32_t *shadow_offset)
 {
-        struct vc4_resource *shadow = vc4_resource(ib->buffer);
-        struct vc4_resource *orig = vc4_resource(shadow->shadow_parent);
-        uint32_t count = shadow->base.b.width0 / 2;
-
-        if (shadow->writes == orig->writes)
-                return;
-
+        struct vc4_context *vc4 = vc4_context(pctx);
+        struct vc4_resource *orig = vc4_resource(ib->buffer);
         perf_debug("Fallback conversion for %d uint indices\n", count);
+
+        void *data;
+        struct pipe_resource *shadow_rsc = NULL;
+        u_upload_alloc(vc4->uploader, 0, count * 2,
+                       shadow_offset, &shadow_rsc, &data);
+        uint16_t *dst = data;
 
         struct pipe_transfer *src_transfer;
         uint32_t *src = pipe_buffer_map_range(pctx, &orig->base.b,
@@ -657,22 +673,15 @@ vc4_update_shadow_index_buffer(struct pipe_context *pctx,
                                               count * 4,
                                               PIPE_TRANSFER_READ, &src_transfer);
 
-        struct pipe_transfer *dst_transfer;
-        uint16_t *dst = pipe_buffer_map_range(pctx, &shadow->base.b,
-                                              0,
-                                              count * 2,
-                                              PIPE_TRANSFER_WRITE, &dst_transfer);
-
         for (int i = 0; i < count; i++) {
                 uint32_t src_index = src[i];
                 assert(src_index <= 0xffff);
                 dst[i] = src_index;
         }
 
-        pctx->transfer_unmap(pctx, dst_transfer);
         pctx->transfer_unmap(pctx, src_transfer);
 
-        shadow->writes = orig->writes;
+        return shadow_rsc;
 }
 
 void

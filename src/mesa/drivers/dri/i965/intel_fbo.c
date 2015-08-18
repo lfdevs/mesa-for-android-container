@@ -310,7 +310,7 @@ intel_alloc_private_renderbuffer_storage(struct gl_context * ctx, struct gl_rend
    intel_miptree_release(&irb->mt);
 
    DBG("%s: %s: %s (%dx%d)\n", __func__,
-       _mesa_lookup_enum_by_nr(internalFormat),
+       _mesa_enum_to_string(internalFormat),
        _mesa_get_format_name(rb->Format), width, height);
 
    if (width == 0 || height == 0)
@@ -390,7 +390,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
                                          image->height,
                                          1,
                                          image->pitch,
-                                         true /*disable_aux_buffers*/);
+                                         MIPTREE_LAYOUT_DISABLE_AUX);
    if (!irb->mt)
       return;
 
@@ -551,10 +551,12 @@ intel_renderbuffer_update_wrapper(struct brw_context *brw,
 
    irb->mt_layer = layer_multiplier * layer;
 
-   if (layered) {
-      irb->layer_count = image->TexObject->NumLayers ?: mt->level[level].depth / layer_multiplier;
-   } else {
+   if (!layered) {
       irb->layer_count = 1;
+   } else if (image->TexObject->NumLayers > 0) {
+      irb->layer_count = image->TexObject->NumLayers;
+   } else {
+      irb->layer_count = mt->level[level].depth / layer_multiplier;
    }
 
    intel_miptree_reference(&irb->mt, mt);
@@ -1020,6 +1022,9 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
    struct intel_mipmap_tree *new_mt;
    int width, height, depth;
 
+   uint32_t layout_flags = MIPTREE_LAYOUT_ACCELERATED_UPLOAD |
+                           MIPTREE_LAYOUT_TILING_ANY;
+
    intel_miptree_get_dimensions_for_image(rb->TexImage, &width, &height, &depth);
 
    new_mt = intel_miptree_create(brw, rb->TexImage->TexObject->Target,
@@ -1027,10 +1032,8 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
                                  intel_image->base.Base.Level,
                                  intel_image->base.Base.Level,
                                  width, height, depth,
-                                 true,
                                  irb->mt->num_samples,
-                                 INTEL_MIPTREE_TILING_ANY,
-                                 false);
+                                 layout_flags);
 
    if (intel_miptree_wants_hiz_buffer(brw, new_mt)) {
       intel_miptree_alloc_hiz(brw, new_mt);
@@ -1077,7 +1080,7 @@ brw_render_cache_set_check_flush(struct brw_context *brw, drm_intel_bo *bo)
    if (!_mesa_set_search(brw->render_cache, bo))
       return;
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 }
 
 /**

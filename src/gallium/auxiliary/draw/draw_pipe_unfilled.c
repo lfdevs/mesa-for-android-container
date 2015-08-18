@@ -53,7 +53,7 @@ struct unfilled_stage {
 };
 
 
-static INLINE struct unfilled_stage *unfilled_stage( struct draw_stage *stage )
+static inline struct unfilled_stage *unfilled_stage( struct draw_stage *stage )
 {
    return (struct unfilled_stage *)stage;
 }

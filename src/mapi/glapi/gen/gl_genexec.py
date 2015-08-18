@@ -25,10 +25,11 @@
 # _mesa_initialize_exec_table().  It is responsible for populating all
 # entries in the "exec" dispatch table that aren't dynamic.
 
+import argparse
 import collections
 import license
 import gl_XML
-import sys, getopt
+import sys
 import apiexec
 
 
@@ -239,24 +240,23 @@ class PrintCode(gl_XML.gl_print_base):
             print '   }'
 
 
-def show_usage():
-    print "Usage: %s [-f input_file_name]" % sys.argv[0]
-    sys.exit(1)
+def _parser():
+    """Parse arguments and return namespace."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f',
+                        dest='filename',
+                        default='gl_and_es_API.xml',
+                        help='an xml file describing an API')
+    return parser.parse_args()
+
+
+def main():
+    """Main function."""
+    args = _parser()
+    printer = PrintCode()
+    api = gl_XML.parse_GL_API(args.filename)
+    printer.Print(api)
 
 
 if __name__ == '__main__':
-    file_name = "gl_and_es_API.xml"
-
-    try:
-        (args, trail) = getopt.getopt(sys.argv[1:], "m:f:")
-    except Exception,e:
-        show_usage()
-
-    for (arg,val) in args:
-        if arg == "-f":
-            file_name = val
-
-    printer = PrintCode()
-
-    api = gl_XML.parse_GL_API(file_name)
-    printer.Print(api)
+    main()

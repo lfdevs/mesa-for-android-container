@@ -32,13 +32,13 @@
 
 /* Some maths. These should probably find their way to u_math, if needed. */
 
-static INLINE int pack_float_16_6x(float f) {
+static inline int pack_float_16_6x(float f) {
     return ((int)(f * 6.0) & 0xffff);
 }
 
 /* Blend state. */
 
-static INLINE uint32_t r300_translate_blend_function(int blend_func,
+static inline uint32_t r300_translate_blend_function(int blend_func,
                                                      boolean clamp)
 {
     switch (blend_func) {
@@ -60,7 +60,7 @@ static INLINE uint32_t r300_translate_blend_function(int blend_func,
     return 0;
 }
 
-static INLINE uint32_t r300_translate_blend_factor(int blend_fact)
+static inline uint32_t r300_translate_blend_factor(int blend_fact)
 {
     switch (blend_fact) {
         case PIPE_BLENDFACTOR_ONE:
@@ -113,7 +113,7 @@ static INLINE uint32_t r300_translate_blend_factor(int blend_fact)
 
 /* DSA state. */
 
-static INLINE uint32_t r300_translate_depth_stencil_function(int zs_func)
+static inline uint32_t r300_translate_depth_stencil_function(int zs_func)
 {
     switch (zs_func) {
         case PIPE_FUNC_NEVER:
@@ -141,7 +141,7 @@ static INLINE uint32_t r300_translate_depth_stencil_function(int zs_func)
     return 0;
 }
 
-static INLINE uint32_t r300_translate_stencil_op(int s_op)
+static inline uint32_t r300_translate_stencil_op(int s_op)
 {
     switch (s_op) {
         case PIPE_STENCIL_OP_KEEP:
@@ -168,7 +168,7 @@ static INLINE uint32_t r300_translate_stencil_op(int s_op)
     return 0;
 }
 
-static INLINE uint32_t r300_translate_alpha_function(int alpha_func)
+static inline uint32_t r300_translate_alpha_function(int alpha_func)
 {
     switch (alpha_func) {
         case PIPE_FUNC_NEVER:
@@ -195,7 +195,7 @@ static INLINE uint32_t r300_translate_alpha_function(int alpha_func)
     return 0;
 }
 
-static INLINE uint32_t
+static inline uint32_t
 r300_translate_polygon_mode_front(unsigned mode) {
     switch (mode)
     {
@@ -213,7 +213,7 @@ r300_translate_polygon_mode_front(unsigned mode) {
     }
 }
 
-static INLINE uint32_t
+static inline uint32_t
 r300_translate_polygon_mode_back(unsigned mode) {
     switch (mode)
     {
@@ -233,7 +233,7 @@ r300_translate_polygon_mode_back(unsigned mode) {
 
 /* Texture sampler state. */
 
-static INLINE uint32_t r300_translate_wrap(int wrap)
+static inline uint32_t r300_translate_wrap(int wrap)
 {
     switch (wrap) {
         case PIPE_TEX_WRAP_REPEAT:
@@ -259,7 +259,7 @@ static INLINE uint32_t r300_translate_wrap(int wrap)
     }
 }
 
-static INLINE uint32_t r300_translate_tex_filters(int min, int mag, int mip,
+static inline uint32_t r300_translate_tex_filters(int min, int mag, int mip,
                                                   boolean is_anisotropic)
 {
     uint32_t retval = 0;
@@ -308,7 +308,7 @@ static INLINE uint32_t r300_translate_tex_filters(int min, int mag, int mip,
     return retval;
 }
 
-static INLINE uint32_t r300_anisotropy(unsigned max_aniso)
+static inline uint32_t r300_anisotropy(unsigned max_aniso)
 {
     if (max_aniso >= 16) {
         return R300_TX_MAX_ANISO_16_TO_1;
@@ -323,7 +323,7 @@ static INLINE uint32_t r300_anisotropy(unsigned max_aniso)
     }
 }
 
-static INLINE uint32_t r500_anisotropy(unsigned max_aniso)
+static inline uint32_t r500_anisotropy(unsigned max_aniso)
 {
     if (!max_aniso) {
         return 0;
@@ -336,7 +336,7 @@ static INLINE uint32_t r500_anisotropy(unsigned max_aniso)
 }
 
 /* Translate pipe_formats into PSC vertex types. */
-static INLINE uint16_t
+static inline uint16_t
 r300_translate_vertex_data_type(enum pipe_format format) {
     uint32_t result = 0;
     const struct util_format_description *desc;
@@ -410,7 +410,7 @@ r300_translate_vertex_data_type(enum pipe_format format) {
     return result;
 }
 
-static INLINE uint16_t
+static inline uint16_t
 r300_translate_vertex_data_swizzle(enum pipe_format format) {
     const struct util_format_description *desc;
     unsigned i, swizzle = 0;

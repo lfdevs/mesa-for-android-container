@@ -538,7 +538,7 @@ cleanup_buffers(struct vl_compositor *c)
    pipe_resource_reference(&c->vertex_buf.buffer, NULL);
 }
 
-static INLINE struct u_rect
+static inline struct u_rect
 default_rect(struct vl_compositor_layer *layer)
 {
    struct pipe_resource *res = layer->sampler_views[0]->texture;
@@ -546,21 +546,21 @@ default_rect(struct vl_compositor_layer *layer)
    return rect;
 }
 
-static INLINE struct vertex2f
+static inline struct vertex2f
 calc_topleft(struct vertex2f size, struct u_rect rect)
 {
    struct vertex2f res = { rect.x0 / size.x, rect.y0 / size.y };
    return res;
 }
 
-static INLINE struct vertex2f
+static inline struct vertex2f
 calc_bottomright(struct vertex2f size, struct u_rect rect)
 {
    struct vertex2f res = { rect.x1 / size.x, rect.y1 / size.y };
    return res;
 }
 
-static INLINE void
+static inline void
 calc_src_and_dst(struct vl_compositor_layer *layer, unsigned width, unsigned height,
                  struct u_rect src, struct u_rect dst)
 {
@@ -658,7 +658,7 @@ gen_rect_verts(struct vertex2f *vb, struct vl_compositor_layer *layer)
    vb[19].y = layer->colors[3].w;
 }
 
-static INLINE struct u_rect
+static inline struct u_rect
 calc_drawn_area(struct vl_compositor_state *s, struct vl_compositor_layer *layer)
 {
    struct vertex2f tl, br;

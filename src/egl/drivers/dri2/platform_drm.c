@@ -115,8 +115,11 @@ dri2_drm_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 
    switch (type) {
    case EGL_WINDOW_BIT:
-      if (!window)
-         return NULL;
+      if (!window) {
+         _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_create_surface");
+         goto cleanup_surf;
+      }
+
       surf = gbm_dri_surface(window);
       dri2_surf->gbm_surf = surf;
       dri2_surf->base.Width =  surf->base.width;
@@ -128,10 +131,13 @@ dri2_drm_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
    }
 
    if (dri2_dpy->dri2) {
+      const __DRIconfig *config =
+         dri2_get_dri_config(dri2_conf, EGL_WINDOW_BIT,
+                             dri2_surf->base.GLColorspace);
+
       dri2_surf->dri_drawable =
-         (*dri2_dpy->dri2->createNewDrawable) (dri2_dpy->dri_screen,
-                                               dri2_conf->dri_double_config,
-                                               dri2_surf->gbm_surf);
+         (*dri2_dpy->dri2->createNewDrawable)(dri2_dpy->dri_screen, config,
+                                              dri2_surf->gbm_surf);
 
    } else {
       assert(dri2_dpy->swrast != NULL);
@@ -611,9 +617,9 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
       char buf[64];
       int n = snprintf(buf, sizeof(buf), DRM_DEV_NAME, DRM_DIR_NAME, 0);
       if (n != -1 && n < sizeof(buf))
-         fd = open(buf, O_RDWR);
+         fd = loader_open_device(buf);
       if (fd < 0)
-         fd = open("/dev/dri/card0", O_RDWR);
+         fd = loader_open_device("/dev/dri/card0");
       dri2_dpy->own_device = 1;
       gbm = gbm_create_device(fd);
       if (gbm == NULL)
@@ -632,7 +638,7 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
    }
 
    if (fd < 0) {
-      fd = dup(gbm_device_get_fd(gbm));
+      fd = fcntl(gbm_device_get_fd(gbm), F_DUPFD_CLOEXEC, 3);
       if (fd < 0) {
          free(dri2_dpy);
          return EGL_FALSE;
@@ -714,10 +720,6 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
            disp->Extensions.WL_bind_wayland_display = EGL_TRUE;
    }
 #endif
-
-   /* we're supporting EGL 1.4 */
-   disp->VersionMajor = 1;
-   disp->VersionMinor = 4;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.

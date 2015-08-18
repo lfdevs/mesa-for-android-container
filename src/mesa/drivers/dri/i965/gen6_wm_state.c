@@ -33,6 +33,7 @@
 #include "program/program.h"
 #include "program/prog_parameter.h"
 #include "program/prog_statevars.h"
+#include "main/framebuffer.h"
 #include "intel_batchbuffer.h"
 
 static void
@@ -284,7 +285,7 @@ upload_wm_state(struct brw_context *brw)
    const struct brw_wm_prog_data *prog_data = brw->wm.prog_data;
 
    /* _NEW_BUFFERS */
-   const bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
+   const bool multisampled_fbo = _mesa_geometric_samples(ctx->DrawBuffer) > 1;
 
    /* In case of non 1x per sample shading, only one of SIMD8 and SIMD16
     * should be enabled. We do 'SIMD16 only' dispatch if a SIMD16 shader

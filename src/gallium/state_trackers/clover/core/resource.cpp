@@ -118,6 +118,8 @@ root_resource::root_resource(clover::device &dev, memory_obj &obj,
                              command_queue &q, const std::string &data) :
    resource(dev, obj) {
    pipe_resource info {};
+   const bool user_ptr_support = dev.pipe->get_param(dev.pipe,
+         PIPE_CAP_RESOURCE_FROM_USER_MEMORY);
 
    if (image *img = dynamic_cast<image *>(&obj)) {
       info.format = translate_format(img->format());
@@ -130,6 +132,7 @@ root_resource::root_resource(clover::device &dev, memory_obj &obj,
       info.depth0 = 1;
    }
 
+   info.array_size = 1;
    info.target = translate_target(obj.type());
    info.bind = (PIPE_BIND_SAMPLER_VIEW |
                 PIPE_BIND_COMPUTE_RESOURCE |
@@ -137,16 +140,29 @@ root_resource::root_resource(clover::device &dev, memory_obj &obj,
                 PIPE_BIND_TRANSFER_READ |
                 PIPE_BIND_TRANSFER_WRITE);
 
+   if (obj.flags() & CL_MEM_USE_HOST_PTR && user_ptr_support) {
+      // Page alignment is normally required for this, just try, hope for the
+      // best and fall back if it fails.
+      pipe = dev.pipe->resource_from_user_memory(dev.pipe, &info, obj.host_ptr());
+      if (pipe)
+         return;
+   }
+
+   if (obj.flags() & (CL_MEM_ALLOC_HOST_PTR | CL_MEM_USE_HOST_PTR)) {
+      info.usage = PIPE_USAGE_STAGING;
+   }
+
    pipe = dev.pipe->resource_create(dev.pipe, &info);
    if (!pipe)
       throw error(CL_OUT_OF_RESOURCES);
 
-   if (!data.empty()) {
+   if (obj.flags() & (CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR)) {
+      const void *data_ptr = !data.empty() ? data.data() : obj.host_ptr();
       box rect { {{ 0, 0, 0 }}, {{ info.width0, info.height0, info.depth0 }} };
       unsigned cpp = util_format_get_blocksize(info.format);
 
       q.pipe->transfer_inline_write(q.pipe, pipe, 0, PIPE_TRANSFER_WRITE,
-                                    rect, data.data(), cpp * info.width0,
+                                    rect, data_ptr, cpp * info.width0,
                                     cpp * info.width0 * info.height0);
    }
 }

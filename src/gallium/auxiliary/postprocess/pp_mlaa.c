@@ -141,8 +141,10 @@ pp_jimenezmlaa_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    p->pipe->clear(p->pipe, PIPE_CLEAR_STENCIL | PIPE_CLEAR_COLOR0,
                   &p->clear_color, 0, 0);
 
-   cso_single_sampler(p->cso, PIPE_SHADER_FRAGMENT, 0, &p->sampler_point);
-   cso_single_sampler_done(p->cso, PIPE_SHADER_FRAGMENT);
+   {
+      const struct pipe_sampler_state *samplers[] = {&p->sampler_point};
+      cso_set_samplers(p->cso, PIPE_SHADER_FRAGMENT, 1, samplers);
+   }
    cso_set_sampler_views(p->cso, PIPE_SHADER_FRAGMENT, 1, &p->view);
 
    cso_set_vertex_shader_handle(p->cso, ppq->shaders[n][1]);    /* offsetvs */
@@ -168,10 +170,11 @@ pp_jimenezmlaa_run(struct pp_queue_t *ppq, struct pipe_resource *in,
 
    pp_filter_set_clear_fb(p);
 
-   cso_single_sampler(p->cso, PIPE_SHADER_FRAGMENT, 0, &p->sampler_point);
-   cso_single_sampler(p->cso, PIPE_SHADER_FRAGMENT, 1, &p->sampler_point);
-   cso_single_sampler(p->cso, PIPE_SHADER_FRAGMENT, 2, &p->sampler);
-   cso_single_sampler_done(p->cso, PIPE_SHADER_FRAGMENT);
+   {
+      const struct pipe_sampler_state *samplers[] =
+         {&p->sampler_point, &p->sampler_point, &p->sampler};
+      cso_set_samplers(p->cso, PIPE_SHADER_FRAGMENT, 3, samplers);
+   }
 
    arr[0] = p->view;
    cso_set_sampler_views(p->cso, PIPE_SHADER_FRAGMENT, 3, arr);
@@ -199,9 +202,11 @@ pp_jimenezmlaa_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    u_sampler_view_default_template(&v_tmp, in, in->format);
    arr[0] = p->pipe->create_sampler_view(p->pipe, in, &v_tmp);
 
-   cso_single_sampler(p->cso, PIPE_SHADER_FRAGMENT, 0, &p->sampler_point);
-   cso_single_sampler(p->cso, PIPE_SHADER_FRAGMENT, 1, &p->sampler_point);
-   cso_single_sampler_done(p->cso, PIPE_SHADER_FRAGMENT);
+   {
+      const struct pipe_sampler_state *samplers[] =
+         {&p->sampler_point, &p->sampler_point};
+      cso_set_samplers(p->cso, PIPE_SHADER_FRAGMENT, 2, samplers);
+   }
 
    arr[1] = p->view;
    cso_set_sampler_views(p->cso, PIPE_SHADER_FRAGMENT, 2, arr);

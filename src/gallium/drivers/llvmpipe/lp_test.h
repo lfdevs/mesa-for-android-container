@@ -77,7 +77,7 @@ unsigned __int64 __rdtsc();
 
 #elif defined(PIPE_CC_GCC) && (defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64))
 
-static INLINE uint64_t
+static inline uint64_t
 rdtsc(void)
 {
    uint32_t hi, lo;

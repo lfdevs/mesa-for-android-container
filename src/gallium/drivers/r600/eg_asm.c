@@ -160,6 +160,9 @@ int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_c
 	alu.op = ALU_OP1_MOVA_INT;
 	alu.src[0].sel = bc->index_reg[id];
 	alu.src[0].chan = 0;
+	if (bc->chip_class == CAYMAN)
+		alu.dst.sel = id == 0 ? CM_V_SQ_MOVA_DST_CF_IDX0 : CM_V_SQ_MOVA_DST_CF_IDX1;
+
 	alu.last = 1;
 	r = r600_bytecode_add_alu(bc, &alu);
 	if (r)
@@ -167,12 +170,14 @@ int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_c
 
 	bc->ar_loaded = 0; /* clobbered */
 
-	memset(&alu, 0, sizeof(alu));
-	alu.op = id == 0 ? ALU_OP0_SET_CF_IDX0 : ALU_OP0_SET_CF_IDX1;
-	alu.last = 1;
-	r = r600_bytecode_add_alu(bc, &alu);
-	if (r)
-		return r;
+	if (bc->chip_class == EVERGREEN) {
+		memset(&alu, 0, sizeof(alu));
+		alu.op = id == 0 ? ALU_OP0_SET_CF_IDX0 : ALU_OP0_SET_CF_IDX1;
+		alu.last = 1;
+		r = r600_bytecode_add_alu(bc, &alu);
+		if (r)
+			return r;
+	}
 
 	/* Must split ALU group as index only applies to following group */
 	if (inside_alu_clause) {

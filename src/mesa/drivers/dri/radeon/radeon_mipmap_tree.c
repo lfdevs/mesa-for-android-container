@@ -276,7 +276,7 @@ static void calculate_min_max_lod(struct gl_sampler_object *samp, struct gl_text
 	radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 			"%s(%p) target %s, min %d, max %d.\n",
 			__func__, tObj,
-			_mesa_lookup_enum_by_nr(tObj->Target),
+			_mesa_enum_to_string(tObj->Target),
 			minLod, maxLod);
 
 	/* save these values */

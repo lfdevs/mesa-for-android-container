@@ -30,7 +30,7 @@
 
 uint32_t
 nv50_tex_choose_tile_dims_helper(unsigned nx, unsigned ny, unsigned nz,
-                                 boolean is_3d)
+                                 bool is_3d)
 {
    uint32_t tile_mode = 0x000;
 
@@ -59,13 +59,13 @@ nv50_tex_choose_tile_dims_helper(unsigned nx, unsigned ny, unsigned nz,
 }
 
 static uint32_t
-nv50_tex_choose_tile_dims(unsigned nx, unsigned ny, unsigned nz, boolean is_3d)
+nv50_tex_choose_tile_dims(unsigned nx, unsigned ny, unsigned nz, bool is_3d)
 {
    return nv50_tex_choose_tile_dims_helper(nx, ny * 2, nz, is_3d);
 }
 
 static uint32_t
-nv50_mt_choose_storage_type(struct nv50_miptree *mt, boolean compressed)
+nv50_mt_choose_storage_type(struct nv50_miptree *mt, bool compressed)
 {
    const unsigned ms = util_logbase2(mt->base.base.nr_samples);
    uint32_t tile_flags;
@@ -184,7 +184,7 @@ nv50_miptree_get_handle(struct pipe_screen *pscreen,
    unsigned stride;
 
    if (!mt || !mt->base.bo)
-      return FALSE;
+      return false;
 
    stride = mt->level[0].pitch;
 
@@ -204,7 +204,7 @@ const struct u_resource_vtbl nv50_miptree_vtbl =
    u_default_transfer_inline_write  /* transfer_inline_write */
 };
 
-static INLINE boolean
+static inline bool
 nv50_miptree_init_ms_mode(struct nv50_miptree *mt)
 {
    switch (mt->base.base.nr_samples) {
@@ -228,12 +228,12 @@ nv50_miptree_init_ms_mode(struct nv50_miptree *mt)
       break;
    default:
       NOUVEAU_ERR("invalid nr_samples: %u\n", mt->base.base.nr_samples);
-      return FALSE;
+      return false;
    }
-   return TRUE;
+   return true;
 }
 
-boolean
+bool
 nv50_miptree_init_layout_linear(struct nv50_miptree *mt, unsigned pitch_align)
 {
    struct pipe_resource *pt = &mt->base.base;
@@ -241,12 +241,12 @@ nv50_miptree_init_layout_linear(struct nv50_miptree *mt, unsigned pitch_align)
    unsigned h = pt->height0;
 
    if (util_format_is_depth_or_stencil(pt->format))
-      return FALSE;
+      return false;
 
    if ((pt->last_level > 0) || (pt->depth0 > 1) || (pt->array_size > 1))
-      return FALSE;
+      return false;
    if (mt->ms_x | mt->ms_y)
-      return FALSE;
+      return false;
 
    mt->level[0].pitch = align(pt->width0 * blocksize, pitch_align);
 
@@ -256,7 +256,7 @@ nv50_miptree_init_layout_linear(struct nv50_miptree *mt, unsigned pitch_align)
 
    mt->total_size = mt->level[0].pitch * h;
 
-   return TRUE;
+   return true;
 }
 
 static void
@@ -335,7 +335,7 @@ nv50_miptree_create(struct pipe_screen *pscreen,
    struct nouveau_device *dev = nouveau_screen(pscreen)->device;
    struct nv50_miptree *mt = CALLOC_STRUCT(nv50_miptree);
    struct pipe_resource *pt = &mt->base.base;
-   boolean compressed = dev->drm_version >= 0x01000101;
+   bool compressed = dev->drm_version >= 0x01000101;
    int ret;
    union nouveau_bo_config bo_config;
    uint32_t bo_flags;
@@ -377,7 +377,7 @@ nv50_miptree_create(struct pipe_screen *pscreen,
    if (!bo_config.nv50.memtype && (pt->bind & PIPE_BIND_SHARED))
       mt->base.domain = NOUVEAU_BO_GART;
    else
-      mt->base.domain = NOUVEAU_BO_VRAM;
+      mt->base.domain = NV_VRAM_DOMAIN(nouveau_screen(pscreen));
 
    bo_flags = mt->base.domain | NOUVEAU_BO_NOSNOOP;
    if (mt->base.base.bind & (PIPE_BIND_CURSOR | PIPE_BIND_DISPLAY_TARGET))
@@ -438,7 +438,7 @@ nv50_miptree_from_handle(struct pipe_screen *pscreen,
 
 
 /* Offset of zslice @z from start of level @l. */
-INLINE unsigned
+inline unsigned
 nv50_mt_zslice_offset(const struct nv50_miptree *mt, unsigned l, unsigned z)
 {
    const struct pipe_resource *pt = &mt->base.base;

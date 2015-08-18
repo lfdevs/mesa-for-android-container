@@ -260,7 +260,8 @@ generate_fs_loop(struct gallivm_state *gallivm,
 {
    const struct util_format_description *zs_format_desc = NULL;
    const struct tgsi_token *tokens = shader->base.tokens;
-   LLVMTypeRef vec_type;
+   struct lp_type int_type = lp_int_type(type);
+   LLVMTypeRef vec_type, int_vec_type;
    LLVMValueRef mask_ptr, mask_val;
    LLVMValueRef consts_ptr, num_consts_ptr;
    LLVMValueRef z;
@@ -295,7 +296,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
       zs_format_desc = util_format_description(key->zsbuf_format);
       assert(zs_format_desc);
 
-      if (!shader->info.base.writes_z) {
+      if (!shader->info.base.writes_z && !shader->info.base.writes_stencil) {
          if (key->alpha.enabled ||
              key->blend.alpha_to_coverage ||
              shader->info.base.uses_kill) {
@@ -329,11 +330,14 @@ generate_fs_loop(struct gallivm_state *gallivm,
       depth_mode = 0;
    }
 
+   vec_type = lp_build_vec_type(gallivm, type);
+   int_vec_type = lp_build_vec_type(gallivm, int_type);
 
    stencil_refs[0] = lp_jit_context_stencil_ref_front_value(gallivm, context_ptr);
    stencil_refs[1] = lp_jit_context_stencil_ref_back_value(gallivm, context_ptr);
-
-   vec_type = lp_build_vec_type(gallivm, type);
+   /* convert scalar stencil refs into vectors */
+   stencil_refs[0] = lp_build_broadcast(gallivm, int_vec_type, stencil_refs[0]);
+   stencil_refs[1] = lp_build_broadcast(gallivm, int_vec_type, stencil_refs[1]);
 
    consts_ptr = lp_jit_context_constants(gallivm, context_ptr);
    num_consts_ptr = lp_jit_context_num_constants(gallivm, context_ptr);
@@ -462,7 +466,9 @@ generate_fs_loop(struct gallivm_state *gallivm,
       int pos0 = find_output_by_semantic(&shader->info.base,
                                          TGSI_SEMANTIC_POSITION,
                                          0);
-
+      int s_out = find_output_by_semantic(&shader->info.base,
+                                          TGSI_SEMANTIC_STENCIL,
+                                          0);
       if (pos0 != -1 && outputs[pos0][2]) {
          z = LLVMBuildLoad(builder, outputs[pos0][2], "output.z");
 
@@ -510,6 +516,15 @@ generate_fs_loop(struct gallivm_state *gallivm,
              */
             z = lp_build_clamp(&f32_bld, z, min_depth, max_depth);
          }
+      }
+
+      if (s_out != -1 && outputs[s_out][1]) {
+         /* there's only one value, and spec says to discard additional bits */
+         LLVMValueRef s_max_mask = lp_build_const_int_vec(gallivm, int_type, 255);
+         stencil_refs[0] = LLVMBuildLoad(builder, outputs[s_out][1], "output.s");
+         stencil_refs[0] = LLVMBuildBitCast(builder, stencil_refs[0], int_vec_type, "");
+         stencil_refs[0] = LLVMBuildAnd(builder, stencil_refs[0], s_max_mask, "");
+         stencil_refs[1] = stencil_refs[0];
       }
 
       lp_build_depth_stencil_load_swizzled(gallivm, type,
@@ -825,7 +840,7 @@ store_unswizzled_block(struct gallivm_state *gallivm,
  *
  * A format which has irregular channel sizes such as R3_G3_B2 or R5_G6_B5.
  */
-static INLINE boolean
+static inline boolean
 is_arithmetic_format(const struct util_format_description *format_desc)
 {
    boolean arith = false;
@@ -845,7 +860,7 @@ is_arithmetic_format(const struct util_format_description *format_desc)
  * to floats for blending, and furthermore has "natural" packed AoS -> unpacked
  * SoA conversion.
  */
-static INLINE boolean
+static inline boolean
 format_expands_to_float_soa(const struct util_format_description *format_desc)
 {
    if (format_desc->format == PIPE_FORMAT_R11G11B10_FLOAT ||
@@ -861,7 +876,7 @@ format_expands_to_float_soa(const struct util_format_description *format_desc)
  *
  * e.g. RGBA16F = 4x half-float and R3G3B2 = 1x byte
  */
-static INLINE void
+static inline void
 lp_mem_type_from_format_desc(const struct util_format_description *format_desc,
                              struct lp_type* type)
 {
@@ -909,7 +924,7 @@ lp_mem_type_from_format_desc(const struct util_format_description *format_desc,
  *
  * e.g. RGBA16F = 4x float, R3G3B2 = 3x byte
  */
-static INLINE void
+static inline void
 lp_blend_type_from_format_desc(const struct util_format_description *format_desc,
                                struct lp_type* type)
 {
@@ -981,7 +996,7 @@ lp_blend_type_from_format_desc(const struct util_format_description *format_desc
  *
  * but we try to avoid division and multiplication through shifts.
  */
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 scale_bits(struct gallivm_state *gallivm,
            int src_bits,
            int dst_bits,
@@ -1093,7 +1108,7 @@ scale_bits(struct gallivm_state *gallivm,
 /**
  * If RT is a smallfloat (needing denorms) format
  */
-static INLINE int
+static inline int
 have_smallfloat_format(struct lp_type dst_type,
                        enum pipe_format format)
 {
@@ -2865,7 +2880,7 @@ llvmpipe_set_constant_buffer(struct pipe_context *pipe,
 /**
  * Return the blend factor equivalent to a destination alpha of one.
  */
-static INLINE unsigned
+static inline unsigned
 force_dst_alpha_one(unsigned factor, boolean clamped_zero)
 {
    switch(factor) {

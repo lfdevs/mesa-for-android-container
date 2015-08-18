@@ -1135,7 +1135,7 @@ lp_build_div(struct lp_build_context *bld,
  *
  * @sa http://www.stereopsis.com/doubleblend.html
  */
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_lerp_simple(struct lp_build_context *bld,
                      LLVMValueRef x,
                      LLVMValueRef v0,
@@ -1674,7 +1674,7 @@ enum lp_build_round_mode
  * NOTE: In the SSE4.1's nearest mode, if two values are equally close, the
  * result is the even value.  That is, rounding 2.5 will be 2.0, and not 3.0.
  */
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_round_sse41(struct lp_build_context *bld,
                      LLVMValueRef a,
                      enum lp_build_round_mode mode)
@@ -1717,7 +1717,7 @@ lp_build_round_sse41(struct lp_build_context *bld,
       args[2] = LLVMConstInt(i32t, mode, 0);
 
       res = lp_build_intrinsic(builder, intrinsic,
-                               vec_type, args, Elements(args));
+                               vec_type, args, Elements(args), 0);
 
       res = LLVMBuildExtractElement(builder, res, index0, "");
    }
@@ -1761,7 +1761,7 @@ lp_build_round_sse41(struct lp_build_context *bld,
 }
 
 
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_iround_nearest_sse2(struct lp_build_context *bld,
                              LLVMValueRef a)
 {
@@ -1817,7 +1817,7 @@ lp_build_iround_nearest_sse2(struct lp_build_context *bld,
 
 /*
  */
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_round_altivec(struct lp_build_context *bld,
                        LLVMValueRef a,
                        enum lp_build_round_mode mode)
@@ -1851,7 +1851,7 @@ lp_build_round_altivec(struct lp_build_context *bld,
    return lp_build_intrinsic_unary(builder, intrinsic, bld->vec_type, a);
 }
 
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_round_arch(struct lp_build_context *bld,
                     LLVMValueRef a,
                     enum lp_build_round_mode mode)
@@ -1997,6 +1997,12 @@ lp_build_floor(struct lp_build_context *bld,
       LLVMTypeRef int_vec_type = bld->int_vec_type;
       LLVMTypeRef vec_type = bld->vec_type;
 
+      if (type.width != 32) {
+         char intrinsic[32];
+         util_snprintf(intrinsic, sizeof intrinsic, "llvm.floor.v%uf%u", type.length, type.width);
+         return lp_build_intrinsic_unary(builder, intrinsic, vec_type, a);
+      }
+
       assert(type.width == 32); /* might want to handle doubles at some point */
 
       inttype = type;
@@ -2065,6 +2071,12 @@ lp_build_ceil(struct lp_build_context *bld,
       LLVMValueRef trunc, res, anosign, mask, tmp;
       LLVMTypeRef int_vec_type = bld->int_vec_type;
       LLVMTypeRef vec_type = bld->vec_type;
+
+      if (type.width != 32) {
+         char intrinsic[32];
+         util_snprintf(intrinsic, sizeof intrinsic, "llvm.ceil.v%uf%u", type.length, type.width);
+         return lp_build_intrinsic_unary(builder, intrinsic, vec_type, a);
+      }
 
       assert(type.width == 32); /* might want to handle doubles at some point */
 
@@ -2427,7 +2439,7 @@ lp_build_sqrt(struct lp_build_context *bld,
  * - http://en.wikipedia.org/wiki/Division_(digital)#Newton.E2.80.93Raphson_division
  * - http://softwarecommunity.intel.com/articles/eng/1818.htm
  */
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_rcp_refine(struct lp_build_context *bld,
                     LLVMValueRef a,
                     LLVMValueRef rcp_a)
@@ -2512,7 +2524,7 @@ lp_build_rcp(struct lp_build_context *bld,
  *
  * See also Intel 64 and IA-32 Architectures Optimization Manual.
  */
-static INLINE LLVMValueRef
+static inline LLVMValueRef
 lp_build_rsqrt_refine(struct lp_build_context *bld,
                       LLVMValueRef a,
                       LLVMValueRef rsqrt_a)
@@ -3535,7 +3547,7 @@ lp_build_fpstate_get(struct gallivm_state *gallivm)
       lp_build_intrinsic(builder,
                          "llvm.x86.sse.stmxcsr",
                          LLVMVoidTypeInContext(gallivm->context),
-                         &mxcsr_ptr8, 1);
+                         &mxcsr_ptr8, 1, 0);
       return mxcsr_ptr;
    }
    return 0;
@@ -3582,6 +3594,6 @@ lp_build_fpstate_set(struct gallivm_state *gallivm,
       lp_build_intrinsic(builder,
                          "llvm.x86.sse.ldmxcsr",
                          LLVMVoidTypeInContext(gallivm->context),
-                         &mxcsr_ptr, 1);
+                         &mxcsr_ptr, 1, 0);
    }
 }

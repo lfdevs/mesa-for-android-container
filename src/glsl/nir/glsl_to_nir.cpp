@@ -65,6 +65,7 @@ public:
    virtual void visit(ir_dereference_variable *);
    virtual void visit(ir_dereference_record *);
    virtual void visit(ir_dereference_array *);
+   virtual void visit(ir_barrier *);
 
    void create_function(ir_function *ir);
 
@@ -279,6 +280,9 @@ nir_visitor::visit(ir_variable *ir)
       var->data.mode = nir_var_uniform;
       break;
 
+   case ir_var_shader_storage:
+      var->data.mode = nir_var_shader_storage;
+      break;
 
    case ir_var_system_value:
       var->data.mode = nir_var_system_value;
@@ -370,6 +374,7 @@ nir_visitor::visit(ir_variable *ir)
       break;
 
    case nir_var_uniform:
+   case nir_var_shader_storage:
       exec_list_push_tail(&shader->uniforms, &var->node);
       break;
 
@@ -930,13 +935,9 @@ nir_visitor::evaluate_rvalue(ir_rvalue* ir)
    }
 
    nir_dest *dest = get_instr_dest(this->result);
-
    assert(dest->is_ssa);
-   nir_src src = NIR_SRC_INIT;
-   src.is_ssa = true;
-   src.ssa = &dest->ssa;
 
-   return src;
+   return nir_src_for_ssa(&dest->ssa);
 }
 
 nir_alu_instr *
@@ -1170,6 +1171,7 @@ nir_visitor::visit(ir_expression *ir)
    case ir_unop_bitcast_f2i:
    case ir_unop_bitcast_u2f:
    case ir_unop_bitcast_f2u:
+   case ir_unop_subroutine_to_int:
       /* no-op */
       emit(nir_op_imov, dest_size, srcs);
       break;
@@ -1892,4 +1894,12 @@ nir_visitor::visit(ir_dereference_array *ir)
    this->deref_tail->child = &deref->deref;
    ralloc_steal(this->deref_tail, deref);
    this->deref_tail = &deref->deref;
+}
+
+void
+nir_visitor::visit(ir_barrier *ir)
+{
+   nir_intrinsic_instr *instr =
+      nir_intrinsic_instr_create(this->shader, nir_intrinsic_barrier);
+   nir_instr_insert_after_cf_list(this->cf_node_list, &instr->instr);
 }

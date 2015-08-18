@@ -84,6 +84,22 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
 
       switch (attr) {
       /* common attributes */
+      case EGL_GL_COLORSPACE_KHR:
+         if (!dpy->Extensions.KHR_gl_colorspace) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+         switch (val) {
+         case EGL_GL_COLORSPACE_SRGB_KHR:
+         case EGL_GL_COLORSPACE_LINEAR_KHR:
+            break;
+         default:
+            err = EGL_BAD_ATTRIBUTE;
+         }
+         if (err != EGL_SUCCESS)
+            break;
+         surf->GLColorspace = val;
+         break;
       case EGL_VG_COLORSPACE:
          switch (val) {
          case EGL_VG_COLORSPACE_sRGB:
@@ -272,6 +288,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
    surf->RenderBuffer = renderBuffer;
    surf->VGAlphaFormat = EGL_VG_ALPHA_FORMAT_NONPRE;
    surf->VGColorspace = EGL_VG_COLORSPACE_sRGB;
+   surf->GLColorspace = EGL_GL_COLORSPACE_LINEAR_KHR;
 
    surf->MipmapLevel = 0;
    surf->MultisampleResolve = EGL_MULTISAMPLE_RESOLVE_DEFAULT;
@@ -309,7 +326,8 @@ _eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
       *value = surface->Config->ConfigID;
       break;
    case EGL_LARGEST_PBUFFER:
-      *value = surface->LargestPbuffer;
+      if (surface->Type == EGL_PBUFFER_BIT)
+         *value = surface->LargestPbuffer;
       break;
    case EGL_TEXTURE_FORMAT:
       /* texture attributes: only for pbuffers, no error otherwise */
@@ -351,6 +369,13 @@ _eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
       break;
    case EGL_VG_COLORSPACE:
       *value = surface->VGColorspace;
+      break;
+   case EGL_GL_COLORSPACE_KHR:
+      if (!dpy->Extensions.KHR_gl_colorspace) {
+         _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
+         return EGL_FALSE;
+      }
+      *value = surface->GLColorspace;
       break;
    case EGL_POST_SUB_BUFFER_SUPPORTED_NV:
       *value = surface->PostSubBufferSupportedNV;

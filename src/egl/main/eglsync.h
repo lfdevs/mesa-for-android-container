@@ -47,18 +47,18 @@ struct _egl_sync
    EGLenum Type;
    EGLenum SyncStatus;
    EGLenum SyncCondition;
-   EGLAttribKHR CLEvent;
+   EGLAttrib CLEvent;
 };
 
 
 extern EGLBoolean
 _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
-             const EGLint *attrib_list, const EGLAttribKHR *attrib_list64);
+             const EGLint *attrib_list, const EGLAttrib *attrib_list64);
 
 
 extern EGLBoolean
-_eglGetSyncAttribKHR(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
-                     EGLint attribute, EGLint *value);
+_eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
+                  EGLint attribute, EGLAttrib *value);
 
 
 /**
@@ -87,11 +87,11 @@ _eglPutSync(_EGLSync *sync)
  * Link a sync to its display and return the handle of the link.
  * The handle can be passed to client directly.
  */
-static inline EGLSyncKHR
+static inline EGLSync
 _eglLinkSync(_EGLSync *sync)
 {
    _eglLinkResource(&sync->Resource, _EGL_RESOURCE_SYNC);
-   return (EGLSyncKHR) sync;
+   return (EGLSync) sync;
 }
 
 
@@ -110,7 +110,7 @@ _eglUnlinkSync(_EGLSync *sync)
  * Return NULL if the handle has no corresponding linked sync.
  */
 static inline _EGLSync *
-_eglLookupSync(EGLSyncKHR handle, _EGLDisplay *dpy)
+_eglLookupSync(EGLSync handle, _EGLDisplay *dpy)
 {
    _EGLSync *sync = (_EGLSync *) handle;
    if (!dpy || !_eglCheckResource((void *) sync, _EGL_RESOURCE_SYNC, dpy))
@@ -122,12 +122,12 @@ _eglLookupSync(EGLSyncKHR handle, _EGLDisplay *dpy)
 /**
  * Return the handle of a linked sync, or EGL_NO_SYNC_KHR.
  */
-static inline EGLSyncKHR
+static inline EGLSync
 _eglGetSyncHandle(_EGLSync *sync)
 {
    _EGLResource *res = (_EGLResource *) sync;
    return (res && _eglIsResourceLinked(res)) ?
-      (EGLSyncKHR) sync : EGL_NO_SYNC_KHR;
+      (EGLSync) sync : EGL_NO_SYNC_KHR;
 }
 
 

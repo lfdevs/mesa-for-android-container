@@ -342,17 +342,6 @@ struct radeon_store {
 	int elts_start;
 };
 
-struct radeon_dri_mirror {
-	__DRIcontext *context;	/* DRI context */
-	__DRIscreen *screen;	/* DRI screen */
-
-	drm_context_t hwContext;
-	drm_hw_lock_t *hwLock;
-	int hwLockCount;
-	int fd;
-	int drmMinor;
-};
-
 typedef void (*radeon_tri_func) (radeonContextPtr,
 				 radeonVertex *,
 				 radeonVertex *, radeonVertex *);
@@ -385,6 +374,7 @@ struct radeon_cmdbuf {
 
 struct radeon_context {
    struct gl_context glCtx;             /**< base class, must be first */
+   __DRIcontext *driContext;               /* DRI context */
    radeonScreenPtr radeonScreen;	/* Screen private DRI data */
 
    /* Texture object bookkeeping
@@ -406,9 +396,6 @@ struct radeon_context {
 
    /* Drawable information */
    unsigned int lastStamp;
-
-   /* Mirrors of some DRI state */
-   struct radeon_dri_mirror dri;
 
    /* Busy waiting */
    GLuint do_usleeps;
@@ -502,12 +489,12 @@ static inline radeonContextPtr RADEON_CONTEXT(struct gl_context *ctx)
 
 static inline __DRIdrawable* radeon_get_drawable(radeonContextPtr radeon)
 {
-	return radeon->dri.context->driDrawablePriv;
+	return radeon->driContext->driDrawablePriv;
 }
 
 static inline __DRIdrawable* radeon_get_readable(radeonContextPtr radeon)
 {
-	return radeon->dri.context->driReadablePriv;
+	return radeon->driContext->driReadablePriv;
 }
 
 extern const char const *radeonVendorString;

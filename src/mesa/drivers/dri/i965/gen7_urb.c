@@ -228,7 +228,7 @@ gen7_upload_urb(struct brw_context *brw)
       remaining_space = total_wants;
    if (remaining_space > 0) {
       unsigned vs_additional = (unsigned)
-         round(vs_wants * (((double) remaining_space) / total_wants));
+         roundf(vs_wants * (((float) remaining_space) / total_wants));
       vs_chunks += vs_additional;
       remaining_space -= vs_additional;
       gs_chunks += remaining_space;

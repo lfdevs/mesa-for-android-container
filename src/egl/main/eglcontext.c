@@ -101,11 +101,42 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *dpy,
 
       switch (attr) {
       case EGL_CONTEXT_CLIENT_VERSION:
+         /* The EGL 1.4 spec says:
+          *
+          *     "attribute EGL_CONTEXT_CLIENT_VERSION is only valid when the
+          *      current rendering API is EGL_OPENGL_ES_API"
+          *
+          * The EGL_KHR_create_context spec says:
+          *
+          *     "EGL_CONTEXT_MAJOR_VERSION_KHR           0x3098
+          *      (this token is an alias for EGL_CONTEXT_CLIENT_VERSION)"
+          *
+          *     "The values for attributes EGL_CONTEXT_MAJOR_VERSION_KHR and
+          *      EGL_CONTEXT_MINOR_VERSION_KHR specify the requested client API
+          *      version. They are only meaningful for OpenGL and OpenGL ES
+          *      contexts, and specifying them for other types of contexts will
+          *      generate an error."
+          */
+         if ((api != EGL_OPENGL_ES_API &&
+             (!dpy->Extensions.KHR_create_context || api != EGL_OPENGL_API))) {
+               err = EGL_BAD_ATTRIBUTE;
+               break;
+         }
+
          ctx->ClientMajorVersion = val;
          break;
 
       case EGL_CONTEXT_MINOR_VERSION_KHR:
-         if (!dpy->Extensions.KHR_create_context) {
+         /* The EGL_KHR_create_context spec says:
+          *
+          *     "The values for attributes EGL_CONTEXT_MAJOR_VERSION_KHR and
+          *      EGL_CONTEXT_MINOR_VERSION_KHR specify the requested client API
+          *      version. They are only meaningful for OpenGL and OpenGL ES
+          *      contexts, and specifying them for other types of contexts will
+          *      generate an error."
+          */
+         if (!dpy->Extensions.KHR_create_context ||
+             (api != EGL_OPENGL_ES_API && api != EGL_OPENGL_API)) {
             err = EGL_BAD_ATTRIBUTE;
             break;
          }
@@ -196,6 +227,36 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *dpy,
 
          if (val == EGL_TRUE)
             ctx->Flags |= EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR;
+         break;
+
+      case EGL_CONTEXT_OPENGL_ROBUST_ACCESS:
+         if (dpy->Version < 15) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+
+         if (val == EGL_TRUE)
+            ctx->Flags |= EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR;
+         break;
+
+      case EGL_CONTEXT_OPENGL_DEBUG:
+         if (dpy->Version < 15) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+
+         if (val == EGL_TRUE)
+            ctx->Flags |= EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR;
+         break;
+
+      case EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE:
+         if (dpy->Version < 15) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+
+         if (val == EGL_TRUE)
+            ctx->Flags |= EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE_BIT_KHR;
          break;
 
       default:

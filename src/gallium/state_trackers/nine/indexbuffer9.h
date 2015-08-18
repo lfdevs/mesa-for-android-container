@@ -45,7 +45,7 @@ struct NineIndexBuffer9
 
     D3DINDEXBUFFER_DESC desc;
 };
-static INLINE struct NineIndexBuffer9 *
+static inline struct NineIndexBuffer9 *
 NineIndexBuffer9( void *data )
 {
     return (struct NineIndexBuffer9 *)data;

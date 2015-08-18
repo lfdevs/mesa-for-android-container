@@ -104,7 +104,7 @@ lp_build_tgsi_intrinsic(
    struct lp_build_context * base = &bld_base->base;
    emit_data->output[emit_data->chan] = lp_build_intrinsic(
                base->gallivm->builder, action->intr_name,
-               emit_data->dst_type, emit_data->args, emit_data->arg_count);
+               emit_data->dst_type, emit_data->args, emit_data->arg_count, 0);
 }
 
 LLVMValueRef
@@ -175,11 +175,50 @@ void lp_build_fetch_args(
    unsigned src;
    for (src = 0; src < emit_data->info->num_src; src++) {
       emit_data->args[src] = lp_build_emit_fetch(bld_base, emit_data->inst, src,
-                                               emit_data->chan);
+                                                 emit_data->src_chan);
    }
    emit_data->arg_count = emit_data->info->num_src;
    lp_build_action_set_dst_type(emit_data, bld_base,
 		emit_data->inst->Instruction.Opcode);
+}
+
+/**
+ * with doubles src and dst channels aren't 1:1.
+ * check the src/dst types for the opcode,
+ * 1. if neither is double then src == dst;
+ * 2. if dest is double
+ *     - don't store to y or w
+ *     - if src is double then src == dst.
+ *     - else for f2d, d.xy = s.x
+ *     - else for f2d, d.zw = s.y
+ * 3. if dst is single, src is double
+ *    - map dst x,z to src xy;
+ *    - map dst y,w to src zw;
+ */
+static int get_src_chan_idx(unsigned opcode,
+                            int dst_chan_index)
+{
+   enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(opcode);
+   enum tgsi_opcode_type stype = tgsi_opcode_infer_src_type(opcode);
+
+   if (dtype != TGSI_TYPE_DOUBLE && stype != TGSI_TYPE_DOUBLE)
+      return dst_chan_index;
+   if (dtype == TGSI_TYPE_DOUBLE) {
+      if (dst_chan_index == 1 || dst_chan_index == 3)
+         return -1;
+      if (stype == TGSI_TYPE_DOUBLE)
+         return dst_chan_index;
+      if (dst_chan_index == 0)
+         return 0;
+      if (dst_chan_index == 2)
+         return 1;
+   } else {
+      if (dst_chan_index == 0 || dst_chan_index == 2)
+         return 0;
+      if (dst_chan_index == 1 || dst_chan_index == 3)
+         return 2;
+   }
+   return -1;
 }
 
 /* XXX: COMMENT
@@ -197,7 +236,6 @@ lp_build_tgsi_inst_llvm(
    struct lp_build_emit_data emit_data;
    unsigned chan_index;
    LLVMValueRef val;
-
    bld_base->pc++;
 
    if (bld_base->emit_debug) {
@@ -240,7 +278,12 @@ lp_build_tgsi_inst_llvm(
    /* Emit the instructions */
    if (info->output_mode == TGSI_OUTPUT_COMPONENTWISE && bld_base->soa) {
       TGSI_FOR_EACH_DST0_ENABLED_CHANNEL(inst, chan_index) {
+         int src_index = get_src_chan_idx(inst->Instruction.Opcode, chan_index);
+         /* ignore channels 1/3 in double dst */
+         if (src_index == -1)
+            continue;
          emit_data.chan = chan_index;
+         emit_data.src_chan = src_index;
          if (!action->fetch_args) {
             lp_build_fetch_args(bld_base, &emit_data);
          } else {

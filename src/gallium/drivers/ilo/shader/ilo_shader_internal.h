@@ -28,6 +28,9 @@
 #ifndef ILO_SHADER_INTERNAL_H
 #define ILO_SHADER_INTERNAL_H
 
+#include "core/ilo_state_sbe.h"
+#include "core/ilo_state_sol.h"
+
 #include "ilo_common.h"
 #include "ilo_state.h"
 #include "ilo_shader.h"
@@ -72,13 +75,27 @@ struct ilo_shader_variant {
    uint32_t saturate_tex_coords[3];
 };
 
+struct ilo_kernel_routing {
+   bool initialized;
+
+   bool is_point;
+   bool light_twoside;
+   uint32_t sprite_coord_enable;
+   int sprite_coord_mode;
+   int src_len;
+   int src_semantics[PIPE_MAX_SHADER_OUTPUTS];
+   int src_indices[PIPE_MAX_SHADER_OUTPUTS];
+
+   struct ilo_state_sbe sbe;
+};
+
 /**
  * A compiled shader.
  */
 struct ilo_shader {
    struct ilo_shader_variant variant;
 
-   struct ilo_shader_cso cso;
+   union ilo_shader_cso cso;
 
    struct {
       int semantic_names[PIPE_MAX_SHADER_INPUTS];
@@ -111,7 +128,9 @@ struct ilo_shader {
 
    bool stream_output;
    int svbi_post_inc;
-   struct pipe_stream_output_info so_info;
+
+   uint32_t sol_data[PIPE_MAX_SO_OUTPUTS][2];
+   struct ilo_state_sol sol;
 
    /* for VS stream output / rasterizer discard */
    int gs_offsets[3];
@@ -121,11 +140,8 @@ struct ilo_shader {
    void *kernel;
    int kernel_size;
 
-   bool routing_initialized;
-   int routing_src_semantics[PIPE_MAX_SHADER_OUTPUTS];
-   int routing_src_indices[PIPE_MAX_SHADER_OUTPUTS];
-   uint32_t routing_sprite_coord_enable;
    struct ilo_kernel_routing routing;
+   struct ilo_state_ps_params_info ps_params;
 
    /* what does the push constant buffer consist of? */
    struct {

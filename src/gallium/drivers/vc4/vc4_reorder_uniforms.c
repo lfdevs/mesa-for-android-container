@@ -42,10 +42,8 @@ qir_reorder_uniforms(struct vc4_compile *c)
         uint32_t *uniform_index = NULL;
         uint32_t uniform_index_size = 0;
         uint32_t next_uniform = 0;
-        struct simple_node *node;
-        foreach(node, &c->instructions) {
-                struct qinst *inst = (struct qinst *)node;
 
+        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
                         if (inst->src[i].file != QFILE_UNIF)
                                 continue;

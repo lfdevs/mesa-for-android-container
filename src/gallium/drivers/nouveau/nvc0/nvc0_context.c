@@ -63,12 +63,12 @@ nvc0_memory_barrier(struct pipe_context *pipe, unsigned flags)
          if (!nvc0->vtxbuf[i].buffer)
             continue;
          if (nvc0->vtxbuf[i].buffer->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
-            nvc0->base.vbo_dirty = TRUE;
+            nvc0->base.vbo_dirty = true;
       }
 
       if (nvc0->idxbuf.buffer &&
           nvc0->idxbuf.buffer->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
-         nvc0->base.vbo_dirty = TRUE;
+         nvc0->base.vbo_dirty = true;
 
       for (s = 0; s < 5 && !nvc0->cb_dirty; ++s) {
          uint32_t valid = nvc0->constbuf_valid[s];
@@ -86,7 +86,7 @@ nvc0_memory_barrier(struct pipe_context *pipe, unsigned flags)
                continue;
 
             if (res->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
-               nvc0->cb_dirty = TRUE;
+               nvc0->cb_dirty = true;
          }
       }
    }
@@ -132,6 +132,9 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
       pipe_resource_reference(res, NULL);
    }
    util_dynarray_fini(&nvc0->global_residents);
+
+   if (nvc0->tcp_empty)
+      nvc0->base.pipe.delete_tcs_state(&nvc0->base.pipe, nvc0->tcp_empty);
 }
 
 static void
@@ -164,9 +167,9 @@ nvc0_default_kick_notify(struct nouveau_pushbuf *push)
 
    if (screen) {
       nouveau_fence_next(&screen->base);
-      nouveau_fence_update(&screen->base, TRUE);
+      nouveau_fence_update(&screen->base, true);
       if (screen->cur_ctx)
-         screen->cur_ctx->state.flushed = TRUE;
+         screen->cur_ctx->state.flushed = true;
       NOUVEAU_DRV_STAT(&screen->base, pushbuf_count, 1);
    }
 }
@@ -306,13 +309,6 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    pipe->memory_barrier = nvc0_memory_barrier;
    pipe->get_sample_position = nvc0_context_get_sample_position;
 
-   if (!screen->cur_ctx) {
-      nvc0->state = screen->save_state;
-      screen->cur_ctx = nvc0;
-      nouveau_pushbuf_bufctx(screen->base.pushbuf, nvc0->bufctx);
-   }
-   screen->base.pushbuf->kick_notify = nvc0_default_kick_notify;
-
    nvc0_init_query_functions(nvc0);
    nvc0_init_surface_functions(nvc0);
    nvc0_init_state_functions(nvc0);
@@ -326,10 +322,25 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
 
    /* shader builtin library is per-screen, but we need a context for m2mf */
    nvc0_program_library_upload(nvc0);
+   nvc0_program_init_tcp_empty(nvc0);
+   if (!nvc0->tcp_empty)
+      goto out_err;
+   /* set the empty tctl prog on next draw in case one is never set */
+   nvc0->dirty |= NVC0_NEW_TCTLPROG;
+
+   /* now that there are no more opportunities for errors, set the current
+    * context if there isn't already one.
+    */
+   if (!screen->cur_ctx) {
+      nvc0->state = screen->save_state;
+      screen->cur_ctx = nvc0;
+      nouveau_pushbuf_bufctx(screen->base.pushbuf, nvc0->bufctx);
+   }
+   screen->base.pushbuf->kick_notify = nvc0_default_kick_notify;
 
    /* add permanently resident buffers to bufctxts */
 
-   flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_RD;
+   flags = NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RD;
 
    BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->text);
    BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->uniform_bo);
@@ -340,7 +351,7 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
       BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->parm);
    }
 
-   flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR;
+   flags = NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RDWR;
 
    if (screen->poly_cache)
       BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->poly_cache);
@@ -378,7 +389,7 @@ out_err:
 
 void
 nvc0_bufctx_fence(struct nvc0_context *nvc0, struct nouveau_bufctx *bufctx,
-                  boolean on_flush)
+                  bool on_flush)
 {
    struct nouveau_list *list = on_flush ? &bufctx->current : &bufctx->pending;
    struct nouveau_list *it;

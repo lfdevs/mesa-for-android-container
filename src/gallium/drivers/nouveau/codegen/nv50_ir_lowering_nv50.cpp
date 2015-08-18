@@ -888,7 +888,7 @@ NV50LoweringPreSSA::handleTXL(TexInstruction *i)
       }
    }
    bld.setPosition(joinBB, false);
-   bld.mkOp(OP_JOIN, TYPE_NONE, NULL);
+   bld.mkFlow(OP_JOIN, NULL, CC_ALWAYS, NULL)->fixed = 1;
    return true;
 }
 

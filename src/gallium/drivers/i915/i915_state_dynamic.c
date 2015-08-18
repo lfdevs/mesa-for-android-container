@@ -46,7 +46,7 @@
  * (active) state every time a 4kb boundary is crossed.
  */
 
-static INLINE void set_dynamic(struct i915_context *i915,
+static inline void set_dynamic(struct i915_context *i915,
                                unsigned offset,
                                const unsigned state)
 {
@@ -60,7 +60,7 @@ static INLINE void set_dynamic(struct i915_context *i915,
 
 
 
-static INLINE void set_dynamic_array(struct i915_context *i915,
+static inline void set_dynamic_array(struct i915_context *i915,
                                      unsigned offset,
                                      const unsigned *src,
                                      unsigned dwords)

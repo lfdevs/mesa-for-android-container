@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-AUTOMAKE_OPTIONS = subdir-objects
-
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
@@ -48,7 +46,7 @@ nouveau_compiler_SOURCES = \
 
 nouveau_compiler_LDADD = \
 	libnouveau.la \
-	../../auxiliary/libgallium.la \
+	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS)
 

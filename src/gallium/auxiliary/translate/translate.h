@@ -130,12 +130,12 @@ struct translate *translate_create( const struct translate_key *key );
 
 boolean translate_is_output_format_supported(enum pipe_format format);
 
-static INLINE int translate_keysize( const struct translate_key *key )
+static inline int translate_keysize( const struct translate_key *key )
 {
    return 2 * sizeof(int) + key->nr_elements * sizeof(struct translate_element);
 }
 
-static INLINE int translate_key_compare( const struct translate_key *a,
+static inline int translate_key_compare( const struct translate_key *a,
                                          const struct translate_key *b )
 {
    int keysize_a = translate_keysize(a);
@@ -148,7 +148,7 @@ static INLINE int translate_key_compare( const struct translate_key *a,
 }
 
 
-static INLINE void translate_key_sanitize( struct translate_key *a )
+static inline void translate_key_sanitize( struct translate_key *a )
 {
    int keysize = translate_keysize(a);
    char *ptr = (char *)a;

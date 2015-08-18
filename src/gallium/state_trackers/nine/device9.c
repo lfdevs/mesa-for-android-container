@@ -510,7 +510,7 @@ NineDevice9_GetCaps( struct NineDevice9 *This )
     return &This->caps;
 }
 
-static INLINE void
+static inline void
 NineDevice9_PauseRecording( struct NineDevice9 *This )
 {
     if (This->record) {
@@ -519,7 +519,7 @@ NineDevice9_PauseRecording( struct NineDevice9 *This )
     }
 }
 
-static INLINE void
+static inline void
 NineDevice9_ResumeRecording( struct NineDevice9 *This )
 {
     if (This->record) {
@@ -2697,7 +2697,7 @@ NineDevice9_GetNPatchMode( struct NineDevice9 *This )
     STUB(0);
 }
 
-static INLINE void
+static inline void
 init_draw_info(struct pipe_draw_info *info,
                struct NineDevice9 *dev, D3DPRIMITIVETYPE type, UINT count)
 {

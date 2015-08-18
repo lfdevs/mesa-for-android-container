@@ -57,7 +57,7 @@ d3dquerytype_to_pipe_query(struct pipe_screen *screen, D3DQUERYTYPE type)
 
 #define GET_DATA_SIZE_CASE2(a, b) case D3DQUERYTYPE_##a: return sizeof(D3DDEVINFO_##b)
 #define GET_DATA_SIZE_CASET(a, b) case D3DQUERYTYPE_##a: return sizeof(b)
-static INLINE DWORD
+static inline DWORD
 nine_query_result_size(D3DQUERYTYPE type)
 {
     switch (type) {

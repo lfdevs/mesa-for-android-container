@@ -36,7 +36,7 @@ tgsi_parse_init(
    const struct tgsi_token *tokens )
 {
    ctx->FullHeader.Header = *(struct tgsi_header *) &tokens[0];
-   if( ctx->FullHeader.Header.HeaderSize >= 2 ) {
+   if (ctx->FullHeader.Header.HeaderSize >= 2) {
       ctx->FullHeader.Processor = *(struct tgsi_processor *) &tokens[1];
    }
    else {
@@ -69,7 +69,7 @@ tgsi_parse_end_of_tokens(
  * warnings.  The warnings seem harmless on x86 but on PPC they cause
  * real failures.
  */
-static INLINE void
+static inline void
 copy_token(void *dst, const void *src)
 {
    memcpy(dst, src, 4);
@@ -113,11 +113,11 @@ tgsi_parse_token(
          next_token(ctx, &decl->Dim);
       }
 
-      if( decl->Declaration.Interpolate ) {
+      if (decl->Declaration.Interpolate) {
          next_token( ctx, &decl->Interp );
       }
 
-      if( decl->Declaration.Semantic ) {
+      if (decl->Declaration.Semantic) {
          next_token( ctx, &decl->Semantic );
       }
 
@@ -129,7 +129,7 @@ tgsi_parse_token(
          next_token(ctx, &decl->SamplerView);
       }
 
-      if( decl->Declaration.Array ) {
+      if (decl->Declaration.Array) {
          next_token(ctx, &decl->Array);
       }
 
@@ -190,21 +190,21 @@ tgsi_parse_token(
 
       if (inst->Instruction.Texture) {
          next_token( ctx, &inst->Texture);
-         for( i = 0; i < inst->Texture.NumOffsets; i++ ) {
+         for (i = 0; i < inst->Texture.NumOffsets; i++) {
             next_token( ctx, &inst->TexOffsets[i] );
          }
       }
 
       assert( inst->Instruction.NumDstRegs <= TGSI_FULL_MAX_DST_REGISTERS );
 
-      for(  i = 0; i < inst->Instruction.NumDstRegs; i++ ) {
+      for (i = 0; i < inst->Instruction.NumDstRegs; i++) {
 
          next_token( ctx, &inst->Dst[i].Register );
 
-         if( inst->Dst[i].Register.Indirect )
+         if (inst->Dst[i].Register.Indirect)
             next_token( ctx, &inst->Dst[i].Indirect );
 
-         if( inst->Dst[i].Register.Dimension ) {
+         if (inst->Dst[i].Register.Dimension) {
             next_token( ctx, &inst->Dst[i].Dimension );
 
             /*
@@ -212,21 +212,21 @@ tgsi_parse_token(
              */
             assert( !inst->Dst[i].Dimension.Dimension );
 
-            if( inst->Dst[i].Dimension.Indirect )
+            if (inst->Dst[i].Dimension.Indirect)
                next_token( ctx, &inst->Dst[i].DimIndirect );
          }
       }
 
       assert( inst->Instruction.NumSrcRegs <= TGSI_FULL_MAX_SRC_REGISTERS );
 
-      for( i = 0; i < inst->Instruction.NumSrcRegs; i++ ) {
+      for (i = 0; i < inst->Instruction.NumSrcRegs; i++) {
 
          next_token( ctx, &inst->Src[i].Register );
 
-         if( inst->Src[i].Register.Indirect )
+         if (inst->Src[i].Register.Indirect)
             next_token( ctx, &inst->Src[i].Indirect );
 
-         if( inst->Src[i].Register.Dimension ) {
+         if (inst->Src[i].Register.Dimension) {
             next_token( ctx, &inst->Src[i].Dimension );
 
             /*
@@ -234,7 +234,7 @@ tgsi_parse_token(
              */
             assert( !inst->Src[i].Dimension.Dimension );
 
-            if( inst->Src[i].Dimension.Indirect )
+            if (inst->Src[i].Dimension.Indirect)
                next_token( ctx, &inst->Src[i].DimIndirect );
          }
       }

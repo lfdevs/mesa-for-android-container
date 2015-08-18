@@ -427,7 +427,7 @@ bind_aapoint_fragment_shader(struct aapoint_stage *aapoint)
 
 
 
-static INLINE struct aapoint_stage *
+static inline struct aapoint_stage *
 aapoint_stage( struct draw_stage *stage )
 {
    return (struct aapoint_stage *) stage;

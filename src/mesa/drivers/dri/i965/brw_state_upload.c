@@ -41,6 +41,7 @@
 #include "brw_gs.h"
 #include "brw_wm.h"
 #include "brw_cs.h"
+#include "main/framebuffer.h"
 
 static const struct brw_tracked_state *gen4_atoms[] =
 {
@@ -191,6 +192,12 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &gen6_color_calc_state,	/* must do before cc unit */
    &gen6_depth_stencil_state,	/* must do before cc unit */
 
+   &gen7_hw_binding_tables, /* Enable hw-generated binding tables for Haswell */
+
+   &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */
+   &brw_gs_image_surfaces, /* Before gs push/pull constants and binding table */
+   &brw_wm_image_surfaces, /* Before wm push/pull constants and binding table */
+
    &gen6_vs_push_constants, /* Before vs_state */
    &gen6_gs_push_constants, /* Before gs_state */
    &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
@@ -250,6 +257,7 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
 static const struct brw_tracked_state *gen7_compute_atoms[] =
 {
    &brw_state_base_address,
+   &brw_cs_image_surfaces,
    &brw_cs_abo_surfaces,
    &brw_cs_state,
 };
@@ -266,6 +274,12 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &gen7_urb,
    &gen8_blend_state,
    &gen6_color_calc_state,
+
+   &gen7_hw_binding_tables, /* Enable hw-generated binding tables for Broadwell */
+
+   &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */
+   &brw_gs_image_surfaces, /* Before gs push/pull constants and binding table */
+   &brw_wm_image_surfaces, /* Before wm push/pull constants and binding table */
 
    &gen6_vs_push_constants, /* Before vs_state */
    &gen6_gs_push_constants, /* Before gs_state */
@@ -333,6 +347,7 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
 static const struct brw_tracked_state *gen8_compute_atoms[] =
 {
    &gen8_state_base_address,
+   &brw_cs_image_surfaces,
    &brw_cs_abo_surfaces,
    &brw_cs_state,
 };
@@ -348,7 +363,7 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       return;
 
    if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
+      brw_emit_post_sync_nonzero_flush(brw);
 
    brw_upload_invariant_state(brw);
 
@@ -467,6 +482,7 @@ void brw_init_state( struct brw_context *brw )
    ctx->DriverFlags.NewUniformBuffer = BRW_NEW_UNIFORM_BUFFER;
    ctx->DriverFlags.NewTextureBuffer = BRW_NEW_TEXTURE_BUFFER;
    ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_ATOMIC_BUFFER;
+   ctx->DriverFlags.NewImageUnits = BRW_NEW_IMAGE_UNITS;
 }
 
 
@@ -580,6 +596,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_STATS_WM),
    DEFINE_BIT(BRW_NEW_UNIFORM_BUFFER),
    DEFINE_BIT(BRW_NEW_ATOMIC_BUFFER),
+   DEFINE_BIT(BRW_NEW_IMAGE_UNITS),
    DEFINE_BIT(BRW_NEW_META_IN_PROGRESS),
    DEFINE_BIT(BRW_NEW_INTERPOLATION_MAP),
    DEFINE_BIT(BRW_NEW_PUSH_CONSTANT_ALLOCATION),
@@ -660,6 +677,7 @@ brw_upload_pipeline_state(struct brw_context *brw,
    int i;
    static int dirty_count = 0;
    struct brw_state_flags state = brw->state.pipelines[pipeline];
+   unsigned int fb_samples = _mesa_geometric_samples(ctx->DrawBuffer);
 
    brw_select_pipeline(brw, pipeline);
 
@@ -696,8 +714,8 @@ brw_upload_pipeline_state(struct brw_context *brw,
       brw->ctx.NewDriverState |= BRW_NEW_META_IN_PROGRESS;
    }
 
-   if (brw->num_samples != ctx->DrawBuffer->Visual.samples) {
-      brw->num_samples = ctx->DrawBuffer->Visual.samples;
+   if (brw->num_samples != fb_samples) {
+      brw->num_samples = fb_samples;
       brw->ctx.NewDriverState |= BRW_NEW_NUM_SAMPLES;
    }
 
@@ -708,7 +726,7 @@ brw_upload_pipeline_state(struct brw_context *brw,
 
    /* Emit Sandybridge workaround flushes on every primitive, for safety. */
    if (brw->gen == 6)
-      intel_emit_post_sync_nonzero_flush(brw);
+      brw_emit_post_sync_nonzero_flush(brw);
 
    brw_upload_programs(brw, pipeline);
    merge_ctx_state(brw, &state);

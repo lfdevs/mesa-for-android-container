@@ -41,7 +41,7 @@ struct NineQuery9
     enum nine_query_state state;
     boolean instant; /* true if D3DISSUE_BEGIN is not needed / invalid */
 };
-static INLINE struct NineQuery9 *
+static inline struct NineQuery9 *
 NineQuery9( void *data )
 {
     return (struct NineQuery9 *)data;

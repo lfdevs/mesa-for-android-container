@@ -31,13 +31,24 @@
 #define DRM_VC4_WAIT_BO                           0x02
 #define DRM_VC4_CREATE_BO                         0x03
 #define DRM_VC4_MMAP_BO                           0x04
+#define DRM_VC4_CREATE_SHADER_BO                  0x05
 
 #define DRM_IOCTL_VC4_SUBMIT_CL           DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_SUBMIT_CL, struct drm_vc4_submit_cl)
 #define DRM_IOCTL_VC4_WAIT_SEQNO          DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_WAIT_SEQNO, struct drm_vc4_wait_seqno)
 #define DRM_IOCTL_VC4_WAIT_BO             DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_WAIT_BO, struct drm_vc4_wait_bo)
 #define DRM_IOCTL_VC4_CREATE_BO           DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_CREATE_BO, struct drm_vc4_create_bo)
 #define DRM_IOCTL_VC4_MMAP_BO             DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_MMAP_BO, struct drm_vc4_mmap_bo)
+#define DRM_IOCTL_VC4_CREATE_SHADER_BO    DRM_IOWR( DRM_COMMAND_BASE + DRM_VC4_CREATE_SHADER_BO, struct drm_vc4_create_shader_bo)
 
+struct drm_vc4_submit_rcl_surface {
+	uint32_t hindex; /* Handle index, or ~0 if not present. */
+	uint32_t offset; /* Offset to start of buffer. */
+	/*
+         * Bits for either render config (color_ms_write) or load/store packet.
+	 */
+	uint16_t bits;
+	uint16_t pad;
+};
 
 /**
  * struct drm_vc4_submit_cl - ioctl argument for submitting commands to the 3D
@@ -61,16 +72,6 @@ struct drm_vc4_submit_cl {
 	 * to the tile allocation BO.
 	 */
 	uint64_t bin_cl;
-
-	/* Pointer to the render command list.
-	 *
-	 * The render command list contains a set of packets to load the
-	 * current tile's state (reading from memory, or just clearing it)
-	 * into the GPU, then call into the tile allocation BO to run the
-	 * stored rendering for that tile, then store the tile's state back to
-	 * memory.
-	 */
-	uint64_t render_cl;
 
 	/* Pointer to the shader records.
 	 *
@@ -102,8 +103,6 @@ struct drm_vc4_submit_cl {
 
 	/* Size in bytes of the binner command list. */
 	uint32_t bin_cl_size;
-	/* Size in bytes of the render command list */
-	uint32_t render_cl_size;
 	/* Size in bytes of the set of shader records. */
 	uint32_t shader_rec_size;
 	/* Number of shader records.
@@ -119,8 +118,25 @@ struct drm_vc4_submit_cl {
 	/* Number of BO handles passed in (size is that times 4). */
 	uint32_t bo_handle_count;
 
+	/* RCL setup: */
+	uint16_t width;
+	uint16_t height;
+	uint8_t min_x_tile;
+	uint8_t min_y_tile;
+	uint8_t max_x_tile;
+	uint8_t max_y_tile;
+	struct drm_vc4_submit_rcl_surface color_read;
+	struct drm_vc4_submit_rcl_surface color_ms_write;
+	struct drm_vc4_submit_rcl_surface zs_read;
+	struct drm_vc4_submit_rcl_surface zs_write;
+	uint32_t clear_color[2];
+	uint32_t clear_z;
+	uint8_t clear_s;
+
+	uint32_t pad:24;
+
+#define VC4_SUBMIT_CL_USE_CLEAR_COLOR			(1 << 0)
 	uint32_t flags;
-	uint32_t pad;
 
 	/* Returned value of the seqno of this render job (for the
 	 * wait ioctl).
@@ -165,6 +181,29 @@ struct drm_vc4_create_bo {
 	uint32_t flags;
 	/** Returned GEM handle for the BO. */
 	uint32_t handle;
+	uint32_t pad;
+};
+
+/**
+ * struct drm_vc4_create_shader_bo - ioctl argument for creating VC4
+ * shader BOs.
+ *
+ * Since allowing a shader to be overwritten while it's also being
+ * executed from would allow privlege escalation, shaders must be
+ * created using this ioctl, and they can't be mmapped later.
+ */
+struct drm_vc4_create_shader_bo {
+	/* Size of the data argument. */
+	uint32_t size;
+	/* Flags, currently must be 0. */
+	uint32_t flags;
+
+	/* Pointer to the data. */
+	uint64_t data;
+
+	/** Returned GEM handle for the BO. */
+	uint32_t handle;
+	/* Pad, must be 0. */
 	uint32_t pad;
 };
 

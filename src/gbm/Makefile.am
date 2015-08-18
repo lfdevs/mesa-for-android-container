@@ -1,5 +1,3 @@
-AUTOMAKE_OPTIONS = subdir-objects
-
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = main/gbm.pc
 
@@ -41,18 +39,15 @@ libgbm_la_LIBADD += $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.l
 endif
 
 if HAVE_DRI2
-noinst_LTLIBRARIES = libgbm_dri.la
-libgbm_dri_la_SOURCES = \
+libgbm_la_SOURCES += \
 	backends/dri/gbm_dri.c \
 	backends/dri/gbm_driint.h
 
-libgbm_dri_la_CFLAGS = \
-	$(AM_CFLAGS) \
+AM_CFLAGS += \
 	-DDEFAULT_DRIVER_DIR='"$(DRI_DRIVER_SEARCH_DIR)"' \
 	$(LIBDRM_CFLAGS)
 
 libgbm_la_LIBADD += \
-	libgbm_dri.la \
 	$(LIBDRM_LIBS)
 endif
 

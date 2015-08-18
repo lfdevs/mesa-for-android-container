@@ -35,7 +35,7 @@
 
 #include "nouveau_gldefs.h"
 
-static INLINE uint32_t
+static inline uint32_t
 nvc0_colormask(unsigned mask)
 {
     uint32_t ret = 0;
@@ -55,7 +55,7 @@ nvc0_colormask(unsigned mask)
 #define NVC0_BLEND_FACTOR_CASE(a, b) \
    case PIPE_BLENDFACTOR_##a: return NV50_BLEND_FACTOR_##b
 
-static INLINE uint32_t
+static inline uint32_t
 nvc0_blend_fac(unsigned factor)
 {
    switch (factor) {
@@ -90,10 +90,9 @@ nvc0_blend_state_create(struct pipe_context *pipe,
    struct nvc0_blend_stateobj *so = CALLOC_STRUCT(nvc0_blend_stateobj);
    int i;
    int r; /* reference */
-   uint32_t ms;
    uint8_t blend_en = 0;
-   boolean indep_masks = FALSE;
-   boolean indep_funcs = FALSE;
+   bool indep_masks = false;
+   bool indep_funcs = false;
 
    so->pipe = *cso;
 
@@ -111,7 +110,7 @@ nvc0_blend_state_create(struct pipe_context *pipe,
              cso->rt[i].alpha_func != cso->rt[r].alpha_func ||
              cso->rt[i].alpha_src_factor != cso->rt[r].alpha_src_factor ||
              cso->rt[i].alpha_dst_factor != cso->rt[r].alpha_dst_factor) {
-            indep_funcs = TRUE;
+            indep_funcs = true;
             break;
          }
       }
@@ -120,7 +119,7 @@ nvc0_blend_state_create(struct pipe_context *pipe,
 
       for (i = 1; i < 8; ++i) {
          if (cso->rt[i].colormask != cso->rt[0].colormask) {
-            indep_masks = TRUE;
+            indep_masks = true;
             break;
          }
       }
@@ -176,15 +175,6 @@ nvc0_blend_state_create(struct pipe_context *pipe,
       }
    }
 
-   ms = 0;
-   if (cso->alpha_to_coverage)
-      ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_COVERAGE;
-   if (cso->alpha_to_one)
-      ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_ONE;
-
-   SB_BEGIN_3D(so, MULTISAMPLE_CTRL, 1);
-   SB_DATA    (so, ms);
-
    assert(so->size <= (sizeof(so->state) / sizeof(so->state[0])));
    return so;
 }
@@ -234,7 +224,7 @@ nvc0_rasterizer_state_create(struct pipe_context *pipe,
     SB_IMMED_3D(so, MULTISAMPLE_ENABLE, cso->multisample);
 
     SB_IMMED_3D(so, LINE_SMOOTH_ENABLE, cso->line_smooth);
-    if (cso->line_smooth)
+    if (cso->line_smooth || cso->multisample)
        SB_BEGIN_3D(so, LINE_WIDTH_SMOOTH, 1);
     else
        SB_BEGIN_3D(so, LINE_WIDTH_ALIASED, 1);
@@ -351,6 +341,13 @@ nvc0_zsa_state_create(struct pipe_context *pipe,
       SB_DATA    (so, nvgl_comparison_op(cso->depth.func));
    }
 
+   SB_IMMED_3D(so, DEPTH_BOUNDS_EN, cso->depth.bounds_test);
+   if (cso->depth.bounds_test) {
+      SB_BEGIN_3D(so, DEPTH_BOUNDS(0), 2);
+      SB_DATA    (so, fui(cso->depth.bounds_min));
+      SB_DATA    (so, fui(cso->depth.bounds_max));
+   }
+
    if (cso->stencil[0].enabled) {
       SB_BEGIN_3D(so, STENCIL_ENABLE, 5);
       SB_DATA    (so, 1);
@@ -428,7 +425,7 @@ nvc0_sampler_state_delete(struct pipe_context *pipe, void *hwcso)
    FREE(hwcso);
 }
 
-static INLINE void
+static inline void
 nvc0_stage_sampler_states_bind(struct nvc0_context *nvc0, int s,
                                unsigned nr, void **hwcso)
 {
@@ -508,6 +505,14 @@ nvc0_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
       assert(start == 0);
       nvc0_stage_sampler_states_bind(nvc0_context(pipe), 0, nr, s);
       break;
+   case PIPE_SHADER_TESS_CTRL:
+      assert(start == 0);
+      nvc0_stage_sampler_states_bind(nvc0_context(pipe), 1, nr, s);
+      break;
+   case PIPE_SHADER_TESS_EVAL:
+      assert(start == 0);
+      nvc0_stage_sampler_states_bind(nvc0_context(pipe), 2, nr, s);
+      break;
    case PIPE_SHADER_GEOMETRY:
       assert(start == 0);
       nvc0_stage_sampler_states_bind(nvc0_context(pipe), 3, nr, s);
@@ -537,7 +542,7 @@ nvc0_sampler_view_destroy(struct pipe_context *pipe,
    FREE(nv50_tic_entry(view));
 }
 
-static INLINE void
+static inline void
 nvc0_stage_set_sampler_views(struct nvc0_context *nvc0, int s,
                              unsigned nr,
                              struct pipe_sampler_view **views)
@@ -632,6 +637,12 @@ nvc0_set_sampler_views(struct pipe_context *pipe, unsigned shader,
    switch (shader) {
    case PIPE_SHADER_VERTEX:
       nvc0_stage_set_sampler_views(nvc0_context(pipe), 0, nr, views);
+      break;
+   case PIPE_SHADER_TESS_CTRL:
+      nvc0_stage_set_sampler_views(nvc0_context(pipe), 1, nr, views);
+      break;
+   case PIPE_SHADER_TESS_EVAL:
+      nvc0_stage_set_sampler_views(nvc0_context(pipe), 2, nr, views);
       break;
    case PIPE_SHADER_GEOMETRY:
       nvc0_stage_set_sampler_views(nvc0_context(pipe), 3, nr, views);
@@ -734,6 +745,38 @@ nvc0_gp_state_bind(struct pipe_context *pipe, void *hwcso)
 }
 
 static void *
+nvc0_tcp_state_create(struct pipe_context *pipe,
+                     const struct pipe_shader_state *cso)
+{
+   return nvc0_sp_state_create(pipe, cso, PIPE_SHADER_TESS_CTRL);
+}
+
+static void
+nvc0_tcp_state_bind(struct pipe_context *pipe, void *hwcso)
+{
+    struct nvc0_context *nvc0 = nvc0_context(pipe);
+
+    nvc0->tctlprog = hwcso;
+    nvc0->dirty |= NVC0_NEW_TCTLPROG;
+}
+
+static void *
+nvc0_tep_state_create(struct pipe_context *pipe,
+                     const struct pipe_shader_state *cso)
+{
+   return nvc0_sp_state_create(pipe, cso, PIPE_SHADER_TESS_EVAL);
+}
+
+static void
+nvc0_tep_state_bind(struct pipe_context *pipe, void *hwcso)
+{
+    struct nvc0_context *nvc0 = nvc0_context(pipe);
+
+    nvc0->tevlprog = hwcso;
+    nvc0->dirty |= NVC0_NEW_TEVLPROG;
+}
+
+static void *
 nvc0_cp_state_create(struct pipe_context *pipe,
                      const struct pipe_compute_state *cso)
 {
@@ -790,7 +833,7 @@ nvc0_set_constant_buffer(struct pipe_context *pipe, uint shader, uint index,
 
    pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, res);
 
-   nvc0->constbuf[s][i].user = (cb && cb->user_buffer) ? TRUE : FALSE;
+   nvc0->constbuf[s][i].user = (cb && cb->user_buffer) ? true : false;
    if (nvc0->constbuf[s][i].user) {
       nvc0->constbuf[s][i].u.data = cb->user_buffer;
       nvc0->constbuf[s][i].size = MIN2(cb->buffer_size, 0x10000);
@@ -934,6 +977,18 @@ nvc0_set_viewport_states(struct pipe_context *pipe,
 }
 
 static void
+nvc0_set_tess_state(struct pipe_context *pipe,
+                    const float default_tess_outer[4],
+                    const float default_tess_inner[2])
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+
+   memcpy(nvc0->default_tess_outer, default_tess_outer, 4 * sizeof(float));
+   memcpy(nvc0->default_tess_inner, default_tess_inner, 2 * sizeof(float));
+   nvc0->dirty |= NVC0_NEW_TESSFACTOR;
+}
+
+static void
 nvc0_set_vertex_buffers(struct pipe_context *pipe,
                         unsigned start_slot, unsigned count,
                         const struct pipe_vertex_buffer *vb)
@@ -1018,7 +1073,7 @@ nvc0_so_target_create(struct pipe_context *pipe,
       FREE(targ);
       return NULL;
    }
-   targ->clean = TRUE;
+   targ->clean = true;
 
    targ->pipe.buffer_size = size;
    targ->pipe.buffer_offset = offset;
@@ -1051,13 +1106,13 @@ nvc0_set_transform_feedback_targets(struct pipe_context *pipe,
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    unsigned i;
-   boolean serialize = TRUE;
+   bool serialize = true;
 
    assert(num_targets <= 4);
 
    for (i = 0; i < num_targets; ++i) {
-      const boolean changed = nvc0->tfbbuf[i] != targets[i];
-      const boolean append = (offsets[i] == ((unsigned)-1));
+      const bool changed = nvc0->tfbbuf[i] != targets[i];
+      const bool append = (offsets[i] == ((unsigned)-1));
       if (!changed && append)
          continue;
       nvc0->tfbbuf_dirty |= 1 << i;
@@ -1066,7 +1121,7 @@ nvc0_set_transform_feedback_targets(struct pipe_context *pipe,
          nvc0_so_target_save_offset(pipe, nvc0->tfbbuf[i], i, &serialize);
 
       if (targets[i] && !append)
-         nvc0_so_target(targets[i])->clean = TRUE;
+         nvc0_so_target(targets[i])->clean = true;
 
       pipe_so_target_reference(&nvc0->tfbbuf[i], targets[i]);
    }
@@ -1125,16 +1180,18 @@ nvc0_set_compute_resources(struct pipe_context *pipe,
 }
 
 static void
-nvc0_set_shader_resources(struct pipe_context *pipe,
-                          unsigned start, unsigned nr,
-                          struct pipe_surface **resources)
+nvc0_set_shader_images(struct pipe_context *pipe, unsigned shader,
+                       unsigned start_slot, unsigned count,
+                       struct pipe_image_view **views)
 {
-   nvc0_bind_surfaces_range(nvc0_context(pipe), 0, start, nr, resources);
+#if 0
+   nvc0_bind_surfaces_range(nvc0_context(pipe), 0, start, nr, views);
 
    nvc0_context(pipe)->dirty |= NVC0_NEW_SURFACES;
+#endif
 }
 
-static INLINE void
+static inline void
 nvc0_set_global_handle(uint32_t *phandle, struct pipe_resource *res)
 {
    struct nv04_resource *buf = nv04_resource(res);
@@ -1218,12 +1275,18 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
    pipe->create_vs_state = nvc0_vp_state_create;
    pipe->create_fs_state = nvc0_fp_state_create;
    pipe->create_gs_state = nvc0_gp_state_create;
+   pipe->create_tcs_state = nvc0_tcp_state_create;
+   pipe->create_tes_state = nvc0_tep_state_create;
    pipe->bind_vs_state = nvc0_vp_state_bind;
    pipe->bind_fs_state = nvc0_fp_state_bind;
    pipe->bind_gs_state = nvc0_gp_state_bind;
+   pipe->bind_tcs_state = nvc0_tcp_state_bind;
+   pipe->bind_tes_state = nvc0_tep_state_bind;
    pipe->delete_vs_state = nvc0_sp_state_delete;
    pipe->delete_fs_state = nvc0_sp_state_delete;
    pipe->delete_gs_state = nvc0_sp_state_delete;
+   pipe->delete_tcs_state = nvc0_sp_state_delete;
+   pipe->delete_tes_state = nvc0_sp_state_delete;
 
    pipe->create_compute_state = nvc0_cp_state_create;
    pipe->bind_compute_state = nvc0_cp_state_bind;
@@ -1239,6 +1302,7 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
    pipe->set_polygon_stipple = nvc0_set_polygon_stipple;
    pipe->set_scissor_states = nvc0_set_scissor_states;
    pipe->set_viewport_states = nvc0_set_viewport_states;
+   pipe->set_tess_state = nvc0_set_tess_state;
 
    pipe->create_vertex_elements_state = nvc0_vertex_state_create;
    pipe->delete_vertex_elements_state = nvc0_vertex_state_delete;
@@ -1253,8 +1317,14 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
 
    pipe->set_global_binding = nvc0_set_global_bindings;
    pipe->set_compute_resources = nvc0_set_compute_resources;
-   pipe->set_shader_resources = nvc0_set_shader_resources;
+   pipe->set_shader_images = nvc0_set_shader_images;
 
    nvc0->sample_mask = ~0;
    nvc0->min_samples = 1;
+   nvc0->default_tess_outer[0] =
+   nvc0->default_tess_outer[1] =
+   nvc0->default_tess_outer[2] =
+   nvc0->default_tess_outer[3] = 1.0;
+   nvc0->default_tess_inner[0] =
+   nvc0->default_tess_inner[1] = 1.0;
 }

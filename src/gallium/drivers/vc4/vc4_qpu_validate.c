@@ -23,6 +23,13 @@
 
 #include "vc4_qpu.h"
 
+#ifdef NDEBUG
+/* Since most of our code is used in assert()s, don't warn about dead code. */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 static bool
 writes_reg(uint64_t inst, uint32_t w)
 {

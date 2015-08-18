@@ -58,7 +58,7 @@ nouveau_copy_buffer(struct nouveau_context *,
                     struct nv04_resource *dst, unsigned dst_pos,
                     struct nv04_resource *src, unsigned src_pos, unsigned size);
 
-boolean
+bool
 nouveau_buffer_migrate(struct nouveau_context *,
                        struct nv04_resource *, unsigned domain);
 
@@ -66,20 +66,20 @@ void *
 nouveau_resource_map_offset(struct nouveau_context *, struct nv04_resource *,
                             uint32_t offset, uint32_t flags);
 
-static INLINE void
+static inline void
 nouveau_resource_unmap(struct nv04_resource *res)
 {
    /* no-op */
 }
 
-static INLINE struct nv04_resource *
+static inline struct nv04_resource *
 nv04_resource(struct pipe_resource *resource)
 {
    return (struct nv04_resource *)resource;
 }
 
 /* is resource mapped into the GPU's address space (i.e. VRAM or GART) ? */
-static INLINE boolean
+static inline bool
 nouveau_resource_mapped_by_gpu(struct pipe_resource *resource)
 {
    return nv04_resource(resource)->domain != 0;
@@ -93,7 +93,7 @@ struct pipe_resource *
 nouveau_user_buffer_create(struct pipe_screen *screen, void *ptr,
                            unsigned bytes, unsigned usage);
 
-boolean
+bool
 nouveau_user_buffer_upload(struct nouveau_context *, struct nv04_resource *,
                            unsigned base, unsigned size);
 

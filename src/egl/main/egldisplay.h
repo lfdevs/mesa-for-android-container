@@ -44,13 +44,12 @@ extern "C" {
 #endif
 
 enum _egl_platform_type {
-   _EGL_PLATFORM_WINDOWS,
    _EGL_PLATFORM_X11,
    _EGL_PLATFORM_WAYLAND,
    _EGL_PLATFORM_DRM,
-   _EGL_PLATFORM_NULL,
    _EGL_PLATFORM_ANDROID,
    _EGL_PLATFORM_HAIKU,
+   _EGL_PLATFORM_SURFACELESS,
 
    _EGL_NUM_PLATFORMS,
    _EGL_INVALID_PLATFORM = -1
@@ -90,45 +89,44 @@ struct _egl_resource
  */
 struct _egl_extensions
 {
-   EGLBoolean MESA_drm_display;
-   EGLBoolean MESA_drm_image;
-   EGLBoolean MESA_configless_context;
-
-   EGLBoolean WL_bind_wayland_display;
-   EGLBoolean WL_create_wayland_buffer_from_image;
-
-   EGLBoolean KHR_image_base;
-   EGLBoolean KHR_image_pixmap;
-   EGLBoolean KHR_vg_parent_image;
-   EGLBoolean KHR_get_all_proc_addresses;
-   EGLBoolean KHR_gl_texture_2D_image;
-   EGLBoolean KHR_gl_texture_cubemap_image;
-   EGLBoolean KHR_gl_texture_3D_image;
-   EGLBoolean KHR_gl_renderbuffer_image;
-
-   EGLBoolean KHR_reusable_sync;
-   EGLBoolean KHR_fence_sync;
-   EGLBoolean KHR_wait_sync;
-   EGLBoolean KHR_cl_event2;
-
-   EGLBoolean KHR_surfaceless_context;
-   EGLBoolean KHR_create_context;
-
-   EGLBoolean NOK_swap_region;
-   EGLBoolean NOK_texture_from_pixmap;
-
+   /* Please keep these sorted alphabetically. */
    EGLBoolean ANDROID_image_native_buffer;
 
    EGLBoolean CHROMIUM_sync_control;
 
+   EGLBoolean EXT_buffer_age;
+   EGLBoolean EXT_create_context_robustness;
+   EGLBoolean EXT_image_dma_buf_import;
+   EGLBoolean EXT_swap_buffers_with_damage;
+
+   EGLBoolean KHR_cl_event2;
+   EGLBoolean KHR_create_context;
+   EGLBoolean KHR_fence_sync;
+   EGLBoolean KHR_get_all_proc_addresses;
+   EGLBoolean KHR_gl_colorspace;
+   EGLBoolean KHR_gl_renderbuffer_image;
+   EGLBoolean KHR_gl_texture_2D_image;
+   EGLBoolean KHR_gl_texture_3D_image;
+   EGLBoolean KHR_gl_texture_cubemap_image;
+   EGLBoolean KHR_image_base;
+   EGLBoolean KHR_image_pixmap;
+   EGLBoolean KHR_reusable_sync;
+   EGLBoolean KHR_surfaceless_context;
+   EGLBoolean KHR_vg_parent_image;
+   EGLBoolean KHR_wait_sync;
+
+   EGLBoolean MESA_configless_context;
+   EGLBoolean MESA_drm_display;
+   EGLBoolean MESA_drm_image;
+   EGLBoolean MESA_image_dma_buf_export;
+
+   EGLBoolean NOK_swap_region;
+   EGLBoolean NOK_texture_from_pixmap;
+
    EGLBoolean NV_post_sub_buffer;
 
-   EGLBoolean EXT_create_context_robustness;
-   EGLBoolean EXT_buffer_age;
-   EGLBoolean EXT_swap_buffers_with_damage;
-   EGLBoolean EXT_image_dma_buf_import;
-
-   EGLBoolean MESA_image_dma_buf_export;
+   EGLBoolean WL_bind_wayland_display;
+   EGLBoolean WL_create_wayland_buffer_from_image;
 };
 
 
@@ -153,8 +151,7 @@ struct _egl_display
 
    /* these fields are set by the driver during init */
    void *DriverData;          /**< Driver private data */
-   EGLint VersionMajor;       /**< EGL major version */
-   EGLint VersionMinor;       /**< EGL minor version */
+   EGLint Version;            /**< EGL version major*10+minor */
    EGLint ClientAPIs;         /**< Bitmask of APIs supported (EGL_xxx_BIT) */
    _EGLExtensions Extensions; /**< Extensions supported */
 

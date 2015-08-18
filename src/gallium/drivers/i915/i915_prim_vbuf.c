@@ -96,7 +96,7 @@ struct i915_vbuf_render {
 /**
  * Basically a cast wrapper.
  */
-static INLINE struct i915_vbuf_render *
+static inline struct i915_vbuf_render *
 i915_vbuf_render(struct vbuf_render *render)
 {
    assert(render);

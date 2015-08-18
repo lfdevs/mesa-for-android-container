@@ -167,7 +167,7 @@ blend_for_op(struct xa_composite_blend *blend,
 }
 
 
-static INLINE int
+static inline int
 xa_repeat_to_gallium(int mode)
 {
     switch(mode) {
@@ -185,7 +185,7 @@ xa_repeat_to_gallium(int mode)
     return PIPE_TEX_WRAP_REPEAT;
 }
 
-static INLINE boolean
+static inline boolean
 xa_filter_to_gallium(int xrender_filter, int *out_filter)
 {
 

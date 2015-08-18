@@ -49,7 +49,7 @@ struct NineAdapter9
     
     struct d3dadapter9_context *ctx;
 };
-static INLINE struct NineAdapter9 *
+static inline struct NineAdapter9 *
 NineAdapter9( void *data )
 {
     return (struct NineAdapter9 *)data;

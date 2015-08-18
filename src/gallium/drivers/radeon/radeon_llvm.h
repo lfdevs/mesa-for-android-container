@@ -33,7 +33,6 @@
 
 #define RADEON_LLVM_MAX_INPUTS 32 * 4
 #define RADEON_LLVM_MAX_OUTPUTS 32 * 4
-#define RADEON_LLVM_MAX_ARRAYS 16
 
 #define RADEON_LLVM_INITIAL_CF_DEPTH 4
 
@@ -59,7 +58,6 @@ struct radeon_llvm_context {
 	unsigned type;
 	unsigned face_gpr;
 	unsigned two_side;
-	unsigned clip_vertex;
 	unsigned inputs_count;
 	struct r600_shader_io * r600_inputs;
 	struct r600_shader_io * r600_outputs;
@@ -73,21 +71,6 @@ struct radeon_llvm_context {
 
 	/*=== Front end configuration ===*/
 
-	/* Special Intrinsics */
-
-	/** Write to an output register: float store_output(float, i32) */
-	const char * store_output_intr;
-
-	/** Swizzle a vector value: <4 x float> swizzle(<4 x float>, i32)
-	 * The swizzle is an unsigned integer that encodes a TGSI_SWIZZLE_* value
-	 * in 2-bits.
-	 * Swizzle{0-1} = X Channel
-	 * Swizzle{2-3} = Y Channel
-	 * Swizzle{4-5} = Z Channel
-	 * Swizzle{6-7} = W Channel
-	 */
-	const char * swizzle_intr;
-
 	/* Instructions that are not described by any of the TGSI opcodes. */
 
 	/** This function is responsible for initilizing the inputs array and will be
@@ -100,9 +83,6 @@ struct radeon_llvm_context {
 	void (*load_system_value)(struct radeon_llvm_context *,
 			unsigned index,
 			const struct tgsi_full_declaration *decl);
-
-	/** User data to use with the callbacks */
-	void * userdata;
 
 	/** This array contains the input values for the shader.  Typically these
 	  * values will be in the form of a target intrinsic that will inform the
@@ -130,8 +110,7 @@ struct radeon_llvm_context {
 	unsigned loop_depth;
 	unsigned loop_depth_max;
 
-	struct tgsi_declaration_range arrays[RADEON_LLVM_MAX_ARRAYS];
-	unsigned num_arrays;
+	struct tgsi_declaration_range *arrays;
 
 	LLVMValueRef main_fn;
 
@@ -148,6 +127,8 @@ static inline LLVMTypeRef tgsi2llvmtype(
 	case TGSI_TYPE_UNSIGNED:
 	case TGSI_TYPE_SIGNED:
 		return LLVMInt32TypeInContext(ctx);
+	case TGSI_TYPE_DOUBLE:
+		return LLVMDoubleTypeInContext(ctx);
 	case TGSI_TYPE_UNTYPED:
 	case TGSI_TYPE_FLOAT:
 		return LLVMFloatTypeInContext(ctx);
@@ -173,8 +154,9 @@ static inline LLVMValueRef bitcast(
 
 
 void radeon_llvm_emit_prepare_cube_coords(struct lp_build_tgsi_context * bld_base,
-                                          struct lp_build_emit_data * emit_data,
-                                          LLVMValueRef *coords_arg);
+					  struct lp_build_emit_data * emit_data,
+					  LLVMValueRef *coords_arg,
+					  LLVMValueRef *derivs_arg);
 
 void radeon_llvm_context_init(struct radeon_llvm_context * ctx);
 
@@ -193,20 +175,29 @@ unsigned radeon_llvm_reg_index_soa(unsigned index, unsigned chan);
 
 void radeon_llvm_finalize_module(struct radeon_llvm_context * ctx);
 
-LLVMValueRef
-build_intrinsic(LLVMBuilderRef builder,
-		const char *name,
-		LLVMTypeRef ret_type,
-		LLVMValueRef *args,
-		unsigned num_args,
-		LLVMAttribute attr);
-
 void
 build_tgsi_intrinsic_nomem(
 		const struct lp_build_tgsi_action * action,
 		struct lp_build_tgsi_context * bld_base,
 		struct lp_build_emit_data * emit_data);
 
+LLVMValueRef
+radeon_llvm_emit_fetch_double(struct lp_build_tgsi_context *bld_base,
+			      LLVMValueRef ptr,
+			      LLVMValueRef ptr2);
 
+LLVMValueRef radeon_llvm_saturate(struct lp_build_tgsi_context *bld_base,
+                                  LLVMValueRef value);
+
+LLVMValueRef radeon_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
+				    const struct tgsi_full_src_register *reg,
+				    enum tgsi_opcode_type type,
+				    unsigned swizzle);
+
+void radeon_llvm_emit_store(
+	struct lp_build_tgsi_context * bld_base,
+	const struct tgsi_full_instruction * inst,
+	const struct tgsi_opcode_info * info,
+	LLVMValueRef dst[4]);
 
 #endif /* RADEON_LLVM_H */

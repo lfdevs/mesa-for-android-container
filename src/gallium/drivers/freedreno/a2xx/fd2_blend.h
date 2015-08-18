@@ -39,7 +39,7 @@ struct fd2_blend_stateobj {
 	uint32_t rb_colormask;
 };
 
-static INLINE struct fd2_blend_stateobj *
+static inline struct fd2_blend_stateobj *
 fd2_blend_stateobj(struct pipe_blend_state *blend)
 {
 	return (struct fd2_blend_stateobj *)blend;

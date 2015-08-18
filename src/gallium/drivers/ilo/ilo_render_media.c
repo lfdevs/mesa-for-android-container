@@ -30,6 +30,7 @@
 #include "core/ilo_builder_mi.h"
 #include "core/ilo_builder_render.h"
 
+#include "ilo_shader.h"
 #include "ilo_state.h"
 #include "ilo_render_gen.h"
 
@@ -206,7 +207,7 @@ ilo_render_emit_launch_grid_commands(struct ilo_render *render,
 
    gen6_state_base_address(render->builder, true);
 
-   gen6_MEDIA_VFE_STATE(render->builder, pcb_size, use_slm);
+   gen6_MEDIA_VFE_STATE(render->builder, &session->compute);
 
    if (pcb_size)
       gen6_MEDIA_CURBE_LOAD(render->builder, pcb, pcb_size);

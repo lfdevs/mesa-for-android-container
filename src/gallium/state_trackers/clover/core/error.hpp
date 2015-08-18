@@ -65,9 +65,9 @@ namespace clover {
       cl_int code;
    };
 
-   class build_error : public error {
+   class compile_error : public error {
    public:
-      build_error(const std::string &what = "") :
+      compile_error(const std::string &what = "") :
          error(CL_COMPILE_PROGRAM_FAILURE, what) {
       }
    };

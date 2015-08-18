@@ -212,7 +212,7 @@ yuyv_to_yuv_soa(struct gallivm_state *gallivm,
 }
 
 
-static INLINE void
+static inline void
 yuv_to_rgb_soa(struct gallivm_state *gallivm,
                unsigned n,
                LLVMValueRef y, LLVMValueRef u, LLVMValueRef v,

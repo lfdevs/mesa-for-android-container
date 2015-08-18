@@ -51,13 +51,13 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 		unsigned i;
 
 		/* The number of dwords all the dirty states would take. */
-		for (i = 0; i < R600_NUM_ATOMS; i++) {
-			if (ctx->atoms[i] && ctx->atoms[i]->dirty) {
-				num_dw += ctx->atoms[i]->num_dw;
-				if (ctx->screen->b.trace_bo) {
-					num_dw += R600_TRACE_CS_DWORDS;
-				}
+		i = r600_next_dirty_atom(ctx, 0);
+		while (i < R600_NUM_ATOMS) {
+			num_dw += ctx->atoms[i]->num_dw;
+			if (ctx->screen->b.trace_bo) {
+				num_dw += R600_TRACE_CS_DWORDS;
 			}
+			i = r600_next_dirty_atom(ctx, i + 1);
 		}
 
 		/* The upper-bound of how much space a draw command would take. */
@@ -68,7 +68,8 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 	}
 
 	/* Count in queries_suspend. */
-	num_dw += ctx->b.num_cs_dw_nontimer_queries_suspend;
+	num_dw += ctx->b.num_cs_dw_nontimer_queries_suspend +
+		  ctx->b.num_cs_dw_timer_queries_suspend;
 
 	/* Count in streamout_end at the end of CS. */
 	if (ctx->b.streamout.begin_emitted) {
@@ -92,7 +93,7 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 	num_dw += 10;
 
 	/* Flush if there's not enough space. */
-	if (num_dw > RADEON_MAX_CMDBUF_DWORDS) {
+	if (num_dw > ctx->b.rings.gfx.cs->max_dw) {
 		ctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 	}
 }
@@ -295,43 +296,45 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	r600_emit_command_buffer(ctx->b.rings.gfx.cs, &ctx->start_cs_cmd);
 
 	/* Re-emit states. */
-	ctx->alphatest_state.atom.dirty = true;
-	ctx->blend_color.atom.dirty = true;
-	ctx->cb_misc_state.atom.dirty = true;
-	ctx->clip_misc_state.atom.dirty = true;
-	ctx->clip_state.atom.dirty = true;
-	ctx->db_misc_state.atom.dirty = true;
-	ctx->db_state.atom.dirty = true;
-	ctx->framebuffer.atom.dirty = true;
-	ctx->pixel_shader.atom.dirty = true;
-	ctx->poly_offset_state.atom.dirty = true;
-	ctx->vgt_state.atom.dirty = true;
-	ctx->sample_mask.atom.dirty = true;
+	r600_mark_atom_dirty(ctx, &ctx->alphatest_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->blend_color.atom);
+	r600_mark_atom_dirty(ctx, &ctx->cb_misc_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->clip_misc_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->clip_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->db_misc_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->db_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->framebuffer.atom);
+	r600_mark_atom_dirty(ctx, &ctx->pixel_shader.atom);
+	r600_mark_atom_dirty(ctx, &ctx->poly_offset_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->vgt_state.atom);
+	r600_mark_atom_dirty(ctx, &ctx->sample_mask.atom);
 	for (i = 0; i < R600_MAX_VIEWPORTS; i++) {
-		ctx->scissor[i].atom.dirty = true;
-		ctx->viewport[i].atom.dirty = true;
+		r600_mark_atom_dirty(ctx, &ctx->scissor[i].atom);
+		r600_mark_atom_dirty(ctx, &ctx->viewport[i].atom);
 	}
-	ctx->config_state.atom.dirty = true;
-	ctx->stencil_ref.atom.dirty = true;
-	ctx->vertex_fetch_shader.atom.dirty = true;
-	ctx->export_shader.atom.dirty = true;
-	ctx->shader_stages.atom.dirty = true;
+	if (ctx->b.chip_class < EVERGREEN) {
+		r600_mark_atom_dirty(ctx, &ctx->config_state.atom);
+	}
+	r600_mark_atom_dirty(ctx, &ctx->stencil_ref.atom);
+	r600_mark_atom_dirty(ctx, &ctx->vertex_fetch_shader.atom);
+	r600_mark_atom_dirty(ctx, &ctx->export_shader.atom);
+	r600_mark_atom_dirty(ctx, &ctx->shader_stages.atom);
 	if (ctx->gs_shader) {
-		ctx->geometry_shader.atom.dirty = true;
-		ctx->gs_rings.atom.dirty = true;
+		r600_mark_atom_dirty(ctx, &ctx->geometry_shader.atom);
+		r600_mark_atom_dirty(ctx, &ctx->gs_rings.atom);
 	}
-	ctx->vertex_shader.atom.dirty = true;
-	ctx->b.streamout.enable_atom.dirty = true;
+	r600_mark_atom_dirty(ctx, &ctx->vertex_shader.atom);
+	r600_mark_atom_dirty(ctx, &ctx->b.streamout.enable_atom);
 
 	if (ctx->blend_state.cso)
-		ctx->blend_state.atom.dirty = true;
+		r600_mark_atom_dirty(ctx, &ctx->blend_state.atom);
 	if (ctx->dsa_state.cso)
-		ctx->dsa_state.atom.dirty = true;
+		r600_mark_atom_dirty(ctx, &ctx->dsa_state.atom);
 	if (ctx->rasterizer_state.cso)
-		ctx->rasterizer_state.atom.dirty = true;
+		r600_mark_atom_dirty(ctx, &ctx->rasterizer_state.atom);
 
 	if (ctx->b.chip_class <= R700) {
-		ctx->seamless_cube_map.atom.dirty = true;
+		r600_mark_atom_dirty(ctx, &ctx->seamless_cube_map.atom);
 	}
 
 	ctx->vertex_buffer_state.dirty_mask = ctx->vertex_buffer_state.enabled_mask;

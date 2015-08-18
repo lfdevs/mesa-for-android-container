@@ -28,6 +28,7 @@
 #include "radeon_common.h"
 #include "r200_context.h"
 #include "r200_blit.h"
+#include "r200_tex.h"
 
 static inline uint32_t cmdpacket0(struct radeon_screen *rscrn,
                                   int reg, int count)
@@ -40,22 +41,42 @@ static inline uint32_t cmdpacket0(struct radeon_screen *rscrn,
 /* common formats supported as both textures and render targets */
 unsigned r200_check_blit(mesa_format mesa_format, uint32_t dst_pitch)
 {
-    /* XXX others?  BE/LE? */
-    switch (mesa_format) {
-    case MESA_FORMAT_B8G8R8A8_UNORM:
-    case MESA_FORMAT_B8G8R8X8_UNORM:
-    case MESA_FORMAT_B5G6R5_UNORM:
-    case MESA_FORMAT_B4G4R4A4_UNORM:
-    case MESA_FORMAT_B5G5R5A1_UNORM:
-    case MESA_FORMAT_A_UNORM8:
-    case MESA_FORMAT_L_UNORM8:
-    case MESA_FORMAT_I_UNORM8:
-    /* swizzled */
-    case MESA_FORMAT_A8B8G8R8_UNORM:
-    case MESA_FORMAT_R8G8B8A8_UNORM:
+    /* XXX others? */
+    if (_mesa_little_endian()) {
+	switch (mesa_format) {
+	case MESA_FORMAT_B8G8R8A8_UNORM:
+	case MESA_FORMAT_B8G8R8X8_UNORM:
+	case MESA_FORMAT_B5G6R5_UNORM:
+	case MESA_FORMAT_B4G4R4A4_UNORM:
+	case MESA_FORMAT_B5G5R5A1_UNORM:
+	case MESA_FORMAT_A_UNORM8:
+	case MESA_FORMAT_L_UNORM8:
+	case MESA_FORMAT_I_UNORM8:
+	/* swizzled - probably can't happen with the disabled Choose8888TexFormat code */
+	case MESA_FORMAT_A8B8G8R8_UNORM:
+	case MESA_FORMAT_R8G8B8A8_UNORM:
 	    break;
-    default:
+	default:
 	    return 0;
+	}
+    }
+    else {
+	switch (mesa_format) {
+	case MESA_FORMAT_A8R8G8B8_UNORM:
+	case MESA_FORMAT_X8R8G8B8_UNORM:
+	case MESA_FORMAT_R5G6B5_UNORM:
+	case MESA_FORMAT_A4R4G4B4_UNORM:
+	case MESA_FORMAT_A1R5G5B5_UNORM:
+	case MESA_FORMAT_A_UNORM8:
+	case MESA_FORMAT_L_UNORM8:
+	case MESA_FORMAT_I_UNORM8:
+	/* swizzled  - probably can't happen with the disabled Choose8888TexFormat code */
+	case MESA_FORMAT_R8G8B8A8_UNORM:
+	case MESA_FORMAT_A8B8G8R8_UNORM:
+	   break;
+	default:
+	   return 0;
+	}
     }
 
     /* Rendering to small buffer doesn't work.
@@ -112,41 +133,11 @@ static void inline emit_tx_setup(struct r200_context *r200,
     assert(height <= 2048);
     assert(offset % 32 == 0);
 
-    /* XXX others?  BE/LE? */
-    switch (src_mesa_format) {
-    case MESA_FORMAT_B8G8R8A8_UNORM:
-	    txformat |= R200_TXFORMAT_ARGB8888 | R200_TXFORMAT_ALPHA_IN_MAP;
-	    break;
-    case MESA_FORMAT_A8B8G8R8_UNORM:
-	    txformat |= R200_TXFORMAT_RGBA8888 | R200_TXFORMAT_ALPHA_IN_MAP;
-	    break;
-    case MESA_FORMAT_R8G8B8A8_UNORM:
-	    txformat |= R200_TXFORMAT_ABGR8888 | R200_TXFORMAT_ALPHA_IN_MAP;
-	    break;
-    case MESA_FORMAT_B8G8R8X8_UNORM:
-	    txformat |= R200_TXFORMAT_ARGB8888;
-	    break;
-    case MESA_FORMAT_B5G6R5_UNORM:
-	    txformat |= R200_TXFORMAT_RGB565;
-	    break;
-    case MESA_FORMAT_B4G4R4A4_UNORM:
-	    txformat |= R200_TXFORMAT_ARGB4444 | R200_TXFORMAT_ALPHA_IN_MAP;
-	    break;
-    case MESA_FORMAT_B5G5R5A1_UNORM:
-	    txformat |= R200_TXFORMAT_ARGB1555 | R200_TXFORMAT_ALPHA_IN_MAP;
-	    break;
-    case MESA_FORMAT_A_UNORM8:
-    case MESA_FORMAT_I_UNORM8:
-	    txformat |= R200_TXFORMAT_I8 | R200_TXFORMAT_ALPHA_IN_MAP;
-	    break;
-    case MESA_FORMAT_L_UNORM8:
-	    txformat |= R200_TXFORMAT_I8;
-	    break;
-    case MESA_FORMAT_L8A8_UNORM:
-	    txformat |= R200_TXFORMAT_AI88 | R200_TXFORMAT_ALPHA_IN_MAP;
-	    break;
-    default:
-	    break;
+    if (_mesa_little_endian()) {
+	txformat |= tx_table_le[src_mesa_format].format;
+    }
+    else {
+	txformat |= tx_table_be[src_mesa_format].format;
     }
 
     if (bo->flags & RADEON_BO_FLAGS_MACRO_TILE)
@@ -155,11 +146,19 @@ static void inline emit_tx_setup(struct r200_context *r200,
 	offset |= R200_TXO_MICRO_TILE;
 
     switch (dst_mesa_format) {
+    /* le */
     case MESA_FORMAT_B8G8R8A8_UNORM:
     case MESA_FORMAT_B8G8R8X8_UNORM:
     case MESA_FORMAT_B5G6R5_UNORM:
     case MESA_FORMAT_B4G4R4A4_UNORM:
     case MESA_FORMAT_B5G5R5A1_UNORM:
+    /* be */
+    case MESA_FORMAT_A8R8G8B8_UNORM:
+    case MESA_FORMAT_X8R8G8B8_UNORM:
+    case MESA_FORMAT_R5G6B5_UNORM:
+    case MESA_FORMAT_A4R4G4B4_UNORM:
+    case MESA_FORMAT_A1R5G5B5_UNORM:
+    /* little and big */
     case MESA_FORMAT_A_UNORM8:
     case MESA_FORMAT_L_UNORM8:
     case MESA_FORMAT_I_UNORM8:
@@ -183,6 +182,9 @@ static void inline emit_tx_setup(struct r200_context *r200,
 	    END_BATCH();
 	    break;
     case MESA_FORMAT_A8B8G8R8_UNORM:
+    case MESA_FORMAT_R8G8B8A8_UNORM:
+       if ((dst_mesa_format == MESA_FORMAT_A8B8G8R8_UNORM && _mesa_little_endian()) ||
+	   (dst_mesa_format == MESA_FORMAT_R8G8B8A8_UNORM && !_mesa_little_endian())) {
 	    BEGIN_BATCH(10);
 	    OUT_BATCH_REGVAL(RADEON_PP_CNTL, (RADEON_TEX_0_ENABLE |
 					      RADEON_TEX_BLEND_0_ENABLE));
@@ -190,6 +192,8 @@ static void inline emit_tx_setup(struct r200_context *r200,
 						  R200_TXC_ARG_B_ZERO |
 						  R200_TXC_ARG_C_R0_COLOR |
 						  R200_TXC_OP_MADD));
+	    /* XXX I don't think this can work. This is output rotation, and alpha contains
+	     * red, not alpha (we'd write gbrr). */
 	    OUT_BATCH_REGVAL(R200_PP_TXCBLEND2_0, (R200_TXC_CLAMP_0_1 |
 						   R200_TXC_OUTPUT_ROTATE_GBA |
 						   R200_TXC_OUTPUT_REG_R0));
@@ -201,8 +205,16 @@ static void inline emit_tx_setup(struct r200_context *r200,
 						   (R200_TXA_REPL_RED << R200_TXA_REPL_ARG_C_SHIFT) |
 						   R200_TXA_OUTPUT_REG_R0));
 	    END_BATCH();
-	    break;
-    case MESA_FORMAT_R8G8B8A8_UNORM:
+       }
+       else {
+	    /* XXX pretty sure could do this with just 2 instead of 4 instructions.
+	     * Like so:
+	     * 1st: use RGA output rotation, rgb arg replicate b, a arg r, write mask rb.
+	     * That's just one instruction in fact but I'm not entirely sure it works
+	     * if some of those incoming r0 components are never written (due to mask)
+	     * in the shader itself to r0.
+	     * In any case this case (and the one above) may not be reachable with
+	     * disabled Choose8888TexFormat code. */
 	    BEGIN_BATCH(34);
 	    OUT_BATCH_REGVAL(RADEON_PP_CNTL, (RADEON_TEX_0_ENABLE |
 					      RADEON_TEX_BLEND_0_ENABLE |
@@ -272,7 +284,8 @@ static void inline emit_tx_setup(struct r200_context *r200,
 	    OUT_BATCH_REGVAL(R200_PP_TXABLEND2_3, (R200_TXA_CLAMP_0_1 |
 						   R200_TXA_OUTPUT_REG_R0));
 	    END_BATCH();
-	    break;
+	}
+	break;
     }
 
     BEGIN_BATCH(18);
@@ -306,21 +319,27 @@ static inline void emit_cb_setup(struct r200_context *r200,
     uint32_t dst_format = 0;
     BATCH_LOCALS(&r200->radeon);
 
-    /* XXX others?  BE/LE? */
     switch (mesa_format) {
+    /* The first of each pair is for little, the second for big endian */
     case MESA_FORMAT_B8G8R8A8_UNORM:
+    case MESA_FORMAT_A8R8G8B8_UNORM:
     case MESA_FORMAT_B8G8R8X8_UNORM:
+    case MESA_FORMAT_X8R8G8B8_UNORM:
+    /* These two are valid both for little and big endian (swizzled) */
     case MESA_FORMAT_A8B8G8R8_UNORM:
     case MESA_FORMAT_R8G8B8A8_UNORM:
 	    dst_format = RADEON_COLOR_FORMAT_ARGB8888;
 	    break;
     case MESA_FORMAT_B5G6R5_UNORM:
+    case MESA_FORMAT_R5G6B5_UNORM:
 	    dst_format = RADEON_COLOR_FORMAT_RGB565;
 	    break;
     case MESA_FORMAT_B4G4R4A4_UNORM:
+    case MESA_FORMAT_A4R4G4B4_UNORM:
 	    dst_format = RADEON_COLOR_FORMAT_ARGB4444;
 	    break;
     case MESA_FORMAT_B5G5R5A1_UNORM:
+    case MESA_FORMAT_A1R5G5B5_UNORM:
 	    dst_format = RADEON_COLOR_FORMAT_ARGB1555;
 	    break;
     case MESA_FORMAT_A_UNORM8:
@@ -546,6 +565,22 @@ unsigned r200_blit(struct gl_context *ctx,
                      flip_y);
 
     radeonFlush(ctx);
+
+    /* We submitted those packets outside our state atom mechanism. Thus
+     * make sure the atoms are resubmitted the next time. */
+    r200->hw.cst.dirty = GL_TRUE;
+    r200->hw.ctx.dirty = GL_TRUE;
+    r200->hw.vap.dirty = GL_TRUE;
+    r200->hw.msk.dirty = GL_TRUE;
+    r200->hw.pix[0].dirty = GL_TRUE;
+    r200->hw.pix[1].dirty = GL_TRUE;
+    r200->hw.pix[2].dirty = GL_TRUE;
+    r200->hw.pix[3].dirty = GL_TRUE;
+    r200->hw.sci.dirty = GL_TRUE;
+    r200->hw.set.dirty = GL_TRUE;
+    r200->hw.tex[0].dirty = GL_TRUE;
+    r200->hw.vte.dirty = GL_TRUE;
+    r200->hw.vtx.dirty = GL_TRUE;
 
     return GL_TRUE;
 }

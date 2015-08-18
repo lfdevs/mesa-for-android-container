@@ -69,7 +69,7 @@ brw_fence_insert(struct brw_context *brw, struct brw_fence *fence)
    assert(!fence->batch_bo);
    assert(!fence->signalled);
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
    fence->batch_bo = brw->batch.bo;
    drm_intel_bo_reference(fence->batch_bo);
    intel_batchbuffer_flush(brw);

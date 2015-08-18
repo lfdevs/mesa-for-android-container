@@ -94,11 +94,6 @@ typedef unsigned char boolean;
 #endif
 #endif
 
-/* XXX: Use standard `inline` keyword instead */
-#ifndef INLINE
-#  define INLINE inline
-#endif
-
 /* Forced function inlining */
 #ifndef ALWAYS_INLINE
 #  ifdef __GNUC__
@@ -106,7 +101,7 @@ typedef unsigned char boolean;
 #  elif defined(_MSC_VER)
 #    define ALWAYS_INLINE __forceinline
 #  else
-#    define ALWAYS_INLINE INLINE
+#    define ALWAYS_INLINE inline
 #  endif
 #endif
 

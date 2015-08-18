@@ -145,6 +145,7 @@ public:
                   unsupported_variable_indexing = true;
                break;
             case ir_var_uniform:
+            case ir_var_shader_storage:
                if (options->EmitNoIndirectUniform)
                   unsupported_variable_indexing = true;
                break;

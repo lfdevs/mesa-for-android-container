@@ -1069,9 +1069,12 @@ try_update_scene_state( struct lp_setup_context *setup )
    if (setup->dirty & LP_SETUP_NEW_CONSTANTS) {
       for (i = 0; i < Elements(setup->constants); ++i) {
          struct pipe_resource *buffer = setup->constants[i].current.buffer;
-         const unsigned current_size = setup->constants[i].current.buffer_size;
+         const unsigned current_size = MIN2(setup->constants[i].current.buffer_size,
+                                            LP_MAX_TGSI_CONST_BUFFER_SIZE);
          const ubyte *current_data = NULL;
          int num_constants;
+
+         STATIC_ASSERT(DATA_BLOCK_SIZE >= LP_MAX_TGSI_CONST_BUFFER_SIZE);
 
          if (buffer) {
             /* resource buffer */

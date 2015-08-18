@@ -120,6 +120,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen, void
 	rctx->b.b.screen = screen;
 	rctx->b.b.priv = priv;
 	rctx->b.b.destroy = r600_destroy_context;
+	rctx->b.set_atom_dirty = (void *)r600_set_atom_dirty;
 
 	if (!r600_common_context_init(&rctx->b, &rscreen->b))
 		goto fail;
@@ -176,7 +177,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen, void
 		goto fail;
 	}
 
-	rctx->b.rings.gfx.cs = ws->cs_create(ws, RING_GFX,
+	rctx->b.rings.gfx.cs = ws->cs_create(rctx->b.ctx, RING_GFX,
 					     r600_context_gfx_flush, rctx,
 					     rscreen->b.trace_bo ?
 						     rscreen->b.trace_bo->cs_buf : NULL);
@@ -268,7 +269,13 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_SAMPLE_SHADING:
 	case PIPE_CAP_CLIP_HALFZ:
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
+	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
 		return 1;
+
+	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+		return rscreen->b.info.drm_major == 2 && rscreen->b.info.drm_minor >= 43;
 
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
 		return !R600_BIG_ENDIAN && rscreen->b.info.has_userptr;
@@ -329,10 +336,10 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
-	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_VERTEXID_NOBASE:
-	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+	case PIPE_CAP_DEPTH_BOUNDS_TEST:
 		return 0;
 
 	/* Stream output. */
@@ -476,6 +483,7 @@ static int r600_get_shader_param(struct pipe_screen* pscreen, unsigned shader, e
 	case PIPE_SHADER_CAP_SUBROUTINES:
 		return 0;
 	case PIPE_SHADER_CAP_INTEGERS:
+	case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
 		return 1;
 	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
 	case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:

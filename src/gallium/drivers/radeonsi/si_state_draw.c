@@ -31,6 +31,7 @@
 
 #include "util/u_index_modify.h"
 #include "util/u_upload_mgr.h"
+#include "util/u_prim.h"
 
 static void si_decompress_textures(struct si_context *sctx)
 {
@@ -64,6 +65,7 @@ static unsigned si_conv_pipe_prim(unsigned mode)
 		[PIPE_PRIM_LINE_STRIP_ADJACENCY]	= V_008958_DI_PT_LINESTRIP_ADJ,
 		[PIPE_PRIM_TRIANGLES_ADJACENCY]		= V_008958_DI_PT_TRILIST_ADJ,
 		[PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]	= V_008958_DI_PT_TRISTRIP_ADJ,
+		[PIPE_PRIM_PATCHES]			= V_008958_DI_PT_PATCH,
 		[R600_PRIM_RECTANGLE_LIST]		= V_008958_DI_PT_RECTLIST
         };
 	assert(mode < Elements(prim_conv));
@@ -87,6 +89,7 @@ static unsigned si_conv_prim_to_gs_out(unsigned mode)
 		[PIPE_PRIM_LINE_STRIP_ADJACENCY]	= V_028A6C_OUTPRIM_TYPE_LINESTRIP,
 		[PIPE_PRIM_TRIANGLES_ADJACENCY]		= V_028A6C_OUTPRIM_TYPE_TRISTRIP,
 		[PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]	= V_028A6C_OUTPRIM_TYPE_TRISTRIP,
+		[PIPE_PRIM_PATCHES]			= V_028A6C_OUTPRIM_TYPE_POINTLIST,
 		[R600_PRIM_RECTANGLE_LIST]		= V_028A6C_OUTPRIM_TYPE_TRISTRIP
 	};
 	assert(mode < Elements(prim_conv));
@@ -94,8 +97,128 @@ static unsigned si_conv_prim_to_gs_out(unsigned mode)
 	return prim_conv[mode];
 }
 
+/**
+ * This calculates the LDS size for tessellation shaders (VS, TCS, TES).
+ * LS.LDS_SIZE is shared by all 3 shader stages.
+ *
+ * The information about LDS and other non-compile-time parameters is then
+ * written to userdata SGPRs.
+ */
+static void si_emit_derived_tess_state(struct si_context *sctx,
+				       const struct pipe_draw_info *info,
+				       unsigned *num_patches)
+{
+	struct radeon_winsys_cs *cs = sctx->b.rings.gfx.cs;
+	struct si_shader_selector *ls = sctx->vs_shader;
+	/* The TES pointer will only be used for sctx->last_tcs.
+	 * It would be wrong to think that TCS = TES. */
+	struct si_shader_selector *tcs =
+		sctx->tcs_shader ? sctx->tcs_shader : sctx->tes_shader;
+	unsigned tes_sh_base = sctx->shader_userdata.sh_base[PIPE_SHADER_TESS_EVAL];
+	unsigned num_tcs_input_cp = info->vertices_per_patch;
+	unsigned num_tcs_output_cp, num_tcs_inputs, num_tcs_outputs;
+	unsigned num_tcs_patch_outputs;
+	unsigned input_vertex_size, output_vertex_size, pervertex_output_patch_size;
+	unsigned input_patch_size, output_patch_size, output_patch0_offset;
+	unsigned perpatch_output_offset, lds_size, ls_rsrc2;
+	unsigned tcs_in_layout, tcs_out_layout, tcs_out_offsets;
+
+	*num_patches = 1; /* TODO: calculate this */
+
+	if (sctx->last_ls == ls->current &&
+	    sctx->last_tcs == tcs &&
+	    sctx->last_tes_sh_base == tes_sh_base &&
+	    sctx->last_num_tcs_input_cp == num_tcs_input_cp)
+		return;
+
+	sctx->last_ls = ls->current;
+	sctx->last_tcs = tcs;
+	sctx->last_tes_sh_base = tes_sh_base;
+	sctx->last_num_tcs_input_cp = num_tcs_input_cp;
+
+	/* This calculates how shader inputs and outputs among VS, TCS, and TES
+	 * are laid out in LDS. */
+	num_tcs_inputs = util_last_bit64(ls->outputs_written);
+
+	if (sctx->tcs_shader) {
+		num_tcs_outputs = util_last_bit64(tcs->outputs_written);
+		num_tcs_output_cp = tcs->info.properties[TGSI_PROPERTY_TCS_VERTICES_OUT];
+		num_tcs_patch_outputs = util_last_bit64(tcs->patch_outputs_written);
+	} else {
+		/* No TCS. Route varyings from LS to TES. */
+		num_tcs_outputs = num_tcs_inputs;
+		num_tcs_output_cp = num_tcs_input_cp;
+		num_tcs_patch_outputs = 2; /* TESSINNER + TESSOUTER */
+	}
+
+	input_vertex_size = num_tcs_inputs * 16;
+	output_vertex_size = num_tcs_outputs * 16;
+
+	input_patch_size = num_tcs_input_cp * input_vertex_size;
+
+	pervertex_output_patch_size = num_tcs_output_cp * output_vertex_size;
+	output_patch_size = pervertex_output_patch_size + num_tcs_patch_outputs * 16;
+
+	output_patch0_offset = sctx->tcs_shader ? input_patch_size * *num_patches : 0;
+	perpatch_output_offset = output_patch0_offset + pervertex_output_patch_size;
+
+	lds_size = output_patch0_offset + output_patch_size * *num_patches;
+	ls_rsrc2 = ls->current->ls_rsrc2;
+
+	if (sctx->b.chip_class >= CIK) {
+		assert(lds_size <= 65536);
+		ls_rsrc2 |= S_00B52C_LDS_SIZE(align(lds_size, 512) / 512);
+	} else {
+		assert(lds_size <= 32768);
+		ls_rsrc2 |= S_00B52C_LDS_SIZE(align(lds_size, 256) / 256);
+	}
+
+	/* Due to a hw bug, RSRC2_LS must be written twice with another
+	 * LS register written in between. */
+	if (sctx->b.chip_class == CIK && sctx->b.family != CHIP_HAWAII)
+		si_write_sh_reg(cs, R_00B52C_SPI_SHADER_PGM_RSRC2_LS, ls_rsrc2);
+	si_write_sh_reg_seq(cs, R_00B528_SPI_SHADER_PGM_RSRC1_LS, 2);
+	radeon_emit(cs, ls->current->ls_rsrc1);
+	radeon_emit(cs, ls_rsrc2);
+
+	/* Compute userdata SGPRs. */
+	assert(((input_vertex_size / 4) & ~0xff) == 0);
+	assert(((output_vertex_size / 4) & ~0xff) == 0);
+	assert(((input_patch_size / 4) & ~0x1fff) == 0);
+	assert(((output_patch_size / 4) & ~0x1fff) == 0);
+	assert(((output_patch0_offset / 16) & ~0xffff) == 0);
+	assert(((perpatch_output_offset / 16) & ~0xffff) == 0);
+	assert(num_tcs_input_cp <= 32);
+	assert(num_tcs_output_cp <= 32);
+
+	tcs_in_layout = (input_patch_size / 4) |
+			((input_vertex_size / 4) << 13);
+	tcs_out_layout = (output_patch_size / 4) |
+			 ((output_vertex_size / 4) << 13);
+	tcs_out_offsets = (output_patch0_offset / 16) |
+			  ((perpatch_output_offset / 16) << 16);
+
+	/* Set them for LS. */
+	si_write_sh_reg(cs,
+		R_00B530_SPI_SHADER_USER_DATA_LS_0 + SI_SGPR_LS_OUT_LAYOUT * 4,
+		tcs_in_layout);
+
+	/* Set them for TCS. */
+	si_write_sh_reg_seq(cs,
+		R_00B430_SPI_SHADER_USER_DATA_HS_0 + SI_SGPR_TCS_OUT_OFFSETS * 4, 3);
+	radeon_emit(cs, tcs_out_offsets);
+	radeon_emit(cs, tcs_out_layout | (num_tcs_input_cp << 26));
+	radeon_emit(cs, tcs_in_layout);
+
+	/* Set them for TES. */
+	si_write_sh_reg_seq(cs, tes_sh_base + SI_SGPR_TCS_OUT_OFFSETS * 4, 2);
+	radeon_emit(cs, tcs_out_offsets);
+	radeon_emit(cs, tcs_out_layout | (num_tcs_output_cp << 26));
+}
+
 static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
-					  const struct pipe_draw_info *info)
+					  const struct pipe_draw_info *info,
+					  unsigned num_patches)
 {
 	struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
 	unsigned prim = info->mode;
@@ -104,10 +227,40 @@ static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 	/* SWITCH_ON_EOP(0) is always preferable. */
 	bool wd_switch_on_eop = false;
 	bool ia_switch_on_eop = false;
+	bool ia_switch_on_eoi = false;
 	bool partial_vs_wave = false;
+	bool partial_es_wave = false;
 
 	if (sctx->gs_shader)
 		primgroup_size = 64; /* recommended with a GS */
+
+	if (sctx->tes_shader) {
+		unsigned num_cp_out =
+			sctx->tcs_shader ?
+			sctx->tcs_shader->info.properties[TGSI_PROPERTY_TCS_VERTICES_OUT] :
+			info->vertices_per_patch;
+		unsigned max_size = 256 / MAX2(info->vertices_per_patch, num_cp_out);
+
+		primgroup_size = MIN2(primgroup_size, max_size);
+
+		/* primgroup_size must be set to a multiple of NUM_PATCHES */
+		primgroup_size = (primgroup_size / num_patches) * num_patches;
+
+		/* SWITCH_ON_EOI must be set if PrimID is used.
+		 * If SWITCH_ON_EOI is set, PARTIAL_ES_WAVE must be set too. */
+		if ((sctx->tcs_shader && sctx->tcs_shader->info.uses_primid) ||
+		    sctx->tes_shader->info.uses_primid) {
+			ia_switch_on_eoi = true;
+			partial_es_wave = true;
+		}
+
+		/* Bug with tessellation and GS on Bonaire and older 2 SE chips. */
+		if ((sctx->b.family == CHIP_TAHITI ||
+		     sctx->b.family == CHIP_PITCAIRN ||
+		     sctx->b.family == CHIP_BONAIRE) &&
+		    sctx->gs_shader)
+			partial_vs_wave = true;
+	}
 
 	/* This is a hardware requirement. */
 	if ((rs && rs->line_stipple_enable) ||
@@ -147,10 +300,44 @@ static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 		assert(wd_switch_on_eop || !ia_switch_on_eop);
 	}
 
+	/* Hw bug with single-primitive instances and SWITCH_ON_EOI
+	 * on multi-SE chips. */
+	if (sctx->b.screen->info.max_se >= 2 && ia_switch_on_eoi &&
+	    (info->indirect ||
+	     (info->instance_count > 1 &&
+	      u_prims_for_vertices(info->mode, info->count) <= 1)))
+		sctx->b.flags |= SI_CONTEXT_VGT_FLUSH;
+
+	/* Instancing bug on 2 SE chips. */
+	if (sctx->b.screen->info.max_se == 2 && ia_switch_on_eoi &&
+	    (info->indirect || info->instance_count > 1))
+		partial_vs_wave = true;
+
 	return S_028AA8_SWITCH_ON_EOP(ia_switch_on_eop) |
+		S_028AA8_SWITCH_ON_EOI(ia_switch_on_eoi) |
 		S_028AA8_PARTIAL_VS_WAVE_ON(partial_vs_wave) |
+		S_028AA8_PARTIAL_ES_WAVE_ON(partial_es_wave) |
 		S_028AA8_PRIMGROUP_SIZE(primgroup_size - 1) |
-		S_028AA8_WD_SWITCH_ON_EOP(sctx->b.chip_class >= CIK ? wd_switch_on_eop : 0);
+		S_028AA8_WD_SWITCH_ON_EOP(sctx->b.chip_class >= CIK ? wd_switch_on_eop : 0) |
+		S_028AA8_MAX_PRIMGRP_IN_WAVE(sctx->b.chip_class >= VI ? 2 : 0);
+}
+
+static unsigned si_get_ls_hs_config(struct si_context *sctx,
+				    const struct pipe_draw_info *info,
+				    unsigned num_patches)
+{
+	unsigned num_output_cp;
+
+	if (!sctx->tes_shader)
+		return 0;
+
+	num_output_cp = sctx->tcs_shader ?
+		sctx->tcs_shader->info.properties[TGSI_PROPERTY_TCS_VERTICES_OUT] :
+		info->vertices_per_patch;
+
+	return S_028B58_NUM_PATCHES(num_patches) |
+		S_028B58_HS_NUM_INPUT_CP(info->vertices_per_patch) |
+		S_028B58_HS_NUM_OUTPUT_CP(num_output_cp);
 }
 
 static void si_emit_scratch_reloc(struct si_context *sctx)
@@ -206,22 +393,31 @@ static void si_emit_draw_registers(struct si_context *sctx,
 	struct radeon_winsys_cs *cs = sctx->b.rings.gfx.cs;
 	unsigned prim = si_conv_pipe_prim(info->mode);
 	unsigned gs_out_prim = si_conv_prim_to_gs_out(sctx->current_rast_prim);
-	unsigned ia_multi_vgt_param = si_get_ia_multi_vgt_param(sctx, info);
+	unsigned ia_multi_vgt_param, ls_hs_config, num_patches = 0;
+
+	if (sctx->tes_shader)
+		si_emit_derived_tess_state(sctx, info, &num_patches);
+
+	ia_multi_vgt_param = si_get_ia_multi_vgt_param(sctx, info, num_patches);
+	ls_hs_config = si_get_ls_hs_config(sctx, info, num_patches);
 
 	/* Draw state. */
 	if (prim != sctx->last_prim ||
-	    ia_multi_vgt_param != sctx->last_multi_vgt_param) {
+	    ia_multi_vgt_param != sctx->last_multi_vgt_param ||
+	    ls_hs_config != sctx->last_ls_hs_config) {
 		if (sctx->b.chip_class >= CIK) {
 			radeon_emit(cs, PKT3(PKT3_DRAW_PREAMBLE, 2, 0));
 			radeon_emit(cs, prim); /* VGT_PRIMITIVE_TYPE */
 			radeon_emit(cs, ia_multi_vgt_param); /* IA_MULTI_VGT_PARAM */
-			radeon_emit(cs, 0); /* VGT_LS_HS_CONFIG */
+			radeon_emit(cs, ls_hs_config); /* VGT_LS_HS_CONFIG */
 		} else {
 			r600_write_config_reg(cs, R_008958_VGT_PRIMITIVE_TYPE, prim);
 			r600_write_context_reg(cs, R_028AA8_IA_MULTI_VGT_PARAM, ia_multi_vgt_param);
+			r600_write_context_reg(cs, R_028B58_VGT_LS_HS_CONFIG, ls_hs_config);
 		}
 		sctx->last_prim = prim;
 		sctx->last_multi_vgt_param = ia_multi_vgt_param;
+		sctx->last_ls_hs_config = ls_hs_config;
 	}
 
 	if (gs_out_prim != sctx->last_gs_out_prim) {
@@ -249,8 +445,7 @@ static void si_emit_draw_packets(struct si_context *sctx,
 				 const struct pipe_index_buffer *ib)
 {
 	struct radeon_winsys_cs *cs = sctx->b.rings.gfx.cs;
-	unsigned sh_base_reg = (sctx->gs_shader ? R_00B330_SPI_SHADER_USER_DATA_ES_0 :
-						  R_00B130_SPI_SHADER_USER_DATA_VS_0);
+	unsigned sh_base_reg = sctx->shader_userdata.sh_base[PIPE_SHADER_VERTEX];
 
 	if (info->count_from_stream_output) {
 		struct r600_so_target *t =
@@ -279,12 +474,24 @@ static void si_emit_draw_packets(struct si_context *sctx,
 	if (info->indexed) {
 		radeon_emit(cs, PKT3(PKT3_INDEX_TYPE, 0, 0));
 
-		if (ib->index_size == 4) {
-			radeon_emit(cs, V_028A7C_VGT_INDEX_32 | (SI_BIG_ENDIAN ?
-					V_028A7C_VGT_DMA_SWAP_32_BIT : 0));
-		} else {
-			radeon_emit(cs, V_028A7C_VGT_INDEX_16 | (SI_BIG_ENDIAN ?
-					V_028A7C_VGT_DMA_SWAP_16_BIT : 0));
+		/* index type */
+		switch (ib->index_size) {
+		case 1:
+			radeon_emit(cs, V_028A7C_VGT_INDEX_8);
+			break;
+		case 2:
+			radeon_emit(cs, V_028A7C_VGT_INDEX_16 |
+				    (SI_BIG_ENDIAN && sctx->b.chip_class <= CIK ?
+					     V_028A7C_VGT_DMA_SWAP_16_BIT : 0));
+			break;
+		case 4:
+			radeon_emit(cs, V_028A7C_VGT_INDEX_32 |
+				    (SI_BIG_ENDIAN && sctx->b.chip_class <= CIK ?
+					     V_028A7C_VGT_DMA_SWAP_32_BIT : 0));
+			break;
+		default:
+			assert(!"unreachable");
+			return;
 		}
 	}
 
@@ -410,8 +617,13 @@ void si_emit_cache_flush(struct r600_common_context *sctx, struct r600_atom *ato
 
 	if (sctx->flags & SI_CONTEXT_INV_TC_L1)
 		cp_coher_cntl |= S_0085F0_TCL1_ACTION_ENA(1);
-	if (sctx->flags & SI_CONTEXT_INV_TC_L2)
+	if (sctx->flags & SI_CONTEXT_INV_TC_L2) {
 		cp_coher_cntl |= S_0085F0_TC_ACTION_ENA(1);
+
+		/* TODO: this might not be needed. */
+		if (sctx->chip_class >= VI)
+			cp_coher_cntl |= S_0301F0_TC_WB_ACTION_ENA(1);
+	}
 
 	if (sctx->flags & SI_CONTEXT_FLUSH_AND_INV_CB) {
 		cp_coher_cntl |= S_0085F0_CB_ACTION_ENA(1) |
@@ -524,8 +736,14 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 	    (info->indexed || !info->count_from_stream_output))
 		return;
 
-	if (!sctx->ps_shader || !sctx->vs_shader)
+	if (!sctx->ps_shader || !sctx->vs_shader) {
+		assert(0);
 		return;
+	}
+	if (!!sctx->tes_shader != (info->mode == PIPE_PRIM_PATCHES)) {
+		assert(0);
+		return;
+	}
 
 	si_decompress_textures(sctx);
 
@@ -536,15 +754,15 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 	 * current_rast_prim for this draw_vbo call. */
 	if (sctx->gs_shader)
 		sctx->current_rast_prim = sctx->gs_shader->gs_output_prim;
+	else if (sctx->tes_shader)
+		sctx->current_rast_prim =
+			sctx->tes_shader->info.properties[TGSI_PROPERTY_TES_PRIM_MODE];
 	else
 		sctx->current_rast_prim = info->mode;
 
 	si_update_shaders(sctx);
-
-	if (sctx->vertex_buffers_dirty) {
-		si_update_vertex_buffers(sctx);
-		sctx->vertex_buffers_dirty = false;
-	}
+	if (!si_upload_shader_descriptors(sctx))
+		return;
 
 	if (info->indexed) {
 		/* Initialize the index buffer struct. */
@@ -554,7 +772,8 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 		ib.offset = sctx->index_buffer.offset;
 
 		/* Translate or upload, if needed. */
-		if (ib.index_size == 1) {
+		/* 8-bit indices are supported on VI. */
+		if (sctx->b.chip_class <= CIK && ib.index_size == 1) {
 			struct pipe_resource *out_buffer = NULL;
 			unsigned out_offset, start, count, start_offset;
 			void *ptr;
@@ -589,6 +808,8 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 		}
 	}
 
+	/* TODO: VI should read index buffers through TC, so this shouldn't be
+	 * needed on VI. */
 	if (info->indexed && r600_resource(ib.buffer)->TC_L2_dirty) {
 		sctx->b.flags |= SI_CONTEXT_INV_TC_L2;
 		r600_resource(ib.buffer)->TC_L2_dirty = false;
@@ -596,7 +817,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 
 	/* Check flush flags. */
 	if (sctx->b.flags)
-		sctx->atoms.s.cache_flush->dirty = true;
+		si_mark_atom_dirty(sctx, sctx->atoms.s.cache_flush);
 
 	si_need_cs_space(sctx, 0, TRUE);
 
@@ -622,7 +843,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 
 	/* Workaround for a VGT hang when streamout is enabled.
 	 * It must be done after drawing. */
-	if (sctx->b.family == CHIP_HAWAII &&
+	if ((sctx->b.family == CHIP_HAWAII || sctx->b.family == CHIP_TONGA) &&
 	    (sctx->b.streamout.streamout_enabled ||
 	     sctx->b.streamout.prims_gen_query_enabled)) {
 		sctx->b.flags |= SI_CONTEXT_VGT_STREAMOUT_SYNC;

@@ -45,7 +45,7 @@
 /* fixme: move it from here */
 #define MAX_PRIMITIVES 64
 
-static INLINE int
+static inline int
 draw_gs_get_input_index(int semantic, int index,
                         const struct tgsi_shader_info *input_info)
 {
@@ -66,7 +66,7 @@ draw_gs_get_input_index(int semantic, int index,
  * the number of elements in the SOA vector. This ensures that the
  * throughput is optimized for the given vector instruction set.
  */
-static INLINE boolean
+static inline boolean
 draw_gs_should_flush(struct draw_geometry_shader *shader)
 {
    return (shader->fetched_prim_count == shader->vector_length);
@@ -190,9 +190,15 @@ static void tgsi_gs_prepare(struct draw_geometry_shader *shader,
                             const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS])
 {
    struct tgsi_exec_machine *machine = shader->machine;
-
+   int j;
    tgsi_exec_set_constant_buffers(machine, PIPE_MAX_CONSTANT_BUFFERS,
                                   constants, constants_size);
+
+   if (shader->info.uses_invocationid) {
+      unsigned i = machine->SysSemanticToIndex[TGSI_SEMANTIC_INVOCATIONID];
+      for (j = 0; j < TGSI_QUAD_SIZE; j++)
+         machine->SystemValue[i].i[j] = shader->invocation_id;
+   }
 }
 
 static unsigned tgsi_gs_run(struct draw_geometry_shader *shader,
@@ -385,7 +391,8 @@ llvm_gs_run(struct draw_geometry_shader *shader,
       (struct vertex_header*)input,
       input_primitives,
       shader->draw->instance_id,
-      shader->llvm_prim_ids);
+      shader->llvm_prim_ids,
+      shader->invocation_id);
 
    return ret;
 }
@@ -555,7 +562,7 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
     * overflown vertices into some area where they won't harm anyone */
    unsigned total_verts_per_buffer = shader->primitive_boundary *
       num_in_primitives;
-
+   unsigned invocation;
    //Assume at least one primitive
    max_out_prims = MAX2(max_out_prims, 1);
 
@@ -564,7 +571,7 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
    output_verts->stride = output_verts->vertex_size;
    output_verts->verts =
       (struct vertex_header *)MALLOC(output_verts->vertex_size *
-                                     total_verts_per_buffer);
+                                     total_verts_per_buffer * shader->num_invocations);
    debug_assert(output_verts->verts);
 
 #if 0
@@ -592,7 +599,7 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
    shader->input = input;
    shader->input_info = input_info;
    FREE(shader->primitive_lengths);
-   shader->primitive_lengths = MALLOC(max_out_prims * sizeof(unsigned));
+   shader->primitive_lengths = MALLOC(max_out_prims * sizeof(unsigned) * shader->num_invocations);
 
 
 #ifdef HAVE_LLVM
@@ -622,23 +629,26 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
    }
 #endif
 
-   shader->prepare(shader, constants, constants_size);
+   for (invocation = 0; invocation < shader->num_invocations; invocation++) {
+      shader->invocation_id = invocation;
 
-   if (input_prim->linear)
-      gs_run(shader, input_prim, input_verts,
-             output_prims, output_verts);
-   else
-      gs_run_elts(shader, input_prim, input_verts,
-                  output_prims, output_verts);
+      shader->prepare(shader, constants, constants_size);
 
-   /* Flush the remaining primitives. Will happen if
-    * num_input_primitives % 4 != 0
-    */
-   if (shader->fetched_prim_count > 0) {
-      gs_flush(shader);
+      if (input_prim->linear)
+         gs_run(shader, input_prim, input_verts,
+                output_prims, output_verts);
+      else
+         gs_run_elts(shader, input_prim, input_verts,
+                     output_prims, output_verts);
+
+      /* Flush the remaining primitives. Will happen if
+       * num_input_primitives % 4 != 0
+       */
+      if (shader->fetched_prim_count > 0) {
+         gs_flush(shader);
+      }
+      debug_assert(shader->fetched_prim_count == 0);
    }
-
-   debug_assert(shader->fetched_prim_count == 0);
 
    /* Update prim_info:
     */
@@ -771,6 +781,8 @@ draw_create_geometry_shader(struct draw_context *draw,
          gs->info.properties[TGSI_PROPERTY_GS_OUTPUT_PRIM];
    gs->max_output_vertices =
          gs->info.properties[TGSI_PROPERTY_GS_MAX_OUTPUT_VERTICES];
+   gs->num_invocations =
+      gs->info.properties[TGSI_PROPERTY_GS_INVOCATIONS];
    if (!gs->max_output_vertices)
       gs->max_output_vertices = 32;
 

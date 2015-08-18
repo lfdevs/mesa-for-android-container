@@ -57,7 +57,7 @@
  *----------------------------------------------------------------------
  */
 
-static INLINE void
+static inline void
 surface_to_surfaceid(struct svga_winsys_context *swc, // IN
                      struct pipe_surface *surface,    // IN
                      SVGA3dSurfaceImageId *id,        // OUT

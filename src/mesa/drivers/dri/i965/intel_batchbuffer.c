@@ -32,6 +32,8 @@
 #include "intel_buffers.h"
 #include "intel_fbo.h"
 #include "brw_context.h"
+#include "brw_defines.h"
+#include "brw_state.h"
 
 #include <xf86drm.h>
 #include <i915_drm.h>
@@ -44,19 +46,10 @@ intel_batchbuffer_init(struct brw_context *brw)
 {
    intel_batchbuffer_reset(brw);
 
-   if (brw->gen >= 6) {
-      /* We can't just use brw_state_batch to get a chunk of space for
-       * the gen6 workaround because it involves actually writing to
-       * the buffer, and the kernel doesn't let us write to the batch.
-       */
-      brw->batch.workaround_bo = drm_intel_bo_alloc(brw->bufmgr,
-						      "pipe_control workaround",
-						      4096, 4096);
-   }
-
    if (!brw->has_llc) {
       brw->batch.cpu_map = malloc(BATCH_SZ);
       brw->batch.map = brw->batch.cpu_map;
+      brw->batch.map_next = brw->batch.cpu_map;
    }
 }
 
@@ -77,12 +70,11 @@ intel_batchbuffer_reset(struct brw_context *brw)
       drm_intel_bo_map(brw->batch.bo, true);
       brw->batch.map = brw->batch.bo->virtual;
    }
+   brw->batch.map_next = brw->batch.map;
 
    brw->batch.reserved_space = BATCH_RESERVED;
    brw->batch.state_batch_offset = brw->batch.bo->size;
-   brw->batch.used = 0;
    brw->batch.needs_sol_reset = false;
-   brw->batch.pipe_controls_since_last_cs_stall = 0;
 
    /* We don't know what ring the new batch will be sent to until we see the
     * first BEGIN_BATCH or BEGIN_BATCH_BLT.  Mark it as unknown.
@@ -93,7 +85,7 @@ intel_batchbuffer_reset(struct brw_context *brw)
 void
 intel_batchbuffer_save_state(struct brw_context *brw)
 {
-   brw->batch.saved.used = brw->batch.used;
+   brw->batch.saved.map_next = brw->batch.map_next;
    brw->batch.saved.reloc_count =
       drm_intel_gem_bo_get_reloc_count(brw->batch.bo);
 }
@@ -103,8 +95,8 @@ intel_batchbuffer_reset_to_saved(struct brw_context *brw)
 {
    drm_intel_gem_bo_clear_relocs(brw->batch.bo, brw->batch.saved.reloc_count);
 
-   brw->batch.used = brw->batch.saved.used;
-   if (brw->batch.used == 0)
+   brw->batch.map_next = brw->batch.saved.map_next;
+   if (USED_BATCH(brw->batch) == 0)
       brw->batch.ring = UNKNOWN_RING;
 }
 
@@ -114,7 +106,6 @@ intel_batchbuffer_free(struct brw_context *brw)
    free(brw->batch.cpu_map);
    drm_intel_bo_unreference(brw->batch.last_bo);
    drm_intel_bo_unreference(brw->batch.bo);
-   drm_intel_bo_unreference(brw->batch.workaround_bo);
 }
 
 static void
@@ -133,7 +124,7 @@ do_batch_dump(struct brw_context *brw)
       drm_intel_decode_set_batch_pointer(decode,
 					 batch->bo->virtual,
 					 batch->bo->offset64,
-					 batch->used);
+                                         USED_BATCH(*batch));
    } else {
       fprintf(stderr,
 	      "WARNING: failed to map batchbuffer (%s), "
@@ -142,7 +133,7 @@ do_batch_dump(struct brw_context *brw)
       drm_intel_decode_set_batch_pointer(decode,
 					 batch->map,
 					 batch->bo->offset64,
-					 batch->used);
+                                         USED_BATCH(*batch));
    }
 
    drm_intel_decode_set_output_file(decode, stderr);
@@ -218,9 +209,31 @@ brw_finish_batch(struct brw_context *brw)
     */
    brw_emit_query_end(brw);
 
-   /* We may also need to snapshot and disable OA counters. */
-   if (brw->batch.ring == RENDER_RING)
+   if (brw->batch.ring == RENDER_RING) {
+      /* We may also need to snapshot and disable OA counters. */
       brw_perf_monitor_finish_batch(brw);
+
+      if (brw->is_haswell) {
+         /* From the Haswell PRM, Volume 2b, Command Reference: Instructions,
+          * 3DSTATE_CC_STATE_POINTERS > "Note":
+          *
+          * "SW must program 3DSTATE_CC_STATE_POINTERS command at the end of every
+          *  3D batch buffer followed by a PIPE_CONTROL with RC flush and CS stall."
+          *
+          * From the example in the docs, it seems to expect a regular pipe control
+          * flush here as well. We may have done it already, but meh.
+          *
+          * See also WaAvoidRCZCounterRollover.
+          */
+         brw_emit_mi_flush(brw);
+         BEGIN_BATCH(2);
+         OUT_BATCH(_3DSTATE_CC_STATE_POINTERS << 16 | (2 - 2));
+         OUT_BATCH(brw->cc.state_offset | 1);
+         ADVANCE_BATCH();
+         brw_emit_pipe_control_flush(brw, PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                          PIPE_CONTROL_CS_STALL);
+      }
+   }
 
    /* Mark that the current program cache BO has been used by the GPU.
     * It will be reallocated if we need to put new programs in for the
@@ -267,6 +280,11 @@ throttle(struct brw_context *brw)
    }
 }
 
+/* Drop when RS headers get pulled to libdrm */
+#ifndef I915_EXEC_RESOURCE_STREAMER
+#define I915_EXEC_RESOURCE_STREAMER (1<<15)
+#endif
+
 /* TODO: Push this whole function into bufmgr.
  */
 static int
@@ -278,7 +296,7 @@ do_flush_locked(struct brw_context *brw)
    if (brw->has_llc) {
       drm_intel_bo_unmap(batch->bo);
    } else {
-      ret = drm_intel_bo_subdata(batch->bo, 0, 4*batch->used, batch->map);
+      ret = drm_intel_bo_subdata(batch->bo, 0, 4 * USED_BATCH(*batch), batch->map);
       if (ret == 0 && batch->state_batch_offset != batch->bo->size) {
 	 ret = drm_intel_bo_subdata(batch->bo,
 				    batch->state_batch_offset,
@@ -293,7 +311,8 @@ do_flush_locked(struct brw_context *brw)
       if (brw->gen >= 6 && batch->ring == BLT_RING) {
          flags = I915_EXEC_BLT;
       } else {
-         flags = I915_EXEC_RENDER;
+         flags = I915_EXEC_RENDER |
+            (brw->use_resource_streamer ? I915_EXEC_RESOURCE_STREAMER : 0);
       }
       if (batch->needs_sol_reset)
 	 flags |= I915_EXEC_GEN7_SOL_RESET;
@@ -303,11 +322,11 @@ do_flush_locked(struct brw_context *brw)
             brw_annotate_aub(brw);
 
 	 if (brw->hw_ctx == NULL || batch->ring != RENDER_RING) {
-	    ret = drm_intel_bo_mrb_exec(batch->bo, 4 * batch->used, NULL, 0, 0,
-					flags);
+            ret = drm_intel_bo_mrb_exec(batch->bo, 4 * USED_BATCH(*batch),
+                                        NULL, 0, 0, flags);
 	 } else {
 	    ret = drm_intel_gem_bo_context_exec(batch->bo, brw->hw_ctx,
-						4 * batch->used, flags);
+                                                4 * USED_BATCH(*batch), flags);
 	 }
       }
 
@@ -331,7 +350,7 @@ _intel_batchbuffer_flush(struct brw_context *brw,
 {
    int ret;
 
-   if (brw->batch.used == 0)
+   if (USED_BATCH(brw->batch) == 0)
       return 0;
 
    if (brw->throttle_batch[0] == NULL) {
@@ -340,7 +359,7 @@ _intel_batchbuffer_flush(struct brw_context *brw,
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
-      int bytes_for_commands = 4 * brw->batch.used;
+      int bytes_for_commands = 4 * USED_BATCH(brw->batch);
       int bytes_for_state = brw->batch.bo->size - brw->batch.state_batch_offset;
       int total_bytes = bytes_for_commands + bytes_for_state;
       fprintf(stderr, "%s:%d: Batchbuffer flush with %4db (pkt) + "
@@ -356,7 +375,7 @@ _intel_batchbuffer_flush(struct brw_context *brw,
 
    /* Mark the end of the buffer. */
    intel_batchbuffer_emit_dword(brw, MI_BATCH_BUFFER_END);
-   if (brw->batch.used & 1) {
+   if (USED_BATCH(brw->batch) & 1) {
       /* Round batchbuffer usage to 2 DWORDs. */
       intel_batchbuffer_emit_dword(brw, MI_NOOP);
    }
@@ -373,6 +392,9 @@ _intel_batchbuffer_flush(struct brw_context *brw,
       drm_intel_bo_wait_rendering(brw->batch.bo);
    }
 
+   if (brw->use_resource_streamer)
+      gen7_reset_hw_bt_pool_offsets(brw);
+
    /* Start a new batch buffer. */
    brw_new_batch(brw);
 
@@ -382,15 +404,15 @@ _intel_batchbuffer_flush(struct brw_context *brw,
 
 /*  This is the only way buffers get added to the validate list.
  */
-bool
-intel_batchbuffer_emit_reloc(struct brw_context *brw,
-                             drm_intel_bo *buffer,
-                             uint32_t read_domains, uint32_t write_domain,
-			     uint32_t delta)
+uint32_t
+intel_batchbuffer_reloc(struct brw_context *brw,
+                        drm_intel_bo *buffer, uint32_t offset,
+                        uint32_t read_domains, uint32_t write_domain,
+                        uint32_t delta)
 {
    int ret;
 
-   ret = drm_intel_bo_emit_reloc(brw->batch.bo, 4*brw->batch.used,
+   ret = drm_intel_bo_emit_reloc(brw->batch.bo, offset,
 				 buffer, delta,
 				 read_domains, write_domain);
    assert(ret == 0);
@@ -400,18 +422,16 @@ intel_batchbuffer_emit_reloc(struct brw_context *brw,
     * case the buffer doesn't move and we can short-circuit the relocation
     * processing in the kernel
     */
-   intel_batchbuffer_emit_dword(brw, buffer->offset64 + delta);
-
-   return true;
+   return buffer->offset64 + delta;
 }
 
-bool
-intel_batchbuffer_emit_reloc64(struct brw_context *brw,
-                               drm_intel_bo *buffer,
-                               uint32_t read_domains, uint32_t write_domain,
-			       uint32_t delta)
+uint64_t
+intel_batchbuffer_reloc64(struct brw_context *brw,
+                          drm_intel_bo *buffer, uint32_t offset,
+                          uint32_t read_domains, uint32_t write_domain,
+                          uint32_t delta)
 {
-   int ret = drm_intel_bo_emit_reloc(brw->batch.bo, 4*brw->batch.used,
+   int ret = drm_intel_bo_emit_reloc(brw->batch.bo, offset,
                                      buffer, delta,
                                      read_domains, write_domain);
    assert(ret == 0);
@@ -421,11 +441,7 @@ intel_batchbuffer_emit_reloc64(struct brw_context *brw,
     * case the buffer doesn't move and we can short-circuit the relocation
     * processing in the kernel
     */
-   uint64_t offset = buffer->offset64 + delta;
-   intel_batchbuffer_emit_dword(brw, offset);
-   intel_batchbuffer_emit_dword(brw, offset >> 32);
-
-   return true;
+   return buffer->offset64 + delta;
 }
 
 
@@ -435,312 +451,8 @@ intel_batchbuffer_data(struct brw_context *brw,
 {
    assert((bytes & 3) == 0);
    intel_batchbuffer_require_space(brw, bytes, ring);
-   memcpy(brw->batch.map + brw->batch.used, data, bytes);
-   brw->batch.used += bytes >> 2;
-}
-
-/**
- * According to the latest documentation, any PIPE_CONTROL with the
- * "Command Streamer Stall" bit set must also have another bit set,
- * with five different options:
- *
- *  - Render Target Cache Flush
- *  - Depth Cache Flush
- *  - Stall at Pixel Scoreboard
- *  - Post-Sync Operation
- *  - Depth Stall
- *
- * I chose "Stall at Pixel Scoreboard" since we've used it effectively
- * in the past, but the choice is fairly arbitrary.
- */
-static void
-gen8_add_cs_stall_workaround_bits(uint32_t *flags)
-{
-   uint32_t wa_bits = PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                      PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                      PIPE_CONTROL_WRITE_IMMEDIATE |
-                      PIPE_CONTROL_WRITE_DEPTH_COUNT |
-                      PIPE_CONTROL_WRITE_TIMESTAMP |
-                      PIPE_CONTROL_STALL_AT_SCOREBOARD |
-                      PIPE_CONTROL_DEPTH_STALL;
-
-   /* If we're doing a CS stall, and don't already have one of the
-    * workaround bits set, add "Stall at Pixel Scoreboard."
-    */
-   if ((*flags & PIPE_CONTROL_CS_STALL) != 0 && (*flags & wa_bits) == 0)
-      *flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
-}
-
-/* Implement the WaCsStallAtEveryFourthPipecontrol workaround on IVB, BYT:
- *
- * "Every 4th PIPE_CONTROL command, not counting the PIPE_CONTROL with
- *  only read-cache-invalidate bit(s) set, must have a CS_STALL bit set."
- *
- * Note that the kernel does CS stalls between batches, so we only need
- * to count them within a batch.
- */
-static uint32_t
-gen7_cs_stall_every_four_pipe_controls(struct brw_context *brw, uint32_t flags)
-{
-   if (brw->gen == 7 && !brw->is_haswell) {
-      if (flags & PIPE_CONTROL_CS_STALL) {
-         /* If we're doing a CS stall, reset the counter and carry on. */
-         brw->batch.pipe_controls_since_last_cs_stall = 0;
-         return 0;
-      }
-
-      /* If this is the fourth pipe control without a CS stall, do one now. */
-      if (++brw->batch.pipe_controls_since_last_cs_stall == 4) {
-         brw->batch.pipe_controls_since_last_cs_stall = 0;
-         return PIPE_CONTROL_CS_STALL;
-      }
-   }
-   return 0;
-}
-
-/**
- * Emit a PIPE_CONTROL with various flushing flags.
- *
- * The caller is responsible for deciding what flags are appropriate for the
- * given generation.
- */
-void
-brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
-{
-   if (brw->gen >= 8) {
-      gen8_add_cs_stall_workaround_bits(&flags);
-
-      BEGIN_BATCH(6);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (6 - 2));
-      OUT_BATCH(flags);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   } else if (brw->gen >= 6) {
-      flags |= gen7_cs_stall_every_four_pipe_controls(brw, flags);
-
-      BEGIN_BATCH(5);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (5 - 2));
-      OUT_BATCH(flags);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   } else {
-      BEGIN_BATCH(4);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | flags | (4 - 2));
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   }
-}
-
-/**
- * Emit a PIPE_CONTROL that writes to a buffer object.
- *
- * \p flags should contain one of the following items:
- *  - PIPE_CONTROL_WRITE_IMMEDIATE
- *  - PIPE_CONTROL_WRITE_TIMESTAMP
- *  - PIPE_CONTROL_WRITE_DEPTH_COUNT
- */
-void
-brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
-                            drm_intel_bo *bo, uint32_t offset,
-                            uint32_t imm_lower, uint32_t imm_upper)
-{
-   if (brw->gen >= 8) {
-      gen8_add_cs_stall_workaround_bits(&flags);
-
-      BEGIN_BATCH(6);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (6 - 2));
-      OUT_BATCH(flags);
-      OUT_RELOC64(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                  offset);
-      OUT_BATCH(imm_lower);
-      OUT_BATCH(imm_upper);
-      ADVANCE_BATCH();
-   } else if (brw->gen >= 6) {
-      flags |= gen7_cs_stall_every_four_pipe_controls(brw, flags);
-
-      /* PPGTT/GGTT is selected by DW2 bit 2 on Sandybridge, but DW1 bit 24
-       * on later platforms.  We always use PPGTT on Gen7+.
-       */
-      unsigned gen6_gtt = brw->gen == 6 ? PIPE_CONTROL_GLOBAL_GTT_WRITE : 0;
-
-      BEGIN_BATCH(5);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (5 - 2));
-      OUT_BATCH(flags);
-      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                gen6_gtt | offset);
-      OUT_BATCH(imm_lower);
-      OUT_BATCH(imm_upper);
-      ADVANCE_BATCH();
-   } else {
-      BEGIN_BATCH(4);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | flags | (4 - 2));
-      OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                PIPE_CONTROL_GLOBAL_GTT_WRITE | offset);
-      OUT_BATCH(imm_lower);
-      OUT_BATCH(imm_upper);
-      ADVANCE_BATCH();
-   }
-}
-
-/**
- * Restriction [DevSNB, DevIVB]:
- *
- * Prior to changing Depth/Stencil Buffer state (i.e. any combination of
- * 3DSTATE_DEPTH_BUFFER, 3DSTATE_CLEAR_PARAMS, 3DSTATE_STENCIL_BUFFER,
- * 3DSTATE_HIER_DEPTH_BUFFER) SW must first issue a pipelined depth stall
- * (PIPE_CONTROL with Depth Stall bit set), followed by a pipelined depth
- * cache flush (PIPE_CONTROL with Depth Flush Bit set), followed by
- * another pipelined depth stall (PIPE_CONTROL with Depth Stall bit set),
- * unless SW can otherwise guarantee that the pipeline from WM onwards is
- * already flushed (e.g., via a preceding MI_FLUSH).
- */
-void
-intel_emit_depth_stall_flushes(struct brw_context *brw)
-{
-   assert(brw->gen >= 6 && brw->gen <= 9);
-
-   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_STALL);
-   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_CACHE_FLUSH);
-   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_STALL);
-}
-
-/**
- * From the Ivybridge PRM, Volume 2 Part 1, Section 3.2 (VS Stage Input):
- * "A PIPE_CONTROL with Post-Sync Operation set to 1h and a depth
- *  stall needs to be sent just prior to any 3DSTATE_VS, 3DSTATE_URB_VS,
- *  3DSTATE_CONSTANT_VS, 3DSTATE_BINDING_TABLE_POINTER_VS,
- *  3DSTATE_SAMPLER_STATE_POINTER_VS command.  Only one PIPE_CONTROL needs
- *  to be sent before any combination of VS associated 3DSTATE."
- */
-void
-gen7_emit_vs_workaround_flush(struct brw_context *brw)
-{
-   assert(brw->gen == 7);
-   brw_emit_pipe_control_write(brw,
-                               PIPE_CONTROL_WRITE_IMMEDIATE
-                               | PIPE_CONTROL_DEPTH_STALL,
-                               brw->batch.workaround_bo, 0,
-                               0, 0);
-}
-
-
-/**
- * Emit a PIPE_CONTROL command for gen7 with the CS Stall bit set.
- */
-void
-gen7_emit_cs_stall_flush(struct brw_context *brw)
-{
-   brw_emit_pipe_control_write(brw,
-                               PIPE_CONTROL_CS_STALL
-                               | PIPE_CONTROL_WRITE_IMMEDIATE,
-                               brw->batch.workaround_bo, 0,
-                               0, 0);
-}
-
-
-/**
- * Emits a PIPE_CONTROL with a non-zero post-sync operation, for
- * implementing two workarounds on gen6.  From section 1.4.7.1
- * "PIPE_CONTROL" of the Sandy Bridge PRM volume 2 part 1:
- *
- * [DevSNB-C+{W/A}] Before any depth stall flush (including those
- * produced by non-pipelined state commands), software needs to first
- * send a PIPE_CONTROL with no bits set except Post-Sync Operation !=
- * 0.
- *
- * [Dev-SNB{W/A}]: Before a PIPE_CONTROL with Write Cache Flush Enable
- * =1, a PIPE_CONTROL with any non-zero post-sync-op is required.
- *
- * And the workaround for these two requires this workaround first:
- *
- * [Dev-SNB{W/A}]: Pipe-control with CS-stall bit set must be sent
- * BEFORE the pipe-control with a post-sync op and no write-cache
- * flushes.
- *
- * And this last workaround is tricky because of the requirements on
- * that bit.  From section 1.4.7.2.3 "Stall" of the Sandy Bridge PRM
- * volume 2 part 1:
- *
- *     "1 of the following must also be set:
- *      - Render Target Cache Flush Enable ([12] of DW1)
- *      - Depth Cache Flush Enable ([0] of DW1)
- *      - Stall at Pixel Scoreboard ([1] of DW1)
- *      - Depth Stall ([13] of DW1)
- *      - Post-Sync Operation ([13] of DW1)
- *      - Notify Enable ([8] of DW1)"
- *
- * The cache flushes require the workaround flush that triggered this
- * one, so we can't use it.  Depth stall would trigger the same.
- * Post-sync nonzero is what triggered this second workaround, so we
- * can't use that one either.  Notify enable is IRQs, which aren't
- * really our business.  That leaves only stall at scoreboard.
- */
-void
-intel_emit_post_sync_nonzero_flush(struct brw_context *brw)
-{
-   brw_emit_pipe_control_flush(brw,
-                               PIPE_CONTROL_CS_STALL |
-                               PIPE_CONTROL_STALL_AT_SCOREBOARD);
-
-   brw_emit_pipe_control_write(brw, PIPE_CONTROL_WRITE_IMMEDIATE,
-                               brw->batch.workaround_bo, 0, 0, 0);
-}
-
-/* Emit a pipelined flush to either flush render and texture cache for
- * reading from a FBO-drawn texture, or flush so that frontbuffer
- * render appears on the screen in DRI1.
- *
- * This is also used for the always_flush_cache driconf debug option.
- */
-void
-intel_batchbuffer_emit_mi_flush(struct brw_context *brw)
-{
-   if (brw->batch.ring == BLT_RING && brw->gen >= 6) {
-      BEGIN_BATCH_BLT(4);
-      OUT_BATCH(MI_FLUSH_DW);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   } else {
-      int flags = PIPE_CONTROL_NO_WRITE | PIPE_CONTROL_RENDER_TARGET_FLUSH;
-      if (brw->gen >= 6) {
-         if (brw->gen == 9) {
-            /* Hardware workaround: SKL
-             *
-             * Emit Pipe Control with all bits set to zero before emitting
-             * a Pipe Control with VF Cache Invalidate set.
-             */
-            brw_emit_pipe_control_flush(brw, 0);
-         }
-
-         flags |= PIPE_CONTROL_INSTRUCTION_INVALIDATE |
-                  PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                  PIPE_CONTROL_VF_CACHE_INVALIDATE |
-                  PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
-                  PIPE_CONTROL_CS_STALL;
-
-         if (brw->gen == 6) {
-            /* Hardware workaround: SNB B-Spec says:
-             *
-             * [Dev-SNB{W/A}]: Before a PIPE_CONTROL with Write Cache
-             * Flush Enable =1, a PIPE_CONTROL with any non-zero
-             * post-sync-op is required.
-             */
-            intel_emit_post_sync_nonzero_flush(brw);
-         }
-      }
-      brw_emit_pipe_control_flush(brw, flags);
-   }
-
-   brw_render_cache_set_clear(brw);
+   memcpy(brw->batch.map_next, data, bytes);
+   brw->batch.map_next += bytes >> 2;
 }
 
 static void

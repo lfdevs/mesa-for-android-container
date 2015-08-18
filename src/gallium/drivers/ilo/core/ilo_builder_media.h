@@ -29,57 +29,30 @@
 #define ILO_BUILDER_MEDIA_H
 
 #include "genhw/genhw.h"
-#include "../ilo_shader.h"
 #include "intel_winsys.h"
 
 #include "ilo_core.h"
 #include "ilo_dev.h"
+#include "ilo_state_compute.h"
 #include "ilo_builder.h"
-
-struct gen6_idrt_data {
-   const struct ilo_shader_state *cs;
-
-   uint32_t sampler_offset;
-   uint32_t binding_table_offset;
-
-   unsigned curbe_size;
-   unsigned thread_group_size;
-};
 
 static inline void
 gen6_MEDIA_VFE_STATE(struct ilo_builder *builder,
-                     unsigned curbe_alloc, bool use_slm)
+                     const struct ilo_state_compute *compute)
 {
    const uint8_t cmd_len = 8;
-   const unsigned idrt_alloc =
-      ((ilo_dev_gen(builder->dev) >= ILO_GEN(7.5)) ? 64 : 32) * 32;
-   int max_threads;
    uint32_t *dw;
 
-   ILO_DEV_ASSERT(builder->dev, 7, 7.5);
-
-   max_threads = builder->dev->thread_count;
-
-   curbe_alloc = align(curbe_alloc, 32);
-   assert(idrt_alloc + curbe_alloc <= builder->dev->urb_size / (use_slm + 1));
+   ILO_DEV_ASSERT(builder->dev, 6, 7.5);
 
    ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN6_RENDER_CMD(MEDIA, MEDIA_VFE_STATE) | (cmd_len - 2);
-   dw[1] = 0; /* scratch */
-
-   dw[2] = (max_threads - 1) << GEN6_VFE_DW2_MAX_THREADS__SHIFT |
-           0 << GEN6_VFE_DW2_URB_ENTRY_COUNT__SHIFT |
-           GEN6_VFE_DW2_RESET_GATEWAY_TIMER |
-           GEN6_VFE_DW2_BYPASS_GATEWAY_CONTROL;
-   if (ilo_dev_gen(builder->dev) >= ILO_GEN(7))
-      dw[2] |= GEN7_VFE_DW2_GPGPU_MODE;
-
+   /* see compute_set_gen6_MEDIA_VFE_STATE() */
+   dw[1] = compute->vfe[0];
+   dw[2] = compute->vfe[1];
    dw[3] = 0;
-
-   dw[4] = 0 << GEN6_VFE_DW4_URB_ENTRY_SIZE__SHIFT |
-           (curbe_alloc / 32);
-
+   dw[4] = compute->vfe[2];
    dw[5] = 0;
    dw[6] = 0;
    dw[7] = 0;
@@ -194,8 +167,10 @@ gen7_GPGPU_WALKER(struct ilo_builder *builder,
 
 static inline uint32_t
 gen6_INTERFACE_DESCRIPTOR_DATA(struct ilo_builder *builder,
-                               const struct gen6_idrt_data *data,
-                               int idrt_count)
+                               const struct ilo_state_compute *compute,
+                               const uint32_t *kernel_offsets,
+                               const uint32_t *sampler_offsets,
+                               const uint32_t *binding_table_offsets)
 {
    /*
     * From the Sandy Bridge PRM, volume 2 part 2, page 34:
@@ -211,61 +186,26 @@ gen6_INTERFACE_DESCRIPTOR_DATA(struct ilo_builder *builder,
     *      aligned address of the Interface Descriptor data."
     */
    const int state_align = 32;
-   const int state_len = (32 / 4) * idrt_count;
+   const int state_len = (32 / 4) * compute->idrt_count;
    uint32_t state_offset, *dw;
    int i;
 
-   ILO_DEV_ASSERT(builder->dev, 7, 7.5);
+   ILO_DEV_ASSERT(builder->dev, 6, 7.5);
 
    state_offset = ilo_builder_dynamic_pointer(builder,
          ILO_BUILDER_ITEM_INTERFACE_DESCRIPTOR, state_align, state_len, &dw);
 
-   for (i = 0; i < idrt_count; i++) {
-      const struct gen6_idrt_data *idrt = &data[i];
-      const struct ilo_shader_state *cs = idrt->cs;
-      unsigned sampler_count, bt_size, slm_size;
-
-      sampler_count =
-         ilo_shader_get_kernel_param(cs, ILO_KERNEL_SAMPLER_COUNT);
-      assert(sampler_count <= 16);
-      sampler_count = (sampler_count + 3) / 4;
-
-      bt_size =
-         ilo_shader_get_kernel_param(cs, ILO_KERNEL_SURFACE_TOTAL_COUNT);
-      if (bt_size > 31)
-         bt_size = 31;
-
-      slm_size = ilo_shader_get_kernel_param(cs, ILO_KERNEL_CS_LOCAL_SIZE);
-
-      assert(idrt->curbe_size / 32 <= 63);
-
-      dw[0] = ilo_shader_get_kernel_offset(idrt->cs);
+   for (i = 0; i < compute->idrt_count; i++) {
+      /* see compute_set_gen6_INTERFACE_DESCRIPTOR_DATA() */
+      dw[0] = compute->idrt[i][0] + kernel_offsets[i];
       dw[1] = 0;
-      dw[2] = idrt->sampler_offset |
-              sampler_count << GEN6_IDRT_DW2_SAMPLER_COUNT__SHIFT;
-      dw[3] = idrt->binding_table_offset |
-              bt_size << GEN6_IDRT_DW3_BINDING_TABLE_SIZE__SHIFT;
-
-      dw[4] = (idrt->curbe_size / 32) << GEN6_IDRT_DW4_CURBE_READ_LEN__SHIFT |
-              0 << GEN6_IDRT_DW4_CURBE_READ_OFFSET__SHIFT;
-
-      if (ilo_dev_gen(builder->dev) >= ILO_GEN(7)) {
-         dw[5] = GEN7_IDRT_DW5_ROUNDING_MODE_RTNE;
-
-         if (slm_size) {
-            assert(slm_size <= 64 * 1024);
-            slm_size = util_next_power_of_two((slm_size + 4095) / 4096);
-
-            dw[5] |= GEN7_IDRT_DW5_BARRIER_ENABLE |
-                     slm_size << GEN7_IDRT_DW5_SLM_SIZE__SHIFT |
-                     idrt->thread_group_size <<
-                        GEN7_IDRT_DW5_THREAD_GROUP_SIZE__SHIFT;
-         }
-      } else {
-         dw[5] = 0;
-      }
-
-      dw[6] = 0;
+      dw[2] = compute->idrt[i][1] |
+              sampler_offsets[i];
+      dw[3] = compute->idrt[i][2] |
+              binding_table_offsets[i];
+      dw[4] = compute->idrt[i][3];
+      dw[5] = compute->idrt[i][4];
+      dw[6] = compute->idrt[i][5];
       dw[7] = 0;
 
       dw += 8;

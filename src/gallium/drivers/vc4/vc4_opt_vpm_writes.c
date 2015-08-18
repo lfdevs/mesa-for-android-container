@@ -37,15 +37,12 @@ qir_opt_vpm_writes(struct vc4_compile *c)
                 return false;
 
         bool progress = false;
-        struct simple_node *node;
         struct qinst *vpm_writes[64] = { 0 };
         uint32_t use_count[c->num_temps];
         uint32_t vpm_write_count = 0;
         memset(&use_count, 0, sizeof(use_count));
 
-        foreach(node, &c->instructions) {
-                struct qinst *inst = (struct qinst *)node;
-
+        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 switch (inst->dst.file) {
                 case QFILE_VPM:
                         vpm_writes[vpm_write_count++] = inst;
@@ -102,7 +99,8 @@ qir_opt_vpm_writes(struct vc4_compile *c)
                  * to maintain the order of the VPM writes.
                  */
                 assert(!vpm_writes[i]->sf);
-                move_to_tail(&vpm_writes[i]->link, &inst->link);
+                list_del(&inst->link);
+                list_addtail(&inst->link, &vpm_writes[i]->link);
                 qir_remove_instruction(c, vpm_writes[i]);
 
                 c->defs[inst->dst.index] = NULL;

@@ -87,6 +87,7 @@ typedef enum {
    nir_var_global,
    nir_var_local,
    nir_var_uniform,
+   nir_var_shader_storage,
    nir_var_system_value
 } nir_variable_mode;
 
@@ -389,14 +390,6 @@ typedef struct {
     */
    bool is_packed;
 
-   /**
-    * If this pointer is non-NULL then this register has exactly one
-    * definition and that definition dominates all of its uses.  This is
-    * set by the out-of-SSA pass so that backends can get SSA-like
-    * information even once they have gone out of SSA.
-    */
-   struct nir_instr *parent_instr;
-
    /** set of nir_instr's where this register is used (read from) */
    struct list_head uses;
 
@@ -448,6 +441,18 @@ nir_instr_prev(nir_instr *instr)
       return NULL;
    else
       return exec_node_data(nir_instr, prev, node);
+}
+
+static inline bool
+nir_instr_is_first(nir_instr *instr)
+{
+   return exec_node_is_head_sentinel(exec_node_get_prev(&instr->node));
+}
+
+static inline bool
+nir_instr_is_last(nir_instr *instr)
+{
+   return exec_node_is_tail_sentinel(exec_node_get_next(&instr->node));
 }
 
 typedef struct {
@@ -563,16 +568,6 @@ nir_src_for_reg(nir_register *reg)
    src.reg.base_offset = 0;
 
    return src;
-}
-
-static inline nir_instr *
-nir_src_get_parent_instr(const nir_src *src)
-{
-   if (src->is_ssa) {
-      return src->ssa->parent_instr;
-   } else {
-      return src->reg.reg->parent_instr;
-   }
 }
 
 static inline nir_dest
@@ -1238,6 +1233,8 @@ nir_block_last_instr(nir_block *block)
    foreach_list_typed_reverse(nir_instr, instr, node, &(block)->instr_list)
 #define nir_foreach_instr_safe(block, instr) \
    foreach_list_typed_safe(nir_instr, instr, node, &(block)->instr_list)
+#define nir_foreach_instr_safe_reverse(block, instr) \
+   foreach_list_typed_safe_reverse(nir_instr, instr, node, &(block)->instr_list)
 
 typedef struct nir_if {
    nir_cf_node cf_node;
@@ -1640,14 +1637,16 @@ void nir_lower_global_vars_to_local(nir_shader *shader);
 
 void nir_lower_locals_to_regs(nir_shader *shader);
 
-void nir_assign_var_locations_scalar(struct exec_list *var_list,
-                                     unsigned *size);
-void nir_assign_var_locations_scalar_direct_first(nir_shader *shader,
-                                                  struct exec_list *var_list,
-                                                  unsigned *direct_size,
-                                                  unsigned *size);
+void nir_assign_var_locations(struct exec_list *var_list,
+                              unsigned *size,
+                              bool is_scalar);
+void nir_assign_var_locations_direct_first(nir_shader *shader,
+                                           struct exec_list *var_list,
+                                           unsigned *direct_size,
+                                           unsigned *size,
+                                           bool is_scalar);
 
-void nir_lower_io(nir_shader *shader);
+void nir_lower_io(nir_shader *shader, bool is_scalar);
 
 void nir_lower_vars_to_ssa(nir_shader *shader);
 
@@ -1655,6 +1654,7 @@ void nir_remove_dead_variables(nir_shader *shader);
 
 void nir_lower_vec_to_movs(nir_shader *shader);
 void nir_lower_alu_to_scalar(nir_shader *shader);
+void nir_lower_load_const_to_scalar(nir_shader *shader);
 
 void nir_lower_phis_to_scalar(nir_shader *shader);
 
@@ -1676,7 +1676,12 @@ bool nir_ssa_defs_interfere(nir_ssa_def *a, nir_ssa_def *b);
 
 void nir_convert_to_ssa_impl(nir_function_impl *impl);
 void nir_convert_to_ssa(nir_shader *shader);
-void nir_convert_from_ssa(nir_shader *shader);
+
+/* If phi_webs_only is true, only convert SSA values involved in phi nodes to
+ * registers.  If false, convert all values (even those not involved in a phi
+ * node) to registers.
+ */
+void nir_convert_from_ssa(nir_shader *shader, bool phi_webs_only);
 
 bool nir_opt_algebraic(nir_shader *shader);
 bool nir_opt_algebraic_late(nir_shader *shader);
@@ -1698,6 +1703,8 @@ bool nir_opt_peephole_select(nir_shader *shader);
 bool nir_opt_peephole_ffma(nir_shader *shader);
 
 bool nir_opt_remove_phis(nir_shader *shader);
+
+bool nir_opt_undef(nir_shader *shader);
 
 void nir_sweep(nir_shader *shader);
 

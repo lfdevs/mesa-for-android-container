@@ -136,11 +136,8 @@ bool
 qir_opt_algebraic(struct vc4_compile *c)
 {
         bool progress = false;
-        struct simple_node *node;
 
-        foreach(node, &c->instructions) {
-                struct qinst *inst = (struct qinst *)node;
-
+        list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 switch (inst->op) {
                 case QOP_SEL_X_Y_ZS:
                 case QOP_SEL_X_Y_ZC:

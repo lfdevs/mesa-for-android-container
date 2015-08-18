@@ -132,7 +132,7 @@ struct NineDevice9
      * is not bound to anything by the vertex declaration */
     struct pipe_resource *dummy_vbo;
 };
-static INLINE struct NineDevice9 *
+static inline struct NineDevice9 *
 NineDevice9( void *data )
 {
     return (struct NineDevice9 *)data;

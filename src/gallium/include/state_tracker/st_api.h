@@ -533,7 +533,7 @@ struct st_api
 /**
  * Return true if the visual has the specified buffers.
  */
-static INLINE boolean
+static inline boolean
 st_visual_have_buffers(const struct st_visual *visual, unsigned mask)
 {
    return ((visual->buffer_mask & mask) == mask);

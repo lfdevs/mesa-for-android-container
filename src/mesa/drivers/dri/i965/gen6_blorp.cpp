@@ -821,7 +821,7 @@ gen6_blorp_emit_depth_stencil_config(struct brw_context *brw,
 
    /* 3DSTATE_DEPTH_BUFFER */
    {
-      intel_emit_depth_stall_flushes(brw);
+      brw_emit_depth_stall_flushes(brw);
 
       BEGIN_BATCH(7);
       /* 3DSTATE_DEPTH_BUFFER dw0 */
@@ -896,7 +896,7 @@ static void
 gen6_blorp_emit_depth_disable(struct brw_context *brw,
                               const brw_blorp_params *params)
 {
-   intel_emit_depth_stall_flushes(brw);
+   brw_emit_depth_stall_flushes(brw);
 
    BEGIN_BATCH(7);
    OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (7 - 2));
@@ -1021,7 +1021,7 @@ gen6_blorp_exec(struct brw_context *brw,
    uint32_t prog_offset = params->get_wm_prog(brw, &prog_data);
 
    /* Emit workaround flushes when we switch from drawing to blorping. */
-   intel_emit_post_sync_nonzero_flush(brw);
+   brw_emit_post_sync_nonzero_flush(brw);
 
    gen6_emit_3dstate_multisample(brw, params->dst.num_samples);
    gen6_emit_3dstate_sample_mask(brw,

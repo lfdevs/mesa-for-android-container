@@ -52,6 +52,13 @@ struct intel_screen
 
    bool hw_has_swizzling;
 
+   int hw_has_timestamp;
+
+   /**
+    * Does the kernel support resource streamer?
+    */
+   bool has_resource_streamer;
+
    /**
     * Does the kernel support context reset notifications?
     */

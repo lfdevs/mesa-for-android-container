@@ -36,11 +36,11 @@
  *   - if/else/endif
  */
 bool
-dead_control_flow_eliminate(backend_visitor *v)
+dead_control_flow_eliminate(backend_shader *s)
 {
    bool progress = false;
 
-   foreach_block_safe (block, v->cfg) {
+   foreach_block_safe (block, s->cfg) {
       bblock_t *if_block = NULL, *else_block = NULL, *endif_block = block;
       bool found = false;
 
@@ -115,7 +115,7 @@ dead_control_flow_eliminate(backend_visitor *v)
    }
 
    if (progress)
-      v->invalidate_live_intervals();
+      s->invalidate_live_intervals();
 
    return progress;
 }

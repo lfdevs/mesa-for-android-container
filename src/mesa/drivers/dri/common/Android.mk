@@ -39,14 +39,9 @@ intermediates := $(call local-generated-sources-dir)
 LOCAL_C_INCLUDES := \
     $(MESA_DRI_C_INCLUDES)
 
-LOCAL_EXPORT_C_INCLUDE_DIRS := $(intermediates)
-
-# swrast only
-ifeq ($(MESA_GPU_DRIVERS),swrast)
-LOCAL_CFLAGS := -D__NOT_HAVE_DRM_H
-else
-LOCAL_SHARED_LIBRARIES := libdrm
-endif
+LOCAL_EXPORT_C_INCLUDE_DIRS := \
+    $(LOCAL_PATH) \
+    $(intermediates)
 
 LOCAL_SRC_FILES := \
 	$(DRI_COMMON_FILES) \
@@ -107,13 +102,6 @@ LOCAL_MODULE := libmesa_megadriver_stub
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 LOCAL_C_INCLUDES := \
     $(MESA_DRI_C_INCLUDES)
-
-# swrast only
-ifeq ($(MESA_GPU_DRIVERS),swrast)
-LOCAL_CFLAGS := -D__NOT_HAVE_DRM_H
-else
-LOCAL_SHARED_LIBRARIES := libdrm
-endif
 
 LOCAL_SRC_FILES := $(megadriver_stub_FILES)
 

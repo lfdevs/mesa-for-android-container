@@ -45,7 +45,7 @@
  * Vertex and index buffers need hardware backing.  Constant buffers
  * do not.  No other types of buffers currently supported.
  */
-static INLINE boolean
+static inline boolean
 svga_buffer_needs_hw_storage(unsigned usage)
 {
    return usage & (PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_INDEX_BUFFER);

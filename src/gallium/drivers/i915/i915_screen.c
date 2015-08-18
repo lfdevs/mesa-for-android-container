@@ -165,6 +165,7 @@ i915_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_sha
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
          return 0;
       default:
          debug_printf("%s: Unknown cap %u.\n", __FUNCTION__, cap);
@@ -242,6 +243,10 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+   case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+   case PIPE_CAP_DEPTH_BOUNDS_TEST:
       return 0;
 
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -462,20 +467,14 @@ i915_fence_reference(struct pipe_screen *screen,
 }
 
 static boolean
-i915_fence_signalled(struct pipe_screen *screen,
-                     struct pipe_fence_handle *fence)
-{
-   struct i915_screen *is = i915_screen(screen);
-
-   return is->iws->fence_signalled(is->iws, fence) == 1;
-}
-
-static boolean
 i915_fence_finish(struct pipe_screen *screen,
                   struct pipe_fence_handle *fence,
                   uint64_t timeout)
 {
    struct i915_screen *is = i915_screen(screen);
+
+   if (!timeout)
+      return is->iws->fence_signalled(is->iws, fence) == 1;
 
    return is->iws->fence_finish(is->iws, fence) == 1;
 }
@@ -564,7 +563,6 @@ i915_screen_create(struct i915_winsys *iws)
    is->base.context_create = i915_create_context;
 
    is->base.fence_reference = i915_fence_reference;
-   is->base.fence_signalled = i915_fence_signalled;
    is->base.fence_finish = i915_fence_finish;
 
    i915_init_screen_resource_functions(is);

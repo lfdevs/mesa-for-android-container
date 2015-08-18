@@ -41,7 +41,6 @@ emit_depth_packets(struct brw_context *brw,
                    bool depth_writable,
                    struct intel_mipmap_tree *stencil_mt,
                    bool stencil_writable,
-                   uint32_t stencil_offset,
                    bool hiz,
                    uint32_t width,
                    uint32_t height,
@@ -57,7 +56,7 @@ emit_depth_packets(struct brw_context *brw,
       return;
    }
 
-   intel_emit_depth_stall_flushes(brw);
+   brw_emit_depth_stall_flushes(brw);
 
    /* _NEW_BUFFERS, _NEW_DEPTH, _NEW_STENCIL */
    BEGIN_BATCH(8);
@@ -100,7 +99,7 @@ emit_depth_packets(struct brw_context *brw,
    }
 
    if (stencil_mt == NULL) {
-     BEGIN_BATCH(5);
+      BEGIN_BATCH(5);
       OUT_BATCH(GEN7_3DSTATE_STENCIL_BUFFER << 16 | (5 - 2));
       OUT_BATCH(0);
       OUT_BATCH(0);
@@ -127,8 +126,7 @@ emit_depth_packets(struct brw_context *brw,
       OUT_BATCH(HSW_STENCIL_ENABLED | mocs_wb << 22 |
                 (2 * stencil_mt->pitch - 1));
       OUT_RELOC64(stencil_mt->bo,
-                  I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-                  stencil_offset);
+                  I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, 0);
       OUT_BATCH(stencil_mt ? stencil_mt->qpitch >> 2 : 0);
       ADVANCE_BATCH();
    }
@@ -220,7 +218,6 @@ gen8_emit_depth_stencil_hiz(struct brw_context *brw,
    emit_depth_packets(brw, depth_mt, brw_depthbuffer_format(brw), surftype,
                       ctx->Depth.Mask != 0,
                       stencil_mt, ctx->Stencil._WriteEnabled,
-                      brw->depthstencil.stencil_offset,
                       hiz, width, height, depth, lod, min_array_element);
 }
 
@@ -253,10 +250,10 @@ pma_fix_enable(const struct brw_context *brw)
     */
    const bool hiz_enabled = depth_irb && intel_renderbuffer_has_hiz(depth_irb);
 
-   /* 3DSTATE_WM::Early Depth/Stencil Control != EDSC_PREPS (2).
-    * We always leave this set to EDSC_NORMAL (0).
+   /* BRW_NEW_FS_PROG_DATA:
+    * 3DSTATE_WM::Early Depth/Stencil Control != EDSC_PREPS (2).
     */
-   const bool edsc_not_preps = true;
+   const bool edsc_not_preps = !brw->wm.prog_data->early_fragment_tests;
 
    /* 3DSTATE_PS_EXTRA::PixelShaderValid is always true. */
    const bool pixel_shader_valid = true;
@@ -439,7 +436,7 @@ gen8_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
                       brw_depth_format(brw, mt->format),
                       BRW_SURFACE_2D,
                       true, /* depth writes */
-                      NULL, false, 0, /* no stencil for now */
+                      NULL, false, /* no stencil for now */
                       true, /* hiz */
                       surface_width,
                       surface_height,
@@ -499,7 +496,7 @@ gen8_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
     */
    brw_emit_pipe_control_write(brw,
                                PIPE_CONTROL_WRITE_IMMEDIATE,
-                               brw->batch.workaround_bo, 0, 0, 0);
+                               brw->workaround_bo, 0, 0, 0);
 
    /* Emit 3DSTATE_WM_HZ_OP again to disable the state overrides. */
    BEGIN_BATCH(5);

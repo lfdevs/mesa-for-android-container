@@ -29,7 +29,7 @@ struct NineDevice9Video
 {
     struct NineUnknown base;
 };
-static INLINE struct NineDevice9Video *
+static inline struct NineDevice9Video *
 NineDevice9Video( void *data )
 {
     return (struct NineDevice9Video *)data;

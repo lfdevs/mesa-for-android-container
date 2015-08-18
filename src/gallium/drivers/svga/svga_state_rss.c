@@ -61,7 +61,7 @@ do {                                                            \
 } while (0)
 
 
-static INLINE void
+static inline void
 svga_queue_rs( struct rs_queue *q,
                unsigned rss,
                unsigned value )

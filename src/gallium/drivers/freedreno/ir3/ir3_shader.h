@@ -29,8 +29,21 @@
 #ifndef IR3_SHADER_H_
 #define IR3_SHADER_H_
 
+#include "pipe/p_state.h"
+
 #include "ir3.h"
 #include "disasm.h"
+
+/* driver param indices: */
+enum ir3_driver_param {
+	IR3_DP_VTXID_BASE = 0,
+	IR3_DP_VTXCNT_MAX = 1,
+};
+
+/* internal semantic used for passing vtxcnt to vertex shader to
+ * implement transform feedback:
+ */
+#define IR3_SEMANTIC_VTXCNT (TGSI_SEMANTIC_COUNT + 0)
 
 typedef uint16_t ir3_semantic;  /* semantic name + index */
 static inline ir3_semantic
@@ -86,10 +99,6 @@ struct ir3_shader_key {
 	 * shader:
 	 */
 	uint16_t fsaturate_s, fsaturate_t, fsaturate_r;
-
-	/* bitmask of sampler which produces integer outputs:
-	 */
-	uint16_t vinteger_s, finteger_s;
 };
 
 static inline bool
@@ -103,6 +112,9 @@ ir3_shader_key_equal(struct ir3_shader_key *a, struct ir3_shader_key *b)
 
 struct ir3_shader_variant {
 	struct fd_bo *bo;
+
+	/* variant id (for debug) */
+	uint32_t id;
 
 	struct ir3_shader_key key;
 
@@ -196,29 +208,50 @@ struct ir3_shader_variant {
 struct ir3_shader {
 	enum shader_t type;
 
+	/* shader id (for debug): */
+	uint32_t id;
+	uint32_t variant_count;
+
+	struct ir3_compiler *compiler;
+
 	struct pipe_context *pctx;
 	const struct tgsi_token *tokens;
+	struct pipe_stream_output_info stream_output;
 
 	struct ir3_shader_variant *variants;
-
-	/* so far, only used for blit_prog shader.. values for
-	 * VPC_VARYING_PS_REPL[i].MODE
-	 */
-	uint32_t vpsrepl[8];
 };
 
 void * ir3_shader_assemble(struct ir3_shader_variant *v, uint32_t gpu_id);
 
 struct ir3_shader * ir3_shader_create(struct pipe_context *pctx,
-		const struct tgsi_token *tokens, enum shader_t type);
+		const struct pipe_shader_state *cso, enum shader_t type);
 void ir3_shader_destroy(struct ir3_shader *shader);
-uint32_t ir3_shader_gpuid(struct ir3_shader *shader);
 struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
 		struct ir3_shader_key key);
+void ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin);
+
+struct fd_ringbuffer;
+void ir3_emit_consts(struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
+		const struct pipe_draw_info *info, uint32_t dirty);
+
+static inline const char *
+ir3_shader_stage(struct ir3_shader *shader)
+{
+	switch (shader->type) {
+	case SHADER_VERTEX:     return "VERT";
+	case SHADER_FRAGMENT:   return "FRAG";
+	case SHADER_COMPUTE:    return "CL";
+	default:
+		unreachable("invalid type");
+		return NULL;
+	}
+}
 
 /*
  * Helper/util:
  */
+
+#include "pipe/p_shader_tokens.h"
 
 static inline int
 ir3_find_output(const struct ir3_shader_variant *so, ir3_semantic semantic)

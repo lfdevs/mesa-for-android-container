@@ -9,7 +9,7 @@
  * Try to wrap a hw screen with a software screen.
  * On failure will return given screen.
  */
-static INLINE struct pipe_screen *
+static inline struct pipe_screen *
 sw_screen_wrap(struct pipe_screen *screen)
 {
 #if defined(GALLIUM_SOFTPIPE) || defined(GALLIUM_LLVMPIPE)

@@ -81,7 +81,8 @@ lp_build_intrinsic(LLVMBuilderRef builder,
                    const char *name,
                    LLVMTypeRef ret_type,
                    LLVMValueRef *args,
-                   unsigned num_args)
+                   unsigned num_args,
+                   LLVMAttribute attr)
 {
    LLVMModuleRef module = LLVMGetGlobalParent(LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)));
    LLVMValueRef function;
@@ -99,6 +100,9 @@ lp_build_intrinsic(LLVMBuilderRef builder,
       }
 
       function = lp_declare_intrinsic(module, name, ret_type, arg_types, num_args);
+
+      if (attr)
+          LLVMAddFunctionAttr(function, attr);
    }
 
    return LLVMBuildCall(builder, function, args, num_args, "");
@@ -111,7 +115,7 @@ lp_build_intrinsic_unary(LLVMBuilderRef builder,
                          LLVMTypeRef ret_type,
                          LLVMValueRef a)
 {
-   return lp_build_intrinsic(builder, name, ret_type, &a, 1);
+   return lp_build_intrinsic(builder, name, ret_type, &a, 1, 0);
 }
 
 
@@ -127,7 +131,7 @@ lp_build_intrinsic_binary(LLVMBuilderRef builder,
    args[0] = a;
    args[1] = b;
 
-   return lp_build_intrinsic(builder, name, ret_type, args, 2);
+   return lp_build_intrinsic(builder, name, ret_type, args, 2, 0);
 }
 
 
@@ -242,7 +246,7 @@ lp_build_intrinsic_map(struct gallivm_state *gallivm,
       LLVMValueRef res_elem;
       for(j = 0; j < num_args; ++j)
          arg_elems[j] = LLVMBuildExtractElement(builder, args[j], index, "");
-      res_elem = lp_build_intrinsic(builder, name, ret_elem_type, arg_elems, num_args);
+      res_elem = lp_build_intrinsic(builder, name, ret_elem_type, arg_elems, num_args, 0);
       res = LLVMBuildInsertElement(builder, res, res_elem, index, "");
    }
 

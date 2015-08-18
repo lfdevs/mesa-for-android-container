@@ -64,10 +64,10 @@ can_do_pipelined_register_writes(struct brw_context *brw)
    /* Set a value in a BO to a known quantity.  The workaround BO already
     * exists and doesn't contain anything important, so we may as well use it.
     */
-   drm_intel_bo_map(brw->batch.workaround_bo, true);
-   data = brw->batch.workaround_bo->virtual;
+   drm_intel_bo_map(brw->workaround_bo, true);
+   data = brw->workaround_bo->virtual;
    data[offset] = 0xffffffff;
-   drm_intel_bo_unmap(brw->batch.workaround_bo);
+   drm_intel_bo_unmap(brw->workaround_bo);
 
    /* Write the register. */
    BEGIN_BATCH(3);
@@ -76,13 +76,13 @@ can_do_pipelined_register_writes(struct brw_context *brw)
    OUT_BATCH(expected_value);
    ADVANCE_BATCH();
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    /* Save the register's value back to the buffer. */
    BEGIN_BATCH(3);
    OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
    OUT_BATCH(reg);
-   OUT_RELOC(brw->batch.workaround_bo,
+   OUT_RELOC(brw->workaround_bo,
              I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
              offset * sizeof(uint32_t));
    ADVANCE_BATCH();
@@ -90,10 +90,10 @@ can_do_pipelined_register_writes(struct brw_context *brw)
    intel_batchbuffer_flush(brw);
 
    /* Check whether the value got written. */
-   drm_intel_bo_map(brw->batch.workaround_bo, false);
-   data = brw->batch.workaround_bo->virtual;
+   drm_intel_bo_map(brw->workaround_bo, false);
+   data = brw->workaround_bo->virtual;
    bool success = data[offset] == expected_value;
-   drm_intel_bo_unmap(brw->batch.workaround_bo);
+   drm_intel_bo_unmap(brw->workaround_bo);
 
    result = success;
 
@@ -120,10 +120,10 @@ can_write_oacontrol(struct brw_context *brw)
    /* Set a value in a BO to a known quantity.  The workaround BO already
     * exists and doesn't contain anything important, so we may as well use it.
     */
-   drm_intel_bo_map(brw->batch.workaround_bo, true);
-   data = brw->batch.workaround_bo->virtual;
+   drm_intel_bo_map(brw->workaround_bo, true);
+   data = brw->workaround_bo->virtual;
    data[offset] = 0xffffffff;
-   drm_intel_bo_unmap(brw->batch.workaround_bo);
+   drm_intel_bo_unmap(brw->workaround_bo);
 
    /* Write OACONTROL. */
    BEGIN_BATCH(3);
@@ -132,18 +132,18 @@ can_write_oacontrol(struct brw_context *brw)
    OUT_BATCH(expected_value);
    ADVANCE_BATCH();
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    /* Save the register's value back to the buffer. */
    BEGIN_BATCH(3);
    OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
    OUT_BATCH(OACONTROL);
-   OUT_RELOC(brw->batch.workaround_bo,
+   OUT_RELOC(brw->workaround_bo,
              I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
              offset * sizeof(uint32_t));
    ADVANCE_BATCH();
 
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
    /* Set OACONTROL back to zero (everything off). */
    BEGIN_BATCH(3);
@@ -155,10 +155,10 @@ can_write_oacontrol(struct brw_context *brw)
    intel_batchbuffer_flush(brw);
 
    /* Check whether the value got written. */
-   drm_intel_bo_map(brw->batch.workaround_bo, false);
-   data = brw->batch.workaround_bo->virtual;
+   drm_intel_bo_map(brw->workaround_bo, false);
+   data = brw->workaround_bo->virtual;
    bool success = data[offset] == expected_value;
-   drm_intel_bo_unmap(brw->batch.workaround_bo);
+   drm_intel_bo_unmap(brw->workaround_bo);
 
    result = success;
 
@@ -282,8 +282,6 @@ intelInitExtensions(struct gl_context *ctx)
    }
 
    if (brw->gen >= 6) {
-      uint64_t dummy;
-
       ctx->Extensions.ARB_blend_func_extended =
          !driQueryOptionb(&brw->optionCache, "disable_blend_func_extended");
       ctx->Extensions.ARB_conditional_render_inverted = true;
@@ -307,14 +305,13 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.EXT_transform_feedback = true;
       ctx->Extensions.OES_depth_texture_cube_map = true;
 
-      /* Test if the kernel has the ioctl. */
-      if (drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &dummy) == 0)
-         ctx->Extensions.ARB_timer_query = true;
+      ctx->Extensions.ARB_timer_query = brw->intelScreen->hw_has_timestamp;
 
       /* Only enable this in core profile because other parts of Mesa behave
        * slightly differently when the extension is enabled.
        */
       if (ctx->API == API_OPENGL_CORE) {
+         ctx->Extensions.ARB_shader_subroutine = true;
          ctx->Extensions.ARB_viewport_array = true;
          ctx->Extensions.AMD_vertex_shader_viewport_index = true;
       }
@@ -325,8 +322,10 @@ intelInitExtensions(struct gl_context *ctx)
    if (brw->gen >= 7) {
       ctx->Extensions.ARB_conservative_depth = true;
       ctx->Extensions.ARB_derivative_control = true;
+      ctx->Extensions.ARB_framebuffer_no_attachments = true;
       ctx->Extensions.ARB_gpu_shader5 = true;
       ctx->Extensions.ARB_shader_atomic_counters = true;
+      ctx->Extensions.ARB_shader_image_load_store = true;
       ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
 
@@ -346,6 +345,7 @@ intelInitExtensions(struct gl_context *ctx)
       if (ctx->API == API_OPENGL_CORE) {
          ctx->Extensions.ARB_viewport_array = true;
          ctx->Extensions.AMD_vertex_shader_viewport_index = true;
+         ctx->Extensions.ARB_shader_subroutine = true;
       }
    }
 

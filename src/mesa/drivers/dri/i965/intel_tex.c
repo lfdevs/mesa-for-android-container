@@ -93,7 +93,7 @@ intel_alloc_texture_image_buffer(struct gl_context *ctx,
    } else {
       intel_image->mt = intel_miptree_create_for_teximage(brw, intel_texobj,
                                                           intel_image,
-                                                          false);
+                                                          0);
 
       /* Even if the object currently has a mipmap tree associated
        * with it, this one is a more likely candidate to represent the
@@ -144,10 +144,8 @@ intel_alloc_texture_storage(struct gl_context *ctx,
                                               first_image->TexFormat,
                                               0, levels - 1,
                                               width, height, depth,
-                                              false, /* expect_accelerated */
                                               num_samples,
-                                              INTEL_MIPTREE_TILING_ANY,
-                                              false);
+                                              MIPTREE_LAYOUT_TILING_ANY);
 
       if (intel_texobj->mt == NULL) {
          return false;
@@ -341,7 +339,7 @@ intel_set_texture_storage_for_buffer_object(struct gl_context *ctx,
                                   buffer_offset,
                                   image->Width, image->Height, image->Depth,
                                   row_stride,
-                                  false /*disable_aux_buffers*/);
+                                  0);
    if (!intel_texobj->mt)
       return false;
 

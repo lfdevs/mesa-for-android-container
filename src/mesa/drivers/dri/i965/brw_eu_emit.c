@@ -914,6 +914,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
          brw_inst_set_3src_src_type(devinfo, inst, BRW_3SRC_TYPE_UD);
          brw_inst_set_3src_dst_type(devinfo, inst, BRW_3SRC_TYPE_UD);
          break;
+      default:
+         unreachable("not reached");
       }
    }
 
@@ -1582,8 +1584,8 @@ brw_ENDIF(struct brw_codegen *p)
    }
 
    if (devinfo->gen < 6) {
-      brw_set_dest(p, insn, retype(brw_vec4_grf(0,0), BRW_REGISTER_TYPE_UD));
-      brw_set_src0(p, insn, retype(brw_vec4_grf(0,0), BRW_REGISTER_TYPE_UD));
+      brw_set_dest(p, insn, retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
+      brw_set_src0(p, insn, retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
       brw_set_src1(p, insn, brw_imm_d(0x0));
    } else if (devinfo->gen == 6) {
       brw_set_dest(p, insn, brw_imm_w(0));
@@ -3403,4 +3405,55 @@ void brw_shader_time_add(struct brw_codegen *p,
    brw_set_dp_untyped_atomic_message(p, send, BRW_AOP_ADD, false);
 
    brw_pop_insn_state(p);
+}
+
+
+/**
+ * Emit the SEND message for a barrier
+ */
+void
+brw_barrier(struct brw_codegen *p, struct brw_reg src)
+{
+   const struct brw_device_info *devinfo = p->devinfo;
+   struct brw_inst *inst;
+
+   assert(devinfo->gen >= 7);
+
+   inst = next_insn(p, BRW_OPCODE_SEND);
+   brw_set_dest(p, inst, brw_null_reg());
+   brw_set_src0(p, inst, src);
+   brw_set_src1(p, inst, brw_null_reg());
+
+   brw_set_message_descriptor(p, inst, BRW_SFID_MESSAGE_GATEWAY,
+                              1 /* msg_length */,
+                              0 /* response_length */,
+                              false /* header_present */,
+                              false /* end_of_thread */);
+
+   brw_inst_set_gateway_notify(devinfo, inst, 1);
+   brw_inst_set_gateway_subfuncid(devinfo, inst,
+                                  BRW_MESSAGE_GATEWAY_SFID_BARRIER_MSG);
+
+   brw_inst_set_mask_control(devinfo, inst, BRW_MASK_DISABLE);
+}
+
+
+/**
+ * Emit the wait instruction for a barrier
+ */
+void
+brw_WAIT(struct brw_codegen *p)
+{
+   const struct brw_device_info *devinfo = p->devinfo;
+   struct brw_inst *insn;
+
+   struct brw_reg src = brw_notification_reg();
+
+   insn = next_insn(p, BRW_OPCODE_WAIT);
+   brw_set_dest(p, insn, src);
+   brw_set_src0(p, insn, src);
+   brw_set_src1(p, insn, brw_null_reg());
+
+   brw_inst_set_exec_size(devinfo, insn, BRW_EXECUTE_1);
+   brw_inst_set_mask_control(devinfo, insn, BRW_MASK_DISABLE);
 }

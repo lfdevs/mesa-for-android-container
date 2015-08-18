@@ -41,7 +41,8 @@ fd_create_surface(struct pipe_context *pctx,
 //	struct fd_resource* tex = fd_resource(ptex);
 	struct fd_surface* surface = CALLOC_STRUCT(fd_surface);
 
-	assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
+	debug_assert(ptex->target != PIPE_BUFFER);
+	debug_assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
 
 	if (surface) {
 		struct pipe_surface *psurf = &surface->base;

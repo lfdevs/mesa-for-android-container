@@ -533,7 +533,7 @@ static struct dct_coeff tbl_B14_DC[1 << 17];
 static struct dct_coeff tbl_B14_AC[1 << 17];
 static struct dct_coeff tbl_B15[1 << 17];
 
-static INLINE void
+static inline void
 init_dct_coeff_table(struct dct_coeff *dst, const struct dct_coeff_compressed *src,
                      unsigned size, bool is_DC)
 {
@@ -594,7 +594,7 @@ init_dct_coeff_table(struct dct_coeff *dst, const struct dct_coeff_compressed *s
    }
 }
 
-static INLINE void
+static inline void
 init_tables()
 {
    vl_vlc_init_table(tbl_B1, Elements(tbl_B1), macroblock_address_increment, Elements(macroblock_address_increment));
@@ -611,19 +611,19 @@ init_tables()
    init_dct_coeff_table(tbl_B15, dct_coeff_tbl_one, Elements(dct_coeff_tbl_one), false);
 }
 
-static INLINE int
+static inline int
 DIV2DOWN(int todiv)
 {
    return (todiv&~1)/2;
 }
 
-static INLINE int
+static inline int
 DIV2UP(int todiv)
 {
    return (todiv+1)/2;
 }
 
-static INLINE void
+static inline void
 motion_vector(struct vl_mpg12_bs *bs, int r, int s, int dmv, short delta[2], short dmvector[2])
 {
    int t;
@@ -647,7 +647,7 @@ motion_vector(struct vl_mpg12_bs *bs, int r, int s, int dmv, short delta[2], sho
    }
 }
 
-static INLINE int
+static inline int
 wrap(short f, int shift)
 {
    if (f < (-16 << shift))
@@ -658,7 +658,7 @@ wrap(short f, int shift)
       return f;
 }
 
-static INLINE void
+static inline void
 motion_vector_frame(struct vl_mpg12_bs *bs, int s, struct pipe_mpeg12_macroblock *mb)
 {
    int dmv = mb->macroblock_modes.bits.frame_motion_type == PIPE_MPEG12_MO_TYPE_DUAL_PRIME;
@@ -682,7 +682,7 @@ motion_vector_frame(struct vl_mpg12_bs *bs, int s, struct pipe_mpeg12_macroblock
    }
 }
 
-static INLINE void
+static inline void
 motion_vector_field(struct vl_mpg12_bs *bs, int s, struct pipe_mpeg12_macroblock *mb)
 {
    int dmv = mb->macroblock_modes.bits.field_motion_type == PIPE_MPEG12_MO_TYPE_DUAL_PRIME;
@@ -701,12 +701,12 @@ motion_vector_field(struct vl_mpg12_bs *bs, int s, struct pipe_mpeg12_macroblock
    }
 }
 
-static INLINE void
+static inline void
 reset_predictor(struct vl_mpg12_bs *bs) {
    bs->pred_dc[0] = bs->pred_dc[1] = bs->pred_dc[2] = 0;
 }
 
-static INLINE void
+static inline void
 decode_dct(struct vl_mpg12_bs *bs, struct pipe_mpeg12_macroblock *mb, int scale)
 {
    static const unsigned blk2cc[] = { 0, 0, 0, 0, 1, 2 };
@@ -805,7 +805,7 @@ entry:
       vl_vlc_eatbits(&bs->vlc, 1);
 }
 
-static INLINE void
+static inline void
 decode_slice(struct vl_mpg12_bs *bs, struct pipe_video_buffer *target)
 {
    struct pipe_mpeg12_macroblock mb;
@@ -929,6 +929,7 @@ decode_slice(struct vl_mpg12_bs *bs, struct pipe_video_buffer *target)
          mb.PMV[1][0][0] = mb.PMV[0][0][0];
          mb.PMV[1][0][1] = mb.PMV[0][0][1];
          assert(extra);
+         (void) extra;
       } else if (mb.macroblock_type & PIPE_MPEG12_MB_TYPE_INTRA ||
                 !(mb.macroblock_type & (PIPE_MPEG12_MB_TYPE_MOTION_FORWARD |
                                         PIPE_MPEG12_MB_TYPE_MOTION_BACKWARD))) {

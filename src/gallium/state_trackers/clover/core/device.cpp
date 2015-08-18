@@ -89,12 +89,12 @@ device::vendor_id() const {
 
 size_t
 device::max_images_read() const {
-   return PIPE_MAX_SHADER_RESOURCES;
+   return PIPE_MAX_SHADER_IMAGES;
 }
 
 size_t
 device::max_images_write() const {
-   return PIPE_MAX_SHADER_RESOURCES;
+   return PIPE_MAX_SHADER_IMAGES;
 }
 
 cl_uint
@@ -183,6 +183,11 @@ std::vector<size_t>
 device::max_block_size() const {
    auto v = get_compute_param<uint64_t>(pipe, PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE);
    return { v.begin(), v.end() };
+}
+
+cl_uint
+device::subgroup_size() const {
+   return get_compute_param<uint32_t>(pipe, PIPE_COMPUTE_CAP_SUBGROUP_SIZE)[0];
 }
 
 std::string

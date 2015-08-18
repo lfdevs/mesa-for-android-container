@@ -25,7 +25,7 @@
 #include "glsl_types.h"
 #include "glsl_parser_extras.h"
 #include "main/macros.h"
-#include "program/hash_table.h"
+#include "util/hash_table.h"
 
 static void print_type(FILE *f, const glsl_type *t);
 
@@ -72,7 +72,7 @@ _mesa_print_ir(FILE *f, exec_list *instructions,
       if (ir->ir_type != ir_type_function)
 	 fprintf(f, "\n");
    }
-   fprintf(f, "\n)");
+   fprintf(f, ")\n");
 }
 
 void
@@ -89,14 +89,14 @@ ir_print_visitor::ir_print_visitor(FILE *f)
 {
    indentation = 0;
    printable_names =
-      hash_table_ctor(32, hash_table_pointer_hash, hash_table_pointer_compare);
+      _mesa_hash_table_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
    symbols = _mesa_symbol_table_ctor();
    mem_ctx = ralloc_context(NULL);
 }
 
 ir_print_visitor::~ir_print_visitor()
 {
-   hash_table_dtor(printable_names);
+   _mesa_hash_table_destroy(printable_names, NULL);
    _mesa_symbol_table_dtor(symbols);
    ralloc_free(mem_ctx);
 }
@@ -121,18 +121,22 @@ ir_print_visitor::unique_name(ir_variable *var)
    }
 
    /* Do we already have a name for this variable? */
-   const char *name = (const char *) hash_table_find(this->printable_names, var);
-   if (name != NULL)
-      return name;
+   struct hash_entry * entry =
+      _mesa_hash_table_search(this->printable_names, var);
+
+   if (entry != NULL) {
+      return (const char *) entry->data;
+   }
 
    /* If there's no conflict, just use the original name */
+   const char* name = NULL;
    if (_mesa_symbol_table_find_symbol(this->symbols, -1, var->name) == NULL) {
       name = var->name;
    } else {
       static unsigned i = 1;
       name = ralloc_asprintf(this->mem_ctx, "%s@%u", var->name, ++i);
    }
-   hash_table_insert(this->printable_names, (void *) name, var);
+   _mesa_hash_table_insert(this->printable_names, var, (void *) name);
    _mesa_symbol_table_add_symbol(this->symbols, -1, name, var);
    return name;
 }
@@ -161,10 +165,16 @@ void ir_print_visitor::visit(ir_variable *ir)
 {
    fprintf(f, "(declare ");
 
+   char loc[256] = {0};
+   if (ir->data.location != -1)
+      snprintf(loc, sizeof(loc), "location=%i ", ir->data.location);
+
    const char *const cent = (ir->data.centroid) ? "centroid " : "";
    const char *const samp = (ir->data.sample) ? "sample " : "";
+   const char *const patc = (ir->data.patch) ? "patch " : "";
    const char *const inv = (ir->data.invariant) ? "invariant " : "";
-   const char *const mode[] = { "", "uniform ", "shader_in ", "shader_out ",
+   const char *const mode[] = { "", "uniform ", "shader_storage",
+                                "shader_in ", "shader_out ",
                                 "in ", "out ", "inout ",
 			        "const_in ", "sys ", "temporary " };
    STATIC_ASSERT(ARRAY_SIZE(mode) == ir_var_mode_count);
@@ -172,8 +182,8 @@ void ir_print_visitor::visit(ir_variable *ir)
    const char *const interp[] = { "", "smooth", "flat", "noperspective" };
    STATIC_ASSERT(ARRAY_SIZE(interp) == INTERP_QUALIFIER_COUNT);
 
-   fprintf(f, "(%s%s%s%s%s%s) ",
-           cent, samp, inv, mode[ir->data.mode],
+   fprintf(f, "(%s%s%s%s%s%s%s%s) ",
+           loc, cent, samp, patc, inv, mode[ir->data.mode],
            stream[ir->data.stream],
            interp[ir->data.interpolation]);
 
@@ -225,7 +235,7 @@ void ir_print_visitor::visit(ir_function_signature *ir)
 
 void ir_print_visitor::visit(ir_function *ir)
 {
-   fprintf(f, "(function %s\n", ir->name);
+   fprintf(f, "(%s function %s\n", ir->is_subroutine ? "subroutine" : "", ir->name);
    indentation++;
    foreach_in_list(ir_function_signature, sig, &ir->signatures) {
       indent();
@@ -573,5 +583,10 @@ ir_print_visitor::visit(ir_end_primitive *ir)
    fprintf(f, "(end-primitive ");
    ir->stream->accept(this);
    fprintf(f, ")\n");
+}
 
+void
+ir_print_visitor::visit(ir_barrier *ir)
+{
+   fprintf(f, "(barrier)\n");
 }

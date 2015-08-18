@@ -52,7 +52,7 @@ struct nv30_render {
    uint32_t prim;
 };
 
-static INLINE struct nv30_render *
+static inline struct nv30_render *
 nv30_render(struct vbuf_render *render)
 {
    return (struct nv30_render *)render;
@@ -79,12 +79,12 @@ nv30_render_allocate_vertices(struct vbuf_render *render,
                                      PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM,
                                      render->max_vertex_buffer_bytes);
       if (!r->buffer)
-         return FALSE;
+         return false;
 
       r->offset = 0;
    }
 
-   return TRUE;
+   return true;
 }
 
 static void *
@@ -134,7 +134,7 @@ nv30_render_draw_elements(struct vbuf_render *render,
                        NOUVEAU_BO_LOW | NOUVEAU_BO_RD, 0, NV30_3D_VTXBUF_DMA1);
    }
 
-   if (!nv30_state_validate(nv30, ~0, FALSE))
+   if (!nv30_state_validate(nv30, ~0, false))
       return;
 
    BEGIN_NV04(push, NV30_3D(VERTEX_BEGIN_END), 1);
@@ -179,7 +179,7 @@ nv30_render_draw_arrays(struct vbuf_render *render, unsigned start, uint nr)
                        NOUVEAU_BO_LOW | NOUVEAU_BO_RD, 0, NV30_3D_VTXBUF_DMA1);
    }
 
-   if (!nv30_state_validate(nv30, ~0, FALSE))
+   if (!nv30_state_validate(nv30, ~0, false))
       return;
 
    BEGIN_NV04(push, NV30_3D(VERTEX_BEGIN_END), 1);
@@ -221,7 +221,7 @@ static const struct {
    [TGSI_SEMANTIC_TEXCOORD] = { EMIT_4F, INTERP_PERSPECTIVE, 8, 7, 0x00004000 },
 };
 
-static boolean
+static bool
 vroute_add(struct nv30_render *r, uint attrib, uint sem, uint *idx)
 {
    struct nv30_screen *screen = r->nv30->screen;
@@ -245,7 +245,7 @@ vroute_add(struct nv30_render *r, uint attrib, uint sem, uint *idx)
    }
 
    if (emit == EMIT_OMIT)
-      return FALSE;
+      return false;
 
    draw_emit_vertex_attr(vinfo, emit, vroute[sem].interp, attrib);
    format = draw_translate_vinfo_format(emit);
@@ -272,10 +272,10 @@ vroute_add(struct nv30_render *r, uint attrib, uint sem, uint *idx)
       assert(sem == TGSI_SEMANTIC_TEXCOORD);
       *idx = 0x00001000 << (result - 8);
    }
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 nv30_render_validate(struct nv30_context *nv30)
 {
    struct nv30_render *r = nv30_render(nv30->draw->render);
@@ -300,7 +300,7 @@ nv30_render_validate(struct nv30_context *nv30)
          }
 
          if (nouveau_heap_alloc(heap, 16, &r->vertprog, &r->vertprog))
-            return FALSE;
+            return false;
       }
    }
 
@@ -370,7 +370,7 @@ nv30_render_validate(struct nv30_context *nv30)
    }
 
    vinfo->size /= 4;
-   return TRUE;
+   return true;
 }
 
 void
@@ -519,6 +519,6 @@ nv30_draw_init(struct pipe_context *pipe)
    draw_set_rasterize_stage(draw, stage);
    draw_wide_line_threshold(draw, 10000000.f);
    draw_wide_point_threshold(draw, 10000000.f);
-   draw_wide_point_sprites(draw, TRUE);
+   draw_wide_point_sprites(draw, true);
    nv30->draw = draw;
 }

@@ -231,6 +231,16 @@ clCompileProgram(cl_program d_prog, cl_uint num_devs,
    return e.get();
 }
 
+CLOVER_API cl_program
+clLinkProgram(cl_context d_ctx, cl_uint num_devs, const cl_device_id *d_devs,
+              const char *p_opts, cl_uint num_progs, const cl_program *d_progs,
+              void (*pfn_notify)(cl_program, void *), void *user_data,
+              cl_int *r_errcode) {
+   CLOVER_NOT_SUPPORTED_UNTIL("1.2");
+   ret_error(r_errcode, CL_LINKER_NOT_AVAILABLE);
+   return NULL;
+}
+
 CLOVER_API cl_int
 clUnloadCompiler() {
    return CL_SUCCESS;

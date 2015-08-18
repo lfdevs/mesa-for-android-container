@@ -31,19 +31,19 @@ nine_dump_D3DTSS_value(unsigned, D3DTEXTURESTAGESTATETYPE, DWORD);
 
 #else /* !DEBUG */
 
-static INLINE void
+static inline void
 nine_dump_D3DADAPTER_IDENTIFIER9(unsigned ch, const D3DADAPTER_IDENTIFIER9 *id)
 { }
-static INLINE void
+static inline void
 nine_dump_D3DCAPS9(unsigned ch, const D3DCAPS9 *caps)
 { }
-static INLINE void
+static inline void
 nine_dump_D3DLIGHT9(unsigned ch, const D3DLIGHT9 *light)
 { }
-static INLINE void
+static inline void
 nine_dump_D3DMATERIAL9(unsigned ch, const D3DMATERIAL9 *mat)
 { }
-static INLINE void
+static inline void
 nine_dump_D3DTSS_value(unsigned ch, D3DTEXTURESTAGESTATETYPE tss, DWORD value)
 { }
 

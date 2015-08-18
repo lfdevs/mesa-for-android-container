@@ -220,7 +220,7 @@ get_result_flags(const struct prog_instruction *inst)
 {
    GLuint flags = 0;
 
-   if (inst->SaturateMode == SATURATE_ZERO_ONE)
+   if (inst->Saturate)
       flags |= A0_DEST_SATURATE;
    if (inst->DstReg.WriteMask & WRITEMASK_X)
       flags |= A0_DEST_CHANNEL_X;

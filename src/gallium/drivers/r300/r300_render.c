@@ -215,7 +215,7 @@ static boolean r300_reserve_cs_dwords(struct r300_context *r300,
     cs_dwords += r300_get_num_cs_end_dwords(r300);
 
     /* Reserve requested CS space. */
-    if (cs_dwords > (RADEON_MAX_CMDBUF_DWORDS - r300->cs->cdw)) {
+    if (cs_dwords > (r300->cs->max_dw - r300->cs->cdw)) {
         r300_flush(&r300->context, RADEON_FLUSH_ASYNC, NULL);
         flushed = TRUE;
     }
@@ -871,7 +871,7 @@ struct r300_render {
     uint8_t *vbo_ptr;
 };
 
-static INLINE struct r300_render*
+static inline struct r300_render*
 r300_render(struct vbuf_render* render)
 {
     return (struct r300_render*)render;

@@ -52,7 +52,7 @@ disable_stages(struct brw_context *brw)
 
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_HS << 16 | (2 - 2));
-   OUT_BATCH(0);
+   OUT_BATCH(brw->hw_bt_pool.next_offset);
    ADVANCE_BATCH();
 
    /* Disable the TE */
@@ -85,7 +85,7 @@ disable_stages(struct brw_context *brw)
 
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_DS << 16 | (2 - 2));
-   OUT_BATCH(0);
+   OUT_BATCH(brw->hw_bt_pool.next_offset);
    ADVANCE_BATCH();
 }
 

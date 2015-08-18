@@ -223,6 +223,7 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 		      GLboolean index_bounds_valid,
 		      GLuint min_index, GLuint max_index,
 		      struct gl_transform_feedback_object *tfb_vertcount,
+                      unsigned stream,
 		      struct gl_buffer_object *indirect);
 
 static GLboolean
@@ -455,6 +456,7 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 		      GLboolean index_bounds_valid,
 		      GLuint min_index, GLuint max_index,
 		      struct gl_transform_feedback_object *tfb_vertcount,
+                      unsigned stream,
 		      struct gl_buffer_object *indirect)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
@@ -492,6 +494,7 @@ TAG(vbo_check_render_prims)(struct gl_context *ctx,
 			    GLboolean index_bounds_valid,
 			    GLuint min_index, GLuint max_index,
 			    struct gl_transform_feedback_object *tfb_vertcount,
+                            unsigned stream,
 			    struct gl_buffer_object *indirect)
 {
 	struct nouveau_context *nctx = to_nouveau_context(ctx);
@@ -501,12 +504,12 @@ TAG(vbo_check_render_prims)(struct gl_context *ctx,
 	if (nctx->fallback == HWTNL)
 		TAG(vbo_render_prims)(ctx, prims, nr_prims, ib,
 				      index_bounds_valid, min_index, max_index,
-				      tfb_vertcount, indirect);
+				      tfb_vertcount, stream, indirect);
 
 	if (nctx->fallback == SWTNL)
 		_tnl_draw_prims(ctx, prims, nr_prims, ib,
 				index_bounds_valid, min_index, max_index,
-				tfb_vertcount, indirect);
+				tfb_vertcount, stream, indirect);
 }
 
 void

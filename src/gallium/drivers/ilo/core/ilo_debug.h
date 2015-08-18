@@ -100,4 +100,21 @@ ilo_warn(const char *format, ...)
 #endif
 }
 
+static inline bool
+ilo_is_zeroed(const void *ptr, size_t size)
+{
+#ifdef DEBUG
+   size_t i;
+
+   for (i = 0; i < size; i++) {
+      if (*((const char *) ptr) != 0)
+         return false;
+   }
+
+   return true;
+#else
+   return true;
+#endif
+}
+
 #endif /* ILO_DEBUG_H */

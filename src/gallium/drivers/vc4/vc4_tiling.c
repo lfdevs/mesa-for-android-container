@@ -127,13 +127,10 @@ vc4_store_utile(void *dst, void *src, uint32_t src_stride, uint32_t cpp)
 static void
 check_box_utile_alignment(const struct pipe_box *box, int cpp)
 {
-        uint32_t utile_w = vc4_utile_width(cpp);
-        uint32_t utile_h = vc4_utile_height(cpp);
-
-        assert(!(box->x & (utile_w - 1)));
-        assert(!(box->y & (utile_h - 1)));
-        assert(!(box->width & (utile_w - 1)));
-        assert(!(box->height & (utile_h - 1)));
+        assert(!(box->x & (vc4_utile_width(cpp) - 1)));
+        assert(!(box->y & (vc4_utile_height(cpp) - 1)));
+        assert(!(box->width & (vc4_utile_width(cpp) - 1)));
+        assert(!(box->height & (vc4_utile_height(cpp) - 1)));
 }
 
 static void

@@ -94,7 +94,7 @@ struct tgsi_transform_context
 /**
  * Helper for emitting temporary register declarations.
  */
-static INLINE void
+static inline void
 tgsi_transform_temp_decl(struct tgsi_transform_context *ctx,
                          unsigned index)
 {
@@ -108,7 +108,7 @@ tgsi_transform_temp_decl(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_input_decl(struct tgsi_transform_context *ctx,
                           unsigned index,
                           unsigned sem_name, unsigned sem_index,
@@ -130,7 +130,7 @@ tgsi_transform_input_decl(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_sampler_decl(struct tgsi_transform_context *ctx,
                             unsigned index)
 {
@@ -143,8 +143,29 @@ tgsi_transform_sampler_decl(struct tgsi_transform_context *ctx,
    ctx->emit_declaration(ctx, &decl);
 }
 
+static inline void
+tgsi_transform_sampler_view_decl(struct tgsi_transform_context *ctx,
+                                 unsigned index,
+                                 unsigned target,
+                                 enum tgsi_return_type type)
+{
+   struct tgsi_full_declaration decl;
 
-static INLINE void
+   decl = tgsi_default_full_declaration();
+   decl.Declaration.File = TGSI_FILE_SAMPLER_VIEW;
+   decl.Declaration.UsageMask = 0xf;
+   decl.Range.First =
+   decl.Range.Last = index;
+   decl.SamplerView.Resource = target;
+   decl.SamplerView.ReturnTypeX = type;
+   decl.SamplerView.ReturnTypeY = type;
+   decl.SamplerView.ReturnTypeZ = type;
+   decl.SamplerView.ReturnTypeW = type;
+
+   ctx->emit_declaration(ctx, &decl);
+}
+
+static inline void
 tgsi_transform_immediate_decl(struct tgsi_transform_context *ctx,
                               float x, float y, float z, float w)
 {
@@ -165,7 +186,7 @@ tgsi_transform_immediate_decl(struct tgsi_transform_context *ctx,
 /**
  * Helper for emitting 1-operand instructions.
  */
-static INLINE void
+static inline void
 tgsi_transform_op1_inst(struct tgsi_transform_context *ctx,
                         unsigned opcode,
                         unsigned dst_file,
@@ -190,7 +211,7 @@ tgsi_transform_op1_inst(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_op2_inst(struct tgsi_transform_context *ctx,
                         unsigned opcode,
                         unsigned dst_file,
@@ -219,7 +240,7 @@ tgsi_transform_op2_inst(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_op1_swz_inst(struct tgsi_transform_context *ctx,
                             unsigned opcode,
                             unsigned dst_file,
@@ -261,7 +282,7 @@ tgsi_transform_op1_swz_inst(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_op2_swz_inst(struct tgsi_transform_context *ctx,
                             unsigned opcode,
                             unsigned dst_file,
@@ -312,7 +333,7 @@ tgsi_transform_op2_swz_inst(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_op3_swz_inst(struct tgsi_transform_context *ctx,
                             unsigned opcode,
                             unsigned dst_file,
@@ -374,7 +395,7 @@ tgsi_transform_op3_swz_inst(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_kill_inst(struct tgsi_transform_context *ctx,
                          unsigned src_file,
                          unsigned src_index,
@@ -398,7 +419,7 @@ tgsi_transform_kill_inst(struct tgsi_transform_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 tgsi_transform_tex_2d_inst(struct tgsi_transform_context *ctx,
                            unsigned dst_file,
                            unsigned dst_index,

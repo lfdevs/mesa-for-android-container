@@ -5,10 +5,7 @@ Import('*')
 
 env = env.Clone()
 
-# XXX: If HAVE_DRI2
 env.PkgUseModules(['DRM'])
-# else
-#env.Append(CPPDEFINES = [('__NOT_HAVE_DRM_H', '1')])
 
 env.Append(CPPPATH = [
     '#/src',
@@ -20,7 +17,6 @@ env.Append(CPPPATH = [
 
 env.Append(CPPDEFINES = [
     ('GALLIUM_STATIC_TARGETS', '1'),
-    'GALLIUM_SOFTPIPE',
 ])
 
 sources = env.ParseSourceList('Makefile.sources', 'common_SOURCES')

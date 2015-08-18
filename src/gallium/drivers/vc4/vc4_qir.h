@@ -33,8 +33,13 @@
 
 #include "util/macros.h"
 #include "glsl/nir/nir.h"
-#include "util/simple_list.h"
+#include "util/list.h"
 #include "util/u_math.h"
+
+#include "vc4_screen.h"
+#include "pipe/p_state.h"
+
+struct nir_builder;
 
 enum qfile {
         QFILE_NULL,
@@ -155,19 +160,15 @@ enum qop {
          * the destination
          */
         QOP_TEX_RESULT,
-        QOP_R4_UNPACK_A,
-        QOP_R4_UNPACK_B,
-        QOP_R4_UNPACK_C,
-        QOP_R4_UNPACK_D
 };
 
 struct queued_qpu_inst {
-        struct simple_node link;
+        struct list_head link;
         uint64_t inst;
 };
 
 struct qinst {
-        struct simple_node link;
+        struct list_head link;
 
         enum qop op;
         struct qreg dst;
@@ -243,7 +244,11 @@ enum quniform_contents {
 
         QUNIFORM_TEXTURE_BORDER_COLOR,
 
-        QUNIFORM_BLEND_CONST_COLOR,
+        QUNIFORM_BLEND_CONST_COLOR_X,
+        QUNIFORM_BLEND_CONST_COLOR_Y,
+        QUNIFORM_BLEND_CONST_COLOR_Z,
+        QUNIFORM_BLEND_CONST_COLOR_W,
+
         QUNIFORM_STENCIL,
 
         QUNIFORM_ALPHA_REF,
@@ -278,6 +283,52 @@ struct vc4_compiler_ubo_range {
          * access.
          */
         bool used;
+};
+
+struct vc4_key {
+        struct vc4_uncompiled_shader *shader_state;
+        struct {
+                enum pipe_format format;
+                unsigned compare_mode:1;
+                unsigned compare_func:3;
+                unsigned wrap_s:3;
+                unsigned wrap_t:3;
+                uint8_t swizzle[4];
+        } tex[VC4_MAX_TEXTURE_SAMPLERS];
+        uint8_t ucp_enables;
+};
+
+struct vc4_fs_key {
+        struct vc4_key base;
+        enum pipe_format color_format;
+        bool depth_enabled;
+        bool stencil_enabled;
+        bool stencil_twoside;
+        bool stencil_full_writemasks;
+        bool is_points;
+        bool is_lines;
+        bool alpha_test;
+        bool point_coord_upper_left;
+        bool light_twoside;
+        uint8_t alpha_test_func;
+        uint8_t logicop_func;
+        uint32_t point_sprite_mask;
+
+        struct pipe_rt_blend_state blend;
+};
+
+struct vc4_vs_key {
+        struct vc4_key base;
+
+        /**
+         * This is a proxy for the array of FS input semantics, which is
+         * larger than we would want to put in the key.
+         */
+        uint64_t compiled_fs_id;
+
+        enum pipe_format attr_formats[8];
+        bool is_coord;
+        bool per_vertex_point_size;
 };
 
 struct vc4_compile {
@@ -356,10 +407,10 @@ struct vc4_compile {
         struct qreg undef;
         enum qstage stage;
         uint32_t num_temps;
-        struct simple_node instructions;
+        struct list_head instructions;
         uint32_t immediates[1024];
 
-        struct simple_node qpu_inst_list;
+        struct list_head qpu_inst_list;
         uint64_t *qpu_insts;
         uint32_t qpu_inst_count;
         uint32_t qpu_inst_size;
@@ -368,6 +419,16 @@ struct vc4_compile {
         uint32_t program_id;
         uint32_t variant_id;
 };
+
+/* Special nir_load_input intrinsic index for loading the current TLB
+ * destination color.
+ */
+#define VC4_NIR_TLB_COLOR_READ_INPUT		2000000000
+
+/* Special offset for nir_load_uniform values to get a QUNIFORM_*
+ * state-dependent value.
+ */
+#define VC4_NIR_STATE_UNIFORM_OFFSET		2000000000
 
 struct vc4_compile *qir_compile_init(void);
 void qir_compile_destroy(struct vc4_compile *c);
@@ -393,7 +454,6 @@ bool qir_is_multi_instruction(struct qinst *inst);
 bool qir_is_tex(struct qinst *inst);
 bool qir_depends_on_flags(struct qinst *inst);
 bool qir_writes_r4(struct qinst *inst);
-bool qir_reads_r4(struct qinst *inst);
 bool qir_src_needs_a_file(struct qinst *inst);
 struct qreg qir_follow_movs(struct vc4_compile *c, struct qreg reg);
 
@@ -409,6 +469,12 @@ bool qir_opt_cse(struct vc4_compile *c);
 bool qir_opt_dead_code(struct vc4_compile *c);
 bool qir_opt_small_immediates(struct vc4_compile *c);
 bool qir_opt_vpm_writes(struct vc4_compile *c);
+void vc4_nir_lower_blend(struct vc4_compile *c);
+void vc4_nir_lower_io(struct vc4_compile *c);
+nir_ssa_def *vc4_nir_get_state_uniform(struct nir_builder *b,
+                                       enum quniform_contents contents);
+nir_ssa_def *vc4_nir_get_swizzled_channel(struct nir_builder *b,
+                                          nir_ssa_def **srcs, int swiz);
 void qir_lower_uniforms(struct vc4_compile *c);
 
 void qpu_schedule_instructions(struct vc4_compile *c);
@@ -523,25 +589,10 @@ QIR_ALU0(FRAG_W)
 QIR_ALU0(FRAG_REV_FLAG)
 QIR_ALU0(TEX_RESULT)
 QIR_ALU0(TLB_COLOR_READ)
+QIR_NODST_1(TLB_COLOR_WRITE)
 QIR_NODST_1(TLB_Z_WRITE)
 QIR_NODST_1(TLB_DISCARD_SETUP)
 QIR_NODST_1(TLB_STENCIL_SETUP)
-
-static inline struct qreg
-qir_R4_UNPACK(struct vc4_compile *c, struct qreg r4, int i)
-{
-        struct qreg t = qir_get_temp(c);
-        qir_emit(c, qir_inst(QOP_R4_UNPACK_A + i, t, r4, c->undef));
-        return t;
-}
-
-static inline struct qreg
-qir_SEL_X_0_COND(struct vc4_compile *c, int i)
-{
-        struct qreg t = qir_get_temp(c);
-        qir_emit(c, qir_inst(QOP_R4_UNPACK_A + i, t, c->undef, c->undef));
-        return t;
-}
 
 static inline struct qreg
 qir_UNPACK_8_F(struct vc4_compile *c, struct qreg src, int i)

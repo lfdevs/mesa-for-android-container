@@ -37,7 +37,8 @@ namespace clover {
                                const std::string &opts,
                                std::string &r_log);
 
-   module compile_program_tgsi(const std::string &source);
+   module compile_program_tgsi(const std::string &source,
+                               std::string &r_log);
 }
 
 #endif

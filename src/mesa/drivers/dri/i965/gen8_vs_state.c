@@ -39,6 +39,9 @@ upload_vs_state(struct brw_context *brw)
    /* BRW_NEW_VS_PROG_DATA */
    const struct brw_vue_prog_data *prog_data = &brw->vs.prog_data->base;
 
+   assert(prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ||
+          prog_data->dispatch_mode == DISPATCH_MODE_4X2_DUAL_OBJECT);
+
    if (prog_data->base.use_alt_mode)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
@@ -50,7 +53,9 @@ upload_vs_state(struct brw_context *brw)
              ((ALIGN(stage_state->sampler_count, 4) / 4) <<
                GEN6_VS_SAMPLER_COUNT_SHIFT) |
              ((prog_data->base.binding_table.size_bytes / 4) <<
-               GEN6_VS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
+               GEN6_VS_BINDING_TABLE_ENTRY_COUNT_SHIFT) |
+             (prog_data->base.nr_image_params ?
+              HSW_VS_UAV_ACCESS_ENABLE : 0));
 
    if (prog_data->base.total_scratch) {
       OUT_RELOC64(stage_state->scratch_bo,
@@ -66,7 +71,8 @@ upload_vs_state(struct brw_context *brw)
              (prog_data->urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
              (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));
 
-   uint32_t simd8_enable = prog_data->simd8 ? GEN8_VS_SIMD8_ENABLE : 0;
+   uint32_t simd8_enable = prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ?
+      GEN8_VS_SIMD8_ENABLE : 0;
    OUT_BATCH(((brw->max_vs_threads - 1) << HSW_VS_MAX_THREADS_SHIFT) |
              GEN6_VS_STATISTICS_ENABLE |
              simd8_enable |

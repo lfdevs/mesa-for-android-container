@@ -89,19 +89,18 @@ txs_type(const glsl_type *type)
 ir_visitor_status
 lower_texture_grad_visitor::visit_leave(ir_texture *ir)
 {
-   /* Only lower textureGrad with shadow samplers */
-   if (ir->op != ir_txd || !ir->shadow_comparitor)
+   /* Only lower textureGrad with cube maps or shadow samplers */
+   if (ir->op != ir_txd ||
+      (ir->sampler->type->sampler_dimensionality != GLSL_SAMPLER_DIM_CUBE &&
+       !ir->shadow_comparitor))
       return visit_continue;
 
-   /* Lower textureGrad() with samplerCubeShadow even if we have the sample_d_c
+   /* Lower textureGrad() with samplerCube* even if we have the sample_d_c
     * message.  GLSL provides gradients for the 'r' coordinate.  Unfortunately:
     *
     * From the Ivybridge PRM, Volume 4, Part 1, sample_d message description:
     * "The r coordinate contains the faceid, and the r gradients are ignored
     *  by hardware."
-    *
-    * We likely need to do a similar treatment for samplerCube and
-    * samplerCubeArray, but we have insufficient testing for that at the moment.
     */
    bool need_lowering = !has_sample_d_c ||
       ir->sampler->type->sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE;
@@ -155,9 +154,20 @@ lower_texture_grad_visitor::visit_leave(ir_texture *ir)
 			       expr(ir_unop_sqrt, dot(dPdy, dPdy)));
    }
 
-   /* lambda_base = log2(rho).  We're ignoring GL state biases for now. */
+   /* lambda_base = log2(rho).  We're ignoring GL state biases for now.
+    *
+    * For cube maps the result of these formulas is giving us a value of rho
+    * that is twice the value we should use, so divide it by 2 or,
+    * alternatively, remove one unit from the result of the log2 computation.
+    */
    ir->op = ir_txl;
-   ir->lod_info.lod = expr(ir_unop_log2, rho);
+   if (ir->sampler->type->sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE) {
+      ir->lod_info.lod = expr(ir_binop_add,
+                              expr(ir_unop_log2, rho),
+                              new(mem_ctx) ir_constant(-1.0f));
+   } else {
+      ir->lod_info.lod = expr(ir_unop_log2, rho);
+   }
 
    progress = true;
    return visit_continue;

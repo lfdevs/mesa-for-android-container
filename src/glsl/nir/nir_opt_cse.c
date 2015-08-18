@@ -86,8 +86,41 @@ nir_instrs_equal(nir_instr *instr1, nir_instr *instr2)
       }
       return true;
    }
-   case nir_instr_type_tex:
-      return false;
+   case nir_instr_type_tex: {
+      nir_tex_instr *tex1 = nir_instr_as_tex(instr1);
+      nir_tex_instr *tex2 = nir_instr_as_tex(instr2);
+
+      if (tex1->op != tex2->op)
+         return false;
+
+      if (tex1->num_srcs != tex2->num_srcs)
+         return false;
+      for (unsigned i = 0; i < tex1->num_srcs; i++) {
+         if (tex1->src[i].src_type != tex2->src[i].src_type ||
+             !nir_srcs_equal(tex1->src[i].src, tex2->src[i].src)) {
+            return false;
+         }
+      }
+
+      if (tex1->coord_components != tex2->coord_components ||
+          tex1->sampler_dim != tex2->sampler_dim ||
+          tex1->is_array != tex2->is_array ||
+          tex1->is_shadow != tex2->is_shadow ||
+          tex1->is_new_style_shadow != tex2->is_new_style_shadow ||
+          memcmp(tex1->const_offset, tex2->const_offset,
+                 sizeof(tex1->const_offset)) != 0 ||
+          tex1->component != tex2->component ||
+         tex1->sampler_index != tex2->sampler_index ||
+         tex1->sampler_array_size != tex2->sampler_array_size) {
+         return false;
+      }
+
+      /* Don't support un-lowered sampler derefs currently. */
+      if (tex1->sampler || tex2->sampler)
+         return false;
+
+      return true;
+   }
    case nir_instr_type_load_const: {
       nir_load_const_instr *load1 = nir_instr_as_load_const(instr1);
       nir_load_const_instr *load2 = nir_instr_as_load_const(instr2);
@@ -181,11 +214,10 @@ nir_instr_can_cse(nir_instr *instr)
 
    switch (instr->type) {
    case nir_instr_type_alu:
+   case nir_instr_type_tex:
    case nir_instr_type_load_const:
    case nir_instr_type_phi:
       return true;
-   case nir_instr_type_tex:
-      return false; /* TODO */
    case nir_instr_type_intrinsic: {
       const nir_intrinsic_info *info =
          &nir_intrinsic_infos[nir_instr_as_intrinsic(instr)->intrinsic];
@@ -212,6 +244,9 @@ nir_instr_get_dest_ssa_def(nir_instr *instr)
    case nir_instr_type_alu:
       assert(nir_instr_as_alu(instr)->dest.dest.is_ssa);
       return &nir_instr_as_alu(instr)->dest.dest.ssa;
+   case nir_instr_type_tex:
+      assert(nir_instr_as_tex(instr)->dest.is_ssa);
+      return &nir_instr_as_tex(instr)->dest.ssa;
    case nir_instr_type_load_const:
       return &nir_instr_as_load_const(instr)->def;
    case nir_instr_type_phi:

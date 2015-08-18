@@ -44,7 +44,7 @@ svga_destroy_shader_variant(struct svga_context *svga,
 /**
  * Check if a shader's bytecode exceeds the device limits.
  */
-static INLINE boolean
+static inline boolean
 svga_shader_too_large(const struct svga_context *svga,
                       const struct svga_shader_variant *variant)
 {

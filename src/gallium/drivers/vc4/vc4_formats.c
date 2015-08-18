@@ -108,7 +108,7 @@ static const struct vc4_format vc4_format_table[] = {
 static const struct vc4_format *
 get_format(enum pipe_format f)
 {
-        if (f > ARRAY_SIZE(vc4_format_table) ||
+        if (f >= ARRAY_SIZE(vc4_format_table) ||
             !vc4_format_table[f].present)
                 return NULL;
         else

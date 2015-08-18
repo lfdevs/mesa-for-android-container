@@ -426,7 +426,6 @@ struct r100_context {
 	struct r100_swtcl_info swtcl;
 
 	GLboolean using_hyperz;
-	GLboolean texmicrotile;
 
 	/* Performance counters
 	 */

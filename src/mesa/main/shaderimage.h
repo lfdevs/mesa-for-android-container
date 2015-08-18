@@ -68,6 +68,9 @@ _mesa_BindImageTextures(GLuint first, GLsizei count, const GLuint *textures);
 void GLAPIENTRY
 _mesa_MemoryBarrier(GLbitfield barriers);
 
+void GLAPIENTRY
+_mesa_MemoryBarrierByRegion(GLbitfield barriers);
+
 #ifdef __cplusplus
 }
 #endif

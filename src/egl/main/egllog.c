@@ -38,10 +38,11 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 #include "c11/threads.h"
 
 #include "egllog.h"
-#include "eglstring.h"
 
 #define MAXSTRING 1000
 #define FALLBACK_LOG_LEVEL _EGL_WARNING
@@ -146,7 +147,7 @@ _eglInitLogger(void)
    log_env = getenv("EGL_LOG_LEVEL");
    if (log_env) {
       for (i = 0; level_strings[i]; i++) {
-         if (_eglstrcasecmp(log_env, level_strings[i]) == 0) {
+         if (strcasecmp(log_env, level_strings[i]) == 0) {
             level = i;
             break;
          }

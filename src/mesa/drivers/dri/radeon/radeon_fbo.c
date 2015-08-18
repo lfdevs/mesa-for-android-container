@@ -169,6 +169,7 @@ radeon_map_renderbuffer_s8z24(struct gl_context *ctx,
     rrb->map_buffer = malloc(w * h * 4);
     ret = radeon_bo_map(rrb->bo, !!(mode & GL_MAP_WRITE_BIT));
     assert(!ret);
+    (void) ret;
     untiled_s8z24_map = rrb->map_buffer;
     tiled_s8z24_map = rrb->bo->ptr;
 
@@ -207,6 +208,7 @@ radeon_map_renderbuffer_z16(struct gl_context *ctx,
     rrb->map_buffer = malloc(w * h * 2);
     ret = radeon_bo_map(rrb->bo, !!(mode & GL_MAP_WRITE_BIT));
     assert(!ret);
+    (void) ret;
 
     untiled_z16_map = rrb->map_buffer;
     tiled_z16_map = rrb->bo->ptr;
@@ -324,6 +326,7 @@ radeon_map_renderbuffer(struct gl_context *ctx,
 
    ret = radeon_bo_map(rrb->bo, !!(mode & GL_MAP_WRITE_BIT));
    assert(!ret);
+   (void) ret;
 
    map = rrb->bo->ptr;
    stride = rrb->map_pitch;
@@ -416,7 +419,6 @@ radeon_unmap_renderbuffer(struct gl_context *ctx,
 {
    struct radeon_context *const rmesa = RADEON_CONTEXT(ctx);
    struct radeon_renderbuffer *rrb = radeon_renderbuffer(rb);
-   GLboolean ok;
 
    if ((rmesa->radeonScreen->chip_flags & RADEON_CHIPSET_DEPTH_ALWAYS_TILED) && !rrb->has_surface) {
        if (rb->Format == MESA_FORMAT_Z24_UNORM_S8_UINT || rb->Format == MESA_FORMAT_Z24_UNORM_X8_UINT) {
@@ -438,6 +440,7 @@ radeon_unmap_renderbuffer(struct gl_context *ctx,
    radeon_bo_unmap(rrb->map_bo);
 
    if (rrb->map_mode & GL_MAP_WRITE_BIT) {
+      GLboolean ok;
       ok = rmesa->vtbl.blit(ctx, rrb->map_bo, 0,
 			    rb->Format, rrb->map_pitch / rrb->cpp,
 			    rrb->map_w, rrb->map_h,
@@ -449,6 +452,7 @@ radeon_unmap_renderbuffer(struct gl_context *ctx,
 			    rrb->map_w, rrb->map_h,
 			    GL_FALSE);
       assert(ok);
+      (void) ok;
    }
 
    radeon_bo_unref(rrb->map_bo);
@@ -700,7 +704,7 @@ radeon_bind_framebuffer(struct gl_context * ctx, GLenum target,
   radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 		"%s(%p, fb %p, target %s) \n",
 		__func__, ctx, fb,
-		_mesa_lookup_enum_by_nr(target));
+		_mesa_enum_to_string(target));
 
    if (target == GL_FRAMEBUFFER_EXT || target == GL_DRAW_FRAMEBUFFER_EXT) {
       radeon_draw_buffer(ctx, fb);

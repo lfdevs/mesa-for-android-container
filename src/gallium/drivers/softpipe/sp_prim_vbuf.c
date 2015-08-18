@@ -145,7 +145,7 @@ sp_vbuf_set_primitive(struct vbuf_render *vbr, unsigned prim)
 }
 
 
-static INLINE cptrf4 get_vert( const void *vertex_buffer,
+static inline cptrf4 get_vert( const void *vertex_buffer,
                                int index,
                                int stride )
 {

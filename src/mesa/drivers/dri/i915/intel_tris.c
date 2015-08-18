@@ -1134,7 +1134,7 @@ intelRasterPrimitive(struct gl_context * ctx, GLenum rprim, GLuint hwprim)
 
    if (0)
       fprintf(stderr, "%s %s %x\n", __func__,
-              _mesa_lookup_enum_by_nr(rprim), hwprim);
+              _mesa_enum_to_string(rprim), hwprim);
 
    intel->vtbl.reduced_primitive_state(intel, rprim);
 
@@ -1158,7 +1158,7 @@ intelRenderPrimitive(struct gl_context * ctx, GLenum prim)
                          ctx->Polygon.BackMode != GL_FILL);
 
    if (0)
-      fprintf(stderr, "%s %s\n", __func__, _mesa_lookup_enum_by_nr(prim));
+      fprintf(stderr, "%s %s\n", __func__, _mesa_enum_to_string(prim));
 
    /* Let some clipping routines know which primitive they're dealing
     * with.

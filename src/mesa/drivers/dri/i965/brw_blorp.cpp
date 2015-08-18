@@ -220,13 +220,13 @@ brw_blorp_exec(struct brw_context *brw, const brw_blorp_params *params)
     * data with different formats, which blorp does for stencil and depth
     * data.
     */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 
 retry:
    intel_batchbuffer_require_space(brw, estimated_max_batch_usage, RENDER_RING);
    intel_batchbuffer_save_state(brw);
    drm_intel_bo *saved_bo = brw->batch.bo;
-   uint32_t saved_used = brw->batch.used;
+   uint32_t saved_used = USED_BATCH(brw->batch);
    uint32_t saved_state_batch_offset = brw->batch.state_batch_offset;
 
    switch (brw->gen) {
@@ -245,7 +245,7 @@ retry:
     * reserved enough space that a wrap will never happen.
     */
    assert(brw->batch.bo == saved_bo);
-   assert((brw->batch.used - saved_used) * 4 +
+   assert((USED_BATCH(brw->batch) - saved_used) * 4 +
           (saved_state_batch_offset - brw->batch.state_batch_offset) <
           estimated_max_batch_usage);
    /* Shut up compiler warnings on release build */
@@ -283,7 +283,7 @@ retry:
    /* Flush the sampler cache so any texturing from the destination is
     * coherent.
     */
-   intel_batchbuffer_emit_mi_flush(brw);
+   brw_emit_mi_flush(brw);
 }
 
 brw_hiz_op_params::brw_hiz_op_params(struct intel_mipmap_tree *mt,

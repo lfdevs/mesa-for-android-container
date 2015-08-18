@@ -32,7 +32,7 @@
 
 
 // Perform a safe void to hgl_context cast
-static INLINE struct hgl_context*
+static inline struct hgl_context*
 hgl_st_context(struct st_context_iface *stctxi)
 {
 	struct hgl_context* context;
@@ -44,7 +44,7 @@ hgl_st_context(struct st_context_iface *stctxi)
 
 
 // Perform a safe void to hgl_buffer cast
-static INLINE struct hgl_buffer*
+static inline struct hgl_buffer*
 hgl_st_framebuffer(struct st_framebuffer_iface *stfbi)
 {
 	struct hgl_buffer* buffer;

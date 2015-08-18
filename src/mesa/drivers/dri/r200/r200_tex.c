@@ -68,9 +68,9 @@ static void r200SetTexWrap( radeonTexObjPtr t, GLenum swrap, GLenum twrap, GLenu
    radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 		"%s(tex %p) sw %s, tw %s, rw %s\n",
 		__func__, t,
-		_mesa_lookup_enum_by_nr(swrap),
-		_mesa_lookup_enum_by_nr(twrap),
-		_mesa_lookup_enum_by_nr(rwrap));
+		_mesa_enum_to_string(swrap),
+		_mesa_enum_to_string(twrap),
+		_mesa_enum_to_string(rwrap));
 
    t->pp_txfilter &= ~(R200_CLAMP_S_MASK | R200_CLAMP_T_MASK | R200_BORDER_MODE_D3D);
 
@@ -225,8 +225,8 @@ static void r200SetTexFilter( radeonTexObjPtr t, GLenum minf, GLenum magf )
    radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 	"%s(tex %p) minf %s, maxf %s, anisotropy %d.\n",
 	__func__, t,
-	_mesa_lookup_enum_by_nr(minf),
-	_mesa_lookup_enum_by_nr(magf),
+	_mesa_enum_to_string(minf),
+	_mesa_enum_to_string(magf),
 	anisotropy);
 
    if ( anisotropy == R200_MAX_ANISO_1_TO_1 ) {
@@ -302,7 +302,7 @@ static void r200TexEnv( struct gl_context *ctx, GLenum target,
    struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
 
    radeon_print(RADEON_TEXTURE | RADEON_STATE, RADEON_VERBOSE, "%s( %s )\n",
-	       __func__, _mesa_lookup_enum_by_nr( pname ) );
+	       __func__, _mesa_enum_to_string( pname ) );
 
    /* This is incorrect: Need to maintain this data for each of
     * GL_TEXTURE_{123}D, GL_TEXTURE_RECTANGLE_NV, etc, and switch
@@ -384,7 +384,7 @@ static void r200TexParameter( struct gl_context *ctx,
    radeon_print(RADEON_TEXTURE | RADEON_STATE, RADEON_VERBOSE,
 		"%s(%p, tex %p)  pname %s\n",
 		__func__, ctx, texObj,
-	       _mesa_lookup_enum_by_nr( pname ) );
+	       _mesa_enum_to_string( pname ) );
 
    switch ( pname ) {
    case GL_TEXTURE_MIN_FILTER:
@@ -415,7 +415,7 @@ static void r200DeleteTexture(struct gl_context * ctx, struct gl_texture_object 
    radeon_print(RADEON_TEXTURE | RADEON_STATE, RADEON_NORMAL,
            "%s( %p (target = %s) )\n", __func__,
 	   (void *)texObj,
-	   _mesa_lookup_enum_by_nr(texObj->Target));
+	   _mesa_enum_to_string(texObj->Target));
 
    if (rmesa) {
       int i;
@@ -473,7 +473,7 @@ static struct gl_texture_object *r200NewTextureObject(struct gl_context * ctx,
    radeon_print(RADEON_STATE | RADEON_TEXTURE, RADEON_NORMAL,
            "%s(%p) target %s, new texture %p.\n",
 	   __func__, ctx,
-	   _mesa_lookup_enum_by_nr(target), t);
+	   _mesa_enum_to_string(target), t);
 
    _mesa_initialize_texture_object(ctx, &t->base, name, target);
    t->base.Sampler.MaxAnisotropy = rmesa->radeon.initialMaxAnisotropy;

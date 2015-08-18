@@ -43,6 +43,7 @@
 
 #include "egl_dri2.h"
 #include "egl_dri2_fallbacks.h"
+#include "loader.h"
 
 static EGLBoolean
 dri2_x11_swap_interval(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
@@ -55,7 +56,7 @@ swrastCreateDrawable(struct dri2_egl_display * dri2_dpy,
    uint32_t           mask;
    const uint32_t     function = GXcopy;
    uint32_t           valgc[2];
-   
+
    /* create GC's */
    dri2_surf->gc = xcb_generate_id(dri2_dpy->conn);
    mask = XCB_GC_FUNCTION;
@@ -225,7 +226,7 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       s = xcb_setup_roots_iterator(xcb_get_setup(dri2_dpy->conn));
       screen = get_xcb_screen(s, dri2_dpy->screen);
       if (!screen) {
-         _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_create_surface");
+         _eglError(EGL_BAD_ALLOC, "failed to get xcb screen");
          goto cleanup_surf;
       }
 
@@ -234,16 +235,23 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
                        dri2_surf->drawable, screen->root,
 			dri2_surf->base.Width, dri2_surf->base.Height);
    } else {
+      if (!drawable) {
+         if (type == EGL_WINDOW_BIT)
+            _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_create_surface");
+         else
+            _eglError(EGL_BAD_NATIVE_PIXMAP, "dri2_create_surface");
+         goto cleanup_surf;
+      }
       dri2_surf->drawable = drawable;
    }
 
    if (dri2_dpy->dri2) {
-      dri2_surf->dri_drawable = 
-	 (*dri2_dpy->dri2->createNewDrawable) (dri2_dpy->dri_screen,
-					       type == EGL_WINDOW_BIT ?
-					       dri2_conf->dri_double_config : 
-					       dri2_conf->dri_single_config,
-					       dri2_surf);
+      const __DRIconfig *config =
+         dri2_get_dri_config(dri2_conf, type, dri2_surf->base.GLColorspace);
+
+      dri2_surf->dri_drawable =
+	 (*dri2_dpy->dri2->createNewDrawable)(dri2_dpy->dri_screen, config,
+					      dri2_surf);
    } else {
       assert(dri2_dpy->swrast);
       dri2_surf->dri_drawable = 
@@ -260,10 +268,18 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
    if (type != EGL_PBUFFER_BIT) {
       cookie = xcb_get_geometry (dri2_dpy->conn, dri2_surf->drawable);
       reply = xcb_get_geometry_reply (dri2_dpy->conn, cookie, &error);
-      if (reply == NULL || error != NULL) {
-	 _eglError(EGL_BAD_ALLOC, "xcb_get_geometry");
-	 free(error);
-	 goto cleanup_dri_drawable;
+      if (error != NULL) {
+         if (error->error_code == BadAlloc)
+            _eglError(EGL_BAD_ALLOC, "xcb_get_geometry");
+         else if (type == EGL_WINDOW_BIT)
+            _eglError(EGL_BAD_NATIVE_WINDOW, "xcb_get_geometry");
+         else
+            _eglError(EGL_BAD_NATIVE_PIXMAP, "xcb_get_geometry");
+         free(error);
+         goto cleanup_dri_drawable;
+      } else if (reply == NULL) {
+         _eglError(EGL_BAD_ALLOC, "xcb_get_geometry");
+         goto cleanup_dri_drawable;
       }
 
       dri2_surf->base.Width = reply->width;
@@ -273,7 +289,25 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
    }
 
    if (dri2_dpy->dri2) {
-      xcb_dri2_create_drawable (dri2_dpy->conn, dri2_surf->drawable);
+      xcb_void_cookie_t cookie;
+      int conn_error;
+
+      cookie = xcb_dri2_create_drawable_checked(dri2_dpy->conn,
+                                                dri2_surf->drawable);
+      error = xcb_request_check(dri2_dpy->conn, cookie);
+      conn_error = xcb_connection_has_error(dri2_dpy->conn);
+      if (conn_error || error != NULL) {
+         if (type == EGL_PBUFFER_BIT || conn_error || error->error_code == BadAlloc)
+            _eglError(EGL_BAD_ALLOC, "xcb_dri2_create_drawable_checked");
+         else if (type == EGL_WINDOW_BIT)
+            _eglError(EGL_BAD_NATIVE_WINDOW,
+                      "xcb_dri2_create_drawable_checked");
+         else
+            _eglError(EGL_BAD_NATIVE_PIXMAP,
+                      "xcb_dri2_create_drawable_checked");
+         free(error);
+         goto cleanup_dri_drawable;
+      }
    } else {
       if (type == EGL_PBUFFER_BIT) {
          dri2_surf->depth = _eglGetConfigKey(conf, EGL_BUFFER_SIZE);
@@ -514,7 +548,7 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
    xcb_generic_error_t *error;
    xcb_screen_iterator_t s;
    xcb_screen_t *screen;
-   char *driver_name, *device_name;
+   char *driver_name, *loader_driver_name, *device_name;
    const xcb_query_extension_reply_t *extension;
 
    xcb_prefetch_extension_data (dri2_dpy->conn, &xcb_xfixes_id);
@@ -539,7 +573,7 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
    s = xcb_setup_roots_iterator(xcb_get_setup(dri2_dpy->conn));
    screen = get_xcb_screen(s, dri2_dpy->screen);
    if (!screen) {
-      _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_x11_connect");
+      _eglLog(_EGL_WARNING, "DRI2: failed to get xcb screen");
       return EGL_FALSE;
    }
    connect_cookie = xcb_dri2_connect_unchecked(dri2_dpy->conn, screen->root,
@@ -574,18 +608,38 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
       return EGL_FALSE;
    }
 
-   driver_name = xcb_dri2_connect_driver_name (connect);
-   dri2_dpy->driver_name =
-      strndup(driver_name,
-              xcb_dri2_connect_driver_name_length(connect));
-
    device_name = xcb_dri2_connect_device_name (connect);
 
    dri2_dpy->device_name =
       strndup(device_name,
               xcb_dri2_connect_device_name_length(connect));
 
+   dri2_dpy->fd = loader_open_device(dri2_dpy->device_name);
+   if (dri2_dpy->fd == -1) {
+      _eglLog(_EGL_WARNING,
+              "DRI2: could not open %s (%s)", dri2_dpy->device_name,
+              strerror(errno));
+      free(dri2_dpy->device_name);
+      free(connect);
+      return EGL_FALSE;
+   }
+
+   driver_name = xcb_dri2_connect_driver_name (connect);
+
+   /* If Mesa knows about the appropriate driver for this fd, then trust it.
+    * Otherwise, default to the server's value.
+    */
+   loader_driver_name = loader_get_driver_for_fd(dri2_dpy->fd, 0);
+   if (loader_driver_name) {
+      dri2_dpy->driver_name = loader_driver_name;
+   } else {
+      dri2_dpy->driver_name =
+         strndup(driver_name,
+                 xcb_dri2_connect_driver_name_length(connect));
+   }
+
    if (dri2_dpy->device_name == NULL || dri2_dpy->driver_name == NULL) {
+      close(dri2_dpy->fd);
       free(dri2_dpy->device_name);
       free(dri2_dpy->driver_name);
       free(connect);
@@ -610,7 +664,7 @@ dri2_x11_authenticate(_EGLDisplay *disp, uint32_t id)
 
    screen = get_xcb_screen(s, dri2_dpy->screen);
    if (!screen) {
-      _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_x11_authenticate");
+      _eglLog(_EGL_WARNING, "DRI2: failed to get xcb screen");
       return -1;
    }
 
@@ -1098,7 +1152,7 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
       dri2_dpy->screen = DefaultScreen(dpy);
    }
 
-   if (xcb_connection_has_error(dri2_dpy->conn)) {
+   if (!dri2_dpy->conn || xcb_connection_has_error(dri2_dpy->conn)) {
       _eglLog(_EGL_WARNING, "DRI2: xcb_connect failed");
       goto cleanup_dpy;
    }
@@ -1124,14 +1178,8 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
    if (!dri2_create_screen(disp))
       goto cleanup_driver;
 
-   if (dri2_dpy->conn) {
-      if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp))
-         goto cleanup_configs;
-   }
-
-   /* we're supporting EGL 1.4 */
-   disp->VersionMajor = 1;
-   disp->VersionMinor = 4;
+   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp))
+      goto cleanup_configs;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.
@@ -1221,40 +1269,19 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
       dri2_dpy->screen = DefaultScreen(dpy);
    }
 
-   if (xcb_connection_has_error(dri2_dpy->conn)) {
+   if (!dri2_dpy->conn || xcb_connection_has_error(dri2_dpy->conn)) {
       _eglLog(_EGL_WARNING, "DRI2: xcb_connect failed");
       goto cleanup_dpy;
    }
 
-   if (dri2_dpy->conn) {
-      if (!dri2_x11_connect(dri2_dpy))
-	 goto cleanup_conn;
-   }
-
-   if (!dri2_load_driver(disp))
+   if (!dri2_x11_connect(dri2_dpy))
       goto cleanup_conn;
 
-#ifdef O_CLOEXEC
-   dri2_dpy->fd = open(dri2_dpy->device_name, O_RDWR | O_CLOEXEC);
-   if (dri2_dpy->fd == -1 && errno == EINVAL)
-#endif
-   {
-      dri2_dpy->fd = open(dri2_dpy->device_name, O_RDWR);
-      if (dri2_dpy->fd != -1)
-         fcntl(dri2_dpy->fd, F_SETFD, fcntl(dri2_dpy->fd, F_GETFD) |
-            FD_CLOEXEC);
-   }
-   if (dri2_dpy->fd == -1) {
-      _eglLog(_EGL_WARNING,
-	      "DRI2: could not open %s (%s)", dri2_dpy->device_name,
-              strerror(errno));
-      goto cleanup_driver;
-   }
+   if (!dri2_x11_local_authenticate(disp))
+      goto cleanup_fd;
 
-   if (dri2_dpy->conn) {
-      if (!dri2_x11_local_authenticate(disp))
-	 goto cleanup_fd;
-   }
+   if (!dri2_load_driver(disp))
+      goto cleanup_fd;
 
    if (dri2_dpy->dri2_minor >= 1) {
       dri2_dpy->dri2_loader_extension.base.name = __DRI_DRI2_LOADER;
@@ -1279,7 +1306,7 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    dri2_dpy->invalidate_available = (dri2_dpy->dri2_minor >= 3);
 
    if (!dri2_create_screen(disp))
-      goto cleanup_fd;
+      goto cleanup_driver;
 
    dri2_x11_setup_swap_interval(dri2_dpy);
 
@@ -1293,14 +1320,8 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    disp->Extensions.WL_bind_wayland_display = EGL_TRUE;
 #endif
 
-   if (dri2_dpy->conn) {
-      if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp))
-	 goto cleanup_configs;
-   }
-
-   /* we're supporting EGL 1.4 */
-   disp->VersionMajor = 1;
-   disp->VersionMinor = 4;
+   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp))
+      goto cleanup_configs;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.
@@ -1312,10 +1333,10 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
  cleanup_configs:
    _eglCleanupDisplay(disp);
    dri2_dpy->core->destroyScreen(dri2_dpy->dri_screen);
- cleanup_fd:
-   close(dri2_dpy->fd);
  cleanup_driver:
    dlclose(dri2_dpy->driver);
+ cleanup_fd:
+   close(dri2_dpy->fd);
  cleanup_conn:
    if (disp->PlatformDisplay == NULL)
       xcb_disconnect(dri2_dpy->conn);

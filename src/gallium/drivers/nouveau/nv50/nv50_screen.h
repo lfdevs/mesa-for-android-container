@@ -32,14 +32,14 @@ struct nv50_graph_state {
    uint32_t semantic_color;
    uint32_t semantic_psize;
    int32_t index_bias;
-   boolean uniform_buffer_bound[3];
-   boolean prim_restart;
-   boolean point_sprite;
-   boolean rt_serialize;
-   boolean flushed;
-   boolean rasterizer_discard;
+   bool uniform_buffer_bound[3];
+   bool prim_restart;
+   bool point_sprite;
+   bool rt_serialize;
+   bool flushed;
+   bool rasterizer_discard;
    uint8_t tls_required;
-   boolean new_tls_space;
+   bool new_tls_space;
    uint8_t num_vtxbufs;
    uint8_t num_vtxelts;
    uint8_t num_textures[3];
@@ -53,6 +53,8 @@ struct nv50_screen {
 
    struct nv50_context *cur_ctx;
    struct nv50_graph_state save_state;
+
+   int num_occlusion_queries_active;
 
    struct nouveau_bo *code;
    struct nouveau_bo *uniforms;
@@ -95,19 +97,19 @@ struct nv50_screen {
    struct nouveau_object *m2mf;
 };
 
-static INLINE struct nv50_screen *
+static inline struct nv50_screen *
 nv50_screen(struct pipe_screen *screen)
 {
    return (struct nv50_screen *)screen;
 }
 
-boolean nv50_blitter_create(struct nv50_screen *);
+bool nv50_blitter_create(struct nv50_screen *);
 void nv50_blitter_destroy(struct nv50_screen *);
 
 int nv50_screen_tic_alloc(struct nv50_screen *, void *);
 int nv50_screen_tsc_alloc(struct nv50_screen *, void *);
 
-static INLINE void
+static inline void
 nv50_resource_fence(struct nv04_resource *res, uint32_t flags)
 {
    struct nv50_screen *screen = nv50_screen(res->base.screen);
@@ -119,7 +121,7 @@ nv50_resource_fence(struct nv04_resource *res, uint32_t flags)
    }
 }
 
-static INLINE void
+static inline void
 nv50_resource_validate(struct nv04_resource *res, uint32_t flags)
 {
    if (likely(res->bo)) {
@@ -142,21 +144,21 @@ struct nv50_format {
 
 extern const struct nv50_format nv50_format_table[];
 
-static INLINE void
+static inline void
 nv50_screen_tic_unlock(struct nv50_screen *screen, struct nv50_tic_entry *tic)
 {
    if (tic->id >= 0)
       screen->tic.lock[tic->id / 32] &= ~(1 << (tic->id % 32));
 }
 
-static INLINE void
+static inline void
 nv50_screen_tsc_unlock(struct nv50_screen *screen, struct nv50_tsc_entry *tsc)
 {
    if (tsc->id >= 0)
       screen->tsc.lock[tsc->id / 32] &= ~(1 << (tsc->id % 32));
 }
 
-static INLINE void
+static inline void
 nv50_screen_tic_free(struct nv50_screen *screen, struct nv50_tic_entry *tic)
 {
    if (tic->id >= 0) {
@@ -165,7 +167,7 @@ nv50_screen_tic_free(struct nv50_screen *screen, struct nv50_tic_entry *tic)
    }
 }
 
-static INLINE void
+static inline void
 nv50_screen_tsc_free(struct nv50_screen *screen, struct nv50_tsc_entry *tsc)
 {
    if (tsc->id >= 0) {

@@ -34,8 +34,8 @@
    (NV50_TIC_0_MAPA__MASK | NV50_TIC_0_MAPB__MASK |   \
     NV50_TIC_0_MAPG__MASK | NV50_TIC_0_MAPR__MASK)
 
-static INLINE uint32_t
-nv50_tic_swizzle(uint32_t tc, unsigned swz, boolean tex_int)
+static inline uint32_t
+nv50_tic_swizzle(uint32_t tc, unsigned swz, bool tex_int)
 {
    switch (swz) {
    case PIPE_SWIZZLE_RED:
@@ -82,7 +82,7 @@ nvc0_create_texture_view(struct pipe_context *pipe,
    uint32_t depth;
    struct nv50_tic_entry *view;
    struct nv50_miptree *mt;
-   boolean tex_int;
+   bool tex_int;
 
    view = MALLOC_STRUCT(nv50_tic_entry);
    if (!view)
@@ -195,7 +195,7 @@ nvc0_create_texture_view(struct pipe_context *pipe,
    default:
       NOUVEAU_ERR("unexpected/invalid texture target: %d\n",
                   mt->base.base.target);
-      return FALSE;
+      return false;
    }
 
    tic[3] = (flags & NV50_TEXVIEW_FILTER_MSAA8) ? 0x20000000 : 0x00300000;
@@ -226,7 +226,7 @@ nvc0_create_texture_view(struct pipe_context *pipe,
    return &view->pipe;
 }
 
-static boolean
+static bool
 nvc0_validate_tic(struct nvc0_context *nvc0, int s)
 {
    uint32_t commands[32];
@@ -234,12 +234,12 @@ nvc0_validate_tic(struct nvc0_context *nvc0, int s)
    struct nouveau_bo *txc = nvc0->screen->txc;
    unsigned i;
    unsigned n = 0;
-   boolean need_flush = FALSE;
+   bool need_flush = false;
 
    for (i = 0; i < nvc0->num_textures[s]; ++i) {
       struct nv50_tic_entry *tic = nv50_tic_entry(nvc0->textures[s][i]);
       struct nv04_resource *res;
-      const boolean dirty = !!(nvc0->textures_dirty[s] & (1 << i));
+      const bool dirty = !!(nvc0->textures_dirty[s] & (1 << i));
 
       if (!tic) {
          if (dirty)
@@ -263,7 +263,7 @@ nvc0_validate_tic(struct nvc0_context *nvc0, int s)
          BEGIN_NIC0(push, NVC0_M2MF(DATA), 8);
          PUSH_DATAp(push, &tic->tic[0], 8);
 
-         need_flush = TRUE;
+         need_flush = true;
       } else
       if (res->status & NOUVEAU_BUFFER_STATUS_GPU_WRITING) {
          BEGIN_NVC0(push, NVC0_3D(TEX_CACHE_CTL), 1);
@@ -295,18 +295,18 @@ nvc0_validate_tic(struct nvc0_context *nvc0, int s)
    return need_flush;
 }
 
-static boolean
+static bool
 nve4_validate_tic(struct nvc0_context *nvc0, unsigned s)
 {
    struct nouveau_bo *txc = nvc0->screen->txc;
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    unsigned i;
-   boolean need_flush = FALSE;
+   bool need_flush = false;
 
    for (i = 0; i < nvc0->num_textures[s]; ++i) {
       struct nv50_tic_entry *tic = nv50_tic_entry(nvc0->textures[s][i]);
       struct nv04_resource *res;
-      const boolean dirty = !!(nvc0->textures_dirty[s] & (1 << i));
+      const bool dirty = !!(nvc0->textures_dirty[s] & (1 << i));
 
       if (!tic) {
          nvc0->tex_handles[s][i] |= NVE4_TIC_ENTRY_INVALID;
@@ -328,7 +328,7 @@ nve4_validate_tic(struct nvc0_context *nvc0, unsigned s)
          PUSH_DATA (push, 0x1001);
          PUSH_DATAp(push, &tic->tic[0], 8);
 
-         need_flush = TRUE;
+         need_flush = true;
       } else
       if (res->status & NOUVEAU_BUFFER_STATUS_GPU_WRITING) {
          BEGIN_NVC0(push, NVC0_3D(TEX_CACHE_CTL), 1);
@@ -356,16 +356,14 @@ nve4_validate_tic(struct nvc0_context *nvc0, unsigned s)
 
 void nvc0_validate_textures(struct nvc0_context *nvc0)
 {
-   boolean need_flush;
+   bool need_flush = false;
+   int i;
 
-   if (nvc0->screen->base.class_3d >= NVE4_3D_CLASS) {
-      need_flush  = nve4_validate_tic(nvc0, 0);
-      need_flush |= nve4_validate_tic(nvc0, 3);
-      need_flush |= nve4_validate_tic(nvc0, 4);
-   } else {
-      need_flush  = nvc0_validate_tic(nvc0, 0);
-      need_flush |= nvc0_validate_tic(nvc0, 3);
-      need_flush |= nvc0_validate_tic(nvc0, 4);
+   for (i = 0; i < 5; i++) {
+      if (nvc0->screen->base.class_3d >= NVE4_3D_CLASS)
+         need_flush |= nve4_validate_tic(nvc0, i);
+      else
+         need_flush |= nvc0_validate_tic(nvc0, i);
    }
 
    if (need_flush) {
@@ -374,14 +372,14 @@ void nvc0_validate_textures(struct nvc0_context *nvc0)
    }
 }
 
-static boolean
+static bool
 nvc0_validate_tsc(struct nvc0_context *nvc0, int s)
 {
    uint32_t commands[16];
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    unsigned i;
    unsigned n = 0;
-   boolean need_flush = FALSE;
+   bool need_flush = false;
 
    for (i = 0; i < nvc0->num_samplers[s]; ++i) {
       struct nv50_tsc_entry *tsc = nv50_tsc_entry(nvc0->samplers[s][i]);
@@ -396,9 +394,9 @@ nvc0_validate_tsc(struct nvc0_context *nvc0, int s)
          tsc->id = nvc0_screen_tsc_alloc(nvc0->screen, tsc);
 
          nvc0_m2mf_push_linear(&nvc0->base, nvc0->screen->txc,
-                               65536 + tsc->id * 32, NOUVEAU_BO_VRAM,
+                               65536 + tsc->id * 32, NV_VRAM_DOMAIN(&nvc0->screen->base),
                                32, tsc->tsc);
-         need_flush = TRUE;
+         need_flush = true;
       }
       nvc0->screen->tsc.lock[tsc->id / 32] |= 1 << (tsc->id % 32);
 
@@ -418,13 +416,13 @@ nvc0_validate_tsc(struct nvc0_context *nvc0, int s)
    return need_flush;
 }
 
-boolean
+bool
 nve4_validate_tsc(struct nvc0_context *nvc0, int s)
 {
    struct nouveau_bo *txc = nvc0->screen->txc;
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    unsigned i;
-   boolean need_flush = FALSE;
+   bool need_flush = false;
 
    for (i = 0; i < nvc0->num_samplers[s]; ++i) {
       struct nv50_tsc_entry *tsc = nv50_tsc_entry(nvc0->samplers[s][i]);
@@ -447,7 +445,7 @@ nve4_validate_tsc(struct nvc0_context *nvc0, int s)
          PUSH_DATA (push, 0x1001);
          PUSH_DATAp(push, &tsc->tsc[0], 8);
 
-         need_flush = TRUE;
+         need_flush = true;
       }
       nvc0->screen->tsc.lock[tsc->id / 32] |= 1 << (tsc->id % 32);
 
@@ -466,16 +464,14 @@ nve4_validate_tsc(struct nvc0_context *nvc0, int s)
 
 void nvc0_validate_samplers(struct nvc0_context *nvc0)
 {
-   boolean need_flush;
+   bool need_flush = false;
+   int i;
 
-   if (nvc0->screen->base.class_3d >= NVE4_3D_CLASS) {
-      need_flush  = nve4_validate_tsc(nvc0, 0);
-      need_flush |= nve4_validate_tsc(nvc0, 3);
-      need_flush |= nve4_validate_tsc(nvc0, 4);
-   } else {
-      need_flush  = nvc0_validate_tsc(nvc0, 0);
-      need_flush |= nvc0_validate_tsc(nvc0, 3);
-      need_flush |= nvc0_validate_tsc(nvc0, 4);
+   for (i = 0; i < 5; i++) {
+      if (nvc0->screen->base.class_3d >= NVE4_3D_CLASS)
+         need_flush |= nve4_validate_tsc(nvc0, i);
+      else
+         need_flush |= nvc0_validate_tsc(nvc0, i);
    }
 
    if (need_flush) {
@@ -645,13 +641,13 @@ nve4_set_surface_info(struct nouveau_pushbuf *push,
    }
 }
 
-static INLINE void
+static inline void
 nvc0_update_surface_bindings(struct nvc0_context *nvc0)
 {
    /* TODO */
 }
 
-static INLINE void
+static inline void
 nve4_update_surface_bindings(struct nvc0_context *nvc0)
 {
    /* TODO */

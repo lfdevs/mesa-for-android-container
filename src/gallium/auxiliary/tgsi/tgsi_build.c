@@ -610,7 +610,7 @@ tgsi_default_instruction( void )
    instruction.Type = TGSI_TOKEN_TYPE_INSTRUCTION;
    instruction.NrTokens = 0;
    instruction.Opcode = TGSI_OPCODE_MOV;
-   instruction.Saturate = TGSI_SAT_NONE;
+   instruction.Saturate = 0;
    instruction.Predicate = 0;
    instruction.NumDstRegs = 1;
    instruction.NumSrcRegs = 1;
@@ -632,7 +632,7 @@ tgsi_build_instruction(unsigned opcode,
    struct tgsi_instruction instruction;
 
    assert (opcode <= TGSI_OPCODE_LAST);
-   assert (saturate <= TGSI_SAT_MINUS_PLUS_ONE);
+   assert (saturate <= 1);
    assert (num_dst_regs <= 3);
    assert (num_src_regs <= 15);
 

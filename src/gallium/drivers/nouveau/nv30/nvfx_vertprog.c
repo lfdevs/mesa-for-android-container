@@ -416,7 +416,7 @@ tgsi_src(struct nvfx_vpc *vpc, const struct tgsi_full_src_register *fsrc) {
    return src;
 }
 
-static INLINE struct nvfx_reg
+static inline struct nvfx_reg
 tgsi_dst(struct nvfx_vpc *vpc, const struct tgsi_full_dst_register *fdst) {
    struct nvfx_reg dst;
 
@@ -455,7 +455,7 @@ tgsi_mask(uint tgsi)
    return mask;
 }
 
-static boolean
+static bool
 nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
             unsigned idx, const struct tgsi_full_instruction *finst)
 {
@@ -466,7 +466,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    struct nvfx_insn insn;
    struct nvfx_relocation reloc;
    struct nvfx_loop_entry loop;
-   boolean sat = FALSE;
+   bool sat = false;
    int mask;
    int ai = -1, ci = -1, ii = -1;
    int i;
@@ -524,25 +524,25 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
          break;
       default:
          NOUVEAU_ERR("bad src file\n");
-         return FALSE;
+         return false;
       }
    }
 
    for (i = 0; i < finst->Instruction.NumSrcRegs; i++) {
       if(src[i].reg.type < 0)
-         return FALSE;
+         return false;
    }
 
    if(finst->Dst[0].Register.File == TGSI_FILE_ADDRESS &&
       finst->Instruction.Opcode != TGSI_OPCODE_ARL)
-      return FALSE;
+      return false;
 
    final_dst = dst  = tgsi_dst(vpc, &finst->Dst[0]);
    mask = tgsi_mask(finst->Dst[0].Register.WriteMask);
-   if(finst->Instruction.Saturate == TGSI_SAT_ZERO_ONE) {
+   if(finst->Instruction.Saturate) {
       assert(finst->Instruction.Opcode != TGSI_OPCODE_ARL);
       if (vpc->is_nv4x)
-         sat = TRUE;
+         sat = true;
       else
       if(dst.type != NVFXSR_TEMP)
          dst = temp(vpc);
@@ -793,10 +793,10 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
       break;
    default:
       NOUVEAU_ERR("invalid opcode %d\n", finst->Instruction.Opcode);
-      return FALSE;
+      return false;
    }
 
-   if(finst->Instruction.Saturate == TGSI_SAT_ZERO_ONE && !vpc->is_nv4x) {
+   if(finst->Instruction.Saturate && !vpc->is_nv4x) {
       if (!vpc->r_0_1.type)
          vpc->r_0_1 = constant(vpc, -1, 0, 1, 0, 0);
       nvfx_vp_emit(vpc, arith(0, VEC, MAX, dst, mask, nvfx_src(dst), swz(nvfx_src(vpc->r_0_1), X, X, X, X), none));
@@ -804,10 +804,10 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    }
 
    release_temps(vpc);
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 nvfx_vertprog_parse_decl_output(struct nvfx_vpc *vpc,
                                 const struct tgsi_full_declaration *fdec)
 {
@@ -825,7 +825,7 @@ nvfx_vertprog_parse_decl_output(struct nvfx_vpc *vpc,
       vpc->r_result[idx] = temp(vpc);
       vpc->r_temps_discard = 0;
       vpc->cvtx_idx = idx;
-      return TRUE;
+      return true;
    case TGSI_SEMANTIC_COLOR:
       if (fdec->Semantic.Index == 0) {
          hw = NVFX_VP(INST_DEST_COL0);
@@ -834,7 +834,7 @@ nvfx_vertprog_parse_decl_output(struct nvfx_vpc *vpc,
          hw = NVFX_VP(INST_DEST_COL1);
       } else {
          NOUVEAU_ERR("bad colour semantic index\n");
-         return FALSE;
+         return false;
       }
       break;
    case TGSI_SEMANTIC_BCOLOR:
@@ -845,7 +845,7 @@ nvfx_vertprog_parse_decl_output(struct nvfx_vpc *vpc,
          hw = NVFX_VP(INST_DEST_BFC1);
       } else {
          NOUVEAU_ERR("bad bcolour semantic index\n");
-         return FALSE;
+         return false;
       }
       break;
    case TGSI_SEMANTIC_FOG:
@@ -868,22 +868,22 @@ nvfx_vertprog_parse_decl_output(struct nvfx_vpc *vpc,
 
       if (i == num_texcoords) {
          vpc->r_result[idx] = nvfx_reg(NVFXSR_NONE, 0);
-         return TRUE;
+         return true;
       }
       break;
    case TGSI_SEMANTIC_EDGEFLAG:
       vpc->r_result[idx] = nvfx_reg(NVFXSR_NONE, 0);
-      return TRUE;
+      return true;
    default:
       NOUVEAU_ERR("bad output semantic\n");
-      return FALSE;
+      return false;
    }
 
    vpc->r_result[idx] = nvfx_reg(NVFXSR_OUTPUT, hw);
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 nvfx_vertprog_prepare(struct nvfx_vpc *vpc)
 {
    struct tgsi_parse_context p;
@@ -924,7 +924,7 @@ nvfx_vertprog_prepare(struct nvfx_vpc *vpc)
             break;
          case TGSI_FILE_OUTPUT:
             if (!nvfx_vertprog_parse_decl_output(vpc, fdec))
-               return FALSE;
+               return false;
             break;
          default:
             break;
@@ -961,12 +961,12 @@ nvfx_vertprog_prepare(struct nvfx_vpc *vpc)
    }
 
    vpc->r_temps_discard = 0;
-   return TRUE;
+   return true;
 }
 
-DEBUG_GET_ONCE_BOOL_OPTION(nvfx_dump_vp, "NVFX_DUMP_VP", FALSE)
+DEBUG_GET_ONCE_BOOL_OPTION(nvfx_dump_vp, "NVFX_DUMP_VP", false)
 
-boolean
+bool
 _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
 {
    struct tgsi_parse_context parse;
@@ -975,13 +975,13 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
    struct util_dynarray insns;
    int i, ucps;
 
-   vp->translated = FALSE;
+   vp->translated = false;
    vp->nr_insns = 0;
    vp->nr_consts = 0;
 
    vpc = CALLOC_STRUCT(nvfx_vpc);
    if (!vpc)
-      return FALSE;
+      return false;
    vpc->is_nv4x = (oclass >= NV40_3D_CLASS) ? ~0 : 0;
    vpc->vp   = vp;
    vpc->pipe = vp->pipe;
@@ -990,7 +990,7 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
 
    if (!nvfx_vertprog_prepare(vpc)) {
       FREE(vpc);
-      return FALSE;
+      return false;
    }
 
    /* Redirect post-transform vertex position to a temp if user clip
@@ -1108,7 +1108,7 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
       debug_printf("\n");
    }
 
-   vp->translated = TRUE;
+   vp->translated = true;
 
 out:
    tgsi_parse_free(&parse);

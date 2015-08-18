@@ -43,9 +43,6 @@ ilo_render_create(struct ilo_builder *builder);
 void
 ilo_render_destroy(struct ilo_render *render);
 
-/**
- * Estimate the size of an action.
- */
 void
 ilo_render_get_sample_position(const struct ilo_render *render,
                                unsigned sample_count,

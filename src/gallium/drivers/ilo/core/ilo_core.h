@@ -29,18 +29,9 @@
 #define ILO_CORE_H
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_defines.h"
-#include "pipe/p_format.h"
 
 #include "util/u_debug.h"
-#include "util/list.h"
-#include "util/u_format.h"
-#include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/u_pointer.h"
-
-#define ILO_PRIM_RECTANGLES PIPE_PRIM_MAX
-#define ILO_PRIM_MAX (PIPE_PRIM_MAX + 1)
 
 #endif /* ILO_CORE_H */

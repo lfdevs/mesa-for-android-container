@@ -369,7 +369,7 @@ _mesa_float_to_half(float val)
           * or normal.
           */
          e = 0;
-         m = (int) _mesa_roundevenf((1 << 24) * fabsf(fi.f));
+         m = _mesa_lroundevenf((1 << 24) * fabsf(fi.f));
       }
       else if (new_exp > 15) {
          /* map this value to infinity */
@@ -383,7 +383,7 @@ _mesa_float_to_half(float val)
           * either normal or infinite.
           */
          e = new_exp + 15;
-         m = (int) _mesa_roundevenf(flt_m / (float) (1 << 13));
+         m = _mesa_lroundevenf(flt_m / (float) (1 << 13));
       }
    }
 

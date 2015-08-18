@@ -40,13 +40,9 @@
 
 
 #include <stdbool.h>
-#ifndef __NOT_HAVE_DRM_H
-#include <xf86drm.h>
-#endif
 #include "dri_util.h"
 #include "utils.h"
 #include "xmlpool.h"
-#include "../glsl/glsl_parser_extras.h"
 #include "main/mtypes.h"
 #include "main/version.h"
 #include "main/errors.h"
@@ -138,18 +134,6 @@ driCreateNewScreen2(int scrn, int fd,
 
     setupLoaderExtensions(psp, extensions);
 
-#ifndef __NOT_HAVE_DRM_H
-    if (fd != -1) {
-       drmVersionPtr version = drmGetVersion(fd);
-       if (version) {
-          psp->drm_version.major = version->version_major;
-          psp->drm_version.minor = version->version_minor;
-          psp->drm_version.patch = version->version_patchlevel;
-          drmFreeVersion(version);
-       }
-    }
-#endif
-
     psp->loaderPrivate = data;
 
     psp->extensions = emptyExtensionList;
@@ -162,16 +146,26 @@ driCreateNewScreen2(int scrn, int fd,
 	return NULL;
     }
 
-    int gl_version_override = _mesa_get_gl_version_override();
-    if (gl_version_override >= 31) {
-       psp->max_gl_core_version = MAX2(psp->max_gl_core_version,
-                                       gl_version_override);
-    } else {
-       psp->max_gl_compat_version = MAX2(psp->max_gl_compat_version,
-                                         gl_version_override);
+    struct gl_constants consts = { 0 };
+    gl_api api;
+    unsigned version;
+
+    api = API_OPENGLES2;
+    if (_mesa_override_gl_version_contextless(&consts, &api, &version))
+       psp->max_gl_es2_version = version;
+
+    api = API_OPENGL_COMPAT;
+    if (_mesa_override_gl_version_contextless(&consts, &api, &version)) {
+       if (api == API_OPENGL_CORE) {
+          psp->max_gl_core_version = version;
+       } else {
+          psp->max_gl_compat_version = version;
+       }
     }
 
-    psp->api_mask = (1 << __DRI_API_OPENGL);
+    psp->api_mask = 0;
+    if (psp->max_gl_compat_version > 0)
+       psp->api_mask |= (1 << __DRI_API_OPENGL);
     if (psp->max_gl_core_version > 0)
        psp->api_mask |= (1 << __DRI_API_OPENGL_CORE);
     if (psp->max_gl_es1_version > 0)
@@ -229,8 +223,6 @@ static void driDestroyScreen(__DRIscreen *psp)
 	 * routine is called after XCloseDisplay, so there is no protocol
 	 * stream open to the X-server anymore.
 	 */
-
-       _mesa_destroy_shader_compiler();
 
 	psp->driver->DestroyScreen(psp);
 

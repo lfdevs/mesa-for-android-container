@@ -32,10 +32,6 @@
 #include "sw/dri/dri_sw_winsys.h"
 #include "sw/null/null_sw_winsys.h"
 #include "sw/wrapper/wrapper_sw_winsys.h"
-#ifdef HAVE_PIPE_LOADER_XLIB
-/* Explicitly wrap the header to ease build without X11 headers */
-#include "sw/xlib/xlib_sw_winsys.h"
-#endif
 #include "target-helpers/inline_sw_helper.h"
 #include "state_tracker/drisw_api.h"
 
@@ -52,29 +48,6 @@ static struct pipe_loader_ops pipe_loader_sw_ops;
 static struct sw_winsys *(*backends[])() = {
    null_sw_create
 };
-
-#ifdef HAVE_PIPE_LOADER_XLIB
-bool
-pipe_loader_sw_probe_xlib(struct pipe_loader_device **devs, Display *display)
-{
-   struct pipe_loader_sw_device *sdev = CALLOC_STRUCT(pipe_loader_sw_device);
-
-   if (!sdev)
-      return false;
-
-   sdev->base.type = PIPE_LOADER_DEVICE_SOFTWARE;
-   sdev->base.driver_name = "swrast";
-   sdev->base.ops = &pipe_loader_sw_ops;
-   sdev->ws = xlib_create_sw_winsys(display);
-   if (!sdev->ws) {
-      FREE(sdev);
-      return false;
-   }
-   *devs = &sdev->base;
-
-   return true;
-}
-#endif
 
 #ifdef HAVE_PIPE_LOADER_DRI
 bool

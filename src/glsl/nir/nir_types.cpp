@@ -155,6 +155,12 @@ glsl_vec4_type(void)
 }
 
 const glsl_type *
+glsl_uint_type(void)
+{
+   return glsl_type::uint_type;
+}
+
+const glsl_type *
 glsl_array_type(const glsl_type *base, unsigned elements)
 {
    return glsl_type::get_array_instance(base, elements);

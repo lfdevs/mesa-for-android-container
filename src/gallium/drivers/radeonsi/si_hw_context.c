@@ -30,10 +30,32 @@
 void si_need_cs_space(struct si_context *ctx, unsigned num_dw,
 			boolean count_draw_in)
 {
+	struct radeon_winsys_cs *cs = ctx->b.rings.gfx.cs;
 	int i;
 
+	/* If the CS is sufficiently large, don't count the space needed
+	 * and just flush if there is less than 8096 dwords left. */
+	if (cs->max_dw >= 24 * 1024) {
+		if (cs->cdw > cs->max_dw - 8 * 1024)
+			ctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+		return;
+	}
+
+	/* There are two memory usage counters in the winsys for all buffers
+	 * that have been added (cs_add_reloc) and two counters in the pipe
+	 * driver for those that haven't been added yet.
+	 * */
+	if (!ctx->b.ws->cs_memory_below_limit(ctx->b.rings.gfx.cs, ctx->b.vram, ctx->b.gtt)) {
+		ctx->b.gtt = 0;
+		ctx->b.vram = 0;
+		ctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+		return;
+	}
+	ctx->b.gtt = 0;
+	ctx->b.vram = 0;
+
 	/* The number of dwords we already used in the CS so far. */
-	num_dw += ctx->b.rings.gfx.cs->cdw;
+	num_dw += cs->cdw;
 
 	if (count_draw_in) {
 		for (i = 0; i < SI_NUM_ATOMS(ctx); i++) {
@@ -50,7 +72,8 @@ void si_need_cs_space(struct si_context *ctx, unsigned num_dw,
 	}
 
 	/* Count in queries_suspend. */
-	num_dw += ctx->b.num_cs_dw_nontimer_queries_suspend;
+	num_dw += ctx->b.num_cs_dw_nontimer_queries_suspend +
+		  ctx->b.num_cs_dw_timer_queries_suspend;
 
 	/* Count in streamout_end at the end of CS. */
 	if (ctx->b.streamout.begin_emitted) {
@@ -72,7 +95,7 @@ void si_need_cs_space(struct si_context *ctx, unsigned num_dw,
 #endif
 
 	/* Flush if there's not enough space. */
-	if (num_dw > RADEON_MAX_CMDBUF_DWORDS) {
+	if (num_dw > cs->max_dw) {
 		ctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 	}
 }
@@ -82,9 +105,16 @@ void si_context_gfx_flush(void *context, unsigned flags,
 {
 	struct si_context *ctx = context;
 	struct radeon_winsys_cs *cs = ctx->b.rings.gfx.cs;
+	struct radeon_winsys *ws = ctx->b.ws;
 
-	if (cs->cdw == ctx->b.initial_gfx_cs_size && !fence)
+	if (cs->cdw == ctx->b.initial_gfx_cs_size &&
+	    (!fence || ctx->last_gfx_fence)) {
+		if (fence)
+			ws->fence_reference(fence, ctx->last_gfx_fence);
+		if (!(flags & RADEON_FLUSH_ASYNC))
+			ws->cs_sync_flush(cs);
 		return;
+	}
 
 	ctx->b.rings.gfx.flushing = true;
 
@@ -101,8 +131,12 @@ void si_context_gfx_flush(void *context, unsigned flags,
 	flags |= RADEON_FLUSH_KEEP_TILING_FLAGS;
 
 	/* Flush the CS. */
-	ctx->b.ws->cs_flush(cs, flags, fence, ctx->screen->b.cs_count++);
+	ws->cs_flush(cs, flags, &ctx->last_gfx_fence,
+		     ctx->screen->b.cs_count++);
 	ctx->b.rings.gfx.flushing = false;
+
+	if (fence)
+		ws->fence_reference(fence, ctx->last_gfx_fence);
 
 #if SI_TRACE_CS
 	if (ctx->screen->b.trace_bo) {
@@ -111,7 +145,7 @@ void si_context_gfx_flush(void *context, unsigned flags,
 
 		for (i = 0; i < 10; i++) {
 			usleep(5);
-			if (!ctx->b.ws->buffer_is_busy(sscreen->b.trace_bo->buf, RADEON_USAGE_READWRITE)) {
+			if (!ws->buffer_is_busy(sscreen->b.trace_bo->buf, RADEON_USAGE_READWRITE)) {
 				break;
 			}
 		}
@@ -130,7 +164,8 @@ void si_context_gfx_flush(void *context, unsigned flags,
 void si_begin_new_cs(struct si_context *ctx)
 {
 	/* Flush read caches at the beginning of CS. */
-	ctx->b.flags |= SI_CONTEXT_INV_TC_L1 |
+	ctx->b.flags |= SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER |
+			SI_CONTEXT_INV_TC_L1 |
 			SI_CONTEXT_INV_TC_L2 |
 			SI_CONTEXT_INV_KCACHE |
 			SI_CONTEXT_INV_ICACHE;
@@ -143,24 +178,32 @@ void si_begin_new_cs(struct si_context *ctx)
 	/* The CS initialization should be emitted before everything else. */
 	si_pm4_emit(ctx, ctx->init_config);
 
-	ctx->clip_regs.dirty = true;
-	ctx->framebuffer.atom.dirty = true;
-	ctx->msaa_sample_locs.dirty = true;
-	ctx->msaa_config.dirty = true;
-	ctx->db_render_state.dirty = true;
-	ctx->b.streamout.enable_atom.dirty = true;
+	si_mark_atom_dirty(ctx, &ctx->clip_regs);
+	si_mark_atom_dirty(ctx, &ctx->framebuffer.atom);
+	si_mark_atom_dirty(ctx, &ctx->msaa_sample_locs);
+	si_mark_atom_dirty(ctx, &ctx->msaa_config);
+	si_mark_atom_dirty(ctx, &ctx->db_render_state);
+	si_mark_atom_dirty(ctx, &ctx->b.streamout.enable_atom);
 	si_all_descriptors_begin_new_cs(ctx);
 
 	r600_postflush_resume_features(&ctx->b);
 
 	ctx->b.initial_gfx_cs_size = ctx->b.rings.gfx.cs->cdw;
+
+	/* Invalidate various draw states so that they are emitted before
+	 * the first draw call. */
 	si_invalidate_draw_sh_constants(ctx);
 	ctx->last_primitive_restart_en = -1;
 	ctx->last_restart_index = SI_RESTART_INDEX_UNKNOWN;
 	ctx->last_gs_out_prim = -1;
 	ctx->last_prim = -1;
 	ctx->last_multi_vgt_param = -1;
+	ctx->last_ls_hs_config = -1;
 	ctx->last_rast_prim = -1;
 	ctx->last_sc_line_stipple = ~0;
 	ctx->emit_scratch_reloc = true;
+	ctx->last_ls = NULL;
+	ctx->last_tcs = NULL;
+	ctx->last_tes_sh_base = -1;
+	ctx->last_num_tcs_input_cp = -1;
 }

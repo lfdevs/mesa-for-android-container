@@ -371,7 +371,7 @@ struct lp_build_sample_context
  * We only support a few wrap modes in lp_build_sample_wrap_linear_int() at
  * this time.  Return whether the given mode is supported by that function.
  */
-static INLINE boolean
+static inline boolean
 lp_is_simple_wrap_mode(unsigned mode)
 {
    switch (mode) {
@@ -384,7 +384,7 @@ lp_is_simple_wrap_mode(unsigned mode)
 }
 
 
-static INLINE void
+static inline void
 apply_sampler_swizzle(struct lp_build_sample_context *bld,
                       LLVMValueRef *texel)
 {
@@ -402,7 +402,7 @@ apply_sampler_swizzle(struct lp_build_sample_context *bld,
  * not really dimension as such, this indicates the amount of
  * "normal" texture coords subject to minification, wrapping etc.
  */
-static INLINE unsigned
+static inline unsigned
 texture_dims(enum pipe_texture_target tex)
 {
    switch (tex) {
@@ -424,7 +424,7 @@ texture_dims(enum pipe_texture_target tex)
    }
 }
 
-static INLINE boolean
+static inline boolean
 has_layer_coord(enum pipe_texture_target tex)
 {
    switch (tex) {

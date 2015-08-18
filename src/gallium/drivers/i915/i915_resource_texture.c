@@ -89,25 +89,25 @@ static const int bottom_offsets[6] = {
    [PIPE_TEX_FACE_NEG_Z] = 16 + 5 * 8,
 };
 
-static INLINE unsigned
+static inline unsigned
 align_nblocksx(enum pipe_format format, unsigned width, unsigned align_to)
 {
    return align(util_format_get_nblocksx(format, width), align_to);
 }
 
-static INLINE unsigned
+static inline unsigned
 align_nblocksy(enum pipe_format format, unsigned width, unsigned align_to)
 {
    return align(util_format_get_nblocksy(format, width), align_to);
 }
 
-static INLINE unsigned
+static inline unsigned
 get_pot_stride(enum pipe_format format, unsigned width)
 {
    return util_next_power_of_two(util_format_get_stride(format, width));
 }
 
-static INLINE const char*
+static inline const char*
 get_tiling_string(enum i915_winsys_buffer_tile tile)
 {
    switch(tile) {

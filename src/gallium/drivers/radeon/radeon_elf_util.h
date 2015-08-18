@@ -37,7 +37,7 @@ struct radeon_shader_reloc;
  * radeon_shader_binary object.
  */
 void radeon_elf_read(const char *elf_data, unsigned elf_size,
-		struct radeon_shader_binary *binary, unsigned debug);
+		     struct radeon_shader_binary *binary);
 
 /**
  * @returns A pointer to the start of the configuration information for

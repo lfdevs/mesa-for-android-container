@@ -243,10 +243,11 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 				       RADEON_LAYOUT_TILED : RADEON_LAYOUT_LINEAR,
 				       surface->level[0].mode >= RADEON_SURF_MODE_2D ?
 				       RADEON_LAYOUT_TILED : RADEON_LAYOUT_LINEAR,
+				       surface->pipe_config,
 				       surface->bankw, surface->bankh,
 				       surface->tile_split,
 				       surface->stencil_tile_split,
-				       surface->mtilea,
+				       surface->mtilea, surface->num_banks,
 				       surface->level[0].pitch_bytes,
 				       (surface->flags & RADEON_SURF_SCANOUT) != 0);
 
@@ -489,7 +490,7 @@ static unsigned r600_texture_get_htile_size(struct r600_common_screen *rscreen,
 	unsigned num_pipes = rscreen->tiling_info.num_channels;
 
 	if (rscreen->chip_class <= EVERGREEN &&
-	    rscreen->info.drm_minor < 26)
+	    rscreen->info.drm_major == 2 && rscreen->info.drm_minor < 26)
 		return 0;
 
 	/* HW bug on R6xx. */
@@ -501,7 +502,7 @@ static unsigned r600_texture_get_htile_size(struct r600_common_screen *rscreen,
 	/* HTILE is broken with 1D tiling on old kernels and CIK. */
 	if (rscreen->chip_class >= CIK &&
 	    rtex->surface.level[0].mode == RADEON_SURF_MODE_1D &&
-	    rscreen->info.drm_minor < 38)
+	    rscreen->info.drm_major == 2 && rscreen->info.drm_minor < 38)
 		return 0;
 
 	switch (num_pipes) {
@@ -706,6 +707,7 @@ static unsigned r600_choose_tiling(struct r600_common_screen *rscreen,
 				   const struct pipe_resource *templ)
 {
 	const struct util_format_description *desc = util_format_description(templ->format);
+	bool force_tiling = templ->flags & R600_RESOURCE_FLAG_FORCE_TILING;
 
 	/* MSAA resources must be 2D tiled. */
 	if (templ->nr_samples > 1)
@@ -715,10 +717,16 @@ static unsigned r600_choose_tiling(struct r600_common_screen *rscreen,
 	if (templ->flags & R600_RESOURCE_FLAG_TRANSFER)
 		return RADEON_SURF_MODE_LINEAR_ALIGNED;
 
+	/* r600g: force tiling on TEXTURE_2D and TEXTURE_3D compute resources. */
+	if (rscreen->chip_class >= R600 && rscreen->chip_class <= CAYMAN &&
+	    (templ->bind & PIPE_BIND_COMPUTE_RESOURCE) &&
+	    (templ->target == PIPE_TEXTURE_2D ||
+	     templ->target == PIPE_TEXTURE_3D))
+		force_tiling = true;
+
 	/* Handle common candidates for the linear mode.
 	 * Compressed textures must always be tiled. */
-	if (!(templ->flags & R600_RESOURCE_FLAG_FORCE_TILING) &&
-	    !util_format_is_compressed(templ->format)) {
+	if (!force_tiling && !util_format_is_compressed(templ->format)) {
 		/* Not everything can be linear, so we cannot enforce it
 		 * for all textures. */
 		if ((rscreen->debug_flags & DBG_NO_TILING) &&
@@ -934,7 +942,7 @@ static void *r600_texture_transfer_map(struct pipe_context *ctx,
 		use_staging_texture = TRUE;
 	} else if (!(usage & PIPE_TRANSFER_READ) &&
 	    (r600_rings_is_buffer_referenced(rctx, rtex->resource.cs_buf, RADEON_USAGE_READWRITE) ||
-	     rctx->ws->buffer_is_busy(rtex->resource.buf, RADEON_USAGE_READWRITE))) {
+	     !rctx->ws->buffer_wait(rtex->resource.buf, 0, RADEON_USAGE_READWRITE))) {
 		/* Use a staging texture for uploads if the underlying BO is busy. */
 		use_staging_texture = TRUE;
 	}
@@ -1059,17 +1067,8 @@ static void r600_texture_transfer_unmap(struct pipe_context *ctx,
 					struct pipe_transfer* transfer)
 {
 	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
-	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
-	struct radeon_winsys_cs_handle *buf;
 	struct pipe_resource *texture = transfer->resource;
 	struct r600_texture *rtex = (struct r600_texture*)texture;
-
-	if (rtransfer->staging) {
-		buf = rtransfer->staging->cs_buf;
-	} else {
-		buf = r600_resource(transfer->resource)->cs_buf;
-	}
-	rctx->ws->buffer_unmap(buf);
 
 	if ((transfer->usage & PIPE_TRANSFER_WRITE) && rtransfer->staging) {
 		if (rtex->is_depth && rtex->resource.b.b.nr_samples <= 1) {
@@ -1262,7 +1261,9 @@ void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 
 		/* fast color clear with 1D tiling doesn't work on old kernels and CIK */
 		if (tex->surface.level[0].mode == RADEON_SURF_MODE_1D &&
-		    rctx->chip_class >= CIK && rctx->screen->info.drm_minor < 38) {
+		    rctx->chip_class >= CIK &&
+		    rctx->screen->info.drm_major == 2 &&
+		    rctx->screen->info.drm_minor < 38) {
 			continue;
 		}
 
@@ -1278,7 +1279,7 @@ void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 				   tex->cmask.offset, tex->cmask.size, 0, true);
 
 		tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
-		fb_state->dirty = true;
+		rctx->set_atom_dirty(rctx, fb_state, true);
 		*buffers &= ~clear_bit;
 	}
 }

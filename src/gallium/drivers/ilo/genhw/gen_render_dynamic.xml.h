@@ -84,7 +84,7 @@ enum gen_blend_function {
     GEN6_BLENDFUNCTION_MAX				      = 0x4,
 };
 
-enum gen_logicop_function {
+enum gen_logic_op {
     GEN6_LOGICOP_CLEAR					      = 0x0,
     GEN6_LOGICOP_NOR					      = 0x1,
     GEN6_LOGICOP_AND_INVERTED				      = 0x2,
@@ -103,20 +103,31 @@ enum gen_logicop_function {
     GEN6_LOGICOP_SET					      = 0xf,
 };
 
-enum gen_sampler_mip_filter {
+enum gen_mip_filter {
     GEN6_MIPFILTER_NONE					      = 0x0,
     GEN6_MIPFILTER_NEAREST				      = 0x1,
     GEN6_MIPFILTER_LINEAR				      = 0x3,
 };
 
-enum gen_sampler_map_filter {
+enum gen_map_filter {
     GEN6_MAPFILTER_NEAREST				      = 0x0,
     GEN6_MAPFILTER_LINEAR				      = 0x1,
     GEN6_MAPFILTER_ANISOTROPIC				      = 0x2,
     GEN6_MAPFILTER_MONO					      = 0x6,
 };
 
-enum gen_sampler_aniso_ratio {
+enum gen_prefilter_op {
+    GEN6_PREFILTEROP_ALWAYS				      = 0x0,
+    GEN6_PREFILTEROP_NEVER				      = 0x1,
+    GEN6_PREFILTEROP_LESS				      = 0x2,
+    GEN6_PREFILTEROP_EQUAL				      = 0x3,
+    GEN6_PREFILTEROP_LEQUAL				      = 0x4,
+    GEN6_PREFILTEROP_GREATER				      = 0x5,
+    GEN6_PREFILTEROP_NOTEQUAL				      = 0x6,
+    GEN6_PREFILTEROP_GEQUAL				      = 0x7,
+};
+
+enum gen_aniso_ratio {
     GEN6_ANISORATIO_2					      = 0x0,
     GEN6_ANISORATIO_4					      = 0x1,
     GEN6_ANISORATIO_6					      = 0x2,
@@ -127,7 +138,7 @@ enum gen_sampler_aniso_ratio {
     GEN6_ANISORATIO_16					      = 0x7,
 };
 
-enum gen_sampler_texcoord_mode {
+enum gen_texcoord_mode {
     GEN6_TEXCOORDMODE_WRAP				      = 0x0,
     GEN6_TEXCOORDMODE_MIRROR				      = 0x1,
     GEN6_TEXCOORDMODE_CLAMP				      = 0x2,
@@ -137,15 +148,15 @@ enum gen_sampler_texcoord_mode {
     GEN8_TEXCOORDMODE_HALF_BORDER			      = 0x6,
 };
 
-enum gen_sampler_key_filter {
+enum gen_key_filter {
     GEN6_KEYFILTER_KILL_ON_ANY_MATCH			      = 0x0,
     GEN6_KEYFILTER_REPLACE_BLACK			      = 0x1,
 };
 
 #define GEN6_COLOR_CALC_STATE__SIZE				6
 
-#define GEN6_CC_DW0_STENCIL0_REF__MASK				0xff000000
-#define GEN6_CC_DW0_STENCIL0_REF__SHIFT				24
+#define GEN6_CC_DW0_STENCIL_REF__MASK				0xff000000
+#define GEN6_CC_DW0_STENCIL_REF__SHIFT				24
 #define GEN6_CC_DW0_STENCIL1_REF__MASK				0x00ff0000
 #define GEN6_CC_DW0_STENCIL1_REF__SHIFT				16
 #define GEN6_CC_DW0_ROUND_DISABLE_DISABLE			(0x1 << 15)
@@ -162,14 +173,14 @@ enum gen_sampler_key_filter {
 #define GEN6_DEPTH_STENCIL_STATE__SIZE				3
 
 #define GEN6_ZS_DW0_STENCIL_TEST_ENABLE				(0x1 << 31)
-#define GEN6_ZS_DW0_STENCIL0_FUNC__MASK				0x70000000
-#define GEN6_ZS_DW0_STENCIL0_FUNC__SHIFT			28
-#define GEN6_ZS_DW0_STENCIL0_FAIL_OP__MASK			0x0e000000
-#define GEN6_ZS_DW0_STENCIL0_FAIL_OP__SHIFT			25
-#define GEN6_ZS_DW0_STENCIL0_ZFAIL_OP__MASK			0x01c00000
-#define GEN6_ZS_DW0_STENCIL0_ZFAIL_OP__SHIFT			22
-#define GEN6_ZS_DW0_STENCIL0_ZPASS_OP__MASK			0x00380000
-#define GEN6_ZS_DW0_STENCIL0_ZPASS_OP__SHIFT			19
+#define GEN6_ZS_DW0_STENCIL_FUNC__MASK				0x70000000
+#define GEN6_ZS_DW0_STENCIL_FUNC__SHIFT				28
+#define GEN6_ZS_DW0_STENCIL_FAIL_OP__MASK			0x0e000000
+#define GEN6_ZS_DW0_STENCIL_FAIL_OP__SHIFT			25
+#define GEN6_ZS_DW0_STENCIL_ZFAIL_OP__MASK			0x01c00000
+#define GEN6_ZS_DW0_STENCIL_ZFAIL_OP__SHIFT			22
+#define GEN6_ZS_DW0_STENCIL_ZPASS_OP__MASK			0x00380000
+#define GEN6_ZS_DW0_STENCIL_ZPASS_OP__SHIFT			19
 #define GEN6_ZS_DW0_STENCIL_WRITE_ENABLE			(0x1 << 18)
 #define GEN6_ZS_DW0_STENCIL1_ENABLE				(0x1 << 15)
 #define GEN6_ZS_DW0_STENCIL1_FUNC__MASK				0x00007000
@@ -181,14 +192,14 @@ enum gen_sampler_key_filter {
 #define GEN6_ZS_DW0_STENCIL1_ZPASS_OP__MASK			0x00000038
 #define GEN6_ZS_DW0_STENCIL1_ZPASS_OP__SHIFT			3
 
-#define GEN6_ZS_DW1_STENCIL0_VALUEMASK__MASK			0xff000000
-#define GEN6_ZS_DW1_STENCIL0_VALUEMASK__SHIFT			24
-#define GEN6_ZS_DW1_STENCIL0_WRITEMASK__MASK			0x00ff0000
-#define GEN6_ZS_DW1_STENCIL0_WRITEMASK__SHIFT			16
-#define GEN6_ZS_DW1_STENCIL1_VALUEMASK__MASK			0x0000ff00
-#define GEN6_ZS_DW1_STENCIL1_VALUEMASK__SHIFT			8
-#define GEN6_ZS_DW1_STENCIL1_WRITEMASK__MASK			0x000000ff
-#define GEN6_ZS_DW1_STENCIL1_WRITEMASK__SHIFT			0
+#define GEN6_ZS_DW1_STENCIL_TEST_MASK__MASK			0xff000000
+#define GEN6_ZS_DW1_STENCIL_TEST_MASK__SHIFT			24
+#define GEN6_ZS_DW1_STENCIL_WRITE_MASK__MASK			0x00ff0000
+#define GEN6_ZS_DW1_STENCIL_WRITE_MASK__SHIFT			16
+#define GEN6_ZS_DW1_STENCIL1_TEST_MASK__MASK			0x0000ff00
+#define GEN6_ZS_DW1_STENCIL1_TEST_MASK__SHIFT			8
+#define GEN6_ZS_DW1_STENCIL1_WRITE_MASK__MASK			0x000000ff
+#define GEN6_ZS_DW1_STENCIL1_WRITE_MASK__SHIFT			0
 
 #define GEN6_ZS_DW2_DEPTH_TEST_ENABLE				(0x1 << 31)
 #define GEN6_ZS_DW2_DEPTH_FUNC__MASK				0x38000000
@@ -216,10 +227,12 @@ enum gen_sampler_key_filter {
 #define GEN6_RT_DW1_ALPHA_TO_COVERAGE				(0x1 << 31)
 #define GEN6_RT_DW1_ALPHA_TO_ONE				(0x1 << 30)
 #define GEN6_RT_DW1_ALPHA_TO_COVERAGE_DITHER			(0x1 << 29)
-#define GEN6_RT_DW1_WRITE_DISABLE_A				(0x1 << 27)
-#define GEN6_RT_DW1_WRITE_DISABLE_R				(0x1 << 26)
-#define GEN6_RT_DW1_WRITE_DISABLE_G				(0x1 << 25)
-#define GEN6_RT_DW1_WRITE_DISABLE_B				(0x1 << 24)
+#define GEN6_RT_DW1_WRITE_DISABLES__MASK			0x0f000000
+#define GEN6_RT_DW1_WRITE_DISABLES__SHIFT			24
+#define GEN6_RT_DW1_WRITE_DISABLES_A				(0x1 << 27)
+#define GEN6_RT_DW1_WRITE_DISABLES_R				(0x1 << 26)
+#define GEN6_RT_DW1_WRITE_DISABLES_G				(0x1 << 25)
+#define GEN6_RT_DW1_WRITE_DISABLES_B				(0x1 << 24)
 #define GEN6_RT_DW1_LOGICOP_ENABLE				(0x1 << 22)
 #define GEN6_RT_DW1_LOGICOP_FUNC__MASK				0x003c0000
 #define GEN6_RT_DW1_LOGICOP_FUNC__SHIFT				18
@@ -267,10 +280,12 @@ enum gen_sampler_key_filter {
 #define GEN8_RT_DW0_DST_ALPHA_FACTOR__SHIFT			8
 #define GEN8_RT_DW0_ALPHA_FUNC__MASK				0x000000e0
 #define GEN8_RT_DW0_ALPHA_FUNC__SHIFT				5
-#define GEN8_RT_DW0_WRITE_DISABLE_A				(0x1 << 3)
-#define GEN8_RT_DW0_WRITE_DISABLE_R				(0x1 << 2)
-#define GEN8_RT_DW0_WRITE_DISABLE_G				(0x1 << 1)
-#define GEN8_RT_DW0_WRITE_DISABLE_B				(0x1 << 0)
+#define GEN8_RT_DW0_WRITE_DISABLES__MASK			0x0000000f
+#define GEN8_RT_DW0_WRITE_DISABLES__SHIFT			0
+#define GEN8_RT_DW0_WRITE_DISABLES_A				(0x1 << 3)
+#define GEN8_RT_DW0_WRITE_DISABLES_R				(0x1 << 2)
+#define GEN8_RT_DW0_WRITE_DISABLES_G				(0x1 << 1)
+#define GEN8_RT_DW0_WRITE_DISABLES_B				(0x1 << 0)
 
 #define GEN8_RT_DW1_LOGICOP_ENABLE				(0x1 << 31)
 #define GEN8_RT_DW1_LOGICOP_FUNC__MASK				0x78000000
@@ -419,6 +434,7 @@ enum gen_sampler_key_filter {
 #define GEN8_SAMPLER_DW0_LOD_PRECLAMP_ENABLE__SHIFT		27
 #define GEN6_SAMPLER_DW0_BASE_LOD__MASK				0x07c00000
 #define GEN6_SAMPLER_DW0_BASE_LOD__SHIFT			22
+#define GEN6_SAMPLER_DW0_BASE_LOD__RADIX			1
 #define GEN6_SAMPLER_DW0_MIP_FILTER__MASK			0x00300000
 #define GEN6_SAMPLER_DW0_MIP_FILTER__SHIFT			20
 #define GEN6_SAMPLER_DW0_MAG_FILTER__MASK			0x000e0000

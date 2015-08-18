@@ -51,7 +51,7 @@
 
 
 /** Approx number of new tokens for instructions in aa_transform_inst() */
-#define NUM_NEW_TOKENS 50
+#define NUM_NEW_TOKENS 53
 
 
 /**
@@ -137,6 +137,7 @@ struct aa_transform_context {
    uint tempsUsed;  /**< bitmask */
    int colorOutput; /**< which output is the primary color */
    uint samplersUsed;  /**< bitfield of samplers used */
+   bool hasSview;
    int freeSampler;  /** an available sampler for the pstipple */
    int maxInput, maxGeneric;  /**< max input index found */
    int colorTemp, texTemp;  /**< temp registers */
@@ -164,6 +165,9 @@ aa_transform_decl(struct tgsi_transform_context *ctx,
            i <= decl->Range.Last; i++) {
          aactx->samplersUsed |= 1 << i;
       }
+   }
+   else if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
+      aactx->hasSview = true;
    }
    else if (decl->Declaration.File == TGSI_FILE_INPUT) {
       if ((int) decl->Range.Last > aactx->maxInput)
@@ -231,6 +235,17 @@ aa_transform_prolog(struct tgsi_transform_context *ctx)
 
    /* declare new sampler */
    tgsi_transform_sampler_decl(ctx, aactx->freeSampler);
+
+   /* if the src shader has SVIEW decl's for each SAMP decl, we
+    * need to continue the trend and ensure there is a matching
+    * SVIEW for the new SAMP we just created
+    */
+   if (aactx->hasSview) {
+      tgsi_transform_sampler_view_decl(ctx,
+                                       aactx->freeSampler,
+                                       TGSI_TEXTURE_2D,
+                                       TGSI_RETURN_TYPE_FLOAT);
+   }
 
    /* declare new temp regs */
    tgsi_transform_temp_decl(ctx, aactx->texTemp);
@@ -496,7 +511,7 @@ bind_aaline_fragment_shader(struct aaline_stage *aaline)
 
 
 
-static INLINE struct aaline_stage *
+static inline struct aaline_stage *
 aaline_stage( struct draw_stage *stage )
 {
    return (struct aaline_stage *) stage;

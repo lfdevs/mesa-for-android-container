@@ -381,8 +381,7 @@ vec4_vs_visitor::emit_program_code()
          break;
 
       default:
-         _mesa_problem(ctx, "Unsupported opcode %s in vertex program\n",
-                       _mesa_opcode_string(vpi->Opcode));
+         assert(!"Unsupported opcode in vertex program");
       }
 
       /* Copy the temporary back into the actual destination register. */
@@ -395,8 +394,7 @@ vec4_vs_visitor::emit_program_code()
     * pull constants.  Do that now.
     */
    if (this->need_all_constants_in_pull_buffer) {
-      const struct gl_program_parameter_list *params =
-         vs_compile->vp->program.Base.Parameters;
+      const struct gl_program_parameter_list *params = vp->Base.Parameters;
       unsigned i;
       for (i = 0; i < params->NumParameters * 4; i++) {
          stage_prog_data->pull_param[i] =
@@ -416,8 +414,7 @@ vec4_vs_visitor::setup_vp_regs()
       vp_temp_regs[i] = src_reg(this, glsl_type::vec4_type);
 
    /* PROGRAM_STATE_VAR etc. */
-   struct gl_program_parameter_list *plist =
-      vs_compile->vp->program.Base.Parameters;
+   struct gl_program_parameter_list *plist = vp->Base.Parameters;
    for (unsigned p = 0; p < plist->NumParameters; p++) {
       unsigned components = plist->Parameters[p].Size;
 
@@ -487,8 +484,7 @@ vec4_vs_visitor::get_vp_dst_reg(const prog_dst_register &dst)
 src_reg
 vec4_vs_visitor::get_vp_src_reg(const prog_src_register &src)
 {
-   struct gl_program_parameter_list *plist =
-      vs_compile->vp->program.Base.Parameters;
+   struct gl_program_parameter_list *plist = vp->Base.Parameters;
 
    src_reg result;
 
@@ -574,15 +570,13 @@ vec4_vs_visitor::get_vp_src_reg(const prog_src_register &src)
          break;
 
       default:
-         _mesa_problem(ctx, "bad uniform src register file: %s\n",
-                       _mesa_register_file_name((gl_register_file)src.File));
+         assert(!"Bad uniform in src register file");
          return src_reg(this, glsl_type::vec4_type);
       }
       break;
 
    default:
-      _mesa_problem(ctx, "bad src register file: %s\n",
-                    _mesa_register_file_name((gl_register_file)src.File));
+      assert(!"Bad src register file");
       return src_reg(this, glsl_type::vec4_type);
    }
 

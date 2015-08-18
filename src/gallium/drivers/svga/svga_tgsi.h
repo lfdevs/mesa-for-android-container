@@ -124,7 +124,7 @@ struct svga_shader_variant
  * The real use of this information is matching vertex elements to
  * fragment shader inputs in the case where vertex shader is disabled.
  */
-static INLINE void svga_generate_vdecl_semantics( unsigned idx,
+static inline void svga_generate_vdecl_semantics( unsigned idx,
                                                   unsigned *usage,
                                                   unsigned *usage_index )
 {
@@ -140,12 +140,12 @@ static INLINE void svga_generate_vdecl_semantics( unsigned idx,
 
 
 
-static INLINE unsigned svga_vs_key_size( const struct svga_vs_compile_key *key )
+static inline unsigned svga_vs_key_size( const struct svga_vs_compile_key *key )
 {
    return sizeof *key;
 }
 
-static INLINE unsigned svga_fs_key_size( const struct svga_fs_compile_key *key )
+static inline unsigned svga_fs_key_size( const struct svga_fs_compile_key *key )
 {
    return (const char *)&key->tex[key->num_textures] - (const char *)key;
 }

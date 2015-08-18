@@ -428,8 +428,7 @@ BuildUtil::mkSysVal(SVSemantic svName, uint32_t svIndex)
 {
    Symbol *sym = new_Symbol(prog, FILE_SYSTEM_VALUE, 0);
 
-   assert(svIndex < 4 ||
-          (svName == SV_CLIP_DISTANCE || svName == SV_TESS_FACTOR));
+   assert(svIndex < 4 || svName == SV_CLIP_DISTANCE);
 
    switch (svName) {
    case SV_POSITION:
@@ -438,7 +437,9 @@ BuildUtil::mkSysVal(SVSemantic svName, uint32_t svIndex)
    case SV_POINT_SIZE:
    case SV_POINT_COORD:
    case SV_CLIP_DISTANCE:
-   case SV_TESS_FACTOR:
+   case SV_TESS_OUTER:
+   case SV_TESS_INNER:
+   case SV_TESS_COORD:
       sym->reg.type = TYPE_F32;
       break;
    default:

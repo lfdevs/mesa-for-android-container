@@ -163,7 +163,7 @@ NineAdapter9_GetAdapterIdentifier( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-static INLINE boolean
+static inline boolean
 backbuffer_format( D3DFORMAT dfmt,
                    D3DFORMAT bfmt,
                    boolean win )
@@ -220,7 +220,7 @@ NineAdapter9_CheckDeviceType( struct NineAdapter9 *This,
     return D3D_OK;
 }
 
-static INLINE boolean
+static inline boolean
 display_format( D3DFORMAT fmt,
                 boolean win )
 {

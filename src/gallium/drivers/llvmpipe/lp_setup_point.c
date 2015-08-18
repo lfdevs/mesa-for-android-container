@@ -296,7 +296,7 @@ setup_point_coefficients( struct lp_setup_context *setup,
 }
 
 
-static INLINE int
+static inline int
 subpixel_snap(float a)
 {
    return util_iround(FIXED_ONE * a);

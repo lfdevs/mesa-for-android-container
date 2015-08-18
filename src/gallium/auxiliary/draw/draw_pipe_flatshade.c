@@ -47,7 +47,7 @@ struct flat_stage
 };
 
 
-static INLINE struct flat_stage *
+static inline struct flat_stage *
 flat_stage(struct draw_stage *stage)
 {
    return (struct flat_stage *) stage;
@@ -55,7 +55,7 @@ flat_stage(struct draw_stage *stage)
 
 
 /** Copy all the constant attributes from 'src' vertex to 'dst' vertex */
-static INLINE void copy_flats( struct draw_stage *stage,
+static inline void copy_flats( struct draw_stage *stage,
                                struct vertex_header *dst,
                                const struct vertex_header *src )
 {
@@ -70,7 +70,7 @@ static INLINE void copy_flats( struct draw_stage *stage,
 
 
 /** Copy all the color attributes from src vertex to dst0 & dst1 vertices */
-static INLINE void copy_flats2( struct draw_stage *stage,
+static inline void copy_flats2( struct draw_stage *stage,
                                 struct vertex_header *dst0,
                                 struct vertex_header *dst1,
                                 const struct vertex_header *src )

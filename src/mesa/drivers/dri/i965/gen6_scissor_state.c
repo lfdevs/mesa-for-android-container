@@ -39,6 +39,8 @@ gen6_upload_scissor_state(struct brw_context *brw)
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    struct gen6_scissor_rect *scissor;
    uint32_t scissor_state_offset;
+   const unsigned int fb_width= _mesa_geometric_width(ctx->DrawBuffer);
+   const unsigned int fb_height = _mesa_geometric_height(ctx->DrawBuffer);
 
    scissor = brw_state_batch(brw, AUB_TRACE_SCISSOR_STATE,
 			     sizeof(*scissor) * ctx->Const.MaxViewports, 32,
@@ -56,7 +58,11 @@ gen6_upload_scissor_state(struct brw_context *brw)
    for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
       int bbox[4];
 
-      _mesa_scissor_bounding_box(ctx, ctx->DrawBuffer, i, bbox);
+      bbox[0] = 0;
+      bbox[1] = fb_width;
+      bbox[2] = 0;
+      bbox[3] = fb_height;
+      _mesa_intersect_scissor_bounding_box(ctx, i, bbox);
 
       if (bbox[0] == bbox[1] || bbox[2] == bbox[3]) {
          /* If the scissor was out of bounds and got clamped to 0 width/height
@@ -80,8 +86,8 @@ gen6_upload_scissor_state(struct brw_context *brw)
          /* memory: Y=0=top */
          scissor[i].xmin = bbox[0];
          scissor[i].xmax = bbox[1] - 1;
-         scissor[i].ymin = ctx->DrawBuffer->Height - bbox[3];
-         scissor[i].ymax = ctx->DrawBuffer->Height - bbox[2] - 1;
+         scissor[i].ymin = fb_height - bbox[3];
+         scissor[i].ymax = fb_height - bbox[2] - 1;
       }
    }
    BEGIN_BATCH(2);

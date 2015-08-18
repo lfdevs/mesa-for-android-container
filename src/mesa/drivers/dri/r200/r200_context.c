@@ -225,18 +225,9 @@ GLboolean r200CreateContext( gl_api api,
    rmesa->radeon.initialMaxAnisotropy = driQueryOptionf(&rmesa->radeon.optionCache,
 							"def_max_anisotropy");
 
-   if ( sPriv->drm_version.major == 1
-       && driQueryOptionb( &rmesa->radeon.optionCache, "hyperz" ) ) {
-      if ( sPriv->drm_version.minor < 13 )
-	 fprintf( stderr, "DRM version 1.%d too old to support HyperZ, "
-			  "disabling.\n", sPriv->drm_version.minor );
-      else
-	 rmesa->using_hyperz = GL_TRUE;
-   }
+   if (driQueryOptionb( &rmesa->radeon.optionCache, "hyperz"))
+      rmesa->using_hyperz = GL_TRUE;
  
-   if ( sPriv->drm_version.minor >= 15 )
-      rmesa->texmicrotile = GL_TRUE;
-
    /* Init default driver functions then plug in our R200-specific functions
     * (the texture functions are especially important)
     */

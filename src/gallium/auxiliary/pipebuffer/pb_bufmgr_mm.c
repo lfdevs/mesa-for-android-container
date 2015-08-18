@@ -65,7 +65,7 @@ struct mm_pb_manager
 };
 
 
-static INLINE struct mm_pb_manager *
+static inline struct mm_pb_manager *
 mm_pb_manager(struct pb_manager *mgr)
 {
    assert(mgr);
@@ -83,7 +83,7 @@ struct mm_buffer
 };
 
 
-static INLINE struct mm_buffer *
+static inline struct mm_buffer *
 mm_buffer(struct pb_buffer *buf)
 {
    assert(buf);

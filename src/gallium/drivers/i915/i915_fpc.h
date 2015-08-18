@@ -136,7 +136,7 @@ struct i915_fp_compile {
 
 /* One neat thing about the UREG representation:  
  */
-static INLINE int
+static inline int
 swizzle(int reg, uint x, uint y, uint z, uint w)
 {
    assert(x <= SRC_ONE);

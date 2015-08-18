@@ -126,7 +126,7 @@ out_no_vws:
    return NULL;
 }
 
-static INLINE boolean
+static inline boolean
 vmw_dri1_intersect_src_bbox(struct drm_clip_rect *dst,
 			    int dst_x,
 			    int dst_y,

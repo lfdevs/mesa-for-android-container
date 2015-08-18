@@ -30,6 +30,10 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(C_SOURCES)
 
+ifeq ($(MESA_ENABLE_LLVM),true)
+LOCAL_SRC_FILES += $(LLVM_C_FILES)
+endif
+
 LOCAL_SHARED_LIBRARIES := libdrm libdrm_radeon
 LOCAL_MODULE := libmesa_pipe_radeon
 

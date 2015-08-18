@@ -49,7 +49,7 @@ struct softpipe_screen {
    boolean use_llvm;
 };
 
-static INLINE struct softpipe_screen *
+static inline struct softpipe_screen *
 softpipe_screen( struct pipe_screen *pipe )
 {
    return (struct softpipe_screen *)pipe;

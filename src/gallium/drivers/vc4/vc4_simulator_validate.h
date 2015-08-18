@@ -43,6 +43,7 @@ struct vc4_exec_info;
 #define kfree(ptr) free(ptr)
 #define krealloc(ptr, size, args) realloc(ptr, size)
 #define roundup(x, y) align(x, y)
+#define round_up(x, y) align(x, y)
 #define max(x, y) MAX2(x, y)
 #define min(x, y) MiN2(x, y)
 #define BUG_ON(condition) assert(!(condition))
@@ -63,16 +64,28 @@ struct drm_device {
         uint32_t simulator_mem_next;
 };
 
-struct drm_gem_cma_object {
-        struct vc4_bo *bo;
+struct drm_gem_object {
+        uint32_t size;
+        struct drm_device *dev;
+};
 
-        struct {
-                uint32_t size;
-        } base;
+struct drm_gem_cma_object {
+        struct drm_gem_object base;
         uint32_t paddr;
         void *vaddr;
 };
 
+struct drm_vc4_bo {
+        struct drm_gem_cma_object base;
+        struct vc4_bo *bo;
+        struct vc4_validated_shader_info *validated_shader;
+        struct list_head unref_head;
+};
+
+static inline struct drm_vc4_bo *to_vc4_bo(struct drm_gem_object *obj)
+{
+        return (struct drm_vc4_bo *)obj;
+}
 
 struct drm_gem_cma_object *
 drm_gem_cma_create(struct drm_device *dev, size_t size);

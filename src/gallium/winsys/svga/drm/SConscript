@@ -8,7 +8,6 @@ if env['gcc'] or env['clang'] or env['icc']:
     env.Append(CCFLAGS = ['-fvisibility=hidden'])
     env.Append(CPPDEFINES = [
         'HAVE_STDINT_H', 
-        'HAVE_SYS_TYPES_H',
         '-D_FILE_OFFSET_BITS=64',
     ])
 

@@ -42,6 +42,7 @@
 #if GALLIUM_RADEONSI
 #include "radeon/radeon_winsys.h"
 #include "radeon/drm/radeon_drm_public.h"
+#include "amdgpu/drm/amdgpu_public.h"
 #include "radeonsi/si_public.h"
 #endif
 
@@ -228,7 +229,12 @@ pipe_radeonsi_create_screen(int fd)
 {
    struct radeon_winsys *rw;
 
-   rw = radeon_drm_winsys_create(fd, radeonsi_screen_create);
+   /* First, try amdgpu. */
+   rw = amdgpu_winsys_create(fd, radeonsi_screen_create);
+
+   if (!rw)
+      rw = radeon_drm_winsys_create(fd, radeonsi_screen_create);
+
    return rw ? debug_screen_wrap(rw->screen) : NULL;
 }
 #endif

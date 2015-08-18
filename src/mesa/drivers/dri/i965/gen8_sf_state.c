@@ -154,10 +154,7 @@ upload_sf(struct brw_context *brw)
        dw1 |= GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;
 
    /* _NEW_LINE */
-   float line_width = brw_get_line_width(brw);
-   uint32_t line_width_u3_7 = U_FIXED(line_width, 7);
-   if (line_width_u3_7 == 0)
-      line_width_u3_7 = 1;
+   uint32_t line_width_u3_7 = brw_get_line_width(brw);
    if (brw->gen >= 9 || brw->is_cherryview) {
       dw1 |= line_width_u3_7 << GEN9_SF_LINE_WIDTH_SHIFT;
    } else {
@@ -172,7 +169,7 @@ upload_sf(struct brw_context *brw)
    point_size = CLAMP(ctx->Point.Size, ctx->Point.MinSize, ctx->Point.MaxSize);
 
    /* Clamp to the hardware limits and convert to fixed point */
-   dw3 |= U_FIXED(CLAMP(point_size, 0.125, 255.875), 3);
+   dw3 |= U_FIXED(CLAMP(point_size, 0.125f, 255.875f), 3);
 
    /* _NEW_PROGRAM | _NEW_POINT */
    if (!(ctx->VertexProgram.PointSizeEnabled || ctx->Point._Attenuated))

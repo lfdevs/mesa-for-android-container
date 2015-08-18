@@ -65,6 +65,7 @@ struct _egl_surface
    EGLenum RenderBuffer;
    EGLenum VGAlphaFormat;
    EGLenum VGColorspace;
+   EGLenum GLColorspace;
 
    /* attributes set by eglSurfaceAttrib */
    EGLint MipmapLevel;

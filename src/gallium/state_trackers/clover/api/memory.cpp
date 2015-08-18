@@ -357,9 +357,29 @@ clCreateImage(cl_context d_ctx, cl_mem_flags flags,
               const cl_image_format *format,
               const cl_image_desc *image_desc,
               void *host_ptr, cl_int *r_errcode) {
-   // This function was added in OpenCL 1.2
-   std::cerr << "CL user error: clCreateImage() not supported by OpenCL 1.1." <<
-                std::endl;
+   CLOVER_NOT_SUPPORTED_UNTIL("1.2");
    ret_error(r_errcode, CL_INVALID_OPERATION);
    return NULL;
+}
+
+CLOVER_API cl_int
+clEnqueueFillBuffer(cl_command_queue command_queue, cl_mem buffer,
+                    const void *pattern, size_t pattern_size,
+                    size_t offset, size_t size,
+                    cl_uint num_events_in_wait_list,
+                    const cl_event *event_wait_list,
+                    cl_event *event) {
+   CLOVER_NOT_SUPPORTED_UNTIL("1.2");
+   return CL_INVALID_VALUE;
+}
+
+CLOVER_API cl_int
+clEnqueueFillImage(cl_command_queue command_queue, cl_mem image,
+                   const void *fill_color,
+                   const size_t *origin, const size_t *region,
+                   cl_uint num_events_in_wait_list,
+                   const cl_event *event_wait_list,
+                   cl_event *event) {
+   CLOVER_NOT_SUPPORTED_UNTIL("1.2");
+   return CL_INVALID_VALUE;
 }

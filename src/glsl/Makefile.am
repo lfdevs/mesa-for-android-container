@@ -19,8 +19,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-AUTOMAKE_OPTIONS = subdir-objects
-
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
@@ -242,21 +240,21 @@ dist-hook:
 	$(RM) glcpp/tests/subtest*/*.out
 
 nir/nir_builder_opcodes.h: nir/nir_opcodes.py nir/nir_builder_opcodes_h.py
-	$(MKDIR_P) nir;							\
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_builder_opcodes_h.py > $@
+	$(AM_V_at)$(MKDIR_P) nir
+	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_builder_opcodes_h.py > $@
 
 nir/nir_constant_expressions.c: nir/nir_opcodes.py nir/nir_constant_expressions.py nir/nir_constant_expressions.h
-	$(MKDIR_P) nir;							\
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_constant_expressions.py > $@
+	$(AM_V_at)$(MKDIR_P) nir
+	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_constant_expressions.py > $@
 
 nir/nir_opcodes.h: nir/nir_opcodes.py nir/nir_opcodes_h.py
-	$(MKDIR_P) nir;							\
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opcodes_h.py > $@
+	$(AM_V_at)$(MKDIR_P) nir
+	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opcodes_h.py > $@
 
 nir/nir_opcodes.c: nir/nir_opcodes.py nir/nir_opcodes_c.py
-	$(MKDIR_P) nir;							\
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opcodes_c.py > $@
+	$(AM_V_at)$(MKDIR_P) nir
+	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opcodes_c.py > $@
 
 nir/nir_opt_algebraic.c: nir/nir_opt_algebraic.py nir/nir_algebraic.py
-	$(MKDIR_P) nir;							\
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opt_algebraic.py > $@
+	$(AM_V_at)$(MKDIR_P) nir
+	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opt_algebraic.py > $@

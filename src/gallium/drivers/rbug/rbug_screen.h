@@ -60,7 +60,7 @@ struct rbug_screen
    struct rbug_list transfers;
 };
 
-static INLINE struct rbug_screen *
+static inline struct rbug_screen *
 rbug_screen(struct pipe_screen *screen)
 {
    return (struct rbug_screen *)screen;

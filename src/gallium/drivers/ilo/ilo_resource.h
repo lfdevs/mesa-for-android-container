@@ -29,8 +29,8 @@
 #define ILO_RESOURCE_H
 
 #include "core/intel_winsys.h"
-#include "core/ilo_buffer.h"
 #include "core/ilo_image.h"
+#include "core/ilo_vma.h"
 
 #include "ilo_common.h"
 #include "ilo_screen.h"
@@ -92,7 +92,10 @@ struct ilo_texture {
 
    bool imported;
 
+   enum pipe_format image_format;
    struct ilo_image image;
+   struct ilo_vma vma;
+   struct ilo_vma aux_vma;
 
    /* XXX thread-safety */
    struct ilo_texture_slice *slices[PIPE_MAX_TEXTURE_LEVELS];
@@ -103,14 +106,15 @@ struct ilo_texture {
 struct ilo_buffer_resource {
    struct pipe_resource base;
 
-   struct ilo_buffer buffer;
+   uint32_t bo_size;
+   struct ilo_vma vma;
 };
 
-static inline struct ilo_buffer *
-ilo_buffer(struct pipe_resource *res)
+static inline struct ilo_buffer_resource *
+ilo_buffer_resource(struct pipe_resource *res)
 {
-   return (res && res->target == PIPE_BUFFER) ?
-      &((struct ilo_buffer_resource *) res)->buffer : NULL;
+   return (struct ilo_buffer_resource *)
+      ((res && res->target == PIPE_BUFFER) ? res : NULL);
 }
 
 static inline struct ilo_texture *
@@ -127,13 +131,14 @@ bool
 ilo_resource_rename_bo(struct pipe_resource *res);
 
 /**
- * Return the bo of the resource.
+ * Return the VMA of the resource.
  */
-static inline struct intel_bo *
-ilo_resource_get_bo(struct pipe_resource *res)
+static inline const struct ilo_vma *
+ilo_resource_get_vma(struct pipe_resource *res)
 {
    return (res->target == PIPE_BUFFER) ?
-      ilo_buffer(res)->bo : ilo_texture(res)->image.bo;
+      &((struct ilo_buffer_resource *) res)->vma :
+      &((struct ilo_texture *) res)->vma;
 }
 
 static inline struct ilo_texture_slice *

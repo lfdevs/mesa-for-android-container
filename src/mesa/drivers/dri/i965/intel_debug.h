@@ -114,8 +114,8 @@ extern uint64_t INTEL_DEBUG;
 
 extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
 
-struct brw_context;
+struct intel_screen;
 
-extern void brw_process_intel_debug_variable(struct brw_context *brw);
+extern void brw_process_intel_debug_variable(struct intel_screen *);
 
 extern bool brw_env_var_as_boolean(const char *var_name, bool default_value);

@@ -189,7 +189,7 @@ intelTexImage(struct gl_context * ctx,
               const struct gl_pixelstore_attrib *unpack)
 {
    DBG("%s target %s level %d %dx%dx%d\n", __func__,
-       _mesa_lookup_enum_by_nr(texImage->TexObject->Target),
+       _mesa_enum_to_string(texImage->TexObject->Target),
        texImage->Level, texImage->Width, texImage->Height, texImage->Depth);
 
    /* Attempt to use the blitter for PBO image uploads.

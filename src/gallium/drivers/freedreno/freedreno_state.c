@@ -300,6 +300,67 @@ fd_vertex_state_bind(struct pipe_context *pctx, void *hwcso)
 	ctx->dirty |= FD_DIRTY_VTXSTATE;
 }
 
+static struct pipe_stream_output_target *
+fd_create_stream_output_target(struct pipe_context *pctx,
+		struct pipe_resource *prsc, unsigned buffer_offset,
+		unsigned buffer_size)
+{
+	struct pipe_stream_output_target *target;
+
+	target = CALLOC_STRUCT(pipe_stream_output_target);
+	if (!target)
+		return NULL;
+
+	pipe_reference_init(&target->reference, 1);
+	pipe_resource_reference(&target->buffer, prsc);
+
+	target->context = pctx;
+	target->buffer_offset = buffer_offset;
+	target->buffer_size = buffer_size;
+
+	return target;
+}
+
+static void
+fd_stream_output_target_destroy(struct pipe_context *pctx,
+		struct pipe_stream_output_target *target)
+{
+	pipe_resource_reference(&target->buffer, NULL);
+	FREE(target);
+}
+
+static void
+fd_set_stream_output_targets(struct pipe_context *pctx,
+		unsigned num_targets, struct pipe_stream_output_target **targets,
+		const unsigned *offsets)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd_streamout_stateobj *so = &ctx->streamout;
+	unsigned i;
+
+	debug_assert(num_targets <= ARRAY_SIZE(so->targets));
+
+	for (i = 0; i < num_targets; i++) {
+		boolean changed = targets[i] != so->targets[i];
+		boolean append = (offsets[i] == (unsigned)-1);
+
+		if (!changed && append)
+			continue;
+
+		so->offsets[i] = 0;
+
+		pipe_so_target_reference(&so->targets[i], targets[i]);
+	}
+
+	for (; i < so->num_targets; i++) {
+		pipe_so_target_reference(&so->targets[i], NULL);
+	}
+
+	so->num_targets = num_targets;
+
+	ctx->dirty |= FD_DIRTY_STREAMOUT;
+}
+
 void
 fd_state_init(struct pipe_context *pctx)
 {
@@ -328,4 +389,8 @@ fd_state_init(struct pipe_context *pctx)
 	pctx->create_vertex_elements_state = fd_vertex_state_create;
 	pctx->delete_vertex_elements_state = fd_vertex_state_delete;
 	pctx->bind_vertex_elements_state = fd_vertex_state_bind;
+
+	pctx->create_stream_output_target = fd_create_stream_output_target;
+	pctx->stream_output_target_destroy = fd_stream_output_target_destroy;
+	pctx->set_stream_output_targets = fd_set_stream_output_targets;
 }

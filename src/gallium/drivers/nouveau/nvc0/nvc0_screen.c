@@ -44,16 +44,16 @@ nvc0_screen_is_format_supported(struct pipe_screen *pscreen,
                                 unsigned bindings)
 {
    if (sample_count > 8)
-      return FALSE;
+      return false;
    if (!(0x117 & (1 << sample_count))) /* 0, 1, 2, 4 or 8 */
-      return FALSE;
+      return false;
 
    if (!util_format_is_supported(format, bindings))
-      return FALSE;
+      return false;
 
    if ((bindings & PIPE_BIND_SAMPLER_VIEW) && (target != PIPE_BUFFER))
       if (util_format_get_blocksizebits(format) == 3 * 32)
-         return FALSE;
+         return false;
 
    /* transfers & shared are always supported */
    bindings &= ~(PIPE_BIND_TRANSFER_READ |
@@ -120,6 +120,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+      return 30;
 
    /* supported caps */
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
@@ -163,7 +165,6 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_USER_CONSTANT_BUFFERS:
    case PIPE_CAP_USER_INDEX_BUFFERS:
    case PIPE_CAP_USER_VERTEX_BUFFERS:
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
    case PIPE_CAP_SAMPLE_SHADING:
    case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
@@ -174,11 +175,16 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CLIP_HALFZ:
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+   case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+   case PIPE_CAP_DEPTH_BOUNDS_TEST:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
       return (class_3d >= NVE4_3D_CLASS) ? 1 : 0;
    case PIPE_CAP_COMPUTE:
       return (class_3d == NVE4_3D_CLASS) ? 1 : 0;
+   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+      return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
 
    /* unsupported caps */
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
@@ -226,12 +232,13 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 
    switch (shader) {
    case PIPE_SHADER_VERTEX:
-      /*
-   case PIPE_SHADER_TESSELLATION_CONTROL:
-   case PIPE_SHADER_TESSELLATION_EVALUATION:
-      */
    case PIPE_SHADER_GEOMETRY:
    case PIPE_SHADER_FRAGMENT:
+      break;
+   case PIPE_SHADER_TESS_CTRL:
+   case PIPE_SHADER_TESS_EVAL:
+      if (class_3d >= GM107_3D_CLASS)
+         return 0;
       break;
    case PIPE_SHADER_COMPUTE:
       if (class_3d != NVE4_3D_CLASS)
@@ -297,6 +304,7 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       return 1;
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+   case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return 0;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       return 16; /* would be 32 in linked (OpenGL-style) mode */
@@ -340,6 +348,7 @@ nvc0_screen_get_compute_param(struct pipe_screen *pscreen,
                               enum pipe_compute_cap param, void *data)
 {
    uint64_t *data64 = (uint64_t *)data;
+   uint32_t *data32 = (uint32_t *)data;
    const uint16_t obj_class = nvc0_screen(pscreen)->compute->oclass;
 
    switch (param) {
@@ -371,6 +380,9 @@ nvc0_screen_get_compute_param(struct pipe_screen *pscreen,
    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE: /* c[], arbitrary limit */
       data64[0] = 4096;
       return 8;
+   case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
+      data32[0] = 32;
+      return 4;
    default:
       return 0;
    }
@@ -549,7 +561,7 @@ nvc0_screen_init_compute(struct nvc0_screen *screen)
       /* Using COMPUTE has weird effects on 3D state, we need to
        * investigate this further before enabling it by default.
        */
-      if (debug_get_bool_option("NVC0_COMPUTE", FALSE))
+      if (debug_get_bool_option("NVC0_COMPUTE", false))
          return nvc0_screen_compute_setup(screen, screen->base.pushbuf);
       return 0;
    case 0xe0:
@@ -563,7 +575,7 @@ nvc0_screen_init_compute(struct nvc0_screen *screen)
    }
 }
 
-boolean
+bool
 nvc0_screen_resize_tls_area(struct nvc0_screen *screen,
                             uint32_t lpos, uint32_t lneg, uint32_t cstack)
 {
@@ -573,7 +585,7 @@ nvc0_screen_resize_tls_area(struct nvc0_screen *screen,
 
    if (size >= (1 << 20)) {
       NOUVEAU_ERR("requested TLS size too large: 0x%"PRIx64"\n", size);
-      return FALSE;
+      return false;
    }
 
    size *= (screen->base.device->chipset >= 0xe0) ? 64 : 48; /* max warps */
@@ -582,15 +594,15 @@ nvc0_screen_resize_tls_area(struct nvc0_screen *screen,
 
    size = align(size, 1 << 17);
 
-   ret = nouveau_bo_new(screen->base.device, NOUVEAU_BO_VRAM, 1 << 17, size,
+   ret = nouveau_bo_new(screen->base.device, NV_VRAM_DOMAIN(&screen->base), 1 << 17, size,
                         NULL, &bo);
    if (ret) {
       NOUVEAU_ERR("failed to allocate TLS area, size: 0x%"PRIx64"\n", size);
-      return FALSE;
+      return false;
    }
    nouveau_bo_ref(NULL, &screen->tls);
    screen->tls = bo;
-   return TRUE;
+   return true;
 }
 
 #define FAIL_SCREEN_INIT(str, err)                    \
@@ -609,6 +621,7 @@ nvc0_screen_create(struct nouveau_device *dev)
    struct nouveau_pushbuf *push;
    uint64_t value;
    uint32_t obj_class;
+   uint32_t flags;
    int ret;
    unsigned i;
 
@@ -645,6 +658,11 @@ nvc0_screen_create(struct nouveau_device *dev)
    screen->base.sysmem_bindings |=
       PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_INDEX_BUFFER;
 
+   if (screen->base.vram_domain & NOUVEAU_BO_GART) {
+      screen->base.sysmem_bindings |= screen->base.vidmem_bindings;
+      screen->base.vidmem_bindings = 0;
+   }
+
    pscreen->destroy = nvc0_screen_destroy;
    pscreen->context_create = nvc0_create;
    pscreen->is_format_supported = nvc0_screen_is_format_supported;
@@ -659,8 +677,11 @@ nvc0_screen_create(struct nouveau_device *dev)
    screen->base.base.get_video_param = nouveau_vp3_screen_get_video_param;
    screen->base.base.is_video_format_supported = nouveau_vp3_screen_video_supported;
 
-   ret = nouveau_bo_new(dev, NOUVEAU_BO_GART | NOUVEAU_BO_MAP, 0, 4096, NULL,
-                        &screen->fence.bo);
+   flags = NOUVEAU_BO_GART | NOUVEAU_BO_MAP;
+   if (dev->drm_version >= 0x01000202)
+      flags |= NOUVEAU_BO_COHERENT;
+
+   ret = nouveau_bo_new(dev, flags, 0, 4096, NULL, &screen->fence.bo);
    if (ret)
       goto fail;
    nouveau_bo_map(screen->fence.bo, 0, NULL);
@@ -775,7 +796,7 @@ nvc0_screen_create(struct nouveau_device *dev)
    BEGIN_NVC0(push, NVC0_3D(COND_MODE), 1);
    PUSH_DATA (push, NVC0_3D_COND_MODE_ALWAYS);
 
-   if (debug_get_bool_option("NOUVEAU_SHADER_WATCHDOG", TRUE)) {
+   if (debug_get_bool_option("NOUVEAU_SHADER_WATCHDOG", true)) {
       /* kill shaders after about 1 second (at 100 MHz) */
       BEGIN_NVC0(push, NVC0_3D(WATCHDOG_TIMER), 1);
       PUSH_DATA (push, 0x17);
@@ -823,7 +844,7 @@ nvc0_screen_create(struct nouveau_device *dev)
 
    nvc0_magic_3d_init(push, screen->eng3d->oclass);
 
-   ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 1 << 17, 1 << 20, NULL,
+   ret = nouveau_bo_new(dev, NV_VRAM_DOMAIN(&screen->base), 1 << 17, 1 << 20, NULL,
                         &screen->text);
    if (ret)
       goto fail;
@@ -833,12 +854,12 @@ nvc0_screen_create(struct nouveau_device *dev)
     */
    nouveau_heap_init(&screen->text_heap, 0, (1 << 20) - 0x100);
 
-   ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 1 << 12, 6 << 16, NULL,
+   ret = nouveau_bo_new(dev, NV_VRAM_DOMAIN(&screen->base), 1 << 12, 6 << 16, NULL,
                         &screen->uniform_bo);
    if (ret)
       goto fail;
 
-   PUSH_REFN (push, screen->uniform_bo, NOUVEAU_BO_VRAM | NOUVEAU_BO_WR);
+   PUSH_REFN (push, screen->uniform_bo, NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_WR);
 
    for (i = 0; i < 5; ++i) {
       /* TIC and TSC entries for each unit (nve4+ only) */
@@ -909,7 +930,7 @@ nvc0_screen_create(struct nouveau_device *dev)
    PUSH_DATA (push, 0);
 
    if (screen->eng3d->oclass < GM107_3D_CLASS) {
-      ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 1 << 17, 1 << 20, NULL,
+      ret = nouveau_bo_new(dev, NV_VRAM_DOMAIN(&screen->base), 1 << 17, 1 << 20, NULL,
                            &screen->poly_cache);
       if (ret)
          goto fail;
@@ -920,7 +941,7 @@ nvc0_screen_create(struct nouveau_device *dev)
       PUSH_DATA (push, 3);
    }
 
-   ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 1 << 17, 1 << 17, NULL,
+   ret = nouveau_bo_new(dev, NV_VRAM_DOMAIN(&screen->base), 1 << 17, 1 << 17, NULL,
                         &screen->txc);
    if (ret)
       goto fail;
@@ -1006,6 +1027,7 @@ nvc0_screen_create(struct nouveau_device *dev)
    PUSH_DATA (push, 0x20);
    BEGIN_NVC0(push, NVC0_3D(SP_SELECT(0)), 1);
    PUSH_DATA (push, 0x00);
+   screen->save_state.patch_vertices = 3;
 
    BEGIN_NVC0(push, NVC0_3D(POINT_COORD_REPLACE), 1);
    PUSH_DATA (push, 0);
@@ -1025,7 +1047,7 @@ nvc0_screen_create(struct nouveau_device *dev)
    if (!nvc0_blitter_create(screen))
       goto fail;
 
-   nouveau_fence_new(&screen->base, &screen->base.fence.current, FALSE);
+   nouveau_fence_new(&screen->base, &screen->base.fence.current, false);
 
    return pscreen;
 

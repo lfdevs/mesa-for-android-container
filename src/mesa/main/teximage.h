@@ -200,15 +200,6 @@ _mesa_copy_texture_sub_image(struct gl_context *ctx, GLuint dims,
                              const char *caller);
 
 extern void
-_mesa_texture_image_multisample(struct gl_context *ctx, GLuint dims,
-                                struct gl_texture_object *texObj,
-                                GLenum target, GLsizei samples,
-                                GLint internalformat, GLsizei width,
-                                GLsizei height, GLsizei depth,
-                                GLboolean fixedsamplelocations,
-                                GLboolean immutable, const char *func);
-
-extern void
 _mesa_texture_buffer_range(struct gl_context *ctx,
                            struct gl_texture_object *texObj,
                            GLenum internalFormat,

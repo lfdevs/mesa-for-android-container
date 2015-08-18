@@ -32,15 +32,115 @@
 #include "glsl/glsl_parser_extras.h"
 #include "main/shaderapi.h"
 
+static void
+shader_debug_log_mesa(void *data, const char *fmt, ...)
+{
+   struct brw_context *brw = (struct brw_context *)data;
+   va_list args;
+
+   va_start(args, fmt);
+   GLuint msg_id = 0;
+   _mesa_gl_vdebug(&brw->ctx, &msg_id,
+                   MESA_DEBUG_SOURCE_SHADER_COMPILER,
+                   MESA_DEBUG_TYPE_OTHER,
+                   MESA_DEBUG_SEVERITY_NOTIFICATION, fmt, args);
+   va_end(args);
+}
+
+static void
+shader_perf_log_mesa(void *data, const char *fmt, ...)
+{
+   struct brw_context *brw = (struct brw_context *)data;
+
+   va_list args;
+   va_start(args, fmt);
+
+   if (unlikely(INTEL_DEBUG & DEBUG_PERF)) {
+      va_list args_copy;
+      va_copy(args_copy, args);
+      vfprintf(stderr, fmt, args_copy);
+      va_end(args_copy);
+   }
+
+   if (brw->perf_debug) {
+      GLuint msg_id = 0;
+      _mesa_gl_vdebug(&brw->ctx, &msg_id,
+                      MESA_DEBUG_SOURCE_SHADER_COMPILER,
+                      MESA_DEBUG_TYPE_PERFORMANCE,
+                      MESA_DEBUG_SEVERITY_MEDIUM, fmt, args);
+   }
+   va_end(args);
+}
+
 struct brw_compiler *
 brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
 {
    struct brw_compiler *compiler = rzalloc(mem_ctx, struct brw_compiler);
 
    compiler->devinfo = devinfo;
+   compiler->shader_debug_log = shader_debug_log_mesa;
+   compiler->shader_perf_log = shader_perf_log_mesa;
 
    brw_fs_alloc_reg_sets(compiler);
    brw_vec4_alloc_reg_set(compiler);
+
+   if (devinfo->gen >= 8 && !(INTEL_DEBUG & DEBUG_VEC4VS))
+      compiler->scalar_vs = true;
+
+   nir_shader_compiler_options *nir_options =
+      rzalloc(compiler, nir_shader_compiler_options);
+   nir_options->native_integers = true;
+   /* In order to help allow for better CSE at the NIR level we tell NIR
+    * to split all ffma instructions during opt_algebraic and we then
+    * re-combine them as a later step.
+    */
+   nir_options->lower_ffma = true;
+   nir_options->lower_sub = true;
+
+   /* We want the GLSL compiler to emit code that uses condition codes */
+   for (int i = 0; i < MESA_SHADER_STAGES; i++) {
+      compiler->glsl_compiler_options[i].MaxUnrollIterations = 32;
+      compiler->glsl_compiler_options[i].MaxIfDepth =
+         devinfo->gen < 6 ? 16 : UINT_MAX;
+
+      compiler->glsl_compiler_options[i].EmitCondCodes = true;
+      compiler->glsl_compiler_options[i].EmitNoNoise = true;
+      compiler->glsl_compiler_options[i].EmitNoMainReturn = true;
+      compiler->glsl_compiler_options[i].EmitNoIndirectInput = true;
+      compiler->glsl_compiler_options[i].EmitNoIndirectOutput =
+	 (i == MESA_SHADER_FRAGMENT);
+      compiler->glsl_compiler_options[i].EmitNoIndirectTemp =
+	 (i == MESA_SHADER_FRAGMENT);
+      compiler->glsl_compiler_options[i].EmitNoIndirectUniform = false;
+      compiler->glsl_compiler_options[i].LowerClipDistance = true;
+
+      /* !ARB_gpu_shader5 */
+      if (devinfo->gen < 7)
+         compiler->glsl_compiler_options[i].EmitNoIndirectSampler = true;
+   }
+
+   compiler->glsl_compiler_options[MESA_SHADER_VERTEX].OptimizeForAOS = true;
+   compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].OptimizeForAOS = true;
+
+   if (compiler->scalar_vs || brw_env_var_as_boolean("INTEL_USE_NIR", false)) {
+      if (compiler->scalar_vs) {
+         /* If we're using the scalar backend for vertex shaders, we need to
+          * configure these accordingly.
+          */
+         compiler->glsl_compiler_options[MESA_SHADER_VERTEX].EmitNoIndirectOutput = true;
+         compiler->glsl_compiler_options[MESA_SHADER_VERTEX].EmitNoIndirectTemp = true;
+         compiler->glsl_compiler_options[MESA_SHADER_VERTEX].OptimizeForAOS = false;
+      }
+
+      compiler->glsl_compiler_options[MESA_SHADER_VERTEX].NirOptions = nir_options;
+   }
+
+   if (brw_env_var_as_boolean("INTEL_USE_NIR", false)) {
+      compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].NirOptions = nir_options;
+   }
+
+   compiler->glsl_compiler_options[MESA_SHADER_FRAGMENT].NirOptions = nir_options;
+   compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions = nir_options;
 
    return compiler;
 }
@@ -97,7 +197,7 @@ is_scalar_shader_stage(struct brw_context *brw, int stage)
    case MESA_SHADER_FRAGMENT:
       return true;
    case MESA_SHADER_VERTEX:
-      return brw->scalar_vs;
+      return brw->intelScreen->compiler->scalar_vs;
    default:
       return false;
    }
@@ -139,7 +239,8 @@ brw_lower_packing_builtins(struct brw_context *brw,
 }
 
 static void
-process_glsl_ir(struct brw_context *brw,
+process_glsl_ir(gl_shader_stage stage,
+                struct brw_context *brw,
                 struct gl_shader_program *shader_prog,
                 struct gl_shader *shader)
 {
@@ -165,7 +266,9 @@ process_glsl_ir(struct brw_context *brw,
                       EXP_TO_EXP2 |
                       LOG_TO_LOG2 |
                       bitfield_insert |
-                      LDEXP_TO_ARITH);
+                      LDEXP_TO_ARITH |
+                      CARRY_TO_ARITH |
+                      BORROW_TO_ARITH);
 
    /* Pre-gen6 HW can only nest if-statements 16 deep.  Beyond this,
     * if-statements need to be flattened.
@@ -185,15 +288,17 @@ process_glsl_ir(struct brw_context *brw,
    lower_quadop_vector(shader->ir, false);
 
    bool lowered_variable_indexing =
-      lower_variable_index_to_cond_assign(shader->ir,
+      lower_variable_index_to_cond_assign((gl_shader_stage)stage,
+                                          shader->ir,
                                           options->EmitNoIndirectInput,
                                           options->EmitNoIndirectOutput,
                                           options->EmitNoIndirectTemp,
                                           options->EmitNoIndirectUniform);
 
    if (unlikely(brw->perf_debug && lowered_variable_indexing)) {
-      perf_debug("Unsupported form of variable indexing in FS; falling "
-                 "back to very inefficient code generation\n");
+      perf_debug("Unsupported form of variable indexing in %s; falling "
+                 "back to very inefficient code generation\n",
+                 _mesa_shader_stage_to_abbrev(shader->Stage));
    }
 
    lower_ubo_reference(shader, shader->ir);
@@ -218,7 +323,7 @@ process_glsl_ir(struct brw_context *brw,
    } while (progress);
 
    if (options->NirOptions != NULL)
-      lower_output_reads(shader->ir);
+      lower_output_reads(stage, shader->ir);
 
    validate_ir_tree(shader->ir);
 
@@ -262,7 +367,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
       _mesa_copy_linked_program_data((gl_shader_stage) stage, shProg, prog);
 
-      process_glsl_ir(brw, shProg, shader);
+      process_glsl_ir((gl_shader_stage) stage, brw, shProg, shader);
 
       /* Make a pass over the IR to add state references for any built-in
        * uniforms that are used.  This has to be done now (during linking).
@@ -297,8 +402,10 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
       brw_add_texrect_params(prog);
 
-      if (options->NirOptions)
-         prog->nir = brw_create_nir(brw, shProg, prog, (gl_shader_stage) stage);
+      if (options->NirOptions) {
+         prog->nir = brw_create_nir(brw, shProg, prog, (gl_shader_stage) stage,
+                                    is_scalar_shader_stage(brw, stage));
+      }
 
       _mesa_reference_program(ctx, &prog, NULL);
    }
@@ -332,6 +439,7 @@ brw_type_for_base_type(const struct glsl_type *type)
       return BRW_REGISTER_TYPE_F;
    case GLSL_TYPE_INT:
    case GLSL_TYPE_BOOL:
+   case GLSL_TYPE_SUBROUTINE:
       return BRW_REGISTER_TYPE_D;
    case GLSL_TYPE_UINT:
       return BRW_REGISTER_TYPE_UD;
@@ -437,6 +545,8 @@ brw_instruction_name(enum opcode op)
       return opcode_descs[op].name;
    case FS_OPCODE_FB_WRITE:
       return "fb_write";
+   case FS_OPCODE_FB_WRITE_LOGICAL:
+      return "fb_write_logical";
    case FS_OPCODE_BLORP_FB_WRITE:
       return "blorp_fb_write";
    case FS_OPCODE_REP_FB_WRITE:
@@ -465,43 +575,80 @@ brw_instruction_name(enum opcode op)
 
    case SHADER_OPCODE_TEX:
       return "tex";
+   case SHADER_OPCODE_TEX_LOGICAL:
+      return "tex_logical";
    case SHADER_OPCODE_TXD:
       return "txd";
+   case SHADER_OPCODE_TXD_LOGICAL:
+      return "txd_logical";
    case SHADER_OPCODE_TXF:
       return "txf";
+   case SHADER_OPCODE_TXF_LOGICAL:
+      return "txf_logical";
    case SHADER_OPCODE_TXL:
       return "txl";
+   case SHADER_OPCODE_TXL_LOGICAL:
+      return "txl_logical";
    case SHADER_OPCODE_TXS:
       return "txs";
+   case SHADER_OPCODE_TXS_LOGICAL:
+      return "txs_logical";
    case FS_OPCODE_TXB:
       return "txb";
+   case FS_OPCODE_TXB_LOGICAL:
+      return "txb_logical";
    case SHADER_OPCODE_TXF_CMS:
       return "txf_cms";
+   case SHADER_OPCODE_TXF_CMS_LOGICAL:
+      return "txf_cms_logical";
    case SHADER_OPCODE_TXF_UMS:
       return "txf_ums";
+   case SHADER_OPCODE_TXF_UMS_LOGICAL:
+      return "txf_ums_logical";
    case SHADER_OPCODE_TXF_MCS:
       return "txf_mcs";
+   case SHADER_OPCODE_TXF_MCS_LOGICAL:
+      return "txf_mcs_logical";
    case SHADER_OPCODE_LOD:
       return "lod";
+   case SHADER_OPCODE_LOD_LOGICAL:
+      return "lod_logical";
    case SHADER_OPCODE_TG4:
       return "tg4";
+   case SHADER_OPCODE_TG4_LOGICAL:
+      return "tg4_logical";
    case SHADER_OPCODE_TG4_OFFSET:
       return "tg4_offset";
+   case SHADER_OPCODE_TG4_OFFSET_LOGICAL:
+      return "tg4_offset_logical";
+
    case SHADER_OPCODE_SHADER_TIME_ADD:
       return "shader_time_add";
 
    case SHADER_OPCODE_UNTYPED_ATOMIC:
       return "untyped_atomic";
+   case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
+      return "untyped_atomic_logical";
    case SHADER_OPCODE_UNTYPED_SURFACE_READ:
       return "untyped_surface_read";
+   case SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL:
+      return "untyped_surface_read_logical";
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
       return "untyped_surface_write";
+   case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:
+      return "untyped_surface_write_logical";
    case SHADER_OPCODE_TYPED_ATOMIC:
       return "typed_atomic";
+   case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:
+      return "typed_atomic_logical";
    case SHADER_OPCODE_TYPED_SURFACE_READ:
       return "typed_surface_read";
+   case SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL:
+      return "typed_surface_read_logical";
    case SHADER_OPCODE_TYPED_SURFACE_WRITE:
       return "typed_surface_write";
+   case SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL:
+      return "typed_surface_write_logical";
    case SHADER_OPCODE_MEMORY_FENCE:
       return "memory_fence";
 
@@ -562,8 +709,6 @@ brw_instruction_name(enum opcode op)
    case FS_OPCODE_DISCARD_JUMP:
       return "discard_jump";
 
-   case FS_OPCODE_SET_OMASK:
-      return "set_omask";
    case FS_OPCODE_SET_SAMPLE_ID:
       return "set_sample_id";
    case FS_OPCODE_SET_SIMD4X2_OFFSET:
@@ -631,6 +776,10 @@ brw_instruction_name(enum opcode op)
       return "gs_ff_sync_set_primitives";
    case CS_OPCODE_CS_TERMINATE:
       return "cs_terminate";
+   case SHADER_OPCODE_BARRIER:
+      return "barrier";
+   case SHADER_OPCODE_MULH:
+      return "mulh";
    }
 
    unreachable("not reached");
@@ -754,19 +903,22 @@ brw_abs_immediate(enum brw_reg_type type, struct brw_reg *reg)
    return false;
 }
 
-backend_visitor::backend_visitor(struct brw_context *brw,
-                                 struct gl_shader_program *shader_prog,
-                                 struct gl_program *prog,
-                                 struct brw_stage_prog_data *stage_prog_data,
-                                 gl_shader_stage stage)
-   : brw(brw),
-     devinfo(brw->intelScreen->devinfo),
-     ctx(&brw->ctx),
+backend_shader::backend_shader(const struct brw_compiler *compiler,
+                               void *log_data,
+                               void *mem_ctx,
+                               struct gl_shader_program *shader_prog,
+                               struct gl_program *prog,
+                               struct brw_stage_prog_data *stage_prog_data,
+                               gl_shader_stage stage)
+   : compiler(compiler),
+     log_data(log_data),
+     devinfo(compiler->devinfo),
      shader(shader_prog ?
         (struct brw_shader *)shader_prog->_LinkedShaders[stage] : NULL),
      shader_prog(shader_prog),
      prog(prog),
      stage_prog_data(stage_prog_data),
+     mem_ctx(mem_ctx),
      cfg(NULL),
      stage(stage)
 {
@@ -846,6 +998,7 @@ backend_instruction::is_commutative() const
    case BRW_OPCODE_XOR:
    case BRW_OPCODE_ADD:
    case BRW_OPCODE_MUL:
+   case SHADER_OPCODE_MULH:
       return true;
    case BRW_OPCODE_SEL:
       /* MIN and MAX are commutative. */
@@ -949,11 +1102,11 @@ backend_instruction::can_do_saturate() const
    case BRW_OPCODE_LINE:
    case BRW_OPCODE_LRP:
    case BRW_OPCODE_MAC:
-   case BRW_OPCODE_MACH:
    case BRW_OPCODE_MAD:
    case BRW_OPCODE_MATH:
    case BRW_OPCODE_MOV:
    case BRW_OPCODE_MUL:
+   case SHADER_OPCODE_MULH:
    case BRW_OPCODE_PLN:
    case BRW_OPCODE_RNDD:
    case BRW_OPCODE_RNDE:
@@ -1052,13 +1205,18 @@ backend_instruction::has_side_effects() const
 {
    switch (opcode) {
    case SHADER_OPCODE_UNTYPED_ATOMIC:
+   case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
    case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
+   case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:
    case SHADER_OPCODE_TYPED_ATOMIC:
+   case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:
    case SHADER_OPCODE_TYPED_SURFACE_WRITE:
+   case SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL:
    case SHADER_OPCODE_MEMORY_FENCE:
    case SHADER_OPCODE_URB_WRITE_SIMD8:
    case FS_OPCODE_FB_WRITE:
+   case SHADER_OPCODE_BARRIER:
       return true;
    default:
       return false;
@@ -1147,13 +1305,13 @@ backend_instruction::remove(bblock_t *block)
 }
 
 void
-backend_visitor::dump_instructions()
+backend_shader::dump_instructions()
 {
    dump_instructions(NULL);
 }
 
 void
-backend_visitor::dump_instructions(const char *name)
+backend_shader::dump_instructions(const char *name)
 {
    FILE *file = stderr;
    if (name && geteuid() != 0) {
@@ -1182,7 +1340,7 @@ backend_visitor::dump_instructions(const char *name)
 }
 
 void
-backend_visitor::calculate_cfg()
+backend_shader::calculate_cfg()
 {
    if (this->cfg)
       return;
@@ -1190,7 +1348,7 @@ backend_visitor::calculate_cfg()
 }
 
 void
-backend_visitor::invalidate_cfg()
+backend_shader::invalidate_cfg()
 {
    ralloc_free(this->cfg);
    this->cfg = NULL;
@@ -1205,7 +1363,7 @@ backend_visitor::invalidate_cfg()
  * trigger some of our asserts that surface indices are < BRW_MAX_SURFACES.
  */
 void
-backend_visitor::assign_common_binding_table_offsets(uint32_t next_binding_table_offset)
+backend_shader::assign_common_binding_table_offsets(uint32_t next_binding_table_offset)
 {
    int num_textures = _mesa_fls(prog->SamplersUsed);
 
@@ -1259,4 +1417,35 @@ backend_visitor::assign_common_binding_table_offsets(uint32_t next_binding_table
    assert(next_binding_table_offset <= BRW_MAX_SURFACES);
 
    /* prog_data->base.binding_table.size will be set by brw_mark_surface_used. */
+}
+
+void
+backend_shader::setup_image_uniform_values(const gl_uniform_storage *storage)
+{
+   const unsigned stage = _mesa_program_enum_to_shader_stage(prog->Target);
+
+   for (unsigned i = 0; i < MAX2(storage->array_elements, 1); i++) {
+      const unsigned image_idx = storage->image[stage].index + i;
+      const brw_image_param *param = &stage_prog_data->image_param[image_idx];
+
+      /* Upload the brw_image_param structure.  The order is expected to match
+       * the BRW_IMAGE_PARAM_*_OFFSET defines.
+       */
+      setup_vector_uniform_values(
+         (const gl_constant_value *)&param->surface_idx, 1);
+      setup_vector_uniform_values(
+         (const gl_constant_value *)param->offset, 2);
+      setup_vector_uniform_values(
+         (const gl_constant_value *)param->size, 3);
+      setup_vector_uniform_values(
+         (const gl_constant_value *)param->stride, 4);
+      setup_vector_uniform_values(
+         (const gl_constant_value *)param->tiling, 3);
+      setup_vector_uniform_values(
+         (const gl_constant_value *)param->swizzling, 2);
+
+      brw_mark_surface_used(
+         stage_prog_data,
+         stage_prog_data->binding_table.image_start + image_idx);
+   }
 }

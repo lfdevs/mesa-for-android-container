@@ -448,8 +448,8 @@ struct nvfx_insn
 	struct nvfx_src src[3];
 };
 
-static INLINE struct nvfx_insn
-nvfx_insn(boolean sat, unsigned op, int unit, struct nvfx_reg dst, unsigned mask, struct nvfx_src s0, struct nvfx_src s1, struct nvfx_src s2)
+static inline struct nvfx_insn
+nvfx_insn(bool sat, unsigned op, int unit, struct nvfx_reg dst, unsigned mask, struct nvfx_src s0, struct nvfx_src s1, struct nvfx_src s2)
 {
 	struct nvfx_insn insn = {
 		.op = op,
@@ -468,7 +468,7 @@ nvfx_insn(boolean sat, unsigned op, int unit, struct nvfx_reg dst, unsigned mask
 	return insn;
 }
 
-static INLINE struct nvfx_reg
+static inline struct nvfx_reg
 nvfx_reg(int type, int index)
 {
 	struct nvfx_reg temp = {
@@ -478,7 +478,7 @@ nvfx_reg(int type, int index)
 	return temp;
 }
 
-static INLINE struct nvfx_src
+static inline struct nvfx_src
 nvfx_src(struct nvfx_reg reg)
 {
 	struct nvfx_src temp = {
@@ -491,7 +491,7 @@ nvfx_src(struct nvfx_reg reg)
 	return temp;
 }
 
-static INLINE struct nvfx_src
+static inline struct nvfx_src
 nvfx_src_swz(struct nvfx_src src, int x, int y, int z, int w)
 {
 	struct nvfx_src dst = src;
@@ -503,14 +503,14 @@ nvfx_src_swz(struct nvfx_src src, int x, int y, int z, int w)
 	return dst;
 }
 
-static INLINE struct nvfx_src
+static inline struct nvfx_src
 nvfx_src_neg(struct nvfx_src src)
 {
 	src.negate = !src.negate;
 	return src;
 }
 
-static INLINE struct nvfx_src
+static inline struct nvfx_src
 nvfx_src_abs(struct nvfx_src src)
 {
 	src.abs = 1;
@@ -529,7 +529,7 @@ struct nv30_vertprog;
 void
 _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp);
 
-boolean
+bool
 _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp);
 
 #endif

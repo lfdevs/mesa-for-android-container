@@ -197,6 +197,9 @@ _eglFlattenArray(_EGLArray *array, void *buffer, EGLint elem_size, EGLint size,
 
    count = array->Size;
    if (buffer) {
+      /* clamp size to 0 */
+      if (size < 0)
+         size = 0;
       /* do not exceed buffer size */
       if (count > size)
          count = size;

@@ -32,13 +32,14 @@
 #include "ilo_dev.h"
 
 /**
- * Initialize the \p dev from \p winsys.  \p winsys is considered owned by \p
- * dev and will be destroyed in \p ilo_dev_cleanup().
+ * Initialize the \p dev from \p winsys.
  */
 bool
 ilo_dev_init(struct ilo_dev *dev, struct intel_winsys *winsys)
 {
    const struct intel_winsys_info *info;
+
+   assert(ilo_is_zeroed(dev, sizeof(*dev)));
 
    info = intel_winsys_get_info(winsys);
 
@@ -177,10 +178,4 @@ ilo_dev_init(struct ilo_dev *dev, struct intel_winsys *winsys)
    }
 
    return true;
-}
-
-void
-ilo_dev_cleanup(struct ilo_dev *dev)
-{
-   intel_winsys_destroy(dev->winsys);
 }

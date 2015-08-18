@@ -43,7 +43,7 @@ _mesa_SampleCoverage(GLclampf value, GLboolean invert)
 
    FLUSH_VERTICES(ctx, 0);
 
-   ctx->Multisample.SampleCoverageValue = (GLfloat) CLAMP(value, 0.0, 1.0);
+   ctx->Multisample.SampleCoverageValue = CLAMP(value, 0.0f, 1.0f);
    ctx->Multisample.SampleCoverageInvert = invert;
    ctx->NewState |= _NEW_MULTISAMPLE;
 }
@@ -134,7 +134,7 @@ _mesa_MinSampleShading(GLclampf value)
 
    FLUSH_VERTICES(ctx, 0);
 
-   ctx->Multisample.MinSampleShadingValue = CLAMP(value, 0.0, 1.0);
+   ctx->Multisample.MinSampleShadingValue = CLAMP(value, 0.0f, 1.0f);
    ctx->NewState |= _NEW_MULTISAMPLE;
 }
 
@@ -164,8 +164,11 @@ _mesa_check_sample_count(struct gl_context *ctx, GLenum target,
     *
     *     "If internalformat is a signed or unsigned integer format and samples
     *     is greater than zero, then the error INVALID_OPERATION is generated."
+    *
+    * This restriction is relaxed for OpenGL ES 3.1.
     */
-   if (_mesa_is_gles3(ctx) && _mesa_is_enum_format_integer(internalFormat)
+   if ((ctx->API == API_OPENGLES2 && ctx->Version == 30) &&
+       _mesa_is_enum_format_integer(internalFormat)
        && samples > 0) {
       return GL_INVALID_OPERATION;
    }

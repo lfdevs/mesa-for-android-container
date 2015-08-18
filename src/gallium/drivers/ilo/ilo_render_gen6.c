@@ -29,11 +29,11 @@
 #include "core/ilo_builder_3d.h"
 #include "core/ilo_builder_mi.h"
 #include "core/ilo_builder_render.h"
-#include "util/u_dual_blend.h"
 #include "util/u_prim.h"
 
 #include "ilo_blitter.h"
 #include "ilo_query.h"
+#include "ilo_resource.h"
 #include "ilo_shader.h"
 #include "ilo_state.h"
 #include "ilo_render_gen.h"
@@ -330,64 +330,19 @@ gen6_draw_common_urb(struct ilo_render *r,
                      const struct ilo_state_vector *vec,
                      struct ilo_render_draw_session *session)
 {
+   const bool gs_active = (vec->gs || (vec->vs &&
+            ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_VS_GEN6_SO)));
+
    /* 3DSTATE_URB */
-   if (DIRTY(VE) || DIRTY(VS) || DIRTY(GS)) {
-      const bool gs_active = (vec->gs || (vec->vs &&
-               ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_VS_GEN6_SO)));
-      int vs_entry_size, gs_entry_size;
-      int vs_total_size, gs_total_size;
-
-      vs_entry_size = (vec->vs) ?
-         ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_OUTPUT_COUNT) : 0;
-
-      /*
-       * As indicated by 2e712e41db0c0676e9f30fc73172c0e8de8d84d4, VF and VS
-       * share VUE handles.  The VUE allocation size must be large enough to
-       * store either VF outputs (number of VERTEX_ELEMENTs) and VS outputs.
-       *
-       * I am not sure if the PRM explicitly states that VF and VS share VUE
-       * handles.  But here is a citation that implies so:
-       *
-       * From the Sandy Bridge PRM, volume 2 part 1, page 44:
-       *
-       *     "Once a FF stage that spawn threads has sufficient input to
-       *      initiate a thread, it must guarantee that it is safe to request
-       *      the thread initiation. For all these FF stages, this check is
-       *      based on :
-       *
-       *      - The availability of output URB entries:
-       *        - VS: As the input URB entries are overwritten with the
-       *          VS-generated output data, output URB availability isn't a
-       *          factor."
-       */
-      if (vs_entry_size < vec->ve->count + vec->ve->prepend_nosrc_cso)
-         vs_entry_size = vec->ve->count + vec->ve->prepend_nosrc_cso;
-
-      gs_entry_size = (vec->gs) ?
-         ilo_shader_get_kernel_param(vec->gs, ILO_KERNEL_OUTPUT_COUNT) :
-         (gs_active) ? vs_entry_size : 0;
-
-      /* in bytes */
-      vs_entry_size *= sizeof(float) * 4;
-      gs_entry_size *= sizeof(float) * 4;
-      vs_total_size = r->dev->urb_size;
-
-      if (gs_active) {
-         vs_total_size /= 2;
-         gs_total_size = vs_total_size;
-      }
-      else {
-         gs_total_size = 0;
-      }
-
-      gen6_3DSTATE_URB(r->builder, vs_total_size, gs_total_size,
-            vs_entry_size, gs_entry_size);
+   if (session->urb_delta.dirty & (ILO_STATE_URB_3DSTATE_URB_VS |
+                                   ILO_STATE_URB_3DSTATE_URB_GS)) {
+      gen6_3DSTATE_URB(r->builder, &vec->urb);
 
       if (r->state.gs.active && !gs_active)
          gen6_wa_post_3dstate_urb_no_gs(r);
-
-      r->state.gs.active = gs_active;
    }
+
+   r->state.gs.active = gs_active;
 }
 
 static void
@@ -459,33 +414,30 @@ gen6_draw_vf(struct ilo_render *r,
 {
    if (ilo_dev_gen(r->dev) >= ILO_GEN(7.5)) {
       /* 3DSTATE_INDEX_BUFFER */
-      if (DIRTY(IB) || r->batch_bo_changed) {
-         gen6_3DSTATE_INDEX_BUFFER(r->builder,
-               &vec->ib, false);
-      }
+      if ((session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_INDEX_BUFFER) ||
+          DIRTY(IB) || r->batch_bo_changed)
+         gen6_3DSTATE_INDEX_BUFFER(r->builder, &vec->ve->vf, &vec->ib.ib);
 
       /* 3DSTATE_VF */
-      if (session->primitive_restart_changed) {
-         gen75_3DSTATE_VF(r->builder, vec->draw->primitive_restart,
-               vec->draw->restart_index);
-      }
-   }
-   else {
+      if (session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VF)
+         gen75_3DSTATE_VF(r->builder, &vec->ve->vf);
+   } else {
       /* 3DSTATE_INDEX_BUFFER */
-      if (DIRTY(IB) || session->primitive_restart_changed ||
-          r->batch_bo_changed) {
-         gen6_3DSTATE_INDEX_BUFFER(r->builder,
-               &vec->ib, vec->draw->primitive_restart);
-      }
+      if ((session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_INDEX_BUFFER) ||
+          DIRTY(IB) || r->batch_bo_changed)
+         gen6_3DSTATE_INDEX_BUFFER(r->builder, &vec->ve->vf, &vec->ib.ib);
    }
 
    /* 3DSTATE_VERTEX_BUFFERS */
-   if (DIRTY(VB) || DIRTY(VE) || r->batch_bo_changed)
-      gen6_3DSTATE_VERTEX_BUFFERS(r->builder, vec->ve, &vec->vb);
+   if ((session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VERTEX_BUFFERS) ||
+       DIRTY(VB) || DIRTY(VE) || r->batch_bo_changed) {
+      gen6_3DSTATE_VERTEX_BUFFERS(r->builder, &vec->ve->vf,
+            vec->vb.vb, vec->ve->vb_count);
+   }
 
    /* 3DSTATE_VERTEX_ELEMENTS */
-   if (DIRTY(VE))
-      gen6_3DSTATE_VERTEX_ELEMENTS(r->builder, vec->ve);
+   if (session->vf_delta.dirty & ILO_STATE_VF_3DSTATE_VERTEX_ELEMENTS)
+      gen6_3DSTATE_VERTEX_ELEMENTS(r->builder, &vec->ve->vf);
 }
 
 void
@@ -516,10 +468,17 @@ gen6_draw_vs(struct ilo_render *r,
 
    /* 3DSTATE_VS */
    if (DIRTY(VS) || r->instruction_bo_changed) {
+      const union ilo_shader_cso *cso = ilo_shader_get_kernel_cso(vec->vs);
+      const uint32_t kernel_offset = ilo_shader_get_kernel_offset(vec->vs);
+
       if (ilo_dev_gen(r->dev) == ILO_GEN(6))
          gen6_wa_pre_3dstate_vs_toggle(r);
 
-      gen6_3DSTATE_VS(r->builder, vec->vs);
+      if (ilo_dev_gen(r->dev) == ILO_GEN(6) &&
+          ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_VS_GEN6_SO))
+         gen6_3DSTATE_VS(r->builder, &cso->vs_sol.vs, kernel_offset);
+      else
+         gen6_3DSTATE_VS(r->builder, &cso->vs, kernel_offset);
    }
 }
 
@@ -535,14 +494,39 @@ gen6_draw_gs(struct ilo_render *r,
    /* 3DSTATE_GS */
    if (DIRTY(GS) || DIRTY(VS) ||
        session->prim_changed || r->instruction_bo_changed) {
+      const union ilo_shader_cso *cso;
+      uint32_t kernel_offset;
+
       if (vec->gs) {
-         gen6_3DSTATE_GS(r->builder, vec->gs);
-      } else if (vec->vs &&
+         cso = ilo_shader_get_kernel_cso(vec->gs);
+         kernel_offset = ilo_shader_get_kernel_offset(vec->gs);
+
+         gen6_3DSTATE_GS(r->builder, &cso->gs, kernel_offset);
+      } else if (ilo_dev_gen(r->dev) == ILO_GEN(6) &&
             ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_VS_GEN6_SO)) {
-         const int verts_per_prim = u_vertices_per_prim(session->reduced_prim);
-         gen6_so_3DSTATE_GS(r->builder, vec->vs, verts_per_prim);
+         const int verts_per_prim =
+            u_vertices_per_prim(session->reduced_prim);
+         enum ilo_kernel_param param;
+
+         switch (verts_per_prim) {
+         case 1:
+            param = ILO_KERNEL_VS_GEN6_SO_POINT_OFFSET;
+            break;
+         case 2:
+            param = ILO_KERNEL_VS_GEN6_SO_LINE_OFFSET;
+            break;
+         default:
+            param = ILO_KERNEL_VS_GEN6_SO_TRI_OFFSET;
+            break;
+         }
+
+         cso = ilo_shader_get_kernel_cso(vec->vs);
+         kernel_offset = ilo_shader_get_kernel_offset(vec->vs) +
+            ilo_shader_get_kernel_param(vec->vs, param);
+
+         gen6_3DSTATE_GS(r->builder, &cso->vs_sol.sol, kernel_offset);
       } else {
-         gen6_disable_3DSTATE_GS(r->builder);
+         gen6_3DSTATE_GS(r->builder, &vec->disabled_gs, 0);
       }
    }
 }
@@ -633,30 +617,8 @@ gen6_draw_clip(struct ilo_render *r,
                struct ilo_render_draw_session *session)
 {
    /* 3DSTATE_CLIP */
-   if (DIRTY(RASTERIZER) || DIRTY(FS) || DIRTY(VIEWPORT) || DIRTY(FB)) {
-      bool enable_guardband = true;
-      unsigned i;
-
-      /*
-       * Gen8+ has viewport extent test.  Guard band test can be enabled on
-       * prior Gens only when the viewport is larger than the framebuffer,
-       * unless we emulate viewport extent test on them.
-       */
-      if (ilo_dev_gen(r->dev) < ILO_GEN(8)) {
-         for (i = 0; i < vec->viewport.count; i++) {
-            const struct ilo_viewport_cso *vp = &vec->viewport.cso[i];
-
-            if (vp->min_x > 0.0f || vp->max_x < vec->fb.state.width ||
-                vp->min_y > 0.0f || vp->max_y < vec->fb.state.height) {
-               enable_guardband = false;
-               break;
-            }
-         }
-      }
-
-      gen6_3DSTATE_CLIP(r->builder, vec->rasterizer,
-            vec->fs, enable_guardband, 1);
-   }
+   if (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_CLIP)
+      gen6_3DSTATE_CLIP(r->builder, &vec->rasterizer->rs);
 }
 
 static void
@@ -665,9 +627,9 @@ gen6_draw_sf(struct ilo_render *r,
              struct ilo_render_draw_session *session)
 {
    /* 3DSTATE_SF */
-   if (DIRTY(RASTERIZER) || DIRTY(FS) || DIRTY(FB)) {
-      gen6_3DSTATE_SF(r->builder, vec->rasterizer, vec->fs,
-            vec->fb.num_samples);
+   if ((session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_SF) || DIRTY(FS)) {
+      const struct ilo_state_sbe *sbe = ilo_shader_get_kernel_sbe(vec->fs);
+      gen6_3DSTATE_SF(r->builder, &vec->rasterizer->rs, sbe);
    }
 }
 
@@ -700,17 +662,17 @@ gen6_draw_wm(struct ilo_render *r,
    }
 
    /* 3DSTATE_WM */
-   if (DIRTY(FS) || DIRTY(BLEND) || DIRTY(DSA) ||
-       DIRTY(RASTERIZER) || r->instruction_bo_changed) {
-      const bool dual_blend = vec->blend->dual_blend;
-      const bool cc_may_kill = (vec->dsa->dw_blend_alpha ||
-                                vec->blend->alpha_to_coverage);
+   if (DIRTY(FS) ||
+       (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_WM) ||
+       r->instruction_bo_changed) {
+      const union ilo_shader_cso *cso = ilo_shader_get_kernel_cso(vec->fs);
+      const uint32_t kernel_offset = ilo_shader_get_kernel_offset(vec->fs);
 
       if (ilo_dev_gen(r->dev) == ILO_GEN(6) && r->hw_ctx_changed)
          gen6_wa_pre_3dstate_wm_max_threads(r);
 
-      gen6_3DSTATE_WM(r->builder, vec->fs,
-            vec->rasterizer, dual_blend, cc_may_kill);
+      gen6_3DSTATE_WM(r->builder, &vec->rasterizer->rs,
+            &cso->ps, kernel_offset);
    }
 }
 
@@ -719,25 +681,23 @@ gen6_draw_wm_multisample(struct ilo_render *r,
                          const struct ilo_state_vector *vec,
                          struct ilo_render_draw_session *session)
 {
-   /* 3DSTATE_MULTISAMPLE and 3DSTATE_SAMPLE_MASK */
-   if (DIRTY(SAMPLE_MASK) || DIRTY(FB)) {
-      const uint32_t *pattern;
-
-      pattern = (vec->fb.num_samples > 1) ?
-         &r->sample_pattern_4x : &r->sample_pattern_1x;
+   /* 3DSTATE_MULTISAMPLE */
+   if (DIRTY(FB) || (session->rs_delta.dirty &
+            ILO_STATE_RASTER_3DSTATE_MULTISAMPLE)) {
+      const uint8_t sample_count = (vec->fb.num_samples > 1) ? 4 : 1;
 
       if (ilo_dev_gen(r->dev) == ILO_GEN(6)) {
          gen6_wa_pre_non_pipelined(r);
          gen6_wa_pre_3dstate_multisample(r);
       }
 
-      gen6_3DSTATE_MULTISAMPLE(r->builder,
-            vec->fb.num_samples, pattern,
-            vec->rasterizer->state.half_pixel_center);
-
-      gen6_3DSTATE_SAMPLE_MASK(r->builder,
-            (vec->fb.num_samples > 1) ? vec->sample_mask : 0x1);
+      gen6_3DSTATE_MULTISAMPLE(r->builder, &vec->rasterizer->rs,
+            &r->sample_pattern, sample_count);
    }
+
+   /* 3DSTATE_SAMPLE_MASK */
+   if (session->rs_delta.dirty & ILO_STATE_RASTER_3DSTATE_SAMPLE_MASK)
+      gen6_3DSTATE_SAMPLE_MASK(r->builder, &vec->rasterizer->rs);
 }
 
 static void
@@ -747,7 +707,7 @@ gen6_draw_wm_depth(struct ilo_render *r,
 {
    /* 3DSTATE_DEPTH_BUFFER and 3DSTATE_CLEAR_PARAMS */
    if (DIRTY(FB) || r->batch_bo_changed) {
-      const struct ilo_zs_surface *zs;
+      const struct ilo_state_zs *zs;
       uint32_t clear_params;
 
       if (vec->fb.state.zsbuf) {
@@ -772,7 +732,7 @@ gen6_draw_wm_depth(struct ilo_render *r,
          gen6_wa_pre_depth(r);
       }
 
-      gen6_3DSTATE_DEPTH_BUFFER(r->builder, zs, false);
+      gen6_3DSTATE_DEPTH_BUFFER(r->builder, zs);
       gen6_3DSTATE_HIER_DEPTH_BUFFER(r->builder, zs);
       gen6_3DSTATE_STENCIL_BUFFER(r->builder, zs);
       gen6_3DSTATE_CLEAR_PARAMS(r->builder, clear_params);
@@ -790,10 +750,8 @@ gen6_draw_wm_raster(struct ilo_render *r,
       if (ilo_dev_gen(r->dev) == ILO_GEN(6))
          gen6_wa_pre_non_pipelined(r);
 
-      gen6_3DSTATE_POLY_STIPPLE_PATTERN(r->builder,
-            &vec->poly_stipple);
-
-      gen6_3DSTATE_POLY_STIPPLE_OFFSET(r->builder, 0, 0);
+      gen6_3DSTATE_POLY_STIPPLE_PATTERN(r->builder, &vec->poly_stipple);
+      gen6_3DSTATE_POLY_STIPPLE_OFFSET(r->builder, &vec->poly_stipple);
    }
 
    /* 3DSTATE_LINE_STIPPLE */
@@ -801,17 +759,16 @@ gen6_draw_wm_raster(struct ilo_render *r,
       if (ilo_dev_gen(r->dev) == ILO_GEN(6))
          gen6_wa_pre_non_pipelined(r);
 
-      gen6_3DSTATE_LINE_STIPPLE(r->builder,
-            vec->rasterizer->state.line_stipple_pattern,
-            vec->rasterizer->state.line_stipple_factor + 1);
+      gen6_3DSTATE_LINE_STIPPLE(r->builder, &vec->line_stipple);
    }
 
    /* 3DSTATE_AA_LINE_PARAMETERS */
-   if (DIRTY(RASTERIZER) && vec->rasterizer->state.line_smooth) {
+   if (session->rs_delta.dirty &
+         ILO_STATE_RASTER_3DSTATE_AA_LINE_PARAMETERS) {
       if (ilo_dev_gen(r->dev) == ILO_GEN(6))
          gen6_wa_pre_non_pipelined(r);
 
-      gen6_3DSTATE_AA_LINE_PARAMETERS(r->builder);
+      gen6_3DSTATE_AA_LINE_PARAMETERS(r->builder, &vec->rasterizer->rs);
    }
 }
 
@@ -849,7 +806,7 @@ ilo_render_emit_draw_commands_gen6(struct ilo_render *render,
    gen6_draw_sf_rect(render, vec, session);
    gen6_draw_vf(render, vec, session);
 
-   ilo_render_3dprimitive(render, vec->draw, &vec->ib);
+   ilo_render_3dprimitive(render, &vec->draw_info);
 }
 
 static void
@@ -860,40 +817,23 @@ gen6_rectlist_vs_to_sf(struct ilo_render *r,
    gen6_wa_post_3dstate_constant_vs(r);
 
    gen6_wa_pre_3dstate_vs_toggle(r);
-   gen6_disable_3DSTATE_VS(r->builder);
+   gen6_3DSTATE_VS(r->builder, &blitter->vs, 0);
 
    gen6_3DSTATE_CONSTANT_GS(r->builder, NULL, NULL, 0);
-   gen6_disable_3DSTATE_GS(r->builder);
+   gen6_3DSTATE_GS(r->builder, &blitter->gs, 0);
 
-   gen6_disable_3DSTATE_CLIP(r->builder);
-   gen6_3DSTATE_SF(r->builder, NULL, NULL, blitter->fb.num_samples);
+   gen6_3DSTATE_CLIP(r->builder, &blitter->fb.rs);
+   gen6_3DSTATE_SF(r->builder, &blitter->fb.rs, &blitter->sbe);
 }
 
 static void
 gen6_rectlist_wm(struct ilo_render *r,
                  const struct ilo_blitter *blitter)
 {
-   uint32_t hiz_op;
-
-   switch (blitter->op) {
-   case ILO_BLITTER_RECTLIST_CLEAR_ZS:
-      hiz_op = GEN6_WM_DW4_DEPTH_CLEAR;
-      break;
-   case ILO_BLITTER_RECTLIST_RESOLVE_Z:
-      hiz_op = GEN6_WM_DW4_DEPTH_RESOLVE;
-      break;
-   case ILO_BLITTER_RECTLIST_RESOLVE_HIZ:
-      hiz_op = GEN6_WM_DW4_HIZ_RESOLVE;
-      break;
-   default:
-      hiz_op = 0;
-      break;
-   }
-
    gen6_3DSTATE_CONSTANT_PS(r->builder, NULL, NULL, 0);
 
    gen6_wa_pre_3dstate_wm_max_threads(r);
-   gen6_hiz_3DSTATE_WM(r->builder, hiz_op);
+   gen6_3DSTATE_WM(r->builder, &blitter->fb.rs, &blitter->ps, 0);
 }
 
 static void
@@ -903,10 +843,8 @@ gen6_rectlist_wm_depth(struct ilo_render *r,
    gen6_wa_pre_depth(r);
 
    if (blitter->uses & (ILO_BLITTER_USE_FB_DEPTH |
-                        ILO_BLITTER_USE_FB_STENCIL)) {
-      gen6_3DSTATE_DEPTH_BUFFER(r->builder,
-            &blitter->fb.dst.u.zs, true);
-   }
+                        ILO_BLITTER_USE_FB_STENCIL))
+      gen6_3DSTATE_DEPTH_BUFFER(r->builder, &blitter->fb.dst.u.zs);
 
    if (blitter->uses & ILO_BLITTER_USE_FB_DEPTH) {
       gen6_3DSTATE_HIER_DEPTH_BUFFER(r->builder,
@@ -926,16 +864,12 @@ static void
 gen6_rectlist_wm_multisample(struct ilo_render *r,
                              const struct ilo_blitter *blitter)
 {
-   const uint32_t *pattern = (blitter->fb.num_samples > 1) ?
-      &r->sample_pattern_4x : &r->sample_pattern_1x;
+   const uint8_t sample_count = (blitter->fb.num_samples > 1) ? 4 : 1;
 
    gen6_wa_pre_3dstate_multisample(r);
 
-   gen6_3DSTATE_MULTISAMPLE(r->builder, blitter->fb.num_samples,
-         pattern, true);
-
-   gen6_3DSTATE_SAMPLE_MASK(r->builder,
-         (1 << blitter->fb.num_samples) - 1);
+   gen6_3DSTATE_MULTISAMPLE(r->builder, &blitter->fb.rs, &r->sample_pattern, sample_count);
+   gen6_3DSTATE_SAMPLE_MASK(r->builder, &blitter->fb.rs);
 }
 
 int
@@ -964,11 +898,9 @@ ilo_render_emit_rectlist_commands_gen6(struct ilo_render *r,
          session->vb_start, session->vb_end,
          sizeof(blitter->vertices[0]));
 
-   gen6_3DSTATE_VERTEX_ELEMENTS(r->builder, &blitter->ve);
+   gen6_3DSTATE_VERTEX_ELEMENTS(r->builder, &blitter->vf);
 
-   gen6_3DSTATE_URB(r->builder, r->dev->urb_size, 0,
-         (blitter->ve.count + blitter->ve.prepend_nosrc_cso) * 4 * sizeof(float),
-         0);
+   gen6_3DSTATE_URB(r->builder, &blitter->urb);
 
    if (r->state.gs.active) {
       gen6_wa_post_3dstate_urb_no_gs(r);
@@ -994,7 +926,7 @@ ilo_render_emit_rectlist_commands_gen6(struct ilo_render *r,
    gen6_3DSTATE_DRAWING_RECTANGLE(r->builder, 0, 0,
          blitter->fb.width, blitter->fb.height);
 
-   ilo_render_3dprimitive(r, &blitter->draw, NULL);
+   ilo_render_3dprimitive(r, &blitter->draw_info);
 }
 
 int

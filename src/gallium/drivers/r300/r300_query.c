@@ -146,10 +146,11 @@ static boolean r300_get_query_result(struct pipe_context* pipe,
 
     if (q->type == PIPE_QUERY_GPU_FINISHED) {
         if (wait) {
-            r300->rws->buffer_wait(q->buf, RADEON_USAGE_READWRITE);
+            r300->rws->buffer_wait(q->buf, PIPE_TIMEOUT_INFINITE,
+                                   RADEON_USAGE_READWRITE);
             vresult->b = TRUE;
         } else {
-            vresult->b = !r300->rws->buffer_is_busy(q->buf, RADEON_USAGE_READWRITE);
+            vresult->b = r300->rws->buffer_wait(q->buf, 0, RADEON_USAGE_READWRITE);
         }
         return vresult->b;
     }
@@ -167,8 +168,6 @@ static boolean r300_get_query_result(struct pipe_context* pipe,
         temp += util_le32_to_cpu(*map);
         map++;
     }
-
-    r300->rws->buffer_unmap(q->cs_buf);
 
     if (q->type == PIPE_QUERY_OCCLUSION_PREDICATE) {
         vresult->b = temp != 0;

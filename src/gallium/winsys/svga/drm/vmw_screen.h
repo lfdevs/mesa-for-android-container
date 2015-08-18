@@ -102,7 +102,7 @@ struct vmw_winsys_screen
 };
 
 
-static INLINE struct vmw_winsys_screen *
+static inline struct vmw_winsys_screen *
 vmw_winsys_screen(struct svga_winsys_screen *base)
 {
    return (struct vmw_winsys_screen *)base;

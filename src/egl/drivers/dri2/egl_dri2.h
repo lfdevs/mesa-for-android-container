@@ -120,9 +120,9 @@ struct dri2_egl_display_vtbl {
    EGLBoolean (*swap_buffers)(_EGLDriver *drv, _EGLDisplay *dpy,
                               _EGLSurface *surf);
 
-   EGLBoolean (*swap_buffers_with_damage)(_EGLDriver *drv, _EGLDisplay *dpy,     
-                                          _EGLSurface *surface,                  
-                                          const EGLint *rects, EGLint n_rects);  
+   EGLBoolean (*swap_buffers_with_damage)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                          _EGLSurface *surface,
+                                          const EGLint *rects, EGLint n_rects);
 
    EGLBoolean (*swap_buffers_region)(_EGLDriver *drv, _EGLDisplay *dpy,
                                      _EGLSurface *surf, EGLint numRects,
@@ -166,6 +166,7 @@ struct dri2_egl_display
    const __DRIrobustnessExtension *robustness;
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
+   const __DRI2rendererQueryExtension *rendererQuery;
    int                       fd;
 
    int                       own_device;
@@ -285,6 +286,8 @@ struct dri2_egl_config
    _EGLConfig         base;
    const __DRIconfig *dri_single_config;
    const __DRIconfig *dri_double_config;
+   const __DRIconfig *dri_srgb_single_config;
+   const __DRIconfig *dri_srgb_double_config;
 };
 
 struct dri2_egl_image
@@ -351,7 +354,14 @@ dri2_initialize_wayland(_EGLDriver *drv, _EGLDisplay *disp);
 EGLBoolean
 dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp);
 
+EGLBoolean
+dri2_initialize_surfaceless(_EGLDriver *drv, _EGLDisplay *disp);
+
 void
 dri2_flush_drawable_for_swapbuffers(_EGLDisplay *disp, _EGLSurface *draw);
+
+const __DRIconfig *
+dri2_get_dri_config(struct dri2_egl_config *conf, EGLint surface_type,
+                    EGLenum colorspace);
 
 #endif /* EGL_DRI2_INCLUDED */

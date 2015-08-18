@@ -1133,8 +1133,7 @@ transform_samp(struct tgsi_transform_context *tctx,
 
    /* MOV_SAT tmpA.<mask>, tmpA */
    if (mask) {
-      create_mov(tctx, &ctx->tmp[A].dst, &ctx->tmp[A].src, mask,
-                 TGSI_SAT_ZERO_ONE);
+      create_mov(tctx, &ctx->tmp[A].dst, &ctx->tmp[A].src, mask, 1);
    }
 
    /* modify the texture samp instruction to take fixed up coord: */

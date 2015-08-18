@@ -88,7 +88,12 @@ stw_query_attrib(
       return TRUE;
 
    case WGL_SWAP_METHOD_ARB:
-      *pvalue = pfi->pfd.dwFlags & PFD_SWAP_COPY ? WGL_SWAP_COPY_ARB : WGL_SWAP_UNDEFINED_ARB;
+      if (pfi->pfd.dwFlags & PFD_SWAP_COPY)
+         *pvalue = WGL_SWAP_COPY_ARB;
+      else if (pfi->pfd.dwFlags & PFD_SWAP_EXCHANGE)
+         *pvalue = WGL_SWAP_EXCHANGE_EXT;
+      else
+         *pvalue = WGL_SWAP_UNDEFINED_ARB;
       return TRUE;
 
    case WGL_SWAP_LAYER_BUFFERS_ARB:
@@ -232,7 +237,7 @@ stw_query_attrib(
       break;
 
    case WGL_SAMPLE_BUFFERS_ARB:
-      *pvalue = 1;
+      *pvalue = (pfi->stvis.samples > 1);
       break;
 
    case WGL_SAMPLES_ARB:

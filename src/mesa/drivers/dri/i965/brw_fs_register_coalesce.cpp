@@ -167,7 +167,6 @@ fs_visitor::register_coalesce()
          src_size = alloc.sizes[inst->src[0].reg];
          assert(src_size <= MAX_VGRF_SIZE);
 
-         assert(inst->src[0].width % 8 == 0);
          channels_remaining = src_size;
          memset(mov, 0, sizeof(mov));
 
@@ -196,7 +195,7 @@ fs_visitor::register_coalesce()
             continue;
          }
          reg_to_offset[offset] = inst->dst.reg_offset;
-         if (inst->src[0].width == 16)
+         if (inst->regs_written > 1)
             reg_to_offset[offset + 1] = inst->dst.reg_offset + 1;
          mov[offset] = inst;
          channels_remaining -= inst->regs_written;
@@ -229,7 +228,6 @@ fs_visitor::register_coalesce()
          continue;
 
       progress = true;
-      bool was_load_payload = inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD;
 
       for (int i = 0; i < src_size; i++) {
          if (mov[i]) {
@@ -243,22 +241,19 @@ fs_visitor::register_coalesce()
       }
 
       foreach_block_and_inst(block, fs_inst, scan_inst, cfg) {
-         for (int i = 0; i < src_size; i++) {
-            if (mov[i] || was_load_payload) {
-               if (scan_inst->dst.file == GRF &&
-                   scan_inst->dst.reg == reg_from &&
-                   scan_inst->dst.reg_offset == i) {
-                  scan_inst->dst.reg = reg_to;
-                  scan_inst->dst.reg_offset = reg_to_offset[i];
-               }
-               for (int j = 0; j < scan_inst->sources; j++) {
-                  if (scan_inst->src[j].file == GRF &&
-                      scan_inst->src[j].reg == reg_from &&
-                      scan_inst->src[j].reg_offset == i) {
-                     scan_inst->src[j].reg = reg_to;
-                     scan_inst->src[j].reg_offset = reg_to_offset[i];
-                  }
-               }
+         if (scan_inst->dst.file == GRF &&
+             scan_inst->dst.reg == reg_from) {
+            scan_inst->dst.reg = reg_to;
+            scan_inst->dst.reg_offset =
+               reg_to_offset[scan_inst->dst.reg_offset];
+         }
+
+         for (int j = 0; j < scan_inst->sources; j++) {
+            if (scan_inst->src[j].file == GRF &&
+                scan_inst->src[j].reg == reg_from) {
+               scan_inst->src[j].reg = reg_to;
+               scan_inst->src[j].reg_offset =
+                  reg_to_offset[scan_inst->src[j].reg_offset];
             }
          }
       }

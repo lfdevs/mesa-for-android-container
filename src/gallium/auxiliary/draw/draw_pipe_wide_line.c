@@ -45,7 +45,7 @@ struct wideline_stage {
 
 
 
-static INLINE struct wideline_stage *wideline_stage( struct draw_stage *stage )
+static inline struct wideline_stage *wideline_stage( struct draw_stage *stage )
 {
    return (struct wideline_stage *)stage;
 }

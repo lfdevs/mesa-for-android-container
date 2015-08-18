@@ -53,13 +53,13 @@
       <param name="fixedsamplelocations" type="GLboolean"/>
    </function>
 
-   <function name="GetMultisamplefv">
+   <function name="GetMultisamplefv" es2="3.1">
       <param name="pname" type="GLenum"/>
       <param name="index" type="GLuint"/>
       <param name="val" type="GLfloat *"/>
    </function>
 
-   <function name="SampleMaski">
+   <function name="SampleMaski" es2="3.1">
       <param name="index" type="GLuint"/>
       <param name="mask" type="GLbitfield"/>
    </function>

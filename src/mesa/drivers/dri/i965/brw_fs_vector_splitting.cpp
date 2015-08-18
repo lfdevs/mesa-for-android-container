@@ -173,7 +173,7 @@ ir_vector_reference_visitor::visit_enter(ir_assignment *ir)
       return visit_continue_with_parent;
    }
    if (ir->lhs->as_dereference_variable() &&
-       is_power_of_two(ir->write_mask) &&
+       _mesa_is_pow_two(ir->write_mask) &&
        !ir->condition) {
       /* If we're writing just a channel, then channel-splitting the LHS is OK.
        */

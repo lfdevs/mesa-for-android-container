@@ -50,15 +50,6 @@ struct _egl_global
    EGLint NumAtExitCalls;
    void (*AtExitCalls[10])(void);
 
-   struct _egl_client_extensions {
-      bool EXT_client_extensions;
-      bool EXT_platform_base;
-      bool EXT_platform_x11;
-      bool EXT_platform_wayland;
-      bool MESA_platform_gbm;
-      bool KHR_get_all_proc_addresses;
-   } ClientExtensions;
-
    const char *ClientExtensionString;
 };
 

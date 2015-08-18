@@ -592,6 +592,15 @@
 #define GEN7_SURFACE_MOCS_SHIFT                 16
 #define GEN7_SURFACE_MOCS_MASK                  INTEL_MASK(19, 16)
 
+#define GEN9_SURFACE_TRMODE_SHIFT          18
+#define GEN9_SURFACE_TRMODE_MASK           INTEL_MASK(19, 18)
+#define GEN9_SURFACE_TRMODE_NONE           0
+#define GEN9_SURFACE_TRMODE_TILEYF         1
+#define GEN9_SURFACE_TRMODE_TILEYS         2
+
+#define GEN9_SURFACE_MIP_TAIL_START_LOD_SHIFT      8
+#define GEN9_SURFACE_MIP_TAIL_START_LOD_MASK       INTEL_MASK(11, 8)
+
 /* Surface state DW6 */
 #define GEN7_SURFACE_MCS_ENABLE                 (1 << 0)
 #define GEN7_SURFACE_MCS_PITCH_SHIFT            3
@@ -866,6 +875,21 @@ enum opcode {
     * instructions.
     */
    FS_OPCODE_FB_WRITE = 128,
+
+   /**
+    * Same as FS_OPCODE_FB_WRITE but expects its arguments separately as
+    * individual sources instead of as a single payload blob:
+    *
+    * Source 0: [required] Color 0.
+    * Source 1: [optional] Color 1 (for dual source blend messages).
+    * Source 2: [optional] Src0 Alpha.
+    * Source 3: [optional] Source Depth (passthrough from the thread payload).
+    * Source 4: [optional] Destination Depth (gl_FragDepth).
+    * Source 5: [optional] Sample Mask (gl_SampleMask).
+    * Source 6: [required] Number of color components (as a UD immediate).
+    */
+   FS_OPCODE_FB_WRITE_LOGICAL,
+
    FS_OPCODE_BLORP_FB_WRITE,
    FS_OPCODE_REP_FB_WRITE,
    SHADER_OPCODE_RCP,
@@ -879,18 +903,49 @@ enum opcode {
    SHADER_OPCODE_SIN,
    SHADER_OPCODE_COS,
 
+   /**
+    * Texture sampling opcodes.
+    *
+    * LOGICAL opcodes are eventually translated to the matching non-LOGICAL
+    * opcode but instead of taking a single payload blob they expect their
+    * arguments separately as individual sources:
+    *
+    * Source 0: [optional] Texture coordinates.
+    * Source 1: [optional] Shadow comparitor.
+    * Source 2: [optional] dPdx if the operation takes explicit derivatives,
+    *                      otherwise LOD value.
+    * Source 3: [optional] dPdy if the operation takes explicit derivatives.
+    * Source 4: [optional] Sample index.
+    * Source 5: [optional] MCS data.
+    * Source 6: [required] Texture sampler.
+    * Source 7: [optional] Texel offset.
+    * Source 8: [required] Number of coordinate components (as UD immediate).
+    * Source 9: [required] Number derivative components (as UD immediate).
+    */
    SHADER_OPCODE_TEX,
+   SHADER_OPCODE_TEX_LOGICAL,
    SHADER_OPCODE_TXD,
+   SHADER_OPCODE_TXD_LOGICAL,
    SHADER_OPCODE_TXF,
+   SHADER_OPCODE_TXF_LOGICAL,
    SHADER_OPCODE_TXL,
+   SHADER_OPCODE_TXL_LOGICAL,
    SHADER_OPCODE_TXS,
+   SHADER_OPCODE_TXS_LOGICAL,
    FS_OPCODE_TXB,
+   FS_OPCODE_TXB_LOGICAL,
    SHADER_OPCODE_TXF_CMS,
+   SHADER_OPCODE_TXF_CMS_LOGICAL,
    SHADER_OPCODE_TXF_UMS,
+   SHADER_OPCODE_TXF_UMS_LOGICAL,
    SHADER_OPCODE_TXF_MCS,
+   SHADER_OPCODE_TXF_MCS_LOGICAL,
    SHADER_OPCODE_LOD,
+   SHADER_OPCODE_LOD_LOGICAL,
    SHADER_OPCODE_TG4,
+   SHADER_OPCODE_TG4_LOGICAL,
    SHADER_OPCODE_TG4_OFFSET,
+   SHADER_OPCODE_TG4_OFFSET_LOGICAL,
 
    /**
     * Combines multiple sources of size 1 into a larger virtual GRF.
@@ -908,13 +963,33 @@ enum opcode {
 
    SHADER_OPCODE_SHADER_TIME_ADD,
 
+   /**
+    * Typed and untyped surface access opcodes.
+    *
+    * LOGICAL opcodes are eventually translated to the matching non-LOGICAL
+    * opcode but instead of taking a single payload blob they expect their
+    * arguments separately as individual sources:
+    *
+    * Source 0: [required] Surface coordinates.
+    * Source 1: [optional] Operation source.
+    * Source 2: [required] Surface index.
+    * Source 3: [required] Number of coordinate components (as UD immediate).
+    * Source 4: [required] Opcode-specific control immediate, same as source 2
+    *                      of the matching non-LOGICAL opcode.
+    */
    SHADER_OPCODE_UNTYPED_ATOMIC,
+   SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL,
    SHADER_OPCODE_UNTYPED_SURFACE_READ,
+   SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL,
    SHADER_OPCODE_UNTYPED_SURFACE_WRITE,
+   SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL,
 
    SHADER_OPCODE_TYPED_ATOMIC,
+   SHADER_OPCODE_TYPED_ATOMIC_LOGICAL,
    SHADER_OPCODE_TYPED_SURFACE_READ,
+   SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL,
    SHADER_OPCODE_TYPED_SURFACE_WRITE,
+   SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL,
 
    SHADER_OPCODE_MEMORY_FENCE,
 
@@ -960,7 +1035,6 @@ enum opcode {
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_MOV_DISPATCH_TO_FLAGS,
    FS_OPCODE_DISCARD_JUMP,
-   FS_OPCODE_SET_OMASK,
    FS_OPCODE_SET_SAMPLE_ID,
    FS_OPCODE_SET_SIMD4X2_OFFSET,
    FS_OPCODE_PACK_HALF_2x16_SPLIT,
@@ -1135,6 +1209,16 @@ enum opcode {
     * Terminate the compute shader.
     */
    CS_OPCODE_CS_TERMINATE,
+
+   /**
+    * GLSL barrier()
+    */
+   SHADER_OPCODE_BARRIER,
+
+   /**
+    * Calculate the high 32-bits of a 32x32 multiply.
+    */
+   SHADER_OPCODE_MULH,
 };
 
 enum brw_urb_write_flags {
@@ -1596,6 +1680,14 @@ enum brw_message_target {
 #define BRW_SCRATCH_SPACE_SIZE_1M     10
 #define BRW_SCRATCH_SPACE_SIZE_2M     11
 
+#define BRW_MESSAGE_GATEWAY_SFID_OPEN_GATEWAY         0
+#define BRW_MESSAGE_GATEWAY_SFID_CLOSE_GATEWAY        1
+#define BRW_MESSAGE_GATEWAY_SFID_FORWARD_MSG          2
+#define BRW_MESSAGE_GATEWAY_SFID_GET_TIMESTAMP        3
+#define BRW_MESSAGE_GATEWAY_SFID_BARRIER_MSG          4
+#define BRW_MESSAGE_GATEWAY_SFID_UPDATE_GATEWAY_STATE 5
+#define BRW_MESSAGE_GATEWAY_SFID_MMIO_READ_WRITE      6
+
 
 #define CMD_URB_FENCE                 0x6000
 #define CMD_CS_URB_STATE              0x6001
@@ -1617,6 +1709,36 @@ enum brw_message_target {
 #define _3DSTATE_BINDING_TABLE_POINTERS_DS	0x7828 /* GEN7+ */
 #define _3DSTATE_BINDING_TABLE_POINTERS_GS	0x7829 /* GEN7+ */
 #define _3DSTATE_BINDING_TABLE_POINTERS_PS	0x782A /* GEN7+ */
+
+#define _3DSTATE_BINDING_TABLE_POOL_ALLOC       0x7919 /* GEN7.5+ */
+#define BRW_HW_BINDING_TABLE_ENABLE             (1 << 11)
+#define GEN7_HW_BT_POOL_MOCS_SHIFT              7
+#define GEN7_HW_BT_POOL_MOCS_MASK               INTEL_MASK(10, 7)
+#define GEN8_HW_BT_POOL_MOCS_SHIFT              0
+#define GEN8_HW_BT_POOL_MOCS_MASK               INTEL_MASK(6, 0)
+/* Only required in HSW */
+#define HSW_BT_POOL_ALLOC_MUST_BE_ONE           (3 << 5)
+
+#define _3DSTATE_BINDING_TABLE_EDIT_VS          0x7843 /* GEN7.5 */
+#define _3DSTATE_BINDING_TABLE_EDIT_GS          0x7844 /* GEN7.5 */
+#define _3DSTATE_BINDING_TABLE_EDIT_HS          0x7845 /* GEN7.5 */
+#define _3DSTATE_BINDING_TABLE_EDIT_DS          0x7846 /* GEN7.5 */
+#define _3DSTATE_BINDING_TABLE_EDIT_PS          0x7847 /* GEN7.5 */
+#define BRW_BINDING_TABLE_INDEX_SHIFT           16
+#define BRW_BINDING_TABLE_INDEX_MASK            INTEL_MASK(23, 16)
+
+#define BRW_BINDING_TABLE_EDIT_TARGET_ALL       3
+#define BRW_BINDING_TABLE_EDIT_TARGET_CORE1     2
+#define BRW_BINDING_TABLE_EDIT_TARGET_CORE0     1
+/* In HSW, when editing binding table entries to surface state offsets,
+ * the surface state offset is a 16-bit value aligned to 32 bytes. But
+ * Surface State Pointer in dword 2 is [15:0]. Right shift surf_offset
+ * by 5 bits so it won't disturb bit 16 (which is used as the binding
+ * table index entry), otherwise it would hang the GPU.
+ */
+#define HSW_SURFACE_STATE_EDIT(value)           (value >> 5)
+/* Same as Haswell, but surface state offsets now aligned to 64 bytes.*/
+#define GEN8_SURFACE_STATE_EDIT(value)          (value >> 6)
 
 #define _3DSTATE_SAMPLER_STATE_POINTERS		0x7802 /* GEN6+ */
 # define PS_SAMPLER_STATE_CHANGE				(1 << 12)
@@ -1733,6 +1855,7 @@ enum brw_message_target {
 # define GEN6_VS_BINDING_TABLE_ENTRY_COUNT_SHIFT	18
 # define GEN6_VS_FLOATING_POINT_MODE_IEEE_754		(0 << 16)
 # define GEN6_VS_FLOATING_POINT_MODE_ALT		(1 << 16)
+# define HSW_VS_UAV_ACCESS_ENABLE                       (1 << 12)
 /* DW4 */
 # define GEN6_VS_DISPATCH_START_GRF_SHIFT		20
 # define GEN6_VS_URB_READ_LENGTH_SHIFT			11
@@ -1758,6 +1881,7 @@ enum brw_message_target {
 # define GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT	18
 # define GEN6_GS_FLOATING_POINT_MODE_IEEE_754		(0 << 16)
 # define GEN6_GS_FLOATING_POINT_MODE_ALT		(1 << 16)
+# define HSW_GS_UAV_ACCESS_ENABLE       		(1 << 12)
 /* DW4 */
 # define GEN7_GS_OUTPUT_VERTEX_SIZE_SHIFT		23
 # define GEN7_GS_OUTPUT_TOPOLOGY_SHIFT			17
@@ -1773,9 +1897,8 @@ enum brw_message_target {
 # define GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_SID		1
 # define GEN7_GS_CONTROL_DATA_HEADER_SIZE_SHIFT		20
 # define GEN7_GS_INSTANCE_CONTROL_SHIFT			15
-# define GEN7_GS_DISPATCH_MODE_SINGLE			(0 << 11)
-# define GEN7_GS_DISPATCH_MODE_DUAL_INSTANCE		(1 << 11)
-# define GEN7_GS_DISPATCH_MODE_DUAL_OBJECT		(2 << 11)
+# define GEN7_GS_DISPATCH_MODE_SHIFT                    11
+# define GEN7_GS_DISPATCH_MODE_MASK                     INTEL_MASK(12, 11)
 # define GEN6_GS_STATISTICS_ENABLE			(1 << 10)
 # define GEN6_GS_SO_STATISTICS_ENABLE			(1 << 9)
 # define GEN6_GS_RENDERING_ENABLE			(1 << 8)
@@ -2261,6 +2384,9 @@ enum brw_wm_barycentric_interp_mode {
 # define GEN7_WM_KILL_ENABLE				(1 << 25)
 # define GEN7_WM_COMPUTED_DEPTH_MODE_SHIFT              23
 # define GEN7_WM_USES_SOURCE_DEPTH			(1 << 20)
+# define GEN7_WM_EARLY_DS_CONTROL_NORMAL                (0 << 21)
+# define GEN7_WM_EARLY_DS_CONTROL_PSEXEC                (1 << 21)
+# define GEN7_WM_EARLY_DS_CONTROL_PREPS                 (2 << 21)
 # define GEN7_WM_USES_SOURCE_W			        (1 << 19)
 # define GEN7_WM_POSITION_ZW_PIXEL			(0 << 17)
 # define GEN7_WM_POSITION_ZW_CENTROID			(2 << 17)
@@ -2285,6 +2411,7 @@ enum brw_wm_barycentric_interp_mode {
 /* DW2 */
 # define GEN7_WM_MSDISPMODE_PERSAMPLE			(0 << 31)
 # define GEN7_WM_MSDISPMODE_PERPIXEL			(1 << 31)
+# define HSW_WM_UAV_ONLY                                (1 << 30)
 
 #define _3DSTATE_PS				0x7820 /* GEN7+ */
 /* DW1: kernel pointer */
@@ -2308,6 +2435,7 @@ enum brw_wm_barycentric_interp_mode {
 # define GEN7_PS_RENDER_TARGET_FAST_CLEAR_ENABLE	(1 << 8)
 # define GEN7_PS_DUAL_SOURCE_BLEND_ENABLE		(1 << 7)
 # define GEN7_PS_RENDER_TARGET_RESOLVE_ENABLE		(1 << 6)
+# define HSW_PS_UAV_ACCESS_ENABLE			(1 << 5)
 # define GEN7_PS_POSOFFSET_NONE				(0 << 3)
 # define GEN7_PS_POSOFFSET_CENTROID			(2 << 3)
 # define GEN7_PS_POSOFFSET_SAMPLE			(3 << 3)
@@ -2498,6 +2626,11 @@ enum brw_wm_barycentric_interp_mode {
 # define MEDIA_VFE_STATE_CURBE_ALLOC_MASK       INTEL_MASK(15, 0)
 
 #define MEDIA_INTERFACE_DESCRIPTOR_LOAD         0x7002
+/* GEN7 DW5, GEN8+ DW6 */
+# define MEDIA_GPGPU_THREAD_COUNT_SHIFT         0
+# define MEDIA_GPGPU_THREAD_COUNT_MASK          INTEL_MASK(7, 0)
+# define GEN8_MEDIA_GPGPU_THREAD_COUNT_SHIFT    0
+# define GEN8_MEDIA_GPGPU_THREAD_COUNT_MASK     INTEL_MASK(9, 0)
 #define MEDIA_STATE_FLUSH                       0x7004
 #define GPGPU_WALKER                            0x7105
 /* GEN8+ DW2 */

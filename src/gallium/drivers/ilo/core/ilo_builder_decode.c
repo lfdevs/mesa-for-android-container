@@ -319,7 +319,7 @@ writer_decode_color_calc(const struct ilo_builder *builder,
               "stencil ref %d, bf stencil ref %d\n",
 	      GEN_EXTRACT(dw, GEN6_CC_DW0_ALPHATEST) ? "FLOAT32" : "UNORM8",
 	      (bool) (dw & GEN6_CC_DW0_ROUND_DISABLE_DISABLE),
-	      GEN_EXTRACT(dw, GEN6_CC_DW0_STENCIL0_REF),
+	      GEN_EXTRACT(dw, GEN6_CC_DW0_STENCIL_REF),
 	      GEN_EXTRACT(dw, GEN6_CC_DW0_STENCIL1_REF));
 
    writer_dw(builder, which, item->offset, 1, "CC\n");
@@ -347,13 +347,13 @@ writer_decode_depth_stencil(const struct ilo_builder *builder,
    dw = writer_dw(builder, which, item->offset, 0, "D_S");
    ilo_printf("stencil %sable, func %d, write %sable\n",
          (dw & GEN6_ZS_DW0_STENCIL_TEST_ENABLE) ? "en" : "dis",
-         GEN_EXTRACT(dw, GEN6_ZS_DW0_STENCIL0_FUNC),
+         GEN_EXTRACT(dw, GEN6_ZS_DW0_STENCIL_FUNC),
          (dw & GEN6_ZS_DW0_STENCIL_WRITE_ENABLE) ? "en" : "dis");
 
    dw = writer_dw(builder, which, item->offset, 1, "D_S");
    ilo_printf("stencil test mask 0x%x, write mask 0x%x\n",
-         GEN_EXTRACT(dw, GEN6_ZS_DW1_STENCIL0_VALUEMASK),
-         GEN_EXTRACT(dw, GEN6_ZS_DW1_STENCIL0_WRITEMASK));
+         GEN_EXTRACT(dw, GEN6_ZS_DW1_STENCIL_TEST_MASK),
+         GEN_EXTRACT(dw, GEN6_ZS_DW1_STENCIL_WRITE_MASK));
 
    dw = writer_dw(builder, which, item->offset, 2, "D_S");
    ilo_printf("depth test %sable, func %d, write %sable\n",

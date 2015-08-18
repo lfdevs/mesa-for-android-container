@@ -44,7 +44,7 @@ struct nvfx_fpc {
    struct util_dynarray label_relocs;
 };
 
-static INLINE struct nvfx_reg
+static inline struct nvfx_reg
 temp(struct nvfx_fpc *fpc)
 {
    int idx = __builtin_ctzll(~fpc->r_temps);
@@ -60,7 +60,7 @@ temp(struct nvfx_fpc *fpc)
    return nvfx_reg(NVFXSR_TEMP, idx);
 }
 
-static INLINE void
+static inline void
 release_temps(struct nvfx_fpc *fpc)
 {
    fpc->r_temps &= ~fpc->r_temps_discard;
@@ -373,7 +373,7 @@ nv40_fp_brk(struct nvfx_fpc *fpc)
    hw[3] = 0;
 }
 
-static INLINE struct nvfx_src
+static inline struct nvfx_src
 tgsi_src(struct nvfx_fpc *fpc, const struct tgsi_full_src_register *fsrc)
 {
    struct nvfx_src src;
@@ -415,7 +415,7 @@ tgsi_src(struct nvfx_fpc *fpc, const struct tgsi_full_src_register *fsrc)
    return src;
 }
 
-static INLINE struct nvfx_reg
+static inline struct nvfx_reg
 tgsi_dst(struct nvfx_fpc *fpc, const struct tgsi_full_dst_register *fdst) {
    switch (fdst->Register.File) {
    case TGSI_FILE_OUTPUT:
@@ -430,7 +430,7 @@ tgsi_dst(struct nvfx_fpc *fpc, const struct tgsi_full_dst_register *fdst) {
    }
 }
 
-static INLINE int
+static inline int
 tgsi_mask(uint tgsi)
 {
    int mask = 0;
@@ -442,7 +442,7 @@ tgsi_mask(uint tgsi)
    return mask;
 }
 
-static boolean
+static bool
 nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
             const struct tgsi_full_instruction *finst)
 {
@@ -455,7 +455,7 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
    int i;
 
    if (finst->Instruction.Opcode == TGSI_OPCODE_END)
-      return TRUE;
+      return true;
 
    for (i = 0; i < finst->Instruction.NumSrcRegs; i++) {
       const struct tgsi_full_src_register *fsrc;
@@ -525,13 +525,13 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
          break;
       default:
          NOUVEAU_ERR("bad src file\n");
-         return FALSE;
+         return false;
       }
    }
 
    dst  = tgsi_dst(fpc, &finst->Dst[0]);
    mask = tgsi_mask(finst->Dst[0].Register.WriteMask);
-   sat  = (finst->Instruction.Saturate == TGSI_SAT_ZERO_ONE);
+   sat  = finst->Instruction.Saturate;
 
    switch (finst->Instruction.Opcode) {
    case TGSI_OPCODE_ABS:
@@ -868,12 +868,12 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
 
         default:
       NOUVEAU_ERR("invalid opcode %d\n", finst->Instruction.Opcode);
-      return FALSE;
+      return false;
    }
 
 out:
    release_temps(fpc);
-   return TRUE;
+   return true;
 nv3x_cflow:
    {
       static int warned = 0;
@@ -887,7 +887,7 @@ nv3x_cflow:
    goto out;
 }
 
-static boolean
+static bool
 nvfx_fragprog_parse_decl_input(struct nvfx_fpc *fpc,
                                const struct tgsi_full_declaration *fdec)
 {
@@ -917,17 +917,17 @@ nvfx_fragprog_parse_decl_input(struct nvfx_fpc *fpc,
    case TGSI_SEMANTIC_GENERIC:
    case TGSI_SEMANTIC_PCOORD:
       /* will be assigned to remaining TC slots later */
-      return TRUE;
+      return true;
    default:
       assert(0);
-      return FALSE;
+      return false;
    }
 
    fpc->r_input[idx] = nvfx_reg(NVFXSR_INPUT, hw);
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 nvfx_fragprog_assign_generic(struct nvfx_fpc *fpc,
                              const struct tgsi_full_declaration *fdec)
 {
@@ -954,16 +954,16 @@ nvfx_fragprog_assign_generic(struct nvfx_fpc *fpc,
             }
             hw = NVFX_FP_OP_INPUT_SRC_TC(hw);
             fpc->r_input[idx] = nvfx_reg(NVFXSR_INPUT, hw);
-            return TRUE;
+            return true;
          }
       }
-      return FALSE;
+      return false;
    default:
-      return TRUE;
+      return true;
    }
 }
 
-static boolean
+static bool
 nvfx_fragprog_parse_decl_output(struct nvfx_fpc *fpc,
             const struct tgsi_full_declaration *fdec)
 {
@@ -984,20 +984,20 @@ nvfx_fragprog_parse_decl_output(struct nvfx_fpc *fpc,
       }
       if(hw > ((fpc->is_nv4x) ? 4 : 2)) {
          NOUVEAU_ERR("bad rcol index\n");
-         return FALSE;
+         return false;
       }
       break;
    default:
       NOUVEAU_ERR("bad output semantic\n");
-      return FALSE;
+      return false;
    }
 
    fpc->r_result[idx] = nvfx_reg(NVFXSR_OUTPUT, hw);
    fpc->r_temps |= (1ULL << hw);
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 nvfx_fragprog_prepare(struct nvfx_fpc *fpc)
 {
    struct tgsi_parse_context p;
@@ -1081,17 +1081,17 @@ nvfx_fragprog_prepare(struct nvfx_fpc *fpc)
       fpc->r_temps_discard = 0ULL;
    }
 
-   return TRUE;
+   return true;
 
 out_err:
    FREE(fpc->r_temp);
    fpc->r_temp = NULL;
 
    tgsi_parse_free(&p);
-   return FALSE;
+   return false;
 }
 
-DEBUG_GET_ONCE_BOOL_OPTION(nvfx_dump_fp, "NVFX_DUMP_FP", FALSE)
+DEBUG_GET_ONCE_BOOL_OPTION(nvfx_dump_fp, "NVFX_DUMP_FP", false)
 
 void
 _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
@@ -1100,7 +1100,7 @@ _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
    struct nvfx_fpc *fpc = NULL;
    struct util_dynarray insns;
 
-   fp->translated = FALSE;
+   fp->translated = false;
    fp->point_sprite_control = 0;
    fp->vp_or = 0;
 
@@ -1182,7 +1182,7 @@ _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
       debug_printf("\n");
    }
 
-   fp->translated = TRUE;
+   fp->translated = true;
 
 out:
    tgsi_parse_free(&parse);

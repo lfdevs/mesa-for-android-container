@@ -145,7 +145,7 @@ static void r600_blit_decompress_depth(struct pipe_context *ctx,
 	rctx->db_misc_state.copy_depth = util_format_has_depth(desc);
 	rctx->db_misc_state.copy_stencil = util_format_has_stencil(desc);
 	rctx->db_misc_state.copy_sample = first_sample;
-	rctx->db_misc_state.atom.dirty = true;
+	r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 
 	for (level = first_level; level <= last_level; level++) {
 		if (!staging && !(texture->dirty_level_mask & (1 << level)))
@@ -162,7 +162,7 @@ static void r600_blit_decompress_depth(struct pipe_context *ctx,
 
 				if (sample != rctx->db_misc_state.copy_sample) {
 					rctx->db_misc_state.copy_sample = sample;
-					rctx->db_misc_state.atom.dirty = true;
+					r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 				}
 
 				surf_tmpl.format = texture->resource.b.b.format;
@@ -197,7 +197,7 @@ static void r600_blit_decompress_depth(struct pipe_context *ctx,
 
 	/* reenable compression in DB_RENDER_CONTROL */
 	rctx->db_misc_state.flush_depthstencil_through_cb = false;
-	rctx->db_misc_state.atom.dirty = true;
+	r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 }
 
 static void r600_blit_decompress_depth_in_place(struct r600_context *rctx,
@@ -210,7 +210,7 @@ static void r600_blit_decompress_depth_in_place(struct r600_context *rctx,
 
 	/* Enable decompression in DB_RENDER_CONTROL */
 	rctx->db_misc_state.flush_depthstencil_in_place = true;
-	rctx->db_misc_state.atom.dirty = true;
+	r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 
 	surf_tmpl.format = texture->resource.b.b.format;
 
@@ -248,7 +248,7 @@ static void r600_blit_decompress_depth_in_place(struct r600_context *rctx,
 
 	/* Disable decompression in DB_RENDER_CONTROL */
 	rctx->db_misc_state.flush_depthstencil_in_place = false;
-	rctx->db_misc_state.atom.dirty = true;
+	r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 }
 
 void r600_decompress_depth_textures(struct r600_context *rctx,
@@ -393,14 +393,11 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct pipe_framebuffer_state *fb = &rctx->framebuffer.state;
 
-	/* Single-sample fast color clear is broken on r600g:
-	 *   https://bugs.freedesktop.org/show_bug.cgi?id=73528
-	 *   https://bugs.freedesktop.org/show_bug.cgi?id=82186
-	 */
-	if (buffers & PIPE_CLEAR_COLOR && rctx->b.chip_class >= EVERGREEN &&
-	    rctx->framebuffer.nr_samples > 1) {
+	if (buffers & PIPE_CLEAR_COLOR && rctx->b.chip_class >= EVERGREEN) {
 		evergreen_do_fast_color_clear(&rctx->b, fb, &rctx->framebuffer.atom,
 					      &buffers, color);
+		if (!buffers)
+			return; /* all buffers have been fast cleared */
 	}
 
 	if (buffers & PIPE_CLEAR_COLOR) {
@@ -440,10 +437,10 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
                    fb->zsbuf->u.tex.last_layer == util_max_layer(&rtex->resource.b.b, level)) {
 			if (rtex->depth_clear_value != depth) {
 				rtex->depth_clear_value = depth;
-				rctx->db_state.atom.dirty = true;
+				r600_mark_atom_dirty(rctx, &rctx->db_state.atom);
 			}
 			rctx->db_misc_state.htile_clear = true;
-			rctx->db_misc_state.atom.dirty = true;
+			r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 		}
 	}
 
@@ -456,7 +453,7 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 	/* disable fast clear */
 	if (rctx->db_misc_state.htile_clear) {
 		rctx->db_misc_state.htile_clear = false;
-		rctx->db_misc_state.atom.dirty = true;
+		r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 	}
 }
 

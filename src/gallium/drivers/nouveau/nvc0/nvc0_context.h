@@ -54,6 +54,7 @@
 #define NVC0_NEW_IDXBUF       (1 << 22)
 #define NVC0_NEW_SURFACES     (1 << 23)
 #define NVC0_NEW_MIN_SAMPLES  (1 << 24)
+#define NVC0_NEW_TESSFACTOR   (1 << 25)
 
 #define NVC0_NEW_CP_PROGRAM   (1 << 0)
 #define NVC0_NEW_CP_SURFACES  (1 << 1)
@@ -93,7 +94,7 @@
 
 struct nvc0_blitctx;
 
-boolean nvc0_blitctx_create(struct nvc0_context *);
+bool nvc0_blitctx_create(struct nvc0_context *);
 void nvc0_blitctx_destroy(struct nvc0_context *);
 
 struct nvc0_context {
@@ -127,10 +128,12 @@ struct nvc0_context {
    struct nvc0_program *fragprog;
    struct nvc0_program *compprog;
 
+   struct nvc0_program *tcp_empty;
+
    struct nvc0_constbuf constbuf[6][NVC0_MAX_PIPE_CONSTBUFS];
    uint16_t constbuf_dirty[6];
    uint16_t constbuf_valid[6];
-   boolean cb_dirty;
+   bool cb_dirty;
 
    struct pipe_vertex_buffer vtxbuf[PIPE_MAX_ATTRIBS];
    unsigned num_vtxbufs;
@@ -164,14 +167,17 @@ struct nvc0_context {
    unsigned sample_mask;
    unsigned min_samples;
 
-   boolean vbo_push_hint;
+   float default_tess_outer[4];
+   float default_tess_inner[2];
+
+   bool vbo_push_hint;
 
    uint8_t tfbbuf_dirty;
    struct pipe_stream_output_target *tfbbuf[4];
    unsigned num_tfbbufs;
 
    struct pipe_query *cond_query;
-   boolean cond_cond; /* inverted rendering condition */
+   bool cond_cond; /* inverted rendering condition */
    uint cond_mode;
    uint32_t cond_condmode; /* the calculated condition */
 
@@ -184,19 +190,19 @@ struct nvc0_context {
    struct util_dynarray global_residents;
 };
 
-static INLINE struct nvc0_context *
+static inline struct nvc0_context *
 nvc0_context(struct pipe_context *pipe)
 {
    return (struct nvc0_context *)pipe;
 }
 
-static INLINE unsigned
+static inline unsigned
 nvc0_shader_stage(unsigned pipe)
 {
    switch (pipe) {
    case PIPE_SHADER_VERTEX: return 0;
-/* case PIPE_SHADER_TESSELLATION_CONTROL: return 1; */
-/* case PIPE_SHADER_TESSELLATION_EVALUATION: return 2; */
+   case PIPE_SHADER_TESS_CTRL: return 1;
+   case PIPE_SHADER_TESS_EVAL: return 2;
    case PIPE_SHADER_GEOMETRY: return 3;
    case PIPE_SHADER_FRAGMENT: return 4;
    case PIPE_SHADER_COMPUTE: return 5;
@@ -210,19 +216,20 @@ nvc0_shader_stage(unsigned pipe)
 /* nvc0_context.c */
 struct pipe_context *nvc0_create(struct pipe_screen *, void *);
 void nvc0_bufctx_fence(struct nvc0_context *, struct nouveau_bufctx *,
-                       boolean on_flush);
+                       bool on_flush);
 void nvc0_default_kick_notify(struct nouveau_pushbuf *);
 
 /* nvc0_draw.c */
 extern struct draw_stage *nvc0_draw_render_stage(struct nvc0_context *);
 
 /* nvc0_program.c */
-boolean nvc0_program_translate(struct nvc0_program *, uint16_t chipset);
-boolean nvc0_program_upload_code(struct nvc0_context *, struct nvc0_program *);
+bool nvc0_program_translate(struct nvc0_program *, uint16_t chipset);
+bool nvc0_program_upload_code(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_destroy(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_library_upload(struct nvc0_context *);
 uint32_t nvc0_program_symbol_offset(const struct nvc0_program *,
                                     uint32_t label);
+void nvc0_program_init_tcp_empty(struct nvc0_context *);
 
 /* nvc0_query.c */
 void nvc0_init_query_functions(struct nvc0_context *);
@@ -231,7 +238,7 @@ void nvc0_query_pushbuf_submit(struct nouveau_pushbuf *,
 void nvc0_query_fifo_wait(struct nouveau_pushbuf *, struct pipe_query *);
 void nvc0_so_target_save_offset(struct pipe_context *,
                                 struct pipe_stream_output_target *, unsigned i,
-                                boolean *serialize);
+                                bool *serialize);
 
 #define NVC0_QUERY_TFB_BUFFER_OFFSET (PIPE_QUERY_TYPES + 0)
 
@@ -250,8 +257,8 @@ extern void nvc0_init_state_functions(struct nvc0_context *);
 /* nvc0_state_validate.c */
 void nvc0_validate_global_residents(struct nvc0_context *,
                                     struct nouveau_bufctx *, int bin);
-extern boolean nvc0_state_validate(struct nvc0_context *, uint32_t state_mask,
-                                   unsigned space_words);
+extern bool nvc0_state_validate(struct nvc0_context *, uint32_t state_mask,
+                                unsigned space_words);
 
 /* nvc0_surface.c */
 extern void nvc0_clear(struct pipe_context *, unsigned buffers,
@@ -260,7 +267,7 @@ extern void nvc0_clear(struct pipe_context *, unsigned buffers,
 extern void nvc0_init_surface_functions(struct nvc0_context *);
 
 /* nvc0_tex.c */
-boolean nve4_validate_tsc(struct nvc0_context *nvc0, int s);
+bool nve4_validate_tsc(struct nvc0_context *nvc0, int s);
 void nvc0_validate_textures(struct nvc0_context *);
 void nvc0_validate_samplers(struct nvc0_context *);
 void nve4_set_tex_handles(struct nvc0_context *);

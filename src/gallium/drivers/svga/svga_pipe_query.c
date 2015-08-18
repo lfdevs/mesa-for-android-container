@@ -59,7 +59,7 @@ struct svga_query {
 
 
 /** cast wrapper */
-static INLINE struct svga_query *
+static inline struct svga_query *
 svga_query( struct pipe_query *q )
 {
    return (struct svga_query *)q;

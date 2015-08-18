@@ -63,7 +63,7 @@ ilo_blitter_pipe_begin(struct ilo_blitter *blitter,
    util_blitter_save_viewport(b, &vec->viewport.viewport0);
 
    if (scissor_enable)
-      util_blitter_save_scissor(b, &vec->scissor.scissor0);
+      util_blitter_save_scissor(b, &vec->viewport.scissor0);
 
    switch (op) {
    case ILO_BLITTER_PIPE_BLIT:

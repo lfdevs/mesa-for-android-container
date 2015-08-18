@@ -43,7 +43,7 @@ struct fd3_sampler_stateobj {
 	bool saturate_s, saturate_t, saturate_r;
 };
 
-static INLINE struct fd3_sampler_stateobj *
+static inline struct fd3_sampler_stateobj *
 fd3_sampler_stateobj(struct pipe_sampler_state *samp)
 {
 	return (struct fd3_sampler_stateobj *)samp;
@@ -54,7 +54,7 @@ struct fd3_pipe_sampler_view {
 	uint32_t texconst0, texconst1, texconst2, texconst3;
 };
 
-static INLINE struct fd3_pipe_sampler_view *
+static inline struct fd3_pipe_sampler_view *
 fd3_pipe_sampler_view(struct pipe_sampler_view *pview)
 {
 	return (struct fd3_pipe_sampler_view *)pview;

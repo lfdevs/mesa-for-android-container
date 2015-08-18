@@ -32,6 +32,7 @@
 #include "fd3_screen.h"
 #include "fd3_context.h"
 #include "fd3_format.h"
+#include "ir3_compiler.h"
 
 static boolean
 fd3_screen_is_format_supported(struct pipe_screen *pscreen,
@@ -103,7 +104,9 @@ fd3_screen_is_format_supported(struct pipe_screen *pscreen,
 void
 fd3_screen_init(struct pipe_screen *pscreen)
 {
-	fd_screen(pscreen)->max_rts = 4;
+	struct fd_screen *screen = fd_screen(pscreen);
+	screen->max_rts = A3XX_MAX_RENDER_TARGETS;
+	screen->compiler = ir3_compiler_create(screen->gpu_id);
 	pscreen->context_create = fd3_context_create;
 	pscreen->is_format_supported = fd3_screen_is_format_supported;
 }

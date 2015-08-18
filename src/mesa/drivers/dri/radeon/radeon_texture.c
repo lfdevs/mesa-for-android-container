@@ -224,7 +224,19 @@ static mesa_format radeonChoose8888TexFormat(radeonContextPtr rmesa,
 	const GLuint ui = 1;
 	const GLubyte littleEndian = *((const GLubyte *)&ui);
 
-	if (fbo)
+
+	/* Unfortunately, regardless the fbo flag, we might still be asked to
+	 * attach a texture to a fbo later, which then won't succeed if we chose
+	 * one which isn't renderable. And unlike more exotic formats, apps aren't
+	 * really prepared for the incomplete framebuffer this results in (they'd
+	 * have to retry with same internalFormat even, just different
+	 * srcFormat/srcType, which can't really be expected anyway).
+	 * Ideally, we'd defer format selection until later (if the texture is
+	 * used as a rt it's likely there's never data uploaded to it before attached
+	 * to a fbo), but this isn't really possible, so for now just always use
+	 * a renderable format.
+	 */
+	if (1 || fbo)
 		return _radeon_texformat_argb8888;
 
 	if ((srcFormat == GL_RGBA && srcType == GL_UNSIGNED_INT_8_8_8_8) ||
@@ -267,8 +279,8 @@ mesa_format radeonChooseTextureFormat(struct gl_context * ctx,
 	radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 		"%s InternalFormat=%s(%d) type=%s format=%s\n",
 		__func__,
-		_mesa_lookup_enum_by_nr(internalFormat), internalFormat,
-		_mesa_lookup_enum_by_nr(type), _mesa_lookup_enum_by_nr(format));
+		_mesa_enum_to_string(internalFormat), internalFormat,
+		_mesa_enum_to_string(type), _mesa_enum_to_string(format));
 	radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 			"%s do32bpt=%d force16bpt=%d\n",
 			__func__, do32bpt, force16bpt);
@@ -531,7 +543,7 @@ void radeon_image_target_texture_2d(struct gl_context *ctx, GLenum target,
 	__DRIscreen *screen;
 	__DRIimage *image;
 
-	screen = radeon->dri.screen;
+	screen = radeon->radeonScreen->driScreen;
 	image = screen->dri2.image->lookupEGLImage(screen, image_handle,
 						   screen->loaderPrivate);
 	if (image == NULL)

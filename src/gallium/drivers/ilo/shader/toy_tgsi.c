@@ -2036,9 +2036,6 @@ parse_instruction(struct toy_tgsi *tgsi,
       if (!dst_is_scratch[i])
          continue;
 
-      if (tgsi_inst->Instruction.Saturate == TGSI_SAT_MINUS_PLUS_ONE)
-         tc_fail(tgsi->tc, "TGSI_SAT_MINUS_PLUS_ONE unhandled");
-
       tgsi->tc->templ.saturate = tgsi_inst->Instruction.Saturate;
 
       /* emit indirect store */

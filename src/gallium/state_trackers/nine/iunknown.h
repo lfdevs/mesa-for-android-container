@@ -52,7 +52,7 @@ struct NineUnknown
 
     void (*dtor)(void *data); /* top-level dtor */
 };
-static INLINE struct NineUnknown *
+static inline struct NineUnknown *
 NineUnknown( void *data )
 {
     return (struct NineUnknown *)data;
@@ -94,14 +94,14 @@ NineUnknown_GetDevice( struct NineUnknown *This,
 
 /*** Nine private methods ***/
 
-static INLINE void
+static inline void
 NineUnknown_Destroy( struct NineUnknown *This )
 {
     assert(!(This->refs | This->bind));
     This->dtor(This);
 }
 
-static INLINE UINT
+static inline UINT
 NineUnknown_Bind( struct NineUnknown *This )
 {
     UINT b = ++This->bind;
@@ -113,7 +113,7 @@ NineUnknown_Bind( struct NineUnknown *This )
     return b;
 }
 
-static INLINE UINT
+static inline UINT
 NineUnknown_Unbind( struct NineUnknown *This )
 {
     UINT b = --This->bind;
@@ -129,7 +129,7 @@ NineUnknown_Unbind( struct NineUnknown *This )
     return b;
 }
 
-static INLINE void
+static inline void
 NineUnknown_ConvertRefToBind( struct NineUnknown *This )
 {
     NineUnknown_Bind(This);
@@ -137,7 +137,7 @@ NineUnknown_ConvertRefToBind( struct NineUnknown *This )
 }
 
 /* Detach from container. */
-static INLINE void
+static inline void
 NineUnknown_Detach( struct NineUnknown *This )
 {
     assert(This->container && !This->forward);

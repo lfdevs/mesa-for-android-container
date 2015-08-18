@@ -57,7 +57,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		tile_mode = LINEAR;
 	}
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < A3XX_MAX_RENDER_TARGETS; i++) {
 		enum pipe_format pformat = 0;
 		enum a3xx_color_fmt format = 0;
 		enum a3xx_color_swap swap = WZYX;
@@ -537,10 +537,7 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 			/* NOTE: They all use the same VP, this is for vtx bufs. */
 			.prog = &ctx->blit_prog[0],
 			.key = {
-				.half_precision = (fd3_half_precision(pfb->cbufs[0]) &&
-								   fd3_half_precision(pfb->cbufs[1]) &&
-								   fd3_half_precision(pfb->cbufs[2]) &&
-								   fd3_half_precision(pfb->cbufs[3]))
+				.half_precision = fd_half_precision(pfb),
 			},
 	};
 	float x0, y0, x1, y1;
@@ -654,6 +651,7 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 
 	if (fd_gmem_needs_restore(ctx, tile, FD_BUFFER_COLOR)) {
 		emit.prog = &ctx->blit_prog[pfb->nr_cbufs - 1];
+		emit.fp = NULL;      /* frag shader changed so clear cache */
 		fd3_program_emit(ring, &emit, pfb->nr_cbufs, pfb->cbufs);
 		emit_mem2gmem_surf(ctx, gmem->cbuf_base, pfb->cbufs, pfb->nr_cbufs, bin_w);
 	}
@@ -674,6 +672,7 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 				emit.prog = &ctx->blit_zs;
 			emit.key.half_precision = false;
 		}
+		emit.fp = NULL;      /* frag shader changed so clear cache */
 		fd3_program_emit(ring, &emit, 1, &pfb->zsbuf);
 		emit_mem2gmem_surf(ctx, gmem->zsbuf_base, &pfb->zsbuf, 1, bin_w);
 	}

@@ -29,7 +29,8 @@
 brw_blorp_eu_emitter::brw_blorp_eu_emitter(struct brw_context *brw,
                                            bool debug_flag)
    : mem_ctx(ralloc_context(NULL)),
-     generator(brw, mem_ctx, (void *) rzalloc(mem_ctx, struct brw_wm_prog_key),
+     generator(brw->intelScreen->compiler, brw,
+               mem_ctx, (void *) rzalloc(mem_ctx, struct brw_wm_prog_key),
                (struct brw_stage_prog_data *) rzalloc(mem_ctx, struct brw_wm_prog_data),
                NULL, 0, false, "BLORP")
 {
@@ -72,7 +73,7 @@ brw_blorp_eu_emitter::emit_kill_if_outside_rect(const struct brw_reg &x,
    emit_cmp(BRW_CONDITIONAL_L, x, dst_x1)->predicate = BRW_PREDICATE_NORMAL;
    emit_cmp(BRW_CONDITIONAL_L, y, dst_y1)->predicate = BRW_PREDICATE_NORMAL;
 
-   fs_inst *inst = new (mem_ctx) fs_inst(BRW_OPCODE_AND, g1, f0, g1);
+   fs_inst *inst = new (mem_ctx) fs_inst(BRW_OPCODE_AND, 16, g1, f0, g1);
    inst->force_writemask_all = true;
    insts.push_tail(inst);
 }
@@ -83,7 +84,7 @@ brw_blorp_eu_emitter::emit_texture_lookup(const struct brw_reg &dst,
                                           unsigned base_mrf,
                                           unsigned msg_length)
 {
-   fs_inst *inst = new (mem_ctx) fs_inst(op, dst, brw_message_reg(base_mrf),
+   fs_inst *inst = new (mem_ctx) fs_inst(op, 16, dst, brw_message_reg(base_mrf),
                                          fs_reg(0u));
 
    inst->base_mrf = base_mrf;
@@ -118,7 +119,8 @@ brw_blorp_eu_emitter::emit_combine(enum opcode combine_opcode,
 {
    assert(combine_opcode == BRW_OPCODE_ADD || combine_opcode == BRW_OPCODE_AVG);
 
-   insts.push_tail(new (mem_ctx) fs_inst(combine_opcode, dst, src_1, src_2));
+   insts.push_tail(new (mem_ctx) fs_inst(combine_opcode, 16, dst,
+                                         src_1, src_2));
 }
 
 fs_inst *
@@ -126,7 +128,7 @@ brw_blorp_eu_emitter::emit_cmp(enum brw_conditional_mod op,
                                const struct brw_reg &x,
                                const struct brw_reg &y)
 {
-   fs_inst *cmp = new (mem_ctx) fs_inst(BRW_OPCODE_CMP,
+   fs_inst *cmp = new (mem_ctx) fs_inst(BRW_OPCODE_CMP, 16,
                                         vec16(brw_null_reg()), x, y);
    cmp->conditional_mod = op;
    insts.push_tail(cmp);

@@ -231,18 +231,53 @@ hud_draw_string(struct hud_context *hud, unsigned x, unsigned y,
 }
 
 static void
-number_to_human_readable(uint64_t num, boolean is_in_bytes, char *out)
+number_to_human_readable(uint64_t num, uint64_t max_value,
+                         enum pipe_driver_query_type type, char *out)
 {
    static const char *byte_units[] =
-      {"", " KB", " MB", " GB", " TB", " PB", " EB"};
+      {" B", " KB", " MB", " GB", " TB", " PB", " EB"};
    static const char *metric_units[] =
       {"", " k", " M", " G", " T", " P", " E"};
-   const char **units = is_in_bytes ? byte_units : metric_units;
-   double divisor = is_in_bytes ? 1024 : 1000;
-   int unit = 0;
+   static const char *time_units[] =
+      {" us", " ms", " s"};  /* based on microseconds */
+   static const char *hz_units[] =
+      {" Hz", " KHz", " MHz", " GHz"};
+   static const char *percent_units[] = {"%"};
+
+   const char **units;
+   unsigned max_unit;
+   double divisor = (type == PIPE_DRIVER_QUERY_TYPE_BYTES) ? 1024 : 1000;
+   unsigned unit = 0;
    double d = num;
 
-   while (d > divisor) {
+   switch (type) {
+   case PIPE_DRIVER_QUERY_TYPE_MICROSECONDS:
+      max_unit = ARRAY_SIZE(time_units)-1;
+      units = time_units;
+      break;
+   case PIPE_DRIVER_QUERY_TYPE_PERCENTAGE:
+      max_unit = ARRAY_SIZE(percent_units)-1;
+      units = percent_units;
+      break;
+   case PIPE_DRIVER_QUERY_TYPE_BYTES:
+      max_unit = ARRAY_SIZE(byte_units)-1;
+      units = byte_units;
+      break;
+   case PIPE_DRIVER_QUERY_TYPE_HZ:
+      max_unit = ARRAY_SIZE(hz_units)-1;
+      units = hz_units;
+      break;
+   default:
+      if (max_value == 100) {
+         max_unit = ARRAY_SIZE(percent_units)-1;
+         units = percent_units;
+      } else {
+         max_unit = ARRAY_SIZE(metric_units)-1;
+         units = metric_units;
+      }
+   }
+
+   while (d > divisor && unit < max_unit) {
       d /= divisor;
       unit++;
    }
@@ -300,9 +335,9 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
       unsigned y = pane->inner_y1 + pane->inner_height * (5 - i) / 5 -
                    hud->font.glyph_height / 2;
 
-      number_to_human_readable(pane->max_value * i / 5,
-                               pane->uses_byte_units, str);
-      hud_draw_string(hud, x, y, str);
+      number_to_human_readable(pane->max_value * i / 5, pane->max_value,
+                               pane->type, str);
+      hud_draw_string(hud, x, y, "%s", str);
    }
 
    /* draw info below the pane */
@@ -311,8 +346,8 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
       unsigned x = pane->x1 + 2;
       unsigned y = pane->y2 + 2 + i*hud->font.glyph_height;
 
-      number_to_human_readable(gr->current_value,
-                               pane->uses_byte_units, str);
+      number_to_human_readable(gr->current_value, pane->max_value,
+                               pane->type, str);
       hud_draw_string(hud, x, y, "  %s: %s", gr->name, str);
       i++;
    }
@@ -417,8 +452,8 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
    cso_save_blend(cso);
    cso_save_depth_stencil_alpha(cso);
    cso_save_fragment_shader(cso);
-   cso_save_sampler_views(cso, PIPE_SHADER_FRAGMENT);
-   cso_save_samplers(cso, PIPE_SHADER_FRAGMENT);
+   cso_save_fragment_sampler_views(cso);
+   cso_save_fragment_samplers(cso);
    cso_save_rasterizer(cso);
    cso_save_viewport(cso);
    cso_save_stream_outputs(cso);
@@ -547,8 +582,8 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
    cso_restore_blend(cso);
    cso_restore_depth_stencil_alpha(cso);
    cso_restore_fragment_shader(cso);
-   cso_restore_sampler_views(cso, PIPE_SHADER_FRAGMENT);
-   cso_restore_samplers(cso, PIPE_SHADER_FRAGMENT);
+   cso_restore_fragment_sampler_views(cso);
+   cso_restore_fragment_samplers(cso);
    cso_restore_rasterizer(cso);
    cso_restore_viewport(cso);
    cso_restore_stream_outputs(cso);
@@ -869,12 +904,16 @@ hud_parse_env_var(struct hud_context *hud, const char *env)
       else if (strcmp(name, "samples-passed") == 0 &&
                has_occlusion_query(hud->pipe->screen)) {
          hud_pipe_query_install(pane, hud->pipe, "samples-passed",
-                                PIPE_QUERY_OCCLUSION_COUNTER, 0, 0, FALSE);
+                                PIPE_QUERY_OCCLUSION_COUNTER, 0, 0,
+                                PIPE_DRIVER_QUERY_TYPE_UINT64,
+                                PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE);
       }
       else if (strcmp(name, "primitives-generated") == 0 &&
                has_streamout(hud->pipe->screen)) {
          hud_pipe_query_install(pane, hud->pipe, "primitives-generated",
-                                PIPE_QUERY_PRIMITIVES_GENERATED, 0, 0, FALSE);
+                                PIPE_QUERY_PRIMITIVES_GENERATED, 0, 0,
+                                PIPE_DRIVER_QUERY_TYPE_UINT64,
+                                PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE);
       }
       else {
          boolean processed = FALSE;
@@ -901,7 +940,8 @@ hud_parse_env_var(struct hud_context *hud, const char *env)
             if (i < Elements(pipeline_statistics_names)) {
                hud_pipe_query_install(pane, hud->pipe, name,
                                       PIPE_QUERY_PIPELINE_STATISTICS, i,
-                                      0, FALSE);
+                                      0, PIPE_DRIVER_QUERY_TYPE_UINT64,
+                                      PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE);
                processed = TRUE;
             }
          }

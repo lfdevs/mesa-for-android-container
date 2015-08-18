@@ -69,6 +69,8 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return PIPE_ENDIAN_LITTLE;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
+   case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
+      return NOUVEAU_MIN_BUFFER_MAP_ALIGN;
    case PIPE_CAP_MAX_VIEWPORTS:
       return 1;
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
@@ -96,6 +98,9 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 1;
+   /* nv35 capabilities */
+   case PIPE_CAP_DEPTH_BOUNDS_TEST:
+      return eng3d->oclass == NV35_3D_CLASS || eng3d->oclass >= NV40_3D_CLASS;
    /* nv4x capabilities */
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_NPOT_TEXTURES:
@@ -135,7 +140,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_START_INSTANCE:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
-   case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
@@ -162,6 +166,9 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+   case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
+   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -252,6 +259,7 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
          return 0;
       default:
          debug_printf("unknown vertex shader param %d\n", param);
@@ -292,6 +300,7 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
          return 0;
       default:
          debug_printf("unknown fragment shader param %d\n", param);
@@ -311,12 +320,12 @@ nv30_screen_is_format_supported(struct pipe_screen *pscreen,
                                 unsigned bindings)
 {
    if (sample_count > 4)
-      return FALSE;
+      return false;
    if (!(0x00000017 & (1 << sample_count)))
-      return FALSE;
+      return false;
 
    if (!util_format_is_supported(format, bindings)) {
-      return FALSE;
+      return false;
    }
 
    /* transfers & shared are always supported */
@@ -524,7 +533,7 @@ nv30_screen_create(struct nouveau_device *dev)
 
    ret = nouveau_bo_wrap(screen->base.device, fifo->notify, &screen->notify);
    if (ret == 0)
-      nouveau_bo_map(screen->notify, 0, screen->base.client);
+      ret = nouveau_bo_map(screen->notify, 0, screen->base.client);
    if (ret)
       FAIL_SCREEN_INIT("error mapping notifier memory: %d\n", ret);
 
@@ -654,6 +663,6 @@ nv30_screen_create(struct nouveau_device *dev)
 
    nouveau_pushbuf_kick(push, push->channel);
 
-   nouveau_fence_new(&screen->base, &screen->base.fence.current, FALSE);
+   nouveau_fence_new(&screen->base, &screen->base.fence.current, false);
    return pscreen;
 }

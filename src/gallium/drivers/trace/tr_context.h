@@ -54,7 +54,7 @@ void
 trace_context_check(const struct pipe_context *pipe);
 
 
-static INLINE struct trace_context *
+static inline struct trace_context *
 trace_context(struct pipe_context *pipe)
 {
    assert(pipe);

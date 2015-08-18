@@ -39,11 +39,13 @@ vc4_wrap_bo_with_cma(struct drm_device *dev, struct vc4_bo *bo)
 {
         struct vc4_context *vc4 = dev->vc4;
         struct vc4_screen *screen = vc4->screen;
-        struct drm_gem_cma_object *obj = CALLOC_STRUCT(drm_gem_cma_object);
+        struct drm_vc4_bo *drm_bo = CALLOC_STRUCT(drm_vc4_bo);
+        struct drm_gem_cma_object *obj = &drm_bo->base;
         uint32_t size = align(bo->size, 4096);
 
-        obj->bo = bo;
+        drm_bo->bo = bo;
         obj->base.size = size;
+        obj->base.dev = dev;
         obj->vaddr = screen->simulator_mem_base + dev->simulator_mem_next;
         obj->paddr = simpenrose_hw_addr(obj->vaddr);
 
@@ -72,11 +74,12 @@ vc4_simulator_pin_bos(struct drm_device *dev, struct vc4_exec_info *exec)
         struct vc4_bo **bos = vc4->bo_pointers.base;
 
         exec->bo_count = args->bo_handle_count;
-        exec->bo = calloc(exec->bo_count, sizeof(struct vc4_bo_exec_state));
+        exec->bo = calloc(exec->bo_count, sizeof(void *));
         for (int i = 0; i < exec->bo_count; i++) {
                 struct vc4_bo *bo = bos[i];
                 struct drm_gem_cma_object *obj = vc4_wrap_bo_with_cma(dev, bo);
 
+                struct drm_vc4_bo *drm_bo = to_vc4_bo(&obj->base);
 #if 0
                 fprintf(stderr, "bo hindex %d: %s\n", i, bo->name);
 #endif
@@ -84,7 +87,16 @@ vc4_simulator_pin_bos(struct drm_device *dev, struct vc4_exec_info *exec)
                 vc4_bo_map(bo);
                 memcpy(obj->vaddr, bo->map, bo->size);
 
-                exec->bo[i].bo = obj;
+                exec->bo[i] = obj;
+
+                /* The kernel does this validation at shader create ioctl
+                 * time.
+                 */
+                if (strcmp(bo->name, "code") == 0) {
+                        drm_bo->validated_shader = vc4_validate_shader(obj);
+                        if (!drm_bo->validated_shader)
+                                abort();
+                }
         }
         return 0;
 }
@@ -93,8 +105,8 @@ static int
 vc4_simulator_unpin_bos(struct vc4_exec_info *exec)
 {
         for (int i = 0; i < exec->bo_count; i++) {
-                struct drm_gem_cma_object *obj = exec->bo[i].bo;
-                struct vc4_bo *bo = obj->bo;
+                struct drm_gem_cma_object *obj = exec->bo[i];
+                struct vc4_bo *bo = to_vc4_bo(&obj->base)->bo;
 
                 memcpy(bo->map, obj->vaddr, bo->size);
 
@@ -124,6 +136,7 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
         int ret;
 
         memset(&exec, 0, sizeof(exec));
+        list_inithead(&exec.unref_list);
 
         if (ctex && ctex->bo->simulator_winsys_map) {
 #if 0
@@ -176,8 +189,12 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
         if (ret)
                 return ret;
 
-        vc4_bo_unreference(&exec.exec_bo->bo);
-        free(exec.exec_bo);
+        list_for_each_entry_safe(struct drm_vc4_bo, bo, &exec.unref_list,
+                                 unref_head) {
+		list_del(&bo->unref_head);
+                vc4_bo_unreference(&bo->bo);
+                free(bo);
+        }
 
         if (ctex && ctex->bo->simulator_winsys_map) {
                 for (int y = 0; y < ctex->base.b.height0; y++) {

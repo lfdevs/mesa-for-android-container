@@ -48,7 +48,7 @@ nv30_vertprog_destroy(struct nv30_vertprog *vp)
    vp->consts = NULL;
    vp->nr_consts = 0;
 
-   vp->translated = FALSE;
+   vp->translated = false;
 }
 
 void
@@ -58,8 +58,8 @@ nv30_vertprog_validate(struct nv30_context *nv30)
    struct nouveau_object *eng3d = nv30->screen->eng3d;
    struct nv30_vertprog *vp = nv30->vertprog.program;
    struct nv30_fragprog *fp = nv30->fragprog.program;
-   boolean upload_code = FALSE;
-   boolean upload_data = FALSE;
+   bool upload_code = false;
+   bool upload_data = false;
    unsigned i;
 
    if (nv30->dirty & NV30_NEW_FRAGPROG) {
@@ -125,7 +125,7 @@ nv30_vertprog_validate(struct nv30_context *nv30)
          }
       }
 
-      upload_code = TRUE;
+      upload_code = true;
    }
 
    if (vp->nr_consts && !vp->data) {
@@ -166,8 +166,8 @@ nv30_vertprog_validate(struct nv30_context *nv30)
          }
       }
 
-      upload_code = TRUE;
-      upload_data = TRUE;
+      upload_code = true;
+      upload_data = true;
    }
 
    if (vp->nr_consts) {

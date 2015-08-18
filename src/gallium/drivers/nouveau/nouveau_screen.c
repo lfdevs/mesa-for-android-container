@@ -68,17 +68,13 @@ nouveau_screen_fence_ref(struct pipe_screen *pscreen,
 }
 
 static boolean
-nouveau_screen_fence_signalled(struct pipe_screen *screen,
-                               struct pipe_fence_handle *pfence)
-{
-        return nouveau_fence_signalled(nouveau_fence(pfence));
-}
-
-static boolean
 nouveau_screen_fence_finish(struct pipe_screen *screen,
 			    struct pipe_fence_handle *pfence,
                             uint64_t timeout)
 {
+	if (!timeout)
+		return nouveau_fence_signalled(nouveau_fence(pfence));
+
 	return nouveau_fence_wait(nouveau_fence(pfence));
 }
 
@@ -115,7 +111,7 @@ nouveau_screen_bo_from_handle(struct pipe_screen *pscreen,
 }
 
 
-boolean
+bool
 nouveau_screen_bo_get_handle(struct pipe_screen *pscreen,
 			     struct nouveau_bo *bo,
 			     unsigned stride,
@@ -127,11 +123,11 @@ nouveau_screen_bo_get_handle(struct pipe_screen *pscreen,
 		return nouveau_bo_name_get(bo, &whandle->handle) == 0;
 	} else if (whandle->type == DRM_API_HANDLE_TYPE_KMS) {
 		whandle->handle = bo->handle;
-		return TRUE;
+		return true;
 	} else if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
 		return nouveau_bo_set_prime(bo, (int *)&whandle->handle) == 0;
 	} else {
-		return FALSE;
+		return false;
 	}
 }
 
@@ -164,6 +160,16 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 		size = sizeof(nvc0_data);
 	}
 
+	/*
+	 * Set default VRAM domain if not overridden
+	 */
+	if (!screen->vram_domain) {
+		if (dev->vram_size > 0)
+			screen->vram_domain = NOUVEAU_BO_VRAM;
+		else
+			screen->vram_domain = NOUVEAU_BO_GART;
+	}
+
 	ret = nouveau_object_new(&dev->object, 0, NOUVEAU_FIFO_CHANNEL_CLASS,
 				 data, size, &screen->channel);
 	if (ret)
@@ -193,7 +199,6 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 	pscreen->get_timestamp = nouveau_screen_get_timestamp;
 
 	pscreen->fence_reference = nouveau_screen_fence_ref;
-	pscreen->fence_signalled = nouveau_screen_fence_signalled;
 	pscreen->fence_finish = nouveau_screen_fence_finish;
 
 	util_format_s3tc_init();
@@ -204,7 +209,8 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 		PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_SCANOUT |
 		PIPE_BIND_CURSOR |
 		PIPE_BIND_SAMPLER_VIEW |
-		PIPE_BIND_SHADER_RESOURCE | PIPE_BIND_COMPUTE_RESOURCE |
+		PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SHADER_IMAGE |
+                PIPE_BIND_COMPUTE_RESOURCE |
 		PIPE_BIND_GLOBAL;
 	screen->sysmem_bindings =
 		PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_STREAM_OUTPUT |

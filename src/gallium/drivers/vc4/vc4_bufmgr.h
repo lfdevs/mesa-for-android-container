@@ -44,9 +44,9 @@ struct vc4_bo {
 #endif
 
         /** Entry in the linked list of buffers freed, by age. */
-        struct simple_node time_list;
+        struct list_head time_list;
         /** Entry in the per-page-count linked list of buffers freed (by age). */
-        struct simple_node size_list;
+        struct list_head size_list;
         /** Approximate second when the bo was freed. */
         time_t free_time;
         /**
@@ -58,8 +58,8 @@ struct vc4_bo {
 
 struct vc4_bo *vc4_bo_alloc(struct vc4_screen *screen, uint32_t size,
                             const char *name);
-struct vc4_bo *vc4_bo_alloc_mem(struct vc4_screen *screen, const void *data,
-                                uint32_t size, const char *name);
+struct vc4_bo *vc4_bo_alloc_shader(struct vc4_screen *screen, const void *data,
+                                   uint32_t size);
 void vc4_bo_last_unreference(struct vc4_bo *bo);
 void vc4_bo_last_unreference_locked_timed(struct vc4_bo *bo, time_t time);
 struct vc4_bo *vc4_bo_open_name(struct vc4_screen *screen, uint32_t name,
@@ -113,10 +113,11 @@ void *
 vc4_bo_map_unsynchronized(struct vc4_bo *bo);
 
 bool
-vc4_bo_wait(struct vc4_bo *bo, uint64_t timeout_ns);
+vc4_bo_wait(struct vc4_bo *bo, uint64_t timeout_ns, const char *reason);
 
 bool
-vc4_wait_seqno(struct vc4_screen *screen, uint64_t seqno, uint64_t timeout_ns);
+vc4_wait_seqno(struct vc4_screen *screen, uint64_t seqno, uint64_t timeout_ns,
+               const char *reason);
 
 void
 vc4_bufmgr_destroy(struct pipe_screen *pscreen);

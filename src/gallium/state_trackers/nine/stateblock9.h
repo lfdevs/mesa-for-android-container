@@ -43,7 +43,7 @@ struct NineStateBlock9
 
     enum nine_stateblock_type type;
 };
-static INLINE struct NineStateBlock9 *
+static inline struct NineStateBlock9 *
 NineStateBlock9( void *data )
 {
     return (struct NineStateBlock9 *)data;

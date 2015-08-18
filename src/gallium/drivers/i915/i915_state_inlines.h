@@ -34,7 +34,7 @@
 #include "i915_reg.h"
 
 
-static INLINE unsigned
+static inline unsigned
 i915_translate_compare_func(unsigned func)
 {
    switch (func) {
@@ -59,7 +59,7 @@ i915_translate_compare_func(unsigned func)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 i915_translate_shadow_compare_func(unsigned func)
 {
    switch (func) {
@@ -84,7 +84,7 @@ i915_translate_shadow_compare_func(unsigned func)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 i915_translate_stencil_op(unsigned op)
 {
    switch (op) {
@@ -109,7 +109,7 @@ i915_translate_stencil_op(unsigned op)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 i915_translate_blend_factor(unsigned factor)
 {
    switch (factor) {
@@ -148,7 +148,7 @@ i915_translate_blend_factor(unsigned factor)
    }
 }
 
-static INLINE unsigned
+static inline unsigned
 i915_translate_blend_func(unsigned mode)
 {
    switch (mode) {
@@ -168,7 +168,7 @@ i915_translate_blend_func(unsigned mode)
 }
 
 
-static INLINE unsigned
+static inline unsigned
 i915_translate_logic_op(unsigned opcode)
 {
    switch (opcode) {
@@ -211,7 +211,7 @@ i915_translate_logic_op(unsigned opcode)
 
 
 
-static INLINE boolean i915_validate_vertices( unsigned hw_prim, unsigned nr )
+static inline boolean i915_validate_vertices( unsigned hw_prim, unsigned nr )
 {
    boolean ok;
 

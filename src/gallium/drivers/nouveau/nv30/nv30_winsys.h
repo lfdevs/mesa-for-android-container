@@ -19,34 +19,34 @@
 #define NV40_3D_PRIM_RESTART_ENABLE 0x1dac
 #define NV40_3D_PRIM_RESTART_INDEX  0x1db0
 
-static INLINE void
+static inline void
 PUSH_RELOC(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t offset,
       uint32_t flags, uint32_t vor, uint32_t tor)
 {
    nouveau_pushbuf_reloc(push, bo, offset, flags, vor, tor);
 }
 
-static INLINE struct nouveau_bufctx *
+static inline struct nouveau_bufctx *
 bufctx(struct nouveau_pushbuf *push)
 {
    struct nouveau_bufctx **pctx = push->user_priv;
    return *pctx;
 }
 
-static INLINE void
+static inline void
 PUSH_RESET(struct nouveau_pushbuf *push, int bin)
 {
    nouveau_bufctx_reset(bufctx(push), bin);
 }
 
-static INLINE void
+static inline void
 PUSH_REFN(struct nouveau_pushbuf *push, int bin,
      struct nouveau_bo *bo, uint32_t access)
 {
    nouveau_bufctx_refn(bufctx(push), bin, bo, access);
 }
 
-static INLINE void
+static inline void
 PUSH_MTHDl(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
       struct nouveau_bo *bo, uint32_t offset, uint32_t access)
 {
@@ -55,7 +55,7 @@ PUSH_MTHDl(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
    PUSH_DATA(push, bo->offset + offset);
 }
 
-static INLINE void
+static inline void
 PUSH_MTHDo(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
       struct nouveau_bo *bo, uint32_t access, uint32_t vor, uint32_t tor)
 {
@@ -67,7 +67,7 @@ PUSH_MTHDo(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
       PUSH_DATA(push, tor);
 }
 
-static INLINE void
+static inline void
 PUSH_MTHDs(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
       struct nouveau_bo *bo, uint32_t data, uint32_t access,
       uint32_t vor, uint32_t tor)
@@ -80,7 +80,7 @@ PUSH_MTHDs(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
       PUSH_DATA(push, data | tor);
 }
 
-static INLINE struct nouveau_bufref *
+static inline struct nouveau_bufref *
 PUSH_MTHD(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
      struct nouveau_bo *bo, uint32_t data, uint32_t access,
      uint32_t vor, uint32_t tor)
@@ -99,7 +99,7 @@ PUSH_MTHD(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
    return bref;
 }
 
-static INLINE void
+static inline void
 PUSH_RESRC(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
            struct nv04_resource *r, uint32_t data, uint32_t access,
            uint32_t vor, uint32_t tor)
@@ -108,14 +108,14 @@ PUSH_RESRC(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
              r->domain | access, vor, tor)->priv = r;
 }
 
-static INLINE void
+static inline void
 BEGIN_NV04(struct nouveau_pushbuf *push, int subc, int mthd, int size)
 {
    PUSH_SPACE(push, size + 1);
    PUSH_DATA (push, 0x00000000 | (size << 18) | (subc << 13) | mthd);
 }
 
-static INLINE void
+static inline void
 BEGIN_NI04(struct nouveau_pushbuf *push, int subc, int mthd, int size)
 {
    PUSH_SPACE(push, size + 1);

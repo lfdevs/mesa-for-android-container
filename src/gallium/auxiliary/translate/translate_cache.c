@@ -49,7 +49,7 @@ struct translate_cache * translate_cache_create( void )
 }
 
 
-static INLINE void delete_translates(struct translate_cache *cache)
+static inline void delete_translates(struct translate_cache *cache)
 {
    struct cso_hash *hash = cache->hash;
    struct cso_hash_iter iter = cso_hash_first_node(hash);
@@ -70,14 +70,14 @@ void translate_cache_destroy(struct translate_cache *cache)
 }
 
 
-static INLINE unsigned translate_hash_key_size(struct translate_key *key)
+static inline unsigned translate_hash_key_size(struct translate_key *key)
 {
    unsigned size = sizeof(struct translate_key) -
                    sizeof(struct translate_element) * (TRANSLATE_MAX_ATTRIBS - key->nr_elements);
    return size;
 }
 
-static INLINE unsigned create_key(struct translate_key *key)
+static inline unsigned create_key(struct translate_key *key)
 {
    unsigned hash_key;
    unsigned size = translate_hash_key_size(key);

@@ -59,6 +59,7 @@ enum glsl_base_type {
    GLSL_TYPE_INTERFACE,
    GLSL_TYPE_ARRAY,
    GLSL_TYPE_VOID,
+   GLSL_TYPE_SUBROUTINE,
    GLSL_TYPE_ERROR
 };
 
@@ -228,18 +229,6 @@ struct glsl_type {
    const glsl_type *get_scalar_type() const;
 
    /**
-    * Query the type of elements in an array
-    *
-    * \return
-    * Pointer to the type of elements in the array for array types, or \c NULL
-    * for non-array types.
-    */
-   const glsl_type *element_type() const
-   {
-      return is_array() ? fields.array : NULL;
-   }
-
-   /**
     * Get the instance of a built-in scalar, vector, or matrix type
     */
    static const glsl_type *get_instance(unsigned base_type, unsigned rows,
@@ -274,6 +263,11 @@ struct glsl_type {
 						  unsigned num_fields,
 						  enum glsl_interface_packing packing,
 						  const char *block_name);
+
+   /**
+    * Get the instance of an subroutine type
+    */
+   static const glsl_type *get_subroutine_instance(const char *subroutine_name);
 
    /**
     * Get the type resulting from a multiplication of \p type_a * \p type_b
@@ -526,6 +520,13 @@ struct glsl_type {
    /**
     * Query if a type is unnamed/anonymous (named by the parser)
     */
+
+   bool is_subroutine() const
+   {
+      return base_type == GLSL_TYPE_SUBROUTINE;
+   }
+   bool contains_subroutine() const;
+
    bool is_anonymous() const
    {
       return !strncmp(name, "#anon", 5);
@@ -556,7 +557,7 @@ struct glsl_type {
       if (base_type == GLSL_TYPE_ATOMIC_UINT)
          return ATOMIC_COUNTER_SIZE;
       else if (is_array())
-         return length * element_type()->atomic_size();
+         return length * fields.array->atomic_size();
       else
          return 0;
    }
@@ -691,6 +692,9 @@ private:
    /** Constructor for array types */
    glsl_type(const glsl_type *array, unsigned length);
 
+   /** Constructor for subroutine types */
+   glsl_type(const char *name);
+
    /** Hash table containing the known array types. */
    static struct hash_table *array_types;
 
@@ -700,7 +704,10 @@ private:
    /** Hash table containing the known interface types. */
    static struct hash_table *interface_types;
 
-   static int record_key_compare(const void *a, const void *b);
+   /** Hash table containing the known subroutine types. */
+   static struct hash_table *subroutine_types;
+
+   static bool record_key_compare(const void *a, const void *b);
    static unsigned record_key_hash(const void *key);
 
    /**
@@ -764,10 +771,29 @@ struct glsl_struct_field {
    unsigned matrix_layout:2;
 
    /**
+    * For interface blocks, 1 if this variable is a per-patch input or output
+    * (as in ir_variable::patch). 0 otherwise.
+    */
+   unsigned patch:1;
+
+   /**
     * For interface blocks, it has a value if this variable uses multiple vertex
     * streams (as in ir_variable::stream). -1 otherwise.
     */
    int stream;
+
+   glsl_struct_field(const struct glsl_type *_type, const char *_name)
+      : type(_type), name(_name), location(-1), interpolation(0), centroid(0),
+        sample(0), matrix_layout(GLSL_MATRIX_LAYOUT_INHERITED), patch(0),
+        stream(-1)
+   {
+      /* empty */
+   }
+
+   glsl_struct_field()
+   {
+      /* empty */
+   }
 };
 
 static inline unsigned int

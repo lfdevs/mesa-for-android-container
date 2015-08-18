@@ -85,6 +85,7 @@ private:
    void emitCCTL(const Instruction *);
 
    void emitINTERP(const Instruction *);
+   void emitAFETCH(const Instruction *);
    void emitPFETCH(const Instruction *);
    void emitVFETCH(const Instruction *);
    void emitEXPORT(const Instruction *);
@@ -1078,8 +1079,14 @@ CodeEmitterNVC0::emitSET(const CmpInstruction *i)
    if (!isFloatType(i->sType))
       lo = 0x3;
 
-   if (isFloatType(i->dType) || isSignedIntType(i->sType))
+   if (isSignedIntType(i->sType))
       lo |= 0x20;
+   if (isFloatType(i->dType)) {
+      if (isFloatType(i->sType))
+         lo |= 0x20;
+      else
+         lo |= 0x80;
+   }
 
    switch (i->op) {
    case OP_SET_AND: hi = 0x10000000; break;
@@ -1406,6 +1413,8 @@ CodeEmitterNVC0::emitFlow(const Instruction *i)
    } else
    if (mask & 2) {
       int32_t pcRel = f->target.bb->binPos - (codeSize + 8);
+      if (writeIssueDelays && !(f->target.bb->binPos & 0x3f))
+         pcRel += 8;
       // currently we don't want absolute branches
       assert(!f->absolute);
       code[0] |= (pcRel & 0x3f) << 26;
@@ -1442,6 +1451,7 @@ CodeEmitterNVC0::emitBAR(const Instruction *i)
       ImmediateValue *imm = i->getSrc(0)->asImm();
       assert(imm);
       code[0] |= imm->reg.data.u32 << 20;
+      code[1] |= 0x8000;
    }
 
    // thread count
@@ -1452,6 +1462,7 @@ CodeEmitterNVC0::emitBAR(const Instruction *i)
       assert(imm);
       code[0] |= imm->reg.data.u32 << 26;
       code[1] |= imm->reg.data.u32 >> 6;
+      code[1] |= 0x4000;
    }
 
    if (i->srcExists(2) && (i->predSrc != 2)) {
@@ -1483,6 +1494,21 @@ CodeEmitterNVC0::emitBAR(const Instruction *i)
       code[1] &= ~(7 << 21);
       defId(pDef, 32 + 21);
    }
+}
+
+void
+CodeEmitterNVC0::emitAFETCH(const Instruction *i)
+{
+   code[0] = 0x00000006;
+   code[1] = 0x0c000000 | (i->src(0).get()->reg.data.offset & 0x7ff);
+
+   if (i->getSrc(0)->reg.file == FILE_SHADER_OUTPUT)
+      code[0] |= 0x200;
+
+   emitPredicate(i);
+
+   defId(i->def(0), 14);
+   srcId(i->src(0).getIndirect(0), 20);
 }
 
 void
@@ -2588,11 +2614,12 @@ private:
          int imul; // integer MUL to MUL delay 3
       } res;
       struct ScoreData {
-         int r[64];
+         int r[256];
          int p[8];
          int c;
       } rd, wr;
       int base;
+      int regs;
 
       void rebase(const int base)
       {
@@ -2601,7 +2628,7 @@ private:
             return;
          this->base = 0;
 
-         for (int i = 0; i < 64; ++i) {
+         for (int i = 0; i < regs; ++i) {
             rd.r[i] += delta;
             wr.r[i] += delta;
          }
@@ -2620,16 +2647,17 @@ private:
          res.imul += delta;
          res.tex += delta;
       }
-      void wipe()
+      void wipe(int regs)
       {
          memset(&rd, 0, sizeof(rd));
          memset(&wr, 0, sizeof(wr));
          memset(&res, 0, sizeof(res));
+         this->regs = regs;
       }
       int getLatest(const ScoreData& d) const
       {
          int max = 0;
-         for (int i = 0; i < 64; ++i)
+         for (int i = 0; i < regs; ++i)
             if (d.r[i] > max)
                max = d.r[i];
          for (int i = 0; i < 8; ++i)
@@ -2664,7 +2692,7 @@ private:
       }
       void setMax(const RegScores *that)
       {
-         for (int i = 0; i < 64; ++i) {
+         for (int i = 0; i < regs; ++i) {
             rd.r[i] = MAX2(rd.r[i], that->rd.r[i]);
             wr.r[i] = MAX2(wr.r[i], that->wr.r[i]);
          }
@@ -2685,7 +2713,7 @@ private:
       }
       void print(int cycle)
       {
-         for (int i = 0; i < 64; ++i) {
+         for (int i = 0; i < regs; ++i) {
             if (rd.r[i] > cycle)
                INFO("rd $r%i @ %i\n", i, rd.r[i]);
             if (wr.r[i] > cycle)
@@ -2780,9 +2808,10 @@ SchedDataCalculator::getCycles(const Instruction *insn, int origDelay) const
 bool
 SchedDataCalculator::visit(Function *func)
 {
+   int regs = targ->getFileSize(FILE_GPR) + 1;
    scoreBoards.resize(func->cfg.getSize());
    for (size_t i = 0; i < scoreBoards.size(); ++i)
-      scoreBoards[i].wipe();
+      scoreBoards[i].wipe(regs);
    return true;
 }
 

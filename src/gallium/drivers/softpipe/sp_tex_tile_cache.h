@@ -127,7 +127,7 @@ extern const struct softpipe_tex_cached_tile *
 sp_find_cached_tile_tex(struct softpipe_tex_tile_cache *tc, 
                         union tex_tile_address addr );
 
-static INLINE union tex_tile_address
+static inline union tex_tile_address
 tex_tile_address( unsigned x,
                   unsigned y,
                   unsigned z,
@@ -147,7 +147,7 @@ tex_tile_address( unsigned x,
 
 /* Quickly retrieve tile if it matches last lookup.
  */
-static INLINE const struct softpipe_tex_cached_tile *
+static inline const struct softpipe_tex_cached_tile *
 sp_get_cached_tile_tex(struct softpipe_tex_tile_cache *tc, 
                        union tex_tile_address addr )
 {

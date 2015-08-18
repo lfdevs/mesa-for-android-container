@@ -30,7 +30,7 @@
 #include "radeon_drm_bo.h"
 
 struct radeon_cs_context {
-    uint32_t                    buf[RADEON_MAX_CMDBUF_DWORDS];
+    uint32_t                    *buf;
 
     int                         fd;
     struct drm_radeon_cs        cs;
@@ -79,13 +79,13 @@ struct radeon_drm_cs {
 
 int radeon_get_reloc(struct radeon_cs_context *csc, struct radeon_bo *bo);
 
-static INLINE struct radeon_drm_cs *
+static inline struct radeon_drm_cs *
 radeon_drm_cs(struct radeon_winsys_cs *base)
 {
     return (struct radeon_drm_cs*)base;
 }
 
-static INLINE boolean
+static inline boolean
 radeon_bo_is_referenced_by_cs(struct radeon_drm_cs *cs,
                               struct radeon_bo *bo)
 {
@@ -94,7 +94,7 @@ radeon_bo_is_referenced_by_cs(struct radeon_drm_cs *cs,
            (num_refs && radeon_get_reloc(cs->csc, bo) != -1);
 }
 
-static INLINE boolean
+static inline boolean
 radeon_bo_is_referenced_by_cs_for_write(struct radeon_drm_cs *cs,
                                         struct radeon_bo *bo)
 {
@@ -110,7 +110,7 @@ radeon_bo_is_referenced_by_cs_for_write(struct radeon_drm_cs *cs,
     return cs->csc->relocs[index].write_domain != 0;
 }
 
-static INLINE boolean
+static inline boolean
 radeon_bo_is_referenced_by_any_cs(struct radeon_bo *bo)
 {
     return bo->num_cs_references != 0;
