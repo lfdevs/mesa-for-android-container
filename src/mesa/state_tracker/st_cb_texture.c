@@ -1873,6 +1873,31 @@ st_TextureView(struct gl_context *ctx,
    return GL_TRUE;
 }
 
+/* HACK: this is only enough for the most basic uses of CopyImage. Must fix
+ * before actually exposing the extension.
+ */
+static void
+st_CopyImageSubData(struct gl_context *ctx,
+                    struct gl_texture_image *src_image,
+                    int src_x, int src_y, int src_z,
+                    struct gl_texture_image *dst_image,
+                    int dst_x, int dst_y, int dst_z,
+                    int src_width, int src_height)
+{
+   struct st_context *st = st_context(ctx);
+   struct pipe_context *pipe = st->pipe;
+   struct st_texture_image *src = st_texture_image(src_image);
+   struct st_texture_image *dst = st_texture_image(dst_image);
+
+   struct pipe_box box;
+
+   u_box_2d_zslice(src_x, src_y, src_z, src_width, src_height, &box);
+   pipe->resource_copy_region(pipe, dst->pt, dst_image->Level,
+                              dst_x, dst_y, dst_z,
+                              src->pt, src_image->Level,
+                              &box);
+}
+
 
 void
 st_init_texture_functions(struct dd_function_table *functions)
@@ -1905,4 +1930,6 @@ st_init_texture_functions(struct dd_function_table *functions)
 
    functions->AllocTextureStorage = st_AllocTextureStorage;
    functions->TextureView = st_TextureView;
+
+   functions->CopyImageSubData = st_CopyImageSubData;
 }

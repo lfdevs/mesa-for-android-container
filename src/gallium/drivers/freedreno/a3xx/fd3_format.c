@@ -262,6 +262,15 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	_T(ETC2_R11_SNORM, ETC2_R11_SNORM, NONE, WZYX),
 	_T(ETC2_RG11_UNORM, ETC2_RG11_UNORM, NONE, WZYX),
 	_T(ETC2_RG11_SNORM, ETC2_RG11_SNORM, NONE, WZYX),
+
+	_T(DXT1_RGB,   DXT1, NONE, WZYX),
+	_T(DXT1_SRGB,  DXT1, NONE, WZYX),
+	_T(DXT1_RGBA,  DXT1, NONE, WZYX),
+	_T(DXT1_SRGBA, DXT1, NONE, WZYX),
+	_T(DXT3_RGBA,  DXT3, NONE, WZYX),
+	_T(DXT3_SRGBA, DXT3, NONE, WZYX),
+	_T(DXT5_RGBA,  DXT5, NONE, WZYX),
+	_T(DXT5_SRGBA, DXT5, NONE, WZYX),
 };
 
 enum a3xx_vtx_fmt
@@ -301,7 +310,7 @@ fd3_pipe2fetchsize(enum pipe_format format)
 {
 	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
 		format = PIPE_FORMAT_Z32_FLOAT;
-	switch (util_format_get_blocksizebits(format)) {
+	switch (util_format_get_blocksizebits(format) / util_format_get_blockwidth(format)) {
 	case 8: return TFETCH_1_BYTE;
 	case 16: return TFETCH_2_BYTE;
 	case 32: return TFETCH_4_BYTE;

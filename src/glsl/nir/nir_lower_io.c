@@ -32,8 +32,10 @@
  */
 
 #include "nir.h"
+#include "nir_builder.h"
 
 struct lower_io_state {
+   nir_builder builder;
    void *mem_ctx;
    bool is_scalar;
 };
@@ -242,6 +244,9 @@ get_io_offset(nir_deref_var *deref, nir_instr *instr, nir_src *indirect,
    bool found_indirect = false;
    unsigned base_offset = 0;
 
+   nir_builder *b = &state->builder;
+   nir_builder_insert_before_instr(b, instr);
+
    nir_deref *tail = &deref->deref;
    while (tail->child != NULL) {
       const struct glsl_type *parent_type = tail->type;
@@ -254,38 +259,18 @@ get_io_offset(nir_deref_var *deref, nir_instr *instr, nir_src *indirect,
          base_offset += size * deref_array->base_offset;
 
          if (deref_array->deref_array_type == nir_deref_array_type_indirect) {
-            nir_load_const_instr *load_const =
-               nir_load_const_instr_create(state->mem_ctx, 1);
-            load_const->value.u[0] = size;
-            nir_instr_insert_before(instr, &load_const->instr);
-
-            nir_alu_instr *mul = nir_alu_instr_create(state->mem_ctx,
-                                                      nir_op_imul);
-            mul->src[0].src.is_ssa = true;
-            mul->src[0].src.ssa = &load_const->def;
-            nir_src_copy(&mul->src[1].src, &deref_array->indirect,
-                         state->mem_ctx);
-            mul->dest.write_mask = 1;
-            nir_ssa_dest_init(&mul->instr, &mul->dest.dest, 1, NULL);
-            nir_instr_insert_before(instr, &mul->instr);
+            nir_ssa_def *mul =
+               nir_imul(b, nir_imm_int(b, size),
+                        nir_ssa_for_src(b, deref_array->indirect, 1));
 
             if (found_indirect) {
-               nir_alu_instr *add = nir_alu_instr_create(state->mem_ctx,
-                                                         nir_op_iadd);
-               add->src[0].src = *indirect;
-               add->src[1].src.is_ssa = true;
-               add->src[1].src.ssa = &mul->dest.dest.ssa;
-               add->dest.write_mask = 1;
-               nir_ssa_dest_init(&add->instr, &add->dest.dest, 1, NULL);
-               nir_instr_insert_before(instr, &add->instr);
-
-               indirect->is_ssa = true;
-               indirect->ssa = &add->dest.dest.ssa;
+               indirect->ssa =
+                  nir_iadd(b, nir_ssa_for_src(b, *indirect, 1), mul);
             } else {
-               indirect->is_ssa = true;
-               indirect->ssa = &mul->dest.dest.ssa;
-               found_indirect = true;
+               indirect->ssa = mul;
             }
+            indirect->is_ssa = true;
+            found_indirect = true;
          }
       } else if (tail->deref_type == nir_deref_type_struct) {
          nir_deref_struct *deref_struct = nir_deref_as_struct(tail);
@@ -297,6 +282,25 @@ get_io_offset(nir_deref_var *deref, nir_instr *instr, nir_src *indirect,
    }
 
    return base_offset;
+}
+
+static nir_intrinsic_op
+load_op(nir_variable_mode mode, bool has_indirect)
+{
+   nir_intrinsic_op op;
+   switch (mode) {
+   case nir_var_shader_in:
+      op = has_indirect ? nir_intrinsic_load_input_indirect :
+                          nir_intrinsic_load_input;
+      break;
+   case nir_var_uniform:
+      op = has_indirect ? nir_intrinsic_load_uniform_indirect :
+                          nir_intrinsic_load_uniform;
+      break;
+   default:
+      unreachable("Unknown variable mode");
+   }
+   return op;
 }
 
 static bool
@@ -318,23 +322,9 @@ nir_lower_io_block(nir_block *block, void *void_state)
 
          bool has_indirect = deref_has_indirect(intrin->variables[0]);
 
-         /* Figure out the opcode */
-         nir_intrinsic_op load_op;
-         switch (mode) {
-         case nir_var_shader_in:
-            load_op = has_indirect ? nir_intrinsic_load_input_indirect :
-                                     nir_intrinsic_load_input;
-            break;
-         case nir_var_uniform:
-            load_op = has_indirect ? nir_intrinsic_load_uniform_indirect :
-                                     nir_intrinsic_load_uniform;
-            break;
-         default:
-            unreachable("Unknown variable mode");
-         }
-
-         nir_intrinsic_instr *load = nir_intrinsic_instr_create(state->mem_ctx,
-                                                                load_op);
+         nir_intrinsic_instr *load =
+            nir_intrinsic_instr_create(state->mem_ctx,
+                                       load_op(mode, has_indirect));
          load->num_components = intrin->num_components;
 
          nir_src indirect;
@@ -409,6 +399,7 @@ nir_lower_io_impl(nir_function_impl *impl, bool is_scalar)
 {
    struct lower_io_state state;
 
+   nir_builder_init(&state.builder, impl);
    state.mem_ctx = ralloc_parent(impl);
    state.is_scalar = is_scalar;
 

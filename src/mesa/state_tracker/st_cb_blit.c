@@ -192,6 +192,7 @@ st_BlitFramebuffer(struct gl_context *ctx,
 
    blit.filter = pFilter;
    blit.render_condition_enable = TRUE;
+   blit.alpha_blend = FALSE;
 
    if (mask & GL_COLOR_BUFFER_BIT) {
       struct gl_renderbuffer_attachment *srcAtt =

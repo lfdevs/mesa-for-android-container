@@ -30,7 +30,8 @@
 struct NineBaseTexture9
 {
     struct NineResource9 base;
-    struct list_head list;
+    struct list_head list; /* for update_textures */
+    struct list_head list2; /* for managed_textures */
 
     /* g3d */
     struct pipe_context *pipe;
@@ -93,6 +94,9 @@ NineBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This );
 
 void WINAPI
 NineBaseTexture9_PreLoad( struct NineBaseTexture9 *This );
+
+void
+NineBaseTexture9_UnLoad( struct NineBaseTexture9 *This );
 
 /* For D3DPOOL_MANAGED only (after SetLOD change): */
 HRESULT

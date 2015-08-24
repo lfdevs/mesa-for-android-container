@@ -68,7 +68,7 @@ release_buffer(struct gbm_surface *_surf, struct gbm_bo *bo)
 {
    struct gbm_dri_surface *surf = (struct gbm_dri_surface *) _surf;
    struct dri2_egl_surface *dri2_surf = surf->dri_private;
-   int i;
+   unsigned i;
 
    for (i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
       if (dri2_surf->color_buffers[i].bo == bo) {
@@ -82,7 +82,7 @@ has_free_buffers(struct gbm_surface *_surf)
 {
    struct gbm_dri_surface *surf = (struct gbm_dri_surface *) _surf;
    struct dri2_egl_surface *dri2_surf = surf->dri_private;
-   int i;
+   unsigned i;
 
    for (i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++)
       if (!dri2_surf->color_buffers[i].locked)
@@ -189,7 +189,7 @@ dri2_drm_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
-   int i;
+   unsigned i;
 
    if (!_eglPutSurface(surf))
       return EGL_TRUE;
@@ -218,7 +218,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
    struct gbm_dri_surface *surf = dri2_surf->gbm_surf;
-   int i;
+   unsigned i;
 
    if (dri2_surf->back == NULL) {
       for (i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
@@ -414,7 +414,7 @@ dri2_drm_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
-   int i;
+   unsigned i;
 
    if (dri2_dpy->swrast) {
       (*dri2_dpy->core->swapBuffers)(dri2_surf->dri_drawable);

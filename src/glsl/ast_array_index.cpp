@@ -290,6 +290,21 @@ _mesa_ast_array_index_to_hir(void *mem_ctx,
                                   "1.30 and later");
          }
       }
+
+      /* From page 27 of the GLSL ES 3.1 specification:
+       *
+       * "When aggregated into arrays within a shader, images can only be
+       *  indexed with a constant integral expression."
+       *
+       * On the other hand the desktop GL specification extension allows
+       * non-constant indexing of image arrays, but behavior is left undefined
+       * in cases where the indexing expression is not dynamically uniform.
+       */
+      if (state->es_shader && array->type->without_array()->is_image()) {
+         _mesa_glsl_error(&loc, state,
+                          "image arrays indexed with non-constant "
+                          "expressions are forbidden in GLSL ES.");
+      }
    }
 
    /* After performing all of the error checking, generate the IR for the

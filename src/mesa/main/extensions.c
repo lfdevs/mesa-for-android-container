@@ -50,6 +50,7 @@ enum {
    ES1 = 1 << API_OPENGLES,
    ES2 = 1 << API_OPENGLES2,
    ES3 = 1 << (API_OPENGL_LAST + 1),
+   ES31 = 1 << (API_OPENGL_LAST + 2),
 };
 
 /**
@@ -152,6 +153,7 @@ static const struct extension extension_table[] = {
    { "GL_ARB_shader_atomic_counters",              o(ARB_shader_atomic_counters),              GL,             2011 },
    { "GL_ARB_shader_bit_encoding",                 o(ARB_shader_bit_encoding),                 GL,             2010 },
    { "GL_ARB_shader_image_load_store",             o(ARB_shader_image_load_store),             GL,             2011 },
+   { "GL_ARB_shader_image_size",                   o(ARB_shader_image_size),                   GL,             2012 },
    { "GL_ARB_shader_objects",                      o(dummy_true),                              GL,             2002 },
    { "GL_ARB_shader_precision",                    o(ARB_shader_precision),                    GL,             2010 },
    { "GL_ARB_shader_stencil_export",               o(ARB_shader_stencil_export),               GL,             2009 },
@@ -773,6 +775,8 @@ _mesa_make_extension_string(struct gl_context *ctx)
    unsigned api_set = (1 << ctx->API);
    if (_mesa_is_gles3(ctx))
       api_set |= ES3;
+   if (_mesa_is_gles31(ctx))
+      api_set |= ES31;
 
    /* Check if the MESA_EXTENSION_MAX_YEAR env var is set */
    {
@@ -854,6 +858,8 @@ _mesa_get_extension_count(struct gl_context *ctx)
    unsigned api_set = (1 << ctx->API);
    if (_mesa_is_gles3(ctx))
       api_set |= ES3;
+   if (_mesa_is_gles31(ctx))
+      api_set |= ES31;
 
    /* only count once */
    if (ctx->Extensions.Count != 0)
@@ -880,6 +886,8 @@ _mesa_get_enabled_extension(struct gl_context *ctx, GLuint index)
    unsigned api_set = (1 << ctx->API);
    if (_mesa_is_gles3(ctx))
       api_set |= ES3;
+   if (_mesa_is_gles31(ctx))
+      api_set |= ES31;
 
    base = (GLboolean*) &ctx->Extensions;
    n = 0;

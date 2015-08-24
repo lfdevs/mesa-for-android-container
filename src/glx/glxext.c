@@ -138,6 +138,9 @@ __glXWireToEvent(Display *dpy, XEvent *event, xEvent *wire)
       if (!glxDraw)
 	 return False;
 
+      aevent->serial = _XSetLastRequestRead(dpy, (xGenericReply *) wire);
+      aevent->send_event = (awire->type & 0x80) != 0;
+      aevent->display = dpy;
       aevent->event_type = awire->event_type;
       aevent->drawable = glxDraw->xDrawable;
       aevent->ust = ((CARD64)awire->ust_hi << 32) | awire->ust_lo;

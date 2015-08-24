@@ -131,11 +131,13 @@ static void
 fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 		unsigned flags)
 {
+	struct fd_ringbuffer *ring = fd_context(pctx)->ring;
+
 	fd_context_render(pctx);
 
 	if (fence) {
 		fd_screen_fence_ref(pctx->screen, fence, NULL);
-		*fence = fd_fence_create(pctx);
+		*fence = fd_fence_create(pctx, fd_ringbuffer_timestamp(ring));
 	}
 }
 

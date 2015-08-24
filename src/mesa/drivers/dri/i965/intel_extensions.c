@@ -326,6 +326,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_gpu_shader5 = true;
       ctx->Extensions.ARB_shader_atomic_counters = true;
       ctx->Extensions.ARB_shader_image_load_store = true;
+      ctx->Extensions.ARB_shader_image_size = true;
       ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
 

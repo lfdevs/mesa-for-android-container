@@ -744,24 +744,30 @@ builtin_variable_generator::generate_constants()
        */
    }
 
-   if (state->is_version(420, 0) ||
+   if (state->is_version(420, 310) ||
        state->ARB_shader_image_load_store_enable) {
       add_const("gl_MaxImageUnits",
                 state->Const.MaxImageUnits);
-      add_const("gl_MaxCombinedImageUnitsAndFragmentOutputs",
-                state->Const.MaxCombinedImageUnitsAndFragmentOutputs);
-      add_const("gl_MaxImageSamples",
-                state->Const.MaxImageSamples);
       add_const("gl_MaxVertexImageUniforms",
                 state->Const.MaxVertexImageUniforms);
-      add_const("gl_MaxTessControlImageUniforms", 0);
-      add_const("gl_MaxTessEvaluationImageUniforms", 0);
-      add_const("gl_MaxGeometryImageUniforms",
-                state->Const.MaxGeometryImageUniforms);
       add_const("gl_MaxFragmentImageUniforms",
                 state->Const.MaxFragmentImageUniforms);
       add_const("gl_MaxCombinedImageUniforms",
                 state->Const.MaxCombinedImageUniforms);
+
+      if (!state->es_shader) {
+         add_const("gl_MaxCombinedImageUnitsAndFragmentOutputs",
+                   state->Const.MaxCombinedShaderOutputResources);
+         add_const("gl_MaxImageSamples",
+                   state->Const.MaxImageSamples);
+         add_const("gl_MaxGeometryImageUniforms",
+                   state->Const.MaxGeometryImageUniforms);
+      }
+
+      if (state->is_version(450, 310)) {
+         add_const("gl_MaxCombinedShaderOutputResources",
+                   state->Const.MaxCombinedShaderOutputResources);
+      }
 
       if (state->is_version(400, 0) ||
           state->ARB_tessellation_shader_enable) {

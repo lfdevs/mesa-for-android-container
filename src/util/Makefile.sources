@@ -1,7 +1,3 @@
-MESA_UTIL_SHADER_CACHE_FILES := \
-	mesa-sha1.c \
-	mesa-sha1.h
-
 MESA_UTIL_FILES :=	\
 	bitset.h \
 	format_srgb.h \

@@ -236,6 +236,11 @@ struct _mesa_glsl_parse_state {
       return ARB_shading_language_420pack_enable || is_version(420, 0);
    }
 
+   bool has_compute_shader() const
+   {
+      return ARB_compute_shader_enable || is_version(430, 310);
+   }
+
    void process_version_directive(YYLTYPE *locp, int version,
                                   const char *ident);
 
@@ -390,7 +395,7 @@ struct _mesa_glsl_parse_state {
 
       /* ARB_shader_image_load_store */
       unsigned MaxImageUnits;
-      unsigned MaxCombinedImageUnitsAndFragmentOutputs;
+      unsigned MaxCombinedShaderOutputResources;
       unsigned MaxImageSamples;
       unsigned MaxVertexImageUniforms;
       unsigned MaxTessControlImageUniforms;
@@ -495,6 +500,8 @@ struct _mesa_glsl_parse_state {
    bool ARB_shader_bit_encoding_warn;
    bool ARB_shader_image_load_store_enable;
    bool ARB_shader_image_load_store_warn;
+   bool ARB_shader_image_size_enable;
+   bool ARB_shader_image_size_warn;
    bool ARB_shader_precision_enable;
    bool ARB_shader_precision_warn;
    bool ARB_shader_stencil_export_enable;

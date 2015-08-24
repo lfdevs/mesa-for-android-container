@@ -251,7 +251,7 @@ nine_state_copy_common(struct nine_state *dst,
         dst->ff.material = src->ff.material;
 
     if (mask->changed.group & NINE_STATE_FF_PSSTAGES) {
-        for (s = 0; s < NINE_MAX_SAMPLERS; ++s) {
+        for (s = 0; s < NINE_MAX_TEXTURE_STAGES; ++s) {
             for (i = 0; i < NINED3DTSS_COUNT; ++i)
                 if (mask->ff.changed.tex_stage[s][i / 32] & (1 << (i % 32)))
                     dst->ff.tex_stage[s][i] = src->ff.tex_stage[s][i];

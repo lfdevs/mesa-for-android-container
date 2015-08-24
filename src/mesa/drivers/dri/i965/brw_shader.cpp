@@ -122,7 +122,7 @@ brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
    compiler->glsl_compiler_options[MESA_SHADER_VERTEX].OptimizeForAOS = true;
    compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].OptimizeForAOS = true;
 
-   if (compiler->scalar_vs || brw_env_var_as_boolean("INTEL_USE_NIR", false)) {
+   if (compiler->scalar_vs || brw_env_var_as_boolean("INTEL_USE_NIR", true)) {
       if (compiler->scalar_vs) {
          /* If we're using the scalar backend for vertex shaders, we need to
           * configure these accordingly.
@@ -135,7 +135,7 @@ brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
       compiler->glsl_compiler_options[MESA_SHADER_VERTEX].NirOptions = nir_options;
    }
 
-   if (brw_env_var_as_boolean("INTEL_USE_NIR", false)) {
+   if (brw_env_var_as_boolean("INTEL_USE_NIR", true)) {
       compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].NirOptions = nir_options;
    }
 

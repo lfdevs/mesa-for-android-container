@@ -732,7 +732,8 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 	r600_blitter_begin(ctx, R600_COPY_TEXTURE);
 	util_blitter_blit_generic(rctx->blitter, dst_view, &dstbox,
 				  src_view, src_box, src_width0, src_height0,
-				  PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL);
+				  PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL,
+				  FALSE);
 	r600_blitter_end(ctx);
 
 	pipe_surface_reference(&dst_view, NULL);

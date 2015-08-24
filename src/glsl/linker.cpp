@@ -2900,7 +2900,7 @@ check_image_resources(struct gl_context *ctx, struct gl_shader_program *prog)
       linker_error(prog, "Too many combined image uniforms\n");
 
    if (total_image_units + fragment_outputs >
-       ctx->Const.MaxCombinedImageUnitsAndFragmentOutputs)
+       ctx->Const.MaxCombinedShaderOutputResources)
       linker_error(prog, "Too many combined image uniforms and fragment outputs\n");
 }
 

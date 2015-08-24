@@ -125,11 +125,15 @@ HRESULT
 NineSurface9_UploadSelf( struct NineSurface9 *This,
                          const struct pipe_box *damaged );
 
-HRESULT
-NineSurface9_CopySurface( struct NineSurface9 *This,
-                          struct NineSurface9 *From,
-                          const POINT *pDestPoint,
-                          const RECT *pSourceRect );
+void
+NineSurface9_CopyMemToDefault( struct NineSurface9 *This,
+                               struct NineSurface9 *From,
+                               const POINT *pDestPoint,
+                               const RECT *pSourceRect );
+
+void
+NineSurface9_CopyDefaultToMem( struct NineSurface9 *This,
+                               struct NineSurface9 *From );
 
 static inline boolean
 NineSurface9_IsOffscreenPlain (struct NineSurface9 *This )

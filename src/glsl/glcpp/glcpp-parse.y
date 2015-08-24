@@ -2478,6 +2478,9 @@ _glcpp_parser_handle_version_declaration(glcpp_parser_t *parser, intmax_t versio
 	      if (extensions->ARB_shader_image_load_store)
 	         add_builtin_define(parser, "GL_ARB_shader_image_load_store", 1);
 
+              if (extensions->ARB_shader_image_size)
+                 add_builtin_define(parser, "GL_ARB_shader_image_size", 1);
+
               if (extensions->ARB_derivative_control)
                  add_builtin_define(parser, "GL_ARB_derivative_control", 1);
 

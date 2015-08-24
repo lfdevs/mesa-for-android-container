@@ -1,1 +1,0 @@
-dri/usr/lib/${DEB_HOST_MULTIARCH}/i686/cmov/libGL.so.* usr/lib/${DEB_HOST_MULTIARCH}/i686/cmov

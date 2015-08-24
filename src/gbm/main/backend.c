@@ -65,7 +65,7 @@ static const struct backend_desc *
 find_backend(const char *name)
 {
    const struct backend_desc *backend = NULL;
-   int i;
+   unsigned i;
 
    for (i = 0; i < ARRAY_SIZE(backends); ++i) {
       if (strcmp(backends[i].name, name) == 0) {
@@ -82,7 +82,7 @@ _gbm_create_device(int fd)
 {
    const struct gbm_backend *backend = NULL;
    struct gbm_device *dev = NULL;
-   int i;
+   unsigned i;
    const char *b;
 
    b = getenv("GBM_BACKEND");

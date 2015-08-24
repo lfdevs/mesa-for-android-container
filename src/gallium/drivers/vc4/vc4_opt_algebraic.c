@@ -143,15 +143,6 @@ qir_opt_algebraic(struct vc4_compile *c)
                 case QOP_SEL_X_Y_ZC:
                 case QOP_SEL_X_Y_NS:
                 case QOP_SEL_X_Y_NC:
-                        if (qir_reg_equals(inst->src[0], inst->src[1])) {
-                                /* Turn "dst = (sf == x) ? a : a)" into
-                                 * "dst = a"
-                                 */
-                                replace_with_mov(c, inst, inst->src[1]);
-                                progress = true;
-                                break;
-                        }
-
                         if (is_zero(c, inst->src[1])) {
                                 /* Replace references to a 0 uniform value
                                  * with the SEL_X_0 equivalent.
@@ -207,6 +198,7 @@ qir_opt_algebraic(struct vc4_compile *c)
 
                         /* FADD(a, FSUB(0, b)) -> FSUB(a, b) */
                         if (inst->src[1].file == QFILE_TEMP &&
+                            c->defs[inst->src[1].index] &&
                             c->defs[inst->src[1].index]->op == QOP_FSUB) {
                                 struct qinst *fsub = c->defs[inst->src[1].index];
                                 if (is_zero(c, fsub->src[0])) {
@@ -221,6 +213,7 @@ qir_opt_algebraic(struct vc4_compile *c)
 
                         /* FADD(FSUB(0, b), a) -> FSUB(a, b) */
                         if (inst->src[0].file == QFILE_TEMP &&
+                            c->defs[inst->src[0].index] &&
                             c->defs[inst->src[0].index]->op == QOP_FSUB) {
                                 struct qinst *fsub = c->defs[inst->src[0].index];
                                 if (is_zero(c, fsub->src[0])) {
@@ -236,18 +229,20 @@ qir_opt_algebraic(struct vc4_compile *c)
                         break;
 
                 case QOP_FMUL:
-                        if (replace_x_0_with_0(c, inst, 0) ||
-                            replace_x_0_with_0(c, inst, 1) ||
-                            fmul_replace_one(c, inst, 0) ||
-                            fmul_replace_one(c, inst, 1)) {
+                        if (!inst->dst.pack &&
+                            (replace_x_0_with_0(c, inst, 0) ||
+                             replace_x_0_with_0(c, inst, 1) ||
+                             fmul_replace_one(c, inst, 0) ||
+                             fmul_replace_one(c, inst, 1))) {
                                 progress = true;
                                 break;
                         }
                         break;
 
                 case QOP_MUL24:
-                        if (replace_x_0_with_0(c, inst, 0) ||
-                            replace_x_0_with_0(c, inst, 1)) {
+                        if (!inst->dst.pack &&
+                            (replace_x_0_with_0(c, inst, 0) ||
+                             replace_x_0_with_0(c, inst, 1))) {
                                 progress = true;
                                 break;
                         }
@@ -275,6 +270,14 @@ qir_opt_algebraic(struct vc4_compile *c)
                 case QOP_OR:
                         if (replace_x_0_with_x(c, inst, 0) ||
                             replace_x_0_with_x(c, inst, 1)) {
+                                progress = true;
+                                break;
+                        }
+                        break;
+
+                case QOP_RCP:
+                        if (is_1f(c, inst->src[0])) {
+                                replace_with_mov(c, inst, inst->src[0]);
                                 progress = true;
                                 break;
                         }

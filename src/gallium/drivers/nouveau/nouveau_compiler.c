@@ -190,6 +190,10 @@ main(int argc, char *argv[])
       type = PIPE_SHADER_GEOMETRY;
    else if (!strncmp(text, "COMP", 4))
       type = PIPE_SHADER_COMPUTE;
+   else if (!strncmp(text, "TESS_CTRL", 9))
+      type = PIPE_SHADER_TESS_CTRL;
+   else if (!strncmp(text, "TESS_EVAL", 9))
+      type = PIPE_SHADER_TESS_EVAL;
    else {
       _debug_printf("Unrecognized TGSI header\n");
       return 1;

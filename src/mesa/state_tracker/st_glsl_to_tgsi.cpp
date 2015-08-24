@@ -2816,7 +2816,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
        */
       glsl_to_tgsi_instruction *inst, *new_inst;
       inst = (glsl_to_tgsi_instruction *)this->instructions.get_tail();
-      new_inst = emit_asm(ir, inst->op, l, inst->src[0], inst->src[1], inst->src[2]);
+      new_inst = emit_asm(ir, inst->op, l, inst->src[0], inst->src[1], inst->src[2], inst->src[3]);
       new_inst->saturate = inst->saturate;
       inst->dead_mask = inst->dst[0].writemask;
    } else {
@@ -4402,12 +4402,12 @@ get_pixel_transfer_visitor(struct st_fragment_program *fp,
     * new visitor. */
    foreach_in_list(glsl_to_tgsi_instruction, inst, &original->instructions) {
       glsl_to_tgsi_instruction *newinst;
-      st_src_reg src_regs[3];
+      st_src_reg src_regs[4];
 
       if (inst->dst[0].file == PROGRAM_OUTPUT)
          prog->OutputsWritten |= BITFIELD64_BIT(inst->dst[0].index);
 
-      for (int i = 0; i < 3; i++) {
+      for (int i = 0; i < 4; i++) {
          src_regs[i] = inst->src[i];
          if (src_regs[i].file == PROGRAM_INPUT &&
              src_regs[i].index == VARYING_SLOT_COL0) {
@@ -4418,7 +4418,7 @@ get_pixel_transfer_visitor(struct st_fragment_program *fp,
             prog->InputsRead |= BITFIELD64_BIT(src_regs[i].index);
       }
 
-      newinst = v->emit_asm(NULL, inst->op, inst->dst[0], src_regs[0], src_regs[1], src_regs[2]);
+      newinst = v->emit_asm(NULL, inst->op, inst->dst[0], src_regs[0], src_regs[1], src_regs[2], src_regs[3]);
       newinst->tex_target = inst->tex_target;
       newinst->sampler_array_size = inst->sampler_array_size;
    }
@@ -4487,18 +4487,18 @@ get_bitmap_visitor(struct st_fragment_program *fp,
     * new visitor. */
    foreach_in_list(glsl_to_tgsi_instruction, inst, &original->instructions) {
       glsl_to_tgsi_instruction *newinst;
-      st_src_reg src_regs[3];
+      st_src_reg src_regs[4];
 
       if (inst->dst[0].file == PROGRAM_OUTPUT)
          prog->OutputsWritten |= BITFIELD64_BIT(inst->dst[0].index);
 
-      for (int i = 0; i < 3; i++) {
+      for (int i = 0; i < 4; i++) {
          src_regs[i] = inst->src[i];
          if (src_regs[i].file == PROGRAM_INPUT)
             prog->InputsRead |= BITFIELD64_BIT(src_regs[i].index);
       }
 
-      newinst = v->emit_asm(NULL, inst->op, inst->dst[0], src_regs[0], src_regs[1], src_regs[2]);
+      newinst = v->emit_asm(NULL, inst->op, inst->dst[0], src_regs[0], src_regs[1], src_regs[2], src_regs[3]);
       newinst->tex_target = inst->tex_target;
       newinst->sampler_array_size = inst->sampler_array_size;
    }

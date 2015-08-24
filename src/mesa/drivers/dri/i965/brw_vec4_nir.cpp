@@ -458,13 +458,28 @@ vec4_visitor::nir_emit_load_const(nir_load_const_instr *instr)
    dst_reg reg = dst_reg(GRF, alloc.allocate(1));
    reg.type =  BRW_REGISTER_TYPE_F;
 
+   unsigned remaining = brw_writemask_for_size(instr->def.num_components);
+
    /* @FIXME: consider emitting vector operations to save some MOVs in
     * cases where the components are representable in 8 bits.
-    * By now, we emit a MOV for each component.
+    * For now, we emit a MOV for each distinct value.
     */
-   for (unsigned i = 0; i < instr->def.num_components; ++i) {
-      reg.writemask = 1 << i;
+   for (unsigned i = 0; i < instr->def.num_components; i++) {
+      unsigned writemask = 1 << i;
+
+      if ((remaining & writemask) == 0)
+         continue;
+
+      for (unsigned j = i; j < instr->def.num_components; j++) {
+         if (instr->value.u[i] == instr->value.u[j]) {
+            writemask |= 1 << j;
+         }
+      }
+
+      reg.writemask = writemask;
       emit(MOV(reg, src_reg(instr->value.f[i])));
+
+      remaining &= ~writemask;
    }
 
    /* Set final writemask */

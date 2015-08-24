@@ -43,7 +43,7 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
     struct pipe_screen *screen = pParams->device->screen;
     enum pipe_format pf;
     unsigned i, l, f, offset, face_size = 0;
-    unsigned *level_offsets;
+    unsigned *level_offsets = NULL;
     D3DSURFACE_DESC sfdesc;
     void *p;
     HRESULT hr;
@@ -69,6 +69,13 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
     /* We support ATI1 and ATI2 hacks only for 2D textures */
     if (Format == D3DFMT_ATI1 || Format == D3DFMT_ATI2)
         return D3DERR_INVALIDCALL;
+
+    if (compressed_format(Format)) {
+        const unsigned w = util_format_get_blockwidth(pf);
+        const unsigned h = util_format_get_blockheight(pf);
+
+        user_assert(!(EdgeLength % w) && !(EdgeLength % h), D3DERR_INVALIDCALL);
+    }
 
     info->screen = pParams->device->screen;
     info->target = PIPE_TEXTURE_CUBE;
@@ -106,7 +113,7 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
         face_size = nine_format_get_size_and_offsets(pf, level_offsets,
                                                      EdgeLength, EdgeLength,
                                                      info->last_level);
-        This->managed_buffer = MALLOC(6 * face_size);
+        This->managed_buffer = align_malloc(6 * face_size, 32);
         if (!This->managed_buffer)
             return E_OUTOFMEMORY;
     }
@@ -150,8 +157,12 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
         }
     }
 
-    for (i = 0; i < 6; ++i) /* width = 0 means empty, depth stays 1 */
+    for (i = 0; i < 6; ++i) {
+        /* Textures start initially dirty */
+        This->dirty_rect[i].width = EdgeLength;
+        This->dirty_rect[i].height = EdgeLength;
         This->dirty_rect[i].depth = 1;
+    }
 
     return D3D_OK;
 }
@@ -259,13 +270,17 @@ NineCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
     user_assert(FaceType < 6, D3DERR_INVALIDCALL);
 
     if (This->base.base.pool != D3DPOOL_MANAGED) {
-        if (This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP)
+        if (This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP) {
             This->base.dirty_mip = TRUE;
+            BASETEX_REGISTER_UPDATE(&This->base);
+        }
         return D3D_OK;
     }
-    This->base.managed.dirty = TRUE;
 
-    BASETEX_REGISTER_UPDATE(&This->base);
+    if (This->base.base.pool == D3DPOOL_MANAGED) {
+        This->base.managed.dirty = TRUE;
+        BASETEX_REGISTER_UPDATE(&This->base);
+    }
 
     if (!pDirtyRect) {
         u_box_origin_2d(This->base.base.info.width0,

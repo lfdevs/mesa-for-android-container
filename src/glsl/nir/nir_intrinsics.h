@@ -123,6 +123,8 @@ INTRINSIC(image_atomic_or, 3, ARR(4, 1, 1), true, 1, 1, 0, 0)
 INTRINSIC(image_atomic_xor, 3, ARR(4, 1, 1), true, 1, 1, 0, 0)
 INTRINSIC(image_atomic_exchange, 3, ARR(4, 1, 1), true, 1, 1, 0, 0)
 INTRINSIC(image_atomic_comp_swap, 4, ARR(4, 1, 1, 1), true, 1, 1, 0, 0)
+INTRINSIC(image_size, 0, ARR(), true, 4, 1, 0,
+          NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
 
 #define SYSTEM_VALUE(name, components) \
    INTRINSIC(load_##name, 0, ARR(), true, components, 0, 0, \

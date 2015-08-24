@@ -54,6 +54,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = d3d.pc
 
 d3dadapter9_la_SOURCES = \
+	description.c \
 	getproc.c \
 	drm.c
 

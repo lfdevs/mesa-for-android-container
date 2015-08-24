@@ -11,9 +11,7 @@ C_SOURCES := \
 	addrlib/core/addrobject.h \
 	addrlib/inc/chip/r800/si_gb_reg.h \
 	addrlib/inc/lnx_common_defs.h \
-	addrlib/r800/chip/si_ci_merged_enum.h \
 	addrlib/r800/chip/si_ci_vi_merged_enum.h \
-	addrlib/r800/chip/si_enum.h \
 	addrlib/r800/ciaddrlib.cpp \
 	addrlib/r800/ciaddrlib.h \
 	addrlib/r800/egbaddrlib.cpp \

@@ -208,7 +208,7 @@ brw_lookup_prog(const struct brw_cache *cache,
                 const void *data, unsigned data_size)
 {
    const struct brw_context *brw = cache->brw;
-   int i;
+   unsigned i;
    const struct brw_cache_item *item;
 
    for (i = 0; i < cache->size; i++) {

@@ -5616,6 +5616,11 @@ texture_image_multisample(struct gl_context *ctx, GLuint dims,
       return;
    }
 
+   if (samples < 1) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s(samples < 1)", func);
+      return;
+   }
+
    if (!check_multisample_target(dims, target, dsa)) {
       if (dsa) {
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(target)", func);
@@ -5789,6 +5794,20 @@ _mesa_TexImage3DMultisample(GLenum target, GLsizei samples,
                              "glTexImage3DMultisample");
 }
 
+static bool
+valid_texstorage_ms_parameters(GLsizei width, GLsizei height, GLsizei depth,
+                               GLsizei samples, unsigned dims)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (!_mesa_valid_tex_storage_dim(width, height, depth)) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "glTexStorage%uDMultisample(width=%d,height=%d,depth=%d)",
+                  dims, width, height, depth);
+      return false;
+   }
+   return true;
+}
 
 void GLAPIENTRY
 _mesa_TexStorage2DMultisample(GLenum target, GLsizei samples,
@@ -5800,6 +5819,9 @@ _mesa_TexStorage2DMultisample(GLenum target, GLsizei samples,
 
    texObj = _mesa_get_current_tex_object(ctx, target);
    if (!texObj)
+      return;
+
+   if (!valid_texstorage_ms_parameters(width, height, 1, samples, 2))
       return;
 
    texture_image_multisample(ctx, 2, texObj, target, samples,
@@ -5819,6 +5841,9 @@ _mesa_TexStorage3DMultisample(GLenum target, GLsizei samples,
 
    texObj = _mesa_get_current_tex_object(ctx, target);
    if (!texObj)
+      return;
+
+   if (!valid_texstorage_ms_parameters(width, height, depth, samples, 3))
       return;
 
    texture_image_multisample(ctx, 3, texObj, target, samples,
@@ -5841,6 +5866,9 @@ _mesa_TextureStorage2DMultisample(GLuint texture, GLsizei samples,
    if (!texObj)
       return;
 
+   if (!valid_texstorage_ms_parameters(width, height, 1, samples, 2))
+      return;
+
    texture_image_multisample(ctx, 2, texObj, texObj->Target, samples,
                              internalformat, width, height, 1,
                              fixedsamplelocations, GL_TRUE,
@@ -5860,6 +5888,9 @@ _mesa_TextureStorage3DMultisample(GLuint texture, GLsizei samples,
    texObj = _mesa_lookup_texture_err(ctx, texture,
                                      "glTextureStorage3DMultisample");
    if (!texObj)
+      return;
+
+   if (!valid_texstorage_ms_parameters(width, height, depth, samples, 3))
       return;
 
    texture_image_multisample(ctx, 3, texObj, texObj->Target, samples,

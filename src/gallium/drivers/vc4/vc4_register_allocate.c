@@ -113,9 +113,10 @@ vc4_alloc_reg_set(struct vc4_context *vc4)
         if (vc4->regs)
                 return;
 
-        vc4->regs = ra_alloc_reg_set(vc4, ARRAY_SIZE(vc4_regs));
+        vc4->regs = ra_alloc_reg_set(vc4, ARRAY_SIZE(vc4_regs), true);
 
         vc4->reg_class_any = ra_alloc_reg_class(vc4->regs);
+        vc4->reg_class_a_or_b_or_acc = ra_alloc_reg_class(vc4->regs);
         vc4->reg_class_r4_or_a = ra_alloc_reg_class(vc4->regs);
         vc4->reg_class_a = ra_alloc_reg_class(vc4->regs);
         for (uint32_t i = 0; i < ARRAY_SIZE(vc4_regs); i++) {
@@ -130,10 +131,12 @@ vc4_alloc_reg_set(struct vc4_context *vc4)
                  */
                 if (vc4_regs[i].mux == QPU_MUX_R4) {
                         ra_class_add_reg(vc4->regs, vc4->reg_class_r4_or_a, i);
+                        ra_class_add_reg(vc4->regs, vc4->reg_class_any, i);
                         continue;
                 }
 
                 ra_class_add_reg(vc4->regs, vc4->reg_class_any, i);
+                ra_class_add_reg(vc4->regs, vc4->reg_class_a_or_b_or_acc, i);
         }
 
         for (uint32_t i = AB_INDEX; i < AB_INDEX + 64; i += 2) {
@@ -177,7 +180,8 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
         uint8_t class_bits[c->num_temps];
         struct qpu_reg *temp_registers = calloc(c->num_temps,
                                                 sizeof(*temp_registers));
-        memset(def, 0, sizeof(def));
+        for (int i = 0; i < ARRAY_SIZE(def); i++)
+                def[i] = ~0;
         memset(use, 0, sizeof(use));
 
         /* If things aren't ever written (undefined values), just read from
@@ -196,7 +200,7 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
         uint32_t ip = 0;
         list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 if (inst->dst.file == QFILE_TEMP) {
-                        def[inst->dst.index] = ip;
+                        def[inst->dst.index] = MIN2(ip, def[inst->dst.index]);
                         use[inst->dst.index] = ip;
                 }
 
@@ -267,17 +271,33 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
                                         AB_INDEX + QPU_R_FRAG_PAYLOAD_ZW * 2);
                         break;
 
-                case QOP_PACK_SCALED:
-                        /* The pack flags require an A-file dst register. */
-                        class_bits[inst->dst.index] &= CLASS_BIT_A;
-                        break;
-
                 default:
                         break;
                 }
 
+                if (inst->dst.pack && !qir_is_mul(inst)) {
+                        /* The non-MUL pack flags require an A-file dst
+                         * register.
+                         */
+                        class_bits[inst->dst.index] &= CLASS_BIT_A;
+                }
+
                 if (qir_src_needs_a_file(inst)) {
-                        class_bits[inst->src[0].index] &= CLASS_BIT_A;
+                        switch (inst->op) {
+                        case QOP_UNPACK_8A_F:
+                        case QOP_UNPACK_8B_F:
+                        case QOP_UNPACK_8C_F:
+                        case QOP_UNPACK_8D_F:
+                                /* Special case: these can be done as R4
+                                 * unpacks, as well.
+                                 */
+                                class_bits[inst->src[0].index] &= (CLASS_BIT_A |
+                                                                   CLASS_BIT_R4);
+                                break;
+                        default:
+                                class_bits[inst->src[0].index] &= CLASS_BIT_A;
+                                break;
+                        }
                 }
                 ip++;
         }
@@ -287,8 +307,10 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
 
                 switch (class_bits[i]) {
                 case CLASS_BIT_A | CLASS_BIT_B_OR_ACC | CLASS_BIT_R4:
-                case CLASS_BIT_A | CLASS_BIT_B_OR_ACC:
                         ra_set_node_class(g, node, vc4->reg_class_any);
+                        break;
+                case CLASS_BIT_A | CLASS_BIT_B_OR_ACC:
+                        ra_set_node_class(g, node, vc4->reg_class_a_or_b_or_acc);
                         break;
                 case CLASS_BIT_A | CLASS_BIT_R4:
                         ra_set_node_class(g, node, vc4->reg_class_r4_or_a);

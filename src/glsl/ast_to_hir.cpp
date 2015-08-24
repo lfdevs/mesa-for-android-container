@@ -2098,10 +2098,10 @@ validate_matrix_layout_for_type(struct _mesa_glsl_parse_state *state,
 static bool
 validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
                            YYLTYPE *loc,
-                           ir_variable *var,
+                           const glsl_type *type,
                            const ast_type_qualifier *qual)
 {
-   if (var->data.mode != ir_var_uniform && var->data.mode != ir_var_shader_storage) {
+   if (!qual->flags.q.uniform && !qual->flags.q.buffer) {
       _mesa_glsl_error(loc, state,
                        "the \"binding\" qualifier only applies to uniforms and "
                        "shader storage buffer objects");
@@ -2114,10 +2114,11 @@ validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
    }
 
    const struct gl_context *const ctx = state->ctx;
-   unsigned elements = var->type->is_array() ? var->type->length : 1;
+   unsigned elements = type->is_array() ? type->length : 1;
    unsigned max_index = qual->binding + elements - 1;
+   const glsl_type *base_type = type->without_array();
 
-   if (var->type->is_interface()) {
+   if (base_type->is_interface()) {
       /* UBOs.  From page 60 of the GLSL 4.20 specification:
        * "If the binding point for any uniform block instance is less than zero,
        *  or greater than or equal to the implementation-dependent maximum
@@ -2128,7 +2129,7 @@ validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
        *
        * The implementation-dependent maximum is GL_MAX_UNIFORM_BUFFER_BINDINGS.
        */
-      if (var->data.mode == ir_var_uniform &&
+      if (qual->flags.q.uniform &&
          max_index >= ctx->Const.MaxUniformBufferBindings) {
          _mesa_glsl_error(loc, state, "layout(binding = %d) for %d UBOs exceeds "
                           "the maximum number of UBO binding points (%d)",
@@ -2136,6 +2137,7 @@ validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
                           ctx->Const.MaxUniformBufferBindings);
          return false;
       }
+
       /* SSBOs. From page 67 of the GLSL 4.30 specification:
        * "If the binding point for any uniform or shader storage block instance
        *  is less than zero, or greater than or equal to the
@@ -2145,7 +2147,7 @@ validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
        *  N, all elements of the array from binding through binding + N – 1 must
        *  be within this range."
        */
-      if (var->data.mode == ir_var_shader_storage &&
+      if (qual->flags.q.buffer &&
          max_index >= ctx->Const.MaxShaderStorageBufferBindings) {
          _mesa_glsl_error(loc, state, "layout(binding = %d) for %d SSBOs exceeds "
                           "the maximum number of SSBO binding points (%d)",
@@ -2153,8 +2155,7 @@ validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
                           ctx->Const.MaxShaderStorageBufferBindings);
          return false;
       }
-   } else if (var->type->is_sampler() ||
-              (var->type->is_array() && var->type->fields.array->is_sampler())) {
+   } else if (base_type->is_sampler()) {
       /* Samplers.  From page 63 of the GLSL 4.20 specification:
        * "If the binding is less than zero, or greater than or equal to the
        *  implementation-dependent maximum supported number of units, a
@@ -2171,7 +2172,7 @@ validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
 
          return false;
       }
-   } else if (var->type->contains_atomic()) {
+   } else if (base_type->contains_atomic()) {
       assert(ctx->Const.MaxAtomicBufferBindings <= MAX_COMBINED_ATOMIC_BUFFERS);
       if (unsigned(qual->binding) >= ctx->Const.MaxAtomicBufferBindings) {
          _mesa_glsl_error(loc, state, "layout(binding = %d) exceeds the "
@@ -2181,10 +2182,19 @@ validate_binding_qualifier(struct _mesa_glsl_parse_state *state,
 
          return false;
       }
+   } else if (state->is_version(420, 310) && base_type->is_image()) {
+      assert(ctx->Const.MaxImageUnits <= MAX_IMAGE_UNITS);
+      if (max_index >= ctx->Const.MaxImageUnits) {
+         _mesa_glsl_error(loc, state, "Image binding %d exceeds the "
+                          " maximum number of image units (%d)", max_index,
+                          ctx->Const.MaxImageUnits);
+         return false;
+      }
+
    } else {
       _mesa_glsl_error(loc, state,
                        "the \"binding\" qualifier only applies to uniform "
-                       "blocks, samplers, atomic counters, or arrays thereof");
+                       "blocks, opaque variables, or arrays thereof");
       return false;
    }
 
@@ -2445,14 +2455,38 @@ apply_image_qualifier_to_variable(const struct ast_type_qualifier *qual,
 
          var->data.image_format = qual->image_format;
       } else {
-         if (var->data.mode == ir_var_uniform && !qual->flags.q.write_only) {
-            _mesa_glsl_error(loc, state, "uniforms not qualified with "
-                             "`writeonly' must have a format layout "
-                             "qualifier");
+         if (var->data.mode == ir_var_uniform) {
+            if (state->es_shader) {
+               _mesa_glsl_error(loc, state, "all image uniforms "
+                                "must have a format layout qualifier");
+
+            } else if (!qual->flags.q.write_only) {
+               _mesa_glsl_error(loc, state, "image uniforms not qualified with "
+                                "`writeonly' must have a format layout "
+                                "qualifier");
+            }
          }
 
          var->data.image_format = GL_NONE;
       }
+
+      /* From page 70 of the GLSL ES 3.1 specification:
+       *
+       * "Except for image variables qualified with the format qualifiers
+       *  r32f, r32i, and r32ui, image variables must specify either memory
+       *  qualifier readonly or the memory qualifier writeonly."
+       */
+      if (state->es_shader &&
+          var->data.image_format != GL_R32F &&
+          var->data.image_format != GL_R32I &&
+          var->data.image_format != GL_R32UI &&
+          !var->data.image_read_only &&
+          !var->data.image_write_only) {
+         _mesa_glsl_error(loc, state, "image variables of format other than "
+                          "r32f, r32i or r32ui must be qualified `readonly' or "
+                          "`writeonly'");
+      }
+
    } else if (qual->flags.q.read_only ||
               qual->flags.q.write_only ||
               qual->flags.q.coherent ||
@@ -2749,7 +2783,7 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
    }
 
    if (qual->flags.q.explicit_binding &&
-       validate_binding_qualifier(state, loc, var, qual)) {
+       validate_binding_qualifier(state, loc, var->type, qual)) {
       var->data.explicit_binding = true;
       var->data.binding = qual->binding;
    }
@@ -3283,7 +3317,7 @@ handle_tess_ctrl_shader_output_decl(struct _mesa_glsl_parse_state *state,
 
    validate_layout_qualifier_vertex_count(state, loc, var, num_vertices,
                                           &state->tcs_output_size,
-                                          "geometry shader input");
+                                          "tessellation control shader output");
 }
 
 /**
@@ -3380,7 +3414,7 @@ validate_identifier(const char *identifier, YYLTYPE loc,
 static bool
 precision_qualifier_allowed(const glsl_type *type)
 {
-   /* Precision qualifiers apply to floating point, integer and sampler
+   /* Precision qualifiers apply to floating point, integer and opaque
     * types.
     *
     * Section 4.5.2 (Precision Qualifiers) of the GLSL 1.30 spec says:
@@ -3410,7 +3444,7 @@ precision_qualifier_allowed(const glsl_type *type)
    return type->is_float()
        || type->is_integer()
        || type->is_record()
-       || type->is_sampler();
+       || type->contains_opaque();
 }
 
 ir_rvalue *
@@ -4121,7 +4155,7 @@ ast_declarator_list::hir(exec_list *instructions,
 
          _mesa_glsl_error(&loc, state,
                           "precision qualifiers apply only to floating point"
-                          ", integer and sampler types");
+                          ", integer and opaque types");
       }
 
       /* From section 4.1.7 of the GLSL 4.40 spec:
@@ -5429,6 +5463,8 @@ is_valid_default_precision_type(const struct glsl_type *const type)
       /* "int" and "float" are valid, but vectors and matrices are not. */
       return type->vector_elements == 1 && type->matrix_columns == 1;
    case GLSL_TYPE_SAMPLER:
+   case GLSL_TYPE_IMAGE:
+   case GLSL_TYPE_ATOMIC_UINT:
       return true;
    default:
       return false;
@@ -5477,7 +5513,7 @@ ast_type_specifier::hir(exec_list *instructions,
       if (!is_valid_default_precision_type(type)) {
          _mesa_glsl_error(&loc, state,
                           "default precision statements apply only to "
-                          "float, int, and sampler types");
+                          "float, int, and opaque types");
          return NULL;
       }
 
@@ -6057,6 +6093,8 @@ ast_interface_block::hir(exec_list *instructions,
                                         num_variables,
                                         packing,
                                         this->block_name);
+   if (this->layout.flags.q.explicit_binding)
+      validate_binding_qualifier(state, &loc, block_type, &this->layout);
 
    if (!state->symbols->add_interface(block_type->name, block_type, var_mode)) {
       YYLTYPE loc = this->get_location();
@@ -6186,6 +6224,10 @@ ast_interface_block::hir(exec_list *instructions,
                              "arrays of arrays interface blocks are "
                              "not allowed");
          }
+
+         if (this->layout.flags.q.explicit_binding)
+            validate_binding_qualifier(state, &loc, block_array_type,
+                                       &this->layout);
 
          var = new(state) ir_variable(block_array_type,
                                       this->instance_name,

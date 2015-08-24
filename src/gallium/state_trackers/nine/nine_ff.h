@@ -3,6 +3,7 @@
 #define _NINE_FF_H_
 
 #include "device9.h"
+#include "vertexdeclaration9.h"
 
 boolean nine_ff_init(struct NineDevice9 *);
 void    nine_ff_fini(struct NineDevice9 *);
@@ -28,5 +29,85 @@ nine_d3d_matrix_inverse_3x3(D3DMATRIX *, const D3DMATRIX *);
 
 void
 nine_d3d_matrix_transpose(D3DMATRIX *, const D3DMATRIX *);
+
+#define NINED3DTSS_TCI_DISABLE                       0
+#define NINED3DTSS_TCI_PASSTHRU                      1
+#define NINED3DTSS_TCI_CAMERASPACENORMAL             2
+#define NINED3DTSS_TCI_CAMERASPACEPOSITION           3
+#define NINED3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR   4
+#define NINED3DTSS_TCI_SPHEREMAP                     5
+
+static inline unsigned
+nine_decltype_get_dim(BYTE type)
+{
+    switch (type) {
+    case D3DDECLTYPE_FLOAT1: return 1;
+    case D3DDECLTYPE_FLOAT2: return 2;
+    case D3DDECLTYPE_FLOAT3: return 3;
+    case D3DDECLTYPE_FLOAT4: return 4;
+    case D3DDECLTYPE_D3DCOLOR: return 1;
+    case D3DDECLTYPE_UBYTE4: return 4;
+    case D3DDECLTYPE_SHORT2: return 2;
+    case D3DDECLTYPE_SHORT4: return 4;
+    case D3DDECLTYPE_UBYTE4N: return 4;
+    case D3DDECLTYPE_SHORT2N: return 2;
+    case D3DDECLTYPE_SHORT4N: return 4;
+    case D3DDECLTYPE_USHORT2N: return 2;
+    case D3DDECLTYPE_USHORT4N: return 4;
+    case D3DDECLTYPE_UDEC3: return 3;
+    case D3DDECLTYPE_DEC3N: return 3;
+    case D3DDECLTYPE_FLOAT16_2: return 2;
+    case D3DDECLTYPE_FLOAT16_4: return 4;
+    default:
+        assert(!"Implementation error !");
+    }
+    return 0;
+}
+
+static inline uint16_t
+nine_ff_get_projected_key(struct nine_state *state)
+{
+    unsigned s, i;
+    uint16_t projected = 0;
+    char input_texture_coord[8];
+    memset(&input_texture_coord, 0, sizeof(input_texture_coord));
+
+    if (state->vdecl) {
+        for (i = 0; i < state->vdecl->nelems; i++) {
+            uint16_t usage = state->vdecl->usage_map[i];
+            if (usage % NINE_DECLUSAGE_COUNT == NINE_DECLUSAGE_TEXCOORD) {
+                s = usage / NINE_DECLUSAGE_COUNT;
+                if (s < 8)
+                    input_texture_coord[s] = nine_decltype_get_dim(state->vdecl->decls[i].Type);
+            }
+        }
+    }
+
+    for (s = 0; s < 8; ++s) {
+        unsigned gen = (state->ff.tex_stage[s][D3DTSS_TEXCOORDINDEX] >> 16) + 1;
+        unsigned dim = state->ff.tex_stage[s][D3DTSS_TEXTURETRANSFORMFLAGS] & 0x7;
+        unsigned proj = !!(state->ff.tex_stage[s][D3DTSS_TEXTURETRANSFORMFLAGS] & D3DTTFF_PROJECTED);
+
+        if (!state->vs) {
+            if (dim > 4)
+                dim = input_texture_coord[s];
+
+            if (!dim && gen == NINED3DTSS_TCI_PASSTHRU)
+                dim = input_texture_coord[s];
+            else if (!dim)
+                dim = 4;
+
+            if (dim == 1) /* NV behaviour */
+                proj = 0;
+            if (dim > input_texture_coord[s] && gen == NINED3DTSS_TCI_PASSTHRU)
+                proj = 0;
+        } else {
+            dim = 4;
+        }
+        if (proj)
+            projected |= (dim-1) << (2 * s);
+    }
+    return projected;
+}
 
 #endif /* _NINE_FF_H_ */

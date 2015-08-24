@@ -662,7 +662,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
    struct intel_renderbuffer *stencilRb =
       intel_get_renderbuffer(fb, BUFFER_STENCIL);
    struct intel_mipmap_tree *depth_mt = NULL, *stencil_mt = NULL;
-   int i;
+   unsigned i;
 
    DBG("%s() on fb %p (%s)\n", __func__,
        fb, (fb == ctx->DrawBuffer ? "drawbuffer" :
@@ -797,7 +797,7 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
    intel_prepare_render(brw);
 
    if (mask & GL_COLOR_BUFFER_BIT) {
-      GLint i;
+      unsigned i;
       struct gl_renderbuffer *src_rb = readFb->_ColorReadBuffer;
       struct intel_renderbuffer *src_irb = intel_renderbuffer(src_rb);
 

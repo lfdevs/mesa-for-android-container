@@ -677,8 +677,10 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
       match = (basicType != GLSL_TYPE_DOUBLE);
       break;
    case GLSL_TYPE_SAMPLER:
-   case GLSL_TYPE_IMAGE:
       match = (basicType == GLSL_TYPE_INT);
+      break;
+   case GLSL_TYPE_IMAGE:
+      match = (basicType == GLSL_TYPE_INT && _mesa_is_desktop_gl(ctx));
       break;
    default:
       match = (basicType == uni->type->base_type);

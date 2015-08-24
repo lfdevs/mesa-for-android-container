@@ -224,7 +224,7 @@ NVC0LegalizePostRA::findFirstUses(
       const Instruction *texi,
       const Instruction *insn,
       std::list<TexUse> &uses,
-      std::tr1::unordered_set<const Instruction *>& visited)
+      unordered_set<const Instruction *>& visited)
 {
    for (int d = 0; insn->defExists(d); ++d) {
       Value *v = insn->getDef(d);
@@ -323,7 +323,7 @@ NVC0LegalizePostRA::insertTextureBarriers(Function *fn)
    if (!uses)
       return false;
    for (size_t i = 0; i < texes.size(); ++i) {
-      std::tr1::unordered_set<const Instruction *> visited;
+      unordered_set<const Instruction *> visited;
       findFirstUses(texes[i], texes[i], uses[i], visited);
    }
 

@@ -1908,6 +1908,12 @@ get_tex_parameterfv(struct gl_context *ctx,
          *params = (GLfloat) obj->Sampler.sRGBDecode;
          break;
 
+      case GL_IMAGE_FORMAT_COMPATIBILITY_TYPE:
+         if (!ctx->Extensions.ARB_shader_image_load_store)
+            goto invalid_pname;
+         *params = (GLfloat) obj->ImageFormatCompatibilityType;
+         break;
+
       default:
          goto invalid_pname;
    }

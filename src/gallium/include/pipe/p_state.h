@@ -663,6 +663,7 @@ struct pipe_blit_info
 
    boolean render_condition_enable; /**< whether the blit should honor the
                                     current render condition */
+   boolean alpha_blend; /* dst.rgb = src.rgb * src.a + dst.rgb * (1 - src.a) */
 };
 
 

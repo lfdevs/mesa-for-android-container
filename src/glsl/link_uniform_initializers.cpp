@@ -100,8 +100,13 @@ copy_constant_to_storage(union gl_constant_value *storage,
    }
 }
 
+/**
+ * Initialize an opaque uniform from the value of an explicit binding
+ * qualifier specified in the shader.  Atomic counters are different because
+ * they have no storage and should be handled elsewhere.
+ */
 void
-set_sampler_binding(gl_shader_program *prog, const char *name, int binding)
+set_opaque_binding(gl_shader_program *prog, const char *name, int binding)
 {
    struct gl_uniform_storage *const storage =
       get_storage(prog->UniformStorage, prog->NumUniformStorage, name);
@@ -127,11 +132,20 @@ set_sampler_binding(gl_shader_program *prog, const char *name, int binding)
    for (int sh = 0; sh < MESA_SHADER_STAGES; sh++) {
       gl_shader *shader = prog->_LinkedShaders[sh];
 
-      if (shader && storage->sampler[sh].active) {
-         for (unsigned i = 0; i < elements; i++) {
-            unsigned index = storage->sampler[sh].index + i;
+      if (shader) {
+         if (storage->type->base_type == GLSL_TYPE_SAMPLER &&
+             storage->sampler[sh].active) {
+            for (unsigned i = 0; i < elements; i++) {
+               const unsigned index = storage->sampler[sh].index + i;
+               shader->SamplerUnits[index] = storage->storage[i].i;
+            }
 
-            shader->SamplerUnits[index] = storage->storage[i].i;
+         } else if (storage->type->base_type == GLSL_TYPE_IMAGE &&
+                    storage->image[sh].active) {
+            for (unsigned i = 0; i < elements; i++) {
+               const unsigned index = storage->image[sh].index + i;
+               shader->ImageUnits[index] = storage->storage[i].i;
+            }
          }
       }
    }
@@ -267,8 +281,9 @@ link_set_uniform_initializers(struct gl_shader_program *prog,
          if (var->data.explicit_binding) {
             const glsl_type *const type = var->type;
 
-            if (type->without_array()->is_sampler()) {
-               linker::set_sampler_binding(prog, var->name, var->data.binding);
+            if (type->without_array()->is_sampler() ||
+                type->without_array()->is_image()) {
+               linker::set_opaque_binding(prog, var->name, var->data.binding);
             } else if (var->is_in_buffer_block()) {
                const glsl_type *const iface_type = var->get_interface_type();
 

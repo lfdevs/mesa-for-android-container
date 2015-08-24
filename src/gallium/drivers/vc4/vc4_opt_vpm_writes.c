@@ -68,7 +68,7 @@ qir_opt_vpm_writes(struct vc4_compile *c)
                         continue;
 
                 struct qinst *inst = c->defs[temp];
-                if (qir_is_multi_instruction(inst))
+                if (!inst || qir_is_multi_instruction(inst))
                         continue;
 
                 if (qir_depends_on_flags(inst) || inst->sf)
@@ -78,22 +78,6 @@ qir_opt_vpm_writes(struct vc4_compile *c)
                     qir_has_side_effect_reads(c, inst)) {
                         continue;
                 }
-
-                /* A QOP_TEX_RESULT destination is r4, so we can't move
-                 * accesses to it past another QOP_TEX_RESULT which would
-                 * update it.
-                 */
-                int src;
-                for (src = 0; src < qir_get_op_nsrc(inst->op); src++) {
-                        if (inst->src[src].file == QFILE_TEMP) {
-                                if (c->defs[inst->src[src].index]->op ==
-                                    QOP_TEX_RESULT) {
-                                        break;
-                                }
-                        }
-                }
-                if (src != qir_get_op_nsrc(inst->op))
-                        continue;
 
                 /* Move the generating instruction to the end of the program
                  * to maintain the order of the VPM writes.

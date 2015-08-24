@@ -48,9 +48,10 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
         return hr;
 
     if (cso) {
-        This->variant.cso = cso;
+        This->ff_cso = cso;
         return D3D_OK;
     }
+
     device = This->base.device;
 
     info.type = PIPE_SHADER_VERTEX;
@@ -59,6 +60,7 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
     info.const_b_base = NINE_CONST_B_BASE(device->max_vs_const_f) / 16;
     info.sampler_mask_shadow = 0x0;
     info.sampler_ps1xtypes = 0x0;
+    info.fog_enable = 0;
 
     hr = nine_translate_shader(device, &info);
     if (FAILED(hr))
@@ -71,6 +73,9 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
     This->byte_code.size = info.byte_size;
 
     This->variant.cso = info.cso;
+    This->last_cso = info.cso;
+    This->last_key = 0;
+
     This->const_used_size = info.const_used_size;
     This->lconstf = info.lconstf;
     This->sampler_mask = info.sampler_mask;
@@ -87,11 +92,12 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
 void
 NineVertexShader9_dtor( struct NineVertexShader9 *This )
 {
-    DBG("This=%p cso=%p\n", This, This->variant.cso);
+    DBG("This=%p\n", This);
 
     if (This->base.device) {
         struct pipe_context *pipe = This->base.device->pipe;
         struct nine_shader_variant *var = &This->variant;
+
         do {
             if (var->cso) {
                 if (This->base.device->state.cso.vs == var->cso)
@@ -100,6 +106,12 @@ NineVertexShader9_dtor( struct NineVertexShader9 *This )
             }
             var = var->next;
         } while (var);
+
+        if (This->ff_cso) {
+            if (This->ff_cso == This->base.device->state.cso.vs)
+                pipe->bind_vs_state(pipe, NULL);
+            pipe->delete_vs_state(pipe, This->ff_cso);
+        }
     }
     nine_shader_variants_free(&This->variant);
 
@@ -130,10 +142,16 @@ NineVertexShader9_GetFunction( struct NineVertexShader9 *This,
 }
 
 void *
-NineVertexShader9_GetVariant( struct NineVertexShader9 *This,
-                              uint32_t key )
+NineVertexShader9_GetVariant( struct NineVertexShader9 *This )
 {
-    void *cso = nine_shader_variant_get(&This->variant, key);
+    void *cso;
+    uint32_t key;
+
+    key = This->next_key;
+    if (key == This->last_key)
+        return This->last_cso;
+
+    cso = nine_shader_variant_get(&This->variant, key);
     if (!cso) {
         struct NineDevice9 *device = This->base.device;
         struct nine_shader_info info;
@@ -144,6 +162,7 @@ NineVertexShader9_GetVariant( struct NineVertexShader9 *This,
         info.const_b_base = NINE_CONST_B_BASE(device->max_vs_const_f) / 16;
         info.byte_code = This->byte_code.tokens;
         info.sampler_mask_shadow = key & 0xf;
+        info.fog_enable = device->state.rs[D3DRS_FOGENABLE];
 
         hr = nine_translate_shader(This->base.device, &info);
         if (FAILED(hr))
@@ -151,6 +170,10 @@ NineVertexShader9_GetVariant( struct NineVertexShader9 *This,
         nine_shader_variant_add(&This->variant, key, info.cso);
         cso = info.cso;
     }
+
+    This->last_key = key;
+    This->last_cso = cso;
+
     return cso;
 }
 

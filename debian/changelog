@@ -1,3 +1,21 @@
+mesa (11.0.0~rc1-1) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release candidate.
+  * control: Drop unneeded libomxil-bellagio-dev build-dep.
+  * rules: Explicitly disable vaapi (Closes: #789100).
+  * control: Update upstream url.
+  * control: Update Vcs-* fields.
+  * Drop libgl1-mesa-swx11* packages.
+  * control: Update package description.
+
+  [ Timo Aaltonen ]
+  * control: Delete commented out libgl1-mesa-glx-i686 from the file.
+  * control: Bump llvm/libclang build-deps to match versions where
+    amdgpu is enabled.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 24 Aug 2015 11:15:16 +0300
+
 mesa (11.0.0~git20150817-1) experimental; urgency=medium
 
   * New upstream snapshot
@@ -9,6 +27,12 @@ mesa (11.0.0~git20150817-1) experimental; urgency=medium
   * rules: Enable llvmpipe on armhf again.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 18 Aug 2015 07:53:45 +0300
+
+mesa (10.6.4-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 19 Aug 2015 09:11:47 +0300
 
 mesa (10.6.3-1) unstable; urgency=medium
 

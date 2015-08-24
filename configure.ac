@@ -9,7 +9,6 @@ dnl Copyright © 2009-2014 Jon TURNEY
 dnl Copyright © 2011-2012 Benjamin Franzke
 dnl Copyright © 2008-2014 David Airlie
 dnl Copyright © 2009-2013 Brian Paul
-dnl Copyright © 2003-2007 Keith Packard, Daniel Stone
 dnl
 dnl Permission is hereby granted, free of charge, to any person obtaining a
 dnl copy of this software and associated documentation files (the "Software"),
@@ -74,7 +73,7 @@ LIBDRM_AMDGPU_REQUIRED=2.4.63
 LIBDRM_INTEL_REQUIRED=2.4.61
 LIBDRM_NVVIEUX_REQUIRED=2.4.33
 LIBDRM_NOUVEAU_REQUIRED=2.4.62
-LIBDRM_FREEDRENO_REQUIRED=2.4.57
+LIBDRM_FREEDRENO_REQUIRED=2.4.64
 DRI2PROTO_REQUIRED=2.6
 DRI3PROTO_REQUIRED=1.0
 PRESENTPROTO_REQUIRED=1.0
@@ -988,144 +987,6 @@ fi
 
 AC_SUBST([MESA_LLVM])
 
-# SHA1 hashing
-AC_ARG_WITH([sha1],
-        [AS_HELP_STRING([--with-sha1=libc|libmd|libnettle|libgcrypt|libcrypto|libsha1|CommonCrypto|CryptoAPI],
-        [choose SHA1 implementation])])
-case "x$with_sha1" in
-x | xlibc | xlibmd | xlibnettle | xlibgcrypt | xlibcrypto | xlibsha1 | xCommonCrypto | xCryptoAPI)
-  ;;
-*)
-        AC_MSG_ERROR([Illegal value for --with-sha1: $with_sha1])
-esac
-
-AC_CHECK_FUNC([SHA1Init], [HAVE_SHA1_IN_LIBC=yes])
-if test "x$with_sha1" = x && test "x$HAVE_SHA1_IN_LIBC" = xyes; then
-	with_sha1=libc
-fi
-if test "x$with_sha1" = xlibc && test "x$HAVE_SHA1_IN_LIBC" != xyes; then
-	AC_MSG_ERROR([sha1 in libc requested but not found])
-fi
-if test "x$with_sha1" = xlibc; then
-	AC_DEFINE([HAVE_SHA1_IN_LIBC], [1],
-		[Use libc SHA1 functions])
-	SHA1_LIBS=""
-fi
-AC_CHECK_FUNC([CC_SHA1_Init], [HAVE_SHA1_IN_COMMONCRYPTO=yes])
-if test "x$with_sha1" = x && test "x$HAVE_SHA1_IN_COMMONCRYPTO" = xyes; then
-	with_sha1=CommonCrypto
-fi
-if test "x$with_sha1" = xCommonCrypto && test "x$HAVE_SHA1_IN_COMMONCRYPTO" != xyes; then
-	AC_MSG_ERROR([CommonCrypto requested but not found])
-fi
-if test "x$with_sha1" = xCommonCrypto; then
-	AC_DEFINE([HAVE_SHA1_IN_COMMONCRYPTO], [1],
-		[Use CommonCrypto SHA1 functions])
-	SHA1_LIBS=""
-fi
-dnl stdcall functions cannot be tested with AC_CHECK_LIB
-AC_CHECK_HEADER([wincrypt.h], [HAVE_SHA1_IN_CRYPTOAPI=yes], [], [#include <windows.h>])
-if test "x$with_sha1" = x && test "x$HAVE_SHA1_IN_CRYPTOAPI" = xyes; then
-	with_sha1=CryptoAPI
-fi
-if test "x$with_sha1" = xCryptoAPI && test "x$HAVE_SHA1_IN_CRYPTOAPI" != xyes; then
-	AC_MSG_ERROR([CryptoAPI requested but not found])
-fi
-if test "x$with_sha1" = xCryptoAPI; then
-	AC_DEFINE([HAVE_SHA1_IN_CRYPTOAPI], [1],
-		[Use CryptoAPI SHA1 functions])
-	SHA1_LIBS=""
-fi
-AC_CHECK_LIB([md], [SHA1Init], [HAVE_LIBMD=yes])
-if test "x$with_sha1" = x && test "x$HAVE_LIBMD" = xyes; then
-	with_sha1=libmd
-fi
-if test "x$with_sha1" = xlibmd && test "x$HAVE_LIBMD" != xyes; then
-	AC_MSG_ERROR([libmd requested but not found])
-fi
-if test "x$with_sha1" = xlibmd; then
-	AC_DEFINE([HAVE_SHA1_IN_LIBMD], [1],
-	          [Use libmd SHA1 functions])
-	SHA1_LIBS=-lmd
-fi
-PKG_CHECK_MODULES([LIBSHA1], [libsha1], [HAVE_LIBSHA1=yes], [HAVE_LIBSHA1=no])
-if test "x$with_sha1" = x && test "x$HAVE_LIBSHA1" = xyes; then
-   with_sha1=libsha1
-fi
-if test "x$with_sha1" = xlibsha1 && test "x$HAVE_LIBSHA1" != xyes; then
-	AC_MSG_ERROR([libsha1 requested but not found])
-fi
-if test "x$with_sha1" = xlibsha1; then
-	AC_DEFINE([HAVE_SHA1_IN_LIBSHA1], [1],
-	          [Use libsha1 for SHA1])
-	SHA1_LIBS=-lsha1
-fi
-AC_CHECK_LIB([nettle], [nettle_sha1_init], [HAVE_LIBNETTLE=yes])
-if test "x$with_sha1" = x && test "x$HAVE_LIBNETTLE" = xyes; then
-	with_sha1=libnettle
-fi
-if test "x$with_sha1" = xlibnettle && test "x$HAVE_LIBNETTLE" != xyes; then
-	AC_MSG_ERROR([libnettle requested but not found])
-fi
-if test "x$with_sha1" = xlibnettle; then
-	AC_DEFINE([HAVE_SHA1_IN_LIBNETTLE], [1],
-	          [Use libnettle SHA1 functions])
-	SHA1_LIBS=-lnettle
-fi
-AC_CHECK_LIB([gcrypt], [gcry_md_open], [HAVE_LIBGCRYPT=yes])
-if test "x$with_sha1" = x && test "x$HAVE_LIBGCRYPT" = xyes; then
-	with_sha1=libgcrypt
-fi
-if test "x$with_sha1" = xlibgcrypt && test "x$HAVE_LIBGCRYPT" != xyes; then
-	AC_MSG_ERROR([libgcrypt requested but not found])
-fi
-if test "x$with_sha1" = xlibgcrypt; then
-	AC_DEFINE([HAVE_SHA1_IN_LIBGCRYPT], [1],
-	          [Use libgcrypt SHA1 functions])
-	SHA1_LIBS=-lgcrypt
-fi
-# We don't need all of the OpenSSL libraries, just libcrypto
-AC_CHECK_LIB([crypto], [SHA1_Init], [HAVE_LIBCRYPTO=yes])
-PKG_CHECK_MODULES([OPENSSL], [openssl], [HAVE_OPENSSL_PKC=yes],
-                  [HAVE_OPENSSL_PKC=no])
-if test "x$HAVE_LIBCRYPTO" = xyes || test "x$HAVE_OPENSSL_PKC" = xyes; then
-	if test "x$with_sha1" = x; then
-		with_sha1=libcrypto
-	fi
-else
-	if test "x$with_sha1" = xlibcrypto; then
-		AC_MSG_ERROR([OpenSSL libcrypto requested but not found])
-	fi
-fi
-if test "x$with_sha1" = xlibcrypto; then
-	if test "x$HAVE_LIBCRYPTO" = xyes; then
-		SHA1_LIBS=-lcrypto
-	else
-		SHA1_LIBS="$OPENSSL_LIBS"
-		SHA1_CFLAGS="$OPENSSL_CFLAGS"
-	fi
-fi
-AC_MSG_CHECKING([for SHA1 implementation])
-AC_MSG_RESULT([$with_sha1])
-AC_SUBST(SHA1_LIBS)
-AC_SUBST(SHA1_CFLAGS)
-
-# Allow user to configure out the shader-cache feature
-AC_ARG_ENABLE([shader-cache],
-    AS_HELP_STRING([--disable-shader-cache], [Disable binary shader cache]),
-    [enable_shader_cache="$enableval"],
-    [if test "x$with_sha1" != "x"; then
-        enable_shader_cache=yes
-     else
-        enable_shader_cache=no
-     fi])
-if test "x$with_sha1" = "x"; then
-    if test "x$enable_shader_cache" = "xyes"; then
-        AC_MSG_ERROR([Cannot enable shader cache (no SHA-1 implementation found)])
-    fi
-fi
-AM_CONDITIONAL([ENABLE_SHADER_CACHE], [test x$enable_shader_cache = xyes])
-
 case "$host_os" in
 linux*)
     need_pci_id=yes ;;
@@ -1633,6 +1494,10 @@ if test "x$enable_nine" = xyes; then
     if test "x$with_gallium_drivers" = xswrast; then
         AC_MSG_ERROR([nine requires at least one non-swrast gallium driver])
     fi
+    if test $GCC_VERSION_MAJOR -lt 4 -o $GCC_VERSION_MAJOR -eq 4 -a $GCC_VERSION_MINOR -lt 6; then
+        AC_MSG_ERROR([gcc >= 4.6 is required to build nine])
+    fi
+
     if test "x$enable_dri3" = xno; then
         AC_MSG_WARN([using nine together with wine requires DRI3 enabled system])
     fi
@@ -2480,12 +2345,6 @@ else
     echo "        Gallium:         no"
 fi
 
-dnl Shader cache
-echo ""
-echo "        Shader cache:    $enable_shader_cache"
-if test "x$enable_shader_cache" = "xyes"; then
-    echo "        With SHA1 from:  $with_sha1"
-fi
 
 dnl Libraries
 echo ""

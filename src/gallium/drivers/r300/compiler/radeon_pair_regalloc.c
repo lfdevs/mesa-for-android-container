@@ -693,7 +693,8 @@ void rc_init_regalloc_state(struct rc_regalloc_state *s)
 	};
 
 	/* Allocate the main ra data structure */
-	s->regs = ra_alloc_reg_set(NULL, R500_PFS_NUM_TEMP_REGS * RC_MASK_XYZW);
+	s->regs = ra_alloc_reg_set(NULL, R500_PFS_NUM_TEMP_REGS * RC_MASK_XYZW,
+                                   true);
 
 	/* Create the register classes */
 	for (i = 0; i < RC_REG_CLASS_COUNT; i++) {

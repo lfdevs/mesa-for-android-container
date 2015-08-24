@@ -50,35 +50,18 @@ fd_screen_fence_ref(struct pipe_screen *pscreen,
 	*ptr = pfence;
 }
 
-/* TODO we need to spiff out libdrm_freedreno a bit to allow passing
- * the timeout.. and maybe a better way to check if fence has been
- * signaled.  The current implementation is a bit lame for now to
- * avoid bumping libdrm version requirement.
- */
-
-boolean fd_screen_fence_signalled(struct pipe_screen *screen,
-		struct pipe_fence_handle *fence)
-{
-	uint32_t timestamp = fd_ringbuffer_timestamp(fence->ctx->ring);
-
-	/* TODO util helper for compare w/ rollover? */
-	return timestamp >= fence->timestamp;
-}
-
 boolean fd_screen_fence_finish(struct pipe_screen *screen,
 		struct pipe_fence_handle *fence,
 		uint64_t timeout)
 {
-	if (!timeout)
-		return fd_screen_fence_signalled(screen, fence);
-
-	if (fd_pipe_wait(fence->screen->pipe, fence->timestamp))
+	if (fd_pipe_wait_timeout(fence->screen->pipe, fence->timestamp, timeout))
 		return false;
 
 	return true;
 }
 
-struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx)
+struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx,
+		uint32_t timestamp)
 {
 	struct pipe_fence_handle *fence;
 	struct fd_context *ctx = fd_context(pctx);
@@ -91,7 +74,7 @@ struct pipe_fence_handle * fd_fence_create(struct pipe_context *pctx)
 
 	fence->ctx = ctx;
 	fence->screen = ctx->screen;
-	fence->timestamp = fd_ringbuffer_timestamp(ctx->ring);
+	fence->timestamp = timestamp;
 
 	return fence;
 }

@@ -452,7 +452,7 @@ int
 driGetConfigAttrib(const __DRIconfig *config,
 		   unsigned int attrib, unsigned int *value)
 {
-    int i;
+    unsigned i;
 
     for (i = 0; i < ARRAY_SIZE(attribMap); i++)
 	if (attribMap[i].attrib == attrib)

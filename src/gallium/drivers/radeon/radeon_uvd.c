@@ -209,8 +209,6 @@ static uint32_t profile2stream_type(struct ruvd_decoder *dec, unsigned family)
 
 static unsigned calc_ctx_size(struct ruvd_decoder *dec)
 {
-	unsigned width_in_mb, height_in_mb, ctx_size;
-
 	unsigned width = align(dec->base.width, VL_MACROBLOCK_WIDTH);
 	unsigned height = align(dec->base.height, VL_MACROBLOCK_HEIGHT);
 
@@ -223,8 +221,7 @@ static unsigned calc_ctx_size(struct ruvd_decoder *dec)
 
 	width = align (width, 16);
 	height = align (height, 16);
-	ctx_size = ((width + 255) / 16)*((height + 255) / 16) * 16 * max_references + 52 * 1024;
-	return ctx_size;
+	return ((width + 255) / 16) * ((height + 255) / 16) * 16 * max_references + 52 * 1024;
 }
 
 /* calculate size of reference picture buffer */

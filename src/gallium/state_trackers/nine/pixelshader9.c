@@ -46,7 +46,7 @@ NinePixelShader9_ctor( struct NinePixelShader9 *This,
         return hr;
 
     if (cso) {
-        This->variant.cso = cso;
+        This->ff_cso = cso;
         return D3D_OK;
     }
     device = This->base.device;
@@ -57,6 +57,8 @@ NinePixelShader9_ctor( struct NinePixelShader9 *This,
     info.const_b_base = NINE_CONST_B_BASE(device->max_ps_const_f) / 16;
     info.sampler_mask_shadow = 0x0;
     info.sampler_ps1xtypes = 0x0;
+    info.fog_enable = 0;
+    info.projected = 0;
 
     hr = nine_translate_shader(device, &info);
     if (FAILED(hr))
@@ -69,9 +71,13 @@ NinePixelShader9_ctor( struct NinePixelShader9 *This,
     This->byte_code.size = info.byte_size;
 
     This->variant.cso = info.cso;
+    This->last_cso = info.cso;
+    This->last_key = 0;
+
     This->sampler_mask = info.sampler_mask;
     This->rt_mask = info.rt_mask;
     This->const_used_size = info.const_used_size;
+    This->bumpenvmat_needed = info.bumpenvmat_needed;
     /* no constant relative addressing for ps */
     assert(info.lconstf.data == NULL);
     assert(info.lconstf.ranges == NULL);
@@ -82,11 +88,12 @@ NinePixelShader9_ctor( struct NinePixelShader9 *This,
 void
 NinePixelShader9_dtor( struct NinePixelShader9 *This )
 {
-    DBG("This=%p cso=%p\n", This, This->variant.cso);
+    DBG("This=%p\n", This);
 
     if (This->base.device) {
         struct pipe_context *pipe = This->base.device->pipe;
-        struct nine_shader_variant *var = &This->variant;
+        struct nine_shader_variant64 *var = &This->variant;
+
         do {
             if (var->cso) {
                 if (This->base.device->state.cso.ps == var->cso)
@@ -95,8 +102,14 @@ NinePixelShader9_dtor( struct NinePixelShader9 *This )
             }
             var = var->next;
         } while (var);
+
+        if (This->ff_cso) {
+            if (This->ff_cso == This->base.device->state.cso.ps)
+                pipe->bind_fs_state(pipe, NULL);
+            pipe->delete_fs_state(pipe, This->ff_cso);
+        }
     }
-    nine_shader_variants_free(&This->variant);
+    nine_shader_variants_free64(&This->variant);
 
     FREE((void *)This->byte_code.tokens); /* const_cast */
 
@@ -124,10 +137,16 @@ NinePixelShader9_GetFunction( struct NinePixelShader9 *This,
 }
 
 void *
-NinePixelShader9_GetVariant( struct NinePixelShader9 *This,
-                             uint32_t key )
+NinePixelShader9_GetVariant( struct NinePixelShader9 *This )
 {
-    void *cso = nine_shader_variant_get(&This->variant, key);
+    void *cso;
+    uint64_t key;
+
+    key = This->next_key;
+    if (key == This->last_key)
+        return This->last_cso;
+
+    cso = nine_shader_variant_get64(&This->variant, key);
     if (!cso) {
         struct NineDevice9 *device = This->base.device;
         struct nine_shader_info info;
@@ -139,13 +158,20 @@ NinePixelShader9_GetVariant( struct NinePixelShader9 *This,
         info.byte_code = This->byte_code.tokens;
         info.sampler_mask_shadow = key & 0xffff;
         info.sampler_ps1xtypes = key;
+        info.fog_enable = device->state.rs[D3DRS_FOGENABLE];
+        info.fog_mode = device->state.rs[D3DRS_FOGTABLEMODE];
+        info.projected = (key >> 48) & 0xffff;
 
         hr = nine_translate_shader(This->base.device, &info);
         if (FAILED(hr))
             return NULL;
-        nine_shader_variant_add(&This->variant, key, info.cso);
+        nine_shader_variant_add64(&This->variant, key, info.cso);
         cso = info.cso;
     }
+
+    This->last_key = key;
+    This->last_cso = cso;
+
     return cso;
 }
 

@@ -116,7 +116,7 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
    /* Construct the list of SO_DECLs to be emitted.  The formatting of the
     * command is feels strange -- each dword pair contains a SO_DECL per stream.
     */
-   for (int i = 0; i < linked_xfb_info->NumOutputs; i++) {
+   for (unsigned i = 0; i < linked_xfb_info->NumOutputs; i++) {
       int buffer = linked_xfb_info->Outputs[i].OutputBuffer;
       uint16_t decl = 0;
       int varying = linked_xfb_info->Outputs[i].OutputRegister;

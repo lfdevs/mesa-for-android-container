@@ -259,7 +259,7 @@ struct translate_ctx
    struct tgsi_token *tokens_end;
    struct tgsi_header *header;
    unsigned processor : 4;
-   int implied_array_size : 5;
+   unsigned implied_array_size : 6;
    unsigned num_immediates;
 };
 
@@ -675,6 +675,9 @@ parse_register_dcl(
    eat_opt_white( &cur );
 
    if (cur[0] == '[') {
+      bool is_in = *file == TGSI_FILE_INPUT;
+      bool is_out = *file == TGSI_FILE_OUTPUT;
+
       ++cur;
       ctx->cur = cur;
       if (!parse_register_dcl_bracket( ctx, &brackets[1] ))
@@ -684,7 +687,11 @@ parse_register_dcl(
        * input primitive. so we want to declare just
        * the index relevant to the semantics which is in
        * the second bracket */
-      if (ctx->processor == TGSI_PROCESSOR_GEOMETRY && *file == TGSI_FILE_INPUT) {
+
+      /* tessellation has similar constraints to geometry shader */
+      if ((ctx->processor == TGSI_PROCESSOR_GEOMETRY && is_in) ||
+          (ctx->processor == TGSI_PROCESSOR_TESS_EVAL && is_in) ||
+          (ctx->processor == TGSI_PROCESSOR_TESS_CTRL && (is_in || is_out))) {
          brackets[0] = brackets[1];
          *num_brackets = 1;
       } else {
@@ -740,6 +747,14 @@ parse_dst_operand(
       dst->Dimension.Indirect = 0;
       dst->Dimension.Dimension = 0;
       dst->Dimension.Index = bracket[0].index;
+
+      if (bracket[0].ind_file != TGSI_FILE_NULL) {
+         dst->Dimension.Indirect = 1;
+         dst->DimIndirect.File = bracket[0].ind_file;
+         dst->DimIndirect.Index = bracket[0].ind_index;
+         dst->DimIndirect.Swizzle = bracket[0].ind_comp;
+         dst->DimIndirect.ArrayID = bracket[0].ind_array;
+      }
       bracket[0] = bracket[1];
    }
    dst->Register.Index = bracket[0].index;
@@ -1622,6 +1637,10 @@ static boolean translate( struct translate_ctx *ctx )
    eat_opt_white( &ctx->cur );
    if (!parse_header( ctx ))
       return FALSE;
+
+   if (ctx->processor == TGSI_PROCESSOR_TESS_CTRL ||
+       ctx->processor == TGSI_PROCESSOR_TESS_EVAL)
+       ctx->implied_array_size = 32;
 
    while (*ctx->cur != '\0') {
       uint label_val = 0;

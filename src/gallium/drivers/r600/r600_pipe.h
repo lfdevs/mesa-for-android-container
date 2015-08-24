@@ -90,7 +90,7 @@
 
 struct r600_context;
 struct r600_bytecode;
-struct r600_shader_key;
+union  r600_shader_key;
 
 /* This is an atom containing GPU commands that never change.
  * This is supposed to be copied directly into the CS. */
@@ -643,7 +643,7 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 /* r600_shader.c */
 int r600_pipe_shader_create(struct pipe_context *ctx,
 			    struct r600_pipe_shader *shader,
-			    struct r600_shader_key key);
+			    union r600_shader_key key);
 
 void r600_pipe_shader_destroy(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 

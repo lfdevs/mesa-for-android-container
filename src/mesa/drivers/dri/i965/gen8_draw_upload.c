@@ -74,7 +74,7 @@ gen8_emit_vertices(struct brw_context *brw)
 
       BEGIN_BATCH(3);
       OUT_BATCH(_3DSTATE_VF_INSTANCING << 16 | (3 - 2));
-      OUT_BATCH(brw->vb.nr_buffers | GEN8_VF_INSTANCING_ENABLE);
+      OUT_BATCH(vue | GEN8_VF_INSTANCING_ENABLE);
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {

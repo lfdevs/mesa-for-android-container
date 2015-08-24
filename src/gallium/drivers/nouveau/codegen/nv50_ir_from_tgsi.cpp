@@ -2990,9 +2990,15 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_UBFE:
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
          src0 = fetchSrc(0, c);
-         src1 = fetchSrc(1, c);
-         src2 = fetchSrc(2, c);
-         mkOp3(OP_INSBF, TYPE_U32, src1, src2, mkImm(0x808), src1);
+         if (tgsi.getSrc(1).getFile() == TGSI_FILE_IMMEDIATE &&
+             tgsi.getSrc(2).getFile() == TGSI_FILE_IMMEDIATE) {
+            src1 = loadImm(NULL, tgsi.getSrc(2).getValueU32(c, info) << 8 |
+                           tgsi.getSrc(1).getValueU32(c, info));
+         } else {
+            src1 = fetchSrc(1, c);
+            src2 = fetchSrc(2, c);
+            mkOp3(OP_INSBF, TYPE_U32, src1, src2, mkImm(0x808), src1);
+         }
          mkOp2(OP_EXTBF, dstTy, dst0[c], src0, src1);
       }
       break;

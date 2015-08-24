@@ -189,7 +189,7 @@ ir3_ra_alloc_reg_set(void *memctx)
 	}
 
 	/* allocate the reg-set.. */
-	set->regs = ra_alloc_reg_set(set, ra_reg_count);
+	set->regs = ra_alloc_reg_set(set, ra_reg_count, true);
 	set->ra_reg_to_gpr = ralloc_array(set, uint16_t, ra_reg_count);
 	set->gpr_to_ra_reg = ralloc_array(set, uint16_t *, total_class_count);
 

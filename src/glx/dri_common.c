@@ -253,8 +253,7 @@ __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGB, bindToTextureRgb),
 static int
 scalarEqual(struct glx_config *mode, unsigned int attrib, unsigned int value)
 {
-   unsigned int glxValue;
-   int i;
+   unsigned glxValue, i;
 
    for (i = 0; i < ARRAY_SIZE(attribMap); i++)
       if (attribMap[i].attrib == attrib) {

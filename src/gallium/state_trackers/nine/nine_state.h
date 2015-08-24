@@ -33,8 +33,7 @@
 
 #define NINED3DRS_VSPOINTSIZE (D3DRS_BLENDOPALPHA + 1)
 #define NINED3DRS_RTMASK      (D3DRS_BLENDOPALPHA + 2)
-#define NINED3DRS_ZBIASSCALE  (D3DRS_BLENDOPALPHA + 3)
-#define NINED3DRS_ALPHACOVERAGE  (D3DRS_BLENDOPALPHA + 4)
+#define NINED3DRS_ALPHACOVERAGE  (D3DRS_BLENDOPALPHA + 3)
 
 #define D3DRS_LAST       D3DRS_BLENDOPALPHA
 #define NINED3DRS_LAST   NINED3DRS_ALPHACOVERAGE /* 213 */
@@ -67,17 +66,26 @@
 #define NINE_STATE_BLEND_COLOR (1 << 16)
 #define NINE_STATE_STENCIL_REF (1 << 17)
 #define NINE_STATE_SAMPLE_MASK (1 << 18)
-#define NINE_STATE_MISC_CONST  (1 << 19)
-#define NINE_STATE_FF          (0x1f << 20)
-#define NINE_STATE_FF_VS       (0x17 << 20)
-#define NINE_STATE_FF_PS       (0x18 << 20)
-#define NINE_STATE_FF_LIGHTING (1 << 20)
-#define NINE_STATE_FF_MATERIAL (1 << 21)
-#define NINE_STATE_FF_VSTRANSF (1 << 22)
-#define NINE_STATE_FF_PSSTAGES (1 << 23)
-#define NINE_STATE_FF_OTHER    (1 << 24)
-#define NINE_STATE_ALL          0x1ffffff
-#define NINE_STATE_UNHANDLED   (1 << 25)
+#define NINE_STATE_FF          (0x1f << 19)
+#define NINE_STATE_FF_VS       (0x17 << 19)
+#define NINE_STATE_FF_PS       (0x18 << 19)
+#define NINE_STATE_FF_LIGHTING (1 << 19)
+#define NINE_STATE_FF_MATERIAL (1 << 20)
+#define NINE_STATE_FF_VSTRANSF (1 << 21)
+#define NINE_STATE_FF_PSSTAGES (1 << 22)
+#define NINE_STATE_FF_OTHER    (1 << 23)
+#define NINE_STATE_FOG_SHADER  (1 << 24)
+#define NINE_STATE_PS1X_SHADER (1 << 25)
+#define NINE_STATE_ALL          0x3ffffff
+#define NINE_STATE_UNHANDLED   (1 << 26)
+
+#define NINE_STATE_COMMIT_DSA  (1 << 0)
+#define NINE_STATE_COMMIT_RASTERIZER (1 << 1)
+#define NINE_STATE_COMMIT_BLEND (1 << 2)
+#define NINE_STATE_COMMIT_CONST_VS (1 << 3)
+#define NINE_STATE_COMMIT_CONST_PS (1 << 4)
+#define NINE_STATE_COMMIT_VS (1 << 5)
+#define NINE_STATE_COMMIT_PS (1 << 6)
 
 
 #define NINE_MAX_SIMULTANEOUS_RENDERTARGETS 4
@@ -93,6 +101,8 @@
     ((nconstf)        * 4 * sizeof(float) + \
      NINE_MAX_CONST_I * 4 * sizeof(int))
 
+
+#define NINE_MAX_TEXTURE_STAGES 8
 
 #define NINE_MAX_LIGHTS        65536
 #define NINE_MAX_LIGHTS_ACTIVE 8
@@ -124,7 +134,6 @@ struct nine_state
         uint16_t vs_const_b; /* NINE_MAX_CONST_B == 16 */
         uint16_t ps_const_b;
         uint8_t ucp;
-        boolean srgb;
     } changed;
 
     struct NineSurface9 *rt[NINE_MAX_SIMULTANEOUS_RENDERTARGETS];
@@ -143,13 +152,13 @@ struct nine_state
     int    vs_const_i[NINE_MAX_CONST_I][4];
     BOOL   vs_const_b[NINE_MAX_CONST_B];
     float *vs_lconstf_temp;
-    uint32_t vs_key;
 
     struct NinePixelShader9 *ps;
     float *ps_const_f;
     int    ps_const_i[NINE_MAX_CONST_I][4];
     BOOL   ps_const_b[NINE_MAX_CONST_B];
-    uint32_t ps_key;
+    float *ps_lconstf_temp;
+    uint32_t bumpmap_vars[6 * NINE_MAX_TEXTURE_STAGES];
 
     struct {
         void *vs;
@@ -184,13 +193,9 @@ struct nine_state
     struct {
         struct {
             uint32_t group;
-            uint32_t tex_stage[NINE_MAX_SAMPLERS][(NINED3DTSS_COUNT + 31) / 32];
+            uint32_t tex_stage[NINE_MAX_TEXTURE_STAGES][(NINED3DTSS_COUNT + 31) / 32];
             uint32_t transform[(NINED3DTS_COUNT + 31) / 32];
         } changed;
-        struct {
-            boolean vs_const;
-            boolean ps_const;
-        } clobber;
 
         D3DMATRIX *transform; /* access only via nine_state_access_transform */
         unsigned num_transforms;
@@ -205,8 +210,19 @@ struct nine_state
 
         D3DMATERIAL9 material;
 
-        DWORD tex_stage[NINE_MAX_SAMPLERS][NINED3DTSS_COUNT];
+        DWORD tex_stage[NINE_MAX_TEXTURE_STAGES][NINED3DTSS_COUNT];
     } ff;
+
+    uint32_t commit;
+    struct {
+        struct pipe_depth_stencil_alpha_state dsa;
+        struct pipe_rasterizer_state rast;
+        struct pipe_blend_state blend;
+        struct pipe_constant_buffer cb_vs;
+        struct pipe_constant_buffer cb_ps;
+        struct pipe_constant_buffer cb_vs_ff;
+        struct pipe_constant_buffer cb_ps_ff;
+    } pipe;
 };
 
 /* map D3DRS -> NINE_STATE_x
@@ -220,8 +236,10 @@ extern const uint32_t nine_render_states_vertex[(NINED3DRS_COUNT + 31) / 32];
 
 struct NineDevice9;
 
-boolean nine_update_state(struct NineDevice9 *, uint32_t group_mask);
+void nine_update_state_framebuffer(struct NineDevice9 *);
+boolean nine_update_state(struct NineDevice9 *);
 
+void nine_state_restore_non_cso(struct NineDevice9 *device);
 void nine_state_set_defaults(struct NineDevice9 *, const D3DCAPS9 *,
                              boolean is_reset);
 void nine_state_clear(struct nine_state *, const boolean device);

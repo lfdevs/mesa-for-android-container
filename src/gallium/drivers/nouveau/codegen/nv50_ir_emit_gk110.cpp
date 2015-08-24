@@ -933,6 +933,7 @@ CodeEmitterGK110::emitCVT(const Instruction *i)
 
    code[0] |= typeSizeofLog2(dType) << 10;
    code[0] |= typeSizeofLog2(i->sType) << 12;
+   code[1] |= i->subOp << 12;
 
    if (isSignedIntType(dType))
       code[0] |= 0x4000;

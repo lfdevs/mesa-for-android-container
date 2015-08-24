@@ -262,7 +262,7 @@ static const struct alu_op_info alu_op_table[] = {
 		{"PRED_SETNE_PUSH_INT",       2, { 0x4D, 0x4D },{  AF_VS, AF_VS, AF_VS, AF_VS},  AF_PRED_PUSH | AF_CC_NE | AF_INT_CMP },
 		{"PRED_SETLT_PUSH_INT",       2, { 0x4E, 0x4E },{  AF_VS, AF_VS, AF_VS, AF_VS},  AF_PRED_PUSH | AF_CC_LT | AF_INT_CMP },
 		{"PRED_SETLE_PUSH_INT",       2, { 0x4F, 0x4F },{  AF_VS, AF_VS, AF_VS, AF_VS},  AF_PRED_PUSH | AF_CC_LE | AF_INT_CMP },
-		{"FLT_TO_INT",                1, { 0x6B, 0x50 },{   AF_S,  AF_S, AF_VS, AF_VS},  AF_INT_DST | AF_CVT },
+		{"FLT_TO_INT",                1, { 0x6B, 0x50 },{   AF_S,  AF_S,  AF_V,  AF_V},  AF_INT_DST | AF_CVT },
 		{"BFREV_INT",                 1, {   -1, 0x51 },{      0,     0, AF_VS, AF_VS},  AF_INT_DST },
 		{"ADDC_UINT",                 2, {   -1, 0x52 },{      0,     0, AF_VS, AF_VS},  AF_UINT_DST },
 		{"SUBB_UINT",                 2, {   -1, 0x53 },{      0,     0, AF_VS, AF_VS},  AF_UINT_DST },

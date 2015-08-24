@@ -1258,56 +1258,65 @@ layout_qualifier_id:
 
       /* Layout qualifiers for ARB_shader_image_load_store. */
       if (state->ARB_shader_image_load_store_enable ||
-          state->is_version(420, 0)) {
+          state->is_version(420, 310)) {
          if (!$$.flags.i) {
             static const struct {
                const char *name;
                GLenum format;
                glsl_base_type base_type;
+               /** Minimum desktop GLSL version required for the image
+                * format.  Use 130 if already present in the original
+                * ARB extension.
+                */
+               unsigned required_glsl;
+               /** Minimum GLSL ES version required for the image format. */
+               unsigned required_essl;
             } map[] = {
-               { "rgba32f", GL_RGBA32F, GLSL_TYPE_FLOAT },
-               { "rgba16f", GL_RGBA16F, GLSL_TYPE_FLOAT },
-               { "rg32f", GL_RG32F, GLSL_TYPE_FLOAT },
-               { "rg16f", GL_RG16F, GLSL_TYPE_FLOAT },
-               { "r11f_g11f_b10f", GL_R11F_G11F_B10F, GLSL_TYPE_FLOAT },
-               { "r32f", GL_R32F, GLSL_TYPE_FLOAT },
-               { "r16f", GL_R16F, GLSL_TYPE_FLOAT },
-               { "rgba32ui", GL_RGBA32UI, GLSL_TYPE_UINT },
-               { "rgba16ui", GL_RGBA16UI, GLSL_TYPE_UINT },
-               { "rgb10_a2ui", GL_RGB10_A2UI, GLSL_TYPE_UINT },
-               { "rgba8ui", GL_RGBA8UI, GLSL_TYPE_UINT },
-               { "rg32ui", GL_RG32UI, GLSL_TYPE_UINT },
-               { "rg16ui", GL_RG16UI, GLSL_TYPE_UINT },
-               { "rg8ui", GL_RG8UI, GLSL_TYPE_UINT },
-               { "r32ui", GL_R32UI, GLSL_TYPE_UINT },
-               { "r16ui", GL_R16UI, GLSL_TYPE_UINT },
-               { "r8ui", GL_R8UI, GLSL_TYPE_UINT },
-               { "rgba32i", GL_RGBA32I, GLSL_TYPE_INT },
-               { "rgba16i", GL_RGBA16I, GLSL_TYPE_INT },
-               { "rgba8i", GL_RGBA8I, GLSL_TYPE_INT },
-               { "rg32i", GL_RG32I, GLSL_TYPE_INT },
-               { "rg16i", GL_RG16I, GLSL_TYPE_INT },
-               { "rg8i", GL_RG8I, GLSL_TYPE_INT },
-               { "r32i", GL_R32I, GLSL_TYPE_INT },
-               { "r16i", GL_R16I, GLSL_TYPE_INT },
-               { "r8i", GL_R8I, GLSL_TYPE_INT },
-               { "rgba16", GL_RGBA16, GLSL_TYPE_FLOAT },
-               { "rgb10_a2", GL_RGB10_A2, GLSL_TYPE_FLOAT },
-               { "rgba8", GL_RGBA8, GLSL_TYPE_FLOAT },
-               { "rg16", GL_RG16, GLSL_TYPE_FLOAT },
-               { "rg8", GL_RG8, GLSL_TYPE_FLOAT },
-               { "r16", GL_R16, GLSL_TYPE_FLOAT },
-               { "r8", GL_R8, GLSL_TYPE_FLOAT },
-               { "rgba16_snorm", GL_RGBA16_SNORM, GLSL_TYPE_FLOAT },
-               { "rgba8_snorm", GL_RGBA8_SNORM, GLSL_TYPE_FLOAT },
-               { "rg16_snorm", GL_RG16_SNORM, GLSL_TYPE_FLOAT },
-               { "rg8_snorm", GL_RG8_SNORM, GLSL_TYPE_FLOAT },
-               { "r16_snorm", GL_R16_SNORM, GLSL_TYPE_FLOAT },
-               { "r8_snorm", GL_R8_SNORM, GLSL_TYPE_FLOAT }
+               { "rgba32f", GL_RGBA32F, GLSL_TYPE_FLOAT, 130, 310 },
+               { "rgba16f", GL_RGBA16F, GLSL_TYPE_FLOAT, 130, 310 },
+               { "rg32f", GL_RG32F, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rg16f", GL_RG16F, GLSL_TYPE_FLOAT, 130, 0 },
+               { "r11f_g11f_b10f", GL_R11F_G11F_B10F, GLSL_TYPE_FLOAT, 130, 0 },
+               { "r32f", GL_R32F, GLSL_TYPE_FLOAT, 130, 310 },
+               { "r16f", GL_R16F, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rgba32ui", GL_RGBA32UI, GLSL_TYPE_UINT, 130, 310 },
+               { "rgba16ui", GL_RGBA16UI, GLSL_TYPE_UINT, 130, 310 },
+               { "rgb10_a2ui", GL_RGB10_A2UI, GLSL_TYPE_UINT, 130, 0 },
+               { "rgba8ui", GL_RGBA8UI, GLSL_TYPE_UINT, 130, 310 },
+               { "rg32ui", GL_RG32UI, GLSL_TYPE_UINT, 130, 0 },
+               { "rg16ui", GL_RG16UI, GLSL_TYPE_UINT, 130, 0 },
+               { "rg8ui", GL_RG8UI, GLSL_TYPE_UINT, 130, 0 },
+               { "r32ui", GL_R32UI, GLSL_TYPE_UINT, 130, 310 },
+               { "r16ui", GL_R16UI, GLSL_TYPE_UINT, 130, 0 },
+               { "r8ui", GL_R8UI, GLSL_TYPE_UINT, 130, 0 },
+               { "rgba32i", GL_RGBA32I, GLSL_TYPE_INT, 130, 310 },
+               { "rgba16i", GL_RGBA16I, GLSL_TYPE_INT, 130, 310 },
+               { "rgba8i", GL_RGBA8I, GLSL_TYPE_INT, 130, 310 },
+               { "rg32i", GL_RG32I, GLSL_TYPE_INT, 130, 0 },
+               { "rg16i", GL_RG16I, GLSL_TYPE_INT, 130, 0 },
+               { "rg8i", GL_RG8I, GLSL_TYPE_INT, 130, 0 },
+               { "r32i", GL_R32I, GLSL_TYPE_INT, 130, 310 },
+               { "r16i", GL_R16I, GLSL_TYPE_INT, 130, 0 },
+               { "r8i", GL_R8I, GLSL_TYPE_INT, 130, 0 },
+               { "rgba16", GL_RGBA16, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rgb10_a2", GL_RGB10_A2, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rgba8", GL_RGBA8, GLSL_TYPE_FLOAT, 130, 310 },
+               { "rg16", GL_RG16, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rg8", GL_RG8, GLSL_TYPE_FLOAT, 130, 0 },
+               { "r16", GL_R16, GLSL_TYPE_FLOAT, 130, 0 },
+               { "r8", GL_R8, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rgba16_snorm", GL_RGBA16_SNORM, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rgba8_snorm", GL_RGBA8_SNORM, GLSL_TYPE_FLOAT, 130, 310 },
+               { "rg16_snorm", GL_RG16_SNORM, GLSL_TYPE_FLOAT, 130, 0 },
+               { "rg8_snorm", GL_RG8_SNORM, GLSL_TYPE_FLOAT, 130, 0 },
+               { "r16_snorm", GL_R16_SNORM, GLSL_TYPE_FLOAT, 130, 0 },
+               { "r8_snorm", GL_R8_SNORM, GLSL_TYPE_FLOAT, 130, 0 }
             };
 
             for (unsigned i = 0; i < ARRAY_SIZE(map); i++) {
-               if (match_layout_qualifier($1, map[i].name, state) == 0) {
+               if (state->is_version(map[i].required_glsl,
+                                     map[i].required_essl) &&
+                   match_layout_qualifier($1, map[i].name, state) == 0) {
                   $$.flags.q.explicit_image_format = 1;
                   $$.image_format = map[i].format;
                   $$.image_base_type = map[i].base_type;
@@ -1519,11 +1528,10 @@ layout_qualifier_id:
                                 "invalid %s of %d specified",
                                 local_size_qualifiers[i], $3);
                YYERROR;
-            } else if (!state->is_version(430, 0) &&
-                       !state->ARB_compute_shader_enable) {
+            } else if (!state->has_compute_shader()) {
                _mesa_glsl_error(& @3, state,
                                 "%s qualifier requires GLSL 4.30 or "
-                                "ARB_compute_shader",
+                                "GLSL ES 3.10 or ARB_compute_shader",
                                 local_size_qualifiers[i]);
                YYERROR;
             } else {

@@ -1023,27 +1023,53 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
 
    case OP_AND:
    {
-      CmpInstruction *cmp = i->getSrc(t)->getInsn()->asCmp();
-      if (!cmp || cmp->op == OP_SLCT || cmp->getDef(0)->refCount() > 1)
-         return;
-      if (!prog->getTarget()->isOpSupported(cmp->op, TYPE_F32))
-         return;
-      if (imm0.reg.data.f32 != 1.0)
-         return;
-      if (i->getSrc(t)->getInsn()->dType != TYPE_U32)
-         return;
+      Instruction *src = i->getSrc(t)->getInsn();
+      ImmediateValue imm1;
+      if (imm0.reg.data.u32 == 0) {
+         i->op = OP_MOV;
+         i->setSrc(0, new_ImmediateValue(prog, 0u));
+         i->src(0).mod = Modifier(0);
+         i->setSrc(1, NULL);
+      } else if (imm0.reg.data.u32 == ~0U) {
+         i->op = i->src(t).mod.getOp();
+         if (t) {
+            i->setSrc(0, i->getSrc(t));
+            i->src(0).mod = i->src(t).mod;
+         }
+         i->setSrc(1, NULL);
+      } else if (src->asCmp()) {
+         CmpInstruction *cmp = src->asCmp();
+         if (!cmp || cmp->op == OP_SLCT || cmp->getDef(0)->refCount() > 1)
+            return;
+         if (!prog->getTarget()->isOpSupported(cmp->op, TYPE_F32))
+            return;
+         if (imm0.reg.data.f32 != 1.0)
+            return;
+         if (cmp->dType != TYPE_U32)
+            return;
 
-      i->getSrc(t)->getInsn()->dType = TYPE_F32;
-      if (i->src(t).mod != Modifier(0)) {
-         assert(i->src(t).mod == Modifier(NV50_IR_MOD_NOT));
-         i->src(t).mod = Modifier(0);
-         cmp->setCond = inverseCondCode(cmp->setCond);
-      }
-      i->op = OP_MOV;
-      i->setSrc(s, NULL);
-      if (t) {
-         i->setSrc(0, i->getSrc(t));
-         i->setSrc(t, NULL);
+         cmp->dType = TYPE_F32;
+         if (i->src(t).mod != Modifier(0)) {
+            assert(i->src(t).mod == Modifier(NV50_IR_MOD_NOT));
+            i->src(t).mod = Modifier(0);
+            cmp->setCond = inverseCondCode(cmp->setCond);
+         }
+         i->op = OP_MOV;
+         i->setSrc(s, NULL);
+         if (t) {
+            i->setSrc(0, i->getSrc(t));
+            i->setSrc(t, NULL);
+         }
+      } else if (prog->getTarget()->isOpSupported(OP_EXTBF, TYPE_U32) &&
+                 src->op == OP_SHR &&
+                 src->src(1).getImmediate(imm1) &&
+                 i->src(t).mod == Modifier(0) &&
+                 util_is_power_of_two(imm0.reg.data.u32 + 1)) {
+         // low byte = offset, high byte = width
+         uint32_t ext = (util_last_bit(imm0.reg.data.u32) << 8) | imm1.reg.data.u32;
+         i->op = OP_EXTBF;
+         i->setSrc(0, src->getSrc(0));
+         i->setSrc(1, new_ImmediateValue(prog, ext));
       }
    }
       break;
@@ -1104,6 +1130,84 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       i->setSrc(0, new_ImmediateValue(i->bb->getProgram(), res));
       i->setSrc(1, NULL);
       i->op = OP_MOV;
+      break;
+   }
+   case OP_CVT: {
+      Storage res;
+
+      // TODO: handle 64-bit values properly
+      if (typeSizeof(i->dType) == 8 || typeSizeof(i->sType) == 8)
+         return;
+
+      // TODO: handle single byte/word extractions
+      if (i->subOp)
+         return;
+
+      bld.setPosition(i, true); /* make sure bld is init'ed */
+
+#define CASE(type, dst, fmin, fmax, imin, imax, umin, umax) \
+   case type: \
+      switch (i->sType) { \
+      case TYPE_F32: \
+         res.data.dst = util_iround(i->saturate ? \
+                                    CLAMP(imm0.reg.data.f32, fmin, fmax) : \
+                                    imm0.reg.data.f32); \
+         break; \
+      case TYPE_S32: \
+         res.data.dst = i->saturate ? \
+                        CLAMP(imm0.reg.data.s32, imin, imax) : \
+                        imm0.reg.data.s32; \
+         break; \
+      case TYPE_U32: \
+         res.data.dst = i->saturate ? \
+                        CLAMP(imm0.reg.data.u32, umin, umax) : \
+                        imm0.reg.data.u32; \
+         break; \
+      case TYPE_S16: \
+         res.data.dst = i->saturate ? \
+                        CLAMP(imm0.reg.data.s16, imin, imax) : \
+                        imm0.reg.data.s16; \
+         break; \
+      case TYPE_U16: \
+         res.data.dst = i->saturate ? \
+                        CLAMP(imm0.reg.data.u16, umin, umax) : \
+                        imm0.reg.data.u16; \
+         break; \
+      default: return; \
+      } \
+      i->setSrc(0, bld.mkImm(res.data.dst)); \
+      break
+
+      switch(i->dType) {
+      CASE(TYPE_U16, u16, 0, UINT16_MAX, 0, UINT16_MAX, 0, UINT16_MAX);
+      CASE(TYPE_S16, s16, INT16_MIN, INT16_MAX, INT16_MIN, INT16_MAX, 0, INT16_MAX);
+      CASE(TYPE_U32, u32, 0, UINT32_MAX, 0, INT32_MAX, 0, UINT32_MAX);
+      CASE(TYPE_S32, s32, INT32_MIN, INT32_MAX, INT32_MIN, INT32_MAX, 0, INT32_MAX);
+      case TYPE_F32:
+         switch (i->sType) {
+         case TYPE_F32:
+            res.data.f32 = i->saturate ?
+               CLAMP(imm0.reg.data.f32, 0.0f, 1.0f) :
+               imm0.reg.data.f32;
+            break;
+         case TYPE_U16: res.data.f32 = (float) imm0.reg.data.u16; break;
+         case TYPE_U32: res.data.f32 = (float) imm0.reg.data.u32; break;
+         case TYPE_S16: res.data.f32 = (float) imm0.reg.data.s16; break;
+         case TYPE_S32: res.data.f32 = (float) imm0.reg.data.s32; break;
+         default:
+            return;
+         }
+         i->setSrc(0, bld.mkImm(res.data.f32));
+         break;
+      default:
+         return;
+      }
+#undef CASE
+
+      i->setType(i->dType); /* Remove i->sType, which we don't need anymore */
+      i->op = OP_MOV;
+      i->saturate = 0;
+      i->src(0).mod = Modifier(0); /* Clear the already applied modifier */
       break;
    }
    default:
@@ -1212,7 +1316,8 @@ private:
    void handleRCP(Instruction *);
    void handleSLCT(Instruction *);
    void handleLOGOP(Instruction *);
-   void handleCVT(Instruction *);
+   void handleCVT_NEG(Instruction *);
+   void handleCVT_EXTBF(Instruction *);
    void handleSUCLAMP(Instruction *);
 
    BuildUtil bld;
@@ -1463,12 +1568,12 @@ AlgebraicOpt::handleLOGOP(Instruction *logop)
 // nv50:
 //  F2I(NEG(I2F(ABS(SET))))
 void
-AlgebraicOpt::handleCVT(Instruction *cvt)
+AlgebraicOpt::handleCVT_NEG(Instruction *cvt)
 {
+   Instruction *insn = cvt->getSrc(0)->getInsn();
    if (cvt->sType != TYPE_F32 ||
        cvt->dType != TYPE_S32 || cvt->src(0).mod != Modifier(0))
       return;
-   Instruction *insn = cvt->getSrc(0)->getInsn();
    if (!insn || insn->op != OP_NEG || insn->dType != TYPE_F32)
       return;
    if (insn->src(0).mod != Modifier(0))
@@ -1496,6 +1601,104 @@ AlgebraicOpt::handleCVT(Instruction *cvt)
    bset->setDef(0, cvt->getDef(0));
    cvt->bb->insertAfter(cvt, bset);
    delete_Instruction(prog, cvt);
+}
+
+// Some shaders extract packed bytes out of words and convert them to
+// e.g. float. The Fermi+ CVT instruction can extract those directly, as can
+// nv50 for word sizes.
+//
+// CVT(EXTBF(x, byte/word))
+// CVT(AND(bytemask, x))
+// CVT(AND(bytemask, SHR(x, 8/16/24)))
+// CVT(SHR(x, 16/24))
+void
+AlgebraicOpt::handleCVT_EXTBF(Instruction *cvt)
+{
+   Instruction *insn = cvt->getSrc(0)->getInsn();
+   ImmediateValue imm;
+   Value *arg = NULL;
+   unsigned width, offset;
+   if ((cvt->sType != TYPE_U32 && cvt->sType != TYPE_S32) || !insn)
+      return;
+   if (insn->op == OP_EXTBF && insn->src(1).getImmediate(imm)) {
+      width = (imm.reg.data.u32 >> 8) & 0xff;
+      offset = imm.reg.data.u32 & 0xff;
+      arg = insn->getSrc(0);
+
+      if (width != 8 && width != 16)
+         return;
+      if (width == 8 && offset & 0x7)
+         return;
+      if (width == 16 && offset & 0xf)
+         return;
+   } else if (insn->op == OP_AND) {
+      int s;
+      if (insn->src(0).getImmediate(imm))
+         s = 0;
+      else if (insn->src(1).getImmediate(imm))
+         s = 1;
+      else
+         return;
+
+      if (imm.reg.data.u32 == 0xff)
+         width = 8;
+      else if (imm.reg.data.u32 == 0xffff)
+         width = 16;
+      else
+         return;
+
+      arg = insn->getSrc(!s);
+      Instruction *shift = arg->getInsn();
+      offset = 0;
+      if (shift && shift->op == OP_SHR &&
+          shift->sType == cvt->sType &&
+          shift->src(1).getImmediate(imm) &&
+          ((width == 8 && (imm.reg.data.u32 & 0x7) == 0) ||
+           (width == 16 && (imm.reg.data.u32 & 0xf) == 0))) {
+         arg = shift->getSrc(0);
+         offset = imm.reg.data.u32;
+      }
+   } else if (insn->op == OP_SHR &&
+              insn->sType == cvt->sType &&
+              insn->src(1).getImmediate(imm)) {
+      arg = insn->getSrc(0);
+      if (imm.reg.data.u32 == 24) {
+         width = 8;
+         offset = 24;
+      } else if (imm.reg.data.u32 == 16) {
+         width = 16;
+         offset = 16;
+      } else {
+         return;
+      }
+   }
+
+   if (!arg)
+      return;
+
+   // Irrespective of what came earlier, we can undo a shift on the argument
+   // by adjusting the offset.
+   Instruction *shift = arg->getInsn();
+   if (shift && shift->op == OP_SHL &&
+       shift->src(1).getImmediate(imm) &&
+       ((width == 8 && (imm.reg.data.u32 & 0x7) == 0) ||
+        (width == 16 && (imm.reg.data.u32 & 0xf) == 0)) &&
+       imm.reg.data.u32 <= offset) {
+      arg = shift->getSrc(0);
+      offset -= imm.reg.data.u32;
+   }
+
+   // The unpackSnorm lowering still leaves a few shifts behind, but it's too
+   // annoying to detect them.
+
+   if (width == 8) {
+      cvt->sType = cvt->sType == TYPE_U32 ? TYPE_U8 : TYPE_S8;
+   } else {
+      assert(width == 16);
+      cvt->sType = cvt->sType == TYPE_U32 ? TYPE_U16 : TYPE_S16;
+   }
+   cvt->setSrc(0, arg);
+   cvt->subOp = offset >> 3;
 }
 
 // SUCLAMP dst, (ADD b imm), k, 0 -> SUCLAMP dst, b, k, imm (if imm fits s6)
@@ -1568,7 +1771,9 @@ AlgebraicOpt::visit(BasicBlock *bb)
          handleLOGOP(i);
          break;
       case OP_CVT:
-         handleCVT(i);
+         handleCVT_NEG(i);
+         if (prog->getTarget()->isOpSupported(OP_EXTBF, TYPE_U32))
+             handleCVT_EXTBF(i);
          break;
       case OP_SUCLAMP:
          handleSUCLAMP(i);

@@ -95,13 +95,17 @@ struct r600_shader {
 	struct r600_shader_array * arrays;
 };
 
-struct r600_shader_key {
-	unsigned color_two_side:1;
-	unsigned alpha_to_one:1;
-	unsigned nr_cbufs:4;
-	unsigned vs_as_es:1;
-	unsigned vs_as_gs_a:1;
-	unsigned vs_prim_id_out:8;
+union r600_shader_key {
+	struct {
+		unsigned	nr_cbufs:4;
+		unsigned	color_two_side:1;
+		unsigned	alpha_to_one:1;
+	} ps;
+	struct {
+		unsigned	prim_id_out:8;
+		unsigned	as_es:1; /* export shader */
+		unsigned	as_gs_a:1;
+	} vs;
 };
 
 struct r600_shader_array {
@@ -122,7 +126,7 @@ struct r600_pipe_shader {
 	unsigned		flatshade;
 	unsigned		pa_cl_vs_out_cntl;
 	unsigned		nr_ps_color_outputs;
-	struct r600_shader_key	key;
+	union r600_shader_key	key;
 	unsigned		db_shader_control;
 	unsigned		ps_depth_export;
 	unsigned		enabled_stream_buffers_mask;

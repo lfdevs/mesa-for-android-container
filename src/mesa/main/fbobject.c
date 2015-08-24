@@ -2033,6 +2033,16 @@ renderbuffer_storage(struct gl_context *ctx, struct gl_renderbuffer *rb,
        */
       sample_count_error = _mesa_check_sample_count(ctx, GL_RENDERBUFFER,
             internalFormat, samples);
+
+      /* Section 2.5 (GL Errors) of OpenGL 3.0 specification, page 16:
+       *
+       * "If a negative number is provided where an argument of type sizei or
+       * sizeiptr is specified, the error INVALID VALUE is generated."
+       */
+      if (samples < 0) {
+         sample_count_error = GL_INVALID_VALUE;
+      }
+
       if (sample_count_error != GL_NO_ERROR) {
          _mesa_error(ctx, sample_count_error, "%s(samples)", func);
          return;

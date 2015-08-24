@@ -702,29 +702,39 @@ void r600_emit_viewport_state(struct r600_context *rctx, struct r600_atom *atom)
 }
 
 /* Compute the key for the hw shader variant */
-static inline struct r600_shader_key r600_shader_selector_key(struct pipe_context * ctx,
+static inline union r600_shader_key r600_shader_selector_key(struct pipe_context * ctx,
 		struct r600_pipe_shader_selector * sel)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
-	struct r600_shader_key key;
+	union r600_shader_key key;
 	memset(&key, 0, sizeof(key));
 
-	if (sel->type == PIPE_SHADER_FRAGMENT) {
-		key.color_two_side = rctx->rasterizer && rctx->rasterizer->two_side;
-		key.alpha_to_one = rctx->alpha_to_one &&
-				   rctx->rasterizer && rctx->rasterizer->multisample_enable &&
-				   !rctx->framebuffer.cb0_is_integer;
-		key.nr_cbufs = rctx->framebuffer.state.nr_cbufs;
-		/* Dual-source blending only makes sense with nr_cbufs == 1. */
-		if (key.nr_cbufs == 1 && rctx->dual_src_blend)
-			key.nr_cbufs = 2;
-	} else if (sel->type == PIPE_SHADER_VERTEX) {
-		key.vs_as_es = (rctx->gs_shader != NULL);
+	switch (sel->type) {
+	case PIPE_SHADER_VERTEX: {
+		key.vs.as_es = (rctx->gs_shader != NULL);
 		if (rctx->ps_shader->current->shader.gs_prim_id_input && !rctx->gs_shader) {
-			key.vs_as_gs_a = true;
-			key.vs_prim_id_out = rctx->ps_shader->current->shader.input[rctx->ps_shader->current->shader.ps_prim_id_input].spi_sid;
+			key.vs.as_gs_a = true;
+			key.vs.prim_id_out = rctx->ps_shader->current->shader.input[rctx->ps_shader->current->shader.ps_prim_id_input].spi_sid;
 		}
+		break;
 	}
+	case PIPE_SHADER_GEOMETRY:
+		break;
+	case PIPE_SHADER_FRAGMENT: {
+		key.ps.color_two_side = rctx->rasterizer && rctx->rasterizer->two_side;
+		key.ps.alpha_to_one = rctx->alpha_to_one &&
+				      rctx->rasterizer && rctx->rasterizer->multisample_enable &&
+				      !rctx->framebuffer.cb0_is_integer;
+		key.ps.nr_cbufs = rctx->framebuffer.state.nr_cbufs;
+		/* Dual-source blending only makes sense with nr_cbufs == 1. */
+		if (key.ps.nr_cbufs == 1 && rctx->dual_src_blend)
+			key.ps.nr_cbufs = 2;
+		break;
+	}
+	default:
+		assert(0);
+	}
+
 	return key;
 }
 
@@ -734,7 +744,7 @@ static int r600_shader_select(struct pipe_context *ctx,
         struct r600_pipe_shader_selector* sel,
         bool *dirty)
 {
-	struct r600_shader_key key;
+	union r600_shader_key key;
 	struct r600_pipe_shader * shader = NULL;
 	int r;
 

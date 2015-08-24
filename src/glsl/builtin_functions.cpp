@@ -136,6 +136,13 @@ v140(const _mesa_glsl_parse_state *state)
 }
 
 static bool
+v400_fs_only(const _mesa_glsl_parse_state *state)
+{
+   return state->is_version(400, 0) &&
+          state->stage == MESA_SHADER_FRAGMENT;
+}
+
+static bool
 es31(const _mesa_glsl_parse_state *state)
 {
    return state->is_version(0, 310);
@@ -270,6 +277,13 @@ texture_array(const _mesa_glsl_parse_state *state)
 static bool
 texture_multisample(const _mesa_glsl_parse_state *state)
 {
+   return state->is_version(150, 310) ||
+          state->ARB_texture_multisample_enable;
+}
+
+static bool
+texture_multisample_array(const _mesa_glsl_parse_state *state)
+{
    return state->is_version(150, 0) ||
           state->ARB_texture_multisample_enable;
 }
@@ -394,8 +408,22 @@ shader_trinary_minmax(const _mesa_glsl_parse_state *state)
 static bool
 shader_image_load_store(const _mesa_glsl_parse_state *state)
 {
+   return (state->is_version(420, 310) ||
+           state->ARB_shader_image_load_store_enable);
+}
+
+static bool
+shader_image_atomic(const _mesa_glsl_parse_state *state)
+{
    return (state->is_version(420, 0) ||
            state->ARB_shader_image_load_store_enable);
+}
+
+static bool
+shader_image_size(const _mesa_glsl_parse_state *state)
+{
+   return state->is_version(430, 310) ||
+           state->ARB_shader_image_size_enable;
 }
 
 static bool
@@ -492,13 +520,19 @@ private:
    /** Create a new function and add the given signatures. */
    void add_function(const char *name, ...);
 
+   typedef ir_function_signature *(builtin_builder::*image_prototype_ctr)(const glsl_type *image_type,
+                                                                          const char *intrinsic_name,
+                                                                          unsigned num_arguments,
+                                                                          unsigned flags);
+
    enum image_function_flags {
       IMAGE_FUNCTION_EMIT_STUB = (1 << 0),
       IMAGE_FUNCTION_RETURNS_VOID = (1 << 1),
       IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE = (1 << 2),
       IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE = (1 << 3),
       IMAGE_FUNCTION_READ_ONLY = (1 << 4),
-      IMAGE_FUNCTION_WRITE_ONLY = (1 << 5)
+      IMAGE_FUNCTION_WRITE_ONLY = (1 << 5),
+      IMAGE_FUNCTION_AVAIL_ATOMIC = (1 << 6)
    };
 
    /**
@@ -507,6 +541,7 @@ private:
     */
    void add_image_function(const char *name,
                            const char *intrinsic_name,
+                           image_prototype_ctr prototype,
                            unsigned num_arguments,
                            unsigned flags);
 
@@ -663,7 +698,7 @@ private:
                                               const glsl_type *stream_type);
    B0(barrier)
 
-   B2(textureQueryLod);
+   BA2(textureQueryLod);
    B1(textureQueryLevels);
    B1(dFdx);
    B1(dFdy);
@@ -708,7 +743,12 @@ private:
                                            const char *intrinsic_name,
                                            unsigned num_arguments,
                                            unsigned flags);
-   ir_function_signature *_image(const glsl_type *image_type,
+   ir_function_signature *_image_size_prototype(const glsl_type *image_type,
+                                                const char *intrinsic_name,
+                                                unsigned num_arguments,
+                                                unsigned flags);
+   ir_function_signature *_image(image_prototype_ctr prototype,
+                                 const glsl_type *image_type,
                                  const char *intrinsic_name,
                                  unsigned num_arguments,
                                  unsigned flags);
@@ -1367,9 +1407,9 @@ builtin_builder::create_builtins()
                 _textureSize(texture_multisample, glsl_type::ivec2_type, glsl_type::isampler2DMS_type),
                 _textureSize(texture_multisample, glsl_type::ivec2_type, glsl_type::usampler2DMS_type),
 
-                _textureSize(texture_multisample, glsl_type::ivec3_type, glsl_type::sampler2DMSArray_type),
-                _textureSize(texture_multisample, glsl_type::ivec3_type, glsl_type::isampler2DMSArray_type),
-                _textureSize(texture_multisample, glsl_type::ivec3_type, glsl_type::usampler2DMSArray_type),
+                _textureSize(texture_multisample_array, glsl_type::ivec3_type, glsl_type::sampler2DMSArray_type),
+                _textureSize(texture_multisample_array, glsl_type::ivec3_type, glsl_type::isampler2DMSArray_type),
+                _textureSize(texture_multisample_array, glsl_type::ivec3_type, glsl_type::usampler2DMSArray_type),
                 NULL);
 
    add_function("texture",
@@ -1632,9 +1672,9 @@ builtin_builder::create_builtins()
                 _texelFetch(texture_multisample, glsl_type::ivec4_type, glsl_type::isampler2DMS_type, glsl_type::ivec2_type),
                 _texelFetch(texture_multisample, glsl_type::uvec4_type, glsl_type::usampler2DMS_type, glsl_type::ivec2_type),
 
-                _texelFetch(texture_multisample, glsl_type::vec4_type,  glsl_type::sampler2DMSArray_type,  glsl_type::ivec3_type),
-                _texelFetch(texture_multisample, glsl_type::ivec4_type, glsl_type::isampler2DMSArray_type, glsl_type::ivec3_type),
-                _texelFetch(texture_multisample, glsl_type::uvec4_type, glsl_type::usampler2DMSArray_type, glsl_type::ivec3_type),
+                _texelFetch(texture_multisample_array, glsl_type::vec4_type,  glsl_type::sampler2DMSArray_type,  glsl_type::ivec3_type),
+                _texelFetch(texture_multisample_array, glsl_type::ivec4_type, glsl_type::isampler2DMSArray_type, glsl_type::ivec3_type),
+                _texelFetch(texture_multisample_array, glsl_type::uvec4_type, glsl_type::usampler2DMSArray_type, glsl_type::ivec3_type),
                 NULL);
 
    add_function("texelFetchOffset",
@@ -1944,40 +1984,77 @@ builtin_builder::create_builtins()
    add_function("barrier", _barrier(), NULL);
 
    add_function("textureQueryLOD",
-                _textureQueryLod(glsl_type::sampler1D_type,  glsl_type::float_type),
-                _textureQueryLod(glsl_type::isampler1D_type, glsl_type::float_type),
-                _textureQueryLod(glsl_type::usampler1D_type, glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler1D_type,  glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::isampler1D_type, glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::usampler1D_type, glsl_type::float_type),
 
-                _textureQueryLod(glsl_type::sampler2D_type,  glsl_type::vec2_type),
-                _textureQueryLod(glsl_type::isampler2D_type, glsl_type::vec2_type),
-                _textureQueryLod(glsl_type::usampler2D_type, glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler2D_type,  glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::isampler2D_type, glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::usampler2D_type, glsl_type::vec2_type),
 
-                _textureQueryLod(glsl_type::sampler3D_type,  glsl_type::vec3_type),
-                _textureQueryLod(glsl_type::isampler3D_type, glsl_type::vec3_type),
-                _textureQueryLod(glsl_type::usampler3D_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler3D_type,  glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::isampler3D_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::usampler3D_type, glsl_type::vec3_type),
 
-                _textureQueryLod(glsl_type::samplerCube_type,  glsl_type::vec3_type),
-                _textureQueryLod(glsl_type::isamplerCube_type, glsl_type::vec3_type),
-                _textureQueryLod(glsl_type::usamplerCube_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::samplerCube_type,  glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::isamplerCube_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::usamplerCube_type, glsl_type::vec3_type),
 
-                _textureQueryLod(glsl_type::sampler1DArray_type,  glsl_type::float_type),
-                _textureQueryLod(glsl_type::isampler1DArray_type, glsl_type::float_type),
-                _textureQueryLod(glsl_type::usampler1DArray_type, glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler1DArray_type,  glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::isampler1DArray_type, glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::usampler1DArray_type, glsl_type::float_type),
 
-                _textureQueryLod(glsl_type::sampler2DArray_type,  glsl_type::vec2_type),
-                _textureQueryLod(glsl_type::isampler2DArray_type, glsl_type::vec2_type),
-                _textureQueryLod(glsl_type::usampler2DArray_type, glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler2DArray_type,  glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::isampler2DArray_type, glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::usampler2DArray_type, glsl_type::vec2_type),
 
-                _textureQueryLod(glsl_type::samplerCubeArray_type,  glsl_type::vec3_type),
-                _textureQueryLod(glsl_type::isamplerCubeArray_type, glsl_type::vec3_type),
-                _textureQueryLod(glsl_type::usamplerCubeArray_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::samplerCubeArray_type,  glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::isamplerCubeArray_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::usamplerCubeArray_type, glsl_type::vec3_type),
 
-                _textureQueryLod(glsl_type::sampler1DShadow_type, glsl_type::float_type),
-                _textureQueryLod(glsl_type::sampler2DShadow_type, glsl_type::vec2_type),
-                _textureQueryLod(glsl_type::samplerCubeShadow_type, glsl_type::vec3_type),
-                _textureQueryLod(glsl_type::sampler1DArrayShadow_type, glsl_type::float_type),
-                _textureQueryLod(glsl_type::sampler2DArrayShadow_type, glsl_type::vec2_type),
-                _textureQueryLod(glsl_type::samplerCubeArrayShadow_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler1DShadow_type, glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler2DShadow_type, glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::samplerCubeShadow_type, glsl_type::vec3_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler1DArrayShadow_type, glsl_type::float_type),
+                _textureQueryLod(texture_query_lod, glsl_type::sampler2DArrayShadow_type, glsl_type::vec2_type),
+                _textureQueryLod(texture_query_lod, glsl_type::samplerCubeArrayShadow_type, glsl_type::vec3_type),
+                NULL);
+
+   add_function("textureQueryLod",
+                _textureQueryLod(v400_fs_only, glsl_type::sampler1D_type,  glsl_type::float_type),
+                _textureQueryLod(v400_fs_only, glsl_type::isampler1D_type, glsl_type::float_type),
+                _textureQueryLod(v400_fs_only, glsl_type::usampler1D_type, glsl_type::float_type),
+
+                _textureQueryLod(v400_fs_only, glsl_type::sampler2D_type,  glsl_type::vec2_type),
+                _textureQueryLod(v400_fs_only, glsl_type::isampler2D_type, glsl_type::vec2_type),
+                _textureQueryLod(v400_fs_only, glsl_type::usampler2D_type, glsl_type::vec2_type),
+
+                _textureQueryLod(v400_fs_only, glsl_type::sampler3D_type,  glsl_type::vec3_type),
+                _textureQueryLod(v400_fs_only, glsl_type::isampler3D_type, glsl_type::vec3_type),
+                _textureQueryLod(v400_fs_only, glsl_type::usampler3D_type, glsl_type::vec3_type),
+
+                _textureQueryLod(v400_fs_only, glsl_type::samplerCube_type,  glsl_type::vec3_type),
+                _textureQueryLod(v400_fs_only, glsl_type::isamplerCube_type, glsl_type::vec3_type),
+                _textureQueryLod(v400_fs_only, glsl_type::usamplerCube_type, glsl_type::vec3_type),
+
+                _textureQueryLod(v400_fs_only, glsl_type::sampler1DArray_type,  glsl_type::float_type),
+                _textureQueryLod(v400_fs_only, glsl_type::isampler1DArray_type, glsl_type::float_type),
+                _textureQueryLod(v400_fs_only, glsl_type::usampler1DArray_type, glsl_type::float_type),
+
+                _textureQueryLod(v400_fs_only, glsl_type::sampler2DArray_type,  glsl_type::vec2_type),
+                _textureQueryLod(v400_fs_only, glsl_type::isampler2DArray_type, glsl_type::vec2_type),
+                _textureQueryLod(v400_fs_only, glsl_type::usampler2DArray_type, glsl_type::vec2_type),
+
+                _textureQueryLod(v400_fs_only, glsl_type::samplerCubeArray_type,  glsl_type::vec3_type),
+                _textureQueryLod(v400_fs_only, glsl_type::isamplerCubeArray_type, glsl_type::vec3_type),
+                _textureQueryLod(v400_fs_only, glsl_type::usamplerCubeArray_type, glsl_type::vec3_type),
+
+                _textureQueryLod(v400_fs_only, glsl_type::sampler1DShadow_type, glsl_type::float_type),
+                _textureQueryLod(v400_fs_only, glsl_type::sampler2DShadow_type, glsl_type::vec2_type),
+                _textureQueryLod(v400_fs_only, glsl_type::samplerCubeShadow_type, glsl_type::vec3_type),
+                _textureQueryLod(v400_fs_only, glsl_type::sampler1DArrayShadow_type, glsl_type::float_type),
+                _textureQueryLod(v400_fs_only, glsl_type::sampler2DArrayShadow_type, glsl_type::vec2_type),
+                _textureQueryLod(v400_fs_only, glsl_type::samplerCubeArrayShadow_type, glsl_type::vec3_type),
                 NULL);
 
    add_function("textureQueryLevels",
@@ -2552,6 +2629,7 @@ builtin_builder::add_function(const char *name, ...)
 void
 builtin_builder::add_image_function(const char *name,
                                     const char *intrinsic_name,
+                                    image_prototype_ctr prototype,
                                     unsigned num_arguments,
                                     unsigned flags)
 {
@@ -2590,12 +2668,13 @@ builtin_builder::add_image_function(const char *name,
       glsl_type::uimage2DMS_type,
       glsl_type::uimage2DMSArray_type
    };
+
    ir_function *f = new(mem_ctx) ir_function(name);
 
    for (unsigned i = 0; i < ARRAY_SIZE(types); ++i) {
       if (types[i]->sampler_type != GLSL_TYPE_FLOAT ||
           (flags & IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE))
-         f->add_signature(_image(types[i], intrinsic_name,
+         f->add_signature(_image(prototype, types[i], intrinsic_name,
                                  num_arguments, flags));
    }
 
@@ -2608,43 +2687,60 @@ builtin_builder::add_image_functions(bool glsl)
    const unsigned flags = (glsl ? IMAGE_FUNCTION_EMIT_STUB : 0);
 
    add_image_function(glsl ? "imageLoad" : "__intrinsic_image_load",
-                      "__intrinsic_image_load", 0,
-                      (flags | IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE |
+                       "__intrinsic_image_load",
+                       &builtin_builder::_image_prototype, 0,
+                       (flags | IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE |
                        IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
                        IMAGE_FUNCTION_READ_ONLY));
 
    add_image_function(glsl ? "imageStore" : "__intrinsic_image_store",
-                      "__intrinsic_image_store", 1,
+                      "__intrinsic_image_store",
+                      &builtin_builder::_image_prototype, 1,
                       (flags | IMAGE_FUNCTION_RETURNS_VOID |
                        IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE |
                        IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
                        IMAGE_FUNCTION_WRITE_ONLY));
 
+   const unsigned atom_flags = flags | IMAGE_FUNCTION_AVAIL_ATOMIC;
+
    add_image_function(glsl ? "imageAtomicAdd" : "__intrinsic_image_atomic_add",
-                      "__intrinsic_image_atomic_add", 1, flags);
+                      "__intrinsic_image_atomic_add",
+                      &builtin_builder::_image_prototype, 1, atom_flags);
 
    add_image_function(glsl ? "imageAtomicMin" : "__intrinsic_image_atomic_min",
-                      "__intrinsic_image_atomic_min", 1, flags);
+                      "__intrinsic_image_atomic_min",
+                      &builtin_builder::_image_prototype, 1, atom_flags);
 
    add_image_function(glsl ? "imageAtomicMax" : "__intrinsic_image_atomic_max",
-                      "__intrinsic_image_atomic_max", 1, flags);
+                      "__intrinsic_image_atomic_max",
+                      &builtin_builder::_image_prototype, 1, atom_flags);
 
    add_image_function(glsl ? "imageAtomicAnd" : "__intrinsic_image_atomic_and",
-                      "__intrinsic_image_atomic_and", 1, flags);
+                      "__intrinsic_image_atomic_and",
+                      &builtin_builder::_image_prototype, 1, atom_flags);
 
    add_image_function(glsl ? "imageAtomicOr" : "__intrinsic_image_atomic_or",
-                      "__intrinsic_image_atomic_or", 1, flags);
+                      "__intrinsic_image_atomic_or",
+                      &builtin_builder::_image_prototype, 1, atom_flags);
 
    add_image_function(glsl ? "imageAtomicXor" : "__intrinsic_image_atomic_xor",
-                      "__intrinsic_image_atomic_xor", 1, flags);
+                      "__intrinsic_image_atomic_xor",
+                      &builtin_builder::_image_prototype, 1, atom_flags);
 
    add_image_function((glsl ? "imageAtomicExchange" :
                        "__intrinsic_image_atomic_exchange"),
-                      "__intrinsic_image_atomic_exchange", 1, flags);
+                      "__intrinsic_image_atomic_exchange",
+                      &builtin_builder::_image_prototype, 1, atom_flags);
 
    add_image_function((glsl ? "imageAtomicCompSwap" :
                        "__intrinsic_image_atomic_comp_swap"),
-                      "__intrinsic_image_atomic_comp_swap", 2, flags);
+                      "__intrinsic_image_atomic_comp_swap",
+                      &builtin_builder::_image_prototype, 2, atom_flags);
+
+   add_image_function(glsl ? "imageSize" : "__intrinsic_image_size",
+                      "__intrinsic_image_size",
+                      &builtin_builder::_image_size_prototype, 1,
+                      flags | IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE);
 }
 
 ir_variable *
@@ -4314,13 +4410,14 @@ builtin_builder::_barrier()
 }
 
 ir_function_signature *
-builtin_builder::_textureQueryLod(const glsl_type *sampler_type,
+builtin_builder::_textureQueryLod(builtin_available_predicate avail,
+                                  const glsl_type *sampler_type,
                                   const glsl_type *coord_type)
 {
    ir_variable *s = in_var(sampler_type, "sampler");
    ir_variable *coord = in_var(coord_type, "coord");
    /* The sampler and coordinate always exist; add optional parameters later. */
-   MAKE_SIG(glsl_type::vec2_type, texture_query_lod, 2, s, coord);
+   MAKE_SIG(glsl_type::vec2_type, avail, 2, s, coord);
 
    ir_texture *tex = new(mem_ctx) ir_texture(ir_lod);
    tex->coordinate = var_ref(coord);
@@ -4787,8 +4884,10 @@ builtin_builder::_image_prototype(const glsl_type *image_type,
    ir_variable *coord = in_var(
       glsl_type::ivec(image_type->coordinate_components()), "coord");
 
-   ir_function_signature *sig = new_sig(
-      ret_type, shader_image_load_store, 2, image, coord);
+   const builtin_available_predicate avail =
+      (flags & IMAGE_FUNCTION_AVAIL_ATOMIC ? shader_image_atomic :
+       shader_image_load_store);
+   ir_function_signature *sig = new_sig(ret_type, avail, 2, image, coord);
 
    /* Sample index for multisample images. */
    if (image_type->sampler_dimensionality == GLSL_SAMPLER_DIM_MS)
@@ -4818,13 +4917,55 @@ builtin_builder::_image_prototype(const glsl_type *image_type,
 }
 
 ir_function_signature *
-builtin_builder::_image(const glsl_type *image_type,
+builtin_builder::_image_size_prototype(const glsl_type *image_type,
+                                       const char *intrinsic_name,
+                                       unsigned num_arguments,
+                                       unsigned flags)
+{
+   const glsl_type *ret_type;
+   unsigned num_components = image_type->coordinate_components();
+
+   /* From the ARB_shader_image_size extension:
+    * "Cube images return the dimensions of one face."
+    */
+   if (image_type->sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE &&
+       !image_type->sampler_array) {
+      num_components = 2;
+   }
+
+   /* FIXME: Add the highp precision qualifier for GLES 3.10 when it is
+    * supported by mesa.
+    */
+   ret_type = glsl_type::get_instance(GLSL_TYPE_INT, num_components, 1);
+
+   ir_variable *image = in_var(image_type, "image");
+   ir_function_signature *sig = new_sig(ret_type, shader_image_size, 1, image);
+
+   /* Set the maximal set of qualifiers allowed for this image
+    * built-in.  Function calls with arguments having fewer
+    * qualifiers than present in the prototype are allowed by the
+    * spec, but not with more, i.e. this will make the compiler
+    * accept everything that needs to be accepted, and reject cases
+    * like loads from write-only or stores to read-only images.
+    */
+   image->data.image_read_only = true;
+   image->data.image_write_only = true;
+   image->data.image_coherent = true;
+   image->data.image_volatile = true;
+   image->data.image_restrict = true;
+
+   return sig;
+}
+
+ir_function_signature *
+builtin_builder::_image(image_prototype_ctr prototype,
+                        const glsl_type *image_type,
                         const char *intrinsic_name,
                         unsigned num_arguments,
                         unsigned flags)
 {
-   ir_function_signature *sig = _image_prototype(image_type, intrinsic_name,
-                                                 num_arguments, flags);
+   ir_function_signature *sig = (this->*prototype)(image_type, intrinsic_name,
+                                                   num_arguments, flags);
 
    if (flags & IMAGE_FUNCTION_EMIT_STUB) {
       ir_factory body(&sig->body, mem_ctx);

@@ -346,6 +346,15 @@ namespace {
 
    // Kernel metadata
 
+   struct kernel_arg_md {
+      llvm::StringRef type_name;
+      llvm::StringRef access_qual;
+      kernel_arg_md(llvm::StringRef type_name_, llvm::StringRef access_qual_):
+         type_name(type_name_), access_qual(access_qual_) {}
+   };
+
+#if HAVE_LLVM >= 0x0306
+
    const llvm::MDNode *
    get_kernel_metadata(const llvm::Function *kernel_func) {
       auto mod = kernel_func->getParent();
@@ -356,12 +365,8 @@ namespace {
 
       const llvm::MDNode *kernel_node = nullptr;
       for (unsigned i = 0; i < kernels_node->getNumOperands(); ++i) {
-#if HAVE_LLVM >= 0x0306
          auto func = llvm::mdconst::dyn_extract<llvm::Function>(
-#else
-         auto func = llvm::dyn_cast<llvm::Function>(
-#endif
-                                    kernels_node->getOperand(i)->getOperand(0));
+               kernels_node->getOperand(i)->getOperand(0));
          if (func == kernel_func) {
             kernel_node = kernels_node->getOperand(i);
             break;
@@ -387,13 +392,6 @@ namespace {
       return node;
    }
 
-   struct kernel_arg_md {
-      llvm::StringRef type_name;
-      llvm::StringRef access_qual;
-      kernel_arg_md(llvm::StringRef type_name_, llvm::StringRef access_qual_):
-         type_name(type_name_), access_qual(access_qual_) {}
-   };
-
    std::vector<kernel_arg_md>
    get_kernel_arg_md(const llvm::Function *kernel_func) {
       auto num_args = kernel_func->getArgumentList().size();
@@ -414,6 +412,17 @@ namespace {
 
       return res;
    }
+
+#else
+
+   std::vector<kernel_arg_md>
+   get_kernel_arg_md(const llvm::Function *kernel_func) {
+      return std::vector<kernel_arg_md>(
+            kernel_func->getArgumentList().size(),
+            kernel_arg_md("", ""));
+   }
+
+#endif // HAVE_LLVM >= 0x0306
 
    std::vector<module::argument>
    get_kernel_args(const llvm::Module *mod, const std::string &kernel_name,

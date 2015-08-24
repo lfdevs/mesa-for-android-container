@@ -27,6 +27,7 @@
 #include "pipe/p_format.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h" /* pipe_box */
+#include "util/macros.h"
 #include "util/u_rect.h"
 #include "util/u_format.h"
 #include "nine_helpers.h"
@@ -36,9 +37,9 @@ struct cso_context;
 extern const enum pipe_format nine_d3d9_to_pipe_format_map[120];
 extern const D3DFORMAT nine_pipe_to_d3d9_format_map[PIPE_FORMAT_COUNT];
 
-void nine_convert_dsa_state(struct cso_context *, const DWORD *);
-void nine_convert_rasterizer_state(struct cso_context *, const DWORD *);
-void nine_convert_blend_state(struct cso_context *, const DWORD *);
+void nine_convert_dsa_state(struct pipe_depth_stencil_alpha_state *, const DWORD *);
+void nine_convert_rasterizer_state(struct pipe_rasterizer_state *, const DWORD *);
+void nine_convert_blend_state(struct pipe_blend_state *, const DWORD *);
 void nine_convert_sampler_state(struct cso_context *, int idx, const DWORD *);
 
 void nine_pipe_context_clear(struct NineDevice9 *);
@@ -79,6 +80,49 @@ rect_to_pipe_box(struct pipe_box *dst, const RECT *src)
     dst->width = src->right - src->left;
     dst->height = src->bottom - src->top;
     dst->depth = 1;
+}
+
+static inline void
+pipe_box_to_rect(RECT *dst, const struct pipe_box *src)
+{
+    dst->left = src->x;
+    dst->right = src->x + src->width;
+    dst->top = src->y;
+    dst->bottom = src->y + src->height;
+}
+
+static inline void
+rect_minify_inclusive(RECT *rect)
+{
+    rect->left = rect->left >> 2;
+    rect->top = rect->top >> 2;
+    rect->right = DIV_ROUND_UP(rect->right, 2);
+    rect->bottom = DIV_ROUND_UP(rect->bottom, 2);
+}
+
+/* We suppose:
+ * 0 <= rect->left < rect->right
+ * 0 <= rect->top < rect->bottom
+ */
+static inline void
+fit_rect_format_inclusive(enum pipe_format format, RECT *rect, int width, int height)
+{
+    const unsigned w = util_format_get_blockwidth(format);
+    const unsigned h = util_format_get_blockheight(format);
+
+    if (util_format_is_compressed(format)) {
+        rect->left = rect->left - rect->left % w;
+        rect->top = rect->top - rect->top % h;
+        rect->right = (rect->right % w) == 0 ?
+            rect->right :
+            rect->right - (rect->right % w) + w;
+        rect->bottom = (rect->bottom % h) == 0 ?
+            rect->bottom :
+            rect->bottom - (rect->bottom % h) + h;
+    }
+
+    rect->right = MIN2(rect->right, width);
+    rect->bottom = MIN2(rect->bottom, height);
 }
 
 static inline boolean
@@ -162,6 +206,23 @@ static inline D3DFORMAT
 pipe_to_d3d9_format(enum pipe_format format)
 {
     return nine_pipe_to_d3d9_format_map[format];
+}
+
+/* ATI1 and ATI2 are not officially compressed in d3d9 */
+static inline boolean
+compressed_format( D3DFORMAT fmt )
+{
+    switch (fmt) {
+    case D3DFMT_DXT1:
+    case D3DFMT_DXT2:
+    case D3DFMT_DXT3:
+    case D3DFMT_DXT4:
+    case D3DFMT_DXT5:
+        return TRUE;
+    default:
+        break;
+    }
+    return FALSE;
 }
 
 static inline boolean

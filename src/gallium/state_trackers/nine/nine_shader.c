@@ -89,6 +89,15 @@ static inline const char *d3dsio_to_string(unsigned opcode);
 #define NINE_SWIZZLE4(x,y,z,w) \
    TGSI_SWIZZLE_##x, TGSI_SWIZZLE_##y, TGSI_SWIZZLE_##z, TGSI_SWIZZLE_##w
 
+#define NINE_CONSTANT_SRC(index) \
+   ureg_src_register(TGSI_FILE_CONSTANT, index)
+
+#define NINE_APPLY_SWIZZLE(src, s) \
+   ureg_swizzle(src, NINE_SWIZZLE4(s, s, s, s))
+
+#define NINE_CONSTANT_SRC_SWIZZLE(index, s) \
+   NINE_APPLY_SWIZZLE(NINE_CONSTANT_SRC(index), s)
+
 #define NINED3DSPDM_SATURATE (D3DSPDM_SATURATE >> D3DSP_DSTMOD_SHIFT)
 #define NINED3DSPDM_PARTIALP (D3DSPDM_PARTIALPRECISION >> D3DSP_DSTMOD_SHIFT)
 #define NINED3DSPDM_CENTROID (D3DSPDM_MSAMPCENTROID >> D3DSP_DSTMOD_SHIFT)
@@ -444,6 +453,9 @@ struct shader_translator
         BYTE minor;
     } version;
     unsigned processor; /* TGSI_PROCESSOR_VERTEX/FRAMGENT */
+    unsigned num_constf_allowed;
+    unsigned num_consti_allowed;
+    unsigned num_constb_allowed;
 
     boolean native_integers;
     boolean inline_subroutines;
@@ -505,7 +517,6 @@ struct shader_translator
 
 #define IS_VS (tx->processor == TGSI_PROCESSOR_VERTEX)
 #define IS_PS (tx->processor == TGSI_PROCESSOR_FRAGMENT)
-#define NINE_MAX_CONST_F_SHADER (tx->processor == TGSI_PROCESSOR_VERTEX ? NINE_MAX_CONST_F : NINE_MAX_CONST_F_PS3)
 
 #define FAILURE_VOID(cond) if ((cond)) {tx->failure=1;return;}
 
@@ -528,7 +539,7 @@ static boolean
 tx_lconstf(struct shader_translator *tx, struct ureg_src *src, INT index)
 {
    INT i;
-   if (index < 0 || index >= NINE_MAX_CONST_F_SHADER) {
+   if (index < 0 || index >= tx->num_constf_allowed) {
        tx->failure = TRUE;
        return FALSE;
    }
@@ -543,7 +554,7 @@ tx_lconstf(struct shader_translator *tx, struct ureg_src *src, INT index)
 static boolean
 tx_lconsti(struct shader_translator *tx, struct ureg_src *src, INT index)
 {
-   if (index < 0 || index >= NINE_MAX_CONST_I) {
+   if (index < 0 || index >= tx->num_consti_allowed) {
        tx->failure = TRUE;
        return FALSE;
    }
@@ -554,7 +565,7 @@ tx_lconsti(struct shader_translator *tx, struct ureg_src *src, INT index)
 static boolean
 tx_lconstb(struct shader_translator *tx, struct ureg_src *src, INT index)
 {
-   if (index < 0 || index >= NINE_MAX_CONST_B) {
+   if (index < 0 || index >= tx->num_constb_allowed) {
        tx->failure = TRUE;
        return FALSE;
    }
@@ -568,9 +579,7 @@ tx_set_lconstf(struct shader_translator *tx, INT index, float f[4])
 {
     unsigned n;
 
-    FAILURE_VOID(index < 0 || index >= NINE_MAX_CONST_F_SHADER)
-    if (IS_VS && index >= NINE_MAX_CONST_F_SHADER)
-        WARN("lconstf index %i too high, indirect access won't work\n", index);
+    FAILURE_VOID(index < 0 || index >= tx->num_constf_allowed)
 
     for (n = 0; n < tx->num_lconstf; ++n)
         if (tx->lconstf[n].idx == index)
@@ -592,7 +601,7 @@ tx_set_lconstf(struct shader_translator *tx, INT index, float f[4])
 static void
 tx_set_lconsti(struct shader_translator *tx, INT index, int i[4])
 {
-    FAILURE_VOID(index < 0 || index >= NINE_MAX_CONST_I)
+    FAILURE_VOID(index < 0 || index >= tx->num_consti_allowed)
     tx->lconsti[index].idx = index;
     tx->lconsti[index].reg = tx->native_integers ?
        ureg_imm4i(tx->ureg, i[0], i[1], i[2], i[3]) :
@@ -601,7 +610,7 @@ tx_set_lconsti(struct shader_translator *tx, INT index, int i[4])
 static void
 tx_set_lconstb(struct shader_translator *tx, INT index, BOOL b)
 {
-    FAILURE_VOID(index < 0 || index >= NINE_MAX_CONST_B)
+    FAILURE_VOID(index < 0 || index >= tx->num_constb_allowed)
     tx->lconstb[index].idx = index;
     tx->lconstb[index].reg = tx->native_integers ?
        ureg_imm1u(tx->ureg, b ? 0xffffffff : 0) :
@@ -670,6 +679,54 @@ tx_pred_alloc(struct shader_translator *tx, INT idx)
     assert(idx == 0);
     if (ureg_dst_is_undef(tx->regs.p))
         tx->regs.p = ureg_DECL_predicate(tx->ureg);
+}
+
+/* NOTE: It's not very clear on which ps1.1-ps1.3 instructions
+ * the projection should be applied on the texture. It doesn't
+ * apply on texkill.
+ * The doc is very imprecise here (it says the projection is done
+ * before rasterization, thus in vs, which seems wrong since ps instructions
+ * are affected differently)
+ * For now we only apply to the ps TEX instruction and TEXBEM.
+ * Perhaps some other instructions would need it */
+static inline void
+apply_ps1x_projection(struct shader_translator *tx, struct ureg_dst dst,
+                      struct ureg_src src, INT idx)
+{
+    struct ureg_dst tmp;
+    unsigned dim = 1 + ((tx->info->projected >> (2 * idx)) & 3);
+
+    /* no projection */
+    if (dim == 1) {
+        ureg_MOV(tx->ureg, dst, src);
+    } else {
+        tmp = tx_scratch_scalar(tx);
+        ureg_RCP(tx->ureg, tmp, ureg_scalar(src, dim-1));
+        ureg_MUL(tx->ureg, dst, tx_src_scalar(tmp), src);
+    }
+}
+
+static inline void
+TEX_with_ps1x_projection(struct shader_translator *tx, struct ureg_dst dst,
+                         unsigned target, struct ureg_src src0,
+                         struct ureg_src src1, INT idx)
+{
+    unsigned dim = 1 + ((tx->info->projected >> (2 * idx)) & 3);
+    struct ureg_dst tmp;
+
+    /* dim == 1: no projection
+     * Looks like must be disabled when it makes no
+     * sense according the texture dimensions
+     */
+    if (dim == 1 || dim <= target) {
+        ureg_TEX(tx->ureg, dst, target, src0, src1);
+    } else if (dim == 4) {
+        ureg_TXP(tx->ureg, dst, target, src0, src1);
+    } else {
+        tmp = tx_scratch(tx);
+        apply_ps1x_projection(tx, tmp, src0, idx);
+        ureg_TEX(tx->ureg, dst, target, ureg_src(tmp), src1);
+    }
 }
 
 static inline void
@@ -1086,9 +1143,18 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
         assert(param->idx >= 0 && param->idx < 4);
         assert(!param->rel);
         tx->info->rt_mask |= 1 << param->idx;
-        if (ureg_dst_is_undef(tx->regs.oCol[param->idx]))
-            tx->regs.oCol[param->idx] =
-               ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, param->idx);
+        if (ureg_dst_is_undef(tx->regs.oCol[param->idx])) {
+            /* ps < 3: oCol[0] will have fog blending afterward
+             * vs < 3: oD1.w (D3DPMISCCAPS_FOGANDSPECULARALPHA) set to 0 even if set */
+            if (!IS_VS && tx->version.major < 3 && param->idx == 0) {
+                tx->regs.oCol[0] = ureg_DECL_temporary(tx->ureg);
+            } else if (IS_VS && tx->version.major < 3 && param->idx == 1) {
+                tx->regs.oCol[1] = ureg_DECL_temporary(tx->ureg);
+            } else {
+                tx->regs.oCol[param->idx] =
+                    ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, param->idx);
+            }
+        }
         dst = tx->regs.oCol[param->idx];
         if (IS_VS && tx->version.major < 3)
             dst = ureg_saturate(dst);
@@ -1824,7 +1890,7 @@ sm1_declusage_to_tgsi(struct tgsi_declaration_semantic *sem,
         sem->Index = 0;
         break;
     default:
-        assert(!"Invalid DECLUSAGE.");
+        unreachable(!"Invalid DECLUSAGE.");
         break;
     }
 }
@@ -2135,12 +2201,79 @@ DECL_SPECIAL(TEXKILL)
 
 DECL_SPECIAL(TEXBEM)
 {
-    STUB(D3DERR_INVALIDCALL);
-}
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_dst tmp, tmp2, texcoord;
+    struct ureg_src sample, m00, m01, m10, m11;
+    struct ureg_src bumpenvlscale, bumpenvloffset;
+    const int m = tx->insn.dst[0].idx;
+    const int n = tx->insn.src[0].idx;
 
-DECL_SPECIAL(TEXBEML)
-{
-    STUB(D3DERR_INVALIDCALL);
+    assert(tx->version.major == 1);
+
+    sample = ureg_DECL_sampler(ureg, m);
+    tx->info->sampler_mask |= 1 << m;
+
+    tx_texcoord_alloc(tx, m);
+
+    tmp = tx_scratch(tx);
+    tmp2 = tx_scratch(tx);
+    texcoord = tx_scratch(tx);
+    /*
+     * Bump-env-matrix:
+     * 00 is X
+     * 01 is Y
+     * 10 is Z
+     * 11 is W
+     */
+    nine_info_mark_const_f_used(tx->info, 8 + 8 + m/2);
+    m00 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, X);
+    m01 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, Y);
+    m10 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, Z);
+    m11 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, W);
+
+    /* These two attributes are packed as X=scale0 Y=offset0 Z=scale1 W=offset1 etc */
+    if (m % 2 == 0) {
+        bumpenvlscale = NINE_CONSTANT_SRC_SWIZZLE(8 + 8 + m / 2, X);
+        bumpenvloffset = NINE_CONSTANT_SRC_SWIZZLE(8 + 8 + m / 2, Y);
+    } else {
+        bumpenvlscale = NINE_CONSTANT_SRC_SWIZZLE(8 + 8 + m / 2, Z);
+        bumpenvloffset = NINE_CONSTANT_SRC_SWIZZLE(8 + 8 + m / 2, W);
+    }
+
+    apply_ps1x_projection(tx, texcoord, tx->regs.vT[m], m);
+
+    /* u' = TextureCoordinates(stage m)u + D3DTSS_BUMPENVMAT00(stage m)*t(n)R  */
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), m00,
+             NINE_APPLY_SWIZZLE(ureg_src(tx->regs.tS[n]), X), ureg_src(texcoord));
+    /* u' = u' + D3DTSS_BUMPENVMAT10(stage m)*t(n)G */
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), m10,
+             NINE_APPLY_SWIZZLE(ureg_src(tx->regs.tS[n]), Y),
+             NINE_APPLY_SWIZZLE(ureg_src(tmp), X));
+
+    /* v' = TextureCoordinates(stage m)v + D3DTSS_BUMPENVMAT01(stage m)*t(n)R */
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_Y), m01,
+             NINE_APPLY_SWIZZLE(ureg_src(tx->regs.tS[n]), X), ureg_src(texcoord));
+    /* v' = v' + D3DTSS_BUMPENVMAT11(stage m)*t(n)G*/
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_Y), m11,
+             NINE_APPLY_SWIZZLE(ureg_src(tx->regs.tS[n]), Y),
+             NINE_APPLY_SWIZZLE(ureg_src(tmp), Y));
+
+    /* Now the texture coordinates are in tmp.xy */
+
+    if (tx->insn.opcode == D3DSIO_TEXBEM) {
+        ureg_TEX(ureg, dst, ps1x_sampler_type(tx->info, m), ureg_src(tmp), sample);
+    } else if (tx->insn.opcode == D3DSIO_TEXBEML) {
+        /* t(m)RGBA = t(m)RGBA * [(t(n)B * D3DTSS_BUMPENVLSCALE(stage m)) + D3DTSS_BUMPENVLOFFSET(stage m)] */
+        ureg_TEX(ureg, tmp, ps1x_sampler_type(tx->info, m), ureg_src(tmp), sample);
+        ureg_MAD(ureg, tmp2, NINE_APPLY_SWIZZLE(ureg_src(tx->regs.tS[n]), Z),
+                 bumpenvlscale, bumpenvloffset);
+        ureg_MUL(ureg, dst, ureg_src(tmp), ureg_src(tmp2));
+    }
+
+    tx->info->bumpenvmat_needed = 1;
+
+    return D3D_OK;
 }
 
 DECL_SPECIAL(TEXREG2AR)
@@ -2421,7 +2554,43 @@ DECL_SPECIAL(TEXDEPTH)
 
 DECL_SPECIAL(BEM)
 {
-    STUB(D3DERR_INVALIDCALL);
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_src src0 = tx_src_param(tx, &tx->insn.src[0]);
+    struct ureg_src src1 = tx_src_param(tx, &tx->insn.src[1]);
+    struct ureg_src m00, m01, m10, m11;
+    const int m = tx->insn.dst[0].idx;
+    struct ureg_dst tmp;
+    /*
+     * Bump-env-matrix:
+     * 00 is X
+     * 01 is Y
+     * 10 is Z
+     * 11 is W
+     */
+    nine_info_mark_const_f_used(tx->info, 8 + m);
+    m00 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, X);
+    m01 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, Y);
+    m10 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, Z);
+    m11 = NINE_CONSTANT_SRC_SWIZZLE(8 + m, W);
+    /* dest.r = src0.r + D3DTSS_BUMPENVMAT00(stage n) * src1.r  */
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), m00,
+             NINE_APPLY_SWIZZLE(src1, X), NINE_APPLY_SWIZZLE(src0, X));
+    /* dest.r = dest.r + D3DTSS_BUMPENVMAT10(stage n) * src1.g; */
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), m10,
+             NINE_APPLY_SWIZZLE(src1, Y), NINE_APPLY_SWIZZLE(ureg_src(tmp), X));
+
+    /* dest.g = src0.g + D3DTSS_BUMPENVMAT01(stage n) * src1.r */
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_Y), m01,
+             NINE_APPLY_SWIZZLE(src1, X), src0);
+    /* dest.g = dest.g + D3DTSS_BUMPENVMAT11(stage n) * src1.g */
+    ureg_MAD(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_Y), m11,
+             NINE_APPLY_SWIZZLE(src1, Y), NINE_APPLY_SWIZZLE(ureg_src(tmp), Y));
+    ureg_MOV(ureg, ureg_writemask(dst, TGSI_WRITEMASK_XY), ureg_src(tmp));
+
+    tx->info->bumpenvmat_needed = 1;
+
+    return D3D_OK;
 }
 
 DECL_SPECIAL(TEXLD)
@@ -2482,7 +2651,7 @@ DECL_SPECIAL(TEX)
     src[1] = ureg_DECL_sampler(ureg, s);
     tx->info->sampler_mask |= 1 << s;
 
-    ureg_TEX(ureg, dst, t, src[0], src[1]);
+    TEX_with_ps1x_projection(tx, dst, t, src[0], src[1], s);
 
     return D3D_OK;
 }
@@ -2616,7 +2785,7 @@ struct sm1_op_info inst_table[] =
     _OPI(TEX,          TEX, V(0,0), V(0,0), V(1,4), V(1,4), 1, 1, SPECIAL(TEXLD_14)),
     _OPI(TEX,          TEX, V(0,0), V(0,0), V(2,0), V(3,0), 1, 2, SPECIAL(TEXLD)),
     _OPI(TEXBEM,       TEX, V(0,0), V(0,0), V(0,0), V(1,3), 1, 1, SPECIAL(TEXBEM)),
-    _OPI(TEXBEML,      TEX, V(0,0), V(0,0), V(0,0), V(1,3), 1, 1, SPECIAL(TEXBEML)),
+    _OPI(TEXBEML,      TEX, V(0,0), V(0,0), V(0,0), V(1,3), 1, 1, SPECIAL(TEXBEM)),
     _OPI(TEXREG2AR,    TEX, V(0,0), V(0,0), V(0,0), V(1,3), 1, 1, SPECIAL(TEXREG2AR)),
     _OPI(TEXREG2GB,    TEX, V(0,0), V(0,0), V(0,0), V(1,3), 1, 1, SPECIAL(TEXREG2GB)),
     _OPI(TEXM3x2PAD,   TEX, V(0,0), V(0,0), V(0,0), V(1,3), 1, 1, SPECIAL(TEXM3x2PAD)),
@@ -3023,6 +3192,8 @@ tx_ctor(struct shader_translator *tx, struct nine_shader_info *info)
     info->lconstf.data = NULL;
     info->lconstf.ranges = NULL;
 
+    info->bumpenvmat_needed = 0;
+
     for (i = 0; i < Elements(tx->regs.rL); ++i) {
         tx->regs.rL[i] = ureg_dst_undef();
     }
@@ -3074,6 +3245,57 @@ tgsi_processor_from_type(unsigned shader_type)
     }
 }
 
+static void
+shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
+{
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst oCol0 = ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0);
+    struct ureg_src fog_end, fog_coeff, fog_density;
+    struct ureg_src fog_vs, depth, fog_color;
+    struct ureg_dst fog_factor;
+
+    if (!tx->info->fog_enable) {
+        ureg_MOV(ureg, oCol0, src_col);
+        return;
+    }
+
+    if (tx->info->fog_mode != D3DFOG_NONE)
+        depth = ureg_scalar(ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_POSITION, 0,
+                                              TGSI_INTERPOLATE_LINEAR),
+                                              TGSI_SWIZZLE_Z);
+
+    nine_info_mark_const_f_used(tx->info, 33);
+    fog_color = NINE_CONSTANT_SRC(32);
+    fog_factor = tx_scratch_scalar(tx);
+
+    if (tx->info->fog_mode == D3DFOG_LINEAR) {
+        fog_end = NINE_CONSTANT_SRC_SWIZZLE(33, X);
+        fog_coeff = NINE_CONSTANT_SRC_SWIZZLE(33, Y);
+        ureg_SUB(ureg, fog_factor, fog_end, depth);
+        ureg_MUL(ureg, ureg_saturate(fog_factor), tx_src_scalar(fog_factor), fog_coeff);
+    } else if (tx->info->fog_mode == D3DFOG_EXP) {
+        fog_density = NINE_CONSTANT_SRC_SWIZZLE(33, X);
+        ureg_MUL(ureg, fog_factor, depth, fog_density);
+        ureg_MUL(ureg, fog_factor, tx_src_scalar(fog_factor), ureg_imm1f(ureg, -1.442695f));
+        ureg_EX2(ureg, fog_factor, tx_src_scalar(fog_factor));
+    } else if (tx->info->fog_mode == D3DFOG_EXP2) {
+        fog_density = NINE_CONSTANT_SRC_SWIZZLE(33, X);
+        ureg_MUL(ureg, fog_factor, depth, fog_density);
+        ureg_MUL(ureg, fog_factor, tx_src_scalar(fog_factor), tx_src_scalar(fog_factor));
+        ureg_MUL(ureg, fog_factor, tx_src_scalar(fog_factor), ureg_imm1f(ureg, -1.442695f));
+        ureg_EX2(ureg, fog_factor, tx_src_scalar(fog_factor));
+    } else {
+        fog_vs = ureg_scalar(ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_FOG, 0,
+                                            TGSI_INTERPOLATE_PERSPECTIVE),
+                                            TGSI_SWIZZLE_X);
+        ureg_MOV(ureg, fog_factor, fog_vs);
+    }
+
+    ureg_LRP(ureg, ureg_writemask(oCol0, TGSI_WRITEMASK_XYZ),
+             tx_src_scalar(fog_factor), src_col, fog_color);
+    ureg_MOV(ureg, ureg_writemask(oCol0, TGSI_WRITEMASK_W), src_col);
+}
+
 #define GET_CAP(n) device->screen->get_param( \
       device->screen, PIPE_CAP_##n)
 #define GET_SHADER_CAP(n) device->screen->get_shader_param( \
@@ -3123,6 +3345,24 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     tx->texcoord_sn = tx->want_texcoord ?
         TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
 
+    if (IS_VS) {
+        tx->num_constf_allowed = NINE_MAX_CONST_F;
+    } else if (tx->version.major < 2) {/* IS_PS v1 */
+        tx->num_constf_allowed = 8;
+    } else if (tx->version.major == 2) {/* IS_PS v2 */
+        tx->num_constf_allowed = 32;
+    } else {/* IS_PS v3 */
+        tx->num_constf_allowed = NINE_MAX_CONST_F_PS3;
+    }
+
+    if (tx->version.major < 2) {
+        tx->num_consti_allowed = 0;
+        tx->num_constb_allowed = 0;
+    } else {
+        tx->num_consti_allowed = NINE_MAX_CONST_I;
+        tx->num_constb_allowed = NINE_MAX_CONST_B;
+    }
+
     /* VS must always write position. Declare it here to make it the 1st output.
      * (Some drivers like nv50 are buggy and rely on that.)
      */
@@ -3145,10 +3385,26 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
         goto out;
     }
 
-    if (IS_PS && (tx->version.major < 2) && tx->num_temp) {
-        ureg_MOV(tx->ureg, ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, 0),
-                 ureg_src(tx->regs.r[0]));
-        info->rt_mask |= 0x1;
+    if (IS_PS && tx->version.major < 3) {
+        if (tx->version.major < 2) {
+            assert(tx->num_temp); /* there must be color output */
+            info->rt_mask |= 0x1;
+            shader_add_ps_fog_stage(tx, ureg_src(tx->regs.r[0]));
+        } else {
+            shader_add_ps_fog_stage(tx, ureg_src(tx->regs.oCol[0]));
+        }
+    }
+
+    if (IS_VS && tx->version.major < 3 && ureg_dst_is_undef(tx->regs.oFog) && info->fog_enable) {
+        tx->regs.oFog = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_FOG, 0);
+        ureg_MOV(tx->ureg, ureg_writemask(tx->regs.oFog, TGSI_WRITEMASK_X), ureg_imm1f(tx->ureg, 0.0f));
+    }
+
+    /* vs < 3: oD1.w (D3DPMISCCAPS_FOGANDSPECULARALPHA) set to 0 even if set */
+    if (IS_VS && tx->version.major < 3 && !ureg_dst_is_undef(tx->regs.oCol[1])) {
+        struct ureg_dst dst = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, 1);
+        ureg_MOV(tx->ureg, ureg_writemask(dst, TGSI_WRITEMASK_XYZ), ureg_src(tx->regs.oCol[1]));
+        ureg_MOV(tx->ureg, ureg_writemask(dst, TGSI_WRITEMASK_W), ureg_imm1f(tx->ureg, 0.0f));
     }
 
     if (info->position_t)
@@ -3233,6 +3489,7 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
                        info->const_int_slots > 0 ?
                            max_const_f + info->const_int_slots :
                                info->const_float_slots;
+
     info->const_used_size = sizeof(float[4]) * slot_max; /* slots start from 1 */
 
     for (s = 0; s < slot_max; s++)

@@ -43,6 +43,12 @@ mesa_format
 _mesa_get_shader_image_format(GLenum format);
 
 /**
+ * Get a single image unit struct with the default state.
+ */
+struct gl_image_unit
+_mesa_default_image_unit(struct gl_context *ctx);
+
+/**
  * Initialize a context's shader image units to the default state.
  */
 void

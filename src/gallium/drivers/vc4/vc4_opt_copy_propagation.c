@@ -39,21 +39,27 @@ qir_opt_copy_propagation(struct vc4_compile *c)
 {
         bool progress = false;
         bool debug = false;
-        struct qreg *movs = calloc(c->num_temps, sizeof(struct qreg));
 
         list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
                         int index = inst->src[i].index;
                         if (inst->src[i].file == QFILE_TEMP &&
-                            (movs[index].file == QFILE_TEMP ||
-                             movs[index].file == QFILE_UNIF)) {
+                            c->defs[index] &&
+                            c->defs[index]->op == QOP_MOV &&
+                            (c->defs[index]->src[0].file == QFILE_TEMP ||
+                             c->defs[index]->src[0].file == QFILE_UNIF)) {
+                                /* If it has a pack, it shouldn't be an SSA
+                                 * def.
+                                 */
+                                assert(!c->defs[index]->dst.pack);
+
                                 if (debug) {
                                         fprintf(stderr, "Copy propagate: ");
                                         qir_dump_inst(c, inst);
                                         fprintf(stderr, "\n");
                                 }
 
-                                inst->src[i] = movs[index];
+                                inst->src[i] = c->defs[index]->src[0];
 
                                 if (debug) {
                                         fprintf(stderr, "to: ");
@@ -64,14 +70,6 @@ qir_opt_copy_propagation(struct vc4_compile *c)
                                 progress = true;
                         }
                 }
-
-                if (inst->op == QOP_MOV &&
-                    inst->dst.file == QFILE_TEMP &&
-                    inst->src[0].file != QFILE_VPM) {
-                        movs[inst->dst.index] = inst->src[0];
-                }
         }
-
-        free(movs);
         return progress;
 }

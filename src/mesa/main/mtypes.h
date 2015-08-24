@@ -94,8 +94,6 @@ struct vbo_context;
 #define PRIM_OUTSIDE_BEGIN_END   (PRIM_MAX + 1)
 #define PRIM_UNKNOWN             (PRIM_MAX + 2)
 
-
-
 /**
  * Indexes for vertex program attributes.
  * GL_NV_vertex_program aliases generic attributes over the conventional
@@ -203,87 +201,10 @@ typedef enum
 /*@}*/
 
 
-/**
- * Indexes for vertex shader outputs, geometry shader inputs/outputs, and
- * fragment shader inputs.
- *
- * Note that some of these values are not available to all pipeline stages.
- *
- * When this enum is updated, the following code must be updated too:
- * - vertResults (in prog_print.c's arb_output_attrib_string())
- * - fragAttribs (in prog_print.c's arb_input_attrib_string())
- * - _mesa_varying_slot_in_fs()
- */
-typedef enum
-{
-   VARYING_SLOT_POS,
-   VARYING_SLOT_COL0, /* COL0 and COL1 must be contiguous */
-   VARYING_SLOT_COL1,
-   VARYING_SLOT_FOGC,
-   VARYING_SLOT_TEX0, /* TEX0-TEX7 must be contiguous */
-   VARYING_SLOT_TEX1,
-   VARYING_SLOT_TEX2,
-   VARYING_SLOT_TEX3,
-   VARYING_SLOT_TEX4,
-   VARYING_SLOT_TEX5,
-   VARYING_SLOT_TEX6,
-   VARYING_SLOT_TEX7,
-   VARYING_SLOT_PSIZ, /* Does not appear in FS */
-   VARYING_SLOT_BFC0, /* Does not appear in FS */
-   VARYING_SLOT_BFC1, /* Does not appear in FS */
-   VARYING_SLOT_EDGE, /* Does not appear in FS */
-   VARYING_SLOT_CLIP_VERTEX, /* Does not appear in FS */
-   VARYING_SLOT_CLIP_DIST0,
-   VARYING_SLOT_CLIP_DIST1,
-   VARYING_SLOT_PRIMITIVE_ID, /* Does not appear in VS */
-   VARYING_SLOT_LAYER, /* Appears as VS or GS output */
-   VARYING_SLOT_VIEWPORT, /* Appears as VS or GS output */
-   VARYING_SLOT_FACE, /* FS only */
-   VARYING_SLOT_PNTC, /* FS only */
-   VARYING_SLOT_TESS_LEVEL_OUTER, /* Only appears as TCS output. */
-   VARYING_SLOT_TESS_LEVEL_INNER, /* Only appears as TCS output. */
-   VARYING_SLOT_VAR0, /* First generic varying slot */
-   VARYING_SLOT_MAX = VARYING_SLOT_VAR0 + MAX_VARYING,
-   VARYING_SLOT_PATCH0 = VARYING_SLOT_MAX,
-   VARYING_SLOT_TESS_MAX = VARYING_SLOT_PATCH0 + MAX_VARYING
-} gl_varying_slot;
-
-
-/**
- * Bitflags for varying slots.
- */
-/*@{*/
-#define VARYING_BIT_POS BITFIELD64_BIT(VARYING_SLOT_POS)
-#define VARYING_BIT_COL0 BITFIELD64_BIT(VARYING_SLOT_COL0)
-#define VARYING_BIT_COL1 BITFIELD64_BIT(VARYING_SLOT_COL1)
-#define VARYING_BIT_FOGC BITFIELD64_BIT(VARYING_SLOT_FOGC)
-#define VARYING_BIT_TEX0 BITFIELD64_BIT(VARYING_SLOT_TEX0)
-#define VARYING_BIT_TEX1 BITFIELD64_BIT(VARYING_SLOT_TEX1)
-#define VARYING_BIT_TEX2 BITFIELD64_BIT(VARYING_SLOT_TEX2)
-#define VARYING_BIT_TEX3 BITFIELD64_BIT(VARYING_SLOT_TEX3)
-#define VARYING_BIT_TEX4 BITFIELD64_BIT(VARYING_SLOT_TEX4)
-#define VARYING_BIT_TEX5 BITFIELD64_BIT(VARYING_SLOT_TEX5)
-#define VARYING_BIT_TEX6 BITFIELD64_BIT(VARYING_SLOT_TEX6)
-#define VARYING_BIT_TEX7 BITFIELD64_BIT(VARYING_SLOT_TEX7)
-#define VARYING_BIT_TEX(U) BITFIELD64_BIT(VARYING_SLOT_TEX0 + (U))
-#define VARYING_BITS_TEX_ANY BITFIELD64_RANGE(VARYING_SLOT_TEX0, \
-                                              MAX_TEXTURE_COORD_UNITS)
-#define VARYING_BIT_PSIZ BITFIELD64_BIT(VARYING_SLOT_PSIZ)
-#define VARYING_BIT_BFC0 BITFIELD64_BIT(VARYING_SLOT_BFC0)
-#define VARYING_BIT_BFC1 BITFIELD64_BIT(VARYING_SLOT_BFC1)
-#define VARYING_BIT_EDGE BITFIELD64_BIT(VARYING_SLOT_EDGE)
-#define VARYING_BIT_CLIP_VERTEX BITFIELD64_BIT(VARYING_SLOT_CLIP_VERTEX)
-#define VARYING_BIT_CLIP_DIST0 BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0)
-#define VARYING_BIT_CLIP_DIST1 BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1)
-#define VARYING_BIT_PRIMITIVE_ID BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_ID)
-#define VARYING_BIT_LAYER BITFIELD64_BIT(VARYING_SLOT_LAYER)
-#define VARYING_BIT_VIEWPORT BITFIELD64_BIT(VARYING_SLOT_VIEWPORT)
-#define VARYING_BIT_FACE BITFIELD64_BIT(VARYING_SLOT_FACE)
-#define VARYING_BIT_PNTC BITFIELD64_BIT(VARYING_SLOT_PNTC)
-#define VARYING_BIT_TESS_LEVEL_OUTER BITFIELD64_BIT(VARYING_SLOT_TESS_LEVEL_OUTER)
-#define VARYING_BIT_TESS_LEVEL_INNER BITFIELD64_BIT(VARYING_SLOT_TESS_LEVEL_INNER)
-#define VARYING_BIT_VAR(V) BITFIELD64_BIT(VARYING_SLOT_VAR0 + (V))
-/*@}*/
+#define VARYING_SLOT_MAX	(VARYING_SLOT_VAR0 + MAX_VARYING)
+#define VARYING_SLOT_PATCH0	(VARYING_SLOT_MAX)
+#define VARYING_SLOT_TESS_MAX	(VARYING_SLOT_PATCH0 + MAX_VARYING)
+#define FRAG_RESULT_MAX		(FRAG_RESULT_DATA0 + MAX_DRAW_BUFFERS)
 
 /**
  * Determine if the given gl_varying_slot appears in the fragment shader.
@@ -305,29 +226,6 @@ _mesa_varying_slot_in_fs(gl_varying_slot slot)
       return GL_TRUE;
    }
 }
-
-
-/**
- * Fragment program results
- */
-typedef enum
-{
-   FRAG_RESULT_DEPTH = 0,
-   FRAG_RESULT_STENCIL = 1,
-   /* If a single color should be written to all render targets, this
-    * register is written.  No FRAG_RESULT_DATAn will be written.
-    */
-   FRAG_RESULT_COLOR = 2,
-   FRAG_RESULT_SAMPLE_MASK = 3,
-
-   /* FRAG_RESULT_DATAn are the per-render-target (GLSL gl_FragData[n]
-    * or ARB_fragment_program fragment.color[n]) color results.  If
-    * any are written, FRAG_RESULT_COLOR will not be written.
-    */
-   FRAG_RESULT_DATA0 = 4,
-   FRAG_RESULT_MAX = (FRAG_RESULT_DATA0 + MAX_DRAW_BUFFERS)
-} gl_frag_result;
-
 
 /**
  * Indexes for all renderbuffers
@@ -3777,7 +3675,7 @@ struct gl_constants
 
    /* GL_ARB_shader_image_load_store */
    GLuint MaxImageUnits;
-   GLuint MaxCombinedImageUnitsAndFragmentOutputs;
+   GLuint MaxCombinedShaderOutputResources;
    GLuint MaxImageSamples;
    GLuint MaxCombinedImageUniforms;
 
@@ -3862,6 +3760,7 @@ struct gl_extensions
    GLboolean ARB_shader_atomic_counters;
    GLboolean ARB_shader_bit_encoding;
    GLboolean ARB_shader_image_load_store;
+   GLboolean ARB_shader_image_size;
    GLboolean ARB_shader_precision;
    GLboolean ARB_shader_stencil_export;
    GLboolean ARB_shader_storage_buffer_object;
@@ -4279,10 +4178,16 @@ struct gl_image_unit
    GLboolean _Valid;
 
    /**
+    * Layer of the texture object bound to this unit as specified by the
+    * application.
+    */
+   GLuint Layer;
+
+   /**
     * Layer of the texture object bound to this unit, or zero if the
     * whole level is bound.
     */
-   GLuint Layer;
+   GLuint _Layer;
 
    /**
     * Access allowed to this texture image.  Either \c GL_READ_ONLY,

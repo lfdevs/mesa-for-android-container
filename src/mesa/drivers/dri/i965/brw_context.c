@@ -513,7 +513,7 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.Program[MESA_SHADER_COMPUTE].MaxImageUniforms =
          BRW_MAX_IMAGES;
       ctx->Const.MaxImageUnits = MAX_IMAGE_UNITS;
-      ctx->Const.MaxCombinedImageUnitsAndFragmentOutputs =
+      ctx->Const.MaxCombinedShaderOutputResources =
          MAX_IMAGE_UNITS + BRW_MAX_DRAW_BUFFERS;
       ctx->Const.MaxImageSamples = 0;
       ctx->Const.MaxCombinedImageUniforms = 3 * BRW_MAX_IMAGES;

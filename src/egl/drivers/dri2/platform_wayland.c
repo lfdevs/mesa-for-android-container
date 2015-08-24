@@ -1227,6 +1227,8 @@ dri2_wl_swrast_get_stride_for_format(int format, int w)
  * Taken from weston shared/os-compatibility.c
  */
 
+#ifndef HAVE_MKOSTEMP
+
 static int
 set_cloexec_or_close(int fd)
 {
@@ -1248,6 +1250,8 @@ err:
    close(fd);
    return -1;
 }
+
+#endif
 
 /*
  * Taken from weston shared/os-compatibility.c

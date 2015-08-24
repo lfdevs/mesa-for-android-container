@@ -586,34 +586,16 @@ _mesa_compressed_image_address(GLint col, GLint row, GLint img,
 compressed_fetch_func
 _mesa_get_compressed_fetch_func(mesa_format format)
 {
-   switch (format) {
-   case MESA_FORMAT_RGB_DXT1:
-   case MESA_FORMAT_RGBA_DXT1:
-   case MESA_FORMAT_RGBA_DXT3:
-   case MESA_FORMAT_RGBA_DXT5:
-   case MESA_FORMAT_SRGB_DXT1:
-   case MESA_FORMAT_SRGBA_DXT1:
-   case MESA_FORMAT_SRGBA_DXT3:
-   case MESA_FORMAT_SRGBA_DXT5:
+   switch (_mesa_get_format_layout(format)) {
+   case MESA_FORMAT_LAYOUT_S3TC:
       return _mesa_get_dxt_fetch_func(format);
-   case MESA_FORMAT_RGB_FXT1:
-   case MESA_FORMAT_RGBA_FXT1:
+   case MESA_FORMAT_LAYOUT_FXT1:
       return _mesa_get_fxt_fetch_func(format);
-   case MESA_FORMAT_R_RGTC1_UNORM:
-   case MESA_FORMAT_L_LATC1_UNORM:
-   case MESA_FORMAT_R_RGTC1_SNORM:
-   case MESA_FORMAT_L_LATC1_SNORM:
-   case MESA_FORMAT_RG_RGTC2_UNORM:
-   case MESA_FORMAT_LA_LATC2_UNORM:
-   case MESA_FORMAT_RG_RGTC2_SNORM:
-   case MESA_FORMAT_LA_LATC2_SNORM:
+   case MESA_FORMAT_LAYOUT_RGTC:
       return _mesa_get_compressed_rgtc_func(format);
-   case MESA_FORMAT_ETC1_RGB8:
+   case MESA_FORMAT_LAYOUT_ETC1:
       return _mesa_get_etc_fetch_func(format);
-   case MESA_FORMAT_BPTC_RGBA_UNORM:
-   case MESA_FORMAT_BPTC_SRGB_ALPHA_UNORM:
-   case MESA_FORMAT_BPTC_RGB_SIGNED_FLOAT:
-   case MESA_FORMAT_BPTC_RGB_UNSIGNED_FLOAT:
+   case MESA_FORMAT_LAYOUT_BPTC:
       return _mesa_get_bptc_fetch_func(format);
    default:
       return NULL;

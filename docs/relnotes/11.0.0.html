@@ -46,9 +46,12 @@ Note: some of the new features are only available with certain drivers.
 <ul>
 <li>New hardware support for AMD GCN 1.2 GPUs: Tonga, Iceland, Carrizo, Fiji</li>
 <li>OpenGL 4.1 on radeonsi, nvc0</li>
+<li>OpenGL ES 3.0 on freedreno (a3xx, a4xx)
 <li>GL_AMD_vertex_shader_viewport_index on radeonsi</li>
 <li>GL_ARB_conditional_render_inverted on r600, radeonsi</li>
+<li>GL_ARB_depth_buffer_float on a4xx</li>
 <li>GL_ARB_derivative_control on radeonsi</li>
+<li>GL_ARB_draw_buffers, GL_ARB_draw_buffers_blend on a4xx</li>
 <li>GL_ARB_fragment_layer_viewport on radeonsi</li>
 <li>GL_ARB_framebuffer_no_attachments on i965</li>
 <li>GL_ARB_get_texture_sub_image for all drivers</li>
@@ -56,12 +59,15 @@ Note: some of the new features are only available with certain drivers.
 <li>GL_ARB_gpu_shader_fp64 on llvmpipe, radeonsi</li>
 <li>GL_ARB_shader_image_load_store on i965</li>
 <li>GL_ARB_shader_precision on radeonsi, nvc0</li>
+<li>GL_ARB_shader_image_size on i965</li>
 <li>GL_ARB_shader_stencil_export on llvmpipe</li>
 <li>GL_ARB_shader_subroutine on core profile all drivers</li>
 <li>GL_ARB_tessellation_shader on nvc0, radeonsi</li>
+<li>GL_ARB_transform_feedback2, GL_ARB_transform_feedback_instanced, GL_EXT_transform_feedback on a3xx, a4xx</li>
 <li>GL_ARB_vertex_attrib_64bit on llvmpipe, radeonsi</li>
 <li>GL_ARB_viewport_array on radeonsi</li>
 <li>GL_EXT_depth_bounds_test on radeonsi, nv30, nv50, nvc0</li>
+<li>GL_EXT_texture_compression_s3tc on freedreno (a3xx)</li>
 <li>GL_NV_read_depth (GLES) on all drivers</li>
 <li>GL_NV_read_depth_stencil (GLES) on all drivers</li>
 <li>GL_NV_read_stencil (GLES) on all drivers</li>
@@ -69,6 +75,7 @@ Note: some of the new features are only available with certain drivers.
 <li>GL_OES_texture_half_float on all r300, r600, radeonsi, nv30, nv50, nvc0, softpipe, llvmpipe</li>
 <li>GL_OES_texture_float_linear on all r300, r600, radeonsi, nv30, nv50, nvc0, softpipe, llvmpipe</li>
 <li>GL_OES_texture_half_float_linear on all r300, r600, radeonsi, nv30, nv50, nvc0, softpipe, llvmpipe</li>
+<li>GL_EXT_draw_buffers2 on a4xx</li>
 <li>GLX_ARB_create_context_robustness on r600, radeonsi</li>
 <li>EGL_EXT_create_context_robustness on r600, radeonsi</li>
 <li>EGL_KHR_gl_colorspace on r600, radeonsi, nv50, nvc0</li>

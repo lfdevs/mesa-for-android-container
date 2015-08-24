@@ -50,8 +50,6 @@ struct NineVolume9
     struct pipe_transfer *transfer;
     unsigned lock_count;
 
-    struct pipe_box dirty_box[2];
-
     struct pipe_context *pipe;
 
     /* for [GS]etPrivateData/FreePrivateData */
@@ -85,20 +83,15 @@ void
 NineVolume9_AddDirtyRegion( struct NineVolume9 *This,
                             const struct pipe_box *box );
 
-static inline void
-NineVolume9_ClearDirtyRegion( struct NineVolume9 *This )
-{
-    memset(&This->dirty_box, 0, sizeof(This->dirty_box));
-}
+HRESULT
+NineVolume9_CopyMemToDefault( struct NineVolume9 *This,
+                              struct NineVolume9 *From,
+                              unsigned dstx, unsigned dsty, unsigned dstz,
+                              struct pipe_box *pSrcBox );
 
 HRESULT
-NineVolume9_CopyVolume( struct NineVolume9 *This,
-                        struct NineVolume9 *From,
-                        unsigned dstx, unsigned dsty, unsigned dstz,
-                        struct pipe_box *pSrcBox );
-
-HRESULT
-NineVolume9_UploadSelf( struct NineVolume9 *This );
+NineVolume9_UploadSelf( struct NineVolume9 *This,
+                        const struct pipe_box *damaged );
 
 
 /*** Direct3D public ***/

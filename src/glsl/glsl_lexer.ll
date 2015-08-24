@@ -369,35 +369,35 @@ precise		KEYWORD_WITH_ALT(400, 0, 400, 0, yyextra->ARB_gpu_shader5_enable, PRECI
 
    /* keywords available with ARB_shader_image_load_store */
 image1D         KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE1D);
-image2D         KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE2D);
-image3D         KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE3D);
+image2D         KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IMAGE2D);
+image3D         KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IMAGE3D);
 image2DRect     KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE2DRECT);
-imageCube       KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGECUBE);
+imageCube       KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IMAGECUBE);
 imageBuffer     KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGEBUFFER);
 image1DArray    KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE1DARRAY);
-image2DArray    KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE2DARRAY);
+image2DArray    KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IMAGE2DARRAY);
 imageCubeArray  KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGECUBEARRAY);
 image2DMS       KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE2DMS);
 image2DMSArray  KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IMAGE2DMSARRAY);
 iimage1D        KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE1D);
-iimage2D        KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE2D);
-iimage3D        KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE3D);
+iimage2D        KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IIMAGE2D);
+iimage3D        KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IIMAGE3D);
 iimage2DRect    KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE2DRECT);
-iimageCube      KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGECUBE);
+iimageCube      KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IIMAGECUBE);
 iimageBuffer    KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGEBUFFER);
 iimage1DArray   KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE1DARRAY);
-iimage2DArray   KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE2DARRAY);
+iimage2DArray   KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, IIMAGE2DARRAY);
 iimageCubeArray KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGECUBEARRAY);
 iimage2DMS      KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE2DMS);
 iimage2DMSArray KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, IIMAGE2DMSARRAY);
 uimage1D        KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE1D);
-uimage2D        KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE2D);
-uimage3D        KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE3D);
+uimage2D        KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, UIMAGE2D);
+uimage3D        KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, UIMAGE3D);
 uimage2DRect    KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE2DRECT);
-uimageCube      KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGECUBE);
+uimageCube      KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, UIMAGECUBE);
 uimageBuffer    KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGEBUFFER);
 uimage1DArray   KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE1DARRAY);
-uimage2DArray   KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE2DARRAY);
+uimage2DArray   KEYWORD_WITH_ALT(130, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, UIMAGE2DARRAY);
 uimageCubeArray KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGECUBEARRAY);
 uimage2DMS      KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE2DMS);
 uimage2DMSArray KEYWORD_WITH_ALT(130, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, UIMAGE2DMSARRAY);
@@ -406,11 +406,11 @@ image2DShadow           KEYWORD(130, 300, 0, 0, IMAGE2DSHADOW);
 image1DArrayShadow      KEYWORD(130, 300, 0, 0, IMAGE1DARRAYSHADOW);
 image2DArrayShadow      KEYWORD(130, 300, 0, 0, IMAGE2DARRAYSHADOW);
 
-coherent	KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, COHERENT);
-volatile	KEYWORD_WITH_ALT(110, 100, 420, 0, yyextra->ARB_shader_image_load_store_enable, VOLATILE);
-restrict	KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, RESTRICT);
-readonly	KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, READONLY);
-writeonly	KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_image_load_store_enable, WRITEONLY);
+coherent       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, COHERENT);
+volatile       KEYWORD_WITH_ALT(110, 100, 420, 310, yyextra->ARB_shader_image_load_store_enable, VOLATILE);
+restrict       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, RESTRICT);
+readonly       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, READONLY);
+writeonly      KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, WRITEONLY);
 
 atomic_uint     KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_atomic_counters_enable, ATOMIC_UINT);
 

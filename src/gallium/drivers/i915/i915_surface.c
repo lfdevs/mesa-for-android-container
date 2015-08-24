@@ -120,7 +120,8 @@ i915_surface_copy_render(struct pipe_context *pipe,
 
    util_blitter_blit_generic(i915->blitter, dst_view, &dstbox,
                              src_view, src_box, src_width0, src_height0,
-                             PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL);
+                             PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL,
+                             FALSE);
    return;
 
 fallback:

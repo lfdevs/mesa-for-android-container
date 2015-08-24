@@ -184,7 +184,9 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
 
     /* Note: It is the role of the backend to fill if necessary
      * BackBufferWidth and BackBufferHeight */
-    ID3DPresent_SetPresentParameters(This->present, pParams, This->mode);
+    hr = ID3DPresent_SetPresentParameters(This->present, pParams, This->mode);
+    if (hr != D3D_OK)
+        return hr;
 
     /* When we have flip behaviour, d3d9 expects we get back the screen buffer when we flip.
      * Here we don't get back the initial content of the screen. To emulate the behaviour
@@ -575,9 +577,10 @@ handle_draw_cursor_and_hud( struct NineSwapChain9 *This, struct pipe_resource *r
         blit.filter = PIPE_TEX_FILTER_NEAREST;
         blit.scissor_enable = FALSE;
 
-        ID3DPresent_GetCursorPos(This->present, &device->cursor.pos);
-
-        /* NOTE: blit messes up when box.x + box.width < 0, fix driver */
+        /* NOTE: blit messes up when box.x + box.width < 0, fix driver
+         * NOTE2: device->cursor.pos contains coordinates relative to the screen.
+         * This happens to be also the position of the cursor when we are fullscreen.
+         * We don't use sw cursor for Windowed mode */
         blit.dst.box.x = MAX2(device->cursor.pos.x, 0) - device->cursor.hotspot.x;
         blit.dst.box.y = MAX2(device->cursor.pos.y, 0) - device->cursor.hotspot.y;
         blit.dst.box.width = blit.src.box.width;
@@ -587,13 +590,14 @@ handle_draw_cursor_and_hud( struct NineSwapChain9 *This, struct pipe_resource *r
             blit.src.box.width, blit.src.box.height,
             blit.dst.box.x, blit.dst.box.y);
 
+        blit.alpha_blend = TRUE;
         This->pipe->blit(This->pipe, &blit);
     }
 
     if (device->hud && resource) {
         hud_draw(device->hud, resource); /* XXX: no offset */
         /* HUD doesn't clobber stipple */
-        NineDevice9_RestoreNonCSOState(device, ~0x2);
+        nine_state_restore_non_cso(device);
     }
 }
 
@@ -704,6 +708,7 @@ present( struct NineSwapChain9 *This,
         blit.mask = PIPE_MASK_RGBA;
         blit.filter = PIPE_TEX_FILTER_NEAREST;
         blit.scissor_enable = FALSE;
+        blit.alpha_blend = FALSE;
 
         This->pipe->blit(This->pipe, &blit);
     }
@@ -835,7 +840,7 @@ NineSwapChain9_Present( struct NineSwapChain9 *This,
     ID3DPresent_WaitBufferReleased(This->present, This->present_handles[0]);
 
     This->base.device->state.changed.group |= NINE_STATE_FB;
-    nine_update_state(This->base.device, NINE_STATE_FB);
+    nine_update_state_framebuffer(This->base.device);
 
     return hr;
 }
@@ -856,6 +861,8 @@ NineSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
     DBG("GetFrontBufferData: This=%p pDestSurface=%p\n",
         This, pDestSurface);
 
+    user_assert(dest_surface->base.pool == D3DPOOL_SYSTEMMEM, D3DERR_INVALIDCALL);
+
     width = dest_surface->desc.Width;
     height = dest_surface->desc.Height;
 
@@ -870,7 +877,7 @@ NineSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
     desc.MultiSampleQuality = 0;
     desc.Width = width;
     desc.Height = height;
-    /* NineSurface9_CopySurface needs same format. */
+    /* NineSurface9_CopyDefaultToMem needs same format. */
     desc.Format = dest_surface->desc.Format;
     desc.Usage = D3DUSAGE_RENDERTARGET;
     hr = NineSurface9_new(pDevice, NineUnknown(This), temp_resource, NULL, 0,
@@ -883,7 +890,7 @@ NineSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
 
     ID3DPresent_FrontBufferCopy(This->present, temp_handle);
 
-    NineSurface9_CopySurface(dest_surface, temp_surface, NULL, NULL);
+    NineSurface9_CopyDefaultToMem(dest_surface, temp_surface);
 
     ID3DPresent_DestroyD3DWindowBuffer(This->present, temp_handle);
     NineUnknown_Destroy(NineUnknown(temp_surface));

@@ -23,6 +23,7 @@
 #include "device9.h"
 #include "volume9.h"
 #include "basetexture9.h" /* for marking dirty */
+#include "volumetexture9.h"
 #include "nine_helpers.h"
 #include "nine_pipe.h"
 #include "nine_dump.h"
@@ -43,7 +44,7 @@ NineVolume9_AllocateData( struct NineVolume9 *This )
     DBG("(%p(This=%p),level=%u) Allocating 0x%x bytes of system memory.\n",
         This->base.container, This, This->level, size);
 
-    This->data = (uint8_t *)MALLOC(size);
+    This->data = (uint8_t *)align_malloc(size, 32);
     if (!This->data)
         return E_OUTOFMEMORY;
     return D3D_OK;
@@ -182,47 +183,23 @@ NineVolume9_GetDesc( struct NineVolume9 *This,
     return D3D_OK;
 }
 
-static inline boolean
-NineVolume9_IsDirty(struct NineVolume9 *This)
-{
-    return This->dirty_box[0].width != 0;
-}
-
 inline void
 NineVolume9_AddDirtyRegion( struct NineVolume9 *This,
                             const struct pipe_box *box )
 {
-    struct pipe_box cover_a, cover_b;
-    float vol[2];
+    D3DBOX dirty_region;
+    struct NineVolumeTexture9 *tex = NineVolumeTexture9(This->base.container);
 
     if (!box) {
-        u_box_3d(0, 0, 0, This->desc.Width, This->desc.Height,
-                 This->desc.Depth, &This->dirty_box[0]);
-        memset(&This->dirty_box[1], 0, sizeof(This->dirty_box[1]));
-        return;
-    }
-    if (!This->dirty_box[0].width) {
-        This->dirty_box[0] = *box;
-        return;
-    }
-
-    u_box_union_3d(&cover_a, &This->dirty_box[0], box);
-    vol[0] = u_box_volume_3d(&cover_a);
-
-    if (This->dirty_box[1].width == 0) {
-        vol[1] = u_box_volume_3d(&This->dirty_box[0]);
-        if (vol[0] > (vol[1] * 1.5f))
-            This->dirty_box[1] = *box;
-        else
-            This->dirty_box[0] = cover_a;
+        NineVolumeTexture9_AddDirtyBox(tex, NULL);
     } else {
-        u_box_union_3d(&cover_b, &This->dirty_box[1], box);
-        vol[1] = u_box_volume_3d(&cover_b);
-
-        if (vol[0] > vol[1])
-            This->dirty_box[1] = cover_b;
-        else
-            This->dirty_box[0] = cover_a;
+        dirty_region.Left = box->x << This->level_actual;
+        dirty_region.Top = box->y << This->level_actual;
+        dirty_region.Front = box->z << This->level_actual;
+        dirty_region.Right = dirty_region.Left + (box->width << This->level_actual);
+        dirty_region.Bottom = dirty_region.Top + (box->height << This->level_actual);
+        dirty_region.Back = dirty_region.Front + (box->depth << This->level_actual);
+        NineVolumeTexture9_AddDirtyBox(tex, &dirty_region);
     }
 }
 
@@ -254,21 +231,26 @@ NineVolume9_LockBox( struct NineVolume9 *This,
         pBox ? pBox->Front : 0, pBox ? pBox->Back : 0,
         nine_D3DLOCK_to_str(Flags));
 
+    /* check if it's already locked */
+    user_assert(This->lock_count == 0, D3DERR_INVALIDCALL);
+
+    /* set pBits to NULL after lock_count check */
+    user_assert(pLockedVolume, E_POINTER);
+    pLockedVolume->pBits = NULL;
+
     user_assert(This->desc.Pool != D3DPOOL_DEFAULT ||
                 (This->desc.Usage & D3DUSAGE_DYNAMIC), D3DERR_INVALIDCALL);
 
     user_assert(!((Flags & D3DLOCK_DISCARD) && (Flags & D3DLOCK_READONLY)),
                 D3DERR_INVALIDCALL);
 
-    user_assert(This->lock_count == 0, D3DERR_INVALIDCALL);
-    user_assert(pLockedVolume, E_POINTER);
-
-    if (pBox && This->desc.Pool == D3DPOOL_DEFAULT &&
-        util_format_is_compressed(This->info.format)) {
+    if (pBox && compressed_format (This->desc.Format)) { /* For volume all pools are checked */
         const unsigned w = util_format_get_blockwidth(This->info.format);
         const unsigned h = util_format_get_blockheight(This->info.format);
-        user_assert(!(pBox->Left % w) && !(pBox->Right % w) &&
-                    !(pBox->Top % h) && !(pBox->Bottom % h),
+        user_assert((pBox->Left == 0 && pBox->Right == This->desc.Width &&
+                     pBox->Top == 0 && pBox->Bottom == This->desc.Height) ||
+                    (!(pBox->Left % w) && !(pBox->Right % w) &&
+                     !(pBox->Top % h) && !(pBox->Bottom % h)),
                     D3DERR_INVALIDCALL);
     }
 
@@ -312,8 +294,7 @@ NineVolume9_LockBox( struct NineVolume9 *This,
 
     if (!(Flags & (D3DLOCK_NO_DIRTY_UPDATE | D3DLOCK_READONLY))) {
         NineVolume9_MarkContainerDirty(This);
-        if (This->desc.Pool == D3DPOOL_MANAGED)
-            NineVolume9_AddDirtyRegion(This, &box);
+        NineVolume9_AddDirtyRegion(This, &box);
     }
 
     ++This->lock_count;
@@ -333,42 +314,31 @@ NineVolume9_UnlockBox( struct NineVolume9 *This )
     return D3D_OK;
 }
 
-
+/* When this function is called, we have already checked
+ * The copy regions fit the volumes */
 HRESULT
-NineVolume9_CopyVolume( struct NineVolume9 *This,
-                        struct NineVolume9 *From,
-                        unsigned dstx, unsigned dsty, unsigned dstz,
-                        struct pipe_box *pSrcBox )
+NineVolume9_CopyMemToDefault( struct NineVolume9 *This,
+                              struct NineVolume9 *From,
+                              unsigned dstx, unsigned dsty, unsigned dstz,
+                              struct pipe_box *pSrcBox )
 {
     struct pipe_context *pipe = This->pipe;
     struct pipe_resource *r_dst = This->resource;
-    struct pipe_resource *r_src = From->resource;
-    struct pipe_transfer *transfer;
     struct pipe_box src_box;
     struct pipe_box dst_box;
-    uint8_t *p_dst;
     const uint8_t *p_src;
 
     DBG("This=%p From=%p dstx=%u dsty=%u dstz=%u pSrcBox=%p\n",
         This, From, dstx, dsty, dstz, pSrcBox);
 
-    assert(This->desc.Pool != D3DPOOL_MANAGED &&
-           From->desc.Pool != D3DPOOL_MANAGED);
-    user_assert(This->desc.Format == From->desc.Format, D3DERR_INVALIDCALL);
+    assert(This->desc.Pool == D3DPOOL_DEFAULT &&
+           From->desc.Pool == D3DPOOL_SYSTEMMEM);
 
     dst_box.x = dstx;
     dst_box.y = dsty;
     dst_box.z = dstz;
 
     if (pSrcBox) {
-        /* make sure it doesn't range outside the source volume */
-        user_assert(pSrcBox->x >= 0 &&
-                    (pSrcBox->width - pSrcBox->x) <= From->desc.Width &&
-                    pSrcBox->y >= 0 &&
-                    (pSrcBox->height - pSrcBox->y) <= From->desc.Height &&
-                    pSrcBox->z >= 0 &&
-                    (pSrcBox->depth - pSrcBox->z) <= From->desc.Depth,
-                    D3DERR_INVALIDCALL);
         src_box = *pSrcBox;
     } else {
         src_box.x = 0;
@@ -378,101 +348,54 @@ NineVolume9_CopyVolume( struct NineVolume9 *This,
         src_box.height = From->desc.Height;
         src_box.depth = From->desc.Depth;
     }
-    /* limits */
-    dst_box.width = This->desc.Width - dst_box.x;
-    dst_box.height = This->desc.Height - dst_box.y;
-    dst_box.depth = This->desc.Depth - dst_box.z;
-
-    user_assert(src_box.width <= dst_box.width &&
-                src_box.height <= dst_box.height &&
-                src_box.depth <= dst_box.depth, D3DERR_INVALIDCALL);
 
     dst_box.width = src_box.width;
     dst_box.height = src_box.height;
     dst_box.depth = src_box.depth;
 
-    if (r_dst && r_src) {
-        pipe->resource_copy_region(pipe,
-                                   r_dst, This->level,
-                                   dst_box.x, dst_box.y, dst_box.z,
-                                   r_src, From->level,
-                                   &src_box);
-    } else
-    if (r_dst) {
-        p_src = NineVolume9_GetSystemMemPointer(From,
-            src_box.x, src_box.y, src_box.z);
+    p_src = NineVolume9_GetSystemMemPointer(From,
+         src_box.x, src_box.y, src_box.z);
 
-        pipe->transfer_inline_write(pipe, r_dst, This->level,
-                                    0, /* WRITE|DISCARD are implicit */
-                                    &dst_box, p_src,
-                                    From->stride, From->layer_stride);
-    } else
-    if (r_src) {
-        p_dst = NineVolume9_GetSystemMemPointer(This, 0, 0, 0);
-        p_src = pipe->transfer_map(pipe, r_src, From->level,
-                                   PIPE_TRANSFER_READ,
-                                   &src_box, &transfer);
-        if (!p_src)
-            return D3DERR_DRIVERINTERNALERROR;
+    pipe->transfer_inline_write(pipe, r_dst, This->level,
+                                0, /* WRITE|DISCARD are implicit */
+                                &dst_box, p_src,
+                                From->stride, From->layer_stride);
 
-        util_copy_box(p_dst, This->info.format,
-                      This->stride, This->layer_stride,
-                      dst_box.x, dst_box.y, dst_box.z,
-                      dst_box.width, dst_box.height, dst_box.depth,
-                      p_src,
-                      transfer->stride, transfer->layer_stride,
-                      src_box.x, src_box.y, src_box.z);
-
-        pipe->transfer_unmap(pipe, transfer);
-    } else {
-        p_dst = NineVolume9_GetSystemMemPointer(This, 0, 0, 0);
-        p_src = NineVolume9_GetSystemMemPointer(From, 0, 0, 0);
-
-        util_copy_box(p_dst, This->info.format,
-                      This->stride, This->layer_stride,
-                      dst_box.x, dst_box.y, dst_box.z,
-                      dst_box.width, dst_box.height, dst_box.depth,
-                      p_src,
-                      From->stride, From->layer_stride,
-                      src_box.x, src_box.y, src_box.z);
-    }
-
-    if (This->desc.Pool == D3DPOOL_DEFAULT)
-        NineVolume9_MarkContainerDirty(This);
-    if (!r_dst && This->resource)
-        NineVolume9_AddDirtyRegion(This, &dst_box);
+    NineVolume9_MarkContainerDirty(This);
 
     return D3D_OK;
 }
 
 HRESULT
-NineVolume9_UploadSelf( struct NineVolume9 *This )
+NineVolume9_UploadSelf( struct NineVolume9 *This,
+                        const struct pipe_box *damaged )
 {
     struct pipe_context *pipe = This->pipe;
     struct pipe_resource *res = This->resource;
+    struct pipe_box box;
     uint8_t *ptr;
-    unsigned i;
 
-    DBG("This=%p dirty=%i data=%p res=%p\n", This, NineVolume9_IsDirty(This),
+    DBG("This=%p damaged=%p data=%p res=%p\n", This, damaged,
         This->data, res);
 
     assert(This->desc.Pool == D3DPOOL_MANAGED);
-
-    if (!NineVolume9_IsDirty(This))
-        return D3D_OK;
     assert(res);
 
-    for (i = 0; i < Elements(This->dirty_box); ++i) {
-        const struct pipe_box *box = &This->dirty_box[i];
-        if (box->width == 0)
-            break;
-        ptr = NineVolume9_GetSystemMemPointer(This, box->x, box->y, box->z);
-
-        pipe->transfer_inline_write(pipe, res, This->level,
-                                    0,
-                                    box, ptr, This->stride, This->layer_stride);
+    if (damaged) {
+        box = *damaged;
+    } else {
+        box.x = 0;
+        box.y = 0;
+        box.z = 0;
+        box.width = This->desc.Width;
+        box.height = This->desc.Height;
+        box.depth = This->desc.Depth;
     }
-    NineVolume9_ClearDirtyRegion(This);
+
+    ptr = NineVolume9_GetSystemMemPointer(This, box.x, box.y, box.z);
+
+    pipe->transfer_inline_write(pipe, res, This->level, 0, &box,
+                                ptr, This->stride, This->layer_stride);
 
     return D3D_OK;
 }

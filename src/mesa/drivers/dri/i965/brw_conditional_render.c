@@ -56,6 +56,12 @@ set_predicate_for_result(struct brw_context *brw,
 
    assert(query->bo != NULL);
 
+   /* Needed to ensure the memory is coherent for the MI_LOAD_REGISTER_MEM
+    * command when loading the values into the predicate source registers for
+    * conditional rendering.
+    */
+   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_FLUSH_ENABLE);
+
    brw_load_register_mem64(brw,
                            MI_PREDICATE_SRC0,
                            query->bo,

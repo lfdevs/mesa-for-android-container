@@ -245,6 +245,18 @@ get_special_write_desc(int reg, bool is_a)
         return special_write[reg];
 }
 
+void
+vc4_qpu_disasm_pack_mul(FILE *out, uint32_t pack)
+{
+        fprintf(out, ".%s", DESC(qpu_pack_mul, pack));
+}
+
+void
+vc4_qpu_disasm_pack_a(FILE *out, uint32_t pack)
+{
+        fprintf(out, "%s", DESC(qpu_pack_a, pack));
+}
+
 static void
 print_alu_dst(uint64_t inst, bool is_mul)
 {
@@ -263,9 +275,9 @@ print_alu_dst(uint64_t inst, bool is_mul)
                 fprintf(stderr, "%s%d?", file, waddr);
 
         if (is_mul && (inst & QPU_PM)) {
-                fprintf(stderr, ".%s", DESC(qpu_pack_mul, pack));
+                vc4_qpu_disasm_pack_mul(stderr, pack);
         } else if (is_a && !(inst & QPU_PM)) {
-                fprintf(stderr, "%s", DESC(qpu_pack_a, pack));
+                vc4_qpu_disasm_pack_a(stderr, pack);
         }
 }
 

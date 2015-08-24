@@ -66,20 +66,11 @@ brw_write_timestamp(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
 void
 brw_write_depth_count(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
 {
-   uint32_t flags;
-
-   flags = (PIPE_CONTROL_WRITE_DEPTH_COUNT |
-            PIPE_CONTROL_DEPTH_STALL);
-
-   /* Needed to ensure the memory is coherent for the MI_LOAD_REGISTER_MEM
-    * command when loading the values into the predicate source registers for
-    * conditional rendering.
-    */
-   if (brw->predicate.supported)
-      flags |= PIPE_CONTROL_FLUSH_ENABLE;
-
-   brw_emit_pipe_control_write(brw, flags, query_bo,
-                               idx * sizeof(uint64_t), 0, 0);
+   brw_emit_pipe_control_write(brw,
+                               PIPE_CONTROL_WRITE_DEPTH_COUNT |
+                               PIPE_CONTROL_DEPTH_STALL,
+                               query_bo, idx * sizeof(uint64_t),
+                               0, 0);
 }
 
 /**

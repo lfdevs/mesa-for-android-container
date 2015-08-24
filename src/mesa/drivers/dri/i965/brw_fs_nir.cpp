@@ -1406,6 +1406,51 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       break;
    }
 
+   case nir_intrinsic_image_size: {
+      /* Get the referenced image variable and type. */
+      const nir_variable *var = instr->variables[0]->var;
+      const glsl_type *type = var->type->without_array();
+
+      /* Get the size of the image. */
+      const fs_reg image = get_nir_image_deref(instr->variables[0]);
+      const fs_reg size = offset(image, bld, BRW_IMAGE_PARAM_SIZE_OFFSET);
+
+      /* For 1DArray image types, the array index is stored in the Z component.
+       * Fix this by swizzling the Z component to the Y component.
+       */
+      const bool is_1d_array_image =
+                  type->sampler_dimensionality == GLSL_SAMPLER_DIM_1D &&
+                  type->sampler_array;
+
+      /* For CubeArray images, we should count the number of cubes instead
+       * of the number of faces. Fix it by dividing the (Z component) by 6.
+       */
+      const bool is_cube_array_image =
+                  type->sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE &&
+                  type->sampler_array;
+
+      /* Copy all the components. */
+      const nir_intrinsic_info *info = &nir_intrinsic_infos[instr->intrinsic];
+      for (unsigned c = 0; c < info->dest_components; ++c) {
+         if ((int)c >= type->coordinate_components()) {
+             bld.MOV(offset(retype(dest, BRW_REGISTER_TYPE_D), bld, c),
+                     fs_reg(1));
+         } else if (c == 1 && is_1d_array_image) {
+            bld.MOV(offset(retype(dest, BRW_REGISTER_TYPE_D), bld, c),
+                    offset(size, bld, 2));
+         } else if (c == 2 && is_cube_array_image) {
+            bld.emit(SHADER_OPCODE_INT_QUOTIENT,
+                     offset(retype(dest, BRW_REGISTER_TYPE_D), bld, c),
+                     offset(size, bld, c), fs_reg(6));
+         } else {
+            bld.MOV(offset(retype(dest, BRW_REGISTER_TYPE_D), bld, c),
+                    offset(size, bld, c));
+         }
+       }
+
+      break;
+   }
+
    case nir_intrinsic_load_front_face:
       bld.MOV(retype(dest, BRW_REGISTER_TYPE_D),
               *emit_frontfacing_interpolation());

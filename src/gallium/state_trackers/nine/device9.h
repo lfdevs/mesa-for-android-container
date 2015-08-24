@@ -69,6 +69,7 @@ struct NineDevice9
     struct nine_state state;   /* device state */
 
     struct list_head update_textures;
+    struct list_head managed_textures;
 
     boolean is_recording;
     boolean in_scene;
@@ -83,7 +84,8 @@ struct NineDevice9
     uint16_t max_ps_const_f;
 
     struct pipe_resource *dummy_texture;
-    struct pipe_sampler_view *dummy_sampler;
+    struct pipe_sampler_view *dummy_sampler_view;
+    struct pipe_sampler_state dummy_sampler_state;
 
     struct gen_mipmap_state *gen_mipmap;
 
@@ -113,6 +115,7 @@ struct NineDevice9
     struct {
         boolean user_vbufs;
         boolean user_ibufs;
+        boolean user_cbufs;
         boolean window_space_position_support;
         boolean vs_integer;
         boolean ps_integer;
@@ -122,7 +125,9 @@ struct NineDevice9
         boolean buggy_barycentrics;
     } driver_bugs;
 
-    struct u_upload_mgr *upload;
+    struct u_upload_mgr *vertex_uploader;
+    struct u_upload_mgr *index_uploader;
+    struct u_upload_mgr *constbuf_uploader;
 
     struct nine_range_pool range_pool;
 
@@ -179,10 +184,6 @@ NineDevice9_GetCSO( struct NineDevice9 *This );
 
 const D3DCAPS9 *
 NineDevice9_GetCaps( struct NineDevice9 *This );
-
-/* Mask: 0x1 = constant buffers, 0x2 = stipple */
-void
-NineDevice9_RestoreNonCSOState( struct NineDevice9 *This, unsigned mask );
 
 /*** Direct3D public ***/
 

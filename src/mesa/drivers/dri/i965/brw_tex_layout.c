@@ -555,7 +555,7 @@ brw_miptree_layout_texture_array(struct brw_context *brw,
       if (mt->compressed)
          img_height /= mt->align_h;
 
-      for (int q = 0; q < mt->level[level].depth; q++) {
+      for (unsigned q = 0; q < mt->level[level].depth; q++) {
          if (mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
             intel_miptree_set_image_offset(mt, level, q, 0, q * img_height);
          } else {

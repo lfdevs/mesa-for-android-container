@@ -898,7 +898,7 @@ brw_upload_ubo_surfaces(struct brw_context *brw,
    uint32_t *surf_offsets =
       &stage_state->surf_offset[prog_data->binding_table.ubo_start];
 
-   for (int i = 0; i < shader->NumUniformBlocks; i++) {
+   for (unsigned i = 0; i < shader->NumUniformBlocks; i++) {
       struct gl_uniform_buffer_binding *binding;
       struct intel_buffer_object *intel_bo;
 
@@ -958,7 +958,7 @@ brw_upload_abo_surfaces(struct brw_context *brw,
    uint32_t *surf_offsets =
       &stage_state->surf_offset[prog_data->binding_table.abo_start];
 
-   for (int i = 0; i < prog->NumAtomicBuffers; i++) {
+   for (unsigned i = 0; i < prog->NumAtomicBuffers; i++) {
       struct gl_atomic_buffer_binding *binding =
          &ctx->AtomicBufferBindings[prog->AtomicBuffers[i].Binding];
       struct intel_buffer_object *intel_bo =
@@ -1117,7 +1117,7 @@ update_texture_image_param(struct brw_context *brw,
                      minify(mt->logical_depth0, u->Level) :
                      mt->logical_depth0);
 
-   intel_miptree_get_image_offset(mt, u->Level, u->Layer,
+   intel_miptree_get_image_offset(mt, u->Level, u->_Layer,
                                   &param->offset[0],
                                   &param->offset[1]);
 
@@ -1202,7 +1202,7 @@ update_image_surface(struct brw_context *brw,
                access != GL_READ_ONLY);
 
          } else {
-            const unsigned min_layer = obj->MinLayer + u->Layer;
+            const unsigned min_layer = obj->MinLayer + u->_Layer;
             const unsigned min_level = obj->MinLevel + u->Level;
             const unsigned num_layers = (!u->Layered ? 1 :
                                          obj->Target == GL_TEXTURE_CUBE_MAP ? 6 :

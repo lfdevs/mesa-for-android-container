@@ -121,7 +121,8 @@ NV50_CODEGEN_SOURCES := \
 	codegen/nv50_ir_target_nv50.cpp \
 	codegen/nv50_ir_target_nv50.h \
 	codegen/nv50_ir_util.cpp \
-	codegen/nv50_ir_util.h
+	codegen/nv50_ir_util.h \
+	codegen/unordered_set.h
 
 NVC0_CODEGEN_SOURCES := \
 	codegen/nv50_ir_emit_gk110.cpp \

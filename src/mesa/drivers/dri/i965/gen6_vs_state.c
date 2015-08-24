@@ -68,7 +68,7 @@ gen6_upload_push_constants(struct brw_context *brw,
       _mesa_load_state_parameters(ctx, prog->Parameters);
 
       gl_constant_value *param;
-      int i;
+      unsigned i;
 
       param = brw_state_batch(brw, type,
 			      prog_data->nr_params * sizeof(gl_constant_value),

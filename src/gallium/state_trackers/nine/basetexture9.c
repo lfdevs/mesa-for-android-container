@@ -57,7 +57,8 @@ NineBaseTexture9_ctor( struct NineBaseTexture9 *This,
     user_assert(!(Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) ||
                 Pool == D3DPOOL_DEFAULT, D3DERR_INVALIDCALL);
     user_assert(!(Usage & D3DUSAGE_DYNAMIC) ||
-                Pool != D3DPOOL_MANAGED, D3DERR_INVALIDCALL);
+                !(Pool == D3DPOOL_MANAGED ||
+                  Pool == D3DPOOL_SCRATCH), D3DERR_INVALIDCALL);
 
     hr = NineResource9_ctor(&This->base, pParams, initResource, alloc, Type, Pool, Usage);
     if (FAILED(hr))
@@ -85,6 +86,9 @@ NineBaseTexture9_ctor( struct NineBaseTexture9 *This,
                    util_format_has_depth(util_format_description(This->base.info.format));
 
     list_inithead(&This->list);
+    list_inithead(&This->list2);
+    if (Pool == D3DPOOL_MANAGED)
+        list_add(&This->list2, &This->base.base.device->managed_textures);
 
     return D3D_OK;
 }
@@ -98,7 +102,9 @@ NineBaseTexture9_dtor( struct NineBaseTexture9 *This )
     pipe_sampler_view_reference(&This->view[1], NULL);
 
     if (This->list.prev != NULL && This->list.next != NULL)
-        list_del(&This->list),
+        list_del(&This->list);
+    if (This->list2.prev != NULL && This->list2.next != NULL)
+        list_del(&This->list2);
 
     NineResource9_dtor(&This->base);
 }
@@ -153,6 +159,8 @@ NineBaseTexture9_SetAutoGenFilterType( struct NineBaseTexture9 *This,
     user_assert(FilterType != D3DTEXF_NONE, D3DERR_INVALIDCALL);
 
     This->mipfilter = FilterType;
+    This->dirty_mip = TRUE;
+    NineBaseTexture9_GenerateMipSubLevels(This);
 
     return D3D_OK;
 }
@@ -310,14 +318,12 @@ NineBaseTexture9_UploadSelf( struct NineBaseTexture9 *This )
                 tex->dirty_box.width, tex->dirty_box.height, tex->dirty_box.depth);
 
             if (tex->dirty_box.width) {
-                for (l = 0; l <= last_level; ++l) {
+                for (l = min_level_dirty; l <= last_level; ++l) {
                     u_box_minify_2d(&box, &tex->dirty_box, l);
-                    NineVolume9_AddDirtyRegion(tex->volumes[l], &tex->dirty_box);
+                    NineVolume9_UploadSelf(tex->volumes[l], &box);
                 }
                 memset(&tex->dirty_box, 0, sizeof(tex->dirty_box));
             }
-            for (l = min_level_dirty; l <= last_level; ++l)
-                NineVolume9_UploadSelf(tex->volumes[l]);
         } else {
             assert(!"invalid texture type");
         }
@@ -361,8 +367,7 @@ NineBaseTexture9_UploadSelf( struct NineBaseTexture9 *This )
                 box.width = u_minify(This->base.info.width0, l);
                 box.height = u_minify(This->base.info.height0, l);
                 box.depth = u_minify(This->base.info.depth0, l);
-                NineVolume9_AddDirtyRegion(tex->volumes[l], &box);
-                NineVolume9_UploadSelf(tex->volumes[l]);
+                NineVolume9_UploadSelf(tex->volumes[l], &box);
             }
         } else {
             assert(!"invalid texture type");
@@ -381,8 +386,7 @@ NineBaseTexture9_UploadSelf( struct NineBaseTexture9 *This )
 void WINAPI
 NineBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This )
 {
-    struct pipe_resource *resource = This->base.resource;
-
+    struct pipe_resource *resource;
     unsigned base_level = 0;
     unsigned last_level = This->base.info.last_level - This->managed.lod;
     unsigned first_layer = 0;
@@ -404,6 +408,8 @@ NineBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This )
         NineBaseTexture9_UpdateSamplerView(This, 0);
 
     last_layer = util_max_layer(This->view[0]->texture, base_level);
+
+    resource = This->base.resource;
 
     util_gen_mipmap(This->pipe, resource,
                     resource->format, base_level, last_level,
@@ -530,6 +536,11 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
             swizzle[2] = PIPE_SWIZZLE_RED;
             swizzle[3] = PIPE_SWIZZLE_RED;
         }
+    } else if (resource->format == PIPE_FORMAT_RGTC2_UNORM) {
+        swizzle[0] = PIPE_SWIZZLE_GREEN;
+        swizzle[1] = PIPE_SWIZZLE_RED;
+        swizzle[2] = PIPE_SWIZZLE_ONE;
+        swizzle[3] = PIPE_SWIZZLE_ONE;
     } else if (resource->format != PIPE_FORMAT_A8_UNORM &&
                resource->format != PIPE_FORMAT_RGTC1_UNORM) {
         /* exceptions:
@@ -576,6 +587,21 @@ NineBaseTexture9_PreLoad( struct NineBaseTexture9 *This )
 
     if (This->base.pool == D3DPOOL_MANAGED)
         NineBaseTexture9_UploadSelf(This);
+}
+
+void
+NineBaseTexture9_UnLoad( struct NineBaseTexture9 *This )
+{
+    if (This->base.pool != D3DPOOL_MANAGED ||
+        This->managed.lod_resident == -1)
+        return;
+
+    pipe_resource_reference(&This->base.resource, NULL);
+    This->managed.lod_resident = -1;
+    This->managed.dirty = TRUE;
+
+    /* If the texture is bound, we have to re-upload it */
+    BASETEX_REGISTER_UPDATE(This);
 }
 
 #ifdef DEBUG

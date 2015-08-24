@@ -246,7 +246,8 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
                                const struct pipe_box *srcbox,
                                unsigned src_width0, unsigned src_height0,
                                unsigned mask, unsigned filter,
-                               const struct pipe_scissor_state *scissor);
+                               const struct pipe_scissor_state *scissor,
+                               boolean alpha_blend);
 
 void util_blitter_blit(struct blitter_context *blitter,
 		       const struct pipe_blit_info *info);

@@ -1020,6 +1020,10 @@ CodeEmitterNVC0::emitCVT(Instruction *i)
       code[0] |= util_logbase2(typeSizeof(dType)) << 20;
       code[0] |= util_logbase2(typeSizeof(i->sType)) << 23;
 
+      // for 8/16 source types, the byte/word is in subOp. word 1 is
+      // represented as 2.
+      code[1] |= i->subOp << 0x17;
+
       if (sat)
          code[0] |= 0x20;
       if (abs)

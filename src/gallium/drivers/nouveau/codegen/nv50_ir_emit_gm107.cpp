@@ -818,6 +818,7 @@ CodeEmitterGM107::emitI2F()
    emitField(0x31, 1, (insn->op == OP_ABS) || insn->src(0).mod.abs());
    emitCC   (0x2f);
    emitField(0x2d, 1, (insn->op == OP_NEG) || insn->src(0).mod.neg());
+   emitField(0x29, 2, insn->subOp);
    emitRND  (0x27, rnd, -1);
    emitField(0x0d, 1, isSignedType(insn->sType));
    emitField(0x0a, 2, util_logbase2(typeSizeof(insn->sType)));
@@ -850,6 +851,7 @@ CodeEmitterGM107::emitI2I()
    emitField(0x31, 1, (insn->op == OP_ABS) || insn->src(0).mod.abs());
    emitCC   (0x2f);
    emitField(0x2d, 1, (insn->op == OP_NEG) || insn->src(0).mod.neg());
+   emitField(0x29, 2, insn->subOp);
    emitField(0x0d, 1, isSignedType(insn->sType));
    emitField(0x0c, 1, isSignedType(insn->dType));
    emitField(0x0a, 2, util_logbase2(typeSizeof(insn->sType)));

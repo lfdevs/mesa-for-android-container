@@ -56,7 +56,7 @@ brw_upload_pull_constants(struct brw_context *brw,
                           const struct brw_stage_prog_data *prog_data,
                           bool dword_pitch)
 {
-   int i;
+   unsigned i;
    uint32_t surf_index = prog_data->binding_table.pull_constants_start;
 
    if (!prog_data->nr_pull_params) {

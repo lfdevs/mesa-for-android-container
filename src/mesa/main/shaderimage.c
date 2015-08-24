@@ -331,17 +331,88 @@ get_image_format_class(mesa_format format)
    }
 }
 
+/**
+ * Return whether an image format should be supported based on the current API
+ * version of the context.
+ */
+static bool
+is_image_format_supported(const struct gl_context *ctx, GLenum format)
+{
+   switch (format) {
+   /* Formats supported on both desktop and ES GL, c.f. table 8.27 of the
+    * OpenGL ES 3.1 specification.
+    */
+   case GL_RGBA32F:
+   case GL_RGBA16F:
+   case GL_R32F:
+   case GL_RGBA32UI:
+   case GL_RGBA16UI:
+   case GL_RGBA8UI:
+   case GL_R32UI:
+   case GL_RGBA32I:
+   case GL_RGBA16I:
+   case GL_RGBA8I:
+   case GL_R32I:
+   case GL_RGBA8:
+   case GL_RGBA8_SNORM:
+      return true;
+
+   /* Formats supported on unextended desktop GL and the original
+    * ARB_shader_image_load_store extension, c.f. table 3.21 of the OpenGL 4.2
+    * specification.
+    */
+   case GL_RG32F:
+   case GL_RG16F:
+   case GL_R11F_G11F_B10F:
+   case GL_R16F:
+   case GL_RGB10_A2UI:
+   case GL_RG32UI:
+   case GL_RG16UI:
+   case GL_RG8UI:
+   case GL_R16UI:
+   case GL_R8UI:
+   case GL_RG32I:
+   case GL_RG16I:
+   case GL_RG8I:
+   case GL_R16I:
+   case GL_R8I:
+   case GL_RGBA16:
+   case GL_RGB10_A2:
+   case GL_RG16:
+   case GL_RG8:
+   case GL_R16:
+   case GL_R8:
+   case GL_RGBA16_SNORM:
+   case GL_RG16_SNORM:
+   case GL_RG8_SNORM:
+   case GL_R16_SNORM:
+   case GL_R8_SNORM:
+      return _mesa_is_desktop_gl(ctx);
+
+   default:
+      return false;
+   }
+}
+
+struct gl_image_unit
+_mesa_default_image_unit(struct gl_context *ctx)
+{
+   const GLenum format = _mesa_is_desktop_gl(ctx) ? GL_R8 : GL_R32UI;
+   const struct gl_image_unit u = {
+      .Access = GL_READ_ONLY,
+      .Format = format,
+      ._ActualFormat = _mesa_get_shader_image_format(format)
+   };
+   return u;
+}
+
 void
 _mesa_init_image_units(struct gl_context *ctx)
 {
    unsigned i;
 
-   for (i = 0; i < ARRAY_SIZE(ctx->ImageUnits); ++i) {
-      struct gl_image_unit *u = &ctx->ImageUnits[i];
-      u->Access = GL_READ_ONLY;
-      u->Format = GL_R8;
-      u->_ActualFormat = _mesa_get_shader_image_format(u->Format);
-   }
+   for (i = 0; i < ARRAY_SIZE(ctx->ImageUnits); ++i)
+      ctx->ImageUnits[i] = _mesa_default_image_unit(ctx);
 }
 
 static GLboolean
@@ -362,7 +433,7 @@ validate_image_unit(struct gl_context *ctx, struct gl_image_unit *u)
       return GL_FALSE;
 
    if (_mesa_tex_target_is_layered(t->Target) &&
-       u->Layer >= _mesa_get_texture_layers(t, u->Level))
+       u->_Layer >= _mesa_get_texture_layers(t, u->Level))
       return GL_FALSE;
 
    if (t->Target == GL_TEXTURE_BUFFER) {
@@ -370,7 +441,7 @@ validate_image_unit(struct gl_context *ctx, struct gl_image_unit *u)
 
    } else {
       struct gl_texture_image *img = (t->Target == GL_TEXTURE_CUBE_MAP ?
-                                      t->Image[u->Layer][u->Level] :
+                                      t->Image[u->_Layer][u->Level] :
                                       t->Image[0][u->Level]);
 
       if (!img || img->Border || img->NumSamples > ctx->Const.MaxImageSamples)
@@ -442,7 +513,7 @@ validate_bind_image_texture(struct gl_context *ctx, GLuint unit,
       return GL_FALSE;
    }
 
-   if (!_mesa_get_shader_image_format(format)) {
+   if (!is_image_format_supported(ctx, format)) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glBindImageTexture(format)");
       return GL_FALSE;
    }
@@ -475,6 +546,18 @@ _mesa_BindImageTexture(GLuint unit, GLuint texture, GLint level,
          return;
       }
 
+      /* From section 8.22 "Texture Image Loads and Stores" of the OpenGL ES
+       * 3.1 spec:
+       *
+       * "An INVALID_OPERATION error is generated if texture is not the name
+       *  of an immutable texture object."
+       */
+      if (_mesa_is_gles(ctx) && !t->Immutable) {
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "glBindImageTexture(!immutable)");
+         return;
+      }
+
       _mesa_reference_texobj(&u->TexObj, t);
    } else {
       _mesa_reference_texobj(&u->TexObj, NULL);
@@ -488,7 +571,8 @@ _mesa_BindImageTexture(GLuint unit, GLuint texture, GLint level,
 
    if (u->TexObj && _mesa_tex_target_is_layered(u->TexObj->Target)) {
       u->Layered = layered;
-      u->Layer = (layered ? 0 : layer);
+      u->Layer = layer;
+      u->_Layer = (u->Layered ? 0 : u->Layer);
    } else {
       u->Layered = GL_FALSE;
       u->Layer = 0;
@@ -599,7 +683,7 @@ _mesa_BindImageTextures(GLuint first, GLsizei count, const GLuint *textures)
             tex_format = image->InternalFormat;
          }
 
-         if (_mesa_get_shader_image_format(tex_format) == MESA_FORMAT_NONE) {
+         if (!is_image_format_supported(ctx, tex_format)) {
             /* The ARB_multi_bind spec says:
              *
              *   "An INVALID_OPERATION error is generated if the internal
@@ -619,7 +703,7 @@ _mesa_BindImageTextures(GLuint first, GLsizei count, const GLuint *textures)
          _mesa_reference_texobj(&u->TexObj, texObj);
          u->Level = 0;
          u->Layered = _mesa_tex_target_is_layered(texObj->Target);
-         u->Layer = 0;
+         u->_Layer = u->Layer = 0;
          u->Access = GL_READ_WRITE;
          u->Format = tex_format;
          u->_ActualFormat = _mesa_get_shader_image_format(tex_format);
@@ -629,7 +713,7 @@ _mesa_BindImageTextures(GLuint first, GLsizei count, const GLuint *textures)
          _mesa_reference_texobj(&u->TexObj, NULL);
          u->Level = 0;
          u->Layered = GL_FALSE;
-         u->Layer = 0;
+         u->_Layer = u->Layer = 0;
          u->Access = GL_READ_ONLY;
          u->Format = GL_R8;
          u->_ActualFormat = MESA_FORMAT_R_UNORM8;

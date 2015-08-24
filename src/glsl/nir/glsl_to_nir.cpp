@@ -641,6 +641,8 @@ nir_visitor::visit(ir_call *ir)
          op = nir_intrinsic_image_atomic_comp_swap;
       } else if (strcmp(ir->callee_name(), "__intrinsic_memory_barrier") == 0) {
          op = nir_intrinsic_memory_barrier;
+      } else if (strcmp(ir->callee_name(), "__intrinsic_image_size") == 0) {
+         op = nir_intrinsic_image_size;
       } else {
          unreachable("not reached");
       }
@@ -666,7 +668,8 @@ nir_visitor::visit(ir_call *ir)
       case nir_intrinsic_image_atomic_or:
       case nir_intrinsic_image_atomic_xor:
       case nir_intrinsic_image_atomic_exchange:
-      case nir_intrinsic_image_atomic_comp_swap: {
+      case nir_intrinsic_image_atomic_comp_swap:
+      case nir_intrinsic_image_size: {
          nir_ssa_undef_instr *instr_undef =
             nir_ssa_undef_instr_create(shader, 1);
          nir_instr_insert_after_cf_list(this->cf_node_list,
@@ -680,6 +683,17 @@ nir_visitor::visit(ir_call *ir)
 
          instr->variables[0] = evaluate_deref(&instr->instr, image);
          param = param->get_next();
+
+         /* Set the intrinsic destination. */
+         if (ir->return_deref) {
+            const nir_intrinsic_info *info =
+                    &nir_intrinsic_infos[instr->intrinsic];
+            nir_ssa_dest_init(&instr->instr, &instr->dest,
+                              info->dest_components, NULL);
+         }
+
+         if (op == nir_intrinsic_image_size)
+            break;
 
          /* Set the address argument, extending the coordinate vector to four
           * components.
@@ -721,11 +735,6 @@ nir_visitor::visit(ir_call *ir)
             instr->src[3] = evaluate_rvalue((ir_dereference *)param);
             param = param->get_next();
          }
-
-         /* Set the intrinsic destination. */
-         if (ir->return_deref)
-            nir_ssa_dest_init(&instr->instr, &instr->dest,
-                              ir->return_deref->type->vector_elements, NULL);
          break;
       }
       case nir_intrinsic_memory_barrier:

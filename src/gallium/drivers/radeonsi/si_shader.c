@@ -2277,7 +2277,7 @@ static void tex_fetch_args(
 	unsigned sampler_index;
 	unsigned num_deriv_channels = 0;
 	bool has_offset = HAVE_LLVM >= 0x0305 ? inst->Texture.NumOffsets > 0 : false;
-	LLVMValueRef res_ptr, samp_ptr;
+	LLVMValueRef res_ptr, samp_ptr, fmask_ptr = NULL;
 
 	sampler_src = emit_data->inst->Instruction.NumSrcRegs - 1;
 	sampler_index = emit_data->inst->Src[sampler_src].Register.Index;
@@ -2293,9 +2293,19 @@ static void tex_fetch_args(
 
 		samp_ptr = LLVMGetParam(si_shader_ctx->radeon_bld.main_fn, SI_PARAM_SAMPLER);
 		samp_ptr = build_indexed_load_const(si_shader_ctx, samp_ptr, ind_index);
+
+		if (target == TGSI_TEXTURE_2D_MSAA ||
+		    target == TGSI_TEXTURE_2D_ARRAY_MSAA) {
+			ind_index = LLVMBuildAdd(gallivm->builder, ind_index,
+						 lp_build_const_int32(gallivm,
+								      SI_FMASK_TEX_OFFSET), "");
+			fmask_ptr = LLVMGetParam(si_shader_ctx->radeon_bld.main_fn, SI_PARAM_RESOURCE);
+			fmask_ptr = build_indexed_load_const(si_shader_ctx, res_ptr, ind_index);
+		}
 	} else {
 		res_ptr = si_shader_ctx->resources[sampler_index];
 		samp_ptr = si_shader_ctx->samplers[sampler_index];
+		fmask_ptr = si_shader_ctx->resources[SI_FMASK_TEX_OFFSET + sampler_index];
 	}
 
 	if (target == TGSI_TEXTURE_BUFFER) {
@@ -2493,7 +2503,7 @@ static void tex_fetch_args(
 		txf_emit_data.dst_type = LLVMVectorType(
 			LLVMInt32TypeInContext(gallivm->context), 4);
 		txf_emit_data.args[0] = lp_build_gather_values(gallivm, txf_address, txf_count);
-		txf_emit_data.args[1] = si_shader_ctx->resources[SI_FMASK_TEX_OFFSET + sampler_index];
+		txf_emit_data.args[1] = fmask_ptr;
 		txf_emit_data.args[2] = lp_build_const_int32(gallivm, inst.Texture.Texture);
 		txf_emit_data.arg_count = 3;
 
@@ -2524,8 +2534,7 @@ static void tex_fetch_args(
 		 * resource descriptor is 0 (invalid),
 		 */
 		LLVMValueRef fmask_desc =
-			LLVMBuildBitCast(gallivm->builder,
-					 si_shader_ctx->resources[SI_FMASK_TEX_OFFSET + sampler_index],
+			LLVMBuildBitCast(gallivm->builder, fmask_ptr,
 					 LLVMVectorType(uint_bld->elem_type, 8), "");
 
 		LLVMValueRef fmask_word1 =
@@ -3973,7 +3982,7 @@ static void si_dump_key(unsigned shader, union si_shader_key *key)
 			fprintf(stderr, "  es_enabled_outputs = 0x%"PRIx64"\n",
 				key->vs.es_enabled_outputs);
 		fprintf(stderr, "  as_es = %u\n", key->vs.as_es);
-		fprintf(stderr, "  as_es = %u\n", key->vs.as_ls);
+		fprintf(stderr, "  as_ls = %u\n", key->vs.as_ls);
 		break;
 
 	case PIPE_SHADER_TESS_CTRL:

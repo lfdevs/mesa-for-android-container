@@ -188,6 +188,12 @@ _mesa_get_format_max_bits(mesa_format format)
  * The return value will be one of:
  *    MESA_FORMAT_LAYOUT_ARRAY
  *    MESA_FORMAT_LAYOUT_PACKED
+ *    MESA_FORMAT_LAYOUT_S3TC
+ *    MESA_FORMAT_LAYOUT_RGTC
+ *    MESA_FORMAT_LAYOUT_FXT1
+ *    MESA_FORMAT_LAYOUT_ETC1
+ *    MESA_FORMAT_LAYOUT_ETC2
+ *    MESA_FORMAT_LAYOUT_BPTC
  *    MESA_FORMAT_LAYOUT_OTHER
  */
 extern enum mesa_format_layout

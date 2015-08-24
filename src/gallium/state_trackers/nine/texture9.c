@@ -101,6 +101,13 @@ NineTexture9_ctor( struct NineTexture9 *This,
     if (Format != D3DFMT_NULL && pf == PIPE_FORMAT_NONE)
         return D3DERR_INVALIDCALL;
 
+    if (compressed_format(Format)) {
+        const unsigned w = util_format_get_blockwidth(pf);
+        const unsigned h = util_format_get_blockheight(pf);
+
+        user_assert(!(Width % w) && !(Height % h), D3DERR_INVALIDCALL);
+    }
+
     info->screen = screen;
     info->target = PIPE_TEXTURE_2D;
     info->format = pf;
@@ -152,10 +159,10 @@ NineTexture9_ctor( struct NineTexture9 *This,
          * apps access sublevels of texture even if they locked only first
          * level) */
         level_offsets = alloca(sizeof(unsigned) * (info->last_level + 1));
-        user_buffer = MALLOC(
+        user_buffer = align_malloc(
             nine_format_get_size_and_offsets(pf, level_offsets,
                                              Width, Height,
-                                             info->last_level));
+                                             info->last_level), 32);
         This->managed_buffer = user_buffer;
         if (!This->managed_buffer)
             return E_OUTOFMEMORY;
@@ -202,6 +209,9 @@ NineTexture9_ctor( struct NineTexture9 *This,
             return hr;
     }
 
+    /* Textures start initially dirty */
+    This->dirty_rect.width = Width;
+    This->dirty_rect.height = Height;
     This->dirty_rect.depth = 1; /* widht == 0 means empty, depth stays 1 */
 
     if (pSharedHandle && !*pSharedHandle) {/* Pool == D3DPOOL_SYSTEMMEM */
@@ -219,7 +229,8 @@ NineTexture9_dtor( struct NineTexture9 *This )
     if (This->surfaces) {
         /* The surfaces should have 0 references and be unbound now. */
         for (l = 0; l <= This->base.base.info.last_level; ++l)
-            NineUnknown_Destroy(&This->surfaces[l]->base.base);
+            if (This->surfaces[l])
+                NineUnknown_Destroy(&This->surfaces[l]->base.base);
         FREE(This->surfaces);
     }
 
@@ -295,18 +306,22 @@ NineTexture9_AddDirtyRect( struct NineTexture9 *This,
         pDirtyRect ? pDirtyRect->left : 0, pDirtyRect ? pDirtyRect->top : 0,
         pDirtyRect ? pDirtyRect->right : 0, pDirtyRect ? pDirtyRect->bottom : 0);
 
-    /* Tracking dirty regions on DEFAULT or SYSTEMMEM resources is pointless,
+    /* Tracking dirty regions on DEFAULT resources is pointless,
      * because we always write to the final storage. Just marked it dirty in
      * case we need to generate mip maps.
      */
-    if (This->base.base.pool != D3DPOOL_MANAGED) {
-        if (This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP)
+    if (This->base.base.pool == D3DPOOL_DEFAULT) {
+        if (This->base.base.usage & D3DUSAGE_AUTOGENMIPMAP) {
             This->base.dirty_mip = TRUE;
+            BASETEX_REGISTER_UPDATE(&This->base);
+        }
         return D3D_OK;
     }
-    This->base.managed.dirty = TRUE;
 
-    BASETEX_REGISTER_UPDATE(&This->base);
+    if (This->base.base.pool == D3DPOOL_MANAGED) {
+        This->base.managed.dirty = TRUE;
+        BASETEX_REGISTER_UPDATE(&This->base);
+    }
 
     if (!pDirtyRect) {
         u_box_origin_2d(This->base.base.info.width0,

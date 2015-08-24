@@ -30,6 +30,16 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(C_SOURCES)
 
+LOCAL_CFLAGS := \
+	$(AMDGPU_CFLAGS) \
+	-DBRAHMA_BUILD=1
+
+LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/addrlib \
+	$(LOCAL_PATH)/addrlib/core \
+	$(LOCAL_PATH)/addrlib/inc/chip/r800 \
+	$(LOCAL_PATH)/addrlib/r800/chip
+
 LOCAL_SHARED_LIBRARIES := libdrm libdrm_amdgpu
 LOCAL_MODULE := libmesa_winsys_amdgpu
 

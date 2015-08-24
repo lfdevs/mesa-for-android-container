@@ -156,7 +156,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
    }
 
    uint8_t *ra_reg_to_grf = ralloc_array(compiler, uint8_t, ra_reg_count);
-   struct ra_regs *regs = ra_alloc_reg_set(compiler, ra_reg_count);
+   struct ra_regs *regs = ra_alloc_reg_set(compiler, ra_reg_count, false);
    if (devinfo->gen >= 6)
       ra_set_allocate_round_robin(regs);
    int *classes = ralloc_array(compiler, int, class_count);
@@ -232,7 +232,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
             for (int base_reg = j;
                  base_reg < j + (class_sizes[i] + 1) / 2;
                  base_reg++) {
-               ra_add_transitive_reg_conflict(regs, base_reg, reg);
+               ra_add_reg_conflict(regs, base_reg, reg);
             }
 
             reg++;
@@ -246,7 +246,7 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
             for (int base_reg = j;
                  base_reg < j + class_sizes[i];
                  base_reg++) {
-               ra_add_transitive_reg_conflict(regs, base_reg, reg);
+               ra_add_reg_conflict(regs, base_reg, reg);
             }
 
             reg++;
@@ -254,6 +254,12 @@ brw_alloc_reg_set(struct brw_compiler *compiler, int dispatch_width)
       }
    }
    assert(reg == ra_reg_count);
+
+   /* Applying transitivity to all of the base registers gives us the
+    * appropreate register conflict relationships everywhere.
+    */
+   for (int reg = 0; reg < base_reg_count; reg++)
+      ra_make_reg_conflicts_transitive(regs, reg);
 
    /* Add a special class for aligned pairs, which we'll put delta_xy
     * in on Gen <= 6 so that we can do PLN.

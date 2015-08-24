@@ -56,7 +56,7 @@ static const struct {
 static int
 dri2_convert_glx_query_renderer_attribs(int attribute)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < ARRAY_SIZE(query_renderer_map); i++)
       if (query_renderer_map[i].glx_attrib == attribute)

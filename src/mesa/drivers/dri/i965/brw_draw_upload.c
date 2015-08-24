@@ -395,7 +395,8 @@ brw_prepare_vertices(struct brw_context *brw)
    GLuint interleaved = 0;
    unsigned int min_index = brw->vb.min_index + brw->basevertex;
    unsigned int max_index = brw->vb.max_index + brw->basevertex;
-   int delta, i, j;
+   unsigned i;
+   int delta, j;
 
    struct brw_vertex_element *upload[VERT_ATTRIB_MAX];
    GLuint nr_uploads = 0;
@@ -418,10 +419,10 @@ brw_prepare_vertices(struct brw_context *brw)
    /* Accumulate the list of enabled arrays. */
    brw->vb.nr_enabled = 0;
    while (vs_inputs) {
-      GLuint i = ffsll(vs_inputs) - 1;
-      struct brw_vertex_element *input = &brw->vb.inputs[i];
+      GLuint index = ffsll(vs_inputs) - 1;
+      struct brw_vertex_element *input = &brw->vb.inputs[index];
 
-      vs_inputs &= ~BITFIELD64_BIT(i);
+      vs_inputs &= ~BITFIELD64_BIT(index);
       brw->vb.enabled[brw->vb.nr_enabled++] = input;
    }
 
@@ -438,7 +439,7 @@ brw_prepare_vertices(struct brw_context *brw)
       if (_mesa_is_bufferobj(glarray->BufferObj)) {
 	 struct intel_buffer_object *intel_buffer =
 	    intel_buffer_object(glarray->BufferObj);
-	 int k;
+	 unsigned k;
 
 	 /* If we have a VB set to be uploaded for this buffer object
 	  * already, reuse that VB state so that we emit fewer

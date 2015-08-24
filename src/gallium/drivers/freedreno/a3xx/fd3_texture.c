@@ -240,7 +240,7 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			A3XX_TEX_CONST_1_HEIGHT(u_minify(prsc->height0, lvl));
 	/* when emitted, A3XX_TEX_CONST_2_INDX() must be OR'd in: */
 	so->texconst2 =
-			A3XX_TEX_CONST_2_PITCH(rsc->slices[lvl].pitch * rsc->cpp);
+			A3XX_TEX_CONST_2_PITCH(util_format_get_nblocksx(cso->format, rsc->slices[lvl].pitch) * rsc->cpp);
 	switch (prsc->target) {
 	case PIPE_TEXTURE_1D_ARRAY:
 	case PIPE_TEXTURE_2D_ARRAY:

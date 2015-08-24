@@ -98,7 +98,7 @@ lower_subroutine_visitor::visit_leave(ir_call *ir)
       else
          last_branch = if_tree(equal(subr_to_int(var), lc), new_call, last_branch);
 
-      if (s > 0)
+      if (return_deref && s > 0)
         return_deref = return_deref->clone(mem_ctx, NULL);
    }
    if (last_branch)

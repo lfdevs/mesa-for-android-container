@@ -24,6 +24,7 @@
 #ifndef VC4_QPU_H
 #define VC4_QPU_H
 
+#include <stdio.h>
 #include <stdint.h>
 
 #include "util/u_math.h"
@@ -204,6 +205,12 @@ M_ALU2(V8SUBS)
 
 void
 vc4_qpu_disasm(const uint64_t *instructions, int num_instructions);
+
+void
+vc4_qpu_disasm_pack_mul(FILE *out, uint32_t pack);
+
+void
+vc4_qpu_disasm_pack_a(FILE *out, uint32_t pack);
 
 void
 vc4_qpu_validate(uint64_t *insts, uint32_t num_inst);

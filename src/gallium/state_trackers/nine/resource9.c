@@ -161,20 +161,22 @@ NineResource9_GetPrivateData( struct NineResource9 *This,
                               DWORD *pSizeOfData )
 {
     struct pheader *header;
+    DWORD sizeofdata;
 
     DBG("This=%p refguid=%p pData=%p pSizeOfData=%p\n",
         This, refguid, pData, pSizeOfData);
 
-    user_assert(pSizeOfData, E_POINTER);
-
     header = util_hash_table_get(This->pdata, refguid);
     if (!header) { return D3DERR_NOTFOUND; }
 
+    user_assert(pSizeOfData, E_POINTER);
+    sizeofdata = *pSizeOfData;
+    *pSizeOfData = header->size;
+
     if (!pData) {
-        *pSizeOfData = header->size;
         return D3D_OK;
     }
-    if (*pSizeOfData < header->size) {
+    if (sizeofdata < header->size) {
         return D3DERR_MOREDATA;
     }
 
@@ -206,10 +208,13 @@ DWORD WINAPI
 NineResource9_SetPriority( struct NineResource9 *This,
                            DWORD PriorityNew )
 {
-    DWORD prev = This->priority;
-
+    DWORD prev;
     DBG("This=%p, PriorityNew=%d\n", This, PriorityNew);
 
+    if (This->pool != D3DPOOL_MANAGED || This->type == D3DRTYPE_SURFACE)
+        return 0;
+
+    prev = This->priority;
     This->priority = PriorityNew;
     return prev;
 }
@@ -217,6 +222,9 @@ NineResource9_SetPriority( struct NineResource9 *This,
 DWORD WINAPI
 NineResource9_GetPriority( struct NineResource9 *This )
 {
+    if (This->pool != D3DPOOL_MANAGED || This->type == D3DRTYPE_SURFACE)
+        return 0;
+
     return This->priority;
 }
 

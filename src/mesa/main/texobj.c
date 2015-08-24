@@ -37,6 +37,7 @@
 #include "hash.h"
 #include "imports.h"
 #include "macros.h"
+#include "shaderimage.h"
 #include "teximage.h"
 #include "texobj.h"
 #include "texstate.h"
@@ -1411,8 +1412,10 @@ unbind_texobj_from_image_units(struct gl_context *ctx,
    for (i = 0; i < ctx->Const.MaxImageUnits; i++) {
       struct gl_image_unit *unit = &ctx->ImageUnits[i];
 
-      if (texObj == unit->TexObj)
+      if (texObj == unit->TexObj) {
          _mesa_reference_texobj(&unit->TexObj, NULL);
+         *unit = _mesa_default_image_unit(ctx);
+      }
    }
 }
 
