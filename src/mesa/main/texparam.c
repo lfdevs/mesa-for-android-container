@@ -1914,6 +1914,12 @@ get_tex_parameterfv(struct gl_context *ctx,
          *params = (GLfloat) obj->ImageFormatCompatibilityType;
          break;
 
+      case GL_TEXTURE_TARGET:
+         if (ctx->API != API_OPENGL_CORE)
+            goto invalid_pname;
+         *params = ENUM_TO_FLOAT(obj->Target);
+         break;
+
       default:
          goto invalid_pname;
    }
@@ -2137,6 +2143,12 @@ get_tex_parameteriv(struct gl_context *ctx,
          if (!ctx->Extensions.ARB_shader_image_load_store)
             goto invalid_pname;
          *params = obj->ImageFormatCompatibilityType;
+         break;
+
+      case GL_TEXTURE_TARGET:
+         if (ctx->API != API_OPENGL_CORE)
+            goto invalid_pname;
+         *params = (GLint) obj->Target;
          break;
 
       default:

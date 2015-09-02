@@ -73,7 +73,6 @@ struct radeon_drm_winsys {
 
     enum radeon_generation gen;
     struct radeon_info info;
-    uint32_t ib_max_size;
     uint32_t va_start;
     uint32_t va_unmap_working;
     uint32_t accel_working2;

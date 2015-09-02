@@ -40,16 +40,25 @@ gen8_emit_vertices(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
+   bool uses_edge_flag;
 
    brw_prepare_vertices(brw);
    brw_prepare_shader_draw_parameters(brw);
 
+   uses_edge_flag = (ctx->Polygon.FrontMode != GL_FILL ||
+                     ctx->Polygon.BackMode != GL_FILL);
+
    if (brw->vs.prog_data->uses_vertexid || brw->vs.prog_data->uses_instanceid) {
       unsigned vue = brw->vb.nr_enabled;
 
-      WARN_ONCE(brw->vs.prog_data->inputs_read & VERT_BIT_EDGEFLAG,
-                "Using VID/IID with edgeflags, need to reorder the "
-                "vertex attributes");
+      /* The element for the edge flags must always be last, so we have to
+       * insert the SGVS before it in that case.
+       */
+      if (uses_edge_flag) {
+         assert(vue > 0);
+         vue--;
+      }
+
       WARN_ONCE(vue >= 33,
                 "Trying to insert VID/IID past 33rd vertex element, "
                 "need to reorder the vertex attrbutes.");
@@ -138,7 +147,18 @@ gen8_emit_vertices(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   unsigned nr_elements = brw->vb.nr_enabled + brw->vs.prog_data->uses_vertexid;
+   /* Normally we don't need an element for the SGVS attribute because the
+    * 3DSTATE_VF_SGVS instruction lets you store the generated attribute in an
+    * element that is past the list in 3DSTATE_VERTEX_ELEMENTS. However if the
+    * vertex ID is used then it needs an element for the base vertex buffer.
+    * Additionally if there is an edge flag element then the SGVS can't be
+    * inserted past that so we need a dummy element to ensure that the edge
+    * flag is the last one.
+    */
+   bool needs_sgvs_element = (brw->vs.prog_data->uses_vertexid ||
+                              (brw->vs.prog_data->uses_instanceid &&
+                               uses_edge_flag));
+   unsigned nr_elements = brw->vb.nr_enabled + needs_sgvs_element;
 
    /* The hardware allows one more VERTEX_ELEMENTS than VERTEX_BUFFERS,
     * presumably for VertexID/InstanceID.
@@ -192,6 +212,24 @@ gen8_emit_vertices(struct brw_context *brw)
                 (comp3 << BRW_VE1_COMPONENT_3_SHIFT));
    }
 
+   if (needs_sgvs_element) {
+      if (brw->vs.prog_data->uses_vertexid) {
+         OUT_BATCH(GEN6_VE0_VALID |
+                   brw->vb.nr_buffers << GEN6_VE0_INDEX_SHIFT |
+                   BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT);
+         OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
+      } else {
+         OUT_BATCH(GEN6_VE0_VALID);
+         OUT_BATCH((BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_0_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
+                   (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
+      }
+   }
+
    if (gen6_edgeflag_input) {
       uint32_t format =
          brw_get_vertex_surface_type(brw, gen6_edgeflag_input->glarray);
@@ -206,25 +244,26 @@ gen8_emit_vertices(struct brw_context *brw)
                 (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
                 (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
    }
-
-   if (brw->vs.prog_data->uses_vertexid) {
-      OUT_BATCH(GEN6_VE0_VALID |
-                brw->vb.nr_buffers << GEN6_VE0_INDEX_SHIFT |
-                BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT);
-      OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
-                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
-                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
-                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
-   }
    ADVANCE_BATCH();
 
-   for (unsigned i = 0; i < brw->vb.nr_enabled; i++) {
+   for (unsigned i = 0, j = 0; i < brw->vb.nr_enabled; i++) {
       const struct brw_vertex_element *input = brw->vb.enabled[i];
       const struct brw_vertex_buffer *buffer = &brw->vb.buffers[input->buffer];
+      unsigned element_index;
+
+      /* The edge flag element is reordered to be the last one in the code
+       * above so we need to compensate for that in the element indices used
+       * below.
+       */
+      if (input == gen6_edgeflag_input)
+         element_index = nr_elements - 1;
+      else
+         element_index = j++;
 
       BEGIN_BATCH(3);
       OUT_BATCH(_3DSTATE_VF_INSTANCING << 16 | (3 - 2));
-      OUT_BATCH(i | (buffer->step_rate ? GEN8_VF_INSTANCING_ENABLE : 0));
+      OUT_BATCH(element_index |
+                (buffer->step_rate ? GEN8_VF_INSTANCING_ENABLE : 0));
       OUT_BATCH(buffer->step_rate);
       ADVANCE_BATCH();
    }

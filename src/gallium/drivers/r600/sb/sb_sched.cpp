@@ -236,7 +236,7 @@ void rp_gpr_tracker::unreserve(alu_node* n) {
 
 	for (i = 0; i < nsrc; ++i) {
 		value *v = n->src[i];
-		if (v->is_readonly())
+		if (v->is_readonly() || v->is_undef())
 			continue;
 		if (i == 1 && opt)
 			continue;

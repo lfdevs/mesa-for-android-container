@@ -887,6 +887,7 @@ nvc0_blitctx_prepare_state(struct nvc0_blitctx *blit)
 
    /* zsa state */
    IMMED_NVC0(push, NVC0_3D(DEPTH_TEST_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(DEPTH_BOUNDS_EN), 0);
    IMMED_NVC0(push, NVC0_3D(STENCIL_ENABLE), 0);
    IMMED_NVC0(push, NVC0_3D(ALPHA_TEST_ENABLE), 0);
 

@@ -563,8 +563,27 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		val |= COND(fp->writes_pos, A3XX_GRAS_CL_CLIP_CNTL_ZCLIP_DISABLE);
 		val |= COND(fp->frag_coord, A3XX_GRAS_CL_CLIP_CNTL_ZCOORD |
 				A3XX_GRAS_CL_CLIP_CNTL_WCOORD);
+		/* TODO only use if prog doesn't use clipvertex/clipdist */
+		val |= MIN2(util_bitcount(ctx->rasterizer->clip_plane_enable), 6) << 26;
 		OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
 		OUT_RING(ring, val);
+	}
+
+	if (dirty & (FD_DIRTY_RASTERIZER | FD_DIRTY_UCP)) {
+		uint32_t planes = ctx->rasterizer->clip_plane_enable;
+		int count = 0;
+
+		while (planes && count < 6) {
+			int i = ffs(planes) - 1;
+
+			planes &= ~(1U << i);
+			fd_wfi(ctx, ring);
+			OUT_PKT0(ring, REG_A3XX_GRAS_CL_USER_PLANE(count++), 4);
+			OUT_RING(ring, fui(ctx->ucp.ucp[i][0]));
+			OUT_RING(ring, fui(ctx->ucp.ucp[i][1]));
+			OUT_RING(ring, fui(ctx->ucp.ucp[i][2]));
+			OUT_RING(ring, fui(ctx->ucp.ucp[i][3]));
+		}
 	}
 
 	/* NOTE: since primitive_restart is not actually part of any

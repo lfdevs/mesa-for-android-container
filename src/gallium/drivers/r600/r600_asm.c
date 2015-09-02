@@ -2029,6 +2029,8 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 					fprintf(stderr, "CND:%X ", cf->cond);
 				if (cf->pop_count)
 					fprintf(stderr, "POP:%X ", cf->pop_count);
+				if (cf->end_of_program)
+					fprintf(stderr, "EOP ");
 				fprintf(stderr, "\n");
 			}
 		}

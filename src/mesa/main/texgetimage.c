@@ -1213,6 +1213,13 @@ getteximage_error_check(struct gl_context *ctx,
                   "%s(format=GL_STENCIL_INDEX)", caller);
       return true;
    }
+   else if (_mesa_is_stencil_format(format)
+	    && !_mesa_is_depthstencil_format(baseFormat)
+	    && !_mesa_is_stencil_format(baseFormat)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(format mismatch)", caller);
+      return true;
+   }
    else if (_mesa_is_ycbcr_format(format)
             && !_mesa_is_ycbcr_format(baseFormat)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,

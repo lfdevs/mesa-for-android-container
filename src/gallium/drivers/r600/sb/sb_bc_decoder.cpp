@@ -32,6 +32,7 @@ int bc_decoder::decode_cf(unsigned &i, bc_cf& bc) {
 	int r = 0;
 	uint32_t dw0 = dw[i];
 	uint32_t dw1 = dw[i+1];
+	assert(i+1 <= ndw);
 
 	if ((dw1 >> 29) & 1) { // CF_ALU
 		return decode_cf_alu(i, bc);

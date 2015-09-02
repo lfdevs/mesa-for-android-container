@@ -793,21 +793,6 @@ brw_emit_vertices(struct brw_context *brw)
                     ((i * 4) << BRW_VE1_DST_OFFSET_SHIFT));
    }
 
-   if (brw->gen >= 6 && gen6_edgeflag_input) {
-      uint32_t format =
-         brw_get_vertex_surface_type(brw, gen6_edgeflag_input->glarray);
-
-      OUT_BATCH((gen6_edgeflag_input->buffer << GEN6_VE0_INDEX_SHIFT) |
-                GEN6_VE0_VALID |
-                GEN6_VE0_EDGE_FLAG_ENABLE |
-                (format << BRW_VE0_FORMAT_SHIFT) |
-                (gen6_edgeflag_input->offset << BRW_VE0_SRC_OFFSET_SHIFT));
-      OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
-                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
-                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
-                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
-   }
-
    if (brw->vs.prog_data->uses_vertexid || brw->vs.prog_data->uses_instanceid) {
       uint32_t dw0 = 0, dw1 = 0;
       uint32_t comp0 = BRW_VE1_COMPONENT_STORE_0;
@@ -846,6 +831,21 @@ brw_emit_vertices(struct brw_context *brw)
 
       OUT_BATCH(dw0);
       OUT_BATCH(dw1);
+   }
+
+   if (brw->gen >= 6 && gen6_edgeflag_input) {
+      uint32_t format =
+         brw_get_vertex_surface_type(brw, gen6_edgeflag_input->glarray);
+
+      OUT_BATCH((gen6_edgeflag_input->buffer << GEN6_VE0_INDEX_SHIFT) |
+                GEN6_VE0_VALID |
+                GEN6_VE0_EDGE_FLAG_ENABLE |
+                (format << BRW_VE0_FORMAT_SHIFT) |
+                (gen6_edgeflag_input->offset << BRW_VE0_SRC_OFFSET_SHIFT));
+      OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
+                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
+                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
+                (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_3_SHIFT));
    }
 
    ADVANCE_BATCH();

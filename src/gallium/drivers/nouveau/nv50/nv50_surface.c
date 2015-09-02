@@ -68,6 +68,10 @@ nv50_2d_format(enum pipe_format format, bool dst, bool dst_src_equal)
       return NV50_SURFACE_FORMAT_R16_UNORM;
    case 4:
       return NV50_SURFACE_FORMAT_BGRA8_UNORM;
+   case 8:
+      return NV50_SURFACE_FORMAT_RGBA16_FLOAT;
+   case 16:
+      return NV50_SURFACE_FORMAT_RGBA32_FLOAT;
    default:
       return 0;
    }
@@ -1002,6 +1006,8 @@ nv50_blitctx_prepare_state(struct nv50_blitctx *blit)
 
    /* zsa state */
    BEGIN_NV04(push, NV50_3D(DEPTH_TEST_ENABLE), 1);
+   PUSH_DATA (push, 0);
+   BEGIN_NV04(push, NV50_3D(DEPTH_BOUNDS_EN), 1);
    PUSH_DATA (push, 0);
    BEGIN_NV04(push, NV50_3D(STENCIL_ENABLE), 1);
    PUSH_DATA (push, 0);

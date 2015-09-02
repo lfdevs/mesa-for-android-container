@@ -6151,10 +6151,10 @@ static int tgsi_cmp(struct r600_shader_ctx *ctx)
 		r = tgsi_make_src_for_op3(ctx, temp_regs[0], i, &alu.src[0], &ctx->src[0]);
 		if (r)
 			return r;
-		r = tgsi_make_src_for_op3(ctx, temp_regs[1], i, &alu.src[1], &ctx->src[2]);
+		r = tgsi_make_src_for_op3(ctx, temp_regs[2], i, &alu.src[1], &ctx->src[2]);
 		if (r)
 			return r;
-		r = tgsi_make_src_for_op3(ctx, temp_regs[2], i, &alu.src[2], &ctx->src[1]);
+		r = tgsi_make_src_for_op3(ctx, temp_regs[1], i, &alu.src[2], &ctx->src[1]);
 		if (r)
 			return r;
 		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);

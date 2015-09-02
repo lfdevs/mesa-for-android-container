@@ -3711,12 +3711,12 @@ texturesubimage(struct gl_context *ctx, GLuint dims,
       rowStride = _mesa_image_image_stride(&ctx->Unpack, width, height,
                                            format, type);
       /* Copy in each face. */
-      for (i = 0; i < 6; ++i) {
+      for (i = zoffset; i < zoffset + depth; ++i) {
          texImage = texObj->Image[i][level];
          assert(texImage);
 
          _mesa_texture_sub_image(ctx, 3, texObj, texImage, texObj->Target,
-                                 level, xoffset, yoffset, zoffset,
+                                 level, xoffset, yoffset, 0,
                                  width, height, 1, format,
                                  type, pixels, true);
          pixels = (GLubyte *) pixels + rowStride;
@@ -5569,10 +5569,13 @@ static GLboolean
 is_renderable_texture_format(struct gl_context *ctx, GLenum internalformat)
 {
    /* Everything that is allowed for renderbuffers,
-    * except for a base format of GL_STENCIL_INDEX.
+    * except for a base format of GL_STENCIL_INDEX, unless supported.
     */
    GLenum baseFormat = _mesa_base_fbo_format(ctx, internalformat);
-   return baseFormat != 0 && baseFormat != GL_STENCIL_INDEX;
+   if (ctx->Extensions.ARB_texture_stencil8)
+      return baseFormat != 0;
+   else
+      return baseFormat != 0 && baseFormat != GL_STENCIL_INDEX;
 }
 
 

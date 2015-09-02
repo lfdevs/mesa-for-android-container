@@ -888,16 +888,7 @@ _mesa_GetnUniformdvARB(GLuint program, GLint location,
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   (void) program;
-   (void) location;
-   (void) bufSize;
-   (void) params;
-
-   /*
    _mesa_get_uniform(ctx, program, location, bufSize, GLSL_TYPE_DOUBLE, params);
-   */
-   _mesa_error(ctx, GL_INVALID_OPERATION, "glGetUniformdvARB"
-               "(GL_ARB_gpu_shader_fp64 not implemented)");
 }
 
 void GLAPIENTRY

@@ -35,6 +35,7 @@
 #include "mtypes.h"
 #include "state.h"
 #include "texcompress.h"
+#include "texstate.h"
 #include "framebuffer.h"
 #include "samplerobj.h"
 #include "stencil.h"
@@ -1785,6 +1786,52 @@ _mesa_GetDoublev(GLenum pname, GLdouble *params)
    }
 }
 
+/**
+ * Convert a GL texture binding enum such as GL_TEXTURE_BINDING_2D
+ * into the corresponding Mesa texture target index.
+ * \return TEXTURE_x_INDEX or -1 if binding is invalid
+ */
+static int
+tex_binding_to_index(const struct gl_context *ctx, GLenum binding)
+{
+   switch (binding) {
+   case GL_TEXTURE_BINDING_1D:
+      return _mesa_is_desktop_gl(ctx) ? TEXTURE_1D_INDEX : -1;
+   case GL_TEXTURE_BINDING_2D:
+      return TEXTURE_2D_INDEX;
+   case GL_TEXTURE_BINDING_3D:
+      return ctx->API != API_OPENGLES ? TEXTURE_3D_INDEX : -1;
+   case GL_TEXTURE_BINDING_CUBE_MAP:
+      return ctx->Extensions.ARB_texture_cube_map
+         ? TEXTURE_CUBE_INDEX : -1;
+   case GL_TEXTURE_BINDING_RECTANGLE:
+      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.NV_texture_rectangle
+         ? TEXTURE_RECT_INDEX : -1;
+   case GL_TEXTURE_BINDING_1D_ARRAY:
+      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.EXT_texture_array
+         ? TEXTURE_1D_ARRAY_INDEX : -1;
+   case GL_TEXTURE_BINDING_2D_ARRAY:
+      return (_mesa_is_desktop_gl(ctx) && ctx->Extensions.EXT_texture_array)
+         || _mesa_is_gles3(ctx)
+         ? TEXTURE_2D_ARRAY_INDEX : -1;
+   case GL_TEXTURE_BINDING_BUFFER:
+      return ctx->API == API_OPENGL_CORE &&
+             ctx->Extensions.ARB_texture_buffer_object ?
+             TEXTURE_BUFFER_INDEX : -1;
+   case GL_TEXTURE_BINDING_CUBE_MAP_ARRAY:
+      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_cube_map_array
+         ? TEXTURE_CUBE_ARRAY_INDEX : -1;
+   case GL_TEXTURE_BINDING_2D_MULTISAMPLE:
+      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_multisample
+         ? TEXTURE_2D_MULTISAMPLE_INDEX : -1;
+   case GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY:
+      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_multisample
+         ? TEXTURE_2D_MULTISAMPLE_ARRAY_INDEX : -1;
+   default:
+      return -1;
+   }
+}
+
 static enum value_type
 find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
 {
@@ -2047,6 +2094,45 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
 
       v->value_int = ctx->ImageUnits[index].Format;
       return TYPE_INT;
+
+   /* ARB_direct_state_access */
+   case GL_TEXTURE_BINDING_1D:
+   case GL_TEXTURE_BINDING_1D_ARRAY:
+   case GL_TEXTURE_BINDING_2D:
+   case GL_TEXTURE_BINDING_2D_ARRAY:
+   case GL_TEXTURE_BINDING_2D_MULTISAMPLE:
+   case GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY:
+   case GL_TEXTURE_BINDING_3D:
+   case GL_TEXTURE_BINDING_BUFFER:
+   case GL_TEXTURE_BINDING_CUBE_MAP:
+   case GL_TEXTURE_BINDING_CUBE_MAP_ARRAY:
+   case GL_TEXTURE_BINDING_RECTANGLE: {
+      int target;
+
+      if (ctx->API != API_OPENGL_CORE)
+         goto invalid_enum;
+      target = tex_binding_to_index(ctx, pname);
+      if (target < 0)
+         goto invalid_enum;
+      if (index >= _mesa_max_tex_unit(ctx))
+         goto invalid_value;
+
+      v->value_int = ctx->Texture.Unit[index].CurrentTex[target]->Name;
+      return TYPE_INT;
+   }
+
+   case GL_SAMPLER_BINDING: {
+      struct gl_sampler_object *samp;
+
+      if (ctx->API != API_OPENGL_CORE)
+         goto invalid_enum;
+      if (index >= _mesa_max_tex_unit(ctx))
+         goto invalid_value;
+
+      samp = ctx->Texture.Unit[index].Sampler;
+      v->value_int = samp ? samp->Name : 0;
+      return TYPE_INT;
+   }
 
    case GL_MAX_COMPUTE_WORK_GROUP_COUNT:
       if (!_mesa_is_desktop_gl(ctx) || !ctx->Extensions.ARB_compute_shader)

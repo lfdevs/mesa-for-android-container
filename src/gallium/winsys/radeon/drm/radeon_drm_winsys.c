@@ -395,20 +395,16 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
         }
 
         ws->info.r600_virtual_address = FALSE;
-        ws->ib_max_size = 64 * 1024;
-
         if (ws->info.drm_minor >= 13) {
+            uint32_t ib_vm_max_size;
+
             ws->info.r600_virtual_address = TRUE;
             if (!radeon_get_drm_value(ws->fd, RADEON_INFO_VA_START, NULL,
                                       &ws->va_start))
                 ws->info.r600_virtual_address = FALSE;
-
-            if (radeon_get_drm_value(ws->fd, RADEON_INFO_IB_VM_MAX_SIZE, NULL,
-                                     &ws->ib_max_size))
-                ws->ib_max_size *= 4; /* the kernel returns the size in dwords */
-            else
+            if (!radeon_get_drm_value(ws->fd, RADEON_INFO_IB_VM_MAX_SIZE, NULL,
+                                      &ib_vm_max_size))
                 ws->info.r600_virtual_address = FALSE;
-
             radeon_get_drm_value(ws->fd, RADEON_INFO_VA_UNMAP_WORKING, NULL,
                                  &ws->va_unmap_working);
         }

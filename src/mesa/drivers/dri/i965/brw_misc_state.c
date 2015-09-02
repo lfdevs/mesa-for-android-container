@@ -878,7 +878,8 @@ brw_upload_invariant_state(struct brw_context *brw)
 {
    const bool is_965 = brw->gen == 4 && !brw->is_g4x;
 
-   brw_select_pipeline(brw, BRW_RENDER_PIPELINE);
+   brw_emit_select_pipeline(brw, BRW_RENDER_PIPELINE);
+   brw->last_pipeline = BRW_RENDER_PIPELINE;
 
    if (brw->gen < 6) {
       /* Disable depth offset clamping. */

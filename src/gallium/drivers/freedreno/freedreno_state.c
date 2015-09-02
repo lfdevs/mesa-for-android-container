@@ -65,7 +65,9 @@ static void
 fd_set_clip_state(struct pipe_context *pctx,
 		const struct pipe_clip_state *clip)
 {
-	DBG("TODO: ");
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->ucp = *clip;
+	ctx->dirty |= FD_DIRTY_UCP;
 }
 
 static void

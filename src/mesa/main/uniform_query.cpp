@@ -319,24 +319,31 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 
       return;
    }
+   if ((uni->type->base_type == GLSL_TYPE_DOUBLE &&
+        returnType != GLSL_TYPE_DOUBLE) ||
+       (uni->type->base_type != GLSL_TYPE_DOUBLE &&
+        returnType == GLSL_TYPE_DOUBLE)) {
+	 _mesa_error( ctx, GL_INVALID_OPERATION,
+	             "glGetnUniform*vARB(incompatible uniform types)");
+	return;
+   }
 
    {
       unsigned elements = (uni->type->is_sampler())
 	 ? 1 : uni->type->components();
+      const int dmul = uni->type->base_type == GLSL_TYPE_DOUBLE ? 2 : 1;
 
       /* Calculate the source base address *BEFORE* modifying elements to
        * account for the size of the user's buffer.
        */
       const union gl_constant_value *const src =
-	 &uni->storage[offset * elements];
+	 &uni->storage[offset * elements * dmul];
 
       assert(returnType == GLSL_TYPE_FLOAT || returnType == GLSL_TYPE_INT ||
-             returnType == GLSL_TYPE_UINT);
-      /* The three (currently) supported types all have the same size,
-       * which is of course the same as their union. That'll change
-       * with glGetUniformdv()...
-       */
-      unsigned bytes = sizeof(src[0]) * elements;
+             returnType == GLSL_TYPE_UINT || returnType == GLSL_TYPE_DOUBLE);
+
+      /* doubles have a different size than the other 3 types */
+      unsigned bytes = sizeof(src[0]) * elements * dmul;
       if (bufSize < 0 || bytes > (unsigned) bufSize) {
 	 _mesa_error( ctx, GL_INVALID_OPERATION,
 	             "glGetnUniform*vARB(out of bounds: bufSize is %d,"

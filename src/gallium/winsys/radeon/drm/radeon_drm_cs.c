@@ -97,22 +97,17 @@ static boolean radeon_init_cs_context(struct radeon_cs_context *csc,
 {
     int i;
 
-    csc->buf = MALLOC(ws->ib_max_size);
-    if (!csc->buf)
-        return FALSE;
     csc->fd = ws->fd;
     csc->nrelocs = 512;
     csc->relocs_bo = (struct radeon_bo**)
                      CALLOC(1, csc->nrelocs * sizeof(struct radeon_bo*));
     if (!csc->relocs_bo) {
-        FREE(csc->buf);
         return FALSE;
     }
 
     csc->relocs = (struct drm_radeon_cs_reloc*)
                   CALLOC(1, csc->nrelocs * sizeof(struct drm_radeon_cs_reloc));
     if (!csc->relocs) {
-        FREE(csc->buf);
         FREE(csc->relocs_bo);
         return FALSE;
     }
@@ -165,7 +160,6 @@ static void radeon_destroy_cs_context(struct radeon_cs_context *csc)
     radeon_cs_context_cleanup(csc);
     FREE(csc->relocs_bo);
     FREE(csc->relocs);
-    FREE(csc->buf);
 }
 
 
@@ -206,7 +200,7 @@ radeon_drm_cs_create(struct radeon_winsys_ctx *ctx,
     cs->cst = &cs->csc2;
     cs->base.buf = cs->csc->buf;
     cs->base.ring_type = ring_type;
-    cs->base.max_dw = ws->ib_max_size / 4;
+    cs->base.max_dw = ARRAY_SIZE(cs->csc->buf);
 
     p_atomic_inc(&ws->num_cs);
     return &cs->base;
