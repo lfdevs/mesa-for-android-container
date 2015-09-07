@@ -1,3 +1,13 @@
+mesa (11.0.0~rc3-1) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * Use https for Vcs-* fields.
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 07 Sep 2015 15:04:32 +0300
+
 mesa (11.0.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.

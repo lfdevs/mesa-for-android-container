@@ -65,7 +65,7 @@ _mesa_texstore_rgb_fxt1(TEXSTORE_PARAMS)
    if (srcFormat != GL_RGB ||
        srcType != GL_UNSIGNED_BYTE ||
        ctx->_ImageTransferState ||
-       srcPacking->RowLength != srcWidth ||
+       ALIGN(srcPacking->RowLength, srcPacking->Alignment) != srcWidth ||
        srcPacking->SwapBytes) {
       /* convert image to RGB/GLubyte */
       GLubyte *tempImageSlices[1];

@@ -109,6 +109,10 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
        pack->Invert)
       return false;
 
+   /* Only a simple blit, no scale, bias or other mapping. */
+   if (ctx->_ImageTransferState)
+      return false;
+
    /* This renderbuffer can come from a texture.  In this case, we impose
     * some of the same restrictions we have for textures and adjust for
     * miplevels.

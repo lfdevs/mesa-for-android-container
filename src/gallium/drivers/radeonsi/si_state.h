@@ -39,6 +39,7 @@ struct si_state_blend {
 	struct si_pm4_state	pm4;
 	uint32_t		cb_target_mask;
 	bool			alpha_to_one;
+	bool			dual_src_blend;
 };
 
 struct si_state_sample_mask {
@@ -251,6 +252,7 @@ void si_shader_change_notify(struct si_context *sctx);
 /* si_state.c */
 struct si_shader_selector;
 
+void si_update_fb_blend_state(struct si_context *sctx);
 boolean si_is_format_supported(struct pipe_screen *screen,
                                enum pipe_format format,
                                enum pipe_texture_target target,

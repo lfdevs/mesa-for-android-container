@@ -118,6 +118,10 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
        packing->Invert)
       return false;
 
+   /* Only a simple blit, no scale, bias or other mapping. */
+   if (ctx->_ImageTransferState)
+      return false;
+
    if (!intel_get_memcpy(texImage->TexFormat, format, type, &mem_copy, &cpp,
                          INTEL_UPLOAD))
       return false;

@@ -3211,7 +3211,8 @@ fs_visitor::lower_integer_multiplication()
              * schedule multi-component multiplications much better.
              */
 
-            if (inst->conditional_mod && inst->dst.is_null()) {
+            fs_reg orig_dst = inst->dst;
+            if (orig_dst.is_null() || orig_dst.file == MRF) {
                inst->dst = fs_reg(GRF, alloc.allocate(dispatch_width / 8),
                                   inst->dst.type);
             }
@@ -3277,10 +3278,9 @@ fs_visitor::lower_integer_multiplication()
 
             ibld.ADD(dst, low, high);
 
-            if (inst->conditional_mod) {
-               fs_reg null(retype(ibld.null_reg_f(), inst->dst.type));
+            if (inst->conditional_mod || orig_dst.file == MRF) {
                set_condmod(inst->conditional_mod,
-                           ibld.MOV(null, inst->dst));
+                           ibld.MOV(orig_dst, inst->dst));
             }
          }
 

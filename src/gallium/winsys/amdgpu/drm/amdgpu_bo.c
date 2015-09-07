@@ -684,6 +684,9 @@ static boolean amdgpu_bo_get_handle(struct pb_buffer *buffer,
    enum amdgpu_bo_handle_type type;
    int r;
 
+   if ((void*)bo != (void*)buffer)
+      pb_cache_manager_remove_buffer(buffer);
+
    switch (whandle->type) {
    case DRM_API_HANDLE_TYPE_SHARED:
       type = amdgpu_bo_handle_type_gem_flink_name;

@@ -14,7 +14,7 @@ The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10551 bytes, from 2015-05-20 20:03:14)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14968 bytes, from 2015-05-20 20:12:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  67120 bytes, from 2015-08-14 23:22:03)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  63785 bytes, from 2015-08-14 18:27:06)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  63915 bytes, from 2015-08-24 16:56:28)
 
 Copyright (C) 2013-2015 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -162,10 +162,13 @@ enum a4xx_tex_fmt {
 	TFMT4_8_UNORM = 4,
 	TFMT4_8_8_UNORM = 14,
 	TFMT4_8_8_8_8_UNORM = 28,
+	TFMT4_8_SNORM = 5,
 	TFMT4_8_8_SNORM = 15,
 	TFMT4_8_8_8_8_SNORM = 29,
+	TFMT4_8_UINT = 6,
 	TFMT4_8_8_UINT = 16,
 	TFMT4_8_8_8_8_UINT = 30,
+	TFMT4_8_SINT = 7,
 	TFMT4_8_8_SINT = 17,
 	TFMT4_8_8_8_8_SINT = 31,
 	TFMT4_16_UINT = 21,

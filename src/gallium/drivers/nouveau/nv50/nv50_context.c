@@ -199,9 +199,13 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
          }
       }
 
-      if (nv50->idxbuf.buffer == res)
+      if (nv50->idxbuf.buffer == res) {
+         /* Just rebind to the bufctx as there is no separate dirty bit */
+         nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_INDEX);
+         BCTX_REFN(nv50->bufctx_3d, INDEX, nv04_resource(res), RD);
          if (!--ref)
             return ref;
+      }
 
       for (s = 0; s < 3; ++s) {
       assert(nv50->num_textures[s] <= PIPE_MAX_SAMPLERS);

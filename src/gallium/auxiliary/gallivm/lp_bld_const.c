@@ -311,7 +311,7 @@ lp_build_const_elem(struct gallivm_state *gallivm,
    else {
       double dscale = lp_const_scale(type);
 
-      elem = LLVMConstInt(elem_type, round(val*dscale), 0);
+      elem = LLVMConstInt(elem_type, (long long) round(val*dscale), 0);
    }
 
    return elem;

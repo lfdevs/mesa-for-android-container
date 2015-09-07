@@ -3993,6 +3993,82 @@ unpack_ubyte_bgr_srgb8(const void *void_src, GLubyte dst[4])
 
 
 static inline void
+unpack_int_a8b8g8r8_uint(const void *void_src, GLuint dst[4])
+{
+    uint32_t *src = (uint32_t *) void_src;
+    uint8_t a = UNPACK(*src, 0, 8);
+    uint8_t b = UNPACK(*src, 8, 8);
+    uint8_t g = UNPACK(*src, 16, 8);
+    uint8_t r = UNPACK(*src, 24, 8);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_a8r8g8b8_uint(const void *void_src, GLuint dst[4])
+{
+    uint32_t *src = (uint32_t *) void_src;
+    uint8_t a = UNPACK(*src, 0, 8);
+    uint8_t r = UNPACK(*src, 8, 8);
+    uint8_t g = UNPACK(*src, 16, 8);
+    uint8_t b = UNPACK(*src, 24, 8);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_r8g8b8a8_uint(const void *void_src, GLuint dst[4])
+{
+    uint32_t *src = (uint32_t *) void_src;
+    uint8_t r = UNPACK(*src, 0, 8);
+    uint8_t g = UNPACK(*src, 8, 8);
+    uint8_t b = UNPACK(*src, 16, 8);
+    uint8_t a = UNPACK(*src, 24, 8);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_b8g8r8a8_uint(const void *void_src, GLuint dst[4])
+{
+    uint32_t *src = (uint32_t *) void_src;
+    uint8_t b = UNPACK(*src, 0, 8);
+    uint8_t g = UNPACK(*src, 8, 8);
+    uint8_t r = UNPACK(*src, 16, 8);
+    uint8_t a = UNPACK(*src, 24, 8);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
 unpack_int_b10g10r10a2_uint(const void *void_src, GLuint dst[4])
 {
     uint32_t *src = (uint32_t *) void_src;
@@ -4057,6 +4133,230 @@ unpack_int_a2r10g10b10_uint(const void *void_src, GLuint dst[4])
     uint16_t r = UNPACK(*src, 2, 10);
     uint16_t g = UNPACK(*src, 12, 10);
     uint16_t b = UNPACK(*src, 22, 10);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_b5g6r5_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t b = UNPACK(*src, 0, 5);
+    uint8_t g = UNPACK(*src, 5, 6);
+    uint8_t r = UNPACK(*src, 11, 5);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = 1;
+}
+
+static inline void
+unpack_int_r5g6b5_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t r = UNPACK(*src, 0, 5);
+    uint8_t g = UNPACK(*src, 5, 6);
+    uint8_t b = UNPACK(*src, 11, 5);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = 1;
+}
+
+static inline void
+unpack_int_b2g3r3_uint(const void *void_src, GLuint dst[4])
+{
+    uint8_t *src = (uint8_t *) void_src;
+    uint8_t b = UNPACK(*src, 0, 2);
+    uint8_t g = UNPACK(*src, 2, 3);
+    uint8_t r = UNPACK(*src, 5, 3);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = 1;
+}
+
+static inline void
+unpack_int_r3g3b2_uint(const void *void_src, GLuint dst[4])
+{
+    uint8_t *src = (uint8_t *) void_src;
+    uint8_t r = UNPACK(*src, 0, 3);
+    uint8_t g = UNPACK(*src, 3, 3);
+    uint8_t b = UNPACK(*src, 6, 2);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = 1;
+}
+
+static inline void
+unpack_int_a4b4g4r4_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t a = UNPACK(*src, 0, 4);
+    uint8_t b = UNPACK(*src, 4, 4);
+    uint8_t g = UNPACK(*src, 8, 4);
+    uint8_t r = UNPACK(*src, 12, 4);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_r4g4b4a4_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t r = UNPACK(*src, 0, 4);
+    uint8_t g = UNPACK(*src, 4, 4);
+    uint8_t b = UNPACK(*src, 8, 4);
+    uint8_t a = UNPACK(*src, 12, 4);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_b4g4r4a4_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t b = UNPACK(*src, 0, 4);
+    uint8_t g = UNPACK(*src, 4, 4);
+    uint8_t r = UNPACK(*src, 8, 4);
+    uint8_t a = UNPACK(*src, 12, 4);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_a4r4g4b4_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t a = UNPACK(*src, 0, 4);
+    uint8_t r = UNPACK(*src, 4, 4);
+    uint8_t g = UNPACK(*src, 8, 4);
+    uint8_t b = UNPACK(*src, 12, 4);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_a1b5g5r5_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t a = UNPACK(*src, 0, 1);
+    uint8_t b = UNPACK(*src, 1, 5);
+    uint8_t g = UNPACK(*src, 6, 5);
+    uint8_t r = UNPACK(*src, 11, 5);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_b5g5r5a1_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t b = UNPACK(*src, 0, 5);
+    uint8_t g = UNPACK(*src, 5, 5);
+    uint8_t r = UNPACK(*src, 10, 5);
+    uint8_t a = UNPACK(*src, 15, 1);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_a1r5g5b5_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t a = UNPACK(*src, 0, 1);
+    uint8_t r = UNPACK(*src, 1, 5);
+    uint8_t g = UNPACK(*src, 6, 5);
+    uint8_t b = UNPACK(*src, 11, 5);
+
+
+    dst[0] = r;
+
+    dst[1] = g;
+
+    dst[2] = b;
+
+    dst[3] = a;
+}
+
+static inline void
+unpack_int_r5g5b5a1_uint(const void *void_src, GLuint dst[4])
+{
+    uint16_t *src = (uint16_t *) void_src;
+    uint8_t r = UNPACK(*src, 0, 5);
+    uint8_t g = UNPACK(*src, 5, 5);
+    uint8_t b = UNPACK(*src, 10, 5);
+    uint8_t a = UNPACK(*src, 15, 1);
 
 
     dst[0] = r;
@@ -6244,6 +6544,34 @@ _mesa_unpack_uint_rgba_row(mesa_format format, GLuint n,
 
     switch (format) {
 
+    case MESA_FORMAT_A8B8G8R8_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_a8b8g8r8_uint(s, dst[i]);
+            s += 4;
+        }
+        break;
+
+    case MESA_FORMAT_A8R8G8B8_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_a8r8g8b8_uint(s, dst[i]);
+            s += 4;
+        }
+        break;
+
+    case MESA_FORMAT_R8G8B8A8_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_r8g8b8a8_uint(s, dst[i]);
+            s += 4;
+        }
+        break;
+
+    case MESA_FORMAT_B8G8R8A8_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_b8g8r8a8_uint(s, dst[i]);
+            s += 4;
+        }
+        break;
+
     case MESA_FORMAT_B10G10R10A2_UINT:
         for (i = 0; i < n; ++i) {
             unpack_int_b10g10r10a2_uint(s, dst[i]);
@@ -6269,6 +6597,90 @@ _mesa_unpack_uint_rgba_row(mesa_format format, GLuint n,
         for (i = 0; i < n; ++i) {
             unpack_int_a2r10g10b10_uint(s, dst[i]);
             s += 4;
+        }
+        break;
+
+    case MESA_FORMAT_B5G6R5_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_b5g6r5_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R5G6B5_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_r5g6b5_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B2G3R3_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_b2g3r3_uint(s, dst[i]);
+            s += 1;
+        }
+        break;
+
+    case MESA_FORMAT_R3G3B2_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_r3g3b2_uint(s, dst[i]);
+            s += 1;
+        }
+        break;
+
+    case MESA_FORMAT_A4B4G4R4_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_a4b4g4r4_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R4G4B4A4_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_r4g4b4a4_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B4G4R4A4_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_b4g4r4a4_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A4R4G4B4_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_a4r4g4b4_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A1B5G5R5_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_a1b5g5r5_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B5G5R5A1_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_b5g5r5a1_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A1R5G5B5_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_a1r5g5b5_uint(s, dst[i]);
+            s += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R5G5B5A1_UINT:
+        for (i = 0; i < n; ++i) {
+            unpack_int_r5g5b5a1_uint(s, dst[i]);
+            s += 2;
         }
         break;
 

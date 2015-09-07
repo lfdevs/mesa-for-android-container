@@ -33,14 +33,6 @@ void si_need_cs_space(struct si_context *ctx, unsigned num_dw,
 	struct radeon_winsys_cs *cs = ctx->b.rings.gfx.cs;
 	int i;
 
-	/* If the CS is sufficiently large, don't count the space needed
-	 * and just flush if there is less than 8096 dwords left. */
-	if (cs->max_dw >= 24 * 1024) {
-		if (cs->cdw > cs->max_dw - 8 * 1024)
-			ctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
-		return;
-	}
-
 	/* There are two memory usage counters in the winsys for all buffers
 	 * that have been added (cs_add_reloc) and two counters in the pipe
 	 * driver for those that haven't been added yet.
@@ -53,6 +45,15 @@ void si_need_cs_space(struct si_context *ctx, unsigned num_dw,
 	}
 	ctx->b.gtt = 0;
 	ctx->b.vram = 0;
+
+	/* If the CS is sufficiently large, don't count the space needed
+	 * and just flush if there is less than 8096 dwords left.
+	 */
+	if (cs->max_dw >= 24 * 1024) {
+		if (cs->cdw > cs->max_dw - 8 * 1024)
+			ctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+		return;
+	}
 
 	/* The number of dwords we already used in the CS so far. */
 	num_dw += cs->cdw;

@@ -238,9 +238,9 @@ st_readpixels(struct gl_context *ctx, GLint x, GLint y,
       GLuint row;
 
       for (row = 0; row < (unsigned) height; row++) {
-         GLvoid *dest = _mesa_image_address3d(pack, pixels,
+         GLvoid *dest = _mesa_image_address2d(pack, pixels,
                                               width, height, format,
-                                              type, 0, row, 0);
+                                              type, row, 0);
          memcpy(dest, map, bytesPerRow);
          map += tex_xfer->stride;
       }

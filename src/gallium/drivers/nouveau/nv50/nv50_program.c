@@ -66,6 +66,7 @@ nv50_vertprog_assign_slots(struct nv50_ir_prog_info *info)
       case TGSI_SEMANTIC_VERTEXID:
          prog->vp.attrs[2] |= NV50_3D_VP_GP_BUILTIN_ATTR_EN_VERTEX_ID;
          prog->vp.attrs[2] |= NV50_3D_VP_GP_BUILTIN_ATTR_EN_VERTEX_ID_DRAW_ARRAYS_ADD_START;
+         prog->vp.vertexid = 1;
          continue;
       default:
          break;

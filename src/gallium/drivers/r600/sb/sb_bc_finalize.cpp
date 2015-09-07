@@ -199,6 +199,9 @@ void bc_finalizer::finalize_if(region_node* r) {
 		cf_node *if_jump = sh.create_cf(CF_OP_JUMP);
 		cf_node *if_pop = sh.create_cf(CF_OP_POP);
 
+		if (!last_cf || last_cf->get_parent_region() == r) {
+			last_cf = if_pop;
+		}
 		if_pop->bc.pop_count = 1;
 		if_pop->jump_after(if_pop);
 

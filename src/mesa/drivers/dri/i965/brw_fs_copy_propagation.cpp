@@ -279,6 +279,7 @@ static bool
 can_change_source_types(fs_inst *inst)
 {
    return !inst->src[0].abs && !inst->src[0].negate &&
+          inst->dst.type == inst->src[0].type &&
           (inst->opcode == BRW_OPCODE_MOV ||
            (inst->opcode == BRW_OPCODE_SEL &&
             inst->predicate != BRW_PREDICATE_NONE &&

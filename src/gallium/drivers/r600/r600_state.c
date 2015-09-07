@@ -2051,7 +2051,7 @@ bool r600_adjust_gprs(struct r600_context *rctx)
 			/* always privilege vs stage so that at worst we have the
 			 * pixel stage producing wrong output (not the vertex
 			 * stage) */
-			new_num_ps_gprs = max_gprs - ((new_num_vs_gprs - new_num_es_gprs - new_num_gs_gprs) + def_num_clause_temp_gprs * 2);
+			new_num_ps_gprs = max_gprs - ((new_num_vs_gprs + new_num_es_gprs + new_num_gs_gprs) + def_num_clause_temp_gprs * 2);
 			new_num_vs_gprs = num_vs_gprs;
 			new_num_gs_gprs = num_gs_gprs;
 			new_num_es_gprs = num_es_gprs;

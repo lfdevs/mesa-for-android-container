@@ -130,7 +130,7 @@ _mesa_texstore_rgb_dxt1(TEXSTORE_PARAMS)
    if (srcFormat != GL_RGB ||
        srcType != GL_UNSIGNED_BYTE ||
        ctx->_ImageTransferState ||
-       srcPacking->RowLength != srcWidth ||
+       ALIGN(srcPacking->RowLength, srcPacking->Alignment) != srcWidth ||
        srcPacking->SwapBytes) {
       /* convert image to RGB/GLubyte */
       GLubyte *tempImageSlices[1];
@@ -187,7 +187,7 @@ _mesa_texstore_rgba_dxt1(TEXSTORE_PARAMS)
    if (srcFormat != GL_RGBA ||
        srcType != GL_UNSIGNED_BYTE ||
        ctx->_ImageTransferState ||
-       srcPacking->RowLength != srcWidth ||
+       ALIGN(srcPacking->RowLength, srcPacking->Alignment) != srcWidth ||
        srcPacking->SwapBytes) {
       /* convert image to RGBA/GLubyte */
       GLubyte *tempImageSlices[1];
@@ -244,7 +244,7 @@ _mesa_texstore_rgba_dxt3(TEXSTORE_PARAMS)
    if (srcFormat != GL_RGBA ||
        srcType != GL_UNSIGNED_BYTE ||
        ctx->_ImageTransferState ||
-       srcPacking->RowLength != srcWidth ||
+       ALIGN(srcPacking->RowLength, srcPacking->Alignment) != srcWidth ||
        srcPacking->SwapBytes) {
       /* convert image to RGBA/GLubyte */
       GLubyte *tempImageSlices[1];
@@ -300,7 +300,7 @@ _mesa_texstore_rgba_dxt5(TEXSTORE_PARAMS)
    if (srcFormat != GL_RGBA ||
        srcType != GL_UNSIGNED_BYTE ||
        ctx->_ImageTransferState ||
-       srcPacking->RowLength != srcWidth ||
+       ALIGN(srcPacking->RowLength, srcPacking->Alignment) != srcWidth ||
        srcPacking->SwapBytes) {
       /* convert image to RGBA/GLubyte */
       GLubyte *tempImageSlices[1];

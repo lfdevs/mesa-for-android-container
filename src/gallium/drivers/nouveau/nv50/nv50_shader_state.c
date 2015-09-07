@@ -641,12 +641,12 @@ nv50_stream_output_validate(struct nv50_context *nv50)
       PUSH_DATA (push, so->num_attribs[i]);
       if (n == 4) {
          PUSH_DATA(push, targ->pipe.buffer_size);
-
-         BEGIN_NV04(push, NVA0_3D(STRMOUT_OFFSET(i)), 1);
          if (!targ->clean) {
             assert(targ->pq);
-            nv50_query_pushbuf_submit(push, targ->pq, 0x4);
+            nv50_query_pushbuf_submit(push, NVA0_3D_STRMOUT_OFFSET(i),
+                                      targ->pq, 0x4);
          } else {
+            BEGIN_NV04(push, NVA0_3D(STRMOUT_OFFSET(i)), 1);
             PUSH_DATA(push, 0);
             targ->clean = false;
          }
@@ -655,6 +655,7 @@ nv50_stream_output_validate(struct nv50_context *nv50)
             (so->stride[i] * nv50->state.prim_size);
          prims = MIN2(prims, limit);
       }
+      targ->stride = so->stride[i];
       BCTX_REFN(nv50->bufctx_3d, SO, buf, WR);
    }
    if (prims != ~0) {

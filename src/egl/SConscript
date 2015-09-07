@@ -15,7 +15,6 @@ env.Append(CPPPATH = [
 
 # parse Makefile.sources
 egl_sources = env.ParseSourceList('Makefile.sources', 'LIBEGL_C_FILES')
-egl_sources.append(env.ParseSourceList('Makefile.sources', 'dri2_backend_core_FILES'))
 
 env.Append(CPPDEFINES = [
     '_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_HAIKU',

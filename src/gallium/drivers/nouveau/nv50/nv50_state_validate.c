@@ -503,7 +503,8 @@ static struct state_validate {
     { nv50_validate_samplers,      NV50_NEW_SAMPLERS },
     { nv50_stream_output_validate, NV50_NEW_STRMOUT |
                                    NV50_NEW_VERTPROG | NV50_NEW_GMTYPROG },
-    { nv50_vertex_arrays_validate, NV50_NEW_VERTEX | NV50_NEW_ARRAYS },
+    { nv50_vertex_arrays_validate, NV50_NEW_VERTEX | NV50_NEW_ARRAYS |
+                                   NV50_NEW_VERTPROG },
     { nv50_validate_min_samples,   NV50_NEW_MIN_SAMPLES },
 };
 #define validate_list_len (sizeof(validate_list) / sizeof(validate_list[0]))

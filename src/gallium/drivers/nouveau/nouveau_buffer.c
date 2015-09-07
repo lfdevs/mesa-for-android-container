@@ -532,8 +532,13 @@ nouveau_buffer_transfer_unmap(struct pipe_context *pipe,
    struct nv04_resource *buf = nv04_resource(transfer->resource);
 
    if (tx->base.usage & PIPE_TRANSFER_WRITE) {
-      if (!(tx->base.usage & PIPE_TRANSFER_FLUSH_EXPLICIT) && tx->map)
-         nouveau_transfer_write(nv, tx, 0, tx->base.box.width);
+      if (!(tx->base.usage & PIPE_TRANSFER_FLUSH_EXPLICIT)) {
+         if (tx->map)
+            nouveau_transfer_write(nv, tx, 0, tx->base.box.width);
+
+         util_range_add(&buf->valid_buffer_range,
+                        tx->base.box.x, tx->base.box.x + tx->base.box.width);
+      }
 
       if (likely(buf->domain)) {
          const uint8_t bind = buf->base.bind;
@@ -541,9 +546,6 @@ nouveau_buffer_transfer_unmap(struct pipe_context *pipe,
          if (bind & (PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_INDEX_BUFFER))
             nv->vbo_dirty = true;
       }
-
-      util_range_add(&buf->valid_buffer_range,
-                     tx->base.box.x, tx->base.box.x + tx->base.box.width);
    }
 
    if (!tx->bo && (tx->base.usage & PIPE_TRANSFER_WRITE))

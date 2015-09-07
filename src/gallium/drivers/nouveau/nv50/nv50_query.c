@@ -266,6 +266,7 @@ nv50_query_end(struct pipe_context *pipe, struct pipe_query *pq)
       nv50_query_get(push, q, 0, 0x1000f010);
       break;
    case NVA0_QUERY_STREAM_OUTPUT_BUFFER_OFFSET:
+      q->sequence++;
       nv50_query_get(push, q, 0, 0x0d005002 | (q->index << 5));
       break;
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
@@ -451,18 +452,18 @@ nv50_render_condition(struct pipe_context *pipe,
 }
 
 void
-nv50_query_pushbuf_submit(struct nouveau_pushbuf *push,
+nv50_query_pushbuf_submit(struct nouveau_pushbuf *push, uint16_t method,
                           struct pipe_query *pq, unsigned result_offset)
 {
    struct nv50_query *q = nv50_query(pq);
 
-   /* XXX: does this exist ? */
-#define NV50_IB_ENTRY_1_NO_PREFETCH (0 << (31 - 8))
+   nv50_query_update(q);
+   if (q->state != NV50_QUERY_STATE_READY)
+      nouveau_bo_wait(q->bo, NOUVEAU_BO_RD, push->client);
+   q->state = NV50_QUERY_STATE_READY;
 
-   PUSH_REFN(push, q->bo, NOUVEAU_BO_RD | NOUVEAU_BO_GART);
-   nouveau_pushbuf_space(push, 0, 0, 1);
-   nouveau_pushbuf_data(push, q->bo, q->offset + result_offset, 4 |
-                        NV50_IB_ENTRY_1_NO_PREFETCH);
+   BEGIN_NV04(push, SUBC_3D(method), 1);
+   PUSH_DATA (push, q->data[result_offset / 4]);
 }
 
 void

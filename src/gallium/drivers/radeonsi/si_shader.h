@@ -190,6 +190,7 @@ struct si_shader_selector {
 	uint64_t	inputs_read;
 	uint64_t	outputs_written;
 	uint32_t	patch_outputs_written;
+	uint32_t	ps_colors_written;
 };
 
 /* Valid shader configurations:

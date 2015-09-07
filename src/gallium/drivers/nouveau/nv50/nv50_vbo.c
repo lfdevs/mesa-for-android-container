@@ -293,13 +293,22 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
    uint64_t addrs[PIPE_MAX_ATTRIBS];
    uint32_t limits[PIPE_MAX_ATTRIBS];
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
-   struct nv50_vertex_stateobj *vertex = nv50->vertex;
+   struct nv50_vertex_stateobj dummy = {};
+   struct nv50_vertex_stateobj *vertex = nv50->vertex ? nv50->vertex : &dummy;
    struct pipe_vertex_buffer *vb;
    struct nv50_vertex_element *ve;
    uint32_t mask;
    uint32_t refd = 0;
    unsigned i;
    const unsigned n = MAX2(vertex->num_elements, nv50->state.num_vtxelts);
+
+   /* A vertexid is not generated for inline data uploads. Have to use a
+    * VBO. This check must come after the vertprog has been validated,
+    * otherwise vertexid may be unset.
+    */
+   assert(nv50->vertprog->translated);
+   if (nv50->vertprog->vp.vertexid)
+      nv50->vbo_push_hint = 0;
 
    if (unlikely(vertex->need_conversion))
       nv50->vbo_fifo = ~0;
@@ -317,7 +326,6 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
          if (buf && buf->status & NOUVEAU_BUFFER_STATUS_GPU_WRITING) {
             buf->status &= ~NOUVEAU_BUFFER_STATUS_GPU_WRITING;
             nv50->base.vbo_dirty = true;
-            break;
          }
       }
    }
@@ -736,9 +744,8 @@ nva0_draw_stream_output(struct nv50_context *nv50,
       BEGIN_NV04(push, NVA0_3D(DRAW_TFB_BASE), 1);
       PUSH_DATA (push, 0);
       BEGIN_NV04(push, NVA0_3D(DRAW_TFB_STRIDE), 1);
-      PUSH_DATA (push, 0);
-      BEGIN_NV04(push, NVA0_3D(DRAW_TFB_BYTES), 1);
-      nv50_query_pushbuf_submit(push, so->pq, 0x4);
+      PUSH_DATA (push, so->stride);
+      nv50_query_pushbuf_submit(push, NVA0_3D_DRAW_TFB_BYTES, so->pq, 0x4);
       BEGIN_NV04(push, NV50_3D(VERTEX_END_GL), 1);
       PUSH_DATA (push, 0);
 
@@ -837,10 +844,6 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       if (nv50->vtxbuf[i].buffer->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
          nv50->base.vbo_dirty = true;
    }
-
-   if (!nv50->base.vbo_dirty && nv50->idxbuf.buffer &&
-       nv50->idxbuf.buffer->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
-      nv50->base.vbo_dirty = true;
 
    if (nv50->base.vbo_dirty) {
       BEGIN_NV04(push, NV50_3D(VERTEX_ARRAY_FLUSH), 1);

@@ -166,6 +166,11 @@ pb_cache_manager_create(struct pb_manager *provider,
                         unsigned bypass_usage,
                         uint64_t maximum_cache_size);
 
+/**
+ * Remove a buffer from the cache, but keep it alive.
+ */
+void
+pb_cache_manager_remove_buffer(struct pb_buffer *buf);
 
 struct pb_fence_ops;
 

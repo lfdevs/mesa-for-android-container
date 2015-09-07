@@ -1864,6 +1864,102 @@ pack_ubyte_rgbx_float32(const GLubyte src[4], void *dst)
 }
 
 static inline void
+pack_ubyte_a8b8g8r8_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+    uint32_t d = 0;
+    d |= PACK(a, 0, 8);
+    d |= PACK(b, 8, 8);
+    d |= PACK(g, 16, 8);
+    d |= PACK(r, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_a8r8g8b8_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+    uint32_t d = 0;
+    d |= PACK(a, 0, 8);
+    d |= PACK(r, 8, 8);
+    d |= PACK(g, 16, 8);
+    d |= PACK(b, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_r8g8b8a8_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+    uint32_t d = 0;
+    d |= PACK(r, 0, 8);
+    d |= PACK(g, 8, 8);
+    d |= PACK(b, 16, 8);
+    d |= PACK(a, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_b8g8r8a8_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+    uint32_t d = 0;
+    d |= PACK(b, 0, 8);
+    d |= PACK(g, 8, 8);
+    d |= PACK(r, 16, 8);
+    d |= PACK(a, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
 pack_ubyte_b10g10r10a2_uint(const GLubyte src[4], void *dst)
 {
 
@@ -1957,6 +2053,278 @@ pack_ubyte_a2r10g10b10_uint(const GLubyte src[4], void *dst)
     d |= PACK(g, 12, 10);
     d |= PACK(b, 22, 10);
     (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_b5g6r5_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 6);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+    uint16_t d = 0;
+    d |= PACK(b, 0, 5);
+    d |= PACK(g, 5, 6);
+    d |= PACK(r, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_r5g6b5_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 6);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+    uint16_t d = 0;
+    d |= PACK(r, 0, 5);
+    d |= PACK(g, 5, 6);
+    d |= PACK(b, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_b2g3r3_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 2);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 3);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 3);
+
+    uint8_t d = 0;
+    d |= PACK(b, 0, 2);
+    d |= PACK(g, 2, 3);
+    d |= PACK(r, 5, 3);
+    (*(uint8_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_r3g3b2_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 3);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 3);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 2);
+
+    uint8_t d = 0;
+    d |= PACK(r, 0, 3);
+    d |= PACK(g, 3, 3);
+    d |= PACK(b, 6, 2);
+    (*(uint8_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_a4b4g4r4_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 4);
+    d |= PACK(b, 4, 4);
+    d |= PACK(g, 8, 4);
+    d |= PACK(r, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_r4g4b4a4_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+    uint16_t d = 0;
+    d |= PACK(r, 0, 4);
+    d |= PACK(g, 4, 4);
+    d |= PACK(b, 8, 4);
+    d |= PACK(a, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_b4g4r4a4_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+    uint16_t d = 0;
+    d |= PACK(b, 0, 4);
+    d |= PACK(g, 4, 4);
+    d |= PACK(r, 8, 4);
+    d |= PACK(a, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_a4r4g4b4_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 4);
+    d |= PACK(r, 4, 4);
+    d |= PACK(g, 8, 4);
+    d |= PACK(b, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_a1b5g5r5_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 1);
+    d |= PACK(b, 1, 5);
+    d |= PACK(g, 6, 5);
+    d |= PACK(r, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_b5g5r5a1_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+    uint16_t d = 0;
+    d |= PACK(b, 0, 5);
+    d |= PACK(g, 5, 5);
+    d |= PACK(r, 10, 5);
+    d |= PACK(a, 15, 1);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_a1r5g5b5_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 1);
+    d |= PACK(r, 1, 5);
+    d |= PACK(g, 6, 5);
+    d |= PACK(b, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_ubyte_r5g5b5a1_uint(const GLubyte src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+    uint16_t d = 0;
+    d |= PACK(r, 0, 5);
+    d |= PACK(g, 5, 5);
+    d |= PACK(b, 10, 5);
+    d |= PACK(a, 15, 1);
+    (*(uint16_t *) dst) = d;
 }
 
 static inline void
@@ -2801,6 +3169,102 @@ pack_ubyte_r11g11b10_float(const GLubyte src[4], void *dst)
 
 
 static inline void
+pack_uint_a8b8g8r8_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+    uint32_t d = 0;
+    d |= PACK(a, 0, 8);
+    d |= PACK(b, 8, 8);
+    d |= PACK(g, 16, 8);
+    d |= PACK(r, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_uint_a8r8g8b8_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+    uint32_t d = 0;
+    d |= PACK(a, 0, 8);
+    d |= PACK(r, 8, 8);
+    d |= PACK(g, 16, 8);
+    d |= PACK(b, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_uint_r8g8b8a8_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+    uint32_t d = 0;
+    d |= PACK(r, 0, 8);
+    d |= PACK(g, 8, 8);
+    d |= PACK(b, 16, 8);
+    d |= PACK(a, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_uint_b8g8r8a8_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 8);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 8);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 8);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 8);
+
+    uint32_t d = 0;
+    d |= PACK(b, 0, 8);
+    d |= PACK(g, 8, 8);
+    d |= PACK(r, 16, 8);
+    d |= PACK(a, 24, 8);
+    (*(uint32_t *) dst) = d;
+}
+
+static inline void
 pack_uint_b10g10r10a2_uint(const GLuint src[4], void *dst)
 {
 
@@ -2894,6 +3358,278 @@ pack_uint_a2r10g10b10_uint(const GLuint src[4], void *dst)
     d |= PACK(g, 12, 10);
     d |= PACK(b, 22, 10);
     (*(uint32_t *) dst) = d;
+}
+
+static inline void
+pack_uint_b5g6r5_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 6);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+    uint16_t d = 0;
+    d |= PACK(b, 0, 5);
+    d |= PACK(g, 5, 6);
+    d |= PACK(r, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_r5g6b5_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 6);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+    uint16_t d = 0;
+    d |= PACK(r, 0, 5);
+    d |= PACK(g, 5, 6);
+    d |= PACK(b, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_b2g3r3_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 2);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 3);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 3);
+
+    uint8_t d = 0;
+    d |= PACK(b, 0, 2);
+    d |= PACK(g, 2, 3);
+    d |= PACK(r, 5, 3);
+    (*(uint8_t *) dst) = d;
+}
+
+static inline void
+pack_uint_r3g3b2_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 3);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 3);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 2);
+
+    uint8_t d = 0;
+    d |= PACK(r, 0, 3);
+    d |= PACK(g, 3, 3);
+    d |= PACK(b, 6, 2);
+    (*(uint8_t *) dst) = d;
+}
+
+static inline void
+pack_uint_a4b4g4r4_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 4);
+    d |= PACK(b, 4, 4);
+    d |= PACK(g, 8, 4);
+    d |= PACK(r, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_r4g4b4a4_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+    uint16_t d = 0;
+    d |= PACK(r, 0, 4);
+    d |= PACK(g, 4, 4);
+    d |= PACK(b, 8, 4);
+    d |= PACK(a, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_b4g4r4a4_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+    uint16_t d = 0;
+    d |= PACK(b, 0, 4);
+    d |= PACK(g, 4, 4);
+    d |= PACK(r, 8, 4);
+    d |= PACK(a, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_a4r4g4b4_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 4);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 4);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 4);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 4);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 4);
+    d |= PACK(r, 4, 4);
+    d |= PACK(g, 8, 4);
+    d |= PACK(b, 12, 4);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_a1b5g5r5_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 1);
+    d |= PACK(b, 1, 5);
+    d |= PACK(g, 6, 5);
+    d |= PACK(r, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_b5g5r5a1_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+    uint16_t d = 0;
+    d |= PACK(b, 0, 5);
+    d |= PACK(g, 5, 5);
+    d |= PACK(r, 10, 5);
+    d |= PACK(a, 15, 1);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_a1r5g5b5_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+    uint16_t d = 0;
+    d |= PACK(a, 0, 1);
+    d |= PACK(r, 1, 5);
+    d |= PACK(g, 6, 5);
+    d |= PACK(b, 11, 5);
+    (*(uint16_t *) dst) = d;
+}
+
+static inline void
+pack_uint_r5g5b5a1_uint(const GLuint src[4], void *dst)
+{
+
+
+    uint8_t r = _mesa_unsigned_to_unsigned(src[0], 5);
+
+
+    uint8_t g = _mesa_unsigned_to_unsigned(src[1], 5);
+
+
+    uint8_t b = _mesa_unsigned_to_unsigned(src[2], 5);
+
+
+    uint8_t a = _mesa_unsigned_to_unsigned(src[3], 1);
+
+    uint16_t d = 0;
+    d |= PACK(r, 0, 5);
+    d |= PACK(g, 5, 5);
+    d |= PACK(b, 10, 5);
+    d |= PACK(a, 15, 1);
+    (*(uint16_t *) dst) = d;
 }
 
 static inline void
@@ -5856,6 +6592,18 @@ _mesa_get_pack_ubyte_rgba_function(mesa_format format)
     case MESA_FORMAT_RGBX_FLOAT32:
         return pack_ubyte_rgbx_float32;
 
+    case MESA_FORMAT_A8B8G8R8_UINT:
+        return pack_ubyte_a8b8g8r8_uint;
+
+    case MESA_FORMAT_A8R8G8B8_UINT:
+        return pack_ubyte_a8r8g8b8_uint;
+
+    case MESA_FORMAT_R8G8B8A8_UINT:
+        return pack_ubyte_r8g8b8a8_uint;
+
+    case MESA_FORMAT_B8G8R8A8_UINT:
+        return pack_ubyte_b8g8r8a8_uint;
+
     case MESA_FORMAT_B10G10R10A2_UINT:
         return pack_ubyte_b10g10r10a2_uint;
 
@@ -5867,6 +6615,42 @@ _mesa_get_pack_ubyte_rgba_function(mesa_format format)
 
     case MESA_FORMAT_A2R10G10B10_UINT:
         return pack_ubyte_a2r10g10b10_uint;
+
+    case MESA_FORMAT_B5G6R5_UINT:
+        return pack_ubyte_b5g6r5_uint;
+
+    case MESA_FORMAT_R5G6B5_UINT:
+        return pack_ubyte_r5g6b5_uint;
+
+    case MESA_FORMAT_B2G3R3_UINT:
+        return pack_ubyte_b2g3r3_uint;
+
+    case MESA_FORMAT_R3G3B2_UINT:
+        return pack_ubyte_r3g3b2_uint;
+
+    case MESA_FORMAT_A4B4G4R4_UINT:
+        return pack_ubyte_a4b4g4r4_uint;
+
+    case MESA_FORMAT_R4G4B4A4_UINT:
+        return pack_ubyte_r4g4b4a4_uint;
+
+    case MESA_FORMAT_B4G4R4A4_UINT:
+        return pack_ubyte_b4g4r4a4_uint;
+
+    case MESA_FORMAT_A4R4G4B4_UINT:
+        return pack_ubyte_a4r4g4b4_uint;
+
+    case MESA_FORMAT_A1B5G5R5_UINT:
+        return pack_ubyte_a1b5g5r5_uint;
+
+    case MESA_FORMAT_B5G5R5A1_UINT:
+        return pack_ubyte_b5g5r5a1_uint;
+
+    case MESA_FORMAT_A1R5G5B5_UINT:
+        return pack_ubyte_a1r5g5b5_uint;
+
+    case MESA_FORMAT_R5G5B5A1_UINT:
+        return pack_ubyte_r5g5b5a1_uint;
 
     case MESA_FORMAT_A_UINT8:
         return pack_ubyte_a_uint8;
@@ -7088,6 +7872,34 @@ _mesa_pack_ubyte_rgba_row(mesa_format format, GLuint n,
         }
         break;
 
+    case MESA_FORMAT_A8B8G8R8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_a8b8g8r8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_A8R8G8B8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_a8r8g8b8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_R8G8B8A8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_r8g8b8a8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_B8G8R8A8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_b8g8r8a8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
     case MESA_FORMAT_B10G10R10A2_UINT:
         for (i = 0; i < n; ++i) {
             pack_ubyte_b10g10r10a2_uint(src[i], d);
@@ -7113,6 +7925,90 @@ _mesa_pack_ubyte_rgba_row(mesa_format format, GLuint n,
         for (i = 0; i < n; ++i) {
             pack_ubyte_a2r10g10b10_uint(src[i], d);
             d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_B5G6R5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_b5g6r5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R5G6B5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_r5g6b5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B2G3R3_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_b2g3r3_uint(src[i], d);
+            d += 1;
+        }
+        break;
+
+    case MESA_FORMAT_R3G3B2_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_r3g3b2_uint(src[i], d);
+            d += 1;
+        }
+        break;
+
+    case MESA_FORMAT_A4B4G4R4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_a4b4g4r4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R4G4B4A4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_r4g4b4a4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B4G4R4A4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_b4g4r4a4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A4R4G4B4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_a4r4g4b4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A1B5G5R5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_a1b5g5r5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B5G5R5A1_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_b5g5r5a1_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A1R5G5B5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_a1r5g5b5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R5G5B5A1_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_ubyte_r5g5b5a1_uint(src[i], d);
+            d += 2;
         }
         break;
 
@@ -7510,6 +8406,34 @@ _mesa_pack_uint_rgba_row(mesa_format format, GLuint n,
 
     switch (format) {
 
+    case MESA_FORMAT_A8B8G8R8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_a8b8g8r8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_A8R8G8B8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_a8r8g8b8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_R8G8B8A8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_r8g8b8a8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_B8G8R8A8_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_b8g8r8a8_uint(src[i], d);
+            d += 4;
+        }
+        break;
+
     case MESA_FORMAT_B10G10R10A2_UINT:
         for (i = 0; i < n; ++i) {
             pack_uint_b10g10r10a2_uint(src[i], d);
@@ -7535,6 +8459,90 @@ _mesa_pack_uint_rgba_row(mesa_format format, GLuint n,
         for (i = 0; i < n; ++i) {
             pack_uint_a2r10g10b10_uint(src[i], d);
             d += 4;
+        }
+        break;
+
+    case MESA_FORMAT_B5G6R5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_b5g6r5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R5G6B5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_r5g6b5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B2G3R3_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_b2g3r3_uint(src[i], d);
+            d += 1;
+        }
+        break;
+
+    case MESA_FORMAT_R3G3B2_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_r3g3b2_uint(src[i], d);
+            d += 1;
+        }
+        break;
+
+    case MESA_FORMAT_A4B4G4R4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_a4b4g4r4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R4G4B4A4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_r4g4b4a4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B4G4R4A4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_b4g4r4a4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A4R4G4B4_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_a4r4g4b4_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A1B5G5R5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_a1b5g5r5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_B5G5R5A1_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_b5g5r5a1_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_A1R5G5B5_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_a1r5g5b5_uint(src[i], d);
+            d += 2;
+        }
+        break;
+
+    case MESA_FORMAT_R5G5B5A1_UINT:
+        for (i = 0; i < n; ++i) {
+            pack_uint_r5g5b5a1_uint(src[i], d);
+            d += 2;
         }
         break;
 

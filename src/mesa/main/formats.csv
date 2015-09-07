@@ -186,10 +186,26 @@ MESA_FORMAT_RGBX_FLOAT32                  , array , 1, 1, f32 , f32 , f32 , x32 
 MESA_FORMAT_Z_FLOAT32                     , array , 1, 1, f32 ,     ,     ,     , x___, zs
 
 # Packed signed/unsigned non-normalized integer formats
+MESA_FORMAT_A8B8G8R8_UINT                 , packed, 1, 1, u8  , u8  , u8  , u8  , wzyx, rgb
+MESA_FORMAT_A8R8G8B8_UINT                 , packed, 1, 1, u8  , u8  , u8  , u8  , yzwx, rgb
+MESA_FORMAT_R8G8B8A8_UINT                 , packed, 1, 1, u8  , u8  , u8  , u8  , xyzw, rgb
+MESA_FORMAT_B8G8R8A8_UINT                 , packed, 1, 1, u8  , u8  , u8  , u8  , zyxw, rgb
 MESA_FORMAT_B10G10R10A2_UINT              , packed, 1, 1, u10 , u10 , u10 , u2  , zyxw, rgb
 MESA_FORMAT_R10G10B10A2_UINT              , packed, 1, 1, u10 , u10 , u10 , u2  , xyzw, rgb
 MESA_FORMAT_A2B10G10R10_UINT              , packed, 1, 1, u2  , u10 , u10 , u10 , wzyx, rgb
 MESA_FORMAT_A2R10G10B10_UINT              , packed, 1, 1, u2  , u10 , u10 , u10 , yzwx, rgb
+MESA_FORMAT_B5G6R5_UINT                   , packed, 1, 1, u5  , u6  ,  u5 ,     , zyx1, rgb
+MESA_FORMAT_R5G6B5_UINT                   , packed, 1, 1, u5  , u6  ,  u5 ,     , xyz1, rgb
+MESA_FORMAT_B2G3R3_UINT                   , packed, 1, 1, u2  , u3  ,  u3 ,     , zyx1, rgb
+MESA_FORMAT_R3G3B2_UINT                   , packed, 1, 1, u3  , u3  ,  u2 ,     , xyz1, rgb
+MESA_FORMAT_A4B4G4R4_UINT                 , packed, 1, 1, u4  , u4  ,  u4 , u4  , wzyx, rgb
+MESA_FORMAT_R4G4B4A4_UINT                 , packed, 1, 1, u4  , u4  ,  u4 , u4  , xyzw, rgb
+MESA_FORMAT_B4G4R4A4_UINT                 , packed, 1, 1, u4  , u4  ,  u4 , u4  , zyxw, rgb
+MESA_FORMAT_A4R4G4B4_UINT                 , packed, 1, 1, u4  , u4  ,  u4 , u4  , yzwx, rgb
+MESA_FORMAT_A1B5G5R5_UINT                 , packed, 1, 1, u1  , u5  ,  u5 , u5  , wzyx, rgb
+MESA_FORMAT_B5G5R5A1_UINT                 , packed, 1, 1, u5  , u5  ,  u5 , u1  , zyxw, rgb
+MESA_FORMAT_A1R5G5B5_UINT                 , packed, 1, 1, u1  , u5  ,  u5 , u5  , yzwx, rgb
+MESA_FORMAT_R5G5B5A1_UINT                 , packed, 1, 1, u5  , u5  ,  u5 , u1  , xyzw, rgb
 
 # Array signed/unsigned non-normalized integer formats
 MESA_FORMAT_A_UINT8                       , array , 1, 1, u8  ,     ,     ,     , 000x, rgb

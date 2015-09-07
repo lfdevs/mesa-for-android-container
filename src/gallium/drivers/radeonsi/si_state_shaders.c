@@ -713,6 +713,15 @@ static void *si_create_shader_state(struct pipe_context *ctx,
 			}
 		}
 		break;
+	case PIPE_SHADER_FRAGMENT:
+		for (i = 0; i < sel->info.num_outputs; i++) {
+			unsigned name = sel->info.output_semantic_name[i];
+			unsigned index = sel->info.output_semantic_index[i];
+
+			if (name == TGSI_SEMANTIC_COLOR)
+				sel->ps_colors_written |= 1 << index;
+		}
+		break;
 	}
 
 	if (sscreen->b.debug_flags & DBG_PRECOMPILE)
@@ -840,6 +849,7 @@ static void si_bind_ps_shader(struct pipe_context *ctx, void *state)
 	}
 
 	sctx->ps_shader = sel;
+	si_update_fb_blend_state(sctx);
 }
 
 static void si_delete_shader_selector(struct pipe_context *ctx,

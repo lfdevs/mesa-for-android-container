@@ -361,6 +361,13 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
                            tempSlice, RGBA32_FLOAT, srcStride,
                            width, height,
                            needsRebase ? rebaseSwizzle : NULL);
+
+      /* Handle byte swapping if required */
+      if (ctx->Pack.SwapBytes) {
+         _mesa_swap_bytes_2d_image(format, type, &ctx->Pack,
+                                   width, height, dest, dest);
+      }
+
       tempSlice += 4 * width * height;
    }
 
@@ -557,17 +564,9 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
 
    do_swap:
       /* Handle byte swapping if required */
-      if (ctx->Pack.SwapBytes) {
-         GLint swapSize = _mesa_sizeof_packed_type(type);
-         if (swapSize == 2 || swapSize == 4) {
-            int swapsPerPixel = _mesa_bytes_per_pixel(format, type) / swapSize;
-            assert(_mesa_bytes_per_pixel(format, type) % swapSize == 0);
-            if (swapSize == 2)
-               _mesa_swap2((GLushort *) dest, width * height * swapsPerPixel);
-            else if (swapSize == 4)
-               _mesa_swap4((GLuint *) dest, width * height * swapsPerPixel);
-         }
-      }
+      if (ctx->Pack.SwapBytes)
+         _mesa_swap_bytes_2d_image(format, type, &ctx->Pack,
+                                   width, height, dest, dest);
 
       /* Unmap the src texture buffer */
       ctx->Driver.UnmapTextureImage(ctx, texImage, zoffset + img);

@@ -314,6 +314,7 @@ qir_get_temp(struct vc4_compile *c)
 
         reg.file = QFILE_TEMP;
         reg.index = c->num_temps++;
+        reg.pack = 0;
 
         if (c->num_temps > c->defs_array_size) {
                 uint32_t old_size = c->defs_array_size;

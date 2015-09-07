@@ -1126,6 +1126,9 @@ static boolean radeon_winsys_bo_get_handle(struct pb_buffer *buffer,
 
     memset(&flink, 0, sizeof(flink));
 
+    if ((void*)bo != (void*)buffer)
+       pb_cache_manager_remove_buffer(buffer);
+
     if (whandle->type == DRM_API_HANDLE_TYPE_SHARED) {
         if (!bo->flink_name) {
             flink.handle = bo->handle;

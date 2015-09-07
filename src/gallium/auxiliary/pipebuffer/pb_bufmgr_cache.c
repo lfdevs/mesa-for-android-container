@@ -104,18 +104,42 @@ pb_cache_manager(struct pb_manager *mgr)
 }
 
 
+static void
+_pb_cache_manager_remove_buffer_locked(struct pb_cache_buffer *buf)
+{
+   struct pb_cache_manager *mgr = buf->mgr;
+
+   if (buf->head.next) {
+      LIST_DEL(&buf->head);
+      assert(mgr->numDelayed);
+      --mgr->numDelayed;
+      mgr->cache_size -= buf->base.size;
+   }
+   buf->mgr = NULL;
+}
+
+void
+pb_cache_manager_remove_buffer(struct pb_buffer *pb_buf)
+{
+   struct pb_cache_buffer *buf = (struct pb_cache_buffer*)pb_buf;
+   struct pb_cache_manager *mgr = buf->mgr;
+
+   if (!mgr)
+      return;
+
+   pipe_mutex_lock(mgr->mutex);
+   _pb_cache_manager_remove_buffer_locked(buf);
+   pipe_mutex_unlock(mgr->mutex);
+}
+
 /**
  * Actually destroy the buffer.
  */
 static inline void
 _pb_cache_buffer_destroy(struct pb_cache_buffer *buf)
 {
-   struct pb_cache_manager *mgr = buf->mgr;
-
-   LIST_DEL(&buf->head);
-   assert(mgr->numDelayed);
-   --mgr->numDelayed;
-   mgr->cache_size -= buf->base.size;
+   if (buf->mgr)
+      _pb_cache_manager_remove_buffer_locked(buf);
    assert(!pipe_is_referenced(&buf->base.reference));
    pb_reference(&buf->buffer, NULL);
    FREE(buf);
@@ -155,6 +179,12 @@ pb_cache_buffer_destroy(struct pb_buffer *_buf)
 {
    struct pb_cache_buffer *buf = pb_cache_buffer(_buf);   
    struct pb_cache_manager *mgr = buf->mgr;
+
+   if (!mgr) {
+      pb_reference(&buf->buffer, NULL);
+      FREE(buf);
+      return;
+   }
 
    pipe_mutex_lock(mgr->mutex);
    assert(!pipe_is_referenced(&buf->base.reference));

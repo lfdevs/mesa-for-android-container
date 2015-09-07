@@ -197,7 +197,7 @@ extern struct draw_stage *nv50_draw_render_stage(struct nv50_context *);
 
 /* nv50_query.c */
 void nv50_init_query_functions(struct nv50_context *);
-void nv50_query_pushbuf_submit(struct nouveau_pushbuf *,
+void nv50_query_pushbuf_submit(struct nouveau_pushbuf *, uint16_t method,
                                struct pipe_query *, unsigned result_offset);
 void nv84_query_fifo_wait(struct nouveau_pushbuf *, struct pipe_query *);
 void nva0_so_target_save_offset(struct pipe_context *,

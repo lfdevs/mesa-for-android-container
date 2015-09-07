@@ -66,9 +66,6 @@ nv30_resource_copy_region(struct pipe_context *pipe,
                           const struct pipe_box *src_box);
 
 void
-nv30_resource_resolve(struct pipe_context *, const struct pipe_resolve_info *);
-
-void
 nv30_blit(struct pipe_context *pipe,
           const struct pipe_blit_info *blit_info);
 
