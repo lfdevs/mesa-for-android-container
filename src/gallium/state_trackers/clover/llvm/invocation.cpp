@@ -465,7 +465,7 @@ namespace {
             const bool is_write_only = access_qual == "write_only";
             const bool is_read_only = access_qual == "read_only";
 
-            typename module::argument::type marg_type;
+            enum module::argument::type marg_type;
             if (is_image2d && is_read_only) {
                marg_type = module::argument::image2d_rd;
             } else if (is_image2d && is_write_only) {

@@ -873,8 +873,13 @@ void st_init_extensions(struct pipe_screen *screen,
 
    consts->MaxViewports = screen->get_param(screen, PIPE_CAP_MAX_VIEWPORTS);
    if (consts->MaxViewports >= 16) {
-      consts->ViewportBounds.Min = -16384.0;
-      consts->ViewportBounds.Max = 16384.0;
+      if (glsl_feature_level >= 400) {
+         consts->ViewportBounds.Min = -32768.0;
+         consts->ViewportBounds.Max = 32767.0;
+      } else {
+         consts->ViewportBounds.Min = -16384.0;
+         consts->ViewportBounds.Max = 16383.0;
+      }
       extensions->ARB_viewport_array = GL_TRUE;
       extensions->ARB_fragment_layer_viewport = GL_TRUE;
       if (extensions->AMD_vertex_shader_layer)

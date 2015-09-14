@@ -55,6 +55,10 @@ intel_copy_texsubimage(struct brw_context *brw,
    const GLenum internalFormat = intelImage->base.Base.InternalFormat;
    bool ret;
 
+   /* No pixel transfer operations (zoom, bias, mapping), just a blit */
+   if (brw->ctx._ImageTransferState)
+      return false;
+
    intel_prepare_render(brw);
 
    /* glCopyTexSubImage() can be called on a multisampled renderbuffer (if

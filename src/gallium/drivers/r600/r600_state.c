@@ -1007,7 +1007,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 
 		/* CMASK. */
 		if (!rctx->dummy_cmask ||
-		    rctx->dummy_cmask->buf->size < cmask.size ||
+		    rctx->dummy_cmask->b.b.width0 < cmask.size ||
 		    rctx->dummy_cmask->buf->alignment % cmask.alignment != 0) {
 			struct pipe_transfer *transfer;
 			void *ptr;
@@ -1025,7 +1025,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 
 		/* FMASK. */
 		if (!rctx->dummy_fmask ||
-		    rctx->dummy_fmask->buf->size < fmask.size ||
+		    rctx->dummy_fmask->b.b.width0 < fmask.size ||
 		    rctx->dummy_fmask->buf->alignment % fmask.alignment != 0) {
 			pipe_resource_reference((struct pipe_resource**)&rctx->dummy_fmask, NULL);
 			rctx->dummy_fmask = r600_buffer_create_helper(rscreen, fmask.size, fmask.alignment);
@@ -1694,7 +1694,7 @@ static void r600_emit_vertex_buffers(struct r600_context *rctx, struct r600_atom
 		radeon_emit(cs, PKT3(PKT3_SET_RESOURCE, 7, 0));
 		radeon_emit(cs, (320 + buffer_index) * 7);
 		radeon_emit(cs, offset); /* RESOURCEi_WORD0 */
-		radeon_emit(cs, rbuffer->buf->size - offset - 1); /* RESOURCEi_WORD1 */
+		radeon_emit(cs, rbuffer->b.b.width0 - offset - 1); /* RESOURCEi_WORD1 */
 		radeon_emit(cs, /* RESOURCEi_WORD2 */
 				 S_038008_ENDIAN_SWAP(r600_endian_swap(32)) |
 				 S_038008_STRIDE(vb->stride));
@@ -1743,7 +1743,7 @@ static void r600_emit_constant_buffers(struct r600_context *rctx,
 		radeon_emit(cs, PKT3(PKT3_SET_RESOURCE, 7, 0));
 		radeon_emit(cs, (buffer_id_base + buffer_index) * 7);
 		radeon_emit(cs, offset); /* RESOURCEi_WORD0 */
-		radeon_emit(cs, rbuffer->buf->size - offset - 1); /* RESOURCEi_WORD1 */
+		radeon_emit(cs, rbuffer->b.b.width0 - offset - 1); /* RESOURCEi_WORD1 */
 		radeon_emit(cs, /* RESOURCEi_WORD2 */
 			    S_038008_ENDIAN_SWAP(gs_ring_buffer ? ENDIAN_NONE : r600_endian_swap(32)) |
 			    S_038008_STRIDE(gs_ring_buffer ? 4 : 16));

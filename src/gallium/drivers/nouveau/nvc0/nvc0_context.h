@@ -299,10 +299,10 @@ nve4_p2mf_push_linear(struct nouveau_context *nv,
                       struct nouveau_bo *dst, unsigned offset, unsigned domain,
                       unsigned size, const void *data);
 void
-nvc0_cb_push(struct nouveau_context *,
-             struct nouveau_bo *bo, unsigned domain,
-             unsigned base, unsigned size,
-             unsigned offset, unsigned words, const uint32_t *data);
+nvc0_cb_bo_push(struct nouveau_context *,
+                struct nouveau_bo *bo, unsigned domain,
+                unsigned base, unsigned size,
+                unsigned offset, unsigned words, const uint32_t *data);
 
 /* nvc0_vbo.c */
 void nvc0_draw_vbo(struct pipe_context *, const struct pipe_draw_info *);

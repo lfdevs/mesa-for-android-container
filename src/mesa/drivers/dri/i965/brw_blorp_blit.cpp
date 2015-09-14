@@ -215,6 +215,10 @@ brw_blorp_copytexsubimage(struct brw_context *brw,
    struct intel_renderbuffer *src_irb = intel_renderbuffer(src_rb);
    struct intel_texture_image *intel_image = intel_texture_image(dst_image);
 
+   /* No pixel transfer operations (zoom, bias, mapping), just a blit */
+   if (brw->ctx._ImageTransferState)
+      return false;
+
    /* Sync up the state of window system buffers.  We need to do this before
     * we go looking at the src renderbuffer's miptree.
     */

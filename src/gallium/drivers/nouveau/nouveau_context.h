@@ -6,6 +6,8 @@
 
 #define NOUVEAU_MAX_SCRATCH_BUFS 4
 
+struct nv04_resource;
+
 struct nouveau_context {
    struct pipe_context pipe;
    struct nouveau_screen *screen;
@@ -23,8 +25,7 @@ struct nouveau_context {
                      unsigned, const void *);
    /* base, size refer to the whole constant buffer */
    void (*push_cb)(struct nouveau_context *,
-                   struct nouveau_bo *, unsigned domain,
-                   unsigned base, unsigned size,
+                   struct nv04_resource *,
                    unsigned offset, unsigned words, const uint32_t *);
 
    /* @return: @ref reduced by nr of references found in context */

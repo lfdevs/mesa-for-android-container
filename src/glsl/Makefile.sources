@@ -69,8 +69,7 @@ NIR_FILES = \
 	nir/nir_vla.h \
 	nir/nir_worklist.c \
 	nir/nir_worklist.h \
-	nir/nir_types.cpp \
-	$(NIR_GENERATED_FILES)
+	nir/nir_types.cpp
 
 # libglsl
 

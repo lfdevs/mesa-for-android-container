@@ -371,7 +371,7 @@ nv30_transfer_rect_blit(XFER_ARGS)
 static bool
 nv30_transfer_sifm(XFER_ARGS)
 {
-   if (!src->pitch || (src->w | src->h) > 1024 || src->w < 2 || src->h < 2)
+   if (!src->pitch || src->w > 1024 || src->h > 1024 || src->w < 2 || src->h < 2)
       return false;
 
    if (src->d > 1 || dst->d > 1)
@@ -381,7 +381,7 @@ nv30_transfer_sifm(XFER_ARGS)
       return false;
 
    if (!dst->pitch) {
-      if ((dst->w | dst->h) > 2048 || dst->w < 2 || dst->h < 2)
+      if (dst->w > 2048 || dst->h > 2048 || dst->w < 2 || dst->h < 2)
          return false;
    } else {
       if (dst->domain != NOUVEAU_BO_VRAM)

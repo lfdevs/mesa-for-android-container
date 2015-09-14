@@ -980,6 +980,8 @@ MAPI_GLAPI_FILES = \
 	table.h \
 	$(MAPI_UTIL_FILES)
 
+MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 glapi_gen_mapi_deps := \
 	mapi_abi.py \
 	$(wildcard glapi/gen/*.xml) \
@@ -2114,22 +2116,20 @@ uninstall-am: uninstall-GLES2_includeHEADERS \
 .PRECIOUS: Makefile
 
 
-# $(1): path to an XML file
-# $(2): name of the printer
-define glapi_gen_mapi
-@$(MKDIR_P) $(dir $@)
-$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/mapi_abi.py \
-	--mode lib --printer $(2) $(1) > $@
-endef
-
 shared-glapi/glapi_mapi_tmp.h : glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
-	$(call glapi_gen_mapi,$<,shared-glapi)
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --mode lib --printer shared-glapi \
+		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
 
 es1api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
-	$(call glapi_gen_mapi,$<,es1api)
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --mode lib --printer es1api \
+		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
 
 es2api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
-	$(call glapi_gen_mapi,$<,es2api)
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --mode lib --printer es2api \
+		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .install-mesa-links
 

@@ -449,7 +449,7 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
 
    for (i = 0; i < info->numOutputs; ++i) {
       if (info->out[i].sn == TGSI_SEMANTIC_COLOR)
-         fp->hdr[18] |= info->out[i].mask << info->out[i].slot[0];
+         fp->hdr[18] |= 0xf << info->out[i].slot[0];
    }
 
    fp->fp.early_z = info->prop.fp.earlyFragTests;

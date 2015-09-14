@@ -319,8 +319,9 @@ nv30_screen_is_format_supported(struct pipe_screen *pscreen,
                                 unsigned sample_count,
                                 unsigned bindings)
 {
-   if (sample_count > 4)
+   if (sample_count > nv30_screen(pscreen)->max_sample_count)
       return false;
+
    if (!(0x00000017 & (1 << sample_count)))
       return false;
 
@@ -449,6 +450,23 @@ nv30_screen_create(struct nouveau_device *dev)
       FREE(screen);
       return NULL;
    }
+
+   /*
+    * Some modern apps try to use msaa without keeping in mind the
+    * restrictions on videomem of older cards. Resulting in dmesg saying:
+    * [ 1197.850642] nouveau E[soffice.bin[3785]] fail ttm_validate
+    * [ 1197.850648] nouveau E[soffice.bin[3785]] validating bo list
+    * [ 1197.850654] nouveau E[soffice.bin[3785]] validate: -12
+    *
+    * Because we are running out of video memory, after which the program
+    * using the msaa visual freezes, and eventually the entire system freezes.
+    *
+    * To work around this we do not allow msaa visauls by default and allow
+    * the user to override this via NV30_MAX_MSAA.
+    */
+   screen->max_sample_count = debug_get_num_option("NV30_MAX_MSAA", 0);
+   if (screen->max_sample_count > 4)
+      screen->max_sample_count = 4;
 
    pscreen = &screen->base.base;
    pscreen->destroy = nv30_screen_destroy;

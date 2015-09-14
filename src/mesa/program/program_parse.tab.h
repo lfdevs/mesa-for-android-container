@@ -184,7 +184,7 @@ union YYSTYPE
       unsigned negate:1;
    } ext_swizzle;
 
-#line 188 "program/program_parse.tab.h" /* yacc.c:1909  */
+#line 188 "./program/program_parse.tab.h" /* yacc.c:1909  */
 };
 
 typedef union YYSTYPE YYSTYPE;

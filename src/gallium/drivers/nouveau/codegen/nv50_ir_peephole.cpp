@@ -2602,6 +2602,10 @@ NV50PostRaConstantFolding::visit(BasicBlock *bb)
              !isFloatType(i->dType))
             break;
 
+         if (i->getDef(0)->reg.data.id >= 64 ||
+             i->getSrc(0)->reg.data.id >= 64)
+            break;
+
          def = i->getSrc(1)->getInsn();
          if (def->op == OP_MOV && def->src(0).getFile() == FILE_IMMEDIATE) {
             vtmp = i->getSrc(1);

@@ -506,11 +506,48 @@ nvc0_miptree_transfer_unmap(struct pipe_context *pctx,
 }
 
 /* This happens rather often with DTD9/st. */
-void
+static void
 nvc0_cb_push(struct nouveau_context *nv,
-             struct nouveau_bo *bo, unsigned domain,
-             unsigned base, unsigned size,
+             struct nv04_resource *res,
              unsigned offset, unsigned words, const uint32_t *data)
+{
+   struct nvc0_context *nvc0 = nvc0_context(&nv->pipe);
+   struct nvc0_constbuf *cb = NULL;
+   int s;
+
+   /* Go through all the constbuf binding points of this buffer and try to
+    * find one which contains the region to be updated.
+    */
+   for (s = 0; s < 6 && !cb; s++) {
+      uint16_t bindings = res->cb_bindings[s];
+      while (bindings) {
+         int i = ffs(bindings) - 1;
+         uint32_t cb_offset = nvc0->constbuf[s][i].offset;
+
+         bindings &= ~(1 << i);
+         if (cb_offset <= offset &&
+             cb_offset + nvc0->constbuf[s][i].size >= offset + words * 4) {
+            cb = &nvc0->constbuf[s][i];
+            break;
+         }
+      }
+   }
+
+   if (cb) {
+      nvc0_cb_bo_push(nv, res->bo, res->domain,
+                      res->offset + cb->offset, cb->size,
+                      offset - cb->offset, words, data);
+   } else {
+      nv->push_data(nv, res->bo, res->offset + offset, res->domain,
+                    words * 4, data);
+   }
+}
+
+void
+nvc0_cb_bo_push(struct nouveau_context *nv,
+                struct nouveau_bo *bo, unsigned domain,
+                unsigned base, unsigned size,
+                unsigned offset, unsigned words, const uint32_t *data)
 {
    struct nouveau_pushbuf *push = nv->pushbuf;
 
@@ -519,6 +556,9 @@ nvc0_cb_push(struct nouveau_context *nv,
 
    assert(!(offset & 3));
    size = align(size, 0x100);
+
+   assert(offset < size);
+   assert(offset + words * 4 <= size);
 
    BEGIN_NVC0(push, NVC0_3D(CB_SIZE), 3);
    PUSH_DATA (push, size);

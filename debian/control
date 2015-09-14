@@ -409,6 +409,7 @@ Breaks:
  libgl1-nvidia-alternatives (<= 275.09.07-1),
  fglrx-glx (<< 1:11-6-1),
  glx-diversions (<< 0.4),
+ libopengl-perl (<< 0.6704+dfsg-2),
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: free implementation of the OpenGL API -- GLX runtime

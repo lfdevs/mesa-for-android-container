@@ -1,3 +1,9 @@
+mesa (11.0.0-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 14 Sep 2015 14:23:13 +0300
+
 mesa (11.0.0~rc3-1) experimental; urgency=medium
 
   [ Andreas Boll ]
@@ -43,6 +49,23 @@ mesa (11.0.0~git20150817-1) experimental; urgency=medium
   * rules: Enable llvmpipe on armhf again.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 18 Aug 2015 07:53:45 +0300
+
+mesa (10.6.7-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 14 Sep 2015 11:15:23 +0300
+
+mesa (10.6.5-1) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+
+  [ Julien Cristau ]
+  * Break libopengl-perl (<< 0.6704+dfsg-2), thanks to Niko Tyni
+    (closes: #796918)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 02 Sep 2015 12:26:37 +0300
 
 mesa (10.6.4-1) unstable; urgency=medium
 

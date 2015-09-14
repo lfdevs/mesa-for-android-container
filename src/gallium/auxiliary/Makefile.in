@@ -1307,6 +1307,8 @@ AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS) $(MSVC2008_COMPAT_CXXFLAGS) \
 	$(am__append_3)
 libgallium_la_SOURCES = $(C_SOURCES) $(NIR_SOURCES) \
 	$(GENERATED_SOURCES) $(am__append_4)
+MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 libgalliumvl_stub_la_SOURCES = \
 	$(VL_STUB_SOURCES)
 
@@ -2559,17 +2561,20 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
-indices/u_indices_gen.c: $(srcdir)/indices/u_indices_gen.py
-	$(AM_V_at)$(MKDIR_P) indices
-	$(AM_V_GEN) $(PYTHON2) $< > $@
+indices/u_indices_gen.c: indices/u_indices_gen.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/indices/u_indices_gen.py > $@
 
-indices/u_unfilled_gen.c: $(srcdir)/indices/u_unfilled_gen.py
-	$(AM_V_at)$(MKDIR_P) indices
-	$(AM_V_GEN) $(PYTHON2) $< > $@
+indices/u_unfilled_gen.c: indices/u_unfilled_gen.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/indices/u_unfilled_gen.py > $@
 
-util/u_format_table.c: $(srcdir)/util/u_format_table.py $(srcdir)/util/u_format_pack.py $(srcdir)/util/u_format_parse.py $(srcdir)/util/u_format.csv
-	$(AM_V_at)$(MKDIR_P) util
-	$(AM_V_GEN) $(PYTHON2) $(srcdir)/util/u_format_table.py $(srcdir)/util/u_format.csv > $@
+util/u_format_table.c: util/u_format_table.py \
+                       util/u_format_pack.py \
+                       util/u_format_parse.py \
+                       util/u_format.csv
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/util/u_format_table.py $(srcdir)/util/u_format.csv > $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

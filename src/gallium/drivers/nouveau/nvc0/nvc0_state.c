@@ -831,6 +831,8 @@ nvc0_set_constant_buffer(struct pipe_context *pipe, uint shader, uint index,
    }
    nvc0->constbuf_dirty[s] |= 1 << i;
 
+   if (nvc0->constbuf[s][i].u.buf)
+      nv04_resource(nvc0->constbuf[s][i].u.buf)->cb_bindings[s] &= ~(1 << i);
    pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, res);
 
    nvc0->constbuf[s][i].user = (cb && cb->user_buffer) ? true : false;

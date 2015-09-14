@@ -149,14 +149,50 @@ static void
 nv30_resource_resolve(struct nv30_context *nv30,
                       const struct pipe_blit_info *info)
 {
+   struct nv30_miptree *src_mt = nv30_miptree(info->src.resource);
    struct nv30_rect src, dst;
+   unsigned x, x0, x1, y, y1, w, h;
 
    define_rect(info->src.resource, 0, info->src.box.z, info->src.box.x,
       info->src.box.y, info->src.box.width, info->src.box.height, &src);
    define_rect(info->dst.resource, 0, info->dst.box.z, info->dst.box.x,
       info->dst.box.y, info->dst.box.width, info->dst.box.height, &dst);
 
-   nv30_transfer_rect(nv30, BILINEAR, &src, &dst);
+   x0 = src.x0;
+   x1 = src.x1;
+   y1 = src.y1;
+
+   /* On nv3x we must use sifm which is restricted to 1024x1024 tiles */
+   for (y = src.y0; y < y1; y += h) {
+      h = y1 - y;
+      if (h > 1024)
+         h = 1024;
+
+      src.y0 = 0;
+      src.y1 = h;
+      src.h = h;
+
+      dst.y1 = dst.y0 + (h >> src_mt->ms_y);
+      dst.h = h >> src_mt->ms_y;
+
+      for (x = x0; x < x1; x += w) {
+         w = x1 - x;
+         if (w > 1024)
+            w = 1024;
+
+         src.offset = y * src.pitch + x * src.cpp;
+         src.x0 = 0;
+         src.x1 = w;
+         src.w = w;
+
+         dst.offset = (y >> src_mt->ms_y) * dst.pitch +
+                      (x >> src_mt->ms_x) * dst.cpp;
+         dst.x1 = dst.x0 + (w >> src_mt->ms_x);
+         dst.w = w >> src_mt->ms_x;
+
+         nv30_transfer_rect(nv30, BILINEAR, &src, &dst);
+      }
+   }
 }
 
 void

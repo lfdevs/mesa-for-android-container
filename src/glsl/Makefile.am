@@ -140,13 +140,16 @@ libglsl_la_SOURCES =					\
 	glsl_parser.cpp					\
 	glsl_parser.h					\
 	$(LIBGLSL_FILES)				\
-	$(NIR_FILES)
+	$(NIR_FILES)					\
+	$(NIR_GENERATED_FILES)
+
 
 libnir_la_SOURCES =					\
 	glsl_types.cpp					\
 	builtin_types.cpp				\
 	glsl_symbol_table.cpp				\
-	$(NIR_FILES)
+	$(NIR_FILES)					\
+	$(NIR_GENERATED_FILES)
 
 glsl_compiler_SOURCES = \
 	$(GLSL_COMPILER_CXX_FILES)
@@ -197,19 +200,23 @@ am__v_YACC_ = $(am__v_YACC_$(AM_DEFAULT_VERBOSITY))
 am__v_YACC_0 = @echo "  YACC    " $@;
 am__v_YACC_1 =
 
+MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
+YACC_GEN = $(AM_V_YACC)$(YACC) $(YFLAGS)
+LEX_GEN = $(AM_V_LEX)$(LEX) $(LFLAGS)
+
 glsl_parser.cpp glsl_parser.h: glsl_parser.yy
-	$(AM_V_YACC) $(YACC) $(YFLAGS) -o $@ -p "_mesa_glsl_" --defines=$(builddir)/glsl_parser.h $<
+	$(YACC_GEN) -o $@ -p "_mesa_glsl_" --defines=$(builddir)/glsl_parser.h $(srcdir)/glsl_parser.yy
 
 glsl_lexer.cpp: glsl_lexer.ll
-	$(AM_V_LEX) $(LEX) $(LFLAGS) -o $@ $<
+	$(LEX_GEN) -o $@ $(srcdir)/glsl_lexer.ll
 
 glcpp/glcpp-parse.c glcpp/glcpp-parse.h: glcpp/glcpp-parse.y
-	$(AM_V_at)$(MKDIR_P) glcpp
-	$(AM_V_YACC) $(YACC) $(YFLAGS) -o $@ -p "glcpp_parser_" --defines=$(builddir)/glcpp/glcpp-parse.h $<
+	$(MKDIR_GEN)
+	$(YACC_GEN) -o $@ -p "glcpp_parser_" --defines=$(builddir)/glcpp/glcpp-parse.h $(srcdir)/glcpp/glcpp-parse.y
 
 glcpp/glcpp-lex.c: glcpp/glcpp-lex.l
-	$(AM_V_at)$(MKDIR_P) glcpp
-	$(AM_V_LEX) $(LEX) $(LFLAGS) -o $@ $<
+	$(MKDIR_GEN)
+	$(LEX_GEN) -o $@ $(srcdir)/glcpp/glcpp-lex.l
 
 # Only the parsers (specifically the header files generated at the same time)
 # need to be in BUILT_SOURCES. Though if we list the parser headers YACC is
@@ -222,11 +229,7 @@ BUILT_SOURCES =						\
 	glsl_lexer.cpp					\
 	glcpp/glcpp-parse.c				\
 	glcpp/glcpp-lex.c				\
-	nir/nir_builder_opcodes.h				\
-	nir/nir_constant_expressions.c			\
-	nir/nir_opcodes.c				\
-	nir/nir_opcodes.h				\
-	nir/nir_opt_algebraic.c
+	$(NIR_GENERATED_FILES)
 CLEANFILES =						\
 	glcpp/glcpp-parse.h				\
 	glsl_parser.h					\
@@ -239,22 +242,24 @@ dist-hook:
 	$(RM) glcpp/tests/*.out
 	$(RM) glcpp/tests/subtest*/*.out
 
-nir/nir_builder_opcodes.h: nir/nir_opcodes.py nir/nir_builder_opcodes_h.py
-	$(AM_V_at)$(MKDIR_P) nir
-	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_builder_opcodes_h.py > $@
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 
-nir/nir_constant_expressions.c: nir/nir_opcodes.py nir/nir_constant_expressions.py nir/nir_constant_expressions.h
-	$(AM_V_at)$(MKDIR_P) nir
-	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_constant_expressions.py > $@
+nir/nir_builder_opcodes.h: nir/nir_opcodes.py nir/nir_builder_opcodes_h.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/nir/nir_builder_opcodes_h.py > $@
+
+nir/nir_constant_expressions.c: nir/nir_opcodes.py nir/nir_constant_expressions.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/nir/nir_constant_expressions.py > $@
 
 nir/nir_opcodes.h: nir/nir_opcodes.py nir/nir_opcodes_h.py
-	$(AM_V_at)$(MKDIR_P) nir
-	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opcodes_h.py > $@
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/nir/nir_opcodes_h.py > $@
 
 nir/nir_opcodes.c: nir/nir_opcodes.py nir/nir_opcodes_c.py
-	$(AM_V_at)$(MKDIR_P) nir
-	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opcodes_c.py > $@
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/nir/nir_opcodes_c.py > $@
 
 nir/nir_opt_algebraic.c: nir/nir_opt_algebraic.py nir/nir_algebraic.py
-	$(AM_V_at)$(MKDIR_P) nir
-	$(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/nir/nir_opt_algebraic.py > $@
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/nir/nir_opt_algebraic.py > $@

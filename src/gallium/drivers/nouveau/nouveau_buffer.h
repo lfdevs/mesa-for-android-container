@@ -41,6 +41,8 @@ struct nv04_resource {
    uint8_t status;
    uint8_t domain;
 
+   uint16_t cb_bindings[6]; /* per-shader per-slot bindings */
+
    struct nouveau_fence *fence;
    struct nouveau_fence *fence_wr;
 

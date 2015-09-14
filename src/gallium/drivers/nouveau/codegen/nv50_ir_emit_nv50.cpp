@@ -884,7 +884,7 @@ CodeEmitterNV50::emitINTERP(const Instruction *i)
    defId(i->def(0), 2);
    srcAddr8(i->src(0), 16);
 
-   if (i->getInterpMode() == NV50_IR_INTERP_FLAT) {
+   if (i->encSize != 8 && i->getInterpMode() == NV50_IR_INTERP_FLAT) {
       code[0] |= 1 << 8;
    } else {
       if (i->op == OP_PINTERP) {
@@ -896,10 +896,11 @@ CodeEmitterNV50::emitINTERP(const Instruction *i)
    }
 
    if (i->encSize == 8) {
-      code[1] =
-         (code[0] & (3 << 24)) >> (24 - 16) |
-         (code[0] & (1 <<  8)) << (18 -  8);
-      code[0] &= ~0x03000100;
+      if (i->getInterpMode() == NV50_IR_INTERP_FLAT)
+         code[1] = 4 << 16;
+      else
+         code[1] = (code[0] & (3 << 24)) >> (24 - 16);
+      code[0] &= ~0x03000000;
       code[0] |= 1;
       emitFlagsRd(i);
    }

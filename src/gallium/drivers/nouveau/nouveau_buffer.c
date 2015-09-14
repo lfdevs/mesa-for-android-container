@@ -206,8 +206,8 @@ nouveau_transfer_write(struct nouveau_context *nv, struct nouveau_transfer *tx,
       nv->copy_data(nv, buf->bo, buf->offset + base, buf->domain,
                     tx->bo, tx->offset + offset, NOUVEAU_BO_GART, size);
    else
-   if ((buf->base.bind & PIPE_BIND_CONSTANT_BUFFER) && nv->push_cb && can_cb)
-      nv->push_cb(nv, buf->bo, buf->domain, buf->offset, buf->base.width0,
+   if (nv->push_cb && can_cb)
+      nv->push_cb(nv, buf,
                   base, size / 4, (const uint32_t *)data);
    else
       nv->push_data(nv, buf->bo, buf->offset + base, buf->domain, size, data);

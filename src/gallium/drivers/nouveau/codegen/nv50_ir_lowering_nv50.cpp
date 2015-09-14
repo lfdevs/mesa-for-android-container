@@ -202,7 +202,10 @@ NV50LegalizePostRA::visit(Function *fn)
    Program *prog = fn->getProgram();
 
    r63 = new_LValue(fn, FILE_GPR);
-   r63->reg.data.id = 63;
+   if (prog->maxGPR < 63)
+      r63->reg.data.id = 63;
+   else
+      r63->reg.data.id = 127;
 
    // this is actually per-program, but we can do it all on visiting main()
    std::list<Instruction *> *outWrites =

@@ -141,7 +141,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 	bool dump = r600_can_dump_shader(&rctx->screen->b, sel->tokens);
 	unsigned use_sb = !(rctx->screen->b.debug_flags & DBG_NO_SB);
 	unsigned sb_disasm = use_sb || (rctx->screen->b.debug_flags & DBG_SB_DISASM);
-	unsigned export_shader = key.vs.as_es;
+	unsigned export_shader;
 
 	shader->shader.bc.isa = rctx->isa;
 
@@ -220,6 +220,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		}
 		break;
 	case TGSI_PROCESSOR_VERTEX:
+		export_shader = key.vs.as_es;
 		if (rctx->b.chip_class >= EVERGREEN) {
 			if (export_shader)
 				evergreen_update_es_state(ctx, shader);
@@ -1830,8 +1831,6 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	ctx.shader = shader;
 	ctx.native_integers = true;
 
-	shader->vs_as_gs_a = key.vs.as_gs_a;
-	shader->vs_as_es = key.vs.as_es;
 
 	r600_bytecode_init(ctx.bc, rscreen->b.chip_class, rscreen->b.family,
 			   rscreen->has_compressed_msaa_texturing);
@@ -1844,9 +1843,14 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	shader->processor_type = ctx.type;
 	ctx.bc->type = shader->processor_type;
 
-	ring_outputs = key.vs.as_es || (ctx.type == TGSI_PROCESSOR_GEOMETRY);
+	if (ctx.type == TGSI_PROCESSOR_VERTEX) {
+		shader->vs_as_gs_a = key.vs.as_gs_a;
+		shader->vs_as_es = key.vs.as_es;
+	}
 
-	if (key.vs.as_es) {
+	ring_outputs = shader->vs_as_es || ctx.type == TGSI_PROCESSOR_GEOMETRY;
+
+	if (shader->vs_as_es) {
 		ctx.gs_for_vs = &rctx->gs_shader->current->shader;
 	} else {
 		ctx.gs_for_vs = NULL;
@@ -1866,7 +1870,8 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	shader->nr_ps_color_exports = 0;
 	shader->nr_ps_max_color_exports = 0;
 
-	shader->two_side = key.ps.color_two_side;
+	if (ctx.type == TGSI_PROCESSOR_FRAGMENT)
+		shader->two_side = key.ps.color_two_side;
 
 	/* register allocations */
 	/* Values [0,127] correspond to GPR[0..127].
@@ -2270,7 +2275,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	convert_edgeflag_to_int(&ctx);
 
 	if (ring_outputs) {
-		if (key.vs.as_es)
+		if (shader->vs_as_es)
 			emit_gs_ring_writes(&ctx, FALSE);
 	} else {
 		/* Export output */

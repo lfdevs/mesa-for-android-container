@@ -25,6 +25,7 @@
 
 #include <stack>
 #include <limits>
+#include <tr1/unordered_map>
 
 namespace nv50_ir {
 
@@ -222,6 +223,7 @@ private:
    private:
       virtual bool visit(BasicBlock *);
       inline bool needNewElseBlock(BasicBlock *b, BasicBlock *p);
+      inline void splitEdges(BasicBlock *b);
    };
 
    class ArgumentMovesPass : public Pass {
@@ -345,28 +347,55 @@ RegAlloc::PhiMovesPass::needNewElseBlock(BasicBlock *b, BasicBlock *p)
    return (n == 2);
 }
 
-// For each operand of each PHI in b, generate a new value by inserting a MOV
-// at the end of the block it is coming from and replace the operand with its
-// result. This eliminates liveness conflicts and enables us to let values be
-// copied to the right register if such a conflict exists nonetheless.
+struct PhiMapHash {
+   size_t operator()(const std::pair<Instruction *, BasicBlock *>& val) const {
+      return std::tr1::hash<Instruction*>()(val.first) * 31 +
+         std::tr1::hash<BasicBlock*>()(val.second);
+   }
+};
+
+typedef std::tr1::unordered_map<
+   std::pair<Instruction *, BasicBlock *>, Value *, PhiMapHash> PhiMap;
+
+// Critical edges need to be split up so that work can be inserted along
+// specific edge transitions. Unfortunately manipulating incident edges into a
+// BB invalidates all the PHI nodes since their sources are implicitly ordered
+// by incident edge order.
 //
-// These MOVs are also crucial in making sure the live intervals of phi srces
-// are extended until the end of the loop, since they are not included in the
-// live-in sets.
-bool
-RegAlloc::PhiMovesPass::visit(BasicBlock *bb)
+// TODO: Make it so that that is not the case, and PHI nodes store pointers to
+// the original BBs.
+void
+RegAlloc::PhiMovesPass::splitEdges(BasicBlock *bb)
 {
-   Instruction *phi, *mov;
    BasicBlock *pb, *pn;
-
+   Instruction *phi;
+   Graph::EdgeIterator ei;
    std::stack<BasicBlock *> stack;
+   int j = 0;
 
-   for (Graph::EdgeIterator ei = bb->cfg.incident(); !ei.end(); ei.next()) {
+   for (ei = bb->cfg.incident(); !ei.end(); ei.next()) {
       pb = BasicBlock::get(ei.getNode());
       assert(pb);
       if (needNewElseBlock(bb, pb))
          stack.push(pb);
    }
+
+   // No critical edges were found, no need to perform any work.
+   if (stack.empty())
+      return;
+
+   // We're about to, potentially, reorder the inbound edges. This means that
+   // we need to hold on to the (phi, bb) -> src mapping, and fix up the phi
+   // nodes after the graph has been modified.
+   PhiMap phis;
+
+   j = 0;
+   for (ei = bb->cfg.incident(); !ei.end(); ei.next(), j++) {
+      pb = BasicBlock::get(ei.getNode());
+      for (phi = bb->getPhi(); phi && phi->op == OP_PHI; phi = phi->next)
+         phis.insert(std::make_pair(std::make_pair(phi, pb), phi->getSrc(j)));
+   }
+
    while (!stack.empty()) {
       pb = stack.top();
       pn = new BasicBlock(func);
@@ -379,12 +408,47 @@ RegAlloc::PhiMovesPass::visit(BasicBlock *bb)
       assert(pb->getExit()->op != OP_CALL);
       if (pb->getExit()->asFlow()->target.bb == bb)
          pb->getExit()->asFlow()->target.bb = pn;
+
+      for (phi = bb->getPhi(); phi && phi->op == OP_PHI; phi = phi->next) {
+         PhiMap::iterator it = phis.find(std::make_pair(phi, pb));
+         assert(it != phis.end());
+         phis.insert(std::make_pair(std::make_pair(phi, pn), it->second));
+         phis.erase(it);
+      }
    }
+
+   // Now go through and fix up all of the phi node sources.
+   j = 0;
+   for (ei = bb->cfg.incident(); !ei.end(); ei.next(), j++) {
+      pb = BasicBlock::get(ei.getNode());
+      for (phi = bb->getPhi(); phi && phi->op == OP_PHI; phi = phi->next) {
+         PhiMap::const_iterator it = phis.find(std::make_pair(phi, pb));
+         assert(it != phis.end());
+
+         phi->setSrc(j, it->second);
+      }
+   }
+}
+
+// For each operand of each PHI in b, generate a new value by inserting a MOV
+// at the end of the block it is coming from and replace the operand with its
+// result. This eliminates liveness conflicts and enables us to let values be
+// copied to the right register if such a conflict exists nonetheless.
+//
+// These MOVs are also crucial in making sure the live intervals of phi srces
+// are extended until the end of the loop, since they are not included in the
+// live-in sets.
+bool
+RegAlloc::PhiMovesPass::visit(BasicBlock *bb)
+{
+   Instruction *phi, *mov;
+
+   splitEdges(bb);
 
    // insert MOVs (phi->src(j) should stem from j-th in-BB)
    int j = 0;
    for (Graph::EdgeIterator ei = bb->cfg.incident(); !ei.end(); ei.next()) {
-      pb = BasicBlock::get(ei.getNode());
+      BasicBlock *pb = BasicBlock::get(ei.getNode());
       if (!pb->isTerminated())
          pb->insertTail(new_FlowInstruction(func, OP_BRA, bb));
 

@@ -110,7 +110,7 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
    struct amdgpu_heap_info vram, gtt;
    struct drm_amdgpu_info_hw_ip dma = {}, uvd = {}, vce = {};
    uint32_t vce_version = 0, vce_feature = 0;
-   int r;
+   int r, i, j;
 
    /* Query hardware and driver information. */
    r = amdgpu_query_gpu_info(ws->dev, &ws->amdinfo);
@@ -248,7 +248,6 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
    ws->info.vram_size = vram.heap_size;
    /* convert the shader clock from KHz to MHz */
    ws->info.max_sclk = ws->amdinfo.max_engine_clk / 1000;
-   ws->info.max_compute_units = 1; /* TODO */
    ws->info.max_se = ws->amdinfo.num_shader_engines;
    ws->info.max_sh_per_se = ws->amdinfo.num_shader_arrays_per_engine;
    ws->info.has_uvd = uvd.available_rings != 0;
@@ -262,6 +261,18 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
    ws->info.r600_max_pipes = ws->amdinfo.max_quad_shader_pipes; /* TODO: is this correct? */
    ws->info.r600_virtual_address = TRUE;
    ws->info.r600_has_dma = dma.available_rings != 0;
+
+   /* Guess what the maximum compute unit number is by looking at the mask
+    * of enabled CUs.
+    */
+   for (i = 0; i < ws->info.max_se; i++)
+      for (j = 0; j < ws->info.max_sh_per_se; j++) {
+         unsigned max = util_last_bit(ws->amdinfo.cu_bitmap[i][j]);
+
+         if (ws->info.max_compute_units < max)
+            ws->info.max_compute_units = max;
+      }
+   ws->info.max_compute_units *= ws->info.max_se * ws->info.max_sh_per_se;
 
    memcpy(ws->info.si_tile_mode_array, ws->amdinfo.gb_tile_mode,
           sizeof(ws->amdinfo.gb_tile_mode));

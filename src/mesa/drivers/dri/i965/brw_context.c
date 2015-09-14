@@ -323,6 +323,15 @@ brw_initialize_context_constants(struct brw_context *brw)
 
    ctx->Const.StripTextureBorder = true;
 
+   ctx->Const.MaxUniformBlockSize = 65536;
+   for (int i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_program_constants *prog = &ctx->Const.Program[i];
+      prog->MaxUniformBlocks = 12;
+      prog->MaxCombinedUniformComponents =
+         prog->MaxUniformComponents +
+         ctx->Const.MaxUniformBlockSize / 4 * prog->MaxUniformBlocks;
+   }
+
    ctx->Const.MaxDualSourceDrawBuffers = 1;
    ctx->Const.MaxDrawBuffers = BRW_MAX_DRAW_BUFFERS;
    ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits = max_samplers;

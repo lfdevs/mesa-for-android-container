@@ -440,7 +440,7 @@ nvc0_constbufs_validate(struct nvc0_context *nvc0)
                BEGIN_NVC0(push, NVC0_3D(CB_BIND(s)), 1);
                PUSH_DATA (push, (0 << 4) | 1);
             }
-            nvc0_cb_push(&nvc0->base, bo, NV_VRAM_DOMAIN(&nvc0->screen->base),
+            nvc0_cb_bo_push(&nvc0->base, bo, NV_VRAM_DOMAIN(&nvc0->screen->base),
                          base, nvc0->state.uniform_buffer_bound[s],
                          0, (size + 3) / 4,
                          nvc0->constbuf[s][0].u.data);
@@ -458,6 +458,7 @@ nvc0_constbufs_validate(struct nvc0_context *nvc0)
                BCTX_REFN(nvc0->bufctx_3d, CB(s, i), res, RD);
 
                nvc0->cb_dirty = 1; /* Force cache flush for UBO. */
+               res->cb_bindings[s] |= 1 << i;
             } else {
                BEGIN_NVC0(push, NVC0_3D(CB_BIND(s)), 1);
                PUSH_DATA (push, (i << 4) | 0);
