@@ -950,6 +950,14 @@ vec4_instruction::can_reswizzle(int dst_writemask,
    if (mlen > 0)
       return false;
 
+   /* We can't use swizzles on the accumulator and that's really the only
+    * HW_REG we would care to reswizzle so just disallow them all.
+    */
+   for (int i = 0; i < 3; i++) {
+      if (src[i].file == HW_REG)
+         return false;
+   }
+
    return true;
 }
 
@@ -1053,6 +1061,17 @@ vec4_visitor::opt_register_coalesce()
                }
             }
 
+            /* This doesn't handle saturation on the instruction we
+             * want to coalesce away if the register types do not match.
+             * But if scan_inst is a non type-converting 'mov', we can fix
+             * the types later.
+             */
+            if (inst->saturate &&
+                inst->dst.type != scan_inst->dst.type &&
+                !(scan_inst->opcode == BRW_OPCODE_MOV &&
+                  scan_inst->dst.type == scan_inst->src[0].type))
+               break;
+
             /* If we can't handle the swizzle, bail. */
             if (!scan_inst->can_reswizzle(inst->dst.writemask,
                                           inst->src[0].swizzle,
@@ -1128,6 +1147,16 @@ vec4_visitor::opt_register_coalesce()
 	       scan_inst->dst.file = inst->dst.file;
 	       scan_inst->dst.reg = inst->dst.reg;
 	       scan_inst->dst.reg_offset = inst->dst.reg_offset;
+               if (inst->saturate &&
+                   inst->dst.type != scan_inst->dst.type) {
+                  /* If we have reached this point, scan_inst is a non
+                   * type-converting 'mov' and we can modify its register types
+                   * to match the ones in inst. Otherwise, we could have an
+                   * incorrect saturation result.
+                   */
+                  scan_inst->dst.type = inst->dst.type;
+                  scan_inst->src[0].type = inst->src[0].type;
+               }
 	       scan_inst->saturate |= inst->saturate;
 	    }
 	    scan_inst = (vec4_instruction *)scan_inst->next;

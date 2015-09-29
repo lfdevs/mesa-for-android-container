@@ -376,7 +376,7 @@ nir_lower_io_block(nir_block *block, void *void_state)
 
          store->const_index[0] = offset;
 
-         nir_src_copy(&store->src[0], &intrin->src[0], state->mem_ctx);
+         nir_src_copy(&store->src[0], &intrin->src[0], store);
 
          if (has_indirect)
             store->src[1] = indirect;

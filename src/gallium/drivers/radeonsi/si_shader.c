@@ -2300,7 +2300,7 @@ static void tex_fetch_args(
 						 lp_build_const_int32(gallivm,
 								      SI_FMASK_TEX_OFFSET), "");
 			fmask_ptr = LLVMGetParam(si_shader_ctx->radeon_bld.main_fn, SI_PARAM_RESOURCE);
-			fmask_ptr = build_indexed_load_const(si_shader_ctx, res_ptr, ind_index);
+			fmask_ptr = build_indexed_load_const(si_shader_ctx, fmask_ptr, ind_index);
 		}
 	} else {
 		res_ptr = si_shader_ctx->resources[sampler_index];

@@ -46,11 +46,11 @@ lower_reduction(nir_alu_instr *instr, nir_op chan_op, nir_op merge_op,
    for (unsigned i = 0; i < num_components; i++) {
       nir_alu_instr *chan = nir_alu_instr_create(mem_ctx, chan_op);
       nir_alu_ssa_dest_init(chan, 1);
-      nir_alu_src_copy(&chan->src[0], &instr->src[0], mem_ctx);
+      nir_alu_src_copy(&chan->src[0], &instr->src[0], chan);
       chan->src[0].swizzle[0] = chan->src[0].swizzle[i];
       if (nir_op_infos[chan_op].num_inputs > 1) {
          assert(nir_op_infos[chan_op].num_inputs == 2);
-         nir_alu_src_copy(&chan->src[1], &instr->src[1], mem_ctx);
+         nir_alu_src_copy(&chan->src[1], &instr->src[1], chan);
          chan->src[1].swizzle[0] = chan->src[1].swizzle[i];
       }
 
@@ -153,7 +153,7 @@ lower_alu_instr_scalar(nir_alu_instr *instr, void *mem_ctx)
          unsigned src_chan = (nir_op_infos[instr->op].input_sizes[i] == 1 ?
                               0 : chan);
 
-         nir_alu_src_copy(&lower->src[i], &instr->src[i], mem_ctx);
+         nir_alu_src_copy(&lower->src[i], &instr->src[i], lower);
          for (int j = 0; j < 4; j++)
             lower->src[i].swizzle[j] = instr->src[i].swizzle[src_chan];
       }

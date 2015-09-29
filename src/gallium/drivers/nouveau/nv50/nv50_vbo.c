@@ -768,6 +768,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   bool tex_dirty = false;
    int i, s;
 
    /* NOTE: caller must ensure that (min_index + index_bias) is >= 0 */
@@ -797,6 +798,9 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 
    push->kick_notify = nv50_draw_vbo_kick_notify;
 
+   /* TODO: Instead of iterating over all the buffer resources looking for
+    * coherent buffers, keep track of a context-wide count.
+    */
    for (s = 0; s < 3 && !nv50->cb_dirty; ++s) {
       uint32_t valid = nv50->constbuf_valid[s];
 
@@ -822,6 +826,21 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       BEGIN_NV04(push, NV50_3D(CODE_CB_FLUSH), 1);
       PUSH_DATA (push, 0);
       nv50->cb_dirty = false;
+   }
+
+   for (s = 0; s < 3 && !tex_dirty; ++s) {
+      for (i = 0; i < nv50->num_textures[s] && !tex_dirty; ++i) {
+         if (!nv50->textures[s][i] ||
+             nv50->textures[s][i]->texture->target != PIPE_BUFFER)
+            continue;
+         if (nv50->textures[s][i]->texture->flags &
+             PIPE_RESOURCE_FLAG_MAP_COHERENT)
+            tex_dirty = true;
+      }
+   }
+   if (tex_dirty) {
+      BEGIN_NV04(push, NV50_3D(TEX_CACHE_CTL), 1);
+      PUSH_DATA (push, 0x20);
    }
 
    if (nv50->vbo_fifo) {

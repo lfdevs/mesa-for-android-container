@@ -221,6 +221,26 @@ nv50_create_texture_view(struct pipe_context *pipe,
    return &view->pipe;
 }
 
+static void
+nv50_update_tic(struct nv50_context *nv50, struct nv50_tic_entry *tic,
+                struct nv04_resource *res)
+{
+   uint64_t address = res->address;
+   if (res->base.target != PIPE_BUFFER)
+      return;
+   address += tic->pipe.u.buf.first_element *
+      util_format_get_blocksize(tic->pipe.format);
+   if (tic->tic[1] == (uint32_t)address &&
+       (tic->tic[2] & 0xff) == address >> 32)
+      return;
+
+   nv50_screen_tic_unlock(nv50->screen, tic);
+   tic->id = -1;
+   tic->tic[1] = address;
+   tic->tic[2] &= 0xffffff00;
+   tic->tic[2] |= address >> 32;
+}
+
 static bool
 nv50_validate_tic(struct nv50_context *nv50, int s)
 {
@@ -240,6 +260,7 @@ nv50_validate_tic(struct nv50_context *nv50, int s)
          continue;
       }
       res = &nv50_miptree(tic->pipe.texture)->base;
+      nv50_update_tic(nv50, tic, res);
 
       if (tic->id < 0) {
          tic->id = nv50_screen_tic_alloc(nv50->screen, tic);

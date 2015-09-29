@@ -1556,7 +1556,10 @@ fs_visitor::assign_vs_urb_setup()
 
             inst->src[i].file = HW_REG;
             inst->src[i].fixed_hw_reg =
-               retype(brw_vec8_grf(grf, 0), inst->src[i].type);
+               stride(byte_offset(retype(brw_vec8_grf(grf, 0), inst->src[i].type),
+                                  inst->src[i].subreg_offset),
+                      inst->exec_size * inst->src[i].stride,
+                      inst->exec_size, inst->src[i].stride);
          }
       }
    }

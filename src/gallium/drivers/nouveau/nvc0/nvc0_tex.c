@@ -226,6 +226,26 @@ nvc0_create_texture_view(struct pipe_context *pipe,
    return &view->pipe;
 }
 
+static void
+nvc0_update_tic(struct nvc0_context *nvc0, struct nv50_tic_entry *tic,
+                struct nv04_resource *res)
+{
+   uint64_t address = res->address;
+   if (res->base.target != PIPE_BUFFER)
+      return;
+   address += tic->pipe.u.buf.first_element *
+      util_format_get_blocksize(tic->pipe.format);
+   if (tic->tic[1] == (uint32_t)address &&
+       (tic->tic[2] & 0xff) == address >> 32)
+      return;
+
+   nvc0_screen_tic_unlock(nvc0->screen, tic);
+   tic->id = -1;
+   tic->tic[1] = address;
+   tic->tic[2] &= 0xffffff00;
+   tic->tic[2] |= address >> 32;
+}
+
 static bool
 nvc0_validate_tic(struct nvc0_context *nvc0, int s)
 {
@@ -247,6 +267,7 @@ nvc0_validate_tic(struct nvc0_context *nvc0, int s)
          continue;
       }
       res = nv04_resource(tic->pipe.texture);
+      nvc0_update_tic(nvc0, tic, res);
 
       if (tic->id < 0) {
          tic->id = nvc0_screen_tic_alloc(nvc0->screen, tic);
@@ -313,6 +334,7 @@ nve4_validate_tic(struct nvc0_context *nvc0, unsigned s)
          continue;
       }
       res = nv04_resource(tic->pipe.texture);
+      nvc0_update_tic(nvc0, tic, res);
 
       if (tic->id < 0) {
          tic->id = nvc0_screen_tic_alloc(nvc0->screen, tic);

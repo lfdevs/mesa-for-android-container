@@ -963,6 +963,7 @@ read_pixels_es3_error_check(GLenum format, GLenum type,
             return GL_NO_ERROR;
          break;
       case GL_UNSIGNED_SHORT:
+      case GL_UNSIGNED_INT:
       case GL_UNSIGNED_INT_24_8:
          if (!is_float_depth)
             return GL_NO_ERROR;

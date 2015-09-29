@@ -45,6 +45,24 @@
 #include "uniforms.h"
 #include "varray.h"
 
+static bool
+need_signed_unsigned_int_conversion(mesa_format mesaFormat,
+                                    GLenum format, GLenum type)
+{
+   const GLenum mesaFormatType = _mesa_get_format_datatype(mesaFormat);
+   const bool is_format_integer = _mesa_is_enum_format_integer(format);
+   return (mesaFormatType == GL_INT &&
+           is_format_integer &&
+           (type == GL_UNSIGNED_INT ||
+            type == GL_UNSIGNED_SHORT ||
+            type == GL_UNSIGNED_BYTE)) ||
+          (mesaFormatType == GL_UNSIGNED_INT &&
+           is_format_integer &&
+           (type == GL_INT ||
+            type == GL_SHORT ||
+            type == GL_BYTE));
+}
+
 static struct gl_texture_image *
 create_texture_for_pbo(struct gl_context *ctx, bool create_pbo,
                        GLenum pbo_target, int width, int height,
@@ -166,6 +184,13 @@ _mesa_meta_pbo_TexSubImage(struct gl_context *ctx, GLuint dims,
    if (ctx->_ImageTransferState)
       return false;
 
+   /* This function rely on BlitFramebuffer to fill in the pixel data for
+    * glTex[Sub]Image*D. But, BlitFrameBuffer doesn't support signed to
+    * unsigned or unsigned to signed integer conversions.
+    */
+   if (need_signed_unsigned_int_conversion(tex_image->TexFormat, format, type))
+      return false;
+
    /* For arrays, use a tall (height * depth) 2D texture but taking into
     * account the inter-image padding specified with the image height packing
     * property.
@@ -248,24 +273,6 @@ fail:
    _mesa_meta_end(ctx);
 
    return success;
-}
-
-static bool
-need_signed_unsigned_int_conversion(mesa_format rbFormat,
-                                    GLenum format, GLenum type)
-{
-   const GLenum srcType = _mesa_get_format_datatype(rbFormat);
-   const bool is_dst_format_integer = _mesa_is_enum_format_integer(format);
-   return (srcType == GL_INT &&
-           is_dst_format_integer &&
-           (type == GL_UNSIGNED_INT ||
-            type == GL_UNSIGNED_SHORT ||
-            type == GL_UNSIGNED_BYTE)) ||
-          (srcType == GL_UNSIGNED_INT &&
-           is_dst_format_integer &&
-           (type == GL_INT ||
-            type == GL_SHORT ||
-            type == GL_BYTE));
 }
 
 bool

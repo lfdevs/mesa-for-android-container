@@ -38,11 +38,11 @@ Build-Depends:
  libudev-dev [linux-any],
  flex,
  bison,
- llvm-3.7-dev (>= 1:3.7~+rc2) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
- libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
+ llvm-3.7-dev (>= 1:3.7~+rc2) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf ppc64el],
+ libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf ppc64el],
  libwayland-dev (>= 1.2.0) [linux-any],
  libclang-3.7-dev (>= 1:3.7~+rc2) [amd64 i386 armhf],
- libclc-dev [amd64 i386 armhf],
+ libclc-dev (>= 0.2.0+git20150813) [amd64 i386 armhf],
 Vcs-Git: https://anonscm.debian.org/git/pkg-xorg/lib/mesa.git
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.org/
@@ -626,7 +626,7 @@ Package: mesa-opencl-icd
 Section: libs
 Architecture: amd64 i386 armhf
 Depends:
- libclc-r600,
+ libclc-r600 (>= 0.2.0+git20150813),
  ocl-icd-libopencl1 | libopencl1,
  ${shlibs:Depends},
  ${misc:Depends},

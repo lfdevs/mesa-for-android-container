@@ -355,6 +355,8 @@ fd3_fs_output_format(enum pipe_format format)
 	case PIPE_FORMAT_R16G16_FLOAT:
 	case PIPE_FORMAT_R11G11B10_FLOAT:
 		return RB_R16G16B16A16_FLOAT;
+	case PIPE_FORMAT_L8_UNORM:
+		return RB_R8G8B8A8_UNORM;
 	default:
 		return fd3_pipe2color(format);
 	}

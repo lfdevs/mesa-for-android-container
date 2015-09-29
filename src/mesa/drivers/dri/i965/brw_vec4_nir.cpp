@@ -456,7 +456,7 @@ void
 vec4_visitor::nir_emit_load_const(nir_load_const_instr *instr)
 {
    dst_reg reg = dst_reg(GRF, alloc.allocate(1));
-   reg.type =  BRW_REGISTER_TYPE_F;
+   reg.type =  BRW_REGISTER_TYPE_D;
 
    unsigned remaining = brw_writemask_for_size(instr->def.num_components);
 
@@ -477,7 +477,7 @@ vec4_visitor::nir_emit_load_const(nir_load_const_instr *instr)
       }
 
       reg.writemask = writemask;
-      emit(MOV(reg, src_reg(instr->value.f[i])));
+      emit(MOV(reg, src_reg(instr->value.i[i])));
 
       remaining &= ~writemask;
    }

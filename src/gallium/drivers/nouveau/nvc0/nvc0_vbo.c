@@ -899,6 +899,9 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 
    push->kick_notify = nvc0_draw_vbo_kick_notify;
 
+   /* TODO: Instead of iterating over all the buffer resources looking for
+    * coherent buffers, keep track of a context-wide count.
+    */
    for (s = 0; s < 5 && !nvc0->cb_dirty; ++s) {
       uint32_t valid = nvc0->constbuf_valid[s];
 
@@ -922,6 +925,23 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (nvc0->cb_dirty) {
       IMMED_NVC0(push, NVC0_3D(MEM_BARRIER), 0x1011);
       nvc0->cb_dirty = false;
+   }
+
+   for (s = 0; s < 5; ++s) {
+      for (int i = 0; i < nvc0->num_textures[s]; ++i) {
+         struct nv50_tic_entry *tic = nv50_tic_entry(nvc0->textures[s][i]);
+         struct pipe_resource *res;
+         if (!tic)
+            continue;
+         res = nvc0->textures[s][i]->texture;
+         if (res->target != PIPE_BUFFER ||
+             !(res->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT))
+            continue;
+
+         BEGIN_NVC0(push, NVC0_3D(TEX_CACHE_CTL), 1);
+         PUSH_DATA (push, (tic->id << 4) | 1);
+         NOUVEAU_DRV_STAT(&nvc0->screen->base, tex_cache_flush_count, 1);
+      }
    }
 
    if (nvc0->state.vbo_mode) {

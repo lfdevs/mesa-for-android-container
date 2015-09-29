@@ -673,14 +673,10 @@ builtin_variable_generator::generate_constants()
       if (!state->es_shader) {
          add_const("gl_MaxGeometryAtomicCounters",
                    state->Const.MaxGeometryAtomicCounters);
-
-	 if (state->is_version(400, 0) ||
-             state->ARB_tessellation_shader_enable) {
-		 add_const("gl_MaxTessControlAtomicCounters",
-                           state->Const.MaxTessControlAtomicCounters);
-		 add_const("gl_MaxTessEvaluationAtomicCounters",
-                           state->Const.MaxTessEvaluationAtomicCounters);
-	 }
+         add_const("gl_MaxTessControlAtomicCounters",
+                   state->Const.MaxTessControlAtomicCounters);
+         add_const("gl_MaxTessEvaluationAtomicCounters",
+                   state->Const.MaxTessEvaluationAtomicCounters);
       }
    }
 

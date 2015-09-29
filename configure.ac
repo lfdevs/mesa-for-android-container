@@ -1150,6 +1150,16 @@ AC_SUBST(GLX_TLS, ${GLX_USE_TLS})
 AS_IF([test "x$GLX_USE_TLS" = xyes -a "x$ax_pthread_ok" = xyes],
       [DEFINES="${DEFINES} -DGLX_USE_TLS"])
 
+dnl Read-only text section on x86 hardened platforms
+AC_ARG_ENABLE([glx-read-only-text],
+    [AS_HELP_STRING([--enable-glx-read-only-text],
+        [Disable writable .text section on x86 (decreases performance) @<:@default=disabled@:>@])],
+    [enable_glx_read_only_text="$enableval"],
+    [enable_glx_read_only_text=no])
+if test "x$enable_glx_read_only_text" = xyes; then
+    DEFINES="$DEFINES -DGLX_X86_READONLY_TEXT"
+fi
+
 dnl
 dnl More DRI setup
 dnl

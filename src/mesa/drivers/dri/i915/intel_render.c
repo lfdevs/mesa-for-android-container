@@ -251,7 +251,7 @@ intel_run_render(struct gl_context * ctx, struct tnl_pipeline_stage *stage)
          continue;
 
       intel_render_tab_verts[prim & PRIM_MODE_MASK] (ctx, start,
-                                                     start + length, prim);
+                                                     length, prim);
    }
 
    tnl->Driver.Render.Finish(ctx);

@@ -561,7 +561,7 @@ emit_copy(nir_parallel_copy_instr *pcopy, nir_src src, nir_src dest_src,
       assert(src.reg.reg->num_components >= dest_src.reg.reg->num_components);
 
    nir_alu_instr *mov = nir_alu_instr_create(mem_ctx, nir_op_imov);
-   nir_src_copy(&mov->src[0].src, &src, mem_ctx);
+   nir_src_copy(&mov->src[0].src, &src, mov);
    mov->dest.dest = nir_dest_for_reg(dest_src.reg.reg);
    mov->dest.write_mask = (1 << dest_src.reg.reg->num_components) - 1;
 

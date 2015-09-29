@@ -3595,7 +3595,16 @@ _mesa_get_framebuffer_attachment_parameter(struct gl_context *ctx,
 
    switch (pname) {
    case GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE_EXT:
-      *params = _mesa_is_winsys_fbo(buffer)
+      /* From the OpenGL spec, 9.2. Binding and Managing Framebuffer Objects:
+       *
+       * "If the value of FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE is NONE, then
+       *  either no framebuffer is bound to target; or the default framebuffer
+       *  is bound, attachment is DEPTH or STENCIL, and the number of depth or
+       *  stencil bits, respectively, is zero."
+       */
+      *params = (_mesa_is_winsys_fbo(buffer) &&
+                 ((attachment != GL_DEPTH && attachment != GL_STENCIL) ||
+                  (att->Type != GL_NONE)))
          ? GL_FRAMEBUFFER_DEFAULT : att->Type;
       return;
    case GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME_EXT:

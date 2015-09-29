@@ -1,3 +1,14 @@
+mesa (11.0.2-1) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * control: Bump libclc dependencies.
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+  * rules, control: Enable llvmpipe on ppc64el. (LP: #1489483)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 29 Sep 2015 16:35:59 +0300
+
 mesa (11.0.0-1) experimental; urgency=medium
 
   * New upstream release.

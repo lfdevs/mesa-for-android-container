@@ -145,7 +145,7 @@ void nir_src_copy(nir_src *dest, const nir_src *src, void *mem_ctx)
    }
 }
 
-void nir_dest_copy(nir_dest *dest, const nir_dest *src, void *mem_ctx)
+void nir_dest_copy(nir_dest *dest, const nir_dest *src, nir_instr *instr)
 {
    /* Copying an SSA definition makes no sense whatsoever. */
    assert(!src->is_ssa);
@@ -155,17 +155,18 @@ void nir_dest_copy(nir_dest *dest, const nir_dest *src, void *mem_ctx)
    dest->reg.base_offset = src->reg.base_offset;
    dest->reg.reg = src->reg.reg;
    if (src->reg.indirect) {
-      dest->reg.indirect = ralloc(mem_ctx, nir_src);
-      nir_src_copy(dest->reg.indirect, src->reg.indirect, mem_ctx);
+      dest->reg.indirect = ralloc(instr, nir_src);
+      nir_src_copy(dest->reg.indirect, src->reg.indirect, instr);
    } else {
       dest->reg.indirect = NULL;
    }
 }
 
 void
-nir_alu_src_copy(nir_alu_src *dest, const nir_alu_src *src, void *mem_ctx)
+nir_alu_src_copy(nir_alu_src *dest, const nir_alu_src *src,
+                 nir_alu_instr *instr)
 {
-   nir_src_copy(&dest->src, &src->src, mem_ctx);
+   nir_src_copy(&dest->src, &src->src, &instr->instr);
    dest->abs = src->abs;
    dest->negate = src->negate;
    for (unsigned i = 0; i < 4; i++)
@@ -173,9 +174,10 @@ nir_alu_src_copy(nir_alu_src *dest, const nir_alu_src *src, void *mem_ctx)
 }
 
 void
-nir_alu_dest_copy(nir_alu_dest *dest, const nir_alu_dest *src, void *mem_ctx)
+nir_alu_dest_copy(nir_alu_dest *dest, const nir_alu_dest *src,
+                  nir_alu_instr *instr)
 {
-   nir_dest_copy(&dest->dest, &src->dest, mem_ctx);
+   nir_dest_copy(&dest->dest, &src->dest, &instr->instr);
    dest->write_mask = src->write_mask;
    dest->saturate = src->saturate;
 }
@@ -1921,14 +1923,14 @@ nir_ssa_def_rewrite_uses(nir_ssa_def *def, nir_src new_src, void *mem_ctx)
    nir_foreach_use_safe(def, use_src) {
       nir_instr *src_parent_instr = use_src->parent_instr;
       list_del(&use_src->use_link);
-      nir_src_copy(use_src, &new_src, mem_ctx);
+      nir_src_copy(use_src, &new_src, src_parent_instr);
       src_add_all_uses(use_src, src_parent_instr, NULL);
    }
 
    nir_foreach_if_use_safe(def, use_src) {
       nir_if *src_parent_if = use_src->parent_if;
       list_del(&use_src->use_link);
-      nir_src_copy(use_src, &new_src, mem_ctx);
+      nir_src_copy(use_src, &new_src, src_parent_if);
       src_add_all_uses(use_src, NULL, src_parent_if);
    }
 }

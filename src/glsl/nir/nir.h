@@ -580,8 +580,8 @@ nir_dest_for_reg(nir_register *reg)
    return dest;
 }
 
-void nir_src_copy(nir_src *dest, const nir_src *src, void *mem_ctx);
-void nir_dest_copy(nir_dest *dest, const nir_dest *src, void *mem_ctx);
+void nir_src_copy(nir_src *dest, const nir_src *src, void *instr_or_if);
+void nir_dest_copy(nir_dest *dest, const nir_dest *src, nir_instr *instr);
 
 typedef struct {
    nir_src src;
@@ -629,10 +629,6 @@ typedef struct {
 
    unsigned write_mask : 4; /* ignored if dest.is_ssa is true */
 } nir_alu_dest;
-
-void nir_alu_src_copy(nir_alu_src *dest, const nir_alu_src *src, void *mem_ctx);
-void nir_alu_dest_copy(nir_alu_dest *dest, const nir_alu_dest *src,
-                       void *mem_ctx);
 
 typedef enum {
    nir_type_invalid = 0, /* Not a valid type */
@@ -701,6 +697,11 @@ typedef struct nir_alu_instr {
    nir_alu_dest dest;
    nir_alu_src src[];
 } nir_alu_instr;
+
+void nir_alu_src_copy(nir_alu_src *dest, const nir_alu_src *src,
+                      nir_alu_instr *instr);
+void nir_alu_dest_copy(nir_alu_dest *dest, const nir_alu_dest *src,
+                       nir_alu_instr *instr);
 
 /* is this source channel used? */
 static inline bool

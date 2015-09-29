@@ -60,8 +60,8 @@ insert_mov(nir_alu_instr *vec, unsigned start_channel,
    assert(src_idx < nir_op_infos[vec->op].num_inputs);
 
    nir_alu_instr *mov = nir_alu_instr_create(mem_ctx, nir_op_imov);
-   nir_alu_src_copy(&mov->src[0], &vec->src[src_idx], mem_ctx);
-   nir_alu_dest_copy(&mov->dest, &vec->dest, mem_ctx);
+   nir_alu_src_copy(&mov->src[0], &vec->src[src_idx], mov);
+   nir_alu_dest_copy(&mov->dest, &vec->dest, mov);
 
    mov->dest.write_mask = (1u << start_channel);
    mov->src[0].swizzle[start_channel] = vec->src[src_idx].swizzle[0];

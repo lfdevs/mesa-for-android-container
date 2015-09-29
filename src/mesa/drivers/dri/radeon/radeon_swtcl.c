@@ -446,7 +446,7 @@ static GLboolean radeon_run_render( struct gl_context *ctx,
 		 start, start+length);
 
       if (length)
-	 tab[prim & PRIM_MODE_MASK]( ctx, start, start + length, prim );
+         tab[prim & PRIM_MODE_MASK](ctx, start, length, prim);
    }
 
    tnl->Driver.Render.Finish( ctx );
