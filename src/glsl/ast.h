@@ -62,6 +62,8 @@ public:
    virtual ir_rvalue *hir(exec_list *instructions,
 			  struct _mesa_glsl_parse_state *state);
 
+   virtual bool has_sequence_subexpression() const;
+
    /**
     * Retrieve the source location of an AST node
     *
@@ -221,6 +223,8 @@ public:
    virtual void hir_no_rvalue(exec_list *instructions,
                               struct _mesa_glsl_parse_state *state);
 
+   virtual bool has_sequence_subexpression() const;
+
    ir_rvalue *do_hir(exec_list *instructions,
                      struct _mesa_glsl_parse_state *state,
                      bool needs_rvalue);
@@ -298,6 +302,8 @@ public:
 
    virtual void hir_no_rvalue(exec_list *instructions,
                               struct _mesa_glsl_parse_state *state);
+
+   virtual bool has_sequence_subexpression() const;
 
 private:
    /**

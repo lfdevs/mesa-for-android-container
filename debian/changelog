@@ -1,3 +1,13 @@
+mesa (11.0.4-1) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+  * Cherry-pick commit 70e91d6 (i965: Remove early release of DRI2
+    miptree) from upstream (Closes: #769518).
+  * control: Add libclc-amdgcn to mesa-opencl-icd depends.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 26 Oct 2015 10:30:04 +0200
+
 mesa (11.0.2-1) experimental; urgency=medium
 
   [ Andreas Boll ]
@@ -60,6 +70,12 @@ mesa (11.0.0~git20150817-1) experimental; urgency=medium
   * rules: Enable llvmpipe on armhf again.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 18 Aug 2015 07:53:45 +0300
+
+mesa (10.6.8-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 22 Sep 2015 17:21:49 +0300
 
 mesa (10.6.7-1) unstable; urgency=medium
 

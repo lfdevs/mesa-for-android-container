@@ -415,8 +415,8 @@ _mesa_init_image_units(struct gl_context *ctx)
       ctx->ImageUnits[i] = _mesa_default_image_unit(ctx);
 }
 
-static GLboolean
-validate_image_unit(struct gl_context *ctx, struct gl_image_unit *u)
+GLboolean
+_mesa_is_image_unit_valid(struct gl_context *ctx, struct gl_image_unit *u)
 {
    struct gl_texture_object *t = u->TexObj;
    mesa_format tex_format;
@@ -424,7 +424,8 @@ validate_image_unit(struct gl_context *ctx, struct gl_image_unit *u)
    if (!t)
       return GL_FALSE;
 
-   _mesa_test_texobj_completeness(ctx, t);
+   if (!t->_BaseComplete && !t->_MipmapComplete)
+       _mesa_test_texobj_completeness(ctx, t);
 
    if (u->Level < t->BaseLevel ||
        u->Level > t->_MaxLevel ||
@@ -471,17 +472,6 @@ validate_image_unit(struct gl_context *ctx, struct gl_image_unit *u)
    }
 
    return GL_TRUE;
-}
-
-void
-_mesa_validate_image_units(struct gl_context *ctx)
-{
-   unsigned i;
-
-   for (i = 0; i < ctx->Const.MaxImageUnits; ++i) {
-      struct gl_image_unit *u = &ctx->ImageUnits[i];
-      u->_Valid = validate_image_unit(ctx, u);
-   }
 }
 
 static GLboolean
@@ -567,7 +557,6 @@ _mesa_BindImageTexture(GLuint unit, GLuint texture, GLint level,
    u->Access = access;
    u->Format = format;
    u->_ActualFormat = _mesa_get_shader_image_format(format);
-   u->_Valid = validate_image_unit(ctx, u);
 
    if (u->TexObj && _mesa_tex_target_is_layered(u->TexObj->Target)) {
       u->Layered = layered;
@@ -707,7 +696,6 @@ _mesa_BindImageTextures(GLuint first, GLsizei count, const GLuint *textures)
          u->Access = GL_READ_WRITE;
          u->Format = tex_format;
          u->_ActualFormat = _mesa_get_shader_image_format(tex_format);
-         u->_Valid = validate_image_unit(ctx, u);
       } else {
          /* Unbind the texture from the unit */
          _mesa_reference_texobj(&u->TexObj, NULL);
@@ -717,7 +705,6 @@ _mesa_BindImageTextures(GLuint first, GLsizei count, const GLuint *textures)
          u->Access = GL_READ_ONLY;
          u->Format = GL_R8;
          u->_ActualFormat = MESA_FORMAT_R_UNORM8;
-         u->_Valid = GL_FALSE;
       }
 
       /* Pass the BindImageTexture call down to the device driver */

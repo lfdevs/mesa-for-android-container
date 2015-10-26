@@ -73,6 +73,10 @@ dri_message(int level, const char *f, ...)
    }
 }
 
+#ifndef GL_LIB_NAME
+#define GL_LIB_NAME "libGL.so.1"
+#endif
+
 #ifndef DEFAULT_DRIVER_DIR
 /* this is normally defined in Mesa/configs/default with DRI_DRIVER_SEARCH_PATH */
 #define DEFAULT_DRIVER_DIR "/usr/local/lib/dri"
@@ -99,7 +103,7 @@ driOpenDriver(const char *driverName)
    int len;
 
    /* Attempt to make sure libGL symbols will be visible to the driver */
-   glhandle = dlopen("libGL.so.1", RTLD_NOW | RTLD_GLOBAL);
+   glhandle = dlopen(GL_LIB_NAME, RTLD_NOW | RTLD_GLOBAL);
 
    libPaths = NULL;
    if (geteuid() == getuid()) {

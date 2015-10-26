@@ -24,6 +24,7 @@
 
 
 #include <stdio.h>
+#include "context.h"
 #include "imports.h"
 #include "mtypes.h"
 #include "version.h"
@@ -181,7 +182,23 @@ _mesa_override_gl_version(struct gl_context *ctx)
 {
    if (_mesa_override_gl_version_contextless(&ctx->Const, &ctx->API,
                                              &ctx->Version)) {
-      create_version_string(ctx, "");
+      /* We need to include API in version string for OpenGL ES, otherwise
+       * application can not detect GLES via glGetString(GL_VERSION) query.
+       *
+       * From OpenGL ES 3.2 spec, Page 436:
+       *
+       *     "The VERSION string is laid out as follows:
+       *
+       *     OpenGL ES N.M vendor-specific information"
+       *
+       * From OpenGL 4.5 spec, Page 538:
+       *
+       *     "The VERSION and SHADING_LANGUAGE_VERSION strings are laid out as
+       *     follows:
+       *
+       *     <version number><space><vendor-specific information>"
+       */
+      create_version_string(ctx, _mesa_is_gles(ctx) ? "OpenGL ES " : "");
    }
 }
 

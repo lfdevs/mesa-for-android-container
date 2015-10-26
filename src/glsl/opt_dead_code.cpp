@@ -103,7 +103,7 @@ do_dead_code(exec_list *instructions, bool uniform_locations_assigned)
 	  */
          if (entry->var->data.mode == ir_var_uniform ||
              entry->var->data.mode == ir_var_shader_storage) {
-            if (uniform_locations_assigned || entry->var->constant_value)
+            if (uniform_locations_assigned || entry->var->constant_initializer)
                continue;
 
             /* Section 2.11.6 (Uniform Variables) of the OpenGL ES 3.0.3 spec

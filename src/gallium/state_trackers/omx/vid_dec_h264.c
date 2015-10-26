@@ -753,10 +753,14 @@ static void slice_header(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp,
          priv->codec_data.h264.delta_pic_order_cnt_bottom = delta_pic_order_cnt_bottom;
       }
 
-      priv->picture.h264.field_order_cnt[0] = pic_order_cnt_msb + pic_order_cnt_lsb;
-      priv->picture.h264.field_order_cnt[1] = pic_order_cnt_msb + pic_order_cnt_lsb;
-      if (!priv->picture.h264.field_pic_flag)
-         priv->picture.h264.field_order_cnt[1] += priv->codec_data.h264.delta_pic_order_cnt_bottom;
+      if (!priv->picture.h264.field_pic_flag) {
+         priv->picture.h264.field_order_cnt[0] = pic_order_cnt_msb + pic_order_cnt_lsb;
+         priv->picture.h264.field_order_cnt[1] = priv->picture.h264.field_order_cnt [0] +
+                                          priv->codec_data.h264.delta_pic_order_cnt_bottom;
+      } else if (!priv->picture.h264.bottom_field_flag)
+         priv->picture.h264.field_order_cnt[0] = pic_order_cnt_msb + pic_order_cnt_lsb;
+      else
+         priv->picture.h264.field_order_cnt[1] = pic_order_cnt_msb + pic_order_cnt_lsb;
 
    } else if (sps->pic_order_cnt_type == 1) {
       unsigned MaxFrameNum = 1 << (sps->log2_max_frame_num_minus4 + 4);

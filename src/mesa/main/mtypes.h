@@ -4171,13 +4171,6 @@ struct gl_image_unit
    GLboolean Layered;
 
    /**
-    * GL_TRUE if the state of this image unit is valid and access from
-    * the shader is allowed.  Otherwise loads from this unit should
-    * return zero and stores should have no effect.
-    */
-   GLboolean _Valid;
-
-   /**
     * Layer of the texture object bound to this unit as specified by the
     * application.
     */

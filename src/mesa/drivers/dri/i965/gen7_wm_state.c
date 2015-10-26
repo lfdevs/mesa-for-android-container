@@ -113,7 +113,14 @@ upload_wm_state(struct brw_context *brw)
    else if (prog_data->base.nr_image_params)
       dw1 |= GEN7_WM_EARLY_DS_CONTROL_PSEXEC;
 
-   /* _NEW_BUFFERS | _NEW_COLOR */
+   /* The "UAV access enable" bits are unnecessary on HSW because they only
+    * seem to have an effect on the HW-assisted coherency mechanism which we
+    * don't need, and the rasterization-related UAV_ONLY flag and the
+    * DISPATCH_ENABLE bit can be set independently from it.
+    * C.f. gen8_upload_ps_extra().
+    *
+    * BRW_NEW_FRAGMENT_PROGRAM | BRW_NEW_FS_PROG_DATA | _NEW_BUFFERS | _NEW_COLOR
+    */
    if (brw->is_haswell &&
        !(brw_color_buffer_write_enabled(brw) || writes_depth) &&
        prog_data->base.nr_image_params)
@@ -220,9 +227,6 @@ gen7_upload_ps_state(struct brw_context *brw,
    int min_inv_per_frag =
       _mesa_get_min_invocations_per_fragment(ctx, fp, false);
    assert(min_inv_per_frag >= 1);
-
-   if (brw->is_haswell && prog_data->base.nr_image_params)
-      dw4 |= HSW_PS_UAV_ACCESS_ENABLE;
 
    if (prog_data->prog_offset_16 || prog_data->no_8) {
       dw4 |= GEN7_PS_16_DISPATCH_ENABLE;

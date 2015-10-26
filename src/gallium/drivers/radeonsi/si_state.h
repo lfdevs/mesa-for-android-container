@@ -274,7 +274,7 @@ si_create_sampler_view_custom(struct pipe_context *ctx,
 			      unsigned force_level);
 
 /* si_state_shader.c */
-void si_update_shaders(struct si_context *sctx);
+bool si_update_shaders(struct si_context *sctx);
 void si_init_shader_functions(struct si_context *sctx);
 
 /* si_state_draw.c */

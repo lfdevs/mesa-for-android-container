@@ -313,12 +313,42 @@ namespace {
 
    namespace image_validity {
       /**
+       * Check whether the bound image is suitable for untyped access.
+       */
+      brw_predicate
+      emit_untyped_image_check(const fs_builder &bld, const fs_reg &image,
+                               brw_predicate pred)
+      {
+         const brw_device_info *devinfo = bld.shader->devinfo;
+         const fs_reg stride = offset(image, bld, BRW_IMAGE_PARAM_STRIDE_OFFSET);
+
+         if (devinfo->gen == 7 && !devinfo->is_haswell) {
+            /* Check whether the first stride component (i.e. the Bpp value)
+             * is greater than four, what on Gen7 indicates that a surface of
+             * type RAW has been bound for untyped access.  Reading or writing
+             * to a surface of type other than RAW using untyped surface
+             * messages causes a hang on IVB and VLV.
+             */
+            set_predicate(pred,
+                          bld.CMP(bld.null_reg_ud(), stride, fs_reg(4),
+                                  BRW_CONDITIONAL_G));
+
+            return BRW_PREDICATE_NORMAL;
+         } else {
+            /* More recent generations handle the format mismatch
+             * gracefully.
+             */
+            return pred;
+         }
+      }
+
+      /**
        * Check whether there is an image bound at the given index and write
        * the comparison result to f0.0.  Returns an appropriate predication
        * mode to use on subsequent image operations.
        */
       brw_predicate
-      emit_surface_check(const fs_builder &bld, const fs_reg &image)
+      emit_typed_atomic_check(const fs_builder &bld, const fs_reg &image)
       {
          const brw_device_info *devinfo = bld.shader->devinfo;
          const fs_reg size = offset(image, bld, BRW_IMAGE_PARAM_SIZE_OFFSET);
@@ -895,7 +925,9 @@ namespace brw {
              * surface read on the result,
              */
             const brw_predicate pred =
-               emit_bounds_check(bld, image, saddr, dims);
+               emit_untyped_image_check(bld, image,
+                                        emit_bounds_check(bld, image,
+                                                          saddr, dims));
 
             /* and they don't know about surface coordinates, we need to
              * convert them to a raw memory offset.
@@ -1041,7 +1073,9 @@ namespace brw {
                 * the surface write on the result,
                 */
                const brw_predicate pred =
-                  emit_bounds_check(bld, image, saddr, dims);
+                  emit_untyped_image_check(bld, image,
+                                           emit_bounds_check(bld, image,
+                                                             saddr, dims));
 
                /* and, phew, they don't know about surface coordinates, we
                 * need to convert them to a raw memory offset.
@@ -1072,7 +1106,7 @@ namespace brw {
          using namespace image_coordinates;
          using namespace surface_access;
          /* Avoid performing an atomic operation on an unbound surface. */
-         const brw_predicate pred = emit_surface_check(bld, image);
+         const brw_predicate pred = emit_typed_atomic_check(bld, image);
 
          /* Transform the image coordinates into actual surface coordinates. */
          const fs_reg saddr =

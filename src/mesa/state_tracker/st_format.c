@@ -1960,7 +1960,11 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
    else if (internalFormat == 3 || internalFormat == 4 ||
             internalFormat == GL_RGB || internalFormat == GL_RGBA ||
             internalFormat == GL_RGB8 || internalFormat == GL_RGBA8 ||
-            internalFormat == GL_BGRA)
+            internalFormat == GL_BGRA ||
+            internalFormat == GL_RGB16F ||
+            internalFormat == GL_RGBA16F ||
+            internalFormat == GL_RGB32F ||
+            internalFormat == GL_RGBA32F)
 	 bindings |= PIPE_BIND_RENDER_TARGET;
 
    /* GLES allows the driver to choose any format which matches

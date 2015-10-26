@@ -2646,7 +2646,11 @@ _X_EXPORT void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
  */
 _X_EXPORT void (*glXGetProcAddress(const GLubyte * procName)) (void)
 #if defined(__GNUC__) && !defined(GLX_ALIAS_UNSUPPORTED)
+# if defined(USE_MGL_NAMESPACE)
+   __attribute__ ((alias("mglXGetProcAddressARB")));
+# else
    __attribute__ ((alias("glXGetProcAddressARB")));
+# endif
 #else
 {
    return glXGetProcAddressARB(procName);

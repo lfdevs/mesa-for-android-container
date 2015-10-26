@@ -115,6 +115,8 @@ enum {
    I915_RASTER_RULES_SETUP_SIZE,
 };
 
+#define I915_TEX_UNITS 8
+
 #define I915_MAX_CONSTANT      32
 #define I915_CONSTANT_SIZE     (2+(4*I915_MAX_CONSTANT))
 
@@ -194,7 +196,8 @@ struct i915_fragment_program
 
    /* Helpers for i915_fragprog.c:
     */
-   GLuint wpos_tex;
+   uint8_t texcoord_mapping[I915_TEX_UNITS];
+   uint8_t wpos_tex;
    bool depth_written;
 
    struct
@@ -204,15 +207,6 @@ struct i915_fragment_program
    } param[I915_MAX_CONSTANT];
    GLuint nr_params;
 };
-
-
-
-
-
-
-
-#define I915_TEX_UNITS 8
-
 
 struct i915_hw_state
 {

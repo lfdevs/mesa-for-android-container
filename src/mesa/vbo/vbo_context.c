@@ -121,7 +121,7 @@ static void init_mat_currval(struct gl_context *ctx)
       /* Size is fixed for the material attributes, for others will
        * be determined at runtime:
        */
-      switch (i - VERT_ATTRIB_GENERIC0) {
+      switch (i) {
       case MAT_ATTRIB_FRONT_SHININESS:
       case MAT_ATTRIB_BACK_SHININESS:
 	 cl->Size = 1;

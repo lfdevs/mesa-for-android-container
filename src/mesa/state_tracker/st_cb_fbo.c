@@ -478,7 +478,7 @@ st_update_renderbuffer_surface(struct st_context *st,
       surf_tmpl.u.tex.first_layer = first_layer;
       surf_tmpl.u.tex.last_layer = last_layer;
 
-      pipe_surface_reference(&strb->surface, NULL);
+      pipe_surface_release(pipe, &strb->surface);
 
       strb->surface = pipe->create_surface(pipe, resource, &surf_tmpl);
    }

@@ -760,8 +760,8 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 	else
 		sctx->current_rast_prim = info->mode;
 
-	si_update_shaders(sctx);
-	if (!si_upload_shader_descriptors(sctx))
+	if (!si_update_shaders(sctx) ||
+	    !si_upload_shader_descriptors(sctx))
 		return;
 
 	if (info->indexed) {
@@ -783,6 +783,10 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 
 			u_upload_alloc(sctx->b.uploader, start_offset, count * 2,
 				       &out_offset, &out_buffer, &ptr);
+			if (!out_buffer) {
+				pipe_resource_reference(&ib.buffer, NULL);
+				return;
+			}
 
 			util_shorten_ubyte_elts_to_userptr(&sctx->b.b, &ib, 0,
 							   ib.offset + start_offset,
@@ -803,6 +807,8 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 			u_upload_data(sctx->b.uploader, start_offset, count * ib.index_size,
 				      (char*)ib.user_buffer + start_offset,
 				      &ib.offset, &ib.buffer);
+			if (!ib.buffer)
+				return;
 			/* info->start will be added by the drawing code */
 			ib.offset -= start_offset;
 		}

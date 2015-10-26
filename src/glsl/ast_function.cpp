@@ -395,13 +395,54 @@ generate_call(exec_list *instructions, ir_function_signature *sig,
       }
    }
 
-   /* If the function call is a constant expression, don't generate any
-    * instructions; just generate an ir_constant.
+   /* Section 4.3.2 (Const) of the GLSL 1.10.59 spec says:
     *
-    * Function calls were first allowed to be constant expressions in GLSL
-    * 1.20 and GLSL ES 3.00.
+    *     "Initializers for const declarations must be formed from literal
+    *     values, other const variables (not including function call
+    *     paramaters), or expressions of these.
+    *
+    *     Constructors may be used in such expressions, but function calls may
+    *     not."
+    *
+    * Section 4.3.3 (Constant Expressions) of the GLSL 1.20.8 spec says:
+    *
+    *     "A constant expression is one of
+    *
+    *         ...
+    *
+    *         - a built-in function call whose arguments are all constant
+    *           expressions, with the exception of the texture lookup
+    *           functions, the noise functions, and ftransform. The built-in
+    *           functions dFdx, dFdy, and fwidth must return 0 when evaluated
+    *           inside an initializer with an argument that is a constant
+    *           expression."
+    *
+    * Section 5.10 (Constant Expressions) of the GLSL ES 1.00.17 spec says:
+    *
+    *     "A constant expression is one of
+    *
+    *         ...
+    *
+    *         - a built-in function call whose arguments are all constant
+    *           expressions, with the exception of the texture lookup
+    *           functions."
+    *
+    * Section 4.3.3 (Constant Expressions) of the GLSL ES 3.00.4 spec says:
+    *
+    *     "A constant expression is one of
+    *
+    *         ...
+    *
+    *         - a built-in function call whose arguments are all constant
+    *           expressions, with the exception of the texture lookup
+    *           functions.  The built-in functions dFdx, dFdy, and fwidth must
+    *           return 0 when evaluated inside an initializer with an argument
+    *           that is a constant expression."
+    *
+    * If the function call is a constant expression, don't generate any
+    * instructions; just generate an ir_constant.
     */
-   if (state->is_version(120, 300)) {
+   if (state->is_version(120, 100)) {
       ir_constant *value = sig->constant_expression_value(actual_parameters, NULL);
       if (value != NULL) {
 	 return value;
@@ -1909,6 +1950,17 @@ ast_function_expression::hir(exec_list *instructions,
    }
 
    unreachable("not reached");
+}
+
+bool
+ast_function_expression::has_sequence_subexpression() const
+{
+   foreach_list_typed(const ast_node, ast, link, &this->expressions) {
+      if (ast->has_sequence_subexpression())
+         return true;
+   }
+
+   return false;
 }
 
 ir_rvalue *

@@ -35,7 +35,8 @@ lib@OPENCL_LIBNAME@_la_LIBADD = \
 	-lclangEdit \
 	-lclangLex \
 	-lclangBasic \
-	$(LLVM_LIBS)
+	$(LLVM_LIBS) \
+	$(PTHREAD_LIBS)
 
 nodist_EXTRA_lib@OPENCL_LIBNAME@_la_SOURCES = dummy.cpp
 lib@OPENCL_LIBNAME@_la_SOURCES =

@@ -24,6 +24,8 @@ PUSH_AVAIL(struct nouveau_pushbuf *push)
 static inline bool
 PUSH_SPACE(struct nouveau_pushbuf *push, uint32_t size)
 {
+   /* Provide a buffer so that fences always have room to be emitted */
+   size += 8;
    if (PUSH_AVAIL(push) < size)
       return nouveau_pushbuf_space(push, size, 0, 0) == 0;
    return true;

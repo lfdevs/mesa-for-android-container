@@ -106,6 +106,8 @@ AC_SYS_LARGEFILE
 LT_PREREQ([2.2])
 LT_INIT([disable-static])
 
+AC_CHECK_PROG(RM, rm, [rm -f])
+
 AX_PROG_BISON([],
               AS_IF([test ! -f "$srcdir/src/glsl/glcpp/glcpp-parse.c"],
                     [AC_MSG_ERROR([bison not found - unable to compile glcpp-parse.y])]))

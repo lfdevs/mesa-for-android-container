@@ -65,14 +65,9 @@ nv50_constbufs_validate(struct nv50_context *nv50)
                PUSH_DATA (push, (b << 12) | (i << 8) | p | 1);
             }
             while (words) {
-               unsigned nr;
+               unsigned nr = MIN2(words, NV04_PFIFO_MAX_PACKET_LEN);
 
-               if (!PUSH_SPACE(push, 16))
-                  break;
-               nr = PUSH_AVAIL(push);
-               assert(nr >= 16);
-               nr = MIN2(MIN2(nr - 3, words), NV04_PFIFO_MAX_PACKET_LEN);
-
+               PUSH_SPACE(push, nr + 3);
                BEGIN_NV04(push, NV50_3D(CB_ADDR), 1);
                PUSH_DATA (push, (start << 8) | b);
                BEGIN_NI04(push, NV50_3D(CB_DATA(0)), nr);

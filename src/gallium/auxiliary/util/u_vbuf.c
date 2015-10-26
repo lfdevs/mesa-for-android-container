@@ -545,6 +545,7 @@ u_vbuf_translate_find_free_vb_slots(struct u_vbuf *mgr,
 
          index = ffs(unused_vb_mask) - 1;
          fallback_vbs[type] = index;
+         unused_vb_mask &= ~(1 << index);
          /*printf("found slot=%i for type=%i\n", index, type);*/
       }
    }

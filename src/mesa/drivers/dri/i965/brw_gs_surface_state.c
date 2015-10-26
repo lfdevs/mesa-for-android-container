@@ -129,7 +129,7 @@ brw_upload_gs_image_surfaces(struct brw_context *brw)
       ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY];
 
    if (prog) {
-      /* BRW_NEW_GS_PROG_DATA, BRW_NEW_IMAGE_UNITS */
+      /* BRW_NEW_GS_PROG_DATA, BRW_NEW_IMAGE_UNITS, _NEW_TEXTURE */
       brw_upload_image_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_GEOMETRY],
                                 &brw->gs.base, &brw->gs.prog_data->base.base);
    }
@@ -137,6 +137,7 @@ brw_upload_gs_image_surfaces(struct brw_context *brw)
 
 const struct brw_tracked_state brw_gs_image_surfaces = {
    .dirty = {
+      .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_GS_PROG_DATA |

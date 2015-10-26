@@ -116,7 +116,7 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
    img->width = width;
    img->height = height;
    w = align(width, 2);
-   h = align(width, 2);
+   h = align(height, 2);
 
    switch (format->fourcc) {
    case VA_FOURCC('N','V','1','2'):

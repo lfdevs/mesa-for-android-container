@@ -326,9 +326,9 @@ link_set_uniform_initializers(struct gl_shader_program *prog,
             } else {
                assert(!"Explicit binding not on a sampler, UBO or atomic.");
             }
-         } else if (var->constant_value) {
+         } else if (var->constant_initializer) {
             linker::set_uniform_initializer(mem_ctx, prog, var->name,
-                                            var->type, var->constant_value,
+                                            var->type, var->constant_initializer,
                                             boolean_true);
          }
       }

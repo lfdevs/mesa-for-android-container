@@ -229,6 +229,7 @@ st_BlitFramebuffer(struct gl_context *ctx,
                   st_adjust_blit_for_msaa_resolve(&blit);
 
                   st->pipe->blit(st->pipe, &blit);
+                  dstRb->defined = true; /* front buffer tracking */
                }
             }
          }
@@ -266,6 +267,7 @@ st_BlitFramebuffer(struct gl_context *ctx,
                   st_adjust_blit_for_msaa_resolve(&blit);
 
                   st->pipe->blit(st->pipe, &blit);
+                  dstRb->defined = true; /* front buffer tracking */
                }
             }
          }

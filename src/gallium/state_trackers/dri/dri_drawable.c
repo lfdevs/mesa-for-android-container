@@ -231,11 +231,11 @@ dri_set_tex_buffer2(__DRIcontext *pDRICtx, GLint target,
       if (format == __DRI_TEXTURE_FORMAT_RGB)  {
          /* only need to cover the formats recognized by dri_fill_st_visual */
          switch (internal_format) {
-         case PIPE_FORMAT_B8G8R8A8_UNORM:
-            internal_format = PIPE_FORMAT_B8G8R8X8_UNORM;
+         case PIPE_FORMAT_BGRA8888_UNORM:
+            internal_format = PIPE_FORMAT_BGRX8888_UNORM;
             break;
-         case PIPE_FORMAT_A8R8G8B8_UNORM:
-            internal_format = PIPE_FORMAT_X8R8G8B8_UNORM;
+         case PIPE_FORMAT_ARGB8888_UNORM:
+            internal_format = PIPE_FORMAT_XRGB8888_UNORM;
             break;
          default:
             break;

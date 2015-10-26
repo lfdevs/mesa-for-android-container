@@ -1922,11 +1922,8 @@ generate_mipmap_uncompressed(struct gl_context *ctx, GLenum target,
       }
 
       /* get dest gl_texture_image */
-      dstImage = _mesa_get_tex_image(ctx, texObj, target, level + 1);
-      if (!dstImage) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "generating mipmaps");
-         return;
-      }
+      dstImage = _mesa_select_tex_image(texObj, target, level + 1);
+      assert(dstImage);
 
       if (target == GL_TEXTURE_1D_ARRAY) {
 	 srcDepth = srcHeight;
@@ -2110,7 +2107,19 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
                                          srcWidth, srcHeight, srcDepth,
                                          &dstWidth, &dstHeight, &dstDepth);
       if (!nextLevel)
-	 break;
+	 goto end;
+
+      if (!_mesa_prepare_mipmap_level(ctx, texObj, level + 1,
+                                      dstWidth, dstHeight, dstDepth,
+                                      border, srcImage->InternalFormat,
+                                      srcImage->TexFormat)) {
+         /* all done */
+         goto end;
+      }
+
+      /* get dest gl_texture_image */
+      dstImage = _mesa_select_tex_image(texObj, target, level + 1);
+      assert(dstImage);
 
       /* Compute dst image strides and alloc memory on first iteration */
       temp_dst_row_stride = _mesa_format_row_stride(temp_format, dstWidth);
@@ -2122,13 +2131,6 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
 	    _mesa_error(ctx, GL_OUT_OF_MEMORY, "generate mipmaps");
             goto end;
 	 }
-      }
-
-      /* get dest gl_texture_image */
-      dstImage = _mesa_get_tex_image(ctx, texObj, target, level + 1);
-      if (!dstImage) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "generating mipmaps");
-         goto end;
       }
 
       /* for 2D arrays, setup array[depth] of slice pointers */
@@ -2148,14 +2150,6 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
                                   temp_src_row_stride,
                                   dstWidth, dstHeight, dstDepth,
                                   temp_dst_slices, temp_dst_row_stride);
-
-      if (!_mesa_prepare_mipmap_level(ctx, texObj, level + 1,
-                                      dstWidth, dstHeight, dstDepth,
-                                      border, srcImage->InternalFormat,
-                                      srcImage->TexFormat)) {
-         /* all done */
-         goto end;
-      }
 
       /* The image space was allocated above so use glTexSubImage now */
       ctx->Driver.TexSubImage(ctx, 2, dstImage,

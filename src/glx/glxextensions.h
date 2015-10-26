@@ -281,11 +281,17 @@ typedef void (*PFNGLXDISABLEEXTENSIONPROC) (const char *name);
 # define GLX_ALIAS_VOID(real_func, proto_args, args, aliased_func)
 #else
 # if defined(__GNUC__) && !defined(GLX_ALIAS_UNSUPPORTED)
-#  define GLX_ALIAS(return_type, real_func, proto_args, args, aliased_func) \
+/* GLX_ALIAS and GLX_ALIAS_VOID both expand to the macro GLX_ALIAS2. Using the
+ * extra expansion means that the name mangling macros in glx_mangle.h will
+ * apply before stringification, so the alias attribute will have a string like
+ * "mglXFoo" instead of "glXFoo". */
+#  define GLX_ALIAS2(return_type, real_func, proto_args, args, aliased_func) \
    return_type  real_func  proto_args                                   \
    __attribute__ ((alias( # aliased_func ) ));
+#  define GLX_ALIAS(return_type, real_func, proto_args, args, aliased_func) \
+   GLX_ALIAS2(return_type, real_func, proto_args, args, aliased_func)
 #  define GLX_ALIAS_VOID(real_func, proto_args, args, aliased_func) \
-   GLX_ALIAS(void, real_func, proto_args, args, aliased_func)
+   GLX_ALIAS2(void, real_func, proto_args, args, aliased_func)
 # else
 #  define GLX_ALIAS(return_type, real_func, proto_args, args, aliased_func) \
    return_type  real_func  proto_args                                   \

@@ -190,8 +190,14 @@ nouveau_fence_wait(struct nouveau_fence *fence)
    /* wtf, someone is waiting on a fence in flush_notify handler? */
    assert(fence->state != NOUVEAU_FENCE_STATE_EMITTING);
 
-   if (fence->state < NOUVEAU_FENCE_STATE_EMITTED)
-      nouveau_fence_emit(fence);
+   if (fence->state < NOUVEAU_FENCE_STATE_EMITTED) {
+      PUSH_SPACE(screen->pushbuf, 8);
+      /* The space allocation might trigger a flush, which could emit the
+       * current fence. So check again.
+       */
+      if (fence->state < NOUVEAU_FENCE_STATE_EMITTED)
+         nouveau_fence_emit(fence);
+   }
 
    if (fence->state < NOUVEAU_FENCE_STATE_FLUSHED)
       if (nouveau_pushbuf_kick(screen->pushbuf, screen->pushbuf->channel))
@@ -224,10 +230,22 @@ nouveau_fence_wait(struct nouveau_fence *fence)
 void
 nouveau_fence_next(struct nouveau_screen *screen)
 {
-   if (screen->fence.current->state < NOUVEAU_FENCE_STATE_EMITTING)
-      nouveau_fence_emit(screen->fence.current);
+   if (screen->fence.current->state < NOUVEAU_FENCE_STATE_EMITTING) {
+      if (screen->fence.current->ref > 1)
+         nouveau_fence_emit(screen->fence.current);
+      else
+         return;
+   }
 
    nouveau_fence_ref(NULL, &screen->fence.current);
 
    nouveau_fence_new(screen, &screen->fence.current, false);
+}
+
+void
+nouveau_fence_unref_bo(void *data)
+{
+   struct nouveau_bo *bo = data;
+
+   nouveau_bo_ref(NULL, &bo);
 }

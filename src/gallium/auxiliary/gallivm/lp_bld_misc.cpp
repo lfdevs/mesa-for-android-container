@@ -81,6 +81,8 @@
 #  pragma pop_macro("DEBUG")
 #endif
 
+#include "c11/threads.h"
+#include "os/os_thread.h"
 #include "pipe/p_config.h"
 #include "util/u_debug.h"
 #include "util/u_cpu_detect.h"
@@ -103,6 +105,33 @@ static LLVMEnsureMultithreaded lLVMEnsureMultithreaded;
 
 }
 
+static once_flag init_native_targets_once_flag;
+
+static void init_native_targets()
+{
+   // If we have a native target, initialize it to ensure it is linked in and
+   // usable by the JIT.
+   llvm::InitializeNativeTarget();
+
+   llvm::InitializeNativeTargetAsmPrinter();
+
+   llvm::InitializeNativeTargetDisassembler();
+}
+
+/**
+ * The llvm target registry is not thread-safe, so drivers and state-trackers
+ * that want to initialize targets should use the gallivm_init_llvm_targets()
+ * function to safely initialize targets.
+ *
+ * LLVM targets should be initialized before the driver or state-tracker tries
+ * to access the registry.
+ */
+extern "C" void
+gallivm_init_llvm_targets(void)
+{
+   call_once(&init_native_targets_once_flag, init_native_targets);
+}
+
 extern "C" void
 lp_set_target_options(void)
 {
@@ -115,13 +144,7 @@ lp_set_target_options(void)
    llvm::DisablePrettyStackTrace = true;
 #endif
 
-   // If we have a native target, initialize it to ensure it is linked in and
-   // usable by the JIT.
-   llvm::InitializeNativeTarget();
-
-   llvm::InitializeNativeTargetAsmPrinter();
-
-   llvm::InitializeNativeTargetDisassembler();
+   gallivm_init_llvm_targets();
 }
 
 

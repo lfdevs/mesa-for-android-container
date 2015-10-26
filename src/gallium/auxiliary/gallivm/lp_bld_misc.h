@@ -41,6 +41,8 @@ extern "C" {
 
 struct lp_generated_code;
 
+extern void
+gallivm_init_llvm_targets(void);
 
 extern void
 lp_set_target_options(void);

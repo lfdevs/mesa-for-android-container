@@ -191,7 +191,11 @@ nv30_vbo_validate(struct nv30_context *nv30)
    if (!nv30->vertex || nv30->draw_flags)
       return;
 
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   if (1) { /* Figure out where the buffers are getting messed up */
+#else
    if (unlikely(vertex->need_conversion)) {
+#endif
       nv30->vbo_fifo = ~0;
       nv30->vbo_user = 0;
    } else {

@@ -55,13 +55,15 @@ void
 _mesa_init_image_units(struct gl_context *ctx);
 
 /**
- * Recalculate the \c _Valid flag of a context's shader image units.
+ * Return GL_TRUE if the state of the image unit passed as argument is valid
+ * and access from the shader is allowed.  Otherwise loads from this unit
+ * should return zero and stores should have no effect.
  *
- * To be called when the state of any texture bound to an image unit
- * changes.
+ * The result depends on context state other than the passed image unit, part
+ * of the _NEW_TEXTURE set.
  */
-void
-_mesa_validate_image_units(struct gl_context *ctx);
+GLboolean
+_mesa_is_image_unit_valid(struct gl_context *ctx, struct gl_image_unit *u);
 
 void GLAPIENTRY
 _mesa_BindImageTexture(GLuint unit, GLuint texture, GLint level,

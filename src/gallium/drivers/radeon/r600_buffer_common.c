@@ -305,12 +305,11 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 				data += box->x % R600_MAP_BUFFER_ALIGNMENT;
 				return r600_buffer_get_transfer(ctx, resource, level, usage, box,
 								ptransfer, data, staging, offset);
-			} else {
-				return NULL; /* error, shouldn't occur though */
 			}
+		} else {
+			/* At this point, the buffer is always idle (we checked it above). */
+			usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
 		}
-		/* At this point, the buffer is always idle (we checked it above). */
-		usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
 	}
 	/* Using a staging buffer in GTT for larger reads is much faster. */
 	else if ((usage & PIPE_TRANSFER_READ) &&

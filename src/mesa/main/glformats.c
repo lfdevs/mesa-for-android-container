@@ -2619,6 +2619,7 @@ _mesa_es3_effective_internal_format_for_format_and_type(GLenum format,
        * internal formats, they do not correspond to GL constants, so the base
        * format is returned instead.
        */
+      case GL_BGRA_EXT:
       case GL_LUMINANCE_ALPHA:
       case GL_LUMINANCE:
       case GL_ALPHA:
@@ -2738,8 +2739,19 @@ _mesa_es3_error_check_format_and_type(const struct gl_context *ctx,
       if (effectiveInternalFormat == GL_NONE)
          return GL_INVALID_OPERATION;
 
-      GLenum baseInternalFormat =
-         _mesa_base_tex_format(ctx, effectiveInternalFormat);
+      GLenum baseInternalFormat;
+      if (internalFormat == GL_BGRA_EXT) {
+         /* Unfortunately, _mesa_base_tex_format returns a base format of
+          * GL_RGBA for GL_BGRA_EXT.  This makes perfect sense if you're
+          * asking the question, "what channels does this format have?"
+          * However, if we're trying to determine if two internal formats
+          * match in the ES3 sense, we actually want GL_BGRA.
+          */
+         baseInternalFormat = GL_BGRA_EXT;
+      } else {
+         baseInternalFormat =
+            _mesa_base_tex_format(ctx, effectiveInternalFormat);
+      }
 
       if (internalFormat != baseInternalFormat)
          return GL_INVALID_OPERATION;
@@ -2748,6 +2760,11 @@ _mesa_es3_error_check_format_and_type(const struct gl_context *ctx,
    }
 
    switch (format) {
+   case GL_BGRA_EXT:
+      if (type != GL_UNSIGNED_BYTE || internalFormat != GL_BGRA)
+         return GL_INVALID_OPERATION;
+      break;
+
    case GL_RGBA:
       switch (type) {
       case GL_UNSIGNED_BYTE:

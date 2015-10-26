@@ -152,12 +152,51 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *dpy,
 
          /* The EGL_KHR_create_context spec says:
           *
-          *     "Flags are only defined for OpenGL context creation, and
-          *     specifying a flags value other than zero for other types of
-          *     contexts, including OpenGL ES contexts, will generate an
-          *     error."
+          *     "If the EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR flag bit is set in
+          *     EGL_CONTEXT_FLAGS_KHR, then a <debug context> will be created.
+          *     [...]
+          *     In some cases a debug context may be identical to a non-debug
+          *     context. This bit is supported for OpenGL and OpenGL ES
+          *     contexts."
           */
-         if (api != EGL_OPENGL_API && val != 0) {
+         if ((val & EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR) &&
+             (api != EGL_OPENGL_API && api != EGL_OPENGL_ES_API)) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+
+         /* The EGL_KHR_create_context spec says:
+          *
+          *     "If the EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE_BIT_KHR flag bit
+          *     is set in EGL_CONTEXT_FLAGS_KHR, then a <forward-compatible>
+          *     context will be created. Forward-compatible contexts are
+          *     defined only for OpenGL versions 3.0 and later. They must not
+          *     support functionality marked as <deprecated> by that version of
+          *     the API, while a non-forward-compatible context must support
+          *     all functionality in that version, deprecated or not. This bit
+          *     is supported for OpenGL contexts, and requesting a
+          *     forward-compatible context for OpenGL versions less than 3.0
+          *     will generate an error."
+          */
+         if ((val & EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE_BIT_KHR) &&
+             (api != EGL_OPENGL_API || ctx->ClientMajorVersion < 3)) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+
+         /* The EGL_KHR_create_context_spec says:
+          *
+          *     "If the EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR bit is set in
+          *     EGL_CONTEXT_FLAGS_KHR, then a context supporting <robust buffer
+          *     access> will be created. Robust buffer access is defined in the
+          *     GL_ARB_robustness extension specification, and the resulting
+          *     context must also support either the GL_ARB_robustness
+          *     extension, or a version of OpenGL incorporating equivalent
+          *     functionality. This bit is supported for OpenGL contexts.
+          */
+         if ((val & EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR) &&
+             (api != EGL_OPENGL_API ||
+              !dpy->Extensions.EXT_create_context_robustness)) {
             err = EGL_BAD_ATTRIBUTE;
             break;
          }

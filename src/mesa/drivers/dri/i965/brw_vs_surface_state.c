@@ -201,7 +201,7 @@ brw_upload_vs_image_surfaces(struct brw_context *brw)
       ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
 
    if (prog) {
-      /* BRW_NEW_VS_PROG_DATA, BRW_NEW_IMAGE_UNITS */
+      /* BRW_NEW_VS_PROG_DATA, BRW_NEW_IMAGE_UNITS, _NEW_TEXTURE */
       brw_upload_image_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_VERTEX],
                                 &brw->vs.base, &brw->vs.prog_data->base.base);
    }
@@ -209,6 +209,7 @@ brw_upload_vs_image_surfaces(struct brw_context *brw)
 
 const struct brw_tracked_state brw_vs_image_surfaces = {
    .dirty = {
+      .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_IMAGE_UNITS |
              BRW_NEW_VERTEX_PROGRAM |

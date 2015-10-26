@@ -34,6 +34,7 @@
 #include "main/blend.h"
 #include "main/mtypes.h"
 #include "main/samplerobj.h"
+#include "main/shaderimage.h"
 #include "program/prog_parameter.h"
 #include "main/framebuffer.h"
 
@@ -1033,7 +1034,7 @@ brw_upload_cs_image_surfaces(struct brw_context *brw)
       ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
 
    if (prog) {
-      /* BRW_NEW_CS_PROG_DATA, BRW_NEW_IMAGE_UNITS */
+      /* BRW_NEW_CS_PROG_DATA, BRW_NEW_IMAGE_UNITS, _NEW_TEXTURE */
       brw_upload_image_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_COMPUTE],
                                 &brw->cs.base, &brw->cs.prog_data->base);
    }
@@ -1041,7 +1042,7 @@ brw_upload_cs_image_surfaces(struct brw_context *brw)
 
 const struct brw_tracked_state brw_cs_image_surfaces = {
    .dirty = {
-      .mesa = _NEW_PROGRAM,
+      .mesa = _NEW_TEXTURE | _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_CS_PROG_DATA |
              BRW_NEW_IMAGE_UNITS
@@ -1174,7 +1175,7 @@ update_image_surface(struct brw_context *brw,
                      uint32_t *surf_offset,
                      struct brw_image_param *param)
 {
-   if (u->_Valid) {
+   if (_mesa_is_image_unit_valid(&brw->ctx, u)) {
       struct gl_texture_object *obj = u->TexObj;
       const unsigned format = get_image_format(brw, u->_ActualFormat, access);
 
@@ -1259,7 +1260,7 @@ brw_upload_wm_image_surfaces(struct brw_context *brw)
    struct gl_shader_program *prog = ctx->Shader._CurrentFragmentProgram;
 
    if (prog) {
-      /* BRW_NEW_FS_PROG_DATA, BRW_NEW_IMAGE_UNITS */
+      /* BRW_NEW_FS_PROG_DATA, BRW_NEW_IMAGE_UNITS, _NEW_TEXTURE */
       brw_upload_image_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_FRAGMENT],
                                 &brw->wm.base, &brw->wm.prog_data->base);
    }
@@ -1267,6 +1268,7 @@ brw_upload_wm_image_surfaces(struct brw_context *brw)
 
 const struct brw_tracked_state brw_wm_image_surfaces = {
    .dirty = {
+      .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_FRAGMENT_PROGRAM |
              BRW_NEW_FS_PROG_DATA |

@@ -50,7 +50,7 @@ endif # MESA_ENABLE_ASM
 ifeq ($(ARCH_X86_HAVE_SSE4_1),true)
 LOCAL_SRC_FILES += \
 	main/streaming-load-memcpy.c \
-	mesa/main/sse_minmax.c
+	main/sse_minmax.c
 LOCAL_CFLAGS := \
 	-msse4.1 \
        -DUSE_SSE41

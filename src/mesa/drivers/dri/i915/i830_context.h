@@ -42,10 +42,10 @@
 #define I830_UPLOAD_STIPPLE          0x4
 #define I830_UPLOAD_INVARIENT        0x8
 #define I830_UPLOAD_RASTER_RULES     0x10
-#define I830_UPLOAD_TEX(i)           (0x10<<(i))
-#define I830_UPLOAD_TEXBLEND(i)      (0x100<<(i))
-#define I830_UPLOAD_TEX_ALL          (0x0f0)
-#define I830_UPLOAD_TEXBLEND_ALL     (0xf00)
+#define I830_UPLOAD_TEX(i)           (0x0100<<(i))
+#define I830_UPLOAD_TEXBLEND(i)      (0x1000<<(i))
+#define I830_UPLOAD_TEX_ALL          (0x0f00)
+#define I830_UPLOAD_TEXBLEND_ALL     (0xf000)
 
 /* State structure offsets - these will probably disappear.
  */

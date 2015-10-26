@@ -468,7 +468,8 @@ void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuf
 
 	u_upload_alloc(sctx->b.uploader, 0, size, const_offset,
 		       (struct pipe_resource**)rbuffer, &tmp);
-	util_memcpy_cpu_to_le32(tmp, ptr, size);
+	if (rbuffer)
+		util_memcpy_cpu_to_le32(tmp, ptr, size);
 }
 
 static void si_set_constant_buffer(struct pipe_context *ctx, uint shader, uint slot,
@@ -500,6 +501,11 @@ static void si_set_constant_buffer(struct pipe_context *ctx, uint shader, uint s
 			si_upload_const_buffer(sctx,
 					       (struct r600_resource**)&buffer, input->user_buffer,
 					       input->buffer_size, &buffer_offset);
+			if (!buffer) {
+				/* Just unbind on failure. */
+				si_set_constant_buffer(ctx, shader, slot, NULL);
+				return;
+			}
 			va = r600_resource(buffer)->gpu_address + buffer_offset;
 		} else {
 			pipe_resource_reference(&buffer, input->buffer);

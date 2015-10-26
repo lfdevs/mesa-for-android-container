@@ -25,9 +25,23 @@
 
 #include <stack>
 #include <limits>
+#if __cplusplus >= 201103L
+#include <unordered_map>
+#else
 #include <tr1/unordered_map>
+#endif
 
 namespace nv50_ir {
+
+#if __cplusplus >= 201103L
+using std::hash;
+using std::unordered_map;
+#elif !defined(ANDROID)
+using std::tr1::hash;
+using std::tr1::unordered_map;
+#else
+#error Android release before Lollipop is not supported!
+#endif
 
 #define MAX_REGISTER_FILE_SIZE 256
 
@@ -349,12 +363,12 @@ RegAlloc::PhiMovesPass::needNewElseBlock(BasicBlock *b, BasicBlock *p)
 
 struct PhiMapHash {
    size_t operator()(const std::pair<Instruction *, BasicBlock *>& val) const {
-      return std::tr1::hash<Instruction*>()(val.first) * 31 +
-         std::tr1::hash<BasicBlock*>()(val.second);
+      return hash<Instruction*>()(val.first) * 31 +
+         hash<BasicBlock*>()(val.second);
    }
 };
 
-typedef std::tr1::unordered_map<
+typedef unordered_map<
    std::pair<Instruction *, BasicBlock *>, Value *, PhiMapHash> PhiMap;
 
 // Critical edges need to be split up so that work can be inserted along

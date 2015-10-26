@@ -339,10 +339,15 @@ nv30_miptree_transfer_unmap(struct pipe_context *pipe,
    struct nv30_context *nv30 = nv30_context(pipe);
    struct nv30_transfer *tx = nv30_transfer(ptx);
 
-   if (ptx->usage & PIPE_TRANSFER_WRITE)
+   if (ptx->usage & PIPE_TRANSFER_WRITE) {
       nv30_transfer_rect(nv30, NEAREST, &tx->tmp, &tx->img);
 
-   nouveau_bo_ref(NULL, &tx->tmp.bo);
+      /* Allow the copies above to finish executing before freeing the source */
+      nouveau_fence_work(nv30->screen->base.fence.current,
+                         nouveau_fence_unref_bo, tx->tmp.bo);
+   } else {
+      nouveau_bo_ref(NULL, &tx->tmp.bo);
+   }
    pipe_resource_reference(&ptx->resource, NULL);
    FREE(tx);
 }

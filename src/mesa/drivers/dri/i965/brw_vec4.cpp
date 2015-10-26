@@ -61,6 +61,8 @@ src_reg::src_reg(register_file file, int reg, const glsl_type *type)
       this->swizzle = brw_swizzle_for_size(type->vector_elements);
    else
       this->swizzle = BRW_SWIZZLE_XYZW;
+   if (type)
+      this->type = brw_type_for_base_type(type);
 }
 
 /** Generic unset register constructor. */
@@ -1105,11 +1107,13 @@ vec4_visitor::opt_register_coalesce()
 	 if (interfered)
 	    break;
 
-         /* If somebody else writes our destination here, we can't coalesce
-          * before that.
+         /* If somebody else writes the same channels of our destination here,
+          * we can't coalesce before that.
           */
-         if (inst->dst.in_range(scan_inst->dst, scan_inst->regs_written))
-	    break;
+         if (inst->dst.in_range(scan_inst->dst, scan_inst->regs_written) &&
+             (inst->dst.writemask & scan_inst->dst.writemask) != 0) {
+            break;
+         }
 
          /* Check for reads of the register we're trying to coalesce into.  We
           * can't go rewriting instructions above that to put some other value

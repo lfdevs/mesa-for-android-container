@@ -976,13 +976,11 @@ static void load_texture( texenv_fragment_program *p, GLuint unit )
 						      ir_var_uniform);
    p->top_instructions->push_head(sampler);
 
-   /* Set the texture unit for this sampler.  The linker will pick this value
-    * up and do-the-right-thing.
-    *
-    * NOTE: The cast to int is important.  Without it, the constant will have
-    * type uint, and things later on may get confused.
+   /* Set the texture unit for this sampler in the same way that
+    * layout(binding=X) would.
     */
-   sampler->constant_value = new(p->mem_ctx) ir_constant(int(unit));
+   sampler->data.explicit_binding = true;
+   sampler->data.binding = unit;
 
    deref = new(p->mem_ctx) ir_dereference_variable(sampler);
    tex->set_sampler(deref, glsl_type::vec4_type);

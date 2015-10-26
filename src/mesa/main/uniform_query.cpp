@@ -319,19 +319,12 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 
       return;
    }
-   if ((uni->type->base_type == GLSL_TYPE_DOUBLE &&
-        returnType != GLSL_TYPE_DOUBLE) ||
-       (uni->type->base_type != GLSL_TYPE_DOUBLE &&
-        returnType == GLSL_TYPE_DOUBLE)) {
-	 _mesa_error( ctx, GL_INVALID_OPERATION,
-	             "glGetnUniform*vARB(incompatible uniform types)");
-	return;
-   }
 
    {
       unsigned elements = (uni->type->is_sampler())
 	 ? 1 : uni->type->components();
       const int dmul = uni->type->base_type == GLSL_TYPE_DOUBLE ? 2 : 1;
+      const int rmul = returnType == GLSL_TYPE_DOUBLE ? 2 : 1;
 
       /* Calculate the source base address *BEFORE* modifying elements to
        * account for the size of the user's buffer.
@@ -343,7 +336,7 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
              returnType == GLSL_TYPE_UINT || returnType == GLSL_TYPE_DOUBLE);
 
       /* doubles have a different size than the other 3 types */
-      unsigned bytes = sizeof(src[0]) * elements * dmul;
+      unsigned bytes = sizeof(src[0]) * elements * rmul;
       if (bufSize < 0 || bytes > (unsigned) bufSize) {
 	 _mesa_error( ctx, GL_INVALID_OPERATION,
 	             "glGetnUniform*vARB(out of bounds: bufSize is %d,"
@@ -367,32 +360,57 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
       } else {
 	 union gl_constant_value *const dst =
 	    (union gl_constant_value *) paramsOut;
-
 	 /* This code could be optimized by putting the loop inside the switch
 	  * statements.  However, this is not expected to be
 	  * performance-critical code.
 	  */
 	 for (unsigned i = 0; i < elements; i++) {
+	   int sidx = i * dmul;
+	   int didx = i * rmul;
+
 	    switch (returnType) {
 	    case GLSL_TYPE_FLOAT:
 	       switch (uni->type->base_type) {
 	       case GLSL_TYPE_UINT:
-		  dst[i].f = (float) src[i].u;
+		  dst[didx].f = (float) src[sidx].u;
 		  break;
 	       case GLSL_TYPE_INT:
 	       case GLSL_TYPE_SAMPLER:
                case GLSL_TYPE_IMAGE:
-		  dst[i].f = (float) src[i].i;
+		  dst[didx].f = (float) src[sidx].i;
 		  break;
 	       case GLSL_TYPE_BOOL:
-		  dst[i].f = src[i].i ? 1.0f : 0.0f;
+		  dst[didx].f = src[sidx].i ? 1.0f : 0.0f;
+		  break;
+	       case GLSL_TYPE_DOUBLE:
+		  dst[didx].f = *(double *)&src[sidx].f;
 		  break;
 	       default:
 		  assert(!"Should not get here.");
 		  break;
 	       }
 	       break;
-
+	    case GLSL_TYPE_DOUBLE:
+	       switch (uni->type->base_type) {
+	       case GLSL_TYPE_UINT:
+		  *(double *)&dst[didx].f = (double) src[sidx].u;
+		  break;
+	       case GLSL_TYPE_INT:
+	       case GLSL_TYPE_SAMPLER:
+	       case GLSL_TYPE_IMAGE:
+		  *(double *)&dst[didx].f = (double) src[sidx].i;
+		  break;
+	       case GLSL_TYPE_BOOL:
+		  *(double *)&dst[didx].f = src[sidx].i ? 1.0f : 0.0f;
+		  break;
+	       case GLSL_TYPE_FLOAT:
+		  *(double *)&dst[didx].f = (double) src[sidx].f;
+		  break;
+	       default:
+		  assert(!"Should not get here.");
+		  break;
+	       }
+	       break;
 	    case GLSL_TYPE_INT:
 	    case GLSL_TYPE_UINT:
 	       switch (uni->type->base_type) {
@@ -414,10 +432,13 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 		   *      a floating-point value is rounded to the
 		   *      nearest integer..."
 		   */
-		  dst[i].i = IROUND(src[i].f);
+		  dst[didx].i = IROUND(src[sidx].f);
 		  break;
 	       case GLSL_TYPE_BOOL:
-		  dst[i].i = src[i].i ? 1 : 0;
+		  dst[didx].i = src[sidx].i ? 1 : 0;
+		  break;
+	       case GLSL_TYPE_DOUBLE:
+		  dst[didx].i = *(double *)&src[sidx].f;
 		  break;
 	       default:
 		  assert(!"Should not get here.");

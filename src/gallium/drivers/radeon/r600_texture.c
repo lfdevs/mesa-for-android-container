@@ -989,6 +989,11 @@ static void *r600_texture_transfer_map(struct pipe_context *ctx,
 
 			if (usage & PIPE_TRANSFER_READ) {
 				struct pipe_resource *temp = ctx->screen->resource_create(ctx->screen, &resource);
+				if (!temp) {
+					R600_ERR("failed to create a temporary depth texture\n");
+					FREE(trans);
+					return NULL;
+				}
 
 				r600_copy_region_with_blit(ctx, temp, 0, 0, 0, 0, texture, level, box);
 				rctx->blit_decompress_depth(ctx, (struct r600_texture*)temp, staging_depth,

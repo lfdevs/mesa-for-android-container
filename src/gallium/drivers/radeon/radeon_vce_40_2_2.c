@@ -233,6 +233,9 @@ static void vui(struct rvce_encoder *enc)
 {
 	int i;
 
+	if (!enc->pic.rate_ctrl.frame_rate_num)
+		return;
+
 	RVCE_BEGIN(0x04000009); // vui
 	RVCE_CS(0x00000000); //aspectRatioInfoPresentFlag
 	RVCE_CS(0x00000000); //aspectRatioInfo.aspectRatioIdc

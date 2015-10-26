@@ -187,14 +187,7 @@ nv50_sifc_linear_u8(struct nouveau_context *nv,
    PUSH_DATA (push, 0);
 
    while (count) {
-      unsigned nr;
-
-      if (!PUSH_SPACE(push, 16))
-         break;
-      nr = PUSH_AVAIL(push);
-      assert(nr >= 16);
-      nr = MIN2(count, nr - 1);
-      nr = MIN2(nr, NV04_PFIFO_MAX_PACKET_LEN);
+      unsigned nr = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN);
 
       BEGIN_NI04(push, NV50_2D(SIFC_DATA), nr);
       PUSH_DATAp(push, src, nr);
@@ -365,9 +358,14 @@ nv50_miptree_transfer_unmap(struct pipe_context *pctx,
             tx->rect[0].base += mt->layer_stride;
          tx->rect[1].base += tx->nblocksy * tx->base.stride;
       }
+
+      /* Allow the copies above to finish executing before freeing the source */
+      nouveau_fence_work(nv50->screen->base.fence.current,
+                         nouveau_fence_unref_bo, tx->rect[1].bo);
+   } else {
+      nouveau_bo_ref(NULL, &tx->rect[1].bo);
    }
 
-   nouveau_bo_ref(NULL, &tx->rect[1].bo);
    pipe_resource_reference(&transfer->resource, NULL);
 
    FREE(tx);
@@ -390,12 +388,9 @@ nv50_cb_push(struct nouveau_context *nv,
    nouveau_pushbuf_validate(push);
 
    while (words) {
-      unsigned nr;
+      unsigned nr = MIN2(words, NV04_PFIFO_MAX_PACKET_LEN);
 
-      nr = PUSH_AVAIL(push);
-      nr = MIN2(nr - 7, words);
-      nr = MIN2(nr, NV04_PFIFO_MAX_PACKET_LEN - 1);
-
+      PUSH_SPACE(push, nr + 7);
       BEGIN_NV04(push, NV50_3D(CB_DEF_ADDRESS_HIGH), 3);
       PUSH_DATAh(push, bo->offset + base);
       PUSH_DATA (push, bo->offset + base);

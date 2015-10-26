@@ -37,6 +37,9 @@ void nouveau_fence_next(struct nouveau_screen *);
 bool nouveau_fence_wait(struct nouveau_fence *);
 bool nouveau_fence_signalled(struct nouveau_fence *);
 
+void nouveau_fence_unref_bo(void *data); /* generic unref bo callback */
+
+
 static inline void
 nouveau_fence_ref(struct nouveau_fence *fence, struct nouveau_fence **ref)
 {

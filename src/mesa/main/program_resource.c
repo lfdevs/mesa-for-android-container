@@ -111,11 +111,9 @@ _mesa_GetProgramInterfaceiv(GLuint program, GLenum programInterface,
       for (i = 0, *params = 0; i < shProg->NumProgramResourceList; i++) {
          if (shProg->ProgramResourceList[i].Type != programInterface)
             continue;
-         const char *name =
-            _mesa_program_resource_name(&shProg->ProgramResourceList[i]);
-         unsigned array_size =
-            _mesa_program_resource_array_size(&shProg->ProgramResourceList[i]);
-         *params = MAX2(*params, strlen(name) + (array_size ? 3 : 0) + 1);
+         unsigned len =
+            _mesa_program_resource_name_len(&shProg->ProgramResourceList[i]);
+         *params = MAX2(*params, len + 1);
       }
       break;
    case GL_MAX_NUM_ACTIVE_VARIABLES:

@@ -188,10 +188,10 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
        * may occur as the stvis->color_format.
        */
       switch(format) {
-      case PIPE_FORMAT_B8G8R8A8_UNORM:
+      case PIPE_FORMAT_BGRA8888_UNORM:
 	 depth = 32;
 	 break;
-      case PIPE_FORMAT_B8G8R8X8_UNORM:
+      case PIPE_FORMAT_BGRX8888_UNORM:
 	 depth = 24;
 	 break;
       case PIPE_FORMAT_B5G6R5_UNORM:
@@ -261,13 +261,13 @@ dri_image_drawable_get_buffers(struct dri_drawable *drawable,
       case PIPE_FORMAT_B5G6R5_UNORM:
          image_format = __DRI_IMAGE_FORMAT_RGB565;
          break;
-      case PIPE_FORMAT_B8G8R8X8_UNORM:
+      case PIPE_FORMAT_BGRX8888_UNORM:
          image_format = __DRI_IMAGE_FORMAT_XRGB8888;
          break;
-      case PIPE_FORMAT_B8G8R8A8_UNORM:
+      case PIPE_FORMAT_BGRA8888_UNORM:
          image_format = __DRI_IMAGE_FORMAT_ARGB8888;
          break;
-      case PIPE_FORMAT_R8G8B8A8_UNORM:
+      case PIPE_FORMAT_RGBA8888_UNORM:
          image_format = __DRI_IMAGE_FORMAT_ABGR8888;
          break;
       default:
@@ -314,10 +314,10 @@ dri2_allocate_buffer(__DRIscreen *sPriv,
 
    switch (format) {
       case 32:
-         pf = PIPE_FORMAT_B8G8R8A8_UNORM;
+         pf = PIPE_FORMAT_BGRA8888_UNORM;
          break;
       case 24:
-         pf = PIPE_FORMAT_B8G8R8X8_UNORM;
+         pf = PIPE_FORMAT_BGRX8888_UNORM;
          break;
       case 16:
          pf = PIPE_FORMAT_Z16_UNORM;
@@ -724,13 +724,13 @@ dri2_create_image_from_winsys(__DRIscreen *_screen,
       pf = PIPE_FORMAT_B5G6R5_UNORM;
       break;
    case __DRI_IMAGE_FORMAT_XRGB8888:
-      pf = PIPE_FORMAT_B8G8R8X8_UNORM;
+      pf = PIPE_FORMAT_BGRX8888_UNORM;
       break;
    case __DRI_IMAGE_FORMAT_ARGB8888:
-      pf = PIPE_FORMAT_B8G8R8A8_UNORM;
+      pf = PIPE_FORMAT_BGRA8888_UNORM;
       break;
    case __DRI_IMAGE_FORMAT_ABGR8888:
-      pf = PIPE_FORMAT_R8G8B8A8_UNORM;
+      pf = PIPE_FORMAT_RGBA8888_UNORM;
       break;
    default:
       pf = PIPE_FORMAT_NONE;
@@ -845,13 +845,13 @@ dri2_create_image(__DRIscreen *_screen,
       pf = PIPE_FORMAT_B5G6R5_UNORM;
       break;
    case __DRI_IMAGE_FORMAT_XRGB8888:
-      pf = PIPE_FORMAT_B8G8R8X8_UNORM;
+      pf = PIPE_FORMAT_BGRX8888_UNORM;
       break;
    case __DRI_IMAGE_FORMAT_ARGB8888:
-      pf = PIPE_FORMAT_B8G8R8A8_UNORM;
+      pf = PIPE_FORMAT_BGRA8888_UNORM;
       break;
    case __DRI_IMAGE_FORMAT_ABGR8888:
-      pf = PIPE_FORMAT_R8G8B8A8_UNORM;
+      pf = PIPE_FORMAT_RGBA8888_UNORM;
       break;
    default:
       pf = PIPE_FORMAT_NONE;
@@ -1293,6 +1293,7 @@ dri2_load_opencl_interop(struct dri_screen *screen)
 }
 
 struct dri2_fence {
+   struct dri_screen *driscreen;
    struct pipe_fence_handle *pipe_fence;
    void *cl_event;
 };
@@ -1313,6 +1314,7 @@ dri2_create_fence(__DRIcontext *_ctx)
       return NULL;
    }
 
+   fence->driscreen = dri_screen(_ctx->driScreenPriv);
    return fence;
 }
 
@@ -1336,6 +1338,7 @@ dri2_get_fence_from_cl_event(__DRIscreen *_screen, intptr_t cl_event)
       return NULL;
    }
 
+   fence->driscreen = driscreen;
    return fence;
 }
 
@@ -1360,9 +1363,9 @@ static GLboolean
 dri2_client_wait_sync(__DRIcontext *_ctx, void *_fence, unsigned flags,
                       uint64_t timeout)
 {
-   struct dri_screen *driscreen = dri_screen(_ctx->driScreenPriv);
-   struct pipe_screen *screen = driscreen->base.screen;
    struct dri2_fence *fence = (struct dri2_fence*)_fence;
+   struct dri_screen *driscreen = fence->driscreen;
+   struct pipe_screen *screen = driscreen->base.screen;
 
    /* No need to flush. The context was flushed when the fence was created. */
 

@@ -90,4 +90,15 @@ void fd3_emit_restore(struct fd_context *ctx);
 
 void fd3_emit_init(struct pipe_context *pctx);
 
+static inline void
+fd3_emit_cache_flush(struct fd_context *ctx, struct fd_ringbuffer *ring)
+{
+	fd_wfi(ctx, ring);
+	OUT_PKT0(ring, REG_A3XX_UCHE_CACHE_INVALIDATE0_REG, 2);
+	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE0_REG_ADDR(0));
+	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR(0) |
+			A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(INVALIDATE) |
+			A3XX_UCHE_CACHE_INVALIDATE1_REG_ENTIRE_CACHE);
+}
+
 #endif /* FD3_EMIT_H */

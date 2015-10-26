@@ -1401,7 +1401,7 @@ save_BlendFunci(GLuint buf, GLenum sfactor, GLenum dfactor)
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
    ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
-   n = alloc_instruction(ctx, OPCODE_BLEND_FUNC_SEPARATE_I, 3);
+   n = alloc_instruction(ctx, OPCODE_BLEND_FUNC_I, 3);
    if (n) {
       n[1].ui = buf;
       n[2].e = sfactor;

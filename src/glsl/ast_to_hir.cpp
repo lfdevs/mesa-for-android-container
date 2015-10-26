@@ -939,6 +939,12 @@ ast_node::hir(exec_list *instructions, struct _mesa_glsl_parse_state *state)
    return NULL;
 }
 
+bool
+ast_node::has_sequence_subexpression() const
+{
+   return false;
+}
+
 void
 ast_function_expression::hir_no_rvalue(exec_list *instructions,
                                        struct _mesa_glsl_parse_state *state)
@@ -1850,6 +1856,80 @@ ast_expression::do_hir(exec_list *instructions,
    return result;
 }
 
+bool
+ast_expression::has_sequence_subexpression() const
+{
+   switch (this->oper) {
+   case ast_plus:
+   case ast_neg:
+   case ast_bit_not:
+   case ast_logic_not:
+   case ast_pre_inc:
+   case ast_pre_dec:
+   case ast_post_inc:
+   case ast_post_dec:
+      return this->subexpressions[0]->has_sequence_subexpression();
+
+   case ast_assign:
+   case ast_add:
+   case ast_sub:
+   case ast_mul:
+   case ast_div:
+   case ast_mod:
+   case ast_lshift:
+   case ast_rshift:
+   case ast_less:
+   case ast_greater:
+   case ast_lequal:
+   case ast_gequal:
+   case ast_nequal:
+   case ast_equal:
+   case ast_bit_and:
+   case ast_bit_xor:
+   case ast_bit_or:
+   case ast_logic_and:
+   case ast_logic_or:
+   case ast_logic_xor:
+   case ast_array_index:
+   case ast_mul_assign:
+   case ast_div_assign:
+   case ast_add_assign:
+   case ast_sub_assign:
+   case ast_mod_assign:
+   case ast_ls_assign:
+   case ast_rs_assign:
+   case ast_and_assign:
+   case ast_xor_assign:
+   case ast_or_assign:
+      return this->subexpressions[0]->has_sequence_subexpression() ||
+             this->subexpressions[1]->has_sequence_subexpression();
+
+   case ast_conditional:
+      return this->subexpressions[0]->has_sequence_subexpression() ||
+             this->subexpressions[1]->has_sequence_subexpression() ||
+             this->subexpressions[2]->has_sequence_subexpression();
+
+   case ast_sequence:
+      return true;
+
+   case ast_field_selection:
+   case ast_identifier:
+   case ast_int_constant:
+   case ast_uint_constant:
+   case ast_float_constant:
+   case ast_bool_constant:
+   case ast_double_constant:
+      return false;
+
+   case ast_aggregate:
+      unreachable("ast_aggregate: Should never get here.");
+
+   case ast_function_call:
+      unreachable("should be handled by ast_function_expression::hir");
+   }
+
+   return false;
+}
 
 ir_rvalue *
 ast_expression_statement::hir(exec_list *instructions,
@@ -3146,16 +3226,72 @@ process_initializer(ir_variable *var, ast_declaration *decl,
 
    /* Calculate the constant value if this is a const or uniform
     * declaration.
+    *
+    * Section 4.3 (Storage Qualifiers) of the GLSL ES 1.00.17 spec says:
+    *
+    *     "Declarations of globals without a storage qualifier, or with
+    *     just the const qualifier, may include initializers, in which case
+    *     they will be initialized before the first line of main() is
+    *     executed.  Such initializers must be a constant expression."
+    *
+    * The same section of the GLSL ES 3.00.4 spec has similar language.
     */
    if (type->qualifier.flags.q.constant
-       || type->qualifier.flags.q.uniform) {
+       || type->qualifier.flags.q.uniform
+       || (state->es_shader && state->current_function == NULL)) {
       ir_rvalue *new_rhs = validate_assignment(state, initializer_loc,
                                                lhs, rhs, true);
       if (new_rhs != NULL) {
          rhs = new_rhs;
 
+         /* Section 4.3.3 (Constant Expressions) of the GLSL ES 3.00.4 spec
+          * says:
+          *
+          *     "A constant expression is one of
+          *
+          *        ...
+          *
+          *        - an expression formed by an operator on operands that are
+          *          all constant expressions, including getting an element of
+          *          a constant array, or a field of a constant structure, or
+          *          components of a constant vector.  However, the sequence
+          *          operator ( , ) and the assignment operators ( =, +=, ...)
+          *          are not included in the operators that can create a
+          *          constant expression."
+          *
+          * Section 12.43 (Sequence operator and constant expressions) says:
+          *
+          *     "Should the following construct be allowed?
+          *
+          *         float a[2,3];
+          *
+          *     The expression within the brackets uses the sequence operator
+          *     (',') and returns the integer 3 so the construct is declaring
+          *     a single-dimensional array of size 3.  In some languages, the
+          *     construct declares a two-dimensional array.  It would be
+          *     preferable to make this construct illegal to avoid confusion.
+          *
+          *     One possibility is to change the definition of the sequence
+          *     operator so that it does not return a constant-expression and
+          *     hence cannot be used to declare an array size.
+          *
+          *     RESOLUTION: The result of a sequence operator is not a
+          *     constant-expression."
+          *
+          * Section 4.3.3 (Constant Expressions) of the GLSL 4.30.9 spec
+          * contains language almost identical to the section 4.3.3 in the
+          * GLSL ES 3.00.4 spec.  This is a new limitation for these GLSL
+          * versions.
+          */
          ir_constant *constant_value = rhs->constant_expression_value();
-         if (!constant_value) {
+         if (!constant_value ||
+             (state->is_version(430, 300) &&
+              decl->initializer->has_sequence_subexpression())) {
+            const char *const variable_mode =
+               (type->qualifier.flags.q.constant)
+               ? "const"
+               : ((type->qualifier.flags.q.uniform) ? "uniform" : "global");
+
             /* If ARB_shading_language_420pack is enabled, initializers of
              * const-qualified local variables do not have to be constant
              * expressions. Const-qualified global variables must still be
@@ -3166,22 +3302,24 @@ process_initializer(ir_variable *var, ast_declaration *decl,
                _mesa_glsl_error(& initializer_loc, state,
                                 "initializer of %s variable `%s' must be a "
                                 "constant expression",
-                                (type->qualifier.flags.q.constant)
-                                ? "const" : "uniform",
+                                variable_mode,
                                 decl->identifier);
                if (var->type->is_numeric()) {
                   /* Reduce cascading errors. */
-                  var->constant_value = ir_constant::zero(state, var->type);
+                  var->constant_value = type->qualifier.flags.q.constant
+                     ? ir_constant::zero(state, var->type) : NULL;
                }
             }
          } else {
             rhs = constant_value;
-            var->constant_value = constant_value;
+            var->constant_value = type->qualifier.flags.q.constant
+               ? constant_value : NULL;
          }
       } else {
          if (var->type->is_numeric()) {
             /* Reduce cascading errors. */
-            var->constant_value = ir_constant::zero(state, var->type);
+            var->constant_value = type->qualifier.flags.q.constant
+               ? ir_constant::zero(state, var->type) : NULL;
          }
       }
    }

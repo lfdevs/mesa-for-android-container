@@ -355,6 +355,10 @@ to be 0.
   are supported.
 * ``PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE``: Whether the driver doesn't
   ignore tgsi_declaration_range::Last for shader inputs and outputs.
+* ``PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT``: This is the maximum number
+  of iterations that loops are allowed to have to be unrolled. It is only
+  a hint to state trackers. Whether any loops will be unrolled is not
+  guaranteed.
 
 
 .. _pipe_compute_cap:

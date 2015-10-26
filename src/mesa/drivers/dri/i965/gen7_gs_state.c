@@ -59,9 +59,7 @@ upload_gs_state(struct brw_context *brw)
       OUT_BATCH(((ALIGN(stage_state->sampler_count, 4)/4) <<
                  GEN6_GS_SAMPLER_COUNT_SHIFT) |
                 ((brw->gs.prog_data->base.base.binding_table.size_bytes / 4) <<
-                 GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT) |
-                (brw->is_haswell && prog_data->base.nr_image_params ?
-                 HSW_GS_UAV_ACCESS_ENABLE : 0));
+                 GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
 
       if (brw->gs.prog_data->base.base.total_scratch) {
          OUT_RELOC(stage_state->scratch_bo,

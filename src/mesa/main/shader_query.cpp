@@ -476,7 +476,7 @@ _mesa_program_resource_array_size(struct gl_program_resource *res)
              RESOURCE_XFB(res)->Size : 0;
    case GL_PROGRAM_INPUT:
    case GL_PROGRAM_OUTPUT:
-      return RESOURCE_VAR(res)->data.max_array_access;
+      return RESOURCE_VAR(res)->type->length;
    case GL_UNIFORM:
    case GL_VERTEX_SUBROUTINE_UNIFORM:
    case GL_GEOMETRY_SUBROUTINE_UNIFORM:
@@ -661,6 +661,57 @@ _mesa_program_resource_find_index(struct gl_shader_program *shProg,
    return NULL;
 }
 
+/* Function returns if resource name is expected to have index
+ * appended into it.
+ *
+ *
+ * Page 61 (page 73 of the PDF) in section 2.11 of the OpenGL ES 3.0
+ * spec says:
+ *
+ *     "If the active uniform is an array, the uniform name returned in
+ *     name will always be the name of the uniform array appended with
+ *     "[0]"."
+ *
+ * The same text also appears in the OpenGL 4.2 spec.  It does not,
+ * however, appear in any previous spec.  Previous specifications are
+ * ambiguous in this regard.  However, either name can later be passed
+ * to glGetUniformLocation (and related APIs), so there shouldn't be any
+ * harm in always appending "[0]" to uniform array names.
+ *
+ * Geometry shader stage has different naming convention where the 'normal'
+ * condition is an array, therefore for variables referenced in geometry
+ * stage we do not add '[0]'.
+ *
+ * Note, that TCS outputs and TES inputs should not have index appended
+ * either.
+ */
+static bool
+add_index_to_name(struct gl_program_resource *res)
+{
+   bool add_index = !(((res->Type == GL_PROGRAM_INPUT) &&
+                       res->StageReferences & (1 << MESA_SHADER_GEOMETRY)));
+
+   /* Transform feedback varyings have array index already appended
+    * in their names.
+    */
+   if (res->Type == GL_TRANSFORM_FEEDBACK_VARYING)
+      add_index = false;
+
+   return add_index;
+}
+
+/* Get name length of a program resource. This consists of
+ * base name + 3 for '[0]' if resource is an array.
+ */
+extern unsigned
+_mesa_program_resource_name_len(struct gl_program_resource *res)
+{
+   unsigned length = strlen(_mesa_program_resource_name(res));
+   if (_mesa_program_resource_array_size(res) && add_index_to_name(res))
+      length += 3;
+   return length;
+}
+
 /* Get full name of a program resource.
  */
 bool
@@ -696,36 +747,7 @@ _mesa_get_program_resource_name(struct gl_shader_program *shProg,
 
    _mesa_copy_string(name, bufSize, length, _mesa_program_resource_name(res));
 
-   /* Page 61 (page 73 of the PDF) in section 2.11 of the OpenGL ES 3.0
-    * spec says:
-    *
-    *     "If the active uniform is an array, the uniform name returned in
-    *     name will always be the name of the uniform array appended with
-    *     "[0]"."
-    *
-    * The same text also appears in the OpenGL 4.2 spec.  It does not,
-    * however, appear in any previous spec.  Previous specifications are
-    * ambiguous in this regard.  However, either name can later be passed
-    * to glGetUniformLocation (and related APIs), so there shouldn't be any
-    * harm in always appending "[0]" to uniform array names.
-    *
-    * Geometry shader stage has different naming convention where the 'normal'
-    * condition is an array, therefore for variables referenced in geometry
-    * stage we do not add '[0]'.
-    *
-    * Note, that TCS outputs and TES inputs should not have index appended
-    * either.
-    */
-   bool add_index = !(((programInterface == GL_PROGRAM_INPUT) &&
-                       res->StageReferences & (1 << MESA_SHADER_GEOMETRY)));
-
-   /* Transform feedback varyings have array index already appended
-    * in their names.
-    */
-   if (programInterface == GL_TRANSFORM_FEEDBACK_VARYING)
-      add_index = false;
-
-   if (add_index && _mesa_program_resource_array_size(res)) {
+   if (_mesa_program_resource_array_size(res) && add_index_to_name(res)) {
       int i;
 
       /* The comparison is strange because *length does *NOT* include the
@@ -972,13 +994,9 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
       switch (res->Type) {
       case GL_ATOMIC_COUNTER_BUFFER:
          goto invalid_operation;
-      case GL_TRANSFORM_FEEDBACK_VARYING:
-         *val = strlen(_mesa_program_resource_name(res)) + 1;
-         break;
       default:
-         /* Base name +3 if array '[0]' + terminator. */
-         *val = strlen(_mesa_program_resource_name(res)) +
-            (_mesa_program_resource_array_size(res) > 0 ? 3 : 0) + 1;
+         /* Resource name length + terminator. */
+         *val = _mesa_program_resource_name_len(res) + 1;
       }
       return 1;
    case GL_TYPE:
@@ -1003,7 +1021,7 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
             return 1;
       case GL_PROGRAM_INPUT:
       case GL_PROGRAM_OUTPUT:
-         *val = MAX2(RESOURCE_VAR(res)->type->length, 1);
+         *val = MAX2(_mesa_program_resource_array_size(res), 1);
          return 1;
       case GL_TRANSFORM_FEEDBACK_VARYING:
          *val = MAX2(RESOURCE_XFB(res)->Size, 1);
