@@ -311,7 +311,7 @@ static const struct brw_device_info brw_device_info_chv = {
    .max_gs_threads = 336,                           \
    .max_hs_threads = 336,                           \
    .max_ds_threads = 336,                           \
-   .max_wm_threads = 64 * 6,                        \
+   .max_wm_threads = 64 * 9,                        \
    .max_cs_threads = 56,                            \
    .urb = {                                         \
       .size = 192,                                  \
@@ -332,6 +332,10 @@ static const struct brw_device_info brw_device_info_skl_gt2 = {
 
 static const struct brw_device_info brw_device_info_skl_gt3 = {
    GEN9_FEATURES, .gt = 3,
+};
+
+static const struct brw_device_info brw_device_info_skl_gt4 = {
+   GEN9_FEATURES, .gt = 4,
 };
 
 static const struct brw_device_info brw_device_info_bxt = {

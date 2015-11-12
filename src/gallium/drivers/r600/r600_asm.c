@@ -621,7 +621,7 @@ static int replace_gpr_with_pv_ps(struct r600_bytecode *bc,
 	return 0;
 }
 
-void r600_bytecode_special_constants(uint32_t value, unsigned *sel, unsigned *neg)
+void r600_bytecode_special_constants(uint32_t value, unsigned *sel, unsigned *neg, unsigned abs)
 {
 	switch(value) {
 	case 0:
@@ -641,11 +641,11 @@ void r600_bytecode_special_constants(uint32_t value, unsigned *sel, unsigned *ne
 		break;
 	case 0xBF800000: /* -1.0f */
 		*sel = V_SQ_ALU_SRC_1;
-		*neg ^= 1;
+		*neg ^= !abs;
 		break;
 	case 0xBF000000: /* -0.5f */
 		*sel = V_SQ_ALU_SRC_0_5;
-		*neg ^= 1;
+		*neg ^= !abs;
 		break;
 	default:
 		*sel = V_SQ_ALU_SRC_LITERAL;
@@ -1194,7 +1194,7 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		}
 		if (nalu->src[i].sel == V_SQ_ALU_SRC_LITERAL)
 			r600_bytecode_special_constants(nalu->src[i].value,
-				&nalu->src[i].sel, &nalu->src[i].neg);
+				&nalu->src[i].sel, &nalu->src[i].neg, nalu->src[i].abs);
 	}
 	if (nalu->dst.sel >= bc->ngpr) {
 		bc->ngpr = nalu->dst.sel + 1;

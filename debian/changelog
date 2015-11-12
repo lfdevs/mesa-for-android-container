@@ -1,3 +1,10 @@
+mesa (11.0.5-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Add myself to Uploaders.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 12 Nov 2015 11:55:02 +0100
+
 mesa (11.0.4-1) unstable; urgency=medium
 
   [ Andreas Boll ]

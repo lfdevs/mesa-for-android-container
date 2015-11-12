@@ -3266,6 +3266,7 @@ static void si_init_config(struct si_context *sctx)
 		break;
 	case CHIP_KABINI:
 	case CHIP_MULLINS:
+	case CHIP_STONEY:
 		raster_config = 0x00000000;
 		raster_config_1 = 0x00000000;
 		break;

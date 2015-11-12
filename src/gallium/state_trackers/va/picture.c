@@ -58,7 +58,7 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
       return VA_STATUS_ERROR_INVALID_SURFACE;
 
    context->target = surf->buffer;
-   context->decoder->begin_frame(context->decoder, context->target, NULL);
+   context->decoder->begin_frame(context->decoder, context->target, &context->desc.base);
 
    return VA_STATUS_SUCCESS;
 }
@@ -517,7 +517,7 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
    buffers[num_buffers] = buf->data;
    sizes[num_buffers] = buf->size;
    ++num_buffers;
-   context->decoder->decode_bitstream(context->decoder, context->target, NULL,
+   context->decoder->decode_bitstream(context->decoder, context->target, &context->desc.base,
       num_buffers, (const void * const*)buffers, sizes);
 }
 

@@ -1,0 +1,2 @@
+# The commit base differs greatly between 11.0 and master
+2832ca95ecce064c7d841a3a374c2179f56161be glsl: fix stream qualifier for blocks with an instance name

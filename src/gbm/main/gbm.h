@@ -35,6 +35,7 @@ extern "C" {
 
 #define __GBM__ 1
 
+#include <stddef.h>
 #include <stdint.h>
 
 /**

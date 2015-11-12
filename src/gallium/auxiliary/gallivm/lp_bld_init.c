@@ -427,6 +427,7 @@ lp_build_init(void)
        */
       util_cpu_caps.has_avx = 0;
       util_cpu_caps.has_avx2 = 0;
+      util_cpu_caps.has_f16c = 0;
    }
 
 #ifdef PIPE_ARCH_PPC_64
@@ -458,7 +459,9 @@ lp_build_init(void)
    util_cpu_caps.has_sse3 = 0;
    util_cpu_caps.has_ssse3 = 0;
    util_cpu_caps.has_sse4_1 = 0;
+   util_cpu_caps.has_sse4_2 = 0;
    util_cpu_caps.has_avx = 0;
+   util_cpu_caps.has_avx2 = 0;
    util_cpu_caps.has_f16c = 0;
 #endif
 

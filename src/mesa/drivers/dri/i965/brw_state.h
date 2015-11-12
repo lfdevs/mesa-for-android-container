@@ -221,7 +221,7 @@ bool brw_search_cache(struct brw_cache *cache,
 		      enum brw_cache_id cache_id,
 		      const void *key,
 		      GLuint key_size,
-		      uint32_t *inout_offset, void *out_aux);
+		      uint32_t *inout_offset, void *inout_aux);
 void brw_state_cache_check_size( struct brw_context *brw );
 
 void brw_init_caches( struct brw_context *brw );

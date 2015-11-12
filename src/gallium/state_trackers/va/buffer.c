@@ -73,6 +73,9 @@ vlVaBufferSetNumElements(VADriverContextP ctx, VABufferID buf_id,
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+   if (!buf)
+      return VA_STATUS_ERROR_INVALID_BUFFER;
+
    buf->data = REALLOC(buf->data, buf->size * buf->num_elements,
                        buf->size * num_elements);
    buf->num_elements = num_elements;
@@ -90,6 +93,9 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   if (!pbuff)
+      return VA_STATUS_ERROR_INVALID_PARAMETER;
 
    buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
    if (!buf)

@@ -497,20 +497,48 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 #endif
    }
 
-   llvm::SmallVector<std::string, 1> MAttrs;
-   if (util_cpu_caps.has_avx) {
-      /*
-       * AVX feature is not automatically detected from CPUID by the X86 target
-       * yet, because the old (yet default) JIT engine is not capable of
-       * emitting the opcodes. On newer llvm versions it is and at least some
-       * versions (tested with 3.3) will emit avx opcodes without this anyway.
-       */
-      MAttrs.push_back("+avx");
-      if (util_cpu_caps.has_f16c) {
-         MAttrs.push_back("+f16c");
-      }
-      builder.setMAttrs(MAttrs);
-   }
+   llvm::SmallVector<std::string, 16> MAttrs;
+
+#if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
+   /*
+    * We need to unset attributes because sometimes LLVM mistakenly assumes
+    * certain features are present given the processor name.
+    *
+    * https://bugs.freedesktop.org/show_bug.cgi?id=92214
+    * http://llvm.org/PR25021
+    * http://llvm.org/PR19429
+    * http://llvm.org/PR16721
+    */
+   MAttrs.push_back(util_cpu_caps.has_sse    ? "+sse"    : "-sse"   );
+   MAttrs.push_back(util_cpu_caps.has_sse2   ? "+sse2"   : "-sse2"  );
+   MAttrs.push_back(util_cpu_caps.has_sse3   ? "+sse3"   : "-sse3"  );
+   MAttrs.push_back(util_cpu_caps.has_ssse3  ? "+ssse3"  : "-ssse3" );
+#if HAVE_LLVM >= 0x0304
+   MAttrs.push_back(util_cpu_caps.has_sse4_1 ? "+sse4.1" : "-sse4.1");
+#else
+   MAttrs.push_back(util_cpu_caps.has_sse4_1 ? "+sse41"  : "-sse41" );
+#endif
+#if HAVE_LLVM >= 0x0304
+   MAttrs.push_back(util_cpu_caps.has_sse4_2 ? "+sse4.2" : "-sse4.2");
+#else
+   MAttrs.push_back(util_cpu_caps.has_sse4_2 ? "+sse42"  : "-sse42" );
+#endif
+   /*
+    * AVX feature is not automatically detected from CPUID by the X86 target
+    * yet, because the old (yet default) JIT engine is not capable of
+    * emitting the opcodes. On newer llvm versions it is and at least some
+    * versions (tested with 3.3) will emit avx opcodes without this anyway.
+    */
+   MAttrs.push_back(util_cpu_caps.has_avx  ? "+avx"  : "-avx");
+   MAttrs.push_back(util_cpu_caps.has_f16c ? "+f16c" : "-f16c");
+   MAttrs.push_back(util_cpu_caps.has_avx2 ? "+avx2" : "-avx2");
+#endif
+
+#if defined(PIPE_ARCH_PPC)
+   MAttrs.push_back(util_cpu_caps.has_altivec ? "+altivec" : "-altivec");
+#endif
+
+   builder.setMAttrs(MAttrs);
 
 #if HAVE_LLVM >= 0x0305
    StringRef MCPU = llvm::sys::getHostCPUName();

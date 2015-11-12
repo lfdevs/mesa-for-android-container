@@ -226,7 +226,11 @@ static boolean do_winsys_init(struct amdgpu_winsys *ws)
       break;
    case CHIP_CARRIZO:
       ws->family = FAMILY_CZ;
-      ws->rev_id = CZ_CARRIZO_A0;
+      ws->rev_id = CARRIZO_A0;
+      break;
+   case CHIP_STONEY:
+      ws->family = FAMILY_CZ;
+      ws->rev_id = STONEY_A0;
       break;
    case CHIP_FIJI:
       ws->family = FAMILY_VI;

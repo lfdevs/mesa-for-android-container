@@ -205,11 +205,12 @@ int rvid_get_video_param(struct pipe_screen *screen,
 			 enum pipe_video_cap param)
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen *)screen;
+	enum pipe_video_format codec = u_reduce_video_profile(profile);
 
 	if (entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
 		switch (param) {
 		case PIPE_VIDEO_CAP_SUPPORTED:
-			return u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC &&
+			return codec == PIPE_VIDEO_FORMAT_MPEG4_AVC &&
 				rvce_is_fw_version_supported(rscreen);
 	        case PIPE_VIDEO_CAP_NPOT_TEXTURES:
         	        return 1;
@@ -232,38 +233,19 @@ int rvid_get_video_param(struct pipe_screen *screen,
 		}
 	}
 
-	/* UVD 2.x limits */
-	if (rscreen->family < CHIP_PALM) {
-		enum pipe_video_format codec = u_reduce_video_profile(profile);
-		switch (param) {
-		case PIPE_VIDEO_CAP_SUPPORTED:
-			/* no support for MPEG4 */
-			return codec != PIPE_VIDEO_FORMAT_MPEG4 &&
-			       /* FIXME: VC-1 simple/main profile is broken */
-			       profile != PIPE_VIDEO_PROFILE_VC1_SIMPLE &&
-			       profile != PIPE_VIDEO_PROFILE_VC1_MAIN;
-		case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-		case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-			/* MPEG2 only with shaders and no support for
-			   interlacing on R6xx style UVD */
-			return codec != PIPE_VIDEO_FORMAT_MPEG12 &&
-			       rscreen->family > CHIP_RV770;
-		default:
-			break;
-		}
-	}
-
 	switch (param) {
 	case PIPE_VIDEO_CAP_SUPPORTED:
-		switch (u_reduce_video_profile(profile)) {
+		switch (codec) {
 		case PIPE_VIDEO_FORMAT_MPEG12:
 		case PIPE_VIDEO_FORMAT_MPEG4:
 		case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-			return entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE;
+			if (rscreen->family < CHIP_PALM)
+				/* no support for MPEG4 */
+				return codec != PIPE_VIDEO_FORMAT_MPEG4;
+			return true;
 		case PIPE_VIDEO_FORMAT_VC1:
 			/* FIXME: VC-1 simple/main profile is broken */
-			return profile == PIPE_VIDEO_PROFILE_VC1_ADVANCED &&
-			       entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE;
+			return profile == PIPE_VIDEO_PROFILE_VC1_ADVANCED;
 		case PIPE_VIDEO_FORMAT_HEVC:
 			/* Carrizo only supports HEVC Main */
 			return rscreen->family >= CHIP_CARRIZO &&
@@ -280,13 +262,17 @@ int rvid_get_video_param(struct pipe_screen *screen,
 	case PIPE_VIDEO_CAP_PREFERED_FORMAT:
 		return PIPE_FORMAT_NV12;
 	case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-		if (u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_HEVC)
-			return false; //The hardware doesn't support interlaced HEVC.
-		return true;
 	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-		if (u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_HEVC)
-			return false; //The hardware doesn't support interlaced HEVC.
-		return true;
+		if (rscreen->family < CHIP_PALM) {
+			/* MPEG2 only with shaders and no support for
+			   interlacing on R6xx style UVD */
+			return codec != PIPE_VIDEO_FORMAT_MPEG12 &&
+			       rscreen->family > CHIP_RV770;
+		} else {
+			if (u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_HEVC)
+				return false; //The firmware doesn't support interlaced HEVC.
+			return true;
+		}
 	case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
 		return true;
 	case PIPE_VIDEO_CAP_MAX_LEVEL:

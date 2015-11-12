@@ -151,11 +151,15 @@ enum {
 
 /* CZ specific rev IDs */
 enum {
-	CZ_CARRIZO_A0      = 0x01,
+	CARRIZO_A0   = 0x01,
+    STONEY_A0    = 0x61,
 	CZ_UNKNOWN      = 0xFF
 };
 
 #define ASICREV_IS_CARRIZO(eChipRev) \
-	(eChipRev >= CARRIZO_A0)
+	((eChipRev >= CARRIZO_A0) && (eChipRev < STONEY_A0))
+
+#define ASICREV_IS_STONEY(eChipRev) \
+	((eChipRev >= STONEY_A0) && (eChipRev < CZ_UNKNOWN))
 
 #endif /* AMDGPU_ID_H */

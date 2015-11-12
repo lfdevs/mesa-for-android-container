@@ -137,7 +137,7 @@ bool
 brw_search_cache(struct brw_cache *cache,
                  enum brw_cache_id cache_id,
                  const void *key, GLuint key_size,
-                 uint32_t *inout_offset, void *out_aux)
+                 uint32_t *inout_offset, void *inout_aux)
 {
    struct brw_context *brw = cache->brw;
    struct brw_cache_item *item;
@@ -155,11 +155,12 @@ brw_search_cache(struct brw_cache *cache,
    if (item == NULL)
       return false;
 
-   *(void **)out_aux = ((char *)item->key + item->key_size);
+   void *aux = ((char *) item->key) + item->key_size;
 
-   if (item->offset != *inout_offset) {
+   if (item->offset != *inout_offset || aux != *((void **) inout_aux)) {
       brw->ctx.NewDriverState |= (1 << cache_id);
       *inout_offset = item->offset;
+      *((void **) inout_aux) = aux;
    }
 
    return true;

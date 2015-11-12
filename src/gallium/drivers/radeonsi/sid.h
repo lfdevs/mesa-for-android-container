@@ -6732,6 +6732,9 @@
 #define   S_00B854_WAVES_PER_SH(x)                                    (((x) & 0x3F) << 0) /* mask is 0x3FF on CIK */
 #define   G_00B854_WAVES_PER_SH(x)                                    (((x) >> 0) & 0x3F) /* mask is 0x3FF on CIK */
 #define   C_00B854_WAVES_PER_SH                                       0xFFFFFFC0 /* mask is 0x3FF on CIK */
+#define   S_00B854_WAVES_PER_SH_CIK(x)                                (((x) & 0x3FF) << 0)
+#define   G_00B854_WAVES_PER_SH_CIK(x)                                (((x) >> 0) & 0x3FF)
+#define   C_00B854_WAVES_PER_SH_CIK                                   0xFFFFFC00
 #define   S_00B854_TG_PER_CU(x)                                       (((x) & 0x0F) << 12)
 #define   G_00B854_TG_PER_CU(x)                                       (((x) >> 12) & 0x0F)
 #define   C_00B854_TG_PER_CU                                          0xFFFF0FFF
@@ -8335,6 +8338,296 @@
 #define     V_028714_SPI_SHADER_UINT16_ABGR                         0x07
 #define     V_028714_SPI_SHADER_SINT16_ABGR                         0x08
 #define     V_028714_SPI_SHADER_32_ABGR                             0x09
+/* Stoney */
+#define R_028754_SX_PS_DOWNCONVERT                                      0x028754
+#define   S_028754_MRT0(x)                                            (((x) & 0x0F) << 0)
+#define   G_028754_MRT0(x)                                            (((x) >> 0) & 0x0F)
+#define   C_028754_MRT0                                               0xFFFFFFF0
+#define     V_028754_SX_RT_EXPORT_NO_CONVERSION				0
+#define     V_028754_SX_RT_EXPORT_32_R					1
+#define     V_028754_SX_RT_EXPORT_32_A					2
+#define     V_028754_SX_RT_EXPORT_10_11_11				3
+#define     V_028754_SX_RT_EXPORT_2_10_10_10				4
+#define     V_028754_SX_RT_EXPORT_8_8_8_8				5
+#define     V_028754_SX_RT_EXPORT_5_6_5					6
+#define     V_028754_SX_RT_EXPORT_1_5_5_5				7
+#define     V_028754_SX_RT_EXPORT_4_4_4_4				8
+#define     V_028754_SX_RT_EXPORT_16_16_GR				9
+#define     V_028754_SX_RT_EXPORT_16_16_AR				10
+#define   S_028754_MRT1(x)                                            (((x) & 0x0F) << 4)
+#define   G_028754_MRT1(x)                                            (((x) >> 4) & 0x0F)
+#define   C_028754_MRT1                                               0xFFFFFF0F
+#define   S_028754_MRT2(x)                                            (((x) & 0x0F) << 8)
+#define   G_028754_MRT2(x)                                            (((x) >> 8) & 0x0F)
+#define   C_028754_MRT2                                               0xFFFFF0FF
+#define   S_028754_MRT3(x)                                            (((x) & 0x0F) << 12)
+#define   G_028754_MRT3(x)                                            (((x) >> 12) & 0x0F)
+#define   C_028754_MRT3                                               0xFFFF0FFF
+#define   S_028754_MRT4(x)                                            (((x) & 0x0F) << 16)
+#define   G_028754_MRT4(x)                                            (((x) >> 16) & 0x0F)
+#define   C_028754_MRT4                                               0xFFF0FFFF
+#define   S_028754_MRT5(x)                                            (((x) & 0x0F) << 20)
+#define   G_028754_MRT5(x)                                            (((x) >> 20) & 0x0F)
+#define   C_028754_MRT5                                               0xFF0FFFFF
+#define   S_028754_MRT6(x)                                            (((x) & 0x0F) << 24)
+#define   G_028754_MRT6(x)                                            (((x) >> 24) & 0x0F)
+#define   C_028754_MRT6                                               0xF0FFFFFF
+#define   S_028754_MRT7(x)                                            (((x) & 0x0F) << 28)
+#define   G_028754_MRT7(x)                                            (((x) >> 28) & 0x0F)
+#define   C_028754_MRT7                                               0x0FFFFFFF
+#define R_028758_SX_BLEND_OPT_EPSILON                                   0x028758
+#define   S_028758_MRT0_EPSILON(x)                                    (((x) & 0x0F) << 0)
+#define   G_028758_MRT0_EPSILON(x)                                    (((x) >> 0) & 0x0F)
+#define   C_028758_MRT0_EPSILON                                       0xFFFFFFF0
+#define      V_028758_EXACT						0
+#define      V_028758_11BIT_FORMAT					1
+#define      V_028758_10BIT_FORMAT					3
+#define      V_028758_8BIT_FORMAT					7
+#define      V_028758_6BIT_FORMAT					11
+#define      V_028758_5BIT_FORMAT					13
+#define      V_028758_4BIT_FORMAT					15
+#define   S_028758_MRT1_EPSILON(x)                                    (((x) & 0x0F) << 4)
+#define   G_028758_MRT1_EPSILON(x)                                    (((x) >> 4) & 0x0F)
+#define   C_028758_MRT1_EPSILON                                       0xFFFFFF0F
+#define   S_028758_MRT2_EPSILON(x)                                    (((x) & 0x0F) << 8)
+#define   G_028758_MRT2_EPSILON(x)                                    (((x) >> 8) & 0x0F)
+#define   C_028758_MRT2_EPSILON                                       0xFFFFF0FF
+#define   S_028758_MRT3_EPSILON(x)                                    (((x) & 0x0F) << 12)
+#define   G_028758_MRT3_EPSILON(x)                                    (((x) >> 12) & 0x0F)
+#define   C_028758_MRT3_EPSILON                                       0xFFFF0FFF
+#define   S_028758_MRT4_EPSILON(x)                                    (((x) & 0x0F) << 16)
+#define   G_028758_MRT4_EPSILON(x)                                    (((x) >> 16) & 0x0F)
+#define   C_028758_MRT4_EPSILON                                       0xFFF0FFFF
+#define   S_028758_MRT5_EPSILON(x)                                    (((x) & 0x0F) << 20)
+#define   G_028758_MRT5_EPSILON(x)                                    (((x) >> 20) & 0x0F)
+#define   C_028758_MRT5_EPSILON                                       0xFF0FFFFF
+#define   S_028758_MRT6_EPSILON(x)                                    (((x) & 0x0F) << 24)
+#define   G_028758_MRT6_EPSILON(x)                                    (((x) >> 24) & 0x0F)
+#define   C_028758_MRT6_EPSILON                                       0xF0FFFFFF
+#define   S_028758_MRT7_EPSILON(x)                                    (((x) & 0x0F) << 28)
+#define   G_028758_MRT7_EPSILON(x)                                    (((x) >> 28) & 0x0F)
+#define   C_028758_MRT7_EPSILON                                       0x0FFFFFFF
+#define R_02875C_SX_BLEND_OPT_CONTROL                                   0x02875C
+#define   S_02875C_MRT0_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 0)
+#define   G_02875C_MRT0_COLOR_OPT_DISABLE(x)                          (((x) >> 0) & 0x1)
+#define   C_02875C_MRT0_COLOR_OPT_DISABLE                             0xFFFFFFFE
+#define   S_02875C_MRT0_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 1)
+#define   G_02875C_MRT0_ALPHA_OPT_DISABLE(x)                          (((x) >> 1) & 0x1)
+#define   C_02875C_MRT0_ALPHA_OPT_DISABLE                             0xFFFFFFFD
+#define   S_02875C_MRT1_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 4)
+#define   G_02875C_MRT1_COLOR_OPT_DISABLE(x)                          (((x) >> 4) & 0x1)
+#define   C_02875C_MRT1_COLOR_OPT_DISABLE                             0xFFFFFFEF
+#define   S_02875C_MRT1_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 5)
+#define   G_02875C_MRT1_ALPHA_OPT_DISABLE(x)                          (((x) >> 5) & 0x1)
+#define   C_02875C_MRT1_ALPHA_OPT_DISABLE                             0xFFFFFFDF
+#define   S_02875C_MRT2_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 8)
+#define   G_02875C_MRT2_COLOR_OPT_DISABLE(x)                          (((x) >> 8) & 0x1)
+#define   C_02875C_MRT2_COLOR_OPT_DISABLE                             0xFFFFFEFF
+#define   S_02875C_MRT2_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 9)
+#define   G_02875C_MRT2_ALPHA_OPT_DISABLE(x)                          (((x) >> 9) & 0x1)
+#define   C_02875C_MRT2_ALPHA_OPT_DISABLE                             0xFFFFFDFF
+#define   S_02875C_MRT3_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 12)
+#define   G_02875C_MRT3_COLOR_OPT_DISABLE(x)                          (((x) >> 12) & 0x1)
+#define   C_02875C_MRT3_COLOR_OPT_DISABLE                             0xFFFFEFFF
+#define   S_02875C_MRT3_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 13)
+#define   G_02875C_MRT3_ALPHA_OPT_DISABLE(x)                          (((x) >> 13) & 0x1)
+#define   C_02875C_MRT3_ALPHA_OPT_DISABLE                             0xFFFFDFFF
+#define   S_02875C_MRT4_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 16)
+#define   G_02875C_MRT4_COLOR_OPT_DISABLE(x)                          (((x) >> 16) & 0x1)
+#define   C_02875C_MRT4_COLOR_OPT_DISABLE                             0xFFFEFFFF
+#define   S_02875C_MRT4_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 17)
+#define   G_02875C_MRT4_ALPHA_OPT_DISABLE(x)                          (((x) >> 17) & 0x1)
+#define   C_02875C_MRT4_ALPHA_OPT_DISABLE                             0xFFFDFFFF
+#define   S_02875C_MRT5_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 20)
+#define   G_02875C_MRT5_COLOR_OPT_DISABLE(x)                          (((x) >> 20) & 0x1)
+#define   C_02875C_MRT5_COLOR_OPT_DISABLE                             0xFFEFFFFF
+#define   S_02875C_MRT5_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 21)
+#define   G_02875C_MRT5_ALPHA_OPT_DISABLE(x)                          (((x) >> 21) & 0x1)
+#define   C_02875C_MRT5_ALPHA_OPT_DISABLE                             0xFFDFFFFF
+#define   S_02875C_MRT6_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 24)
+#define   G_02875C_MRT6_COLOR_OPT_DISABLE(x)                          (((x) >> 24) & 0x1)
+#define   C_02875C_MRT6_COLOR_OPT_DISABLE                             0xFEFFFFFF
+#define   S_02875C_MRT6_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 25)
+#define   G_02875C_MRT6_ALPHA_OPT_DISABLE(x)                          (((x) >> 25) & 0x1)
+#define   C_02875C_MRT6_ALPHA_OPT_DISABLE                             0xFDFFFFFF
+#define   S_02875C_MRT7_COLOR_OPT_DISABLE(x)                          (((x) & 0x1) << 28)
+#define   G_02875C_MRT7_COLOR_OPT_DISABLE(x)                          (((x) >> 28) & 0x1)
+#define   C_02875C_MRT7_COLOR_OPT_DISABLE                             0xEFFFFFFF
+#define   S_02875C_MRT7_ALPHA_OPT_DISABLE(x)                          (((x) & 0x1) << 29)
+#define   G_02875C_MRT7_ALPHA_OPT_DISABLE(x)                          (((x) >> 29) & 0x1)
+#define   C_02875C_MRT7_ALPHA_OPT_DISABLE                             0xDFFFFFFF
+#define   S_02875C_PIXEN_ZERO_OPT_DISABLE(x)                          (((x) & 0x1) << 31)
+#define   G_02875C_PIXEN_ZERO_OPT_DISABLE(x)                          (((x) >> 31) & 0x1)
+#define   C_02875C_PIXEN_ZERO_OPT_DISABLE                             0x7FFFFFFF
+#define R_028760_SX_MRT0_BLEND_OPT                                      0x028760
+#define   S_028760_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_028760_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_028760_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define     V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_ALL			0
+#define     V_028760_BLEND_OPT_PRESERVE_ALL_IGNORE_NONE			1
+#define     V_028760_BLEND_OPT_PRESERVE_C1_IGNORE_C0			2
+#define     V_028760_BLEND_OPT_PRESERVE_C0_IGNORE_C1			3
+#define     V_028760_BLEND_OPT_PRESERVE_A1_IGNORE_A0			4
+#define     V_028760_BLEND_OPT_PRESERVE_A0_IGNORE_A1			5
+#define     V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_A0			6
+#define     V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE		7
+#define   S_028760_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_028760_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_028760_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_028760_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_028760_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_028760_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define     V_028760_OPT_COMB_NONE					0
+#define     V_028760_OPT_COMB_ADD					1
+#define     V_028760_OPT_COMB_SUBTRACT					2
+#define     V_028760_OPT_COMB_MIN					3
+#define     V_028760_OPT_COMB_MAX					4
+#define     V_028760_OPT_COMB_REVSUBTRACT				5
+#define     V_028760_OPT_COMB_BLEND_DISABLED				6
+#define     V_028760_OPT_COMB_SAFE_ADD					7
+#define   S_028760_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_028760_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_028760_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_028760_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_028760_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_028760_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_028760_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_028760_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_028760_ALPHA_COMB_FCN                                     0xF8FFFFFF
+#define R_028764_SX_MRT1_BLEND_OPT                                      0x028764
+#define   S_028764_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_028764_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_028764_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define   S_028764_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_028764_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_028764_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_028764_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_028764_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_028764_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define   S_028764_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_028764_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_028764_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_028764_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_028764_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_028764_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_028764_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_028764_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_028764_ALPHA_COMB_FCN                                     0xF8FFFFFF
+#define R_028768_SX_MRT2_BLEND_OPT                                      0x028768
+#define   S_028768_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_028768_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_028768_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define   S_028768_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_028768_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_028768_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_028768_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_028768_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_028768_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define   S_028768_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_028768_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_028768_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_028768_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_028768_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_028768_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_028768_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_028768_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_028768_ALPHA_COMB_FCN                                     0xF8FFFFFF
+#define R_02876C_SX_MRT3_BLEND_OPT                                      0x02876C
+#define   S_02876C_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_02876C_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_02876C_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define   S_02876C_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_02876C_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_02876C_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_02876C_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_02876C_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_02876C_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define   S_02876C_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_02876C_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_02876C_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_02876C_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_02876C_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_02876C_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_02876C_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_02876C_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_02876C_ALPHA_COMB_FCN                                     0xF8FFFFFF
+#define R_028770_SX_MRT4_BLEND_OPT                                      0x028770
+#define   S_028770_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_028770_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_028770_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define   S_028770_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_028770_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_028770_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_028770_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_028770_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_028770_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define   S_028770_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_028770_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_028770_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_028770_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_028770_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_028770_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_028770_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_028770_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_028770_ALPHA_COMB_FCN                                     0xF8FFFFFF
+#define R_028774_SX_MRT5_BLEND_OPT                                      0x028774
+#define   S_028774_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_028774_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_028774_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define   S_028774_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_028774_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_028774_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_028774_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_028774_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_028774_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define   S_028774_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_028774_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_028774_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_028774_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_028774_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_028774_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_028774_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_028774_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_028774_ALPHA_COMB_FCN                                     0xF8FFFFFF
+#define R_028778_SX_MRT6_BLEND_OPT                                      0x028778
+#define   S_028778_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_028778_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_028778_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define   S_028778_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_028778_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_028778_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_028778_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_028778_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_028778_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define   S_028778_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_028778_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_028778_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_028778_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_028778_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_028778_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_028778_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_028778_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_028778_ALPHA_COMB_FCN                                     0xF8FFFFFF
+#define R_02877C_SX_MRT7_BLEND_OPT                                      0x02877C
+#define   S_02877C_COLOR_SRC_OPT(x)                                   (((x) & 0x07) << 0)
+#define   G_02877C_COLOR_SRC_OPT(x)                                   (((x) >> 0) & 0x07)
+#define   C_02877C_COLOR_SRC_OPT                                      0xFFFFFFF8
+#define   S_02877C_COLOR_DST_OPT(x)                                   (((x) & 0x07) << 4)
+#define   G_02877C_COLOR_DST_OPT(x)                                   (((x) >> 4) & 0x07)
+#define   C_02877C_COLOR_DST_OPT                                      0xFFFFFF8F
+#define   S_02877C_COLOR_COMB_FCN(x)                                  (((x) & 0x07) << 8)
+#define   G_02877C_COLOR_COMB_FCN(x)                                  (((x) >> 8) & 0x07)
+#define   C_02877C_COLOR_COMB_FCN                                     0xFFFFF8FF
+#define   S_02877C_ALPHA_SRC_OPT(x)                                   (((x) & 0x07) << 16)
+#define   G_02877C_ALPHA_SRC_OPT(x)                                   (((x) >> 16) & 0x07)
+#define   C_02877C_ALPHA_SRC_OPT                                      0xFFF8FFFF
+#define   S_02877C_ALPHA_DST_OPT(x)                                   (((x) & 0x07) << 20)
+#define   G_02877C_ALPHA_DST_OPT(x)                                   (((x) >> 20) & 0x07)
+#define   C_02877C_ALPHA_DST_OPT                                      0xFF8FFFFF
+#define   S_02877C_ALPHA_COMB_FCN(x)                                  (((x) & 0x07) << 24)
+#define   G_02877C_ALPHA_COMB_FCN(x)                                  (((x) >> 24) & 0x07)
+#define   C_02877C_ALPHA_COMB_FCN                                     0xF8FFFFFF
+/*        */
 #define R_028780_CB_BLEND0_CONTROL                                      0x028780
 #define   S_028780_COLOR_SRCBLEND(x)                                  (((x) & 0x1F) << 0)
 #define   G_028780_COLOR_SRCBLEND(x)                                  (((x) >> 0) & 0x1F)
@@ -8597,6 +8890,7 @@
 #define     V_028808_CB_ELIMINATE_FAST_CLEAR                        0x02
 #define     V_028808_CB_RESOLVE                                     0x03
 #define     V_028808_CB_FMASK_DECOMPRESS                            0x05
+#define     V_028808_CB_DCC_DECOMPRESS                              0x06
 #define   S_028808_ROP3(x)                                            (((x) & 0xFF) << 16)
 #define   G_028808_ROP3(x)                                            (((x) >> 16) & 0xFF)
 #define   C_028808_ROP3                                               0xFF00FFFF
@@ -8675,6 +8969,11 @@
 #define     V_02880C_EXPORT_GREATER_THAN_Z                          2
 #define     V_02880C_EXPORT_RESERVED                                3
 /*     */
+/* Stoney */
+#define   S_02880C_DUAL_QUAD_DISABLE(x)                               (((x) & 0x1) << 15)
+#define   G_02880C_DUAL_QUAD_DISABLE(x)                               (((x) >> 15) & 0x1)
+#define   C_02880C_DUAL_QUAD_DISABLE                                  0xFFFF7FFF
+/*        */
 #define R_028810_PA_CL_CLIP_CNTL                                        0x028810
 #define   S_028810_UCP_ENA_0(x)                                       (((x) & 0x1) << 0)
 #define   G_028810_UCP_ENA_0(x)                                       (((x) >> 0) & 0x1)
@@ -9256,6 +9555,9 @@
 #define     V_028A40_GS_SCENARIO_G                                  0x03
 #define     V_028A40_GS_SCENARIO_C                                  0x04
 #define     V_028A40_SPRITE_EN                                      0x05
+#define   S_028A40_RESERVED_0(x)                                      (((x) & 0x1) << 3)
+#define   G_028A40_RESERVED_0(x)                                      (((x) >> 3) & 0x1)
+#define   C_028A40_RESERVED_0                                         0xFFFFFFF7
 #define   S_028A40_CUT_MODE(x)                                        (((x) & 0x03) << 4)
 #define   G_028A40_CUT_MODE(x)                                        (((x) >> 4) & 0x03)
 #define   C_028A40_CUT_MODE                                           0xFFFFFFCF
@@ -9263,12 +9565,19 @@
 #define     V_028A40_GS_CUT_512                                     0x01
 #define     V_028A40_GS_CUT_256                                     0x02
 #define     V_028A40_GS_CUT_128                                     0x03
+#define   S_028A40_RESERVED_1(x)                                      (((x) & 0x1F) << 6)
+#define   G_028A40_RESERVED_1(x)                                      (((x) >> 6) & 0x1F)
+#define   C_028A40_RESERVED_1                                         0xFFFFF83F
 #define   S_028A40_GS_C_PACK_EN(x)                                    (((x) & 0x1) << 11)
 #define   G_028A40_GS_C_PACK_EN(x)                                    (((x) >> 11) & 0x1)
 #define   C_028A40_GS_C_PACK_EN                                       0xFFFFF7FF
+#define   S_028A40_RESERVED_2(x)                                      (((x) & 0x1) << 12)
+#define   G_028A40_RESERVED_2(x)                                      (((x) >> 12) & 0x1)
+#define   C_028A40_RESERVED_2                                         0xFFFFEFFF
 #define   S_028A40_ES_PASSTHRU(x)                                     (((x) & 0x1) << 13)
 #define   G_028A40_ES_PASSTHRU(x)                                     (((x) >> 13) & 0x1)
 #define   C_028A40_ES_PASSTHRU                                        0xFFFFDFFF
+/* SI-CIK */
 #define   S_028A40_COMPUTE_MODE(x)                                    (((x) & 0x1) << 14)
 #define   G_028A40_COMPUTE_MODE(x)                                    (((x) >> 14) & 0x1)
 #define   C_028A40_COMPUTE_MODE                                       0xFFFFBFFF
@@ -9278,6 +9587,7 @@
 #define   S_028A40_ELEMENT_INFO_EN(x)                                 (((x) & 0x1) << 16)
 #define   G_028A40_ELEMENT_INFO_EN(x)                                 (((x) >> 16) & 0x1)
 #define   C_028A40_ELEMENT_INFO_EN                                    0xFFFEFFFF
+/*        */
 #define   S_028A40_PARTIAL_THD_AT_EOI(x)                              (((x) & 0x1) << 17)
 #define   G_028A40_PARTIAL_THD_AT_EOI(x)                              (((x) >> 17) & 0x1)
 #define   C_028A40_PARTIAL_THD_AT_EOI                                 0xFFFDFFFF
@@ -9463,6 +9773,9 @@
 #define   C_028A7C_RDREQ_POLICY                                       0xFFFFFF3F
 #define     V_028A7C_VGT_POLICY_LRU                                 0x00
 #define     V_028A7C_VGT_POLICY_STREAM                              0x01
+#define   S_028A7C_RDREQ_POLICY_VI(x)                                 (((x) & 0x1) << 6)
+#define   G_028A7C_RDREQ_POLICY_VI(x)                                 (((x) >> 6) & 0x1)
+#define   C_028A7C_RDREQ_POLICY_VI                                    0xFFFFFFBF
 #define   S_028A7C_ATC(x)                                             (((x) & 0x1) << 8)
 #define   G_028A7C_ATC(x)                                             (((x) >> 8) & 0x1)
 #define   C_028A7C_ATC                                                0xFFFFFEFF
@@ -9839,6 +10152,9 @@
 #define     V_028B6C_VGT_POLICY_BYPASS                              0x02
 /*     */
 /* VI */
+#define   S_028B6C_RDREQ_POLICY_VI(x)                                 (((x) & 0x1) << 15)
+#define   G_028B6C_RDREQ_POLICY_VI(x)                                 (((x) >> 15) & 0x1)
+#define   C_028B6C_RDREQ_POLICY_VI                                    0xFFFF7FFF
 #define   S_028B6C_DISTRIBUTION_MODE(x)                               (((x) & 0x03) << 17)
 #define   G_028B6C_DISTRIBUTION_MODE(x)                               (((x) >> 17) & 0x03)
 #define   C_028B6C_DISTRIBUTION_MODE                                  0xFFF9FFFF
@@ -10441,6 +10757,12 @@
 #define   S_028C3C_AA_MASK_X1Y1(x)                                    (((x) & 0xFFFF) << 16)
 #define   G_028C3C_AA_MASK_X1Y1(x)                                    (((x) >> 16) & 0xFFFF)
 #define   C_028C3C_AA_MASK_X1Y1                                       0x0000FFFF
+/* Stoney */
+#define R_028C40_PA_SC_SHADER_CONTROL                                   0x028C40
+#define   S_028C40_REALIGN_DQUADS_AFTER_N_WAVES(x)                    (((x) & 0x03) << 0)
+#define   G_028C40_REALIGN_DQUADS_AFTER_N_WAVES(x)                    (((x) >> 0) & 0x03)
+#define   C_028C40_REALIGN_DQUADS_AFTER_N_WAVES                       0xFFFFFFFC
+/*        */
 #define R_028C58_VGT_VERTEX_REUSE_BLOCK_CNTL                            0x028C58
 #define   S_028C58_VTX_REUSE_DEPTH(x)                                 (((x) & 0xFF) << 0)
 #define   G_028C58_VTX_REUSE_DEPTH(x)                                 (((x) >> 0) & 0xFF)

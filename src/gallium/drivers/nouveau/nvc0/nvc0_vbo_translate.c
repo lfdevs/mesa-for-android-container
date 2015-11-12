@@ -27,6 +27,7 @@ struct push_context {
    struct {
       bool enabled;
       bool value;
+      uint8_t width;
       unsigned stride;
       const uint8_t *data;
    } edgeflag;
@@ -53,6 +54,7 @@ nvc0_push_context_init(struct nvc0_context *nvc0, struct push_context *ctx)
    /* silence warnings */
    ctx->edgeflag.data = NULL;
    ctx->edgeflag.stride = 0;
+   ctx->edgeflag.width = 0;
 }
 
 static inline void
@@ -100,6 +102,7 @@ nvc0_push_map_edgeflag(struct push_context *ctx, struct nvc0_context *nvc0,
    struct nv04_resource *buf = nv04_resource(vb->buffer);
 
    ctx->edgeflag.stride = vb->stride;
+   ctx->edgeflag.width = util_format_get_blocksize(ve->src_format);
    if (buf) {
       unsigned offset = vb->buffer_offset + ve->src_offset;
       ctx->edgeflag.data = nouveau_resource_map_offset(&nvc0->base,
@@ -137,10 +140,17 @@ prim_restart_search_i32(const uint32_t *elts, unsigned push, uint32_t index)
 }
 
 static inline bool
-ef_value(const struct push_context *ctx, uint32_t index)
+ef_value_8(const struct push_context *ctx, uint32_t index)
 {
-   float *pf = (float *)&ctx->edgeflag.data[index * ctx->edgeflag.stride];
-   return *pf ? true : false;
+   uint8_t *pf = (uint8_t *)&ctx->edgeflag.data[index * ctx->edgeflag.stride];
+   return !!*pf;
+}
+
+static inline bool
+ef_value_32(const struct push_context *ctx, uint32_t index)
+{
+   uint32_t *pf = (uint32_t *)&ctx->edgeflag.data[index * ctx->edgeflag.stride];
+   return !!*pf;
 }
 
 static inline bool
@@ -154,7 +164,11 @@ static inline unsigned
 ef_toggle_search_i08(struct push_context *ctx, const uint8_t *elts, unsigned n)
 {
    unsigned i;
-   for (i = 0; i < n && ef_value(ctx, elts[i]) == ctx->edgeflag.value; ++i);
+   bool ef = ctx->edgeflag.value;
+   if (ctx->edgeflag.width == 1)
+      for (i = 0; i < n && ef_value_8(ctx, elts[i]) == ef; ++i);
+   else
+      for (i = 0; i < n && ef_value_32(ctx, elts[i]) == ef; ++i);
    return i;
 }
 
@@ -162,7 +176,11 @@ static inline unsigned
 ef_toggle_search_i16(struct push_context *ctx, const uint16_t *elts, unsigned n)
 {
    unsigned i;
-   for (i = 0; i < n && ef_value(ctx, elts[i]) == ctx->edgeflag.value; ++i);
+   bool ef = ctx->edgeflag.value;
+   if (ctx->edgeflag.width == 1)
+      for (i = 0; i < n && ef_value_8(ctx, elts[i]) == ef; ++i);
+   else
+      for (i = 0; i < n && ef_value_32(ctx, elts[i]) == ef; ++i);
    return i;
 }
 
@@ -170,7 +188,11 @@ static inline unsigned
 ef_toggle_search_i32(struct push_context *ctx, const uint32_t *elts, unsigned n)
 {
    unsigned i;
-   for (i = 0; i < n && ef_value(ctx, elts[i]) == ctx->edgeflag.value; ++i);
+   bool ef = ctx->edgeflag.value;
+   if (ctx->edgeflag.width == 1)
+      for (i = 0; i < n && ef_value_8(ctx, elts[i]) == ef; ++i);
+   else
+      for (i = 0; i < n && ef_value_32(ctx, elts[i]) == ef; ++i);
    return i;
 }
 
@@ -178,7 +200,11 @@ static inline unsigned
 ef_toggle_search_seq(struct push_context *ctx, unsigned start, unsigned n)
 {
    unsigned i;
-   for (i = 0; i < n && ef_value(ctx, start++) == ctx->edgeflag.value; ++i);
+   bool ef = ctx->edgeflag.value;
+   if (ctx->edgeflag.width == 1)
+      for (i = 0; i < n && ef_value_8(ctx, start++) == ef; ++i);
+   else
+      for (i = 0; i < n && ef_value_32(ctx, start++) == ef; ++i);
    return i;
 }
 

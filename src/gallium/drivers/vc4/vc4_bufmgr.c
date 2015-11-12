@@ -37,6 +37,9 @@
 static bool dump_stats = false;
 
 static void
+vc4_bo_cache_free_all(struct vc4_bo_cache *cache);
+
+static void
 vc4_bo_dump_stats(struct vc4_screen *screen)
 {
         struct vc4_bo_cache *cache = &screen->bo_cache;
@@ -136,6 +139,8 @@ vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
         bo->name = name;
         bo->private = true;
 
+        bool cleared_and_retried = false;
+retry:
         if (!using_vc4_simulator) {
                 struct drm_vc4_create_bo create;
                 memset(&create, 0, sizeof(create));
@@ -157,6 +162,12 @@ vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
                 assert(create.size >= size);
         }
         if (ret != 0) {
+                if (!list_empty(&screen->bo_cache.time_list) &&
+                    !cleared_and_retried) {
+                        cleared_and_retried = true;
+                        vc4_bo_cache_free_all(&screen->bo_cache);
+                        goto retry;
+                }
                 fprintf(stderr, "create ioctl failure\n");
                 abort();
         }
@@ -246,6 +257,18 @@ free_stale_bos(struct vc4_screen *screen, time_t time)
                 fprintf(stderr, "Freed stale BOs:\n");
                 vc4_bo_dump_stats(screen);
         }
+}
+
+static void
+vc4_bo_cache_free_all(struct vc4_bo_cache *cache)
+{
+        pipe_mutex_lock(cache->lock);
+        list_for_each_entry_safe(struct vc4_bo, bo, &cache->time_list,
+                                 time_list) {
+                vc4_bo_remove_from_cache(cache, bo);
+                vc4_bo_free(bo);
+        }
+        pipe_mutex_unlock(cache->lock);
 }
 
 void
@@ -600,11 +623,7 @@ vc4_bufmgr_destroy(struct pipe_screen *pscreen)
         struct vc4_screen *screen = vc4_screen(pscreen);
         struct vc4_bo_cache *cache = &screen->bo_cache;
 
-        list_for_each_entry_safe(struct vc4_bo, bo, &cache->time_list,
-                                 time_list) {
-                vc4_bo_remove_from_cache(cache, bo);
-                vc4_bo_free(bo);
-        }
+        vc4_bo_cache_free_all(cache);
 
         if (dump_stats) {
                 fprintf(stderr, "BO stats after screen destroy:\n");
