@@ -1497,6 +1497,7 @@
 #define   S_028878_UNCACHED_FIRST_INST(x)              (((x) & 0x1) << 28)
 #define   G_028878_UNCACHED_FIRST_INST(x)              (((x) >> 28) & 0x1)
 #define   C_028878_UNCACHED_FIRST_INST                 0xEFFFFFFF
+#define R_02887C_SQ_PGM_RESOURCES_2_GS                 0x02887C
 
 #define R_028890_SQ_PGM_RESOURCES_ES                 0x028890
 #define   S_028890_NUM_GPRS(x)                         (((x) & 0xFF) << 0)
@@ -1511,6 +1512,7 @@
 #define   S_028890_UNCACHED_FIRST_INST(x)              (((x) & 0x1) << 28)
 #define   G_028890_UNCACHED_FIRST_INST(x)              (((x) >> 28) & 0x1)
 #define   C_028890_UNCACHED_FIRST_INST                 0xEFFFFFFF
+#define R_028894_SQ_PGM_RESOURCES_2_ES                 0x028894
 
 #define R_028864_SQ_PGM_RESOURCES_2_VS               0x028864
 #define   S_028864_SINGLE_ROUND(x)                     (((x) & 0x3) << 0)

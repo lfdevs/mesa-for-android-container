@@ -746,7 +746,12 @@ lp_build_interp_soa_init(struct lp_build_interp_soa_context *bld,
 
    pos_init(bld, x0, y0);
 
-   if (coeff_type.length > 4) {
+   /*
+    * Simple method (single step interpolation) may be slower if vector length
+    * is just 4, but the results are different (generally less accurate) with
+    * the other method, so always use more accurate version.
+    */
+   if (1) {
       bld->simple_interp = TRUE;
       {
          /* XXX this should use a global static table */

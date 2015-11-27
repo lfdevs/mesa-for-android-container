@@ -62,10 +62,14 @@ static const struct qir_op_info qir_op_info[] = {
         [QOP_SEL_X_0_NC] = { "fsel_x_0_nc", 1, 1, false, true },
         [QOP_SEL_X_0_ZS] = { "fsel_x_0_zs", 1, 1, false, true },
         [QOP_SEL_X_0_ZC] = { "fsel_x_0_zc", 1, 1, false, true },
+        [QOP_SEL_X_0_CS] = { "fsel_x_0_cs", 1, 1, false, true },
+        [QOP_SEL_X_0_CC] = { "fsel_x_0_cc", 1, 1, false, true },
         [QOP_SEL_X_Y_NS] = { "fsel_x_y_ns", 1, 2, false, true },
         [QOP_SEL_X_Y_NC] = { "fsel_x_y_nc", 1, 2, false, true },
         [QOP_SEL_X_Y_ZS] = { "fsel_x_y_zs", 1, 2, false, true },
         [QOP_SEL_X_Y_ZC] = { "fsel_x_y_zc", 1, 2, false, true },
+        [QOP_SEL_X_Y_CS] = { "fsel_x_y_cs", 1, 2, false, true },
+        [QOP_SEL_X_Y_CC] = { "fsel_x_y_cc", 1, 2, false, true },
 
         [QOP_RCP] = { "rcp", 1, 1, false, true },
         [QOP_RSQ] = { "rsq", 1, 1, false, true },
@@ -193,10 +197,14 @@ qir_depends_on_flags(struct qinst *inst)
         case QOP_SEL_X_0_NC:
         case QOP_SEL_X_0_ZS:
         case QOP_SEL_X_0_ZC:
+        case QOP_SEL_X_0_CS:
+        case QOP_SEL_X_0_CC:
         case QOP_SEL_X_Y_NS:
         case QOP_SEL_X_Y_NC:
         case QOP_SEL_X_Y_ZS:
         case QOP_SEL_X_Y_ZC:
+        case QOP_SEL_X_Y_CS:
+        case QOP_SEL_X_Y_CC:
                 return true;
         default:
                 return false;

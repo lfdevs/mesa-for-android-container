@@ -500,8 +500,10 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
           bufHasStartcode(buf, 0x0000010b, 32))
          break;
 
+      if (context->decoder->profile == PIPE_VIDEO_PROFILE_VC1_ADVANCED) {
          buffers[num_buffers] = (void *const)&start_code_vc1;
          sizes[num_buffers++] = sizeof(start_code_vc1);
+      }
       break;
    case PIPE_VIDEO_FORMAT_MPEG4:
       if (bufHasStartcode(buf, 0x000001, 24))

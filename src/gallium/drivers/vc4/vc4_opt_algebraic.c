@@ -143,6 +143,8 @@ qir_opt_algebraic(struct vc4_compile *c)
                 case QOP_SEL_X_Y_ZC:
                 case QOP_SEL_X_Y_NS:
                 case QOP_SEL_X_Y_NC:
+                case QOP_SEL_X_Y_CS:
+                case QOP_SEL_X_Y_CC:
                         if (is_zero(c, inst->src[1])) {
                                 /* Replace references to a 0 uniform value
                                  * with the SEL_X_0 equivalent.

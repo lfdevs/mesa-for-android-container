@@ -455,7 +455,8 @@ lower_copies_to_load_store(struct deref_node *node,
          struct deref_node *arg_node =
             get_deref_node(copy->variables[i], state);
 
-         if (arg_node == NULL)
+         /* Only bother removing copy entries for other nodes */
+         if (arg_node == NULL || arg_node == node)
             continue;
 
          struct set_entry *arg_entry = _mesa_set_search(arg_node->copies, copy);
@@ -465,6 +466,8 @@ lower_copies_to_load_store(struct deref_node *node,
 
       nir_instr_remove(&copy->instr);
    }
+
+   node->copies = NULL;
 
    return true;
 }

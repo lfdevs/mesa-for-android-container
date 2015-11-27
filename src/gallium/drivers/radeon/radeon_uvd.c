@@ -940,6 +940,12 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 	dec->msg->body.decode.width_in_samples = dec->base.width;
 	dec->msg->body.decode.height_in_samples = dec->base.height;
 
+	if ((picture->profile == PIPE_VIDEO_PROFILE_VC1_SIMPLE) ||
+	    (picture->profile == PIPE_VIDEO_PROFILE_VC1_MAIN)) {
+		dec->msg->body.decode.width_in_samples = align(dec->msg->body.decode.width_in_samples, 16) / 16;
+		dec->msg->body.decode.height_in_samples = align(dec->msg->body.decode.height_in_samples, 16) / 16;
+	}
+
 	dec->msg->body.decode.dpb_size = dec->dpb.res->buf->size;
 	dec->msg->body.decode.bsd_size = bs_size;
 	dec->msg->body.decode.db_pitch = dec->base.width;

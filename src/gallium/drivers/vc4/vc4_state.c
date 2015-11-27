@@ -581,6 +581,10 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                 tmpl.last_level = cso->u.tex.last_level - cso->u.tex.first_level;
 
                 prsc = vc4_resource_create(pctx->screen, &tmpl);
+                if (!prsc) {
+                        free(so);
+                        return NULL;
+                }
                 rsc = vc4_resource(prsc);
                 clone = vc4_resource(prsc);
                 clone->shadow_parent = &shadow_parent->base.b;

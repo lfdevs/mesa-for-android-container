@@ -1,0 +1,73 @@
+From 65ba65b73e4758fc16e79b1d135b51f7f34bbb0a Mon Sep 17 00:00:00 2001
+From: Andreas Boll <andreas.boll.dev@gmail.com>
+Date: Thu, 26 Nov 2015 20:06:07 +0100
+Subject: [PATCH] docs: Replace sourceforge logo with a text link
+
+Fixes the following Lintian (Debian package checker) error:
+
+privacy-breach-logo
+
+  usr/share/doc/mesa-common-dev/contents.html
+    (http://sourceforge.net/sflogo.php?group_id=3&amp;type=1)
+  usr/share/doc/mesa-common-dev/thanks.html
+    (http://sourceforge.net/sflogo.php?group_id=3&amp;type=1)
+
+The extended description of this tag is:
+
+    This package creates a potential privacy breach by fetching a logo
+at runtime.
+
+    Before using a local copy you should check that the logo is suitable
+for main. You can get help with determining this by posting a link to
+the logo and a copy of, or a link to, the logo copyright and license
+information to the debian-legal mailing list.
+
+    Please replace any scripts, images, or other remote resources with
+non-remote resources. It is preferable to replace them with text and
+links but local copies of the remote resources are also acceptable as
+long as they don't also make calls to remote services. Please ensure
+that the remote resources are suitable for Debian main before making
+local copies of them.
+
+    Severity: serious, Certainty: possible
+
+    Check: files, Type: binary, udeb
+
+Signed-off-by: Andreas Boll <andreas.boll.dev@gmail.com>
+---
+ docs/contents.html | 3 +--
+ docs/thanks.html   | 4 +---
+ 2 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/docs/contents.html b/docs/contents.html
+index 6612cbe..5e0f514 100644
+--- a/docs/contents.html
++++ b/docs/contents.html
+@@ -96,8 +96,7 @@
+ <br>
+ <blockquote>
+ <a href="http://sourceforge.net"
+-target="_parent"><img src="http://sourceforge.net/sflogo.php?group_id=3&amp;type=1"
+-width="88" height="31" align="bottom" alt="Sourceforge.net" border="0"></a>
++target="_parent">sourceforge.net</a>
+ </blockquote>
+ 
+ </body>
+diff --git a/docs/thanks.html b/docs/thanks.html
+index 29a41e4..685cb31 100644
+--- a/docs/thanks.html
++++ b/docs/thanks.html
+@@ -42,9 +42,7 @@ Tungsten Graphics, Inc. have supported the ongoing development of Mesa.
+ <li>The
+ <a href="http://www.mesa3d.org">Mesa</a>
+ website is hosted by
+-<a href="http://sourceforge.net">
+-<img src="http://sourceforge.net/sflogo.php?group_id=3&amp;type=1"
+-width="88" height="31" align="bottom" alt="Sourceforge.net" border="0"></a>
++<a href="http://sourceforge.net">sourceforge.net</a>.
+ <br>
+ <br>
+ 
+-- 
+2.1.4
+

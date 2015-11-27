@@ -168,8 +168,9 @@ retry:
                         vc4_bo_cache_free_all(&screen->bo_cache);
                         goto retry;
                 }
-                fprintf(stderr, "create ioctl failure\n");
-                abort();
+
+                free(bo);
+                return NULL;
         }
 
         screen->bo_count++;

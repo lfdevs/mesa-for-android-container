@@ -76,6 +76,9 @@ struct radeon_bomgr {
     bool va;
     uint64_t va_offset;
     struct list_head va_holes;
+
+    /* BO size alignment */
+    unsigned size_align;
 };
 
 static inline struct radeon_bomgr *radeon_bomgr(struct pb_manager *mgr)
@@ -164,8 +167,10 @@ static uint64_t radeon_bomgr_find_va(struct radeon_bomgr *mgr, uint64_t size, ui
     struct radeon_bo_va_hole *hole, *n;
     uint64_t offset = 0, waste = 0;
 
-    alignment = MAX2(alignment, 4096);
-    size = align(size, 4096);
+    /* All VM address space holes will implicitly start aligned to the
+     * size alignment, so we don't need to sanitize the alignment here
+     */
+    size = align(size, mgr->size_align);
 
     pipe_mutex_lock(mgr->bo_va_mutex);
     /* first look for a hole */
@@ -222,7 +227,7 @@ static void radeon_bomgr_free_va(struct radeon_bomgr *mgr, uint64_t va, uint64_t
 {
     struct radeon_bo_va_hole *hole;
 
-    size = align(size, 4096);
+    size = align(size, mgr->size_align);
 
     pipe_mutex_lock(mgr->bo_va_mutex);
     if ((va + size) == mgr->va_offset) {
@@ -333,9 +338,9 @@ static void radeon_bo_destroy(struct pb_buffer *_buf)
     pipe_mutex_destroy(bo->map_mutex);
 
     if (bo->initial_domain & RADEON_DOMAIN_VRAM)
-        bo->rws->allocated_vram -= align(bo->base.size, 4096);
+        bo->rws->allocated_vram -= align(bo->base.size, mgr->size_align);
     else if (bo->initial_domain & RADEON_DOMAIN_GTT)
-        bo->rws->allocated_gtt -= align(bo->base.size, 4096);
+        bo->rws->allocated_gtt -= align(bo->base.size, mgr->size_align);
     FREE(bo);
 }
 
@@ -620,9 +625,9 @@ static struct pb_buffer *radeon_bomgr_create_bo(struct pb_manager *_mgr,
     }
 
     if (rdesc->initial_domains & RADEON_DOMAIN_VRAM)
-        rws->allocated_vram += align(size, 4096);
+        rws->allocated_vram += align(size, mgr->size_align);
     else if (rdesc->initial_domains & RADEON_DOMAIN_GTT)
-        rws->allocated_gtt += align(size, 4096);
+        rws->allocated_gtt += align(size, mgr->size_align);
 
     return &bo->base;
 }
@@ -695,6 +700,9 @@ struct pb_manager *radeon_bomgr_create(struct radeon_drm_winsys *rws)
     mgr->va = rws->info.r600_virtual_address;
     mgr->va_offset = rws->va_start;
     list_inithead(&mgr->va_holes);
+
+    /* TTM aligns the BO size to the CPU page size */
+    mgr->size_align = sysconf(_SC_PAGESIZE);
 
     return &mgr->base;
 }
@@ -858,7 +866,7 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
      * BOs. Aligning this here helps the cached bufmgr. Especially small BOs,
      * like constant/uniform buffers, can benefit from better and more reuse.
      */
-    size = align(size, 4096);
+    size = align(size, mgr->size_align);
 
     /* Only set one usage bit each for domains and flags, or the cache manager
      * might consider different sets of domains / flags compatible
@@ -969,7 +977,7 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
         pipe_mutex_unlock(mgr->bo_handles_mutex);
     }
 
-    ws->allocated_gtt += align(bo->base.size, 4096);
+    ws->allocated_gtt += align(bo->base.size, mgr->size_align);
 
     return (struct pb_buffer*)bo;
 }
@@ -1106,9 +1114,9 @@ done:
     bo->initial_domain = radeon_bo_get_initial_domain((void*)bo);
 
     if (bo->initial_domain & RADEON_DOMAIN_VRAM)
-        ws->allocated_vram += align(bo->base.size, 4096);
+        ws->allocated_vram += align(bo->base.size, mgr->size_align);
     else if (bo->initial_domain & RADEON_DOMAIN_GTT)
-        ws->allocated_gtt += align(bo->base.size, 4096);
+        ws->allocated_gtt += align(bo->base.size, mgr->size_align);
 
     return (struct pb_buffer*)bo;
 

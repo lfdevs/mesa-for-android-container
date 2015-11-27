@@ -35,11 +35,12 @@
 
 static bool miptree_debug = false;
 
-static void
+static bool
 vc4_resource_bo_alloc(struct vc4_resource *rsc)
 {
         struct pipe_resource *prsc = &rsc->base.b;
         struct pipe_screen *pscreen = prsc->screen;
+        struct vc4_bo *bo;
 
         if (miptree_debug) {
                 fprintf(stderr, "alloc %p: size %d + offset %d -> %d\n",
@@ -51,12 +52,18 @@ vc4_resource_bo_alloc(struct vc4_resource *rsc)
                         rsc->cube_map_stride * (prsc->array_size - 1));
         }
 
-        vc4_bo_unreference(&rsc->bo);
-        rsc->bo = vc4_bo_alloc(vc4_screen(pscreen),
-                               rsc->slices[0].offset +
-                               rsc->slices[0].size +
-                               rsc->cube_map_stride * (prsc->array_size - 1),
-                               "resource");
+        bo = vc4_bo_alloc(vc4_screen(pscreen),
+                          rsc->slices[0].offset +
+                          rsc->slices[0].size +
+                          rsc->cube_map_stride * (prsc->array_size - 1),
+                          "resource");
+        if (bo) {
+                vc4_bo_unreference(&rsc->bo);
+                rsc->bo = bo;
+                return true;
+        } else {
+                return false;
+        }
 }
 
 static void
@@ -101,21 +108,27 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
         char *buf;
 
         if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) {
-                vc4_resource_bo_alloc(rsc);
+                if (vc4_resource_bo_alloc(rsc)) {
 
-                /* If it might be bound as one of our vertex buffers, make
-                 * sure we re-emit vertex buffer state.
-                 */
-                if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
-                        vc4->dirty |= VC4_DIRTY_VTXBUF;
+                        /* If it might be bound as one of our vertex buffers,
+                         * make sure we re-emit vertex buffer state.
+                         */
+                        if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
+                                vc4->dirty |= VC4_DIRTY_VTXBUF;
+                } else {
+                        /* If we failed to reallocate, flush everything so
+                         * that we don't violate any syncing requirements.
+                         */
+                        vc4_flush(pctx);
+                }
         } else if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
                 if (vc4_cl_references_bo(pctx, rsc->bo)) {
                         if ((usage & PIPE_TRANSFER_DISCARD_RANGE) &&
                             prsc->last_level == 0 &&
                             prsc->width0 == box->width &&
                             prsc->height0 == box->height &&
-                            prsc->depth0 == box->depth) {
-                                vc4_resource_bo_alloc(rsc);
+                            prsc->depth0 == box->depth &&
+                            vc4_resource_bo_alloc(rsc)) {
                                 if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
                                         vc4->dirty |= VC4_DIRTY_VTXBUF;
                         } else {
@@ -389,8 +402,7 @@ vc4_resource_create(struct pipe_screen *pscreen,
                 rsc->vc4_format = get_resource_texture_format(prsc);
 
         vc4_setup_slices(rsc);
-        vc4_resource_bo_alloc(rsc);
-        if (!rsc->bo)
+        if (!vc4_resource_bo_alloc(rsc))
                 goto fail;
 
         return prsc;

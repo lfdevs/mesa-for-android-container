@@ -57,6 +57,8 @@ static bool
 prepare_target(struct gl_context *ctx, GLuint name, GLenum *target, int level,
                struct gl_texture_object **tex_obj,
                struct gl_texture_image **tex_image, GLuint *tmp_tex,
+               GLuint *width,
+               GLuint *height,
                const char *dbg_prefix)
 {
    if (name == 0) {
@@ -130,6 +132,8 @@ prepare_target(struct gl_context *ctx, GLuint name, GLenum *target, int level,
       _mesa_BindTexture(*target, *tmp_tex);
       *tex_obj = _mesa_lookup_texture(ctx, *tmp_tex);
       *tex_image = _mesa_get_tex_image(ctx, *tex_obj, *target, 0);
+      *width = rb->Width;
+      *height = rb->Height;
 
       if (!ctx->Driver.BindRenderbufferTexImage(ctx, rb, *tex_image)) {
          _mesa_problem(ctx, "Failed to create texture from renderbuffer");
@@ -175,6 +179,9 @@ prepare_target(struct gl_context *ctx, GLuint name, GLenum *target, int level,
                      "glCopyImageSubData(%sLevel = %u)", dbg_prefix, level);
          return false;
       }
+
+      *width = (*tex_image)->Width;
+      *height = (*tex_image)->Height;
    }
 
    return true;
@@ -409,6 +416,7 @@ _mesa_CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel,
    GLuint tmpTexNames[2] = { 0, 0 };
    struct gl_texture_object *srcTexObj, *dstTexObj;
    struct gl_texture_image *srcTexImage, *dstTexImage;
+   GLuint src_w, src_h, dst_w, dst_h;
    GLuint src_bw, src_bh, dst_bw, dst_bh;
    int i;
 
@@ -429,16 +437,42 @@ _mesa_CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel,
    }
 
    if (!prepare_target(ctx, srcName, &srcTarget, srcLevel,
-                       &srcTexObj, &srcTexImage, &tmpTexNames[0], "src"))
+                       &srcTexObj, &srcTexImage, &tmpTexNames[0],
+                       &src_w, &src_h, "src"))
       goto cleanup;
 
    if (!prepare_target(ctx, dstName, &dstTarget, dstLevel,
-                       &dstTexObj, &dstTexImage, &tmpTexNames[1], "dst"))
+                       &dstTexObj, &dstTexImage, &tmpTexNames[1],
+                       &dst_w, &dst_h, "dst"))
       goto cleanup;
 
    _mesa_get_format_block_size(srcTexImage->TexFormat, &src_bw, &src_bh);
+
+   /* Section 18.3.2 (Copying Between Images) of the OpenGL 4.5 Core Profile
+    * spec says:
+    *
+    *    An INVALID_VALUE error is generated if the dimensions of either
+    *    subregion exceeds the boundaries of the corresponding image object,
+    *    or if the image format is compressed and the dimensions of the
+    *    subregion fail to meet the alignment constraints of the format.
+    *
+    * and Section 8.7 (Compressed Texture Images) says:
+    *
+    *    An INVALID_OPERATION error is generated if any of the following
+    *    conditions occurs:
+    *
+    *      * width is not a multiple of four, and width + xoffset is not
+    *        equal to the value of TEXTURE_WIDTH.
+    *      * height is not a multiple of four, and height + yoffset is not
+    *        equal to the value of TEXTURE_HEIGHT.
+    *
+    * so we take that to mean that you can copy the "last" block of a
+    * compressed texture image even if it's smaller than the minimum block
+    * dimensions.
+    */
    if ((srcX % src_bw != 0) || (srcY % src_bh != 0) ||
-       (srcWidth % src_bw != 0) || (srcHeight % src_bh != 0)) {
+       (srcWidth % src_bw != 0 && (srcX + srcWidth) != src_w) ||
+       (srcHeight % src_bh != 0 && (srcY + srcHeight) != src_h)) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glCopyImageSubData(unaligned src rectangle)");
       goto cleanup;

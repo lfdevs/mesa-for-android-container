@@ -2342,6 +2342,8 @@ static void cayman_init_atom_start_cs(struct r600_context *rctx)
 
 	r600_store_context_reg(cb, R_028848_SQ_PGM_RESOURCES_2_PS, S_028848_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
 	r600_store_context_reg(cb, R_028864_SQ_PGM_RESOURCES_2_VS, S_028864_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
+	r600_store_context_reg(cb, R_02887C_SQ_PGM_RESOURCES_2_GS, S_028848_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
+	r600_store_context_reg(cb, R_028894_SQ_PGM_RESOURCES_2_ES, S_028848_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
 	r600_store_context_reg(cb, R_0288A8_SQ_PGM_RESOURCES_FS, 0);
 
 	/* to avoid GPU doing any preloading of constant from random address */
@@ -2781,6 +2783,8 @@ void evergreen_init_atom_start_cs(struct r600_context *rctx)
 
 	r600_store_context_reg(cb, R_028848_SQ_PGM_RESOURCES_2_PS, S_028848_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
 	r600_store_context_reg(cb, R_028864_SQ_PGM_RESOURCES_2_VS, S_028864_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
+	r600_store_context_reg(cb, R_02887C_SQ_PGM_RESOURCES_2_GS, S_028848_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
+	r600_store_context_reg(cb, R_028894_SQ_PGM_RESOURCES_2_ES, S_028848_SINGLE_ROUND(V_SQ_ROUND_NEAREST_EVEN));
 	r600_store_context_reg(cb, R_0288A8_SQ_PGM_RESOURCES_FS, 0);
 
 	/* to avoid GPU doing any preloading of constant from random address */

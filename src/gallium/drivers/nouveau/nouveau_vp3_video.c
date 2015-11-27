@@ -437,6 +437,7 @@ nouveau_vp3_screen_get_video_param(struct pipe_screen *pscreen,
       /* VP3 does not support MPEG4, VP4+ do. */
       return entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM &&
          profile >= PIPE_VIDEO_PROFILE_MPEG1 &&
+         profile < PIPE_VIDEO_PROFILE_HEVC_MAIN &&
          (!vp3 || codec != PIPE_VIDEO_FORMAT_MPEG4) &&
          firmware_present(pscreen, profile);
    case PIPE_VIDEO_CAP_NPOT_TEXTURES:

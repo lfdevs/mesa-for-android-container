@@ -1055,6 +1055,10 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
                 qir_SF(c, qir_SUB(c, src[0], src[1]));
                 *dest = qir_SEL_X_0_NC(c, qir_uniform_ui(c, ~0));
                 break;
+        case nir_op_uge:
+                qir_SF(c, qir_SUB(c, src[0], src[1]));
+                *dest = qir_SEL_X_0_CC(c, qir_uniform_ui(c, ~0));
+                break;
         case nir_op_ilt:
                 qir_SF(c, qir_SUB(c, src[0], src[1]));
                 *dest = qir_SEL_X_0_NS(c, qir_uniform_ui(c, ~0));
