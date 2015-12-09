@@ -656,8 +656,8 @@ nouveau_buffer_create(struct pipe_screen *pscreen,
    if (buffer->base.flags & (PIPE_RESOURCE_FLAG_MAP_PERSISTENT |
                              PIPE_RESOURCE_FLAG_MAP_COHERENT)) {
       buffer->domain = NOUVEAU_BO_GART;
-   } else if (buffer->base.bind &
-              (screen->vidmem_bindings & screen->sysmem_bindings)) {
+   } else if (buffer->base.bind == 0 || (buffer->base.bind &
+              (screen->vidmem_bindings & screen->sysmem_bindings))) {
       switch (buffer->base.usage) {
       case PIPE_USAGE_DEFAULT:
       case PIPE_USAGE_IMMUTABLE:
@@ -684,6 +684,10 @@ nouveau_buffer_create(struct pipe_screen *pscreen,
       if (buffer->base.bind & screen->sysmem_bindings)
          buffer->domain = NOUVEAU_BO_GART;
    }
+   /* There can be very special situations where we want non-gpu-mapped
+    * buffers, but never through this interface.
+    */
+   assert(buffer->domain);
    ret = nouveau_buffer_allocate(screen, buffer, buffer->domain);
 
    if (ret == false)

@@ -2322,6 +2322,9 @@ CodeEmitterNVC0::emitInstruction(Instruction *insn)
    case OP_PFETCH:
       emitPFETCH(insn);
       break;
+   case OP_AFETCH:
+      emitAFETCH(insn);
+      break;
    case OP_EMIT:
    case OP_RESTART:
       emitOUT(insn);

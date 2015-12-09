@@ -2159,6 +2159,10 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 			struct r600_bytecode_alu alu;
 			int r;
 
+			/* GS thread with no output workaround - emit a cut at start of GS */
+			if (ctx.bc->chip_class == R600)
+				r600_bytecode_add_cfinst(ctx.bc, CF_OP_CUT_VERTEX);
+
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 			alu.op = ALU_OP1_MOV;
 			alu.src[0].sel = V_SQ_ALU_SRC_LITERAL;

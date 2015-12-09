@@ -180,9 +180,10 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
                                  int ref)
 {
    struct nvc0_context *nvc0 = nvc0_context(&ctx->pipe);
+   unsigned bind = res->bind ? res->bind : PIPE_BIND_VERTEX_BUFFER;
    unsigned s, i;
 
-   if (res->bind & PIPE_BIND_RENDER_TARGET) {
+   if (bind & PIPE_BIND_RENDER_TARGET) {
       for (i = 0; i < nvc0->framebuffer.nr_cbufs; ++i) {
          if (nvc0->framebuffer.cbufs[i] &&
              nvc0->framebuffer.cbufs[i]->texture == res) {
@@ -193,7 +194,7 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
          }
       }
    }
-   if (res->bind & PIPE_BIND_DEPTH_STENCIL) {
+   if (bind & PIPE_BIND_DEPTH_STENCIL) {
       if (nvc0->framebuffer.zsbuf &&
           nvc0->framebuffer.zsbuf->texture == res) {
          nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
@@ -203,12 +204,12 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
       }
    }
 
-   if (res->bind & (PIPE_BIND_VERTEX_BUFFER |
-                    PIPE_BIND_INDEX_BUFFER |
-                    PIPE_BIND_CONSTANT_BUFFER |
-                    PIPE_BIND_STREAM_OUTPUT |
-                    PIPE_BIND_COMMAND_ARGS_BUFFER |
-                    PIPE_BIND_SAMPLER_VIEW)) {
+   if (bind & (PIPE_BIND_VERTEX_BUFFER |
+               PIPE_BIND_INDEX_BUFFER |
+               PIPE_BIND_CONSTANT_BUFFER |
+               PIPE_BIND_STREAM_OUTPUT |
+               PIPE_BIND_COMMAND_ARGS_BUFFER |
+               PIPE_BIND_SAMPLER_VIEW)) {
       for (i = 0; i < nvc0->num_vtxbufs; ++i) {
          if (nvc0->vtxbuf[i].buffer == res) {
             nvc0->dirty |= NVC0_NEW_ARRAYS;

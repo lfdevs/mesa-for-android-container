@@ -54,8 +54,9 @@
 #include "brw_blorp.h"
 
 struct brw_fast_clear_state {
+   struct gl_buffer_object *buf_obj;
+   struct gl_vertex_array_object *array_obj;
    GLuint vao;
-   GLuint vbo;
    GLuint shader_prog;
    GLint color_location;
 };
@@ -64,11 +65,11 @@ static bool
 brw_fast_clear_init(struct brw_context *brw)
 {
    struct brw_fast_clear_state *clear;
+   struct gl_context *ctx = &brw->ctx;
 
    if (brw->fast_clear_state) {
       clear = brw->fast_clear_state;
       _mesa_BindVertexArray(clear->vao);
-      _mesa_BindBuffer(GL_ARRAY_BUFFER, clear->vbo);
       return true;
    }
 
@@ -79,10 +80,21 @@ brw_fast_clear_init(struct brw_context *brw)
    memset(clear, 0, sizeof *clear);
    _mesa_GenVertexArrays(1, &clear->vao);
    _mesa_BindVertexArray(clear->vao);
-   _mesa_GenBuffers(1, &clear->vbo);
-   _mesa_BindBuffer(GL_ARRAY_BUFFER, clear->vbo);
-   _mesa_VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 2, 0);
-   _mesa_EnableVertexAttribArray(0);
+
+   clear->buf_obj = ctx->Driver.NewBufferObject(ctx, 0xDEADBEEF);
+   if (clear->buf_obj == NULL)
+      return false;
+
+   clear->array_obj = _mesa_lookup_vao(ctx, clear->vao);
+   assert(clear->array_obj != NULL);
+
+   _mesa_update_array_format(ctx, clear->array_obj, VERT_ATTRIB_GENERIC(0),
+                             2, GL_FLOAT, GL_RGBA, GL_FALSE, GL_FALSE, GL_FALSE,
+                             0, true);
+   _mesa_bind_vertex_buffer(ctx, clear->array_obj, VERT_ATTRIB_GENERIC(0),
+                            clear->buf_obj, 0, sizeof(float) * 2);
+   _mesa_enable_vertex_array_attrib(ctx, clear->array_obj,
+                                    VERT_ATTRIB_GENERIC(0));
 
    return true;
 }
@@ -150,7 +162,7 @@ brw_meta_fast_clear_free(struct brw_context *brw)
    _mesa_make_current(&brw->ctx, NULL, NULL);
 
    _mesa_DeleteVertexArrays(1, &clear->vao);
-   _mesa_DeleteBuffers(1, &clear->vbo);
+   _mesa_reference_buffer_object(&brw->ctx, &clear->buf_obj, NULL);
    _mesa_DeleteProgram(clear->shader_prog);
    free(clear);
 
@@ -165,8 +177,10 @@ struct rect {
 };
 
 static void
-brw_draw_rectlist(struct gl_context *ctx, struct rect *rect, int num_instances)
+brw_draw_rectlist(struct brw_context *brw, struct rect *rect, int num_instances)
 {
+   struct gl_context *ctx = &brw->ctx;
+   struct brw_fast_clear_state *clear = brw->fast_clear_state;
    int start = 0, count = 3;
    struct _mesa_prim prim;
    float verts[6];
@@ -179,8 +193,8 @@ brw_draw_rectlist(struct gl_context *ctx, struct rect *rect, int num_instances)
    verts[5] = rect->y0;
 
    /* upload new vertex data */
-   _mesa_BufferData(GL_ARRAY_BUFFER_ARB, sizeof(verts), verts,
-                    GL_DYNAMIC_DRAW_ARB);
+   _mesa_buffer_data(ctx, clear->buf_obj, GL_NONE, sizeof(verts), verts,
+                     GL_DYNAMIC_DRAW, __func__);
 
    if (ctx->NewState)
       _mesa_update_state(ctx);
@@ -582,14 +596,14 @@ brw_meta_fast_clear(struct brw_context *brw, struct gl_framebuffer *fb,
       _mesa_meta_drawbuffers_from_bitfield(fast_clear_buffers);
       brw_bind_rep_write_shader(brw, (float *) fast_clear_color);
       set_fast_clear_op(brw, GEN7_PS_RENDER_TARGET_FAST_CLEAR_ENABLE);
-      brw_draw_rectlist(ctx, &fast_clear_rect, layers);
+      brw_draw_rectlist(brw, &fast_clear_rect, layers);
       set_fast_clear_op(brw, 0);
    }
 
    if (rep_clear_buffers) {
       _mesa_meta_drawbuffers_from_bitfield(rep_clear_buffers);
       brw_bind_rep_write_shader(brw, ctx->Color.ClearColor.f);
-      brw_draw_rectlist(ctx, &clear_rect, layers);
+      brw_draw_rectlist(brw, &clear_rect, layers);
    }
 
    /* Now set the mts we cleared to INTEL_FAST_CLEAR_STATE_CLEAR so we'll
@@ -701,7 +715,7 @@ brw_meta_resolve_color(struct brw_context *brw,
    mt->fast_clear_state = INTEL_FAST_CLEAR_STATE_RESOLVED;
    get_resolve_rect(brw, mt, &rect);
 
-   brw_draw_rectlist(ctx, &rect, 1);
+   brw_draw_rectlist(brw, &rect, 1);
 
    set_fast_clear_op(brw, 0);
    use_rectlist(brw, false);

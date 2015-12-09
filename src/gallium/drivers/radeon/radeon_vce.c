@@ -388,6 +388,11 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 	struct radeon_surf *tmp_surf;
 	unsigned cpb_size;
 
+	if (rscreen->info.family == CHIP_STONEY) {
+		RVID_ERR("Stoney VCE is not supported!\n");
+		return NULL;
+	}
+
 	if (!rscreen->info.vce_fw_version) {
 		RVID_ERR("Kernel doesn't supports VCE!\n");
 		return NULL;

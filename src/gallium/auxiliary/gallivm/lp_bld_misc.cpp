@@ -536,6 +536,15 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 
 #if defined(PIPE_ARCH_PPC)
    MAttrs.push_back(util_cpu_caps.has_altivec ? "+altivec" : "-altivec");
+#if HAVE_LLVM >= 0x0304
+   /*
+    * Make sure VSX instructions are disabled
+    * See LLVM bug https://llvm.org/bugs/show_bug.cgi?id=25503#c7
+    */
+   if (util_cpu_caps.has_altivec) {
+      MAttrs.push_back("-vsx");
+   }
+#endif
 #endif
 
    builder.setMAttrs(MAttrs);

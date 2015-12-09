@@ -1402,8 +1402,7 @@ static const char * const tex_opcode_strs[] = { "tex", "txb", "txl", "txd", "txf
 
 const char *ir_texture::opcode_string()
 {
-   assert((unsigned int) op <=
-	  sizeof(tex_opcode_strs) / sizeof(tex_opcode_strs[0]));
+   assert((unsigned int) op < ARRAY_SIZE(tex_opcode_strs));
    return tex_opcode_strs[op];
 }
 

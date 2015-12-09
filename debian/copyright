@@ -10,30 +10,117 @@ For more information see:
 
   http://www.mesa3d.org/
 
-The tarball was built by combining MesaLib and MesaDemos tarballs, and
-deleting the progs/objviewer/ directory.
+-------------------------------------------------------------------------------
+The Mesa distribution consists of several components. Different copyrights and
+licenses apply to different components. For example, some demo programs are
+copyrighted by SGI, some of the Mesa device drivers are copyrighted by their
+authors. See below for a list of Mesa's main components and the license for
+each.
 
-Copyright:
+The core Mesa library is licensed according to the terms of the MIT license.
+This allows integration with the XFree86, Xorg and DRI projects.
 
-Upstream Author: Brian Paul <brian.paul@tungstengraphics.com>
+The default Mesa license is as follows:
 
-License:
+Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
 
-                    License / Copyright Information
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
 
-   The Mesa distribution consists of several components. Different
-   copyrights and licenses apply to different components. For
-   example, GLUT is copyrighted by Mark Kilgard, some demo programs
-   are copyrighted by SGI, some of the Mesa device drivers are
-   copyrighted by their authors. See below for a list of Mesa's
-   components and the copyright/license for each.
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
 
-   The core Mesa library is licensed according to the terms of the
-   XFree86 copyright (an MIT-style license). This allows integration
-   with the XFree86/DRI project. Unless otherwise stated, the Mesa
-   source code and documentation is licensed as follows:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
- Copyright (C) 1999-2003  Brian Paul   All Rights Reserved.
+Attention, Contributors
+
+When contributing to the Mesa project you must agree to the licensing terms of
+the component to which you're contributing. The following section lists the
+primary components of the Mesa distribution and their respective licenses.
+
+Mesa Component Licenses
+
+Component         Location               License
+------------------------------------------------------------------
+Main Mesa code    src/mesa/              Mesa (MIT)
+
+Device drivers    src/mesa/drivers/*     MIT, generally
+
+Ext headers       include/GL/glext.h     Khronos
+                  include/GL/glxext.h
+
+C11 thread        include/c11/threads*.h Boost (permissive)
+emulation
+
+In general, consult the source files for license terms.
+--------------------------------------------------------------------------------
+
+Khronos license:
+
+ Copyright (c) 2013-2015 The Khronos Group Inc.
+
+ Permission is hereby granted, free of charge, to any person obtaining a
+ copy of this software and/or associated documentation files (the
+ "Materials"), to deal in the Materials without restriction, including
+ without limitation the rights to use, copy, modify, merge, publish,
+ distribute, sublicense, and/or sell copies of the Materials, and to
+ permit persons to whom the Materials are furnished to do so, subject to
+ the following conditions:
+
+ The above copyright notice and this permission notice shall be included
+ in all copies or substantial portions of the Materials.
+
+ THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+
+
+Boost license:
+
+ (C) Copyright yohhoy 2012.
+ Distributed under the Boost Software License, Version 1.0.
+
+ Permission is hereby granted, free of charge, to any person or organization
+ obtaining a copy of the software and accompanying documentation covered by
+ this license (the "Software") to use, reproduce, display, distribute,
+ execute, and transmit the Software, and to prepare [[derivative work]]s of the
+ Software, and to permit third-parties to whom the Software is furnished to
+ do so, all subject to the following:
+
+ The copyright notices in the Software and this entire statement, including
+ the above license grant, this restriction and the following disclaimer,
+ must be included in all copies of the Software, in whole or in part, and
+ all derivative works of the Software, unless such copies or derivative
+ works are solely in the form of machine-executable object code generated by
+ a source language processor.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+ SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ DEALINGS IN THE SOFTWARE.
+
+
+SGI Free Software License B:
+
+ SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008)
+ Copyright (C) 1991-2000 Silicon Graphics, Inc. All Rights Reserved.
 
  Permission is hereby granted, free of charge, to any person obtaining a
  copy of this software and associated documentation files (the "Software"),
@@ -42,148 +129,23 @@ License:
  and/or sell copies of the Software, and to permit persons to whom the
  Software is furnished to do so, subject to the following conditions:
 
- The above copyright notice and this permission notice shall be included
- in all copies or substantial portions of the Software.
+ The above copyright notice including the dates of first publication and
+ either this permission notice or a reference to
+ http://oss.sgi.com/projects/FreeB/
+ shall be included in all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ SILICON GRAPHICS, INC. BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+ OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
 
-                        Attention, Contributors
-
-   When contributing to the Mesa project you must agree to relinquish
-   your work to the holder of the copyright for the particular
-   component you're contributing to. That is, you can't put your own
-   copyright on the code, unless it's a modular piece that can be
-   omitted from Mesa (like a new device driver). If for example, you
-   contribute a bug fix to Mesa's texture mapping code, your code
-   will become a part of the body of work which is copyrighted by
-   Brian Paul and licensed by the above terms.
-
-----------------------------------------------------------------------
-
-Some files, as listed below, are made available under the SGI Free B 
-license.  This license is as follows:
-
-SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008)
-
-Copyright (C) [dates of first publication] Silicon Graphics, Inc. All Rights
-Reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-of the Software, and to permit persons to whom the Software is furnished to do
-so, subject to the following conditions:
-The above copyright notice including the dates of first publication and either
-this permission notice or a reference to http://oss.sgi.com/projects/FreeB/
-shall be included in all copies or substantial portions of the Software.
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL SILICON GRAPHICS, INC. BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
-ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-IN THE SOFTWARE.
-Except as contained in this notice, the name of Silicon Graphics, Inc. shall
-not be used in advertising or otherwise to promote the sale, use or other
-dealings in this Software without prior written authorization from Silicon
-Graphics, Inc.
-
---------------------------------------------------------------------------
-
-Some other files listed below are made available from Silicon Graphics,
-Inc. under a more liberal, MIT-style license, as follows:
-
-   Permission to use, copy, modify, and distribute this software for
-   any purpose and without fee is hereby granted, provided that the above
-   copyright notice appear in all copies and that both the copyright notice
-   and this permission notice appear in supporting documentation, and that
-   the name of Silicon Graphics, Inc. not be used in advertising
-   or publicity pertaining to distribution of the software without specific,
-   written prior permission.
-
-   THE MATERIAL EMBODIED ON THIS SOFTWARE IS PROVIDED TO YOU "AS-IS"
-   AND WITHOUT WARRANTY OF ANY KIND, EXPRESS, IMPLIED OR OTHERWISE
-   INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY OR
-   FITNESS FOR A PARTICULAR PURPOSE.  IN NO EVENT SHALL SILICON
-   GRAPHICS, INC.  BE LIABLE TO YOU OR ANYONE ELSE FOR ANY DIRECT,
-   SPECIAL, INCIDENTAL, INDIRECT OR CONSEQUENTIAL DAMAGES OF ANY
-   KIND, OR ANY DAMAGES WHATSOEVER, INCLUDING WITHOUT LIMITATION,
-   LOSS OF PROFIT, LOSS OF USE, SAVINGS OR REVENUE, OR THE CLAIMS OF
-   THIRD PARTIES, WHETHER OR NOT SILICON GRAPHICS, INC.  HAS BEEN
-   ADVISED OF THE POSSIBILITY OF SUCH LOSS, HOWEVER CAUSED AND ON
-   ANY THEORY OF LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE
-   POSSESSION, USE OR PERFORMANCE OF THIS SOFTWARE.
-   
-   US Government Users Restricted Rights
-   Use, duplication, or disclosure by the Government is subject to
-   restrictions set forth in FAR 52.227.19(c)(2) or subparagraph
-   (c)(1)(ii) of the Rights in Technical Data and Computer Software
-   clause at DFARS 252.227-7013 and/or in similar or successor
-   clauses in the FAR or the DOD or NASA FAR Supplement.
-   Unpublished-- rights reserved under the copyright laws of the
-   United States.  Contractor/manufacturer is Silicon Graphics,
-   Inc., 2011 N.  Shoreline Blvd., Mountain View, CA 94039-7311.
-
---------------------------------------------------------------------------
-
- Mesa Component Licenses:
-
- Component       Files                 Primary Author      License
- ----------------------------------------------------------------------------
- core Mesa code  src/*.[ch]            Brian Paul          Mesa
-                 include/GL/gl.h
-
- GLX driver      src/X/*               Brian Paul          Mesa
-                 include/GL/glx.h
-                 include/GL/xmesa.h
-
- OS/Mesa driver  src/OSmesa/*          Brian Paul          Mesa
-                 include/GL/osmesa.h
-
- 3Dfx driver     src/FX/*              David Bucciarelli   Mesa
-                 include/GL/fxmesa.h
-
- BeOS R4 driver  mesa/drivers/beos/    Brian Paul          Mesa
-
- MGL driver      include/GL/mglmesa.h  SciTech, Inc        GNU LGPL
-
- Windows driver  mesa/drivers/windows/ Li Wei              GNU LGPL
-                 include/GL/wmesa.h
-
- SVGA driver     mesa/drivers/svga/    Brian Paul          GNU LGPL
-                 include/GL/svgamesa.h
-
- DOS driver      mesa/drivers/dos/     Charlie Wallace     GNU LGPL
-                 include/GL/dosmesa.h
-
- GGI driver      mesa/drivers/ggi/     Uwe Maurer          GNU LGPL
-                 include/GL/ggimesa.h
-
- GLUT            src/glut/*            Mark Kilgard        Mark's copyright
-                 include/GL/*glut*.h
-
- GLU library     src/glu/*             Brian Paul          GNU LGPL
-
- SGI GLU library src/glu/sgi/*         SGI                 SGI Free B
-                 include/GL/glu.h
-
- Ext registry    include/GL/glext.h    SGI                 SGI Free B
-                 include/GL/glxext.h
-
- demo programs   progs/demos/*         various             see source files
-
- X demos         progs/xdemos/*        Brian Paul          see source files
-
- SGI demos       progs/samples/*       SGI                 SGI MIT-style
-
- RedBook demos   progs/redbook/*       SGI                 SGI MIT-style
+ Except as contained in this notice, the name of Silicon Graphics, Inc.
+ shall not be used in advertising or otherwise to promote the sale, use or
+ other dealings in this Software without prior written authorization from
+ Silicon Graphics, Inc.
 
 
 On Debian systems the full text of the GNU LGPL license is found in
@@ -193,4 +155,3 @@ On Debian systems the full text of the GNU LGPL license is found in
 
 The Debian packaging is (C) 2006, Thierry Reding <thierry@gilfi.de> and
 is licensed under the GPL, see `/usr/share/common-licenses/GPL'.
-

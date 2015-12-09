@@ -21,7 +21,7 @@ lib@OPENCL_LIBNAME@_la_LIBADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
 	$(ELF_LIB) \
-	-ldl \
+	$(DLOPEN_LIBS) \
 	-lclangCodeGen \
 	-lclangFrontendTool \
 	-lclangFrontend \

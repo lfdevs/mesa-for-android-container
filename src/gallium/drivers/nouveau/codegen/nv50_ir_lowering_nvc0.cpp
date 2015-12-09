@@ -962,11 +962,14 @@ NVC0LoweringPass::handleTXD(TexInstruction *txd)
 bool
 NVC0LoweringPass::handleTXQ(TexInstruction *txq)
 {
+   const int chipset = prog->getTarget()->getChipset();
+   if (chipset >= NVISA_GK104_CHIPSET && txq->tex.rIndirectSrc < 0)
+      txq->tex.r += prog->driver->io.texBindBase / 4;
+
    if (txq->tex.rIndirectSrc < 0)
       return true;
 
    Value *ticRel = txq->getIndirectR();
-   const int chipset = prog->getTarget()->getChipset();
 
    txq->setIndirectS(NULL);
    txq->tex.sIndirectSrc = -1;

@@ -2181,10 +2181,11 @@ void r600_init_atom_start_cs(struct r600_context *rctx)
 		num_temp_gprs = 4;
 		num_gs_gprs = 0;
 		num_es_gprs = 0;
-		num_ps_threads = 136;
-		num_vs_threads = 48;
-		num_gs_threads = 4;
-		num_es_threads = 4;
+		/* use limits 40 VS and at least 16 ES/GS */
+		num_ps_threads = 120;
+		num_vs_threads = 40;
+		num_gs_threads = 16;
+		num_es_threads = 16;
 		num_ps_stack_entries = 40;
 		num_vs_stack_entries = 40;
 		num_gs_stack_entries = 32;
@@ -2643,6 +2644,9 @@ void r600_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 		S_02881C_USE_VTX_VIEWPORT_INDX(rshader->vs_out_viewport);
 }
 
+#define RV610_GSVS_ALIGN 32
+#define R600_GSVS_ALIGN 16
+
 void r600_update_gs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
@@ -2651,6 +2655,23 @@ void r600_update_gs_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 	struct r600_shader *cp_shader = &shader->gs_copy_shader->shader;
 	unsigned gsvs_itemsize =
 			(cp_shader->ring_item_size * rshader->gs_max_out_vertices) >> 2;
+
+	/* some r600s needs gsvs itemsize aligned to cacheline size
+	   this was fixed in rs780 and above. */
+	switch (rctx->b.family) {
+	case CHIP_RV610:
+		gsvs_itemsize = align(gsvs_itemsize, RV610_GSVS_ALIGN);
+		break;
+	case CHIP_R600:
+	case CHIP_RV630:
+	case CHIP_RV670:
+	case CHIP_RV620:
+	case CHIP_RV635:
+		gsvs_itemsize = align(gsvs_itemsize, R600_GSVS_ALIGN);
+		break;
+	default:
+		break;
+	}
 
 	r600_init_command_buffer(cb, 64);
 

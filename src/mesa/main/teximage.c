@@ -1616,7 +1616,7 @@ texture_format_error_check_gles(struct gl_context *ctx, GLenum format,
       }
    }
    else {
-      err = _mesa_es_error_check_format_and_type(format, type, dimensions);
+      err = _mesa_es_error_check_format_and_type(ctx, format, type, dimensions);
       if (err != GL_NO_ERROR) {
          _mesa_error(ctx, err, "%s(format = %s, type = %s)",
                      callerName, _mesa_enum_to_string(format),

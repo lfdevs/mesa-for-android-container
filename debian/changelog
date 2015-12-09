@@ -1,3 +1,14 @@
+mesa (11.0.7-1) unstable; urgency=medium
+
+  [ Julien Cristau ]
+  * Update debian/copyright from docs/license.html (closes: #806805).  Thanks,
+    Steinar H. Gunderson!
+
+  [ Andreas Boll ]
+  * New upstream release.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Wed, 09 Dec 2015 21:18:17 +0100
+
 mesa (11.0.6-1) unstable; urgency=medium
 
   * New upstream release.

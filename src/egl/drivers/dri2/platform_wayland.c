@@ -703,18 +703,10 @@ dri2_wl_swap_buffers_with_damage(_EGLDriver *drv,
    dri2_surf->dx = 0;
    dri2_surf->dy = 0;
 
-   if (n_rects == 0) {
-      wl_surface_damage(dri2_surf->wl_win->surface,
-                        0, 0, INT32_MAX, INT32_MAX);
-   } else {
-      for (i = 0; i < n_rects; i++) {
-         const int *rect = &rects[i * 4];
-         wl_surface_damage(dri2_surf->wl_win->surface,
-                           rect[0],
-                           dri2_surf->base.Height - rect[1] - rect[3],
-                           rect[2], rect[3]);
-      }
-   }
+   /* We deliberately ignore the damage region and post maximum damage, due to
+    * https://bugs.freedesktop.org/78190 */
+   wl_surface_damage(dri2_surf->wl_win->surface,
+                     0, 0, INT32_MAX, INT32_MAX);
 
    if (dri2_dpy->is_different_gpu) {
       _EGLContext *ctx = _eglGetCurrentContext();

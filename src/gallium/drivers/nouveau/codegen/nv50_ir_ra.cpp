@@ -1573,10 +1573,28 @@ SpillCodeInserter::spill(Instruction *defi, Value *slot, LValue *lval)
 
    Instruction *st;
    if (slot->reg.file == FILE_MEMORY_LOCAL) {
-      st = new_Instruction(func, OP_STORE, ty);
-      st->setSrc(0, slot);
-      st->setSrc(1, lval);
       lval->noSpill = 1;
+      if (ty != TYPE_B96) {
+         st = new_Instruction(func, OP_STORE, ty);
+         st->setSrc(0, slot);
+         st->setSrc(1, lval);
+      } else {
+         st = new_Instruction(func, OP_SPLIT, ty);
+         st->setSrc(0, lval);
+         for (int d = 0; d < lval->reg.size / 4; ++d)
+            st->setDef(d, new_LValue(func, FILE_GPR));
+
+         for (int d = lval->reg.size / 4 - 1; d >= 0; --d) {
+            Value *tmp = cloneShallow(func, slot);
+            tmp->reg.size = 4;
+            tmp->reg.data.offset += 4 * d;
+
+            Instruction *s = new_Instruction(func, OP_STORE, TYPE_U32);
+            s->setSrc(0, tmp);
+            s->setSrc(1, st->getDef(d));
+            defi->bb->insertAfter(defi, s);
+         }
+      }
    } else {
       st = new_Instruction(func, OP_CVT, ty);
       st->setDef(0, slot);
@@ -1596,7 +1614,27 @@ SpillCodeInserter::unspill(Instruction *usei, LValue *lval, Value *slot)
    Instruction *ld;
    if (slot->reg.file == FILE_MEMORY_LOCAL) {
       lval->noSpill = 1;
-      ld = new_Instruction(func, OP_LOAD, ty);
+      if (ty != TYPE_B96) {
+         ld = new_Instruction(func, OP_LOAD, ty);
+      } else {
+         ld = new_Instruction(func, OP_MERGE, ty);
+         for (int d = 0; d < lval->reg.size / 4; ++d) {
+            Value *tmp = cloneShallow(func, slot);
+            LValue *val;
+            tmp->reg.size = 4;
+            tmp->reg.data.offset += 4 * d;
+
+            Instruction *l = new_Instruction(func, OP_LOAD, TYPE_U32);
+            l->setDef(0, (val = new_LValue(func, FILE_GPR)));
+            l->setSrc(0, tmp);
+            usei->bb->insertBefore(usei, l);
+            ld->setSrc(d, val);
+            val->noSpill = 1;
+         }
+         ld->setDef(0, lval);
+         usei->bb->insertBefore(usei, ld);
+         return lval;
+      }
    } else {
       ld = new_Instruction(func, OP_CVT, ty);
    }
