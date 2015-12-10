@@ -69,7 +69,7 @@ static boolean same_src_reg(struct i915_full_src_register *d1, struct i915_full_
            d1->Register.Negate == d2->Register.Negate);
 }
 
-const static struct {
+static const struct {
    boolean is_texture;
    boolean commutes;
    unsigned neutral_element;

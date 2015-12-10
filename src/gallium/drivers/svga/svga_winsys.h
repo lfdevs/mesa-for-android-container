@@ -79,15 +79,20 @@ struct winsys_handle;
 #define SVGA_FENCE_FLAG_EXEC      (1 << 0)
 #define SVGA_FENCE_FLAG_QUERY     (1 << 1)
 
-#define SVGA_SURFACE_USAGE_SHARED (1 << 0)
+#define SVGA_SURFACE_USAGE_SHARED  (1 << 0)
+#define SVGA_SURFACE_USAGE_SCANOUT (1 << 1)
+
+#define SVGA_QUERY_FLAG_SET        (1 << 0)
+#define SVGA_QUERY_FLAG_REF        (1 << 1)
+
+#define SVGA_HINT_FLAG_DRAW_EMITTED (1 << 0)
 
 /** Opaque surface handle */
 struct svga_winsys_surface;
 
-
 /** Opaque guest-backed objects */
 struct svga_winsys_gb_shader;
-
+struct svga_winsys_gb_query;
 
 
 /**
@@ -143,7 +148,8 @@ struct svga_winsys_context
 	                uint32 *shid,
 			uint32 *mobid,
 			uint32 *offset,
-	                struct svga_winsys_gb_shader *shader);
+	                struct svga_winsys_gb_shader *shader,
+                        unsigned flags);
 
    /**
     * Emit a relocation for a guest-backed context.
@@ -173,6 +179,26 @@ struct svga_winsys_context
 		     uint32 offset,
 		     unsigned flags);
 
+   /**
+    * Emit a relocation for a guest-backed query object.
+    *
+    * NOTE: Order of this call does matter. It should be the same order
+    * as relocations appear in the command buffer.
+    */
+   void
+   (*query_relocation)(struct svga_winsys_context *swc,
+	               SVGAMobId *id,
+	               struct svga_winsys_gb_query *query);
+
+   /**
+    * Bind queries to context.
+    * \param flags  exactly one of SVGA_QUERY_FLAG_SET/REF
+    */
+   enum pipe_error
+   (*query_bind)(struct svga_winsys_context *sws,
+                 struct svga_winsys_gb_query *query,
+                 unsigned flags);
+
    void
    (*commit)(struct svga_winsys_context *swc);
    
@@ -187,6 +213,11 @@ struct svga_winsys_context
     * global to the entire SVGA device.
     */
    uint32 cid;
+
+   /**
+    * Flags to hint the current context state
+    */
+   uint32 hints;
 
    /**
     ** BEGIN new functions for guest-backed surfaces.
@@ -219,6 +250,36 @@ struct svga_winsys_context
                     struct svga_winsys_surface *surface,
                     boolean *rebind);
 
+   /**
+    * Create and define a DX GB shader that resides in the device COTable.
+    * Caller of this function will issue the DXDefineShader command.
+    */
+   struct svga_winsys_gb_shader *
+   (*shader_create)(struct svga_winsys_context *swc,
+                    uint32 shaderId,
+                    SVGA3dShaderType shaderType,
+                    const uint32 *bytecode,
+                    uint32 bytecodeLen);
+
+   /**
+    * Destroy a DX GB shader.
+    * This function will issue the DXDestroyShader command.
+    */
+   void
+   (*shader_destroy)(struct svga_winsys_context *swc,
+                     struct svga_winsys_gb_shader *shader);
+
+   /**
+    * Rebind a DX GB resource to a context.
+    * This is called to reference a DX GB resource in the command stream in
+    * order to page in the associated resource in case the memory has been
+    * paged out, and to fence it if necessary after command submission.
+    */
+   enum pipe_error
+   (*resource_rebind)(struct svga_winsys_context *swc,
+                      struct svga_winsys_surface *surface,
+                      struct svga_winsys_gb_shader *shader,
+                      unsigned flags);
 };
 
 
@@ -260,7 +321,7 @@ struct svga_winsys_screen
     * \param format Format Device surface format
     * \param usage Winsys usage: bitmask of SVGA_SURFACE_USAGE_x flags
     * \param size Surface size given in device format
-    * \param numFaces Number of faces of the surface (1 or 6)
+    * \param numLayers Number of layers of the surface (or cube faces)
     * \param numMipLevels Number of mipmap levels for each face
     *
     * Returns the surface ID (sid). Surfaces are generic
@@ -274,7 +335,7 @@ struct svga_winsys_screen
     * - Each face has a list of mipmap levels
     *
     * - Each mipmap image may have multiple volume
-    *   slices, if the image is three dimensional.
+    *   slices for 3D image, or multiple 2D slices for texture array.
     *
     * - Each slice is a 2D array of 'blocks'
     *
@@ -296,8 +357,9 @@ struct svga_winsys_screen
                      SVGA3dSurfaceFormat format,
                      unsigned usage,
                      SVGA3dSize size,
-                     uint32 numFaces,
-                     uint32 numMipLevels);
+                     uint32 numLayers,
+                     uint32 numMipLevels,
+                     unsigned sampleCount);
 
    /**
     * Creates a surface from a winsys handle.
@@ -343,7 +405,7 @@ struct svga_winsys_screen
    (*surface_can_create)(struct svga_winsys_screen *sws,
                          SVGA3dSurfaceFormat format,
                          SVGA3dSize size,
-                         uint32 numFaces,
+                         uint32 numLayers,
                          uint32 numMipLevels);
 
    /**
@@ -420,7 +482,7 @@ struct svga_winsys_screen
     */
    struct svga_winsys_gb_shader *
    (*shader_create)(struct svga_winsys_screen *sws,
-		    SVGA3dShaderType type,
+		    SVGA3dShaderType shaderType,
 		    const uint32 *bytecode,
 		    uint32 bytecodeLen);
 
@@ -432,6 +494,46 @@ struct svga_winsys_screen
    (*shader_destroy)(struct svga_winsys_screen *sws,
 		     struct svga_winsys_gb_shader *shader);
 
+   /**
+    * Create and define a GB query.
+    */
+   struct svga_winsys_gb_query *
+   (*query_create)(struct svga_winsys_screen *sws, uint32 len);
+
+   /**
+    * Destroy a GB query.
+    */
+   void
+   (*query_destroy)(struct svga_winsys_screen *sws,
+		    struct svga_winsys_gb_query *query);
+
+   /**
+    * Initialize the query state of the query that resides in the slot
+    * specified in offset
+    * \return zero on success.
+    */
+   int
+   (*query_init)(struct svga_winsys_screen *sws,
+                       struct svga_winsys_gb_query *query,
+                       unsigned offset,
+                       SVGA3dQueryState queryState);
+
+   /**
+    * Inquire for the query state and result of the query that resides
+    * in the slot specified in offset
+    */
+   void
+   (*query_get_result)(struct svga_winsys_screen *sws,
+                       struct svga_winsys_gb_query *query,
+                       unsigned offset,
+                       SVGA3dQueryState *queryState,
+                       void *result, uint32 resultLen);
+
+   /** Have VGPU v10 hardware? */
+   boolean have_vgpu10;
+
+   /** To rebind resources at the beginnning of a new command buffer */
+   boolean need_to_rebind_resources;
 };
 
 

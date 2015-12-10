@@ -54,36 +54,47 @@ boolean
 os_get_process_name(char *procname, size_t size)
 {
    const char *name;
+
+   /* First, check if the GALLIUM_PROCESS_NAME env var is set to
+    * override the normal process name query.
+    */
+   name = os_get_option("GALLIUM_PROCESS_NAME");
+
+   if (!name) {
+      /* do normal query */
+
 #if defined(PIPE_SUBSYSTEM_WINDOWS_USER)
-   char szProcessPath[MAX_PATH];
-   char *lpProcessName;
-   char *lpProcessExt;
+      char szProcessPath[MAX_PATH];
+      char *lpProcessName;
+      char *lpProcessExt;
 
-   GetModuleFileNameA(NULL, szProcessPath, Elements(szProcessPath));
+      GetModuleFileNameA(NULL, szProcessPath, Elements(szProcessPath));
 
-   lpProcessName = strrchr(szProcessPath, '\\');
-   lpProcessName = lpProcessName ? lpProcessName + 1 : szProcessPath;
+      lpProcessName = strrchr(szProcessPath, '\\');
+      lpProcessName = lpProcessName ? lpProcessName + 1 : szProcessPath;
 
-   lpProcessExt = strrchr(lpProcessName, '.');
-   if (lpProcessExt) {
-      *lpProcessExt = '\0';
-   }
+      lpProcessExt = strrchr(lpProcessName, '.');
+      if (lpProcessExt) {
+         *lpProcessExt = '\0';
+      }
 
-   name = lpProcessName;
+      name = lpProcessName;
 
 #elif defined(__GLIBC__) || defined(__CYGWIN__)
-   name = program_invocation_short_name;
+      name = program_invocation_short_name;
 #elif defined(PIPE_OS_BSD) || defined(PIPE_OS_APPLE)
-   /* *BSD and OS X */
-   name = getprogname();
+      /* *BSD and OS X */
+      name = getprogname();
 #elif defined(PIPE_OS_HAIKU)
-   image_info info;
-   get_image_info(B_CURRENT_TEAM, &info);
-   name = info.name;
+      image_info info;
+      get_image_info(B_CURRENT_TEAM, &info);
+      name = info.name;
 #else
 #warning unexpected platform in os_process.c
-   return FALSE;
+      return FALSE;
 #endif
+
+   }
 
    assert(size > 0);
    assert(procname);

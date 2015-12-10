@@ -163,7 +163,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
     if (This->params.BehaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING)
         DBG("Application asked mixed Software Vertex Processing. Ignoring.\n");
 
-    This->pipe = This->screen->context_create(This->screen, NULL);
+    This->pipe = This->screen->context_create(This->screen, NULL, 0);
     if (!This->pipe) { return E_OUTOFMEMORY; } /* guess */
 
     This->cso = cso_create_context(This->pipe);

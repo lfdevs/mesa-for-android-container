@@ -33,6 +33,7 @@
  * Set GALLIUM_HUD=help for more info.
  */
 
+#include <signal.h>
 #include <stdio.h>
 
 #include "hud/hud_context.h"
@@ -51,12 +52,15 @@
 #include "tgsi/tgsi_text.h"
 #include "tgsi/tgsi_dump.h"
 
+/* Control the visibility of all HUD contexts */
+static boolean huds_visible = TRUE;
 
 struct hud_context {
    struct pipe_context *pipe;
    struct cso_context *cso;
    struct u_upload_mgr *uploader;
 
+   struct hud_batch_query_context *batch_query;
    struct list_head pane_list;
 
    /* states */
@@ -95,6 +99,13 @@ struct hud_context {
    } text, bg, whitelines;
 };
 
+#ifdef PIPE_OS_UNIX
+static void
+signal_visible_handler(int sig, siginfo_t *siginfo, void *context)
+{
+   huds_visible = !huds_visible;
+}
+#endif
 
 static void
 hud_draw_colored_prims(struct hud_context *hud, unsigned prim,
@@ -441,6 +452,9 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
    struct hud_pane *pane;
    struct hud_graph *gr;
 
+   if (!huds_visible)
+      return;
+
    hud->fb_width = tex->width0;
    hud->fb_height = tex->height0;
    hud->constants.two_div_fb_width = 2.0f / hud->fb_width;
@@ -510,6 +524,8 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
    hud_alloc_vertices(hud, &hud->text, 4 * 512, 4 * sizeof(float));
 
    /* prepare all graphs */
+   hud_batch_query_update(hud->batch_query);
+
    LIST_FOR_EACH_ENTRY(pane, &hud->pane_list, head) {
       LIST_FOR_EACH_ENTRY(gr, &pane->graph_list, head) {
          gr->query_new_value(gr);
@@ -903,17 +919,21 @@ hud_parse_env_var(struct hud_context *hud, const char *env)
       }
       else if (strcmp(name, "samples-passed") == 0 &&
                has_occlusion_query(hud->pipe->screen)) {
-         hud_pipe_query_install(pane, hud->pipe, "samples-passed",
+         hud_pipe_query_install(&hud->batch_query, pane, hud->pipe,
+                                "samples-passed",
                                 PIPE_QUERY_OCCLUSION_COUNTER, 0, 0,
                                 PIPE_DRIVER_QUERY_TYPE_UINT64,
-                                PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE);
+                                PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE,
+                                0);
       }
       else if (strcmp(name, "primitives-generated") == 0 &&
                has_streamout(hud->pipe->screen)) {
-         hud_pipe_query_install(pane, hud->pipe, "primitives-generated",
+         hud_pipe_query_install(&hud->batch_query, pane, hud->pipe,
+                                "primitives-generated",
                                 PIPE_QUERY_PRIMITIVES_GENERATED, 0, 0,
                                 PIPE_DRIVER_QUERY_TYPE_UINT64,
-                                PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE);
+                                PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE,
+                                0);
       }
       else {
          boolean processed = FALSE;
@@ -938,17 +958,19 @@ hud_parse_env_var(struct hud_context *hud, const char *env)
                if (strcmp(name, pipeline_statistics_names[i]) == 0)
                   break;
             if (i < Elements(pipeline_statistics_names)) {
-               hud_pipe_query_install(pane, hud->pipe, name,
+               hud_pipe_query_install(&hud->batch_query, pane, hud->pipe, name,
                                       PIPE_QUERY_PIPELINE_STATISTICS, i,
                                       0, PIPE_DRIVER_QUERY_TYPE_UINT64,
-                                      PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE);
+                                      PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE,
+                                      0);
                processed = TRUE;
             }
          }
 
          /* driver queries */
          if (!processed) {
-            if (!hud_driver_query_install(pane, hud->pipe, name)){
+            if (!hud_driver_query_install(&hud->batch_query, pane, hud->pipe,
+                                          name)) {
                fprintf(stderr, "gallium_hud: unknown driver query '%s'\n", name);
             }
          }
@@ -987,6 +1009,9 @@ hud_parse_env_var(struct hud_context *hud, const char *env)
 
       case ',':
          env++;
+         if (!pane)
+            break;
+
          y += height + hud->font.glyph_height * (pane->num_graphs + 2);
          height = 100;
 
@@ -1122,6 +1147,12 @@ hud_create(struct pipe_context *pipe, struct cso_context *cso)
    struct pipe_sampler_view view_templ;
    unsigned i;
    const char *env = debug_get_option("GALLIUM_HUD", NULL);
+   unsigned signo = debug_get_num_option("GALLIUM_HUD_TOGGLE_SIGNAL", 0);
+#ifdef PIPE_OS_UNIX
+   static boolean sig_handled = FALSE;
+   struct sigaction action = {};
+#endif
+   huds_visible = debug_get_bool_option("GALLIUM_HUD_VISIBLE", TRUE);
 
    if (!env || !*env)
       return NULL;
@@ -1264,6 +1295,22 @@ hud_create(struct pipe_context *pipe, struct cso_context *cso)
 
    LIST_INITHEAD(&hud->pane_list);
 
+   /* setup sig handler once for all hud contexts */
+#ifdef PIPE_OS_UNIX
+   if (!sig_handled && signo != 0) {
+      action.sa_sigaction = &signal_visible_handler;
+      action.sa_flags = SA_SIGINFO;
+
+      if (signo >= NSIG)
+         fprintf(stderr, "gallium_hud: invalid signal %u\n", signo);
+      else if (sigaction(signo, &action, NULL) < 0)
+         fprintf(stderr, "gallium_hud: unable to set handler for signal %u\n", signo);
+      fflush(stderr);
+
+      sig_handled = TRUE;
+   }
+#endif
+
    hud_parse_env_var(hud, env);
    return hud;
 }
@@ -1284,6 +1331,7 @@ hud_destroy(struct hud_context *hud)
       FREE(pane);
    }
 
+   hud_batch_query_cleanup(&hud->batch_query);
    pipe->delete_fs_state(pipe, hud->fs_color);
    pipe->delete_fs_state(pipe, hud->fs_text);
    pipe->delete_vs_state(pipe, hud->vs);

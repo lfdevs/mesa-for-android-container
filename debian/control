@@ -8,7 +8,7 @@ Build-Depends:
  debhelper (>= 9),
  quilt (>= 0.40),
  pkg-config,
- libdrm-dev (>= 2.4.63) [!hurd-any],
+ libdrm-dev (>= 2.4.65) [!hurd-any],
  libx11-dev,
  x11proto-gl-dev (>= 1.4.14),
  libxxf86vm-dev,
@@ -402,13 +402,11 @@ Depends:
  ${misc:Depends},
  libglapi-mesa (= ${binary:Version}),
  libudev1 [linux-any],
-Recommends: libgl1-mesa-dri (>= 7.2)
-Conflicts: libgl1, libgl1-mesa-dri (<< 6.4.0)
-Replaces: libgl1, libgl1-mesa-dri (<< 6.4.0)
+Recommends: libgl1-mesa-dri
+Conflicts: libgl1
+Replaces: libgl1
 Provides: libgl1
 Breaks:
- libgl1-nvidia-alternatives (<= 275.09.07-1),
- fglrx-glx (<< 1:11-6-1),
  glx-diversions (<< 0.4),
  libopengl-perl (<< 0.6704+dfsg-2),
 Pre-Depends: ${misc:Pre-Depends}
@@ -452,21 +450,14 @@ Description: Debugging symbols for the Mesa GLX runtime
 
 Package: libgl1-mesa-dri
 Section: libs
-Priority: optional
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  ${shlibs:Depends},
  ${misc:Depends}
 Recommends: libtxc-dxtn-s2tc0 | libtxc-dxtn0
-Conflicts: xlibmesa-dri (<< 1:7.0.0)
-Replaces: xlibmesa-dri (<< 1:7.0.0), libgl1-mesa-dri-experimental (<< 7.11.1)
 Breaks:
  xserver-xorg-core (<< 2:1.14.3-5),
- xserver-xorg-core-no-multiarch,
- libgl1-mesa-glx (<< 7.10.2-4),
- libgl1-mesa-glx-no-multiarch,
- libgl1-mesa-dri-experimental (<< 7.11.1),
 Multi-Arch: same
 Description: free implementation of the OpenGL API -- DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -486,7 +477,6 @@ Architecture: any
 Depends:
  libgl1-mesa-dri (= ${binary:Version}),
  ${misc:Depends},
-Replaces: libgl1-mesa-dri-experimental-dbg (<< 7.11.1)
 Multi-Arch: same
 Description: Debugging symbols for the Mesa DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -507,7 +497,7 @@ Architecture: any
 Depends:
  mesa-common-dev (= ${binary:Version}),
  libgl1-mesa-glx (= ${binary:Version}),
- libdrm-dev (>= 2.4.52) [!hurd-any],
+ libdrm-dev (>= 2.4.65) [!hurd-any],
  libx11-dev,
  libx11-xcb-dev,
  libxcb-dri3-dev,
@@ -523,9 +513,9 @@ Depends:
  x11proto-dri2-dev (>= 2.6),
  x11proto-gl-dev (>= 1.4.14),
  ${misc:Depends},
-Conflicts: libgl-dev, libgl1-mesa-dri-dev
-Replaces: libgl-dev, libgl1-mesa-dri-dev
-Provides: libgl-dev, libgl1-mesa-dri-dev
+Conflicts: libgl-dev
+Replaces: libgl-dev
+Provides: libgl-dev
 Multi-Arch: same
 Description: free implementation of the OpenGL API -- GLX development files
  This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -541,10 +531,9 @@ Description: free implementation of the OpenGL API -- GLX development files
 Package: mesa-common-dev
 Section: libdevel
 Architecture: any
-Replaces: xlibmesa-gl-dev (<< 1:7), xlibosmesa-dev, libgl1-mesa-swx11-dev (<< 6.5.2), libgl1-mesa-dev (<< 7.5~rc4-2)
 Depends:
  libx11-dev,
- libdrm-dev (>= 2.4.52) [!hurd-any],
+ libdrm-dev (>= 2.4.65) [!hurd-any],
  ${misc:Depends},
 Multi-Arch: same
 Description: Developer documentation for Mesa
@@ -559,7 +548,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libglapi-mesa (= ${binary:Version}),
-Replaces: libgl1-mesa-swx11 (<< 6.5.2)
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: Mesa Off-screen rendering extension
@@ -577,9 +565,9 @@ Depends:
  libosmesa6 (= ${binary:Version}),
  mesa-common-dev (= ${binary:Version}) | libgl-dev,
  ${misc:Depends},
-Conflicts: xlibosmesa-dev, libosmesa4-dev, libosmesa-dev
-Replaces: xlibosmesa-dev, libosmesa-dev, libgl1-mesa-swx11-dev (<< 6.5.2), mesa-common-dev (<< 6.5.2)
-Provides: xlibosmesa-dev, libosmesa-dev
+Conflicts: libosmesa-dev
+Replaces: libosmesa-dev
+Provides: libosmesa-dev
 Multi-Arch: same
 Description: Mesa Off-screen rendering extension -- development files
  This package provides the required environment for developing programs
@@ -626,6 +614,7 @@ Description: Debugging symbols for the Mesa VDPAU video acceleration drivers
 Package: mesa-opencl-icd
 Section: libs
 Architecture: amd64 i386 armhf
+Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libclc-r600 (>= 0.2.0+git20150813),
  libclc-amdgcn,
@@ -637,6 +626,7 @@ Replaces:
 Breaks:
  libgl1-mesa-dri (<< 10.3.0-1),
 Provides: opencl-icd
+Multi-Arch: same
 Description: free implementation of the OpenCL API -- ICD runtime
  This package contains the mesa implementation of the OpenCL (Open Compute
  Language) library, which is intended for use with an ICD loader. OpenCL
@@ -650,6 +640,7 @@ Architecture: amd64 i386 armhf
 Depends:
  mesa-opencl-icd (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the OpenCL API -- debugging symbols
  This package contains the mesa implementation of the OpenCL (Open Compute
  Language) library, which is intended for use with an ICD loader. OpenCL

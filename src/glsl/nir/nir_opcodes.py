@@ -453,12 +453,65 @@ binop("fxor", tfloat, commutative,
 binop_reduce("fdot", 1, tfloat, tfloat, "{src0} * {src1}", "{src0} + {src1}",
              "{src}")
 
+binop_reduce("fdot_replicated", 4, tfloat, tfloat,
+             "{src0} * {src1}", "{src0} + {src1}", "{src}")
+
+opcode("fdph", 1, tfloat, [3, 4], [tfloat, tfloat], "",
+       "src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w")
+opcode("fdph_replicated", 4, tfloat, [3, 4], [tfloat, tfloat], "",
+       "src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w")
+
 binop("fmin", tfloat, "", "fminf(src0, src1)")
 binop("imin", tint, commutative + associative, "src1 > src0 ? src0 : src1")
 binop("umin", tunsigned, commutative + associative, "src1 > src0 ? src0 : src1")
 binop("fmax", tfloat, "", "fmaxf(src0, src1)")
 binop("imax", tint, commutative + associative, "src1 > src0 ? src1 : src0")
 binop("umax", tunsigned, commutative + associative, "src1 > src0 ? src1 : src0")
+
+# Saturated vector add for 4 8bit ints.
+binop("usadd_4x8", tint, commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MIN2(((src0 >> i) & 0xff) + ((src1 >> i) & 0xff), 0xff) << i;
+}
+""")
+
+# Saturated vector subtract for 4 8bit ints.
+binop("ussub_4x8", tint, "", """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   int src0_chan = (src0 >> i) & 0xff;
+   int src1_chan = (src1 >> i) & 0xff;
+   if (src0_chan > src1_chan)
+      dst |= (src0_chan - src1_chan) << i;
+}
+""")
+
+# vector min for 4 8bit ints.
+binop("umin_4x8", tint, commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MIN2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
+}
+""")
+
+# vector max for 4 8bit ints.
+binop("umax_4x8", tint, commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MAX2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
+}
+""")
+
+# unorm multiply: (a * b) / 255.
+binop("umul_unorm_4x8", tint, commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   int src0_chan = (src0 >> i) & 0xff;
+   int src1_chan = (src1 >> i) & 0xff;
+   dst |= ((src0_chan * src1_chan) / 255) << i;
+}
+""")
 
 binop("fpow", tfloat, "", "powf(src0, src1)")
 
@@ -510,7 +563,7 @@ opcode("bcsel", 0, tunsigned, [0, 0, 0],
       [tbool, tunsigned, tunsigned], "", "src0 ? src1 : src2")
 
 triop("bfi", tunsigned, """
-unsigned mask = src0, insert = src1 & mask, base = src2;
+unsigned mask = src0, insert = src1, base = src2;
 if (mask == 0) {
    dst = base;
 } else {
@@ -519,7 +572,7 @@ if (mask == 0) {
       tmp >>= 1;
       insert <<= 1;
    }
-   dst = (base & ~mask) | insert;
+   dst = (base & ~mask) | (insert & mask);
 }
 """)
 

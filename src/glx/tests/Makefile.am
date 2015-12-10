@@ -10,7 +10,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/include/GL/internal \
 	$(DEFINES) \
 	$(LIBDRM_CFLAGS) \
-	$(X11_CFLAGS)
+	$(X11_INCLUDES)
 
 TESTS = glx-test
 check_PROGRAMS = glx-test

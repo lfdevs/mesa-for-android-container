@@ -25,8 +25,9 @@
 using namespace clover;
 
 context::context(const property_list &props,
-                 const ref_vector<device> &devs) :
-   props(props), devs(devs) {
+                 const ref_vector<device> &devs,
+                 const notify_action &notify) :
+   notify(notify), props(props), devs(devs) {
 }
 
 bool

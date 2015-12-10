@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009-2012 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -50,7 +50,8 @@ vmw_svga_winsys_shader_reference(struct vmw_svga_winsys_shader **pdst,
    if (pipe_reference(dst_ref, src_ref)) {
       struct svga_winsys_screen *sws = &dst->screen->base;
 
-      vmw_ioctl_shader_destroy(dst->screen, dst->shid);
+      if (!sws->have_vgpu10)
+         vmw_ioctl_shader_destroy(dst->screen, dst->shid);
 #ifdef DEBUG
       /* to detect dangling pointers */
       assert(p_atomic_read(&dst->validated) == 0);

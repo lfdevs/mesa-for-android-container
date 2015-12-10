@@ -24,15 +24,36 @@
 #include "core/event.hpp"
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
+#include "pipe/p_state.h"
 
 using namespace clover;
+
+namespace {
+   void
+   debug_notify_callback(void *data,
+                         unsigned *id,
+                         enum pipe_debug_type type,
+                         const char *fmt,
+                         va_list args) {
+      const command_queue *queue = (const command_queue *)data;
+      char buffer[1024];
+      vsnprintf(buffer, sizeof(buffer), fmt, args);
+      queue->context().notify(buffer);
+   }
+}
 
 command_queue::command_queue(clover::context &ctx, clover::device &dev,
                              cl_command_queue_properties props) :
    context(ctx), device(dev), props(props) {
-   pipe = dev.pipe->context_create(dev.pipe, NULL);
+   pipe = dev.pipe->context_create(dev.pipe, NULL, PIPE_CONTEXT_COMPUTE_ONLY);
    if (!pipe)
       throw error(CL_INVALID_DEVICE);
+
+   if (ctx.notify) {
+      struct pipe_debug_callback cb = { &debug_notify_callback, this };
+      if (pipe->set_debug_callback)
+         pipe->set_debug_callback(pipe, &cb);
+   }
 }
 
 command_queue::~command_queue() {

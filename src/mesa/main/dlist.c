@@ -105,13 +105,12 @@ struct gl_list_extensions
  * \param ctx GL context.
  *
  * Checks if dd_function_table::SaveNeedFlush is marked to flush
- * stored (save) vertices, and calls
- * dd_function_table::SaveFlushVertices if so.
+ * stored (save) vertices, and calls vbo_save_SaveFlushVertices if so.
  */
 #define SAVE_FLUSH_VERTICES(ctx)		\
 do {						\
    if (ctx->Driver.SaveNeedFlush)		\
-      ctx->Driver.SaveFlushVertices(ctx);	\
+      vbo_save_SaveFlushVertices(ctx);               \
 } while (0)
 
 
@@ -5466,7 +5465,7 @@ save_Begin(GLenum mode)
       /* Give the driver an opportunity to hook in an optimized
        * display list compiler.
        */
-      if (ctx->Driver.NotifySaveBegin(ctx, mode))
+      if (vbo_save_NotifyBegin(ctx, mode))
          return;
 
       SAVE_FLUSH_VERTICES(ctx);
@@ -7743,8 +7742,7 @@ execute_list(struct gl_context *ctx, GLuint list)
 
    ctx->ListState.CallDepth++;
 
-   if (ctx->Driver.BeginCallList)
-      ctx->Driver.BeginCallList(ctx, dlist);
+   vbo_save_BeginCallList(ctx, dlist);
 
    n = dlist->Head;
 
@@ -8900,8 +8898,7 @@ execute_list(struct gl_context *ctx, GLuint list)
       }
    }
 
-   if (ctx->Driver.EndCallList)
-      ctx->Driver.EndCallList(ctx);
+   vbo_save_EndCallList(ctx);
 
    ctx->ListState.CallDepth--;
 }
@@ -9029,7 +9026,7 @@ _mesa_NewList(GLuint name, GLenum mode)
    ctx->ListState.CurrentBlock = ctx->ListState.CurrentList->Head;
    ctx->ListState.CurrentPos = 0;
 
-   ctx->Driver.NewList(ctx, name, mode);
+   vbo_save_NewList(ctx, name, mode);
 
    ctx->CurrentDispatch = ctx->Save;
    _glapi_set_dispatch(ctx->CurrentDispatch);
@@ -9063,7 +9060,7 @@ _mesa_EndList(void)
    /* Call before emitting END_OF_LIST, in case the driver wants to
     * emit opcodes itself.
     */
-   ctx->Driver.EndList(ctx);
+   vbo_save_EndList(ctx);
 
    (void) alloc_instruction(ctx, OPCODE_END_OF_LIST, 0);
 
@@ -9744,6 +9741,46 @@ print_list(struct gl_context *ctx, GLuint list, const char *fname)
                    n[3].f, n[4].f, n[5].f, n[6].f,
                    get_pointer(&n[7]));
             break;
+         case OPCODE_BLEND_COLOR:
+            fprintf(f, "BlendColor %f, %f, %f, %f\n",
+                    n[1].f, n[2].f, n[3].f, n[4].f);
+            break;
+         case OPCODE_BLEND_EQUATION:
+            fprintf(f, "BlendEquation %s\n",
+                    enum_string(n[1].e));
+            break;
+         case OPCODE_BLEND_EQUATION_SEPARATE:
+            fprintf(f, "BlendEquationSeparate %s, %s\n",
+                    enum_string(n[1].e),
+                    enum_string(n[2].e));
+            break;
+         case OPCODE_BLEND_FUNC_SEPARATE:
+            fprintf(f, "BlendFuncSeparate %s, %s, %s, %s\n",
+                    enum_string(n[1].e),
+                    enum_string(n[2].e),
+                    enum_string(n[3].e),
+                    enum_string(n[4].e));
+            break;
+         case OPCODE_BLEND_EQUATION_I:
+            fprintf(f, "BlendEquationi %u, %s\n",
+                    n[1].ui, enum_string(n[2].e));
+            break;
+         case OPCODE_BLEND_EQUATION_SEPARATE_I:
+            fprintf(f, "BlendEquationSeparatei %u, %s, %s\n",
+                    n[1].ui, enum_string(n[2].e), enum_string(n[3].e));
+            break;
+         case OPCODE_BLEND_FUNC_I:
+            fprintf(f, "BlendFunci %u, %s, %s\n",
+                    n[1].ui, enum_string(n[2].e), enum_string(n[3].e));
+            break;
+         case OPCODE_BLEND_FUNC_SEPARATE_I:
+            fprintf(f, "BlendFuncSeparatei %u, %s, %s, %s, %s\n",
+                    n[1].ui,
+                    enum_string(n[2].e),
+                    enum_string(n[3].e),
+                    enum_string(n[4].e),
+                    enum_string(n[5].e));
+            break;
          case OPCODE_CALL_LIST:
             fprintf(f, "CallList %d\n", (int) n[1].ui);
             break;
@@ -9763,6 +9800,9 @@ print_list(struct gl_context *ctx, GLuint list, const char *fname)
             break;
          case OPCODE_LINE_STIPPLE:
             fprintf(f, "LineStipple %d %x\n", n[1].i, (int) n[2].us);
+            break;
+         case OPCODE_LINE_WIDTH:
+            fprintf(f, "LineWidth %f\n", n[1].f);
             break;
          case OPCODE_LOAD_IDENTITY:
             fprintf(f, "LoadIdentity\n");
@@ -9792,6 +9832,9 @@ print_list(struct gl_context *ctx, GLuint list, const char *fname)
          case OPCODE_ORTHO:
             fprintf(f, "Ortho %g %g %g %g %g %g\n",
                          n[1].f, n[2].f, n[3].f, n[4].f, n[5].f, n[6].f);
+            break;
+         case OPCODE_POINT_SIZE:
+            fprintf(f, "PointSize %f\n", n[1].f);
             break;
          case OPCODE_POP_ATTRIB:
             fprintf(f, "PopAttrib\n");

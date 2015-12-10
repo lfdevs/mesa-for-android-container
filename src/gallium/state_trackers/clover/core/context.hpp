@@ -36,7 +36,10 @@ namespace clover {
       typedef clover::property_list<cl_context_properties> property_list;
 
    public:
-      context(const property_list &props, const ref_vector<device> &devs);
+      typedef std::function<void (const char *)> notify_action;
+
+      context(const property_list &props, const ref_vector<device> &devs,
+              const notify_action &notify);
 
       context(const context &ctx) = delete;
       context &
@@ -52,6 +55,8 @@ namespace clover {
 
       device_range
       devices() const;
+
+      const notify_action notify;
 
    private:
       property_list props;

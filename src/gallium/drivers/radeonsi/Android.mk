@@ -23,7 +23,7 @@
 
 LOCAL_PATH := $(call my-dir)
 
-# get C_SOURCES
+# get C_SOURCES and GENERATED_SOURCES
 include $(LOCAL_PATH)/Makefile.sources
 
 include $(CLEAR_VARS)
@@ -32,6 +32,17 @@ LOCAL_SRC_FILES := $(C_SOURCES)
 
 LOCAL_SHARED_LIBRARIES := libdrm libdrm_radeon
 LOCAL_MODULE := libmesa_pipe_radeonsi
+
+# generate sources
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+intermediates := $(call local-generated-sources-dir)
+LOCAL_GENERATED_SOURCES := $(addprefix $(intermediates)/, $(GENERATED_SOURCES))
+
+$(LOCAL_GENERATED_SOURCES): PRIVATE_PYTHON := $(MESA_PYTHON2)
+$(LOCAL_GENERATED_SOURCES): PRIVATE_CUSTOM_TOOL = $(PRIVATE_PYTHON) $^ > $@
+
+$(intermediates)/sid_tables.h:  $(intermediates)/%.h: $(LOCAL_PATH)/%.py $(LOCAL_PATH)/sid.h
+	$(transform-generated-source)
 
 include $(GALLIUM_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)

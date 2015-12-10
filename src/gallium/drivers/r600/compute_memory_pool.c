@@ -120,7 +120,7 @@ int64_t compute_memory_prealloc_chunk(
 
 	assert(size_in_dw <= pool->size_in_dw);
 
-	COMPUTE_DBG(pool->screen, "* compute_memory_prealloc_chunk() size_in_dw = %ld\n",
+	COMPUTE_DBG(pool->screen, "* compute_memory_prealloc_chunk() size_in_dw = %"PRIi64"\n",
 		size_in_dw);
 
 	LIST_FOR_EACH_ENTRY(item, pool->item_list, link) {
@@ -151,7 +151,7 @@ struct list_head *compute_memory_postalloc_chunk(
 	struct compute_memory_item *next;
 	struct list_head *next_link;
 
-	COMPUTE_DBG(pool->screen, "* compute_memory_postalloc_chunck() start_in_dw = %ld\n",
+	COMPUTE_DBG(pool->screen, "* compute_memory_postalloc_chunck() start_in_dw = %"PRIi64"\n",
 		start_in_dw);
 
 	/* Check if we can insert it in the front of the list */
@@ -568,7 +568,7 @@ void compute_memory_free(struct compute_memory_pool* pool, int64_t id)
 	struct pipe_screen *screen = (struct pipe_screen *)pool->screen;
 	struct pipe_resource *res;
 
-	COMPUTE_DBG(pool->screen, "* compute_memory_free() id + %ld \n", id);
+	COMPUTE_DBG(pool->screen, "* compute_memory_free() id + %"PRIi64" \n", id);
 
 	LIST_FOR_EACH_ENTRY_SAFE(item, next, pool->item_list, link) {
 
@@ -628,7 +628,7 @@ struct compute_memory_item* compute_memory_alloc(
 {
 	struct compute_memory_item *new_item = NULL;
 
-	COMPUTE_DBG(pool->screen, "* compute_memory_alloc() size_in_dw = %ld (%ld bytes)\n",
+	COMPUTE_DBG(pool->screen, "* compute_memory_alloc() size_in_dw = %"PRIi64" (%"PRIi64" bytes)\n",
 			size_in_dw, 4 * size_in_dw);
 
 	new_item = (struct compute_memory_item *)

@@ -188,9 +188,9 @@ value* shader::create_temp_value() {
 	return get_value(VLK_TEMP, id, 0);
 }
 
-value* shader::get_kcache_value(unsigned bank, unsigned index, unsigned chan) {
+value* shader::get_kcache_value(unsigned bank, unsigned index, unsigned chan, alu_kcache_index_mode index_mode) {
 	return get_ro_value(kcache_values, VLK_KCACHE,
-			sel_chan((bank << 12) | index, chan));
+			sel_chan(bank, index, chan, index_mode));
 }
 
 void shader::add_input(unsigned gpr, bool preloaded, unsigned comp_mask) {

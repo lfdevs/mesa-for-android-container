@@ -96,9 +96,11 @@ struct nv50_ir_prog_info
       uint32_t tlsSpace;  /* required local memory per thread */
       uint32_t *code;
       uint32_t codeSize;
+      uint32_t instructions;
       uint8_t sourceRep;  /* NV50_PROGRAM_IR */
       const void *source;
       void *relocData;
+      void *interpData;
       struct nv50_ir_prog_symbol *syms;
       uint16_t numSyms;
    } bin;
@@ -143,6 +145,7 @@ struct nv50_ir_prog_info
          bool earlyFragTests;
          bool separateFragData;
          bool usesDiscard;
+         bool sampleInterp;      /* perform sample interp on all fp inputs */
       } fp;
       struct {
          uint32_t inputOffset; /* base address for user args */
@@ -154,9 +157,8 @@ struct nv50_ir_prog_info
    uint8_t numBarriers;
 
    struct {
-      uint8_t clipDistance;      /* index of first clip distance output */
-      uint8_t clipDistanceMask;  /* mask of clip distances defined */
-      uint8_t cullDistanceMask;  /* clip distance mode (1 bit per output) */
+      uint8_t clipDistances;     /* number of clip distance outputs */
+      uint8_t cullDistances;     /* number of cull distance outputs */
       int8_t genUserClip;        /* request user clip planes for ClipVertex */
       uint16_t ucpBase;          /* base address for UCPs */
       uint8_t ucpCBSlot;         /* constant buffer index of UCP data */
@@ -168,7 +170,6 @@ struct nv50_ir_prog_info
       int8_t viewportId;         /* output index of ViewportIndex */
       uint8_t fragDepth;         /* output index of FragDepth */
       uint8_t sampleMask;        /* output index of SampleMask */
-      bool sampleInterp;         /* perform sample interp on all fp inputs */
       uint8_t backFaceColor[2];  /* input/output indices of back face colour */
       uint8_t globalAccess;      /* 1 for read, 2 for wr, 3 for rw */
       bool fp64;                 /* program uses fp64 math */
@@ -197,6 +198,10 @@ extern void nv50_ir_relocate_code(void *relocData, uint32_t *code,
                                   uint32_t codePos,
                                   uint32_t libPos,
                                   uint32_t dataPos);
+
+extern void
+nv50_ir_change_interp(void *interpData, uint32_t *code,
+                      bool force_per_sample, bool flatshade);
 
 /* obtain code that will be shared among programs */
 extern void nv50_ir_get_target_library(uint32_t chipset,

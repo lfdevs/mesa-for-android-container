@@ -23,147 +23,147 @@
 #include "nouveau_vp3_video.h"
 
 struct mpeg12_picparm_vp {
-	uint16_t width; // 00 in mb units
-	uint16_t height; // 02 in mb units
+   uint16_t width; // 00 in mb units
+   uint16_t height; // 02 in mb units
 
-	uint32_t unk04; // 04 stride for Y?
-	uint32_t unk08; // 08 stride for CbCr?
+   uint32_t unk04; // 04 stride for Y?
+   uint32_t unk08; // 08 stride for CbCr?
 
-	uint32_t ofs[6]; // 1c..20 ofs
-	uint32_t bucket_size; // 24
-	uint32_t inter_ring_data_size; // 28
-	uint16_t unk2c; // 2c
-	uint16_t alternate_scan; // 2e
-	uint16_t unk30; // 30 not seen set yet
-	uint16_t picture_structure; // 32
-	uint16_t pad2[3];
-	uint16_t unk3a; // 3a set on I frame?
+   uint32_t ofs[6]; // 1c..20 ofs
+   uint32_t bucket_size; // 24
+   uint32_t inter_ring_data_size; // 28
+   uint16_t unk2c; // 2c
+   uint16_t alternate_scan; // 2e
+   uint16_t unk30; // 30 not seen set yet
+   uint16_t picture_structure; // 32
+   uint16_t pad2[3];
+   uint16_t unk3a; // 3a set on I frame?
 
-	uint32_t f_code[4]; // 3c
-	uint32_t picture_coding_type; // 4c
-	uint32_t intra_dc_precision; // 50
-	uint32_t q_scale_type; // 54
-	uint32_t top_field_first; // 58
-	uint32_t full_pel_forward_vector; // 5c
-	uint32_t full_pel_backward_vector; // 60
-	uint8_t intra_quantizer_matrix[0x40]; // 64
-	uint8_t non_intra_quantizer_matrix[0x40]; // a4
+   uint32_t f_code[4]; // 3c
+   uint32_t picture_coding_type; // 4c
+   uint32_t intra_dc_precision; // 50
+   uint32_t q_scale_type; // 54
+   uint32_t top_field_first; // 58
+   uint32_t full_pel_forward_vector; // 5c
+   uint32_t full_pel_backward_vector; // 60
+   uint8_t intra_quantizer_matrix[0x40]; // 64
+   uint8_t non_intra_quantizer_matrix[0x40]; // a4
 };
 
 struct mpeg4_picparm_vp {
-	uint32_t width; // 00 in normal units
-	uint32_t height; // 04 in normal units
-	uint32_t unk08; // stride 1
-	uint32_t unk0c; // stride 2
-	uint32_t ofs[6]; // 10..24 ofs
-	uint32_t bucket_size; // 28
-	uint32_t pad1; // 2c, pad
-	uint32_t pad2; // 30
-	uint32_t inter_ring_data_size; // 34
+   uint32_t width; // 00 in normal units
+   uint32_t height; // 04 in normal units
+   uint32_t unk08; // stride 1
+   uint32_t unk0c; // stride 2
+   uint32_t ofs[6]; // 10..24 ofs
+   uint32_t bucket_size; // 28
+   uint32_t pad1; // 2c, pad
+   uint32_t pad2; // 30
+   uint32_t inter_ring_data_size; // 34
 
-	uint32_t trd[2]; // 38, 3c
-	uint32_t trb[2]; // 40, 44
-	uint32_t u48; // XXX codec selection? Should test with different values of VdpDecoderProfile
-	uint16_t f_code_fw; // 4c
-	uint16_t f_code_bw; // 4e
-	uint8_t interlaced; // 50
+   uint32_t trd[2]; // 38, 3c
+   uint32_t trb[2]; // 40, 44
+   uint32_t u48; // XXX codec selection? Should test with different values of VdpDecoderProfile
+   uint16_t f_code_fw; // 4c
+   uint16_t f_code_bw; // 4e
+   uint8_t interlaced; // 50
 
-	uint8_t quant_type; // bool, written to 528
-	uint8_t quarter_sample; // bool, written to 548
-	uint8_t short_video_header; // bool, negated written to 528 shifted by 1
-	uint8_t u54; // bool, written to 0x740
-	uint8_t vop_coding_type; // 55
-	uint8_t rounding_control; // 56
-	uint8_t alternate_vertical_scan_flag; // 57 bool
-	uint8_t top_field_first; // bool, written to vuc
+   uint8_t quant_type; // bool, written to 528
+   uint8_t quarter_sample; // bool, written to 548
+   uint8_t short_video_header; // bool, negated written to 528 shifted by 1
+   uint8_t u54; // bool, written to 0x740
+   uint8_t vop_coding_type; // 55
+   uint8_t rounding_control; // 56
+   uint8_t alternate_vertical_scan_flag; // 57 bool
+   uint8_t top_field_first; // bool, written to vuc
 
-	uint8_t pad4[3]; // 59, 5a, 5b, contains garbage on blob
+   uint8_t pad4[3]; // 59, 5a, 5b, contains garbage on blob
 
-	uint32_t intra[0x10]; // 5c
-	uint32_t non_intra[0x10]; // 9c
-	uint32_t pad5[0x10]; // bc what does this do?
-	// udc..uff pad?
+   uint32_t intra[0x10]; // 5c
+   uint32_t non_intra[0x10]; // 9c
+   uint32_t pad5[0x10]; // bc what does this do?
+   // udc..uff pad?
 };
 
 // Full version, with data pumped from BSP
 struct vc1_picparm_vp {
-	uint32_t bucket_size; // 00
-	uint32_t pad; // 04
+   uint32_t bucket_size; // 00
+   uint32_t pad; // 04
 
-	uint32_t inter_ring_data_size; // 08
-	uint32_t unk0c; // stride 1
-	uint32_t unk10; // stride 2
-	uint32_t ofs[6]; // 14..28 ofs
+   uint32_t inter_ring_data_size; // 08
+   uint32_t unk0c; // stride 1
+   uint32_t unk10; // stride 2
+   uint32_t ofs[6]; // 14..28 ofs
 
-	uint16_t width; // 2c
-	uint16_t height; // 2e
+   uint16_t width; // 2c
+   uint16_t height; // 2e
 
-	uint8_t profile; // 30 0 = simple, 1 = main, 2 = advanced
-	uint8_t loopfilter; // 31 written into vuc
-	uint8_t fastuvmc; // 32, written into vuc
-	uint8_t dquant; // 33
+   uint8_t profile; // 30 0 = simple, 1 = main, 2 = advanced
+   uint8_t loopfilter; // 31 written into vuc
+   uint8_t fastuvmc; // 32, written into vuc
+   uint8_t dquant; // 33
 
-	uint8_t overlap; // 34
-	uint8_t quantizer; // 35
-	uint8_t u36; // 36, bool
-	uint8_t pad2; // 37, to align to 0x38
+   uint8_t overlap; // 34
+   uint8_t quantizer; // 35
+   uint8_t u36; // 36, bool
+   uint8_t pad2; // 37, to align to 0x38
 };
 
 struct h264_picparm_vp { // 700..a00
-	uint16_t width, height;
-	uint32_t stride1, stride2; // 04 08
-	uint32_t ofs[6]; // 0c..24 in-image offset
+   uint16_t width, height;
+   uint32_t stride1, stride2; // 04 08
+   uint32_t ofs[6]; // 0c..24 in-image offset
 
-	uint32_t tmp_stride;
-	uint32_t bucket_size; // 28 bucket size
-	uint32_t inter_ring_data_size; // 2c
+   uint32_t tmp_stride;
+   uint32_t bucket_size; // 28 bucket size
+   uint32_t inter_ring_data_size; // 2c
 
-	unsigned mb_adaptive_frame_field_flag : 1; // 0
-	unsigned direct_8x8_inference_flag : 1; // 1 0x02: into vuc ofs 56
-	unsigned weighted_pred_flag : 1; // 2 0x04
-	unsigned constrained_intra_pred_flag : 1; // 3 0x08: into vuc ofs 68
-	unsigned is_reference : 1; // 4
-	unsigned interlace : 1; // 5 field_pic_flag
-	unsigned bottom_field_flag : 1; // 6
-	unsigned second_field : 1; // 7 0x80: nfi yet
+   unsigned mb_adaptive_frame_field_flag : 1; // 0
+   unsigned direct_8x8_inference_flag : 1; // 1 0x02: into vuc ofs 56
+   unsigned weighted_pred_flag : 1; // 2 0x04
+   unsigned constrained_intra_pred_flag : 1; // 3 0x08: into vuc ofs 68
+   unsigned is_reference : 1; // 4
+   unsigned interlace : 1; // 5 field_pic_flag
+   unsigned bottom_field_flag : 1; // 6
+   unsigned second_field : 1; // 7 0x80: nfi yet
 
-	signed log2_max_frame_num_minus4 : 4; // 31 0..3
-	unsigned chroma_format_idc : 2; // 31 4..5
-	unsigned pic_order_cnt_type : 2; // 31 6..7
-	signed pic_init_qp_minus26 : 6; // 32 0..5
-	signed chroma_qp_index_offset : 5; // 32 6..10
-	signed second_chroma_qp_index_offset : 5; // 32 11..15
+   signed log2_max_frame_num_minus4 : 4; // 31 0..3
+   unsigned chroma_format_idc : 2; // 31 4..5
+   unsigned pic_order_cnt_type : 2; // 31 6..7
+   signed pic_init_qp_minus26 : 6; // 32 0..5
+   signed chroma_qp_index_offset : 5; // 32 6..10
+   signed second_chroma_qp_index_offset : 5; // 32 11..15
 
-	unsigned weighted_bipred_idc : 2; // 34 0..1
-	unsigned fifo_dec_index : 7; // 34 2..8
-	unsigned tmp_idx : 5; // 34 9..13
-	unsigned frame_number : 16; // 34 14..29
-	unsigned u34_3030 : 1; // 34 30..30 pp.u34[30:30]
-	unsigned u34_3131 : 1; // 34 31..31 pad?
+   unsigned weighted_bipred_idc : 2; // 34 0..1
+   unsigned fifo_dec_index : 7; // 34 2..8
+   unsigned tmp_idx : 5; // 34 9..13
+   unsigned frame_number : 16; // 34 14..29
+   unsigned u34_3030 : 1; // 34 30..30 pp.u34[30:30]
+   unsigned u34_3131 : 1; // 34 31..31 pad?
 
-	uint32_t field_order_cnt[2]; // 38, 3c
+   uint32_t field_order_cnt[2]; // 38, 3c
 
-	struct { // 40
-		unsigned fifo_idx : 7; // 00 0..6
-		unsigned tmp_idx : 5; // 00 7..11
-		unsigned top_is_reference : 1; // 00 12
-		unsigned bottom_is_reference : 1; // 00 13
-		unsigned is_long_term : 1; // 00 14
-		unsigned notseenyet : 1; // 00 15 pad?
-		unsigned field_pic_flag : 1; // 00 16
-		unsigned top_field_marking : 4; // 00 17..20
-		unsigned bottom_field_marking : 4; // 00 21..24
-		unsigned pad : 7; // 00 d25..31
+   struct { // 40
+      unsigned fifo_idx : 7; // 00 0..6
+      unsigned tmp_idx : 5; // 00 7..11
+      unsigned top_is_reference : 1; // 00 12
+      unsigned bottom_is_reference : 1; // 00 13
+      unsigned is_long_term : 1; // 00 14
+      unsigned notseenyet : 1; // 00 15 pad?
+      unsigned field_pic_flag : 1; // 00 16
+      unsigned top_field_marking : 4; // 00 17..20
+      unsigned bottom_field_marking : 4; // 00 21..24
+      unsigned pad : 7; // 00 d25..31
 
-		uint32_t field_order_cnt[2]; // 04,08
-		uint32_t frame_idx; // 0c
-	} refs[0x10];
+      uint32_t field_order_cnt[2]; // 04,08
+      uint32_t frame_idx; // 0c
+   } refs[0x10];
 
-	uint8_t m4x4[6][16]; // 140
-	uint8_t m8x8[2][64]; // 1a0
-	uint32_t u220; // 220 number of extra reorder_list to append?
-	uint8_t u224[0x20]; // 224..244 reorder_list append ?
-	uint8_t nfi244[0xb0]; // add some pad to make sure nulls are read
+   uint8_t m4x4[6][16]; // 140
+   uint8_t m8x8[2][64]; // 1a0
+   uint32_t u220; // 220 number of extra reorder_list to append?
+   uint8_t u224[0x20]; // 224..244 reorder_list append ?
+   uint8_t nfi244[0xb0]; // add some pad to make sure nulls are read
 };
 
 static void

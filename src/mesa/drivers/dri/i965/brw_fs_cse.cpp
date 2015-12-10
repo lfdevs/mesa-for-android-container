@@ -78,6 +78,7 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case FS_OPCODE_LINTERP:
    case SHADER_OPCODE_FIND_LIVE_CHANNEL:
    case SHADER_OPCODE_BROADCAST:
+   case SHADER_OPCODE_MOV_INDIRECT:
       return true;
    case SHADER_OPCODE_RCP:
    case SHADER_OPCODE_RSQ:
@@ -93,7 +94,8 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case SHADER_OPCODE_LOAD_PAYLOAD:
       return !inst->is_copy_payload(v->alloc);
    default:
-      return inst->is_send_from_grf() && !inst->has_side_effects();
+      return inst->is_send_from_grf() && !inst->has_side_effects() &&
+         !inst->is_volatile();
    }
 }
 
@@ -109,20 +111,20 @@ operands_match(const fs_inst *a, const fs_inst *b, bool *negate)
               (xs[2].equals(ys[1]) && xs[1].equals(ys[2])));
    } else if (a->opcode == BRW_OPCODE_MUL && a->dst.type == BRW_REGISTER_TYPE_F) {
       bool xs0_negate = xs[0].negate;
-      bool xs1_negate = xs[1].file == IMM ? xs[1].fixed_hw_reg.dw1.f < 0.0f
+      bool xs1_negate = xs[1].file == IMM ? xs[1].f < 0.0f
                                           : xs[1].negate;
       bool ys0_negate = ys[0].negate;
-      bool ys1_negate = ys[1].file == IMM ? ys[1].fixed_hw_reg.dw1.f < 0.0f
+      bool ys1_negate = ys[1].file == IMM ? ys[1].f < 0.0f
                                           : ys[1].negate;
-      float xs1_imm = xs[1].fixed_hw_reg.dw1.f;
-      float ys1_imm = ys[1].fixed_hw_reg.dw1.f;
+      float xs1_imm = xs[1].f;
+      float ys1_imm = ys[1].f;
 
       xs[0].negate = false;
       xs[1].negate = false;
       ys[0].negate = false;
       ys[1].negate = false;
-      xs[1].fixed_hw_reg.dw1.f = fabsf(xs[1].fixed_hw_reg.dw1.f);
-      ys[1].fixed_hw_reg.dw1.f = fabsf(ys[1].fixed_hw_reg.dw1.f);
+      xs[1].f = fabsf(xs[1].f);
+      ys[1].f = fabsf(ys[1].f);
 
       bool ret = (xs[0].equals(ys[0]) && xs[1].equals(ys[1])) ||
                  (xs[1].equals(ys[0]) && xs[0].equals(ys[1]));
@@ -131,8 +133,8 @@ operands_match(const fs_inst *a, const fs_inst *b, bool *negate)
       xs[1].negate = xs[1].file == IMM ? false : xs1_negate;
       ys[0].negate = ys0_negate;
       ys[1].negate = ys[1].file == IMM ? false : ys1_negate;
-      xs[1].fixed_hw_reg.dw1.f = xs1_imm;
-      ys[1].fixed_hw_reg.dw1.f = ys1_imm;
+      xs[1].f = xs1_imm;
+      ys[1].f = ys1_imm;
 
       *negate = (xs0_negate != xs1_negate) != (ys0_negate != ys1_negate);
       return ret;
@@ -195,7 +197,7 @@ create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
          header_size = 0;
       }
 
-      assert(src.file == GRF);
+      assert(src.file == VGRF);
       payload = ralloc_array(bld.shader->mem_ctx, fs_reg, sources);
       for (int i = 0; i < header_size; i++) {
          payload[i] = src;
@@ -225,7 +227,8 @@ fs_visitor::opt_cse_local(bblock_t *block)
    foreach_inst_in_block(fs_inst, inst, block) {
       /* Skip some cases. */
       if (is_expression(this, inst) && !inst->is_partial_write() &&
-          (inst->dst.file != HW_REG || inst->dst.is_null()))
+          ((inst->dst.file != ARF && inst->dst.file != FIXED_GRF) ||
+           inst->dst.is_null()))
       {
          bool found = false;
          bool negate = false;
@@ -261,7 +264,7 @@ fs_visitor::opt_cse_local(bblock_t *block)
                                        .at(block, entry->generator->next);
                int written = entry->generator->regs_written;
 
-               entry->tmp = fs_reg(GRF, alloc.allocate(written),
+               entry->tmp = fs_reg(VGRF, alloc.allocate(written),
                                    entry->generator->dst.type);
 
                create_copy_instr(ibld, entry->generator, entry->tmp, false);
@@ -319,7 +322,7 @@ fs_visitor::opt_cse_local(bblock_t *block)
             /* Kill any AEB entries using registers that don't get reused any
              * more -- a sure sign they'll fail operands_match().
              */
-            if (src_reg->file == GRF && virtual_grf_end[src_reg->reg] < ip) {
+            if (src_reg->file == VGRF && virtual_grf_end[src_reg->nr] < ip) {
                entry->remove();
                ralloc_free(entry);
                break;

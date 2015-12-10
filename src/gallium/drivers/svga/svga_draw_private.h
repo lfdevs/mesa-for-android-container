@@ -46,7 +46,11 @@ static const unsigned svga_hw_prims =
     (1 << PIPE_PRIM_LINE_STRIP) |
     (1 << PIPE_PRIM_TRIANGLES) |
     (1 << PIPE_PRIM_TRIANGLE_STRIP) |
-    (1 << PIPE_PRIM_TRIANGLE_FAN));
+    (1 << PIPE_PRIM_TRIANGLE_FAN) |
+    (1 << PIPE_PRIM_LINES_ADJACENCY) |
+    (1 << PIPE_PRIM_LINE_STRIP_ADJACENCY) |
+    (1 << PIPE_PRIM_TRIANGLES_ADJACENCY) |
+    (1 << PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY));
 
 
 /**
@@ -57,8 +61,8 @@ static const unsigned svga_hw_prims =
  * PIPE_PRIM_QUADS, PIPE_PRIM_QUAD_STRIP or PIPE_PRIM_POLYGON.  We convert
  * those to other types of primitives with index/translation code.
  */
-static inline unsigned
-svga_translate_prim(unsigned mode, unsigned vcount,unsigned *prim_count)
+static inline SVGA3dPrimitiveType
+svga_translate_prim(unsigned mode, unsigned vcount, unsigned *prim_count)
 {
    switch (mode) {
    case PIPE_PRIM_POINTS:
@@ -85,6 +89,22 @@ svga_translate_prim(unsigned mode, unsigned vcount,unsigned *prim_count)
       *prim_count = vcount - 2;
       return SVGA3D_PRIMITIVE_TRIANGLEFAN; 
 
+   case PIPE_PRIM_LINES_ADJACENCY:
+      *prim_count = vcount / 4;
+      return SVGA3D_PRIMITIVE_LINELIST_ADJ;
+
+   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+      *prim_count = vcount - 3;
+      return SVGA3D_PRIMITIVE_LINESTRIP_ADJ;
+
+   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+      *prim_count = vcount / 6;
+      return SVGA3D_PRIMITIVE_TRIANGLELIST_ADJ;
+
+   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      *prim_count = vcount / 2 - 2 ;
+      return SVGA3D_PRIMITIVE_TRIANGLESTRIP_ADJ;
+
    default:
       assert(0);
       *prim_count = 0;
@@ -110,13 +130,19 @@ struct index_cache {
 struct draw_cmd {
    struct svga_winsys_context *swc;
 
+   /* vertex layout info */
    SVGA3dVertexDecl vdecl[SVGA3D_INPUTREG_MAX];
-   struct pipe_resource *vdecl_vb[SVGA3D_INPUTREG_MAX];
    unsigned vdecl_count;
+   SVGA3dElementLayoutId vdecl_layout_id;
+   unsigned vdecl_buffer_index[SVGA3D_INPUTREG_MAX];
+
+   /* vertex buffer info */
+   struct pipe_vertex_buffer vbufs[SVGA3D_INPUTREG_MAX];
+   unsigned vbuf_count;
 
    SVGA3dPrimitiveRange prim[QSZ];
    struct pipe_resource *prim_ib[QSZ];
-   unsigned prim_count;
+   unsigned prim_count;   /**< number of primitives for this draw */
    unsigned min_index[QSZ];
    unsigned max_index[QSZ];
 };
@@ -158,9 +184,11 @@ struct svga_hwtnl {
 enum pipe_error 
 svga_hwtnl_prim( struct svga_hwtnl *hwtnl,
                  const SVGA3dPrimitiveRange *range,
+                 unsigned vcount,
                  unsigned min_index,
                  unsigned max_index,
-                 struct pipe_resource *ib );
+                 struct pipe_resource *ib,
+                 unsigned start_instance, unsigned instance_count);
 
 enum pipe_error
 svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
@@ -171,7 +199,9 @@ svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
                                        unsigned max_index,
                                        unsigned prim, 
                                        unsigned start,
-                                       unsigned count );
+                                       unsigned count,
+                                       unsigned start_instance,
+                                       unsigned instance_count);
 
 
 #endif

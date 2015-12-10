@@ -32,7 +32,8 @@ platform::platform() : adaptor_range(evals(), devs) {
 
    for (pipe_loader_device *ldev : ldevs) {
       try {
-         devs.push_back(create<device>(*this, ldev));
+         if (ldev)
+            devs.push_back(create<device>(*this, ldev));
       } catch (error &) {
          pipe_loader_release(&ldev, 1);
       }

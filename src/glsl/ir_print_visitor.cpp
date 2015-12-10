@@ -173,8 +173,8 @@ void ir_print_visitor::visit(ir_variable *ir)
    const char *const samp = (ir->data.sample) ? "sample " : "";
    const char *const patc = (ir->data.patch) ? "patch " : "";
    const char *const inv = (ir->data.invariant) ? "invariant " : "";
-   const char *const mode[] = { "", "uniform ", "shader_storage",
-                                "shader_in ", "shader_out ",
+   const char *const mode[] = { "", "uniform ", "shader_storage ",
+                                "shader_shared ", "shader_in ", "shader_out ",
                                 "in ", "out ", "inout ",
 			        "const_in ", "sys ", "temporary " };
    STATIC_ASSERT(ARRAY_SIZE(mode) == ir_var_mode_count);
@@ -268,13 +268,22 @@ void ir_print_visitor::visit(ir_texture *ir)
 {
    fprintf(f, "(%s ", ir->opcode_string());
 
+   if (ir->op == ir_samples_identical) {
+      ir->sampler->accept(this);
+      fprintf(f, " ");
+      ir->coordinate->accept(this);
+      fprintf(f, ")");
+      return;
+   }
+
    print_type(f, ir->type);
    fprintf(f, " ");
 
    ir->sampler->accept(this);
    fprintf(f, " ");
 
-   if (ir->op != ir_txs && ir->op != ir_query_levels) {
+   if (ir->op != ir_txs && ir->op != ir_query_levels &&
+       ir->op != ir_texture_samples) {
       ir->coordinate->accept(this);
 
       fprintf(f, " ");
@@ -290,7 +299,7 @@ void ir_print_visitor::visit(ir_texture *ir)
 
    if (ir->op != ir_txf && ir->op != ir_txf_ms &&
        ir->op != ir_txs && ir->op != ir_tg4 &&
-       ir->op != ir_query_levels) {
+       ir->op != ir_query_levels && ir->op != ir_texture_samples) {
       if (ir->projector)
 	 ir->projector->accept(this);
       else
@@ -310,6 +319,7 @@ void ir_print_visitor::visit(ir_texture *ir)
    case ir_tex:
    case ir_lod:
    case ir_query_levels:
+   case ir_texture_samples:
       break;
    case ir_txb:
       ir->lod_info.bias->accept(this);
@@ -332,6 +342,8 @@ void ir_print_visitor::visit(ir_texture *ir)
    case ir_tg4:
       ir->lod_info.component->accept(this);
       break;
+   case ir_samples_identical:
+      unreachable(!"ir_samples_identical was already handled");
    };
    fprintf(f, ")");
 }
@@ -586,7 +598,7 @@ ir_print_visitor::visit(ir_end_primitive *ir)
 }
 
 void
-ir_print_visitor::visit(ir_barrier *ir)
+ir_print_visitor::visit(ir_barrier *)
 {
    fprintf(f, "(barrier)\n");
 }

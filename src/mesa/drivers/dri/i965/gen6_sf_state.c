@@ -60,6 +60,23 @@ get_attr_override(const struct brw_vue_map *vue_map, int urb_entry_read_offset,
    /* Find the VUE slot for this attribute. */
    int slot = vue_map->varying_to_slot[fs_attr];
 
+   /* Viewport and Layer are stored in the VUE header.  We need to override
+    * them to zero if earlier stages didn't write them, as GL requires that
+    * they read back as zero when not explicitly set.
+    */
+   if (fs_attr == VARYING_SLOT_VIEWPORT || fs_attr == VARYING_SLOT_LAYER) {
+      unsigned override =
+         ATTRIBUTE_0_OVERRIDE_X | ATTRIBUTE_0_OVERRIDE_W |
+         ATTRIBUTE_CONST_0000 << ATTRIBUTE_0_CONST_SOURCE_SHIFT;
+
+      if (!(vue_map->slots_valid & VARYING_BIT_LAYER))
+         override |= ATTRIBUTE_0_OVERRIDE_Y;
+      if (!(vue_map->slots_valid & VARYING_BIT_VIEWPORT))
+         override |= ATTRIBUTE_0_OVERRIDE_Z;
+
+      return override;
+   }
+
    /* If there was only a back color written but not front, use back
     * as the color instead of undefined
     */
@@ -159,13 +176,29 @@ calculate_attr_overrides(const struct brw_context *brw,
                          uint16_t *attr_overrides,
                          uint32_t *point_sprite_enables,
                          uint32_t *flat_enables,
-                         uint32_t *urb_entry_read_length)
+                         uint32_t *urb_entry_read_length,
+                         uint32_t *urb_entry_read_offset)
 {
-   const int urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
    uint32_t max_source_attr = 0;
 
    *point_sprite_enables = 0;
    *flat_enables = 0;
+
+   *urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
+
+   /* BRW_NEW_FRAGMENT_PROGRAM
+    *
+    * If the fragment shader reads VARYING_SLOT_LAYER, then we need to pass in
+    * the full vertex header.  Otherwise, we can program the SF to start
+    * reading at an offset of 1 (2 varying slots) to skip unnecessary data:
+    * - VARYING_SLOT_PSIZ and BRW_VARYING_SLOT_NDC on gen4-5
+    * - VARYING_SLOT_{PSIZ,LAYER} and VARYING_SLOT_POS on gen6+
+    */
+
+   bool fs_needs_vue_header = brw->fragment_program->Base.InputsRead &
+      (VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
+
+   *urb_entry_read_offset = fs_needs_vue_header ? 0 : 1;
 
    /* _NEW_LIGHT */
    bool shade_model_flat = brw->ctx.Light.ShadeModel == GL_FLAT;
@@ -228,7 +261,7 @@ calculate_attr_overrides(const struct brw_context *brw,
       /* BRW_NEW_VUE_MAP_GEOM_OUT | _NEW_LIGHT | _NEW_PROGRAM */
       uint16_t attr_override = point_sprite ? 0 :
          get_attr_override(&brw->vue_map_geom_out,
-			   urb_entry_read_offset, attr,
+			   *urb_entry_read_offset, attr,
                            brw->ctx.VertexProgram._TwoSideEnabled,
                            &max_source_attr);
 
@@ -276,7 +309,6 @@ upload_sf_state(struct brw_context *brw)
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    const bool multisampled_fbo = _mesa_geometric_samples(ctx->DrawBuffer) > 1;
 
-   const int urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
    float point_size;
    uint16_t attr_overrides[16];
    uint32_t point_sprite_origin;
@@ -411,8 +443,10 @@ upload_sf_state(struct brw_context *brw)
     * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | BRW_NEW_FS_PROG_DATA
     */
    uint32_t urb_entry_read_length;
+   uint32_t urb_entry_read_offset;
    calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
-                            &flat_enables, &urb_entry_read_length);
+                            &flat_enables, &urb_entry_read_length,
+                            &urb_entry_read_offset);
    dw1 |= (urb_entry_read_length << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT |
            urb_entry_read_offset << GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT);
 

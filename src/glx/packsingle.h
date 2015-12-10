@@ -83,7 +83,6 @@
 #define __GLX_SINGLE_PUT_CHAR(offset,a)         \
    *((INT8 *) (pc + offset)) = a
 
-#ifndef CRAY
 #define __GLX_SINGLE_PUT_SHORT(offset,a)        \
    *((INT16 *) (pc + offset)) = a
 
@@ -92,21 +91,6 @@
 
 #define __GLX_SINGLE_PUT_FLOAT(offset,a)        \
    *((FLOAT32 *) (pc + offset)) = a
-
-#else
-#define __GLX_SINGLE_PUT_SHORT(offset,a)        \
-   { GLubyte *cp = (pc+offset);                    \
-      int shift = (64-16) - ((int)(cp) >> (64-6));                      \
-      *(int *)cp = (*(int *)cp & ~(0xffff << shift)) | ((a & 0xffff) << shift); }
-
-#define __GLX_SINGLE_PUT_LONG(offset,a)         \
-   { GLubyte *cp = (pc+offset);                    \
-      int shift = (64-32) - ((int)(cp) >> (64-6));                      \
-      *(int *)cp = (*(int *)cp & ~(0xffffffff << shift)) | ((a & 0xffffffff) << shift); }
-
-#define __GLX_SINGLE_PUT_FLOAT(offset,a)        \
-   gl_put_float(pc + offset, a)
-#endif
 
 /* Read support macros */
 #define __GLX_SINGLE_READ_XREPLY()                    \
@@ -118,7 +102,6 @@
 #define __GLX_SINGLE_GET_SIZE(a)                \
    a = (GLint) reply.size
 
-#ifndef _CRAY
 #define __GLX_SINGLE_GET_CHAR(p)                \
    *p = *(GLbyte *)&reply.pad3;
 
@@ -131,39 +114,12 @@
 #define __GLX_SINGLE_GET_FLOAT(p)               \
    *p = *(GLfloat *)&reply.pad3;
 
-#else
-#define __GLX_SINGLE_GET_CHAR(p)                \
-   *p = reply.pad3 >> 24;
-
-#define __GLX_SINGLE_GET_SHORT(p)               \
-   {int t = reply.pad3 >> 16;                            \
-      *p = (t & 0x8000) ? (t | ~0xffff) : (t & 0xffff);}
-
-#define __GLX_SINGLE_GET_LONG(p)                \
-   {int t = reply.pad3;                                              \
-      *p = (t & 0x80000000) ? (t | ~0xffffffff) : (t & 0xffffffff);}
-
-#define PAD3OFFSET 16
-#define __GLX_SINGLE_GET_FLOAT(p)                        \
-   *p = gl_ntoh_float((GLubyte *)&reply + PAD3OFFSET);
-
-#define __GLX_SINGLE_GET_DOUBLE(p)                       \
-   *p = gl_ntoh_double((GLubyte *)&reply + PAD3OFFSET);
-
-extern float gl_ntoh_float(GLubyte *);
-extern float gl_ntoh_double(GLubyte *);
-#endif
-
-#ifndef _CRAY
-
 #ifdef __GLX_ALIGN64
 #define __GLX_SINGLE_GET_DOUBLE(p)              \
    __GLX_MEM_COPY(p, &reply.pad3, 8)
 #else
 #define __GLX_SINGLE_GET_DOUBLE(p)              \
    *p = *(GLdouble *)&reply.pad3
-#endif
-
 #endif
 
 /* Get an array of typed data */
@@ -192,22 +148,10 @@ extern float gl_ntoh_double(GLubyte *);
 #define __GLX_SINGLE_GET_LONG_ARRAY(a,alen)        \
    _XRead(dpy,(char *)a,alen*__GLX_SIZE_INT32);
 
-#ifndef _CRAY
 #define __GLX_SINGLE_GET_FLOAT_ARRAY(a,alen)       \
    _XRead(dpy,(char *)a,alen*__GLX_SIZE_FLOAT32);
 
 #define __GLX_SINGLE_GET_DOUBLE_ARRAY(a,alen)      \
    _XRead(dpy,(char *)a,alen*__GLX_SIZE_FLOAT64);
-
-#else
-#define __GLX_SINGLE_GET_FLOAT_ARRAY(a,alen)    \
-   gl_get_float_array(dpy,a,alen);
-
-#define __GLX_SINGLE_GET_DOUBLE_ARRAY(a,alen)   \
-   gl_get_double_array(dpy, a, alen);
-
-extern void gl_get_float_array(Display * dpy, float *a, int alen);
-extern void gl_get_double_array(Display * dpy, double *a, int alen);
-#endif
 
 #endif /* !__GLX_packsingle_h__ */

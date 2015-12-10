@@ -249,12 +249,7 @@ add_parallel_copy_to_end_of_block(nir_block *block, void *void_state)
       nir_parallel_copy_instr *pcopy =
          nir_parallel_copy_instr_create(state->dead_ctx);
 
-      nir_instr *last_instr = nir_block_last_instr(block);
-      if (last_instr && last_instr->type == nir_instr_type_jump) {
-         nir_instr_insert_before(last_instr, &pcopy->instr);
-      } else {
-         nir_instr_insert_after_block(block, &pcopy->instr);
-      }
+      nir_instr_insert(nir_after_block_before_jump(block), &pcopy->instr);
    }
 
    return true;
@@ -364,8 +359,7 @@ isolate_phi_nodes_block(nir_block *block, void *void_state)
       exec_list_push_tail(&block_pcopy->entries, &entry->node);
 
       nir_ssa_def_rewrite_uses(&phi->dest.ssa,
-                               nir_src_for_ssa(&entry->dest.ssa),
-                               state->mem_ctx);
+                               nir_src_for_ssa(&entry->dest.ssa));
 
       nir_instr_rewrite_src(&block_pcopy->instr, &entry->src,
                             nir_src_for_ssa(&phi->dest.ssa));
@@ -498,7 +492,7 @@ rewrite_ssa_def(nir_ssa_def *def, void *void_state)
       reg->num_array_elems = 0;
    }
 
-   nir_ssa_def_rewrite_uses(def, nir_src_for_reg(reg), state->mem_ctx);
+   nir_ssa_def_rewrite_uses(def, nir_src_for_reg(reg));
    assert(list_empty(&def->uses) && list_empty(&def->if_uses));
 
    if (def->parent_instr->type == nir_instr_type_ssa_undef) {
@@ -518,9 +512,7 @@ rewrite_ssa_def(nir_ssa_def *def, void *void_state)
     */
    nir_dest *dest = exec_node_data(nir_dest, def, ssa);
 
-   *dest = nir_dest_for_reg(reg);
-   dest->reg.parent_instr = state->instr;
-   list_addtail(&dest->reg.def_link, &reg->defs);
+   nir_instr_rewrite_dest(state->instr, dest, nir_dest_for_reg(reg));
 
    return true;
 }
@@ -785,7 +777,7 @@ nir_convert_from_ssa_impl(nir_function_impl *impl, bool phi_webs_only)
    nir_metadata_preserve(impl, nir_metadata_block_index |
                                nir_metadata_dominance);
 
-   nir_metadata_require(impl, nir_metadata_live_variables |
+   nir_metadata_require(impl, nir_metadata_live_ssa_defs |
                               nir_metadata_dominance);
 
    nir_foreach_block(impl, coalesce_phi_nodes_block, &state);

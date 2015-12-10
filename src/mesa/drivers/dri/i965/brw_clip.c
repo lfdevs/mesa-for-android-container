@@ -223,6 +223,7 @@ brw_upload_clip_prog(struct brw_context *brw)
 	       /* _NEW_POLYGON, _NEW_BUFFERS */
 	       key.offset_units = ctx->Polygon.OffsetUnits * ctx->DrawBuffer->_MRD * 2;
 	       key.offset_factor = ctx->Polygon.OffsetFactor * ctx->DrawBuffer->_MRD;
+	       key.offset_clamp = ctx->Polygon.OffsetClamp * ctx->DrawBuffer->_MRD;
 	    }
 
 	    if (!ctx->Polygon._FrontBit) {

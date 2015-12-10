@@ -151,4 +151,11 @@ nv50_surface_from_buffer(struct pipe_context *pipe,
 void
 nv50_surface_destroy(struct pipe_context *, struct pipe_surface *);
 
+void
+nv50_clear_texture(struct pipe_context *pipe,
+                   struct pipe_resource *res,
+                   unsigned level,
+                   const struct pipe_box *box,
+                   const void *data);
+
 #endif /* __NV50_RESOURCE_H__ */

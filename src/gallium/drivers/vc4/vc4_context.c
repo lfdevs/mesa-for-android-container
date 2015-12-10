@@ -188,13 +188,16 @@ vc4_context_destroy(struct pipe_context *pctx)
         pipe_surface_reference(&vc4->framebuffer.cbufs[0], NULL);
         pipe_surface_reference(&vc4->framebuffer.zsbuf, NULL);
 
+        pipe_surface_reference(&vc4->color_write, NULL);
+        pipe_surface_reference(&vc4->color_read, NULL);
+
         vc4_program_fini(pctx);
 
         ralloc_free(vc4);
 }
 
 struct pipe_context *
-vc4_context_create(struct pipe_screen *pscreen, void *priv)
+vc4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
         struct vc4_screen *screen = vc4_screen(pscreen);
         struct vc4_context *vc4;

@@ -27,7 +27,7 @@
 
 #include "brw_fs.h"
 #include "brw_cfg.h"
-#include "glsl/glsl_types.h"
+#include "glsl/nir/glsl_types.h"
 #include "glsl/ir_optimization.h"
 
 using namespace brw;
@@ -35,8 +35,8 @@ using namespace brw;
 static void
 assign_reg(unsigned *reg_hw_locations, fs_reg *reg)
 {
-   if (reg->file == GRF) {
-      reg->reg = reg_hw_locations[reg->reg] + reg->reg_offset;
+   if (reg->file == VGRF) {
+      reg->nr = reg_hw_locations[reg->nr] + reg->reg_offset;
       reg->reg_offset = 0;
    }
 }
@@ -330,32 +330,12 @@ count_to_loop_end(const bblock_t *block)
    unreachable("not reached");
 }
 
-/**
- * Sets up interference between thread payload registers and the virtual GRFs
- * to be allocated for program temporaries.
- *
- * We want to be able to reallocate the payload for our virtual GRFs, notably
- * because the setup coefficients for a full set of 16 FS inputs takes up 8 of
- * our 128 registers.
- *
- * The layout of the payload registers is:
- *
- * 0..payload.num_regs-1: fixed function setup (including bary coordinates).
- * payload.num_regs..payload.num_regs+curb_read_lengh-1: uniform data
- * payload.num_regs+curb_read_lengh..first_non_payload_grf-1: setup coefficients.
- *
- * And we have payload_node_count nodes covering these registers in order
- * (note that in SIMD16, a node is two registers).
- */
-void
-fs_visitor::setup_payload_interference(struct ra_graph *g,
-                                       int payload_node_count,
-                                       int first_payload_node)
+void fs_visitor::calculate_payload_ranges(int payload_node_count,
+                                          int *payload_last_use_ip)
 {
    int loop_depth = 0;
    int loop_end_ip = 0;
 
-   int payload_last_use_ip[payload_node_count];
    for (int i = 0; i < payload_node_count; i++)
       payload_last_use_ip[i] = -1;
 
@@ -386,14 +366,13 @@ fs_visitor::setup_payload_interference(struct ra_graph *g,
       else
          use_ip = ip;
 
-      /* Note that UNIFORM args have been turned into FIXED_HW_REG by
+      /* Note that UNIFORM args have been turned into FIXED_GRF by
        * assign_curbe_setup(), and interpolation uses fixed hardware regs from
        * the start (see interp_reg()).
        */
       for (int i = 0; i < inst->sources; i++) {
-         if (inst->src[i].file == HW_REG &&
-             inst->src[i].fixed_hw_reg.file == BRW_GENERAL_REGISTER_FILE) {
-            int node_nr = inst->src[i].fixed_hw_reg.nr;
+         if (inst->src[i].file == FIXED_GRF) {
+            int node_nr = inst->src[i].nr;
             if (node_nr >= payload_node_count)
                continue;
 
@@ -426,6 +405,33 @@ fs_visitor::setup_payload_interference(struct ra_graph *g,
 
       ip++;
    }
+}
+
+
+/**
+ * Sets up interference between thread payload registers and the virtual GRFs
+ * to be allocated for program temporaries.
+ *
+ * We want to be able to reallocate the payload for our virtual GRFs, notably
+ * because the setup coefficients for a full set of 16 FS inputs takes up 8 of
+ * our 128 registers.
+ *
+ * The layout of the payload registers is:
+ *
+ * 0..payload.num_regs-1: fixed function setup (including bary coordinates).
+ * payload.num_regs..payload.num_regs+curb_read_lengh-1: uniform data
+ * payload.num_regs+curb_read_lengh..first_non_payload_grf-1: setup coefficients.
+ *
+ * And we have payload_node_count nodes covering these registers in order
+ * (note that in SIMD16, a node is two registers).
+ */
+void
+fs_visitor::setup_payload_interference(struct ra_graph *g,
+                                       int payload_node_count,
+                                       int first_payload_node)
+{
+   int payload_last_use_ip[payload_node_count];
+   calculate_payload_ranges(payload_node_count, payload_last_use_ip);
 
    for (int i = 0; i < payload_node_count; i++) {
       if (payload_last_use_ip[i] == -1)
@@ -478,14 +484,14 @@ get_used_mrfs(fs_visitor *v, bool *mrf_used)
 {
    int reg_width = v->dispatch_width / 8;
 
-   memset(mrf_used, 0, BRW_MAX_MRF * sizeof(bool));
+   memset(mrf_used, 0, BRW_MAX_MRF(v->devinfo->gen) * sizeof(bool));
 
    foreach_block_and_inst(block, fs_inst, inst, v->cfg) {
       if (inst->dst.file == MRF) {
-         int reg = inst->dst.reg & ~BRW_MRF_COMPR4;
+         int reg = inst->dst.nr & ~BRW_MRF_COMPR4;
          mrf_used[reg] = true;
          if (reg_width == 2) {
-            if (inst->dst.reg & BRW_MRF_COMPR4) {
+            if (inst->dst.nr & BRW_MRF_COMPR4) {
                mrf_used[reg + 4] = true;
             } else {
                mrf_used[reg + 1] = true;
@@ -509,11 +515,11 @@ static void
 setup_mrf_hack_interference(fs_visitor *v, struct ra_graph *g,
                             int first_mrf_node, int *first_used_mrf)
 {
-   bool mrf_used[BRW_MAX_MRF];
+   bool mrf_used[BRW_MAX_MRF(v->devinfo->gen)];
    get_used_mrfs(v, mrf_used);
 
-   *first_used_mrf = BRW_MAX_MRF;
-   for (int i = 0; i < BRW_MAX_MRF; i++) {
+   *first_used_mrf = BRW_MAX_MRF(v->devinfo->gen);
+   for (int i = 0; i < BRW_MAX_MRF(v->devinfo->gen); i++) {
       /* Mark each MRF reg node as being allocated to its physical register.
        *
        * The alternative would be to have per-physical-register classes, which
@@ -577,8 +583,8 @@ fs_visitor::assign_regs(bool allow_spilling)
        * that register and set it to the appropriate class.
        */
       if (compiler->fs_reg_sets[rsi].aligned_pairs_class >= 0 &&
-          this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC].file == GRF &&
-          this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC].reg == i) {
+          this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC].file == VGRF &&
+          this->delta_xy[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC].nr == i) {
          c = compiler->fs_reg_sets[rsi].aligned_pairs_class;
       }
 
@@ -593,7 +599,7 @@ fs_visitor::assign_regs(bool allow_spilling)
 
    setup_payload_interference(g, payload_node_count, first_payload_node);
    if (devinfo->gen >= 7) {
-      int first_used_mrf = BRW_MAX_MRF;
+      int first_used_mrf = BRW_MAX_MRF(devinfo->gen);
       setup_mrf_hack_interference(this, g, first_mrf_hack_node,
                                   &first_used_mrf);
 
@@ -609,16 +615,16 @@ fs_visitor::assign_regs(bool allow_spilling)
           * highest register that works.
           */
          if (inst->eot) {
-            int size = alloc.sizes[inst->src[0].reg];
+            int size = alloc.sizes[inst->src[0].nr];
             int reg = compiler->fs_reg_sets[rsi].class_to_ra_reg_range[size] - 1;
 
             /* If something happened to spill, we want to push the EOT send
              * register early enough in the register file that we don't
              * conflict with any used MRF hack registers.
              */
-            reg -= BRW_MAX_MRF - first_used_mrf;
+            reg -= BRW_MAX_MRF(devinfo->gen) - first_used_mrf;
 
-            ra_set_node_reg(g, inst->src[0].reg, reg);
+            ra_set_node_reg(g, inst->src[0].nr, reg);
             break;
          }
       }
@@ -637,19 +643,19 @@ fs_visitor::assign_regs(bool allow_spilling)
        * destination interfere.
        */
       foreach_block_and_inst(block, fs_inst, inst, cfg) {
-         if (inst->dst.file != GRF)
+         if (inst->dst.file != VGRF)
             continue;
 
          for (int i = 0; i < inst->sources; ++i) {
-            if (inst->src[i].file == GRF) {
-               ra_add_node_interference(g, inst->dst.reg, inst->src[i].reg);
+            if (inst->src[i].file == VGRF) {
+               ra_add_node_interference(g, inst->dst.nr, inst->src[i].nr);
             }
          }
       }
    }
 
    /* Debug of register spilling: Go spill everything. */
-   if (unlikely(INTEL_DEBUG & DEBUG_SPILL)) {
+   if (unlikely(INTEL_DEBUG & DEBUG_SPILL_FS)) {
       int reg = choose_spill_reg(g);
 
       if (reg != -1) {
@@ -727,7 +733,7 @@ fs_visitor::emit_unspill(bblock_t *block, fs_inst *inst, fs_reg dst,
       unspill_inst->regs_written = reg_size;
 
       if (!gen7_read) {
-         unspill_inst->base_mrf = 14;
+         unspill_inst->base_mrf = FIRST_SPILL_MRF(devinfo->gen) + 1;
          unspill_inst->mlen = 1; /* header contains offset */
       }
 
@@ -741,9 +747,9 @@ fs_visitor::emit_spill(bblock_t *block, fs_inst *inst, fs_reg src,
                        uint32_t spill_offset, int count)
 {
    int reg_size = 1;
-   int spill_base_mrf = 14;
+   int spill_base_mrf = FIRST_SPILL_MRF(devinfo->gen) + 1;
    if (dispatch_width == 16 && count % 2 == 0) {
-      spill_base_mrf = 13;
+      spill_base_mrf = FIRST_SPILL_MRF(devinfo->gen);
       reg_size = 2;
    }
 
@@ -779,8 +785,8 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
     */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       for (unsigned int i = 0; i < inst->sources; i++) {
-	 if (inst->src[i].file == GRF) {
-	    spill_costs[inst->src[i].reg] += loop_scale;
+	 if (inst->src[i].file == VGRF) {
+            spill_costs[inst->src[i].nr] += loop_scale;
 
             /* Register spilling logic assumes full-width registers; smeared
              * registers have a width of 1 so if we try to spill them we'll
@@ -790,16 +796,16 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
              * register pressure anyhow.
              */
             if (!inst->src[i].is_contiguous()) {
-               no_spill[inst->src[i].reg] = true;
+               no_spill[inst->src[i].nr] = true;
             }
 	 }
       }
 
-      if (inst->dst.file == GRF) {
-	 spill_costs[inst->dst.reg] += inst->regs_written * loop_scale;
+      if (inst->dst.file == VGRF) {
+         spill_costs[inst->dst.nr] += inst->regs_written * loop_scale;
 
          if (!inst->dst.is_contiguous()) {
-            no_spill[inst->dst.reg] = true;
+            no_spill[inst->dst.nr] = true;
          }
       }
 
@@ -814,14 +820,14 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
 	 break;
 
       case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
-	 if (inst->src[0].file == GRF)
-	    no_spill[inst->src[0].reg] = true;
+	 if (inst->src[0].file == VGRF)
+            no_spill[inst->src[0].nr] = true;
 	 break;
 
       case SHADER_OPCODE_GEN4_SCRATCH_READ:
       case SHADER_OPCODE_GEN7_SCRATCH_READ:
-	 if (inst->dst.file == GRF)
-	    no_spill[inst->dst.reg] = true;
+	 if (inst->dst.file == VGRF)
+            no_spill[inst->dst.nr] = true;
 	 break;
 
       default:
@@ -843,7 +849,8 @@ fs_visitor::spill_reg(int spill_reg)
    int size = alloc.sizes[spill_reg];
    unsigned int spill_offset = last_scratch;
    assert(ALIGN(spill_offset, 16) == spill_offset); /* oword read/write req. */
-   int spill_base_mrf = dispatch_width > 8 ? 13 : 14;
+   int spill_base_mrf = dispatch_width > 8 ? FIRST_SPILL_MRF(devinfo->gen) :
+                                             FIRST_SPILL_MRF(devinfo->gen) + 1;
 
    /* Spills may use MRFs 13-15 in the SIMD16 case.  Our texturing is done
     * using up to 11 MRFs starting from either m1 or m2, and fb writes can use
@@ -853,10 +860,10 @@ fs_visitor::spill_reg(int spill_reg)
     * SIMD16 mode, because we'd stomp the FB writes.
     */
    if (!spilled_any_registers) {
-      bool mrf_used[BRW_MAX_MRF];
+      bool mrf_used[BRW_MAX_MRF(devinfo->gen)];
       get_used_mrfs(this, mrf_used);
 
-      for (int i = spill_base_mrf; i < BRW_MAX_MRF; i++) {
+      for (int i = spill_base_mrf; i < BRW_MAX_MRF(devinfo->gen); i++) {
          if (mrf_used[i]) {
             fail("Register spilling not supported with m%d used", i);
           return;
@@ -875,14 +882,14 @@ fs_visitor::spill_reg(int spill_reg)
     */
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
       for (unsigned int i = 0; i < inst->sources; i++) {
-	 if (inst->src[i].file == GRF &&
-	     inst->src[i].reg == spill_reg) {
+	 if (inst->src[i].file == VGRF &&
+             inst->src[i].nr == spill_reg) {
             int regs_read = inst->regs_read(i);
             int subset_spill_offset = (spill_offset +
                                        REG_SIZE * inst->src[i].reg_offset);
-            fs_reg unspill_dst(GRF, alloc.allocate(regs_read));
+            fs_reg unspill_dst(VGRF, alloc.allocate(regs_read));
 
-            inst->src[i].reg = unspill_dst.reg;
+            inst->src[i].nr = unspill_dst.nr;
             inst->src[i].reg_offset = 0;
 
             emit_unspill(block, inst, unspill_dst, subset_spill_offset,
@@ -890,13 +897,13 @@ fs_visitor::spill_reg(int spill_reg)
 	 }
       }
 
-      if (inst->dst.file == GRF &&
-	  inst->dst.reg == spill_reg) {
+      if (inst->dst.file == VGRF &&
+          inst->dst.nr == spill_reg) {
          int subset_spill_offset = (spill_offset +
                                     REG_SIZE * inst->dst.reg_offset);
-         fs_reg spill_src(GRF, alloc.allocate(inst->regs_written));
+         fs_reg spill_src(VGRF, alloc.allocate(inst->regs_written));
 
-         inst->dst.reg = spill_src.reg;
+         inst->dst.nr = spill_src.nr;
          inst->dst.reg_offset = 0;
 
          /* If we're immediately spilling the register, we should not use

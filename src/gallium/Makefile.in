@@ -102,11 +102,12 @@ target_triplet = @target@
 @HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_11 = drivers/softpipe
 @HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_12 = drivers/llvmpipe
 @HAVE_GALLIUM_VC4_TRUE@am__append_13 = drivers/vc4 winsys/vc4/drm
-@NEED_WINSYS_XLIB_TRUE@am__append_14 = winsys/sw/xlib
-@HAVE_DRISW_TRUE@am__append_15 = winsys/sw/dri
-@HAVE_DRI2_TRUE@am__append_16 = winsys/sw/kms-dri
-@HAVE_LOADER_GALLIUM_TRUE@am__append_17 = targets/pipe-loader
-@HAVE_CLOVER_TRUE@am__append_18 = state_trackers/clover targets/opencl
+@HAVE_GALLIUM_VIRGL_TRUE@am__append_14 = drivers/virgl winsys/virgl/drm winsys/virgl/vtest
+@NEED_WINSYS_XLIB_TRUE@am__append_15 = winsys/sw/xlib
+@HAVE_DRISW_TRUE@am__append_16 = winsys/sw/dri
+@HAVE_DRISW_KMS_TRUE@am__append_17 = winsys/sw/kms-dri
+@HAVE_CLOVER_TRUE@am__append_18 = targets/pipe-loader \
+@HAVE_CLOVER_TRUE@	state_trackers/clover targets/opencl
 @HAVE_DRICOMMON_TRUE@am__append_19 = state_trackers/dri targets/dri
 @HAVE_X11_DRIVER_TRUE@am__append_20 = state_trackers/glx/xlib targets/libgl-xlib
 @HAVE_ST_OMX_TRUE@am__append_21 = state_trackers/omx targets/omx
@@ -192,20 +193,22 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = auxiliary drivers/noop drivers/trace drivers/rbug \
-	drivers/freedreno winsys/freedreno/drm drivers/i915 \
-	winsys/i915/drm drivers/ilo winsys/intel/drm drivers/nouveau \
-	winsys/nouveau/drm drivers/svga winsys/svga/drm drivers/r300 \
-	drivers/radeon drivers/r600 drivers/radeonsi winsys/amdgpu/drm \
+DIST_SUBDIRS = auxiliary auxiliary/pipe-loader drivers/ddebug \
+	drivers/noop drivers/trace drivers/rbug drivers/freedreno \
+	winsys/freedreno/drm drivers/i915 winsys/i915/drm drivers/ilo \
+	winsys/intel/drm drivers/nouveau winsys/nouveau/drm \
+	drivers/svga winsys/svga/drm drivers/r300 drivers/radeon \
+	drivers/r600 drivers/radeonsi winsys/amdgpu/drm \
 	winsys/radeon/drm drivers/softpipe drivers/llvmpipe \
-	drivers/vc4 winsys/vc4/drm winsys/sw/null winsys/sw/xlib \
-	winsys/sw/dri winsys/sw/kms-dri winsys/sw/wrapper \
-	targets/pipe-loader state_trackers/clover targets/opencl \
-	state_trackers/dri targets/dri state_trackers/glx/xlib \
-	targets/libgl-xlib state_trackers/omx targets/omx \
-	state_trackers/osmesa targets/osmesa state_trackers/va \
-	targets/va state_trackers/vdpau targets/vdpau \
-	state_trackers/xa targets/xa state_trackers/xvmc targets/xvmc \
+	drivers/vc4 winsys/vc4/drm drivers/virgl winsys/virgl/drm \
+	winsys/virgl/vtest winsys/sw/null winsys/sw/xlib winsys/sw/dri \
+	winsys/sw/kms-dri winsys/sw/wrapper targets/pipe-loader \
+	state_trackers/clover targets/opencl state_trackers/dri \
+	targets/dri state_trackers/glx/xlib targets/libgl-xlib \
+	state_trackers/omx targets/omx state_trackers/osmesa \
+	targets/osmesa state_trackers/va targets/va \
+	state_trackers/vdpau targets/vdpau state_trackers/xa \
+	targets/xa state_trackers/xvmc targets/xvmc \
 	state_trackers/nine targets/d3dadapter9 tests/trivial \
 	tests/unit
 am__DIST_COMMON = $(srcdir)/Makefile.in
@@ -333,6 +336,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -377,6 +382,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -410,7 +417,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -441,6 +452,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -512,17 +525,18 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = auxiliary drivers/noop drivers/trace drivers/rbug \
-	$(am__append_1) $(am__append_2) $(am__append_3) \
-	$(am__append_4) $(am__append_5) $(am__append_6) \
-	$(am__append_7) $(am__append_8) $(am__append_9) \
-	$(am__append_10) $(am__append_11) $(am__append_12) \
-	$(am__append_13) winsys/sw/null $(am__append_14) \
-	$(am__append_15) $(am__append_16) winsys/sw/wrapper \
-	$(am__append_17) $(am__append_18) $(am__append_19) \
-	$(am__append_20) $(am__append_21) $(am__append_22) \
-	$(am__append_23) $(am__append_24) $(am__append_25) \
-	$(am__append_26) $(am__append_27) $(am__append_28)
+SUBDIRS = auxiliary auxiliary/pipe-loader drivers/ddebug drivers/noop \
+	drivers/trace drivers/rbug $(am__append_1) $(am__append_2) \
+	$(am__append_3) $(am__append_4) $(am__append_5) \
+	$(am__append_6) $(am__append_7) $(am__append_8) \
+	$(am__append_9) $(am__append_10) $(am__append_11) \
+	$(am__append_12) $(am__append_13) $(am__append_14) \
+	winsys/sw/null $(am__append_15) $(am__append_16) \
+	$(am__append_17) winsys/sw/wrapper $(am__append_18) \
+	$(am__append_19) $(am__append_20) $(am__append_21) \
+	$(am__append_22) $(am__append_23) $(am__append_24) \
+	$(am__append_25) $(am__append_26) $(am__append_27) \
+	$(am__append_28)
 EXTRA_DIST = docs README.portability SConscript winsys/sw/gdi \
 	winsys/sw/hgl include state_trackers/README state_trackers/wgl \
 	targets/libgl-gdi targets/graw-gdi targets/graw-null \

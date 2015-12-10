@@ -23,6 +23,7 @@
 		xa_surface_dma;
 		xa_surface_format;
 		xa_surface_from_handle;
+		xa_surface_from_handle2;
 		xa_surface_handle;
 		xa_surface_map;
 		xa_surface_redefine;

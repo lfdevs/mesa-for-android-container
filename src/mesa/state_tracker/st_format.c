@@ -34,6 +34,8 @@
 
 #include "main/imports.h"
 #include "main/context.h"
+#include "main/enums.h"
+#include "main/formats.h"
 #include "main/glformats.h"
 #include "main/texgetimage.h"
 #include "main/teximage.h"
@@ -1911,7 +1913,7 @@ st_choose_matching_format(struct st_context *st, unsigned bind,
       }
 
       if (_mesa_format_matches_format_and_type(mesa_format, format, type,
-                                               swapBytes)) {
+                                               swapBytes, NULL)) {
          enum pipe_format format =
             st_mesa_format_to_pipe_format(st, mesa_format);
 
@@ -1938,6 +1940,7 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
 {
    struct st_context *st = st_context(ctx);
    enum pipe_format pFormat;
+   mesa_format mFormat;
    unsigned bindings;
    enum pipe_texture_target pTarget = gl_target_to_pipe(target);
 
@@ -2014,7 +2017,20 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
       return MESA_FORMAT_NONE;
    }
 
-   return st_pipe_format_to_mesa_format(pFormat);
+   mFormat = st_pipe_format_to_mesa_format(pFormat);
+
+   /* Debugging aid */
+   if (0) {
+      debug_printf("%s(intFormat=%s, format=%s, type=%s) -> %s, %s\n",
+                   __func__,
+                   _mesa_enum_to_string(internalFormat),
+                   _mesa_enum_to_string(format),
+                   _mesa_enum_to_string(type),
+                   util_format_name(pFormat),
+                   _mesa_get_format_name(mFormat));
+   }
+
+   return mFormat;
 }
 
 

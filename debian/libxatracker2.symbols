@@ -21,6 +21,7 @@ libxatracker.so.2 libxatracker2 #MINVER#
  xa_surface_create@Base 0
  xa_surface_dma@Base 0
  xa_surface_format@Base 0
+ xa_surface_from_handle2@Base 11.1.0~
  xa_surface_from_handle@Base 0
  xa_surface_handle@Base 0
  xa_surface_map@Base 0

@@ -27,6 +27,7 @@
 #include <math.h>
 #include "main/core.h"
 #include "util/rounding.h" /* for _mesa_roundeven */
+#include "util/half_float.h"
 #include "nir_constant_expressions.h"
 
 #if defined(__SUNPRO_CC)
@@ -730,7 +731,7 @@ evaluate_bfi(unsigned num_components, nir_const_value *_src)
 
             unsigned dst;
             
-unsigned mask = src0, insert = src1 & mask, base = src2;
+unsigned mask = src0, insert = src1, base = src2;
 if (mask == 0) {
    dst = base;
 } else {
@@ -739,7 +740,7 @@ if (mask == 0) {
       tmp >>= 1;
       insert <<= 1;
    }
-   dst = (base & ~mask) | insert;
+   dst = (base & ~mask) | (insert & mask);
 }
 
 
@@ -1460,6 +1461,150 @@ evaluate_fdot4(unsigned num_components, nir_const_value *_src)
          dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
 
             _dst_val.f[0] = dst.x;
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_fdot_replicated2(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+
+      struct float_vec src0 = {
+            _src[0].f[0],
+            _src[0].f[1],
+      };
+
+      struct float_vec src1 = {
+            _src[1].f[0],
+            _src[1].f[1],
+      };
+
+      struct float_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
+
+            _dst_val.f[0] = dst.x;
+            _dst_val.f[1] = dst.y;
+            _dst_val.f[2] = dst.z;
+            _dst_val.f[3] = dst.w;
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_fdot_replicated3(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+
+      struct float_vec src0 = {
+            _src[0].f[0],
+            _src[0].f[1],
+            _src[0].f[2],
+      };
+
+      struct float_vec src1 = {
+            _src[1].f[0],
+            _src[1].f[1],
+            _src[1].f[2],
+      };
+
+      struct float_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
+
+            _dst_val.f[0] = dst.x;
+            _dst_val.f[1] = dst.y;
+            _dst_val.f[2] = dst.z;
+            _dst_val.f[3] = dst.w;
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_fdot_replicated4(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+
+      struct float_vec src0 = {
+            _src[0].f[0],
+            _src[0].f[1],
+            _src[0].f[2],
+            _src[0].f[3],
+      };
+
+      struct float_vec src1 = {
+            _src[1].f[0],
+            _src[1].f[1],
+            _src[1].f[2],
+            _src[1].f[3],
+      };
+
+      struct float_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
+
+            _dst_val.f[0] = dst.x;
+            _dst_val.f[1] = dst.y;
+            _dst_val.f[2] = dst.z;
+            _dst_val.f[3] = dst.w;
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_fdph(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+
+      struct float_vec src0 = {
+            _src[0].f[0],
+            _src[0].f[1],
+            _src[0].f[2],
+      };
+
+      struct float_vec src1 = {
+            _src[1].f[0],
+            _src[1].f[1],
+            _src[1].f[2],
+            _src[1].f[3],
+      };
+
+      struct float_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+
+            _dst_val.f[0] = dst.x;
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_fdph_replicated(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+
+      struct float_vec src0 = {
+            _src[0].f[0],
+            _src[0].f[1],
+            _src[0].f[2],
+      };
+
+      struct float_vec src1 = {
+            _src[1].f[0],
+            _src[1].f[1],
+            _src[1].f[2],
+            _src[1].f[3],
+      };
+
+      struct float_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+
+            _dst_val.f[0] = dst.x;
+            _dst_val.f[1] = dst.y;
+            _dst_val.f[2] = dst.z;
+            _dst_val.f[3] = dst.w;
 
    return _dst_val;
 }
@@ -3057,6 +3202,29 @@ evaluate_umax(unsigned num_components, nir_const_value *_src)
    return _dst_val;
 }
 static nir_const_value
+evaluate_umax_4x8(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               int src0 = _src[0].i[_i];
+               int src1 = _src[1].i[_i];
+
+            int dst;
+            
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MAX2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
+}
+
+
+            _dst_val.i[_i] = dst;
+      }
+
+   return _dst_val;
+}
+static nir_const_value
 evaluate_umin(unsigned num_components, nir_const_value *_src)
 {
    nir_const_value _dst_val = { { {0, 0, 0, 0} } };
@@ -3069,6 +3237,29 @@ evaluate_umin(unsigned num_components, nir_const_value *_src)
             unsigned dst = src1 > src0 ? src0 : src1;
 
             _dst_val.u[_i] = dst;
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_umin_4x8(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               int src0 = _src[0].i[_i];
+               int src1 = _src[1].i[_i];
+
+            int dst;
+            
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MIN2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
+}
+
+
+            _dst_val.i[_i] = dst;
       }
 
    return _dst_val;
@@ -3103,6 +3294,31 @@ evaluate_umul_high(unsigned num_components, nir_const_value *_src)
             unsigned dst = (uint32_t)(((uint64_t) src0 * (uint64_t) src1) >> 32);
 
             _dst_val.u[_i] = dst;
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_umul_unorm_4x8(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               int src0 = _src[0].i[_i];
+               int src1 = _src[1].i[_i];
+
+            int dst;
+            
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   int src0_chan = (src0 >> i) & 0xff;
+   int src1_chan = (src1 >> i) & 0xff;
+   dst |= ((src0_chan * src1_chan) / 255) << i;
+}
+
+
+            _dst_val.i[_i] = dst;
       }
 
    return _dst_val;
@@ -3262,6 +3478,29 @@ dst.w = unpack_unorm_1x8((uint8_t)(src0.x >> 24));
    return _dst_val;
 }
 static nir_const_value
+evaluate_usadd_4x8(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               int src0 = _src[0].i[_i];
+               int src1 = _src[1].i[_i];
+
+            int dst;
+            
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MIN2(((src0 >> i) & 0xff) + ((src1 >> i) & 0xff), 0xff) << i;
+}
+
+
+            _dst_val.i[_i] = dst;
+      }
+
+   return _dst_val;
+}
+static nir_const_value
 evaluate_ushr(unsigned num_components, nir_const_value *_src)
 {
    nir_const_value _dst_val = { { {0, 0, 0, 0} } };
@@ -3274,6 +3513,32 @@ evaluate_ushr(unsigned num_components, nir_const_value *_src)
             unsigned dst = src0 >> src1;
 
             _dst_val.u[_i] = dst;
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_ussub_4x8(unsigned num_components, nir_const_value *_src)
+{
+   nir_const_value _dst_val = { { {0, 0, 0, 0} } };
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               int src0 = _src[0].i[_i];
+               int src1 = _src[1].i[_i];
+
+            int dst;
+            
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   int src0_chan = (src0 >> i) & 0xff;
+   int src1_chan = (src1 >> i) & 0xff;
+   if (src0_chan > src1_chan)
+      dst |= (src0_chan - src1_chan) << i;
+}
+
+
+            _dst_val.i[_i] = dst;
       }
 
    return _dst_val;
@@ -3623,6 +3888,26 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
    }
    case nir_op_fdot4: {
       return evaluate_fdot4(num_components, src);
+      break;
+   }
+   case nir_op_fdot_replicated2: {
+      return evaluate_fdot_replicated2(num_components, src);
+      break;
+   }
+   case nir_op_fdot_replicated3: {
+      return evaluate_fdot_replicated3(num_components, src);
+      break;
+   }
+   case nir_op_fdot_replicated4: {
+      return evaluate_fdot_replicated4(num_components, src);
+      break;
+   }
+   case nir_op_fdph: {
+      return evaluate_fdph(num_components, src);
+      break;
+   }
+   case nir_op_fdph_replicated: {
+      return evaluate_fdph_replicated(num_components, src);
       break;
    }
    case nir_op_feq: {
@@ -3985,8 +4270,16 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_umax(num_components, src);
       break;
    }
+   case nir_op_umax_4x8: {
+      return evaluate_umax_4x8(num_components, src);
+      break;
+   }
    case nir_op_umin: {
       return evaluate_umin(num_components, src);
+      break;
+   }
+   case nir_op_umin_4x8: {
+      return evaluate_umin_4x8(num_components, src);
       break;
    }
    case nir_op_umod: {
@@ -3995,6 +4288,10 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
    }
    case nir_op_umul_high: {
       return evaluate_umul_high(num_components, src);
+      break;
+   }
+   case nir_op_umul_unorm_4x8: {
+      return evaluate_umul_unorm_4x8(num_components, src);
       break;
    }
    case nir_op_unpack_half_2x16: {
@@ -4025,8 +4322,16 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_unpack_unorm_4x8(num_components, src);
       break;
    }
+   case nir_op_usadd_4x8: {
+      return evaluate_usadd_4x8(num_components, src);
+      break;
+   }
    case nir_op_ushr: {
       return evaluate_ushr(num_components, src);
+      break;
+   }
+   case nir_op_ussub_4x8: {
+      return evaluate_ussub_4x8(num_components, src);
       break;
    }
    case nir_op_usub_borrow: {

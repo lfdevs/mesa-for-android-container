@@ -40,21 +40,23 @@ if HAVE_GALLIUM_STATIC_TARGETS
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =
-TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la
+TARGET_LIB_DEPS =
 
 include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 
 gallium_drv_video_la_SOURCES += target.c
 gallium_drv_video_la_CPPFLAGS = $(TARGET_CPPFLAGS)
-gallium_drv_video_la_LIBADD += $(TARGET_LIB_DEPS) \
+gallium_drv_video_la_LIBADD += \
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_static.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(TARGET_LIB_DEPS) \
 	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
 
 gallium_drv_video_la_LIBADD += \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_dynamic.la
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 

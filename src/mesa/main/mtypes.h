@@ -42,7 +42,7 @@
 #include "main/config.h"
 #include "glapi/glapi.h"
 #include "math/m_matrix.h"	/* GLmatrix */
-#include "glsl/shader_enums.h"
+#include "glsl/nir/shader_enums.h"
 #include "main/formats.h"       /* MESA_FORMAT_COUNT */
 
 
@@ -93,118 +93,6 @@ struct vbo_context;
 #define PRIM_MAX                 GL_PATCHES
 #define PRIM_OUTSIDE_BEGIN_END   (PRIM_MAX + 1)
 #define PRIM_UNKNOWN             (PRIM_MAX + 2)
-
-/**
- * Indexes for vertex program attributes.
- * GL_NV_vertex_program aliases generic attributes over the conventional
- * attributes.  In GL_ARB_vertex_program shader the aliasing is optional.
- * In GL_ARB_vertex_shader / OpenGL 2.0 the aliasing is disallowed (the
- * generic attributes are distinct/separate).
- */
-typedef enum
-{
-   VERT_ATTRIB_POS = 0,
-   VERT_ATTRIB_WEIGHT = 1,
-   VERT_ATTRIB_NORMAL = 2,
-   VERT_ATTRIB_COLOR0 = 3,
-   VERT_ATTRIB_COLOR1 = 4,
-   VERT_ATTRIB_FOG = 5,
-   VERT_ATTRIB_COLOR_INDEX = 6,
-   VERT_ATTRIB_EDGEFLAG = 7,
-   VERT_ATTRIB_TEX0 = 8,
-   VERT_ATTRIB_TEX1 = 9,
-   VERT_ATTRIB_TEX2 = 10,
-   VERT_ATTRIB_TEX3 = 11,
-   VERT_ATTRIB_TEX4 = 12,
-   VERT_ATTRIB_TEX5 = 13,
-   VERT_ATTRIB_TEX6 = 14,
-   VERT_ATTRIB_TEX7 = 15,
-   VERT_ATTRIB_POINT_SIZE = 16,
-   VERT_ATTRIB_GENERIC0 = 17,
-   VERT_ATTRIB_GENERIC1 = 18,
-   VERT_ATTRIB_GENERIC2 = 19,
-   VERT_ATTRIB_GENERIC3 = 20,
-   VERT_ATTRIB_GENERIC4 = 21,
-   VERT_ATTRIB_GENERIC5 = 22,
-   VERT_ATTRIB_GENERIC6 = 23,
-   VERT_ATTRIB_GENERIC7 = 24,
-   VERT_ATTRIB_GENERIC8 = 25,
-   VERT_ATTRIB_GENERIC9 = 26,
-   VERT_ATTRIB_GENERIC10 = 27,
-   VERT_ATTRIB_GENERIC11 = 28,
-   VERT_ATTRIB_GENERIC12 = 29,
-   VERT_ATTRIB_GENERIC13 = 30,
-   VERT_ATTRIB_GENERIC14 = 31,
-   VERT_ATTRIB_GENERIC15 = 32,
-   VERT_ATTRIB_MAX = 33
-} gl_vert_attrib;
-
-/**
- * Symbolic constats to help iterating over
- * specific blocks of vertex attributes.
- *
- * VERT_ATTRIB_FF
- *   includes all fixed function attributes as well as
- *   the aliased GL_NV_vertex_program shader attributes.
- * VERT_ATTRIB_TEX
- *   include the classic texture coordinate attributes.
- *   Is a subset of VERT_ATTRIB_FF.
- * VERT_ATTRIB_GENERIC
- *   include the OpenGL 2.0+ GLSL generic shader attributes.
- *   These alias the generic GL_ARB_vertex_shader attributes.
- */
-#define VERT_ATTRIB_FF(i)           (VERT_ATTRIB_POS + (i))
-#define VERT_ATTRIB_FF_MAX          VERT_ATTRIB_GENERIC0
-
-#define VERT_ATTRIB_TEX(i)          (VERT_ATTRIB_TEX0 + (i))
-#define VERT_ATTRIB_TEX_MAX         MAX_TEXTURE_COORD_UNITS
-
-#define VERT_ATTRIB_GENERIC(i)      (VERT_ATTRIB_GENERIC0 + (i))
-#define VERT_ATTRIB_GENERIC_MAX     MAX_VERTEX_GENERIC_ATTRIBS
-
-/**
- * Bitflags for vertex attributes.
- * These are used in bitfields in many places.
- */
-/*@{*/
-#define VERT_BIT_POS             BITFIELD64_BIT(VERT_ATTRIB_POS)
-#define VERT_BIT_WEIGHT          BITFIELD64_BIT(VERT_ATTRIB_WEIGHT)
-#define VERT_BIT_NORMAL          BITFIELD64_BIT(VERT_ATTRIB_NORMAL)
-#define VERT_BIT_COLOR0          BITFIELD64_BIT(VERT_ATTRIB_COLOR0)
-#define VERT_BIT_COLOR1          BITFIELD64_BIT(VERT_ATTRIB_COLOR1)
-#define VERT_BIT_FOG             BITFIELD64_BIT(VERT_ATTRIB_FOG)
-#define VERT_BIT_COLOR_INDEX     BITFIELD64_BIT(VERT_ATTRIB_COLOR_INDEX)
-#define VERT_BIT_EDGEFLAG        BITFIELD64_BIT(VERT_ATTRIB_EDGEFLAG)
-#define VERT_BIT_TEX0            BITFIELD64_BIT(VERT_ATTRIB_TEX0)
-#define VERT_BIT_TEX1            BITFIELD64_BIT(VERT_ATTRIB_TEX1)
-#define VERT_BIT_TEX2            BITFIELD64_BIT(VERT_ATTRIB_TEX2)
-#define VERT_BIT_TEX3            BITFIELD64_BIT(VERT_ATTRIB_TEX3)
-#define VERT_BIT_TEX4            BITFIELD64_BIT(VERT_ATTRIB_TEX4)
-#define VERT_BIT_TEX5            BITFIELD64_BIT(VERT_ATTRIB_TEX5)
-#define VERT_BIT_TEX6            BITFIELD64_BIT(VERT_ATTRIB_TEX6)
-#define VERT_BIT_TEX7            BITFIELD64_BIT(VERT_ATTRIB_TEX7)
-#define VERT_BIT_POINT_SIZE      BITFIELD64_BIT(VERT_ATTRIB_POINT_SIZE)
-#define VERT_BIT_GENERIC0        BITFIELD64_BIT(VERT_ATTRIB_GENERIC0)
-
-#define VERT_BIT(i)              BITFIELD64_BIT(i)
-#define VERT_BIT_ALL             BITFIELD64_RANGE(0, VERT_ATTRIB_MAX)
-
-#define VERT_BIT_FF(i)           VERT_BIT(i)
-#define VERT_BIT_FF_ALL          BITFIELD64_RANGE(0, VERT_ATTRIB_FF_MAX)
-#define VERT_BIT_TEX(i)          VERT_BIT(VERT_ATTRIB_TEX(i))
-#define VERT_BIT_TEX_ALL         \
-   BITFIELD64_RANGE(VERT_ATTRIB_TEX(0), VERT_ATTRIB_TEX_MAX)
-
-#define VERT_BIT_GENERIC(i)      VERT_BIT(VERT_ATTRIB_GENERIC(i))
-#define VERT_BIT_GENERIC_ALL     \
-   BITFIELD64_RANGE(VERT_ATTRIB_GENERIC(0), VERT_ATTRIB_GENERIC_MAX)
-/*@}*/
-
-
-#define VARYING_SLOT_MAX	(VARYING_SLOT_VAR0 + MAX_VARYING)
-#define VARYING_SLOT_PATCH0	(VARYING_SLOT_MAX)
-#define VARYING_SLOT_TESS_MAX	(VARYING_SLOT_PATCH0 + MAX_VARYING)
-#define FRAG_RESULT_MAX		(FRAG_RESULT_DATA0 + MAX_DRAW_BUFFERS)
 
 /**
  * Determine if the given gl_varying_slot appears in the fragment shader.
@@ -594,26 +482,24 @@ struct gl_colorbuffer_attrib
 struct gl_current_attrib
 {
    /**
-    * \name Current vertex attributes.
+    * \name Current vertex attributes (color, texcoords, etc).
     * \note Values are valid only after FLUSH_VERTICES has been called.
     * \note Index and Edgeflag current values are stored as floats in the 
     * SIX and SEVEN attribute slots.
+    * \note We need double storage for 64-bit vertex attributes
     */
-   /* we need double storage for this for vertex attrib 64bit */
-   GLfloat Attrib[VERT_ATTRIB_MAX][4*2];	/**< Position, color, texcoords, etc */
+   GLfloat Attrib[VERT_ATTRIB_MAX][4*2];
 
    /**
-    * \name Current raster position attributes (always valid).
-    * \note This set of attributes is very similar to the SWvertex struct.
+    * \name Current raster position attributes (always up to date after a
+    * glRasterPos call).
     */
-   /*@{*/
    GLfloat RasterPos[4];
    GLfloat RasterDistance;
    GLfloat RasterColor[4];
    GLfloat RasterSecondaryColor[4];
    GLfloat RasterTexCoords[MAX_TEXTURE_COORD_UNITS][4];
    GLboolean RasterPosValid;
-   /*@}*/
 };
 
 
@@ -1051,6 +937,7 @@ typedef enum
  */
 struct gl_sampler_object
 {
+   mtx_t Mutex;
    GLuint Name;
    GLint RefCount;
    GLchar *Label;               /**< GL_KHR_debug */
@@ -1972,28 +1859,11 @@ typedef enum
 
 
 /**
- * \brief Layout qualifiers for gl_FragDepth.
- *
- * Extension AMD_conservative_depth allows gl_FragDepth to be redeclared with
- * a layout qualifier.
- *
- * \see enum ir_depth_layout
- */
-enum gl_frag_depth_layout
-{
-   FRAG_DEPTH_LAYOUT_NONE, /**< No layout is specified. */
-   FRAG_DEPTH_LAYOUT_ANY,
-   FRAG_DEPTH_LAYOUT_GREATER,
-   FRAG_DEPTH_LAYOUT_LESS,
-   FRAG_DEPTH_LAYOUT_UNCHANGED
-};
-
-
-/**
  * Base class for any kind of program object
  */
 struct gl_program
 {
+   mtx_t Mutex;
    GLuint Id;
    GLint RefCount;
    GLubyte *String;  /**< Null-terminated program text */
@@ -2021,7 +1891,7 @@ struct gl_program
     * For vertex and geometry shaders, true if the program uses the
     * gl_ClipDistance output.  Ignored for fragment shaders.
     */
-   GLboolean UsesClipDistanceOut;
+   unsigned ClipDistanceArraySize;
 
 
    /** Named parameters, constants, etc. from program text */
@@ -2323,6 +2193,7 @@ struct gl_ati_fragment_shader_state
 struct gl_subroutine_function
 {
    char *name;
+   int index;
    int num_compat_types;
    const struct glsl_type **types;
 };
@@ -2391,14 +2262,38 @@ struct gl_shader
    unsigned num_combined_uniform_components;
 
    /**
-    * This shader's uniform block information.
+    * This shader's uniform/ssbo block information.
     *
     * These fields are only set post-linking.
+    *
+    * BufferInterfaceBlocks is a list containing both UBOs and SSBOs. This is
+    * useful during the linking process so that we don't have to handle SSBOs
+    * specifically.
+    *
+    * UniformBlocks is a list of UBOs. This is useful for backends that need
+    * or prefer to see separate index spaces for UBOS and SSBOs like the GL
+    * API specifies.
+    *
+    * ShaderStorageBlocks is a list of SSBOs. This is useful for backends that
+    * need or prefer to see separate index spaces for UBOS and SSBOs like the
+    * GL API specifies.
+    *
+    * UniformBlocks and ShaderStorageBlocks only have pointers into
+    * BufferInterfaceBlocks so the actual resource information is not
+    * duplicated.
     */
+   unsigned NumBufferInterfaceBlocks;
+   struct gl_uniform_block *BufferInterfaceBlocks;
+
    unsigned NumUniformBlocks;
-   struct gl_uniform_block *UniformBlocks;
+   struct gl_uniform_block **UniformBlocks;
+
+   unsigned NumShaderStorageBlocks;
+   struct gl_uniform_block **ShaderStorageBlocks;
 
    struct exec_list *ir;
+   struct exec_list *packed_varyings;
+   struct exec_list *fragdata_arrays;
    struct glsl_symbol_table *symbols;
 
    bool uses_builtin_functions;
@@ -2496,6 +2391,9 @@ struct gl_shader
     */
    GLuint NumImages;
 
+   struct gl_active_atomic_buffer **AtomicBuffers;
+   unsigned NumAtomicBuffers;
+
    /**
     * Whether early fragment tests are enabled as defined by
     * ARB_shader_image_load_store.
@@ -2560,7 +2458,8 @@ enum gl_uniform_block_packing
 {
    ubo_packing_std140,
    ubo_packing_shared,
-   ubo_packing_packed
+   ubo_packing_packed,
+   ubo_packing_std430
 };
 
 
@@ -2720,7 +2619,6 @@ struct gl_shader_program
        * True if gl_ClipDistance is written to.  Copied into
        * gl_tess_eval_program by _mesa_copy_linked_program_data().
        */
-      GLboolean UsesClipDistance;
       GLuint ClipDistanceArraySize; /**< Size of the gl_ClipDistance array, or
                                          0 if not present. */
    } TessEval;
@@ -2743,7 +2641,6 @@ struct gl_shader_program
        * True if gl_ClipDistance is written to.  Copied into
        * gl_geometry_program by _mesa_copy_linked_program_data().
        */
-      GLboolean UsesClipDistance;
       GLuint ClipDistanceArraySize; /**< Size of the gl_ClipDistance array, or
                                          0 if not present. */
       bool UsesEndPrimitive;
@@ -2756,7 +2653,6 @@ struct gl_shader_program
        * True if gl_ClipDistance is written to.  Copied into gl_vertex_program
        * by _mesa_copy_linked_program_data().
        */
-      GLboolean UsesClipDistance;
       GLuint ClipDistanceArraySize; /**< Size of the gl_ClipDistance array, or
                                          0 if not present. */
    } Vert;
@@ -2792,17 +2688,43 @@ struct gl_shader_program
     */
    unsigned LastClipDistanceArraySize;
 
+   /**
+    * This shader's uniform/ssbo block information.
+    *
+    * BufferInterfaceBlocks is a list containing both UBOs and SSBOs. This is
+    * useful during the linking process so that we don't have to handle SSBOs
+    * specifically.
+    *
+    * UniformBlocks is a list of UBOs. This is useful for backends that need
+    * or prefer to see separate index spaces for UBOS and SSBOs like the GL
+    * API specifies.
+    *
+    * ShaderStorageBlocks is a list of SSBOs. This is useful for backends that
+    * need or prefer to see separate index spaces for UBOS and SSBOs like the
+    * GL API specifies.
+    *
+    * UniformBlocks and ShaderStorageBlocks only have pointers into
+    * BufferInterfaceBlocks so the actual resource information is not
+    * duplicated and are only set after linking.
+    */
+   unsigned NumBufferInterfaceBlocks;
+   struct gl_uniform_block *BufferInterfaceBlocks;
+
    unsigned NumUniformBlocks;
-   struct gl_uniform_block *UniformBlocks;
+   struct gl_uniform_block **UniformBlocks;
+
+   unsigned NumShaderStorageBlocks;
+   struct gl_uniform_block **ShaderStorageBlocks;
 
    /**
-    * Indices into the _LinkedShaders's UniformBlocks[] array for each stage
-    * they're used in, or -1.
+    * Indices into the BufferInterfaceBlocks[] array for each stage they're
+    * used in, or -1.
     *
-    * This is used to maintain the Binding values of the stage's UniformBlocks[]
-    * and to answer the GL_UNIFORM_BLOCK_REFERENCED_BY_*_SHADER queries.
+    * This is used to maintain the Binding values of the stage's
+    * BufferInterfaceBlocks[] and to answer the
+    * GL_UNIFORM_BLOCK_REFERENCED_BY_*_SHADER queries.
     */
-   int *UniformBlockStageIndex[MESA_SHADER_STAGES];
+   int *InterfaceBlockStageIndex[MESA_SHADER_STAGES];
 
    /**
     * Map of active uniform names to locations
@@ -2953,6 +2875,8 @@ struct gl_shader_compiler_options
     *     matrix * vector operations, such as position transformation.
     */
    GLboolean OptimizeForAOS;
+
+   GLboolean LowerBufferInterfaceBlocks; /**< Lower UBO and SSBO access to intrinsics. */
 
    const struct nir_shader_compiler_options *NirOptions;
 };
@@ -3525,6 +3449,9 @@ struct gl_constants
    /** GL_EXT_provoking_vertex */
    GLboolean QuadsFollowProvokingVertexConvention;
 
+   /** GL_ARB_viewport_array */
+   GLenum LayerAndVPIndexProvokingVertex;
+
    /** OpenGL version 3.0 */
    GLbitfield ContextFlags;  /**< Ex: GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT */
 
@@ -3657,11 +3584,24 @@ struct gl_constants
     * below:
     *    SampleMap8x = {a, b, c, d, e, f, g, h};
     *
-    * Follow the logic for other sample counts.
+    * Follow the logic for sample counts 2-8.
+    *
+    * For 16x the sample indices layout as a 4x4 grid as follows:
+    *
+    *            -----------------
+    *            | 0 | 1 | 2 | 3 |
+    *            -----------------
+    *            | 4 | 5 | 6 | 7 |
+    *            -----------------
+    *            | 8 | 9 |10 |11 |
+    *            -----------------
+    *            |12 |13 |14 |15 |
+    *            -----------------
     */
    uint8_t SampleMap2x[2];
    uint8_t SampleMap4x[4];
    uint8_t SampleMap8x[8];
+   uint8_t SampleMap16x[16];
 
    /** GL_ARB_shader_atomic_counters */
    GLuint MaxAtomicBufferBindings;
@@ -3742,6 +3682,7 @@ struct gl_extensions
    GLboolean ARB_fragment_shader;
    GLboolean ARB_framebuffer_no_attachments;
    GLboolean ARB_framebuffer_object;
+   GLboolean ARB_enhanced_layouts;
    GLboolean ARB_explicit_attrib_location;
    GLboolean ARB_explicit_uniform_location;
    GLboolean ARB_geometry_shader4;
@@ -3759,12 +3700,14 @@ struct gl_extensions
    GLboolean ARB_seamless_cube_map;
    GLboolean ARB_shader_atomic_counters;
    GLboolean ARB_shader_bit_encoding;
+   GLboolean ARB_shader_clock;
    GLboolean ARB_shader_image_load_store;
    GLboolean ARB_shader_image_size;
    GLboolean ARB_shader_precision;
    GLboolean ARB_shader_stencil_export;
    GLboolean ARB_shader_storage_buffer_object;
    GLboolean ARB_shader_subroutine;
+   GLboolean ARB_shader_texture_image_samples;
    GLboolean ARB_shader_texture_lod;
    GLboolean ARB_shading_language_packing;
    GLboolean ARB_shading_language_420pack;
@@ -3822,8 +3765,8 @@ struct gl_extensions
    GLboolean EXT_polygon_offset_clamp;
    GLboolean EXT_provoking_vertex;
    GLboolean EXT_shader_integer_mix;
+   GLboolean EXT_shader_samples_identical;
    GLboolean EXT_stencil_two_side;
-   GLboolean EXT_texture3D;
    GLboolean EXT_texture_array;
    GLboolean EXT_texture_compression_latc;
    GLboolean EXT_texture_compression_s3tc;
@@ -3853,6 +3796,8 @@ struct gl_extensions
    GLboolean ATI_fragment_shader;
    GLboolean ATI_separate_stencil;
    GLboolean INTEL_performance_query;
+   GLboolean KHR_texture_compression_astc_hdr;
+   GLboolean KHR_texture_compression_astc_ldr;
    GLboolean MESA_pack_invert;
    GLboolean MESA_ycbcr_texture;
    GLboolean NV_conditional_render;
@@ -3879,6 +3824,12 @@ struct gl_extensions
    const GLubyte *String;
    /** Number of supported extensions */
    GLuint Count;
+   /**
+    * The context version which extension helper functions compare against.
+    * By default, the value is equal to ctx->Version. This changes to ~0
+    * while meta is in progress.
+    */
+   GLubyte Version;
 };
 
 
@@ -4385,6 +4336,7 @@ struct gl_context
    struct gl_perf_monitor_state PerfMonitor;
 
    struct gl_buffer_object *DrawIndirectBuffer; /** < GL_ARB_draw_indirect */
+   struct gl_buffer_object *DispatchIndirectBuffer; /** < GL_ARB_compute_shader */
 
    struct gl_buffer_object *CopyReadBuffer; /**< GL_ARB_copy_buffer */
    struct gl_buffer_object *CopyWriteBuffer; /**< GL_ARB_copy_buffer */
@@ -4576,7 +4528,7 @@ static inline bool
 _mesa_active_fragment_shader_has_atomic_ops(const struct gl_context *ctx)
 {
    return ctx->Shader._CurrentFragmentProgram != NULL &&
-      ctx->Shader._CurrentFragmentProgram->NumAtomicBuffers > 0;
+      ctx->Shader._CurrentFragmentProgram->_LinkedShaders[MESA_SHADER_FRAGMENT]->NumAtomicBuffers > 0;
 }
 
 #ifdef __cplusplus

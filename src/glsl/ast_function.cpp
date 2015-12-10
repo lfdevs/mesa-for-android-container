@@ -142,6 +142,31 @@ verify_image_parameter(YYLTYPE *loc, _mesa_glsl_parse_state *state,
    return true;
 }
 
+static bool
+verify_first_atomic_ssbo_parameter(YYLTYPE *loc, _mesa_glsl_parse_state *state,
+                                   ir_variable *var)
+{
+   if (!var || !var->is_in_shader_storage_block()) {
+      _mesa_glsl_error(loc, state, "First argument to atomic function "
+                       "must be a buffer variable");
+      return false;
+   }
+   return true;
+}
+
+static bool
+is_atomic_ssbo_function(const char *func_name)
+{
+   return !strcmp(func_name, "atomicAdd") ||
+          !strcmp(func_name, "atomicMin") ||
+          !strcmp(func_name, "atomicMax") ||
+          !strcmp(func_name, "atomicAnd") ||
+          !strcmp(func_name, "atomicOr") ||
+          !strcmp(func_name, "atomicXor") ||
+          !strcmp(func_name, "atomicExchange") ||
+          !strcmp(func_name, "atomicCompSwap");
+}
+
 /**
  * Verify that 'out' and 'inout' actual parameters are lvalues.  Also, verify
  * that 'const_in' formal parameters (an extension in our IR) correspond to
@@ -231,18 +256,10 @@ verify_parameter_modes(_mesa_glsl_parse_state *state,
 			     actual->variable_referenced()->name);
 	    return false;
 	 } else if (!actual->is_lvalue()) {
-            /* Even though ir_binop_vector_extract is not an l-value, let it
-             * slop through.  generate_call will handle it correctly.
-             */
-            ir_expression *const expr = ((ir_rvalue *) actual)->as_expression();
-            if (expr == NULL
-                || expr->operation != ir_binop_vector_extract
-                || !expr->operands[0]->is_lvalue()) {
-               _mesa_glsl_error(&loc, state,
-                                "function parameter '%s %s' is not an lvalue",
-                                mode, formal->name);
-               return false;
-            }
+            _mesa_glsl_error(&loc, state,
+                             "function parameter '%s %s' is not an lvalue",
+                             mode, formal->name);
+            return false;
 	 }
       }
 
@@ -256,6 +273,23 @@ verify_parameter_modes(_mesa_glsl_parse_state *state,
       actual_ir_node  = actual_ir_node->next;
       actual_ast_node = actual_ast_node->next;
    }
+
+   /* The first parameter of atomic functions must be a buffer variable */
+   const char *func_name = sig->function_name();
+   bool is_atomic_ssbo = is_atomic_ssbo_function(func_name);
+   if (is_atomic_ssbo) {
+      const ir_rvalue *const actual = (ir_rvalue *) actual_ir_parameters.head;
+
+      const ast_expression *const actual_ast =
+         exec_node_data(ast_expression, actual_ast_parameters.head, link);
+      YYLTYPE loc = actual_ast->get_location();
+
+      if (!verify_first_atomic_ssbo_parameter(&loc, state,
+                                              actual->variable_referenced())) {
+         return false;
+      }
+   }
+
    return true;
 }
 
@@ -334,12 +368,8 @@ fix_parameter(void *mem_ctx, ir_rvalue *actual, const glsl_type *formal_type,
 
    ir_rvalue *lhs = actual;
    if (expr != NULL && expr->operation == ir_binop_vector_extract) {
-      rhs = new(mem_ctx) ir_expression(ir_triop_vector_insert,
-                                       expr->operands[0]->type,
-                                       expr->operands[0]->clone(mem_ctx, NULL),
-                                       rhs,
-                                       expr->operands[1]->clone(mem_ctx, NULL));
-      lhs = expr->operands[0]->clone(mem_ctx, NULL);
+      lhs = new(mem_ctx) ir_dereference_array(expr->operands[0]->clone(mem_ctx, NULL),
+                                              expr->operands[1]->clone(mem_ctx, NULL));
    }
 
    ir_assignment *const assignment_2 = new(mem_ctx) ir_assignment(lhs, rhs);
@@ -566,6 +596,37 @@ match_subroutine_by_name(const char *name,
    sig = found->matching_signature(state, actual_parameters,
                                   false, &is_exact);
    return sig;
+}
+
+static ir_rvalue *
+generate_array_index(void *mem_ctx, exec_list *instructions,
+                     struct _mesa_glsl_parse_state *state, YYLTYPE loc,
+                     const ast_expression *array, ast_expression *idx,
+                     const char **function_name, exec_list *actual_parameters)
+{
+   if (array->oper == ast_array_index) {
+      /* This handles arrays of arrays */
+      ir_rvalue *outer_array = generate_array_index(mem_ctx, instructions,
+                                                    state, loc,
+                                                    array->subexpressions[0],
+                                                    array->subexpressions[1],
+                                                    function_name, actual_parameters);
+      ir_rvalue *outer_array_idx = idx->hir(instructions, state);
+
+      YYLTYPE index_loc = idx->get_location();
+      return _mesa_ast_array_index_to_hir(mem_ctx, state, outer_array,
+                                          outer_array_idx, loc,
+                                          index_loc);
+   } else {
+      ir_variable *sub_var = NULL;
+      *function_name = array->primary_expression.identifier;
+
+      match_subroutine_by_name(*function_name, actual_parameters,
+                               state, &sub_var);
+
+      ir_rvalue *outer_array_idx = idx->hir(instructions, state);
+      return new(mem_ctx) ir_dereference_array(sub_var, outer_array_idx);
+   }
 }
 
 static void
@@ -949,6 +1010,7 @@ process_array_constructor(exec_list *instructions,
    }
 
    bool all_parameters_are_constant = true;
+   const glsl_type *element_type = constructor_type->fields.array;
 
    /* Type cast each parameter and, if possible, fold constants. */
    foreach_in_list_safe(ir_rvalue, ir, &actual_parameters) {
@@ -975,12 +1037,34 @@ process_array_constructor(exec_list *instructions,
 	 }
       }
 
-      if (result->type != constructor_type->fields.array) {
+      if (constructor_type->fields.array->is_unsized_array()) {
+         /* As the inner parameters of the constructor are created without
+          * knowledge of each other we need to check to make sure unsized
+          * parameters of unsized constructors all end up with the same size.
+          *
+          * e.g we make sure to fail for a constructor like this:
+          * vec4[][] a = vec4[][](vec4[](vec4(0.0), vec4(1.0)),
+          *                       vec4[](vec4(0.0), vec4(1.0), vec4(1.0)),
+          *                       vec4[](vec4(0.0), vec4(1.0)));
+          */
+         if (element_type->is_unsized_array()) {
+             /* This is the first parameter so just get the type */
+            element_type = result->type;
+         } else if (element_type != result->type) {
+            _mesa_glsl_error(loc, state, "type error in array constructor: "
+                             "expected: %s, found %s",
+                             element_type->name,
+                             result->type->name);
+            return ir_rvalue::error_value(ctx);
+         }
+      } else if (result->type != constructor_type->fields.array) {
 	 _mesa_glsl_error(loc, state, "type error in array constructor: "
 			  "expected: %s, found %s",
 			  constructor_type->fields.array->name,
 			  result->type->name);
          return ir_rvalue::error_value(ctx);
+      } else {
+         element_type = result->type;
       }
 
       /* Attempt to convert the parameter to a constant valued expression.
@@ -995,6 +1079,14 @@ process_array_constructor(exec_list *instructions,
          all_parameters_are_constant = false;
 
       ir->replace_with(result);
+   }
+
+   if (constructor_type->fields.array->is_unsized_array()) {
+      constructor_type =
+	 glsl_type::get_array_instance(element_type,
+				       parameter_count);
+      assert(constructor_type != NULL);
+      assert(constructor_type->length == parameter_count);
    }
 
    if (all_parameters_are_constant)
@@ -1634,11 +1726,16 @@ ast_function_expression::handle_method(exec_list *instructions,
 
       if (op->type->is_array()) {
          if (op->type->is_unsized_array()) {
-            _mesa_glsl_error(&loc, state, "length called on unsized array");
-            goto fail;
+            if (!state->has_shader_storage_buffer_objects()) {
+               _mesa_glsl_error(&loc, state, "length called on unsized array"
+                                             " only available with "
+                                             "ARB_shader_storage_buffer_object");
+            }
+            /* Calculate length of an unsized array in run-time */
+            result = new(ctx) ir_expression(ir_unop_ssbo_unsized_array_length, op);
+         } else {
+            result = new(ctx) ir_constant(op->type->array_size());
          }
-
-         result = new(ctx) ir_constant(op->type->array_size());
       } else if (op->type->is_vector()) {
          if (state->ARB_shading_language_420pack_enable) {
             /* .length() returns int. */
@@ -1911,15 +2008,17 @@ ast_function_expression::hir(exec_list *instructions,
       ir_variable *sub_var = NULL;
       ir_rvalue *array_idx = NULL;
 
+      process_parameters(instructions, &actual_parameters, &this->expressions,
+			 state);
+
       if (id->oper == ast_array_index) {
-         func_name = id->subexpressions[0]->primary_expression.identifier;
-	 array_idx = id->subexpressions[1]->hir(instructions, state);
+         array_idx = generate_array_index(ctx, instructions, state, loc,
+                                          id->subexpressions[0],
+                                          id->subexpressions[1], &func_name,
+                                          &actual_parameters);
       } else {
          func_name = id->primary_expression.identifier;
       }
-
-      process_parameters(instructions, &actual_parameters, &this->expressions,
-			 state);
 
       ir_function_signature *sig =
 	 match_function_by_name(func_name, &actual_parameters, state);

@@ -35,6 +35,7 @@
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_sanity.h"
 #include "util/u_debug.h"
+#include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include "util/u_bitmask.h"
@@ -1830,29 +1831,6 @@ void ureg_free_tokens( const struct tgsi_token *tokens )
 }
 
 
-static inline unsigned
-pipe_shader_from_tgsi_processor(unsigned processor)
-{
-   switch (processor) {
-   case TGSI_PROCESSOR_VERTEX:
-      return PIPE_SHADER_VERTEX;
-   case TGSI_PROCESSOR_TESS_CTRL:
-      return PIPE_SHADER_TESS_CTRL;
-   case TGSI_PROCESSOR_TESS_EVAL:
-      return PIPE_SHADER_TESS_EVAL;
-   case TGSI_PROCESSOR_GEOMETRY:
-      return PIPE_SHADER_GEOMETRY;
-   case TGSI_PROCESSOR_FRAGMENT:
-      return PIPE_SHADER_FRAGMENT;
-   case TGSI_PROCESSOR_COMPUTE:
-      return PIPE_SHADER_COMPUTE;
-   default:
-      assert(0);
-      return PIPE_SHADER_VERTEX;
-   }
-}
-
-
 struct ureg_program *
 ureg_create(unsigned processor)
 {
@@ -1872,7 +1850,7 @@ ureg_create_with_screen(unsigned processor, struct pipe_screen *screen)
    ureg->supports_any_inout_decl_range =
       screen &&
       screen->get_shader_param(screen,
-                               pipe_shader_from_tgsi_processor(processor),
+                               util_pipe_shader_from_tgsi_processor(processor),
                                PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE) != 0;
 
    for (i = 0; i < Elements(ureg->properties); i++)

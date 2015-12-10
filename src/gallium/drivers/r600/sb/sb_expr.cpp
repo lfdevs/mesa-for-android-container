@@ -403,7 +403,8 @@ bool expr_handler::fold_alu_op1(alu_node& n) {
 		if ((n.bc.op == ALU_OP1_MOV || n.bc.op == ALU_OP1_MOVA_INT ||
 				n.bc.op == ALU_OP1_MOVA_GPR_INT)
 				&& n.bc.clamp == 0 && n.bc.omod == 0
-				&& n.bc.src[0].abs == 0 && n.bc.src[0].neg == 0) {
+				&& n.bc.src[0].abs == 0 && n.bc.src[0].neg == 0 &&
+				n.src.size() == 1 /* RIM/SIM can be appended as additional values */) {
 			assign_source(n.dst[0], v0);
 			return true;
 		}

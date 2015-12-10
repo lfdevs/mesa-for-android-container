@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 1998-2014 VMware, Inc.  All rights reserved.
+ * Copyright 1998-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -223,8 +223,229 @@ typedef enum {
     */
    SVGA3D_DEVCAP_TS_COLOR_KEY                      = 93, /* boolean */
 
+   /*
+    * Deprecated.
+    */
+   SVGA3D_DEVCAP_DEAD2                             = 94,
+
+   /*
+    * Does the device support the DX commands?
+    */
+   SVGA3D_DEVCAP_DX                                = 95,
+
+   /*
+    * What is the maximum size of a texture array?
+    *
+    * (Even if this cap is zero, cubemaps are still allowed.)
+    */
+   SVGA3D_DEVCAP_MAX_TEXTURE_ARRAY_SIZE            = 96,
+
+   /*
+    * What is the maximum number of vertex buffers that can
+    * be used in the DXContext inputAssembly?
+    */
+   SVGA3D_DEVCAP_DX_MAX_VERTEXBUFFERS              = 97,
+
+   /*
+    * What is the maximum number of constant buffers
+    * that can be expected to work correctly with a
+    * DX context?
+    */
+   SVGA3D_DEVCAP_DX_MAX_CONSTANT_BUFFERS           = 98,
+
+   /*
+    * Does the device support provoking vertex control?
+    * If zero, the first vertex will always be the provoking vertex.
+    */
+   SVGA3D_DEVCAP_DX_PROVOKING_VERTEX               = 99,
+
+   SVGA3D_DEVCAP_DXFMT_X8R8G8B8                    = 100,
+   SVGA3D_DEVCAP_DXFMT_A8R8G8B8                    = 101,
+   SVGA3D_DEVCAP_DXFMT_R5G6B5                      = 102,
+   SVGA3D_DEVCAP_DXFMT_X1R5G5B5                    = 103,
+   SVGA3D_DEVCAP_DXFMT_A1R5G5B5                    = 104,
+   SVGA3D_DEVCAP_DXFMT_A4R4G4B4                    = 105,
+   SVGA3D_DEVCAP_DXFMT_Z_D32                       = 106,
+   SVGA3D_DEVCAP_DXFMT_Z_D16                       = 107,
+   SVGA3D_DEVCAP_DXFMT_Z_D24S8                     = 108,
+   SVGA3D_DEVCAP_DXFMT_Z_D15S1                     = 109,
+   SVGA3D_DEVCAP_DXFMT_LUMINANCE8                  = 110,
+   SVGA3D_DEVCAP_DXFMT_LUMINANCE4_ALPHA4           = 111,
+   SVGA3D_DEVCAP_DXFMT_LUMINANCE16                 = 112,
+   SVGA3D_DEVCAP_DXFMT_LUMINANCE8_ALPHA8           = 113,
+   SVGA3D_DEVCAP_DXFMT_DXT1                        = 114,
+   SVGA3D_DEVCAP_DXFMT_DXT2                        = 115,
+   SVGA3D_DEVCAP_DXFMT_DXT3                        = 116,
+   SVGA3D_DEVCAP_DXFMT_DXT4                        = 117,
+   SVGA3D_DEVCAP_DXFMT_DXT5                        = 118,
+   SVGA3D_DEVCAP_DXFMT_BUMPU8V8                    = 119,
+   SVGA3D_DEVCAP_DXFMT_BUMPL6V5U5                  = 120,
+   SVGA3D_DEVCAP_DXFMT_BUMPX8L8V8U8                = 121,
+   SVGA3D_DEVCAP_DXFMT_FORMAT_DEAD1                = 122,
+   SVGA3D_DEVCAP_DXFMT_ARGB_S10E5                  = 123,
+   SVGA3D_DEVCAP_DXFMT_ARGB_S23E8                  = 124,
+   SVGA3D_DEVCAP_DXFMT_A2R10G10B10                 = 125,
+   SVGA3D_DEVCAP_DXFMT_V8U8                        = 126,
+   SVGA3D_DEVCAP_DXFMT_Q8W8V8U8                    = 127,
+   SVGA3D_DEVCAP_DXFMT_CxV8U8                      = 128,
+   SVGA3D_DEVCAP_DXFMT_X8L8V8U8                    = 129,
+   SVGA3D_DEVCAP_DXFMT_A2W10V10U10                 = 130,
+   SVGA3D_DEVCAP_DXFMT_ALPHA8                      = 131,
+   SVGA3D_DEVCAP_DXFMT_R_S10E5                     = 132,
+   SVGA3D_DEVCAP_DXFMT_R_S23E8                     = 133,
+   SVGA3D_DEVCAP_DXFMT_RG_S10E5                    = 134,
+   SVGA3D_DEVCAP_DXFMT_RG_S23E8                    = 135,
+   SVGA3D_DEVCAP_DXFMT_BUFFER                      = 136,
+   SVGA3D_DEVCAP_DXFMT_Z_D24X8                     = 137,
+   SVGA3D_DEVCAP_DXFMT_V16U16                      = 138,
+   SVGA3D_DEVCAP_DXFMT_G16R16                      = 139,
+   SVGA3D_DEVCAP_DXFMT_A16B16G16R16                = 140,
+   SVGA3D_DEVCAP_DXFMT_UYVY                        = 141,
+   SVGA3D_DEVCAP_DXFMT_YUY2                        = 142,
+   SVGA3D_DEVCAP_DXFMT_NV12                        = 143,
+   SVGA3D_DEVCAP_DXFMT_AYUV                        = 144,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32A32_TYPELESS       = 145,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32A32_UINT           = 146,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32A32_SINT           = 147,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32_TYPELESS          = 148,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32_FLOAT             = 149,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32_UINT              = 150,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32_SINT              = 151,
+   SVGA3D_DEVCAP_DXFMT_R16G16B16A16_TYPELESS       = 152,
+   SVGA3D_DEVCAP_DXFMT_R16G16B16A16_UINT           = 153,
+   SVGA3D_DEVCAP_DXFMT_R16G16B16A16_SNORM          = 154,
+   SVGA3D_DEVCAP_DXFMT_R16G16B16A16_SINT           = 155,
+   SVGA3D_DEVCAP_DXFMT_R32G32_TYPELESS             = 156,
+   SVGA3D_DEVCAP_DXFMT_R32G32_UINT                 = 157,
+   SVGA3D_DEVCAP_DXFMT_R32G32_SINT                 = 158,
+   SVGA3D_DEVCAP_DXFMT_R32G8X24_TYPELESS           = 159,
+   SVGA3D_DEVCAP_DXFMT_D32_FLOAT_S8X24_UINT        = 160,
+   SVGA3D_DEVCAP_DXFMT_R32_FLOAT_X8X24_TYPELESS    = 161,
+   SVGA3D_DEVCAP_DXFMT_X32_TYPELESS_G8X24_UINT     = 162,
+   SVGA3D_DEVCAP_DXFMT_R10G10B10A2_TYPELESS        = 163,
+   SVGA3D_DEVCAP_DXFMT_R10G10B10A2_UINT            = 164,
+   SVGA3D_DEVCAP_DXFMT_R11G11B10_FLOAT             = 165,
+   SVGA3D_DEVCAP_DXFMT_R8G8B8A8_TYPELESS           = 166,
+   SVGA3D_DEVCAP_DXFMT_R8G8B8A8_UNORM              = 167,
+   SVGA3D_DEVCAP_DXFMT_R8G8B8A8_UNORM_SRGB         = 168,
+   SVGA3D_DEVCAP_DXFMT_R8G8B8A8_UINT               = 169,
+   SVGA3D_DEVCAP_DXFMT_R8G8B8A8_SINT               = 170,
+   SVGA3D_DEVCAP_DXFMT_R16G16_TYPELESS             = 171,
+   SVGA3D_DEVCAP_DXFMT_R16G16_UINT                 = 172,
+   SVGA3D_DEVCAP_DXFMT_R16G16_SINT                 = 173,
+   SVGA3D_DEVCAP_DXFMT_R32_TYPELESS                = 174,
+   SVGA3D_DEVCAP_DXFMT_D32_FLOAT                   = 175,
+   SVGA3D_DEVCAP_DXFMT_R32_UINT                    = 176,
+   SVGA3D_DEVCAP_DXFMT_R32_SINT                    = 177,
+   SVGA3D_DEVCAP_DXFMT_R24G8_TYPELESS              = 178,
+   SVGA3D_DEVCAP_DXFMT_D24_UNORM_S8_UINT           = 179,
+   SVGA3D_DEVCAP_DXFMT_R24_UNORM_X8_TYPELESS       = 180,
+   SVGA3D_DEVCAP_DXFMT_X24_TYPELESS_G8_UINT        = 181,
+   SVGA3D_DEVCAP_DXFMT_R8G8_TYPELESS               = 182,
+   SVGA3D_DEVCAP_DXFMT_R8G8_UNORM                  = 183,
+   SVGA3D_DEVCAP_DXFMT_R8G8_UINT                   = 184,
+   SVGA3D_DEVCAP_DXFMT_R8G8_SINT                   = 185,
+   SVGA3D_DEVCAP_DXFMT_R16_TYPELESS                = 186,
+   SVGA3D_DEVCAP_DXFMT_R16_UNORM                   = 187,
+   SVGA3D_DEVCAP_DXFMT_R16_UINT                    = 188,
+   SVGA3D_DEVCAP_DXFMT_R16_SNORM                   = 189,
+   SVGA3D_DEVCAP_DXFMT_R16_SINT                    = 190,
+   SVGA3D_DEVCAP_DXFMT_R8_TYPELESS                 = 191,
+   SVGA3D_DEVCAP_DXFMT_R8_UNORM                    = 192,
+   SVGA3D_DEVCAP_DXFMT_R8_UINT                     = 193,
+   SVGA3D_DEVCAP_DXFMT_R8_SNORM                    = 194,
+   SVGA3D_DEVCAP_DXFMT_R8_SINT                     = 195,
+   SVGA3D_DEVCAP_DXFMT_P8                          = 196,
+   SVGA3D_DEVCAP_DXFMT_R9G9B9E5_SHAREDEXP          = 197,
+   SVGA3D_DEVCAP_DXFMT_R8G8_B8G8_UNORM             = 198,
+   SVGA3D_DEVCAP_DXFMT_G8R8_G8B8_UNORM             = 199,
+   SVGA3D_DEVCAP_DXFMT_BC1_TYPELESS                = 200,
+   SVGA3D_DEVCAP_DXFMT_BC1_UNORM_SRGB              = 201,
+   SVGA3D_DEVCAP_DXFMT_BC2_TYPELESS                = 202,
+   SVGA3D_DEVCAP_DXFMT_BC2_UNORM_SRGB              = 203,
+   SVGA3D_DEVCAP_DXFMT_BC3_TYPELESS                = 204,
+   SVGA3D_DEVCAP_DXFMT_BC3_UNORM_SRGB              = 205,
+   SVGA3D_DEVCAP_DXFMT_BC4_TYPELESS                = 206,
+   SVGA3D_DEVCAP_DXFMT_ATI1                        = 207,
+   SVGA3D_DEVCAP_DXFMT_BC4_SNORM                   = 208,
+   SVGA3D_DEVCAP_DXFMT_BC5_TYPELESS                = 209,
+   SVGA3D_DEVCAP_DXFMT_ATI2                        = 210,
+   SVGA3D_DEVCAP_DXFMT_BC5_SNORM                   = 211,
+   SVGA3D_DEVCAP_DXFMT_R10G10B10_XR_BIAS_A2_UNORM  = 212,
+   SVGA3D_DEVCAP_DXFMT_B8G8R8A8_TYPELESS           = 213,
+   SVGA3D_DEVCAP_DXFMT_B8G8R8A8_UNORM_SRGB         = 214,
+   SVGA3D_DEVCAP_DXFMT_B8G8R8X8_TYPELESS           = 215,
+   SVGA3D_DEVCAP_DXFMT_B8G8R8X8_UNORM_SRGB         = 216,
+   SVGA3D_DEVCAP_DXFMT_Z_DF16                      = 217,
+   SVGA3D_DEVCAP_DXFMT_Z_DF24                      = 218,
+   SVGA3D_DEVCAP_DXFMT_Z_D24S8_INT                 = 219,
+   SVGA3D_DEVCAP_DXFMT_YV12                        = 220,
+   SVGA3D_DEVCAP_DXFMT_R32G32B32A32_FLOAT          = 221,
+   SVGA3D_DEVCAP_DXFMT_R16G16B16A16_FLOAT          = 222,
+   SVGA3D_DEVCAP_DXFMT_R16G16B16A16_UNORM          = 223,
+   SVGA3D_DEVCAP_DXFMT_R32G32_FLOAT                = 224,
+   SVGA3D_DEVCAP_DXFMT_R10G10B10A2_UNORM           = 225,
+   SVGA3D_DEVCAP_DXFMT_R8G8B8A8_SNORM              = 226,
+   SVGA3D_DEVCAP_DXFMT_R16G16_FLOAT                = 227,
+   SVGA3D_DEVCAP_DXFMT_R16G16_UNORM                = 228,
+   SVGA3D_DEVCAP_DXFMT_R16G16_SNORM                = 229,
+   SVGA3D_DEVCAP_DXFMT_R32_FLOAT                   = 230,
+   SVGA3D_DEVCAP_DXFMT_R8G8_SNORM                  = 231,
+   SVGA3D_DEVCAP_DXFMT_R16_FLOAT                   = 232,
+   SVGA3D_DEVCAP_DXFMT_D16_UNORM                   = 233,
+   SVGA3D_DEVCAP_DXFMT_A8_UNORM                    = 234,
+   SVGA3D_DEVCAP_DXFMT_BC1_UNORM                   = 235,
+   SVGA3D_DEVCAP_DXFMT_BC2_UNORM                   = 236,
+   SVGA3D_DEVCAP_DXFMT_BC3_UNORM                   = 237,
+   SVGA3D_DEVCAP_DXFMT_B5G6R5_UNORM                = 238,
+   SVGA3D_DEVCAP_DXFMT_B5G5R5A1_UNORM              = 239,
+   SVGA3D_DEVCAP_DXFMT_B8G8R8A8_UNORM              = 240,
+   SVGA3D_DEVCAP_DXFMT_B8G8R8X8_UNORM              = 241,
+   SVGA3D_DEVCAP_DXFMT_BC4_UNORM                   = 242,
+   SVGA3D_DEVCAP_DXFMT_BC5_UNORM                   = 243,
+
    SVGA3D_DEVCAP_MAX                       /* This must be the last index. */
 } SVGA3dDevCapIndex;
+
+/*
+ * Bit definitions for DXFMT devcaps
+ *
+ *
+ * SUPPORTED: Can the format be defined?
+ * SHADER_SAMPLE: Can the format be sampled from a shader?
+ * COLOR_RENDERTARGET: Can the format be a color render target?
+ * DEPTH_RENDERTARGET: Can the format be a depth render target?
+ * BLENDABLE: Is the format blendable?
+ * MIPS: Does the format support mip levels?
+ * ARRAY: Does the format support texture arrays?
+ * VOLUME: Does the format support having volume?
+ * MULTISAMPLE_2: Does the format support 2x multisample?
+ * MULTISAMPLE_4: Does the format support 4x multisample?
+ * MULTISAMPLE_8: Does the format support 8x multisample?
+ */
+#define SVGA3D_DXFMT_SUPPORTED                (1 <<  0)
+#define SVGA3D_DXFMT_SHADER_SAMPLE            (1 <<  1)
+#define SVGA3D_DXFMT_COLOR_RENDERTARGET       (1 <<  2)
+#define SVGA3D_DXFMT_DEPTH_RENDERTARGET       (1 <<  3)
+#define SVGA3D_DXFMT_BLENDABLE                (1 <<  4)
+#define SVGA3D_DXFMT_MIPS                     (1 <<  5)
+#define SVGA3D_DXFMT_ARRAY                    (1 <<  6)
+#define SVGA3D_DXFMT_VOLUME                   (1 <<  7)
+#define SVGA3D_DXFMT_DX_VERTEX_BUFFER         (1 <<  8)
+#define SVGADX_DXFMT_MULTISAMPLE_2            (1 <<  9)
+#define SVGADX_DXFMT_MULTISAMPLE_4            (1 << 10)
+#define SVGADX_DXFMT_MULTISAMPLE_8            (1 << 11)
+#define SVGADX_DXFMT_MAX                      (1 << 12)
+
+/*
+ * Convenience mask for any multisample capability.
+ *
+ * The multisample bits imply both load and render capability.
+ */
+#define SVGA3D_DXFMT_MULTISAMPLE ( \
+           SVGADX_DXFMT_MULTISAMPLE_2 | \
+           SVGADX_DXFMT_MULTISAMPLE_4 | \
+           SVGADX_DXFMT_MULTISAMPLE_8 )
 
 typedef union {
    Bool   b;
@@ -233,4 +454,4 @@ typedef union {
    float  f;
 } SVGA3dDevCapResult;
 
-#endif // _SVGA3D_DEVCAPS_H_
+#endif /* _SVGA3D_DEVCAPS_H_ */

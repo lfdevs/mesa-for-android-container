@@ -37,7 +37,7 @@
 #include <stdint.h>
 
 #define XA_TRACKER_VERSION_MAJOR 2
-#define XA_TRACKER_VERSION_MINOR 2
+#define XA_TRACKER_VERSION_MINOR 3
 #define XA_TRACKER_VERSION_PATCH 0
 
 #define XA_FLAG_SHARED         (1 << 0)
@@ -149,6 +149,7 @@ struct xa_box {
 enum xa_handle_type {
     xa_handle_type_shared,
     xa_handle_type_kms,
+    xa_handle_type_fd,
 };
 
 extern void xa_tracker_version(int *major, int *minor, int *patch);
@@ -177,6 +178,17 @@ extern struct xa_surface * xa_surface_from_handle(struct xa_tracker *xa,
 					    enum xa_formats pform,
 					    unsigned int flags,
 					    uint32_t handle, uint32_t stride);
+extern struct xa_surface *
+xa_surface_from_handle2(struct xa_tracker *xa,
+                        int width,
+                        int height,
+                        int depth,
+                        enum xa_surface_type stype,
+                        enum xa_formats xa_format,
+                        unsigned int flags,
+                        enum xa_handle_type type,
+                        uint32_t handle,
+                        uint32_t stride);
 
 enum xa_formats xa_surface_format(const struct xa_surface *srf);
 

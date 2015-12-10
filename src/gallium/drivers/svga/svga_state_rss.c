@@ -23,16 +23,20 @@
  *
  **********************************************************/
 
+#include "pipe/p_defines.h"
+#include "util/u_bitmask.h"
 #include "util/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
-#include "pipe/p_defines.h"
 #include "util/u_math.h"
+#include "util/u_memory.h"
 
 #include "svga_context.h"
 #include "svga_screen.h"
 #include "svga_state.h"
 #include "svga_cmd.h"
+#include "svga_format.h"
+#include "svga_shader.h"
 
 
 struct rs_queue {
@@ -77,7 +81,7 @@ svga_queue_rs( struct rs_queue *q,
  * the "to" state.
  */
 static enum pipe_error
-emit_rss(struct svga_context *svga, unsigned dirty)
+emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
 {
    struct svga_screen *screen = svga_screen(svga->pipe.screen);
    struct rs_queue queue;
@@ -85,7 +89,7 @@ emit_rss(struct svga_context *svga, unsigned dirty)
 
    queue.rs_count = 0;
 
-   if (dirty & SVGA_NEW_BLEND) {
+   if (dirty & (SVGA_NEW_BLEND | SVGA_NEW_BLEND_COLOR)) {
       const struct svga_blend_state *curr = svga->curr.blend;
 
       EMIT_RS( svga, curr->rt[0].writemask, COLORWRITEENABLE, fail );
@@ -119,7 +123,7 @@ emit_rss(struct svga_context *svga, unsigned dirty)
       EMIT_RS( svga, color, BLENDCOLOR, fail );
    }
 
-   if (dirty & (SVGA_NEW_DEPTH_STENCIL | SVGA_NEW_RAST)) {
+   if (dirty & (SVGA_NEW_DEPTH_STENCIL_ALPHA | SVGA_NEW_RAST)) {
       const struct svga_depth_stencil_state *curr = svga->curr.depth; 
       const struct svga_rasterizer_state *rast = svga->curr.rast; 
 
@@ -300,6 +304,151 @@ fail:
    return PIPE_ERROR_OUT_OF_MEMORY;
 }
 
+/** Returns a non-culling rasterizer state object to be used with
+ *  point sprite.
+ */
+static struct svga_rasterizer_state *
+get_no_cull_rasterizer_state(struct svga_context *svga)
+{
+   const struct svga_rasterizer_state *r = svga->curr.rast;
+   unsigned int aa_point = r->templ.point_smooth;
+
+   if (!svga->rasterizer_no_cull[aa_point]) {
+      struct pipe_rasterizer_state rast;
+
+      memset(&rast, 0, sizeof(rast));
+      rast.flatshade = 1;
+      rast.front_ccw = 1;
+      rast.point_smooth = r->templ.point_smooth;
+
+      /* All rasterizer states have the same half_pixel_center,
+       * bottom_edge_rule and clip_halfz values since they are
+       * constant for a context. If we ever implement
+       * GL_ARB_clip_control, the clip_halfz field would have to be observed.
+       */
+      rast.half_pixel_center = r->templ.half_pixel_center;
+      rast.bottom_edge_rule = r->templ.bottom_edge_rule;
+      rast.clip_halfz = r->templ.clip_halfz;
+
+      svga->rasterizer_no_cull[aa_point] =
+               svga->pipe.create_rasterizer_state(&svga->pipe, &rast);
+   }
+   return svga->rasterizer_no_cull[aa_point];
+}
+
+static enum pipe_error
+emit_rss_vgpu10(struct svga_context *svga, unsigned dirty)
+{
+   enum pipe_error ret = PIPE_OK;
+
+   svga_hwtnl_flush_retry(svga);
+
+   if (dirty & (SVGA_NEW_BLEND | SVGA_NEW_BLEND_COLOR)) {
+      const struct svga_blend_state *curr;
+      float blend_factor[4];
+
+      if (svga_has_any_integer_cbufs(svga)) {
+         /* Blending is not supported in integer-valued render targets. */
+         curr = svga->noop_blend;
+         blend_factor[0] =
+         blend_factor[1] =
+         blend_factor[2] =
+         blend_factor[3] = 0;
+      }
+      else {
+         curr = svga->curr.blend;
+
+         if (curr->blend_color_alpha) {
+            blend_factor[0] =
+            blend_factor[1] =
+            blend_factor[2] =
+            blend_factor[3] = svga->curr.blend_color.color[3];
+         }
+         else {
+            blend_factor[0] = svga->curr.blend_color.color[0];
+            blend_factor[1] = svga->curr.blend_color.color[1];
+            blend_factor[2] = svga->curr.blend_color.color[2];
+            blend_factor[3] = svga->curr.blend_color.color[3];
+         }
+      }
+
+      /* Set/bind the blend state object */
+      if (svga->state.hw_draw.blend_id != curr->id ||
+          svga->state.hw_draw.blend_factor[0] != blend_factor[0] ||
+          svga->state.hw_draw.blend_factor[1] != blend_factor[1] ||
+          svga->state.hw_draw.blend_factor[2] != blend_factor[2] ||
+          svga->state.hw_draw.blend_factor[3] != blend_factor[3] ||
+          svga->state.hw_draw.blend_sample_mask != svga->curr.sample_mask) {
+         ret = SVGA3D_vgpu10_SetBlendState(svga->swc, curr->id,
+                                           blend_factor,
+                                           svga->curr.sample_mask);
+         if (ret != PIPE_OK)
+            return ret;
+
+         svga->state.hw_draw.blend_id = curr->id;
+         svga->state.hw_draw.blend_factor[0] = blend_factor[0];
+         svga->state.hw_draw.blend_factor[1] = blend_factor[1];
+         svga->state.hw_draw.blend_factor[2] = blend_factor[2];
+         svga->state.hw_draw.blend_factor[3] = blend_factor[3];
+         svga->state.hw_draw.blend_sample_mask = svga->curr.sample_mask;
+      }
+   }
+
+   if (dirty & (SVGA_NEW_DEPTH_STENCIL_ALPHA | SVGA_NEW_STENCIL_REF)) {
+      const struct svga_depth_stencil_state *curr = svga->curr.depth;
+      unsigned curr_ref = svga->curr.stencil_ref.ref_value[0];
+
+      if (curr->id != svga->state.hw_draw.depth_stencil_id ||
+          curr_ref != svga->state.hw_draw.stencil_ref) {
+         /* Set/bind the depth/stencil state object */
+         ret = SVGA3D_vgpu10_SetDepthStencilState(svga->swc, curr->id,
+                                                  curr_ref);
+         if (ret != PIPE_OK)
+            return ret;
+
+         svga->state.hw_draw.depth_stencil_id = curr->id;
+         svga->state.hw_draw.stencil_ref = curr_ref;
+      }
+   }
+
+   if (dirty & (SVGA_NEW_REDUCED_PRIMITIVE | SVGA_NEW_RAST)) {
+      const struct svga_rasterizer_state *rast;
+
+      if (svga->curr.reduced_prim == PIPE_PRIM_POINTS &&
+          svga->curr.gs && svga->curr.gs->wide_point) {
+
+         /* If we are drawing a point sprite, we will need to
+          * bind a non-culling rasterizer state object
+          */
+         rast = get_no_cull_rasterizer_state(svga);
+      }
+      else {
+         rast = svga->curr.rast;
+      }
+
+      if (svga->state.hw_draw.rasterizer_id != rast->id) {
+         /* Set/bind the rasterizer state object */
+         ret = SVGA3D_vgpu10_SetRasterizerState(svga->swc, rast->id);
+         if (ret != PIPE_OK)
+            return ret;
+         svga->state.hw_draw.rasterizer_id = rast->id;
+      }
+   }
+   return PIPE_OK;
+}
+
+
+static enum pipe_error
+emit_rss(struct svga_context *svga, unsigned dirty)
+{
+   if (svga_have_vgpu10(svga)) {
+      return emit_rss_vgpu10(svga, dirty);
+   }
+   else {
+      return emit_rss_vgpu9(svga, dirty);
+   }
+}
+
 
 struct svga_tracked_state svga_hw_rss = 
 {
@@ -307,11 +456,12 @@ struct svga_tracked_state svga_hw_rss =
 
    (SVGA_NEW_BLEND |
     SVGA_NEW_BLEND_COLOR |
-    SVGA_NEW_DEPTH_STENCIL |
+    SVGA_NEW_DEPTH_STENCIL_ALPHA |
     SVGA_NEW_STENCIL_REF |
     SVGA_NEW_RAST |
     SVGA_NEW_FRAME_BUFFER |
-    SVGA_NEW_NEED_PIPELINE),
+    SVGA_NEW_NEED_PIPELINE |
+    SVGA_NEW_REDUCED_PRIMITIVE),
 
    emit_rss
 };

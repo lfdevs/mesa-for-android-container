@@ -8,6 +8,7 @@ env = env.Clone()
 
 env.Append(CPPPATH = [
     '#/include',
+    '#/include/HaikuGL',
     '#/src/egl/main',
     '#/src',
 ])

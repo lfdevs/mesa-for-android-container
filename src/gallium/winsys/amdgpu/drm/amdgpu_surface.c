@@ -175,7 +175,9 @@ static int compute_level(struct amdgpu_winsys *ws,
                          struct radeon_surf *surf, bool is_stencil,
                          unsigned level, unsigned type, bool compressed,
                          ADDR_COMPUTE_SURFACE_INFO_INPUT *AddrSurfInfoIn,
-                         ADDR_COMPUTE_SURFACE_INFO_OUTPUT *AddrSurfInfoOut)
+                         ADDR_COMPUTE_SURFACE_INFO_OUTPUT *AddrSurfInfoOut,
+                         ADDR_COMPUTE_DCCINFO_INPUT *AddrDccIn,
+                         ADDR_COMPUTE_DCCINFO_OUTPUT *AddrDccOut)
 {
    struct radeon_surf_level *surf_level;
    ADDR_E_RETURNCODE ret;
@@ -248,6 +250,31 @@ static int compute_level(struct amdgpu_winsys *ws,
       surf->tiling_index[level] = AddrSurfInfoOut->tileIndex;
 
    surf->bo_size = surf_level->offset + AddrSurfInfoOut->surfSize;
+
+   if (AddrSurfInfoIn->flags.dccCompatible) {
+      AddrDccIn->colorSurfSize = AddrSurfInfoOut->surfSize;
+      AddrDccIn->tileMode = AddrSurfInfoOut->tileMode;
+      AddrDccIn->tileInfo = *AddrSurfInfoOut->pTileInfo;
+      AddrDccIn->tileIndex = AddrSurfInfoOut->tileIndex;
+      AddrDccIn->macroModeIndex = AddrSurfInfoOut->macroModeIndex;
+
+      ret = AddrComputeDccInfo(ws->addrlib,
+                               AddrDccIn,
+                               AddrDccOut);
+
+      if (ret == ADDR_OK) {
+         surf_level->dcc_offset = surf->dcc_size;
+         surf->dcc_size = surf_level->dcc_offset + AddrDccOut->dccRamSize;
+         surf->dcc_alignment = MAX2(surf->dcc_alignment, AddrDccOut->dccRamBaseAlign);
+      } else {
+         surf->dcc_size = 0;
+         surf_level->dcc_offset = 0;
+      }
+   } else {
+      surf->dcc_size = 0;
+      surf_level->dcc_offset = 0;
+   }
+
    return 0;
 }
 
@@ -259,6 +286,8 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    bool compressed;
    ADDR_COMPUTE_SURFACE_INFO_INPUT AddrSurfInfoIn = {0};
    ADDR_COMPUTE_SURFACE_INFO_OUTPUT AddrSurfInfoOut = {0};
+   ADDR_COMPUTE_DCCINFO_INPUT AddrDccIn = {0};
+   ADDR_COMPUTE_DCCINFO_OUTPUT AddrDccOut = {0};
    ADDR_TILEINFO AddrTileInfoIn = {0};
    ADDR_TILEINFO AddrTileInfoOut = {0};
    int r;
@@ -269,6 +298,8 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
 
    AddrSurfInfoIn.size = sizeof(ADDR_COMPUTE_SURFACE_INFO_INPUT);
    AddrSurfInfoOut.size = sizeof(ADDR_COMPUTE_SURFACE_INFO_OUTPUT);
+   AddrDccIn.size = sizeof(ADDR_COMPUTE_DCCINFO_INPUT);
+   AddrDccOut.size = sizeof(ADDR_COMPUTE_DCCINFO_OUTPUT);
    AddrSurfInfoOut.pTileInfo = &AddrTileInfoOut;
 
    type = RADEON_SURF_GET(surf->flags, TYPE);
@@ -318,10 +349,10 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
       }
    }
    else {
-      AddrSurfInfoIn.bpp = surf->bpe * 8;
+      AddrDccIn.bpp = AddrSurfInfoIn.bpp = surf->bpe * 8;
    }
 
-   AddrSurfInfoIn.numSamples = surf->nsamples;
+   AddrDccIn.numSamples = AddrSurfInfoIn.numSamples = surf->nsamples;
    AddrSurfInfoIn.tileIndex = -1;
 
    /* Set the micro tile type. */
@@ -339,6 +370,9 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    AddrSurfInfoIn.flags.display = (surf->flags & RADEON_SURF_SCANOUT) != 0;
    AddrSurfInfoIn.flags.pow2Pad = surf->last_level > 0;
    AddrSurfInfoIn.flags.degrade4Space = 1;
+   AddrSurfInfoIn.flags.dccCompatible = !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
+                                        !(surf->flags & RADEON_SURF_SCANOUT) &&
+                                        !compressed && AddrDccIn.numSamples <= 1;
 
    /* This disables incorrect calculations (hacks) in addrlib. */
    AddrSurfInfoIn.flags.noStencil = 1;
@@ -375,11 +409,13 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    }
 
    surf->bo_size = 0;
+   surf->dcc_size = 0;
+   surf->dcc_alignment = 1;
 
    /* Calculate texture layout information. */
    for (level = 0; level <= surf->last_level; level++) {
       r = compute_level(ws, surf, false, level, type, compressed,
-                        &AddrSurfInfoIn, &AddrSurfInfoOut);
+                        &AddrSurfInfoIn, &AddrSurfInfoOut, &AddrDccIn, &AddrDccOut);
       if (r)
          return r;
 
@@ -406,7 +442,7 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
 
       for (level = 0; level <= surf->last_level; level++) {
          r = compute_level(ws, surf, true, level, type, compressed,
-                           &AddrSurfInfoIn, &AddrSurfInfoOut);
+                           &AddrSurfInfoIn, &AddrSurfInfoOut, &AddrDccIn, &AddrDccOut);
          if (r)
             return r;
 

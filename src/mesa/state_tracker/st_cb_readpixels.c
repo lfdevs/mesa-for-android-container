@@ -139,7 +139,7 @@ st_readpixels(struct gl_context *ctx, GLint x, GLint y,
     * in which case the memcpy-based fast path will likely be used and
     * we don't have to blit. */
    if (_mesa_format_matches_format_and_type(rb->Format, format,
-                                            type, pack->SwapBytes)) {
+                                            type, pack->SwapBytes, NULL)) {
       goto fallback;
    }
 

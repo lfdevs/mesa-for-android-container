@@ -162,6 +162,8 @@ intel_batchbuffer_advance(struct brw_context *brw)
       abort();
    }
    batch->total = 0;
+#else
+   (void) brw;
 #endif
 }
 

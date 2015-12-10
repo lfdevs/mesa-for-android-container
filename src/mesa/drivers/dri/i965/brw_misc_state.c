@@ -174,13 +174,17 @@ brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
    uint32_t tile_mask_x = 0, tile_mask_y = 0;
 
    if (depth_mt) {
-      intel_miptree_get_tile_masks(depth_mt, &tile_mask_x, &tile_mask_y, false);
+      intel_get_tile_masks(depth_mt->tiling, depth_mt->tr_mode,
+                           depth_mt->cpp, false,
+                           &tile_mask_x, &tile_mask_y);
 
       if (intel_miptree_level_has_hiz(depth_mt, depth_level)) {
          uint32_t hiz_tile_mask_x, hiz_tile_mask_y;
-         intel_miptree_get_tile_masks(depth_mt->hiz_buf->mt,
-                                      &hiz_tile_mask_x, &hiz_tile_mask_y,
-                                      false);
+         intel_get_tile_masks(depth_mt->hiz_buf->mt->tiling,
+                              depth_mt->hiz_buf->mt->tr_mode,
+                              depth_mt->hiz_buf->mt->cpp,
+                              false, &hiz_tile_mask_x,
+                              &hiz_tile_mask_y);
 
          /* Each HiZ row represents 2 rows of pixels */
          hiz_tile_mask_y = hiz_tile_mask_y << 1 | 1;
@@ -200,9 +204,11 @@ brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
          tile_mask_y |= 63;
       } else {
          uint32_t stencil_tile_mask_x, stencil_tile_mask_y;
-         intel_miptree_get_tile_masks(stencil_mt,
-                                      &stencil_tile_mask_x,
-                                      &stencil_tile_mask_y, false);
+         intel_get_tile_masks(stencil_mt->tiling,
+                              stencil_mt->tr_mode,
+                              stencil_mt->cpp,
+                              false, &stencil_tile_mask_x,
+                              &stencil_tile_mask_y);
 
          tile_mask_x |= stencil_tile_mask_x;
          tile_mask_y |= stencil_tile_mask_y;
@@ -880,14 +886,6 @@ brw_upload_invariant_state(struct brw_context *brw)
 
    brw_emit_select_pipeline(brw, BRW_RENDER_PIPELINE);
    brw->last_pipeline = BRW_RENDER_PIPELINE;
-
-   if (brw->gen < 6) {
-      /* Disable depth offset clamping. */
-      BEGIN_BATCH(2);
-      OUT_BATCH(_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP << 16 | (2 - 2));
-      OUT_BATCH_F(0.0);
-      ADVANCE_BATCH();
-   }
 
    if (brw->gen >= 8) {
       BEGIN_BATCH(3);

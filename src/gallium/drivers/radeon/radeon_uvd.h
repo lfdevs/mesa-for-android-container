@@ -233,6 +233,15 @@ struct ruvd_h265 {
 
 	uint8_t		highestTid;
 	uint8_t		isNonRef;
+
+	uint8_t 	p010_mode;
+	uint8_t 	msb_mode;
+	uint8_t 	luma_10to8;
+	uint8_t 	chroma_10to8;
+	uint8_t 	sclr_luma10to8;
+	uint8_t 	sclr_chroma10to8;
+
+	uint8_t 	direct_reflist[2][15];
 };
 
 struct ruvd_vc1 {
@@ -385,7 +394,10 @@ struct ruvd_msg {
 			uint32_t	dt_chroma_top_offset;
 			uint32_t	dt_chroma_bottom_offset;
 			uint32_t	dt_surf_tile_config;
-			uint32_t	dt_reserved[3];
+			uint32_t	dt_uv_surf_tile_config;
+			// re-use dt_wa_chroma_top_offset as dt_ext_info for UV pitch in stoney
+			uint32_t	dt_wa_chroma_top_offset;
+			uint32_t	dt_wa_chroma_bottom_offset;
 
 			uint32_t	reserved[16];
 

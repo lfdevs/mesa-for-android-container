@@ -127,7 +127,8 @@ softpipe_can_create_resource(struct pipe_screen *screen,
  */
 static boolean
 softpipe_displaytarget_layout(struct pipe_screen *screen,
-                              struct softpipe_resource *spr)
+                              struct softpipe_resource *spr,
+                              const void *map_front_private)
 {
    struct sw_winsys *winsys = softpipe_screen(screen)->winsys;
 
@@ -139,6 +140,7 @@ softpipe_displaytarget_layout(struct pipe_screen *screen,
                                           spr->base.width0, 
                                           spr->base.height0,
                                           64,
+                                          map_front_private,
                                           &spr->stride[0] );
 
    return spr->dt != NULL;
@@ -149,8 +151,9 @@ softpipe_displaytarget_layout(struct pipe_screen *screen,
  * Create new pipe_resource given the template information.
  */
 static struct pipe_resource *
-softpipe_resource_create(struct pipe_screen *screen,
-                         const struct pipe_resource *templat)
+softpipe_resource_create_front(struct pipe_screen *screen,
+                               const struct pipe_resource *templat,
+                               const void *map_front_private)
 {
    struct softpipe_resource *spr = CALLOC_STRUCT(softpipe_resource);
    if (!spr)
@@ -169,7 +172,7 @@ softpipe_resource_create(struct pipe_screen *screen,
    if (spr->base.bind & (PIPE_BIND_DISPLAY_TARGET |
 			 PIPE_BIND_SCANOUT |
 			 PIPE_BIND_SHARED)) {
-      if (!softpipe_displaytarget_layout(screen, spr))
+      if (!softpipe_displaytarget_layout(screen, spr, map_front_private))
          goto fail;
    }
    else {
@@ -184,6 +187,12 @@ softpipe_resource_create(struct pipe_screen *screen,
    return NULL;
 }
 
+static struct pipe_resource *
+softpipe_resource_create(struct pipe_screen *screen,
+                         const struct pipe_resource *templat)
+{
+   return softpipe_resource_create_front(screen, templat, NULL);
+}
 
 static void
 softpipe_resource_destroy(struct pipe_screen *pscreen,
@@ -514,6 +523,7 @@ void
 softpipe_init_screen_texture_funcs(struct pipe_screen *screen)
 {
    screen->resource_create = softpipe_resource_create;
+   screen->resource_create_front = softpipe_resource_create_front;
    screen->resource_destroy = softpipe_resource_destroy;
    screen->resource_from_handle = softpipe_resource_from_handle;
    screen->resource_get_handle = softpipe_resource_get_handle;

@@ -35,7 +35,7 @@ endif
 
 LOCAL_SRC_FILES := target.c
 
-LOCAL_CFLAGS := -DDRI_TARGET
+LOCAL_CFLAGS :=
 
 LOCAL_SHARED_LIBRARIES := \
 	libdl \
@@ -108,6 +108,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libmesa_dri_common \
 	libmesa_megadriver_stub \
 	libmesa_gallium \
+	libmesa_pipe_loader \
 	libmesa_util \
 	libmesa_loader \
 

@@ -9,6 +9,7 @@ env.Append(CPPPATH = [
     '#/src',
     '#/src/mapi',
     '#/src/mesa',
+    '#/include/HaikuGL',
 ])
 
 sources = [

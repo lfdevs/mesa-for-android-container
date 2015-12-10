@@ -586,6 +586,7 @@ GLAPI void APIENTRY glBeginTransformFeedback(GLenum mode);
 GLAPI void APIENTRY glBindBufferBase(GLenum target, GLuint index, GLuint buffer);
 GLAPI void APIENTRY glBindBufferRange(GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
 void APIENTRY gl_dispatch_stub_574(GLuint program, GLuint colorNumber, const GLchar *name);
+GLAPI void APIENTRY glBindFragDataLocationEXT(GLuint program, GLuint colorNumber, const GLchar *name);
 void APIENTRY gl_dispatch_stub_575(GLenum target, GLenum clamp);
 GLAPI void APIENTRY glClearBufferfi(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil);
 GLAPI void APIENTRY glClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *value);
@@ -723,9 +724,9 @@ GLAPI void APIENTRY glGetInteger64v(GLenum pname, GLint64 *params);
 GLAPI void APIENTRY glGetSynciv(GLsync sync, GLenum pname, GLsizei bufSize, GLsizei *length, GLint *values);
 GLAPI GLboolean APIENTRY glIsSync(GLsync sync);
 GLAPI void APIENTRY glWaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout);
-void APIENTRY gl_dispatch_stub_702(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex);
-void APIENTRY gl_dispatch_stub_703(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLsizei primcount, GLint basevertex);
-void APIENTRY gl_dispatch_stub_704(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex);
+GLAPI void APIENTRY glDrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex);
+GLAPI void APIENTRY glDrawElementsInstancedBaseVertex(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLsizei primcount, GLint basevertex);
+GLAPI void APIENTRY glDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex);
 void APIENTRY gl_dispatch_stub_705(GLenum mode, const GLsizei *count, GLenum type, const GLvoid * const *indices, GLsizei primcount, const GLint *basevertex);
 void APIENTRY gl_dispatch_stub_706(GLenum mode);
 GLAPI void APIENTRY glGetMultisamplefv(GLenum pname, GLuint index, GLfloat *val);
@@ -919,431 +920,432 @@ GLint APIENTRY gl_dispatch_stub_894(GLuint program, GLenum programInterface, con
 GLint APIENTRY gl_dispatch_stub_895(GLuint program, GLenum programInterface, const GLchar *name);
 void APIENTRY gl_dispatch_stub_896(GLuint program, GLenum programInterface, GLuint index, GLsizei bufSize, GLsizei *length, GLchar *name);
 void APIENTRY gl_dispatch_stub_897(GLuint program, GLenum programInterface, GLuint index, GLsizei propCount, const GLenum *props, GLsizei bufSize, GLsizei *length, GLint *params);
-void APIENTRY gl_dispatch_stub_898(GLenum target, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size);
+void APIENTRY gl_dispatch_stub_898(GLuint program, GLuint shaderStorageBlockIndex, GLuint shaderStorageBlockBinding);
+void APIENTRY gl_dispatch_stub_899(GLenum target, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size);
 GLAPI void APIENTRY glTexStorage2DMultisample(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
-void APIENTRY gl_dispatch_stub_900(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations);
-void APIENTRY gl_dispatch_stub_901(GLenum target, GLsizeiptr size, const GLvoid *data, GLbitfield flags);
-void APIENTRY gl_dispatch_stub_902(GLuint texture, GLint level, GLenum format, GLenum type, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_903(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_904(GLenum target, GLuint first, GLsizei count, const GLuint *buffers);
-void APIENTRY gl_dispatch_stub_905(GLenum target, GLuint first, GLsizei count, const GLuint *buffers, const GLintptr *offsets, const GLsizeiptr *sizes);
-void APIENTRY gl_dispatch_stub_906(GLuint first, GLsizei count, const GLuint *textures);
-void APIENTRY gl_dispatch_stub_907(GLuint first, GLsizei count, const GLuint *samplers);
-void APIENTRY gl_dispatch_stub_908(GLuint first, GLsizei count, const GLuint *textures);
-void APIENTRY gl_dispatch_stub_909(GLuint first, GLsizei count, const GLuint *buffers, const GLintptr *offsets, const GLsizei *strides);
-void APIENTRY gl_dispatch_stub_910(GLenum origin, GLenum depth);
-void APIENTRY gl_dispatch_stub_911(GLuint unit, GLuint texture);
-void APIENTRY gl_dispatch_stub_912(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
-GLenum APIENTRY gl_dispatch_stub_913(GLuint framebuffer, GLenum target);
-void APIENTRY gl_dispatch_stub_914(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_915(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_916(GLuint framebuffer, GLenum buffer, GLfloat depth, GLint stencil);
-void APIENTRY gl_dispatch_stub_917(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_918(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint *value);
-void APIENTRY gl_dispatch_stub_919(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint *value);
-void APIENTRY gl_dispatch_stub_920(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_921(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_922(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_923(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size);
-void APIENTRY gl_dispatch_stub_924(GLuint texture, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width);
-void APIENTRY gl_dispatch_stub_925(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height);
-void APIENTRY gl_dispatch_stub_926(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height);
-void APIENTRY gl_dispatch_stub_927(GLsizei n, GLuint *buffers);
-void APIENTRY gl_dispatch_stub_928(GLsizei n, GLuint *framebuffers);
-void APIENTRY gl_dispatch_stub_929(GLsizei n, GLuint *pipelines);
-void APIENTRY gl_dispatch_stub_930(GLenum target, GLsizei n, GLuint *ids);
-void APIENTRY gl_dispatch_stub_931(GLsizei n, GLuint *renderbuffers);
-void APIENTRY gl_dispatch_stub_932(GLsizei n, GLuint *samplers);
-void APIENTRY gl_dispatch_stub_933(GLenum target, GLsizei n, GLuint *textures);
-void APIENTRY gl_dispatch_stub_934(GLsizei n, GLuint *ids);
-void APIENTRY gl_dispatch_stub_935(GLsizei n, GLuint *arrays);
-void APIENTRY gl_dispatch_stub_936(GLuint vaobj, GLuint index);
+void APIENTRY gl_dispatch_stub_901(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations);
+void APIENTRY gl_dispatch_stub_902(GLenum target, GLsizeiptr size, const GLvoid *data, GLbitfield flags);
+void APIENTRY gl_dispatch_stub_903(GLuint texture, GLint level, GLenum format, GLenum type, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_904(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_905(GLenum target, GLuint first, GLsizei count, const GLuint *buffers);
+void APIENTRY gl_dispatch_stub_906(GLenum target, GLuint first, GLsizei count, const GLuint *buffers, const GLintptr *offsets, const GLsizeiptr *sizes);
+void APIENTRY gl_dispatch_stub_907(GLuint first, GLsizei count, const GLuint *textures);
+void APIENTRY gl_dispatch_stub_908(GLuint first, GLsizei count, const GLuint *samplers);
+void APIENTRY gl_dispatch_stub_909(GLuint first, GLsizei count, const GLuint *textures);
+void APIENTRY gl_dispatch_stub_910(GLuint first, GLsizei count, const GLuint *buffers, const GLintptr *offsets, const GLsizei *strides);
+void APIENTRY gl_dispatch_stub_911(GLenum origin, GLenum depth);
+void APIENTRY gl_dispatch_stub_912(GLuint unit, GLuint texture);
+void APIENTRY gl_dispatch_stub_913(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
+GLenum APIENTRY gl_dispatch_stub_914(GLuint framebuffer, GLenum target);
+void APIENTRY gl_dispatch_stub_915(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_916(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_917(GLuint framebuffer, GLenum buffer, GLfloat depth, GLint stencil);
+void APIENTRY gl_dispatch_stub_918(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_919(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint *value);
+void APIENTRY gl_dispatch_stub_920(GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint *value);
+void APIENTRY gl_dispatch_stub_921(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_922(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_923(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_924(GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size);
+void APIENTRY gl_dispatch_stub_925(GLuint texture, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width);
+void APIENTRY gl_dispatch_stub_926(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height);
+void APIENTRY gl_dispatch_stub_927(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height);
+void APIENTRY gl_dispatch_stub_928(GLsizei n, GLuint *buffers);
+void APIENTRY gl_dispatch_stub_929(GLsizei n, GLuint *framebuffers);
+void APIENTRY gl_dispatch_stub_930(GLsizei n, GLuint *pipelines);
+void APIENTRY gl_dispatch_stub_931(GLenum target, GLsizei n, GLuint *ids);
+void APIENTRY gl_dispatch_stub_932(GLsizei n, GLuint *renderbuffers);
+void APIENTRY gl_dispatch_stub_933(GLsizei n, GLuint *samplers);
+void APIENTRY gl_dispatch_stub_934(GLenum target, GLsizei n, GLuint *textures);
+void APIENTRY gl_dispatch_stub_935(GLsizei n, GLuint *ids);
+void APIENTRY gl_dispatch_stub_936(GLsizei n, GLuint *arrays);
 void APIENTRY gl_dispatch_stub_937(GLuint vaobj, GLuint index);
-void APIENTRY gl_dispatch_stub_938(GLuint buffer, GLintptr offset, GLsizeiptr length);
-void APIENTRY gl_dispatch_stub_939(GLuint texture);
-void APIENTRY gl_dispatch_stub_940(GLuint texture, GLint level, GLsizei bufSize, GLvoid *pixels);
-void APIENTRY gl_dispatch_stub_941(GLuint buffer, GLenum pname, GLint64 *params);
-void APIENTRY gl_dispatch_stub_942(GLuint buffer, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_943(GLuint buffer, GLenum pname, GLvoid **params);
-void APIENTRY gl_dispatch_stub_944(GLuint buffer, GLintptr offset, GLsizeiptr size, GLvoid *data);
-void APIENTRY gl_dispatch_stub_945(GLuint framebuffer, GLenum attachment, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_946(GLuint framebuffer, GLenum pname, GLint *param);
-void APIENTRY gl_dispatch_stub_947(GLuint renderbuffer, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_948(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
+void APIENTRY gl_dispatch_stub_938(GLuint vaobj, GLuint index);
+void APIENTRY gl_dispatch_stub_939(GLuint buffer, GLintptr offset, GLsizeiptr length);
+void APIENTRY gl_dispatch_stub_940(GLuint texture);
+void APIENTRY gl_dispatch_stub_941(GLuint texture, GLint level, GLsizei bufSize, GLvoid *pixels);
+void APIENTRY gl_dispatch_stub_942(GLuint buffer, GLenum pname, GLint64 *params);
+void APIENTRY gl_dispatch_stub_943(GLuint buffer, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_944(GLuint buffer, GLenum pname, GLvoid **params);
+void APIENTRY gl_dispatch_stub_945(GLuint buffer, GLintptr offset, GLsizeiptr size, GLvoid *data);
+void APIENTRY gl_dispatch_stub_946(GLuint framebuffer, GLenum attachment, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_947(GLuint framebuffer, GLenum pname, GLint *param);
+void APIENTRY gl_dispatch_stub_948(GLuint renderbuffer, GLenum pname, GLint *params);
 void APIENTRY gl_dispatch_stub_949(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
 void APIENTRY gl_dispatch_stub_950(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
 void APIENTRY gl_dispatch_stub_951(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
-void APIENTRY gl_dispatch_stub_952(GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, GLvoid *pixels);
-void APIENTRY gl_dispatch_stub_953(GLuint texture, GLint level, GLenum pname, GLfloat *params);
-void APIENTRY gl_dispatch_stub_954(GLuint texture, GLint level, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_955(GLuint texture, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_956(GLuint texture, GLenum pname, GLuint *params);
-void APIENTRY gl_dispatch_stub_957(GLuint texture, GLenum pname, GLfloat *params);
-void APIENTRY gl_dispatch_stub_958(GLuint texture, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_959(GLuint xfb, GLenum pname, GLuint index, GLint64 *param);
-void APIENTRY gl_dispatch_stub_960(GLuint xfb, GLenum pname, GLuint index, GLint *param);
-void APIENTRY gl_dispatch_stub_961(GLuint xfb, GLenum pname, GLint *param);
-void APIENTRY gl_dispatch_stub_962(GLuint vaobj, GLuint index, GLenum pname, GLint64 *param);
-void APIENTRY gl_dispatch_stub_963(GLuint vaobj, GLuint index, GLenum pname, GLint *param);
-void APIENTRY gl_dispatch_stub_964(GLuint vaobj, GLenum pname, GLint *param);
-void APIENTRY gl_dispatch_stub_965(GLuint framebuffer, GLsizei numAttachments, const GLenum *attachments);
-void APIENTRY gl_dispatch_stub_966(GLuint framebuffer, GLsizei numAttachments, const GLenum *attachments, GLint x, GLint y, GLsizei width, GLsizei height);
-GLvoid * APIENTRY gl_dispatch_stub_967(GLuint buffer, GLenum access);
-GLvoid * APIENTRY gl_dispatch_stub_968(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
-void APIENTRY gl_dispatch_stub_969(GLuint buffer, GLsizeiptr size, const GLvoid *data, GLenum usage);
-void APIENTRY gl_dispatch_stub_970(GLuint buffer, GLsizeiptr size, const GLvoid *data, GLbitfield flags);
-void APIENTRY gl_dispatch_stub_971(GLuint buffer, GLintptr offset, GLsizeiptr size, const GLvoid *data);
-void APIENTRY gl_dispatch_stub_972(GLuint framebuffer, GLenum buf);
-void APIENTRY gl_dispatch_stub_973(GLuint framebuffer, GLsizei n, const GLenum *bufs);
-void APIENTRY gl_dispatch_stub_974(GLuint framebuffer, GLenum pname, GLint param);
-void APIENTRY gl_dispatch_stub_975(GLuint framebuffer, GLenum buf);
-void APIENTRY gl_dispatch_stub_976(GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
-void APIENTRY gl_dispatch_stub_977(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level);
-void APIENTRY gl_dispatch_stub_978(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer);
-void APIENTRY gl_dispatch_stub_979(GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height);
-void APIENTRY gl_dispatch_stub_980(GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
-void APIENTRY gl_dispatch_stub_981(GLuint texture, GLenum internalformat, GLuint buffer);
-void APIENTRY gl_dispatch_stub_982(GLuint texture, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size);
-void APIENTRY gl_dispatch_stub_983(GLuint texture, GLenum pname, const GLint *params);
-void APIENTRY gl_dispatch_stub_984(GLuint texture, GLenum pname, const GLuint *params);
-void APIENTRY gl_dispatch_stub_985(GLuint texture, GLenum pname, GLfloat param);
-void APIENTRY gl_dispatch_stub_986(GLuint texture, GLenum pname, const GLfloat *param);
-void APIENTRY gl_dispatch_stub_987(GLuint texture, GLenum pname, GLint param);
-void APIENTRY gl_dispatch_stub_988(GLuint texture, GLenum pname, const GLint *param);
-void APIENTRY gl_dispatch_stub_989(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width);
-void APIENTRY gl_dispatch_stub_990(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
-void APIENTRY gl_dispatch_stub_991(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
-void APIENTRY gl_dispatch_stub_992(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth);
-void APIENTRY gl_dispatch_stub_993(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations);
-void APIENTRY gl_dispatch_stub_994(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const GLvoid *pixels);
-void APIENTRY gl_dispatch_stub_995(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels);
-void APIENTRY gl_dispatch_stub_996(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels);
-void APIENTRY gl_dispatch_stub_997(GLuint xfb, GLuint index, GLuint buffer);
-void APIENTRY gl_dispatch_stub_998(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
-GLboolean APIENTRY gl_dispatch_stub_999(GLuint buffer);
-void APIENTRY gl_dispatch_stub_1000(GLuint vaobj, GLuint attribindex, GLuint bindingindex);
-void APIENTRY gl_dispatch_stub_1001(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset);
-void APIENTRY gl_dispatch_stub_1002(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset);
+void APIENTRY gl_dispatch_stub_952(GLuint id, GLuint buffer, GLenum pname, GLintptr offset);
+void APIENTRY gl_dispatch_stub_953(GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, GLvoid *pixels);
+void APIENTRY gl_dispatch_stub_954(GLuint texture, GLint level, GLenum pname, GLfloat *params);
+void APIENTRY gl_dispatch_stub_955(GLuint texture, GLint level, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_956(GLuint texture, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_957(GLuint texture, GLenum pname, GLuint *params);
+void APIENTRY gl_dispatch_stub_958(GLuint texture, GLenum pname, GLfloat *params);
+void APIENTRY gl_dispatch_stub_959(GLuint texture, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_960(GLuint xfb, GLenum pname, GLuint index, GLint64 *param);
+void APIENTRY gl_dispatch_stub_961(GLuint xfb, GLenum pname, GLuint index, GLint *param);
+void APIENTRY gl_dispatch_stub_962(GLuint xfb, GLenum pname, GLint *param);
+void APIENTRY gl_dispatch_stub_963(GLuint vaobj, GLuint index, GLenum pname, GLint64 *param);
+void APIENTRY gl_dispatch_stub_964(GLuint vaobj, GLuint index, GLenum pname, GLint *param);
+void APIENTRY gl_dispatch_stub_965(GLuint vaobj, GLenum pname, GLint *param);
+void APIENTRY gl_dispatch_stub_966(GLuint framebuffer, GLsizei numAttachments, const GLenum *attachments);
+void APIENTRY gl_dispatch_stub_967(GLuint framebuffer, GLsizei numAttachments, const GLenum *attachments, GLint x, GLint y, GLsizei width, GLsizei height);
+GLvoid * APIENTRY gl_dispatch_stub_968(GLuint buffer, GLenum access);
+GLvoid * APIENTRY gl_dispatch_stub_969(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
+void APIENTRY gl_dispatch_stub_970(GLuint buffer, GLsizeiptr size, const GLvoid *data, GLenum usage);
+void APIENTRY gl_dispatch_stub_971(GLuint buffer, GLsizeiptr size, const GLvoid *data, GLbitfield flags);
+void APIENTRY gl_dispatch_stub_972(GLuint buffer, GLintptr offset, GLsizeiptr size, const GLvoid *data);
+void APIENTRY gl_dispatch_stub_973(GLuint framebuffer, GLenum buf);
+void APIENTRY gl_dispatch_stub_974(GLuint framebuffer, GLsizei n, const GLenum *bufs);
+void APIENTRY gl_dispatch_stub_975(GLuint framebuffer, GLenum pname, GLint param);
+void APIENTRY gl_dispatch_stub_976(GLuint framebuffer, GLenum buf);
+void APIENTRY gl_dispatch_stub_977(GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+void APIENTRY gl_dispatch_stub_978(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level);
+void APIENTRY gl_dispatch_stub_979(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer);
+void APIENTRY gl_dispatch_stub_980(GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height);
+void APIENTRY gl_dispatch_stub_981(GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
+void APIENTRY gl_dispatch_stub_982(GLuint texture, GLenum internalformat, GLuint buffer);
+void APIENTRY gl_dispatch_stub_983(GLuint texture, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size);
+void APIENTRY gl_dispatch_stub_984(GLuint texture, GLenum pname, const GLint *params);
+void APIENTRY gl_dispatch_stub_985(GLuint texture, GLenum pname, const GLuint *params);
+void APIENTRY gl_dispatch_stub_986(GLuint texture, GLenum pname, GLfloat param);
+void APIENTRY gl_dispatch_stub_987(GLuint texture, GLenum pname, const GLfloat *param);
+void APIENTRY gl_dispatch_stub_988(GLuint texture, GLenum pname, GLint param);
+void APIENTRY gl_dispatch_stub_989(GLuint texture, GLenum pname, const GLint *param);
+void APIENTRY gl_dispatch_stub_990(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width);
+void APIENTRY gl_dispatch_stub_991(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
+void APIENTRY gl_dispatch_stub_992(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
+void APIENTRY gl_dispatch_stub_993(GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth);
+void APIENTRY gl_dispatch_stub_994(GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations);
+void APIENTRY gl_dispatch_stub_995(GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const GLvoid *pixels);
+void APIENTRY gl_dispatch_stub_996(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels);
+void APIENTRY gl_dispatch_stub_997(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels);
+void APIENTRY gl_dispatch_stub_998(GLuint xfb, GLuint index, GLuint buffer);
+void APIENTRY gl_dispatch_stub_999(GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
+GLboolean APIENTRY gl_dispatch_stub_1000(GLuint buffer);
+void APIENTRY gl_dispatch_stub_1001(GLuint vaobj, GLuint attribindex, GLuint bindingindex);
+void APIENTRY gl_dispatch_stub_1002(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset);
 void APIENTRY gl_dispatch_stub_1003(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset);
-void APIENTRY gl_dispatch_stub_1004(GLuint vaobj, GLuint bindingindex, GLuint divisor);
-void APIENTRY gl_dispatch_stub_1005(GLuint vaobj, GLuint buffer);
-void APIENTRY gl_dispatch_stub_1006(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
-void APIENTRY gl_dispatch_stub_1007(GLuint vaobj, GLuint first, GLsizei count, const GLuint *buffers, const GLintptr *offsets, const GLsizei *strides);
-void APIENTRY gl_dispatch_stub_1008(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, GLvoid *pixels);
-void APIENTRY gl_dispatch_stub_1009(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, GLvoid *pixels);
-void APIENTRY gl_dispatch_stub_1010(GLuint buffer);
-void APIENTRY gl_dispatch_stub_1011(GLuint buffer, GLintptr offset, GLsizeiptr length);
+void APIENTRY gl_dispatch_stub_1004(GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset);
+void APIENTRY gl_dispatch_stub_1005(GLuint vaobj, GLuint bindingindex, GLuint divisor);
+void APIENTRY gl_dispatch_stub_1006(GLuint vaobj, GLuint buffer);
+void APIENTRY gl_dispatch_stub_1007(GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
+void APIENTRY gl_dispatch_stub_1008(GLuint vaobj, GLuint first, GLsizei count, const GLuint *buffers, const GLintptr *offsets, const GLsizei *strides);
+void APIENTRY gl_dispatch_stub_1009(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, GLvoid *pixels);
+void APIENTRY gl_dispatch_stub_1010(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, GLvoid *pixels);
+void APIENTRY gl_dispatch_stub_1011(GLuint buffer);
+void APIENTRY gl_dispatch_stub_1012(GLuint buffer, GLintptr offset, GLsizeiptr length);
 GLAPI void APIENTRY glInvalidateFramebuffer(GLenum target, GLsizei numAttachments, const GLenum *attachments);
 GLAPI void APIENTRY glInvalidateSubFramebuffer(GLenum target, GLsizei numAttachments, const GLenum *attachments, GLint x, GLint y, GLsizei width, GLsizei height);
-void APIENTRY gl_dispatch_stub_1014(GLuint texture, GLint level);
-void APIENTRY gl_dispatch_stub_1015(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth);
-void APIENTRY gl_dispatch_stub_1016(GLfloat factor, GLfloat bias);
-void APIENTRY gl_dispatch_stub_1017(GLfloat x, GLfloat y, GLfloat z, GLfloat width, GLfloat height);
-void APIENTRY gl_dispatch_stub_1018(const GLfloat *coords);
-void APIENTRY gl_dispatch_stub_1019(GLint x, GLint y, GLint z, GLint width, GLint height);
-void APIENTRY gl_dispatch_stub_1020(const GLint *coords);
-void APIENTRY gl_dispatch_stub_1021(GLshort x, GLshort y, GLshort z, GLshort width, GLshort height);
-void APIENTRY gl_dispatch_stub_1022(const GLshort *coords);
-void APIENTRY gl_dispatch_stub_1023(GLfixed x, GLfixed y, GLfixed z, GLfixed width, GLfixed height);
-void APIENTRY gl_dispatch_stub_1024(const GLfixed *coords);
-void APIENTRY gl_dispatch_stub_1025(GLenum type, GLsizei stride, const GLvoid *pointer);
-GLbitfield APIENTRY gl_dispatch_stub_1026(GLfixed *mantissa, GLint *exponent);
-void APIENTRY gl_dispatch_stub_1027(GLclampf value, GLboolean invert);
-void APIENTRY gl_dispatch_stub_1028(GLenum pattern);
-void APIENTRY gl_dispatch_stub_1029(GLint size, GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
-void APIENTRY gl_dispatch_stub_1030(GLsizei stride, GLsizei count, const GLboolean *pointer);
-void APIENTRY gl_dispatch_stub_1031(GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
+void APIENTRY gl_dispatch_stub_1015(GLuint texture, GLint level);
+void APIENTRY gl_dispatch_stub_1016(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth);
+void APIENTRY gl_dispatch_stub_1017(GLfloat factor, GLfloat bias);
+void APIENTRY gl_dispatch_stub_1018(GLfloat x, GLfloat y, GLfloat z, GLfloat width, GLfloat height);
+void APIENTRY gl_dispatch_stub_1019(const GLfloat *coords);
+void APIENTRY gl_dispatch_stub_1020(GLint x, GLint y, GLint z, GLint width, GLint height);
+void APIENTRY gl_dispatch_stub_1021(const GLint *coords);
+void APIENTRY gl_dispatch_stub_1022(GLshort x, GLshort y, GLshort z, GLshort width, GLshort height);
+void APIENTRY gl_dispatch_stub_1023(const GLshort *coords);
+void APIENTRY gl_dispatch_stub_1024(GLfixed x, GLfixed y, GLfixed z, GLfixed width, GLfixed height);
+void APIENTRY gl_dispatch_stub_1025(const GLfixed *coords);
+void APIENTRY gl_dispatch_stub_1026(GLenum type, GLsizei stride, const GLvoid *pointer);
+GLbitfield APIENTRY gl_dispatch_stub_1027(GLfixed *mantissa, GLint *exponent);
+void APIENTRY gl_dispatch_stub_1028(GLclampf value, GLboolean invert);
+void APIENTRY gl_dispatch_stub_1029(GLenum pattern);
+void APIENTRY gl_dispatch_stub_1030(GLint size, GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
+void APIENTRY gl_dispatch_stub_1031(GLsizei stride, GLsizei count, const GLboolean *pointer);
 void APIENTRY gl_dispatch_stub_1032(GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
-void APIENTRY gl_dispatch_stub_1033(GLint size, GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
+void APIENTRY gl_dispatch_stub_1033(GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
 void APIENTRY gl_dispatch_stub_1034(GLint size, GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
-void APIENTRY gl_dispatch_stub_1035(GLenum target, GLsizei numAttachments, const GLenum *attachments);
-void APIENTRY gl_dispatch_stub_1036(GLuint pipeline, GLuint program);
-void APIENTRY gl_dispatch_stub_1037(GLuint pipeline);
-GLuint APIENTRY gl_dispatch_stub_1038(GLenum type, GLsizei count, const GLchar * const *strings);
-void APIENTRY gl_dispatch_stub_1039(GLsizei n, const GLuint *pipelines);
-void APIENTRY gl_dispatch_stub_1040(GLsizei n, GLuint *pipelines);
-void APIENTRY gl_dispatch_stub_1041(GLuint pipeline, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
-void APIENTRY gl_dispatch_stub_1042(GLuint pipeline, GLenum pname, GLint *params);
-GLboolean APIENTRY gl_dispatch_stub_1043(GLuint pipeline);
-void APIENTRY gl_dispatch_stub_1044(GLint first, GLsizei count);
-void APIENTRY gl_dispatch_stub_1045(GLuint program, GLint location, GLdouble x);
-void APIENTRY gl_dispatch_stub_1046(GLuint program, GLint location, GLsizei count, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1047(GLuint program, GLint location, GLfloat x);
-void APIENTRY gl_dispatch_stub_1048(GLuint program, GLint location, GLsizei count, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1049(GLuint program, GLint location, GLint x);
-void APIENTRY gl_dispatch_stub_1050(GLuint program, GLint location, GLsizei count, const GLint *value);
-void APIENTRY gl_dispatch_stub_1051(GLuint program, GLint location, GLuint x);
-void APIENTRY gl_dispatch_stub_1052(GLuint program, GLint location, GLsizei count, const GLuint *value);
-void APIENTRY gl_dispatch_stub_1053(GLuint program, GLint location, GLdouble x, GLdouble y);
-void APIENTRY gl_dispatch_stub_1054(GLuint program, GLint location, GLsizei count, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1055(GLuint program, GLint location, GLfloat x, GLfloat y);
-void APIENTRY gl_dispatch_stub_1056(GLuint program, GLint location, GLsizei count, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1057(GLuint program, GLint location, GLint x, GLint y);
-void APIENTRY gl_dispatch_stub_1058(GLuint program, GLint location, GLsizei count, const GLint *value);
-void APIENTRY gl_dispatch_stub_1059(GLuint program, GLint location, GLuint x, GLuint y);
-void APIENTRY gl_dispatch_stub_1060(GLuint program, GLint location, GLsizei count, const GLuint *value);
-void APIENTRY gl_dispatch_stub_1061(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z);
-void APIENTRY gl_dispatch_stub_1062(GLuint program, GLint location, GLsizei count, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1063(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z);
-void APIENTRY gl_dispatch_stub_1064(GLuint program, GLint location, GLsizei count, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1065(GLuint program, GLint location, GLint x, GLint y, GLint z);
-void APIENTRY gl_dispatch_stub_1066(GLuint program, GLint location, GLsizei count, const GLint *value);
-void APIENTRY gl_dispatch_stub_1067(GLuint program, GLint location, GLuint x, GLuint y, GLuint z);
-void APIENTRY gl_dispatch_stub_1068(GLuint program, GLint location, GLsizei count, const GLuint *value);
-void APIENTRY gl_dispatch_stub_1069(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
-void APIENTRY gl_dispatch_stub_1070(GLuint program, GLint location, GLsizei count, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1071(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
-void APIENTRY gl_dispatch_stub_1072(GLuint program, GLint location, GLsizei count, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1073(GLuint program, GLint location, GLint x, GLint y, GLint z, GLint w);
-void APIENTRY gl_dispatch_stub_1074(GLuint program, GLint location, GLsizei count, const GLint *value);
-void APIENTRY gl_dispatch_stub_1075(GLuint program, GLint location, GLuint x, GLuint y, GLuint z, GLuint w);
-void APIENTRY gl_dispatch_stub_1076(GLuint program, GLint location, GLsizei count, const GLuint *value);
-void APIENTRY gl_dispatch_stub_1077(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1078(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1079(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1080(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1081(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1082(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1083(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1084(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1085(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1086(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1087(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1088(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1089(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1090(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1091(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1092(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1093(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
-void APIENTRY gl_dispatch_stub_1094(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1095(void);
-void APIENTRY gl_dispatch_stub_1096(GLuint pipeline, GLbitfield stages, GLuint program);
-void APIENTRY gl_dispatch_stub_1097(GLuint pipeline);
-void APIENTRY gl_dispatch_stub_1098(GLDEBUGPROC callback, const GLvoid *userParam);
-void APIENTRY gl_dispatch_stub_1099(GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint *ids, GLboolean enabled);
-void APIENTRY gl_dispatch_stub_1100(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *buf);
-GLuint APIENTRY gl_dispatch_stub_1101(GLuint count, GLsizei bufsize, GLenum *sources, GLenum *types, GLuint *ids, GLenum *severities, GLsizei *lengths, GLchar *messageLog);
-void APIENTRY gl_dispatch_stub_1102(GLenum identifier, GLuint name, GLsizei bufSize, GLsizei *length, GLchar *label);
-void APIENTRY gl_dispatch_stub_1103(const GLvoid *ptr, GLsizei bufSize, GLsizei *length, GLchar *label);
-void APIENTRY gl_dispatch_stub_1104(GLenum identifier, GLuint name, GLsizei length, const GLchar *label);
-void APIENTRY gl_dispatch_stub_1105(const GLvoid *ptr, GLsizei length, const GLchar *label);
-void APIENTRY gl_dispatch_stub_1106(void);
-void APIENTRY gl_dispatch_stub_1107(GLenum source, GLuint id, GLsizei length, const GLchar *message);
-void APIENTRY gl_dispatch_stub_1108(GLfloat red, GLfloat green, GLfloat blue);
-void APIENTRY gl_dispatch_stub_1109(const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1035(GLint size, GLenum type, GLsizei stride, GLsizei count, const GLvoid *pointer);
+void APIENTRY gl_dispatch_stub_1036(GLenum target, GLsizei numAttachments, const GLenum *attachments);
+void APIENTRY gl_dispatch_stub_1037(GLuint pipeline, GLuint program);
+void APIENTRY gl_dispatch_stub_1038(GLuint pipeline);
+GLuint APIENTRY gl_dispatch_stub_1039(GLenum type, GLsizei count, const GLchar * const *strings);
+void APIENTRY gl_dispatch_stub_1040(GLsizei n, const GLuint *pipelines);
+void APIENTRY gl_dispatch_stub_1041(GLsizei n, GLuint *pipelines);
+void APIENTRY gl_dispatch_stub_1042(GLuint pipeline, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
+void APIENTRY gl_dispatch_stub_1043(GLuint pipeline, GLenum pname, GLint *params);
+GLboolean APIENTRY gl_dispatch_stub_1044(GLuint pipeline);
+void APIENTRY gl_dispatch_stub_1045(GLint first, GLsizei count);
+void APIENTRY gl_dispatch_stub_1046(GLuint program, GLint location, GLdouble x);
+void APIENTRY gl_dispatch_stub_1047(GLuint program, GLint location, GLsizei count, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1048(GLuint program, GLint location, GLfloat x);
+void APIENTRY gl_dispatch_stub_1049(GLuint program, GLint location, GLsizei count, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1050(GLuint program, GLint location, GLint x);
+void APIENTRY gl_dispatch_stub_1051(GLuint program, GLint location, GLsizei count, const GLint *value);
+void APIENTRY gl_dispatch_stub_1052(GLuint program, GLint location, GLuint x);
+void APIENTRY gl_dispatch_stub_1053(GLuint program, GLint location, GLsizei count, const GLuint *value);
+void APIENTRY gl_dispatch_stub_1054(GLuint program, GLint location, GLdouble x, GLdouble y);
+void APIENTRY gl_dispatch_stub_1055(GLuint program, GLint location, GLsizei count, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1056(GLuint program, GLint location, GLfloat x, GLfloat y);
+void APIENTRY gl_dispatch_stub_1057(GLuint program, GLint location, GLsizei count, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1058(GLuint program, GLint location, GLint x, GLint y);
+void APIENTRY gl_dispatch_stub_1059(GLuint program, GLint location, GLsizei count, const GLint *value);
+void APIENTRY gl_dispatch_stub_1060(GLuint program, GLint location, GLuint x, GLuint y);
+void APIENTRY gl_dispatch_stub_1061(GLuint program, GLint location, GLsizei count, const GLuint *value);
+void APIENTRY gl_dispatch_stub_1062(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z);
+void APIENTRY gl_dispatch_stub_1063(GLuint program, GLint location, GLsizei count, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1064(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z);
+void APIENTRY gl_dispatch_stub_1065(GLuint program, GLint location, GLsizei count, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1066(GLuint program, GLint location, GLint x, GLint y, GLint z);
+void APIENTRY gl_dispatch_stub_1067(GLuint program, GLint location, GLsizei count, const GLint *value);
+void APIENTRY gl_dispatch_stub_1068(GLuint program, GLint location, GLuint x, GLuint y, GLuint z);
+void APIENTRY gl_dispatch_stub_1069(GLuint program, GLint location, GLsizei count, const GLuint *value);
+void APIENTRY gl_dispatch_stub_1070(GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+void APIENTRY gl_dispatch_stub_1071(GLuint program, GLint location, GLsizei count, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1072(GLuint program, GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+void APIENTRY gl_dispatch_stub_1073(GLuint program, GLint location, GLsizei count, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1074(GLuint program, GLint location, GLint x, GLint y, GLint z, GLint w);
+void APIENTRY gl_dispatch_stub_1075(GLuint program, GLint location, GLsizei count, const GLint *value);
+void APIENTRY gl_dispatch_stub_1076(GLuint program, GLint location, GLuint x, GLuint y, GLuint z, GLuint w);
+void APIENTRY gl_dispatch_stub_1077(GLuint program, GLint location, GLsizei count, const GLuint *value);
+void APIENTRY gl_dispatch_stub_1078(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1079(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1080(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1081(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1082(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1083(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1084(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1085(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1086(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1087(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1088(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1089(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1090(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1091(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1092(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1093(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1094(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble *value);
+void APIENTRY gl_dispatch_stub_1095(GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1096(void);
+void APIENTRY gl_dispatch_stub_1097(GLuint pipeline, GLbitfield stages, GLuint program);
+void APIENTRY gl_dispatch_stub_1098(GLuint pipeline);
+void APIENTRY gl_dispatch_stub_1099(GLDEBUGPROC callback, const GLvoid *userParam);
+void APIENTRY gl_dispatch_stub_1100(GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint *ids, GLboolean enabled);
+void APIENTRY gl_dispatch_stub_1101(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *buf);
+GLuint APIENTRY gl_dispatch_stub_1102(GLuint count, GLsizei bufsize, GLenum *sources, GLenum *types, GLuint *ids, GLenum *severities, GLsizei *lengths, GLchar *messageLog);
+void APIENTRY gl_dispatch_stub_1103(GLenum identifier, GLuint name, GLsizei bufSize, GLsizei *length, GLchar *label);
+void APIENTRY gl_dispatch_stub_1104(const GLvoid *ptr, GLsizei bufSize, GLsizei *length, GLchar *label);
+void APIENTRY gl_dispatch_stub_1105(GLenum identifier, GLuint name, GLsizei length, const GLchar *label);
+void APIENTRY gl_dispatch_stub_1106(const GLvoid *ptr, GLsizei length, const GLchar *label);
+void APIENTRY gl_dispatch_stub_1107(void);
+void APIENTRY gl_dispatch_stub_1108(GLenum source, GLuint id, GLsizei length, const GLchar *message);
+void APIENTRY gl_dispatch_stub_1109(GLfloat red, GLfloat green, GLfloat blue);
+void APIENTRY gl_dispatch_stub_1110(const GLfloat *v);
 GLAPI void APIENTRY glMultiDrawElementsEXT(GLenum mode, const GLsizei *count, GLenum type, const GLvoid * const *indices, GLsizei primcount);
-void APIENTRY gl_dispatch_stub_1111(GLfloat coord);
-void APIENTRY gl_dispatch_stub_1112(const GLfloat *coord);
-void APIENTRY gl_dispatch_stub_1113(void);
-void APIENTRY gl_dispatch_stub_1114(GLdouble x, GLdouble y, GLdouble z, GLdouble w);
-void APIENTRY gl_dispatch_stub_1115(const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1116(GLfloat x, GLfloat y, GLfloat z, GLfloat w);
-void APIENTRY gl_dispatch_stub_1117(const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1118(GLint x, GLint y, GLint z, GLint w);
-void APIENTRY gl_dispatch_stub_1119(const GLint *v);
-void APIENTRY gl_dispatch_stub_1120(GLshort x, GLshort y, GLshort z, GLshort w);
-void APIENTRY gl_dispatch_stub_1121(const GLshort *v);
-void APIENTRY gl_dispatch_stub_1122(const GLenum *mode, const GLint *first, const GLsizei *count, GLsizei primcount, GLint modestride);
-void APIENTRY gl_dispatch_stub_1123(const GLenum *mode, const GLsizei *count, GLenum type, const GLvoid * const *indices, GLsizei primcount, GLint modestride);
-GLboolean APIENTRY gl_dispatch_stub_1124(GLsizei n, const GLuint *ids, GLboolean *residences);
-void APIENTRY gl_dispatch_stub_1125(GLenum target, GLuint id, const GLfloat *params);
-void APIENTRY gl_dispatch_stub_1126(GLenum target, GLuint index, GLenum pname, GLdouble *params);
-void APIENTRY gl_dispatch_stub_1127(GLenum target, GLuint index, GLenum pname, GLfloat *params);
-void APIENTRY gl_dispatch_stub_1128(GLuint id, GLenum pname, GLubyte *program);
-void APIENTRY gl_dispatch_stub_1129(GLuint id, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_1130(GLenum target, GLuint address, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_1131(GLuint index, GLenum pname, GLdouble *params);
-void APIENTRY gl_dispatch_stub_1132(GLuint index, GLenum pname, GLfloat *params);
-void APIENTRY gl_dispatch_stub_1133(GLuint index, GLenum pname, GLint *params);
-void APIENTRY gl_dispatch_stub_1134(GLenum target, GLuint id, GLsizei len, const GLubyte *program);
-void APIENTRY gl_dispatch_stub_1135(GLenum target, GLuint index, GLsizei num, const GLdouble *params);
-void APIENTRY gl_dispatch_stub_1136(GLenum target, GLuint index, GLsizei num, const GLfloat *params);
-void APIENTRY gl_dispatch_stub_1137(GLsizei n, const GLuint *ids);
-void APIENTRY gl_dispatch_stub_1138(GLenum target, GLuint address, GLenum matrix, GLenum transform);
-void APIENTRY gl_dispatch_stub_1139(GLuint index, GLdouble x);
-void APIENTRY gl_dispatch_stub_1140(GLuint index, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1141(GLuint index, GLfloat x);
-void APIENTRY gl_dispatch_stub_1142(GLuint index, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1143(GLuint index, GLshort x);
-void APIENTRY gl_dispatch_stub_1144(GLuint index, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1145(GLuint index, GLdouble x, GLdouble y);
-void APIENTRY gl_dispatch_stub_1146(GLuint index, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1147(GLuint index, GLfloat x, GLfloat y);
-void APIENTRY gl_dispatch_stub_1148(GLuint index, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1149(GLuint index, GLshort x, GLshort y);
-void APIENTRY gl_dispatch_stub_1150(GLuint index, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1151(GLuint index, GLdouble x, GLdouble y, GLdouble z);
-void APIENTRY gl_dispatch_stub_1152(GLuint index, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1153(GLuint index, GLfloat x, GLfloat y, GLfloat z);
-void APIENTRY gl_dispatch_stub_1154(GLuint index, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1155(GLuint index, GLshort x, GLshort y, GLshort z);
-void APIENTRY gl_dispatch_stub_1156(GLuint index, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1157(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
-void APIENTRY gl_dispatch_stub_1158(GLuint index, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1159(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
-void APIENTRY gl_dispatch_stub_1160(GLuint index, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1161(GLuint index, GLshort x, GLshort y, GLshort z, GLshort w);
-void APIENTRY gl_dispatch_stub_1162(GLuint index, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1163(GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w);
-void APIENTRY gl_dispatch_stub_1164(GLuint index, const GLubyte *v);
-void APIENTRY gl_dispatch_stub_1165(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer);
-void APIENTRY gl_dispatch_stub_1166(GLuint index, GLsizei n, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1167(GLuint index, GLsizei n, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1168(GLuint index, GLsizei n, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1169(GLuint index, GLsizei n, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1170(GLuint index, GLsizei n, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1171(GLuint index, GLsizei n, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1172(GLuint index, GLsizei n, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1173(GLuint index, GLsizei n, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1174(GLuint index, GLsizei n, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1175(GLuint index, GLsizei n, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1176(GLuint index, GLsizei n, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1177(GLuint index, GLsizei n, const GLshort *v);
-void APIENTRY gl_dispatch_stub_1178(GLuint index, GLsizei n, const GLubyte *v);
-void APIENTRY gl_dispatch_stub_1179(GLenum pname, GLfloat *param);
-void APIENTRY gl_dispatch_stub_1180(GLenum pname, GLint *param);
-void APIENTRY gl_dispatch_stub_1181(GLenum pname, const GLfloat *param);
-void APIENTRY gl_dispatch_stub_1182(GLenum pname, const GLint *param);
-void APIENTRY gl_dispatch_stub_1183(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
-void APIENTRY gl_dispatch_stub_1184(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
-void APIENTRY gl_dispatch_stub_1185(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
-void APIENTRY gl_dispatch_stub_1186(void);
-void APIENTRY gl_dispatch_stub_1187(GLuint id);
-void APIENTRY gl_dispatch_stub_1188(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
-void APIENTRY gl_dispatch_stub_1189(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
-void APIENTRY gl_dispatch_stub_1190(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
-void APIENTRY gl_dispatch_stub_1191(GLuint id);
-void APIENTRY gl_dispatch_stub_1192(void);
-GLuint APIENTRY gl_dispatch_stub_1193(GLuint range);
-void APIENTRY gl_dispatch_stub_1194(GLuint dst, GLuint coord, GLenum swizzle);
-void APIENTRY gl_dispatch_stub_1195(GLuint dst, GLuint interp, GLenum swizzle);
-void APIENTRY gl_dispatch_stub_1196(GLuint dst, const GLfloat *value);
-void APIENTRY gl_dispatch_stub_1197(GLenum face);
-void APIENTRY gl_dispatch_stub_1198(GLuint array);
-void APIENTRY gl_dispatch_stub_1199(GLsizei n, GLuint *arrays);
-void APIENTRY gl_dispatch_stub_1200(GLuint id, GLsizei len, const GLubyte *name, GLdouble *params);
-void APIENTRY gl_dispatch_stub_1201(GLuint id, GLsizei len, const GLubyte *name, GLfloat *params);
-void APIENTRY gl_dispatch_stub_1202(GLuint id, GLsizei len, const GLubyte *name, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
-void APIENTRY gl_dispatch_stub_1203(GLuint id, GLsizei len, const GLubyte *name, const GLdouble *v);
-void APIENTRY gl_dispatch_stub_1204(GLuint id, GLsizei len, const GLubyte *name, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
-void APIENTRY gl_dispatch_stub_1205(GLuint id, GLsizei len, const GLubyte *name, const GLfloat *v);
-void APIENTRY gl_dispatch_stub_1206(void);
-void APIENTRY gl_dispatch_stub_1207(GLenum coord, GLenum pname, GLfixed *params);
-void APIENTRY gl_dispatch_stub_1208(GLenum coord, GLenum pname, GLint param);
-void APIENTRY gl_dispatch_stub_1209(GLenum coord, GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1210(GLclampd zmin, GLclampd zmax);
-void APIENTRY gl_dispatch_stub_1211(GLenum target, GLuint framebuffer);
-void APIENTRY gl_dispatch_stub_1212(GLenum target, GLuint renderbuffer);
-void APIENTRY gl_dispatch_stub_1213(GLenum target, GLenum pname, GLint param);
-void APIENTRY gl_dispatch_stub_1214(GLenum target, GLintptr offset, GLsizeiptr size);
-void APIENTRY gl_dispatch_stub_1215(GLuint index, GLint x);
-void APIENTRY gl_dispatch_stub_1216(GLuint index, GLuint x);
-void APIENTRY gl_dispatch_stub_1217(GLuint index, GLint x, GLint y);
-void APIENTRY gl_dispatch_stub_1218(GLuint index, const GLint *v);
-void APIENTRY gl_dispatch_stub_1219(GLuint index, GLuint x, GLuint y);
-void APIENTRY gl_dispatch_stub_1220(GLuint index, const GLuint *v);
-void APIENTRY gl_dispatch_stub_1221(GLuint index, GLint x, GLint y, GLint z);
-void APIENTRY gl_dispatch_stub_1222(GLuint index, const GLint *v);
-void APIENTRY gl_dispatch_stub_1223(GLuint index, GLuint x, GLuint y, GLuint z);
-void APIENTRY gl_dispatch_stub_1224(GLuint index, const GLuint *v);
-void APIENTRY gl_dispatch_stub_1225(GLuint index, GLint x, GLint y, GLint z, GLint w);
+void APIENTRY gl_dispatch_stub_1112(GLfloat coord);
+void APIENTRY gl_dispatch_stub_1113(const GLfloat *coord);
+void APIENTRY gl_dispatch_stub_1114(void);
+void APIENTRY gl_dispatch_stub_1115(GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+void APIENTRY gl_dispatch_stub_1116(const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1117(GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+void APIENTRY gl_dispatch_stub_1118(const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1119(GLint x, GLint y, GLint z, GLint w);
+void APIENTRY gl_dispatch_stub_1120(const GLint *v);
+void APIENTRY gl_dispatch_stub_1121(GLshort x, GLshort y, GLshort z, GLshort w);
+void APIENTRY gl_dispatch_stub_1122(const GLshort *v);
+void APIENTRY gl_dispatch_stub_1123(const GLenum *mode, const GLint *first, const GLsizei *count, GLsizei primcount, GLint modestride);
+void APIENTRY gl_dispatch_stub_1124(const GLenum *mode, const GLsizei *count, GLenum type, const GLvoid * const *indices, GLsizei primcount, GLint modestride);
+GLboolean APIENTRY gl_dispatch_stub_1125(GLsizei n, const GLuint *ids, GLboolean *residences);
+void APIENTRY gl_dispatch_stub_1126(GLenum target, GLuint id, const GLfloat *params);
+void APIENTRY gl_dispatch_stub_1127(GLenum target, GLuint index, GLenum pname, GLdouble *params);
+void APIENTRY gl_dispatch_stub_1128(GLenum target, GLuint index, GLenum pname, GLfloat *params);
+void APIENTRY gl_dispatch_stub_1129(GLuint id, GLenum pname, GLubyte *program);
+void APIENTRY gl_dispatch_stub_1130(GLuint id, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_1131(GLenum target, GLuint address, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_1132(GLuint index, GLenum pname, GLdouble *params);
+void APIENTRY gl_dispatch_stub_1133(GLuint index, GLenum pname, GLfloat *params);
+void APIENTRY gl_dispatch_stub_1134(GLuint index, GLenum pname, GLint *params);
+void APIENTRY gl_dispatch_stub_1135(GLenum target, GLuint id, GLsizei len, const GLubyte *program);
+void APIENTRY gl_dispatch_stub_1136(GLenum target, GLuint index, GLsizei num, const GLdouble *params);
+void APIENTRY gl_dispatch_stub_1137(GLenum target, GLuint index, GLsizei num, const GLfloat *params);
+void APIENTRY gl_dispatch_stub_1138(GLsizei n, const GLuint *ids);
+void APIENTRY gl_dispatch_stub_1139(GLenum target, GLuint address, GLenum matrix, GLenum transform);
+void APIENTRY gl_dispatch_stub_1140(GLuint index, GLdouble x);
+void APIENTRY gl_dispatch_stub_1141(GLuint index, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1142(GLuint index, GLfloat x);
+void APIENTRY gl_dispatch_stub_1143(GLuint index, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1144(GLuint index, GLshort x);
+void APIENTRY gl_dispatch_stub_1145(GLuint index, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1146(GLuint index, GLdouble x, GLdouble y);
+void APIENTRY gl_dispatch_stub_1147(GLuint index, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1148(GLuint index, GLfloat x, GLfloat y);
+void APIENTRY gl_dispatch_stub_1149(GLuint index, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1150(GLuint index, GLshort x, GLshort y);
+void APIENTRY gl_dispatch_stub_1151(GLuint index, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1152(GLuint index, GLdouble x, GLdouble y, GLdouble z);
+void APIENTRY gl_dispatch_stub_1153(GLuint index, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1154(GLuint index, GLfloat x, GLfloat y, GLfloat z);
+void APIENTRY gl_dispatch_stub_1155(GLuint index, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1156(GLuint index, GLshort x, GLshort y, GLshort z);
+void APIENTRY gl_dispatch_stub_1157(GLuint index, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1158(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+void APIENTRY gl_dispatch_stub_1159(GLuint index, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1160(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+void APIENTRY gl_dispatch_stub_1161(GLuint index, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1162(GLuint index, GLshort x, GLshort y, GLshort z, GLshort w);
+void APIENTRY gl_dispatch_stub_1163(GLuint index, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1164(GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w);
+void APIENTRY gl_dispatch_stub_1165(GLuint index, const GLubyte *v);
+void APIENTRY gl_dispatch_stub_1166(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer);
+void APIENTRY gl_dispatch_stub_1167(GLuint index, GLsizei n, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1168(GLuint index, GLsizei n, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1169(GLuint index, GLsizei n, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1170(GLuint index, GLsizei n, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1171(GLuint index, GLsizei n, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1172(GLuint index, GLsizei n, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1173(GLuint index, GLsizei n, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1174(GLuint index, GLsizei n, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1175(GLuint index, GLsizei n, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1176(GLuint index, GLsizei n, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1177(GLuint index, GLsizei n, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1178(GLuint index, GLsizei n, const GLshort *v);
+void APIENTRY gl_dispatch_stub_1179(GLuint index, GLsizei n, const GLubyte *v);
+void APIENTRY gl_dispatch_stub_1180(GLenum pname, GLfloat *param);
+void APIENTRY gl_dispatch_stub_1181(GLenum pname, GLint *param);
+void APIENTRY gl_dispatch_stub_1182(GLenum pname, const GLfloat *param);
+void APIENTRY gl_dispatch_stub_1183(GLenum pname, const GLint *param);
+void APIENTRY gl_dispatch_stub_1184(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
+void APIENTRY gl_dispatch_stub_1185(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
+void APIENTRY gl_dispatch_stub_1186(GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
+void APIENTRY gl_dispatch_stub_1187(void);
+void APIENTRY gl_dispatch_stub_1188(GLuint id);
+void APIENTRY gl_dispatch_stub_1189(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod);
+void APIENTRY gl_dispatch_stub_1190(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod);
+void APIENTRY gl_dispatch_stub_1191(GLenum op, GLuint dst, GLuint dstMask, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod);
+void APIENTRY gl_dispatch_stub_1192(GLuint id);
+void APIENTRY gl_dispatch_stub_1193(void);
+GLuint APIENTRY gl_dispatch_stub_1194(GLuint range);
+void APIENTRY gl_dispatch_stub_1195(GLuint dst, GLuint coord, GLenum swizzle);
+void APIENTRY gl_dispatch_stub_1196(GLuint dst, GLuint interp, GLenum swizzle);
+void APIENTRY gl_dispatch_stub_1197(GLuint dst, const GLfloat *value);
+void APIENTRY gl_dispatch_stub_1198(GLenum face);
+void APIENTRY gl_dispatch_stub_1199(GLuint array);
+void APIENTRY gl_dispatch_stub_1200(GLsizei n, GLuint *arrays);
+void APIENTRY gl_dispatch_stub_1201(GLuint id, GLsizei len, const GLubyte *name, GLdouble *params);
+void APIENTRY gl_dispatch_stub_1202(GLuint id, GLsizei len, const GLubyte *name, GLfloat *params);
+void APIENTRY gl_dispatch_stub_1203(GLuint id, GLsizei len, const GLubyte *name, GLdouble x, GLdouble y, GLdouble z, GLdouble w);
+void APIENTRY gl_dispatch_stub_1204(GLuint id, GLsizei len, const GLubyte *name, const GLdouble *v);
+void APIENTRY gl_dispatch_stub_1205(GLuint id, GLsizei len, const GLubyte *name, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+void APIENTRY gl_dispatch_stub_1206(GLuint id, GLsizei len, const GLubyte *name, const GLfloat *v);
+void APIENTRY gl_dispatch_stub_1207(void);
+void APIENTRY gl_dispatch_stub_1208(GLenum coord, GLenum pname, GLfixed *params);
+void APIENTRY gl_dispatch_stub_1209(GLenum coord, GLenum pname, GLint param);
+void APIENTRY gl_dispatch_stub_1210(GLenum coord, GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1211(GLclampd zmin, GLclampd zmax);
+void APIENTRY gl_dispatch_stub_1212(GLenum target, GLuint framebuffer);
+void APIENTRY gl_dispatch_stub_1213(GLenum target, GLuint renderbuffer);
+void APIENTRY gl_dispatch_stub_1214(GLenum target, GLenum pname, GLint param);
+void APIENTRY gl_dispatch_stub_1215(GLenum target, GLintptr offset, GLsizeiptr size);
+void APIENTRY gl_dispatch_stub_1216(GLuint index, GLint x);
+void APIENTRY gl_dispatch_stub_1217(GLuint index, GLuint x);
+void APIENTRY gl_dispatch_stub_1218(GLuint index, GLint x, GLint y);
+void APIENTRY gl_dispatch_stub_1219(GLuint index, const GLint *v);
+void APIENTRY gl_dispatch_stub_1220(GLuint index, GLuint x, GLuint y);
+void APIENTRY gl_dispatch_stub_1221(GLuint index, const GLuint *v);
+void APIENTRY gl_dispatch_stub_1222(GLuint index, GLint x, GLint y, GLint z);
+void APIENTRY gl_dispatch_stub_1223(GLuint index, const GLint *v);
+void APIENTRY gl_dispatch_stub_1224(GLuint index, GLuint x, GLuint y, GLuint z);
+void APIENTRY gl_dispatch_stub_1225(GLuint index, const GLuint *v);
+void APIENTRY gl_dispatch_stub_1226(GLuint index, GLint x, GLint y, GLint z, GLint w);
 GLAPI void APIENTRY glVertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w);
-void APIENTRY gl_dispatch_stub_1226(GLuint index, const GLint *v);
+void APIENTRY gl_dispatch_stub_1227(GLuint index, const GLint *v);
 GLAPI void APIENTRY glVertexAttribI4iv(GLuint index, const GLint *v);
-void APIENTRY gl_dispatch_stub_1227(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w);
+void APIENTRY gl_dispatch_stub_1228(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w);
 GLAPI void APIENTRY glVertexAttribI4ui(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w);
-void APIENTRY gl_dispatch_stub_1228(GLuint index, const GLuint *v);
+void APIENTRY gl_dispatch_stub_1229(GLuint index, const GLuint *v);
 GLAPI void APIENTRY glVertexAttribI4uiv(GLuint index, const GLuint *v);
-void APIENTRY gl_dispatch_stub_1229(GLint r, GLint g, GLint b, GLint a);
-void APIENTRY gl_dispatch_stub_1230(GLuint r, GLuint g, GLuint b, GLuint a);
-void APIENTRY gl_dispatch_stub_1231(GLenum target, GLuint index, GLuint buffer, GLintptr offset);
-void APIENTRY gl_dispatch_stub_1232(GLuint monitor);
-void APIENTRY gl_dispatch_stub_1233(GLsizei n, GLuint *monitors);
-void APIENTRY gl_dispatch_stub_1234(GLuint monitor);
-void APIENTRY gl_dispatch_stub_1235(GLsizei n, GLuint *monitors);
-void APIENTRY gl_dispatch_stub_1236(GLuint monitor, GLenum pname, GLsizei dataSize, GLuint *data, GLint *bytesWritten);
-void APIENTRY gl_dispatch_stub_1237(GLuint group, GLuint counter, GLenum pname, GLvoid *data);
-void APIENTRY gl_dispatch_stub_1238(GLuint group, GLuint counter, GLsizei bufSize, GLsizei *length, GLchar *counterString);
-void APIENTRY gl_dispatch_stub_1239(GLuint group, GLint *numCounters, GLint *maxActiveCounters, GLsizei countersSize, GLuint *counters);
-void APIENTRY gl_dispatch_stub_1240(GLuint group, GLsizei bufSize, GLsizei *length, GLchar *groupString);
-void APIENTRY gl_dispatch_stub_1241(GLint *numGroups, GLsizei groupsSize, GLuint *groups);
-void APIENTRY gl_dispatch_stub_1242(GLuint monitor, GLboolean enable, GLuint group, GLint numCounters, GLuint *counterList);
-void APIENTRY gl_dispatch_stub_1243(GLenum objectType, GLuint name, GLenum pname, GLint *value);
-GLenum APIENTRY gl_dispatch_stub_1244(GLenum objectType, GLuint name, GLenum option);
+void APIENTRY gl_dispatch_stub_1230(GLint r, GLint g, GLint b, GLint a);
+void APIENTRY gl_dispatch_stub_1231(GLuint r, GLuint g, GLuint b, GLuint a);
+void APIENTRY gl_dispatch_stub_1232(GLenum target, GLuint index, GLuint buffer, GLintptr offset);
+void APIENTRY gl_dispatch_stub_1233(GLuint monitor);
+void APIENTRY gl_dispatch_stub_1234(GLsizei n, GLuint *monitors);
+void APIENTRY gl_dispatch_stub_1235(GLuint monitor);
+void APIENTRY gl_dispatch_stub_1236(GLsizei n, GLuint *monitors);
+void APIENTRY gl_dispatch_stub_1237(GLuint monitor, GLenum pname, GLsizei dataSize, GLuint *data, GLint *bytesWritten);
+void APIENTRY gl_dispatch_stub_1238(GLuint group, GLuint counter, GLenum pname, GLvoid *data);
+void APIENTRY gl_dispatch_stub_1239(GLuint group, GLuint counter, GLsizei bufSize, GLsizei *length, GLchar *counterString);
+void APIENTRY gl_dispatch_stub_1240(GLuint group, GLint *numCounters, GLint *maxActiveCounters, GLsizei countersSize, GLuint *counters);
+void APIENTRY gl_dispatch_stub_1241(GLuint group, GLsizei bufSize, GLsizei *length, GLchar *groupString);
+void APIENTRY gl_dispatch_stub_1242(GLint *numGroups, GLsizei groupsSize, GLuint *groups);
+void APIENTRY gl_dispatch_stub_1243(GLuint monitor, GLboolean enable, GLuint group, GLint numCounters, GLuint *counterList);
+void APIENTRY gl_dispatch_stub_1244(GLenum objectType, GLuint name, GLenum pname, GLint *value);
 GLenum APIENTRY gl_dispatch_stub_1245(GLenum objectType, GLuint name, GLenum option);
-void APIENTRY gl_dispatch_stub_1246(GLuint program);
-GLuint APIENTRY gl_dispatch_stub_1247(GLenum type, const GLchar *string);
-void APIENTRY gl_dispatch_stub_1248(GLenum type, GLuint program);
-void APIENTRY gl_dispatch_stub_1249(void);
+GLenum APIENTRY gl_dispatch_stub_1246(GLenum objectType, GLuint name, GLenum option);
+void APIENTRY gl_dispatch_stub_1247(GLuint program);
+GLuint APIENTRY gl_dispatch_stub_1248(GLenum type, const GLchar *string);
+void APIENTRY gl_dispatch_stub_1249(GLenum type, GLuint program);
 void APIENTRY gl_dispatch_stub_1250(void);
-void APIENTRY gl_dispatch_stub_1251(GLintptr surface, GLenum pname, GLsizei bufSize, GLsizei *length, GLint *values);
-void APIENTRY gl_dispatch_stub_1252(const GLvoid *vdpDevice, const GLvoid *getProcAddress);
-GLboolean APIENTRY gl_dispatch_stub_1253(GLintptr surface);
-void APIENTRY gl_dispatch_stub_1254(GLsizei numSurfaces, const GLintptr *surfaces);
-GLintptr APIENTRY gl_dispatch_stub_1255(const GLvoid *vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint *textureNames);
+void APIENTRY gl_dispatch_stub_1251(void);
+void APIENTRY gl_dispatch_stub_1252(GLintptr surface, GLenum pname, GLsizei bufSize, GLsizei *length, GLint *values);
+void APIENTRY gl_dispatch_stub_1253(const GLvoid *vdpDevice, const GLvoid *getProcAddress);
+GLboolean APIENTRY gl_dispatch_stub_1254(GLintptr surface);
+void APIENTRY gl_dispatch_stub_1255(GLsizei numSurfaces, const GLintptr *surfaces);
 GLintptr APIENTRY gl_dispatch_stub_1256(const GLvoid *vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint *textureNames);
-void APIENTRY gl_dispatch_stub_1257(GLintptr surface, GLenum access);
-void APIENTRY gl_dispatch_stub_1258(GLsizei numSurfaces, const GLintptr *surfaces);
-void APIENTRY gl_dispatch_stub_1259(GLintptr surface);
-void APIENTRY gl_dispatch_stub_1260(GLuint queryHandle);
-void APIENTRY gl_dispatch_stub_1261(GLuint queryId, GLuint *queryHandle);
-void APIENTRY gl_dispatch_stub_1262(GLuint queryHandle);
+GLintptr APIENTRY gl_dispatch_stub_1257(const GLvoid *vdpSurface, GLenum target, GLsizei numTextureNames, const GLuint *textureNames);
+void APIENTRY gl_dispatch_stub_1258(GLintptr surface, GLenum access);
+void APIENTRY gl_dispatch_stub_1259(GLsizei numSurfaces, const GLintptr *surfaces);
+void APIENTRY gl_dispatch_stub_1260(GLintptr surface);
+void APIENTRY gl_dispatch_stub_1261(GLuint queryHandle);
+void APIENTRY gl_dispatch_stub_1262(GLuint queryId, GLuint *queryHandle);
 void APIENTRY gl_dispatch_stub_1263(GLuint queryHandle);
-void APIENTRY gl_dispatch_stub_1264(GLuint *queryId);
-void APIENTRY gl_dispatch_stub_1265(GLuint queryId, GLuint *nextQueryId);
-void APIENTRY gl_dispatch_stub_1266(GLuint queryId, GLuint counterId, GLuint counterNameLength, GLchar *counterName, GLuint counterDescLength, GLchar *counterDesc, GLuint *counterOffset, GLuint *counterDataSize, GLuint *counterTypeEnum, GLuint *counterDataTypeEnum, GLuint64 *rawCounterMaxValue);
-void APIENTRY gl_dispatch_stub_1267(GLuint queryHandle, GLuint flags, GLsizei dataSize, GLvoid *data, GLuint *bytesWritten);
-void APIENTRY gl_dispatch_stub_1268(GLchar *queryName, GLuint *queryId);
-void APIENTRY gl_dispatch_stub_1269(GLuint queryId, GLuint queryNameLength, GLchar *queryName, GLuint *dataSize, GLuint *noCounters, GLuint *noInstances, GLuint *capsMask);
-void APIENTRY gl_dispatch_stub_1270(GLfloat factor, GLfloat units, GLfloat clamp);
-void APIENTRY gl_dispatch_stub_1271(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask);
-void APIENTRY gl_dispatch_stub_1272(GLenum target, GLuint index, GLsizei count, const GLfloat *params);
+void APIENTRY gl_dispatch_stub_1264(GLuint queryHandle);
+void APIENTRY gl_dispatch_stub_1265(GLuint *queryId);
+void APIENTRY gl_dispatch_stub_1266(GLuint queryId, GLuint *nextQueryId);
+void APIENTRY gl_dispatch_stub_1267(GLuint queryId, GLuint counterId, GLuint counterNameLength, GLchar *counterName, GLuint counterDescLength, GLchar *counterDesc, GLuint *counterOffset, GLuint *counterDataSize, GLuint *counterTypeEnum, GLuint *counterDataTypeEnum, GLuint64 *rawCounterMaxValue);
+void APIENTRY gl_dispatch_stub_1268(GLuint queryHandle, GLuint flags, GLsizei dataSize, GLvoid *data, GLuint *bytesWritten);
+void APIENTRY gl_dispatch_stub_1269(GLchar *queryName, GLuint *queryId);
+void APIENTRY gl_dispatch_stub_1270(GLuint queryId, GLuint queryNameLength, GLchar *queryName, GLuint *dataSize, GLuint *noCounters, GLuint *noInstances, GLuint *capsMask);
+void APIENTRY gl_dispatch_stub_1271(GLfloat factor, GLfloat units, GLfloat clamp);
+void APIENTRY gl_dispatch_stub_1272(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask);
 void APIENTRY gl_dispatch_stub_1273(GLenum target, GLuint index, GLsizei count, const GLfloat *params);
-void APIENTRY gl_dispatch_stub_1274(GLenum target, GLvoid *writeOffset);
+void APIENTRY gl_dispatch_stub_1274(GLenum target, GLuint index, GLsizei count, const GLfloat *params);
 void APIENTRY gl_dispatch_stub_1275(GLenum target, GLvoid *writeOffset);
-void APIENTRY gl_dispatch_stub_1276(GLenum func, GLclampx ref);
-void APIENTRY gl_dispatch_stub_1277(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha);
-void APIENTRY gl_dispatch_stub_1278(GLclampx depth);
-void APIENTRY gl_dispatch_stub_1279(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha);
-void APIENTRY gl_dispatch_stub_1280(GLclampx zNear, GLclampx zFar);
-void APIENTRY gl_dispatch_stub_1281(GLenum pname, GLfixed param);
-void APIENTRY gl_dispatch_stub_1282(GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1283(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
-void APIENTRY gl_dispatch_stub_1284(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
-void APIENTRY gl_dispatch_stub_1285(GLenum pname, GLfixed param);
-void APIENTRY gl_dispatch_stub_1286(GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1287(GLenum light, GLenum pname, GLfixed param);
-void APIENTRY gl_dispatch_stub_1288(GLenum light, GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1289(GLfixed width);
-void APIENTRY gl_dispatch_stub_1290(const GLfixed *m);
-void APIENTRY gl_dispatch_stub_1291(GLenum face, GLenum pname, GLfixed param);
-void APIENTRY gl_dispatch_stub_1292(GLenum face, GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1293(const GLfixed *m);
-void APIENTRY gl_dispatch_stub_1294(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q);
-void APIENTRY gl_dispatch_stub_1295(GLfixed nx, GLfixed ny, GLfixed nz);
-void APIENTRY gl_dispatch_stub_1296(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
-void APIENTRY gl_dispatch_stub_1297(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
-void APIENTRY gl_dispatch_stub_1298(GLfixed size);
-void APIENTRY gl_dispatch_stub_1299(GLfixed factor, GLfixed units);
-void APIENTRY gl_dispatch_stub_1300(GLfixed angle, GLfixed x, GLfixed y, GLfixed z);
-void APIENTRY gl_dispatch_stub_1301(GLclampx value, GLboolean invert);
-void APIENTRY gl_dispatch_stub_1302(GLfixed x, GLfixed y, GLfixed z);
-void APIENTRY gl_dispatch_stub_1303(GLenum target, GLenum pname, GLfixed param);
-void APIENTRY gl_dispatch_stub_1304(GLenum target, GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1305(GLenum target, GLenum pname, GLfixed param);
-void APIENTRY gl_dispatch_stub_1306(GLfixed x, GLfixed y, GLfixed z);
-void APIENTRY gl_dispatch_stub_1307(GLenum plane, const GLfloat *equation);
-void APIENTRY gl_dispatch_stub_1308(GLenum plane, const GLfixed *equation);
-void APIENTRY gl_dispatch_stub_1309(GLenum plane, GLfloat *equation);
-void APIENTRY gl_dispatch_stub_1310(GLenum plane, GLfixed *equation);
-void APIENTRY gl_dispatch_stub_1311(GLenum pname, GLfixed *params);
-void APIENTRY gl_dispatch_stub_1312(GLenum light, GLenum pname, GLfixed *params);
-void APIENTRY gl_dispatch_stub_1313(GLenum face, GLenum pname, GLfixed *params);
-void APIENTRY gl_dispatch_stub_1314(GLenum target, GLenum pname, GLfixed *params);
+void APIENTRY gl_dispatch_stub_1276(GLenum target, GLvoid *writeOffset);
+void APIENTRY gl_dispatch_stub_1277(GLenum func, GLclampx ref);
+void APIENTRY gl_dispatch_stub_1278(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha);
+void APIENTRY gl_dispatch_stub_1279(GLclampx depth);
+void APIENTRY gl_dispatch_stub_1280(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha);
+void APIENTRY gl_dispatch_stub_1281(GLclampx zNear, GLclampx zFar);
+void APIENTRY gl_dispatch_stub_1282(GLenum pname, GLfixed param);
+void APIENTRY gl_dispatch_stub_1283(GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1284(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
+void APIENTRY gl_dispatch_stub_1285(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
+void APIENTRY gl_dispatch_stub_1286(GLenum pname, GLfixed param);
+void APIENTRY gl_dispatch_stub_1287(GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1288(GLenum light, GLenum pname, GLfixed param);
+void APIENTRY gl_dispatch_stub_1289(GLenum light, GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1290(GLfixed width);
+void APIENTRY gl_dispatch_stub_1291(const GLfixed *m);
+void APIENTRY gl_dispatch_stub_1292(GLenum face, GLenum pname, GLfixed param);
+void APIENTRY gl_dispatch_stub_1293(GLenum face, GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1294(const GLfixed *m);
+void APIENTRY gl_dispatch_stub_1295(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q);
+void APIENTRY gl_dispatch_stub_1296(GLfixed nx, GLfixed ny, GLfixed nz);
+void APIENTRY gl_dispatch_stub_1297(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar);
+void APIENTRY gl_dispatch_stub_1298(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar);
+void APIENTRY gl_dispatch_stub_1299(GLfixed size);
+void APIENTRY gl_dispatch_stub_1300(GLfixed factor, GLfixed units);
+void APIENTRY gl_dispatch_stub_1301(GLfixed angle, GLfixed x, GLfixed y, GLfixed z);
+void APIENTRY gl_dispatch_stub_1302(GLclampx value, GLboolean invert);
+void APIENTRY gl_dispatch_stub_1303(GLfixed x, GLfixed y, GLfixed z);
+void APIENTRY gl_dispatch_stub_1304(GLenum target, GLenum pname, GLfixed param);
+void APIENTRY gl_dispatch_stub_1305(GLenum target, GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1306(GLenum target, GLenum pname, GLfixed param);
+void APIENTRY gl_dispatch_stub_1307(GLfixed x, GLfixed y, GLfixed z);
+void APIENTRY gl_dispatch_stub_1308(GLenum plane, const GLfloat *equation);
+void APIENTRY gl_dispatch_stub_1309(GLenum plane, const GLfixed *equation);
+void APIENTRY gl_dispatch_stub_1310(GLenum plane, GLfloat *equation);
+void APIENTRY gl_dispatch_stub_1311(GLenum plane, GLfixed *equation);
+void APIENTRY gl_dispatch_stub_1312(GLenum pname, GLfixed *params);
+void APIENTRY gl_dispatch_stub_1313(GLenum light, GLenum pname, GLfixed *params);
+void APIENTRY gl_dispatch_stub_1314(GLenum face, GLenum pname, GLfixed *params);
 void APIENTRY gl_dispatch_stub_1315(GLenum target, GLenum pname, GLfixed *params);
-void APIENTRY gl_dispatch_stub_1316(GLenum pname, GLfixed param);
-void APIENTRY gl_dispatch_stub_1317(GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1318(GLenum target, GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1316(GLenum target, GLenum pname, GLfixed *params);
+void APIENTRY gl_dispatch_stub_1317(GLenum pname, GLfixed param);
+void APIENTRY gl_dispatch_stub_1318(GLenum pname, const GLfixed *params);
+void APIENTRY gl_dispatch_stub_1319(GLenum target, GLenum pname, const GLfixed *params);
 #undef MAPI_TMP_DEFINES
 #endif /* MAPI_TMP_DEFINES */
 
@@ -2349,6 +2351,13 @@ GLAPI void APIENTRY glBindBufferRange(GLenum target, GLuint index, GLuint buffer
    ((void (APIENTRY *)(GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)) _func)(target, index, buffer, offset, size);
 }
 
+GLAPI void APIENTRY glBindFragDataLocationEXT(GLuint program, GLuint colorNumber, const GLchar *name)
+{
+   const struct mapi_table *_tbl = entry_current_get();
+   mapi_func _func = ((const mapi_func *) _tbl)[574];
+   ((void (APIENTRY *)(GLuint program, GLuint colorNumber, const GLchar *name)) _func)(program, colorNumber, name);
+}
+
 GLAPI void APIENTRY glClearBufferfi(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)
 {
    const struct mapi_table *_tbl = entry_current_get();
@@ -2867,6 +2876,27 @@ GLAPI void APIENTRY glWaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
    ((void (APIENTRY *)(GLsync sync, GLbitfield flags, GLuint64 timeout)) _func)(sync, flags, timeout);
 }
 
+GLAPI void APIENTRY glDrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex)
+{
+   const struct mapi_table *_tbl = entry_current_get();
+   mapi_func _func = ((const mapi_func *) _tbl)[702];
+   ((void (APIENTRY *)(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex)) _func)(mode, count, type, indices, basevertex);
+}
+
+GLAPI void APIENTRY glDrawElementsInstancedBaseVertex(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLsizei primcount, GLint basevertex)
+{
+   const struct mapi_table *_tbl = entry_current_get();
+   mapi_func _func = ((const mapi_func *) _tbl)[703];
+   ((void (APIENTRY *)(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLsizei primcount, GLint basevertex)) _func)(mode, count, type, indices, primcount, basevertex);
+}
+
+GLAPI void APIENTRY glDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex)
+{
+   const struct mapi_table *_tbl = entry_current_get();
+   mapi_func _func = ((const mapi_func *) _tbl)[704];
+   ((void (APIENTRY *)(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, GLint basevertex)) _func)(mode, start, end, count, type, indices, basevertex);
+}
+
 GLAPI void APIENTRY glGetMultisamplefv(GLenum pname, GLuint index, GLfloat *val)
 {
    const struct mapi_table *_tbl = entry_current_get();
@@ -3150,56 +3180,56 @@ GLAPI void APIENTRY glVertexBindingDivisor(GLuint attribindex, GLuint divisor)
 GLAPI void APIENTRY glTexStorage2DMultisample(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[899];
+   mapi_func _func = ((const mapi_func *) _tbl)[900];
    ((void (APIENTRY *)(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) _func)(target, samples, internalformat, width, height, fixedsamplelocations);
 }
 
 GLAPI void APIENTRY glInvalidateFramebuffer(GLenum target, GLsizei numAttachments, const GLenum *attachments)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1012];
+   mapi_func _func = ((const mapi_func *) _tbl)[1013];
    ((void (APIENTRY *)(GLenum target, GLsizei numAttachments, const GLenum *attachments)) _func)(target, numAttachments, attachments);
 }
 
 GLAPI void APIENTRY glInvalidateSubFramebuffer(GLenum target, GLsizei numAttachments, const GLenum *attachments, GLint x, GLint y, GLsizei width, GLsizei height)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1013];
+   mapi_func _func = ((const mapi_func *) _tbl)[1014];
    ((void (APIENTRY *)(GLenum target, GLsizei numAttachments, const GLenum *attachments, GLint x, GLint y, GLsizei width, GLsizei height)) _func)(target, numAttachments, attachments, x, y, width, height);
 }
 
 GLAPI void APIENTRY glMultiDrawElementsEXT(GLenum mode, const GLsizei *count, GLenum type, const GLvoid * const *indices, GLsizei primcount)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1110];
+   mapi_func _func = ((const mapi_func *) _tbl)[1111];
    ((void (APIENTRY *)(GLenum mode, const GLsizei *count, GLenum type, const GLvoid * const *indices, GLsizei primcount)) _func)(mode, count, type, indices, primcount);
 }
 
 GLAPI void APIENTRY glVertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1225];
+   mapi_func _func = ((const mapi_func *) _tbl)[1226];
    ((void (APIENTRY *)(GLuint index, GLint x, GLint y, GLint z, GLint w)) _func)(index, x, y, z, w);
 }
 
 GLAPI void APIENTRY glVertexAttribI4iv(GLuint index, const GLint *v)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1226];
+   mapi_func _func = ((const mapi_func *) _tbl)[1227];
    ((void (APIENTRY *)(GLuint index, const GLint *v)) _func)(index, v);
 }
 
 GLAPI void APIENTRY glVertexAttribI4ui(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1227];
+   mapi_func _func = ((const mapi_func *) _tbl)[1228];
    ((void (APIENTRY *)(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w)) _func)(index, x, y, z, w);
 }
 
 GLAPI void APIENTRY glVertexAttribI4uiv(GLuint index, const GLuint *v)
 {
    const struct mapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1228];
+   mapi_func _func = ((const mapi_func *) _tbl)[1229];
    ((void (APIENTRY *)(GLuint index, const GLuint *v)) _func)(index, v);
 }
 
@@ -3638,6 +3668,9 @@ STUB_ASM_ENTRY("glBindBufferBase")"\n"
 STUB_ASM_ENTRY("glBindBufferRange")"\n"
 "\t"STUB_ASM_CODE("573")"\n"
 
+STUB_ASM_ENTRY("glBindFragDataLocationEXT")"\n"
+"\t"STUB_ASM_CODE("574")"\n"
+
 STUB_ASM_ENTRY("glClearBufferfi")"\n"
 "\t"STUB_ASM_CODE("576")"\n"
 
@@ -3860,6 +3893,15 @@ STUB_ASM_ENTRY("glIsSync")"\n"
 STUB_ASM_ENTRY("glWaitSync")"\n"
 "\t"STUB_ASM_CODE("701")"\n"
 
+STUB_ASM_ENTRY("glDrawElementsBaseVertex")"\n"
+"\t"STUB_ASM_CODE("702")"\n"
+
+STUB_ASM_ENTRY("glDrawElementsInstancedBaseVertex")"\n"
+"\t"STUB_ASM_CODE("703")"\n"
+
+STUB_ASM_ENTRY("glDrawRangeElementsBaseVertex")"\n"
+"\t"STUB_ASM_CODE("704")"\n"
+
 STUB_ASM_ENTRY("glGetMultisamplefv")"\n"
 "\t"STUB_ASM_CODE("707")"\n"
 
@@ -3981,28 +4023,28 @@ STUB_ASM_ENTRY("glVertexBindingDivisor")"\n"
 "\t"STUB_ASM_CODE("887")"\n"
 
 STUB_ASM_ENTRY("glTexStorage2DMultisample")"\n"
-"\t"STUB_ASM_CODE("899")"\n"
+"\t"STUB_ASM_CODE("900")"\n"
 
 STUB_ASM_ENTRY("glInvalidateFramebuffer")"\n"
-"\t"STUB_ASM_CODE("1012")"\n"
-
-STUB_ASM_ENTRY("glInvalidateSubFramebuffer")"\n"
 "\t"STUB_ASM_CODE("1013")"\n"
 
+STUB_ASM_ENTRY("glInvalidateSubFramebuffer")"\n"
+"\t"STUB_ASM_CODE("1014")"\n"
+
 STUB_ASM_ENTRY("glMultiDrawElementsEXT")"\n"
-"\t"STUB_ASM_CODE("1110")"\n"
+"\t"STUB_ASM_CODE("1111")"\n"
 
 STUB_ASM_ENTRY("glVertexAttribI4i")"\n"
-"\t"STUB_ASM_CODE("1225")"\n"
-
-STUB_ASM_ENTRY("glVertexAttribI4iv")"\n"
 "\t"STUB_ASM_CODE("1226")"\n"
 
-STUB_ASM_ENTRY("glVertexAttribI4ui")"\n"
+STUB_ASM_ENTRY("glVertexAttribI4iv")"\n"
 "\t"STUB_ASM_CODE("1227")"\n"
 
-STUB_ASM_ENTRY("glVertexAttribI4uiv")"\n"
+STUB_ASM_ENTRY("glVertexAttribI4ui")"\n"
 "\t"STUB_ASM_CODE("1228")"\n"
+
+STUB_ASM_ENTRY("glVertexAttribI4uiv")"\n"
+"\t"STUB_ASM_CODE("1229")"\n"
 
 );
 #undef MAPI_TMP_STUB_ASM_GCC_NO_HIDDEN

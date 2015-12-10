@@ -75,7 +75,7 @@ vec4_live_variables::setup_def_use()
 
 	 /* Set use[] for this instruction */
 	 for (unsigned int i = 0; i < 3; i++) {
-	    if (inst->src[i].file == GRF) {
+	    if (inst->src[i].file == VGRF) {
                for (unsigned j = 0; j < inst->regs_read(i); j++) {
                   for (int c = 0; c < 4; c++) {
                      const unsigned v =
@@ -86,9 +86,10 @@ vec4_live_variables::setup_def_use()
                }
 	    }
 	 }
-         if (inst->reads_flag()) {
-            if (!BITSET_TEST(bd->flag_def, 0)) {
-               BITSET_SET(bd->flag_use, 0);
+         for (unsigned c = 0; c < 4; c++) {
+            if (inst->reads_flag(c) &&
+                !BITSET_TEST(bd->flag_def, c)) {
+               BITSET_SET(bd->flag_use, c);
             }
          }
 
@@ -96,7 +97,7 @@ vec4_live_variables::setup_def_use()
 	  * are the things that screen off preceding definitions of a
 	  * variable, and thus qualify for being in def[].
 	  */
-	 if (inst->dst.file == GRF &&
+	 if (inst->dst.file == VGRF &&
 	     (!inst->predicate || inst->opcode == BRW_OPCODE_SEL)) {
             for (unsigned i = 0; i < inst->regs_written; i++) {
                for (int c = 0; c < 4; c++) {
@@ -110,8 +111,11 @@ vec4_live_variables::setup_def_use()
             }
          }
          if (inst->writes_flag()) {
-            if (!BITSET_TEST(bd->flag_use, 0)) {
-               BITSET_SET(bd->flag_def, 0);
+            for (unsigned c = 0; c < 4; c++) {
+               if ((inst->dst.writemask & (1 << c)) &&
+                   !BITSET_TEST(bd->flag_use, c)) {
+                  BITSET_SET(bd->flag_def, c);
+               }
             }
          }
 
@@ -252,7 +256,7 @@ vec4_visitor::calculate_live_intervals()
    int ip = 0;
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (unsigned int i = 0; i < 3; i++) {
-	 if (inst->src[i].file == GRF) {
+	 if (inst->src[i].file == VGRF) {
             for (unsigned j = 0; j < inst->regs_read(i); j++) {
                for (int c = 0; c < 4; c++) {
                   const unsigned v =
@@ -264,7 +268,7 @@ vec4_visitor::calculate_live_intervals()
 	 }
       }
 
-      if (inst->dst.file == GRF) {
+      if (inst->dst.file == VGRF) {
          for (unsigned i = 0; i < inst->regs_written; i++) {
             for (int c = 0; c < 4; c++) {
                if (inst->dst.writemask & (1 << c)) {
@@ -291,15 +295,15 @@ vec4_visitor::calculate_live_intervals()
       struct block_data *bd = &live_intervals->block_data[block->num];
 
       for (int i = 0; i < live_intervals->num_vars; i++) {
-	 if (BITSET_TEST(bd->livein, i)) {
-	    start[i] = MIN2(start[i], block->start_ip);
-	    end[i] = MAX2(end[i], block->start_ip);
-	 }
+         if (BITSET_TEST(bd->livein, i)) {
+            start[i] = MIN2(start[i], block->start_ip);
+            end[i] = MAX2(end[i], block->start_ip);
+         }
 
-	 if (BITSET_TEST(bd->liveout, i)) {
-	    start[i] = MIN2(start[i], block->end_ip);
-	    end[i] = MAX2(end[i], block->end_ip);
-	 }
+         if (BITSET_TEST(bd->liveout, i)) {
+            start[i] = MIN2(start[i], block->end_ip);
+            end[i] = MAX2(end[i], block->end_ip);
+         }
       }
    }
 }

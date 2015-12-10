@@ -1,5 +1,2 @@
-# The commit base differs greatly between 11.0 and master
-2832ca95ecce064c7d841a3a374c2179f56161be glsl: fix stream qualifier for blocks with an instance name
-
-# Somewhat of a mixed feature/bugfix patch, causing some 200 piglit regressions
-2b676570960277d47477822ffeccc672613f9142 gallium/swrast: fix front buffer blitting. (v2)
+# The introduced definitions are not used/implemented by mesa
+1d5b88e33b07bc26d612720e6cb197a6917ba75f gles2: Update gl2ext.h to revision: 32120

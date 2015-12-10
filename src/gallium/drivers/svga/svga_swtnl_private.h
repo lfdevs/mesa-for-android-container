@@ -43,12 +43,16 @@ struct svga_vbuf_render {
 
    unsigned vertex_size;
 
+   SVGA3dElementLayoutId layout_id; /**< current element layout id */
+
    unsigned prim;
 
    struct pipe_resource *vbuf;
    struct pipe_resource *ibuf;
    struct pipe_transfer *vbuf_transfer;
    struct pipe_transfer *ibuf_transfer;
+
+   void *vbuf_ptr;
 
    /* current size of buffer */
    size_t vbuf_size;

@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -111,7 +111,7 @@ svga_drm_winsys_screen_create(int fd)
 			       &drm_compat, "vmwgfx drm driver"))
       return NULL;
 
-   vws = vmw_winsys_create( fd, FALSE );
+   vws = vmw_winsys_create(fd);
    if (!vws)
       goto out_no_vws;
 

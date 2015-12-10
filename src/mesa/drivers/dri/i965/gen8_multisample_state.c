@@ -52,13 +52,11 @@ gen8_emit_3dstate_sample_pattern(struct brw_context *brw)
    BEGIN_BATCH(9);
    OUT_BATCH(_3DSTATE_SAMPLE_PATTERN << 16 | (9 - 2));
 
-   /* 16x MSAA
-    * XXX: Need to program these.
-    */
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
+   /* 16x MSAA */
+   OUT_BATCH(brw_multisample_positions_16x[0]); /* positions  3,  2,  1,  0 */
+   OUT_BATCH(brw_multisample_positions_16x[1]); /* positions  7,  6,  5,  4 */
+   OUT_BATCH(brw_multisample_positions_16x[2]); /* positions 11, 10,  9,  8 */
+   OUT_BATCH(brw_multisample_positions_16x[3]); /* positions 15, 14, 13, 12 */
 
    /* 8x MSAA */
    OUT_BATCH(brw_multisample_positions_8x[1]); /* sample positions 7654 */

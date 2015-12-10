@@ -396,13 +396,6 @@ _mesa_flsll(uint64_t n)
 #endif
 }
 
-
-extern GLhalfARB
-_mesa_float_to_half(float f);
-
-extern float
-_mesa_half_to_float(GLhalfARB h);
-
 static inline bool
 _mesa_half_is_negative(GLhalfARB h)
 {
@@ -423,6 +416,9 @@ _mesa_vsnprintf(char *str, size_t size, const char *fmt, va_list arg);
 #define snprintf _snprintf
 #endif
 
+#if defined(_WIN32) && !defined(strtok_r)
+#define strtok_r strtok_s
+#endif
 
 #ifdef __cplusplus
 }

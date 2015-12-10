@@ -51,6 +51,11 @@ struct ilo_render {
 
    struct intel_bo *workaround_bo;
 
+   struct ilo_render_scratch_space {
+      struct intel_bo *bo;
+      int size;
+   } vs_scratch, gs_scratch, fs_scratch;
+
    struct ilo_state_sample_pattern sample_pattern;
 
    bool hw_ctx_changed;

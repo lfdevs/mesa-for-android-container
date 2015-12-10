@@ -52,6 +52,28 @@ stw_st_framebuffer(struct st_framebuffer_iface *stfb)
    return (struct stw_st_framebuffer *) stfb;
 }
 
+
+/**
+ * Is the given mutex held by the calling thread?
+ */
+static bool
+own_mutex(const CRITICAL_SECTION *cs)
+{
+   // We can't compare OwningThread with our thread handle/id (see
+   // http://stackoverflow.com/a/12675635 ) but we can compare with the
+   // OwningThread member of a critical section we know we own.
+   CRITICAL_SECTION dummy;
+   InitializeCriticalSection(&dummy);
+   EnterCriticalSection(&dummy);
+   if (0)
+      _debug_printf("%p %p\n", cs->OwningThread, dummy.OwningThread);
+   bool ret = cs->OwningThread == dummy.OwningThread;
+   LeaveCriticalSection(&dummy);
+   DeleteCriticalSection(&dummy);
+   return ret;
+}
+
+
 /**
  * Remove outdated textures and create the requested ones.
  */
@@ -136,7 +158,7 @@ stw_st_framebuffer_validate(struct st_context_iface *stctx,
    for (i = 0; i < count; i++)
       statt_mask |= 1 << statts[i];
 
-   pipe_mutex_lock(stwfb->fb->mutex);
+   stw_framebuffer_lock(stwfb->fb);
 
    if (stwfb->fb->must_resize || (statt_mask & ~stwfb->texture_mask)) {
       stw_st_framebuffer_validate_locked(&stwfb->base,
@@ -149,7 +171,7 @@ stw_st_framebuffer_validate(struct st_context_iface *stctx,
       pipe_resource_reference(&out[i], stwfb->textures[statts[i]]);
    }
 
-   stw_framebuffer_release(stwfb->fb);
+   stw_framebuffer_unlock(stwfb->fb);
 
    return TRUE;
 }
@@ -165,10 +187,17 @@ stw_st_framebuffer_present_locked(HDC hdc,
    struct stw_st_framebuffer *stwfb = stw_st_framebuffer(stfb);
    struct pipe_resource *resource;
 
+   assert(own_mutex(&stwfb->fb->mutex));
+
    resource = stwfb->textures[statt];
    if (resource) {
       stw_framebuffer_present_locked(hdc, stwfb->fb, resource);
    }
+   else {
+      stw_framebuffer_unlock(stwfb->fb);
+   }
+
+   assert(!own_mutex(&stwfb->fb->mutex));
 
    return TRUE;
 }
@@ -182,7 +211,7 @@ stw_st_framebuffer_flush_front(struct st_context_iface *stctx,
    boolean ret;
    HDC hDC;
 
-   pipe_mutex_lock(stwfb->fb->mutex);
+   stw_framebuffer_lock(stwfb->fb);
 
    /* We must not cache HDCs anywhere, as they can be invalidated by the
     * application, or screen resolution changes. */

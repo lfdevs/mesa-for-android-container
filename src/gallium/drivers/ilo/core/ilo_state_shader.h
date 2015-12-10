@@ -42,8 +42,6 @@ struct ilo_state_shader_kernel_info {
 
    uint8_t grf_start;
    uint8_t pcb_attr_count;
-
-   uint32_t scratch_size;
 };
 
 /**
@@ -77,6 +75,7 @@ struct ilo_state_vs_info {
    struct ilo_state_shader_resource_info resource;
    struct ilo_state_shader_urb_info urb;
 
+   uint32_t per_thread_scratch_size;
    bool dispatch_enable;
    bool stats_enable;
 };
@@ -86,6 +85,7 @@ struct ilo_state_hs_info {
    struct ilo_state_shader_resource_info resource;
    struct ilo_state_shader_urb_info urb;
 
+   uint32_t per_thread_scratch_size;
    bool dispatch_enable;
    bool stats_enable;
 };
@@ -95,6 +95,7 @@ struct ilo_state_ds_info {
    struct ilo_state_shader_resource_info resource;
    struct ilo_state_shader_urb_info urb;
 
+   uint32_t per_thread_scratch_size;
    bool dispatch_enable;
    bool stats_enable;
 };
@@ -119,6 +120,7 @@ struct ilo_state_gs_info {
 
    struct ilo_state_gs_sol_info sol;
 
+   uint32_t per_thread_scratch_size;
    bool dispatch_enable;
    bool stats_enable;
 };
@@ -158,6 +160,8 @@ struct ilo_state_ps_info {
    struct ilo_state_ps_io_info io;
    struct ilo_state_ps_params_info params;
 
+   uint32_t per_thread_scratch_size;
+
    /* bitmask of GEN6_PS_DISPATCH_x */
    uint8_t valid_kernels;
    bool per_sample_dispatch;
@@ -173,23 +177,28 @@ struct ilo_state_ps_info {
 
 struct ilo_state_vs {
    uint32_t vs[5];
+   uint32_t scratch_size;
 };
 
 struct ilo_state_hs {
    uint32_t hs[4];
+   uint32_t scratch_size;
 };
 
 struct ilo_state_ds {
    uint32_t te[3];
    uint32_t ds[5];
+   uint32_t scratch_size;
 };
 
 struct ilo_state_gs {
    uint32_t gs[5];
+   uint32_t scratch_size;
 };
 
 struct ilo_state_ps {
    uint32_t ps[8];
+   uint32_t scratch_size;
 
    struct ilo_state_ps_dispatch_conds {
       bool ps_valid;
@@ -211,6 +220,12 @@ bool
 ilo_state_vs_init_disabled(struct ilo_state_vs *vs,
                            const struct ilo_dev *dev);
 
+static inline uint32_t
+ilo_state_vs_get_scratch_size(const struct ilo_state_vs *vs)
+{
+   return vs->scratch_size;
+}
+
 bool
 ilo_state_hs_init(struct ilo_state_hs *hs,
                   const struct ilo_dev *dev,
@@ -221,6 +236,12 @@ ilo_state_hs_init_disabled(struct ilo_state_hs *hs,
                            const struct ilo_dev *dev);
 
 
+static inline uint32_t
+ilo_state_hs_get_scratch_size(const struct ilo_state_hs *hs)
+{
+   return hs->scratch_size;
+}
+
 bool
 ilo_state_ds_init(struct ilo_state_ds *ds,
                   const struct ilo_dev *dev,
@@ -230,6 +251,12 @@ bool
 ilo_state_ds_init_disabled(struct ilo_state_ds *ds,
                            const struct ilo_dev *dev);
 
+static inline uint32_t
+ilo_state_ds_get_scratch_size(const struct ilo_state_ds *ds)
+{
+   return ds->scratch_size;
+}
+
 bool
 ilo_state_gs_init(struct ilo_state_gs *gs,
                   const struct ilo_dev *dev,
@@ -238,6 +265,12 @@ ilo_state_gs_init(struct ilo_state_gs *gs,
 bool
 ilo_state_gs_init_disabled(struct ilo_state_gs *gs,
                            const struct ilo_dev *dev);
+
+static inline uint32_t
+ilo_state_gs_get_scratch_size(const struct ilo_state_gs *gs)
+{
+   return gs->scratch_size;
+}
 
 bool
 ilo_state_ps_init(struct ilo_state_ps *ps,
@@ -252,5 +285,11 @@ bool
 ilo_state_ps_set_params(struct ilo_state_ps *ps,
                         const struct ilo_dev *dev,
                         const struct ilo_state_ps_params_info *params);
+
+static inline uint32_t
+ilo_state_ps_get_scratch_size(const struct ilo_state_ps *ps)
+{
+   return ps->scratch_size;
+}
 
 #endif /* ILO_STATE_SHADER_H */

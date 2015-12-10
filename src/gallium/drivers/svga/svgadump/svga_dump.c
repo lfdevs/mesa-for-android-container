@@ -1369,12 +1369,6 @@ dump_SVGA3dCmdDefineSurface(const SVGA3dCmdDefineSurface *cmd)
    case SVGA3D_BUMPL6V5U5:
       _debug_printf("\t\t.format = SVGA3D_BUMPL6V5U5\n");
       break;
-   case SVGA3D_BUMPX8L8V8U8:
-      _debug_printf("\t\t.format = SVGA3D_BUMPX8L8V8U8\n");
-      break;
-   case SVGA3D_BUMPL8V8U8:
-      _debug_printf("\t\t.format = SVGA3D_BUMPL8V8U8\n");
-      break;
    case SVGA3D_ARGB_S10E5:
       _debug_printf("\t\t.format = SVGA3D_ARGB_S10E5\n");
       break;
@@ -1525,15 +1519,6 @@ static void
 dump_SVGA3dCmdDestroyGBShader(const SVGA3dCmdDestroyGBShader *cmd)
 {
    _debug_printf("\t\t.shid = %u\n", cmd->shid);
-}
-
-static void
-dump_SVGA3dCmdBindGBShaderConsts(const SVGA3dCmdBindGBShaderConsts *cmd)
-{
-   _debug_printf("\t\t.cid = %u\n", cmd->cid);
-   _debug_printf("\t\t.shaderType = %u\n", cmd->shaderType);
-   _debug_printf("\t\t.shaderConstType = %u\n", cmd->shaderConstType);
-   _debug_printf("\t\t.sid = %u\n", cmd->sid);
 }
 
 static void
@@ -1926,14 +1911,6 @@ svga_dump_command(uint32_t cmd_id, const void *data, uint32_t size)
       {
          const SVGA3dCmdDestroyGBShader *cmd = (const SVGA3dCmdDestroyGBShader *) body;
          dump_SVGA3dCmdDestroyGBShader(cmd);
-         body = (const uint8_t *)&cmd[1];
-      }
-      break;
-   case SVGA_3D_CMD_BIND_SHADERCONSTS:
-      _debug_printf("\tSVGA_3D_CMD_BIND_SHADERCONSTS\n");
-      {
-         const SVGA3dCmdBindGBShaderConsts *cmd = (const SVGA3dCmdBindGBShaderConsts *) body;
-         dump_SVGA3dCmdBindGBShaderConsts(cmd);
          body = (const uint8_t *)&cmd[1];
       }
       break;

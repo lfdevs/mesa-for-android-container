@@ -24,7 +24,7 @@
  * Authors:
  *    Keith Whitwell <keithw@vmware.com>
  */
-
+#include <stdbool.h>
 
 /**
  * \file t_dd_dmatmp.h
@@ -39,29 +39,12 @@
  * tristrips, lineloops to linestrips), or to indexed vertices.
  */
 
-#if !defined(HAVE_TRIANGLES)
-#error "must have at least triangles to use render template"
+#if !HAVE_TRIANGLES || !HAVE_LINES || !HAVE_LINE_STRIPS || !HAVE_TRI_STRIPS || !HAVE_TRI_FANS
+#error "must have lines, line strips, triangles, triangle fans, and triangle strips to use render template"
 #endif
 
-#if !HAVE_ELTS
-#define ELTS_VARS(buf)
-#define ALLOC_ELTS(nr) 0
-#define EMIT_ELT( offset, elt )
-#define EMIT_TWO_ELTS( offset, elt0, elt1 )
-#define INCR_ELTS( nr )
-#define ELT_INIT(prim)
-#define GET_CURRENT_VB_MAX_ELTS() 0
-#define GET_SUBSEQUENT_VB_MAX_ELTS() 0
-#define RELEASE_ELT_VERTS()
-#define EMIT_INDEXED_VERTS( ctx, start, count )
-#endif
-
-#ifndef EMIT_TWO_ELTS
-#define EMIT_TWO_ELTS( offset, elt0, elt1 )	\
-do { 						\
-   EMIT_ELT( offset, elt0 ); 			\
-   EMIT_ELT( offset+1, elt1 ); 			\
-} while (0)
+#if HAVE_QUAD_STRIPS || HAVE_QUADS || HAVE_ELTS
+#error "ELTs, quads, and quad strips not supported by render template"
 #endif
 
 
@@ -69,33 +52,8 @@ do { 						\
 /*                  Render whole begin/end objects                    */
 /**********************************************************************/
 
-
-
-
-#if (HAVE_ELTS)
-static void *TAG(emit_elts)( struct gl_context *ctx, GLuint *elts, GLuint nr,
-			     void *buf)
-{
-   GLint i;
-   LOCAL_VARS;
-   ELTS_VARS(buf);
-
-   for ( i = 0 ; i+1 < nr ; i+=2, elts += 2 ) {
-      EMIT_TWO_ELTS( 0, elts[0], elts[1] );
-      INCR_ELTS( 2 );
-   }
-   
-   if (i < nr) {
-      EMIT_ELT( 0, elts[0] );
-      INCR_ELTS( 1 );
-   }
-
-   return (void *)ELTPTR;
-}
-#endif
-
-static __inline void *TAG(emit_verts)( struct gl_context *ctx, GLuint start, 
-				     GLuint count, void *buf )
+static inline void *TAG(emit_verts)(struct gl_context *ctx, GLuint start,
+                                    GLuint count, void *buf)
 {
    return EMIT_VERTS(ctx, start, count, buf);
 }
@@ -104,179 +62,153 @@ static __inline void *TAG(emit_verts)( struct gl_context *ctx, GLuint start,
  *                    Render non-indexed primitives.
  ***********************************************************************/
 
-static void TAG(render_points_verts)( struct gl_context *ctx,
-				      GLuint start,
-				      GLuint count,
-				      GLuint flags )
+static void TAG(render_points_verts)(struct gl_context *ctx,
+                                     GLuint start,
+                                     GLuint count,
+                                     GLuint flags)
 {
    if (HAVE_POINTS) {
       LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
+      const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
+      unsigned currentsz;
       GLuint j, nr;
 
-      INIT( GL_POINTS );
+      INIT(GL_POINTS);
 
       currentsz = GET_CURRENT_VB_MAX_VERTS();
       if (currentsz < 8)
-	 currentsz = dmasz;
+         currentsz = dmasz;
 
       for (j = 0; j < count; j += nr) {
-	 nr = MIN2( currentsz, count - j );
+         nr = MIN2(currentsz, count - j);
          TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-	 currentsz = dmasz;
+         currentsz = dmasz;
       }
-
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
+      unreachable("Cannot draw primitive; validate_render should have "
+                  "prevented this");
    }
 }
 
-static void TAG(render_lines_verts)( struct gl_context *ctx,
-				     GLuint start,
-				     GLuint count,
-				     GLuint flags )
-{
-   if (HAVE_LINES) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
-      GLuint j, nr;
-
-      INIT( GL_LINES );
-
-      /* Emit whole number of lines in total and in each buffer:
-       */
-      count -= count & 1;
-      currentsz = GET_CURRENT_VB_MAX_VERTS();
-      currentsz -= currentsz & 1;
-      dmasz -= dmasz & 1;
-
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j < count; j += nr) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-	 currentsz = dmasz;
-      }
-
-   } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-static void TAG(render_line_strip_verts)( struct gl_context *ctx,
-					  GLuint start,
-					  GLuint count,
-					  GLuint flags )
-{
-   if (HAVE_LINE_STRIPS) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
-      GLuint j, nr;
-
-      INIT( GL_LINE_STRIP );
-
-      currentsz = GET_CURRENT_VB_MAX_VERTS();
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j + 1 < count; j += nr - 1 ) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-	 currentsz = dmasz;
-      }
- 
-      FLUSH();
-
-   } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-static void TAG(render_line_loop_verts)( struct gl_context *ctx,
-					 GLuint start,
-					 GLuint count,
-					 GLuint flags )
-{
-   if (HAVE_LINE_STRIPS) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
-      GLuint j, nr;
-
-      INIT( GL_LINE_STRIP );
-
-      j = (flags & PRIM_BEGIN) ? 0 : 1;
-
-      /* Ensure last vertex won't wrap buffers:
-       */
-      currentsz = GET_CURRENT_VB_MAX_VERTS();
-      currentsz--;
-      dmasz--;
-
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
-
-      if (j + 1 < count) {
-	 for ( ; j + 1 < count; j += nr - 1 ) {
-	    nr = MIN2( currentsz, count - j );
-
-	    if (j + nr >= count &&
-		count > 1 &&
-		(flags & PRIM_END)) 
-	    {
-	       void *tmp;
-	       tmp = ALLOC_VERTS(nr+1);
-               tmp = TAG(emit_verts)(ctx, start + j, nr, tmp);
-	       tmp = TAG(emit_verts)( ctx, start, 1, tmp );
-	       (void) tmp;
-	    }
-	    else {
-               TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-	       currentsz = dmasz;
-	    }
-	 }
-
-      }
-      else if (count > 1 && (flags & PRIM_END)) {
-	 void *tmp;
-	 tmp = ALLOC_VERTS(2);
-	 tmp = TAG(emit_verts)( ctx, start+1, 1, tmp );
-	 tmp = TAG(emit_verts)( ctx, start, 1, tmp );
-	 (void) tmp;
-      }
-
-      FLUSH();
-
-   } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-static void TAG(render_triangles_verts)( struct gl_context *ctx,
-					 GLuint start,
-					 GLuint count,
-					 GLuint flags )
+static void TAG(render_lines_verts)(struct gl_context *ctx,
+                                    GLuint start,
+                                    GLuint count,
+                                    GLuint flags)
 {
    LOCAL_VARS;
-   int dmasz = (GET_SUBSEQUENT_VB_MAX_VERTS()/3) * 3;
-   int currentsz;
+   const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS() & ~1;
+   unsigned currentsz;
+   GLuint j, nr;
+
+   INIT(GL_LINES);
+
+   /* Emit whole number of lines in total and in each buffer:
+    */
+   count -= count & 1;
+   currentsz = GET_CURRENT_VB_MAX_VERTS();
+   currentsz -= currentsz & 1;
+
+   if (currentsz < 8)
+      currentsz = dmasz;
+
+   for (j = 0; j < count; j += nr) {
+      nr = MIN2(currentsz, count - j);
+      TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
+      currentsz = dmasz;
+   }
+}
+
+
+static void TAG(render_line_strip_verts)(struct gl_context *ctx,
+                                         GLuint start,
+                                         GLuint count,
+                                         GLuint flags)
+{
+   LOCAL_VARS;
+   const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
+   unsigned currentsz;
+   GLuint j, nr;
+
+   INIT(GL_LINE_STRIP);
+
+   currentsz = GET_CURRENT_VB_MAX_VERTS();
+   if (currentsz < 8)
+      currentsz = dmasz;
+
+   for (j = 0; j + 1 < count; j += nr - 1) {
+      nr = MIN2(currentsz, count - j);
+      TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
+      currentsz = dmasz;
+   }
+ 
+   FLUSH();
+}
+
+
+static void TAG(render_line_loop_verts)(struct gl_context *ctx,
+                                        GLuint start,
+                                        GLuint count,
+                                        GLuint flags)
+{
+   LOCAL_VARS;
+   const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS() - 1;
+   unsigned currentsz;
+   GLuint j, nr;
+
+   INIT(GL_LINE_STRIP);
+
+   j = (flags & PRIM_BEGIN) ? 0 : 1;
+
+   /* Ensure last vertex won't wrap buffers:
+    */
+   currentsz = GET_CURRENT_VB_MAX_VERTS();
+   currentsz--;
+
+   if (currentsz < 8)
+      currentsz = dmasz;
+
+   if (j + 1 < count) {
+      for (/* empty */; j + 1 < count; j += nr - 1) {
+         nr = MIN2(currentsz, count - j);
+
+         if (j + nr >= count &&
+             count > 1 &&
+             (flags & PRIM_END)) {
+            void *tmp;
+            tmp = ALLOC_VERTS(nr+1);
+            tmp = TAG(emit_verts)(ctx, start + j, nr, tmp);
+            tmp = TAG(emit_verts)( ctx, start, 1, tmp );
+            (void) tmp;
+         } else {
+            TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
+            currentsz = dmasz;
+         }
+      }
+   } else if (count > 1 && (flags & PRIM_END)) {
+      void *tmp;
+      tmp = ALLOC_VERTS(2);
+      tmp = TAG(emit_verts)( ctx, start+1, 1, tmp );
+      tmp = TAG(emit_verts)( ctx, start, 1, tmp );
+      (void) tmp;
+   }
+
+   FLUSH();
+}
+
+
+static void TAG(render_triangles_verts)(struct gl_context *ctx,
+                                        GLuint start,
+                                        GLuint count,
+                                        GLuint flags)
+{
+   LOCAL_VARS;
+   const unsigned dmasz = (GET_SUBSEQUENT_VB_MAX_VERTS() / 3) * 3;
+   unsigned currentsz;
    GLuint j, nr;
 
    INIT(GL_TRIANGLES);
 
-   currentsz = (GET_CURRENT_VB_MAX_VERTS()/3) * 3;
+   currentsz = (GET_CURRENT_VB_MAX_VERTS() / 3) * 3;
 
    /* Emit whole number of tris in total.  dmasz is already a multiple
     * of 3.
@@ -287,7 +219,7 @@ static void TAG(render_triangles_verts)( struct gl_context *ctx,
       currentsz = dmasz;
 
    for (j = 0; j < count; j += nr) {
-      nr = MIN2( currentsz, count - j );
+      nr = MIN2(currentsz, count - j);
       TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
       currentsz = dmasz;
    }
@@ -295,365 +227,191 @@ static void TAG(render_triangles_verts)( struct gl_context *ctx,
 
 
 
-static void TAG(render_tri_strip_verts)( struct gl_context *ctx,
-					 GLuint start,
-					 GLuint count,
-					 GLuint flags )
+static void TAG(render_tri_strip_verts)(struct gl_context *ctx,
+                                        GLuint start,
+                                        GLuint count,
+                                        GLuint flags)
 {
-   if (HAVE_TRI_STRIPS) {
-      LOCAL_VARS;
-      GLuint j, nr;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
+   LOCAL_VARS;
+   GLuint j, nr;
+   const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS() & ~1;
+   unsigned currentsz;
 
-      INIT(GL_TRIANGLE_STRIP);
+   INIT(GL_TRIANGLE_STRIP);
 
-      currentsz = GET_CURRENT_VB_MAX_VERTS();
+   currentsz = GET_CURRENT_VB_MAX_VERTS();
 
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
+   if (currentsz < 8)
+      currentsz = dmasz;
 
-      /* From here on emit even numbers of tris when wrapping over buffers:
-       */
-      dmasz -= (dmasz & 1);
-      currentsz -= (currentsz & 1);
+   /* From here on emit even numbers of tris when wrapping over buffers:
+    */
+   currentsz -= (currentsz & 1);
 
-      for (j = 0; j + 2 < count; j += nr - 2) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-	 currentsz = dmasz;
-      }
-
-      FLUSH();
-
-   } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
+   for (j = 0; j + 2 < count; j += nr - 2) {
+      nr = MIN2(currentsz, count - j);
+      TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
+      currentsz = dmasz;
    }
+
+   FLUSH();
 }
 
-static void TAG(render_tri_fan_verts)( struct gl_context *ctx,
-				       GLuint start,
-				       GLuint count,
-				       GLuint flags )
+static void TAG(render_tri_fan_verts)(struct gl_context *ctx,
+                                      GLuint start,
+                                      GLuint count,
+                                      GLuint flags)
 {
-   if (HAVE_TRI_FANS) {
-      LOCAL_VARS;
-      GLuint j, nr;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
+   LOCAL_VARS;
+   GLuint j, nr;
+   const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
+   unsigned currentsz;
 
-      INIT(GL_TRIANGLE_FAN);
+   INIT(GL_TRIANGLE_FAN);
 
-      currentsz = GET_CURRENT_VB_MAX_VERTS();
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
+   currentsz = GET_CURRENT_VB_MAX_VERTS();
+   if (currentsz < 8)
+      currentsz = dmasz;
 
-      for (j = 1; j + 1 < count; j += nr - 2) {
-	 void *tmp;
-	 nr = MIN2( currentsz, count - j + 1 );
-	 tmp = ALLOC_VERTS( nr );
-	 tmp = TAG(emit_verts)( ctx, start, 1, tmp );
-         tmp = TAG(emit_verts)( ctx, start + j, nr - 1, tmp );
-	 (void) tmp;
-	 currentsz = dmasz;
-      }
-
-      FLUSH();
+   for (j = 1; j + 1 < count; j += nr - 2) {
+      void *tmp;
+      nr = MIN2(currentsz, count - j + 1);
+      tmp = ALLOC_VERTS(nr);
+      tmp = TAG(emit_verts)(ctx, start, 1, tmp);
+      tmp = TAG(emit_verts)(ctx, start + j, nr - 1, tmp);
+      (void) tmp;
+      currentsz = dmasz;
    }
-   else {
-      /* Could write code to emit these as indexed vertices (for the
-       * g400, for instance).
-       */
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
+
+   FLUSH();
 }
 
 
-static void TAG(render_poly_verts)( struct gl_context *ctx,
-				    GLuint start,
-				    GLuint count,
-				    GLuint flags )
+static void TAG(render_poly_verts)(struct gl_context *ctx,
+                                   GLuint start,
+                                   GLuint count,
+                                   GLuint flags)
 {
    if (HAVE_POLYGONS) {
       LOCAL_VARS;
       GLuint j, nr;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
+      const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
+      unsigned currentsz;
 
       INIT(GL_POLYGON);
 
       currentsz = GET_CURRENT_VB_MAX_VERTS();
       if (currentsz < 8) {
-	 currentsz = dmasz;
+         currentsz = dmasz;
       }
 
-      for (j = 1 ; j + 1 < count ; j += nr - 2 ) {
-	 void *tmp;
-	 nr = MIN2( currentsz, count - j + 1 );
-	 tmp = ALLOC_VERTS( nr );
-	 tmp = TAG(emit_verts)( ctx, start, 1, tmp );
+      for (j = 1; j + 1 < count; j += nr - 2) {
+         void *tmp;
+         nr = MIN2(currentsz, count - j + 1);
+         tmp = ALLOC_VERTS(nr);
+         tmp = TAG(emit_verts)(ctx, start, 1, tmp);
          tmp = TAG(emit_verts)(ctx, start + j, nr - 1, tmp);
-	 (void) tmp;
-	 currentsz = dmasz;
+         (void) tmp;
+         currentsz = dmasz;
       }
 
       FLUSH();
-   }
-   else if (HAVE_TRI_FANS && ctx->Light.ShadeModel == GL_SMOOTH) {
+   } else if (ctx->Light.ShadeModel == GL_SMOOTH ||
+              ctx->Light.ProvokingVertex == GL_FIRST_VERTEX_CONVENTION) {
       TAG(render_tri_fan_verts)( ctx, start, count, flags );
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
+      unreachable("Cannot draw primitive; validate_render should have "
+                  "prevented this");
    }
 }
 
-static void TAG(render_quad_strip_verts)( struct gl_context *ctx,
-					  GLuint start,
-					  GLuint count,
-					  GLuint flags )
+static void TAG(render_quad_strip_verts)(struct gl_context *ctx,
+                                         GLuint start,
+                                         GLuint count,
+                                         GLuint flags)
 {
    GLuint j, nr;
 
-   if (HAVE_QUAD_STRIPS) {
+   if (ctx->Light.ShadeModel == GL_SMOOTH) {
       LOCAL_VARS;
-      GLuint j, nr;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
-
-      INIT(GL_QUAD_STRIP);
-
-      currentsz = GET_CURRENT_VB_MAX_VERTS();
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
-
-      dmasz -= (dmasz & 2);
-      currentsz -= (currentsz & 2);
-
-      for (j = 0; j + 3 < count; j += nr - 2 ) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-	 currentsz = dmasz;
-      }
-
-      FLUSH();
-
-   } else if (HAVE_TRI_STRIPS && 
-	      ctx->Light.ShadeModel == GL_FLAT &&
-	      TNL_CONTEXT(ctx)->vb.AttribPtr[_TNL_ATTRIB_COLOR0]->stride) {
-      if (HAVE_ELTS) {
-	 LOCAL_VARS;
-	 int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-	 int currentsz;
-	 GLuint j, nr;
-
-         EMIT_INDEXED_VERTS( ctx, start, count );
-
-	 /* Simulate flat-shaded quadstrips using indexed vertices:
-	  */
-	 ELT_INIT( GL_TRIANGLES );
-
-	 currentsz = GET_CURRENT_VB_MAX_ELTS();
-
-	 /* Emit whole number of quads in total, and in each buffer.
-	  */
-	 dmasz -= dmasz & 1;
-	 count -= count & 1;
-	 currentsz -= currentsz & 1;
-
-	 if (currentsz < 12)
-	    currentsz = dmasz;
-
-	 currentsz = currentsz/6*2;
-	 dmasz = dmasz/6*2;
-
-	 for (j = 0; j + 3 < count; j += nr - 2) {
-	    nr = MIN2( currentsz, count - j );
-	    if (nr >= 4) {
-	       GLint quads = (nr/2)-1;
-	       GLint i;
-	       ELTS_VARS( ALLOC_ELTS( quads*6 ) );
-
-               for (i = j; i < j + quads * 2; i += 2) {
-		  EMIT_TWO_ELTS( 0, (i+0), (i+1) );
-		  EMIT_TWO_ELTS( 2, (i+2), (i+1) );
-		  EMIT_TWO_ELTS( 4, (i+3), (i+2) );
-		  INCR_ELTS( 6 );
-	       }
-
-	       FLUSH();
-	    }
-	    currentsz = dmasz;
-	 }
-
-	 RELEASE_ELT_VERTS();
-	 FLUSH();
-      }
-      else {
-	 /* Vertices won't fit in a single buffer or elts not
-	  * available - should never happen.
-	  */
-        fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-	 return;
-      }
-   }
-   else if (HAVE_TRI_STRIPS) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_VERTS();
-      int currentsz;
+      const unsigned dmasz = GET_SUBSEQUENT_VB_MAX_VERTS() & ~1;
+      unsigned currentsz;
 
       /* Emit smooth-shaded quadstrips as tristrips:
        */
       FLUSH();
-      INIT( GL_TRIANGLE_STRIP );
+      INIT(GL_TRIANGLE_STRIP);
 
       /* Emit whole number of quads in total, and in each buffer.
        */
-      dmasz -= dmasz & 1;
       currentsz = GET_CURRENT_VB_MAX_VERTS();
       currentsz -= currentsz & 1;
       count -= count & 1;
 
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
+      if (currentsz < 8)
+         currentsz = dmasz;
 
       for (j = 0; j + 3 < count; j += nr - 2) {
-	 nr = MIN2( currentsz, count - j );
+         nr = MIN2(currentsz, count - j);
          TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-	 currentsz = dmasz;
+         currentsz = dmasz;
       }
 
       FLUSH();
-
    } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
+      unreachable("Cannot draw primitive; validate_render should have "
+                  "prevented this");
    }
 }
 
 
-static void TAG(render_quads_verts)( struct gl_context *ctx,
-				     GLuint start,
-				     GLuint count,
-				     GLuint flags )
+static void TAG(render_quads_verts)(struct gl_context *ctx,
+                                    GLuint start,
+                                    GLuint count,
+                                    GLuint flags)
 {
-   /* Emit whole number of quads in total. */
-   count -= count & 3;
-
-   if (HAVE_QUADS) {
-      LOCAL_VARS;
-      int dmasz = (GET_SUBSEQUENT_VB_MAX_VERTS()/4) * 4;
-      int currentsz;
-      GLuint j, nr;
-
-      INIT(GL_QUADS);
-
-      currentsz = (GET_CURRENT_VB_MAX_VERTS()/4) * 4;
-      if (currentsz < 8)
-         currentsz = dmasz;
-
-      for (j = 0; j < count; j += nr) {
-         nr = MIN2( currentsz, count - j );
-         TAG(emit_verts)(ctx, start + j, nr, ALLOC_VERTS(nr));
-         currentsz = dmasz;
-      }
-   }
-   else if (HAVE_ELTS) {
-      /* Hardware doesn't have a quad primitive type -- try to
-       * simulate it using indexed vertices and the triangle
-       * primitive:
-       */
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-      GLuint j, nr;
-
-      EMIT_INDEXED_VERTS( ctx, start, count );
-
-      FLUSH();
-      ELT_INIT( GL_TRIANGLES );
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-
-      /* Emit whole number of quads in total, and in each buffer.
-       */
-      dmasz -= dmasz & 3;
-      currentsz -= currentsz & 3;
-
-      /* Adjust for rendering as triangles:
-       */
-      currentsz = currentsz/6*4;
-      dmasz = dmasz/6*4;
-
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j < count; j += nr ) {
-	 nr = MIN2( currentsz, count - j );
-	 if (nr >= 4) {
-	    GLint quads = nr/4;
-	    GLint i;
-	    ELTS_VARS( ALLOC_ELTS( quads*6 ) );
-
-            for (i = j; i < j + quads * 4; i += 4) {
-	       EMIT_TWO_ELTS( 0, (i+0), (i+1) );
-	       EMIT_TWO_ELTS( 2, (i+3), (i+1) );
-	       EMIT_TWO_ELTS( 4, (i+2), (i+3) );
-	       INCR_ELTS( 6 );
-	    }
-
-	    FLUSH();
-	 }
-	 currentsz = dmasz;
-      }
-
-      RELEASE_ELT_VERTS();
-   }
-   else if (HAVE_TRIANGLES) {
-      /* Hardware doesn't have a quad primitive type -- try to
-       * simulate it using triangle primitive.  This is a win for
-       * gears, but is it useful in the broader world?
-       */
+   if (ctx->Light.ShadeModel == GL_SMOOTH ||
+       ctx->Light.ProvokingVertex == GL_LAST_VERTEX_CONVENTION) {
       LOCAL_VARS;
       GLuint j;
 
+      /* Emit whole number of quads in total. */
+      count -= count & 3;
+
+      /* Hardware doesn't have a quad primitive type -- try to simulate it using
+       * triangle primitive.  This is a win for gears, but is it useful in the
+       * broader world?
+       */
       INIT(GL_TRIANGLES);
 
       for (j = 0; j + 3 < count; j += 4) {
-	 void *tmp = ALLOC_VERTS( 6 );
-	 /* Send v0, v1, v3
-	  */
-	 tmp = EMIT_VERTS(ctx, start + j,     2, tmp);
-	 tmp = EMIT_VERTS(ctx, start + j + 3, 1, tmp);
-	 /* Send v1, v2, v3
-	  */
-	 tmp = EMIT_VERTS(ctx, start + j + 1, 3, tmp);
-	 (void) tmp;
+         void *tmp = ALLOC_VERTS(6);
+         /* Send v0, v1, v3
+          */
+         tmp = EMIT_VERTS(ctx, start + j,     2, tmp);
+         tmp = EMIT_VERTS(ctx, start + j + 3, 1, tmp);
+         /* Send v1, v2, v3
+          */
+         tmp = EMIT_VERTS(ctx, start + j + 1, 3, tmp);
+         (void) tmp;
       }
-   }
-   else {
-      /* Vertices won't fit in a single buffer, should never happen.
-       */
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
+   } else {
+      unreachable("Cannot draw primitive");
    }
 }
 
-static void TAG(render_noop)( struct gl_context *ctx,
-			      GLuint start,
-			      GLuint count,
-			      GLuint flags )
+static void TAG(render_noop)(struct gl_context *ctx,
+                             GLuint start,
+                             GLuint count,
+                             GLuint flags)
 {
+   (void) ctx;
+   (void) start;
+   (void) count;
+   (void) flags;
 }
 
-
-
-
-static tnl_render_func TAG(render_tab_verts)[GL_POLYGON+2] =
+static const tnl_render_func TAG(render_tab_verts)[GL_POLYGON+2] =
 {
    TAG(render_points_verts),
    TAG(render_lines_verts),
@@ -668,590 +426,63 @@ static tnl_render_func TAG(render_tab_verts)[GL_POLYGON+2] =
    TAG(render_noop),
 };
 
-
-/****************************************************************************
- *                 Render elts using hardware indexed verts                 *
- ****************************************************************************/
-
-#if (HAVE_ELTS)
-static void TAG(render_points_elts)( struct gl_context *ctx,
-				     GLuint start,
-				     GLuint count,
-				     GLuint flags )
-{
-   if (HAVE_POINTS) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      GLuint j, nr;
-
-      ELT_INIT( GL_POINTS );
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j < count; j += nr ) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_elts)(ctx, elts + start + j, nr, ALLOC_ELTS(nr));
-	 FLUSH();
-	 currentsz = dmasz;
-      }
-   } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-
-static void TAG(render_lines_elts)( struct gl_context *ctx,
-				    GLuint start,
-				    GLuint count,
-				    GLuint flags )
-{
-   if (HAVE_LINES) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      GLuint j, nr;
-
-      ELT_INIT( GL_LINES );
-
-      /* Emit whole number of lines in total and in each buffer:
-       */
-      count -= count & 1;
-      currentsz -= currentsz & 1;
-      dmasz -= dmasz & 1;
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j < count; j += nr ) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_elts)(ctx, elts + start + j, nr, ALLOC_ELTS(nr));
-	 FLUSH();
-	 currentsz = dmasz;
-      }
-   } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-static void TAG(render_line_strip_elts)( struct gl_context *ctx,
-					 GLuint start,
-					 GLuint count,
-					 GLuint flags )
-{
-   if (HAVE_LINE_STRIPS) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      GLuint j, nr;
-
-      FLUSH(); /* always a new primitive */
-      ELT_INIT( GL_LINE_STRIP );
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j + 1 < count; j += nr - 1) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_elts)( ctx, elts + start + j, nr, ALLOC_ELTS(nr));
-	 FLUSH();
-	 currentsz = dmasz;
-      }
-   } else {
-      /* TODO: Try to emit as indexed lines.
-       */
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-static void TAG(render_line_loop_elts)( struct gl_context *ctx,
-					GLuint start,
-					GLuint count,
-					GLuint flags )
-{
-   if (HAVE_LINE_STRIPS) {
-      LOCAL_VARS;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      GLuint j, nr;
-
-      FLUSH();
-      ELT_INIT( GL_LINE_STRIP );
-
-      j = (flags & PRIM_BEGIN) ? 0 : 1;
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
-
-      /* Ensure last vertex doesn't wrap:
-       */
-      currentsz--;
-      dmasz--;
-
-      if (j + 1 < count) {
-	 for ( ; j + 1 < count; j += nr - 1 ) {
-	    nr = MIN2( currentsz, count - j );
-
-	    if (j + nr >= count &&
-		count > 1 &&
-		(flags & PRIM_END)) 
-	    {
-	       void *tmp;
-	       tmp = ALLOC_ELTS(nr+1);
-               tmp = TAG(emit_elts)(ctx, elts + start + j, nr, tmp);
-	       tmp = TAG(emit_elts)( ctx, elts+start, 1, tmp );
-	       (void) tmp;
-	    }
-	    else {
-               TAG(emit_elts)(ctx, elts + start + j, nr, ALLOC_ELTS(nr));
-	       currentsz = dmasz;
-	    }
-	 }
-
-      }
-      else if (count > 1 && (flags & PRIM_END)) {
-	 void *tmp;
-	 tmp = ALLOC_ELTS(2);
-	 tmp = TAG(emit_elts)( ctx, elts+start+1, 1, tmp );
-	 tmp = TAG(emit_elts)( ctx, elts+start, 1, tmp );
-	 (void) tmp;
-      }
-
-      FLUSH();
-   } else {
-      /* TODO: Try to emit as indexed lines */
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-/* For verts, we still eliminate the copy from main memory to dma
- * buffers.  For elts, this is probably no better (worse?) than the
- * standard path.
- */
-static void TAG(render_triangles_elts)( struct gl_context *ctx,
-					GLuint start,
-					GLuint count,
-					GLuint flags )
-{
-   LOCAL_VARS;
-   GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-   int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS()/3*3;
-   int currentsz;
-   GLuint j, nr;
-
-   FLUSH();
-   ELT_INIT( GL_TRIANGLES );
-
-   currentsz = GET_CURRENT_VB_MAX_ELTS();
-
-   /* Emit whole number of tris in total.  dmasz is already a multiple
-    * of 3.
-    */
-   count -= count % 3;
-   currentsz -= currentsz%3;
-   if (currentsz < 8)
-      currentsz = dmasz;
-
-   for (j = 0; j < count; j += nr) {
-      nr = MIN2( currentsz, count - j );
-      TAG(emit_elts)(ctx, elts + start + j, nr, ALLOC_ELTS(nr));
-      FLUSH();
-      currentsz = dmasz;
-   }
-}
-
-
-
-static void TAG(render_tri_strip_elts)( struct gl_context *ctx,
-					GLuint start,
-					GLuint count,
-					GLuint flags )
-{
-   if (HAVE_TRI_STRIPS) {
-      LOCAL_VARS;
-      GLuint j, nr;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-
-      FLUSH();
-      ELT_INIT( GL_TRIANGLE_STRIP );
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
-
-      /* Keep the same winding over multiple buffers:
-       */
-      dmasz -= (dmasz & 1);
-      currentsz -= (currentsz & 1);
-
-      for (j = 0; j + 2 < count; j += nr - 2) {
-	 nr = MIN2( currentsz, count - j );
-	 TAG(emit_elts)( ctx, elts + start + j, nr, ALLOC_ELTS(nr) );
-	 FLUSH();
-	 currentsz = dmasz;
-      }
-   } else {
-      /* TODO: try to emit as indexed triangles */
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-static void TAG(render_tri_fan_elts)( struct gl_context *ctx,
-				      GLuint start,
-				      GLuint count,
-				      GLuint flags )
-{
-   if (HAVE_TRI_FANS) {
-      LOCAL_VARS;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      GLuint j, nr;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-
-      FLUSH();
-      ELT_INIT( GL_TRIANGLE_FAN );
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
-
-      for (j = 1; j + 1 < count; j += nr - 2) {
-	 void *tmp;
-	 nr = MIN2( currentsz, count - j + 1 );
-	 tmp = ALLOC_ELTS( nr );
-	 tmp = TAG(emit_elts)( ctx, elts+start, 1, tmp );
-         tmp = TAG(emit_elts)(ctx, elts + start + j, nr - 1, tmp);
-	 (void) tmp;
-	 FLUSH();
-	 currentsz = dmasz;
-      }
-   } else {
-      /* TODO: try to emit as indexed triangles */
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-
-static void TAG(render_poly_elts)( struct gl_context *ctx,
-				   GLuint start,
-				   GLuint count,
-				   GLuint flags )
-{
-   if (HAVE_POLYGONS) {
-      LOCAL_VARS;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      GLuint j, nr;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-
-      FLUSH();
-      ELT_INIT( GL_POLYGON );
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-      if (currentsz < 8) {
-	 currentsz = dmasz;
-      }
-
-      for (j = 1 ; j + 1 < count; j += nr - 2) {
-	 void *tmp;
-	 nr = MIN2( currentsz, count - j + 1 );
-	 tmp = ALLOC_ELTS( nr );
-	 tmp = TAG(emit_elts)( ctx, elts+start, 1, tmp );
-         tmp = TAG(emit_elts)(ctx, elts + start + j, nr - 1, tmp);
-	 (void) tmp;
-	 FLUSH();
-	 currentsz = dmasz;
-      }
-   } else if (HAVE_TRI_FANS && ctx->Light.ShadeModel == GL_SMOOTH) {
-      TAG(render_tri_fan_verts)( ctx, start, count, flags );
-   } else {
-      fprintf(stderr, "%s - cannot draw primitive\n", __func__);
-      return;
-   }
-}
-
-static void TAG(render_quad_strip_elts)( struct gl_context *ctx,
-					 GLuint start,
-					 GLuint count,
-					 GLuint flags )
-{
-   if (HAVE_QUAD_STRIPS && 0) {
-   }
-   else if (HAVE_TRI_STRIPS) {
-      LOCAL_VARS;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-      GLuint j, nr;
-
-      FLUSH();
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-
-      /* Emit whole number of quads in total, and in each buffer.
-       */
-      dmasz -= dmasz & 1;
-      count -= count & 1;
-      currentsz -= currentsz & 1;
-
-      if (currentsz < 12)
-	 currentsz = dmasz;
-
-      if (ctx->Light.ShadeModel == GL_FLAT) {
-	 ELT_INIT( GL_TRIANGLES );
-
-	 currentsz = currentsz/6*2;
-	 dmasz = dmasz/6*2;
-
-         for (j = 0; j + 3 < count; j += nr - 2) {
-	    nr = MIN2( currentsz, count - j );
-
-	    if (nr >= 4)
-	    {
-	       GLint i;
-	       GLint quads = (nr/2)-1;
-	       ELTS_VARS( ALLOC_ELTS( quads*6 ) );
-
-               for (i = j; i < j + quads; i++, elts += 2) {
-		  EMIT_TWO_ELTS( 0, elts[0], elts[1] );
-		  EMIT_TWO_ELTS( 2, elts[2], elts[1] );
-		  EMIT_TWO_ELTS( 4, elts[3], elts[2] );
-		  INCR_ELTS( 6 );
-	       }
-
-	       FLUSH();
-	    }
-
-	    currentsz = dmasz;
-	 }
-      }
-      else {
-	 ELT_INIT( GL_TRIANGLE_STRIP );
-
-         for (j = 0; j + 3 < count; j += nr - 2) {
-	    nr = MIN2( currentsz, count - j );
-            TAG(emit_elts)(ctx, elts + start + j, nr, ALLOC_ELTS(nr));
-	    FLUSH();
-	    currentsz = dmasz;
-	 }
-      }
-   }
-}
-
-
-static void TAG(render_quads_elts)( struct gl_context *ctx,
-				    GLuint start,
-				    GLuint count,
-				    GLuint flags )
-{
-   /* Emit whole number of quads in total. */
-   count -= count & 3;
-
-   if (HAVE_QUADS) {
-      LOCAL_VARS;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS()/4*4;
-      int currentsz;
-      GLuint j, nr;
-
-      FLUSH();
-      ELT_INIT( GL_TRIANGLES );
-
-      currentsz = GET_CURRENT_VB_MAX_ELTS()/4*4;
-
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j < count; j += nr) {
-	 nr = MIN2( currentsz, count - j );
-         TAG(emit_elts)(ctx, elts + start + j, nr, ALLOC_ELTS(nr));
-	 FLUSH();
-	 currentsz = dmasz;
-      }
-   } else {
-      LOCAL_VARS;
-      GLuint *elts = TNL_CONTEXT(ctx)->vb.Elts;
-      int dmasz = GET_SUBSEQUENT_VB_MAX_ELTS();
-      int currentsz;
-      GLuint j, nr;
-
-      ELT_INIT( GL_TRIANGLES );
-      currentsz = GET_CURRENT_VB_MAX_ELTS();
-
-      /* Emit whole number of quads in total, and in each buffer.
-       */
-      dmasz -= dmasz & 3;
-      currentsz -= currentsz & 3;
-
-      /* Adjust for rendering as triangles:
-       */
-      currentsz = currentsz/6*4;
-      dmasz = dmasz/6*4;
-
-      if (currentsz < 8)
-	 currentsz = dmasz;
-
-      for (j = 0; j + 3 < count; j += nr - 2) {
-	 nr = MIN2( currentsz, count - j );
-
-	 if (nr >= 4)
-	 {
-	    GLint quads = nr/4;
-	    GLint i;
-	    ELTS_VARS( ALLOC_ELTS( quads * 6 ) );
-
-	    for (i = j; i < j + quads; i++, elts += 4) {
-	       EMIT_TWO_ELTS( 0, elts[0], elts[1] );
-	       EMIT_TWO_ELTS( 2, elts[3], elts[1] );
-	       EMIT_TWO_ELTS( 4, elts[2], elts[3] );
-	       INCR_ELTS( 6 );
-	    }
-
-	    FLUSH();
-	 }
-
-	 currentsz = dmasz;
-      }
-   }
-}
-
-
-
-static tnl_render_func TAG(render_tab_elts)[GL_POLYGON+2] =
-{
-   TAG(render_points_elts),
-   TAG(render_lines_elts),
-   TAG(render_line_loop_elts),
-   TAG(render_line_strip_elts),
-   TAG(render_triangles_elts),
-   TAG(render_tri_strip_elts),
-   TAG(render_tri_fan_elts),
-   TAG(render_quads_elts),
-   TAG(render_quad_strip_elts),
-   TAG(render_poly_elts),
-   TAG(render_noop),
-};
-
-
-
-#endif
-
-
-
 /* Pre-check the primitives in the VB to prevent the need for
  * fallbacks later on.
  */
-static GLboolean TAG(validate_render)( struct gl_context *ctx,
-				       struct vertex_buffer *VB )
+static bool TAG(validate_render)(struct gl_context *ctx,
+                                 struct vertex_buffer *VB)
 {
    GLint i;
 
    if (VB->ClipOrMask & ~CLIP_CULL_BIT)
-      return GL_FALSE;
+      return false;
 
-   if (VB->Elts && !HAVE_ELTS)
-      return GL_FALSE;
+   if (VB->Elts)
+      return false;
 
    for (i = 0 ; i < VB->PrimitiveCount ; i++) {
       GLuint prim = VB->Primitive[i].mode;
       GLuint count = VB->Primitive[i].count;
-      GLboolean ok = GL_FALSE;
+      bool ok = false;
 
       if (!count)
-	 continue;
+         continue;
 
       switch (prim & PRIM_MODE_MASK) {
       case GL_POINTS:
-	 ok = HAVE_POINTS;
-	 break;
+         ok = HAVE_POINTS;
+         break;
       case GL_LINES:
-	 ok = HAVE_LINES && !ctx->Line.StippleFlag;
-	 break;
       case GL_LINE_STRIP:
-	 ok = HAVE_LINE_STRIPS && !ctx->Line.StippleFlag;
-	 break;
       case GL_LINE_LOOP:
-	 ok = HAVE_LINE_STRIPS && !ctx->Line.StippleFlag;
-	 break;
+         ok = !ctx->Line.StippleFlag;
+         break;
       case GL_TRIANGLES:
-	 ok = HAVE_TRIANGLES;
-	 break;
       case GL_TRIANGLE_STRIP:
-	 ok = HAVE_TRI_STRIPS;
-	 break;
       case GL_TRIANGLE_FAN:
-	 ok = HAVE_TRI_FANS;
-	 break;
+         ok = true;
+         break;
       case GL_POLYGON:
-	 if (HAVE_POLYGONS) {
-	    ok = GL_TRUE;
-	 }
-	 else {
-	    ok = (HAVE_TRI_FANS && ctx->Light.ShadeModel == GL_SMOOTH);
-         }
-	 break;
+         ok = (HAVE_POLYGONS) || ctx->Light.ShadeModel == GL_SMOOTH ||
+              ctx->Light.ProvokingVertex == GL_FIRST_VERTEX_CONVENTION;
+         break;
       case GL_QUAD_STRIP:
-	 if (VB->Elts) {
-	    ok = HAVE_TRI_STRIPS;
-	 }
-	 else if (HAVE_QUAD_STRIPS) {
-	    ok = GL_TRUE;
-	 } else if (HAVE_TRI_STRIPS && 
-		    ctx->Light.ShadeModel == GL_FLAT &&
-		    VB->AttribPtr[_TNL_ATTRIB_COLOR0]->stride != 0) {
-	    if (HAVE_ELTS) {
-	       ok = (GLint) count < GET_SUBSEQUENT_VB_MAX_ELTS();
-	    }
-	    else {
-	       ok = GL_FALSE;
-	    }
-	 }
-	 else 
-	    ok = HAVE_TRI_STRIPS;
-	 break;
+         ok = VB->Elts || ctx->Light.ShadeModel == GL_SMOOTH;
+         break;
       case GL_QUADS:
-	 if (HAVE_QUADS) {
-	    ok = GL_TRUE;
-	 } else if (HAVE_ELTS) {
-	    ok = (GLint) count < GET_SUBSEQUENT_VB_MAX_ELTS();
-	 }
-	 else {
-	    ok = HAVE_TRIANGLES; /* flatshading is ok. */
-	 }
-	 break;
+         ok = ctx->Light.ShadeModel == GL_SMOOTH ||
+              ctx->Light.ProvokingVertex == GL_LAST_VERTEX_CONVENTION;
+         break;
       default:
-	 break;
+         break;
       }
       
       if (!ok) {
-/* 	 fprintf(stderr, "not ok %s\n", _mesa_enum_to_string(prim & PRIM_MODE_MASK)); */
-	 return GL_FALSE;
+/*          fprintf(stderr, "not ok %s\n", _mesa_enum_to_string(prim & PRIM_MODE_MASK)); */
+         return false;
       }
    }
 
-   return GL_TRUE;
+   return true;
 }
 

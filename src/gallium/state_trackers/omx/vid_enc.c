@@ -185,7 +185,7 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
                                 PIPE_VIDEO_ENTRYPOINT_ENCODE,
                                 PIPE_VIDEO_CAP_STACKED_FRAMES);
 
-   priv->s_pipe = screen->context_create(screen, priv->screen);
+   priv->s_pipe = screen->context_create(screen, priv->screen, 0);
    if (!priv->s_pipe)
       return OMX_ErrorInsufficientResources;
 
@@ -202,7 +202,7 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
       return OMX_ErrorInsufficientResources;
    }
 
-   priv->t_pipe = screen->context_create(screen, priv->screen);
+   priv->t_pipe = screen->context_create(screen, priv->screen, 0);
    if (!priv->t_pipe)
       return OMX_ErrorInsufficientResources;
 

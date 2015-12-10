@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -63,13 +63,6 @@ struct vmw_region
    uint32_t size;
 };
 
-/* XXX: This isn't a real hardware flag, but just a hack for kernel to
- * know about primary surfaces. In newer versions of the kernel
- * interface the driver uses a special field.
- */
-#define SVGA3D_SURFACE_HINT_SCANOUT (1 << 9)
-
-
 uint32_t
 vmw_region_size(struct vmw_region *region)
 {
@@ -91,8 +84,28 @@ vmw_ioctl_context_create(struct vmw_winsys_screen *vws)
       return -1;
 
    vmw_printf("Context id is %d\n", c_arg.cid);
-
    return c_arg.cid;
+}
+
+uint32
+vmw_ioctl_extended_context_create(struct vmw_winsys_screen *vws,
+                                  boolean vgpu10)
+{
+   union drm_vmw_extended_context_arg c_arg;
+   int ret;
+
+   VMW_FUNC;
+   memset(&c_arg, 0, sizeof(c_arg));
+   c_arg.req = (vgpu10 ? drm_vmw_context_vgpu10 : drm_vmw_context_legacy);
+   ret = drmCommandWriteRead(vws->ioctl.drm_fd,
+                             DRM_VMW_CREATE_EXTENDED_CONTEXT,
+                             &c_arg, sizeof(c_arg));
+
+   if (ret)
+      return -1;
+
+   vmw_printf("Context id is %d\n", c_arg.cid);
+   return c_arg.rep.cid;
 }
 
 void
@@ -116,7 +129,8 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
                          SVGA3dSurfaceFormat format,
                          unsigned usage,
                          SVGA3dSize size,
-                         uint32_t numFaces, uint32_t numMipLevels)
+                         uint32_t numFaces, uint32_t numMipLevels,
+                         unsigned sampleCount)
 {
    union drm_vmw_surface_create_arg s_arg;
    struct drm_vmw_surface_create_req *req = &s_arg.req;
@@ -131,17 +145,8 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
    vmw_printf("%s flags %d format %d\n", __FUNCTION__, flags, format);
 
    memset(&s_arg, 0, sizeof(s_arg));
-   if (vws->use_old_scanout_flag &&
-       (flags & SVGA3D_SURFACE_HINT_SCANOUT)) {
-      req->flags = (uint32_t) flags;
-      req->scanout = false;
-   } else if (flags & SVGA3D_SURFACE_HINT_SCANOUT) {
-      req->flags = (uint32_t) (flags & ~SVGA3D_SURFACE_HINT_SCANOUT);
-      req->scanout = true;
-   } else {
-      req->flags = (uint32_t) flags;
-      req->scanout = false;
-   }
+   req->flags = (uint32_t) flags;
+   req->scanout = !!(usage & SVGA_SURFACE_USAGE_SCANOUT);
    req->format = (uint32_t) format;
    req->shareable = !!(usage & SVGA_SURFACE_USAGE_SHARED);
 
@@ -188,6 +193,7 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
 			    SVGA3dSize size,
 			    uint32_t numFaces,
 			    uint32_t numMipLevels,
+                            unsigned sampleCount,
                             uint32_t buffer_handle,
 			    struct vmw_region **p_region)
 {
@@ -206,25 +212,29 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
    }
 
    memset(&s_arg, 0, sizeof(s_arg));
-   if (flags & SVGA3D_SURFACE_HINT_SCANOUT) {
-      req->svga3d_flags = (uint32_t) (flags & ~SVGA3D_SURFACE_HINT_SCANOUT);
-      req->drm_surface_flags = drm_vmw_surface_flag_scanout;
-   } else {
-      req->svga3d_flags = (uint32_t) flags;
-   }
+   req->svga3d_flags = (uint32_t) flags;
+   if (usage & SVGA_SURFACE_USAGE_SCANOUT)
+      req->drm_surface_flags |= drm_vmw_surface_flag_scanout;
    req->format = (uint32_t) format;
    if (usage & SVGA_SURFACE_USAGE_SHARED)
       req->drm_surface_flags |= drm_vmw_surface_flag_shareable;
    req->drm_surface_flags |= drm_vmw_surface_flag_create_buffer; 
-
-   assert(numFaces * numMipLevels < DRM_VMW_MAX_SURFACE_FACES*
-	  DRM_VMW_MAX_MIP_LEVELS);
    req->base_size.width = size.width;
    req->base_size.height = size.height;
    req->base_size.depth = size.depth;
    req->mip_levels = numMipLevels;
    req->multisample_count = 0;
    req->autogen_filter = SVGA3D_TEX_FILTER_NONE;
+
+   if (vws->base.have_vgpu10) {
+      req->array_size = numFaces;
+      req->multisample_count = sampleCount;
+   } else {
+      assert(numFaces * numMipLevels < DRM_VMW_MAX_SURFACE_FACES*
+	     DRM_VMW_MAX_MIP_LEVELS);
+      req->array_size = 0;
+   }
+
    if (buffer_handle)
       req->buffer_handle = buffer_handle;
    else
@@ -403,6 +413,7 @@ vmw_ioctl_command(struct vmw_winsys_screen *vws, int32_t cid,
    struct drm_vmw_execbuf_arg arg;
    struct drm_vmw_fence_rep rep;
    int ret;
+   int argsize;
 
 #ifdef DEBUG
    {
@@ -433,13 +444,21 @@ vmw_ioctl_command(struct vmw_winsys_screen *vws, int32_t cid,
    arg.commands = (unsigned long)commands;
    arg.command_size = size;
    arg.throttle_us = throttle_us;
-   arg.version = DRM_VMW_EXECBUF_VERSION;
+   arg.version = vws->ioctl.drm_execbuf_version;
+   arg.context_handle = (vws->base.have_vgpu10 ? cid : SVGA3D_INVALID_ID);
 
+   /* In DRM_VMW_EXECBUF_VERSION 1, the drm_vmw_execbuf_arg structure ends with
+    * the flags field. The structure size sent to drmCommandWrite must match
+    * the drm_execbuf_version. Otherwise, an invalid value will be returned.
+    */
+   argsize = vws->ioctl.drm_execbuf_version > 1 ? sizeof(arg) :
+                offsetof(struct drm_vmw_execbuf_arg, context_handle);
    do {
-       ret = drmCommandWrite(vws->ioctl.drm_fd, DRM_VMW_EXECBUF, &arg, sizeof(arg));
+       ret = drmCommandWrite(vws->ioctl.drm_fd, DRM_VMW_EXECBUF, &arg, argsize);
    } while(ret == -ERESTART);
    if (ret) {
       vmw_error("%s error %s.\n", __FUNCTION__, strerror(-ret));
+      abort();
    }
 
    if (rep.error) {
@@ -832,6 +851,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
    int ret;
    uint32_t *cap_buffer;
    drmVersionPtr version;
+   boolean drm_gb_capable;
    boolean have_drm_2_5;
 
    VMW_FUNC;
@@ -844,6 +864,12 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       (version->version_major == 2 && version->version_minor > 4);
    vws->ioctl.have_drm_2_6 = version->version_major > 2 ||
       (version->version_major == 2 && version->version_minor > 5);
+   vws->ioctl.have_drm_2_9 = version->version_major > 2 ||
+      (version->version_major == 2 && version->version_minor > 8);
+
+   vws->ioctl.drm_execbuf_version = vws->ioctl.have_drm_2_9 ? 2 : 1;
+
+   drm_gb_capable = have_drm_2_5;
 
    memset(&gp_arg, 0, sizeof(gp_arg));
    gp_arg.param = DRM_VMW_PARAM_3D;
@@ -875,9 +901,10 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       vws->base.have_gb_objects =
          !!(gp_arg.value & (uint64_t) SVGA_CAP_GBOBJECTS);
    
-   if (vws->base.have_gb_objects && !have_drm_2_5)
+   if (vws->base.have_gb_objects && !drm_gb_capable)
       goto out_no_3d;
 
+   vws->base.have_vgpu10 = FALSE;
    if (vws->base.have_gb_objects) {
       memset(&gp_arg, 0, sizeof(gp_arg));
       gp_arg.param = DRM_VMW_PARAM_3D_CAPS_SIZE;
@@ -918,6 +945,27 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
 
       /* Never early flush surfaces, mobs do accounting. */
       vws->ioctl.max_surface_memory = -1;
+
+      if (vws->ioctl.have_drm_2_9) {
+
+         memset(&gp_arg, 0, sizeof(gp_arg));
+         gp_arg.param = DRM_VMW_PARAM_VGPU10;
+         ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GET_PARAM,
+                                   &gp_arg, sizeof(gp_arg));
+         if (ret == 0 && gp_arg.value != 0) {
+            const char *vgpu10_val;
+
+            debug_printf("Have VGPU10 interface and hardware.\n");
+            vws->base.have_vgpu10 = TRUE;
+            vgpu10_val = getenv("SVGA_VGPU10");
+            if (vgpu10_val && strcmp(vgpu10_val, "0") == 0) {
+               debug_printf("Disabling VGPU10 interface.\n");
+               vws->base.have_vgpu10 = FALSE;
+            } else {
+               debug_printf("Enabling VGPU10 interface.\n");
+            }
+         }
+      }
    } else {
       vws->ioctl.num_cap_3d = SVGA3D_DEVCAP_MAX;
 
@@ -937,6 +985,9 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
 
       size = SVGA_FIFO_3D_CAPS_SIZE * sizeof(uint32_t);
    }
+
+   debug_printf("VGPU10 interface is %s.\n",
+                vws->base.have_vgpu10 ? "on" : "off");
 
    cap_buffer = calloc(1, size);
    if (!cap_buffer) {

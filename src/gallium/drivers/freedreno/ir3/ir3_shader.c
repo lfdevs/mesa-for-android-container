@@ -300,11 +300,11 @@ static void dump_reg(const char *name, uint32_t r)
 		debug_printf("; %s: r%d.%c\n", name, r >> 2, "xyzw"[r & 0x3]);
 }
 
-static void dump_semantic(struct ir3_shader_variant *so,
-		unsigned sem, const char *name)
+static void dump_output(struct ir3_shader_variant *so,
+		unsigned slot, const char *name)
 {
 	uint32_t regid;
-	regid = ir3_find_output_regid(so, ir3_semantic_name(sem, 0));
+	regid = ir3_find_output_regid(so, slot);
 	dump_reg(name, regid);
 }
 
@@ -355,27 +355,51 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin)
 
 	disasm_a3xx(bin, so->info.sizedwords, 0, so->type);
 
-	debug_printf("; %s: outputs:", type);
-	for (i = 0; i < so->outputs_count; i++) {
-		uint8_t regid = so->outputs[i].regid;
-		ir3_semantic sem = so->outputs[i].semantic;
-		debug_printf(" r%d.%c (%u:%u)",
-				(regid >> 2), "xyzw"[regid & 0x3],
-				sem2name(sem), sem2idx(sem));
+	switch (so->type) {
+	case SHADER_VERTEX:
+		debug_printf("; %s: outputs:", type);
+		for (i = 0; i < so->outputs_count; i++) {
+			uint8_t regid = so->outputs[i].regid;
+			debug_printf(" r%d.%c (%s)",
+					(regid >> 2), "xyzw"[regid & 0x3],
+					gl_varying_slot_name(so->outputs[i].slot));
+		}
+		debug_printf("\n");
+		debug_printf("; %s: inputs:", type);
+		for (i = 0; i < so->inputs_count; i++) {
+			uint8_t regid = so->inputs[i].regid;
+			debug_printf(" r%d.%c (cm=%x,il=%u,b=%u)",
+					(regid >> 2), "xyzw"[regid & 0x3],
+					so->inputs[i].compmask,
+					so->inputs[i].inloc,
+					so->inputs[i].bary);
+		}
+		debug_printf("\n");
+		break;
+	case SHADER_FRAGMENT:
+		debug_printf("; %s: outputs:", type);
+		for (i = 0; i < so->outputs_count; i++) {
+			uint8_t regid = so->outputs[i].regid;
+			debug_printf(" r%d.%c (%s)",
+					(regid >> 2), "xyzw"[regid & 0x3],
+					gl_frag_result_name(so->outputs[i].slot));
+		}
+		debug_printf("\n");
+		debug_printf("; %s: inputs:", type);
+		for (i = 0; i < so->inputs_count; i++) {
+			uint8_t regid = so->inputs[i].regid;
+			debug_printf(" r%d.%c (%s,cm=%x,il=%u,b=%u)",
+					(regid >> 2), "xyzw"[regid & 0x3],
+					gl_varying_slot_name(so->inputs[i].slot),
+					so->inputs[i].compmask,
+					so->inputs[i].inloc,
+					so->inputs[i].bary);
+		}
+		debug_printf("\n");
+		break;
+	case SHADER_COMPUTE:
+		break;
 	}
-	debug_printf("\n");
-	debug_printf("; %s: inputs:", type);
-	for (i = 0; i < so->inputs_count; i++) {
-		uint8_t regid = so->inputs[i].regid;
-		ir3_semantic sem = so->inputs[i].semantic;
-		debug_printf(" r%d.%c (%u:%u,cm=%x,il=%u,b=%u)",
-				(regid >> 2), "xyzw"[regid & 0x3],
-				sem2name(sem), sem2idx(sem),
-				so->inputs[i].compmask,
-				so->inputs[i].inloc,
-				so->inputs[i].bary);
-	}
-	debug_printf("\n");
 
 	/* print generic shader info: */
 	debug_printf("; %s prog %d/%d: %u instructions, %d half, %d full\n",
@@ -391,13 +415,24 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin)
 	/* print shader type specific info: */
 	switch (so->type) {
 	case SHADER_VERTEX:
-		dump_semantic(so, TGSI_SEMANTIC_POSITION, "pos");
-		dump_semantic(so, TGSI_SEMANTIC_PSIZE, "psize");
+		dump_output(so, VARYING_SLOT_POS, "pos");
+		dump_output(so, VARYING_SLOT_PSIZ, "psize");
 		break;
 	case SHADER_FRAGMENT:
 		dump_reg("pos (bary)", so->pos_regid);
-		dump_semantic(so, TGSI_SEMANTIC_POSITION, "posz");
-		dump_semantic(so, TGSI_SEMANTIC_COLOR, "color");
+		dump_output(so, FRAG_RESULT_DEPTH, "posz");
+		if (so->color0_mrt) {
+			dump_output(so, FRAG_RESULT_COLOR, "color");
+		} else {
+			dump_output(so, FRAG_RESULT_DATA0, "data0");
+			dump_output(so, FRAG_RESULT_DATA1, "data1");
+			dump_output(so, FRAG_RESULT_DATA2, "data2");
+			dump_output(so, FRAG_RESULT_DATA3, "data3");
+			dump_output(so, FRAG_RESULT_DATA4, "data4");
+			dump_output(so, FRAG_RESULT_DATA5, "data5");
+			dump_output(so, FRAG_RESULT_DATA6, "data6");
+			dump_output(so, FRAG_RESULT_DATA7, "data7");
+		}
 		/* these two are hard-coded since we don't know how to
 		 * program them to anything but all 0's...
 		 */
@@ -466,7 +501,7 @@ static void
 emit_ubos(struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
 		struct fd_constbuf_stateobj *constbuf)
 {
-	uint32_t offset = v->first_driver_param;  /* UBOs after user consts */
+	uint32_t offset = v->first_driver_param + IR3_UBOS_OFF;
 	if (v->constlen > offset) {
 		struct fd_context *ctx = fd_context(v->shader->pctx);
 		uint32_t params = MIN2(4, v->constlen - offset) * 4;
@@ -519,7 +554,8 @@ emit_immediates(struct ir3_shader_variant *v, struct fd_ringbuffer *ring)
 static void
 emit_tfbos(struct ir3_shader_variant *v, struct fd_ringbuffer *ring)
 {
-	uint32_t offset = v->first_driver_param + 5;  /* streamout addresses after driver-params*/
+	/* streamout addresses after driver-params: */
+	uint32_t offset = v->first_driver_param + IR3_TFBOS_OFF;
 	if (v->constlen > offset) {
 		struct fd_context *ctx = fd_context(v->shader->pctx);
 		struct fd_streamout_stateobj *so = &ctx->streamout;
@@ -622,17 +658,33 @@ ir3_emit_consts(struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
 	/* emit driver params every time: */
 	/* TODO skip emit if shader doesn't use driver params to avoid WFI.. */
 	if (info && (v->type == SHADER_VERTEX)) {
-		uint32_t offset = v->first_driver_param + 4;  /* driver params after UBOs */
+		uint32_t offset = v->first_driver_param + IR3_DRIVER_PARAM_OFF;
 		if (v->constlen >= offset) {
-			uint32_t vertex_params[4] = {
+			uint32_t vertex_params[IR3_DP_COUNT] = {
 				[IR3_DP_VTXID_BASE] = info->indexed ?
 						info->index_bias : info->start,
 				[IR3_DP_VTXCNT_MAX] = max_tf_vtx(v),
 			};
+			/* if no user-clip-planes, we don't need to emit the
+			 * entire thing:
+			 */
+			uint32_t vertex_params_size = 4;
+
+			if (v->key.ucp_enables) {
+				struct pipe_clip_state *ucp = &ctx->ucp;
+				unsigned pos = IR3_DP_UCP0_X;
+				for (unsigned i = 0; pos <= IR3_DP_UCP7_W; i++) {
+					for (unsigned j = 0; j < 4; j++) {
+						vertex_params[pos] = fui(ucp->ucp[i][j]);
+						pos++;
+					}
+				}
+				vertex_params_size = ARRAY_SIZE(vertex_params);
+			}
 
 			fd_wfi(ctx, ring);
 			ctx->emit_const(ring, SHADER_VERTEX, offset * 4, 0,
-					ARRAY_SIZE(vertex_params), vertex_params, NULL);
+					vertex_params_size, vertex_params, NULL);
 
 			/* if needed, emit stream-out buffer addresses: */
 			if (vertex_params[IR3_DP_VTXCNT_MAX] > 0) {

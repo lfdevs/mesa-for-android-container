@@ -101,12 +101,12 @@ fd4_size2indextype(unsigned index_size)
 }
 static inline void
 fd4_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
 		const struct pipe_draw_info *info)
 {
 	struct pipe_index_buffer *idx = &ctx->indexbuf;
 	struct fd_bo *idx_bo = NULL;
-	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
 	enum a4xx_index_size idx_type;
 	enum pc_di_src_sel src_sel;
 	uint32_t idx_size, idx_offset;
@@ -126,11 +126,6 @@ fd4_draw_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		idx_offset = 0;
 		src_sel = DI_SRC_SEL_AUTO_INDEX;
 	}
-
-	/* points + psize -> spritelist: */
-	if (ctx->rasterizer && ctx->rasterizer->point_size_per_vertex &&
-			(info->mode == PIPE_PRIM_POINTS))
-		primtype = DI_PT_POINTLIST_PSIZE;
 
 	fd4_draw(ctx, ring, primtype, vismode, src_sel,
 			info->count, info->instance_count,

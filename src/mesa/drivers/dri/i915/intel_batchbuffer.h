@@ -128,6 +128,8 @@ intel_batchbuffer_advance(struct intel_context *intel)
       abort();
    }
    batch->total = 0;
+#else
+   (void) intel;
 #endif
 }
 

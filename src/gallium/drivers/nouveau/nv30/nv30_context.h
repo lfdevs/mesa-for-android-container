@@ -132,7 +132,7 @@ nv30_context(struct pipe_context *pipe)
 }
 
 struct pipe_context *
-nv30_context_create(struct pipe_screen *pscreen, void *priv);
+nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags);
 
 void
 nv30_vbo_init(struct pipe_context *pipe);

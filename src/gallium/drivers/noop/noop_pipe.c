@@ -260,7 +260,8 @@ static void noop_destroy_context(struct pipe_context *ctx)
 	FREE(ctx);
 }
 
-static struct pipe_context *noop_create_context(struct pipe_screen *screen, void *priv)
+static struct pipe_context *noop_create_context(struct pipe_screen *screen,
+                                                void *priv, unsigned flags)
 {
 	struct pipe_context *ctx = CALLOC_STRUCT(pipe_context);
 

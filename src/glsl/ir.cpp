@@ -342,6 +342,11 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
 					   op0->type->vector_elements, 1);
       break;
 
+   case ir_unop_get_buffer_size:
+   case ir_unop_ssbo_unsized_array_length:
+      this->type = glsl_type::int_type;
+      break;
+
    default:
       assert(!"not reached: missing automatic type setup for ir_expression");
       this->type = op0->type;
@@ -571,6 +576,8 @@ static const char *const operator_strs[] = {
    "noise",
    "subroutine_to_int",
    "interpolate_at_centroid",
+   "get_buffer_size",
+   "ssbo_unsized_array_length",
    "+",
    "-",
    "*",
@@ -653,6 +660,22 @@ ir_expression::get_operator(const char *str)
 	 return (ir_expression_operation) op;
    }
    return (ir_expression_operation) -1;
+}
+
+ir_variable *
+ir_expression::variable_referenced() const
+{
+   switch (operation) {
+      case ir_binop_vector_extract:
+      case ir_triop_vector_insert:
+         /* We get these for things like a[0] where a is a vector type. In these
+          * cases we want variable_referenced() to return the actual vector
+          * variable this is wrapping.
+          */
+         return operands[0]->variable_referenced();
+      default:
+         return ir_rvalue::variable_referenced();
+   }
 }
 
 ir_constant::ir_constant()
@@ -1398,7 +1421,7 @@ ir_dereference::is_lvalue() const
 }
 
 
-static const char * const tex_opcode_strs[] = { "tex", "txb", "txl", "txd", "txf", "txf_ms", "txs", "lod", "tg4", "query_levels" };
+static const char * const tex_opcode_strs[] = { "tex", "txb", "txl", "txd", "txf", "txf_ms", "txs", "lod", "tg4", "query_levels", "texture_samples", "samples_identical" };
 
 const char *ir_texture::opcode_string()
 {
@@ -1426,11 +1449,16 @@ ir_texture::set_sampler(ir_dereference *sampler, const glsl_type *type)
    this->sampler = sampler;
    this->type = type;
 
-   if (this->op == ir_txs || this->op == ir_query_levels) {
+   if (this->op == ir_txs || this->op == ir_query_levels ||
+       this->op == ir_texture_samples) {
       assert(type->base_type == GLSL_TYPE_INT);
    } else if (this->op == ir_lod) {
       assert(type->vector_elements == 2);
       assert(type->base_type == GLSL_TYPE_FLOAT);
+   } else if (this->op == ir_samples_identical) {
+      assert(type == glsl_type::bool_type);
+      assert(sampler->type->base_type == GLSL_TYPE_SAMPLER);
+      assert(sampler->type->sampler_dimensionality == GLSL_SAMPLER_DIM_MS);
    } else {
       assert(sampler->type->sampler_type == (int) type->base_type);
       if (sampler->type->sampler_shadow)
@@ -1651,11 +1679,13 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    this->data.interpolation = INTERP_QUALIFIER_NONE;
    this->data.max_array_access = 0;
    this->data.atomic.offset = 0;
+   this->data.precision = GLSL_PRECISION_NONE;
    this->data.image_read_only = false;
    this->data.image_write_only = false;
    this->data.image_coherent = false;
    this->data.image_volatile = false;
    this->data.image_restrict = false;
+   this->data.from_ssbo_unsized_array = false;
 
    if (type != NULL) {
       if (type->base_type == GLSL_TYPE_SAMPLER)
@@ -1663,8 +1693,8 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
 
       if (type->is_interface())
          this->init_interface_type(type);
-      else if (type->is_array() && type->fields.array->is_interface())
-         this->init_interface_type(type->fields.array);
+      else if (type->without_array()->is_interface())
+         this->init_interface_type(type->without_array());
    }
 }
 
@@ -1816,6 +1846,7 @@ ir_function_signature::replace_parameters(exec_list *new_params)
 ir_function::ir_function(const char *name)
    : ir_instruction(ir_type_function)
 {
+   this->subroutine_index = -1;
    this->name = ralloc_strdup(this, name);
 }
 

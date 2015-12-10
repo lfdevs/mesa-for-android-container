@@ -32,6 +32,7 @@
 #include "p_format.h"
 #include "p_video_enums.h"
 #include "p_defines.h"
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,6 +45,7 @@ struct pipe_blit_info;
 struct pipe_box;
 struct pipe_clip_state;
 struct pipe_constant_buffer;
+struct pipe_debug_callback;
 struct pipe_depth_stencil_alpha_state;
 struct pipe_draw_info;
 struct pipe_fence_handle;
@@ -113,6 +115,25 @@ struct pipe_context {
    struct pipe_query *(*create_query)( struct pipe_context *pipe,
                                        unsigned query_type,
                                        unsigned index );
+
+   /**
+    * Create a query object that queries all given query types simultaneously.
+    *
+    * This can only be used for those query types for which
+    * get_driver_query_info indicates that it must be used. Only one batch
+    * query object may be active at a time.
+    *
+    * There may be additional constraints on which query types can be used
+    * together, in particular those that are implied by
+    * get_driver_query_group_info.
+    *
+    * \param num_queries the number of query types
+    * \param query_types array of \p num_queries query types
+    * \return a query object, or NULL on error.
+    */
+   struct pipe_query *(*create_batch_query)( struct pipe_context *pipe,
+                                             unsigned num_queries,
+                                             unsigned *query_types );
 
    void (*destroy_query)(struct pipe_context *pipe,
                          struct pipe_query *q);
@@ -236,6 +257,13 @@ struct pipe_context {
    void (*set_tess_state)(struct pipe_context *,
                           const float default_outer_level[4],
                           const float default_inner_level[2]);
+
+   /**
+    * Sets the debug callback. If the pointer is null, then no callback is
+    * set, otherwise a copy of the data should be made.
+    */
+   void (*set_debug_callback)(struct pipe_context *,
+                              const struct pipe_debug_callback *);
 
    /**
     * Bind an array of shader buffers that will be used by a shader.
@@ -369,6 +397,16 @@ struct pipe_context {
                                unsigned stencil,
                                unsigned dstx, unsigned dsty,
                                unsigned width, unsigned height);
+
+   /**
+    * Clear the texture with the specified texel. Not guaranteed to be a
+    * renderable format. Data provided in the resource's format.
+    */
+   void (*clear_texture)(struct pipe_context *pipe,
+                         struct pipe_resource *res,
+                         unsigned level,
+                         const struct pipe_box *box,
+                         const void *data);
 
    /**
     * Clear a buffer. Runs a memset over the specified region with the element
@@ -591,6 +629,13 @@ struct pipe_context {
                                float *out_value);
 
    /**
+    * Query a timestamp in nanoseconds.  This is completely equivalent to
+    * pipe_screen::get_timestamp() but takes a context handle for drivers
+    * that require a context.
+    */
+   uint64_t (*get_timestamp)(struct pipe_context *);
+
+   /**
     * Flush the resource cache, so that the resource can be used
     * by an external client. Possible usage:
     * - flushing a resource before presenting it on the screen
@@ -617,6 +662,17 @@ struct pipe_context {
     * Return information about unexpected device resets.
     */
    enum pipe_reset_status (*get_device_reset_status)(struct pipe_context *ctx);
+
+   /**
+    * Dump driver-specific debug information into a stream. This is
+    * used by debugging tools.
+    *
+    * \param ctx        pipe context
+    * \param stream     where the output should be written to
+    * \param flags      a mask of PIPE_DEBUG_* flags
+    */
+   void (*dump_debug_state)(struct pipe_context *ctx, FILE *stream,
+                            unsigned flags);
 };
 
 

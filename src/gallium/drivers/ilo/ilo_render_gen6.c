@@ -475,10 +475,13 @@ gen6_draw_vs(struct ilo_render *r,
          gen6_wa_pre_3dstate_vs_toggle(r);
 
       if (ilo_dev_gen(r->dev) == ILO_GEN(6) &&
-          ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_VS_GEN6_SO))
-         gen6_3DSTATE_VS(r->builder, &cso->vs_sol.vs, kernel_offset);
-      else
-         gen6_3DSTATE_VS(r->builder, &cso->vs, kernel_offset);
+          ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_VS_GEN6_SO)) {
+         gen6_3DSTATE_VS(r->builder, &cso->vs_sol.vs,
+               kernel_offset, r->vs_scratch.bo);
+      } else {
+         gen6_3DSTATE_VS(r->builder, &cso->vs,
+               kernel_offset, r->vs_scratch.bo);
+      }
    }
 }
 
@@ -501,7 +504,8 @@ gen6_draw_gs(struct ilo_render *r,
          cso = ilo_shader_get_kernel_cso(vec->gs);
          kernel_offset = ilo_shader_get_kernel_offset(vec->gs);
 
-         gen6_3DSTATE_GS(r->builder, &cso->gs, kernel_offset);
+         gen6_3DSTATE_GS(r->builder, &cso->gs,
+               kernel_offset, r->gs_scratch.bo);
       } else if (ilo_dev_gen(r->dev) == ILO_GEN(6) &&
             ilo_shader_get_kernel_param(vec->vs, ILO_KERNEL_VS_GEN6_SO)) {
          const int verts_per_prim =
@@ -524,9 +528,10 @@ gen6_draw_gs(struct ilo_render *r,
          kernel_offset = ilo_shader_get_kernel_offset(vec->vs) +
             ilo_shader_get_kernel_param(vec->vs, param);
 
-         gen6_3DSTATE_GS(r->builder, &cso->vs_sol.sol, kernel_offset);
+         gen6_3DSTATE_GS(r->builder, &cso->vs_sol.sol,
+               kernel_offset, r->gs_scratch.bo);
       } else {
-         gen6_3DSTATE_GS(r->builder, &vec->disabled_gs, 0);
+         gen6_3DSTATE_GS(r->builder, &vec->disabled_gs, 0, NULL);
       }
    }
 }
@@ -672,7 +677,7 @@ gen6_draw_wm(struct ilo_render *r,
          gen6_wa_pre_3dstate_wm_max_threads(r);
 
       gen6_3DSTATE_WM(r->builder, &vec->rasterizer->rs,
-            &cso->ps, kernel_offset);
+            &cso->ps, kernel_offset, r->fs_scratch.bo);
    }
 }
 
@@ -817,10 +822,10 @@ gen6_rectlist_vs_to_sf(struct ilo_render *r,
    gen6_wa_post_3dstate_constant_vs(r);
 
    gen6_wa_pre_3dstate_vs_toggle(r);
-   gen6_3DSTATE_VS(r->builder, &blitter->vs, 0);
+   gen6_3DSTATE_VS(r->builder, &blitter->vs, 0, NULL);
 
    gen6_3DSTATE_CONSTANT_GS(r->builder, NULL, NULL, 0);
-   gen6_3DSTATE_GS(r->builder, &blitter->gs, 0);
+   gen6_3DSTATE_GS(r->builder, &blitter->gs, 0, NULL);
 
    gen6_3DSTATE_CLIP(r->builder, &blitter->fb.rs);
    gen6_3DSTATE_SF(r->builder, &blitter->fb.rs, &blitter->sbe);
@@ -833,7 +838,7 @@ gen6_rectlist_wm(struct ilo_render *r,
    gen6_3DSTATE_CONSTANT_PS(r->builder, NULL, NULL, 0);
 
    gen6_wa_pre_3dstate_wm_max_threads(r);
-   gen6_3DSTATE_WM(r->builder, &blitter->fb.rs, &blitter->ps, 0);
+   gen6_3DSTATE_WM(r->builder, &blitter->fb.rs, &blitter->ps, 0, NULL);
 }
 
 static void

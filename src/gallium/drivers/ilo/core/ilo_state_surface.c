@@ -814,10 +814,6 @@ surface_get_gen6_image_sample_count(const struct ilo_dev *dev,
       *sample_count = GEN7_NUMSAMPLES_8;
       min_gen = ILO_GEN(7);
       break;
-   case 16:
-      *sample_count = GEN8_NUMSAMPLES_16;
-      min_gen = ILO_GEN(8);
-      break;
    default:
       assert(!"invalid sample count");
       *sample_count = GEN6_NUMSAMPLES_1;

@@ -105,8 +105,8 @@ brw_upload_gs_abo_surfaces(struct brw_context *brw)
 
    if (prog) {
       /* BRW_NEW_GS_PROG_DATA */
-      brw_upload_abo_surfaces(brw, prog, &brw->gs.base,
-                              &brw->gs.prog_data->base.base);
+      brw_upload_abo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_GEOMETRY],
+                              &brw->gs.base, &brw->gs.prog_data->base.base);
    }
 }
 

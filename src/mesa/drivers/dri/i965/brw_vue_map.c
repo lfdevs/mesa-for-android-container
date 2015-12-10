@@ -44,13 +44,13 @@
 #include "brw_context.h"
 
 static inline void
-assign_vue_slot(struct brw_vue_map *vue_map, int varying)
+assign_vue_slot(struct brw_vue_map *vue_map, int varying, int slot)
 {
    /* Make sure this varying hasn't been assigned a slot already */
    assert (vue_map->varying_to_slot[varying] == -1);
 
-   vue_map->varying_to_slot[varying] = vue_map->num_slots;
-   vue_map->slot_to_varying[vue_map->num_slots++] = varying;
+   vue_map->varying_to_slot[varying] = slot;
+   vue_map->slot_to_varying[slot] = varying;
 }
 
 /**
@@ -59,10 +59,18 @@ assign_vue_slot(struct brw_vue_map *vue_map, int varying)
 void
 brw_compute_vue_map(const struct brw_device_info *devinfo,
                     struct brw_vue_map *vue_map,
-                    GLbitfield64 slots_valid)
+                    GLbitfield64 slots_valid,
+                    bool separate)
 {
+   /* Keep using the packed/contiguous layout on old hardware - we only need
+    * the SSO layout when using geometry/tessellation shaders or 32 FS input
+    * varyings, which only exist on Gen >= 6.  It's also a bit more efficient.
+    */
+   if (devinfo->gen < 6)
+      separate = false;
+
    vue_map->slots_valid = slots_valid;
-   int i;
+   vue_map->separate = separate;
 
    /* gl_Layer and gl_ViewportIndex don't get their own varying slots -- they
     * are stored in the first VUE slot (VARYING_SLOT_PSIZ).
@@ -77,11 +85,12 @@ brw_compute_vue_map(const struct brw_device_info *devinfo,
     */
    STATIC_ASSERT(BRW_VARYING_SLOT_COUNT <= 127);
 
-   vue_map->num_slots = 0;
-   for (i = 0; i < BRW_VARYING_SLOT_COUNT; ++i) {
+   for (int i = 0; i < BRW_VARYING_SLOT_COUNT; ++i) {
       vue_map->varying_to_slot[i] = -1;
-      vue_map->slot_to_varying[i] = BRW_VARYING_SLOT_COUNT;
+      vue_map->slot_to_varying[i] = BRW_VARYING_SLOT_PAD;
    }
+
+   int slot = 0;
 
    /* VUE header: format depends on chip generation and whether clipping is
     * enabled.
@@ -98,9 +107,9 @@ brw_compute_vue_map(const struct brw_device_info *devinfo,
        * On Ironlake the VUE header is nominally 20 dwords, but the hardware
        * will accept the same header layout as Gen4 [and should be a bit faster]
        */
-      assign_vue_slot(vue_map, VARYING_SLOT_PSIZ);
-      assign_vue_slot(vue_map, BRW_VARYING_SLOT_NDC);
-      assign_vue_slot(vue_map, VARYING_SLOT_POS);
+      assign_vue_slot(vue_map, VARYING_SLOT_PSIZ, slot++);
+      assign_vue_slot(vue_map, BRW_VARYING_SLOT_NDC, slot++);
+      assign_vue_slot(vue_map, VARYING_SLOT_POS, slot++);
    } else {
       /* There are 8 or 16 DWs (D0-D15) in VUE header on Sandybridge:
        * dword 0-3 of the header is indices, point width, clip flags.
@@ -109,40 +118,90 @@ brw_compute_vue_map(const struct brw_device_info *devinfo,
        * enabled.
        * dword 8-11 or 16-19 is the first vertex element data we fill.
        */
-      assign_vue_slot(vue_map, VARYING_SLOT_PSIZ);
-      assign_vue_slot(vue_map, VARYING_SLOT_POS);
+      assign_vue_slot(vue_map, VARYING_SLOT_PSIZ, slot++);
+      assign_vue_slot(vue_map, VARYING_SLOT_POS, slot++);
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0))
-         assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST0);
+         assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST0, slot++);
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1))
-         assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST1);
+         assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST1, slot++);
 
       /* front and back colors need to be consecutive so that we can use
        * ATTRIBUTE_SWIZZLE_INPUTATTR_FACING to swizzle them when doing
        * two-sided color.
        */
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_COL0))
-         assign_vue_slot(vue_map, VARYING_SLOT_COL0);
+         assign_vue_slot(vue_map, VARYING_SLOT_COL0, slot++);
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_BFC0))
-         assign_vue_slot(vue_map, VARYING_SLOT_BFC0);
+         assign_vue_slot(vue_map, VARYING_SLOT_BFC0, slot++);
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_COL1))
-         assign_vue_slot(vue_map, VARYING_SLOT_COL1);
+         assign_vue_slot(vue_map, VARYING_SLOT_COL1, slot++);
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_BFC1))
-         assign_vue_slot(vue_map, VARYING_SLOT_BFC1);
+         assign_vue_slot(vue_map, VARYING_SLOT_BFC1, slot++);
    }
 
-   /* The hardware doesn't care about the rest of the vertex outputs, so just
-    * assign them contiguously.  Don't reassign outputs that already have a
-    * slot.
+   /* The hardware doesn't care about the rest of the vertex outputs, so we
+    * can assign them however we like.  For normal programs, we simply assign
+    * them contiguously.
+    *
+    * For separate shader pipelines, we first assign built-in varyings
+    * contiguous slots.  This works because ARB_separate_shader_objects
+    * requires that all shaders have matching built-in varying interface
+    * blocks.  Next, we assign generic varyings based on their location
+    * (either explicit or linker assigned).  This guarantees a fixed layout.
     *
     * We generally don't need to assign a slot for VARYING_SLOT_CLIP_VERTEX,
     * since it's encoded as the clip distances by emit_clip_distances().
     * However, it may be output by transform feedback, and we'd rather not
     * recompute state when TF changes, so we just always include it.
     */
-   for (int i = 0; i < VARYING_SLOT_MAX; ++i) {
-      if ((slots_valid & BITFIELD64_BIT(i)) &&
-          vue_map->varying_to_slot[i] == -1) {
-         assign_vue_slot(vue_map, i);
+   GLbitfield64 builtins = slots_valid & BITFIELD64_MASK(VARYING_SLOT_VAR0);
+   while (builtins != 0) {
+      const int varying = ffsll(builtins) - 1;
+      if (vue_map->varying_to_slot[varying] == -1) {
+         assign_vue_slot(vue_map, varying, slot++);
       }
+      builtins &= ~BITFIELD64_BIT(varying);
    }
+
+   const int first_generic_slot = slot;
+   GLbitfield64 generics = slots_valid & ~BITFIELD64_MASK(VARYING_SLOT_VAR0);
+   while (generics != 0) {
+      const int varying = ffsll(generics) - 1;
+      if (separate) {
+         slot = first_generic_slot + varying - VARYING_SLOT_VAR0;
+         assign_vue_slot(vue_map, varying, slot);
+      } else {
+         assign_vue_slot(vue_map, varying, slot++);
+      }
+      generics &= ~BITFIELD64_BIT(varying);
+   }
+
+   vue_map->num_slots = separate ? slot + 1 : slot;
+}
+
+static const char *
+varying_name(brw_varying_slot slot)
+{
+   if (slot < VARYING_SLOT_MAX)
+      return gl_varying_slot_name(slot);
+
+   static const char *brw_names[] = {
+      [BRW_VARYING_SLOT_NDC - VARYING_SLOT_MAX] = "BRW_VARYING_SLOT_NDC",
+      [BRW_VARYING_SLOT_PAD - VARYING_SLOT_MAX] = "BRW_VARYING_SLOT_PAD",
+      [BRW_VARYING_SLOT_PNTC - VARYING_SLOT_MAX] = "BRW_VARYING_SLOT_PNTC",
+   };
+
+   return brw_names[slot - VARYING_SLOT_MAX];
+}
+
+void
+brw_print_vue_map(FILE *fp, const struct brw_vue_map *vue_map)
+{
+   fprintf(fp, "VUE map (%d slots, %s)\n",
+           vue_map->num_slots, vue_map->separate ? "SSO" : "non-SSO");
+   for (int i = 0; i < vue_map->num_slots; i++) {
+      fprintf(fp, "  [%d] %s\n", i,
+              varying_name(vue_map->slot_to_varying[i]));
+   }
+   fprintf(fp, "\n");
 }

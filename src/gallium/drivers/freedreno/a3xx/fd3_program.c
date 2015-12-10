@@ -194,24 +194,17 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	/* seems like vs->constlen + fs->constlen > 256, then CONSTMODE=1 */
 	constmode = ((vp->constlen + fp->constlen) > 256) ? 1 : 0;
 
-	pos_regid = ir3_find_output_regid(vp,
-		ir3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
-	posz_regid = ir3_find_output_regid(fp,
-		ir3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
-	psize_regid = ir3_find_output_regid(vp,
-		ir3_semantic_name(TGSI_SEMANTIC_PSIZE, 0));
+	pos_regid = ir3_find_output_regid(vp, VARYING_SLOT_POS);
+	posz_regid = ir3_find_output_regid(fp, FRAG_RESULT_DEPTH);
+	psize_regid = ir3_find_output_regid(vp, VARYING_SLOT_PSIZ);
 	if (fp->color0_mrt) {
 		color_regid[0] = color_regid[1] = color_regid[2] = color_regid[3] =
-			ir3_find_output_regid(fp, ir3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
+			ir3_find_output_regid(fp, FRAG_RESULT_COLOR);
 	} else {
-		for (i = 0; i < fp->outputs_count; i++) {
-			ir3_semantic sem = fp->outputs[i].semantic;
-			unsigned idx = sem2idx(sem);
-			if (sem2name(sem) != TGSI_SEMANTIC_COLOR)
-				continue;
-			debug_assert(idx < ARRAY_SIZE(color_regid));
-			color_regid[idx] = fp->outputs[i].regid;
-		}
+		color_regid[0] = ir3_find_output_regid(fp, FRAG_RESULT_DATA0);
+		color_regid[1] = ir3_find_output_regid(fp, FRAG_RESULT_DATA1);
+		color_regid[2] = ir3_find_output_regid(fp, FRAG_RESULT_DATA2);
+		color_regid[3] = ir3_find_output_regid(fp, FRAG_RESULT_DATA3);
 	}
 
 	/* adjust regids for alpha output formats. there is no alpha render
@@ -280,14 +273,14 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 
 		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count) {
-			k = ir3_find_output(vp, fp->inputs[j].semantic);
+			k = ir3_find_output(vp, fp->inputs[j].slot);
 			reg |= A3XX_SP_VS_OUT_REG_A_REGID(vp->outputs[k].regid);
 			reg |= A3XX_SP_VS_OUT_REG_A_COMPMASK(fp->inputs[j].compmask);
 		}
 
 		j = ir3_next_varying(fp, j);
 		if (j < fp->inputs_count) {
-			k = ir3_find_output(vp, fp->inputs[j].semantic);
+			k = ir3_find_output(vp, fp->inputs[j].slot);
 			reg |= A3XX_SP_VS_OUT_REG_B_REGID(vp->outputs[k].regid);
 			reg |= A3XX_SP_VS_OUT_REG_B_COMPMASK(fp->inputs[j].compmask);
 		}
@@ -394,7 +387,6 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 
 		/* figure out VARYING_INTERP / FLAT_SHAD register values: */
 		for (j = -1; (j = ir3_next_varying(fp, j)) < (int)fp->inputs_count; ) {
-			uint32_t interp = fp->inputs[j].interpolate;
 
 			/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
 			 * instead.. rather than -8 everywhere else..
@@ -406,8 +398,8 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			 */
 			debug_assert((inloc % 4) == 0);
 
-			if ((interp == TGSI_INTERPOLATE_CONSTANT) ||
-					((interp == TGSI_INTERPOLATE_COLOR) && emit->rasterflat)) {
+			if ((fp->inputs[j].interpolate == INTERP_QUALIFIER_FLAT) ||
+					(fp->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
 				for (i = 0; i < 4; i++, loc++) {
 					vinterp[loc / 16] |= FLAT << ((loc % 16) * 2);
@@ -415,14 +407,20 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 				}
 			}
 
-			/* Replace the .xy coordinates with S/T from the point sprite. Set
-			 * interpolation bits for .zw such that they become .01
-			 */
-			if (emit->sprite_coord_enable & (1 << sem2idx(fp->inputs[j].semantic))) {
-				vpsrepl[inloc / 16] |= (emit->sprite_coord_mode ? 0x0d : 0x09)
-					<< ((inloc % 16) * 2);
-				vinterp[(inloc + 2) / 16] |= 2 << (((inloc + 2) % 16) * 2);
-				vinterp[(inloc + 3) / 16] |= 3 << (((inloc + 3) % 16) * 2);
+			gl_varying_slot slot = fp->inputs[j].slot;
+
+			/* since we don't enable PIPE_CAP_TGSI_TEXCOORD: */
+			if (slot >= VARYING_SLOT_VAR0) {
+				unsigned texmask = 1 << (slot - VARYING_SLOT_VAR0);
+				/* Replace the .xy coordinates with S/T from the point sprite. Set
+				 * interpolation bits for .zw such that they become .01
+				 */
+				if (emit->sprite_coord_enable & texmask) {
+					vpsrepl[inloc / 16] |= (emit->sprite_coord_mode ? 0x0d : 0x09)
+							<< ((inloc % 16) * 2);
+					vinterp[(inloc + 2) / 16] |= 2 << (((inloc + 2) % 16) * 2);
+					vinterp[(inloc + 3) / 16] |= 3 << (((inloc + 3) % 16) * 2);
+				}
 			}
 		}
 

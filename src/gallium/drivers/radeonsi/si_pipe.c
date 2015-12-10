@@ -44,22 +44,21 @@ static void si_destroy_context(struct pipe_context *context)
 	pipe_resource_reference(&sctx->gsvs_ring, NULL);
 	pipe_resource_reference(&sctx->tf_ring, NULL);
 	pipe_resource_reference(&sctx->null_const_buf.buffer, NULL);
-	r600_resource_reference(&sctx->border_color_table, NULL);
+	r600_resource_reference(&sctx->border_color_buffer, NULL);
+	free(sctx->border_color_table);
 	r600_resource_reference(&sctx->scratch_buffer, NULL);
 	sctx->b.ws->fence_reference(&sctx->last_gfx_fence, NULL);
 
 	si_pm4_free_state(sctx, sctx->init_config, ~0);
-	si_pm4_delete_state(sctx, gs_rings, sctx->gs_rings);
-	si_pm4_delete_state(sctx, tf_ring, sctx->tf_state);
+	if (sctx->init_config_gs_rings)
+		si_pm4_free_state(sctx, sctx->init_config_gs_rings, ~0);
 	for (i = 0; i < Elements(sctx->vgt_shader_config); i++)
 		si_pm4_delete_state(sctx, vgt_shader_config, sctx->vgt_shader_config[i]);
 
 	if (sctx->pstipple_sampler_state)
 		sctx->b.b.delete_sampler_state(&sctx->b.b, sctx->pstipple_sampler_state);
-	if (sctx->dummy_pixel_shader)
-		sctx->b.b.delete_fs_state(&sctx->b.b, sctx->dummy_pixel_shader);
-	if (sctx->fixed_func_tcs_shader)
-		sctx->b.b.delete_tcs_state(&sctx->b.b, sctx->fixed_func_tcs_shader);
+	if (sctx->fixed_func_tcs_shader.cso)
+		sctx->b.b.delete_tcs_state(&sctx->b.b, sctx->fixed_func_tcs_shader.cso);
 	if (sctx->custom_dsa_flush)
 		sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush);
 	if (sctx->custom_blend_resolve)
@@ -73,14 +72,20 @@ static void si_destroy_context(struct pipe_context *context)
 	if (sctx->blitter)
 		util_blitter_destroy(sctx->blitter);
 
-	si_pm4_cleanup(sctx);
-
 	r600_common_context_cleanup(&sctx->b);
 
 #if HAVE_LLVM >= 0x0306
 	LLVMDisposeTargetMachine(sctx->tm);
 #endif
 
+	r600_resource_reference(&sctx->trace_buf, NULL);
+	r600_resource_reference(&sctx->last_trace_buf, NULL);
+	free(sctx->last_ib);
+	if (sctx->last_bo_list) {
+		for (i = 0; i < sctx->last_bo_count; i++)
+			pb_reference(&sctx->last_bo_list[i].buf, NULL);
+		free(sctx->last_bo_list);
+	}
 	FREE(sctx);
 }
 
@@ -92,7 +97,8 @@ si_amdgpu_get_reset_status(struct pipe_context *ctx)
 	return sctx->b.ws->ctx_query_reset_status(sctx->b.ctx);
 }
 
-static struct pipe_context *si_create_context(struct pipe_screen *screen, void *priv)
+static struct pipe_context *si_create_context(struct pipe_screen *screen,
+                                              void *priv, unsigned flags)
 {
 	struct si_context *sctx = CALLOC_STRUCT(si_context);
 	struct si_screen* sscreen = (struct si_screen *)screen;
@@ -106,11 +112,15 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	if (sctx == NULL)
 		return NULL;
 
+	if (sscreen->b.debug_flags & DBG_CHECK_VM)
+		flags |= PIPE_CONTEXT_DEBUG;
+
 	sctx->b.b.screen = screen; /* this must be set first */
 	sctx->b.b.priv = priv;
 	sctx->b.b.destroy = si_destroy_context;
 	sctx->b.set_atom_dirty = (void *)si_set_atom_dirty;
 	sctx->screen = sscreen; /* Easy accessing of screen/winsys. */
+	sctx->is_debug = (flags & PIPE_CONTEXT_DEBUG) != 0;
 
 	if (!r600_common_context_init(&sctx->b, &sscreen->b))
 		goto fail;
@@ -121,6 +131,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	si_init_blit_functions(sctx);
 	si_init_compute_functions(sctx);
 	si_init_cp_dma_functions(sctx);
+	si_init_debug_functions(sctx);
 
 	if (sscreen->b.info.has_uvd) {
 		sctx->b.b.create_video_codec = si_uvd_create_decoder;
@@ -130,26 +141,31 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 		sctx->b.b.create_video_buffer = vl_video_buffer_create;
 	}
 
-	sctx->b.rings.gfx.cs = ws->cs_create(sctx->b.ctx, RING_GFX, si_context_gfx_flush,
-					     sctx, sscreen->b.trace_bo ?
-						sscreen->b.trace_bo->cs_buf : NULL);
-	sctx->b.rings.gfx.flush = si_context_gfx_flush;
+	sctx->b.gfx.cs = ws->cs_create(sctx->b.ctx, RING_GFX, si_context_gfx_flush,
+				       sctx, sscreen->b.trace_bo ?
+					       sscreen->b.trace_bo->cs_buf : NULL);
+	sctx->b.gfx.flush = si_context_gfx_flush;
+
+	/* Border colors. */
+	sctx->border_color_table = malloc(SI_MAX_BORDER_COLORS *
+					  sizeof(*sctx->border_color_table));
+	if (!sctx->border_color_table)
+		goto fail;
+
+	sctx->border_color_buffer = (struct r600_resource*)
+		pipe_buffer_create(screen, PIPE_BIND_CUSTOM, PIPE_USAGE_DEFAULT,
+				   SI_MAX_BORDER_COLORS *
+				   sizeof(*sctx->border_color_table));
+	if (!sctx->border_color_buffer)
+		goto fail;
+
+	sctx->border_color_map =
+		ws->buffer_map(sctx->border_color_buffer->cs_buf,
+			       NULL, PIPE_TRANSFER_WRITE);
+	if (!sctx->border_color_map)
+		goto fail;
 
 	si_init_all_descriptors(sctx);
-
-	/* Initialize cache_flush. */
-	sctx->cache_flush = si_atom_cache_flush;
-	sctx->atoms.s.cache_flush = &sctx->cache_flush;
-
-	sctx->msaa_sample_locs = si_atom_msaa_sample_locs;
-	sctx->atoms.s.msaa_sample_locs = &sctx->msaa_sample_locs;
-
-	sctx->msaa_config = si_atom_msaa_config;
-	sctx->atoms.s.msaa_config = &sctx->msaa_config;
-
-	sctx->atoms.s.streamout_begin = &sctx->b.streamout.begin_atom;
-	sctx->atoms.s.streamout_enable = &sctx->b.streamout.enable_atom;
-
 	si_init_state_functions(sctx);
 	si_init_shader_functions(sctx);
 
@@ -160,6 +176,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 	if (sctx->blitter == NULL)
 		goto fail;
 	sctx->blitter->draw_rectangle = r600_draw_rectangle;
+
+	sctx->sample_mask.sample_mask = 0xffff;
 
 	/* these must be last */
 	si_begin_new_cs(sctx);
@@ -205,6 +223,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, void *
 
 	return &sctx->b.b;
 fail:
+	fprintf(stderr, "radeonsi: Failed to create a context.\n");
 	si_destroy_context(&sctx->b.b);
 	return NULL;
 }
@@ -252,6 +271,8 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_NPOT_TEXTURES:
 	case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
+	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
+	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
         case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
 	case PIPE_CAP_TGSI_INSTANCEID:
 	case PIPE_CAP_COMPUTE:
@@ -272,7 +293,14 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
 	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+	case PIPE_CAP_SHAREABLE_SHADERS:
 	case PIPE_CAP_DEPTH_BOUNDS_TEST:
+	case PIPE_CAP_SAMPLER_VIEW_TARGET:
+	case PIPE_CAP_TEXTURE_QUERY_LOD:
+	case PIPE_CAP_TEXTURE_GATHER_SM5:
+	case PIPE_CAP_TGSI_TXQS:
+	case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
+	case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
 		return 1;
 
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
@@ -295,6 +323,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
 	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 		return 4;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
@@ -303,22 +332,14 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
 		return MIN2(sscreen->b.info.vram_size, 0xFFFFFFFF);
 
-	case PIPE_CAP_TEXTURE_QUERY_LOD:
-	case PIPE_CAP_TEXTURE_GATHER_SM5:
-		return HAVE_LLVM >= 0x0305;
-	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
-		return HAVE_LLVM >= 0x0305 ? 4 : 0;
-
 	/* Unsupported features. */
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
 	case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
-	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_FAKE_SW_MSAA:
 	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
-	case PIPE_CAP_SAMPLER_VIEW_TARGET:
 	case PIPE_CAP_VERTEXID_NOBASE:
+	case PIPE_CAP_CLEAR_TEXTURE:
 		return 0;
 
 	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
@@ -363,7 +384,7 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 8;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
-		return 16;
+		return SI_MAX_VIEWPORTS;
 
 	/* Timer queries, present when the clock frequency is non zero. */
 	case PIPE_CAP_QUERY_TIMESTAMP:
@@ -559,6 +580,33 @@ static bool si_initialize_pipe_config(struct si_screen *sscreen)
 	return true;
 }
 
+static bool si_init_gs_info(struct si_screen *sscreen)
+{
+	switch (sscreen->b.family) {
+	case CHIP_OLAND:
+	case CHIP_HAINAN:
+	case CHIP_KAVERI:
+	case CHIP_KABINI:
+	case CHIP_MULLINS:
+	case CHIP_ICELAND:
+	case CHIP_CARRIZO:
+	case CHIP_STONEY:
+		sscreen->gs_table_depth = 16;
+		return true;
+	case CHIP_TAHITI:
+	case CHIP_PITCAIRN:
+	case CHIP_VERDE:
+	case CHIP_BONAIRE:
+	case CHIP_HAWAII:
+	case CHIP_TONGA:
+	case CHIP_FIJI:
+		sscreen->gs_table_depth = 32;
+		return true;
+	default:
+		return false;
+	}
+}
+
 struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 {
 	struct si_screen *sscreen = CALLOC_STRUCT(si_screen);
@@ -576,7 +624,8 @@ struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 	sscreen->b.b.resource_create = r600_resource_create_common;
 
 	if (!r600_common_screen_init(&sscreen->b, ws) ||
-	    !si_initialize_pipe_config(sscreen)) {
+	    !si_initialize_pipe_config(sscreen) ||
+	    !si_init_gs_info(sscreen)) {
 		FREE(sscreen);
 		return NULL;
 	}
@@ -588,7 +637,7 @@ struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 		sscreen->b.debug_flags |= DBG_FS | DBG_VS | DBG_GS | DBG_PS | DBG_CS;
 
 	/* Create the auxiliary context. This must be done last. */
-	sscreen->b.aux_context = sscreen->b.b.context_create(&sscreen->b.b, NULL);
+	sscreen->b.aux_context = sscreen->b.b.context_create(&sscreen->b.b, NULL, 0);
 
 	return &sscreen->b.b;
 }

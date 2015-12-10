@@ -240,8 +240,7 @@ intel_miptree_create_layout(struct intel_context *intel,
                             GLuint last_level,
                             GLuint width0,
                             GLuint height0,
-                            GLuint depth0,
-                            bool for_bo);
+                            GLuint depth0);
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_bo(struct intel_context *intel,
@@ -285,6 +284,10 @@ intel_miptree_check_level_layer(struct intel_mipmap_tree *mt,
                                 uint32_t level,
                                 uint32_t layer)
 {
+   (void) mt;
+   (void) level;
+   (void) layer;
+
    assert(level >= mt->first_level);
    assert(level <= mt->last_level);
    assert(layer < mt->level[level].depth);
@@ -340,14 +343,11 @@ intel_miptree_copy_teximage(struct intel_context *intel,
  */
 void i915_miptree_layout(struct intel_mipmap_tree *mt);
 void i945_miptree_layout(struct intel_mipmap_tree *mt);
-void brw_miptree_layout(struct intel_context *intel,
-			struct intel_mipmap_tree *mt);
 
 void *intel_miptree_map_raw(struct intel_context *intel,
                             struct intel_mipmap_tree *mt);
 
-void intel_miptree_unmap_raw(struct intel_context *intel,
-                             struct intel_mipmap_tree *mt);
+void intel_miptree_unmap_raw(struct intel_mipmap_tree *mt);
 
 void
 intel_miptree_map(struct intel_context *intel,

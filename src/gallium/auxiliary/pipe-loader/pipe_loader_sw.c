@@ -30,45 +30,161 @@
 #include "util/u_memory.h"
 #include "util/u_dl.h"
 #include "sw/dri/dri_sw_winsys.h"
+#include "sw/kms-dri/kms_dri_sw_winsys.h"
 #include "sw/null/null_sw_winsys.h"
 #include "sw/wrapper/wrapper_sw_winsys.h"
-#include "target-helpers/inline_sw_helper.h"
+#include "target-helpers/sw_helper_public.h"
 #include "state_tracker/drisw_api.h"
+#include "state_tracker/sw_driver.h"
+#include "state_tracker/sw_winsys.h"
 
 struct pipe_loader_sw_device {
    struct pipe_loader_device base;
+   const struct sw_driver_descriptor *dd;
+#ifndef GALLIUM_STATIC_TARGETS
    struct util_dl_library *lib;
+#endif
    struct sw_winsys *ws;
 };
 
 #define pipe_loader_sw_device(dev) ((struct pipe_loader_sw_device *)dev)
 
-static struct pipe_loader_ops pipe_loader_sw_ops;
+static const struct pipe_loader_ops pipe_loader_sw_ops;
 
-static struct sw_winsys *(*backends[])() = {
-   null_sw_create
+#ifdef GALLIUM_STATIC_TARGETS
+static const struct sw_driver_descriptor driver_descriptors = {
+   .create_screen = sw_screen_create,
+   .winsys = {
+#ifdef HAVE_PIPE_LOADER_DRI
+      {
+         .name = "dri",
+         .create_winsys = dri_create_sw_winsys,
+      },
+#endif
+#ifdef HAVE_PIPE_LOADER_KMS
+      {
+         .name = "kms_dri",
+         .create_winsys = kms_dri_create_winsys,
+      },
+#endif
+/**
+ * XXX: Do not include these two for non autotools builds.
+ * They don't have neither opencl nor nine, where these are used.
+ */
+#ifndef DROP_PIPE_LOADER_MISC
+      {
+         .name = "null",
+         .create_winsys = null_sw_create,
+      },
+      {
+         .name = "wrapped",
+         .create_winsys = wrapper_sw_winsys_wrap_pipe_screen,
+      },
+#endif
+      { 0 },
+   }
 };
+#endif
+
+static bool
+pipe_loader_sw_probe_init_common(struct pipe_loader_sw_device *sdev)
+{
+   sdev->base.type = PIPE_LOADER_DEVICE_SOFTWARE;
+   sdev->base.driver_name = "swrast";
+   sdev->base.ops = &pipe_loader_sw_ops;
+
+#ifdef GALLIUM_STATIC_TARGETS
+   sdev->dd = &driver_descriptors;
+   if (!sdev->dd)
+      return false;
+#else
+   sdev->lib = pipe_loader_find_module(&sdev->base, PIPE_SEARCH_DIR);
+   if (!sdev->lib)
+      return false;
+
+   sdev->dd = (const struct sw_driver_descriptor *)
+      util_dl_get_proc_address(sdev->lib, "swrast_driver_descriptor");
+
+   if (!sdev->dd){
+      util_dl_close(sdev->lib);
+      sdev->lib = NULL;
+      return false;
+   }
+#endif
+
+   return true;
+}
+
+static void
+pipe_loader_sw_probe_teardown_common(struct pipe_loader_sw_device *sdev)
+{
+#ifndef GALLIUM_STATIC_TARGETS
+   if (sdev->lib)
+      util_dl_close(sdev->lib);
+#endif
+}
 
 #ifdef HAVE_PIPE_LOADER_DRI
 bool
 pipe_loader_sw_probe_dri(struct pipe_loader_device **devs, struct drisw_loader_funcs *drisw_lf)
 {
    struct pipe_loader_sw_device *sdev = CALLOC_STRUCT(pipe_loader_sw_device);
+   int i;
 
    if (!sdev)
       return false;
 
-   sdev->base.type = PIPE_LOADER_DEVICE_SOFTWARE;
-   sdev->base.driver_name = "swrast";
-   sdev->base.ops = &pipe_loader_sw_ops;
-   sdev->ws = dri_create_sw_winsys(drisw_lf);
-   if (!sdev->ws) {
-      FREE(sdev);
-      return false;
-   }
-   *devs = &sdev->base;
+   if (!pipe_loader_sw_probe_init_common(sdev))
+      goto fail;
 
+   for (i = 0; sdev->dd->winsys[i].name; i++) {
+      if (strcmp(sdev->dd->winsys[i].name, "dri") == 0) {
+         sdev->ws = sdev->dd->winsys[i].create_winsys(drisw_lf);
+         break;
+      }
+   }
+   if (!sdev->ws)
+      goto fail;
+
+   *devs = &sdev->base;
    return true;
+
+fail:
+   pipe_loader_sw_probe_teardown_common(sdev);
+   FREE(sdev);
+   return false;
+}
+#endif
+
+#ifdef HAVE_PIPE_LOADER_KMS
+bool
+pipe_loader_sw_probe_kms(struct pipe_loader_device **devs, int fd)
+{
+   struct pipe_loader_sw_device *sdev = CALLOC_STRUCT(pipe_loader_sw_device);
+   int i;
+
+   if (!sdev)
+      return false;
+
+   if (!pipe_loader_sw_probe_init_common(sdev))
+      goto fail;
+
+   for (i = 0; sdev->dd->winsys[i].name; i++) {
+      if (strcmp(sdev->dd->winsys[i].name, "kms_dri") == 0) {
+         sdev->ws = sdev->dd->winsys[i].create_winsys(fd);
+         break;
+      }
+   }
+   if (!sdev->ws)
+      goto fail;
+
+   *devs = &sdev->base;
+   return true;
+
+fail:
+   pipe_loader_sw_probe_teardown_common(sdev);
+   FREE(sdev);
+   return false;
 }
 #endif
 
@@ -76,38 +192,40 @@ bool
 pipe_loader_sw_probe_null(struct pipe_loader_device **devs)
 {
    struct pipe_loader_sw_device *sdev = CALLOC_STRUCT(pipe_loader_sw_device);
+   int i;
 
    if (!sdev)
       return false;
 
-   sdev->base.type = PIPE_LOADER_DEVICE_SOFTWARE;
-   sdev->base.driver_name = "swrast";
-   sdev->base.ops = &pipe_loader_sw_ops;
-   sdev->ws = null_sw_create();
-   if (!sdev->ws) {
-      FREE(sdev);
-      return false;
-   }
-   *devs = &sdev->base;
+   if (!pipe_loader_sw_probe_init_common(sdev))
+      goto fail;
 
+   for (i = 0; sdev->dd->winsys[i].name; i++) {
+      if (strcmp(sdev->dd->winsys[i].name, "null") == 0) {
+         sdev->ws = sdev->dd->winsys[i].create_winsys();
+         break;
+      }
+   }
+   if (!sdev->ws)
+      goto fail;
+
+   *devs = &sdev->base;
    return true;
+
+fail:
+   pipe_loader_sw_probe_teardown_common(sdev);
+   FREE(sdev);
+   return false;
 }
 
 int
 pipe_loader_sw_probe(struct pipe_loader_device **devs, int ndev)
 {
-   int i;
+   int i = 1;
 
-   for (i = 0; i < Elements(backends); i++) {
-      if (i < ndev) {
-         struct pipe_loader_sw_device *sdev = CALLOC_STRUCT(pipe_loader_sw_device);
-	 /* TODO: handle CALLOC_STRUCT failure */
-
-         sdev->base.type = PIPE_LOADER_DEVICE_SOFTWARE;
-         sdev->base.driver_name = "swrast";
-         sdev->base.ops = &pipe_loader_sw_ops;
-         sdev->ws = backends[i]();
-         devs[i] = &sdev->base;
+   if (i <= ndev) {
+      if (!pipe_loader_sw_probe_null(devs)) {
+         i--;
       }
    }
 
@@ -119,21 +237,30 @@ pipe_loader_sw_probe_wrapped(struct pipe_loader_device **dev,
                              struct pipe_screen *screen)
 {
    struct pipe_loader_sw_device *sdev = CALLOC_STRUCT(pipe_loader_sw_device);
+   int i;
 
    if (!sdev)
       return false;
 
-   sdev->base.type = PIPE_LOADER_DEVICE_SOFTWARE;
-   sdev->base.driver_name = "swrast";
-   sdev->base.ops = &pipe_loader_sw_ops;
-   sdev->ws = wrapper_sw_winsys_wrap_pipe_screen(screen);
+   if (!pipe_loader_sw_probe_init_common(sdev))
+      goto fail;
 
-   if (!sdev->ws) {
-      FREE(sdev);
-      return false;
+   for (i = 0; sdev->dd->winsys[i].name; i++) {
+      if (strcmp(sdev->dd->winsys[i].name, "wrapped") == 0) {
+         sdev->ws = sdev->dd->winsys[i].create_winsys(screen);
+         break;
+      }
    }
+   if (!sdev->ws)
+      goto fail;
+
    *dev = &sdev->base;
    return true;
+
+fail:
+   pipe_loader_sw_probe_teardown_common(sdev);
+   FREE(sdev);
+   return false;
 }
 
 static void
@@ -141,8 +268,10 @@ pipe_loader_sw_release(struct pipe_loader_device **dev)
 {
    struct pipe_loader_sw_device *sdev = pipe_loader_sw_device(*dev);
 
+#ifndef GALLIUM_STATIC_TARGETS
    if (sdev->lib)
       util_dl_close(sdev->lib);
+#endif
 
    FREE(sdev);
    *dev = NULL;
@@ -156,28 +285,19 @@ pipe_loader_sw_configuration(struct pipe_loader_device *dev,
 }
 
 static struct pipe_screen *
-pipe_loader_sw_create_screen(struct pipe_loader_device *dev,
-                             const char *library_paths)
+pipe_loader_sw_create_screen(struct pipe_loader_device *dev)
 {
    struct pipe_loader_sw_device *sdev = pipe_loader_sw_device(dev);
-   struct pipe_screen *(*init)(struct sw_winsys *);
+   struct pipe_screen *screen;
 
-   if (!sdev->lib)
-      sdev->lib = pipe_loader_find_module(dev, library_paths);
-   if (!sdev->lib)
-      return NULL;
+   screen = sdev->dd->create_screen(sdev->ws);
+   if (!screen)
+      sdev->ws->destroy(sdev->ws);
 
-   init = (void *)util_dl_get_proc_address(sdev->lib, "swrast_create_screen");
-   if (!init){
-      util_dl_close(sdev->lib);
-      sdev->lib = NULL;
-      return NULL;
-   }
-
-   return init(sdev->ws);
+   return screen;
 }
 
-static struct pipe_loader_ops pipe_loader_sw_ops = {
+static const struct pipe_loader_ops pipe_loader_sw_ops = {
    .create_screen = pipe_loader_sw_create_screen,
    .configuration = pipe_loader_sw_configuration,
    .release = pipe_loader_sw_release

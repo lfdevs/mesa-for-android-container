@@ -239,8 +239,8 @@ sbe_set_gen8_3DSTATE_SBE(struct ilo_state_sbe *sbe,
          vue_read_len << GEN7_SBE_DW1_URB_READ_LEN__SHIFT;
 
    if (ilo_dev_gen(dev) >= ILO_GEN(8)) {
-      dw1 |= GEN8_SBE_DW1_USE_URB_READ_LEN |
-             GEN8_SBE_DW1_USE_URB_READ_OFFSET |
+      dw1 |= GEN8_SBE_DW1_FORCE_URB_READ_LEN |
+             GEN8_SBE_DW1_FORCE_URB_READ_OFFSET |
              vue_read_offset << GEN8_SBE_DW1_URB_READ_OFFSET__SHIFT;
    } else {
       dw1 |= vue_read_offset << GEN7_SBE_DW1_URB_READ_OFFSET__SHIFT;
@@ -286,10 +286,10 @@ sbe_set_gen8_3DSTATE_SBE_SWIZ(struct ilo_state_sbe *sbe,
                 swizzle->attr << GEN8_SBE_SWIZ_SRC_ATTR__SHIFT;
 
       if (swizzle->force_zeros) {
-         swiz[i] |= GEN8_SBE_SWIZ_OVERRIDE_W |
-                    GEN8_SBE_SWIZ_OVERRIDE_Z |
-                    GEN8_SBE_SWIZ_OVERRIDE_Y |
-                    GEN8_SBE_SWIZ_OVERRIDE_X |
+         swiz[i] |= GEN8_SBE_SWIZ_CONST_OVERRIDE_W |
+                    GEN8_SBE_SWIZ_CONST_OVERRIDE_Z |
+                    GEN8_SBE_SWIZ_CONST_OVERRIDE_Y |
+                    GEN8_SBE_SWIZ_CONST_OVERRIDE_X |
                     GEN8_SBE_SWIZ_CONST_0000;
       }
    }

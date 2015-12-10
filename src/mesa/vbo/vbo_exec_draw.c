@@ -53,10 +53,10 @@ vbo_exec_debug_verts( struct vbo_exec_context *exec )
    for (i = 0 ; i < exec->vtx.prim_count ; i++) {
       struct _mesa_prim *prim = &exec->vtx.prim[i];
       printf("   prim %d: %s%s %d..%d %s %s\n",
-	     i, 
+	     i,
 	     _mesa_lookup_prim_by_nr(prim->mode),
 	     prim->weak ? " (weak)" : "",
-	     prim->start, 
+	     prim->start,
 	     prim->start + prim->count,
 	     prim->begin ? "BEGIN" : "(wrap)",
 	     prim->end ? "END" : "(wrap)");
@@ -64,21 +64,23 @@ vbo_exec_debug_verts( struct vbo_exec_context *exec )
 }
 
 
-/*
- * NOTE: Need to have calculated primitives by this point -- do it on the fly.
- * NOTE: Old 'parity' issue is gone.
+/**
+ * Copy zero, one or two vertices from the current vertex buffer into
+ * the temporary "copy" buffer.
+ * This is used when a single primitive overflows a vertex buffer and
+ * we need to continue the primitive in a new vertex buffer.
+ * The temporary "copy" buffer holds the vertices which need to get
+ * copied from the old buffer to the new one.
  */
 static GLuint
 vbo_copy_vertices( struct vbo_exec_context *exec )
 {
-   GLuint nr = exec->vtx.prim[exec->vtx.prim_count-1].count;
+   struct _mesa_prim *last_prim = &exec->vtx.prim[exec->vtx.prim_count - 1];
+   const GLuint nr = last_prim->count;
    GLuint ovf, i;
-   GLuint sz = exec->vtx.vertex_size;
+   const GLuint sz = exec->vtx.vertex_size;
    fi_type *dst = exec->vtx.copied.buffer;
-   const fi_type *src = (exec->vtx.buffer_map +
-                         exec->vtx.prim[exec->vtx.prim_count-1].start * 
-                         exec->vtx.vertex_size);
-
+   const fi_type *src = exec->vtx.buffer_map + last_prim->start * sz;
 
    switch (exec->ctx->Driver.CurrentExecPrimitive) {
    case GL_POINTS:
@@ -107,6 +109,18 @@ vbo_copy_vertices( struct vbo_exec_context *exec )
 	 return 1;
       }
    case GL_LINE_LOOP:
+      if (last_prim->begin == 0) {
+         /* We're dealing with the second or later section of a split/wrapped
+          * GL_LINE_LOOP.  Since we're converting line loops to line strips,
+          * we've already increment the last_prim->start counter by one to
+          * skip the 0th vertex in the loop.  We need to undo that (effectively
+          * subtract one from last_prim->start) so that we copy the 0th vertex
+          * to the next vertex buffer.
+          */
+         assert(last_prim->start > 0);
+         src -= sz;
+      }
+      /* fall-through */
    case GL_TRIANGLE_FAN:
    case GL_POLYGON:
       if (nr == 0) {
@@ -124,7 +138,7 @@ vbo_copy_vertices( struct vbo_exec_context *exec )
    case GL_TRIANGLE_STRIP:
       /* no parity issue, but need to make sure the tri is not drawn twice */
       if (nr & 1) {
-	 exec->vtx.prim[exec->vtx.prim_count-1].count--;
+	 last_prim->count--;
       }
       /* fallthrough */
    case GL_QUAD_STRIP:
@@ -219,7 +233,7 @@ vbo_exec_bind_arrays( struct gl_context *ctx )
          exec->vtx.inputs[attr] = &arrays[attr];
 
          if (_mesa_is_bufferobj(exec->vtx.bufferobj)) {
-            /* a real buffer obj: Ptr is an offset, not a pointer*/
+            /* a real buffer obj: Ptr is an offset, not a pointer */
             assert(exec->vtx.bufferobj->Mappings[MAP_INTERNAL].Pointer);
             assert(offset >= 0);
             arrays[attr].Ptr = (GLubyte *)
@@ -259,7 +273,7 @@ vbo_exec_vtx_unmap( struct vbo_exec_context *exec )
 {
    if (_mesa_is_bufferobj(exec->vtx.bufferobj)) {
       struct gl_context *ctx = exec->ctx;
-      
+
       if (ctx->Driver.FlushMappedBufferRange) {
          GLintptr offset = exec->vtx.buffer_used -
                            exec->vtx.bufferobj->Mappings[MAP_INTERNAL].Offset;
@@ -277,7 +291,7 @@ vbo_exec_vtx_unmap( struct vbo_exec_context *exec )
 
       assert(exec->vtx.buffer_used <= VBO_VERT_BUFFER_SIZE);
       assert(exec->vtx.buffer_ptr != NULL);
-      
+
       ctx->Driver.UnmapBuffer(ctx, exec->vtx.bufferobj, MAP_INTERNAL);
       exec->vtx.buffer_map = NULL;
       exec->vtx.buffer_ptr = NULL;
@@ -299,7 +313,7 @@ vbo_exec_vtx_map( struct vbo_exec_context *exec )
                               GL_MAP_FLUSH_EXPLICIT_BIT |
                               MESA_MAP_NOWAIT_BIT;
    const GLenum usage = GL_STREAM_DRAW_ARB;
-   
+
    if (!_mesa_is_bufferobj(exec->vtx.bufferobj))
       return;
 
@@ -323,7 +337,7 @@ vbo_exec_vtx_map( struct vbo_exec_context *exec )
          exec->vtx.buffer_ptr = exec->vtx.buffer_map = NULL;
       }
    }
-   
+
    if (!exec->vtx.buffer_map) {
       /* Need to allocate a new VBO */
       exec->vtx.buffer_used = 0;
@@ -381,14 +395,14 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec, GLboolean keepUnmapped)
    if (0)
       vbo_exec_debug_verts( exec );
 
-   if (exec->vtx.prim_count && 
+   if (exec->vtx.prim_count &&
        exec->vtx.vert_count) {
 
-      exec->vtx.copied.nr = vbo_copy_vertices( exec ); 
+      exec->vtx.copied.nr = vbo_copy_vertices( exec );
 
       if (exec->vtx.copied.nr != exec->vtx.vert_count) {
 	 struct gl_context *ctx = exec->ctx;
-	 
+
 	 /* Before the update_state() as this may raise _NEW_VARYING_VP_INPUTS
           * from _mesa_set_varying_vp_inputs().
 	  */
@@ -405,7 +419,7 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec, GLboolean keepUnmapped)
             printf("%s %d %d\n", __func__, exec->vtx.prim_count,
 		   exec->vtx.vert_count);
 
-	 vbo_context(ctx)->draw_prims( ctx, 
+	 vbo_context(ctx)->draw_prims( ctx,
 				       exec->vtx.prim,
 				       exec->vtx.prim_count,
 				       NULL,
@@ -433,8 +447,7 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec, GLboolean keepUnmapped)
    if (keepUnmapped || exec->vtx.vertex_size == 0)
       exec->vtx.max_vert = 0;
    else
-      exec->vtx.max_vert = ((VBO_VERT_BUFFER_SIZE - exec->vtx.buffer_used) / 
-                            (exec->vtx.vertex_size * sizeof(GLfloat)));
+      exec->vtx.max_vert = vbo_compute_max_verts(exec);
 
    exec->vtx.buffer_ptr = exec->vtx.buffer_map;
    exec->vtx.prim_count = 0;

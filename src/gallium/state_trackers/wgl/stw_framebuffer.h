@@ -30,7 +30,8 @@
 
 #include <windows.h>
 
-#include "os/os_thread.h"
+#include "util/u_debug.h"
+
 
 struct pipe_resource;
 struct st_framebuffer_iface;
@@ -45,11 +46,11 @@ struct stw_framebuffer
     * This mutex has two purposes:
     * - protect the access to the mutable data members below
     * - prevent the framebuffer from being deleted while being accessed.
-    * 
-    * It is OK to lock this mutex while holding the stw_device::fb_mutex lock, 
-    * but the opposite must never happen.
+    *
+    * Note: if both this mutex and the stw_device::fb_mutex need to be locked,
+    * the stw_device::fb_mutex needs to be locked first.
     */
-   pipe_mutex mutex;
+   CRITICAL_SECTION mutex;
    
    /*
     * Immutable members.
@@ -112,38 +113,33 @@ struct stw_framebuffer
 /**
  * Create a new framebuffer object which will correspond to the given HDC.
  * 
- * This function will acquire stw_framebuffer::mutex. stw_framebuffer_release
+ * This function will acquire stw_framebuffer::mutex. stw_framebuffer_unlock
  * must be called when done 
  */
 struct stw_framebuffer *
-stw_framebuffer_create(
-   HDC hdc,
-   int iPixelFormat );
+stw_framebuffer_create(HDC hdc, int iPixelFormat);
 
 void
-stw_framebuffer_reference(
-   struct stw_framebuffer **ptr,
-   struct stw_framebuffer *fb);
+stw_framebuffer_reference(struct stw_framebuffer **ptr,
+                          struct stw_framebuffer *fb);
 
 /**
  * Search a framebuffer with a matching HWND.
  * 
- * This function will acquire stw_framebuffer::mutex. stw_framebuffer_release
+ * This function will acquire stw_framebuffer::mutex. stw_framebuffer_unlock
  * must be called when done 
  */
 struct stw_framebuffer *
-stw_framebuffer_from_hwnd(
-   HWND hwnd );
+stw_framebuffer_from_hwnd(HWND hwnd);
 
 /**
  * Search a framebuffer with a matching HDC.
  * 
- * This function will acquire stw_framebuffer::mutex. stw_framebuffer_release
+ * This function will acquire stw_framebuffer::mutex. stw_framebuffer_unlock
  * must be called when done 
  */
 struct stw_framebuffer *
-stw_framebuffer_from_hdc(
-   HDC hdc );
+stw_framebuffer_from_hdc(HDC hdc);
 
 BOOL
 stw_framebuffer_present_locked(HDC hdc,
@@ -151,17 +147,29 @@ stw_framebuffer_present_locked(HDC hdc,
                                struct pipe_resource *res);
 
 void
-stw_framebuffer_update(
-   struct stw_framebuffer *fb);
+stw_framebuffer_update(struct stw_framebuffer *fb);
+
+
+static inline void
+stw_framebuffer_lock(struct stw_framebuffer *fb)
+{
+   assert(fb);
+   EnterCriticalSection(&fb->mutex);
+}
+
 
 /**
  * Release stw_framebuffer::mutex lock. This framebuffer must not be accessed
  * after calling this function, as it may have been deleted by another thread
  * in the meanwhile.
  */
-void
-stw_framebuffer_release(
-   struct stw_framebuffer *fb);
+static inline void
+stw_framebuffer_unlock(struct stw_framebuffer *fb)
+{
+   assert(fb);
+   LeaveCriticalSection(&fb->mutex);
+}
+
 
 /**
  * Cleanup any existing framebuffers when exiting application.

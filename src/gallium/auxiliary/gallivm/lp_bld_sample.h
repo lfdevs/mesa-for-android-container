@@ -99,6 +99,7 @@ struct lp_sampler_params
    unsigned sampler_index;
    unsigned sample_key;
    LLVMValueRef context_ptr;
+   LLVMValueRef thread_data_ptr;
    const LLVMValueRef *coords;
    const LLVMValueRef *offsets;
    LLVMValueRef lod;
@@ -267,6 +268,17 @@ struct lp_sampler_dynamic_state
                    struct gallivm_state *gallivm,
                    LLVMValueRef context_ptr,
                    unsigned sampler_unit);
+
+   /** 
+    * Obtain texture cache (returns ptr to lp_build_format_cache).
+    *
+    * It's optional: no caching will be done if it's NULL.
+    */
+   LLVMValueRef
+   (*cache_ptr)(const struct lp_sampler_dynamic_state *state,
+                struct gallivm_state *gallivm,
+                LLVMValueRef thread_data_ptr,
+                unsigned unit);
 };
 
 
@@ -356,6 +368,7 @@ struct lp_build_sample_context
    LLVMValueRef img_stride_array;
    LLVMValueRef base_ptr;
    LLVMValueRef mip_offsets;
+   LLVMValueRef cache;
 
    /** Integer vector with texture width, height, depth */
    LLVMValueRef int_size;

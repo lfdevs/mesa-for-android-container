@@ -31,7 +31,6 @@
 #include "main/mtypes.h"
 #include "main/imports.h"
 #include "main/macros.h"
-#include "main/colormac.h"
 #include "main/renderbuffer.h"
 #include "main/framebuffer.h"
 

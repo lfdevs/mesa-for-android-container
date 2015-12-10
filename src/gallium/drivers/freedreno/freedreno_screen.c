@@ -61,7 +61,7 @@ static const struct debug_named_value debug_options[] = {
 		{"msgs",      FD_DBG_MSGS,   "Print debug messages"},
 		{"disasm",    FD_DBG_DISASM, "Dump TGSI and adreno shader disassembly"},
 		{"dclear",    FD_DBG_DCLEAR, "Mark all state dirty after clear"},
-		{"flush",     FD_DBG_FLUSH,  "Force flush after every draw"},
+		{"ddraw",     FD_DBG_DDRAW,  "Mark all state dirty after draw"},
 		{"noscis",    FD_DBG_NOSCIS, "Disable scissor optimization"},
 		{"direct",    FD_DBG_DIRECT, "Force inline (SS_DIRECT) state loads"},
 		{"nobypass",  FD_DBG_NOBYPASS, "Disable GMEM bypass"},
@@ -70,6 +70,7 @@ static const struct debug_named_value debug_options[] = {
 		{"optmsgs",   FD_DBG_OPTMSGS,"Enable optimizer debug messages"},
 		{"glsl120",   FD_DBG_GLSL120,"Temporary flag to force GLSL 1.20 (rather than 1.30) on a3xx+"},
 		{"shaderdb",  FD_DBG_SHADERDB, "Enable shaderdb output"},
+		{"flush",     FD_DBG_FLUSH,  "Force flush after every draw"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -159,11 +160,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_SHADER_STENCIL_EXPORT:
 	case PIPE_CAP_TGSI_TEXCOORD:
 	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
-	case PIPE_CAP_CONDITIONAL_RENDER:
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
 	case PIPE_CAP_TEXTURE_BARRIER:
 	case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-	case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
 	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_COMPUTE:
 		return 0;
@@ -176,23 +175,24 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_INDEP_BLEND_FUNC:
 	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
 	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+	case PIPE_CAP_CONDITIONAL_RENDER:
+	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
+	case PIPE_CAP_FAKE_SW_MSAA:
+	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
+	case PIPE_CAP_DEPTH_CLIP_DISABLE:
+	case PIPE_CAP_CLIP_HALFZ:
 		return is_a3xx(screen) || is_a4xx(screen);
 
 	case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-		/* ignoring first/last_element.. but I guess that should be
-		 * easy to add..
-		 */
-		return 0;
+		return is_a3xx(screen) ? 16 : 0;
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
 		/* I think 32k on a4xx.. and we could possibly emulate more
 		 * by pretending 2d/rect textures and splitting high bits
 		 * of index into 2nd dimension..
 		 */
-		return 16383;
-
-	case PIPE_CAP_DEPTH_CLIP_DISABLE:
-	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
-		return is_a3xx(screen);
+		if (is_a3xx(screen)) return 8192;
+		if (is_a4xx(screen)) return 16383;
+		return 0;
 
 	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
 	case PIPE_CAP_CUBE_MAP_ARRAY:
@@ -204,7 +204,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
 		if (glsl120)
 			return 120;
-		return is_ir3(screen) ? 130 : 120;
+		return is_ir3(screen) ? 140 : 120;
 
 	/* Unsupported features. */
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
@@ -219,22 +219,24 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
 	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 	case PIPE_CAP_TEXTURE_GATHER_SM5:
-	case PIPE_CAP_FAKE_SW_MSAA:
 	case PIPE_CAP_TEXTURE_QUERY_LOD:
 	case PIPE_CAP_SAMPLE_SHADING:
 	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
 	case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
 	case PIPE_CAP_DRAW_INDIRECT:
 	case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
-	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
 	case PIPE_CAP_SAMPLER_VIEW_TARGET:
-	case PIPE_CAP_CLIP_HALFZ:
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
 	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
 	case PIPE_CAP_DEPTH_BOUNDS_TEST:
+	case PIPE_CAP_TGSI_TXQS:
+	case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
+	case PIPE_CAP_SHAREABLE_SHADERS:
+	case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
+	case PIPE_CAP_CLEAR_TEXTURE:
 		return 0;
 
 	case PIPE_CAP_MAX_VIEWPORTS:
@@ -277,6 +279,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:
 		return screen->max_rts;
+	case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
+		return is_a3xx(screen) ? 1 : 0;
 
 	/* Queries. */
 	case PIPE_CAP_QUERY_TIME_ELAPSED:
@@ -484,6 +488,7 @@ fd_screen_create(struct fd_device *dev)
 	pscreen = &screen->base;
 
 	screen->dev = dev;
+	screen->refcnt = 1;
 
 	// maybe this should be in context?
 	screen->pipe = fd_pipe_new(screen->dev, FD_PIPE_3D);
@@ -542,6 +547,7 @@ fd_screen_create(struct fd_device *dev)
 	case 220:
 		fd2_screen_init(pscreen);
 		break;
+	case 305:
 	case 307:
 	case 320:
 	case 330:

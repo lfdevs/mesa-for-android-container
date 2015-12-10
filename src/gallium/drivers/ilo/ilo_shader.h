@@ -36,7 +36,6 @@ enum ilo_kernel_param {
    ILO_KERNEL_INPUT_COUNT,
    ILO_KERNEL_OUTPUT_COUNT,
    ILO_KERNEL_SAMPLER_COUNT,
-   ILO_KERNEL_URB_DATA_START_REG,
    ILO_KERNEL_SKIP_CBUF0_UPLOAD,
    ILO_KERNEL_PCB_CBUF0_SIZE,
 
@@ -53,7 +52,6 @@ enum ilo_kernel_param {
    ILO_KERNEL_VS_INPUT_EDGEFLAG,
    ILO_KERNEL_VS_PCB_UCP_SIZE,
    ILO_KERNEL_VS_GEN6_SO,
-   ILO_KERNEL_VS_GEN6_SO_START_REG,
    ILO_KERNEL_VS_GEN6_SO_POINT_OFFSET,
    ILO_KERNEL_VS_GEN6_SO_LINE_OFFSET,
    ILO_KERNEL_VS_GEN6_SO_TRI_OFFSET,
@@ -64,10 +62,6 @@ enum ilo_kernel_param {
    ILO_KERNEL_GS_GEN6_SURFACE_SO_BASE,
    ILO_KERNEL_GS_GEN6_SURFACE_SO_COUNT,
 
-   ILO_KERNEL_FS_INPUT_Z,
-   ILO_KERNEL_FS_INPUT_W,
-   ILO_KERNEL_FS_OUTPUT_Z,
-   ILO_KERNEL_FS_USE_KILL,
    ILO_KERNEL_FS_BARYCENTRIC_INTERPOLATIONS,
    ILO_KERNEL_FS_DISPATCH_16_OFFSET,
    ILO_KERNEL_FS_SURFACE_RT_BASE,
@@ -126,6 +120,12 @@ ilo_shader_cache_upload(struct ilo_shader_cache *shc,
 void
 ilo_shader_cache_invalidate(struct ilo_shader_cache *shc);
 
+void
+ilo_shader_cache_get_max_scratch_sizes(const struct ilo_shader_cache *shc,
+                                       int *vs_scratch_size,
+                                       int *gs_scratch_size,
+                                       int *fs_scratch_size);
+
 struct ilo_shader_state *
 ilo_shader_create_vs(const struct ilo_dev *dev,
                      const struct pipe_shader_state *state,
@@ -148,9 +148,6 @@ ilo_shader_create_cs(const struct ilo_dev *dev,
 
 void
 ilo_shader_destroy(struct ilo_shader_state *shader);
-
-int
-ilo_shader_get_type(const struct ilo_shader_state *shader);
 
 bool
 ilo_shader_select_kernel(struct ilo_shader_state *shader,

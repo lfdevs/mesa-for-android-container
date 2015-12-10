@@ -115,8 +115,14 @@ svga_screen_cache_lookup(struct svga_screen *svgascreen,
 
       assert(entry->handle);
 
+      /* If the key matches and the fence is signalled (the surface is no
+       * longer needed) the lookup was successful.  We found a surface that
+       * can be reused.
+       * We unlink the surface from the cache entry and we add the entry to
+       * the 'empty' list.
+       */
       if (memcmp(&entry->key, key, sizeof *key) == 0 &&
-         sws->fence_signalled(sws, entry->fence, 0) == 0) {
+          sws->fence_signalled(sws, entry->fence, 0) == 0) {
          unsigned surf_size;
 
          assert(sws->surface_is_flushed(sws, entry->handle));
@@ -124,10 +130,13 @@ svga_screen_cache_lookup(struct svga_screen *svgascreen,
          handle = entry->handle; /* Reference is transfered here. */
          entry->handle = NULL;
 
+         /* Remove from hash table */
          LIST_DEL(&entry->bucket_head);
 
+         /* remove from LRU list */
          LIST_DEL(&entry->head);
 
+         /* Add the cache entry (but not the surface!) to the empty list */
          LIST_ADD(&entry->head, &cache->empty);
 
          /* update the cache size */
@@ -195,7 +204,8 @@ svga_screen_cache_shrink(struct svga_screen *svgascreen,
 
 
 /**
- * Transfers a handle reference.
+ * Add a surface to the cache.  This is done when the driver deletes
+ * the surface.  Note: transfers a handle reference.
  */
 static void
 svga_screen_cache_add(struct svga_screen *svgascreen,
@@ -207,17 +217,17 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
    struct svga_host_surface_cache_entry *entry = NULL;
    struct svga_winsys_surface *handle = *p_handle;
    unsigned surf_size;
-   
+
    assert(key->cachable);
 
    if (!handle)
       return;
-   
+
    surf_size = surface_size(key);
 
    *p_handle = NULL;
    pipe_mutex_lock(cache->mutex);
-   
+
    if (surf_size >= SVGA_HOST_SURFACE_CACHE_BYTES) {
       /* this surface is too large to cache, just free it */
       sws->surface_reference(sws, &handle, NULL);
@@ -245,10 +255,13 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
    }
 
    if (!LIST_IS_EMPTY(&cache->empty)) {
-      /* use the first empty entry */
+      /* An empty entry has no surface associated with it.
+       * Use the first empty entry.
+       */
       entry = LIST_ENTRY(struct svga_host_surface_cache_entry,
                          cache->empty.next, head);
 
+      /* Remove from LRU list */
       LIST_DEL(&entry->head);
    }
    else if (!LIST_IS_EMPTY(&cache->unused)) {
@@ -262,12 +275,15 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
 
       sws->surface_reference(sws, &entry->handle, NULL);
 
+      /* Remove from hash table */
       LIST_DEL(&entry->bucket_head);
 
+      /* Remove from LRU list */
       LIST_DEL(&entry->head);
    }
 
    if (entry) {
+      assert(entry->handle == NULL);
       entry->handle = handle;
       memcpy(&entry->key, key, sizeof entry->key);
 
@@ -304,6 +320,7 @@ svga_screen_cache_flush(struct svga_screen *svgascreen,
 
    pipe_mutex_lock(cache->mutex);
 
+   /* Loop over entries in the validated list */
    curr = cache->validated.next;
    next = curr->next;
    while (curr != &cache->validated) {
@@ -312,12 +329,15 @@ svga_screen_cache_flush(struct svga_screen *svgascreen,
       assert(entry->handle);
 
       if (sws->surface_is_flushed(sws, entry->handle)) {
+         /* remove entry from LRU list */
          LIST_DEL(&entry->head);
 
          svgascreen->sws->fence_reference(svgascreen->sws, &entry->fence, fence);
 
+         /* Add entry to the unused list */
          LIST_ADD(&entry->head, &cache->unused);
 
+         /* Add entry to the hash table bucket */
          bucket = svga_screen_cache_bucket(&entry->key);
          LIST_ADD(&entry->bucket_head, &cache->bucket[bucket]);
       }
@@ -388,9 +408,12 @@ svga_screen_cache_init(struct svga_screen *svgascreen)
  * Allocate a new host-side surface.  If the surface is marked as cachable,
  * first try re-using a surface in the cache of freed surfaces.  Otherwise,
  * allocate a new surface.
+ * \param bind_flags  bitmask of PIPE_BIND_x flags
+ * \param usage  one of PIPE_USAGE_x values
  */
 struct svga_winsys_surface *
 svga_screen_surface_create(struct svga_screen *svgascreen,
+                           unsigned bind_flags, unsigned usage,
                            struct svga_host_surface_cache_key *key)
 {
    struct svga_winsys_screen *sws = svgascreen->sws;
@@ -398,17 +421,20 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
    boolean cachable = SVGA_SURFACE_CACHE_ENABLED && key->cachable;
 
    SVGA_DBG(DEBUG_CACHE|DEBUG_DMA,
-            "%s sz %dx%dx%d mips %d faces %d cachable %d\n",
+            "%s sz %dx%dx%d mips %d faces %d arraySize %d cachable %d\n",
             __FUNCTION__,
             key->size.width,
             key->size.height,
             key->size.depth,
             key->numMipLevels,
             key->numFaces,
+            key->arraySize,
             key->cachable);
 
    if (cachable) {
       if (key->format == SVGA3D_BUFFER) {
+         SVGA3dSurfaceFlags hint_flag;
+
          /* For buffers, round the buffer size up to the nearest power
           * of two to increase the probability of cache hits.  Keep
           * texture surface dimensions unchanged.
@@ -417,15 +443,33 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
          while (size < key->size.width)
             size <<= 1;
          key->size.width = size;
-	 /* Since we're reusing buffers we're effectively transforming all
-	  * of them into dynamic buffers.
-	  *
-	  * It would be nice to not cache long lived static buffers. But there
-	  * is no way to detect the long lived from short lived ones yet. A
-	  * good heuristic would be buffer size.
-	  */
-	 key->flags &= ~SVGA3D_SURFACE_HINT_STATIC;
-	 key->flags |= SVGA3D_SURFACE_HINT_DYNAMIC;
+
+         /* Determine whether the buffer is static or dynamic.
+          * This is a bit of a heuristic which can be tuned as needed.
+          */
+         if (usage == PIPE_USAGE_DEFAULT ||
+             usage == PIPE_USAGE_IMMUTABLE) {
+            hint_flag = SVGA3D_SURFACE_HINT_STATIC;
+         }
+         else if (bind_flags & PIPE_BIND_INDEX_BUFFER) {
+            /* Index buffers don't change too often.  Mark them as static.
+             */
+            hint_flag = SVGA3D_SURFACE_HINT_STATIC;
+         }
+         else {
+            /* Since we're reusing buffers we're effectively transforming all
+             * of them into dynamic buffers.
+             *
+             * It would be nice to not cache long lived static buffers. But there
+             * is no way to detect the long lived from short lived ones yet. A
+             * good heuristic would be buffer size.
+             */
+            hint_flag = SVGA3D_SURFACE_HINT_DYNAMIC;
+         }
+
+         key->flags &= ~(SVGA3D_SURFACE_HINT_STATIC |
+                         SVGA3D_SURFACE_HINT_DYNAMIC);
+         key->flags |= hint_flag;
       }
 
       handle = svga_screen_cache_lookup(svgascreen, key);
@@ -436,24 +480,32 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
                      key->size.width);
          else
             SVGA_DBG(DEBUG_CACHE|DEBUG_DMA,
-                     "reuse sid %p sz %dx%dx%d mips %d faces %d\n", handle,
+                     "reuse sid %p sz %dx%dx%d mips %d faces %d arraySize %d\n", handle,
                      key->size.width,
                      key->size.height,
                      key->size.depth,
                      key->numMipLevels,
-                     key->numFaces);
+                     key->numFaces,
+                     key->arraySize);
       }
    }
 
    if (!handle) {
+      unsigned usage = 0;
+
+      if (!key->cachable)
+         usage |= SVGA_SURFACE_USAGE_SHARED;
+      if (key->scanout)
+         usage |= SVGA_SURFACE_USAGE_SCANOUT;
+
       handle = sws->surface_create(sws,
                                    key->flags,
                                    key->format,
-                                   key->cachable ?
-                                   0 : SVGA_SURFACE_USAGE_SHARED,
+                                   usage,
                                    key->size,
-                                   key->numFaces,
-                                   key->numMipLevels);
+                                   key->numFaces * key->arraySize,
+                                   key->numMipLevels,
+                                   key->sampleCount);
       if (handle)
          SVGA_DBG(DEBUG_CACHE|DEBUG_DMA,
                   "  CREATE sid %p sz %dx%dx%d\n",

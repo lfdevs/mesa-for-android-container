@@ -29,6 +29,7 @@
 
 #include "nvc0/nvc0_stateobj.h"
 #include "nvc0/nvc0_context.h"
+#include "nvc0/nvc0_query_hw.h"
 
 #include "nvc0/nvc0_3d.xml.h"
 #include "nv50/nv50_texture.xml.h"
@@ -211,9 +212,6 @@ nvc0_rasterizer_state_create(struct pipe_context *pipe,
      * always emit 16 commands, one for each scissor rectangle, here.
      */
 
-    SB_BEGIN_3D(so, SHADE_MODEL, 1);
-    SB_DATA    (so, cso->flatshade ? NVC0_3D_SHADE_MODEL_FLAT :
-                                     NVC0_3D_SHADE_MODEL_SMOOTH);
     SB_IMMED_3D(so, PROVOKING_VERTEX_LAST, !cso->flatshade_first);
     SB_IMMED_3D(so, VERTEX_TWO_SIDE_ENABLE, cso->light_twoside);
 
@@ -682,6 +680,10 @@ nvc0_sp_state_create(struct pipe_context *pipe,
    if (cso->stream_output.num_outputs)
       prog->pipe.stream_output = cso->stream_output;
 
+   prog->translated = nvc0_program_translate(
+      prog, nvc0_context(pipe)->screen->base.device->chipset,
+      &nouveau_context(pipe)->debug);
+
    return (void *)prog;
 }
 
@@ -1070,7 +1072,7 @@ nvc0_so_target_create(struct pipe_context *pipe,
    if (!targ)
       return NULL;
 
-   targ->pq = pipe->create_query(pipe, NVC0_QUERY_TFB_BUFFER_OFFSET, 0);
+   targ->pq = pipe->create_query(pipe, NVC0_HW_QUERY_TFB_BUFFER_OFFSET, 0);
    if (!targ->pq) {
       FREE(targ);
       return NULL;
@@ -1088,6 +1090,25 @@ nvc0_so_target_create(struct pipe_context *pipe,
    util_range_add(&buf->valid_buffer_range, offset, offset + size);
 
    return &targ->pipe;
+}
+
+static void
+nvc0_so_target_save_offset(struct pipe_context *pipe,
+                           struct pipe_stream_output_target *ptarg,
+                           unsigned index, bool *serialize)
+{
+   struct nvc0_so_target *targ = nvc0_so_target(ptarg);
+
+   if (*serialize) {
+      *serialize = false;
+      PUSH_SPACE(nvc0_context(pipe)->base.pushbuf, 1);
+      IMMED_NVC0(nvc0_context(pipe)->base.pushbuf, NVC0_3D(SERIALIZE), 0);
+
+      NOUVEAU_DRV_STAT(nouveau_screen(pipe->screen), gpu_serialize_count, 1);
+   }
+
+   nvc0_query(targ->pq)->index = index;
+   pipe->end_query(pipe, targ->pq);
 }
 
 static void

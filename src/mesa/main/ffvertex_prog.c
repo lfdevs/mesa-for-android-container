@@ -1690,11 +1690,10 @@ _mesa_get_fixed_func_vertex_program(struct gl_context *ctx)
                           ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS,
                           ctx->Const.Program[MESA_SHADER_VERTEX].MaxTemps );
 
-#if 0
       if (ctx->Driver.ProgramStringNotify)
          ctx->Driver.ProgramStringNotify( ctx, GL_VERTEX_PROGRAM_ARB,
                                           &prog->Base );
-#endif
+
       _mesa_program_cache_insert(ctx, ctx->VertexProgram.Cache,
                                  &key, sizeof(key), &prog->Base);
    }

@@ -48,9 +48,8 @@ class register_coalesce_vec4_visitor : public vec4_visitor
 {
 public:
    register_coalesce_vec4_visitor(struct brw_compiler *compiler,
-                                  struct gl_shader_program *shader_prog)
-      : vec4_visitor(compiler, NULL, NULL, NULL, NULL, shader_prog,
-                     MESA_SHADER_VERTEX, NULL,
+                                  nir_shader *shader)
+      : vec4_visitor(compiler, NULL, NULL, NULL, shader, NULL,
                      false /* no_spills */, -1)
    {
    }
@@ -68,11 +67,6 @@ protected:
    }
 
    virtual void emit_prolog()
-   {
-      unreachable("Not reached");
-   }
-
-   virtual void emit_program_code()
    {
       unreachable("Not reached");
    }
@@ -103,11 +97,11 @@ void register_coalesce_test::SetUp()
 
    vp = ralloc(NULL, struct brw_vertex_program);
 
-   shader_prog = ralloc(NULL, struct gl_shader_program);
+   nir_shader *shader = nir_shader_create(NULL, MESA_SHADER_VERTEX, NULL);
 
-   v = new register_coalesce_vec4_visitor(compiler, shader_prog);
+   v = new register_coalesce_vec4_visitor(compiler, shader);
 
-   _mesa_init_vertex_program(ctx, &vp->program, GL_VERTEX_SHADER, 0);
+   _mesa_init_gl_program(&vp->program.Base, GL_VERTEX_SHADER, 0);
 
    devinfo->gen = 4;
 }
@@ -141,7 +135,7 @@ TEST_F(register_coalesce_test, test_compute_to_mrf)
    m0.writemask = WRITEMASK_X;
    m0.type = BRW_REGISTER_TYPE_F;
 
-   vec4_instruction *mul = v->emit(v->MUL(temp, something, src_reg(1.0f)));
+   vec4_instruction *mul = v->emit(v->MUL(temp, something, brw_imm_f(1.0f)));
    v->emit(v->MOV(m0, src_reg(temp)));
 
    register_coalesce(v);
@@ -165,7 +159,7 @@ TEST_F(register_coalesce_test, test_multiple_use)
    m1.type = BRW_REGISTER_TYPE_F;
 
    src_reg src = src_reg(temp);
-   vec4_instruction *mul = v->emit(v->MUL(temp, something, src_reg(1.0f)));
+   vec4_instruction *mul = v->emit(v->MUL(temp, something, brw_imm_f(1.0f)));
    src.swizzle = BRW_SWIZZLE_XXXX;
    v->emit(v->MOV(m0, src));
    src.swizzle = BRW_SWIZZLE_XYZW;
@@ -219,7 +213,7 @@ TEST_F(register_coalesce_test, test_dp4_grf)
 
    register_coalesce(v);
 
-   EXPECT_EQ(dp4->dst.reg, to.reg);
+   EXPECT_EQ(dp4->dst.nr, to.nr);
    EXPECT_EQ(dp4->dst.writemask, WRITEMASK_Y);
 }
 
@@ -245,5 +239,5 @@ TEST_F(register_coalesce_test, test_channel_mul_grf)
 
    register_coalesce(v);
 
-   EXPECT_EQ(mul->dst.reg, to.reg);
+   EXPECT_EQ(mul->dst.nr, to.nr);
 }

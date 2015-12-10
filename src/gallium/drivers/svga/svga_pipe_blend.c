@@ -27,14 +27,15 @@
 #include "pipe/p_defines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/u_bitmask.h"
 
 #include "svga_context.h"
-
 #include "svga_hw_reg.h"
+#include "svga_cmd.h"
 
 
 static inline unsigned
-svga_translate_blend_factor(unsigned factor)
+svga_translate_blend_factor(const struct svga_context *svga, unsigned factor)
 {
    switch (factor) {
    case PIPE_BLENDFACTOR_ZERO:            return SVGA3D_BLENDOP_ZERO;
@@ -50,8 +51,21 @@ svga_translate_blend_factor(unsigned factor)
    case PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE: return SVGA3D_BLENDOP_SRCALPHASAT;
    case PIPE_BLENDFACTOR_CONST_COLOR:     return SVGA3D_BLENDOP_BLENDFACTOR;
    case PIPE_BLENDFACTOR_INV_CONST_COLOR: return SVGA3D_BLENDOP_INVBLENDFACTOR;
-   case PIPE_BLENDFACTOR_CONST_ALPHA:     return SVGA3D_BLENDOP_BLENDFACTOR; /* ? */
-   case PIPE_BLENDFACTOR_INV_CONST_ALPHA: return SVGA3D_BLENDOP_INVBLENDFACTOR; /* ? */
+   case PIPE_BLENDFACTOR_CONST_ALPHA:
+      if (svga_have_vgpu10(svga))
+         return SVGA3D_BLENDOP_BLENDFACTORALPHA;
+      else
+         return SVGA3D_BLENDOP_BLENDFACTOR; /* as close as we can get */
+   case PIPE_BLENDFACTOR_INV_CONST_ALPHA:
+      if (svga_have_vgpu10(svga))
+         return SVGA3D_BLENDOP_INVBLENDFACTORALPHA;
+      else
+         return SVGA3D_BLENDOP_INVBLENDFACTOR; /* as close as we can get */
+   case PIPE_BLENDFACTOR_SRC1_COLOR:      return SVGA3D_BLENDOP_SRC1COLOR;
+   case PIPE_BLENDFACTOR_INV_SRC1_COLOR:  return SVGA3D_BLENDOP_INVSRC1COLOR;
+   case PIPE_BLENDFACTOR_SRC1_ALPHA:      return SVGA3D_BLENDOP_SRC1ALPHA;
+   case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:  return SVGA3D_BLENDOP_INVSRC1ALPHA;
+   case 0:                                return SVGA3D_BLENDOP_ONE;
    default:
       assert(0);
       return SVGA3D_BLENDOP_ZERO;
@@ -74,18 +88,64 @@ svga_translate_blend_func(unsigned mode)
 }
 
 
+/**
+ * Define a vgpu10 blend state object for the given
+ * svga blend state.
+ */
+static void
+define_blend_state_object(struct svga_context *svga,
+                          struct svga_blend_state *bs)
+{
+   SVGA3dDXBlendStatePerRT perRT[SVGA3D_MAX_RENDER_TARGETS];
+   unsigned try;
+   int i;
+
+   assert(svga_have_vgpu10(svga));
+
+   bs->id = util_bitmask_add(svga->blend_object_id_bm);
+
+   for (i = 0; i < SVGA3D_DX_MAX_RENDER_TARGETS; i++) {
+      perRT[i].blendEnable = bs->rt[i].blend_enable;
+      perRT[i].srcBlend = bs->rt[i].srcblend;
+      perRT[i].destBlend = bs->rt[i].dstblend;
+      perRT[i].blendOp = bs->rt[i].blendeq;
+      perRT[i].srcBlendAlpha = bs->rt[i].srcblend_alpha;
+      perRT[i].destBlendAlpha = bs->rt[i].dstblend_alpha;
+      perRT[i].blendOpAlpha = bs->rt[i].blendeq_alpha;
+      perRT[i].renderTargetWriteMask = bs->rt[i].writemask;
+      perRT[i].logicOpEnable = 0;
+      perRT[i].logicOp = SVGA3D_LOGICOP_COPY;
+      assert(perRT[i].srcBlend == perRT[0].srcBlend);
+   }
+
+   /* Loop in case command buffer is full and we need to flush and retry */
+   for (try = 0; try < 2; try++) {
+      enum pipe_error ret;
+
+      ret = SVGA3D_vgpu10_DefineBlendState(svga->swc,
+                                           bs->id,
+                                           bs->alpha_to_coverage,
+                                           bs->independent_blend_enable,
+                                           perRT);
+      if (ret == PIPE_OK)
+         return;
+      svga_context_flush(svga, NULL);
+   }
+}
+
+
 static void *
 svga_create_blend_state(struct pipe_context *pipe,
                         const struct pipe_blend_state *templ)
 {
+   struct svga_context *svga = svga_context(pipe);
    struct svga_blend_state *blend = CALLOC_STRUCT( svga_blend_state );
    unsigned i;
 
- 
    /* Fill in the per-rendertarget blend state.  We currently only
-    * have one rendertarget.
+    * support independent blend enable and colormask per render target.
     */
-   for (i = 0; i < 1; i++) {
+   for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
       /* No way to set this in SVGA3D, and no way to correctly implement it on
        * top of D3D9 API.  Instead we try to simulate with various blend modes.
        */
@@ -107,6 +167,9 @@ svga_create_blend_state(struct pipe_context *pipe,
             break;
          case PIPE_LOGICOP_COPY:
             blend->rt[i].blend_enable = FALSE;
+            blend->rt[i].srcblend       = SVGA3D_BLENDOP_ONE;
+            blend->rt[i].dstblend       = SVGA3D_BLENDOP_ZERO;
+            blend->rt[i].blendeq        = SVGA3D_BLENDEQ_ADD;
             break;
          case PIPE_LOGICOP_COPY_INVERTED:
             blend->rt[i].blend_enable   = TRUE;
@@ -169,37 +232,100 @@ svga_create_blend_state(struct pipe_context *pipe,
          case PIPE_LOGICOP_EQUIV:
             /* Fill these in with plausible values */
             blend->rt[i].blend_enable = FALSE;
+            blend->rt[i].srcblend       = SVGA3D_BLENDOP_ONE;
+            blend->rt[i].dstblend       = SVGA3D_BLENDOP_ZERO;
+            blend->rt[i].blendeq        = SVGA3D_BLENDEQ_ADD;
             break;
          default:
             assert(0);
             break;
          }
+         blend->rt[i].srcblend_alpha = blend->rt[i].srcblend;
+         blend->rt[i].dstblend_alpha = blend->rt[i].dstblend;
+         blend->rt[i].blendeq_alpha = blend->rt[i].blendeq;
       }
       else {
-         blend->rt[i].blend_enable   = templ->rt[0].blend_enable;
-
-         if (templ->rt[0].blend_enable) {
-            blend->rt[i].srcblend       = svga_translate_blend_factor(templ->rt[0].rgb_src_factor);
-            blend->rt[i].dstblend       = svga_translate_blend_factor(templ->rt[0].rgb_dst_factor);
-            blend->rt[i].blendeq        = svga_translate_blend_func(templ->rt[0].rgb_func);
-            blend->rt[i].srcblend_alpha = svga_translate_blend_factor(templ->rt[0].alpha_src_factor);
-            blend->rt[i].dstblend_alpha = svga_translate_blend_factor(templ->rt[0].alpha_dst_factor);
-            blend->rt[i].blendeq_alpha  = svga_translate_blend_func(templ->rt[0].alpha_func);
+         /* Note: the vgpu10 device does not yet support independent
+          * blend terms per render target.  Target[0] always specifies the
+          * blending terms.
+          */
+         if (templ->independent_blend_enable || templ->rt[0].blend_enable) {
+            /* always use the 0th target's blending terms for now */
+            blend->rt[i].srcblend =
+               svga_translate_blend_factor(svga, templ->rt[0].rgb_src_factor);
+            blend->rt[i].dstblend =
+               svga_translate_blend_factor(svga, templ->rt[0].rgb_dst_factor);
+            blend->rt[i].blendeq =
+               svga_translate_blend_func(templ->rt[0].rgb_func);
+            blend->rt[i].srcblend_alpha =
+               svga_translate_blend_factor(svga, templ->rt[0].alpha_src_factor);
+            blend->rt[i].dstblend_alpha =
+               svga_translate_blend_factor(svga, templ->rt[0].alpha_dst_factor);
+            blend->rt[i].blendeq_alpha =
+               svga_translate_blend_func(templ->rt[0].alpha_func);
 
             if (blend->rt[i].srcblend_alpha != blend->rt[i].srcblend ||
                 blend->rt[i].dstblend_alpha != blend->rt[i].dstblend ||
-                blend->rt[i].blendeq_alpha  != blend->rt[i].blendeq)
-            {
+                blend->rt[i].blendeq_alpha  != blend->rt[i].blendeq) {
                blend->rt[i].separate_alpha_blend_enable = TRUE;
             }
          }
+         else {
+            /* disabled - default blend terms */
+            blend->rt[i].srcblend = SVGA3D_BLENDOP_ONE;
+            blend->rt[i].dstblend = SVGA3D_BLENDOP_ZERO;
+            blend->rt[i].blendeq = SVGA3D_BLENDEQ_ADD;
+            blend->rt[i].srcblend_alpha = SVGA3D_BLENDOP_ONE;
+            blend->rt[i].dstblend_alpha = SVGA3D_BLENDOP_ZERO;
+            blend->rt[i].blendeq_alpha = SVGA3D_BLENDEQ_ADD;
+         }
+
+         if (templ->independent_blend_enable) {
+            blend->rt[i].blend_enable = templ->rt[i].blend_enable;
+         }
+         else {
+            blend->rt[i].blend_enable = templ->rt[0].blend_enable;
+         }
       }
 
-      blend->rt[i].writemask = templ->rt[0].colormask;
+      /* Some GL blend modes are not supported by the VGPU9 device (there's
+       * no equivalent of PIPE_BLENDFACTOR_[INV_]CONST_ALPHA).
+       * When we set this flag, we copy the constant blend alpha value
+       * to the R, G, B components.
+       * This works as long as the src/dst RGB blend factors doesn't use
+       * PIPE_BLENDFACTOR_CONST_COLOR and PIPE_BLENDFACTOR_CONST_ALPHA
+       * at the same time.  There's no work-around for that.
+       */
+      if (!svga_have_vgpu10(svga)) {
+         if (templ->rt[0].rgb_src_factor == PIPE_BLENDFACTOR_CONST_ALPHA ||
+             templ->rt[0].rgb_dst_factor == PIPE_BLENDFACTOR_CONST_ALPHA ||
+             templ->rt[0].rgb_src_factor == PIPE_BLENDFACTOR_INV_CONST_ALPHA ||
+             templ->rt[0].rgb_dst_factor == PIPE_BLENDFACTOR_INV_CONST_ALPHA) {
+            blend->blend_color_alpha = TRUE;
+         }
+      }
+
+      if (templ->independent_blend_enable) {
+         blend->rt[i].writemask = templ->rt[i].colormask;
+      }
+      else {
+         blend->rt[i].writemask = templ->rt[0].colormask;
+      }
    }
+
+   blend->independent_blend_enable = templ->independent_blend_enable;
+
+   blend->alpha_to_coverage = templ->alpha_to_coverage;
+
+   if (svga_have_vgpu10(svga)) {
+      define_blend_state_object(svga, blend);
+   }
+
+   svga->hud.num_state_objects++;
 
    return blend;
 }
+
 
 static void svga_bind_blend_state(struct pipe_context *pipe,
                                   void *blend)
@@ -210,10 +336,32 @@ static void svga_bind_blend_state(struct pipe_context *pipe,
    svga->dirty |= SVGA_NEW_BLEND;
 }
 
-
-static void svga_delete_blend_state(struct pipe_context *pipe, void *blend)
+static void svga_delete_blend_state(struct pipe_context *pipe,
+                                    void *blend)
 {
+   struct svga_context *svga = svga_context(pipe);
+   struct svga_blend_state *bs =
+      (struct svga_blend_state *) blend;
+
+   if (bs->id != SVGA3D_INVALID_ID) {
+      enum pipe_error ret;
+
+      ret = SVGA3D_vgpu10_DestroyBlendState(svga->swc, bs->id);
+      if (ret != PIPE_OK) {
+         svga_context_flush(svga, NULL);
+         ret = SVGA3D_vgpu10_DestroyBlendState(svga->swc, bs->id);
+         assert(ret == PIPE_OK);
+      }
+
+      if (bs->id == svga->state.hw_draw.blend_id)
+         svga->state.hw_draw.blend_id = SVGA3D_INVALID_ID;
+
+      util_bitmask_clear(svga->blend_object_id_bm, bs->id);
+      bs->id = SVGA3D_INVALID_ID;
+   }
+
    FREE(blend);
+   svga->hud.num_state_objects--;
 }
 
 static void svga_set_blend_color( struct pipe_context *pipe,
@@ -235,6 +383,3 @@ void svga_init_blend_functions( struct svga_context *svga )
 
    svga->pipe.set_blend_color = svga_set_blend_color;
 }
-
-
-

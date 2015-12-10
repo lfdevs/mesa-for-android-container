@@ -23,13 +23,15 @@
  *
  **********************************************************/
 
-#include "util/u_inlines.h"
 #include "pipe/p_defines.h"
+#include "util/u_bitmask.h"
+#include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
 #include "svga_context.h"
 #include "svga_hw_reg.h"
+#include "svga_cmd.h"
 
 
 static inline unsigned
@@ -69,10 +71,67 @@ svga_translate_stencil_op(unsigned op)
 }
 
 
+/**
+ * Define a vgpu10 depth/stencil state object for the given
+ * svga depth/stencil state.
+ */
+static void
+define_depth_stencil_state_object(struct svga_context *svga,
+                                  struct svga_depth_stencil_state *ds)
+{
+   unsigned try;
+
+   assert(svga_have_vgpu10(svga));
+
+   ds->id = util_bitmask_add(svga->ds_object_id_bm);
+
+   /* spot check that these comparision tokens are the same */
+   assert(SVGA3D_COMPARISON_NEVER == SVGA3D_CMP_NEVER);
+   assert(SVGA3D_COMPARISON_LESS == SVGA3D_CMP_LESS);
+   assert(SVGA3D_COMPARISON_NOT_EQUAL == SVGA3D_CMP_NOTEQUAL);
+
+   /* Loop in case command buffer is full and we need to flush and retry */
+   for (try = 0; try < 2; try++) {
+      enum pipe_error ret;
+
+      /* Note: we use the ds->stencil[0].enabled value for both the front
+       * and back-face enables.  If single-side stencil is used, we'll have
+       * set the back state the same as the front state.
+       */
+      ret = SVGA3D_vgpu10_DefineDepthStencilState(svga->swc,
+                                                  ds->id,
+                                                  /* depth/Z */
+                                                  ds->zenable,
+                                                  ds->zwriteenable,
+                                                  ds->zfunc,
+                                                  /* Stencil */
+                                                  ds->stencil[0].enabled, /*f|b*/
+                                                  ds->stencil[0].enabled, /*f*/
+                                                  ds->stencil[0].enabled, /*b*/
+                                                  ds->stencil_mask,
+                                                  ds->stencil_writemask,
+                                                  /* front stencil */
+                                                  ds->stencil[0].fail,
+                                                  ds->stencil[0].zfail,
+                                                  ds->stencil[0].pass,
+                                                  ds->stencil[0].func,
+                                                  /* back stencil */
+                                                  ds->stencil[1].fail,
+                                                  ds->stencil[1].zfail,
+                                                  ds->stencil[1].pass,
+                                                  ds->stencil[1].func);
+      if (ret == PIPE_OK)
+         return;
+      svga_context_flush(svga, NULL);
+   }
+}
+
+
 static void *
 svga_create_depth_stencil_state(struct pipe_context *pipe,
 				const struct pipe_depth_stencil_alpha_state *templ)
 {
+   struct svga_context *svga = svga_context(pipe);
    struct svga_depth_stencil_state *ds = CALLOC_STRUCT( svga_depth_stencil_state );
 
    /* Don't try to figure out CW/CCW correspondence with
@@ -92,10 +151,18 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
       ds->stencil_mask      = templ->stencil[0].valuemask & 0xff;
       ds->stencil_writemask = templ->stencil[0].writemask & 0xff;
    }
+   else {
+      ds->stencil[0].func = SVGA3D_CMP_ALWAYS;
+      ds->stencil[0].fail = SVGA3D_STENCILOP_KEEP;
+      ds->stencil[0].zfail = SVGA3D_STENCILOP_KEEP;
+      ds->stencil[0].pass = SVGA3D_STENCILOP_KEEP;
+   }
 
 
    ds->stencil[1].enabled = templ->stencil[1].enabled;
    if (templ->stencil[1].enabled) {
+      assert(templ->stencil[0].enabled);
+      /* two-sided stencil */
       ds->stencil[1].func   = svga_translate_compare_func(templ->stencil[1].func);
       ds->stencil[1].fail   = svga_translate_stencil_op(templ->stencil[1].fail_op);
       ds->stencil[1].zfail  = svga_translate_stencil_op(templ->stencil[1].zfail_op);
@@ -104,6 +171,13 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
       ds->stencil_mask      = templ->stencil[1].valuemask & 0xff;
       ds->stencil_writemask = templ->stencil[1].writemask & 0xff;
    }
+   else {
+      /* back face state is same as front-face state */
+      ds->stencil[1].func = ds->stencil[0].func;
+      ds->stencil[1].fail = ds->stencil[0].fail;
+      ds->stencil[1].zfail = ds->stencil[0].zfail;
+      ds->stencil[1].pass = ds->stencil[0].pass;
+   }
 
 
    ds->zenable = templ->depth.enabled;
@@ -111,12 +185,24 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
       ds->zfunc = svga_translate_compare_func(templ->depth.func);
       ds->zwriteenable = templ->depth.writemask;
    }
+   else {
+      ds->zfunc = SVGA3D_CMP_ALWAYS;
+   }
 
    ds->alphatestenable = templ->alpha.enabled;
    if (ds->alphatestenable) {
       ds->alphafunc = svga_translate_compare_func(templ->alpha.func);
       ds->alpharef = templ->alpha.ref_value;
    }
+   else {
+      ds->alphafunc = SVGA3D_CMP_ALWAYS;
+   }
+
+   if (svga_have_vgpu10(svga)) {
+      define_depth_stencil_state_object(svga, ds);
+   }
+
+   svga->hud.num_state_objects++;
 
    return ds;
 }
@@ -126,14 +212,45 @@ static void svga_bind_depth_stencil_state(struct pipe_context *pipe,
 {
    struct svga_context *svga = svga_context(pipe);
 
+   if (svga_have_vgpu10(svga)) {
+      /* flush any previously queued drawing before changing state */
+      svga_hwtnl_flush_retry(svga);
+   }
+
    svga->curr.depth = (const struct svga_depth_stencil_state *)depth_stencil;
-   svga->dirty |= SVGA_NEW_DEPTH_STENCIL;
+   svga->dirty |= SVGA_NEW_DEPTH_STENCIL_ALPHA;
 }
 
 static void svga_delete_depth_stencil_state(struct pipe_context *pipe,
                                             void *depth_stencil)
 {
+   struct svga_context *svga = svga_context(pipe);
+   struct svga_depth_stencil_state *ds =
+      (struct svga_depth_stencil_state *) depth_stencil;
+
+   if (svga_have_vgpu10(svga)) {
+      enum pipe_error ret;
+
+      svga_hwtnl_flush_retry(svga);
+
+      assert(ds->id != SVGA3D_INVALID_ID);
+
+      ret = SVGA3D_vgpu10_DestroyDepthStencilState(svga->swc, ds->id);
+      if (ret != PIPE_OK) {
+         svga_context_flush(svga, NULL);
+         ret = SVGA3D_vgpu10_DestroyDepthStencilState(svga->swc, ds->id);
+         assert(ret == PIPE_OK);
+      }
+
+      if (ds->id == svga->state.hw_draw.depth_stencil_id)
+         svga->state.hw_draw.depth_stencil_id = SVGA3D_INVALID_ID;
+
+      util_bitmask_clear(svga->ds_object_id_bm, ds->id);
+      ds->id = SVGA3D_INVALID_ID;
+   }
+
    FREE(depth_stencil);
+   svga->hud.num_state_objects--;
 }
 
 
@@ -141,6 +258,11 @@ static void svga_set_stencil_ref( struct pipe_context *pipe,
                                   const struct pipe_stencil_ref *stencil_ref )
 {
    struct svga_context *svga = svga_context(pipe);
+
+   if (svga_have_vgpu10(svga)) {
+      /* flush any previously queued drawing before changing state */
+      svga_hwtnl_flush_retry(svga);
+   }
 
    svga->curr.stencil_ref = *stencil_ref;
 
@@ -151,6 +273,11 @@ static void
 svga_set_sample_mask(struct pipe_context *pipe,
                      unsigned sample_mask)
 {
+   struct svga_context *svga = svga_context(pipe);
+
+   svga->curr.sample_mask = sample_mask;
+
+   svga->dirty |= SVGA_NEW_BLEND; /* See emit_rss_vgpu10() */
 }
 
 

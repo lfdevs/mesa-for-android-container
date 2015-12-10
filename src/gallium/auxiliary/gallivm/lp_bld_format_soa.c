@@ -346,6 +346,7 @@ lp_build_rgba8_to_fi32_soa(struct gallivm_state *gallivm,
  * \param i, j  the sub-block pixel coordinates.  For non-compressed formats
  *              these will always be (0,0).  For compressed formats, i will
  *              be in [0, block_width-1] and j will be in [0, block_height-1].
+ * \param cache  optional value pointing to a lp_build_format_cache structure
  */
 void
 lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
@@ -355,6 +356,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
                         LLVMValueRef offset,
                         LLVMValueRef i,
                         LLVMValueRef j,
+                        LLVMValueRef cache,
                         LLVMValueRef rgba_out[4])
 {
    LLVMBuilderRef builder = gallivm->builder;
@@ -473,12 +475,45 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
       tmp_type.norm = TRUE;
 
       tmp = lp_build_fetch_rgba_aos(gallivm, format_desc, tmp_type,
-                                    TRUE, base_ptr, offset, i, j);
+                                    TRUE, base_ptr, offset, i, j, cache);
 
       lp_build_rgba8_to_fi32_soa(gallivm,
                                 type,
                                 tmp,
                                 rgba_out);
+
+      return;
+   }
+
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC &&
+       /* non-srgb case is already handled above */
+       format_desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB &&
+       type.floating && type.width == 32 &&
+       (type.length == 1 || (type.length % 4 == 0)) &&
+       cache) {
+      const struct util_format_description *format_decompressed;
+      const struct util_format_description *flinear_desc;
+      LLVMValueRef packed;
+      flinear_desc = util_format_description(util_format_linear(format_desc->format));
+      packed = lp_build_fetch_cached_texels(gallivm,
+                                            flinear_desc,
+                                            type.length,
+                                            base_ptr,
+                                            offset,
+                                            i, j,
+                                            cache);
+      packed = LLVMBuildBitCast(builder, packed,
+                                lp_build_int_vec_type(gallivm, type), "");
+      /*
+       * The values are now packed so they match ordinary srgb RGBA8 format,
+       * hence need to use matching format for unpack.
+       */
+      format_decompressed = util_format_description(PIPE_FORMAT_R8G8B8A8_SRGB);
+
+      lp_build_unpack_rgba_soa(gallivm,
+                               format_decompressed,
+                               type,
+                               packed, rgba_out);
 
       return;
    }
@@ -524,7 +559,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
          /* Get a single float[4]={R,G,B,A} pixel */
          tmp = lp_build_fetch_rgba_aos(gallivm, format_desc, tmp_type,
                                        TRUE, base_ptr, offset_elem,
-                                       i_elem, j_elem);
+                                       i_elem, j_elem, cache);
 
          /*
           * Insert the AoS tmp value channels into the SoA result vectors at

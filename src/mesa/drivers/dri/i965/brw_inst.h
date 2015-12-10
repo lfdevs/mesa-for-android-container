@@ -39,6 +39,15 @@
 extern "C" {
 #endif
 
+/** Maximum SEND message length */
+#define BRW_MAX_MSG_LENGTH 15
+
+/** First MRF register used by pull loads */
+#define FIRST_SPILL_MRF(gen) ((gen) == 6 ? 21 : 13)
+
+/** First MRF register used by spills */
+#define FIRST_PULL_LOAD_MRF(gen) ((gen) == 6 ? 16 : 13)
+
 /* brw_context.h has a forward declaration of brw_inst, so name the struct. */
 typedef struct brw_inst {
    uint64_t data[2];
@@ -172,7 +181,8 @@ F(saturate,             31,  31)
 F(debug_control,        30,  30)
 F(cmpt_control,         29,  29)
 FC(branch_control,      28,  28, devinfo->gen >= 8)
-F(acc_wr_control,       28,  28)
+FC(acc_wr_control,      28,  28, devinfo->gen >= 6)
+FC(mask_control_ex,     28,  28, devinfo->is_g4x || devinfo->gen == 5)
 F(cond_modifier,        27,  24)
 FC(math_function,       27,  24, devinfo->gen >= 6)
 F(exec_size,            23,  21)
@@ -383,6 +393,7 @@ FF(urb_per_slot_offset,
    /* 4-6: */ -1, -1, -1, -1, -1, -1, -1, -1,
    /* 7:   */ MD(16), MD(16),
    /* 8:   */ MD(17), MD(17))
+FC(urb_channel_mask_present, MD(15), MD(15), devinfo->gen >= 8)
 FC(urb_complete, MD(15), MD(15), devinfo->gen < 8)
 FC(urb_used, MD(14), MD(14), devinfo->gen < 7)
 FC(urb_allocate, MD(13), MD(13), devinfo->gen < 7)
@@ -683,7 +694,7 @@ brw_inst_bits(const brw_inst *inst, unsigned high, unsigned low)
    high %= 64;
    low %= 64;
 
-   const uint64_t mask = (1ull << (high - low + 1)) - 1;
+   const uint64_t mask = (~0ull >> (64 - (high - low + 1)));
 
    return (inst->data[word] >> low) & mask;
 }
@@ -702,7 +713,7 @@ brw_inst_set_bits(brw_inst *inst, unsigned high, unsigned low, uint64_t value)
    high %= 64;
    low %= 64;
 
-   const uint64_t mask = ((1ull << (high - low + 1)) - 1) << low;
+   const uint64_t mask = (~0ull >> (64 - (high - low + 1))) << low;
 
    /* Make sure the supplied value actually fits in the given bitfield. */
    assert((value & (mask >> low)) == value);
@@ -729,7 +740,7 @@ typedef struct {
  * Bits indices range from 0..63.
  */
 static inline unsigned
-brw_compact_inst_bits(brw_compact_inst *inst, unsigned high, unsigned low)
+brw_compact_inst_bits(const brw_compact_inst *inst, unsigned high, unsigned low)
 {
    const uint64_t mask = (1ull << (high - low + 1)) - 1;
 
@@ -753,56 +764,65 @@ brw_compact_inst_set_bits(brw_compact_inst *inst, unsigned high, unsigned low,
    inst->data = (inst->data & ~mask) | (value << low);
 }
 
-#define F(name, high, low)                                      \
-static inline void                                              \
-brw_compact_inst_set_##name(brw_compact_inst *inst, unsigned v) \
-{                                                               \
-   brw_compact_inst_set_bits(inst, high, low, v);               \
-}                                                               \
-                                                                \
-static inline unsigned                                          \
-brw_compact_inst_##name(brw_compact_inst *inst)                 \
-{                                                               \
-   return brw_compact_inst_bits(inst, high, low);               \
+#define FC(name, high, low, assertions)                            \
+static inline void                                                 \
+brw_compact_inst_set_##name(const struct brw_device_info *devinfo, \
+                            brw_compact_inst *inst, unsigned v)    \
+{                                                                  \
+   assert(assertions);                                             \
+   (void) devinfo;                                                 \
+   brw_compact_inst_set_bits(inst, high, low, v);                  \
+}                                                                  \
+static inline unsigned                                             \
+brw_compact_inst_##name(const struct brw_device_info *devinfo,     \
+                        const brw_compact_inst *inst)              \
+{                                                                  \
+   assert(assertions);                                             \
+   (void) devinfo;                                                 \
+   return brw_compact_inst_bits(inst, high, low);                  \
 }
 
-F(src1_reg_nr,    63, 56)
-F(src0_reg_nr,    55, 48)
-F(dst_reg_nr,     47, 40)
-F(src1_index,     39, 35)
-F(src0_index,     34, 30)
-F(cmpt_control,   29, 29) /* Same location as brw_inst */
-F(flag_subreg_nr, 28, 28) /* <= Gen6 only */
-F(cond_modifier,  27, 24) /* Same location as brw_inst */
-F(acc_wr_control, 23, 23)
-F(subreg_index,   22, 18)
-F(datatype_index, 17, 13)
-F(control_index,  12,  8)
-F(debug_control,   7,  7)
-F(opcode,          6,  0) /* Same location as brw_inst */
+/* A simple macro for fields which stay in the same place on all generations. */
+#define F(name, high, low) FC(name, high, low, true)
+
+F(src1_reg_nr,      63, 56)
+F(src0_reg_nr,      55, 48)
+F(dst_reg_nr,       47, 40)
+F(src1_index,       39, 35)
+F(src0_index,       34, 30)
+F(cmpt_control,     29, 29) /* Same location as brw_inst */
+FC(flag_subreg_nr,  28, 28, devinfo->gen <= 6)
+F(cond_modifier,    27, 24) /* Same location as brw_inst */
+FC(acc_wr_control,  23, 23, devinfo->gen >= 6)
+FC(mask_control_ex, 23, 23, devinfo->is_g4x || devinfo->gen == 5)
+F(subreg_index,     22, 18)
+F(datatype_index,   17, 13)
+F(control_index,    12,  8)
+F(debug_control,     7,  7)
+F(opcode,            6,  0) /* Same location as brw_inst */
 
 /**
  * (Gen8+) Compacted three-source instructions:
  *  @{
  */
-F(3src_src2_reg_nr,    63, 57)
-F(3src_src1_reg_nr,    56, 50)
-F(3src_src0_reg_nr,    49, 43)
-F(3src_src2_subreg_nr, 42, 40)
-F(3src_src1_subreg_nr, 39, 37)
-F(3src_src0_subreg_nr, 36, 34)
-F(3src_src2_rep_ctrl,  33, 33)
-F(3src_src1_rep_ctrl,  32, 32)
-F(3src_saturate,       31, 31)
-F(3src_debug_control,  30, 30)
-F(3src_cmpt_control,   29, 29)
-F(3src_src0_rep_ctrl,  28, 28)
+FC(3src_src2_reg_nr,    63, 57, devinfo->gen >= 8)
+FC(3src_src1_reg_nr,    56, 50, devinfo->gen >= 8)
+FC(3src_src0_reg_nr,    49, 43, devinfo->gen >= 8)
+FC(3src_src2_subreg_nr, 42, 40, devinfo->gen >= 8)
+FC(3src_src1_subreg_nr, 39, 37, devinfo->gen >= 8)
+FC(3src_src0_subreg_nr, 36, 34, devinfo->gen >= 8)
+FC(3src_src2_rep_ctrl,  33, 33, devinfo->gen >= 8)
+FC(3src_src1_rep_ctrl,  32, 32, devinfo->gen >= 8)
+FC(3src_saturate,       31, 31, devinfo->gen >= 8)
+FC(3src_debug_control,  30, 30, devinfo->gen >= 8)
+FC(3src_cmpt_control,   29, 29, devinfo->gen >= 8)
+FC(3src_src0_rep_ctrl,  28, 28, devinfo->gen >= 8)
 /* Reserved */
-F(3src_dst_reg_nr,     18, 12)
-F(3src_source_index,   11, 10)
-F(3src_control_index,   9,  8)
+FC(3src_dst_reg_nr,     18, 12, devinfo->gen >= 8)
+FC(3src_source_index,   11, 10, devinfo->gen >= 8)
+FC(3src_control_index,   9,  8, devinfo->gen >= 8)
 /* Bit 7 is Reserved (for future Opcode expansion) */
-F(3src_opcode,          6,  0)
+FC(3src_opcode,          6,  0, devinfo->gen >= 8)
 /** @} */
 
 #undef F

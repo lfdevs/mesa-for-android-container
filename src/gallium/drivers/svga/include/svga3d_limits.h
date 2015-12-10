@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2007-2014 VMware, Inc.  All rights reserved.
+ * Copyright 2007-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -41,6 +41,7 @@
 #define SVGA3D_NUM_CLIPPLANES                   6
 #define SVGA3D_MAX_RENDER_TARGETS               8
 #define SVGA3D_MAX_SIMULTANEOUS_RENDER_TARGETS  (SVGA3D_MAX_RENDER_TARGETS)
+#define SVGA3D_MAX_UAVIEWS                      8
 #define SVGA3D_MAX_CONTEXT_IDS                  256
 #define SVGA3D_MAX_SURFACE_IDS                  (32 * 1024)
 
@@ -56,9 +57,6 @@
 
 #define SVGA3D_NUM_TEXTURE_UNITS                32
 #define SVGA3D_NUM_LIGHTS                       8
-#define SVGA3D_MAX_VIDEODECODERS                8
-#define SVGA3D_MAX_VIDEOPROCESSORS              8
-#define SVGA3D_MAX_VIDEODECODER_FRAMES          400
 
 /*
  * Maximum size in dwords of shader text the SVGA device will allow.
@@ -98,4 +96,4 @@
  */
 #define SVGA3D_MAX_DRAW_PRIMITIVE_RANGES 32
 
-#endif // _SVGA3D_LIMITS_H_
+#endif /* _SVGA3D_LIMITS_H_ */

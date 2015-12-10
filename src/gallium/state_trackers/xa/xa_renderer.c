@@ -465,9 +465,11 @@ renderer_copy_prepare(struct xa_context *r,
     }
 
     /* shaders */
-    if (src_texture->format == PIPE_FORMAT_L8_UNORM)
+    if (src_texture->format == PIPE_FORMAT_L8_UNORM ||
+        src_texture->format == PIPE_FORMAT_R8_UNORM)
 	fs_traits |= FS_SRC_LUMINANCE;
-    if (dst_surface->format == PIPE_FORMAT_L8_UNORM)
+    if (dst_surface->format == PIPE_FORMAT_L8_UNORM ||
+        dst_surface->format == PIPE_FORMAT_R8_UNORM)
 	fs_traits |= FS_DST_LUMINANCE;
     if (xa_format_a(dst_xa_format) != 0 &&
 	xa_format_a(src_xa_format) == 0)

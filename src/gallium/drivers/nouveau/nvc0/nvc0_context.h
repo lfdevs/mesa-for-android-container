@@ -15,6 +15,7 @@
 #include "nvc0/nvc0_screen.h"
 #include "nvc0/nvc0_program.h"
 #include "nvc0/nvc0_resource.h"
+#include "nvc0/nvc0_query.h"
 
 #include "nv50/nv50_transfer.h"
 
@@ -214,7 +215,7 @@ nvc0_shader_stage(unsigned pipe)
 
 
 /* nvc0_context.c */
-struct pipe_context *nvc0_create(struct pipe_screen *, void *);
+struct pipe_context *nvc0_create(struct pipe_screen *, void *, unsigned flags);
 void nvc0_bufctx_fence(struct nvc0_context *, struct nouveau_bufctx *,
                        bool on_flush);
 void nvc0_default_kick_notify(struct nouveau_pushbuf *);
@@ -223,24 +224,14 @@ void nvc0_default_kick_notify(struct nouveau_pushbuf *);
 extern struct draw_stage *nvc0_draw_render_stage(struct nvc0_context *);
 
 /* nvc0_program.c */
-bool nvc0_program_translate(struct nvc0_program *, uint16_t chipset);
+bool nvc0_program_translate(struct nvc0_program *, uint16_t chipset,
+                            struct pipe_debug_callback *);
 bool nvc0_program_upload_code(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_destroy(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_library_upload(struct nvc0_context *);
 uint32_t nvc0_program_symbol_offset(const struct nvc0_program *,
                                     uint32_t label);
 void nvc0_program_init_tcp_empty(struct nvc0_context *);
-
-/* nvc0_query.c */
-void nvc0_init_query_functions(struct nvc0_context *);
-void nvc0_query_pushbuf_submit(struct nouveau_pushbuf *,
-                               struct pipe_query *, unsigned result_offset);
-void nvc0_query_fifo_wait(struct nouveau_pushbuf *, struct pipe_query *);
-void nvc0_so_target_save_offset(struct pipe_context *,
-                                struct pipe_stream_output_target *, unsigned i,
-                                bool *serialize);
-
-#define NVC0_QUERY_TFB_BUFFER_OFFSET (PIPE_QUERY_TYPES + 0)
 
 /* nvc0_shader_state.c */
 void nvc0_vertprog_validate(struct nvc0_context *);

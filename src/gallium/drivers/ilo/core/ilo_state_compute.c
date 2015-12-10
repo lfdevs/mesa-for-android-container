@@ -158,7 +158,8 @@ compute_interface_get_gen6_read_end(const struct ilo_dev *dev,
     */
    assert(per_thread_read <= 63);
 
-   /* From the Haswell PRM, volume 2d, page 199:
+   /*
+    * From the Haswell PRM, volume 2d, page 199:
     *
     *     "(Cross-Thread Constant Data Read Length) [0,127]"
     */
@@ -210,38 +211,68 @@ compute_validate_gen6(const struct ilo_dev *dev,
    return true;
 }
 
-static uint8_t
-compute_get_gen6_scratch_space(const struct ilo_dev *dev,
-                               const struct ilo_state_compute_info *info)
+static uint32_t
+compute_get_gen6_per_thread_scratch_size(const struct ilo_dev *dev,
+                                         const struct ilo_state_compute_info *info,
+                                         uint8_t *per_thread_space)
 {
-   uint32_t scratch_size = 0;
-   uint8_t i;
+   ILO_DEV_ASSERT(dev, 6, 7);
 
-   ILO_DEV_ASSERT(dev, 6, 8);
+   /*
+    * From the Sandy Bridge PRM, volume 2 part 2, page 30:
+    *
+    *     "(Per Thread Scratch Space)
+    *      Range = [0,11] indicating [1k bytes, 12k bytes] [DevSNB]"
+    */
+   assert(info->per_thread_scratch_size <= 12 * 1024);
 
-   for (i = 0; i < info->interface_count; i++) {
-      if (scratch_size < info->interfaces[i].scratch_size)
-         scratch_size = info->interfaces[i].scratch_size;
+   if (!info->per_thread_scratch_size) {
+      *per_thread_space = 0;
+      return 0;
    }
 
-   if (ilo_dev_gen(dev) >= ILO_GEN(8)) {
-      assert(scratch_size <= 2 * 1024 * 1024);
+   *per_thread_space = (info->per_thread_scratch_size > 1024) ?
+      (info->per_thread_scratch_size - 1) / 1024 : 0;
 
-      /* next power of two, starting from 1KB */
-      return (scratch_size > 1024) ?
-         (util_last_bit(scratch_size - 1) - 10): 0;
-   } else if (ilo_dev_gen(dev) >= ILO_GEN(7.5)) {
-      assert(scratch_size <= 2 * 1024 * 1024);
+   return 1024 * (1 + *per_thread_space);
+}
 
-      /* next power of two, starting from 2KB */
-      return (scratch_size > 2048) ?
-         (util_last_bit(scratch_size - 1) - 11): 0;
-   } else {
-      assert(scratch_size <= 12 * 1024);
+static uint32_t
+compute_get_gen75_per_thread_scratch_size(const struct ilo_dev *dev,
+                                          const struct ilo_state_compute_info *info,
+                                          uint8_t *per_thread_space)
+{
+   ILO_DEV_ASSERT(dev, 7.5, 8);
 
-      return (scratch_size > 1024) ?
-         (scratch_size - 1) / 1024 : 0;
+   /*
+    * From the Haswell PRM, volume 2b, page 407:
+    *
+    *     "(Per Thread Scratch Space)
+    *      [0,10]  Indicating [2k bytes, 2 Mbytes]"
+    *
+    *     "Note: The scratch space should be declared as 2x the desired
+    *      scratch space. The stack will start at the half-way point instead
+    *      of the end. The upper half of scratch space will not be accessed
+    *      and so does not have to be allocated in memory."
+    *
+    * From the Broadwell PRM, volume 2a, page 450:
+    *
+    *     "(Per Thread Scratch Space)
+    *      [0,11]  indicating [1k bytes, 2 Mbytes]"
+    */
+   assert(info->per_thread_scratch_size <=
+         ((ilo_dev_gen(dev) >= ILO_GEN(8)) ? 2 : 1) * 1024 * 1024);
+
+   if (!info->per_thread_scratch_size) {
+      *per_thread_space = 0;
+      return 0;
    }
+
+   /* next power of two, starting from 1KB */
+   *per_thread_space = (info->per_thread_scratch_size > 1024) ?
+      (util_last_bit(info->per_thread_scratch_size - 1) - 10) : 0;
+
+   return 1 << (10 + *per_thread_space);
 }
 
 static bool
@@ -250,7 +281,8 @@ compute_set_gen6_MEDIA_VFE_STATE(struct ilo_state_compute *compute,
                                  const struct ilo_state_compute_info *info)
 {
    struct compute_urb_configuration urb;
-   uint8_t scratch_space;
+   uint32_t per_thread_size;
+   uint8_t per_thread_space;
 
    uint32_t dw1, dw2, dw4;
 
@@ -260,9 +292,16 @@ compute_set_gen6_MEDIA_VFE_STATE(struct ilo_state_compute *compute,
        !compute_validate_gen6(dev, info, &urb))
       return false;
 
-   scratch_space = compute_get_gen6_scratch_space(dev, info);
+   if (ilo_dev_gen(dev) >= ILO_GEN(7.5)) {
+      per_thread_size = compute_get_gen75_per_thread_scratch_size(dev,
+            info, &per_thread_space);
+   } else {
+      per_thread_size = compute_get_gen6_per_thread_scratch_size(dev,
+            info, &per_thread_space);
+   }
 
-   dw1 = scratch_space << GEN6_VFE_DW1_SCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw1 = per_thread_space << GEN6_VFE_DW1_SCRATCH_SPACE_PER_THREAD__SHIFT;
+
    dw2 = (dev->thread_count - 1) << GEN6_VFE_DW2_MAX_THREADS__SHIFT |
          urb.urb_entry_count << GEN6_VFE_DW2_URB_ENTRY_COUNT__SHIFT |
          GEN6_VFE_DW2_RESET_GATEWAY_TIMER |
@@ -280,6 +319,8 @@ compute_set_gen6_MEDIA_VFE_STATE(struct ilo_state_compute *compute,
    compute->vfe[0] = dw1;
    compute->vfe[1] = dw2;
    compute->vfe[2] = dw4;
+
+   compute->scratch_size = per_thread_size * dev->thread_count;
 
    return true;
 }

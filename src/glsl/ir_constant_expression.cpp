@@ -36,6 +36,7 @@
 #include <math.h>
 #include "main/core.h" /* for MAX2, MIN2, CLAMP */
 #include "util/rounding.h" /* for _mesa_roundeven */
+#include "util/half_float.h"
 #include "ir.h"
 #include "glsl_types.h"
 #include "program/hash_table.h"

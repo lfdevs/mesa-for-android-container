@@ -4,6 +4,8 @@ env = env.Clone()
 
 env.Append(CPPPATH = [
     '#/src',
+    '#/src/glsl',
+    '#/src/glsl/nir',
     '#/src/mapi',
     '#/src/mesa',
     '#/src/mesa/main',

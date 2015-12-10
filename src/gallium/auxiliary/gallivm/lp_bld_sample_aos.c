@@ -593,7 +593,8 @@ lp_build_sample_fetch_image_nearest(struct lp_build_sample_context *bld,
                                       TRUE,
                                       data_ptr, offset,
                                       x_subcoord,
-                                      y_subcoord);
+                                      y_subcoord,
+                                      bld->cache);
    }
 
    *colors = rgba8;
@@ -933,7 +934,8 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
                                                TRUE,
                                                data_ptr, offset[k][j][i],
                                                x_subcoord[i],
-                                               y_subcoord[j]);
+                                               y_subcoord[j],
+                                               bld->cache);
             }
 
             neighbors[k][j][i] = rgba8;

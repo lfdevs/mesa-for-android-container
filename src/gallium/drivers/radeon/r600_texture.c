@@ -268,6 +268,7 @@ static void r600_texture_destroy(struct pipe_screen *screen,
 	if (rtex->cmask_buffer != &rtex->resource) {
 	    pipe_resource_reference((struct pipe_resource**)&rtex->cmask_buffer, NULL);
 	}
+	pipe_resource_reference((struct pipe_resource**)&rtex->dcc_buffer, NULL);
 	pb_reference(&resource->buf, NULL);
 	FREE(rtex);
 }
@@ -482,6 +483,25 @@ static void r600_texture_alloc_cmask_separate(struct r600_common_screen *rscreen
 		rtex->cb_color_info |= EG_S_028C70_FAST_CLEAR(1);
 }
 
+static void vi_texture_alloc_dcc_separate(struct r600_common_screen *rscreen,
+					      struct r600_texture *rtex)
+{
+	if (rscreen->debug_flags & DBG_NO_DCC)
+		return;
+
+	rtex->dcc_buffer = (struct r600_resource *)
+		r600_aligned_buffer_create(&rscreen->b, PIPE_BIND_CUSTOM,
+				   PIPE_USAGE_DEFAULT, rtex->surface.dcc_size, rtex->surface.dcc_alignment);
+	if (rtex->dcc_buffer == NULL) {
+		return;
+	}
+
+	r600_screen_clear_buffer(rscreen, &rtex->dcc_buffer->b.b, 0, rtex->surface.dcc_size,
+				 0xFFFFFFFF, true);
+
+	rtex->cb_color_info |= VI_S_028C70_DCC_ENABLE(1);
+}
+
 static unsigned r600_texture_get_htile_size(struct r600_common_screen *rscreen,
 					    struct r600_texture *rtex)
 {
@@ -621,6 +641,8 @@ r600_texture_create_object(struct pipe_screen *screen,
 				return NULL;
 			}
 		}
+		if (rtex->surface.dcc_size)
+			vi_texture_alloc_dcc_separate(rscreen, rtex);
 	}
 
 	/* Now create the backing buffer. */
@@ -1097,7 +1119,7 @@ static const struct u_resource_vtbl r600_texture_vtbl =
 	NULL,				/* get_handle */
 	r600_texture_destroy,		/* resource_destroy */
 	r600_texture_transfer_map,	/* transfer_map */
-	NULL,				/* transfer_flush_region */
+	u_default_transfer_flush_region, /* transfer_flush_region */
 	r600_texture_transfer_unmap,	/* transfer_unmap */
 	NULL				/* transfer_inline_write */
 };
@@ -1219,15 +1241,90 @@ static void evergreen_set_clear_color(struct r600_texture *rtex,
 	memcpy(rtex->color_clear_value, &uc, 2 * sizeof(uint32_t));
 }
 
+static void vi_get_fast_clear_parameters(enum pipe_format surface_format,
+					 const union pipe_color_union *color,
+					 uint32_t* reset_value,
+					 bool* clear_words_needed)
+{
+	bool values[4] = {};
+	int i;
+	bool main_value = false;
+	bool extra_value = false;
+	int extra_channel;
+	const struct util_format_description *desc = util_format_description(surface_format);
+
+	*clear_words_needed = true;
+	*reset_value = 0x20202020U;
+
+	/* If we want to clear without needing a fast clear eliminate step, we
+	 * can set each channel to 0 or 1 (or 0/max for integer formats). We
+	 * have two sets of flags, one for the last or first channel(extra) and
+	 * one for the other channels(main).
+	 */
+
+	if (surface_format == PIPE_FORMAT_R11G11B10_FLOAT ||
+	    surface_format == PIPE_FORMAT_B5G6R5_UNORM ||
+	    surface_format == PIPE_FORMAT_B5G6R5_SRGB) {
+		extra_channel = -1;
+	} else if (desc->layout == UTIL_FORMAT_LAYOUT_PLAIN) {
+		if(r600_translate_colorswap(surface_format) <= 1)
+			extra_channel = desc->nr_channels - 1;
+		else
+			extra_channel = 0;
+	} else
+		return;
+
+	for (i = 0; i < 4; ++i) {
+		int index = desc->swizzle[i] - UTIL_FORMAT_SWIZZLE_X;
+
+		if (desc->swizzle[i] < UTIL_FORMAT_SWIZZLE_X ||
+		    desc->swizzle[i] > UTIL_FORMAT_SWIZZLE_W)
+			continue;
+
+		if (util_format_is_pure_sint(surface_format)) {
+			values[i] = color->i[i] != 0;
+			if (color->i[i] != 0 && color->i[i] != INT32_MAX)
+				return;
+		} else if (util_format_is_pure_uint(surface_format)) {
+			values[i] = color->ui[i] != 0U;
+			if (color->ui[i] != 0U && color->ui[i] != UINT32_MAX)
+				return;
+		} else {
+			values[i] = color->f[i] != 0.0F;
+			if (color->f[i] != 0.0F && color->f[i] != 1.0F)
+				return;
+		}
+
+		if (index == extra_channel)
+			extra_value = values[i];
+		else
+			main_value = values[i];
+	}
+
+	for (int i = 0; i < 4; ++i)
+		if (values[i] != main_value &&
+		    desc->swizzle[i] - UTIL_FORMAT_SWIZZLE_X != extra_channel &&
+		    desc->swizzle[i] >= UTIL_FORMAT_SWIZZLE_X &&
+		    desc->swizzle[i] <= UTIL_FORMAT_SWIZZLE_W)
+			return;
+
+	*clear_words_needed = false;
+	if (main_value)
+		*reset_value |= 0x80808080U;
+
+	if (extra_value)
+		*reset_value |= 0x40404040U;
+}
+
 void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 				   struct pipe_framebuffer_state *fb,
 				   struct r600_atom *fb_state,
-				   unsigned *buffers,
+				   unsigned *buffers, unsigned *dirty_cbufs,
 				   const union pipe_color_union *color)
 {
 	int i;
 
-	if (rctx->current_render_cond)
+	if (rctx->render_cond)
 		return;
 
 	for (i = 0; i < fb->nr_cbufs; i++) {
@@ -1272,18 +1369,38 @@ void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 			continue;
 		}
 
-		/* ensure CMASK is enabled */
-		r600_texture_alloc_cmask_separate(rctx->screen, tex);
-		if (tex->cmask.size == 0) {
-			continue;
+		if (tex->dcc_buffer) {
+			uint32_t reset_value;
+			bool clear_words_needed;
+
+			if (rctx->screen->debug_flags & DBG_NO_DCC_CLEAR)
+				continue;
+
+			vi_get_fast_clear_parameters(fb->cbufs[i]->format, color, &reset_value, &clear_words_needed);
+
+			rctx->clear_buffer(&rctx->b, &tex->dcc_buffer->b.b,
+					0, tex->surface.dcc_size, reset_value, true);
+
+			if (clear_words_needed)
+				tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
+		} else {
+			/* ensure CMASK is enabled */
+			r600_texture_alloc_cmask_separate(rctx->screen, tex);
+			if (tex->cmask.size == 0) {
+				continue;
+			}
+
+			/* Do the fast clear. */
+			rctx->clear_buffer(&rctx->b, &tex->cmask_buffer->b.b,
+					tex->cmask.offset, tex->cmask.size, 0, true);
+
+			tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
 		}
 
-		/* Do the fast clear. */
 		evergreen_set_clear_color(tex, fb->cbufs[i]->format, color);
-		rctx->clear_buffer(&rctx->b, &tex->cmask_buffer->b.b,
-				   tex->cmask.offset, tex->cmask.size, 0, true);
 
-		tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
+		if (dirty_cbufs)
+			*dirty_cbufs |= 1 << i;
 		rctx->set_atom_dirty(rctx, fb_state, true);
 		*buffers &= ~clear_bit;
 	}

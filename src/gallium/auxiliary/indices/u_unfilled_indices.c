@@ -111,14 +111,15 @@ static unsigned nr_lines( unsigned prim,
                               
 
 
-int u_unfilled_translator( unsigned prim,
-                        unsigned in_index_size,
-                        unsigned nr,
-                        unsigned unfilled_mode,
-                        unsigned *out_prim,
-                        unsigned *out_index_size,
-                        unsigned *out_nr,
-                        u_translate_func *out_translate )
+enum indices_mode
+u_unfilled_translator(unsigned prim,
+                      unsigned in_index_size,
+                      unsigned nr,
+                      unsigned unfilled_mode,
+                      unsigned *out_prim,
+                      unsigned *out_index_size,
+                      unsigned *out_nr,
+                      u_translate_func *out_translate)
 {
    unsigned in_idx;
    unsigned out_idx;
@@ -170,14 +171,15 @@ int u_unfilled_translator( unsigned prim,
  * different front/back fill modes, that can be handled with the
  * 'draw' module.
  */
-int u_unfilled_generator( unsigned prim,
-                          unsigned start,
-                          unsigned nr,
-                          unsigned unfilled_mode,
-                          unsigned *out_prim,
-                          unsigned *out_index_size,
-                          unsigned *out_nr,
-                          u_generate_func *out_generate )
+enum indices_mode
+u_unfilled_generator(unsigned prim,
+                     unsigned start,
+                     unsigned nr,
+                     unsigned unfilled_mode,
+                     unsigned *out_prim,
+                     unsigned *out_index_size,
+                     unsigned *out_nr,
+                     u_generate_func *out_generate)
 {
    unsigned out_idx;
 

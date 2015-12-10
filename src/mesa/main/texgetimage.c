@@ -289,8 +289,7 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
    uint8_t rebaseSwizzle[4];
 
    /* Decompress into temp float buffer, then pack into user buffer */
-   tempImage = malloc(width * height * depth
-                                  * 4 * sizeof(GLfloat));
+   tempImage = malloc(width * height * depth * 4 * sizeof(GLfloat));
    if (!tempImage) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage()");
       return;
@@ -635,7 +634,7 @@ get_tex_memcpy(struct gl_context *ctx,
        texBaseFormat == texImage->_BaseFormat) {
       memCopy = _mesa_format_matches_format_and_type(texImage->TexFormat,
                                                      format, type,
-                                                     ctx->Pack.SwapBytes);
+                                                     ctx->Pack.SwapBytes, NULL);
    }
 
    if (depth > 1) {

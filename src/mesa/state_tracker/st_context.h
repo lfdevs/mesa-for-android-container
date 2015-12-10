@@ -46,6 +46,7 @@ struct draw_stage;
 struct gen_mipmap_state;
 struct st_context;
 struct st_fragment_program;
+struct st_perf_monitor_group;
 struct u_upload_mgr;
 
 
@@ -98,6 +99,15 @@ struct st_context
    boolean has_etc1;
    boolean has_etc2;
    boolean prefer_blit_based_texture_transfer;
+   boolean force_persample_in_shader;
+   boolean has_shareable_shaders;
+
+   /**
+    * If a shader can be created when we get its source.
+    * This means it has only 1 variant, not counting glBitmap and
+    * glDrawPixels.
+    */
+   boolean shader_has_one_variant[MESA_SHADER_STAGES];
 
    boolean needs_texcoord_semantic;
    boolean apply_texture_swizzle_to_border_color;
@@ -161,15 +171,8 @@ struct st_context
    struct gl_texture_object *default_texture;
 
    struct {
-      struct gl_program_cache *cache;
-      struct st_fragment_program *program;  /**< cur pixel transfer prog */
-      GLuint xfer_prog_sn;  /**< pixel xfer program serial no. */
-      GLuint user_prog_sn;  /**< user fragment program serial no. */
-      struct st_fragment_program *combined_prog;
-      GLuint combined_prog_sn;
       struct pipe_resource *pixelmap_texture;
       struct pipe_sampler_view *pixelmap_sampler_view;
-      boolean pixelmap_enabled;  /**< use the pixelmap texture? */
    } pixel_xfer;
 
    /** for glBitmap */
@@ -183,7 +186,7 @@ struct st_context
 
    /** for glDraw/CopyPixels */
    struct {
-      struct gl_fragment_program *shaders[4];
+      void *zs_shaders[4];
       void *vert_shaders[2];   /**< ureg shaders */
    } drawpix;
 
@@ -215,6 +218,8 @@ struct st_context
    int32_t read_stamp;
 
    struct st_config_options options;
+
+   struct st_perf_monitor_group *perfmon;
 };
 
 

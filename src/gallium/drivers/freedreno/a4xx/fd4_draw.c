@@ -47,6 +47,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd4_emit *emit)
 {
 	const struct pipe_draw_info *info = emit->info;
+	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
 
 	if (!(fd4_emit_get_vp(emit) && fd4_emit_get_fp(emit)))
 		return;
@@ -64,7 +65,14 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
 			info->restart_index : 0xffffffff);
 
+	/* points + psize -> spritelist: */
+	if (ctx->rasterizer->point_size_per_vertex &&
+			fd4_emit_get_vp(emit)->writes_psize &&
+			(info->mode == PIPE_PRIM_POINTS))
+		primtype = DI_PT_POINTLIST_PSIZE;
+
 	fd4_draw_emit(ctx, ring,
+			primtype,
 			emit->key.binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
 			info);
 }
@@ -118,11 +126,12 @@ fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 		.key = {
 			/* do binning pass first: */
 			.binning_pass = true,
-			.color_two_side = ctx->rasterizer ? ctx->rasterizer->light_twoside : false,
-			.rasterflat = ctx->rasterizer && ctx->rasterizer->flatshade,
+			.color_two_side = ctx->rasterizer->light_twoside,
+			.rasterflat = ctx->rasterizer->flatshade,
 			// TODO set .half_precision based on render target format,
 			// ie. float16 and smaller use half, float32 use full..
 			.half_precision = !!(fd_mesa_debug & FD_DBG_FRAGHALF),
+			.ucp_enables = ctx->rasterizer->clip_plane_enable,
 			.has_per_samp = (fd4_ctx->fsaturate || fd4_ctx->vsaturate),
 			.vsaturate_s = fd4_ctx->vsaturate_s,
 			.vsaturate_t = fd4_ctx->vsaturate_t,
@@ -131,9 +140,9 @@ fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 			.fsaturate_t = fd4_ctx->fsaturate_t,
 			.fsaturate_r = fd4_ctx->fsaturate_r,
 		},
-		.rasterflat = ctx->rasterizer && ctx->rasterizer->flatshade,
-		.sprite_coord_enable = ctx->rasterizer ? ctx->rasterizer->sprite_coord_enable : false,
-		.sprite_coord_mode = ctx->rasterizer ? ctx->rasterizer->sprite_coord_mode : false,
+		.rasterflat = ctx->rasterizer->flatshade,
+		.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
+		.sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
 	};
 	unsigned dirty;
 
@@ -262,8 +271,7 @@ fd4_clear(struct fd_context *ctx, unsigned buffers,
 		mrt_comp[i] = (buffers & (PIPE_CLEAR_COLOR0 << i)) ? 0xf : 0x0;
 
 		OUT_PKT0(ring, REG_A4XX_RB_MRT_CONTROL(i), 1);
-		OUT_RING(ring, A4XX_RB_MRT_CONTROL_FASTCLEAR |
-				A4XX_RB_MRT_CONTROL_B11 |
+		OUT_RING(ring, A4XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY) |
 				A4XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf));
 
 		OUT_PKT0(ring, REG_A4XX_RB_MRT_BLEND_CONTROL(i), 1);

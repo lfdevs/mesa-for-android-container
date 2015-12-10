@@ -41,7 +41,9 @@ enum gen_eu_urb_op {
     GEN7_MSG_URB_READ_OWORD				      = 0x3,
     GEN7_MSG_URB_ATOMIC_MOV				      = 0x4,
     GEN7_MSG_URB_ATOMIC_INC				      = 0x5,
+    GEN75_MSG_URB_ATOMIC_ADD				      = 0x6,
     GEN8_MSG_URB_SIMD8_WRITE				      = 0x7,
+    GEN8_MSG_URB_SIMD8_READ				      = 0x8,
 };
 
 enum gen_eu_pi_simd {
@@ -137,6 +139,7 @@ enum gen_eu_dp_op {
     GEN75_MSG_DP_RC_MEMORY_FENCE			      = 0x7,
     GEN75_MSG_DP_RC_MEDIA_BLOCK_WRITE			      = 0xa,
     GEN75_MSG_DP_RC_RT_WRITE				      = 0xc,
+    GEN8_MSG_DP_RC_RT_READ				      = 0xd,
     GEN75_MSG_DP_CC_OWORD_BLOCK_READ			      = 0x0,
     GEN75_MSG_DP_CC_UNALIGNED_OWORD_BLOCK_READ		      = 0x1,
     GEN75_MSG_DP_CC_OWORD_DUAL_BLOCK_READ		      = 0x2,

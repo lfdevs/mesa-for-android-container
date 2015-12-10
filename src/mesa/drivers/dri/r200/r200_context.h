@@ -42,7 +42,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "main/macros.h"
 #include "main/mtypes.h"
-#include "main/colormac.h"
 #include "r200_reg.h"
 #include "r200_vertprog.h"
 

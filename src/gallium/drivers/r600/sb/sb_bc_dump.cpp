@@ -27,6 +27,7 @@
 #include "sb_bc.h"
 #include "sb_shader.h"
 #include "sb_pass.h"
+#include "eg_sq.h" // V_SQ_CF_INDEX_0/1
 
 namespace r600_sb {
 
@@ -182,6 +183,9 @@ void bc_dump::dump(cf_node& n) {
 
 		if (n.bc.pop_count)
 			s << " POP:" << n.bc.pop_count;
+
+		if (n.bc.count && (n.bc.op_ptr->flags & CF_EMIT))
+			s << " STREAM" << n.bc.count;
 	}
 
 	if (!n.bc.barrier)
@@ -351,6 +355,14 @@ void bc_dump::dump(alu_node& n) {
 			s << "  " << vec_bs[n.bc.bank_swizzle];
 	}
 
+	if (ctx.is_cayman()) {
+		if (n.bc.op == ALU_OP1_MOVA_INT) {
+			static const char *mova_str[] = { " AR_X", " PC", " CF_IDX0", " CF_IDX1",
+				" Unknown MOVA_INT dest" };
+			s << mova_str[std::min(n.bc.dst_gpr, 4u)];  // CM_V_SQ_MOVA_DST_AR_*
+		}
+	}
+
 	sblog << s.str() << "\n";
 }
 
@@ -447,9 +459,9 @@ void bc_dump::dump(fetch_node& n) {
 		if (n.bc.fetch_whole_quad)
 			s << " FWQ";
 		if (ctx.is_egcm() && n.bc.resource_index_mode)
-			s << " RIM:SQ_CF_INDEX_" << n.bc.resource_index_mode;
+			s << " RIM:SQ_CF_INDEX_" << (n.bc.resource_index_mode - V_SQ_CF_INDEX_0);
 		if (ctx.is_egcm() && n.bc.sampler_index_mode)
-			s << " SID:SQ_CF_INDEX_" << n.bc.sampler_index_mode;
+			s << " SID:SQ_CF_INDEX_" << (n.bc.sampler_index_mode - V_SQ_CF_INDEX_0);
 
 		s << " UCF:" << n.bc.use_const_fields
 				<< " FMT(DTA:" << n.bc.data_format
@@ -466,6 +478,10 @@ void bc_dump::dump(fetch_node& n) {
 		for (unsigned k = 0; k < 3; ++k)
 			if (n.bc.offset[k])
 				s << " O" << chans[k] << ":" << n.bc.offset[k];
+		if (ctx.is_egcm() && n.bc.resource_index_mode)
+			s << " RIM:SQ_CF_INDEX_" << (n.bc.resource_index_mode - V_SQ_CF_INDEX_0);
+		if (ctx.is_egcm() && n.bc.sampler_index_mode)
+			s << " SID:SQ_CF_INDEX_" << (n.bc.sampler_index_mode - V_SQ_CF_INDEX_0);
 	}
 
 	sblog << s.str() << "\n";

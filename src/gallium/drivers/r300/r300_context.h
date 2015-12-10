@@ -705,7 +705,7 @@ r300_get_nonnull_cb(struct pipe_framebuffer_state *fb, unsigned i)
 }
 
 struct pipe_context* r300_create_context(struct pipe_screen* screen,
-                                         void *priv);
+                                         void *priv, unsigned flags);
 
 /* Context initialization. */
 struct draw_stage* r300_draw_stage(struct r300_context* r300);

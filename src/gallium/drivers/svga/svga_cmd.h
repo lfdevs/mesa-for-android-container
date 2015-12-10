@@ -47,6 +47,7 @@ struct svga_winsys_context;
 struct svga_winsys_buffer;
 struct svga_winsys_surface;
 struct svga_winsys_gb_shader;
+struct svga_winsys_gb_query;
 
 
 /*
@@ -229,12 +230,6 @@ SVGA3D_SetShader(struct svga_winsys_context *swc,
  */
 
 enum pipe_error
-SVGA3D_DefineGBShader(struct svga_winsys_context *swc,
-                      struct svga_winsys_gb_shader *gbshader,
-                      SVGA3dShaderType type,
-                      uint32 sizeInBytes);
-
-enum pipe_error
 SVGA3D_BindGBShader(struct svga_winsys_context *swc,
                     struct svga_winsys_gb_shader *gbshader);
 
@@ -244,24 +239,8 @@ SVGA3D_SetGBShader(struct svga_winsys_context *swc,
                    struct svga_winsys_gb_shader *gbshader);
 
 enum pipe_error
-SVGA3D_DestroyGBShader(struct svga_winsys_context *swc,
-                       struct svga_winsys_gb_shader *gbshader);
-
-enum pipe_error
 SVGA3D_BindGBSurface(struct svga_winsys_context *swc,
                      struct svga_winsys_surface *surface);
-
-enum pipe_error
-SVGA3D_DefineGBContext(struct svga_winsys_context *swc);
-
-enum pipe_error
-SVGA3D_DestroyGBContext(struct svga_winsys_context *swc);
-
-enum pipe_error
-SVGA3D_BindGBContext(struct svga_winsys_context *swc);
-
-enum pipe_error
-SVGA3D_InvalidateGBContext(struct svga_winsys_context *swc);
 
 enum pipe_error
 SVGA3D_UpdateGBImage(struct svga_winsys_context *swc,
@@ -326,5 +305,337 @@ enum pipe_error
 SVGA3D_WaitForQuery(struct svga_winsys_context *swc,
                     SVGA3dQueryType type,
                     struct svga_winsys_buffer *buffer);
+
+
+
+/*
+ * VGPU10 commands
+ */
+
+enum pipe_error
+SVGA3D_vgpu10_PredCopyRegion(struct svga_winsys_context *swc,
+                             struct svga_winsys_surface *dstSurf,
+                             uint32 dstSubResource,
+                             struct svga_winsys_surface *srcSurf,
+                             uint32 srcSubResource,
+                             const SVGA3dCopyBox *box);
+
+enum pipe_error
+SVGA3D_vgpu10_PredCopy(struct svga_winsys_context *swc,
+                       struct svga_winsys_surface *dstSurf,
+                       struct svga_winsys_surface *srcSurf);
+
+enum pipe_error
+SVGA3D_vgpu10_SetViewports(struct svga_winsys_context *swc,
+                           unsigned count, const SVGA3dViewport *viewports);
+
+enum pipe_error
+SVGA3D_vgpu10_SetShader(struct svga_winsys_context *swc,
+                        SVGA3dShaderType type,
+                        struct svga_winsys_gb_shader *gbshader,
+                        SVGA3dShaderId shaderId);
+
+enum pipe_error
+SVGA3D_vgpu10_SetShaderResources(struct svga_winsys_context *swc,
+                                 SVGA3dShaderType type,
+                                 uint32 startView,
+                                 unsigned count,
+                                 const SVGA3dShaderResourceViewId ids[],
+                                 struct svga_winsys_surface **views);
+
+enum pipe_error
+SVGA3D_vgpu10_SetSamplers(struct svga_winsys_context *swc,
+                          unsigned count,
+                          uint32 startSampler,
+                          SVGA3dShaderType type,
+                          const SVGA3dSamplerId *samplerIds);
+
+enum pipe_error
+SVGA3D_vgpu10_SetRenderTargets(struct svga_winsys_context *swc,
+                               unsigned color_count,
+                               struct pipe_surface **color_surfs,
+                               struct pipe_surface *depth_stencil_surf);
+
+enum pipe_error
+SVGA3D_vgpu10_SetBlendState(struct svga_winsys_context *swc,
+                            SVGA3dBlendStateId blendId,
+                            const float *blendFactor, uint32 sampleMask);
+
+enum pipe_error
+SVGA3D_vgpu10_SetDepthStencilState(struct svga_winsys_context *swc,
+                                   SVGA3dDepthStencilStateId depthStencilId,
+                                   uint32 stencilRef);
+
+enum pipe_error
+SVGA3D_vgpu10_SetRasterizerState(struct svga_winsys_context *swc,
+                                 SVGA3dRasterizerStateId rasterizerId);
+
+enum pipe_error
+SVGA3D_vgpu10_SetPredication(struct svga_winsys_context *swc,
+                             SVGA3dQueryId queryId,
+                             uint32 predicateValue);
+
+enum pipe_error
+SVGA3D_vgpu10_SetSOTargets(struct svga_winsys_context *swc,
+                           unsigned count, const SVGA3dSoTarget *targets,
+                           struct svga_winsys_surface **surfaces);
+
+enum pipe_error
+SVGA3D_vgpu10_SetScissorRects(struct svga_winsys_context *swc,
+                              unsigned count,
+                              const SVGASignedRect *rects);
+
+enum pipe_error
+SVGA3D_vgpu10_SetStreamOutput(struct svga_winsys_context *swc,
+                              SVGA3dStreamOutputId soid);
+
+enum pipe_error
+SVGA3D_vgpu10_Draw(struct svga_winsys_context *swc,
+                   uint32 vertexCount, uint32 startVertexLocation);
+
+enum pipe_error
+SVGA3D_vgpu10_DrawIndexed(struct svga_winsys_context *swc,
+                          uint32 indexCount, uint32 startIndexLocation,
+                          int32 baseVertexLocation);
+
+enum pipe_error
+SVGA3D_vgpu10_DrawInstanced(struct svga_winsys_context *swc,
+                            uint32 vertexCountPerInstance,
+                            uint32 instanceCount,
+                            uint32 startVertexLocation,
+                            uint32 startInstanceLocation);
+
+enum pipe_error
+SVGA3D_vgpu10_DrawIndexedInstanced(struct svga_winsys_context *swc,
+                                   uint32 indexCountPerInstance,
+                                   uint32 instanceCount,
+                                   uint32 startIndexLocation,
+                                   int32  baseVertexLocation,
+                                   uint32 startInstanceLocation);
+
+enum pipe_error
+SVGA3D_vgpu10_DrawAuto(struct svga_winsys_context *swc);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineQuery(struct svga_winsys_context *swc,
+                          SVGA3dQueryId queryId,
+                          SVGA3dQueryType type,
+                          SVGA3dDXQueryFlags flags);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyQuery(struct svga_winsys_context *swc,
+                           SVGA3dQueryId queryId);
+
+enum pipe_error
+SVGA3D_vgpu10_BindQuery(struct svga_winsys_context *swc,
+                        struct svga_winsys_gb_query *gbQuery,
+                        SVGA3dQueryId queryId);
+
+enum pipe_error
+SVGA3D_vgpu10_SetQueryOffset(struct svga_winsys_context *swc,
+                             SVGA3dQueryId queryId,
+                             uint32 mobOffset);
+
+enum pipe_error
+SVGA3D_vgpu10_BeginQuery(struct svga_winsys_context *swc,
+                         SVGA3dQueryId queryId);
+
+enum pipe_error
+SVGA3D_vgpu10_EndQuery(struct svga_winsys_context *swc,
+                       SVGA3dQueryId queryId);
+
+enum pipe_error
+SVGA3D_vgpu10_ClearRenderTargetView(struct svga_winsys_context *swc,
+                                    struct pipe_surface *color_surf,
+                                    const float *rgba);
+
+enum pipe_error
+SVGA3D_vgpu10_ClearDepthStencilView(struct svga_winsys_context *swc,
+                                    struct pipe_surface *ds_surf,
+                                    uint16 flags, uint16 stencil, float depth);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineShaderResourceView(struct svga_winsys_context *swc,
+                             SVGA3dShaderResourceViewId shaderResourceViewId,
+                             struct svga_winsys_surface *surf,
+                             SVGA3dSurfaceFormat format,
+                             SVGA3dResourceType resourceDimension,
+                             const SVGA3dShaderResourceViewDesc *desc);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyShaderResourceView(struct svga_winsys_context *swc,
+                            SVGA3dShaderResourceViewId shaderResourceViewId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineRenderTargetView(struct svga_winsys_context *swc,
+                                  SVGA3dRenderTargetViewId renderTargetViewId,
+                                  struct svga_winsys_surface *surface,
+                                  SVGA3dSurfaceFormat format,
+                                  SVGA3dResourceType resourceDimension,
+                                  const SVGA3dRenderTargetViewDesc *desc);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyRenderTargetView(struct svga_winsys_context *swc,
+                                SVGA3dRenderTargetViewId renderTargetViewId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineDepthStencilView(struct svga_winsys_context *swc,
+                                  SVGA3dDepthStencilViewId depthStencilViewId,
+                                  struct svga_winsys_surface *surface,
+                                  SVGA3dSurfaceFormat format,
+                                  SVGA3dResourceType resourceDimension,
+                                  const SVGA3dRenderTargetViewDesc *desc);
+
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyDepthStencilView(struct svga_winsys_context *swc,
+                                SVGA3dDepthStencilViewId depthStencilViewId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineElementLayout(struct svga_winsys_context *swc,
+                               unsigned count,
+                               SVGA3dElementLayoutId elementLayoutId,
+                               const SVGA3dInputElementDesc *elements);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyElementLayout(struct svga_winsys_context *swc,
+                                   SVGA3dElementLayoutId elementLayoutId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineBlendState(struct svga_winsys_context *swc,
+                               SVGA3dBlendStateId blendId,
+                               uint8 alphaToCoverageEnable,
+                               uint8 independentBlendEnable,
+                               const SVGA3dDXBlendStatePerRT *perRT);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyBlendState(struct svga_winsys_context *swc,
+                                SVGA3dBlendStateId blendId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineDepthStencilState(struct svga_winsys_context *swc,
+                                      SVGA3dDepthStencilStateId depthStencilId,
+                                      uint8 depthEnable,
+                                      SVGA3dDepthWriteMask depthWriteMask,
+                                      SVGA3dComparisonFunc depthFunc,
+                                      uint8 stencilEnable,
+                                      uint8 frontEnable,
+                                      uint8 backEnable,
+                                      uint8 stencilReadMask,
+                                      uint8 stencilWriteMask,
+                                      uint8 frontStencilFailOp,
+                                      uint8 frontStencilDepthFailOp,
+                                      uint8 frontStencilPassOp,
+                                      SVGA3dComparisonFunc frontStencilFunc,
+                                      uint8 backStencilFailOp,
+                                      uint8 backStencilDepthFailOp,
+                                      uint8 backStencilPassOp,
+                                      SVGA3dComparisonFunc backStencilFunc);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyDepthStencilState(struct svga_winsys_context *swc,
+                                       SVGA3dDepthStencilStateId depthStencilId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineRasterizerState(struct svga_winsys_context *swc,
+                                    SVGA3dRasterizerStateId rasterizerId,
+                                    uint8 fillMode,
+                                    SVGA3dCullMode cullMode,
+                                    uint8 frontCounterClockwise,
+                                    int32 depthBias,
+                                    float depthBiasClamp,
+                                    float slopeScaledDepthBias,
+                                    uint8 depthClipEnable,
+                                    uint8 scissorEnable,
+                                    uint8 multisampleEnable,
+                                    uint8 antialiasedLineEnable,
+                                    float lineWidth,
+                                    uint8 lineStippleEnable,
+                                    uint8 lineStippleFactor,
+                                    uint16 lineStipplePattern,
+                                    uint8 provokingVertexLast);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyRasterizerState(struct svga_winsys_context *swc,
+                                     SVGA3dRasterizerStateId rasterizerId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineSamplerState(struct svga_winsys_context *swc,
+                                 SVGA3dSamplerId samplerId,
+                                 SVGA3dFilter filter,
+                                 uint8 addressU,
+                                 uint8 addressV,
+                                 uint8 addressW,
+                                 float mipLODBias,
+                                 uint8 maxAnisotropy,
+                                 uint8 comparisonFunc,
+                                 SVGA3dRGBAFloat borderColor,
+                                 float minLOD,
+                                 float maxLOD);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroySamplerState(struct svga_winsys_context *swc,
+                                  SVGA3dSamplerId samplerId);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyShader(struct svga_winsys_context *swc,
+                            SVGA3dShaderId shaderId);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineAndBindShader(struct svga_winsys_context *swc,
+                                  struct svga_winsys_gb_shader *gbshader,
+                                  SVGA3dShaderId shaderId,
+                                  SVGA3dShaderType type,
+                                  uint32 sizeInBytes);
+
+enum pipe_error
+SVGA3D_vgpu10_DefineStreamOutput(struct svga_winsys_context *swc,
+      SVGA3dStreamOutputId soid,
+      uint32 numOutputStreamEntries,
+      uint32 streamOutputStrideInBytes[SVGA3D_DX_MAX_SOTARGETS],
+      const SVGA3dStreamOutputDeclarationEntry decl[SVGA3D_MAX_STREAMOUT_DECLS]);
+
+enum pipe_error
+SVGA3D_vgpu10_DestroyStreamOutput(struct svga_winsys_context *swc,
+                                  SVGA3dStreamOutputId soid);
+
+enum pipe_error
+SVGA3D_vgpu10_ReadbackSubResource(struct svga_winsys_context *swc,
+                                  struct svga_winsys_surface *surface,
+                                  unsigned subResource);
+
+enum pipe_error
+SVGA3D_vgpu10_SetInputLayout(struct svga_winsys_context *swc,
+                             SVGA3dElementLayoutId elementLayoutId);
+
+enum pipe_error
+SVGA3D_vgpu10_SetVertexBuffers(struct svga_winsys_context *swc,
+                               unsigned count,
+                               uint32 startBuffer,
+                               const SVGA3dVertexBuffer *bufferInfo,
+                               struct svga_winsys_surface **surfaces);
+
+enum pipe_error
+SVGA3D_vgpu10_SetTopology(struct svga_winsys_context *swc,
+                          SVGA3dPrimitiveType topology);
+
+enum pipe_error
+SVGA3D_vgpu10_SetIndexBuffer(struct svga_winsys_context *swc,
+                             struct svga_winsys_surface *indexes,
+                             SVGA3dSurfaceFormat format, uint32 offset);
+
+enum pipe_error
+SVGA3D_vgpu10_SetSingleConstantBuffer(struct svga_winsys_context *swc,
+                                      unsigned slot,
+                                      SVGA3dShaderType type,
+                                      struct svga_winsys_surface *surface,
+                                      uint32 offsetInBytes,
+                                      uint32 sizeInBytes);
+
+enum pipe_error
+SVGA3D_vgpu10_UpdateSubResource(struct svga_winsys_context *swc,
+                                struct svga_winsys_surface *surface,
+                                const SVGA3dBox *box,
+                                unsigned subResource);
 
 #endif /* __SVGA3D_H__ */

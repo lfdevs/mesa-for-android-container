@@ -54,7 +54,7 @@ void radeon_dump_cs_on_lockup(struct radeon_drm_cs *cs, struct radeon_cs_context
     }
 
     memset(&args, 0, sizeof(args));
-    args.handle = csc->relocs_bo[0]->handle;
+    args.handle = csc->relocs_bo[0].bo->handle;
     for (i = 0; i < RADEON_CS_DUMP_AFTER_MS_TIMEOUT; i++) {
         usleep(1);
         lockup = drmCommandWriteRead(csc->fd, DRM_RADEON_GEM_BUSY, &args, sizeof(args));
@@ -94,15 +94,15 @@ void radeon_dump_cs_on_lockup(struct radeon_drm_cs *cs, struct radeon_cs_context
     fprintf(dump, "\n");
 
     for (i = 0; i < csc->crelocs; i++) {
-        unsigned j, ndw = (csc->relocs_bo[i]->base.size + 3) >> 2;
+        unsigned j, ndw = (csc->relocs_bo[i].bo->base.size + 3) >> 2;
 
-        ptr = radeon_bo_do_map(csc->relocs_bo[i]);
+        ptr = radeon_bo_do_map(csc->relocs_bo[i].bo);
         if (ptr) {
             fprintf(dump, "static uint32_t bo_%04d_data[%d] = {\n   ", i, ndw);
             for (j = 0; j < ndw; j++) {
                 if (j && !(j % 8)) {
                     uint32_t offset = (j - 8) << 2;
-                    fprintf(dump, "  /* [0x%08x] va[0x%016"PRIx64"] */\n   ", offset, offset + csc->relocs_bo[i]->va);
+                    fprintf(dump, "  /* [0x%08x] va[0x%016"PRIx64"] */\n   ", offset, offset + csc->relocs_bo[i].bo->va);
                 }
                 fprintf(dump, " 0x%08x,", ptr[j]);
             }
@@ -139,16 +139,16 @@ void radeon_dump_cs_on_lockup(struct radeon_drm_cs *cs, struct radeon_cs_context
     fprintf(dump, "\n");
 
     for (i = 0; i < csc->crelocs; i++) {
-        unsigned ndw = (csc->relocs_bo[i]->base.size + 3) >> 2;
+        unsigned ndw = (csc->relocs_bo[i].bo->base.size + 3) >> 2;
         uint32_t *ptr;
 
-        ptr = radeon_bo_do_map(csc->relocs_bo[i]);
+        ptr = radeon_bo_do_map(csc->relocs_bo[i].bo);
         if (ptr) {
             fprintf(dump, "    bo[%d] = bo_new(&ctx, %d, bo_%04d_data, 0x%016"PRIx64", 0x%08x);\n",
-                    i, ndw, i, csc->relocs_bo[i]->va, csc->relocs_bo[i]->base.alignment);
+                    i, ndw, i, csc->relocs_bo[i].bo->va, csc->relocs_bo[i].bo->base.alignment);
         } else {
             fprintf(dump, "    bo[%d] = bo_new(&ctx, %d, NULL, 0x%016"PRIx64", 0x%08x);\n",
-                    i, ndw, csc->relocs_bo[i]->va, csc->relocs_bo[i]->base.alignment);
+                    i, ndw, csc->relocs_bo[i].bo->va, csc->relocs_bo[i].bo->base.alignment);
         }
     }
     fprintf(dump, "\n");

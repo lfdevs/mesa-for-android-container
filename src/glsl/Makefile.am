@@ -50,12 +50,14 @@ EXTRA_DIST = tests glcpp/tests README TODO glcpp/README	\
 	nir/nir_opcodes_c.py				\
 	nir/nir_opcodes_h.py				\
 	nir/nir_opt_algebraic.py			\
+	nir/tests					\
 	SConscript
 
 include Makefile.sources
 
 TESTS = glcpp/tests/glcpp-test				\
 	glcpp/tests/glcpp-test-cr-lf			\
+        nir/tests/control_flow_tests			\
 	tests/blob-test					\
 	tests/general-ir-test				\
 	tests/optimization-test				\
@@ -70,6 +72,7 @@ noinst_LTLIBRARIES = libnir.la libglsl.la libglcpp.la
 check_PROGRAMS =					\
 	glcpp/glcpp					\
 	glsl_test					\
+	nir/tests/control_flow_tests			\
 	tests/blob-test					\
 	tests/general-ir-test				\
 	tests/sampler-types-test			\
@@ -145,9 +148,6 @@ libglsl_la_SOURCES =					\
 
 
 libnir_la_SOURCES =					\
-	glsl_types.cpp					\
-	builtin_types.cpp				\
-	glsl_symbol_table.cpp				\
 	$(NIR_FILES)					\
 	$(NIR_GENERATED_FILES)
 
@@ -157,6 +157,7 @@ glsl_compiler_SOURCES = \
 glsl_compiler_LDADD =					\
 	libglsl.la					\
 	$(top_builddir)/src/libglsl_util.la		\
+	$(top_builddir)/src/util/libmesautil.la		\
 	$(PTHREAD_LIBS)
 
 glsl_test_SOURCES = \
@@ -263,3 +264,13 @@ nir/nir_opcodes.c: nir/nir_opcodes.py nir/nir_opcodes_c.py
 nir/nir_opt_algebraic.c: nir/nir_opt_algebraic.py nir/nir_algebraic.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/nir/nir_opt_algebraic.py > $@
+
+nir_tests_control_flow_tests_SOURCES =			\
+	nir/tests/control_flow_tests.cpp
+nir_tests_control_flow_tests_CFLAGS =			\
+	$(PTHREAD_CFLAGS)
+nir_tests_control_flow_tests_LDADD =			\
+	$(top_builddir)/src/gtest/libgtest.la		\
+	$(top_builddir)/src/glsl/libnir.la		\
+	$(top_builddir)/src/util/libmesautil.la		\
+	$(PTHREAD_LIBS)

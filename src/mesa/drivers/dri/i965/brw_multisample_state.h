@@ -81,3 +81,29 @@ brw_multisample_positions_4x = 0xae2ae662;
  */
 static const uint32_t
 brw_multisample_positions_8x[] = { 0xdbb39d79, 0x3ff55117 };
+
+/**
+ * Sample positions:
+ *
+ *    0 1 2 3 4 5 6 7 8 9 a b c d e f
+ * 0   15
+ * 1                  9
+ * 2         10
+ * 3                        7
+ * 4                               13
+ * 5                1
+ * 6        4
+ * 7                          3
+ * 8 12
+ * 9                    0
+ * a            2
+ * b                            6
+ * c     11
+ * d                      5
+ * e              8
+ * f                             14
+ */
+static const uint32_t
+brw_multisample_positions_16x[] = {
+   0xc75a7599, 0xb3dbad36, 0x2c42816e, 0x10eff408
+};

@@ -135,7 +135,7 @@ ilo_context_destroy(struct pipe_context *pipe)
 }
 
 static struct pipe_context *
-ilo_context_create(struct pipe_screen *screen, void *priv)
+ilo_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
 {
    struct ilo_screen *is = ilo_screen(screen);
    struct ilo_context *ilo;

@@ -37,6 +37,10 @@
 struct ilo_shader_cache {
    struct list_head shaders;
    struct list_head changed;
+
+   int max_vs_scratch_size;
+   int max_gs_scratch_size;
+   int max_fs_scratch_size;
 };
 
 /**
@@ -121,6 +125,8 @@ ilo_shader_cache_upload(struct ilo_shader_cache *shc,
       struct ilo_shader *sh;
 
       LIST_FOR_EACH_ENTRY(sh, &shader->variants, list) {
+         int scratch_size, *cur_max;
+
          if (sh->uploaded)
             continue;
 
@@ -128,6 +134,29 @@ ilo_shader_cache_upload(struct ilo_shader_cache *shc,
                sh->kernel_size, sh->kernel);
 
          sh->uploaded = true;
+
+         switch (shader->info.type) {
+         case PIPE_SHADER_VERTEX:
+            scratch_size = ilo_state_vs_get_scratch_size(&sh->cso.vs);
+            cur_max = &shc->max_vs_scratch_size;
+            break;
+         case PIPE_SHADER_GEOMETRY:
+            scratch_size = ilo_state_gs_get_scratch_size(&sh->cso.gs);
+            cur_max = &shc->max_gs_scratch_size;
+            break;
+         case PIPE_SHADER_FRAGMENT:
+            scratch_size = ilo_state_ps_get_scratch_size(&sh->cso.ps);
+            cur_max = &shc->max_fs_scratch_size;
+            break;
+         default:
+            assert(!"unknown shader type");
+            scratch_size = 0;
+            cur_max = &shc->max_vs_scratch_size;
+            break;
+         }
+
+         if (*cur_max < scratch_size)
+            *cur_max = scratch_size;
       }
 
       list_del(&shader->list);
@@ -155,6 +184,21 @@ ilo_shader_cache_invalidate(struct ilo_shader_cache *shc)
       LIST_FOR_EACH_ENTRY(sh, &shader->variants, list)
          sh->uploaded = false;
    }
+
+   shc->max_vs_scratch_size = 0;
+   shc->max_gs_scratch_size = 0;
+   shc->max_fs_scratch_size = 0;
+}
+
+void
+ilo_shader_cache_get_max_scratch_sizes(const struct ilo_shader_cache *shc,
+                                       int *vs_scratch_size,
+                                       int *gs_scratch_size,
+                                       int *fs_scratch_size)
+{
+   *vs_scratch_size = shc->max_vs_scratch_size;
+   *gs_scratch_size = shc->max_gs_scratch_size;
+   *fs_scratch_size = shc->max_fs_scratch_size;
 }
 
 /**
@@ -578,7 +622,6 @@ init_shader_kernel(const struct ilo_shader *kernel,
    kern->grf_start = kernel->in.start_grf;
    kern->pcb_attr_count =
       (kernel->pcb.cbuf0_size + kernel->pcb.clip_state_size + 15) / 16;
-   kern->scratch_size = 0;
 }
 
 static void
@@ -602,6 +645,7 @@ init_vs(struct ilo_shader *kernel,
    init_shader_urb(kernel, state, &info.urb);
    init_shader_kernel(kernel, state, &info.kernel);
    init_shader_resource(kernel, state, &info.resource);
+   info.per_thread_scratch_size = kernel->per_thread_scratch_size;
    info.dispatch_enable = true;
    info.stats_enable = true;
 
@@ -640,6 +684,7 @@ init_gs(struct ilo_shader *kernel,
    init_shader_urb(kernel, state, &info.urb);
    init_shader_kernel(kernel, state, &info.kernel);
    init_shader_resource(kernel, state, &info.resource);
+   info.per_thread_scratch_size = kernel->per_thread_scratch_size;
    info.dispatch_enable = true;
    info.stats_enable = true;
 
@@ -664,6 +709,7 @@ init_ps(struct ilo_shader *kernel,
    init_shader_kernel(kernel, state, &info.kernel_8);
    init_shader_resource(kernel, state, &info.resource);
 
+   info.per_thread_scratch_size = kernel->per_thread_scratch_size;
    info.io.has_rt_write = true;
    info.io.posoffset = GEN6_POSOFFSET_NONE;
    info.io.attr_count = kernel->in.count;
@@ -987,15 +1033,6 @@ ilo_shader_destroy(struct ilo_shader_state *shader)
 }
 
 /**
- * Return the type (PIPE_SHADER_x) of the shader.
- */
-int
-ilo_shader_get_type(const struct ilo_shader_state *shader)
-{
-   return shader->info.type;
-}
-
-/**
  * Select a kernel for the given context.  This will compile a new kernel if
  * none of the existing kernels work with the context.
  *
@@ -1257,9 +1294,6 @@ ilo_shader_get_kernel_param(const struct ilo_shader_state *shader,
    case ILO_KERNEL_SAMPLER_COUNT:
       val = shader->info.num_samplers;
       break;
-   case ILO_KERNEL_URB_DATA_START_REG:
-      val = kernel->in.start_grf;
-      break;
    case ILO_KERNEL_SKIP_CBUF0_UPLOAD:
       val = kernel->skip_cbuf0_upload;
       break;
@@ -1311,9 +1345,6 @@ ilo_shader_get_kernel_param(const struct ilo_shader_state *shader,
    case ILO_KERNEL_VS_GEN6_SO:
       val = kernel->stream_output;
       break;
-   case ILO_KERNEL_VS_GEN6_SO_START_REG:
-      val = kernel->gs_start_grf;
-      break;
    case ILO_KERNEL_VS_GEN6_SO_POINT_OFFSET:
       val = kernel->gs_offsets[0];
       break;
@@ -1340,16 +1371,6 @@ ilo_shader_get_kernel_param(const struct ilo_shader_state *shader,
       val = kernel->bt.gen6_so_count;
       break;
 
-   case ILO_KERNEL_FS_INPUT_Z:
-   case ILO_KERNEL_FS_INPUT_W:
-      val = kernel->in.has_pos;
-      break;
-   case ILO_KERNEL_FS_OUTPUT_Z:
-      val = kernel->out.has_pos;
-      break;
-   case ILO_KERNEL_FS_USE_KILL:
-      val = kernel->has_kill;
-      break;
    case ILO_KERNEL_FS_BARYCENTRIC_INTERPOLATIONS:
       val = kernel->in.barycentric_interpolation_mode;
       break;

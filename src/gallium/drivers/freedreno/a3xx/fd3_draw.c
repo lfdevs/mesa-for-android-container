@@ -81,7 +81,9 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
 			info->restart_index : 0xffffffff);
 
-	if (ctx->rasterizer && ctx->rasterizer->point_size_per_vertex &&
+	/* points + psize -> spritelist: */
+	if (ctx->rasterizer->point_size_per_vertex &&
+			fd3_emit_get_vp(emit)->writes_psize &&
 			(info->mode == PIPE_PRIM_POINTS))
 		primtype = DI_PT_POINTLIST_PSIZE;
 
@@ -137,7 +139,7 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 		.key = {
 			/* do binning pass first: */
 			.binning_pass = true,
-			.color_two_side = ctx->rasterizer ? ctx->rasterizer->light_twoside : false,
+			.color_two_side = ctx->rasterizer->light_twoside,
 			// TODO set .half_precision based on render target format,
 			// ie. float16 and smaller use half, float32 use full..
 			.half_precision = !!(fd_mesa_debug & FD_DBG_FRAGHALF),
@@ -149,9 +151,9 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 			.fsaturate_t = fd3_ctx->fsaturate_t,
 			.fsaturate_r = fd3_ctx->fsaturate_r,
 		},
-		.rasterflat = ctx->rasterizer && ctx->rasterizer->flatshade,
-		.sprite_coord_enable = ctx->rasterizer ? ctx->rasterizer->sprite_coord_enable : 0,
-		.sprite_coord_mode = ctx->rasterizer ? ctx->rasterizer->sprite_coord_mode : false,
+		.rasterflat = ctx->rasterizer->flatshade,
+		.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
+		.sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
 	};
 	unsigned dirty;
 

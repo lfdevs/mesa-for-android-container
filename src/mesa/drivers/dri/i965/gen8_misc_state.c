@@ -29,7 +29,8 @@
 /**
  * Define the base addresses which some state is referenced from.
  */
-void gen8_upload_state_base_address(struct brw_context *brw)
+static void
+gen8_upload_state_base_address(struct brw_context *brw)
 {
    uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
    int pkt_len = brw->gen >= 9 ? 19 : 16;

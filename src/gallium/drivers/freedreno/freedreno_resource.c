@@ -27,6 +27,7 @@
  */
 
 #include "util/u_format.h"
+#include "util/u_format_rgtc.h"
 #include "util/u_format_zs.h"
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
@@ -111,11 +112,19 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
 	util_range_set_empty(&rsc->valid_buffer_range);
 }
 
-/* Currently this is only used for flushing Z32_S8 texture transfers, but
- * eventually it should handle everything.
- */
+static unsigned
+fd_resource_layer_offset(struct fd_resource *rsc,
+						 struct fd_resource_slice *slice,
+						 unsigned layer)
+{
+	if (rsc->layer_first)
+		return layer * rsc->layer_size;
+	else
+		return layer * slice->size0;
+}
+
 static void
-fd_resource_flush(struct fd_transfer *trans, const struct pipe_box *box)
+fd_resource_flush_z32s8(struct fd_transfer *trans, const struct pipe_box *box)
 {
 	struct fd_resource *rsc = fd_resource(trans->base.resource);
 	struct fd_resource_slice *slice = fd_resource_slice(rsc, trans->base.level);
@@ -123,12 +132,11 @@ fd_resource_flush(struct fd_transfer *trans, const struct pipe_box *box)
 	enum pipe_format format = trans->base.resource->format;
 
 	float *depth = fd_bo_map(rsc->bo) + slice->offset +
+		fd_resource_layer_offset(rsc, slice, trans->base.box.z) +
 		(trans->base.box.y + box->y) * slice->pitch * 4 + (trans->base.box.x + box->x) * 4;
 	uint8_t *stencil = fd_bo_map(rsc->stencil->bo) + sslice->offset +
+		fd_resource_layer_offset(rsc->stencil, sslice, trans->base.box.z) +
 		(trans->base.box.y + box->y) * sslice->pitch + trans->base.box.x + box->x;
-
-	assert(format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT ||
-		   format == PIPE_FORMAT_X32_S8X24_UINT);
 
 	if (format != PIPE_FORMAT_X32_S8X24_UINT)
 		util_format_z32_float_s8x24_uint_unpack_z_float(
@@ -140,6 +148,73 @@ fd_resource_flush(struct fd_transfer *trans, const struct pipe_box *box)
 			stencil, sslice->pitch,
 			trans->staging, trans->base.stride,
 			box->width, box->height);
+}
+
+static void
+fd_resource_flush_rgtc(struct fd_transfer *trans, const struct pipe_box *box)
+{
+	struct fd_resource *rsc = fd_resource(trans->base.resource);
+	struct fd_resource_slice *slice = fd_resource_slice(rsc, trans->base.level);
+	enum pipe_format format = trans->base.resource->format;
+
+	uint8_t *data = fd_bo_map(rsc->bo) + slice->offset +
+		fd_resource_layer_offset(rsc, slice, trans->base.box.z) +
+		((trans->base.box.y + box->y) * slice->pitch +
+		 trans->base.box.x + box->x) * rsc->cpp;
+
+	uint8_t *source = trans->staging +
+		util_format_get_nblocksy(format, box->y) * trans->base.stride +
+		util_format_get_stride(format, box->x);
+
+	switch (format) {
+	case PIPE_FORMAT_RGTC1_UNORM:
+	case PIPE_FORMAT_RGTC1_SNORM:
+	case PIPE_FORMAT_LATC1_UNORM:
+	case PIPE_FORMAT_LATC1_SNORM:
+		util_format_rgtc1_unorm_unpack_rgba_8unorm(
+				data, slice->pitch * rsc->cpp,
+				source, trans->base.stride,
+				box->width, box->height);
+		break;
+	case PIPE_FORMAT_RGTC2_UNORM:
+	case PIPE_FORMAT_RGTC2_SNORM:
+	case PIPE_FORMAT_LATC2_UNORM:
+	case PIPE_FORMAT_LATC2_SNORM:
+		util_format_rgtc2_unorm_unpack_rgba_8unorm(
+				data, slice->pitch * rsc->cpp,
+				source, trans->base.stride,
+				box->width, box->height);
+		break;
+	default:
+		assert(!"Unexpected format\n");
+		break;
+	}
+}
+
+static void
+fd_resource_flush(struct fd_transfer *trans, const struct pipe_box *box)
+{
+	enum pipe_format format = trans->base.resource->format;
+
+	switch (format) {
+	case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+	case PIPE_FORMAT_X32_S8X24_UINT:
+		fd_resource_flush_z32s8(trans, box);
+		break;
+	case PIPE_FORMAT_RGTC1_UNORM:
+	case PIPE_FORMAT_RGTC1_SNORM:
+	case PIPE_FORMAT_RGTC2_UNORM:
+	case PIPE_FORMAT_RGTC2_SNORM:
+	case PIPE_FORMAT_LATC1_UNORM:
+	case PIPE_FORMAT_LATC1_SNORM:
+	case PIPE_FORMAT_LATC2_UNORM:
+	case PIPE_FORMAT_LATC2_SNORM:
+		fd_resource_flush_rgtc(trans, box);
+		break;
+	default:
+		assert(!"Unexpected staging transfer type");
+		break;
+	}
 }
 
 static void fd_resource_transfer_flush_region(struct pipe_context *pctx,
@@ -267,20 +342,15 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 		return NULL;
 	}
 
-	if (rsc->layer_first) {
-		offset = slice->offset +
-			box->y / util_format_get_blockheight(format) * ptrans->stride +
-			box->x / util_format_get_blockwidth(format) * rsc->cpp +
-			box->z * rsc->layer_size;
-	} else {
-		offset = slice->offset +
-			box->y / util_format_get_blockheight(format) * ptrans->stride +
-			box->x / util_format_get_blockwidth(format) * rsc->cpp +
-			box->z * slice->size0;
-	}
+	offset = slice->offset +
+		box->y / util_format_get_blockheight(format) * ptrans->stride +
+		box->x / util_format_get_blockwidth(format) * rsc->cpp +
+		fd_resource_layer_offset(rsc, slice, box->z);
 
 	if (prsc->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT ||
 		prsc->format == PIPE_FORMAT_X32_S8X24_UINT) {
+		assert(trans->base.box.depth == 1);
+
 		trans->base.stride = trans->base.box.width * rsc->cpp * 2;
 		trans->staging = malloc(trans->base.stride * trans->base.box.height);
 		if (!trans->staging)
@@ -298,8 +368,10 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 				goto fail;
 
 			float *depth = (float *)(buf + slice->offset +
+				fd_resource_layer_offset(rsc, slice, box->z) +
 				box->y * slice->pitch * 4 + box->x * 4);
 			uint8_t *stencil = sbuf + sslice->offset +
+				fd_resource_layer_offset(rsc->stencil, sslice, box->z) +
 				box->y * sslice->pitch + box->x;
 
 			if (format != PIPE_FORMAT_X32_S8X24_UINT)
@@ -312,6 +384,54 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 					trans->staging, trans->base.stride,
 					stencil, sslice->pitch,
 					box->width, box->height);
+		}
+
+		buf = trans->staging;
+		offset = 0;
+	} else if (rsc->internal_format != format &&
+			   util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC) {
+		assert(trans->base.box.depth == 1);
+
+		trans->base.stride = util_format_get_stride(
+				format, trans->base.box.width);
+		trans->staging = malloc(
+				util_format_get_2d_size(format, trans->base.stride,
+										trans->base.box.height));
+		if (!trans->staging)
+			goto fail;
+
+		/* if we're not discarding the whole range (or resource), we must copy
+		 * the real data in.
+		 */
+		if (!(usage & (PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE |
+					   PIPE_TRANSFER_DISCARD_RANGE))) {
+			uint8_t *rgba8 = (uint8_t *)buf + slice->offset +
+				fd_resource_layer_offset(rsc, slice, box->z) +
+				box->y * slice->pitch * rsc->cpp + box->x * rsc->cpp;
+
+			switch (format) {
+			case PIPE_FORMAT_RGTC1_UNORM:
+			case PIPE_FORMAT_RGTC1_SNORM:
+			case PIPE_FORMAT_LATC1_UNORM:
+			case PIPE_FORMAT_LATC1_SNORM:
+				util_format_rgtc1_unorm_pack_rgba_8unorm(
+					trans->staging, trans->base.stride,
+					rgba8, slice->pitch * rsc->cpp,
+					box->width, box->height);
+				break;
+			case PIPE_FORMAT_RGTC2_UNORM:
+			case PIPE_FORMAT_RGTC2_SNORM:
+			case PIPE_FORMAT_LATC2_UNORM:
+			case PIPE_FORMAT_LATC2_SNORM:
+				util_format_rgtc2_unorm_pack_rgba_8unorm(
+					trans->staging, trans->base.stride,
+					rgba8, slice->pitch * rsc->cpp,
+					box->width, box->height);
+				break;
+			default:
+				assert(!"Unexpected format");
+				break;
+			}
 		}
 
 		buf = trans->staging;
@@ -361,7 +481,7 @@ static const struct u_resource_vtbl fd_resource_vtbl = {
 };
 
 static uint32_t
-setup_slices(struct fd_resource *rsc, uint32_t alignment)
+setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format format)
 {
 	struct pipe_resource *prsc = &rsc->base.b;
 	uint32_t level, size = 0;
@@ -379,7 +499,7 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment)
 
 		slice->pitch = width = align(width, 32);
 		slice->offset = size;
-		blocks = util_format_get_nblocks(prsc->format, width, height);
+		blocks = util_format_get_nblocks(format, width, height);
 		/* 1d array and 2d array textures must all have the same layer size
 		 * for each miplevel on a3xx. 3d textures can have different layer
 		 * sizes for high levels, but the hw auto-sizer is buggy (or at least
@@ -430,11 +550,12 @@ fd_resource_create(struct pipe_screen *pscreen,
 {
 	struct fd_resource *rsc = CALLOC_STRUCT(fd_resource);
 	struct pipe_resource *prsc = &rsc->base.b;
-	uint32_t size;
+	enum pipe_format format = tmpl->format;
+	uint32_t size, alignment;
 
 	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
-			tmpl->target, util_format_name(tmpl->format),
+			tmpl->target, util_format_name(format),
 			tmpl->width0, tmpl->height0, tmpl->depth0,
 			tmpl->array_size, tmpl->last_level, tmpl->nr_samples,
 			tmpl->usage, tmpl->bind, tmpl->flags);
@@ -451,13 +572,18 @@ fd_resource_create(struct pipe_screen *pscreen,
 	util_range_init(&rsc->valid_buffer_range);
 
 	rsc->base.vtbl = &fd_resource_vtbl;
-	if (tmpl->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
-		rsc->cpp = util_format_get_blocksize(PIPE_FORMAT_Z32_FLOAT);
-	else
-		rsc->cpp = util_format_get_blocksize(tmpl->format);
+
+	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
+		format = PIPE_FORMAT_Z32_FLOAT;
+	else if (fd_screen(pscreen)->gpu_id < 400 &&
+			 util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC)
+		format = PIPE_FORMAT_R8G8B8A8_UNORM;
+	rsc->internal_format = format;
+	rsc->cpp = util_format_get_blocksize(format);
 
 	assert(rsc->cpp);
 
+	alignment = slice_alignment(pscreen, tmpl);
 	if (is_a4xx(fd_screen(pscreen))) {
 		switch (tmpl->target) {
 		case PIPE_TEXTURE_3D:
@@ -465,11 +591,12 @@ fd_resource_create(struct pipe_screen *pscreen,
 			break;
 		default:
 			rsc->layer_first = true;
+			alignment = 1;
 			break;
 		}
 	}
 
-	size = setup_slices(rsc, slice_alignment(pscreen, tmpl));
+	size = setup_slices(rsc, alignment, format);
 
 	if (rsc->layer_first) {
 		rsc->layer_size = align(size, 4096);
@@ -548,7 +675,7 @@ fail:
 	return NULL;
 }
 
-static void fd_blitter_pipe_begin(struct fd_context *ctx);
+static void fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond);
 static void fd_blitter_pipe_end(struct fd_context *ctx);
 
 /**
@@ -570,7 +697,7 @@ fd_blitter_pipe_copy_region(struct fd_context *ctx,
 	if (!util_blitter_is_copy_supported(ctx->blitter, dst, src))
 		return false;
 
-	fd_blitter_pipe_begin(ctx);
+	fd_blitter_pipe_begin(ctx, false);
 	util_blitter_copy_texture(ctx->blitter,
 			dst, dst_level, dstx, dsty, dstz,
 			src, src_level, src_box);
@@ -612,6 +739,25 @@ fd_resource_copy_region(struct pipe_context *pctx,
 			src, src_level, src_box);
 }
 
+bool
+fd_render_condition_check(struct pipe_context *pctx)
+{
+	struct fd_context *ctx = fd_context(pctx);
+
+	if (!ctx->cond_query)
+		return true;
+
+	union pipe_query_result res = { 0 };
+	bool wait =
+		ctx->cond_mode != PIPE_RENDER_COND_NO_WAIT &&
+		ctx->cond_mode != PIPE_RENDER_COND_BY_REGION_NO_WAIT;
+
+	if (pctx->get_query_result(pctx, ctx->cond_query, wait, &res))
+			return (bool)res.u64 != ctx->cond_cond;
+
+	return true;
+}
+
 /**
  * Optimal hardware path for blitting pixels.
  * Scaling, format conversion, up- and downsampling (resolve) are allowed.
@@ -630,6 +776,9 @@ fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 		return;
 	}
 
+	if (info.render_condition_enable && !fd_render_condition_check(pctx))
+		return;
+
 	if (util_try_blit_via_copy_region(pctx, &info)) {
 		return; /* done */
 	}
@@ -646,13 +795,13 @@ fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 		return;
 	}
 
-	fd_blitter_pipe_begin(ctx);
+	fd_blitter_pipe_begin(ctx, info.render_condition_enable);
 	util_blitter_blit(ctx->blitter, &info);
 	fd_blitter_pipe_end(ctx);
 }
 
 static void
-fd_blitter_pipe_begin(struct fd_context *ctx)
+fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond)
 {
 	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vtx.vertexbuf.vb);
 	util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx.vtx);
@@ -673,6 +822,9 @@ fd_blitter_pipe_begin(struct fd_context *ctx)
 			(void **)ctx->fragtex.samplers);
 	util_blitter_save_fragment_sampler_views(ctx->blitter,
 			ctx->fragtex.num_textures, ctx->fragtex.textures);
+	if (!render_cond)
+		util_blitter_save_render_condition(ctx->blitter,
+			ctx->cond_query, ctx->cond_cond, ctx->cond_mode);
 
 	fd_hw_query_set_stage(ctx, ctx->ring, FD_STAGE_BLIT);
 }

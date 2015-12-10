@@ -202,6 +202,7 @@
 
 #define   EG_S_028C70_FAST_CLEAR(x)                       (((x) & 0x1) << 17)
 #define   SI_S_028C70_FAST_CLEAR(x)                       (((x) & 0x1) << 13)
+#define   VI_S_028C70_DCC_ENABLE(x)                       (((x) & 0x1) << 28)
 
 /*CIK+*/
 #define R_0300FC_CP_STRMOUT_CNTL		     0x0300FC

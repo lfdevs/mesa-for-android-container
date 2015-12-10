@@ -28,6 +28,7 @@
 
 
 #include "pipe/p_format.h"
+#include "svga_context.h"
 #include "svga_types.h"
 #include "svga_reg.h"
 #include "svga3d_reg.h"
@@ -35,6 +36,27 @@
 
 struct svga_screen;
 
+
+/**
+ * Vertex format flags.  These are used to specify that some vertex formats
+ * need extra processing/conversion in the vertex shader.  For example,
+ * setting the W component to 1, or swapping R/B, or converting packed uint
+ * types to signed int/snorm.
+ */
+#define VF_ADJUST_RANGE     (1 << 0)
+#define VF_W_TO_1           (1 << 1)
+#define VF_U_TO_F_CAST      (1 << 2)  /* convert uint to float */
+#define VF_I_TO_F_CAST      (1 << 3)  /* convert sint to float */
+#define VF_BGRA             (1 << 4)  /* swap R/B */
+#define VF_PUINT_TO_SNORM   (1 << 5)  /* 10_10_10_2 to snorm */
+#define VF_PUINT_TO_USCALED (1 << 6)  /* 10_10_10_2 to uscaled */
+#define VF_PUINT_TO_SSCALED (1 << 7)  /* 10_10_10_2 to sscaled */
+
+
+void
+svga_translate_vertex_format_vgpu10(enum pipe_format format,
+                                    SVGA3dSurfaceFormat *svga_format,
+                                    unsigned *vf_flags);
 
 enum SVGA3dSurfaceFormat
 svga_translate_format(struct svga_screen *ss,
@@ -51,6 +73,28 @@ svga_format_size(SVGA3dSurfaceFormat format,
                  unsigned *block_width,
                  unsigned *block_height,
                  unsigned *bytes_per_block);
+
+const char *
+svga_format_name(SVGA3dSurfaceFormat format);
+
+boolean
+svga_format_is_integer(SVGA3dSurfaceFormat format);
+
+enum tgsi_return_type
+svga_get_texture_datatype(enum pipe_format format);
+
+
+// XXX: Move this to svga_context?
+boolean
+svga_has_any_integer_cbufs(const struct svga_context *svga);
+
+
+SVGA3dSurfaceFormat
+svga_typeless_format(SVGA3dSurfaceFormat format);
+
+
+SVGA3dSurfaceFormat
+svga_sampler_format(SVGA3dSurfaceFormat format);
 
 
 #endif /* SVGA_FORMAT_H_ */

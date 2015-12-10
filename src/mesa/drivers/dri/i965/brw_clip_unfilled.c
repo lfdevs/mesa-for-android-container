@@ -188,6 +188,12 @@ static void copy_bfc( struct brw_clip_compile *c )
   GLfloat bc	= dir.y * iz;
   offset = ctx->Polygon.OffsetUnits * DEPTH_SCALE;
   offset += MAX2( abs(ac), abs(bc) ) * ctx->Polygon.OffsetFactor;
+  if (ctx->Polygon.OffsetClamp && isfinite(ctx->Polygon.OffsetClamp)) {
+    if (ctx->Polygon.OffsetClamp < 0)
+      offset = MAX2( offset, ctx->Polygon.OffsetClamp );
+    else
+      offset = MIN2( offset, ctx->Polygon.OffsetClamp );
+  }
   offset *= MRD;
 */
 static void compute_offset( struct brw_clip_compile *c )
@@ -211,6 +217,14 @@ static void compute_offset( struct brw_clip_compile *c )
 
    brw_MUL(p, vec1(off), vec1(off), brw_imm_f(c->key.offset_factor));
    brw_ADD(p, vec1(off), vec1(off), brw_imm_f(c->key.offset_units));
+   if (c->key.offset_clamp && isfinite(c->key.offset_clamp)) {
+      brw_CMP(p,
+              vec1(brw_null_reg()),
+              c->key.offset_clamp < 0 ? BRW_CONDITIONAL_GE : BRW_CONDITIONAL_L,
+              vec1(off),
+              brw_imm_f(c->key.offset_clamp));
+      brw_SEL(p, vec1(off), vec1(off), brw_imm_f(c->key.offset_clamp));
+   }
 }
 
 

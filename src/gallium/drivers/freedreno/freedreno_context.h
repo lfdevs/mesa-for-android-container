@@ -335,6 +335,7 @@ struct fd_context {
 		FD_DIRTY_SCISSOR     = (1 << 17),
 		FD_DIRTY_STREAMOUT   = (1 << 18),
 		FD_DIRTY_UCP         = (1 << 19),
+		FD_DIRTY_BLEND_DUAL  = (1 << 20),
 	} dirty;
 
 	struct pipe_blend_state *blend;
@@ -357,6 +358,10 @@ struct fd_context {
 	struct pipe_index_buffer indexbuf;
 	struct fd_streamout_stateobj streamout;
 	struct pipe_clip_state ucp;
+
+	struct pipe_query *cond_query;
+	bool cond_cond; /* inverted rendering condition */
+	uint cond_mode;
 
 	/* GMEM/tile handling fxns: */
 	void (*emit_tile_init)(struct fd_context *ctx);

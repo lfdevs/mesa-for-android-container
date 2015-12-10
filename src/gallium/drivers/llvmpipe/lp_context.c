@@ -128,7 +128,8 @@ llvmpipe_render_condition ( struct pipe_context *pipe,
 }
 
 struct pipe_context *
-llvmpipe_create_context( struct pipe_screen *screen, void *priv )
+llvmpipe_create_context(struct pipe_screen *screen, void *priv,
+                        unsigned flags)
 {
    struct llvmpipe_context *llvmpipe;
 

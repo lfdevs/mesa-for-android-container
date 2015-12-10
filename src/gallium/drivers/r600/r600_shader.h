@@ -75,16 +75,12 @@ struct r600_shader {
 	boolean			has_txq_cube_array_z_comp;
 	boolean			uses_tex_buffers;
 	boolean                 gs_prim_id_input;
-	/* Temporarily workaround SB not handling CF_INDEX_[01] index registers */
-	boolean			uses_index_registers;
 
-	/* geometry shader properties */
-	unsigned		gs_input_prim;
-	unsigned		gs_output_prim;
-	unsigned		gs_max_out_vertices;
-	unsigned		gs_num_invocations;
-	/* size in bytes of a data item in the ring (single vertex data) */
-	unsigned		ring_item_size;
+	uint8_t			ps_conservative_z;
+
+	/* Size in bytes of a data item in the ring(s) (single vertex data).
+	   Stages with only one ring items 123 will be set to 0. */
+	unsigned		ring_item_sizes[4];
 
 	unsigned		indirect_files;
 	unsigned		max_arrays;
@@ -93,6 +89,8 @@ struct r600_shader {
 	unsigned		vs_as_gs_a;
 	unsigned                ps_prim_id_input;
 	struct r600_shader_array * arrays;
+
+	boolean			uses_doubles;
 };
 
 union r600_shader_key {

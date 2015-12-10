@@ -179,7 +179,7 @@ namespace brw {
          assert(dispatch_width() <= 32);
 
          if (n > 0)
-            return dst_reg(GRF, shader->alloc.allocate(
+            return dst_reg(VGRF, shader->alloc.allocate(
                               DIV_ROUND_UP(n * type_sz(type) * dispatch_width(),
                                            REG_SIZE)),
                            type);
@@ -224,12 +224,13 @@ namespace brw {
       src_reg
       sample_mask_reg() const
       {
-         const bool uses_kill =
-            (shader->stage == MESA_SHADER_FRAGMENT &&
-             ((brw_wm_prog_data *)shader->stage_prog_data)->uses_kill);
-         return (shader->stage != MESA_SHADER_FRAGMENT ? src_reg(0xffff) :
-                 uses_kill ? brw_flag_reg(0, 1) :
-                 retype(brw_vec1_grf(1, 7), BRW_REGISTER_TYPE_UD));
+         if (shader->stage != MESA_SHADER_FRAGMENT) {
+            return brw_imm_d(0xffff);
+         } else if (((brw_wm_prog_data *)shader->stage_prog_data)->uses_kill) {
+            return brw_flag_reg(0, 1);
+         } else {
+            return retype(brw_vec1_grf(1, 7), BRW_REGISTER_TYPE_UD);
+         }
       }
 
       /**
@@ -372,6 +373,8 @@ namespace brw {
       emit_minmax(const dst_reg &dst, const src_reg &src0,
                   const src_reg &src1, brw_conditional_mod mod) const
       {
+         assert(mod == BRW_CONDITIONAL_GE || mod == BRW_CONDITIONAL_L);
+
          if (shader->devinfo->gen >= 6) {
             set_condmod(mod, SEL(dst, fix_unsigned_negate(src0),
                                  fix_unsigned_negate(src1)));
@@ -388,14 +391,21 @@ namespace brw {
       src_reg
       emit_uniformize(const src_reg &src) const
       {
+         /* FIXME: We use a vector chan_index and dst to allow constant and
+          * copy propagration to move result all the way into the consuming
+          * instruction (typically a surface index or sampler index for a
+          * send). This uses 1 or 3 extra hw registers in 16 or 32 wide
+          * dispatch. Once we teach const/copy propagation about scalars we
+          * should go back to scalar destinations here.
+          */
          const fs_builder ubld = exec_all();
-         const dst_reg chan_index = component(vgrf(BRW_REGISTER_TYPE_UD), 0);
-         const dst_reg dst = component(vgrf(src.type), 0);
+         const dst_reg chan_index = vgrf(BRW_REGISTER_TYPE_UD);
+         const dst_reg dst = vgrf(src.type);
 
          ubld.emit(SHADER_OPCODE_FIND_LIVE_CHANNEL, chan_index);
-         ubld.emit(SHADER_OPCODE_BROADCAST, dst, src, chan_index);
+         ubld.emit(SHADER_OPCODE_BROADCAST, dst, src, component(chan_index, 0));
 
-         return src_reg(dst);
+         return src_reg(component(dst, 0));
       }
 
       /**
@@ -538,7 +548,7 @@ namespace brw {
             const dst_reg x_times_one_minus_a = vgrf(dst.type);
 
             MUL(y_times_a, y, a);
-            ADD(one_minus_a, negate(a), src_reg(1.0f));
+            ADD(one_minus_a, negate(a), brw_imm_f(1.0f));
             MUL(x_times_one_minus_a, x, src_reg(one_minus_a));
             return ADD(dst, src_reg(x_times_one_minus_a), src_reg(y_times_a));
          }
@@ -586,7 +596,7 @@ namespace brw {
       src_reg
       fix_3src_operand(const src_reg &src) const
       {
-         if (src.file == GRF || src.file == UNIFORM || src.stride > 1) {
+         if (src.file == VGRF || src.file == UNIFORM || src.stride > 1) {
             return src;
          } else {
             dst_reg expanded = vgrf(src.type);

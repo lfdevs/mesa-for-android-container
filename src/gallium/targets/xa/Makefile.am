@@ -38,7 +38,6 @@ libxatracker_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/glsl/libnir.la \
-	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
@@ -61,7 +60,7 @@ if HAVE_GALLIUM_STATIC_TARGETS
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =
-TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la
+TARGET_LIB_DEPS =
 
 include $(top_srcdir)/src/gallium/drivers/i915/Automake.inc
 
@@ -75,13 +74,15 @@ include $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc
 
 libxatracker_la_SOURCES += target.c
 libxatracker_la_CPPFLAGS = $(TARGET_CPPFLAGS)
-libxatracker_la_LIBADD += $(TARGET_LIB_DEPS)
+libxatracker_la_LIBADD += \
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_static.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(TARGET_LIB_DEPS)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
 
 libxatracker_la_LIBADD += \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_dynamic.la
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 

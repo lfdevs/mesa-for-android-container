@@ -28,6 +28,8 @@
 #ifndef ILO_DEBUG_H
 #define ILO_DEBUG_H
 
+#include "util/u_debug.h"
+
 #include "ilo_core.h"
 
 /* enable debug flags affecting hot pathes only with debug builds */

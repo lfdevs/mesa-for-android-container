@@ -84,6 +84,9 @@ objects. They all follow simple, one-method binding calls, e.g.
     levels. This corresponds to GL's ``PATCH_DEFAULT_OUTER_LEVEL``.
   * ``default_inner_level`` is the default value for the inner tessellation
     levels. This corresponds to GL's ``PATCH_DEFAULT_INNER_LEVEL``.
+* ``set_debug_callback`` sets the callback to be used for reporting
+  various debug messages, eventually reported via KHR_debug and
+  similar mechanisms.
 
 
 Sampler Views
@@ -223,6 +226,10 @@ with the specified depth and stencil values (for combined depth/stencil buffers,
 is is also possible to only clear one or the other part). While it is only
 possible to clear one surface at a time (which can include several layers),
 this surface need not be bound to the framebuffer.
+
+``clear_texture`` clears a non-PIPE_BUFFER resource's specified level
+and bounding box with a clear value provided in that resource's native
+format.
 
 ``clear_buffer`` clears a PIPE_BUFFER resource with the specified clear value
 (which may be multiple bytes in length). Logically this is a memset with a

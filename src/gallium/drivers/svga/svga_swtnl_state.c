@@ -25,10 +25,13 @@
 
 #include "draw/draw_context.h"
 #include "draw/draw_vbuf.h"
+#include "util/u_bitmask.h"
 #include "util/u_inlines.h"
 #include "pipe/p_state.h"
 
+#include "svga_cmd.h"
 #include "svga_context.h"
+#include "svga_shader.h"
 #include "svga_swtnl.h"
 #include "svga_state.h"
 #include "svga_tgsi.h"
@@ -51,30 +54,37 @@ static void set_draw_viewport( struct svga_context *svga )
    float adjx = 0.0f;
    float adjy = 0.0f;
 
-   switch (svga->curr.reduced_prim) {
-   case PIPE_PRIM_POINTS:
-      adjx = SVGA_POINT_ADJ_X;
-      adjy = SVGA_POINT_ADJ_Y;
-      break;
-   case PIPE_PRIM_LINES:
-      /* XXX: This is to compensate for the fact that wide lines are
-       * going to be drawn with triangles, but we're not catching all
-       * cases where that will happen.
-       */
-      if (svga->curr.rast->need_pipeline & SVGA_PIPELINE_FLAG_LINES)
-      {
-         adjx = SVGA_LINE_ADJ_X + 0.175f;
-         adjy = SVGA_LINE_ADJ_Y - 0.175f;
+   if (svga_have_vgpu10(svga)) {
+      if (svga->curr.reduced_prim == PIPE_PRIM_TRIANGLES) {
+         adjy = 0.25;
       }
-      else {
-         adjx = SVGA_LINE_ADJ_X;
-         adjy = SVGA_LINE_ADJ_Y;
+   }
+   else {
+      switch (svga->curr.reduced_prim) {
+      case PIPE_PRIM_POINTS:
+         adjx = SVGA_POINT_ADJ_X;
+         adjy = SVGA_POINT_ADJ_Y;
+         break;
+      case PIPE_PRIM_LINES:
+         /* XXX: This is to compensate for the fact that wide lines are
+          * going to be drawn with triangles, but we're not catching all
+          * cases where that will happen.
+          */
+         if (svga->curr.rast->need_pipeline & SVGA_PIPELINE_FLAG_LINES)
+         {
+            adjx = SVGA_LINE_ADJ_X + 0.175f;
+            adjy = SVGA_LINE_ADJ_Y - 0.175f;
+         }
+         else {
+            adjx = SVGA_LINE_ADJ_X;
+            adjy = SVGA_LINE_ADJ_Y;
+         }
+         break;
+      case PIPE_PRIM_TRIANGLES:
+         adjx += SVGA_TRIANGLE_ADJ_X;
+         adjy += SVGA_TRIANGLE_ADJ_Y;
+         break;
       }
-      break;
-   case PIPE_PRIM_TRIANGLES:
-      adjx += SVGA_TRIANGLE_ADJ_X;
-      adjy += SVGA_TRIANGLE_ADJ_Y;
-      break;
    }
 
    vp.translate[0] += adjx;
@@ -150,6 +160,59 @@ struct svga_tracked_state svga_update_swtnl_draw =
 };
 
 
+static SVGA3dSurfaceFormat
+translate_vertex_format(SVGA3dDeclType format)
+{
+   switch (format) {
+   case SVGA3D_DECLTYPE_FLOAT1:
+      return SVGA3D_R32_FLOAT;
+   case SVGA3D_DECLTYPE_FLOAT2:
+      return SVGA3D_R32G32_FLOAT;
+   case SVGA3D_DECLTYPE_FLOAT3:
+      return SVGA3D_R32G32B32_FLOAT;
+   case SVGA3D_DECLTYPE_FLOAT4:
+      return SVGA3D_R32G32B32A32_FLOAT;
+   default:
+      assert(!"Unexpected format in translate_vertex_format()");
+      return SVGA3D_R32G32B32A32_FLOAT;
+   }
+}
+
+
+static SVGA3dElementLayoutId
+svga_vdecl_to_input_element(struct svga_context *svga,
+                            const SVGA3dVertexDecl *vdecl, unsigned num_decls)
+{
+   SVGA3dElementLayoutId id;
+   SVGA3dInputElementDesc elements[PIPE_MAX_ATTRIBS];
+   enum pipe_error ret;
+   unsigned i;
+
+   assert(num_decls <= PIPE_MAX_ATTRIBS);
+   assert(svga_have_vgpu10(svga));
+
+   for (i = 0; i < num_decls; i++) {
+      elements[i].inputSlot = 0; /* vertex buffer index */
+      elements[i].alignedByteOffset = vdecl[i].array.offset;
+      elements[i].format = translate_vertex_format(vdecl[i].identity.type);
+      elements[i].inputSlotClass = SVGA3D_INPUT_PER_VERTEX_DATA;
+      elements[i].instanceDataStepRate = 0;
+      elements[i].inputRegister = i;
+   }
+
+   id = util_bitmask_add(svga->input_element_object_id_bm);
+
+   ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls, id, elements);
+   if (ret != PIPE_OK) {
+      svga_context_flush(svga, NULL);
+      ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls, id, elements);
+      assert(ret == PIPE_OK);
+   }
+
+   return id;
+}
+
+
 enum pipe_error
 svga_swtnl_update_vdecl( struct svga_context *svga )
 {
@@ -164,16 +227,19 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
    int nr_decls = 0;
    int src;
    unsigned i;
+   int any_change;
 
    memset(vinfo, 0, sizeof(*vinfo));
    memset(vdecl, 0, sizeof(vdecl));
 
    draw_prepare_shader_outputs(draw);
+
    /* always add position */
    src = draw_find_shader_output(draw, TGSI_SEMANTIC_POSITION, 0);
    draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_LINEAR, src);
    vinfo->attrib[0].emit = EMIT_4F;
    vdecl[0].array.offset = offset;
+   vdecl[0].identity.method = SVGA3D_DECLMETHOD_DEFAULT;
    vdecl[0].identity.type = SVGA3D_DECLTYPE_FLOAT4;
    vdecl[0].identity.usage = SVGA3D_DECLUSAGE_POSITIONT;
    vdecl[0].identity.usageIndex = 0;
@@ -225,16 +291,67 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
    draw_compute_vertex_size(vinfo);
 
    svga_render->vdecl_count = nr_decls;
-   for (i = 0; i < svga_render->vdecl_count; i++)
+   for (i = 0; i < svga_render->vdecl_count; i++) {
       vdecl[i].array.stride = offset;
+   }
 
-   if (memcmp(svga_render->vdecl, vdecl, sizeof(vdecl)) == 0)
-      return PIPE_OK;
+   any_change = memcmp(svga_render->vdecl, vdecl, sizeof(vdecl));
+
+   if (svga_have_vgpu10(svga)) {
+      enum pipe_error ret;
+
+      if (!any_change && svga_render->layout_id != SVGA3D_INVALID_ID) {
+         return PIPE_OK;
+      }
+
+      if (svga_render->layout_id != SVGA3D_INVALID_ID) {
+         /* destroy old */
+         ret = SVGA3D_vgpu10_DestroyElementLayout(svga->swc,
+                                                  svga_render->layout_id);
+         if (ret != PIPE_OK) {
+            svga_context_flush(svga, NULL);
+            ret = SVGA3D_vgpu10_DestroyElementLayout(svga->swc,
+                                                     svga_render->layout_id);
+            assert(ret == PIPE_OK);
+         }
+
+         /**
+          * reset current layout id state after the element layout is
+          * destroyed, so that if a new layout has the same layout id, we
+          * will know to re-issue the SetInputLayout command.
+          */
+         if (svga->state.hw_draw.layout_id == svga_render->layout_id)
+            svga->state.hw_draw.layout_id = SVGA3D_INVALID_ID;
+
+         util_bitmask_clear(svga->input_element_object_id_bm,
+                            svga_render->layout_id);
+      }
+
+      svga_render->layout_id =
+         svga_vdecl_to_input_element(svga, vdecl, nr_decls);
+
+      /* bind new */
+      if (svga->state.hw_draw.layout_id != svga_render->layout_id) {
+         ret = SVGA3D_vgpu10_SetInputLayout(svga->swc, svga_render->layout_id);
+         if (ret != PIPE_OK) {
+            svga_context_flush(svga, NULL);
+            ret = SVGA3D_vgpu10_SetInputLayout(svga->swc,
+                                               svga_render->layout_id);
+            assert(ret == PIPE_OK);
+         }
+
+         svga->state.hw_draw.layout_id = svga_render->layout_id;
+      }
+   }
+   else {
+      if (!any_change)
+         return PIPE_OK;
+   }
 
    memcpy(svga_render->vdecl, vdecl, sizeof(vdecl));
    svga->swtnl.new_vdecl = TRUE;
 
-   return PIPE_OK;
+   return 0;
 }
 
 

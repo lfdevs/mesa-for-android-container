@@ -37,6 +37,7 @@ upload_sbe(struct brw_context *brw)
    uint32_t num_outputs = brw->wm.prog_data->num_varying_inputs;
    uint16_t attr_overrides[VARYING_SLOT_MAX];
    uint32_t urb_entry_read_length;
+   uint32_t urb_entry_read_offset;
    uint32_t point_sprite_enables;
    uint32_t flat_enables;
    int sbe_cmd_length;
@@ -66,7 +67,8 @@ upload_sbe(struct brw_context *brw)
    calculate_attr_overrides(brw, attr_overrides,
                             &point_sprite_enables,
                             &flat_enables,
-                            &urb_entry_read_length);
+                            &urb_entry_read_length,
+                            &urb_entry_read_offset);
 
    /* Typically, the URB entry read length and offset should be programmed in
     * 3DSTATE_VS and 3DSTATE_GS; SBE inherits it from the last active stage
@@ -78,7 +80,7 @@ upload_sbe(struct brw_context *brw)
     */
    dw1 |=
       urb_entry_read_length << GEN7_SBE_URB_ENTRY_READ_LENGTH_SHIFT |
-      BRW_SF_URB_ENTRY_READ_OFFSET << GEN8_SBE_URB_ENTRY_READ_OFFSET_SHIFT |
+      urb_entry_read_offset << GEN8_SBE_URB_ENTRY_READ_OFFSET_SHIFT |
       GEN8_SBE_FORCE_URB_ENTRY_READ_LENGTH |
       GEN8_SBE_FORCE_URB_ENTRY_READ_OFFSET;
 

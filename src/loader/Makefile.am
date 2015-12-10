@@ -25,13 +25,16 @@ EXTRA_DIST = SConscript
 
 noinst_LTLIBRARIES = libloader.la
 
-libloader_la_CPPFLAGS = \
+AM_CPPFLAGS = \
 	$(DEFINES) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
 	$(VISIBILITY_CFLAGS) \
+	$(XCB_DRI3_CFLAGS) \
+	$(LIBDRM_CFLAGS) \
 	$(LIBUDEV_CFLAGS)
 
+libloader_la_CPPFLAGS = $(AM_CPPFLAGS)
 libloader_la_SOURCES = $(LOADER_C_FILES)
 libloader_la_LIBADD =
 
@@ -49,9 +52,15 @@ libloader_la_CPPFLAGS += \
 endif
 
 if HAVE_LIBDRM
-libloader_la_CPPFLAGS += \
-	$(LIBDRM_CFLAGS)
-
 libloader_la_LIBADD += \
 	$(LIBDRM_LIBS)
+endif
+
+if HAVE_DRI3
+noinst_LTLIBRARIES += libloader_dri3_helper.la
+
+libloader_dri3_helper_la_SOURCES = \
+	loader_dri3_helper.c \
+	loader_dri3_helper.h
+libloader_dri3_helper_la_LIBADD = $(XCB_DRI3_LIBS)
 endif

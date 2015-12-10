@@ -34,6 +34,7 @@
 
 const struct opcode_desc opcode_descs[128] = {
    [BRW_OPCODE_MOV]      = { .name = "mov",     .nsrc = 1, .ndst = 1 },
+   [BRW_OPCODE_MOVI]     = { .name = "movi",    .nsrc = 2, .ndst = 1 },
    [BRW_OPCODE_FRC]      = { .name = "frc",     .nsrc = 1, .ndst = 1 },
    [BRW_OPCODE_RNDU]     = { .name = "rndu",    .nsrc = 1, .ndst = 1 },
    [BRW_OPCODE_RNDD]     = { .name = "rndd",    .nsrc = 1, .ndst = 1 },
@@ -83,23 +84,26 @@ const struct opcode_desc opcode_descs[128] = {
 
    [BRW_OPCODE_SEND]     = { .name = "send",    .nsrc = 1, .ndst = 1 },
    [BRW_OPCODE_SENDC]    = { .name = "sendc",   .nsrc = 1, .ndst = 1 },
+   [BRW_OPCODE_SENDS]    = { .name = "sends",   .nsrc = 2, .ndst = 1 },
+   [BRW_OPCODE_SENDSC]   = { .name = "sendsc",  .nsrc = 2, .ndst = 1 },
+   [BRW_OPCODE_ILLEGAL]  = { .name = "illegal", .nsrc = 0, .ndst = 0 },
    [BRW_OPCODE_NOP]      = { .name = "nop",     .nsrc = 0, .ndst = 0 },
    [BRW_OPCODE_NENOP]    = { .name = "nenop",   .nsrc = 0, .ndst = 0 },
    [BRW_OPCODE_JMPI]     = { .name = "jmpi",    .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_IF]       = { .name = "if",      .nsrc = 2, .ndst = 0 },
-   [BRW_OPCODE_IFF]      = { .name = "iff",     .nsrc = 2, .ndst = 1 },
-   [BRW_OPCODE_WHILE]    = { .name = "while",   .nsrc = 2, .ndst = 0 },
-   [BRW_OPCODE_ELSE]     = { .name = "else",    .nsrc = 2, .ndst = 0 },
-   [BRW_OPCODE_BREAK]    = { .name = "break",   .nsrc = 2, .ndst = 0 },
-   [BRW_OPCODE_CONTINUE] = { .name = "cont",    .nsrc = 1, .ndst = 0 },
-   [BRW_OPCODE_HALT]     = { .name = "halt",    .nsrc = 1, .ndst = 0 },
-   [BRW_OPCODE_MSAVE]    = { .name = "msave",   .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_PUSH]     = { .name = "push",    .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_MRESTORE] = { .name = "mrest",   .nsrc = 1, .ndst = 1 },
-   [BRW_OPCODE_POP]      = { .name = "pop",     .nsrc = 2, .ndst = 0 },
+   [BRW_OPCODE_IF]       = { .name = "if",      .nsrc = 0, .ndst = 0 },
+   [BRW_OPCODE_IFF]      = { .name = "iff",     .nsrc = 0, .ndst = 0 },
+   [BRW_OPCODE_WHILE]    = { .name = "while",   .nsrc = 0, .ndst = 0 },
+   [BRW_OPCODE_ELSE]     = { .name = "else",    .nsrc = 0, .ndst = 0 },
+   [BRW_OPCODE_BREAK]    = { .name = "break",   .nsrc = 0, .ndst = 0 },
+   [BRW_OPCODE_CONTINUE] = { .name = "cont",    .nsrc = 0, .ndst = 0 },
+   [BRW_OPCODE_HALT]     = { .name = "halt",    .nsrc = 0, .ndst = 0 },
+   // [BRW_OPCODE_MSAVE]    = { .name = "msave",   .nsrc = 1, .ndst = 1 },
+   // [BRW_OPCODE_PUSH]     = { .name = "push",    .nsrc = 1, .ndst = 1 },
+   // [BRW_OPCODE_MREST]    = { .name = "mrest",   .nsrc = 1, .ndst = 1 },
+   // [BRW_OPCODE_POP]      = { .name = "pop",     .nsrc = 2, .ndst = 0 },
    [BRW_OPCODE_WAIT]     = { .name = "wait",    .nsrc = 1, .ndst = 0 },
    [BRW_OPCODE_DO]       = { .name = "do",      .nsrc = 0, .ndst = 0 },
-   [BRW_OPCODE_ENDIF]    = { .name = "endif",   .nsrc = 2, .ndst = 0 },
+   [BRW_OPCODE_ENDIF]    = { .name = "endif",   .nsrc = 0, .ndst = 0 },
 };
 
 static bool
@@ -137,8 +141,8 @@ has_branch_ctrl(const struct brw_device_info *devinfo, enum opcode opcode)
       return false;
 
    return opcode == BRW_OPCODE_IF ||
-          opcode == BRW_OPCODE_ELSE ||
-          opcode == BRW_OPCODE_GOTO;
+          opcode == BRW_OPCODE_ELSE;
+          /* opcode == BRW_OPCODE_GOTO; */
 }
 
 static bool
@@ -252,7 +256,7 @@ static const char *const pred_inv[2] = {
    [1] = "-"
 };
 
-static const char *const pred_ctrl_align16[16] = {
+const char *const pred_ctrl_align16[16] = {
    [1] = "",
    [2] = ".x",
    [3] = ".y",
@@ -412,6 +416,22 @@ static const char *const gen7_gateway_subfuncid[8] = {
    [BRW_MESSAGE_GATEWAY_SFID_MMIO_READ_WRITE] = "mmio read/write",
 };
 
+static const char *const gen4_dp_read_port_msg_type[4] = {
+   [0b00] = "OWord Block Read",
+   [0b01] = "OWord Dual Block Read",
+   [0b10] = "Media Block Read",
+   [0b11] = "DWord Scattered Read",
+};
+
+static const char *const g45_dp_read_port_msg_type[8] = {
+   [0b000] = "OWord Block Read",
+   [0b010] = "OWord Dual Block Read",
+   [0b100] = "Media Block Read",
+   [0b110] = "DWord Scattered Read",
+   [0b001] = "Render Target UNORM Read",
+   [0b011] = "AVC Loop Filter Read",
+};
+
 static const char *const dp_write_port_msg_type[8] = {
    [0b000] = "OWord block write",
    [0b001] = "OWord dual block write",
@@ -556,15 +576,15 @@ static const char *const gen5_urb_opcode[] = {
 };
 
 static const char *const gen7_urb_opcode[] = {
-   [0] = "write HWord",
-   [1] = "write OWord",
-   [2] = "read HWord",
-   [3] = "read OWord",
-   [4] = "atomic mov",  /* Gen7+ */
-   [5] = "atomic inc",  /* Gen7+ */
-   [6] = "atomic add",  /* Gen8+ */
-   [7] = "SIMD8 write", /* Gen8+ */
-   [8] = "SIMD8 read",  /* Gen8+ */
+   [BRW_URB_OPCODE_WRITE_HWORD] = "write HWord",
+   [BRW_URB_OPCODE_WRITE_OWORD] = "write OWord",
+   [BRW_URB_OPCODE_READ_HWORD] = "read HWord",
+   [BRW_URB_OPCODE_READ_OWORD] = "read OWord",
+   [GEN7_URB_OPCODE_ATOMIC_MOV] = "atomic mov",  /* Gen7+ */
+   [GEN7_URB_OPCODE_ATOMIC_INC] = "atomic inc",  /* Gen7+ */
+   [GEN8_URB_OPCODE_ATOMIC_ADD] = "atomic add",  /* Gen8+ */
+   [GEN8_URB_OPCODE_SIMD8_WRITE] = "SIMD8 write", /* Gen8+ */
+   [GEN8_URB_OPCODE_SIMD8_READ] = "SIMD8 read",  /* Gen8+ */
    /* [9-15] - reserved */
 };
 
@@ -601,10 +621,12 @@ static const char *const gen5_sampler_msg_type[] = {
    [GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4]      = "gather4",
    [GEN5_SAMPLER_MESSAGE_LOD]                 = "lod",
    [GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO]      = "resinfo",
+   [GEN6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO]   = "sampleinfo",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_C]    = "gather4_c",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO]   = "gather4_po",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C] = "gather4_po_c",
    [HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE] = "sample_d_c",
+   [GEN9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W]     = "ld2dms_w",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS]       = "ld_mcs",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS]       = "ld2dms",
    [GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DSS]       = "ld2dss",
@@ -703,13 +725,13 @@ reg(FILE *file, unsigned _reg_file, unsigned _reg_nr)
 
    /* Clear the Compr4 instruction compression bit. */
    if (_reg_file == BRW_MESSAGE_REGISTER_FILE)
-      _reg_nr &= ~(1 << 7);
+      _reg_nr &= ~BRW_MRF_COMPR4;
 
    if (_reg_file == BRW_ARCHITECTURE_REGISTER_FILE) {
       switch (_reg_nr & 0xf0) {
       case BRW_ARF_NULL:
          string(file, "null");
-         return -1;
+         break;
       case BRW_ARF_ADDRESS:
          format(file, "a%d", _reg_nr & 0x0f);
          break;
@@ -891,7 +913,6 @@ src_ia1(FILE *file,
         unsigned _addr_subreg_nr,
         unsigned _negate,
         unsigned __abs,
-        unsigned _addr_mode,
         unsigned _horiz_stride, unsigned _width, unsigned _vert_stride)
 {
    int err = 0;
@@ -1126,7 +1147,6 @@ src0(FILE *file, const struct brw_device_info *devinfo, brw_inst *inst)
                         brw_inst_src0_ia_subreg_nr(devinfo, inst),
                         brw_inst_src0_negate(devinfo, inst),
                         brw_inst_src0_abs(devinfo, inst),
-                        brw_inst_src0_address_mode(devinfo, inst),
                         brw_inst_src0_hstride(devinfo, inst),
                         brw_inst_src0_width(devinfo, inst),
                         brw_inst_src0_vstride(devinfo, inst));
@@ -1183,7 +1203,6 @@ src1(FILE *file, const struct brw_device_info *devinfo, brw_inst *inst)
                         brw_inst_src1_ia_subreg_nr(devinfo, inst),
                         brw_inst_src1_negate(devinfo, inst),
                         brw_inst_src1_abs(devinfo, inst),
-                        brw_inst_src1_address_mode(devinfo, inst),
                         brw_inst_src1_hstride(devinfo, inst),
                         brw_inst_src1_width(devinfo, inst),
                         brw_inst_src1_vstride(devinfo, inst));
@@ -1444,10 +1463,17 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
                       brw_inst_dp_msg_type(devinfo, inst),
                       devinfo->gen >= 7 ? 0 : brw_inst_dp_write_commit(devinfo, inst));
             } else {
-               format(file, " (%ld, %ld, %ld)",
-                      brw_inst_binding_table_index(devinfo, inst),
-                      brw_inst_dp_read_msg_control(devinfo, inst),
-                      brw_inst_dp_read_msg_type(devinfo, inst));
+               bool is_965 = devinfo->gen == 4 && !devinfo->is_g4x;
+               err |= control(file, "DP read message type",
+                              is_965 ? gen4_dp_read_port_msg_type :
+                                       g45_dp_read_port_msg_type,
+                              brw_inst_dp_read_msg_type(devinfo, inst),
+                              &space);
+
+               format(file, " MsgCtrl = 0x%lx",
+                      brw_inst_dp_read_msg_control(devinfo, inst));
+
+               format(file, " Surface = %ld", brw_inst_binding_table_index(devinfo, inst));
             }
             break;
 
@@ -1623,7 +1649,7 @@ brw_disassemble_inst(FILE *file, const struct brw_device_info *devinfo,
          if (brw_inst_qtr_control(devinfo, inst) == BRW_COMPRESSION_COMPRESSED &&
              opcode_descs[opcode].ndst > 0 &&
              brw_inst_dst_reg_file(devinfo, inst) == BRW_MESSAGE_REGISTER_FILE &&
-             brw_inst_dst_da_reg_nr(devinfo, inst) & (1 << 7)) {
+             brw_inst_dst_da_reg_nr(devinfo, inst) & BRW_MRF_COMPR4) {
             format(file, " compr4");
          } else {
             err |= control(file, "compression control", compr_ctrl,

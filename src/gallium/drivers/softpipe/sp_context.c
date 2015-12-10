@@ -186,8 +186,8 @@ softpipe_render_condition( struct pipe_context *pipe,
 
 
 struct pipe_context *
-softpipe_create_context( struct pipe_screen *screen,
-			 void *priv )
+softpipe_create_context(struct pipe_screen *screen,
+			void *priv, unsigned flags)
 {
    struct softpipe_screen *sp_screen = softpipe_screen(screen);
    struct softpipe_context *softpipe = CALLOC_STRUCT(softpipe_context);

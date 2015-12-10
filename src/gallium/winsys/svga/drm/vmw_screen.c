@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -57,7 +57,7 @@ static unsigned vmw_dev_hash(void *key)
  */
 
 struct vmw_winsys_screen *
-vmw_winsys_create( int fd, boolean use_old_scanout_flag )
+vmw_winsys_create( int fd )
 {
    struct vmw_winsys_screen *vws;
    struct stat stat_buf;
@@ -84,8 +84,8 @@ vmw_winsys_create( int fd, boolean use_old_scanout_flag )
    vws->device = stat_buf.st_rdev;
    vws->open_count = 1;
    vws->ioctl.drm_fd = dup(fd);
-   vws->use_old_scanout_flag = use_old_scanout_flag;
    vws->base.have_gb_dma = TRUE;
+   vws->base.need_to_rebind_resources = FALSE;
 
    if (!vmw_ioctl_init(vws))
       goto out_no_ioctl;

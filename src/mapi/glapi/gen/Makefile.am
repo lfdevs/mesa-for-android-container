@@ -153,6 +153,7 @@ API_XML = \
 	ARB_shader_atomic_counters.xml \
 	ARB_shader_image_load_store.xml \
 	ARB_shader_subroutine.xml \
+	ARB_shader_storage_buffer_object.xml \
 	ARB_sync.xml \
 	ARB_tessellation_shader.xml \
 	ARB_texture_barrier.xml \
@@ -190,6 +191,7 @@ API_XML = \
 	INTEL_performance_query.xml \
 	KHR_debug.xml \
 	KHR_context_flush_control.xml \
+	KHR_texture_compression_astc.xml \
 	NV_conditional_render.xml \
 	NV_primitive_restart.xml \
 	NV_texture_barrier.xml \

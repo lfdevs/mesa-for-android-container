@@ -48,6 +48,7 @@ class fetch_node;
 class alu_group_node;
 class region_node;
 class shader;
+class value;
 
 class sb_ostream {
 public:
@@ -477,7 +478,9 @@ struct bc_cf {
 
 	bool is_alu_extended() {
 		assert(op_ptr->flags & CF_ALU);
-		return kc[2].mode != KC_LOCK_NONE || kc[3].mode != KC_LOCK_NONE;
+		return kc[2].mode != KC_LOCK_NONE || kc[3].mode != KC_LOCK_NONE ||
+			kc[0].index_mode != KC_INDEX_NONE || kc[1].index_mode != KC_INDEX_NONE ||
+			kc[2].index_mode != KC_INDEX_NONE || kc[3].index_mode != KC_INDEX_NONE;
 	}
 
 };
@@ -818,13 +821,16 @@ class bc_parser {
 
 	bool gpr_reladdr;
 
+	// Note: currently relies on input emitting SET_CF in same basic block as uses
+	value *cf_index_value[2];
+	alu_node *mova;
 public:
 
 	bc_parser(sb_context &sctx, r600_bytecode *bc, r600_shader* pshader) :
 		ctx(sctx), dec(), bc(bc), pshader(pshader),
 		dw(), bc_ndw(), max_cf(),
 		sh(), error(), slots(), cgroup(),
-		cf_map(), loop_stack(), gpr_reladdr() { }
+		cf_map(), loop_stack(), gpr_reladdr(), cf_index_value(), mova() { }
 
 	int decode();
 	int prepare();
@@ -852,6 +858,10 @@ private:
 	int prepare_loop(cf_node *c);
 	int prepare_if(cf_node *c);
 
+	void save_set_cf_index(value *val, unsigned idx);
+	value *get_cf_index_value(unsigned idx);
+	void save_mova(alu_node *mova);
+	alu_node *get_mova();
 };
 
 

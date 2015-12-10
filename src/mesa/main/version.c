@@ -199,6 +199,7 @@ _mesa_override_gl_version(struct gl_context *ctx)
        *     <version number><space><vendor-specific information>"
        */
       create_version_string(ctx, _mesa_is_gles(ctx) ? "OpenGL ES " : "");
+      ctx->Extensions.Version = ctx->Version;
    }
 }
 
@@ -467,13 +468,15 @@ compute_version_es2(const struct gl_extensions *extensions)
                          extensions->ARB_arrays_of_arrays &&
                          extensions->ARB_compute_shader &&
                          extensions->ARB_draw_indirect &&
-                         false /*extensions->ARB_framebuffer_no_attachments*/ &&
+                         extensions->ARB_explicit_uniform_location &&
+                         extensions->ARB_framebuffer_no_attachments &&
                          extensions->ARB_shader_atomic_counters &&
                          extensions->ARB_shader_image_load_store &&
-                         false /*extensions->ARB_shader_image_size*/ &&
-                         false /*extensions->ARB_shader_storage_buffer_object*/ &&
+                         extensions->ARB_shader_image_size &&
+                         extensions->ARB_shader_storage_buffer_object &&
                          extensions->ARB_shading_language_packing &&
                          extensions->ARB_stencil_texturing &&
+                         extensions->ARB_texture_multisample &&
                          extensions->ARB_gpu_shader5 &&
                          extensions->EXT_shader_integer_mix);
 
@@ -522,6 +525,7 @@ _mesa_compute_version(struct gl_context *ctx)
       return;
 
    ctx->Version = _mesa_get_version(&ctx->Extensions, &ctx->Const, ctx->API);
+   ctx->Extensions.Version = ctx->Version;
 
    /* Make sure that the GLSL version lines up with the GL version. In some
     * cases it can be too high, e.g. if an extension is missing.

@@ -43,9 +43,7 @@
  * convenience pointers (glsl_type::foo_type).
  * @{
  */
-#define DECL_TYPE(NAME, ...)                                    \
-   const glsl_type glsl_type::_##NAME##_type = glsl_type(__VA_ARGS__, #NAME); \
-   const glsl_type *const glsl_type::NAME##_type = &glsl_type::_##NAME##_type;
+#define DECL_TYPE(NAME, ...)
 
 #define STRUCT_TYPE(NAME)                                       \
    const glsl_type glsl_type::_struct_##NAME##_type =           \
@@ -127,7 +125,7 @@ static const struct glsl_struct_field gl_FogParameters_fields[] = {
 #define T(TYPE, MIN_GL, MIN_ES) \
    { glsl_type::TYPE##_type, MIN_GL, MIN_ES },
 
-const static struct builtin_type_versions {
+static const struct builtin_type_versions {
    const glsl_type *const type;
    int min_gl;
    int min_es;
@@ -307,7 +305,8 @@ _mesa_glsl_initialize_types(struct _mesa_glsl_parse_state *state)
       add_type(symbols, glsl_type::usamplerCubeArray_type);
    }
 
-   if (state->ARB_texture_multisample_enable) {
+   if (state->ARB_texture_multisample_enable ||
+       state->OES_texture_storage_multisample_2d_array_enable) {
       add_type(symbols, glsl_type::sampler2DMS_type);
       add_type(symbols, glsl_type::isampler2DMS_type);
       add_type(symbols, glsl_type::usampler2DMS_type);

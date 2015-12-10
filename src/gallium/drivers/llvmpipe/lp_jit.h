@@ -43,6 +43,7 @@
 #include "lp_texture.h"
 
 
+struct lp_build_format_cache;
 struct lp_fragment_shader_variant;
 struct llvmpipe_screen;
 
@@ -189,6 +190,7 @@ enum {
 
 struct lp_jit_thread_data
 {
+   struct lp_build_format_cache *cache;
    uint64_t vis_counter;
 
    /*
@@ -201,11 +203,15 @@ struct lp_jit_thread_data
 
 
 enum {
-   LP_JIT_THREAD_DATA_COUNTER = 0,
+   LP_JIT_THREAD_DATA_CACHE = 0,
+   LP_JIT_THREAD_DATA_COUNTER,
    LP_JIT_THREAD_DATA_RASTER_STATE_VIEWPORT_INDEX,
    LP_JIT_THREAD_DATA_COUNT
 };
 
+
+#define lp_jit_thread_data_cache(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, LP_JIT_THREAD_DATA_CACHE, "cache")
 
 #define lp_jit_thread_data_counter(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_THREAD_DATA_COUNTER, "counter")

@@ -39,7 +39,12 @@ struct fd4_blend_stateobj {
 	struct {
 		uint32_t control;
 		uint32_t buf_info;
-		uint32_t blend_control;
+		/* Blend control bits for color if there is an alpha channel */
+		uint32_t blend_control_rgb;
+		/* Blend control bits for color if there is no alpha channel */
+		uint32_t blend_control_no_alpha_rgb;
+		/* Blend control bits for alpha channel */
+		uint32_t blend_control_alpha;
 	} rb_mrt[A4XX_MAX_RENDER_TARGETS];
 	uint32_t rb_fs_output;
 };

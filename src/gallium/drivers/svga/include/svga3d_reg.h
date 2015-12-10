@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 1998-2014 VMware, Inc.  All rights reserved.
+ * Copyright 1998-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -43,6 +43,7 @@
 #include "svga3d_types.h"
 #include "svga3d_limits.h"
 #include "svga3d_cmd.h"
+#include "svga3d_dx.h"
 #include "svga3d_devcaps.h"
 
 

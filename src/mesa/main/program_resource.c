@@ -41,6 +41,8 @@ supported_interface_enum(struct gl_context *ctx, GLenum iface)
    case GL_PROGRAM_OUTPUT:
    case GL_TRANSFORM_FEEDBACK_VARYING:
    case GL_ATOMIC_COUNTER_BUFFER:
+   case GL_BUFFER_VARIABLE:
+   case GL_SHADER_STORAGE_BLOCK:
       return true;
    case GL_VERTEX_SUBROUTINE:
    case GL_FRAGMENT_SUBROUTINE:
@@ -58,8 +60,6 @@ supported_interface_enum(struct gl_context *ctx, GLenum iface)
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
       return _mesa_has_tessellation(ctx) && _mesa_has_shader_subroutine(ctx);
-   case GL_BUFFER_VARIABLE:
-   case GL_SHADER_STORAGE_BLOCK:
    default:
       return false;
    }
@@ -125,6 +125,26 @@ _mesa_GetProgramInterfaceiv(GLuint program, GLenum programInterface,
                   (struct gl_uniform_block *)
                   shProg->ProgramResourceList[i].Data;
                *params = MAX2(*params, block->NumUniforms);
+            }
+         }
+         break;
+      case GL_SHADER_STORAGE_BLOCK:
+         for (i = 0, *params = 0; i < shProg->NumProgramResourceList; i++) {
+            if (shProg->ProgramResourceList[i].Type == programInterface) {
+               struct gl_uniform_block *block =
+                  (struct gl_uniform_block *)
+                  shProg->ProgramResourceList[i].Data;
+               GLint block_params = 0;
+               for (unsigned j = 0; j < block->NumUniforms; j++) {
+                  const char *iname = block->Uniforms[j].IndexName;
+                  struct gl_program_resource *uni =
+                     _mesa_program_resource_find_name(shProg, GL_BUFFER_VARIABLE,
+                                                      iname, NULL);
+                  if (!uni)
+                     continue;
+                  block_params++;
+               }
+               *params = MAX2(*params, block_params);
             }
          }
          break;
@@ -245,8 +265,10 @@ _mesa_GetProgramResourceIndex(GLuint program, GLenum programInterface,
    case GL_PROGRAM_INPUT:
    case GL_PROGRAM_OUTPUT:
    case GL_UNIFORM:
+   case GL_BUFFER_VARIABLE:
    case GL_TRANSFORM_FEEDBACK_VARYING:
    case GL_UNIFORM_BLOCK:
+   case GL_SHADER_STORAGE_BLOCK:
       res = _mesa_program_resource_find_name(shProg, programInterface, name,
                                              &array_index);
       if (!res || array_index > 0)

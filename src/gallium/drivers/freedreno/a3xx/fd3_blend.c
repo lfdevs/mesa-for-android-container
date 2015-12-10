@@ -28,6 +28,7 @@
 
 #include "pipe/p_state.h"
 #include "util/u_blend.h"
+#include "util/u_dual_blend.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 
@@ -130,6 +131,9 @@ fd3_blend_state_create(struct pipe_context *pctx,
 		if (cso->dither)
 			so->rb_mrt[i].control |= A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS);
 	}
+
+	if (cso->rt[0].blend_enable && util_blend_state_is_dual(cso, 0))
+		so->rb_render_control = A3XX_RB_RENDER_CONTROL_DUAL_COLOR_IN_ENABLE;
 
 	return so;
 }

@@ -15,10 +15,6 @@ env.Append(CPPPATH = [
     xmlpool_options.dir.dir, # Dir to generated xmlpool/options.h
 ])
 
-env.Append(CPPDEFINES = [
-    ('GALLIUM_STATIC_TARGETS', '1'),
-])
-
 sources = env.ParseSourceList('Makefile.sources', 'common_SOURCES')
 
 # XXX: if HAVE_DRISW

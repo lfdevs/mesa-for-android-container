@@ -27,33 +27,33 @@
 static void dump_comm_vp(struct nouveau_vp3_decoder *dec, struct comm *comm, u32 comm_seq,
                          struct nouveau_bo *inter_bo, unsigned slice_size)
 {
-	unsigned i, idx = comm->pvp_cur_index & 0xf;
-	debug_printf("Status: %08x, stage: %08x\n", comm->status_vp[idx], comm->pvp_stage);
+   unsigned i, idx = comm->pvp_cur_index & 0xf;
+   debug_printf("Status: %08x, stage: %08x\n", comm->status_vp[idx], comm->pvp_stage);
 #if 0
-	debug_printf("Acked byte ofs: %x, bsp byte ofs: %x\n", comm->acked_byte_ofs, comm->byte_ofs);
-	debug_printf("Irq/parse indexes: %i %i\n", comm->irq_index, comm->parse_endpos_index);
+   debug_printf("Acked byte ofs: %x, bsp byte ofs: %x\n", comm->acked_byte_ofs, comm->byte_ofs);
+   debug_printf("Irq/parse indexes: %i %i\n", comm->irq_index, comm->parse_endpos_index);
 
-	for (i = 0; i != comm->irq_index; ++i)
-		debug_printf("irq[%i] = { @ %08x -> %04x }\n", i, comm->irq_pos[i], comm->irq_470[i]);
-	for (i = 0; i != comm->parse_endpos_index; ++i)
-		debug_printf("parse_endpos[%i] = { @ %08x}\n", i, comm->parse_endpos[i]);
+   for (i = 0; i != comm->irq_index; ++i)
+      debug_printf("irq[%i] = { @ %08x -> %04x }\n", i, comm->irq_pos[i], comm->irq_470[i]);
+   for (i = 0; i != comm->parse_endpos_index; ++i)
+      debug_printf("parse_endpos[%i] = { @ %08x}\n", i, comm->parse_endpos[i]);
 #endif
-	debug_printf("mb_y = %u\n", comm->mb_y[idx]);
-	if (comm->status_vp[idx] <= 1)
-		return;
+   debug_printf("mb_y = %u\n", comm->mb_y[idx]);
+   if (comm->status_vp[idx] <= 1)
+      return;
 
-	if ((comm->pvp_stage & 0xff) != 0xff) {
-		unsigned *map;
-		int ret = nouveau_bo_map(inter_bo, NOUVEAU_BO_RD|NOUVEAU_BO_NOBLOCK, dec->client);
-		assert(ret >= 0);
-		map = inter_bo->map;
-		for (i = 0; i < comm->byte_ofs + slice_size; i += 0x10) {
-			debug_printf("%05x: %08x %08x %08x %08x\n", i, map[i/4], map[i/4+1], map[i/4+2], map[i/4+3]);
-		}
-		munmap(inter_bo->map, inter_bo->size);
-		inter_bo->map = NULL;
-	}
-	assert((comm->pvp_stage & 0xff) == 0xff);
+   if ((comm->pvp_stage & 0xff) != 0xff) {
+      unsigned *map;
+      int ret = nouveau_bo_map(inter_bo, NOUVEAU_BO_RD|NOUVEAU_BO_NOBLOCK, dec->client);
+      assert(ret >= 0);
+      map = inter_bo->map;
+      for (i = 0; i < comm->byte_ofs + slice_size; i += 0x10) {
+         debug_printf("%05x: %08x %08x %08x %08x\n", i, map[i/4], map[i/4+1], map[i/4+2], map[i/4+3]);
+      }
+      munmap(inter_bo->map, inter_bo->size);
+      inter_bo->map = NULL;
+   }
+   assert((comm->pvp_stage & 0xff) == 0xff);
 }
 #endif
 

@@ -854,10 +854,10 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                      jit_tex->img_stride[j] = lp_tex->img_stride[j];
                   }
 
-                  if (view->target == PIPE_TEXTURE_1D_ARRAY ||
-                      view->target == PIPE_TEXTURE_2D_ARRAY ||
-                      view->target == PIPE_TEXTURE_CUBE ||
-                      view->target == PIPE_TEXTURE_CUBE_ARRAY) {
+                  if (res->target == PIPE_TEXTURE_1D_ARRAY ||
+                      res->target == PIPE_TEXTURE_2D_ARRAY ||
+                      res->target == PIPE_TEXTURE_CUBE ||
+                      res->target == PIPE_TEXTURE_CUBE_ARRAY) {
                      /*
                       * For array textures, we don't have first_layer, instead
                       * adjust last_layer (stored as depth) plus the mip level offsets

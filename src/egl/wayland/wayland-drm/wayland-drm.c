@@ -197,7 +197,7 @@ drm_authenticate(struct wl_client *client,
 		wl_resource_post_event(resource, WL_DRM_AUTHENTICATED);
 }
 
-const static struct wl_drm_interface drm_interface = {
+static const struct wl_drm_interface drm_interface = {
 	drm_authenticate,
 	drm_create_buffer,
         drm_create_planar_buffer,

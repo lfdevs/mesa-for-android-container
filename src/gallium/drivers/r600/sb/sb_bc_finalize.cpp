@@ -303,7 +303,8 @@ void bc_finalizer::finalize_alu_group(alu_group_node* g, node *prev_node) {
 			assert(fdst.chan() == slot || slot == SLOT_TRANS);
 		}
 
-		n->bc.dst_gpr = fdst.sel();
+		if (!(n->bc.op_ptr->flags & AF_MOVA && ctx.is_cayman()))
+			n->bc.dst_gpr = fdst.sel();
 		n->bc.dst_chan = d ? fdst.chan() : slot < SLOT_TRANS ? slot : 0;
 
 
@@ -514,7 +515,7 @@ void bc_finalizer::copy_fetch_src(fetch_node &dst, fetch_node &src, unsigned arg
 
 void bc_finalizer::emit_set_grad(fetch_node* f) {
 
-	assert(f->src.size() == 12);
+	assert(f->src.size() == 12 || f->src.size() == 13);
 	unsigned ops[2] = { FETCH_OP_SET_GRADIENTS_V, FETCH_OP_SET_GRADIENTS_H };
 
 	unsigned arg_start = 0;
@@ -764,8 +765,6 @@ void bc_finalizer::finalize_cf(cf_node* c) {
 			mask |= (1 << chan);
 		}
 
-		assert(reg >= 0 && mask);
-
 		if (reg >= 0)
 			update_ngpr(reg);
 
@@ -811,8 +810,8 @@ void bc_finalizer::finalize_cf(cf_node* c) {
 }
 
 sel_chan bc_finalizer::translate_kcache(cf_node* alu, value* v) {
-	unsigned sel = v->select.sel();
-	unsigned bank = sel >> 12;
+	unsigned sel = v->select.kcache_sel();
+	unsigned bank = v->select.kcache_bank();
 	unsigned chan = v->select.chan();
 	static const unsigned kc_base[] = {128, 160, 256, 288};
 

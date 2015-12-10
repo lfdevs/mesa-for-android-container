@@ -46,10 +46,10 @@ class saturate_propagation_fs_visitor : public fs_visitor
 public:
    saturate_propagation_fs_visitor(struct brw_compiler *compiler,
                                    struct brw_wm_prog_data *prog_data,
-                                   struct gl_shader_program *shader_prog)
-      : fs_visitor(compiler, NULL, NULL, MESA_SHADER_FRAGMENT, NULL,
-                   &prog_data->base, shader_prog,
-                   (struct gl_program *) NULL, 8, -1) {}
+                                   nir_shader *shader)
+      : fs_visitor(compiler, NULL, NULL, NULL,
+                   &prog_data->base, (struct gl_program *) NULL,
+                   shader, 8, -1) {}
 };
 
 
@@ -62,11 +62,11 @@ void saturate_propagation_test::SetUp()
 
    fp = ralloc(NULL, struct brw_fragment_program);
    prog_data = ralloc(NULL, struct brw_wm_prog_data);
-   shader_prog = ralloc(NULL, struct gl_shader_program);
+   nir_shader *shader = nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL);
 
-   v = new saturate_propagation_fs_visitor(compiler, prog_data, shader_prog);
+   v = new saturate_propagation_fs_visitor(compiler, prog_data, shader);
 
-   _mesa_init_fragment_program(ctx, &fp->program, GL_FRAGMENT_SHADER, 0);
+   _mesa_init_gl_program(&fp->program.Base, GL_FRAGMENT_SHADER, 0);
 
    devinfo->gen = 4;
 }

@@ -1,5 +1,4 @@
-/**************************************************************************
- *
+/*
  * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  *
@@ -7,7 +6,7 @@
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
  * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
+ * distribute, sublicense, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
  *
@@ -17,13 +16,12 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
  * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- **************************************************************************/
+ */
 
 #include "brw_context.h"
 #include "intel_buffers.h"
@@ -34,30 +32,10 @@
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
 
-
-bool
-brw_is_front_buffer_reading(struct gl_framebuffer *fb)
-{
-   if (!fb || _mesa_is_user_fbo(fb))
-      return false;
-
-   return fb->_ColorReadBufferIndex == BUFFER_FRONT_LEFT;
-}
-
-bool
-brw_is_front_buffer_drawing(struct gl_framebuffer *fb)
-{
-   if (!fb || _mesa_is_user_fbo(fb))
-      return false;
-
-   return (fb->_NumColorDrawBuffers >= 1 &&
-           fb->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT);
-}
-
 static void
 intelDrawBuffer(struct gl_context * ctx, GLenum mode)
 {
-   if (brw_is_front_buffer_drawing(ctx->DrawBuffer)) {
+   if (_mesa_is_front_buffer_drawing(ctx->DrawBuffer)) {
       struct brw_context *const brw = brw_context(ctx);
 
       /* If we might be front-buffer rendering on this buffer for the first
@@ -73,7 +51,7 @@ intelDrawBuffer(struct gl_context * ctx, GLenum mode)
 static void
 intelReadBuffer(struct gl_context * ctx, GLenum mode)
 {
-   if (brw_is_front_buffer_reading(ctx->ReadBuffer)) {
+   if (_mesa_is_front_buffer_reading(ctx->ReadBuffer)) {
       struct brw_context *const brw = brw_context(ctx);
 
       /* If we might be front-buffer reading on this buffer for the first

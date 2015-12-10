@@ -27,6 +27,7 @@
 
 #include "util/u_framebuffer.h"
 #include "util/u_inlines.h"
+#include "util/u_pstipple.h"
 
 #include "svga_context.h"
 #include "svga_screen.h"
@@ -46,10 +47,37 @@ static void svga_set_scissor_states( struct pipe_context *pipe,
 }
 
 
-static void svga_set_polygon_stipple( struct pipe_context *pipe,
-                                      const struct pipe_poly_stipple *stipple )
+static void
+svga_set_polygon_stipple(struct pipe_context *pipe,
+                         const struct pipe_poly_stipple *stipple)
 {
-   /* overridden by the draw module */
+   struct svga_context *svga = svga_context(pipe);
+
+   /* release old texture */
+   pipe_resource_reference(&svga->polygon_stipple.texture, NULL);
+
+   /* release old sampler view */
+   if (svga->polygon_stipple.sampler_view) {
+      pipe->sampler_view_destroy(pipe,
+                                 &svga->polygon_stipple.sampler_view->base);
+   }
+
+   /* create new stipple texture */
+   svga->polygon_stipple.texture =
+      util_pstipple_create_stipple_texture(pipe, stipple->stipple);
+
+   /* create new sampler view */
+   svga->polygon_stipple.sampler_view =
+      (struct svga_pipe_sampler_view *)
+      util_pstipple_create_sampler_view(pipe,
+                                        svga->polygon_stipple.texture);
+
+   /* allocate sampler state, if first time */
+   if (!svga->polygon_stipple.sampler) {
+      svga->polygon_stipple.sampler = util_pstipple_create_sampler(pipe);
+   }
+
+   svga->dirty |= SVGA_NEW_STIPPLE;
 }
 
 
@@ -83,6 +111,11 @@ static void svga_set_framebuffer_state(struct pipe_context *pipe,
    boolean propagate = FALSE;
    unsigned i;
 
+   /* make sure any pending drawing calls are flushed before changing
+    * the framebuffer state
+    */
+   svga_hwtnl_flush_retry(svga);
+
    dst->width = fb->width;
    dst->height = fb->height;
    dst->nr_cbufs = fb->nr_cbufs;
@@ -99,9 +132,6 @@ static void svga_set_framebuffer_state(struct pipe_context *pipe,
    }
 
    if (propagate) {
-      /* make sure that drawing calls comes before propagation calls */
-      svga_hwtnl_flush_retry( svga );
-   
       for (i = 0; i < dst->nr_cbufs; i++) {
          struct pipe_surface *s = i < fb->nr_cbufs ? fb->cbufs[i] : NULL;
          if (dst->cbufs[i] && dst->cbufs[i] != s)
@@ -109,13 +139,30 @@ static void svga_set_framebuffer_state(struct pipe_context *pipe,
       }
    }
 
-   /* XXX: Actually the virtual hardware may support rendertargets with
-    * different size, depending on the host API and driver, but since we cannot
-    * know that make no such assumption here. */
-   for(i = 0; i < fb->nr_cbufs; ++i) {
-      if (fb->zsbuf && fb->cbufs[i]) {
-         assert(fb->zsbuf->width == fb->cbufs[i]->width); 
-         assert(fb->zsbuf->height == fb->cbufs[i]->height); 
+   /* Check that all surfaces are the same size.
+    * Actually, the virtual hardware may support rendertargets with
+    * different size, depending on the host API and driver,
+    */
+   {
+      int width = 0, height = 0;
+      if (fb->zsbuf) {
+         width = fb->zsbuf->width;
+         height = fb->zsbuf->height;
+      }
+      for (i = 0; i < fb->nr_cbufs; ++i) {
+         if (fb->cbufs[i]) {
+            if (width && height) {
+               if (fb->cbufs[i]->width != width ||
+                   fb->cbufs[i]->height != height) {
+                  debug_warning("Mixed-size color and depth/stencil surfaces "
+                                "may not work properly");
+               }
+            }
+            else {
+               width = fb->cbufs[i]->width;
+               height = fb->cbufs[i]->height;
+            }
+         }
       }
    }
 

@@ -56,6 +56,7 @@
 #include "intel_mipmap_tree.h"
 
 #include "utils.h"
+#include "util/debug.h"
 #include "util/ralloc.h"
 
 int INTEL_DEBUG = (0);
@@ -243,7 +244,7 @@ intel_prepare_render(struct intel_context *intel)
     * that will happen next will probably dirty the front buffer.  So
     * mark it as dirty here.
     */
-   if (intel->is_front_buffer_rendering)
+   if (_mesa_is_front_buffer_drawing(intel->ctx.DrawBuffer))
       intel->front_buffer_dirty = true;
 
    /* Wait for the swapbuffers before the one we just emitted, so we
@@ -290,7 +291,7 @@ intel_viewport(struct gl_context *ctx)
     intelCalcViewport(ctx);
 }
 
-static const struct dri_debug_control debug_control[] = {
+static const struct debug_control debug_control[] = {
    { "tex",   DEBUG_TEXTURE},
    { "state", DEBUG_STATE},
    { "blit",  DEBUG_BLIT},
@@ -356,7 +357,7 @@ intel_glFlush(struct gl_context *ctx)
 
    intel_flush(ctx);
    intel_flush_front(ctx);
-   if (intel->is_front_buffer_rendering)
+   if (_mesa_is_front_buffer_drawing(ctx->DrawBuffer))
       intel->need_throttle = true;
 }
 
@@ -474,8 +475,8 @@ intelInitContext(struct intel_context *intel,
 
    ctx->Const.MinLineWidth = 1.0;
    ctx->Const.MinLineWidthAA = 1.0;
-   ctx->Const.MaxLineWidth = 5.0;
-   ctx->Const.MaxLineWidthAA = 5.0;
+   ctx->Const.MaxLineWidth = 7.0;
+   ctx->Const.MaxLineWidthAA = 7.0;
    ctx->Const.LineWidthGranularity = 0.5;
 
    ctx->Const.MinPointSize = 1.0;
@@ -512,7 +513,7 @@ intelInitContext(struct intel_context *intel,
 
    intelInitExtensions(ctx);
 
-   INTEL_DEBUG = driParseDebugString(getenv("INTEL_DEBUG"), debug_control);
+   INTEL_DEBUG = parse_debug_string(getenv("INTEL_DEBUG"), debug_control);
    if (INTEL_DEBUG & DEBUG_BUFMGR)
       dri_bufmgr_set_debug(intel->bufmgr, true);
    if (INTEL_DEBUG & DEBUG_PERF)
@@ -700,8 +701,8 @@ intel_query_dri2_buffers(struct intel_context *intel,
    back_rb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
 
    memset(attachments, 0, sizeof(attachments));
-   if ((intel->is_front_buffer_rendering ||
-	intel->is_front_buffer_reading ||
+   if ((_mesa_is_front_buffer_drawing(fb) ||
+        _mesa_is_front_buffer_reading(fb) ||
 	!back_rb) && front_rb) {
       /* If a fake front buffer is in use, then querying for
        * __DRI_BUFFER_FRONT_LEFT will cause the server to copy the image from
@@ -866,8 +867,10 @@ intel_update_image_buffers(struct intel_context *intel, __DRIdrawable *drawable)
    else
       return;
 
-   if ((intel->is_front_buffer_rendering || intel->is_front_buffer_reading || !back_rb) && front_rb)
+   if (front_rb && (_mesa_is_front_buffer_drawing(fb) ||
+                    _mesa_is_front_buffer_reading(fb) || !back_rb)) {
       buffer_mask |= __DRI_IMAGE_BUFFER_FRONT;
+   }
 
    if (back_rb)
       buffer_mask |= __DRI_IMAGE_BUFFER_BACK;

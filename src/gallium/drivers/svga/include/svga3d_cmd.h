@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 1998-2014 VMware, Inc.  All rights reserved.
+ * Copyright 1998-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -53,130 +53,227 @@
  * and up.
  */
 
-#define SVGA_3D_CMD_LEGACY_BASE                                1000
-#define SVGA_3D_CMD_BASE                                       1040
+typedef enum {
+   SVGA_3D_CMD_LEGACY_BASE                                = 1000,
+   SVGA_3D_CMD_BASE                                       = 1040,
 
-#define SVGA_3D_CMD_SURFACE_DEFINE                             1040
-#define SVGA_3D_CMD_SURFACE_DESTROY                            1041
-#define SVGA_3D_CMD_SURFACE_COPY                               1042
-#define SVGA_3D_CMD_SURFACE_STRETCHBLT                         1043
-#define SVGA_3D_CMD_SURFACE_DMA                                1044
-#define SVGA_3D_CMD_CONTEXT_DEFINE                             1045
-#define SVGA_3D_CMD_CONTEXT_DESTROY                            1046
-#define SVGA_3D_CMD_SETTRANSFORM                               1047
-#define SVGA_3D_CMD_SETZRANGE                                  1048
-#define SVGA_3D_CMD_SETRENDERSTATE                             1049
-#define SVGA_3D_CMD_SETRENDERTARGET                            1050
-#define SVGA_3D_CMD_SETTEXTURESTATE                            1051
-#define SVGA_3D_CMD_SETMATERIAL                                1052
-#define SVGA_3D_CMD_SETLIGHTDATA                               1053
-#define SVGA_3D_CMD_SETLIGHTENABLED                            1054
-#define SVGA_3D_CMD_SETVIEWPORT                                1055
-#define SVGA_3D_CMD_SETCLIPPLANE                               1056
-#define SVGA_3D_CMD_CLEAR                                      1057
-#define SVGA_3D_CMD_PRESENT                                    1058
-#define SVGA_3D_CMD_SHADER_DEFINE                              1059
-#define SVGA_3D_CMD_SHADER_DESTROY                             1060
-#define SVGA_3D_CMD_SET_SHADER                                 1061
-#define SVGA_3D_CMD_SET_SHADER_CONST                           1062
-#define SVGA_3D_CMD_DRAW_PRIMITIVES                            1063
-#define SVGA_3D_CMD_SETSCISSORRECT                             1064
-#define SVGA_3D_CMD_BEGIN_QUERY                                1065
-#define SVGA_3D_CMD_END_QUERY                                  1066
-#define SVGA_3D_CMD_WAIT_FOR_QUERY                             1067
-#define SVGA_3D_CMD_PRESENT_READBACK                           1068
-#define SVGA_3D_CMD_BLIT_SURFACE_TO_SCREEN                     1069
-#define SVGA_3D_CMD_SURFACE_DEFINE_V2                          1070
-#define SVGA_3D_CMD_GENERATE_MIPMAPS                           1071
-#define SVGA_3D_CMD_VIDEO_CREATE_DECODER                       1072
-#define SVGA_3D_CMD_VIDEO_DESTROY_DECODER                      1073
-#define SVGA_3D_CMD_VIDEO_CREATE_PROCESSOR                     1074
-#define SVGA_3D_CMD_VIDEO_DESTROY_PROCESSOR                    1075
-#define SVGA_3D_CMD_VIDEO_DECODE_START_FRAME                   1076
-#define SVGA_3D_CMD_VIDEO_DECODE_RENDER                        1077
-#define SVGA_3D_CMD_VIDEO_DECODE_END_FRAME                     1078
-#define SVGA_3D_CMD_VIDEO_PROCESS_FRAME                        1079
-#define SVGA_3D_CMD_ACTIVATE_SURFACE                           1080
-#define SVGA_3D_CMD_DEACTIVATE_SURFACE                         1081
-#define SVGA_3D_CMD_SCREEN_DMA                                 1082
-#define SVGA_3D_CMD_SET_UNITY_SURFACE_COOKIE                   1083
-#define SVGA_3D_CMD_OPEN_CONTEXT_SURFACE                       1084
+   SVGA_3D_CMD_SURFACE_DEFINE                             = 1040,
+   SVGA_3D_CMD_SURFACE_DESTROY                            = 1041,
+   SVGA_3D_CMD_SURFACE_COPY                               = 1042,
+   SVGA_3D_CMD_SURFACE_STRETCHBLT                         = 1043,
+   SVGA_3D_CMD_SURFACE_DMA                                = 1044,
+   SVGA_3D_CMD_CONTEXT_DEFINE                             = 1045,
+   SVGA_3D_CMD_CONTEXT_DESTROY                            = 1046,
+   SVGA_3D_CMD_SETTRANSFORM                               = 1047,
+   SVGA_3D_CMD_SETZRANGE                                  = 1048,
+   SVGA_3D_CMD_SETRENDERSTATE                             = 1049,
+   SVGA_3D_CMD_SETRENDERTARGET                            = 1050,
+   SVGA_3D_CMD_SETTEXTURESTATE                            = 1051,
+   SVGA_3D_CMD_SETMATERIAL                                = 1052,
+   SVGA_3D_CMD_SETLIGHTDATA                               = 1053,
+   SVGA_3D_CMD_SETLIGHTENABLED                            = 1054,
+   SVGA_3D_CMD_SETVIEWPORT                                = 1055,
+   SVGA_3D_CMD_SETCLIPPLANE                               = 1056,
+   SVGA_3D_CMD_CLEAR                                      = 1057,
+   SVGA_3D_CMD_PRESENT                                    = 1058,
+   SVGA_3D_CMD_SHADER_DEFINE                              = 1059,
+   SVGA_3D_CMD_SHADER_DESTROY                             = 1060,
+   SVGA_3D_CMD_SET_SHADER                                 = 1061,
+   SVGA_3D_CMD_SET_SHADER_CONST                           = 1062,
+   SVGA_3D_CMD_DRAW_PRIMITIVES                            = 1063,
+   SVGA_3D_CMD_SETSCISSORRECT                             = 1064,
+   SVGA_3D_CMD_BEGIN_QUERY                                = 1065,
+   SVGA_3D_CMD_END_QUERY                                  = 1066,
+   SVGA_3D_CMD_WAIT_FOR_QUERY                             = 1067,
+   SVGA_3D_CMD_PRESENT_READBACK                           = 1068,
+   SVGA_3D_CMD_BLIT_SURFACE_TO_SCREEN                     = 1069,
+   SVGA_3D_CMD_SURFACE_DEFINE_V2                          = 1070,
+   SVGA_3D_CMD_GENERATE_MIPMAPS                           = 1071,
+   SVGA_3D_CMD_VIDEO_CREATE_DECODER                       = 1072,
+   SVGA_3D_CMD_VIDEO_DESTROY_DECODER                      = 1073,
+   SVGA_3D_CMD_VIDEO_CREATE_PROCESSOR                     = 1074,
+   SVGA_3D_CMD_VIDEO_DESTROY_PROCESSOR                    = 1075,
+   SVGA_3D_CMD_VIDEO_DECODE_START_FRAME                   = 1076,
+   SVGA_3D_CMD_VIDEO_DECODE_RENDER                        = 1077,
+   SVGA_3D_CMD_VIDEO_DECODE_END_FRAME                     = 1078,
+   SVGA_3D_CMD_VIDEO_PROCESS_FRAME                        = 1079,
+   SVGA_3D_CMD_ACTIVATE_SURFACE                           = 1080,
+   SVGA_3D_CMD_DEACTIVATE_SURFACE                         = 1081,
+   SVGA_3D_CMD_SCREEN_DMA                                 = 1082,
+   SVGA_3D_CMD_DEAD1                                      = 1083,
+   SVGA_3D_CMD_DEAD2                                      = 1084,
 
-#define SVGA_3D_CMD_LOGICOPS_BITBLT                            1085
-#define SVGA_3D_CMD_LOGICOPS_TRANSBLT                          1086
-#define SVGA_3D_CMD_LOGICOPS_STRETCHBLT                        1087
-#define SVGA_3D_CMD_LOGICOPS_COLORFILL                         1088
-#define SVGA_3D_CMD_LOGICOPS_ALPHABLEND                        1089
-#define SVGA_3D_CMD_LOGICOPS_CLEARTYPEBLEND                    1090
+   SVGA_3D_CMD_LOGICOPS_BITBLT                            = 1085,
+   SVGA_3D_CMD_LOGICOPS_TRANSBLT                          = 1086,
+   SVGA_3D_CMD_LOGICOPS_STRETCHBLT                        = 1087,
+   SVGA_3D_CMD_LOGICOPS_COLORFILL                         = 1088,
+   SVGA_3D_CMD_LOGICOPS_ALPHABLEND                        = 1089,
+   SVGA_3D_CMD_LOGICOPS_CLEARTYPEBLEND                    = 1090,
 
-#define SVGA_3D_CMD_SET_OTABLE_BASE                            1091
-#define SVGA_3D_CMD_READBACK_OTABLE                            1092
+   SVGA_3D_CMD_SET_OTABLE_BASE                            = 1091,
+   SVGA_3D_CMD_READBACK_OTABLE                            = 1092,
 
-#define SVGA_3D_CMD_DEFINE_GB_MOB                              1093
-#define SVGA_3D_CMD_DESTROY_GB_MOB                             1094
-#define SVGA_3D_CMD_REDEFINE_GB_MOB                            1095
-#define SVGA_3D_CMD_UPDATE_GB_MOB_MAPPING                      1096
+   SVGA_3D_CMD_DEFINE_GB_MOB                              = 1093,
+   SVGA_3D_CMD_DESTROY_GB_MOB                             = 1094,
+   SVGA_3D_CMD_DEAD3                                      = 1095,
+   SVGA_3D_CMD_UPDATE_GB_MOB_MAPPING                      = 1096,
 
-#define SVGA_3D_CMD_DEFINE_GB_SURFACE                          1097
-#define SVGA_3D_CMD_DESTROY_GB_SURFACE                         1098
-#define SVGA_3D_CMD_BIND_GB_SURFACE                            1099
-#define SVGA_3D_CMD_COND_BIND_GB_SURFACE                       1100
-#define SVGA_3D_CMD_UPDATE_GB_IMAGE                            1101
-#define SVGA_3D_CMD_UPDATE_GB_SURFACE                          1102
-#define SVGA_3D_CMD_READBACK_GB_IMAGE                          1103
-#define SVGA_3D_CMD_READBACK_GB_SURFACE                        1104
-#define SVGA_3D_CMD_INVALIDATE_GB_IMAGE                        1105
-#define SVGA_3D_CMD_INVALIDATE_GB_SURFACE                      1106
+   SVGA_3D_CMD_DEFINE_GB_SURFACE                          = 1097,
+   SVGA_3D_CMD_DESTROY_GB_SURFACE                         = 1098,
+   SVGA_3D_CMD_BIND_GB_SURFACE                            = 1099,
+   SVGA_3D_CMD_COND_BIND_GB_SURFACE                       = 1100,
+   SVGA_3D_CMD_UPDATE_GB_IMAGE                            = 1101,
+   SVGA_3D_CMD_UPDATE_GB_SURFACE                          = 1102,
+   SVGA_3D_CMD_READBACK_GB_IMAGE                          = 1103,
+   SVGA_3D_CMD_READBACK_GB_SURFACE                        = 1104,
+   SVGA_3D_CMD_INVALIDATE_GB_IMAGE                        = 1105,
+   SVGA_3D_CMD_INVALIDATE_GB_SURFACE                      = 1106,
 
-#define SVGA_3D_CMD_DEFINE_GB_CONTEXT                          1107
-#define SVGA_3D_CMD_DESTROY_GB_CONTEXT                         1108
-#define SVGA_3D_CMD_BIND_GB_CONTEXT                            1109
-#define SVGA_3D_CMD_READBACK_GB_CONTEXT                        1110
-#define SVGA_3D_CMD_INVALIDATE_GB_CONTEXT                      1111
+   SVGA_3D_CMD_DEFINE_GB_CONTEXT                          = 1107,
+   SVGA_3D_CMD_DESTROY_GB_CONTEXT                         = 1108,
+   SVGA_3D_CMD_BIND_GB_CONTEXT                            = 1109,
+   SVGA_3D_CMD_READBACK_GB_CONTEXT                        = 1110,
+   SVGA_3D_CMD_INVALIDATE_GB_CONTEXT                      = 1111,
 
-#define SVGA_3D_CMD_DEFINE_GB_SHADER                           1112
-#define SVGA_3D_CMD_DESTROY_GB_SHADER                          1113
-#define SVGA_3D_CMD_BIND_GB_SHADER                             1114
+   SVGA_3D_CMD_DEFINE_GB_SHADER                           = 1112,
+   SVGA_3D_CMD_DESTROY_GB_SHADER                          = 1113,
+   SVGA_3D_CMD_BIND_GB_SHADER                             = 1114,
 
-#define SVGA_3D_CMD_BIND_SHADERCONSTS                          1115
+   SVGA_3D_CMD_SET_OTABLE_BASE64                          = 1115,
 
-#define SVGA_3D_CMD_BEGIN_GB_QUERY                             1116
-#define SVGA_3D_CMD_END_GB_QUERY                               1117
-#define SVGA_3D_CMD_WAIT_FOR_GB_QUERY                          1118
+   SVGA_3D_CMD_BEGIN_GB_QUERY                             = 1116,
+   SVGA_3D_CMD_END_GB_QUERY                               = 1117,
+   SVGA_3D_CMD_WAIT_FOR_GB_QUERY                          = 1118,
 
-#define SVGA_3D_CMD_NOP                                        1119
+   SVGA_3D_CMD_NOP                                        = 1119,
 
-#define SVGA_3D_CMD_ENABLE_GART                                1120
-#define SVGA_3D_CMD_DISABLE_GART                               1121
-#define SVGA_3D_CMD_MAP_MOB_INTO_GART                          1122
-#define SVGA_3D_CMD_UNMAP_GART_RANGE                           1123
+   SVGA_3D_CMD_ENABLE_GART                                = 1120,
+   SVGA_3D_CMD_DISABLE_GART                               = 1121,
+   SVGA_3D_CMD_MAP_MOB_INTO_GART                          = 1122,
+   SVGA_3D_CMD_UNMAP_GART_RANGE                           = 1123,
 
-#define SVGA_3D_CMD_DEFINE_GB_SCREENTARGET                     1124
-#define SVGA_3D_CMD_DESTROY_GB_SCREENTARGET                    1125
-#define SVGA_3D_CMD_BIND_GB_SCREENTARGET                       1126
-#define SVGA_3D_CMD_UPDATE_GB_SCREENTARGET                     1127
+   SVGA_3D_CMD_DEFINE_GB_SCREENTARGET                     = 1124,
+   SVGA_3D_CMD_DESTROY_GB_SCREENTARGET                    = 1125,
+   SVGA_3D_CMD_BIND_GB_SCREENTARGET                       = 1126,
+   SVGA_3D_CMD_UPDATE_GB_SCREENTARGET                     = 1127,
 
-#define SVGA_3D_CMD_READBACK_GB_IMAGE_PARTIAL                  1128
-#define SVGA_3D_CMD_INVALIDATE_GB_IMAGE_PARTIAL                1129
+   SVGA_3D_CMD_READBACK_GB_IMAGE_PARTIAL                  = 1128,
+   SVGA_3D_CMD_INVALIDATE_GB_IMAGE_PARTIAL                = 1129,
 
-#define SVGA_3D_CMD_SET_GB_SHADERCONSTS_INLINE                 1130
+   SVGA_3D_CMD_SET_GB_SHADERCONSTS_INLINE                 = 1130,
 
-#define SVGA_3D_CMD_GB_SCREEN_DMA                              1131
-#define SVGA_3D_CMD_BIND_GB_SURFACE_WITH_PITCH                 1132
-#define SVGA_3D_CMD_GB_MOB_FENCE                               1133
-#define SVGA_3D_CMD_DEFINE_GB_SURFACE_V2                       1134
-#define SVGA_3D_CMD_DEFINE_GB_MOB64                            1135
-#define SVGA_3D_CMD_REDEFINE_GB_MOB64                          1136
-#define SVGA_3D_CMD_NOP_ERROR                                  1137
+   SVGA_3D_CMD_GB_SCREEN_DMA                              = 1131,
+   SVGA_3D_CMD_BIND_GB_SURFACE_WITH_PITCH                 = 1132,
+   SVGA_3D_CMD_GB_MOB_FENCE                               = 1133,
+   SVGA_3D_CMD_DEFINE_GB_SURFACE_V2                       = 1134,
+   SVGA_3D_CMD_DEFINE_GB_MOB64                            = 1135,
+   SVGA_3D_CMD_REDEFINE_GB_MOB64                          = 1136,
+   SVGA_3D_CMD_NOP_ERROR                                  = 1137,
 
-#define SVGA_3D_CMD_RESERVED1                                  1138
-#define SVGA_3D_CMD_RESERVED2                                  1139
-#define SVGA_3D_CMD_RESERVED3                                  1140
-#define SVGA_3D_CMD_RESERVED4                                  1141
-#define SVGA_3D_CMD_RESERVED5                                  1142
+   SVGA_3D_CMD_SET_VERTEX_STREAMS                         = 1138,
+   SVGA_3D_CMD_SET_VERTEX_DECLS                           = 1139,
+   SVGA_3D_CMD_SET_VERTEX_DIVISORS                        = 1140,
+   SVGA_3D_CMD_DRAW                                       = 1141,
+   SVGA_3D_CMD_DRAW_INDEXED                               = 1142,
 
-#define SVGA_3D_CMD_MAX                                        1203
-#define SVGA_3D_CMD_FUTURE_MAX                                 3000
+   /*
+    * DX10 Commands
+    */
+   SVGA_3D_CMD_DX_MIN                                     = 1143,
+   SVGA_3D_CMD_DX_DEFINE_CONTEXT                          = 1143,
+   SVGA_3D_CMD_DX_DESTROY_CONTEXT                         = 1144,
+   SVGA_3D_CMD_DX_BIND_CONTEXT                            = 1145,
+   SVGA_3D_CMD_DX_READBACK_CONTEXT                        = 1146,
+   SVGA_3D_CMD_DX_INVALIDATE_CONTEXT                      = 1147,
+   SVGA_3D_CMD_DX_SET_SINGLE_CONSTANT_BUFFER              = 1148,
+   SVGA_3D_CMD_DX_SET_SHADER_RESOURCES                    = 1149,
+   SVGA_3D_CMD_DX_SET_SHADER                              = 1150,
+   SVGA_3D_CMD_DX_SET_SAMPLERS                            = 1151,
+   SVGA_3D_CMD_DX_DRAW                                    = 1152,
+   SVGA_3D_CMD_DX_DRAW_INDEXED                            = 1153,
+   SVGA_3D_CMD_DX_DRAW_INSTANCED                          = 1154,
+   SVGA_3D_CMD_DX_DRAW_INDEXED_INSTANCED                  = 1155,
+   SVGA_3D_CMD_DX_DRAW_AUTO                               = 1156,
+   SVGA_3D_CMD_DX_SET_INPUT_LAYOUT                        = 1157,
+   SVGA_3D_CMD_DX_SET_VERTEX_BUFFERS                      = 1158,
+   SVGA_3D_CMD_DX_SET_INDEX_BUFFER                        = 1159,
+   SVGA_3D_CMD_DX_SET_TOPOLOGY                            = 1160,
+   SVGA_3D_CMD_DX_SET_RENDERTARGETS                       = 1161,
+   SVGA_3D_CMD_DX_SET_BLEND_STATE                         = 1162,
+   SVGA_3D_CMD_DX_SET_DEPTHSTENCIL_STATE                  = 1163,
+   SVGA_3D_CMD_DX_SET_RASTERIZER_STATE                    = 1164,
+   SVGA_3D_CMD_DX_DEFINE_QUERY                            = 1165,
+   SVGA_3D_CMD_DX_DESTROY_QUERY                           = 1166,
+   SVGA_3D_CMD_DX_BIND_QUERY                              = 1167,
+   SVGA_3D_CMD_DX_SET_QUERY_OFFSET                        = 1168,
+   SVGA_3D_CMD_DX_BEGIN_QUERY                             = 1169,
+   SVGA_3D_CMD_DX_END_QUERY                               = 1170,
+   SVGA_3D_CMD_DX_READBACK_QUERY                          = 1171,
+   SVGA_3D_CMD_DX_SET_PREDICATION                         = 1172,
+   SVGA_3D_CMD_DX_SET_SOTARGETS                           = 1173,
+   SVGA_3D_CMD_DX_SET_VIEWPORTS                           = 1174,
+   SVGA_3D_CMD_DX_SET_SCISSORRECTS                        = 1175,
+   SVGA_3D_CMD_DX_CLEAR_RENDERTARGET_VIEW                 = 1176,
+   SVGA_3D_CMD_DX_CLEAR_DEPTHSTENCIL_VIEW                 = 1177,
+   SVGA_3D_CMD_DX_PRED_COPY_REGION                        = 1178,
+   SVGA_3D_CMD_DX_PRED_COPY                               = 1179,
+   SVGA_3D_CMD_DX_STRETCHBLT                              = 1180,
+   SVGA_3D_CMD_DX_GENMIPS                                 = 1181,
+   SVGA_3D_CMD_DX_UPDATE_SUBRESOURCE                      = 1182,
+   SVGA_3D_CMD_DX_READBACK_SUBRESOURCE                    = 1183,
+   SVGA_3D_CMD_DX_INVALIDATE_SUBRESOURCE                  = 1184,
+   SVGA_3D_CMD_DX_DEFINE_SHADERRESOURCE_VIEW              = 1185,
+   SVGA_3D_CMD_DX_DESTROY_SHADERRESOURCE_VIEW             = 1186,
+   SVGA_3D_CMD_DX_DEFINE_RENDERTARGET_VIEW                = 1187,
+   SVGA_3D_CMD_DX_DESTROY_RENDERTARGET_VIEW               = 1188,
+   SVGA_3D_CMD_DX_DEFINE_DEPTHSTENCIL_VIEW                = 1189,
+   SVGA_3D_CMD_DX_DESTROY_DEPTHSTENCIL_VIEW               = 1190,
+   SVGA_3D_CMD_DX_DEFINE_ELEMENTLAYOUT                    = 1191,
+   SVGA_3D_CMD_DX_DESTROY_ELEMENTLAYOUT                   = 1192,
+   SVGA_3D_CMD_DX_DEFINE_BLEND_STATE                      = 1193,
+   SVGA_3D_CMD_DX_DESTROY_BLEND_STATE                     = 1194,
+   SVGA_3D_CMD_DX_DEFINE_DEPTHSTENCIL_STATE               = 1195,
+   SVGA_3D_CMD_DX_DESTROY_DEPTHSTENCIL_STATE              = 1196,
+   SVGA_3D_CMD_DX_DEFINE_RASTERIZER_STATE                 = 1197,
+   SVGA_3D_CMD_DX_DESTROY_RASTERIZER_STATE                = 1198,
+   SVGA_3D_CMD_DX_DEFINE_SAMPLER_STATE                    = 1199,
+   SVGA_3D_CMD_DX_DESTROY_SAMPLER_STATE                   = 1200,
+   SVGA_3D_CMD_DX_DEFINE_SHADER                           = 1201,
+   SVGA_3D_CMD_DX_DESTROY_SHADER                          = 1202,
+   SVGA_3D_CMD_DX_BIND_SHADER                             = 1203,
+   SVGA_3D_CMD_DX_DEFINE_STREAMOUTPUT                     = 1204,
+   SVGA_3D_CMD_DX_DESTROY_STREAMOUTPUT                    = 1205,
+   SVGA_3D_CMD_DX_SET_STREAMOUTPUT                        = 1206,
+   SVGA_3D_CMD_DX_SET_COTABLE                             = 1207,
+   SVGA_3D_CMD_DX_READBACK_COTABLE                        = 1208,
+   SVGA_3D_CMD_DX_BUFFER_COPY                             = 1209,
+   SVGA_3D_CMD_DX_TRANSFER_FROM_BUFFER                    = 1210,
+   SVGA_3D_CMD_DX_SURFACE_COPY_AND_READBACK               = 1211,
+   SVGA_3D_CMD_DX_MOVE_QUERY                              = 1212,
+   SVGA_3D_CMD_DX_BIND_ALL_QUERY                          = 1213,
+   SVGA_3D_CMD_DX_READBACK_ALL_QUERY                      = 1214,
+   SVGA_3D_CMD_DX_PRED_TRANSFER_FROM_BUFFER               = 1215,
+   SVGA_3D_CMD_DX_MOB_FENCE_64                            = 1216,
+   SVGA_3D_CMD_DX_BIND_ALL_SHADER                         = 1217,
+   SVGA_3D_CMD_DX_HINT                                    = 1218,
+   SVGA_3D_CMD_DX_BUFFER_UPDATE                           = 1219,
+   SVGA_3D_CMD_DX_SET_VS_CONSTANT_BUFFER_OFFSET           = 1220,
+   SVGA_3D_CMD_DX_SET_PS_CONSTANT_BUFFER_OFFSET           = 1221,
+   SVGA_3D_CMD_DX_SET_GS_CONSTANT_BUFFER_OFFSET           = 1222,
+
+   /*
+    * Reserve some IDs to be used for the DX11 shader types.
+    */
+   SVGA_3D_CMD_DX_RESERVED1                               = 1223,
+   SVGA_3D_CMD_DX_RESERVED2                               = 1224,
+   SVGA_3D_CMD_DX_RESERVED3                               = 1225,
+
+   SVGA_3D_CMD_DX_COND_BIND_ALL_SHADER                    = 1226,
+
+   SVGA_3D_CMD_DX_MAX                                     = 1227,
+   SVGA_3D_CMD_MAX                                        = 1227,
+   SVGA_3D_CMD_FUTURE_MAX                                 = 3000
+} SVGAFifo3dCmdId;
 
 /*
  * FIFO command format definitions:
@@ -193,54 +290,6 @@ struct {
 }
 #include "vmware_pack_end.h"
 SVGA3dCmdHeader;
-
-typedef enum {
-   SVGA3D_SURFACE_CUBEMAP               = (1 << 0),
-
-   /*
-    * HINT flags are not enforced by the device but are useful for
-    * performance.
-    */
-   SVGA3D_SURFACE_HINT_STATIC           = (1 << 1),
-   SVGA3D_SURFACE_HINT_DYNAMIC          = (1 << 2),
-   SVGA3D_SURFACE_HINT_INDEXBUFFER      = (1 << 3),
-   SVGA3D_SURFACE_HINT_VERTEXBUFFER     = (1 << 4),
-   SVGA3D_SURFACE_HINT_TEXTURE          = (1 << 5),
-   SVGA3D_SURFACE_HINT_RENDERTARGET     = (1 << 6),
-   SVGA3D_SURFACE_HINT_DEPTHSTENCIL     = (1 << 7),
-   SVGA3D_SURFACE_HINT_WRITEONLY        = (1 << 8),
-   SVGA3D_SURFACE_MASKABLE_ANTIALIAS    = (1 << 9),
-   SVGA3D_SURFACE_AUTOGENMIPMAPS        = (1 << 10),
-   SVGA3D_SURFACE_DECODE_RENDERTARGET   = (1 << 11),
-
-   /*
-    * Is this surface using a base-level pitch for it's mob backing?
-    *
-    * This flag is not intended to be set by guest-drivers, but is instead
-    * set by the device when the surface is bound to a mob with a specified
-    * pitch.
-    */
-   SVGA3D_SURFACE_MOB_PITCH             = (1 << 12),
-
-   SVGA3D_SURFACE_INACTIVE              = (1 << 13),
-   SVGA3D_SURFACE_HINT_RT_LOCKABLE      = (1 << 14),
-   SVGA3D_SURFACE_VOLUME                = (1 << 15),
-
-   /*
-    * Required to be set on a surface to bind it to a screen target.
-    */
-   SVGA3D_SURFACE_SCREENTARGET          = (1 << 16),
-
-   SVGA3D_SURFACE_RESERVED1             = (1 << 17),
-   SVGA3D_SURFACE_1D                    = (1 << 18),
-   SVGA3D_SURFACE_ARRAY                 = (1 << 19),
-
-} SVGA3dSurfaceFlags;
-
-#define SVGA3D_SURFACE_HB_DISALLOWED_MASK (SVGA3D_SURFACE_SCREENTARGET | \
-                                           SVGA3D_SURFACE_MOB_PITCH    | \
-                                           SVGA3D_SURFACE_BIND_CONSTANT_BUFFER | \
-                                           SVGA3D_SURFACE_BIND_STREAM_OUTPUT)
 
 typedef
 #include "vmware_pack_begin.h"
@@ -669,6 +718,128 @@ SVGA3dCmdDrawPrimitives;      /* SVGA_3D_CMD_DRAWPRIMITIVES */
 typedef
 #include "vmware_pack_begin.h"
 struct {
+   uint32 cid;
+
+   uint32 primitiveCount;        /* How many primitives to render */
+   uint32 startVertexLocation;   /* Which vertex do we start rendering at. */
+
+   uint8 primitiveType;          /* SVGA3dPrimitiveType */
+   uint8 padding[3];
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDraw;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 cid;
+
+   uint8 primitiveType;       /* SVGA3dPrimitiveType */
+
+   uint32 indexBufferSid;     /* Valid index buffer sid. */
+   uint32 indexBufferOffset;  /* Byte offset into the vertex buffer, almost */
+			      /* always 0 for DX9 guests, non-zero for OpenGL */
+                              /* guests.  We can't represent non-multiple of */
+                              /* stride offsets in D3D9Renderer... */
+   uint8 indexBufferStride;   /* Allowable values = 1, 2, or 4 */
+
+   int32 baseVertexLocation;  /* Bias applied to the index when selecting a */
+                              /* vertex from the streams, may be negative */
+
+   uint32 primitiveCount;     /* How many primitives to render */
+   uint32 pad0;
+   uint16 pad1;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDrawIndexed;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   /*
+    * Describe a vertex array's data type, and define how it is to be
+    * used by the fixed function pipeline or the vertex shader. It
+    * isn't useful to have two VertexDecls with the same
+    * VertexArrayIdentity in one draw call.
+    */
+   uint16 streamOffset;
+   uint8 stream;
+   uint8 type;          /* SVGA3dDeclType */
+   uint8 method;        /* SVGA3dDeclMethod */
+   uint8 usage;         /* SVGA3dDeclUsage */
+   uint8 usageIndex;
+   uint8 padding;
+
+}
+#include "vmware_pack_end.h"
+SVGA3dVertexElement;
+
+/*
+ * Should the vertex element respect the stream value?  The high bit of the
+ * stream should be set to indicate that the stream should be respected.  If
+ * the high bit is not set, the stream will be ignored and replaced by the index
+ * of the position of the currently considered vertex element.
+ *
+ * All guests should set this bit and correctly specify the stream going
+ * forward.
+ */
+#define SVGA3D_VERTEX_ELEMENT_RESPECT_STREAM (1 << 7)
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 cid;
+
+   uint32 numElements;
+
+   /*
+    * Followed by numElements SVGA3dVertexElement structures.
+    *
+    * If numElements < SVGA3D_MAX_VERTEX_ARRAYS, the remaining elements
+    * are cleared and will not be used by following draws.
+    */
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdSetVertexDecls;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 sid;
+   uint32 stride;
+   uint32 offset;
+}
+#include "vmware_pack_end.h"
+SVGA3dVertexStream;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 cid;
+
+   uint32 numStreams;
+   /*
+    * Followed by numStream SVGA3dVertexStream structures.
+    *
+    * If numStreams < SVGA3D_MAX_VERTEX_ARRAYS, the remaining streams
+    * are cleared and will not be used by following draws.
+    */
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdSetVertexStreams;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 cid;
+   uint32 numDivisors;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdSetVertexDivisors;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
    uint32                   stage;
    SVGA3dTextureStateName   name;
    union {
@@ -989,38 +1160,6 @@ struct SVGA3dCmdScreenDMA {
 SVGA3dCmdScreenDMA;        /* SVGA_3D_CMD_SCREEN_DMA */
 
 /*
- * Set Unity Surface Cookie
- *
- * Associates the supplied cookie with the surface id for use with
- * Unity.  This cookie is a hint from guest to host, there is no way
- * for the guest to readback the cookie and the host is free to drop
- * the cookie association at will.  The default value for the cookie
- * on all surfaces is 0.
- */
-
-typedef
-#include "vmware_pack_begin.h"
-struct SVGA3dCmdSetUnitySurfaceCookie {
-   uint32 sid;
-   uint64 cookie;
-}
-#include "vmware_pack_end.h"
-SVGA3dCmdSetUnitySurfaceCookie;   /* SVGA_3D_CMD_SET_UNITY_SURFACE_COOKIE */
-
-/*
- * Open a context-specific surface in a non-context-specific manner.
- */
-
-typedef
-#include "vmware_pack_begin.h"
-struct SVGA3dCmdOpenContextSurface {
-   uint32 sid;
-}
-#include "vmware_pack_end.h"
-SVGA3dCmdOpenContextSurface;   /* SVGA_3D_CMD_OPEN_CONTEXT_SURFACE */
-
-
-/*
  * Logic ops
  */
 
@@ -1139,8 +1278,8 @@ struct SVGA3dCmdLogicOpsClearTypeBlend {
    uint32 gamma;
    uint32 color;
    uint32 color2;
-   int alphaOffsetX;
-   int alphaOffsetY;
+   int32 alphaOffsetX;
+   int32 alphaOffsetY;
    /* Followed by variable number of SVGA3dBox structures */
 }
 #include "vmware_pack_end.h"
@@ -1151,8 +1290,76 @@ SVGA3dCmdLogicOpsClearTypeBlend;   /* SVGA_3D_CMD_LOGICOPS_CLEARTYPEBLEND */
  * Guest-backed objects definitions.
  */
 
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGAMobFormat ptDepth;
+   uint32 sizeInBytes;
+   PPN64 base;
+}
+#include "vmware_pack_end.h"
+SVGAOTableMobEntry;
+#define SVGA3D_OTABLE_MOB_ENTRY_SIZE (sizeof(SVGAOTableMobEntry))
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGA3dSurfaceFormat format;
+   SVGA3dSurfaceFlags surfaceFlags;
+   uint32 numMipLevels;
+   uint32 multisampleCount;
+   SVGA3dTextureFilter autogenFilter;
+   SVGA3dSize size;
+   SVGAMobId mobid;
+   uint32 arraySize;
+   uint32 mobPitch;
+   uint32 pad[5];
+}
+#include "vmware_pack_end.h"
+SVGAOTableSurfaceEntry;
+#define SVGA3D_OTABLE_SURFACE_ENTRY_SIZE (sizeof(SVGAOTableSurfaceEntry))
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 cid;
+   SVGAMobId mobid;
+}
+#include "vmware_pack_end.h"
+SVGAOTableContextEntry;
+#define SVGA3D_OTABLE_CONTEXT_ENTRY_SIZE (sizeof(SVGAOTableContextEntry))
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGA3dShaderType type;
+   uint32 sizeInBytes;
+   uint32 offsetInBytes;
+   SVGAMobId mobid;
+}
+#include "vmware_pack_end.h"
+SVGAOTableShaderEntry;
+#define SVGA3D_OTABLE_SHADER_ENTRY_SIZE (sizeof(SVGAOTableShaderEntry))
+
 #define SVGA_STFLAG_PRIMARY (1 << 0)
 typedef uint32 SVGAScreenTargetFlags;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGA3dSurfaceImageId image;
+   uint32 width;
+   uint32 height;
+   int32 xRoot;
+   int32 yRoot;
+   SVGAScreenTargetFlags flags;
+   uint32 dpi;
+   uint32 pad[7];
+}
+#include "vmware_pack_end.h"
+SVGAOTableScreenTargetEntry;
+#define SVGA3D_OTABLE_SCREEN_TARGET_ENTRY_SIZE \
+	(sizeof(SVGAOTableScreenTargetEntry))
 
 typedef
 #include "vmware_pack_begin.h"
@@ -1177,6 +1384,209 @@ struct {
 }
 #include "vmware_pack_end.h"
 SVGA3dShaderConstBool;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint16 streamOffset;
+   uint8 stream;
+   uint8 type;
+   uint8 methodUsage;
+   uint8 usageIndex;
+}
+#include "vmware_pack_end.h"
+SVGAGBVertexElement;
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 sid;
+   uint16 stride;
+   uint32 offset;
+}
+#include "vmware_pack_end.h"
+SVGAGBVertexStream;
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGA3dRect viewport;
+   SVGA3dRect scissorRect;
+   SVGA3dZRange zRange;
+
+   SVGA3dSurfaceImageId renderTargets[SVGA3D_RT_MAX];
+   SVGAGBVertexElement decl1[4];
+
+   uint32 renderStates[SVGA3D_RS_MAX];
+   SVGAGBVertexElement decl2[18];
+   uint32 pad0[2];
+
+   struct {
+      SVGA3dFace face;
+      SVGA3dMaterial material;
+   } material;
+
+   float clipPlanes[SVGA3D_NUM_CLIPPLANES][4];
+   float matrices[SVGA3D_TRANSFORM_MAX][16];
+
+   SVGA3dBool lightEnabled[SVGA3D_NUM_LIGHTS];
+   SVGA3dLightData lightData[SVGA3D_NUM_LIGHTS];
+
+   /*
+    * Shaders currently bound
+    */
+   uint32 shaders[SVGA3D_NUM_SHADERTYPE_PREDX];
+   SVGAGBVertexElement decl3[10];
+   uint32 pad1[3];
+
+   uint32 occQueryActive;
+   uint32 occQueryValue;
+
+   /*
+    * Int/Bool Shader constants
+    */
+   SVGA3dShaderConstInt pShaderIValues[SVGA3D_CONSTINTREG_MAX];
+   SVGA3dShaderConstInt vShaderIValues[SVGA3D_CONSTINTREG_MAX];
+   uint16 pShaderBValues;
+   uint16 vShaderBValues;
+
+
+   SVGAGBVertexStream streams[SVGA3D_MAX_VERTEX_ARRAYS];
+   SVGA3dVertexDivisor divisors[SVGA3D_MAX_VERTEX_ARRAYS];
+   uint32 numVertexDecls;
+   uint32 numVertexStreams;
+   uint32 numVertexDivisors;
+   uint32 pad2[30];
+
+   /*
+    * Texture Stages
+    *
+    * SVGA3D_TS_INVALID through SVGA3D_TS_CONSTANT are in the
+    * textureStages array.
+    * SVGA3D_TS_COLOR_KEY is in tsColorKey.
+    */
+   uint32 tsColorKey[SVGA3D_NUM_TEXTURE_UNITS];
+   uint32 textureStages[SVGA3D_NUM_TEXTURE_UNITS][SVGA3D_TS_CONSTANT + 1];
+   uint32 tsColorKeyEnable[SVGA3D_NUM_TEXTURE_UNITS];
+
+   /*
+    * Float Shader constants.
+    */
+   SVGA3dShaderConstFloat pShaderFValues[SVGA3D_CONSTREG_MAX];
+   SVGA3dShaderConstFloat vShaderFValues[SVGA3D_CONSTREG_MAX];
+}
+#include "vmware_pack_end.h"
+SVGAGBContextData;
+#define SVGA3D_CONTEXT_DATA_SIZE (sizeof(SVGAGBContextData))
+
+/*
+ * SVGA3dCmdSetOTableBase --
+ *
+ * This command allows the guest to specify the base PPN of the
+ * specified object table.
+ */
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGAOTableType type;
+   PPN baseAddress;
+   uint32 sizeInBytes;
+   uint32 validSizeInBytes;
+   SVGAMobFormat ptDepth;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdSetOTableBase;  /* SVGA_3D_CMD_SET_OTABLE_BASE */
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGAOTableType type;
+   PPN64 baseAddress;
+   uint32 sizeInBytes;
+   uint32 validSizeInBytes;
+   SVGAMobFormat ptDepth;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdSetOTableBase64;  /* SVGA_3D_CMD_SET_OTABLE_BASE64 */
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   SVGAOTableType type;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdReadbackOTable;  /* SVGA_3D_CMD_READBACK_OTABLE */
+
+/*
+ * Define a memory object (Mob) in the OTable.
+ */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDefineGBMob {
+   SVGAMobId mobid;
+   SVGAMobFormat ptDepth;
+   PPN base;
+   uint32 sizeInBytes;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDefineGBMob;   /* SVGA_3D_CMD_DEFINE_GB_MOB */
+
+
+/*
+ * Destroys an object in the OTable.
+ */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDestroyGBMob {
+   SVGAMobId mobid;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDestroyGBMob;   /* SVGA_3D_CMD_DESTROY_GB_MOB */
+
+
+/*
+ * Define a memory object (Mob) in the OTable with a PPN64 base.
+ */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDefineGBMob64 {
+   SVGAMobId mobid;
+   SVGAMobFormat ptDepth;
+   PPN64 base;
+   uint32 sizeInBytes;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDefineGBMob64;   /* SVGA_3D_CMD_DEFINE_GB_MOB64 */
+
+/*
+ * Redefine an object in the OTable with PPN64 base.
+ */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdRedefineGBMob64 {
+   SVGAMobId mobid;
+   SVGAMobFormat ptDepth;
+   PPN64 base;
+   uint32 sizeInBytes;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdRedefineGBMob64;   /* SVGA_3D_CMD_REDEFINE_GB_MOB64 */
+
+/*
+ * Notification that the page tables have been modified.
+ */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdUpdateGBMobMapping {
+   SVGAMobId mobid;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdUpdateGBMobMapping;   /* SVGA_3D_CMD_UPDATE_GB_MOB_MAPPING */
 
 /*
  * Define a guest-backed surface.
@@ -1243,7 +1653,7 @@ SVGA3dCmdBindGBSurfaceWithPitch;   /* SVGA_3D_CMD_BIND_GB_SURFACE_WITH_PITCH */
 
 typedef
 #include "vmware_pack_begin.h"
-struct{
+struct SVGA3dCmdCondBindGBSurface {
    uint32 sid;
    SVGAMobId testMobid;
    SVGAMobId mobid;
@@ -1477,18 +1887,6 @@ struct SVGA3dCmdDestroyGBShader {
 #include "vmware_pack_end.h"
 SVGA3dCmdDestroyGBShader;   /* SVGA_3D_CMD_DESTROY_GB_SHADER */
 
-
-typedef
-#include "vmware_pack_begin.h"
-struct SVGA3dCmdBindGBShaderConsts {
-   uint32 cid;
-   SVGA3dShaderType shaderType;
-   SVGA3dShaderConstType shaderConstType;
-   uint32 sid;
-}
-#include "vmware_pack_end.h"
-SVGA3dCmdBindGBShaderConsts;   /* SVGA_3D_CMD_BIND_SHADERCONSTS */
-
 typedef
 #include "vmware_pack_begin.h"
 struct {
@@ -1553,7 +1951,7 @@ typedef
 #include "vmware_pack_begin.h"
 struct {
    SVGAMobId mobid;
-   uint32 fbOffset;
+   uint32 mustBeZero;
    uint32 initialized;
 }
 #include "vmware_pack_end.h"
@@ -1649,6 +2047,6 @@ struct {
    uint32 mobOffset;
 }
 #include "vmware_pack_end.h"
-SVGA3dCmdGBMobFence;  /* SVGA_3D_CMD_GB_MOB_FENCE*/
+SVGA3dCmdGBMobFence;  /* SVGA_3D_CMD_GB_MOB_FENCE */
 
-#endif // _SVGA3D_CMD_H_
+#endif /* _SVGA3D_CMD_H_ */

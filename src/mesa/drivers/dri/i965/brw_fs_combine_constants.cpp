@@ -121,7 +121,7 @@ struct imm {
     * constant value.
     */
    uint8_t subreg_offset;
-   uint16_t reg;
+   uint16_t nr;
 
    /** The number of coissuable instructions using this immediate. */
    uint16_t uses_by_coissue;
@@ -219,7 +219,7 @@ fs_visitor::opt_combine_constants()
              inst->src[i].type != BRW_REGISTER_TYPE_F)
             continue;
 
-         float val = fabsf(inst->src[i].fixed_hw_reg.dw1.f);
+         float val = fabsf(inst->src[i].f);
          struct imm *imm = find_imm(&table, val);
 
          if (imm) {
@@ -268,7 +268,7 @@ fs_visitor::opt_combine_constants()
 
 
    /* Insert MOVs to load the constant values into GRFs. */
-   fs_reg reg(GRF, alloc.allocate(dispatch_width / 8));
+   fs_reg reg(VGRF, alloc.allocate(dispatch_width / 8));
    reg.stride = 0;
    for (int i = 0; i < table.len; i++) {
       struct imm *imm = &table.imm[i];
@@ -279,13 +279,13 @@ fs_visitor::opt_combine_constants()
                       imm->block->last_non_control_flow_inst()->next);
       const fs_builder ibld = bld.at(imm->block, n).exec_all().group(1, 0);
 
-      ibld.MOV(reg, fs_reg(imm->val));
-      imm->reg = reg.reg;
+      ibld.MOV(reg, brw_imm_f(imm->val));
+      imm->nr = reg.nr;
       imm->subreg_offset = reg.subreg_offset;
 
       reg.subreg_offset += sizeof(float);
       if ((unsigned)reg.subreg_offset == dispatch_width * sizeof(float)) {
-         reg.reg = alloc.allocate(dispatch_width / 8);
+         reg.nr = alloc.allocate(dispatch_width / 8);
          reg.subreg_offset = 0;
       }
    }
@@ -295,13 +295,12 @@ fs_visitor::opt_combine_constants()
    for (int i = 0; i < table.len; i++) {
       foreach_list_typed(reg_link, link, link, table.imm[i].uses) {
          fs_reg *reg = link->reg;
-         reg->file = GRF;
-         reg->reg = table.imm[i].reg;
+         reg->file = VGRF;
+         reg->nr = table.imm[i].nr;
          reg->subreg_offset = table.imm[i].subreg_offset;
          reg->stride = 0;
-         reg->negate = signbit(reg->fixed_hw_reg.dw1.f) !=
-                               signbit(table.imm[i].val);
-         assert(fabsf(reg->fixed_hw_reg.dw1.f) == table.imm[i].val);
+         reg->negate = signbit(reg->f) != signbit(table.imm[i].val);
+         assert(fabsf(reg->f) == table.imm[i].val);
       }
    }
 

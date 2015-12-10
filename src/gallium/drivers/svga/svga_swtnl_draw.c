@@ -42,9 +42,9 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
 {
    struct pipe_transfer *vb_transfer[PIPE_MAX_ATTRIBS] = { 0 };
    struct pipe_transfer *ib_transfer = NULL;
-   struct pipe_transfer *cb_transfer = NULL;
+   struct pipe_transfer *cb_transfer[SVGA_MAX_CONST_BUFS] = { 0 };
    struct draw_context *draw = svga->swtnl.draw;
-   unsigned i;
+   unsigned i, old_num_vertex_buffers;
    const void *map;
    enum pipe_error ret;
 
@@ -76,6 +76,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
          draw_set_mapped_vertex_buffer(draw, i, map, ~0);
       }
    }
+   old_num_vertex_buffers = svga->curr.num_vertex_buffers;
 
    /* Map index buffer, if present */
    map = NULL;
@@ -88,16 +89,21 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
                        svga->curr.ib.index_size, ~0);
    }
 
-   if (svga->curr.cbufs[PIPE_SHADER_VERTEX].buffer) {
+   /* Map constant buffers */
+   for (i = 0; i < Elements(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
+      if (svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer == NULL) {
+         continue;
+      }
+
       map = pipe_buffer_map(&svga->pipe,
-                            svga->curr.cbufs[PIPE_SHADER_VERTEX].buffer,
+                            svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer,
                             PIPE_TRANSFER_READ,
-			    &cb_transfer);
+                            &cb_transfer[i]);
       assert(map);
       draw_set_mapped_constant_buffer(
-         draw, PIPE_SHADER_VERTEX, 0,
+         draw, PIPE_SHADER_VERTEX, i,
          map,
-         svga->curr.cbufs[PIPE_SHADER_VERTEX].buffer->width0);
+         svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer->width0);
    }
 
    draw_vbo(draw, info);
@@ -105,8 +111,8 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    draw_flush(svga->swtnl.draw);
 
    /* Ensure the draw module didn't touch this */
-   assert(i == svga->curr.num_vertex_buffers);
-   
+   assert(old_num_vertex_buffers == svga->curr.num_vertex_buffers);
+
    /*
     * unmap vertex/index buffers
     */
@@ -122,8 +128,10 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
       draw_set_indexes(draw, NULL, 0, 0);
    }
 
-   if (svga->curr.cbufs[PIPE_SHADER_VERTEX].buffer) {
-      pipe_buffer_unmap(&svga->pipe, cb_transfer);
+   for (i = 0; i < Elements(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
+      if (svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer) {
+         pipe_buffer_unmap(&svga->pipe, cb_transfer[i]);
+      }
    }
 
    /* Now safe to remove the need_swtnl flag in any update_state call */
@@ -166,9 +174,6 @@ boolean svga_init_swtnl( struct svga_context *svga )
 
    if (!screen->haveLineSmooth)
       draw_install_aaline_stage(svga->swtnl.draw, &svga->pipe);
-
-   /* always install polygon stipple stage */
-   draw_install_pstipple_stage(svga->swtnl.draw, &svga->pipe);
 
    /* enable/disable line stipple stage depending on device caps */
    draw_enable_line_stipple(svga->swtnl.draw, !screen->haveLineStipple);

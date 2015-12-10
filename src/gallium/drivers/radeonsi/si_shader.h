@@ -26,14 +26,15 @@
  *      Christian König <christian.koenig@amd.com>
  */
 
-/* How linking tessellation shader inputs and outputs works.
+/* How linking shader inputs and outputs between vertex, tessellation, and
+ * geometry shaders works.
  *
  * Inputs and outputs between shaders are stored in a buffer. This buffer
  * lives in LDS (typical case for tessellation), but it can also live
- * in memory. Each input or output has a fixed location within a vertex.
+ * in memory (ESGS). Each input or output has a fixed location within a vertex.
  * The highest used input or output determines the stride between vertices.
  *
- * Since tessellation is only enabled in the OpenGL core profile,
+ * Since GS and tessellation are only possible in the OpenGL core profile,
  * only these semantics are valid for per-vertex data:
  *
  *   Name             Location
@@ -57,13 +58,11 @@
  * That's how independent shaders agree on input and output locations.
  * The si_shader_io_get_unique_index function assigns the locations.
  *
- * Other required information for calculating the input and output addresses
- * like the vertex stride, the patch stride, and the offsets where per-vertex
- * and per-patch data start, is passed to the shader via user data SGPRs.
- * The offsets and strides are calculated at draw time and aren't available
- * at compile time.
- *
- * The same approach should be used for linking ES->GS in the future.
+ * For tessellation, other required information for calculating the input and
+ * output addresses like the vertex stride, the patch stride, and the offsets
+ * where per-vertex and per-patch data start, is passed to the shader via
+ * user data SGPRs. The offsets and strides are calculated at draw time and
+ * aren't available at compile time.
  */
 
 #ifndef SI_SHADER_H
@@ -83,19 +82,22 @@ struct radeon_shader_reloc;
 #define SI_SGPR_VERTEX_BUFFER	8  /* VS only */
 #define SI_SGPR_BASE_VERTEX	10 /* VS only */
 #define SI_SGPR_START_INSTANCE	11 /* VS only */
+#define SI_SGPR_VS_STATE_BITS	12 /* VS(VS) only */
 #define SI_SGPR_LS_OUT_LAYOUT	12 /* VS(LS) only */
 #define SI_SGPR_TCS_OUT_OFFSETS	8  /* TCS & TES only */
 #define SI_SGPR_TCS_OUT_LAYOUT	9  /* TCS & TES only */
 #define SI_SGPR_TCS_IN_LAYOUT	10 /* TCS only */
 #define SI_SGPR_ALPHA_REF	8  /* PS only */
+#define SI_SGPR_PS_STATE_BITS	9  /* PS only */
 
-#define SI_VS_NUM_USER_SGPR	12
-#define SI_LS_NUM_USER_SGPR	13
+#define SI_VS_NUM_USER_SGPR	13 /* API VS */
+#define SI_ES_NUM_USER_SGPR	12 /* API VS */
+#define SI_LS_NUM_USER_SGPR	13 /* API VS */
 #define SI_TCS_NUM_USER_SGPR	11
 #define SI_TES_NUM_USER_SGPR	10
 #define SI_GS_NUM_USER_SGPR	8
 #define SI_GSCOPY_NUM_USER_SGPR	4
-#define SI_PS_NUM_USER_SGPR	9
+#define SI_PS_NUM_USER_SGPR	10
 
 /* LLVM function parameter indices */
 #define SI_PARAM_RW_BUFFERS	0
@@ -107,6 +109,8 @@ struct radeon_shader_reloc;
 #define SI_PARAM_VERTEX_BUFFER	4
 #define SI_PARAM_BASE_VERTEX	5
 #define SI_PARAM_START_INSTANCE	6
+/* [0] = clamp vertex color */
+#define SI_PARAM_VS_STATE_BITS	7
 /* the other VS parameters are assigned dynamically */
 
 /* Offsets where TCS outputs and TCS patch outputs live in LDS:
@@ -148,46 +152,65 @@ struct radeon_shader_reloc;
 
 /* PS only parameters */
 #define SI_PARAM_ALPHA_REF		4
-#define SI_PARAM_PRIM_MASK		5
-#define SI_PARAM_PERSP_SAMPLE		6
-#define SI_PARAM_PERSP_CENTER		7
-#define SI_PARAM_PERSP_CENTROID		8
-#define SI_PARAM_PERSP_PULL_MODEL	9
-#define SI_PARAM_LINEAR_SAMPLE		10
-#define SI_PARAM_LINEAR_CENTER		11
-#define SI_PARAM_LINEAR_CENTROID	12
-#define SI_PARAM_LINE_STIPPLE_TEX	13
-#define SI_PARAM_POS_X_FLOAT		14
-#define SI_PARAM_POS_Y_FLOAT		15
-#define SI_PARAM_POS_Z_FLOAT		16
-#define SI_PARAM_POS_W_FLOAT		17
-#define SI_PARAM_FRONT_FACE		18
-#define SI_PARAM_ANCILLARY		19
-#define SI_PARAM_SAMPLE_COVERAGE	20
-#define SI_PARAM_POS_FIXED_PT		21
+/* Bits:
+ * 0: force_persample_interp
+ */
+#define SI_PARAM_PS_STATE_BITS		5
+#define SI_PARAM_PRIM_MASK		6
+#define SI_PARAM_PERSP_SAMPLE		7
+#define SI_PARAM_PERSP_CENTER		8
+#define SI_PARAM_PERSP_CENTROID		9
+#define SI_PARAM_PERSP_PULL_MODEL	10
+#define SI_PARAM_LINEAR_SAMPLE		11
+#define SI_PARAM_LINEAR_CENTER		12
+#define SI_PARAM_LINEAR_CENTROID	13
+#define SI_PARAM_LINE_STIPPLE_TEX	14
+#define SI_PARAM_POS_X_FLOAT		15
+#define SI_PARAM_POS_Y_FLOAT		16
+#define SI_PARAM_POS_Z_FLOAT		17
+#define SI_PARAM_POS_W_FLOAT		18
+#define SI_PARAM_FRONT_FACE		19
+#define SI_PARAM_ANCILLARY		20
+#define SI_PARAM_SAMPLE_COVERAGE	21
+#define SI_PARAM_POS_FIXED_PT		22
 
 #define SI_NUM_PARAMS (SI_PARAM_POS_FIXED_PT + 1)
 
 struct si_shader;
 
+/* A shader selector is a gallium CSO and contains shader variants and
+ * binaries for one TGSI program. This can be shared by multiple contexts.
+ */
 struct si_shader_selector {
-	struct si_shader *current;
+	pipe_mutex		mutex;
+	struct si_shader	*first_variant; /* immutable after the first variant */
+	struct si_shader	*last_variant; /* mutable */
 
 	struct tgsi_token       *tokens;
 	struct pipe_stream_output_info  so;
 	struct tgsi_shader_info		info;
 
-	unsigned	num_shaders;
-
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	unsigned	type;
 
+	/* Whether the shader has to use a conditional assignment to
+	 * choose between weights when emulating
+	 * pipe_rasterizer_state::force_persample_interp.
+	 * If false, "si_emit_spi_ps_input" will take care of it instead.
+	 */
+	bool		forces_persample_interp_for_persp;
+	bool		forces_persample_interp_for_linear;
+
+	unsigned	esgs_itemsize;
+	unsigned	gs_input_verts_per_prim;
 	unsigned	gs_output_prim;
 	unsigned	gs_max_out_vertices;
 	unsigned	gs_num_invocations;
+	unsigned	max_gs_stream; /* count - 1 */
+	unsigned	gsvs_vertex_size;
+	unsigned	max_gsvs_emit_size;
 
 	/* masks of "get_unique_index" bits */
-	uint64_t	inputs_read;
 	uint64_t	outputs_written;
 	uint32_t	patch_outputs_written;
 	uint32_t	ps_colors_written;
@@ -213,16 +236,16 @@ union si_shader_key {
 		unsigned	alpha_to_one:1;
 		unsigned	poly_stipple:1;
 		unsigned	poly_line_smoothing:1;
+		unsigned	clamp_color:1;
 	} ps;
 	struct {
 		unsigned	instance_divisors[SI_NUM_VERTEX_BUFFERS];
 		/* Mask of "get_unique_index" bits - which outputs are read
 		 * by the next stage (needed by ES).
 		 * This describes how outputs are laid out in memory. */
-		uint64_t	es_enabled_outputs;
 		unsigned	as_es:1; /* export shader */
 		unsigned	as_ls:1; /* local shader */
-		unsigned	export_prim_id; /* when PS needs it and GS is disabled */
+		unsigned	export_prim_id:1; /* when PS needs it and GS is disabled */
 	} vs;
 	struct {
 		unsigned	prim_mode:3;
@@ -231,9 +254,8 @@ union si_shader_key {
 		/* Mask of "get_unique_index" bits - which outputs are read
 		 * by the next stage (needed by ES).
 		 * This describes how outputs are laid out in memory. */
-		uint64_t	es_enabled_outputs;
 		unsigned	as_es:1; /* export shader */
-		unsigned	export_prim_id; /* when PS needs it and GS is disabled */
+		unsigned	export_prim_id:1; /* when PS needs it and GS is disabled */
 	} tes; /* tessellation evaluation shader */
 };
 
@@ -268,28 +290,30 @@ struct si_shader {
 	bool			is_gs_copy_shader;
 	bool			dx10_clamp_mode; /* convert NaNs to 0 */
 
-	unsigned		ls_rsrc1;
-	unsigned		ls_rsrc2;
+	unsigned		rsrc1;
+	unsigned		rsrc2;
 };
 
 static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
 {
-	if (sctx->gs_shader)
-		return &sctx->gs_shader->info;
-	else if (sctx->tes_shader)
-		return &sctx->tes_shader->info;
+	if (sctx->gs_shader.cso)
+		return &sctx->gs_shader.cso->info;
+	else if (sctx->tes_shader.cso)
+		return &sctx->tes_shader.cso->info;
+	else if (sctx->vs_shader.cso)
+		return &sctx->vs_shader.cso->info;
 	else
-		return &sctx->vs_shader->info;
+		return NULL;
 }
 
 static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 {
-	if (sctx->gs_shader)
-		return sctx->gs_shader->current->gs_copy_shader;
-	else if (sctx->tes_shader)
-		return sctx->tes_shader->current;
+	if (sctx->gs_shader.current)
+		return sctx->gs_shader.current->gs_copy_shader;
+	else if (sctx->tes_shader.current)
+		return sctx->tes_shader.current;
 	else
-		return sctx->vs_shader->current;
+		return sctx->vs_shader.current;
 }
 
 static inline bool si_vs_exports_prim_id(struct si_shader *shader)
@@ -305,9 +329,10 @@ static inline bool si_vs_exports_prim_id(struct si_shader *shader)
 /* radeonsi_shader.c */
 int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
 		     struct si_shader *shader);
+void si_dump_shader_key(unsigned shader, union si_shader_key *key, FILE *f);
 int si_compile_llvm(struct si_screen *sscreen, struct si_shader *shader,
 		    LLVMTargetMachineRef tm, LLVMModuleRef mod);
-void si_shader_destroy(struct pipe_context *ctx, struct si_shader *shader);
+void si_shader_destroy(struct si_shader *shader);
 unsigned si_shader_io_get_unique_index(unsigned semantic_name, unsigned index);
 int si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader);
 int si_shader_binary_read(struct si_screen *sscreen, struct si_shader *shader);

@@ -35,6 +35,7 @@
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/enums.h"
+#include "util/half_float.h"
 
 #include "t_context.h"
 #include "tnl.h"

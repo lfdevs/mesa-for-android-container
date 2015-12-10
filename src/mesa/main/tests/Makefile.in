@@ -93,6 +93,8 @@ check_PROGRAMS = main-test$(EXEEXT)
 @HAVE_SHARED_GLAPI_TRUE@am__append_1 = -DHAVE_SHARED_GLAPI
 @HAVE_SHARED_GLAPI_TRUE@am__append_2 = \
 @HAVE_SHARED_GLAPI_TRUE@	dispatch_sanity.cpp		\
+@HAVE_SHARED_GLAPI_TRUE@	mesa_formats.cpp			\
+@HAVE_SHARED_GLAPI_TRUE@	mesa_extensions.cpp			\
 @HAVE_SHARED_GLAPI_TRUE@	program_state_string.cpp
 
 @HAVE_SHARED_GLAPI_TRUE@am__append_3 = \
@@ -120,8 +122,11 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__main_test_SOURCES_DIST = enum_strings.cpp dispatch_sanity.cpp \
-	program_state_string.cpp stubs.cpp
+	mesa_formats.cpp mesa_extensions.cpp program_state_string.cpp \
+	stubs.cpp
 @HAVE_SHARED_GLAPI_TRUE@am__objects_1 = dispatch_sanity.$(OBJEXT) \
+@HAVE_SHARED_GLAPI_TRUE@	mesa_formats.$(OBJEXT) \
+@HAVE_SHARED_GLAPI_TRUE@	mesa_extensions.$(OBJEXT) \
 @HAVE_SHARED_GLAPI_TRUE@	program_state_string.$(OBJEXT)
 @HAVE_SHARED_GLAPI_FALSE@am__objects_2 = stubs.$(OBJEXT)
 am_main_test_OBJECTS = enum_strings.$(OBJEXT) $(am__objects_1) \
@@ -500,6 +505,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -544,6 +551,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -577,7 +586,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -608,6 +621,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -680,7 +695,6 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CFLAGS = \
-	$(X11_CFLAGS) \
 	$(PTHREAD_CFLAGS)
 
 AM_CPPFLAGS = -I$(top_srcdir)/src/gtest/include -I$(top_srcdir)/src \
@@ -746,6 +760,8 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dispatch_sanity.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/enum_strings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mesa_extensions.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mesa_formats.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/program_state_string.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stubs.Po@am__quote@
 

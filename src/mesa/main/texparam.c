@@ -1208,20 +1208,35 @@ static GLboolean
 legal_get_tex_level_parameter_target(struct gl_context *ctx, GLenum target,
                                      bool dsa)
 {
+   /* Common targets for desktop GL and GLES 3.1. */
    switch (target) {
-   case GL_TEXTURE_1D:
-   case GL_PROXY_TEXTURE_1D:
    case GL_TEXTURE_2D:
-   case GL_PROXY_TEXTURE_2D:
    case GL_TEXTURE_3D:
-   case GL_PROXY_TEXTURE_3D:
       return GL_TRUE;
+   case GL_TEXTURE_2D_ARRAY_EXT:
+      return ctx->Extensions.EXT_texture_array;
    case GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB:
    case GL_TEXTURE_CUBE_MAP_NEGATIVE_X_ARB:
    case GL_TEXTURE_CUBE_MAP_POSITIVE_Y_ARB:
    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_ARB:
    case GL_TEXTURE_CUBE_MAP_POSITIVE_Z_ARB:
    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_ARB:
+      return ctx->Extensions.ARB_texture_cube_map;
+   case GL_TEXTURE_2D_MULTISAMPLE:
+   case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
+      return ctx->Extensions.ARB_texture_multisample;
+   }
+
+   if (!_mesa_is_desktop_gl(ctx))
+      return GL_FALSE;
+
+   /* Rest of the desktop GL targets. */
+   switch (target) {
+   case GL_TEXTURE_1D:
+   case GL_PROXY_TEXTURE_1D:
+   case GL_PROXY_TEXTURE_2D:
+   case GL_PROXY_TEXTURE_3D:
+      return GL_TRUE;
    case GL_PROXY_TEXTURE_CUBE_MAP_ARB:
       return ctx->Extensions.ARB_texture_cube_map;
    case GL_TEXTURE_CUBE_MAP_ARRAY_ARB:
@@ -1232,7 +1247,6 @@ legal_get_tex_level_parameter_target(struct gl_context *ctx, GLenum target,
       return ctx->Extensions.NV_texture_rectangle;
    case GL_TEXTURE_1D_ARRAY_EXT:
    case GL_PROXY_TEXTURE_1D_ARRAY_EXT:
-   case GL_TEXTURE_2D_ARRAY_EXT:
    case GL_PROXY_TEXTURE_2D_ARRAY_EXT:
       return ctx->Extensions.EXT_texture_array;
    case GL_TEXTURE_BUFFER:
@@ -1254,8 +1268,6 @@ legal_get_tex_level_parameter_target(struct gl_context *ctx, GLenum target,
        * "target may also be TEXTURE_BUFFER, indicating the texture buffer."
        */
       return ctx->API == API_OPENGL_CORE && ctx->Version >= 31;
-   case GL_TEXTURE_2D_MULTISAMPLE:
-   case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
    case GL_PROXY_TEXTURE_2D_MULTISAMPLE:
    case GL_PROXY_TEXTURE_2D_MULTISAMPLE_ARRAY:
       return ctx->Extensions.ARB_texture_multisample;

@@ -128,8 +128,7 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
    /* May need to create a new tree:
     */
    if (!intelObj->mt) {
-      intel_miptree_get_dimensions_for_image(&firstImage->base.Base,
-					     &width, &height, &depth);
+      intel_get_image_dims(&firstImage->base.Base, &width, &height, &depth);
 
       perf_debug("Creating new %s %dx%dx%d %d-level miptree to handle "
                  "finalized texture miptree.\n",

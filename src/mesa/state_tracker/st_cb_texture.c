@@ -695,7 +695,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
     * in which case the memcpy-based fast path will likely be used and
     * we don't have to blit. */
    if (_mesa_format_matches_format_and_type(texImage->TexFormat, format,
-                                            type, unpack->SwapBytes)) {
+                                            type, unpack->SwapBytes, NULL)) {
       goto fallback;
    }
 
@@ -963,7 +963,7 @@ st_GetTexSubImage(struct gl_context * ctx,
    /* See if the texture format already matches the format and type,
     * in which case the memcpy-based fast path will be used. */
    if (_mesa_format_matches_format_and_type(texImage->TexFormat, format,
-                                            type, ctx->Pack.SwapBytes)) {
+                                            type, ctx->Pack.SwapBytes, NULL)) {
       goto fallback;
    }
 
@@ -1116,7 +1116,7 @@ st_GetTexSubImage(struct gl_context * ctx,
 
    /* copy/pack data into user buffer */
    if (_mesa_format_matches_format_and_type(mesa_format, format, type,
-                                            ctx->Pack.SwapBytes)) {
+                                            ctx->Pack.SwapBytes, NULL)) {
       /* memcpy */
       const uint bytesPerRow = width * util_format_get_blocksize(dst_format);
       GLuint row, slice;
@@ -1873,31 +1873,33 @@ st_TextureView(struct gl_context *ctx,
    return GL_TRUE;
 }
 
-/* HACK: this is only enough for the most basic uses of CopyImage. Must fix
- * before actually exposing the extension.
- */
 static void
-st_CopyImageSubData(struct gl_context *ctx,
-                    struct gl_texture_image *src_image,
-                    int src_x, int src_y, int src_z,
-                    struct gl_texture_image *dst_image,
-                    int dst_x, int dst_y, int dst_z,
-                    int src_width, int src_height)
+st_ClearTexSubImage(struct gl_context *ctx,
+                    struct gl_texture_image *texImage,
+                    GLint xoffset, GLint yoffset, GLint zoffset,
+                    GLsizei width, GLsizei height, GLsizei depth,
+                    const GLvoid *clearValue)
 {
+   static const char zeros[16] = {0};
+   struct st_texture_image *stImage = st_texture_image(texImage);
+   struct pipe_resource *pt = stImage->pt;
    struct st_context *st = st_context(ctx);
    struct pipe_context *pipe = st->pipe;
-   struct st_texture_image *src = st_texture_image(src_image);
-   struct st_texture_image *dst = st_texture_image(dst_image);
-
+   unsigned level = texImage->Level;
    struct pipe_box box;
 
-   u_box_2d_zslice(src_x, src_y, src_z, src_width, src_height, &box);
-   pipe->resource_copy_region(pipe, dst->pt, dst_image->Level,
-                              dst_x, dst_y, dst_z,
-                              src->pt, src_image->Level,
-                              &box);
-}
+   if (!pt)
+      return;
 
+   u_box_3d(xoffset, yoffset, zoffset + texImage->Face,
+            width, height, depth, &box);
+   if (texImage->TexObject->Immutable) {
+      level += texImage->TexObject->MinLevel;
+      box.z += texImage->TexObject->MinLayer;
+   }
+
+   pipe->clear_texture(pipe, pt, level, &box, clearValue ? clearValue : zeros);
+}
 
 void
 st_init_texture_functions(struct dd_function_table *functions)
@@ -1930,6 +1932,5 @@ st_init_texture_functions(struct dd_function_table *functions)
 
    functions->AllocTextureStorage = st_AllocTextureStorage;
    functions->TextureView = st_TextureView;
-
-   functions->CopyImageSubData = st_CopyImageSubData;
+   functions->ClearTexSubImage = st_ClearTexSubImage;
 }

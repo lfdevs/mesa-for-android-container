@@ -60,7 +60,6 @@ HDC stw_get_current_dc( void );
 
 BOOL stw_make_current( HDC hdc, DHGLRC dhglrc );
 
-void stw_flush_current_locked( struct stw_framebuffer *fb );
 void stw_notify_current_locked( struct stw_framebuffer *fb );
 
 #endif /* STW_CONTEXT_H */

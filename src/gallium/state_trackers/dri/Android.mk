@@ -29,9 +29,6 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(common_SOURCES)
 
-LOCAL_CFLAGS := \
-	-DGALLIUM_STATIC_TARGETS=1 \
-
 LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/mapi \
 	$(MESA_TOP)/src/mesa \

@@ -53,8 +53,12 @@ gen8_upload_ps_extra(struct brw_context *brw,
        _mesa_get_min_invocations_per_fragment(ctx, fp, false) > 1)
       dw1 |= GEN8_PSX_SHADER_IS_PER_SAMPLE;
 
-   if (fp->Base.SystemValuesRead & SYSTEM_BIT_SAMPLE_MASK_IN)
-      dw1 |= GEN8_PSX_SHADER_USES_INPUT_COVERAGE_MASK;
+   if (fp->Base.SystemValuesRead & SYSTEM_BIT_SAMPLE_MASK_IN) {
+      if (brw->gen >= 9)
+         dw1 |= BRW_PSICMS_INNER << GEN9_PSX_SHADER_NORMAL_COVERAGE_MASK_SHIFT;
+      else
+         dw1 |= GEN8_PSX_SHADER_USES_INPUT_COVERAGE_MASK;
+   }
 
    if (prog_data->uses_omask)
       dw1 |= GEN8_PSX_OMASK_TO_RENDER_TARGET;
@@ -90,6 +94,11 @@ gen8_upload_ps_extra(struct brw_context *brw,
         prog_data->base.nr_image_params) &&
        !brw_color_buffer_write_enabled(brw))
       dw1 |= GEN8_PSX_SHADER_HAS_UAV;
+
+   if (prog_data->computed_stencil) {
+      assert(brw->gen >= 9);
+      dw1 |= GEN9_PSX_SHADER_COMPUTES_STENCIL;
+   }
 
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_PS_EXTRA << 16 | (2 - 2));

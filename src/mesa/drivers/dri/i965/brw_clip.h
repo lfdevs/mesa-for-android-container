@@ -62,6 +62,7 @@ struct brw_clip_prog_key {
 
    GLfloat offset_factor;
    GLfloat offset_units;
+   GLfloat offset_clamp;
 };
 
 

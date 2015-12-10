@@ -43,7 +43,7 @@ lower_load_const_instr_scalar(nir_load_const_instr *lower)
 
    nir_builder b;
    nir_builder_init(&b, nir_cf_node_get_function(&lower->instr.block->cf_node));
-   nir_builder_insert_before_instr(&b, &lower->instr);
+   b.cursor = nir_before_instr(&lower->instr);
 
    /* Emit the individual loads. */
    nir_ssa_def *loads[4];
@@ -55,24 +55,10 @@ lower_load_const_instr_scalar(nir_load_const_instr *lower)
    }
 
    /* Batch things back together into a vector. */
-   nir_ssa_def *vec;
-   switch (lower->def.num_components) {
-   case 2:
-      vec = nir_vec2(&b, loads[0], loads[1]);
-      break;
-   case 3:
-      vec = nir_vec3(&b, loads[0], loads[1], loads[2]);
-      break;
-   case 4:
-      vec = nir_vec4(&b, loads[0], loads[1], loads[2], loads[3]);
-      break;
-   default:
-      unreachable("Unknown load_const component count.");
-   }
+   nir_ssa_def *vec = nir_vec(&b, loads, lower->def.num_components);
 
    /* Replace the old load with a reference to our reconstructed vector. */
-   nir_ssa_def_rewrite_uses(&lower->def, nir_src_for_ssa(vec),
-                            ralloc_parent(b.impl));
+   nir_ssa_def_rewrite_uses(&lower->def, nir_src_for_ssa(vec));
    nir_instr_remove(&lower->instr);
 }
 

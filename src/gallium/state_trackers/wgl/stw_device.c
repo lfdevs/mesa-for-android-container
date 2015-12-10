@@ -106,8 +106,8 @@ stw_init(const struct stw_winsys *stw_winsys)
          screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
    stw_dev->max_2d_length = 1 << (stw_dev->max_2d_levels - 1);
 
-   pipe_mutex_init( stw_dev->ctx_mutex );
-   pipe_mutex_init( stw_dev->fb_mutex );
+   InitializeCriticalSection(&stw_dev->ctx_mutex);
+   InitializeCriticalSection(&stw_dev->fb_mutex);
 
    stw_dev->ctx_table = handle_table_create();
    if (!stw_dev->ctx_table) {
@@ -156,9 +156,9 @@ stw_cleanup(void)
     * Abort cleanup if there are still active contexts. In some situations
     * this DLL may be unloaded before the DLL that is using GL contexts is.
     */
-   pipe_mutex_lock( stw_dev->ctx_mutex );
+   stw_lock_contexts(stw_dev);
    dhglrc = handle_table_get_first_handle(stw_dev->ctx_table);
-   pipe_mutex_unlock( stw_dev->ctx_mutex );
+   stw_unlock_contexts(stw_dev);
    if (dhglrc) {
       debug_printf("%s: contexts still active -- cleanup aborted\n", __FUNCTION__);
       stw_dev = NULL;
@@ -169,8 +169,8 @@ stw_cleanup(void)
 
    stw_framebuffer_cleanup();
    
-   pipe_mutex_destroy( stw_dev->fb_mutex );
-   pipe_mutex_destroy( stw_dev->ctx_mutex );
+   DeleteCriticalSection(&stw_dev->fb_mutex);
+   DeleteCriticalSection(&stw_dev->ctx_mutex);
    
    FREE(stw_dev->smapi);
    stw_dev->stapi->destroy(stw_dev->stapi);

@@ -406,7 +406,6 @@ u_vbuf_translate_buffers(struct u_vbuf *mgr, struct translate_key *key,
    struct pipe_resource *out_buffer = NULL;
    uint8_t *out_map;
    unsigned out_offset, mask;
-   enum pipe_error err;
 
    /* Get a translate object. */
    tr = translate_cache_find(mgr->translate_cache, key);
@@ -454,12 +453,12 @@ u_vbuf_translate_buffers(struct u_vbuf *mgr, struct translate_key *key,
       assert((ib->buffer || ib->user_buffer) && ib->index_size);
 
       /* Create and map the output buffer. */
-      err = u_upload_alloc(mgr->uploader, 0,
-                           key->output_stride * num_indices,
-                           &out_offset, &out_buffer,
-                           (void**)&out_map);
-      if (err != PIPE_OK)
-         return err;
+      u_upload_alloc(mgr->uploader, 0,
+                     key->output_stride * num_indices,
+                     &out_offset, &out_buffer,
+                     (void**)&out_map);
+      if (!out_buffer)
+         return PIPE_ERROR_OUT_OF_MEMORY;
 
       if (ib->user_buffer) {
          map = (uint8_t*)ib->user_buffer + offset;
@@ -486,13 +485,13 @@ u_vbuf_translate_buffers(struct u_vbuf *mgr, struct translate_key *key,
       }
    } else {
       /* Create and map the output buffer. */
-      err = u_upload_alloc(mgr->uploader,
-                           key->output_stride * start_vertex,
-                           key->output_stride * num_vertices,
-                           &out_offset, &out_buffer,
-                           (void**)&out_map);
-      if (err != PIPE_OK)
-         return err;
+      u_upload_alloc(mgr->uploader,
+                     key->output_stride * start_vertex,
+                     key->output_stride * num_vertices,
+                     &out_offset, &out_buffer,
+                     (void**)&out_map);
+      if (!out_buffer)
+         return PIPE_ERROR_OUT_OF_MEMORY;
 
       out_offset -= key->output_stride * start_vertex;
 
@@ -978,7 +977,6 @@ u_vbuf_upload_buffers(struct u_vbuf *mgr,
       unsigned start, end;
       struct pipe_vertex_buffer *real_vb;
       const uint8_t *ptr;
-      enum pipe_error err;
 
       i = u_bit_scan(&buffer_mask);
 
@@ -989,10 +987,10 @@ u_vbuf_upload_buffers(struct u_vbuf *mgr,
       real_vb = &mgr->real_vertex_buffer[i];
       ptr = mgr->vertex_buffer[i].user_buffer;
 
-      err = u_upload_data(mgr->uploader, start, end - start, ptr + start,
-                          &real_vb->buffer_offset, &real_vb->buffer);
-      if (err != PIPE_OK)
-         return err;
+      u_upload_data(mgr->uploader, start, end - start, ptr + start,
+                    &real_vb->buffer_offset, &real_vb->buffer);
+      if (!real_vb->buffer)
+         return PIPE_ERROR_OUT_OF_MEMORY;
 
       real_vb->buffer_offset -= start;
    }
@@ -1000,26 +998,30 @@ u_vbuf_upload_buffers(struct u_vbuf *mgr,
    return PIPE_OK;
 }
 
-static boolean u_vbuf_need_minmax_index(struct u_vbuf *mgr)
+static boolean u_vbuf_need_minmax_index(const struct u_vbuf *mgr)
 {
    /* See if there are any per-vertex attribs which will be uploaded or
     * translated. Use bitmasks to get the info instead of looping over vertex
     * elements. */
    return (mgr->ve->used_vb_mask &
-           ((mgr->user_vb_mask | mgr->incompatible_vb_mask |
+           ((mgr->user_vb_mask |
+             mgr->incompatible_vb_mask |
              mgr->ve->incompatible_vb_mask_any) &
-            mgr->ve->noninstance_vb_mask_any & mgr->nonzero_stride_vb_mask)) != 0;
+            mgr->ve->noninstance_vb_mask_any &
+            mgr->nonzero_stride_vb_mask)) != 0;
 }
 
-static boolean u_vbuf_mapping_vertex_buffer_blocks(struct u_vbuf *mgr)
+static boolean u_vbuf_mapping_vertex_buffer_blocks(const struct u_vbuf *mgr)
 {
    /* Return true if there are hw buffers which don't need to be translated.
     *
     * We could query whether each buffer is busy, but that would
     * be way more costly than this. */
    return (mgr->ve->used_vb_mask &
-           (~mgr->user_vb_mask & ~mgr->incompatible_vb_mask &
-            mgr->ve->compatible_vb_mask_all & mgr->ve->noninstance_vb_mask_any &
+           (~mgr->user_vb_mask &
+            ~mgr->incompatible_vb_mask &
+            mgr->ve->compatible_vb_mask_all &
+            mgr->ve->noninstance_vb_mask_any &
             mgr->nonzero_stride_vb_mask)) != 0;
 }
 

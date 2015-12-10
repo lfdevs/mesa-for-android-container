@@ -35,7 +35,7 @@
 #define MODULE_PREFIX "pipe_"
 
 static int (*backends[])(struct pipe_loader_device **, int) = {
-#ifdef HAVE_PIPE_LOADER_DRM
+#ifdef HAVE_LIBDRM
    &pipe_loader_drm_probe,
 #endif
    &pipe_loader_sw_probe
@@ -69,10 +69,9 @@ pipe_loader_configuration(struct pipe_loader_device *dev,
 }
 
 struct pipe_screen *
-pipe_loader_create_screen(struct pipe_loader_device *dev,
-                          const char *library_paths)
+pipe_loader_create_screen(struct pipe_loader_device *dev)
 {
-   return dev->ops->create_screen(dev, library_paths);
+   return dev->ops->create_screen(dev);
 }
 
 struct util_dl_library *

@@ -32,6 +32,11 @@
 #include "vc4_simulator_validate.h"
 #include "simpenrose/simpenrose.h"
 
+/* A marker placed just after each BO, then checked after rendering to make
+ * sure it's still there.
+ */
+#define BO_SENTINEL		0xfedcba98
+
 #define OVERFLOW_SIZE (32 * 1024 * 1024)
 
 static struct drm_gem_cma_object *
@@ -49,9 +54,11 @@ vc4_wrap_bo_with_cma(struct drm_device *dev, struct vc4_bo *bo)
         obj->vaddr = screen->simulator_mem_base + dev->simulator_mem_next;
         obj->paddr = simpenrose_hw_addr(obj->vaddr);
 
-        dev->simulator_mem_next += size;
+        dev->simulator_mem_next += size + sizeof(uint32_t);
         dev->simulator_mem_next = align(dev->simulator_mem_next, 4096);
         assert(dev->simulator_mem_next <= screen->simulator_mem_size);
+
+        *(uint32_t *)(obj->vaddr + bo->size) = BO_SENTINEL;
 
         return obj;
 }
@@ -106,10 +113,16 @@ vc4_simulator_unpin_bos(struct vc4_exec_info *exec)
 {
         for (int i = 0; i < exec->bo_count; i++) {
                 struct drm_gem_cma_object *obj = exec->bo[i];
-                struct vc4_bo *bo = to_vc4_bo(&obj->base)->bo;
+                struct drm_vc4_bo *drm_bo = to_vc4_bo(&obj->base);
+                struct vc4_bo *bo = drm_bo->bo;
 
+                assert(*(uint32_t *)(obj->vaddr + bo->size) == BO_SENTINEL);
                 memcpy(bo->map, obj->vaddr, bo->size);
 
+                if (drm_bo->validated_shader) {
+                        free(drm_bo->validated_shader->texture_samples);
+                        free(drm_bo->validated_shader);
+                }
                 free(obj);
         }
 
@@ -192,6 +205,8 @@ vc4_simulator_flush(struct vc4_context *vc4, struct drm_vc4_submit_cl *args)
         list_for_each_entry_safe(struct drm_vc4_bo, bo, &exec.unref_list,
                                  unref_head) {
 		list_del(&bo->unref_head);
+                assert(*(uint32_t *)(bo->base.vaddr + bo->bo->size) ==
+                       BO_SENTINEL);
                 vc4_bo_unreference(&bo->bo);
                 free(bo);
         }

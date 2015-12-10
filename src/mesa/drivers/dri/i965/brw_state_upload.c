@@ -258,7 +258,12 @@ static const struct brw_tracked_state *gen7_compute_atoms[] =
 {
    &brw_state_base_address,
    &brw_cs_image_surfaces,
+   &gen7_cs_push_constants,
+   &brw_cs_pull_constants,
+   &brw_cs_ubo_surfaces,
    &brw_cs_abo_surfaces,
+   &brw_texture_surfaces,
+   &brw_cs_work_groups_surface,
    &brw_cs_state,
 };
 
@@ -348,7 +353,12 @@ static const struct brw_tracked_state *gen8_compute_atoms[] =
 {
    &gen8_state_base_address,
    &brw_cs_image_surfaces,
+   &gen7_cs_push_constants,
+   &brw_cs_pull_constants,
+   &brw_cs_ubo_surfaces,
    &brw_cs_abo_surfaces,
+   &brw_texture_surfaces,
+   &brw_cs_work_groups_surface,
    &brw_cs_state,
 };
 
@@ -480,6 +490,7 @@ void brw_init_state( struct brw_context *brw )
    ctx->DriverFlags.NewTransformFeedbackProg = BRW_NEW_TRANSFORM_FEEDBACK;
    ctx->DriverFlags.NewRasterizerDiscard = BRW_NEW_RASTERIZER_DISCARD;
    ctx->DriverFlags.NewUniformBuffer = BRW_NEW_UNIFORM_BUFFER;
+   ctx->DriverFlags.NewShaderStorageBuffer = BRW_NEW_UNIFORM_BUFFER;
    ctx->DriverFlags.NewTextureBuffer = BRW_NEW_TEXTURE_BUFFER;
    ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_ATOMIC_BUFFER;
    ctx->DriverFlags.NewImageUnits = BRW_NEW_IMAGE_UNITS;
@@ -578,9 +589,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_CONTEXT),
    DEFINE_BIT(BRW_NEW_PSP),
    DEFINE_BIT(BRW_NEW_SURFACES),
-   DEFINE_BIT(BRW_NEW_VS_BINDING_TABLE),
-   DEFINE_BIT(BRW_NEW_GS_BINDING_TABLE),
-   DEFINE_BIT(BRW_NEW_PS_BINDING_TABLE),
+   DEFINE_BIT(BRW_NEW_BINDING_TABLE_POINTERS),
    DEFINE_BIT(BRW_NEW_INDICES),
    DEFINE_BIT(BRW_NEW_VERTICES),
    DEFINE_BIT(BRW_NEW_BATCH),
@@ -589,7 +598,6 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_GS_CONSTBUF),
    DEFINE_BIT(BRW_NEW_PROGRAM_CACHE),
    DEFINE_BIT(BRW_NEW_STATE_BASE_ADDRESS),
-   DEFINE_BIT(BRW_NEW_VUE_MAP_VS),
    DEFINE_BIT(BRW_NEW_VUE_MAP_GEOM_OUT),
    DEFINE_BIT(BRW_NEW_TRANSFORM_FEEDBACK),
    DEFINE_BIT(BRW_NEW_RASTERIZER_DISCARD),
@@ -609,6 +617,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_SAMPLER_STATE_TABLE),
    DEFINE_BIT(BRW_NEW_VS_ATTRIB_WORKAROUNDS),
    DEFINE_BIT(BRW_NEW_COMPUTE_PROGRAM),
+   DEFINE_BIT(BRW_NEW_CS_WORK_GROUPS),
    {0, 0, 0}
 };
 
@@ -643,6 +652,21 @@ brw_upload_programs(struct brw_context *brw,
          brw_upload_ff_gs_prog(brw);
       else
          brw_upload_gs_prog(brw);
+
+      /* Update the VUE map for data exiting the GS stage of the pipeline.
+       * This comes from the last enabled shader stage.
+       */
+      GLbitfield64 old_slots = brw->vue_map_geom_out.slots_valid;
+      bool old_separate = brw->vue_map_geom_out.separate;
+      if (brw->geometry_program)
+         brw->vue_map_geom_out = brw->gs.prog_data->base.vue_map;
+      else
+         brw->vue_map_geom_out = brw->vs.prog_data->base.vue_map;
+
+      /* If the layout has changed, signal BRW_NEW_VUE_MAP_GEOM_OUT. */
+      if (old_slots != brw->vue_map_geom_out.slots_valid ||
+          old_separate != brw->vue_map_geom_out.separate)
+         brw->ctx.NewDriverState |= BRW_NEW_VUE_MAP_GEOM_OUT;
 
       brw_upload_wm_prog(brw);
    } else if (pipeline == BRW_COMPUTE_PIPELINE) {
@@ -795,7 +819,7 @@ brw_pipeline_state_finished(struct brw_context *brw,
                             enum brw_pipeline pipeline)
 {
    /* Save all dirty state into the other pipelines */
-   for (int i = 0; i < BRW_NUM_PIPELINES; i++) {
+   for (unsigned i = 0; i < BRW_NUM_PIPELINES; i++) {
       if (i != pipeline) {
          brw->state.pipelines[i].mesa |= brw->NewGLState;
          brw->state.pipelines[i].brw |= brw->ctx.NewDriverState;

@@ -67,66 +67,68 @@ typedef void (*u_generate_func)( unsigned start,
 /* Return codes describe the translate/generate operation.  Caller may
  * be able to reuse translated indices under some circumstances.
  */
-#define U_TRANSLATE_ERROR  -1
-#define U_TRANSLATE_NORMAL  1
-#define U_TRANSLATE_MEMCPY  2
-#define U_GENERATE_LINEAR   3
-#define U_GENERATE_REUSABLE 4
-#define U_GENERATE_ONE_OFF  5
-
+enum indices_mode {
+   U_TRANSLATE_ERROR = -1,
+   U_TRANSLATE_NORMAL = 1,
+   U_TRANSLATE_MEMCPY = 2,
+   U_GENERATE_LINEAR  = 3,
+   U_GENERATE_REUSABLE= 4,
+   U_GENERATE_ONE_OFF = 5,
+};
 
 void u_index_init( void );
 
-int u_index_translator( unsigned hw_mask,
-                        unsigned prim,
-                        unsigned in_index_size,
-                        unsigned nr,
-                        unsigned in_pv,   /* API */
-                        unsigned out_pv,  /* hardware */
-                        unsigned prim_restart,
-                        unsigned *out_prim,
-                        unsigned *out_index_size,
-                        unsigned *out_nr,
-                        u_translate_func *out_translate );
+enum indices_mode
+u_index_translator(unsigned hw_mask,
+                   unsigned prim,
+                   unsigned in_index_size,
+                   unsigned nr,
+                   unsigned in_pv,   /* API */
+                   unsigned out_pv,  /* hardware */
+                   unsigned prim_restart,
+                   unsigned *out_prim,
+                   unsigned *out_index_size,
+                   unsigned *out_nr,
+                   u_translate_func *out_translate);
 
 /* Note that even when generating it is necessary to know what the
  * API's PV is, as the indices generated will depend on whether it is
  * the same as hardware or not, and in the case of triangle strips,
  * whether it is first or last.
  */
-int u_index_generator( unsigned hw_mask,
-                       unsigned prim,
-                       unsigned start,
-                       unsigned nr,
-                       unsigned in_pv,   /* API */
-                       unsigned out_pv,  /* hardware */
-                       unsigned *out_prim,
-                       unsigned *out_index_size,
-                       unsigned *out_nr,
-                       u_generate_func *out_generate );
+enum indices_mode
+u_index_generator(unsigned hw_mask,
+                  unsigned prim,
+                  unsigned start,
+                  unsigned nr,
+                  unsigned in_pv,   /* API */
+                  unsigned out_pv,  /* hardware */
+                  unsigned *out_prim,
+                  unsigned *out_index_size,
+                  unsigned *out_nr,
+                  u_generate_func *out_generate);
 
 
 void u_unfilled_init( void );
 
-int u_unfilled_translator( unsigned prim,
-                           unsigned in_index_size,
-                           unsigned nr,
-                           unsigned unfilled_mode,
-                           unsigned *out_prim,
-                           unsigned *out_index_size,
-                           unsigned *out_nr,
-                           u_translate_func *out_translate );
+enum indices_mode
+u_unfilled_translator(unsigned prim,
+                      unsigned in_index_size,
+                      unsigned nr,
+                      unsigned unfilled_mode,
+                      unsigned *out_prim,
+                      unsigned *out_index_size,
+                      unsigned *out_nr,
+                      u_translate_func *out_translate);
 
-int u_unfilled_generator( unsigned prim,
-                          unsigned start,
-                          unsigned nr,
-                          unsigned unfilled_mode,
-                          unsigned *out_prim,
-                          unsigned *out_index_size,
-                          unsigned *out_nr,
-                          u_generate_func *out_generate );
-
-
-
+enum indices_mode
+u_unfilled_generator(unsigned prim,
+                     unsigned start,
+                     unsigned nr,
+                     unsigned unfilled_mode,
+                     unsigned *out_prim,
+                     unsigned *out_index_size,
+                     unsigned *out_nr,
+                     u_generate_func *out_generate);
 
 #endif

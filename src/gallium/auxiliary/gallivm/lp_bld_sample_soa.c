@@ -161,6 +161,7 @@ lp_build_sample_texel_soa(struct lp_build_sample_context *bld,
                            bld->texel_type,
                            data_ptr, offset,
                            i, j,
+                           bld->cache,
                            texel_out);
 
    /*
@@ -405,16 +406,17 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
       break;
 
    case PIPE_TEX_WRAP_MIRROR_REPEAT:
+      if (offset) {
+         offset = lp_build_int_to_float(coord_bld, offset);
+         offset = lp_build_div(coord_bld, offset, length_f);
+         coord = lp_build_add(coord_bld, coord, offset);
+      }
       /* compute mirror function */
       coord = lp_build_coord_mirror(bld, coord);
 
       /* scale coord to length */
       coord = lp_build_mul(coord_bld, coord, length_f);
       coord = lp_build_sub(coord_bld, coord, half);
-      if (offset) {
-         offset = lp_build_int_to_float(coord_bld, offset);
-         coord = lp_build_add(coord_bld, coord, offset);
-      }
 
       /* convert to int, compute lerp weight */
       lp_build_ifloor_fract(coord_bld, coord, &coord0, &weight);
@@ -567,12 +569,13 @@ lp_build_sample_wrap_nearest(struct lp_build_sample_context *bld,
          coord = lp_build_mul(coord_bld, coord, length_f);
       }
 
+      if (offset) {
+         offset = lp_build_int_to_float(coord_bld, offset);
+         coord = lp_build_add(coord_bld, coord, offset);
+      }
       /* floor */
       /* use itrunc instead since we clamp to 0 anyway */
       icoord = lp_build_itrunc(coord_bld, coord);
-      if (offset) {
-         icoord = lp_build_add(int_coord_bld, icoord, offset);
-      }
 
       /* clamp to [0, length - 1]. */
       icoord = lp_build_clamp(int_coord_bld, icoord, int_coord_bld->zero,
@@ -2387,6 +2390,7 @@ lp_build_fetch_texel(struct lp_build_sample_context *bld,
                            bld->texel_type,
                            bld->base_ptr, offset,
                            i, j,
+                           bld->cache,
                            colors_out);
 
    if (out_of_bound_ret_zero) {
@@ -2440,6 +2444,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
                          unsigned texture_index,
                          unsigned sampler_index,
                          LLVMValueRef context_ptr,
+                         LLVMValueRef thread_data_ptr,
                          const LLVMValueRef *coords,
                          const LLVMValueRef *offsets,
                          const struct lp_derivatives *derivs, /* optional */
@@ -2586,6 +2591,10 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
       derived_sampler_state.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
       derived_sampler_state.wrap_t = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
    }
+   /*
+    * We could force CLAMP to CLAMP_TO_EDGE here if min/mag filter is nearest,
+    * so AoS path could be used. Not sure it's worth the trouble...
+    */
 
    min_img_filter = derived_sampler_state.min_img_filter;
    mag_img_filter = derived_sampler_state.mag_img_filter;
@@ -2700,6 +2709,11 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
    bld.mip_offsets = dynamic_state->mip_offsets(dynamic_state, gallivm,
                                                 context_ptr, texture_index);
    /* Note that mip_offsets is an array[level] of offsets to texture images */
+
+   if (dynamic_state->cache_ptr && thread_data_ptr) {
+      bld.cache = dynamic_state->cache_ptr(dynamic_state, gallivm,
+                                           thread_data_ptr, texture_index);
+   }
 
    /* width, height, depth as single int vector */
    if (dims <= 1) {
@@ -2877,6 +2891,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
          bld4.base_ptr = bld.base_ptr;
          bld4.mip_offsets = bld.mip_offsets;
          bld4.int_size = bld.int_size;
+         bld4.cache = bld.cache;
 
          bld4.vector_width = lp_type_width(type4);
 
@@ -3075,12 +3090,14 @@ lp_build_sample_gen_func(struct gallivm_state *gallivm,
    LLVMValueRef offsets[3] = { NULL };
    LLVMValueRef lod = NULL;
    LLVMValueRef context_ptr;
+   LLVMValueRef thread_data_ptr = NULL;
    LLVMValueRef texel_out[4];
    struct lp_derivatives derivs;
    struct lp_derivatives *deriv_ptr = NULL;
    unsigned num_param = 0;
    unsigned i, num_coords, num_derivs, num_offsets, layer;
    enum lp_sampler_lod_control lod_control;
+   boolean need_cache = FALSE;
 
    lod_control = (sample_key & LP_SAMPLER_LOD_CONTROL_MASK) >>
                     LP_SAMPLER_LOD_CONTROL_SHIFT;
@@ -3088,8 +3105,19 @@ lp_build_sample_gen_func(struct gallivm_state *gallivm,
    get_target_info(static_texture_state->target,
                    &num_coords, &num_derivs, &num_offsets, &layer);
 
+   if (dynamic_state->cache_ptr) {
+      const struct util_format_description *format_desc;
+      format_desc = util_format_description(static_texture_state->format);
+      if (format_desc && format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
+         need_cache = TRUE;
+      }
+   }
+
    /* "unpack" arguments */
    context_ptr = LLVMGetParam(function, num_param++);
+   if (need_cache) {
+      thread_data_ptr = LLVMGetParam(function, num_param++);
+   }
    for (i = 0; i < num_coords; i++) {
       coords[i] = LLVMGetParam(function, num_param++);
    }
@@ -3140,6 +3168,7 @@ lp_build_sample_gen_func(struct gallivm_state *gallivm,
                             texture_index,
                             sampler_index,
                             context_ptr,
+                            thread_data_ptr,
                             coords,
                             offsets,
                             deriv_ptr,
@@ -3183,6 +3212,7 @@ lp_build_sample_soa_func(struct gallivm_state *gallivm,
    const LLVMValueRef *offsets = params->offsets;
    const struct lp_derivatives *derivs = params->derivs;
    enum lp_sampler_lod_control lod_control;
+   boolean need_cache = FALSE;
 
    lod_control = (sample_key & LP_SAMPLER_LOD_CONTROL_MASK) >>
                     LP_SAMPLER_LOD_CONTROL_SHIFT;
@@ -3190,6 +3220,17 @@ lp_build_sample_soa_func(struct gallivm_state *gallivm,
    get_target_info(static_texture_state->target,
                    &num_coords, &num_derivs, &num_offsets, &layer);
 
+   if (dynamic_state->cache_ptr) {
+      const struct util_format_description *format_desc;
+      format_desc = util_format_description(static_texture_state->format);
+      if (format_desc && format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
+         /*
+          * This is not 100% correct, if we have cache but the
+          * util_format_s3tc_prefer is true the cache won't get used
+          * regardless (could hook up the block decode there...) */
+         need_cache = TRUE;
+      }
+   }
    /*
     * texture function matches are found by name.
     * Thus the name has to include both the texture and sampler unit
@@ -3215,6 +3256,9 @@ lp_build_sample_soa_func(struct gallivm_state *gallivm,
        */
 
       arg_types[num_param++] = LLVMTypeOf(params->context_ptr);
+      if (need_cache) {
+         arg_types[num_param++] = LLVMTypeOf(params->thread_data_ptr);
+      }
       for (i = 0; i < num_coords; i++) {
          arg_types[num_param++] = LLVMTypeOf(coords[0]);
          assert(LLVMTypeOf(coords[0]) == LLVMTypeOf(coords[i]));
@@ -3274,6 +3318,9 @@ lp_build_sample_soa_func(struct gallivm_state *gallivm,
 
    num_args = 0;
    args[num_args++] = params->context_ptr;
+   if (need_cache) {
+      args[num_args++] = params->thread_data_ptr;
+   }
    for (i = 0; i < num_coords; i++) {
       args[num_args++] = coords[i];
    }
@@ -3378,6 +3425,7 @@ lp_build_sample_soa(const struct lp_static_texture_state *static_texture_state,
                                params->texture_index,
                                params->sampler_index,
                                params->context_ptr,
+                               params->thread_data_ptr,
                                params->coords,
                                params->offsets,
                                params->derivs,

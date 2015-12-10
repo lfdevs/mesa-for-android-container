@@ -31,6 +31,7 @@
 #include "radeon/r600_pipe_common.h"
 
 #define SI_NUM_SHADERS (PIPE_SHADER_TESS_EVAL+1)
+#define SI_MAX_ATTRIBS 16
 
 struct si_screen;
 struct si_shader;
@@ -42,80 +43,96 @@ struct si_state_blend {
 	bool			dual_src_blend;
 };
 
-struct si_state_sample_mask {
-	struct si_pm4_state	pm4;
-	uint16_t		sample_mask;
-};
-
-struct si_state_scissor {
-	struct si_pm4_state		pm4;
-	struct pipe_scissor_state	scissor;
-};
-
-struct si_state_viewport {
-	struct si_pm4_state		pm4;
-	struct pipe_viewport_state	viewport;
-};
-
 struct si_state_rasterizer {
 	struct si_pm4_state	pm4;
+	/* poly offset states for 16-bit, 24-bit, and 32-bit zbuffers */
+	struct si_pm4_state	pm4_poly_offset[3];
 	bool			flatshade;
 	bool			two_side;
 	bool			multisample_enable;
+	bool			force_persample_interp;
 	bool			line_stipple_enable;
 	unsigned		sprite_coord_enable;
 	unsigned		pa_sc_line_stipple;
 	unsigned		pa_cl_clip_cntl;
 	unsigned		clip_plane_enable;
-	float			offset_units;
-	float			offset_scale;
 	bool			poly_stipple_enable;
 	bool			line_smooth;
 	bool			poly_smooth;
+	bool			uses_poly_offset;
+	bool			clamp_fragment_color;
+	bool			rasterizer_discard;
+};
+
+struct si_dsa_stencil_ref_part {
+	uint8_t			valuemask[2];
+	uint8_t			writemask[2];
 };
 
 struct si_state_dsa {
-	struct si_pm4_state	pm4;
-	unsigned		alpha_func;
-	uint8_t			valuemask[2];
-	uint8_t			writemask[2];
+	struct si_pm4_state		pm4;
+	unsigned			alpha_func;
+	struct si_dsa_stencil_ref_part	stencil_ref;
+};
+
+struct si_stencil_ref {
+	struct r600_atom		atom;
+	struct pipe_stencil_ref		state;
+	struct si_dsa_stencil_ref_part	dsa_part;
 };
 
 struct si_vertex_element
 {
 	unsigned			count;
-	uint32_t			rsrc_word3[PIPE_MAX_ATTRIBS];
-	uint32_t			format_size[PIPE_MAX_ATTRIBS];
-	struct pipe_vertex_element	elements[PIPE_MAX_ATTRIBS];
+	uint32_t			rsrc_word3[SI_MAX_ATTRIBS];
+	uint32_t			format_size[SI_MAX_ATTRIBS];
+	struct pipe_vertex_element	elements[SI_MAX_ATTRIBS];
 };
 
 union si_state {
 	struct {
 		struct si_state_blend		*blend;
-		struct si_pm4_state		*blend_color;
-		struct si_pm4_state		*clip;
-		struct si_state_sample_mask	*sample_mask;
-		struct si_state_scissor		*scissor[16];
-		struct si_state_viewport	*viewport[16];
 		struct si_state_rasterizer	*rasterizer;
 		struct si_state_dsa		*dsa;
-		struct si_pm4_state		*fb_rs;
-		struct si_pm4_state		*fb_blend;
-		struct si_pm4_state		*dsa_stencil_ref;
-		struct si_pm4_state		*ta_bordercolor_base;
+		struct si_pm4_state		*poly_offset;
 		struct si_pm4_state		*ls;
 		struct si_pm4_state		*hs;
 		struct si_pm4_state		*es;
 		struct si_pm4_state		*gs;
-		struct si_pm4_state		*gs_rings;
-		struct si_pm4_state		*tf_ring;
 		struct si_pm4_state		*vgt_shader_config;
 		struct si_pm4_state		*vs;
 		struct si_pm4_state		*ps;
-		struct si_pm4_state		*spi;
 	} named;
 	struct si_pm4_state	*array[0];
 };
+
+union si_state_atoms {
+	struct {
+		/* The order matters. */
+		struct r600_atom *cache_flush;
+		struct r600_atom *render_cond;
+		struct r600_atom *streamout_begin;
+		struct r600_atom *streamout_enable; /* must be after streamout_begin */
+		struct r600_atom *framebuffer;
+		struct r600_atom *msaa_sample_locs;
+		struct r600_atom *db_render_state;
+		struct r600_atom *msaa_config;
+		struct r600_atom *sample_mask;
+		struct r600_atom *cb_target_mask;
+		struct r600_atom *blend_color;
+		struct r600_atom *clip_regs;
+		struct r600_atom *clip_state;
+		struct r600_atom *shader_userdata;
+		struct r600_atom *scissors;
+		struct r600_atom *viewports;
+		struct r600_atom *stencil_ref;
+		struct r600_atom *spi_map;
+		struct r600_atom *spi_ps_input;
+	} s;
+	struct r600_atom *array[0];
+};
+
+#define SI_NUM_ATOMS (sizeof(union si_state_atoms)/sizeof(struct r600_atom*))
 
 struct si_shader_data {
 	struct r600_atom	atom;
@@ -156,7 +173,7 @@ struct si_shader_data {
 #define SI_SO_BUF_OFFSET	SI_NUM_RING_BUFFERS
 #define SI_NUM_RW_BUFFERS	(SI_SO_BUF_OFFSET + 4)
 
-#define SI_NUM_VERTEX_BUFFERS	16
+#define SI_NUM_VERTEX_BUFFERS	SI_MAX_ATTRIBS
 
 
 /* This represents descriptors in memory, such as buffer resources,
@@ -223,19 +240,7 @@ struct si_buffer_resources {
 				  si_pm4_block_idx(member)); \
 	} while(0)
 
-#define si_pm4_set_state(sctx, member, value) \
-	do { \
-		if ((sctx)->queued.named.member != (value)) { \
-			si_pm4_free_state(sctx, \
-				(struct si_pm4_state *)(sctx)->queued.named.member, \
-				si_pm4_block_idx(member)); \
-			(sctx)->queued.named.member = (value); \
-		} \
-	} while(0)
-
 /* si_descriptors.c */
-void si_set_sampler_descriptors(struct si_context *sctx, unsigned shader,
-				unsigned start, unsigned count, void **states);
 void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
 			struct pipe_resource *buffer,
 			unsigned stride, unsigned num_records,
@@ -248,11 +253,14 @@ void si_all_descriptors_begin_new_cs(struct si_context *sctx);
 void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuffer,
 			    const uint8_t *ptr, unsigned size, uint32_t *const_offset);
 void si_shader_change_notify(struct si_context *sctx);
+void si_emit_shader_userdata(struct si_context *sctx, struct r600_atom *atom);
 
 /* si_state.c */
 struct si_shader_selector;
 
-void si_update_fb_blend_state(struct si_context *sctx);
+void si_init_atom(struct si_context *sctx, struct r600_atom *atom,
+		  struct r600_atom **list_elem,
+		  void (*emit_func)(struct si_context *ctx, struct r600_atom *state));
 boolean si_is_format_supported(struct pipe_screen *screen,
                                enum pipe_format format,
                                enum pipe_texture_target target,
@@ -278,13 +286,8 @@ bool si_update_shaders(struct si_context *sctx);
 void si_init_shader_functions(struct si_context *sctx);
 
 /* si_state_draw.c */
-extern const struct r600_atom si_atom_cache_flush;
-extern const struct r600_atom si_atom_msaa_sample_locs;
-extern const struct r600_atom si_atom_msaa_config;
-void si_emit_cache_flush(struct r600_common_context *sctx, struct r600_atom *atom);
+void si_emit_cache_flush(struct si_context *sctx, struct r600_atom *atom);
 void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *dinfo);
-
-/* si_commands.c */
-void si_cmd_context_control(struct si_pm4_state *pm4);
+void si_trace_emit(struct si_context *sctx);
 
 #endif

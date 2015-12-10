@@ -170,8 +170,8 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/drawtex.h main/enable.c main/enable.h main/enums.c \
 	main/enums.h main/errors.c main/errors.h main/eval.c \
 	main/eval.h main/execmem.c main/extensions.c main/extensions.h \
-	main/fbobject.c main/fbobject.h main/feedback.c \
-	main/feedback.h main/ff_fragment_shader.cpp \
+	main/extensions_table.h main/fbobject.c main/fbobject.h \
+	main/feedback.c main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
 	main/fog.h main/format_info.h main/format_pack.h \
 	main/format_pack.c main/format_unpack.h main/format_unpack.c \
@@ -187,12 +187,12 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/matrix.c main/matrix.h main/mipmap.c main/mipmap.h \
 	main/mm.c main/mm.h main/mtypes.h main/multisample.c \
 	main/multisample.h main/objectlabel.c main/objectlabel.h \
-	main/pack.c main/pack.h main/pbo.c main/pbo.h \
-	main/performance_monitor.c main/performance_monitor.h \
-	main/pipelineobj.c main/pipelineobj.h main/pixel.c \
-	main/pixel.h main/pixelstore.c main/pixelstore.h \
-	main/pixeltransfer.c main/pixeltransfer.h main/points.c \
-	main/points.h main/polygon.c main/polygon.h \
+	main/objectpurge.c main/objectpurge.h main/pack.c main/pack.h \
+	main/pbo.c main/pbo.h main/performance_monitor.c \
+	main/performance_monitor.h main/pipelineobj.c \
+	main/pipelineobj.h main/pixel.c main/pixel.h main/pixelstore.c \
+	main/pixelstore.h main/pixeltransfer.c main/pixeltransfer.h \
+	main/points.c main/points.h main/polygon.c main/polygon.h \
 	main/program_resource.c main/program_resource.h \
 	main/querymatrix.c main/querymatrix.h main/queryobj.c \
 	main/queryobj.h main/rastpos.c main/rastpos.h main/readpix.c \
@@ -240,31 +240,31 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	vbo/vbo_save.h vbo/vbo_save_loopback.c vbo/vbo_split.c \
 	vbo/vbo_split_copy.c vbo/vbo_split.h vbo/vbo_split_inplace.c \
 	tnl/t_context.c tnl/t_context.h tnl/t_draw.c tnl/tnl.h \
-	tnl/t_pipeline.c tnl/t_pipeline.h tnl/t_rasterpos.c \
-	tnl/t_vb_cliptmp.h tnl/t_vb_fog.c tnl/t_vb_light.c \
-	tnl/t_vb_lighttmp.h tnl/t_vb_normals.c tnl/t_vb_points.c \
-	tnl/t_vb_program.c tnl/t_vb_render.c tnl/t_vb_rendertmp.h \
-	tnl/t_vb_texgen.c tnl/t_vb_texmat.c tnl/t_vb_vertex.c \
-	tnl/t_vertex.c tnl/t_vertex_generic.c tnl/t_vertex.h \
-	tnl/t_vertex_sse.c tnl/t_vp_build.c tnl/t_vp_build.h \
-	swrast/s_aaline.c swrast/s_aaline.h swrast/s_aalinetemp.h \
-	swrast/s_aatriangle.c swrast/s_aatriangle.h \
-	swrast/s_aatritemp.h swrast/s_alpha.c swrast/s_alpha.h \
-	swrast/s_atifragshader.c swrast/s_atifragshader.h \
-	swrast/s_bitmap.c swrast/s_blend.c swrast/s_blend.h \
-	swrast/s_blit.c swrast/s_chan.h swrast/s_clear.c \
-	swrast/s_context.c swrast/s_context.h swrast/s_copypix.c \
-	swrast/s_depth.c swrast/s_depth.h swrast/s_drawpix.c \
-	swrast_setup/ss_tritmp.h swrast_setup/ss_vb.h \
-	swrast_setup/swrast_setup.h swrast/s_feedback.c \
-	swrast/s_feedback.h swrast/s_fog.c swrast/s_fog.h \
-	swrast/s_fragprog.c swrast/s_fragprog.h swrast/s_lines.c \
-	swrast/s_lines.h swrast/s_linetemp.h swrast/s_logic.c \
-	swrast/s_logic.h swrast/s_masking.c swrast/s_masking.h \
-	swrast/s_points.c swrast/s_points.h swrast/s_renderbuffer.c \
-	swrast/s_renderbuffer.h swrast/s_span.c swrast/s_span.h \
-	swrast/s_stencil.c swrast/s_stencil.h swrast/s_texcombine.c \
-	swrast/s_texcombine.h swrast/s_texfetch.c swrast/s_texfetch.h \
+	tnl/t_pipeline.c tnl/t_pipeline.h tnl/t_vb_cliptmp.h \
+	tnl/t_vb_fog.c tnl/t_vb_light.c tnl/t_vb_lighttmp.h \
+	tnl/t_vb_normals.c tnl/t_vb_points.c tnl/t_vb_program.c \
+	tnl/t_vb_render.c tnl/t_vb_rendertmp.h tnl/t_vb_texgen.c \
+	tnl/t_vb_texmat.c tnl/t_vb_vertex.c tnl/t_vertex.c \
+	tnl/t_vertex_generic.c tnl/t_vertex.h tnl/t_vertex_sse.c \
+	tnl/t_vp_build.c tnl/t_vp_build.h swrast/s_aaline.c \
+	swrast/s_aaline.h swrast/s_aalinetemp.h swrast/s_aatriangle.c \
+	swrast/s_aatriangle.h swrast/s_aatritemp.h swrast/s_alpha.c \
+	swrast/s_alpha.h swrast/s_atifragshader.c \
+	swrast/s_atifragshader.h swrast/s_bitmap.c swrast/s_blend.c \
+	swrast/s_blend.h swrast/s_blit.c swrast/s_chan.h \
+	swrast/s_clear.c swrast/s_context.c swrast/s_context.h \
+	swrast/s_copypix.c swrast/s_depth.c swrast/s_depth.h \
+	swrast/s_drawpix.c swrast_setup/ss_tritmp.h \
+	swrast_setup/ss_vb.h swrast_setup/swrast_setup.h \
+	swrast/s_feedback.c swrast/s_feedback.h swrast/s_fog.c \
+	swrast/s_fog.h swrast/s_fragprog.c swrast/s_fragprog.h \
+	swrast/s_lines.c swrast/s_lines.h swrast/s_linetemp.h \
+	swrast/s_logic.c swrast/s_logic.h swrast/s_masking.c \
+	swrast/s_masking.h swrast/s_points.c swrast/s_points.h \
+	swrast/s_renderbuffer.c swrast/s_renderbuffer.h \
+	swrast/s_span.c swrast/s_span.h swrast/s_stencil.c \
+	swrast/s_stencil.h swrast/s_texcombine.c swrast/s_texcombine.h \
+	swrast/s_texfetch.c swrast/s_texfetch.h \
 	swrast/s_texfetch_tmp.h swrast/s_texfilter.c \
 	swrast/s_texfilter.h swrast/s_texrender.c swrast/s_texture.c \
 	swrast/s_triangle.c swrast/s_triangle.h swrast/s_tritemp.h \
@@ -327,25 +327,26 @@ am__objects_2 = main/accum.lo main/api_arrayelt.lo main/api_exec.lo \
 	main/glformats.lo main/hash.lo main/hint.lo main/histogram.lo \
 	main/image.lo main/imports.lo main/light.lo main/lines.lo \
 	main/matrix.lo main/mipmap.lo main/mm.lo main/multisample.lo \
-	main/objectlabel.lo main/pack.lo main/pbo.lo \
-	main/performance_monitor.lo main/pipelineobj.lo main/pixel.lo \
-	main/pixelstore.lo main/pixeltransfer.lo main/points.lo \
-	main/polygon.lo main/program_resource.lo main/querymatrix.lo \
-	main/queryobj.lo main/rastpos.lo main/readpix.lo main/remap.lo \
-	main/renderbuffer.lo main/samplerobj.lo main/scissor.lo \
-	main/shaderapi.lo main/shaderimage.lo main/shaderobj.lo \
-	main/shader_query.lo main/shared.lo main/state.lo \
-	main/stencil.lo main/syncobj.lo main/texcompress.lo \
-	main/texcompress_bptc.lo main/texcompress_cpal.lo \
-	main/texcompress_etc.lo main/texcompress_fxt1.lo \
-	main/texcompress_rgtc.lo main/texcompress_s3tc.lo \
-	main/texenv.lo main/texformat.lo main/texgen.lo \
-	main/texgetimage.lo main/teximage.lo main/texobj.lo \
-	main/texparam.lo main/texstate.lo main/texstorage.lo \
-	main/texstore.lo main/textureview.lo main/texturebarrier.lo \
-	main/transformfeedback.lo main/uniform_query.lo \
-	main/uniforms.lo main/varray.lo main/vdpau.lo main/version.lo \
-	main/viewport.lo main/vtxfmt.lo $(am__objects_1)
+	main/objectlabel.lo main/objectpurge.lo main/pack.lo \
+	main/pbo.lo main/performance_monitor.lo main/pipelineobj.lo \
+	main/pixel.lo main/pixelstore.lo main/pixeltransfer.lo \
+	main/points.lo main/polygon.lo main/program_resource.lo \
+	main/querymatrix.lo main/queryobj.lo main/rastpos.lo \
+	main/readpix.lo main/remap.lo main/renderbuffer.lo \
+	main/samplerobj.lo main/scissor.lo main/shaderapi.lo \
+	main/shaderimage.lo main/shaderobj.lo main/shader_query.lo \
+	main/shared.lo main/state.lo main/stencil.lo main/syncobj.lo \
+	main/texcompress.lo main/texcompress_bptc.lo \
+	main/texcompress_cpal.lo main/texcompress_etc.lo \
+	main/texcompress_fxt1.lo main/texcompress_rgtc.lo \
+	main/texcompress_s3tc.lo main/texenv.lo main/texformat.lo \
+	main/texgen.lo main/texgetimage.lo main/teximage.lo \
+	main/texobj.lo main/texparam.lo main/texstate.lo \
+	main/texstorage.lo main/texstore.lo main/textureview.lo \
+	main/texturebarrier.lo main/transformfeedback.lo \
+	main/uniform_query.lo main/uniforms.lo main/varray.lo \
+	main/vdpau.lo main/version.lo main/viewport.lo main/vtxfmt.lo \
+	$(am__objects_1)
 am__objects_3 = math/m_debug_clip.lo math/m_debug_norm.lo \
 	math/m_debug_xform.lo math/m_eval.lo math/m_matrix.lo \
 	math/m_translate.lo math/m_vector.lo
@@ -358,11 +359,11 @@ am__objects_5 = vbo/vbo_context.lo vbo/vbo_exec_api.lo \
 	vbo/vbo_save_loopback.lo vbo/vbo_split.lo \
 	vbo/vbo_split_copy.lo vbo/vbo_split_inplace.lo
 am__objects_6 = tnl/t_context.lo tnl/t_draw.lo tnl/t_pipeline.lo \
-	tnl/t_rasterpos.lo tnl/t_vb_fog.lo tnl/t_vb_light.lo \
-	tnl/t_vb_normals.lo tnl/t_vb_points.lo tnl/t_vb_program.lo \
-	tnl/t_vb_render.lo tnl/t_vb_texgen.lo tnl/t_vb_texmat.lo \
-	tnl/t_vb_vertex.lo tnl/t_vertex.lo tnl/t_vertex_generic.lo \
-	tnl/t_vertex_sse.lo tnl/t_vp_build.lo
+	tnl/t_vb_fog.lo tnl/t_vb_light.lo tnl/t_vb_normals.lo \
+	tnl/t_vb_points.lo tnl/t_vb_program.lo tnl/t_vb_render.lo \
+	tnl/t_vb_texgen.lo tnl/t_vb_texmat.lo tnl/t_vb_vertex.lo \
+	tnl/t_vertex.lo tnl/t_vertex_generic.lo tnl/t_vertex_sse.lo \
+	tnl/t_vp_build.lo
 am__objects_7 = swrast/s_aaline.lo swrast/s_aatriangle.lo \
 	swrast/s_alpha.lo swrast/s_atifragshader.lo swrast/s_bitmap.lo \
 	swrast/s_blend.lo swrast/s_blit.lo swrast/s_clear.lo \
@@ -450,8 +451,8 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/drawtex.h main/enable.c main/enable.h main/enums.c \
 	main/enums.h main/errors.c main/errors.h main/eval.c \
 	main/eval.h main/execmem.c main/extensions.c main/extensions.h \
-	main/fbobject.c main/fbobject.h main/feedback.c \
-	main/feedback.h main/ff_fragment_shader.cpp \
+	main/extensions_table.h main/fbobject.c main/fbobject.h \
+	main/feedback.c main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
 	main/fog.h main/format_info.h main/format_pack.h \
 	main/format_pack.c main/format_unpack.h main/format_unpack.c \
@@ -467,12 +468,12 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/matrix.c main/matrix.h main/mipmap.c main/mipmap.h \
 	main/mm.c main/mm.h main/mtypes.h main/multisample.c \
 	main/multisample.h main/objectlabel.c main/objectlabel.h \
-	main/pack.c main/pack.h main/pbo.c main/pbo.h \
-	main/performance_monitor.c main/performance_monitor.h \
-	main/pipelineobj.c main/pipelineobj.h main/pixel.c \
-	main/pixel.h main/pixelstore.c main/pixelstore.h \
-	main/pixeltransfer.c main/pixeltransfer.h main/points.c \
-	main/points.h main/polygon.c main/polygon.h \
+	main/objectpurge.c main/objectpurge.h main/pack.c main/pack.h \
+	main/pbo.c main/pbo.h main/performance_monitor.c \
+	main/performance_monitor.h main/pipelineobj.c \
+	main/pipelineobj.h main/pixel.c main/pixel.h main/pixelstore.c \
+	main/pixelstore.h main/pixeltransfer.c main/pixeltransfer.h \
+	main/points.c main/points.h main/polygon.c main/polygon.h \
 	main/program_resource.c main/program_resource.h \
 	main/querymatrix.c main/querymatrix.h main/queryobj.c \
 	main/queryobj.h main/rastpos.c main/rastpos.h main/readpix.c \
@@ -530,23 +531,27 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	state_tracker/st_atom_tess.c state_tracker/st_atom_texture.c \
 	state_tracker/st_atom_viewport.c state_tracker/st_cache.h \
 	state_tracker/st_cb_bitmap.c state_tracker/st_cb_bitmap.h \
-	state_tracker/st_cb_blit.c state_tracker/st_cb_blit.h \
-	state_tracker/st_cb_bufferobjects.c \
+	state_tracker/st_cb_bitmap_shader.c state_tracker/st_cb_blit.c \
+	state_tracker/st_cb_blit.h state_tracker/st_cb_bufferobjects.c \
 	state_tracker/st_cb_bufferobjects.h \
 	state_tracker/st_cb_clear.c state_tracker/st_cb_clear.h \
 	state_tracker/st_cb_condrender.c \
 	state_tracker/st_cb_condrender.h \
+	state_tracker/st_cb_copyimage.c \
+	state_tracker/st_cb_copyimage.h \
 	state_tracker/st_cb_drawpixels.c \
-	state_tracker/st_cb_drawpixels.h state_tracker/st_cb_drawtex.c \
-	state_tracker/st_cb_drawtex.h state_tracker/st_cb_eglimage.c \
-	state_tracker/st_cb_eglimage.h state_tracker/st_cb_fbo.c \
-	state_tracker/st_cb_fbo.h state_tracker/st_cb_feedback.c \
-	state_tracker/st_cb_feedback.h state_tracker/st_cb_flush.c \
-	state_tracker/st_cb_flush.h state_tracker/st_cb_msaa.c \
-	state_tracker/st_cb_msaa.h state_tracker/st_cb_perfmon.c \
-	state_tracker/st_cb_perfmon.h state_tracker/st_cb_program.c \
-	state_tracker/st_cb_program.h state_tracker/st_cb_queryobj.c \
-	state_tracker/st_cb_queryobj.h state_tracker/st_cb_rasterpos.c \
+	state_tracker/st_cb_drawpixels.h \
+	state_tracker/st_cb_drawpixels_shader.c \
+	state_tracker/st_cb_drawtex.c state_tracker/st_cb_drawtex.h \
+	state_tracker/st_cb_eglimage.c state_tracker/st_cb_eglimage.h \
+	state_tracker/st_cb_fbo.c state_tracker/st_cb_fbo.h \
+	state_tracker/st_cb_feedback.c state_tracker/st_cb_feedback.h \
+	state_tracker/st_cb_flush.c state_tracker/st_cb_flush.h \
+	state_tracker/st_cb_msaa.c state_tracker/st_cb_msaa.h \
+	state_tracker/st_cb_perfmon.c state_tracker/st_cb_perfmon.h \
+	state_tracker/st_cb_program.c state_tracker/st_cb_program.h \
+	state_tracker/st_cb_queryobj.c state_tracker/st_cb_queryobj.h \
+	state_tracker/st_cb_rasterpos.c \
 	state_tracker/st_cb_rasterpos.h \
 	state_tracker/st_cb_readpixels.c \
 	state_tracker/st_cb_readpixels.h state_tracker/st_cb_strings.c \
@@ -616,10 +621,14 @@ am__objects_21 = state_tracker/st_atom_array.lo \
 	state_tracker/st_atom_stipple.lo state_tracker/st_atom_tess.lo \
 	state_tracker/st_atom_texture.lo \
 	state_tracker/st_atom_viewport.lo \
-	state_tracker/st_cb_bitmap.lo state_tracker/st_cb_blit.lo \
+	state_tracker/st_cb_bitmap.lo \
+	state_tracker/st_cb_bitmap_shader.lo \
+	state_tracker/st_cb_blit.lo \
 	state_tracker/st_cb_bufferobjects.lo \
 	state_tracker/st_cb_clear.lo state_tracker/st_cb_condrender.lo \
+	state_tracker/st_cb_copyimage.lo \
 	state_tracker/st_cb_drawpixels.lo \
+	state_tracker/st_cb_drawpixels_shader.lo \
 	state_tracker/st_cb_drawtex.lo state_tracker/st_cb_eglimage.lo \
 	state_tracker/st_cb_fbo.lo state_tracker/st_cb_feedback.lo \
 	state_tracker/st_cb_flush.lo state_tracker/st_cb_msaa.lo \
@@ -914,6 +923,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -958,6 +969,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -991,7 +1004,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -1022,6 +1039,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -1174,6 +1193,7 @@ MAIN_FILES = \
 	main/execmem.c \
 	main/extensions.c \
 	main/extensions.h \
+	main/extensions_table.h \
 	main/fbobject.c \
 	main/fbobject.h \
 	main/feedback.c \
@@ -1231,6 +1251,8 @@ MAIN_FILES = \
 	main/multisample.h \
 	main/objectlabel.c \
 	main/objectlabel.h \
+	main/objectpurge.c \
+	main/objectpurge.h \
 	main/pack.c \
 	main/pack.h \
 	main/pbo.c \
@@ -1440,7 +1462,6 @@ TNL_FILES = \
 	tnl/tnl.h \
 	tnl/t_pipeline.c \
 	tnl/t_pipeline.h \
-	tnl/t_rasterpos.c \
 	tnl/t_vb_cliptmp.h \
 	tnl/t_vb_fog.c \
 	tnl/t_vb_light.c \
@@ -1510,6 +1531,7 @@ STATETRACKER_FILES = \
 	state_tracker/st_cache.h \
 	state_tracker/st_cb_bitmap.c \
 	state_tracker/st_cb_bitmap.h \
+	state_tracker/st_cb_bitmap_shader.c \
 	state_tracker/st_cb_blit.c \
 	state_tracker/st_cb_blit.h \
 	state_tracker/st_cb_bufferobjects.c \
@@ -1518,8 +1540,11 @@ STATETRACKER_FILES = \
 	state_tracker/st_cb_clear.h \
 	state_tracker/st_cb_condrender.c \
 	state_tracker/st_cb_condrender.h \
+	state_tracker/st_cb_copyimage.c \
+	state_tracker/st_cb_copyimage.h \
 	state_tracker/st_cb_drawpixels.c \
 	state_tracker/st_cb_drawpixels.h \
+	state_tracker/st_cb_drawpixels_shader.c \
 	state_tracker/st_cb_drawtex.c \
 	state_tracker/st_cb_drawtex.h \
 	state_tracker/st_cb_eglimage.c \
@@ -1714,6 +1739,7 @@ INCLUDE_DIRS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/glsl \
+	-I$(top_srcdir)/src/glsl/nir \
 	-I$(top_builddir)/src/glsl \
 	-I$(top_builddir)/src/glsl/nir \
 	-I$(top_srcdir)/src/glsl/glcpp \
@@ -1943,6 +1969,8 @@ main/multisample.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/objectlabel.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
+main/objectpurge.lo: main/$(am__dirstamp) \
+	main/$(DEPDIR)/$(am__dirstamp)
 main/pack.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/pbo.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/performance_monitor.lo: main/$(am__dirstamp) \
@@ -2078,7 +2106,6 @@ tnl/$(DEPDIR)/$(am__dirstamp):
 tnl/t_context.lo: tnl/$(am__dirstamp) tnl/$(DEPDIR)/$(am__dirstamp)
 tnl/t_draw.lo: tnl/$(am__dirstamp) tnl/$(DEPDIR)/$(am__dirstamp)
 tnl/t_pipeline.lo: tnl/$(am__dirstamp) tnl/$(DEPDIR)/$(am__dirstamp)
-tnl/t_rasterpos.lo: tnl/$(am__dirstamp) tnl/$(DEPDIR)/$(am__dirstamp)
 tnl/t_vb_fog.lo: tnl/$(am__dirstamp) tnl/$(DEPDIR)/$(am__dirstamp)
 tnl/t_vb_light.lo: tnl/$(am__dirstamp) tnl/$(DEPDIR)/$(am__dirstamp)
 tnl/t_vb_normals.lo: tnl/$(am__dirstamp) tnl/$(DEPDIR)/$(am__dirstamp)
@@ -2345,6 +2372,8 @@ state_tracker/st_atom_viewport.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_bitmap.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_cb_bitmap_shader.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_blit.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_bufferobjects.lo: state_tracker/$(am__dirstamp) \
@@ -2353,7 +2382,12 @@ state_tracker/st_cb_clear.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_condrender.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_cb_copyimage.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_drawpixels.lo: state_tracker/$(am__dirstamp) \
+	state_tracker/$(DEPDIR)/$(am__dirstamp)
+state_tracker/st_cb_drawpixels_shader.lo:  \
+	state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
 state_tracker/st_cb_drawtex.lo: state_tracker/$(am__dirstamp) \
 	state_tracker/$(DEPDIR)/$(am__dirstamp)
@@ -2535,6 +2569,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/mm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/multisample.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/objectlabel.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/objectpurge.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/pack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/pbo.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/performance_monitor.Plo@am__quote@
@@ -2640,11 +2675,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_atom_viewport.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_bitmap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_bitmap_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_bufferobjects.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_clear.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_condrender.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_copyimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_drawpixels.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_drawpixels_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_drawtex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_eglimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@state_tracker/$(DEPDIR)/st_cb_fbo.Plo@am__quote@
@@ -2709,7 +2747,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tnl/$(DEPDIR)/t_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tnl/$(DEPDIR)/t_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tnl/$(DEPDIR)/t_pipeline.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@tnl/$(DEPDIR)/t_rasterpos.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tnl/$(DEPDIR)/t_vb_fog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tnl/$(DEPDIR)/t_vb_light.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tnl/$(DEPDIR)/t_vb_normals.Plo@am__quote@

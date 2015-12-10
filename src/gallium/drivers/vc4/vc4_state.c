@@ -51,7 +51,9 @@ vc4_set_blend_color(struct pipe_context *pctx,
                     const struct pipe_blend_color *blend_color)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
-        vc4->blend_color = *blend_color;
+        vc4->blend_color.f = *blend_color;
+        for (int i = 0; i < 4; i++)
+                vc4->blend_color.ub[i] = float_to_ubyte(blend_color->color[i]);
         vc4->dirty |= VC4_DIRTY_BLEND_COLOR;
 }
 
@@ -303,10 +305,10 @@ vc4_set_index_buffer(struct pipe_context *pctx,
         struct vc4_context *vc4 = vc4_context(pctx);
 
         if (ib) {
-                assert(!ib->user_buffer);
                 pipe_resource_reference(&vc4->indexbuf.buffer, ib->buffer);
                 vc4->indexbuf.index_size = ib->index_size;
                 vc4->indexbuf.offset = ib->offset;
+                vc4->indexbuf.user_buffer = ib->user_buffer;
         } else {
                 pipe_resource_reference(&vc4->indexbuf.buffer, NULL);
         }
@@ -417,6 +419,23 @@ vc4_set_framebuffer_state(struct pipe_context *pctx,
 
         cso->width = framebuffer->width;
         cso->height = framebuffer->height;
+
+        /* If we're binding to uninitialized buffers, no need to load their
+         * contents before drawing..
+         */
+        if (cso->cbufs[0]) {
+                struct vc4_resource *rsc =
+                        vc4_resource(cso->cbufs[0]->texture);
+                if (!rsc->writes)
+                        vc4->cleared |= PIPE_CLEAR_COLOR0;
+        }
+
+        if (cso->zsbuf) {
+                struct vc4_resource *rsc =
+                        vc4_resource(cso->zsbuf->texture);
+                if (!rsc->writes)
+                        vc4->cleared |= PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL;
+        }
 
         /* Nonzero texture mipmap levels are laid out as if they were in
          * power-of-two-sized spaces.  The renderbuffer config infers its

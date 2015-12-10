@@ -40,6 +40,7 @@
 struct fd4_sampler_stateobj {
 	struct pipe_sampler_state base;
 	uint32_t texsamp0, texsamp1;
+	bool saturate_s, saturate_t, saturate_r;
 };
 
 static inline struct fd4_sampler_stateobj *
@@ -50,7 +51,7 @@ fd4_sampler_stateobj(struct pipe_sampler_state *samp)
 
 struct fd4_pipe_sampler_view {
 	struct pipe_sampler_view base;
-	uint32_t texconst0, texconst1, texconst2, texconst3, textconst4;
+	uint32_t texconst0, texconst1, texconst2, texconst3, texconst4;
 };
 
 static inline struct fd4_pipe_sampler_view *

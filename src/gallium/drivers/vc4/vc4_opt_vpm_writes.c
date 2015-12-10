@@ -58,7 +58,7 @@ qir_opt_vpm_writes(struct vc4_compile *c)
         }
 
         for (int i = 0; i < vpm_write_count; i++) {
-                if (vpm_writes[i]->op != QOP_MOV ||
+                if (!qir_is_raw_mov(vpm_writes[i]) ||
                     vpm_writes[i]->src[0].file != QFILE_TEMP) {
                         continue;
                 }

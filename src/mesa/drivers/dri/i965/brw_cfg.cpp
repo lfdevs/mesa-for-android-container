@@ -305,6 +305,10 @@ cfg_t::cfg_t(exec_list *instructions)
 
          assert(cur_do != NULL && cur_while != NULL);
 	 cur->add_successor(mem_ctx, cur_do);
+
+         if (inst->predicate)
+            cur->add_successor(mem_ctx, cur_while);
+
 	 set_next_block(&cur, cur_while, ip);
 
 	 /* Pop the stack so we're in the previous loop */
@@ -422,7 +426,11 @@ cfg_t::dump(backend_shader *s)
       calculate_idom();
 
    foreach_block (block, this) {
-      fprintf(stderr, "START B%d IDOM(B%d)", block->num, block->idom->num);
+      if (block->idom)
+         fprintf(stderr, "START B%d IDOM(B%d)", block->num, block->idom->num);
+      else
+         fprintf(stderr, "START B%d IDOM(none)", block->num);
+
       foreach_list_typed(bblock_link, link, link, &block->parents) {
          fprintf(stderr, " <-B%d",
                  link->block->num);
@@ -520,7 +528,9 @@ cfg_t::dump_domtree()
 {
    printf("digraph DominanceTree {\n");
    foreach_block(block, this) {
-      printf("\t%d -> %d\n", block->idom->num, block->num);
+      if (block->idom) {
+         printf("\t%d -> %d\n", block->idom->num, block->num);
+      }
    }
    printf("}\n");
 }

@@ -27,6 +27,7 @@
 #include "util/u_inlines.h"
 
 #include "nv50/nv50_context.h"
+#include "nv50/nv50_query_hw.h"
 
 void
 nv50_constbufs_validate(struct nv50_context *nv50)
@@ -112,7 +113,7 @@ nv50_program_validate(struct nv50_context *nv50, struct nv50_program *prog)
 {
    if (!prog->translated) {
       prog->translated = nv50_program_translate(
-         prog, nv50->screen->base.device->chipset);
+         prog, nv50->screen->base.device->chipset, &nv50->base.debug);
       if (!prog->translated)
          return false;
    } else
@@ -168,11 +169,23 @@ nv50_fragprog_validate(struct nv50_context *nv50)
 {
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    struct nv50_program *fp = nv50->fragprog;
+   struct pipe_rasterizer_state *rast = &nv50->rast->pipe;
 
-   fp->fp.sample_interp = nv50->min_samples > 1;
+   if (fp->fp.force_persample_interp != rast->force_persample_interp) {
+      /* Force the program to be reuploaded, which will trigger interp fixups
+       * to get applied
+       */
+      if (fp->mem)
+         nouveau_heap_free(&fp->mem);
+
+      fp->fp.force_persample_interp = rast->force_persample_interp;
+   }
+
+   if (fp->mem && !(nv50->dirty & (NV50_NEW_FRAGPROG | NV50_NEW_MIN_SAMPLES)))
+      return;
 
    if (!nv50_program_validate(nv50, fp))
-         return;
+      return;
    nv50_program_update_context_state(nv50, fp, 1);
 
    BEGIN_NV04(push, NV50_3D(FP_REG_ALLOC_TEMP), 1);
@@ -629,7 +642,7 @@ nv50_stream_output_validate(struct nv50_context *nv50)
       const unsigned n = nv50->screen->base.class_3d >= NVA0_3D_CLASS ? 4 : 3;
 
       if (n == 4 && !targ->clean)
-         nv84_query_fifo_wait(push, targ->pq);
+         nv84_hw_query_fifo_wait(push, nv50_query(targ->pq));
       BEGIN_NV04(push, NV50_3D(STRMOUT_ADDRESS_HIGH(i)), n);
       PUSH_DATAh(push, buf->address + targ->pipe.buffer_offset);
       PUSH_DATA (push, buf->address + targ->pipe.buffer_offset);
@@ -638,8 +651,8 @@ nv50_stream_output_validate(struct nv50_context *nv50)
          PUSH_DATA(push, targ->pipe.buffer_size);
          if (!targ->clean) {
             assert(targ->pq);
-            nv50_query_pushbuf_submit(push, NVA0_3D_STRMOUT_OFFSET(i),
-                                      targ->pq, 0x4);
+            nv50_hw_query_pushbuf_submit(push, NVA0_3D_STRMOUT_OFFSET(i),
+                                         nv50_query(targ->pq), 0x4);
          } else {
             BEGIN_NV04(push, NVA0_3D(STRMOUT_OFFSET(i)), 1);
             PUSH_DATA(push, 0);

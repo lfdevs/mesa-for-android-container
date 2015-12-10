@@ -690,7 +690,7 @@ set_control_index(const struct brw_device_info *devinfo,
 
    for (int i = 0; i < 32; i++) {
       if (control_index_table[i] == uncompacted) {
-         brw_compact_inst_set_control_index(dst, i);
+         brw_compact_inst_set_control_index(devinfo, dst, i);
 	 return true;
       }
    }
@@ -711,7 +711,7 @@ set_datatype_index(const struct brw_device_info *devinfo, brw_compact_inst *dst,
 
    for (int i = 0; i < 32; i++) {
       if (datatype_table[i] == uncompacted) {
-         brw_compact_inst_set_datatype_index(dst, i);
+         brw_compact_inst_set_datatype_index(devinfo, dst, i);
 	 return true;
       }
    }
@@ -732,7 +732,7 @@ set_subreg_index(const struct brw_device_info *devinfo, brw_compact_inst *dst,
 
    for (int i = 0; i < 32; i++) {
       if (subreg_table[i] == uncompacted) {
-         brw_compact_inst_set_subreg_index(dst, i);
+         brw_compact_inst_set_subreg_index(devinfo, dst, i);
 	 return true;
       }
    }
@@ -764,7 +764,7 @@ set_src0_index(const struct brw_device_info *devinfo,
    if (!get_src_index(uncompacted, &compacted))
       return false;
 
-   brw_compact_inst_set_src0_index(dst, compacted);
+   brw_compact_inst_set_src0_index(devinfo, dst, compacted);
 
    return true;
 }
@@ -784,7 +784,7 @@ set_src1_index(const struct brw_device_info *devinfo, brw_compact_inst *dst,
          return false;
    }
 
-   brw_compact_inst_set_src1_index(dst, compacted);
+   brw_compact_inst_set_src1_index(devinfo, dst, compacted);
 
    return true;
 }
@@ -802,9 +802,9 @@ set_3src_control_index(const struct brw_device_info *devinfo,
    if (devinfo->gen >= 9 || devinfo->is_cherryview)
       uncompacted |= brw_inst_bits(src, 36, 35) << 24; /* 2b */
 
-   for (int i = 0; i < ARRAY_SIZE(gen8_3src_control_index_table); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(gen8_3src_control_index_table); i++) {
       if (gen8_3src_control_index_table[i] == uncompacted) {
-         brw_compact_inst_set_3src_control_index(dst, i);
+         brw_compact_inst_set_3src_control_index(devinfo, dst, i);
 	 return true;
       }
    }
@@ -836,9 +836,9 @@ set_3src_source_index(const struct brw_device_info *devinfo,
          (brw_inst_bits(src, 104, 104) << 44);  /* 1b */
    }
 
-   for (int i = 0; i < ARRAY_SIZE(gen8_3src_source_index_table); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(gen8_3src_source_index_table); i++) {
       if (gen8_3src_source_index_table[i] == uncompacted) {
-         brw_compact_inst_set_3src_source_index(dst, i);
+         brw_compact_inst_set_3src_source_index(devinfo, dst, i);
 	 return true;
       }
    }
@@ -909,7 +909,7 @@ brw_try_compact_3src_instruction(const struct brw_device_info *devinfo,
       return false;
 
 #define compact(field) \
-   brw_compact_inst_set_3src_##field(dst, brw_inst_3src_##field(devinfo, src))
+   brw_compact_inst_set_3src_##field(devinfo, dst, brw_inst_3src_##field(devinfo, src))
 
    compact(opcode);
 
@@ -921,7 +921,7 @@ brw_try_compact_3src_instruction(const struct brw_device_info *devinfo,
 
    compact(dst_reg_nr);
    compact(src0_rep_ctrl);
-   brw_compact_inst_set_3src_cmpt_control(dst, true);
+   brw_compact_inst_set_3src_cmpt_control(devinfo, dst, true);
    compact(debug_control);
    compact(saturate);
    compact(src1_rep_ctrl);
@@ -952,13 +952,6 @@ is_compactable_immediate(unsigned imm)
 
    /* We get one bit replicated through the top 20 bits. */
    return imm == 0 || imm == 0xfffff000;
-}
-
-/* Returns whether an opcode takes three sources. */
-static bool
-is_3src(uint32_t op)
-{
-   return opcode_descs[op].nsrc == 3;
 }
 
 /**
@@ -1003,35 +996,51 @@ brw_try_compact_instruction(const struct brw_device_info *devinfo,
 
    memset(&temp, 0, sizeof(temp));
 
-   brw_compact_inst_set_opcode(&temp, brw_inst_opcode(devinfo, src));
-   brw_compact_inst_set_debug_control(&temp, brw_inst_debug_control(devinfo, src));
+#define compact(field) \
+   brw_compact_inst_set_##field(devinfo, &temp, brw_inst_##field(devinfo, src))
+
+   compact(opcode);
+   compact(debug_control);
+
    if (!set_control_index(devinfo, &temp, src))
       return false;
    if (!set_datatype_index(devinfo, &temp, src))
       return false;
    if (!set_subreg_index(devinfo, &temp, src, is_immediate))
       return false;
-   brw_compact_inst_set_acc_wr_control(&temp,
-                                       brw_inst_acc_wr_control(devinfo, src));
-   brw_compact_inst_set_cond_modifier(&temp,
-                                      brw_inst_cond_modifier(devinfo, src));
+
+   if (devinfo->gen >= 6) {
+      compact(acc_wr_control);
+   } else {
+      compact(mask_control_ex);
+   }
+
+   compact(cond_modifier);
+
    if (devinfo->gen <= 6)
-      brw_compact_inst_set_flag_subreg_nr(&temp,
-                                          brw_inst_flag_subreg_nr(devinfo, src));
-   brw_compact_inst_set_cmpt_control(&temp, true);
+      compact(flag_subreg_nr);
+
+   brw_compact_inst_set_cmpt_control(devinfo, &temp, true);
+
    if (!set_src0_index(devinfo, &temp, src))
       return false;
    if (!set_src1_index(devinfo, &temp, src, is_immediate))
       return false;
-   brw_compact_inst_set_dst_reg_nr(&temp, brw_inst_dst_da_reg_nr(devinfo, src));
-   brw_compact_inst_set_src0_reg_nr(&temp, brw_inst_src0_da_reg_nr(devinfo, src));
+
+   brw_compact_inst_set_dst_reg_nr(devinfo, &temp,
+                                   brw_inst_dst_da_reg_nr(devinfo, src));
+   brw_compact_inst_set_src0_reg_nr(devinfo, &temp,
+                                    brw_inst_src0_da_reg_nr(devinfo, src));
+
    if (is_immediate) {
-      brw_compact_inst_set_src1_reg_nr(&temp,
+      brw_compact_inst_set_src1_reg_nr(devinfo, &temp,
                                        brw_inst_imm_ud(devinfo, src) & 0xff);
    } else {
-      brw_compact_inst_set_src1_reg_nr(&temp,
+      brw_compact_inst_set_src1_reg_nr(devinfo, &temp,
                                        brw_inst_src1_da_reg_nr(devinfo, src));
    }
+
+#undef compact
 
    *dst = temp;
 
@@ -1043,7 +1052,7 @@ set_uncompacted_control(const struct brw_device_info *devinfo, brw_inst *dst,
                         brw_compact_inst *src)
 {
    uint32_t uncompacted =
-      control_index_table[brw_compact_inst_control_index(src)];
+      control_index_table[brw_compact_inst_control_index(devinfo, src)];
 
    if (devinfo->gen >= 8) {
       brw_inst_set_bits(dst, 33, 31, (uncompacted >> 16));
@@ -1064,7 +1073,8 @@ static void
 set_uncompacted_datatype(const struct brw_device_info *devinfo, brw_inst *dst,
                          brw_compact_inst *src)
 {
-   uint32_t uncompacted = datatype_table[brw_compact_inst_datatype_index(src)];
+   uint32_t uncompacted =
+      datatype_table[brw_compact_inst_datatype_index(devinfo, src)];
 
    if (devinfo->gen >= 8) {
       brw_inst_set_bits(dst, 63, 61, (uncompacted >> 18));
@@ -1080,7 +1090,8 @@ static void
 set_uncompacted_subreg(const struct brw_device_info *devinfo, brw_inst *dst,
                        brw_compact_inst *src)
 {
-   uint16_t uncompacted = subreg_table[brw_compact_inst_subreg_index(src)];
+   uint16_t uncompacted =
+      subreg_table[brw_compact_inst_subreg_index(devinfo, src)];
 
    brw_inst_set_bits(dst, 100, 96, (uncompacted >> 10));
    brw_inst_set_bits(dst,  68, 64, (uncompacted >>  5) & 0x1f);
@@ -1091,7 +1102,7 @@ static void
 set_uncompacted_src0(const struct brw_device_info *devinfo, brw_inst *dst,
                      brw_compact_inst *src)
 {
-   uint32_t compacted = brw_compact_inst_src0_index(src);
+   uint32_t compacted = brw_compact_inst_src0_index(devinfo, src);
    uint16_t uncompacted = src_index_table[compacted];
 
    brw_inst_set_bits(dst, 88, 77, uncompacted);
@@ -1102,11 +1113,12 @@ set_uncompacted_src1(const struct brw_device_info *devinfo, brw_inst *dst,
                      brw_compact_inst *src, bool is_immediate)
 {
    if (is_immediate) {
-      signed high5 = brw_compact_inst_src1_index(src);
+      signed high5 = brw_compact_inst_src1_index(devinfo, src);
       /* Replicate top bit of src1_index into high 20 bits of the immediate. */
       brw_inst_set_imm_ud(devinfo, dst, (high5 << 27) >> 19);
    } else {
-      uint16_t uncompacted = src_index_table[brw_compact_inst_src1_index(src)];
+      uint16_t uncompacted =
+         src_index_table[brw_compact_inst_src1_index(devinfo, src)];
 
       brw_inst_set_bits(dst, 120, 109, uncompacted);
    }
@@ -1118,7 +1130,7 @@ set_uncompacted_3src_control_index(const struct brw_device_info *devinfo,
 {
    assert(devinfo->gen >= 8);
 
-   uint32_t compacted = brw_compact_inst_3src_control_index(src);
+   uint32_t compacted = brw_compact_inst_3src_control_index(devinfo, src);
    uint32_t uncompacted = gen8_3src_control_index_table[compacted];
 
    brw_inst_set_bits(dst, 34, 32, (uncompacted >> 21) & 0x7);
@@ -1134,7 +1146,7 @@ set_uncompacted_3src_source_index(const struct brw_device_info *devinfo,
 {
    assert(devinfo->gen >= 8);
 
-   uint32_t compacted = brw_compact_inst_3src_source_index(src);
+   uint32_t compacted = brw_compact_inst_3src_source_index(devinfo, src);
    uint64_t uncompacted = gen8_3src_source_index_table[compacted];
 
    brw_inst_set_bits(dst,  83,  83, (uncompacted >> 43) & 0x1);
@@ -1160,7 +1172,7 @@ brw_uncompact_3src_instruction(const struct brw_device_info *devinfo,
    assert(devinfo->gen >= 8);
 
 #define uncompact(field) \
-   brw_inst_set_3src_##field(devinfo, dst, brw_compact_inst_3src_##field(src))
+   brw_inst_set_3src_##field(devinfo, dst, brw_compact_inst_3src_##field(devinfo, src))
 
    uncompact(opcode);
 
@@ -1190,13 +1202,16 @@ brw_uncompact_instruction(const struct brw_device_info *devinfo, brw_inst *dst,
 {
    memset(dst, 0, sizeof(*dst));
 
-   if (devinfo->gen >= 8 && is_3src(brw_compact_inst_3src_opcode(src))) {
+   if (devinfo->gen >= 8 && is_3src(brw_compact_inst_3src_opcode(devinfo, src))) {
       brw_uncompact_3src_instruction(devinfo, dst, src);
       return;
    }
 
-   brw_inst_set_opcode(devinfo, dst, brw_compact_inst_opcode(src));
-   brw_inst_set_debug_control(devinfo, dst, brw_compact_inst_debug_control(src));
+#define uncompact(field) \
+   brw_inst_set_##field(devinfo, dst, brw_compact_inst_##field(devinfo, src))
+
+   uncompact(opcode);
+   uncompact(debug_control);
 
    set_uncompacted_control(devinfo, dst, src);
    set_uncompacted_datatype(devinfo, dst, src);
@@ -1206,22 +1221,36 @@ brw_uncompact_instruction(const struct brw_device_info *devinfo, brw_inst *dst,
                        brw_inst_src1_reg_file(devinfo, dst) == BRW_IMMEDIATE_VALUE;
 
    set_uncompacted_subreg(devinfo, dst, src);
-   brw_inst_set_acc_wr_control(devinfo, dst, brw_compact_inst_acc_wr_control(src));
-   brw_inst_set_cond_modifier(devinfo, dst, brw_compact_inst_cond_modifier(src));
+
+   if (devinfo->gen >= 6) {
+      uncompact(acc_wr_control);
+   } else {
+      uncompact(mask_control_ex);
+   }
+
+   uncompact(cond_modifier);
+
    if (devinfo->gen <= 6)
-      brw_inst_set_flag_subreg_nr(devinfo, dst,
-                                  brw_compact_inst_flag_subreg_nr(src));
+      uncompact(flag_subreg_nr);
+
    set_uncompacted_src0(devinfo, dst, src);
    set_uncompacted_src1(devinfo, dst, src, is_immediate);
-   brw_inst_set_dst_da_reg_nr(devinfo, dst, brw_compact_inst_dst_reg_nr(src));
-   brw_inst_set_src0_da_reg_nr(devinfo, dst, brw_compact_inst_src0_reg_nr(src));
+
+   brw_inst_set_dst_da_reg_nr(devinfo, dst,
+                              brw_compact_inst_dst_reg_nr(devinfo, src));
+   brw_inst_set_src0_da_reg_nr(devinfo, dst,
+                               brw_compact_inst_src0_reg_nr(devinfo, src));
+
    if (is_immediate) {
       brw_inst_set_imm_ud(devinfo, dst,
                           brw_inst_imm_ud(devinfo, dst) |
-                          brw_compact_inst_src1_reg_nr(src));
+                          brw_compact_inst_src1_reg_nr(devinfo, src));
    } else {
-      brw_inst_set_src1_da_reg_nr(devinfo, dst, brw_compact_inst_src1_reg_nr(src));
+      brw_inst_set_src1_da_reg_nr(devinfo, dst,
+                                  brw_compact_inst_src1_reg_nr(devinfo, src));
    }
+
+#undef uncompact
 }
 
 void brw_debug_compact_uncompact(const struct brw_device_info *devinfo,
@@ -1371,6 +1400,9 @@ void
 brw_compact_instructions(struct brw_codegen *p, int start_offset,
                          int num_annotations, struct annotation *annotation)
 {
+   if (unlikely(INTEL_DEBUG & DEBUG_NO_COMPACTION))
+      return;
+
    const struct brw_device_info *devinfo = p->devinfo;
    void *store = p->store + start_offset / 16;
    /* For an instruction at byte offset 16*i before compaction, this is the
@@ -1415,8 +1447,8 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
          if ((offset & sizeof(brw_compact_inst)) != 0 && devinfo->is_g4x){
             brw_compact_inst *align = store + offset;
             memset(align, 0, sizeof(*align));
-            brw_compact_inst_set_opcode(align, BRW_OPCODE_NENOP);
-            brw_compact_inst_set_cmpt_control(align, true);
+            brw_compact_inst_set_opcode(devinfo, align, BRW_OPCODE_NENOP);
+            brw_compact_inst_set_cmpt_control(devinfo, align, true);
             offset += sizeof(brw_compact_inst);
             compacted_count--;
             compacted_counts[src_offset / sizeof(brw_inst)] = compacted_count;
@@ -1524,8 +1556,8 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
    if (p->next_insn_offset & sizeof(brw_compact_inst)) {
       brw_compact_inst *align = store + offset;
       memset(align, 0, sizeof(*align));
-      brw_compact_inst_set_opcode(align, BRW_OPCODE_NOP);
-      brw_compact_inst_set_cmpt_control(align, true);
+      brw_compact_inst_set_opcode(devinfo, align, BRW_OPCODE_NOP);
+      brw_compact_inst_set_cmpt_control(devinfo, align, true);
       p->next_insn_offset += sizeof(brw_compact_inst);
    }
    p->nr_insn = p->next_insn_offset / sizeof(brw_inst);

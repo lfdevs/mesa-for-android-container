@@ -538,12 +538,19 @@ lrp_emit(
    struct lp_build_tgsi_context * bld_base,
    struct lp_build_emit_data * emit_data)
 {
-   LLVMValueRef tmp;
-   tmp = lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_SUB,
-                                   emit_data->args[1],
-                                   emit_data->args[2]);
-   emit_data->output[emit_data->chan] = lp_build_emit_llvm_ternary(bld_base,
-                    TGSI_OPCODE_MAD, emit_data->args[0], tmp, emit_data->args[2]);
+   struct lp_build_context *bld = &bld_base->base;
+   LLVMValueRef inv, a, b;
+
+   /* This uses the correct version: (1 - t)*a + t*b
+    *
+    * An alternative version is "a + t*(b-a)". The problem is this version
+    * doesn't return "b" for t = 1, because "a + (b-a)" isn't equal to "b"
+    * because of the floating-point rounding.
+    */
+   inv = lp_build_sub(bld, bld_base->base.one, emit_data->args[0]);
+   a = lp_build_mul(bld, emit_data->args[1], emit_data->args[0]);
+   b = lp_build_mul(bld, emit_data->args[2], inv);
+   emit_data->output[emit_data->chan] = lp_build_add(bld, a, b);
 }
 
 /* TGSI_OPCODE_MAD */

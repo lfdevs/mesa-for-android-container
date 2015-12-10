@@ -60,7 +60,7 @@ graw_util_create_window(struct graw_info *info,
       return FALSE;
    }
    
-   info->ctx = info->screen->context_create(info->screen, NULL);
+   info->ctx = info->screen->context_create(info->screen, NULL, 0);
    if (info->ctx == NULL) {
       debug_printf("graw: Failed to create context\n");
       return FALSE;

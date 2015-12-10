@@ -49,7 +49,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "radeon_drm.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
-#include "main/colormac.h"
 #include "radeon_screen.h"
 
 #include "radeon_common.h"

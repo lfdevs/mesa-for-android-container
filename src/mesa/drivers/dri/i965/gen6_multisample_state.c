@@ -48,6 +48,9 @@ gen6_get_sample_position(struct gl_context *ctx,
    case 8:
       bits = brw_multisample_positions_8x[index >> 2] >> (8 * (index & 3));
       break;
+   case 16:
+      bits = brw_multisample_positions_16x[index >> 2] >> (8 * (index & 3));
+      break;
    default:
       unreachable("Not implemented");
    }
@@ -88,6 +91,17 @@ gen6_get_sample_position(struct gl_context *ctx,
  *           | 6 | 7 |                      | 7 | 1 |
  *           ---------                      ---------
  *
+ * 16X MSAA sample index layout  16x MSAA sample number layout
+ *         -----------------            -----------------
+ *         | 0 | 1 | 2 | 3 |            |15 |10 | 9 | 7 |
+ *         -----------------            -----------------
+ *         | 4 | 5 | 6 | 7 |            | 4 | 1 | 3 |13 |
+ *         -----------------            -----------------
+ *         | 8 | 9 |10 |11 |            |12 | 2 | 0 | 6 |
+ *         -----------------            -----------------
+ *         |12 |13 |14 |15 |            |11 | 8 | 5 |14 |
+ *         -----------------            -----------------
+ *
  * A sample map is used to map sample indices to sample numbers.
  */
 void
@@ -96,10 +110,13 @@ gen6_set_sample_maps(struct gl_context *ctx)
    uint8_t map_2x[2] = {0, 1};
    uint8_t map_4x[4] = {0, 1, 2, 3};
    uint8_t map_8x[8] = {5, 2, 4, 6, 0, 3, 7, 1};
+   uint8_t map_16x[16] = { 15, 10, 9, 7, 4, 1, 3, 13,
+                           12, 2, 0, 6, 11, 8, 5, 14 };
 
    memcpy(ctx->Const.SampleMap2x, map_2x, sizeof(map_2x));
    memcpy(ctx->Const.SampleMap4x, map_4x, sizeof(map_4x));
    memcpy(ctx->Const.SampleMap8x, map_8x, sizeof(map_8x));
+   memcpy(ctx->Const.SampleMap16x, map_16x, sizeof(map_16x));
 }
 
 /**

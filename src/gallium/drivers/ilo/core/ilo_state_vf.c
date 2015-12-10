@@ -369,14 +369,14 @@ vf_params_set_gen8_3DSTATE_VF_SGVS(struct ilo_state_vf *vf,
 
    if (params->prepend_instanceid) {
       dw1 |= GEN8_SGVS_DW1_IID_ENABLE |
-             1 << GEN8_SGVS_DW1_IID_VE_COMP__SHIFT |
-             attr << GEN8_SGVS_DW1_IID_VE_INDEX__SHIFT;
+             1 << GEN8_SGVS_DW1_IID_COMP__SHIFT |
+             attr << GEN8_SGVS_DW1_IID_OFFSET__SHIFT;
    }
 
    if (params->prepend_vertexid) {
       dw1 |= GEN8_SGVS_DW1_VID_ENABLE |
-             0 << GEN8_SGVS_DW1_VID_VE_COMP__SHIFT |
-             attr << GEN8_SGVS_DW1_VID_VE_INDEX__SHIFT;
+             0 << GEN8_SGVS_DW1_VID_COMP__SHIFT |
+             attr << GEN8_SGVS_DW1_VID_OFFSET__SHIFT;
    }
 
    STATIC_ASSERT(ARRAY_SIZE(vf->sgvs) >= 1);

@@ -36,14 +36,9 @@ public:
    void init();
 
    fs_reg();
-   explicit fs_reg(float f);
-   explicit fs_reg(int32_t i);
-   explicit fs_reg(uint32_t u);
-   explicit fs_reg(uint8_t vf[4]);
-   explicit fs_reg(uint8_t vf0, uint8_t vf1, uint8_t vf2, uint8_t vf3);
-   fs_reg(struct brw_reg fixed_hw_reg);
-   fs_reg(enum register_file file, int reg);
-   fs_reg(enum register_file file, int reg, enum brw_reg_type type);
+   fs_reg(struct brw_reg reg);
+   fs_reg(enum brw_reg_file file, int nr);
+   fs_reg(enum brw_reg_file file, int nr, enum brw_reg_type type);
 
    bool equals(const fs_reg &r) const;
    bool is_contiguous() const;
@@ -72,7 +67,7 @@ public:
 static inline fs_reg
 negate(fs_reg reg)
 {
-   assert(reg.file != HW_REG && reg.file != IMM);
+   assert(reg.file != IMM);
    reg.negate = !reg.negate;
    return reg;
 }
@@ -80,7 +75,7 @@ negate(fs_reg reg)
 static inline fs_reg
 retype(fs_reg reg, enum brw_reg_type type)
 {
-   reg.fixed_hw_reg.type = reg.type = type;
+   reg.type = type;
    return reg;
 }
 
@@ -90,14 +85,17 @@ byte_offset(fs_reg reg, unsigned delta)
    switch (reg.file) {
    case BAD_FILE:
       break;
-   case GRF:
+   case VGRF:
    case ATTR:
       reg.reg_offset += delta / 32;
       break;
    case MRF:
-      reg.reg += delta / 32;
+      reg.nr += delta / 32;
       break;
-   default:
+   case ARF:
+   case FIXED_GRF:
+   case IMM:
+   case UNIFORM:
       assert(delta == 0);
    }
    reg.subreg_offset += delta % 32;
@@ -115,11 +113,12 @@ horiz_offset(fs_reg reg, unsigned delta)
        * horizontal offset should be a harmless no-op.
        */
       break;
-   case GRF:
+   case VGRF:
    case MRF:
    case ATTR:
       return byte_offset(reg, delta * reg.stride * type_sz(reg.type));
-   default:
+   case ARF:
+   case FIXED_GRF:
       assert(delta == 0);
    }
    return reg;
@@ -157,13 +156,13 @@ half(fs_reg reg, unsigned idx)
    case IMM:
       return reg;
 
-   case GRF:
+   case VGRF:
    case MRF:
       return horiz_offset(reg, 8 * idx);
 
+   case ARF:
+   case FIXED_GRF:
    case ATTR:
-   case HW_REG:
-   default:
       unreachable("Cannot take half of this register type");
    }
    return reg;
@@ -204,6 +203,7 @@ public:
    unsigned components_read(unsigned i) const;
    int regs_read(int arg) const;
    bool can_do_source_mods(const struct brw_device_info *devinfo);
+   bool can_change_types() const;
    bool has_side_effects() const;
 
    bool reads_flag() const;

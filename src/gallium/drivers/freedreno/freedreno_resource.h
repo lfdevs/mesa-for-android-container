@@ -73,6 +73,7 @@ struct fd_resource {
 	struct u_resource base;
 	struct fd_bo *bo;
 	uint32_t cpp;
+	enum pipe_format internal_format;
 	bool layer_first;        /* see above description */
 	uint32_t layer_size;
 	struct fd_resource_slice slices[MAX_MIP_LEVELS];
@@ -134,5 +135,7 @@ fd_resource_offset(struct fd_resource *rsc, unsigned level, unsigned layer)
 
 void fd_resource_screen_init(struct pipe_screen *pscreen);
 void fd_resource_context_init(struct pipe_context *pctx);
+
+bool fd_render_condition_check(struct pipe_context *pctx);
 
 #endif /* FREEDRENO_RESOURCE_H_ */

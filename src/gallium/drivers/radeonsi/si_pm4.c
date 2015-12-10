@@ -107,6 +107,7 @@ void si_pm4_free_state_simple(struct si_pm4_state *state)
 {
 	for (int i = 0; i < state->nbo; ++i)
 		r600_resource_reference(&state->bo[i], NULL);
+	r600_resource_reference(&state->indirect_buffer, NULL);
 	FREE(state);
 }
 
@@ -124,49 +125,29 @@ void si_pm4_free_state(struct si_context *sctx,
 	si_pm4_free_state_simple(state);
 }
 
-unsigned si_pm4_dirty_dw(struct si_context *sctx)
-{
-	unsigned count = 0;
-
-	for (int i = 0; i < NUMBER_OF_STATES; ++i) {
-		struct si_pm4_state *state = sctx->queued.array[i];
-
-		if (!state || sctx->emitted.array[i] == state)
-			continue;
-
-		count += state->ndw;
-#if SI_TRACE_CS
-		/* for tracing each states */
-		if (sctx->screen->b.trace_bo) {
-			count += SI_TRACE_CS_DWORDS;
-		}
-#endif
-	}
-
-	return count;
-}
-
 void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 {
-	struct radeon_winsys_cs *cs = sctx->b.rings.gfx.cs;
+	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
+
 	for (int i = 0; i < state->nbo; ++i) {
-		r600_context_bo_reloc(&sctx->b, &sctx->b.rings.gfx, state->bo[i],
+		radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx, state->bo[i],
 				      state->bo_usage[i], state->bo_priority[i]);
 	}
 
-	memcpy(&cs->buf[cs->cdw], state->pm4, state->ndw * 4);
+	if (!state->indirect_buffer) {
+		radeon_emit_array(cs, state->pm4, state->ndw);
+	} else {
+		struct r600_resource *ib = state->indirect_buffer;
 
-	for (int i = 0; i < state->nrelocs; ++i) {
-		cs->buf[cs->cdw + state->relocs[i]] += cs->cdw << 2;
+		radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx, ib,
+					  RADEON_USAGE_READ,
+                                          RADEON_PRIO_IB2);
+
+		radeon_emit(cs, PKT3(PKT3_INDIRECT_BUFFER_CIK, 2, 0));
+		radeon_emit(cs, ib->gpu_address);
+		radeon_emit(cs, (ib->gpu_address >> 32) & 0xffff);
+		radeon_emit(cs, (ib->b.b.width0 >> 2) & 0xfffff);
 	}
-
-	cs->cdw += state->ndw;
-
-#if SI_TRACE_CS
-	if (sctx->screen->b.trace_bo) {
-		si_trace_emit(sctx);
-	}
-#endif
 }
 
 void si_pm4_emit_dirty(struct si_context *sctx)
@@ -187,9 +168,35 @@ void si_pm4_reset_emitted(struct si_context *sctx)
 	memset(&sctx->emitted, 0, sizeof(sctx->emitted));
 }
 
-void si_pm4_cleanup(struct si_context *sctx)
+void si_pm4_upload_indirect_buffer(struct si_context *sctx,
+				   struct si_pm4_state *state)
 {
-	for (int i = 0; i < NUMBER_OF_STATES; ++i) {
-		si_pm4_free_state(sctx, sctx->queued.array[i], i);
+	struct pipe_screen *screen = sctx->b.b.screen;
+	unsigned aligned_ndw = align(state->ndw, 8);
+
+	/* only supported on CIK and later */
+	if (sctx->b.chip_class < CIK)
+		return;
+
+	assert(state->ndw);
+	assert(aligned_ndw <= SI_PM4_MAX_DW);
+
+	r600_resource_reference(&state->indirect_buffer, NULL);
+	state->indirect_buffer = (struct r600_resource*)
+		pipe_buffer_create(screen, PIPE_BIND_CUSTOM,
+				   PIPE_USAGE_DEFAULT, aligned_ndw * 4);
+	if (!state->indirect_buffer)
+		return;
+
+	/* Pad the IB to 8 DWs to meet CP fetch alignment requirements. */
+	if (sctx->screen->b.info.gfx_ib_pad_with_type2) {
+		for (int i = state->ndw; i < aligned_ndw; i++)
+			state->pm4[i] = 0x80000000; /* type2 nop packet */
+	} else {
+		for (int i = state->ndw; i < aligned_ndw; i++)
+			state->pm4[i] = 0xffff1000; /* type3 nop packet */
 	}
+
+	pipe_buffer_write(&sctx->b.b, &state->indirect_buffer->b.b,
+			  0, aligned_ndw *4, state->pm4);
 }

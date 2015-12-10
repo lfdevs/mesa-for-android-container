@@ -155,18 +155,6 @@ fs_visitor::opt_peephole_sel()
       if (movs == 0)
          continue;
 
-      enum brw_predicate predicate;
-      bool predicate_inverse;
-      if (devinfo->gen == 6 && if_inst->conditional_mod) {
-         /* For Sandybridge with IF with embedded comparison */
-         predicate = BRW_PREDICATE_NORMAL;
-         predicate_inverse = false;
-      } else {
-         /* Separate CMP and IF instructions */
-         predicate = if_inst->predicate;
-         predicate_inverse = if_inst->predicate_inverse;
-      }
-
       /* Generate SEL instructions for pairs of MOVs to a common destination. */
       for (int i = 0; i < movs; i++) {
          if (!then_mov[i] || !else_mov[i])
@@ -195,13 +183,6 @@ fs_visitor::opt_peephole_sel()
       if (movs == 0)
          continue;
 
-      /* Emit a CMP if our IF used the embedded comparison */
-      if (devinfo->gen == 6 && if_inst->conditional_mod) {
-         const fs_builder ibld(this, block, if_inst);
-         ibld.CMP(ibld.null_reg_d(), if_inst->src[0], if_inst->src[1],
-                  if_inst->conditional_mod);
-      }
-
       for (int i = 0; i < movs; i++) {
          const fs_builder ibld = fs_builder(this, then_block, then_mov[i])
                                  .at(block, if_inst);
@@ -220,7 +201,7 @@ fs_visitor::opt_peephole_sel()
                ibld.MOV(src0, then_mov[i]->src[0]);
             }
 
-            set_predicate_inv(predicate, predicate_inverse,
+            set_predicate_inv(if_inst->predicate, if_inst->predicate_inverse,
                               ibld.SEL(then_mov[i]->dst, src0,
                                        else_mov[i]->src[0]));
          }

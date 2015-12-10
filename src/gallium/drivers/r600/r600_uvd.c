@@ -47,7 +47,10 @@
 #include "r600_pipe.h"
 #include "radeon/radeon_video.h"
 #include "radeon/radeon_uvd.h"
+#include "radeon/radeon_vce.h"
 #include "r600d.h"
+
+#define R600_UVD_ENABLE_TILING 0
 
 /**
  * creates an video buffer with an UVD compatible memory layout
@@ -77,7 +80,7 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 	template.height = align(tmpl->height / array_size, VL_MACROBLOCK_HEIGHT);
 
 	vl_video_buffer_template(&templ, &template, resource_formats[0], 1, array_size, PIPE_USAGE_DEFAULT, 0);
-	if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced)
+	if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 		templ.bind = PIPE_BIND_LINEAR;
 	resources[0] = (struct r600_texture *)
 		pipe->screen->resource_create(pipe->screen, &templ);
@@ -86,7 +89,7 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 
 	if (resource_formats[1] != PIPE_FORMAT_NONE) {
 		vl_video_buffer_template(&templ, &template, resource_formats[1], 1, array_size, PIPE_USAGE_DEFAULT, 1);
-		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced)
+		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 			templ.bind = PIPE_BIND_LINEAR;
 		resources[1] = (struct r600_texture *)
 			pipe->screen->resource_create(pipe->screen, &templ);
@@ -96,7 +99,7 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 
 	if (resource_formats[2] != PIPE_FORMAT_NONE) {
 		vl_video_buffer_template(&templ, &template, resource_formats[2], 1, array_size, PIPE_USAGE_DEFAULT, 2);
-		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced)
+		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 			templ.bind = PIPE_BIND_LINEAR;
 		resources[2] = (struct r600_texture *)
 			pipe->screen->resource_create(pipe->screen, &templ);
@@ -166,9 +169,28 @@ static struct radeon_winsys_cs_handle* r600_uvd_set_dtb(struct ruvd_msg *msg, st
 	return luma->resource.cs_buf;
 }
 
+/* get the radeon resources for VCE */
+static void r600_vce_get_buffer(struct pipe_resource *resource,
+				struct radeon_winsys_cs_handle **handle,
+				struct radeon_surf **surface)
+{
+	struct r600_texture *res = (struct r600_texture *)resource;
+
+	if (handle)
+		*handle = res->resource.cs_buf;
+
+	if (surface)
+		*surface = &res->surface;
+}
+
 /* create decoder */
 struct pipe_video_codec *r600_uvd_create_decoder(struct pipe_context *context,
-						   const struct pipe_video_codec *templat)
+						 const struct pipe_video_codec *templat)
 {
+	struct r600_context *ctx = (struct r600_context *)context;
+
+        if (templat->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE)
+                return rvce_create_encoder(context, templat, ctx->b.ws, r600_vce_get_buffer);
+
 	return ruvd_create_decoder(context, templat, r600_uvd_set_dtb);
 }

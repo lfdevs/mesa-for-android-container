@@ -111,6 +111,7 @@ kms_sw_displaytarget_create(struct sw_winsys *ws,
                             enum pipe_format format,
                             unsigned width, unsigned height,
                             unsigned alignment,
+                            const void *front_private,
                             unsigned *stride)
 {
    struct kms_sw_winsys *kms_sw = kms_sw_winsys(ws);

@@ -694,10 +694,10 @@ cc_set_gen8_3DSTATE_PS_BLEND(struct ilo_state_cc *cc,
       cc_get_gen6_effective_rt(dev, info, 0, &rt0);
 
       /* 0x0 is reserved for blend factors and we have to set them all */
-      dw1 |= rt0.a_src << GEN8_PS_BLEND_DW1_SRC_ALPHA_FACTOR__SHIFT |
-             rt0.a_dst << GEN8_PS_BLEND_DW1_DST_ALPHA_FACTOR__SHIFT |
-             rt0.rgb_src << GEN8_PS_BLEND_DW1_SRC_COLOR_FACTOR__SHIFT |
-             rt0.rgb_dst << GEN8_PS_BLEND_DW1_DST_COLOR_FACTOR__SHIFT;
+      dw1 |= rt0.a_src << GEN8_PS_BLEND_DW1_RT0_SRC_ALPHA_FACTOR__SHIFT |
+             rt0.a_dst << GEN8_PS_BLEND_DW1_RT0_DST_ALPHA_FACTOR__SHIFT |
+             rt0.rgb_src << GEN8_PS_BLEND_DW1_RT0_SRC_COLOR_FACTOR__SHIFT |
+             rt0.rgb_dst << GEN8_PS_BLEND_DW1_RT0_DST_COLOR_FACTOR__SHIFT;
 
       for (i = 0; i < blend->rt_count; i++) {
          if (blend->rt[i].argb_write_disables != 0xf) {
@@ -707,10 +707,10 @@ cc_set_gen8_3DSTATE_PS_BLEND(struct ilo_state_cc *cc,
       }
 
       if (rt0.blend_enable) {
-         dw1 |= GEN8_PS_BLEND_DW1_BLEND_ENABLE;
+         dw1 |= GEN8_PS_BLEND_DW1_RT0_BLEND_ENABLE;
 
          if (rt0.a_src != rt0.rgb_src || rt0.a_dst != rt0.rgb_dst)
-            dw1 |= GEN8_PS_BLEND_DW1_INDEPENDENT_ALPHA_ENABLE;
+            dw1 |= GEN8_PS_BLEND_DW1_RT0_INDEPENDENT_ALPHA_ENABLE;
       }
    }
 

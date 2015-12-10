@@ -815,6 +815,13 @@
 #define     V_02880C_EXPORT_DB_FOUR16                  0x01
 #define     V_02880C_EXPORT_DB_TWO                     0x02
 #define   S_02880C_ALPHA_TO_MASK_DISABLE(x)            (((x) & 0x1) << 12)
+#define   S_02880C_CONSERVATIVE_Z_EXPORT(x)            (((x) & 0x03) << 16)
+#define   G_02880C_CONSERVATIVE_Z_EXPORT(x)            (((x) >> 16) & 0x03)
+#define   C_02880C_CONSERVATIVE_Z_EXPORT               0xFFFCFFFF
+#define     V_02880C_EXPORT_ANY_Z                      0
+#define     V_02880C_EXPORT_LESS_THAN_Z                1
+#define     V_02880C_EXPORT_GREATER_THAN_Z             2
+#define     V_02880C_EXPORT_RESERVED                   3
 
 #define R_028A00_PA_SU_POINT_SIZE                    0x028A00
 #define   S_028A00_HEIGHT(x)                           (((x) & 0xFFFF) << 0)
@@ -2497,5 +2504,13 @@
 #define    DMA_PACKET_SRBM_WRITE                0x9
 #define    DMA_PACKET_CONSTANT_FILL             0xd
 #define    DMA_PACKET_NOP                       0xf
+
+#define EG_FETCH_CONSTANTS_OFFSET_PS 0
+#define EG_FETCH_CONSTANTS_OFFSET_VS 176
+#define EG_FETCH_CONSTANTS_OFFSET_GS 336
+#define EG_FETCH_CONSTANTS_OFFSET_HS 496
+#define EG_FETCH_CONSTANTS_OFFSET_LS 656
+#define EG_FETCH_CONSTANTS_OFFSET_CS 816
+#define EG_FETCH_CONSTANTS_OFFSET_FS 992
 
 #endif

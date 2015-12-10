@@ -121,11 +121,9 @@ target_triplet = @target@
 @HAVE_DRICOMMON_TRUE@	$(top_builddir)/src/mesa/drivers/dri/common/libxmlconfig.la
 
 @HAVE_LIBDRM_TRUE@am__append_3 = \
-@HAVE_LIBDRM_TRUE@	$(LIBDRM_CFLAGS)
-
-@HAVE_LIBDRM_TRUE@am__append_4 = \
 @HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
 
+@HAVE_DRI3_TRUE@am__append_4 = libloader_dri3_helper.la
 subdir = src/loader
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -156,6 +154,15 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+@HAVE_DRI3_TRUE@libloader_dri3_helper_la_DEPENDENCIES =  \
+@HAVE_DRI3_TRUE@	$(am__DEPENDENCIES_1)
+am__libloader_dri3_helper_la_SOURCES_DIST = loader_dri3_helper.c \
+	loader_dri3_helper.h
+@HAVE_DRI3_TRUE@am_libloader_dri3_helper_la_OBJECTS =  \
+@HAVE_DRI3_TRUE@	loader_dri3_helper.lo
+libloader_dri3_helper_la_OBJECTS =  \
+	$(am_libloader_dri3_helper_la_OBJECTS)
+@HAVE_DRI3_TRUE@am_libloader_dri3_helper_la_rpath =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -190,8 +197,9 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libloader_la_SOURCES)
-DIST_SOURCES = $(libloader_la_SOURCES)
+SOURCES = $(libloader_la_SOURCES) $(libloader_dri3_helper_la_SOURCES)
+DIST_SOURCES = $(libloader_la_SOURCES) \
+	$(am__libloader_dri3_helper_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -317,6 +325,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -361,6 +371,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -394,7 +406,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -425,6 +441,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -503,12 +521,24 @@ LOADER_C_FILES := \
 	pci_id_driver_map.h
 
 EXTRA_DIST = SConscript
-noinst_LTLIBRARIES = libloader.la
-libloader_la_CPPFLAGS = $(DEFINES) -I$(top_srcdir)/include \
-	-I$(top_srcdir)/src $(VISIBILITY_CFLAGS) $(LIBUDEV_CFLAGS) \
-	$(am__append_1) $(am__append_3)
+noinst_LTLIBRARIES = libloader.la $(am__append_4)
+AM_CPPFLAGS = \
+	$(DEFINES) \
+	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
+	$(VISIBILITY_CFLAGS) \
+	$(XCB_DRI3_CFLAGS) \
+	$(LIBDRM_CFLAGS) \
+	$(LIBUDEV_CFLAGS)
+
+libloader_la_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_1)
 libloader_la_SOURCES = $(LOADER_C_FILES)
-libloader_la_LIBADD = $(am__append_2) $(am__append_4)
+libloader_la_LIBADD = $(am__append_2) $(am__append_3)
+@HAVE_DRI3_TRUE@libloader_dri3_helper_la_SOURCES = \
+@HAVE_DRI3_TRUE@	loader_dri3_helper.c \
+@HAVE_DRI3_TRUE@	loader_dri3_helper.h
+
+@HAVE_DRI3_TRUE@libloader_dri3_helper_la_LIBADD = $(XCB_DRI3_LIBS)
 all: all-am
 
 .SUFFIXES:
@@ -558,6 +588,9 @@ clean-noinstLTLIBRARIES:
 libloader.la: $(libloader_la_OBJECTS) $(libloader_la_DEPENDENCIES) $(EXTRA_libloader_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libloader_la_OBJECTS) $(libloader_la_LIBADD) $(LIBS)
 
+libloader_dri3_helper.la: $(libloader_dri3_helper_la_OBJECTS) $(libloader_dri3_helper_la_DEPENDENCIES) $(EXTRA_libloader_dri3_helper_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(LINK) $(am_libloader_dri3_helper_la_rpath) $(libloader_dri3_helper_la_OBJECTS) $(libloader_dri3_helper_la_LIBADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -566,6 +599,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libloader_la-loader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libloader_la-pci_id_driver_map.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loader_dri3_helper.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\

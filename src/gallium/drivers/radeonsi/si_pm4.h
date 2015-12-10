@@ -29,9 +29,8 @@
 
 #include "radeon/radeon_winsys.h"
 
-#define SI_PM4_MAX_DW		256
-#define SI_PM4_MAX_BO		32
-#define SI_PM4_MAX_RELOCS	4
+#define SI_PM4_MAX_DW		160
+#define SI_PM4_MAX_BO		1
 
 // forward defines
 struct si_context;
@@ -39,6 +38,9 @@ enum chip_class;
 
 struct si_pm4_state
 {
+	/* optional indirect buffer */
+	struct r600_resource	*indirect_buffer;
+
 	/* PKT3_SET_*_REG handling */
 	unsigned	last_opcode;
 	unsigned	last_reg;
@@ -54,10 +56,6 @@ struct si_pm4_state
 	enum radeon_bo_usage	bo_usage[SI_PM4_MAX_BO];
 	enum radeon_bo_priority	bo_priority[SI_PM4_MAX_BO];
 
-	/* relocs for shader data */
-	unsigned	nrelocs;
-	unsigned	relocs[SI_PM4_MAX_RELOCS];
-
 	bool compute_pkt;
 };
 
@@ -70,16 +68,16 @@ void si_pm4_add_bo(struct si_pm4_state *state,
 		   struct r600_resource *bo,
 		   enum radeon_bo_usage usage,
 		   enum radeon_bo_priority priority);
+void si_pm4_upload_indirect_buffer(struct si_context *sctx,
+				   struct si_pm4_state *state);
 
 void si_pm4_free_state_simple(struct si_pm4_state *state);
 void si_pm4_free_state(struct si_context *sctx,
 		       struct si_pm4_state *state,
 		       unsigned idx);
 
-unsigned si_pm4_dirty_dw(struct si_context *sctx);
 void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state);
 void si_pm4_emit_dirty(struct si_context *sctx);
 void si_pm4_reset_emitted(struct si_context *sctx);
-void si_pm4_cleanup(struct si_context *sctx);
 
 #endif

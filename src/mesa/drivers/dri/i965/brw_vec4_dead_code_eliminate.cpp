@@ -78,13 +78,19 @@ vec4_visitor::dead_code_eliminate()
              sizeof(BITSET_WORD));
 
       foreach_inst_in_block_reverse(vec4_instruction, inst, block) {
-         if (inst->dst.file == GRF && !inst->has_side_effects()) {
+         if ((inst->dst.file == VGRF && !inst->has_side_effects()) ||
+             (inst->dst.is_null() && inst->writes_flag())){
             bool result_live[4] = { false };
 
-            for (unsigned i = 0; i < inst->regs_written; i++) {
-               for (int c = 0; c < 4; c++)
-                  result_live[c] |= BITSET_TEST(
-                     live, var_from_reg(alloc, offset(inst->dst, i), c));
+            if (inst->dst.file == VGRF) {
+               for (unsigned i = 0; i < inst->regs_written; i++) {
+                  for (int c = 0; c < 4; c++)
+                     result_live[c] |= BITSET_TEST(
+                        live, var_from_reg(alloc, offset(inst->dst, i), c));
+               }
+            } else {
+               for (unsigned c = 0; c < 4; c++)
+                  result_live[c] = BITSET_TEST(flag_live, c);
             }
 
             /* If the instruction can't do writemasking, then it's all or
@@ -117,14 +123,18 @@ vec4_visitor::dead_code_eliminate()
          }
 
          if (inst->dst.is_null() && inst->writes_flag()) {
-            if (!BITSET_TEST(flag_live, 0)) {
+            bool combined_live = false;
+            for (unsigned c = 0; c < 4; c++)
+               combined_live |= BITSET_TEST(flag_live, c);
+
+            if (!combined_live) {
                inst->opcode = BRW_OPCODE_NOP;
                progress = true;
                continue;
             }
          }
 
-         if (inst->dst.file == GRF && !inst->predicate) {
+         if (inst->dst.file == VGRF && !inst->predicate) {
             for (unsigned i = 0; i < inst->regs_written; i++) {
                for (int c = 0; c < 4; c++) {
                   if (inst->dst.writemask & (1 << c)) {
@@ -135,12 +145,13 @@ vec4_visitor::dead_code_eliminate()
             }
          }
 
-         if (inst->writes_flag()) {
-            BITSET_CLEAR(flag_live, 0);
+         if (inst->writes_flag() && !inst->predicate) {
+            for (unsigned c = 0; c < 4; c++)
+               BITSET_CLEAR(flag_live, c);
          }
 
          for (int i = 0; i < 3; i++) {
-            if (inst->src[i].file == GRF) {
+            if (inst->src[i].file == VGRF) {
                for (unsigned j = 0; j < inst->regs_read(i); j++) {
                   for (int c = 0; c < 4; c++) {
                      BITSET_SET(live, var_from_reg(alloc,
@@ -150,8 +161,10 @@ vec4_visitor::dead_code_eliminate()
             }
          }
 
-         if (inst->reads_flag()) {
-            BITSET_SET(flag_live, 0);
+         for (unsigned c = 0; c < 4; c++) {
+            if (inst->reads_flag(c)) {
+               BITSET_SET(flag_live, c);
+            }
          }
       }
    }

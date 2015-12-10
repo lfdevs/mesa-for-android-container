@@ -103,6 +103,7 @@ struct pipe_rasterizer_state
    unsigned point_tri_clip:1; /** large points clipped as tris or points */
    unsigned point_size_per_vertex:1; /**< size computed in vertex shader */
    unsigned multisample:1;         /* XXX maybe more ms state in future */
+   unsigned force_persample_interp:1;
    unsigned line_smooth:1;
    unsigned line_stipple_enable:1;
    unsigned line_last_pixel:1;
@@ -681,6 +682,31 @@ struct pipe_compute_state
    unsigned req_local_mem; /**< Required size of the LOCAL resource. */
    unsigned req_private_mem; /**< Required size of the PRIVATE resource. */
    unsigned req_input_mem; /**< Required size of the INPUT resource. */
+};
+
+/**
+ * Structure that contains a callback for debug messages from the driver back
+ * to the state tracker.
+ */
+struct pipe_debug_callback
+{
+   /**
+    * Callback for the driver to report debug/performance/etc information back
+    * to the state tracker.
+    *
+    * \param data       user-supplied data pointer
+    * \param id         message type identifier, if pointed value is 0, then a
+    *                   new id is assigned
+    * \param type       PIPE_DEBUG_TYPE_*
+    * \param format     printf-style format string
+    * \param args       args for format string
+    */
+   void (*debug_message)(void *data,
+                         unsigned *id,
+                         enum pipe_debug_type type,
+                         const char *fmt,
+                         va_list args);
+   void *data;
 };
 
 #ifdef __cplusplus

@@ -2,6 +2,7 @@
 #define __NOUVEAU_CONTEXT_H__
 
 #include "pipe/p_context.h"
+#include "pipe/p_state.h"
 #include <nouveau.h>
 
 #define NOUVEAU_MAX_SCRATCH_BUFS 4
@@ -14,6 +15,7 @@ struct nouveau_context {
 
    struct nouveau_client *client;
    struct nouveau_pushbuf *pushbuf;
+   struct pipe_debug_callback debug;
 
    bool vbo_dirty;
 
@@ -62,6 +64,9 @@ nouveau_context(struct pipe_context *pipe)
 
 void
 nouveau_context_init_vdec(struct nouveau_context *);
+
+void
+nouveau_context_init(struct nouveau_context *);
 
 void
 nouveau_scratch_runout_release(struct nouveau_context *);

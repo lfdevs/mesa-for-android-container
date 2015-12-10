@@ -119,19 +119,24 @@ target_triplet = @target@
 @HAVE_EGL_PLATFORM_X11_TRUE@	$(XCB_DRI2_CFLAGS)
 @HAVE_EGL_PLATFORM_X11_TRUE@am__append_2 = $(XCB_DRI2_LIBS)
 @HAVE_EGL_PLATFORM_X11_TRUE@am__append_3 = drivers/dri2/platform_x11.c
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_4 =  \
+@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@am__append_4 = \
+@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.c \
+@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.h
+
+@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@am__append_5 = $(top_builddir)/src/loader/libloader_dri3_helper.la
+@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_6 =  \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	-DHAVE_WAYLAND_PLATFORM \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS)
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_5 = $(WAYLAND_LIBS) \
+@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_7 = $(WAYLAND_LIBS) \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(LIBDRM_LIBS) \
 @HAVE_EGL_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
-@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_6 = drivers/dri2/platform_wayland.c
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_7 = -DHAVE_DRM_PLATFORM
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_8 = $(top_builddir)/src/gbm/libgbm.la
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_9 = drivers/dri2/platform_drm.c
-@HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_10 = -DHAVE_SURFACELESS_PLATFORM
-@HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_11 = drivers/dri2/platform_surfaceless.c
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_12 = \
+@HAVE_EGL_PLATFORM_WAYLAND_TRUE@am__append_8 = drivers/dri2/platform_wayland.c
+@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_9 = -DHAVE_DRM_PLATFORM
+@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_10 = $(top_builddir)/src/gbm/libgbm.la
+@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_11 = drivers/dri2/platform_drm.c
+@HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_12 = -DHAVE_SURFACELESS_PLATFORM
+@HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_13 = drivers/dri2/platform_surfaceless.c
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_14 = \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-I$(top_srcdir)/src/loader \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-I$(top_srcdir)/src/egl/drivers/dri2 \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-I$(top_srcdir)/src/gbm/backends/dri \
@@ -141,11 +146,12 @@ target_triplet = @target@
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	-D_EGL_BUILT_IN_DRIVER_DRI2
 
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_13 = \
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_15 = \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(dri2_backend_core_FILES) \
-@HAVE_EGL_DRIVER_DRI2_TRUE@	$(dri2_backend_FILES)
+@HAVE_EGL_DRIVER_DRI2_TRUE@	$(dri2_backend_FILES) \
+@HAVE_EGL_DRIVER_DRI2_TRUE@	$(dri3_backend_FILES)
 
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_14 = $(top_builddir)/src/loader/libloader.la \
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__append_16 = $(top_builddir)/src/loader/libloader.la \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(DLOPEN_LIBS) $(LIBDRM_LIBS)
 subdir = src/egl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -207,7 +213,8 @@ am__DEPENDENCIES_1 =
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__DEPENDENCIES_1)
 libEGL_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
-	$(am__DEPENDENCIES_3) $(am__append_8) $(am__DEPENDENCIES_4)
+	$(am__append_5) $(am__DEPENDENCIES_3) $(am__append_10) \
+	$(am__DEPENDENCIES_4)
 am__libEGL_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
 	main/eglarray.c main/eglarray.h main/eglcompiler.h \
 	main/eglconfig.c main/eglconfig.h main/eglcontext.c \
@@ -221,7 +228,9 @@ am__libEGL_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
 	drivers/dri2/egl_dri2.h drivers/dri2/egl_dri2_fallbacks.h \
 	drivers/dri2/platform_x11.c drivers/dri2/platform_wayland.c \
 	drivers/dri2/platform_drm.c \
-	drivers/dri2/platform_surfaceless.c
+	drivers/dri2/platform_surfaceless.c \
+	drivers/dri2/platform_x11_dri3.c \
+	drivers/dri2/platform_x11_dri3.h
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = main/eglapi.lo main/eglarray.lo main/eglconfig.lo \
 	main/eglcontext.lo main/eglcurrent.lo main/egldisplay.lo \
@@ -237,9 +246,11 @@ am__objects_2 = drivers/dri2/egl_dri2.lo
 @HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__objects_6 = drivers/dri2/platform_surfaceless.lo
 am__objects_7 = $(am__objects_3) $(am__objects_4) $(am__objects_5) \
 	$(am__objects_6)
-@HAVE_EGL_DRIVER_DRI2_TRUE@am__objects_8 = $(am__objects_2) \
-@HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__objects_7)
-am_libEGL_la_OBJECTS = $(am__objects_1) $(am__objects_8)
+@HAVE_DRI3_TRUE@@HAVE_EGL_PLATFORM_X11_TRUE@am__objects_8 = drivers/dri2/platform_x11_dri3.lo
+am__objects_9 = $(am__objects_8)
+@HAVE_EGL_DRIVER_DRI2_TRUE@am__objects_10 = $(am__objects_2) \
+@HAVE_EGL_DRIVER_DRI2_TRUE@	$(am__objects_7) $(am__objects_9)
+am_libEGL_la_OBJECTS = $(am__objects_1) $(am__objects_10)
 libEGL_la_OBJECTS = $(am_libEGL_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -310,8 +321,186 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
+am__tty_colors_dummy = \
+  mgn= red= grn= lgn= blu= brg= std=; \
+  am__color_tests=no
+am__tty_colors = { \
+  $(am__tty_colors_dummy); \
+  if test "X$(AM_COLOR_TESTS)" = Xno; then \
+    am__color_tests=no; \
+  elif test "X$(AM_COLOR_TESTS)" = Xalways; then \
+    am__color_tests=yes; \
+  elif test "X$$TERM" != Xdumb && { test -t 1; } 2>/dev/null; then \
+    am__color_tests=yes; \
+  fi; \
+  if test $$am__color_tests = yes; then \
+    red='[0;31m'; \
+    grn='[0;32m'; \
+    lgn='[1;32m'; \
+    blu='[1;34m'; \
+    mgn='[0;35m'; \
+    brg='[1m'; \
+    std='[m'; \
+  fi; \
+}
+am__recheck_rx = ^[ 	]*:recheck:[ 	]*
+am__global_test_result_rx = ^[ 	]*:global-test-result:[ 	]*
+am__copy_in_global_log_rx = ^[ 	]*:copy-in-global-log:[ 	]*
+# A command that, given a newline-separated list of test names on the
+# standard input, print the name of the tests that are to be re-run
+# upon "make recheck".
+am__list_recheck_tests = $(AWK) '{ \
+  recheck = 1; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+        { \
+          if ((getline line2 < ($$0 ".log")) < 0) \
+	    recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[nN][Oo]/) \
+        { \
+          recheck = 0; \
+          break; \
+        } \
+      else if (line ~ /$(am__recheck_rx)[yY][eE][sS]/) \
+        { \
+          break; \
+        } \
+    }; \
+  if (recheck) \
+    print $$0; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# A command that, given a newline-separated list of test names on the
+# standard input, create the global log from their .trs and .log files.
+am__create_global_log = $(AWK) ' \
+function fatal(msg) \
+{ \
+  print "fatal: making $@: " msg | "cat >&2"; \
+  exit 1; \
+} \
+function rst_section(header) \
+{ \
+  print header; \
+  len = length(header); \
+  for (i = 1; i <= len; i = i + 1) \
+    printf "="; \
+  printf "\n\n"; \
+} \
+{ \
+  copy_in_global_log = 1; \
+  global_test_result = "RUN"; \
+  while ((rc = (getline line < ($$0 ".trs"))) != 0) \
+    { \
+      if (rc < 0) \
+         fatal("failed to read from " $$0 ".trs"); \
+      if (line ~ /$(am__global_test_result_rx)/) \
+        { \
+          sub("$(am__global_test_result_rx)", "", line); \
+          sub("[ 	]*$$", "", line); \
+          global_test_result = line; \
+        } \
+      else if (line ~ /$(am__copy_in_global_log_rx)[nN][oO]/) \
+        copy_in_global_log = 0; \
+    }; \
+  if (copy_in_global_log) \
+    { \
+      rst_section(global_test_result ": " $$0); \
+      while ((rc = (getline line < ($$0 ".log"))) != 0) \
+      { \
+        if (rc < 0) \
+          fatal("failed to read from " $$0 ".log"); \
+        print line; \
+      }; \
+      printf "\n"; \
+    }; \
+  close ($$0 ".trs"); \
+  close ($$0 ".log"); \
+}'
+# Restructured Text title.
+am__rst_title = { sed 's/.*/   &   /;h;s/./=/g;p;x;s/ *$$//;p;g' && echo; }
+# Solaris 10 'make', and several other traditional 'make' implementations,
+# pass "-e" to $(SHELL), and POSIX 2008 even requires this.  Work around it
+# by disabling -e (using the XSI extension "set +e") if it's set.
+am__sh_e_setup = case $$- in *e*) set +e;; esac
+# Default flags passed to test drivers.
+am__common_driver_flags = \
+  --color-tests "$$am__color_tests" \
+  --enable-hard-errors "$$am__enable_hard_errors" \
+  --expect-failure "$$am__expect_failure"
+# To be inserted before the command running the test.  Creates the
+# directory for the log if needed.  Stores in $dir the directory
+# containing $f, in $tst the test, in $log the log.  Executes the
+# developer- defined test setup AM_TESTS_ENVIRONMENT (if any), and
+# passes TESTS_ENVIRONMENT.  Set up options for the wrapper that
+# will run the test scripts (or their associated LOG_COMPILER, if
+# thy have one).
+am__check_pre = \
+$(am__sh_e_setup);					\
+$(am__vpath_adj_setup) $(am__vpath_adj)			\
+$(am__tty_colors);					\
+srcdir=$(srcdir); export srcdir;			\
+case "$@" in						\
+  */*) am__odir=`echo "./$@" | sed 's|/[^/]*$$||'`;;	\
+    *) am__odir=.;; 					\
+esac;							\
+test "x$$am__odir" = x"." || test -d "$$am__odir" 	\
+  || $(MKDIR_P) "$$am__odir" || exit $$?;		\
+if test -f "./$$f"; then dir=./;			\
+elif test -f "$$f"; then dir=;				\
+else dir="$(srcdir)/"; fi;				\
+tst=$$dir$$f; log='$@'; 				\
+if test -n '$(DISABLE_HARD_ERRORS)'; then		\
+  am__enable_hard_errors=no; 				\
+else							\
+  am__enable_hard_errors=yes; 				\
+fi; 							\
+case " $(XFAIL_TESTS) " in				\
+  *[\ \	]$$f[\ \	]* | *[\ \	]$$dir$$f[\ \	]*) \
+    am__expect_failure=yes;;				\
+  *)							\
+    am__expect_failure=no;;				\
+esac; 							\
+$(AM_TESTS_ENVIRONMENT) $(TESTS_ENVIRONMENT)
+# A shell command to get the names of the tests scripts with any registered
+# extension removed (i.e., equivalently, the names of the test logs, with
+# the '.log' extension removed).  The result is saved in the shell variable
+# '$bases'.  This honors runtime overriding of TESTS and TEST_LOGS.  Sadly,
+# we cannot use something simpler, involving e.g., "$(TEST_LOGS:.log=)",
+# since that might cause problem with VPATH rewrites for suffix-less tests.
+# See also 'test-harness-vpath-rewrite.sh' and 'test-trs-basic.sh'.
+am__set_TESTS_bases = \
+  bases='$(TEST_LOGS)'; \
+  bases=`for i in $$bases; do echo $$i; done | sed 's/\.log$$//'`; \
+  bases=`echo $$bases`
+RECHECK_LOGS = $(TEST_LOGS)
+AM_RECURSIVE_TARGETS = check recheck
+TEST_SUITE_LOG = test-suite.log
+TEST_EXTENSIONS = @EXEEXT@ .test
+LOG_DRIVER = $(SHELL) $(top_srcdir)/bin/test-driver
+LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
+am__set_b = \
+  case '$@' in \
+    */*) \
+      case '$*' in \
+        */*) b='$*';; \
+          *) b=`echo '$@' | sed 's/\.log$$//'`; \
+       esac;; \
+    *) \
+      b='$*';; \
+  esac
+am__test_logs1 = $(TESTS:=.log)
+am__test_logs2 = $(am__test_logs1:@EXEEXT@.log=.log)
+TEST_LOGS = $(am__test_logs2:.test.log=.log)
+TEST_LOG_DRIVER = $(SHELL) $(top_srcdir)/bin/test-driver
+TEST_LOG_COMPILE = $(TEST_LOG_COMPILER) $(AM_TEST_LOG_FLAGS) \
+	$(TEST_LOG_FLAGS)
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.sources \
-	$(top_srcdir)/bin/depcomp $(top_srcdir)/install-lib-links.mk
+	$(top_srcdir)/bin/depcomp $(top_srcdir)/bin/test-driver \
+	$(top_srcdir)/install-lib-links.mk
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
@@ -411,6 +600,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -455,6 +646,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -488,7 +681,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -519,6 +716,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -629,12 +828,12 @@ AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/egl/main \
 	-I$(top_srcdir)/src/gbm/main -I$(top_srcdir)/src $(DEFINES) \
 	$(VISIBILITY_CFLAGS) $(LIBDRM_CFLAGS) $(EGL_CFLAGS) \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM) $(am__append_1) \
-	$(am__append_4) $(am__append_7) $(am__append_10) \
-	$(am__append_12)
+	$(am__append_6) $(am__append_9) $(am__append_12) \
+	$(am__append_14)
 lib_LTLIBRARIES = libEGL.la
-libEGL_la_SOURCES = $(LIBEGL_C_FILES) $(am__append_13)
+libEGL_la_SOURCES = $(LIBEGL_C_FILES) $(am__append_15)
 libEGL_la_LIBADD = $(EGL_LIB_DEPS) $(am__append_2) $(am__append_5) \
-	$(am__append_8) $(am__append_14)
+	$(am__append_7) $(am__append_10) $(am__append_16)
 libEGL_la_LDFLAGS = \
 	-no-undefined \
 	-version-number 1:0 \
@@ -642,8 +841,9 @@ libEGL_la_LDFLAGS = \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 
-dri2_backend_FILES = $(am__append_3) $(am__append_6) $(am__append_9) \
-	$(am__append_11)
+dri2_backend_FILES = $(am__append_3) $(am__append_8) $(am__append_11) \
+	$(am__append_13)
+dri3_backend_FILES = $(am__append_4)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = main/egl.pc
 khrdir = $(includedir)/KHR
@@ -656,7 +856,9 @@ egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglmesaext.h \
 	$(top_srcdir)/include/EGL/eglplatform.h
 
+TESTS = egl-symbols-check
 EXTRA_DIST = \
+	egl-symbols-check \
 	SConscript \
 	drivers/haiku \
 	docs \
@@ -666,7 +868,7 @@ EXTRA_DIST = \
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .lo .o .obj
+.SUFFIXES: .c .lo .log .o .obj .test .test$(EXEEXT) .trs
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/Makefile.sources $(top_srcdir)/install-lib-links.mk $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -773,6 +975,8 @@ drivers/dri2/platform_drm.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 drivers/dri2/platform_surfaceless.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
+drivers/dri2/platform_x11_dri3.lo: drivers/dri2/$(am__dirstamp) \
+	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 
 libEGL.la: $(libEGL_la_OBJECTS) $(libEGL_la_DEPENDENCIES) $(EXTRA_libEGL_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libEGL_la_LINK) -rpath $(libdir) $(libEGL_la_OBJECTS) $(libEGL_la_LIBADD) $(LIBS)
@@ -792,6 +996,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_surfaceless.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_wayland.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_x11.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_x11_dri3.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/eglapi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/eglarray.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/eglconfig.Plo@am__quote@
@@ -953,6 +1158,169 @@ cscopelist-am: $(am__tagged_files)
 distclean-tags:
 	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
 
+# Recover from deleted '.trs' file; this should ensure that
+# "rm -f foo.log; make foo.trs" re-run 'foo.test', and re-create
+# both 'foo.log' and 'foo.trs'.  Break the recipe in two subshells
+# to avoid problems with "make -n".
+.log.trs:
+	rm -f $< $@
+	$(MAKE) $(AM_MAKEFLAGS) $<
+
+# Leading 'am--fnord' is there to ensure the list of targets does not
+# expand to empty, as could happen e.g. with make check TESTS=''.
+am--fnord $(TEST_LOGS) $(TEST_LOGS:.log=.trs): $(am__force_recheck)
+am--force-recheck:
+	@:
+
+$(TEST_SUITE_LOG): $(TEST_LOGS)
+	@$(am__set_TESTS_bases); \
+	am__f_ok () { test -f "$$1" && test -r "$$1"; }; \
+	redo_bases=`for i in $$bases; do \
+	              am__f_ok $$i.trs && am__f_ok $$i.log || echo $$i; \
+	            done`; \
+	if test -n "$$redo_bases"; then \
+	  redo_logs=`for i in $$redo_bases; do echo $$i.log; done`; \
+	  redo_results=`for i in $$redo_bases; do echo $$i.trs; done`; \
+	  if $(am__make_dryrun); then :; else \
+	    rm -f $$redo_logs && rm -f $$redo_results || exit 1; \
+	  fi; \
+	fi; \
+	if test -n "$$am__remaking_logs"; then \
+	  echo "fatal: making $(TEST_SUITE_LOG): possible infinite" \
+	       "recursion detected" >&2; \
+	elif test -n "$$redo_logs"; then \
+	  am__remaking_logs=yes $(MAKE) $(AM_MAKEFLAGS) $$redo_logs; \
+	fi; \
+	if $(am__make_dryrun); then :; else \
+	  st=0;  \
+	  errmsg="fatal: making $(TEST_SUITE_LOG): failed to create"; \
+	  for i in $$redo_bases; do \
+	    test -f $$i.trs && test -r $$i.trs \
+	      || { echo "$$errmsg $$i.trs" >&2; st=1; }; \
+	    test -f $$i.log && test -r $$i.log \
+	      || { echo "$$errmsg $$i.log" >&2; st=1; }; \
+	  done; \
+	  test $$st -eq 0 || exit 1; \
+	fi
+	@$(am__sh_e_setup); $(am__tty_colors); $(am__set_TESTS_bases); \
+	ws='[ 	]'; \
+	results=`for b in $$bases; do echo $$b.trs; done`; \
+	test -n "$$results" || results=/dev/null; \
+	all=`  grep "^$$ws*:test-result:"           $$results | wc -l`; \
+	pass=` grep "^$$ws*:test-result:$$ws*PASS"  $$results | wc -l`; \
+	fail=` grep "^$$ws*:test-result:$$ws*FAIL"  $$results | wc -l`; \
+	skip=` grep "^$$ws*:test-result:$$ws*SKIP"  $$results | wc -l`; \
+	xfail=`grep "^$$ws*:test-result:$$ws*XFAIL" $$results | wc -l`; \
+	xpass=`grep "^$$ws*:test-result:$$ws*XPASS" $$results | wc -l`; \
+	error=`grep "^$$ws*:test-result:$$ws*ERROR" $$results | wc -l`; \
+	if test `expr $$fail + $$xpass + $$error` -eq 0; then \
+	  success=true; \
+	else \
+	  success=false; \
+	fi; \
+	br='==================='; br=$$br$$br$$br$$br; \
+	result_count () \
+	{ \
+	    if test x"$$1" = x"--maybe-color"; then \
+	      maybe_colorize=yes; \
+	    elif test x"$$1" = x"--no-color"; then \
+	      maybe_colorize=no; \
+	    else \
+	      echo "$@: invalid 'result_count' usage" >&2; exit 4; \
+	    fi; \
+	    shift; \
+	    desc=$$1 count=$$2; \
+	    if test $$maybe_colorize = yes && test $$count -gt 0; then \
+	      color_start=$$3 color_end=$$std; \
+	    else \
+	      color_start= color_end=; \
+	    fi; \
+	    echo "$${color_start}# $$desc $$count$${color_end}"; \
+	}; \
+	create_testsuite_report () \
+	{ \
+	  result_count $$1 "TOTAL:" $$all   "$$brg"; \
+	  result_count $$1 "PASS: " $$pass  "$$grn"; \
+	  result_count $$1 "SKIP: " $$skip  "$$blu"; \
+	  result_count $$1 "XFAIL:" $$xfail "$$lgn"; \
+	  result_count $$1 "FAIL: " $$fail  "$$red"; \
+	  result_count $$1 "XPASS:" $$xpass "$$red"; \
+	  result_count $$1 "ERROR:" $$error "$$mgn"; \
+	}; \
+	{								\
+	  echo "$(PACKAGE_STRING): $(subdir)/$(TEST_SUITE_LOG)" |	\
+	    $(am__rst_title);						\
+	  create_testsuite_report --no-color;				\
+	  echo;								\
+	  echo ".. contents:: :depth: 2";				\
+	  echo;								\
+	  for b in $$bases; do echo $$b; done				\
+	    | $(am__create_global_log);					\
+	} >$(TEST_SUITE_LOG).tmp || exit 1;				\
+	mv $(TEST_SUITE_LOG).tmp $(TEST_SUITE_LOG);			\
+	if $$success; then						\
+	  col="$$grn";							\
+	 else								\
+	  col="$$red";							\
+	  test x"$$VERBOSE" = x || cat $(TEST_SUITE_LOG);		\
+	fi;								\
+	echo "$${col}$$br$${std}"; 					\
+	echo "$${col}Testsuite summary for $(PACKAGE_STRING)$${std}";	\
+	echo "$${col}$$br$${std}"; 					\
+	create_testsuite_report --maybe-color;				\
+	echo "$$col$$br$$std";						\
+	if $$success; then :; else					\
+	  echo "$${col}See $(subdir)/$(TEST_SUITE_LOG)$${std}";		\
+	  if test -n "$(PACKAGE_BUGREPORT)"; then			\
+	    echo "$${col}Please report to $(PACKAGE_BUGREPORT)$${std}";	\
+	  fi;								\
+	  echo "$$col$$br$$std";					\
+	fi;								\
+	$$success || exit 1
+
+check-TESTS:
+	@list='$(RECHECK_LOGS)';           test -z "$$list" || rm -f $$list
+	@list='$(RECHECK_LOGS:.log=.trs)'; test -z "$$list" || rm -f $$list
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	trs_list=`for i in $$bases; do echo $$i.trs; done`; \
+	log_list=`echo $$log_list`; trs_list=`echo $$trs_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) TEST_LOGS="$$log_list"; \
+	exit $$?;
+recheck: all 
+	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
+	@set +e; $(am__set_TESTS_bases); \
+	bases=`for i in $$bases; do echo $$i; done \
+	         | $(am__list_recheck_tests)` || exit 1; \
+	log_list=`for i in $$bases; do echo $$i.log; done`; \
+	log_list=`echo $$log_list`; \
+	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) \
+	        am__force_recheck=am--force-recheck \
+	        TEST_LOGS="$$log_list"; \
+	exit $$?
+egl-symbols-check.log: egl-symbols-check
+	@p='egl-symbols-check'; \
+	b='egl-symbols-check'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+.test.log:
+	@p='$<'; \
+	$(am__set_b); \
+	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+@am__EXEEXT_TRUE@.test$(EXEEXT).log:
+@am__EXEEXT_TRUE@	@p='$<'; \
+@am__EXEEXT_TRUE@	$(am__set_b); \
+@am__EXEEXT_TRUE@	$(am__check_pre) $(TEST_LOG_DRIVER) --test-name "$$f" \
+@am__EXEEXT_TRUE@	--log-file $$b.log --trs-file $$b.trs \
+@am__EXEEXT_TRUE@	$(am__common_driver_flags) $(AM_TEST_LOG_DRIVER_FLAGS) $(TEST_LOG_DRIVER_FLAGS) -- $(TEST_LOG_COMPILE) \
+@am__EXEEXT_TRUE@	"$$tst" $(AM_TESTS_FD_REDIRECT)
+
 distdir: $(DISTFILES)
 	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
 	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
@@ -984,6 +1352,7 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
 check: check-am
 @BUILD_SHARED_FALSE@all-local:
 @HAVE_COMPAT_SYMLINKS_FALSE@all-local:
@@ -1012,6 +1381,9 @@ install-strip:
 	    "INSTALL_PROGRAM_ENV=STRIPPROG='$(STRIP)'" install; \
 	fi
 mostlyclean-generic:
+	-test -z "$(TEST_LOGS)" || rm -f $(TEST_LOGS)
+	-test -z "$(TEST_LOGS:.log=.trs)" || rm -f $(TEST_LOGS:.log=.trs)
+	-test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
 
 clean-generic:
 
@@ -1101,23 +1473,24 @@ ps-am:
 uninstall-am: uninstall-eglHEADERS uninstall-khrHEADERS \
 	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am all-local check check-am clean \
-	clean-generic clean-libLTLIBRARIES clean-libtool clean-local \
-	cscopelist-am ctags ctags-am distclean distclean-compile \
-	distclean-generic distclean-libtool distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-eglHEADERS install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am \
-	install-khrHEADERS install-libLTLIBRARIES install-man \
-	install-pdf install-pdf-am install-pkgconfigDATA install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-eglHEADERS uninstall-khrHEADERS \
+.PHONY: CTAGS GTAGS TAGS all all-am all-local check check-TESTS \
+	check-am clean clean-generic clean-libLTLIBRARIES \
+	clean-libtool clean-local cscopelist-am ctags ctags-am \
+	distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-dvi install-dvi-am install-eglHEADERS \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-khrHEADERS \
+	install-libLTLIBRARIES install-man install-pdf install-pdf-am \
+	install-pkgconfigDATA install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	recheck tags tags-am uninstall uninstall-am \
+	uninstall-eglHEADERS uninstall-khrHEADERS \
 	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 
 .PRECIOUS: Makefile

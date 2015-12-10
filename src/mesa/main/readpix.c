@@ -201,7 +201,7 @@ readpixels_can_use_memcpy(const struct gl_context *ctx, GLenum format, GLenum ty
 
    /* The Mesa format must match the input format and type. */
    if (!_mesa_format_matches_format_and_type(rb->Format, format, type,
-                                             packing->SwapBytes)) {
+                                             packing->SwapBytes, NULL)) {
       return GL_FALSE;
    }
 

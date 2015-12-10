@@ -73,7 +73,8 @@ void st_upload_constants( struct st_context *st,
        * the parameters list are explicitly set by the user with glUniform,
        * glProgramParameter(), etc.
        */
-      _mesa_load_state_parameters(st->ctx, params);
+      if (params->StateFlags)
+         _mesa_load_state_parameters(st->ctx, params);
 
       /* We always need to get a new buffer, to keep the drivers simple and
        * avoid gratuitous rendering synchronization.
@@ -238,7 +239,7 @@ static void st_bind_ubos(struct st_context *st,
       struct gl_uniform_buffer_binding *binding;
       struct st_buffer_object *st_obj;
 
-      binding = &st->ctx->UniformBufferBindings[shader->UniformBlocks[i].Binding];
+      binding = &st->ctx->UniformBufferBindings[shader->UniformBlocks[i]->Binding];
       st_obj = st_buffer_object(binding->BufferObject);
 
       cb.buffer = st_obj->buffer;

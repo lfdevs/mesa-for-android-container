@@ -50,7 +50,7 @@
  */
 void
 brw_upload_pull_constants(struct brw_context *brw,
-                          GLbitfield brw_new_constbuf,
+                          GLbitfield64 brw_new_constbuf,
                           const struct gl_program *prog,
                           struct brw_stage_state *stage_state,
                           const struct brw_stage_prog_data *prog_data,
@@ -177,8 +177,8 @@ brw_upload_vs_abo_surfaces(struct brw_context *brw)
 
    if (prog) {
       /* BRW_NEW_VS_PROG_DATA */
-      brw_upload_abo_surfaces(brw, prog, &brw->vs.base,
-                              &brw->vs.prog_data->base.base);
+      brw_upload_abo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_VERTEX],
+                              &brw->vs.base, &brw->vs.prog_data->base.base);
    }
 }
 

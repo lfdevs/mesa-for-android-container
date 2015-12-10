@@ -547,6 +547,7 @@ static void
 ilo_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 {
    struct ilo_context *ilo = ilo_context(pipe);
+   int vs_scratch_size, gs_scratch_size, fs_scratch_size;
 
    if (ilo_debug & ILO_DEBUG_DRAW) {
       if (info->indexed) {
@@ -574,7 +575,14 @@ ilo_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 
    ilo_finalize_3d_states(ilo, info);
 
+   /* upload kernels */
    ilo_shader_cache_upload(ilo->shader_cache, &ilo->cp->builder);
+
+   /* prepare scratch spaces */
+   ilo_shader_cache_get_max_scratch_sizes(ilo->shader_cache,
+         &vs_scratch_size, &gs_scratch_size, &fs_scratch_size);
+   ilo_render_prepare_scratch_spaces(ilo->render,
+         vs_scratch_size, gs_scratch_size, fs_scratch_size);
 
    ilo_blit_resolve_framebuffer(ilo);
 

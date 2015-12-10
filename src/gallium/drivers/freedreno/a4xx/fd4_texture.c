@@ -35,32 +35,32 @@
 #include "fd4_texture.h"
 #include "fd4_format.h"
 
-/* TODO do we need to emulate clamp-to-edge like a3xx? */
 static enum a4xx_tex_clamp
-tex_clamp(unsigned wrap)
+tex_clamp(unsigned wrap, bool clamp_to_edge)
 {
-	/* hardware probably supports more, but we can't coax all the
-	 * wrap/clamp modes out of the GLESv2 blob driver.
-	 *
-	 * TODO once we have basics working, go back and just try
-	 * different values and see what happens
-	 */
+	/* Hardware does not support _CLAMP, but we emulate it: */
+	if (wrap == PIPE_TEX_WRAP_CLAMP) {
+		wrap = (clamp_to_edge) ?
+			PIPE_TEX_WRAP_CLAMP_TO_EDGE : PIPE_TEX_WRAP_CLAMP_TO_BORDER;
+	}
+
 	switch (wrap) {
 	case PIPE_TEX_WRAP_REPEAT:
 		return A4XX_TEX_REPEAT;
-	case PIPE_TEX_WRAP_CLAMP:
 	case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
 		return A4XX_TEX_CLAMP_TO_EDGE;
 	case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
-// TODO
-//		return A4XX_TEX_CLAMP_TO_BORDER;
-	case PIPE_TEX_WRAP_MIRROR_CLAMP:
-	case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
+		return A4XX_TEX_CLAMP_TO_BORDER;
 	case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
-// TODO
-//		return A4XX_TEX_MIRROR_CLAMP;
+		/* only works for PoT.. need to emulate otherwise! */
+		return A4XX_TEX_MIRROR_CLAMP;
 	case PIPE_TEX_WRAP_MIRROR_REPEAT:
 		return A4XX_TEX_MIRROR_REPEAT;
+	case PIPE_TEX_WRAP_MIRROR_CLAMP:
+	case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
+		/* these two we could perhaps emulate, but we currently
+		 * just don't advertise PIPE_CAP_TEXTURE_MIRROR_CLAMP
+		 */
 	default:
 		DBG("invalid wrap: %u", wrap);
 		return 0;
@@ -88,6 +88,7 @@ fd4_sampler_state_create(struct pipe_context *pctx,
 	struct fd4_sampler_stateobj *so = CALLOC_STRUCT(fd4_sampler_stateobj);
 	unsigned aniso = util_last_bit(MIN2(cso->max_anisotropy >> 1, 8));
 	bool miplinear = false;
+	bool clamp_to_edge;
 
 	if (!so)
 		return NULL;
@@ -97,20 +98,37 @@ fd4_sampler_state_create(struct pipe_context *pctx,
 
 	so->base = *cso;
 
+	/*
+	 * For nearest filtering, _CLAMP means _CLAMP_TO_EDGE;  for linear
+	 * filtering, _CLAMP means _CLAMP_TO_BORDER while additionally
+	 * clamping the texture coordinates to [0.0, 1.0].
+	 *
+	 * The clamping will be taken care of in the shaders.  There are two
+	 * filters here, but let the minification one has a say.
+	 */
+	clamp_to_edge = (cso->min_img_filter == PIPE_TEX_FILTER_NEAREST);
+	if (!clamp_to_edge) {
+		so->saturate_s = (cso->wrap_s == PIPE_TEX_WRAP_CLAMP);
+		so->saturate_t = (cso->wrap_t == PIPE_TEX_WRAP_CLAMP);
+		so->saturate_r = (cso->wrap_r == PIPE_TEX_WRAP_CLAMP);
+	}
+
 	so->texsamp0 =
 		COND(miplinear, A4XX_TEX_SAMP_0_MIPFILTER_LINEAR_NEAR) |
 		A4XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
 		A4XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
 		A4XX_TEX_SAMP_0_ANISO(aniso) |
-		A4XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s)) |
-		A4XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t)) |
-		A4XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r));
+		A4XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, clamp_to_edge)) |
+		A4XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, clamp_to_edge)) |
+		A4XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, clamp_to_edge));
 
 	so->texsamp1 =
 //		COND(miplinear, A4XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR) |
+		COND(!cso->seamless_cube_map, A4XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF) |
 		COND(!cso->normalized_coords, A4XX_TEX_SAMP_1_UNNORM_COORDS);
 
 	if (cso->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
+		so->texsamp0 |= A4XX_TEX_SAMP_0_LOD_BIAS(cso->lod_bias);
 		so->texsamp1 |=
 			A4XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
 			A4XX_TEX_SAMP_1_MAX_LOD(cso->max_lod);
@@ -120,6 +138,50 @@ fd4_sampler_state_create(struct pipe_context *pctx,
 		so->texsamp1 |= A4XX_TEX_SAMP_1_COMPARE_FUNC(cso->compare_func); /* maps 1:1 */
 
 	return so;
+}
+
+static void
+fd4_sampler_states_bind(struct pipe_context *pctx,
+		unsigned shader, unsigned start,
+		unsigned nr, void **hwcso)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd4_context *fd4_ctx = fd4_context(ctx);
+	uint16_t saturate_s = 0, saturate_t = 0, saturate_r = 0;
+	unsigned i;
+
+	for (i = 0; i < nr; i++) {
+		if (hwcso[i]) {
+			struct fd4_sampler_stateobj *sampler =
+					fd4_sampler_stateobj(hwcso[i]);
+			if (sampler->saturate_s)
+				saturate_s |= (1 << i);
+			if (sampler->saturate_t)
+				saturate_t |= (1 << i);
+			if (sampler->saturate_r)
+				saturate_r |= (1 << i);
+		}
+	}
+
+	fd_sampler_states_bind(pctx, shader, start, nr, hwcso);
+
+	if (shader == PIPE_SHADER_FRAGMENT) {
+		fd4_ctx->fsaturate =
+			(saturate_s != 0) ||
+			(saturate_t != 0) ||
+			(saturate_r != 0);
+		fd4_ctx->fsaturate_s = saturate_s;
+		fd4_ctx->fsaturate_t = saturate_t;
+		fd4_ctx->fsaturate_r = saturate_r;
+	} else if (shader == PIPE_SHADER_VERTEX) {
+		fd4_ctx->vsaturate =
+			(saturate_s != 0) ||
+			(saturate_t != 0) ||
+			(saturate_r != 0);
+		fd4_ctx->vsaturate_s = saturate_s;
+		fd4_ctx->vsaturate_t = saturate_t;
+		fd4_ctx->vsaturate_r = saturate_r;
+	}
 }
 
 static enum a4xx_tex_type
@@ -152,6 +214,7 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	struct fd_resource *rsc = fd_resource(prsc);
 	unsigned lvl = fd_sampler_first_level(cso);
 	unsigned miplevels = fd_sampler_last_level(cso) - lvl;
+	uint32_t sz2 = 0;
 
 	if (!so)
 		return NULL;
@@ -177,7 +240,9 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		A4XX_TEX_CONST_1_HEIGHT(u_minify(prsc->height0, lvl));
 	so->texconst2 =
 		A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(cso->format)) |
-		A4XX_TEX_CONST_2_PITCH(rsc->slices[lvl].pitch * rsc->cpp);
+		A4XX_TEX_CONST_2_PITCH(
+			util_format_get_nblocksx(
+				cso->format, rsc->slices[lvl].pitch) * rsc->cpp);
 
 	switch (prsc->target) {
 	case PIPE_TEXTURE_1D_ARRAY:
@@ -195,7 +260,10 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	case PIPE_TEXTURE_3D:
 		so->texconst3 =
 			A4XX_TEX_CONST_3_DEPTH(u_minify(prsc->depth0, lvl)) |
-			A4XX_TEX_CONST_3_LAYERSZ(rsc->slices[0].size0);
+			A4XX_TEX_CONST_3_LAYERSZ(rsc->slices[lvl].size0);
+		while (lvl < cso->u.tex.last_level && sz2 != rsc->slices[lvl+1].size0)
+			sz2 = rsc->slices[++lvl].size0;
+		so->texconst4 = A4XX_TEX_CONST_4_LAYERSZ(sz2);
 		break;
 	default:
 		so->texconst3 = 0x00000000;
@@ -209,7 +277,7 @@ void
 fd4_texture_init(struct pipe_context *pctx)
 {
 	pctx->create_sampler_state = fd4_sampler_state_create;
-	pctx->bind_sampler_states = fd_sampler_states_bind;
+	pctx->bind_sampler_states = fd4_sampler_states_bind;
 	pctx->create_sampler_view = fd4_sampler_view_create;
 	pctx->set_sampler_views = fd_set_sampler_views;
 }

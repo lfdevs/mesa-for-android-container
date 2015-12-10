@@ -1437,6 +1437,30 @@ CodeEmitterGK110::emitInterpMode(const Instruction *i)
    code[1] |= (i->ipa & 0xc) << (19 - 2);
 }
 
+static void
+interpApply(const InterpEntry *entry, uint32_t *code,
+      bool force_persample_interp, bool flatshade)
+{
+   int ipa = entry->ipa;
+   int reg = entry->reg;
+   int loc = entry->loc;
+
+   if (flatshade &&
+       (ipa & NV50_IR_INTERP_MODE_MASK) == NV50_IR_INTERP_SC) {
+      ipa = NV50_IR_INTERP_FLAT;
+      reg = 0xff;
+   } else if (force_persample_interp &&
+              (ipa & NV50_IR_INTERP_SAMPLE_MASK) == NV50_IR_INTERP_DEFAULT &&
+              (ipa & NV50_IR_INTERP_MODE_MASK) != NV50_IR_INTERP_FLAT) {
+      ipa |= NV50_IR_INTERP_CENTROID;
+   }
+   code[loc + 1] &= ~(0xf << 19);
+   code[loc + 1] |= (ipa & 0x3) << 21;
+   code[loc + 1] |= (ipa & 0xc) << (19 - 2);
+   code[loc + 0] &= ~(0xff << 23);
+   code[loc + 0] |= reg << 23;
+}
+
 void
 CodeEmitterGK110::emitINTERP(const Instruction *i)
 {
@@ -1448,10 +1472,13 @@ CodeEmitterGK110::emitINTERP(const Instruction *i)
    if (i->saturate)
       code[1] |= 1 << 18;
 
-   if (i->op == OP_PINTERP)
+   if (i->op == OP_PINTERP) {
       srcId(i->src(1), 23);
-   else
+      addInterp(i->ipa, SDATA(i->src(1)).id, interpApply);
+   } else {
       code[0] |= 0xff << 23;
+      addInterp(i->ipa, 0xff, interpApply);
+   }
 
    srcId(i->src(0).getIndirect(0), 10);
    emitInterpMode(i);
@@ -1617,6 +1644,7 @@ CodeEmitterGK110::getSRegEncoding(const ValueRef& ref)
    case SV_VERTEX_COUNT:  return 0x10;
    case SV_INVOCATION_ID: return 0x11;
    case SV_YDIR:          return 0x12;
+   case SV_THREAD_KILL:   return 0x13;
    case SV_TID:           return 0x21 + SDATA(ref).sv.index;
    case SV_CTAID:         return 0x25 + SDATA(ref).sv.index;
    case SV_NTID:          return 0x29 + SDATA(ref).sv.index;

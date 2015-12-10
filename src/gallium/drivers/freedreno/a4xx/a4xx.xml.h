@@ -8,13 +8,14 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    364 bytes, from 2015-05-20 20:03:07)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    398 bytes, from 2015-09-24 17:25:31)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2015-05-20 20:03:07)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32901 bytes, from 2015-05-20 20:03:14)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10551 bytes, from 2015-05-20 20:03:14)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10755 bytes, from 2015-09-14 20:46:55)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14968 bytes, from 2015-05-20 20:12:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  67120 bytes, from 2015-08-14 23:22:03)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  63915 bytes, from 2015-08-24 16:56:28)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  68291 bytes, from 2015-11-17 16:39:59)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  64038 bytes, from 2015-11-17 16:37:36)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2015-09-24 17:30:00)
 
 Copyright (C) 2013-2015 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -46,11 +47,13 @@ enum a4xx_color_fmt {
 	RB4_R8_UNORM = 2,
 	RB4_R4G4B4A4_UNORM = 8,
 	RB4_R5G5B5A1_UNORM = 10,
-	RB4_R5G6R5_UNORM = 14,
+	RB4_R5G6B5_UNORM = 14,
 	RB4_R8G8_UNORM = 15,
 	RB4_R8G8_SNORM = 16,
 	RB4_R8G8_UINT = 17,
 	RB4_R8G8_SINT = 18,
+	RB4_R16_UNORM = 19,
+	RB4_R16_SNORM = 20,
 	RB4_R16_FLOAT = 21,
 	RB4_R16_UINT = 22,
 	RB4_R16_SINT = 23,
@@ -62,12 +65,16 @@ enum a4xx_color_fmt {
 	RB4_R10G10B10A2_UNORM = 31,
 	RB4_R10G10B10A2_UINT = 34,
 	RB4_R11G11B10_FLOAT = 39,
+	RB4_R16G16_UNORM = 40,
+	RB4_R16G16_SNORM = 41,
 	RB4_R16G16_FLOAT = 42,
 	RB4_R16G16_UINT = 43,
 	RB4_R16G16_SINT = 44,
 	RB4_R32_FLOAT = 45,
 	RB4_R32_UINT = 46,
 	RB4_R32_SINT = 47,
+	RB4_R16G16B16A16_UNORM = 52,
+	RB4_R16G16B16A16_SNORM = 53,
 	RB4_R16G16B16A16_FLOAT = 54,
 	RB4_R16G16B16A16_UINT = 55,
 	RB4_R16G16B16A16_SINT = 56,
@@ -145,15 +152,15 @@ enum a4xx_vtx_fmt {
 	VFMT4_8_8_SNORM = 53,
 	VFMT4_8_8_8_SNORM = 54,
 	VFMT4_8_8_8_8_SNORM = 55,
-	VFMT4_10_10_10_2_UINT = 60,
-	VFMT4_10_10_10_2_UNORM = 61,
-	VFMT4_10_10_10_2_SINT = 62,
-	VFMT4_10_10_10_2_SNORM = 63,
+	VFMT4_10_10_10_2_UINT = 56,
+	VFMT4_10_10_10_2_UNORM = 57,
+	VFMT4_10_10_10_2_SINT = 58,
+	VFMT4_10_10_10_2_SNORM = 59,
 };
 
 enum a4xx_tex_fmt {
 	TFMT4_5_6_5_UNORM = 11,
-	TFMT4_5_5_5_1_UNORM = 10,
+	TFMT4_5_5_5_1_UNORM = 9,
 	TFMT4_4_4_4_4_UNORM = 8,
 	TFMT4_X8Z24_UNORM = 71,
 	TFMT4_10_10_10_2_UNORM = 33,
@@ -171,6 +178,12 @@ enum a4xx_tex_fmt {
 	TFMT4_8_SINT = 7,
 	TFMT4_8_8_SINT = 17,
 	TFMT4_8_8_8_8_SINT = 31,
+	TFMT4_16_UNORM = 18,
+	TFMT4_16_16_UNORM = 38,
+	TFMT4_16_16_16_16_UNORM = 51,
+	TFMT4_16_SNORM = 19,
+	TFMT4_16_16_SNORM = 39,
+	TFMT4_16_16_16_16_SNORM = 52,
 	TFMT4_16_UINT = 21,
 	TFMT4_16_16_UINT = 41,
 	TFMT4_16_16_16_16_UINT = 54,
@@ -191,6 +204,16 @@ enum a4xx_tex_fmt {
 	TFMT4_32_32_32_32_FLOAT = 63,
 	TFMT4_9_9_9_E5_FLOAT = 32,
 	TFMT4_11_11_10_FLOAT = 37,
+	TFMT4_DXT1 = 86,
+	TFMT4_DXT3 = 87,
+	TFMT4_DXT5 = 88,
+	TFMT4_RGTC1_UNORM = 90,
+	TFMT4_RGTC1_SNORM = 91,
+	TFMT4_RGTC2_UNORM = 94,
+	TFMT4_RGTC2_SNORM = 95,
+	TFMT4_BPTC_UFLOAT = 97,
+	TFMT4_BPTC_FLOAT = 98,
+	TFMT4_BPTC = 99,
 	TFMT4_ATC_RGB = 100,
 	TFMT4_ATC_RGBA_EXPLICIT = 101,
 	TFMT4_ATC_RGBA_INTERPOLATED = 102,
@@ -249,7 +272,8 @@ enum a4xx_tex_clamp {
 	A4XX_TEX_REPEAT = 0,
 	A4XX_TEX_CLAMP_TO_EDGE = 1,
 	A4XX_TEX_MIRROR_REPEAT = 2,
-	A4XX_TEX_CLAMP_NONE = 3,
+	A4XX_TEX_CLAMP_TO_BORDER = 3,
+	A4XX_TEX_MIRROR_CLAMP = 4,
 };
 
 enum a4xx_tex_aniso {
@@ -398,8 +422,13 @@ static inline uint32_t REG_A4XX_RB_MRT_CONTROL(uint32_t i0) { return 0x000020a4 
 #define A4XX_RB_MRT_CONTROL_READ_DEST_ENABLE			0x00000008
 #define A4XX_RB_MRT_CONTROL_BLEND				0x00000010
 #define A4XX_RB_MRT_CONTROL_BLEND2				0x00000020
-#define A4XX_RB_MRT_CONTROL_FASTCLEAR				0x00000400
-#define A4XX_RB_MRT_CONTROL_B11					0x00000800
+#define A4XX_RB_MRT_CONTROL_ROP_ENABLE				0x00000040
+#define A4XX_RB_MRT_CONTROL_ROP_CODE__MASK			0x00000f00
+#define A4XX_RB_MRT_CONTROL_ROP_CODE__SHIFT			8
+static inline uint32_t A4XX_RB_MRT_CONTROL_ROP_CODE(enum a3xx_rop_code val)
+{
+	return ((val) << A4XX_RB_MRT_CONTROL_ROP_CODE__SHIFT) & A4XX_RB_MRT_CONTROL_ROP_CODE__MASK;
+}
 #define A4XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK		0x0f000000
 #define A4XX_RB_MRT_CONTROL_COMPONENT_ENABLE__SHIFT		24
 static inline uint32_t A4XX_RB_MRT_CONTROL_COMPONENT_ENABLE(uint32_t val)
@@ -488,8 +517,8 @@ static inline uint32_t A4XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(enum adreno_r
 	return ((val) << A4XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR__SHIFT) & A4XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR__MASK;
 }
 
-#define REG_A4XX_RB_BLEND_RED					0x000020f3
-#define A4XX_RB_BLEND_RED_UINT__MASK				0x00007fff
+#define REG_A4XX_RB_BLEND_RED					0x000020f0
+#define A4XX_RB_BLEND_RED_UINT__MASK				0x0000ffff
 #define A4XX_RB_BLEND_RED_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_RED_UINT(uint32_t val)
 {
@@ -502,8 +531,16 @@ static inline uint32_t A4XX_RB_BLEND_RED_FLOAT(float val)
 	return ((util_float_to_half(val)) << A4XX_RB_BLEND_RED_FLOAT__SHIFT) & A4XX_RB_BLEND_RED_FLOAT__MASK;
 }
 
-#define REG_A4XX_RB_BLEND_GREEN					0x000020f4
-#define A4XX_RB_BLEND_GREEN_UINT__MASK				0x00007fff
+#define REG_A4XX_RB_BLEND_RED_F32				0x000020f1
+#define A4XX_RB_BLEND_RED_F32__MASK				0xffffffff
+#define A4XX_RB_BLEND_RED_F32__SHIFT				0
+static inline uint32_t A4XX_RB_BLEND_RED_F32(float val)
+{
+	return ((fui(val)) << A4XX_RB_BLEND_RED_F32__SHIFT) & A4XX_RB_BLEND_RED_F32__MASK;
+}
+
+#define REG_A4XX_RB_BLEND_GREEN					0x000020f2
+#define A4XX_RB_BLEND_GREEN_UINT__MASK				0x0000ffff
 #define A4XX_RB_BLEND_GREEN_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_GREEN_UINT(uint32_t val)
 {
@@ -516,8 +553,16 @@ static inline uint32_t A4XX_RB_BLEND_GREEN_FLOAT(float val)
 	return ((util_float_to_half(val)) << A4XX_RB_BLEND_GREEN_FLOAT__SHIFT) & A4XX_RB_BLEND_GREEN_FLOAT__MASK;
 }
 
-#define REG_A4XX_RB_BLEND_BLUE					0x000020f5
-#define A4XX_RB_BLEND_BLUE_UINT__MASK				0x00007fff
+#define REG_A4XX_RB_BLEND_GREEN_F32				0x000020f3
+#define A4XX_RB_BLEND_GREEN_F32__MASK				0xffffffff
+#define A4XX_RB_BLEND_GREEN_F32__SHIFT				0
+static inline uint32_t A4XX_RB_BLEND_GREEN_F32(float val)
+{
+	return ((fui(val)) << A4XX_RB_BLEND_GREEN_F32__SHIFT) & A4XX_RB_BLEND_GREEN_F32__MASK;
+}
+
+#define REG_A4XX_RB_BLEND_BLUE					0x000020f4
+#define A4XX_RB_BLEND_BLUE_UINT__MASK				0x0000ffff
 #define A4XX_RB_BLEND_BLUE_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_BLUE_UINT(uint32_t val)
 {
@@ -530,8 +575,16 @@ static inline uint32_t A4XX_RB_BLEND_BLUE_FLOAT(float val)
 	return ((util_float_to_half(val)) << A4XX_RB_BLEND_BLUE_FLOAT__SHIFT) & A4XX_RB_BLEND_BLUE_FLOAT__MASK;
 }
 
+#define REG_A4XX_RB_BLEND_BLUE_F32				0x000020f5
+#define A4XX_RB_BLEND_BLUE_F32__MASK				0xffffffff
+#define A4XX_RB_BLEND_BLUE_F32__SHIFT				0
+static inline uint32_t A4XX_RB_BLEND_BLUE_F32(float val)
+{
+	return ((fui(val)) << A4XX_RB_BLEND_BLUE_F32__SHIFT) & A4XX_RB_BLEND_BLUE_F32__MASK;
+}
+
 #define REG_A4XX_RB_BLEND_ALPHA					0x000020f6
-#define A4XX_RB_BLEND_ALPHA_UINT__MASK				0x00007fff
+#define A4XX_RB_BLEND_ALPHA_UINT__MASK				0x0000ffff
 #define A4XX_RB_BLEND_ALPHA_UINT__SHIFT				0
 static inline uint32_t A4XX_RB_BLEND_ALPHA_UINT(uint32_t val)
 {
@@ -542,6 +595,14 @@ static inline uint32_t A4XX_RB_BLEND_ALPHA_UINT(uint32_t val)
 static inline uint32_t A4XX_RB_BLEND_ALPHA_FLOAT(float val)
 {
 	return ((util_float_to_half(val)) << A4XX_RB_BLEND_ALPHA_FLOAT__SHIFT) & A4XX_RB_BLEND_ALPHA_FLOAT__MASK;
+}
+
+#define REG_A4XX_RB_BLEND_ALPHA_F32				0x000020f7
+#define A4XX_RB_BLEND_ALPHA_F32__MASK				0xffffffff
+#define A4XX_RB_BLEND_ALPHA_F32__SHIFT				0
+static inline uint32_t A4XX_RB_BLEND_ALPHA_F32(float val)
+{
+	return ((fui(val)) << A4XX_RB_BLEND_ALPHA_F32__SHIFT) & A4XX_RB_BLEND_ALPHA_F32__MASK;
 }
 
 #define REG_A4XX_RB_ALPHA_CONTROL				0x000020f8
@@ -566,7 +627,7 @@ static inline uint32_t A4XX_RB_FS_OUTPUT_ENABLE_BLEND(uint32_t val)
 {
 	return ((val) << A4XX_RB_FS_OUTPUT_ENABLE_BLEND__SHIFT) & A4XX_RB_FS_OUTPUT_ENABLE_BLEND__MASK;
 }
-#define A4XX_RB_FS_OUTPUT_FAST_CLEAR				0x00000100
+#define A4XX_RB_FS_OUTPUT_INDEPENDENT_BLEND			0x00000100
 #define A4XX_RB_FS_OUTPUT_SAMPLE_MASK__MASK			0xffff0000
 #define A4XX_RB_FS_OUTPUT_SAMPLE_MASK__SHIFT			16
 static inline uint32_t A4XX_RB_FS_OUTPUT_SAMPLE_MASK(uint32_t val)
@@ -2022,6 +2083,8 @@ static inline uint32_t A4XX_TPL1_TP_TEX_COUNT_GS(uint32_t val)
 #define REG_A4XX_GRAS_PERFCTR_TSE_SEL_3				0x00000c8b
 
 #define REG_A4XX_GRAS_CL_CLIP_CNTL				0x00002000
+#define A4XX_GRAS_CL_CLIP_CNTL_CLIP_DISABLE			0x00008000
+#define A4XX_GRAS_CL_CLIP_CNTL_ZERO_GB_SCALE_Z			0x00400000
 
 #define REG_A4XX_GRAS_CLEAR_CNTL				0x00002003
 #define A4XX_GRAS_CLEAR_CNTL_NOT_FASTCLEAR			0x00000001
@@ -2644,20 +2707,6 @@ static inline uint32_t A4XX_PC_HS_PARAM_PRIMTYPE(enum adreno_pa_su_sc_draw val)
 
 #define REG_A4XX_UNKNOWN_20EF					0x000020ef
 
-#define REG_A4XX_UNKNOWN_20F0					0x000020f0
-
-#define REG_A4XX_UNKNOWN_20F1					0x000020f1
-
-#define REG_A4XX_UNKNOWN_20F2					0x000020f2
-
-#define REG_A4XX_UNKNOWN_20F7					0x000020f7
-#define A4XX_UNKNOWN_20F7__MASK					0xffffffff
-#define A4XX_UNKNOWN_20F7__SHIFT				0
-static inline uint32_t A4XX_UNKNOWN_20F7(float val)
-{
-	return ((fui(val)) << A4XX_UNKNOWN_20F7__SHIFT) & A4XX_UNKNOWN_20F7__MASK;
-}
-
 #define REG_A4XX_UNKNOWN_2152					0x00002152
 
 #define REG_A4XX_UNKNOWN_2153					0x00002153
@@ -2718,6 +2767,12 @@ static inline uint32_t A4XX_TEX_SAMP_0_ANISO(enum a4xx_tex_aniso val)
 {
 	return ((val) << A4XX_TEX_SAMP_0_ANISO__SHIFT) & A4XX_TEX_SAMP_0_ANISO__MASK;
 }
+#define A4XX_TEX_SAMP_0_LOD_BIAS__MASK				0xfff80000
+#define A4XX_TEX_SAMP_0_LOD_BIAS__SHIFT				19
+static inline uint32_t A4XX_TEX_SAMP_0_LOD_BIAS(float val)
+{
+	return ((((int32_t)(val * 256.0))) << A4XX_TEX_SAMP_0_LOD_BIAS__SHIFT) & A4XX_TEX_SAMP_0_LOD_BIAS__MASK;
+}
 
 #define REG_A4XX_TEX_SAMP_1					0x00000001
 #define A4XX_TEX_SAMP_1_COMPARE_FUNC__MASK			0x0000000e
@@ -2726,6 +2781,7 @@ static inline uint32_t A4XX_TEX_SAMP_1_COMPARE_FUNC(enum adreno_compare_func val
 {
 	return ((val) << A4XX_TEX_SAMP_1_COMPARE_FUNC__SHIFT) & A4XX_TEX_SAMP_1_COMPARE_FUNC__MASK;
 }
+#define A4XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF			0x00000010
 #define A4XX_TEX_SAMP_1_UNNORM_COORDS				0x00000020
 #define A4XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR			0x00000040
 #define A4XX_TEX_SAMP_1_MAX_LOD__MASK				0x000fff00

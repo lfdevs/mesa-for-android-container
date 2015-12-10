@@ -39,13 +39,8 @@ public:
 
    void init();
 
-   src_reg(register_file file, int reg, const glsl_type *type);
+   src_reg(enum brw_reg_file file, int nr, const glsl_type *type);
    src_reg();
-   src_reg(float f);
-   src_reg(uint32_t u);
-   src_reg(int32_t i);
-   src_reg(uint8_t vf[4]);
-   src_reg(uint8_t vf0, uint8_t vf1, uint8_t vf2, uint8_t vf3);
    src_reg(struct brw_reg reg);
 
    bool equals(const src_reg &r) const;
@@ -55,22 +50,21 @@ public:
 
    explicit src_reg(const dst_reg &reg);
 
-   unsigned swizzle; /**< BRW_SWIZZLE_XYZW macros from brw_reg.h. */
-
    src_reg *reladdr;
 };
 
 static inline src_reg
 retype(src_reg reg, enum brw_reg_type type)
 {
-   reg.fixed_hw_reg.type = reg.type = type;
+   reg.type = type;
    return reg;
 }
 
 static inline src_reg
 offset(src_reg reg, unsigned delta)
 {
-   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
+   assert(delta == 0 ||
+          (reg.file != ARF && reg.file != FIXED_GRF && reg.file != IMM));
    reg.reg_offset += delta;
    return reg;
 }
@@ -82,7 +76,6 @@ offset(src_reg reg, unsigned delta)
 static inline src_reg
 swizzle(src_reg reg, unsigned swizzle)
 {
-   assert(reg.file != HW_REG);
    reg.swizzle = brw_compose_swizzle(swizzle, reg.swizzle);
    return reg;
 }
@@ -90,7 +83,7 @@ swizzle(src_reg reg, unsigned swizzle)
 static inline src_reg
 negate(src_reg reg)
 {
-   assert(reg.file != HW_REG && reg.file != IMM);
+   assert(reg.file != IMM);
    reg.negate = !reg.negate;
    return reg;
 }
@@ -110,10 +103,10 @@ public:
    void init();
 
    dst_reg();
-   dst_reg(register_file file, int reg);
-   dst_reg(register_file file, int reg, const glsl_type *type,
+   dst_reg(enum brw_reg_file file, int nr);
+   dst_reg(enum brw_reg_file file, int nr, const glsl_type *type,
            unsigned writemask);
-   dst_reg(register_file file, int reg, brw_reg_type type,
+   dst_reg(enum brw_reg_file file, int nr, brw_reg_type type,
            unsigned writemask);
    dst_reg(struct brw_reg reg);
    dst_reg(class vec4_visitor *v, const struct glsl_type *type);
@@ -122,22 +115,21 @@ public:
 
    bool equals(const dst_reg &r) const;
 
-   unsigned writemask; /**< Bitfield of WRITEMASK_[XYZW] */
-
    src_reg *reladdr;
 };
 
 static inline dst_reg
 retype(dst_reg reg, enum brw_reg_type type)
 {
-   reg.fixed_hw_reg.type = reg.type = type;
+   reg.type = type;
    return reg;
 }
 
 static inline dst_reg
 offset(dst_reg reg, unsigned delta)
 {
-   assert(delta == 0 || (reg.file != HW_REG && reg.file != IMM));
+   assert(delta == 0 ||
+          (reg.file != ARF && reg.file != FIXED_GRF && reg.file != IMM));
    reg.reg_offset += delta;
    return reg;
 }
@@ -145,7 +137,7 @@ offset(dst_reg reg, unsigned delta)
 static inline dst_reg
 writemask(dst_reg reg, unsigned mask)
 {
-   assert(reg.file != HW_REG && reg.file != IMM);
+   assert(reg.file != IMM);
    assert((reg.writemask & mask) != 0);
    reg.writemask &= mask;
    return reg;
@@ -161,9 +153,6 @@ public:
                     const src_reg &src1 = src_reg(),
                     const src_reg &src2 = src_reg());
 
-   struct brw_reg get_dst(void);
-   struct brw_reg get_src(const struct brw_vue_prog_data *prog_data, int i);
-
    dst_reg dst;
    src_reg src[3];
 
@@ -175,13 +164,36 @@ public:
 
    bool is_send_from_grf();
    unsigned regs_read(unsigned arg) const;
-   bool can_reswizzle(int dst_writemask, int swizzle, int swizzle_mask);
+   bool can_reswizzle(const struct brw_device_info *devinfo, int dst_writemask,
+                      int swizzle, int swizzle_mask);
    void reswizzle(int dst_writemask, int swizzle);
    bool can_do_source_mods(const struct brw_device_info *devinfo);
+   bool can_change_types() const;
 
    bool reads_flag()
    {
       return predicate || opcode == VS_OPCODE_UNPACK_FLAGS_SIMD4X2;
+   }
+
+   bool reads_flag(unsigned c)
+   {
+      if (opcode == VS_OPCODE_UNPACK_FLAGS_SIMD4X2)
+         return true;
+
+      switch (predicate) {
+      case BRW_PREDICATE_NONE:
+         return false;
+      case BRW_PREDICATE_ALIGN16_REPLICATE_X:
+         return c == 0;
+      case BRW_PREDICATE_ALIGN16_REPLICATE_Y:
+         return c == 1;
+      case BRW_PREDICATE_ALIGN16_REPLICATE_Z:
+         return c == 2;
+      case BRW_PREDICATE_ALIGN16_REPLICATE_W:
+         return c == 3;
+      default:
+         return true;
+      }
    }
 
    bool writes_flag()

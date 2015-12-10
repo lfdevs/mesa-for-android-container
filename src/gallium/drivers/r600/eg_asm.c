@@ -115,6 +115,7 @@ int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf)
 					S_SQ_CF_WORD1_BARRIER(1) |
 					S_SQ_CF_WORD1_COND(cf->cond) |
 					S_SQ_CF_WORD1_POP_COUNT(cf->pop_count) |
+					S_SQ_CF_WORD1_COUNT(cf->count) |
 					S_SQ_CF_WORD1_END_OF_PROGRAM(cf->end_of_program);
 		}
 	}

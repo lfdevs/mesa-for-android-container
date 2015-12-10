@@ -249,6 +249,9 @@ vsplit_segment_loop_linear(struct vsplit_frontend *vsplit, unsigned flags,
 
    assert(icount + !!close_loop <= vsplit->segment_size);
 
+   /* need to draw the sections of the line loop as line strips */
+   flags |= DRAW_LINE_LOOP_AS_STRIP;
+
    if (close_loop) {
       for (nr = 0; nr < icount; nr++)
          vsplit->fetch_elts[nr] = istart + nr;

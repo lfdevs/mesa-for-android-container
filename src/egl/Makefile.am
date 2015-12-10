@@ -47,12 +47,21 @@ libEGL_la_LDFLAGS = \
 	$(LD_NO_UNDEFINED)
 
 dri2_backend_FILES =
+dri3_backend_FILES =
 
 if HAVE_EGL_PLATFORM_X11
 AM_CFLAGS += -DHAVE_X11_PLATFORM
 AM_CFLAGS += $(XCB_DRI2_CFLAGS)
 libEGL_la_LIBADD += $(XCB_DRI2_LIBS)
 dri2_backend_FILES += drivers/dri2/platform_x11.c
+
+if HAVE_DRI3
+dri3_backend_FILES += \
+	drivers/dri2/platform_x11_dri3.c \
+	drivers/dri2/platform_x11_dri3.h
+
+libEGL_la_LIBADD += $(top_builddir)/src/loader/libloader_dri3_helper.la
+endif
 endif
 
 if HAVE_EGL_PLATFORM_WAYLAND
@@ -88,7 +97,8 @@ AM_CFLAGS += \
 
 libEGL_la_SOURCES += \
 	$(dri2_backend_core_FILES) \
-	$(dri2_backend_FILES)
+	$(dri2_backend_FILES) \
+	$(dri3_backend_FILES)
 
 libEGL_la_LIBADD += $(top_builddir)/src/loader/libloader.la
 libEGL_la_LIBADD += $(DLOPEN_LIBS) $(LIBDRM_LIBS)
@@ -111,7 +121,10 @@ egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglmesaext.h \
 	$(top_srcdir)/include/EGL/eglplatform.h
 
+TESTS = egl-symbols-check
+
 EXTRA_DIST = \
+	egl-symbols-check \
 	SConscript \
 	drivers/haiku \
 	docs \

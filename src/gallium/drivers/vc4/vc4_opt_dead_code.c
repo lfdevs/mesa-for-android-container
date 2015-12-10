@@ -69,7 +69,7 @@ has_nonremovable_reads(struct vc4_compile *c, struct qinst *inst)
                 }
 
                 if (inst->src[i].file == QFILE_VARY &&
-                    c->input_semantics[inst->src[i].index].semantic == 0xff) {
+                    c->input_slots[inst->src[i].index].slot == 0xff) {
                         return true;
                 }
         }

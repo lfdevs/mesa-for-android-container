@@ -45,8 +45,6 @@ struct ilo_state_compute_interface_info {
    /* usually 0 unless there are multiple interfaces */
    uint32_t kernel_offset;
 
-   uint32_t scratch_size;
-
    uint8_t sampler_count;
    uint8_t surface_count;
 
@@ -65,6 +63,8 @@ struct ilo_state_compute_info {
    const struct ilo_state_compute_interface_info *interfaces;
    uint8_t interface_count;
 
+   uint32_t per_thread_scratch_size;
+
    uint32_t cv_urb_alloc_size;
    uint32_t curbe_alloc_size;
 };
@@ -74,6 +74,8 @@ struct ilo_state_compute {
 
    uint32_t (*idrt)[6];
    uint8_t idrt_count;
+
+   uint32_t scratch_size;
 };
 
 static inline size_t
@@ -88,5 +90,11 @@ bool
 ilo_state_compute_init(struct ilo_state_compute *compute,
                        const struct ilo_dev *dev,
                        const struct ilo_state_compute_info *info);
+
+static inline uint32_t
+ilo_state_compute_get_scratch_size(const struct ilo_state_compute *compute)
+{
+   return compute->scratch_size;
+}
 
 #endif /* ILO_STATE_COMPUTE_H */

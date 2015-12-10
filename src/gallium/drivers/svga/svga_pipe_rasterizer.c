@@ -23,16 +23,18 @@
  *
  **********************************************************/
 
-#include "draw/draw_context.h"
-#include "util/u_inlines.h"
 #include "pipe/p_defines.h"
+#include "draw/draw_context.h"
+#include "util/u_bitmask.h"
+#include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
+#include "svga_cmd.h"
 #include "svga_context.h"
+#include "svga_hw_reg.h"
 #include "svga_screen.h"
 
-#include "svga_hw_reg.h"
 
 /* Hardware frontwinding is always set up as SVGA3D_FRONTWINDING_CW.
  */
@@ -58,6 +60,96 @@ static SVGA3dFace svga_translate_cullmode( unsigned mode,
 static SVGA3dShadeMode svga_translate_flatshade( unsigned mode )
 {
    return mode ? SVGA3D_SHADEMODE_FLAT : SVGA3D_SHADEMODE_SMOOTH;
+}
+
+
+static unsigned
+translate_fill_mode(unsigned fill)
+{
+   switch (fill) {
+   case PIPE_POLYGON_MODE_POINT:
+      return SVGA3D_FILLMODE_POINT;
+   case PIPE_POLYGON_MODE_LINE:
+      return SVGA3D_FILLMODE_LINE;
+   case PIPE_POLYGON_MODE_FILL:
+      return SVGA3D_FILLMODE_FILL;
+   default:
+      assert(!"Bad fill mode");
+      return SVGA3D_FILLMODE_FILL;
+   }
+}
+
+
+static unsigned
+translate_cull_mode(unsigned cull)
+{
+   switch (cull) {
+   case PIPE_FACE_NONE:
+      return SVGA3D_CULL_NONE;
+   case PIPE_FACE_FRONT:
+      return SVGA3D_CULL_FRONT;
+   case PIPE_FACE_BACK:
+      return SVGA3D_CULL_BACK;
+   case PIPE_FACE_FRONT_AND_BACK:
+      /* NOTE: we simply no-op polygon drawing in svga_draw_vbo() */
+      return SVGA3D_CULL_NONE;
+   default:
+      assert(!"Bad cull mode");
+      return SVGA3D_CULL_NONE;
+   }
+}
+
+
+static void
+define_rasterizer_object(struct svga_context *svga,
+                         struct svga_rasterizer_state *rast)
+{
+   unsigned fill_mode = translate_fill_mode(rast->templ.fill_front);
+   unsigned cull_mode = translate_cull_mode(rast->templ.cull_face);
+   int depth_bias = rast->templ.offset_units;
+   float slope_scaled_depth_bias =  rast->templ.offset_scale;
+   float depth_bias_clamp = 0.0; /* XXX fix me */
+   unsigned try;
+   const float line_width = rast->templ.line_width > 0.0f ?
+      rast->templ.line_width : 1.0f;
+   const uint8 line_factor = rast->templ.line_stipple_enable ?
+      rast->templ.line_stipple_factor : 0;
+   const uint16 line_pattern = rast->templ.line_stipple_enable ?
+      rast->templ.line_stipple_pattern : 0;
+
+   rast->id = util_bitmask_add(svga->rast_object_id_bm);
+
+   if (rast->templ.fill_front != rast->templ.fill_back) {
+      /* The VGPU10 device can't handle different front/back fill modes.
+       * We'll handle that with a swtnl/draw fallback.  But we need to
+       * make sure we always fill triangles in that case.
+       */
+      fill_mode = SVGA3D_FILLMODE_FILL;
+   }
+
+   for (try = 0; try < 2; try++) {
+      enum pipe_error ret =
+         SVGA3D_vgpu10_DefineRasterizerState(svga->swc,
+                                             rast->id,
+                                             fill_mode,
+                                             cull_mode,
+                                             rast->templ.front_ccw,
+                                             depth_bias,
+                                             depth_bias_clamp,
+                                             slope_scaled_depth_bias,
+                                             rast->templ.depth_clip,
+                                             rast->templ.scissor,
+                                             rast->templ.multisample,
+                                             rast->templ.line_smooth,
+                                             line_width,
+                                             rast->templ.line_stipple_enable,
+                                             line_factor,
+                                             line_pattern,
+                                             !rast->templ.flatshade_first);
+      if (ret == PIPE_OK)
+         return;
+      svga_context_flush(svga, NULL);
+   }
 }
 
 
@@ -92,17 +184,24 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
    rast->antialiasedlineenable = templ->line_smooth;
    rast->lastpixel = templ->line_last_pixel;
    rast->pointsprite = templ->sprite_coord_enable != 0x0;
-   rast->pointsize = templ->point_size;
-   rast->hw_unfilled = PIPE_POLYGON_MODE_FILL;
+
+   if (templ->point_smooth) {
+      /* For smooth points we need to generate fragments for at least
+       * a 2x2 region.  Otherwise the quad we draw may be too small and
+       * we may generate no fragments at all.
+       */
+      rast->pointsize = MAX2(2.0f, templ->point_size);
+   }
+   else {
+      rast->pointsize = templ->point_size;
+   }
+
+   rast->hw_fillmode = PIPE_POLYGON_MODE_FILL;
 
    /* Use swtnl + decomposition implement these:
     */
-   if (templ->poly_stipple_enable) {
-      rast->need_pipeline |= SVGA_PIPELINE_FLAG_TRIS;
-      rast->need_pipeline_tris_str = "poly stipple";
-   }
 
-   if (screen->maxLineWidth > 1.0F) {
+   if (templ->line_width <= screen->maxLineWidth) {
       /* pass line width to device */
       rast->linewidth = MAX2(1.0F, templ->line_width);
    }
@@ -129,7 +228,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
       }
    } 
 
-   if (templ->point_smooth) {
+   if (!svga_have_vgpu10(svga) && templ->point_smooth) {
       rast->need_pipeline |= SVGA_PIPELINE_FLAG_POINTS;
       rast->need_pipeline_points_str = "smooth points";
    }
@@ -231,13 +330,13 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
          rast->depthbias = templ->offset_units;
       }
 
-      rast->hw_unfilled = fill;
+      rast->hw_fillmode = fill;
    }
 
    if (rast->need_pipeline & SVGA_PIPELINE_FLAG_TRIS) {
       /* Turn off stuff which will get done in the draw module:
        */
-      rast->hw_unfilled = PIPE_POLYGON_MODE_FILL;
+      rast->hw_fillmode = PIPE_POLYGON_MODE_FILL;
       rast->slopescaledepthbias = 0;
       rast->depthbias = 0;
    }
@@ -249,6 +348,12 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
       debug_printf(" tris: %s \n", rast->need_pipeline_tris_str);
    }
 
+   if (svga_have_vgpu10(svga)) {
+      define_rasterizer_object(svga, rast);
+   }
+
+   svga->hud.num_state_objects++;
+
    return rast;
 }
 
@@ -258,18 +363,38 @@ static void svga_bind_rasterizer_state( struct pipe_context *pipe,
    struct svga_context *svga = svga_context(pipe);
    struct svga_rasterizer_state *raster = (struct svga_rasterizer_state *)state;
 
-
-   draw_set_rasterizer_state(svga->swtnl.draw, raster ? &raster->templ : NULL,
-                             state);
    svga->curr.rast = raster;
 
    svga->dirty |= SVGA_NEW_RAST;
+
+   if (raster && raster->templ.poly_stipple_enable) {
+      svga->dirty |= SVGA_NEW_STIPPLE;
+   }
 }
 
-static void svga_delete_rasterizer_state(struct pipe_context *pipe,
-                                         void *raster)
+static void
+svga_delete_rasterizer_state(struct pipe_context *pipe, void *state)
 {
-   FREE(raster);
+   struct svga_context *svga = svga_context(pipe);
+   struct svga_rasterizer_state *raster =
+      (struct svga_rasterizer_state *) state;
+
+   if (svga_have_vgpu10(svga)) {
+      enum pipe_error ret =
+         SVGA3D_vgpu10_DestroyRasterizerState(svga->swc, raster->id);
+      if (ret != PIPE_OK) {
+         svga_context_flush(svga, NULL);
+         ret = SVGA3D_vgpu10_DestroyRasterizerState(svga->swc, raster->id);
+      }
+
+      if (raster->id == svga->state.hw_draw.rasterizer_id)
+         svga->state.hw_draw.rasterizer_id = SVGA3D_INVALID_ID;
+
+      util_bitmask_clear(svga->rast_object_id_bm, raster->id);
+   }
+
+   FREE(state);
+   svga->hud.num_state_objects--;
 }
 
 

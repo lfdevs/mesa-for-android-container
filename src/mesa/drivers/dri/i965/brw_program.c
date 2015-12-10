@@ -69,8 +69,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
       if (prog) {
 	 prog->id = get_new_program_id(brw->intelScreen);
 
-	 return _mesa_init_vertex_program( ctx, &prog->program,
-					     target, id );
+	 return _mesa_init_gl_program(&prog->program.Base, target, id);
       }
       else
 	 return NULL;
@@ -81,8 +80,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
       if (prog) {
 	 prog->id = get_new_program_id(brw->intelScreen);
 
-	 return _mesa_init_fragment_program( ctx, &prog->program,
-					     target, id );
+	 return _mesa_init_gl_program(&prog->program.Base, target, id);
       }
       else
 	 return NULL;
@@ -93,7 +91,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
       if (prog) {
          prog->id = get_new_program_id(brw->intelScreen);
 
-         return _mesa_init_geometry_program(ctx, &prog->program, target, id);
+         return _mesa_init_gl_program(&prog->program.Base, target, id);
       } else {
          return NULL;
       }
@@ -104,7 +102,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
       if (prog) {
          prog->id = get_new_program_id(brw->intelScreen);
 
-         return _mesa_init_compute_program(ctx, &prog->program, target, id);
+         return _mesa_init_gl_program(&prog->program.Base, target, id);
       } else {
          return NULL;
       }
@@ -128,6 +126,7 @@ brwProgramStringNotify(struct gl_context *ctx,
 		       struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct brw_compiler *compiler = brw->intelScreen->compiler;
 
    switch (target) {
    case GL_FRAGMENT_PROGRAM_ARB: {
@@ -142,9 +141,7 @@ brwProgramStringNotify(struct gl_context *ctx,
 
       brw_add_texrect_params(prog);
 
-      if (ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT].NirOptions) {
-         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_FRAGMENT, true);
-      }
+      prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_FRAGMENT, true);
 
       brw_fs_precompile(ctx, NULL, prog);
       break;
@@ -168,10 +165,8 @@ brwProgramStringNotify(struct gl_context *ctx,
 
       brw_add_texrect_params(prog);
 
-      if (ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].NirOptions) {
-         prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_VERTEX,
-                                    brw->intelScreen->compiler->scalar_vs);
-      }
+      prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_VERTEX,
+                                 compiler->scalar_stage[MESA_SHADER_VERTEX]);
 
       brw_vs_precompile(ctx, NULL, prog);
       break;
@@ -244,18 +239,6 @@ brw_add_texrect_params(struct gl_program *prog)
 
       _mesa_add_state_reference(prog->Parameters, (gl_state_index *)tokens);
    }
-}
-
-/* Per-thread scratch space is a power-of-two multiple of 1KB. */
-int
-brw_get_scratch_size(int size)
-{
-   int i;
-
-   for (i = 1024; i < size; i *= 2)
-      ;
-
-   return i;
 }
 
 void
@@ -361,6 +344,8 @@ brw_report_shader_time(struct brw_context *brw)
 
       switch (type) {
       case ST_VS:
+      case ST_TCS:
+      case ST_TES:
       case ST_GS:
       case ST_FS8:
       case ST_FS16:
@@ -387,6 +372,8 @@ brw_report_shader_time(struct brw_context *brw)
 
       switch (type) {
       case ST_VS:
+      case ST_TCS:
+      case ST_TES:
       case ST_GS:
       case ST_FS8:
       case ST_FS16:
@@ -424,6 +411,12 @@ brw_report_shader_time(struct brw_context *brw)
       case ST_VS:
          stage = "vs";
          break;
+      case ST_TCS:
+         stage = "tcs";
+         break;
+      case ST_TES:
+         stage = "tes";
+         break;
       case ST_GS:
          stage = "gs";
          break;
@@ -447,6 +440,8 @@ brw_report_shader_time(struct brw_context *brw)
 
    fprintf(stderr, "\n");
    print_shader_time_line("total", "vs", 0, total_by_type[ST_VS], total);
+   print_shader_time_line("total", "tcs", 0, total_by_type[ST_TCS], total);
+   print_shader_time_line("total", "tes", 0, total_by_type[ST_TES], total);
    print_shader_time_line("total", "gs", 0, total_by_type[ST_GS], total);
    print_shader_time_line("total", "fs8", 0, total_by_type[ST_FS8], total);
    print_shader_time_line("total", "fs16", 0, total_by_type[ST_FS16], total);
@@ -535,39 +530,13 @@ brw_destroy_shader_time(struct brw_context *brw)
 }
 
 void
-brw_mark_surface_used(struct brw_stage_prog_data *prog_data,
-                      unsigned surf_index)
-{
-   assert(surf_index < BRW_MAX_SURFACES);
-
-   prog_data->binding_table.size_bytes =
-      MAX2(prog_data->binding_table.size_bytes, (surf_index + 1) * 4);
-}
-
-bool
-brw_stage_prog_data_compare(const struct brw_stage_prog_data *a,
-                            const struct brw_stage_prog_data *b)
-{
-   /* Compare all the struct up to the pointers. */
-   if (memcmp(a, b, offsetof(struct brw_stage_prog_data, param)))
-      return false;
-
-   if (memcmp(a->param, b->param, a->nr_params * sizeof(void *)))
-      return false;
-
-   if (memcmp(a->pull_param, b->pull_param, a->nr_pull_params * sizeof(void *)))
-      return false;
-
-   return true;
-}
-
-void
 brw_stage_prog_data_free(const void *p)
 {
    struct brw_stage_prog_data *prog_data = (struct brw_stage_prog_data *)p;
 
    ralloc_free(prog_data->param);
    ralloc_free(prog_data->pull_param);
+   ralloc_free(prog_data->image_param);
 }
 
 void
@@ -586,5 +555,24 @@ brw_dump_ir(const char *stage, struct gl_shader_program *shader_prog,
       fprintf(stderr, "ARB_%s_program %d ir for native %s shader\n",
               stage, prog->Id, stage);
       _mesa_print_program(prog);
+   }
+}
+
+void
+brw_setup_tex_for_precompile(struct brw_context *brw,
+                             struct brw_sampler_prog_key_data *tex,
+                             struct gl_program *prog)
+{
+   const bool has_shader_channel_select = brw->is_haswell || brw->gen >= 8;
+   unsigned sampler_count = _mesa_fls(prog->SamplersUsed);
+   for (unsigned i = 0; i < sampler_count; i++) {
+      if (!has_shader_channel_select && (prog->ShadowSamplers & (1 << i))) {
+         /* Assume DEPTH_TEXTURE_MODE is the default: X, X, X, 1 */
+         tex->swizzles[i] =
+            MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_X, SWIZZLE_X, SWIZZLE_ONE);
+      } else {
+         /* Color sampler: assume no swizzling. */
+         tex->swizzles[i] = SWIZZLE_XYZW;
+      }
    }
 }

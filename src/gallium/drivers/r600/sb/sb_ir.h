@@ -62,6 +62,13 @@ struct sel_chan
 
 	static unsigned sel(unsigned idx) { return (idx-1) >> 2; }
 	static unsigned chan(unsigned idx) { return (idx-1) & 3; }
+
+	sel_chan(unsigned bank, unsigned index,
+			 unsigned chan, alu_kcache_index_mode index_mode)
+		: id(sel_chan((bank << 12) | index | ((unsigned)index_mode << 28), chan).id) {}
+	unsigned kcache_index_mode() const { return sel() >> 28; }
+	unsigned kcache_sel() const { return sel() & 0x0fffffffu; }
+	unsigned kcache_bank() const { return kcache_sel() >> 12; }
 };
 
 inline sb_ostream& operator <<(sb_ostream& o, sel_chan r) {

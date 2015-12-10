@@ -34,6 +34,7 @@
 #include "imports.h"
 #include "macros.h"
 #include "util/rounding.h"
+#include "util/half_float.h"
 
 extern const mesa_array_format RGBA32_FLOAT;
 extern const mesa_array_format RGBA8_UBYTE;

@@ -566,10 +566,6 @@ _mesa_BindImageTexture(GLuint unit, GLuint texture, GLint level,
       u->Layered = GL_FALSE;
       u->Layer = 0;
    }
-
-   if (ctx->Driver.BindImageTexture)
-      ctx->Driver.BindImageTexture(ctx, u, u->TexObj, level, layered,
-                                   layer, access, format);
 }
 
 void GLAPIENTRY
@@ -706,11 +702,6 @@ _mesa_BindImageTextures(GLuint first, GLsizei count, const GLuint *textures)
          u->Format = GL_R8;
          u->_ActualFormat = MESA_FORMAT_R_UNORM8;
       }
-
-      /* Pass the BindImageTexture call down to the device driver */
-      if (ctx->Driver.BindImageTexture)
-         ctx->Driver.BindImageTexture(ctx, u, u->TexObj, u->Level, u->Layered,
-                                      u->Layer, u->Access, u->Format);
    }
 
    _mesa_end_texture_lookups(ctx);

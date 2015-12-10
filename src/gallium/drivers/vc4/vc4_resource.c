@@ -679,11 +679,16 @@ vc4_get_shadow_index_buffer(struct pipe_context *pctx,
                        shadow_offset, &shadow_rsc, &data);
         uint16_t *dst = data;
 
-        struct pipe_transfer *src_transfer;
-        uint32_t *src = pipe_buffer_map_range(pctx, &orig->base.b,
-                                              ib->offset,
-                                              count * 4,
-                                              PIPE_TRANSFER_READ, &src_transfer);
+        struct pipe_transfer *src_transfer = NULL;
+        const uint32_t *src;
+        if (ib->user_buffer) {
+                src = ib->user_buffer;
+        } else {
+                src = pipe_buffer_map_range(pctx, &orig->base.b,
+                                            ib->offset,
+                                            count * 4,
+                                            PIPE_TRANSFER_READ, &src_transfer);
+        }
 
         for (int i = 0; i < count; i++) {
                 uint32_t src_index = src[i];
@@ -691,7 +696,8 @@ vc4_get_shadow_index_buffer(struct pipe_context *pctx,
                 dst[i] = src_index;
         }
 
-        pctx->transfer_unmap(pctx, src_transfer);
+        if (src_transfer)
+                pctx->transfer_unmap(pctx, src_transfer);
 
         return shadow_rsc;
 }

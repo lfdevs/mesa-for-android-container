@@ -40,6 +40,8 @@ struct locals_to_regs_state {
     * used to make adding register initialization code deterministic.
     */
    nir_array derefs_array;
+
+   bool progress;
 };
 
 /* The following two functions implement a hash and equality check for
@@ -221,14 +223,14 @@ lower_locals_to_regs_block(nir_block *block, void *void_state)
             nir_ssa_dest_init(&mov->instr, &mov->dest.dest,
                               intrin->num_components, NULL);
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                     nir_src_for_ssa(&mov->dest.dest.ssa),
-                                     state->shader);
+                                     nir_src_for_ssa(&mov->dest.dest.ssa));
          } else {
             nir_dest_copy(&mov->dest.dest, &intrin->dest, &mov->instr);
          }
          nir_instr_insert_before(&intrin->instr, &mov->instr);
 
          nir_instr_remove(&intrin->instr);
+         state->progress = true;
          break;
       }
 
@@ -250,6 +252,7 @@ lower_locals_to_regs_block(nir_block *block, void *void_state)
          nir_instr_insert_before(&intrin->instr, &mov->instr);
 
          nir_instr_remove(&intrin->instr);
+         state->progress = true;
          break;
       }
 
@@ -337,15 +340,17 @@ insert_constant_initializer(nir_deref_var *deref_head, nir_deref *deref_tail,
    mov->dest.dest.reg.indirect = reg_src.reg.indirect;
 
    nir_instr_insert_after(&load->instr, &mov->instr);
+   state->progress = true;
 }
 
-static void
+static bool
 nir_lower_locals_to_regs_impl(nir_function_impl *impl)
 {
    struct locals_to_regs_state state;
 
    state.shader = impl->overload->function->shader;
    state.impl = impl;
+   state.progress = false;
    state.regs_table = _mesa_hash_table_create(NULL, hash_deref, derefs_equal);
    nir_array_init(&state.derefs_array, NULL);
 
@@ -373,13 +378,19 @@ nir_lower_locals_to_regs_impl(nir_function_impl *impl)
 
    nir_array_fini(&state.derefs_array);
    _mesa_hash_table_destroy(state.regs_table, NULL);
+
+   return state.progress;
 }
 
-void
+bool
 nir_lower_locals_to_regs(nir_shader *shader)
 {
+   bool progress = false;
+
    nir_foreach_overload(shader, overload) {
       if (overload->impl)
-         nir_lower_locals_to_regs_impl(overload->impl);
+         progress = nir_lower_locals_to_regs_impl(overload->impl) || progress;
    }
+
+   return progress;
 }

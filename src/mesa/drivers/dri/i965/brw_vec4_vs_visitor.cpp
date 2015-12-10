@@ -50,7 +50,7 @@ vec4_vs_visitor::emit_prolog()
             dst_reg dst = reg;
             dst.type = brw_type_for_base_type(glsl_type::vec4_type);
             dst.writemask = (1 << (wa_flags & BRW_ATTRIB_WA_COMPONENT_MASK)) - 1;
-            emit(MUL(dst, src_reg(dst), src_reg(1.0f / 65536.0f)));
+            emit(MUL(dst, src_reg(dst), brw_imm_f(1.0f / 65536.0f)));
          }
 
          /* Do sign recovery for 2101010 formats if required. */
@@ -58,8 +58,8 @@ vec4_vs_visitor::emit_prolog()
             if (sign_recovery_shift.file == BAD_FILE) {
                /* shift constant: <22,22,22,30> */
                sign_recovery_shift = dst_reg(this, glsl_type::uvec4_type);
-               emit(MOV(writemask(sign_recovery_shift, WRITEMASK_XYZ), src_reg(22u)));
-               emit(MOV(writemask(sign_recovery_shift, WRITEMASK_W), src_reg(30u)));
+               emit(MOV(writemask(sign_recovery_shift, WRITEMASK_XYZ), brw_imm_ud(22u)));
+               emit(MOV(writemask(sign_recovery_shift, WRITEMASK_W), brw_imm_ud(30u)));
             }
 
             emit(SHL(reg_ud, src_reg(reg_ud), src_reg(sign_recovery_shift)));
@@ -87,16 +87,16 @@ vec4_vs_visitor::emit_prolog()
                   /* mul constant: 1 / (2^(b-1) - 1) */
                   es3_normalize_factor = dst_reg(this, glsl_type::vec4_type);
                   emit(MOV(writemask(es3_normalize_factor, WRITEMASK_XYZ),
-                           src_reg(1.0f / ((1<<9) - 1))));
+                           brw_imm_f(1.0f / ((1<<9) - 1))));
                   emit(MOV(writemask(es3_normalize_factor, WRITEMASK_W),
-                           src_reg(1.0f / ((1<<1) - 1))));
+                           brw_imm_f(1.0f / ((1<<1) - 1))));
                }
 
                dst_reg dst = reg;
                dst.type = brw_type_for_base_type(glsl_type::vec4_type);
                emit(MOV(dst, src_reg(reg_d)));
                emit(MUL(dst, src_reg(dst), src_reg(es3_normalize_factor)));
-               emit_minmax(BRW_CONDITIONAL_GE, dst, src_reg(dst), src_reg(-1.0f));
+               emit_minmax(BRW_CONDITIONAL_GE, dst, src_reg(dst), brw_imm_f(-1.0f));
             } else {
                /* The following equations are from the OpenGL 3.2 specification:
                 *
@@ -113,9 +113,9 @@ vec4_vs_visitor::emit_prolog()
                   /* 1 / (2^b - 1) for b=<10,10,10,2> */
                   normalize_factor = dst_reg(this, glsl_type::vec4_type);
                   emit(MOV(writemask(normalize_factor, WRITEMASK_XYZ),
-                           src_reg(1.0f / ((1<<10) - 1))));
+                           brw_imm_f(1.0f / ((1<<10) - 1))));
                   emit(MOV(writemask(normalize_factor, WRITEMASK_W),
-                           src_reg(1.0f / ((1<<2) - 1))));
+                           brw_imm_f(1.0f / ((1<<2) - 1))));
                }
 
                dst_reg dst = reg;
@@ -124,8 +124,8 @@ vec4_vs_visitor::emit_prolog()
 
                /* For signed normalization, we want the numerator to be 2c+1. */
                if (wa_flags & BRW_ATTRIB_WA_SIGN) {
-                  emit(MUL(dst, src_reg(dst), src_reg(2.0f)));
-                  emit(ADD(dst, src_reg(dst), src_reg(1.0f)));
+                  emit(MUL(dst, src_reg(dst), brw_imm_f(2.0f)));
+                  emit(ADD(dst, src_reg(dst), brw_imm_f(1.0f)));
                }
 
                emit(MUL(dst, src_reg(dst), src_reg(normalize_factor)));
@@ -202,8 +202,93 @@ vec4_vs_visitor::emit_urb_write_opcode(bool complete)
 
 
 void
+vec4_vs_visitor::emit_urb_slot(dst_reg reg, int varying)
+{
+   reg.type = BRW_REGISTER_TYPE_F;
+   output_reg[varying].type = reg.type;
+
+   switch (varying) {
+   case VARYING_SLOT_COL0:
+   case VARYING_SLOT_COL1:
+   case VARYING_SLOT_BFC0:
+   case VARYING_SLOT_BFC1: {
+      /* These built-in varyings are only supported in compatibility mode,
+       * and we only support GS in core profile.  So, this must be a vertex
+       * shader.
+       */
+      vec4_instruction *inst = emit_generic_urb_slot(reg, varying);
+      if (inst && key->clamp_vertex_color)
+         inst->saturate = true;
+      break;
+   }
+   default:
+      return vec4_visitor::emit_urb_slot(reg, varying);
+   }
+}
+
+
+void
+vec4_vs_visitor::emit_clip_distances(dst_reg reg, int offset)
+{
+   /* From the GLSL 1.30 spec, section 7.1 (Vertex Shader Special Variables):
+    *
+    *     "If a linked set of shaders forming the vertex stage contains no
+    *     static write to gl_ClipVertex or gl_ClipDistance, but the
+    *     application has requested clipping against user clip planes through
+    *     the API, then the coordinate written to gl_Position is used for
+    *     comparison against the user clip planes."
+    *
+    * This function is only called if the shader didn't write to
+    * gl_ClipDistance.  Accordingly, we use gl_ClipVertex to perform clipping
+    * if the user wrote to it; otherwise we use gl_Position.
+    */
+   gl_varying_slot clip_vertex = VARYING_SLOT_CLIP_VERTEX;
+   if (!(prog_data->vue_map.slots_valid & VARYING_BIT_CLIP_VERTEX)) {
+      clip_vertex = VARYING_SLOT_POS;
+   }
+
+   for (int i = 0; i + offset < key->nr_userclip_plane_consts && i < 4;
+        ++i) {
+      reg.writemask = 1 << i;
+      emit(DP4(reg,
+               src_reg(output_reg[clip_vertex]),
+               src_reg(this->userplane[i + offset])));
+   }
+}
+
+
+void
+vec4_vs_visitor::setup_uniform_clipplane_values()
+{
+   for (int i = 0; i < key->nr_userclip_plane_consts; ++i) {
+      assert(this->uniforms < uniform_array_size);
+      this->userplane[i] = dst_reg(UNIFORM, this->uniforms);
+      this->userplane[i].type = BRW_REGISTER_TYPE_F;
+      for (int j = 0; j < 4; ++j) {
+         stage_prog_data->param[this->uniforms * 4 + j] =
+            (gl_constant_value *) &clip_planes[i][j];
+      }
+      ++this->uniforms;
+   }
+}
+
+
+void
 vec4_vs_visitor::emit_thread_end()
 {
+   setup_uniform_clipplane_values();
+
+   /* Lower legacy ff and ClipVertex clipping to clip distances */
+   if (key->nr_userclip_plane_consts > 0) {
+      current_annotation = "user clip distances";
+
+      output_reg[VARYING_SLOT_CLIP_DIST0] = dst_reg(this, glsl_type::vec4_type);
+      output_reg[VARYING_SLOT_CLIP_DIST1] = dst_reg(this, glsl_type::vec4_type);
+
+      emit_clip_distances(output_reg[VARYING_SLOT_CLIP_DIST0], 0);
+      emit_clip_distances(output_reg[VARYING_SLOT_CLIP_DIST1], 4);
+   }
+
    /* For VS, we always end the thread by emitting a single vertex.
     * emit_urb_write_opcode() will take care of setting the eot flag on the
     * SEND instruction.
@@ -216,19 +301,16 @@ vec4_vs_visitor::vec4_vs_visitor(const struct brw_compiler *compiler,
                                  void *log_data,
                                  const struct brw_vs_prog_key *key,
                                  struct brw_vs_prog_data *vs_prog_data,
-                                 struct gl_vertex_program *vp,
-                                 struct gl_shader_program *prog,
+                                 const nir_shader *shader,
+                                 gl_clip_plane *clip_planes,
                                  void *mem_ctx,
                                  int shader_time_index,
                                  bool use_legacy_snorm_formula)
-   : vec4_visitor(compiler, log_data,
-                  &vp->Base, &key->base, &vs_prog_data->base, prog,
-                  MESA_SHADER_VERTEX,
-                  mem_ctx, false /* no_spills */,
-                  shader_time_index),
+   : vec4_visitor(compiler, log_data, &key->tex, &vs_prog_data->base, shader,
+                  mem_ctx, false /* no_spills */, shader_time_index),
      key(key),
      vs_prog_data(vs_prog_data),
-     vp(vp),
+     clip_planes(clip_planes),
      use_legacy_snorm_formula(use_legacy_snorm_formula)
 {
 }

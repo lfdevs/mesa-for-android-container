@@ -240,7 +240,8 @@ aa_transform_prolog(struct tgsi_transform_context *ctx)
                                TGSI_FILE_INPUT, texInput, TGSI_SWIZZLE_W);
 
    /* KILL_IF -tmp0.yyyy;   # if -tmp0.y < 0, KILL */
-   tgsi_transform_kill_inst(ctx, TGSI_FILE_TEMPORARY, tmp0, TGSI_SWIZZLE_Y);
+   tgsi_transform_kill_inst(ctx, TGSI_FILE_TEMPORARY, tmp0,
+                            TGSI_SWIZZLE_Y, TRUE);
 
    /* compute coverage factor = (1-d)/(1-k) */
 

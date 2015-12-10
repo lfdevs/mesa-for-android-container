@@ -86,7 +86,7 @@ static const uint8_t a20x_primtypes[PIPE_PRIM_MAX] = {
 };
 
 struct pipe_context *
-fd2_context_create(struct pipe_screen *pscreen, void *priv)
+fd2_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
 	struct fd_screen *screen = fd_screen(pscreen);
 	struct fd2_context *fd2_ctx = CALLOC_STRUCT(fd2_context);

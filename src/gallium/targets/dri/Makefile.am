@@ -10,7 +10,7 @@ AM_CFLAGS = \
 
 AM_CPPFLAGS = \
 	$(DEFINES) \
-	-DDRI_TARGET \
+        -DGALLIUM_DDEBUG \
 	-DGALLIUM_NOOP \
 	-DGALLIUM_RBUG \
 	-DGALLIUM_TRACE
@@ -45,6 +45,7 @@ gallium_dri_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/dri/libdri.la \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+        $(top_builddir)/src/gallium/drivers/ddebug/libddebug.la \
 	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
@@ -63,7 +64,7 @@ EXTRA_DIST = \
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =
-TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la
+TARGET_LIB_DEPS =
 
 include $(top_srcdir)/src/gallium/drivers/i915/Automake.inc
 
@@ -81,6 +82,8 @@ include $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc
 
+include $(top_srcdir)/src/gallium/drivers/virgl/Automake.inc
+
 include $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc
 
@@ -88,14 +91,16 @@ if HAVE_GALLIUM_STATIC_TARGETS
 
 gallium_dri_la_SOURCES += target.c
 gallium_dri_la_CPPFLAGS = $(AM_CPPFLAGS) $(TARGET_CPPFLAGS)
-gallium_dri_la_LIBADD += $(TARGET_LIB_DEPS) \
+gallium_dri_la_LIBADD += \
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_static.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(TARGET_LIB_DEPS) \
 	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
 
 gallium_dri_la_LIBADD += \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_dynamic.la
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 

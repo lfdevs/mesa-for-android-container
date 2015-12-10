@@ -64,8 +64,13 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_ANNOTATION          (1ull << 28)
 #define DEBUG_NO8                 (1ull << 29)
 #define DEBUG_VEC4VS              (1ull << 30)
-#define DEBUG_SPILL               (1ull << 31)
-#define DEBUG_CS                  (1ull << 32)
+#define DEBUG_SPILL_FS            (1ull << 31)
+#define DEBUG_SPILL_VEC4          (1ull << 32)
+#define DEBUG_CS                  (1ull << 33)
+#define DEBUG_HEX                 (1ull << 34)
+#define DEBUG_NO_COMPACTION       (1ull << 35)
+#define DEBUG_TCS                 (1ull << 36)
+#define DEBUG_TES                 (1ull << 37)
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"
@@ -114,8 +119,6 @@ extern uint64_t INTEL_DEBUG;
 
 extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
 
-struct intel_screen;
-
-extern void brw_process_intel_debug_variable(struct intel_screen *);
+extern void brw_process_intel_debug_variable(void);
 
 extern bool brw_env_var_as_boolean(const char *var_name, bool default_value);

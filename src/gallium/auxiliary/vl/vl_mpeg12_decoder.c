@@ -1120,7 +1120,7 @@ vl_create_mpeg12_decoder(struct pipe_context *context,
 
    dec->base = *templat;
    dec->base.context = context;
-   dec->context = context->screen->context_create(context->screen, NULL);
+   dec->context = context->screen->context_create(context->screen, NULL, 0);
 
    dec->base.destroy = vl_mpeg12_destroy;
    dec->base.begin_frame = vl_mpeg12_begin_frame;

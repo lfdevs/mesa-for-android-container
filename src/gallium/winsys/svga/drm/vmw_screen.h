@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -65,8 +65,6 @@ struct vmw_winsys_screen
 {
    struct svga_winsys_screen base;
 
-   boolean use_old_scanout_flag;
-
    struct {
       int drm_fd;
       uint32_t hwversion;
@@ -76,6 +74,8 @@ struct vmw_winsys_screen
       uint64_t max_surface_memory;
       uint64_t max_texture_size;
       boolean have_drm_2_6;
+      boolean have_drm_2_9;
+      uint32_t drm_execbuf_version;
    } ioctl;
 
    struct {
@@ -115,6 +115,10 @@ vmw_region_size(struct vmw_region *region);
 uint32
 vmw_ioctl_context_create(struct vmw_winsys_screen *vws);
 
+uint32
+vmw_ioctl_extended_context_create(struct vmw_winsys_screen *vws,
+                                  boolean vgpu10);
+
 void
 vmw_ioctl_context_destroy(struct vmw_winsys_screen *vws,
                           uint32 cid);
@@ -126,7 +130,8 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
                          unsigned usage,
                          SVGA3dSize size,
                          uint32 numFaces,
-                         uint32 numMipLevels);
+                         uint32 numMipLevels,
+                         unsigned sampleCount);
 uint32
 vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
 			    SVGA3dSurfaceFlags flags,
@@ -135,6 +140,7 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
 			    SVGA3dSize size,
 			    uint32 numFaces,
 			    uint32 numMipLevels,
+                            unsigned sampleCount,
                             uint32 buffer_handle,
 			    struct vmw_region **p_region);
 
@@ -213,7 +219,7 @@ boolean vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws);
 void vmw_ioctl_cleanup(struct vmw_winsys_screen *vws);
 void vmw_pools_cleanup(struct vmw_winsys_screen *vws);
 
-struct vmw_winsys_screen *vmw_winsys_create(int fd, boolean use_old_scanout_flag);
+struct vmw_winsys_screen *vmw_winsys_create(int fd);
 void vmw_winsys_destroy(struct vmw_winsys_screen *sws);
 void vmw_winsys_screen_set_throttling(struct pipe_screen *screen,
 				      uint32_t throttle_us);
@@ -226,5 +232,14 @@ vmw_fences_signal(struct pb_fence_ops *fence_ops,
                   uint32_t signaled,
                   uint32_t emitted,
                   boolean has_emitted);
+
+struct svga_winsys_gb_shader *
+vmw_svga_winsys_shader_create(struct svga_winsys_screen *sws,
+			      SVGA3dShaderType type,
+			      const uint32 *bytecode,
+			      uint32 bytecodeLen);
+void
+vmw_svga_winsys_shader_destroy(struct svga_winsys_screen *sws,
+			       struct svga_winsys_gb_shader *shader);
 
 #endif /* VMW_SCREEN_H_ */

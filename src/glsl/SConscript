@@ -16,6 +16,7 @@ env.Prepend(CPPPATH = [
     '#src/gallium/include',
     '#src/gallium/auxiliary',
     '#src/glsl',
+    '#src/glsl/nir',
     '#src/glsl/glcpp',
 ])
 
@@ -59,6 +60,12 @@ source_lists = env.ParseSourceList('Makefile.sources')
 # add non-generated sources
 for l in ('LIBGLCPP_FILES', 'LIBGLSL_FILES'):
     glsl_sources += source_lists[l]
+
+# add nir/glsl_types.cpp manually, because SCons still doesn't know about NIR.
+# XXX: Remove this once we build NIR and NIR_FILES.
+glsl_sources += [
+    'nir/glsl_types.cpp',
+]
 
 if env['msvc']:
     env.Prepend(CPPPATH = ['#/src/getopt'])

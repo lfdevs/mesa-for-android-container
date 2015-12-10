@@ -1,5 +1,4 @@
-/**************************************************************************
- *
+/*
  * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  *
@@ -7,7 +6,7 @@
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
  * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
+ * distribute, sublicense, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
  *
@@ -17,13 +16,12 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
  * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- **************************************************************************/
+ */
 
 #include "main/version.h"
 
@@ -176,6 +174,7 @@ intelInitExtensions(struct gl_context *ctx)
 
    assert(brw->gen >= 4);
 
+   ctx->Extensions.ARB_arrays_of_arrays = true;
    ctx->Extensions.ARB_buffer_storage = true;
    ctx->Extensions.ARB_clear_texture = true;
    ctx->Extensions.ARB_clip_control = true;
@@ -231,6 +230,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_packed_float = true;
    ctx->Extensions.EXT_pixel_buffer_object = true;
    ctx->Extensions.EXT_point_parameters = true;
+   ctx->Extensions.EXT_polygon_offset_clamp = true;
    ctx->Extensions.EXT_provoking_vertex = true;
    ctx->Extensions.EXT_stencil_two_side = true;
    ctx->Extensions.EXT_texture_array = true;
@@ -250,6 +250,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.MESA_pack_invert = true;
    ctx->Extensions.NV_conditional_render = true;
    ctx->Extensions.NV_primitive_restart = true;
+   ctx->Extensions.NV_texture_barrier = true;
    ctx->Extensions.NV_texture_env_combine4 = true;
    ctx->Extensions.NV_texture_rectangle = true;
    ctx->Extensions.TDFX_texture_compression_FXT1 = true;
@@ -287,6 +288,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_conditional_render_inverted = true;
       ctx->Extensions.ARB_draw_buffers_blend = true;
       ctx->Extensions.ARB_ES3_compatibility = true;
+      ctx->Extensions.ARB_fragment_layer_viewport = true;
       ctx->Extensions.ARB_sample_shading = true;
       ctx->Extensions.ARB_shading_language_420pack = true;
       ctx->Extensions.ARB_shading_language_packing = true;
@@ -301,7 +303,6 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.AMD_vertex_shader_layer = true;
       ctx->Extensions.EXT_framebuffer_multisample = true;
       ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = true;
-      ctx->Extensions.EXT_polygon_offset_clamp = true;
       ctx->Extensions.EXT_transform_feedback = true;
       ctx->Extensions.OES_depth_texture_cube_map = true;
 
@@ -325,10 +326,14 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_framebuffer_no_attachments = true;
       ctx->Extensions.ARB_gpu_shader5 = true;
       ctx->Extensions.ARB_shader_atomic_counters = true;
+      ctx->Extensions.ARB_shader_clock = true;
       ctx->Extensions.ARB_shader_image_load_store = true;
       ctx->Extensions.ARB_shader_image_size = true;
+      ctx->Extensions.ARB_shader_texture_image_samples = true;
       ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
+      ctx->Extensions.ARB_shader_storage_buffer_object = true;
+      ctx->Extensions.EXT_shader_samples_identical = true;
 
       if (can_do_pipelined_register_writes(brw)) {
          ctx->Extensions.ARB_draw_indirect = true;
@@ -352,6 +357,12 @@ intelInitExtensions(struct gl_context *ctx)
 
    if (brw->gen >= 8) {
       ctx->Extensions.ARB_stencil_texturing = true;
+   }
+
+   if (brw->gen >= 9) {
+      ctx->Extensions.KHR_texture_compression_astc_ldr = true;
+      ctx->Extensions.KHR_texture_compression_astc_hdr = true;
+      ctx->Extensions.ARB_shader_stencil_export = true;
    }
 
    if (ctx->API == API_OPENGL_CORE)

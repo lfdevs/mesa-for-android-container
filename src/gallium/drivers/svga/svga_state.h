@@ -57,14 +57,20 @@ extern struct svga_tracked_state svga_hw_framebuffer;
 
 /* HW_DRAW
  */
+extern struct svga_tracked_state svga_need_tgsi_transform;
 extern struct svga_tracked_state svga_hw_vs;
 extern struct svga_tracked_state svga_hw_fs;
+extern struct svga_tracked_state svga_hw_gs;
 extern struct svga_tracked_state svga_hw_rss;
+extern struct svga_tracked_state svga_hw_pstipple;
+extern struct svga_tracked_state svga_hw_sampler;
+extern struct svga_tracked_state svga_hw_sampler_bindings;
 extern struct svga_tracked_state svga_hw_tss;
 extern struct svga_tracked_state svga_hw_tss_binding;
 extern struct svga_tracked_state svga_hw_clip_planes;
 extern struct svga_tracked_state svga_hw_vdecl;
 extern struct svga_tracked_state svga_hw_fs_constants;
+extern struct svga_tracked_state svga_hw_gs_constants;
 extern struct svga_tracked_state svga_hw_vs_constants;
 
 /* SWTNL_DRAW
@@ -93,10 +99,14 @@ enum pipe_error svga_emit_initial_state( struct svga_context *svga );
 
 enum pipe_error svga_reemit_framebuffer_bindings( struct svga_context *svga );
 
+enum pipe_error svga_rebind_framebuffer_bindings( struct svga_context *svga );
+
 enum pipe_error svga_reemit_tss_bindings( struct svga_context *svga );
 
 enum pipe_error svga_reemit_vs_bindings(struct svga_context *svga);
 
 enum pipe_error svga_reemit_fs_bindings(struct svga_context *svga);
+
+enum pipe_error svga_reemit_gs_bindings(struct svga_context *svga);
 
 #endif

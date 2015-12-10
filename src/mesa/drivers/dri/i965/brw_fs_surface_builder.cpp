@@ -44,7 +44,7 @@ namespace brw {
              */
             const fs_reg usurface = bld.emit_uniformize(surface);
             const fs_reg srcs[] = {
-               addr, src, usurface, fs_reg(dims), fs_reg(arg)
+               addr, src, usurface, brw_imm_ud(dims), brw_imm_ud(arg)
             };
             const fs_reg dst = bld.vgrf(BRW_REGISTER_TYPE_UD, rsize);
             fs_inst *inst = bld.emit(opcode, dst, srcs, ARRAY_SIZE(srcs));
@@ -330,7 +330,7 @@ namespace {
              * messages causes a hang on IVB and VLV.
              */
             set_predicate(pred,
-                          bld.CMP(bld.null_reg_ud(), stride, fs_reg(4),
+                          bld.CMP(bld.null_reg_ud(), stride, brw_imm_d(4),
                                   BRW_CONDITIONAL_G));
 
             return BRW_PREDICATE_NORMAL;
@@ -361,7 +361,7 @@ namespace {
              */
             bld.CMP(bld.null_reg_ud(),
                     retype(size, BRW_REGISTER_TYPE_UD),
-                    fs_reg(0), BRW_CONDITIONAL_NZ);
+                    brw_imm_d(0), BRW_CONDITIONAL_NZ);
 
             return BRW_PREDICATE_NORMAL;
          } else {
@@ -438,7 +438,7 @@ namespace {
              * FINISHME: Factor out this frequently recurring pattern into a
              * helper function.
              */
-            const fs_reg srcs[] = { addr, fs_reg(0), offset(addr, bld, 1) };
+            const fs_reg srcs[] = { addr, brw_imm_d(0), offset(addr, bld, 1) };
             const fs_reg dst = bld.vgrf(addr.type, dims);
             bld.LOAD_PAYLOAD(dst, srcs, dims, 0);
             return dst;
@@ -488,7 +488,7 @@ namespace {
             bld.ADD(offset(addr, bld, c), offset(off, bld, c),
                     (c < dims ?
                      offset(retype(coord, BRW_REGISTER_TYPE_UD), bld, c) :
-                     fs_reg(0)));
+                     fs_reg(brw_imm_d(0))));
 
          /* The layout of 3-D textures in memory is sort-of like a tiling
           * format.  At each miplevel, the slices are arranged in rows of
@@ -515,7 +515,7 @@ namespace {
             /* Decompose z into a major (tmp.y) and a minor (tmp.x)
              * index.
              */
-            bld.BFE(offset(tmp, bld, 0), offset(tile, bld, 2), fs_reg(0),
+            bld.BFE(offset(tmp, bld, 0), offset(tile, bld, 2), brw_imm_d(0),
                     offset(retype(coord, BRW_REGISTER_TYPE_UD), bld, 2));
             bld.SHR(offset(tmp, bld, 1),
                     offset(retype(coord, BRW_REGISTER_TYPE_UD), bld, 2),
@@ -549,7 +549,7 @@ namespace {
             for (unsigned c = 0; c < 2; ++c) {
                /* Calculate the minor x and y indices. */
                bld.BFE(offset(minor, bld, c), offset(tile, bld, c),
-                       fs_reg(0), offset(addr, bld, c));
+                       brw_imm_d(0), offset(addr, bld, c));
 
                /* Calculate the major x and y indices. */
                bld.SHR(offset(major, bld, c),
@@ -595,7 +595,7 @@ namespace {
 
                /* XOR tmp.x and tmp.y with bit 6 of the memory address. */
                bld.XOR(tmp, tmp, offset(tmp, bld, 1));
-               bld.AND(tmp, tmp, fs_reg(1 << 6));
+               bld.AND(tmp, tmp, brw_imm_d(1 << 6));
                bld.XOR(dst, dst, tmp);
             }
 
@@ -647,7 +647,7 @@ namespace {
                const fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_UD);
 
                /* Shift each component left to the correct bitfield position. */
-               bld.SHL(tmp, offset(src, bld, c), fs_reg(shifts[c] % 32));
+               bld.SHL(tmp, offset(src, bld, c), brw_imm_ud(shifts[c] % 32));
 
                /* Add everything up. */
                if (seen[shifts[c] / 32]) {
@@ -679,13 +679,13 @@ namespace {
                /* Shift left to discard the most significant bits. */
                bld.SHL(offset(dst, bld, c),
                        offset(src, bld, shifts[c] / 32),
-                       fs_reg(32 - shifts[c] % 32 - widths[c]));
+                       brw_imm_ud(32 - shifts[c] % 32 - widths[c]));
 
                /* Shift back to the least significant bits using an arithmetic
                 * shift to get sign extension on signed types.
                 */
                bld.ASR(offset(dst, bld, c),
-                       offset(dst, bld, c), fs_reg(32 - widths[c]));
+                       offset(dst, bld, c), brw_imm_ud(32 - widths[c]));
             }
          }
 
@@ -709,14 +709,14 @@ namespace {
             if (widths[c]) {
                /* Clamp to the maximum value. */
                bld.emit_minmax(offset(dst, bld, c), offset(src, bld, c),
-                               fs_reg((int)scale(widths[c] - s)),
+                               brw_imm_d((int)scale(widths[c] - s)),
                                BRW_CONDITIONAL_L);
 
                /* Clamp to the minimum value. */
                if (is_signed)
                   bld.emit_minmax(offset(dst, bld, c), offset(dst, bld, c),
-                                  fs_reg(-(int)scale(widths[c] - s) - 1),
-                                  BRW_CONDITIONAL_G);
+                                  brw_imm_d(-(int)scale(widths[c] - s) - 1),
+                                  BRW_CONDITIONAL_GE);
             }
          }
 
@@ -741,13 +741,13 @@ namespace {
 
                /* Divide by the normalization constants. */
                bld.MUL(offset(dst, bld, c), offset(dst, bld, c),
-                       fs_reg(1.0f / scale(widths[c] - s)));
+                       brw_imm_f(1.0f / scale(widths[c] - s)));
 
                /* Clamp to the minimum value. */
                if (is_signed)
                   bld.emit_minmax(offset(dst, bld, c),
-                                  offset(dst, bld, c), fs_reg(-1.0f),
-                                  BRW_CONDITIONAL_G);
+                                  offset(dst, bld, c), brw_imm_f(-1.0f),
+                                  BRW_CONDITIONAL_GE);
             }
          }
          return dst;
@@ -771,10 +771,10 @@ namespace {
                /* Clamp the normalized floating-point argument. */
                if (is_signed) {
                   bld.emit_minmax(offset(fdst, bld, c), offset(src, bld, c),
-                                  fs_reg(-1.0f), BRW_CONDITIONAL_G);
+                                  brw_imm_f(-1.0f), BRW_CONDITIONAL_GE);
 
                   bld.emit_minmax(offset(fdst, bld, c), offset(fdst, bld, c),
-                                  fs_reg(1.0f), BRW_CONDITIONAL_L);
+                                  brw_imm_f(1.0f), BRW_CONDITIONAL_L);
                } else {
                   set_saturate(true, bld.MOV(offset(fdst, bld, c),
                                              offset(src, bld, c)));
@@ -782,7 +782,7 @@ namespace {
 
                /* Multiply by the normalization constants. */
                bld.MUL(offset(fdst, bld, c), offset(fdst, bld, c),
-                       fs_reg((float)scale(widths[c] - s)));
+                       brw_imm_f((float)scale(widths[c] - s)));
 
                /* Convert to integer. */
                bld.RNDE(offset(fdst, bld, c), offset(fdst, bld, c));
@@ -814,7 +814,7 @@ namespace {
                 */
                if (widths[c] < 16)
                   bld.SHL(offset(dst, bld, c),
-                          offset(dst, bld, c), fs_reg(15 - widths[c]));
+                          offset(dst, bld, c), brw_imm_ud(15 - widths[c]));
 
                /* Convert to 32-bit floating point. */
                bld.F16TO32(offset(fdst, bld, c), offset(dst, bld, c));
@@ -842,7 +842,7 @@ namespace {
                /* Clamp to the minimum value. */
                if (widths[c] < 16)
                   bld.emit_minmax(offset(fdst, bld, c), offset(fdst, bld, c),
-                                  fs_reg(0.0f), BRW_CONDITIONAL_G);
+                                  brw_imm_f(0.0f), BRW_CONDITIONAL_GE);
 
                /* Convert to 16-bit floating-point. */
                bld.F32TO16(offset(dst, bld, c), offset(fdst, bld, c));
@@ -855,7 +855,7 @@ namespace {
                 */
                if (widths[c] < 16)
                   bld.SHR(offset(dst, bld, c), offset(dst, bld, c),
-                          fs_reg(15 - widths[c]));
+                          brw_imm_ud(15 - widths[c]));
             }
          }
 
@@ -874,7 +874,8 @@ namespace {
 
          for (unsigned c = 0; c < 4; ++c)
             bld.MOV(offset(dst, bld, c),
-                    widths[c] ? offset(src, bld, c) : fs_reg(pad[c]));
+                    widths[c] ? offset(src, bld, c)
+                              : fs_reg(brw_imm_ud(pad[c])));
 
          return dst;
       }
@@ -937,9 +938,9 @@ namespace brw {
             tmp = emit_untyped_read(bld, image, laddr, 1, size, pred);
 
             /* An out of bounds surface access should give zero as result. */
-            for (unsigned c = 0; c < 4; ++c)
+            for (unsigned c = 0; c < size; ++c)
                set_predicate(pred, bld.SEL(offset(tmp, bld, c),
-                                           offset(tmp, bld, c), fs_reg(0)));
+                                           offset(tmp, bld, c), brw_imm_d(0)));
          }
 
          /* Set the register type to D instead of UD if the data type is
@@ -1122,7 +1123,7 @@ namespace brw {
 
          /* An unbound surface access should give zero as result. */
          if (rsize)
-            set_predicate(pred, bld.SEL(tmp, tmp, fs_reg(0)));
+            set_predicate(pred, bld.SEL(tmp, tmp, brw_imm_d(0)));
 
          return tmp;
       }

@@ -92,18 +92,19 @@ target_triplet = @target@
 @HAVE_DRISW_TRUE@am__append_1 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_MESA_LLVM_TRUE@am__append_2 = \
-@HAVE_MESA_LLVM_TRUE@	$(LLVM_CFLAGS)
+@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
+@HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
 @HAVE_MESA_LLVM_TRUE@am__append_3 = \
+@HAVE_MESA_LLVM_TRUE@	$(LLVM_CFLAGS)
+
+@HAVE_MESA_LLVM_TRUE@am__append_4 = \
 @HAVE_MESA_LLVM_TRUE@	$(GALLIUM_CFLAGS) \
 @HAVE_MESA_LLVM_TRUE@	$(LLVM_CXXFLAGS)
 
-@HAVE_MESA_LLVM_TRUE@am__append_4 = \
+@HAVE_MESA_LLVM_TRUE@am__append_5 = \
 @HAVE_MESA_LLVM_TRUE@	$(GALLIVM_SOURCES)
-
-@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@NEED_GALLIUM_VL_TRUE@am__append_5 = \
-@HAVE_GALLIUM_STATIC_TARGETS_TRUE@@NEED_GALLIUM_VL_TRUE@	-DGALLIUM_STATIC_TARGETS=1
 
 @NEED_GALLIUM_VL_TRUE@am__append_6 = libgalliumvl.la
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_7 = libgalliumvlwinsys.la
@@ -182,16 +183,19 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	rbug/rbug_shader.c rbug/rbug_shader.h rbug/rbug_texture.c \
 	rbug/rbug_texture.h rtasm/rtasm_cpu.c rtasm/rtasm_cpu.h \
 	rtasm/rtasm_execmem.c rtasm/rtasm_execmem.h \
-	rtasm/rtasm_x86sse.c rtasm/rtasm_x86sse.h tgsi/tgsi_build.c \
-	tgsi/tgsi_build.h tgsi/tgsi_dump.c tgsi/tgsi_dump.h \
-	tgsi/tgsi_exec.c tgsi/tgsi_exec.h tgsi/tgsi_info.c \
-	tgsi/tgsi_info.h tgsi/tgsi_iterate.c tgsi/tgsi_iterate.h \
-	tgsi/tgsi_lowering.c tgsi/tgsi_lowering.h \
+	rtasm/rtasm_x86sse.c rtasm/rtasm_x86sse.h tgsi/tgsi_aa_point.c \
+	tgsi/tgsi_aa_point.h tgsi/tgsi_build.c tgsi/tgsi_build.h \
+	tgsi/tgsi_dump.c tgsi/tgsi_dump.h tgsi/tgsi_exec.c \
+	tgsi/tgsi_exec.h tgsi/tgsi_emulate.c tgsi/tgsi_emulate.h \
+	tgsi/tgsi_info.c tgsi/tgsi_info.h tgsi/tgsi_iterate.c \
+	tgsi/tgsi_iterate.h tgsi/tgsi_lowering.c tgsi/tgsi_lowering.h \
 	tgsi/tgsi_opcode_tmp.h tgsi/tgsi_parse.c tgsi/tgsi_parse.h \
+	tgsi/tgsi_point_sprite.c tgsi/tgsi_point_sprite.h \
 	tgsi/tgsi_sanity.c tgsi/tgsi_sanity.h tgsi/tgsi_scan.c \
 	tgsi/tgsi_scan.h tgsi/tgsi_strings.c tgsi/tgsi_strings.h \
 	tgsi/tgsi_text.c tgsi/tgsi_text.h tgsi/tgsi_transform.c \
-	tgsi/tgsi_transform.h tgsi/tgsi_ureg.c tgsi/tgsi_ureg.h \
+	tgsi/tgsi_transform.h tgsi/tgsi_two_side.c \
+	tgsi/tgsi_two_side.h tgsi/tgsi_ureg.c tgsi/tgsi_ureg.h \
 	tgsi/tgsi_util.c tgsi/tgsi_util.h translate/translate.c \
 	translate/translate.h translate/translate_cache.c \
 	translate/translate_cache.h translate/translate_generic.c \
@@ -228,10 +232,11 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_linear.c util/u_linear.h util/u_math.c util/u_math.h \
 	util/u_memory.h util/u_mm.c util/u_mm.h util/u_network.c \
 	util/u_network.h util/u_pack_color.h util/u_pointer.h \
-	util/u_prim.h util/u_pstipple.c util/u_pstipple.h \
-	util/u_range.h util/u_rect.h util/u_resource.c \
-	util/u_resource.h util/u_ringbuffer.c util/u_ringbuffer.h \
-	util/u_sampler.c util/u_sampler.h util/u_simple_shaders.c \
+	util/u_prim.h util/u_prim_restart.c util/u_prim_restart.h \
+	util/u_pstipple.c util/u_pstipple.h util/u_range.h \
+	util/u_rect.h util/u_resource.c util/u_resource.h \
+	util/u_ringbuffer.c util/u_ringbuffer.h util/u_sampler.c \
+	util/u_sampler.h util/u_simple_shaders.c \
 	util/u_simple_shaders.h util/u_slab.c util/u_slab.h \
 	util/u_split_prim.h util/u_sse.h util/u_staging.c \
 	util/u_staging.h util/u_string.h util/u_suballoc.c \
@@ -252,7 +257,8 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	gallivm/lp_bld_debug.cpp gallivm/lp_bld_debug.h \
 	gallivm/lp_bld_flow.c gallivm/lp_bld_flow.h \
 	gallivm/lp_bld_format_aos_array.c gallivm/lp_bld_format_aos.c \
-	gallivm/lp_bld_format_float.c gallivm/lp_bld_format.h \
+	gallivm/lp_bld_format_cached.c gallivm/lp_bld_format_float.c \
+	gallivm/lp_bld_format.c gallivm/lp_bld_format.h \
 	gallivm/lp_bld_format_soa.c gallivm/lp_bld_format_srgb.c \
 	gallivm/lp_bld_format_yuv.c gallivm/lp_bld_gather.c \
 	gallivm/lp_bld_gather.h gallivm/lp_bld.h gallivm/lp_bld_init.c \
@@ -306,11 +312,13 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	rbug/rbug_context.lo rbug/rbug_core.lo rbug/rbug_demarshal.lo \
 	rbug/rbug_shader.lo rbug/rbug_texture.lo rtasm/rtasm_cpu.lo \
 	rtasm/rtasm_execmem.lo rtasm/rtasm_x86sse.lo \
-	tgsi/tgsi_build.lo tgsi/tgsi_dump.lo tgsi/tgsi_exec.lo \
-	tgsi/tgsi_info.lo tgsi/tgsi_iterate.lo tgsi/tgsi_lowering.lo \
-	tgsi/tgsi_parse.lo tgsi/tgsi_sanity.lo tgsi/tgsi_scan.lo \
-	tgsi/tgsi_strings.lo tgsi/tgsi_text.lo tgsi/tgsi_transform.lo \
-	tgsi/tgsi_ureg.lo tgsi/tgsi_util.lo translate/translate.lo \
+	tgsi/tgsi_aa_point.lo tgsi/tgsi_build.lo tgsi/tgsi_dump.lo \
+	tgsi/tgsi_exec.lo tgsi/tgsi_emulate.lo tgsi/tgsi_info.lo \
+	tgsi/tgsi_iterate.lo tgsi/tgsi_lowering.lo tgsi/tgsi_parse.lo \
+	tgsi/tgsi_point_sprite.lo tgsi/tgsi_sanity.lo \
+	tgsi/tgsi_scan.lo tgsi/tgsi_strings.lo tgsi/tgsi_text.lo \
+	tgsi/tgsi_transform.lo tgsi/tgsi_two_side.lo tgsi/tgsi_ureg.lo \
+	tgsi/tgsi_util.lo translate/translate.lo \
 	translate/translate_cache.lo translate/translate_generic.lo \
 	translate/translate_sse.lo util/u_bitmask.lo util/u_blit.lo \
 	util/u_blitter.lo util/u_cache.lo util/u_caps.lo \
@@ -327,8 +335,8 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_gen_mipmap.lo util/u_handle_table.lo util/u_hash.lo \
 	util/u_hash_table.lo util/u_helpers.lo util/u_index_modify.lo \
 	util/u_keymap.lo util/u_linear.lo util/u_math.lo util/u_mm.lo \
-	util/u_network.lo util/u_pstipple.lo util/u_resource.lo \
-	util/u_ringbuffer.lo util/u_sampler.lo \
+	util/u_network.lo util/u_prim_restart.lo util/u_pstipple.lo \
+	util/u_resource.lo util/u_ringbuffer.lo util/u_sampler.lo \
 	util/u_simple_shaders.lo util/u_slab.lo util/u_staging.lo \
 	util/u_suballoc.lo util/u_surface.lo util/u_surfaces.lo \
 	util/u_tests.lo util/u_texture.lo util/u_tile.lo \
@@ -341,7 +349,8 @@ am__objects_4 = gallivm/lp_bld_arit.lo gallivm/lp_bld_arit_overflow.lo \
 	gallivm/lp_bld_const.lo gallivm/lp_bld_conv.lo \
 	gallivm/lp_bld_debug.lo gallivm/lp_bld_flow.lo \
 	gallivm/lp_bld_format_aos_array.lo \
-	gallivm/lp_bld_format_aos.lo gallivm/lp_bld_format_float.lo \
+	gallivm/lp_bld_format_aos.lo gallivm/lp_bld_format_cached.lo \
+	gallivm/lp_bld_format_float.lo gallivm/lp_bld_format.lo \
 	gallivm/lp_bld_format_soa.lo gallivm/lp_bld_format_srgb.lo \
 	gallivm/lp_bld_format_yuv.lo gallivm/lp_bld_gather.lo \
 	gallivm/lp_bld_init.lo gallivm/lp_bld_intr.lo \
@@ -399,8 +408,10 @@ am__objects_7 = vl/vl_stubs.lo
 am_libgalliumvl_stub_la_OBJECTS = $(am__objects_7)
 libgalliumvl_stub_la_OBJECTS = $(am_libgalliumvl_stub_la_OBJECTS)
 libgalliumvlwinsys_la_LIBADD =
-am__libgalliumvlwinsys_la_SOURCES_DIST = vl/vl_winsys_dri.c
-am__objects_8 = vl/libgalliumvlwinsys_la-vl_winsys_dri.lo
+am__libgalliumvlwinsys_la_SOURCES_DIST = vl/vl_winsys_dri.c \
+	vl/vl_winsys_drm.c
+am__objects_8 = vl/libgalliumvlwinsys_la-vl_winsys_dri.lo \
+	vl/libgalliumvlwinsys_la-vl_winsys_drm.lo
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am_libgalliumvlwinsys_la_OBJECTS = $(am__objects_8)
 libgalliumvlwinsys_la_OBJECTS = $(am_libgalliumvlwinsys_la_OBJECTS)
 libgalliumvlwinsys_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
@@ -467,27 +478,11 @@ DIST_SOURCES = $(am__libgallium_la_SOURCES_DIST) \
 	$(am__libgalliumvl_la_SOURCES_DIST) \
 	$(libgalliumvl_stub_la_SOURCES) \
 	$(am__libgalliumvlwinsys_la_SOURCES_DIST)
-RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
-	ctags-recursive dvi-recursive html-recursive info-recursive \
-	install-data-recursive install-dvi-recursive \
-	install-exec-recursive install-html-recursive \
-	install-info-recursive install-pdf-recursive \
-	install-ps-recursive install-recursive installcheck-recursive \
-	installdirs-recursive pdf-recursive ps-recursive \
-	tags-recursive uninstall-recursive
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
-  distclean-recursive maintainer-clean-recursive
-am__recursive_targets = \
-  $(RECURSIVE_TARGETS) \
-  $(RECURSIVE_CLEAN_TARGETS) \
-  $(am__extra_recursive_targets)
-AM_RECURSIVE_TARGETS = $(am__recursive_targets:-recursive=) TAGS CTAGS \
-	distdir
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -507,36 +502,10 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = pipe-loader
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.sources \
 	$(top_srcdir)/bin/depcomp \
 	$(top_srcdir)/src/gallium/Automake.inc
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-am__relativize = \
-  dir0=`pwd`; \
-  sed_first='s,^\([^/]*\)/.*$$,\1,'; \
-  sed_rest='s,^[^/]*/*,,'; \
-  sed_last='s,^.*/\([^/]*\)$$,\1,'; \
-  sed_butlast='s,/*[^/]*$$,,'; \
-  while test -n "$$dir1"; do \
-    first=`echo "$$dir1" | sed -e "$$sed_first"`; \
-    if test "$$first" != "."; then \
-      if test "$$first" = ".."; then \
-        dir2=`echo "$$dir0" | sed -e "$$sed_last"`/"$$dir2"; \
-        dir0=`echo "$$dir0" | sed -e "$$sed_butlast"`; \
-      else \
-        first2=`echo "$$dir2" | sed -e "$$sed_first"`; \
-        if test "$$first2" = "$$first"; then \
-          dir2=`echo "$$dir2" | sed -e "$$sed_rest"`; \
-        else \
-          dir2="../$$dir2"; \
-        fi; \
-        dir0="$$dir0"/"$$first"; \
-      fi; \
-    fi; \
-    dir1=`echo "$$dir1" | sed -e "$$sed_rest"`; \
-  done; \
-  reldir="$$dir2"
 ACLOCAL = @ACLOCAL@
 AMDGPU_CFLAGS = @AMDGPU_CFLAGS@
 AMDGPU_LIBS = @AMDGPU_LIBS@
@@ -635,6 +604,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -679,6 +650,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -712,7 +685,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -743,6 +720,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -814,7 +793,6 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-@HAVE_LOADER_GALLIUM_TRUE@SUBDIRS := pipe-loader
 C_SOURCES := \
 	cso_cache/cso_cache.c \
 	cso_cache/cso_cache.h \
@@ -946,12 +924,16 @@ C_SOURCES := \
 	rtasm/rtasm_execmem.h \
 	rtasm/rtasm_x86sse.c \
 	rtasm/rtasm_x86sse.h \
+	tgsi/tgsi_aa_point.c \
+	tgsi/tgsi_aa_point.h \
 	tgsi/tgsi_build.c \
 	tgsi/tgsi_build.h \
 	tgsi/tgsi_dump.c \
 	tgsi/tgsi_dump.h \
 	tgsi/tgsi_exec.c \
 	tgsi/tgsi_exec.h \
+	tgsi/tgsi_emulate.c \
+	tgsi/tgsi_emulate.h \
 	tgsi/tgsi_info.c \
 	tgsi/tgsi_info.h \
 	tgsi/tgsi_iterate.c \
@@ -961,6 +943,8 @@ C_SOURCES := \
 	tgsi/tgsi_opcode_tmp.h \
 	tgsi/tgsi_parse.c \
 	tgsi/tgsi_parse.h \
+	tgsi/tgsi_point_sprite.c \
+	tgsi/tgsi_point_sprite.h \
 	tgsi/tgsi_sanity.c \
 	tgsi/tgsi_sanity.h \
 	tgsi/tgsi_scan.c \
@@ -971,6 +955,8 @@ C_SOURCES := \
 	tgsi/tgsi_text.h \
 	tgsi/tgsi_transform.c \
 	tgsi/tgsi_transform.h \
+	tgsi/tgsi_two_side.c \
+	tgsi/tgsi_two_side.h \
 	tgsi/tgsi_ureg.c \
 	tgsi/tgsi_ureg.h \
 	tgsi/tgsi_util.c \
@@ -1077,6 +1063,8 @@ C_SOURCES := \
 	util/u_pack_color.h \
 	util/u_pointer.h \
 	util/u_prim.h \
+	util/u_prim_restart.c \
+	util/u_prim_restart.h \
 	util/u_pstipple.c \
 	util/u_pstipple.h \
 	util/u_range.h \
@@ -1157,7 +1145,8 @@ VL_SOURCES := \
 
 # XXX: Nuke this as our dri targets no longer depend on VL.
 VL_WINSYS_SOURCES := \
-	vl/vl_winsys_dri.c
+	vl/vl_winsys_dri.c \
+	vl/vl_winsys_drm.c
 
 VL_STUB_SOURCES := \
 	vl/vl_stubs.c
@@ -1186,7 +1175,9 @@ GALLIVM_SOURCES := \
 	gallivm/lp_bld_flow.h \
 	gallivm/lp_bld_format_aos_array.c \
 	gallivm/lp_bld_format_aos.c \
+	gallivm/lp_bld_format_cached.c \
 	gallivm/lp_bld_format_float.c \
+	gallivm/lp_bld_format.c \
 	gallivm/lp_bld_format.h \
 	gallivm/lp_bld_format_soa.c \
 	gallivm/lp_bld_format_srgb.c \
@@ -1297,27 +1288,28 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1)
+	$(am__append_1) $(am__append_2)
 noinst_LTLIBRARIES = libgallium.la libgalliumvl_stub.la \
 	$(am__append_6) $(am__append_7)
 AM_CFLAGS = -I$(top_srcdir)/src/loader -I$(top_builddir)/src/glsl/nir \
 	-I$(top_srcdir)/src/gallium/auxiliary/util $(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) $(MSVC2008_COMPAT_CXXFLAGS) \
-	$(am__append_2)
-AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS) $(MSVC2008_COMPAT_CXXFLAGS) \
 	$(am__append_3)
+AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS) $(MSVC2008_COMPAT_CXXFLAGS) \
+	$(am__append_4)
 libgallium_la_SOURCES = $(C_SOURCES) $(NIR_SOURCES) \
-	$(GENERATED_SOURCES) $(am__append_4)
+	$(GENERATED_SOURCES) $(am__append_5)
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 libgalliumvl_stub_la_SOURCES = \
 	$(VL_STUB_SOURCES)
 
-@NEED_GALLIUM_VL_TRUE@COMMON_VL_CFLAGS = $(AM_CFLAGS) $(VL_CFLAGS) \
-@NEED_GALLIUM_VL_TRUE@	$(DRI2PROTO_CFLAGS) $(LIBDRM_CFLAGS) \
-@NEED_GALLIUM_VL_TRUE@	$(GALLIUM_PIPE_LOADER_DEFINES) \
-@NEED_GALLIUM_VL_TRUE@	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\" \
-@NEED_GALLIUM_VL_TRUE@	$(am__append_5)
+@NEED_GALLIUM_VL_TRUE@COMMON_VL_CFLAGS = \
+@NEED_GALLIUM_VL_TRUE@	$(AM_CFLAGS) \
+@NEED_GALLIUM_VL_TRUE@	$(VL_CFLAGS) \
+@NEED_GALLIUM_VL_TRUE@	$(DRI2PROTO_CFLAGS) \
+@NEED_GALLIUM_VL_TRUE@	$(LIBDRM_CFLAGS)
+
 @NEED_GALLIUM_VL_TRUE@libgalliumvl_la_CFLAGS = \
 @NEED_GALLIUM_VL_TRUE@	$(COMMON_VL_CFLAGS)
 
@@ -1344,7 +1336,7 @@ EXTRA_DIST = \
 	util/u_format_parse.py \
 	util/u_format_table.py
 
-all: all-recursive
+all: all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .lo .o .obj
@@ -1578,16 +1570,22 @@ tgsi/$(am__dirstamp):
 tgsi/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) tgsi/$(DEPDIR)
 	@: > tgsi/$(DEPDIR)/$(am__dirstamp)
+tgsi/tgsi_aa_point.lo: tgsi/$(am__dirstamp) \
+	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_build.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_dump.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_exec.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
+tgsi/tgsi_emulate.lo: tgsi/$(am__dirstamp) \
+	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_info.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_iterate.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_lowering.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_parse.lo: tgsi/$(am__dirstamp) \
+	tgsi/$(DEPDIR)/$(am__dirstamp)
+tgsi/tgsi_point_sprite.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_sanity.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
@@ -1596,6 +1594,8 @@ tgsi/tgsi_strings.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_text.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_transform.lo: tgsi/$(am__dirstamp) \
+	tgsi/$(DEPDIR)/$(am__dirstamp)
+tgsi/tgsi_two_side.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_ureg.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_util.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
@@ -1683,6 +1683,8 @@ util/u_linear.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_math.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_mm.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_network.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
+util/u_prim_restart.lo: util/$(am__dirstamp) \
+	util/$(DEPDIR)/$(am__dirstamp)
 util/u_pstipple.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_resource.lo: util/$(am__dirstamp) \
@@ -1746,7 +1748,11 @@ gallivm/lp_bld_format_aos_array.lo: gallivm/$(am__dirstamp) \
 	gallivm/$(DEPDIR)/$(am__dirstamp)
 gallivm/lp_bld_format_aos.lo: gallivm/$(am__dirstamp) \
 	gallivm/$(DEPDIR)/$(am__dirstamp)
+gallivm/lp_bld_format_cached.lo: gallivm/$(am__dirstamp) \
+	gallivm/$(DEPDIR)/$(am__dirstamp)
 gallivm/lp_bld_format_float.lo: gallivm/$(am__dirstamp) \
+	gallivm/$(DEPDIR)/$(am__dirstamp)
+gallivm/lp_bld_format.lo: gallivm/$(am__dirstamp) \
 	gallivm/$(DEPDIR)/$(am__dirstamp)
 gallivm/lp_bld_format_soa.lo: gallivm/$(am__dirstamp) \
 	gallivm/$(DEPDIR)/$(am__dirstamp)
@@ -1843,6 +1849,8 @@ libgalliumvl_stub.la: $(libgalliumvl_stub_la_OBJECTS) $(libgalliumvl_stub_la_DEP
 	$(AM_V_CCLD)$(LINK)  $(libgalliumvl_stub_la_OBJECTS) $(libgalliumvl_stub_la_LIBADD) $(LIBS)
 vl/libgalliumvlwinsys_la-vl_winsys_dri.lo: vl/$(am__dirstamp) \
 	vl/$(DEPDIR)/$(am__dirstamp)
+vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/$(am__dirstamp) \
+	vl/$(DEPDIR)/$(am__dirstamp)
 
 libgalliumvlwinsys.la: $(libgalliumvlwinsys_la_OBJECTS) $(libgalliumvlwinsys_la_DEPENDENCIES) $(EXTRA_libgalliumvlwinsys_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libgalliumvlwinsys_la_LINK) $(am_libgalliumvlwinsys_la_rpath) $(libgalliumvlwinsys_la_OBJECTS) $(libgalliumvlwinsys_la_LIBADD) $(LIBS)
@@ -1932,8 +1940,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_conv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_flow.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_format.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_format_aos.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_format_aos_array.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_format_cached.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_format_float.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_format_soa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_format_srgb.Plo@am__quote@
@@ -1994,18 +2004,22 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@rtasm/$(DEPDIR)/rtasm_cpu.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rtasm/$(DEPDIR)/rtasm_execmem.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@rtasm/$(DEPDIR)/rtasm_x86sse.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_aa_point.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_build.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_dump.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_emulate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_info.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_iterate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_lowering.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_parse.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_point_sprite.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_sanity.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_scan.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_strings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_text.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_transform.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_two_side.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_ureg.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@translate/$(DEPDIR)/translate.Plo@am__quote@
@@ -2053,6 +2067,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_math.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_mm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_network.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_prim_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_pstipple.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_ringbuffer.Plo@am__quote@
@@ -2083,6 +2098,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_video_buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvl_la-vl_zscan.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@vl/$(DEPDIR)/vl_stubs.Plo@am__quote@
 
 .c.o:
@@ -2207,6 +2223,13 @@ vl/libgalliumvlwinsys_la-vl_winsys_dri.lo: vl/vl_winsys_dri.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_dri.lo `test -f 'vl/vl_winsys_dri.c' || echo '$(srcdir)/'`vl/vl_winsys_dri.c
 
+vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/vl_winsys_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvlwinsys_la-vl_winsys_drm.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Tpo -c -o vl/libgalliumvlwinsys_la-vl_winsys_drm.lo `test -f 'vl/vl_winsys_drm.c' || echo '$(srcdir)/'`vl/vl_winsys_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Tpo vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vl/vl_winsys_drm.c' object='vl/libgalliumvlwinsys_la-vl_winsys_drm.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_drm.lo `test -f 'vl/vl_winsys_drm.c' || echo '$(srcdir)/'`vl/vl_winsys_drm.c
+
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
 @am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
@@ -2252,61 +2275,14 @@ clean-libtool:
 	-rm -rf util/.libs util/_libs
 	-rm -rf vl/.libs vl/_libs
 
-# This directory's subdirectories are mostly independent; you can cd
-# into them and run 'make' without going through this Makefile.
-# To change the values of 'make' variables: instead of editing Makefiles,
-# (1) if the variable is set in 'config.status', edit 'config.status'
-#     (which will cause the Makefiles to be regenerated when you run 'make');
-# (2) otherwise, pass the desired values on the 'make' command line.
-$(am__recursive_targets):
-	@fail=; \
-	if $(am__make_keepgoing); then \
-	  failcom='fail=yes'; \
-	else \
-	  failcom='exit 1'; \
-	fi; \
-	dot_seen=no; \
-	target=`echo $@ | sed s/-recursive//`; \
-	case "$@" in \
-	  distclean-* | maintainer-clean-*) list='$(DIST_SUBDIRS)' ;; \
-	  *) list='$(SUBDIRS)' ;; \
-	esac; \
-	for subdir in $$list; do \
-	  echo "Making $$target in $$subdir"; \
-	  if test "$$subdir" = "."; then \
-	    dot_seen=yes; \
-	    local_target="$$target-am"; \
-	  else \
-	    local_target="$$target"; \
-	  fi; \
-	  ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
-	  || eval $$failcom; \
-	done; \
-	if test "$$dot_seen" = "no"; then \
-	  $(MAKE) $(AM_MAKEFLAGS) "$$target-am" || exit 1; \
-	fi; test -z "$$fail"
-
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
-tags: tags-recursive
+tags: tags-am
 TAGS: tags
 
 tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	set x; \
 	here=`pwd`; \
-	if ($(ETAGS) --etags-include --version) >/dev/null 2>&1; then \
-	  include_option=--etags-include; \
-	  empty_fix=.; \
-	else \
-	  include_option=--include; \
-	  empty_fix=; \
-	fi; \
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    test ! -f $$subdir/TAGS || \
-	      set "$$@" "$$include_option=$$here/$$subdir/TAGS"; \
-	  fi; \
-	done; \
 	$(am__define_uniq_tagged_files); \
 	shift; \
 	if test -z "$(ETAGS_ARGS)$$*$$unique"; then :; else \
@@ -2319,7 +2295,7 @@ tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	      $$unique; \
 	  fi; \
 	fi
-ctags: ctags-recursive
+ctags: ctags-am
 
 CTAGS: ctags
 ctags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
@@ -2332,7 +2308,7 @@ GTAGS:
 	here=`$(am__cd) $(top_builddir) && pwd` \
 	  && $(am__cd) $(top_srcdir) \
 	  && gtags -i $(GTAGS_ARGS) "$$here"
-cscopelist: cscopelist-recursive
+cscopelist: cscopelist-am
 
 cscopelist-am: $(am__tagged_files)
 	list='$(am__tagged_files)'; \
@@ -2381,45 +2357,19 @@ distdir: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
-	@list='$(DIST_SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    $(am__make_dryrun) \
-	      || test -d "$(distdir)/$$subdir" \
-	      || $(MKDIR_P) "$(distdir)/$$subdir" \
-	      || exit 1; \
-	    dir1=$$subdir; dir2="$(distdir)/$$subdir"; \
-	    $(am__relativize); \
-	    new_distdir=$$reldir; \
-	    dir1=$$subdir; dir2="$(top_distdir)"; \
-	    $(am__relativize); \
-	    new_top_distdir=$$reldir; \
-	    echo " (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) top_distdir="$$new_top_distdir" distdir="$$new_distdir" \\"; \
-	    echo "     am__remove_distdir=: am__skip_length_check=: am__skip_mode_fix=: distdir)"; \
-	    ($(am__cd) $$subdir && \
-	      $(MAKE) $(AM_MAKEFLAGS) \
-	        top_distdir="$$new_top_distdir" \
-	        distdir="$$new_distdir" \
-		am__remove_distdir=: \
-		am__skip_length_check=: \
-		am__skip_mode_fix=: \
-	        distdir) \
-	      || exit 1; \
-	  fi; \
-	done
 check-am: all-am
-check: check-recursive
+check: check-am
 all-am: Makefile $(LTLIBRARIES)
-installdirs: installdirs-recursive
-installdirs-am:
-install: install-recursive
-install-exec: install-exec-recursive
-install-data: install-data-recursive
-uninstall: uninstall-recursive
+installdirs:
+install: install-am
+install-exec: install-exec-am
+install-data: install-data-am
+uninstall: uninstall-am
 
 install-am: all-am
 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
 
-installcheck: installcheck-recursive
+installcheck: installcheck-am
 install-strip:
 	if test -z '$(STRIP)'; then \
 	  $(MAKE) $(AM_MAKEFLAGS) INSTALL_PROGRAM="$(INSTALL_STRIP_PROGRAM)" \
@@ -2471,93 +2421,92 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-clean: clean-recursive
+clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
-distclean: distclean-recursive
+distclean: distclean-am
 	-rm -rf cso_cache/$(DEPDIR) draw/$(DEPDIR) gallivm/$(DEPDIR) hud/$(DEPDIR) indices/$(DEPDIR) nir/$(DEPDIR) os/$(DEPDIR) pipebuffer/$(DEPDIR) postprocess/$(DEPDIR) rbug/$(DEPDIR) rtasm/$(DEPDIR) tgsi/$(DEPDIR) translate/$(DEPDIR) util/$(DEPDIR) vl/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
 
-dvi: dvi-recursive
+dvi: dvi-am
 
 dvi-am:
 
-html: html-recursive
+html: html-am
 
 html-am:
 
-info: info-recursive
+info: info-am
 
 info-am:
 
 install-data-am:
 
-install-dvi: install-dvi-recursive
+install-dvi: install-dvi-am
 
 install-dvi-am:
 
 install-exec-am:
 
-install-html: install-html-recursive
+install-html: install-html-am
 
 install-html-am:
 
-install-info: install-info-recursive
+install-info: install-info-am
 
 install-info-am:
 
 install-man:
 
-install-pdf: install-pdf-recursive
+install-pdf: install-pdf-am
 
 install-pdf-am:
 
-install-ps: install-ps-recursive
+install-ps: install-ps-am
 
 install-ps-am:
 
 installcheck-am:
 
-maintainer-clean: maintainer-clean-recursive
+maintainer-clean: maintainer-clean-am
 	-rm -rf cso_cache/$(DEPDIR) draw/$(DEPDIR) gallivm/$(DEPDIR) hud/$(DEPDIR) indices/$(DEPDIR) nir/$(DEPDIR) os/$(DEPDIR) pipebuffer/$(DEPDIR) postprocess/$(DEPDIR) rbug/$(DEPDIR) rtasm/$(DEPDIR) tgsi/$(DEPDIR) translate/$(DEPDIR) util/$(DEPDIR) vl/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
-mostlyclean: mostlyclean-recursive
+mostlyclean: mostlyclean-am
 
 mostlyclean-am: mostlyclean-compile mostlyclean-generic \
 	mostlyclean-libtool
 
-pdf: pdf-recursive
+pdf: pdf-am
 
 pdf-am:
 
-ps: ps-recursive
+ps: ps-am
 
 ps-am:
 
 uninstall-am:
 
-.MAKE: $(am__recursive_targets) install-am install-strip
+.MAKE: install-am install-strip
 
-.PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
-	check-am clean clean-generic clean-libtool \
-	clean-noinstLTLIBRARIES cscopelist-am ctags ctags-am distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am
+.PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
+	clean-libtool clean-noinstLTLIBRARIES cscopelist-am ctags \
+	ctags-am distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-dvi install-dvi-am install-exec \
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am
 
 .PRECIOUS: Makefile
 

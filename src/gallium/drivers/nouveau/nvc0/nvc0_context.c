@@ -263,7 +263,7 @@ nvc0_context_get_sample_position(struct pipe_context *, unsigned, unsigned,
                                  float *);
 
 struct pipe_context *
-nvc0_create(struct pipe_screen *pscreen, void *priv)
+nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 {
    struct nvc0_screen *screen = nvc0_screen(pscreen);
    struct nvc0_context *nvc0;
@@ -310,6 +310,7 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    pipe->memory_barrier = nvc0_memory_barrier;
    pipe->get_sample_position = nvc0_context_get_sample_position;
 
+   nouveau_context_init(&nvc0->base);
    nvc0_init_query_functions(nvc0);
    nvc0_init_surface_functions(nvc0);
    nvc0_init_state_functions(nvc0);

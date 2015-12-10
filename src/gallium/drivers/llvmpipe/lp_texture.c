@@ -200,7 +200,8 @@ llvmpipe_can_create_resource(struct pipe_screen *screen,
 
 static boolean
 llvmpipe_displaytarget_layout(struct llvmpipe_screen *screen,
-                              struct llvmpipe_resource *lpr)
+                              struct llvmpipe_resource *lpr,
+                              const void *map_front_private)
 {
    struct sw_winsys *winsys = screen->winsys;
 
@@ -215,12 +216,13 @@ llvmpipe_displaytarget_layout(struct llvmpipe_screen *screen,
                                           lpr->base.format,
                                           width, height,
                                           64,
+                                          map_front_private,
                                           &lpr->row_stride[0] );
 
    if (lpr->dt == NULL)
       return FALSE;
 
-   {
+   if (!map_front_private) {
       void *map = winsys->displaytarget_map(winsys, lpr->dt,
                                             PIPE_TRANSFER_WRITE);
 
@@ -235,8 +237,9 @@ llvmpipe_displaytarget_layout(struct llvmpipe_screen *screen,
 
 
 static struct pipe_resource *
-llvmpipe_resource_create(struct pipe_screen *_screen,
-                         const struct pipe_resource *templat)
+llvmpipe_resource_create_front(struct pipe_screen *_screen,
+                               const struct pipe_resource *templat,
+                               const void *map_front_private)
 {
    struct llvmpipe_screen *screen = llvmpipe_screen(_screen);
    struct llvmpipe_resource *lpr = CALLOC_STRUCT(llvmpipe_resource);
@@ -254,7 +257,7 @@ llvmpipe_resource_create(struct pipe_screen *_screen,
                             PIPE_BIND_SCANOUT |
                             PIPE_BIND_SHARED)) {
          /* displayable surface */
-         if (!llvmpipe_displaytarget_layout(screen, lpr))
+         if (!llvmpipe_displaytarget_layout(screen, lpr, map_front_private))
             goto fail;
       }
       else {
@@ -300,7 +303,12 @@ llvmpipe_resource_create(struct pipe_screen *_screen,
    FREE(lpr);
    return NULL;
 }
-
+static struct pipe_resource *
+llvmpipe_resource_create(struct pipe_screen *_screen,
+                         const struct pipe_resource *templat)
+{
+   return llvmpipe_resource_create_front(_screen, templat, NULL);
+}
 
 static void
 llvmpipe_resource_destroy(struct pipe_screen *pscreen,
@@ -797,6 +805,7 @@ llvmpipe_init_screen_resource_funcs(struct pipe_screen *screen)
 #endif
 
    screen->resource_create = llvmpipe_resource_create;
+/*   screen->resource_create_front = llvmpipe_resource_create_front; */
    screen->resource_destroy = llvmpipe_resource_destroy;
    screen->resource_from_handle = llvmpipe_resource_from_handle;
    screen->resource_get_handle = llvmpipe_resource_get_handle;

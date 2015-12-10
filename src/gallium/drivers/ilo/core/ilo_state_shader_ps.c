@@ -34,7 +34,8 @@ struct pixel_ff {
    uint32_t kernel_offsets[3];
    uint8_t grf_starts[3];
    bool pcb_enable;
-   uint8_t scratch_space;
+   uint8_t per_thread_scratch_space;
+   uint32_t per_thread_scratch_size;
 
    uint8_t sampler_count;
    uint8_t surface_count;
@@ -56,13 +57,6 @@ ps_kernel_validate_gen6(const struct ilo_dev *dev,
 {
    /* "Dispatch GRF Start Register for Constant/Setup Data" is U7 */
    const uint8_t max_grf_start = 128;
-   /*
-    * From the Sandy Bridge PRM, volume 2 part 1, page 271:
-    *
-    *     "(Per-Thread Scratch Space)
-    *      Range  [0,11] indicating [1k bytes, 2M bytes] in powers of two"
-    */
-   const uint32_t max_scratch_size = 2 * 1024 * 1024;
 
    ILO_DEV_ASSERT(dev, 6, 8);
 
@@ -70,7 +64,6 @@ ps_kernel_validate_gen6(const struct ilo_dev *dev,
    assert(kernel->offset % 64 == 0);
 
    assert(kernel->grf_start < max_grf_start);
-   assert(kernel->scratch_size <= max_scratch_size);
 
    return true;
 }
@@ -325,7 +318,6 @@ ps_get_gen6_ff_kernels(const struct ilo_dev *dev,
    const struct ilo_state_shader_kernel_info *kernel_8 = &info->kernel_8;
    const struct ilo_state_shader_kernel_info *kernel_16 = &info->kernel_16;
    const struct ilo_state_shader_kernel_info *kernel_32 = &info->kernel_32;
-   uint32_t scratch_size;
 
    ILO_DEV_ASSERT(dev, 6, 8);
 
@@ -363,21 +355,6 @@ ps_get_gen6_ff_kernels(const struct ilo_dev *dev,
                      ((ff->dispatch_modes & GEN6_PS_DISPATCH_32) &&
                       kernel_32->pcb_attr_count));
 
-   scratch_size = 0;
-   if ((ff->dispatch_modes & GEN6_PS_DISPATCH_8) &&
-       scratch_size < kernel_8->scratch_size)
-      scratch_size = kernel_8->scratch_size;
-   if ((ff->dispatch_modes & GEN6_PS_DISPATCH_16) &&
-       scratch_size < kernel_16->scratch_size)
-      scratch_size = kernel_16->scratch_size;
-   if ((ff->dispatch_modes & GEN6_PS_DISPATCH_32) &&
-       scratch_size < kernel_32->scratch_size)
-      scratch_size = kernel_32->scratch_size;
-
-   /* next power of two, starting from 1KB */
-   ff->scratch_space = (scratch_size > 1024) ?
-      (util_last_bit(scratch_size - 1) - 10): 0;
-
    /* GPU hangs on Haswell if none of the dispatch mode bits is set */
    if (ilo_dev_gen(dev) == ILO_GEN(7.5) && !ff->dispatch_modes)
       ff->dispatch_modes |= GEN6_PS_DISPATCH_8;
@@ -400,6 +377,21 @@ ps_get_gen6_ff(const struct ilo_dev *dev,
 
    if (!ps_validate_gen6(dev, info) || !ps_get_gen6_ff_kernels(dev, info, ff))
       return false;
+
+   if (info->per_thread_scratch_size) {
+      /*
+       * From the Sandy Bridge PRM, volume 2 part 1, page 271:
+       *
+       *     "(Per-Thread Scratch Space)
+       *      Range  [0,11] indicating [1k bytes, 2M bytes] in powers of two"
+       */
+      assert(info->per_thread_scratch_size <= 2 * 1024 * 1024);
+
+      /* next power of two, starting from 1KB */
+      ff->per_thread_scratch_space = (info->per_thread_scratch_size > 1024) ?
+         (util_last_bit(info->per_thread_scratch_size - 1) - 10) : 0;
+      ff->per_thread_scratch_size = 1 << (10 + ff->per_thread_scratch_space);
+   }
 
    ff->sampler_count = (resource->sampler_count <= 12) ?
       (resource->sampler_count + 3) / 4 : 4;
@@ -441,7 +433,8 @@ ps_set_gen6_3dstate_wm(struct ilo_state_ps *ps,
    if (false)
       dw2 |= GEN6_THREADDISP_FP_MODE_ALT;
 
-   dw3 = ff->scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw3 = ff->per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw4 = ff->grf_starts[0] << GEN6_WM_DW4_URB_GRF_START0__SHIFT |
          ff->grf_starts[1] << GEN6_WM_DW4_URB_GRF_START1__SHIFT |
@@ -539,7 +532,8 @@ ps_set_gen7_3DSTATE_PS(struct ilo_state_ps *ps,
    if (false)
       dw2 |= GEN6_THREADDISP_FP_MODE_ALT;
 
-   dw3 = ff->scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw3 = ff->per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw4 = io->posoffset << GEN7_PS_DW4_POSOFFSET__SHIFT |
          ff->dispatch_modes << GEN7_PS_DW4_DISPATCH_MODE__SHIFT;
@@ -592,13 +586,19 @@ ps_set_gen8_3DSTATE_PS(struct ilo_state_ps *ps,
 
    ILO_DEV_ASSERT(dev, 8, 8);
 
-   dw3 = ff->sampler_count << GEN6_THREADDISP_SAMPLER_COUNT__SHIFT |
+   /*
+    * Set VME here for correct computation of LODs and others.  Not sure why
+    * it is needed now.
+    */
+   dw3 = GEN6_THREADDISP_VME |
+         ff->sampler_count << GEN6_THREADDISP_SAMPLER_COUNT__SHIFT |
          ff->surface_count << GEN6_THREADDISP_BINDING_TABLE_SIZE__SHIFT;
 
    if (false)
       dw3 |= GEN6_THREADDISP_FP_MODE_ALT;
 
-   dw4 = ff->scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw4 = ff->per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw6 = ff->thread_count << GEN8_PS_DW6_MAX_THREADS__SHIFT |
          io->posoffset << GEN8_PS_DW6_POSOFFSET__SHIFT |
@@ -700,6 +700,7 @@ ilo_state_ps_init(struct ilo_state_ps *ps,
       ret &= ps_set_gen6_3dstate_wm(ps, dev, info, &ff);
    }
 
+   ps->scratch_size = ff.per_thread_scratch_size * ff.thread_count;
    /* save conditions */
    ps->conds = ff.conds;
 

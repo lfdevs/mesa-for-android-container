@@ -479,6 +479,16 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
    save->API = ctx->API;
    ctx->API = API_OPENGL_COMPAT;
 
+   /* Mesa's extension helper functions use the current context's API to look up
+    * the version required by an extension as a step in determining whether or
+    * not it has been advertised. Since meta aims to only be restricted by the
+    * driver capability (and not by whether or not an extension has been
+    * advertised), set the helper functions' Version variable to a value that
+    * will make the checks on the context API and version unconditionally pass.
+    */
+   save->ExtensionsVersion = ctx->Extensions.Version;
+   ctx->Extensions.Version = ~0;
+
    /* Pausing transform feedback needs to be done early, or else we won't be
     * able to change other state.
     */
@@ -629,7 +639,7 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       /* Save the shader state from ctx->Shader (instead of ctx->_Shader) so
        * that we don't have to worry about the current pipeline state.
        */
-      for (i = 0; i <= MESA_SHADER_FRAGMENT; i++) {
+      for (i = 0; i < MESA_SHADER_STAGES; i++) {
          _mesa_reference_shader_program(ctx, &save->Shader[i],
                                         ctx->Shader.CurrentProgram[i]);
       }
@@ -650,7 +660,6 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       GLuint u, tgt;
 
       save->ActiveUnit = ctx->Texture.CurrentUnit;
-      save->ClientActiveUnit = ctx->Array.ActiveTexture;
       save->EnvMode = ctx->Texture.Unit[0].EnvMode;
 
       /* Disable all texture units */
@@ -683,7 +692,6 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
 
       /* set defaults for unit[0] */
       _mesa_ActiveTexture(GL_TEXTURE0);
-      _mesa_ClientActiveTexture(GL_TEXTURE0);
       _mesa_TexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
    }
 
@@ -735,8 +743,6 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       /* save vertex array object state */
       _mesa_reference_vao(ctx, &save->VAO,
                                    ctx->Array.VAO);
-      _mesa_reference_buffer_object(ctx, &save->ArrayBufferObj,
-                                    ctx->Array.ArrayBufferObj);
       /* set some default state? */
    }
 
@@ -979,7 +985,9 @@ _mesa_meta_end(struct gl_context *ctx)
          GL_TESS_EVALUATION_SHADER,
          GL_GEOMETRY_SHADER,
          GL_FRAGMENT_SHADER,
+         GL_COMPUTE_SHADER,
       };
+      STATIC_ASSERT(MESA_SHADER_STAGES == ARRAY_SIZE(targets));
 
       bool any_shader;
 
@@ -1005,7 +1013,7 @@ _mesa_meta_end(struct gl_context *ctx)
       }
 
       any_shader = false;
-      for (i = 0; i <= MESA_SHADER_FRAGMENT; i++) {
+      for (i = 0; i < MESA_SHADER_STAGES; i++) {
          /* It is safe to call _mesa_use_shader_program even if the extension
           * necessary for that program state is not supported.  In that case,
           * the saved program object must be NULL and the currently bound
@@ -1110,7 +1118,6 @@ _mesa_meta_end(struct gl_context *ctx)
 
       /* restore current unit state */
       _mesa_ActiveTexture(GL_TEXTURE0 + save->ActiveUnit);
-      _mesa_ClientActiveTexture(GL_TEXTURE0 + save->ClientActiveUnit);
    }
 
    if (state & MESA_META_TRANSFORM) {
@@ -1144,10 +1151,6 @@ _mesa_meta_end(struct gl_context *ctx)
    }
 
    if (state & MESA_META_VERTEX) {
-      /* restore vertex buffer object */
-      _mesa_BindBuffer(GL_ARRAY_BUFFER_ARB, save->ArrayBufferObj->Name);
-      _mesa_reference_buffer_object(ctx, &save->ArrayBufferObj, NULL);
-
       /* restore vertex array object */
       _mesa_BindVertexArray(save->VAO->Name);
       _mesa_reference_vao(ctx, &save->VAO, NULL);
@@ -1250,6 +1253,7 @@ _mesa_meta_end(struct gl_context *ctx)
    ctx->Meta->SaveStackDepth--;
 
    ctx->API = save->API;
+   ctx->Extensions.Version = save->ExtensionsVersion;
 }
 
 

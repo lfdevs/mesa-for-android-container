@@ -111,7 +111,8 @@ _mesa_TextureStorage3DEXT(GLuint texture, GLenum target, GLsizei levels,
                           GLsizei width, GLsizei height, GLsizei depth);
 
 extern GLboolean
-_mesa_is_legal_tex_storage_format(struct gl_context *ctx, GLenum internalformat);
+_mesa_is_legal_tex_storage_format(const struct gl_context *ctx,
+                                  GLenum internalformat);
 
 extern GLboolean
 _mesa_AllocTextureStorage_sw(struct gl_context *ctx,

@@ -29,6 +29,7 @@
 #include "util/u_string.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/u_math.h"
 #include "tgsi_dump.h"
 #include "tgsi_info.h"
 #include "tgsi_iterate.h"
@@ -42,6 +43,8 @@ static const int indent_spaces = 3;
 struct dump_ctx
 {
    struct tgsi_iterate_context iter;
+
+   boolean dump_float_as_hex;
 
    uint instno;
    uint immno;
@@ -88,6 +91,7 @@ dump_enum(
 #define SID(I)          ctx->dump_printf( ctx, "%d", I )
 #define FLT(F)          ctx->dump_printf( ctx, "%10.4f", F )
 #define DBL(D)          ctx->dump_printf( ctx, "%10.8f", D )
+#define HFLT(F)         ctx->dump_printf( ctx, "0x%08x", fui((F)) )
 #define ENM(E,ENUMS)    dump_enum( ctx, E, ENUMS, sizeof( ENUMS ) / sizeof( *ENUMS ) )
 
 const char *
@@ -251,7 +255,10 @@ dump_imm_data(struct tgsi_iterate_context *iter,
          break;
       }
       case TGSI_IMM_FLOAT32:
-         FLT( data[i].Float );
+         if (ctx->dump_float_as_hex)
+            HFLT( data[i].Float );
+         else
+            FLT( data[i].Float );
          break;
       case TGSI_IMM_UINT32:
          UID(data[i].Uint);
@@ -648,6 +655,7 @@ tgsi_dump_instruction(
    ctx.indent = 0;
    ctx.dump_printf = dump_ctx_printf;
    ctx.indentation = 0;
+   ctx.file = NULL;
 
    iter_instruction( &ctx.iter, (struct tgsi_full_instruction *)inst );
 }
@@ -681,6 +689,11 @@ tgsi_dump_to_file(const struct tgsi_token *tokens, uint flags, FILE *file)
    ctx.indentation = 0;
    ctx.file = file;
 
+   if (flags & TGSI_DUMP_FLOAT_AS_HEX)
+      ctx.dump_float_as_hex = TRUE;
+   else
+      ctx.dump_float_as_hex = FALSE;
+
    tgsi_iterate_shader( tokens, &ctx.iter );
 }
 
@@ -696,6 +709,7 @@ struct str_dump_ctx
    char *str;
    char *ptr;
    int left;
+   bool nospace;
 };
 
 static void
@@ -718,10 +732,11 @@ str_dump_ctx_printf(struct dump_ctx *ctx, const char *format, ...)
          sctx->ptr += written;
          sctx->left -= written;
       }
-   }
+   } else
+      sctx->nospace = true;
 }
 
-void
+bool
 tgsi_dump_str(
    const struct tgsi_token *tokens,
    uint flags,
@@ -748,8 +763,16 @@ tgsi_dump_str(
    ctx.str[0] = 0;
    ctx.ptr = str;
    ctx.left = (int)size;
+   ctx.nospace = false;
+
+   if (flags & TGSI_DUMP_FLOAT_AS_HEX)
+      ctx.base.dump_float_as_hex = TRUE;
+   else
+      ctx.base.dump_float_as_hex = FALSE;
 
    tgsi_iterate_shader( tokens, &ctx.base.iter );
+
+   return !ctx.nospace;
 }
 
 void
@@ -772,6 +795,7 @@ tgsi_dump_instruction_str(
    ctx.str[0] = 0;
    ctx.ptr = str;
    ctx.left = (int)size;
+   ctx.nospace = false;
 
    iter_instruction( &ctx.base.iter, (struct tgsi_full_instruction *)inst );
 }

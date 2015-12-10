@@ -33,6 +33,7 @@
 #include "svga_draw.h"
 #include "svga_tgsi.h"
 #include "svga_screen.h"
+#include "svga_shader.h"
 #include "svga_resource_buffer.h"
 #include "svga_hw_reg.h"
 
@@ -42,15 +43,13 @@ static enum pipe_error
 emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
 {
    const struct pipe_vertex_element *ve = svga->curr.velems->velem;
+   SVGA3dVertexDecl decls[SVGA3D_INPUTREG_MAX];
+   unsigned buffer_indexes[SVGA3D_INPUTREG_MAX];
    unsigned i;
    unsigned neg_bias = 0;
 
    assert(svga->curr.velems->count >=
           svga->curr.vs->base.info.file_count[TGSI_FILE_INPUT]);
-
-   /* specify number of vertex element declarations to come */
-   svga_hwtnl_reset_vdecl( svga->hwtnl,
-                           svga->curr.velems->count );
 
    /**
     * We can't set the VDECL offset to something negative, so we
@@ -70,15 +69,16 @@ emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
    for (i = 0; i < svga->curr.velems->count; i++) {
       const struct pipe_vertex_buffer *vb =
          &svga->curr.vb[ve[i].vertex_buffer_index];
-      const struct svga_buffer *buffer;
+      struct svga_buffer *buffer;
       unsigned int offset = vb->buffer_offset + ve[i].src_offset;
+      unsigned tmp_neg_bias = 0;
 
       if (!vb->buffer)
          continue;
 
       buffer = svga_buffer(vb->buffer);
       if (buffer->uploaded.start > offset) {
-         unsigned tmp_neg_bias = buffer->uploaded.start - offset;
+         tmp_neg_bias = buffer->uploaded.start - offset;
          if (vb->stride)
             tmp_neg_bias = (tmp_neg_bias + vb->stride - 1) / vb->stride;
          neg_bias = MAX2(neg_bias, tmp_neg_bias);
@@ -89,8 +89,7 @@ emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
       const struct pipe_vertex_buffer *vb =
          &svga->curr.vb[ve[i].vertex_buffer_index];
       unsigned usage, index;
-      const struct svga_buffer *buffer;
-      SVGA3dVertexDecl decl;
+      struct svga_buffer *buffer;
 
       if (!vb->buffer)
          continue;
@@ -100,28 +99,36 @@ emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
 
       /* SVGA_NEW_VELEMENT
        */
-      decl.identity.type = svga->curr.velems->decl_type[i];
-      decl.identity.method = SVGA3D_DECLMETHOD_DEFAULT;
-      decl.identity.usage = usage;
-      decl.identity.usageIndex = index;
-      decl.array.stride = vb->stride;
+      decls[i].identity.type = svga->curr.velems->decl_type[i];
+      decls[i].identity.method = SVGA3D_DECLMETHOD_DEFAULT;
+      decls[i].identity.usage = usage;
+      decls[i].identity.usageIndex = index;
+      decls[i].array.stride = vb->stride;
 
       /* Compensate for partially uploaded vbo, and
        * for the negative index bias.
        */
-      decl.array.offset = (vb->buffer_offset
+      decls[i].array.offset = (vb->buffer_offset
                            + ve[i].src_offset
 			   + neg_bias * vb->stride
 			   - buffer->uploaded.start);
 
-      assert(decl.array.offset >= 0);
+      assert(decls[i].array.offset >= 0);
 
-      svga_hwtnl_vdecl( svga->hwtnl,
-                        i,
-                        &decl,
-                        buffer->uploaded.buffer ? buffer->uploaded.buffer :
-                        vb->buffer );
+      buffer_indexes[i] = ve[i].vertex_buffer_index;
+
+      assert(!buffer->uploaded.buffer);
    }
+
+   svga_hwtnl_vertex_decls(svga->hwtnl,
+                           svga->curr.velems->count,
+                           decls,
+                           buffer_indexes,
+                           svga->curr.velems->id);
+
+   svga_hwtnl_vertex_buffers(svga->hwtnl,
+                             svga->curr.num_vertex_buffers,
+                             svga->curr.vb);
 
    svga_hwtnl_set_index_bias( svga->hwtnl, -(int) neg_bias );
    return PIPE_OK;

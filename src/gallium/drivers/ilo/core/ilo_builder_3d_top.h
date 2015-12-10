@@ -477,14 +477,16 @@ gen8_3DSTATE_INDEX_BUFFER(struct ilo_builder *builder,
 static inline void
 gen6_3DSTATE_VS(struct ilo_builder *builder,
                 const struct ilo_state_vs *vs,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 6;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 6, 7.5);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN6_RENDER_CMD(3D, 3DSTATE_VS) | (cmd_len - 2);
    dw[1] = kernel_offset;
@@ -493,19 +495,26 @@ gen6_3DSTATE_VS(struct ilo_builder *builder,
    dw[3] = vs->vs[1];
    dw[4] = vs->vs[2];
    dw[5] = vs->vs[3];
+
+   if (ilo_state_vs_get_scratch_size(vs)) {
+      ilo_builder_batch_reloc(builder, pos + 3, scratch_bo,
+            vs->vs[1], 0);
+   }
 }
 
 static inline void
 gen8_3DSTATE_VS(struct ilo_builder *builder,
                 const struct ilo_state_vs *vs,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 9;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 8, 8);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN6_RENDER_CMD(3D, 3DSTATE_VS) | (cmd_len - 2);
    dw[1] = kernel_offset;
@@ -517,19 +526,26 @@ gen8_3DSTATE_VS(struct ilo_builder *builder,
    dw[6] = vs->vs[2];
    dw[7] = vs->vs[3];
    dw[8] = vs->vs[4];
+
+   if (ilo_state_vs_get_scratch_size(vs)) {
+      ilo_builder_batch_reloc64(builder, pos + 4, scratch_bo,
+            vs->vs[1], 0);
+   }
 }
 
 static inline void
 gen7_3DSTATE_HS(struct ilo_builder *builder,
                 const struct ilo_state_hs *hs,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 7;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 7, 7.5);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN7_RENDER_CMD(3D, 3DSTATE_HS) | (cmd_len - 2);
    /* see hs_set_gen7_3DSTATE_HS() */
@@ -539,19 +555,26 @@ gen7_3DSTATE_HS(struct ilo_builder *builder,
    dw[4] = hs->hs[2];
    dw[5] = hs->hs[3];
    dw[6] = 0;
+
+   if (ilo_state_hs_get_scratch_size(hs)) {
+      ilo_builder_batch_reloc(builder, pos + 4, scratch_bo,
+            hs->hs[2], 0);
+   }
 }
 
 static inline void
 gen8_3DSTATE_HS(struct ilo_builder *builder,
                 const struct ilo_state_hs *hs,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 9;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 8, 8);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN7_RENDER_CMD(3D, 3DSTATE_HS) | (cmd_len - 2);
    /* see hs_set_gen7_3DSTATE_HS() */
@@ -563,6 +586,11 @@ gen8_3DSTATE_HS(struct ilo_builder *builder,
    dw[6] = 0;
    dw[7] = hs->hs[3];
    dw[8] = 0;
+
+   if (ilo_state_hs_get_scratch_size(hs)) {
+      ilo_builder_batch_reloc64(builder, pos + 5, scratch_bo,
+            hs->hs[2], 0);
+   }
 }
 
 static inline void
@@ -586,14 +614,16 @@ gen7_3DSTATE_TE(struct ilo_builder *builder,
 static inline void
 gen7_3DSTATE_DS(struct ilo_builder *builder,
                 const struct ilo_state_ds *ds,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 6;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 7, 7.5);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN7_RENDER_CMD(3D, 3DSTATE_DS) | (cmd_len - 2);
    /* see ds_set_gen7_3DSTATE_DS() */
@@ -602,19 +632,26 @@ gen7_3DSTATE_DS(struct ilo_builder *builder,
    dw[3] = ds->ds[1];
    dw[4] = ds->ds[2];
    dw[5] = ds->ds[3];
+
+   if (ilo_state_ds_get_scratch_size(ds)) {
+      ilo_builder_batch_reloc(builder, pos + 3, scratch_bo,
+            ds->ds[1], 0);
+   }
 }
 
 static inline void
 gen8_3DSTATE_DS(struct ilo_builder *builder,
                 const struct ilo_state_ds *ds,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 9;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 8, 8);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN7_RENDER_CMD(3D, 3DSTATE_DS) | (cmd_len - 2);
    /* see ds_set_gen7_3DSTATE_DS() */
@@ -626,19 +663,26 @@ gen8_3DSTATE_DS(struct ilo_builder *builder,
    dw[6] = ds->ds[2];
    dw[7] = ds->ds[3];
    dw[8] = ds->ds[4];
+
+   if (ilo_state_ds_get_scratch_size(ds)) {
+      ilo_builder_batch_reloc64(builder, pos + 4, scratch_bo,
+            ds->ds[1], 0);
+   }
 }
 
 static inline void
 gen6_3DSTATE_GS(struct ilo_builder *builder,
                 const struct ilo_state_gs *gs,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 7;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 6, 6);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN6_RENDER_CMD(3D, 3DSTATE_GS) | (cmd_len - 2);
    dw[1] = kernel_offset;
@@ -648,6 +692,11 @@ gen6_3DSTATE_GS(struct ilo_builder *builder,
    dw[4] = gs->gs[2];
    dw[5] = gs->gs[3];
    dw[6] = gs->gs[4];
+
+   if (ilo_state_gs_get_scratch_size(gs)) {
+      ilo_builder_batch_reloc(builder, pos + 3, scratch_bo,
+            gs->gs[1], 0);
+   }
 }
 
 static inline void
@@ -677,14 +726,16 @@ gen6_3DSTATE_GS_SVB_INDEX(struct ilo_builder *builder,
 static inline void
 gen7_3DSTATE_GS(struct ilo_builder *builder,
                 const struct ilo_state_gs *gs,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 7;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 7, 7.5);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN6_RENDER_CMD(3D, 3DSTATE_GS) | (cmd_len - 2);
    dw[1] = kernel_offset;
@@ -694,19 +745,26 @@ gen7_3DSTATE_GS(struct ilo_builder *builder,
    dw[4] = gs->gs[2];
    dw[5] = gs->gs[3];
    dw[6] = 0;
+
+   if (ilo_state_gs_get_scratch_size(gs)) {
+      ilo_builder_batch_reloc(builder, pos + 3, scratch_bo,
+            gs->gs[1], 0);
+   }
 }
 
 static inline void
 gen8_3DSTATE_GS(struct ilo_builder *builder,
                 const struct ilo_state_gs *gs,
-                uint32_t kernel_offset)
+                uint32_t kernel_offset,
+                struct intel_bo *scratch_bo)
 {
    const uint8_t cmd_len = 10;
    uint32_t *dw;
+   unsigned pos;
 
    ILO_DEV_ASSERT(builder->dev, 8, 8);
 
-   ilo_builder_batch_pointer(builder, cmd_len, &dw);
+   pos = ilo_builder_batch_pointer(builder, cmd_len, &dw);
 
    dw[0] = GEN6_RENDER_CMD(3D, 3DSTATE_GS) | (cmd_len - 2);
    dw[1] = kernel_offset;
@@ -719,6 +777,11 @@ gen8_3DSTATE_GS(struct ilo_builder *builder,
    dw[7] = gs->gs[3];
    dw[8] = 0;
    dw[9] = gs->gs[4];
+
+   if (ilo_state_gs_get_scratch_size(gs)) {
+      ilo_builder_batch_reloc64(builder, pos + 4, scratch_bo,
+            gs->gs[1], 0);
+   }
 }
 
 static inline void

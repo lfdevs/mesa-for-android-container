@@ -33,11 +33,13 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <X11/Xlib.h>
 
 #include "os/os_thread.h"
 #include "util/u_memory.h"
+#include "loader/loader.h"
 
 #include "entrypoint.h"
 #include "vid_dec.h"
@@ -47,6 +49,8 @@ pipe_static_mutex(omx_lock);
 static Display *omx_display = NULL;
 static struct vl_screen *omx_screen = NULL;
 static unsigned omx_usecount = 0;
+static const char *omx_render_node = NULL;
+static int drm_fd;
 
 int omx_component_library_Setup(stLoaderComponentType **stComponents)
 {
@@ -70,21 +74,34 @@ int omx_component_library_Setup(stLoaderComponentType **stComponents)
 
 struct vl_screen *omx_get_screen(void)
 {
+   static bool first_time = true;
    pipe_mutex_lock(omx_lock);
 
-   if (!omx_display) {
-      omx_display = XOpenDisplay(NULL);
-      if (!omx_display) {
-         pipe_mutex_unlock(omx_lock);
-         return NULL;
-      }
-   }
-
    if (!omx_screen) {
-      omx_screen = vl_screen_create(omx_display, 0);
-      if (!omx_screen) {
-         pipe_mutex_unlock(omx_lock);
-         return NULL;
+      if (first_time) {
+         omx_render_node = debug_get_option("OMX_RENDER_NODE", NULL);
+         first_time = false;
+      }
+      if (omx_render_node) {
+         drm_fd = loader_open_device(omx_render_node);
+         if (drm_fd < 0)
+            goto error;
+
+         omx_screen = vl_drm_screen_create(drm_fd);
+         if (!omx_screen) {
+            close(drm_fd);
+            goto error;
+         }
+      } else {
+         omx_display = XOpenDisplay(NULL);
+         if (!omx_display)
+            goto error;
+
+         omx_screen = vl_dri2_screen_create(omx_display, 0);
+         if (!omx_screen) {
+            XCloseDisplay(omx_display);
+            goto error;
+         }
       }
    }
 
@@ -92,16 +109,23 @@ struct vl_screen *omx_get_screen(void)
 
    pipe_mutex_unlock(omx_lock);
    return omx_screen;
+
+error:
+   pipe_mutex_unlock(omx_lock);
+   return NULL;
 }
 
 void omx_put_screen(void)
 {
    pipe_mutex_lock(omx_lock);
    if ((--omx_usecount) == 0) {
-      vl_screen_destroy(omx_screen);
-      XCloseDisplay(omx_display);
+      omx_screen->destroy(omx_screen);
       omx_screen = NULL;
-      omx_display = NULL;
+
+      if (omx_render_node)
+         close(drm_fd);
+      else
+         XCloseDisplay(omx_display);
    }
    pipe_mutex_unlock(omx_lock);
 }

@@ -96,7 +96,11 @@ target_triplet = @target@
 @HAVE_DRISW_TRUE@am__append_1 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_LD_VERSION_SCRIPT_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
+@HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
+
+@HAVE_LD_VERSION_SCRIPT_TRUE@am__append_3 = \
 @HAVE_LD_VERSION_SCRIPT_TRUE@	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/opencl/opencl.sym
 
 subdir = src/gallium/targets/opencl
@@ -147,11 +151,10 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icddir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-lib@OPENCL_LIBNAME@_la_DEPENDENCIES = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
+lib@OPENCL_LIBNAME@_la_DEPENDENCIES = $(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_dynamic.la \
 	$(top_builddir)/src/gallium/state_trackers/clover/libclover.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/util/libmesautil.la \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) $(am__DEPENDENCIES_1) \
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_lib@OPENCL_LIBNAME@_la_OBJECTS =
@@ -311,6 +314,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -355,6 +360,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -388,7 +395,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -419,6 +430,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -554,17 +567,16 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1)
+	$(am__append_1) $(am__append_2)
 lib_LTLIBRARIES = lib@OPENCL_LIBNAME@.la
 lib@OPENCL_LIBNAME@_la_LDFLAGS = $(LLVM_LDFLAGS) -no-undefined \
 	-version-number @OPENCL_VERSION@:0 $(GC_SECTIONS) \
-	$(LD_NO_UNDEFINED) $(am__append_2)
+	$(LD_NO_UNDEFINED) $(am__append_3)
 lib@OPENCL_LIBNAME@_la_LIBADD = \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_dynamic.la \
 	$(top_builddir)/src/gallium/state_trackers/clover/libclover.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
 	$(ELF_LIB) \
 	$(DLOPEN_LIBS) \
 	-lclangCodeGen \

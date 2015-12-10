@@ -141,7 +141,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 0, 0, 0, 1, 1, 0, NONE, "ENDLOOP", TGSI_OPCODE_ENDLOOP },
    { 0, 0, 0, 0, 1, 0, NONE, "ENDSUB", TGSI_OPCODE_ENDSUB },
    { 1, 1, 1, 0, 0, 0, OTHR, "TXQ_LZ", TGSI_OPCODE_TXQ_LZ },
-   { 0, 0, 0, 0, 0, 0, NONE, "", 104 },     /* removed */
+   { 1, 1, 1, 0, 0, 0, OTHR, "TXQS", TGSI_OPCODE_TXQS },
    { 0, 0, 0, 0, 0, 0, NONE, "", 105 },     /* removed */
    { 0, 0, 0, 0, 0, 0, NONE, "", 106 },     /* removed */
    { 0, 0, 0, 0, 0, 0, NONE, "NOP", TGSI_OPCODE_NOP },
@@ -331,6 +331,7 @@ tgsi_opcode_infer_type( uint opcode )
    case TGSI_OPCODE_SAD: /* XXX some src args may be signed for SAD ? */
    case TGSI_OPCODE_TXQ:
    case TGSI_OPCODE_TXQ_LZ:
+   case TGSI_OPCODE_TXQS:
    case TGSI_OPCODE_F2U:
    case TGSI_OPCODE_UDIV:
    case TGSI_OPCODE_UMAD:

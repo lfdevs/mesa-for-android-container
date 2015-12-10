@@ -461,7 +461,7 @@ brw_pixel_interpolator_query(struct brw_codegen *p,
                              struct brw_reg mrf,
                              bool noperspective,
                              unsigned mode,
-                             unsigned data,
+                             struct brw_reg data,
                              unsigned msg_length,
                              unsigned response_length);
 
@@ -522,6 +522,10 @@ bool brw_try_compact_instruction(const struct brw_device_info *devinfo,
 void brw_debug_compact_uncompact(const struct brw_device_info *devinfo,
                                  brw_inst *orig, brw_inst *uncompacted);
 
+/* brw_eu_validate.c */
+bool brw_validate_instructions(const struct brw_codegen *p, int start_offset,
+                               struct annotation_info *annotation);
+
 static inline int
 next_offset(const struct brw_device_info *devinfo, void *store, int offset)
 {
@@ -531,6 +535,12 @@ next_offset(const struct brw_device_info *devinfo, void *store, int offset)
       return offset + 8;
    else
       return offset + 16;
+}
+
+static inline bool
+is_3src(enum opcode opcode)
+{
+   return opcode_descs[opcode].nsrc == 3;
 }
 
 #ifdef __cplusplus

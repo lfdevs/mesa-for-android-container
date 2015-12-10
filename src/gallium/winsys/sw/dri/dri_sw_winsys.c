@@ -44,8 +44,10 @@ struct dri_sw_displaytarget
    unsigned height;
    unsigned stride;
 
+   unsigned map_flags;
    void *data;
    void *mapped;
+   const void *front_private;
 };
 
 struct dri_sw_winsys
@@ -83,6 +85,7 @@ dri_sw_displaytarget_create(struct sw_winsys *winsys,
                             enum pipe_format format,
                             unsigned width, unsigned height,
                             unsigned alignment,
+                            const void *front_private,
                             unsigned *stride)
 {
    struct dri_sw_displaytarget *dri_sw_dt;
@@ -95,6 +98,7 @@ dri_sw_displaytarget_create(struct sw_winsys *winsys,
    dri_sw_dt->format = format;
    dri_sw_dt->width = width;
    dri_sw_dt->height = height;
+   dri_sw_dt->front_private = front_private;
 
    format_stride = util_format_get_stride(format, width);
    dri_sw_dt->stride = align(format_stride, alignment);
@@ -133,6 +137,12 @@ dri_sw_displaytarget_map(struct sw_winsys *ws,
 {
    struct dri_sw_displaytarget *dri_sw_dt = dri_sw_displaytarget(dt);
    dri_sw_dt->mapped = dri_sw_dt->data;
+
+   if (dri_sw_dt->front_private && (flags & PIPE_TRANSFER_READ)) {
+      struct dri_sw_winsys *dri_sw_ws = dri_sw_winsys(ws);
+      dri_sw_ws->lf->get_image((void *)dri_sw_dt->front_private, 0, 0, dri_sw_dt->width, dri_sw_dt->height, dri_sw_dt->stride, dri_sw_dt->data);
+   }
+   dri_sw_dt->map_flags = flags;
    return dri_sw_dt->mapped;
 }
 
@@ -141,6 +151,11 @@ dri_sw_displaytarget_unmap(struct sw_winsys *ws,
                            struct sw_displaytarget *dt)
 {
    struct dri_sw_displaytarget *dri_sw_dt = dri_sw_displaytarget(dt);
+   if (dri_sw_dt->front_private && (dri_sw_dt->map_flags & PIPE_TRANSFER_WRITE)) {
+      struct dri_sw_winsys *dri_sw_ws = dri_sw_winsys(ws);
+      dri_sw_ws->lf->put_image2((void *)dri_sw_dt->front_private, dri_sw_dt->data, 0, 0, dri_sw_dt->width, dri_sw_dt->height, dri_sw_dt->stride);
+   }
+   dri_sw_dt->map_flags = 0;
    dri_sw_dt->mapped = NULL;
 }
 

@@ -389,6 +389,7 @@ enum SVSemantic
    SV_SBASE,
    SV_VERTEX_STRIDE,
    SV_INVOCATION_INFO,
+   SV_THREAD_KILL,
    SV_UNDEFINED,
    SV_LAST
 };
@@ -824,8 +825,8 @@ private:
 
 enum TexQuery
 {
-   TXQ_DIMS,
-   TXQ_TYPE,
+   TXQ_DIMS, /* x, y, z, levels */
+   TXQ_TYPE, /* ?, ?, samples, ? */
    TXQ_SAMPLE_POSITION,
    TXQ_FILTER,
    TXQ_LOD,

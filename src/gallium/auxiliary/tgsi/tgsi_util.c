@@ -462,3 +462,21 @@ tgsi_util_get_texture_coord_dim(int tgsi_tex, int *shadow_or_sample)
 
    return dim;
 }
+
+
+boolean
+tgsi_is_shadow_target(unsigned target)
+{
+   switch (target) {
+   case TGSI_TEXTURE_SHADOW1D:
+   case TGSI_TEXTURE_SHADOW2D:
+   case TGSI_TEXTURE_SHADOWRECT:
+   case TGSI_TEXTURE_SHADOW1D_ARRAY:
+   case TGSI_TEXTURE_SHADOW2D_ARRAY:
+   case TGSI_TEXTURE_SHADOWCUBE:
+   case TGSI_TEXTURE_SHADOWCUBE_ARRAY:
+      return TRUE;
+   default:
+      return FALSE;
+   }
+}

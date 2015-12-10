@@ -31,6 +31,7 @@
  * GL_ARB_separate_shader_objects extension.
  */
 
+#include <stdbool.h>
 #include "main/glheader.h"
 #include "main/context.h"
 #include "main/dispatch.h"
@@ -42,12 +43,11 @@
 #include "main/shaderobj.h"
 #include "main/transformfeedback.h"
 #include "main/uniforms.h"
+#include "glsl/glsl_parser_extras.h"
+#include "glsl/ir_uniform.h"
 #include "program/program.h"
 #include "program/prog_parameter.h"
 #include "util/ralloc.h"
-#include <stdbool.h>
-#include "../glsl/glsl_parser_extras.h"
-#include "../glsl/ir_uniform.h"
 
 /**
  * Delete a pipeline object.
@@ -230,6 +230,10 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
    struct gl_shader_program *shProg = NULL;
    GLbitfield any_valid_stages;
 
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glUseProgramStages(%u, 0x%x, %u)\n",
+                  pipeline, stages, program);
+
    if (!pipe) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "glUseProgramStages(pipeline)");
       return;
@@ -251,6 +255,8 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
    if (_mesa_has_tessellation(ctx))
       any_valid_stages |= GL_TESS_CONTROL_SHADER_BIT |
                           GL_TESS_EVALUATION_SHADER_BIT;
+   if (_mesa_has_compute_shaders(ctx))
+      any_valid_stages |= GL_COMPUTE_SHADER_BIT;
 
    if (stages != GL_ALL_SHADER_BITS && (stages & ~any_valid_stages) != 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glUseProgramStages(Stages)");
@@ -332,6 +338,9 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
 
    if ((stages & GL_TESS_EVALUATION_SHADER_BIT) != 0)
       _mesa_use_shader_program(ctx, GL_TESS_EVALUATION_SHADER, shProg, pipe);
+
+   if ((stages & GL_COMPUTE_SHADER_BIT) != 0)
+      _mesa_use_shader_program(ctx, GL_COMPUTE_SHADER, shProg, pipe);
 }
 
 /**
@@ -344,6 +353,9 @@ _mesa_ActiveShaderProgram(GLuint pipeline, GLuint program)
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *shProg = NULL;
    struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
+
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glActiveShaderProgram(%u, %u)\n", pipeline, program);
 
    if (program != 0) {
       shProg = _mesa_lookup_shader_program_err(ctx, program,
@@ -379,6 +391,9 @@ _mesa_BindProgramPipeline(GLuint pipeline)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_pipeline_object *newObj = NULL;
+
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glBindProgramPipeline(%u)\n", pipeline);
 
    /* Rebinding the same pipeline object: no change.
     */
@@ -467,6 +482,9 @@ _mesa_DeleteProgramPipelines(GLsizei n, const GLuint *pipelines)
    GET_CURRENT_CONTEXT(ctx);
    GLsizei i;
 
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glDeleteProgramPipelines(%d, %p)\n", n, pipelines);
+
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteProgramPipelines(n<0)");
       return;
@@ -551,6 +569,9 @@ _mesa_GenProgramPipelines(GLsizei n, GLuint *pipelines)
 {
    GET_CURRENT_CONTEXT(ctx);
 
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glGenProgramPipelines(%d, %p)\n", n, pipelines);
+
    create_program_pipelines(ctx, n, pipelines, false);
 }
 
@@ -558,6 +579,9 @@ void GLAPIENTRY
 _mesa_CreateProgramPipelines(GLsizei n, GLuint *pipelines)
 {
    GET_CURRENT_CONTEXT(ctx);
+
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glCreateProgramPipelines(%d, %p)\n", n, pipelines);
 
    create_program_pipelines(ctx, n, pipelines, true);
 }
@@ -574,6 +598,9 @@ _mesa_IsProgramPipeline(GLuint pipeline)
 {
    GET_CURRENT_CONTEXT(ctx);
 
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glIsProgramPipeline(%u)\n", pipeline);
+
    struct gl_pipeline_object *obj = _mesa_lookup_pipeline_object(ctx, pipeline);
    if (obj == NULL)
       return GL_FALSE;
@@ -589,6 +616,10 @@ _mesa_GetProgramPipelineiv(GLuint pipeline, GLenum pname, GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
+
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glGetProgramPipelineiv(%u, %d, %p)\n",
+                  pipeline, pname, params);
 
    /* Are geometry shaders available in this context?
     */
@@ -641,6 +672,12 @@ _mesa_GetProgramPipelineiv(GLuint pipeline, GLenum pname, GLint *params)
    case GL_FRAGMENT_SHADER:
       *params = pipe->CurrentProgram[MESA_SHADER_FRAGMENT]
          ? pipe->CurrentProgram[MESA_SHADER_FRAGMENT]->Name : 0;
+      return;
+   case GL_COMPUTE_SHADER:
+      if (!_mesa_has_compute_shaders(ctx))
+         break;
+      *params = pipe->CurrentProgram[MESA_SHADER_COMPUTE]
+         ? pipe->CurrentProgram[MESA_SHADER_COMPUTE]->Name : 0;
       return;
    default:
       break;
@@ -724,6 +761,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
                                 GLboolean IsBound)
 {
    unsigned i;
+   bool program_empty = true;
 
    pipe->Validated = GL_FALSE;
 
@@ -820,6 +858,29 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
       }
    }
 
+   /* Section 11.1.3.11 (Validation) of the OpenGL 4.5 spec says:
+    *
+    *    "An INVALID_OPERATION error is generated by any command that trans-
+    *    fers vertices to the GL or launches compute work if the current set
+    *    of active program objects cannot be executed, for reasons including:
+    *
+    *       ...
+    *
+    *       - There is no current program object specified by UseProgram,
+    *         there is a current program pipeline object, and that object is
+    *         empty (no executable code is installed for any stage).
+    */
+   for (i = 0; i < MESA_SHADER_STAGES; i++) {
+      if (pipe->CurrentProgram[i]) {
+         program_empty = false;
+         break;
+      }
+   }
+
+   if (program_empty) {
+      goto err;
+   }
+
    /* Section 2.11.11 (Shader Execution), subheading "Validation," of the
     * OpenGL 4.1 spec says:
     *
@@ -856,6 +917,9 @@ _mesa_ValidateProgramPipeline(GLuint pipeline)
 {
    GET_CURRENT_CONTEXT(ctx);
 
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glValidateProgramPipeline(%u)\n", pipeline);
+
    struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
 
    if (!pipe) {
@@ -866,6 +930,21 @@ _mesa_ValidateProgramPipeline(GLuint pipeline)
 
    _mesa_validate_program_pipeline(ctx, pipe,
                                    (ctx->_Shader->Name == pipe->Name));
+
+   /* Validate inputs against outputs, this cannot be done during linking
+    * since programs have been linked separately from each other.
+    *
+    * From OpenGL 4.5 Core spec:
+    *     "Separable program objects may have validation failures that cannot be
+    *     detected without the complete program pipeline. Mismatched interfaces,
+    *     improper usage of program objects together, and the same
+    *     state-dependent failures can result in validation errors for such
+    *     program objects."
+    *
+    * OpenGL ES 3.1 specification has the same text.
+    */
+   if (!_mesa_validate_pipeline_io(pipe))
+      pipe->Validated = GL_FALSE;
 }
 
 void GLAPIENTRY
@@ -873,6 +952,10 @@ _mesa_GetProgramPipelineInfoLog(GLuint pipeline, GLsizei bufSize,
                                 GLsizei *length, GLchar *infoLog)
 {
    GET_CURRENT_CONTEXT(ctx);
+
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glGetProgramPipelineInfoLog(%u, %d, %p, %p)\n",
+                  pipeline, bufSize, length, infoLog);
 
    struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
 

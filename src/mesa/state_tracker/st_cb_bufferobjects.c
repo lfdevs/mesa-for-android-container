@@ -83,6 +83,7 @@ st_bufferobj_free(struct gl_context *ctx, struct gl_buffer_object *obj)
    if (st_obj->buffer)
       pipe_resource_reference(&st_obj->buffer, NULL);
 
+   mtx_destroy(&st_obj->Base.Mutex);
    free(st_obj->Base.Label);
    free(st_obj);
 }
@@ -527,8 +528,4 @@ st_init_bufferobject_functions(struct dd_function_table *functions)
    functions->UnmapBuffer = st_bufferobj_unmap;
    functions->CopyBufferSubData = st_copy_buffer_subdata;
    functions->ClearBufferSubData = st_clear_buffer_subdata;
-
-   /* For GL_APPLE_vertex_array_object */
-   functions->NewArrayObject = _mesa_new_vao;
-   functions->DeleteArrayObject = _mesa_delete_vao;
 }

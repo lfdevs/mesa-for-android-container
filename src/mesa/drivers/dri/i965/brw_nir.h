@@ -85,6 +85,17 @@ enum brw_reg_type brw_type_for_nir_type(nir_alu_type type);
 
 enum glsl_base_type brw_glsl_base_type_for_nir_type(nir_alu_type type);
 
+void brw_nir_setup_glsl_uniforms(nir_shader *shader,
+                                 struct gl_shader_program *shader_prog,
+                                 const struct gl_program *prog,
+                                 struct brw_stage_prog_data *stage_prog_data,
+                                 bool is_scalar);
+
+void brw_nir_setup_arb_uniforms(nir_shader *shader, struct gl_program *prog,
+                                struct brw_stage_prog_data *stage_prog_data);
+
+bool brw_nir_opt_peephole_ffma(nir_shader *shader);
+
 #ifdef __cplusplus
 }
 #endif

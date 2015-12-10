@@ -27,6 +27,7 @@
 #include "translate/translate.h"
 
 #include "nv50/nv50_context.h"
+#include "nv50/nv50_query_hw.h"
 #include "nv50/nv50_resource.h"
 
 #include "nv50/nv50_3d.xml.h"
@@ -293,22 +294,13 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
    uint64_t addrs[PIPE_MAX_ATTRIBS];
    uint32_t limits[PIPE_MAX_ATTRIBS];
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
-   struct nv50_vertex_stateobj dummy = {};
-   struct nv50_vertex_stateobj *vertex = nv50->vertex ? nv50->vertex : &dummy;
+   struct nv50_vertex_stateobj *vertex = nv50->vertex;
    struct pipe_vertex_buffer *vb;
    struct nv50_vertex_element *ve;
    uint32_t mask;
    uint32_t refd = 0;
    unsigned i;
    const unsigned n = MAX2(vertex->num_elements, nv50->state.num_vtxelts);
-
-   /* A vertexid is not generated for inline data uploads. Have to use a
-    * VBO. This check must come after the vertprog has been validated,
-    * otherwise vertexid may be unset.
-    */
-   assert(nv50->vertprog->translated);
-   if (nv50->vertprog->vp.vertexid)
-      nv50->vbo_push_hint = 0;
 
    if (unlikely(vertex->need_conversion))
       nv50->vbo_fifo = ~0;
@@ -486,7 +478,7 @@ nv50_draw_arrays(struct nv50_context *nv50,
       BEGIN_NV04(push, NV50_3D(VB_ELEMENT_BASE), 1);
       PUSH_DATA (push, 0);
       if (nv50->screen->base.class_3d >= NV84_3D_CLASS) {
-         BEGIN_NV04(push, SUBC_3D(NV84_3D_VERTEX_ID_BASE), 1);
+         BEGIN_NV04(push, NV84_3D(VERTEX_ID_BASE), 1);
          PUSH_DATA (push, 0);
       }
       nv50->state.index_bias = 0;
@@ -612,7 +604,7 @@ nv50_draw_elements(struct nv50_context *nv50, bool shorten,
       BEGIN_NV04(push, NV50_3D(VB_ELEMENT_BASE), 1);
       PUSH_DATA (push, index_bias);
       if (nv50->screen->base.class_3d >= NV84_3D_CLASS) {
-         BEGIN_NV04(push, SUBC_3D(NV84_3D_VERTEX_ID_BASE), 1);
+         BEGIN_NV04(push, NV84_3D(VERTEX_ID_BASE), 1);
          PUSH_DATA (push, index_bias);
       }
       nv50->state.index_bias = index_bias;
@@ -635,7 +627,7 @@ nv50_draw_elements(struct nv50_context *nv50, bool shorten,
        * pushbuf submit, but it's probably not a big performance difference.
        */
       if (buf->fence_wr && !nouveau_fence_signalled(buf->fence_wr))
-         nouveau_fence_wait(buf->fence_wr);
+         nouveau_fence_wait(buf->fence_wr, &nv50->base.debug);
 
       while (instance_count--) {
          BEGIN_NV04(push, NV50_3D(VERTEX_BEGIN_GL), 1);
@@ -745,7 +737,8 @@ nva0_draw_stream_output(struct nv50_context *nv50,
       PUSH_DATA (push, 0);
       BEGIN_NV04(push, NVA0_3D(DRAW_TFB_STRIDE), 1);
       PUSH_DATA (push, so->stride);
-      nv50_query_pushbuf_submit(push, NVA0_3D_DRAW_TFB_BYTES, so->pq, 0x4);
+      nv50_hw_query_pushbuf_submit(push, NVA0_3D_DRAW_TFB_BYTES,
+                                   nv50_query(so->pq), 0x4);
       BEGIN_NV04(push, NV50_3D(VERTEX_END_GL), 1);
       PUSH_DATA (push, 0);
 

@@ -177,9 +177,9 @@ swrastPutImage(__DRIdrawable * draw, int op,
 }
 
 static void
-swrastGetImage(__DRIdrawable * read,
-               int x, int y, int w, int h,
-               char *data, void *loaderPrivate)
+swrastGetImage2(__DRIdrawable * read,
+                int x, int y, int w, int h, int stride,
+                char *data, void *loaderPrivate)
 {
    struct drisw_drawable *prp = loaderPrivate;
    __GLXDRIdrawable *pread = &(prp->base);
@@ -193,20 +193,29 @@ swrastGetImage(__DRIdrawable * read,
    ximage->data = data;
    ximage->width = w;
    ximage->height = h;
-   ximage->bytes_per_line = bytes_per_line(w * ximage->bits_per_pixel, 32);
+   ximage->bytes_per_line = stride ? stride : bytes_per_line(w * ximage->bits_per_pixel, 32);
 
    XGetSubImage(dpy, readable, x, y, w, h, ~0L, ZPixmap, ximage, 0, 0);
 
    ximage->data = NULL;
 }
 
+static void
+swrastGetImage(__DRIdrawable * read,
+               int x, int y, int w, int h,
+               char *data, void *loaderPrivate)
+{
+   swrastGetImage2(read, x, y, w, h, 0, data, loaderPrivate);
+}
+
 static const __DRIswrastLoaderExtension swrastLoaderExtension = {
-   .base = {__DRI_SWRAST_LOADER, 2 },
+   .base = {__DRI_SWRAST_LOADER, 3 },
 
    .getDrawableInfo     = swrastGetDrawableInfo,
    .putImage            = swrastPutImage,
    .getImage            = swrastGetImage,
    .putImage2           = swrastPutImage2,
+   .getImage2           = swrastGetImage2,
 };
 
 static const __DRIextension *loader_extensions[] = {

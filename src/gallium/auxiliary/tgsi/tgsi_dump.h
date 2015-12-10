@@ -38,7 +38,9 @@
 extern "C" {
 #endif
 
-void
+#define TGSI_DUMP_FLOAT_AS_HEX (1 << 0)
+
+bool
 tgsi_dump_str(
    const struct tgsi_token *tokens,
    uint flags,

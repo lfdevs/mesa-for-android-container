@@ -365,14 +365,14 @@ static uint64_t amdgpu_query_value(struct radeon_winsys *rws,
    return 0;
 }
 
-static void amdgpu_read_registers(struct radeon_winsys *rws,
+static bool amdgpu_read_registers(struct radeon_winsys *rws,
                                   unsigned reg_offset,
                                   unsigned num_registers, uint32_t *out)
 {
    struct amdgpu_winsys *ws = (struct amdgpu_winsys*)rws;
 
-   amdgpu_read_mm_registers(ws->dev, reg_offset / 4, num_registers,
-                            0xffffffff, 0, out);
+   return amdgpu_read_mm_registers(ws->dev, reg_offset / 4, num_registers,
+                                   0xffffffff, 0, out) == 0;
 }
 
 static unsigned hash_dev(void *key)

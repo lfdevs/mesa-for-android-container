@@ -44,15 +44,15 @@
  * full size of the heap.
  */
 struct nouveau_heap {
-	struct nouveau_heap *prev;
-	struct nouveau_heap *next;
+   struct nouveau_heap *prev;
+   struct nouveau_heap *next;
 
-	void *priv;
+   void *priv;
 
-	unsigned start;
-	unsigned size;
+   unsigned start;
+   unsigned size;
 
-	int in_use;
+   int in_use;
 };
 
 int

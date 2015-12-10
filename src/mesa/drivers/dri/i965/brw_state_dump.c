@@ -376,13 +376,13 @@ dump_sdc(struct brw_context *brw, uint32_t offset)
 static void dump_sampler_state(struct brw_context *brw,
 			       uint32_t offset, uint32_t size)
 {
-   int i;
+   unsigned i;
    uint32_t *samp = brw->batch.bo->virtual + offset;
 
    for (i = 0; i < size / 16; i++) {
       char name[20];
 
-      sprintf(name, "WM SAMP%d", i);
+      sprintf(name, "WM SAMP%u", i);
       batch_out(brw, name, offset, 0, "filtering\n");
       batch_out(brw, name, offset, 1, "wrapping, lod\n");
       batch_out(brw, name, offset, 2, "default color pointer\n");

@@ -34,7 +34,6 @@
 #include "intel_context.h"
 
 struct intel_context;
-struct intel_framebuffer;
 
 extern void intel_check_front_buffer_rendering(struct intel_context *intel);
 

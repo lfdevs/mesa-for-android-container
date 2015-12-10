@@ -230,6 +230,7 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
                   const LLVMValueRef (*inputs)[4],
                   LLVMValueRef (*outputs)[4],
                   LLVMValueRef context_ptr,
+                  LLVMValueRef thread_data_ptr,
                   struct lp_build_sampler_soa *sampler,
                   const struct tgsi_shader_info *info,
                   const struct lp_build_tgsi_gs_iface *gs_iface);
@@ -447,6 +448,7 @@ struct lp_build_tgsi_soa_context
    const LLVMValueRef (*inputs)[TGSI_NUM_CHANNELS];
    LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS];
    LLVMValueRef context_ptr;
+   LLVMValueRef thread_data_ptr;
 
    const struct lp_build_sampler_soa *sampler;
 

@@ -47,11 +47,15 @@ struct svga_surface
    struct svga_host_surface_cache_key key;
    struct svga_winsys_surface *handle;
 
-   unsigned real_face;
+   unsigned real_layer;
    unsigned real_level;
    unsigned real_zslice;
 
    boolean dirty;
+
+   /* VGPU10 */
+   SVGA3dRenderTargetViewId view_id;
+   struct svga_surface *backed;
 };
 
 
@@ -64,11 +68,13 @@ svga_surface_needs_propagation(const struct pipe_surface *surf);
 struct svga_winsys_surface *
 svga_texture_view_surface(struct svga_context *svga,
                           struct svga_texture *tex,
+                          unsigned bind_flags,
                           SVGA3dSurfaceFlags flags,
                           SVGA3dSurfaceFormat format,
                           unsigned start_mip,
                           unsigned num_mip,
-                          int face_pick,
+                          int layer_pick,
+                          unsigned num_layers,
                           int zslice_pick,
                           struct svga_host_surface_cache_key *key); /* OUT */
 
@@ -98,5 +104,9 @@ svga_surface_const(const struct pipe_surface *surface)
    assert(surface);
    return (const struct svga_surface *)surface;
 }
+
+struct pipe_surface *
+svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s);
+
 
 #endif

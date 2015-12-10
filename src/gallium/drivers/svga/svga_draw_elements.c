@@ -25,6 +25,7 @@
 
 #include "util/u_inlines.h"
 #include "util/u_prim.h"
+#include "util/u_upload_mgr.h"
 #include "indices/u_indices.h"
 
 #include "svga_cmd.h"
@@ -45,7 +46,7 @@ translate_indices(struct svga_hwtnl *hwtnl, struct pipe_resource *src,
    struct pipe_context *pipe = &hwtnl->svga->pipe;
    struct pipe_transfer *src_transfer = NULL;
    struct pipe_transfer *dst_transfer = NULL;
-   unsigned size;
+   unsigned size = index_size * nr;
    const void *src_map = NULL;
    struct pipe_resource *dst = NULL;
    void *dst_map = NULL;
@@ -98,7 +99,9 @@ svga_hwtnl_simple_draw_range_elements(struct svga_hwtnl *hwtnl,
                                       unsigned index_size, int index_bias,
                                       unsigned min_index, unsigned max_index,
                                       unsigned prim, unsigned start,
-                                      unsigned count)
+                                      unsigned count,
+                                      unsigned start_instance,
+                                      unsigned instance_count)
 {
    SVGA3dPrimitiveRange range;
    unsigned hw_prim;
@@ -109,12 +112,6 @@ svga_hwtnl_simple_draw_range_elements(struct svga_hwtnl *hwtnl,
    if (hw_count == 0)
       return PIPE_OK; /* nothing to draw */
 
-   /* We should never see user-space buffers in the driver.  The vbuf
-    * module should have converted them into real buffers.
-    */
-   if (index_buffer)
-      assert(!svga_buffer_is_user_buffer(index_buffer));
-
    range.primType = hw_prim;
    range.primitiveCount = hw_count;
    range.indexArray.offset = index_offset;
@@ -122,7 +119,9 @@ svga_hwtnl_simple_draw_range_elements(struct svga_hwtnl *hwtnl,
    range.indexWidth = index_size;
    range.indexBias = index_bias;
 
-   return svga_hwtnl_prim(hwtnl, &range, min_index, max_index, index_buffer);
+   return svga_hwtnl_prim(hwtnl, &range, count,
+                          min_index, max_index, index_buffer,
+                          start_instance, instance_count);
 }
 
 
@@ -131,9 +130,11 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                                struct pipe_resource *index_buffer,
                                unsigned index_size, int index_bias,
                                unsigned min_index, unsigned max_index,
-                               unsigned prim, unsigned start, unsigned count)
+                               unsigned prim, unsigned start, unsigned count,
+                               unsigned start_instance, unsigned instance_count)
 {
-   unsigned gen_prim, gen_size, gen_nr, gen_type;
+   unsigned gen_prim, gen_size, gen_nr;
+   enum indices_mode gen_type;
    u_translate_func gen_func;
    enum pipe_error ret = PIPE_OK;
 
@@ -165,7 +166,9 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                                                    index_bias,
                                                    min_index,
                                                    max_index,
-                                                   gen_prim, start, count);
+                                                   gen_prim, start, count,
+                                                   start_instance,
+                                                   instance_count);
    }
    else {
       struct pipe_resource *gen_buf = NULL;
@@ -190,7 +193,9 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                                                   index_bias,
                                                   min_index,
                                                   max_index,
-                                                  gen_prim, 0, gen_nr);
+                                                  gen_prim, 0, gen_nr,
+                                                  start_instance,
+                                                  instance_count);
       if (ret != PIPE_OK)
          goto done;
 

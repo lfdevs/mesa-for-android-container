@@ -58,10 +58,12 @@ ilo_blit_resolve_slices(struct ilo_context *ilo,
     * As it is only used to resolve HiZ right now, return early when there is
     * no HiZ.
     */
-   if (!ilo_image_can_enable_aux(&tex->image, level))
+   if (tex->image.aux.type != ILO_IMAGE_AUX_HIZ ||
+       !ilo_image_can_enable_aux(&tex->image, level))
       return;
 
-   if (ilo_image_can_enable_aux(&tex->image, level)) {
+   if (tex->image.aux.type == ILO_IMAGE_AUX_HIZ &&
+       ilo_image_can_enable_aux(&tex->image, level)) {
       ilo_blit_resolve_slices_for_hiz(ilo, res, level,
             first_slice, num_slices, resolve_flags);
    }

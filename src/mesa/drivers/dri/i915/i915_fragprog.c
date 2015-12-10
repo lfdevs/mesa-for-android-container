@@ -1315,9 +1315,10 @@ static struct gl_program *
 i915NewProgram(struct gl_context * ctx, GLenum target, GLuint id)
 {
    switch (target) {
-   case GL_VERTEX_PROGRAM_ARB:
-      return _mesa_init_vertex_program(ctx, CALLOC_STRUCT(gl_vertex_program),
-                                       target, id);
+   case GL_VERTEX_PROGRAM_ARB: {
+      struct gl_vertex_program *prog = CALLOC_STRUCT(gl_vertex_program);
+      return _mesa_init_gl_program(&prog->Base, target, id);
+   }
 
    case GL_FRAGMENT_PROGRAM_ARB:{
          struct i915_fragment_program *prog =
@@ -1325,8 +1326,7 @@ i915NewProgram(struct gl_context * ctx, GLenum target, GLuint id)
          if (prog) {
             i915_init_program(I915_CONTEXT(ctx), prog);
 
-            return _mesa_init_fragment_program(ctx, &prog->FragProg,
-                                               target, id);
+            return _mesa_init_gl_program(&prog->FragProg.Base, target, id);
          }
          else
             return NULL;

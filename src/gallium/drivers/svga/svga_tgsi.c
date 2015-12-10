@@ -37,6 +37,7 @@
 #include "svgadump/svga_shader_dump.h"
 
 #include "svga_context.h"
+#include "svga_shader.h"
 #include "svga_tgsi.h"
 #include "svga_tgsi_emit.h"
 #include "svga_debug.h"
@@ -166,97 +167,6 @@ svga_shader_emit_header(struct svga_shader_emitter *emit)
 
 
 /**
- * Use the shader info to generate a bitmask indicating which generic
- * inputs are used by the shader.  A set bit indicates that GENERIC[i]
- * is used.
- */
-unsigned
-svga_get_generic_inputs_mask(const struct tgsi_shader_info *info)
-{
-   unsigned i, mask = 0x0;
-
-   for (i = 0; i < info->num_inputs; i++) {
-      if (info->input_semantic_name[i] == TGSI_SEMANTIC_GENERIC) {
-         unsigned j = info->input_semantic_index[i];
-         assert(j < sizeof(mask) * 8);
-         mask |= 1 << j;
-      }
-   }
-
-   return mask;
-}
-
-
-/**
- * Given a mask of used generic variables (as returned by the above functions)
- * fill in a table which maps those indexes to small integers.
- * This table is used by the remap_generic_index() function in
- * svga_tgsi_decl_sm30.c
- * Example: if generics_mask = binary(1010) it means that GENERIC[1] and
- * GENERIC[3] are used.  The remap_table will contain:
- *   table[1] = 0;
- *   table[3] = 1;
- * The remaining table entries will be filled in with the next unused
- * generic index (in this example, 2).
- */
-void
-svga_remap_generics(unsigned generics_mask,
-                    int8_t remap_table[MAX_GENERIC_VARYING])
-{
-   /* Note texcoord[0] is reserved so start at 1 */
-   unsigned count = 1, i;
-
-   for (i = 0; i < MAX_GENERIC_VARYING; i++) {
-      remap_table[i] = -1;
-   }
-
-   /* for each bit set in generic_mask */
-   while (generics_mask) {
-      unsigned index = ffs(generics_mask) - 1;
-      remap_table[index] = count++;
-      generics_mask &= ~(1 << index);
-   }
-}
-
-
-/**
- * Use the generic remap table to map a TGSI generic varying variable
- * index to a small integer.  If the remapping table doesn't have a
- * valid value for the given index (the table entry is -1) it means
- * the fragment shader doesn't use that VS output.  Just allocate
- * the next free value in that case.  Alternately, we could cull
- * VS instructions that write to register, or replace the register
- * with a dummy temp register.
- * XXX TODO: we should do one of the later as it would save precious
- * texcoord registers.
- */
-int
-svga_remap_generic_index(int8_t remap_table[MAX_GENERIC_VARYING],
-                         int generic_index)
-{
-   assert(generic_index < MAX_GENERIC_VARYING);
-
-   if (generic_index >= MAX_GENERIC_VARYING) {
-      /* just don't return a random/garbage value */
-      generic_index = MAX_GENERIC_VARYING - 1;
-   }
-
-   if (remap_table[generic_index] == -1) {
-      /* This is a VS output that has no matching PS input.  Find a
-       * free index.
-       */
-      int i, max = 0;
-      for (i = 0; i < MAX_GENERIC_VARYING; i++) {
-         max = MAX2(max, remap_table[i]);
-      }
-      remap_table[generic_index] = max + 1;
-   }
-
-   return remap_table[generic_index];
-}
-
-
-/**
  * Parse TGSI shader and translate to SVGA/DX9 serialized
  * representation.
  *
@@ -264,9 +174,10 @@ svga_remap_generic_index(int8_t remap_table[MAX_GENERIC_VARYING],
  * can be dynamically grown.  Once we've finished and know how large
  * it is, it will be copied to a hardware buffer for upload.
  */
-static struct svga_shader_variant *
-svga_tgsi_translate(const struct svga_shader *shader,
-                    const struct svga_compile_key *key, unsigned unit)
+struct svga_shader_variant *
+svga_tgsi_vgpu9_translate(struct svga_context *svga,
+                          const struct svga_shader *shader,
+                          const struct svga_compile_key *key, unsigned unit)
 {
    struct svga_shader_variant *variant = NULL;
    struct svga_shader_emitter emit;
@@ -288,10 +199,10 @@ svga_tgsi_translate(const struct svga_shader *shader,
    emit.imm_start = emit.info.file_max[TGSI_FILE_CONSTANT] + 1;
 
    if (unit == PIPE_SHADER_FRAGMENT)
-      emit.imm_start += key->fkey.num_unnormalized_coords;
+      emit.imm_start += key->num_unnormalized_coords;
 
    if (unit == PIPE_SHADER_VERTEX) {
-      emit.imm_start += key->vkey.need_prescale ? 2 : 0;
+      emit.imm_start += key->vs.need_prescale ? 2 : 0;
    }
 
    emit.nr_hw_float_const =
@@ -317,7 +228,7 @@ svga_tgsi_translate(const struct svga_shader *shader,
       goto fail;
    }
 
-   variant = CALLOC_STRUCT(svga_shader_variant);
+   variant = svga_new_shader_variant(svga);
    if (variant == NULL)
       goto fail;
 
@@ -327,7 +238,18 @@ svga_tgsi_translate(const struct svga_shader *shader,
    memcpy(&variant->key, key, sizeof(*key));
    variant->id = UTIL_BITMASK_INVALID_INDEX;
 
-   if (SVGA_DEBUG & DEBUG_TGSI) {
+   variant->pstipple_sampler_unit = emit.pstipple_sampler_unit;
+
+   /* If there was exactly one write to a fragment shader output register
+    * and it came from a constant buffer, we know all fragments will have
+    * the same color (except for blending).
+    */
+   variant->constant_color_output =
+      emit.constant_color_output && emit.num_output_writes == 1;
+
+#if 0
+   if (!svga_shader_verify(variant->tokens, variant->nr_tokens) ||
+       SVGA_DEBUG & DEBUG_TGSI) {
       debug_printf("#####################################\n");
       debug_printf("Shader %u below\n", shader->id);
       tgsi_dump(shader->tokens, 0);
@@ -337,6 +259,7 @@ svga_tgsi_translate(const struct svga_shader *shader,
       }
       debug_printf("#####################################\n");
    }
+#endif
 
    return variant;
 
@@ -344,40 +267,4 @@ svga_tgsi_translate(const struct svga_shader *shader,
    FREE(variant);
    FREE(emit.buf);
    return NULL;
-}
-
-
-struct svga_shader_variant *
-svga_translate_fragment_program(const struct svga_fragment_shader *fs,
-                                const struct svga_fs_compile_key *fkey)
-{
-   struct svga_compile_key key;
-
-   memset(&key, 0, sizeof(key));
-
-   memcpy(&key.fkey, fkey, sizeof *fkey);
-
-   memcpy(key.generic_remap_table, fs->generic_remap_table,
-          sizeof(fs->generic_remap_table));
-
-   return svga_tgsi_translate(&fs->base, &key, PIPE_SHADER_FRAGMENT);
-}
-
-
-struct svga_shader_variant *
-svga_translate_vertex_program(const struct svga_vertex_shader *vs,
-                              const struct svga_vs_compile_key *vkey)
-{
-   struct svga_compile_key key;
-
-   memset(&key, 0, sizeof(key));
-
-   memcpy(&key.vkey, vkey, sizeof *vkey);
-
-   /* Note: we could alternately store the remap table in the vkey but
-    * that would make it larger.  We just regenerate it here instead.
-    */
-   svga_remap_generics(vkey->fs_generic_inputs, key.generic_remap_table);
-
-   return svga_tgsi_translate(&vs->base, &key, PIPE_SHADER_VERTEX);
 }

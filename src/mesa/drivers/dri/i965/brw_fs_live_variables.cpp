@@ -117,7 +117,7 @@ fs_live_variables::setup_one_write(struct block_data *bd, fs_inst *inst,
    /* The def[] bitset marks when an initialization in a block completely
     * screens off previous updates of that variable (VGRF channel).
     */
-   if (inst->dst.file == GRF && !inst->is_partial_write()) {
+   if (inst->dst.file == VGRF && !inst->is_partial_write()) {
       if (!BITSET_TEST(bd->use, var))
          BITSET_SET(bd->def, var);
    }
@@ -149,7 +149,7 @@ fs_live_variables::setup_def_use()
 	 for (unsigned int i = 0; i < inst->sources; i++) {
             fs_reg reg = inst->src[i];
 
-            if (reg.file != GRF)
+            if (reg.file != VGRF)
                continue;
 
             for (int j = 0; j < inst->regs_read(i); j++) {
@@ -172,7 +172,7 @@ fs_live_variables::setup_def_use()
          }
 
          /* Set def[] for this instruction */
-         if (inst->dst.file == GRF) {
+         if (inst->dst.file == VGRF) {
             fs_reg reg = inst->dst;
             for (int j = 0; j < inst->regs_written; j++) {
                setup_one_write(bd, inst, ip, reg);
@@ -259,16 +259,15 @@ fs_live_variables::compute_start_end()
       struct block_data *bd = &block_data[block->num];
 
       for (int i = 0; i < num_vars; i++) {
-	 if (BITSET_TEST(bd->livein, i)) {
-	    start[i] = MIN2(start[i], block->start_ip);
-	    end[i] = MAX2(end[i], block->start_ip);
-	 }
+         if (BITSET_TEST(bd->livein, i)) {
+            start[i] = MIN2(start[i], block->start_ip);
+            end[i] = MAX2(end[i], block->start_ip);
+         }
 
-	 if (BITSET_TEST(bd->liveout, i)) {
-	    start[i] = MIN2(start[i], block->end_ip);
-	    end[i] = MAX2(end[i], block->end_ip);
-	 }
-
+         if (BITSET_TEST(bd->liveout, i)) {
+            start[i] = MIN2(start[i], block->end_ip);
+            end[i] = MAX2(end[i], block->end_ip);
+         }
       }
    }
 }

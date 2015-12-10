@@ -45,8 +45,13 @@ clCreateContext(const cl_context_properties *d_props, cl_uint num_devs,
          throw error(CL_INVALID_PROPERTY);
    }
 
+   const auto notify = (!pfn_notify ? context::notify_action() :
+                        [=](const char *s) {
+                           pfn_notify(s, NULL, 0, user_data);
+                        });
+
    ret_error(r_errcode, CL_SUCCESS);
-   return desc(new context(props, devs));
+   return desc(new context(props, devs, notify));
 
 } catch (error &e) {
    ret_error(r_errcode, e);

@@ -2148,7 +2148,6 @@ void radeonInitStateFuncs( struct gl_context *ctx )
    ctx->Driver.Enable			= radeonEnable;
    ctx->Driver.Fogfv			= radeonFogfv;
    ctx->Driver.FrontFace		= radeonFrontFace;
-   ctx->Driver.Hint			= NULL;
    ctx->Driver.LightModelfv		= radeonLightModelfv;
    ctx->Driver.Lightfv			= radeonLightfv;
    ctx->Driver.LineStipple              = radeonLineStipple;

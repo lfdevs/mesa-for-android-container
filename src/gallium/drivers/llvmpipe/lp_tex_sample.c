@@ -221,6 +221,21 @@ LP_LLVM_SAMPLER_MEMBER(lod_bias,   LP_JIT_SAMPLER_LOD_BIAS, TRUE)
 LP_LLVM_SAMPLER_MEMBER(border_color, LP_JIT_SAMPLER_BORDER_COLOR, FALSE)
 
 
+#if LP_USE_TEXTURE_CACHE
+static LLVMValueRef
+lp_llvm_texture_cache_ptr(const struct lp_sampler_dynamic_state *base,
+                          struct gallivm_state *gallivm,
+                          LLVMValueRef thread_data_ptr,
+                          unsigned unit)
+{
+   /* We use the same cache for all units */
+   (void)unit;
+
+   return lp_jit_thread_data_cache(gallivm, thread_data_ptr);
+}
+#endif
+
+
 static void
 lp_llvm_sampler_soa_destroy(struct lp_build_sampler_soa *sampler)
 {
@@ -313,6 +328,10 @@ lp_llvm_sampler_soa_create(const struct lp_sampler_static_state *static_state)
    sampler->dynamic_state.base.max_lod = lp_llvm_sampler_max_lod;
    sampler->dynamic_state.base.lod_bias = lp_llvm_sampler_lod_bias;
    sampler->dynamic_state.base.border_color = lp_llvm_sampler_border_color;
+
+#if LP_USE_TEXTURE_CACHE
+   sampler->dynamic_state.base.cache_ptr = lp_llvm_texture_cache_ptr;
+#endif
 
    sampler->dynamic_state.static_state = static_state;
 

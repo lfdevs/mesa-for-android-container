@@ -60,11 +60,6 @@ target_to_target(GLenum target)
    }
 }
 
-/**
- * @param for_bo Indicates that the caller is
- *        intel_miptree_create_for_bo(). If true, then do not create
- *        \c stencil_mt.
- */
 struct intel_mipmap_tree *
 intel_miptree_create_layout(struct intel_context *intel,
                             GLenum target,
@@ -73,8 +68,7 @@ intel_miptree_create_layout(struct intel_context *intel,
                             GLuint last_level,
                             GLuint width0,
                             GLuint height0,
-                            GLuint depth0,
-                            bool for_bo)
+                            GLuint depth0)
 {
    struct intel_mipmap_tree *mt = calloc(sizeof(*mt), 1);
    if (!mt)
@@ -181,8 +175,7 @@ intel_miptree_create(struct intel_context *intel,
 
    mt = intel_miptree_create_layout(intel, target, format,
 				      first_level, last_level, width0,
-				      height0, depth0,
-				      false);
+				      height0, depth0);
    /*
     * pitch == 0 || height == 0  indicates the null texture
     */
@@ -262,8 +255,7 @@ intel_miptree_create_for_bo(struct intel_context *intel,
 
    mt = intel_miptree_create_layout(intel, GL_TEXTURE_2D, format,
                                     0, 0,
-                                    width, height, 1,
-                                    true);
+                                    width, height, 1);
    if (!mt) {
       free(region);
       return mt;
@@ -723,8 +715,7 @@ intel_miptree_map_raw(struct intel_context *intel, struct intel_mipmap_tree *mt)
 }
 
 void
-intel_miptree_unmap_raw(struct intel_context *intel,
-                        struct intel_mipmap_tree *mt)
+intel_miptree_unmap_raw(struct intel_mipmap_tree *mt)
 {
    drm_intel_bo_unmap(mt->region->bo);
 }
@@ -772,13 +763,9 @@ intel_miptree_map_gtt(struct intel_context *intel,
 }
 
 static void
-intel_miptree_unmap_gtt(struct intel_context *intel,
-			struct intel_mipmap_tree *mt,
-			struct intel_miptree_map *map,
-			unsigned int level,
-			unsigned int slice)
+intel_miptree_unmap_gtt(struct intel_mipmap_tree *mt)
 {
-   intel_miptree_unmap_raw(intel, mt);
+   intel_miptree_unmap_raw(mt);
 }
 
 static void
@@ -833,7 +820,7 @@ intel_miptree_unmap_blit(struct intel_context *intel,
 {
    struct gl_context *ctx = &intel->ctx;
 
-   intel_miptree_unmap_raw(intel, map->mt);
+   intel_miptree_unmap_raw(map->mt);
 
    if (map->mode & GL_MAP_WRITE_BIT) {
       bool ok = intel_miptree_blit(intel,
@@ -949,7 +936,7 @@ intel_miptree_unmap(struct intel_context *intel,
    if (map->mt) {
       intel_miptree_unmap_blit(intel, mt, map, level, slice);
    } else {
-      intel_miptree_unmap_gtt(intel, mt, map, level, slice);
+      intel_miptree_unmap_gtt(mt);
    }
 
    intel_miptree_release_map(mt, level, slice);

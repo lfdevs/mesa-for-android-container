@@ -1,6 +1,4 @@
-
-/**************************************************************************
- *
+/*
  * Copyright 2006 VMware, Inc.
  * All Rights Reserved.
  *
@@ -8,7 +6,7 @@
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
  * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
+ * distribute, sublicense, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
  *
@@ -18,13 +16,12 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
  * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- **************************************************************************/
+ */
 
 #ifndef INTEL_BUFFERS_H
 #define INTEL_BUFFERS_H
@@ -33,11 +30,6 @@
 #include "drm.h"
 #include "brw_context.h"
 
-struct intel_framebuffer;
-
 extern void intelInitBufferFuncs(struct dd_function_table *functions);
-
-bool brw_is_front_buffer_reading(struct gl_framebuffer *fb);
-bool brw_is_front_buffer_drawing(struct gl_framebuffer *fb);
 
 #endif /* INTEL_BUFFERS_H */

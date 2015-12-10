@@ -157,8 +157,7 @@ prepare_mipmap_level(struct gl_context *ctx,
 
 /**
  * Called via ctx->Driver.GenerateMipmap()
- * Note: We don't yet support 3D textures, 1D/2D array textures or texture
- * borders.
+ * Note: We don't yet support 3D textures, or texture borders.
  */
 void
 _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,

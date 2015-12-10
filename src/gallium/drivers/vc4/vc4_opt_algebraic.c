@@ -64,6 +64,7 @@ is_constant_value(struct vc4_compile *c, struct qreg reg,
                   uint32_t val)
 {
         if (reg.file == QFILE_UNIF &&
+            !reg.pack &&
             c->uniform_contents[reg.index] == QUNIFORM_CONSTANT &&
             c->uniform_data[reg.index] == val) {
                 return true;

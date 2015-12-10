@@ -262,10 +262,34 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                 case QUNIFORM_BLEND_CONST_COLOR_Z:
                 case QUNIFORM_BLEND_CONST_COLOR_W:
                         cl_aligned_f(&uniforms,
-                                     CLAMP(vc4->blend_color.color[uinfo->contents[i] -
-                                                                  QUNIFORM_BLEND_CONST_COLOR_X],
+                                     CLAMP(vc4->blend_color.f.color[uinfo->contents[i] -
+                                                                    QUNIFORM_BLEND_CONST_COLOR_X],
                                            0, 1));
                         break;
+
+                case QUNIFORM_BLEND_CONST_COLOR_RGBA: {
+                        const uint8_t *format_swiz =
+                                vc4_get_format_swizzle(vc4->framebuffer.cbufs[0]->format);
+                        uint32_t color = 0;
+                        for (int i = 0; i < 4; i++) {
+                                if (format_swiz[i] >= 4)
+                                        continue;
+
+                                color |= (vc4->blend_color.ub[format_swiz[i]] <<
+                                          (i * 8));
+                        }
+                        cl_aligned_u32(&uniforms, color);
+                        break;
+                }
+
+                case QUNIFORM_BLEND_CONST_COLOR_AAAA: {
+                        uint8_t a = vc4->blend_color.ub[3];
+                        cl_aligned_u32(&uniforms, ((a) |
+                                                   (a << 8) |
+                                                   (a << 16) |
+                                                   (a << 24)));
+                        break;
+                }
 
                 case QUNIFORM_STENCIL:
                         cl_aligned_u32(&uniforms,
@@ -330,6 +354,8 @@ vc4_set_shader_uniform_dirty_flags(struct vc4_compiled_shader *shader)
                 case QUNIFORM_BLEND_CONST_COLOR_Y:
                 case QUNIFORM_BLEND_CONST_COLOR_Z:
                 case QUNIFORM_BLEND_CONST_COLOR_W:
+                case QUNIFORM_BLEND_CONST_COLOR_RGBA:
+                case QUNIFORM_BLEND_CONST_COLOR_AAAA:
                         dirty |= VC4_DIRTY_BLEND_COLOR;
                         break;
 

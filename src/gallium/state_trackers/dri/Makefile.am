@@ -25,8 +25,6 @@ include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CPPFLAGS = \
-	$(GALLIUM_PIPE_LOADER_DEFINES) \
-	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\" \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
@@ -36,15 +34,10 @@ AM_CPPFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-if HAVE_GALLIUM_STATIC_TARGETS
-AM_CPPFLAGS += \
-	-DGALLIUM_STATIC_TARGETS=1
-
 if HAVE_GALLIUM_SOFTPIPE
 AM_CPPFLAGS += \
 	-DGALLIUM_SOFTPIPE
 endif # HAVE_GALLIUM_SOFTPIPE
-endif # HAVE_GALLIUM_STATIC_TARGETS
 
 noinst_LTLIBRARIES = libdri.la
 libdri_la_SOURCES = $(common_SOURCES)

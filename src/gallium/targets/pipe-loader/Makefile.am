@@ -27,6 +27,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
+	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	-DGALLIUM_RBUG \
@@ -53,7 +54,6 @@ endif
 PIPE_LIBS += \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/glsl/libnir.la \
-	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
@@ -209,6 +209,10 @@ AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
 pipe_swrast_la_LIBADD += \
 	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
 endif
+
+pipe_swrast_la_LIBADD += \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+
 endif
 
 EXTRA_DIST = pipe.sym

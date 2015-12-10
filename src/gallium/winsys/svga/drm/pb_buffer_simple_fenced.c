@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007-2010 VMware, Inc.
+ * Copyright 2007-2015 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -339,6 +339,7 @@ fenced_buffer_finish_locked(struct fenced_manager *fenced_mgr,
          /* TODO: remove consequents buffers with the same fence? */
 
          assert(!destroyed);
+         (void) destroyed;
 
          fenced_buf->flags &= ~PB_USAGE_GPU_READ_WRITE;
 
@@ -660,6 +661,7 @@ fenced_buffer_fence(struct pb_buffer *buf,
          boolean destroyed;
          destroyed = fenced_buffer_remove_locked(fenced_mgr, fenced_buf);
          assert(!destroyed);
+         (void) destroyed;
       }
       if (fence) {
          ops->fence_reference(ops, &fenced_buf->fence, fence);

@@ -36,7 +36,9 @@
 #include "util/list.h"
 #include "util/u_transfer.h"
 
-#define R600_NUM_ATOMS 75
+#include "tgsi/tgsi_scan.h"
+
+#define R600_NUM_ATOMS 43
 
 #define R600_MAX_VIEWPORTS 16
 
@@ -57,17 +59,19 @@
 
 /* the number of CS dwords for flushing and drawing */
 #define R600_MAX_FLUSH_CS_DWORDS	16
-#define R600_MAX_DRAW_CS_DWORDS		47
+#define R600_MAX_DRAW_CS_DWORDS		52
 #define R600_TRACE_CS_DWORDS		7
 
 #define R600_MAX_USER_CONST_BUFFERS 13
-#define R600_MAX_DRIVER_CONST_BUFFERS 3
+#define R600_MAX_DRIVER_CONST_BUFFERS 2
 #define R600_MAX_CONST_BUFFERS (R600_MAX_USER_CONST_BUFFERS + R600_MAX_DRIVER_CONST_BUFFERS)
 
 /* start driver buffers after user buffers */
-#define R600_UCP_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS)
-#define R600_BUFFER_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 1)
-#define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 2)
+#define R600_BUFFER_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS)
+#define R600_UCP_SIZE (4*4*8)
+#define R600_BUFFER_INFO_OFFSET (R600_UCP_SIZE)
+
+#define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 1)
 /* Currently R600_MAX_CONST_BUFFERS just fits on the hw, which has a limit
  * of 16 const buffers.
  * UCP/SAMPLE_POSITIONS are never accessed by same shader stage so they can use the same id.
@@ -75,8 +79,6 @@
  * In order to support d3d 11 mandated minimum of 15 user const buffers
  * we'd have to squash all use cases into one driver buffer.
  */
-#define R600_SAMPLE_POSITIONS_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS)
-
 #define R600_MAX_CONST_BUFFER_SIZE (4096 * sizeof(float[4]))
 
 #ifdef PIPE_ARCH_BIG_ENDIAN
@@ -84,9 +86,6 @@
 #else
 #define R600_BIG_ENDIAN 0
 #endif
-
-#define R600_DIRTY_ATOM_WORD_BITS (sizeof(unsigned long) * 8)
-#define R600_DIRTY_ATOM_ARRAY_LEN DIV_ROUND_UP(R600_NUM_ATOMS, R600_DIRTY_ATOM_WORD_BITS)
 
 struct r600_context;
 struct r600_bytecode;
@@ -110,12 +109,14 @@ struct r600_db_misc_state {
 	struct r600_atom		atom;
 	bool				occlusion_query_enabled;
 	bool				flush_depthstencil_through_cb;
-	bool				flush_depthstencil_in_place;
+	bool				flush_depth_inplace;
+	bool				flush_stencil_inplace;
 	bool				copy_depth, copy_stencil;
 	unsigned			copy_sample;
 	unsigned			log_samples;
 	unsigned			db_shader_control;
 	bool				htile_clear;
+	uint8_t				ps_conservative_z;
 };
 
 struct r600_cb_misc_state {
@@ -206,8 +207,8 @@ struct r600_stencil_ref_state {
 
 struct r600_viewport_state {
 	struct r600_atom atom;
-	struct pipe_viewport_state state;
-	int idx;
+	struct pipe_viewport_state state[R600_MAX_VIEWPORTS];
+	uint32_t dirty_mask;
 };
 
 struct r600_shader_stages_state {
@@ -254,6 +255,7 @@ struct r600_pipe_sampler_view {
 	struct r600_resource		*tex_resource;
 	uint32_t			tex_resource_words[8];
 	bool				skip_mip_address_reloc;
+	bool				is_stencil_sampler;
 };
 
 struct r600_rasterizer_state {
@@ -305,11 +307,17 @@ struct r600_pipe_shader_selector {
 
 	struct tgsi_token       *tokens;
 	struct pipe_stream_output_info  so;
+	struct tgsi_shader_info		info;
 
 	unsigned	num_shaders;
 
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	unsigned	type;
+
+	/* geometry shader properties */
+	unsigned	gs_output_prim;
+	unsigned	gs_max_out_vertices;
+	unsigned	gs_num_invocations;
 
 	unsigned	nr_ps_max_color_exports;
 };
@@ -351,11 +359,15 @@ struct r600_textures_info {
 	struct r600_samplerview_state	views;
 	struct r600_sampler_states	states;
 	bool				is_array_sampler[NUM_TEX_UNITS];
+};
 
-	/* cube array txq workaround */
-	uint32_t			*txq_constants;
-	/* buffer related workarounds */
-	uint32_t			*buffer_constants;
+struct r600_shader_driver_constants_info {
+	/* currently 128 bytes for UCP/samplepos + sampler buffer constants */
+	uint32_t			*constants;
+	uint32_t			alloc_size;
+	bool				vs_ucp_dirty;
+	bool				texture_const_dirty;
+	bool				ps_sample_pos_dirty;
 };
 
 struct r600_constbuf_state
@@ -385,9 +397,9 @@ struct r600_cso_state
 struct r600_scissor_state
 {
 	struct r600_atom		atom;
-	struct pipe_scissor_state	scissor;
+	struct pipe_scissor_state	scissor[R600_MAX_VIEWPORTS];
+	uint32_t			dirty_mask;
 	bool				enable; /* r6xx only */
-	int idx;
 };
 
 struct r600_fetch_shader {
@@ -430,7 +442,7 @@ struct r600_context {
 	/* State binding slots are here. */
 	struct r600_atom		*atoms[R600_NUM_ATOMS];
 	/* Dirty atom bitmask for fast tests */
-	unsigned long			dirty_atoms[R600_DIRTY_ATOM_ARRAY_LEN];
+	uint64_t			dirty_atoms;
 	/* States for CS initialization. */
 	struct r600_command_buffer	start_cs_cmd; /* invariant state mostly */
 	/** Compute specific registers initializations.  The start_cs_cmd atom
@@ -450,12 +462,12 @@ struct r600_context {
 	struct r600_poly_offset_state	poly_offset_state;
 	struct r600_cso_state		rasterizer_state;
 	struct r600_sample_mask		sample_mask;
-	struct r600_scissor_state	scissor[R600_MAX_VIEWPORTS];
+	struct r600_scissor_state	scissor;
 	struct r600_seamless_cube_map	seamless_cube_map;
 	struct r600_config_state	config_state;
 	struct r600_stencil_ref_state	stencil_ref;
 	struct r600_vgt_state		vgt_state;
-	struct r600_viewport_state	viewport[R600_MAX_VIEWPORTS];
+	struct r600_viewport_state	viewport;
 	/* Shaders and shader resources. */
 	struct r600_cso_state		vertex_fetch_shader;
 	struct r600_shader_state	vertex_shader;
@@ -467,6 +479,9 @@ struct r600_context {
 	struct r600_gs_rings_state	gs_rings;
 	struct r600_constbuf_state	constbuf_state[PIPE_SHADER_TYPES];
 	struct r600_textures_info	samplers[PIPE_SHADER_TYPES];
+
+	struct r600_shader_driver_constants_info driver_consts[PIPE_SHADER_TYPES];
+
 	/** Vertex buffers for fetch shaders */
 	struct r600_vertexbuf_state	vertex_buffer_state;
 	/** Vertex buffers for compute shaders */
@@ -493,6 +508,7 @@ struct r600_context {
 
 	void				*sb_context;
 	struct r600_isa		*isa;
+	float sample_positions[4 * 16];
 };
 
 static inline void r600_emit_command_buffer(struct radeon_winsys_cs *cs,
@@ -507,53 +523,21 @@ static inline void r600_set_atom_dirty(struct r600_context *rctx,
 				       struct r600_atom *atom,
 				       bool dirty)
 {
-	unsigned long mask;
-	unsigned int w;
-
-	atom->dirty = dirty;
+	uint64_t mask;
 
 	assert(atom->id != 0);
-	w = atom->id / R600_DIRTY_ATOM_WORD_BITS;
-	mask = 1ul << (atom->id % R600_DIRTY_ATOM_WORD_BITS);
+	assert(atom->id < sizeof(mask) * 8);
+	mask = 1ull << atom->id;
 	if (dirty)
-		rctx->dirty_atoms[w] |= mask;
+		rctx->dirty_atoms |= mask;
 	else
-		rctx->dirty_atoms[w] &= ~mask;
+		rctx->dirty_atoms &= ~mask;
 }
 
 static inline void r600_mark_atom_dirty(struct r600_context *rctx,
 					struct r600_atom *atom)
 {
 	r600_set_atom_dirty(rctx, atom, true);
-}
-
-static inline unsigned int r600_next_dirty_atom(struct r600_context *rctx,
-						unsigned int id)
-{
-#if !defined(DEBUG) && defined(HAVE___BUILTIN_CTZ)
-	unsigned int w = id / R600_DIRTY_ATOM_WORD_BITS;
-	unsigned int bit = id % R600_DIRTY_ATOM_WORD_BITS;
-	unsigned long bits, mask = (1ul << bit) - 1;
-
-	for (; w < R600_DIRTY_ATOM_ARRAY_LEN; w++, mask = 0ul) {
-		bits = rctx->dirty_atoms[w] & ~mask;
-		if (bits == 0)
-			continue;
-		return w * R600_DIRTY_ATOM_WORD_BITS + __builtin_ctzl(bits);
-	}
-
-	return R600_NUM_ATOMS;
-#else
-	for (; id < R600_NUM_ATOMS; id++) {
-		bool dirty = !!(rctx->dirty_atoms[id / R600_DIRTY_ATOM_WORD_BITS] &
-			(1ul << (id % R600_DIRTY_ATOM_WORD_BITS)));
-		assert(dirty == (rctx->atoms[id] && rctx->atoms[id]->dirty));
-		if (dirty)
-			break;
-	}
-
-	return id;
-#endif
 }
 
 void r600_trace_emit(struct r600_context *rctx);
@@ -872,14 +856,14 @@ static inline void eg_store_loop_const(struct r600_command_buffer *cb, unsigned 
 void r600_init_command_buffer(struct r600_command_buffer *cb, unsigned num_dw);
 void r600_release_command_buffer(struct r600_command_buffer *cb);
 
-static inline void r600_write_compute_context_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
+static inline void radeon_compute_set_context_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
-	r600_write_context_reg_seq(cs, reg, num);
+	radeon_set_context_reg_seq(cs, reg, num);
 	/* Set the compute bit on the packet header */
 	cs->buf[cs->cdw - 2] |= RADEON_CP_PACKET3_COMPUTE_MODE;
 }
 
-static inline void r600_write_ctl_const_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
+static inline void radeon_set_ctl_const_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= R600_CTL_CONST_OFFSET);
 	assert(cs->cdw+2+num <= cs->max_dw);
@@ -887,24 +871,24 @@ static inline void r600_write_ctl_const_seq(struct radeon_winsys_cs *cs, unsigne
 	cs->buf[cs->cdw++] = (reg - R600_CTL_CONST_OFFSET) >> 2;
 }
 
-static inline void r600_write_compute_context_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
+static inline void radeon_compute_set_context_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
 {
-	r600_write_compute_context_reg_seq(cs, reg, 1);
+	radeon_compute_set_context_reg_seq(cs, reg, 1);
 	radeon_emit(cs, value);
 }
 
-static inline void r600_write_context_reg_flag(struct radeon_winsys_cs *cs, unsigned reg, unsigned value, unsigned flag)
+static inline void radeon_set_context_reg_flag(struct radeon_winsys_cs *cs, unsigned reg, unsigned value, unsigned flag)
 {
 	if (flag & RADEON_CP_PACKET3_COMPUTE_MODE) {
-		r600_write_compute_context_reg(cs, reg, value);
+		radeon_compute_set_context_reg(cs, reg, value);
 	} else {
-		r600_write_context_reg(cs, reg, value);
+		radeon_set_context_reg(cs, reg, value);
 	}
 }
 
-static inline void r600_write_ctl_const(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
+static inline void radeon_set_ctl_const(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
 {
-	r600_write_ctl_const_seq(cs, reg, 1);
+	radeon_set_ctl_const_seq(cs, reg, 1);
 	radeon_emit(cs, value);
 }
 

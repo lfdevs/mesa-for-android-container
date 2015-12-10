@@ -95,7 +95,7 @@ vertical_alignment(const struct brw_context *brw,
         surf_type == BRW_SURFACE_1D))
       return GEN8_SURFACE_VALIGN_4;
 
-   switch (mt->align_h) {
+   switch (mt->valign) {
    case 4:
       return GEN8_SURFACE_VALIGN_4;
    case 8:
@@ -120,7 +120,7 @@ horizontal_alignment(const struct brw_context *brw,
         gen9_use_linear_1d_layout(brw, mt)))
       return GEN8_SURFACE_HALIGN_4;
 
-   switch (mt->align_w) {
+   switch (mt->halign) {
    case 4:
       return GEN8_SURFACE_HALIGN_4;
    case 8:
@@ -183,6 +183,20 @@ gen8_emit_buffer_surface_state(struct brw_context *brw,
 }
 
 static void
+gen8_emit_fast_clear_color(struct brw_context *brw,
+                           struct intel_mipmap_tree *mt,
+                           uint32_t *surf)
+{
+   if (brw->gen >= 9) {
+      surf[12] = mt->gen9_fast_clear_color.ui[0];
+      surf[13] = mt->gen9_fast_clear_color.ui[1];
+      surf[14] = mt->gen9_fast_clear_color.ui[2];
+      surf[15] = mt->gen9_fast_clear_color.ui[3];
+   } else
+      surf[7] |= mt->fast_clear_color_value;
+}
+
+static void
 gen8_emit_texture_surface_state(struct brw_context *brw,
                                 struct intel_mipmap_tree *mt,
                                 GLenum target,
@@ -200,6 +214,7 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
    int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
    unsigned tiling_mode, pitch;
    const unsigned tr_mode = surface_tiling_resource_mode(mt->tr_mode);
+   const uint32_t surf_type = translate_tex_target(target);
 
    if (mt->format == MESA_FORMAT_S_UINT8) {
       tiling_mode = GEN8_SURFACE_TILING_W;
@@ -221,11 +236,16 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
        * "When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E, HALIGN
        *  16 must be used."
        */
-      assert(brw->gen < 9 || mt->align_w == 16);
-      assert(brw->gen < 8 || mt->num_samples > 1 || mt->align_w == 16);
+      if (brw->gen >= 9 || mt->num_samples == 1)
+         assert(mt->halign == 16);
+
+      if (brw->gen >= 9) {
+         assert(mt->num_samples > 1 ||
+                brw_losslessly_compressible_format(brw, surf_type));
+      }
+
    }
 
-   const uint32_t surf_type = translate_tex_target(target);
    uint32_t *surf = allocate_surface_state(brw, surf_offset, surf_index);
 
    surf[0] = SET_FIELD(surf_type, BRW_SURFACE_TYPE) |
@@ -237,6 +257,20 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
    if (surf_type == BRW_SURFACE_CUBE) {
       surf[0] |= BRW_SURFACE_CUBEFACE_ENABLES;
    }
+
+   /* From the CHV PRM, Volume 2d, page 321 (RENDER_SURFACE_STATE dword 0
+    * bit 9 "Sampler L2 Bypass Mode Disable" Programming Notes):
+    *
+    *    This bit must be set for the following surface types: BC2_UNORM
+    *    BC3_UNORM BC5_UNORM BC5_SNORM BC7_UNORM
+    */
+   if ((brw->gen >= 9 || brw->is_cherryview) &&
+       (format == BRW_SURFACEFORMAT_BC2_UNORM ||
+        format == BRW_SURFACEFORMAT_BC3_UNORM ||
+        format == BRW_SURFACEFORMAT_BC5_UNORM ||
+        format == BRW_SURFACEFORMAT_BC5_SNORM ||
+        format == BRW_SURFACEFORMAT_BC7_UNORM))
+      surf[0] |= GEN8_SURFACE_SAMPLER_L2_BYPASS_DISABLE;
 
    if (_mesa_is_array_texture(target) || target == GL_TEXTURE_CUBE_MAP)
       surf[0] |= GEN8_SURFACE_IS_ARRAY;
@@ -262,14 +296,18 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
    }
 
    if (aux_mt) {
+      uint32_t tile_w, tile_h;
+      assert(aux_mt->tiling == I915_TILING_Y);
+      intel_get_tile_dims(aux_mt->tiling, aux_mt->tr_mode,
+                          aux_mt->cpp, &tile_w, &tile_h);
       surf[6] = SET_FIELD(mt->qpitch / 4, GEN8_SURFACE_AUX_QPITCH) |
-                SET_FIELD((aux_mt->pitch / 128) - 1, GEN8_SURFACE_AUX_PITCH) |
+                SET_FIELD((aux_mt->pitch / tile_w) - 1,
+                          GEN8_SURFACE_AUX_PITCH) |
                 aux_mode;
-   } else {
-      surf[6] = 0;
    }
 
-   surf[7] = mt->fast_clear_color_value |
+   gen8_emit_fast_clear_color(brw, mt, surf);
+   surf[7] |=
       SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 0)), GEN7_SURFACE_SCS_R) |
       SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 1)), GEN7_SURFACE_SCS_G) |
       SET_FIELD(swizzle_to_scs(GET_SWZ(swizzle, 2)), GEN7_SURFACE_SCS_B) |
@@ -283,11 +321,7 @@ gen8_emit_texture_surface_state(struct brw_context *brw,
                               aux_mt->bo, 0,
                               I915_GEM_DOMAIN_SAMPLER,
                               (rw ? I915_GEM_DOMAIN_SAMPLER : 0));
-   } else {
-      surf[10] = 0;
-      surf[11] = 0;
    }
-   surf[12] = 0;
 
    /* Emit relocation to surface contents */
    drm_intel_bo_emit_reloc(brw->batch.bo,
@@ -451,8 +485,8 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
        * "When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E, HALIGN
        *  16 must be used."
        */
-      assert(brw->gen < 9 || mt->align_w == 16);
-      assert(brw->gen < 8 || mt->num_samples > 1 || mt->align_w == 16);
+      if (brw->gen >= 9 || mt->num_samples == 1)
+         assert(mt->halign == 16);
    }
 
    uint32_t *surf = allocate_surface_state(brw, &offset, surf_index);
@@ -487,18 +521,21 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
    }
 
    if (aux_mt) {
+      uint32_t tile_w, tile_h;
+      assert(aux_mt->tiling == I915_TILING_Y);
+      intel_get_tile_dims(aux_mt->tiling, aux_mt->tr_mode,
+                          aux_mt->cpp, &tile_w, &tile_h);
       surf[6] = SET_FIELD(mt->qpitch / 4, GEN8_SURFACE_AUX_QPITCH) |
-                SET_FIELD((aux_mt->pitch / 128) - 1, GEN8_SURFACE_AUX_PITCH) |
+                SET_FIELD((aux_mt->pitch / tile_w) - 1,
+                          GEN8_SURFACE_AUX_PITCH) |
                 aux_mode;
-   } else {
-      surf[6] = 0;
    }
 
-   surf[7] = mt->fast_clear_color_value |
-             SET_FIELD(HSW_SCS_RED,   GEN7_SURFACE_SCS_R) |
-             SET_FIELD(HSW_SCS_GREEN, GEN7_SURFACE_SCS_G) |
-             SET_FIELD(HSW_SCS_BLUE,  GEN7_SURFACE_SCS_B) |
-             SET_FIELD(HSW_SCS_ALPHA, GEN7_SURFACE_SCS_A);
+   gen8_emit_fast_clear_color(brw, mt, surf);
+   surf[7] |= SET_FIELD(HSW_SCS_RED,   GEN7_SURFACE_SCS_R) |
+              SET_FIELD(HSW_SCS_GREEN, GEN7_SURFACE_SCS_G) |
+              SET_FIELD(HSW_SCS_BLUE,  GEN7_SURFACE_SCS_B) |
+              SET_FIELD(HSW_SCS_ALPHA, GEN7_SURFACE_SCS_A);
 
    assert(mt->offset % mt->cpp == 0);
    *((uint64_t *) &surf[8]) = mt->bo->offset64 + mt->offset; /* reloc */
@@ -509,11 +546,7 @@ gen8_update_renderbuffer_surface(struct brw_context *brw,
                               offset + 10 * 4,
                               aux_mt->bo, 0,
                               I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
-   } else {
-      surf[10] = 0;
-      surf[11] = 0;
    }
-   surf[12] = 0;
 
    drm_intel_bo_emit_reloc(brw->batch.bo,
                            offset + 8 * 4,

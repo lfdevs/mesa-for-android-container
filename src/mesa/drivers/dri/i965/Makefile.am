@@ -33,6 +33,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/mesa/drivers/dri/intel/server \
 	-I$(top_srcdir)/src/gtest/include \
+	-I$(top_srcdir)/src/glsl/nir \
 	-I$(top_builddir)/src/glsl/nir \
 	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	$(DEFINES) \
@@ -41,18 +42,17 @@ AM_CFLAGS = \
 
 AM_CXXFLAGS = $(AM_CFLAGS)
 
-noinst_LTLIBRARIES = libi965_dri.la
+noinst_LTLIBRARIES = libi965_dri.la libi965_compiler.la
 libi965_dri_la_SOURCES = $(i965_FILES)
-libi965_dri_la_LIBADD = $(INTEL_LIBS)
+libi965_dri_la_LIBADD = libi965_compiler.la $(INTEL_LIBS)
+
+libi965_compiler_la_SOURCES = $(i965_compiler_FILES)
 
 TEST_LIBS = \
-	libi965_dri.la \
-	../common/libdricommon.la \
-	../common/libxmlconfig.la \
-	../common/libmegadriver_stub.la \
+	libi965_compiler.la \
         ../../../libmesa.la \
-	$(DRI_LIB_DEPS) \
-        $(CLOCK_LIB) \
+	$(PTHREAD_LIBS) \
+	$(DLOPEN_LIBS) \
 	../common/libdri_test_stubs.la
 
 TESTS = \
@@ -60,6 +60,7 @@ TESTS = \
 	test_fs_saturate_propagation \
         test_eu_compact \
 	test_vf_float_conversions \
+	test_vec4_cmod_propagation \
         test_vec4_copy_propagation \
         test_vec4_register_coalesce
 
@@ -94,6 +95,12 @@ test_vec4_copy_propagation_SOURCES = \
 test_vec4_copy_propagation_LDADD = \
         $(top_builddir)/src/gtest/libgtest.la \
         $(TEST_LIBS)
+
+test_vec4_cmod_propagation_SOURCES = \
+	test_vec4_cmod_propagation.cpp
+test_vec4_cmod_propagation_LDADD = \
+	$(top_builddir)/src/gtest/libgtest.la \
+	$(TEST_LIBS)
 
 test_eu_compact_SOURCES = \
 	test_eu_compact.c

@@ -3610,7 +3610,7 @@ pack_ubyte_rgbx_sint32(const GLubyte src[4], void *dst)
          d[1] = g;
          d[2] = b;
             }
-                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                              
 static inline void
 pack_ubyte_r9g9b9e5_float(const GLubyte src[4], void *dst)
 {
@@ -5099,7 +5099,7 @@ pack_uint_rgbx_sint32(const GLuint src[4], void *dst)
          d[1] = g;
          d[2] = b;
             }
-                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                              
 /* float packing functions */
 
 
@@ -7196,7 +7196,7 @@ pack_float_rgbx_float32(const GLfloat src[4], void *dst)
          d[1] = g;
          d[2] = b;
             }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
 static inline void
 pack_float_r9g9b9e5_float(const GLfloat src[4], void *dst)
 {
@@ -7749,7 +7749,7 @@ _mesa_get_pack_ubyte_rgba_function(mesa_format format)
 
    case MESA_FORMAT_RGBX_SINT32:
       return pack_ubyte_rgbx_sint32;
-                                                                                                                                                                                                         default:
+                                                                                                                                                                                                                                                                                                                                                                                 default:
       return NULL;
    }
 }
@@ -8070,7 +8070,7 @@ _mesa_get_pack_float_rgba_function(mesa_format format)
 
    case MESA_FORMAT_RGBX_FLOAT32:
       return pack_float_rgbx_float32;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     default:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             default:
       return NULL;
    }
 }
@@ -9325,7 +9325,7 @@ _mesa_pack_ubyte_rgba_row(mesa_format format, GLuint n,
          d += 16;
       }
       break;
-                                                                                                                                                                                                         default:
+                                                                                                                                                                                                                                                                                                                                                                                 default:
       assert(!"Invalid format");
    }
 }
@@ -9859,7 +9859,7 @@ _mesa_pack_uint_rgba_row(mesa_format format, GLuint n,
          d += 16;
       }
       break;
-                                                                                                                                                                                                         default:
+                                                                                                                                                                                                                                                                                                                                                                                 default:
       assert(!"Invalid format");
    }
 }
@@ -10596,7 +10596,7 @@ _mesa_pack_float_rgba_row(mesa_format format, GLuint n,
          d += 16;
       }
       break;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     default:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             default:
       assert(!"Invalid format");
    }
 }

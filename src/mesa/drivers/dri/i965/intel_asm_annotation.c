@@ -23,18 +23,13 @@
 
 #include "brw_cfg.h"
 #include "brw_eu.h"
-#include "brw_context.h"
 #include "intel_debug.h"
 #include "intel_asm_annotation.h"
-#include "program/prog_print.h"
-#include "program/prog_instruction.h"
-#include "main/macros.h"
 #include "glsl/nir/nir.h"
 
 void
 dump_assembly(void *assembly, int num_annotations, struct annotation *annotation,
-              const struct brw_device_info *devinfo,
-              const struct gl_program *prog)
+              const struct brw_device_info *devinfo)
 {
    const char *last_annotation_string = NULL;
    const void *last_annotation_ir = NULL;
@@ -57,19 +52,7 @@ dump_assembly(void *assembly, int num_annotations, struct annotation *annotation
          last_annotation_ir = annotation[i].ir;
          if (last_annotation_ir) {
             fprintf(stderr, "   ");
-            if (prog->nir)
-               nir_print_instr(annotation[i].ir, stderr);
-            else if (!prog->Instructions)
-               fprint_ir(stderr, annotation[i].ir);
-            else {
-               const struct prog_instruction *pi =
-                  (const struct prog_instruction *)annotation[i].ir;
-               fprintf(stderr, "%d: ",
-                       (int)(pi - prog->Instructions));
-               _mesa_fprint_instruction_opt(stderr,
-                                            pi,
-                                            0, PROG_PRINT_DEBUG, NULL);
-            }
+            nir_print_instr(annotation[i].ir, stderr);
             fprintf(stderr, "\n");
          }
       }
@@ -81,6 +64,10 @@ dump_assembly(void *assembly, int num_annotations, struct annotation *annotation
       }
 
       brw_disassemble(devinfo, assembly, start_offset, end_offset, stderr);
+
+      if (annotation[i].error) {
+         fputs(annotation[i].error, stderr);
+      }
 
       if (annotation[i].block_end) {
          fprintf(stderr, "   END B%d", annotation[i].block_end->num);
@@ -95,9 +82,8 @@ dump_assembly(void *assembly, int num_annotations, struct annotation *annotation
    fprintf(stderr, "\n");
 }
 
-void annotate(const struct brw_device_info *devinfo,
-              struct annotation_info *annotation, const struct cfg_t *cfg,
-              struct backend_instruction *inst, unsigned offset)
+static bool
+annotation_array_ensure_space(struct annotation_info *annotation)
 {
    if (annotation->ann_size <= annotation->ann_count) {
       int old_size = annotation->ann_size;
@@ -105,11 +91,24 @@ void annotate(const struct brw_device_info *devinfo,
       annotation->ann = reralloc(annotation->mem_ctx, annotation->ann,
                                  struct annotation, annotation->ann_size);
       if (!annotation->ann)
-         return;
+         return false;
 
       memset(annotation->ann + old_size, 0,
              (annotation->ann_size - old_size) * sizeof(struct annotation));
    }
+
+   return true;
+}
+
+void annotate(const struct brw_device_info *devinfo,
+              struct annotation_info *annotation, const struct cfg_t *cfg,
+              struct backend_instruction *inst, unsigned offset)
+{
+   if (annotation->mem_ctx == NULL)
+      annotation->mem_ctx = ralloc_context(NULL);
+
+   if (!annotation_array_ensure_space(annotation))
+      return;
 
    struct annotation *ann = &annotation->ann[annotation->ann_count++];
    ann->offset = offset;
@@ -122,6 +121,24 @@ void annotate(const struct brw_device_info *devinfo,
       ann->block_start = cfg->blocks[annotation->cur_block];
    }
 
+   if (bblock_end(cfg->blocks[annotation->cur_block]) == inst) {
+      ann->block_end = cfg->blocks[annotation->cur_block];
+      annotation->cur_block++;
+   }
+
+   /* Merge this annotation with the previous if possible. */
+   struct annotation *prev = annotation->ann_count > 1 ?
+         &annotation->ann[annotation->ann_count - 2] : NULL;
+   if (prev != NULL &&
+       ann->ir == prev->ir &&
+       ann->annotation == prev->annotation &&
+       ann->block_start == NULL &&
+       prev->block_end == NULL) {
+      if (ann->block_end == NULL)
+         annotation->ann_count--;
+      return;
+   }
+
    /* There is no hardware DO instruction on Gen6+, so since DO always
     * starts a basic block, we need to set the .block_start of the next
     * instruction's annotation with a pointer to the bblock started by
@@ -132,11 +149,6 @@ void annotate(const struct brw_device_info *devinfo,
     */
    if (devinfo->gen >= 6 && inst->opcode == BRW_OPCODE_DO) {
       annotation->ann_count--;
-   }
-
-   if (bblock_end(cfg->blocks[annotation->cur_block]) == inst) {
-      ann->block_end = cfg->blocks[annotation->cur_block];
-      annotation->cur_block++;
    }
 }
 
@@ -152,4 +164,48 @@ annotation_finalize(struct annotation_info *annotation,
                                  struct annotation, annotation->ann_size + 1);
    }
    annotation->ann[annotation->ann_count].offset = next_inst_offset;
+}
+
+void
+annotation_insert_error(struct annotation_info *annotation, unsigned offset,
+                        const char *error)
+{
+   struct annotation *ann;
+
+   if (!annotation->ann_count)
+      return;
+
+   /* We may have to split an annotation, so ensure we have enough space
+    * allocated for that case up front.
+    */
+   if (!annotation_array_ensure_space(annotation))
+      return;
+
+   assume(annotation->ann_count > 0);
+
+   for (int i = 0; i < annotation->ann_count; i++) {
+      struct annotation *cur = &annotation->ann[i];
+      struct annotation *next = &annotation->ann[i + 1];
+      ann = cur;
+
+      if (next->offset <= offset)
+         continue;
+
+      if (offset + sizeof(brw_inst) != next->offset) {
+         memmove(next, cur,
+                 (annotation->ann_count - i + 2) * sizeof(struct annotation));
+         cur->error = NULL;
+         cur->error_length = 0;
+         cur->block_end = NULL;
+         next->offset = offset + sizeof(brw_inst);
+         next->block_start = NULL;
+         annotation->ann_count++;
+      }
+      break;
+   }
+
+   if (ann->error)
+      ralloc_strcat(&ann->error, error);
+   else
+      ann->error = ralloc_strdup(annotation->mem_ctx, error);
 }

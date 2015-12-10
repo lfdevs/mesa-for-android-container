@@ -34,11 +34,11 @@ boolean r600_rings_is_buffer_referenced(struct r600_common_context *ctx,
 					struct radeon_winsys_cs_handle *buf,
 					enum radeon_bo_usage usage)
 {
-	if (ctx->ws->cs_is_buffer_referenced(ctx->rings.gfx.cs, buf, usage)) {
+	if (ctx->ws->cs_is_buffer_referenced(ctx->gfx.cs, buf, usage)) {
 		return TRUE;
 	}
-	if (ctx->rings.dma.cs && ctx->rings.dma.cs->cdw &&
-	    ctx->ws->cs_is_buffer_referenced(ctx->rings.dma.cs, buf, usage)) {
+	if (ctx->dma.cs && ctx->dma.cs->cdw &&
+	    ctx->ws->cs_is_buffer_referenced(ctx->dma.cs, buf, usage)) {
 		return TRUE;
 	}
 	return FALSE;
@@ -60,26 +60,26 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 		rusage = RADEON_USAGE_WRITE;
 	}
 
-	if (ctx->rings.gfx.cs->cdw != ctx->initial_gfx_cs_size &&
-	    ctx->ws->cs_is_buffer_referenced(ctx->rings.gfx.cs,
+	if (ctx->gfx.cs->cdw != ctx->initial_gfx_cs_size &&
+	    ctx->ws->cs_is_buffer_referenced(ctx->gfx.cs,
 					     resource->cs_buf, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
-			ctx->rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+			ctx->gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 			return NULL;
 		} else {
-			ctx->rings.gfx.flush(ctx, 0, NULL);
+			ctx->gfx.flush(ctx, 0, NULL);
 			busy = true;
 		}
 	}
-	if (ctx->rings.dma.cs &&
-	    ctx->rings.dma.cs->cdw &&
-	    ctx->ws->cs_is_buffer_referenced(ctx->rings.dma.cs,
+	if (ctx->dma.cs &&
+	    ctx->dma.cs->cdw &&
+	    ctx->ws->cs_is_buffer_referenced(ctx->dma.cs,
 					     resource->cs_buf, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
-			ctx->rings.dma.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+			ctx->dma.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 			return NULL;
 		} else {
-			ctx->rings.dma.flush(ctx, 0, NULL);
+			ctx->dma.flush(ctx, 0, NULL);
 			busy = true;
 		}
 	}
@@ -90,9 +90,9 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 		} else {
 			/* We will be wait for the GPU. Wait for any offloaded
 			 * CS flush to complete to avoid busy-waiting in the winsys. */
-			ctx->ws->cs_sync_flush(ctx->rings.gfx.cs);
-			if (ctx->rings.dma.cs)
-				ctx->ws->cs_sync_flush(ctx->rings.dma.cs);
+			ctx->ws->cs_sync_flush(ctx->gfx.cs);
+			if (ctx->dma.cs)
+				ctx->ws->cs_sync_flush(ctx->dma.cs);
 		}
 	}
 
@@ -240,7 +240,7 @@ static bool r600_can_dma_copy_buffer(struct r600_common_context *rctx,
 	bool dword_aligned = !(dstx % 4) && !(srcx % 4) && !(size % 4);
 
 	return rctx->screen->has_cp_dma ||
-	       (dword_aligned && (rctx->rings.dma.cs ||
+	       (dword_aligned && (rctx->dma.cs ||
 				  rctx->screen->has_streamout));
 
 }
@@ -345,37 +345,59 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 					ptransfer, data, NULL, 0);
 }
 
-static void r600_buffer_transfer_unmap(struct pipe_context *ctx,
-				       struct pipe_transfer *transfer)
+static void r600_buffer_do_flush_region(struct pipe_context *ctx,
+					struct pipe_transfer *transfer,
+				        const struct pipe_box *box)
 {
 	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
 	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
 	struct r600_resource *rbuffer = r600_resource(transfer->resource);
 
 	if (rtransfer->staging) {
-		if (rtransfer->transfer.usage & PIPE_TRANSFER_WRITE) {
-			struct pipe_resource *dst, *src;
-			unsigned soffset, doffset, size;
-			struct pipe_box box;
+		struct pipe_resource *dst, *src;
+		unsigned soffset;
+		struct pipe_box dma_box;
 
-			dst = transfer->resource;
-			src = &rtransfer->staging->b.b;
-			size = transfer->box.width;
-			doffset = transfer->box.x;
-			soffset = rtransfer->offset + transfer->box.x % R600_MAP_BUFFER_ALIGNMENT;
+		dst = transfer->resource;
+		src = &rtransfer->staging->b.b;
+		soffset = rtransfer->offset + box->x % R600_MAP_BUFFER_ALIGNMENT;
 
-			u_box_1d(soffset, size, &box);
+		u_box_1d(soffset, box->width, &dma_box);
 
-			/* Copy the staging buffer into the original one. */
-			rctx->dma_copy(ctx, dst, 0, doffset, 0, 0, src, 0, &box);
-		}
+		/* Copy the staging buffer into the original one. */
+		rctx->dma_copy(ctx, dst, 0, box->x, 0, 0, src, 0, &dma_box);
+	}
+
+	util_range_add(&rbuffer->valid_buffer_range, box->x,
+		       box->x + box->width);
+}
+
+static void r600_buffer_flush_region(struct pipe_context *ctx,
+				     struct pipe_transfer *transfer,
+				     const struct pipe_box *rel_box)
+{
+	if (transfer->usage & (PIPE_TRANSFER_WRITE |
+			       PIPE_TRANSFER_FLUSH_EXPLICIT)) {
+		struct pipe_box box;
+
+		u_box_1d(transfer->box.x + rel_box->x, rel_box->width, &box);
+		r600_buffer_do_flush_region(ctx, transfer, &box);
+	}
+}
+
+static void r600_buffer_transfer_unmap(struct pipe_context *ctx,
+				       struct pipe_transfer *transfer)
+{
+	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
+	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
+
+	if (transfer->usage & PIPE_TRANSFER_WRITE &&
+	    !(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT))
+		r600_buffer_do_flush_region(ctx, transfer, &transfer->box);
+
+	if (rtransfer->staging)
 		pipe_resource_reference((struct pipe_resource**)&rtransfer->staging, NULL);
-	}
 
-	if (transfer->usage & PIPE_TRANSFER_WRITE) {
-		util_range_add(&rbuffer->valid_buffer_range, transfer->box.x,
-			       transfer->box.x + transfer->box.width);
-	}
 	util_slab_free(&rctx->pool_transfers, transfer);
 }
 
@@ -384,7 +406,7 @@ static const struct u_resource_vtbl r600_buffer_vtbl =
 	NULL,				/* get_handle */
 	r600_buffer_destroy,		/* resource_destroy */
 	r600_buffer_transfer_map,	/* transfer_map */
-	NULL,				/* transfer_flush_region */
+	r600_buffer_flush_region,	/* transfer_flush_region */
 	r600_buffer_transfer_unmap,	/* transfer_unmap */
 	NULL				/* transfer_inline_write */
 };
@@ -419,6 +441,27 @@ struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 		return NULL;
 	}
 	return &rbuffer->b.b;
+}
+
+struct pipe_resource *r600_aligned_buffer_create(struct pipe_screen *screen,
+						 unsigned bind,
+						 unsigned usage,
+						 unsigned size,
+						 unsigned alignment)
+{
+	struct pipe_resource buffer;
+
+	memset(&buffer, 0, sizeof buffer);
+	buffer.target = PIPE_BUFFER;
+	buffer.format = PIPE_FORMAT_R8_UNORM;
+	buffer.bind = bind;
+	buffer.usage = usage;
+	buffer.flags = 0;
+	buffer.width0 = size;
+	buffer.height0 = 1;
+	buffer.depth0 = 1;
+	buffer.array_size = 1;
+	return r600_buffer_create(screen, &buffer, alignment);
 }
 
 struct pipe_resource *

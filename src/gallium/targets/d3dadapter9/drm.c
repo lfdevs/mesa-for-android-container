@@ -20,6 +20,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+/* XXX: header order is slightly screwy here */
 #include "loader.h"
 
 #include "adapter9.h"
@@ -29,8 +30,8 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 
-#include "target-helpers/inline_drm_helper.h"
-#include "target-helpers/inline_sw_helper.h"
+#include "target-helpers/drm_helper.h"
+#include "target-helpers/sw_helper.h"
 #include "state_tracker/drm_driver.h"
 
 #include "d3dadapter/d3dadapter9.h"
@@ -91,51 +92,13 @@ drm_destroy( struct d3dadapter9_context *ctx )
     else if (ctx->hal)
         ctx->hal->destroy(ctx->hal);
 
-#if !GALLIUM_STATIC_TARGETS
     if (drm->swdev)
         pipe_loader_release(&drm->swdev, 1);
     if (drm->dev)
         pipe_loader_release(&drm->dev, 1);
-#endif
 
     close(drm->fd);
     FREE(ctx);
-}
-
-/* read a DWORD in the form 0xnnnnnnnn, which is how sysfs pci id stuff is
- * formatted. */
-static inline DWORD
-read_file_dword( const char *name )
-{
-    char buf[32];
-    int fd, r;
-
-    fd = open(name, O_RDONLY);
-    if (fd < 0) {
-        DBG("Unable to get PCI information from `%s'\n", name);
-        return 0;
-    }
-
-    r = read(fd, buf, 32);
-    close(fd);
-
-    return (r > 0) ? (DWORD)strtol(buf, NULL, 0) : 0;
-}
-
-/* sysfs doesn't expose the revision as its own file, so this function grabs a
- * dword at an offset in the raw PCI header. The reason this isn't used for all
- * data is that the kernel will make corrections but not expose them in the raw
- * header bytes. */
-static inline DWORD
-read_config_dword( int fd,
-                   unsigned offset )
-{
-    DWORD r = 0;
-
-    if (lseek(fd, offset, SEEK_SET) != offset) { return 0; }
-    if (read(fd, &r, 4) != 4) { return 0; }
-
-    return r;
 }
 
 static inline void
@@ -215,26 +178,16 @@ drm_create_adapter( int fd,
     driOptionCache userInitOptions;
     int throttling_value_user = -2;
 
-#if !GALLIUM_STATIC_TARGETS
-    const char *paths[] = {
-        getenv("D3D9_DRIVERS_PATH"),
-        getenv("D3D9_DRIVERS_DIR"),
-        PIPE_SEARCH_DIR
-    };
-#endif
-
     if (!ctx) { return E_OUTOFMEMORY; }
 
     ctx->base.destroy = drm_destroy;
 
+    /* Although the fd is provided from external source, mesa/nine
+     * takes ownership of it. */
     fd = loader_get_user_preferred_fd(fd, &different_device);
     ctx->fd = fd;
     ctx->base.linear_framebuffer = !!different_device;
 
-#if GALLIUM_STATIC_TARGETS
-    ctx->base.hal = dd_create_screen(fd);
-#else
-    /* use pipe-loader to dlopen appropriate drm driver */
     if (!pipe_loader_drm_probe_fd(&ctx->dev, fd)) {
         ERR("Failed to probe drm fd %d.\n", fd);
         FREE(ctx);
@@ -242,26 +195,15 @@ drm_create_adapter( int fd,
         return D3DERR_DRIVERINTERNALERROR;
     }
 
-    /* use pipe-loader to create a drm screen (hal) */
-    ctx->base.hal = NULL;
-    for (i = 0; !ctx->base.hal && i < Elements(paths); ++i) {
-        if (!paths[i]) { continue; }
-        ctx->base.hal = pipe_loader_create_screen(ctx->dev, paths[i]);
-    }
-#endif
+    ctx->base.hal = pipe_loader_create_screen(ctx->dev);
     if (!ctx->base.hal) {
         ERR("Unable to load requested driver.\n");
         drm_destroy(&ctx->base);
         return D3DERR_DRIVERINTERNALERROR;
     }
 
-#if GALLIUM_STATIC_TARGETS
-    dmabuf_ret = dd_configuration(DRM_CONF_SHARE_FD);
-    throttle_ret = dd_configuration(DRM_CONF_THROTTLE);
-#else
     dmabuf_ret = pipe_loader_configuration(ctx->dev, DRM_CONF_SHARE_FD);
     throttle_ret = pipe_loader_configuration(ctx->dev, DRM_CONF_THROTTLE);
-#endif // GALLIUM_STATIC_TARGETS
     if (!dmabuf_ret || !dmabuf_ret->val.val_bool) {
         ERR("The driver is not capable of dma-buf sharing."
             "Abandon to load nine state tracker\n");
@@ -308,18 +250,10 @@ drm_create_adapter( int fd,
     driDestroyOptionCache(&userInitOptions);
     driDestroyOptionInfo(&defaultInitOptions);
 
-#if GALLIUM_STATIC_TARGETS
-    ctx->base.ref = ninesw_create_screen(ctx->base.hal);
-#else
     /* wrap it to create a software screen that can share resources */
-    if (pipe_loader_sw_probe_wrapped(&ctx->swdev, ctx->base.hal)) {
-        ctx->base.ref = NULL;
-        for (i = 0; !ctx->base.ref && i < Elements(paths); ++i) {
-            if (!paths[i]) { continue; }
-            ctx->base.ref = pipe_loader_create_screen(ctx->swdev, paths[i]);
-        }
-    }
-#endif
+    if (pipe_loader_sw_probe_wrapped(&ctx->swdev, ctx->base.hal))
+        ctx->base.ref = pipe_loader_create_screen(ctx->swdev);
+
     if (!ctx->base.ref) {
         ERR("Couldn't wrap drm screen to swrast screen. Software devices "
             "will be unavailable.\n");

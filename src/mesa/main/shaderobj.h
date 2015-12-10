@@ -82,12 +82,18 @@ _mesa_init_shader(struct gl_context *ctx, struct gl_shader *shader);
 extern struct gl_shader *
 _mesa_new_shader(struct gl_context *ctx, GLuint name, GLenum type);
 
+extern void
+_mesa_delete_shader(struct gl_context *ctx, struct gl_shader *sh);
+
 extern struct gl_shader_program *
 _mesa_lookup_shader_program(struct gl_context *ctx, GLuint name);
 
 extern struct gl_shader_program *
 _mesa_lookup_shader_program_err(struct gl_context *ctx, GLuint name,
                                 const char *caller);
+
+extern struct gl_shader_program *
+_mesa_new_shader_program(GLuint name);
 
 extern void
 _mesa_clear_shader_program_data(struct gl_shader_program *shProg);
@@ -96,6 +102,9 @@ extern void
 _mesa_free_shader_program_data(struct gl_context *ctx,
                                struct gl_shader_program *shProg);
 
+extern void
+_mesa_delete_shader_program(struct gl_context *ctx,
+                            struct gl_shader_program *shProg);
 
 
 extern void
@@ -224,6 +233,9 @@ _mesa_shader_stage_to_subroutine_uniform(gl_shader_stage stage)
       return GL_TESS_EVALUATION_SUBROUTINE_UNIFORM;
    }
 }
+
+extern bool
+_mesa_validate_pipeline_io(struct gl_pipeline_object *);
 
 #ifdef __cplusplus
 }

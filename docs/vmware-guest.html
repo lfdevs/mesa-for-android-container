@@ -27,6 +27,31 @@ MacOS are all supported.
 </p>
 
 <p>
+With the August 2015 Workstation 12 / Fusion 8 releases, OpenGL 3.3
+is supported in the guest.
+This requires:
+<ul>
+<li>The VM is configured for virtual hardware version 12.
+<li>The host OS, GPU and graphics driver supports DX11 (Windows) or
+    OpenGL 4.0 (Linux, Mac)
+<li>On Linux, the vmwgfx kernel module must be version 2.9.0 or later.
+<li>A recent version of Mesa with the updated svga gallium driver.
+</ul>
+</p>
+
+<p>
+Otherwise, OpenGL 2.1 is supported.
+</p>
+
+<p>
+OpenGL 3.3 support can be disabled by setting the environment variable
+SVGA_VGPU10=0.
+You will then have OpenGL 2.1 support.
+This may be useful to work around application bugs (such as incorrect use
+of the OpenGL 3.x core profile).
+</p>
+
+<p>
 Most modern Linux distros include the SVGA3D driver so end users shouldn't
 be concerned with this information.
 But if your distro lacks the driver or you want to update to the latest code
@@ -123,10 +148,33 @@ To get the latest code from git:
 <h2>Building the Code</h2>
 
 <ul>
-<li>Build libdrm: If you're on a 32-bit system, you should skip the --libdir configure option. Note also the comment about toolchain libdrm above. 
+<li>
+Determine where the GL-related libraries reside on your system and set
+the LIBDIR environment variable accordingly.
+<br><br>
+For 32-bit Ubuntu systems:
+<pre>
+  export LIBDIR=/usr/lib/i386-linux-gnu
+</pre>
+For 64-bit Ubuntu systems:
+<pre>
+  export LIBDIR=/usr/lib/x86_64-linux-gnu
+</pre>
+For 32-bit Fedora systems:
+<pre>
+  export LIBDIR=/usr/lib
+</pre>
+For 64-bit Fedora systems:
+<pre>
+  export LIBDIR=/usr/lib64
+</pre>
+
+</li>
+
+<li>Build libdrm:
   <pre>
   cd $TOP/drm
-  ./autogen.sh --prefix=/usr --libdir=/usr/lib64
+  ./autogen.sh --prefix=/usr --libdir=${LIBDIR}
   make
   sudo make install
   </pre>
@@ -137,12 +185,9 @@ The libxatracker library is used exclusively by the X server to do render,
 copy and video acceleration:
 <br>
 The following configure options doesn't build the EGL system.
-<br>
-As before, if you're on a 32-bit system, you should skip the --libdir
-configure option.
   <pre>
   cd $TOP/mesa
-  ./autogen.sh --prefix=/usr --libdir=/usr/lib64 --with-gallium-drivers=svga --with-dri-drivers= --enable-xa --disable-dri3
+  ./autogen.sh --prefix=/usr --libdir=${LIBDIR} --with-gallium-drivers=svga --with-dri-drivers=swrast --enable-xa --disable-dri3 --enable-glx-tls
   make
   sudo make install
   </pre>
@@ -152,25 +197,39 @@ if they're not installed in your system.  You should be told what's missing.
 <br>
 <br>
 
-<li>xf86-video-vmware: Now, once libxatracker is installed, we proceed with building and replacing the current Xorg driver. First check if your system is 32- or 64-bit. If you're building for a 32-bit system, you will not be needing the --libdir=/usr/lib64 option to autogen. 
+<li>xf86-video-vmware: Now, once libxatracker is installed, we proceed with
+building and replacing the current Xorg driver.
+First check if your system is 32- or 64-bit.
   <pre>
   cd $TOP/xf86-video-vmware
-  ./autogen.sh --prefix=/usr --libdir=/usr/lib64
+  ./autogen.sh --prefix=/usr --libdir=${LIBDIR}
   make
   sudo make install
   </pre>
+
 <li>vmwgfx kernel module. First make sure that any old version of this kernel module is removed from the system by issuing
-  <pre>
+<pre>
   sudo rm /lib/modules/`uname -r`/kernel/drivers/gpu/drm/vmwgfx.ko*
-  </pre>
-Then 
-  <pre>
+</pre>
+Build and install:
+<pre>
   cd $TOP/vmwgfx
   make
   sudo make install
-  sudo cp 00-vmwgfx.rules /etc/udev/rules.d
-  sudo depmod -ae
-  </pre>
+  sudo depmod -a
+</pre>
+If you're using a Ubuntu OS:
+<pre>
+  sudo update-initramfs -u
+</pre>
+If you're using a Fedora OS:
+<pre>
+  sudo dracut --force
+</pre>
+Add 'vmwgfx' to the /etc/modules file:
+<pre>
+  echo vmwgfx | sudo tee -a /etc/modules
+</pre>
 
 Note: some distros put DRM kernel drivers in different directories.
 For example, sometimes vmwgfx.ko might be found in
@@ -226,6 +285,16 @@ If you don't see this, try setting this environment variable:
 <p>
 then rerun glxinfo and examine the output for error messages.
 </p>
+
+<p>
+If OpenGL 3.3 is not working (you only get OpenGL 2.1):
+</p>
+<ul>
+<li>Make sure the VM uses hardware version 12.
+<li>Make sure the vmwgfx kernel module is version 2.9.0 or later.
+<li>Check the vmware.log file for errors.
+<li>Run 'dmesg | grep vmwgfx' and look for "DX: yes".
+
 
 </div>
 </body>

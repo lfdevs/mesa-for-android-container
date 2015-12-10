@@ -343,7 +343,7 @@ TargetNV50::insnCanLoad(const Instruction *i, int s,
    }
 
    if (sf == FILE_IMMEDIATE)
-      return true;
+      return ldSize <= 4;
 
 
    // Check if memory access is encodable:
@@ -454,7 +454,7 @@ TargetNV50::isModSupported(const Instruction *insn, int s, Modifier mod) const
          return false;
       }
    }
-   if (s >= 3)
+   if (s >= opInfo[insn->op].srcNr || s >= 3)
       return false;
    return (mod & Modifier(opInfo[insn->op].srcMods[s])) == mod;
 }

@@ -102,6 +102,8 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
 
    this->Const.MaxDrawBuffers = ctx->Const.MaxDrawBuffers;
 
+   this->Const.MaxDualSourceDrawBuffers = ctx->Const.MaxDualSourceDrawBuffers;
+
    /* 1.50 constants */
    this->Const.MaxVertexOutputComponents = ctx->Const.Program[MESA_SHADER_VERTEX].MaxOutputComponents;
    this->Const.MaxGeometryInputComponents = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxInputComponents;
@@ -242,6 +244,12 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->default_uniform_qualifier = new(this) ast_type_qualifier();
    this->default_uniform_qualifier->flags.q.shared = 1;
    this->default_uniform_qualifier->flags.q.column_major = 1;
+   this->default_uniform_qualifier->is_default_qualifier = true;
+
+   this->default_shader_storage_qualifier = new(this) ast_type_qualifier();
+   this->default_shader_storage_qualifier->flags.q.shared = 1;
+   this->default_shader_storage_qualifier->flags.q.column_major = 1;
+   this->default_shader_storage_qualifier->is_default_qualifier = true;
 
    this->fs_uses_gl_fragcoord = false;
    this->fs_redeclares_gl_fragcoord = false;
@@ -469,7 +477,7 @@ _mesa_glsl_msg(const YYLTYPE *locp, _mesa_glsl_parse_state *state,
    struct gl_context *ctx = state->ctx;
 
    /* Report the error via GL_ARB_debug_output. */
-   _mesa_shader_debug(ctx, type, &msg_id, msg, strlen(msg));
+   _mesa_shader_debug(ctx, type, &msg_id, msg);
 
    ralloc_strcat(&state->info_log, "\n");
 }
@@ -588,6 +596,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_derivative_control,           true,  false,     ARB_derivative_control),
    EXT(ARB_draw_buffers,                 true,  false,     dummy_true),
    EXT(ARB_draw_instanced,               true,  false,     ARB_draw_instanced),
+   EXT(ARB_enhanced_layouts,             true,  false,     ARB_enhanced_layouts),
    EXT(ARB_explicit_attrib_location,     true,  false,     ARB_explicit_attrib_location),
    EXT(ARB_explicit_uniform_location,    true,  false,     ARB_explicit_uniform_location),
    EXT(ARB_fragment_coord_conventions,   true,  false,     ARB_fragment_coord_conventions),
@@ -598,12 +607,14 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_separate_shader_objects,      true,  false,     dummy_true),
    EXT(ARB_shader_atomic_counters,       true,  false,     ARB_shader_atomic_counters),
    EXT(ARB_shader_bit_encoding,          true,  false,     ARB_shader_bit_encoding),
+   EXT(ARB_shader_clock,                 true,  false,     ARB_shader_clock),
    EXT(ARB_shader_image_load_store,      true,  false,     ARB_shader_image_load_store),
    EXT(ARB_shader_image_size,            true,  false,     ARB_shader_image_size),
    EXT(ARB_shader_precision,             true,  false,     ARB_shader_precision),
    EXT(ARB_shader_stencil_export,        true,  false,     ARB_shader_stencil_export),
-   EXT(ARB_shader_storage_buffer_object, true,  false,     ARB_shader_storage_buffer_object),
+   EXT(ARB_shader_storage_buffer_object, true,  true,      ARB_shader_storage_buffer_object),
    EXT(ARB_shader_subroutine,            true,  false,     ARB_shader_subroutine),
+   EXT(ARB_shader_texture_image_samples, true,  false,     ARB_shader_texture_image_samples),
    EXT(ARB_shader_texture_lod,           true,  false,     ARB_shader_texture_lod),
    EXT(ARB_shading_language_420pack,     true,  false,     ARB_shading_language_420pack),
    EXT(ARB_shading_language_packing,     true,  false,     ARB_shading_language_packing),
@@ -625,7 +636,8 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
     */
    EXT(OES_EGL_image_external,         false, true,      OES_EGL_image_external),
    EXT(OES_standard_derivatives,       false, true,      OES_standard_derivatives),
-   EXT(OES_texture_3D,                 false, true,      EXT_texture3D),
+   EXT(OES_texture_3D,                 false, true,      dummy_true),
+   EXT(OES_texture_storage_multisample_2d_array, false, true, ARB_texture_multisample),
 
    /* All other extensions go here, sorted alphabetically.
     */
@@ -634,9 +646,11 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(AMD_shader_trinary_minmax,      true,  false,     dummy_true),
    EXT(AMD_vertex_shader_layer,        true,  false,     AMD_vertex_shader_layer),
    EXT(AMD_vertex_shader_viewport_index, true,  false,   AMD_vertex_shader_viewport_index),
+   EXT(EXT_blend_func_extended,        false,  true,     ARB_blend_func_extended),
    EXT(EXT_draw_buffers,               false,  true,     dummy_true),
    EXT(EXT_separate_shader_objects,    false, true,      dummy_true),
    EXT(EXT_shader_integer_mix,         true,  true,      EXT_shader_integer_mix),
+   EXT(EXT_shader_samples_identical,   true,  true,      EXT_shader_samples_identical),
    EXT(EXT_texture_array,              true,  false,     EXT_texture_array),
 };
 
@@ -856,6 +870,139 @@ _mesa_ast_set_aggregate_type(const glsl_type *type,
    }
 }
 
+void
+_mesa_ast_process_interface_block(YYLTYPE *locp,
+                                  _mesa_glsl_parse_state *state,
+                                  ast_interface_block *const block,
+                                  const struct ast_type_qualifier q)
+{
+   if (q.flags.q.buffer) {
+      if (!state->has_shader_storage_buffer_objects()) {
+         _mesa_glsl_error(locp, state,
+                          "#version 430 / GL_ARB_shader_storage_buffer_object "
+                          "required for defining shader storage blocks");
+      } else if (state->ARB_shader_storage_buffer_object_warn) {
+         _mesa_glsl_warning(locp, state,
+                            "#version 430 / GL_ARB_shader_storage_buffer_object "
+                            "required for defining shader storage blocks");
+      }
+   } else if (q.flags.q.uniform) {
+      if (!state->has_uniform_buffer_objects()) {
+         _mesa_glsl_error(locp, state,
+                          "#version 140 / GL_ARB_uniform_buffer_object "
+                          "required for defining uniform blocks");
+      } else if (state->ARB_uniform_buffer_object_warn) {
+         _mesa_glsl_warning(locp, state,
+                            "#version 140 / GL_ARB_uniform_buffer_object "
+                            "required for defining uniform blocks");
+      }
+   } else {
+      if (state->es_shader || state->language_version < 150) {
+         _mesa_glsl_error(locp, state,
+                          "#version 150 required for using "
+                          "interface blocks");
+      }
+   }
+
+   /* From the GLSL 1.50.11 spec, section 4.3.7 ("Interface Blocks"):
+    * "It is illegal to have an input block in a vertex shader
+    *  or an output block in a fragment shader"
+    */
+   if ((state->stage == MESA_SHADER_VERTEX) && q.flags.q.in) {
+      _mesa_glsl_error(locp, state,
+                       "`in' interface block is not allowed for "
+                       "a vertex shader");
+   } else if ((state->stage == MESA_SHADER_FRAGMENT) && q.flags.q.out) {
+      _mesa_glsl_error(locp, state,
+                       "`out' interface block is not allowed for "
+                       "a fragment shader");
+   }
+
+   /* Since block arrays require names, and both features are added in
+    * the same language versions, we don't have to explicitly
+    * version-check both things.
+    */
+   if (block->instance_name != NULL) {
+      state->check_version(150, 300, locp, "interface blocks with "
+                           "an instance name are not allowed");
+   }
+
+   uint64_t interface_type_mask;
+   struct ast_type_qualifier temp_type_qualifier;
+
+   /* Get a bitmask containing only the in/out/uniform/buffer
+    * flags, allowing us to ignore other irrelevant flags like
+    * interpolation qualifiers.
+    */
+   temp_type_qualifier.flags.i = 0;
+   temp_type_qualifier.flags.q.uniform = true;
+   temp_type_qualifier.flags.q.in = true;
+   temp_type_qualifier.flags.q.out = true;
+   temp_type_qualifier.flags.q.buffer = true;
+   interface_type_mask = temp_type_qualifier.flags.i;
+
+   /* Get the block's interface qualifier.  The interface_qualifier
+    * production rule guarantees that only one bit will be set (and
+    * it will be in/out/uniform).
+    */
+   uint64_t block_interface_qualifier = q.flags.i;
+
+   block->layout.flags.i |= block_interface_qualifier;
+
+   if (state->stage == MESA_SHADER_GEOMETRY &&
+       state->has_explicit_attrib_stream()) {
+      /* Assign global layout's stream value. */
+      block->layout.flags.q.stream = 1;
+      block->layout.flags.q.explicit_stream = 0;
+      block->layout.stream = state->out_qualifier->stream;
+   }
+
+   foreach_list_typed (ast_declarator_list, member, link, &block->declarations) {
+      ast_type_qualifier& qualifier = member->type->qualifier;
+      if ((qualifier.flags.i & interface_type_mask) == 0) {
+         /* GLSLangSpec.1.50.11, 4.3.7 (Interface Blocks):
+          * "If no optional qualifier is used in a member declaration, the
+          *  qualifier of the variable is just in, out, or uniform as declared
+          *  by interface-qualifier."
+          */
+         qualifier.flags.i |= block_interface_qualifier;
+      } else if ((qualifier.flags.i & interface_type_mask) !=
+                 block_interface_qualifier) {
+         /* GLSLangSpec.1.50.11, 4.3.7 (Interface Blocks):
+          * "If optional qualifiers are used, they can include interpolation
+          *  and storage qualifiers and they must declare an input, output,
+          *  or uniform variable consistent with the interface qualifier of
+          *  the block."
+          */
+         _mesa_glsl_error(locp, state,
+                          "uniform/in/out qualifier on "
+                          "interface block member does not match "
+                          "the interface block");
+      }
+
+      /* From GLSL ES 3.0, chapter 4.3.7 "Interface Blocks":
+       *
+       * "GLSL ES 3.0 does not support interface blocks for shader inputs or
+       * outputs."
+       *
+       * And from GLSL ES 3.0, chapter 4.6.1 "The invariant qualifier":.
+       *
+       * "Only variables output from a shader can be candidates for
+       * invariance."
+       *
+       * From GLSL 4.40 and GLSL 1.50, section "Interface Blocks":
+       *
+       * "If optional qualifiers are used, they can include interpolation
+       * qualifiers, auxiliary storage qualifiers, and storage qualifiers
+       * and they must declare an input, output, or uniform member
+       * consistent with the interface qualifier of the block"
+       */
+      if (qualifier.flags.q.invariant)
+         _mesa_glsl_error(locp, state,
+                          "invariant qualifiers cannot be used "
+                          "with interface blocks members");
+   }
+}
 
 void
 _mesa_ast_type_qualifier_print(const struct ast_type_qualifier *q)
@@ -1501,8 +1648,20 @@ set_shader_inout_layout(struct gl_shader *shader,
    switch (shader->Stage) {
    case MESA_SHADER_TESS_CTRL:
       shader->TessCtrl.VerticesOut = 0;
-      if (state->tcs_output_vertices_specified)
-         shader->TessCtrl.VerticesOut = state->out_qualifier->vertices;
+      if (state->tcs_output_vertices_specified) {
+         unsigned vertices;
+         if (state->out_qualifier->vertices->
+               process_qualifier_constant(state, "vertices", &vertices,
+                                          false)) {
+
+            YYLTYPE loc = state->out_qualifier->vertices->get_location();
+            if (vertices > state->Const.MaxPatchVertices) {
+               _mesa_glsl_error(&loc, state, "vertices (%d) exceeds "
+                                "GL_MAX_PATCH_VERTICES", vertices);
+            }
+            shader->TessCtrl.VerticesOut = vertices;
+         }
+      }
       break;
    case MESA_SHADER_TESS_EVAL:
       shader->TessEval.PrimitiveMode = PRIM_UNKNOWN;
@@ -1523,8 +1682,14 @@ set_shader_inout_layout(struct gl_shader *shader,
       break;
    case MESA_SHADER_GEOMETRY:
       shader->Geom.VerticesOut = 0;
-      if (state->out_qualifier->flags.q.max_vertices)
-         shader->Geom.VerticesOut = state->out_qualifier->max_vertices;
+      if (state->out_qualifier->flags.q.max_vertices) {
+         unsigned qual_max_vertices;
+         if (state->out_qualifier->max_vertices->
+               process_qualifier_constant(state, "max_vertices",
+                                          &qual_max_vertices, true)) {
+            shader->Geom.VerticesOut = qual_max_vertices;
+         }
+      }
 
       if (state->gs_input_prim_type_specified) {
          shader->Geom.InputType = state->in_qualifier->prim_type;
@@ -1539,8 +1704,22 @@ set_shader_inout_layout(struct gl_shader *shader,
       }
 
       shader->Geom.Invocations = 0;
-      if (state->in_qualifier->flags.q.invocations)
-         shader->Geom.Invocations = state->in_qualifier->invocations;
+      if (state->in_qualifier->flags.q.invocations) {
+         unsigned invocations;
+         if (state->in_qualifier->invocations->
+               process_qualifier_constant(state, "invocations",
+                                          &invocations, false)) {
+
+            YYLTYPE loc = state->in_qualifier->invocations->get_location();
+            if (invocations > MAX_GEOMETRY_SHADER_INVOCATIONS) {
+               _mesa_glsl_error(&loc, state,
+                                "invocations (%d) exceeds "
+                                "GL_MAX_GEOMETRY_SHADER_INVOCATIONS",
+                                invocations);
+            }
+            shader->Geom.Invocations = invocations;
+         }
+      }
       break;
 
    case MESA_SHADER_COMPUTE:
@@ -1652,15 +1831,15 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    if (shader->InfoLog)
       ralloc_free(shader->InfoLog);
 
+   if (!state->error)
+      set_shader_inout_layout(shader, state);
+
    shader->symbols = new(shader->ir) glsl_symbol_table;
    shader->CompileStatus = !state->error;
    shader->InfoLog = state->info_log;
    shader->Version = state->language_version;
    shader->IsES = state->es_shader;
    shader->uses_builtin_functions = state->uses_builtin_functions;
-
-   if (!state->error)
-      set_shader_inout_layout(shader, state);
 
    /* Retain any live IR, but trash the rest. */
    reparent_ir(shader->ir, shader->ir);
@@ -1691,6 +1870,8 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
          break;
       }
    }
+
+   _mesa_glsl_initialize_derived_variables(shader);
 
    delete state->symbols;
    ralloc_free(state);
@@ -1756,7 +1937,6 @@ do_common_optimization(exec_list *ir, bool linked,
       progress = do_constant_variable_unlinked(ir) || progress;
    progress = do_constant_folding(ir) || progress;
    progress = do_minmax_prune(ir) || progress;
-   progress = do_cse(ir) || progress;
    progress = do_rebalance_tree(ir) || progress;
    progress = do_algebraic(ir, native_integers, options) || progress;
    progress = do_lower_jumps(ir) || progress;

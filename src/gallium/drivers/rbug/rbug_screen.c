@@ -129,13 +129,13 @@ rbug_screen_is_format_supported(struct pipe_screen *_screen,
 
 static struct pipe_context *
 rbug_screen_context_create(struct pipe_screen *_screen,
-                           void *priv)
+                           void *priv, unsigned flags)
 {
    struct rbug_screen *rb_screen = rbug_screen(_screen);
    struct pipe_screen *screen = rb_screen->screen;
    struct pipe_context *result;
 
-   result = screen->context_create(screen, priv);
+   result = screen->context_create(screen, priv, flags);
    if (result)
       return rbug_context_create(_screen, result);
    return NULL;
@@ -281,7 +281,7 @@ rbug_screen_create(struct pipe_screen *screen)
 
    rb_screen->screen = screen;
 
-   rb_screen->private_context = screen->context_create(screen, NULL);
+   rb_screen->private_context = screen->context_create(screen, NULL, 0);
    if (!rb_screen->private_context)
       goto err_free;
 

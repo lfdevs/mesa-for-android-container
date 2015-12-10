@@ -22,14 +22,10 @@
  */
 
 /**
- * @file vc4_opt_algebraic.c
+ * @file vc4_qir_lower_uniforms.c
  *
- * This is the optimization pass for miscellaneous changes to instructions
- * where we can simplify the operation by some knowledge about the specific
- * operations.
- *
- * Mostly this will be a matter of turning things into MOVs so that they can
- * later be copy-propagated out.
+ * This is the pre-code-generation pass for fixing up instructions that try to
+ * read from multiple uniform values.
  */
 
 #include "vc4_qir.h"
@@ -85,6 +81,33 @@ is_lowerable_uniform(struct qinst *inst, int i)
         return true;
 }
 
+/* Returns the number of different uniform values referenced by the
+ * instruction.
+ */
+static uint32_t
+qir_get_instruction_uniform_count(struct qinst *inst)
+{
+        uint32_t count = 0;
+
+        for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                if (inst->src[i].file != QFILE_UNIF)
+                        continue;
+
+                bool is_duplicate = false;
+                for (int j = 0; j < i; j++) {
+                        if (inst->src[j].file == QFILE_UNIF &&
+                            inst->src[j].index == inst->src[i].index) {
+                                is_duplicate = true;
+                                break;
+                        }
+                }
+                if (!is_duplicate)
+                        count++;
+        }
+
+        return count;
+}
+
 void
 qir_lower_uniforms(struct vc4_compile *c)
 {
@@ -98,13 +121,7 @@ qir_lower_uniforms(struct vc4_compile *c)
         list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                 uint32_t nsrc = qir_get_op_nsrc(inst->op);
 
-                uint32_t count = 0;
-                for (int i = 0; i < nsrc; i++) {
-                        if (inst->src[i].file == QFILE_UNIF)
-                                count++;
-                }
-
-                if (count <= 1)
+                if (qir_get_instruction_uniform_count(inst) <= 1)
                         continue;
 
                 for (int i = 0; i < nsrc; i++) {
@@ -140,23 +157,22 @@ qir_lower_uniforms(struct vc4_compile *c)
                 list_for_each_entry(struct qinst, inst, &c->instructions, link) {
                         uint32_t nsrc = qir_get_op_nsrc(inst->op);
 
-                        uint32_t count = 0;
-                        for (int i = 0; i < nsrc; i++) {
-                                if (inst->src[i].file == QFILE_UNIF)
-                                        count++;
-                        }
+                        uint32_t count = qir_get_instruction_uniform_count(inst);
 
                         if (count <= 1)
                                 continue;
 
+                        bool removed = false;
                         for (int i = 0; i < nsrc; i++) {
                                 if (is_lowerable_uniform(inst, i) &&
                                     inst->src[i].index == max_index) {
                                         inst->src[i] = temp;
                                         remove_uniform(ht, unif);
-                                        count--;
+                                        removed = true;
                                 }
                         }
+                        if (removed)
+                                count--;
 
                         /* If the instruction doesn't need lowering any more,
                          * then drop it from the list.

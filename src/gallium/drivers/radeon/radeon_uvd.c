@@ -110,8 +110,8 @@ static void send_cmd(struct ruvd_decoder *dec, unsigned cmd,
 {
 	int reloc_idx;
 
-	reloc_idx = dec->ws->cs_add_reloc(dec->cs, cs_buf, usage, domain,
-					  RADEON_PRIO_MIN);
+	reloc_idx = dec->ws->cs_add_buffer(dec->cs, cs_buf, usage, domain,
+					  RADEON_PRIO_UVD);
 	if (!dec->use_legacy) {
 		uint64_t addr;
 		addr = dec->ws->buffer_get_virtual_address(cs_buf);
@@ -478,6 +478,8 @@ static struct ruvd_h265 get_h265_msg(struct ruvd_decoder *dec, struct pipe_video
 	result.sps_info_flags |= pic->pps->sps->separate_colour_plane_flag << 8;
 	if (((struct r600_common_screen*)dec->screen)->family == CHIP_CARRIZO)
 		result.sps_info_flags |= 1 << 9;
+	if (pic->UseRefPicList == true)
+		result.sps_info_flags |= 1 << 10;
 
 	result.chroma_format = pic->pps->sps->chroma_format_idc;
 	result.bit_depth_luma_minus8 = pic->pps->sps->bit_depth_luma_minus8;
@@ -585,6 +587,11 @@ static struct ruvd_h265 get_h265_msg(struct ruvd_decoder *dec, struct pipe_video
 	memcpy(dec->it + 96, pic->pps->sps->ScalingList8x8, 6 * 64);
 	memcpy(dec->it + 480, pic->pps->sps->ScalingList16x16, 6 * 64);
 	memcpy(dec->it + 864, pic->pps->sps->ScalingList32x32, 2 * 64);
+
+	for (i = 0 ; i < 2 ; i++) {
+		for (int j = 0 ; j < 15 ; j++)
+			result.direct_reflist[i][j] = pic->RefPicList[i][j];
+	}
 
 	/* TODO
 	result.highestTid;
@@ -951,6 +958,8 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 	dec->msg->body.decode.db_pitch = dec->base.width;
 
 	dt = dec->set_dtb(dec->msg, (struct vl_video_buffer *)target);
+	if (((struct r600_common_screen*)dec->screen)->family >= CHIP_STONEY)
+		dec->msg->body.decode.dt_wa_chroma_top_offset = dec->msg->body.decode.dt_pitch / 2;
 
 	switch (u_reduce_video_profile(picture->profile)) {
 	case PIPE_VIDEO_FORMAT_MPEG4_AVC:

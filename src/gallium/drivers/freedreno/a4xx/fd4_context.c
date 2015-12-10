@@ -55,6 +55,8 @@ fd4_context_destroy(struct pipe_context *pctx)
 	pipe_resource_reference(&fd4_ctx->solid_vbuf, NULL);
 	pipe_resource_reference(&fd4_ctx->blit_texcoord_vbuf, NULL);
 
+	u_upload_destroy(fd4_ctx->border_color_uploader);
+
 	fd_context_destroy(pctx);
 }
 
@@ -96,7 +98,7 @@ static const uint8_t primtypes[PIPE_PRIM_MAX] = {
 };
 
 struct pipe_context *
-fd4_context_create(struct pipe_screen *pscreen, void *priv)
+fd4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
 	struct fd_screen *screen = fd_screen(pscreen);
 	struct fd4_context *fd4_ctx = CALLOC_STRUCT(fd4_context);
@@ -168,6 +170,9 @@ fd4_context_create(struct pipe_screen *pscreen, void *priv)
 	fd4_ctx->blit_vbuf_state.vertexbuf.vb[1].buffer = fd4_ctx->solid_vbuf;
 
 	fd4_query_context_init(pctx);
+
+	fd4_ctx->border_color_uploader = u_upload_create(pctx, 4096,
+			2 * PIPE_MAX_SAMPLERS * BORDERCOLOR_SIZE, 0);
 
 	return pctx;
 }

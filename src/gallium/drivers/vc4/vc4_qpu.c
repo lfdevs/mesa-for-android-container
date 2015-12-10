@@ -454,8 +454,7 @@ qpu_merge_inst(uint64_t a, uint64_t b)
                                 QPU_SET_FIELD(QPU_SIG_NONE, QPU_SIG));
 
         /* Misc fields that have to match exactly. */
-        ok = ok && merge_fields(&merge, a, b, QPU_SF | QPU_PM,
-                                ~0);
+        ok = ok && merge_fields(&merge, a, b, QPU_SF, ~0);
 
         if (!merge_fields(&merge, a, b, QPU_RADDR_A_MASK,
                           QPU_SET_FIELD(QPU_R_NOP, QPU_RADDR_A))) {
@@ -493,64 +492,94 @@ qpu_merge_inst(uint64_t a, uint64_t b)
                         return 0;
         }
 
-        /* packing: Make sure that non-NOP packs agree, then deal with
-         * special-case failing of adding a non-NOP pack to something with a
-         * NOP pack.
-         */
-        if (!merge_fields(&merge, a, b, QPU_PACK_MASK, 0))
-                return 0;
-        bool new_a_pack = (QPU_GET_FIELD(a, QPU_PACK) !=
-                           QPU_GET_FIELD(merge, QPU_PACK));
-        bool new_b_pack = (QPU_GET_FIELD(b, QPU_PACK) !=
-                           QPU_GET_FIELD(merge, QPU_PACK));
-        if (!(merge & QPU_PM)) {
-                /* Make sure we're not going to be putting a new
-                 * a-file packing on either half.
+        if (!merge_fields(&merge, a, b, QPU_PM, ~0)) {
+                /* If one instruction has PM bit set and the other not, the
+                 * one without PM shouldn't do packing/unpacking, and we
+                 * have to make sure non-NOP packing/unpacking from PM
+                 * instruction aren't added to it.
                  */
-                if (new_a_pack && writes_a_file(a))
+                uint64_t temp;
+
+                /* Let a be the one with PM bit */
+                if (!(a & QPU_PM)) {
+                        temp = a;
+                        a = b;
+                        b = temp;
+                }
+
+                if ((b & (QPU_PACK_MASK | QPU_UNPACK_MASK)) != 0)
                         return 0;
 
-                if (new_b_pack && writes_a_file(b))
+                if ((a & QPU_PACK_MASK) != 0 &&
+                    QPU_GET_FIELD(b, QPU_OP_MUL) != QPU_M_NOP)
+                        return 0;
+
+                if ((a & QPU_UNPACK_MASK) != 0 && reads_r4(b))
                         return 0;
         } else {
-                /* Make sure we're not going to be putting new MUL packing on
-                 * either half.
+                /* packing: Make sure that non-NOP packs agree, then deal with
+                 * special-case failing of adding a non-NOP pack to something
+                 * with a NOP pack.
                  */
-                if (new_a_pack && QPU_GET_FIELD(a, QPU_OP_MUL) != QPU_M_NOP)
+                if (!merge_fields(&merge, a, b, QPU_PACK_MASK, 0))
                         return 0;
+                bool new_a_pack = (QPU_GET_FIELD(a, QPU_PACK) !=
+                                QPU_GET_FIELD(merge, QPU_PACK));
+                bool new_b_pack = (QPU_GET_FIELD(b, QPU_PACK) !=
+                                QPU_GET_FIELD(merge, QPU_PACK));
+                if (!(merge & QPU_PM)) {
+                        /* Make sure we're not going to be putting a new
+                         * a-file packing on either half.
+                         */
+                        if (new_a_pack && writes_a_file(a))
+                                return 0;
 
-                if (new_b_pack && QPU_GET_FIELD(b, QPU_OP_MUL) != QPU_M_NOP)
-                        return 0;
-        }
+                        if (new_b_pack && writes_a_file(b))
+                                return 0;
+                } else {
+                        /* Make sure we're not going to be putting new MUL
+                         * packing oneither half.
+                         */
+                        if (new_a_pack &&
+                            QPU_GET_FIELD(a, QPU_OP_MUL) != QPU_M_NOP)
+                                return 0;
 
-        /* unpacking: Make sure that non-NOP unpacks agree, then deal with
-         * special-case failing of adding a non-NOP unpack to something with a
-         * NOP unpack.
-         */
-        if (!merge_fields(&merge, a, b, QPU_UNPACK_MASK, 0))
-                return 0;
-        bool new_a_unpack = (QPU_GET_FIELD(a, QPU_UNPACK) !=
-                             QPU_GET_FIELD(merge, QPU_UNPACK));
-        bool new_b_unpack = (QPU_GET_FIELD(b, QPU_UNPACK) !=
-                             QPU_GET_FIELD(merge, QPU_UNPACK));
-        if (!(merge & QPU_PM)) {
-                /* Make sure we're not going to be putting a new
-                 * a-file packing on either half.
+                        if (new_b_pack &&
+                            QPU_GET_FIELD(b, QPU_OP_MUL) != QPU_M_NOP)
+                                return 0;
+                }
+
+                /* unpacking: Make sure that non-NOP unpacks agree, then deal
+                 * with special-case failing of adding a non-NOP unpack to
+                 * something with a NOP unpack.
                  */
-                if (new_a_unpack && QPU_GET_FIELD(a, QPU_RADDR_A) != QPU_R_NOP)
+                if (!merge_fields(&merge, a, b, QPU_UNPACK_MASK, 0))
                         return 0;
+                bool new_a_unpack = (QPU_GET_FIELD(a, QPU_UNPACK) !=
+                                QPU_GET_FIELD(merge, QPU_UNPACK));
+                bool new_b_unpack = (QPU_GET_FIELD(b, QPU_UNPACK) !=
+                                QPU_GET_FIELD(merge, QPU_UNPACK));
+                if (!(merge & QPU_PM)) {
+                        /* Make sure we're not going to be putting a new
+                         * a-file packing on either half.
+                         */
+                        if (new_a_unpack &&
+                            QPU_GET_FIELD(a, QPU_RADDR_A) != QPU_R_NOP)
+                                return 0;
 
-                if (new_b_unpack && QPU_GET_FIELD(b, QPU_RADDR_A) != QPU_R_NOP)
-                        return 0;
-        } else {
-                /* Make sure we're not going to be putting new r4 unpack on
-                 * either half.
-                 */
-                if (new_a_unpack && reads_r4(a))
-                        return 0;
+                        if (new_b_unpack &&
+                            QPU_GET_FIELD(b, QPU_RADDR_A) != QPU_R_NOP)
+                                return 0;
+                } else {
+                        /* Make sure we're not going to be putting new r4
+                         * unpack on either half.
+                         */
+                        if (new_a_unpack && reads_r4(a))
+                                return 0;
 
-                if (new_b_unpack && reads_r4(b))
-                        return 0;
+                        if (new_b_unpack && reads_r4(b))
+                                return 0;
+                }
         }
 
         if (ok)

@@ -1,5 +1,4 @@
-/**************************************************************************
- *
+/*
  * Copyright 2006 VMware, Inc.
  * All Rights Reserved.
  *
@@ -7,7 +6,7 @@
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
  * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
+ * distribute, sublicense, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
  *
@@ -17,14 +16,12 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
  * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- **************************************************************************/
-
+ */
 
 #include "main/enums.h"
 #include "main/imports.h"
@@ -54,19 +51,6 @@
 #include "brw_context.h"
 
 #define FILE_DEBUG_FLAG DEBUG_FBO
-
-/**
- * Create a new framebuffer object.
- */
-static struct gl_framebuffer *
-intel_new_framebuffer(struct gl_context * ctx, GLuint name)
-{
-   /* Only drawable state in intel_framebuffer at this time, just use Mesa's
-    * class
-    */
-   return _mesa_new_framebuffer(ctx, name);
-}
-
 
 /** Called by gl_renderbuffer::Delete() */
 static void
@@ -359,14 +343,14 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
    if (image->planar_format && image->planar_format->nplanes > 1) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
             "glEGLImageTargetRenderbufferStorage(planar buffers are not "
-               "supported as render targets.");
+               "supported as render targets.)");
       return;
    }
 
    /* __DRIimage is opaque to the core so it has to be checked here */
    if (!brw->format_supported_as_render_target[image->format]) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
-            "glEGLImageTargetRenderbufferStorage(unsupported image format");
+            "glEGLImageTargetRenderbufferStorage(unsupported image format)");
       return;
    }
 
@@ -411,6 +395,7 @@ static GLboolean
 intel_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
                            GLenum internalFormat, GLuint width, GLuint height)
 {
+   (void) ctx;
    assert(rb->Name == 0);
    rb->Width = width;
    rb->Height = height;
@@ -424,6 +409,10 @@ static GLboolean
 intel_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
                         GLenum internalFormat, GLuint width, GLuint height)
 {
+   (void) rb;
+   (void) internalFormat;
+   (void) width;
+   (void) height;
    _mesa_problem(ctx, "intel_nop_alloc_storage should never be called.");
    return false;
 }
@@ -783,7 +772,7 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
                                     GLint srcX1, GLint srcY1,
                                     GLint dstX0, GLint dstY0,
                                     GLint dstX1, GLint dstY1,
-                                    GLbitfield mask, GLenum filter)
+                                    GLbitfield mask)
 {
    struct brw_context *brw = brw_context(ctx);
 
@@ -903,7 +892,7 @@ intel_blit_framebuffer(struct gl_context *ctx,
    mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
                                               srcX0, srcY0, srcX1, srcY1,
                                               dstX0, dstY0, dstX1, dstY1,
-                                              mask, filter);
+                                              mask);
    if (mask == 0x0)
       return;
 
@@ -941,7 +930,7 @@ gen4_blit_framebuffer(struct gl_context *ctx,
    mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
                                               srcX0, srcY0, srcX1, srcY1,
                                               dstX0, dstY0, dstX1, dstY1,
-                                              mask, filter);
+                                              mask);
    if (mask == 0x0)
       return;
 
@@ -1021,7 +1010,7 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
    uint32_t layout_flags = MIPTREE_LAYOUT_ACCELERATED_UPLOAD |
                            MIPTREE_LAYOUT_TILING_ANY;
 
-   intel_miptree_get_dimensions_for_image(rb->TexImage, &width, &height, &depth);
+   intel_get_image_dims(rb->TexImage, &width, &height, &depth);
 
    new_mt = intel_miptree_create(brw, rb->TexImage->TexObject->Target,
                                  intel_image->base.Base.TexFormat,
@@ -1087,7 +1076,6 @@ void
 intel_fbo_init(struct brw_context *brw)
 {
    struct dd_function_table *dd = &brw->ctx.Driver;
-   dd->NewFramebuffer = intel_new_framebuffer;
    dd->NewRenderbuffer = intel_new_renderbuffer;
    dd->MapRenderbuffer = intel_map_renderbuffer;
    dd->UnmapRenderbuffer = intel_unmap_renderbuffer;

@@ -129,7 +129,7 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
 
 extern GLboolean
 _mesa_target_can_be_compressed(const struct gl_context *ctx, GLenum target,
-                               GLenum intFormat);
+                               GLenum intFormat, GLenum *error);
 
 extern GLuint
 _mesa_tex_target_to_face(GLenum target);

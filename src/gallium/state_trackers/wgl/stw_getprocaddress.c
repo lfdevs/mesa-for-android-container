@@ -37,6 +37,8 @@
 #include "stw_icd.h"
 #include "stw_nopfuncs.h"
 
+#include "util/u_debug.h"
+
 struct stw_extension_entry
 {
    const char *name;

@@ -46,10 +46,10 @@ class cmod_propagation_fs_visitor : public fs_visitor
 public:
    cmod_propagation_fs_visitor(struct brw_compiler *compiler,
                                struct brw_wm_prog_data *prog_data,
-                               struct gl_shader_program *shader_prog)
-      : fs_visitor(compiler, NULL, NULL, MESA_SHADER_FRAGMENT, NULL,
-                   &prog_data->base, shader_prog,
-                   (struct gl_program *) NULL, 8, -1) {}
+                               nir_shader *shader)
+      : fs_visitor(compiler, NULL, NULL, NULL,
+                   &prog_data->base, (struct gl_program *) NULL,
+                   shader, 8, -1) {}
 };
 
 
@@ -62,11 +62,11 @@ void cmod_propagation_test::SetUp()
 
    fp = ralloc(NULL, struct brw_fragment_program);
    prog_data = ralloc(NULL, struct brw_wm_prog_data);
-   shader_prog = ralloc(NULL, struct gl_shader_program);
+   nir_shader *shader = nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL);
 
-   v = new cmod_propagation_fs_visitor(compiler, prog_data, shader_prog);
+   v = new cmod_propagation_fs_visitor(compiler, prog_data, shader);
 
-   _mesa_init_fragment_program(ctx, &fp->program, GL_FRAGMENT_SHADER, 0);
+   _mesa_init_gl_program(&fp->program.Base, GL_FRAGMENT_SHADER, 0);
 
    devinfo->gen = 4;
 }
@@ -84,7 +84,7 @@ instruction(bblock_t *block, int num)
 static bool
 cmod_propagation(fs_visitor *v)
 {
-   const bool print = false;
+   const bool print = getenv("TEST_DEBUG");
 
    if (print) {
       fprintf(stderr, "= Before =\n");
@@ -107,7 +107,7 @@ TEST_F(cmod_propagation_test, basic)
    fs_reg dest = v->vgrf(glsl_type::float_type);
    fs_reg src0 = v->vgrf(glsl_type::float_type);
    fs_reg src1 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
+   fs_reg zero(brw_imm_f(0.0f));
    bld.ADD(dest, src0, src1);
    bld.CMP(bld.null_reg_f(), dest, zero, BRW_CONDITIONAL_GE);
 
@@ -139,7 +139,7 @@ TEST_F(cmod_propagation_test, cmp_nonzero)
    fs_reg dest = v->vgrf(glsl_type::float_type);
    fs_reg src0 = v->vgrf(glsl_type::float_type);
    fs_reg src1 = v->vgrf(glsl_type::float_type);
-   fs_reg nonzero(1.0f);
+   fs_reg nonzero(brw_imm_f(1.0f));
    bld.ADD(dest, src0, src1);
    bld.CMP(bld.null_reg_f(), dest, nonzero, BRW_CONDITIONAL_GE);
 
@@ -171,7 +171,7 @@ TEST_F(cmod_propagation_test, non_cmod_instruction)
    const fs_builder &bld = v->bld;
    fs_reg dest = v->vgrf(glsl_type::uint_type);
    fs_reg src0 = v->vgrf(glsl_type::uint_type);
-   fs_reg zero(0u);
+   fs_reg zero(brw_imm_ud(0u));
    bld.FBL(dest, src0);
    bld.CMP(bld.null_reg_ud(), dest, zero, BRW_CONDITIONAL_GE);
 
@@ -205,7 +205,7 @@ TEST_F(cmod_propagation_test, intervening_flag_write)
    fs_reg src0 = v->vgrf(glsl_type::float_type);
    fs_reg src1 = v->vgrf(glsl_type::float_type);
    fs_reg src2 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
+   fs_reg zero(brw_imm_f(0.0f));
    bld.ADD(dest, src0, src1);
    bld.CMP(bld.null_reg_f(), src2, zero, BRW_CONDITIONAL_GE);
    bld.CMP(bld.null_reg_f(), dest, zero, BRW_CONDITIONAL_GE);
@@ -244,7 +244,7 @@ TEST_F(cmod_propagation_test, intervening_flag_read)
    fs_reg src0 = v->vgrf(glsl_type::float_type);
    fs_reg src1 = v->vgrf(glsl_type::float_type);
    fs_reg src2 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
+   fs_reg zero(brw_imm_f(0.0f));
    bld.ADD(dest0, src0, src1);
    set_predicate(BRW_PREDICATE_NORMAL, bld.SEL(dest1, src2, zero));
    bld.CMP(bld.null_reg_f(), dest0, zero, BRW_CONDITIONAL_GE);
@@ -282,7 +282,7 @@ TEST_F(cmod_propagation_test, intervening_dest_write)
    fs_reg src0 = v->vgrf(glsl_type::float_type);
    fs_reg src1 = v->vgrf(glsl_type::float_type);
    fs_reg src2 = v->vgrf(glsl_type::vec2_type);
-   fs_reg zero(0.0f);
+   fs_reg zero(brw_imm_f(0.0f));
    bld.ADD(offset(dest, bld, 2), src0, src1);
    bld.emit(SHADER_OPCODE_TEX, dest, src2)
       ->regs_written = 4;
@@ -323,7 +323,7 @@ TEST_F(cmod_propagation_test, intervening_flag_read_same_value)
    fs_reg src0 = v->vgrf(glsl_type::float_type);
    fs_reg src1 = v->vgrf(glsl_type::float_type);
    fs_reg src2 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
+   fs_reg zero(brw_imm_f(0.0f));
    set_condmod(BRW_CONDITIONAL_GE, bld.ADD(dest0, src0, src1));
    set_predicate(BRW_PREDICATE_NORMAL, bld.SEL(dest1, src2, zero));
    bld.CMP(bld.null_reg_f(), dest0, zero, BRW_CONDITIONAL_GE);
@@ -360,7 +360,7 @@ TEST_F(cmod_propagation_test, negate)
    fs_reg dest = v->vgrf(glsl_type::float_type);
    fs_reg src0 = v->vgrf(glsl_type::float_type);
    fs_reg src1 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
+   fs_reg zero(brw_imm_f(0.0f));
    bld.ADD(dest, src0, src1);
    dest.negate = true;
    bld.CMP(bld.null_reg_f(), dest, zero, BRW_CONDITIONAL_GE);
@@ -425,7 +425,7 @@ TEST_F(cmod_propagation_test, different_types_cmod_with_zero)
    fs_reg dest = v->vgrf(glsl_type::int_type);
    fs_reg src0 = v->vgrf(glsl_type::int_type);
    fs_reg src1 = v->vgrf(glsl_type::int_type);
-   fs_reg zero(0.0f);
+   fs_reg zero(brw_imm_f(0.0f));
    bld.ADD(dest, src0, src1);
    bld.CMP(bld.null_reg_f(), retype(dest, BRW_REGISTER_TYPE_F), zero,
            BRW_CONDITIONAL_GE);
@@ -458,8 +458,8 @@ TEST_F(cmod_propagation_test, andnz_one)
    const fs_builder &bld = v->bld;
    fs_reg dest = v->vgrf(glsl_type::int_type);
    fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
-   fs_reg one(1);
+   fs_reg zero(brw_imm_f(0.0f));
+   fs_reg one(brw_imm_d(1));
 
    bld.CMP(retype(dest, BRW_REGISTER_TYPE_F), src0, zero, BRW_CONDITIONAL_L);
    set_condmod(BRW_CONDITIONAL_NZ,
@@ -493,8 +493,8 @@ TEST_F(cmod_propagation_test, andnz_non_one)
    const fs_builder &bld = v->bld;
    fs_reg dest = v->vgrf(glsl_type::int_type);
    fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
-   fs_reg nonone(38);
+   fs_reg zero(brw_imm_f(0.0f));
+   fs_reg nonone(brw_imm_d(38));
 
    bld.CMP(retype(dest, BRW_REGISTER_TYPE_F), src0, zero, BRW_CONDITIONAL_L);
    set_condmod(BRW_CONDITIONAL_NZ,
@@ -528,8 +528,8 @@ TEST_F(cmod_propagation_test, andz_one)
    const fs_builder &bld = v->bld;
    fs_reg dest = v->vgrf(glsl_type::int_type);
    fs_reg src0 = v->vgrf(glsl_type::float_type);
-   fs_reg zero(0.0f);
-   fs_reg one(1);
+   fs_reg zero(brw_imm_f(0.0f));
+   fs_reg one(brw_imm_d(1));
 
    bld.CMP(retype(dest, BRW_REGISTER_TYPE_F), src0, zero, BRW_CONDITIONAL_L);
    set_condmod(BRW_CONDITIONAL_Z,

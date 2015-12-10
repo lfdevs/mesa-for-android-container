@@ -45,6 +45,7 @@ struct amdgpu_ctx {
 
 struct amdgpu_cs_buffer {
    struct amdgpu_winsys_bo *bo;
+   uint64_t priority_usage;
    enum radeon_bo_usage usage;
    enum radeon_bo_domain domains;
 };
@@ -68,7 +69,7 @@ struct amdgpu_cs {
    struct amdgpu_cs_request    request;
    struct amdgpu_cs_ib_info    ib;
 
-   /* Relocs. */
+   /* Buffers. */
    unsigned                    max_num_buffers;
    unsigned                    num_buffers;
    amdgpu_bo_handle            *handles;
@@ -115,7 +116,7 @@ static inline void amdgpu_fence_reference(struct pipe_fence_handle **dst,
    *rdst = rsrc;
 }
 
-int amdgpu_get_reloc(struct amdgpu_cs *csc, struct amdgpu_winsys_bo *bo);
+int amdgpu_lookup_buffer(struct amdgpu_cs *csc, struct amdgpu_winsys_bo *bo);
 
 static inline struct amdgpu_cs *
 amdgpu_cs(struct radeon_winsys_cs *base)
@@ -129,7 +130,7 @@ amdgpu_bo_is_referenced_by_cs(struct amdgpu_cs *cs,
 {
    int num_refs = bo->num_cs_references;
    return num_refs == bo->rws->num_cs ||
-         (num_refs && amdgpu_get_reloc(cs, bo) != -1);
+         (num_refs && amdgpu_lookup_buffer(cs, bo) != -1);
 }
 
 static inline boolean
@@ -142,7 +143,7 @@ amdgpu_bo_is_referenced_by_cs_with_usage(struct amdgpu_cs *cs,
    if (!bo->num_cs_references)
       return FALSE;
 
-   index = amdgpu_get_reloc(cs, bo);
+   index = amdgpu_lookup_buffer(cs, bo);
    if (index == -1)
       return FALSE;
 

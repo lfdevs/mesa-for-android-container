@@ -341,8 +341,8 @@ r100CreateContext( gl_api api,
 
 
 #if DO_DEBUG
-   RADEON_DEBUG = driParseDebugString( getenv( "RADEON_DEBUG" ),
-				       debug_control );
+   RADEON_DEBUG = parse_debug_string( getenv( "RADEON_DEBUG" ),
+                                      debug_control );
 #endif
 
    tcl_mode = driQueryOptioni(&rmesa->radeon.optionCache, "tcl_mode");

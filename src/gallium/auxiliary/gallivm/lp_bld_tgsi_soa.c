@@ -2321,6 +2321,7 @@ emit_tex( struct lp_build_tgsi_soa_context *bld,
    params.texture_index = unit;
    params.sampler_index = unit;
    params.context_ptr = bld->context_ptr;
+   params.thread_data_ptr = bld->thread_data_ptr;
    params.coords = coords;
    params.offsets = offsets;
    params.lod = lod;
@@ -2488,6 +2489,7 @@ emit_sample(struct lp_build_tgsi_soa_context *bld,
    params.texture_index = texture_unit;
    params.sampler_index = sampler_unit;
    params.context_ptr = bld->context_ptr;
+   params.thread_data_ptr = bld->thread_data_ptr;
    params.coords = coords;
    params.offsets = offsets;
    params.lod = lod;
@@ -2606,8 +2608,14 @@ emit_fetch_texels( struct lp_build_tgsi_soa_context *bld,
    params.type = bld->bld_base.base.type;
    params.sample_key = sample_key;
    params.texture_index = unit;
-   params.sampler_index = unit;
+   /*
+    * sampler not actually used, set to 0 so it won't exceed PIPE_MAX_SAMPLERS
+    * and trigger some assertions with d3d10 where the sampler view number
+    * can exceed this.
+    */
+   params.sampler_index = 0;
    params.context_ptr = bld->context_ptr;
+   params.thread_data_ptr = bld->thread_data_ptr;
    params.coords = coords;
    params.offsets = offsets;
    params.derivs = NULL;
@@ -3858,6 +3866,7 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
                   const LLVMValueRef (*inputs)[TGSI_NUM_CHANNELS],
                   LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS],
                   LLVMValueRef context_ptr,
+                  LLVMValueRef thread_data_ptr,
                   struct lp_build_sampler_soa *sampler,
                   const struct tgsi_shader_info *info,
                   const struct lp_build_tgsi_gs_iface *gs_iface)
@@ -3893,6 +3902,7 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
    bld.bld_base.info = info;
    bld.indirect_files = info->indirect_files;
    bld.context_ptr = context_ptr;
+   bld.thread_data_ptr = thread_data_ptr;
 
    /*
     * If the number of temporaries is rather large then we just

@@ -118,7 +118,7 @@ gen7_emit_push_constant_state(struct brw_context *brw, unsigned vs_size,
 
    /* From p292 of the Ivy Bridge PRM (11.2.4 3DSTATE_PUSH_CONSTANT_ALLOC_PS):
     *
-    *     A PIPE_CONTOL command with the CS Stall bit set must be programmed
+    *     A PIPE_CONTROL command with the CS Stall bit set must be programmed
     *     in the ring after this instruction.
     *
     * No such restriction exists for Haswell or Baytrail.

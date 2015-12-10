@@ -52,7 +52,7 @@ fs_visitor::dead_code_eliminate()
              sizeof(BITSET_WORD));
 
       foreach_inst_in_block_reverse(fs_inst, inst, block) {
-         if (inst->dst.file == GRF && !inst->has_side_effects()) {
+         if (inst->dst.file == VGRF && !inst->has_side_effects()) {
             bool result_live = false;
 
             if (inst->regs_written == 1) {
@@ -96,7 +96,7 @@ fs_visitor::dead_code_eliminate()
             continue;
          }
 
-         if (inst->dst.file == GRF) {
+         if (inst->dst.file == VGRF) {
             if (!inst->is_partial_write()) {
                int var = live_intervals->var_from_reg(inst->dst);
                for (int i = 0; i < inst->regs_written; i++) {
@@ -105,12 +105,12 @@ fs_visitor::dead_code_eliminate()
             }
          }
 
-         if (inst->writes_flag()) {
+         if (inst->writes_flag() && !inst->predicate) {
             BITSET_CLEAR(flag_live, inst->flag_subreg);
          }
 
          for (int i = 0; i < inst->sources; i++) {
-            if (inst->src[i].file == GRF) {
+            if (inst->src[i].file == VGRF) {
                int var = live_intervals->var_from_reg(inst->src[i]);
 
                for (int j = 0; j < inst->regs_read(i); j++) {

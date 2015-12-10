@@ -214,10 +214,10 @@ prepare_shader_sampling(
                   row_stride[j] = sp_tex->stride[j];
                   img_stride[j] = sp_tex->img_stride[j];
                }
-               if (view->target == PIPE_TEXTURE_1D_ARRAY ||
-                   view->target == PIPE_TEXTURE_2D_ARRAY ||
-                   view->target == PIPE_TEXTURE_CUBE ||
-                   view->target == PIPE_TEXTURE_CUBE_ARRAY) {
+               if (tex->target == PIPE_TEXTURE_1D_ARRAY ||
+                   tex->target == PIPE_TEXTURE_2D_ARRAY ||
+                   tex->target == PIPE_TEXTURE_CUBE ||
+                   tex->target == PIPE_TEXTURE_CUBE_ARRAY) {
                   num_layers = view->u.tex.last_layer - view->u.tex.first_layer + 1;
                   for (j = first_level; j <= last_level; j++) {
                      mip_offsets[j] += view->u.tex.first_layer *

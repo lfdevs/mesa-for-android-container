@@ -126,7 +126,7 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
              SET_FIELD(min_array_element, BRW_SURFACE_MIN_ARRAY_ELEMENT) |
              SET_FIELD(depth - 1, BRW_SURFACE_RENDER_TARGET_VIEW_EXTENT);
 
-   surf[5] = (mt->align_h == 4 ? BRW_SURFACE_VERTICAL_ALIGN_ENABLE : 0);
+   surf[5] = (mt->valign == 4 ? BRW_SURFACE_VERTICAL_ALIGN_ENABLE : 0);
 
    drm_intel_bo_emit_reloc(brw->batch.bo,
                            offset + 4,

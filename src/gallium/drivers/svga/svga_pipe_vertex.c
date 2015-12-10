@@ -23,17 +23,21 @@
  *
  **********************************************************/
 
+#include "pipe/p_defines.h"
+#include "util/u_bitmask.h"
+#include "util/u_format.h"
 #include "util/u_helpers.h"
 #include "util/u_inlines.h"
-#include "pipe/p_defines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_transfer.h"
 #include "tgsi/tgsi_parse.h"
 
-#include "svga_screen.h"
-#include "svga_resource_buffer.h"
 #include "svga_context.h"
+#include "svga_cmd.h"
+#include "svga_format.h"
+#include "svga_resource_buffer.h"
+#include "svga_screen.h"
 
 
 static void svga_set_vertex_buffers(struct pipe_context *pipe,
@@ -55,59 +59,7 @@ static void svga_set_index_buffer(struct pipe_context *pipe,
 {
    struct svga_context *svga = svga_context(pipe);
 
-   if (ib) {
-      pipe_resource_reference(&svga->curr.ib.buffer, ib->buffer);
-      memcpy(&svga->curr.ib, ib, sizeof(svga->curr.ib));
-   }
-   else {
-      pipe_resource_reference(&svga->curr.ib.buffer, NULL);
-      memset(&svga->curr.ib, 0, sizeof(svga->curr.ib));
-   }
-
-   /* TODO make this more like a state */
-}
-
-
-/**
- * Given a gallium vertex element format, return the corresponding SVGA3D
- * format.  Return SVGA3D_DECLTYPE_MAX for unsupported gallium formats.
- */
-static SVGA3dDeclType
-translate_vertex_format(enum pipe_format format)
-{
-   switch (format) {
-   case PIPE_FORMAT_R32_FLOAT:            return SVGA3D_DECLTYPE_FLOAT1;
-   case PIPE_FORMAT_R32G32_FLOAT:         return SVGA3D_DECLTYPE_FLOAT2;
-   case PIPE_FORMAT_R32G32B32_FLOAT:      return SVGA3D_DECLTYPE_FLOAT3;
-   case PIPE_FORMAT_R32G32B32A32_FLOAT:   return SVGA3D_DECLTYPE_FLOAT4;
-   case PIPE_FORMAT_B8G8R8A8_UNORM:       return SVGA3D_DECLTYPE_D3DCOLOR;
-   case PIPE_FORMAT_R8G8B8A8_USCALED:     return SVGA3D_DECLTYPE_UBYTE4;
-   case PIPE_FORMAT_R16G16_SSCALED:       return SVGA3D_DECLTYPE_SHORT2;
-   case PIPE_FORMAT_R16G16B16A16_SSCALED: return SVGA3D_DECLTYPE_SHORT4;
-   case PIPE_FORMAT_R8G8B8A8_UNORM:       return SVGA3D_DECLTYPE_UBYTE4N;
-   case PIPE_FORMAT_R16G16_SNORM:         return SVGA3D_DECLTYPE_SHORT2N;
-   case PIPE_FORMAT_R16G16B16A16_SNORM:   return SVGA3D_DECLTYPE_SHORT4N;
-   case PIPE_FORMAT_R16G16_UNORM:         return SVGA3D_DECLTYPE_USHORT2N;
-   case PIPE_FORMAT_R16G16B16A16_UNORM:   return SVGA3D_DECLTYPE_USHORT4N;
-   case PIPE_FORMAT_R10G10B10X2_USCALED:  return SVGA3D_DECLTYPE_UDEC3;
-   case PIPE_FORMAT_R10G10B10X2_SNORM:    return SVGA3D_DECLTYPE_DEC3N;
-   case PIPE_FORMAT_R16G16_FLOAT:         return SVGA3D_DECLTYPE_FLOAT16_2;
-   case PIPE_FORMAT_R16G16B16A16_FLOAT:   return SVGA3D_DECLTYPE_FLOAT16_4;
-
-   /* See attrib_needs_adjustment() and attrib_needs_w_to_1() below */
-   case PIPE_FORMAT_R8G8B8_SNORM:         return SVGA3D_DECLTYPE_UBYTE4N;
-
-   /* See attrib_needs_w_to_1() below */
-   case PIPE_FORMAT_R16G16B16_SNORM:      return SVGA3D_DECLTYPE_SHORT4N;
-   case PIPE_FORMAT_R16G16B16_UNORM:      return SVGA3D_DECLTYPE_USHORT4N;
-   case PIPE_FORMAT_R8G8B8_UNORM:         return SVGA3D_DECLTYPE_UBYTE4N;
-
-   default:
-      /* There are many formats without hardware support.  This case
-       * will be hit regularly, meaning we'll need swvfetch.
-       */
-      return SVGA3D_DECLTYPE_MAX;
-   }
+   util_set_index_buffer(&svga->curr.ib, ib);
 }
 
 
@@ -129,20 +81,163 @@ attrib_needs_range_adjustment(enum pipe_format format)
 
 
 /**
- * Does the given vertex attrib format need to have the W component set
- * to one in the VS?
+ * Given a gallium vertex element format, return the corresponding
+ * SVGA3dDeclType.
  */
-static boolean
-attrib_needs_w_to_1(enum pipe_format format)
+static SVGA3dDeclType
+translate_vertex_format_to_decltype(enum pipe_format format)
 {
    switch (format) {
-   case PIPE_FORMAT_R8G8B8_SNORM:
-   case PIPE_FORMAT_R8G8B8_UNORM:
-   case PIPE_FORMAT_R16G16B16_SNORM:
-   case PIPE_FORMAT_R16G16B16_UNORM:
-      return TRUE;
+   case PIPE_FORMAT_R32_FLOAT:            return SVGA3D_DECLTYPE_FLOAT1;
+   case PIPE_FORMAT_R32G32_FLOAT:         return SVGA3D_DECLTYPE_FLOAT2;
+   case PIPE_FORMAT_R32G32B32_FLOAT:      return SVGA3D_DECLTYPE_FLOAT3;
+   case PIPE_FORMAT_R32G32B32A32_FLOAT:   return SVGA3D_DECLTYPE_FLOAT4;
+   case PIPE_FORMAT_B8G8R8A8_UNORM:       return SVGA3D_DECLTYPE_D3DCOLOR;
+   case PIPE_FORMAT_R8G8B8A8_USCALED:     return SVGA3D_DECLTYPE_UBYTE4;
+   case PIPE_FORMAT_R16G16_SSCALED:       return SVGA3D_DECLTYPE_SHORT2;
+   case PIPE_FORMAT_R16G16B16A16_SSCALED: return SVGA3D_DECLTYPE_SHORT4;
+   case PIPE_FORMAT_R8G8B8A8_UNORM:       return SVGA3D_DECLTYPE_UBYTE4N;
+   case PIPE_FORMAT_R16G16_SNORM:         return SVGA3D_DECLTYPE_SHORT2N;
+   case PIPE_FORMAT_R16G16B16A16_SNORM:   return SVGA3D_DECLTYPE_SHORT4N;
+   case PIPE_FORMAT_R16G16_UNORM:         return SVGA3D_DECLTYPE_USHORT2N;
+   case PIPE_FORMAT_R16G16B16A16_UNORM:   return SVGA3D_DECLTYPE_USHORT4N;
+   case PIPE_FORMAT_R10G10B10X2_USCALED:  return SVGA3D_DECLTYPE_UDEC3;
+   case PIPE_FORMAT_R10G10B10X2_SNORM:    return SVGA3D_DECLTYPE_DEC3N;
+   case PIPE_FORMAT_R16G16_FLOAT:         return SVGA3D_DECLTYPE_FLOAT16_2;
+   case PIPE_FORMAT_R16G16B16A16_FLOAT:   return SVGA3D_DECLTYPE_FLOAT16_4;
+
+   /* See attrib_needs_adjustment() and attrib_needs_w_to_1() above */
+   case PIPE_FORMAT_R8G8B8_SNORM:         return SVGA3D_DECLTYPE_UBYTE4N;
+
+   /* See attrib_needs_w_to_1() above */
+   case PIPE_FORMAT_R16G16B16_SNORM:      return SVGA3D_DECLTYPE_SHORT4N;
+   case PIPE_FORMAT_R16G16B16_UNORM:      return SVGA3D_DECLTYPE_USHORT4N;
+   case PIPE_FORMAT_R8G8B8_UNORM:         return SVGA3D_DECLTYPE_UBYTE4N;
+
    default:
-      return FALSE;
+      /* There are many formats without hardware support.  This case
+       * will be hit regularly, meaning we'll need swvfetch.
+       */
+      return SVGA3D_DECLTYPE_MAX;
+   }
+}
+
+
+static void
+define_input_element_object(struct svga_context *svga,
+                            struct svga_velems_state *velems)
+{
+   SVGA3dInputElementDesc elements[PIPE_MAX_ATTRIBS];
+   enum pipe_error ret;
+   unsigned i;
+
+   assert(velems->count <= PIPE_MAX_ATTRIBS);
+   assert(svga_have_vgpu10(svga));
+
+   for (i = 0; i < velems->count; i++) {
+      const struct pipe_vertex_element *elem = velems->velem + i;
+      SVGA3dSurfaceFormat svga_format;
+      unsigned vf_flags;
+
+      svga_translate_vertex_format_vgpu10(elem->src_format,
+                                          &svga_format, &vf_flags);
+
+      velems->decl_type[i] =
+         translate_vertex_format_to_decltype(elem->src_format);
+      elements[i].inputSlot = elem->vertex_buffer_index;
+      elements[i].alignedByteOffset = elem->src_offset;
+      elements[i].format = svga_format;
+
+      if (elem->instance_divisor) {
+         elements[i].inputSlotClass = SVGA3D_INPUT_PER_INSTANCE_DATA;
+         elements[i].instanceDataStepRate = elem->instance_divisor;
+      }
+      else {
+         elements[i].inputSlotClass = SVGA3D_INPUT_PER_VERTEX_DATA;
+         elements[i].instanceDataStepRate = 0;
+      }
+      elements[i].inputRegister = i;
+
+      if (elements[i].format == SVGA3D_FORMAT_INVALID) {
+         velems->need_swvfetch = TRUE;
+      }
+
+      if (util_format_is_pure_integer(elem->src_format)) {
+         velems->attrib_is_pure_int |= (1 << i);
+      }
+
+      if (vf_flags & VF_W_TO_1) {
+         velems->adjust_attrib_w_1 |= (1 << i);
+      }
+
+      if (vf_flags & VF_U_TO_F_CAST) {
+         velems->adjust_attrib_utof |= (1 << i);
+      }
+      else if (vf_flags & VF_I_TO_F_CAST) {
+         velems->adjust_attrib_itof |= (1 << i);
+      }
+
+      if (vf_flags & VF_BGRA) {
+         velems->attrib_is_bgra |= (1 << i);
+      }
+
+      if (vf_flags & VF_PUINT_TO_SNORM) {
+         velems->attrib_puint_to_snorm |= (1 << i);
+      }
+      else if (vf_flags & VF_PUINT_TO_USCALED) {
+         velems->attrib_puint_to_uscaled |= (1 << i);
+      }
+      else if (vf_flags & VF_PUINT_TO_SSCALED) {
+         velems->attrib_puint_to_sscaled |= (1 << i);
+      }
+   }
+
+   velems->id = util_bitmask_add(svga->input_element_object_id_bm);
+
+   ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, velems->count,
+                                           velems->id, elements);
+   if (ret != PIPE_OK) {
+      svga_context_flush(svga, NULL);
+      ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, velems->count,
+                                              velems->id, elements);
+      assert(ret == PIPE_OK);
+   }
+}
+
+
+/**
+ * Translate the vertex element types to SVGA3dDeclType and check
+ * for VS-based vertex attribute adjustments.
+ */
+static void
+translate_vertex_decls(struct svga_context *svga,
+                       struct svga_velems_state *velems)
+{
+   unsigned i;
+
+   assert(!svga_have_vgpu10(svga));
+
+   for (i = 0; i < velems->count; i++) {
+      const enum pipe_format f = velems->velem[i].src_format;
+      SVGA3dSurfaceFormat svga_format;
+      unsigned vf_flags;
+
+      svga_translate_vertex_format_vgpu10(f, &svga_format, &vf_flags);
+
+      velems->decl_type[i] = translate_vertex_format_to_decltype(f);
+      if (velems->decl_type[i] == SVGA3D_DECLTYPE_MAX) {
+         /* Unsupported format - use software fetch */
+         velems->need_swvfetch = TRUE;
+      }
+
+      /* Check for VS-based adjustments */
+      if (attrib_needs_range_adjustment(f)) {
+         velems->adjust_attrib_range |= (1 << i);
+      }
+
+      if (vf_flags & VF_W_TO_1) {
+         velems->adjust_attrib_w_1 |= (1 << i);
+      }
    }
 }
 
@@ -152,54 +247,78 @@ svga_create_vertex_elements_state(struct pipe_context *pipe,
                                   unsigned count,
                                   const struct pipe_vertex_element *attribs)
 {
+   struct svga_context *svga = svga_context(pipe);
    struct svga_velems_state *velems;
+
    assert(count <= PIPE_MAX_ATTRIBS);
    velems = (struct svga_velems_state *) MALLOC(sizeof(struct svga_velems_state));
    if (velems) {
-      unsigned i;
-
       velems->count = count;
       memcpy(velems->velem, attribs, sizeof(*attribs) * count);
 
       velems->need_swvfetch = FALSE;
       velems->adjust_attrib_range = 0x0;
+      velems->attrib_is_pure_int = 0x0;
       velems->adjust_attrib_w_1 = 0x0;
+      velems->adjust_attrib_itof = 0x0;
+      velems->adjust_attrib_utof = 0x0;
+      velems->attrib_is_bgra = 0x0;
+      velems->attrib_puint_to_snorm = 0x0;
+      velems->attrib_puint_to_uscaled = 0x0;
+      velems->attrib_puint_to_sscaled = 0x0;
 
-      /* Translate Gallium vertex format to SVGA3dDeclType */
-      for (i = 0; i < count; i++) {
-         enum pipe_format f = attribs[i].src_format;
-         velems->decl_type[i] = translate_vertex_format(f);
-         if (velems->decl_type[i] == SVGA3D_DECLTYPE_MAX) {
-            /* Unsupported format - use software fetch */
-            velems->need_swvfetch = TRUE;
-            break;
-         }
-
-         if (attrib_needs_range_adjustment(f)) {
-            velems->adjust_attrib_range |= (1 << i);
-         }
-         if (attrib_needs_w_to_1(f)) {
-            velems->adjust_attrib_w_1 |= (1 << i);
-         }
+      if (svga_have_vgpu10(svga)) {
+         define_input_element_object(svga, velems);
+      }
+      else {
+         translate_vertex_decls(svga, velems);
       }
    }
+
+   svga->hud.num_state_objects++;
+
    return velems;
 }
 
-static void svga_bind_vertex_elements_state(struct pipe_context *pipe,
-                                            void *velems)
+
+static void
+svga_bind_vertex_elements_state(struct pipe_context *pipe, void *state)
 {
    struct svga_context *svga = svga_context(pipe);
-   struct svga_velems_state *svga_velems = (struct svga_velems_state *) velems;
+   struct svga_velems_state *velems = (struct svga_velems_state *) state;
 
-   svga->curr.velems = svga_velems;
+   svga->curr.velems = velems;
    svga->dirty |= SVGA_NEW_VELEMENT;
 }
 
-static void svga_delete_vertex_elements_state(struct pipe_context *pipe,
-                                              void *velems)
+
+static void
+svga_delete_vertex_elements_state(struct pipe_context *pipe, void *state)
 {
+   struct svga_context *svga = svga_context(pipe);
+   struct svga_velems_state *velems = (struct svga_velems_state *) state;
+
+   if (svga_have_vgpu10(svga)) {
+      enum pipe_error ret;
+
+      svga_hwtnl_flush_retry(svga);
+
+      ret = SVGA3D_vgpu10_DestroyElementLayout(svga->swc, velems->id);
+      if (ret != PIPE_OK) {
+         svga_context_flush(svga, NULL);
+         ret = SVGA3D_vgpu10_DestroyElementLayout(svga->swc, velems->id);
+         assert(ret == PIPE_OK);
+      }
+
+      if (velems->id == svga->state.hw_draw.layout_id)
+         svga->state.hw_draw.layout_id = SVGA3D_INVALID_ID;
+
+      util_bitmask_clear(svga->input_element_object_id_bm, velems->id);
+      velems->id = SVGA3D_INVALID_ID;
+   }
+
    FREE(velems);
+   svga->hud.num_state_objects--;
 }
 
 void svga_cleanup_vertex_state( struct svga_context *svga )
@@ -219,5 +338,3 @@ void svga_init_vertex_functions( struct svga_context *svga )
    svga->pipe.bind_vertex_elements_state = svga_bind_vertex_elements_state;
    svga->pipe.delete_vertex_elements_state = svga_delete_vertex_elements_state;
 }
-
-

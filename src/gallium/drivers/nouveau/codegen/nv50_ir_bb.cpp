@@ -291,7 +291,7 @@ void BasicBlock::permuteAdjacent(Instruction *a, Instruction *b)
 
    if (b->prev)
       b->prev->next = b;
-   if (a->prev)
+   if (a->next)
       a->next->prev = a;
 }
 

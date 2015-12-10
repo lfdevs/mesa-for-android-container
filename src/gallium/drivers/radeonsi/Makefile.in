@@ -114,6 +114,10 @@ target_triplet = @target@
 @HAVE_DRISW_TRUE@am__append_1 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
+@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
+@HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
+
 subdir = src/gallium/drivers/radeonsi
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -134,11 +138,12 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libradeonsi_la_LIBADD =
-am__objects_1 = cik_sdma.lo si_blit.lo si_commands.lo si_compute.lo \
-	si_cp_dma.lo si_descriptors.lo si_dma.lo si_hw_context.lo \
+am__objects_1 = cik_sdma.lo si_blit.lo si_compute.lo si_cp_dma.lo \
+	si_debug.lo si_descriptors.lo si_dma.lo si_hw_context.lo \
 	si_pipe.lo si_pm4.lo si_shader.lo si_state.lo si_state_draw.lo \
 	si_state_shaders.lo si_uvd.lo
-am_libradeonsi_la_OBJECTS = $(am__objects_1)
+am__objects_2 =
+am_libradeonsi_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libradeonsi_la_OBJECTS = $(am_libradeonsi_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -306,6 +311,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -350,6 +357,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -383,7 +392,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -414,6 +427,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -488,9 +503,9 @@ top_srcdir = @top_srcdir@
 C_SOURCES := \
 	cik_sdma.c \
 	si_blit.c \
-	si_commands.c \
 	si_compute.c \
 	si_cp_dma.c \
+	si_debug.c \
 	si_descriptors.c \
 	sid.h \
 	si_dma.c \
@@ -507,6 +522,9 @@ C_SOURCES := \
 	si_state_shaders.c \
 	si_state.h \
 	si_uvd.c
+
+GENERATED_SOURCES := \
+	sid_tables.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -572,15 +590,22 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1)
+	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(RADEON_CFLAGS) \
 	$(LLVM_CFLAGS)
 
 noinst_LTLIBRARIES = libradeonsi.la
-libradeonsi_la_SOURCES = $(C_SOURCES)
-all: all-am
+libradeonsi_la_SOURCES = $(C_SOURCES) $(GENERATED_SOURCES)
+EXTRA_DIST = \
+	sid_tables.py
+
+BUILT_SOURCES = \
+	sid_tables.h
+
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .lo .o .obj
@@ -637,9 +662,9 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cik_sdma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_blit.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_commands.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_compute.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_cp_dma.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_descriptors.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_dma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_hw_context.Plo@am__quote@
@@ -764,10 +789,12 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: check-am
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
 all-am: Makefile $(LTLIBRARIES)
 installdirs:
-install: install-am
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -797,6 +824,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
@@ -868,7 +896,7 @@ ps-am:
 
 uninstall-am:
 
-.MAKE: install-am install-strip
+.MAKE: all check install install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
 	clean-libtool clean-noinstLTLIBRARIES cscopelist-am ctags \
@@ -886,6 +914,9 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
+
+sid_tables.h: $(srcdir)/sid_tables.py $(srcdir)/sid.h
+	$(AM_V_GEN) $(PYTHON2) $(srcdir)/sid_tables.py $(srcdir)/sid.h > $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

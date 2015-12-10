@@ -63,7 +63,7 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_MSGS     0x0001
 #define FD_DBG_DISASM   0x0002
 #define FD_DBG_DCLEAR   0x0004
-#define FD_DBG_FLUSH    0x0008
+#define FD_DBG_DDRAW    0x0008
 #define FD_DBG_NOSCIS   0x0010
 #define FD_DBG_DIRECT   0x0020
 #define FD_DBG_NOBYPASS 0x0040
@@ -72,6 +72,7 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_OPTMSGS  0x0200
 #define FD_DBG_GLSL120  0x0400
 #define FD_DBG_SHADERDB 0x0800
+#define FD_DBG_FLUSH    0x1000
 
 extern int fd_mesa_debug;
 extern bool fd_binning_enabled;

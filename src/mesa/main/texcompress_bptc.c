@@ -30,6 +30,7 @@
 #include "texcompress.h"
 #include "texcompress_bptc.h"
 #include "util/format_srgb.h"
+#include "util/half_float.h"
 #include "texstore.h"
 #include "macros.h"
 #include "image.h"

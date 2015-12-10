@@ -64,19 +64,6 @@ intel_get_rb_region(struct gl_framebuffer *fb, GLuint attIndex)
       return NULL;
 }
 
-/**
- * Create a new framebuffer object.
- */
-static struct gl_framebuffer *
-intel_new_framebuffer(struct gl_context * ctx, GLuint name)
-{
-   /* Only drawable state in intel_framebuffer at this time, just use Mesa's
-    * class
-    */
-   return _mesa_new_framebuffer(ctx, name);
-}
-
-
 /** Called by gl_renderbuffer::Delete() */
 static void
 intel_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
@@ -770,7 +757,6 @@ intel_blit_framebuffer(struct gl_context *ctx,
 void
 intel_fbo_init(struct intel_context *intel)
 {
-   intel->ctx.Driver.NewFramebuffer = intel_new_framebuffer;
    intel->ctx.Driver.NewRenderbuffer = intel_new_renderbuffer;
    intel->ctx.Driver.MapRenderbuffer = intel_map_renderbuffer;
    intel->ctx.Driver.UnmapRenderbuffer = intel_unmap_renderbuffer;

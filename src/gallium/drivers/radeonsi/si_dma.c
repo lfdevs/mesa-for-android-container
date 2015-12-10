@@ -49,7 +49,7 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 				uint64_t src_offset,
 				uint64_t size)
 {
-	struct radeon_winsys_cs *cs = ctx->b.rings.dma.cs;
+	struct radeon_winsys_cs *cs = ctx->b.dma.cs;
 	unsigned i, ncopy, csize, max_csize, sub_cmd, shift;
 	struct r600_resource *rdst = (struct r600_resource*)dst;
 	struct r600_resource *rsrc = (struct r600_resource*)src;
@@ -78,16 +78,16 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 
 	r600_need_dma_space(&ctx->b, ncopy * 5);
 
-	r600_context_bo_reloc(&ctx->b, &ctx->b.rings.dma, rsrc, RADEON_USAGE_READ,
-			      RADEON_PRIO_MIN);
-	r600_context_bo_reloc(&ctx->b, &ctx->b.rings.dma, rdst, RADEON_USAGE_WRITE,
-			      RADEON_PRIO_MIN);
+	radeon_add_to_buffer_list(&ctx->b, &ctx->b.dma, rsrc, RADEON_USAGE_READ,
+			      RADEON_PRIO_SDMA_BUFFER);
+	radeon_add_to_buffer_list(&ctx->b, &ctx->b.dma, rdst, RADEON_USAGE_WRITE,
+			      RADEON_PRIO_SDMA_BUFFER);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = size < max_csize ? size : max_csize;
 		cs->buf[cs->cdw++] = SI_DMA_PACKET(SI_DMA_PACKET_COPY, sub_cmd, csize);
-		cs->buf[cs->cdw++] = dst_offset & 0xffffffff;
-		cs->buf[cs->cdw++] = src_offset & 0xffffffff;
+		cs->buf[cs->cdw++] = dst_offset;
+		cs->buf[cs->cdw++] = src_offset;
 		cs->buf[cs->cdw++] = (dst_offset >> 32UL) & 0xff;
 		cs->buf[cs->cdw++] = (src_offset >> 32UL) & 0xff;
 		dst_offset += csize << shift;
@@ -111,7 +111,7 @@ static void si_dma_copy_tile(struct si_context *ctx,
 			     unsigned pitch,
 			     unsigned bpp)
 {
-	struct radeon_winsys_cs *cs = ctx->b.rings.dma.cs;
+	struct radeon_winsys_cs *cs = ctx->b.dma.cs;
 	struct si_screen *sscreen = ctx->screen;
 	struct r600_texture *rsrc = (struct r600_texture*)src;
 	struct r600_texture *rdst = (struct r600_texture*)dst;
@@ -177,10 +177,10 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	ncopy = (size / SI_DMA_COPY_MAX_SIZE_DW) + !!(size % SI_DMA_COPY_MAX_SIZE_DW);
 	r600_need_dma_space(&ctx->b, ncopy * 9);
 
-	r600_context_bo_reloc(&ctx->b, &ctx->b.rings.dma, &rsrc->resource,
-			      RADEON_USAGE_READ, RADEON_PRIO_MIN);
-	r600_context_bo_reloc(&ctx->b, &ctx->b.rings.dma, &rdst->resource,
-			      RADEON_USAGE_WRITE, RADEON_PRIO_MIN);
+	radeon_add_to_buffer_list(&ctx->b, &ctx->b.dma, &rsrc->resource,
+			      RADEON_USAGE_READ, RADEON_PRIO_SDMA_TEXTURE);
+	radeon_add_to_buffer_list(&ctx->b, &ctx->b.dma, &rdst->resource,
+			      RADEON_USAGE_WRITE, RADEON_PRIO_SDMA_TEXTURE);
 
 	for (i = 0; i < ncopy; i++) {
 		cheight = copy_height;
@@ -221,7 +221,7 @@ void si_dma_copy(struct pipe_context *ctx,
 	unsigned src_x, src_y;
 	unsigned dst_x = dstx, dst_y = dsty, dst_z = dstz;
 
-	if (sctx->b.rings.dma.cs == NULL) {
+	if (sctx->b.dma.cs == NULL) {
 		goto fallback;
 	}
 
@@ -246,13 +246,14 @@ void si_dma_copy(struct pipe_context *ctx,
 	goto fallback;
 
 	if (src->format != dst->format || src_box->depth > 1 ||
-	    rdst->dirty_level_mask != 0 ||
+	    (rdst->dirty_level_mask | rdst->stencil_dirty_level_mask) & (1 << dst_level) ||
 	    rdst->cmask.size || rdst->fmask.size ||
-	    rsrc->cmask.size || rsrc->fmask.size) {
+	    rsrc->cmask.size || rsrc->fmask.size ||
+	    rdst->dcc_buffer || rsrc->dcc_buffer) {
 		goto fallback;
 	}
 
-	if (rsrc->dirty_level_mask) {
+	if (rsrc->dirty_level_mask & (1 << src_level)) {
 		ctx->flush_resource(ctx, src);
 	}
 

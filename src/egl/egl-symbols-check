@@ -1,0 +1,55 @@
+#!/bin/bash
+
+FUNCS=$(nm -D --defined-only ${1-.libs/libEGL.so} | grep -o "T .*" | cut -c 3- | while read func; do
+( grep -q "^$func$" || echo $func )  <<EOF
+eglBindAPI
+eglBindTexImage
+eglChooseConfig
+eglClientWaitSync
+eglCopyBuffers
+eglCreateContext
+eglCreateImage
+eglCreatePbufferFromClientBuffer
+eglCreatePbufferSurface
+eglCreatePixmapSurface
+eglCreatePlatformPixmapSurface
+eglCreatePlatformWindowSurface
+eglCreateSync
+eglCreateWindowSurface
+eglDestroyContext
+eglDestroyImage
+eglDestroySurface
+eglDestroySync
+eglGetConfigAttrib
+eglGetConfigs
+eglGetCurrentContext
+eglGetCurrentDisplay
+eglGetCurrentSurface
+eglGetDisplay
+eglGetError
+eglGetPlatformDisplay
+eglGetProcAddress
+eglGetSyncAttrib
+eglInitialize
+eglMakeCurrent
+eglQueryAPI
+eglQueryContext
+eglQueryString
+eglQuerySurface
+eglReleaseTexImage
+eglReleaseThread
+eglSurfaceAttrib
+eglSwapBuffers
+eglSwapInterval
+eglTerminate
+eglWaitClient
+eglWaitGL
+eglWaitNative
+eglWaitSync
+_fini
+_init
+EOF
+done)
+
+test ! -n "$FUNCS" || echo $FUNCS
+test ! -n "$FUNCS"

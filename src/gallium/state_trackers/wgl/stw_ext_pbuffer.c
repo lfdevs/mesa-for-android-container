@@ -35,6 +35,8 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 
+#include "util/u_debug.h"
+
 #include "stw_device.h"
 #include "stw_pixelformat.h"
 #include "stw_framebuffer.h"
@@ -220,7 +222,7 @@ wglCreatePbufferARB(HDC hCurrentDC,
    fb->bPbuffer = TRUE;
    iDisplayablePixelFormat = fb->iDisplayablePixelFormat;
 
-   stw_framebuffer_release(fb);
+   stw_framebuffer_unlock(fb);
 
    /*
     * We need to set a displayable pixel format on the hidden window DC

@@ -46,12 +46,6 @@
                 printf(__VA_ARGS__);                      \
 } while(0)
 
-static struct gl_framebuffer *
-radeon_new_framebuffer(struct gl_context *ctx, GLuint name)
-{
-  return _mesa_new_framebuffer(ctx, name);
-}
-
 static void
 radeon_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
@@ -868,7 +862,6 @@ radeon_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 
 void radeon_fbo_init(struct radeon_context *radeon)
 {
-  radeon->glCtx.Driver.NewFramebuffer = radeon_new_framebuffer;
   radeon->glCtx.Driver.NewRenderbuffer = radeon_new_renderbuffer;
   radeon->glCtx.Driver.MapRenderbuffer = radeon_map_renderbuffer;
   radeon->glCtx.Driver.UnmapRenderbuffer = radeon_unmap_renderbuffer;

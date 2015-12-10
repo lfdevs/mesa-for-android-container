@@ -74,10 +74,10 @@ static void init_ctx(struct context *ctx)
         ret = pipe_loader_probe(&ctx->dev, 1);
         assert(ret);
 
-        ctx->screen = pipe_loader_create_screen(ctx->dev, PIPE_SEARCH_DIR);
+        ctx->screen = pipe_loader_create_screen(ctx->dev);
         assert(ctx->screen);
 
-        ctx->pipe = ctx->screen->context_create(ctx->screen, NULL);
+        ctx->pipe = ctx->screen->context_create(ctx->screen, NULL, 0);
         assert(ctx->pipe);
 
         DUMP_COMPUTE_PARAM(p, PIPE_COMPUTE_CAP_GRID_DIMENSION);

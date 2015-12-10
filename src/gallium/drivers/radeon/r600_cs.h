@@ -33,29 +33,24 @@
 #include "r600_pipe_common.h"
 #include "r600d_common.h"
 
-static inline unsigned r600_context_bo_reloc(struct r600_common_context *rctx,
-					     struct r600_ring *ring,
-					     struct r600_resource *rbo,
-					     enum radeon_bo_usage usage,
-					     enum radeon_bo_priority priority)
+/**
+ * Add a buffer to the buffer list for the given command stream (CS).
+ *
+ * All buffers used by a CS must be added to the list. This tells the kernel
+ * driver which buffers are used by GPU commands. Other buffers can
+ * be swapped out (not accessible) during execution.
+ *
+ * The buffer list becomes empty after every context flush and must be
+ * rebuilt.
+ */
+static inline unsigned radeon_add_to_buffer_list(struct r600_common_context *rctx,
+						 struct r600_ring *ring,
+						 struct r600_resource *rbo,
+						 enum radeon_bo_usage usage,
+						 enum radeon_bo_priority priority)
 {
 	assert(usage);
-
-	/* Make sure that all previous rings are flushed so that everything
-	 * looks serialized from the driver point of view.
-	 */
-	if (!ring->flushing) {
-		if (ring == &rctx->rings.gfx) {
-			if (rctx->rings.dma.cs) {
-				/* flush dma ring */
-				rctx->rings.dma.flush(rctx, RADEON_FLUSH_ASYNC, NULL);
-			}
-		} else {
-			/* flush gfx ring */
-			rctx->rings.gfx.flush(rctx, RADEON_FLUSH_ASYNC, NULL);
-		}
-	}
-	return rctx->ws->cs_add_reloc(ring->cs, rbo->cs_buf, usage,
+	return rctx->ws->cs_add_buffer(ring->cs, rbo->cs_buf, usage,
 				      rbo->domains, priority) * 4;
 }
 
@@ -66,7 +61,7 @@ static inline void r600_emit_reloc(struct r600_common_context *rctx,
 {
 	struct radeon_winsys_cs *cs = ring->cs;
 	bool has_vm = ((struct r600_common_screen*)rctx->b.screen)->info.r600_virtual_address;
-	unsigned reloc = r600_context_bo_reloc(rctx, ring, rbo, usage, priority);
+	unsigned reloc = radeon_add_to_buffer_list(rctx, ring, rbo, usage, priority);
 
 	if (!has_vm) {
 		radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
@@ -74,7 +69,7 @@ static inline void r600_emit_reloc(struct r600_common_context *rctx,
 	}
 }
 
-static inline void r600_write_config_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
+static inline void radeon_set_config_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg < R600_CONTEXT_REG_OFFSET);
 	assert(cs->cdw+2+num <= cs->max_dw);
@@ -82,13 +77,13 @@ static inline void r600_write_config_reg_seq(struct radeon_winsys_cs *cs, unsign
 	radeon_emit(cs, (reg - R600_CONFIG_REG_OFFSET) >> 2);
 }
 
-static inline void r600_write_config_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
+static inline void radeon_set_config_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
 {
-	r600_write_config_reg_seq(cs, reg, 1);
+	radeon_set_config_reg_seq(cs, reg, 1);
 	radeon_emit(cs, value);
 }
 
-static inline void r600_write_context_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
+static inline void radeon_set_context_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= R600_CONTEXT_REG_OFFSET);
 	assert(cs->cdw+2+num <= cs->max_dw);
@@ -96,13 +91,13 @@ static inline void r600_write_context_reg_seq(struct radeon_winsys_cs *cs, unsig
 	radeon_emit(cs, (reg - R600_CONTEXT_REG_OFFSET) >> 2);
 }
 
-static inline void r600_write_context_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
+static inline void radeon_set_context_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
 {
-	r600_write_context_reg_seq(cs, reg, 1);
+	radeon_set_context_reg_seq(cs, reg, 1);
 	radeon_emit(cs, value);
 }
 
-static inline void si_write_sh_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
+static inline void radeon_set_sh_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= SI_SH_REG_OFFSET && reg < SI_SH_REG_END);
 	assert(cs->cdw+2+num <= cs->max_dw);
@@ -110,13 +105,13 @@ static inline void si_write_sh_reg_seq(struct radeon_winsys_cs *cs, unsigned reg
 	radeon_emit(cs, (reg - SI_SH_REG_OFFSET) >> 2);
 }
 
-static inline void si_write_sh_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
+static inline void radeon_set_sh_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
 {
-	si_write_sh_reg_seq(cs, reg, 1);
+	radeon_set_sh_reg_seq(cs, reg, 1);
 	radeon_emit(cs, value);
 }
 
-static inline void cik_write_uconfig_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
+static inline void radeon_set_uconfig_reg_seq(struct radeon_winsys_cs *cs, unsigned reg, unsigned num)
 {
 	assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
 	assert(cs->cdw+2+num <= cs->max_dw);
@@ -124,9 +119,9 @@ static inline void cik_write_uconfig_reg_seq(struct radeon_winsys_cs *cs, unsign
 	radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2);
 }
 
-static inline void cik_write_uconfig_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
+static inline void radeon_set_uconfig_reg(struct radeon_winsys_cs *cs, unsigned reg, unsigned value)
 {
-	cik_write_uconfig_reg_seq(cs, reg, 1);
+	radeon_set_uconfig_reg_seq(cs, reg, 1);
 	radeon_emit(cs, value);
 }
 

@@ -370,7 +370,8 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
                         LLVMValueRef base_ptr,
                         LLVMValueRef offset,
                         LLVMValueRef i,
-                        LLVMValueRef j)
+                        LLVMValueRef j,
+                        LLVMValueRef cache)
 {
    LLVMBuilderRef builder = gallivm->builder;
    unsigned num_pixels = type.length / 4;
@@ -500,6 +501,34 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
                     &tmp, 1, &tmp, 1);
 
       return tmp;
+   }
+
+   /*
+    * s3tc rgb formats
+    */
+
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC && cache) {
+      struct lp_type tmp_type;
+      LLVMValueRef tmp;
+
+      memset(&tmp_type, 0, sizeof tmp_type);
+      tmp_type.width = 8;
+      tmp_type.length = num_pixels * 4;
+      tmp_type.norm = TRUE;
+
+      tmp = lp_build_fetch_cached_texels(gallivm,
+                                         format_desc,
+                                         num_pixels,
+                                         base_ptr,
+                                         offset,
+                                         i, j,
+                                         cache);
+
+      lp_build_conv(gallivm,
+                    tmp_type, type,
+                    &tmp, 1, &tmp, 1);
+
+       return tmp;
    }
 
    /*

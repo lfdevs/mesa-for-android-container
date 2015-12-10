@@ -26,17 +26,19 @@
 #include "pipe/p_compiler.h"
 #include "util/u_inlines.h"
 #include "pipe/p_defines.h"
+#include "util/u_helpers.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
-#include "util/u_upload_mgr.h"
 
 #include "svga_context.h"
 #include "svga_draw.h"
 #include "svga_draw_private.h"
 #include "svga_debug.h"
 #include "svga_screen.h"
+#include "svga_resource.h"
 #include "svga_resource_buffer.h"
 #include "svga_resource_texture.h"
+#include "svga_shader.h"
 #include "svga_surface.h"
 #include "svga_winsys.h"
 #include "svga_cmd.h"
@@ -71,8 +73,8 @@ svga_hwtnl_destroy(struct svga_hwtnl *hwtnl)
       }
    }
 
-   for (i = 0; i < hwtnl->cmd.vdecl_count; i++)
-      pipe_resource_reference(&hwtnl->cmd.vdecl_vb[i], NULL);
+   for (i = 0; i < hwtnl->cmd.vbuf_count; i++)
+      pipe_resource_reference(&hwtnl->cmd.vbufs[i].buffer, NULL);
 
    for (i = 0; i < hwtnl->cmd.prim_count; i++)
       pipe_resource_reference(&hwtnl->cmd.prim_ib[i], NULL);
@@ -85,45 +87,55 @@ void
 svga_hwtnl_set_flatshade(struct svga_hwtnl *hwtnl,
                          boolean flatshade, boolean flatshade_first)
 {
-   hwtnl->hw_pv = PV_FIRST;
+   struct svga_screen *svgascreen = svga_screen(hwtnl->svga->pipe.screen);
+
+   /* User-specified PV */
    hwtnl->api_pv = (flatshade && !flatshade_first) ? PV_LAST : PV_FIRST;
+
+   /* Device supported PV */
+   if (svgascreen->haveProvokingVertex) {
+      /* use the mode specified by the user */
+      hwtnl->hw_pv = hwtnl->api_pv;
+   }
+   else {
+      /* the device only support first provoking vertex */
+      hwtnl->hw_pv = PV_FIRST;
+   }
 }
 
 
 void
-svga_hwtnl_set_unfilled(struct svga_hwtnl *hwtnl, unsigned mode)
+svga_hwtnl_set_fillmode(struct svga_hwtnl *hwtnl, unsigned mode)
 {
    hwtnl->api_fillmode = mode;
 }
 
 
 void
-svga_hwtnl_reset_vdecl(struct svga_hwtnl *hwtnl, unsigned count)
+svga_hwtnl_vertex_decls(struct svga_hwtnl *hwtnl,
+                        unsigned count,
+                        const SVGA3dVertexDecl * decls,
+                        const unsigned *buffer_indexes,
+                        SVGA3dElementLayoutId layout_id)
 {
-   unsigned i;
-
    assert(hwtnl->cmd.prim_count == 0);
-
-   for (i = count; i < hwtnl->cmd.vdecl_count; i++) {
-      pipe_resource_reference(&hwtnl->cmd.vdecl_vb[i], NULL);
-   }
-
    hwtnl->cmd.vdecl_count = count;
+   hwtnl->cmd.vdecl_layout_id = layout_id;
+   memcpy(hwtnl->cmd.vdecl, decls, count * sizeof(*decls));
+   memcpy(hwtnl->cmd.vdecl_buffer_index, buffer_indexes,
+          count * sizeof(unsigned));
 }
 
 
+/**
+ * Specify vertex buffers for hardware drawing.
+ */
 void
-svga_hwtnl_vdecl(struct svga_hwtnl *hwtnl,
-                 unsigned i,
-                 const SVGA3dVertexDecl * decl, struct pipe_resource *vb)
+svga_hwtnl_vertex_buffers(struct svga_hwtnl *hwtnl,
+                          unsigned count, struct pipe_vertex_buffer *buffers)
 {
-   assert(hwtnl->cmd.prim_count == 0);
-
-   assert(i < hwtnl->cmd.vdecl_count);
-
-   hwtnl->cmd.vdecl[i] = *decl;
-
-   pipe_resource_reference(&hwtnl->cmd.vdecl_vb[i], vb);
+   util_set_vertex_buffers_count(hwtnl->cmd.vbufs,
+                                 &hwtnl->cmd.vbuf_count, buffers, 0, count);
 }
 
 
@@ -145,8 +157,8 @@ svga_hwtnl_is_buffer_referred(struct svga_hwtnl *hwtnl,
       return FALSE;
    }
 
-   for (i = 0; i < hwtnl->cmd.vdecl_count; ++i) {
-      if (hwtnl->cmd.vdecl_vb[i] == buffer) {
+   for (i = 0; i < hwtnl->cmd.vbuf_count; ++i) {
+      if (hwtnl->cmd.vbufs[i].buffer == buffer) {
          return TRUE;
       }
    }
@@ -161,116 +173,440 @@ svga_hwtnl_is_buffer_referred(struct svga_hwtnl *hwtnl,
 }
 
 
-enum pipe_error
-svga_hwtnl_flush(struct svga_hwtnl *hwtnl)
+static enum pipe_error
+draw_vgpu9(struct svga_hwtnl *hwtnl)
 {
    struct svga_winsys_context *swc = hwtnl->cmd.swc;
    struct svga_context *svga = hwtnl->svga;
    enum pipe_error ret;
+   struct svga_winsys_surface *vb_handle[SVGA3D_INPUTREG_MAX];
+   struct svga_winsys_surface *ib_handle[QSZ];
+   struct svga_winsys_surface *handle;
+   SVGA3dVertexDecl *vdecl;
+   SVGA3dPrimitiveRange *prim;
+   unsigned i;
 
-   if (hwtnl->cmd.prim_count) {
-      struct svga_winsys_surface *vb_handle[SVGA3D_INPUTREG_MAX];
-      struct svga_winsys_surface *ib_handle[QSZ];
-      struct svga_winsys_surface *handle;
-      SVGA3dVertexDecl *vdecl;
-      SVGA3dPrimitiveRange *prim;
-      unsigned i;
+   for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
+      unsigned j = hwtnl->cmd.vdecl_buffer_index[i];
+      handle = svga_buffer_handle(svga, hwtnl->cmd.vbufs[j].buffer);
+      if (handle == NULL)
+         return PIPE_ERROR_OUT_OF_MEMORY;
 
-      for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
-         assert(!svga_buffer_is_user_buffer(hwtnl->cmd.vdecl_vb[i]));
-         handle = svga_buffer_handle(svga, hwtnl->cmd.vdecl_vb[i]);
+      vb_handle[i] = handle;
+   }
+
+   for (i = 0; i < hwtnl->cmd.prim_count; i++) {
+      if (hwtnl->cmd.prim_ib[i]) {
+         handle = svga_buffer_handle(svga, hwtnl->cmd.prim_ib[i]);
          if (handle == NULL)
             return PIPE_ERROR_OUT_OF_MEMORY;
+      }
+      else
+         handle = NULL;
 
-         vb_handle[i] = handle;
+      ib_handle[i] = handle;
+   }
+
+   if (svga->rebind.flags.rendertargets) {
+      ret = svga_reemit_framebuffer_bindings(svga);
+      if (ret != PIPE_OK) {
+         return ret;
+      }
+   }
+
+   if (svga->rebind.flags.texture_samplers) {
+      ret = svga_reemit_tss_bindings(svga);
+      if (ret != PIPE_OK) {
+         return ret;
+      }
+   }
+
+   if (svga->rebind.flags.vs) {
+      ret = svga_reemit_vs_bindings(svga);
+      if (ret != PIPE_OK) {
+         return ret;
+      }
+   }
+
+   if (svga->rebind.flags.fs) {
+      ret = svga_reemit_fs_bindings(svga);
+      if (ret != PIPE_OK) {
+         return ret;
+      }
+   }
+
+   SVGA_DBG(DEBUG_DMA, "draw to sid %p, %d prims\n",
+            svga->curr.framebuffer.cbufs[0] ?
+            svga_surface(svga->curr.framebuffer.cbufs[0])->handle : NULL,
+            hwtnl->cmd.prim_count);
+
+   ret = SVGA3D_BeginDrawPrimitives(swc,
+                                    &vdecl,
+                                    hwtnl->cmd.vdecl_count,
+                                    &prim, hwtnl->cmd.prim_count);
+   if (ret != PIPE_OK)
+      return ret;
+
+   memcpy(vdecl,
+          hwtnl->cmd.vdecl,
+          hwtnl->cmd.vdecl_count * sizeof hwtnl->cmd.vdecl[0]);
+
+   for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
+      /* check for 4-byte alignment */
+      assert(vdecl[i].array.offset % 4 == 0);
+      assert(vdecl[i].array.stride % 4 == 0);
+
+      /* Given rangeHint is considered to be relative to indexBias, and
+       * indexBias varies per primitive, we cannot accurately supply an
+       * rangeHint when emitting more than one primitive per draw command.
+       */
+      if (hwtnl->cmd.prim_count == 1) {
+         vdecl[i].rangeHint.first = hwtnl->cmd.min_index[0];
+         vdecl[i].rangeHint.last = hwtnl->cmd.max_index[0] + 1;
+      }
+      else {
+         vdecl[i].rangeHint.first = 0;
+         vdecl[i].rangeHint.last = 0;
       }
 
-      for (i = 0; i < hwtnl->cmd.prim_count; i++) {
-         if (hwtnl->cmd.prim_ib[i]) {
-            assert(!svga_buffer_is_user_buffer(hwtnl->cmd.prim_ib[i]));
-            handle = svga_buffer_handle(svga, hwtnl->cmd.prim_ib[i]);
-            if (handle == NULL)
-               return PIPE_ERROR_OUT_OF_MEMORY;
+      swc->surface_relocation(swc,
+                              &vdecl[i].array.surfaceId,
+                              NULL, vb_handle[i], SVGA_RELOC_READ);
+   }
+
+   memcpy(prim,
+          hwtnl->cmd.prim, hwtnl->cmd.prim_count * sizeof hwtnl->cmd.prim[0]);
+
+   for (i = 0; i < hwtnl->cmd.prim_count; i++) {
+      swc->surface_relocation(swc,
+                              &prim[i].indexArray.surfaceId,
+                              NULL, ib_handle[i], SVGA_RELOC_READ);
+      pipe_resource_reference(&hwtnl->cmd.prim_ib[i], NULL);
+   }
+
+   SVGA_FIFOCommitAll(swc);
+
+   hwtnl->cmd.prim_count = 0;
+
+   return PIPE_OK;
+}
+
+
+static SVGA3dSurfaceFormat
+xlate_index_format(unsigned indexWidth)
+{
+   if (indexWidth == 2) {
+      return SVGA3D_R16_UINT;
+   }
+   else if (indexWidth == 4) {
+      return SVGA3D_R32_UINT;
+   }
+   else {
+      assert(!"Bad indexWidth");
+      return SVGA3D_R32_UINT;
+   }
+}
+
+
+static enum pipe_error
+validate_sampler_resources(struct svga_context *svga)
+{
+   unsigned shader;
+
+   assert(svga_have_vgpu10(svga));
+
+   for (shader = PIPE_SHADER_VERTEX; shader <= PIPE_SHADER_GEOMETRY; shader++) {
+      unsigned count = svga->curr.num_sampler_views[shader];
+      unsigned i;
+      struct svga_winsys_surface *surfaces[PIPE_MAX_SAMPLERS];
+      enum pipe_error ret;
+
+      /*
+       * Reference bound sampler resources to ensure pending updates are
+       * noticed by the device.
+       */
+      for (i = 0; i < count; i++) {
+         struct svga_pipe_sampler_view *sv =
+            svga_pipe_sampler_view(svga->curr.sampler_views[shader][i]);
+
+         if (sv) {
+            if (sv->base.texture->target == PIPE_BUFFER) {
+               surfaces[i] = svga_buffer_handle(svga, sv->base.texture);
+            }
+            else {
+               surfaces[i] = svga_texture(sv->base.texture)->handle;
+            }
          }
          else {
-            handle = NULL;
-         }
-
-         ib_handle[i] = handle;
-      }
-
-      if (svga->rebind.rendertargets) {
-         ret = svga_reemit_framebuffer_bindings(svga);
-         if (ret != PIPE_OK) {
-            return ret;
+            surfaces[i] = NULL;
          }
       }
 
-      if (svga->rebind.texture_samplers) {
-         ret = svga_reemit_tss_bindings(svga);
-         if (ret != PIPE_OK) {
-            return ret;
+      if (shader == PIPE_SHADER_FRAGMENT &&
+          svga->curr.rast->templ.poly_stipple_enable) {
+         const unsigned unit = svga->state.hw_draw.fs->pstipple_sampler_unit;
+         struct svga_pipe_sampler_view *sv =
+            svga->polygon_stipple.sampler_view;
+
+         assert(sv);
+         surfaces[unit] = svga_texture(sv->base.texture)->handle;
+         count = MAX2(count, unit+1);
+      }
+
+      /* rebind the shader resources if needed */
+      if (svga->rebind.flags.texture_samplers) {
+         for (i = 0; i < count; i++) {
+            if (surfaces[i]) {
+               ret = svga->swc->resource_rebind(svga->swc,
+                                                surfaces[i],
+                                                NULL,
+                                                SVGA_RELOC_READ);
+               if (ret != PIPE_OK)
+                  return ret;
+            }
+         }
+      }
+   }
+   svga->rebind.flags.texture_samplers = FALSE;
+
+   return PIPE_OK;
+}
+
+
+static enum pipe_error
+validate_constant_buffers(struct svga_context *svga)
+{
+   unsigned shader;
+
+   assert(svga_have_vgpu10(svga));
+
+   for (shader = PIPE_SHADER_VERTEX; shader <= PIPE_SHADER_GEOMETRY; shader++) {
+      enum pipe_error ret;
+      struct svga_buffer *buffer;
+      struct svga_winsys_surface *handle;
+      unsigned enabled_constbufs;
+
+      /* Rebind the default constant buffer if needed */
+      if (svga->rebind.flags.constbufs) {
+         buffer = svga_buffer(svga->state.hw_draw.constbuf[shader]);
+         if (buffer) {
+            ret = svga->swc->resource_rebind(svga->swc,
+                                             buffer->handle,
+                                             NULL,
+                                             SVGA_RELOC_READ);
+            if (ret != PIPE_OK)
+               return ret;
          }
       }
 
-      if (svga->rebind.vs) {
-         ret = svga_reemit_vs_bindings(svga);
-         if (ret != PIPE_OK) {
-            return ret;
+      /*
+       * Reference other bound constant buffers to ensure pending updates are
+       * noticed by the device.
+       */
+      enabled_constbufs = svga->state.hw_draw.enabled_constbufs[shader] & ~1u;
+      while (enabled_constbufs) {
+         unsigned i = u_bit_scan(&enabled_constbufs);
+         buffer = svga_buffer(svga->curr.constbufs[shader][i].buffer);
+         if (buffer) {
+            handle = svga_buffer_handle(svga, &buffer->b.b);
+
+            if (svga->rebind.flags.constbufs) {
+               ret = svga->swc->resource_rebind(svga->swc,
+                                                handle,
+                                                NULL,
+                                                SVGA_RELOC_READ);
+               if (ret != PIPE_OK)
+                  return ret;
+            }
          }
       }
+   }
+   svga->rebind.flags.constbufs = FALSE;
 
-      if (svga->rebind.fs) {
-         ret = svga_reemit_fs_bindings(svga);
-         if (ret != PIPE_OK) {
-            return ret;
-         }
-      }
+   return PIPE_OK;
+}
 
-      SVGA_DBG(DEBUG_DMA, "draw to sid %p, %d prims\n",
-               svga->curr.framebuffer.cbufs[0] ?
-               svga_surface(svga->curr.framebuffer.cbufs[0])->handle : NULL,
-               hwtnl->cmd.prim_count);
 
-      ret = SVGA3D_BeginDrawPrimitives(swc, &vdecl, hwtnl->cmd.vdecl_count,
-                                       &prim, hwtnl->cmd.prim_count);
+static enum pipe_error
+draw_vgpu10(struct svga_hwtnl *hwtnl,
+            const SVGA3dPrimitiveRange *range,
+            unsigned vcount,
+            unsigned min_index,
+            unsigned max_index, struct pipe_resource *ib,
+            unsigned start_instance, unsigned instance_count)
+{
+   struct svga_context *svga = hwtnl->svga;
+   struct svga_winsys_surface *vb_handle[SVGA3D_INPUTREG_MAX];
+   struct svga_winsys_surface *ib_handle;
+   const unsigned vbuf_count = hwtnl->cmd.vbuf_count;
+   enum pipe_error ret;
+   unsigned i;
+
+   assert(svga_have_vgpu10(svga));
+   assert(hwtnl->cmd.prim_count == 0);
+
+   /* We need to reemit all the current resource bindings along with the Draw
+    * command to be sure that the referenced resources are available for the
+    * Draw command, just in case the surfaces associated with the resources
+    * are paged out.
+    */
+   if (svga->rebind.val) {
+      ret = svga_rebind_framebuffer_bindings(svga);
       if (ret != PIPE_OK)
          return ret;
 
-      memcpy(vdecl, hwtnl->cmd.vdecl,
-             hwtnl->cmd.vdecl_count * sizeof hwtnl->cmd.vdecl[0]);
-
-      for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
-         /* Given rangeHint is considered to be relative to indexBias, and 
-          * indexBias varies per primitive, we cannot accurately supply an 
-          * rangeHint when emitting more than one primitive per draw command.
-          */
-         if (hwtnl->cmd.prim_count == 1) {
-            vdecl[i].rangeHint.first = hwtnl->cmd.min_index[0];
-            vdecl[i].rangeHint.last = hwtnl->cmd.max_index[0] + 1;
-         }
-         else {
-            vdecl[i].rangeHint.first = 0;
-            vdecl[i].rangeHint.last = 0;
-         }
-
-         swc->surface_relocation(swc, &vdecl[i].array.surfaceId, NULL,
-                                 vb_handle[i], SVGA_RELOC_READ);
-      }
-
-      memcpy(prim, hwtnl->cmd.prim,
-             hwtnl->cmd.prim_count * sizeof hwtnl->cmd.prim[0]);
-
-      for (i = 0; i < hwtnl->cmd.prim_count; i++) {
-         swc->surface_relocation(swc, &prim[i].indexArray.surfaceId, NULL,
-                                 ib_handle[i], SVGA_RELOC_READ);
-         pipe_resource_reference(&hwtnl->cmd.prim_ib[i], NULL);
-      }
-
-      SVGA_FIFOCommitAll(swc);
-      hwtnl->cmd.prim_count = 0;
+      ret = svga_rebind_shaders(svga);
+      if (ret != PIPE_OK)
+         return ret;
    }
 
+   ret = validate_sampler_resources(svga);
+   if (ret != PIPE_OK)
+      return ret;
+
+   ret = validate_constant_buffers(svga);
+   if (ret != PIPE_OK)
+      return ret;
+
+   /* Get handle for each referenced vertex buffer */
+   for (i = 0; i < vbuf_count; i++) {
+      struct svga_buffer *sbuf = svga_buffer(hwtnl->cmd.vbufs[i].buffer);
+
+      if (sbuf) {
+         assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_VERTEX_BUFFER);
+         vb_handle[i] = svga_buffer_handle(svga, &sbuf->b.b);
+         if (vb_handle[i] == NULL)
+            return PIPE_ERROR_OUT_OF_MEMORY;
+      }
+      else {
+         vb_handle[i] = NULL;
+      }
+   }
+
+   /* Get handles for the index buffers */
+   if (ib) {
+      struct svga_buffer *sbuf = svga_buffer(ib);
+
+      assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_INDEX_BUFFER);
+      (void) sbuf; /* silence unused var warning */
+
+      ib_handle = svga_buffer_handle(svga, ib);
+      if (ib_handle == NULL)
+         return PIPE_ERROR_OUT_OF_MEMORY;
+   }
+   else {
+      ib_handle = NULL;
+   }
+
+   /* setup vertex attribute input layout */
+   if (svga->state.hw_draw.layout_id != hwtnl->cmd.vdecl_layout_id) {
+      ret = SVGA3D_vgpu10_SetInputLayout(svga->swc,
+                                         hwtnl->cmd.vdecl_layout_id);
+      if (ret != PIPE_OK)
+         return ret;
+
+      svga->state.hw_draw.layout_id = hwtnl->cmd.vdecl_layout_id;
+   }
+
+   /* setup vertex buffers */
+   {
+      SVGA3dVertexBuffer buffers[PIPE_MAX_ATTRIBS];
+
+      for (i = 0; i < vbuf_count; i++) {
+         buffers[i].stride = hwtnl->cmd.vbufs[i].stride;
+         buffers[i].offset = hwtnl->cmd.vbufs[i].buffer_offset;
+      }
+      if (vbuf_count > 0) {
+         ret = SVGA3D_vgpu10_SetVertexBuffers(svga->swc, vbuf_count,
+                                              0,    /* startBuffer */
+                                              buffers, vb_handle);
+         if (ret != PIPE_OK)
+            return ret;
+      }
+   }
+
+   /* Set primitive type (line, tri, etc) */
+   if (svga->state.hw_draw.topology != range->primType) {
+      ret = SVGA3D_vgpu10_SetTopology(svga->swc, range->primType);
+      if (ret != PIPE_OK)
+         return ret;
+
+      svga->state.hw_draw.topology = range->primType;
+   }
+
+   if (ib_handle) {
+      /* indexed drawing */
+      SVGA3dSurfaceFormat indexFormat = xlate_index_format(range->indexWidth);
+
+      /* setup index buffer */
+      ret = SVGA3D_vgpu10_SetIndexBuffer(svga->swc, ib_handle,
+                                         indexFormat,
+                                         range->indexArray.offset);
+      if (ret != PIPE_OK)
+         return ret;
+
+      if (instance_count > 1) {
+         ret = SVGA3D_vgpu10_DrawIndexedInstanced(svga->swc,
+                                                  vcount,
+                                                  instance_count,
+                                                  0, /* startIndexLocation */
+                                                  range->indexBias,
+                                                  start_instance);
+         if (ret != PIPE_OK)
+            return ret;
+      }
+      else {
+         /* non-instanced drawing */
+         ret = SVGA3D_vgpu10_DrawIndexed(svga->swc,
+                                         vcount,
+                                         0,      /* startIndexLocation */
+                                         range->indexBias);
+         if (ret != PIPE_OK)
+            return ret;
+      }
+   }
+   else {
+      /* non-indexed drawing */
+      if (instance_count > 1) {
+         ret = SVGA3D_vgpu10_DrawInstanced(svga->swc,
+                                           vcount,
+                                           instance_count,
+                                           range->indexBias,
+                                           start_instance);
+         if (ret != PIPE_OK)
+            return ret;
+      }
+      else {
+         /* non-instanced */
+         ret = SVGA3D_vgpu10_Draw(svga->swc,
+                                  vcount,
+                                  range->indexBias);
+         if (ret != PIPE_OK)
+            return ret;
+      }
+   }
+
+   hwtnl->cmd.prim_count = 0;
+
+   return PIPE_OK;
+}
+
+
+
+/**
+ * Emit any pending drawing commands to the command buffer.
+ * When we receive VGPU9 drawing commands we accumulate them and don't
+ * immediately emit them into the command buffer.
+ * This function needs to be called before we change state that could
+ * effect those pending draws.
+ */
+enum pipe_error
+svga_hwtnl_flush(struct svga_hwtnl *hwtnl)
+{
+   if (!svga_have_vgpu10(hwtnl->svga) && hwtnl->cmd.prim_count) {
+      /* we only queue up primitive for VGPU9 */
+      return draw_vgpu9(hwtnl);
+   }
    return PIPE_OK;
 }
 
@@ -298,18 +634,28 @@ check_draw_params(struct svga_hwtnl *hwtnl,
 {
    unsigned i;
 
+   assert(!svga_have_vgpu10(hwtnl->svga));
+
    for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
-      struct pipe_resource *vb = hwtnl->cmd.vdecl_vb[i];
-      unsigned size = vb ? vb->width0 : 0;
+      unsigned j = hwtnl->cmd.vdecl_buffer_index[i];
+      const struct pipe_vertex_buffer *vb = &hwtnl->cmd.vbufs[j];
+      unsigned size = vb->buffer ? vb->buffer->width0 : 0;
       unsigned offset = hwtnl->cmd.vdecl[i].array.offset;
       unsigned stride = hwtnl->cmd.vdecl[i].array.stride;
       int index_bias = (int) range->indexBias + hwtnl->index_bias;
       unsigned width;
 
+      if (size == 0)
+         continue;
+
       assert(vb);
       assert(size);
       assert(offset < size);
       assert(min_index <= max_index);
+      (void) width;
+      (void) stride;
+      (void) offset;
+      (void) size;
 
       switch (hwtnl->cmd.vdecl[i].identity.type) {
       case SVGA3D_DECLTYPE_FLOAT1:
@@ -390,6 +736,9 @@ check_draw_params(struct svga_hwtnl *hwtnl,
       assert(size);
       assert(offset < size);
       assert(stride);
+      (void) size;
+      (void) offset;
+      (void) stride;
 
       switch (range->primType) {
       case SVGA3D_PRIMITIVE_POINTLIST:
@@ -421,33 +770,57 @@ check_draw_params(struct svga_hwtnl *hwtnl,
 }
 
 
+/**
+ * All drawing filters down into this function, either directly
+ * on the hardware path or after doing software vertex processing.
+ */
 enum pipe_error
 svga_hwtnl_prim(struct svga_hwtnl *hwtnl,
                 const SVGA3dPrimitiveRange * range,
+                unsigned vcount,
                 unsigned min_index,
-                unsigned max_index, struct pipe_resource *ib)
+                unsigned max_index, struct pipe_resource *ib,
+                unsigned start_instance, unsigned instance_count)
 {
    enum pipe_error ret = PIPE_OK;
 
+   if (svga_have_vgpu10(hwtnl->svga)) {
+      /* draw immediately */
+      ret = draw_vgpu10(hwtnl, range, vcount, min_index, max_index, ib,
+                        start_instance, instance_count);
+      if (ret != PIPE_OK) {
+         svga_context_flush(hwtnl->svga, NULL);
+         ret = draw_vgpu10(hwtnl, range, vcount, min_index, max_index, ib,
+                           start_instance, instance_count);
+         assert(ret == PIPE_OK);
+      }
+   }
+   else {
+      /* batch up drawing commands */
 #ifdef DEBUG
-   check_draw_params(hwtnl, range, min_index, max_index, ib);
+      check_draw_params(hwtnl, range, min_index, max_index, ib);
+      assert(start_instance == 0);
+      assert(instance_count <= 1);
+#else
+      (void) check_draw_params;
 #endif
 
-   if (hwtnl->cmd.prim_count + 1 >= QSZ) {
-      ret = svga_hwtnl_flush(hwtnl);
-      if (ret != PIPE_OK)
-         return ret;
+      if (hwtnl->cmd.prim_count + 1 >= QSZ) {
+         ret = svga_hwtnl_flush(hwtnl);
+         if (ret != PIPE_OK)
+            return ret;
+      }
+
+      /* min/max indices are relative to bias */
+      hwtnl->cmd.min_index[hwtnl->cmd.prim_count] = min_index;
+      hwtnl->cmd.max_index[hwtnl->cmd.prim_count] = max_index;
+
+      hwtnl->cmd.prim[hwtnl->cmd.prim_count] = *range;
+      hwtnl->cmd.prim[hwtnl->cmd.prim_count].indexBias += hwtnl->index_bias;
+
+      pipe_resource_reference(&hwtnl->cmd.prim_ib[hwtnl->cmd.prim_count], ib);
+      hwtnl->cmd.prim_count++;
    }
-
-   /* min/max indices are relative to bias */
-   hwtnl->cmd.min_index[hwtnl->cmd.prim_count] = min_index;
-   hwtnl->cmd.max_index[hwtnl->cmd.prim_count] = max_index;
-
-   hwtnl->cmd.prim[hwtnl->cmd.prim_count] = *range;
-   hwtnl->cmd.prim[hwtnl->cmd.prim_count].indexBias += hwtnl->index_bias;
-
-   pipe_resource_reference(&hwtnl->cmd.prim_ib[hwtnl->cmd.prim_count], ib);
-   hwtnl->cmd.prim_count++;
 
    return ret;
 }

@@ -44,12 +44,6 @@
 
 #define INTEL_UPLOAD_SIZE (64*1024)
 
-/**
- * Like ALIGN(), but works with a non-power-of-two alignment.
- */
-#define ALIGN_NPOT(value, alignment) \
-   (((value) + (alignment) - 1) / (alignment) * (alignment))
-
 void
 intel_upload_finish(struct brw_context *brw)
 {

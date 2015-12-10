@@ -29,21 +29,22 @@
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
 
-#define DEBUG_DMA      0x1
-#define DEBUG_TGSI     0x4
-#define DEBUG_PIPE     0x8
-#define DEBUG_STATE    0x10
-#define DEBUG_SCREEN   0x20
-#define DEBUG_TEX      0x40
-#define DEBUG_SWTNL    0x80
-#define DEBUG_CONSTS   0x100
-#define DEBUG_VIEWPORT 0x200
-#define DEBUG_VIEWS    0x400
-#define DEBUG_PERF     0x800    /* print something when we hit any slow path operation */
-#define DEBUG_FLUSH    0x1000   /* flush after every draw */
-#define DEBUG_SYNC     0x2000   /* sync after every flush */
-#define DEBUG_QUERY    0x4000
-#define DEBUG_CACHE    0x8000
+#define DEBUG_DMA          0x1
+#define DEBUG_TGSI         0x4
+#define DEBUG_PIPE         0x8
+#define DEBUG_STATE        0x10
+#define DEBUG_SCREEN       0x20
+#define DEBUG_TEX          0x40
+#define DEBUG_SWTNL        0x80
+#define DEBUG_CONSTS       0x100
+#define DEBUG_VIEWPORT     0x200
+#define DEBUG_VIEWS        0x400
+#define DEBUG_PERF         0x800    /* print something when we hit any slow path operation */
+#define DEBUG_FLUSH        0x1000   /* flush after every draw */
+#define DEBUG_SYNC         0x2000   /* sync after every flush */
+#define DEBUG_QUERY        0x4000
+#define DEBUG_CACHE        0x8000
+#define DEBUG_STREAMOUT    0x10000
 
 #ifdef DEBUG
 extern int SVGA_DEBUG;

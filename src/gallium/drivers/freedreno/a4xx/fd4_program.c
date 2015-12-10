@@ -227,36 +227,23 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 	/* blob seems to always use constmode currently: */
 	constmode = 1;
 
-	pos_regid = ir3_find_output_regid(s[VS].v,
-		ir3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
-	posz_regid = ir3_find_output_regid(s[FS].v,
-		ir3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
-	psize_regid = ir3_find_output_regid(s[VS].v,
-		ir3_semantic_name(TGSI_SEMANTIC_PSIZE, 0));
+	pos_regid = ir3_find_output_regid(s[VS].v, VARYING_SLOT_POS);
+	posz_regid = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DEPTH);
+	psize_regid = ir3_find_output_regid(s[VS].v, VARYING_SLOT_PSIZ);
 	if (s[FS].v->color0_mrt) {
 		color_regid[0] = color_regid[1] = color_regid[2] = color_regid[3] =
 		color_regid[4] = color_regid[5] = color_regid[6] = color_regid[7] =
-			ir3_find_output_regid(s[FS].v, ir3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
+			ir3_find_output_regid(s[FS].v, FRAG_RESULT_COLOR);
 	} else {
-		const struct ir3_shader_variant *fp = s[FS].v;
-		memset(color_regid, 0, sizeof(color_regid));
-		for (i = 0; i < fp->outputs_count; i++) {
-			ir3_semantic sem = fp->outputs[i].semantic;
-			unsigned idx = sem2idx(sem);
-			if (sem2name(sem) != TGSI_SEMANTIC_COLOR)
-				continue;
-			debug_assert(idx < ARRAY_SIZE(color_regid));
-			color_regid[idx] = fp->outputs[i].regid;
-		}
+		color_regid[0] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA0);
+		color_regid[1] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA1);
+		color_regid[2] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA2);
+		color_regid[3] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA3);
+		color_regid[4] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA4);
+		color_regid[5] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA5);
+		color_regid[6] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA6);
+		color_regid[7] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA7);
 	}
-
-	/* adjust regids for alpha output formats. there is no alpha render
-	 * format, so it's just treated like red
-	 */
-	for (i = 0; i < nr; i++)
-		if (util_format_is_alpha(pipe_surface_format(bufs[i])))
-			color_regid[i] += 3;
-
 
 	/* TODO get these dynamically: */
 	face_regid = s[FS].v->frag_face ? regid(0,0) : regid(63,0);
@@ -348,14 +335,14 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 
 		j = ir3_next_varying(s[FS].v, j);
 		if (j < s[FS].v->inputs_count) {
-			k = ir3_find_output(s[VS].v, s[FS].v->inputs[j].semantic);
+			k = ir3_find_output(s[VS].v, s[FS].v->inputs[j].slot);
 			reg |= A4XX_SP_VS_OUT_REG_A_REGID(s[VS].v->outputs[k].regid);
 			reg |= A4XX_SP_VS_OUT_REG_A_COMPMASK(s[FS].v->inputs[j].compmask);
 		}
 
 		j = ir3_next_varying(s[FS].v, j);
 		if (j < s[FS].v->inputs_count) {
-			k = ir3_find_output(s[VS].v, s[FS].v->inputs[j].semantic);
+			k = ir3_find_output(s[VS].v, s[FS].v->inputs[j].slot);
 			reg |= A4XX_SP_VS_OUT_REG_B_REGID(s[VS].v->outputs[k].regid);
 			reg |= A4XX_SP_VS_OUT_REG_B_COMPMASK(s[FS].v->inputs[j].compmask);
 		}
@@ -492,7 +479,6 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 		 */
 		/* figure out VARYING_INTERP / VARYING_PS_REPL register values: */
 		for (j = -1; (j = ir3_next_varying(s[FS].v, j)) < (int)s[FS].v->inputs_count; ) {
-			uint32_t interp = s[FS].v->inputs[j].interpolate;
 
 			/* TODO might be cleaner to just +8 in SP_VS_VPC_DST_REG
 			 * instead.. rather than -8 everywhere else..
@@ -504,8 +490,8 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			 */
 			debug_assert((inloc % 4) == 0);
 
-			if ((interp == TGSI_INTERPOLATE_CONSTANT) ||
-					((interp == TGSI_INTERPOLATE_COLOR) && emit->rasterflat)) {
+			if ((s[FS].v->inputs[j].interpolate == INTERP_QUALIFIER_FLAT) ||
+					(s[FS].v->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
 
 				for (i = 0; i < 4; i++, loc++) {
@@ -514,14 +500,20 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 				}
 			}
 
-			/* Replace the .xy coordinates with S/T from the point sprite. Set
-			 * interpolation bits for .zw such that they become .01
-			 */
-			if (emit->sprite_coord_enable & (1 << sem2idx(s[FS].v->inputs[j].semantic))) {
-				vpsrepl[inloc / 16] |= (emit->sprite_coord_mode ? 0x0d : 0x09)
-					<< ((inloc % 16) * 2);
-				vinterp[(inloc + 2) / 16] |= 2 << (((inloc + 2) % 16) * 2);
-				vinterp[(inloc + 3) / 16] |= 3 << (((inloc + 3) % 16) * 2);
+			gl_varying_slot slot = s[FS].v->inputs[j].slot;
+
+			/* since we don't enable PIPE_CAP_TGSI_TEXCOORD: */
+			if (slot >= VARYING_SLOT_VAR0) {
+				unsigned texmask = 1 << (slot - VARYING_SLOT_VAR0);
+				/* Replace the .xy coordinates with S/T from the point sprite. Set
+				 * interpolation bits for .zw such that they become .01
+				 */
+				if (emit->sprite_coord_enable & texmask) {
+					vpsrepl[inloc / 16] |= (emit->sprite_coord_mode ? 0x0d : 0x09)
+						<< ((inloc % 16) * 2);
+					vinterp[(inloc + 2) / 16] |= 2 << (((inloc + 2) % 16) * 2);
+					vinterp[(inloc + 3) / 16] |= 3 << (((inloc + 3) % 16) * 2);
+				}
 			}
 		}
 

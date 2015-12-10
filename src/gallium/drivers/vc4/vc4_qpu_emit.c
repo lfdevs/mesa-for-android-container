@@ -101,7 +101,8 @@ swap_file(struct qpu_reg *src)
 static void
 fixup_raddr_conflict(struct vc4_compile *c,
                      struct qpu_reg dst,
-                     struct qpu_reg *src0, struct qpu_reg *src1)
+                     struct qpu_reg *src0, struct qpu_reg *src1,
+                     struct qinst *inst, uint64_t *unpack)
 {
         uint32_t mux0 = src0->mux == QPU_MUX_SMALL_IMM ? QPU_MUX_B : src0->mux;
         uint32_t mux1 = src1->mux == QPU_MUX_SMALL_IMM ? QPU_MUX_B : src1->mux;
@@ -117,11 +118,46 @@ fixup_raddr_conflict(struct vc4_compile *c,
                 return;
 
         if (mux0 == QPU_MUX_A) {
-                queue(c, qpu_a_MOV(qpu_rb(31), *src0));
+                /* Make sure we use the same type of MOV as the instruction,
+                 * in case of unpacks.
+                 */
+                if (qir_is_float_input(inst))
+                        queue(c, qpu_a_FMAX(qpu_rb(31), *src0, *src0));
+                else
+                        queue(c, qpu_a_MOV(qpu_rb(31), *src0));
+
+                /* If we had an unpack on this A-file source, we need to put
+                 * it into this MOV, not into the later move from regfile B.
+                 */
+                if (inst->src[0].pack) {
+                        *last_inst(c) |= *unpack;
+                        *unpack = 0;
+                }
                 *src0 = qpu_rb(31);
         } else {
                 queue(c, qpu_a_MOV(qpu_ra(31), *src0));
                 *src0 = qpu_ra(31);
+        }
+}
+
+static void
+set_last_dst_pack(struct vc4_compile *c, struct qinst *inst)
+{
+        bool had_pm = *last_inst(c) & QPU_PM;
+        bool had_ws = *last_inst(c) & QPU_WS;
+        uint32_t unpack = QPU_GET_FIELD(*last_inst(c), QPU_UNPACK);
+
+        if (!inst->dst.pack)
+                return;
+
+        *last_inst(c) |= QPU_SET_FIELD(inst->dst.pack, QPU_PACK);
+
+        if (qir_is_mul(inst)) {
+                assert(!unpack || had_pm);
+                *last_inst(c) |= QPU_PM;
+        } else {
+                assert(!unpack || !had_pm);
+                assert(!had_ws); /* dst must be a-file to pack. */
         }
 }
 
@@ -134,15 +170,6 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
         uint32_t vpm_read_fifo_count = 0;
         uint32_t vpm_read_offset = 0;
         int last_vpm_read_index = -1;
-        /* Map from the QIR ops enum order to QPU unpack bits. */
-        static const uint32_t unpack_map[] = {
-                QPU_UNPACK_8A,
-                QPU_UNPACK_8B,
-                QPU_UNPACK_8C,
-                QPU_UNPACK_8D,
-                QPU_UNPACK_16A_TO_F32,
-                QPU_UNPACK_16B_TO_F32,
-        };
 
         list_inithead(&c->qpu_inst_list);
 
@@ -203,9 +230,22 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         A(NOT),
 
                         M(FMUL),
+                        M(V8MULD),
+                        M(V8MIN),
+                        M(V8MAX),
+                        M(V8ADDS),
+                        M(V8SUBS),
                         M(MUL24),
+
+                        /* If we replicate src[0] out to src[1], this works
+                         * out the same as a MOV.
+                         */
+                        [QOP_MOV] = { QPU_A_OR },
+                        [QOP_FMOV] = { QPU_A_FMAX },
+                        [QOP_MMOV] = { QPU_M_V8MIN },
                 };
 
+                uint64_t unpack = 0;
                 struct qpu_reg src[4];
                 for (int i = 0; i < qir_get_op_nsrc(qinst->op); i++) {
                         int index = qinst->src[i].index;
@@ -215,6 +255,14 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                                 break;
                         case QFILE_TEMP:
                                 src[i] = temp_registers[index];
+                                if (qinst->src[i].pack) {
+                                        assert(!unpack ||
+                                               unpack == qinst->src[i].pack);
+                                        unpack = QPU_SET_FIELD(qinst->src[i].pack,
+                                                               QPU_UNPACK);
+                                        if (src[i].mux == QPU_MUX_R4)
+                                                unpack |= QPU_PM;
+                                }
                                 break;
                         case QFILE_UNIF:
                                 src[i] = qpu_unif();
@@ -259,21 +307,13 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                 }
 
                 switch (qinst->op) {
-                case QOP_MOV:
-                        /* Skip emitting the MOV if it's a no-op. */
-                        if (dst.mux == QPU_MUX_A || dst.mux == QPU_MUX_B ||
-                            dst.mux != src[0].mux || dst.addr != src[0].addr) {
-                                queue(c, qpu_a_MOV(dst, src[0]));
-                        }
-                        break;
-
                 case QOP_SEL_X_0_ZS:
                 case QOP_SEL_X_0_ZC:
                 case QOP_SEL_X_0_NS:
                 case QOP_SEL_X_0_NC:
                 case QOP_SEL_X_0_CS:
                 case QOP_SEL_X_0_CC:
-                        queue(c, qpu_a_MOV(dst, src[0]));
+                        queue(c, qpu_a_MOV(dst, src[0]) | unpack);
                         set_last_cond_add(c, qinst->op - QOP_SEL_X_0_ZS +
                                           QPU_COND_ZS);
 
@@ -289,10 +329,14 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                 case QOP_SEL_X_Y_CS:
                 case QOP_SEL_X_Y_CC:
                         queue(c, qpu_a_MOV(dst, src[0]));
+                        if (qinst->src[0].pack)
+                                *(last_inst(c)) |= unpack;
                         set_last_cond_add(c, qinst->op - QOP_SEL_X_Y_ZS +
                                           QPU_COND_ZS);
 
                         queue(c, qpu_a_MOV(dst, src[1]));
+                        if (qinst->src[1].pack)
+                                *(last_inst(c)) |= unpack;
                         set_last_cond_add(c, ((qinst->op - QOP_SEL_X_Y_ZS) ^
                                               1) + QPU_COND_ZS);
 
@@ -305,19 +349,19 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         switch (qinst->op) {
                         case QOP_RCP:
                                 queue(c, qpu_a_MOV(qpu_rb(QPU_W_SFU_RECIP),
-                                                   src[0]));
+                                                   src[0]) | unpack);
                                 break;
                         case QOP_RSQ:
                                 queue(c, qpu_a_MOV(qpu_rb(QPU_W_SFU_RECIPSQRT),
-                                                   src[0]));
+                                                   src[0]) | unpack);
                                 break;
                         case QOP_EXP2:
                                 queue(c, qpu_a_MOV(qpu_rb(QPU_W_SFU_EXP),
-                                                   src[0]));
+                                                   src[0]) | unpack);
                                 break;
                         case QOP_LOG2:
                                 queue(c, qpu_a_MOV(qpu_rb(QPU_W_SFU_LOG),
-                                                   src[0]));
+                                                   src[0]) | unpack);
                                 break;
                         default:
                                 abort();
@@ -326,25 +370,6 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         if (dst.mux != QPU_MUX_R4)
                                 queue(c, qpu_a_MOV(dst, qpu_r4()));
 
-                        break;
-
-                case QOP_PACK_8888_F:
-                        queue(c, qpu_m_MOV(dst, src[0]));
-                        *last_inst(c) |= QPU_PM;
-                        *last_inst(c) |= QPU_SET_FIELD(QPU_PACK_MUL_8888,
-                                                       QPU_PACK);
-                        break;
-
-                case QOP_PACK_8A_F:
-                case QOP_PACK_8B_F:
-                case QOP_PACK_8C_F:
-                case QOP_PACK_8D_F:
-                        queue(c,
-                              qpu_m_MOV(dst, src[0]) |
-                              QPU_PM |
-                              QPU_SET_FIELD(QPU_PACK_MUL_8A +
-                                            qinst->op - QOP_PACK_8A_F,
-                                            QPU_PACK));
                         break;
 
                 case QOP_FRAG_X:
@@ -371,16 +396,19 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
 
                 case QOP_TLB_DISCARD_SETUP:
                         discard = true;
-                        queue(c, qpu_a_MOV(src[0], src[0]));
+                        queue(c, qpu_a_MOV(src[0], src[0]) | unpack);
                         *last_inst(c) |= QPU_SF;
                         break;
 
                 case QOP_TLB_STENCIL_SETUP:
-                        queue(c, qpu_a_MOV(qpu_ra(QPU_W_TLB_STENCIL_SETUP), src[0]));
+                        assert(!unpack);
+                        queue(c, qpu_a_MOV(qpu_ra(QPU_W_TLB_STENCIL_SETUP),
+                                           src[0]) | unpack);
                         break;
 
                 case QOP_TLB_Z_WRITE:
-                        queue(c, qpu_a_MOV(qpu_ra(QPU_W_TLB_Z), src[0]));
+                        queue(c, qpu_a_MOV(qpu_ra(QPU_W_TLB_Z),
+                                           src[0]) | unpack);
                         if (discard) {
                                 set_last_cond_add(c, QPU_COND_ZS);
                         }
@@ -396,14 +424,14 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         break;
 
                 case QOP_TLB_COLOR_WRITE:
-                        queue(c, qpu_a_MOV(qpu_tlbc(), src[0]));
+                        queue(c, qpu_a_MOV(qpu_tlbc(), src[0]) | unpack);
                         if (discard) {
                                 set_last_cond_add(c, QPU_COND_ZS);
                         }
                         break;
 
                 case QOP_VARY_ADD_C:
-                        queue(c, qpu_a_FADD(dst, src[0], qpu_r5()));
+                        queue(c, qpu_a_FADD(dst, src[0], qpu_r5()) | unpack);
                         break;
 
                 case QOP_TEX_S:
@@ -412,12 +440,14 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                 case QOP_TEX_B:
                         queue(c, qpu_a_MOV(qpu_rb(QPU_W_TMU0_S +
                                                   (qinst->op - QOP_TEX_S)),
-                                           src[0]));
+                                           src[0]) | unpack);
                         break;
 
                 case QOP_TEX_DIRECT:
-                        fixup_raddr_conflict(c, dst, &src[0], &src[1]);
-                        queue(c, qpu_a_ADD(qpu_rb(QPU_W_TMU0_S), src[0], src[1]));
+                        fixup_raddr_conflict(c, dst, &src[0], &src[1],
+                                             qinst, &unpack);
+                        queue(c, qpu_a_ADD(qpu_rb(QPU_W_TMU0_S),
+                                           src[0], src[1]) | unpack);
                         break;
 
                 case QOP_TEX_RESULT:
@@ -428,66 +458,15 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                                 queue(c, qpu_a_MOV(dst, qpu_r4()));
                         break;
 
-                case QOP_UNPACK_8A_F:
-                case QOP_UNPACK_8B_F:
-                case QOP_UNPACK_8C_F:
-                case QOP_UNPACK_8D_F:
-                case QOP_UNPACK_16A_F:
-                case QOP_UNPACK_16B_F: {
-                        if (src[0].mux == QPU_MUX_R4) {
-                                queue(c, qpu_a_MOV(dst, src[0]));
-                                *last_inst(c) |= QPU_PM;
-                                *last_inst(c) |= QPU_SET_FIELD(QPU_UNPACK_8A +
-                                                               (qinst->op -
-                                                                QOP_UNPACK_8A_F),
-                                                               QPU_UNPACK);
-                        } else {
-                                assert(src[0].mux == QPU_MUX_A);
-
-                                /* Since we're setting the pack bits, if the
-                                 * destination is in A it would get re-packed.
-                                 */
-                                queue(c, qpu_a_FMAX((dst.mux == QPU_MUX_A ?
-                                                     qpu_rb(31) : dst),
-                                                    src[0], src[0]));
-                                *last_inst(c) |=
-                                        QPU_SET_FIELD(unpack_map[qinst->op -
-                                                                 QOP_UNPACK_8A_F],
-                                                      QPU_UNPACK);
-
-                                if (dst.mux == QPU_MUX_A) {
-                                        queue(c, qpu_a_MOV(dst, qpu_rb(31)));
-                                }
-                        }
-                }
-                        break;
-
-                case QOP_UNPACK_8A_I:
-                case QOP_UNPACK_8B_I:
-                case QOP_UNPACK_8C_I:
-                case QOP_UNPACK_8D_I:
-                case QOP_UNPACK_16A_I:
-                case QOP_UNPACK_16B_I: {
-                        assert(src[0].mux == QPU_MUX_A);
-
-                        /* Since we're setting the pack bits, if the
-                         * destination is in A it would get re-packed.
-                         */
-                        queue(c, qpu_a_MOV((dst.mux == QPU_MUX_A ?
-                                            qpu_rb(31) : dst), src[0]));
-                        *last_inst(c) |= QPU_SET_FIELD(unpack_map[qinst->op -
-                                                                  QOP_UNPACK_8A_I],
-                                                       QPU_UNPACK);
-
-                        if (dst.mux == QPU_MUX_A) {
-                                queue(c, qpu_a_MOV(dst, qpu_rb(31)));
-                        }
-                }
-                        break;
-
                 default:
                         assert(qinst->op < ARRAY_SIZE(translate));
                         assert(translate[qinst->op].op != 0); /* NOPs */
+
+                        /* Skip emitting the MOV if it's a no-op. */
+                        if (qir_is_raw_mov(qinst) &&
+                            dst.mux == src[0].mux && dst.addr == src[0].addr) {
+                                break;
+                        }
 
                         /* If we have only one source, put it in the second
                          * argument slot as well so that we don't take up
@@ -496,27 +475,19 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                         if (qir_get_op_nsrc(qinst->op) == 1)
                                 src[1] = src[0];
 
-                        fixup_raddr_conflict(c, dst, &src[0], &src[1]);
+                        fixup_raddr_conflict(c, dst, &src[0], &src[1],
+                                             qinst, &unpack);
 
                         if (qir_is_mul(qinst)) {
                                 queue(c, qpu_m_alu2(translate[qinst->op].op,
                                                     dst,
-                                                    src[0], src[1]));
-                                if (qinst->dst.pack) {
-                                        *last_inst(c) |= QPU_PM;
-                                        *last_inst(c) |= QPU_SET_FIELD(qinst->dst.pack,
-                                                                       QPU_PACK);
-                                }
+                                                    src[0], src[1]) | unpack);
                         } else {
                                 queue(c, qpu_a_alu2(translate[qinst->op].op,
                                                     dst,
-                                                    src[0], src[1]));
-                                if (qinst->dst.pack) {
-                                        assert(dst.mux == QPU_MUX_A);
-                                        *last_inst(c) |= QPU_SET_FIELD(qinst->dst.pack,
-                                                                       QPU_PACK);
-                                }
+                                                    src[0], src[1]) | unpack);
                         }
+                        set_last_dst_pack(c, qinst);
 
                         break;
                 }

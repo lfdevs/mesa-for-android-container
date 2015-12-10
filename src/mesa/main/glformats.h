@@ -57,6 +57,9 @@ extern GLint
 _mesa_bytes_per_vertex_attrib(GLint comps, GLenum type);
 
 extern GLboolean
+_mesa_is_astc_format(GLenum internalFormat);
+
+extern GLboolean
 _mesa_is_type_unsigned(GLenum type);
 
 extern GLboolean

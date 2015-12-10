@@ -98,7 +98,7 @@ static const uint8_t primtypes[PIPE_PRIM_MAX] = {
 };
 
 struct pipe_context *
-fd3_context_create(struct pipe_screen *pscreen, void *priv)
+fd3_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
 	struct fd_screen *screen = fd_screen(pscreen);
 	struct fd3_context *fd3_ctx = CALLOC_STRUCT(fd3_context);

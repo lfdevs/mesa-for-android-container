@@ -143,7 +143,8 @@ vec4_visitor::opt_cse_local(bblock_t *block)
    foreach_inst_in_block (vec4_instruction, inst, block) {
       /* Skip some cases. */
       if (is_expression(inst) && !inst->predicate && inst->mlen == 0 &&
-          (inst->dst.file != HW_REG || inst->dst.is_null()))
+          ((inst->dst.file != ARF && inst->dst.file != FIXED_GRF) ||
+           inst->dst.is_null()))
       {
          bool found = false;
 
@@ -174,7 +175,7 @@ vec4_visitor::opt_cse_local(bblock_t *block)
              */
             bool no_existing_temp = entry->tmp.file == BAD_FILE;
             if (no_existing_temp && !entry->generator->dst.is_null()) {
-               entry->tmp = retype(src_reg(GRF, alloc.allocate(
+               entry->tmp = retype(src_reg(VGRF, alloc.allocate(
                                               entry->generator->regs_written),
                                            NULL), inst->dst.type);
 
@@ -233,7 +234,7 @@ vec4_visitor::opt_cse_local(bblock_t *block)
              * overwrote.
              */
             if (inst->dst.file == entry->generator->src[i].file &&
-                inst->dst.reg == entry->generator->src[i].reg) {
+                inst->dst.nr == entry->generator->src[i].nr) {
                entry->remove();
                ralloc_free(entry);
                break;
@@ -242,7 +243,7 @@ vec4_visitor::opt_cse_local(bblock_t *block)
             /* Kill any AEB entries using registers that don't get reused any
              * more -- a sure sign they'll fail operands_match().
              */
-            if (src->file == GRF) {
+            if (src->file == VGRF) {
                if (var_range_end(var_from_reg(alloc, *src), 4) < ip) {
                   entry->remove();
                   ralloc_free(entry);

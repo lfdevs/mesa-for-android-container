@@ -51,7 +51,7 @@ struct svga_texture
 {
    struct u_resource b;
 
-   boolean defined[6][SVGA_MAX_TEXTURE_LEVELS];
+   ushort *defined;
    
    struct svga_sampler_view *cached_view;
 
@@ -77,6 +77,12 @@ struct svga_texture
     */
    struct svga_winsys_surface *handle;
 
+   /**
+    * Whether the host side surface is imported and not created by this
+    * driver.
+    */
+   boolean imported;
+
    unsigned size;  /**< Approximate size in bytes */
 
    /** array indexed by cube face or 3D/array slice, one bit per mipmap level */
@@ -91,7 +97,7 @@ struct svga_transfer
 {
    struct pipe_transfer base;
 
-   unsigned face;
+   unsigned slice;  /**< array slice or cube face */
 
    struct svga_winsys_buffer *hwbuf;
 
@@ -135,29 +141,6 @@ svga_age_texture_view(struct svga_texture *tex, unsigned level)
 }
 
 
-/**
- * Mark the given texture face/level as being defined.
- */
-static inline void
-svga_define_texture_level(struct svga_texture *tex,
-                          unsigned face,unsigned level)
-{
-   assert(face < Elements(tex->defined));
-   assert(level < Elements(tex->defined[0]));
-   tex->defined[face][level] = TRUE;
-}
-
-
-static inline bool
-svga_is_texture_level_defined(const struct svga_texture *tex,
-                              unsigned face, unsigned level)
-{
-   assert(face < Elements(tex->defined));
-   assert(level < Elements(tex->defined[0]));
-   return tex->defined[face][level];
-}
-
-
 /** For debugging, check that face and level are legal */
 static inline void
 check_face_level(const struct svga_texture *tex,
@@ -174,6 +157,27 @@ check_face_level(const struct svga_texture *tex,
    }
 
    assert(level < 8 * sizeof(tex->rendered_to[0]));
+}
+
+
+/**
+ * Mark the given texture face/level as being defined.
+ */
+static inline void
+svga_define_texture_level(struct svga_texture *tex,
+                          unsigned face,unsigned level)
+{
+   check_face_level(tex, face, level);
+   tex->defined[face] |= 1 << level;
+}
+
+
+static inline bool
+svga_is_texture_level_defined(const struct svga_texture *tex,
+                              unsigned face, unsigned level)
+{
+   check_face_level(tex, face, level);
+   return (tex->defined[face] & (1 << level)) != 0;
 }
 
 

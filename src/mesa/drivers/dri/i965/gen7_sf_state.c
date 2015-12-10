@@ -40,7 +40,6 @@ upload_sbe_state(struct brw_context *brw)
    uint32_t point_sprite_enables;
    uint32_t flat_enables;
    int i;
-   const int urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
    uint16_t attr_overrides[16];
    /* _NEW_BUFFERS */
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
@@ -65,8 +64,10 @@ upload_sbe_state(struct brw_context *brw)
     * _NEW_POINT | _NEW_LIGHT | _NEW_PROGRAM | BRW_NEW_FS_PROG_DATA
     */
    uint32_t urb_entry_read_length;
+   uint32_t urb_entry_read_offset;
    calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
-                            &flat_enables, &urb_entry_read_length);
+                            &flat_enables, &urb_entry_read_length,
+                            &urb_entry_read_offset);
    dw1 |= urb_entry_read_length << GEN7_SBE_URB_ENTRY_READ_LENGTH_SHIFT |
           urb_entry_read_offset << GEN7_SBE_URB_ENTRY_READ_OFFSET_SHIFT;
 

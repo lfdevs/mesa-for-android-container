@@ -134,7 +134,7 @@ try_pbo_upload(struct gl_context *ctx,
    }
 
    if (!_mesa_format_matches_format_and_type(intelImage->mt->format,
-                                             format, type, false)) {
+                                             format, type, false, NULL)) {
       DBG("%s: format mismatch (upload to %s with format 0x%x, type 0x%x)\n",
 	  __func__, _mesa_get_format_name(intelImage->mt->format),
 	  format, type);
@@ -241,8 +241,7 @@ intel_set_texture_image_region(struct gl_context *ctx,
 
    intel_image->mt = intel_miptree_create_layout(intel, target, image->TexFormat,
                                                  0, 0,
-                                                 width, height, 1,
-                                                 true);
+                                                 width, height, 1);
    if (intel_image->mt == NULL)
        return;
    intel_region_reference(&intel_image->mt->region, region);

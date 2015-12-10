@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2007-2014 VMware, Inc.  All rights reserved.
+ * Copyright 2007-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -75,7 +75,7 @@
  */
 
 #define SVGA_ESCAPE_VMWARE_HINT               0x00030000
-#define SVGA_ESCAPE_VMWARE_HINT_FULLSCREEN    0x00030001  // Deprecated
+#define SVGA_ESCAPE_VMWARE_HINT_FULLSCREEN    0x00030001  /* Deprecated */
 
 typedef
 struct {

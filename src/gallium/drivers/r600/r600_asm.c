@@ -252,6 +252,12 @@ static int alu_uses_rel(struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
 	return 0;
 }
 
+static int is_alu_64bit_inst(struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
+{
+	const struct alu_op_info *op = r600_isa_alu(alu->op);
+	return (op->flags & AF_64);
+}
+
 static int is_alu_vec_unit_inst(struct r600_bytecode *bc, struct r600_bytecode_alu *alu)
 {
 	unsigned slots = r600_isa_alu_slots(bc->isa->hw_class, alu->op);
@@ -576,6 +582,12 @@ static int replace_gpr_with_pv_ps(struct r600_bytecode *bc,
 
 	for (i = 0; i < max_slots; ++i) {
 		if (prev[i] && (prev[i]->dst.write || prev[i]->is_op3) && !prev[i]->dst.rel) {
+
+			if (is_alu_64bit_inst(bc, prev[i])) {
+				gpr[i] = -1;
+				continue;
+			}
+
 			gpr[i] = prev[i]->dst.sel;
 			/* cube writes more than PV.X */
 			if (is_alu_reduction_inst(bc, prev[i]))
@@ -591,6 +603,8 @@ static int replace_gpr_with_pv_ps(struct r600_bytecode *bc,
 		if(!alu)
 			continue;
 
+		if (is_alu_64bit_inst(bc, alu))
+			continue;
 		num_src = r600_bytecode_get_num_operands(bc, alu);
 		for (src = 0; src < num_src; ++src) {
 			if (!is_gpr(alu->src[src].sel) || alu->src[src].rel)
@@ -2029,6 +2043,8 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 					fprintf(stderr, "CND:%X ", cf->cond);
 				if (cf->pop_count)
 					fprintf(stderr, "POP:%X ", cf->pop_count);
+				if (cf->count && (cfop->flags & CF_EMIT))
+					fprintf(stderr, "STREAM%d ", cf->count);
 				if (cf->end_of_program)
 					fprintf(stderr, "EOP ");
 				fprintf(stderr, "\n");

@@ -35,6 +35,8 @@
 #include "stw_device.h"
 #include "stw_ext_context.h"
 
+#include "util/u_debug.h"
+
 
 wglCreateContext_t wglCreateContext_func = 0;
 wglDeleteContext_t wglDeleteContext_func = 0;

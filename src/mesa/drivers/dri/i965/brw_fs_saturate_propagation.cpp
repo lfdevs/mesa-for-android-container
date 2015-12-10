@@ -52,20 +52,23 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
       ip--;
 
       if (inst->opcode != BRW_OPCODE_MOV ||
-          inst->dst.file != GRF ||
-          inst->src[0].file != GRF ||
+          !inst->saturate ||
+          inst->dst.file != VGRF ||
+          inst->dst.type != inst->src[0].type ||
+          inst->src[0].file != VGRF ||
           inst->src[0].abs ||
-          inst->src[0].negate ||
-          !inst->saturate)
+          inst->src[0].negate)
          continue;
 
       int src_var = v->live_intervals->var_from_reg(inst->src[0]);
       int src_end_ip = v->live_intervals->end[src_var];
 
       bool interfered = false;
-      foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst, block) {
+      foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
          if (scan_inst->overwrites_reg(inst->src[0])) {
-            if (scan_inst->is_partial_write())
+            if (scan_inst->is_partial_write() ||
+                (scan_inst->dst.type != inst->dst.type &&
+                 !scan_inst->can_change_types()))
                break;
 
             if (scan_inst->saturate) {
@@ -73,6 +76,12 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
                progress = true;
             } else if (src_end_ip <= ip || inst->dst.equals(inst->src[0])) {
                if (scan_inst->can_do_saturate()) {
+                  if (scan_inst->dst.type != inst->dst.type) {
+                     scan_inst->dst.type = inst->dst.type;
+                     for (int i = 0; i < scan_inst->sources; i++) {
+                        scan_inst->src[i].type = inst->dst.type;
+                     }
+                  }
                   scan_inst->saturate = true;
                   inst->saturate = false;
                   progress = true;
@@ -81,8 +90,8 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
             break;
          }
          for (int i = 0; i < scan_inst->sources; i++) {
-            if (scan_inst->src[i].file == GRF &&
-                scan_inst->src[i].reg == inst->src[0].reg &&
+            if (scan_inst->src[i].file == VGRF &&
+                scan_inst->src[i].nr == inst->src[0].nr &&
                 scan_inst->src[i].reg_offset == inst->src[0].reg_offset) {
                if (scan_inst->opcode != BRW_OPCODE_MOV ||
                    !scan_inst->saturate ||

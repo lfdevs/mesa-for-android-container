@@ -31,18 +31,7 @@
 
 #include "gen6_gs_visitor.h"
 
-const unsigned MAX_GS_INPUT_VERTICES = 6;
-
 namespace brw {
-
-void
-gen6_gs_visitor::assign_binding_table_offsets()
-{
-   /* In gen6 we reserve the first BRW_MAX_SOL_BINDINGS entries for transform
-    * feedback surfaces.
-    */
-   assign_common_binding_table_offsets(BRW_MAX_SOL_BINDINGS);
-}
 
 void
 gen6_gs_visitor::emit_prolog()
@@ -74,9 +63,9 @@ gen6_gs_visitor::emit_prolog()
    this->vertex_output = src_reg(this,
                                  glsl_type::uint_type,
                                  (prog_data->vue_map.num_slots + 1) *
-                                 c->gp->program.VerticesOut);
+                                 nir->info.gs.vertices_out);
    this->vertex_output_offset = src_reg(this, glsl_type::uint_type);
-   emit(MOV(dst_reg(this->vertex_output_offset), src_reg(0u)));
+   emit(MOV(dst_reg(this->vertex_output_offset), brw_imm_ud(0u)));
 
    /* MRF 1 will be the header for all messages (FF_SYNC and URB_WRITES),
     * so initialize it once to R0.
@@ -98,15 +87,15 @@ gen6_gs_visitor::emit_prolog()
     * headers.
     */
    this->first_vertex = src_reg(this, glsl_type::uint_type);
-   emit(MOV(dst_reg(this->first_vertex), URB_WRITE_PRIM_START));
+   emit(MOV(dst_reg(this->first_vertex), brw_imm_ud(URB_WRITE_PRIM_START)));
 
    /* The FF_SYNC message requires to know the number of primitives generated,
     * so keep a counter for this.
     */
    this->prim_count = src_reg(this, glsl_type::uint_type);
-   emit(MOV(dst_reg(this->prim_count), 0u));
+   emit(MOV(dst_reg(this->prim_count), brw_imm_ud(0u)));
 
-   if (c->prog_data.gen6_xfb_enabled) {
+   if (gs_prog_data->gen6_xfb_enabled) {
       /* Create a virtual register to hold destination indices in SOL */
       this->destination_indices = src_reg(this, glsl_type::uvec4_type);
       /* Create a virtual register to hold number of written primitives */
@@ -139,7 +128,7 @@ gen6_gs_visitor::emit_prolog()
     * in the 3DSTATE_GS state packet. That information can be obtained by other
     * means though, so we can safely use r1 for this purpose.
     */
-   if (c->prog_data.include_primitive_id) {
+   if (gs_prog_data->include_primitive_id) {
       this->primitive_id =
          src_reg(retype(brw_vec8_grf(1, 0), BRW_REGISTER_TYPE_UD));
       emit(GS_OPCODE_SET_PRIMITIVE_ID, dst_reg(this->primitive_id));
@@ -147,89 +136,67 @@ gen6_gs_visitor::emit_prolog()
 }
 
 void
-gen6_gs_visitor::visit(ir_emit_vertex *ir)
-{
-   gs_emit_vertex(ir->stream_id());
-}
-void
 gen6_gs_visitor::gs_emit_vertex(int stream_id)
 {
    this->current_annotation = "gen6 emit vertex";
-   /* Honor max_vertex layout indication in geometry shader by ignoring any
-    * vertices coming after c->gp->program.VerticesOut.
-    */
-   unsigned num_output_vertices = c->gp->program.VerticesOut;
-   emit(CMP(dst_null_d(), this->vertex_count, src_reg(num_output_vertices),
-            BRW_CONDITIONAL_L));
-   emit(IF(BRW_PREDICATE_NORMAL));
-   {
-      /* Buffer all output slots for this vertex in vertex_output */
-      for (int slot = 0; slot < prog_data->vue_map.num_slots; ++slot) {
-         int varying = prog_data->vue_map.slot_to_varying[slot];
-         if (varying != VARYING_SLOT_PSIZ) {
-            dst_reg dst(this->vertex_output);
-            dst.reladdr = ralloc(mem_ctx, src_reg);
-            memcpy(dst.reladdr, &this->vertex_output_offset, sizeof(src_reg));
-            emit_urb_slot(dst, varying);
-         } else {
-            /* The PSIZ slot can pack multiple varyings in different channels
-             * and emit_urb_slot() will produce a MOV instruction for each of
-             * them. Since we are writing to an array, that will translate to
-             * possibly multiple MOV instructions with an array destination and
-             * each will generate a scratch write with the same offset into
-             * scratch space (thus, each one overwriting the previous). This is
-             * not what we want. What we will do instead is emit PSIZ to a
-             * a regular temporary register, then move that resgister into the
-             * array. This way we only have one instruction with an array
-             * destination and we only produce a single scratch write.
-             */
-            dst_reg tmp = dst_reg(src_reg(this, glsl_type::uvec4_type));
-            emit_urb_slot(tmp, varying);
-            dst_reg dst(this->vertex_output);
-            dst.reladdr = ralloc(mem_ctx, src_reg);
-            memcpy(dst.reladdr, &this->vertex_output_offset, sizeof(src_reg));
-            vec4_instruction *inst = emit(MOV(dst, src_reg(tmp)));
-            inst->force_writemask_all = true;
-         }
 
-         emit(ADD(dst_reg(this->vertex_output_offset),
-                  this->vertex_output_offset, 1u));
-      }
-
-      /* Now buffer flags for this vertex */
-      dst_reg dst(this->vertex_output);
-      dst.reladdr = ralloc(mem_ctx, src_reg);
-      memcpy(dst.reladdr, &this->vertex_output_offset, sizeof(src_reg));
-      if (c->gp->program.OutputType == GL_POINTS) {
-         /* If we are outputting points, then every vertex has PrimStart and
-          * PrimEnd set.
-          */
-         emit(MOV(dst, (_3DPRIM_POINTLIST << URB_WRITE_PRIM_TYPE_SHIFT) |
-                  URB_WRITE_PRIM_START | URB_WRITE_PRIM_END));
-         emit(ADD(dst_reg(this->prim_count), this->prim_count, 1u));
+   /* Buffer all output slots for this vertex in vertex_output */
+   for (int slot = 0; slot < prog_data->vue_map.num_slots; ++slot) {
+      int varying = prog_data->vue_map.slot_to_varying[slot];
+      if (varying != VARYING_SLOT_PSIZ) {
+         dst_reg dst(this->vertex_output);
+         dst.reladdr = ralloc(mem_ctx, src_reg);
+         memcpy(dst.reladdr, &this->vertex_output_offset, sizeof(src_reg));
+         emit_urb_slot(dst, varying);
       } else {
-         /* Otherwise, we can only set the PrimStart flag, which we have stored
-          * in the first_vertex register. We will have to wait until we execute
-          * EndPrimitive() or we end the thread to set the PrimEnd flag on a
-          * vertex.
+         /* The PSIZ slot can pack multiple varyings in different channels
+          * and emit_urb_slot() will produce a MOV instruction for each of
+          * them. Since we are writing to an array, that will translate to
+          * possibly multiple MOV instructions with an array destination and
+          * each will generate a scratch write with the same offset into
+          * scratch space (thus, each one overwriting the previous). This is
+          * not what we want. What we will do instead is emit PSIZ to a
+          * a regular temporary register, then move that resgister into the
+          * array. This way we only have one instruction with an array
+          * destination and we only produce a single scratch write.
           */
-         emit(OR(dst, this->first_vertex,
-                 (c->prog_data.output_topology << URB_WRITE_PRIM_TYPE_SHIFT)));
-         emit(MOV(dst_reg(this->first_vertex), 0u));
+         dst_reg tmp = dst_reg(src_reg(this, glsl_type::uvec4_type));
+         emit_urb_slot(tmp, varying);
+         dst_reg dst(this->vertex_output);
+         dst.reladdr = ralloc(mem_ctx, src_reg);
+         memcpy(dst.reladdr, &this->vertex_output_offset, sizeof(src_reg));
+         vec4_instruction *inst = emit(MOV(dst, src_reg(tmp)));
+         inst->force_writemask_all = true;
       }
+
       emit(ADD(dst_reg(this->vertex_output_offset),
-               this->vertex_output_offset, 1u));
-
-      /* Update vertex count */
-      emit(ADD(dst_reg(this->vertex_count), this->vertex_count, 1u));
+               this->vertex_output_offset, brw_imm_ud(1u)));
    }
-   emit(BRW_OPCODE_ENDIF);
-}
 
-void
-gen6_gs_visitor::visit(ir_end_primitive *)
-{
-   gs_end_primitive();
+   /* Now buffer flags for this vertex */
+   dst_reg dst(this->vertex_output);
+   dst.reladdr = ralloc(mem_ctx, src_reg);
+   memcpy(dst.reladdr, &this->vertex_output_offset, sizeof(src_reg));
+   if (nir->info.gs.output_primitive == GL_POINTS) {
+      /* If we are outputting points, then every vertex has PrimStart and
+       * PrimEnd set.
+       */
+      emit(MOV(dst, brw_imm_d((_3DPRIM_POINTLIST << URB_WRITE_PRIM_TYPE_SHIFT) |
+                              URB_WRITE_PRIM_START | URB_WRITE_PRIM_END)));
+      emit(ADD(dst_reg(this->prim_count), this->prim_count, brw_imm_ud(1u)));
+   } else {
+      /* Otherwise, we can only set the PrimStart flag, which we have stored
+       * in the first_vertex register. We will have to wait until we execute
+       * EndPrimitive() or we end the thread to set the PrimEnd flag on a
+       * vertex.
+       */
+      emit(OR(dst, this->first_vertex,
+              brw_imm_ud(gs_prog_data->output_topology <<
+                         URB_WRITE_PRIM_TYPE_SHIFT)));
+      emit(MOV(dst_reg(this->first_vertex), brw_imm_ud(0u)));
+   }
+   emit(ADD(dst_reg(this->vertex_output_offset),
+            this->vertex_output_offset, brw_imm_ud(1u)));
 }
 
 void
@@ -239,7 +206,7 @@ gen6_gs_visitor::gs_end_primitive()
    /* Calling EndPrimitive() is optional for point output. In this case we set
     * the PrimEnd flag when we process EmitVertex().
     */
-   if (c->gp->program.OutputType == GL_POINTS)
+   if (nir->info.gs.output_primitive == GL_POINTS)
       return;
 
    /* Otherwise we know that the last vertex we have processed was the last
@@ -251,11 +218,11 @@ gen6_gs_visitor::gs_end_primitive()
     * comparison below (hence the num_output_vertices + 1 in the comparison
     * below).
     */
-   unsigned num_output_vertices = c->gp->program.VerticesOut;
-   emit(CMP(dst_null_d(), this->vertex_count, src_reg(num_output_vertices + 1),
-            BRW_CONDITIONAL_L));
-   vec4_instruction *inst = emit(CMP(dst_null_d(),
-                                     this->vertex_count, 0u,
+   unsigned num_output_vertices = nir->info.gs.vertices_out;
+   emit(CMP(dst_null_ud(), this->vertex_count,
+            brw_imm_ud(num_output_vertices + 1), BRW_CONDITIONAL_L));
+   vec4_instruction *inst = emit(CMP(dst_null_ud(),
+                                     this->vertex_count, brw_imm_ud(0u),
                                      BRW_CONDITIONAL_NEQ));
    inst->predicate = BRW_PREDICATE_NORMAL;
    emit(IF(BRW_PREDICATE_NORMAL));
@@ -265,19 +232,19 @@ gen6_gs_visitor::gs_end_primitive()
        * vertex.
        */
       src_reg offset(this, glsl_type::uint_type);
-      emit(ADD(dst_reg(offset), this->vertex_output_offset, src_reg(-1)));
+      emit(ADD(dst_reg(offset), this->vertex_output_offset, brw_imm_d(-1)));
 
       src_reg dst(this->vertex_output);
       dst.reladdr = ralloc(mem_ctx, src_reg);
       memcpy(dst.reladdr, &offset, sizeof(src_reg));
 
-      emit(OR(dst_reg(dst), dst, URB_WRITE_PRIM_END));
-      emit(ADD(dst_reg(this->prim_count), this->prim_count, 1u));
+      emit(OR(dst_reg(dst), dst, brw_imm_d(URB_WRITE_PRIM_END)));
+      emit(ADD(dst_reg(this->prim_count), this->prim_count, brw_imm_ud(1u)));
 
       /* Set the first vertex flag to indicate that the next vertex will start
        * a primitive.
        */
-      emit(MOV(dst_reg(this->first_vertex), URB_WRITE_PRIM_START));
+      emit(MOV(dst_reg(this->first_vertex), brw_imm_d(URB_WRITE_PRIM_START)));
    }
    emit(BRW_OPCODE_ENDIF);
 }
@@ -296,13 +263,26 @@ gen6_gs_visitor::emit_urb_write_header(int mrf)
     */
    src_reg flags_offset(this, glsl_type::uint_type);
    emit(ADD(dst_reg(flags_offset),
-            this->vertex_output_offset, src_reg(prog_data->vue_map.num_slots)));
+            this->vertex_output_offset,
+            brw_imm_d(prog_data->vue_map.num_slots)));
 
    src_reg flags_data(this->vertex_output);
    flags_data.reladdr = ralloc(mem_ctx, src_reg);
    memcpy(flags_data.reladdr, &flags_offset, sizeof(src_reg));
 
    emit(GS_OPCODE_SET_DWORD_2, dst_reg(MRF, mrf), flags_data);
+}
+
+static int
+align_interleaved_urb_mlen(int mlen)
+{
+   /* URB data written (does not include the message header reg) must
+    * be a multiple of 256 bits, or 2 VS registers.  See vol5c.5,
+    * section 5.4.3.2.2: URB_INTERLEAVED.
+    */
+   if ((mlen % 2) != 1)
+      mlen++;
+   return mlen;
 }
 
 void
@@ -331,14 +311,7 @@ gen6_gs_visitor::emit_urb_write_opcode(bool complete, int base_mrf,
    }
 
    inst->base_mrf = base_mrf;
-   /* URB data written (does not include the message header reg) must
-    * be a multiple of 256 bits, or 2 VS registers.  See vol5c.5,
-    * section 5.4.3.2.2: URB_INTERLEAVED.
-    */
-   int mlen = last_mrf - base_mrf;
-   if ((mlen % 2) != 1)
-      mlen++;
-   inst->mlen = mlen;
+   inst->mlen = align_interleaved_urb_mlen(last_mrf - base_mrf);
    inst->offset = urb_offset;
 }
 
@@ -349,12 +322,10 @@ gen6_gs_visitor::emit_thread_end()
     * first_vertex is not zero. This is only relevant for outputs other than
     * points because in the point case we set PrimEnd on all vertices.
     */
-   if (c->gp->program.OutputType != GL_POINTS) {
-      emit(CMP(dst_null_d(), this->first_vertex, 0u, BRW_CONDITIONAL_Z));
+   if (nir->info.gs.output_primitive != GL_POINTS) {
+      emit(CMP(dst_null_ud(), this->first_vertex, brw_imm_ud(0u), BRW_CONDITIONAL_Z));
       emit(IF(BRW_PREDICATE_NORMAL));
-      {
-         visit((ir_end_primitive *) NULL);
-      }
+      gs_end_primitive();
       emit(BRW_OPCODE_ENDIF);
    }
 
@@ -373,18 +344,18 @@ gen6_gs_visitor::emit_thread_end()
 
    /* In the process of generating our URB write message contents, we
     * may need to unspill a register or load from an array.  Those
-    * reads would use MRFs 14-15.
+    * reads would use MRFs 21..23
     */
-   int max_usable_mrf = 13;
+   int max_usable_mrf = FIRST_SPILL_MRF(devinfo->gen);
 
    /* Issue the FF_SYNC message and obtain the initial VUE handle. */
-   emit(CMP(dst_null_d(), this->vertex_count, 0u, BRW_CONDITIONAL_G));
+   emit(CMP(dst_null_ud(), this->vertex_count, brw_imm_ud(0u), BRW_CONDITIONAL_G));
    emit(IF(BRW_PREDICATE_NORMAL));
    {
       this->current_annotation = "gen6 thread end: ff_sync";
 
       vec4_instruction *inst;
-      if (c->prog_data.gen6_xfb_enabled) {
+      if (gs_prog_data->gen6_xfb_enabled) {
          src_reg sol_temp(this, glsl_type::uvec4_type);
          emit(GS_OPCODE_FF_SYNC_SET_PRIMITIVES,
               dst_reg(this->svbi),
@@ -395,15 +366,15 @@ gen6_gs_visitor::emit_thread_end()
                      dst_reg(this->temp), this->prim_count, this->svbi);
       } else {
          inst = emit(GS_OPCODE_FF_SYNC,
-                     dst_reg(this->temp), this->prim_count, src_reg(0u));
+                     dst_reg(this->temp), this->prim_count, brw_imm_ud(0u));
       }
       inst->base_mrf = base_mrf;
 
       /* Loop over all buffered vertices and emit URB write messages */
       this->current_annotation = "gen6 thread end: urb writes init";
       src_reg vertex(this, glsl_type::uint_type);
-      emit(MOV(dst_reg(vertex), 0u));
-      emit(MOV(dst_reg(this->vertex_output_offset), 0u));
+      emit(MOV(dst_reg(vertex), brw_imm_ud(0u)));
+      emit(MOV(dst_reg(this->vertex_output_offset), brw_imm_ud(0u)));
 
       this->current_annotation = "gen6 thread end: urb writes";
       emit(BRW_OPCODE_DO);
@@ -447,12 +418,13 @@ gen6_gs_visitor::emit_thread_end()
 
                mrf++;
                emit(ADD(dst_reg(this->vertex_output_offset),
-                        this->vertex_output_offset, 1u));
+                        this->vertex_output_offset, brw_imm_ud(1u)));
 
                /* If this was max_usable_mrf, we can't fit anything more into
-                * this URB WRITE.
+                * this URB WRITE. Same if we reached the max. message length.
                 */
-               if (mrf > max_usable_mrf) {
+               if (mrf > max_usable_mrf ||
+                   align_interleaved_urb_mlen(mrf - base_mrf + 1) > BRW_MAX_MSG_LENGTH) {
                   slot++;
                   break;
                }
@@ -467,13 +439,13 @@ gen6_gs_visitor::emit_thread_end()
           * writing the next vertex.
           */
          emit(ADD(dst_reg(this->vertex_output_offset),
-                  this->vertex_output_offset, 1u));
+                  this->vertex_output_offset, brw_imm_ud(1u)));
 
-         emit(ADD(dst_reg(vertex), vertex, 1u));
+         emit(ADD(dst_reg(vertex), vertex, brw_imm_ud(1u)));
       }
       emit(BRW_OPCODE_WHILE);
 
-      if (c->prog_data.gen6_xfb_enabled)
+      if (gs_prog_data->gen6_xfb_enabled)
          xfb_write();
    }
    emit(BRW_OPCODE_ENDIF);
@@ -495,11 +467,11 @@ gen6_gs_visitor::emit_thread_end()
     */
    this->current_annotation = "gen6 thread end: EOT";
 
-   if (c->prog_data.gen6_xfb_enabled) {
+   if (gs_prog_data->gen6_xfb_enabled) {
       /* When emitting EOT, set SONumPrimsWritten Increment Value. */
       src_reg data(this, glsl_type::uint_type);
-      emit(AND(dst_reg(data), this->sol_prim_written, src_reg(0xffffu)));
-      emit(SHL(dst_reg(data), data, src_reg(16u)));
+      emit(AND(dst_reg(data), this->sol_prim_written, brw_imm_ud(0xffffu)));
+      emit(SHL(dst_reg(data), data, brw_imm_ud(16u)));
       emit(GS_OPCODE_SET_DWORD_2, dst_reg(MRF, base_mrf), data);
    }
 
@@ -537,7 +509,7 @@ gen6_gs_visitor::setup_payload()
     * information (and move the original value to a virtual register if
     * necessary).
     */
-   if (c->prog_data.include_primitive_id)
+   if (gs_prog_data->include_primitive_id)
       attribute_map[VARYING_SLOT_PRIMITIVE_ID] = attributes_per_reg * reg;
    reg++;
 
@@ -560,9 +532,6 @@ gen6_gs_visitor::xfb_setup()
       BRW_SWIZZLE4(3, 3, 3, 3)
    };
 
-   struct brw_gs_prog_data *prog_data =
-      (struct brw_gs_prog_data *) &c->prog_data;
-
    const struct gl_transform_feedback_info *linked_xfb_info =
       &this->shader_prog->LinkedTransformFeedback;
    int i;
@@ -578,11 +547,11 @@ gen6_gs_visitor::xfb_setup()
     */
    assert(linked_xfb_info->NumOutputs <= BRW_MAX_SOL_BINDINGS);
 
-   prog_data->num_transform_feedback_bindings = linked_xfb_info->NumOutputs;
-   for (i = 0; i < prog_data->num_transform_feedback_bindings; i++) {
-      prog_data->transform_feedback_bindings[i] =
+   gs_prog_data->num_transform_feedback_bindings = linked_xfb_info->NumOutputs;
+   for (i = 0; i < gs_prog_data->num_transform_feedback_bindings; i++) {
+      gs_prog_data->transform_feedback_bindings[i] =
          linked_xfb_info->Outputs[i].OutputRegister;
-      prog_data->transform_feedback_swizzles[i] =
+      gs_prog_data->transform_feedback_swizzles[i] =
          swizzle_for_offset[linked_xfb_info->Outputs[i].ComponentOffset];
    }
 }
@@ -591,13 +560,11 @@ void
 gen6_gs_visitor::xfb_write()
 {
    unsigned num_verts;
-   struct brw_gs_prog_data *prog_data =
-      (struct brw_gs_prog_data *) &c->prog_data;
 
-   if (!prog_data->num_transform_feedback_bindings)
+   if (!gs_prog_data->num_transform_feedback_bindings)
       return;
 
-   switch (c->prog_data.output_topology) {
+   switch (gs_prog_data->output_topology) {
    case _3DPRIM_POINTLIST:
       num_verts = 1;
       break;
@@ -623,8 +590,8 @@ gen6_gs_visitor::xfb_write()
 
    this->current_annotation = "gen6 thread end: svb writes init";
 
-   emit(MOV(dst_reg(this->vertex_output_offset), 0u));
-   emit(MOV(dst_reg(this->sol_prim_written), 0u));
+   emit(MOV(dst_reg(this->vertex_output_offset), brw_imm_ud(0u)));
+   emit(MOV(dst_reg(this->sol_prim_written), brw_imm_ud(0u)));
 
    /* Check that at least one primitive can be written
     *
@@ -635,7 +602,7 @@ gen6_gs_visitor::xfb_write()
     * transform feedback is in interleaved or separate attribs mode.
     */
    src_reg sol_temp(this, glsl_type::uvec4_type);
-   emit(ADD(dst_reg(sol_temp), this->svbi, src_reg(num_verts)));
+   emit(ADD(dst_reg(sol_temp), this->svbi, brw_imm_ud(num_verts)));
 
    /* Compare SVBI calculated number with the maximum value, which is
     * in R1.4 (previously saved in this->max_svbi) for gen6.
@@ -657,8 +624,8 @@ gen6_gs_visitor::xfb_write()
    emit(BRW_OPCODE_ENDIF);
 
    /* Write transform feedback data for all processed vertices. */
-   for (int i = 0; i < c->gp->program.VerticesOut; i++) {
-      emit(MOV(dst_reg(sol_temp), i));
+   for (int i = 0; i < (int)nir->info.gs.vertices_out; i++) {
+      emit(MOV(dst_reg(sol_temp), brw_imm_d(i)));
       emit(CMP(dst_null_d(), sol_temp, this->vertex_count,
                BRW_CONDITIONAL_L));
       emit(IF(BRW_PREDICATE_NORMAL));
@@ -672,17 +639,15 @@ gen6_gs_visitor::xfb_write()
 void
 gen6_gs_visitor::xfb_program(unsigned vertex, unsigned num_verts)
 {
-   struct brw_gs_prog_data *prog_data =
-      (struct brw_gs_prog_data *) &c->prog_data;
    unsigned binding;
-   unsigned num_bindings = prog_data->num_transform_feedback_bindings;
+   unsigned num_bindings = gs_prog_data->num_transform_feedback_bindings;
    src_reg sol_temp(this, glsl_type::uvec4_type);
 
    /* Check for buffer overflow: we need room to write the complete primitive
     * (all vertices). Otherwise, avoid writing any vertices for it
     */
-   emit(ADD(dst_reg(sol_temp), this->sol_prim_written, 1u));
-   emit(MUL(dst_reg(sol_temp), sol_temp, src_reg(num_verts)));
+   emit(ADD(dst_reg(sol_temp), this->sol_prim_written, brw_imm_ud(1u)));
+   emit(MUL(dst_reg(sol_temp), sol_temp, brw_imm_ud(num_verts)));
    emit(ADD(dst_reg(sol_temp), sol_temp, this->svbi));
    emit(CMP(dst_null_d(), sol_temp, this->max_svbi, BRW_CONDITIONAL_LE));
    emit(IF(BRW_PREDICATE_NORMAL));
@@ -696,7 +661,7 @@ gen6_gs_visitor::xfb_program(unsigned vertex, unsigned num_verts)
        */
       for (binding = 0; binding < num_bindings; ++binding) {
          unsigned char varying =
-            prog_data->transform_feedback_bindings[binding];
+            gs_prog_data->transform_feedback_bindings[binding];
 
          /* Set up the correct destination index for this vertex */
          vec4_instruction *inst = emit(GS_OPCODE_SVB_SET_DST_INDEX,
@@ -720,7 +685,7 @@ gen6_gs_visitor::xfb_program(unsigned vertex, unsigned num_verts)
          src_reg data(this->vertex_output);
          data.reladdr = ralloc(mem_ctx, src_reg);
          int offset = get_vertex_output_offset_for_varying(vertex, varying);
-         emit(MOV(dst_reg(this->vertex_output_offset), offset));
+         emit(MOV(dst_reg(this->vertex_output_offset), brw_imm_d(offset)));
          memcpy(data.reladdr, &this->vertex_output_offset, sizeof(src_reg));
          data.type = output_reg[varying].type;
 
@@ -734,7 +699,7 @@ gen6_gs_visitor::xfb_program(unsigned vertex, unsigned num_verts)
          else if (varying == VARYING_SLOT_VIEWPORT)
             data.swizzle = BRW_SWIZZLE_ZZZZ;
          else
-            data.swizzle = prog_data->transform_feedback_swizzles[binding];
+            data.swizzle = gs_prog_data->transform_feedback_swizzles[binding];
 
          /* Write data */
          inst = emit(GS_OPCODE_SVB_WRITE, mrf_reg, data, sol_temp);
@@ -747,9 +712,9 @@ gen6_gs_visitor::xfb_program(unsigned vertex, unsigned num_verts)
              */
             emit(ADD(dst_reg(this->destination_indices),
                      this->destination_indices,
-                     src_reg(num_verts)));
+                     brw_imm_ud(num_verts)));
             emit(ADD(dst_reg(this->sol_prim_written),
-                     this->sol_prim_written, 1u));
+                     this->sol_prim_written, brw_imm_ud(1u)));
          }
 
       }

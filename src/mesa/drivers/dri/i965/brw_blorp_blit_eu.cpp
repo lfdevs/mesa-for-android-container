@@ -32,7 +32,7 @@ brw_blorp_eu_emitter::brw_blorp_eu_emitter(struct brw_context *brw,
      generator(brw->intelScreen->compiler, brw,
                mem_ctx, (void *) rzalloc(mem_ctx, struct brw_wm_prog_key),
                (struct brw_stage_prog_data *) rzalloc(mem_ctx, struct brw_wm_prog_data),
-               NULL, 0, false, "BLORP")
+               0, false, "BLORP")
 {
    if (debug_flag)
       generator.enable_debug("blorp");
@@ -85,7 +85,7 @@ brw_blorp_eu_emitter::emit_texture_lookup(const struct brw_reg &dst,
                                           unsigned msg_length)
 {
    fs_inst *inst = new (mem_ctx) fs_inst(op, 16, dst, brw_message_reg(base_mrf),
-                                         fs_reg(0u));
+                                         brw_imm_ud(0u));
 
    inst->base_mrf = base_mrf;
    inst->mlen = msg_length;

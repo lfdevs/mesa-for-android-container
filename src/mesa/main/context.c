@@ -402,10 +402,6 @@ one_time_init( struct gl_context *ctx )
 		     PACKAGE_VERSION, __DATE__, __TIME__);
       }
 #endif
-
-#ifdef DEBUG
-      _mesa_test_formats();
-#endif
    }
 
    /* per-API one-time init */
@@ -657,6 +653,9 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
 
    /* GL_EXT_provoking_vertex */
    consts->QuadsFollowProvokingVertexConvention = GL_TRUE;
+
+   /** GL_ARB_viewport_array */
+   consts->LayerAndVPIndexProvokingVertex = GL_UNDEFINED_VERTEX;
 
    /* GL_EXT_transform_feedback */
    consts->MaxTransformFeedbackBuffers = MAX_FEEDBACK_BUFFERS;

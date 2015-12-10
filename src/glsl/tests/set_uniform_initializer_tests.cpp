@@ -117,8 +117,8 @@ establish_uniform_storage(struct gl_shader_program *prog, unsigned num_storage,
    prog->UniformStorage[index_to_set].array_elements = array_size;
    prog->UniformStorage[index_to_set].initialized = false;
    for (int sh = 0; sh < MESA_SHADER_STAGES; sh++) {
-      prog->UniformStorage[index_to_set].sampler[sh].index = ~0;
-      prog->UniformStorage[index_to_set].sampler[sh].active = false;
+      prog->UniformStorage[index_to_set].opaque[sh].index = ~0;
+      prog->UniformStorage[index_to_set].opaque[sh].active = false;
    }
    prog->UniformStorage[index_to_set].num_driver_storage = 0;
    prog->UniformStorage[index_to_set].driver_storage = NULL;
@@ -138,8 +138,8 @@ establish_uniform_storage(struct gl_shader_program *prog, unsigned num_storage,
       prog->UniformStorage[i].array_elements = 0;
       prog->UniformStorage[i].initialized = false;
       for (int sh = 0; sh < MESA_SHADER_STAGES; sh++) {
-         prog->UniformStorage[i].sampler[sh].index = ~0;
-         prog->UniformStorage[i].sampler[sh].active = false;
+         prog->UniformStorage[i].opaque[sh].index = ~0;
+         prog->UniformStorage[i].opaque[sh].active = false;
       }
       prog->UniformStorage[i].num_driver_storage = 0;
       prog->UniformStorage[i].driver_storage = NULL;

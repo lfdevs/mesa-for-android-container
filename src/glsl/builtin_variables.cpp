@@ -22,12 +22,16 @@
  */
 
 #include "ir.h"
+#include "ir_builder.h"
+#include "linker.h"
 #include "glsl_parser_extras.h"
 #include "glsl_symbol_table.h"
 #include "main/core.h"
 #include "main/uniforms.h"
 #include "program/prog_statevars.h"
 #include "program/prog_instruction.h"
+
+using namespace ir_builder;
 
 static const struct gl_builtin_uniform_element gl_NumSamples_elements[] = {
    {NULL, {STATE_NUM_SAMPLES, 0, 0}, SWIZZLE_XXXX}
@@ -323,6 +327,7 @@ per_vertex_accumulator::add_field(int slot, const glsl_type *type,
    this->fields[this->num_fields].centroid = 0;
    this->fields[this->num_fields].sample = 0;
    this->fields[this->num_fields].patch = 0;
+   this->fields[this->num_fields].precision = GLSL_PRECISION_NONE;
    this->num_fields++;
 }
 
@@ -372,6 +377,11 @@ private:
       return add_variable(name, type, ir_var_shader_out, slot);
    }
 
+   ir_variable *add_index_output(int slot, int index, const glsl_type *type, const char *name)
+   {
+      return add_index_variable(name, type, ir_var_shader_out, slot, index);
+   }
+
    ir_variable *add_system_value(int slot, const glsl_type *type,
                                  const char *name)
    {
@@ -380,11 +390,12 @@ private:
 
    ir_variable *add_variable(const char *name, const glsl_type *type,
                              enum ir_variable_mode mode, int slot);
+   ir_variable *add_index_variable(const char *name, const glsl_type *type,
+                             enum ir_variable_mode mode, int slot, int index);
    ir_variable *add_uniform(const glsl_type *type, const char *name);
    ir_variable *add_const(const char *name, int value);
    ir_variable *add_const_ivec3(const char *name, int x, int y, int z);
-   void add_varying(int slot, const glsl_type *type, const char *name,
-                    const char *name_as_gs_input);
+   void add_varying(int slot, const glsl_type *type, const char *name);
 
    exec_list * const instructions;
    struct _mesa_glsl_parse_state * const state;
@@ -399,10 +410,12 @@ private:
 
    const glsl_type * const bool_t;
    const glsl_type * const int_t;
+   const glsl_type * const uint_t;
    const glsl_type * const float_t;
    const glsl_type * const vec2_t;
    const glsl_type * const vec3_t;
    const glsl_type * const vec4_t;
+   const glsl_type * const uvec3_t;
    const glsl_type * const mat3_t;
    const glsl_type * const mat4_t;
 
@@ -416,12 +429,54 @@ builtin_variable_generator::builtin_variable_generator(
    : instructions(instructions), state(state), symtab(state->symbols),
      compatibility(!state->is_version(140, 100)),
      bool_t(glsl_type::bool_type), int_t(glsl_type::int_type),
+     uint_t(glsl_type::uint_type),
      float_t(glsl_type::float_type), vec2_t(glsl_type::vec2_type),
      vec3_t(glsl_type::vec3_type), vec4_t(glsl_type::vec4_type),
+     uvec3_t(glsl_type::uvec3_type),
      mat3_t(glsl_type::mat3_type), mat4_t(glsl_type::mat4_type)
 {
 }
 
+ir_variable *
+builtin_variable_generator::add_index_variable(const char *name,
+                                         const glsl_type *type,
+                                         enum ir_variable_mode mode, int slot, int index)
+{
+   ir_variable *var = new(symtab) ir_variable(type, name, mode);
+   var->data.how_declared = ir_var_declared_implicitly;
+
+   switch (var->data.mode) {
+   case ir_var_auto:
+   case ir_var_shader_in:
+   case ir_var_uniform:
+   case ir_var_system_value:
+      var->data.read_only = true;
+      break;
+   case ir_var_shader_out:
+   case ir_var_shader_storage:
+      break;
+   default:
+      /* The only variables that are added using this function should be
+       * uniforms, shader storage, shader inputs, and shader outputs, constants
+       * (which use ir_var_auto), and system values.
+       */
+      assert(0);
+      break;
+   }
+
+   var->data.location = slot;
+   var->data.explicit_location = (slot >= 0);
+   var->data.explicit_index = 1;
+   var->data.index = index;
+
+   /* Once the variable is created an initialized, add it to the symbol table
+    * and add the declaration to the IR stream.
+    */
+   instructions->push_tail(var);
+
+   symtab->add_variable(var);
+   return var;
+}
 
 ir_variable *
 builtin_variable_generator::add_variable(const char *name,
@@ -573,6 +628,14 @@ builtin_variable_generator::generate_constants()
          add_const("gl_MaxVaryingVectors",
                    state->ctx->Const.MaxVarying);
       }
+
+      /* EXT_blend_func_extended brings a built in constant
+       * for determining number of dual source draw buffers
+       */
+      if (state->EXT_blend_func_extended_enable) {
+         add_const("gl_MaxDualSourceDrawBuffersEXT",
+                   state->Const.MaxDualSourceDrawBuffers);
+      }
    } else {
       add_const("gl_MaxVertexUniformComponents",
                 state->Const.MaxVertexUniformComponents);
@@ -703,7 +766,7 @@ builtin_variable_generator::generate_constants()
       }
    }
 
-   if (state->is_version(430, 0) || state->ARB_compute_shader_enable) {
+   if (state->is_version(430, 310) || state->ARB_compute_shader_enable) {
       add_const("gl_MaxComputeAtomicCounterBuffers", MAX_COMPUTE_ATOMIC_COUNTER_BUFFERS);
       add_const("gl_MaxComputeAtomicCounters", MAX_COMPUTE_ATOMIC_COUNTERS);
       add_const("gl_MaxComputeImageUniforms", MAX_COMPUTE_IMAGE_UNIFORMS);
@@ -880,16 +943,22 @@ builtin_variable_generator::generate_uniforms()
 void
 builtin_variable_generator::generate_vs_special_vars()
 {
+   ir_variable *var;
+
    if (state->is_version(130, 300))
       add_system_value(SYSTEM_VALUE_VERTEX_ID, int_t, "gl_VertexID");
    if (state->ARB_draw_instanced_enable)
       add_system_value(SYSTEM_VALUE_INSTANCE_ID, int_t, "gl_InstanceIDARB");
    if (state->ARB_draw_instanced_enable || state->is_version(140, 300))
       add_system_value(SYSTEM_VALUE_INSTANCE_ID, int_t, "gl_InstanceID");
-   if (state->AMD_vertex_shader_layer_enable)
-      add_output(VARYING_SLOT_LAYER, int_t, "gl_Layer");
-   if (state->AMD_vertex_shader_viewport_index_enable)
-      add_output(VARYING_SLOT_VIEWPORT, int_t, "gl_ViewportIndex");
+   if (state->AMD_vertex_shader_layer_enable) {
+      var = add_output(VARYING_SLOT_LAYER, int_t, "gl_Layer");
+      var->data.interpolation = INTERP_QUALIFIER_FLAT;
+   }
+   if (state->AMD_vertex_shader_viewport_index_enable) {
+      var = add_output(VARYING_SLOT_VIEWPORT, int_t, "gl_ViewportIndex");
+      var->data.interpolation = INTERP_QUALIFIER_FLAT;
+   }
    if (compatibility) {
       add_input(VERT_ATTRIB_POS, vec4_t, "gl_Vertex");
       add_input(VERT_ATTRIB_NORMAL, vec3_t, "gl_Normal");
@@ -947,9 +1016,14 @@ builtin_variable_generator::generate_tes_special_vars()
 void
 builtin_variable_generator::generate_gs_special_vars()
 {
-   add_output(VARYING_SLOT_LAYER, int_t, "gl_Layer");
-   if (state->is_version(410, 0) || state->ARB_viewport_array_enable)
-      add_output(VARYING_SLOT_VIEWPORT, int_t, "gl_ViewportIndex");
+   ir_variable *var;
+
+   var = add_output(VARYING_SLOT_LAYER, int_t, "gl_Layer");
+   var->data.interpolation = INTERP_QUALIFIER_FLAT;
+   if (state->is_version(410, 0) || state->ARB_viewport_array_enable) {
+      var = add_output(VARYING_SLOT_VIEWPORT, int_t, "gl_ViewportIndex");
+      var->data.interpolation = INTERP_QUALIFIER_FLAT;
+   }
    if (state->is_version(400, 0) || state->ARB_gpu_shader5_enable)
       add_system_value(SYSTEM_VALUE_INVOCATION_ID, int_t, "gl_InvocationID");
 
@@ -963,7 +1037,6 @@ builtin_variable_generator::generate_gs_special_vars()
     * the specific case of gl_PrimitiveIDIn.  So we don't need to treat
     * gl_PrimitiveIDIn as an {ARB,EXT}_geometry_shader4-only variable.
     */
-   ir_variable *var;
    var = add_input(VARYING_SLOT_PRIMITIVE_ID, int_t, "gl_PrimitiveIDIn");
    var->data.interpolation = INTERP_QUALIFIER_FLAT;
    var = add_output(VARYING_SLOT_PRIMITIVE_ID, int_t, "gl_PrimitiveID");
@@ -977,14 +1050,15 @@ builtin_variable_generator::generate_gs_special_vars()
 void
 builtin_variable_generator::generate_fs_special_vars()
 {
+   ir_variable *var;
+
    add_input(VARYING_SLOT_POS, vec4_t, "gl_FragCoord");
    add_input(VARYING_SLOT_FACE, bool_t, "gl_FrontFacing");
    if (state->is_version(120, 100))
       add_input(VARYING_SLOT_PNTC, vec2_t, "gl_PointCoord");
 
    if (state->is_version(150, 0)) {
-      ir_variable *var =
-         add_input(VARYING_SLOT_PRIMITIVE_ID, int_t, "gl_PrimitiveID");
+      var = add_input(VARYING_SLOT_PRIMITIVE_ID, int_t, "gl_PrimitiveID");
       var->data.interpolation = INTERP_QUALIFIER_FLAT;
    }
 
@@ -996,6 +1070,19 @@ builtin_variable_generator::generate_fs_special_vars()
       add_output(FRAG_RESULT_COLOR, vec4_t, "gl_FragColor");
       add_output(FRAG_RESULT_DATA0,
                  array(vec4_t, state->Const.MaxDrawBuffers), "gl_FragData");
+   }
+
+   if (state->es_shader && state->language_version == 100 && state->EXT_blend_func_extended_enable) {
+      /* We make an assumption here that there will only ever be one dual-source draw buffer
+       * In case this assumption is ever proven to be false, make sure to assert here
+       * since we don't handle this case.
+       * In practice, this issue will never arise since no hardware will support it.
+       */
+      assert(state->Const.MaxDualSourceDrawBuffers <= 1);
+      add_index_output(FRAG_RESULT_DATA0, 1, vec4_t, "gl_SecondaryFragColorEXT");
+      add_index_output(FRAG_RESULT_DATA0, 1,
+                       array(vec4_t, state->Const.MaxDualSourceDrawBuffers),
+                       "gl_SecondaryFragDataEXT");
    }
 
    /* gl_FragDepth has always been in desktop GLSL, but did not appear in GLSL
@@ -1036,9 +1123,14 @@ builtin_variable_generator::generate_fs_special_vars()
    }
 
    if (state->is_version(430, 0) || state->ARB_fragment_layer_viewport_enable) {
-      add_input(VARYING_SLOT_LAYER, int_t, "gl_Layer");
-      add_input(VARYING_SLOT_VIEWPORT, int_t, "gl_ViewportIndex");
+      var = add_input(VARYING_SLOT_LAYER, int_t, "gl_Layer");
+      var->data.interpolation = INTERP_QUALIFIER_FLAT;
+      var = add_input(VARYING_SLOT_VIEWPORT, int_t, "gl_ViewportIndex");
+      var->data.interpolation = INTERP_QUALIFIER_FLAT;
    }
+
+   if (state->is_version(450, 310)/* || state->ARB_ES3_1_compatibility_enable*/)
+      add_system_value(SYSTEM_VALUE_HELPER_INVOCATION, bool_t, "gl_HelperInvocation");
 }
 
 
@@ -1048,20 +1140,23 @@ builtin_variable_generator::generate_fs_special_vars()
 void
 builtin_variable_generator::generate_cs_special_vars()
 {
-   /* TODO: finish this. */
+   add_system_value(SYSTEM_VALUE_LOCAL_INVOCATION_ID, uvec3_t,
+                    "gl_LocalInvocationID");
+   add_system_value(SYSTEM_VALUE_WORK_GROUP_ID, uvec3_t, "gl_WorkGroupID");
+   add_system_value(SYSTEM_VALUE_NUM_WORK_GROUPS, uvec3_t, "gl_NumWorkGroups");
+   add_variable("gl_GlobalInvocationID", uvec3_t, ir_var_auto, 0);
+   add_variable("gl_LocalInvocationIndex", uint_t, ir_var_auto, 0);
 }
 
 
 /**
  * Add a single "varying" variable.  The variable's type and direction (input
  * or output) are adjusted as appropriate for the type of shader being
- * compiled.  For geometry shaders using {ARB,EXT}_geometry_shader4,
- * name_as_gs_input is used for the input (to avoid ambiguity).
+ * compiled.
  */
 void
 builtin_variable_generator::add_varying(int slot, const glsl_type *type,
-                                        const char *name,
-                                        const char *name_as_gs_input)
+                                        const char *name)
 {
    switch (state->stage) {
    case MESA_SHADER_TESS_CTRL:
@@ -1089,32 +1184,29 @@ builtin_variable_generator::add_varying(int slot, const glsl_type *type,
 void
 builtin_variable_generator::generate_varyings()
 {
-#define ADD_VARYING(loc, type, name) \
-   add_varying(loc, type, name, name "In")
-
    /* gl_Position and gl_PointSize are not visible from fragment shaders. */
    if (state->stage != MESA_SHADER_FRAGMENT) {
-      ADD_VARYING(VARYING_SLOT_POS, vec4_t, "gl_Position");
-      ADD_VARYING(VARYING_SLOT_PSIZ, float_t, "gl_PointSize");
+      add_varying(VARYING_SLOT_POS, vec4_t, "gl_Position");
+      add_varying(VARYING_SLOT_PSIZ, float_t, "gl_PointSize");
    }
 
    if (state->is_version(130, 0)) {
-       ADD_VARYING(VARYING_SLOT_CLIP_DIST0, array(float_t, 0),
+       add_varying(VARYING_SLOT_CLIP_DIST0, array(float_t, 0),
                    "gl_ClipDistance");
    }
 
    if (compatibility) {
-      ADD_VARYING(VARYING_SLOT_TEX0, array(vec4_t, 0), "gl_TexCoord");
-      ADD_VARYING(VARYING_SLOT_FOGC, float_t, "gl_FogFragCoord");
+      add_varying(VARYING_SLOT_TEX0, array(vec4_t, 0), "gl_TexCoord");
+      add_varying(VARYING_SLOT_FOGC, float_t, "gl_FogFragCoord");
       if (state->stage == MESA_SHADER_FRAGMENT) {
-         ADD_VARYING(VARYING_SLOT_COL0, vec4_t, "gl_Color");
-         ADD_VARYING(VARYING_SLOT_COL1, vec4_t, "gl_SecondaryColor");
+         add_varying(VARYING_SLOT_COL0, vec4_t, "gl_Color");
+         add_varying(VARYING_SLOT_COL1, vec4_t, "gl_SecondaryColor");
       } else {
-         ADD_VARYING(VARYING_SLOT_CLIP_VERTEX, vec4_t, "gl_ClipVertex");
-         ADD_VARYING(VARYING_SLOT_COL0, vec4_t, "gl_FrontColor");
-         ADD_VARYING(VARYING_SLOT_BFC0, vec4_t, "gl_BackColor");
-         ADD_VARYING(VARYING_SLOT_COL1, vec4_t, "gl_FrontSecondaryColor");
-         ADD_VARYING(VARYING_SLOT_BFC1, vec4_t, "gl_BackSecondaryColor");
+         add_varying(VARYING_SLOT_CLIP_VERTEX, vec4_t, "gl_ClipVertex");
+         add_varying(VARYING_SLOT_COL0, vec4_t, "gl_FrontColor");
+         add_varying(VARYING_SLOT_BFC0, vec4_t, "gl_BackColor");
+         add_varying(VARYING_SLOT_COL1, vec4_t, "gl_FrontSecondaryColor");
+         add_varying(VARYING_SLOT_BFC1, vec4_t, "gl_BackSecondaryColor");
       }
    }
 
@@ -1163,6 +1255,7 @@ builtin_variable_generator::generate_varyings()
          var->data.centroid = fields[i].centroid;
          var->data.sample = fields[i].sample;
          var->data.patch = fields[i].patch;
+         var->data.precision = fields[i].precision;
          var->init_interface_type(per_vertex_out_type);
       }
    }
@@ -1203,4 +1296,85 @@ _mesa_glsl_initialize_variables(exec_list *instructions,
       gen.generate_cs_special_vars();
       break;
    }
+}
+
+
+/**
+ * Initialize compute shader variables with values that are derived from other
+ * compute shader variable.
+ */
+static void
+initialize_cs_derived_variables(gl_shader *shader,
+                                ir_function_signature *const main_sig)
+{
+   assert(shader->Stage == MESA_SHADER_COMPUTE);
+
+   ir_variable *gl_GlobalInvocationID =
+      shader->symbols->get_variable("gl_GlobalInvocationID");
+   assert(gl_GlobalInvocationID);
+   ir_variable *gl_WorkGroupID =
+      shader->symbols->get_variable("gl_WorkGroupID");
+   assert(gl_WorkGroupID);
+   ir_variable *gl_WorkGroupSize =
+      shader->symbols->get_variable("gl_WorkGroupSize");
+   if (gl_WorkGroupSize == NULL) {
+      void *const mem_ctx = ralloc_parent(shader->ir);
+      gl_WorkGroupSize = new(mem_ctx) ir_variable(glsl_type::uvec3_type,
+                                                  "gl_WorkGroupSize",
+                                                  ir_var_auto);
+      gl_WorkGroupSize->data.how_declared = ir_var_declared_implicitly;
+      gl_WorkGroupSize->data.read_only = true;
+      shader->ir->push_head(gl_WorkGroupSize);
+   }
+   ir_variable *gl_LocalInvocationID =
+      shader->symbols->get_variable("gl_LocalInvocationID");
+   assert(gl_LocalInvocationID);
+
+   /* gl_GlobalInvocationID =
+    *    gl_WorkGroupID * gl_WorkGroupSize + gl_LocalInvocationID
+    */
+   ir_instruction *inst =
+      assign(gl_GlobalInvocationID,
+             add(mul(gl_WorkGroupID, gl_WorkGroupSize),
+                 gl_LocalInvocationID));
+   main_sig->body.push_head(inst);
+
+   /* gl_LocalInvocationIndex =
+    *    gl_LocalInvocationID.z * gl_WorkGroupSize.x * gl_WorkGroupSize.y +
+    *    gl_LocalInvocationID.y * gl_WorkGroupSize.x +
+    *    gl_LocalInvocationID.x;
+    */
+   ir_expression *index_z =
+      mul(mul(swizzle_z(gl_LocalInvocationID), swizzle_x(gl_WorkGroupSize)),
+          swizzle_y(gl_WorkGroupSize));
+   ir_expression *index_y =
+      mul(swizzle_y(gl_LocalInvocationID), swizzle_x(gl_WorkGroupSize));
+   ir_expression *index_y_plus_z = add(index_y, index_z);
+   operand index_x(swizzle_x(gl_LocalInvocationID));
+   ir_expression *index_x_plus_y_plus_z = add(index_y_plus_z, index_x);
+   ir_variable *gl_LocalInvocationIndex =
+      shader->symbols->get_variable("gl_LocalInvocationIndex");
+   assert(gl_LocalInvocationIndex);
+   inst = assign(gl_LocalInvocationIndex, index_x_plus_y_plus_z);
+   main_sig->body.push_head(inst);
+}
+
+
+/**
+ * Initialize builtin variables with values based on other builtin variables.
+ * These are initialized in the main function.
+ */
+void
+_mesa_glsl_initialize_derived_variables(gl_shader *shader)
+{
+   /* We only need to set CS variables currently. */
+   if (shader->Stage != MESA_SHADER_COMPUTE)
+      return;
+
+   ir_function_signature *const main_sig =
+      _mesa_get_main_function_signature(shader);
+   if (main_sig == NULL)
+      return;
+
+   initialize_cs_derived_variables(shader, main_sig);
 }

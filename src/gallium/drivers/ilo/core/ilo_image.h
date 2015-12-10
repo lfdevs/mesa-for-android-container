@@ -102,7 +102,7 @@ struct ilo_image_info {
 
    /*
     * prefer GEN6_TILING_NONE when the (estimated) image size exceeds the
-    * threshold
+    * threshold; ignored when zero
     */
    uint32_t prefer_linear_threshold;
 

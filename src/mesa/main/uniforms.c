@@ -1002,10 +1002,10 @@ _mesa_UniformBlockBinding(GLuint program,
    if (!shProg)
       return;
 
-   if (uniformBlockIndex >= shProg->NumUniformBlocks) {
+   if (uniformBlockIndex >= shProg->NumBufferInterfaceBlocks) {
       _mesa_error(ctx, GL_INVALID_VALUE,
 		  "glUniformBlockBinding(block index %u >= %u)",
-		  uniformBlockIndex, shProg->NumUniformBlocks);
+		  uniformBlockIndex, shProg->NumBufferInterfaceBlocks);
       return;
    }
 
@@ -1016,26 +1016,78 @@ _mesa_UniformBlockBinding(GLuint program,
       return;
    }
 
-   if (shProg->UniformBlocks[uniformBlockIndex].Binding !=
+   if (shProg->BufferInterfaceBlocks[uniformBlockIndex].Binding !=
        uniformBlockBinding) {
       int i;
 
       FLUSH_VERTICES(ctx, 0);
       ctx->NewDriverState |= ctx->DriverFlags.NewUniformBuffer;
 
-      shProg->UniformBlocks[uniformBlockIndex].Binding = uniformBlockBinding;
+      shProg->BufferInterfaceBlocks[uniformBlockIndex].Binding = uniformBlockBinding;
 
       for (i = 0; i < MESA_SHADER_STAGES; i++) {
-	 int stage_index = shProg->UniformBlockStageIndex[i][uniformBlockIndex];
+	 int stage_index = shProg->InterfaceBlockStageIndex[i][uniformBlockIndex];
 
 	 if (stage_index != -1) {
 	    struct gl_shader *sh = shProg->_LinkedShaders[i];
-	    sh->UniformBlocks[stage_index].Binding = uniformBlockBinding;
+	    sh->BufferInterfaceBlocks[stage_index].Binding = uniformBlockBinding;
 	 }
       }
    }
 }
 
+void GLAPIENTRY
+_mesa_ShaderStorageBlockBinding(GLuint program,
+			        GLuint shaderStorageBlockIndex,
+			        GLuint shaderStorageBlockBinding)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct gl_shader_program *shProg;
+
+   if (!ctx->Extensions.ARB_shader_storage_buffer_object) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glShaderStorageBlockBinding");
+      return;
+   }
+
+   shProg = _mesa_lookup_shader_program_err(ctx, program,
+					    "glShaderStorageBlockBinding");
+   if (!shProg)
+      return;
+
+   if (shaderStorageBlockIndex >= shProg->NumBufferInterfaceBlocks) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+		  "glShaderStorageBlockBinding(block index %u >= %u)",
+		  shaderStorageBlockIndex, shProg->NumBufferInterfaceBlocks);
+      return;
+   }
+
+   if (shaderStorageBlockBinding >= ctx->Const.MaxShaderStorageBufferBindings) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+		  "glShaderStorageBlockBinding(block binding %u >= %u)",
+		  shaderStorageBlockBinding,
+                  ctx->Const.MaxShaderStorageBufferBindings);
+      return;
+   }
+
+   if (shProg->BufferInterfaceBlocks[shaderStorageBlockIndex].Binding !=
+       shaderStorageBlockBinding) {
+      int i;
+
+      FLUSH_VERTICES(ctx, 0);
+      ctx->NewDriverState |= ctx->DriverFlags.NewShaderStorageBuffer;
+
+      shProg->BufferInterfaceBlocks[shaderStorageBlockIndex].Binding = shaderStorageBlockBinding;
+
+      for (i = 0; i < MESA_SHADER_STAGES; i++) {
+	 int stage_index = shProg->InterfaceBlockStageIndex[i][shaderStorageBlockIndex];
+
+	 if (stage_index != -1) {
+	    struct gl_shader *sh = shProg->_LinkedShaders[i];
+	    sh->BufferInterfaceBlocks[stage_index].Binding = shaderStorageBlockBinding;
+	 }
+      }
+   }
+}
 
 /**
  * Generic program resource property query.

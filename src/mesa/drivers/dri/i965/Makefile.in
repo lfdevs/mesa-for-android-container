@@ -113,6 +113,7 @@ target_triplet = @target@
 TESTS = test_fs_cmod_propagation$(EXEEXT) \
 	test_fs_saturate_propagation$(EXEEXT) test_eu_compact$(EXEEXT) \
 	test_vf_float_conversions$(EXEEXT) \
+	test_vec4_cmod_propagation$(EXEEXT) \
 	test_vec4_copy_propagation$(EXEEXT) \
 	test_vec4_register_coalesce$(EXEEXT)
 check_PROGRAMS = $(am__EXEEXT_1)
@@ -135,86 +136,96 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-am__DEPENDENCIES_1 =
-libi965_dri_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
-am__objects_1 = brw_binding_tables.lo brw_blorp_blit.lo \
-	brw_blorp_blit_eu.lo brw_blorp.lo brw_cc.lo brw_cfg.lo \
-	brw_clear.lo brw_clip.lo brw_clip_line.lo brw_clip_point.lo \
-	brw_clip_state.lo brw_clip_tri.lo brw_clip_unfilled.lo \
-	brw_clip_util.lo brw_compute.lo brw_conditional_render.lo \
-	brw_context.lo brw_cs.lo brw_cubemap_normalize.lo brw_curbe.lo \
+libi965_compiler_la_LIBADD =
+am__objects_1 = brw_cfg.lo brw_cubemap_normalize.lo \
 	brw_dead_control_flow.lo brw_device_info.lo brw_disasm.lo \
-	brw_draw.lo brw_draw_upload.lo brw_eu.lo brw_eu_compact.lo \
-	brw_eu_emit.lo brw_eu_util.lo brw_ff_gs.lo brw_ff_gs_emit.lo \
-	brw_fs_channel_expressions.lo brw_fs_cmod_propagation.lo \
-	brw_fs_combine_constants.lo brw_fs_copy_propagation.lo \
-	brw_fs.lo brw_fs_cse.lo brw_fs_dead_code_eliminate.lo \
-	brw_fs_generator.lo brw_fs_live_variables.lo brw_fs_nir.lo \
-	brw_fs_peephole_predicated_break.lo brw_fs_reg_allocate.lo \
+	brw_eu.lo brw_eu_compact.lo brw_eu_emit.lo brw_eu_util.lo \
+	brw_eu_validate.lo brw_fs_channel_expressions.lo \
+	brw_fs_cmod_propagation.lo brw_fs_combine_constants.lo \
+	brw_fs_copy_propagation.lo brw_fs.lo brw_fs_cse.lo \
+	brw_fs_dead_code_eliminate.lo brw_fs_generator.lo \
+	brw_fs_live_variables.lo brw_fs_nir.lo brw_fs_reg_allocate.lo \
 	brw_fs_register_coalesce.lo brw_fs_saturate_propagation.lo \
 	brw_fs_sel_peephole.lo brw_fs_surface_builder.lo \
-	brw_fs_vector_splitting.lo brw_fs_visitor.lo brw_gs.lo \
-	brw_gs_state.lo brw_gs_surface_state.lo \
-	brw_interpolation_map.lo brw_lower_texture_gradients.lo \
-	brw_lower_unnormalized_offset.lo brw_meta_fast_clear.lo \
-	brw_meta_stencil_blit.lo brw_meta_updownsample.lo \
-	brw_meta_util.lo brw_misc_state.lo brw_nir.lo \
-	brw_nir_analyze_boolean_resolves.lo brw_object_purgeable.lo \
-	brw_packed_float.lo brw_performance_monitor.lo \
-	brw_pipe_control.lo brw_primitive_restart.lo brw_program.lo \
-	brw_queryobj.lo brw_reset.lo brw_sampler_state.lo \
-	brw_schedule_instructions.lo brw_sf.lo brw_sf_emit.lo \
-	brw_sf_state.lo brw_shader.lo brw_state_batch.lo \
-	brw_state_cache.lo brw_state_dump.lo brw_state_upload.lo \
-	brw_surface_formats.lo brw_tex.lo brw_tex_layout.lo brw_urb.lo \
-	brw_util.lo brw_vec4_copy_propagation.lo brw_vec4.lo \
-	brw_vec4_cse.lo brw_vec4_dead_code_eliminate.lo \
+	brw_fs_validate.lo brw_fs_vector_splitting.lo \
+	brw_fs_visitor.lo brw_interpolation_map.lo \
+	brw_lower_texture_gradients.lo \
+	brw_lower_unnormalized_offset.lo brw_nir.lo \
+	brw_nir_analyze_boolean_resolves.lo \
+	brw_nir_opt_peephole_ffma.lo brw_nir_uniforms.lo \
+	brw_packed_float.lo brw_predicated_break.lo \
+	brw_schedule_instructions.lo brw_shader.lo \
+	brw_surface_formats.lo brw_util.lo \
+	brw_vec4_cmod_propagation.lo brw_vec4_copy_propagation.lo \
+	brw_vec4.lo brw_vec4_cse.lo brw_vec4_dead_code_eliminate.lo \
 	brw_vec4_generator.lo brw_vec4_gs_visitor.lo \
 	brw_vec4_live_variables.lo brw_vec4_nir.lo brw_vec4_gs_nir.lo \
-	brw_vec4_reg_allocate.lo brw_vec4_visitor.lo brw_vec4_vp.lo \
-	brw_vec4_vs_visitor.lo brw_vs.lo brw_vs_state.lo \
-	brw_vs_surface_state.lo brw_vue_map.lo brw_wm.lo brw_wm_iz.lo \
-	brw_wm_state.lo brw_wm_surface_state.lo gen6_blorp.lo \
-	gen6_cc.lo gen6_clip_state.lo gen6_depth_state.lo \
-	gen6_depthstencil.lo gen6_gs_state.lo gen6_gs_visitor.lo \
-	gen6_multisample_state.lo gen6_queryobj.lo \
-	gen6_sampler_state.lo gen6_scissor_state.lo gen6_sf_state.lo \
-	gen6_sol.lo gen6_surface_state.lo gen6_urb.lo \
-	gen6_viewport_state.lo gen6_vs_state.lo gen6_wm_state.lo \
-	gen7_blorp.lo gen7_disable.lo gen7_gs_state.lo \
-	gen7_misc_state.lo gen7_sf_state.lo gen7_sol_state.lo \
-	gen7_urb.lo gen7_viewport_state.lo gen7_vs_state.lo \
-	gen7_wm_state.lo gen7_wm_surface_state.lo gen8_blend_state.lo \
-	gen8_depth_state.lo gen8_disable.lo gen8_draw_upload.lo \
-	gen8_gs_state.lo gen8_misc_state.lo gen8_multisample_state.lo \
-	gen8_ps_state.lo gen8_sf_state.lo gen8_sol_state.lo \
-	gen8_surface_state.lo gen8_viewport_state.lo gen8_vs_state.lo \
-	gen8_wm_depth_stencil.lo intel_asm_annotation.lo \
-	intel_batchbuffer.lo intel_blit.lo intel_buffer_objects.lo \
-	intel_buffers.lo intel_copy_image.lo intel_debug.lo \
-	intel_extensions.lo intel_fbo.lo intel_mipmap_tree.lo \
-	intel_pixel_bitmap.lo intel_pixel.lo intel_pixel_copy.lo \
-	intel_pixel_draw.lo intel_pixel_read.lo intel_resolve_map.lo \
-	intel_screen.lo intel_state.lo intel_syncobj.lo intel_tex.lo \
-	intel_tex_copy.lo intel_tex_image.lo intel_tex_subimage.lo \
-	intel_tex_validate.lo intel_tiled_memcpy.lo intel_upload.lo
-am_libi965_dri_la_OBJECTS = $(am__objects_1)
-libi965_dri_la_OBJECTS = $(am_libi965_dri_la_OBJECTS)
+	brw_vec4_reg_allocate.lo brw_vec4_surface_builder.lo \
+	brw_vec4_visitor.lo brw_vec4_vs_visitor.lo brw_vue_map.lo \
+	brw_wm_iz.lo gen6_gs_visitor.lo intel_asm_annotation.lo \
+	intel_debug.lo intel_resolve_map.lo
+am_libi965_compiler_la_OBJECTS = $(am__objects_1)
+libi965_compiler_la_OBJECTS = $(am_libi965_compiler_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am__DEPENDENCIES_1 =
+libi965_dri_la_DEPENDENCIES = libi965_compiler.la \
+	$(am__DEPENDENCIES_1)
+am__objects_2 = brw_binding_tables.lo brw_blorp_blit.lo \
+	brw_blorp_blit_eu.lo brw_blorp.lo brw_cc.lo brw_clear.lo \
+	brw_clip.lo brw_clip_line.lo brw_clip_point.lo \
+	brw_clip_state.lo brw_clip_tri.lo brw_clip_unfilled.lo \
+	brw_clip_util.lo brw_compute.lo brw_conditional_render.lo \
+	brw_context.lo brw_cs.lo brw_curbe.lo brw_draw.lo \
+	brw_draw_upload.lo brw_ff_gs.lo brw_ff_gs_emit.lo brw_gs.lo \
+	brw_gs_state.lo brw_gs_surface_state.lo brw_link.lo \
+	brw_meta_fast_clear.lo brw_meta_stencil_blit.lo \
+	brw_meta_updownsample.lo brw_meta_util.lo brw_misc_state.lo \
+	brw_object_purgeable.lo brw_performance_monitor.lo \
+	brw_pipe_control.lo brw_program.lo brw_primitive_restart.lo \
+	brw_queryobj.lo brw_reset.lo brw_sampler_state.lo brw_sf.lo \
+	brw_sf_emit.lo brw_sf_state.lo brw_state_batch.lo \
+	brw_state_cache.lo brw_state_dump.lo brw_state_upload.lo \
+	brw_tex.lo brw_tex_layout.lo brw_urb.lo brw_vs.lo \
+	brw_vs_state.lo brw_vs_surface_state.lo brw_wm.lo \
+	brw_wm_state.lo brw_wm_surface_state.lo gen6_blorp.lo \
+	gen6_cc.lo gen6_clip_state.lo gen6_depth_state.lo \
+	gen6_depthstencil.lo gen6_gs_state.lo \
+	gen6_multisample_state.lo gen6_queryobj.lo \
+	gen6_sampler_state.lo gen6_scissor_state.lo gen6_sf_state.lo \
+	gen6_sol.lo gen6_surface_state.lo gen6_urb.lo \
+	gen6_viewport_state.lo gen6_vs_state.lo gen6_wm_state.lo \
+	gen7_blorp.lo gen7_cs_state.lo gen7_disable.lo \
+	gen7_gs_state.lo gen7_misc_state.lo gen7_sf_state.lo \
+	gen7_sol_state.lo gen7_urb.lo gen7_viewport_state.lo \
+	gen7_vs_state.lo gen7_wm_state.lo gen7_wm_surface_state.lo \
+	gen8_blend_state.lo gen8_depth_state.lo gen8_disable.lo \
+	gen8_draw_upload.lo gen8_gs_state.lo gen8_misc_state.lo \
+	gen8_multisample_state.lo gen8_ps_state.lo gen8_sf_state.lo \
+	gen8_sol_state.lo gen8_surface_state.lo gen8_viewport_state.lo \
+	gen8_vs_state.lo gen8_wm_depth_stencil.lo intel_batchbuffer.lo \
+	intel_blit.lo intel_buffer_objects.lo intel_buffers.lo \
+	intel_copy_image.lo intel_extensions.lo intel_fbo.lo \
+	intel_mipmap_tree.lo intel_pixel_bitmap.lo intel_pixel.lo \
+	intel_pixel_copy.lo intel_pixel_draw.lo intel_pixel_read.lo \
+	intel_screen.lo intel_state.lo intel_syncobj.lo intel_tex.lo \
+	intel_tex_copy.lo intel_tex_image.lo intel_tex_subimage.lo \
+	intel_tex_validate.lo intel_tiled_memcpy.lo intel_upload.lo
+am_libi965_dri_la_OBJECTS = $(am__objects_2)
+libi965_dri_la_OBJECTS = $(am_libi965_dri_la_OBJECTS)
 am__EXEEXT_1 = test_fs_cmod_propagation$(EXEEXT) \
 	test_fs_saturate_propagation$(EXEEXT) test_eu_compact$(EXEEXT) \
 	test_vf_float_conversions$(EXEEXT) \
+	test_vec4_cmod_propagation$(EXEEXT) \
 	test_vec4_copy_propagation$(EXEEXT) \
 	test_vec4_register_coalesce$(EXEEXT)
 am_test_eu_compact_OBJECTS = test_eu_compact.$(OBJEXT)
 test_eu_compact_OBJECTS = $(am_test_eu_compact_OBJECTS)
-am__DEPENDENCIES_2 = libi965_dri.la ../common/libdricommon.la \
-	../common/libxmlconfig.la ../common/libmegadriver_stub.la \
-	../../../libmesa.la $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) ../common/libdri_test_stubs.la
+am__DEPENDENCIES_2 = libi965_compiler.la ../../../libmesa.la \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	../common/libdri_test_stubs.la
 test_eu_compact_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_test_fs_cmod_propagation_OBJECTS =  \
 	test_fs_cmod_propagation.$(OBJEXT)
@@ -227,6 +238,12 @@ am_test_fs_saturate_propagation_OBJECTS =  \
 test_fs_saturate_propagation_OBJECTS =  \
 	$(am_test_fs_saturate_propagation_OBJECTS)
 test_fs_saturate_propagation_DEPENDENCIES =  \
+	$(top_builddir)/src/gtest/libgtest.la $(am__DEPENDENCIES_2)
+am_test_vec4_cmod_propagation_OBJECTS =  \
+	test_vec4_cmod_propagation.$(OBJEXT)
+test_vec4_cmod_propagation_OBJECTS =  \
+	$(am_test_vec4_cmod_propagation_OBJECTS)
+test_vec4_cmod_propagation_DEPENDENCIES =  \
 	$(top_builddir)/src/gtest/libgtest.la $(am__DEPENDENCIES_2)
 am_test_vec4_copy_propagation_OBJECTS =  \
 	test_vec4_copy_propagation.$(OBJEXT)
@@ -298,16 +315,20 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(libi965_dri_la_SOURCES) $(test_eu_compact_SOURCES) \
+SOURCES = $(libi965_compiler_la_SOURCES) $(libi965_dri_la_SOURCES) \
+	$(test_eu_compact_SOURCES) \
 	$(nodist_EXTRA_test_eu_compact_SOURCES) \
 	$(test_fs_cmod_propagation_SOURCES) \
 	$(test_fs_saturate_propagation_SOURCES) \
+	$(test_vec4_cmod_propagation_SOURCES) \
 	$(test_vec4_copy_propagation_SOURCES) \
 	$(test_vec4_register_coalesce_SOURCES) \
 	$(test_vf_float_conversions_SOURCES)
-DIST_SOURCES = $(libi965_dri_la_SOURCES) $(test_eu_compact_SOURCES) \
+DIST_SOURCES = $(libi965_compiler_la_SOURCES) \
+	$(libi965_dri_la_SOURCES) $(test_eu_compact_SOURCES) \
 	$(test_fs_cmod_propagation_SOURCES) \
 	$(test_fs_saturate_propagation_SOURCES) \
+	$(test_vec4_cmod_propagation_SOURCES) \
 	$(test_vec4_copy_propagation_SOURCES) \
 	$(test_vec4_register_coalesce_SOURCES) \
 	$(test_vf_float_conversions_SOURCES)
@@ -640,6 +661,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -684,6 +707,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -717,7 +742,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -748,6 +777,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -819,50 +850,23 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-i965_FILES = \
-	brw_binding_tables.c \
-	brw_blorp_blit.cpp \
-	brw_blorp_blit_eu.cpp \
-	brw_blorp_blit_eu.h \
-	brw_blorp.cpp \
-	brw_blorp.h \
-	brw_cc.c \
+i965_compiler_FILES = \
 	brw_cfg.cpp \
 	brw_cfg.h \
-	brw_clear.c \
-	brw_clip.c \
-	brw_clip.h \
-	brw_clip_line.c \
-	brw_clip_point.c \
-	brw_clip_state.c \
-	brw_clip_tri.c \
-	brw_clip_unfilled.c \
-	brw_clip_util.c \
-	brw_compute.c \
-	brw_conditional_render.c \
-	brw_context.c \
-	brw_context.h \
-	brw_cs.cpp \
-	brw_cs.h \
+	brw_compiler.h \
 	brw_cubemap_normalize.cpp \
-	brw_curbe.c \
 	brw_dead_control_flow.cpp \
 	brw_dead_control_flow.h \
 	brw_defines.h \
 	brw_device_info.c \
 	brw_device_info.h \
 	brw_disasm.c \
-	brw_draw.c \
-	brw_draw.h \
-	brw_draw_upload.c \
 	brw_eu.c \
 	brw_eu_compact.c \
 	brw_eu_emit.c \
 	brw_eu.h \
 	brw_eu_util.c \
-	brw_ff_gs.c \
-	brw_ff_gs_emit.c \
-	brw_ff_gs.h \
+	brw_eu_validate.c \
 	brw_fs_builder.h \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_cmod_propagation.cpp \
@@ -876,19 +880,15 @@ i965_FILES = \
 	brw_fs_live_variables.cpp \
 	brw_fs_live_variables.h \
 	brw_fs_nir.cpp \
-	brw_fs_peephole_predicated_break.cpp \
 	brw_fs_reg_allocate.cpp \
 	brw_fs_register_coalesce.cpp \
 	brw_fs_saturate_propagation.cpp \
 	brw_fs_sel_peephole.cpp \
 	brw_fs_surface_builder.cpp \
 	brw_fs_surface_builder.h \
+	brw_fs_validate.cpp \
 	brw_fs_vector_splitting.cpp \
 	brw_fs_visitor.cpp \
-	brw_gs.c \
-	brw_gs.h \
-	brw_gs_state.c \
-	brw_gs_surface_state.c \
 	brw_inst.h \
 	brw_interpolation_map.c \
 	brw_ir_allocator.h \
@@ -896,46 +896,22 @@ i965_FILES = \
 	brw_ir_vec4.h \
 	brw_lower_texture_gradients.cpp \
 	brw_lower_unnormalized_offset.cpp \
-	brw_meta_fast_clear.c \
-	brw_meta_stencil_blit.c \
-	brw_meta_updownsample.c \
-	brw_meta_util.c \
-	brw_meta_util.h \
-	brw_misc_state.c \
-	brw_multisample_state.h \
 	brw_nir.h \
 	brw_nir.c \
 	brw_nir_analyze_boolean_resolves.c \
-	brw_object_purgeable.c \
+	brw_nir_opt_peephole_ffma.c \
+	brw_nir_uniforms.cpp \
 	brw_packed_float.c \
-	brw_performance_monitor.c \
-	brw_pipe_control.c \
-	brw_primitive_restart.c \
-	brw_program.c \
-	brw_program.h \
-	brw_queryobj.c \
+	brw_predicated_break.cpp \
 	brw_reg.h \
-	brw_reset.c \
-	brw_sampler_state.c \
 	brw_schedule_instructions.cpp \
-	brw_sf.c \
-	brw_sf_emit.c \
-	brw_sf.h \
-	brw_sf_state.c \
 	brw_shader.cpp \
 	brw_shader.h \
-	brw_state_batch.c \
-	brw_state_cache.c \
-	brw_state_dump.c \
-	brw_state.h \
-	brw_state_upload.c \
-	brw_structs.h \
 	brw_surface_formats.c \
-	brw_tex.c \
-	brw_tex_layout.c \
-	brw_urb.c \
 	brw_util.c \
 	brw_util.h \
+	brw_vec4_builder.h \
+	brw_vec4_cmod_propagation.cpp \
 	brw_vec4_copy_propagation.cpp \
 	brw_vec4.cpp \
 	brw_vec4_cse.cpp \
@@ -949,17 +925,92 @@ i965_FILES = \
 	brw_vec4_nir.cpp \
 	brw_vec4_gs_nir.cpp \
 	brw_vec4_reg_allocate.cpp \
+	brw_vec4_surface_builder.cpp \
+	brw_vec4_surface_builder.h \
 	brw_vec4_visitor.cpp \
-	brw_vec4_vp.cpp \
 	brw_vec4_vs_visitor.cpp \
+	brw_vue_map.c \
+	brw_wm_iz.cpp \
+	gen6_gs_visitor.cpp \
+	gen6_gs_visitor.h \
+	intel_asm_annotation.c \
+	intel_asm_annotation.h \
+	intel_debug.c \
+	intel_debug.h \
+	intel_reg.h \
+	intel_resolve_map.c \
+	intel_resolve_map.h
+
+i965_FILES = \
+	brw_binding_tables.c \
+	brw_blorp_blit.cpp \
+	brw_blorp_blit_eu.cpp \
+	brw_blorp_blit_eu.h \
+	brw_blorp.cpp \
+	brw_blorp.h \
+	brw_cc.c \
+	brw_clear.c \
+	brw_clip.c \
+	brw_clip.h \
+	brw_clip_line.c \
+	brw_clip_point.c \
+	brw_clip_state.c \
+	brw_clip_tri.c \
+	brw_clip_unfilled.c \
+	brw_clip_util.c \
+	brw_compute.c \
+	brw_conditional_render.c \
+	brw_context.c \
+	brw_context.h \
+	brw_cs.c \
+	brw_cs.h \
+	brw_curbe.c \
+	brw_draw.c \
+	brw_draw.h \
+	brw_draw_upload.c \
+	brw_ff_gs.c \
+	brw_ff_gs_emit.c \
+	brw_ff_gs.h \
+	brw_gs.c \
+	brw_gs.h \
+	brw_gs_state.c \
+	brw_gs_surface_state.c \
+	brw_link.cpp \
+	brw_meta_fast_clear.c \
+	brw_meta_stencil_blit.c \
+	brw_meta_updownsample.c \
+	brw_meta_util.c \
+	brw_meta_util.h \
+	brw_misc_state.c \
+	brw_multisample_state.h \
+	brw_object_purgeable.c \
+	brw_performance_monitor.c \
+	brw_pipe_control.c \
+	brw_program.c \
+	brw_program.h \
+	brw_primitive_restart.c \
+	brw_queryobj.c \
+	brw_reset.c \
+	brw_sampler_state.c \
+	brw_sf.c \
+	brw_sf_emit.c \
+	brw_sf.h \
+	brw_sf_state.c \
+	brw_state_batch.c \
+	brw_state_cache.c \
+	brw_state_dump.c \
+	brw_state.h \
+	brw_state_upload.c \
+	brw_structs.h \
+	brw_tex.c \
+	brw_tex_layout.c \
+	brw_urb.c \
 	brw_vs.c \
 	brw_vs.h \
 	brw_vs_state.c \
 	brw_vs_surface_state.c \
-	brw_vue_map.c \
 	brw_wm.c \
 	brw_wm.h \
-	brw_wm_iz.cpp \
 	brw_wm_state.c \
 	brw_wm_surface_state.c \
 	gen6_blorp.cpp \
@@ -969,8 +1020,6 @@ i965_FILES = \
 	gen6_depth_state.c \
 	gen6_depthstencil.c \
 	gen6_gs_state.c \
-	gen6_gs_visitor.cpp \
-	gen6_gs_visitor.h \
 	gen6_multisample_state.c \
 	gen6_queryobj.c \
 	gen6_sampler_state.c \
@@ -984,6 +1033,7 @@ i965_FILES = \
 	gen6_wm_state.c \
 	gen7_blorp.cpp \
 	gen7_blorp.h \
+	gen7_cs_state.c \
 	gen7_disable.c \
 	gen7_gs_state.c \
 	gen7_misc_state.c \
@@ -1008,8 +1058,6 @@ i965_FILES = \
 	gen8_viewport_state.c \
 	gen8_vs_state.c \
 	gen8_wm_depth_stencil.c \
-	intel_asm_annotation.c \
-	intel_asm_annotation.h \
 	intel_batchbuffer.c \
 	intel_batchbuffer.h \
 	intel_blit.c \
@@ -1019,8 +1067,6 @@ i965_FILES = \
 	intel_buffers.c \
 	intel_buffers.h \
 	intel_copy_image.c \
-	intel_debug.c \
-	intel_debug.h \
 	intel_extensions.c \
 	intel_fbo.c \
 	intel_fbo.h \
@@ -1033,9 +1079,6 @@ i965_FILES = \
 	intel_pixel_draw.c \
 	intel_pixel.h \
 	intel_pixel_read.c \
-	intel_reg.h \
-	intel_resolve_map.c \
-	intel_resolve_map.h \
 	intel_screen.c \
 	intel_screen.h \
 	intel_state.c \
@@ -1061,6 +1104,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/mesa/drivers/dri/intel/server \
 	-I$(top_srcdir)/src/gtest/include \
+	-I$(top_srcdir)/src/glsl/nir \
 	-I$(top_builddir)/src/glsl/nir \
 	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	$(DEFINES) \
@@ -1068,17 +1112,15 @@ AM_CFLAGS = \
 	$(INTEL_CFLAGS)
 
 AM_CXXFLAGS = $(AM_CFLAGS)
-noinst_LTLIBRARIES = libi965_dri.la
+noinst_LTLIBRARIES = libi965_dri.la libi965_compiler.la
 libi965_dri_la_SOURCES = $(i965_FILES)
-libi965_dri_la_LIBADD = $(INTEL_LIBS)
+libi965_dri_la_LIBADD = libi965_compiler.la $(INTEL_LIBS)
+libi965_compiler_la_SOURCES = $(i965_compiler_FILES)
 TEST_LIBS = \
-	libi965_dri.la \
-	../common/libdricommon.la \
-	../common/libxmlconfig.la \
-	../common/libmegadriver_stub.la \
+	libi965_compiler.la \
         ../../../libmesa.la \
-	$(DRI_LIB_DEPS) \
-        $(CLOCK_LIB) \
+	$(PTHREAD_LIBS) \
+	$(DLOPEN_LIBS) \
 	../common/libdri_test_stubs.la
 
 test_fs_cmod_propagation_SOURCES = \
@@ -1115,6 +1157,13 @@ test_vec4_copy_propagation_SOURCES = \
 test_vec4_copy_propagation_LDADD = \
         $(top_builddir)/src/gtest/libgtest.la \
         $(TEST_LIBS)
+
+test_vec4_cmod_propagation_SOURCES = \
+	test_vec4_cmod_propagation.cpp
+
+test_vec4_cmod_propagation_LDADD = \
+	$(top_builddir)/src/gtest/libgtest.la \
+	$(TEST_LIBS)
 
 test_eu_compact_SOURCES = \
 	test_eu_compact.c
@@ -1167,6 +1216,9 @@ clean-noinstLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
+libi965_compiler.la: $(libi965_compiler_la_OBJECTS) $(libi965_compiler_la_DEPENDENCIES) $(EXTRA_libi965_compiler_la_DEPENDENCIES) 
+	$(AM_V_CXXLD)$(CXXLINK)  $(libi965_compiler_la_OBJECTS) $(libi965_compiler_la_LIBADD) $(LIBS)
+
 libi965_dri.la: $(libi965_dri_la_OBJECTS) $(libi965_dri_la_DEPENDENCIES) $(EXTRA_libi965_dri_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(CXXLINK)  $(libi965_dri_la_OBJECTS) $(libi965_dri_la_LIBADD) $(LIBS)
 
@@ -1190,6 +1242,10 @@ test_fs_cmod_propagation$(EXEEXT): $(test_fs_cmod_propagation_OBJECTS) $(test_fs
 test_fs_saturate_propagation$(EXEEXT): $(test_fs_saturate_propagation_OBJECTS) $(test_fs_saturate_propagation_DEPENDENCIES) $(EXTRA_test_fs_saturate_propagation_DEPENDENCIES) 
 	@rm -f test_fs_saturate_propagation$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(test_fs_saturate_propagation_OBJECTS) $(test_fs_saturate_propagation_LDADD) $(LIBS)
+
+test_vec4_cmod_propagation$(EXEEXT): $(test_vec4_cmod_propagation_OBJECTS) $(test_vec4_cmod_propagation_DEPENDENCIES) $(EXTRA_test_vec4_cmod_propagation_DEPENDENCIES) 
+	@rm -f test_vec4_cmod_propagation$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(test_vec4_cmod_propagation_OBJECTS) $(test_vec4_cmod_propagation_LDADD) $(LIBS)
 
 test_vec4_copy_propagation$(EXEEXT): $(test_vec4_copy_propagation_OBJECTS) $(test_vec4_copy_propagation_DEPENDENCIES) $(EXTRA_test_vec4_copy_propagation_DEPENDENCIES) 
 	@rm -f test_vec4_copy_propagation$(EXEEXT)
@@ -1238,6 +1294,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_eu_compact.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_eu_emit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_eu_util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_eu_validate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_ff_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_ff_gs_emit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs.Plo@am__quote@
@@ -1250,18 +1307,19 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_generator.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_live_variables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_nir.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_peephole_predicated_break.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_reg_allocate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_register_coalesce.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_saturate_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_sel_peephole.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_surface_builder.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_validate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_vector_splitting.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_fs_visitor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_gs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_gs_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_interpolation_map.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_link.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_texture_gradients.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_lower_unnormalized_offset.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_fast_clear.Plo@am__quote@
@@ -1271,10 +1329,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_analyze_boolean_resolves.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_opt_peephole_ffma.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_packed_float.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_performance_monitor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_pipe_control.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_predicated_break.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_primitive_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_queryobj.Plo@am__quote@
@@ -1295,6 +1356,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_urb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_cmod_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_copy_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_cse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_dead_code_eliminate.Plo@am__quote@
@@ -1304,8 +1366,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_live_variables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_reg_allocate.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_surface_builder.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_visitor.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_vp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vec4_vs_visitor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_vs_state.Plo@am__quote@
@@ -1335,6 +1397,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_vs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_wm_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_blorp.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_cs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_disable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_gs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_misc_state.Plo@am__quote@
@@ -1388,6 +1451,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_eu_compact.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_fs_cmod_propagation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_fs_saturate_propagation.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vec4_cmod_propagation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vec4_copy_propagation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vec4_register_coalesce.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_vf_float_conversions.Po@am__quote@
@@ -1663,6 +1727,13 @@ test_eu_compact.log: test_eu_compact$(EXEEXT)
 test_vf_float_conversions.log: test_vf_float_conversions$(EXEEXT)
 	@p='test_vf_float_conversions$(EXEEXT)'; \
 	b='test_vf_float_conversions'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test_vec4_cmod_propagation.log: test_vec4_cmod_propagation$(EXEEXT)
+	@p='test_vec4_cmod_propagation$(EXEEXT)'; \
+	b='test_vec4_cmod_propagation'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

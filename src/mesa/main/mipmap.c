@@ -37,6 +37,7 @@
 #include "texstore.h"
 #include "image.h"
 #include "macros.h"
+#include "util/half_float.h"
 #include "../../gallium/auxiliary/util/u_format_rgb9e5.h"
 #include "../../gallium/auxiliary/util/u_format_r11g11b10f.h"
 
@@ -1886,7 +1887,7 @@ generate_mipmap_uncompressed(struct gl_context *ctx, GLenum target,
    GLenum datatype;
    GLuint comps;
 
-   _mesa_format_to_type_and_comps(srcImage->TexFormat, &datatype, &comps);
+   _mesa_uncompressed_format_to_type_and_comps(srcImage->TexFormat, &datatype, &comps);
 
    for (level = texObj->BaseLevel; level < maxLevel; level++) {
       /* generate image[level+1] from image[level] */

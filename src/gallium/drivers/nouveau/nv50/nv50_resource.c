@@ -32,8 +32,8 @@ nv50_resource_from_handle(struct pipe_screen * screen,
 
 struct pipe_surface *
 nv50_surface_from_buffer(struct pipe_context *pipe,
-			 struct pipe_resource *pbuf,
-			 const struct pipe_surface *templ)
+                         struct pipe_resource *pbuf,
+                         const struct pipe_surface *templ)
 {
    struct nv50_surface *sf = CALLOC_STRUCT(nv50_surface);
    if (!sf)
@@ -65,8 +65,8 @@ nv50_surface_from_buffer(struct pipe_context *pipe,
 
 static struct pipe_surface *
 nv50_surface_create(struct pipe_context *pipe,
-		    struct pipe_resource *pres,
-		    const struct pipe_surface *templ)
+                    struct pipe_resource *pres,
+                    const struct pipe_surface *templ)
 {
    /* surfaces are assumed to be miptrees all over the place. */
    assert(pres->target != PIPE_BUFFER);

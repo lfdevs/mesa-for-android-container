@@ -34,19 +34,6 @@ AM_CFLAGS = \
 	$(GALLIUM_TARGET_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-if HAVE_GALLIUM_STATIC_TARGETS
-AM_CPPFLAGS = \
-	-DNINE_TARGET \
-	-DGALLIUM_STATIC_TARGETS=1
-
-else
-
-AM_CPPFLAGS = \
-	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\" \
-	$(GALLIUM_PIPE_LOADER_DEFINES)
-
-endif
-
 ninedir = $(D3D_DRIVER_INSTALL_DIR)
 nine_LTLIBRARIES = d3dadapter9.la
 
@@ -76,10 +63,8 @@ d3dadapter9_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl_stub.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/glsl/libnir.la \
-	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/gallium/state_trackers/nine/libninetracker.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(EXPAT_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
@@ -88,7 +73,7 @@ EXTRA_DIST = d3dadapter9.sym
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =
-TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la
+TARGET_LIB_DEPS =
 
 include $(top_srcdir)/src/gallium/drivers/i915/Automake.inc
 
@@ -112,14 +97,16 @@ include $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc
 if HAVE_GALLIUM_STATIC_TARGETS
 
 d3dadapter9_la_CPPFLAGS = $(AM_CPPFLAGS) $(TARGET_CPPFLAGS)
-d3dadapter9_la_LIBADD += $(TARGET_LIB_DEPS) \
+d3dadapter9_la_LIBADD += \
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_static.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(TARGET_LIB_DEPS) \
 	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
 
 else # HAVE_GALLIUM_STATIC_TARGETS
 
 d3dadapter9_la_LIBADD += \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
-	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader_dynamic.la
 
 endif # HAVE_GALLIUM_STATIC_TARGETS
 

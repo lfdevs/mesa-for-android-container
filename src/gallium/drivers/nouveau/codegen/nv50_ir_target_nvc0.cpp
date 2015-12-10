@@ -338,17 +338,30 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
    if (sf == FILE_IMMEDIATE) {
       Storage &reg = ld->getSrc(0)->asImm()->reg;
 
-      if (typeSizeof(i->sType) > 4)
-         return false;
-      if (opInfo[i->op].immdBits != 0xffffffff) {
-         if (i->sType == TYPE_F32) {
+      if (opInfo[i->op].immdBits != 0xffffffff || typeSizeof(i->sType) > 4) {
+         switch (i->sType) {
+         case TYPE_F64:
+            if (reg.data.u64 & 0x00000fffffffffffULL)
+               return false;
+            break;
+         case TYPE_F32:
             if (reg.data.u32 & 0xfff)
                return false;
-         } else
-         if (i->sType == TYPE_S32 || i->sType == TYPE_U32) {
+            break;
+         case TYPE_S32:
+         case TYPE_U32:
             // with u32, 0xfffff counts as 0xffffffff as well
             if (reg.data.s32 > 0x7ffff || reg.data.s32 < -0x80000)
                return false;
+            break;
+         case TYPE_U8:
+         case TYPE_S8:
+         case TYPE_U16:
+         case TYPE_S16:
+         case TYPE_F16:
+            break;
+         default:
+            return false;
          }
       } else
       if (i->op == OP_MAD || i->op == OP_FMA) {
@@ -426,7 +439,7 @@ TargetNVC0::isModSupported(const Instruction *insn, int s, Modifier mod) const
          return false;
       }
    }
-   if (s >= 3)
+   if (s >= opInfo[insn->op].srcNr || s >= 3)
       return false;
    return (mod & Modifier(opInfo[insn->op].srcMods[s])) == mod;
 }

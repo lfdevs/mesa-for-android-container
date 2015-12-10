@@ -2163,7 +2163,7 @@ unpack_float_rgbx_float32(const void *void_src, GLfloat dst[4])
       
          dst[3] = 1.0f;
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
 static void
 unpack_float_r9g9b9e5_float(const void *src, GLfloat dst[4])
 {
@@ -3986,7 +3986,7 @@ unpack_ubyte_bgr_srgb8(const void *void_src, GLubyte dst[4])
       
          dst[3] = 255;
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
 /* integer packing functions */
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
@@ -5283,7 +5283,7 @@ unpack_int_rgbx_sint32(const void *void_src, GLuint dst[4])
       
          dst[3] = 1;
 }
-                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                              
 
 void
 _mesa_unpack_rgba_row(mesa_format format, GLuint n,
@@ -5911,7 +5911,7 @@ _mesa_unpack_rgba_row(mesa_format format, GLuint n,
          s += 16;
       }
       break;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     case MESA_FORMAT_YCBCR:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             case MESA_FORMAT_YCBCR:
       unpack_float_ycbcr(src, dst, n);
       break;
    case MESA_FORMAT_YCBCR_REV:
@@ -6513,7 +6513,7 @@ _mesa_unpack_ubyte_rgba_row(mesa_format format, GLuint n,
          s += 3;
       }
       break;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             default:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     default:
       /* get float values, convert to ubyte */
       {
          GLfloat *tmp = malloc(n * 4 * sizeof(GLfloat));
@@ -7059,7 +7059,7 @@ _mesa_unpack_uint_rgba_row(mesa_format format, GLuint n,
          s += 16;
       }
       break;
-                                                                                                                                                                                                         default:
+                                                                                                                                                                                                                                                                                                                                                                                 default:
       _mesa_problem(NULL, "%s: bad format %s", __func__,
                     _mesa_get_format_name(format));
       return;

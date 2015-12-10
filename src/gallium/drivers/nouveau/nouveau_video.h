@@ -83,7 +83,7 @@ BEGIN_NI04(struct nouveau_pushbuf *push, int subc, int mthd, unsigned size)
 static inline void
 PUSH_MTHDl(struct nouveau_pushbuf *push, int subc, int mthd,
            struct nouveau_bo *bo, uint32_t offset,
-	   struct nouveau_bufctx *ctx, int bin, uint32_t rw)
+           struct nouveau_bufctx *ctx, int bin, uint32_t rw)
 {
    nouveau_bufctx_mthd(ctx, bin, NV04_FIFO_PKHDR(subc, mthd, 1),
                        bo, offset,

@@ -68,7 +68,7 @@ public:
    bool vars_interfere(int a, int b);
    int var_from_reg(const fs_reg &reg) const
    {
-      return var_from_vgrf[reg.reg] + reg.reg_offset;
+      return var_from_vgrf[reg.nr] + reg.reg_offset;
    }
 
    /** Map from virtual GRF number to index in block_data arrays. */

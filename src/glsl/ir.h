@@ -322,18 +322,19 @@ protected:
  * Variable storage classes
  */
 enum ir_variable_mode {
-   ir_var_auto = 0,     /**< Function local variables and globals. */
-   ir_var_uniform,      /**< Variable declared as a uniform. */
-   ir_var_shader_storage,   /**< Variable declared as an ssbo. */
+   ir_var_auto = 0,             /**< Function local variables and globals. */
+   ir_var_uniform,              /**< Variable declared as a uniform. */
+   ir_var_shader_storage,       /**< Variable declared as an ssbo. */
+   ir_var_shader_shared,        /**< Variable declared as shared. */
    ir_var_shader_in,
    ir_var_shader_out,
    ir_var_function_in,
    ir_var_function_out,
    ir_var_function_inout,
-   ir_var_const_in,	/**< "in" param that must be a constant expression */
-   ir_var_system_value, /**< Ex: front-face, instance-id, etc. */
-   ir_var_temporary,	/**< Temporary variable generated during compilation. */
-   ir_var_mode_count	/**< Number of variable modes */
+   ir_var_const_in,             /**< "in" param that must be a constant expression */
+   ir_var_system_value,         /**< Ex: front-face, instance-id, etc. */
+   ir_var_temporary,            /**< Temporary variable generated during compilation. */
+   ir_var_mode_count            /**< Number of variable modes */
 };
 
 /**
@@ -449,6 +450,15 @@ public:
    {
       return (this->data.mode == ir_var_uniform ||
               this->data.mode == ir_var_shader_storage) &&
+             this->interface_type != NULL;
+   }
+
+   /**
+    * Determine whether or not a variable is part of a shader storage block.
+    */
+   inline bool is_in_shader_storage_block() const
+   {
+      return this->data.mode == ir_var_shader_storage &&
              this->interface_type != NULL;
    }
 
@@ -761,6 +771,19 @@ public:
       unsigned index:1;
 
       /**
+       * Precision qualifier.
+       *
+       * In desktop GLSL we do not care about precision qualifiers at all, in
+       * fact, the spec says that precision qualifiers are ignored.
+       *
+       * To make things easy, we make it so that this field is always
+       * GLSL_PRECISION_NONE on desktop shaders. This way all the variables
+       * have the same precision value and the checks we add in the compiler
+       * for this field will never break a desktop shader compile.
+       */
+      unsigned precision:2;
+
+      /**
        * \brief Layout qualifier for gl_FragDepth.
        *
        * This is not equal to \c ir_depth_layout_none if and only if this
@@ -776,6 +799,11 @@ public:
       unsigned image_coherent:1;
       unsigned image_volatile:1;
       unsigned image_restrict:1;
+
+      /**
+       * ARB_shader_storage_buffer_object
+       */
+      unsigned from_ssbo_unsized_array:1; /**< unsized array buffer variable. */
 
       /**
        * Emit a warning if this variable is accessed.
@@ -819,6 +847,8 @@ public:
        *   - Fragment shader output: one of the values from \c gl_frag_result.
        *   - Uniforms: Per-stage uniform slot number for default uniform block.
        *   - Uniforms: Index within the uniform block definition for UBO members.
+       *   - Non-UBO Uniforms: explicit location until linking then reused to
+       *     store uniform slot number.
        *   - Other: This field is not currently used.
        *
        * If the variable is a uniform, shader input, or shader output, and the
@@ -1141,6 +1171,8 @@ public:
     */
    int num_subroutine_types;
    const struct glsl_type **subroutine_types;
+
+   int subroutine_index;
 };
 
 inline const char *ir_function_signature::function_name() const
@@ -1409,9 +1441,26 @@ enum ir_expression_operation {
    ir_unop_interpolate_at_centroid,
 
    /**
+    * Ask the driver for the total size of a buffer block.
+    *
+    * operand0 is the ir_constant buffer block index in the linked shader.
+    */
+   ir_unop_get_buffer_size,
+
+   /**
+    * Calculate length of an unsized array inside a buffer block.
+    * This opcode is going to be replaced in a lowering pass inside
+    * the linker.
+    *
+    * operand0 is the unsized array's ir_value for the calculation
+    * of its length.
+    */
+   ir_unop_ssbo_unsized_array_length,
+
+   /**
     * A sentinel marking the last of the unary operations.
     */
-   ir_last_unop = ir_unop_interpolate_at_centroid,
+   ir_last_unop = ir_unop_ssbo_unsized_array_length,
 
    ir_binop_add,
    ir_binop_sub,
@@ -1698,6 +1747,8 @@ public:
 
    virtual ir_visitor_status accept(ir_hierarchical_visitor *);
 
+   virtual ir_variable *variable_referenced() const;
+
    ir_expression_operation operation;
    ir_rvalue *operands[4];
 };
@@ -1914,7 +1965,9 @@ enum ir_texture_opcode {
    ir_txs,		/**< Texture size */
    ir_lod,		/**< Texture lod query */
    ir_tg4,		/**< Texture gather */
-   ir_query_levels      /**< Texture levels query */
+   ir_query_levels,     /**< Texture levels query */
+   ir_texture_samples,  /**< Texture samples query */
+   ir_samples_identical, /**< Query whether all samples are definitely identical. */
 };
 
 
@@ -1941,6 +1994,7 @@ enum ir_texture_opcode {
  * (lod <type> <sampler> <coordinate>)
  * (tg4 <type> <sampler> <coordinate> <offset> <component>)
  * (query_levels <type> <sampler>)
+ * (samples_identical <sampler> <coordinate>)
  */
 class ir_texture : public ir_rvalue {
 public:
@@ -2513,6 +2567,9 @@ _mesa_glsl_initialize_variables(exec_list *instructions,
 				struct _mesa_glsl_parse_state *state);
 
 extern void
+_mesa_glsl_initialize_derived_variables(gl_shader *shader);
+
+extern void
 _mesa_glsl_initialize_functions(_mesa_glsl_parse_state *state);
 
 extern void
@@ -2523,11 +2580,13 @@ _mesa_glsl_find_builtin_function(_mesa_glsl_parse_state *state,
                                  const char *name, exec_list *actual_parameters);
 
 extern ir_function *
-_mesa_glsl_find_builtin_function_by_name(_mesa_glsl_parse_state *state,
-                                         const char *name);
+_mesa_glsl_find_builtin_function_by_name(const char *name);
 
 extern gl_shader *
 _mesa_glsl_get_builtin_function_shader(void);
+
+extern ir_function_signature *
+_mesa_get_main_function_signature(gl_shader *sh);
 
 extern void
 _mesa_glsl_release_functions(void);

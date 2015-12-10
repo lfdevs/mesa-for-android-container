@@ -204,7 +204,8 @@ trace_screen_is_format_supported(struct pipe_screen *_screen,
 
 
 static struct pipe_context *
-trace_screen_context_create(struct pipe_screen *_screen, void *priv)
+trace_screen_context_create(struct pipe_screen *_screen, void *priv,
+                            unsigned flags)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
@@ -213,8 +214,10 @@ trace_screen_context_create(struct pipe_screen *_screen, void *priv)
    trace_dump_call_begin("pipe_screen", "context_create");
 
    trace_dump_arg(ptr, screen);
+   trace_dump_arg(ptr, priv);
+   trace_dump_arg(uint, flags);
 
-   result = screen->context_create(screen, priv);
+   result = screen->context_create(screen, priv, flags);
 
    trace_dump_ret(ptr, result);
 
@@ -452,9 +455,6 @@ struct pipe_screen *
 trace_screen_create(struct pipe_screen *screen)
 {
    struct trace_screen *tr_scr;
-
-   if(!screen)
-      goto error1;
 
    if (!trace_enabled())
       goto error1;

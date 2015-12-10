@@ -23,6 +23,7 @@
 #include "nouveau_screen.h"
 #include "nouveau_winsys.h"
 #include "nouveau_fence.h"
+#include "os/os_time.h"
 
 #ifdef PIPE_OS_UNIX
 #include <sched.h>
@@ -56,26 +57,6 @@ nouveau_fence_trigger_work(struct nouveau_fence *fence)
       LIST_DEL(&work->list);
       FREE(work);
    }
-}
-
-bool
-nouveau_fence_work(struct nouveau_fence *fence,
-                   void (*func)(void *), void *data)
-{
-   struct nouveau_fence_work *work;
-
-   if (!fence || fence->state == NOUVEAU_FENCE_STATE_SIGNALLED) {
-      func(data);
-      return true;
-   }
-
-   work = CALLOC_STRUCT(nouveau_fence_work);
-   if (!work)
-      return false;
-   work->func = func;
-   work->data = data;
-   LIST_ADD(&work->list, &fence->work);
-   return true;
 }
 
 void
@@ -181,11 +162,10 @@ nouveau_fence_signalled(struct nouveau_fence *fence)
    return fence->state == NOUVEAU_FENCE_STATE_SIGNALLED;
 }
 
-bool
-nouveau_fence_wait(struct nouveau_fence *fence)
+static bool
+nouveau_fence_kick(struct nouveau_fence *fence)
 {
    struct nouveau_screen *screen = fence->screen;
-   uint32_t spins = 0;
 
    /* wtf, someone is waiting on a fence in flush_notify handler? */
    assert(fence->state != NOUVEAU_FENCE_STATE_EMITTING);
@@ -206,11 +186,32 @@ nouveau_fence_wait(struct nouveau_fence *fence)
    if (fence == screen->fence.current)
       nouveau_fence_next(screen);
 
-   do {
-      nouveau_fence_update(screen, false);
+   nouveau_fence_update(screen, false);
 
-      if (fence->state == NOUVEAU_FENCE_STATE_SIGNALLED)
+   return true;
+}
+
+bool
+nouveau_fence_wait(struct nouveau_fence *fence, struct pipe_debug_callback *debug)
+{
+   struct nouveau_screen *screen = fence->screen;
+   uint32_t spins = 0;
+   int64_t start = 0;
+
+   if (debug && debug->debug_message)
+      start = os_time_get_nano();
+
+   if (!nouveau_fence_kick(fence))
+      return false;
+
+   do {
+      if (fence->state == NOUVEAU_FENCE_STATE_SIGNALLED) {
+         if (debug && debug->debug_message)
+            pipe_debug_message(debug, PERF_INFO,
+                               "stalled %.3f ms waiting for fence",
+                               (os_time_get_nano() - start) / 1000000.f);
          return true;
+      }
       if (!spins)
          NOUVEAU_DRV_STAT(screen, any_non_kernel_fence_sync_count, 1);
       spins++;
@@ -218,6 +219,8 @@ nouveau_fence_wait(struct nouveau_fence *fence)
       if (!(spins % 8)) /* donate a few cycles */
          sched_yield();
 #endif
+
+      nouveau_fence_update(screen, false);
    } while (spins < NOUVEAU_FENCE_MAX_SPINS);
 
    debug_printf("Wait on fence %u (ack = %u, next = %u) timed out !\n",
@@ -248,4 +251,27 @@ nouveau_fence_unref_bo(void *data)
    struct nouveau_bo *bo = data;
 
    nouveau_bo_ref(NULL, &bo);
+}
+
+bool
+nouveau_fence_work(struct nouveau_fence *fence,
+                   void (*func)(void *), void *data)
+{
+   struct nouveau_fence_work *work;
+
+   if (!fence || fence->state == NOUVEAU_FENCE_STATE_SIGNALLED) {
+      func(data);
+      return true;
+   }
+
+   work = CALLOC_STRUCT(nouveau_fence_work);
+   if (!work)
+      return false;
+   work->func = func;
+   work->data = data;
+   LIST_ADD(&work->list, &fence->work);
+   p_atomic_inc(&fence->work_count);
+   if (fence->work_count > 64)
+      nouveau_fence_kick(fence);
+   return true;
 }

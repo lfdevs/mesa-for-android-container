@@ -88,13 +88,14 @@ struct tgsi_interp_coef
    float dady[TGSI_NUM_CHANNELS];
 };
 
-enum tgsi_sampler_control {
-   tgsi_sampler_lod_none,
-   tgsi_sampler_lod_bias,
-   tgsi_sampler_lod_explicit,
-   tgsi_sampler_lod_zero,
-   tgsi_sampler_derivs_explicit,
-   tgsi_sampler_gather,
+enum tgsi_sampler_control
+{
+   TGSI_SAMPLER_LOD_NONE,
+   TGSI_SAMPLER_LOD_BIAS,
+   TGSI_SAMPLER_LOD_EXPLICIT,
+   TGSI_SAMPLER_LOD_ZERO,
+   TGSI_SAMPLER_DERIVS_EXPLICIT,
+   TGSI_SAMPLER_GATHER,
 };
 
 /**
@@ -138,6 +139,16 @@ struct tgsi_sampler
                      const int j[TGSI_QUAD_SIZE], const int k[TGSI_QUAD_SIZE],
                      const int lod[TGSI_QUAD_SIZE], const int8_t offset[3],
                      float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+   void (*query_lod)(const struct tgsi_sampler *tgsi_sampler,
+                     const unsigned sview_index,
+                     const unsigned sampler_index,
+                     const float s[TGSI_QUAD_SIZE],
+                     const float t[TGSI_QUAD_SIZE],
+                     const float p[TGSI_QUAD_SIZE],
+                     const float c0[TGSI_QUAD_SIZE],
+                     const enum tgsi_sampler_control control,
+                     float mipmap[TGSI_QUAD_SIZE],
+                     float lod[TGSI_QUAD_SIZE]);
 };
 
 #define TGSI_EXEC_NUM_TEMPS       4096

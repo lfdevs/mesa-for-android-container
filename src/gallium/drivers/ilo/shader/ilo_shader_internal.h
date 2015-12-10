@@ -139,6 +139,7 @@ struct ilo_shader {
 
    void *kernel;
    int kernel_size;
+   int per_thread_scratch_size;
 
    struct ilo_kernel_routing routing;
    struct ilo_state_ps_params_info ps_params;

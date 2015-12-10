@@ -229,7 +229,7 @@ Status XvMCCreateContext(Display *dpy, XvPortID port, int surface_type_id,
       return BadAlloc;
 
    /* TODO: Reuse screen if process creates another context */
-   vscreen = vl_screen_create(dpy, scrn);
+   vscreen = vl_dri2_screen_create(dpy, scrn);
 
    if (!vscreen) {
       XVMC_MSG(XVMC_ERR, "[XvMC] Could not create VL screen.\n");
@@ -237,10 +237,10 @@ Status XvMCCreateContext(Display *dpy, XvPortID port, int surface_type_id,
       return BadAlloc;
    }
 
-   pipe = vscreen->pscreen->context_create(vscreen->pscreen, vscreen);
+   pipe = vscreen->pscreen->context_create(vscreen->pscreen, vscreen, 0);
    if (!pipe) {
       XVMC_MSG(XVMC_ERR, "[XvMC] Could not create VL context.\n");
-      vl_screen_destroy(vscreen);
+      vscreen->destroy(vscreen);
       FREE(context_priv);
       return BadAlloc;
    }
@@ -258,7 +258,7 @@ Status XvMCCreateContext(Display *dpy, XvPortID port, int surface_type_id,
    if (!context_priv->decoder) {
       XVMC_MSG(XVMC_ERR, "[XvMC] Could not create VL decoder.\n");
       pipe->destroy(pipe);
-      vl_screen_destroy(vscreen);
+      vscreen->destroy(vscreen);
       FREE(context_priv);
       return BadAlloc;
    }
@@ -267,7 +267,7 @@ Status XvMCCreateContext(Display *dpy, XvPortID port, int surface_type_id,
       XVMC_MSG(XVMC_ERR, "[XvMC] Could not create VL compositor.\n");
       context_priv->decoder->destroy(context_priv->decoder);
       pipe->destroy(pipe);
-      vl_screen_destroy(vscreen);
+      vscreen->destroy(vscreen);
       FREE(context_priv);
       return BadAlloc;
    }
@@ -277,7 +277,7 @@ Status XvMCCreateContext(Display *dpy, XvPortID port, int surface_type_id,
       vl_compositor_cleanup(&context_priv->compositor);
       context_priv->decoder->destroy(context_priv->decoder);
       pipe->destroy(pipe);
-      vl_screen_destroy(vscreen);
+      vscreen->destroy(vscreen);
       FREE(context_priv);
       return BadAlloc;
    }
@@ -332,7 +332,7 @@ Status XvMCDestroyContext(Display *dpy, XvMCContext *context)
    vl_compositor_cleanup_state(&context_priv->cstate);
    vl_compositor_cleanup(&context_priv->compositor);
    context_priv->pipe->destroy(context_priv->pipe);
-   vl_screen_destroy(context_priv->vscreen);
+   context_priv->vscreen->destroy(context_priv->vscreen);
    FREE(context_priv);
    context->privData = NULL;
 

@@ -84,6 +84,7 @@ null_sw_displaytarget_create(struct sw_winsys *winsys,
                              enum pipe_format format,
                              unsigned width, unsigned height,
                              unsigned alignment,
+                             const void *front_private,
                              unsigned *stride)
 {
    fprintf(stderr, "null_sw_displaytarget_create() returning NULL\n");

@@ -392,10 +392,22 @@ BuildUtil::mkImm(float f)
    return mkImm(u.u32);
 }
 
+ImmediateValue *
+BuildUtil::mkImm(double d)
+{
+   return new_ImmediateValue(prog, d);
+}
+
 Value *
 BuildUtil::loadImm(Value *dst, float f)
 {
    return mkOp1v(OP_MOV, TYPE_F32, dst ? dst : getScratch(), mkImm(f));
+}
+
+Value *
+BuildUtil::loadImm(Value *dst, double d)
+{
+   return mkOp1v(OP_MOV, TYPE_F64, dst ? dst : getScratch(), mkImm(d));
 }
 
 Value *
@@ -555,6 +567,12 @@ BuildUtil::split64BitOpPostRA(Function *fn, Instruction *i,
    switch (i->dType) {
    case TYPE_U64: hTy = TYPE_U32; break;
    case TYPE_S64: hTy = TYPE_S32; break;
+   case TYPE_F64:
+      if (i->op == OP_MOV) {
+         hTy = TYPE_U32;
+         break;
+      }
+      /* fallthrough */
    default:
       return NULL;
    }

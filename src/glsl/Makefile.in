@@ -116,11 +116,13 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 TESTS = glcpp/tests/glcpp-test glcpp/tests/glcpp-test-cr-lf \
-	tests/blob-test$(EXEEXT) tests/general-ir-test$(EXEEXT) \
-	tests/optimization-test tests/sampler-types-test$(EXEEXT) \
+	nir/tests/control_flow_tests$(EXEEXT) tests/blob-test$(EXEEXT) \
+	tests/general-ir-test$(EXEEXT) tests/optimization-test \
+	tests/sampler-types-test$(EXEEXT) \
 	tests/uniform-initializer-test$(EXEEXT)
 check_PROGRAMS = glcpp/glcpp$(EXEEXT) glsl_test$(EXEEXT) \
-	tests/blob-test$(EXEEXT) tests/general-ir-test$(EXEEXT) \
+	nir/tests/control_flow_tests$(EXEEXT) tests/blob-test$(EXEEXT) \
+	tests/general-ir-test$(EXEEXT) \
 	tests/sampler-types-test$(EXEEXT) \
 	tests/uniform-initializer-test$(EXEEXT)
 noinst_PROGRAMS = glsl_compiler$(EXEEXT)
@@ -157,12 +159,11 @@ libglsl_la_DEPENDENCIES = libglcpp.la
 am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	ast_to_hir.lo ast_type.lo blob.lo builtin_functions.lo \
 	builtin_types.lo builtin_variables.lo glsl_parser_extras.lo \
-	glsl_symbol_table.lo glsl_types.lo hir_field_selection.lo \
-	ir_basic_block.lo ir_builder.lo ir_clone.lo \
-	ir_constant_expression.lo ir.lo ir_equals.lo \
-	ir_expression_flattening.lo ir_function_can_inline.lo \
-	ir_function_detect_recursion.lo ir_function.lo \
-	ir_hierarchical_visitor.lo ir_hv_accept.lo \
+	glsl_symbol_table.lo hir_field_selection.lo ir_basic_block.lo \
+	ir_builder.lo ir_clone.lo ir_constant_expression.lo ir.lo \
+	ir_equals.lo ir_expression_flattening.lo \
+	ir_function_can_inline.lo ir_function_detect_recursion.lo \
+	ir_function.lo ir_hierarchical_visitor.lo ir_hv_accept.lo \
 	ir_import_prototypes.lo ir_print_visitor.lo ir_reader.lo \
 	ir_rvalue_visitor.lo ir_set_program_inouts.lo ir_validate.lo \
 	ir_variable_refcount.lo linker.lo link_atomics.lo \
@@ -181,12 +182,12 @@ am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	lower_variable_index_to_cond_assign.lo \
 	lower_vec_index_to_cond_assign.lo \
 	lower_vec_index_to_swizzle.lo lower_vector.lo \
-	lower_vector_insert.lo lower_vertex_id.lo \
-	lower_output_reads.lo lower_ubo_reference.lo opt_algebraic.lo \
-	opt_array_splitting.lo opt_conditional_discard.lo \
-	opt_constant_folding.lo opt_constant_propagation.lo \
-	opt_constant_variable.lo opt_copy_propagation.lo \
-	opt_copy_propagation_elements.lo opt_cse.lo \
+	lower_vector_derefs.lo lower_vector_insert.lo \
+	lower_vertex_id.lo lower_output_reads.lo \
+	lower_ubo_reference.lo opt_algebraic.lo opt_array_splitting.lo \
+	opt_conditional_discard.lo opt_constant_folding.lo \
+	opt_constant_propagation.lo opt_constant_variable.lo \
+	opt_copy_propagation.lo opt_copy_propagation_elements.lo \
 	opt_dead_builtin_variables.lo opt_dead_builtin_varyings.lo \
 	opt_dead_code.lo opt_dead_code_local.lo opt_dead_functions.lo \
 	opt_flatten_nested_if_blocks.lo opt_flip_matrices.lo \
@@ -195,34 +196,39 @@ am__objects_2 = ast_array_index.lo ast_expr.lo ast_function.lo \
 	opt_redundant_jumps.lo opt_structure_splitting.lo \
 	opt_swizzle_swizzle.lo opt_tree_grafting.lo opt_vectorize.lo \
 	s_expression.lo
-am__objects_3 = nir/glsl_to_nir.lo nir/nir.lo nir/nir_dominance.lo \
-	nir/nir_from_ssa.lo nir/nir_intrinsics.lo \
-	nir/nir_live_variables.lo nir/nir_lower_alu_to_scalar.lo \
-	nir/nir_lower_atomics.lo nir/nir_lower_global_vars_to_local.lo \
+am__objects_3 = nir/glsl_to_nir.lo nir/glsl_types.lo nir/nir.lo \
+	nir/nir_clone.lo nir/nir_control_flow.lo nir/nir_dominance.lo \
+	nir/nir_from_ssa.lo nir/nir_gs_count_vertices.lo \
+	nir/nir_intrinsics.lo nir/nir_instr_set.lo nir/nir_liveness.lo \
+	nir/nir_lower_alu_to_scalar.lo nir/nir_lower_atomics.lo \
+	nir/nir_lower_clip.lo nir/nir_lower_global_vars_to_local.lo \
+	nir/nir_lower_gs_intrinsics.lo \
 	nir/nir_lower_load_const_to_scalar.lo \
 	nir/nir_lower_locals_to_regs.lo nir/nir_lower_idiv.lo \
-	nir/nir_lower_io.lo nir/nir_lower_phis_to_scalar.lo \
-	nir/nir_lower_samplers.lo nir/nir_lower_system_values.lo \
-	nir/nir_lower_tex_projector.lo nir/nir_lower_to_source_mods.lo \
-	nir/nir_lower_vars_to_ssa.lo nir/nir_lower_var_copies.lo \
-	nir/nir_lower_vec_to_movs.lo nir/nir_metadata.lo \
+	nir/nir_lower_io.lo nir/nir_lower_outputs_to_temporaries.lo \
+	nir/nir_lower_phis_to_scalar.lo nir/nir_lower_samplers.lo \
+	nir/nir_lower_system_values.lo nir/nir_lower_tex.lo \
+	nir/nir_lower_to_source_mods.lo \
+	nir/nir_lower_two_sided_color.lo nir/nir_lower_vars_to_ssa.lo \
+	nir/nir_lower_var_copies.lo nir/nir_lower_vec_to_movs.lo \
+	nir/nir_metadata.lo nir/nir_move_vec_src_uses_to_dest.lo \
 	nir/nir_normalize_cubemap_coords.lo \
 	nir/nir_opt_constant_folding.lo nir/nir_opt_copy_propagate.lo \
-	nir/nir_opt_cse.lo nir/nir_opt_dce.lo nir/nir_opt_gcm.lo \
-	nir/nir_opt_global_to_local.lo nir/nir_opt_peephole_ffma.lo \
+	nir/nir_opt_cse.lo nir/nir_opt_dce.lo nir/nir_opt_dead_cf.lo \
+	nir/nir_opt_gcm.lo nir/nir_opt_global_to_local.lo \
 	nir/nir_opt_peephole_select.lo nir/nir_opt_remove_phis.lo \
 	nir/nir_opt_undef.lo nir/nir_print.lo \
 	nir/nir_remove_dead_variables.lo nir/nir_search.lo \
 	nir/nir_split_var_copies.lo nir/nir_sweep.lo nir/nir_to_ssa.lo \
-	nir/nir_validate.lo nir/nir_worklist.lo nir/nir_types.lo
+	nir/nir_validate.lo nir/nir_worklist.lo nir/nir_types.lo \
+	nir/shader_enums.lo
 am__objects_4 = nir/nir_constant_expressions.lo nir/nir_opcodes.lo \
 	nir/nir_opt_algebraic.lo
 am_libglsl_la_OBJECTS = glsl_lexer.lo glsl_parser.lo $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4)
 libglsl_la_OBJECTS = $(am_libglsl_la_OBJECTS)
 libnir_la_LIBADD =
-am_libnir_la_OBJECTS = glsl_types.lo builtin_types.lo \
-	glsl_symbol_table.lo $(am__objects_3) $(am__objects_4)
+am_libnir_la_OBJECTS = $(am__objects_3) $(am__objects_4)
 libnir_la_OBJECTS = $(am_libnir_la_OBJECTS)
 PROGRAMS = $(noinst_PROGRAMS)
 am_glcpp_glcpp_OBJECTS = glcpp/glcpp.$(OBJEXT)
@@ -234,12 +240,21 @@ am_glsl_compiler_OBJECTS = $(am__objects_5)
 glsl_compiler_OBJECTS = $(am_glsl_compiler_OBJECTS)
 am__DEPENDENCIES_1 =
 glsl_compiler_DEPENDENCIES = libglsl.la \
-	$(top_builddir)/src/libglsl_util.la $(am__DEPENDENCIES_1)
+	$(top_builddir)/src/libglsl_util.la \
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1)
 am_glsl_test_OBJECTS = standalone_scaffolding.$(OBJEXT) test.$(OBJEXT) \
 	test_optpass.$(OBJEXT)
 glsl_test_OBJECTS = $(am_glsl_test_OBJECTS)
 glsl_test_DEPENDENCIES = libglsl.la \
 	$(top_builddir)/src/libglsl_util.la $(am__DEPENDENCIES_1)
+am_nir_tests_control_flow_tests_OBJECTS =  \
+	nir/tests/control_flow_tests.$(OBJEXT)
+nir_tests_control_flow_tests_OBJECTS =  \
+	$(am_nir_tests_control_flow_tests_OBJECTS)
+nir_tests_control_flow_tests_DEPENDENCIES =  \
+	$(top_builddir)/src/gtest/libgtest.la \
+	$(top_builddir)/src/glsl/libnir.la \
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1)
 am_tests_blob_test_OBJECTS = tests/blob_test.$(OBJEXT)
 tests_blob_test_OBJECTS = $(am_tests_blob_test_OBJECTS)
 tests_blob_test_DEPENDENCIES = $(top_builddir)/src/glsl/libglsl.la
@@ -325,12 +340,14 @@ am__v_CXXLD_1 =
 SOURCES = $(libglcpp_la_SOURCES) $(libglsl_la_SOURCES) \
 	$(libnir_la_SOURCES) $(glcpp_glcpp_SOURCES) \
 	$(glsl_compiler_SOURCES) $(glsl_test_SOURCES) \
+	$(nir_tests_control_flow_tests_SOURCES) \
 	$(tests_blob_test_SOURCES) $(tests_general_ir_test_SOURCES) \
 	$(tests_sampler_types_test_SOURCES) \
 	$(tests_uniform_initializer_test_SOURCES)
 DIST_SOURCES = $(libglcpp_la_SOURCES) $(libglsl_la_SOURCES) \
 	$(libnir_la_SOURCES) $(glcpp_glcpp_SOURCES) \
 	$(glsl_compiler_SOURCES) $(glsl_test_SOURCES) \
+	$(nir_tests_control_flow_tests_SOURCES) \
 	$(tests_blob_test_SOURCES) $(tests_general_ir_test_SOURCES) \
 	$(tests_sampler_types_test_SOURCES) \
 	$(tests_uniform_initializer_test_SOURCES)
@@ -664,6 +681,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -708,6 +727,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -741,7 +762,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -772,6 +797,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -876,6 +903,7 @@ EXTRA_DIST = tests glcpp/tests README TODO glcpp/README	\
 	nir/nir_opcodes_c.py				\
 	nir/nir_opcodes_h.py				\
 	nir/nir_opt_algebraic.py			\
+	nir/tests					\
 	SConscript
 
 LIBGLCPP_FILES = \
@@ -896,40 +924,55 @@ NIR_GENERATED_FILES = \
 NIR_FILES = \
 	nir/glsl_to_nir.cpp \
 	nir/glsl_to_nir.h \
+	nir/glsl_types.cpp \
+	nir/glsl_types.h \
+	nir/builtin_type_macros.h \
 	nir/nir.c \
 	nir/nir.h \
 	nir/nir_array.h \
 	nir/nir_builder.h \
+	nir/nir_clone.c \
 	nir/nir_constant_expressions.h \
+	nir/nir_control_flow.c \
+	nir/nir_control_flow.h \
+	nir/nir_control_flow_private.h \
 	nir/nir_dominance.c \
 	nir/nir_from_ssa.c \
+	nir/nir_gs_count_vertices.c \
 	nir/nir_intrinsics.c \
 	nir/nir_intrinsics.h \
-	nir/nir_live_variables.c \
+	nir/nir_instr_set.c \
+	nir/nir_instr_set.h \
+	nir/nir_liveness.c \
 	nir/nir_lower_alu_to_scalar.c \
 	nir/nir_lower_atomics.c \
+	nir/nir_lower_clip.c \
 	nir/nir_lower_global_vars_to_local.c \
+	nir/nir_lower_gs_intrinsics.c \
 	nir/nir_lower_load_const_to_scalar.c \
 	nir/nir_lower_locals_to_regs.c \
 	nir/nir_lower_idiv.c \
 	nir/nir_lower_io.c \
+	nir/nir_lower_outputs_to_temporaries.c \
 	nir/nir_lower_phis_to_scalar.c \
-	nir/nir_lower_samplers.cpp \
+	nir/nir_lower_samplers.c \
 	nir/nir_lower_system_values.c \
-	nir/nir_lower_tex_projector.c \
+	nir/nir_lower_tex.c \
 	nir/nir_lower_to_source_mods.c \
+	nir/nir_lower_two_sided_color.c \
 	nir/nir_lower_vars_to_ssa.c \
 	nir/nir_lower_var_copies.c \
 	nir/nir_lower_vec_to_movs.c \
 	nir/nir_metadata.c \
+	nir/nir_move_vec_src_uses_to_dest.c \
 	nir/nir_normalize_cubemap_coords.c \
 	nir/nir_opt_constant_folding.c \
 	nir/nir_opt_copy_propagate.c \
 	nir/nir_opt_cse.c \
 	nir/nir_opt_dce.c \
+	nir/nir_opt_dead_cf.c \
 	nir/nir_opt_gcm.c \
 	nir/nir_opt_global_to_local.c \
-	nir/nir_opt_peephole_ffma.c \
 	nir/nir_opt_peephole_select.c \
 	nir/nir_opt_remove_phis.c \
 	nir/nir_opt_undef.c \
@@ -945,7 +988,9 @@ NIR_FILES = \
 	nir/nir_vla.h \
 	nir/nir_worklist.c \
 	nir/nir_worklist.h \
-	nir/nir_types.cpp
+	nir/nir_types.cpp \
+	nir/shader_enums.h \
+	nir/shader_enums.c
 
 
 # libglsl
@@ -959,15 +1004,12 @@ LIBGLSL_FILES = \
 	blob.c \
 	blob.h \
 	builtin_functions.cpp \
-	builtin_type_macros.h \
 	builtin_types.cpp \
 	builtin_variables.cpp \
 	glsl_parser_extras.cpp \
 	glsl_parser_extras.h \
 	glsl_symbol_table.cpp \
 	glsl_symbol_table.h \
-	glsl_types.cpp \
-	glsl_types.h \
 	hir_field_selection.cpp \
 	ir_basic_block.cpp \
 	ir_basic_block.h \
@@ -1038,6 +1080,7 @@ LIBGLSL_FILES = \
 	lower_vec_index_to_cond_assign.cpp \
 	lower_vec_index_to_swizzle.cpp \
 	lower_vector.cpp \
+	lower_vector_derefs.cpp \
 	lower_vector_insert.cpp \
 	lower_vertex_id.cpp \
 	lower_output_reads.cpp \
@@ -1050,7 +1093,6 @@ LIBGLSL_FILES = \
 	opt_constant_variable.cpp \
 	opt_copy_propagation.cpp \
 	opt_copy_propagation_elements.cpp \
-	opt_cse.cpp \
 	opt_dead_builtin_variables.cpp \
 	opt_dead_builtin_varyings.cpp \
 	opt_dead_code.cpp \
@@ -1070,8 +1112,7 @@ LIBGLSL_FILES = \
 	opt_vectorize.cpp \
 	program.h \
 	s_expression.cpp \
-	s_expression.h \
-	shader_enums.h
+	s_expression.h
 
 
 # glsl_compiler
@@ -1167,9 +1208,6 @@ libglsl_la_SOURCES = \
 	$(NIR_GENERATED_FILES)
 
 libnir_la_SOURCES = \
-	glsl_types.cpp					\
-	builtin_types.cpp				\
-	glsl_symbol_table.cpp				\
 	$(NIR_FILES)					\
 	$(NIR_GENERATED_FILES)
 
@@ -1179,6 +1217,7 @@ glsl_compiler_SOURCES = \
 glsl_compiler_LDADD = \
 	libglsl.la					\
 	$(top_builddir)/src/libglsl_util.la		\
+	$(top_builddir)/src/util/libmesautil.la		\
 	$(PTHREAD_LIBS)
 
 glsl_test_SOURCES = \
@@ -1243,6 +1282,18 @@ CLEANFILES = \
 	$(BUILT_SOURCES)
 
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+nir_tests_control_flow_tests_SOURCES = \
+	nir/tests/control_flow_tests.cpp
+
+nir_tests_control_flow_tests_CFLAGS = \
+	$(PTHREAD_CFLAGS)
+
+nir_tests_control_flow_tests_LDADD = \
+	$(top_builddir)/src/gtest/libgtest.la		\
+	$(top_builddir)/src/glsl/libnir.la		\
+	$(top_builddir)/src/util/libmesautil.la		\
+	$(PTHREAD_LIBS)
+
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -1310,19 +1361,30 @@ nir/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) nir/$(DEPDIR)
 	@: > nir/$(DEPDIR)/$(am__dirstamp)
 nir/glsl_to_nir.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/glsl_types.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_clone.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_control_flow.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_dominance.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_from_ssa.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_gs_count_vertices.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_intrinsics.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
-nir/nir_live_variables.lo: nir/$(am__dirstamp) \
+nir/nir_instr_set.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_liveness.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_alu_to_scalar.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_atomics.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_clip.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_global_vars_to_local.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_gs_intrinsics.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_load_const_to_scalar.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
@@ -1331,15 +1393,19 @@ nir/nir_lower_locals_to_regs.lo: nir/$(am__dirstamp) \
 nir/nir_lower_idiv.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_io.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_outputs_to_temporaries.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_phis_to_scalar.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_samplers.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_system_values.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
-nir/nir_lower_tex_projector.lo: nir/$(am__dirstamp) \
+nir/nir_lower_tex.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_to_source_mods.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_two_sided_color.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_vars_to_ssa.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
@@ -1348,6 +1414,8 @@ nir/nir_lower_var_copies.lo: nir/$(am__dirstamp) \
 nir/nir_lower_vec_to_movs.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_metadata.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_move_vec_src_uses_to_dest.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_normalize_cubemap_coords.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_constant_folding.lo: nir/$(am__dirstamp) \
@@ -1356,10 +1424,10 @@ nir/nir_opt_copy_propagate.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_cse.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_dce.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_opt_dead_cf.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_gcm.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_global_to_local.lo: nir/$(am__dirstamp) \
-	nir/$(DEPDIR)/$(am__dirstamp)
-nir/nir_opt_peephole_ffma.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_peephole_select.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
@@ -1378,6 +1446,7 @@ nir/nir_to_ssa.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_validate.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_worklist.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_types.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/shader_enums.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_constant_expressions.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opcodes.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
@@ -1421,6 +1490,18 @@ glsl_compiler$(EXEEXT): $(glsl_compiler_OBJECTS) $(glsl_compiler_DEPENDENCIES) $
 glsl_test$(EXEEXT): $(glsl_test_OBJECTS) $(glsl_test_DEPENDENCIES) $(EXTRA_glsl_test_DEPENDENCIES) 
 	@rm -f glsl_test$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(glsl_test_OBJECTS) $(glsl_test_LDADD) $(LIBS)
+nir/tests/$(am__dirstamp):
+	@$(MKDIR_P) nir/tests
+	@: > nir/tests/$(am__dirstamp)
+nir/tests/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) nir/tests/$(DEPDIR)
+	@: > nir/tests/$(DEPDIR)/$(am__dirstamp)
+nir/tests/control_flow_tests.$(OBJEXT): nir/tests/$(am__dirstamp) \
+	nir/tests/$(DEPDIR)/$(am__dirstamp)
+
+nir/tests/control_flow_tests$(EXEEXT): $(nir_tests_control_flow_tests_OBJECTS) $(nir_tests_control_flow_tests_DEPENDENCIES) $(EXTRA_nir_tests_control_flow_tests_DEPENDENCIES) nir/tests/$(am__dirstamp)
+	@rm -f nir/tests/control_flow_tests$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(nir_tests_control_flow_tests_OBJECTS) $(nir_tests_control_flow_tests_LDADD) $(LIBS)
 tests/$(am__dirstamp):
 	@$(MKDIR_P) tests
 	@: > tests/$(am__dirstamp)
@@ -1468,6 +1549,7 @@ mostlyclean-compile:
 	-rm -f glcpp/*.lo
 	-rm -f nir/*.$(OBJEXT)
 	-rm -f nir/*.lo
+	-rm -f nir/tests/*.$(OBJEXT)
 	-rm -f tests/*.$(OBJEXT)
 
 distclean-compile:
@@ -1486,7 +1568,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glsl_parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glsl_parser_extras.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glsl_symbol_table.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/glsl_types.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hir_field_selection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ir_basic_block.Plo@am__quote@
@@ -1541,6 +1622,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vec_index_to_cond_assign.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vec_index_to_swizzle.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vector_derefs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vector_insert.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lower_vertex_id.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
@@ -1552,7 +1634,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_constant_variable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_copy_propagation.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_copy_propagation_elements.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_cse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_dead_builtin_variables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_dead_builtin_varyings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/opt_dead_code.Plo@am__quote@
@@ -1579,28 +1660,38 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glcpp/$(DEPDIR)/glcpp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glcpp/$(DEPDIR)/pp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/glsl_to_nir.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/glsl_types.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_clone.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_constant_expressions.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_control_flow.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_dominance.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_from_ssa.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_gs_count_vertices.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_instr_set.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_intrinsics.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_live_variables.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_liveness.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_alu_to_scalar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_atomics.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_clip.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_global_vars_to_local.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_gs_intrinsics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_idiv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_load_const_to_scalar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_locals_to_regs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_outputs_to_temporaries.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_phis_to_scalar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_samplers.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_system_values.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_tex_projector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_tex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_to_source_mods.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_two_sided_color.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_var_copies.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_vars_to_ssa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_vec_to_movs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_metadata.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_move_vec_src_uses_to_dest.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_normalize_cubemap_coords.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opcodes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_algebraic.Plo@am__quote@
@@ -1608,9 +1699,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_copy_propagate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_cse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_dce.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_dead_cf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_gcm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_global_to_local.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_peephole_ffma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_peephole_select.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_remove_phis.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_undef.Plo@am__quote@
@@ -1623,6 +1714,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_types.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_validate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_worklist.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/shader_enums.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/tests/$(DEPDIR)/control_flow_tests.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/blob_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/builtin_variable_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/copy_constant_to_storage_tests.Po@am__quote@
@@ -1688,6 +1781,7 @@ clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf glcpp/.libs glcpp/_libs
 	-rm -rf nir/.libs nir/_libs
+	-rm -rf nir/tests/.libs nir/tests/_libs
 	-rm -rf tests/.libs tests/_libs
 
 ID: $(am__tagged_files)
@@ -1897,6 +1991,13 @@ glcpp/tests/glcpp-test-cr-lf.log: glcpp/tests/glcpp-test-cr-lf
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+nir/tests/control_flow_tests.log: nir/tests/control_flow_tests$(EXEEXT)
+	@p='nir/tests/control_flow_tests$(EXEEXT)'; \
+	b='nir/tests/control_flow_tests'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/blob-test.log: tests/blob-test$(EXEEXT)
 	@p='tests/blob-test$(EXEEXT)'; \
 	b='tests/blob-test'; \
@@ -2022,6 +2123,8 @@ distclean-generic:
 	-rm -f glcpp/$(am__dirstamp)
 	-rm -f nir/$(DEPDIR)/$(am__dirstamp)
 	-rm -f nir/$(am__dirstamp)
+	-rm -f nir/tests/$(DEPDIR)/$(am__dirstamp)
+	-rm -f nir/tests/$(am__dirstamp)
 	-rm -f tests/$(DEPDIR)/$(am__dirstamp)
 	-rm -f tests/$(am__dirstamp)
 
@@ -2035,7 +2138,7 @@ clean-am: clean-checkPROGRAMS clean-generic clean-libtool clean-local \
 	clean-noinstLTLIBRARIES clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR) glcpp/$(DEPDIR) nir/$(DEPDIR) tests/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) glcpp/$(DEPDIR) nir/$(DEPDIR) nir/tests/$(DEPDIR) tests/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -2081,7 +2184,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR) glcpp/$(DEPDIR) nir/$(DEPDIR) tests/$(DEPDIR)
+	-rm -rf ./$(DEPDIR) glcpp/$(DEPDIR) nir/$(DEPDIR) nir/tests/$(DEPDIR) tests/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

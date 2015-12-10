@@ -1,5 +1,4 @@
-/**************************************************************************
- *
+/*
  * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  *
@@ -7,7 +6,7 @@
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
  * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
+ * distribute, sublicense, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
  *
@@ -17,13 +16,12 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
  * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- **************************************************************************/
+ */
 
 #define CMD_MI				(0x0 << 29)
 #define CMD_2D				(0x2 << 29)
@@ -174,6 +172,11 @@
 #define GEN7_3DPRIM_INSTANCE_COUNT      0x2438
 #define GEN7_3DPRIM_START_INSTANCE      0x243C
 #define GEN7_3DPRIM_BASE_VERTEX         0x2440
+
+/* Auto-Compute / Indirect Registers */
+#define GEN7_GPGPU_DISPATCHDIMX         0x2500
+#define GEN7_GPGPU_DISPATCHDIMY         0x2504
+#define GEN7_GPGPU_DISPATCHDIMZ         0x2508
 
 #define GEN7_CACHE_MODE_1               0x7004
 # define GEN8_HIZ_NP_PMA_FIX_ENABLE        (1 << 11)

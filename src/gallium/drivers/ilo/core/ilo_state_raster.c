@@ -512,7 +512,7 @@ raster_set_gen8_3DSTATE_RASTER(struct ilo_state_raster *rs,
 
    /* where should line_msaa_enable be set? */
    if (setup->msaa_enable)
-      dw1 |= GEN8_RASTER_DW1_API_MULTISAMPLE_ENABLE;
+      dw1 |= GEN8_RASTER_DW1_DX_MULTISAMPLE_ENABLE;
 
    if (tri->depth_offset_solid)
       dw1 |= GEN8_RASTER_DW1_DEPTH_OFFSET_SOLID;
@@ -573,10 +573,6 @@ get_gen6_sample_count(const struct ilo_dev *dev, uint8_t sample_count)
    case 8:
       c = GEN7_NUMSAMPLES_8;
       min_gen = ILO_GEN(7);
-      break;
-   case 16:
-      c = GEN8_NUMSAMPLES_16;
-      min_gen = ILO_GEN(8);
       break;
    default:
       assert(!"unexpected sample count");
@@ -792,17 +788,17 @@ raster_set_gen8_3DSTATE_WM(struct ilo_state_raster *rs,
    if (ilo_dev_gen(dev) < ILO_GEN(8)) {
       switch (scan->earlyz_op) {
       case ILO_STATE_RASTER_EARLYZ_DEPTH_CLEAR:
-         dw1 |= GEN7_WM_DW1_DEPTH_CLEAR;
+         dw1 |= GEN7_WM_DW1_LEGACY_DEPTH_CLEAR;
          break;
       case ILO_STATE_RASTER_EARLYZ_DEPTH_RESOLVE:
-         dw1 |= GEN7_WM_DW1_DEPTH_RESOLVE;
+         dw1 |= GEN7_WM_DW1_LEGACY_DEPTH_RESOLVE;
          break;
       case ILO_STATE_RASTER_EARLYZ_HIZ_RESOLVE:
-         dw1 |= GEN7_WM_DW1_HIZ_RESOLVE;
+         dw1 |= GEN7_WM_DW1_LEGACY_HIZ_RESOLVE;
          break;
       default:
          if (scan->earlyz_stencil_clear)
-            dw1 |= GEN7_WM_DW1_DEPTH_CLEAR;
+            dw1 |= GEN7_WM_DW1_LEGACY_DEPTH_CLEAR;
          break;
       }
    }

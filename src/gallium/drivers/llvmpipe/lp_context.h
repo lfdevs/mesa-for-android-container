@@ -160,7 +160,8 @@ struct llvmpipe_context {
 
 
 struct pipe_context *
-llvmpipe_create_context( struct pipe_screen *screen, void *priv );
+llvmpipe_create_context(struct pipe_screen *screen, void *priv,
+                        unsigned flags);
 
 struct pipe_resource *
 llvmpipe_user_buffer_create(struct pipe_screen *screen,

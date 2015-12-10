@@ -149,10 +149,22 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
       sbuf->key.flags = 0;
 
       sbuf->key.format = SVGA3D_BUFFER;
-      if (sbuf->b.b.bind & PIPE_BIND_VERTEX_BUFFER)
+      if (sbuf->bind_flags & PIPE_BIND_VERTEX_BUFFER) {
          sbuf->key.flags |= SVGA3D_SURFACE_HINT_VERTEXBUFFER;
-      if (sbuf->b.b.bind & PIPE_BIND_INDEX_BUFFER)
+         sbuf->key.flags |= SVGA3D_SURFACE_BIND_VERTEX_BUFFER;
+      }
+      if (sbuf->bind_flags & PIPE_BIND_INDEX_BUFFER) {
          sbuf->key.flags |= SVGA3D_SURFACE_HINT_INDEXBUFFER;
+         sbuf->key.flags |= SVGA3D_SURFACE_BIND_INDEX_BUFFER;
+      }
+      if (sbuf->bind_flags & PIPE_BIND_CONSTANT_BUFFER)
+         sbuf->key.flags |= SVGA3D_SURFACE_BIND_CONSTANT_BUFFER;
+
+      if (sbuf->bind_flags & PIPE_BIND_STREAM_OUTPUT)
+         sbuf->key.flags |= SVGA3D_SURFACE_BIND_STREAM_OUTPUT;
+
+      if (sbuf->bind_flags & PIPE_BIND_SAMPLER_VIEW)
+         sbuf->key.flags |= SVGA3D_SURFACE_BIND_SHADER_RESOURCE;
 
       sbuf->key.size.width = sbuf->b.b.width0;
       sbuf->key.size.height = 1;
@@ -161,10 +173,12 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
       sbuf->key.numFaces = 1;
       sbuf->key.numMipLevels = 1;
       sbuf->key.cachable = 1;
+      sbuf->key.arraySize = 1;
 
       SVGA_DBG(DEBUG_DMA, "surface_create for buffer sz %d\n", sbuf->b.b.width0);
 
-      sbuf->handle = svga_screen_surface_create(ss, &sbuf->key);
+      sbuf->handle = svga_screen_surface_create(ss, sbuf->b.b.bind,
+                                                sbuf->b.b.usage, &sbuf->key);
       if (!sbuf->handle)
          return PIPE_ERROR_OUT_OF_MEMORY;
 
@@ -203,8 +217,8 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
 			      struct svga_buffer *sbuf)
 {
    struct svga_winsys_context *swc = svga->swc;
-   SVGA3dCmdUpdateGBImage *cmd;
-   struct svga_3d_update_gb_image *ccmd = NULL;
+   SVGA3dCmdUpdateGBImage *update_cmd;
+   struct svga_3d_update_gb_image *whole_update_cmd = NULL;
    uint32 numBoxes = sbuf->map.num_ranges;
    struct pipe_resource *dummy;
    unsigned int i;
@@ -214,68 +228,78 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
 
    if (sbuf->dma.flags.discard) {
       struct svga_3d_invalidate_gb_image *cicmd = NULL;
-      SVGA3dCmdInvalidateGBImage *icmd;
+      SVGA3dCmdInvalidateGBImage *invalidate_cmd;
+      const unsigned total_commands_size =
+         sizeof(*invalidate_cmd) + numBoxes * sizeof(*whole_update_cmd);
 
       /* Allocate FIFO space for one INVALIDATE_GB_IMAGE command followed by
        * 'numBoxes' UPDATE_GB_IMAGE commands.  Allocate all at once rather
        * than with separate commands because we need to properly deal with
        * filling the command buffer.
        */
-      icmd = SVGA3D_FIFOReserve(swc,
-				SVGA_3D_CMD_INVALIDATE_GB_IMAGE,
-				sizeof *icmd + numBoxes * sizeof *ccmd,
-				2);
-      if (!icmd)
+      invalidate_cmd = SVGA3D_FIFOReserve(swc,
+                                          SVGA_3D_CMD_INVALIDATE_GB_IMAGE,
+                                          total_commands_size, 1 + numBoxes);
+      if (!invalidate_cmd)
 	 return PIPE_ERROR_OUT_OF_MEMORY;
 
-      cicmd = container_of(icmd, cicmd, body);
-      cicmd->header.size = sizeof *icmd;
-      swc->surface_relocation(swc, &icmd->image.sid, NULL, sbuf->handle,
+      cicmd = container_of(invalidate_cmd, cicmd, body);
+      cicmd->header.size = sizeof(*invalidate_cmd);
+      swc->surface_relocation(swc, &invalidate_cmd->image.sid, NULL, sbuf->handle,
                               (SVGA_RELOC_WRITE |
                                SVGA_RELOC_INTERNAL |
                                SVGA_RELOC_DMA));
-      icmd->image.face = 0;
-      icmd->image.mipmap = 0;
+      invalidate_cmd->image.face = 0;
+      invalidate_cmd->image.mipmap = 0;
 
+      /* The whole_update_command is a SVGA3dCmdHeader plus the
+       * SVGA3dCmdUpdateGBImage command.
+       */
+      whole_update_cmd = (struct svga_3d_update_gb_image *) &invalidate_cmd[1];
       /* initialize the first UPDATE_GB_IMAGE command */
-      ccmd = (struct svga_3d_update_gb_image *) &icmd[1];
-      ccmd->header.id = SVGA_3D_CMD_UPDATE_GB_IMAGE;
-      cmd = &ccmd->body;
+      whole_update_cmd->header.id = SVGA_3D_CMD_UPDATE_GB_IMAGE;
+      update_cmd = &whole_update_cmd->body;
 
    } else {
       /* Allocate FIFO space for 'numBoxes' UPDATE_GB_IMAGE commands */
-      cmd = SVGA3D_FIFOReserve(swc,
-			       SVGA_3D_CMD_UPDATE_GB_IMAGE,
-			       sizeof *cmd + (numBoxes - 1) * sizeof *ccmd,
-			       1);
-      if (!cmd)
+      const unsigned total_commands_size =
+         sizeof(*update_cmd) + (numBoxes - 1) * sizeof(*whole_update_cmd);
+
+      update_cmd = SVGA3D_FIFOReserve(swc,
+                                      SVGA_3D_CMD_UPDATE_GB_IMAGE,
+                                      total_commands_size, numBoxes);
+      if (!update_cmd)
 	 return PIPE_ERROR_OUT_OF_MEMORY;
 
-      ccmd = container_of(cmd, ccmd, body);
+      /* The whole_update_command is a SVGA3dCmdHeader plus the
+       * SVGA3dCmdUpdateGBImage command.
+       */
+      whole_update_cmd = container_of(update_cmd, whole_update_cmd, body);
    }
 
    /* Init the first UPDATE_GB_IMAGE command */
-   ccmd->header.size = sizeof *cmd;
-   swc->surface_relocation(swc, &cmd->image.sid, NULL, sbuf->handle,
+   whole_update_cmd->header.size = sizeof(*update_cmd);
+   swc->surface_relocation(swc, &update_cmd->image.sid, NULL, sbuf->handle,
 			   SVGA_RELOC_WRITE | SVGA_RELOC_INTERNAL);
-   cmd->image.face = 0;
-   cmd->image.mipmap = 0;
+   update_cmd->image.face = 0;
+   update_cmd->image.mipmap = 0;
 
    /* Save pointer to the first UPDATE_GB_IMAGE command so that we can
     * fill in the box info below.
     */
-   sbuf->dma.updates = ccmd;
+   sbuf->dma.updates = whole_update_cmd;
 
    /*
-    * Copy the relocation info, face and mipmap to all
-    * subsequent commands. NOTE: For winsyses that actually
-    * patch the image.sid member at flush time, this will fail
-    * miserably. For those we need to add as many relocations
-    * as there are copy boxes.
+    * Copy the face, mipmap, etc. info to all subsequent commands.
+    * Also do the surface relocation for each subsequent command.
     */
-
    for (i = 1; i < numBoxes; ++i) {
-      memcpy(++ccmd, sbuf->dma.updates, sizeof *ccmd);
+      whole_update_cmd++;
+      memcpy(whole_update_cmd, sbuf->dma.updates, sizeof(*whole_update_cmd));
+
+      swc->surface_relocation(swc, &whole_update_cmd->body.image.sid, NULL,
+                              sbuf->handle,
+                              SVGA_RELOC_WRITE | SVGA_RELOC_INTERNAL);
    }
 
    /* Increment reference count */
@@ -405,6 +429,8 @@ svga_buffer_upload_flush(struct svga_context *svga,
 
          assert(box->x <= sbuf->b.b.width0);
          assert(box->x + box->w <= sbuf->b.b.width0);
+
+         svga->hud.num_bytes_uploaded += box->w;
       }
    }
    else {
@@ -430,6 +456,8 @@ svga_buffer_upload_flush(struct svga_context *svga,
 
          assert(box->x <= sbuf->b.b.width0);
          assert(box->x + box->w <= sbuf->b.b.width0);
+
+         svga->hud.num_bytes_uploaded += box->w;
       }
    }
 

@@ -323,7 +323,7 @@ public:
 
 
 	value* get_special_ro_value(unsigned sel);
-	value* get_kcache_value(unsigned bank, unsigned index, unsigned chan);
+	value* get_kcache_value(unsigned bank, unsigned index, unsigned chan, alu_kcache_index_mode index_mode);
 
 	value* get_value_version(value* v, unsigned ver);
 

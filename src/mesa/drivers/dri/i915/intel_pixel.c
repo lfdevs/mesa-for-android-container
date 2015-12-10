@@ -126,7 +126,6 @@ intel_check_blit_fragment_ops(struct gl_context * ctx, bool src_alpha_is_one)
 void
 intelInitPixelFuncs(struct dd_function_table *functions)
 {
-   functions->Accum = _mesa_accum;
    functions->Bitmap = intelBitmap;
    functions->CopyPixels = intelCopyPixels;
    functions->DrawPixels = intelDrawPixels;

@@ -62,9 +62,12 @@ struct svga_host_surface_cache_key
    SVGA3dSurfaceFlags flags;
    SVGA3dSurfaceFormat format;
    SVGA3dSize size;
-   uint32_t numFaces:24;
-   uint32_t numMipLevels:7;
+   uint32_t numFaces:3;
+   uint32_t arraySize:16;
+   uint32_t numMipLevels:6;
    uint32_t cachable:1;         /* False if this is a shared surface */
+   uint32_t sampleCount:5;
+   uint32_t scanout:1;
 };
 
 
@@ -137,6 +140,7 @@ svga_screen_cache_init(struct svga_screen *svgascreen);
 
 struct svga_winsys_surface *
 svga_screen_surface_create(struct svga_screen *svgascreen,
+                           unsigned bind_flags, unsigned usage,
                            struct svga_host_surface_cache_key *key);
 
 void

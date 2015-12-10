@@ -34,6 +34,7 @@
 #include "util/list.h"
 #include "util/u_format.h"
 #include "util/u_inlines.h"
+#include "util/u_memory.h"
 #include "util/u_pointer.h"
 
 #include "core/ilo_core.h"

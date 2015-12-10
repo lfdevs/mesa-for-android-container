@@ -247,8 +247,12 @@ namespace {
       // attribute.  This attribute will prevent Clang from creating
       // illegal uses of barrier() (e.g. Moving barrier() inside a conditional
       // that is no executed by all threads) during its optimizaton passes.
+#if HAVE_LLVM >= 0x0308
+      c.getCodeGenOpts().LinkBitcodeFiles.emplace_back(llvm::Linker::Flags::None,
+                                                       libclc_path);
+#else
       c.getCodeGenOpts().LinkBitcodeFile = libclc_path;
-
+#endif
       optimization_level = c.getCodeGenOpts().OptimizationLevel;
 
       // Compile the code

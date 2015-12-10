@@ -136,8 +136,8 @@ emit_pipeline_stat(struct brw_context *brw, drm_intel_bo *bo,
       IA_VERTICES_COUNT,   /* VERTICES_SUBMITTED */
       IA_PRIMITIVES_COUNT, /* PRIMITIVES_SUBMITTED */
       VS_INVOCATION_COUNT, /* VERTEX_SHADER_INVOCATIONS */
-      0, /* HS_INVOCATION_COUNT,*/  /* TESS_CONTROL_SHADER_PATCHES */
-      0, /* DS_INVOCATION_COUNT,*/  /* TESS_EVALUATION_SHADER_INVOCATIONS */
+      HS_INVOCATION_COUNT, /* TESS_CONTROL_SHADER_PATCHES */
+      DS_INVOCATION_COUNT, /* TESS_EVALUATION_SHADER_INVOCATIONS */
       GS_PRIMITIVES_COUNT, /* GEOMETRY_SHADER_PRIMITIVES_EMITTED */
       PS_INVOCATION_COUNT, /* FRAGMENT_SHADER_INVOCATIONS */
       CS_INVOCATION_COUNT, /* COMPUTE_SHADER_INVOCATIONS */
@@ -231,6 +231,8 @@ gen6_queryobj_get_results(struct gl_context *ctx,
    case GL_CLIPPING_INPUT_PRIMITIVES_ARB:
    case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
    case GL_COMPUTE_SHADER_INVOCATIONS_ARB:
+   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
+   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
       query->Base.Result = results[1] - results[0];
       break;
 
@@ -250,8 +252,6 @@ gen6_queryobj_get_results(struct gl_context *ctx,
          query->Base.Result /= 4;
       break;
 
-   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
-   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
    default:
       unreachable("Unrecognized query target in brw_queryobj_get_results()");
    }
@@ -329,11 +329,11 @@ gen6_begin_query(struct gl_context *ctx, struct gl_query_object *q)
    case GL_CLIPPING_INPUT_PRIMITIVES_ARB:
    case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
    case GL_COMPUTE_SHADER_INVOCATIONS_ARB:
+   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
+   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
       emit_pipeline_stat(brw, query->bo, query->Base.Stream, query->Base.Target, 0);
       break;
 
-   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
-   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
    default:
       unreachable("Unrecognized query target in brw_begin_query()");
    }
@@ -381,12 +381,12 @@ gen6_end_query(struct gl_context *ctx, struct gl_query_object *q)
    case GL_CLIPPING_INPUT_PRIMITIVES_ARB:
    case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
    case GL_GEOMETRY_SHADER_INVOCATIONS:
+   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
+   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
       emit_pipeline_stat(brw, query->bo,
                          query->Base.Stream, query->Base.Target, 1);
       break;
 
-   case GL_TESS_CONTROL_SHADER_PATCHES_ARB:
-   case GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB:
    default:
       unreachable("Unrecognized query target in brw_end_query()");
    }

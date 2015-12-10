@@ -1,3 +1,18 @@
+mesa (11.1.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * Bump libdrm-dev build-dep to 2.4.65.
+  * Update symbols for libgles2-mesa and libxatracker2.
+  * Remove Breaks/Conflicts/Provides/Replaces from pre-wheezy.
+  * Remove duplicated field "Priority" from package libgl1-mesa-dri.
+  * Declare Multi-Arch: same for mesa-opencl-icd{,-dbg} (Closes:
+    #804919).
+  * Add a Lintian override for symbols-declares-dependency-on-other-
+    package libgbm1-private.
+  * Remove obsolete libgl1-mesa-dri.lintian-overrides.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 10 Dec 2015 12:22:54 +0100
+
 mesa (11.0.7-1) unstable; urgency=medium
 
   [ Julien Cristau ]

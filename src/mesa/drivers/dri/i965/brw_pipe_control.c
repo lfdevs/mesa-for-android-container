@@ -193,6 +193,14 @@ brw_emit_depth_stall_flushes(struct brw_context *brw)
 {
    assert(brw->gen >= 6 && brw->gen <= 9);
 
+   /* Starting on BDW, these pipe controls are unnecessary.
+    *
+    *   WM HW will internally manage the draining pipe and flushing of the caches
+    *   when this command is issued. The PIPE_CONTROL restrictions are removed.
+    */
+   if (brw->gen >= 8)
+      return;
+
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_STALL);
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_CACHE_FLUSH);
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_STALL);

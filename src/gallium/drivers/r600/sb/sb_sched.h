@@ -66,6 +66,7 @@ public:
 class literal_tracker {
 	literal lt[4];
 	unsigned uc[4];
+
 public:
 	literal_tracker() : lt(), uc() {}
 
@@ -219,6 +220,8 @@ public:
 	// bottom-up)
 	value *current_ar;
 	value *current_pr;
+	// current values of CF_IDX registers that need preloading
+	value *current_idx[2];
 
 	alu_clause_tracker(shader &sh);
 
@@ -235,7 +238,7 @@ public:
 	void new_group();
 	bool is_empty();
 
-	alu_node* create_ar_load();
+	alu_node* create_ar_load(value *v, chan_select ar_channel);
 
 	void discard_current_group();
 
@@ -256,6 +259,7 @@ class post_scheduler : public pass {
 
 	val_set cleared_interf;
 
+	void emit_index_registers();
 public:
 
 	post_scheduler(shader &sh) : pass(sh),
@@ -265,6 +269,9 @@ public:
 	virtual int run();
 	void run_on(container_node *n);
 	void schedule_bb(bb_node *bb);
+
+	void load_index_register(value *v, unsigned idx);
+	void process_fetch(container_node *c);
 
 	void process_alu(container_node *c);
 	void schedule_alu(container_node *c);

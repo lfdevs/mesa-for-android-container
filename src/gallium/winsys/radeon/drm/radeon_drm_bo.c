@@ -104,30 +104,54 @@ static struct radeon_bo *get_radeon_bo(struct pb_buffer *_buf)
     return bo;
 }
 
+static bool radeon_bo_is_busy(struct radeon_bo *bo)
+{
+    struct drm_radeon_gem_busy args = {0};
+
+    args.handle = bo->handle;
+    return drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_BUSY,
+                               &args, sizeof(args)) != 0;
+}
+
+static void radeon_bo_wait_idle(struct radeon_bo *bo)
+{
+    struct drm_radeon_gem_wait_idle args = {0};
+
+    args.handle = bo->handle;
+    while (drmCommandWrite(bo->rws->fd, DRM_RADEON_GEM_WAIT_IDLE,
+                           &args, sizeof(args)) == -EBUSY);
+}
+
 static bool radeon_bo_wait(struct pb_buffer *_buf, uint64_t timeout,
                            enum radeon_bo_usage usage)
 {
-   struct radeon_bo *bo = get_radeon_bo(_buf);
+    struct radeon_bo *bo = get_radeon_bo(_buf);
+    int64_t abs_timeout;
 
-   /* Wait if any ioctl is being submitted with this buffer. */
-   if (!os_wait_until_zero(&bo->num_active_ioctls, timeout))
-      return false;
+    /* No timeout. Just query. */
+    if (timeout == 0)
+        return !bo->num_active_ioctls && !radeon_bo_is_busy(bo);
 
-   /* TODO: handle arbitrary timeout */
-    if (!timeout) {
-        struct drm_radeon_gem_busy args = {0};
+    abs_timeout = os_time_get_absolute_timeout(timeout);
 
-        args.handle = bo->handle;
-        return drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_BUSY,
-                                   &args, sizeof(args)) == 0;
-    } else {
-        struct drm_radeon_gem_wait_idle args = {0};
+    /* Wait if any ioctl is being submitted with this buffer. */
+    if (!os_wait_until_zero_abs_timeout(&bo->num_active_ioctls, abs_timeout))
+        return false;
 
-        args.handle = bo->handle;
-        while (drmCommandWrite(bo->rws->fd, DRM_RADEON_GEM_WAIT_IDLE,
-                               &args, sizeof(args)) == -EBUSY);
+    /* Infinite timeout. */
+    if (abs_timeout == PIPE_TIMEOUT_INFINITE) {
+        radeon_bo_wait_idle(bo);
         return true;
     }
+
+    /* Other timeouts need to be emulated with a loop. */
+    while (radeon_bo_is_busy(bo)) {
+       if (os_time_get_nano() >= abs_timeout)
+          return false;
+       os_time_sleep(10);
+    }
+
+    return true;
 }
 
 static enum radeon_bo_domain get_valid_domain(enum radeon_bo_domain domain)

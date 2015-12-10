@@ -38,19 +38,21 @@ public:
    gen6_gs_visitor(const struct brw_compiler *comp,
                    void *log_data,
                    struct brw_gs_compile *c,
+                   struct brw_gs_prog_data *prog_data,
                    struct gl_shader_program *prog,
+                   const nir_shader *shader,
                    void *mem_ctx,
                    bool no_spills,
                    int shader_time_index) :
-      vec4_gs_visitor(comp, log_data, c, prog, mem_ctx, no_spills,
-                      shader_time_index) {}
+      vec4_gs_visitor(comp, log_data, c, prog_data, shader, mem_ctx, no_spills,
+                      shader_time_index),
+      shader_prog(prog)
+      {
+      }
 
 protected:
-   virtual void assign_binding_table_offsets();
    virtual void emit_prolog();
    virtual void emit_thread_end();
-   virtual void visit(ir_emit_vertex *);
-   virtual void visit(ir_end_primitive *);
    virtual void gs_emit_vertex(int stream_id);
    virtual void gs_end_primitive();
    virtual void emit_urb_write_header(int mrf);
@@ -65,6 +67,8 @@ private:
    void xfb_program(unsigned vertex, unsigned num_verts);
    void xfb_setup();
    int get_vertex_output_offset_for_varying(int vertex, int varying);
+
+   const struct gl_shader_program *shader_prog;
 
    src_reg vertex_output;
    src_reg vertex_output_offset;

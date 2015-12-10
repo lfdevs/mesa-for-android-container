@@ -91,7 +91,7 @@ do_blit_readpixels(struct gl_context * ctx,
 
    if (ctx->_ImageTransferState ||
        !_mesa_format_matches_format_and_type(irb->mt->format, format, type,
-                                             false)) {
+                                             false, NULL)) {
       DBG("%s - bad format for blit\n", __func__);
       return false;
    }

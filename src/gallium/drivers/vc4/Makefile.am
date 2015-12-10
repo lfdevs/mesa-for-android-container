@@ -23,7 +23,6 @@ include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
 if USE_VC4_SIMULATOR
-SIM_CFLAGS = -DUSE_VC4_SIMULATOR=1
 SIM_LDFLAGS = -lsimpenrose
 endif
 

@@ -30,6 +30,7 @@
 #define IR3_NIR_H_
 
 #include "glsl/nir/nir.h"
+#include "glsl/nir/shader_enums.h"
 
 bool ir3_nir_lower_if_else(nir_shader *shader);
 

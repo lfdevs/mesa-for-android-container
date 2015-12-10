@@ -42,6 +42,16 @@ struct fd_bo;
 struct fd_screen {
 	struct pipe_screen base;
 
+	/* it would be tempting to use pipe_reference here, but that
+	 * really doesn't work well if it isn't the first member of
+	 * the struct, so not quite so awesome to be adding refcnting
+	 * further down the inheritance hierarchy:
+	 */
+	int refcnt;
+
+	/* place for winsys to stash it's own stuff: */
+	void *winsys_priv;
+
 	uint32_t gmemsize_bytes;
 	uint32_t device_id;
 	uint32_t gpu_id;         /* 220, 305, etc */

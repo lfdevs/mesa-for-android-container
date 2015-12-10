@@ -421,7 +421,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
    lp_build_tgsi_soa(gallivm, tokens, type, &mask,
                      consts_ptr, num_consts_ptr, &system_values,
                      interp->inputs,
-                     outputs, context_ptr,
+                     outputs, context_ptr, thread_data_ptr,
                      sampler, &shader->info.base, NULL);
 
    /* Alpha test */
@@ -2303,8 +2303,8 @@ generate_fragment(struct llvmpipe_context *lp,
    lp_build_name(dady_ptr, "dady");
    lp_build_name(color_ptr_ptr, "color_ptr_ptr");
    lp_build_name(depth_ptr, "depth");
-   lp_build_name(thread_data_ptr, "thread_data");
    lp_build_name(mask_input, "mask_input");
+   lp_build_name(thread_data_ptr, "thread_data");
    lp_build_name(stride_ptr, "stride_ptr");
    lp_build_name(depth_stride, "depth_stride");
 

@@ -115,6 +115,10 @@ target_triplet = @target@
 @HAVE_DRISW_TRUE@am__append_1 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
+@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
+@HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
+
 subdir = src/gallium/drivers/svga
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -137,24 +141,27 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsvga_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_1 = svga_cmd.lo svga_context.lo svga_draw_arrays.lo \
-	svga_draw.lo svga_draw_elements.lo svga_format.lo \
-	svga_pipe_blend.lo svga_pipe_blit.lo svga_pipe_clear.lo \
-	svga_pipe_constants.lo svga_pipe_depthstencil.lo \
-	svga_pipe_draw.lo svga_pipe_flush.lo svga_pipe_fs.lo \
-	svga_pipe_misc.lo svga_pipe_query.lo svga_pipe_rasterizer.lo \
-	svga_pipe_sampler.lo svga_pipe_vertex.lo svga_pipe_vs.lo \
-	svga_resource_buffer.lo svga_resource_buffer_upload.lo \
-	svga_resource.lo svga_resource_texture.lo svga_sampler_view.lo \
-	svga_screen.lo svga_screen_cache.lo svga_shader.lo \
-	svga_state.lo svga_state_constants.lo \
-	svga_state_framebuffer.lo svga_state_fs.lo \
-	svga_state_need_swtnl.lo svga_state_rss.lo svga_state_tss.lo \
+am__objects_1 = svga_cmd.lo svga_cmd_vgpu10.lo svga_context.lo \
+	svga_draw_arrays.lo svga_draw.lo svga_draw_elements.lo \
+	svga_format.lo svga_link.lo svga_pipe_blend.lo \
+	svga_pipe_blit.lo svga_pipe_clear.lo svga_pipe_constants.lo \
+	svga_pipe_depthstencil.lo svga_pipe_draw.lo svga_pipe_flush.lo \
+	svga_pipe_fs.lo svga_pipe_gs.lo svga_pipe_misc.lo \
+	svga_pipe_query.lo svga_pipe_rasterizer.lo \
+	svga_pipe_sampler.lo svga_pipe_streamout.lo \
+	svga_pipe_vertex.lo svga_pipe_vs.lo svga_resource_buffer.lo \
+	svga_resource_buffer_upload.lo svga_resource.lo \
+	svga_resource_texture.lo svga_sampler_view.lo svga_screen.lo \
+	svga_screen_cache.lo svga_shader.lo svga_state.lo \
+	svga_state_constants.lo svga_state_framebuffer.lo \
+	svga_state_fs.lo svga_state_gs.lo svga_state_need_swtnl.lo \
+	svga_state_rss.lo svga_state_sampler.lo \
+	svga_state_tgsi_transform.lo svga_state_tss.lo \
 	svga_state_vdecl.lo svga_state_vs.lo svga_surface.lo \
 	svga_swtnl_backend.lo svga_swtnl_draw.lo svga_swtnl_state.lo \
 	svga_tgsi.lo svga_tgsi_decl_sm30.lo svga_tgsi_insn.lo \
-	svgadump/svga_dump.lo svgadump/svga_shader_dump.lo \
-	svgadump/svga_shader_op.lo
+	svga_tgsi_vgpu10.lo svgadump/svga_dump.lo \
+	svgadump/svga_shader_dump.lo svgadump/svga_shader_op.lo
 am_libsvga_la_OBJECTS = $(am__objects_1)
 libsvga_la_OBJECTS = $(am_libsvga_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -326,6 +333,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -370,6 +379,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -403,7 +414,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -434,6 +449,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -508,6 +525,7 @@ top_srcdir = @top_srcdir@
 C_SOURCES := \
 	svga_cmd.c \
 	svga_cmd.h \
+	svga_cmd_vgpu10.c \
 	svga_context.c \
 	svga_context.h \
 	svga_debug.h \
@@ -519,6 +537,8 @@ C_SOURCES := \
 	svga_format.c \
 	svga_format.h \
 	svga_hw_reg.h \
+	svga_link.c \
+	svga_link.h \
 	svga_pipe_blend.c \
 	svga_pipe_blit.c \
 	svga_pipe_clear.c \
@@ -527,10 +547,12 @@ C_SOURCES := \
 	svga_pipe_draw.c \
 	svga_pipe_flush.c \
 	svga_pipe_fs.c \
+	svga_pipe_gs.c \
 	svga_pipe_misc.c \
 	svga_pipe_query.c \
 	svga_pipe_rasterizer.c \
 	svga_pipe_sampler.c \
+	svga_pipe_streamout.c \
 	svga_pipe_vertex.c \
 	svga_pipe_vs.c \
 	svga_public.h \
@@ -551,15 +573,19 @@ C_SOURCES := \
 	svga_shader.c \
 	svga_shader.h \
 	svga_state.c \
+	svga_state.h \
 	svga_state_constants.c \
 	svga_state_framebuffer.c \
 	svga_state_fs.c \
-	svga_state.h \
+	svga_state_gs.c \
 	svga_state_need_swtnl.c \
 	svga_state_rss.c \
+	svga_state_sampler.c \
+	svga_state_tgsi_transform.c \
 	svga_state_tss.c \
 	svga_state_vdecl.c \
 	svga_state_vs.c \
+	svga_streamout.h \
 	svga_surface.c \
 	svga_surface.h \
 	svga_swtnl_backend.c \
@@ -572,6 +598,7 @@ C_SOURCES := \
 	svga_tgsi_emit.h \
 	svga_tgsi.h \
 	svga_tgsi_insn.c \
+	svga_tgsi_vgpu10.c \
 	svga_winsys.h \
 	\
 	svgadump/svga_dump.c \
@@ -587,6 +614,7 @@ SVGA_H_FILES := \
 	include/svga3d_caps.h \
 	include/svga3d_cmd.h \
 	include/svga3d_devcaps.h \
+	include/svga3d_dx.h \
 	include/svga3d_limits.h \
 	include/svga3d_reg.h \
 	include/svga3d_shaderdefs.h \
@@ -596,6 +624,7 @@ SVGA_H_FILES := \
 	include/svga_overlay.h \
 	include/svga_reg.h \
 	include/svga_types.h \
+	include/VGPU10ShaderTokens.h \
 	include/vmware_pack_begin.h \
 	include/vmware_pack_end.h
 
@@ -663,7 +692,7 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1)
+	$(am__append_1) $(am__append_2)
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(MSVC2013_COMPAT_CFLAGS)
@@ -745,11 +774,13 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_cmd.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_cmd_vgpu10.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_draw_arrays.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_draw_elements.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_format.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_link.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_blend.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_clear.Plo@am__quote@
@@ -758,10 +789,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_flush.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_fs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_misc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_rasterizer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_sampler.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_streamout.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_vertex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_pipe_vs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_resource.Plo@am__quote@
@@ -776,8 +809,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_constants.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_framebuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_fs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_need_swtnl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_rss.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_sampler.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_tgsi_transform.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_tss.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_vdecl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_vs.Plo@am__quote@
@@ -788,6 +824,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_tgsi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_tgsi_decl_sm30.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_tgsi_insn.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_tgsi_vgpu10.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@svgadump/$(DEPDIR)/svga_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@svgadump/$(DEPDIR)/svga_shader_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@svgadump/$(DEPDIR)/svga_shader_op.Plo@am__quote@

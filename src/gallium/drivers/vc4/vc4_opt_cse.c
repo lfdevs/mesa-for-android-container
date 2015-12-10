@@ -65,6 +65,7 @@ vc4_find_cse(struct vc4_compile *c, struct hash_table *ht,
              struct qinst *inst, uint32_t sf_count)
 {
         if (inst->dst.file != QFILE_TEMP ||
+            !c->defs[inst->dst.index] ||
             inst->op == QOP_MOV ||
             qir_get_op_nsrc(inst->op) > 4) {
                 return NULL;

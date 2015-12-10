@@ -22,6 +22,7 @@
  */
 
 #include "util/u_math.h"
+#include "util/u_prim.h"
 #include "util/macros.h"
 #include "vc4_context.h"
 
@@ -163,6 +164,41 @@ dump_VC4_PACKET_LOAD_TILE_BUFFER_GENERAL(void *cl, uint32_t offset, uint32_t hw_
 }
 
 static void
+dump_VC4_PACKET_GL_INDEXED_PRIMITIVE(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        uint8_t *b = cl + offset;
+        uint32_t *count = cl + offset + 1;
+        uint32_t *ib_offset = cl + offset + 5;
+        uint32_t *max_index = cl + offset + 9;
+
+        fprintf(stderr, "0x%08x 0x%08x:      0x%02x %s %s\n",
+                offset, hw_offset,
+                b[0], (b[0] & VC4_INDEX_BUFFER_U16) ? "16-bit" : "8-bit",
+                u_prim_name(b[0] & 0x7));
+        fprintf(stderr, "0x%08x 0x%08x:           %d verts\n",
+                offset + 1, hw_offset + 1, *count);
+        fprintf(stderr, "0x%08x 0x%08x:      0x%08x IB offset\n",
+                offset + 5, hw_offset + 5, *ib_offset);
+        fprintf(stderr, "0x%08x 0x%08x:      0x%08x max index\n",
+                offset + 9, hw_offset + 9, *max_index);
+}
+
+static void
+dump_VC4_PACKET_GL_ARRAY_PRIMITIVE(void *cl, uint32_t offset, uint32_t hw_offset)
+{
+        uint8_t *b = cl + offset;
+        uint32_t *count = cl + offset + 1;
+        uint32_t *start = cl + offset + 5;
+
+        fprintf(stderr, "0x%08x 0x%08x:      0x%02x %s\n",
+                offset, hw_offset, b[0], u_prim_name(b[0] & 0x7));
+        fprintf(stderr, "0x%08x 0x%08x:      %d verts\n",
+                offset + 1, hw_offset + 1, *count);
+        fprintf(stderr, "0x%08x 0x%08x:      0x%08x start\n",
+                offset + 5, hw_offset + 5, *start);
+}
+
+static void
 dump_VC4_PACKET_FLAT_SHADE_FLAGS(void *cl, uint32_t offset, uint32_t hw_offset)
 {
         uint32_t *bits = cl + offset;
@@ -262,14 +298,14 @@ dump_VC4_PACKET_TILE_RENDERING_MODE_CONFIG(void *cl, uint32_t offset, uint32_t h
                 shorts[1]);
 
         const char *format = "???";
-        switch ((bytes[0] >> 2) & 3) {
-        case 0:
+        switch (VC4_GET_FIELD(shorts[2], VC4_RENDER_CONFIG_FORMAT)) {
+        case VC4_RENDER_CONFIG_FORMAT_BGR565_DITHERED:
                 format = "BGR565_DITHERED";
                 break;
-        case 1:
+        case VC4_RENDER_CONFIG_FORMAT_RGBA8888:
                 format = "RGBA8888";
                 break;
-        case 2:
+        case VC4_RENDER_CONFIG_FORMAT_BGR565:
                 format = "BGR565";
                 break;
         }
@@ -277,29 +313,31 @@ dump_VC4_PACKET_TILE_RENDERING_MODE_CONFIG(void *cl, uint32_t offset, uint32_t h
                 format = "64bit";
 
         const char *tiling = "???";
-        switch ((bytes[0] >> 6) & 3) {
-        case 0:
+        switch (VC4_GET_FIELD(shorts[2], VC4_RENDER_CONFIG_MEMORY_FORMAT)) {
+        case VC4_TILING_FORMAT_LINEAR:
                 tiling = "linear";
                 break;
-        case 1:
+        case VC4_TILING_FORMAT_T:
                 tiling = "T";
                 break;
-        case 2:
+        case VC4_TILING_FORMAT_LT:
                 tiling = "LT";
                 break;
         }
 
-        fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s %s %s\n",
+        fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s %s %s %s\n",
                 offset + 8, hw_offset + 8,
                 bytes[0],
                 format, tiling,
-                (bytes[0] & VC4_RENDER_CONFIG_MS_MODE_4X) ? "ms" : "ss");
+                (shorts[2] & VC4_RENDER_CONFIG_MS_MODE_4X) ? "ms" : "ss",
+                (shorts[2] & VC4_RENDER_CONFIG_DECIMATE_MODE_4X) ?
+                "ms_decimate" : "ss_decimate");
 
         const char *earlyz = "";
-        if (bytes[1] & (1 << 3)) {
+        if (shorts[2] & VC4_RENDER_CONFIG_EARLY_Z_COVERAGE_DISABLE) {
                 earlyz = "early_z disabled";
         } else {
-                if (bytes[1] & (1 << 2))
+                if (shorts[2] & VC4_RENDER_CONFIG_EARLY_Z_DIRECTION_G)
                         earlyz = "early_z >";
                 else
                         earlyz = "early_z <";
@@ -356,8 +394,8 @@ static const struct packet_info {
         PACKET_DUMP(VC4_PACKET_STORE_TILE_BUFFER_GENERAL),
         PACKET_DUMP(VC4_PACKET_LOAD_TILE_BUFFER_GENERAL),
 
-        PACKET(VC4_PACKET_GL_INDEXED_PRIMITIVE),
-        PACKET(VC4_PACKET_GL_ARRAY_PRIMITIVE),
+        PACKET_DUMP(VC4_PACKET_GL_INDEXED_PRIMITIVE),
+        PACKET_DUMP(VC4_PACKET_GL_ARRAY_PRIMITIVE),
 
         PACKET(VC4_PACKET_COMPRESSED_PRIMITIVE),
         PACKET(VC4_PACKET_CLIPPED_COMPRESSED_PRIMITIVE),

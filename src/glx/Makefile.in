@@ -138,11 +138,12 @@ target_triplet = @target@
 @HAVE_DRI3_TRUE@	dri3_glx.c \
 @HAVE_DRI3_TRUE@	dri3_priv.h
 
-@HAVE_APPLEDRI_TRUE@am__append_5 = \
+@HAVE_DRI3_TRUE@am__append_5 = $(top_builddir)/src/loader/libloader_dri3_helper.la
+@HAVE_APPLEDRI_TRUE@am__append_6 = \
 @HAVE_APPLEDRI_TRUE@	applegl_glx.c
 
-@HAVE_APPLEDRI_TRUE@am__append_6 = apple
-@HAVE_APPLEDRI_TRUE@am__append_7 = $(builddir)/apple/libappleglx.la
+@HAVE_APPLEDRI_TRUE@am__append_7 = apple
+@HAVE_APPLEDRI_TRUE@am__append_8 = $(builddir)/apple/libappleglx.la
 subdir = src/glx
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -206,7 +207,7 @@ lib@GL_LIB@_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_CFLAGS) $(CFLAGS) $(lib@GL_LIB@_la_LDFLAGS) $(LDFLAGS) -o \
 	$@
 libglx_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la \
-	$(am__append_7)
+	$(am__append_5) $(am__append_8)
 am__libglx_la_SOURCES_DIST = clientattrib.c clientinfo.c compsize.c \
 	create_context.c eval.c glxclient.h glxcmds.c glxconfig.c \
 	glxconfig.h glxcurrent.c glx_error.c glx_error.h glxext.c \
@@ -444,6 +445,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -488,6 +491,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -521,7 +526,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -552,6 +561,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -625,7 +636,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_CFLAGS = -DGLX_SHARED_GLAPI
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
-SUBDIRS = $(am__append_6) . tests
+SUBDIRS = $(am__append_7) . tests
 EXTRA_DIST = SConscript
 @HAVE_XF86VIDMODE_TRUE@EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
 AM_CFLAGS = \
@@ -663,9 +674,9 @@ libglx_la_SOURCES = clientattrib.c clientinfo.c compsize.c \
 	indirect_window_pos.c packrender.h packsingle.h pixel.c \
 	pixelstore.c query_renderer.c render2.c renderpix.c single2.c \
 	singlepix.c vertarr.c $(am__append_1) $(am__append_2) \
-	$(am__append_3) $(am__append_4) $(am__append_5)
+	$(am__append_3) $(am__append_4) $(am__append_6)
 libglx_la_LIBADD = $(top_builddir)/src/loader/libloader.la \
-	$(am__append_7)
+	$(am__append_5) $(am__append_8)
 GL_LIBS = \
 	libglx.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la \

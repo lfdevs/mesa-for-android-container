@@ -194,6 +194,8 @@ ir_texture::accept(ir_hierarchical_visitor *v)
    case ir_tex:
    case ir_lod:
    case ir_query_levels:
+   case ir_texture_samples:
+   case ir_samples_identical:
       break;
    case ir_txb:
       s = this->lod_info.bias->accept(v);

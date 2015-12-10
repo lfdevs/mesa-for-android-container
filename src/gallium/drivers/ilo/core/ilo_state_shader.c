@@ -37,7 +37,9 @@ enum vertex_stage {
 
 struct vertex_ff {
    uint8_t grf_start;
-   uint8_t scratch_space;
+
+   uint8_t per_thread_scratch_space;
+   uint32_t per_thread_scratch_size;
 
    uint8_t sampler_count;
    uint8_t surface_count;
@@ -59,13 +61,6 @@ vertex_validate_gen6_kernel(const struct ilo_dev *dev,
     * others.
     */
    const uint8_t max_grf_start = (stage == STAGE_GS) ? 16 : 32;
-   /*
-    * From the Sandy Bridge PRM, volume 2 part 1, page 134:
-    *
-    *     "(Per-Thread Scratch Space)
-    *      Range    [0,11] indicating [1K Bytes, 2M Bytes]"
-    */
-   const uint32_t max_scratch_size = 2 * 1024 * 1024;
 
    ILO_DEV_ASSERT(dev, 6, 8);
 
@@ -73,7 +68,6 @@ vertex_validate_gen6_kernel(const struct ilo_dev *dev,
    assert(!kernel->offset);
 
    assert(kernel->grf_start < max_grf_start);
-   assert(kernel->scratch_size <= max_scratch_size);
 
    return true;
 }
@@ -112,18 +106,33 @@ vertex_get_gen6_ff(const struct ilo_dev *dev,
                    const struct ilo_state_shader_kernel_info *kernel,
                    const struct ilo_state_shader_resource_info *resource,
                    const struct ilo_state_shader_urb_info *urb,
+                   uint32_t per_thread_scratch_size,
                    struct vertex_ff *ff)
 {
    ILO_DEV_ASSERT(dev, 6, 8);
+
+   memset(ff, 0, sizeof(*ff));
 
    if (!vertex_validate_gen6_kernel(dev, stage, kernel) ||
        !vertex_validate_gen6_urb(dev, stage, urb))
       return false;
 
    ff->grf_start = kernel->grf_start;
-   /* next power of two, starting from 1KB */
-   ff->scratch_space = (kernel->scratch_size > 1024) ?
-      (util_last_bit(kernel->scratch_size - 1) - 10): 0;
+
+   if (per_thread_scratch_size) {
+      /*
+       * From the Sandy Bridge PRM, volume 2 part 1, page 134:
+       *
+       *     "(Per-Thread Scratch Space)
+       *      Range    [0,11] indicating [1K Bytes, 2M Bytes]"
+       */
+      assert(per_thread_scratch_size <= 2 * 1024 * 1024);
+
+      /* next power of two, starting from 1KB */
+      ff->per_thread_scratch_space = (per_thread_scratch_size > 1024) ?
+         (util_last_bit(per_thread_scratch_size - 1) - 10) : 0;
+      ff->per_thread_scratch_size = 1 << (10 + ff->per_thread_scratch_space);
+   }
 
    ff->sampler_count = (resource->sampler_count <= 12) ?
       (resource->sampler_count + 3) / 4 : 4;
@@ -192,8 +201,8 @@ vs_set_gen6_3DSTATE_VS(struct ilo_state_vs *vs,
 
    ILO_DEV_ASSERT(dev, 6, 8);
 
-   if (!vertex_get_gen6_ff(dev, STAGE_VS, &info->kernel,
-            &info->resource, &info->urb, &ff))
+   if (!vertex_get_gen6_ff(dev, STAGE_VS, &info->kernel, &info->resource,
+            &info->urb, info->per_thread_scratch_size, &ff))
       return false;
 
    thread_count = vs_get_gen6_thread_count(dev, info);
@@ -207,7 +216,8 @@ vs_set_gen6_3DSTATE_VS(struct ilo_state_vs *vs,
    if (ilo_dev_gen(dev) >= ILO_GEN(7.5) && ff.has_uav)
       dw2 |= GEN75_THREADDISP_ACCESS_UAV;
 
-   dw3 = ff.scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw3 = ff.per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw4 = ff.grf_start << GEN6_VS_DW4_URB_GRF_START__SHIFT |
          ff.vue_read_len << GEN6_VS_DW4_URB_READ_LEN__SHIFT |
@@ -233,6 +243,8 @@ vs_set_gen6_3DSTATE_VS(struct ilo_state_vs *vs,
 
    if (ilo_dev_gen(dev) >= ILO_GEN(8))
       vs->vs[4] = ff.user_clip_enables << GEN8_VS_DW8_UCP_CLIP_ENABLES__SHIFT;
+
+   vs->scratch_size = ff.per_thread_scratch_size * thread_count;
 
    return true;
 }
@@ -273,8 +285,8 @@ hs_set_gen7_3DSTATE_HS(struct ilo_state_hs *hs,
 
    ILO_DEV_ASSERT(dev, 7, 8);
 
-   if (!vertex_get_gen6_ff(dev, STAGE_HS, &info->kernel,
-            &info->resource, &info->urb, &ff))
+   if (!vertex_get_gen6_ff(dev, STAGE_HS, &info->kernel, &info->resource,
+            &info->urb, info->per_thread_scratch_size, &ff))
       return false;
 
    thread_count = hs_get_gen7_thread_count(dev, info);
@@ -282,19 +294,22 @@ hs_set_gen7_3DSTATE_HS(struct ilo_state_hs *hs,
    dw1 = ff.sampler_count << GEN6_THREADDISP_SAMPLER_COUNT__SHIFT |
          ff.surface_count << GEN6_THREADDISP_BINDING_TABLE_SIZE__SHIFT;
 
-   if (ilo_dev_gen(dev) >= ILO_GEN(7.5))
+   dw2 = 0 << GEN7_HS_DW2_INSTANCE_COUNT__SHIFT;
+
+   if (ilo_dev_gen(dev) >= ILO_GEN(8))
+      dw2 |= thread_count << GEN8_HS_DW2_MAX_THREADS__SHIFT;
+   else if (ilo_dev_gen(dev) >= ILO_GEN(7.5))
       dw1 |= thread_count << GEN75_HS_DW1_DISPATCH_MAX_THREADS__SHIFT;
    else
       dw1 |= thread_count << GEN7_HS_DW1_DISPATCH_MAX_THREADS__SHIFT;
-
-   dw2 = 0 << GEN7_HS_DW2_INSTANCE_COUNT__SHIFT;
 
    if (info->dispatch_enable)
       dw2 |= GEN7_HS_DW2_HS_ENABLE;
    if (info->stats_enable)
       dw2 |= GEN7_HS_DW2_STATISTICS;
 
-   dw4 = ff.scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw4 = ff.per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw5 = GEN7_HS_DW5_INCLUDE_VERTEX_HANDLES |
          ff.grf_start << GEN7_HS_DW5_URB_GRF_START__SHIFT |
@@ -309,6 +324,8 @@ hs_set_gen7_3DSTATE_HS(struct ilo_state_hs *hs,
    hs->hs[1] = dw2;
    hs->hs[2] = dw4;
    hs->hs[3] = dw5;
+
+   hs->scratch_size = ff.per_thread_scratch_size * thread_count;
 
    return true;
 }
@@ -373,8 +390,8 @@ ds_set_gen7_3DSTATE_DS(struct ilo_state_ds *ds,
 
    ILO_DEV_ASSERT(dev, 7, 8);
 
-   if (!vertex_get_gen6_ff(dev, STAGE_DS, &info->kernel,
-            &info->resource, &info->urb, &ff))
+   if (!vertex_get_gen6_ff(dev, STAGE_DS, &info->kernel, &info->resource,
+            &info->urb, info->per_thread_scratch_size, &ff))
       return false;
 
    thread_count = ds_get_gen7_thread_count(dev, info);
@@ -385,7 +402,8 @@ ds_set_gen7_3DSTATE_DS(struct ilo_state_ds *ds,
    if (ilo_dev_gen(dev) >= ILO_GEN(7.5) && ff.has_uav)
       dw2 |= GEN75_THREADDISP_ACCESS_UAV;
 
-   dw3 = ff.scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw3 = ff.per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw4 = ff.grf_start << GEN7_DS_DW4_URB_GRF_START__SHIFT |
          ff.vue_read_len << GEN7_DS_DW4_URB_READ_LEN__SHIFT |
@@ -412,6 +430,8 @@ ds_set_gen7_3DSTATE_DS(struct ilo_state_ds *ds,
    if (ilo_dev_gen(dev) >= ILO_GEN(8))
       ds->ds[4] = ff.user_clip_enables << GEN8_DS_DW8_UCP_CLIP_ENABLES__SHIFT;
 
+   ds->scratch_size = ff.per_thread_scratch_size * thread_count;
+
    return true;
 }
 
@@ -425,8 +445,8 @@ gs_get_gen6_ff(const struct ilo_dev *dev,
 
    ILO_DEV_ASSERT(dev, 6, 8);
 
-   if (!vertex_get_gen6_ff(dev, STAGE_GS, &info->kernel,
-            &info->resource, &info->urb, ff))
+   if (!vertex_get_gen6_ff(dev, STAGE_GS, &info->kernel, &info->resource,
+            &info->urb, info->per_thread_scratch_size, ff))
       return false;
 
    /*
@@ -510,7 +530,8 @@ gs_set_gen6_3DSTATE_GS(struct ilo_state_gs *gs,
          ff.sampler_count << GEN6_THREADDISP_SAMPLER_COUNT__SHIFT |
          ff.surface_count << GEN6_THREADDISP_BINDING_TABLE_SIZE__SHIFT;
 
-   dw3 = ff.scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw3 = ff.per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw4 = ff.vue_read_len << GEN6_GS_DW4_URB_READ_LEN__SHIFT |
          ff.vue_read_offset << GEN6_GS_DW4_URB_READ_OFFSET__SHIFT |
@@ -550,6 +571,8 @@ gs_set_gen6_3DSTATE_GS(struct ilo_state_gs *gs,
    gs->gs[3] = dw5;
    gs->gs[4] = dw6;
 
+   gs->scratch_size = ff.per_thread_scratch_size * thread_count;
+
    return true;
 }
 
@@ -588,7 +611,8 @@ gs_set_gen7_3DSTATE_GS(struct ilo_state_gs *gs,
    if (ilo_dev_gen(dev) >= ILO_GEN(7.5) && ff.has_uav)
       dw2 |= GEN75_THREADDISP_ACCESS_UAV;
 
-   dw3 = ff.scratch_space << GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
+   dw3 = ff.per_thread_scratch_space <<
+      GEN6_THREADSCRATCH_SPACE_PER_THREAD__SHIFT;
 
    dw4 = vertex_size << GEN7_GS_DW4_OUTPUT_SIZE__SHIFT |
          0 << GEN7_GS_DW4_OUTPUT_TOPO__SHIFT |
@@ -617,6 +641,8 @@ gs_set_gen7_3DSTATE_GS(struct ilo_state_gs *gs,
 
    if (ilo_dev_gen(dev) >= ILO_GEN(8))
       gs->gs[4] = ff.user_clip_enables << GEN8_GS_DW9_UCP_CLIP_ENABLES__SHIFT;
+
+   gs->scratch_size = ff.per_thread_scratch_size * thread_count;
 
    return true;
 }

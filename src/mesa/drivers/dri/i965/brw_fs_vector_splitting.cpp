@@ -42,7 +42,7 @@
 #include "glsl/ir.h"
 #include "glsl/ir_visitor.h"
 #include "glsl/ir_rvalue_visitor.h"
-#include "glsl/glsl_types.h"
+#include "glsl/nir/glsl_types.h"
 #include "util/hash_table.h"
 
 static bool debug = false;
@@ -106,6 +106,7 @@ ir_vector_reference_visitor::get_variable_entry(ir_variable *var)
 
    switch (var->data.mode) {
    case ir_var_uniform:
+   case ir_var_shader_storage:
    case ir_var_shader_in:
    case ir_var_shader_out:
    case ir_var_system_value:

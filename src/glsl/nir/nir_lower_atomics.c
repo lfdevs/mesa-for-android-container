@@ -25,9 +25,15 @@
  *
  */
 
+#include "ir_uniform.h"
 #include "nir.h"
 #include "main/config.h"
 #include <assert.h>
+
+typedef struct {
+   const struct gl_shader_program *shader_program;
+   nir_shader   *shader;
+} lower_atomic_state;
 
 /*
  * replace atomic counter intrinsics that use a variable with intrinsics
@@ -35,7 +41,8 @@
  */
 
 static void
-lower_instr(nir_intrinsic_instr *instr, nir_function_impl *impl)
+lower_instr(nir_intrinsic_instr *instr,
+            lower_atomic_state *state)
 {
    nir_intrinsic_op op;
    switch (instr->intrinsic) {
@@ -60,10 +67,11 @@ lower_instr(nir_intrinsic_instr *instr, nir_function_impl *impl)
       return; /* atomics passed as function arguments can't be lowered */
 
    void *mem_ctx = ralloc_parent(instr);
+   unsigned uniform_loc = instr->variables[0]->var->data.location;
 
    nir_intrinsic_instr *new_instr = nir_intrinsic_instr_create(mem_ctx, op);
    new_instr->const_index[0] =
-      (int) instr->variables[0]->var->data.atomic.buffer_index;
+      state->shader_program->UniformStorage[uniform_loc].opaque[state->shader->stage].index;
 
    nir_load_const_instr *offset_const = nir_load_const_instr_create(mem_ctx, 1);
    offset_const->value.u[0] = instr->variables[0]->var->data.atomic.offset;
@@ -72,20 +80,22 @@ lower_instr(nir_intrinsic_instr *instr, nir_function_impl *impl)
 
    nir_ssa_def *offset_def = &offset_const->def;
 
-   if (instr->variables[0]->deref.child != NULL) {
-      assert(instr->variables[0]->deref.child->deref_type ==
-             nir_deref_type_array);
-      nir_deref_array *deref_array =
-         nir_deref_as_array(instr->variables[0]->deref.child);
-      assert(deref_array->deref.child == NULL);
+   nir_deref *tail = &instr->variables[0]->deref;
+   while (tail->child != NULL) {
+      assert(tail->child->deref_type == nir_deref_type_array);
+      nir_deref_array *deref_array = nir_deref_as_array(tail->child);
+      tail = tail->child;
 
-      offset_const->value.u[0] +=
-         deref_array->base_offset * ATOMIC_COUNTER_SIZE;
+      unsigned child_array_elements = tail->child != NULL ?
+         glsl_get_aoa_size(tail->type) : 1;
+
+      offset_const->value.u[0] += deref_array->base_offset *
+         child_array_elements * ATOMIC_COUNTER_SIZE;
 
       if (deref_array->deref_array_type == nir_deref_array_type_indirect) {
          nir_load_const_instr *atomic_counter_size =
                nir_load_const_instr_create(mem_ctx, 1);
-         atomic_counter_size->value.u[0] = ATOMIC_COUNTER_SIZE;
+         atomic_counter_size->value.u[0] = child_array_elements * ATOMIC_COUNTER_SIZE;
          nir_instr_insert_before(&instr->instr, &atomic_counter_size->instr);
 
          nir_alu_instr *mul = nir_alu_instr_create(mem_ctx, nir_op_imul);
@@ -102,7 +112,7 @@ lower_instr(nir_intrinsic_instr *instr, nir_function_impl *impl)
          add->src[0].src.is_ssa = true;
          add->src[0].src.ssa = &mul->dest.dest.ssa;
          add->src[1].src.is_ssa = true;
-         add->src[1].src.ssa = &offset_const->def;
+         add->src[1].src.ssa = offset_def;
          nir_instr_insert_before(&instr->instr, &add->instr);
 
          offset_def = &add->dest.dest.ssa;
@@ -116,8 +126,7 @@ lower_instr(nir_intrinsic_instr *instr, nir_function_impl *impl)
       nir_ssa_dest_init(&new_instr->instr, &new_instr->dest,
                         instr->dest.ssa.num_components, NULL);
       nir_ssa_def_rewrite_uses(&instr->dest.ssa,
-                               nir_src_for_ssa(&new_instr->dest.ssa),
-                               mem_ctx);
+                               nir_src_for_ssa(&new_instr->dest.ssa));
    } else {
       nir_dest_copy(&new_instr->dest, &instr->dest, mem_ctx);
    }
@@ -131,18 +140,25 @@ lower_block(nir_block *block, void *state)
 {
    nir_foreach_instr_safe(block, instr) {
       if (instr->type == nir_instr_type_intrinsic)
-         lower_instr(nir_instr_as_intrinsic(instr), state);
+         lower_instr(nir_instr_as_intrinsic(instr),
+                     (lower_atomic_state *) state);
    }
 
    return true;
 }
 
 void
-nir_lower_atomics(nir_shader *shader)
+nir_lower_atomics(nir_shader *shader,
+                  const struct gl_shader_program *shader_program)
 {
+   lower_atomic_state state = {
+      .shader = shader,
+      .shader_program = shader_program,
+   };
+
    nir_foreach_overload(shader, overload) {
       if (overload->impl) {
-         nir_foreach_block(overload->impl, lower_block, overload->impl);
+         nir_foreach_block(overload->impl, lower_block, (void *) &state);
          nir_metadata_preserve(overload->impl, nir_metadata_block_index |
                                                nir_metadata_dominance);
       }

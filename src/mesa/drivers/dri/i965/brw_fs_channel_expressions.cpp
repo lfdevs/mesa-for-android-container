@@ -45,7 +45,7 @@
 #include "brw_wm.h"
 #include "glsl/ir.h"
 #include "glsl/ir_expression_flattening.h"
-#include "glsl/glsl_types.h"
+#include "glsl/nir/glsl_types.h"
 
 class ir_channel_expressions_visitor : public ir_hierarchical_visitor {
 public:
@@ -379,6 +379,7 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    }
 
    case ir_binop_ubo_load:
+   case ir_unop_get_buffer_size:
       unreachable("not yet supported");
 
    case ir_triop_fma:
@@ -430,6 +431,7 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_triop_vector_insert:
    case ir_quadop_bitfield_insert:
    case ir_quadop_vector:
+   case ir_unop_ssbo_unsized_array_length:
       unreachable("should have been lowered");
 
    case ir_unop_unpack_half_2x16_split_x:

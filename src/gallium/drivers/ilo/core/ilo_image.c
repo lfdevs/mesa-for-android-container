@@ -286,8 +286,8 @@ image_get_gen6_tiling(const struct ilo_dev *dev,
                                  info->bind_surface_dp_typed))
          return GEN6_TILING_NONE;
 
-      if (estimated_size <= 64 ||
-          estimated_size > info->prefer_linear_threshold)
+      if (estimated_size <= 64 || (info->prefer_linear_threshold &&
+               estimated_size > info->prefer_linear_threshold))
          return GEN6_TILING_NONE;
 
       if (estimated_size <= 2048)

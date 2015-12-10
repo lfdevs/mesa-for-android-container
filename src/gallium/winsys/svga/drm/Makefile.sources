@@ -17,4 +17,6 @@ C_SOURCES := \
 	vmw_surface.c \
 	vmw_surface.h \
 	vmw_shader.c \
-	vmw_shader.h
+	vmw_shader.h \
+	vmw_query.c \
+	vmw_query.h

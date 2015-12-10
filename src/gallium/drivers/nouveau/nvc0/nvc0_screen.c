@@ -178,11 +178,16 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
    case PIPE_CAP_DEPTH_BOUNDS_TEST:
+   case PIPE_CAP_TGSI_TXQS:
+   case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
+   case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
+   case PIPE_CAP_SHAREABLE_SHADERS:
+   case PIPE_CAP_CLEAR_TEXTURE:
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
       return (class_3d >= NVE4_3D_CLASS) ? 1 : 0;
    case PIPE_CAP_COMPUTE:
-      return (class_3d == NVE4_3D_CLASS) ? 1 : 0;
+      return (class_3d <= NVE4_3D_CLASS) ? 1 : 0;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
 
@@ -241,7 +246,7 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
          return 0;
       break;
    case PIPE_SHADER_COMPUTE:
-      if (class_3d != NVE4_3D_CLASS)
+      if (class_3d > NVE4_3D_CLASS)
          return 0;
       break;
    default:
@@ -349,45 +354,51 @@ static int
 nvc0_screen_get_compute_param(struct pipe_screen *pscreen,
                               enum pipe_compute_cap param, void *data)
 {
-   uint64_t *data64 = (uint64_t *)data;
-   uint32_t *data32 = (uint32_t *)data;
-   const uint16_t obj_class = nvc0_screen(pscreen)->compute->oclass;
+   struct nvc0_screen *screen = nvc0_screen(pscreen);
+   const uint16_t obj_class = screen->compute->oclass;
+
+#define RET(x) do {                  \
+   if (data)                         \
+      memcpy(data, x, sizeof(x));    \
+   return sizeof(x);                 \
+} while (0)
 
    switch (param) {
    case PIPE_COMPUTE_CAP_GRID_DIMENSION:
-      data64[0] = 3;
-      return 8;
+      RET((uint64_t []) { 3 });
    case PIPE_COMPUTE_CAP_MAX_GRID_SIZE:
-      data64[0] = (obj_class >= NVE4_COMPUTE_CLASS) ? 0x7fffffff : 65535;
-      data64[1] = 65535;
-      data64[2] = 65535;
-      return 24;
+      if (obj_class >= NVE4_COMPUTE_CLASS) {
+         RET(((uint64_t []) { 0x7fffffff, 65535, 65535 }));
+      } else {
+         RET(((uint64_t []) { 65535, 65535, 65535 }));
+      }
    case PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE:
-      data64[0] = 1024;
-      data64[1] = 1024;
-      data64[2] = 64;
-      return 24;
+      RET(((uint64_t []) { 1024, 1024, 64 }));
    case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
-      data64[0] = 1024;
-      return 8;
+      RET((uint64_t []) { 1024 });
    case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE: /* g[] */
-      data64[0] = (uint64_t)1 << 40;
-      return 8;
+      RET((uint64_t []) { 1ULL << 40 });
    case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE: /* s[] */
-      data64[0] = 48 << 10;
-      return 8;
+      RET((uint64_t []) { 48 << 10 });
    case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE: /* l[] */
-      data64[0] = 512 << 10;
-      return 8;
+      RET((uint64_t []) { 512 << 10 });
    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE: /* c[], arbitrary limit */
-      data64[0] = 4096;
-      return 8;
+      RET((uint64_t []) { 4096 });
    case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
-      data32[0] = 32;
-      return 4;
+      RET((uint32_t []) { 32 });
+   case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
+      RET((uint64_t []) { 1ULL << 40 });
+   case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
+      RET((uint32_t []) { 0 });
+   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
+      RET((uint32_t []) { screen->mp_count_compute });
+   case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+      RET((uint32_t []) { 512 }); /* FIXME: arbitrary limit */
    default:
       return 0;
    }
+
+#undef RET
 }
 
 static void
@@ -405,7 +416,7 @@ nvc0_screen_destroy(struct pipe_screen *pscreen)
        * _current_ one, and remove both.
        */
       nouveau_fence_ref(screen->base.fence.current, &current);
-      nouveau_fence_wait(current);
+      nouveau_fence_wait(current, NULL);
       nouveau_fence_ref(NULL, &current);
       nouveau_fence_ref(NULL, &screen->base.fence.current);
    }
@@ -561,12 +572,7 @@ nvc0_screen_init_compute(struct nvc0_screen *screen)
    switch (screen->base.device->chipset & ~0xf) {
    case 0xc0:
    case 0xd0:
-      /* Using COMPUTE has weird effects on 3D state, we need to
-       * investigate this further before enabling it by default.
-       */
-      if (debug_get_bool_option("NVC0_COMPUTE", false))
-         return nvc0_screen_compute_setup(screen, screen->base.pushbuf);
-      return 0;
+      return nvc0_screen_compute_setup(screen, screen->base.pushbuf);
    case 0xe0:
       return nve4_screen_compute_setup(screen, screen->base.pushbuf);
    case 0xf0:
@@ -829,6 +835,8 @@ nvc0_screen_create(struct nouveau_device *dev)
    PUSH_DATA (push, 1);
    BEGIN_NVC0(push, NVC0_3D(BLEND_ENABLE_COMMON), 1);
    PUSH_DATA (push, 0);
+   BEGIN_NVC0(push, NVC0_3D(SHADE_MODEL), 1);
+   PUSH_DATA (push, NVC0_3D_SHADE_MODEL_SMOOTH);
    if (screen->eng3d->oclass < NVE4_3D_CLASS) {
       BEGIN_NVC0(push, NVC0_3D(TEX_MISC), 1);
       PUSH_DATA (push, NVC0_3D_TEX_MISC_SEAMLESS_CUBE_MAP);
@@ -914,6 +922,7 @@ nvc0_screen_create(struct nouveau_device *dev)
       else
          value = (16 << 8) | 4;
    }
+   screen->gpc_count = value & 0x000000ff;
    screen->mp_count = value >> 8;
    screen->mp_count_compute = screen->mp_count;
 

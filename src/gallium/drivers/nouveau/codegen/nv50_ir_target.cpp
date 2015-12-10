@@ -166,7 +166,7 @@ void Target::destroy(Target *targ)
    delete targ;
 }
 
-CodeEmitter::CodeEmitter(const Target *target) : targ(target)
+CodeEmitter::CodeEmitter(const Target *target) : targ(target), interpInfo(NULL)
 {
 }
 
@@ -373,6 +373,7 @@ Program::emitBinary(struct nv50_ir_prog_info *info)
    if (!code)
       return false;
    emit->setCodeLocation(code, binSize);
+   info->bin.instructions = 0;
 
    for (ArrayList::Iterator fi = allFuncs.iterator(); !fi.end(); fi.next()) {
       Function *fn = reinterpret_cast<Function *>(fi.get());
@@ -382,12 +383,14 @@ Program::emitBinary(struct nv50_ir_prog_info *info)
       for (int b = 0; b < fn->bbCount; ++b) {
          for (Instruction *i = fn->bbArray[b]->getEntry(); i; i = i->next) {
             emit->emitInstruction(i);
+            info->bin.instructions++;
             if (i->sType == TYPE_F64 || i->dType == TYPE_F64)
                info->io.fp64 = true;
          }
       }
    }
    info->bin.relocData = emit->getRelocInfo();
+   info->bin.interpData = emit->getInterpInfo();
 
    emitSymbolTable(info);
 
@@ -424,6 +427,29 @@ CodeEmitter::addReloc(RelocEntry::Type ty, int w, uint32_t data, uint32_t m,
    relocInfo->entry[n].offset = codeSize + w * 4;
    relocInfo->entry[n].bitPos = s;
    relocInfo->entry[n].type = ty;
+
+   return true;
+}
+
+bool
+CodeEmitter::addInterp(int ipa, int reg, InterpApply apply)
+{
+   unsigned int n = interpInfo ? interpInfo->count : 0;
+
+   if (!(n % RELOC_ALLOC_INCREMENT)) {
+      size_t size = sizeof(InterpInfo) + n * sizeof(InterpEntry);
+      interpInfo = reinterpret_cast<InterpInfo *>(
+         REALLOC(interpInfo, n ? size : 0,
+                 size + RELOC_ALLOC_INCREMENT * sizeof(InterpEntry)));
+      if (!interpInfo)
+         return false;
+      if (n == 0)
+         memset(interpInfo, 0, sizeof(InterpInfo));
+   }
+   ++interpInfo->count;
+
+   interpInfo->entry[n] = InterpEntry(ipa, reg, codeSize >> 2);
+   interpInfo->apply = apply;
 
    return true;
 }
@@ -469,6 +495,19 @@ nv50_ir_relocate_code(void *relocData, uint32_t *code,
 
    for (unsigned int i = 0; i < info->count; ++i)
       info->entry[i].apply(code, info);
+}
+
+void
+nv50_ir_change_interp(void *interpData, uint32_t *code,
+                      bool force_persample_interp, bool flatshade)
+{
+   nv50_ir::InterpInfo *info = reinterpret_cast<nv50_ir::InterpInfo *>(
+      interpData);
+
+   // force_persample_interp: all non-flat -> per-sample
+   // flatshade: all color -> flat
+   for (unsigned i = 0; i < info->count; ++i)
+      info->apply(&info->entry[i], code, force_persample_interp, flatshade);
 }
 
 void

@@ -363,7 +363,7 @@ static void r300_init_states(struct pipe_context *pipe)
 }
 
 struct pipe_context* r300_create_context(struct pipe_screen* screen,
-                                         void *priv)
+                                         void *priv, unsigned flags)
 {
     struct r300_context* r300 = CALLOC_STRUCT(r300_context);
     struct r300_screen* r300screen = r300_screen(screen);

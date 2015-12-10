@@ -34,7 +34,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "main/glheader.h"
 #include "main/mtypes.h"
-#include "main/colormac.h"
 #include "main/imports.h"
 #include "main/macros.h"
 

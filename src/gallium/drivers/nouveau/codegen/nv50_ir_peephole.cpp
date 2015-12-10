@@ -155,7 +155,7 @@ private:
    void checkSwapSrc01(Instruction *);
 
    bool isCSpaceLoad(Instruction *);
-   bool isImmd32Load(Instruction *);
+   bool isImmdLoad(Instruction *);
    bool isAttribOrSharedLoad(Instruction *);
 };
 
@@ -166,9 +166,10 @@ LoadPropagation::isCSpaceLoad(Instruction *ld)
 }
 
 bool
-LoadPropagation::isImmd32Load(Instruction *ld)
+LoadPropagation::isImmdLoad(Instruction *ld)
 {
-   if (!ld || (ld->op != OP_MOV) || (typeSizeof(ld->dType) != 4))
+   if (!ld || (ld->op != OP_MOV) ||
+       ((typeSizeof(ld->dType) != 4) && (typeSizeof(ld->dType) != 8)))
       return false;
    return ld->src(0).getFile() == FILE_IMMEDIATE;
 }
@@ -201,8 +202,8 @@ LoadPropagation::checkSwapSrc01(Instruction *insn)
       else
          return;
    } else
-   if (isImmd32Load(i0)) {
-      if (!isCSpaceLoad(i1) && !isImmd32Load(i1))
+   if (isImmdLoad(i0)) {
+      if (!isCSpaceLoad(i1) && !isImmdLoad(i1))
          insn->swapSources(0, 1);
       else
          return;
@@ -447,6 +448,7 @@ ConstantFolding::expr(Instruction *i,
 {
    struct Storage *const a = &imm0.reg, *const b = &imm1.reg;
    struct Storage res;
+   DataType type = i->dType;
 
    memset(&res.data, 0, sizeof(res.data));
 
@@ -588,6 +590,18 @@ ConstantFolding::expr(Instruction *i,
       // The two arguments to pfetch are logically added together. Normally
       // the second argument will not be constant, but that can happen.
       res.data.u32 = a->data.u32 + b->data.u32;
+      type = TYPE_U32;
+      break;
+   case OP_MERGE:
+      switch (i->dType) {
+      case TYPE_U64:
+      case TYPE_S64:
+      case TYPE_F64:
+         res.data.u64 = (((uint64_t)b->data.u32) << 32) | a->data.u32;
+         break;
+      default:
+         return;
+      }
       break;
    default:
       return;
@@ -602,6 +616,8 @@ ConstantFolding::expr(Instruction *i,
    i->setSrc(1, NULL);
 
    i->getSrc(0)->reg.data = res.data;
+   i->getSrc(0)->reg.type = type;
+   i->getSrc(0)->reg.size = typeSizeof(type);
 
    switch (i->op) {
    case OP_MAD:
@@ -842,6 +858,12 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->src(0).mod = i->src(t).mod;
          i->setSrc(1, new_ImmediateValue(prog, imm0.reg.data.u32));
          i->src(1).mod = 0;
+      } else
+      if (i->postFactor && i->sType == TYPE_F32) {
+         /* Can't emit a postfactor with an immediate, have to fold it in */
+         i->setSrc(s, new_ImmediateValue(
+                      prog, imm0.reg.data.f32 * exp2f(i->postFactor)));
+         i->postFactor = 0;
       }
       break;
    case OP_MAD:
@@ -1148,6 +1170,11 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
 #define CASE(type, dst, fmin, fmax, imin, imax, umin, umax) \
    case type: \
       switch (i->sType) { \
+      case TYPE_F64: \
+         res.data.dst = util_iround(i->saturate ? \
+                                    CLAMP(imm0.reg.data.f64, fmin, fmax) : \
+                                    imm0.reg.data.f64); \
+         break; \
       case TYPE_F32: \
          res.data.dst = util_iround(i->saturate ? \
                                     CLAMP(imm0.reg.data.f32, fmin, fmax) : \
@@ -1185,6 +1212,11 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       CASE(TYPE_S32, s32, INT32_MIN, INT32_MAX, INT32_MIN, INT32_MAX, 0, INT32_MAX);
       case TYPE_F32:
          switch (i->sType) {
+         case TYPE_F64:
+            res.data.f32 = i->saturate ?
+               CLAMP(imm0.reg.data.f64, 0.0f, 1.0f) :
+               imm0.reg.data.f64;
+            break;
          case TYPE_F32:
             res.data.f32 = i->saturate ?
                CLAMP(imm0.reg.data.f32, 0.0f, 1.0f) :
@@ -1198,6 +1230,27 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
             return;
          }
          i->setSrc(0, bld.mkImm(res.data.f32));
+         break;
+      case TYPE_F64:
+         switch (i->sType) {
+         case TYPE_F64:
+            res.data.f64 = i->saturate ?
+               CLAMP(imm0.reg.data.f64, 0.0f, 1.0f) :
+               imm0.reg.data.f64;
+            break;
+         case TYPE_F32:
+            res.data.f64 = i->saturate ?
+               CLAMP(imm0.reg.data.f32, 0.0f, 1.0f) :
+               imm0.reg.data.f32;
+            break;
+         case TYPE_U16: res.data.f64 = (double) imm0.reg.data.u16; break;
+         case TYPE_U32: res.data.f64 = (double) imm0.reg.data.u32; break;
+         case TYPE_S16: res.data.f64 = (double) imm0.reg.data.s16; break;
+         case TYPE_S32: res.data.f64 = (double) imm0.reg.data.s32; break;
+         default:
+            return;
+         }
+         i->setSrc(0, bld.mkImm(res.data.f64));
          break;
       default:
          return;
@@ -2607,7 +2660,7 @@ NV50PostRaConstantFolding::visit(BasicBlock *bb)
             break;
 
          def = i->getSrc(1)->getInsn();
-         if (def->op == OP_MOV && def->src(0).getFile() == FILE_IMMEDIATE) {
+         if (def && def->op == OP_MOV && def->src(0).getFile() == FILE_IMMEDIATE) {
             vtmp = i->getSrc(1);
             i->setSrc(1, def->getSrc(0));
 
@@ -2909,6 +2962,16 @@ DeadCodeElim::visit(BasicBlock *bb)
    return true;
 }
 
+// Each load can go into up to 4 destinations, any of which might potentially
+// be dead (i.e. a hole). These can always be split into 2 loads, independent
+// of where the holes are. We find the first contiguous region, put it into
+// the first load, and then put the second contiguous region into the second
+// load. There can be at most 2 contiguous regions.
+//
+// Note that there are some restrictions, for example it's not possible to do
+// a 64-bit load that's not 64-bit aligned, so such a load has to be split
+// up. Also hardware doesn't support 96-bit loads, so those also have to be
+// split into a 64-bit and 32-bit load.
 void
 DeadCodeElim::checkSplitLoad(Instruction *ld1)
 {
@@ -2929,6 +2992,8 @@ DeadCodeElim::checkSplitLoad(Instruction *ld1)
    addr1 = ld1->getSrc(0)->reg.data.offset;
    n1 = n2 = 0;
    size1 = size2 = 0;
+
+   // Compute address/width for first load
    for (d = 0; ld1->defExists(d); ++d) {
       if (mask & (1 << d)) {
          if (size1 && (addr1 & 0x7))
@@ -2942,15 +3007,33 @@ DeadCodeElim::checkSplitLoad(Instruction *ld1)
          break;
       }
    }
+
+   // Scale back the size of the first load until it can be loaded. This
+   // typically happens for TYPE_B96 loads.
+   while (n1 &&
+          !prog->getTarget()->isAccessSupported(ld1->getSrc(0)->reg.file,
+                                                typeOfSize(size1))) {
+      size1 -= def1[--n1]->reg.size;
+      d--;
+   }
+
+   // Compute address/width for second load
    for (addr2 = addr1 + size1; ld1->defExists(d); ++d) {
       if (mask & (1 << d)) {
+         assert(!size2 || !(addr2 & 0x7));
          def2[n2] = ld1->getDef(d);
          size2 += def2[n2++]->reg.size;
-      } else {
+      } else if (!n2) {
          assert(!n2);
          addr2 += ld1->getDef(d)->reg.size;
+      } else {
+         break;
       }
    }
+
+   // Make sure that we've processed all the values
+   for (; ld1->defExists(d); ++d)
+      assert(!(mask & (1 << d)));
 
    updateLdStOffset(ld1, addr1, func);
    ld1->setType(typeOfSize(size1));

@@ -190,7 +190,7 @@ nv30_context_destroy(struct pipe_context *pipe)
    } while(0)
 
 struct pipe_context *
-nv30_context_create(struct pipe_screen *pscreen, void *priv)
+nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 {
    struct nv30_screen *screen = nv30_screen(pscreen);
    struct nv30_context *nv30 = CALLOC_STRUCT(nv30_context);
@@ -242,6 +242,7 @@ nv30_context_create(struct pipe_screen *pscreen, void *priv)
    if (debug_get_bool_option("NV30_SWTNL", false))
       nv30->draw_flags |= NV30_NEW_SWTNL;
 
+   nouveau_context_init(&nv30->base);
    nv30->sample_mask = 0xffff;
    nv30_vbo_init(pipe);
    nv30_query_init(pipe);

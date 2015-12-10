@@ -347,9 +347,9 @@ usampler2DArray		KEYWORD(130, 300, 130, 300, USAMPLER2DARRAY);
 sampler2DMS        KEYWORD_WITH_ALT(150, 300, 150, 310, yyextra->ARB_texture_multisample_enable, SAMPLER2DMS);
 isampler2DMS       KEYWORD_WITH_ALT(150, 300, 150, 310, yyextra->ARB_texture_multisample_enable, ISAMPLER2DMS);
 usampler2DMS       KEYWORD_WITH_ALT(150, 300, 150, 310, yyextra->ARB_texture_multisample_enable, USAMPLER2DMS);
-sampler2DMSArray   KEYWORD_WITH_ALT(150, 300, 150, 0, yyextra->ARB_texture_multisample_enable, SAMPLER2DMSARRAY);
-isampler2DMSArray  KEYWORD_WITH_ALT(150, 300, 150, 0, yyextra->ARB_texture_multisample_enable, ISAMPLER2DMSARRAY);
-usampler2DMSArray  KEYWORD_WITH_ALT(150, 300, 150, 0, yyextra->ARB_texture_multisample_enable, USAMPLER2DMSARRAY);
+sampler2DMSArray   KEYWORD_WITH_ALT(150, 300, 150, 320, yyextra->ARB_texture_multisample_enable || yyextra->OES_texture_storage_multisample_2d_array_enable, SAMPLER2DMSARRAY);
+isampler2DMSArray  KEYWORD_WITH_ALT(150, 300, 150, 320, yyextra->ARB_texture_multisample_enable || yyextra->OES_texture_storage_multisample_2d_array_enable, ISAMPLER2DMSARRAY);
+usampler2DMSArray  KEYWORD_WITH_ALT(150, 300, 150, 320, yyextra->ARB_texture_multisample_enable || yyextra->OES_texture_storage_multisample_2d_array_enable, USAMPLER2DMSARRAY);
 
    /* keywords available with ARB_texture_cube_map_array_enable extension on desktop GLSL */
 samplerCubeArray   KEYWORD_WITH_ALT(400, 0, 400, 0, yyextra->ARB_texture_cube_map_array_enable, SAMPLERCUBEARRAY);
@@ -406,13 +406,15 @@ image2DShadow           KEYWORD(130, 300, 0, 0, IMAGE2DSHADOW);
 image1DArrayShadow      KEYWORD(130, 300, 0, 0, IMAGE1DARRAYSHADOW);
 image2DArrayShadow      KEYWORD(130, 300, 0, 0, IMAGE2DARRAYSHADOW);
 
-coherent       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, COHERENT);
-volatile       KEYWORD_WITH_ALT(110, 100, 420, 310, yyextra->ARB_shader_image_load_store_enable, VOLATILE);
-restrict       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, RESTRICT);
-readonly       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, READONLY);
-writeonly      KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable, WRITEONLY);
+coherent       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable || yyextra->ARB_shader_storage_buffer_object_enable, COHERENT);
+volatile       KEYWORD_WITH_ALT(110, 100, 420, 310, yyextra->ARB_shader_image_load_store_enable || yyextra->ARB_shader_storage_buffer_object_enable, VOLATILE);
+restrict       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable || yyextra->ARB_shader_storage_buffer_object_enable, RESTRICT);
+readonly       KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable || yyextra->ARB_shader_storage_buffer_object_enable, READONLY);
+writeonly      KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_load_store_enable || yyextra->ARB_shader_storage_buffer_object_enable, WRITEONLY);
 
 atomic_uint     KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_atomic_counters_enable, ATOMIC_UINT);
+
+shared          KEYWORD_WITH_ALT(430, 310, 430, 310, yyextra->ARB_compute_shader_enable, SHARED);
 
 struct		return STRUCT;
 void		return VOID_TOK;

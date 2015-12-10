@@ -347,8 +347,7 @@ fd4_emit_tile_mem2gmem(struct fd_context *ctx, struct fd_tile *tile)
 		mrt_comp[i] = ((i < pfb->nr_cbufs) && pfb->cbufs[i]) ? 0xf : 0;
 
 		OUT_PKT0(ring, REG_A4XX_RB_MRT_CONTROL(i), 1);
-		OUT_RING(ring, A4XX_RB_MRT_CONTROL_FASTCLEAR |
-				A4XX_RB_MRT_CONTROL_B11 |
+		OUT_RING(ring, A4XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY) |
 				A4XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf));
 
 		OUT_PKT0(ring, REG_A4XX_RB_MRT_BLEND_CONTROL(i), 1);

@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2009 VMware, Inc.  All rights reserved.
+ * Copyright 2009-2015 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -41,6 +41,7 @@
 #include "vmw_surface.h"
 #include "vmw_fence.h"
 #include "vmw_shader.h"
+#include "vmw_query.h"
 
 #define VMW_COMMAND_SIZE (64*1024)
 #define VMW_SURFACE_RELOCS (1024)
@@ -250,6 +251,7 @@ vmw_swc_flush(struct svga_winsys_context *swc,
    vswc->must_flush = FALSE;
    debug_flush_flush(vswc->fctx);
 #endif
+   swc->hints &= ~SVGA_HINT_FLAG_DRAW_EMITTED;
    vswc->preemptive_flush = FALSE;
    vswc->seen_surfaces = 0;
    vswc->seen_regions = 0;
@@ -371,7 +373,8 @@ vmw_swc_region_relocation(struct svga_winsys_context *swc,
 
    if (vmw_swc_add_validate_buffer(vswc, reloc->buffer, flags)) {
       vswc->seen_regions += reloc->buffer->size;
-      if(vswc->seen_regions >= VMW_GMR_POOL_SIZE/5)
+      if ((swc->hints & SVGA_HINT_FLAG_DRAW_EMITTED) &&
+          vswc->seen_regions >= VMW_GMR_POOL_SIZE/5)
          vswc->preemptive_flush = TRUE;
    }
 
@@ -391,26 +394,31 @@ vmw_swc_mob_relocation(struct svga_winsys_context *swc,
 {
    struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
    struct vmw_buffer_relocation *reloc;
+   struct pb_buffer *pb_buffer = vmw_pb_buffer(buffer);
 
-   assert(vswc->region.staged < vswc->region.reserved);
+   if (id) {
+      assert(vswc->region.staged < vswc->region.reserved);
 
-   reloc = &vswc->region.relocs[vswc->region.used + vswc->region.staged];
-   reloc->mob.id = id;
-   reloc->mob.offset_into_mob = offset_into_mob;
+      reloc = &vswc->region.relocs[vswc->region.used + vswc->region.staged];
+      reloc->mob.id = id;
+      reloc->mob.offset_into_mob = offset_into_mob;
 
-   /*
-    * pb_validate holds a refcount to the buffer, so no need to
-    * refcount it again in the relocation.
-    */
-   reloc->buffer = vmw_pb_buffer(buffer);
-   reloc->offset = offset;
-   reloc->is_mob = TRUE;
-   ++vswc->region.staged;
+      /*
+       * pb_validate holds a refcount to the buffer, so no need to
+       * refcount it again in the relocation.
+       */
+      reloc->buffer = pb_buffer;
+      reloc->offset = offset;
+      reloc->is_mob = TRUE;
+      ++vswc->region.staged;
+   }
 
-   if (vmw_swc_add_validate_buffer(vswc, reloc->buffer, flags)) {
-      vswc->seen_mobs += reloc->buffer->size;
-      /* divide by 5, tested for best performance */
-      if (vswc->seen_mobs >= vswc->vws->ioctl.max_mob_memory / VMW_MAX_MOB_MEM_FACTOR)
+   if (vmw_swc_add_validate_buffer(vswc, pb_buffer, flags)) {
+      vswc->seen_mobs += pb_buffer->size;
+
+      if ((swc->hints & SVGA_HINT_FLAG_DRAW_EMITTED) &&
+          vswc->seen_mobs >=
+            vswc->vws->ioctl.max_mob_memory / VMW_MAX_MOB_MEM_FACTOR)
          vswc->preemptive_flush = TRUE;
    }
 
@@ -471,8 +479,9 @@ vmw_swc_surface_only_relocation(struct svga_winsys_context *swc,
       ++vswc->surface.staged;
 
       vswc->seen_surfaces += vsurf->size;
-      /* divide by 5 not well tuned for performance */
-      if (vswc->seen_surfaces >= vswc->vws->ioctl.max_surface_memory / VMW_MAX_SURF_MEM_FACTOR)
+      if ((swc->hints & SVGA_HINT_FLAG_DRAW_EMITTED) &&
+          vswc->seen_surfaces >=
+            vswc->vws->ioctl.max_surface_memory / VMW_MAX_SURF_MEM_FACTOR)
          vswc->preemptive_flush = TRUE;
    }
 
@@ -481,7 +490,8 @@ vmw_swc_surface_only_relocation(struct svga_winsys_context *swc,
       p_atomic_inc(&vsurf->validated);
    }
 
-   *where = vsurf->sid;
+   if (where)
+      *where = vsurf->sid;
 }
 
 static void
@@ -495,7 +505,7 @@ vmw_swc_surface_relocation(struct svga_winsys_context *swc,
 
    assert(swc->have_gb_objects || mobid == NULL);
 
-   if(!surface) {
+   if (!surface) {
       *where = SVGA3D_INVALID_ID;
       if (mobid)
          *mobid = SVGA3D_INVALID_ID;
@@ -525,43 +535,60 @@ vmw_swc_shader_relocation(struct svga_winsys_context *swc,
 			  uint32 *shid,
 			  uint32 *mobid,
 			  uint32 *offset,
-			  struct svga_winsys_gb_shader *shader)
+			  struct svga_winsys_gb_shader *shader,
+                          unsigned flags)
 {
    struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
+   struct vmw_winsys_screen *vws = vswc->vws;
    struct vmw_svga_winsys_shader *vshader;
    struct vmw_ctx_validate_item *ishader;
+
    if(!shader) {
       *shid = SVGA3D_INVALID_ID;
       return;
    }
 
-   assert(vswc->shader.staged < vswc->shader.reserved);
    vshader = vmw_svga_winsys_shader(shader);
-   ishader = util_hash_table_get(vswc->hash, vshader);
 
-   if (ishader == NULL) {
-      ishader = &vswc->shader.items[vswc->shader.used + vswc->shader.staged];
-      vmw_svga_winsys_shader_reference(&ishader->vshader, vshader);
-      ishader->referenced = FALSE;
-      /*
-       * Note that a failure here may just fall back to unhashed behavior
-       * and potentially cause unnecessary flushing, so ignore the
-       * return code.
-       */
-      (void) util_hash_table_set(vswc->hash, vshader, ishader);
-      ++vswc->shader.staged;
+   if (!vws->base.have_vgpu10) {
+      assert(vswc->shader.staged < vswc->shader.reserved);
+      ishader = util_hash_table_get(vswc->hash, vshader);
+
+      if (ishader == NULL) {
+         ishader = &vswc->shader.items[vswc->shader.used + vswc->shader.staged];
+         vmw_svga_winsys_shader_reference(&ishader->vshader, vshader);
+         ishader->referenced = FALSE;
+         /*
+          * Note that a failure here may just fall back to unhashed behavior
+          * and potentially cause unnecessary flushing, so ignore the
+          * return code.
+          */
+         (void) util_hash_table_set(vswc->hash, vshader, ishader);
+         ++vswc->shader.staged;
+      }
+
+      if (!ishader->referenced) {
+         ishader->referenced = TRUE;
+         p_atomic_inc(&vshader->validated);
+      }
    }
 
-   if (!ishader->referenced) {
-      ishader->referenced = TRUE;
-      p_atomic_inc(&vshader->validated);
-   }
+   if (shid)
+      *shid = vshader->shid;
 
-   *shid = vshader->shid;
-
-   if (mobid != NULL && vshader->buf)
+   if (vshader->buf)
       vmw_swc_mob_relocation(swc, mobid, offset, vshader->buf,
 			     0, SVGA_RELOC_READ);
+}
+
+static void
+vmw_swc_query_relocation(struct svga_winsys_context *swc,
+                         SVGAMobId *id,
+                         struct svga_winsys_gb_query *query)
+{
+   /* Queries are backed by one big MOB */
+   vmw_swc_mob_relocation(swc, id, NULL, query->buf, 0,
+                          SVGA_RELOC_READ | SVGA_RELOC_WRITE);
 }
 
 static void
@@ -569,7 +596,6 @@ vmw_swc_commit(struct svga_winsys_context *swc)
 {
    struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
 
-   assert(vswc->command.reserved);
    assert(vswc->command.used + vswc->command.reserved <= vswc->command.size);
    vswc->command.used += vswc->command.reserved;
    vswc->command.reserved = 0;
@@ -633,6 +659,96 @@ static int vmw_ptr_compare(void *key1, void *key2)
    return (key1 == key2) ? 0 : 1;
 }
 
+
+/**
+ * vmw_svga_winsys_vgpu10_shader_screate - The winsys shader_crate callback
+ *
+ * @swc: The winsys context.
+ * @shaderId: Previously allocated shader id.
+ * @shaderType: The shader type.
+ * @bytecode: The shader bytecode
+ * @bytecodelen: The length of the bytecode.
+ *
+ * Creates an svga_winsys_gb_shader structure and allocates a buffer for the
+ * shader code and copies the shader code into the buffer. Shader
+ * resource creation is not done.
+ */
+static struct svga_winsys_gb_shader *
+vmw_svga_winsys_vgpu10_shader_create(struct svga_winsys_context *swc,
+                                     uint32 shaderId,
+                                     SVGA3dShaderType shaderType,
+                                     const uint32 *bytecode,
+                                     uint32 bytecodeLen)
+{
+   struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
+   struct vmw_svga_winsys_shader *shader;
+   struct svga_winsys_gb_shader *gb_shader =
+      vmw_svga_winsys_shader_create(&vswc->vws->base, shaderType, bytecode,
+                                    bytecodeLen);
+   if (!gb_shader)
+      return NULL;
+
+   shader = vmw_svga_winsys_shader(gb_shader);
+   shader->shid = shaderId;
+
+   return gb_shader;
+}
+
+/**
+ * vmw_svga_winsys_vgpu10_shader_destroy - The winsys shader_destroy callback.
+ *
+ * @swc: The winsys context.
+ * @shader: A shader structure previously allocated by shader_create.
+ *
+ * Frees the shader structure and the buffer holding the shader code.
+ */
+static void
+vmw_svga_winsys_vgpu10_shader_destroy(struct svga_winsys_context *swc,
+                                      struct svga_winsys_gb_shader *shader)
+{
+   struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
+
+   vmw_svga_winsys_shader_destroy(&vswc->vws->base, shader);
+}
+
+/**
+ * vmw_svga_winsys_resource_rebind - The winsys resource_rebind callback
+ *
+ * @swc: The winsys context.
+ * @surface: The surface to be referenced.
+ * @shader: The shader to be referenced.
+ * @flags: Relocation flags.
+ *
+ * This callback is needed because shader backing buffers are sub-allocated, and
+ * hence the kernel fencing is not sufficient. The buffers need to be put on
+ * the context's validation list and fenced after command submission to avoid
+ * reuse of busy shader buffers. In addition, surfaces need to be put on the
+ * validation list in order for the driver to regard them as referenced
+ * by the command stream.
+ */
+static enum pipe_error
+vmw_svga_winsys_resource_rebind(struct svga_winsys_context *swc,
+                                struct svga_winsys_surface *surface,
+                                struct svga_winsys_gb_shader *shader,
+                                unsigned flags)
+{
+   /**
+    * Need to reserve one validation item for either the surface or
+    * the shader.
+    */
+   if (!vmw_swc_reserve(swc, 0, 1))
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   if (surface)
+      vmw_swc_surface_relocation(swc, NULL, NULL, surface, flags);
+   else if (shader)
+      vmw_swc_shader_relocation(swc, NULL, NULL, NULL, shader, flags);
+
+   vmw_swc_commit(swc);
+
+   return PIPE_OK;
+}
+
 struct svga_winsys_context *
 vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
 {
@@ -648,6 +764,8 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
    vswc->base.surface_relocation = vmw_swc_surface_relocation;
    vswc->base.region_relocation = vmw_swc_region_relocation;
    vswc->base.mob_relocation = vmw_swc_mob_relocation;
+   vswc->base.query_relocation = vmw_swc_query_relocation;
+   vswc->base.query_bind = vmw_swc_query_bind;
    vswc->base.context_relocation = vmw_swc_context_relocation;
    vswc->base.shader_relocation = vmw_swc_shader_relocation;
    vswc->base.commit = vmw_swc_commit;
@@ -655,7 +773,19 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
    vswc->base.surface_map = vmw_svga_winsys_surface_map;
    vswc->base.surface_unmap = vmw_svga_winsys_surface_unmap;
 
-   vswc->base.cid = vmw_ioctl_context_create(vws);
+  vswc->base.shader_create = vmw_svga_winsys_vgpu10_shader_create;
+  vswc->base.shader_destroy = vmw_svga_winsys_vgpu10_shader_destroy;
+
+  vswc->base.resource_rebind = vmw_svga_winsys_resource_rebind;
+
+   if (sws->have_vgpu10)
+      vswc->base.cid = vmw_ioctl_extended_context_create(vws, sws->have_vgpu10);
+   else
+      vswc->base.cid = vmw_ioctl_context_create(vws);
+
+   if (vswc->base.cid == -1)
+      goto out_no_context;
+
    vswc->base.have_gb_objects = sws->have_gb_objects;
 
    vswc->vws = vws;
@@ -682,6 +812,8 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
 out_no_hash:
    pb_validate_destroy(vswc->validate);
 out_no_validate:
+   vmw_ioctl_context_destroy(vws, vswc->base.cid);
+out_no_context:
    FREE(vswc);
    return NULL;
 }

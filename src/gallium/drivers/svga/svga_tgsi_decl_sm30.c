@@ -216,7 +216,7 @@ ps30_input(struct svga_shader_emitter *emit,
 
       return emit_decl( emit, reg, 0, 0 );
    }
-   else if (emit->key.fkey.light_twoside &&
+   else if (emit->key.fs.light_twoside &&
             (semantic.Name == TGSI_SEMANTIC_COLOR)) {
 
       if (!translate_vs_ps_semantic( emit, semantic, &usage, &index ))
@@ -285,9 +285,9 @@ ps30_input(struct svga_shader_emitter *emit,
          return FALSE;
 
       if (semantic.Name == TGSI_SEMANTIC_GENERIC &&
-          emit->key.fkey.sprite_origin_lower_left &&
+          emit->key.sprite_origin_lower_left &&
           index >= 1 &&
-          emit->key.fkey.tex[index - 1].sprite_texgen) {
+          emit->key.tex[index - 1].sprite_texgen) {
          /* This is a sprite texture coord with lower-left origin.
           * We need to invert the texture T coordinate since the SVGA3D
           * device only supports an upper-left origin.
@@ -329,7 +329,7 @@ ps30_output(struct svga_shader_emitter *emit,
    switch (semantic.Name) {
    case TGSI_SEMANTIC_COLOR:
       if (emit->unit == PIPE_SHADER_FRAGMENT) {
-         if (emit->key.fkey.white_fragments) {
+         if (emit->key.fs.white_fragments) {
             /* Used for XOR logicop mode */
             emit->output_map[idx] = dst_register( SVGA3DREG_TEMP,
                                                   emit->nr_hw_temp++ );
@@ -337,14 +337,14 @@ ps30_output(struct svga_shader_emitter *emit,
             emit->true_color_output[idx] = dst_register(SVGA3DREG_COLOROUT, 
                                                         semantic.Index);
          }
-         else if (emit->key.fkey.write_color0_to_n_cbufs) {
+         else if (emit->key.fs.write_color0_to_n_cbufs) {
             /* We'll write color output [0] to all render targets.
              * Prepare all the output registers here, but only when the
              * semantic.Index == 0 so we don't do this more than once.
              */
             if (semantic.Index == 0) {
                unsigned i;
-               for (i = 0; i < emit->key.fkey.write_color0_to_n_cbufs; i++) {
+               for (i = 0; i < emit->key.fs.write_color0_to_n_cbufs; i++) {
                   emit->output_map[idx+i] = dst_register(SVGA3DREG_TEMP,
                                                      emit->nr_hw_temp++);
                   emit->temp_color_output[i] = emit->output_map[idx+i];
@@ -487,7 +487,7 @@ vs30_output(struct svga_shader_emitter *emit,
       /* This has the effect of not declaring psiz (below) and not 
        * emitting the final MOV to true_psiz in the postamble.
        */
-      if (!emit->key.vkey.allow_psiz)
+      if (!emit->key.vs.allow_psiz)
          return TRUE;
 
       emit->true_psiz = dcl.dst;
@@ -517,7 +517,7 @@ vs30_output(struct svga_shader_emitter *emit,
 static ubyte
 svga_tgsi_sampler_type(const struct svga_shader_emitter *emit, int idx)
 {
-   switch (emit->key.fkey.tex[idx].texture_target) {
+   switch (emit->key.tex[idx].texture_target) {
    case PIPE_TEXTURE_1D:
       return SVGA3DSAMP_2D;
    case PIPE_TEXTURE_2D:

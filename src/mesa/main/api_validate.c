@@ -698,16 +698,39 @@ valid_draw_indirect(struct gl_context *ctx,
 {
    const GLsizeiptr end = (GLsizeiptr)indirect + size;
 
+   /* OpenGL ES 3.1 spec. section 10.5:
+    *
+    *      "DrawArraysIndirect requires that all data sourced for the
+    *      command, including the DrawArraysIndirectCommand
+    *      structure,  be in buffer objects,  and may not be called when
+    *      the default vertex array object is bound."
+    */
+   if (ctx->Array.VAO == ctx->Array.DefaultVAO) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "(no VAO bound)");
+      return GL_FALSE;
+   }
+
    if (!_mesa_valid_prim_mode(ctx, mode, name))
       return GL_FALSE;
 
+   /* OpenGL ES 3.1 specification, section 10.5:
+    *
+    *      "An INVALID_OPERATION error is generated if
+    *      transform feedback is active and not paused."
+    */
+   if (_mesa_is_gles31(ctx) && _mesa_is_xfb_active_and_unpaused(ctx)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(TransformFeedback is active and not paused)", name);
+   }
 
-   /* From the ARB_draw_indirect specification:
-    * "An INVALID_OPERATION error is generated [...] if <indirect> is no
-    *  word aligned."
+   /* From OpenGL version 4.4. section 10.5
+    * and OpenGL ES 3.1, section 10.6:
+    *
+    *      "An INVALID_VALUE error is generated if indirect is not a
+    *       multiple of the size, in basic machine units, of uint."
     */
    if ((GLsizeiptr)indirect & (sizeof(GLuint) - 1)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
+      _mesa_error(ctx, GL_INVALID_VALUE,
                   "%s(indirect is not aligned)", name);
       return GL_FALSE;
    }
@@ -881,4 +904,135 @@ _mesa_validate_MultiDrawElementsIndirect(struct gl_context *ctx,
       return GL_FALSE;
 
    return GL_TRUE;
+}
+
+static bool
+check_valid_to_compute(struct gl_context *ctx, const char *function)
+{
+   struct gl_shader_program *prog;
+
+   if (!_mesa_has_compute_shaders(ctx)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "unsupported function (%s) called",
+                  function);
+      return false;
+   }
+
+   /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
+    *
+    * "An INVALID_OPERATION error is generated if there is no active program
+    *  for the compute shader stage."
+    */
+   prog = ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
+   if (prog == NULL || prog->_LinkedShaders[MESA_SHADER_COMPUTE] == NULL) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(no active compute shader)",
+                  function);
+      return false;
+   }
+
+   return true;
+}
+
+GLboolean
+_mesa_validate_DispatchCompute(struct gl_context *ctx,
+                               const GLuint *num_groups)
+{
+   int i;
+   FLUSH_CURRENT(ctx, 0);
+
+   if (!check_valid_to_compute(ctx, "glDispatchCompute"))
+      return GL_FALSE;
+
+   for (i = 0; i < 3; i++) {
+      /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
+       *
+       * "An INVALID_VALUE error is generated if any of num_groups_x,
+       *  num_groups_y and num_groups_z are greater than or equal to the
+       *  maximum work group count for the corresponding dimension."
+       *
+       * However, the "or equal to" portions appears to be a specification
+       * bug. In all other areas, the specification appears to indicate that
+       * the number of workgroups can match the MAX_COMPUTE_WORK_GROUP_COUNT
+       * value. For example, under DispatchComputeIndirect:
+       *
+       * "If any of num_groups_x, num_groups_y or num_groups_z is greater than
+       *  the value of MAX_COMPUTE_WORK_GROUP_COUNT for the corresponding
+       *  dimension then the results are undefined."
+       *
+       * Additionally, the OpenGLES 3.1 specification does not contain "or
+       * equal to" as an error condition.
+       */
+      if (num_groups[i] > ctx->Const.MaxComputeWorkGroupCount[i]) {
+         _mesa_error(ctx, GL_INVALID_VALUE,
+                     "glDispatchCompute(num_groups_%c)", 'x' + i);
+         return GL_FALSE;
+      }
+   }
+
+   return GL_TRUE;
+}
+
+static GLboolean
+valid_dispatch_indirect(struct gl_context *ctx,
+                        GLintptr indirect,
+                        GLsizei size, const char *name)
+{
+   GLintptr end = (GLintptr)indirect + size;
+
+   if (!check_valid_to_compute(ctx, name))
+      return GL_FALSE;
+
+   /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
+    *
+    * "An INVALID_VALUE error is generated if indirect is negative or is not a
+    *  multiple of four."
+    */
+   if ((GLintptr)indirect & (sizeof(GLuint) - 1)) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "%s(indirect is not aligned)", name);
+      return GL_FALSE;
+   }
+
+   if ((GLintptr)indirect < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "%s(indirect is less than zero)", name);
+      return GL_FALSE;
+   }
+
+   /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
+    *
+    * "An INVALID_OPERATION error is generated if no buffer is bound to the
+    *  DRAW_INDIRECT_BUFFER binding, or if the command would source data
+    *  beyond the end of the buffer object."
+    */
+   if (!_mesa_is_bufferobj(ctx->DispatchIndirectBuffer)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s: no buffer bound to DISPATCH_INDIRECT_BUFFER", name);
+      return GL_FALSE;
+   }
+
+   if (_mesa_check_disallowed_mapping(ctx->DispatchIndirectBuffer)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(DISPATCH_INDIRECT_BUFFER is mapped)", name);
+      return GL_FALSE;
+   }
+
+   if (ctx->DispatchIndirectBuffer->Size < end) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(DISPATCH_INDIRECT_BUFFER too small)", name);
+      return GL_FALSE;
+   }
+
+   return GL_TRUE;
+}
+
+GLboolean
+_mesa_validate_DispatchComputeIndirect(struct gl_context *ctx,
+                                       GLintptr indirect)
+{
+   FLUSH_CURRENT(ctx, 0);
+
+   return valid_dispatch_indirect(ctx, indirect, 3 * sizeof(GLuint),
+                                  "glDispatchComputeIndirect");
 }

@@ -27,43 +27,8 @@
 namespace brw {
 
 void
-vec4_gs_visitor::nir_setup_inputs(nir_shader *shader)
+vec4_gs_visitor::nir_setup_inputs()
 {
-   nir_inputs = ralloc_array(mem_ctx, src_reg, shader->num_inputs);
-
-   foreach_list_typed(nir_variable, var, node, &shader->inputs) {
-      int offset = var->data.driver_location;
-      if (var->type->base_type == GLSL_TYPE_ARRAY) {
-         /* Geometry shader inputs are arrays, but they use an unusual array
-          * layout: instead of all array elements for a given geometry shader
-          * input being stored consecutively, all geometry shader inputs are
-          * interleaved into one giant array. At this stage of compilation, we
-          * assume that the stride of the array is BRW_VARYING_SLOT_COUNT.
-          * Later, setup_attributes() will remap our accesses to the actual
-          * input array.
-          */
-         assert(var->type->length > 0);
-         int length = var->type->length;
-         int size = type_size(var->type) / length;
-         for (int i = 0; i < length; i++) {
-            int location = var->data.location + i * BRW_VARYING_SLOT_COUNT;
-            for (int j = 0; j < size; j++) {
-               src_reg src = src_reg(ATTR, location + j, var->type);
-               src = retype(src, brw_type_for_base_type(var->type));
-               nir_inputs[offset] = src;
-               offset++;
-            }
-         }
-      } else {
-         int size = type_size(var->type);
-         for (int i = 0; i < size; i++) {
-            src_reg src = src_reg(ATTR, var->data.location + i, var->type);
-            src = retype(src, brw_type_for_base_type(var->type));
-            nir_inputs[offset] = src;
-            offset++;
-         }
-      }
-   }
 }
 
 void
@@ -72,6 +37,10 @@ vec4_gs_visitor::nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr)
    dst_reg *reg;
 
    switch (instr->intrinsic) {
+   case nir_intrinsic_load_primitive_id:
+      /* We'll just read g1 directly; don't create a temporary. */
+      break;
+
    case nir_intrinsic_load_invocation_id:
       reg = &this->nir_system_values[SYSTEM_VALUE_INVOCATION_ID];
       if (reg->file == BAD_FILE)
@@ -92,14 +61,52 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    src_reg src;
 
    switch (instr->intrinsic) {
-   case nir_intrinsic_emit_vertex: {
+   case nir_intrinsic_load_per_vertex_input_indirect:
+      assert(!"EmitNoIndirectInput should prevent this.");
+   case nir_intrinsic_load_per_vertex_input: {
+      /* The EmitNoIndirectInput flag guarantees our vertex index will
+       * be constant.  We should handle indirects someday.
+       */
+      nir_const_value *vertex = nir_src_as_const_value(instr->src[0]);
+
+      /* Make up a type...we have no way of knowing... */
+      const glsl_type *const type = glsl_type::ivec(instr->num_components);
+
+      src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u[0] +
+                          instr->const_index[0], type);
+      dest = get_nir_dest(instr->dest, src.type);
+      dest.writemask = brw_writemask_for_size(instr->num_components);
+      emit(MOV(dest, src));
+      break;
+   }
+
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_input_indirect:
+      unreachable("nir_lower_io should have produced per_vertex intrinsics");
+
+   case nir_intrinsic_emit_vertex_with_counter: {
+      this->vertex_count =
+         retype(get_nir_src(instr->src[0], 1), BRW_REGISTER_TYPE_UD);
       int stream_id = instr->const_index[0];
       gs_emit_vertex(stream_id);
       break;
    }
 
-   case nir_intrinsic_end_primitive:
+   case nir_intrinsic_end_primitive_with_counter:
+      this->vertex_count =
+         retype(get_nir_src(instr->src[0], 1), BRW_REGISTER_TYPE_UD);
       gs_end_primitive();
+      break;
+
+   case nir_intrinsic_set_vertex_count:
+      this->vertex_count =
+         retype(get_nir_src(instr->src[0], 1), BRW_REGISTER_TYPE_UD);
+      break;
+
+   case nir_intrinsic_load_primitive_id:
+      assert(gs_prog_data->include_primitive_id);
+      dest = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_D);
+      emit(MOV(dest, retype(brw_vec4_grf(1, 0), BRW_REGISTER_TYPE_D)));
       break;
 
    case nir_intrinsic_load_invocation_id: {

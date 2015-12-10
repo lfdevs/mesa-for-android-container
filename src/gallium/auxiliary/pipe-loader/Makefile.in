@@ -92,11 +92,18 @@ target_triplet = @target@
 @HAVE_DRISW_TRUE@am__append_1 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_DRM_LOADER_GALLIUM_TRUE@am__append_2 = \
-@HAVE_DRM_LOADER_GALLIUM_TRUE@	$(LIBDRM_CFLAGS)
+@HAVE_DRISW_KMS_TRUE@am__append_2 = \
+@HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
+@HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_DRM_LOADER_GALLIUM_TRUE@am__append_3 = \
-@HAVE_DRM_LOADER_GALLIUM_TRUE@	$(DRM_SOURCES)
+@HAVE_LIBDRM_TRUE@am__append_3 = \
+@HAVE_LIBDRM_TRUE@	$(LIBDRM_CFLAGS)
+
+@HAVE_LIBDRM_TRUE@am__append_4 = \
+@HAVE_LIBDRM_TRUE@	$(DRM_SOURCES)
+
+@HAVE_LIBDRM_TRUE@am__append_5 = \
+@HAVE_LIBDRM_TRUE@	$(DRM_SOURCES)
 
 subdir = src/gallium/auxiliary/pipe-loader
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -117,18 +124,44 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-@HAVE_DRM_LOADER_GALLIUM_TRUE@libpipe_loader_la_DEPENDENCIES = $(top_builddir)/src/loader/libloader.la
-am__libpipe_loader_la_SOURCES_DIST = pipe_loader.c pipe_loader.h \
-	pipe_loader_priv.h pipe_loader_sw.c pipe_loader_drm.c
-am__objects_1 = pipe_loader.lo pipe_loader_sw.lo
-am__objects_2 = pipe_loader_drm.lo
-@HAVE_DRM_LOADER_GALLIUM_TRUE@am__objects_3 = $(am__objects_2)
-am_libpipe_loader_la_OBJECTS = $(am__objects_1) $(am__objects_3)
-libpipe_loader_la_OBJECTS = $(am_libpipe_loader_la_OBJECTS)
+libpipe_loader_dynamic_la_DEPENDENCIES =  \
+	$(top_builddir)/src/loader/libloader.la
+am__libpipe_loader_dynamic_la_SOURCES_DIST = pipe_loader.c \
+	pipe_loader.h pipe_loader_priv.h pipe_loader_sw.c \
+	pipe_loader_drm.c
+am__objects_1 = libpipe_loader_dynamic_la-pipe_loader.lo \
+	libpipe_loader_dynamic_la-pipe_loader_sw.lo
+am__objects_2 = libpipe_loader_dynamic_la-pipe_loader_drm.lo
+@HAVE_LIBDRM_TRUE@am__objects_3 = $(am__objects_2)
+am_libpipe_loader_dynamic_la_OBJECTS = $(am__objects_1) \
+	$(am__objects_3)
+libpipe_loader_dynamic_la_OBJECTS =  \
+	$(am_libpipe_loader_dynamic_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+libpipe_loader_dynamic_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libpipe_loader_dynamic_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+libpipe_loader_static_la_DEPENDENCIES =  \
+	$(top_builddir)/src/loader/libloader.la
+am__libpipe_loader_static_la_SOURCES_DIST = pipe_loader.c \
+	pipe_loader.h pipe_loader_priv.h pipe_loader_sw.c \
+	pipe_loader_drm.c
+am__objects_4 = libpipe_loader_static_la-pipe_loader.lo \
+	libpipe_loader_static_la-pipe_loader_sw.lo
+am__objects_5 = libpipe_loader_static_la-pipe_loader_drm.lo
+@HAVE_LIBDRM_TRUE@am__objects_6 = $(am__objects_5)
+am_libpipe_loader_static_la_OBJECTS = $(am__objects_4) \
+	$(am__objects_6)
+libpipe_loader_static_la_OBJECTS =  \
+	$(am_libpipe_loader_static_la_OBJECTS)
+libpipe_loader_static_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libpipe_loader_static_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -163,8 +196,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libpipe_loader_la_SOURCES)
-DIST_SOURCES = $(am__libpipe_loader_la_SOURCES_DIST)
+SOURCES = $(libpipe_loader_dynamic_la_SOURCES) \
+	$(libpipe_loader_static_la_SOURCES)
+DIST_SOURCES = $(am__libpipe_loader_dynamic_la_SOURCES_DIST) \
+	$(am__libpipe_loader_static_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -291,6 +326,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -335,6 +372,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -368,7 +407,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -399,6 +442,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -543,18 +588,34 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_1)
+	$(am__append_1) $(am__append_2)
 
 # XXX: check if we need the gallium/winsys include
 AM_CFLAGS = -I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/winsys \
 	$(GALLIUM_PIPE_LOADER_DEFINES) $(GALLIUM_CFLAGS) \
-	$(VISIBILITY_CFLAGS) $(am__append_2)
-noinst_LTLIBRARIES = libpipe_loader.la
-libpipe_loader_la_SOURCES = $(COMMON_SOURCES) $(am__append_3)
-@HAVE_DRM_LOADER_GALLIUM_TRUE@libpipe_loader_la_LIBADD = \
-@HAVE_DRM_LOADER_GALLIUM_TRUE@	$(top_builddir)/src/loader/libloader.la
+	$(VISIBILITY_CFLAGS) $(am__append_3)
+noinst_LTLIBRARIES = \
+	libpipe_loader_static.la \
+	libpipe_loader_dynamic.la
 
+libpipe_loader_static_la_CFLAGS = \
+	$(AM_CFLAGS) \
+	-DGALLIUM_STATIC_TARGETS=1
+
+libpipe_loader_dynamic_la_CFLAGS = \
+	$(AM_CFLAGS) \
+	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\"
+
+libpipe_loader_static_la_SOURCES = $(COMMON_SOURCES) $(am__append_4)
+libpipe_loader_dynamic_la_SOURCES = $(COMMON_SOURCES) $(am__append_5)
+libpipe_loader_static_la_LIBADD = \
+	$(top_builddir)/src/loader/libloader.la
+
+libpipe_loader_dynamic_la_LIBADD = \
+	$(top_builddir)/src/loader/libloader.la
+
+EXTRA_DIST = SConscript
 all: all-am
 
 .SUFFIXES:
@@ -601,8 +662,11 @@ clean-noinstLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
-libpipe_loader.la: $(libpipe_loader_la_OBJECTS) $(libpipe_loader_la_DEPENDENCIES) $(EXTRA_libpipe_loader_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(LINK)  $(libpipe_loader_la_OBJECTS) $(libpipe_loader_la_LIBADD) $(LIBS)
+libpipe_loader_dynamic.la: $(libpipe_loader_dynamic_la_OBJECTS) $(libpipe_loader_dynamic_la_DEPENDENCIES) $(EXTRA_libpipe_loader_dynamic_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libpipe_loader_dynamic_la_LINK)  $(libpipe_loader_dynamic_la_OBJECTS) $(libpipe_loader_dynamic_la_LIBADD) $(LIBS)
+
+libpipe_loader_static.la: $(libpipe_loader_static_la_OBJECTS) $(libpipe_loader_static_la_DEPENDENCIES) $(EXTRA_libpipe_loader_static_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libpipe_loader_static_la_LINK)  $(libpipe_loader_static_la_OBJECTS) $(libpipe_loader_static_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -610,9 +674,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_loader.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_loader_drm.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipe_loader_sw.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_drm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_sw.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpipe_loader_static_la-pipe_loader.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpipe_loader_static_la-pipe_loader_drm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libpipe_loader_static_la-pipe_loader_sw.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -637,6 +704,48 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+libpipe_loader_dynamic_la-pipe_loader.lo: pipe_loader.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_dynamic_la_CFLAGS) $(CFLAGS) -MT libpipe_loader_dynamic_la-pipe_loader.lo -MD -MP -MF $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader.Tpo -c -o libpipe_loader_dynamic_la-pipe_loader.lo `test -f 'pipe_loader.c' || echo '$(srcdir)/'`pipe_loader.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader.Tpo $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='pipe_loader.c' object='libpipe_loader_dynamic_la-pipe_loader.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_dynamic_la_CFLAGS) $(CFLAGS) -c -o libpipe_loader_dynamic_la-pipe_loader.lo `test -f 'pipe_loader.c' || echo '$(srcdir)/'`pipe_loader.c
+
+libpipe_loader_dynamic_la-pipe_loader_sw.lo: pipe_loader_sw.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_dynamic_la_CFLAGS) $(CFLAGS) -MT libpipe_loader_dynamic_la-pipe_loader_sw.lo -MD -MP -MF $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_sw.Tpo -c -o libpipe_loader_dynamic_la-pipe_loader_sw.lo `test -f 'pipe_loader_sw.c' || echo '$(srcdir)/'`pipe_loader_sw.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_sw.Tpo $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_sw.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='pipe_loader_sw.c' object='libpipe_loader_dynamic_la-pipe_loader_sw.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_dynamic_la_CFLAGS) $(CFLAGS) -c -o libpipe_loader_dynamic_la-pipe_loader_sw.lo `test -f 'pipe_loader_sw.c' || echo '$(srcdir)/'`pipe_loader_sw.c
+
+libpipe_loader_dynamic_la-pipe_loader_drm.lo: pipe_loader_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_dynamic_la_CFLAGS) $(CFLAGS) -MT libpipe_loader_dynamic_la-pipe_loader_drm.lo -MD -MP -MF $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_drm.Tpo -c -o libpipe_loader_dynamic_la-pipe_loader_drm.lo `test -f 'pipe_loader_drm.c' || echo '$(srcdir)/'`pipe_loader_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_drm.Tpo $(DEPDIR)/libpipe_loader_dynamic_la-pipe_loader_drm.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='pipe_loader_drm.c' object='libpipe_loader_dynamic_la-pipe_loader_drm.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_dynamic_la_CFLAGS) $(CFLAGS) -c -o libpipe_loader_dynamic_la-pipe_loader_drm.lo `test -f 'pipe_loader_drm.c' || echo '$(srcdir)/'`pipe_loader_drm.c
+
+libpipe_loader_static_la-pipe_loader.lo: pipe_loader.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_static_la_CFLAGS) $(CFLAGS) -MT libpipe_loader_static_la-pipe_loader.lo -MD -MP -MF $(DEPDIR)/libpipe_loader_static_la-pipe_loader.Tpo -c -o libpipe_loader_static_la-pipe_loader.lo `test -f 'pipe_loader.c' || echo '$(srcdir)/'`pipe_loader.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libpipe_loader_static_la-pipe_loader.Tpo $(DEPDIR)/libpipe_loader_static_la-pipe_loader.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='pipe_loader.c' object='libpipe_loader_static_la-pipe_loader.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_static_la_CFLAGS) $(CFLAGS) -c -o libpipe_loader_static_la-pipe_loader.lo `test -f 'pipe_loader.c' || echo '$(srcdir)/'`pipe_loader.c
+
+libpipe_loader_static_la-pipe_loader_sw.lo: pipe_loader_sw.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_static_la_CFLAGS) $(CFLAGS) -MT libpipe_loader_static_la-pipe_loader_sw.lo -MD -MP -MF $(DEPDIR)/libpipe_loader_static_la-pipe_loader_sw.Tpo -c -o libpipe_loader_static_la-pipe_loader_sw.lo `test -f 'pipe_loader_sw.c' || echo '$(srcdir)/'`pipe_loader_sw.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libpipe_loader_static_la-pipe_loader_sw.Tpo $(DEPDIR)/libpipe_loader_static_la-pipe_loader_sw.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='pipe_loader_sw.c' object='libpipe_loader_static_la-pipe_loader_sw.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_static_la_CFLAGS) $(CFLAGS) -c -o libpipe_loader_static_la-pipe_loader_sw.lo `test -f 'pipe_loader_sw.c' || echo '$(srcdir)/'`pipe_loader_sw.c
+
+libpipe_loader_static_la-pipe_loader_drm.lo: pipe_loader_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_static_la_CFLAGS) $(CFLAGS) -MT libpipe_loader_static_la-pipe_loader_drm.lo -MD -MP -MF $(DEPDIR)/libpipe_loader_static_la-pipe_loader_drm.Tpo -c -o libpipe_loader_static_la-pipe_loader_drm.lo `test -f 'pipe_loader_drm.c' || echo '$(srcdir)/'`pipe_loader_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libpipe_loader_static_la-pipe_loader_drm.Tpo $(DEPDIR)/libpipe_loader_static_la-pipe_loader_drm.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='pipe_loader_drm.c' object='libpipe_loader_static_la-pipe_loader_drm.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libpipe_loader_static_la_CFLAGS) $(CFLAGS) -c -o libpipe_loader_static_la-pipe_loader_drm.lo `test -f 'pipe_loader_drm.c' || echo '$(srcdir)/'`pipe_loader_drm.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

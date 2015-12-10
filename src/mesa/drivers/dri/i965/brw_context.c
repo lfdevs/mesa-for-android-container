@@ -41,6 +41,7 @@
 #include "main/version.h"
 #include "main/vtxfmt.h"
 #include "main/texobj.h"
+#include "main/framebuffer.h"
 
 #include "vbo/vbo_context.h"
 
@@ -50,7 +51,7 @@
 
 #include "brw_context.h"
 #include "brw_defines.h"
-#include "brw_shader.h"
+#include "brw_compiler.h"
 #include "brw_draw.h"
 #include "brw_state.h"
 
@@ -83,6 +84,12 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
 
    switch (brw->gen) {
    case 9:
+      samples[0] = 16;
+      samples[1] = 8;
+      samples[2] = 4;
+      samples[3] = 2;
+      return 4;
+
    case 8:
       samples[0] = 8;
       samples[1] = 4;
@@ -315,64 +322,82 @@ static void
 brw_initialize_context_constants(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   const struct brw_compiler *compiler = brw->intelScreen->compiler;
+
+   const bool stage_exists[MESA_SHADER_STAGES] = {
+      [MESA_SHADER_VERTEX] = true,
+      [MESA_SHADER_TESS_CTRL] = false,
+      [MESA_SHADER_TESS_EVAL] = false,
+      [MESA_SHADER_GEOMETRY] = brw->gen >= 6,
+      [MESA_SHADER_FRAGMENT] = true,
+      [MESA_SHADER_COMPUTE] = _mesa_extension_override_enables.ARB_compute_shader,
+   };
+
+   unsigned num_stages = 0;
+   for (int i = 0; i < MESA_SHADER_STAGES; i++) {
+      if (stage_exists[i])
+         num_stages++;
+   }
 
    unsigned max_samplers =
       brw->gen >= 8 || brw->is_haswell ? BRW_MAX_TEX_UNIT : 16;
 
+   ctx->Const.MaxDualSourceDrawBuffers = 1;
+   ctx->Const.MaxDrawBuffers = BRW_MAX_DRAW_BUFFERS;
+   ctx->Const.MaxCombinedShaderOutputResources =
+      MAX_IMAGE_UNITS + BRW_MAX_DRAW_BUFFERS;
+
    ctx->Const.QueryCounterBits.Timestamp = 36;
 
+   ctx->Const.MaxTextureCoordUnits = 8; /* Mesa limit */
+   ctx->Const.MaxImageUnits = MAX_IMAGE_UNITS;
+   ctx->Const.MaxRenderbufferSize = 8192;
+   ctx->Const.MaxTextureLevels = MIN2(14 /* 8192 */, MAX_TEXTURE_LEVELS);
+   ctx->Const.Max3DTextureLevels = 12; /* 2048 */
+   ctx->Const.MaxCubeTextureLevels = 14; /* 8192 */
+   ctx->Const.MaxArrayTextureLayers = brw->gen >= 7 ? 2048 : 512;
+   ctx->Const.MaxTextureMbytes = 1536;
+   ctx->Const.MaxTextureRectSize = 1 << 12;
+   ctx->Const.MaxTextureMaxAnisotropy = 16.0;
    ctx->Const.StripTextureBorder = true;
+   if (brw->gen >= 7)
+      ctx->Const.MaxProgramTextureGatherComponents = 4;
+   else if (brw->gen == 6)
+      ctx->Const.MaxProgramTextureGatherComponents = 1;
 
    ctx->Const.MaxUniformBlockSize = 65536;
+
    for (int i = 0; i < MESA_SHADER_STAGES; i++) {
       struct gl_program_constants *prog = &ctx->Const.Program[i];
-      prog->MaxUniformBlocks = 12;
+
+      if (!stage_exists[i])
+         continue;
+
+      prog->MaxTextureImageUnits = max_samplers;
+
+      prog->MaxUniformBlocks = BRW_MAX_UBO;
       prog->MaxCombinedUniformComponents =
          prog->MaxUniformComponents +
          ctx->Const.MaxUniformBlockSize / 4 * prog->MaxUniformBlocks;
+
+      prog->MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
+      prog->MaxAtomicBuffers = BRW_MAX_ABO;
+      prog->MaxImageUniforms = compiler->scalar_stage[i] ? BRW_MAX_IMAGES : 0;
+      prog->MaxShaderStorageBlocks = BRW_MAX_SSBO;
    }
 
-   ctx->Const.MaxDualSourceDrawBuffers = 1;
-   ctx->Const.MaxDrawBuffers = BRW_MAX_DRAW_BUFFERS;
-   ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits = max_samplers;
-   ctx->Const.MaxTextureCoordUnits = 8; /* Mesa limit */
    ctx->Const.MaxTextureUnits =
       MIN2(ctx->Const.MaxTextureCoordUnits,
            ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits);
-   ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits = max_samplers;
-   if (brw->gen >= 6)
-      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = max_samplers;
-   else
-      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = 0;
-   if (_mesa_extension_override_enables.ARB_compute_shader) {
-      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits = BRW_MAX_TEX_UNIT;
-      ctx->Const.MaxUniformBufferBindings += 12;
-   } else {
-      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits = 0;
-   }
-   ctx->Const.MaxCombinedTextureImageUnits =
-      ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits +
-      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits +
-      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits +
-      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits;
 
-   ctx->Const.MaxTextureLevels = 14; /* 8192 */
-   if (ctx->Const.MaxTextureLevels > MAX_TEXTURE_LEVELS)
-      ctx->Const.MaxTextureLevels = MAX_TEXTURE_LEVELS;
-   ctx->Const.Max3DTextureLevels = 12; /* 2048 */
-   ctx->Const.MaxCubeTextureLevels = 14; /* 8192 */
-   ctx->Const.MaxTextureMbytes = 1536;
+   ctx->Const.MaxUniformBufferBindings = num_stages * BRW_MAX_UBO;
+   ctx->Const.MaxCombinedUniformBlocks = num_stages * BRW_MAX_UBO;
+   ctx->Const.MaxCombinedAtomicBuffers = num_stages * BRW_MAX_ABO;
+   ctx->Const.MaxCombinedShaderStorageBlocks = num_stages * BRW_MAX_SSBO;
+   ctx->Const.MaxShaderStorageBufferBindings = num_stages * BRW_MAX_SSBO;
+   ctx->Const.MaxCombinedTextureImageUnits = num_stages * max_samplers;
+   ctx->Const.MaxCombinedImageUniforms = num_stages * BRW_MAX_IMAGES;
 
-   if (brw->gen >= 7)
-      ctx->Const.MaxArrayTextureLayers = 2048;
-   else
-      ctx->Const.MaxArrayTextureLayers = 512;
-
-   ctx->Const.MaxTextureRectSize = 1 << 12;
-
-   ctx->Const.MaxTextureMaxAnisotropy = 16.0;
-
-   ctx->Const.MaxRenderbufferSize = 8192;
 
    /* Hardware only supports a limited number of transform feedback buffers.
     * So we need to override the Mesa default (which is based only on software
@@ -420,6 +445,7 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.MaxColorTextureSamples = max_samples;
    ctx->Const.MaxDepthTextureSamples = max_samples;
    ctx->Const.MaxIntegerSamples = max_samples;
+   ctx->Const.MaxImageSamples = 0;
 
    /* gen6_set_sample_maps() sets SampleMap{2,4,8}x variables which are used
     * to map indices of rectangular grid to sample numbers within a pixel.
@@ -428,11 +454,6 @@ brw_initialize_context_constants(struct brw_context *brw)
     * gen6_set_sample_maps() definition.
     */
    gen6_set_sample_maps(ctx);
-
-   if (brw->gen >= 7)
-      ctx->Const.MaxProgramTextureGatherComponents = 4;
-   else if (brw->gen == 6)
-      ctx->Const.MaxProgramTextureGatherComponents = 1;
 
    ctx->Const.MinLineWidth = 1.0;
    ctx->Const.MinLineWidthAA = 1.0;
@@ -504,30 +525,6 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.Program[MESA_SHADER_VERTEX].HighInt = ctx->Const.Program[MESA_SHADER_VERTEX].LowInt;
    ctx->Const.Program[MESA_SHADER_VERTEX].MediumInt = ctx->Const.Program[MESA_SHADER_VERTEX].LowInt;
 
-   if (brw->gen >= 7) {
-      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
-      ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
-      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
-      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
-      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers = BRW_MAX_ABO;
-      ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicBuffers = BRW_MAX_ABO;
-      ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxAtomicBuffers = BRW_MAX_ABO;
-      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxAtomicBuffers = BRW_MAX_ABO;
-      ctx->Const.MaxCombinedAtomicBuffers = 3 * BRW_MAX_ABO;
-
-      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxImageUniforms =
-         BRW_MAX_IMAGES;
-      ctx->Const.Program[MESA_SHADER_VERTEX].MaxImageUniforms =
-         (brw->intelScreen->compiler->scalar_vs ? BRW_MAX_IMAGES : 0);
-      ctx->Const.Program[MESA_SHADER_COMPUTE].MaxImageUniforms =
-         BRW_MAX_IMAGES;
-      ctx->Const.MaxImageUnits = MAX_IMAGE_UNITS;
-      ctx->Const.MaxCombinedShaderOutputResources =
-         MAX_IMAGE_UNITS + BRW_MAX_DRAW_BUFFERS;
-      ctx->Const.MaxImageSamples = 0;
-      ctx->Const.MaxCombinedImageUniforms = 3 * BRW_MAX_IMAGES;
-   }
-
    /* Gen6 converts quads to polygon in beginning of 3D pipeline,
     * but we're not sure how it's actually done for vertex order,
     * that affect provoking vertex decision. Always use last vertex
@@ -567,6 +564,15 @@ brw_initialize_context_constants(struct brw_context *brw)
     * However, unaligned accesses are slower, so enforce buffer alignment.
     */
    ctx->Const.UniformBufferOffsetAlignment = 16;
+
+   /* ShaderStorageBufferOffsetAlignment should be a cacheline (64 bytes) so
+    * that we can safely have the CPU and GPU writing the same SSBO on
+    * non-cachecoherent systems (our Atom CPUs). With UBOs, the GPU never
+    * writes, so there's no problem. For an SSBO, the GPU and the CPU can
+    * be updating disjoint regions of the buffer simultaneously and that will
+    * break if the regions overlap the same cacheline.
+    */
+   ctx->Const.ShaderStorageBufferOffsetAlignment = 64;
    ctx->Const.TextureBufferOffsetAlignment = 16;
    ctx->Const.MaxTextureBufferSize = 128 * 1024 * 1024;
 
@@ -1274,7 +1280,7 @@ intel_prepare_render(struct brw_context *brw)
     * that will happen next will probably dirty the front buffer.  So
     * mark it as dirty here.
     */
-   if (brw_is_front_buffer_drawing(ctx->DrawBuffer))
+   if (_mesa_is_front_buffer_drawing(ctx->DrawBuffer))
       brw->front_buffer_dirty = true;
 }
 
@@ -1313,8 +1319,8 @@ intel_query_dri2_buffers(struct brw_context *brw,
    back_rb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
 
    memset(attachments, 0, sizeof(attachments));
-   if ((brw_is_front_buffer_drawing(fb) ||
-        brw_is_front_buffer_reading(fb) ||
+   if ((_mesa_is_front_buffer_drawing(fb) ||
+        _mesa_is_front_buffer_reading(fb) ||
         !back_rb) && front_rb) {
       /* If a fake front buffer is in use, then querying for
        * __DRI_BUFFER_FRONT_LEFT will cause the server to copy the image from
@@ -1428,7 +1434,7 @@ intel_process_dri2_buffer(struct brw_context *brw,
                                             drawable->w, drawable->h,
                                             buffer->pitch);
 
-   if (brw_is_front_buffer_drawing(fb) &&
+   if (_mesa_is_front_buffer_drawing(fb) &&
        (buffer->attachment == __DRI_BUFFER_FRONT_LEFT ||
         buffer->attachment == __DRI_BUFFER_FAKE_FRONT_LEFT) &&
        rb->Base.Base.NumSamples > 1) {
@@ -1486,7 +1492,7 @@ intel_update_image_buffer(struct brw_context *intel,
                                             buffer->width, buffer->height,
                                             buffer->pitch);
 
-   if (brw_is_front_buffer_drawing(fb) &&
+   if (_mesa_is_front_buffer_drawing(fb) &&
        buffer_type == __DRI_IMAGE_BUFFER_FRONT &&
        rb->Base.Base.NumSamples > 1) {
       intel_renderbuffer_upsample(intel, rb);
@@ -1514,8 +1520,8 @@ intel_update_image_buffers(struct brw_context *brw, __DRIdrawable *drawable)
    else
       return;
 
-   if (front_rb && (brw_is_front_buffer_drawing(fb) ||
-                    brw_is_front_buffer_reading(fb) || !back_rb)) {
+   if (front_rb && (_mesa_is_front_buffer_drawing(fb) ||
+                    _mesa_is_front_buffer_reading(fb) || !back_rb)) {
       buffer_mask |= __DRI_IMAGE_BUFFER_FRONT;
    }
 

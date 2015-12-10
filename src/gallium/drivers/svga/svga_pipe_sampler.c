@@ -23,17 +23,21 @@
  *
  **********************************************************/
 
-#include "util/u_inlines.h"
 #include "pipe/p_defines.h"
+#include "util/u_bitmask.h"
 #include "util/u_format.h"
+#include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "tgsi/tgsi_parse.h"
 
 #include "svga_context.h"
-#include "svga_resource_texture.h"
-
+#include "svga_cmd.h"
 #include "svga_debug.h"
+#include "svga_resource_texture.h"
+#include "svga_surface.h"
+#include "svga_sampler_view.h"
+
 
 static inline unsigned
 translate_wrap_mode(unsigned wrap)
@@ -91,6 +95,126 @@ static inline unsigned translate_mip_filter( unsigned filter )
    }
 }
 
+
+static uint8
+translate_comparison_func(unsigned func)
+{
+   switch (func) {
+   case PIPE_FUNC_NEVER:
+      return SVGA3D_COMPARISON_NEVER;
+   case PIPE_FUNC_LESS:
+      return SVGA3D_COMPARISON_LESS;
+   case PIPE_FUNC_EQUAL:
+      return SVGA3D_COMPARISON_EQUAL;
+   case PIPE_FUNC_LEQUAL:
+      return SVGA3D_COMPARISON_LESS_EQUAL;
+   case PIPE_FUNC_GREATER:
+      return SVGA3D_COMPARISON_GREATER;
+   case PIPE_FUNC_NOTEQUAL:
+      return SVGA3D_COMPARISON_NOT_EQUAL;
+   case PIPE_FUNC_GEQUAL:
+      return SVGA3D_COMPARISON_GREATER_EQUAL;
+   case PIPE_FUNC_ALWAYS:
+      return SVGA3D_COMPARISON_ALWAYS;
+   default:
+      assert(!"Invalid comparison function");
+      return SVGA3D_COMPARISON_ALWAYS;
+   }
+}
+
+
+/**
+ * Translate filtering state to vgpu10 format.
+ */
+static SVGA3dFilter
+translate_filter_mode(unsigned img_filter,
+                      unsigned min_filter,
+                      unsigned mag_filter,
+                      boolean anisotropic,
+                      boolean compare)
+{
+   SVGA3dFilter mode = 0;
+
+   if (img_filter == PIPE_TEX_FILTER_LINEAR)
+      mode |= SVGA3D_FILTER_MIP_LINEAR;
+   if (min_filter == PIPE_TEX_FILTER_LINEAR)
+      mode |= SVGA3D_FILTER_MIN_LINEAR;
+   if (mag_filter == PIPE_TEX_FILTER_LINEAR)
+      mode |= SVGA3D_FILTER_MAG_LINEAR;
+   if (anisotropic)
+      mode |= SVGA3D_FILTER_ANISOTROPIC;
+   if (compare)
+      mode |= SVGA3D_FILTER_COMPARE;
+
+   return mode;
+}
+
+
+/**
+ * Define a vgpu10 sampler state.
+ */
+static void
+define_sampler_state_object(struct svga_context *svga,
+                            struct svga_sampler_state *ss,
+                            const struct pipe_sampler_state *ps)
+{
+   uint8_t max_aniso = (uint8_t) 255; /* XXX fix me */
+   boolean anisotropic;
+   uint8 compare_func;
+   SVGA3dFilter filter;
+   SVGA3dRGBAFloat bcolor;
+   unsigned try;
+   float min_lod, max_lod;
+
+   assert(svga_have_vgpu10(svga));
+
+   anisotropic = ss->aniso_level > 1.0f;
+
+   filter = translate_filter_mode(ps->min_mip_filter,
+                                  ps->min_img_filter,
+                                  ps->mag_img_filter,
+                                  anisotropic,
+                                  ss->compare_mode);
+
+   compare_func = translate_comparison_func(ss->compare_func);
+
+   COPY_4V(bcolor.value, ps->border_color.f);
+
+   ss->id = util_bitmask_add(svga->sampler_object_id_bm);
+
+   assert(ps->min_lod <= ps->max_lod);
+
+   if (ps->min_mip_filter == PIPE_TEX_MIPFILTER_NONE) {
+      /* just use the base level image */
+      min_lod = max_lod = 0.0f;
+   }
+   else {
+      min_lod = ps->min_lod;
+      max_lod = ps->max_lod;
+   }
+
+   /* Loop in case command buffer is full and we need to flush and retry */
+   for (try = 0; try < 2; try++) {
+      enum pipe_error ret =
+         SVGA3D_vgpu10_DefineSamplerState(svga->swc,
+                                          ss->id,
+                                          filter,
+                                          ss->addressu,
+                                          ss->addressv,
+                                          ss->addressw,
+                                          ss->lod_bias, /* float */
+                                          max_aniso,
+                                          compare_func,
+                                          bcolor,
+                                          min_lod,       /* float */
+                                          max_lod);      /* float */
+      if (ret == PIPE_OK)
+         return;
+      svga_context_flush(svga, NULL);
+   }
+}
+
+
 static void *
 svga_create_sampler_state(struct pipe_context *pipe,
                           const struct pipe_sampler_state *sampler)
@@ -141,9 +265,15 @@ svga_create_sampler_state(struct pipe_context *pipe,
       }
    }
 
+   if (svga_have_vgpu10(svga)) {
+      define_sampler_state_object(svga, cso, sampler);
+   }
+
    SVGA_DBG(DEBUG_VIEWS, "min %u, view(min %u, max %u) lod, mipfilter %s\n",
             cso->min_lod, cso->view_min_lod, cso->view_max_lod,
             cso->mipfilter == SVGA3D_TEX_FILTER_NONE ? "SVGA3D_TEX_FILTER_NONE" : "SOMETHING");
+
+   svga->hud.num_state_objects++;
 
    return cso;
 }
@@ -161,19 +291,19 @@ svga_bind_sampler_states(struct pipe_context *pipe,
    assert(shader < PIPE_SHADER_TYPES);
    assert(start + num <= PIPE_MAX_SAMPLERS);
 
-   /* we only support fragment shader samplers at this time */
-   if (shader != PIPE_SHADER_FRAGMENT)
+   /* Pre-VGPU10 only supports FS textures */
+   if (!svga_have_vgpu10(svga) && shader != PIPE_SHADER_FRAGMENT)
       return;
 
    for (i = 0; i < num; i++)
-      svga->curr.sampler[start + i] = samplers[i];
+      svga->curr.sampler[shader][start + i] = samplers[i];
 
    /* find highest non-null sampler[] entry */
    {
-      unsigned j = MAX2(svga->curr.num_samplers, start + num);
-      while (j > 0 && svga->curr.sampler[j - 1] == NULL)
+      unsigned j = MAX2(svga->curr.num_samplers[shader], start + num);
+      while (j > 0 && svga->curr.sampler[shader][j - 1] == NULL)
          j--;
-      svga->curr.num_samplers = j;
+      svga->curr.num_samplers[shader] = j;
    }
 
    svga->dirty |= SVGA_NEW_SAMPLER;
@@ -183,7 +313,24 @@ svga_bind_sampler_states(struct pipe_context *pipe,
 static void svga_delete_sampler_state(struct pipe_context *pipe,
                                       void *sampler)
 {
+   struct svga_sampler_state *ss = (struct svga_sampler_state *) sampler;
+   struct svga_context *svga = svga_context(pipe);
+
+   if (svga_have_vgpu10(svga)) {
+      enum pipe_error ret;
+
+      svga_hwtnl_flush_retry(svga);
+
+      ret = SVGA3D_vgpu10_DestroySamplerState(svga->swc, ss->id);
+      if (ret != PIPE_OK) {
+         svga_context_flush(svga, NULL);
+         ret = SVGA3D_vgpu10_DestroySamplerState(svga->swc, ss->id);
+      }
+      util_bitmask_clear(svga->sampler_object_id_bm, ss->id);
+   }
+
    FREE(sampler);
+   svga->hud.num_state_objects--;
 }
 
 
@@ -192,17 +339,21 @@ svga_create_sampler_view(struct pipe_context *pipe,
                          struct pipe_resource *texture,
                          const struct pipe_sampler_view *templ)
 {
-   struct pipe_sampler_view *view = CALLOC_STRUCT(pipe_sampler_view);
+   struct svga_pipe_sampler_view *sv = CALLOC_STRUCT(svga_pipe_sampler_view);
 
-   if (view) {
-      *view = *templ;
-      view->reference.count = 1;
-      view->texture = NULL;
-      pipe_resource_reference(&view->texture, texture);
-      view->context = pipe;
+   if (!sv) {
+      return NULL;
    }
 
-   return view;
+   sv->base = *templ;
+   sv->base.reference.count = 1;
+   sv->base.texture = NULL;
+   pipe_resource_reference(&sv->base.texture, texture);
+
+   sv->base.context = pipe;
+   sv->id = SVGA3D_INVALID_ID;
+
+   return &sv->base;
 }
 
 
@@ -210,8 +361,37 @@ static void
 svga_sampler_view_destroy(struct pipe_context *pipe,
                           struct pipe_sampler_view *view)
 {
-   pipe_resource_reference(&view->texture, NULL);
-   FREE(view);
+   struct svga_context *svga = svga_context(pipe);
+   struct svga_pipe_sampler_view *sv = svga_pipe_sampler_view(view);
+
+   if (svga_have_vgpu10(svga) && sv->id != SVGA3D_INVALID_ID) {
+      if (view->context != pipe) {
+         /* The SVGA3D device will generate an error (and on Linux, cause
+          * us to abort) if we try to destroy a shader resource view from
+          * a context other than the one it was created with.  Skip the
+          * SVGA3D_vgpu10_DestroyShaderResourceView() and leak the sampler
+          * view for now.  This should only sometimes happen when a shared
+          * texture is deleted.
+          */
+         _debug_printf("context mismatch in %s\n", __func__);
+      }
+      else {
+         enum pipe_error ret;
+
+         svga_hwtnl_flush_retry(svga); /* XXX is this needed? */
+
+         ret = SVGA3D_vgpu10_DestroyShaderResourceView(svga->swc, sv->id);
+         if (ret != PIPE_OK) {
+            svga_context_flush(svga, NULL);
+            ret = SVGA3D_vgpu10_DestroyShaderResourceView(svga->swc, sv->id);
+         }
+         util_bitmask_clear(svga->sampler_view_id_bm, sv->id);
+      }
+   }
+
+   pipe_resource_reference(&sv->base.texture, NULL);
+
+   FREE(sv);
 }
 
 static void
@@ -227,20 +407,20 @@ svga_set_sampler_views(struct pipe_context *pipe,
    uint i;
 
    assert(shader < PIPE_SHADER_TYPES);
-   assert(start + num <= Elements(svga->curr.sampler_views));
+   assert(start + num <= Elements(svga->curr.sampler_views[shader]));
 
-   /* we only support fragment shader sampler views at this time */
-   if (shader != PIPE_SHADER_FRAGMENT)
+   /* Pre-VGPU10 only supports FS textures */
+   if (!svga_have_vgpu10(svga) && shader != PIPE_SHADER_FRAGMENT)
       return;
 
    for (i = 0; i < num; i++) {
-      if (svga->curr.sampler_views[start + i] != views[i]) {
+      if (svga->curr.sampler_views[shader][start + i] != views[i]) {
          /* Note: we're using pipe_sampler_view_release() here to work around
           * a possible crash when the old view belongs to another context that
           * was already destroyed.
           */
-         pipe_sampler_view_release(pipe, &svga->curr.sampler_views[start + i]);
-         pipe_sampler_view_reference(&svga->curr.sampler_views[start + i],
+         pipe_sampler_view_release(pipe, &svga->curr.sampler_views[shader][start + i]);
+         pipe_sampler_view_reference(&svga->curr.sampler_views[shader][start + i],
                                      views[i]);
       }
 
@@ -256,10 +436,10 @@ svga_set_sampler_views(struct pipe_context *pipe,
 
    /* find highest non-null sampler_views[] entry */
    {
-      unsigned j = MAX2(svga->curr.num_sampler_views, start + num);
-      while (j > 0 && svga->curr.sampler_views[j - 1] == NULL)
+      unsigned j = MAX2(svga->curr.num_sampler_views[shader], start + num);
+      while (j > 0 && svga->curr.sampler_views[shader][j - 1] == NULL)
          j--;
-      svga->curr.num_sampler_views = j;
+      svga->curr.num_sampler_views[shader] = j;
    }
 
    svga->dirty |= SVGA_NEW_TEXTURE_BINDING;
@@ -270,7 +450,31 @@ svga_set_sampler_views(struct pipe_context *pipe,
       svga->dirty |= SVGA_NEW_TEXTURE_FLAGS;
       svga->curr.tex_flags.flag_1d = flag_1d;
       svga->curr.tex_flags.flag_srgb = flag_srgb;
-   }  
+   }
+
+   /* Check if any of the sampler view resources collide with the framebuffer
+    * color buffers or depth stencil resource. If so, enable the NEW_FRAME_BUFFER
+    * dirty bit so that emit_framebuffer can be invoked to create backed view
+    * for the conflicted surface view.
+    */
+   for (i = 0; i < svga->curr.framebuffer.nr_cbufs; i++) {
+      if (svga->curr.framebuffer.cbufs[i]) {
+         struct svga_surface *s = svga_surface(svga->curr.framebuffer.cbufs[i]);
+         if (svga_check_sampler_view_resource_collision(svga, s->handle, shader)) {
+            svga->dirty |= SVGA_NEW_FRAME_BUFFER;
+            break;
+         }
+      }
+   }
+
+   if (svga->curr.framebuffer.zsbuf) {
+      struct svga_surface *s = svga_surface(svga->curr.framebuffer.zsbuf);
+      if (s) {
+         if (svga_check_sampler_view_resource_collision(svga, s->handle, shader)) {
+            svga->dirty |= SVGA_NEW_FRAME_BUFFER;
+         }
+      }
+   }
 }
 
 

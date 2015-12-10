@@ -37,6 +37,7 @@
 #include "sb_bc.h"
 #include "sb_shader.h"
 #include "sb_pass.h"
+#include "eg_sq.h" // V_SQ_CF_INDEX_NONE
 
 namespace r600_sb {
 
@@ -406,6 +407,14 @@ void gcm::bu_sched_bb(bb_node* bb) {
 					ncnt = 3;
 				}
 
+				bool sampler_indexing = false;
+				if (n->is_fetch_inst() &&
+					static_cast<fetch_node *>(n)->bc.sampler_index_mode != V_SQ_CF_INDEX_NONE)
+				{
+					sampler_indexing = true; // Give sampler indexed ops get their own clause
+					ncnt = sh.get_ctx().is_cayman() ? 2 : 3; // MOVA + SET_CF_IDX0/1
+				}
+
 				if ((sq == SQ_TEX || sq == SQ_VTX) &&
 						((last_count >= ctx.max_fetch/2 &&
 						check_alu_ready_count(24)) ||
@@ -418,7 +427,7 @@ void gcm::bu_sched_bb(bb_node* bb) {
 				bu_ready[sq].pop_front();
 
 				if (sq != SQ_CF) {
-					if (!clause) {
+					if (!clause || sampler_indexing) {
 						clause = sh.create_clause(sq == SQ_ALU ?
 								NST_ALU_CLAUSE :
 									sq == SQ_TEX ? NST_TEX_CLAUSE :

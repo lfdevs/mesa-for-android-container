@@ -25,6 +25,8 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "util/u_memory.h"
+
 #include "ilo_builder.h"
 #include "ilo_builder_render.h" /* for ilo_builder_batch_patch_sba() */
 

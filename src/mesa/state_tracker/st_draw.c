@@ -42,6 +42,8 @@
 #include "main/macros.h"
 #include "main/varray.h"
 
+#include "glsl/ir_uniform.h"
+
 #include "vbo/vbo.h"
 
 #include "st_context.h"
@@ -61,8 +63,6 @@
 #include "util/u_upload_mgr.h"
 #include "draw/draw_context.h"
 #include "cso_cache/cso_context.h"
-
-#include "../glsl/ir_uniform.h"
 
 
 /**
@@ -106,9 +106,10 @@ setup_index_buffer(struct st_context *st,
    }
    else if (st->indexbuf_uploader) {
       /* upload indexes from user memory into a real buffer */
-      if (u_upload_data(st->indexbuf_uploader, 0,
-                        ib->count * ibuffer->index_size, ib->ptr,
-                        &ibuffer->offset, &ibuffer->buffer) != PIPE_OK) {
+      u_upload_data(st->indexbuf_uploader, 0,
+                    ib->count * ibuffer->index_size, ib->ptr,
+                    &ibuffer->offset, &ibuffer->buffer);
+      if (!ibuffer->buffer) {
          /* out of memory */
          return FALSE;
       }

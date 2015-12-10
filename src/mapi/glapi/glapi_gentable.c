@@ -3936,6 +3936,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
 
     if(!disp->GetPointerv) {
         void ** procp = (void **) &disp->GetPointerv;
+        snprintf(symboln, sizeof(symboln), "%sGetPointervKHR", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetPointerv) {
+        void ** procp = (void **) &disp->GetPointerv;
         snprintf(symboln, sizeof(symboln), "%sGetPointervEXT", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
@@ -12063,9 +12074,53 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->DrawElementsBaseVertex) {
+        void ** procp = (void **) &disp->DrawElementsBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sDrawElementsBaseVertexEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->DrawElementsBaseVertex) {
+        void ** procp = (void **) &disp->DrawElementsBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sDrawElementsBaseVertexOES", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->DrawElementsInstancedBaseVertex) {
         void ** procp = (void **) &disp->DrawElementsInstancedBaseVertex;
         snprintf(symboln, sizeof(symboln), "%sDrawElementsInstancedBaseVertex", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->DrawElementsInstancedBaseVertex) {
+        void ** procp = (void **) &disp->DrawElementsInstancedBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sDrawElementsInstancedBaseVertexEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->DrawElementsInstancedBaseVertex) {
+        void ** procp = (void **) &disp->DrawElementsInstancedBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sDrawElementsInstancedBaseVertexOES", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -12085,9 +12140,53 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->DrawRangeElementsBaseVertex) {
+        void ** procp = (void **) &disp->DrawRangeElementsBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sDrawRangeElementsBaseVertexEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->DrawRangeElementsBaseVertex) {
+        void ** procp = (void **) &disp->DrawRangeElementsBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sDrawRangeElementsBaseVertexOES", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->MultiDrawElementsBaseVertex) {
         void ** procp = (void **) &disp->MultiDrawElementsBaseVertex;
         snprintf(symboln, sizeof(symboln), "%sMultiDrawElementsBaseVertex", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->MultiDrawElementsBaseVertex) {
+        void ** procp = (void **) &disp->MultiDrawElementsBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sMultiDrawElementsBaseVertexEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->MultiDrawElementsBaseVertex) {
+        void ** procp = (void **) &disp->MultiDrawElementsBaseVertex;
+        snprintf(symboln, sizeof(symboln), "%sMultiDrawElementsBaseVertexOES", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -12305,9 +12404,31 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->BindFragDataLocationIndexed) {
+        void ** procp = (void **) &disp->BindFragDataLocationIndexed;
+        snprintf(symboln, sizeof(symboln), "%sBindFragDataLocationIndexedEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->GetFragDataIndex) {
         void ** procp = (void **) &disp->GetFragDataIndex;
         snprintf(symboln, sizeof(symboln), "%sGetFragDataIndex", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetFragDataIndex) {
+        void ** procp = (void **) &disp->GetFragDataIndex;
+        snprintf(symboln, sizeof(symboln), "%sGetFragDataIndexEXT", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -14373,6 +14494,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->GetProgramResourceLocationIndex) {
+        void ** procp = (void **) &disp->GetProgramResourceLocationIndex;
+        snprintf(symboln, sizeof(symboln), "%sGetProgramResourceLocationIndexEXT", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->GetProgramResourceName) {
         void ** procp = (void **) &disp->GetProgramResourceName;
         snprintf(symboln, sizeof(symboln), "%sGetProgramResourceName", symbol_prefix);
@@ -14387,6 +14519,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->GetProgramResourceiv) {
         void ** procp = (void **) &disp->GetProgramResourceiv;
         snprintf(symboln, sizeof(symboln), "%sGetProgramResourceiv", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ShaderStorageBlockBinding) {
+        void ** procp = (void **) &disp->ShaderStorageBlockBinding;
+        snprintf(symboln, sizeof(symboln), "%sShaderStorageBlockBinding", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -14428,9 +14571,31 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->TexStorage3DMultisample) {
+        void ** procp = (void **) &disp->TexStorage3DMultisample;
+        snprintf(symboln, sizeof(symboln), "%sTexStorage3DMultisampleOES", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->BufferStorage) {
         void ** procp = (void **) &disp->BufferStorage;
         snprintf(symboln, sizeof(symboln), "%sBufferStorage", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->BufferStorage) {
+        void ** procp = (void **) &disp->BufferStorage;
+        snprintf(symboln, sizeof(symboln), "%sBufferStorageEXT", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -17112,6 +17277,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->DebugMessageCallback) {
+        void ** procp = (void **) &disp->DebugMessageCallback;
+        snprintf(symboln, sizeof(symboln), "%sDebugMessageCallbackKHR", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->DebugMessageControl) {
         void ** procp = (void **) &disp->DebugMessageControl;
         snprintf(symboln, sizeof(symboln), "%sDebugMessageControlARB", symbol_prefix);
@@ -17126,6 +17302,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     if(!disp->DebugMessageControl) {
         void ** procp = (void **) &disp->DebugMessageControl;
         snprintf(symboln, sizeof(symboln), "%sDebugMessageControl", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->DebugMessageControl) {
+        void ** procp = (void **) &disp->DebugMessageControl;
+        snprintf(symboln, sizeof(symboln), "%sDebugMessageControlKHR", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -17156,6 +17343,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->DebugMessageInsert) {
+        void ** procp = (void **) &disp->DebugMessageInsert;
+        snprintf(symboln, sizeof(symboln), "%sDebugMessageInsertKHR", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->GetDebugMessageLog) {
         void ** procp = (void **) &disp->GetDebugMessageLog;
         snprintf(symboln, sizeof(symboln), "%sGetDebugMessageLogARB", symbol_prefix);
@@ -17178,9 +17376,31 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->GetDebugMessageLog) {
+        void ** procp = (void **) &disp->GetDebugMessageLog;
+        snprintf(symboln, sizeof(symboln), "%sGetDebugMessageLogKHR", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->GetObjectLabel) {
         void ** procp = (void **) &disp->GetObjectLabel;
         snprintf(symboln, sizeof(symboln), "%sGetObjectLabel", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->GetObjectLabel) {
+        void ** procp = (void **) &disp->GetObjectLabel;
+        snprintf(symboln, sizeof(symboln), "%sGetObjectLabelKHR", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -17200,9 +17420,31 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->GetObjectPtrLabel) {
+        void ** procp = (void **) &disp->GetObjectPtrLabel;
+        snprintf(symboln, sizeof(symboln), "%sGetObjectPtrLabelKHR", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->ObjectLabel) {
         void ** procp = (void **) &disp->ObjectLabel;
         snprintf(symboln, sizeof(symboln), "%sObjectLabel", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->ObjectLabel) {
+        void ** procp = (void **) &disp->ObjectLabel;
+        snprintf(symboln, sizeof(symboln), "%sObjectLabelKHR", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else
@@ -17222,6 +17464,17 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->ObjectPtrLabel) {
+        void ** procp = (void **) &disp->ObjectPtrLabel;
+        snprintf(symboln, sizeof(symboln), "%sObjectPtrLabelKHR", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->PopDebugGroup) {
         void ** procp = (void **) &disp->PopDebugGroup;
         snprintf(symboln, sizeof(symboln), "%sPopDebugGroup", symbol_prefix);
@@ -17233,9 +17486,31 @@ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix) {
     }
 
 
+    if(!disp->PopDebugGroup) {
+        void ** procp = (void **) &disp->PopDebugGroup;
+        snprintf(symboln, sizeof(symboln), "%sPopDebugGroupKHR", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
     if(!disp->PushDebugGroup) {
         void ** procp = (void **) &disp->PushDebugGroup;
         snprintf(symboln, sizeof(symboln), "%sPushDebugGroup", symbol_prefix);
+#ifdef _WIN32
+        *procp = GetProcAddress(handle, symboln);
+#else
+        *procp = dlsym(handle, symboln);
+#endif
+    }
+
+
+    if(!disp->PushDebugGroup) {
+        void ** procp = (void **) &disp->PushDebugGroup;
+        snprintf(symboln, sizeof(symboln), "%sPushDebugGroupKHR", symbol_prefix);
 #ifdef _WIN32
         *procp = GetProcAddress(handle, symboln);
 #else

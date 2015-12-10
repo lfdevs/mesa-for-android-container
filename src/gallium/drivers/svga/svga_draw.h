@@ -35,54 +35,50 @@ struct svga_winsys_context;
 struct svga_screen;
 struct svga_context;
 struct pipe_resource;
+struct u_upload_mgr;
 
-struct svga_hwtnl *
-svga_hwtnl_create(struct svga_context *svga);
+struct svga_hwtnl *svga_hwtnl_create(struct svga_context *svga);
 
-void svga_hwtnl_destroy( struct svga_hwtnl *hwtnl );
+void svga_hwtnl_destroy(struct svga_hwtnl *hwtnl);
 
-void svga_hwtnl_set_flatshade( struct svga_hwtnl *hwtnl,
-                               boolean flatshade,
-                               boolean flatshade_first );
+void svga_hwtnl_set_flatshade(struct svga_hwtnl *hwtnl,
+                              boolean flatshade, boolean flatshade_first);
 
-void svga_hwtnl_set_unfilled( struct svga_hwtnl *hwtnl,
-                              unsigned mode );
+void svga_hwtnl_set_fillmode(struct svga_hwtnl *hwtnl, unsigned mode);
 
-void svga_hwtnl_vdecl( struct svga_hwtnl *hwtnl,
-                       unsigned i,
-                       const SVGA3dVertexDecl *decl,
-                       struct pipe_resource *vb);
+void
+svga_hwtnl_vertex_decls(struct svga_hwtnl *hwtnl,
+                        unsigned count,
+                        const SVGA3dVertexDecl * decls,
+                        const unsigned *buffer_indexes,
+                        SVGA3dElementLayoutId layoutId);
 
-void svga_hwtnl_reset_vdecl( struct svga_hwtnl *hwtnl,
-                             unsigned count );
-
-
-enum pipe_error 
-svga_hwtnl_draw_arrays( struct svga_hwtnl *hwtnl,
-                        unsigned prim, 
-                        unsigned start, 
-                        unsigned count);
+void
+svga_hwtnl_vertex_buffers(struct svga_hwtnl *hwtnl,
+                          unsigned count, struct pipe_vertex_buffer *buffers);
 
 enum pipe_error
-svga_hwtnl_draw_range_elements( struct svga_hwtnl *hwtnl,
-                                struct pipe_resource *indexBuffer,
-                                unsigned index_size,
-                                int index_bias,
-                                unsigned min_index,
-                                unsigned max_index,
-                                unsigned prim, 
-                                unsigned start, 
-                                unsigned count );
+svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
+                       unsigned prim, unsigned start, unsigned count,
+                       unsigned start_instance, unsigned instance_count);
+
+enum pipe_error
+svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
+                               struct pipe_resource *indexBuffer,
+                               unsigned index_size,
+                               int index_bias,
+                               unsigned min_index,
+                               unsigned max_index,
+                               unsigned prim, unsigned start, unsigned count,
+                               unsigned start_instance, unsigned instance_count);
 
 boolean
-svga_hwtnl_is_buffer_referred( struct svga_hwtnl *hwtnl,
-                               struct pipe_resource *buffer );
+svga_hwtnl_is_buffer_referred(struct svga_hwtnl *hwtnl,
+                              struct pipe_resource *buffer);
 
-enum pipe_error
-svga_hwtnl_flush( struct svga_hwtnl *hwtnl );
+enum pipe_error svga_hwtnl_flush(struct svga_hwtnl *hwtnl);
 
-void svga_hwtnl_set_index_bias( struct svga_hwtnl *hwtnl,
-                                int index_bias);
+void svga_hwtnl_set_index_bias(struct svga_hwtnl *hwtnl, int index_bias);
 
 
 #endif /* SVGA_DRAW_H_ */

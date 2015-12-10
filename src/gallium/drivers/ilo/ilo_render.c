@@ -67,8 +67,47 @@ ilo_render_create(struct ilo_builder *builder)
 void
 ilo_render_destroy(struct ilo_render *render)
 {
+   intel_bo_unref(render->vs_scratch.bo);
+   intel_bo_unref(render->gs_scratch.bo);
+   intel_bo_unref(render->fs_scratch.bo);
+
    intel_bo_unref(render->workaround_bo);
    FREE(render);
+}
+
+static bool
+resize_scratch_space(struct ilo_render *render,
+                     struct ilo_render_scratch_space *scratch,
+                     const char *name, int new_size)
+{
+   struct intel_bo *bo;
+
+   if (scratch->size >= new_size)
+      return true;
+
+   bo = intel_winsys_alloc_bo(render->builder->winsys, name, new_size, false);
+   if (!bo)
+      return false;
+
+   intel_bo_unref(scratch->bo);
+   scratch->bo = bo;
+   scratch->size = new_size;
+
+   return true;
+}
+
+bool
+ilo_render_prepare_scratch_spaces(struct ilo_render *render,
+                                  int vs_scratch_size,
+                                  int gs_scratch_size,
+                                  int fs_scratch_size)
+{
+   return (resize_scratch_space(render, &render->vs_scratch,
+            "vs scratch", vs_scratch_size) &&
+           resize_scratch_space(render, &render->gs_scratch,
+            "gs scratch", gs_scratch_size) &&
+           resize_scratch_space(render, &render->fs_scratch,
+            "fs scratch", fs_scratch_size));
 }
 
 void

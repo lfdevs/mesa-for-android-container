@@ -5,12 +5,14 @@ SUBDIRS =
 ##
 
 SUBDIRS += auxiliary
+SUBDIRS += auxiliary/pipe-loader
 
 ##
 ## Gallium pipe drivers and their respective winsys'
 ##
 
 SUBDIRS += \
+	drivers/ddebug \
 	drivers/noop \
 	drivers/trace \
 	drivers/rbug
@@ -81,6 +83,11 @@ if HAVE_GALLIUM_VC4
 SUBDIRS += drivers/vc4 winsys/vc4/drm
 endif
 
+## virgl
+if HAVE_GALLIUM_VIRGL
+SUBDIRS += drivers/virgl winsys/virgl/drm winsys/virgl/vtest
+endif
+
 ## the sw winsys'
 SUBDIRS += winsys/sw/null
 
@@ -92,7 +99,7 @@ if HAVE_DRISW
 SUBDIRS += winsys/sw/dri
 endif
 
-if HAVE_DRI2
+if HAVE_DRISW_KMS
 SUBDIRS += winsys/sw/kms-dri
 endif
 
@@ -114,7 +121,8 @@ EXTRA_DIST = \
 ## Gallium state trackers and their users (targets)
 ##
 
-if HAVE_LOADER_GALLIUM
+## XXX: Rename the conditional once we have a config switch for static/dynamic pipe-drivers
+if HAVE_CLOVER
 SUBDIRS += targets/pipe-loader
 endif
 

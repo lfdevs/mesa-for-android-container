@@ -186,7 +186,8 @@ vlVdpPresentationQueueGetTime(VdpPresentationQueue presentation_queue,
       return VDP_STATUS_INVALID_HANDLE;
 
    pipe_mutex_lock(pq->device->mutex);
-   *current_time = vl_screen_get_timestamp(pq->device->vscreen, pq->drawable);
+   *current_time = pq->device->vscreen->get_timestamp(pq->device->vscreen,
+                                                      (void *)pq->drawable);
    pipe_mutex_unlock(pq->device->mutex);
 
    return VDP_STATUS_OK;
@@ -214,6 +215,7 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
 
    struct vl_compositor *compositor;
    struct vl_compositor_state *cstate;
+   struct vl_screen *vscreen;
 
    pq = vlGetDataHTAB(presentation_queue);
    if (!pq)
@@ -226,15 +228,16 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
    pipe = pq->device->context;
    compositor = &pq->device->compositor;
    cstate = &pq->cstate;
+   vscreen = pq->device->vscreen;
 
    pipe_mutex_lock(pq->device->mutex);
-   tex = vl_screen_texture_from_drawable(pq->device->vscreen, pq->drawable);
+   tex = vscreen->texture_from_drawable(vscreen, (void *)pq->drawable);
    if (!tex) {
       pipe_mutex_unlock(pq->device->mutex);
       return VDP_STATUS_INVALID_HANDLE;
    }
 
-   dirty_area = vl_screen_get_dirty_area(pq->device->vscreen);
+   dirty_area = vscreen->get_dirty_area(vscreen);
 
    memset(&surf_templ, 0, sizeof(surf_templ));
    surf_templ.format = tex->format;
@@ -267,12 +270,9 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
       vl_compositor_render(cstate, compositor, surf_draw, dirty_area, true);
    }
 
-   vl_screen_set_next_timestamp(pq->device->vscreen, earliest_presentation_time);
-   pipe->screen->flush_frontbuffer
-   (
-      pipe->screen, tex, 0, 0,
-      vl_screen_get_private(pq->device->vscreen), NULL
-   );
+   vscreen->set_next_timestamp(vscreen, earliest_presentation_time);
+   pipe->screen->flush_frontbuffer(pipe->screen, tex, 0, 0,
+                                   vscreen->get_private(vscreen), NULL);
 
    pipe->screen->fence_reference(pipe->screen, &surf->fence, NULL);
    pipe->flush(pipe, &surf->fence, 0);

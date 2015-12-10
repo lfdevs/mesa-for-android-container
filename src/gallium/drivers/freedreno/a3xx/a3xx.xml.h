@@ -8,13 +8,14 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    364 bytes, from 2015-05-20 20:03:07)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    398 bytes, from 2015-09-24 17:25:31)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2015-05-20 20:03:07)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32901 bytes, from 2015-05-20 20:03:14)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10551 bytes, from 2015-05-20 20:03:14)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10755 bytes, from 2015-09-14 20:46:55)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14968 bytes, from 2015-05-20 20:12:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  67120 bytes, from 2015-08-14 23:22:03)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  63915 bytes, from 2015-08-24 16:56:28)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  68291 bytes, from 2015-11-17 16:39:59)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  64038 bytes, from 2015-11-17 16:37:36)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2015-09-24 17:30:00)
 
 Copyright (C) 2013-2015 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -110,10 +111,14 @@ enum a3xx_vtx_fmt {
 	VFMT_8_8_SNORM = 53,
 	VFMT_8_8_8_SNORM = 54,
 	VFMT_8_8_8_8_SNORM = 55,
-	VFMT_10_10_10_2_UINT = 60,
-	VFMT_10_10_10_2_UNORM = 61,
-	VFMT_10_10_10_2_SINT = 62,
-	VFMT_10_10_10_2_SNORM = 63,
+	VFMT_10_10_10_2_UINT = 56,
+	VFMT_10_10_10_2_UNORM = 57,
+	VFMT_10_10_10_2_SINT = 58,
+	VFMT_10_10_10_2_SNORM = 59,
+	VFMT_2_10_10_10_UINT = 60,
+	VFMT_2_10_10_10_UNORM = 61,
+	VFMT_2_10_10_10_SINT = 62,
+	VFMT_2_10_10_10_SNORM = 63,
 };
 
 enum a3xx_tex_fmt {
@@ -137,10 +142,12 @@ enum a3xx_tex_fmt {
 	TFMT_DXT1 = 36,
 	TFMT_DXT3 = 37,
 	TFMT_DXT5 = 38,
+	TFMT_2_10_10_10_UNORM = 40,
 	TFMT_10_10_10_2_UNORM = 41,
 	TFMT_9_9_9_E5_FLOAT = 42,
 	TFMT_11_11_10_FLOAT = 43,
 	TFMT_A8_UNORM = 44,
+	TFMT_L8_UNORM = 45,
 	TFMT_L8_A8_UNORM = 47,
 	TFMT_8_UNORM = 48,
 	TFMT_8_8_UNORM = 49,
@@ -182,6 +189,8 @@ enum a3xx_tex_fmt {
 	TFMT_32_SINT = 92,
 	TFMT_32_32_SINT = 93,
 	TFMT_32_32_32_32_SINT = 95,
+	TFMT_2_10_10_10_UINT = 96,
+	TFMT_10_10_10_2_UINT = 97,
 	TFMT_ETC2_RG11_SNORM = 112,
 	TFMT_ETC2_RG11_UNORM = 113,
 	TFMT_ETC2_R11_SNORM = 114,
@@ -214,6 +223,9 @@ enum a3xx_color_fmt {
 	RB_R8_UINT = 14,
 	RB_R8_SINT = 15,
 	RB_R10G10B10A2_UNORM = 16,
+	RB_A2R10G10B10_UNORM = 17,
+	RB_R10G10B10A2_UINT = 18,
+	RB_A2R10G10B10_UINT = 19,
 	RB_A8_UNORM = 20,
 	RB_R8_UNORM = 21,
 	RB_R16_FLOAT = 24,
@@ -250,25 +262,6 @@ enum a3xx_sp_perfcounter_select {
 	SP_ALU_ACTIVE_CYCLES = 29,
 };
 
-enum a3xx_rop_code {
-	ROP_CLEAR = 0,
-	ROP_NOR = 1,
-	ROP_AND_INVERTED = 2,
-	ROP_COPY_INVERTED = 3,
-	ROP_AND_REVERSE = 4,
-	ROP_INVERT = 5,
-	ROP_XOR = 6,
-	ROP_NAND = 7,
-	ROP_AND = 8,
-	ROP_EQUIV = 9,
-	ROP_NOOP = 10,
-	ROP_OR_INVERTED = 11,
-	ROP_COPY = 12,
-	ROP_OR_REVERSE = 13,
-	ROP_OR = 14,
-	ROP_SET = 15,
-};
-
 enum a3xx_rb_blend_opcode {
 	BLEND_DST_PLUS_SRC = 0,
 	BLEND_SRC_MINUS_DST = 1,
@@ -280,6 +273,8 @@ enum a3xx_rb_blend_opcode {
 enum a3xx_intp_mode {
 	SMOOTH = 0,
 	FLAT = 1,
+	ZERO = 2,
+	ONE = 3,
 };
 
 enum a3xx_repl_mode {
@@ -680,9 +675,16 @@ static inline uint32_t REG_A3XX_CP_PROTECT_REG(uint32_t i0) { return 0x00000460 
 #define A3XX_GRAS_CL_CLIP_CNTL_VP_CLIP_CODE_IGNORE		0x00080000
 #define A3XX_GRAS_CL_CLIP_CNTL_VP_XFORM_DISABLE			0x00100000
 #define A3XX_GRAS_CL_CLIP_CNTL_PERSP_DIVISION_DISABLE		0x00200000
+#define A3XX_GRAS_CL_CLIP_CNTL_ZERO_GB_SCALE_Z			0x00400000
 #define A3XX_GRAS_CL_CLIP_CNTL_ZCOORD				0x00800000
 #define A3XX_GRAS_CL_CLIP_CNTL_WCOORD				0x01000000
 #define A3XX_GRAS_CL_CLIP_CNTL_ZCLIP_DISABLE			0x02000000
+#define A3XX_GRAS_CL_CLIP_CNTL_NUM_USER_CLIP_PLANES__MASK	0x1c000000
+#define A3XX_GRAS_CL_CLIP_CNTL_NUM_USER_CLIP_PLANES__SHIFT	26
+static inline uint32_t A3XX_GRAS_CL_CLIP_CNTL_NUM_USER_CLIP_PLANES(uint32_t val)
+{
+	return ((val) << A3XX_GRAS_CL_CLIP_CNTL_NUM_USER_CLIP_PLANES__SHIFT) & A3XX_GRAS_CL_CLIP_CNTL_NUM_USER_CLIP_PLANES__MASK;
+}
 
 #define REG_A3XX_GRAS_CL_GB_CLIP_ADJ				0x00002044
 #define A3XX_GRAS_CL_GB_CLIP_ADJ_HORZ__MASK			0x000003ff
@@ -773,7 +775,7 @@ static inline uint32_t A3XX_GRAS_SU_POINT_SIZE(float val)
 #define A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL__SHIFT		0
 static inline uint32_t A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL(float val)
 {
-	return ((((int32_t)(val * 16384.0))) << A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL__SHIFT) & A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL__MASK;
+	return ((((int32_t)(val * 1048576.0))) << A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL__SHIFT) & A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL__MASK;
 }
 
 #define REG_A3XX_GRAS_SU_POLY_OFFSET_OFFSET			0x0000206d
@@ -894,6 +896,9 @@ static inline uint32_t A3XX_RB_MODE_CONTROL_MRT(uint32_t val)
 #define A3XX_RB_MODE_CONTROL_PACKER_TIMER_ENABLE		0x00010000
 
 #define REG_A3XX_RB_RENDER_CONTROL				0x000020c1
+#define A3XX_RB_RENDER_CONTROL_DUAL_COLOR_IN_ENABLE		0x00000001
+#define A3XX_RB_RENDER_CONTROL_YUV_IN_ENABLE			0x00000002
+#define A3XX_RB_RENDER_CONTROL_COV_VALUE_INPUT_ENABLE		0x00000004
 #define A3XX_RB_RENDER_CONTROL_FACENESS				0x00000008
 #define A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK			0x00000ff0
 #define A3XX_RB_RENDER_CONTROL_BIN_WIDTH__SHIFT			4
@@ -907,6 +912,8 @@ static inline uint32_t A3XX_RB_RENDER_CONTROL_BIN_WIDTH(uint32_t val)
 #define A3XX_RB_RENDER_CONTROL_YCOORD				0x00008000
 #define A3XX_RB_RENDER_CONTROL_ZCOORD				0x00010000
 #define A3XX_RB_RENDER_CONTROL_WCOORD				0x00020000
+#define A3XX_RB_RENDER_CONTROL_I_CLAMP_ENABLE			0x00080000
+#define A3XX_RB_RENDER_CONTROL_COV_VALUE_OUTPUT_ENABLE		0x00100000
 #define A3XX_RB_RENDER_CONTROL_ALPHA_TEST			0x00400000
 #define A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC__MASK		0x07000000
 #define A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC__SHIFT		24
@@ -914,6 +921,8 @@ static inline uint32_t A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(enum adreno_compar
 {
 	return ((val) << A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC__SHIFT) & A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC__MASK;
 }
+#define A3XX_RB_RENDER_CONTROL_ALPHA_TO_COVERAGE		0x40000000
+#define A3XX_RB_RENDER_CONTROL_ALPHA_TO_ONE			0x80000000
 
 #define REG_A3XX_RB_MSAA_CONTROL				0x000020c2
 #define A3XX_RB_MSAA_CONTROL_DISABLE				0x00000400
@@ -1603,11 +1612,23 @@ static inline uint32_t A3XX_VFD_CONTROL_0_STRMFETCHINSTRCNT(uint32_t val)
 }
 
 #define REG_A3XX_VFD_CONTROL_1					0x00002241
-#define A3XX_VFD_CONTROL_1_MAXSTORAGE__MASK			0x0000ffff
+#define A3XX_VFD_CONTROL_1_MAXSTORAGE__MASK			0x0000000f
 #define A3XX_VFD_CONTROL_1_MAXSTORAGE__SHIFT			0
 static inline uint32_t A3XX_VFD_CONTROL_1_MAXSTORAGE(uint32_t val)
 {
 	return ((val) << A3XX_VFD_CONTROL_1_MAXSTORAGE__SHIFT) & A3XX_VFD_CONTROL_1_MAXSTORAGE__MASK;
+}
+#define A3XX_VFD_CONTROL_1_MAXTHRESHOLD__MASK			0x000000f0
+#define A3XX_VFD_CONTROL_1_MAXTHRESHOLD__SHIFT			4
+static inline uint32_t A3XX_VFD_CONTROL_1_MAXTHRESHOLD(uint32_t val)
+{
+	return ((val) << A3XX_VFD_CONTROL_1_MAXTHRESHOLD__SHIFT) & A3XX_VFD_CONTROL_1_MAXTHRESHOLD__MASK;
+}
+#define A3XX_VFD_CONTROL_1_MINTHRESHOLD__MASK			0x00000f00
+#define A3XX_VFD_CONTROL_1_MINTHRESHOLD__SHIFT			8
+static inline uint32_t A3XX_VFD_CONTROL_1_MINTHRESHOLD(uint32_t val)
+{
+	return ((val) << A3XX_VFD_CONTROL_1_MINTHRESHOLD__SHIFT) & A3XX_VFD_CONTROL_1_MINTHRESHOLD__MASK;
 }
 #define A3XX_VFD_CONTROL_1_REGID4VTX__MASK			0x00ff0000
 #define A3XX_VFD_CONTROL_1_REGID4VTX__SHIFT			16

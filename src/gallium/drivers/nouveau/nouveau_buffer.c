@@ -225,21 +225,22 @@ nouveau_transfer_write(struct nouveau_context *nv, struct nouveau_transfer *tx,
  * for write/read by waiting on the buffer's relevant fences.
  */
 static inline bool
-nouveau_buffer_sync(struct nv04_resource *buf, unsigned rw)
+nouveau_buffer_sync(struct nouveau_context *nv,
+                    struct nv04_resource *buf, unsigned rw)
 {
    if (rw == PIPE_TRANSFER_READ) {
       if (!buf->fence_wr)
          return true;
       NOUVEAU_DRV_STAT_RES(buf, buf_non_kernel_fence_sync_count,
                            !nouveau_fence_signalled(buf->fence_wr));
-      if (!nouveau_fence_wait(buf->fence_wr))
+      if (!nouveau_fence_wait(buf->fence_wr, &nv->debug))
          return false;
    } else {
       if (!buf->fence)
          return true;
       NOUVEAU_DRV_STAT_RES(buf, buf_non_kernel_fence_sync_count,
                            !nouveau_fence_signalled(buf->fence));
-      if (!nouveau_fence_wait(buf->fence))
+      if (!nouveau_fence_wait(buf->fence, &nv->debug))
          return false;
 
       nouveau_fence_ref(NULL, &buf->fence);
@@ -478,7 +479,7 @@ nouveau_buffer_transfer_map(struct pipe_context *pipe,
       if (unlikely(usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)) {
          /* Discarding was not possible, must sync because
           * subsequent transfers might use UNSYNCHRONIZED. */
-         nouveau_buffer_sync(buf, usage & PIPE_TRANSFER_READ_WRITE);
+         nouveau_buffer_sync(nv, buf, usage & PIPE_TRANSFER_READ_WRITE);
       } else
       if (usage & PIPE_TRANSFER_DISCARD_RANGE) {
          /* The whole range is being discarded, so it doesn't matter what was
@@ -490,7 +491,7 @@ nouveau_buffer_transfer_map(struct pipe_context *pipe,
          if (usage & PIPE_TRANSFER_DONTBLOCK)
             map = NULL;
          else
-            nouveau_buffer_sync(buf, usage & PIPE_TRANSFER_READ_WRITE);
+            nouveau_buffer_sync(nv, buf, usage & PIPE_TRANSFER_READ_WRITE);
       } else {
          /* It is expected that the returned buffer be a representation of the
           * data in question, so we must copy it over from the buffer. */
@@ -615,7 +616,7 @@ nouveau_resource_map_offset(struct nouveau_context *nv,
    if (res->mm) {
       unsigned rw;
       rw = (flags & NOUVEAU_BO_WR) ? PIPE_TRANSFER_WRITE : PIPE_TRANSFER_READ;
-      nouveau_buffer_sync(res, rw);
+      nouveau_buffer_sync(nv, res, rw);
       if (nouveau_bo_map(res->bo, 0, NULL))
          return NULL;
    } else {

@@ -148,6 +148,7 @@ wsw_dt_create(struct sw_winsys *ws,
               enum pipe_format format,
               unsigned width, unsigned height,
               unsigned alignment,
+              const void *front_private,
               unsigned *stride)
 {
    struct wrapper_sw_winsys *wsw = wrapper_sw_winsys(ws);
@@ -299,7 +300,7 @@ wrapper_sw_winsys_wrap_pipe_screen(struct pipe_screen *screen)
    wsw->base.destroy = wsw_destroy;
 
    wsw->screen = screen;
-   wsw->pipe = screen->context_create(screen, NULL);
+   wsw->pipe = screen->context_create(screen, NULL, 0);
    if (!wsw->pipe)
       goto err_free;
 

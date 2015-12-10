@@ -54,17 +54,9 @@
 extern "C" {
 #endif
 
-const unsigned *brw_vs_emit(struct brw_context *brw,
-                            void *mem_ctx,
-                            const struct brw_vs_prog_key *key,
-                            struct brw_vs_prog_data *prog_data,
-                            struct gl_vertex_program *vp,
-                            struct gl_shader_program *shader_prog,
-                            unsigned *program_size);
 void brw_vs_debug_recompile(struct brw_context *brw,
                             struct gl_shader_program *prog,
                             const struct brw_vs_prog_key *key);
-bool brw_vs_prog_data_compare(const void *a, const void *b);
 
 void
 brw_upload_vs_prog(struct brw_context *brw);
@@ -88,8 +80,8 @@ public:
                    void *log_data,
                    const struct brw_vs_prog_key *key,
                    struct brw_vs_prog_data *vs_prog_data,
-                   struct gl_vertex_program *vp,
-                   struct gl_shader_program *prog,
+                   const nir_shader *shader,
+                   gl_clip_plane *clip_planes,
                    void *mem_ctx,
                    int shader_time_index,
                    bool use_legacy_snorm_formula);
@@ -99,22 +91,20 @@ protected:
                                               const glsl_type *type);
    virtual void setup_payload();
    virtual void emit_prolog();
-   virtual void emit_program_code();
    virtual void emit_thread_end();
    virtual void emit_urb_write_header(int mrf);
+   virtual void emit_urb_slot(dst_reg reg, int varying);
    virtual vec4_instruction *emit_urb_write_opcode(bool complete);
 
 private:
    int setup_attributes(int payload_reg);
-   void setup_vp_regs();
-   dst_reg get_vp_dst_reg(const prog_dst_register &dst);
-   src_reg get_vp_src_reg(const prog_src_register &src);
+   void setup_uniform_clipplane_values();
+   void emit_clip_distances(dst_reg reg, int offset);
 
    const struct brw_vs_prog_key *const key;
    struct brw_vs_prog_data * const vs_prog_data;
-   struct gl_vertex_program *const vp;
-   src_reg *vp_temp_regs;
-   src_reg vp_addr_reg;
+
+   gl_clip_plane *clip_planes;
 
    bool use_legacy_snorm_formula;
 };

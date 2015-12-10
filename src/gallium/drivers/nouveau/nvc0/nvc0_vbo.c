@@ -29,6 +29,7 @@
 #include "translate/translate.h"
 
 #include "nvc0/nvc0_context.h"
+#include "nvc0/nvc0_query_hw.h"
 #include "nvc0/nvc0_resource.h"
 
 #include "nvc0/nvc0_3d.xml.h"
@@ -775,7 +776,7 @@ nvc0_draw_stream_output(struct nvc0_context *nvc0,
       res->status &= ~NOUVEAU_BUFFER_STATUS_GPU_WRITING;
       PUSH_SPACE(push, 2);
       IMMED_NVC0(push, NVC0_3D(SERIALIZE), 0);
-      nvc0_query_fifo_wait(push, so->pq);
+      nvc0_hw_query_fifo_wait(push, nvc0_query(so->pq));
       if (nvc0->screen->eng3d->oclass < GM107_3D_CLASS)
          IMMED_NVC0(push, NVC0_3D(VERTEX_ARRAY_FLUSH), 0);
 
@@ -791,7 +792,7 @@ nvc0_draw_stream_output(struct nvc0_context *nvc0,
       BEGIN_NVC0(push, NVC0_3D(DRAW_TFB_STRIDE), 1);
       PUSH_DATA (push, so->stride);
       BEGIN_NVC0(push, NVC0_3D(DRAW_TFB_BYTES), 1);
-      nvc0_query_pushbuf_submit(push, so->pq, 0x4);
+      nvc0_hw_query_pushbuf_submit(push, nvc0_query(so->pq), 0x4);
       IMMED_NVC0(push, NVC0_3D(VERTEX_END_GL), 0);
 
       mode |= NVC0_3D_VERTEX_BEGIN_GL_INSTANCE_NEXT;

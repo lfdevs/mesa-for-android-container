@@ -29,95 +29,95 @@ int
 nouveau_heap_init(struct nouveau_heap **heap,
                   unsigned start, unsigned size)
 {
-	struct nouveau_heap *r;
+   struct nouveau_heap *r;
 
-	r = calloc(1, sizeof(struct nouveau_heap));
-	if (!r)
-		return 1;
+   r = calloc(1, sizeof(struct nouveau_heap));
+   if (!r)
+      return 1;
 
-	r->start = start;
-	r->size  = size;
-	*heap = r;
-	return 0;
+   r->start = start;
+   r->size  = size;
+   *heap = r;
+   return 0;
 }
 
 void
 nouveau_heap_destroy(struct nouveau_heap **heap)
 {
-	if (!*heap)
-		return;
-	free(*heap);
-	*heap = NULL;
+   if (!*heap)
+      return;
+   free(*heap);
+   *heap = NULL;
 }
 
 int
 nouveau_heap_alloc(struct nouveau_heap *heap, unsigned size, void *priv,
                    struct nouveau_heap **res)
 {
-	struct nouveau_heap *r;
+   struct nouveau_heap *r;
 
-	if (!heap || !size || !res || *res)
-		return 1;
+   if (!heap || !size || !res || *res)
+      return 1;
 
-	while (heap) {
-		if (!heap->in_use && heap->size >= size) {
-			r = calloc(1, sizeof(struct nouveau_heap));
-			if (!r)
-				return 1;
+   while (heap) {
+      if (!heap->in_use && heap->size >= size) {
+         r = calloc(1, sizeof(struct nouveau_heap));
+         if (!r)
+            return 1;
 
-			r->start  = (heap->start + heap->size) - size;
-			r->size   = size;
-			r->in_use = 1;
-			r->priv   = priv;
+         r->start  = (heap->start + heap->size) - size;
+         r->size   = size;
+         r->in_use = 1;
+         r->priv   = priv;
 
-			heap->size -= size;
+         heap->size -= size;
 
-			r->next = heap->next;
-			if (heap->next)
-				heap->next->prev = r;
-			r->prev = heap;
-			heap->next = r;
+         r->next = heap->next;
+         if (heap->next)
+            heap->next->prev = r;
+         r->prev = heap;
+         heap->next = r;
 
-			*res = r;
-			return 0;
-		}
+         *res = r;
+         return 0;
+      }
 
-		heap = heap->next;
-	}
+      heap = heap->next;
+   }
 
-	return 1;
+   return 1;
 }
 
 void
 nouveau_heap_free(struct nouveau_heap **res)
 {
-	struct nouveau_heap *r;
+   struct nouveau_heap *r;
 
-	if (!res || !*res)
-		return;
-	r = *res;
-	*res = NULL;
+   if (!res || !*res)
+      return;
+   r = *res;
+   *res = NULL;
 
-	r->in_use = 0;
+   r->in_use = 0;
 
-	if (r->next && !r->next->in_use) {
-		struct nouveau_heap *new = r->next;
+   if (r->next && !r->next->in_use) {
+      struct nouveau_heap *new = r->next;
 
-		new->prev = r->prev;
-		if (r->prev)
-			r->prev->next = new;
-		new->size += r->size;
-		new->start = r->start;
+      new->prev = r->prev;
+      if (r->prev)
+         r->prev->next = new;
+      new->size += r->size;
+      new->start = r->start;
 
-		free(r);
-		r = new;
-	}
+      free(r);
+      r = new;
+   }
 
-	if (r->prev && !r->prev->in_use) {
-		r->prev->next = r->next;
-		if (r->next)
-			r->next->prev = r->prev;
-		r->prev->size += r->size;
-		free(r);
-	}
+   if (r->prev && !r->prev->in_use) {
+      r->prev->next = r->next;
+      if (r->next)
+         r->next->prev = r->prev;
+      r->prev->size += r->size;
+      free(r);
+   }
 }

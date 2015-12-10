@@ -188,7 +188,7 @@ static void init( void )
       exit(1);
    }
 
-   ctx = screen->context_create(screen, NULL);
+   ctx = screen->context_create(screen, NULL, 0);
    if (ctx == NULL)
       exit(3);
 

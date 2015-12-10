@@ -65,8 +65,8 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 	util_blitter_save_rasterizer(rctx->blitter, rctx->rasterizer_state.cso);
 
 	if (op & R600_SAVE_FRAGMENT_STATE) {
-		util_blitter_save_viewport(rctx->blitter, &rctx->viewport[0].state);
-		util_blitter_save_scissor(rctx->blitter, &rctx->scissor[0].scissor);
+		util_blitter_save_viewport(rctx->blitter, &rctx->viewport.state[0]);
+		util_blitter_save_scissor(rctx->blitter, &rctx->scissor.scissor[0]);
 		util_blitter_save_fragment_shader(rctx->blitter, rctx->ps_shader);
 		util_blitter_save_blend(rctx->blitter, rctx->blend_state.cso);
 		util_blitter_save_depth_stencil_alpha(rctx->blitter, rctx->dsa_state.cso);
@@ -87,18 +87,16 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 			(struct pipe_sampler_view**)rctx->samplers[PIPE_SHADER_FRAGMENT].views.views);
 	}
 
-	if ((op & R600_DISABLE_RENDER_COND) && rctx->b.current_render_cond) {
-           util_blitter_save_render_condition(rctx->blitter,
-                                              rctx->b.current_render_cond,
-                                              rctx->b.current_render_cond_cond,
-                                              rctx->b.current_render_cond_mode);
-        }
+	if (op & R600_DISABLE_RENDER_COND)
+		rctx->b.render_cond_force_off = true;
 }
 
 static void r600_blitter_end(struct pipe_context *ctx)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
-        r600_resume_nontimer_queries(&rctx->b);
+
+	rctx->b.render_cond_force_off = false;
+	r600_resume_nontimer_queries(&rctx->b);
 }
 
 static unsigned u_max_sample(struct pipe_resource *r)
@@ -202,20 +200,28 @@ static void r600_blit_decompress_depth(struct pipe_context *ctx,
 
 static void r600_blit_decompress_depth_in_place(struct r600_context *rctx,
                                                 struct r600_texture *texture,
+						bool is_stencil_sampler,
                                                 unsigned first_level, unsigned last_level,
                                                 unsigned first_layer, unsigned last_layer)
 {
 	struct pipe_surface *zsurf, surf_tmpl = {{0}};
 	unsigned layer, max_layer, checked_last_layer, level;
+	unsigned *dirty_level_mask;
 
 	/* Enable decompression in DB_RENDER_CONTROL */
-	rctx->db_misc_state.flush_depthstencil_in_place = true;
+	if (is_stencil_sampler) {
+		rctx->db_misc_state.flush_stencil_inplace = true;
+		dirty_level_mask = &texture->stencil_dirty_level_mask;
+	} else {
+		rctx->db_misc_state.flush_depth_inplace = true;
+		dirty_level_mask = &texture->dirty_level_mask;
+	}
 	r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 
 	surf_tmpl.format = texture->resource.b.b.format;
 
 	for (level = first_level; level <= last_level; level++) {
-		if (!(texture->dirty_level_mask & (1 << level)))
+		if (!(*dirty_level_mask & (1 << level)))
 			continue;
 
 		surf_tmpl.u.tex.level = level;
@@ -242,12 +248,13 @@ static void r600_blit_decompress_depth_in_place(struct r600_context *rctx,
 		/* The texture will always be dirty if some layers or samples aren't flushed.
 		 * I don't think this case occurs often though. */
 		if (first_layer == 0 && last_layer == max_layer) {
-			texture->dirty_level_mask &= ~(1 << level);
+			*dirty_level_mask &= ~(1 << level);
 		}
 	}
 
 	/* Disable decompression in DB_RENDER_CONTROL */
-	rctx->db_misc_state.flush_depthstencil_in_place = false;
+	rctx->db_misc_state.flush_depth_inplace = false;
+	rctx->db_misc_state.flush_stencil_inplace = false;
 	r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 }
 
@@ -259,12 +266,14 @@ void r600_decompress_depth_textures(struct r600_context *rctx,
 
 	while (depth_texture_mask) {
 		struct pipe_sampler_view *view;
+		struct r600_pipe_sampler_view *rview;
 		struct r600_texture *tex;
 
 		i = u_bit_scan(&depth_texture_mask);
 
 		view = &textures->views[i]->base;
 		assert(view);
+		rview = (struct r600_pipe_sampler_view*)view;
 
 		tex = (struct r600_texture *)view->texture;
 		assert(tex->is_depth && !tex->is_flushing_texture);
@@ -272,6 +281,7 @@ void r600_decompress_depth_textures(struct r600_context *rctx,
 		if (rctx->b.chip_class >= EVERGREEN ||
 		    r600_can_read_depth(tex)) {
 			r600_blit_decompress_depth_in_place(rctx, tex,
+						   rview->is_stencil_sampler,
 						   view->u.tex.first_level, view->u.tex.last_level,
 						   0, util_max_layer(&tex->resource.b.b, view->u.tex.first_level));
 		} else {
@@ -367,9 +377,14 @@ static bool r600_decompress_subresource(struct pipe_context *ctx,
 	if (rtex->is_depth && !rtex->is_flushing_texture) {
 		if (rctx->b.chip_class >= EVERGREEN ||
 		    r600_can_read_depth(rtex)) {
-			r600_blit_decompress_depth_in_place(rctx, rtex,
+			r600_blit_decompress_depth_in_place(rctx, rtex, false,
 						   level, level,
 						   first_layer, last_layer);
+			if (rtex->surface.flags & RADEON_SURF_SBUFFER) {
+				r600_blit_decompress_depth_in_place(rctx, rtex, true,
+							   level, level,
+							   first_layer, last_layer);
+			}
 		} else {
 			if (!r600_init_flushed_depth_texture(ctx, tex, NULL))
 				return false; /* error */
@@ -395,7 +410,7 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 
 	if (buffers & PIPE_CLEAR_COLOR && rctx->b.chip_class >= EVERGREEN) {
 		evergreen_do_fast_color_clear(&rctx->b, fb, &rctx->framebuffer.atom,
-					      &buffers, color);
+					      &buffers, NULL, color);
 		if (!buffers)
 			return; /* all buffers have been fast cleared */
 	}
@@ -510,7 +525,7 @@ static void r600_copy_buffer(struct pipe_context *ctx, struct pipe_resource *dst
 	 * Can we somehow flush the index buffer cache? Starting a new IB seems
 	 * to do the trick. */
 	if (rctx->b.chip_class <= R700)
-		rctx->b.rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+		rctx->b.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
 }
 
 /**
@@ -587,6 +602,7 @@ static void r600_clear_buffer(struct pipe_context *ctx, struct pipe_resource *ds
 	} else {
 		uint32_t *map = r600_buffer_map_sync_with_rings(&rctx->b, r600_resource(dst),
 								 PIPE_TRANSFER_WRITE);
+		map += offset / 4;
 		size /= 4;
 		for (unsigned i = 0; i < size; i++)
 			*map++ = value;

@@ -23,6 +23,10 @@ struct nv50_context;
 
 #define NV50_MAX_VIEWPORTS 16
 
+#define NV50_MAX_GLOBALS 16
+
+#define ONE_TEMP_SIZE (4/*vector*/ * sizeof(float))
+
 struct nv50_blitter;
 
 struct nv50_graph_state {
@@ -66,6 +70,7 @@ struct nv50_screen {
    unsigned MPsInTP;
    unsigned max_tls_space;
    unsigned cur_tls_space;
+   unsigned mp_count;
 
    struct nouveau_heap *vp_code_heap;
    struct nouveau_heap *gp_code_heap;
@@ -90,9 +95,16 @@ struct nv50_screen {
       struct nouveau_bo *bo;
    } fence;
 
+   struct {
+      struct nv50_program *prog; /* compute state object to read MP counters */
+      struct nv50_hw_sm_query *mp_counter[4]; /* counter to query allocation */
+      uint8_t num_hw_sm_active;
+   } pm;
+
    struct nouveau_object *sync;
 
    struct nouveau_object *tesla;
+   struct nouveau_object *compute;
    struct nouveau_object *eng2d;
    struct nouveau_object *m2mf;
 };
@@ -103,11 +115,18 @@ nv50_screen(struct pipe_screen *screen)
    return (struct nv50_screen *)screen;
 }
 
+int nv50_screen_get_driver_query_info(struct pipe_screen *, unsigned,
+                                      struct pipe_driver_query_info *);
+int nv50_screen_get_driver_query_group_info(struct pipe_screen *, unsigned,
+                                            struct pipe_driver_query_group_info *);
+
 bool nv50_blitter_create(struct nv50_screen *);
 void nv50_blitter_destroy(struct nv50_screen *);
 
 int nv50_screen_tic_alloc(struct nv50_screen *, void *);
 int nv50_screen_tsc_alloc(struct nv50_screen *, void *);
+
+int nv50_screen_compute_setup(struct nv50_screen *, struct nouveau_pushbuf *);
 
 static inline void
 nv50_resource_fence(struct nv04_resource *res, uint32_t flags)

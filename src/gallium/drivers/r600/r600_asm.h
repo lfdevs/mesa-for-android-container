@@ -149,6 +149,7 @@ struct r600_bytecode_cf {
 	unsigned			id;
 	unsigned			cond;
 	unsigned			pop_count;
+	unsigned			count;
 	unsigned			cf_addr; /* control flow addr */
 	struct r600_bytecode_kcache		kcache[4];
 	unsigned			r6xx_uses_waterfall;
@@ -279,4 +280,19 @@ void eg_bytecode_export_read(struct r600_bytecode *bc,
 
 void r600_vertex_data_type(enum pipe_format pformat, unsigned *format,
 			   unsigned *num_format, unsigned *format_comp, unsigned *endian);
+
+static inline int fp64_switch(int i)
+{
+	switch (i) {
+	case 0:
+		return 1;
+	case 1:
+		return 0;
+	case 2:
+		return 3;
+	case 3:
+		return 2;
+	}
+	return 0;
+}
 #endif

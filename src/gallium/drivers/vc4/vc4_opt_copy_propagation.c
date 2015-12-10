@@ -41,34 +41,77 @@ qir_opt_copy_propagation(struct vc4_compile *c)
         bool debug = false;
 
         list_for_each_entry(struct qinst, inst, &c->instructions, link) {
-                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
-                        int index = inst->src[i].index;
-                        if (inst->src[i].file == QFILE_TEMP &&
-                            c->defs[index] &&
-                            c->defs[index]->op == QOP_MOV &&
-                            (c->defs[index]->src[0].file == QFILE_TEMP ||
-                             c->defs[index]->src[0].file == QFILE_UNIF)) {
-                                /* If it has a pack, it shouldn't be an SSA
-                                 * def.
-                                 */
-                                assert(!c->defs[index]->dst.pack);
+                int nsrc = qir_get_op_nsrc(inst->op);
+                for (int i = 0; i < nsrc; i++) {
+                        if (inst->src[i].file != QFILE_TEMP)
+                                continue;
 
-                                if (debug) {
-                                        fprintf(stderr, "Copy propagate: ");
-                                        qir_dump_inst(c, inst);
-                                        fprintf(stderr, "\n");
-                                }
-
-                                inst->src[i] = c->defs[index]->src[0];
-
-                                if (debug) {
-                                        fprintf(stderr, "to: ");
-                                        qir_dump_inst(c, inst);
-                                        fprintf(stderr, "\n");
-                                }
-
-                                progress = true;
+                        struct qinst *mov = c->defs[inst->src[i].index];
+                        if (!mov ||
+                            (mov->op != QOP_MOV &&
+                             mov->op != QOP_FMOV &&
+                             mov->op != QOP_MMOV)) {
+                                continue;
                         }
+
+                        if (mov->src[0].file != QFILE_TEMP &&
+                            mov->src[0].file != QFILE_UNIF) {
+                                continue;
+                        }
+
+                        if (mov->dst.pack)
+                                continue;
+
+                        uint8_t unpack;
+                        if (mov->src[0].pack) {
+                                /* Make sure that the meaning of the unpack
+                                 * would be the same between the two
+                                 * instructions.
+                                 */
+                                if (qir_is_float_input(inst) !=
+                                    qir_is_float_input(mov)) {
+                                        continue;
+                                }
+
+                                /* There's only one unpack field, so make sure
+                                 * this instruction doesn't already use it.
+                                 */
+                                bool already_has_unpack = false;
+                                for (int j = 0; j < nsrc; j++) {
+                                        if (inst->src[j].pack)
+                                                already_has_unpack = true;
+                                }
+                                if (already_has_unpack)
+                                        continue;
+
+                                /* A destination pack requires the PM bit to
+                                 * be set to a specific value already, which
+                                 * may be different from ours.
+                                 */
+                                if (inst->dst.pack)
+                                        continue;
+
+                                unpack = mov->src[0].pack;
+                        } else {
+                                unpack = inst->src[i].pack;
+                        }
+
+                        if (debug) {
+                                fprintf(stderr, "Copy propagate: ");
+                                qir_dump_inst(c, inst);
+                                fprintf(stderr, "\n");
+                        }
+
+                        inst->src[i] = mov->src[0];
+                        inst->src[i].pack = unpack;
+
+                        if (debug) {
+                                fprintf(stderr, "to: ");
+                                qir_dump_inst(c, inst);
+                                fprintf(stderr, "\n");
+                        }
+
+                        progress = true;
                 }
         }
         return progress;

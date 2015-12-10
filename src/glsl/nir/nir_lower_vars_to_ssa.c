@@ -628,8 +628,7 @@ rename_variables_block(nir_block *block, struct lower_variables_state *state)
                nir_instr_remove(&intrin->instr);
 
                nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                        nir_src_for_ssa(&undef->def),
-                                        state->shader);
+                                        nir_src_for_ssa(&undef->def));
                continue;
             }
 
@@ -653,8 +652,7 @@ rename_variables_block(nir_block *block, struct lower_variables_state *state)
             nir_instr_remove(&intrin->instr);
 
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                     nir_src_for_ssa(&mov->dest.dest.ssa),
-                                     state->shader);
+                                     nir_src_for_ssa(&mov->dest.dest.ssa));
             break;
          }
 
@@ -881,10 +879,6 @@ nir_lower_vars_to_ssa_impl(nir_function_impl *impl)
    state.add_to_direct_deref_nodes = true;
    nir_foreach_block(impl, register_variable_uses_block, &state);
 
-   struct set *outputs = _mesa_set_create(state.dead_ctx,
-                                          _mesa_hash_pointer,
-                                          _mesa_key_pointer_equal);
-
    bool progress = false;
 
    nir_metadata_require(impl, nir_metadata_block_index);
@@ -918,9 +912,6 @@ nir_lower_vars_to_ssa_impl(nir_function_impl *impl)
          def_stack_push(node, &load->def, &state);
       }
 
-      if (deref->var->data.mode == nir_var_shader_out)
-         _mesa_set_add(outputs, node);
-
       foreach_deref_node_match(deref, lower_copies_to_load_store, &state);
    }
 
@@ -938,7 +929,7 @@ nir_lower_vars_to_ssa_impl(nir_function_impl *impl)
    nir_foreach_block(impl, register_variable_uses_block, &state);
 
    insert_phi_nodes(&state);
-   rename_variables_block(impl->start_block, &state);
+   rename_variables_block(nir_start_block(impl), &state);
 
    nir_metadata_preserve(impl, nir_metadata_block_index |
                                nir_metadata_dominance);

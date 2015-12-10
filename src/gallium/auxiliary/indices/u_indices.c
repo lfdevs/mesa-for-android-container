@@ -68,17 +68,18 @@ static void translate_memcpy_uint( const void *in,
  * \param out_nr  returns number of new vertices
  * \param out_translate  returns the translation function to use by the caller
  */
-int u_index_translator( unsigned hw_mask,
-                        unsigned prim,
-                        unsigned in_index_size,
-                        unsigned nr,
-                        unsigned in_pv,
-                        unsigned out_pv,
-                        unsigned prim_restart,
-                        unsigned *out_prim,
-                        unsigned *out_index_size,
-                        unsigned *out_nr,
-                        u_translate_func *out_translate )
+enum indices_mode
+u_index_translator(unsigned hw_mask,
+                   unsigned prim,
+                   unsigned in_index_size,
+                   unsigned nr,
+                   unsigned in_pv,
+                   unsigned out_pv,
+                   unsigned prim_restart,
+                   unsigned *out_prim,
+                   unsigned *out_index_size,
+                   unsigned *out_nr,
+                   u_translate_func *out_translate)
 {
    unsigned in_idx;
    unsigned out_idx;
@@ -204,17 +205,17 @@ int u_index_translator( unsigned hw_mask,
  * \param out_nr  returns new number of vertices to draw
  * \param out_generate  returns pointer to the generator function
  */
-int u_index_generator( unsigned hw_mask,
-                       unsigned prim,
-                       unsigned start,
-                       unsigned nr,
-                       unsigned in_pv,
-                       unsigned out_pv,
-                       unsigned *out_prim,
-                       unsigned *out_index_size,
-                       unsigned *out_nr,
-                       u_generate_func *out_generate )
-
+enum indices_mode
+u_index_generator(unsigned hw_mask,
+                  unsigned prim,
+                  unsigned start,
+                  unsigned nr,
+                  unsigned in_pv,
+                  unsigned out_pv,
+                  unsigned *out_prim,
+                  unsigned *out_index_size,
+                  unsigned *out_nr,
+                  u_generate_func *out_generate)
 {
    unsigned out_idx;
 

@@ -244,6 +244,7 @@ CodeEmitterGM107::emitSYS(int pos, const Value *val)
    case SV_LANEID         : id = 0x00; break;
    case SV_VERTEX_COUNT   : id = 0x10; break;
    case SV_INVOCATION_ID  : id = 0x11; break;
+   case SV_THREAD_KILL    : id = 0x13; break;
    case SV_INVOCATION_INFO: id = 0x1d; break;
    default:
       assert(!"invalid system value");
@@ -310,9 +311,12 @@ CodeEmitterGM107::emitIMMD(int pos, int len, const ValueRef &ref)
    uint32_t val = imm->reg.data.u32;
 
    if (len == 19) {
-      if (isFloatType(insn->sType)) {
+      if (insn->sType == TYPE_F32 || insn->sType == TYPE_F16) {
          assert(!(val & 0x00000fff));
          val >>= 12;
+      } else if (insn->sType == TYPE_F64) {
+         assert(!(imm->reg.data.u64 & 0x00000fffffffffffULL));
+         val = imm->reg.data.u64 >> 44;
       }
       assert(!(val & 0xfff00000) || (val & 0xfff00000) == 0xfff00000);
       emitField( 56,   1, (val & 0x80000) >> 19);
@@ -2217,6 +2221,30 @@ CodeEmitterGM107::emitAL2P()
    emitGPR  (0x00, insn->def(0));
 }
 
+static void
+interpApply(const InterpEntry *entry, uint32_t *code,
+      bool force_persample_interp, bool flatshade)
+{
+   int ipa = entry->ipa;
+   int reg = entry->reg;
+   int loc = entry->loc;
+
+   if (flatshade &&
+       (ipa & NV50_IR_INTERP_MODE_MASK) == NV50_IR_INTERP_SC) {
+      ipa = NV50_IR_INTERP_FLAT;
+      reg = 0xff;
+   } else if (force_persample_interp &&
+              (ipa & NV50_IR_INTERP_SAMPLE_MASK) == NV50_IR_INTERP_DEFAULT &&
+              (ipa & NV50_IR_INTERP_MODE_MASK) != NV50_IR_INTERP_FLAT) {
+      ipa |= NV50_IR_INTERP_CENTROID;
+   }
+   code[loc + 1] &= ~(0xf << 0x14);
+   code[loc + 1] |= (ipa & 0x3) << 0x16;
+   code[loc + 1] |= (ipa & 0xc) << (0x14 - 2);
+   code[loc + 0] &= ~(0xff << 0x14);
+   code[loc + 0] |= reg << 0x14;
+}
+
 void
 CodeEmitterGM107::emitIPA()
 {
@@ -2255,10 +2283,12 @@ CodeEmitterGM107::emitIPA()
       emitGPR(0x14, insn->src(1));
       if (insn->getSampleMode() == NV50_IR_INTERP_OFFSET)
          emitGPR(0x27, insn->src(2));
+      addInterp(insn->ipa, insn->getSrc(1)->reg.data.id, interpApply);
    } else {
       if (insn->getSampleMode() == NV50_IR_INTERP_OFFSET)
          emitGPR(0x27, insn->src(1));
       emitGPR(0x14);
+      addInterp(insn->ipa, 0xff, interpApply);
    }
 
    if (insn->getSampleMode() != NV50_IR_INTERP_OFFSET)

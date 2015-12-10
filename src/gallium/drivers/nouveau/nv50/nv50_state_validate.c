@@ -487,7 +487,7 @@ static struct state_validate {
     { nv50_validate_viewport,      NV50_NEW_VIEWPORT },
     { nv50_vertprog_validate,      NV50_NEW_VERTPROG },
     { nv50_gmtyprog_validate,      NV50_NEW_GMTYPROG },
-    { nv50_fragprog_validate,      NV50_NEW_FRAGPROG |
+    { nv50_fragprog_validate,      NV50_NEW_FRAGPROG | NV50_NEW_RASTERIZER |
                                    NV50_NEW_MIN_SAMPLES },
     { nv50_fp_linkage_validate,    NV50_NEW_FRAGPROG | NV50_NEW_VERTPROG |
                                    NV50_NEW_GMTYPROG | NV50_NEW_RASTERIZER },
@@ -503,8 +503,7 @@ static struct state_validate {
     { nv50_validate_samplers,      NV50_NEW_SAMPLERS },
     { nv50_stream_output_validate, NV50_NEW_STRMOUT |
                                    NV50_NEW_VERTPROG | NV50_NEW_GMTYPROG },
-    { nv50_vertex_arrays_validate, NV50_NEW_VERTEX | NV50_NEW_ARRAYS |
-                                   NV50_NEW_VERTPROG },
+    { nv50_vertex_arrays_validate, NV50_NEW_VERTEX | NV50_NEW_ARRAYS },
     { nv50_validate_min_samples,   NV50_NEW_MIN_SAMPLES },
 };
 #define validate_list_len (sizeof(validate_list) / sizeof(validate_list[0]))

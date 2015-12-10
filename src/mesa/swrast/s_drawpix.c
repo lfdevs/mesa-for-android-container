@@ -242,7 +242,7 @@ fast_draw_rgba_pixels(struct gl_context *ctx, GLint x, GLint y,
    }
 
    if (_mesa_format_matches_format_and_type(rb->Format, format, type,
-                                            ctx->Unpack.SwapBytes)) {
+                                            ctx->Unpack.SwapBytes, NULL)) {
       fast_draw_generic_pixels(ctx, rb, x, y, width, height,
                                format, type, &unpack, pixels);
       return GL_TRUE;

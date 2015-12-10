@@ -43,6 +43,12 @@ ilo_render_create(struct ilo_builder *builder);
 void
 ilo_render_destroy(struct ilo_render *render);
 
+bool
+ilo_render_prepare_scratch_spaces(struct ilo_render *render,
+                                  int vs_scratch_size,
+                                  int gs_scratch_size,
+                                  int fs_scratch_size);
+
 void
 ilo_render_get_sample_position(const struct ilo_render *render,
                                unsigned sample_count,

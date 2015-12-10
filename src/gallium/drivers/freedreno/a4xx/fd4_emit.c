@@ -124,7 +124,20 @@ static void
 emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		enum adreno_state_block sb, struct fd_texture_stateobj *tex)
 {
-	unsigned i;
+	static const uint32_t bcolor_reg[] = {
+			[SB_VERT_TEX] = REG_A4XX_TPL1_TP_VS_BORDER_COLOR_BASE_ADDR,
+			[SB_FRAG_TEX] = REG_A4XX_TPL1_TP_FS_BORDER_COLOR_BASE_ADDR,
+	};
+	struct fd4_context *fd4_ctx = fd4_context(ctx);
+	unsigned i, off;
+	void *ptr;
+
+	u_upload_alloc(fd4_ctx->border_color_uploader,
+			0, 2 * PIPE_MAX_SAMPLERS * BORDERCOLOR_SIZE, &off,
+			&fd4_ctx->border_color_buf,
+			&ptr);
+
+	fd_setup_border_colors(tex, ptr, 0);
 
 	if (tex->num_samplers > 0) {
 		int num_samplers;
@@ -181,7 +194,7 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			if (view->base.texture) {
 				struct fd_resource *rsc = fd_resource(view->base.texture);
 				uint32_t offset = fd_resource_offset(rsc, start, 0);
-				OUT_RELOC(ring, rsc->bo, offset, view->textconst4, 0);
+				OUT_RELOC(ring, rsc->bo, offset, view->texconst4, 0);
 			} else {
 				OUT_RING(ring, 0x00000000);
 			}
@@ -190,6 +203,11 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			OUT_RING(ring, 0x00000000);
 		}
 	}
+
+	OUT_PKT0(ring, bcolor_reg[sb], 1);
+	OUT_RELOC(ring, fd_resource(fd4_ctx->border_color_buf)->bo, off, 0, 0);
+
+	u_upload_unmap(fd4_ctx->border_color_uploader);
 }
 
 /* emit texture state for mem->gmem restore operation.. eventually it would
@@ -314,27 +332,35 @@ fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 	unsigned instance_regid = regid(63, 0);
 	unsigned vtxcnt_regid = regid(63, 0);
 
+	/* Note that sysvals come *after* normal inputs: */
 	for (i = 0; i < vp->inputs_count; i++) {
-		uint8_t semantic = sem2name(vp->inputs[i].semantic);
-		if (semantic == TGSI_SEMANTIC_VERTEXID_NOBASE)
-			vertex_regid = vp->inputs[i].regid;
-		else if (semantic == TGSI_SEMANTIC_INSTANCEID)
-			instance_regid = vp->inputs[i].regid;
-		else if (semantic == IR3_SEMANTIC_VTXCNT)
-			vtxcnt_regid = vp->inputs[i].regid;
-		else if ((i < vtx->vtx->num_elements) && vp->inputs[i].compmask)
+		if (!vp->inputs[i].compmask)
+			continue;
+		if (vp->inputs[i].sysval) {
+			switch(vp->inputs[i].slot) {
+			case SYSTEM_VALUE_BASE_VERTEX:
+				/* handled elsewhere */
+				break;
+			case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:
+				vertex_regid = vp->inputs[i].regid;
+				break;
+			case SYSTEM_VALUE_INSTANCE_ID:
+				instance_regid = vp->inputs[i].regid;
+				break;
+			case SYSTEM_VALUE_VERTEX_CNT:
+				vtxcnt_regid = vp->inputs[i].regid;
+				break;
+			default:
+				unreachable("invalid system value");
+				break;
+			}
+		} else if (i < vtx->vtx->num_elements) {
 			last = i;
+		}
 	}
 
-	/* hw doesn't like to be configured for zero vbo's, it seems: */
-	if ((vtx->vtx->num_elements == 0) &&
-			(vertex_regid == regid(63, 0)) &&
-			(instance_regid == regid(63, 0)) &&
-			(vtxcnt_regid == regid(63, 0)))
-		return;
-
 	for (i = 0, j = 0; i <= last; i++) {
-		assert(sem2name(vp->inputs[i].semantic) == 0);
+		assert(!vp->inputs[i].sysval);
 		if (vp->inputs[i].compmask) {
 			struct pipe_vertex_element *elem = &vtx->vtx->pipe[i];
 			const struct pipe_vertex_buffer *vb =
@@ -375,6 +401,38 @@ fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			total_in += vp->inputs[i].ncomp;
 			j++;
 		}
+	}
+
+	/* hw doesn't like to be configured for zero vbo's, it seems: */
+	if (last < 0) {
+		/* just recycle the shader bo, we just need to point to *something*
+		 * valid:
+		 */
+		struct fd_bo *dummy_vbo = vp->bo;
+		bool switchnext = (vertex_regid != regid(63, 0)) ||
+				(instance_regid != regid(63, 0)) ||
+				(vtxcnt_regid != regid(63, 0));
+
+		OUT_PKT0(ring, REG_A4XX_VFD_FETCH(0), 4);
+		OUT_RING(ring, A4XX_VFD_FETCH_INSTR_0_FETCHSIZE(0) |
+				A4XX_VFD_FETCH_INSTR_0_BUFSTRIDE(0) |
+				COND(switchnext, A4XX_VFD_FETCH_INSTR_0_SWITCHNEXT));
+		OUT_RELOC(ring, dummy_vbo, 0, 0, 0);
+		OUT_RING(ring, A4XX_VFD_FETCH_INSTR_2_SIZE(1));
+		OUT_RING(ring, A4XX_VFD_FETCH_INSTR_3_STEPRATE(1));
+
+		OUT_PKT0(ring, REG_A4XX_VFD_DECODE_INSTR(0), 1);
+		OUT_RING(ring, A4XX_VFD_DECODE_INSTR_CONSTFILL |
+				A4XX_VFD_DECODE_INSTR_WRITEMASK(0x1) |
+				A4XX_VFD_DECODE_INSTR_FORMAT(VFMT4_8_UNORM) |
+				A4XX_VFD_DECODE_INSTR_SWAP(XYZW) |
+				A4XX_VFD_DECODE_INSTR_REGID(regid(0,0)) |
+				A4XX_VFD_DECODE_INSTR_SHIFTCNT(1) |
+				A4XX_VFD_DECODE_INSTR_LASTCOMPVALID |
+				COND(switchnext, A4XX_VFD_DECODE_INSTR_SWITCHNEXT));
+
+		total_in = 1;
+		j = 1;
 	}
 
 	OUT_PKT0(ring, REG_A4XX_VFD_CONTROL_0, 5);
@@ -439,11 +497,16 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RINGP(ring, val, &fd4_context(ctx)->rbrc_patches);
 	}
 
-	if (dirty & FD_DIRTY_ZSA) {
+	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_FRAMEBUFFER)) {
 		struct fd4_zsa_stateobj *zsa = fd4_zsa_stateobj(ctx->zsa);
+		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+		uint32_t rb_alpha_control = zsa->rb_alpha_control;
+
+		if (util_format_is_pure_integer(pipe_surface_format(pfb->cbufs[0])))
+			rb_alpha_control &= ~A4XX_RB_ALPHA_CONTROL_ALPHA_TEST;
 
 		OUT_PKT0(ring, REG_A4XX_RB_ALPHA_CONTROL, 1);
-		OUT_RING(ring, zsa->rb_alpha_control);
+		OUT_RING(ring, rb_alpha_control);
 
 		OUT_PKT0(ring, REG_A4XX_RB_STENCIL_CONTROL, 2);
 		OUT_RING(ring, zsa->rb_stencil_control);
@@ -563,16 +626,35 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		ctx->prog.dirty = 0;
 	}
 
-	if ((dirty & FD_DIRTY_BLEND) && ctx->blend) {
+	if ((dirty & FD_DIRTY_BLEND)) {
 		struct fd4_blend_stateobj *blend = fd4_blend_stateobj(ctx->blend);
 		uint32_t i;
 
 		for (i = 0; i < A4XX_MAX_RENDER_TARGETS; i++) {
+			enum pipe_format format = pipe_surface_format(
+					ctx->framebuffer.cbufs[i]);
+			bool is_int = util_format_is_pure_integer(format);
+			bool has_alpha = util_format_has_alpha(format);
+			uint32_t control = blend->rb_mrt[i].control;
+			uint32_t blend_control = blend->rb_mrt[i].blend_control_alpha;
+
+			if (is_int) {
+				control &= A4XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK;
+				control |= A4XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY);
+			}
+
+			if (has_alpha) {
+				blend_control |= blend->rb_mrt[i].blend_control_rgb;
+			} else {
+				blend_control |= blend->rb_mrt[i].blend_control_no_alpha_rgb;
+				control &= ~A4XX_RB_MRT_CONTROL_BLEND2;
+			}
+
 			OUT_PKT0(ring, REG_A4XX_RB_MRT_CONTROL(i), 1);
-			OUT_RING(ring, blend->rb_mrt[i].control);
+			OUT_RING(ring, control);
 
 			OUT_PKT0(ring, REG_A4XX_RB_MRT_BLEND_CONTROL(i), 1);
-			OUT_RING(ring, blend->rb_mrt[i].blend_control);
+			OUT_RING(ring, blend_control);
 		}
 
 		OUT_PKT0(ring, REG_A4XX_RB_FS_OUTPUT, 1);
@@ -580,17 +662,50 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				A4XX_RB_FS_OUTPUT_SAMPLE_MASK(0xffff));
 	}
 
-	if (dirty & FD_DIRTY_BLEND_COLOR) {
+	if (dirty & (FD_DIRTY_BLEND_COLOR | FD_DIRTY_FRAMEBUFFER)) {
 		struct pipe_blend_color *bcolor = &ctx->blend_color;
-		OUT_PKT0(ring, REG_A4XX_RB_BLEND_RED, 4);
-		OUT_RING(ring, A4XX_RB_BLEND_RED_UINT(bcolor->color[0] * 255.0) |
+		struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+		float factor = 65535.0;
+		int i;
+
+		for (i = 0; i < pfb->nr_cbufs; i++) {
+			enum pipe_format format = pipe_surface_format(pfb->cbufs[i]);
+			const struct util_format_description *desc =
+				util_format_description(format);
+			int j;
+
+			if (desc->is_mixed)
+				continue;
+
+			j = util_format_get_first_non_void_channel(format);
+			if (j == -1)
+				continue;
+
+			if (desc->channel[j].size > 8 || !desc->channel[j].normalized ||
+				desc->channel[j].pure_integer)
+				continue;
+
+			/* Just use the first unorm8/snorm8 render buffer. Can't keep
+			 * everyone happy.
+			 */
+			if (desc->channel[j].type == UTIL_FORMAT_TYPE_SIGNED)
+				factor = 32767.0;
+			break;
+		}
+
+		OUT_PKT0(ring, REG_A4XX_RB_BLEND_RED, 8);
+		OUT_RING(ring, A4XX_RB_BLEND_RED_UINT(bcolor->color[0] * factor) |
 				A4XX_RB_BLEND_RED_FLOAT(bcolor->color[0]));
-		OUT_RING(ring, A4XX_RB_BLEND_GREEN_UINT(bcolor->color[1] * 255.0) |
+		OUT_RING(ring, A4XX_RB_BLEND_RED_F32(bcolor->color[0]));
+		OUT_RING(ring, A4XX_RB_BLEND_GREEN_UINT(bcolor->color[1] * factor) |
 				A4XX_RB_BLEND_GREEN_FLOAT(bcolor->color[1]));
-		OUT_RING(ring, A4XX_RB_BLEND_BLUE_UINT(bcolor->color[2] * 255.0) |
+		OUT_RING(ring, A4XX_RB_BLEND_GREEN_F32(bcolor->color[1]));
+		OUT_RING(ring, A4XX_RB_BLEND_BLUE_UINT(bcolor->color[2] * factor) |
 				A4XX_RB_BLEND_BLUE_FLOAT(bcolor->color[2]));
-		OUT_RING(ring, A4XX_RB_BLEND_ALPHA_UINT(bcolor->color[3] * 255.0) |
+		OUT_RING(ring, A4XX_RB_BLEND_BLUE_F32(bcolor->color[2]));
+		OUT_RING(ring, A4XX_RB_BLEND_ALPHA_UINT(bcolor->color[3] * factor) |
 				A4XX_RB_BLEND_ALPHA_FLOAT(bcolor->color[3]));
+		OUT_RING(ring, A4XX_RB_BLEND_ALPHA_F32(bcolor->color[3]));
 	}
 
 	if (dirty & FD_DIRTY_VERTTEX) {
@@ -668,15 +783,6 @@ fd4_emit_restore(struct fd_context *ctx)
 	OUT_PKT0(ring, REG_A4XX_UNKNOWN_20EF, 1);
 	OUT_RING(ring, 0x00000000);
 
-	OUT_PKT0(ring, REG_A4XX_UNKNOWN_20F0, 1);
-	OUT_RING(ring, 0x00000000);
-
-	OUT_PKT0(ring, REG_A4XX_UNKNOWN_20F1, 1);
-	OUT_RING(ring, 0x00000000);
-
-	OUT_PKT0(ring, REG_A4XX_UNKNOWN_20F2, 1);
-	OUT_RING(ring, 0x00000000);
-
 	OUT_PKT0(ring, REG_A4XX_RB_BLEND_RED, 4);
 	OUT_RING(ring, A4XX_RB_BLEND_RED_UINT(0) |
 			A4XX_RB_BLEND_RED_FLOAT(0.0));
@@ -686,9 +792,6 @@ fd4_emit_restore(struct fd_context *ctx)
 			A4XX_RB_BLEND_BLUE_FLOAT(0.0));
 	OUT_RING(ring, A4XX_RB_BLEND_ALPHA_UINT(0x7fff) |
 			A4XX_RB_BLEND_ALPHA_FLOAT(1.0));
-
-	OUT_PKT0(ring, REG_A4XX_UNKNOWN_20F7, 1);
-	OUT_RING(ring, 0x3f800000);
 
 	OUT_PKT0(ring, REG_A4XX_UNKNOWN_2152, 1);
 	OUT_RING(ring, 0x00000000);

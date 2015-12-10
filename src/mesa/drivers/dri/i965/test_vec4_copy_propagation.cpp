@@ -45,9 +45,8 @@ class copy_propagation_vec4_visitor : public vec4_visitor
 {
 public:
    copy_propagation_vec4_visitor(struct brw_compiler *compiler,
-                                  struct gl_shader_program *shader_prog)
-      : vec4_visitor(compiler, NULL, NULL, NULL, NULL, shader_prog,
-                     MESA_SHADER_VERTEX, NULL,
+                                 nir_shader *shader)
+      : vec4_visitor(compiler, NULL, NULL, NULL, shader, NULL,
                      false /* no_spills */, -1)
    {
    }
@@ -65,11 +64,6 @@ protected:
    }
 
    virtual void emit_prolog()
-   {
-      unreachable("Not reached");
-   }
-
-   virtual void emit_program_code()
    {
       unreachable("Not reached");
    }
@@ -100,11 +94,11 @@ void copy_propagation_test::SetUp()
 
    vp = ralloc(NULL, struct brw_vertex_program);
 
-   shader_prog = ralloc(NULL, struct gl_shader_program);
+   nir_shader *shader = nir_shader_create(NULL, MESA_SHADER_VERTEX, NULL);
 
-   v = new copy_propagation_vec4_visitor(compiler, shader_prog);
+   v = new copy_propagation_vec4_visitor(compiler, shader);
 
-   _mesa_init_vertex_program(ctx, &vp->program, GL_VERTEX_SHADER, 0);
+   _mesa_init_gl_program(&vp->program.Base, GL_VERTEX_SHADER, 0);
 
    devinfo->gen = 4;
 }
@@ -150,7 +144,7 @@ TEST_F(copy_propagation_test, test_swizzle_swizzle)
 
    copy_propagation(v);
 
-   EXPECT_EQ(test_mov->src[0].reg, a.reg);
+   EXPECT_EQ(test_mov->src[0].nr, a.nr);
    EXPECT_EQ(test_mov->src[0].swizzle, BRW_SWIZZLE4(SWIZZLE_Z,
                                                     SWIZZLE_W,
                                                     SWIZZLE_X,
@@ -168,7 +162,7 @@ TEST_F(copy_propagation_test, test_swizzle_writemask)
                                                       SWIZZLE_X,
                                                       SWIZZLE_Z))));
 
-   v->emit(v->MOV(writemask(a, WRITEMASK_XYZ), src_reg(1.0f)));
+   v->emit(v->MOV(writemask(a, WRITEMASK_XYZ), brw_imm_f(1.0f)));
 
    vec4_instruction *test_mov =
       v->MOV(c, swizzle(src_reg(b), BRW_SWIZZLE4(SWIZZLE_W,
@@ -180,7 +174,7 @@ TEST_F(copy_propagation_test, test_swizzle_writemask)
    copy_propagation(v);
 
    /* should not copy propagate */
-   EXPECT_EQ(test_mov->src[0].reg, b.reg);
+   EXPECT_EQ(test_mov->src[0].nr, b.nr);
    EXPECT_EQ(test_mov->src[0].swizzle, BRW_SWIZZLE4(SWIZZLE_W,
                                                     SWIZZLE_W,
                                                     SWIZZLE_W,

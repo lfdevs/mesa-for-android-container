@@ -188,9 +188,13 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	VT(B10G10R10A2_UNORM,   10_10_10_2_UNORM, R10G10B10A2_UNORM, WXYZ),
 	_T(B10G10R10X2_UNORM,   10_10_10_2_UNORM, R10G10B10A2_UNORM, WXYZ),
 	V_(R10G10B10A2_SNORM,   10_10_10_2_SNORM, NONE,              WZYX),
+	V_(B10G10R10A2_SNORM,   10_10_10_2_SNORM, NONE,              WXYZ),
 	V_(R10G10B10A2_UINT,    10_10_10_2_UINT,  NONE,              WZYX),
+	V_(B10G10R10A2_UINT,    10_10_10_2_UINT,  NONE,              WXYZ),
 	V_(R10G10B10A2_USCALED, 10_10_10_2_UINT,  NONE,              WZYX),
+	V_(B10G10R10A2_USCALED, 10_10_10_2_UINT,  NONE,              WXYZ),
 	V_(R10G10B10A2_SSCALED, 10_10_10_2_SINT,  NONE,              WZYX),
+	V_(B10G10R10A2_SSCALED, 10_10_10_2_SINT,  NONE,              WXYZ),
 
 	_T(R11G11B10_FLOAT, 11_11_10_FLOAT, R11G11B10_FLOAT, WZYX),
 	_T(R9G9B9E5_FLOAT,  9_9_9_E5_FLOAT, NONE,            WZYX),
@@ -271,6 +275,16 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	_T(DXT3_SRGBA, DXT3, NONE, WZYX),
 	_T(DXT5_RGBA,  DXT5, NONE, WZYX),
 	_T(DXT5_SRGBA, DXT5, NONE, WZYX),
+
+	/* faked */
+	_T(RGTC1_UNORM, 8_8_8_8_UNORM, NONE, WZYX),
+	_T(RGTC1_SNORM, 8_8_8_8_SNORM, NONE, WZYX),
+	_T(RGTC2_UNORM, 8_8_8_8_UNORM, NONE, WZYX),
+	_T(RGTC2_SNORM, 8_8_8_8_SNORM, NONE, WZYX),
+	_T(LATC1_UNORM, 8_8_8_8_UNORM, NONE, WZYX),
+	_T(LATC1_SNORM, 8_8_8_8_SNORM, NONE, WZYX),
+	_T(LATC2_UNORM, 8_8_8_8_UNORM, NONE, WZYX),
+	_T(LATC2_SNORM, 8_8_8_8_SNORM, NONE, WZYX),
 };
 
 enum a3xx_vtx_fmt
@@ -310,6 +324,8 @@ fd3_pipe2fetchsize(enum pipe_format format)
 {
 	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
 		format = PIPE_FORMAT_Z32_FLOAT;
+	else if (util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC)
+		format = PIPE_FORMAT_R8G8B8A8_UNORM;
 	switch (util_format_get_blocksizebits(format) / util_format_get_blockwidth(format)) {
 	case 8: return TFETCH_1_BYTE;
 	case 16: return TFETCH_2_BYTE;
@@ -322,6 +338,14 @@ fd3_pipe2fetchsize(enum pipe_format format)
 					 util_format_get_blocksizebits(format));
 		return TFETCH_DISABLE;
 	}
+}
+
+unsigned
+fd3_pipe2nblocksx(enum pipe_format format, unsigned width)
+{
+	if (util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC)
+		format = PIPE_FORMAT_R8G8B8A8_UNORM;
+	return util_format_get_nblocksx(format, width);
 }
 
 /* we need to special case a bit the depth/stencil restore, because we are

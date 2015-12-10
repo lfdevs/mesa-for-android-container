@@ -7,6 +7,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glBindBuffer@Base 7.8.1
  glBindBufferBase@Base 9.1~
  glBindBufferRange@Base 9.1~
+ glBindFragDataLocationEXT@Base 11.1.0~
  glBindFramebuffer@Base 7.8.1
  glBindImageTexture@Base 10.7.0~
  glBindRenderbuffer@Base 7.8.1
@@ -70,9 +71,12 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glDrawArraysInstanced@Base 9.1~
  glDrawBuffers@Base 9.1~
  glDrawElements@Base 7.8.1
+ glDrawElementsBaseVertex@Base 11.1.0~
  glDrawElementsIndirect@Base 10.7.0~
  glDrawElementsInstanced@Base 9.1~
+ glDrawElementsInstancedBaseVertex@Base 11.1.0~
  glDrawRangeElements@Base 9.1~
+ glDrawRangeElementsBaseVertex@Base 11.1.0~
  glEnable@Base 7.8.1
  glEnableVertexAttribArray@Base 7.8.1
  glEndQuery@Base 9.1~

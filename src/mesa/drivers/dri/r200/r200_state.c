@@ -37,7 +37,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/imports.h"
 #include "main/api_arrayelt.h"
 #include "main/enums.h"
-#include "main/colormac.h"
 #include "main/light.h"
 #include "main/framebuffer.h"
 #include "main/fbobject.h"
@@ -2389,7 +2388,6 @@ void r200InitStateFuncs( radeonContextPtr radeon, struct dd_function_table *func
    functions->Enable			= r200Enable;
    functions->Fogfv			= r200Fogfv;
    functions->FrontFace			= r200FrontFace;
-   functions->Hint			= NULL;
    functions->LightModelfv		= r200LightModelfv;
    functions->Lightfv			= r200Lightfv;
    functions->LineStipple		= r200LineStipple;

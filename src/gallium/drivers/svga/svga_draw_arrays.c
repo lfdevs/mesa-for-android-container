@@ -32,6 +32,7 @@
 #include "svga_draw.h"
 #include "svga_draw_private.h"
 #include "svga_context.h"
+#include "svga_shader.h"
 
 
 #define DBG 0
@@ -49,8 +50,8 @@ generate_indices(struct svga_hwtnl *hwtnl,
    struct pipe_resource *dst = NULL;
    void *dst_map = NULL;
 
-   dst = pipe_buffer_create(pipe->screen,
-                            PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_DEFAULT, size);
+   dst = pipe_buffer_create(pipe->screen, PIPE_BIND_INDEX_BUFFER,
+                            PIPE_USAGE_IMMUTABLE, size);
    if (dst == NULL)
       goto fail;
 
@@ -168,7 +169,8 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
 
 static enum pipe_error
 simple_draw_arrays(struct svga_hwtnl *hwtnl,
-                   unsigned prim, unsigned start, unsigned count)
+                   unsigned prim, unsigned start, unsigned count,
+                   unsigned start_instance, unsigned instance_count)
 {
    SVGA3dPrimitiveRange range;
    unsigned hw_prim;
@@ -191,17 +193,47 @@ simple_draw_arrays(struct svga_hwtnl *hwtnl,
     * looking at those numbers knows to adjust them by
     * range.indexBias.
     */
-   return svga_hwtnl_prim(hwtnl, &range, 0, count - 1, NULL);
+   return svga_hwtnl_prim(hwtnl, &range, count,
+                          0, count - 1, NULL,
+                          start_instance, instance_count);
 }
 
 
 enum pipe_error
 svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
-                       unsigned prim, unsigned start, unsigned count)
+                       unsigned prim, unsigned start, unsigned count,
+                       unsigned start_instance, unsigned instance_count)
 {
-   unsigned gen_prim, gen_size, gen_nr, gen_type;
+   unsigned gen_prim, gen_size, gen_nr;
+   enum indices_mode gen_type;
    u_generate_func gen_func;
    enum pipe_error ret = PIPE_OK;
+   unsigned api_pv = hwtnl->api_pv;
+   struct svga_context *svga = hwtnl->svga;
+
+   if (svga->curr.rast->templ.flatshade &&
+       svga->state.hw_draw.fs->constant_color_output) {
+      /* The fragment color is a constant, not per-vertex so the whole
+       * primitive will be the same color (except for possible blending).
+       * We can ignore the current provoking vertex state and use whatever
+       * the hardware wants.
+       */
+      api_pv = hwtnl->hw_pv;
+
+      if (hwtnl->api_fillmode == PIPE_POLYGON_MODE_FILL) {
+         /* Do some simple primitive conversions to avoid index buffer
+          * generation below.  Note that polygons and quads are not directly
+          * supported by the svga device.  Also note, we can only do this
+          * for flat/constant-colored rendering because of provoking vertex.
+          */
+         if (prim == PIPE_PRIM_POLYGON) {
+            prim = PIPE_PRIM_TRIANGLE_FAN;
+         }
+         else if (prim == PIPE_PRIM_QUADS && count == 4) {
+            prim = PIPE_PRIM_TRIANGLE_FAN;
+         }
+      }
+   }
 
    if (hwtnl->api_fillmode != PIPE_POLYGON_MODE_FILL &&
        prim >= PIPE_PRIM_TRIANGLES) {
@@ -222,13 +254,14 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
                                    prim,
                                    start,
                                    count,
-                                   hwtnl->api_pv,
+                                   api_pv,
                                    hwtnl->hw_pv,
                                    &gen_prim, &gen_size, &gen_nr, &gen_func);
    }
 
    if (gen_type == U_GENERATE_LINEAR) {
-      return simple_draw_arrays(hwtnl, gen_prim, start, count);
+      return simple_draw_arrays(hwtnl, gen_prim, start, count,
+                                start_instance, instance_count);
    }
    else {
       struct pipe_resource *gen_buf = NULL;
@@ -250,8 +283,9 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
                                                   start,
                                                   0,
                                                   count - 1,
-                                                  gen_prim, 0, gen_nr);
-
+                                                  gen_prim, 0, gen_nr,
+                                                  start_instance,
+                                                  instance_count);
       if (ret != PIPE_OK)
          goto done;
 

@@ -130,10 +130,13 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libmesautil_la_LIBADD =
-am__objects_1 = libmesautil_la-hash_table.lo libmesautil_la-ralloc.lo \
-	libmesautil_la-register_allocate.lo libmesautil_la-rgtc.lo \
-	libmesautil_la-set.lo libmesautil_la-strtod.lo
+am__DEPENDENCIES_1 =
+libmesautil_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am__objects_1 = libmesautil_la-debug.lo libmesautil_la-half_float.lo \
+	libmesautil_la-hash_table.lo libmesautil_la-mesa-sha1.lo \
+	libmesautil_la-ralloc.lo libmesautil_la-register_allocate.lo \
+	libmesautil_la-rgtc.lo libmesautil_la-set.lo \
+	libmesautil_la-strndup.lo libmesautil_la-strtod.lo
 am__objects_2 = libmesautil_la-format_srgb.lo
 am_libmesautil_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libmesautil_la_OBJECTS = $(am_libmesautil_la_OBJECTS)
@@ -554,6 +557,8 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
+LIBSHA1_LIBS = @LIBSHA1_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBUDEV_CFLAGS = @LIBUDEV_CFLAGS@
 LIBUDEV_LIBS = @LIBUDEV_LIBS@
@@ -598,6 +603,8 @@ OMX_LIBS = @OMX_LIBS@
 OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
 OSMESA_LIB = @OSMESA_LIB@
 OSMESA_LIB_DEPS = @OSMESA_LIB_DEPS@
 OSMESA_PC_LIB_PRIV = @OSMESA_PC_LIB_PRIV@
@@ -631,7 +638,11 @@ SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
+SHA1_CFLAGS = @SHA1_CFLAGS@
+SHA1_LIBS = @SHA1_LIBS@
 SHELL = @SHELL@
+SIMPENROSE_CFLAGS = @SIMPENROSE_CFLAGS@
+SIMPENROSE_LIBS = @SIMPENROSE_LIBS@
 SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 VA_CFLAGS = @VA_CFLAGS@
@@ -662,6 +673,8 @@ XA_TINY = @XA_TINY@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
+XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
+XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -736,11 +749,17 @@ top_srcdir = @top_srcdir@
 SUBDIRS = . tests/hash_table
 MESA_UTIL_FILES := \
 	bitset.h \
+	debug.c \
+	debug.h \
 	format_srgb.h \
+	half_float.c \
+	half_float.h \
 	hash_table.c	\
 	hash_table.h \
 	list.h \
 	macros.h \
+	mesa-sha1.c \
+	mesa-sha1.h \
 	ralloc.c \
 	ralloc.h \
 	register_allocate.c \
@@ -751,6 +770,8 @@ MESA_UTIL_FILES := \
 	set.c \
 	set.h \
 	simple_list.h \
+	strndup.c \
+	strndup.h \
 	strtod.c \
 	strtod.h \
 	texcompress_rgtc_tmp.h \
@@ -771,6 +792,7 @@ libmesautil_la_CPPFLAGS = \
 	-I$(top_srcdir)/src/mesa \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
+	$(SHA1_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	$(MSVC2008_COMPAT_CFLAGS)
 
@@ -778,6 +800,7 @@ libmesautil_la_SOURCES = \
 	$(MESA_UTIL_FILES) \
 	$(MESA_UTIL_GENERATED_FILES)
 
+libmesautil_la_LIBADD = $(SHA1_LIBS)
 roundeven_test_LDADD = -lm
 TESTS = $(check_PROGRAMS)
 BUILT_SOURCES = $(MESA_UTIL_GENERATED_FILES)
@@ -857,12 +880,16 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-format_srgb.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-half_float.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-hash_table.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-mesa-sha1.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-ralloc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-register_allocate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-rgtc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-set.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-strndup.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-strtod.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/roundeven_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/u_atomic_test.Po@am__quote@
@@ -891,12 +918,33 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
+libmesautil_la-debug.lo: debug.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-debug.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-debug.Tpo -c -o libmesautil_la-debug.lo `test -f 'debug.c' || echo '$(srcdir)/'`debug.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-debug.Tpo $(DEPDIR)/libmesautil_la-debug.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='debug.c' object='libmesautil_la-debug.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-debug.lo `test -f 'debug.c' || echo '$(srcdir)/'`debug.c
+
+libmesautil_la-half_float.lo: half_float.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-half_float.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-half_float.Tpo -c -o libmesautil_la-half_float.lo `test -f 'half_float.c' || echo '$(srcdir)/'`half_float.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-half_float.Tpo $(DEPDIR)/libmesautil_la-half_float.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='half_float.c' object='libmesautil_la-half_float.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-half_float.lo `test -f 'half_float.c' || echo '$(srcdir)/'`half_float.c
+
 libmesautil_la-hash_table.lo: hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-hash_table.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-hash_table.Tpo -c -o libmesautil_la-hash_table.lo `test -f 'hash_table.c' || echo '$(srcdir)/'`hash_table.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-hash_table.Tpo $(DEPDIR)/libmesautil_la-hash_table.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='hash_table.c' object='libmesautil_la-hash_table.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-hash_table.lo `test -f 'hash_table.c' || echo '$(srcdir)/'`hash_table.c
+
+libmesautil_la-mesa-sha1.lo: mesa-sha1.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-mesa-sha1.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-mesa-sha1.Tpo -c -o libmesautil_la-mesa-sha1.lo `test -f 'mesa-sha1.c' || echo '$(srcdir)/'`mesa-sha1.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-mesa-sha1.Tpo $(DEPDIR)/libmesautil_la-mesa-sha1.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='mesa-sha1.c' object='libmesautil_la-mesa-sha1.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-mesa-sha1.lo `test -f 'mesa-sha1.c' || echo '$(srcdir)/'`mesa-sha1.c
 
 libmesautil_la-ralloc.lo: ralloc.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-ralloc.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-ralloc.Tpo -c -o libmesautil_la-ralloc.lo `test -f 'ralloc.c' || echo '$(srcdir)/'`ralloc.c
@@ -925,6 +973,13 @@ libmesautil_la-set.lo: set.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='set.c' object='libmesautil_la-set.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-set.lo `test -f 'set.c' || echo '$(srcdir)/'`set.c
+
+libmesautil_la-strndup.lo: strndup.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-strndup.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-strndup.Tpo -c -o libmesautil_la-strndup.lo `test -f 'strndup.c' || echo '$(srcdir)/'`strndup.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-strndup.Tpo $(DEPDIR)/libmesautil_la-strndup.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='strndup.c' object='libmesautil_la-strndup.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-strndup.lo `test -f 'strndup.c' || echo '$(srcdir)/'`strndup.c
 
 libmesautil_la-strtod.lo: strtod.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-strtod.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-strtod.Tpo -c -o libmesautil_la-strtod.lo `test -f 'strtod.c' || echo '$(srcdir)/'`strtod.c

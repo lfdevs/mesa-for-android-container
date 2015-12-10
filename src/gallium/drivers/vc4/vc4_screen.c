@@ -94,6 +94,7 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_SHADOW_MAP:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
         case PIPE_CAP_TWO_SIDED_STENCIL:
+        case PIPE_CAP_USER_INDEX_BUFFERS:
                 return 1;
 
                 /* lying for GL 2.0 */
@@ -152,7 +153,6 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
         case PIPE_CAP_VERTEX_COLOR_CLAMPED:
         case PIPE_CAP_USER_VERTEX_BUFFERS:
-        case PIPE_CAP_USER_INDEX_BUFFERS:
         case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
         case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
         case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
@@ -180,6 +180,11 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
 	case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
 	case PIPE_CAP_DEPTH_BOUNDS_TEST:
+	case PIPE_CAP_TGSI_TXQS:
+	case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
+	case PIPE_CAP_SHAREABLE_SHADERS:
+	case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
+	case PIPE_CAP_CLEAR_TEXTURE:
                 return 0;
 
                 /* Stream output. */

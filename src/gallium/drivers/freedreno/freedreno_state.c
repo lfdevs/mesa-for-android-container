@@ -27,6 +27,7 @@
  */
 
 #include "pipe/p_state.h"
+#include "util/u_dual_blend.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_helpers.h"
@@ -225,8 +226,17 @@ static void
 fd_blend_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
+	struct pipe_blend_state *cso = hwcso;
+	bool old_is_dual = ctx->blend ?
+		ctx->blend->rt[0].blend_enable && util_blend_state_is_dual(ctx->blend, 0) :
+		false;
+	bool new_is_dual = cso ?
+		cso->rt[0].blend_enable && util_blend_state_is_dual(cso, 0) :
+		false;
 	ctx->blend = hwcso;
 	ctx->dirty |= FD_DIRTY_BLEND;
+	if (old_is_dual != new_is_dual)
+		ctx->dirty |= FD_DIRTY_BLEND_DUAL;
 }
 
 static void

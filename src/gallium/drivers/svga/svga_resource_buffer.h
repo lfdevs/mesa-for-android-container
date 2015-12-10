@@ -65,6 +65,9 @@ struct svga_buffer
 {
    struct u_resource b;
 
+   /** This is a superset of b.b.bind */
+   unsigned bind_flags;
+
    /**
     * Regular (non DMA'able) memory.
     * 
@@ -187,6 +190,8 @@ struct svga_buffer
    struct list_head head;
 
    unsigned size;  /**< Approximate size in bytes */
+
+   boolean dirty;  /**< Need to do a readback before mapping? */
 };
 
 
@@ -248,6 +253,9 @@ svga_buffer_hw_storage_map(struct svga_context *svga,
                            unsigned flags, boolean *retry)
 {
    struct svga_winsys_screen *sws = svga_buffer_winsys_screen(sbuf);
+
+   svga->hud.num_resources_mapped++;
+
    if (sws->have_gb_objects) {
       return svga->swc->surface_map(svga->swc, sbuf->handle, flags, retry);
    } else {

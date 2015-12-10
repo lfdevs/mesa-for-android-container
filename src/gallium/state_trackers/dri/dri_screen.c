@@ -390,9 +390,7 @@ dri_destroy_screen(__DRIscreen * sPriv)
 
    dri_destroy_screen_helper(screen);
 
-#if !GALLIUM_STATIC_TARGETS
    pipe_loader_release(&screen->dev, 1);
-#endif // !GALLIUM_STATIC_TARGETS
 
    free(screen);
    sPriv->driverPrivate = NULL;
@@ -416,11 +414,6 @@ dri_init_screen_helper(struct dri_screen *screen,
                        const char* driver_name)
 {
    screen->base.screen = pscreen;
-   if (!screen->base.screen) {
-      debug_printf("%s: failed to create pipe_screen\n", __FUNCTION__);
-      return NULL;
-   }
-
    screen->base.get_egl_image = dri_get_egl_image;
    screen->base.get_param = dri_get_param;
 

@@ -398,7 +398,7 @@ xmesa_get_context(struct st_framebuffer_iface *stfbi)
 
    pipe = xstfb->display->pipe;
    if (!pipe) {
-      pipe = xstfb->screen->context_create(xstfb->screen, NULL);
+      pipe = xstfb->screen->context_create(xstfb->screen, NULL, 0);
       if (!pipe)
          return NULL;
       xstfb->display->pipe = pipe;

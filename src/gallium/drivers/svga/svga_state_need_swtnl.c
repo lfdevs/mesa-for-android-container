@@ -26,6 +26,7 @@
 #include "util/u_inlines.h"
 #include "pipe/p_state.h"
 #include "svga_context.h"
+#include "svga_shader.h"
 #include "svga_state.h"
 #include "svga_debug.h"
 #include "svga_hw_reg.h"
@@ -91,7 +92,7 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
       unsigned generic_inputs =
          svga->curr.fs ? svga->curr.fs->generic_inputs : 0;
 
-      if (sprite_coord_gen &&
+      if (!svga_have_vgpu10(svga) && sprite_coord_gen &&
           (generic_inputs & ~sprite_coord_gen)) {
          /* The fragment shader is using some generic inputs that are
           * not being replaced by auto-generated point/sprite coords (and

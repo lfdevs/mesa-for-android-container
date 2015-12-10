@@ -29,6 +29,7 @@
 #include "svga_cmd.h"
 #include "svga_surface.h"
 
+//#include "util/u_blit_sw.h"
 #include "util/u_format.h"
 #include "util/u_surface.h"
 
@@ -159,7 +160,8 @@ static void svga_blit(struct pipe_context *pipe,
    struct svga_context *svga = svga_context(pipe);
    struct pipe_blit_info info = *blit_info;
 
-   if (info.src.resource->nr_samples > 1 &&
+   if (!svga_have_vgpu10(svga) &&
+       info.src.resource->nr_samples > 1 &&
        info.dst.resource->nr_samples <= 1 &&
        !util_format_is_depth_or_stencil(info.src.resource->format) &&
        !util_format_is_pure_integer(info.src.resource->format)) {
@@ -171,12 +173,8 @@ static void svga_blit(struct pipe_context *pipe,
       return; /* done */
    }
 
-   if (info.mask & PIPE_MASK_S) {
-      debug_printf("svga: cannot blit stencil, skipping\n");
-      info.mask &= ~PIPE_MASK_S;
-   }
-
-   if (!util_blitter_is_blit_supported(svga->blitter, &info)) {
+   if ((info.mask & PIPE_MASK_S) ||
+       !util_blitter_is_blit_supported(svga->blitter, &info)) {
       debug_printf("svga: blit unsupported %s -> %s\n",
                    util_format_short_name(info.src.resource->format),
                    util_format_short_name(info.dst.resource->format));
@@ -188,9 +186,9 @@ static void svga_blit(struct pipe_context *pipe,
    util_blitter_save_vertex_buffer_slot(svga->blitter, svga->curr.vb);
    util_blitter_save_vertex_elements(svga->blitter, (void*)svga->curr.velems);
    util_blitter_save_vertex_shader(svga->blitter, svga->curr.vs);
-   /*util_blitter_save_geometry_shader(svga->blitter, svga->curr.gs);*/
-   /*util_blitter_save_so_targets(svga->blitter, svga->num_so_targets,
-                     (struct pipe_stream_output_target**)svga->so_targets);*/
+   util_blitter_save_geometry_shader(svga->blitter, svga->curr.user_gs);
+   util_blitter_save_so_targets(svga->blitter, svga->num_so_targets,
+                     (struct pipe_stream_output_target**)svga->so_targets);
    util_blitter_save_rasterizer(svga->blitter, (void*)svga->curr.rast);
    util_blitter_save_viewport(svga->blitter, &svga->curr.viewport);
    util_blitter_save_scissor(svga->blitter, &svga->curr.scissor);
@@ -199,14 +197,14 @@ static void svga_blit(struct pipe_context *pipe,
    util_blitter_save_depth_stencil_alpha(svga->blitter,
                                          (void*)svga->curr.depth);
    util_blitter_save_stencil_ref(svga->blitter, &svga->curr.stencil_ref);
-   /*util_blitter_save_sample_mask(svga->blitter, svga->sample_mask);*/
+   util_blitter_save_sample_mask(svga->blitter, svga->curr.sample_mask);
    util_blitter_save_framebuffer(svga->blitter, &svga->curr.framebuffer);
    util_blitter_save_fragment_sampler_states(svga->blitter,
-                     svga->curr.num_samplers,
-                     (void**)svga->curr.sampler);
+                     svga->curr.num_samplers[PIPE_SHADER_FRAGMENT],
+                     (void**)svga->curr.sampler[PIPE_SHADER_FRAGMENT]);
    util_blitter_save_fragment_sampler_views(svga->blitter,
-                     svga->curr.num_sampler_views,
-                     svga->curr.sampler_views);
+                     svga->curr.num_sampler_views[PIPE_SHADER_FRAGMENT],
+                     svga->curr.sampler_views[PIPE_SHADER_FRAGMENT]);
    /*util_blitter_save_render_condition(svga->blitter, svga->render_cond_query,
                                       svga->render_cond_cond, svga->render_cond_mode);*/
    util_blitter_blit(svga->blitter, &info);

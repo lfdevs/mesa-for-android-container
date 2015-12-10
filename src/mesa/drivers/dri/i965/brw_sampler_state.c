@@ -44,6 +44,7 @@
 
 #include "main/macros.h"
 #include "main/samplerobj.h"
+#include "util/half_float.h"
 
 /**
  * Emit a 3DSTATE_SAMPLER_STATE_POINTERS_{VS,HS,GS,DS,PS} packet.
@@ -88,13 +89,11 @@ brw_emit_sampler_state(struct brw_context *brw,
                        unsigned min_lod,
                        unsigned max_lod,
                        int lod_bias,
-                       unsigned base_level,
                        unsigned shadow_function,
                        bool non_normalized_coordinates,
                        uint32_t border_color_offset)
 {
    ss[0] = BRW_SAMPLER_LOD_PRECLAMP_ENABLE |
-           SET_FIELD(base_level, BRW_SAMPLER_BASE_MIPLEVEL) |
            SET_FIELD(mip_filter, BRW_SAMPLER_MIP_FILTER) |
            SET_FIELD(mag_filter, BRW_SAMPLER_MAG_FILTER) |
            SET_FIELD(min_filter, BRW_SAMPLER_MIN_FILTER);
@@ -491,7 +490,6 @@ brw_update_sampler_state(struct brw_context *brw,
    const unsigned max_lod = U_FIXED(CLAMP(sampler->MaxLod, 0, 13), lod_bits);
    const int lod_bias =
       S_FIXED(CLAMP(tex_unit_lod_bias + sampler->LodBias, -16, 15), lod_bits);
-   const unsigned base_level = U_FIXED(0, 1);
 
    /* Upload the border color if necessary.  If not, just point it at
     * offset 0 (the start of the batch) - the color should be ignored,
@@ -515,7 +513,7 @@ brw_update_sampler_state(struct brw_context *brw,
                           max_anisotropy,
                           address_rounding,
                           wrap_s, wrap_t, wrap_r,
-                          min_lod, max_lod, lod_bias, base_level,
+                          min_lod, max_lod, lod_bias,
                           shadow_function,
                           non_normalized_coords,
                           border_color_offset);

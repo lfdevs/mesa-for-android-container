@@ -282,23 +282,23 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
                         class_bits[inst->dst.index] &= CLASS_BIT_A;
                 }
 
-                if (qir_src_needs_a_file(inst)) {
-                        switch (inst->op) {
-                        case QOP_UNPACK_8A_F:
-                        case QOP_UNPACK_8B_F:
-                        case QOP_UNPACK_8C_F:
-                        case QOP_UNPACK_8D_F:
-                                /* Special case: these can be done as R4
-                                 * unpacks, as well.
-                                 */
-                                class_bits[inst->src[0].index] &= (CLASS_BIT_A |
-                                                                   CLASS_BIT_R4);
-                                break;
-                        default:
-                                class_bits[inst->src[0].index] &= CLASS_BIT_A;
-                                break;
+                /* Apply restrictions for src unpacks.  The integer unpacks
+                 * can only be done from regfile A, while float unpacks can be
+                 * either A or R4.
+                 */
+                for (int i = 0; i < qir_get_op_nsrc(inst->op); i++) {
+                        if (inst->src[i].file == QFILE_TEMP &&
+                            inst->src[i].pack) {
+                                if (qir_is_float_input(inst)) {
+                                        class_bits[inst->src[i].index] &=
+                                                CLASS_BIT_A | CLASS_BIT_R4;
+                                } else {
+                                        class_bits[inst->src[i].index] &=
+                                                CLASS_BIT_A;
+                                }
                         }
                 }
+
                 ip++;
         }
 

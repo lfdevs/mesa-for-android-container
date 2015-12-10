@@ -125,7 +125,7 @@ gen8_draw_wm(struct ilo_render *r,
 
    /* 3DSTATE_PS */
    if (DIRTY(FS) || r->instruction_bo_changed)
-      gen8_3DSTATE_PS(r->builder, &cso->ps, kernel_offset);
+      gen8_3DSTATE_PS(r->builder, &cso->ps, kernel_offset, r->fs_scratch.bo);
 
    /* 3DSTATE_PS_EXTRA */
    if (DIRTY(FS))

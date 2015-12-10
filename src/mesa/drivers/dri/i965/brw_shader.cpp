@@ -84,8 +84,12 @@ brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
    brw_fs_alloc_reg_sets(compiler);
    brw_vec4_alloc_reg_set(compiler);
 
-   if (devinfo->gen >= 8 && !(INTEL_DEBUG & DEBUG_VEC4VS))
-      compiler->scalar_vs = true;
+   compiler->scalar_stage[MESA_SHADER_VERTEX] =
+      devinfo->gen >= 8 && !(INTEL_DEBUG & DEBUG_VEC4VS);
+   compiler->scalar_stage[MESA_SHADER_GEOMETRY] =
+      devinfo->gen >= 8 && brw_env_var_as_boolean("INTEL_SCALAR_GS", false);
+   compiler->scalar_stage[MESA_SHADER_FRAGMENT] = true;
+   compiler->scalar_stage[MESA_SHADER_COMPUTE] = true;
 
    nir_shader_compiler_options *nir_options =
       rzalloc(compiler, nir_shader_compiler_options);
@@ -96,6 +100,14 @@ brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
     */
    nir_options->lower_ffma = true;
    nir_options->lower_sub = true;
+   /* In the vec4 backend, our dpN instruction replicates its result to all
+    * the components of a vec4.  We would like NIR to give us replicated fdot
+    * instructions because it can optimize better for us.
+    *
+    * For the FS backend, it should be lowered away by the scalarizing pass so
+    * we should never see fdot anyway.
+    */
+   nir_options->fdot_replicates = true;
 
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (int i = 0; i < MESA_SHADER_STAGES; i++) {
@@ -107,40 +119,26 @@ brw_compiler_create(void *mem_ctx, const struct brw_device_info *devinfo)
       compiler->glsl_compiler_options[i].EmitNoNoise = true;
       compiler->glsl_compiler_options[i].EmitNoMainReturn = true;
       compiler->glsl_compiler_options[i].EmitNoIndirectInput = true;
-      compiler->glsl_compiler_options[i].EmitNoIndirectOutput =
-	 (i == MESA_SHADER_FRAGMENT);
-      compiler->glsl_compiler_options[i].EmitNoIndirectTemp =
-	 (i == MESA_SHADER_FRAGMENT);
       compiler->glsl_compiler_options[i].EmitNoIndirectUniform = false;
       compiler->glsl_compiler_options[i].LowerClipDistance = true;
+
+      bool is_scalar = compiler->scalar_stage[i];
+
+      compiler->glsl_compiler_options[i].EmitNoIndirectOutput = is_scalar;
+      compiler->glsl_compiler_options[i].EmitNoIndirectTemp = is_scalar;
+      compiler->glsl_compiler_options[i].OptimizeForAOS = !is_scalar;
 
       /* !ARB_gpu_shader5 */
       if (devinfo->gen < 7)
          compiler->glsl_compiler_options[i].EmitNoIndirectSampler = true;
+
+      compiler->glsl_compiler_options[i].NirOptions = nir_options;
+
+      compiler->glsl_compiler_options[i].LowerBufferInterfaceBlocks = true;
    }
 
-   compiler->glsl_compiler_options[MESA_SHADER_VERTEX].OptimizeForAOS = true;
-   compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].OptimizeForAOS = true;
-
-   if (compiler->scalar_vs || brw_env_var_as_boolean("INTEL_USE_NIR", true)) {
-      if (compiler->scalar_vs) {
-         /* If we're using the scalar backend for vertex shaders, we need to
-          * configure these accordingly.
-          */
-         compiler->glsl_compiler_options[MESA_SHADER_VERTEX].EmitNoIndirectOutput = true;
-         compiler->glsl_compiler_options[MESA_SHADER_VERTEX].EmitNoIndirectTemp = true;
-         compiler->glsl_compiler_options[MESA_SHADER_VERTEX].OptimizeForAOS = false;
-      }
-
-      compiler->glsl_compiler_options[MESA_SHADER_VERTEX].NirOptions = nir_options;
-   }
-
-   if (brw_env_var_as_boolean("INTEL_USE_NIR", true)) {
-      compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].NirOptions = nir_options;
-   }
-
-   compiler->glsl_compiler_options[MESA_SHADER_FRAGMENT].NirOptions = nir_options;
-   compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions = nir_options;
+   if (compiler->scalar_stage[MESA_SHADER_GEOMETRY])
+      compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].EmitNoIndirectInput = false;
 
    return compiler;
 }
@@ -161,275 +159,15 @@ brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
    return &shader->base;
 }
 
-/**
- * Performs a compile of the shader stages even when we don't know
- * what non-orthogonal state will be set, in the hope that it reflects
- * the eventual NOS used, and thus allows us to produce link failures.
- */
-static bool
-brw_shader_precompile(struct gl_context *ctx,
-                      struct gl_shader_program *sh_prog)
+void
+brw_mark_surface_used(struct brw_stage_prog_data *prog_data,
+                      unsigned surf_index)
 {
-   struct gl_shader *vs = sh_prog->_LinkedShaders[MESA_SHADER_VERTEX];
-   struct gl_shader *gs = sh_prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
-   struct gl_shader *fs = sh_prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
-   struct gl_shader *cs = sh_prog->_LinkedShaders[MESA_SHADER_COMPUTE];
+   assert(surf_index < BRW_MAX_SURFACES);
 
-   if (fs && !brw_fs_precompile(ctx, sh_prog, fs->Program))
-      return false;
-
-   if (gs && !brw_gs_precompile(ctx, sh_prog, gs->Program))
-      return false;
-
-   if (vs && !brw_vs_precompile(ctx, sh_prog, vs->Program))
-      return false;
-
-   if (cs && !brw_cs_precompile(ctx, sh_prog, cs->Program))
-      return false;
-
-   return true;
+   prog_data->binding_table.size_bytes =
+      MAX2(prog_data->binding_table.size_bytes, (surf_index + 1) * 4);
 }
-
-static inline bool
-is_scalar_shader_stage(struct brw_context *brw, int stage)
-{
-   switch (stage) {
-   case MESA_SHADER_FRAGMENT:
-      return true;
-   case MESA_SHADER_VERTEX:
-      return brw->intelScreen->compiler->scalar_vs;
-   default:
-      return false;
-   }
-}
-
-static void
-brw_lower_packing_builtins(struct brw_context *brw,
-                           gl_shader_stage shader_type,
-                           exec_list *ir)
-{
-   int ops = LOWER_PACK_SNORM_2x16
-           | LOWER_UNPACK_SNORM_2x16
-           | LOWER_PACK_UNORM_2x16
-           | LOWER_UNPACK_UNORM_2x16;
-
-   if (is_scalar_shader_stage(brw, shader_type)) {
-      ops |= LOWER_UNPACK_UNORM_4x8
-           | LOWER_UNPACK_SNORM_4x8
-           | LOWER_PACK_UNORM_4x8
-           | LOWER_PACK_SNORM_4x8;
-   }
-
-   if (brw->gen >= 7) {
-      /* Gen7 introduced the f32to16 and f16to32 instructions, which can be
-       * used to execute packHalf2x16 and unpackHalf2x16. For AOS code, no
-       * lowering is needed. For SOA code, the Half2x16 ops must be
-       * scalarized.
-       */
-      if (is_scalar_shader_stage(brw, shader_type)) {
-         ops |= LOWER_PACK_HALF_2x16_TO_SPLIT
-             |  LOWER_UNPACK_HALF_2x16_TO_SPLIT;
-      }
-   } else {
-      ops |= LOWER_PACK_HALF_2x16
-          |  LOWER_UNPACK_HALF_2x16;
-   }
-
-   lower_packing_builtins(ir, ops);
-}
-
-static void
-process_glsl_ir(gl_shader_stage stage,
-                struct brw_context *brw,
-                struct gl_shader_program *shader_prog,
-                struct gl_shader *shader)
-{
-   struct gl_context *ctx = &brw->ctx;
-   const struct gl_shader_compiler_options *options =
-      &ctx->Const.ShaderCompilerOptions[shader->Stage];
-
-   /* Temporary memory context for any new IR. */
-   void *mem_ctx = ralloc_context(NULL);
-
-   ralloc_adopt(mem_ctx, shader->ir);
-
-   /* lower_packing_builtins() inserts arithmetic instructions, so it
-    * must precede lower_instructions().
-    */
-   brw_lower_packing_builtins(brw, shader->Stage, shader->ir);
-   do_mat_op_to_vec(shader->ir);
-   const int bitfield_insert = brw->gen >= 7 ? BITFIELD_INSERT_TO_BFM_BFI : 0;
-   lower_instructions(shader->ir,
-                      MOD_TO_FLOOR |
-                      DIV_TO_MUL_RCP |
-                      SUB_TO_ADD_NEG |
-                      EXP_TO_EXP2 |
-                      LOG_TO_LOG2 |
-                      bitfield_insert |
-                      LDEXP_TO_ARITH |
-                      CARRY_TO_ARITH |
-                      BORROW_TO_ARITH);
-
-   /* Pre-gen6 HW can only nest if-statements 16 deep.  Beyond this,
-    * if-statements need to be flattened.
-    */
-   if (brw->gen < 6)
-      lower_if_to_cond_assign(shader->ir, 16);
-
-   do_lower_texture_projection(shader->ir);
-   brw_lower_texture_gradients(brw, shader->ir);
-   do_vec_index_to_cond_assign(shader->ir);
-   lower_vector_insert(shader->ir, true);
-   if (options->NirOptions == NULL)
-      brw_do_cubemap_normalize(shader->ir);
-   lower_offset_arrays(shader->ir);
-   brw_do_lower_unnormalized_offset(shader->ir);
-   lower_noise(shader->ir);
-   lower_quadop_vector(shader->ir, false);
-
-   bool lowered_variable_indexing =
-      lower_variable_index_to_cond_assign((gl_shader_stage)stage,
-                                          shader->ir,
-                                          options->EmitNoIndirectInput,
-                                          options->EmitNoIndirectOutput,
-                                          options->EmitNoIndirectTemp,
-                                          options->EmitNoIndirectUniform);
-
-   if (unlikely(brw->perf_debug && lowered_variable_indexing)) {
-      perf_debug("Unsupported form of variable indexing in %s; falling "
-                 "back to very inefficient code generation\n",
-                 _mesa_shader_stage_to_abbrev(shader->Stage));
-   }
-
-   lower_ubo_reference(shader, shader->ir);
-
-   bool progress;
-   do {
-      progress = false;
-
-      if (is_scalar_shader_stage(brw, shader->Stage)) {
-         brw_do_channel_expressions(shader->ir);
-         brw_do_vector_splitting(shader->ir);
-      }
-
-      progress = do_lower_jumps(shader->ir, true, true,
-                                true, /* main return */
-                                false, /* continue */
-                                false /* loops */
-                                ) || progress;
-
-      progress = do_common_optimization(shader->ir, true, true,
-                                        options, ctx->Const.NativeIntegers) || progress;
-   } while (progress);
-
-   if (options->NirOptions != NULL)
-      lower_output_reads(stage, shader->ir);
-
-   validate_ir_tree(shader->ir);
-
-   /* Now that we've finished altering the linked IR, reparent any live IR back
-    * to the permanent memory context, and free the temporary one (discarding any
-    * junk we optimized away).
-    */
-   reparent_ir(shader->ir, shader->ir);
-   ralloc_free(mem_ctx);
-
-   if (ctx->_Shader->Flags & GLSL_DUMP) {
-      fprintf(stderr, "\n");
-      fprintf(stderr, "GLSL IR for linked %s program %d:\n",
-              _mesa_shader_stage_to_string(shader->Stage),
-              shader_prog->Name);
-      _mesa_print_ir(stderr, shader->ir, NULL);
-      fprintf(stderr, "\n");
-   }
-}
-
-GLboolean
-brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
-{
-   struct brw_context *brw = brw_context(ctx);
-   unsigned int stage;
-
-   for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
-      struct gl_shader *shader = shProg->_LinkedShaders[stage];
-      const struct gl_shader_compiler_options *options =
-         &ctx->Const.ShaderCompilerOptions[stage];
-
-      if (!shader)
-	 continue;
-
-      struct gl_program *prog =
-	 ctx->Driver.NewProgram(ctx, _mesa_shader_stage_to_program(stage),
-                                shader->Name);
-      if (!prog)
-	return false;
-      prog->Parameters = _mesa_new_parameter_list();
-
-      _mesa_copy_linked_program_data((gl_shader_stage) stage, shProg, prog);
-
-      process_glsl_ir((gl_shader_stage) stage, brw, shProg, shader);
-
-      /* Make a pass over the IR to add state references for any built-in
-       * uniforms that are used.  This has to be done now (during linking).
-       * Code generation doesn't happen until the first time this shader is
-       * used for rendering.  Waiting until then to generate the parameters is
-       * too late.  At that point, the values for the built-in uniforms won't
-       * get sent to the shader.
-       */
-      foreach_in_list(ir_instruction, node, shader->ir) {
-	 ir_variable *var = node->as_variable();
-
-	 if ((var == NULL) || (var->data.mode != ir_var_uniform)
-	     || (strncmp(var->name, "gl_", 3) != 0))
-	    continue;
-
-	 const ir_state_slot *const slots = var->get_state_slots();
-	 assert(slots != NULL);
-
-	 for (unsigned int i = 0; i < var->get_num_state_slots(); i++) {
-	    _mesa_add_state_reference(prog->Parameters,
-				      (gl_state_index *) slots[i].tokens);
-	 }
-      }
-
-      do_set_program_inouts(shader->ir, prog, shader->Stage);
-
-      prog->SamplersUsed = shader->active_samplers;
-      prog->ShadowSamplers = shader->shadow_samplers;
-      _mesa_update_shader_textures_used(shProg, prog);
-
-      _mesa_reference_program(ctx, &shader->Program, prog);
-
-      brw_add_texrect_params(prog);
-
-      if (options->NirOptions) {
-         prog->nir = brw_create_nir(brw, shProg, prog, (gl_shader_stage) stage,
-                                    is_scalar_shader_stage(brw, stage));
-      }
-
-      _mesa_reference_program(ctx, &prog, NULL);
-   }
-
-   if ((ctx->_Shader->Flags & GLSL_DUMP) && shProg->Name != 0) {
-      for (unsigned i = 0; i < shProg->NumShaders; i++) {
-         const struct gl_shader *sh = shProg->Shaders[i];
-         if (!sh)
-            continue;
-
-         fprintf(stderr, "GLSL %s shader %d source for linked program %d:\n",
-                 _mesa_shader_stage_to_string(sh->Stage),
-                 i, shProg->Name);
-         fprintf(stderr, "%s", sh->Source);
-         fprintf(stderr, "\n");
-      }
-   }
-
-   if (brw->precompile && !brw_shader_precompile(ctx, shProg))
-      return false;
-
-   return true;
-}
-
 
 enum brw_reg_type
 brw_type_for_base_type(const struct glsl_type *type)
@@ -540,13 +278,15 @@ const char *
 brw_instruction_name(enum opcode op)
 {
    switch (op) {
-   case BRW_OPCODE_MOV ... BRW_OPCODE_NOP:
+   case BRW_OPCODE_ILLEGAL ... BRW_OPCODE_NOP:
       assert(opcode_descs[op].name);
       return opcode_descs[op].name;
    case FS_OPCODE_FB_WRITE:
       return "fb_write";
    case FS_OPCODE_FB_WRITE_LOGICAL:
       return "fb_write_logical";
+   case FS_OPCODE_PACK_STENCIL_REF:
+      return "pack_stencil_ref";
    case FS_OPCODE_BLORP_FB_WRITE:
       return "blorp_fb_write";
    case FS_OPCODE_REP_FB_WRITE:
@@ -601,6 +341,10 @@ brw_instruction_name(enum opcode op)
       return "txf_cms";
    case SHADER_OPCODE_TXF_CMS_LOGICAL:
       return "txf_cms_logical";
+   case SHADER_OPCODE_TXF_CMS_W:
+      return "txf_cms_w";
+   case SHADER_OPCODE_TXF_CMS_W_LOGICAL:
+      return "txf_cms_w_logical";
    case SHADER_OPCODE_TXF_UMS:
       return "txf_ums";
    case SHADER_OPCODE_TXF_UMS_LOGICAL:
@@ -621,6 +365,8 @@ brw_instruction_name(enum opcode op)
       return "tg4_offset";
    case SHADER_OPCODE_TG4_OFFSET_LOGICAL:
       return "tg4_offset_logical";
+   case SHADER_OPCODE_SAMPLEINFO:
+      return "sampleinfo";
 
    case SHADER_OPCODE_SHADER_TIME_ADD:
       return "shader_time_add";
@@ -663,6 +409,16 @@ brw_instruction_name(enum opcode op)
       return "gen7_scratch_read";
    case SHADER_OPCODE_URB_WRITE_SIMD8:
       return "gen8_urb_write_simd8";
+   case SHADER_OPCODE_URB_WRITE_SIMD8_PER_SLOT:
+      return "gen8_urb_write_simd8_per_slot";
+   case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED:
+      return "gen8_urb_write_simd8_masked";
+   case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED_PER_SLOT:
+      return "gen8_urb_write_simd8_masked_per_slot";
+   case SHADER_OPCODE_URB_READ_SIMD8:
+      return "urb_read_simd8";
+   case SHADER_OPCODE_URB_READ_SIMD8_PER_SLOT:
+      return "urb_read_simd8_per_slot";
 
    case SHADER_OPCODE_FIND_LIVE_CHANNEL:
       return "find_live_channel";
@@ -694,6 +450,9 @@ brw_instruction_name(enum opcode op)
       return "pixel_x";
    case FS_OPCODE_PIXEL_Y:
       return "pixel_y";
+
+   case FS_OPCODE_GET_BUFFER_SIZE:
+      return "fs_get_buffer_size";
 
    case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
       return "uniform_pull_const";
@@ -743,6 +502,9 @@ brw_instruction_name(enum opcode op)
    case VS_OPCODE_SET_SIMD4X2_HEADER_GEN9:
       return "set_simd4x2_header_gen9";
 
+   case VS_OPCODE_GET_BUFFER_SIZE:
+      return "vs_get_buffer_size";
+
    case VS_OPCODE_UNPACK_FLAGS_SIMD4X2:
       return "unpack_flags_simd4x2";
 
@@ -780,6 +542,8 @@ brw_instruction_name(enum opcode op)
       return "barrier";
    case SHADER_OPCODE_MULH:
       return "mulh";
+   case SHADER_OPCODE_MOV_INDIRECT:
+      return "mov_indirect";
    }
 
    unreachable("not reached");
@@ -792,21 +556,17 @@ brw_saturate_immediate(enum brw_reg_type type, struct brw_reg *reg)
       unsigned ud;
       int d;
       float f;
-   } imm = { reg->dw1.ud }, sat_imm = { 0 };
+   } imm = { reg->ud }, sat_imm = { 0 };
 
    switch (type) {
    case BRW_REGISTER_TYPE_UD:
    case BRW_REGISTER_TYPE_D:
+   case BRW_REGISTER_TYPE_UW:
+   case BRW_REGISTER_TYPE_W:
    case BRW_REGISTER_TYPE_UQ:
    case BRW_REGISTER_TYPE_Q:
       /* Nothing to do. */
       return false;
-   case BRW_REGISTER_TYPE_UW:
-      sat_imm.ud = CLAMP(imm.ud, 0, USHRT_MAX);
-      break;
-   case BRW_REGISTER_TYPE_W:
-      sat_imm.d = CLAMP(imm.d, SHRT_MIN, SHRT_MAX);
-      break;
    case BRW_REGISTER_TYPE_F:
       sat_imm.f = CLAMP(imm.f, 0.0f, 1.0f);
       break;
@@ -823,7 +583,7 @@ brw_saturate_immediate(enum brw_reg_type type, struct brw_reg *reg)
    }
 
    if (imm.ud != sat_imm.ud) {
-      reg->dw1.ud = sat_imm.ud;
+      reg->ud = sat_imm.ud;
       return true;
    }
    return false;
@@ -835,17 +595,17 @@ brw_negate_immediate(enum brw_reg_type type, struct brw_reg *reg)
    switch (type) {
    case BRW_REGISTER_TYPE_D:
    case BRW_REGISTER_TYPE_UD:
-      reg->dw1.d = -reg->dw1.d;
+      reg->d = -reg->d;
       return true;
    case BRW_REGISTER_TYPE_W:
    case BRW_REGISTER_TYPE_UW:
-      reg->dw1.d = -(int16_t)reg->dw1.ud;
+      reg->d = -(int16_t)reg->ud;
       return true;
    case BRW_REGISTER_TYPE_F:
-      reg->dw1.f = -reg->dw1.f;
+      reg->f = -reg->f;
       return true;
    case BRW_REGISTER_TYPE_VF:
-      reg->dw1.ud ^= 0x80808080;
+      reg->ud ^= 0x80808080;
       return true;
    case BRW_REGISTER_TYPE_UB:
    case BRW_REGISTER_TYPE_B:
@@ -869,16 +629,16 @@ brw_abs_immediate(enum brw_reg_type type, struct brw_reg *reg)
 {
    switch (type) {
    case BRW_REGISTER_TYPE_D:
-      reg->dw1.d = abs(reg->dw1.d);
+      reg->d = abs(reg->d);
       return true;
    case BRW_REGISTER_TYPE_W:
-      reg->dw1.d = abs((int16_t)reg->dw1.ud);
+      reg->d = abs((int16_t)reg->ud);
       return true;
    case BRW_REGISTER_TYPE_F:
-      reg->dw1.f = fabsf(reg->dw1.f);
+      reg->f = fabsf(reg->f);
       return true;
    case BRW_REGISTER_TYPE_VF:
-      reg->dw1.ud &= ~0x80808080;
+      reg->ud &= ~0x80808080;
       return true;
    case BRW_REGISTER_TYPE_UB:
    case BRW_REGISTER_TYPE_B:
@@ -906,21 +666,16 @@ brw_abs_immediate(enum brw_reg_type type, struct brw_reg *reg)
 backend_shader::backend_shader(const struct brw_compiler *compiler,
                                void *log_data,
                                void *mem_ctx,
-                               struct gl_shader_program *shader_prog,
-                               struct gl_program *prog,
-                               struct brw_stage_prog_data *stage_prog_data,
-                               gl_shader_stage stage)
+                               const nir_shader *shader,
+                               struct brw_stage_prog_data *stage_prog_data)
    : compiler(compiler),
      log_data(log_data),
      devinfo(compiler->devinfo),
-     shader(shader_prog ?
-        (struct brw_shader *)shader_prog->_LinkedShaders[stage] : NULL),
-     shader_prog(shader_prog),
-     prog(prog),
+     nir(shader),
      stage_prog_data(stage_prog_data),
      mem_ctx(mem_ctx),
      cfg(NULL),
-     stage(stage)
+     stage(shader->stage)
 {
    debug_enabled = INTEL_DEBUG & intel_debug_flag_for_shader_stage(stage);
    stage_name = _mesa_shader_stage_to_string(stage);
@@ -933,7 +688,7 @@ backend_reg::is_zero() const
    if (file != IMM)
       return false;
 
-   return fixed_hw_reg.dw1.d == 0;
+   return d == 0;
 }
 
 bool
@@ -943,8 +698,8 @@ backend_reg::is_one() const
       return false;
 
    return type == BRW_REGISTER_TYPE_F
-          ? fixed_hw_reg.dw1.f == 1.0
-          : fixed_hw_reg.dw1.d == 1;
+          ? f == 1.0
+          : d == 1;
 }
 
 bool
@@ -955,9 +710,9 @@ backend_reg::is_negative_one() const
 
    switch (type) {
    case BRW_REGISTER_TYPE_F:
-      return fixed_hw_reg.dw1.f == -1.0;
+      return f == -1.0;
    case BRW_REGISTER_TYPE_D:
-      return fixed_hw_reg.dw1.d == -1;
+      return d == -1;
    default:
       return false;
    }
@@ -966,25 +721,21 @@ backend_reg::is_negative_one() const
 bool
 backend_reg::is_null() const
 {
-   return file == HW_REG &&
-          fixed_hw_reg.file == BRW_ARCHITECTURE_REGISTER_FILE &&
-          fixed_hw_reg.nr == BRW_ARF_NULL;
+   return file == ARF && nr == BRW_ARF_NULL;
 }
 
 
 bool
 backend_reg::is_accumulator() const
 {
-   return file == HW_REG &&
-          fixed_hw_reg.file == BRW_ARCHITECTURE_REGISTER_FILE &&
-          fixed_hw_reg.nr == BRW_ARF_ACCUMULATOR;
+   return file == ARF && nr == BRW_ARF_ACCUMULATOR;
 }
 
 bool
 backend_reg::in_range(const backend_reg &r, unsigned n) const
 {
    return (file == r.file &&
-           reg == r.reg &&
+           nr == r.nr &&
            reg_offset >= r.reg_offset &&
            reg_offset < r.reg_offset + n);
 }
@@ -1015,7 +766,7 @@ backend_instruction::is_commutative() const
 bool
 backend_instruction::is_3src() const
 {
-   return opcode < ARRAY_SIZE(opcode_descs) && opcode_descs[opcode].nsrc == 3;
+   return ::is_3src(opcode);
 }
 
 bool
@@ -1026,6 +777,7 @@ backend_instruction::is_tex() const
            opcode == SHADER_OPCODE_TXD ||
            opcode == SHADER_OPCODE_TXF ||
            opcode == SHADER_OPCODE_TXF_CMS ||
+           opcode == SHADER_OPCODE_TXF_CMS_W ||
            opcode == SHADER_OPCODE_TXF_UMS ||
            opcode == SHADER_OPCODE_TXF_MCS ||
            opcode == SHADER_OPCODE_TXL ||
@@ -1215,8 +967,25 @@ backend_instruction::has_side_effects() const
    case SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL:
    case SHADER_OPCODE_MEMORY_FENCE:
    case SHADER_OPCODE_URB_WRITE_SIMD8:
+   case SHADER_OPCODE_URB_WRITE_SIMD8_PER_SLOT:
+   case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED:
+   case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED_PER_SLOT:
    case FS_OPCODE_FB_WRITE:
    case SHADER_OPCODE_BARRIER:
+      return true;
+   default:
+      return false;
+   }
+}
+
+bool
+backend_instruction::is_volatile() const
+{
+   switch (opcode) {
+   case SHADER_OPCODE_UNTYPED_SURFACE_READ:
+   case SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL:
+   case SHADER_OPCODE_TYPED_SURFACE_READ:
+   case SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL:
       return true;
    default:
       return false;
@@ -1323,13 +1092,15 @@ backend_shader::dump_instructions(const char *name)
    if (cfg) {
       int ip = 0;
       foreach_block_and_inst(block, backend_instruction, inst, cfg) {
-         fprintf(file, "%4d: ", ip++);
+         if (!unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER))
+            fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
    } else {
       int ip = 0;
       foreach_in_list(backend_instruction, inst, &instructions) {
-         fprintf(file, "%4d: ", ip++);
+         if (!unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER))
+            fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
    }
@@ -1363,18 +1134,33 @@ backend_shader::invalidate_cfg()
  * trigger some of our asserts that surface indices are < BRW_MAX_SURFACES.
  */
 void
-backend_shader::assign_common_binding_table_offsets(uint32_t next_binding_table_offset)
+brw_assign_common_binding_table_offsets(gl_shader_stage stage,
+                                        const struct brw_device_info *devinfo,
+                                        const struct gl_shader_program *shader_prog,
+                                        const struct gl_program *prog,
+                                        struct brw_stage_prog_data *stage_prog_data,
+                                        uint32_t next_binding_table_offset)
 {
+   const struct gl_shader *shader = NULL;
    int num_textures = _mesa_fls(prog->SamplersUsed);
+
+   if (shader_prog)
+      shader = shader_prog->_LinkedShaders[stage];
 
    stage_prog_data->binding_table.texture_start = next_binding_table_offset;
    next_binding_table_offset += num_textures;
 
    if (shader) {
+      assert(shader->NumUniformBlocks <= BRW_MAX_UBO);
       stage_prog_data->binding_table.ubo_start = next_binding_table_offset;
-      next_binding_table_offset += shader->base.NumUniformBlocks;
+      next_binding_table_offset += shader->NumUniformBlocks;
+
+      assert(shader->NumShaderStorageBlocks <= BRW_MAX_SSBO);
+      stage_prog_data->binding_table.ssbo_start = next_binding_table_offset;
+      next_binding_table_offset += shader->NumShaderStorageBlocks;
    } else {
       stage_prog_data->binding_table.ubo_start = 0xd0d0d0d0;
+      stage_prog_data->binding_table.ssbo_start = 0xd0d0d0d0;
    }
 
    if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
@@ -1396,16 +1182,16 @@ backend_shader::assign_common_binding_table_offsets(uint32_t next_binding_table_
       stage_prog_data->binding_table.gather_texture_start = 0xd0d0d0d0;
    }
 
-   if (shader_prog && shader_prog->NumAtomicBuffers) {
+   if (shader && shader->NumAtomicBuffers) {
       stage_prog_data->binding_table.abo_start = next_binding_table_offset;
-      next_binding_table_offset += shader_prog->NumAtomicBuffers;
+      next_binding_table_offset += shader->NumAtomicBuffers;
    } else {
       stage_prog_data->binding_table.abo_start = 0xd0d0d0d0;
    }
 
-   if (shader && shader->base.NumImages) {
+   if (shader && shader->NumImages) {
       stage_prog_data->binding_table.image_start = next_binding_table_offset;
-      next_binding_table_offset += shader->base.NumImages;
+      next_binding_table_offset += shader->NumImages;
    } else {
       stage_prog_data->binding_table.image_start = 0xd0d0d0d0;
    }
@@ -1419,33 +1205,79 @@ backend_shader::assign_common_binding_table_offsets(uint32_t next_binding_table_
    /* prog_data->base.binding_table.size will be set by brw_mark_surface_used. */
 }
 
-void
-backend_shader::setup_image_uniform_values(const gl_uniform_storage *storage)
+static void
+setup_vec4_uniform_value(const gl_constant_value **params,
+                         const gl_constant_value *values,
+                         unsigned n)
 {
-   const unsigned stage = _mesa_program_enum_to_shader_stage(prog->Target);
+   static const gl_constant_value zero = { 0 };
+
+   for (unsigned i = 0; i < n; ++i)
+      params[i] = &values[i];
+
+   for (unsigned i = n; i < 4; ++i)
+      params[i] = &zero;
+}
+
+void
+brw_setup_image_uniform_values(gl_shader_stage stage,
+                               struct brw_stage_prog_data *stage_prog_data,
+                               unsigned param_start_index,
+                               const gl_uniform_storage *storage)
+{
+   const gl_constant_value **param =
+      &stage_prog_data->param[param_start_index];
 
    for (unsigned i = 0; i < MAX2(storage->array_elements, 1); i++) {
-      const unsigned image_idx = storage->image[stage].index + i;
-      const brw_image_param *param = &stage_prog_data->image_param[image_idx];
+      const unsigned image_idx = storage->opaque[stage].index + i;
+      const brw_image_param *image_param =
+         &stage_prog_data->image_param[image_idx];
 
       /* Upload the brw_image_param structure.  The order is expected to match
        * the BRW_IMAGE_PARAM_*_OFFSET defines.
        */
-      setup_vector_uniform_values(
-         (const gl_constant_value *)&param->surface_idx, 1);
-      setup_vector_uniform_values(
-         (const gl_constant_value *)param->offset, 2);
-      setup_vector_uniform_values(
-         (const gl_constant_value *)param->size, 3);
-      setup_vector_uniform_values(
-         (const gl_constant_value *)param->stride, 4);
-      setup_vector_uniform_values(
-         (const gl_constant_value *)param->tiling, 3);
-      setup_vector_uniform_values(
-         (const gl_constant_value *)param->swizzling, 2);
+      setup_vec4_uniform_value(param + BRW_IMAGE_PARAM_SURFACE_IDX_OFFSET,
+         (const gl_constant_value *)&image_param->surface_idx, 1);
+      setup_vec4_uniform_value(param + BRW_IMAGE_PARAM_OFFSET_OFFSET,
+         (const gl_constant_value *)image_param->offset, 2);
+      setup_vec4_uniform_value(param + BRW_IMAGE_PARAM_SIZE_OFFSET,
+         (const gl_constant_value *)image_param->size, 3);
+      setup_vec4_uniform_value(param + BRW_IMAGE_PARAM_STRIDE_OFFSET,
+         (const gl_constant_value *)image_param->stride, 4);
+      setup_vec4_uniform_value(param + BRW_IMAGE_PARAM_TILING_OFFSET,
+         (const gl_constant_value *)image_param->tiling, 3);
+      setup_vec4_uniform_value(param + BRW_IMAGE_PARAM_SWIZZLING_OFFSET,
+         (const gl_constant_value *)image_param->swizzling, 2);
+      param += BRW_IMAGE_PARAM_SIZE;
 
       brw_mark_surface_used(
          stage_prog_data,
          stage_prog_data->binding_table.image_start + image_idx);
    }
 }
+
+/**
+ * Decide which set of clip planes should be used when clipping via
+ * gl_Position or gl_ClipVertex.
+ */
+gl_clip_plane *brw_select_clip_planes(struct gl_context *ctx)
+{
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]) {
+      /* There is currently a GLSL vertex shader, so clip according to GLSL
+       * rules, which means compare gl_ClipVertex (or gl_Position, if
+       * gl_ClipVertex wasn't assigned) against the eye-coordinate clip planes
+       * that were stored in EyeUserPlane at the time the clip planes were
+       * specified.
+       */
+      return ctx->Transform.EyeUserPlane;
+   } else {
+      /* Either we are using fixed function or an ARB vertex program.  In
+       * either case the clip planes are going to be compared against
+       * gl_Position (which is in clip coordinates) so we have to clip using
+       * _ClipUserPlane, which was transformed into clip coordinates by Mesa
+       * core.
+       */
+      return ctx->Transform._ClipUserPlane;
+   }
+}
+

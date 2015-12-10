@@ -23,6 +23,7 @@
  *
  **********************************************************/
 
+#include "util/u_bitmask.h"
 #include "util/u_debug.h"
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
@@ -63,14 +64,19 @@ static const struct svga_tracked_state *hw_clear_state[] =
  */
 static const struct svga_tracked_state *hw_draw_state[] =
 {
+   &svga_need_tgsi_transform,
    &svga_hw_fs,
+   &svga_hw_gs,
    &svga_hw_vs,
    &svga_hw_rss,
-   &svga_hw_tss,
-   &svga_hw_tss_binding,
+   &svga_hw_sampler,           /* VGPU10 */
+   &svga_hw_sampler_bindings,  /* VGPU10 */
+   &svga_hw_tss,               /* pre-VGPU10 */
+   &svga_hw_tss_binding,       /* pre-VGPU10 */
    &svga_hw_clip_planes,
    &svga_hw_vdecl,
    &svga_hw_fs_constants,
+   &svga_hw_gs_constants,
    &svga_hw_vs_constants,
    NULL
 };
@@ -219,6 +225,9 @@ svga_update_state(struct svga_context *svga, unsigned max_level)
       svga->state.dirty[i] |= svga->dirty;
 
    svga->dirty = 0;
+
+   svga->hud.num_validations++;
+
    return PIPE_OK;
 }
 
@@ -255,23 +264,55 @@ do {                                            \
  */
 enum pipe_error svga_emit_initial_state( struct svga_context *svga )
 {
-   SVGA3dRenderState *rs;
-   unsigned count = 0;
-   const unsigned COUNT = 2;
-   enum pipe_error ret;
+   if (svga_have_vgpu10(svga)) {
+      SVGA3dRasterizerStateId id = util_bitmask_add(svga->rast_object_id_bm);
+      enum pipe_error ret;
 
-   ret = SVGA3D_BeginSetRenderState( svga->swc, &rs, COUNT );
-   if (ret != PIPE_OK)
+      /* XXX preliminary code */
+      ret = SVGA3D_vgpu10_DefineRasterizerState(svga->swc,
+                                             id,
+                                             SVGA3D_FILLMODE_FILL,
+                                             SVGA3D_CULL_NONE,
+                                             1, /* frontCounterClockwise */
+                                             0, /* depthBias */
+                                             0.0f, /* depthBiasClamp */
+                                             0.0f, /* slopeScaledDepthBiasClamp */
+                                             0, /* depthClampEnable */
+                                             0, /* scissorEnable */
+                                             0, /* multisampleEnable */
+                                             0, /* aalineEnable */
+                                             1.0f, /* lineWidth */
+                                             0, /* lineStippleEnable */
+                                             0, /* lineStippleFactor */
+                                             0, /* lineStipplePattern */
+                                             0); /* provokingVertexLast */
+
+
+      assert(ret == PIPE_OK);
+
+      ret = SVGA3D_vgpu10_SetRasterizerState(svga->swc, id);
       return ret;
+   }
+   else {
+      SVGA3dRenderState *rs;
+      unsigned count = 0;
+      const unsigned COUNT = 2;
+      enum pipe_error ret;
 
-   /* Always use D3D style coordinate space as this is the only one
-    * which is implemented on all backends.
-    */
-   EMIT_RS(rs, count, SVGA3D_RS_COORDINATETYPE, SVGA3D_COORDINATE_LEFTHANDED );
-   EMIT_RS(rs, count, SVGA3D_RS_FRONTWINDING, SVGA3D_FRONTWINDING_CW );
-   
-   assert( COUNT == count );
-   SVGA_FIFOCommitAll( svga->swc );
+      ret = SVGA3D_BeginSetRenderState( svga->swc, &rs, COUNT );
+      if (ret != PIPE_OK)
+         return ret;
 
-   return PIPE_OK;
+      /* Always use D3D style coordinate space as this is the only one
+       * which is implemented on all backends.
+       */
+      EMIT_RS(rs, count, SVGA3D_RS_COORDINATETYPE,
+              SVGA3D_COORDINATE_LEFTHANDED );
+      EMIT_RS(rs, count, SVGA3D_RS_FRONTWINDING, SVGA3D_FRONTWINDING_CW );
+
+      assert( COUNT == count );
+      SVGA_FIFOCommitAll( svga->swc );
+
+      return PIPE_OK;
+   }
 }
