@@ -71,6 +71,18 @@ write_texture_p2(struct vc4_context *vc4,
                VC4_SET_FIELD((data >> 16) & 1, VC4_TEX_P2_BSLOD));
 }
 
+static void
+write_texture_msaa_addr(struct vc4_context *vc4,
+                 struct vc4_cl_out **uniforms,
+                        struct vc4_texture_stateobj *texstate,
+                        uint32_t unit)
+{
+        struct pipe_sampler_view *texture = texstate->textures[unit];
+        struct vc4_resource *rsc = vc4_resource(texture->texture);
+
+        cl_aligned_reloc(vc4, &vc4->uniforms, uniforms, rsc->bo, 0);
+}
+
 
 #define SWIZ(x,y,z,w) {          \
         UTIL_FORMAT_SWIZZLE_##x, \
@@ -244,6 +256,11 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                         cl_aligned_reloc(vc4, &vc4->uniforms, &uniforms, ubo, 0);
                         break;
 
+                case QUNIFORM_TEXTURE_MSAA_ADDR:
+                        write_texture_msaa_addr(vc4, &uniforms,
+                                                texstate, uinfo->data[i]);
+                        break;
+
                 case QUNIFORM_TEXTURE_BORDER_COLOR:
                         write_texture_border_color(vc4, &uniforms,
                                                    texstate, uinfo->data[i]);
@@ -303,6 +320,10 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                         cl_aligned_f(&uniforms,
                                      vc4->zsa->base.alpha.ref_value);
                         break;
+
+                case QUNIFORM_SAMPLE_MASK:
+                        cl_aligned_u32(&uniforms, vc4->sample_mask);
+                        break;
                 }
 #if 0
                 uint32_t written_val = *((uint32_t *)uniforms - 1);
@@ -345,6 +366,7 @@ vc4_set_shader_uniform_dirty_flags(struct vc4_compiled_shader *shader)
                 case QUNIFORM_TEXTURE_CONFIG_P1:
                 case QUNIFORM_TEXTURE_CONFIG_P2:
                 case QUNIFORM_TEXTURE_BORDER_COLOR:
+                case QUNIFORM_TEXTURE_MSAA_ADDR:
                 case QUNIFORM_TEXRECT_SCALE_X:
                 case QUNIFORM_TEXRECT_SCALE_Y:
                         dirty |= VC4_DIRTY_TEXSTATE;
@@ -362,6 +384,10 @@ vc4_set_shader_uniform_dirty_flags(struct vc4_compiled_shader *shader)
                 case QUNIFORM_STENCIL:
                 case QUNIFORM_ALPHA_REF:
                         dirty |= VC4_DIRTY_ZSA;
+                        break;
+
+                case QUNIFORM_SAMPLE_MASK:
+                        dirty |= VC4_DIRTY_SAMPLE_MASK;
                         break;
                 }
         }

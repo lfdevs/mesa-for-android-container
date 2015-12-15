@@ -494,7 +494,6 @@ fast_clear_attachments(struct brw_context *brw,
                        struct rect fast_clear_rect)
 {
    assert(brw->gen >= 9);
-   struct gl_context *ctx = &brw->ctx;
 
    brw_bind_rep_write_shader(brw, (float *) fast_clear_color);
 
@@ -511,7 +510,7 @@ fast_clear_attachments(struct brw_context *brw,
 
       _mesa_meta_drawbuffers_from_bitfield(1 << index);
 
-      brw_draw_rectlist(ctx, &fast_clear_rect, MAX2(1, fb->MaxNumLayers));
+      brw_draw_rectlist(brw, &fast_clear_rect, MAX2(1, fb->MaxNumLayers));
 
       /* Now set the mcs we cleared to INTEL_FAST_CLEAR_STATE_CLEAR so we'll
        * resolve them eventually.

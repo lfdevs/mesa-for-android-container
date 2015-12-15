@@ -686,7 +686,7 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
          i->tex.s = 0x1f;
          i->setIndirectR(hnd);
          i->setIndirectS(NULL);
-      } else if (i->tex.r == i->tex.s) {
+      } else if (i->tex.r == i->tex.s || i->op == OP_TXF) {
          i->tex.r += prog->driver->io.texBindBase / 4;
          i->tex.s  = 0; // only a single cX[] value possible here
       } else {

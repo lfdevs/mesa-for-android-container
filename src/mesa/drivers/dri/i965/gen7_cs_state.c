@@ -304,7 +304,7 @@ brw_upload_cs_pull_constants(struct brw_context *brw)
 
    /* _NEW_PROGRAM_CONSTANTS */
    brw_upload_pull_constants(brw, BRW_NEW_SURFACES, &cp->program.Base,
-                             stage_state, prog_data, true);
+                             stage_state, prog_data);
 }
 
 const struct brw_tracked_state brw_cs_pull_constants = {

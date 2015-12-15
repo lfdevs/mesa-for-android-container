@@ -206,6 +206,8 @@ struct vc4_context {
         struct pipe_surface *color_write;
         struct pipe_surface *zs_read;
         struct pipe_surface *zs_write;
+        struct pipe_surface *msaa_color_write;
+        struct pipe_surface *msaa_zs_write;
         /** @} */
         /** @{
          * Bounding box of the scissor across all queued drawing.
@@ -224,6 +226,15 @@ struct vc4_context {
         uint32_t draw_width;
         uint32_t draw_height;
         /** @} */
+        /** @{ Tile information, depending on MSAA and float color buffer. */
+        uint32_t draw_tiles_x; /** @< Number of tiles wide for framebuffer. */
+        uint32_t draw_tiles_y; /** @< Number of tiles high for framebuffer. */
+
+        uint32_t tile_width; /** @< Width of a tile. */
+        uint32_t tile_height; /** @< Height of a tile. */
+        /** Whether the current rendering is in a 4X MSAA tile buffer. */
+        bool msaa;
+	/** @} */
 
         struct util_slab_mempool transfer_pool;
         struct blitter_context *blitter;

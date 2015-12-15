@@ -21,6 +21,7 @@ C_SOURCES := \
 	vc4_job.c \
 	vc4_nir_lower_blend.c \
 	vc4_nir_lower_io.c \
+	vc4_nir_lower_txf_ms.c \
 	vc4_opt_algebraic.c \
 	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \

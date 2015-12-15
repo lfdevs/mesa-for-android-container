@@ -89,31 +89,37 @@ vc4_submit_setup_rcl_surface(struct vc4_context *vc4,
         submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
         submit_surf->offset = surf->offset;
 
-        if (is_depth) {
-                submit_surf->bits =
-                        VC4_SET_FIELD(VC4_LOADSTORE_TILE_BUFFER_ZS,
-                                      VC4_LOADSTORE_TILE_BUFFER_BUFFER);
+        if (psurf->texture->nr_samples == 0) {
+                if (is_depth) {
+                        submit_surf->bits =
+                                VC4_SET_FIELD(VC4_LOADSTORE_TILE_BUFFER_ZS,
+                                              VC4_LOADSTORE_TILE_BUFFER_BUFFER);
 
+                } else {
+                        submit_surf->bits =
+                                VC4_SET_FIELD(VC4_LOADSTORE_TILE_BUFFER_COLOR,
+                                              VC4_LOADSTORE_TILE_BUFFER_BUFFER) |
+                                VC4_SET_FIELD(vc4_rt_format_is_565(psurf->format) ?
+                                              VC4_LOADSTORE_TILE_BUFFER_BGR565 :
+                                              VC4_LOADSTORE_TILE_BUFFER_RGBA8888,
+                                              VC4_LOADSTORE_TILE_BUFFER_FORMAT);
+                }
+                submit_surf->bits |=
+                        VC4_SET_FIELD(surf->tiling,
+                                      VC4_LOADSTORE_TILE_BUFFER_TILING);
         } else {
-                submit_surf->bits =
-                        VC4_SET_FIELD(VC4_LOADSTORE_TILE_BUFFER_COLOR,
-                                      VC4_LOADSTORE_TILE_BUFFER_BUFFER) |
-                        VC4_SET_FIELD(vc4_rt_format_is_565(psurf->format) ?
-                                      VC4_LOADSTORE_TILE_BUFFER_BGR565 :
-                                      VC4_LOADSTORE_TILE_BUFFER_RGBA8888,
-                                      VC4_LOADSTORE_TILE_BUFFER_FORMAT);
+                assert(!is_write);
+                submit_surf->flags |= VC4_SUBMIT_RCL_SURFACE_READ_IS_FULL_RES;
         }
-        submit_surf->bits |=
-                VC4_SET_FIELD(surf->tiling, VC4_LOADSTORE_TILE_BUFFER_TILING);
 
         if (is_write)
                 rsc->writes++;
 }
 
 static void
-vc4_submit_setup_ms_rcl_surface(struct vc4_context *vc4,
-                                struct drm_vc4_submit_rcl_surface *submit_surf,
-                                struct pipe_surface *psurf)
+vc4_submit_setup_rcl_render_config_surface(struct vc4_context *vc4,
+                                           struct drm_vc4_submit_rcl_surface *submit_surf,
+                                           struct pipe_surface *psurf)
 {
         struct vc4_surface *surf = vc4_surface(psurf);
 
@@ -126,13 +132,35 @@ vc4_submit_setup_ms_rcl_surface(struct vc4_context *vc4,
         submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
         submit_surf->offset = surf->offset;
 
-        submit_surf->bits =
-                VC4_SET_FIELD(vc4_rt_format_is_565(surf->base.format) ?
-                              VC4_RENDER_CONFIG_FORMAT_BGR565 :
-                              VC4_RENDER_CONFIG_FORMAT_RGBA8888,
-                              VC4_RENDER_CONFIG_FORMAT) |
-                VC4_SET_FIELD(surf->tiling, VC4_RENDER_CONFIG_MEMORY_FORMAT);
+        if (psurf->texture->nr_samples == 0) {
+                submit_surf->bits =
+                        VC4_SET_FIELD(vc4_rt_format_is_565(surf->base.format) ?
+                                      VC4_RENDER_CONFIG_FORMAT_BGR565 :
+                                      VC4_RENDER_CONFIG_FORMAT_RGBA8888,
+                                      VC4_RENDER_CONFIG_FORMAT) |
+                        VC4_SET_FIELD(surf->tiling,
+                                      VC4_RENDER_CONFIG_MEMORY_FORMAT);
+        }
 
+        rsc->writes++;
+}
+
+static void
+vc4_submit_setup_rcl_msaa_surface(struct vc4_context *vc4,
+                                  struct drm_vc4_submit_rcl_surface *submit_surf,
+                                  struct pipe_surface *psurf)
+{
+        struct vc4_surface *surf = vc4_surface(psurf);
+
+        if (!surf) {
+                submit_surf->hindex = ~0;
+                return;
+        }
+
+        struct vc4_resource *rsc = vc4_resource(psurf->texture);
+        submit_surf->hindex = vc4_gem_hindex(vc4, rsc->bo);
+        submit_surf->offset = surf->offset;
+        submit_surf->bits = 0;
         rsc->writes++;
 }
 
@@ -150,17 +178,34 @@ vc4_job_submit(struct vc4_context *vc4)
         struct drm_vc4_submit_cl submit;
         memset(&submit, 0, sizeof(submit));
 
-        cl_ensure_space(&vc4->bo_handles, 4 * sizeof(uint32_t));
-        cl_ensure_space(&vc4->bo_pointers, 4 * sizeof(struct vc4_bo *));
+        cl_ensure_space(&vc4->bo_handles, 6 * sizeof(uint32_t));
+        cl_ensure_space(&vc4->bo_pointers, 6 * sizeof(struct vc4_bo *));
 
         vc4_submit_setup_rcl_surface(vc4, &submit.color_read,
                                      vc4->color_read, false, false);
-        vc4_submit_setup_ms_rcl_surface(vc4, &submit.color_ms_write,
-                                        vc4->color_write);
+        vc4_submit_setup_rcl_render_config_surface(vc4, &submit.color_write,
+                                                   vc4->color_write);
         vc4_submit_setup_rcl_surface(vc4, &submit.zs_read,
                                      vc4->zs_read, true, false);
         vc4_submit_setup_rcl_surface(vc4, &submit.zs_write,
                                      vc4->zs_write, true, true);
+
+        vc4_submit_setup_rcl_msaa_surface(vc4, &submit.msaa_color_write,
+                                          vc4->msaa_color_write);
+        vc4_submit_setup_rcl_msaa_surface(vc4, &submit.msaa_zs_write,
+                                          vc4->msaa_zs_write);
+
+        if (vc4->msaa) {
+                /* This bit controls how many pixels the general
+                 * (i.e. subsampled) loads/stores are iterating over
+                 * (multisample loads replicate out to the other samples).
+                 */
+                submit.color_write.bits |= VC4_RENDER_CONFIG_MS_MODE_4X;
+                /* Controls whether color_write's
+                 * VC4_PACKET_STORE_MS_TILE_BUFFER does 4x decimation
+                 */
+                submit.color_write.bits |= VC4_RENDER_CONFIG_DECIMATE_MODE_4X;
+        }
 
         submit.bo_handles = (uintptr_t)vc4->bo_handles.base;
         submit.bo_handle_count = cl_offset(&vc4->bo_handles) / 4;
@@ -173,10 +218,10 @@ vc4_job_submit(struct vc4_context *vc4)
         submit.uniforms_size = cl_offset(&vc4->uniforms);
 
         assert(vc4->draw_min_x != ~0 && vc4->draw_min_y != ~0);
-        submit.min_x_tile = vc4->draw_min_x / 64;
-        submit.min_y_tile = vc4->draw_min_y / 64;
-        submit.max_x_tile = (vc4->draw_max_x - 1) / 64;
-        submit.max_y_tile = (vc4->draw_max_y - 1) / 64;
+        submit.min_x_tile = vc4->draw_min_x / vc4->tile_width;
+        submit.min_y_tile = vc4->draw_min_y / vc4->tile_height;
+        submit.max_x_tile = (vc4->draw_max_x - 1) / vc4->tile_width;
+        submit.max_y_tile = (vc4->draw_max_y - 1) / vc4->tile_height;
         submit.width = vc4->draw_width;
         submit.height = vc4->draw_height;
         if (vc4->cleared) {

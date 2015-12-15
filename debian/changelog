@@ -1,3 +1,12 @@
+mesa (11.1.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Add a patch to remove the unused symbol
+    _glapi_create_table_from_handle from libGL.so.1.
+  * Replace shlibs file with a symbols file for libgl1-mesa-glx.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 15 Dec 2015 20:24:10 +0100
+
 mesa (11.1.0~rc3-1) experimental; urgency=medium
 
   * New upstream release candidate.

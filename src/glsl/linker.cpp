@@ -3940,6 +3940,77 @@ split_ubos_and_ssbos(void *mem_ctx,
    assert(*num_ubos + *num_ssbos == num_blocks);
 }
 
+static void
+set_always_active_io(exec_list *ir, ir_variable_mode io_mode)
+{
+   assert(io_mode == ir_var_shader_in || io_mode == ir_var_shader_out);
+
+   foreach_in_list(ir_instruction, node, ir) {
+      ir_variable *const var = node->as_variable();
+
+      if (var == NULL || var->data.mode != io_mode)
+         continue;
+
+      /* Don't set always active on builtins that haven't been redeclared */
+      if (var->data.how_declared == ir_var_declared_implicitly)
+         continue;
+
+      var->data.always_active_io = true;
+   }
+}
+
+/**
+ * When separate shader programs are enabled, only input/outputs between
+ * the stages of a multi-stage separate program can be safely removed
+ * from the shader interface. Other inputs/outputs must remain active.
+ */
+static void
+disable_varying_optimizations_for_sso(struct gl_shader_program *prog)
+{
+   unsigned first, last;
+   assert(prog->SeparateShader);
+
+   first = MESA_SHADER_STAGES;
+   last = 0;
+
+   /* Determine first and last stage. Excluding the compute stage */
+   for (unsigned i = 0; i < MESA_SHADER_COMPUTE; i++) {
+      if (!prog->_LinkedShaders[i])
+         continue;
+      if (first == MESA_SHADER_STAGES)
+         first = i;
+      last = i;
+   }
+
+   if (first == MESA_SHADER_STAGES)
+      return;
+
+   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+      gl_shader *sh = prog->_LinkedShaders[stage];
+      if (!sh)
+         continue;
+
+      if (first == last) {
+         /* For a single shader program only allow inputs to the vertex shader
+          * and outputs from the fragment shader to be removed.
+          */
+         if (stage != MESA_SHADER_VERTEX)
+            set_always_active_io(sh->ir, ir_var_shader_in);
+         if (stage != MESA_SHADER_FRAGMENT)
+            set_always_active_io(sh->ir, ir_var_shader_out);
+      } else {
+         /* For multi-stage separate shader programs only allow inputs and
+          * outputs between the shader stages to be removed as well as inputs
+          * to the vertex shader and outputs from the fragment shader.
+          */
+         if (stage == first && stage != MESA_SHADER_VERTEX)
+            set_always_active_io(sh->ir, ir_var_shader_in);
+         else if (stage == last && stage != MESA_SHADER_FRAGMENT)
+            set_always_active_io(sh->ir, ir_var_shader_out);
+      }
+   }
+}
+
 void
 link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 {
@@ -4198,6 +4269,9 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 	 lower_discard_flow(sh->ir);
       }
    }
+
+   if (prog->SeparateShader)
+      disable_varying_optimizations_for_sso(prog);
 
    if (!interstage_cross_validate_uniform_blocks(prog))
       goto done;

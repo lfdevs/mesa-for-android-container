@@ -1,0 +1,137 @@
+From d1b35fae4b9acfc9a700f59047d9c4142648d93b Mon Sep 17 00:00:00 2001
+From: Andreas Boll <andreas.boll.dev@gmail.com>
+Date: Wed, 9 Dec 2015 13:41:22 +0100
+Subject: [PATCH] glapi: Build glapi_gentable.c only on Darwin
+
+Removes the public symbol _glapi_create_table_from_handle from
+libGL.so.1 on all platforms except Darwin.
+
+Since the symbol is not used on other platforms it makes sense to
+build glapi_gentable.c only on Darwin.
+
+A little bit of history:
+
+_glapi_create_table_from_handle was introduced in
+
+commit 85937f4c0d4a78d3a11e3c1fa6148640f2a9ad7b
+Author: Jeremy Huddleston <jeremyhu@apple.com>
+Date:   Thu Jun 9 16:59:49 2011 -0700
+
+    glapi: Add API that can create a _glapi_table from a dlfcn handle
+
+    Example usage:
+
+    void *handle = dlopen(opengl_library_path, RTLD_LOCAL);
+    struct _glapi_table *disp = _glapi_create_table_from_handle(handle,
+"gl");
+
+    Signed-off-by: Jeremy Huddleston <jeremyhu@apple.com>
+
+and the only user in mesa was added in
+
+commit f35913b96e743c5014e99220b1a1c5532a894d69
+Author: Jeremy Huddleston <jeremyhu@apple.com>
+Date:   Thu Jun 9 17:29:51 2011 -0700
+
+    apple: Use _glapi_create_table_from_handle to initialize our
+dispatch table
+
+    Signed-off-by: Jeremy Huddleston <jeremyhu@apple.com>
+
+gl_gentable.py was also used for XQuartz in xserver 1.11 - 1.14.
+
+v2: Fix typos in commit message
+    Add missing XORG_GLAPI_OUTPUTS += \ into src/mapi/glapi/gen/Makefile.am
+    Add glapi_gentable.c to EXTRA_DIST for inclusion in the release
+    tarball
+
+v3: Fix commit message: s/gl_gentable.c/glapi_gentable.c/
+
+Cc: Jeremy Huddleston <jeremyhu@apple.com>
+Signed-off-by: Andreas Boll <andreas.boll.dev@gmail.com>
+---
+ src/mapi/Makefile.am           |  6 +++++-
+ src/mapi/glapi/gen/Makefile.am | 14 +++++++++++---
+ src/mapi/glapi/glapi.h         |  2 ++
+ 3 files changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapi/Makefile.am b/src/mapi/Makefile.am
+index 307e05d..ddd3daa 100644
+--- a/src/mapi/Makefile.am
++++ b/src/mapi/Makefile.am
+@@ -106,12 +106,16 @@ if HAVE_SPARC_ASM
+ GLAPI_ASM_SOURCES = glapi/glapi_sparc.S
+ endif
+ 
+-glapi_libglapi_la_SOURCES = glapi/glapi_gentable.c
++glapi_libglapi_la_SOURCES =
+ glapi_libglapi_la_CPPFLAGS = \
+ 	$(AM_CPPFLAGS) \
+ 	-I$(top_srcdir)/src/mapi/glapi \
+ 	-I$(top_srcdir)/src/mesa
+ 
++if HAVE_APPLEDRI
++glapi_libglapi_la_SOURCES += glapi/glapi_gentable.c
++endif
++
+ if HAVE_SHARED_GLAPI
+ glapi_libglapi_la_SOURCES += $(MAPI_BRIDGE_FILES) glapi/glapi_mapi_tmp.h
+ glapi_libglapi_la_CPPFLAGS += \
+diff --git a/src/mapi/glapi/gen/Makefile.am b/src/mapi/glapi/gen/Makefile.am
+index 2da8f7d..3d3410c 100644
+--- a/src/mapi/glapi/gen/Makefile.am
++++ b/src/mapi/glapi/gen/Makefile.am
+@@ -27,8 +27,11 @@ MESA_GLAPI_OUTPUTS = \
+ 	$(MESA_GLAPI_DIR)/glapi_mapi_tmp.h \
+ 	$(MESA_GLAPI_DIR)/glprocs.h \
+ 	$(MESA_GLAPI_DIR)/glapitemp.h \
+-	$(MESA_GLAPI_DIR)/glapitable.h \
+-	$(MESA_GLAPI_DIR)/glapi_gentable.c
++	$(MESA_GLAPI_DIR)/glapitable.h
++
++if HAVE_APPLEDRI
++MESA_GLAPI_OUTPUTS += $(MESA_GLAPI_DIR)/glapi_gentable.c
++endif
+ 
+ MESA_GLAPI_ASM_OUTPUTS =
+ if HAVE_X86_ASM
+@@ -57,6 +60,7 @@ BUILT_SOURCES = \
+ 	$(MESA_GLX_DIR)/indirect_size.c
+ EXTRA_DIST= \
+ 	$(BUILT_SOURCES) \
++	$(MESA_GLAPI_DIR)/glapi_gentable.c \
+ 	$(MESA_GLAPI_DIR)/glapi_x86.S \
+ 	$(MESA_GLAPI_DIR)/glapi_x86-64.S \
+ 	$(MESA_GLAPI_DIR)/glapi_sparc.S \
+@@ -88,8 +92,12 @@ XORG_GLAPI_DIR = $(XORG_BASE)/glx
+ XORG_GLAPI_OUTPUTS = \
+ 	$(XORG_GLAPI_DIR)/glprocs.h \
+ 	$(XORG_GLAPI_DIR)/glapitable.h \
+-	$(XORG_GLAPI_DIR)/dispatch.h \
++	$(XORG_GLAPI_DIR)/dispatch.h
++
++if HAVE_APPLEDRI
++XORG_GLAPI_OUTPUTS += \
+ 	$(XORG_GLAPI_DIR)/glapi_gentable.c
++endif
+ 
+ XORG_OUTPUTS = \
+ 	$(XORG_GLAPI_OUTPUTS) \
+diff --git a/src/mapi/glapi/glapi.h b/src/mapi/glapi/glapi.h
+index f269b17..3593c88 100644
+--- a/src/mapi/glapi/glapi.h
++++ b/src/mapi/glapi/glapi.h
+@@ -158,8 +158,10 @@ _GLAPI_EXPORT const char *
+ _glapi_get_proc_name(unsigned int offset);
+ 
+ 
++#ifdef GLX_USE_APPLEGL
+ _GLAPI_EXPORT struct _glapi_table *
+ _glapi_create_table_from_handle(void *handle, const char *symbol_prefix);
++#endif
+ 
+ 
+ _GLAPI_EXPORT void
+-- 
+2.1.4
+

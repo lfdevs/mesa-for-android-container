@@ -38,6 +38,7 @@
 
 #include "vc4_screen.h"
 #include "vc4_qpu_defines.h"
+#include "kernel/vc4_packet.h"
 #include "pipe/p_state.h"
 
 struct nir_builder;
@@ -121,7 +122,9 @@ enum qop {
         QOP_TLB_STENCIL_SETUP,
         QOP_TLB_Z_WRITE,
         QOP_TLB_COLOR_WRITE,
+        QOP_TLB_COLOR_WRITE_MS,
         QOP_TLB_COLOR_READ,
+        QOP_MS_MASK,
         QOP_VARY_ADD_C,
 
         QOP_FRAG_X,
@@ -230,6 +233,8 @@ enum quniform_contents {
         /** A reference to a texture config parameter 2 cubemap stride uniform */
         QUNIFORM_TEXTURE_CONFIG_P2,
 
+        QUNIFORM_TEXTURE_MSAA_ADDR,
+
         QUNIFORM_UBO_ADDR,
 
         QUNIFORM_TEXRECT_SCALE_X,
@@ -247,6 +252,7 @@ enum quniform_contents {
         QUNIFORM_STENCIL,
 
         QUNIFORM_ALPHA_REF,
+        QUNIFORM_SAMPLE_MASK,
 };
 
 struct vc4_varying_slot {
@@ -283,11 +289,18 @@ struct vc4_key {
         struct vc4_uncompiled_shader *shader_state;
         struct {
                 enum pipe_format format;
-                unsigned compare_mode:1;
-                unsigned compare_func:3;
-                unsigned wrap_s:3;
-                unsigned wrap_t:3;
                 uint8_t swizzle[4];
+                union {
+                        struct {
+                                unsigned compare_mode:1;
+                                unsigned compare_func:3;
+                                unsigned wrap_s:3;
+                                unsigned wrap_t:3;
+                        };
+                        struct {
+                                uint16_t msaa_width, msaa_height;
+                        };
+                };
         } tex[VC4_MAX_TEXTURE_SAMPLERS];
         uint8_t ucp_enables;
 };
@@ -304,6 +317,10 @@ struct vc4_fs_key {
         bool alpha_test;
         bool point_coord_upper_left;
         bool light_twoside;
+        bool msaa;
+        bool sample_coverage;
+        bool sample_alpha_to_coverage;
+        bool sample_alpha_to_one;
         uint8_t alpha_test_func;
         uint8_t logicop_func;
         uint32_t point_sprite_mask;
@@ -348,6 +365,9 @@ struct vc4_compile {
          */
         struct qreg *inputs;
         struct qreg *outputs;
+        bool msaa_per_sample_output;
+        struct qreg color_reads[VC4_MAX_SAMPLES];
+        struct qreg sample_colors[VC4_MAX_SAMPLES];
         uint32_t inputs_array_size;
         uint32_t outputs_array_size;
         uint32_t uniforms_array_size;
@@ -396,6 +416,7 @@ struct vc4_compile {
         uint32_t output_position_index;
         uint32_t output_color_index;
         uint32_t output_point_size_index;
+        uint32_t output_sample_mask_index;
 
         struct qreg undef;
         enum qstage stage;
@@ -417,6 +438,8 @@ struct vc4_compile {
  * destination color.
  */
 #define VC4_NIR_TLB_COLOR_READ_INPUT		2000000000
+
+#define VC4_NIR_MS_MASK_OUTPUT			2000000000
 
 /* Special offset for nir_load_uniform values to get a QUNIFORM_*
  * state-dependent value.
@@ -476,6 +499,7 @@ nir_ssa_def *vc4_nir_get_state_uniform(struct nir_builder *b,
                                        enum quniform_contents contents);
 nir_ssa_def *vc4_nir_get_swizzled_channel(struct nir_builder *b,
                                           nir_ssa_def **srcs, int swiz);
+void vc4_nir_lower_txf_ms(struct vc4_compile *c);
 void qir_lower_uniforms(struct vc4_compile *c);
 
 void qpu_schedule_instructions(struct vc4_compile *c);
@@ -616,9 +640,11 @@ QIR_ALU0(FRAG_REV_FLAG)
 QIR_ALU0(TEX_RESULT)
 QIR_ALU0(TLB_COLOR_READ)
 QIR_NODST_1(TLB_COLOR_WRITE)
+QIR_NODST_1(TLB_COLOR_WRITE_MS)
 QIR_NODST_1(TLB_Z_WRITE)
 QIR_NODST_1(TLB_DISCARD_SETUP)
 QIR_NODST_1(TLB_STENCIL_SETUP)
+QIR_NODST_1(MS_MASK)
 
 static inline struct qreg
 qir_UNPACK_8_F(struct vc4_compile *c, struct qreg src, int i)

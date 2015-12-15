@@ -84,7 +84,7 @@ vc4_nir_unpack_16u(nir_builder *b, nir_ssa_def *src, unsigned chan)
 static nir_ssa_def *
 vc4_nir_unpack_8f(nir_builder *b, nir_ssa_def *src, unsigned chan)
 {
-        return nir_swizzle(b, nir_unpack_unorm_4x8(b, src), &chan, 1, false);
+        return nir_channel(b, nir_unpack_unorm_4x8(b, src), chan);
 }
 
 static nir_ssa_def *
@@ -226,7 +226,9 @@ vc4_nir_lower_fs_input(struct vc4_compile *c, nir_builder *b,
 {
         b->cursor = nir_before_instr(&intr->instr);
 
-        if (intr->const_index[0] == VC4_NIR_TLB_COLOR_READ_INPUT) {
+        if (intr->const_index[0] >= VC4_NIR_TLB_COLOR_READ_INPUT &&
+            intr->const_index[0] < (VC4_NIR_TLB_COLOR_READ_INPUT +
+                                    VC4_MAX_SAMPLES)) {
                 /* This doesn't need any lowering. */
                 return;
         }
@@ -309,7 +311,8 @@ vc4_nir_lower_output(struct vc4_compile *c, nir_builder *b,
         /* Color output is lowered by vc4_nir_lower_blend(). */
         if (c->stage == QSTAGE_FRAG &&
             (output_var->data.location == FRAG_RESULT_COLOR ||
-             output_var->data.location == FRAG_RESULT_DATA0)) {
+             output_var->data.location == FRAG_RESULT_DATA0 ||
+             output_var->data.location == FRAG_RESULT_SAMPLE_MASK)) {
                 intr->const_index[0] *= 4;
                 return;
         }
@@ -326,9 +329,8 @@ vc4_nir_lower_output(struct vc4_compile *c, nir_builder *b,
                 intr_comp->const_index[0] = intr->const_index[0] * 4 + i;
 
                 assert(intr->src[0].is_ssa);
-                intr_comp->src[0] = nir_src_for_ssa(nir_swizzle(b,
-                                                                intr->src[0].ssa,
-                                                                &i, 1, false));
+                intr_comp->src[0] =
+                        nir_src_for_ssa(nir_channel(b, intr->src[0].ssa, i));
                 nir_builder_instr_insert(b, &intr_comp->instr);
         }
 

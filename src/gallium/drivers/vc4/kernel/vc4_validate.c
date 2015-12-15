@@ -47,7 +47,6 @@
 	void *validated,				\
 	void *untrusted
 
-
 /** Return the width in pixels of a 64-byte microtile. */
 static uint32_t
 utile_width(int cpp)
@@ -191,7 +190,7 @@ vc4_check_tex_size(struct vc4_exec_info *exec, struct drm_gem_cma_object *fbo,
 
 	if (size + offset < size ||
 	    size + offset > fbo->base.size) {
-		DRM_ERROR("Overflow in %dx%d (%dx%d) fbo size (%d + %d > %d)\n",
+		DRM_ERROR("Overflow in %dx%d (%dx%d) fbo size (%d + %d > %zd)\n",
 			  width, height,
 			  aligned_width, aligned_height,
 			  size, offset, fbo->base.size);
@@ -200,7 +199,6 @@ vc4_check_tex_size(struct vc4_exec_info *exec, struct drm_gem_cma_object *fbo,
 
 	return true;
 }
-
 
 static int
 validate_flush(VALIDATE_ARGS)
@@ -270,7 +268,7 @@ validate_indexed_prim_list(VALIDATE_ARGS)
 
 	if (offset > ib->base.size ||
 	    (ib->base.size - offset) / index_size < length) {
-		DRM_ERROR("IB access overflow (%d + %d*%d > %d)\n",
+		DRM_ERROR("IB access overflow (%d + %d*%d > %zd)\n",
 			  offset, length, index_size, ib->base.size);
 		return -EINVAL;
 	}
@@ -361,9 +359,8 @@ validate_tile_binning_config(VALIDATE_ARGS)
 	}
 
 	if (flags & (VC4_BIN_CONFIG_DB_NON_MS |
-		     VC4_BIN_CONFIG_TILE_BUFFER_64BIT |
-		     VC4_BIN_CONFIG_MS_MODE_4X)) {
-		DRM_ERROR("unsupported bining config flags 0x%02x\n", flags);
+		     VC4_BIN_CONFIG_TILE_BUFFER_64BIT)) {
+		DRM_ERROR("unsupported binning config flags 0x%02x\n", flags);
 		return -EINVAL;
 	}
 
@@ -424,8 +421,8 @@ validate_gem_handles(VALIDATE_ARGS)
 	return 0;
 }
 
-#define VC4_DEFINE_PACKET(packet, name, func) \
-	[packet] = { packet ## _SIZE, name, func }
+#define VC4_DEFINE_PACKET(packet, func) \
+	[packet] = { packet ## _SIZE, #packet, func }
 
 static const struct cmd_info {
 	uint16_t len;
@@ -433,42 +430,42 @@ static const struct cmd_info {
 	int (*func)(struct vc4_exec_info *exec, void *validated,
 		    void *untrusted);
 } cmd_info[] = {
-	VC4_DEFINE_PACKET(VC4_PACKET_HALT, "halt", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_NOP, "nop", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_FLUSH, "flush", validate_flush),
-	VC4_DEFINE_PACKET(VC4_PACKET_FLUSH_ALL, "flush all state", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_START_TILE_BINNING, "start tile binning", validate_start_tile_binning),
-	VC4_DEFINE_PACKET(VC4_PACKET_INCREMENT_SEMAPHORE, "increment semaphore", validate_increment_semaphore),
+	VC4_DEFINE_PACKET(VC4_PACKET_HALT, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_NOP, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_FLUSH, validate_flush),
+	VC4_DEFINE_PACKET(VC4_PACKET_FLUSH_ALL, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_START_TILE_BINNING,
+			  validate_start_tile_binning),
+	VC4_DEFINE_PACKET(VC4_PACKET_INCREMENT_SEMAPHORE,
+			  validate_increment_semaphore),
 
-	VC4_DEFINE_PACKET(VC4_PACKET_GL_INDEXED_PRIMITIVE, "Indexed Primitive List", validate_indexed_prim_list),
+	VC4_DEFINE_PACKET(VC4_PACKET_GL_INDEXED_PRIMITIVE,
+			  validate_indexed_prim_list),
+	VC4_DEFINE_PACKET(VC4_PACKET_GL_ARRAY_PRIMITIVE,
+			  validate_gl_array_primitive),
 
-	VC4_DEFINE_PACKET(VC4_PACKET_GL_ARRAY_PRIMITIVE, "Vertex Array Primitives", validate_gl_array_primitive),
+	VC4_DEFINE_PACKET(VC4_PACKET_PRIMITIVE_LIST_FORMAT, NULL),
 
-	/* This is only used by clipped primitives (packets 48 and 49), which
-	 * we don't support parsing yet.
-	 */
-	VC4_DEFINE_PACKET(VC4_PACKET_PRIMITIVE_LIST_FORMAT, "primitive list format", NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_GL_SHADER_STATE, validate_gl_shader_state),
 
-	VC4_DEFINE_PACKET(VC4_PACKET_GL_SHADER_STATE, "GL Shader State", validate_gl_shader_state),
-	/* We don't support validating NV shader states. */
-
-	VC4_DEFINE_PACKET(VC4_PACKET_CONFIGURATION_BITS, "configuration bits", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_FLAT_SHADE_FLAGS, "flat shade flags", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_POINT_SIZE, "point size", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_LINE_WIDTH, "line width", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_RHT_X_BOUNDARY, "RHT X boundary", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_DEPTH_OFFSET, "Depth Offset", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_CLIP_WINDOW, "Clip Window", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_VIEWPORT_OFFSET, "Viewport Offset", NULL),
-	VC4_DEFINE_PACKET(VC4_PACKET_CLIPPER_XY_SCALING, "Clipper XY Scaling", NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_CONFIGURATION_BITS, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_FLAT_SHADE_FLAGS, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_POINT_SIZE, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_LINE_WIDTH, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_RHT_X_BOUNDARY, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_DEPTH_OFFSET, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_CLIP_WINDOW, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_VIEWPORT_OFFSET, NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_CLIPPER_XY_SCALING, NULL),
 	/* Note: The docs say this was also 105, but it was 106 in the
 	 * initial userland code drop.
 	 */
-	VC4_DEFINE_PACKET(VC4_PACKET_CLIPPER_Z_SCALING, "Clipper Z Scale and Offset", NULL),
+	VC4_DEFINE_PACKET(VC4_PACKET_CLIPPER_Z_SCALING, NULL),
 
-	VC4_DEFINE_PACKET(VC4_PACKET_TILE_BINNING_MODE_CONFIG, "tile binning configuration", validate_tile_binning_config),
+	VC4_DEFINE_PACKET(VC4_PACKET_TILE_BINNING_MODE_CONFIG,
+			  validate_tile_binning_config),
 
-	VC4_DEFINE_PACKET(VC4_PACKET_GEM_HANDLES, "GEM handles", validate_gem_handles),
+	VC4_DEFINE_PACKET(VC4_PACKET_GEM_HANDLES, validate_gem_handles),
 };
 
 int
@@ -500,11 +497,6 @@ vc4_validate_bin_cl(struct drm_device *dev,
 			return -EINVAL;
 		}
 
-#if 0
-		DRM_INFO("0x%08x: packet %d (%s) size %d processing...\n",
-			 src_offset, cmd, info->name, info->len);
-#endif
-
 		if (src_offset + info->len > len) {
 			DRM_ERROR("0x%08x: packet %d (%s) length 0x%08x "
 				  "exceeds bounds (0x%08x)\n",
@@ -519,8 +511,7 @@ vc4_validate_bin_cl(struct drm_device *dev,
 		if (info->func && info->func(exec,
 					     dst_pkt + 1,
 					     src_pkt + 1)) {
-			DRM_ERROR("0x%08x: packet %d (%s) failed to "
-				  "validate\n",
+			DRM_ERROR("0x%08x: packet %d (%s) failed to validate\n",
 				  src_offset, cmd, info->name);
 			return -EINVAL;
 		}
@@ -588,12 +579,14 @@ reloc_tex(struct vc4_exec_info *exec,
 
 	if (sample->is_direct) {
 		uint32_t remaining_size = tex->base.size - p0;
+
 		if (p0 > tex->base.size - 4) {
 			DRM_ERROR("UBO offset greater than UBO size\n");
 			goto fail;
 		}
 		if (p1 > remaining_size - 4) {
-			DRM_ERROR("UBO clamp would allow reads outside of UBO\n");
+			DRM_ERROR("UBO clamp would allow reads "
+				  "outside of UBO\n");
 			goto fail;
 		}
 		*validated_p0 = tex->paddr + p0;
@@ -866,7 +859,7 @@ validate_gl_shader_rec(struct drm_device *dev,
 
 		if (vbo->base.size < offset ||
 		    vbo->base.size - offset < attr_size) {
-			DRM_ERROR("BO offset overflow (%d + %d > %d)\n",
+			DRM_ERROR("BO offset overflow (%d + %d > %zd)\n",
 				  offset, attr_size, vbo->base.size);
 			return -EINVAL;
 		}
@@ -875,7 +868,8 @@ validate_gl_shader_rec(struct drm_device *dev,
 			max_index = ((vbo->base.size - offset - attr_size) /
 				     stride);
 			if (state->max_index > max_index) {
-				DRM_ERROR("primitives use index %d out of supplied %d\n",
+				DRM_ERROR("primitives use index %d out of "
+					  "supplied %d\n",
 					  state->max_index, max_index);
 				return -EINVAL;
 			}

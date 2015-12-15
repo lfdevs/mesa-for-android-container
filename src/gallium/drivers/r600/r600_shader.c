@@ -598,6 +598,106 @@ static int select_twoside_color(struct r600_shader_ctx *ctx, int front, int back
 	return 0;
 }
 
+/* execute a single slot ALU calculation */
+static int single_alu_op2(struct r600_shader_ctx *ctx, int op,
+			  int dst_sel, int dst_chan,
+			  int src0_sel, unsigned src0_chan_val,
+			  int src1_sel, unsigned src1_chan_val)
+{
+	struct r600_bytecode_alu alu;
+	int r, i;
+
+	if (ctx->bc->chip_class == CAYMAN && op == ALU_OP2_MULLO_INT) {
+		for (i = 0; i < 4; i++) {
+			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+			alu.op = op;
+			alu.src[0].sel = src0_sel;
+			if (src0_sel == V_SQ_ALU_SRC_LITERAL)
+				alu.src[0].value = src0_chan_val;
+			else
+				alu.src[0].chan = src0_chan_val;
+			alu.src[1].sel = src1_sel;
+			if (src1_sel == V_SQ_ALU_SRC_LITERAL)
+				alu.src[1].value = src1_chan_val;
+			else
+				alu.src[1].chan = src1_chan_val;
+			alu.dst.sel = dst_sel;
+			alu.dst.chan = i;
+			alu.dst.write = i == dst_chan;
+			alu.last = (i == 3);
+			r = r600_bytecode_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
+		return 0;
+	}
+
+	memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+	alu.op = op;
+	alu.src[0].sel = src0_sel;
+	if (src0_sel == V_SQ_ALU_SRC_LITERAL)
+		alu.src[0].value = src0_chan_val;
+	else
+		alu.src[0].chan = src0_chan_val;
+	alu.src[1].sel = src1_sel;
+	if (src1_sel == V_SQ_ALU_SRC_LITERAL)
+		alu.src[1].value = src1_chan_val;
+	else
+		alu.src[1].chan = src1_chan_val;
+	alu.dst.sel = dst_sel;
+	alu.dst.chan = dst_chan;
+	alu.dst.write = 1;
+	alu.last = 1;
+	r = r600_bytecode_add_alu(ctx->bc, &alu);
+	if (r)
+		return r;
+	return 0;
+}
+
+/* execute a single slot ALU calculation */
+static int single_alu_op3(struct r600_shader_ctx *ctx, int op,
+			  int dst_sel, int dst_chan,
+			  int src0_sel, unsigned src0_chan_val,
+			  int src1_sel, unsigned src1_chan_val,
+			  int src2_sel, unsigned src2_chan_val)
+{
+	struct r600_bytecode_alu alu;
+	int r;
+
+	/* validate this for other ops */
+	assert(op == ALU_OP3_MULADD_UINT24);
+	memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+	alu.op = op;
+	alu.src[0].sel = src0_sel;
+	if (src0_sel == V_SQ_ALU_SRC_LITERAL)
+		alu.src[0].value = src0_chan_val;
+	else
+		alu.src[0].chan = src0_chan_val;
+	alu.src[1].sel = src1_sel;
+	if (src1_sel == V_SQ_ALU_SRC_LITERAL)
+		alu.src[1].value = src1_chan_val;
+	else
+		alu.src[1].chan = src1_chan_val;
+	alu.src[2].sel = src2_sel;
+	if (src2_sel == V_SQ_ALU_SRC_LITERAL)
+		alu.src[2].value = src2_chan_val;
+	else
+		alu.src[2].chan = src2_chan_val;
+	alu.dst.sel = dst_sel;
+	alu.dst.chan = dst_chan;
+	alu.is_op3 = 1;
+	alu.last = 1;
+	r = r600_bytecode_add_alu(ctx->bc, &alu);
+	if (r)
+		return r;
+	return 0;
+}
+
+static inline int get_address_file_reg(struct r600_shader_ctx *ctx, int index)
+{
+	return index > 0 ? ctx->bc->index_reg[index - 1] : ctx->bc->ar_reg;
+}
+
 static int vs_add_primid_output(struct r600_shader_ctx *ctx, int prim_id_sid)
 {
 	int i;
@@ -1129,6 +1229,7 @@ static int fetch_gs_input(struct r600_shader_ctx *ctx, struct tgsi_full_src_regi
 	unsigned vtx_id = src->Dimension.Index;
 	int offset_reg = vtx_id / 3;
 	int offset_chan = vtx_id % 3;
+	int t2 = 0;
 
 	/* offsets of per-vertex data in ESGS ring are passed to GS in R0.x, R0.y,
 	 * R0.w, R1.x, R1.y, R1.z (it seems R0.z is used for PrimitiveID) */
@@ -1136,13 +1237,24 @@ static int fetch_gs_input(struct r600_shader_ctx *ctx, struct tgsi_full_src_regi
 	if (offset_reg == 0 && offset_chan == 2)
 		offset_chan = 3;
 
+	if (src->Dimension.Indirect || src->Register.Indirect)
+		t2 = r600_get_temp(ctx);
+
 	if (src->Dimension.Indirect) {
 		int treg[3];
-		int t2;
 		struct r600_bytecode_alu alu;
 		int r, i;
-
-		/* you have got to be shitting me -
+		unsigned addr_reg;
+		addr_reg = get_address_file_reg(ctx, src->DimIndirect.Index);
+		if (src->DimIndirect.Index > 0) {
+			r = single_alu_op2(ctx, ALU_OP1_MOV,
+					   ctx->bc->ar_reg, 0,
+					   addr_reg, 0,
+					   0, 0);
+			if (r)
+				return r;
+		}
+		/*
 		   we have to put the R0.x/y/w into Rt.x Rt+1.x Rt+2.x then index reg from Rt.
 		   at least this is what fglrx seems to do. */
 		for (i = 0; i < 3; i++) {
@@ -1150,7 +1262,6 @@ static int fetch_gs_input(struct r600_shader_ctx *ctx, struct tgsi_full_src_regi
 		}
 		r600_add_gpr_array(ctx->shader, treg[0], 3, 0x0F);
 
-		t2 = r600_get_temp(ctx);
 		for (i = 0; i < 3; i++) {
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 			alu.op = ALU_OP1_MOV;
@@ -1175,8 +1286,33 @@ static int fetch_gs_input(struct r600_shader_ctx *ctx, struct tgsi_full_src_regi
 		if (r)
 			return r;
 		offset_reg = t2;
+		offset_chan = 0;
 	}
 
+	if (src->Register.Indirect) {
+		int addr_reg;
+		unsigned first = ctx->info.input_array_first[src->Indirect.ArrayID];
+
+		addr_reg = get_address_file_reg(ctx, src->Indirect.Index);
+
+		/* pull the value from index_reg */
+		r = single_alu_op2(ctx, ALU_OP2_ADD_INT,
+				   t2, 1,
+				   addr_reg, 0,
+				   V_SQ_ALU_SRC_LITERAL, first);
+		if (r)
+			return r;
+		r = single_alu_op3(ctx, ALU_OP3_MULADD_UINT24,
+				   t2, 0,
+				   t2, 1,
+				   V_SQ_ALU_SRC_LITERAL, 4,
+				   offset_reg, offset_chan);
+		if (r)
+			return r;
+		offset_reg = t2;
+		offset_chan = 0;
+		index = src->Register.Index - first;
+	}
 
 	memset(&vtx, 0, sizeof(vtx));
 	vtx.buffer_id = R600_GS_RING_CONST_BUFFER;
@@ -1222,6 +1358,7 @@ static int tgsi_split_gs_inputs(struct r600_shader_ctx *ctx)
 
 			fetch_gs_input(ctx, src, treg);
 			ctx->src[i].sel = treg;
+			ctx->src[i].rel = 0;
 		}
 	}
 	return 0;
@@ -1498,7 +1635,7 @@ static int generate_gs_copy_shader(struct r600_context *rctx,
 		*last_exp_pos = NULL, *last_exp_param = NULL;
 	int i, j, next_clip_pos = 61, next_param = 0;
 	int ring;
-
+	bool only_ring_0 = true;
 	cshader = calloc(1, sizeof(struct r600_pipe_shader));
 	if (!cshader)
 		return 0;
@@ -1570,6 +1707,8 @@ static int generate_gs_copy_shader(struct r600_context *rctx,
 		for (i = 0; i < so->num_outputs; i++) {
 			if (so->output[i].stream == ring) {
 				enabled = true;
+				if (ring > 0)
+					only_ring_0 = false;
 				break;
 			}
 		}
@@ -1604,7 +1743,7 @@ static int generate_gs_copy_shader(struct r600_context *rctx,
 		cf_jump = ctx.bc->cf_last;
 
 		if (enabled)
-			emit_streamout(&ctx, so, ring, &cshader->shader.ring_item_sizes[ring]);
+			emit_streamout(&ctx, so, only_ring_0 ? -1 : ring, &cshader->shader.ring_item_sizes[ring]);
 		cshader->shader.ring_item_sizes[ring] = ocnt * 16;
 	}
 
@@ -7185,7 +7324,7 @@ static int tgsi_eg_arl(struct r600_shader_ctx *ctx)
 	struct r600_bytecode_alu alu;
 	int r;
 	int i, lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
-	unsigned reg = inst->Dst[0].Register.Index > 0 ? ctx->bc->index_reg[inst->Dst[0].Register.Index - 1] : ctx->bc->ar_reg;
+	unsigned reg = get_address_file_reg(ctx, inst->Dst[0].Register.Index);
 
 	assert(inst->Dst[0].Register.Index < 3);
 	memset(&alu, 0, sizeof(struct r600_bytecode_alu));

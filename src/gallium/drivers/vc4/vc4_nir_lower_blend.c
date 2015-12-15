@@ -29,6 +29,10 @@
  * from the tile buffer after having waited for the scoreboard (which is
  * handled by vc4_qpu_emit.c), then do math using your output color and that
  * destination value, and update the output color appropriately.
+ *
+ * Once this pass is done, the color write will either have one component (for
+ * single sample) with packed argb8888, or 4 components with the per-sample
+ * argb8888 result.
  */
 
 /**
@@ -40,15 +44,23 @@
 #include "glsl/nir/nir_builder.h"
 #include "vc4_context.h"
 
+static bool
+blend_depends_on_dst_color(struct vc4_compile *c)
+{
+        return (c->fs_key->blend.blend_enable ||
+                c->fs_key->blend.colormask != 0xf ||
+                c->fs_key->logicop_func != PIPE_LOGICOP_COPY);
+}
+
 /** Emits a load of the previous fragment color from the tile buffer. */
 static nir_ssa_def *
-vc4_nir_get_dst_color(nir_builder *b)
+vc4_nir_get_dst_color(nir_builder *b, int sample)
 {
         nir_intrinsic_instr *load =
                 nir_intrinsic_instr_create(b->shader,
                                            nir_intrinsic_load_input);
         load->num_components = 1;
-        load->const_index[0] = VC4_NIR_TLB_COLOR_READ_INPUT;
+        load->const_index[0] = VC4_NIR_TLB_COLOR_READ_INPUT + sample;
         nir_ssa_dest_init(&load->instr, &load->dest, 1, NULL);
         nir_builder_instr_insert(b, &load->instr);
         return &load->dest.ssa;
@@ -496,22 +508,25 @@ vc4_nir_swizzle_and_pack(struct vc4_compile *c, nir_builder *b,
 
 }
 
-static void
-vc4_nir_lower_blend_instr(struct vc4_compile *c, nir_builder *b,
-                          nir_intrinsic_instr *intr)
+static nir_ssa_def *
+vc4_nir_blend_pipeline(struct vc4_compile *c, nir_builder *b, nir_ssa_def *src,
+                       int sample)
 {
         enum pipe_format color_format = c->fs_key->color_format;
         const uint8_t *format_swiz = vc4_get_format_swizzle(color_format);
         bool srgb = util_format_is_srgb(color_format);
 
         /* Pull out the float src/dst color components. */
-        nir_ssa_def *packed_dst_color = vc4_nir_get_dst_color(b);
+        nir_ssa_def *packed_dst_color = vc4_nir_get_dst_color(b, sample);
         nir_ssa_def *dst_vec4 = nir_unpack_unorm_4x8(b, packed_dst_color);
         nir_ssa_def *src_color[4], *unpacked_dst_color[4];
         for (unsigned i = 0; i < 4; i++) {
-                src_color[i] = nir_swizzle(b, intr->src[0].ssa, &i, 1, false);
-                unpacked_dst_color[i] = nir_swizzle(b, dst_vec4, &i, 1, false);
+                src_color[i] = nir_channel(b, src, i);
+                unpacked_dst_color[i] = nir_channel(b, dst_vec4, i);
         }
+
+        if (c->fs_key->sample_alpha_to_one && c->fs_key->msaa)
+                src_color[3] = nir_imm_float(b, 1.0);
 
         vc4_nir_emit_alpha_test_discard(c, b, src_color[3]);
 
@@ -560,16 +575,100 @@ vc4_nir_lower_blend_instr(struct vc4_compile *c, nir_builder *b,
                         colormask &= ~(0xff << (i * 8));
                 }
         }
-        packed_color = nir_ior(b,
-                               nir_iand(b, packed_color,
-                                        nir_imm_int(b, colormask)),
-                               nir_iand(b, packed_dst_color,
-                                        nir_imm_int(b, ~colormask)));
 
-        /* Turn the old vec4 output into a store of the packed color. */
-        nir_instr_rewrite_src(&intr->instr, &intr->src[0],
-                              nir_src_for_ssa(packed_color));
+        return nir_ior(b,
+                       nir_iand(b, packed_color,
+                                nir_imm_int(b, colormask)),
+                       nir_iand(b, packed_dst_color,
+                                nir_imm_int(b, ~colormask)));
+}
+
+static int
+vc4_nir_next_output_driver_location(nir_shader *s)
+{
+        int maxloc = -1;
+
+        nir_foreach_variable(var, &s->outputs)
+                maxloc = MAX2(maxloc, (int)var->data.driver_location);
+
+        return maxloc + 1;
+}
+
+static void
+vc4_nir_store_sample_mask(struct vc4_compile *c, nir_builder *b,
+                          nir_ssa_def *val)
+{
+        nir_variable *sample_mask = nir_variable_create(c->s, nir_var_shader_out,
+                                                        glsl_uint_type(),
+                                                        "sample_mask");
+        sample_mask->data.driver_location =
+                vc4_nir_next_output_driver_location(c->s);
+        sample_mask->data.location = FRAG_RESULT_SAMPLE_MASK;
+
+        nir_intrinsic_instr *intr =
+                nir_intrinsic_instr_create(c->s, nir_intrinsic_store_output);
         intr->num_components = 1;
+        intr->const_index[0] = sample_mask->data.driver_location;
+
+        intr->src[0] = nir_src_for_ssa(val);
+        nir_builder_instr_insert(b, &intr->instr);
+}
+
+static void
+vc4_nir_lower_blend_instr(struct vc4_compile *c, nir_builder *b,
+                          nir_intrinsic_instr *intr)
+{
+        nir_ssa_def *frag_color = intr->src[0].ssa;
+
+        if (c->fs_key->sample_coverage) {
+                nir_intrinsic_instr *load =
+                        nir_intrinsic_instr_create(b->shader,
+                                                   nir_intrinsic_load_sample_mask_in);
+                load->num_components = 1;
+                nir_ssa_dest_init(&load->instr, &load->dest, 1, NULL);
+                nir_builder_instr_insert(b, &load->instr);
+
+                nir_ssa_def *bitmask = &load->dest.ssa;
+
+                vc4_nir_store_sample_mask(c, b, bitmask);
+        } else if (c->fs_key->sample_alpha_to_coverage) {
+                nir_ssa_def *a = nir_channel(b, frag_color, 3);
+
+                /* XXX: We should do a nice dither based on the fragment
+                 * coordinate, instead.
+                 */
+                nir_ssa_def *num_samples = nir_imm_float(b, VC4_MAX_SAMPLES);
+                nir_ssa_def *num_bits = nir_f2i(b, nir_fmul(b, a, num_samples));
+                nir_ssa_def *bitmask = nir_isub(b,
+                                                nir_ishl(b,
+                                                         nir_imm_int(b, 1),
+                                                         num_bits),
+                                                nir_imm_int(b, 1));
+                vc4_nir_store_sample_mask(c, b, bitmask);
+        }
+
+        /* The TLB color read returns each sample in turn, so if our blending
+         * depends on the destination color, we're going to have to run the
+         * blending function separately for each destination sample value, and
+         * then output the per-sample color using TLB_COLOR_MS.
+         */
+        nir_ssa_def *blend_output;
+        if (c->fs_key->msaa && blend_depends_on_dst_color(c)) {
+                c->msaa_per_sample_output = true;
+
+                nir_ssa_def *samples[4];
+                for (int i = 0; i < VC4_MAX_SAMPLES; i++)
+                        samples[i] = vc4_nir_blend_pipeline(c, b, frag_color, i);
+                blend_output = nir_vec4(b,
+                                        samples[0], samples[1],
+                                        samples[2], samples[3]);
+        } else {
+                blend_output = vc4_nir_blend_pipeline(c, b, frag_color, 0);
+        }
+
+        nir_instr_rewrite_src(&intr->instr, &intr->src[0],
+                              nir_src_for_ssa(blend_output));
+        intr->num_components = blend_output->num_components;
 }
 
 static bool
@@ -577,7 +676,7 @@ vc4_nir_lower_blend_block(nir_block *block, void *state)
 {
         struct vc4_compile *c = state;
 
-        nir_foreach_instr(block, instr) {
+        nir_foreach_instr_safe(block, instr) {
                 if (instr->type != nir_instr_type_intrinsic)
                         continue;
                 nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);

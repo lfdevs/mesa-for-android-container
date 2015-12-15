@@ -94,7 +94,12 @@ static void
 replace_with_mov(struct vc4_compile *c, struct qinst *inst, struct qreg arg)
 {
         dump_from(c, inst);
-        inst->op = QOP_MOV;
+        if (qir_is_mul(inst))
+                inst->op = QOP_MMOV;
+        else if (qir_is_float_input(inst))
+                inst->op = QOP_FMOV;
+        else
+                inst->op = QOP_MOV;
         inst->src[0] = arg;
         inst->src[1] = c->undef;
         dump_to(c, inst);
@@ -181,6 +186,7 @@ qir_opt_algebraic(struct vc4_compile *c)
                 case QOP_SUB:
                         if (is_zero(c, inst->src[1])) {
                                 replace_with_mov(c, inst, inst->src[0]);
+                                progress = true;
                         }
                         break;
 

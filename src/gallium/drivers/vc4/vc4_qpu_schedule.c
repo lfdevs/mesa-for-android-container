@@ -295,6 +295,10 @@ process_waddr_deps(struct schedule_state *state, struct schedule_node *n,
                         add_write_dep(state, &state->last_tlb, n);
                         break;
 
+                case QPU_W_MS_FLAGS:
+                        add_write_dep(state, &state->last_tlb, n);
+                        break;
+
                 case QPU_W_NOP:
                         break;
 

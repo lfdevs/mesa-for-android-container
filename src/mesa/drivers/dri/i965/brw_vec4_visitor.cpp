@@ -1550,23 +1550,16 @@ vec4_visitor::get_pull_constant_offset(bblock_t * block, vec4_instruction *inst,
 
       emit_before(block, inst, ADD(dst_reg(index), *reladdr,
                                    brw_imm_d(reg_offset)));
-
-      /* Pre-gen6, the message header uses byte offsets instead of vec4
-       * (16-byte) offset units.
-       */
-      if (devinfo->gen < 6) {
-         emit_before(block, inst, MUL(dst_reg(index), index, brw_imm_d(16)));
-      }
+      emit_before(block, inst, MUL(dst_reg(index), index, brw_imm_d(16)));
 
       return index;
    } else if (devinfo->gen >= 8) {
       /* Store the offset in a GRF so we can send-from-GRF. */
       src_reg offset = src_reg(this, glsl_type::int_type);
-      emit_before(block, inst, MOV(dst_reg(offset), brw_imm_d(reg_offset)));
+      emit_before(block, inst, MOV(dst_reg(offset), brw_imm_d(reg_offset * 16)));
       return offset;
    } else {
-      int message_header_scale = devinfo->gen < 6 ? 16 : 1;
-      return brw_imm_d(reg_offset * message_header_scale);
+      return brw_imm_d(reg_offset * 16);
    }
 }
 

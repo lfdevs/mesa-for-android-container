@@ -48,11 +48,10 @@ brw_upload_gs_pull_constants(struct brw_context *brw)
 
    /* BRW_NEW_GS_PROG_DATA */
    const struct brw_vue_prog_data *prog_data = &brw->gs.prog_data->base;
-   const bool dword_pitch = prog_data->dispatch_mode == DISPATCH_MODE_SIMD8;
 
    /* _NEW_PROGRAM_CONSTANTS */
    brw_upload_pull_constants(brw, BRW_NEW_GS_CONSTBUF, &gp->program.Base,
-                             stage_state, &prog_data->base, dword_pitch);
+                             stage_state, &prog_data->base);
 }
 
 const struct brw_tracked_state brw_gs_pull_constants = {
@@ -79,10 +78,9 @@ brw_upload_gs_ubo_surfaces(struct brw_context *brw)
 
    /* BRW_NEW_GS_PROG_DATA */
    struct brw_vue_prog_data *prog_data = &brw->gs.prog_data->base;
-   bool dword_pitch = prog_data->dispatch_mode == DISPATCH_MODE_SIMD8;
 
    brw_upload_ubo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_GEOMETRY],
-			   &brw->gs.base, &prog_data->base, dword_pitch);
+			   &brw->gs.base, &prog_data->base);
 }
 
 const struct brw_tracked_state brw_gs_ubo_surfaces = {

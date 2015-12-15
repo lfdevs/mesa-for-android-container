@@ -68,21 +68,17 @@ vc4_start_draw(struct vc4_context *vc4)
 
         vc4_get_draw_cl_space(vc4);
 
-        uint32_t width = vc4->framebuffer.width;
-        uint32_t height = vc4->framebuffer.height;
-        uint32_t tilew = align(width, 64) / 64;
-        uint32_t tileh = align(height, 64) / 64;
         struct vc4_cl_out *bcl = cl_start(&vc4->bcl);
-
         //   Tile state data is 48 bytes per tile, I think it can be thrown away
         //   as soon as binning is finished.
         cl_u8(&bcl, VC4_PACKET_TILE_BINNING_MODE_CONFIG);
         cl_u32(&bcl, 0); /* tile alloc addr, filled by kernel */
         cl_u32(&bcl, 0); /* tile alloc size, filled by kernel */
         cl_u32(&bcl, 0); /* tile state addr, filled by kernel */
-        cl_u8(&bcl, tilew);
-        cl_u8(&bcl, tileh);
-        cl_u8(&bcl, 0); /* flags, filled by kernel. */
+        cl_u8(&bcl, vc4->draw_tiles_x);
+        cl_u8(&bcl, vc4->draw_tiles_y);
+        /* Other flags are filled by kernel. */
+        cl_u8(&bcl, vc4->msaa ? VC4_BIN_CONFIG_MS_MODE_4X : 0);
 
         /* START_TILE_BINNING resets the statechange counters in the hardware,
          * which are what is used when a primitive is binned to a tile to
@@ -102,8 +98,8 @@ vc4_start_draw(struct vc4_context *vc4)
 
         vc4->needs_flush = true;
         vc4->draw_calls_queued++;
-        vc4->draw_width = width;
-        vc4->draw_height = height;
+        vc4->draw_width = vc4->framebuffer.width;
+        vc4->draw_height = vc4->framebuffer.height;
 
         cl_end(&vc4->bcl, bcl);
 }

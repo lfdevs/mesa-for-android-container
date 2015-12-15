@@ -239,8 +239,8 @@ bool r600_common_context_init(struct r600_common_context *rctx,
 	rctx->family = rscreen->family;
 	rctx->chip_class = rscreen->chip_class;
 
-	if (rscreen->family == CHIP_HAWAII)
-		rctx->max_db = 16;
+	if (rscreen->chip_class >= CIK)
+		rctx->max_db = MAX2(8, rscreen->info.r600_num_backends);
 	else if (rscreen->chip_class >= EVERGREEN)
 		rctx->max_db = 8;
 	else

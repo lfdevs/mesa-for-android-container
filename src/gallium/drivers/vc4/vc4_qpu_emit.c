@@ -387,6 +387,14 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
                                             qpu_rb(QPU_R_MS_REV_FLAGS)));
                         break;
 
+                case QOP_MS_MASK:
+                        src[1] = qpu_ra(QPU_R_MS_REV_FLAGS);
+                        fixup_raddr_conflict(c, dst, &src[0], &src[1],
+                                             qinst, &unpack);
+                        queue(c, qpu_a_AND(qpu_ra(QPU_W_MS_FLAGS),
+                                           src[0], src[1]) | unpack);
+                        break;
+
                 case QOP_FRAG_Z:
                 case QOP_FRAG_W:
                         /* QOP_FRAG_Z/W don't emit instructions, just allocate
@@ -425,6 +433,13 @@ vc4_generate_code(struct vc4_context *vc4, struct vc4_compile *c)
 
                 case QOP_TLB_COLOR_WRITE:
                         queue(c, qpu_a_MOV(qpu_tlbc(), src[0]) | unpack);
+                        if (discard) {
+                                set_last_cond_add(c, QPU_COND_ZS);
+                        }
+                        break;
+
+                case QOP_TLB_COLOR_WRITE_MS:
+                        queue(c, qpu_a_MOV(qpu_tlbc_ms(), src[0]));
                         if (discard) {
                                 set_last_cond_add(c, QPU_COND_ZS);
                         }

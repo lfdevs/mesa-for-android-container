@@ -67,8 +67,16 @@ vc4_flush(struct pipe_context *pctx)
         cl_u8(&bcl, VC4_PACKET_FLUSH);
         cl_end(&vc4->bcl, bcl);
 
+        vc4->msaa = false;
         if (cbuf && (vc4->resolve & PIPE_CLEAR_COLOR0)) {
-                pipe_surface_reference(&vc4->color_write, cbuf);
+                pipe_surface_reference(&vc4->color_write,
+                                       cbuf->texture->nr_samples ? NULL : cbuf);
+                pipe_surface_reference(&vc4->msaa_color_write,
+                                       cbuf->texture->nr_samples ? cbuf : NULL);
+
+                if (cbuf->texture->nr_samples)
+                        vc4->msaa = true;
+
                 if (!(vc4->cleared & PIPE_CLEAR_COLOR0)) {
                         pipe_surface_reference(&vc4->color_read, cbuf);
                 } else {
@@ -78,11 +86,21 @@ vc4_flush(struct pipe_context *pctx)
         } else {
                 pipe_surface_reference(&vc4->color_write, NULL);
                 pipe_surface_reference(&vc4->color_read, NULL);
+                pipe_surface_reference(&vc4->msaa_color_write, NULL);
         }
 
         if (vc4->framebuffer.zsbuf &&
             (vc4->resolve & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))) {
-                pipe_surface_reference(&vc4->zs_write, zsbuf);
+                pipe_surface_reference(&vc4->zs_write,
+                                       zsbuf->texture->nr_samples ?
+                                       NULL : zsbuf);
+                pipe_surface_reference(&vc4->msaa_zs_write,
+                                       zsbuf->texture->nr_samples ?
+                                       zsbuf : NULL);
+
+                if (zsbuf->texture->nr_samples)
+                        vc4->msaa = true;
+
                 if (!(vc4->cleared & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))) {
                         pipe_surface_reference(&vc4->zs_read, zsbuf);
                 } else {
@@ -91,6 +109,7 @@ vc4_flush(struct pipe_context *pctx)
         } else {
                 pipe_surface_reference(&vc4->zs_write, NULL);
                 pipe_surface_reference(&vc4->zs_read, NULL);
+                pipe_surface_reference(&vc4->msaa_zs_write, NULL);
         }
 
         vc4_job_submit(vc4);
@@ -244,6 +263,8 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
                                         PIPE_BIND_INDEX_BUFFER);
 
         vc4_debug |= saved_shaderdb_flag;
+
+        vc4->sample_mask = (1 << VC4_MAX_SAMPLES) - 1;
 
         return &vc4->base;
 

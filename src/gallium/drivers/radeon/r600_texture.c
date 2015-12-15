@@ -489,6 +489,10 @@ static void vi_texture_alloc_dcc_separate(struct r600_common_screen *rscreen,
 	if (rscreen->debug_flags & DBG_NO_DCC)
 		return;
 
+	/* TODO: DCC is broken on Stoney */
+	if (rscreen->family == CHIP_STONEY)
+		return;
+
 	rtex->dcc_buffer = (struct r600_resource *)
 		r600_aligned_buffer_create(&rscreen->b, PIPE_BIND_CUSTOM,
 				   PIPE_USAGE_DEFAULT, rtex->surface.dcc_size, rtex->surface.dcc_alignment);

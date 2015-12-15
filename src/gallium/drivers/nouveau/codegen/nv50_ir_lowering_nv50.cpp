@@ -202,7 +202,8 @@ NV50LegalizePostRA::visit(Function *fn)
    Program *prog = fn->getProgram();
 
    r63 = new_LValue(fn, FILE_GPR);
-   if (prog->maxGPR < 63)
+   // GPR units on nv50 are in half-regs
+   if (prog->maxGPR < 126)
       r63->reg.data.id = 63;
    else
       r63->reg.data.id = 127;

@@ -787,11 +787,9 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       src_reg offset;
 
       if (!has_indirect)  {
-         offset = brw_imm_ud(const_offset / 16);
+         offset = brw_imm_ud(const_offset & ~15);
       } else {
-         offset = src_reg(this, glsl_type::uint_type);
-         emit(SHR(dst_reg(offset), get_nir_src(instr->src[1], nir_type_int, 1),
-                  brw_imm_ud(4u)));
+         offset = get_nir_src(instr->src[1], nir_type_int, 1);
       }
 
       src_reg packed_consts = src_reg(this, glsl_type::vec4_type);

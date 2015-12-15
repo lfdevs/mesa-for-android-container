@@ -143,15 +143,16 @@ am__objects_1 = kernel/vc4_gem.lo kernel/vc4_render_cl.lo \
 	vc4_blit.lo vc4_bufmgr.lo vc4_cl.lo vc4_cl_dump.lo \
 	vc4_context.lo vc4_draw.lo vc4_emit.lo vc4_fence.lo \
 	vc4_formats.lo vc4_job.lo vc4_nir_lower_blend.lo \
-	vc4_nir_lower_io.lo vc4_opt_algebraic.lo \
-	vc4_opt_constant_folding.lo vc4_opt_copy_propagation.lo \
-	vc4_opt_cse.lo vc4_opt_dead_code.lo \
-	vc4_opt_small_immediates.lo vc4_opt_vpm_writes.lo \
-	vc4_program.lo vc4_qir.lo vc4_qir_lower_uniforms.lo vc4_qpu.lo \
-	vc4_qpu_disasm.lo vc4_qpu_emit.lo vc4_qpu_schedule.lo \
-	vc4_qpu_validate.lo vc4_query.lo vc4_register_allocate.lo \
-	vc4_reorder_uniforms.lo vc4_resource.lo vc4_screen.lo \
-	vc4_simulator.lo vc4_state.lo vc4_tiling.lo vc4_uniforms.lo
+	vc4_nir_lower_io.lo vc4_nir_lower_txf_ms.lo \
+	vc4_opt_algebraic.lo vc4_opt_constant_folding.lo \
+	vc4_opt_copy_propagation.lo vc4_opt_cse.lo \
+	vc4_opt_dead_code.lo vc4_opt_small_immediates.lo \
+	vc4_opt_vpm_writes.lo vc4_program.lo vc4_qir.lo \
+	vc4_qir_lower_uniforms.lo vc4_qpu.lo vc4_qpu_disasm.lo \
+	vc4_qpu_emit.lo vc4_qpu_schedule.lo vc4_qpu_validate.lo \
+	vc4_query.lo vc4_register_allocate.lo vc4_reorder_uniforms.lo \
+	vc4_resource.lo vc4_screen.lo vc4_simulator.lo vc4_state.lo \
+	vc4_tiling.lo vc4_uniforms.lo
 am_libvc4_la_OBJECTS = $(am__objects_1)
 libvc4_la_OBJECTS = $(am_libvc4_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -535,6 +536,7 @@ C_SOURCES := \
 	vc4_job.c \
 	vc4_nir_lower_blend.c \
 	vc4_nir_lower_io.c \
+	vc4_nir_lower_txf_ms.c \
 	vc4_opt_algebraic.c \
 	vc4_opt_constant_folding.c \
 	vc4_opt_copy_propagation.c \
@@ -728,6 +730,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_job.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_nir_lower_blend.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_nir_lower_io.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_nir_lower_txf_ms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_algebraic.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_constant_folding.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_opt_copy_propagation.Plo@am__quote@

@@ -186,7 +186,7 @@ fs_visitor::VARYING_PULL_CONSTANT_LOAD(const fs_builder &bld,
     * the redundant ones.
     */
    fs_reg vec4_offset = vgrf(glsl_type::int_type);
-   bld.ADD(vec4_offset, varying_offset, brw_imm_ud(const_offset & ~3));
+   bld.ADD(vec4_offset, varying_offset, brw_imm_ud(const_offset & ~0xf));
 
    int scale = 1;
    if (devinfo->gen == 4 && bld.dispatch_width() == 8) {
@@ -218,7 +218,7 @@ fs_visitor::VARYING_PULL_CONSTANT_LOAD(const fs_builder &bld,
          inst->mlen = 1 + bld.dispatch_width() / 8;
    }
 
-   bld.MOV(dst, offset(vec4_result, bld, (const_offset & 3) * scale));
+   bld.MOV(dst, offset(vec4_result, bld, ((const_offset & 0xf) / 4) * scale));
 }
 
 /**
@@ -1999,10 +1999,12 @@ fs_visitor::demote_pull_constants()
 
          /* Generate a pull load into dst. */
          if (inst->src[i].reladdr) {
+            fs_reg indirect = ibld.vgrf(BRW_REGISTER_TYPE_D);
+            ibld.MUL(indirect, *inst->src[i].reladdr, brw_imm_d(4));
             VARYING_PULL_CONSTANT_LOAD(ibld, dst,
                                        brw_imm_ud(index),
-                                       *inst->src[i].reladdr,
-                                       pull_index);
+                                       indirect,
+                                       pull_index * 4);
             inst->src[i].reladdr = NULL;
             inst->src[i].stride = 1;
          } else {
@@ -3038,13 +3040,11 @@ fs_visitor::lower_uniform_pull_constant_loads()
          continue;
 
       if (devinfo->gen >= 7) {
-         /* The offset arg before was a vec4-aligned byte offset.  We need to
-          * turn it into a dword offset.
-          */
+         /* The offset arg is a vec4-aligned immediate byte offset. */
          fs_reg const_offset_reg = inst->src[1];
          assert(const_offset_reg.file == IMM &&
                 const_offset_reg.type == BRW_REGISTER_TYPE_UD);
-         const_offset_reg.ud /= 4;
+         assert(const_offset_reg.ud % 16 == 0);
 
          fs_reg payload, offset;
          if (devinfo->gen >= 9) {

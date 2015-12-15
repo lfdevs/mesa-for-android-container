@@ -632,7 +632,7 @@ void si_check_vm_faults(struct si_context *sctx)
 	/* Use conservative timeout 800ms, after which we won't wait any
 	 * longer and assume the GPU is hung.
 	 */
-	screen->fence_finish(screen, sctx->last_gfx_fence, 800*1000*1000);
+	sctx->b.ws->fence_wait(sctx->b.ws, sctx->last_gfx_fence, 800*1000*1000);
 
 	if (!si_vm_fault_occured(sctx, &addr))
 		return;

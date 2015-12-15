@@ -196,6 +196,24 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
       brw_render_cache_set_check_flush(brw, tex_obj->mt->bo);
    }
 
+   /* Resolve color for each active shader image. */
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      const struct gl_shader *shader = ctx->_Shader->CurrentProgram[i] ?
+         ctx->_Shader->CurrentProgram[i]->_LinkedShaders[i] : NULL;
+
+      if (unlikely(shader && shader->NumImages)) {
+         for (unsigned j = 0; j < shader->NumImages; j++) {
+            struct gl_image_unit *u = &ctx->ImageUnits[shader->ImageUnits[j]];
+            tex_obj = intel_texture_object(u->TexObj);
+
+            if (tex_obj && tex_obj->mt) {
+               intel_miptree_resolve_color(brw, tex_obj->mt);
+               brw_render_cache_set_check_flush(brw, tex_obj->mt->bo);
+            }
+         }
+      }
+   }
+
    _mesa_lock_context_textures(ctx);
 }
 

@@ -4080,7 +4080,7 @@ yyreduce:
       if (((yyvsp[-1].type_qualifier).flags.q.in || (yyvsp[-1].type_qualifier).flags.q.out) && ((yyvsp[0].type_qualifier).flags.q.in || (yyvsp[0].type_qualifier).flags.q.out))
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate in/out/inout qualifier");
 
-      if (!state->has_420pack() && (yyvsp[0].type_qualifier).flags.q.constant)
+      if (!state->has_420pack_or_es31() && (yyvsp[0].type_qualifier).flags.q.constant)
          _mesa_glsl_error(&(yylsp[-1]), state, "in/out/inout must come after const "
                                       "or precise");
 
@@ -4096,7 +4096,7 @@ yyreduce:
       if ((yyvsp[0].type_qualifier).precision != ast_precision_none)
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate precision qualifier");
 
-      if (!(state->has_420pack() || state->is_version(420, 310)) &&
+      if (!state->has_420pack_or_es31() &&
           (yyvsp[0].type_qualifier).flags.i != 0)
          _mesa_glsl_error(&(yylsp[-1]), state, "precision qualifiers must come last");
 
@@ -4675,7 +4675,7 @@ yyreduce:
          (yyval.type_qualifier).index = (yyvsp[0].expression);
       }
 
-      if ((state->has_420pack() ||
+      if ((state->has_420pack_or_es31() ||
            state->has_atomic_counters() ||
            state->has_shader_storage_buffer_objects()) &&
           match_layout_qualifier("binding", (yyvsp[-2].identifier), state) == 0) {
@@ -4927,7 +4927,7 @@ yyreduce:
       if ((yyvsp[0].type_qualifier).flags.q.invariant)
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate \"invariant\" qualifier");
 
-      if (!state->has_420pack() && (yyvsp[0].type_qualifier).flags.q.precise)
+      if (!state->has_420pack_or_es31() && (yyvsp[0].type_qualifier).flags.q.precise)
          _mesa_glsl_error(&(yylsp[-1]), state,
                           "\"invariant\" must come after \"precise\"");
 
@@ -4964,7 +4964,7 @@ yyreduce:
       if ((yyvsp[0].type_qualifier).has_interpolation())
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate interpolation qualifier");
 
-      if (!state->has_420pack() &&
+      if (!state->has_420pack_or_es31() &&
           ((yyvsp[0].type_qualifier).flags.q.precise || (yyvsp[0].type_qualifier).flags.q.invariant)) {
          _mesa_glsl_error(&(yylsp[-1]), state, "interpolation qualifiers must come "
                           "after \"precise\" or \"invariant\"");
@@ -4988,7 +4988,7 @@ yyreduce:
        * precise qualifiers since these are useful in ARB_separate_shader_objects.
        * There is no clear spec guidance on this either.
        */
-      if (!state->has_420pack() && (yyvsp[0].type_qualifier).has_layout())
+      if (!state->has_420pack_or_es31() && (yyvsp[0].type_qualifier).has_layout())
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate layout(...) qualifiers");
 
       (yyval.type_qualifier) = (yyvsp[-1].type_qualifier);
@@ -5014,7 +5014,7 @@ yyreduce:
                           "duplicate auxiliary storage qualifier (centroid or sample)");
       }
 
-      if (!state->has_420pack() &&
+      if (!state->has_420pack_or_es31() &&
           ((yyvsp[0].type_qualifier).flags.q.precise || (yyvsp[0].type_qualifier).flags.q.invariant ||
            (yyvsp[0].type_qualifier).has_interpolation() || (yyvsp[0].type_qualifier).has_layout())) {
          _mesa_glsl_error(&(yylsp[-1]), state, "auxiliary storage qualifiers must come "
@@ -5036,7 +5036,7 @@ yyreduce:
       if ((yyvsp[0].type_qualifier).has_storage())
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate storage qualifier");
 
-      if (!state->has_420pack() &&
+      if (!state->has_420pack_or_es31() &&
           ((yyvsp[0].type_qualifier).flags.q.precise || (yyvsp[0].type_qualifier).flags.q.invariant || (yyvsp[0].type_qualifier).has_interpolation() ||
            (yyvsp[0].type_qualifier).has_layout() || (yyvsp[0].type_qualifier).has_auxiliary_storage())) {
          _mesa_glsl_error(&(yylsp[-1]), state, "storage qualifiers must come after "
@@ -5056,7 +5056,7 @@ yyreduce:
       if ((yyvsp[0].type_qualifier).precision != ast_precision_none)
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate precision qualifier");
 
-      if (!(state->has_420pack() || state->is_version(420, 310)) &&
+      if (!(state->has_420pack_or_es31()) &&
           (yyvsp[0].type_qualifier).flags.i != 0)
          _mesa_glsl_error(&(yylsp[-1]), state, "precision qualifiers must come last");
 
@@ -6591,7 +6591,7 @@ yyreduce:
     {
       ast_interface_block *block = (ast_interface_block *) (yyvsp[0].node);
 
-      if (!state->has_420pack() && block->layout.has_layout() &&
+      if (!state->has_420pack_or_es31() && block->layout.has_layout() &&
           !block->layout.is_default_qualifier) {
          _mesa_glsl_error(&(yylsp[-1]), state, "duplicate layout(...) qualifiers");
          YYERROR;

@@ -1101,28 +1101,6 @@ fs_visitor::nir_emit_undef(const fs_builder &bld, nir_ssa_undef_instr *instr)
                                                instr->def.num_components);
 }
 
-static fs_reg
-fs_reg_for_nir_reg(fs_visitor *v, nir_register *nir_reg,
-                   unsigned base_offset, nir_src *indirect)
-{
-   fs_reg reg;
-
-   assert(!nir_reg->is_global);
-
-   reg = v->nir_locals[nir_reg->index];
-
-   reg = offset(reg, v->bld, base_offset * nir_reg->num_components);
-   if (indirect) {
-      int multiplier = nir_reg->num_components * (v->dispatch_width / 8);
-
-      reg.reladdr = new(v->mem_ctx) fs_reg(v->vgrf(glsl_type::int_type));
-      v->bld.MUL(*reg.reladdr, v->get_nir_src(*indirect),
-                 brw_imm_d(multiplier));
-   }
-
-   return reg;
-}
-
 fs_reg
 fs_visitor::get_nir_src(nir_src src)
 {
@@ -1130,8 +1108,10 @@ fs_visitor::get_nir_src(nir_src src)
    if (src.is_ssa) {
       reg = nir_ssa_values[src.ssa->index];
    } else {
-      reg = fs_reg_for_nir_reg(this, src.reg.reg, src.reg.base_offset,
-                               src.reg.indirect);
+      /* We don't handle indirects on locals */
+      assert(src.reg.indirect == NULL);
+      reg = offset(nir_locals[src.reg.reg->index], bld,
+                   src.reg.base_offset * src.reg.reg->num_components);
    }
 
    /* to avoid floating-point denorm flushing problems, set the type by
@@ -1148,10 +1128,12 @@ fs_visitor::get_nir_dest(nir_dest dest)
       nir_ssa_values[dest.ssa.index] = bld.vgrf(BRW_REGISTER_TYPE_F,
                                                 dest.ssa.num_components);
       return nir_ssa_values[dest.ssa.index];
+   } else {
+      /* We don't handle indirects on locals */
+      assert(dest.reg.indirect == NULL);
+      return offset(nir_locals[dest.reg.reg->index], bld,
+                    dest.reg.base_offset * dest.reg.reg->num_components);
    }
-
-   return fs_reg_for_nir_reg(this, dest.reg.reg, dest.reg.base_offset,
-                             dest.reg.indirect);
 }
 
 fs_reg
@@ -2368,16 +2350,13 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       }
 
       if (has_indirect) {
-         /* Turn the byte offset into a dword offset. */
-         fs_reg base_offset = vgrf(glsl_type::int_type);
-         bld.SHR(base_offset, retype(get_nir_src(instr->src[1]),
-                                     BRW_REGISTER_TYPE_D),
-                 brw_imm_d(2));
+         fs_reg base_offset = retype(get_nir_src(instr->src[1]),
+                                     BRW_REGISTER_TYPE_D);
 
-         unsigned vec4_offset = instr->const_index[0] / 4;
+         unsigned vec4_offset = instr->const_index[0];
          for (int i = 0; i < instr->num_components; i++)
             VARYING_PULL_CONSTANT_LOAD(bld, offset(dest, bld, i), surf_index,
-                                       base_offset, vec4_offset + i);
+                                       base_offset, vec4_offset + i * 4);
       } else {
          fs_reg packed_consts = vgrf(glsl_type::float_type);
          packed_consts.type = dest.type;
@@ -2450,7 +2429,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    }
 
    case nir_intrinsic_load_input_indirect:
-      has_indirect = true;
+      unreachable("Not allowed");
       /* fallthrough */
    case nir_intrinsic_load_input: {
       unsigned index = 0;
@@ -2462,8 +2441,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
             src = offset(retype(nir_inputs, dest.type), bld,
                          instr->const_index[0] + index);
          }
-         if (has_indirect)
-            src.reladdr = new(mem_ctx) fs_reg(get_nir_src(instr->src[0]));
          index++;
 
          bld.MOV(dest, src);
@@ -2536,7 +2513,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    }
 
    case nir_intrinsic_store_output_indirect:
-      has_indirect = true;
+      unreachable("Not allowed");
       /* fallthrough */
    case nir_intrinsic_store_output: {
       fs_reg src = get_nir_src(instr->src[0]);
@@ -2544,8 +2521,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       for (unsigned j = 0; j < instr->num_components; j++) {
          fs_reg new_dest = offset(retype(nir_outputs, src.type), bld,
                                   instr->const_index[0] + index);
-         if (has_indirect)
-            src.reladdr = new(mem_ctx) fs_reg(get_nir_src(instr->src[1]));
          index++;
          bld.MOV(new_dest, src);
          src = offset(src, bld, 1);

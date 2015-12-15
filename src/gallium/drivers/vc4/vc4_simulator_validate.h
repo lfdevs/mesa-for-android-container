@@ -65,7 +65,7 @@ struct drm_device {
 };
 
 struct drm_gem_object {
-        uint32_t size;
+        size_t size;
         struct drm_device *dev;
 };
 

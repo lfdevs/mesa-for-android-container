@@ -901,8 +901,21 @@ generate_pull_constant_load(struct brw_codegen *p,
 
    gen6_resolve_implied_move(p, &header, inst->base_mrf);
 
-   brw_MOV(p, retype(brw_message_reg(inst->base_mrf + 1), BRW_REGISTER_TYPE_D),
-	   offset);
+   if (devinfo->gen >= 6) {
+      if (offset.file == BRW_IMMEDIATE_VALUE) {
+         brw_MOV(p, retype(brw_message_reg(inst->base_mrf + 1),
+                           BRW_REGISTER_TYPE_D),
+                 brw_imm_d(offset.ud >> 4));
+      } else {
+         brw_SHR(p, retype(brw_message_reg(inst->base_mrf + 1),
+                           BRW_REGISTER_TYPE_D),
+                 offset, brw_imm_d(4));
+      }
+   } else {
+      brw_MOV(p, retype(brw_message_reg(inst->base_mrf + 1),
+                        BRW_REGISTER_TYPE_D),
+              offset);
+   }
 
    uint32_t msg_type;
 
