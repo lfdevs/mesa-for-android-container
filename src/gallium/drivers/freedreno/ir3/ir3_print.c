@@ -143,7 +143,7 @@ block_id(struct ir3_block *block)
 #ifdef DEBUG
 	return block->serialno;
 #else
-	return (uint32_t)(uint64_t)block;
+	return (uint32_t)(unsigned long)block;
 #endif
 }
 

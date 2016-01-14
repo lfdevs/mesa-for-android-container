@@ -69,12 +69,10 @@ private:
    };
    bool insertTextureBarriers(Function *);
    inline bool insnDominatedBy(const Instruction *, const Instruction *) const;
-   void findFirstUses(const Instruction *tex, const Instruction *def,
-                      std::list<TexUse>&,
-                      unordered_set<const Instruction *>&);
-   void findOverwritingDefs(const Instruction *tex, Instruction *insn,
-                            const BasicBlock *term,
-                            std::list<TexUse>&);
+   void findFirstUses(Instruction *texi, std::list<TexUse> &uses);
+   void findFirstUsesBB(int minGPR, int maxGPR, Instruction *start,
+                        const Instruction *texi, std::list<TexUse> &uses,
+                        unordered_set<const BasicBlock *> &visited);
    void addTexUse(std::list<TexUse>&, Instruction *, const Instruction *);
    const Instruction *recurseDef(const Instruction *);
 

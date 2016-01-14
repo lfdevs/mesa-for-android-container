@@ -287,7 +287,8 @@ draw_bitmap_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
       GLfloat colorSave[4];
       COPY_4V(colorSave, ctx->Current.Attrib[VERT_ATTRIB_COLOR0]);
       COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], color);
-      st_upload_constants(st, fpv->parameters, PIPE_SHADER_FRAGMENT);
+      st_upload_constants(st, st->fp->Base.Base.Parameters,
+                          PIPE_SHADER_FRAGMENT);
       COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], colorSave);
    }
 
@@ -404,6 +405,9 @@ draw_bitmap_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    cso_restore_stream_outputs(cso);
 
    pipe_resource_reference(&vbuf, NULL);
+
+   /* We uploaded modified constants, need to invalidate them. */
+   st->dirty.mesa |= _NEW_PROGRAM_CONSTANTS;
 }
 
 

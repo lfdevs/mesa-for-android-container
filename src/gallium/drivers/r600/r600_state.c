@@ -1768,7 +1768,7 @@ static void r600_emit_constant_buffers(struct r600_context *rctx,
 
 		if (!gs_ring_buffer) {
 			radeon_set_context_reg(cs, reg_alu_constbuf_size + buffer_index * 4,
-					       ALIGN_DIVUP(cb->buffer_size >> 4, 16));
+					       ALIGN_DIVUP(cb->buffer_size, 256));
 			radeon_set_context_reg(cs, reg_alu_const_cache + buffer_index * 4, offset >> 8);
 		}
 

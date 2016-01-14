@@ -169,9 +169,12 @@ nvc0_create_decoder(struct pipe_context *context,
    for (i = 0; i < NOUVEAU_VP3_VIDEO_QDEPTH && !ret; ++i)
       ret = nouveau_bo_new(screen->device, NOUVEAU_BO_VRAM,
                            0, 1 << 20, &cfg, &dec->bsp_bo[i]);
-   if (!ret)
+   if (!ret) {
+      /* total fudge factor... just has to be bigger for higher bitrates? */
+      unsigned inter_size = align(templ->width * templ->height * 2, 4 << 20);
       ret = nouveau_bo_new(screen->device, NOUVEAU_BO_VRAM,
-                           0x100, 4 << 20, &cfg, &dec->inter_bo[0]);
+                           0x100, inter_size, &cfg, &dec->inter_bo[0]);
+   }
    if (!ret) {
       ret = nouveau_bo_new(screen->device, NOUVEAU_BO_VRAM,
                            0x100, dec->inter_bo[0]->size, &cfg,

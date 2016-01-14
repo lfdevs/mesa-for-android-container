@@ -1,3 +1,12 @@
+mesa (11.1.1-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Enable support for virgl (Closes: #807774).
+  * Enable support for vc4 (Closes: #809406).
+  * Enable support for freedreno on arm64.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 14 Jan 2016 11:27:28 +0100
+
 mesa (11.1.0-1) experimental; urgency=medium
 
   * New upstream release.
@@ -21,6 +30,12 @@ mesa (11.1.0~rc3-1) experimental; urgency=medium
   * Remove obsolete libgl1-mesa-dri.lintian-overrides.
 
  -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 10 Dec 2015 12:22:54 +0100
+
+mesa (11.0.8-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 22 Dec 2015 16:12:35 +0200
 
 mesa (11.0.7-1) unstable; urgency=medium
 

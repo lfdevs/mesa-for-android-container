@@ -179,6 +179,7 @@ optimizations = [
    (('fmul', ('fexp2', a), ('fexp2', b)), ('fexp2', ('fadd', a, b))),
    # Division and reciprocal
    (('fdiv', 1.0, a), ('frcp', a)),
+   (('fdiv', a, b), ('fmul', a, ('frcp', b)), 'options->lower_fdiv'),
    (('frcp', ('frcp', a)), a),
    (('frcp', ('fsqrt', a)), ('frsq', a)),
    (('fsqrt', a), ('frcp', ('frsq', a)), 'options->lower_fsqrt'),

@@ -80,7 +80,6 @@ struct st_fp_variant
    void *driver_shader;
 
    /** For glBitmap variants */
-   struct gl_program_parameter_list *parameters;
    uint bitmap_sampler;
 
    /** For glDrawPixels variants */

@@ -410,6 +410,7 @@ brw_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_A8R8G8B8_SRGB] = 0,
       [MESA_FORMAT_R8G8B8A8_SRGB] = BRW_SURFACEFORMAT_R8G8B8A8_UNORM_SRGB,
       [MESA_FORMAT_X8R8G8B8_SRGB] = 0,
+      [MESA_FORMAT_B8G8R8X8_SRGB] = BRW_SURFACEFORMAT_B8G8R8X8_UNORM_SRGB,
       [MESA_FORMAT_L_SRGB8] = BRW_SURFACEFORMAT_L8_UNORM_SRGB,
       [MESA_FORMAT_L8A8_SRGB] = BRW_SURFACEFORMAT_L8A8_UNORM_SRGB,
       [MESA_FORMAT_A8L8_SRGB] = 0,
@@ -674,6 +675,10 @@ brw_init_surface_formats(struct brw_context *brw)
 	  */
 	 render = BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
 	 break;
+      case BRW_SURFACEFORMAT_B8G8R8X8_UNORM_SRGB:
+         if (gen < tinfo->render_target)
+            render = BRW_SURFACEFORMAT_B8G8R8A8_UNORM_SRGB;
+         break;
       case BRW_SURFACEFORMAT_R8G8B8X8_UNORM:
          render = BRW_SURFACEFORMAT_R8G8B8A8_UNORM;
          break;

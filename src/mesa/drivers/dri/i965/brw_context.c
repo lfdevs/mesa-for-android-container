@@ -158,8 +158,10 @@ intel_viewport(struct gl_context *ctx)
    __DRIcontext *driContext = brw->driContext;
 
    if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
-      dri2InvalidateDrawable(driContext->driDrawablePriv);
-      dri2InvalidateDrawable(driContext->driReadablePriv);
+      if (driContext->driDrawablePriv)
+         dri2InvalidateDrawable(driContext->driDrawablePriv);
+      if (driContext->driReadablePriv)
+         dri2InvalidateDrawable(driContext->driReadablePriv);
    }
 }
 

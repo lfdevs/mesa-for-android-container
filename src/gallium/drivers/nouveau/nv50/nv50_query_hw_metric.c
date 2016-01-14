@@ -71,7 +71,8 @@ nv50_hw_metric_destroy_query(struct nv50_context *nv50,
    unsigned i;
 
    for (i = 0; i < hmq->num_queries; i++)
-      hmq->queries[i]->funcs->destroy_query(nv50, hmq->queries[i]);
+      if (hmq->queries[i]->funcs->destroy_query)
+         hmq->queries[i]->funcs->destroy_query(nv50, hmq->queries[i]);
    FREE(hmq);
 }
 

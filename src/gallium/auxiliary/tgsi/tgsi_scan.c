@@ -365,6 +365,9 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   info->output_semantic_index[reg] = (ubyte) semIndex;
                   info->num_outputs++;
 
+                  if (semName == TGSI_SEMANTIC_COLOR)
+                     info->colors_written |= 1 << semIndex;
+
                   if (procType == TGSI_PROCESSOR_VERTEX ||
                       procType == TGSI_PROCESSOR_GEOMETRY ||
                       procType == TGSI_PROCESSOR_TESS_CTRL ||

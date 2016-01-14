@@ -994,6 +994,9 @@ nv50_set_vertex_buffers(struct pipe_context *pipe,
    struct nv50_context *nv50 = nv50_context(pipe);
    unsigned i;
 
+   nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_VERTEX);
+   nv50->dirty |= NV50_NEW_ARRAYS;
+
    util_set_vertex_buffers_count(nv50->vtxbuf, &nv50->num_vtxbufs, vb,
                                  start_slot, count);
 
@@ -1017,10 +1020,6 @@ nv50_set_vertex_buffers(struct pipe_context *pipe,
          nv50->vbo_constant &= ~(1 << dst_index);
       }
    }
-
-   nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_VERTEX);
-
-   nv50->dirty |= NV50_NEW_ARRAYS;
 }
 
 static void

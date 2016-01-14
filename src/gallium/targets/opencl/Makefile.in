@@ -268,7 +268,6 @@ EGL_CLIENT_APIS = @EGL_CLIENT_APIS@
 EGL_LIB_DEPS = @EGL_LIB_DEPS@
 EGL_NATIVE_PLATFORM = @EGL_NATIVE_PLATFORM@
 EGREP = @EGREP@
-ELF_LIB = @ELF_LIB@
 EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
@@ -312,6 +311,8 @@ LIBCLC_INCLUDEDIR = @LIBCLC_INCLUDEDIR@
 LIBCLC_LIBEXECDIR = @LIBCLC_LIBEXECDIR@
 LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
+LIBELF_CFLAGS = @LIBELF_CFLAGS@
+LIBELF_LIBS = @LIBELF_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBSHA1_CFLAGS = @LIBSHA1_CFLAGS@
@@ -569,6 +570,9 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_1) $(am__append_2)
 lib_LTLIBRARIES = lib@OPENCL_LIBNAME@.la
+AM_CPPFLAGS = \
+        $(LIBELF_CFLAGS)
+
 lib@OPENCL_LIBNAME@_la_LDFLAGS = $(LLVM_LDFLAGS) -no-undefined \
 	-version-number @OPENCL_VERSION@:0 $(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED) $(am__append_3)
@@ -577,7 +581,7 @@ lib@OPENCL_LIBNAME@_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/clover/libclover.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(ELF_LIB) \
+	$(LIBELF_LIBS) \
 	$(DLOPEN_LIBS) \
 	-lclangCodeGen \
 	-lclangFrontendTool \

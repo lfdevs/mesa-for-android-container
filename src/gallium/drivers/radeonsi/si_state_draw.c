@@ -216,6 +216,18 @@ static void si_emit_derived_tess_state(struct si_context *sctx,
 	radeon_emit(cs, tcs_out_layout | (num_tcs_output_cp << 26));
 }
 
+static unsigned si_num_prims_for_vertices(const struct pipe_draw_info *info)
+{
+	switch (info->mode) {
+	case PIPE_PRIM_PATCHES:
+		return info->count / info->vertices_per_patch;
+	case R600_PRIM_RECTANGLE_LIST:
+		return info->count / 3;
+	default:
+		return u_prims_for_vertices(info->mode, info->count);
+	}
+}
+
 static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 					  const struct pipe_draw_info *info,
 					  unsigned num_patches)
@@ -320,7 +332,7 @@ static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 	if (sctx->b.screen->info.max_se >= 2 && ia_switch_on_eoi &&
 	    (info->indirect ||
 	     (info->instance_count > 1 &&
-	      u_prims_for_vertices(info->mode, info->count) <= 1)))
+	      si_num_prims_for_vertices(info) <= 1)))
 		sctx->b.flags |= SI_CONTEXT_VGT_FLUSH;
 
 	return S_028AA8_SWITCH_ON_EOP(ia_switch_on_eop) |
@@ -872,7 +884,9 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 
 	/* Workaround for a VGT hang when streamout is enabled.
 	 * It must be done after drawing. */
-	if ((sctx->b.family == CHIP_HAWAII || sctx->b.family == CHIP_TONGA) &&
+	if ((sctx->b.family == CHIP_HAWAII ||
+	     sctx->b.family == CHIP_TONGA ||
+	     sctx->b.family == CHIP_FIJI) &&
 	    (sctx->b.streamout.streamout_enabled ||
 	     sctx->b.streamout.prims_gen_query_enabled)) {
 		sctx->b.flags |= SI_CONTEXT_VGT_STREAMOUT_SYNC;

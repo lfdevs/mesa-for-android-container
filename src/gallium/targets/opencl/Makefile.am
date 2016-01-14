@@ -2,6 +2,9 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 lib_LTLIBRARIES = lib@OPENCL_LIBNAME@.la
 
+AM_CPPFLAGS = \
+        $(LIBELF_CFLAGS)
+
 lib@OPENCL_LIBNAME@_la_LDFLAGS = \
 	$(LLVM_LDFLAGS) \
 	-no-undefined \
@@ -19,7 +22,7 @@ lib@OPENCL_LIBNAME@_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/clover/libclover.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(ELF_LIB) \
+	$(LIBELF_LIBS) \
 	$(DLOPEN_LIBS) \
 	-lclangCodeGen \
 	-lclangFrontendTool \

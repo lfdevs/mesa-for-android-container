@@ -240,9 +240,11 @@ vc4_job_submit(struct vc4_context *vc4)
 #else
                 ret = vc4_simulator_flush(vc4, &submit);
 #endif
-                if (ret) {
-                        fprintf(stderr, "VC4 submit failed\n");
-                        abort();
+                static bool warned = false;
+                if (ret && !warned) {
+                        fprintf(stderr, "Draw call returned %s.  "
+                                        "Expect corruption.\n", strerror(errno));
+                        warned = true;
                 }
         }
 

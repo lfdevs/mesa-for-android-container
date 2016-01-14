@@ -116,6 +116,12 @@ static void
 nvc0_hw_destroy_query(struct nvc0_context *nvc0, struct nvc0_query *q)
 {
    struct nvc0_hw_query *hq = nvc0_hw_query(q);
+
+   if (hq->funcs && hq->funcs->destroy_query) {
+      hq->funcs->destroy_query(nvc0, hq);
+      return;
+   }
+
    nvc0_hw_query_allocate(nvc0, q, 0);
    nouveau_fence_ref(NULL, &hq->fence);
    FREE(hq);
@@ -467,7 +473,6 @@ nvc0_hw_query_pushbuf_submit(struct nouveau_pushbuf *push,
 #define NVC0_IB_ENTRY_1_NO_PREFETCH (1 << (31 - 8))
 
    PUSH_REFN(push, hq->bo, NOUVEAU_BO_RD | NOUVEAU_BO_GART);
-   nouveau_pushbuf_space(push, 0, 0, 1);
    nouveau_pushbuf_data(push, hq->bo, hq->offset + result_offset, 4 |
                         NVC0_IB_ENTRY_1_NO_PREFETCH);
 }

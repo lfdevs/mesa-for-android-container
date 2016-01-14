@@ -77,7 +77,7 @@ nv98_decoder_bsp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
       bsp_size += (1 << 20) - 1;
       bsp_size &= ~((1 << 20) - 1);
 
-      ret = nouveau_bo_new(dec->bitplane_bo->device, NOUVEAU_BO_VRAM, 0, bsp_size, NULL, &tmp_bo);
+      ret = nouveau_bo_new(dec->client->device, NOUVEAU_BO_VRAM, 0, bsp_size, NULL, &tmp_bo);
       if (ret) {
          debug_printf("reallocating bsp %u -> %u failed with %i\n",
                       bsp_bo ? (unsigned)bsp_bo->size : 0, bsp_size, ret);
@@ -90,7 +90,7 @@ nv98_decoder_bsp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
    if (!inter_bo || bsp_bo->size * 4 > inter_bo->size) {
       struct nouveau_bo *tmp_bo = NULL;
 
-      ret = nouveau_bo_new(dec->bitplane_bo->device, NOUVEAU_BO_VRAM, 0, bsp_bo->size * 4, NULL, &tmp_bo);
+      ret = nouveau_bo_new(dec->client->device, NOUVEAU_BO_VRAM, 0, bsp_bo->size * 4, NULL, &tmp_bo);
       if (ret) {
          debug_printf("reallocating inter %u -> %u failed with %i\n",
                       inter_bo ? (unsigned)inter_bo->size : 0, (unsigned)bsp_bo->size * 4, ret);

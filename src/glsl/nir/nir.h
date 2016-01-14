@@ -1435,6 +1435,7 @@ typedef struct nir_function {
                   exec_list_get_head(&(func)->overload_list), node)
 
 typedef struct nir_shader_compiler_options {
+   bool lower_fdiv;
    bool lower_ffma;
    bool lower_flrp;
    bool lower_fpow;

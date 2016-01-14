@@ -187,7 +187,8 @@ nvc0_hw_metric_destroy_query(struct nvc0_context *nvc0,
    unsigned i;
 
    for (i = 0; i < hmq->num_queries; i++)
-      hmq->queries[i]->funcs->destroy_query(nvc0, hmq->queries[i]);
+      if (hmq->queries[i]->funcs->destroy_query)
+         hmq->queries[i]->funcs->destroy_query(nvc0, hmq->queries[i]);
    FREE(hmq);
 }
 

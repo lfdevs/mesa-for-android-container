@@ -16,7 +16,8 @@ libradeon_la_SOURCES = \
 if NEED_RADEON_LLVM
 
 AM_CFLAGS += \
-	$(LLVM_CFLAGS)
+	$(LLVM_CFLAGS) \
+	$(LIBELF_CFLAGS)
 
 libradeon_la_SOURCES += \
 	$(LLVM_C_FILES)
@@ -24,7 +25,7 @@ libradeon_la_SOURCES += \
 libradeon_la_LIBADD = \
 	$(CLOCK_LIB) \
 	$(LLVM_LIBS) \
-	$(ELF_LIB)
+	$(LIBELF_LIBS)
 
 libradeon_la_LDFLAGS = \
 	$(LLVM_LDFLAGS)

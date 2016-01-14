@@ -229,13 +229,17 @@ void cayman_emit_msaa_config(struct radeon_winsys_cs *cs, int nr_samples,
 					       S_028804_HIGH_QUALITY_INTERSECTIONS(1) |
 					       S_028804_STATIC_ANCHOR_ASSOCIATIONS(1));
 			radeon_set_context_reg(cs, EG_R_028A4C_PA_SC_MODE_CNTL_1,
-					     EG_S_028A4C_PS_ITER_SAMPLE(ps_iter_samples > 1));
+					       EG_S_028A4C_PS_ITER_SAMPLE(ps_iter_samples > 1) |
+					       EG_S_028A4C_FORCE_EOV_CNTDWN_ENABLE(1) |
+					       EG_S_028A4C_FORCE_EOV_REZ_ENABLE(1));
 		} else if (overrast_samples > 1) {
 			radeon_set_context_reg(cs, CM_R_028804_DB_EQAA,
 					       S_028804_HIGH_QUALITY_INTERSECTIONS(1) |
 					       S_028804_STATIC_ANCHOR_ASSOCIATIONS(1) |
 					       S_028804_OVERRASTERIZATION_AMOUNT(log_samples));
-			radeon_set_context_reg(cs, EG_R_028A4C_PA_SC_MODE_CNTL_1, 0);
+			radeon_set_context_reg(cs, EG_R_028A4C_PA_SC_MODE_CNTL_1,
+					       EG_S_028A4C_FORCE_EOV_CNTDWN_ENABLE(1) |
+					       EG_S_028A4C_FORCE_EOV_REZ_ENABLE(1));
 		}
 	} else {
 		radeon_set_context_reg_seq(cs, CM_R_028BDC_PA_SC_LINE_CNTL, 2);
@@ -245,6 +249,8 @@ void cayman_emit_msaa_config(struct radeon_winsys_cs *cs, int nr_samples,
 		radeon_set_context_reg(cs, CM_R_028804_DB_EQAA,
 				       S_028804_HIGH_QUALITY_INTERSECTIONS(1) |
 				       S_028804_STATIC_ANCHOR_ASSOCIATIONS(1));
-		radeon_set_context_reg(cs, EG_R_028A4C_PA_SC_MODE_CNTL_1, 0);
+		radeon_set_context_reg(cs, EG_R_028A4C_PA_SC_MODE_CNTL_1,
+				       EG_S_028A4C_FORCE_EOV_CNTDWN_ENABLE(1) |
+				       EG_S_028A4C_FORCE_EOV_REZ_ENABLE(1));
 	}
 }

@@ -188,7 +188,7 @@ void st_validate_state( struct st_context *st )
 
    st_manager_validate_framebuffers(st);
 
-   if (state->st == 0)
+   if (state->st == 0 && state->mesa == 0)
       return;
 
    /*printf("%s %x/%x\n", __func__, state->mesa, state->st);*/

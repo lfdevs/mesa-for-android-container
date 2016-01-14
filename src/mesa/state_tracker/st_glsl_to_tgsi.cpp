@@ -5640,6 +5640,12 @@ get_mesa_program(struct gl_context *ctx,
 
    _mesa_reference_program(ctx, &shader->Program, prog);
 
+   /* Avoid reallocation of the program parameter list, because the uniform
+    * storage is only associated with the original parameter list.
+    * This should be enough for Bitmap and DrawPixels constants.
+    */
+   _mesa_reserve_parameter_storage(prog->Parameters, 8);
+
    /* This has to be done last.  Any operation the can cause
     * prog->ParameterValues to get reallocated (e.g., anything that adds a
     * program constant) has to happen before creating this linkage.

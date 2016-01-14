@@ -119,7 +119,7 @@ static void r600_query_sw_end(struct r600_common_context *rctx,
 		rctx->b.flush(&rctx->b, &query->fence, 0);
 		break;
 	case R600_QUERY_DRAW_CALLS:
-		query->begin_result = rctx->num_draw_calls;
+		query->end_result = rctx->num_draw_calls;
 		break;
 	case R600_QUERY_REQUESTED_VRAM:
 	case R600_QUERY_REQUESTED_GTT:
@@ -141,10 +141,10 @@ static void r600_query_sw_end(struct r600_common_context *rctx,
 		query->begin_result = 0;
 		break;
 	case R600_QUERY_NUM_COMPILATIONS:
-		query->begin_result = p_atomic_read(&rctx->screen->num_compilations);
+		query->end_result = p_atomic_read(&rctx->screen->num_compilations);
 		break;
 	case R600_QUERY_NUM_SHADERS_CREATED:
-		query->begin_result = p_atomic_read(&rctx->screen->num_shaders_created);
+		query->end_result = p_atomic_read(&rctx->screen->num_shaders_created);
 		break;
 	default:
 		unreachable("r600_query_sw_end: bad query type");

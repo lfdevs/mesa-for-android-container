@@ -2181,7 +2181,8 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	ctx.nliterals = 0;
 	ctx.literals = NULL;
 
-	shader->fs_write_all = ctx.info.properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS];
+	shader->fs_write_all = ctx.info.properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS] &&
+			       ctx.info.colors_written == 1;
 	shader->vs_position_window_space = ctx.info.properties[TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION];
 	shader->ps_conservative_z = (uint8_t)ctx.info.properties[TGSI_PROPERTY_FS_DEPTH_LAYOUT];
 

@@ -1,0 +1,5 @@
+# As per Marek http://lists.freedesktop.org/archives/mesa-stable/2015-December/003600.html
+37208c4fd7b1ec679d10992b42a2811cab8245a5 Revert "radeonsi: disable DCC on Stoney"
+
+# causes regression in xwayland, kde/plasma, mpv, steam ... fdo#92759
+839793680f99b8387bee9489733d5071c10f3ace i965: Use MESA_FORMAT_B8G8R8X8_SRGB for RGB visuals

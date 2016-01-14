@@ -405,6 +405,11 @@ nv50_screen_destroy(struct pipe_screen *pscreen)
 
    if (screen->blitter)
       nv50_blitter_destroy(screen);
+   if (screen->pm.prog) {
+      screen->pm.prog->code = NULL; /* hardcoded, don't FREE */
+      nv50_program_destroy(NULL, screen->pm.prog);
+      FREE(screen->pm.prog);
+   }
 
    nouveau_bo_ref(NULL, &screen->code);
    nouveau_bo_ref(NULL, &screen->tls_bo);

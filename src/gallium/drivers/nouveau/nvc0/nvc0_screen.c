@@ -428,6 +428,7 @@ nvc0_screen_destroy(struct pipe_screen *pscreen)
    if (screen->pm.prog) {
       screen->pm.prog->code = NULL; /* hardcoded, don't FREE */
       nvc0_program_destroy(NULL, screen->pm.prog);
+      FREE(screen->pm.prog);
    }
 
    nouveau_bo_ref(NULL, &screen->text);

@@ -153,7 +153,9 @@ static void
 nv50_hw_sm_destroy_query(struct nv50_context *nv50, struct nv50_hw_query *hq)
 {
    struct nv50_query *q = &hq->base;
-   q->funcs->destroy_query(nv50, q);
+   nv50_hw_query_allocate(nv50, q, 0);
+   nouveau_fence_ref(NULL, &hq->fence);
+   FREE(hq);
 }
 
 static boolean

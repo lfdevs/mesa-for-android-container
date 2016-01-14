@@ -168,6 +168,8 @@
 
 #define EG_R_028A4C_PA_SC_MODE_CNTL_1                0x028A4C
 #define   EG_S_028A4C_PS_ITER_SAMPLE(x)                 (((x) & 0x1) << 16)
+#define   EG_S_028A4C_FORCE_EOV_CNTDWN_ENABLE(x)        (((x) & 0x1) << 25)
+#define   EG_S_028A4C_FORCE_EOV_REZ_ENABLE(x)           (((x) & 0x1) << 26)
 
 #define CM_R_028804_DB_EQAA                          0x00028804
 #define   S_028804_MAX_ANCHOR_SAMPLES(x)		(((x) & 0x7) << 0)

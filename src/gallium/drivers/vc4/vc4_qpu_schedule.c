@@ -254,7 +254,8 @@ process_waddr_deps(struct schedule_state *state, struct schedule_node *n,
                 }
         } else if (is_tmu_write(waddr)) {
                 add_write_dep(state, &state->last_tmu_write, n);
-        } else if (qpu_waddr_is_tlb(waddr)) {
+        } else if (qpu_waddr_is_tlb(waddr) ||
+                   waddr == QPU_W_MS_FLAGS) {
                 add_write_dep(state, &state->last_tlb, n);
         } else {
                 switch (waddr) {

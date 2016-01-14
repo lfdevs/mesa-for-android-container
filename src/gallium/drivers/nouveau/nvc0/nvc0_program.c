@@ -285,8 +285,6 @@ nvc0_tp_get_tess_mode(struct nvc0_program *tp, struct nv50_ir_prog_info *info)
       break;
    case PIPE_PRIM_TRIANGLES:
       tp->tp.tess_mode = NVC0_3D_TESS_MODE_PRIM_TRIANGLES;
-      if (info->prop.tp.winding > 0)
-         tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CW;
       break;
    case PIPE_PRIM_QUADS:
       tp->tp.tess_mode = NVC0_3D_TESS_MODE_PRIM_QUADS;
@@ -295,6 +293,10 @@ nvc0_tp_get_tess_mode(struct nvc0_program *tp, struct nv50_ir_prog_info *info)
       tp->tp.tess_mode = ~0;
       return;
    }
+
+   if (info->prop.tp.winding > 0)
+      tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CW;
+
    if (info->prop.tp.outputPrim != PIPE_PRIM_POINTS)
       tp->tp.tess_mode |= NVC0_3D_TESS_MODE_CONNECTED;
 

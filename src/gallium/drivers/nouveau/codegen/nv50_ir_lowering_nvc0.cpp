@@ -186,91 +186,67 @@ NVC0LegalizePostRA::addTexUse(std::list<TexUse> &uses,
       uses.push_back(TexUse(usei, texi));
 }
 
+// While it might be tempting to use the an algorithm that just looks at tex
+// uses, not all texture results are guaranteed to be used on all paths. In
+// the case where along some control flow path a texture result is never used,
+// we might reuse that register for something else, creating a
+// write-after-write hazard. So we have to manually look through all
+// instructions looking for ones that reference the registers in question.
 void
-NVC0LegalizePostRA::findOverwritingDefs(const Instruction *texi,
-                                        Instruction *insn,
-                                        const BasicBlock *term,
-                                        std::list<TexUse> &uses)
+NVC0LegalizePostRA::findFirstUses(
+   Instruction *texi, std::list<TexUse> &uses)
 {
-   while (insn->op == OP_MOV && insn->getDef(0)->equals(insn->getSrc(0)))
-      insn = insn->getSrc(0)->getUniqueInsn();
+   int minGPR = texi->def(0).rep()->reg.data.id;
+   int maxGPR = minGPR + texi->def(0).rep()->reg.size / 4 - 1;
 
-   // NOTE: the tex itself is, of course, not an overwriting definition
-   if (insn == texi || !insn->bb->reachableBy(texi->bb, term))
-      return;
-
-   switch (insn->op) {
-   /* Values not connected to the tex's definition through any of these should
-    * not be conflicting.
-    */
-   case OP_SPLIT:
-   case OP_MERGE:
-   case OP_PHI:
-   case OP_UNION:
-      /* recurse again */
-      for (int s = 0; insn->srcExists(s); ++s)
-         findOverwritingDefs(texi, insn->getSrc(s)->getUniqueInsn(), term,
-                             uses);
-      break;
-   default:
-      // if (!isTextureOp(insn->op)) // TODO: are TEXes always ordered ?
-      addTexUse(uses, insn, texi);
-      break;
-   }
+   unordered_set<const BasicBlock *> visited;
+   findFirstUsesBB(minGPR, maxGPR, texi->next, texi, uses, visited);
 }
 
 void
-NVC0LegalizePostRA::findFirstUses(
-      const Instruction *texi,
-      const Instruction *insn,
-      std::list<TexUse> &uses,
-      unordered_set<const Instruction *>& visited)
+NVC0LegalizePostRA::findFirstUsesBB(
+   int minGPR, int maxGPR, Instruction *start,
+   const Instruction *texi, std::list<TexUse> &uses,
+   unordered_set<const BasicBlock *> &visited)
 {
-   for (int d = 0; insn->defExists(d); ++d) {
-      Value *v = insn->getDef(d);
-      for (Value::UseIterator u = v->uses.begin(); u != v->uses.end(); ++u) {
-         Instruction *usei = (*u)->getInsn();
+   const BasicBlock *bb = start->bb;
 
-         // NOTE: In case of a loop that overwrites a value but never uses
-         // it, it can happen that we have a cycle of uses that consists only
-         // of phis and no-op moves and will thus cause an infinite loop here
-         // since these are not considered actual uses.
-         // The most obvious (and perhaps the only) way to prevent this is to
-         // remember which instructions we've already visited.
+   // We don't process the whole bb the first time around. This is correct,
+   // however we might be in a loop and hit this BB again, and need to process
+   // the full thing. So only mark a bb as visited if we processed it from the
+   // beginning.
+   if (start == bb->getEntry()) {
+      if (visited.find(bb) != visited.end())
+         return;
+      visited.insert(bb);
+   }
 
-         if (visited.find(usei) != visited.end())
+   for (Instruction *insn = start; insn != bb->getExit(); insn = insn->next) {
+      if (insn->isNop())
+         continue;
+
+      for (int d = 0; insn->defExists(d); ++d) {
+         if (insn->def(d).getFile() != FILE_GPR ||
+             insn->def(d).rep()->reg.data.id < minGPR ||
+             insn->def(d).rep()->reg.data.id > maxGPR)
             continue;
-
-         visited.insert(usei);
-
-         if (usei->op == OP_PHI || usei->op == OP_UNION) {
-            // need a barrier before WAW cases, like:
-            //   %r0 = tex
-            //   if ...
-            //     texbar <- is required or tex might replace x again
-            //     %r1 = x <- overwriting def
-            //   %r2 = phi %r0, %r1
-            for (int s = 0; usei->srcExists(s); ++s) {
-               Instruction *defi = usei->getSrc(s)->getUniqueInsn();
-               if (defi && &usei->src(s) != *u)
-                  findOverwritingDefs(texi, defi, usei->bb, uses);
-            }
-         }
-
-         if (usei->op == OP_SPLIT ||
-             usei->op == OP_MERGE ||
-             usei->op == OP_PHI ||
-             usei->op == OP_UNION) {
-            // these uses don't manifest in the machine code
-            findFirstUses(texi, usei, uses, visited);
-         } else
-         if (usei->op == OP_MOV && usei->getDef(0)->equals(usei->getSrc(0)) &&
-             usei->subOp != NV50_IR_SUBOP_MOV_FINAL) {
-            findFirstUses(texi, usei, uses, visited);
-         } else {
-            addTexUse(uses, usei, texi);
-         }
+         addTexUse(uses, insn, texi);
+         return;
       }
+
+      for (int s = 0; insn->srcExists(s); ++s) {
+         if (insn->src(s).getFile() != FILE_GPR ||
+             insn->src(s).rep()->reg.data.id < minGPR ||
+             insn->src(s).rep()->reg.data.id > maxGPR)
+            continue;
+         addTexUse(uses, insn, texi);
+         return;
+      }
+   }
+
+   for (Graph::EdgeIterator ei = bb->cfg.outgoing(); !ei.end(); ei.next()) {
+      findFirstUsesBB(minGPR, maxGPR, BasicBlock::get(ei.getNode())->getEntry(),
+                      texi, uses, visited);
    }
 }
 
@@ -323,8 +299,7 @@ NVC0LegalizePostRA::insertTextureBarriers(Function *fn)
    if (!uses)
       return false;
    for (size_t i = 0; i < texes.size(); ++i) {
-      unordered_set<const Instruction *> visited;
-      findFirstUses(texes[i], texes[i], uses[i], visited);
+      findFirstUses(texes[i], uses[i]);
    }
 
    // determine the barrier level at each use

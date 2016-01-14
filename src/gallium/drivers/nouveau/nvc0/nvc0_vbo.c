@@ -784,7 +784,7 @@ nvc0_draw_stream_output(struct nvc0_context *nvc0,
    }
 
    while (num_instances--) {
-      PUSH_SPACE(push, 8);
+      nouveau_pushbuf_space(push, 9, 0, 1);
       BEGIN_NVC0(push, NVC0_3D(VERTEX_BEGIN_GL), 1);
       PUSH_DATA (push, mode);
       BEGIN_NVC0(push, NVC0_3D(DRAW_TFB_BASE), 1);
@@ -811,7 +811,8 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
    if (buf->fence_wr && !nouveau_fence_signalled(buf->fence_wr))
       IMMED_NVC0(push, SUBC_3D(NV10_SUBCHAN_REF_CNT), 0);
 
-   PUSH_SPACE(push, 8);
+   nouveau_pushbuf_space(push, 8, 0, 1);
+   PUSH_REFN(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
    if (info->indexed) {
       assert(nvc0->idxbuf.buffer);
       assert(nouveau_resource_mapped_by_gpu(nvc0->idxbuf.buffer));
@@ -829,8 +830,6 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
    }
    PUSH_DATA(push, nvc0_prim_gl(info->mode));
 #define NVC0_IB_ENTRY_1_NO_PREFETCH (1 << (31 - 8))
-   PUSH_REFN(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
-   nouveau_pushbuf_space(push, 0, 0, 1);
    nouveau_pushbuf_data(push,
                         buf->bo, offset, NVC0_IB_ENTRY_1_NO_PREFETCH | size);
 }

@@ -956,17 +956,8 @@ varying_matches::record(ir_variable *producer_var, ir_variable *consumer_var)
          type = type->fields.array;
       }
 
-      if (type->is_array()) {
-         slots = 1;
-         while (type->is_array()) {
-            slots *= type->length;
-            type = type->fields.array;
-         }
-         slots *= type->matrix_columns;
-      } else {
-         slots = type->matrix_columns;
-      }
-      this->matches[this->num_matches].num_components = 4 * slots;
+      slots = type->count_attribute_slots(false);
+      this->matches[this->num_matches].num_components = slots * 4;
    } else {
       this->matches[this->num_matches].num_components
          = var->type->component_slots();
@@ -1710,7 +1701,8 @@ check_against_output_limit(struct gl_context *ctx,
 
       if (var && var->data.mode == ir_var_shader_out &&
           var_counts_against_varying_limit(producer->Stage, var)) {
-         output_vectors += var->type->count_attribute_slots();
+         /* outputs for fragment shader can't be doubles */
+         output_vectors += var->type->count_attribute_slots(false);
       }
    }
 
@@ -1751,7 +1743,8 @@ check_against_input_limit(struct gl_context *ctx,
 
       if (var && var->data.mode == ir_var_shader_in &&
           var_counts_against_varying_limit(consumer->Stage, var)) {
-         input_vectors += var->type->count_attribute_slots();
+         /* vertex inputs aren't varying counted */
+         input_vectors += var->type->count_attribute_slots(false);
       }
    }
 

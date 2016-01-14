@@ -1026,9 +1026,11 @@ nvc0_blitctx_post_blit(struct nvc0_blitctx *blit)
       nvc0->base.pipe.render_condition(&nvc0->base.pipe, nvc0->cond_query,
                                        nvc0->cond_cond, nvc0->cond_mode);
 
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_VTX_TMP);
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_FB);
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(4, 0));
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(4, 1));
+   nouveau_scratch_done(&nvc0->base);
 
    nvc0->dirty = blit->saved.dirty |
       (NVC0_NEW_FRAMEBUFFER | NVC0_NEW_SCISSOR | NVC0_NEW_SAMPLE_MASK |
