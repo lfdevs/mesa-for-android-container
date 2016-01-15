@@ -1262,14 +1262,14 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glXGetCurrentDisplayEXT@Base 0
  glXGetCurrentDrawable@Base 0
  glXGetCurrentReadDrawable@Base 0
- glXGetDriverConfig@Base 0
+ (arch=!hurd-any)glXGetDriverConfig@Base 0
  glXGetFBConfigAttrib@Base 0
  glXGetFBConfigAttribSGIX@Base 0
  glXGetFBConfigFromVisualSGIX@Base 0
  glXGetFBConfigs@Base 0
  glXGetProcAddress@Base 0
  glXGetProcAddressARB@Base 0
- glXGetScreenDriver@Base 0
+ (arch=!hurd-any)glXGetScreenDriver@Base 0
  glXGetSelectedEvent@Base 0
  glXGetSelectedEventSGIX@Base 0
  glXGetVisualFromFBConfig@Base 0

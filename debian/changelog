@@ -1,3 +1,10 @@
+mesa (11.1.1-2) unstable; urgency=medium
+
+  * Limit the symbols glXGetDriverConfig and glXGetScreenDriver to
+    arch=!hurd-any (Fixes FTBFS on hurd).
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Fri, 15 Jan 2016 18:44:52 +0100
+
 mesa (11.1.1-1) experimental; urgency=medium
 
   * New upstream release.
