@@ -1989,7 +1989,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
       fs_generator g(compiler, log_data, mem_ctx, (void *) key,
                      &prog_data->base.base, v.promoted_constants,
-                     v.runtime_check_aads_emit, "VS");
+                     v.runtime_check_aads_emit, MESA_SHADER_VERTEX);
       if (INTEL_DEBUG & DEBUG_VS) {
          const char *debug_name =
             ralloc_asprintf(mem_ctx, "%s vertex shader %s",

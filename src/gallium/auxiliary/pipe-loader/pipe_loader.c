@@ -32,6 +32,11 @@
 #include "util/u_string.h"
 #include "util/u_dl.h"
 
+#ifdef _MSC_VER
+#include <stdlib.h>
+#define PATH_MAX _MAX_PATH
+#endif
+
 #define MODULE_PREFIX "pipe_"
 
 static int (*backends[])(struct pipe_loader_device **, int) = {

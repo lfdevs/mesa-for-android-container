@@ -167,7 +167,7 @@ brw_delete_buffer(struct gl_context * ctx, struct gl_buffer_object *obj)
    _mesa_buffer_unmap_all_mappings(ctx, obj);
 
    drm_intel_bo_unreference(intel_obj->buffer);
-   free(intel_obj);
+   _mesa_delete_buffer_object(ctx, obj);
 }
 
 

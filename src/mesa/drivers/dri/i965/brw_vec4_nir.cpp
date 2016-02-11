@@ -1017,7 +1017,11 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_umul_high: {
       struct brw_reg acc = retype(brw_acc_reg(8), dst.type);
 
-      emit(MUL(acc, op[0], op[1]));
+      if (devinfo->gen >=8)
+         emit(MUL(acc, op[0], retype(op[1], BRW_REGISTER_TYPE_UW)));
+      else
+         emit(MUL(acc, op[0], op[1]));
+
       emit(MACH(dst, op[0], op[1]));
       break;
    }

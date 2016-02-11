@@ -2814,6 +2814,8 @@ GlobalCSE::visit(BasicBlock *bb)
       ik = phi->getSrc(0)->getInsn();
       if (!ik)
          continue; // probably a function input
+      if (ik->defCount(0xff) > 1)
+         continue; // too painful to check if we can really push this forward
       for (s = 1; phi->srcExists(s); ++s) {
          if (phi->getSrc(s)->refCount() > 1)
             break;

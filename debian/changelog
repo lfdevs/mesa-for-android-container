@@ -1,3 +1,9 @@
+mesa (11.1.2-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 11 Feb 2016 13:14:08 +0200
+
 mesa (11.1.1-2) unstable; urgency=medium
 
   * Limit the symbols glXGetDriverConfig and glXGetScreenDriver to

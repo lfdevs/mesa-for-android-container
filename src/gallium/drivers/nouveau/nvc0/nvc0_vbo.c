@@ -331,7 +331,7 @@ nvc0_validate_vertex_buffers(struct nvc0_context *nvc0)
       b = ve->pipe.vertex_buffer_index;
       vb = &nvc0->vtxbuf[b];
 
-      if (!vb->buffer) {
+      if (nvc0->vbo_user & (1 << b)) {
          if (!(nvc0->constant_vbos & (1 << b))) {
             if (ve->pipe.instance_divisor) {
                BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_DIVISOR(i)), 1);
@@ -349,13 +349,13 @@ nvc0_validate_vertex_buffers(struct nvc0_context *nvc0)
 
       if (unlikely(ve->pipe.instance_divisor)) {
          BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(i)), 4);
-         PUSH_DATA (push, (1 << 12) | vb->stride);
+         PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
          PUSH_DATAh(push, res->address + offset);
          PUSH_DATA (push, res->address + offset);
          PUSH_DATA (push, ve->pipe.instance_divisor);
       } else {
          BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(i)), 3);
-         PUSH_DATA (push, (1 << 12) | vb->stride);
+         PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
          PUSH_DATAh(push, res->address + offset);
          PUSH_DATA (push, res->address + offset);
       }
@@ -392,6 +392,10 @@ nvc0_validate_vertex_buffers_shared(struct nvc0_context *nvc0)
          }
          /* address/value set in nvc0_update_user_vbufs_shared */
          continue;
+      } else if (!vb->buffer) {
+         /* there can be holes in the vertex buffer lists */
+         IMMED_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(b)), 0);
+         continue;
       }
       buf = nv04_resource(vb->buffer);
       offset = vb->buffer_offset;
@@ -407,6 +411,12 @@ nvc0_validate_vertex_buffers_shared(struct nvc0_context *nvc0)
 
       BCTX_REFN(nvc0->bufctx_3d, VTX, buf, RD);
    }
+   /* If there are more elements than buffers, we might not have unset
+    * fetching on the later elements.
+    */
+   for (; b < nvc0->vertex->num_elements; ++b)
+      IMMED_NVC0(push, NVC0_3D(VERTEX_ARRAY_FETCH(b)), 0);
+
    if (nvc0->vbo_user)
       nvc0_update_user_vbufs_shared(nvc0);
 }

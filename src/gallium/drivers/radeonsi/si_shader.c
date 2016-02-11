@@ -2291,6 +2291,9 @@ static void si_llvm_emit_fs_epilogue(struct lp_build_tgsi_context * bld_base)
 		last_args[6]= uint->zero;
 		last_args[7]= uint->zero;
 		last_args[8]= uint->zero;
+
+		if (info->uses_kill)
+			si_shader_ctx->shader->spi_shader_z_format = V_028710_SPI_SHADER_32_R;
 	}
 
 	/* Specify whether the EXEC mask represents the valid mask */

@@ -35,6 +35,7 @@
 #include "util/u_memory.h"
 #include "util/u_video.h"
 #include "vl/vl_rbsp.h"
+#include "vl/vl_zscan.h"
 
 #include "entrypoint.h"
 #include "vid_dec.h"
@@ -205,6 +206,7 @@ static void scaling_list(struct vl_rbsp *rbsp, uint8_t *scalingList, unsigned si
                          const uint8_t *defaultList, const uint8_t *fallbackList)
 {
    unsigned lastScale = 8, nextScale = 8;
+   const int *list;
    unsigned i;
 
    /* (pic|seq)_scaling_list_present_flag[i] */
@@ -214,6 +216,7 @@ static void scaling_list(struct vl_rbsp *rbsp, uint8_t *scalingList, unsigned si
       return;
    }
 
+   list = (sizeOfScalingList == 16) ? vl_zscan_normal_16 : vl_zscan_normal;
    for (i = 0; i < sizeOfScalingList; ++i ) {
 
       if (nextScale != 0) {
@@ -224,8 +227,8 @@ static void scaling_list(struct vl_rbsp *rbsp, uint8_t *scalingList, unsigned si
             return;
          }
       }
-      scalingList[i] = nextScale == 0 ? lastScale : nextScale;
-      lastScale = scalingList[i];
+      scalingList[list[i]] = nextScale == 0 ? lastScale : nextScale;
+      lastScale = scalingList[list[i]];
    }
 }
 

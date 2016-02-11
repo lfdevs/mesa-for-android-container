@@ -17,12 +17,11 @@ env.Append(CPPDEFINES = [
 
 source = env.ParseSourceList('Makefile.sources', 'COMMON_SOURCES')
 
-#if HAVE_LIBDRM
-source += env.ParseSourceList('Makefile.sources', 'DRM_SOURCES')
+if env['HAVE_DRM']:
+    source += env.ParseSourceList('Makefile.sources', 'DRM_SOURCES')
 
-env.PkgUseModules('DRM')
-env.Append(LIBS = [libloader])
-#endif
+    env.PkgUseModules('DRM')
+    env.Append(LIBS = [libloader])
 
 pipe_loader = env.ConvenienceLibrary(
     target = 'pipe_loader',

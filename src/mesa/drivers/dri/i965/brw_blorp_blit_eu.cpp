@@ -32,7 +32,7 @@ brw_blorp_eu_emitter::brw_blorp_eu_emitter(struct brw_context *brw,
      generator(brw->intelScreen->compiler, brw,
                mem_ctx, (void *) rzalloc(mem_ctx, struct brw_wm_prog_key),
                (struct brw_stage_prog_data *) rzalloc(mem_ctx, struct brw_wm_prog_data),
-               0, false, "BLORP")
+               0, false, MESA_SHADER_FRAGMENT)
 {
    if (debug_flag)
       generator.enable_debug("blorp");

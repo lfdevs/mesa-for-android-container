@@ -413,7 +413,7 @@ _mesa_new_buffer_object(struct gl_context *ctx, GLuint name)
  *
  * Default callback for the \c dd_function_table::DeleteBuffer() hook.
  */
-static void
+void
 _mesa_delete_buffer_object(struct gl_context *ctx,
                            struct gl_buffer_object *bufObj)
 {

@@ -2524,6 +2524,11 @@ _mesa_UniformSubroutinesuiv(GLenum shadertype, GLsizei count,
    i = 0;
    do {
       struct gl_uniform_storage *uni = sh->SubroutineUniformRemapTable[i];
+      if (uni == NULL) {
+         i++;
+         continue;
+      }
+
       int uni_count = uni->array_elements ? uni->array_elements : 1;
       int j, k;
 
@@ -2551,6 +2556,11 @@ _mesa_UniformSubroutinesuiv(GLenum shadertype, GLsizei count,
    i = 0;
    do {
       struct gl_uniform_storage *uni = sh->SubroutineUniformRemapTable[i];
+      if (uni == NULL) {
+         i++;
+         continue;
+      }
+
       int uni_count = uni->array_elements ? uni->array_elements : 1;
 
       memcpy(&uni->storage[0], &indices[i],

@@ -3,3 +3,7 @@
 
 # causes regression in xwayland, kde/plasma, mpv, steam ... fdo#92759
 839793680f99b8387bee9489733d5071c10f3ace i965: Use MESA_FORMAT_B8G8R8X8_SRGB for RGB visuals
+
+# .num_slices isn't available in 11.1
+f2c891353609b48459f27f205407d42823dd7d03 Add missing platform information for KBL
+

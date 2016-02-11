@@ -3134,7 +3134,7 @@ check_explicit_uniform_locations(struct gl_context *ctx,
          if (var && (var->data.mode == ir_var_uniform &&
                      var->data.explicit_location)) {
             bool ret;
-            if (var->type->is_subroutine())
+            if (var->type->without_array()->is_subroutine())
                ret = reserve_subroutine_explicit_locations(prog, sh, var);
             else
                ret = reserve_explicit_locations(prog, uniform_map, var);

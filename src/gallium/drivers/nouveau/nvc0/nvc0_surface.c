@@ -355,27 +355,132 @@ nvc0_clear_render_target(struct pipe_context *pipe,
 }
 
 static void
-nvc0_clear_buffer_cpu(struct pipe_context *pipe,
-                      struct pipe_resource *res,
-                      unsigned offset, unsigned size,
-                      const void *data, int data_size)
+nvc0_clear_buffer_push_nvc0(struct pipe_context *pipe,
+                            struct pipe_resource *res,
+                            unsigned offset, unsigned size,
+                            const void *data, int data_size)
 {
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nv04_resource *buf = nv04_resource(res);
-   struct pipe_transfer *pt;
-   struct pipe_box box;
-   unsigned elements, i;
+   unsigned i;
 
-   elements = size / data_size;
+   nouveau_bufctx_refn(nvc0->bufctx, 0, buf->bo, buf->domain | NOUVEAU_BO_WR);
+   nouveau_pushbuf_bufctx(push, nvc0->bufctx);
+   nouveau_pushbuf_validate(push);
 
-   u_box_1d(offset, size, &box);
+   unsigned count = (size + 3) / 4;
+   unsigned data_words = data_size / 4;
 
-   uint8_t *map = buf->vtbl->transfer_map(pipe, res, 0, PIPE_TRANSFER_WRITE,
-                                          &box, &pt);
+   while (count) {
+      unsigned nr_data = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN) / data_words;
+      unsigned nr = nr_data * data_words;
 
-   for (i = 0; i < elements; ++i)
-      memcpy(&map[i*data_size], data, data_size);
+      if (!PUSH_SPACE(push, nr + 9))
+         break;
 
-   buf->vtbl->transfer_unmap(pipe, pt);
+      BEGIN_NVC0(push, NVC0_M2MF(OFFSET_OUT_HIGH), 2);
+      PUSH_DATAh(push, buf->address + offset);
+      PUSH_DATA (push, buf->address + offset);
+      BEGIN_NVC0(push, NVC0_M2MF(LINE_LENGTH_IN), 2);
+      PUSH_DATA (push, MIN2(size, nr * 4));
+      PUSH_DATA (push, 1);
+      BEGIN_NVC0(push, NVC0_M2MF(EXEC), 1);
+      PUSH_DATA (push, 0x100111);
+
+      /* must not be interrupted (trap on QUERY fence, 0x50 works however) */
+      BEGIN_NIC0(push, NVC0_M2MF(DATA), nr);
+      for (i = 0; i < nr_data; i++)
+         PUSH_DATAp(push, data, data_words);
+
+      count -= nr;
+      offset += nr * 4;
+      size -= nr * 4;
+   }
+
+   if (buf->mm) {
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
+   }
+
+   nouveau_bufctx_reset(nvc0->bufctx, 0);
+}
+
+static void
+nvc0_clear_buffer_push_nve4(struct pipe_context *pipe,
+                            struct pipe_resource *res,
+                            unsigned offset, unsigned size,
+                            const void *data, int data_size)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nv04_resource *buf = nv04_resource(res);
+   unsigned i;
+
+   nouveau_bufctx_refn(nvc0->bufctx, 0, buf->bo, buf->domain | NOUVEAU_BO_WR);
+   nouveau_pushbuf_bufctx(push, nvc0->bufctx);
+   nouveau_pushbuf_validate(push);
+
+   unsigned count = (size + 3) / 4;
+   unsigned data_words = data_size / 4;
+
+   while (count) {
+      unsigned nr_data = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN) / data_words;
+      unsigned nr = nr_data * data_words;
+
+      if (!PUSH_SPACE(push, nr + 10))
+         break;
+
+      BEGIN_NVC0(push, NVE4_P2MF(UPLOAD_DST_ADDRESS_HIGH), 2);
+      PUSH_DATAh(push, buf->address + offset);
+      PUSH_DATA (push, buf->address + offset);
+      BEGIN_NVC0(push, NVE4_P2MF(UPLOAD_LINE_LENGTH_IN), 2);
+      PUSH_DATA (push, MIN2(size, nr * 4));
+      PUSH_DATA (push, 1);
+      /* must not be interrupted (trap on QUERY fence, 0x50 works however) */
+      BEGIN_1IC0(push, NVE4_P2MF(UPLOAD_EXEC), nr + 1);
+      PUSH_DATA (push, 0x1001);
+      for (i = 0; i < nr_data; i++)
+         PUSH_DATAp(push, data, data_words);
+
+      count -= nr;
+      offset += nr * 4;
+      size -= nr * 4;
+   }
+
+   if (buf->mm) {
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
+   }
+
+   nouveau_bufctx_reset(nvc0->bufctx, 0);
+}
+
+static void
+nvc0_clear_buffer_push(struct pipe_context *pipe,
+                       struct pipe_resource *res,
+                       unsigned offset, unsigned size,
+                       const void *data, int data_size)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   unsigned tmp;
+
+   if (data_size == 1) {
+      tmp = *(unsigned char *)data;
+      tmp = (tmp << 24) | (tmp << 16) | (tmp << 8) | tmp;
+      data = &tmp;
+      data_size = 4;
+   } else if (data_size == 2) {
+      tmp = *(unsigned short *)data;
+      tmp = (tmp << 16) | tmp;
+      data = &tmp;
+      data_size = 4;
+   }
+
+   if (nvc0->screen->base.class_3d < NVE4_3D_CLASS)
+      nvc0_clear_buffer_push_nvc0(pipe, res, offset, size, data, data_size);
+   else
+      nvc0_clear_buffer_push_nve4(pipe, res, offset, size, data, data_size);
 }
 
 static void
@@ -400,10 +505,8 @@ nvc0_clear_buffer(struct pipe_context *pipe,
       memcpy(&color.ui, data, 16);
       break;
    case 12:
-      /* This doesn't work, RGB32 is not a valid RT format.
-       * dst_fmt = PIPE_FORMAT_R32G32B32_UINT;
-       * memcpy(&color.ui, data, 12);
-       * memset(&color.ui[3], 0, 4);
+      /* RGB32 is not a valid RT format. This will be handled by the pushbuf
+       * uploader.
        */
       break;
    case 8:
@@ -435,14 +538,26 @@ nvc0_clear_buffer(struct pipe_context *pipe,
    assert(size % data_size == 0);
 
    if (data_size == 12) {
-      /* TODO: Find a way to do this with the GPU! */
-      nvc0_clear_buffer_cpu(pipe, res, offset, size, data, data_size);
+      nvc0_clear_buffer_push(pipe, res, offset, size, data, data_size);
       return;
+   }
+
+   if (offset & 0xff) {
+      unsigned fixup_size = MIN2(size, align(offset, 0x100) - offset);
+      assert(fixup_size % data_size == 0);
+      nvc0_clear_buffer_push(pipe, res, offset, fixup_size, data, data_size);
+      offset += fixup_size;
+      size -= fixup_size;
+      if (!size)
+         return;
    }
 
    elements = size / data_size;
    height = (elements + 16383) / 16384;
    width = elements / height;
+   if (height > 1)
+      width &= ~0xff;
+   assert(width > 0);
 
    if (!PUSH_SPACE(push, 40))
       return;
@@ -463,7 +578,7 @@ nvc0_clear_buffer(struct pipe_context *pipe,
    BEGIN_NVC0(push, NVC0_3D(RT_ADDRESS_HIGH(0)), 9);
    PUSH_DATAh(push, buf->address + offset);
    PUSH_DATA (push, buf->address + offset);
-   PUSH_DATA (push, width * data_size);
+   PUSH_DATA (push, align(width * data_size, 0x100));
    PUSH_DATA (push, height);
    PUSH_DATA (push, nvc0_format_table[dst_fmt].rt);
    PUSH_DATA (push, NVC0_3D_RT_TILE_MODE_LINEAR);
@@ -478,24 +593,20 @@ nvc0_clear_buffer(struct pipe_context *pipe,
 
    IMMED_NVC0(push, NVC0_3D(CLEAR_BUFFERS), 0x3c);
 
+   IMMED_NVC0(push, NVC0_3D(COND_MODE), nvc0->cond_condmode);
+
+   if (buf->mm) {
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
+      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
+   }
+
    if (width * height != elements) {
       offset += width * height * data_size;
       width = elements - width * height;
-      height = 1;
-
-      BEGIN_NVC0(push, NVC0_3D(RT_ADDRESS_HIGH(0)), 4);
-      PUSH_DATAh(push, buf->address + offset);
-      PUSH_DATA (push, buf->address + offset);
-      PUSH_DATA (push, width * data_size);
-      PUSH_DATA (push, height);
-
-      IMMED_NVC0(push, NVC0_3D(CLEAR_BUFFERS), 0x3c);
+      nvc0_clear_buffer_push(pipe, res, offset, width * data_size,
+                             data, data_size);
    }
 
-   IMMED_NVC0(push, NVC0_3D(COND_MODE), nvc0->cond_condmode);
-
-   nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
-   nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
    nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
 }
 

@@ -212,13 +212,37 @@ static void si_shader_es(struct si_shader *shader)
 		si_set_tesseval_regs(shader, pm4);
 }
 
+/**
+ * Calculate the appropriate setting of VGT_GS_MODE when \p shader is a
+ * geometry shader.
+ */
+static uint32_t si_vgt_gs_mode(struct si_shader *shader)
+{
+	unsigned gs_max_vert_out = shader->selector->gs_max_out_vertices;
+	unsigned cut_mode;
+
+	if (gs_max_vert_out <= 128) {
+		cut_mode = V_028A40_GS_CUT_128;
+	} else if (gs_max_vert_out <= 256) {
+		cut_mode = V_028A40_GS_CUT_256;
+	} else if (gs_max_vert_out <= 512) {
+		cut_mode = V_028A40_GS_CUT_512;
+	} else {
+		assert(gs_max_vert_out <= 1024);
+		cut_mode = V_028A40_GS_CUT_1024;
+	}
+
+	return S_028A40_MODE(V_028A40_GS_SCENARIO_G) |
+	       S_028A40_CUT_MODE(cut_mode)|
+	       S_028A40_ES_WRITE_OPTIMIZE(1) |
+	       S_028A40_GS_WRITE_OPTIMIZE(1);
+}
+
 static void si_shader_gs(struct si_shader *shader)
 {
 	unsigned gs_vert_itemsize = shader->selector->gsvs_vertex_size;
-	unsigned gs_max_vert_out = shader->selector->gs_max_out_vertices;
 	unsigned gsvs_itemsize = shader->selector->max_gsvs_emit_size >> 2;
 	unsigned gs_num_invocations = shader->selector->gs_num_invocations;
-	unsigned cut_mode;
 	struct si_pm4_state *pm4;
 	unsigned num_sgprs, num_user_sgprs;
 	uint64_t va;
@@ -232,22 +256,7 @@ static void si_shader_gs(struct si_shader *shader)
 	if (pm4 == NULL)
 		return;
 
-	if (gs_max_vert_out <= 128) {
-		cut_mode = V_028A40_GS_CUT_128;
-	} else if (gs_max_vert_out <= 256) {
-		cut_mode = V_028A40_GS_CUT_256;
-	} else if (gs_max_vert_out <= 512) {
-		cut_mode = V_028A40_GS_CUT_512;
-	} else {
-		assert(gs_max_vert_out <= 1024);
-		cut_mode = V_028A40_GS_CUT_1024;
-	}
-
-	si_pm4_set_reg(pm4, R_028A40_VGT_GS_MODE,
-		       S_028A40_MODE(V_028A40_GS_SCENARIO_G) |
-		       S_028A40_CUT_MODE(cut_mode)|
-		       S_028A40_ES_WRITE_OPTIMIZE(1) |
-		       S_028A40_GS_WRITE_OPTIMIZE(1));
+	si_pm4_set_reg(pm4, R_028A40_VGT_GS_MODE, si_vgt_gs_mode(shader));
 
 	si_pm4_set_reg(pm4, R_028A60_VGT_GSVS_RING_OFFSET_1, gsvs_itemsize);
 	si_pm4_set_reg(pm4, R_028A64_VGT_GSVS_RING_OFFSET_2, gsvs_itemsize * ((max_stream >= 2) ? 2 : 1));
@@ -255,7 +264,7 @@ static void si_shader_gs(struct si_shader *shader)
 
 	si_pm4_set_reg(pm4, R_028AB0_VGT_GSVS_RING_ITEMSIZE, gsvs_itemsize * (max_stream + 1));
 
-	si_pm4_set_reg(pm4, R_028B38_VGT_GS_MAX_VERT_OUT, gs_max_vert_out);
+	si_pm4_set_reg(pm4, R_028B38_VGT_GS_MAX_VERT_OUT, shader->selector->gs_max_out_vertices);
 
 	si_pm4_set_reg(pm4, R_028B5C_VGT_GS_VERT_ITEMSIZE, gs_vert_itemsize >> 2);
 	si_pm4_set_reg(pm4, R_028B60_VGT_GS_VERT_ITEMSIZE_1, (max_stream >= 1) ? gs_vert_itemsize >> 2 : 0);
@@ -289,7 +298,14 @@ static void si_shader_gs(struct si_shader *shader)
 		       S_00B22C_SCRATCH_EN(shader->scratch_bytes_per_wave > 0));
 }
 
-static void si_shader_vs(struct si_shader *shader)
+/**
+ * Compute the state for \p shader, which will run as a vertex shader on the
+ * hardware.
+ *
+ * If \p gs is non-NULL, it points to the geometry shader for which this shader
+ * is the copy shader.
+ */
+static void si_shader_vs(struct si_shader *shader, struct si_shader *gs)
 {
 	struct si_pm4_state *pm4;
 	unsigned num_sgprs, num_user_sgprs;
@@ -304,15 +320,21 @@ static void si_shader_vs(struct si_shader *shader)
 	if (pm4 == NULL)
 		return;
 
-	/* If this is the GS copy shader, the GS state writes this register.
-	 * Otherwise, the VS state writes it.
+	/* We always write VGT_GS_MODE in the VS state, because every switch
+	 * between different shader pipelines involving a different GS or no
+	 * GS at all involves a switch of the VS (different GS use different
+	 * copy shaders). On the other hand, when the API switches from a GS to
+	 * no GS and then back to the same GS used originally, the GS state is
+	 * not sent again.
 	 */
-	if (!shader->is_gs_copy_shader) {
+	if (!gs) {
 		si_pm4_set_reg(pm4, R_028A40_VGT_GS_MODE,
 			       S_028A40_MODE(enable_prim_id ? V_028A40_GS_SCENARIO_A : 0));
 		si_pm4_set_reg(pm4, R_028A84_VGT_PRIMITIVEID_EN, enable_prim_id);
-	} else
+	} else {
+		si_pm4_set_reg(pm4, R_028A40_VGT_GS_MODE, si_vgt_gs_mode(gs));
 		si_pm4_set_reg(pm4, R_028A84_VGT_PRIMITIVEID_EN, 0);
+	}
 
 	va = shader->bo->gpu_address;
 	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ, RADEON_PRIO_USER_SHADER);
@@ -473,7 +495,7 @@ static void si_shader_init_pm4_state(struct si_shader *shader)
 		else if (shader->key.vs.as_es)
 			si_shader_es(shader);
 		else
-			si_shader_vs(shader);
+			si_shader_vs(shader, NULL);
 		break;
 	case PIPE_SHADER_TESS_CTRL:
 		si_shader_hs(shader);
@@ -482,11 +504,11 @@ static void si_shader_init_pm4_state(struct si_shader *shader)
 		if (shader->key.tes.as_es)
 			si_shader_es(shader);
 		else
-			si_shader_vs(shader);
+			si_shader_vs(shader, NULL);
 		break;
 	case PIPE_SHADER_GEOMETRY:
 		si_shader_gs(shader);
-		si_shader_vs(shader->gs_copy_shader);
+		si_shader_vs(shader->gs_copy_shader, shader);
 		break;
 	case PIPE_SHADER_FRAGMENT:
 		si_shader_ps(shader);
@@ -1281,6 +1303,7 @@ static bool si_update_spi_tmpring_size(struct si_context *sctx)
 		si_get_max_scratch_bytes_per_wave(sctx);
 	unsigned scratch_needed_size = scratch_bytes_per_wave *
 		sctx->scratch_waves;
+	unsigned spi_tmpring_size;
 	int r;
 
 	if (scratch_needed_size > 0) {
@@ -1350,8 +1373,12 @@ static bool si_update_spi_tmpring_size(struct si_context *sctx)
 	assert((scratch_needed_size & ~0x3FF) == scratch_needed_size &&
 		"scratch size should already be aligned correctly.");
 
-	sctx->spi_tmpring_size = S_0286E8_WAVES(sctx->scratch_waves) |
-				S_0286E8_WAVESIZE(scratch_bytes_per_wave >> 10);
+	spi_tmpring_size = S_0286E8_WAVES(sctx->scratch_waves) |
+			   S_0286E8_WAVESIZE(scratch_bytes_per_wave >> 10);
+	if (spi_tmpring_size != sctx->spi_tmpring_size) {
+		sctx->spi_tmpring_size = spi_tmpring_size;
+		sctx->emit_scratch_reloc = true;
+	}
 	return true;
 }
 

@@ -472,7 +472,7 @@ _mesa_meta_bind_rb_as_tex_image(struct gl_context *ctx,
 
 GLuint
 _mesa_meta_setup_sampler(struct gl_context *ctx,
-                         const struct gl_texture_object *texObj,
+                         struct gl_texture_object *texObj,
                          GLenum target, GLenum filter, GLuint srcLevel);
 
 extern GLbitfield

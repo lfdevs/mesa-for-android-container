@@ -99,7 +99,7 @@ intel_bufferobj_free(struct gl_context * ctx, struct gl_buffer_object *obj)
    _mesa_align_free(intel_obj->sys_buffer);
 
    drm_intel_bo_unreference(intel_obj->buffer);
-   free(intel_obj);
+   _mesa_delete_buffer_object(ctx, obj);
 }
 
 

@@ -442,7 +442,7 @@ public:
                 struct brw_stage_prog_data *prog_data,
                 unsigned promoted_constants,
                 bool runtime_check_aads_emit,
-                const char *stage_abbrev);
+                gl_shader_stage stage);
    ~fs_generator();
 
    void enable_debug(const char *shader_name);
@@ -553,7 +553,7 @@ private:
    bool runtime_check_aads_emit;
    bool debug_flag;
    const char *shader_name;
-   const char *stage_abbrev;
+   gl_shader_stage stage;
    void *mem_ctx;
 };
 

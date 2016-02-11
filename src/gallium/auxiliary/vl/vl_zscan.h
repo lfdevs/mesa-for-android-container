@@ -64,6 +64,7 @@ struct vl_zscan_buffer
    struct pipe_surface *dst;
 };
 
+extern const int vl_zscan_normal_16[];
 extern const int vl_zscan_linear[];
 extern const int vl_zscan_normal[];
 extern const int vl_zscan_alternate[];

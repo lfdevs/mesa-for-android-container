@@ -71,7 +71,7 @@ radeonDeleteBufferObject(struct gl_context * ctx,
         radeon_bo_unref(radeon_obj->bo);
     }
 
-    free(radeon_obj);
+    _mesa_delete_buffer_object(ctx, obj);
 }
 
 

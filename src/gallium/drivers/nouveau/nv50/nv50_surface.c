@@ -592,6 +592,82 @@ nv50_clear(struct pipe_context *pipe, unsigned buffers,
 }
 
 static void
+nv50_clear_buffer_push(struct pipe_context *pipe,
+                       struct pipe_resource *res,
+                       unsigned offset, unsigned size,
+                       const void *data, int data_size)
+{
+   struct nv50_context *nv50 = nv50_context(pipe);
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   struct nv04_resource *buf = nv04_resource(res);
+   unsigned count = (size + 3) / 4;
+   unsigned xcoord = offset & 0xff;
+   unsigned tmp, i;
+
+   if (data_size == 1) {
+      tmp = *(unsigned char *)data;
+      tmp = (tmp << 24) | (tmp << 16) | (tmp << 8) | tmp;
+      data = &tmp;
+      data_size = 4;
+   } else if (data_size == 2) {
+      tmp = *(unsigned short *)data;
+      tmp = (tmp << 16) | tmp;
+      data = &tmp;
+      data_size = 4;
+   }
+
+   unsigned data_words = data_size / 4;
+
+   nouveau_bufctx_refn(nv50->bufctx, 0, buf->bo, buf->domain | NOUVEAU_BO_WR);
+   nouveau_pushbuf_bufctx(push, nv50->bufctx);
+   nouveau_pushbuf_validate(push);
+
+   offset &= ~0xff;
+
+   BEGIN_NV04(push, NV50_2D(DST_FORMAT), 2);
+   PUSH_DATA (push, NV50_SURFACE_FORMAT_R8_UNORM);
+   PUSH_DATA (push, 1);
+   BEGIN_NV04(push, NV50_2D(DST_PITCH), 5);
+   PUSH_DATA (push, 262144);
+   PUSH_DATA (push, 65536);
+   PUSH_DATA (push, 1);
+   PUSH_DATAh(push, buf->address + offset);
+   PUSH_DATA (push, buf->address + offset);
+   BEGIN_NV04(push, NV50_2D(SIFC_BITMAP_ENABLE), 2);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, NV50_SURFACE_FORMAT_R8_UNORM);
+   BEGIN_NV04(push, NV50_2D(SIFC_WIDTH), 10);
+   PUSH_DATA (push, size);
+   PUSH_DATA (push, 1);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 1);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 1);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, xcoord);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 0);
+
+   while (count) {
+      unsigned nr_data = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN) / data_words;
+      unsigned nr = nr_data * data_words;
+
+      BEGIN_NI04(push, NV50_2D(SIFC_DATA), nr);
+      for (i = 0; i < nr_data; i++)
+         PUSH_DATAp(push, data, data_words);
+
+      count -= nr;
+   }
+
+   if (buf->mm) {
+      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence);
+      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence_wr);
+   }
+
+   nouveau_bufctx_reset(nv50->bufctx, 0);
+}
+
+static void
 nv50_clear_buffer(struct pipe_context *pipe,
                   struct pipe_resource *res,
                   unsigned offset, unsigned size,
@@ -640,9 +716,22 @@ nv50_clear_buffer(struct pipe_context *pipe,
 
    assert(size % data_size == 0);
 
+   if (offset & 0xff) {
+      unsigned fixup_size = MIN2(size, align(offset, 0x100) - offset);
+      assert(fixup_size % data_size == 0);
+      nv50_clear_buffer_push(pipe, res, offset, fixup_size, data, data_size);
+      offset += fixup_size;
+      size -= fixup_size;
+      if (!size)
+         return;
+   }
+
    elements = size / data_size;
    height = (elements + 8191) / 8192;
    width = elements / height;
+   if (height > 1)
+      width &= ~0xff;
+   assert(width > 0);
 
    BEGIN_NV04(push, NV50_3D(CLEAR_COLOR(0)), 4);
    PUSH_DATAf(push, color.f[0]);
@@ -666,13 +755,13 @@ nv50_clear_buffer(struct pipe_context *pipe,
    BEGIN_NV04(push, NV50_3D(RT_CONTROL), 1);
    PUSH_DATA (push, 1);
    BEGIN_NV04(push, NV50_3D(RT_ADDRESS_HIGH(0)), 5);
-   PUSH_DATAh(push, buf->bo->offset + buf->offset + offset);
-   PUSH_DATA (push, buf->bo->offset + buf->offset + offset);
+   PUSH_DATAh(push, buf->address + offset);
+   PUSH_DATA (push, buf->address + offset);
    PUSH_DATA (push, nv50_format_table[dst_fmt].rt);
    PUSH_DATA (push, 0);
    PUSH_DATA (push, 0);
    BEGIN_NV04(push, NV50_3D(RT_HORIZ(0)), 2);
-   PUSH_DATA (push, NV50_3D_RT_HORIZ_LINEAR | (width * data_size));
+   PUSH_DATA (push, NV50_3D_RT_HORIZ_LINEAR | align(width * data_size, 0x100));
    PUSH_DATA (push, height);
    BEGIN_NV04(push, NV50_3D(ZETA_ENABLE), 1);
    PUSH_DATA (push, 0);
@@ -691,25 +780,20 @@ nv50_clear_buffer(struct pipe_context *pipe,
    BEGIN_NI04(push, NV50_3D(CLEAR_BUFFERS), 1);
    PUSH_DATA (push, 0x3c);
 
-   if (width * height != elements) {
-      offset += width * height * data_size;
-      width = elements - width * height;
-      height = 1;
-      BEGIN_NV04(push, NV50_3D(RT_ADDRESS_HIGH(0)), 2);
-      PUSH_DATAh(push, buf->bo->offset + buf->offset + offset);
-      PUSH_DATA (push, buf->bo->offset + buf->offset + offset);
-      BEGIN_NV04(push, NV50_3D(RT_HORIZ(0)), 2);
-      PUSH_DATA (push, NV50_3D_RT_HORIZ_LINEAR | (width * data_size));
-      PUSH_DATA (push, height);
-      BEGIN_NI04(push, NV50_3D(CLEAR_BUFFERS), 1);
-      PUSH_DATA (push, 0x3c);
-   }
-
    BEGIN_NV04(push, NV50_3D(COND_MODE), 1);
    PUSH_DATA (push, nv50->cond_condmode);
 
-   nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence);
-   nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence_wr);
+   if (buf->mm) {
+      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence);
+      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence_wr);
+   }
+
+   if (width * height != elements) {
+      offset += width * height * data_size;
+      width = elements - width * height;
+      nv50_clear_buffer_push(pipe, res, offset, width * data_size,
+                             data, data_size);
+   }
 
    nv50->dirty |= NV50_NEW_FRAMEBUFFER | NV50_NEW_SCISSOR;
 }

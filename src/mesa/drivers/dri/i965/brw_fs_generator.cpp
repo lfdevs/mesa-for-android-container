@@ -27,6 +27,7 @@
  * native instructions.
  */
 
+#include "glsl/glsl_parser_extras.h"
 #include "main/macros.h"
 #include "brw_context.h"
 #include "brw_eu.h"
@@ -112,14 +113,14 @@ fs_generator::fs_generator(const struct brw_compiler *compiler, void *log_data,
                            struct brw_stage_prog_data *prog_data,
                            unsigned promoted_constants,
                            bool runtime_check_aads_emit,
-                           const char *stage_abbrev)
+                           gl_shader_stage stage)
 
    : compiler(compiler), log_data(log_data),
      devinfo(compiler->devinfo), key(key),
      prog_data(prog_data),
      promoted_constants(promoted_constants),
      runtime_check_aads_emit(runtime_check_aads_emit), debug_flag(false),
-     stage_abbrev(stage_abbrev), mem_ctx(mem_ctx)
+     stage(stage), mem_ctx(mem_ctx)
 {
    p = rzalloc(mem_ctx, struct brw_codegen);
    brw_init_codegen(devinfo, p, mem_ctx);
@@ -903,6 +904,14 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
             /* Set the offset bits in DWord 2. */
             brw_MOV(p, get_element_ud(header_reg, 2),
                        brw_imm_ud(inst->offset));
+         } else if (stage != MESA_SHADER_VERTEX &&
+                    stage != MESA_SHADER_FRAGMENT) {
+            /* The vertex and fragment stages have g0.2 set to 0, so
+             * header0.2 is 0 when g0 is copied. Other stages may not, so we
+             * must set it to 0 to avoid setting undesirable bits in the
+             * message.
+             */
+            brw_MOV(p, get_element_ud(header_reg, 2), brw_imm_ud(0));
          }
 
          brw_adjust_sampler_state_pointer(p, header_reg, sampler_index);
@@ -2296,7 +2305,8 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
                               "%s SIMD%d shader: %d inst, %d loops, %u cycles, "
                               "%d:%d spills:fills, Promoted %u constants, "
                               "compacted %d to %d bytes.\n",
-                              stage_abbrev, dispatch_width, before_size / 16,
+                              _mesa_shader_stage_to_abbrev(stage),
+                              dispatch_width, before_size / 16,
                               loop_count, cfg->cycle_count, spill_count,
                               fill_count, promoted_constants, before_size,
                               after_size);

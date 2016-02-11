@@ -1499,6 +1499,9 @@ GCRA::cleanup(const bool success)
 
    delete[] nodes;
    nodes = NULL;
+   hi.next = hi.prev = &hi;
+   lo[0].next = lo[0].prev = &lo[0];
+   lo[1].next = lo[1].prev = &lo[1];
 }
 
 Symbol *

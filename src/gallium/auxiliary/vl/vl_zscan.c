@@ -49,6 +49,13 @@ enum VS_OUTPUT
    VS_O_VTEX = 0
 };
 
+const int vl_zscan_normal_16[] =
+{
+   /* Zig-Zag scan pattern */
+    0, 1, 4, 8, 5, 2, 3, 6,
+    9,12,13,10, 7,11,14,15
+};
+
 const int vl_zscan_linear[] =
 {
    /* Linear scan pattern */

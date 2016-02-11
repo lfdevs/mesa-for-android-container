@@ -235,6 +235,8 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
 
       case __DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE:
          srgb = value != 0;
+         if (!disp->Extensions.KHR_gl_colorspace && srgb)
+            return NULL;
          break;
 
       default:

@@ -805,18 +805,18 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
             /* 1D array textures.
              * We need to convert gallium coords to GL coords.
              */
-            GLvoid *src = _mesa_image_address3d(unpack, pixels,
+            GLvoid *src = _mesa_image_address2d(unpack, pixels,
                                                 width, depth, format,
-                                                type, 0, slice, 0);
+                                                type, slice, 0);
             memcpy(map, src, bytesPerRow);
          }
          else {
             ubyte *slice_map = map;
 
             for (row = 0; row < (unsigned) height; row++) {
-               GLvoid *src = _mesa_image_address3d(unpack, pixels,
-                                                   width, height, format,
-                                                   type, slice, row, 0);
+               GLvoid *src = _mesa_image_address(dims, unpack, pixels,
+                                                 width, height, format,
+                                                 type, slice, row, 0);
                memcpy(slice_map, src, bytesPerRow);
                slice_map += transfer->stride;
             }

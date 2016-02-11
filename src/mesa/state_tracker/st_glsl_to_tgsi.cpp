@@ -3776,9 +3776,11 @@ glsl_to_tgsi_visitor::get_last_temp_read_first_temp_write(int *last_reads, int *
             last_reads[inst->src[j].index] = (depth == 0) ? i : -2;
       }
       for (j = 0; j < num_inst_dst_regs(inst); j++) {
-         if (inst->dst[j].file == PROGRAM_TEMPORARY)
+         if (inst->dst[j].file == PROGRAM_TEMPORARY) {
             if (first_writes[inst->dst[j].index] == -1)
                first_writes[inst->dst[j].index] = (depth == 0) ? i : loop_start;
+            last_reads[inst->dst[j].index] = (depth == 0) ? i : -2;
+         }
       }
       for (j = 0; j < inst->tex_offset_num_offset; j++) {
          if (inst->tex_offsets[j].file == PROGRAM_TEMPORARY)
@@ -4292,6 +4294,7 @@ glsl_to_tgsi_visitor::merge_registers(void)
             /* Update the first_writes and last_reads arrays with the new
              * values for the merged register index, and mark the newly unused
              * register index as such. */
+            assert(last_reads[j] >= last_reads[i]);
             last_reads[i] = last_reads[j];
             first_writes[j] = -1;
             last_reads[j] = -1;

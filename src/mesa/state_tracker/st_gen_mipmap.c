@@ -80,6 +80,7 @@ st_generate_mipmap(struct gl_context *ctx, GLenum target,
    struct st_texture_object *stObj = st_texture_object(texObj);
    struct pipe_resource *pt = st_get_texobj_resource(texObj);
    const uint baseLevel = texObj->BaseLevel;
+   enum pipe_format format;
    uint lastLevel, first_layer, last_layer;
    uint dstLevel;
 
@@ -149,10 +150,15 @@ st_generate_mipmap(struct gl_context *ctx, GLenum target,
       last_layer = util_max_layer(pt, baseLevel);
    }
 
+   if (stObj->surface_based)
+      format = stObj->surface_format;
+   else
+      format = pt->format;
+
    /* Try to generate the mipmap by rendering/texturing.  If that fails,
     * use the software fallback.
     */
-   if (!util_gen_mipmap(st->pipe, pt, pt->format, baseLevel, lastLevel,
+   if (!util_gen_mipmap(st->pipe, pt, format, baseLevel, lastLevel,
                         first_layer, last_layer, PIPE_TEX_FILTER_LINEAR)) {
       _mesa_generate_mipmap(ctx, target, texObj);
    }

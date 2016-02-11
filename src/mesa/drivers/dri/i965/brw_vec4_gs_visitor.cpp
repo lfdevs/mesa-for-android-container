@@ -832,7 +832,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
 
          fs_generator g(compiler, log_data, mem_ctx, &c.key,
                         &prog_data->base.base, v.promoted_constants,
-                        false, "GS");
+                        false, MESA_SHADER_GEOMETRY);
          if (unlikely(INTEL_DEBUG & DEBUG_GS)) {
             const char *label =
                shader->info.label ? shader->info.label : "unnamed";
